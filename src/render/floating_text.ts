@@ -14,24 +14,30 @@ interface Entry {
 const LIFETIME_MS = 900;
 const MAX_ACTIVE = 48;
 
-export function makeTextSprite(text: string, color: string, scale = 1): THREE.Sprite | null {
+export function makeTextSprite(
+  text: string,
+  color: string,
+  scale = 1,
+  widthPx = 128,
+  fontPx = 30,
+): THREE.Sprite | null {
   const canvas = document.createElement('canvas');
-  canvas.width = 128;
+  canvas.width = widthPx;
   canvas.height = 48;
   const g = canvas.getContext('2d');
   if (!g) return null;
-  g.font = 'bold 30px system-ui, sans-serif';
+  g.font = `bold ${fontPx}px system-ui, sans-serif`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.strokeStyle = 'rgba(0, 0, 0, 0.9)';
   g.lineWidth = 6;
-  g.strokeText(text, 64, 24);
+  g.strokeText(text, widthPx / 2, 24);
   g.fillStyle = color;
-  g.fillText(text, 64, 24);
+  g.fillText(text, widthPx / 2, 24);
   const texture = new THREE.CanvasTexture(canvas);
   const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(3.2 * scale, 1.2 * scale, 1);
+  sprite.scale.set((widthPx / 40) * scale, 1.2 * scale, 1);
   return sprite;
 }
 

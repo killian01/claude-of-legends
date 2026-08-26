@@ -12,6 +12,7 @@ import { Minimap } from '../ui/minimap';
 import type { IWorld } from '../world_api';
 import { setupInput } from './input';
 import { pickEnemyAt } from './picking';
+import { playSfx } from './sfx';
 
 export interface KillNote {
   unitId: number;
@@ -52,6 +53,7 @@ export function startPresentation(
 
   let hooks: NetHooks = {};
   const showPing = (x: number, z: number, from: string, team: TeamId): void => {
+    playSfx('ping');
     renderer.flashMarker(x, z, 0xffd94a);
     minimap.addPing(x, z);
     hud.pushChat(from, team, 'pinged the map');

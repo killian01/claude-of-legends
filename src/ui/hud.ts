@@ -4,14 +4,15 @@
 // screens, and the Escape menu. Reads the world through IWorld only; content
 // data (items, sigils, champions) is data-as-code it may read directly.
 
+import { playSfx } from '../game/sfx';
 import type { Status } from '../sim/combat/status';
-import { CHAMPIONS } from '../sim/content/champions';
 import { effectiveItemCost, ITEM_LIST, ITEMS, type ItemStats } from '../sim/content/items';
 import { SIGILS } from '../sim/content/sigils';
 import { MAX_LEVEL, xpForNext } from '../sim/stats';
 import { type AbilityKey, type TeamId, ULT_LEVEL } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { describeAbility, describeItem, describeSigil } from './describe';
+import { itemIconUrl } from './icons';
 import { attachTooltip } from './tooltips';
 
 const KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
@@ -230,6 +231,7 @@ export class Hud {
   private announceUntil = 0;
   private sawBattleBegin = false;
   private sawFirstBlood = false;
+  private endPlayed = false;
   private lastTowerCount: number | null = null;
 
   constructor(container: HTMLElement, world: IWorld, selfId: number, selfTeam: TeamId) {
@@ -339,10 +341,15 @@ export class Hud {
     for (const item of ITEM_LIST) {
       const btn = el('button', 'hud-item') as HTMLButtonElement;
       btn.type = 'button';
+      const icon = document.createElement('img');
+      icon.src = itemIconUrl(item);
+      icon.width = 26;
+      icon.height = 26;
+      icon.style.borderRadius = '4px';
       const left = el('div', '');
       left.append(el('div', '', item.name), el('div', 'hud-item-stats', statLabel(item.stats)));
       const cost = el('div', 'hud-item-cost', `${item.cost}g`);
-      btn.append(left, cost);
+      btn.append(icon, left, cost);
       attachTooltip(btn, () => describeItem(item, statLabel(item.stats)));
       btn.addEventListener('click', () => this.tryBuy(item.id));
       this.shop.appendChild(btn);
@@ -517,6 +524,8 @@ export class Hud {
         this.sawFirstBlood = true;
         this.announce('First blood');
       }
+      if (k.unitId === this.selfId) playSfx('death');
+      else if (k.killerId === this.selfId) playSfx('kill');
       const killerRow = rowOf(k.killerId);
       let killerName = killerRow?.name ?? 'The lane';
       let killerColor = killerRow ? TEAM_TEXT_COLORS[killerRow.team] : '#c9d8ae';
@@ -565,6 +574,7 @@ export class Hud {
     const towerCount = [...this.world.units.values()].filter((x) => x.kind === 'tower').length;
     if (this.lastTowerCount !== null && towerCount < this.lastTowerCount) {
       this.announce('A tower has fallen');
+      playSfx('tower');
     }
     this.lastTowerCount = towerCount;
 
@@ -623,7 +633,16 @@ export class Hud {
 
     for (let i = 0; i < this.invSlots.length; i++) {
       const itemId = u.items[i];
-      this.invSlots[i]!.textContent = itemId ? itemInitials(itemId) : '';
+      const slot = this.invSlots[i]!;
+      const def = itemId ? ITEMS[itemId] : undefined;
+      if (def) {
+        slot.textContent = '';
+        slot.style.backgroundImage = `url(${itemIconUrl(def)})`;
+        slot.style.backgroundSize = 'cover';
+      } else {
+        slot.textContent = itemId ? itemInitials(itemId) : '';
+        slot.style.backgroundImage = '';
+      }
     }
 
     if (this.shop.classList.contains('open')) {
@@ -667,6 +686,10 @@ export class Hud {
     const winner = this.world.winner;
     this.endOverlay.classList.toggle('open', winner !== null);
     if (winner !== null) {
+      if (!this.endPlayed) {
+        this.endPlayed = true;
+        playSfx(winner === this.selfTeam ? 'victory' : 'defeat');
+      }
       this.endTitle.textContent = winner === this.selfTeam ? 'VICTORY' : 'DEFEAT';
       this.endTitle.style.color = winner === this.selfTeam ? '#8fd06a' : '#d06a6a';
     }
