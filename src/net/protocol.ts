@@ -56,6 +56,9 @@ export interface SnapMobile {
   z: number;
   r: number;
   t: TeamId;
+  // Cosmetic ability tag ('championId_KEY' or 'sigil_id'); absent for auto
+  // attacks. Clients pick per-ability visuals from it.
+  v?: string;
 }
 
 export interface SelfSnap {

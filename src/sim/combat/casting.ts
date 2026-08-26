@@ -107,6 +107,7 @@ export function executeCast(
   castRange: number,
   aim: Vec2,
   power: Power,
+  vfx: string | null = null,
 ): boolean {
   switch (spec.kind) {
     case 'skillshot': {
@@ -131,6 +132,7 @@ export function executeCast(
         power,
         onHit: spec.onHit,
         allyEffects: spec.allyEffects ?? [],
+        vfx,
       });
       return true;
     }
@@ -155,6 +157,7 @@ export function executeCast(
         detonateAt: spec.detonateDelay !== undefined ? ctx.time + spec.detonateDelay : null,
         onDetonate: spec.onDetonate ?? [],
         entered: new Set(),
+        vfx,
       });
       return true;
     }
@@ -255,5 +258,13 @@ export function castAbility(
   caster.mana -= def.manaCost;
   breakStealth(caster);
   ctx.events.push({ type: 'cast', unitId: caster.id, key });
-  return executeCast(ctx, caster, def.spec, def.castRange, aim, power);
+  return executeCast(
+    ctx,
+    caster,
+    def.spec,
+    def.castRange,
+    aim,
+    power,
+    `${caster.championId}_${key}`,
+  );
 }

@@ -9,6 +9,7 @@ import { isRooted, isStunned } from '../sim/combat/status';
 import type { Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
+import { buildProjectileMesh, buildZoneMesh } from './ability_vfx';
 import { buildChampionMesh } from './champion_shapes';
 import { FloatingText, makeTextSprite } from './floating_text';
 import { buildMapDressing, type MapDressing, SKIRT_COLOR } from './map_dressing';
@@ -449,14 +450,7 @@ export class Renderer {
     for (const [id, p] of this.world.projectiles) {
       const t = this.trackedProjectiles.get(id);
       if (!t) {
-        const mesh = new THREE.Mesh(
-          new THREE.SphereGeometry(Math.max(0.25, p.radius), 10, 8),
-          new THREE.MeshLambertMaterial({
-            color: TEAM_LIGHT[p.team] ?? 0xffffff,
-            emissive: TEAM_LIGHT[p.team] ?? 0xffffff,
-            emissiveIntensity: 0.5,
-          }),
-        );
+        const mesh = buildProjectileMesh(p, this.world, TEAM_LIGHT[p.team] ?? 0xffffff);
         mesh.position.set(p.pos.x, 1.2, p.pos.z);
         this.scene.add(mesh);
         this.trackedProjectiles.set(id, {
@@ -479,14 +473,7 @@ export class Renderer {
 
     for (const [id, z] of this.world.zones) {
       if (!this.trackedZones.has(id)) {
-        const mesh = new THREE.Mesh(
-          new THREE.CylinderGeometry(z.radius, z.radius, 0.15, 24),
-          new THREE.MeshLambertMaterial({
-            color: TEAM_COLORS[z.team] ?? 0xffffff,
-            transparent: true,
-            opacity: 0.3,
-          }),
-        );
+        const mesh = buildZoneMesh(z, this.world, TEAM_COLORS[z.team] ?? 0xffffff);
         mesh.position.set(z.pos.x, 0.1, z.pos.z);
         this.scene.add(mesh);
         this.trackedZones.set(id, mesh);
@@ -562,6 +549,8 @@ export class Renderer {
     for (const [id, mesh] of this.trackedZones) {
       const s = 1 + 0.05 * Math.sin(now * 0.006 + id);
       mesh.scale.set(s, 1, s);
+      const marks = mesh.userData.marks as THREE.Object3D | undefined;
+      if (marks) marks.rotation.y = now * 0.0012;
     }
     for (let i = this.dying.length - 1; i >= 0; i--) {
       const d = this.dying[i]!;

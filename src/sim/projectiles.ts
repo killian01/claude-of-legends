@@ -29,6 +29,9 @@ export interface Projectile {
   allyEffects: readonly EffectSpec[];
   // 'attack' for auto-attack bolts (feeds on-hit passives); default 'ability'.
   via?: DamageVia;
+  // Cosmetic source tag ('championId_KEY' or 'sigil_id'), null for auto
+  // attacks. Renderers pick per-ability visuals from it; never gameplay.
+  vfx: string | null;
 }
 
 function segmentDistance(p: Vec2, a: Vec2, b: Vec2): number {

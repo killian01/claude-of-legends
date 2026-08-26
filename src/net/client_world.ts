@@ -259,6 +259,7 @@ export class ClientWorld implements IWorld {
           power: { ad: 0, ap: 0 },
           onHit: [],
           allyEffects: [],
+          vfx: p.v ?? null,
         });
       }
     }
@@ -269,7 +270,13 @@ export class ClientWorld implements IWorld {
     const seenZ = new Set<number>();
     for (const z of msg.zones) {
       seenZ.add(z.i);
-      if (!this.zones.has(z.i)) {
+      const existingZone = this.zones.get(z.i);
+      if (existingZone) {
+        // Zones rarely move today, but a frozen mirror would silently
+        // misplace any future moving zone.
+        existingZone.pos.x = z.x;
+        existingZone.pos.z = z.z;
+      } else {
         this.zones.set(z.i, {
           id: z.i,
           sourceId: 0,
@@ -286,6 +293,7 @@ export class ClientWorld implements IWorld {
           detonateAt: null,
           onDetonate: [],
           entered: new Set(),
+          vfx: z.v ?? null,
         });
       }
     }

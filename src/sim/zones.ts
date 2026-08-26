@@ -23,6 +23,9 @@ export interface Zone {
   detonateAt: number | null;
   onDetonate: readonly EffectSpec[];
   entered: Set<number>;
+  // Cosmetic source tag ('championId_KEY' or 'sigil_id'). Renderers pick
+  // per-ability visuals from it; never gameplay.
+  vfx: string | null;
 }
 
 function unitsInside(ctx: CombatCtx, z: Zone, enemies: boolean): Unit[] {

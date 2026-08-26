@@ -37,6 +37,7 @@ function fire(ctx: CombatCtx, u: Unit, target: Unit): void {
       onHit: [{ kind: 'damage', base: 0, adRatio: 1, dtype: 'physical' }],
       allyEffects: [],
       via: 'attack',
+      vfx: null,
     });
   } else {
     dealDamage(ctx, u.id, target, u.stats.ad, 'physical', 'attack');
