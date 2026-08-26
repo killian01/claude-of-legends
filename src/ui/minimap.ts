@@ -67,10 +67,10 @@ export class Minimap {
   update(): void {
     const { g } = this;
     const map = this.world.map;
-    g.fillStyle = '#18240e';
+    g.fillStyle = '#2b4d1e';
     g.fillRect(0, 0, SIZE_PX, SIZE_PX);
 
-    g.strokeStyle = '#6b6044';
+    g.strokeStyle = '#846d47';
     g.lineWidth = Math.max(2, map.laneWidth * this.scale * 0.7);
     for (const lane of Object.values(map.lanes)) {
       g.beginPath();
@@ -79,13 +79,21 @@ export class Minimap {
       g.stroke();
     }
 
-    g.fillStyle = '#0f1a07';
+    // The river band, matching the 3D dressing's endpoints.
+    g.strokeStyle = '#2f7290';
+    g.lineWidth = Math.max(3, 9 * this.scale);
+    g.beginPath();
+    g.moveTo(this.px(map.size / 2 - 20), this.pz(map.size / 2 + 20));
+    g.lineTo(this.px(map.size / 2 + 20), this.pz(map.size / 2 - 20));
+    g.stroke();
+
+    g.fillStyle = '#1c3212';
     for (const w of map.walls) {
       g.beginPath();
       g.arc(this.px(w.x), this.pz(w.z), w.r * this.scale, 0, Math.PI * 2);
       g.fill();
     }
-    g.fillStyle = '#33611f';
+    g.fillStyle = '#4d9032';
     for (const b of map.brush) {
       g.beginPath();
       g.arc(this.px(b.x), this.pz(b.z), b.r * this.scale, 0, Math.PI * 2);
