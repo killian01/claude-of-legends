@@ -223,6 +223,17 @@ const CSS = `
   font-size: 14px; font-weight: 600; cursor: pointer;
 }
 .hud-menu-btn:hover { border-color: #7ca050; }
+.hud-end-card {
+  margin-top: 14px; padding: 14px 18px; border-radius: 10px;
+  background: rgba(14, 20, 9, 0.92); border: 1px solid #466030;
+  display: flex; gap: 26px; pointer-events: auto;
+}
+.hud-end-team { min-width: 170px; }
+.hud-end-team h4 { margin: 0 0 6px; font-size: 13px; }
+.hud-end-team.blue h4 { color: #9dbcf5; }
+.hud-end-team.red h4 { color: #f5a3a3; }
+.hud-end-row { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
+.hud-end-row span:last-child { color: #93a87c; margin-left: 12px; white-space: nowrap; }
 `;
 
 export interface NetHooks {
@@ -255,6 +266,8 @@ export class Hud {
   private readonly deathSub: HTMLElement;
   private readonly endOverlay: HTMLElement;
   private readonly endTitle: HTMLElement;
+  private readonly endSub: HTMLElement;
+  private readonly endStats: HTMLElement;
   private readonly escapeOverlay: HTMLElement;
   private readonly feed: HTMLElement;
   private readonly chatLog: HTMLElement;
@@ -459,7 +472,11 @@ export class Hud {
 
     this.endOverlay = el('div', 'hud-overlay');
     this.endTitle = el('div', 'hud-overlay-title');
-    this.endOverlay.append(this.endTitle);
+    this.endSub = el('div', 'hud-overlay-sub');
+    this.endStats = el('div', 'hud-end-card');
+    const endReturn = el('button', 'hud-menu-btn', 'Return to menu');
+    endReturn.addEventListener('click', () => window.location.reload());
+    this.endOverlay.append(this.endTitle, this.endSub, this.endStats, endReturn);
 
     this.escapeOverlay = el('div', 'hud-overlay');
     const resume = el('button', 'hud-menu-btn', 'Resume (Esc)');
@@ -760,13 +777,39 @@ export class Hud {
 
     const winner = this.world.winner;
     this.endOverlay.classList.toggle('open', winner !== null);
-    if (winner !== null) {
-      if (!this.endPlayed) {
-        this.endPlayed = true;
-        playSfx(winner === this.selfTeam ? 'victory' : 'defeat');
-      }
+    if (winner !== null && !this.endPlayed) {
+      this.endPlayed = true;
+      playSfx(winner === this.selfTeam ? 'victory' : 'defeat');
       this.endTitle.textContent = winner === this.selfTeam ? 'VICTORY' : 'DEFEAT';
       this.endTitle.style.color = winner === this.selfTeam ? '#8fd06a' : '#d06a6a';
+      const total = Math.max(0, Math.floor(this.world.time));
+      this.endSub.textContent = `Match time ${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+      // Final per-champion stats, built once at match end.
+      const mkDiv = (className: string): HTMLElement => {
+        const d = document.createElement('div');
+        d.className = className;
+        return d;
+      };
+      this.endStats.textContent = '';
+      const rows = this.world.scoreboard();
+      for (const t of [0, 1] as const) {
+        const box = mkDiv(`hud-end-team ${t === 0 ? 'blue' : 'red'}`);
+        const title = t === winner ? `Team ${t + 1} (winner)` : `Team ${t + 1}`;
+        const h = document.createElement('h4');
+        h.textContent = title;
+        box.appendChild(h);
+        for (const row of rows.filter((r) => r.team === t)) {
+          const line = mkDiv('hud-end-row');
+          const name = document.createElement('span');
+          name.textContent = row.name;
+          if (row.unitId === this.selfId) name.style.color = '#e8f5c8';
+          const kda = document.createElement('span');
+          kda.textContent = `Lv ${row.level} · ${row.kills}/${row.deaths}`;
+          line.append(name, kda);
+          box.appendChild(line);
+        }
+        this.endStats.appendChild(box);
+      }
     }
   }
 }
