@@ -5,7 +5,7 @@ import type { CombatCtx } from '../sim_context';
 import { isInvulnerable } from '../structure_rules';
 import type { DamageType } from '../types';
 import type { Unit } from '../unit';
-import { absorbWithShields, armorBonus, mrBonus } from './status';
+import { absorbWithShields, armorBonus, cancelRecall, mrBonus } from './status';
 
 // Buff-granted armor/mr counts; expired statuses are pruned at tick start so
 // no time parameter is needed here.
@@ -33,6 +33,7 @@ export function dealDamage(
   const mitigated = amount * mitigationMultiplier(target, dtype);
   const after = absorbWithShields(target, mitigated, ctx.time);
   if (after <= 0) return;
+  cancelRecall(target);
   target.hp -= after;
   ctx.events.push({ type: 'damage', sourceId, targetId: target.id, amount: after, dtype });
   if (target.hp <= 0) {

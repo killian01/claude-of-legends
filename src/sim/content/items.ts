@@ -137,4 +137,20 @@ export const ITEMS: Readonly<Record<string, ItemDef>> = Object.fromEntries(
   [...T1, ...T2].map((i) => [i.id, i]),
 );
 
+// The price after consuming owned components, mirroring the sim's buy rule.
+export function effectiveItemCost(itemId: string, owned: readonly string[]): number {
+  const def = ITEMS[itemId];
+  if (!def) return Number.POSITIVE_INFINITY;
+  let discount = 0;
+  const consumed: number[] = [];
+  for (const compId of def.buildsFrom ?? []) {
+    const idx = owned.findIndex((it, i) => it === compId && !consumed.includes(i));
+    if (idx !== -1) {
+      consumed.push(idx);
+      discount += ITEMS[compId]?.cost ?? 0;
+    }
+  }
+  return def.cost - discount;
+}
+
 export const ITEM_LIST: readonly ItemDef[] = [...T1, ...T2];

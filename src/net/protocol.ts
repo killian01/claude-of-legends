@@ -18,9 +18,13 @@ export type ClientMsg =
   | { t: 'pick'; championId: string; sigils: [string, string] }
   | { t: 'move'; x: number; z: number }
   | { t: 'attack'; targetId: number }
+  | { t: 'attack_move'; x: number; z: number }
+  | { t: 'recall' }
   | { t: 'cast'; key: AbilityKey; x: number; z: number }
   | { t: 'sigil'; slot: number; x: number; z: number }
-  | { t: 'buy'; itemId: string };
+  | { t: 'buy'; itemId: string }
+  | { t: 'chat'; text: string }
+  | { t: 'ping'; x: number; z: number };
 
 // Lite fields ride every snapshot; the optional identity block only on the
 // first snapshot after the unit (re)enters this client's vision.
@@ -91,7 +95,7 @@ export type ServerMsg =
     }
   | { t: 'lobby'; code: string; host: boolean; players: string[] }
   | { t: 'select_start'; team: TeamId; players: SelectPlayer[]; deadline: number }
-  | { t: 'select_update'; locked: number; total: number }
+  | { t: 'select_update'; locked: number; total: number; taken: string[] }
   | { t: 'match_start'; selfUnitId: number; team: TeamId }
   | {
       t: 'snap';
@@ -105,6 +109,8 @@ export type ServerMsg =
       winner: TeamId | null;
     }
   | { t: 'score'; rows: ScoreRow[] }
+  | { t: 'chat'; from: string; team: TeamId; text: string }
+  | { t: 'ping'; from: string; team: TeamId; x: number; z: number }
   | { t: 'match_end' }
   | { t: 'error'; message: string };
 

@@ -8,7 +8,7 @@
 
 import type { Action, ObsUnit, Policy } from '../../policy';
 import type { Rng } from '../../rng';
-import { ITEMS } from '../items';
+import { effectiveItemCost } from '../items';
 import { GAME_MAP } from '../map';
 
 export interface BotDef {
@@ -72,22 +72,6 @@ function nextPurchase(items: readonly string[]): string | null {
   return null;
 }
 
-// Mirrors the sim's component discount so the bot only tries affordable buys.
-function effectiveCost(itemId: string, items: readonly string[]): number {
-  const def = ITEMS[itemId];
-  if (!def) return Number.POSITIVE_INFINITY;
-  let discount = 0;
-  const consumed: number[] = [];
-  for (const compId of def.buildsFrom ?? []) {
-    const idx = items.findIndex((it, i) => it === compId && !consumed.includes(i));
-    if (idx !== -1) {
-      consumed.push(idx);
-      discount += ITEMS[compId]?.cost ?? 0;
-    }
-  }
-  return def.cost - discount;
-}
-
 const policy: Policy = (obs, rng: Rng): Action => {
   const s = obs.self;
   if (s.dead) return { kind: 'noop' };
@@ -108,7 +92,7 @@ const policy: Policy = (obs, rng: Rng): Action => {
   // Shop while home.
   if (atFountain && s.items.length < 6) {
     const wanted = nextPurchase(s.items);
-    if (wanted && s.gold >= effectiveCost(wanted, s.items)) {
+    if (wanted && s.gold >= effectiveItemCost(wanted, s.items)) {
       return { kind: 'buy', itemId: wanted };
     }
   }
