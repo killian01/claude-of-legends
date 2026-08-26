@@ -121,6 +121,18 @@ const policy: Policy = (obs, rng: Rng): Action => {
     return { kind: 'move', x: s.x + (dx / d) * 8, z: s.z + (dz / d) * 8 };
   }
 
+  // Close out the game: a vulnerable Sanctum in reach beats everything,
+  // especially once it is low (measured stall: both Sanctums chipped to
+  // ~300 hp with nobody finishing).
+  const sanctumTarget = enemies.find((e) => e.kind === 'sanctum' && e.invulnerable !== true);
+  if (
+    sanctumTarget &&
+    dist(s.x, s.z, sanctumTarget) <= FARM_RANGE &&
+    (sanctumTarget.hpFrac < 0.5 || escortAt(sanctumTarget.x, sanctumTarget.z) >= 2)
+  ) {
+    return { kind: 'attack', targetId: sanctumTarget.id };
+  }
+
   // Fight: throw a ready ability at a close champion, otherwise attack it.
   if (champ && dist(s.x, s.z, champ) <= CHAMPION_ATTACK_RANGE) {
     if (dist(s.x, s.z, champ) <= CAST_RANGE) {

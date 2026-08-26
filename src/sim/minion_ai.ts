@@ -26,7 +26,24 @@ function targetRank(u: Unit): number {
   return 2;
 }
 
+const ALLY_PROTECT_RADIUS = 8;
+const AGGRO_MEMORY_S = 3;
+
+// The laning rule: an enemy champion that recently damaged a nearby allied
+// champion outranks everything else.
+function aggressorIds(ctx: CombatCtx, u: Unit): Set<number> {
+  const out = new Set<number>();
+  for (const ally of ctx.units.values()) {
+    if (ally.team !== u.team || ally.kind !== 'champion' || ally.dead) continue;
+    if (ctx.time - ally.lastHitAt > AGGRO_MEMORY_S) continue;
+    if (Math.hypot(ally.pos.x - u.pos.x, ally.pos.z - u.pos.z) > ALLY_PROTECT_RADIUS) continue;
+    out.add(ally.lastHitByChampion);
+  }
+  return out;
+}
+
 function acquire(ctx: CombatCtx, u: Unit): void {
+  const aggressors = aggressorIds(ctx, u);
   let best: Unit | null = null;
   let bestRank = Number.POSITIVE_INFINITY;
   let bestDist = Number.POSITIVE_INFINITY;
@@ -36,7 +53,7 @@ function acquire(ctx: CombatCtx, u: Unit): void {
     const d = Math.hypot(o.pos.x - u.pos.x, o.pos.z - u.pos.z);
     if (d > AGGRO_RADIUS) continue;
     if ((o.kind === 'tower' || o.kind === 'sanctum') && isInvulnerable(ctx.units, o)) continue;
-    const rank = targetRank(o);
+    const rank = aggressors.has(o.id) ? -1 : targetRank(o);
     if (rank < bestRank || (rank === bestRank && d < bestDist)) {
       best = o;
       bestRank = rank;

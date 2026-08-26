@@ -59,6 +59,10 @@ export interface Unit {
   // removed on death.
   dead: boolean;
   respawnAt: number;
+  // Aggro memory: the last enemy CHAMPION that damaged this champion, for
+  // tower and minion aggro switching (the core laning rules).
+  lastHitByChampion: number;
+  lastHitAt: number;
   // Vision and rewards.
   sightRange: number;
   goldBounty: number;
@@ -120,6 +124,8 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     deaths: 0,
     dead: false,
     respawnAt: 0,
+    lastHitByChampion: 0,
+    lastHitAt: -999,
     sightRange: 8,
     goldBounty: 0,
     xpBounty: 0,

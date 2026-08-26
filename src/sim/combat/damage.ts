@@ -34,6 +34,15 @@ export function dealDamage(
   const after = absorbWithShields(target, mitigated, ctx.time);
   if (after <= 0) return;
   cancelRecall(target);
+  // Aggro memory for the laning rules: towers and minions turn on a
+  // champion that damages a nearby allied champion.
+  if (target.kind === 'champion') {
+    const source = ctx.units.get(sourceId);
+    if (source && source.kind === 'champion' && source.team !== target.team) {
+      target.lastHitByChampion = sourceId;
+      target.lastHitAt = ctx.time;
+    }
+  }
   target.hp -= after;
   ctx.events.push({ type: 'damage', sourceId, targetId: target.id, amount: after, dtype });
   if (target.hp <= 0) {
