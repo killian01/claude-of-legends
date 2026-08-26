@@ -6,9 +6,9 @@ import type { ChampionDef } from './content/champions';
 import type { LaneId } from './content/map';
 import type { AbilityKey, TeamId, Vec2 } from './types';
 
-export type UnitKind = 'champion' | 'minion' | 'tower' | 'sanctum' | 'warden';
+export type UnitKind = 'champion' | 'minion' | 'tower' | 'sanctum' | 'warden' | 'camp';
 
-export type MinionVariant = 'melee' | 'caster' | 'siege';
+export type MinionVariant = 'melee' | 'caster' | 'siege' | 'vanguard';
 
 export interface UnitStats {
   ad: number;
@@ -251,7 +251,7 @@ export function createMinion(
     u.stats.attackSpeed = 0.67;
     u.goldBounty = 14;
     u.xpBounty = 30;
-  } else {
+  } else if (variant === 'siege') {
     // Siege: the wave-breaker that actually threatens towers.
     u.radius = 0.6;
     u.hp = 900;
@@ -260,6 +260,19 @@ export function createMinion(
     u.stats.attackSpeed = 0.5;
     u.goldBounty = 60;
     u.xpBounty = 90;
+  } else {
+    // Vanguard: the lane-escalation elite that marches once a lane's towers
+    // are down. Slow, huge, and worth answering.
+    u.radius = 0.85;
+    u.moveSpeed = 3.0;
+    u.hp = 1500;
+    u.stats.ad = 65;
+    u.stats.armor = 20;
+    u.stats.mr = 20;
+    u.stats.attackRange = 1.2;
+    u.stats.attackSpeed = 0.6;
+    u.goldBounty = 90;
+    u.xpBounty = 130;
   }
   u.hp = Math.round(u.hp * scale);
   u.maxHp = u.hp;
@@ -284,6 +297,26 @@ export function createWarden(id: number, pos: Vec2): Unit {
   u.sightRange = 8;
   u.goldBounty = 150;
   u.xpBounty = 200;
+  return u;
+}
+
+// A jungle camp monster (systems review): neutral map treasure that fights
+// back inside a short leash and pays gold, xp, and sometimes a buff.
+export function createCamp(id: number, pos: Vec2): Unit {
+  const u = baseUnit(id, 0, 'camp', pos);
+  u.neutral = true;
+  u.radius = 0.7;
+  u.moveSpeed = 2.8;
+  u.hp = 550;
+  u.maxHp = 550;
+  u.stats.ad = 40;
+  u.stats.armor = 15;
+  u.stats.mr = 15;
+  u.stats.attackRange = 1.5;
+  u.stats.attackSpeed = 0.6;
+  u.sightRange = 6;
+  u.goldBounty = 80;
+  u.xpBounty = 100;
   return u;
 }
 

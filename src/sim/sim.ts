@@ -7,6 +7,7 @@
 
 import { stepAttackMove } from './attack_move';
 import { runBotDecisions } from './bot_driver';
+import { initialCampStates, onCampSlain, stepCamps } from './camps';
 import { stepAutoAttacks } from './combat/auto_attack';
 import { castAbility, executeCast } from './combat/casting';
 import { stepDots } from './combat/dots';
@@ -112,6 +113,7 @@ export class Sim {
   // The Warden's Boon lives outside units so it survives deaths.
   readonly teamBuffs = new TeamBuffs();
   private readonly objectives = initialObjectiveState();
+  private readonly campStates = initialCampStates(GAME_MAP);
 
   constructor(seed: number) {
     this.rng = new Rng(seed);
@@ -202,8 +204,9 @@ export class Sim {
     if (!u) return false;
     // Your own team always sees its units, DEAD INCLUDED: review finding
     // F.1/F.3, a dead champion vanishing from its own snapshot froze the
-    // online HUD and killed the death screen.
-    if (u.team === team) return true;
+    // online HUD and killed the death screen. Neutral units carry a nominal
+    // team and never qualify: camps sit in the fog for everyone.
+    if (!u.neutral && u.team === team) return true;
     if (u.dead) return false;
     // Structures are always revealed, like the genre; so is the Warden
     // (both teams watch its health bar, that IS the drama).
@@ -386,7 +389,10 @@ export class Sim {
       spawnWave(ctx, this.map, this.waveCount++);
       this.nextWaveAt += WAVE_EVERY;
     }
-    if (this.winner === null) stepObjectives(ctx, this.map, this.objectives);
+    if (this.winner === null) {
+      stepObjectives(ctx, this.map, this.objectives);
+      stepCamps(ctx, this.campStates);
+    }
 
     stepMinionAi(ctx, this.nav, this.map, this.tickCount);
     stepTowerAi(ctx);
@@ -446,6 +452,9 @@ export class Sim {
             this.teamBuffs.grantBoon(killer.team, this.time);
           }
           onWardenSlain(this.objectives, this.time);
+        }
+        if (u.kind === 'camp') {
+          onCampSlain(this.campStates, id, this.units.get(killerId), this.time);
         }
         if (u.moveSpeed <= 0) this.nav.unblockCircle(u.pos.x, u.pos.z, staticFootprint(u));
         this.units.delete(id);

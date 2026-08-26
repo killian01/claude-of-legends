@@ -418,6 +418,55 @@ export class Renderer {
     }
   }
 
+  // One-shot cast flash for INSTANT abilities (cone, burst, dash, targeted):
+  // they spawn no projectile and no zone, so without this they read as
+  // nothing happening. The shape mirrors the aim preview, in the ability's
+  // school color, and fades through the shared markers list.
+  spawnCastFx(p: AimPreview, color: number, from: Vec2, aim: Vec2): void {
+    const mat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.55,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    let mesh: THREE.Mesh;
+    const dx = aim.x - from.x;
+    const dz = aim.z - from.z;
+    if (p.kind === 'cone') {
+      const half = p.halfAngle ?? Math.PI / 4;
+      const geo = new THREE.CircleGeometry(
+        p.range ?? p.castRange,
+        20,
+        Math.PI / 2 - half,
+        half * 2,
+      );
+      mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.rotation.z = Math.atan2(dx, dz) + Math.PI;
+      mesh.position.set(from.x, 0.14, from.z);
+    } else if (p.kind === 'burst') {
+      mesh = new THREE.Mesh(new THREE.CircleGeometry(p.radius ?? 1.5, 28), mat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(from.x, 0.14, from.z);
+    } else if (p.kind === 'dash') {
+      const len = Math.min(p.range ?? p.castRange, Math.hypot(dx, dz) || 1);
+      const geo = new THREE.PlaneGeometry(0.7, len);
+      geo.translate(0, len / 2, 0);
+      mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.rotation.z = Math.atan2(dx, dz) + Math.PI;
+      mesh.position.set(from.x, 0.14, from.z);
+    } else {
+      // enemy_target / self_or_ally: a bright ring where the cast resolved.
+      mesh = new THREE.Mesh(new THREE.RingGeometry(0.6, 1.1, 24), mat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(aim.x, 0.14, aim.z);
+    }
+    this.scene.add(mesh);
+    this.markers.push({ mesh, material: mat, bornAt: performance.now() });
+  }
+
   hideAimPreview(): void {
     for (const m of this.aimMeshes) {
       this.scene.remove(m);
@@ -610,6 +659,25 @@ export class Renderer {
     const color = TEAM_COLORS[u.team] ?? 0xffffff;
     const holder = new THREE.Group();
     if (kind === 'minion') {
+      // Vanguards (lane-escalation elites) get a hulking spiked silhouette.
+      if (u.radius >= 0.75) {
+        const mat = new THREE.MeshLambertMaterial({ color, flatShading: true });
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.6, 1.1), mat);
+        body.position.y = 0.95;
+        body.castShadow = true;
+        holder.add(body);
+        const darkMat = new THREE.MeshLambertMaterial({
+          color: new THREE.Color(color).multiplyScalar(0.55),
+          flatShading: true,
+        });
+        for (const side of [-1, 1]) {
+          const spike = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.7, 4), darkMat);
+          spike.position.set(side * 0.5, 2.0, 0);
+          holder.add(spike);
+        }
+        holder.userData.body = body;
+        return { holder, barY: 2.6 };
+      }
       const ranged = u.stats.attackRange > 2;
       const body = ranged
         ? new THREE.Mesh(
@@ -655,6 +723,23 @@ export class Renderer {
       enableShadows(holder);
       collectSpinners(holder);
       return { holder, barY: 7.2 };
+    }
+    if (kind === 'camp') {
+      // A jungle beast: a squat amber-jade critter with a spine of thorns.
+      const mat = new THREE.MeshLambertMaterial({ color: 0x8a6a3f, flatShading: true });
+      const thorns = new THREE.MeshLambertMaterial({ color: 0x4a6a45, flatShading: true });
+      const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.65, 0), mat);
+      body.position.y = 0.65;
+      body.scale.set(1.1, 0.85, 1.25);
+      holder.add(body);
+      for (let i = 0; i < 3; i++) {
+        const thorn = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.5, 4), thorns);
+        thorn.position.set(0, 1.1, -0.35 + i * 0.35);
+        thorn.rotation.x = -0.3;
+        holder.add(thorn);
+      }
+      enableShadows(holder);
+      return { holder, barY: 1.9 };
     }
     if (kind === 'warden') {
       // The neutral river beast: dark jade bulk with glowing violet crystals.
@@ -753,7 +838,9 @@ export class Renderer {
             ? 1.8
             : u.kind === 'minion'
               ? Math.min(2.2, 1.2 + u.maxHp / 900)
-              : 3.2;
+              : u.kind === 'camp'
+                ? 1.5
+                : 3.2;
         const { fill, back, manaFill } = this.buildHpBar(
           holder,
           barY,
@@ -863,8 +950,9 @@ export class Renderer {
       // A living unit always keeps a visible sliver of bar.
       t.hpFill.scale.x = Math.max(0.07, t.barWidth * frac);
       let fillColor = this.barColor(id, u.team);
-      // The neutral Warden's bar is violet for everyone.
+      // Neutral bars: violet Warden, amber jungle camps, for everyone.
       if (u.kind === 'warden') fillColor = 0xc06ae8;
+      else if (u.kind === 'camp') fillColor = 0xd8a24f;
       // Last-hit aid: an enemy minion that one of the player's autos would
       // finish turns its bar gold, like the genre's execute indicators.
       if (u.kind === 'minion' && u.team !== this.viewerTeam) {
@@ -1202,6 +1290,8 @@ export class Renderer {
       if (age >= 1) {
         this.scene.remove(m.mesh);
         m.material.dispose();
+        // Cast-fx meshes own their geometry; ring markers share one.
+        if (m.mesh.geometry !== this.markerGeometry) m.mesh.geometry.dispose();
         this.markers.splice(i, 1);
       } else {
         m.mesh.scale.setScalar(1 - 0.4 * age);

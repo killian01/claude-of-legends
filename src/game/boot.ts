@@ -6,6 +6,7 @@
 // toasts fire here from mirrored state, before (or instead of) the
 // authoritative answer.
 
+import { schoolColorOf } from '../render/ability_vfx';
 import { Renderer } from '../render/renderer';
 import { effectiveRank, ULT_RANK_LEVELS } from '../sim/stats';
 import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
@@ -126,7 +127,29 @@ export function startPresentation(
         }
       }
     }
-    world.castAbility(selfId, key, aim);
+    const ok = world.castAbility(selfId, key, aim);
+    // Instant abilities spawn no projectile or zone: flash their shape in
+    // the ability's school color so the cast visibly happened.
+    if (
+      ok &&
+      u &&
+      ab &&
+      ['cone', 'burst', 'dash', 'enemy_target', 'self_or_ally'].includes(ab.spec.kind)
+    ) {
+      const spec = ab.spec as { radius?: number; range?: number; halfAngle?: number };
+      renderer.spawnCastFx(
+        {
+          castRange: ab.castRange,
+          kind: ab.spec.kind,
+          radius: spec.radius,
+          range: spec.range,
+          halfAngle: spec.halfAngle,
+        },
+        schoolColorOf(ab.spec).main,
+        { x: u.pos.x, z: u.pos.z },
+        aim,
+      );
+    }
   };
 
   // Fires the queued ground cast the moment the champion is in range.

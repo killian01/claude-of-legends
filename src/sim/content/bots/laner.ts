@@ -75,6 +75,14 @@ function nextPurchase(items: readonly string[], championId: string | null): stri
       return 'windrazor';
     }
     if (!has('heart_gem')) return 'heart_gem';
+    if (!has('doombrand')) {
+      if (!has('iron_blade')) return 'iron_blade';
+      return 'doombrand';
+    }
+    if (!has('skyshear')) {
+      if (!has('swift_fang')) return 'swift_fang';
+      return 'skyshear';
+    }
     return null;
   }
   if (role === 'Mage' || role === 'Battlemage') {
@@ -93,6 +101,14 @@ function nextPurchase(items: readonly string[], championId: string | null): stri
       return 'archmind';
     }
     if (!has('heart_gem')) return 'heart_gem';
+    if (!has('tempest_core')) {
+      if (!has('spark_rod')) return 'spark_rod';
+      return 'tempest_core';
+    }
+    if (!has('null_engine')) {
+      if (!has('spark_rod')) return 'spark_rod';
+      return 'null_engine';
+    }
     return null;
   }
   // Tanks, fighters, and supports keep the defensive shell.
@@ -112,6 +128,10 @@ function nextPurchase(items: readonly string[], championId: string | null): stri
   }
   if (!has('iron_blade')) return 'iron_blade';
   if (!has('swift_fang')) return 'swift_fang';
+  if (!has('worldheart')) {
+    if (!has('guard_plate')) return 'guard_plate';
+    return 'worldheart';
+  }
   return null;
 }
 
@@ -221,6 +241,19 @@ const policy: Policy = (obs, rng: Rng): Action => {
   if (minion && dist(s.x, s.z, minion) <= FARM_RANGE) {
     return { kind: 'attack', targetId: minion.id };
   }
+  // Jungle detour: with no enemy champion in sight and no minion to farm, a
+  // visible camp nearby is free income (systems review v1: one dumb rule).
+  if (!champ) {
+    const camp = nearest(
+      enemies.filter((u) => u.kind === 'camp'),
+      s.x,
+      s.z,
+    );
+    if (camp && dist(s.x, s.z, camp) <= FARM_RANGE) {
+      return { kind: 'attack', targetId: camp.id };
+    }
+  }
+
   const structure = nearest(
     enemies.filter((u) => (u.kind === 'tower' || u.kind === 'sanctum') && u.invulnerable !== true),
     s.x,

@@ -156,6 +156,11 @@ export class Minimap {
         g.lineTo(x - 4, z);
         g.closePath();
         g.fill();
+      } else if (u.kind === 'camp') {
+        g.fillStyle = '#d8a24f';
+        g.beginPath();
+        g.arc(x, z, 2.5, 0, Math.PI * 2);
+        g.fill();
       } else if (u.kind === 'warden') {
         // The Warden: a violet blotch both teams can track.
         g.fillStyle = '#c06ae8';

@@ -25,6 +25,12 @@ const SCHOOLS: Readonly<Record<string, School>> = {
   fire: { main: 0xef8a3c, glow: 0xffc07a },
 };
 
+// The school color for a cast spec, for one-shot cast flashes (instant
+// abilities have no projectile or zone to carry their identity).
+export function schoolColorOf(spec: CastSpec): { main: number; glow: number } {
+  return schoolOf(spec);
+}
+
 function schoolOf(spec: CastSpec): School {
   const json = JSON.stringify(spec);
   const has = (w: string): boolean => json.includes(`"${w}"`);

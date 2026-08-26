@@ -668,6 +668,10 @@ export class Hud {
       'Finished items, built from two components',
       ITEM_LIST.filter((i) => i.tier === 2),
     );
+    addSection(
+      'Legendary upgrades, built from a finished item',
+      ITEM_LIST.filter((i) => i.tier === 3),
+    );
     this.shopDetail = el('div', 'hud-shop-detail');
     shopBody.append(shopGrid, this.shopDetail);
     this.shop.append(shopHead, shopBody);
@@ -899,7 +903,10 @@ export class Hud {
     const title = mk('');
     title.append(
       mk('hud-detail-name', def.name),
-      mk('hud-detail-tier', def.tier === 1 ? 'Component' : 'Finished item'),
+      mk(
+        'hud-detail-tier',
+        def.tier === 1 ? 'Component' : def.tier === 2 ? 'Finished item' : 'Legendary upgrade',
+      ),
     );
     head.append(bigIcon, title);
     d.appendChild(head);
@@ -1241,7 +1248,9 @@ export class Hud {
                 ? 'Sanctum'
                 : target.kind === 'warden'
                   ? 'Warden'
-                  : 'Minion';
+                  : target.kind === 'camp'
+                    ? 'Jungle Beast'
+                    : 'Minion';
           this.targetPortrait.src =
             target.kind === 'warden'
               ? iconDataUrl('W', '#3d2a5a', '#a06ae8')
