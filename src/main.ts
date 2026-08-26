@@ -15,11 +15,16 @@ if (!app) throw new Error('missing #app root element');
 
 const sim = new Sim(42);
 const world: IWorld = sim;
-const self = sim.addChampion(0);
+
+// Pick a champion with ?champ=<id> (fenn, korrath, maera, ...). Sylra is the
+// default until the champion select screen lands in phase 6.
+const requested = new URLSearchParams(window.location.search).get('champ');
+const championId = requested && sim.championDef(requested) ? requested : undefined;
+const self = sim.addChampion(0, undefined, championId);
 
 // Practice dummies on mid lane until real opponents land (phases 4 and 7).
-sim.addChampion(1, { x: 66, z: 66 });
-sim.addChampion(1, { x: 80, z: 80 });
+sim.addChampion(1, { x: 66, z: 66 }, 'korrath');
+sim.addChampion(1, { x: 80, z: 80 }, 'vesk');
 
 const renderer = new Renderer(app, world);
 renderer.followUnit(self.id);
@@ -32,6 +37,7 @@ setupInput(renderer, {
     else sim.orderMove(self.id, p.x, p.z);
   },
   onCast: (key, aim) => sim.castAbility(self.id, key, aim),
+  onCastSigil: (slot, aim) => sim.castSigil(self.id, slot, aim),
   onToggleShop: () => hud.toggleShop(),
 });
 

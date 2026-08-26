@@ -8,7 +8,7 @@ import type { CombatCtx } from '../sim_context';
 import type { DamageType } from '../types';
 import type { Unit } from '../unit';
 import { dealDamage } from './damage';
-import { addMarkStack, addStatus, clearMarks } from './status';
+import { addMarkStack, addStatus, clearMarks, healFactor } from './status';
 
 export interface Power {
   ad: number;
@@ -17,15 +17,40 @@ export interface Power {
 
 export type EffectSpec =
   | { kind: 'damage'; base: number; adRatio?: number; apRatio?: number; dtype: DamageType }
+  | { kind: 'heal'; base: number; apRatio?: number }
   | { kind: 'slow'; pct: number; duration: number }
   | { kind: 'root'; duration: number }
+  | { kind: 'stun'; duration: number }
+  | { kind: 'taunt'; duration: number }
+  | { kind: 'stealth'; duration: number }
+  | { kind: 'blind'; duration: number; factor: number }
+  | { kind: 'knockback'; distance: number }
+  | { kind: 'pull'; distance: number }
   | { kind: 'shield'; base: number; apRatio?: number; duration: number }
+  | { kind: 'dot'; duration: number; perSecond: number; dtype: DamageType }
+  | { kind: 'grievous'; duration: number; factor: number }
+  | { kind: 'buff'; duration: number; msPct?: number; asPct?: number; armor?: number; mr?: number }
   | {
       kind: 'mark';
       duration: number;
       stacksToTrigger: number;
       onTrigger: readonly EffectSpec[];
     };
+
+// Displaces a unit along dir by up to `distance`, clamped to walkable ground.
+function displace(ctx: CombatCtx, target: Unit, dx: number, dz: number, distance: number): void {
+  const len = Math.hypot(dx, dz);
+  if (len === 0 || target.moveSpeed <= 0) return;
+  const dest = {
+    x: target.pos.x + (dx / len) * distance,
+    z: target.pos.z + (dz / len) * distance,
+  };
+  const landed = ctx.nav.isWalkableAt(dest.x, dest.z)
+    ? dest
+    : ctx.nav.nearestWalkable(dest.x, dest.z, 6);
+  if (landed) target.pos = { x: landed.x, z: landed.z };
+  target.path = [];
+}
 
 export function applyEffects(
   ctx: CombatCtx,
@@ -41,12 +66,49 @@ export function applyEffects(
         dealDamage(ctx, sourceId, target, amount, spec.dtype);
         break;
       }
+      case 'heal': {
+        const amount = (spec.base + (spec.apRatio ?? 0) * power.ap) * healFactor(target, ctx.time);
+        target.hp = Math.min(target.maxHp, target.hp + amount);
+        break;
+      }
       case 'slow':
         addStatus(target, { kind: 'slow', until: ctx.time + spec.duration, pct: spec.pct });
         break;
       case 'root':
         addStatus(target, { kind: 'root', until: ctx.time + spec.duration });
         break;
+      case 'stun':
+        addStatus(target, { kind: 'stun', until: ctx.time + spec.duration });
+        break;
+      case 'taunt':
+        addStatus(target, { kind: 'taunt', until: ctx.time + spec.duration, sourceId });
+        break;
+      case 'stealth':
+        addStatus(target, { kind: 'stealth', until: ctx.time + spec.duration });
+        break;
+      case 'blind':
+        addStatus(target, {
+          kind: 'blind',
+          until: ctx.time + spec.duration,
+          factor: spec.factor,
+        });
+        break;
+      case 'knockback': {
+        const source = ctx.units.get(sourceId);
+        const from = source ? source.pos : target.pos;
+        displace(ctx, target, target.pos.x - from.x, target.pos.z - from.z, spec.distance);
+        break;
+      }
+      case 'pull': {
+        const source = ctx.units.get(sourceId);
+        if (!source) break;
+        const dx = source.pos.x - target.pos.x;
+        const dz = source.pos.z - target.pos.z;
+        const gap = Math.hypot(dx, dz);
+        const travel = Math.min(spec.distance, Math.max(0, gap - 1));
+        if (travel > 0) displace(ctx, target, dx, dz, travel);
+        break;
+      }
       case 'shield': {
         const value = spec.base + (spec.apRatio ?? 0) * power.ap;
         addStatus(target, {
@@ -56,6 +118,32 @@ export function applyEffects(
         });
         break;
       }
+      case 'dot':
+        addStatus(target, {
+          kind: 'dot',
+          until: ctx.time + spec.duration,
+          perSecond: spec.perSecond,
+          sourceId,
+          dtype: spec.dtype,
+        });
+        break;
+      case 'grievous':
+        addStatus(target, {
+          kind: 'grievous',
+          until: ctx.time + spec.duration,
+          factor: spec.factor,
+        });
+        break;
+      case 'buff':
+        addStatus(target, {
+          kind: 'buff',
+          until: ctx.time + spec.duration,
+          msPct: spec.msPct ?? 0,
+          asPct: spec.asPct ?? 0,
+          armor: spec.armor ?? 0,
+          mr: spec.mr ?? 0,
+        });
+        break;
       case 'mark': {
         const stacks = addMarkStack(target, spec.duration, ctx.time);
         if (stacks >= spec.stacksToTrigger) {

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { applyEffects, type EffectSpec } from '../src/sim/combat/effects';
 import { isRooted, slowPct } from '../src/sim/combat/status';
 import { CHAMPIONS } from '../src/sim/content/champions';
+import { NavGrid } from '../src/sim/navgrid';
 import { Rng } from '../src/sim/rng';
 import { Sim } from '../src/sim/sim';
 import type { CombatCtx } from '../src/sim/sim_context';
@@ -89,6 +90,7 @@ describe('Sylra', () => {
     const ctx: CombatCtx = {
       time: 0,
       rng,
+      nav: new NavGrid(10, [], 0),
       units: new Map([[b.id, b]]),
       projectiles: new Map(),
       zones: new Map(),

@@ -7,8 +7,11 @@ import type { AbilityKey, Vec2 } from '../sim/types';
 export interface InputHandlers {
   onRightClick(p: Vec2): void;
   onCast(key: AbilityKey, aim: Vec2): void;
+  onCastSigil(slot: number, aim: Vec2): void;
   onToggleShop(): void;
 }
+
+const SIGIL_KEYS: Readonly<Record<string, number>> = { d: 0, f: 1 };
 
 const ABILITY_KEYS: Readonly<Record<string, AbilityKey>> = {
   q: 'Q',
@@ -41,6 +44,12 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): void {
     const lower = e.key.toLowerCase();
     if (lower === 'p' || lower === 'b') {
       handlers.onToggleShop();
+      return;
+    }
+    const sigilSlot = SIGIL_KEYS[lower];
+    if (sigilSlot !== undefined) {
+      const aim = renderer.groundPointAt(mouseX, mouseY);
+      if (aim) handlers.onCastSigil(sigilSlot, aim);
       return;
     }
     const key = ABILITY_KEYS[lower];

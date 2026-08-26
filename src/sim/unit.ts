@@ -59,6 +59,9 @@ export interface Unit {
   sightRange: number;
   goldBounty: number;
   xpBounty: number;
+  // The two equipped sigils and their ready-at times (champions).
+  sigils: string[];
+  sigilCooldowns: number[];
   // Structure metadata (towers only; the Sanctum core is identified by kind).
   structure: StructureMeta | null;
   // Lane minion state.
@@ -110,6 +113,8 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     sightRange: 8,
     goldBounty: 0,
     xpBounty: 0,
+    sigils: [],
+    sigilCooldowns: [],
     structure: null,
     lane: null,
     laneProgress: 0,
@@ -140,6 +145,8 @@ export function createChampion(id: number, team: TeamId, pos: Vec2, def: Champio
   u.sightRange = 12;
   u.goldBounty = 300;
   u.xpBounty = 200;
+  u.sigils = ['riftstep', 'mend'];
+  u.sigilCooldowns = [0, 0];
   return u;
 }
 

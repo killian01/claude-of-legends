@@ -3,6 +3,7 @@
 // Chasing and firing ride the shared auto-attack system; this module only
 // decides targets and lane movement.
 
+import { isStealthed } from './combat/status';
 import type { GameMap, LaneId } from './content/map';
 import type { NavGrid } from './navgrid';
 import { findPath } from './pathfind';
@@ -28,6 +29,7 @@ function acquire(ctx: CombatCtx, u: Unit): void {
   let bestDist = Number.POSITIVE_INFINITY;
   for (const o of ctx.units.values()) {
     if (o.team === u.team || o.dead || ctx.dead.has(o.id)) continue;
+    if (isStealthed(o, ctx.time)) continue;
     const d = Math.hypot(o.pos.x - u.pos.x, o.pos.z - u.pos.z);
     if (d > AGGRO_RADIUS) continue;
     if ((o.kind === 'tower' || o.kind === 'sanctum') && isInvulnerable(ctx.units, o)) continue;
@@ -45,6 +47,7 @@ function currentTargetValid(ctx: CombatCtx, u: Unit): boolean {
   if (u.attackTargetId === null) return false;
   const t = ctx.units.get(u.attackTargetId);
   if (!t || t.dead || ctx.dead.has(t.id) || t.team === u.team) return false;
+  if (isStealthed(t, ctx.time)) return false;
   return Math.hypot(t.pos.x - u.pos.x, t.pos.z - u.pos.z) <= LEASH_RADIUS;
 }
 

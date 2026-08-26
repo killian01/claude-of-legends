@@ -1,5 +1,6 @@
-// Ground zones: damage-over-time fields, entry triggers, and delayed
-// detonations. A zone affects enemies of its owning team only.
+// Ground zones: damage-over-time fields, entry triggers, delayed
+// detonations, and ally-affecting fields (heals). Enemy effects target the
+// zone owner's enemies; allyOnTick targets its allies.
 
 import { applyEffects, type EffectSpec, type Power } from './combat/effects';
 import type { CombatCtx } from './sim_context';
@@ -18,15 +19,17 @@ export interface Zone {
   power: Power;
   onEnter: readonly EffectSpec[];
   onTick: readonly EffectSpec[];
+  allyOnTick: readonly EffectSpec[];
   detonateAt: number | null;
   onDetonate: readonly EffectSpec[];
   entered: Set<number>;
 }
 
-function enemiesInside(ctx: CombatCtx, z: Zone): Unit[] {
+function unitsInside(ctx: CombatCtx, z: Zone, enemies: boolean): Unit[] {
   const out: Unit[] = [];
   for (const u of ctx.units.values()) {
-    if (u.team === z.team || u.dead || ctx.dead.has(u.id)) continue;
+    if (u.dead || ctx.dead.has(u.id)) continue;
+    if (enemies ? u.team === z.team : u.team !== z.team) continue;
     if (Math.hypot(u.pos.x - z.pos.x, u.pos.z - z.pos.z) <= z.radius + u.radius) out.push(u);
   }
   return out;
@@ -34,7 +37,7 @@ function enemiesInside(ctx: CombatCtx, z: Zone): Unit[] {
 
 export function stepZones(ctx: CombatCtx): void {
   for (const z of [...ctx.zones.values()]) {
-    const inside = enemiesInside(ctx, z);
+    const inside = unitsInside(ctx, z, true);
 
     if (z.onEnter.length > 0) {
       for (const u of inside) {
@@ -45,8 +48,13 @@ export function stepZones(ctx: CombatCtx): void {
       }
     }
 
-    if (z.onTick.length > 0 && ctx.time >= z.nextTickAt) {
+    if (ctx.time >= z.nextTickAt && (z.onTick.length > 0 || z.allyOnTick.length > 0)) {
       for (const u of inside) applyEffects(ctx, z.sourceId, z.power, u, z.onTick);
+      if (z.allyOnTick.length > 0) {
+        for (const u of unitsInside(ctx, z, false)) {
+          applyEffects(ctx, z.sourceId, z.power, u, z.allyOnTick);
+        }
+      }
       z.nextTickAt += z.tickEvery;
     }
 

@@ -1,6 +1,7 @@
-// Projectiles in flight: linear skillshots and homing auto-attack bolts.
-// Hit tests use point-to-segment distance so fast projectiles cannot tunnel
-// through a unit between two ticks.
+// Projectiles in flight: linear skillshots (optionally piercing, optionally
+// affecting allies they pass through) and homing auto-attack bolts. Hit tests
+// use point-to-segment distance so fast projectiles cannot tunnel through a
+// unit between two ticks.
 
 import { applyEffects, type EffectSpec, type Power } from './combat/effects';
 import type { CombatCtx } from './sim_context';
@@ -18,8 +19,12 @@ export interface Projectile {
   maxRange: number;
   traveled: number;
   homingTargetId: number | null;
+  pierce: boolean;
+  // Units already affected by this projectile (piercing hits once per unit).
+  hitIds: Set<number>;
   power: Power;
   onHit: readonly EffectSpec[];
+  allyEffects: readonly EffectSpec[];
 }
 
 function segmentDistance(p: Vec2, a: Vec2, b: Vec2): number {
@@ -62,22 +67,39 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
     p.pos.z += p.dir.z * step;
     p.traveled += step;
 
-    let hit: Unit | null = null;
-    let hitDist = Number.POSITIVE_INFINITY;
+    // Enemies crossed this step, nearest-first for determinism.
+    const crossed: { u: Unit; d: number }[] = [];
     for (const u of ctx.units.values()) {
-      if (u.team === p.team || u.dead || ctx.dead.has(u.id)) continue;
+      if (u.team === p.team || u.dead || ctx.dead.has(u.id) || p.hitIds.has(u.id)) continue;
       if (segmentDistance(u.pos, from, p.pos) > p.radius + u.radius) continue;
-      const d = Math.hypot(u.pos.x - from.x, u.pos.z - from.z);
-      if (d < hitDist) {
-        hitDist = d;
-        hit = u;
+      crossed.push({ u, d: Math.hypot(u.pos.x - from.x, u.pos.z - from.z) });
+    }
+    crossed.sort((a, b) => a.d - b.d || a.u.id - b.u.id);
+
+    let despawned = false;
+    for (const { u } of crossed) {
+      p.hitIds.add(u.id);
+      applyEffects(ctx, p.sourceId, p.power, u, p.onHit);
+      if (!p.pierce) {
+        ctx.projectiles.delete(p.id);
+        despawned = true;
+        break;
       }
     }
-    if (hit) {
-      applyEffects(ctx, p.sourceId, p.power, hit, p.onHit);
-      ctx.projectiles.delete(p.id);
-      continue;
+    if (despawned) continue;
+
+    // Piercing waves can also carry effects for allies they pass through.
+    if (p.allyEffects.length > 0) {
+      for (const u of ctx.units.values()) {
+        if (u.team !== p.team || u.id === p.sourceId || u.dead || ctx.dead.has(u.id)) continue;
+        if (u.kind !== 'champion' && u.kind !== 'minion') continue;
+        if (p.hitIds.has(u.id)) continue;
+        if (segmentDistance(u.pos, from, p.pos) > p.radius + u.radius) continue;
+        p.hitIds.add(u.id);
+        applyEffects(ctx, p.sourceId, p.power, u, p.allyEffects);
+      }
     }
+
     if (p.traveled >= p.maxRange) ctx.projectiles.delete(p.id);
   }
 }

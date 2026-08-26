@@ -6,11 +6,13 @@
 //   vision -> clock.
 
 import { stepAutoAttacks } from './combat/auto_attack';
-import { castAbility } from './combat/casting';
-import { effectiveMoveSpeed, expireStatuses } from './combat/status';
+import { castAbility, executeCast } from './combat/casting';
+import { stepDots } from './combat/dots';
+import { breakStealth, effectiveMoveSpeed, expireStatuses, isStunned } from './combat/status';
 import { CHAMPIONS, DEFAULT_CHAMPION_ID } from './content/champions';
 import { ITEMS } from './content/items';
 import { GAME_MAP, type GameMap } from './content/map';
+import { SIGILS } from './content/sigils';
 import { createMapUnits } from './map_units';
 import { stepMinionAi } from './minion_ai';
 import { stepMovement } from './movement';
@@ -34,6 +36,7 @@ export type SimEvent =
   | { type: 'damage'; sourceId: number; targetId: number; amount: number; dtype: DamageType }
   | { type: 'death'; unitId: number; killerId: number }
   | { type: 'cast'; unitId: number; key: AbilityKey }
+  | { type: 'sigil'; unitId: number; slot: number }
   | { type: 'victory'; team: TeamId };
 
 export const ULT_LEVEL = 6;
@@ -75,13 +78,14 @@ export class Sim {
       this.units.set(u.id, u);
       this.nav.blockCircle(u.pos.x, u.pos.z, staticFootprint(u));
     }
-    this.visibility = computeVisibility(this.map, this.units);
+    this.visibility = computeVisibility(this.map, this.units, 0);
   }
 
   private ctx(): CombatCtx {
     return {
       time: this.time,
       rng: this.rng,
+      nav: this.nav,
       units: this.units,
       projectiles: this.projectiles,
       zones: this.zones,
@@ -146,6 +150,25 @@ export class Sim {
     return castAbility(this.ctx(), u, key, def, aim);
   }
 
+  castSigil(unitId: number, slot: number, aim: Vec2): boolean {
+    const u = this.units.get(unitId);
+    if (!u || u.kind !== 'champion' || u.dead || this.dead.has(unitId)) return false;
+    if (isStunned(u, this.time)) return false;
+    const sigilId = u.sigils[slot];
+    const def = sigilId ? SIGILS[sigilId] : undefined;
+    if (!def) return false;
+    if ((u.sigilCooldowns[slot] ?? 0) > this.time) return false;
+    const ok = executeCast(this.ctx(), u, def.spec, def.castRange, aim, {
+      ad: u.stats.ad,
+      ap: u.stats.ap,
+    });
+    if (!ok) return false;
+    u.sigilCooldowns[slot] = this.time + def.cooldown;
+    breakStealth(u);
+    this.events.push({ type: 'sigil', unitId, slot });
+    return true;
+  }
+
   buyItem(unitId: number, itemId: string): boolean {
     const u = this.units.get(unitId);
     const def = ITEMS[itemId];
@@ -181,6 +204,7 @@ export class Sim {
 
     for (const u of this.units.values()) expireStatuses(u, this.time);
 
+    stepDots(ctx);
     grantPassiveGold(ctx);
     for (const u of this.units.values()) {
       if (u.dead) continue;
@@ -241,7 +265,7 @@ export class Sim {
       u.cooldowns = {};
     }
 
-    this.visibility = computeVisibility(this.map, this.units);
+    this.visibility = computeVisibility(this.map, this.units, this.time);
 
     this.time += DT;
     this.tickCount += 1;
