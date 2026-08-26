@@ -23,6 +23,7 @@ export type ClientMsg =
   | { t: 'cast'; key: AbilityKey; x: number; z: number }
   | { t: 'sigil'; slot: number; x: number; z: number }
   | { t: 'buy'; itemId: string }
+  | { t: 'skill'; key: AbilityKey }
   | { t: 'chat'; text: string }
   | { t: 'ping'; x: number; z: number };
 
@@ -64,6 +65,9 @@ export interface SelfSnap {
   dead: boolean;
   respawnAt: number;
   cooldowns: Partial<Record<AbilityKey, number>>;
+  // Effective ability ranks and unspent skill points, for the HUD pips.
+  abilityRanks: Record<AbilityKey, number>;
+  skillPoints: number;
   sigilCooldowns: number[];
   items: string[];
   sigils: string[];

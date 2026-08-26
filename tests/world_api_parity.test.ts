@@ -25,6 +25,7 @@ const IWORLD_MEMBERS: readonly { name: string; kind: 'value' | 'function' }[] = 
   { name: 'castAbility', kind: 'function' },
   { name: 'castSigil', kind: 'function' },
   { name: 'buyItem', kind: 'function' },
+  { name: 'levelAbility', kind: 'function' },
 ];
 
 describe('IWorld parity', () => {

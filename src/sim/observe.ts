@@ -7,8 +7,9 @@ import { CHAMPIONS } from './content/champions';
 import { SIGILS } from './content/sigils';
 import type { Observation, ObsUnit } from './policy';
 import type { Sim } from './sim';
+import { effectiveRank } from './stats';
 import { isInvulnerable } from './structure_rules';
-import { type AbilityKey, ULT_LEVEL } from './types';
+import type { AbilityKey } from './types';
 
 const KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
 
@@ -19,12 +20,12 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
   if (!def) return null;
 
   const abilityReady = { Q: false, W: false, E: false, R: false };
+  const abilityRanks = { Q: 0, W: 0, E: 0, R: 0 };
   for (const key of KEYS) {
     const a = def.abilities[key];
+    abilityRanks[key] = effectiveRank(u, key);
     abilityReady[key] =
-      (u.cooldowns[key] ?? 0) <= sim.time &&
-      u.mana >= a.manaCost &&
-      (key !== 'R' || u.level >= ULT_LEVEL);
+      (u.cooldowns[key] ?? 0) <= sim.time && u.mana >= a.manaCost && abilityRanks[key] > 0;
   }
 
   const sigilReady = u.sigils.map((id, slot) => {
@@ -69,6 +70,8 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       gold: u.gold,
       dead: u.dead,
       abilityReady,
+      abilityRanks,
+      skillPoints: u.skillPoints,
       sigils: [...u.sigils],
       sigilReady,
       items: [...u.items],

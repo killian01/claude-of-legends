@@ -2,11 +2,32 @@
 // Aura (armor to nearby allies) is deferred with the passive-hook system.
 // His W exercises the taunt primitive.
 
+import { refreshBuff } from '../../combat/status';
 import type { ChampionDef } from './index';
+
+const BULWARK_RANGE = 6;
+const BULWARK_ARMOR = 8;
+// Just over the 0.25 s passive tick so the aura never flickers off.
+const BULWARK_DURATION_S = 0.4;
 
 export const TORV: ChampionDef = {
   id: 'torv',
   name: 'Torv, Stonehorn',
+  role: 'Support',
+  blurb: 'The one who starts the fight: engage, disruption, and a protective aura.',
+  passive: {
+    name: 'Bulwark Aura',
+    description: 'Nearby allied champions gain 8 bonus armor.',
+    onTick(ctx, self) {
+      for (const u of ctx.units.values()) {
+        if (u.kind !== 'champion' || u.team !== self.team || u.dead || ctx.dead.has(u.id)) {
+          continue;
+        }
+        if (Math.hypot(u.pos.x - self.pos.x, u.pos.z - self.pos.z) > BULWARK_RANGE) continue;
+        refreshBuff(u, ctx.time, BULWARK_DURATION_S, { armor: BULWARK_ARMOR });
+      }
+    },
+  },
   base: {
     hp: 640,
     mana: 340,

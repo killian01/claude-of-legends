@@ -102,6 +102,11 @@ export class Match {
       case 'buy':
         if (typeof msg.itemId === 'string') this.sim.buyItem(p.unitId, msg.itemId);
         break;
+      case 'skill':
+        if (msg.key === 'Q' || msg.key === 'W' || msg.key === 'E' || msg.key === 'R') {
+          this.sim.levelAbility(p.unitId, msg.key);
+        }
+        break;
       default:
         break;
     }

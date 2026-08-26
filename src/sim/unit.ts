@@ -42,6 +42,14 @@ export interface Unit {
   statuses: Status[];
   // Ready-at sim times per ability key.
   cooldowns: Partial<Record<AbilityKey, number>>;
+  // Ability ranks (basics start at 1, R unlocks at champion level 6) and
+  // unspent skill points (one per level-up past 1).
+  abilityRanks: Record<AbilityKey, number>;
+  skillPoints: number;
+  // Generic per-champion passive counter (Heat, Twinshot...).
+  passiveStacks: number;
+  // Last time ANY damage landed (Shieldskin-style passives).
+  lastDamagedAt: number;
   attackTargetId: number | null;
   attackReadyAt: number;
   // Attack-move destination; enemies encountered on the way are engaged.
@@ -112,6 +120,10 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     },
     statuses: [],
     cooldowns: {},
+    abilityRanks: { Q: 1, W: 1, E: 1, R: 0 },
+    skillPoints: 0,
+    passiveStacks: 0,
+    lastDamagedAt: -999,
     attackTargetId: null,
     attackReadyAt: 0,
     attackMoveTarget: null,

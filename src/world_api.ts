@@ -27,4 +27,5 @@ export interface IWorld {
   castAbility(unitId: number, key: AbilityKey, aim: Vec2): boolean;
   castSigil(unitId: number, slot: number, aim: Vec2): boolean;
   buyItem(unitId: number, itemId: string): boolean;
+  levelAbility(unitId: number, key: AbilityKey): boolean;
 }

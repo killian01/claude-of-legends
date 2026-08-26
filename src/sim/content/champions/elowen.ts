@@ -2,11 +2,27 @@
 // (ability damage grants move speed) is deferred with the passive-hook
 // system. Her W exercises the blind primitive: enemy sight shrinks inside.
 
+import { refreshBuff } from '../../combat/status';
 import type { ChampionDef } from './index';
+
+const MISTBORNE_MS_PCT = 0.08;
+const MISTBORNE_DURATION_S = 1.2;
 
 export const ELOWEN: ChampionDef = {
   id: 'elowen',
   name: 'Elowen, Mistward',
+  role: 'Battlemage',
+  blurb: 'A skirmishing mage who bends vision itself and flows between hits.',
+  passive: {
+    name: 'Mistborne',
+    description: 'Dealing ability damage grants a brief burst of move speed.',
+    modifyDamage(ctx, self, _target, amount, _dtype, via) {
+      if (via === 'ability' && amount > 0) {
+        refreshBuff(self, ctx.time, MISTBORNE_DURATION_S, { msPct: MISTBORNE_MS_PCT });
+      }
+      return amount;
+    },
+  },
   base: {
     hp: 560,
     mana: 480,

@@ -1,6 +1,8 @@
 // The one damage pipeline: mitigation by armor or magic resist, shield
 // absorption, hp loss, and death detection. Nothing else subtracts hp.
 
+import type { DamageVia } from '../passive_types';
+import { passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
 import { isInvulnerable } from '../structure_rules';
 import type { DamageType } from '../types';
@@ -25,12 +27,23 @@ export function dealDamage(
   target: Unit,
   amount: number,
   dtype: DamageType,
+  via: DamageVia = 'other',
 ): void {
   if (ctx.dead.has(target.id) || target.dead) return;
   if ((target.kind === 'tower' || target.kind === 'sanctum') && isInvulnerable(ctx.units, target)) {
     return;
   }
+  // Source passive damage modifier (Opportunist, Deadstill, Heat...).
+  const source = ctx.units.get(sourceId);
+  if (source) {
+    const passive = passiveOf(source);
+    if (passive?.modifyDamage) {
+      amount = passive.modifyDamage(ctx, source, target, amount, dtype, via);
+    }
+  }
   const mitigated = amount * mitigationMultiplier(target, dtype);
+  // Shield-absorbed hits still count as taking damage (Shieldskin timing).
+  if (mitigated > 0) target.lastDamagedAt = ctx.time;
   const after = absorbWithShields(target, mitigated, ctx.time);
   if (after <= 0) return;
   cancelRecall(target);

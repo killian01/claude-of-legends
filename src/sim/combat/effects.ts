@@ -4,6 +4,8 @@
 // cast time so a projectile in flight stays deterministic even if the caster
 // dies before impact.
 
+import type { DamageVia } from '../passive_types';
+import { passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
 import type { DamageType } from '../types';
 import type { Unit } from '../unit';
@@ -13,6 +15,8 @@ import { addMarkStack, addStatus, clearMarks, healFactor } from './status';
 export interface Power {
   ad: number;
   ap: number;
+  // Rank multiplier applied to BASE amounts (damage, heal, shield, dot).
+  scale?: number;
 }
 
 export type EffectSpec =
@@ -58,7 +62,9 @@ export function applyEffects(
   power: Power,
   target: Unit,
   specs: readonly EffectSpec[],
+  via: DamageVia = 'ability',
 ): void {
+  const scale = power.scale ?? 1;
   // Structures are immune to crowd control and displacement (review F.2:
   // towers could be stunned and even taunted).
   const structure = target.kind === 'tower' || target.kind === 'sanctum';
@@ -77,14 +83,18 @@ export function applyEffects(
     }
     switch (spec.kind) {
       case 'damage': {
-        const amount = spec.base + (spec.adRatio ?? 0) * power.ad + (spec.apRatio ?? 0) * power.ap;
-        dealDamage(ctx, sourceId, target, amount, spec.dtype);
+        const amount =
+          spec.base * scale + (spec.adRatio ?? 0) * power.ad + (spec.apRatio ?? 0) * power.ap;
+        dealDamage(ctx, sourceId, target, amount, spec.dtype, via);
         break;
       }
       case 'heal': {
         if (target.dead || ctx.dead.has(target.id)) break;
-        const amount = (spec.base + (spec.apRatio ?? 0) * power.ap) * healFactor(target, ctx.time);
+        const amount =
+          (spec.base * scale + (spec.apRatio ?? 0) * power.ap) * healFactor(target, ctx.time);
         target.hp = Math.min(target.maxHp, target.hp + amount);
+        const source = ctx.units.get(sourceId);
+        if (source && amount > 0) passiveOf(source)?.onHealGiven?.(ctx, source, target, amount);
         break;
       }
       case 'slow':
@@ -127,7 +137,8 @@ export function applyEffects(
       }
       case 'shield': {
         // Grievous wounds cut shields like heals (review F.2).
-        const value = (spec.base + (spec.apRatio ?? 0) * power.ap) * healFactor(target, ctx.time);
+        const value =
+          (spec.base * scale + (spec.apRatio ?? 0) * power.ap) * healFactor(target, ctx.time);
         addStatus(target, {
           kind: 'shield',
           until: ctx.time + spec.duration,
@@ -139,7 +150,7 @@ export function applyEffects(
         addStatus(target, {
           kind: 'dot',
           until: ctx.time + spec.duration,
-          perSecond: spec.perSecond,
+          perSecond: spec.perSecond * scale,
           sourceId,
           dtype: spec.dtype,
         });

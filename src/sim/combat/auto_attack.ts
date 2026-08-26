@@ -5,6 +5,7 @@
 // stealth.
 
 import type { NavGrid } from '../navgrid';
+import { passiveOf } from '../passives';
 import { findPath } from '../pathfind';
 import type { CombatCtx } from '../sim_context';
 import type { Unit } from '../unit';
@@ -35,9 +36,11 @@ function fire(ctx: CombatCtx, u: Unit, target: Unit): void {
       power: { ad: u.stats.ad, ap: u.stats.ap },
       onHit: [{ kind: 'damage', base: 0, adRatio: 1, dtype: 'physical' }],
       allyEffects: [],
+      via: 'attack',
     });
   } else {
-    dealDamage(ctx, u.id, target, u.stats.ad, 'physical');
+    dealDamage(ctx, u.id, target, u.stats.ad, 'physical', 'attack');
+    passiveOf(u)?.onAttackHit?.(ctx, u, target);
   }
   const cadence = Math.max(0.1, u.stats.attackSpeed * (1 + attackSpeedBonusPct(u, ctx.time)));
   u.attackReadyAt = ctx.time + 1 / cadence;

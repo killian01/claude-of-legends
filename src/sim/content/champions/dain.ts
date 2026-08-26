@@ -4,9 +4,27 @@
 
 import type { ChampionDef } from './index';
 
+const HEAT_MAX = 4;
+const HEAT_BONUS = 1.25;
+
 export const DAIN: ChampionDef = {
   id: 'dain',
   name: 'Dain, Emberfist',
+  role: 'Fighter',
+  blurb: 'A brawler who wants long trades: attacks build Heat for empowered abilities.',
+  passive: {
+    name: 'Heat',
+    description:
+      'Attacks build Heat (up to 4). At full Heat, the next ability deals 25 percent bonus damage.',
+    onAttackHit(_ctx, self) {
+      self.passiveStacks = Math.min(HEAT_MAX, self.passiveStacks + 1);
+    },
+    modifyDamage(_ctx, self, _target, amount, _dtype, via) {
+      if (via !== 'ability' || self.passiveStacks < HEAT_MAX) return amount;
+      self.passiveStacks = 0;
+      return amount * HEAT_BONUS;
+    },
+  },
   base: {
     hp: 620,
     mana: 300,

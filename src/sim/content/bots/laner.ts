@@ -76,6 +76,16 @@ const policy: Policy = (obs, rng: Rng): Action => {
   const s = obs.self;
   if (s.dead) return { kind: 'noop' };
 
+  // Spend skill points as soon as they exist: R at its level gates (6/11/16),
+  // then Q > W > E. A free action, but one decision slot this period.
+  if (s.skillPoints > 0) {
+    const ultGate = [6, 11, 16][s.abilityRanks.R];
+    if (ultGate !== undefined && s.level >= ultGate) return { kind: 'level', key: 'R' };
+    for (const key of ['Q', 'W', 'E'] as const) {
+      if (s.abilityRanks[key] < 5) return { kind: 'level', key };
+    }
+  }
+
   const fountain = GAME_MAP.fountains.find((f) => f.team === s.team)!;
   const enemySanctum = GAME_MAP.sanctums.find((c) => c.team !== s.team)!;
   const atFountain = Math.hypot(s.x - fountain.x, s.z - fountain.z) <= fountain.r + 2;

@@ -67,6 +67,22 @@ export function gainXp(u: Unit, amount: number): void {
   while (u.level < MAX_LEVEL && u.xp >= xpForNext(u.level)) {
     u.xp -= xpForNext(u.level);
     u.level += 1;
+    u.skillPoints += 1;
     recalcChampion(u);
   }
 }
+
+// The live rank of an ability. Basics are always at least rank 1; R counts
+// as rank 1 from champion level 6 even before a point is invested.
+export function effectiveRank(u: Unit, key: 'Q' | 'W' | 'E' | 'R'): number {
+  const stored = u.abilityRanks[key] ?? 0;
+  if (key === 'R') return stored > 0 ? stored : u.level >= 6 ? 1 : 0;
+  return Math.max(1, stored);
+}
+
+export const BASIC_MAX_RANK = 5;
+export const ULT_MAX_RANK = 3;
+export const ULT_RANK_LEVELS: readonly number[] = [6, 11, 16];
+// Generic rank scaling: base amounts grow, cooldowns shrink.
+export const RANK_BASE_SCALE = 0.22;
+export const RANK_CD_SCALE = 0.06;

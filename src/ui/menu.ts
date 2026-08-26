@@ -2,11 +2,23 @@
 // select. Pure DOM, callback-driven; the entry point owns the flow.
 
 import type { SelectPlayer } from '../net/protocol';
-import { CHAMPION_LIST } from '../sim/content/champions';
+import { CHAMPION_LIST, type ChampionRole } from '../sim/content/champions';
 import { SIGIL_LIST } from '../sim/content/sigils';
 import type { AbilityKey, TeamId } from '../sim/types';
 import { describeAbility, describeSigil } from './describe';
 import { attachTooltip } from './tooltips';
+
+// One color per role so classes read at a glance on the select grid.
+const ROLE_COLORS: Readonly<Record<ChampionRole, string>> = {
+  Tank: '#8fb3d9',
+  Fighter: '#d9925a',
+  Mage: '#a67ee8',
+  Battlemage: '#c96fc0',
+  Assassin: '#e86a6a',
+  Marksman: '#e8c862',
+  Support: '#6fd9a8',
+  Skirmisher: '#d9d15a',
+};
 
 const CSS = `
 .menu, .menu * { box-sizing: border-box; }
@@ -42,11 +54,14 @@ const CSS = `
 .menu-players { font-size: 13px; margin: 6px 0 10px; color: #c9d8ae; }
 .menu-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 6px 0 4px; }
 .menu-champ {
-  padding: 8px; border-radius: 6px; border: 1px solid #3a4f28; background: #17210f;
+  padding: 7px 8px; border-radius: 6px; border: 1px solid #3a4f28; background: #17210f;
   color: #d8e6c0; font-size: 12px; text-align: left; cursor: pointer;
 }
 .menu-champ:hover { border-color: #7ca050; }
 .menu-champ.picked { border-color: #a3c96a; background: #2c4a1c; }
+.menu-champ-name { font-weight: 700; }
+.menu-champ-role { font-size: 10px; font-weight: 700; margin-top: 2px; }
+.menu-champ-blurb { font-size: 10px; color: #93a87c; margin-top: 1px; line-height: 1.35; }
 .menu-sigils { display: flex; gap: 6px; margin: 6px 0; }
 .menu-sigil {
   flex: 1; padding: 7px 4px; border-radius: 6px; border: 1px solid #4d451f; background: #1c190d;
@@ -264,9 +279,16 @@ export function showSelect(
   const champButtons = new Map<string, HTMLButtonElement>();
   const ABILITY_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
   for (const c of CHAMPION_LIST) {
-    const btn = el('button', 'menu-champ', c.name) as HTMLButtonElement;
+    const btn = el('button', 'menu-champ') as HTMLButtonElement;
+    btn.appendChild(el('div', 'menu-champ-name', c.name));
+    const role = el('div', 'menu-champ-role', c.role);
+    role.style.color = ROLE_COLORS[c.role] ?? '#c9d8ae';
+    btn.appendChild(role);
+    btn.appendChild(el('div', 'menu-champ-blurb', c.blurb));
     attachTooltip(btn, () => [
-      c.name,
+      `${c.name} (${c.role})`,
+      c.blurb,
+      `Passive, ${c.passive.name}: ${c.passive.description}`,
       ...ABILITY_KEYS.map((k) => describeAbility(k, c.abilities[k]).slice(0, 3).join(' ')),
     ]);
     btn.addEventListener('click', () => {

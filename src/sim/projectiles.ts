@@ -4,6 +4,8 @@
 // unit between two ticks.
 
 import { applyEffects, type EffectSpec, type Power } from './combat/effects';
+import type { DamageVia } from './passive_types';
+import { passiveOf } from './passives';
 import type { CombatCtx } from './sim_context';
 import type { TeamId, Vec2 } from './types';
 import type { Unit } from './unit';
@@ -25,6 +27,8 @@ export interface Projectile {
   power: Power;
   onHit: readonly EffectSpec[];
   allyEffects: readonly EffectSpec[];
+  // 'attack' for auto-attack bolts (feeds on-hit passives); default 'ability'.
+  via?: DamageVia;
 }
 
 function segmentDistance(p: Vec2, a: Vec2, b: Vec2): number {
@@ -53,7 +57,12 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
       const d = Math.hypot(dx, dz);
       const step = p.speed * dt;
       if (d <= step + p.radius + target.radius) {
-        applyEffects(ctx, p.sourceId, p.power, target, p.onHit);
+        const via = p.via ?? 'ability';
+        applyEffects(ctx, p.sourceId, p.power, target, p.onHit, via);
+        if (via === 'attack') {
+          const source = ctx.units.get(p.sourceId);
+          if (source && !source.dead) passiveOf(source)?.onAttackHit?.(ctx, source, target);
+        }
         ctx.projectiles.delete(p.id);
         continue;
       }
