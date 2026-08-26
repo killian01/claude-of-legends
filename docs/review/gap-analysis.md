@@ -184,7 +184,15 @@ Expanded report additions:
   (cheap DoS); tower/minion last hits evaporate the 300 g champion bounty
   and kill XP goes to enemies who never participated; no item selling.
 
-## G. Proposed fix plan (batched, in order)
+## G. Fix plan (batched, in order) — ALL FIVE BATCHES SHIPPED
+
+Status: batches 0 through 4 are implemented, tested (128 green including
+the match-must-end acceptance run), and pushed. Full bot matches conclude
+on their own in 11.6 to 21.1 minutes across seeds with different winners.
+Remaining P1/P2 items not covered by the batches (reconnect, skill points,
+champion passives, minion unit collision, potions, camera freedom, fog
+terrain dimming, assists, deeper art) stay tracked in docs/roadmap.md and
+the sections above.
 
 - **Batch 0, the game must be able to END (sim and balance)**: unstick the
   side-lane minions (waypoint reach radius vs tower footprints), real
