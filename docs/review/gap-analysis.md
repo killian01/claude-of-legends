@@ -116,7 +116,43 @@ emotes, item actives.
 - [P2] UI art pass on panels and frames; fog-of-war terrain dimming; day
   cycle or atmosphere.
 
-## F. Reviewer reports (to merge)
+## F. Reviewer reports
 
-Pending: playability-by-simulation, spec-coverage, sim/server correctness,
-browser UX. Their findings land here with the same severity scale.
+Pending: playability-by-simulation, sim/server correctness, browser UX.
+
+### F.1 Spec-coverage reviewer (landed)
+
+Confirms (already listed above): recall, attack-move, skill points, own and
+enemy status display, keybind discovery, game clock, projectiles and zones
+crossing the fog unfiltered.
+
+New findings:
+
+- [P0][high] ONLINE DEATH BUG: a dead champion vanishes from the mirror
+  world (`Sim.isVisible` false for dead, snapshot puts it in `gone`,
+  ClientWorld deletes it): no death screen online, HUD frozen, camera falls
+  to map center. Reproduced by test. Fix: keep own-team dead champions in
+  the snapshot.
+- [P1][high] "Full regen at fountain" promised, only base regen exists:
+  healing at home takes minutes (bots idle at the fountain because of it).
+- [P1][high] No-duplicate-champions-within-a-team is enforced for bots only;
+  two humans on one team can lock the same champion.
+- [P2] Select screen: no random button; 45 s deadline vs the promised 60 s.
+- [P2] Respawn scales with level, not game time as promised.
+- [P2] Kit fidelity vs roster.md (beyond deferred passives): no knockup or
+  knock-aside primitives (Korrath R stuns instead), Fenn R not untargetable,
+  Ashvyn E root unconditional (no max-range logic), Dain W single pulse,
+  Torv Q pushes everyone at landing, dashes are instant teleports (dash and
+  blink conflated), no vision-granting zone primitive.
+- [P2] ADR 0003 drift: rate and cap hardcoded (not configurable); a bot
+  gets ONE action per 250 ms window while a human can move and cast in the
+  same window (a structural human advantage the ADR rejects); the
+  cast-applies-next-tick semantics and the headless parity test do not exist
+  yet; a budget-rejected cast gives the player zero feedback.
+- [P2] Shop button disabled state ignores the component discount (full price
+  check) so buyable upgrades can look unaffordable.
+- [P2] Ship-readiness: no Dockerfile; README still says "day 0, the code
+  lands next"; roadmap.md never mentions the passive-hook system that
+  champion files point to.
+- [P2] ADR 0001 partially honored: no monolith line-count ratchet test, no
+  persisted golden trace (double-run in-process only).
