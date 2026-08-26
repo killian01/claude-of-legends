@@ -260,9 +260,21 @@ export function startPresentation(
   startMusic();
 
   let lastTick = performance.now();
+  let wardenWasUp = false;
   const onWorldTick = (notes?: WorldNotes): void => {
     lastTick = performance.now();
     stepPendingCast();
+    // Warden spawn: ping its pit on the minimap and flash the ground so
+    // nobody misses it (the HUD adds the announcement and the voice).
+    const wardenUp = world.objectiveSpawnAt() === null;
+    if (wardenUp && !wardenWasUp) {
+      const warden = [...world.units.values()].find((u) => u.kind === 'warden');
+      if (warden) {
+        minimap.addPing(warden.pos.x, warden.pos.z);
+        renderer.flashMarker(warden.pos.x, warden.pos.z, 0xb06ae8);
+      }
+    }
+    wardenWasUp = wardenUp;
     renderer.onSimTick();
     hud.update();
     minimap.update();

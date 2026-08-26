@@ -4,6 +4,7 @@
 // screens, and the Escape menu. Reads the world through IWorld only; content
 // data (items, sigils, champions) is data-as-code it may read directly.
 
+import { announceVoice } from '../game/announcer';
 import { playSfx } from '../game/sfx';
 import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
@@ -991,9 +992,12 @@ export class Hud {
       if (!this.sawFirstBlood) {
         this.sawFirstBlood = true;
         this.announce('First blood');
+        announceVoice('First blood', true);
       }
-      if (k.unitId === this.selfId) playSfx('death');
-      else if (k.killerId === this.selfId) {
+      if (k.unitId === this.selfId) {
+        playSfx('death');
+        announceVoice('You have been slain', true);
+      } else if (k.killerId === this.selfId) {
         playSfx('kill');
         // Kill confirmation, center screen in gold; chained kills escalate.
         const now = performance.now();
@@ -1008,6 +1012,16 @@ export class Hud {
                 ? 'RAMPAGE'
                 : `You killed ${victimRow.name}`;
         this.announce(chainText, '#ffd94a');
+        announceVoice(
+          this.killChain >= 4
+            ? 'Rampage'
+            : this.killChain === 3
+              ? 'Triple kill'
+              : this.killChain === 2
+                ? 'Double kill'
+                : 'You have slain an enemy',
+          true,
+        );
       }
       const killerRow = rowOf(k.killerId);
       let killerName = killerRow?.name ?? 'The lane';
@@ -1052,12 +1066,14 @@ export class Hud {
       } else {
         this.sawBattleBegin = true;
         this.announce('Battle begins');
+        announceVoice('Minions have spawned');
       }
     }
     const towerCount = [...this.world.units.values()].filter((x) => x.kind === 'tower').length;
     if (this.lastTowerCount !== null && towerCount < this.lastTowerCount) {
       this.announce('A tower has fallen');
       playSfx('tower');
+      announceVoice('A tower has fallen');
     }
     this.lastTowerCount = towerCount;
 
@@ -1077,14 +1093,17 @@ export class Hud {
       if (wardenUp) {
         this.announce('The Warden has awoken', '#d8a6f5');
         playSfx('tower');
+        announceVoice('The Warden has awoken', true);
       } else {
         const mine = this.world.teamBuff(this.selfTeam);
         if (mine && mine.until > this.world.time + 100) {
           this.announce("Your team claims the Warden's Boon", '#ffd94a');
           playSfx('levelup');
+          announceVoice('Your team has claimed the Boon', true);
         } else {
           this.announce("The enemy claims the Warden's Boon", '#f5a3a3');
           playSfx('deny');
+          announceVoice('The enemy has claimed the Boon', true);
         }
       }
     }
@@ -1319,6 +1338,7 @@ export class Hud {
     if (winner !== null && !this.endPlayed) {
       this.endPlayed = true;
       playSfx(winner === this.selfTeam ? 'victory' : 'defeat');
+      announceVoice(winner === this.selfTeam ? 'Victory' : 'Defeat', true);
       this.endTitle.textContent = winner === this.selfTeam ? 'VICTORY' : 'DEFEAT';
       this.endTitle.style.color = winner === this.selfTeam ? '#8fd06a' : '#d06a6a';
       const total = Math.max(0, Math.floor(this.world.time));

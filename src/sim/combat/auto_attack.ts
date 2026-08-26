@@ -16,10 +16,22 @@ const RANGED_THRESHOLD = 2;
 const BOLT_SPEED = 30;
 const REPATH_DISTANCE = 2;
 
+// Tower heat (dive punish): each consecutive tower shot at a CHAMPION hits
+// harder, like the genre, so diving past shot two is a commitment. Towers
+// reuse the generic passiveStacks counter as their heat; tower_ai resets it
+// on every target change.
+export const TOWER_RAMP_PER_HIT = 0.35;
+export const TOWER_RAMP_CAP = 4;
+
 function fire(ctx: CombatCtx, u: Unit, target: Unit): void {
   breakStealth(u);
   // Presentation hook: renderers play a swing animation off this event.
   ctx.events.push({ type: 'attack', unitId: u.id, targetId: target.id });
+  let ad = u.stats.ad;
+  if (u.kind === 'tower' && target.kind === 'champion') {
+    ad *= 1 + TOWER_RAMP_PER_HIT * Math.min(u.passiveStacks, TOWER_RAMP_CAP);
+    u.passiveStacks += 1;
+  }
   if (u.stats.attackRange > RANGED_THRESHOLD) {
     const id = ctx.allocId();
     ctx.projectiles.set(id, {
@@ -35,14 +47,14 @@ function fire(ctx: CombatCtx, u: Unit, target: Unit): void {
       homingTargetId: target.id,
       pierce: false,
       hitIds: new Set(),
-      power: { ad: u.stats.ad, ap: u.stats.ap },
+      power: { ad, ap: u.stats.ap },
       onHit: [{ kind: 'damage', base: 0, adRatio: 1, dtype: 'physical' }],
       allyEffects: [],
       via: 'attack',
       vfx: null,
     });
   } else {
-    dealDamage(ctx, u.id, target, u.stats.ad, 'physical', 'attack');
+    dealDamage(ctx, u.id, target, ad, 'physical', 'attack');
     passiveOf(u)?.onAttackHit?.(ctx, u, target);
   }
   const cadence = Math.max(0.1, u.stats.attackSpeed * (1 + attackSpeedBonusPct(u, ctx.time)));

@@ -13,6 +13,7 @@ import { buildProjectileMesh, buildZoneMesh } from './ability_vfx';
 import { buildChampionMesh } from './champion_shapes';
 import { FloatingText, makeTextSprite } from './floating_text';
 import { buildMapDressing, type MapDressing, SKIRT_COLOR } from './map_dressing';
+import { buildMinionMesh } from './minion_shapes';
 import { buildSanctumMesh, buildTowerMesh } from './structure_shapes';
 
 const TEAM_COLORS: readonly number[] = [0x4a7dd6, 0xd65c5c];
@@ -143,7 +144,13 @@ export class Renderer {
     mesh: THREE.Mesh;
     material: THREE.MeshBasicMaterial;
     bornAt: number;
+    // Cast effects EXPAND as they fade (an impact); order rings shrink.
+    grow?: boolean;
   }[] = [];
+  // Short-lived glow sprites trailing behind live projectiles.
+  private readonly trails: { sprite: THREE.Sprite; bornAt: number }[] = [];
+  private lastTrailDropAt = 0;
+  private trailTexture: THREE.Texture | null = null;
   private readonly fct: FloatingText;
   private readonly selfRing: THREE.Mesh;
   private readonly fogCanvas = document.createElement('canvas');
@@ -464,7 +471,46 @@ export class Renderer {
       mesh.position.set(aim.x, 0.14, aim.z);
     }
     this.scene.add(mesh);
-    this.markers.push({ mesh, material: mat, bornAt: performance.now() });
+    this.markers.push({ mesh, material: mat, bornAt: performance.now(), grow: true });
+    // Dashes leave a short trail of fading glow dots along the path.
+    if (p.kind === 'dash') {
+      const len = Math.min(p.range ?? p.castRange, Math.hypot(dx, dz) || 1);
+      const d = Math.hypot(dx, dz) || 1;
+      for (let i = 1; i <= 3; i++) {
+        const k = (len * i) / 4;
+        const dotMat = new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0.5,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        });
+        const dot = new THREE.Mesh(new THREE.CircleGeometry(0.35, 12), dotMat);
+        dot.rotation.x = -Math.PI / 2;
+        dot.position.set(from.x + (dx / d) * k, 0.13, from.z + (dz / d) * k);
+        this.scene.add(dot);
+        this.markers.push({ mesh: dot, material: dotMat, bornAt: performance.now(), grow: true });
+      }
+    }
+  }
+
+  // Radial glow used by projectile trails; built once.
+  private glowTexture(): THREE.Texture {
+    if (this.trailTexture) return this.trailTexture;
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const g = canvas.getContext('2d');
+    if (g) {
+      const grad = g.createRadialGradient(16, 16, 1, 16, 16, 16);
+      grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+      grad.addColorStop(0.5, 'rgba(255,255,255,0.25)');
+      grad.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 32, 32);
+    }
+    this.trailTexture = new THREE.CanvasTexture(canvas);
+    return this.trailTexture;
   }
 
   hideAimPreview(): void {
@@ -659,40 +705,11 @@ export class Renderer {
     const color = TEAM_COLORS[u.team] ?? 0xffffff;
     const holder = new THREE.Group();
     if (kind === 'minion') {
-      // Vanguards (lane-escalation elites) get a hulking spiked silhouette.
-      if (u.radius >= 0.75) {
-        const mat = new THREE.MeshLambertMaterial({ color, flatShading: true });
-        const body = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.6, 1.1), mat);
-        body.position.y = 0.95;
-        body.castShadow = true;
-        holder.add(body);
-        const darkMat = new THREE.MeshLambertMaterial({
-          color: new THREE.Color(color).multiplyScalar(0.55),
-          flatShading: true,
-        });
-        for (const side of [-1, 1]) {
-          const spike = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.7, 4), darkMat);
-          spike.position.set(side * 0.5, 2.0, 0);
-          holder.add(spike);
-        }
-        holder.userData.body = body;
-        return { holder, barY: 2.6 };
-      }
-      const ranged = u.stats.attackRange > 2;
-      const body = ranged
-        ? new THREE.Mesh(
-            new THREE.ConeGeometry(0.45, 1.2, 6),
-            new THREE.MeshLambertMaterial({ color, flatShading: true }),
-          )
-        : new THREE.Mesh(
-            new THREE.BoxGeometry(0.8, 1.0, 0.8),
-            new THREE.MeshLambertMaterial({ color, flatShading: true }),
-          );
-      body.position.y = 0.6;
-      body.castShadow = true;
-      holder.add(body);
-      holder.userData.body = body;
-      return { holder, barY: 1.8 };
+      const built = buildMinionMesh(u, color);
+      holder.add(built.holder);
+      holder.userData.body = built.body;
+      enableShadows(holder);
+      return { holder, barY: built.barY };
     }
     if (kind === 'tower') {
       holder.add(buildTowerMesh(color));
@@ -773,7 +790,24 @@ export class Renderer {
         holder.add(spike);
       }
       enableShadows(holder);
-      return { holder, barY: 4.0 };
+      // A beacon of violet light: the Warden must be impossible to miss
+      // from anywhere nearby. Spins slowly via the shared spinner path.
+      const beacon = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.8, 1.3, 16, 6, 1, true),
+        new THREE.MeshBasicMaterial({
+          color: 0xb06ae8,
+          transparent: true,
+          opacity: 0.16,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        }),
+      );
+      beacon.position.y = 8;
+      beacon.userData.spin = true;
+      holder.add(beacon);
+      collectSpinners(holder);
+      holder.scale.setScalar(1.15);
+      return { holder, barY: 4.6 };
     }
     const figure = buildChampionMesh(u.championId, color, u.skin);
     holder.add(figure);
@@ -793,6 +827,7 @@ export class Renderer {
     width: number,
     withMana: boolean,
     thick = false,
+    segments = 0,
   ): { fill: THREE.Sprite; back: THREE.Sprite; manaFill: THREE.Sprite | null } {
     const backH = thick ? 0.56 : withMana ? 0.5 : 0.34;
     const back = new THREE.Sprite(new THREE.SpriteMaterial({ color: COLOR_BAR_BACK }));
@@ -811,6 +846,18 @@ export class Renderer {
       manaFill.scale.set(width, 0.12, 1);
       manaFill.position.set(-width / 2, barY - 0.12, 0);
       holder.add(manaFill);
+    }
+    // Segment ticks on thick (structure) bars: chunks visibly disappear,
+    // so thousands of hp read as progress instead of a static bar.
+    if (thick && segments > 1) {
+      for (let i = 1; i < segments; i++) {
+        const tick = new THREE.Sprite(new THREE.SpriteMaterial({ color: COLOR_BAR_BACK }));
+        tick.center.set(0.5, 0.5);
+        tick.scale.set(0.05, thick ? 0.44 : 0.24, 1);
+        tick.position.set(-width / 2 + (width * i) / segments, barY, 0.01);
+        tick.renderOrder = 1;
+        holder.add(tick);
+      }
     }
     return { fill, back, manaFill };
   }
@@ -847,6 +894,7 @@ export class Renderer {
           barWidth,
           u.kind === 'champion',
           structure,
+          structure ? Math.round(u.maxHp / 300) : 0,
         );
         holder.position.set(u.pos.x, 0, u.pos.z);
         holder.userData.unitId = id;
@@ -1293,9 +1341,45 @@ export class Renderer {
         // Cast-fx meshes own their geometry; ring markers share one.
         if (m.mesh.geometry !== this.markerGeometry) m.mesh.geometry.dispose();
         this.markers.splice(i, 1);
+      } else if (m.grow) {
+        m.mesh.scale.setScalar(0.55 + 0.75 * age);
+        m.material.opacity = 0.7 * (1 - age * age);
       } else {
         m.mesh.scale.setScalar(1 - 0.4 * age);
         m.material.opacity = 0.9 * (1 - age);
+      }
+    }
+
+    // Projectile trails: drop a glow behind every live bolt, fade fast.
+    if (now - this.lastTrailDropAt > 55 && this.trackedProjectiles.size > 0) {
+      this.lastTrailDropAt = now;
+      for (const t of this.trackedProjectiles.values()) {
+        if (this.trails.length >= 90) break;
+        const sprite = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: this.glowTexture(),
+            color: t.color,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          }),
+        );
+        sprite.position.copy(t.mesh.position);
+        sprite.scale.setScalar(1.1);
+        this.scene.add(sprite);
+        this.trails.push({ sprite, bornAt: now });
+      }
+    }
+    for (let i = this.trails.length - 1; i >= 0; i--) {
+      const tr = this.trails[i]!;
+      const age = (now - tr.bornAt) / 260;
+      if (age >= 1) {
+        this.scene.remove(tr.sprite);
+        (tr.sprite.material as THREE.SpriteMaterial).dispose();
+        this.trails.splice(i, 1);
+      } else {
+        (tr.sprite.material as THREE.SpriteMaterial).opacity = 0.55 * (1 - age);
+        tr.sprite.scale.setScalar(1.1 * (1 - 0.5 * age));
       }
     }
 
