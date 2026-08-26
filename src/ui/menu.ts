@@ -68,6 +68,16 @@ const CSS = `
   color: #d8c9a0; font-size: 11px; text-align: center; cursor: pointer;
 }
 .menu-sigil.picked { border-color: #d8b45a; background: #3d3312; }
+.menu-roster { margin-top: 10px; }
+.menu-roster-champ {
+  padding: 9px 10px; border-radius: 6px; border: 1px solid #3a4f28; background: #17210f;
+  margin-bottom: 6px; font-size: 12px; line-height: 1.45;
+}
+.menu-roster-name { font-weight: 700; font-size: 13px; }
+.menu-roster-role { font-size: 11px; font-weight: 700; margin-left: 6px; }
+.menu-roster-blurb { color: #93a87c; margin: 2px 0 4px; }
+.menu-roster-line { color: #c9d8ae; font-size: 11px; }
+.menu-roster-line b { color: #e8dfae; font-weight: 700; }
 .menu-teams { display: flex; gap: 14px; font-size: 12px; margin-bottom: 6px; }
 .menu-team { flex: 1; }
 .menu-team h4 { margin: 0 0 3px; font-size: 12px; }
@@ -158,6 +168,43 @@ export function showHome(container: HTMLElement): Promise<HomeChoice> {
     row.append(code, join);
 
     card.append(play, practice, create, el('div', 'menu-label', 'Play with friends'), row);
+
+    // The out-of-game roster browser: every champion with role, passive,
+    // and kit, readable before ever entering a queue.
+    const rosterBtn = el('button', 'menu-btn', 'Browse the champions');
+    const roster = el('div', 'menu-roster');
+    roster.style.display = 'none';
+    let rosterBuilt = false;
+    rosterBtn.addEventListener('click', () => {
+      const open = roster.style.display === 'none';
+      roster.style.display = open ? 'block' : 'none';
+      rosterBtn.textContent = open ? 'Hide the champions' : 'Browse the champions';
+      if (!rosterBuilt) {
+        rosterBuilt = true;
+        const keys: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
+        for (const c of CHAMPION_LIST) {
+          const box = el('div', 'menu-roster-champ');
+          const head = el('div', '');
+          head.appendChild(el('span', 'menu-roster-name', c.name));
+          const role = el('span', 'menu-roster-role', c.role);
+          role.style.color = ROLE_COLORS[c.role] ?? '#c9d8ae';
+          head.appendChild(role);
+          box.appendChild(head);
+          box.appendChild(el('div', 'menu-roster-blurb', c.blurb));
+          const passive = el('div', 'menu-roster-line');
+          passive.innerHTML = `<b>Passive, ${c.passive.name}:</b> ${c.passive.description}`;
+          box.appendChild(passive);
+          for (const k of keys) {
+            const lines = describeAbility(k, c.abilities[k]);
+            const line = el('div', 'menu-roster-line');
+            line.innerHTML = `<b>${lines[0] ?? ''}</b> ${lines.slice(2).join(' ')}`;
+            box.appendChild(line);
+          }
+          roster.appendChild(box);
+        }
+      }
+    });
+    card.append(el('div', 'menu-label', 'Learn the game'), rosterBtn, roster);
   });
 }
 

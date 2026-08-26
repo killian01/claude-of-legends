@@ -78,6 +78,7 @@ function startOnline(choice: HomeChoice): void {
   let selectUi: SelectController | null = null;
   let pres: ReturnType<typeof startPresentation> | null = null;
   let opened = false;
+  let matchEnded = false;
 
   const clearMenus = (): void => {
     queueUi?.remove();
@@ -182,7 +183,10 @@ function startOnline(choice: HomeChoice): void {
         world.applyServer(msg);
         break;
       case 'match_end':
-        window.location.reload();
+        // The end overlay (stats + Return to menu) owns the way out; only
+        // fall back to a reload when no presentation ever started.
+        matchEnded = true;
+        if (!pres) window.location.reload();
         break;
       case 'error':
         console.warn('server:', msg.message);
@@ -193,6 +197,9 @@ function startOnline(choice: HomeChoice): void {
   });
 
   ws.addEventListener('close', () => {
+    // A close after the match ended is the server reaping the room, not a
+    // failure; the end screen is already up.
+    if (matchEnded) return;
     if (!opened) {
       showNotice(
         container,
