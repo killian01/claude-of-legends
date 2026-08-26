@@ -44,6 +44,12 @@ export class Renderer {
   private readonly trackedProjectiles = new Map<number, TrackedMobile>();
   private readonly trackedZones = new Map<number, THREE.Object3D>();
   private readonly cameraOffset = new THREE.Vector3(0, 40, 24);
+  private readonly markerGeometry = new THREE.RingGeometry(0.5, 0.8, 24);
+  private readonly markers: {
+    mesh: THREE.Mesh;
+    material: THREE.MeshBasicMaterial;
+    bornAt: number;
+  }[] = [];
   private followId: number | null = null;
   private viewerTeam = 0;
 
@@ -83,6 +89,21 @@ export class Renderer {
   // The team whose fog of war this client renders.
   setViewerTeam(team: number): void {
     this.viewerTeam = team;
+  }
+
+  // A brief ground ring where a move order landed.
+  flashMarker(x: number, z: number): void {
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x9be86a,
+      transparent: true,
+      opacity: 0.9,
+      side: THREE.DoubleSide,
+    });
+    const mesh = new THREE.Mesh(this.markerGeometry, material);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.set(x, 0.15, z);
+    this.scene.add(mesh);
+    this.markers.push({ mesh, material, bornAt: performance.now() });
   }
 
   private buildLights(): void {
@@ -324,6 +345,20 @@ export class Renderer {
       const z = t.prev.z + (t.curr.z - t.prev.z) * alpha;
       t.mesh.position.set(x, 1.2, z);
     }
+    const now = performance.now();
+    for (let i = this.markers.length - 1; i >= 0; i--) {
+      const m = this.markers[i]!;
+      const age = (now - m.bornAt) / 600;
+      if (age >= 1) {
+        this.scene.remove(m.mesh);
+        m.material.dispose();
+        this.markers.splice(i, 1);
+      } else {
+        m.mesh.scale.setScalar(1 - 0.4 * age);
+        m.material.opacity = 0.9 * (1 - age);
+      }
+    }
+
     const target =
       followPos ?? new THREE.Vector3(this.world.map.size / 2, 0, this.world.map.size / 2);
     this.camera.position.copy(target).add(this.cameraOffset);

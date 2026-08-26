@@ -34,6 +34,7 @@ const ABILITY_KEYS = new Set(['Q', 'W', 'E', 'R']);
 export class Match {
   readonly sim: Sim;
   readonly players = new Map<number, MatchPlayer>();
+  private readonly unitNames = new Map<number, string>();
   private eventsThisTick: SimEvent[] = [];
 
   constructor(seed: number, picks: readonly MatchPick[]) {
@@ -41,6 +42,7 @@ export class Match {
     for (const p of picks) {
       const unit = this.sim.addChampion(p.team, undefined, p.championId);
       unit.sigils = [...p.sigils];
+      this.unitNames.set(unit.id, p.name);
       if (p.bot) {
         const def = BOTS[p.bot] ?? BOTS[DEFAULT_BOT_ID];
         if (def) this.sim.attachPolicy(unit.id, def.policy);
@@ -54,6 +56,15 @@ export class Match {
         known: new Set(),
       });
     }
+  }
+
+  // Scoreboard rows with real player and bot names.
+  buildScore(): ServerMsg {
+    const rows = this.sim.scoreboard().map((r) => ({
+      ...r,
+      name: this.unitNames.get(r.unitId) ?? r.name,
+    }));
+    return { t: 'score', rows };
   }
 
   tick(): void {

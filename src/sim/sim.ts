@@ -28,7 +28,15 @@ import { Rng } from './rng';
 import type { CombatCtx } from './sim_context';
 import { recalcChampion } from './stats';
 import { stepTowerAi } from './tower_ai';
-import { type AbilityKey, type DamageType, DT, type TeamId, ULT_LEVEL, type Vec2 } from './types';
+import {
+  type AbilityKey,
+  type DamageType,
+  DT,
+  type ScoreRow,
+  type TeamId,
+  ULT_LEVEL,
+  type Vec2,
+} from './types';
 import { createChampion, staticFootprint, type Unit } from './unit';
 import { computeVisibility } from './vision';
 import { FIRST_WAVE_AT, spawnWave, WAVE_EVERY } from './waves';
@@ -124,6 +132,25 @@ export class Sim {
     const u = this.units.get(unitId);
     if (!u || u.kind !== 'champion') return;
     this.policies.set(unitId, policy);
+  }
+
+  // One row per champion; position-free, so it crosses the fog safely.
+  scoreboard(): readonly ScoreRow[] {
+    const rows: ScoreRow[] = [];
+    for (const u of this.units.values()) {
+      if (u.kind !== 'champion' || u.championId === null) continue;
+      const def = CHAMPIONS[u.championId];
+      rows.push({
+        unitId: u.id,
+        name: def ? (def.name.split(',')[0] ?? def.name) : u.championId,
+        championId: u.championId,
+        team: u.team,
+        level: u.level,
+        kills: u.kills,
+        deaths: u.deaths,
+      });
+    }
+    return rows;
   }
 
   isVisible(team: TeamId, unitId: number): boolean {
@@ -252,6 +279,9 @@ export class Sim {
       if (!u) continue;
       grantKillRewards(ctx, u, this.killers.get(id) ?? 0);
       if (u.kind === 'champion') {
+        const killer = this.units.get(this.killers.get(id) ?? 0);
+        if (killer && killer.kind === 'champion' && killer.team !== u.team) killer.kills += 1;
+        u.deaths += 1;
         u.dead = true;
         u.hp = 0;
         u.respawnAt = this.time + RESPAWN_BASE + RESPAWN_PER_LEVEL * u.level;

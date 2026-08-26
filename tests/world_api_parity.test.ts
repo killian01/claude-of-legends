@@ -16,6 +16,7 @@ const IWORLD_MEMBERS: readonly { name: string; kind: 'value' | 'function' }[] = 
   { name: 'projectiles', kind: 'value' },
   { name: 'zones', kind: 'value' },
   { name: 'championDef', kind: 'function' },
+  { name: 'scoreboard', kind: 'function' },
   { name: 'isVisible', kind: 'function' },
   { name: 'orderMove', kind: 'function' },
   { name: 'orderAttack', kind: 'function' },

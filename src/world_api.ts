@@ -6,7 +6,7 @@
 import type { ChampionDef } from './sim/content/champions';
 import type { GameMap } from './sim/content/map';
 import type { Projectile } from './sim/projectiles';
-import type { AbilityKey, TeamId, Vec2 } from './sim/types';
+import type { AbilityKey, ScoreRow, TeamId, Vec2 } from './sim/types';
 import type { Unit } from './sim/unit';
 import type { Zone } from './sim/zones';
 
@@ -18,6 +18,7 @@ export interface IWorld {
   readonly projectiles: ReadonlyMap<number, Readonly<Projectile>>;
   readonly zones: ReadonlyMap<number, Readonly<Zone>>;
   championDef(championId: string): ChampionDef | null;
+  scoreboard(): readonly ScoreRow[];
   isVisible(team: TeamId, unitId: number): boolean;
   orderMove(unitId: number, x: number, z: number): void;
   orderAttack(unitId: number, targetId: number): void;

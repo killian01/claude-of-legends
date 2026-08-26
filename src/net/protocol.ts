@@ -4,7 +4,7 @@
 // full identity fields sent once per unit per client ("full" vs "lite"
 // records, the world-of-claudecraft pattern).
 
-import type { AbilityKey, TeamId } from '../sim/types';
+import type { AbilityKey, ScoreRow, TeamId } from '../sim/types';
 import type { StructureMeta, UnitKind } from '../sim/unit';
 
 export type ClientMsg =
@@ -96,6 +96,7 @@ export type ServerMsg =
       events: SnapEvent[];
       winner: TeamId | null;
     }
+  | { t: 'score'; rows: ScoreRow[] }
   | { t: 'match_end' }
   | { t: 'error'; message: string };
 
