@@ -35,3 +35,7 @@ _Avoid_: APM cap, input throttle
 **Movement intention**:
 A participant's persistent movement order. The sim samples the latest one every tick; replacing it costs no decision budget.
 _Avoid_: movement command (implies one-shot)
+
+**Skin**:
+A purely cosmetic appearance variant of a champion, chosen at champion select and visible to everyone. Never affects gameplay, stats, or the Policy observation.
+_Avoid_: costume, chroma

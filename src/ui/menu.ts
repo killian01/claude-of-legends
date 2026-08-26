@@ -4,6 +4,7 @@
 import type { SelectPlayer } from '../net/protocol';
 import { CHAMPION_LIST, type ChampionRole } from '../sim/content/champions';
 import { SIGIL_LIST } from '../sim/content/sigils';
+import { SKINS } from '../sim/content/skins';
 import type { AbilityKey, TeamId } from '../sim/types';
 import { describeAbility, describeSigil } from './describe';
 import { attachTooltip } from './tooltips';
@@ -68,6 +69,17 @@ const CSS = `
   color: #d8c9a0; font-size: 11px; text-align: center; cursor: pointer;
 }
 .menu-sigil.picked { border-color: #d8b45a; background: #3d3312; }
+.menu-skins { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+.menu-skin {
+  padding: 6px 10px 6px 26px; border-radius: 6px; border: 1px solid #3a4f28;
+  background: #17210f; color: #d8e6c0; font-size: 11px; cursor: pointer;
+  position: relative;
+}
+.menu-skin.picked { border-color: #a3c96a; background: #2c4a1c; }
+.menu-skin-swatch {
+  position: absolute; left: 7px; top: 50%; transform: translateY(-50%);
+  width: 13px; height: 13px; border-radius: 3px; border: 1px solid #0008;
+}
 .menu-roster { margin-top: 10px; }
 .menu-roster-champ {
   padding: 9px 10px; border-radius: 6px; border: 1px solid #3a4f28; background: #17210f;
@@ -293,7 +305,7 @@ export function showSelect(
   roster: SelectPlayer[] | null,
   team: TeamId,
   deadline: number | null,
-  onLock: (championId: string, sigils: [string, string]) => void,
+  onLock: (championId: string, sigils: [string, string], skin: number) => void,
 ): SelectController {
   const { root, card } = screen(container);
   card.append(el('h1', 'menu-title', 'Champion select'));
@@ -319,8 +331,31 @@ export function showSelect(
   }
 
   let championId: string | null = null;
+  let skinIndex = 0;
   let takenSet = new Set<string>();
   const sigils: string[] = ['riftstep', 'mend'];
+
+  // Skin picker: cosmetic variants of the picked champion (CONTEXT.md).
+  const teamCss = team === 0 ? '#4a7dd6' : '#d65c5c';
+  const skinRow = el('div', 'menu-skins');
+  const renderSkins = (): void => {
+    skinRow.textContent = '';
+    const list = championId ? (SKINS[championId] ?? []) : [];
+    for (const [i, s] of list.entries()) {
+      const btn = el('button', 'menu-skin', s.name) as HTMLButtonElement;
+      btn.classList.toggle('picked', i === skinIndex);
+      const swatch = el('span', 'menu-skin-swatch');
+      const body = s.body === null ? teamCss : `#${s.body.toString(16).padStart(6, '0')}`;
+      const accent = `#${s.accent.toString(16).padStart(6, '0')}`;
+      swatch.style.background = `linear-gradient(135deg, ${body} 55%, ${accent} 55%)`;
+      btn.appendChild(swatch);
+      btn.addEventListener('click', () => {
+        skinIndex = i;
+        renderSkins();
+      });
+      skinRow.appendChild(btn);
+    }
+  };
 
   const grid = el('div', 'menu-grid');
   const champButtons = new Map<string, HTMLButtonElement>();
@@ -341,6 +376,8 @@ export function showSelect(
     btn.addEventListener('click', () => {
       if (takenSet.has(c.id)) return;
       championId = c.id;
+      skinIndex = 0;
+      renderSkins();
       for (const [id, b] of champButtons) b.classList.toggle('picked', id === c.id);
       lock.disabled = false;
     });
@@ -377,7 +414,7 @@ export function showSelect(
     if (!championId || sigils.length !== 2) return;
     lock.disabled = true;
     lock.textContent = 'Locked';
-    onLock(championId, [sigils[0]!, sigils[1]!]);
+    onLock(championId, [sigils[0]!, sigils[1]!], skinIndex);
   });
 
   const randomBtn = el('button', 'menu-btn', 'Random champion');
@@ -391,6 +428,8 @@ export function showSelect(
     el('div', 'menu-label', 'Pick your champion (hover for the kit)'),
     grid,
     randomBtn,
+    el('div', 'menu-label', 'Skin (cosmetic only)'),
+    skinRow,
     el('div', 'menu-label', 'Pick two sigils (first goes on D, second on F)'),
     sigilRow,
     lock,

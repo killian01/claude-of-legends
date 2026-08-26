@@ -18,6 +18,11 @@ Living document. The 48 hour build scope is defined by the ADRs in `docs/adr/` a
   collision, minion aggro on champion attackers.
 - **Out-of-game** (batch 8): end-of-match stats screen (no more hard
   reload), champion roster browser and role-labeled champion select.
+- **Champion skins** (batch 9): three cosmetic palette skins per champion
+  (data in `src/sim/content/skins.ts`), picked at champion select, carried
+  in the snapshot identity block, rendered with a team-colored base ring
+  so allegiance always reads. New skins are an easy community
+  contribution; real 3D skins ride the deferred model pipeline below.
 
 ## Future options (explicitly deferred)
 

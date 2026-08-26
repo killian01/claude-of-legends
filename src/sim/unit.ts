@@ -46,6 +46,9 @@ export interface Unit {
   // unspent skill points (one per level-up past 1).
   abilityRanks: Record<AbilityKey, number>;
   skillPoints: number;
+  // Cosmetic skin index (champions; CONTEXT.md "Skin"). Never read by the
+  // sim or by Policies.
+  skin: number;
   // Generic per-champion passive counter (Heat, Twinshot...).
   passiveStacks: number;
   // Last time ANY damage landed (Shieldskin-style passives).
@@ -122,6 +125,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     cooldowns: {},
     abilityRanks: { Q: 1, W: 1, E: 1, R: 0 },
     skillPoints: 0,
+    skin: 0,
     passiveStacks: 0,
     lastDamagedAt: -999,
     attackTargetId: null,

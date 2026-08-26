@@ -160,7 +160,7 @@ wss.on('connection', (ws) => {
         if (!inMatch) matchmaker.startLobby(id, now);
         break;
       case 'pick':
-        matchmaker.pick(id, msg.championId, msg.sigils);
+        matchmaker.pick(id, msg.championId, msg.sigils, msg.skin);
         break;
       case 'chat':
       case 'ping': {

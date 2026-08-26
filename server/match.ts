@@ -17,6 +17,8 @@ export interface MatchPick {
   team: TeamId;
   championId: string;
   sigils: [string, string];
+  // Cosmetic skin index; clamped by the sim.
+  skin?: number;
   // Bot policy id: this seat is driven in-sim, not by a connection.
   bot?: string;
 }
@@ -40,7 +42,7 @@ export class Match {
   constructor(seed: number, picks: readonly MatchPick[]) {
     this.sim = new Sim(seed);
     for (const p of picks) {
-      const unit = this.sim.addChampion(p.team, undefined, p.championId);
+      const unit = this.sim.addChampion(p.team, undefined, p.championId, p.skin ?? 0);
       unit.sigils = [...p.sigils];
       this.unitNames.set(unit.id, p.name);
       if (p.bot) {
