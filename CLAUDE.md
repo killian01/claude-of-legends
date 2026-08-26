@@ -24,6 +24,7 @@ Vitest · Biome. No UI framework; tiny dependency set.
 | `src/sim/` | **Deterministic game core, the source of truth.** No DOM/Three/network imports; runs in browser, server, and headless. |
 | `src/sim/content/` | Data-as-code: champions, items, sigils, the map, bots (`content/bots/`, one file per bot). |
 | `src/render/` | Three.js top-down renderer. Reads the world; never mutates it. |
+| `src/game/` | Local input and client glue. |
 | `src/ui/` | HUD (DOM + CSS). |
 | `src/net/` | Online client: auth + WebSocket mirror world. |
 | `server/` | Authoritative game server. |

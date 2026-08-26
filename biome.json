@@ -12,7 +12,13 @@
     }
   },
   "linter": {
-    "enabled": true
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "style": {
+        "noNonNullAssertion": "off"
+      }
+    }
   },
   "files": {
     "includes": ["**", "!**/dist", "!**/dist-server", "!**/node_modules"]
