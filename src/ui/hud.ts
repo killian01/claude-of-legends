@@ -12,8 +12,17 @@ import { MAX_LEVEL, xpForNext } from '../sim/stats';
 import { type AbilityKey, type TeamId, ULT_LEVEL } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { describeAbility, describeItem, describeSigil } from './describe';
-import { itemIconUrl } from './icons';
+import { iconDataUrl, itemIconUrl } from './icons';
 import { attachTooltip } from './tooltips';
+
+const KEY_TINTS: Readonly<Record<string, [string, string]>> = {
+  Q: ['#7a2f1f', '#c96a3a'],
+  W: ['#1f4a7a', '#3a8ac9'],
+  E: ['#2f6a2a', '#5aa53a'],
+  R: ['#5a2a7a', '#9a5ac9'],
+  D: ['#6a5a1f', '#c9a53a'],
+  F: ['#6a5a1f', '#c9a53a'],
+};
 
 const KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
 const TEAM_TEXT_COLORS = ['#9dbcf5', '#f5a3a3'];
@@ -283,9 +292,18 @@ export class Hud {
     const self = world.units.get(selfId);
     const def = self?.championId ? world.championDef(self.championId) : null;
 
+    const tintSlot = (slot: HTMLElement, key: string): void => {
+      const tint = KEY_TINTS[key];
+      if (!tint) return;
+      slot.style.backgroundImage = `url(${iconDataUrl('', tint[0], tint[1])})`;
+      slot.style.backgroundSize = 'cover';
+      slot.style.textShadow = '0 2px 4px #000';
+    };
+
     const slots = el('div', 'hud-slots');
     for (const key of KEYS) {
       const slot = el('div', 'hud-slot', key);
+      tintSlot(slot, key);
       const cd = el('div', 'hud-slot-cd');
       cd.style.display = 'none';
       slot.appendChild(cd);
@@ -300,6 +318,7 @@ export class Hud {
     for (const [i, keyLabel] of (['D', 'F'] as const).entries()) {
       const slot = el('div', 'hud-slot', keyLabel);
       slot.style.borderColor = '#6b5a2e';
+      tintSlot(slot, keyLabel);
       const cd = el('div', 'hud-slot-cd');
       cd.style.display = 'none';
       slot.appendChild(cd);

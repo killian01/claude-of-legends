@@ -15,6 +15,7 @@ export class Minimap {
   private readonly canvas: HTMLCanvasElement;
   private readonly g: CanvasRenderingContext2D;
   private readonly scale: number;
+  private readonly fog = document.createElement('canvas');
   private readonly pings: { x: number; z: number; until: number }[] = [];
 
   constructor(
@@ -89,6 +90,31 @@ export class Minimap {
       g.beginPath();
       g.arc(this.px(b.x), this.pz(b.z), b.r * this.scale, 0, Math.PI * 2);
       g.fill();
+    }
+
+    // Fog of war shading: darken everything, then punch soft holes around
+    // friendly sight before drawing units on top.
+    this.fog.width = SIZE_PX;
+    this.fog.height = SIZE_PX;
+    const f = this.fog.getContext('2d');
+    if (f) {
+      f.fillStyle = 'rgba(0, 0, 0, 0.42)';
+      f.fillRect(0, 0, SIZE_PX, SIZE_PX);
+      f.globalCompositeOperation = 'destination-out';
+      for (const u of this.world.units.values()) {
+        if (u.team !== this.viewerTeam || u.dead) continue;
+        const r = Math.max(4, u.sightRange) * this.scale;
+        const x = this.px(u.pos.x);
+        const z = this.pz(u.pos.z);
+        const grad = f.createRadialGradient(x, z, r * 0.55, x, z, r);
+        grad.addColorStop(0, 'rgba(0,0,0,1)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        f.fillStyle = grad;
+        f.beginPath();
+        f.arc(x, z, r, 0, Math.PI * 2);
+        f.fill();
+      }
+      g.drawImage(this.fog, 0, 0);
     }
 
     for (const u of this.world.units.values()) {

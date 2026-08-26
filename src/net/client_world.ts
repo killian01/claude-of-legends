@@ -94,7 +94,8 @@ function materializeUnit(s: SnapUnit): Unit {
     deaths: 0,
     dead: false,
     respawnAt: 0,
-    sightRange: 0,
+    // Mirrors the sim's per-kind sight so the client fog overlay matches.
+    sightRange: s.k === 'champion' ? 12 : s.k === 'tower' ? 10 : 8,
     goldBounty: 0,
     xpBounty: 0,
     sigils: [],
