@@ -8,4 +8,6 @@ Status: day 0. Design in progress; the code lands next.
 - `docs/adr/`: the decisions taken so far and why.
 - `docs/roadmap.md`: what is deliberately deferred.
 
+All project content, in the game and in the docs, is in English, with original fantasy naming only (no borrowed IP, see `docs/adr/0004-original-naming-no-borrowed-ip.md`).
+
 License: MIT.

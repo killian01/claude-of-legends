@@ -19,3 +19,11 @@ _Avoid_: AI, NPC, computer player
 **Policy**:
 A deterministic decision function (observation, rng) -> action, with the exact observation and action space the Gym environment exposes. The single abstraction behind every bot, scripted or trained.
 _Avoid_: agent, brain, controller
+
+**Decision budget**:
+The token bucket that rate-limits budgeted actions identically for every participant: refills at about 4 per second of sim time, capacity at most 2, both configurable. Ability casts are budgeted; movement is not.
+_Avoid_: APM cap, input throttle
+
+**Movement intention**:
+A participant's persistent movement order. The sim samples the latest one every tick; replacing it costs no decision budget.
+_Avoid_: movement command (implies one-shot)
