@@ -112,13 +112,18 @@ export class Minimap {
       } else if (u.kind === 'champion') {
         g.fillStyle = color;
         g.beginPath();
-        g.arc(x, z, 3, 0, Math.PI * 2);
+        g.arc(x, z, 4, 0, Math.PI * 2);
         g.fill();
         if (u.id === this.selfId) {
           g.strokeStyle = '#ffffff';
           g.lineWidth = 1.5;
           g.stroke();
         }
+        g.font = 'bold 6px system-ui, sans-serif';
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillStyle = '#ffffff';
+        g.fillText((u.championId?.[0] ?? '?').toUpperCase(), x, z + 0.5);
       } else {
         g.fillStyle = color;
         g.fillRect(x - 1, z - 1, 2, 2);

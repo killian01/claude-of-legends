@@ -4,9 +4,12 @@
 // ticks for smooth motion.
 
 import * as THREE from 'three';
+import { playSfx } from '../game/sfx';
 import { isRooted, isStunned } from '../sim/combat/status';
 import type { Vec2 } from '../sim/types';
+import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
+import { buildChampionMesh } from './champion_shapes';
 import { FloatingText, makeTextSprite } from './floating_text';
 
 const TEAM_COLORS: readonly number[] = [0x4a7dd6, 0xd65c5c];
@@ -29,6 +32,8 @@ interface TrackedUnit {
   lastHp: number;
   stunMark: THREE.Sprite | null;
   rootMark: THREE.Mesh | null;
+  namePlate: THREE.Sprite | null;
+  nameKey: string;
   prev: Vec2;
   curr: Vec2;
 }
@@ -136,8 +141,10 @@ export class Renderer {
   onCombatNotes(notes: CombatNotes): void {
     const self = this.followId !== null ? this.world.units.get(this.followId) : undefined;
     for (const amount of notes.golds) {
+      playSfx('gold');
       if (self) this.fct.spawn(`+${amount}g`, '#ffd94a', self.pos.x, 3.4, self.pos.z, 0.9);
     }
+    if (notes.casts.length > 0) playSfx('cast');
     for (const casterId of notes.casts) {
       const caster = this.world.units.get(casterId);
       if (!caster) continue;
@@ -185,21 +192,27 @@ export class Renderer {
       }
     }
 
-    const wallMat = new THREE.MeshLambertMaterial({ color: COLOR_WALL });
+    // Walls read as ROCK (dark, capped in gray); brush reads as FOLIAGE
+    // (bright green, taller): the review flagged them as indistinguishable.
+    const wallMat = new THREE.MeshLambertMaterial({ color: 0x1a2b10 });
+    const wallCapMat = new THREE.MeshLambertMaterial({ color: 0x4a4a42 });
     for (const w of map.walls) {
       const wall = new THREE.Mesh(new THREE.CylinderGeometry(w.r, w.r + 0.6, 3, 14), wallMat);
       wall.position.set(w.x, 1.5, w.z);
       this.scene.add(wall);
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(w.r * 0.75, w.r, 0.6, 14), wallCapMat);
+      cap.position.set(w.x, 3.2, w.z);
+      this.scene.add(cap);
     }
 
     const brushMat = new THREE.MeshLambertMaterial({
-      color: COLOR_BRUSH,
+      color: 0x4e9a35,
       transparent: true,
-      opacity: 0.55,
+      opacity: 0.75,
     });
     for (const b of map.brush) {
-      const brush = new THREE.Mesh(new THREE.CylinderGeometry(b.r, b.r, 0.6, 10), brushMat);
-      brush.position.set(b.x, 0.3, b.z);
+      const brush = new THREE.Mesh(new THREE.CylinderGeometry(b.r * 0.92, b.r, 1.0, 10), brushMat);
+      brush.position.set(b.x, 0.5, b.z);
       this.scene.add(brush);
     }
 
@@ -210,18 +223,51 @@ export class Renderer {
       );
       pad.position.set(f.x, 0.1, f.z);
       this.scene.add(pad);
+      const glow = new THREE.Mesh(
+        new THREE.RingGeometry(f.r + 0.2, f.r + 0.9, 32),
+        new THREE.MeshBasicMaterial({
+          color: TEAM_LIGHT[f.team] ?? 0xffffff,
+          transparent: true,
+          opacity: 0.45,
+          side: THREE.DoubleSide,
+        }),
+      );
+      glow.rotation.x = -Math.PI / 2;
+      glow.position.set(f.x, 0.12, f.z);
+      this.scene.add(glow);
+    }
+
+    // The river band across the center, perpendicular to mid lane.
+    const river = new THREE.Mesh(
+      new THREE.BoxGeometry(56, 0.08, 9),
+      new THREE.MeshLambertMaterial({ color: 0x3d6a8a, transparent: true, opacity: 0.5 }),
+    );
+    river.position.set(half, 0.04, half);
+    river.rotation.y = Math.PI / 4;
+    this.scene.add(river);
+
+    // Faint team-tinted base areas.
+    for (const s of map.sanctums) {
+      const zone = new THREE.Mesh(
+        new THREE.CircleGeometry(17, 32),
+        new THREE.MeshLambertMaterial({
+          color: TEAM_COLORS[s.team] ?? 0xffffff,
+          transparent: true,
+          opacity: 0.1,
+        }),
+      );
+      zone.rotation.x = -Math.PI / 2;
+      zone.position.set(s.x, 0.03, s.z);
+      this.scene.add(zone);
     }
   }
 
-  private buildUnitMesh(
-    kind: string,
-    team: number,
-    attackRange: number,
-  ): { holder: THREE.Group; barY: number } {
-    const color = TEAM_COLORS[team] ?? 0xffffff;
+  private buildUnitMesh(u: Readonly<Unit>): { holder: THREE.Group; barY: number } {
+    const kind = u.kind;
+    const color = TEAM_COLORS[u.team] ?? 0xffffff;
     const holder = new THREE.Group();
     if (kind === 'minion') {
-      const ranged = attackRange > 2;
+      const ranged = u.stats.attackRange > 2;
       const body = ranged
         ? new THREE.Mesh(
             new THREE.ConeGeometry(0.45, 1.2, 6),
@@ -258,13 +304,8 @@ export class Renderer {
       holder.add(mesh);
       return { holder, barY: 6.2 };
     }
-    const capsule = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.65, 1.0, 4, 12),
-      new THREE.MeshLambertMaterial({ color }),
-    );
-    capsule.position.y = 1.15;
-    holder.add(capsule);
-    return { holder, barY: 2.9 };
+    holder.add(buildChampionMesh(u.championId, color));
+    return { holder, barY: 3.0 };
   }
 
   private buildHpBar(
@@ -294,10 +335,11 @@ export class Renderer {
   // Called once after every sim tick: shifts interpolation history and syncs
   // the mesh sets with the world's units, projectiles, and zones.
   onSimTick(): void {
+    const scoreRows = this.world.scoreboard();
     for (const [id, u] of this.world.units) {
       let t = this.tracked.get(id);
       if (!t) {
-        const { holder, barY } = this.buildUnitMesh(u.kind, u.team, u.stats.attackRange);
+        const { holder, barY } = this.buildUnitMesh(u);
         const barWidth = u.kind === 'champion' ? 1.8 : u.kind === 'minion' ? 1.0 : 2.2;
         const { fill, back } = this.buildHpBar(holder, barY, barWidth);
         holder.position.set(u.pos.x, 0, u.pos.z);
@@ -313,6 +355,8 @@ export class Renderer {
           lastHp: u.hp,
           stunMark: null,
           rootMark: null,
+          namePlate: null,
+          nameKey: '',
           prev: { x: u.pos.x, z: u.pos.z },
           curr: { x: u.pos.x, z: u.pos.z },
         };
@@ -332,8 +376,36 @@ export class Renderer {
       if (visible && dhp >= 1) {
         const color = u.team === this.viewerTeam ? '#ff6a5e' : '#ffe9a8';
         this.fct.spawn(`-${Math.round(dhp)}`, color, u.pos.x, t.barY + 0.9, u.pos.z);
+        if (id === this.followId) playSfx('hit');
       }
       t.lastHp = u.hp;
+
+      // Nameplate: player or bot name plus level, rebuilt on change only.
+      if (u.kind === 'champion') {
+        const row = scoreRows.find((r) => r.unitId === id);
+        const label = `${row?.name ?? u.championId ?? ''}  Lv${u.level}`;
+        if (t.nameKey !== label) {
+          if (t.namePlate) {
+            t.mesh.remove(t.namePlate);
+            const mat = t.namePlate.material as THREE.SpriteMaterial;
+            mat.map?.dispose();
+            mat.dispose();
+          }
+          const plate = makeTextSprite(
+            label,
+            u.team === this.viewerTeam ? '#d8ecff' : '#ffd8d2',
+            0.55,
+            256,
+            24,
+          );
+          if (plate) {
+            plate.position.set(0, t.barY + 0.5, 0);
+            t.mesh.add(plate);
+            t.namePlate = plate;
+          }
+          t.nameKey = label;
+        }
+      }
 
       const frac = Math.max(0, Math.min(1, u.hp / u.maxHp));
       t.hpFill.scale.x = Math.max(0.001, t.barWidth * frac);
