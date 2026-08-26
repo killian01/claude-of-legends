@@ -18,6 +18,14 @@ const BARBED_MARK: EffectSpec = {
 export const SYLRA: ChampionDef = {
   id: 'sylra',
   name: 'Sylra, Thornweaver',
+  role: 'Mage',
+  blurb: 'A zone-control mage who locks areas down and punishes anyone who stays.',
+  // Barbed Marks lives entirely in her ability specs (mark effects), so the
+  // passive entry is descriptive only.
+  passive: {
+    name: 'Barbed Marks',
+    description: 'Her abilities mark enemies; the third mark on a target roots it briefly.',
+  },
   base: {
     hp: 570,
     mana: 480,

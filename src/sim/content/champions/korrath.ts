@@ -1,11 +1,30 @@
-// Korrath, the Bulwark. Tank (docs/design/roster.md). Passive Shieldskin
-// (shield when unhit for a while) is deferred with the passive-hook system.
+// Korrath, the Bulwark. Tank (docs/design/roster.md).
 
+import { addStatus } from '../../combat/status';
 import type { ChampionDef } from './index';
+
+const SHIELDSKIN_CALM_S = 4;
+const SHIELDSKIN_BASE = 25;
+const SHIELDSKIN_PER_LEVEL = 7;
 
 export const KORRATH: ChampionDef = {
   id: 'korrath',
   name: 'Korrath, the Bulwark',
+  role: 'Tank',
+  blurb: 'An immovable frontline anchor who soaks damage and locks enemies down.',
+  passive: {
+    name: 'Shieldskin',
+    description: 'After 4 seconds without taking damage, gains a small shield.',
+    onTick(ctx, self) {
+      if (ctx.time - self.lastDamagedAt < SHIELDSKIN_CALM_S) return;
+      if (self.statuses.some((s) => s.kind === 'shield' && s.until > ctx.time)) return;
+      addStatus(self, {
+        kind: 'shield',
+        until: ctx.time + 6,
+        remaining: SHIELDSKIN_BASE + SHIELDSKIN_PER_LEVEL * self.level,
+      });
+    },
+  },
   base: {
     hp: 650,
     mana: 320,

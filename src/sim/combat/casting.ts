@@ -4,6 +4,7 @@
 // reuse executeCast with their own bookkeeping.
 
 import type { CombatCtx } from '../sim_context';
+import { effectiveRank, RANK_BASE_SCALE, RANK_CD_SCALE } from '../stats';
 import type { AbilityKey, Vec2 } from '../types';
 import type { Unit } from '../unit';
 import { applyEffects, type EffectSpec, type Power } from './effects';
@@ -233,17 +234,24 @@ export function castAbility(
   if (isStunned(caster, ctx.time)) return false;
   // A rooted champion cannot dash out of the root (review F.2).
   if (def.spec.kind === 'dash' && isRooted(caster, ctx.time)) return false;
+  // Rank 0 means locked (R before champion level 6).
+  const rank = effectiveRank(caster, key);
+  if (rank <= 0) return false;
   if ((caster.cooldowns[key] ?? 0) > ctx.time) return false;
   if (caster.mana < def.manaCost) return false;
 
-  const power = { ad: caster.stats.ad, ap: caster.stats.ap };
+  const power = {
+    ad: caster.stats.ad,
+    ap: caster.stats.ap,
+    scale: 1 + RANK_BASE_SCALE * (rank - 1),
+  };
   // Target-requiring specs resolve BEFORE anything is paid.
   if (def.spec.kind === 'enemy_target') {
     const at = clampToRange(caster.pos, aim, def.castRange);
     if (!findEnemyTarget(ctx, caster, at, def.spec.searchRadius, def.castRange)) return false;
   }
 
-  caster.cooldowns[key] = ctx.time + def.cooldown;
+  caster.cooldowns[key] = ctx.time + def.cooldown * (1 - RANK_CD_SCALE * (rank - 1));
   caster.mana -= def.manaCost;
   breakStealth(caster);
   ctx.events.push({ type: 'cast', unitId: caster.id, key });

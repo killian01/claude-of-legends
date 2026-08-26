@@ -2,11 +2,32 @@
 // (stacking bleed on attacks) and W's per-stack bonus are deferred with the
 // passive-hook system; R approximates sustained lifesteal with a burst heal.
 
+import { addStatus } from '../../combat/status';
 import type { ChampionDef } from './index';
+
+const REND_DURATION_S = 2.5;
+const REND_BASE_DPS = 3;
+const REND_DPS_PER_LEVEL = 0.6;
 
 export const RHOKA: ChampionDef = {
   id: 'rhoka',
   name: 'Rhoka, Wildclaw',
+  role: 'Skirmisher',
+  blurb: 'A diving brawler who feeds on extended fights and bleeds targets out.',
+  passive: {
+    name: 'Rend',
+    description: 'Attacks apply a stacking short bleed.',
+    onAttackHit(ctx, self, target) {
+      if (target.kind === 'tower' || target.kind === 'sanctum') return;
+      addStatus(target, {
+        kind: 'dot',
+        until: ctx.time + REND_DURATION_S,
+        perSecond: REND_BASE_DPS + REND_DPS_PER_LEVEL * self.level,
+        sourceId: self.id,
+        dtype: 'physical',
+      });
+    },
+  },
   base: {
     hp: 600,
     mana: 320,

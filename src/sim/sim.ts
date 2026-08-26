@@ -29,6 +29,7 @@ import { createMapUnits } from './map_units';
 import { stepMinionAi } from './minion_ai';
 import { stepMovement } from './movement';
 import { NavGrid } from './navgrid';
+import { stepPassives } from './passives';
 import { findPath } from './pathfind';
 import type { Policy } from './policy';
 import type { Projectile } from './projectiles';
@@ -38,7 +39,13 @@ import { grantKillRewards, grantPassiveGold } from './rewards';
 import { Rng } from './rng';
 import { stepSeparation } from './separation';
 import type { CombatCtx } from './sim_context';
-import { recalcChampion } from './stats';
+import {
+  BASIC_MAX_RANK,
+  effectiveRank,
+  recalcChampion,
+  ULT_MAX_RANK,
+  ULT_RANK_LEVELS,
+} from './stats';
 import { stepTowerAi } from './tower_ai';
 import {
   type AbilityKey,
@@ -46,7 +53,6 @@ import {
   DT,
   type ScoreRow,
   type TeamId,
-  ULT_LEVEL,
   type Vec2,
 } from './types';
 import { createChampion, staticFootprint, type Unit } from './unit';
@@ -242,7 +248,6 @@ export class Sim {
     if (this.winner !== null) return false;
     const u = this.units.get(unitId);
     if (!u || u.championId === null || u.dead) return false;
-    if (key === 'R' && u.level < ULT_LEVEL) return false;
     const def = CHAMPIONS[u.championId]?.abilities[key];
     if (!def) return false;
     if (!hasDecisionToken(u, this.time)) return false;
@@ -252,6 +257,26 @@ export class Sim {
       cancelRecall(u);
     }
     return ok;
+  }
+
+  // Spends one skill point to rank up an ability. Basics cap at rank 5; R
+  // caps at 3 with champion-level gates 6/11/16. Free action (no decision
+  // token): it is meta-progression, not an in-world act.
+  levelAbility(unitId: number, key: AbilityKey): boolean {
+    if (this.winner !== null) return false;
+    const u = this.units.get(unitId);
+    if (!u || u.kind !== 'champion' || u.championId === null) return false;
+    if (u.skillPoints <= 0) return false;
+    const rank = effectiveRank(u, key);
+    if (key === 'R') {
+      if (rank >= ULT_MAX_RANK) return false;
+      if (u.level < (ULT_RANK_LEVELS[rank] ?? Number.POSITIVE_INFINITY)) return false;
+    } else if (rank >= BASIC_MAX_RANK) {
+      return false;
+    }
+    u.abilityRanks[key] = rank + 1;
+    u.skillPoints -= 1;
+    return true;
   }
 
   castSigil(unitId: number, slot: number, aim: Vec2): boolean {
@@ -323,6 +348,7 @@ export class Sim {
       if (u.stats.manaRegen > 0) u.mana = Math.min(u.maxMana, u.mana + u.stats.manaRegen * DT);
     }
     applyFountainRegen(ctx, this.map);
+    stepPassives(ctx, this.tickCount);
 
     runBotDecisions(this, this.policies);
 

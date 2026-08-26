@@ -2,11 +2,25 @@
 // Deadstill (bonus vs slowed/immobilized) is deferred with the passive-hook
 // system.
 
+import { isRooted, slowPct } from '../../combat/status';
 import type { ChampionDef } from './index';
+
+const DEADSTILL_BONUS = 1.15;
 
 export const VESK: ChampionDef = {
   id: 'vesk',
   name: 'Vesk, the Longshot',
+  role: 'Marksman',
+  blurb: 'Artillery range, immobile and terrifying: punishes anything held still.',
+  passive: {
+    name: 'Deadstill',
+    description: 'Attacks deal 15 percent bonus damage to slowed or immobilized targets.',
+    modifyDamage(ctx, _self, target, amount, _dtype, via) {
+      if (via !== 'attack') return amount;
+      if (slowPct(target, ctx.time) <= 0 && !isRooted(target, ctx.time)) return amount;
+      return amount * DEADSTILL_BONUS;
+    },
+  },
   base: {
     hp: 540,
     mana: 300,

@@ -39,9 +39,13 @@ export interface ObsSelf {
   level: number;
   gold: number;
   dead: boolean;
-  // Cooldown, mana, and level gates resolved; the decision budget is not
+  // Cooldown, mana, and rank gates resolved; the decision budget is not
   // part of readiness (a ready ability can still be budget-rejected).
   abilityReady: Record<AbilityKey, boolean>;
+  // Effective ability ranks (R reads 0 until champion level 6) and unspent
+  // skill points. Additive v0 fields, like `invulnerable` on ObsUnit.
+  abilityRanks: Record<AbilityKey, number>;
+  skillPoints: number;
   sigils: readonly string[];
   sigilReady: readonly boolean[];
   items: readonly string[];
@@ -62,6 +66,8 @@ export type Action =
   | { kind: 'attack'; targetId: number }
   | { kind: 'cast'; key: AbilityKey; x: number; z: number }
   | { kind: 'sigil'; slot: number; x: number; z: number }
-  | { kind: 'buy'; itemId: string };
+  | { kind: 'buy'; itemId: string }
+  // Spends one skill point (free action, outside the decision budget).
+  | { kind: 'level'; key: AbilityKey };
 
 export type Policy = (obs: Observation, rng: Rng) => Action;

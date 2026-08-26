@@ -1,6 +1,6 @@
 // Timed statuses on units and the pure helpers that read them. Expiry is
-// driven by sim time, never wall-clock. Champion passives that need per-tick
-// hooks are deferred (see docs/design/roster.md); everything here is generic.
+// driven by sim time, never wall-clock. Everything here is generic; champion
+// passives compose these helpers through the hooks in passive_types.ts.
 
 import type { DamageType } from '../types';
 import type { Unit } from '../unit';
@@ -33,6 +33,34 @@ export function expireStatuses(u: Unit, time: number): void {
 
 export function addStatus(u: Unit, s: Status): void {
   u.statuses.push(s);
+}
+
+// Extends an identical buff instead of stacking a second copy; used by
+// repeating passives (auras, on-hit speed) whose re-application every few
+// ticks must not sum with itself.
+export function refreshBuff(
+  u: Unit,
+  time: number,
+  duration: number,
+  stats: { msPct?: number; asPct?: number; armor?: number; mr?: number },
+): void {
+  const msPct = stats.msPct ?? 0;
+  const asPct = stats.asPct ?? 0;
+  const armor = stats.armor ?? 0;
+  const mr = stats.mr ?? 0;
+  for (const s of u.statuses) {
+    if (
+      s.kind === 'buff' &&
+      s.msPct === msPct &&
+      s.asPct === asPct &&
+      s.armor === armor &&
+      s.mr === mr
+    ) {
+      s.until = Math.max(s.until, time + duration);
+      return;
+    }
+  }
+  u.statuses.push({ kind: 'buff', until: time + duration, msPct, asPct, armor, mr });
 }
 
 function has(u: Unit, kind: Status['kind'], time: number): boolean {

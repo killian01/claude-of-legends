@@ -2,11 +2,37 @@
 // Tide (heal splash to a second ally) is deferred with the passive-hook
 // system. Her waves exercise ally-affecting piercing projectiles.
 
+import { healFactor } from '../../combat/status';
 import type { ChampionDef } from './index';
+
+const SPRING_TIDE_RATIO = 0.35;
+const SPRING_TIDE_RANGE = 6;
 
 export const MAERA: ChampionDef = {
   id: 'maera',
   name: 'Maera, Tidecaller',
+  role: 'Support',
+  blurb: 'Sustain and wave-shaped utility: keeps the team standing.',
+  passive: {
+    name: 'Spring Tide',
+    description: 'Her heals splash 35 percent of the amount onto the nearest other ally.',
+    onHealGiven(ctx, self, target, amount) {
+      let best: typeof target | null = null;
+      let bestD = SPRING_TIDE_RANGE;
+      for (const u of ctx.units.values()) {
+        if (u.kind !== 'champion' || u.team !== self.team) continue;
+        if (u.id === target.id || u.id === self.id || u.dead || ctx.dead.has(u.id)) continue;
+        const d = Math.hypot(u.pos.x - target.pos.x, u.pos.z - target.pos.z);
+        if (d < bestD) {
+          bestD = d;
+          best = u;
+        }
+      }
+      if (!best) return;
+      const splash = amount * SPRING_TIDE_RATIO * healFactor(best, ctx.time);
+      best.hp = Math.min(best.maxHp, best.hp + splash);
+    },
+  },
   base: {
     hp: 550,
     mana: 500,

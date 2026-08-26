@@ -4,9 +4,22 @@
 
 import type { ChampionDef } from './index';
 
+const OPPORTUNIST_THRESHOLD = 0.35;
+const OPPORTUNIST_BONUS = 1.15;
+
 export const FENN: ChampionDef = {
   id: 'fenn',
   name: 'Fenn, the Quickblade',
+  role: 'Assassin',
+  blurb: 'A single-target executioner who commits hard and finishes low targets.',
+  passive: {
+    name: 'Opportunist',
+    description: 'Deals 15 percent bonus damage to enemies below 35 percent health.',
+    modifyDamage(_ctx, _self, target, amount) {
+      if (target.maxHp <= 0 || target.hp / target.maxHp >= OPPORTUNIST_THRESHOLD) return amount;
+      return amount * OPPORTUNIST_BONUS;
+    },
+  },
   base: {
     hp: 560,
     mana: 320,

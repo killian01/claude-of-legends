@@ -5,6 +5,7 @@
 
 import type { SelfSnap, ServerMsg, SnapEvent, SnapMobile, SnapUnit } from '../src/net/protocol';
 import type { Sim, SimEvent } from '../src/sim/sim';
+import { effectiveRank } from '../src/sim/stats';
 import type { TeamId } from '../src/sim/types';
 import type { Unit } from '../src/sim/unit';
 
@@ -108,6 +109,14 @@ export function buildSnapshot(
       dead: selfUnit.dead,
       respawnAt: round2(selfUnit.respawnAt),
       cooldowns: { ...selfUnit.cooldowns },
+      // Effective ranks: R already reads 1 at level 6 pre-investment.
+      abilityRanks: {
+        Q: effectiveRank(selfUnit, 'Q'),
+        W: effectiveRank(selfUnit, 'W'),
+        E: effectiveRank(selfUnit, 'E'),
+        R: effectiveRank(selfUnit, 'R'),
+      },
+      skillPoints: selfUnit.skillPoints,
       sigilCooldowns: [...selfUnit.sigilCooldowns],
       items: [...selfUnit.items],
       sigils: [...selfUnit.sigils],

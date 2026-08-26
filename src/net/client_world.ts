@@ -82,6 +82,10 @@ function materializeUnit(s: SnapUnit): Unit {
     },
     statuses: [],
     cooldowns: {},
+    abilityRanks: { Q: 1, W: 1, E: 1, R: 0 },
+    skillPoints: 0,
+    passiveStacks: 0,
+    lastDamagedAt: -999,
     attackTargetId: null,
     attackReadyAt: 0,
     attackMoveTarget: null,
@@ -167,6 +171,11 @@ export class ClientWorld implements IWorld {
     return true;
   }
 
+  levelAbility(_unitId: number, key: AbilityKey): boolean {
+    this.send({ t: 'skill', key });
+    return true;
+  }
+
   // Returns true when the message changed world state (a new snapshot).
   applyServer(msg: ServerMsg): boolean {
     if (msg.t === 'match_start') {
@@ -212,6 +221,8 @@ export class ClientWorld implements IWorld {
         self.dead = msg.self.dead;
         self.respawnAt = msg.self.respawnAt;
         self.cooldowns = msg.self.cooldowns;
+        self.abilityRanks = msg.self.abilityRanks;
+        self.skillPoints = msg.self.skillPoints;
         self.sigilCooldowns = msg.self.sigilCooldowns;
         self.items = msg.self.items;
         self.sigils = msg.self.sigils;

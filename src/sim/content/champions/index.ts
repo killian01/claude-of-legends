@@ -1,10 +1,11 @@
 // The champion registry: data-as-code records merged into one table the
 // engine reads. One file per champion; new champions are the flagship
-// community contribution. Champion passives that need per-tick hooks are
-// deferred to the passive-hook system (see docs/roadmap.md); Sylra's marks
-// live entirely in her ability specs.
+// community contribution. Passives hook into the engine through
+// ChampionPassive (src/sim/passive_types.ts); Sylra's marks live entirely
+// in her ability specs, so her passive entry is descriptive only.
 
 import type { AbilityDef } from '../../combat/casting';
+import type { ChampionPassive } from '../../passive_types';
 import type { AbilityKey } from '../../types';
 import { ASHVYN } from './ashvyn';
 import { DAIN } from './dain';
@@ -40,9 +41,23 @@ export interface ChampionGrowth {
   mr: number;
 }
 
+export type ChampionRole =
+  | 'Tank'
+  | 'Fighter'
+  | 'Mage'
+  | 'Battlemage'
+  | 'Assassin'
+  | 'Marksman'
+  | 'Support'
+  | 'Skirmisher';
+
 export interface ChampionDef {
   id: string;
   name: string;
+  role: ChampionRole;
+  // One line of play-style intent, shown on the select screen.
+  blurb: string;
+  passive: ChampionPassive;
   base: ChampionBaseStats;
   growth: ChampionGrowth;
   abilities: Record<AbilityKey, AbilityDef>;

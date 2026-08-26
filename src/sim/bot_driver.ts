@@ -35,6 +35,9 @@ export function runBotDecisions(sim: Sim, policies: ReadonlyMap<number, Policy>)
       case 'buy':
         sim.buyItem(unitId, action.itemId);
         break;
+      case 'level':
+        sim.levelAbility(unitId, action.key);
+        break;
       default:
         break;
     }

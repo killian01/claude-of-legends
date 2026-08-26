@@ -2,11 +2,27 @@
 // Twinshot (every third attack strikes twice) and its W reset are deferred
 // with the passive-hook system; W keeps the dash and grants attack speed.
 
+import { dealDamage } from '../../combat/damage';
 import type { ChampionDef } from './index';
+
+const TWINSHOT_EVERY = 3;
+const TWINSHOT_RATIO = 0.5;
 
 export const ASHVYN: ChampionDef = {
   id: 'ashvyn',
   name: 'Ashvyn, Nightbow',
+  role: 'Marksman',
+  blurb: 'A mobile duelist marksman who weaves in and out of range.',
+  passive: {
+    name: 'Twinshot',
+    description: 'Every third attack strikes twice (the echo deals 50 percent damage).',
+    onAttackHit(ctx, self, target) {
+      self.passiveStacks += 1;
+      if (self.passiveStacks < TWINSHOT_EVERY) return;
+      self.passiveStacks = 0;
+      dealDamage(ctx, self.id, target, self.stats.ad * TWINSHOT_RATIO, 'physical', 'other');
+    },
+  },
   base: {
     hp: 560,
     mana: 280,

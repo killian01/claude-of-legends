@@ -8,8 +8,15 @@ import { playSfx } from '../game/sfx';
 import type { Status } from '../sim/combat/status';
 import { effectiveItemCost, ITEM_LIST, ITEMS, type ItemStats } from '../sim/content/items';
 import { SIGILS } from '../sim/content/sigils';
-import { MAX_LEVEL, xpForNext } from '../sim/stats';
-import { type AbilityKey, type TeamId, ULT_LEVEL } from '../sim/types';
+import {
+  BASIC_MAX_RANK,
+  effectiveRank,
+  MAX_LEVEL,
+  ULT_MAX_RANK,
+  ULT_RANK_LEVELS,
+  xpForNext,
+} from '../sim/stats';
+import type { AbilityKey, TeamId } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { describeAbility, describeItem, describeSigil } from './describe';
 import { iconDataUrl, itemIconUrl } from './icons';
@@ -114,6 +121,23 @@ const CSS = `
   position: absolute; left: 0; right: 0; bottom: -13px;
   font-size: 8px; font-weight: 400; text-align: center; color: #93a87c; white-space: nowrap;
 }
+.hud-slot-pips {
+  position: absolute; left: 3px; right: 3px; bottom: 2px;
+  display: flex; gap: 2px; justify-content: center;
+}
+.hud-slot-pip {
+  width: 5px; height: 5px; border-radius: 1px;
+  background: #2c3d1e; border: 1px solid #466030;
+}
+.hud-slot-pip.on { background: #e8c862; border-color: #b89b3e; }
+.hud-slot-up {
+  position: absolute; left: 50%; top: -20px; transform: translateX(-50%);
+  width: 18px; height: 18px; border-radius: 4px; cursor: pointer;
+  background: #b89b3e; color: #14200c; border: 1px solid #e8c862;
+  font-size: 14px; font-weight: 800; line-height: 16px; text-align: center;
+  animation: hud-up-pulse 1s ease-in-out infinite alternate;
+}
+@keyframes hud-up-pulse { from { filter: brightness(0.85); } to { filter: brightness(1.25); } }
 .hud-inv { display: flex; gap: 4px; pointer-events: auto; }
 .hud-inv-slot {
   width: 30px; height: 30px; border-radius: 4px; background: #17210f;
@@ -218,7 +242,10 @@ export class Hud {
   private readonly manaText: HTMLElement;
   private readonly xpFill: HTMLElement;
   private readonly xpText: HTMLElement;
-  private readonly slots = new Map<AbilityKey, { root: HTMLElement; cd: HTMLElement }>();
+  private readonly slots = new Map<
+    AbilityKey,
+    { root: HTMLElement; cd: HTMLElement; pips: HTMLElement; up: HTMLElement }
+  >();
   private readonly sigilSlots: { root: HTMLElement; cd: HTMLElement; label: HTMLElement }[] = [];
   private readonly invSlots: HTMLElement[] = [];
   private readonly shop: HTMLElement;
@@ -307,13 +334,22 @@ export class Hud {
       const cd = el('div', 'hud-slot-cd');
       cd.style.display = 'none';
       slot.appendChild(cd);
+      const pips = el('div', 'hud-slot-pips');
+      slot.appendChild(pips);
+      const up = el('div', 'hud-slot-up', '+');
+      up.style.display = 'none';
+      up.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.world.levelAbility(this.selfId, key);
+      });
+      slot.appendChild(up);
       if (def) {
         const name = el('div', 'hud-slot-name', def.abilities[key].name);
         slot.appendChild(name);
         attachTooltip(slot, () => describeAbility(key, def.abilities[key]));
       }
       slots.appendChild(slot);
-      this.slots.set(key, { root: slot, cd });
+      this.slots.set(key, { root: slot, cd, pips, up });
     }
     for (const [i, keyLabel] of (['D', 'F'] as const).entries()) {
       const slot = el('div', 'hud-slot', keyLabel);
@@ -351,7 +387,8 @@ export class Hud {
     const hints = el('div', 'hud-hints');
     hints.textContent =
       'Right-click: move / attack. A: attack-move. B: recall. Q W E R: abilities. ' +
-      'D F: sigils. P: shop. Tab: scoreboard. Enter: chat. G: ping. Esc: menu.';
+      'D F: sigils. P: shop. Tab: scoreboard. Enter: chat. G: ping. Esc: menu. ' +
+      'Level up: click + above an ability.';
 
     this.shop = el('div', 'hud-shop');
     this.shop.append(el('h3', '', 'Shop (P to close)'));
@@ -622,17 +659,36 @@ export class Hud {
     for (const key of KEYS) {
       const slot = this.slots.get(key);
       if (!slot) continue;
-      const locked = key === 'R' && u.level < ULT_LEVEL;
+      const rank = effectiveRank(u, key);
+      const maxRank = key === 'R' ? ULT_MAX_RANK : BASIC_MAX_RANK;
       const remaining = (u.cooldowns[key] ?? 0) - this.world.time;
-      if (locked) {
+      if (rank <= 0) {
         slot.cd.style.display = 'flex';
-        slot.cd.textContent = `Lv${ULT_LEVEL}`;
+        slot.cd.textContent = `Lv${ULT_RANK_LEVELS[0]}`;
       } else if (remaining > 0) {
         slot.cd.style.display = 'flex';
         slot.cd.textContent = remaining >= 1 ? String(Math.ceil(remaining)) : remaining.toFixed(1);
       } else {
         slot.cd.style.display = 'none';
       }
+      // Rank pips and the skill-point "+" button.
+      if (slot.pips.childElementCount !== maxRank) {
+        slot.pips.textContent = '';
+        for (let i = 0; i < maxRank; i++) {
+          const pip = document.createElement('div');
+          pip.className = 'hud-slot-pip';
+          slot.pips.appendChild(pip);
+        }
+      }
+      for (let i = 0; i < slot.pips.childElementCount; i++) {
+        (slot.pips.children[i] as HTMLElement).classList.toggle('on', i < rank);
+      }
+      const canRank =
+        u.skillPoints > 0 &&
+        (key === 'R'
+          ? rank < ULT_MAX_RANK && u.level >= (ULT_RANK_LEVELS[rank] ?? Number.POSITIVE_INFINITY)
+          : rank < BASIC_MAX_RANK);
+      slot.up.style.display = canRank ? 'block' : 'none';
       const cost = def ? def.abilities[key].manaCost : 0;
       slot.root.classList.toggle('nomana', u.mana < cost);
     }
