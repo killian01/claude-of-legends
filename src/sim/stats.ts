@@ -7,7 +7,20 @@ import { ITEMS, type ItemStats } from './content/items';
 import type { Unit } from './unit';
 
 function sumItemStats(items: readonly string[]): Required<ItemStats> {
-  const out = { hp: 0, mana: 0, ad: 0, ap: 0, armor: 0, mr: 0, attackSpeedPct: 0, moveSpeed: 0 };
+  const out = {
+    hp: 0,
+    mana: 0,
+    ad: 0,
+    ap: 0,
+    armor: 0,
+    mr: 0,
+    attackSpeedPct: 0,
+    moveSpeed: 0,
+    armorPen: 0,
+    mrPen: 0,
+    armorPenPct: 0,
+    mrPenPct: 0,
+  };
   for (const id of items) {
     const def = ITEMS[id];
     if (!def) continue;
@@ -19,6 +32,10 @@ function sumItemStats(items: readonly string[]): Required<ItemStats> {
     out.mr += def.stats.mr ?? 0;
     out.attackSpeedPct += def.stats.attackSpeedPct ?? 0;
     out.moveSpeed += def.stats.moveSpeed ?? 0;
+    out.armorPen += def.stats.armorPen ?? 0;
+    out.mrPen += def.stats.mrPen ?? 0;
+    out.armorPenPct += def.stats.armorPenPct ?? 0;
+    out.mrPenPct += def.stats.mrPenPct ?? 0;
   }
   return out;
 }
@@ -45,14 +62,19 @@ export function recalcChampion(u: Unit): void {
   u.stats.armor = def.base.armor + def.growth.armor * lvl + items.armor;
   u.stats.mr = def.base.mr + def.growth.mr * lvl + items.mr;
   u.stats.attackSpeed = def.base.attackSpeed * (1 + items.attackSpeedPct);
+  u.stats.armorPen = items.armorPen;
+  u.stats.mrPen = items.mrPen;
+  u.stats.armorPenPct = Math.min(0.7, items.armorPenPct);
+  u.stats.mrPenPct = Math.min(0.7, items.mrPenPct);
   u.moveSpeed = def.base.moveSpeed + items.moveSpeed;
 }
 
 // XP needed to go from `level` to `level + 1`. Tuned down after review F.0
-// measured levels 2-4 after 10 minutes (ultimates were dead content); the
-// full curve now totals ~10900 xp, reachable inside the 20-25 min target.
+// (ultimates were dead content), then again by the pacing review: the full
+// curve now totals ~9400 xp so level and ability spikes land noticeably
+// faster inside the 20-25 min target.
 export function xpForNext(level: number): number {
-  return 100 + 60 * level;
+  return 85 + 52 * level;
 }
 
 export const MAX_LEVEL = 18;
@@ -84,5 +106,8 @@ export const BASIC_MAX_RANK = 5;
 export const ULT_MAX_RANK = 3;
 export const ULT_RANK_LEVELS: readonly number[] = [6, 11, 16];
 // Generic rank scaling: base amounts grow, cooldowns shrink.
-export const RANK_BASE_SCALE = 0.22;
+// Raised twice by the pacing and snowball reviews: rank 5 is now 3.2x the
+// rank 1 base, genre-shaped, so a level lead is a real damage lead (and the
+// only offensive level scaling mages have).
+export const RANK_BASE_SCALE = 0.55;
 export const RANK_CD_SCALE = 0.06;

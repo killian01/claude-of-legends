@@ -41,6 +41,37 @@ function bodyHeight(u: Readonly<Unit>): number {
   return 3.0;
 }
 
+// Selection picking: ANY living unit the viewer can see, allies and
+// invulnerable structures included (clicking a tower to inspect it is
+// legitimate even when it cannot be attacked yet).
+export function pickUnitOnScreen(
+  world: IWorld,
+  selfTeam: TeamId,
+  clientX: number,
+  clientY: number,
+  project: ScreenProjector,
+): Readonly<Unit> | null {
+  let best: Readonly<Unit> | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const u of world.units.values()) {
+    if (u.dead) continue;
+    if (u.team !== selfTeam && !world.isVisible(selfTeam, u.id)) continue;
+    const h = bodyHeight(u);
+    const c = project(u.pos.x, h, u.pos.z);
+    if (!c) continue;
+    const edge = project(u.pos.x + u.radius, h, u.pos.z);
+    const radiusPx = edge ? Math.hypot(edge.x - c.x, edge.y - c.y) : 0;
+    const d = Math.hypot(c.x - clientX, c.y - clientY) - radiusPx;
+    if (d > CLICK_SLOP_PX) continue;
+    const score = (d <= 0 ? 0 : 100000) + kindPriority(u) * 1000 + d;
+    if (score < bestScore) {
+      bestScore = score;
+      best = u;
+    }
+  }
+  return best;
+}
+
 export function pickEnemyOnScreen(
   world: IWorld,
   selfTeam: TeamId,

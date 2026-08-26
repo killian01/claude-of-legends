@@ -18,6 +18,8 @@ const REPATH_DISTANCE = 2;
 
 function fire(ctx: CombatCtx, u: Unit, target: Unit): void {
   breakStealth(u);
+  // Presentation hook: renderers play a swing animation off this event.
+  ctx.events.push({ type: 'attack', unitId: u.id, targetId: target.id });
   if (u.stats.attackRange > RANGED_THRESHOLD) {
     const id = ctx.allocId();
     ctx.projectiles.set(id, {

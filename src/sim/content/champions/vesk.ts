@@ -30,17 +30,17 @@ export const VESK: ChampionDef = {
     mr: 30,
     attackRange: 6.2,
     attackSpeed: 0.66,
-    moveSpeed: 3.3,
+    moveSpeed: 3.55,
     hpRegen: 1.3,
     manaRegen: 1.4,
     radius: 0.6,
   },
-  growth: { hp: 88, mana: 32, ad: 4.2, armor: 3.6, mr: 1.3 },
+  growth: { hp: 88, mana: 32, ad: 5.5, armor: 2, mr: 1.3 },
   abilities: {
     Q: {
       name: 'Piercing Round',
-      manaCost: 50,
-      cooldown: 8,
+      manaCost: 45,
+      cooldown: 6,
       castRange: 14,
       spec: {
         kind: 'skillshot',
@@ -48,13 +48,13 @@ export const VESK: ChampionDef = {
         radius: 0.5,
         range: 14,
         pierce: true,
-        onHit: [{ kind: 'damage', base: 90, adRatio: 0.9, dtype: 'physical' }],
+        onHit: [{ kind: 'damage', base: 79, adRatio: 1.71, dtype: 'physical' }],
       },
     },
     W: {
       name: 'Caltrops',
-      manaCost: 60,
-      cooldown: 12,
+      manaCost: 50,
+      cooldown: 9,
       castRange: 8,
       spec: {
         kind: 'zone',
@@ -63,14 +63,14 @@ export const VESK: ChampionDef = {
         tickEvery: 0.5,
         onTick: [
           { kind: 'slow', pct: 0.35, duration: 1 },
-          { kind: 'damage', base: 10, adRatio: 0.1, dtype: 'physical' },
+          { kind: 'damage', base: 9, adRatio: 0.19, dtype: 'physical' },
         ],
       },
     },
     E: {
       name: 'Backstep',
-      manaCost: 40,
-      cooldown: 10,
+      manaCost: 35,
+      cooldown: 7.5,
       castRange: 3,
       spec: {
         kind: 'dash',
@@ -80,8 +80,8 @@ export const VESK: ChampionDef = {
     },
     R: {
       name: 'Horizon Shot',
-      manaCost: 100,
-      cooldown: 90,
+      manaCost: 85,
+      cooldown: 67.5,
       castRange: 40,
       spec: {
         kind: 'skillshot',
@@ -89,7 +89,7 @@ export const VESK: ChampionDef = {
         radius: 0.9,
         range: 40,
         onHit: [
-          { kind: 'damage', base: 250, adRatio: 1.0, dtype: 'physical' },
+          { kind: 'damage', base: 220, adRatio: 1.9, dtype: 'physical' },
           { kind: 'slow', pct: 0.5, duration: 2 },
         ],
       },

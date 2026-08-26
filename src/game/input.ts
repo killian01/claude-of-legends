@@ -8,8 +8,12 @@ import type { AbilityKey, Vec2 } from '../sim/types';
 
 export interface InputHandlers {
   onRightClick(p: Vec2, screenX: number, screenY: number): void;
+  // Left-click selects a unit (target frame) or clears the selection.
+  onLeftClick(screenX: number, screenY: number): void;
   onHover(screenX: number, screenY: number): void;
-  onCast(key: AbilityKey, aim: Vec2): void;
+  // Hold-to-aim: keydown shows the range preview, keyup casts at the cursor.
+  onAimStart(key: AbilityKey): void;
+  onAimCommit(key: AbilityKey, aim: Vec2): void;
   onCastSigil(slot: number, aim: Vec2): void;
   onAttackMove(aim: Vec2): void;
   onRecall(): void;
@@ -45,9 +49,13 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): void {
   el.addEventListener('contextmenu', (e) => e.preventDefault());
 
   el.addEventListener('pointerdown', (e) => {
-    if (e.button !== 2) return;
     mouseX = e.clientX;
     mouseY = e.clientY;
+    if (e.button === 0) {
+      handlers.onLeftClick(e.clientX, e.clientY);
+      return;
+    }
+    if (e.button !== 2) return;
     const p = renderer.groundPointAt(e.clientX, e.clientY);
     if (p) handlers.onRightClick(p, e.clientX, e.clientY);
   });
@@ -100,7 +108,14 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): void {
     }
     const key = ABILITY_KEYS[lower];
     if (!key) return;
-    const p = aim();
-    if (p) handlers.onCast(key, p);
+    handlers.onAimStart(key);
+  });
+
+  window.addEventListener('keyup', (e) => {
+    if (handlers.isTyping()) return;
+    const key = ABILITY_KEYS[e.key.toLowerCase()];
+    if (!key) return;
+    const p = renderer.groundPointAt(mouseX, mouseY);
+    if (p) handlers.onAimCommit(key, p);
   });
 }

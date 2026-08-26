@@ -42,17 +42,17 @@ export const MAERA: ChampionDef = {
     mr: 32,
     attackRange: 5.25,
     attackSpeed: 0.6,
-    moveSpeed: 3.4,
+    moveSpeed: 3.65,
     hpRegen: 1.4,
     manaRegen: 1.9,
     radius: 0.62,
   },
-  growth: { hp: 85, mana: 50, ad: 2.5, armor: 4, mr: 1.5 },
+  growth: { hp: 85, mana: 50, ad: 2.5, armor: 2.3, mr: 1.5 },
   abilities: {
     Q: {
       name: 'Tide Surge',
-      manaCost: 60,
-      cooldown: 9,
+      manaCost: 50,
+      cooldown: 7,
       castRange: 9,
       spec: {
         kind: 'skillshot',
@@ -60,14 +60,14 @@ export const MAERA: ChampionDef = {
         radius: 1.0,
         range: 9,
         pierce: true,
-        onHit: [{ kind: 'damage', base: 70, apRatio: 0.5, dtype: 'magic' }],
+        onHit: [{ kind: 'damage', base: 62, apRatio: 0.95, dtype: 'magic' }],
         allyEffects: [{ kind: 'heal', base: 60, apRatio: 0.4 }],
       },
     },
     W: {
       name: 'Rising Spring',
-      manaCost: 70,
-      cooldown: 13,
+      manaCost: 60,
+      cooldown: 10,
       castRange: 8,
       spec: {
         kind: 'zone',
@@ -79,8 +79,8 @@ export const MAERA: ChampionDef = {
     },
     E: {
       name: 'Undertow',
-      manaCost: 50,
-      cooldown: 9,
+      manaCost: 45,
+      cooldown: 7,
       castRange: 8,
       spec: {
         kind: 'skillshot',
@@ -89,15 +89,15 @@ export const MAERA: ChampionDef = {
         range: 8,
         pierce: true,
         onHit: [
-          { kind: 'damage', base: 50, apRatio: 0.35, dtype: 'magic' },
+          { kind: 'damage', base: 44, apRatio: 0.66, dtype: 'magic' },
           { kind: 'slow', pct: 0.35, duration: 1.5 },
         ],
       },
     },
     R: {
       name: 'Great Wave',
-      manaCost: 100,
-      cooldown: 90,
+      manaCost: 85,
+      cooldown: 67.5,
       castRange: 10,
       spec: {
         kind: 'skillshot',
@@ -106,7 +106,7 @@ export const MAERA: ChampionDef = {
         range: 10,
         pierce: true,
         onHit: [
-          { kind: 'damage', base: 150, apRatio: 0.6, dtype: 'magic' },
+          { kind: 'damage', base: 132, apRatio: 1.14, dtype: 'magic' },
           { kind: 'knockback', distance: 2.5 },
         ],
         allyEffects: [{ kind: 'shield', base: 150, apRatio: 0.5, duration: 3 }],

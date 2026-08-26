@@ -76,6 +76,20 @@ interface TrackedUnit {
   yaw: number;
   walkAmp: number;
   pulseUntil: number;
+  // Hit flash: a brief white emissive blink when the unit takes damage.
+  flashUntil: number;
+  flashMats: { mat: THREE.MeshLambertMaterial; orig: number }[] | null;
+  // Auto-attack swing: lunge direction and end time.
+  swingUntil: number;
+  swingDir: Vec2;
+  // Recall channel effect, created on first use and toggled by the status.
+  recallFx: THREE.Group | null;
+  // Structures show their hp as a number; rebuilt only when it changes.
+  hpLabel: THREE.Sprite | null;
+  hpLabelKey: string;
+  // Death presentation: champions fall for a beat instead of popping out.
+  wasDead: boolean;
+  deadUntil: number;
 }
 
 // The limb pivots a champion mesh publishes for the walk cycle.
@@ -91,10 +105,22 @@ export interface CombatNotes {
   casts: readonly number[];
   // Damage the viewer dealt to others; the only cross-unit numbers shown.
   hits: readonly { targetId: number; amount: number }[];
+  // Auto-attacks fired by visible units, for swing animations.
+  attacks: readonly { unitId: number; targetId: number }[];
+}
+
+// What the aim preview needs to draw a cast's range and shape.
+export interface AimPreview {
+  castRange: number;
+  kind: string;
+  radius?: number;
+  range?: number;
+  halfAngle?: number;
 }
 
 interface TrackedMobile {
   mesh: THREE.Object3D;
+  color: number;
   prev: Vec2;
   curr: Vec2;
 }
@@ -126,7 +152,8 @@ export class Renderer {
   private readonly targetReticle: THREE.Group;
   private readonly targetSpinner: THREE.Mesh;
   private readonly hoverRing: THREE.Mesh;
-  private zoom = 1;
+  // Slightly zoomed in by default: characters read far better up close.
+  private zoom = 0.85;
   private followId: number | null = null;
   private viewerTeam = 0;
   private dressing: MapDressing | null = null;
@@ -139,6 +166,16 @@ export class Renderer {
   private pointerX = -1;
   private pointerY = -1;
   private edgePanGate: () => boolean = () => true;
+  // Camera kick while the player is being hit.
+  private shakeUntil = 0;
+  // The display-grade vignette div; doubles as the low-hp warning.
+  private readonly vignette: HTMLDivElement;
+  private lowHpActive = false;
+  // The active cast preview (held ability key) and its throwaway meshes.
+  private aimPreview: AimPreview | null = null;
+  private aimMeshes: THREE.Mesh[] = [];
+  private aimGuide: THREE.Mesh | null = null;
+  private aimSpot: THREE.Mesh | null = null;
 
   constructor(container: HTMLElement, world: IWorld) {
     this.world = world;
@@ -159,11 +196,11 @@ export class Renderer {
     // plus a vignette overlay. The HUD lives outside this container.
     this.gl.domElement.style.filter = 'saturate(1.08) contrast(1.05)';
     if (!container.style.position) container.style.position = 'relative';
-    const vignette = document.createElement('div');
-    vignette.style.cssText =
+    this.vignette = document.createElement('div');
+    this.vignette.style.cssText =
       'position:absolute;inset:0;pointer-events:none;' +
       'background:radial-gradient(ellipse at center, transparent 55%, rgba(8,12,5,0.3) 100%);';
-    container.appendChild(vignette);
+    container.appendChild(this.vignette);
 
     const aspect = container.clientWidth / Math.max(1, container.clientHeight);
     this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 500);
@@ -185,12 +222,31 @@ export class Renderer {
     );
 
     // Track the pointer for edge panning; on the window so the edges of the
-    // screen still register even over HUD elements.
+    // screen still register even over HUD elements. Leaving the window must
+    // KEEP panning (the mouse is past the edge, the strongest pan intent),
+    // so the exit position is recorded instead of cleared.
     window.addEventListener('pointermove', (e) => {
       this.pointerX = e.clientX;
       this.pointerY = e.clientY;
     });
-    document.addEventListener('pointerleave', () => {
+    // On a multi-monitor setup a fast exit can report a last position well
+    // inside the window; snap it to the closest edge so panning continues
+    // in the direction the cursor left.
+    window.addEventListener('mouseout', (e) => {
+      if (e.relatedTarget !== null) return;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const dists = [e.clientX, w - e.clientX, e.clientY, h - e.clientY];
+      const closest = dists.indexOf(Math.min(...dists));
+      this.pointerX = e.clientX;
+      this.pointerY = e.clientY;
+      if (closest === 0) this.pointerX = 0;
+      else if (closest === 1) this.pointerX = w;
+      else if (closest === 2) this.pointerY = 0;
+      else this.pointerY = h;
+    });
+    // Alt-tabbing away must not leave the camera drifting forever.
+    window.addEventListener('blur', () => {
       this.pointerX = -1;
       this.pointerY = -1;
     });
@@ -318,15 +374,100 @@ export class Renderer {
     this.edgePanGate = gate;
   }
 
+  // Cast preview while an ability key is held: a range circle around the
+  // caster plus the cast's shape (arrow, disc, or wedge) tracking the
+  // cursor, all in the genre's targeting blue.
+  showAimPreview(p: AimPreview): void {
+    this.hideAimPreview();
+    this.aimPreview = p;
+    const mat = (opacity: number): THREE.MeshBasicMaterial =>
+      new THREE.MeshBasicMaterial({
+        color: 0x5fb8e8,
+        transparent: true,
+        opacity,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+    const add = (mesh: THREE.Mesh): THREE.Mesh => {
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.y = 0.12;
+      this.scene.add(mesh);
+      this.aimMeshes.push(mesh);
+      return mesh;
+    };
+    if (p.castRange > 0.5)
+      add(new THREE.Mesh(new THREE.RingGeometry(p.castRange - 0.12, p.castRange, 48), mat(0.55)));
+    if (p.kind === 'skillshot' || p.kind === 'dash') {
+      const len = p.range ?? p.castRange;
+      const width = Math.max(0.5, (p.radius ?? 0.3) * 2);
+      const geo = new THREE.PlaneGeometry(width, len);
+      geo.translate(0, len / 2, 0);
+      this.aimGuide = add(new THREE.Mesh(geo, mat(0.22)));
+    } else if (p.kind === 'cone') {
+      const half = p.halfAngle ?? Math.PI / 4;
+      this.aimGuide = add(
+        new THREE.Mesh(
+          new THREE.CircleGeometry(p.range ?? p.castRange, 24, Math.PI / 2 - half, half * 2),
+          mat(0.22),
+        ),
+      );
+    } else if (p.kind === 'zone') {
+      this.aimSpot = add(new THREE.Mesh(new THREE.CircleGeometry(p.radius ?? 1, 32), mat(0.25)));
+    } else if (p.kind === 'burst') {
+      add(new THREE.Mesh(new THREE.CircleGeometry(p.radius ?? 1, 32), mat(0.18)));
+    }
+  }
+
+  hideAimPreview(): void {
+    for (const m of this.aimMeshes) {
+      this.scene.remove(m);
+      m.geometry.dispose();
+      (m.material as THREE.Material).dispose();
+    }
+    this.aimMeshes = [];
+    this.aimGuide = null;
+    this.aimSpot = null;
+    this.aimPreview = null;
+  }
+
+  // Follows the caster and the cursor each frame while a preview is up.
+  private updateAimPreview(): void {
+    if (!this.aimPreview) return;
+    const self = this.followId !== null ? this.tracked.get(this.followId) : undefined;
+    if (!self) return;
+    const sx = self.mesh.position.x;
+    const sz = self.mesh.position.z;
+    for (const m of this.aimMeshes) {
+      if (m === this.aimSpot) continue;
+      m.position.x = sx;
+      m.position.z = sz;
+    }
+    const cursor = this.pointerX >= 0 ? this.groundPointAt(this.pointerX, this.pointerY) : null;
+    if (!cursor) return;
+    const dx = cursor.x - sx;
+    const dz = cursor.z - sz;
+    if (this.aimGuide && Math.hypot(dx, dz) > 0.05) {
+      // PlaneGeometry extends +y pre-rotation, which maps to -z flat; flip.
+      this.aimGuide.rotation.z = Math.atan2(dx, dz) + Math.PI;
+    }
+    if (this.aimSpot) {
+      const d = Math.hypot(dx, dz);
+      const max = this.aimPreview.castRange;
+      const k = d > max && d > 0 ? max / d : 1;
+      this.aimSpot.position.set(sx + dx * k, 0.12, sz + dz * k);
+    }
+  }
+
   // Edge pan: holding the cursor near a screen edge slides the free camera,
   // MOBA style. Starts from wherever the camera currently looks.
   private updateFreeCam(dtMs: number, followPos: THREE.Vector3 | null): void {
-    const EDGE_PX = 22;
+    const EDGE_PX = 28;
     if (this.pointerX < 0 || !this.edgePanGate()) return;
     const rect = this.gl.domElement.getBoundingClientRect();
-    const x = this.pointerX - rect.left;
-    const y = this.pointerY - rect.top;
-    if (x < 0 || y < 0 || x > rect.width || y > rect.height) return;
+    // Clamp instead of rejecting: a pointer past the window edge counts as
+    // sitting ON that edge, so panning continues outside the window.
+    const x = Math.max(0, Math.min(rect.width, this.pointerX - rect.left));
+    const y = Math.max(0, Math.min(rect.height, this.pointerY - rect.top));
     let dx = 0;
     let dz = 0;
     if (x < EDGE_PX) dx -= 1;
@@ -380,20 +521,49 @@ export class Renderer {
       playSfx('gold');
       if (self) this.fct.spawn(`+${amount}g`, '#ffd94a', self.pos.x, 3.4, self.pos.z, 0.9);
     }
-    // The viewer's own damage dealt, floated over the victim.
+    // Auto-attack swings: the attacker snaps to face its target and lunges,
+    // so kiting (attack while retreating) visibly lands hits.
+    for (const atk of notes.attacks) {
+      const t = this.tracked.get(atk.unitId);
+      const attacker = this.world.units.get(atk.unitId);
+      const target = this.world.units.get(atk.targetId);
+      if (!t || !t.mesh.visible) continue;
+      t.swingUntil = performance.now() + 200;
+      if (target) {
+        const dx = target.pos.x - t.curr.x;
+        const dz = target.pos.z - t.curr.z;
+        const d = Math.hypot(dx, dz) || 1;
+        t.swingDir = { x: dx / d, z: dz / d };
+        t.yaw = Math.atan2(dx, dz);
+      }
+      if (atk.unitId === this.followId) playSfx('swing');
+      // Tower fire is unmistakable: a red flash on the victim and a heavy
+      // bolt sound when it is shooting YOU.
+      if (attacker?.kind === 'tower' && target) {
+        this.flashMarker(target.pos.x, target.pos.z, 0xff5a3a);
+        if (atk.targetId === this.followId) playSfx('towershot');
+      }
+    }
+    // The viewer's own damage dealt: a crack sound plus numbers over the
+    // victim, scaled and recolored by how big the hit is.
+    let impacted = false;
     for (const hit of notes.hits) {
       if (hit.amount < 1) continue;
       const t = this.tracked.get(hit.targetId);
       const victim = this.world.units.get(hit.targetId);
       if (!t || !victim || !t.mesh.visible) continue;
+      impacted = true;
+      const bigness = Math.min(1, hit.amount / Math.max(1, victim.maxHp * 0.15));
       this.fct.spawn(
         `-${Math.round(hit.amount)}`,
-        '#ffe9a8',
+        bigness > 0.65 ? '#ffb648' : '#ffe9a8',
         victim.pos.x,
         t.barY + 1.4,
         victim.pos.z,
+        0.85 + bigness * 0.6,
       );
     }
+    if (impacted) playSfx('impact');
     if (notes.casts.length > 0) playSfx('cast');
     for (const casterId of notes.casts) {
       const caster = this.world.units.get(casterId);
@@ -460,6 +630,24 @@ export class Renderer {
       holder.add(buildTowerMesh(color));
       enableShadows(holder);
       collectSpinners(holder);
+      // Enemy towers telegraph their reach with a faint red ground ring
+      // (added after the shadow pass so the ring casts none).
+      if (u.team !== this.viewerTeam) {
+        const reach = u.stats.attackRange + u.radius;
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(reach - 0.22, reach, 48),
+          new THREE.MeshBasicMaterial({
+            color: 0xff5a3a,
+            transparent: true,
+            opacity: 0.14,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          }),
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.1;
+        holder.add(ring);
+      }
       return { holder, barY: 8.6 };
     }
     if (kind === 'sanctum') {
@@ -468,27 +656,33 @@ export class Renderer {
       collectSpinners(holder);
       return { holder, barY: 7.2 };
     }
-    holder.add(buildChampionMesh(u.championId, color, u.skin));
+    const figure = buildChampionMesh(u.championId, color, u.skin);
+    holder.add(figure);
+    // Surface the figure's limb pivots on the holder the render loop sees;
+    // without this hoist the walk cycle never runs.
+    holder.userData.anim = figure.userData.anim;
     enableShadows(holder);
     return { holder, barY: 3.0 };
   }
 
   // Health bar, plus a thin mana strip stacked BELOW it for champions: two
-  // separate rows so the bars never sit on top of each other.
+  // separate rows so the bars never sit on top of each other. Structures get
+  // a thick bar (they carry thousands of hp; a thin sliver read as "empty").
   private buildHpBar(
     holder: THREE.Group,
     barY: number,
     width: number,
     withMana: boolean,
+    thick = false,
   ): { fill: THREE.Sprite; back: THREE.Sprite; manaFill: THREE.Sprite | null } {
-    const backH = withMana ? 0.5 : 0.34;
+    const backH = thick ? 0.56 : withMana ? 0.5 : 0.34;
     const back = new THREE.Sprite(new THREE.SpriteMaterial({ color: COLOR_BAR_BACK }));
     back.center.set(0, 0.5);
     back.scale.set(width + 0.14, backH, 1);
     back.position.set(-(width + 0.14) / 2, barY, 0);
     const fill = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xffffff }));
     fill.center.set(0, 0.5);
-    fill.scale.set(width, 0.24, 1);
+    fill.scale.set(width, thick ? 0.44 : 0.24, 1);
     fill.position.set(-width / 2, barY + (withMana ? 0.09 : 0), 0);
     holder.add(back, fill);
     let manaFill: THREE.Sprite | null = null;
@@ -517,12 +711,21 @@ export class Renderer {
       let t = this.tracked.get(id);
       if (!t) {
         const { holder, barY } = this.buildUnitMesh(u);
-        const barWidth = u.kind === 'champion' ? 1.8 : u.kind === 'minion' ? 1.0 : 2.2;
+        // Minion bars widen with their max hp so a beefy siege minion never
+        // reads as "almost dead" while it still soaks several hits.
+        const structure = u.kind === 'tower' || u.kind === 'sanctum';
+        const barWidth =
+          u.kind === 'champion'
+            ? 1.8
+            : u.kind === 'minion'
+              ? Math.min(2.2, 1.2 + u.maxHp / 900)
+              : 3.2;
         const { fill, back, manaFill } = this.buildHpBar(
           holder,
           barY,
           barWidth,
           u.kind === 'champion',
+          structure,
         );
         holder.position.set(u.pos.x, 0, u.pos.z);
         holder.userData.unitId = id;
@@ -546,23 +749,51 @@ export class Renderer {
           yaw: 0,
           walkAmp: 0,
           pulseUntil: 0,
+          flashUntil: 0,
+          flashMats: null,
+          swingUntil: 0,
+          swingDir: { x: 0, z: 1 },
+          recallFx: null,
+          hpLabel: null,
+          hpLabelKey: '',
+          wasDead: false,
+          deadUntil: 0,
         };
         this.tracked.set(id, t);
       } else {
         t.prev = t.curr;
         t.curr = { x: u.pos.x, z: u.pos.z };
       }
+      // Death edges: a champion falls for a beat instead of popping out,
+      // and respawns without sliding across the map from its death spot.
+      const nowMs = performance.now();
+      if (u.dead && !t.wasDead) {
+        t.deadUntil = nowMs + 600;
+        if (t.mesh.visible) this.flashMarker(u.pos.x, u.pos.z, 0xff5a3a);
+      } else if (!u.dead && t.wasDead) {
+        t.prev = { ...t.curr };
+        t.deadUntil = 0;
+        t.pulseUntil = nowMs + 320;
+      }
+      t.wasDead = u.dead;
+
       const visible =
-        !u.dead &&
+        (!u.dead || t.deadUntil > nowMs) &&
         (u.team === this.viewerTeam || this.world.isVisible(this.viewerTeam as 0 | 1, id));
       t.mesh.visible = visible;
 
       // Damage numbers are PERSONAL, like the genre: only what the player
       // takes shows here (what the player deals arrives via combat notes).
+      // Every visible hit still lands a white flash and, on the player, a
+      // camera kick, so fights read as impacts rather than draining bars.
       const dhp = t.lastHp - u.hp;
-      if (visible && dhp >= 1 && id === this.followId) {
-        this.fct.spawn(`-${Math.round(dhp)}`, '#ff6a5e', u.pos.x, t.barY + 1.4, u.pos.z);
-        playSfx('hit');
+      if (visible && dhp >= 1) {
+        t.flashUntil = performance.now() + 130;
+        if (id === this.followId) {
+          this.fct.spawn(`-${Math.round(dhp)}`, '#ff6a5e', u.pos.x, t.barY + 1.4, u.pos.z);
+          playSfx('hit');
+          if (dhp >= u.maxHp * 0.05) this.shakeUntil = performance.now() + 200;
+        }
       }
       t.lastHp = u.hp;
 
@@ -595,12 +826,49 @@ export class Renderer {
       }
 
       const frac = Math.max(0, Math.min(1, u.hp / u.maxHp));
-      t.hpFill.scale.x = Math.max(0.001, t.barWidth * frac);
-      (t.hpFill.material as THREE.SpriteMaterial).color.set(this.barColor(id, u.team));
+      // A living unit always keeps a visible sliver of bar.
+      t.hpFill.scale.x = Math.max(0.07, t.barWidth * frac);
+      let fillColor = this.barColor(id, u.team);
+      // Last-hit aid: an enemy minion that one of the player's autos would
+      // finish turns its bar gold, like the genre's execute indicators.
+      if (u.kind === 'minion' && u.team !== this.viewerTeam) {
+        const me = this.followId !== null ? this.world.units.get(this.followId) : undefined;
+        const ad = me?.stats.ad ?? 0;
+        if (ad > 0 && u.hp <= ad * (100 / (100 + Math.max(0, u.stats.armor)))) {
+          fillColor = 0xffd94a;
+        }
+      }
+      (t.hpFill.material as THREE.SpriteMaterial).color.set(fillColor);
       // Minion bars only show once damaged, like the genre: less clutter.
       const barVisible = visible && (u.kind !== 'minion' || u.hp < u.maxHp - 1);
       t.hpFill.visible = barVisible;
       t.hpBack.visible = barVisible;
+
+      // Damaged structures print their remaining hp: thousands of points
+      // do not fit in a bar's pixels alone.
+      if (u.kind === 'tower' || u.kind === 'sanctum') {
+        const showLabel = barVisible && u.hp < u.maxHp - 1;
+        const key = showLabel ? String(Math.ceil(u.hp / 10) * 10) : '';
+        if (key !== t.hpLabelKey) {
+          t.hpLabelKey = key;
+          if (t.hpLabel) {
+            t.mesh.remove(t.hpLabel);
+            const mat = t.hpLabel.material as THREE.SpriteMaterial;
+            mat.map?.dispose();
+            mat.dispose();
+            t.hpLabel = null;
+          }
+          if (key !== '') {
+            const label = makeTextSprite(key, '#ffe9a8', 0.6, 160, 30);
+            if (label) {
+              label.position.set(0, t.barY + 0.7, 0);
+              t.mesh.add(label);
+              t.hpLabel = label;
+            }
+          }
+        }
+        if (t.hpLabel) t.hpLabel.visible = showLabel;
+      }
       if (t.manaFill) {
         const mfrac = u.maxMana > 0 ? Math.max(0, Math.min(1, u.mana / u.maxMana)) : 0;
         t.manaFill.scale.x = Math.max(0.001, t.barWidth * mfrac);
@@ -633,6 +901,42 @@ export class Renderer {
         t.rootMark = ring;
       }
       if (t.rootMark) t.rootMark.visible = rooted;
+
+      // Recall channel: a spinning blue ring and glow column while the
+      // status runs, on any champion the viewer can see.
+      if (u.kind === 'champion') {
+        const recalling =
+          visible && u.statuses.some((s) => s.kind === 'recall' && s.until > this.world.time);
+        if (recalling && !t.recallFx) {
+          const fx = new THREE.Group();
+          const ring = new THREE.Mesh(
+            new THREE.RingGeometry(0.85, 1.1, 24),
+            new THREE.MeshBasicMaterial({
+              color: 0x6ac9e8,
+              transparent: true,
+              opacity: 0.75,
+              side: THREE.DoubleSide,
+            }),
+          );
+          ring.rotation.x = -Math.PI / 2;
+          ring.position.y = 0.14;
+          const beam = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.55, 0.9, 3.4, 12, 1, true),
+            new THREE.MeshBasicMaterial({
+              color: 0x9fe0ff,
+              transparent: true,
+              opacity: 0.25,
+              side: THREE.DoubleSide,
+              depthWrite: false,
+            }),
+          );
+          beam.position.y = 1.7;
+          fx.add(ring, beam);
+          t.mesh.add(fx);
+          t.recallFx = fx;
+        }
+        if (t.recallFx) t.recallFx.visible = recalling;
+      }
     }
     for (const [id, t] of this.tracked) {
       if (!this.world.units.has(id)) {
@@ -646,11 +950,13 @@ export class Renderer {
     for (const [id, p] of this.world.projectiles) {
       const t = this.trackedProjectiles.get(id);
       if (!t) {
-        const mesh = buildProjectileMesh(p, this.world, TEAM_LIGHT[p.team] ?? 0xffffff);
+        const color = TEAM_LIGHT[p.team] ?? 0xffffff;
+        const mesh = buildProjectileMesh(p, this.world, color);
         mesh.position.set(p.pos.x, 1.2, p.pos.z);
         this.scene.add(mesh);
         this.trackedProjectiles.set(id, {
           mesh,
+          color,
           prev: { x: p.pos.x, z: p.pos.z },
           curr: { x: p.pos.x, z: p.pos.z },
         });
@@ -661,6 +967,8 @@ export class Renderer {
     }
     for (const [id, t] of this.trackedProjectiles) {
       if (!this.world.projectiles.has(id)) {
+        // Impact burst where the bolt ended, in its own color.
+        this.flashMarker(t.curr.x, t.curr.z, t.color);
         this.scene.remove(t.mesh);
         disposeDeep(t.mesh);
         this.trackedProjectiles.delete(id);
@@ -744,7 +1052,11 @@ export class Renderer {
 
       const phase = now * 0.013 + id * 1.7;
       const bobY = Math.abs(Math.sin(phase)) * 0.1 * t.walkAmp;
-      t.mesh.position.set(x, bobY, z);
+      // Auto-attack lunge: a short hop toward the victim.
+      const swinging = t.swingUntil > now;
+      const swingK = swinging ? Math.sin((1 - (t.swingUntil - now) / 200) * Math.PI) : 0;
+      t.mesh.position.set(x + t.swingDir.x * swingK * 0.28, bobY, z + t.swingDir.z * swingK * 0.28);
+      if (swinging) t.mesh.rotation.y = t.yaw;
 
       const anim = t.mesh.userData.anim as AnimParts | undefined;
       if (anim) {
@@ -753,14 +1065,27 @@ export class Renderer {
         anim.legs[0]!.rotation.x = swing * 0.7;
         anim.legs[1]!.rotation.x = -swing * 0.7;
         anim.arms[0]!.rotation.x = -swing * 0.5;
-        anim.arms[1]!.rotation.x = swing * 0.5;
+        // The right arm strikes during an auto-attack swing.
+        anim.arms[1]!.rotation.x = swinging ? -1.7 * swingK : swing * 0.5;
         const breath = Math.sin(now * 0.0021 + id) * (1 - t.walkAmp);
         anim.torso.scale.y = 1 + breath * 0.025;
         anim.head.position.y = 2.02 + breath * 0.03;
       } else if (t.kind === 'minion') {
-        // Minions waddle: a small roll synced to the walk bob.
+        // Minions waddle while walking and tilt into their strikes.
         const body = t.mesh.userData.body as THREE.Object3D | undefined;
-        if (body) body.rotation.z = Math.sin(phase) * 0.12 * t.walkAmp;
+        if (body) {
+          body.rotation.z = Math.sin(phase) * 0.12 * t.walkAmp;
+          body.rotation.x = swinging ? 0.4 * swingK : 0;
+        }
+      }
+
+      // Recall channel spin.
+      if (t.recallFx?.visible) {
+        t.recallFx.rotation.y = now * 0.004;
+        const beamMat = (t.recallFx.children[1] as THREE.Mesh | undefined)?.material as
+          | THREE.MeshBasicMaterial
+          | undefined;
+        if (beamMat) beamMat.opacity = 0.2 + 0.12 * Math.sin(now * 0.008);
       }
 
       // Cast pulse: a brief swell of the whole body.
@@ -768,12 +1093,41 @@ export class Renderer {
       if (t.pulseUntil > now) s = 1 + 0.16 * Math.sin(((t.pulseUntil - now) / 280) * Math.PI);
       if (living) t.mesh.scale.setScalar(s);
 
+      // Champion death fall: tip over and sink through the brief window the
+      // corpse stays visible.
+      if (t.kind === 'champion') {
+        if (t.deadUntil > now) {
+          const age = 1 - (t.deadUntil - now) / 600;
+          t.mesh.rotation.x = age * 1.2;
+          t.mesh.position.y = -age * 0.6;
+        } else {
+          t.mesh.rotation.x = 0;
+        }
+      }
+
+      // Hit flash: blink the body materials white, restore on expiry.
+      if (t.flashUntil > now) {
+        if (!t.flashMats) {
+          t.flashMats = [];
+          t.mesh.traverse((child) => {
+            const mat = (child as THREE.Mesh).material as THREE.MeshLambertMaterial | undefined;
+            if (mat?.isMeshLambertMaterial) t.flashMats?.push({ mat, orig: mat.emissive.getHex() });
+          });
+        }
+        const k = (t.flashUntil - now) / 130;
+        for (const f of t.flashMats) f.mat.emissive.setScalar(0.55 * k);
+      } else if (t.flashMats) {
+        for (const f of t.flashMats) f.mat.emissive.setHex(f.orig);
+        t.flashMats = null;
+      }
+
       const spinners = t.mesh.userData.spinners as THREE.Object3D[] | undefined;
       if (spinners) for (const sp of spinners) sp.rotation.y = now * 0.0006;
       if (id === this.followId) followPos = new THREE.Vector3(x, 0, z);
     }
 
     this.placeIndicators(now, alpha);
+    this.updateAimPreview();
     for (const t of this.trackedProjectiles.values()) {
       const x = t.prev.x + (t.curr.x - t.prev.x) * alpha;
       const z = t.prev.z + (t.curr.z - t.prev.z) * alpha;
@@ -828,12 +1182,31 @@ export class Renderer {
     const selfUnit = this.followId !== null ? this.world.units.get(this.followId) : undefined;
     this.selfRing.visible = selfUnit !== undefined && !selfUnit.dead;
 
+    // Low-hp warning: the vignette turns into a pulsing red frame under 30
+    // percent health, scaling up as death gets closer.
+    const hpFrac = selfUnit && !selfUnit.dead ? selfUnit.hp / selfUnit.maxHp : 1;
+    if (hpFrac < 0.3) {
+      this.lowHpActive = true;
+      const danger = 1 - hpFrac / 0.3;
+      const a = (0.22 + 0.18 * danger + 0.1 * Math.sin(now * 0.008)) * (0.6 + 0.4 * danger);
+      this.vignette.style.background = `radial-gradient(ellipse at center, transparent 45%, rgba(150,20,10,${a.toFixed(3)}) 100%)`;
+    } else if (this.lowHpActive) {
+      this.lowHpActive = false;
+      this.vignette.style.background =
+        'radial-gradient(ellipse at center, transparent 55%, rgba(8,12,5,0.3) 100%)';
+    }
+
     this.updateFreeCam(dtMs, followPos);
     const target =
       this.freeCam ??
       followPos ??
       new THREE.Vector3(this.world.map.size / 2, 0, this.world.map.size / 2);
     this.camera.position.copy(target).addScaledVector(this.cameraOffset, this.zoom);
+    if (this.shakeUntil > now) {
+      const k = ((this.shakeUntil - now) / 200) * 0.3;
+      this.camera.position.x += (Math.random() * 2 - 1) * k;
+      this.camera.position.z += (Math.random() * 2 - 1) * k;
+    }
     this.camera.lookAt(target);
     this.gl.render(this.scene, this.camera);
   }

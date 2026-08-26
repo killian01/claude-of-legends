@@ -4,7 +4,7 @@
 
 import type { AbilityDef, CastSpec } from '../sim/combat/casting';
 import type { EffectSpec } from '../sim/combat/effects';
-import type { ItemDef } from '../sim/content/items';
+import { ITEMS, type ItemDef } from '../sim/content/items';
 import type { SigilDef } from '../sim/content/sigils';
 import type { AbilityKey } from '../sim/types';
 
@@ -14,18 +14,18 @@ function fmtEffect(e: EffectSpec): string {
   switch (e.kind) {
     case 'damage': {
       let s = `${e.base}`;
-      if (e.adRatio) s += ` (+${pct(e.adRatio)} AD)`;
-      if (e.apRatio) s += ` (+${pct(e.apRatio)} AP)`;
+      if (e.adRatio) s += ` (+${pct(e.adRatio)} of your Attack Damage)`;
+      if (e.apRatio) s += ` (+${pct(e.apRatio)} of your Ability Power)`;
       return `${s} ${e.dtype} damage`;
     }
     case 'heal': {
       let s = `heals ${e.base}`;
-      if (e.apRatio) s += ` (+${pct(e.apRatio)} AP)`;
+      if (e.apRatio) s += ` (+${pct(e.apRatio)} of your Ability Power)`;
       return s;
     }
     case 'shield': {
       let s = `shields ${e.base}`;
-      if (e.apRatio) s += ` (+${pct(e.apRatio)} AP)`;
+      if (e.apRatio) s += ` (+${pct(e.apRatio)} of your Ability Power)`;
       return `${s} for ${e.duration}s`;
     }
     case 'slow':
@@ -134,6 +134,9 @@ export function describeSigil(def: SigilDef): string[] {
 
 export function describeItem(def: ItemDef, statLine: string): string[] {
   const lines = [`${def.name} (${def.cost}g)`, statLine];
-  if (def.buildsFrom) lines.push(`Builds from: ${def.buildsFrom.join(' + ')}.`);
+  if (def.buildsFrom) {
+    const names = def.buildsFrom.map((id) => ITEMS[id]?.name ?? id);
+    lines.push(`Builds from: ${names.join(' + ')}.`);
+  }
   return lines;
 }

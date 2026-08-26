@@ -9,6 +9,11 @@ interface Entry {
   texture: THREE.CanvasTexture;
   bornAt: number;
   baseY: number;
+  baseX: number;
+  baseZ: number;
+  // Sideways drift so simultaneous hits fan out instead of stacking.
+  driftX: number;
+  driftZ: number;
 }
 
 const LIFETIME_MS = 900;
@@ -53,7 +58,9 @@ export class FloatingText {
     if (this.entries.length >= MAX_ACTIVE) return;
     const sprite = makeTextSprite(text, color, scale);
     if (!sprite) return;
-    sprite.position.set(x, y, z);
+    const jx = (Math.random() - 0.5) * 0.9;
+    const jz = (Math.random() - 0.5) * 0.5;
+    sprite.position.set(x + jx, y, z + jz);
     this.scene.add(sprite);
     this.entries.push({
       sprite,
@@ -61,6 +68,10 @@ export class FloatingText {
       texture: (sprite.material as THREE.SpriteMaterial).map as THREE.CanvasTexture,
       bornAt: performance.now(),
       baseY: y,
+      baseX: x + jx,
+      baseZ: z + jz,
+      driftX: (Math.random() - 0.5) * 1.2,
+      driftZ: (Math.random() - 0.5) * 0.5,
     });
   }
 
@@ -75,7 +86,13 @@ export class FloatingText {
         this.entries.splice(i, 1);
         continue;
       }
-      e.sprite.position.y = e.baseY + age * 1.8;
+      // Ease-out rise with a sideways drift: an arc, not an elevator.
+      const rise = 1 - (1 - age) * (1 - age);
+      e.sprite.position.set(
+        e.baseX + e.driftX * age,
+        e.baseY + rise * 1.9,
+        e.baseZ + e.driftZ * age,
+      );
       e.material.opacity = 1 - age * age;
     }
   }

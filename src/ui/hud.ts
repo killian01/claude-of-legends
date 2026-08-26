@@ -5,6 +5,7 @@
 // data (items, sigils, champions) is data-as-code it may read directly.
 
 import { playSfx } from '../game/sfx';
+import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
 import { effectiveItemCost, ITEM_LIST, ITEMS, type ItemStats } from '../sim/content/items';
 import { SIGILS } from '../sim/content/sigils';
@@ -34,6 +35,7 @@ const KEY_TINTS: Readonly<Record<string, [string, string]>> = {
 
 const KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
 const TEAM_TEXT_COLORS = ['#9dbcf5', '#f5a3a3'];
+const TEAM_PORTRAIT_COLORS = [0x4a7dd6, 0xd65c5c];
 
 function statusLabel(s: Status, time: number): string {
   const left = Math.max(0, s.until - time);
@@ -65,17 +67,20 @@ function statusLabel(s: Status, time: number): string {
   }
 }
 
+// Full stat names, not initials: nobody should have to guess what AD means.
 function statLabel(s: ItemStats): string {
   const parts: string[] = [];
-  if (s.ad) parts.push(`+${s.ad} AD`);
-  if (s.ap) parts.push(`+${s.ap} AP`);
-  if (s.hp) parts.push(`+${s.hp} HP`);
-  if (s.mana) parts.push(`+${s.mana} MP`);
-  if (s.armor) parts.push(`+${s.armor} ARM`);
-  if (s.mr) parts.push(`+${s.mr} MR`);
-  if (s.attackSpeedPct) parts.push(`+${Math.round(s.attackSpeedPct * 100)}% AS`);
-  if (s.moveSpeed) parts.push(`+${s.moveSpeed} MS`);
-  return parts.join(' ');
+  if (s.ad) parts.push(`+${s.ad} Attack Damage`);
+  if (s.ap) parts.push(`+${s.ap} Ability Power`);
+  if (s.hp) parts.push(`+${s.hp} Health`);
+  if (s.mana) parts.push(`+${s.mana} Mana`);
+  if (s.armor) parts.push(`+${s.armor} Armor`);
+  if (s.mr) parts.push(`+${s.mr} Magic Resist`);
+  if (s.attackSpeedPct) parts.push(`+${Math.round(s.attackSpeedPct * 100)}% Attack Speed`);
+  if (s.moveSpeed) parts.push(`+${s.moveSpeed} Move Speed`);
+  if (s.armorPen) parts.push(`+${s.armorPen} Armor Penetration`);
+  if (s.mrPen) parts.push(`+${s.mrPen} Magic Penetration`);
+  return parts.join(', ');
 }
 
 function itemInitials(id: string): string {
@@ -153,10 +158,6 @@ const CSS = `
   position: absolute; inset: 0; border-radius: 6px; background: rgba(0,0,0,0.72);
   color: #fff; display: flex; align-items: center; justify-content: center;
   font-size: 15px; font-weight: 600;
-}
-.hud-slot-name {
-  position: absolute; left: 0; right: 0; bottom: -13px;
-  font-size: 8px; font-weight: 400; text-align: center; color: #93a87c; white-space: nowrap;
 }
 .hud-slot-pips {
   position: absolute; left: 3px; right: 3px; bottom: 2px;
@@ -308,6 +309,21 @@ const CSS = `
 .hud-score-kda { color: #93a87c; white-space: nowrap; text-align: right; }
 .hud-score-row.self .hud-score-kda { color: #e8f5c8; }
 .hud-score-cs { color: #93a87c; text-align: right; }
+.hud-target {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  display: none; align-items: center; gap: 9px; min-width: 200px;
+  background: rgba(14, 20, 9, 0.9); border: 1px solid #466030; border-radius: 8px;
+  padding: 6px 10px;
+}
+.hud-target.open { display: flex; }
+.hud-target img { width: 38px; height: 38px; border-radius: 6px; border: 1px solid #3a4f28; }
+.hud-target-body { flex: 1; }
+.hud-target-name { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+.hud-target-bar {
+  position: relative; height: 10px; border-radius: 3px;
+  background: #10160c; overflow: hidden;
+}
+.hud-target-bar .hud-bar-text { line-height: 10px; }
 .hud-kda {
   position: absolute; top: 12px; right: 12px; text-align: right;
   background: rgba(14, 20, 9, 0.85); border: 1px solid #3a4f28; border-radius: 6px;
@@ -363,7 +379,7 @@ export class Hud {
     AbilityKey,
     { root: HTMLElement; cd: HTMLElement; pips: HTMLElement; up: HTMLElement }
   >();
-  private readonly sigilSlots: { root: HTMLElement; cd: HTMLElement; label: HTMLElement }[] = [];
+  private readonly sigilSlots: { root: HTMLElement; cd: HTMLElement }[] = [];
   private readonly invSlots: HTMLElement[] = [];
   private readonly levelBadge: HTMLElement;
   private readonly goldText: HTMLElement;
@@ -377,6 +393,8 @@ export class Hud {
   private shopSelected: string | null = null;
   private lastDetailSig = '';
   private lastLevel = -1;
+  private lastKillAt = 0;
+  private killChain = 0;
   private readonly deathOverlay: HTMLElement;
   private readonly deathSub: HTMLElement;
   private readonly endOverlay: HTMLElement;
@@ -393,6 +411,13 @@ export class Hud {
   private readonly scoreTeams: [HTMLElement, HTMLElement];
   private readonly kdaText: HTMLElement;
   private readonly kdaCs: HTMLElement;
+  private readonly targetFrame: HTMLElement;
+  private readonly targetPortrait: HTMLImageElement;
+  private readonly targetName: HTMLElement;
+  private readonly targetHpFill: HTMLElement;
+  private readonly targetHpText: HTMLElement;
+  private targetId: number | null = null;
+  private targetKey = '';
   private netHooks: NetHooks = {};
   private announceUntil = 0;
   private sawBattleBegin = false;
@@ -504,11 +529,9 @@ export class Hud {
         this.world.levelAbility(this.selfId, key);
       });
       slot.appendChild(up);
-      if (def) {
-        const name = el('div', 'hud-slot-name', def.abilities[key].name);
-        slot.appendChild(name);
-        attachTooltip(slot, () => describeAbility(key, def.abilities[key]));
-      }
+      // Names live in the tooltip only; labels under the bar collided with
+      // the inventory row below.
+      if (def) attachTooltip(slot, () => describeAbility(key, def.abilities[key]));
       slots.appendChild(slot);
       this.slots.set(key, { root: slot, cd, pips, up });
     }
@@ -528,15 +551,13 @@ export class Hud {
       const cd = el('div', 'hud-slot-cd');
       cd.style.display = 'none';
       slot.appendChild(cd);
-      const label = el('div', 'hud-slot-name');
-      slot.appendChild(label);
       attachTooltip(slot, () => {
         const u = this.world.units.get(this.selfId);
         const sigil = u?.sigils[i] ? SIGILS[u.sigils[i]!] : undefined;
         return sigil ? describeSigil(sigil) : [];
       });
       slots.appendChild(slot);
-      this.sigilSlots.push({ root: slot, cd, label });
+      this.sigilSlots.push({ root: slot, cd });
     }
 
     const inv = el('div', 'hud-inv');
@@ -556,10 +577,10 @@ export class Hud {
 
     const hints = el('div', 'hud-hints');
     hints.textContent =
-      'Right-click: move / attack. A: attack-move. B: recall. Q W E R: abilities. ' +
-      'D F: sigils. P: shop. Tab: scoreboard. Enter: chat. G: ping. Esc: menu. ' +
-      'Screen edges pan the camera; Space recenters; left-click the minimap to look. ' +
-      'Level up: click + above an ability.';
+      'Right-click: move / attack. A: attack-move. B: recall. Q W E R: hold to aim ' +
+      '(blue range preview), release to cast. D F: sigils. P: shop. Tab: scoreboard. ' +
+      'Enter: chat. G: ping. Esc: menu. Screen edges pan the camera; Space recenters; ' +
+      'left-click the minimap to look. Level up: click + above an ability.';
 
     // The always-visible personal score, MOBA style: K / D / A plus creep
     // score, top right.
@@ -568,6 +589,20 @@ export class Hud {
     this.kdaCs = el('span', 'cs', 'CS 0');
     kda.append(this.kdaText, this.kdaCs);
     attachTooltip(kda, () => ['Kills / Deaths / Assists', 'CS: minions last-hit.']);
+
+    // The attacked target's frame, MOBA style: portrait, name, and health at
+    // the top of the screen while an attack order stands.
+    this.targetFrame = el('div', 'hud-target');
+    this.targetPortrait = document.createElement('img');
+    const targetBody = el('div', 'hud-target-body');
+    this.targetName = el('div', 'hud-target-name');
+    const targetBar = el('div', 'hud-target-bar');
+    this.targetHpFill = el('div', 'hud-bar-fill');
+    this.targetHpFill.style.background = '#e0574a';
+    this.targetHpText = el('div', 'hud-bar-text');
+    targetBar.append(this.targetHpFill, this.targetHpText);
+    targetBody.append(this.targetName, targetBar);
+    this.targetFrame.append(this.targetPortrait, targetBody);
 
     // The shop: a large centered window (clear of the minimap) laid out like
     // the genre expects. Components on top, finished items below with their
@@ -700,6 +735,7 @@ export class Hud {
       bottom,
       hints,
       kda,
+      this.targetFrame,
       this.shop,
       this.feed,
       chat,
@@ -735,6 +771,11 @@ export class Hud {
     return this.chatInput.style.display === 'block';
   }
 
+  // The unit the player is attacking, mirrored into the target frame.
+  setTarget(unitId: number | null): void {
+    this.targetId = unitId;
+  }
+
   // True while a modal owns the pointer; the camera must not edge-pan then.
   blocksCamera(): boolean {
     return (
@@ -768,8 +809,9 @@ export class Hud {
     window.setTimeout(() => line.remove(), 12000);
   }
 
-  announce(text: string): void {
+  announce(text: string, color = '#f2ffd9'): void {
     this.announceEl.textContent = text;
+    this.announceEl.style.color = color;
     this.announceEl.style.opacity = '1';
     this.announceUntil = performance.now() + 2600;
   }
@@ -840,7 +882,9 @@ export class Hud {
         mk(
           'hud-detail-empty',
           'Select an item to see its stats, build path, and price. ' +
-            'Finished items combine two components; owning a component discounts the upgrade.',
+            'Finished items combine two components; owning a component discounts the upgrade. ' +
+            'Attack Damage powers basic attacks and physical abilities; Ability Power boosts ' +
+            'ability scaling; Armor cuts physical damage taken and Magic Resist cuts magic.',
         ),
       );
       return;
@@ -941,7 +985,22 @@ export class Hud {
         this.announce('First blood');
       }
       if (k.unitId === this.selfId) playSfx('death');
-      else if (k.killerId === this.selfId) playSfx('kill');
+      else if (k.killerId === this.selfId) {
+        playSfx('kill');
+        // Kill confirmation, center screen in gold; chained kills escalate.
+        const now = performance.now();
+        this.killChain = now - this.lastKillAt < 10000 ? this.killChain + 1 : 1;
+        this.lastKillAt = now;
+        const chainText =
+          this.killChain === 2
+            ? 'DOUBLE KILL'
+            : this.killChain === 3
+              ? 'TRIPLE KILL'
+              : this.killChain >= 4
+                ? 'RAMPAGE'
+                : `You killed ${victimRow.name}`;
+        this.announce(chainText, '#ffd94a');
+      }
       const killerRow = rowOf(k.killerId);
       let killerName = killerRow?.name ?? 'The lane';
       let killerColor = killerRow ? TEAM_TEXT_COLORS[killerRow.team] : '#c9d8ae';
@@ -1064,8 +1123,6 @@ export class Hud {
 
     for (let i = 0; i < this.sigilSlots.length; i++) {
       const slot = this.sigilSlots[i]!;
-      const sigil = u.sigils[i] ? SIGILS[u.sigils[i]!] : undefined;
-      slot.label.textContent = sigil ? sigil.name : '';
       const remaining = (u.sigilCooldowns[i] ?? 0) - this.world.time;
       if (remaining > 0) {
         slot.cd.style.display = 'flex';
@@ -1124,11 +1181,41 @@ export class Hud {
       }
     }
 
+    // The attacked target's frame: identity refreshed on target change,
+    // health every tick; hidden when the target dies or leaves sight.
+    const target = this.targetId !== null ? this.world.units.get(this.targetId) : undefined;
+    const showTarget =
+      target !== undefined && !target.dead && this.world.isVisible(this.selfTeam, target.id);
+    this.targetFrame.classList.toggle('open', showTarget);
+    if (showTarget && target) {
+      const key = `${target.id}|${target.level}`;
+      if (this.targetKey !== key) {
+        this.targetKey = key;
+        const tint = TEAM_PORTRAIT_COLORS[target.team] ?? 0xd65c5c;
+        if (target.kind === 'champion' && target.championId) {
+          this.targetPortrait.src = championPortraitUrl(target.championId, target.skin, tint);
+          const row = this.world.scoreboard().find((r) => r.unitId === target.id);
+          this.targetName.textContent = `${row?.name ?? target.championId} (Lv ${target.level})`;
+        } else {
+          const label =
+            target.kind === 'tower' ? 'Tower' : target.kind === 'sanctum' ? 'Sanctum' : 'Minion';
+          this.targetPortrait.src = iconDataUrl(label[0] ?? '?', '#5a1f1f', '#a04040');
+          this.targetName.textContent = label;
+        }
+        this.targetName.style.color = TEAM_TEXT_COLORS[target.team] ?? '#f5a3a3';
+      }
+      this.targetHpFill.style.transform = `scaleX(${Math.max(0, target.hp / target.maxHp)})`;
+      this.targetHpText.textContent = `${Math.ceil(target.hp)} / ${Math.round(target.maxHp)}`;
+    } else {
+      this.targetKey = '';
+    }
+
     // The always-on personal score widget.
     const selfRow = this.world.scoreboard().find((r) => r.unitId === this.selfId);
     if (selfRow) {
-      this.kdaText.textContent = `${selfRow.kills} / ${selfRow.deaths} / ${selfRow.assists}`;
-      this.kdaCs.textContent = `CS ${selfRow.cs}`;
+      // Defensive ?? 0: an older server may send rows without these fields.
+      this.kdaText.textContent = `${selfRow.kills} / ${selfRow.deaths} / ${selfRow.assists ?? 0}`;
+      this.kdaCs.textContent = `CS ${selfRow.cs ?? 0}`;
     }
 
     if (this.score.classList.contains('open')) {
@@ -1156,10 +1243,10 @@ export class Hud {
           name.textContent = `${r.name} (Lv ${r.level})`;
           const kda = document.createElement('span');
           kda.className = 'hud-score-kda';
-          kda.textContent = `${r.kills} / ${r.deaths} / ${r.assists}`;
+          kda.textContent = `${r.kills} / ${r.deaths} / ${r.assists ?? 0}`;
           const cs = document.createElement('span');
           cs.className = 'hud-score-cs';
-          cs.textContent = String(r.cs);
+          cs.textContent = String(r.cs ?? 0);
           row.append(name, kda, cs);
           box.appendChild(row);
         }
@@ -1200,7 +1287,7 @@ export class Hud {
           name.textContent = row.name;
           if (row.unitId === this.selfId) name.style.color = '#e8f5c8';
           const kda = document.createElement('span');
-          kda.textContent = `Lv ${row.level} · ${row.kills}/${row.deaths}/${row.assists} · CS ${row.cs}`;
+          kda.textContent = `Lv ${row.level} · ${row.kills}/${row.deaths}/${row.assists ?? 0} · CS ${row.cs ?? 0}`;
           line.append(name, kda);
           box.appendChild(line);
         }

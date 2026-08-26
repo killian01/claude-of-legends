@@ -75,6 +75,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       sigils: [...u.sigils],
       sigilReady,
       items: [...u.items],
+      championId: u.championId,
     },
     units,
   };

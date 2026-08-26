@@ -11,7 +11,7 @@ const BARBED_MARK: EffectSpec = {
   stacksToTrigger: 3,
   onTrigger: [
     { kind: 'root', duration: 1.1 },
-    { kind: 'damage', base: 40, apRatio: 0.3, dtype: 'magic' },
+    { kind: 'damage', base: 35, apRatio: 0.57, dtype: 'magic' },
   ],
 };
 
@@ -35,7 +35,7 @@ export const SYLRA: ChampionDef = {
     mr: 30,
     attackRange: 5.5,
     attackSpeed: 0.65,
-    moveSpeed: 3.35,
+    moveSpeed: 3.6,
     hpRegen: 1.1,
     manaRegen: 1.6,
     radius: 0.65,
@@ -44,27 +44,27 @@ export const SYLRA: ChampionDef = {
     hp: 96,
     mana: 40,
     ad: 3,
-    armor: 4.2,
+    armor: 2.4,
     mr: 1.3,
   },
   abilities: {
     Q: {
       name: 'Thorn Bolt',
-      manaCost: 50,
-      cooldown: 7,
+      manaCost: 45,
+      cooldown: 5.5,
       castRange: 10.5,
       spec: {
         kind: 'skillshot',
         speed: 24,
         radius: 0.7,
         range: 10.5,
-        onHit: [{ kind: 'damage', base: 80, apRatio: 0.65, dtype: 'magic' }, BARBED_MARK],
+        onHit: [{ kind: 'damage', base: 70, apRatio: 1.23, dtype: 'magic' }, BARBED_MARK],
       },
     },
     W: {
       name: 'Bramble Field',
-      manaCost: 70,
-      cooldown: 12,
+      manaCost: 60,
+      cooldown: 9,
       castRange: 8.5,
       spec: {
         kind: 'zone',
@@ -73,15 +73,15 @@ export const SYLRA: ChampionDef = {
         tickEvery: 0.5,
         onEnter: [BARBED_MARK],
         onTick: [
-          { kind: 'damage', base: 20, apRatio: 0.1, dtype: 'magic' },
+          { kind: 'damage', base: 18, apRatio: 0.19, dtype: 'magic' },
           { kind: 'slow', pct: 0.25, duration: 1 },
         ],
       },
     },
     E: {
       name: 'Verdant Shell',
-      manaCost: 60,
-      cooldown: 11,
+      manaCost: 50,
+      cooldown: 8.5,
       castRange: 8,
       spec: {
         kind: 'self_or_ally',
@@ -91,8 +91,8 @@ export const SYLRA: ChampionDef = {
     },
     R: {
       name: 'Overgrowth',
-      manaCost: 100,
-      cooldown: 80,
+      manaCost: 85,
+      cooldown: 60,
       castRange: 9,
       spec: {
         kind: 'zone',
@@ -100,7 +100,7 @@ export const SYLRA: ChampionDef = {
         duration: 1.3,
         detonateDelay: 1.25,
         onDetonate: [
-          { kind: 'damage', base: 180, apRatio: 0.7, dtype: 'magic' },
+          { kind: 'damage', base: 158, apRatio: 1.33, dtype: 'magic' },
           { kind: 'root', duration: 1.6 },
           BARBED_MARK,
         ],

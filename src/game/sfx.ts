@@ -16,7 +16,10 @@ export type SfxName =
   | 'defeat'
   | 'deny'
   | 'levelup'
-  | 'buy';
+  | 'buy'
+  | 'swing'
+  | 'impact'
+  | 'towershot';
 
 export interface AudioBus {
   ctx: AudioContext;
@@ -168,6 +171,9 @@ const MIN_INTERVAL_MS: Partial<Record<SfxName, number>> = {
   hit: 120,
   gold: 60,
   deny: 160,
+  swing: 90,
+  impact: 70,
+  towershot: 120,
 };
 
 export function playSfx(name: SfxName): void {
@@ -178,16 +184,51 @@ export function playSfx(name: SfxName): void {
   if (min > 0 && now - (lastPlay.get(name) ?? 0) < min) return;
   lastPlay.set(name, now);
 
+  // A little pitch jitter keeps rapid-fire combat sounds from stuttering
+  // like one looped sample.
+  const j = 0.92 + Math.random() * 0.16;
+
   switch (name) {
     case 'cast':
-      // An airy whoosh with a rising sine core.
-      noise(b, { dur: 0.22, freq: 500, slideTo: 2600, q: 1.4, vol: 0.55, verb: 0.3 });
-      tone(b, { freq: 620, slideTo: 990, dur: 0.16, type: 'sine', vol: 0.3, verb: 0.25 });
+      // Pure air, no oscillator: a body whoosh, a bright breath above it,
+      // and a low push underneath.
+      noise(b, {
+        dur: 0.28,
+        freq: 320 * j,
+        slideTo: 1500 * j,
+        q: 0.8,
+        vol: 0.75,
+        verb: 0.35,
+      });
+      noise(b, {
+        dur: 0.2,
+        freq: 2400 * j,
+        slideTo: 5200 * j,
+        q: 1.2,
+        vol: 0.22,
+        delay: 0.04,
+        verb: 0.5,
+      });
+      tone(b, { freq: 95 * j, slideTo: 55, dur: 0.16, type: 'sine', vol: 0.35 });
       break;
     case 'hit':
       // A soft body thud: dark noise plus a pitched-down thump.
-      noise(b, { dur: 0.07, freq: 900, slideTo: 250, type: 'lowpass', vol: 0.6 });
-      tone(b, { freq: 170, slideTo: 70, dur: 0.09, type: 'sine', vol: 0.55 });
+      noise(b, { dur: 0.07, freq: 900 * j, slideTo: 250, type: 'lowpass', vol: 0.6 });
+      tone(b, { freq: 170 * j, slideTo: 70, dur: 0.09, type: 'sine', vol: 0.55 });
+      break;
+    case 'swing':
+      // A quick air whip for the player's own auto-attacks.
+      noise(b, { dur: 0.08, freq: 700 * j, slideTo: 2200 * j, q: 1.1, vol: 0.3 });
+      break;
+    case 'impact':
+      // The crack of YOUR damage landing on someone else.
+      noise(b, { dur: 0.06, freq: 2200 * j, slideTo: 600, q: 1.4, vol: 0.5 });
+      tone(b, { freq: 220 * j, slideTo: 110, dur: 0.07, type: 'sine', vol: 0.4 });
+      break;
+    case 'towershot':
+      // A heavy arcane bolt: unmistakably a tower.
+      tone(b, { freq: 320 * j, slideTo: 90, dur: 0.16, type: 'sawtooth', vol: 0.5, lpf: 900 });
+      noise(b, { dur: 0.1, freq: 1400, slideTo: 400, q: 1, vol: 0.35 });
       break;
     case 'kill':
       // Heavy impact then a two-note glory chime.

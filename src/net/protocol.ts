@@ -64,6 +64,8 @@ export interface SnapMobile {
 export interface SelfSnap {
   mana: number;
   maxMana: number;
+  // Current attack damage, for the client's last-hit indicator.
+  ad: number;
   gold: number;
   level: number;
   xp: number;
@@ -87,6 +89,8 @@ export type SnapEvent =
   // Personal: damage THIS client dealt to another unit, for its own
   // floating combat numbers only.
   | { e: 'dmg'; targetId: number; amount: number }
+  // A visible unit fired an auto-attack; drives swing animations.
+  | { e: 'atk'; unitId: number; targetId: number }
   | { e: 'victory'; team: TeamId };
 
 export interface SelectPlayer {

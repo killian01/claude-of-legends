@@ -9,7 +9,9 @@ import type { Vec2 } from './types';
 import { createMinion, type MinionVariant } from './unit';
 
 export const FIRST_WAVE_AT = 10;
-export const WAVE_EVERY = 30;
+// 24 s, down from 30: shorter gaps between waves keep the lanes in near
+// constant contact (pacing review: matches felt empty between fights).
+export const WAVE_EVERY = 24;
 export const MELEE_PER_WAVE = 3;
 export const CASTERS_PER_WAVE = 2;
 export const SIEGE_WAVE_EVERY = 3;
