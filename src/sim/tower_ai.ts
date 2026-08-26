@@ -28,9 +28,32 @@ function nearest(ctx: CombatCtx, tower: Unit, kinds: readonly string[]): Unit | 
   return best;
 }
 
+const AGGRO_MEMORY_S = 2;
+
+// The dive-punish rule: a champion that damaged an allied champion in tower
+// range pulls the tower onto itself, overriding any current lock.
+function aggressorInRange(ctx: CombatCtx, tower: Unit): Unit | null {
+  for (const ally of ctx.units.values()) {
+    if (ally.team !== tower.team || ally.kind !== 'champion' || ally.dead) continue;
+    if (ctx.time - ally.lastHitAt > AGGRO_MEMORY_S) continue;
+    if (!inRange(tower, ally)) continue;
+    const attacker = ctx.units.get(ally.lastHitByChampion);
+    if (!attacker || attacker.dead || ctx.dead.has(attacker.id)) continue;
+    if (attacker.team === tower.team) continue;
+    if (isStealthed(attacker, ctx.time)) continue;
+    if (inRange(tower, attacker)) return attacker;
+  }
+  return null;
+}
+
 export function stepTowerAi(ctx: CombatCtx): void {
   for (const u of ctx.units.values()) {
     if (u.kind !== 'tower' || u.dead || ctx.dead.has(u.id)) continue;
+    const aggressor = aggressorInRange(ctx, u);
+    if (aggressor) {
+      u.attackTargetId = aggressor.id;
+      continue;
+    }
     if (u.attackTargetId !== null) {
       const t = ctx.units.get(u.attackTargetId);
       if (

@@ -24,6 +24,7 @@ import { GAME_MAP, type GameMap } from './content/map';
 import { SIGILS } from './content/sigils';
 import { hasDecisionToken, spendDecisionToken } from './decision_budget';
 import { applyFountainRegen } from './fountain';
+import { stepIdleDefense } from './idle_defense';
 import { createMapUnits } from './map_units';
 import { stepMinionAi } from './minion_ai';
 import { stepMovement } from './movement';
@@ -35,6 +36,7 @@ import { stepProjectiles } from './projectiles';
 import { startRecall, stepRecalls } from './recall';
 import { grantKillRewards, grantPassiveGold } from './rewards';
 import { Rng } from './rng';
+import { stepSeparation } from './separation';
 import type { CombatCtx } from './sim_context';
 import { recalcChampion } from './stats';
 import { stepTowerAi } from './tower_ai';
@@ -332,6 +334,7 @@ export class Sim {
     stepMinionAi(ctx, this.nav, this.map, this.tickCount);
     stepTowerAi(ctx);
     stepAttackMove(this);
+    stepIdleDefense(this);
     stepAutoAttacks(ctx, this.nav);
 
     for (const u of this.units.values()) {
@@ -340,6 +343,7 @@ export class Sim {
       if (speed > 0) stepMovement(u, DT, speed);
     }
 
+    stepSeparation(ctx, this.nav);
     stepProjectiles(ctx, DT);
     stepZones(ctx);
 

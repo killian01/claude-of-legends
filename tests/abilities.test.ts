@@ -12,10 +12,11 @@ import type { CombatCtx } from '../src/sim/sim_context';
 import type { Unit } from '../src/sim/unit';
 import { createChampion } from '../src/sim/unit';
 
+// Spaced beyond attack range so idle auto-defense stays out of the way.
 function duel(): { sim: Sim; a: Unit; b: Unit } {
   const sim = new Sim(11);
   const a = sim.addChampion(0, { x: 75, z: 75 });
-  const b = sim.addChampion(1, { x: 81, z: 75 });
+  const b = sim.addChampion(1, { x: 85, z: 75 });
   return { sim, a, b };
 }
 

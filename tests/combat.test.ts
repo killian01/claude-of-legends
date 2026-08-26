@@ -5,11 +5,12 @@ import { mitigationMultiplier } from '../src/sim/combat/damage';
 import { Sim } from '../src/sim/sim';
 import type { Unit } from '../src/sim/unit';
 
-// Open mid-lane ground, far from towers and jungle walls.
+// Open mid-lane ground, far from towers and jungle walls, and OUTSIDE
+// attack range so idle auto-defense does not start a fight on its own.
 function duel(): { sim: Sim; a: Unit; b: Unit } {
   const sim = new Sim(11);
   const a = sim.addChampion(0, { x: 75, z: 75 });
-  const b = sim.addChampion(1, { x: 79, z: 75 });
+  const b = sim.addChampion(1, { x: 84, z: 75 });
   return { sim, a, b };
 }
 
