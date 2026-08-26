@@ -2,6 +2,7 @@
 // absorption, hp loss, and death detection. Nothing else subtracts hp.
 
 import type { CombatCtx } from '../sim_context';
+import { isInvulnerable } from '../structure_rules';
 import type { DamageType } from '../types';
 import type { Unit } from '../unit';
 import { absorbWithShields } from './status';
@@ -19,7 +20,10 @@ export function dealDamage(
   amount: number,
   dtype: DamageType,
 ): void {
-  if (ctx.dead.has(target.id)) return;
+  if (ctx.dead.has(target.id) || target.dead) return;
+  if ((target.kind === 'tower' || target.kind === 'sanctum') && isInvulnerable(ctx.units, target)) {
+    return;
+  }
   const mitigated = amount * mitigationMultiplier(target, dtype);
   const after = absorbWithShields(target, mitigated, ctx.time);
   if (after <= 0) return;
@@ -28,6 +32,7 @@ export function dealDamage(
   if (target.hp <= 0) {
     target.hp = 0;
     ctx.dead.add(target.id);
+    ctx.killers.set(target.id, sourceId);
     ctx.events.push({ type: 'death', unitId: target.id, killerId: sourceId });
   }
 }

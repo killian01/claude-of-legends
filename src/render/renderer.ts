@@ -45,6 +45,7 @@ export class Renderer {
   private readonly trackedZones = new Map<number, THREE.Object3D>();
   private readonly cameraOffset = new THREE.Vector3(0, 40, 24);
   private followId: number | null = null;
+  private viewerTeam = 0;
 
   constructor(container: HTMLElement, world: IWorld) {
     this.world = world;
@@ -77,6 +78,11 @@ export class Renderer {
 
   followUnit(id: number): void {
     this.followId = id;
+  }
+
+  // The team whose fog of war this client renders.
+  setViewerTeam(team: number): void {
+    this.viewerTeam = team;
   }
 
   private buildLights(): void {
@@ -144,9 +150,28 @@ export class Renderer {
     }
   }
 
-  private buildUnitMesh(kind: string, team: number): { holder: THREE.Group; barY: number } {
+  private buildUnitMesh(
+    kind: string,
+    team: number,
+    attackRange: number,
+  ): { holder: THREE.Group; barY: number } {
     const color = TEAM_COLORS[team] ?? 0xffffff;
     const holder = new THREE.Group();
+    if (kind === 'minion') {
+      const ranged = attackRange > 2;
+      const body = ranged
+        ? new THREE.Mesh(
+            new THREE.ConeGeometry(0.45, 1.2, 6),
+            new THREE.MeshLambertMaterial({ color }),
+          )
+        : new THREE.Mesh(
+            new THREE.BoxGeometry(0.8, 1.0, 0.8),
+            new THREE.MeshLambertMaterial({ color }),
+          );
+      body.position.y = 0.6;
+      holder.add(body);
+      return { holder, barY: 1.8 };
+    }
     if (kind === 'tower') {
       const base = new THREE.Mesh(
         new THREE.CylinderGeometry(1.1, 1.4, 5, 10),
@@ -200,8 +225,8 @@ export class Renderer {
     for (const [id, u] of this.world.units) {
       let t = this.tracked.get(id);
       if (!t) {
-        const { holder, barY } = this.buildUnitMesh(u.kind, u.team);
-        const barWidth = u.kind === 'champion' ? 1.6 : 2.2;
+        const { holder, barY } = this.buildUnitMesh(u.kind, u.team, u.stats.attackRange);
+        const barWidth = u.kind === 'champion' ? 1.6 : u.kind === 'minion' ? 1.0 : 2.2;
         const hpFill = this.buildHpBar(holder, u.team, barY, barWidth);
         holder.position.set(u.pos.x, 0, u.pos.z);
         holder.userData.unitId = id;
@@ -221,6 +246,9 @@ export class Renderer {
       }
       const frac = Math.max(0, Math.min(1, u.hp / u.maxHp));
       t.hpFill.scale.x = Math.max(0.001, t.barWidth * frac);
+      t.mesh.visible =
+        !u.dead &&
+        (u.team === this.viewerTeam || this.world.isVisible(this.viewerTeam as 0 | 1, id));
     }
     for (const [id, t] of this.tracked) {
       if (!this.world.units.has(id)) {

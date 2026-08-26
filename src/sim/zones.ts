@@ -26,7 +26,7 @@ export interface Zone {
 function enemiesInside(ctx: CombatCtx, z: Zone): Unit[] {
   const out: Unit[] = [];
   for (const u of ctx.units.values()) {
-    if (u.team === z.team || ctx.dead.has(u.id)) continue;
+    if (u.team === z.team || u.dead || ctx.dead.has(u.id)) continue;
     if (Math.hypot(u.pos.x - z.pos.x, u.pos.z - z.pos.z) <= z.radius + u.radius) out.push(u);
   }
   return out;

@@ -53,7 +53,7 @@ describe('auto-attacks', () => {
     expect(after).toBeLessThan(before);
   });
 
-  it('kills, emits a death event, and removes the unit', () => {
+  it('kills, emits a death event, and marks the champion dead', () => {
     const { sim, a, b } = duel();
     b.hp = 30;
     sim.orderAttack(a.id, b.id);
@@ -66,8 +66,10 @@ describe('auto-attacks', () => {
     }
     expect(death).toBe(true);
     sim.tick();
-    expect(sim.units.has(b.id)).toBe(false);
-    // The attacker drops its order instead of chasing a ghost.
+    // Champions stay in the sim while dead; only non-champions are removed.
+    expect(sim.units.has(b.id)).toBe(true);
+    expect(b.dead).toBe(true);
+    // The attacker drops its order instead of hitting a corpse.
     sim.tick();
     expect(a.attackTargetId).toBeNull();
   });

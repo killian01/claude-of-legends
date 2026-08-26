@@ -20,10 +20,19 @@ export interface ChampionBaseStats {
   radius: number;
 }
 
+export interface ChampionGrowth {
+  hp: number;
+  mana: number;
+  ad: number;
+  armor: number;
+  mr: number;
+}
+
 export interface ChampionDef {
   id: string;
   name: string;
   base: ChampionBaseStats;
+  growth: ChampionGrowth;
   abilities: Record<AbilityKey, AbilityDef>;
 }
 

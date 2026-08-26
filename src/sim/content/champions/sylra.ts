@@ -32,6 +32,13 @@ export const SYLRA: ChampionDef = {
     manaRegen: 1.6,
     radius: 0.65,
   },
+  growth: {
+    hp: 96,
+    mana: 40,
+    ad: 3,
+    armor: 4.2,
+    mr: 1.3,
+  },
   abilities: {
     Q: {
       name: 'Thorn Bolt',

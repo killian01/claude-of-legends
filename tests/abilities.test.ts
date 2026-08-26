@@ -67,7 +67,8 @@ describe('Sylra', () => {
 
   it('R detonates after its delay, damages and roots', () => {
     const { sim, a, b } = duel();
-    sim.castAbility(a.id, 'R', { x: b.pos.x, z: b.pos.z });
+    a.level = 6;
+    expect(sim.castAbility(a.id, 'R', { x: b.pos.x, z: b.pos.z })).toBe(true);
     for (let i = 0; i < 20; i++) sim.tick();
     // 1 second in: not yet detonated.
     expect(b.hp).toBe(b.maxHp);
@@ -93,6 +94,7 @@ describe('Sylra', () => {
       zones: new Map(),
       events: [],
       dead: new Set(),
+      killers: new Map(),
       allocId: () => 100,
     };
     const mark: EffectSpec = {
@@ -107,6 +109,13 @@ describe('Sylra', () => {
     applyEffects(ctx, 1, { ad: 0, ap: 0 }, b, [mark]);
     expect(isRooted(b, 0)).toBe(true);
     expect(b.statuses.some((s) => s.kind === 'mark')).toBe(false);
+  });
+
+  it('locks R before champion level 6', () => {
+    const { sim, a } = duel();
+    expect(sim.castAbility(a.id, 'R', { x: 81, z: 75 })).toBe(false);
+    a.level = 6;
+    expect(sim.castAbility(a.id, 'R', { x: 81, z: 75 })).toBe(true);
   });
 
   it('enforces cooldown and mana', () => {

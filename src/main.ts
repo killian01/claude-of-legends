@@ -23,7 +23,8 @@ sim.addChampion(1, { x: 80, z: 80 });
 
 const renderer = new Renderer(app, world);
 renderer.followUnit(self.id);
-const hud = new Hud(app, world, self.id);
+renderer.setViewerTeam(self.team);
+const hud = new Hud(app, world, self.id, self.team);
 setupInput(renderer, {
   onRightClick: (p) => {
     const enemy = pickEnemyAt(world, p, self.team);
@@ -31,6 +32,7 @@ setupInput(renderer, {
     else sim.orderMove(self.id, p.x, p.z);
   },
   onCast: (key, aim) => sim.castAbility(self.id, key, aim),
+  onToggleShop: () => hud.toggleShop(),
 });
 
 const TICK_MS = DT * 1000;

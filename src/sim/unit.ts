@@ -1,11 +1,14 @@
-// The shared unit model. Champions, towers, and Sanctums are all units; what
-// varies is data (stats, kind), not the entity shape. Minions join in phase 4.
+// The shared unit model. Champions, minions, towers, and Sanctums are all
+// units; what varies is data (stats, kind), not the entity shape.
 
 import type { Status } from './combat/status';
 import type { ChampionDef } from './content/champions';
+import type { LaneId } from './content/map';
 import type { AbilityKey, TeamId, Vec2 } from './types';
 
-export type UnitKind = 'champion' | 'tower' | 'sanctum';
+export type UnitKind = 'champion' | 'minion' | 'tower' | 'sanctum';
+
+export type MinionVariant = 'melee' | 'caster';
 
 export interface UnitStats {
   ad: number;
@@ -16,6 +19,11 @@ export interface UnitStats {
   attackSpeed: number;
   hpRegen: number;
   manaRegen: number;
+}
+
+export interface StructureMeta {
+  lane: LaneId | 'sanctum';
+  tier: 1 | 2;
 }
 
 export interface Unit {
@@ -38,6 +46,24 @@ export interface Unit {
   attackReadyAt: number;
   // Remaining waypoints toward the current move order; empty when idle.
   path: Vec2[];
+  // Progression and economy (champions).
+  level: number;
+  xp: number;
+  gold: number;
+  items: string[];
+  // Death state: champions stay in the sim while dead; everything else is
+  // removed on death.
+  dead: boolean;
+  respawnAt: number;
+  // Vision and rewards.
+  sightRange: number;
+  goldBounty: number;
+  xpBounty: number;
+  // Structure metadata (towers only; the Sanctum core is identified by kind).
+  structure: StructureMeta | null;
+  // Lane minion state.
+  lane: LaneId | null;
+  laneProgress: number;
 }
 
 // Ground a static unit (tower, Sanctum) blocks in the NavGrid while it
@@ -47,63 +73,24 @@ export function staticFootprint(u: Unit): number {
   return u.radius + 0.4;
 }
 
-export function createChampion(id: number, team: TeamId, pos: Vec2, def: ChampionDef): Unit {
-  const b = def.base;
-  return {
-    id,
-    team,
-    kind: 'champion',
-    championId: def.id,
-    pos: { x: pos.x, z: pos.z },
-    radius: b.radius,
-    moveSpeed: b.moveSpeed,
-    hp: b.hp,
-    maxHp: b.hp,
-    mana: b.mana,
-    maxMana: b.mana,
-    stats: {
-      ad: b.ad,
-      ap: b.ap,
-      armor: b.armor,
-      mr: b.mr,
-      attackRange: b.attackRange,
-      attackSpeed: b.attackSpeed,
-      hpRegen: b.hpRegen,
-      manaRegen: b.manaRegen,
-    },
-    statuses: [],
-    cooldowns: {},
-    attackTargetId: null,
-    attackReadyAt: 0,
-    path: [],
-  };
-}
-
-function createStatic(
-  id: number,
-  team: TeamId,
-  kind: UnitKind,
-  pos: Vec2,
-  radius: number,
-  hp: number,
-): Unit {
+function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
   return {
     id,
     team,
     kind,
     championId: null,
     pos: { x: pos.x, z: pos.z },
-    radius,
+    radius: 0.6,
     moveSpeed: 0,
-    hp,
-    maxHp: hp,
+    hp: 1,
+    maxHp: 1,
     mana: 0,
     maxMana: 0,
     stats: {
       ad: 0,
       ap: 0,
-      armor: 40,
-      mr: 40,
+      armor: 0,
+      mr: 0,
       attackRange: 0,
       attackSpeed: 0,
       hpRegen: 0,
@@ -114,13 +101,104 @@ function createStatic(
     attackTargetId: null,
     attackReadyAt: 0,
     path: [],
+    level: 1,
+    xp: 0,
+    gold: 0,
+    items: [],
+    dead: false,
+    respawnAt: 0,
+    sightRange: 8,
+    goldBounty: 0,
+    xpBounty: 0,
+    structure: null,
+    lane: null,
+    laneProgress: 0,
   };
 }
 
-export function createTower(id: number, team: TeamId, pos: Vec2): Unit {
-  return createStatic(id, team, 'tower', pos, 1.4, 2500);
+export function createChampion(id: number, team: TeamId, pos: Vec2, def: ChampionDef): Unit {
+  const b = def.base;
+  const u = baseUnit(id, team, 'champion', pos);
+  u.championId = def.id;
+  u.radius = b.radius;
+  u.moveSpeed = b.moveSpeed;
+  u.hp = b.hp;
+  u.maxHp = b.hp;
+  u.mana = b.mana;
+  u.maxMana = b.mana;
+  u.stats = {
+    ad: b.ad,
+    ap: b.ap,
+    armor: b.armor,
+    mr: b.mr,
+    attackRange: b.attackRange,
+    attackSpeed: b.attackSpeed,
+    hpRegen: b.hpRegen,
+    manaRegen: b.manaRegen,
+  };
+  u.gold = 500;
+  u.sightRange = 12;
+  u.goldBounty = 300;
+  u.xpBounty = 200;
+  return u;
+}
+
+export function createMinion(
+  id: number,
+  team: TeamId,
+  variant: MinionVariant,
+  lane: LaneId,
+  pos: Vec2,
+): Unit {
+  const u = baseUnit(id, team, 'minion', pos);
+  u.lane = lane;
+  u.laneProgress = 1;
+  u.moveSpeed = 3.4;
+  if (variant === 'melee') {
+    u.radius = 0.5;
+    u.hp = 455;
+    u.maxHp = 455;
+    u.stats.ad = 12;
+    u.stats.attackRange = 0.5;
+    u.stats.attackSpeed = 1.25;
+    u.goldBounty = 21;
+    u.xpBounty = 60;
+  } else {
+    u.radius = 0.4;
+    u.hp = 290;
+    u.maxHp = 290;
+    u.stats.ad = 23;
+    u.stats.attackRange = 6;
+    u.stats.attackSpeed = 0.67;
+    u.goldBounty = 14;
+    u.xpBounty = 30;
+  }
+  return u;
+}
+
+export function createTower(id: number, team: TeamId, pos: Vec2, structure: StructureMeta): Unit {
+  const u = baseUnit(id, team, 'tower', pos);
+  u.radius = 1.4;
+  u.hp = 2500;
+  u.maxHp = 2500;
+  u.stats.ad = 170;
+  u.stats.armor = 40;
+  u.stats.mr = 40;
+  u.stats.attackRange = 9;
+  u.stats.attackSpeed = 0.83;
+  u.sightRange = 10;
+  u.goldBounty = 250;
+  u.xpBounty = 100;
+  u.structure = structure;
+  return u;
 }
 
 export function createSanctum(id: number, team: TeamId, pos: Vec2): Unit {
-  return createStatic(id, team, 'sanctum', pos, 2.2, 3000);
+  const u = baseUnit(id, team, 'sanctum', pos);
+  u.radius = 2.2;
+  u.hp = 3000;
+  u.maxHp = 3000;
+  u.stats.armor = 40;
+  u.stats.mr = 40;
+  return u;
 }

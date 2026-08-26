@@ -38,9 +38,9 @@ function fire(ctx: CombatCtx, u: Unit, target: Unit): void {
 export function stepAutoAttacks(ctx: CombatCtx, nav: NavGrid): void {
   for (const u of ctx.units.values()) {
     if (u.attackTargetId === null) continue;
-    if (ctx.dead.has(u.id)) continue;
+    if (ctx.dead.has(u.id) || u.dead) continue;
     const target = ctx.units.get(u.attackTargetId);
-    if (!target || ctx.dead.has(target.id) || target.team === u.team) {
+    if (!target || target.dead || ctx.dead.has(target.id) || target.team === u.team) {
       u.attackTargetId = null;
       continue;
     }
