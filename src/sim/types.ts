@@ -6,6 +6,10 @@ export const DT = 1 / TICK_RATE;
 
 export type TeamId = 0 | 1;
 
+export type AbilityKey = 'Q' | 'W' | 'E' | 'R';
+
+export type DamageType = 'physical' | 'magic' | 'true';
+
 // Ground-plane coordinates. Named x/z so the Three.js renderer maps them onto
 // its ground plane without translation.
 export interface Vec2 {

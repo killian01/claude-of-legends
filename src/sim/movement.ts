@@ -1,10 +1,11 @@
-// Walks a unit along its path at its move speed, consuming several waypoints
-// in one tick when they are close together. Pure function of the unit and dt.
+// Walks a unit along its path at the given speed, consuming several waypoints
+// in one tick when they are close together. Pure function of the unit, dt,
+// and the effective speed (statuses are resolved by the caller).
 
 import type { Unit } from './unit';
 
-export function stepMovement(u: Unit, dt: number): void {
-  let budget = u.moveSpeed * dt;
+export function stepMovement(u: Unit, dt: number, speed: number): void {
+  let budget = speed * dt;
   while (budget > 1e-9 && u.path.length > 0) {
     const wp = u.path[0]!;
     const dx = wp.x - u.pos.x;

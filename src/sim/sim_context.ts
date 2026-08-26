@@ -1,0 +1,20 @@
+// The seam combat systems talk to instead of Sim itself: live views of the
+// state a system needs plus the event and death buffers. Sim stays a thin
+// coordinator; systems stay host-agnostic modules a test can drive directly.
+
+import type { Projectile } from './projectiles';
+import type { Rng } from './rng';
+import type { SimEvent } from './sim';
+import type { Unit } from './unit';
+import type { Zone } from './zones';
+
+export interface CombatCtx {
+  readonly time: number;
+  readonly rng: Rng;
+  readonly units: Map<number, Unit>;
+  readonly projectiles: Map<number, Projectile>;
+  readonly zones: Map<number, Zone>;
+  readonly events: SimEvent[];
+  readonly dead: Set<number>;
+  allocId(): number;
+}
