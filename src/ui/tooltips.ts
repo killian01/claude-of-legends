@@ -16,6 +16,12 @@ function ensureTip(): HTMLDivElement {
   return tip;
 }
 
+// For screen teardown: a hovered anchor removed from the DOM never fires
+// mouseleave, which would leave the shared tip stuck on screen forever.
+export function hideTooltip(): void {
+  if (tip) tip.style.display = 'none';
+}
+
 export function attachTooltip(el: HTMLElement, lines: () => readonly string[]): void {
   el.addEventListener('mouseenter', () => {
     const t = ensureTip();
