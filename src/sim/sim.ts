@@ -292,10 +292,15 @@ export class Sim {
     if (def.spec.kind === 'dash' && isRooted(u, this.time)) return false;
     if ((u.sigilCooldowns[slot] ?? 0) > this.time) return false;
     if (!hasDecisionToken(u, this.time)) return false;
-    const ok = executeCast(this.ctx(), u, def.spec, def.castRange, aim, {
-      ad: u.stats.ad,
-      ap: u.stats.ap,
-    });
+    const ok = executeCast(
+      this.ctx(),
+      u,
+      def.spec,
+      def.castRange,
+      aim,
+      { ad: u.stats.ad, ap: u.stats.ap },
+      `sigil_${sigilId}`,
+    );
     if (!ok) return false;
     spendDecisionToken(u, this.time);
     cancelRecall(u);

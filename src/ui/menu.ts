@@ -2,6 +2,7 @@
 // select. Pure DOM, callback-driven; the entry point owns the flow.
 
 import type { SelectPlayer } from '../net/protocol';
+import { championPortraitUrl } from '../render/portraits';
 import { CHAMPION_LIST, type ChampionRole } from '../sim/content/champions';
 import { SIGIL_LIST } from '../sim/content/sigils';
 import { SKINS } from '../sim/content/skins';
@@ -57,9 +58,16 @@ const CSS = `
 .menu-champ {
   padding: 7px 8px; border-radius: 6px; border: 1px solid #3a4f28; background: #17210f;
   color: #d8e6c0; font-size: 12px; text-align: left; cursor: pointer;
+  display: flex; gap: 8px; align-items: flex-start;
 }
 .menu-champ:hover { border-color: #7ca050; }
 .menu-champ.picked { border-color: #a3c96a; background: #2c4a1c; }
+.menu-champ-portrait {
+  width: 44px; height: 44px; border-radius: 6px; flex: none;
+  background: radial-gradient(circle at 40% 35%, #2c4a1c 0%, #101a09 90%);
+  border: 1px solid #2c3d1e;
+}
+.menu-champ-body { min-width: 0; }
 .menu-champ-name { font-weight: 700; }
 .menu-champ-role { font-size: 10px; font-weight: 700; margin-top: 2px; }
 .menu-champ-blurb { font-size: 10px; color: #93a87c; margin-top: 1px; line-height: 1.35; }
@@ -84,7 +92,14 @@ const CSS = `
 .menu-roster-champ {
   padding: 9px 10px; border-radius: 6px; border: 1px solid #3a4f28; background: #17210f;
   margin-bottom: 6px; font-size: 12px; line-height: 1.45;
+  display: flex; gap: 10px; align-items: flex-start;
 }
+.menu-roster-portrait {
+  width: 56px; height: 56px; border-radius: 6px; flex: none;
+  background: radial-gradient(circle at 40% 35%, #2c4a1c 0%, #101a09 90%);
+  border: 1px solid #2c3d1e;
+}
+.menu-roster-body { min-width: 0; }
 .menu-roster-name { font-weight: 700; font-size: 13px; }
 .menu-roster-role { font-size: 11px; font-weight: 700; margin-left: 6px; }
 .menu-roster-blurb { color: #93a87c; margin: 2px 0 4px; }
@@ -196,22 +211,29 @@ export function showHome(container: HTMLElement): Promise<HomeChoice> {
         const keys: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
         for (const c of CHAMPION_LIST) {
           const box = el('div', 'menu-roster-champ');
+          const portrait = document.createElement('img');
+          portrait.className = 'menu-roster-portrait';
+          portrait.src = championPortraitUrl(c.id);
+          portrait.alt = '';
+          box.appendChild(portrait);
+          const body = el('div', 'menu-roster-body');
           const head = el('div', '');
           head.appendChild(el('span', 'menu-roster-name', c.name));
           const role = el('span', 'menu-roster-role', c.role);
           role.style.color = ROLE_COLORS[c.role] ?? '#c9d8ae';
           head.appendChild(role);
-          box.appendChild(head);
-          box.appendChild(el('div', 'menu-roster-blurb', c.blurb));
+          body.appendChild(head);
+          body.appendChild(el('div', 'menu-roster-blurb', c.blurb));
           const passive = el('div', 'menu-roster-line');
           passive.innerHTML = `<b>Passive, ${c.passive.name}:</b> ${c.passive.description}`;
-          box.appendChild(passive);
+          body.appendChild(passive);
           for (const k of keys) {
             const lines = describeAbility(k, c.abilities[k]);
             const line = el('div', 'menu-roster-line');
             line.innerHTML = `<b>${lines[0] ?? ''}</b> ${lines.slice(2).join(' ')}`;
-            box.appendChild(line);
+            body.appendChild(line);
           }
+          box.appendChild(body);
           roster.appendChild(box);
         }
       }
@@ -362,11 +384,18 @@ export function showSelect(
   const ABILITY_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
   for (const c of CHAMPION_LIST) {
     const btn = el('button', 'menu-champ') as HTMLButtonElement;
-    btn.appendChild(el('div', 'menu-champ-name', c.name));
+    const portrait = document.createElement('img');
+    portrait.className = 'menu-champ-portrait';
+    portrait.src = championPortraitUrl(c.id, 0, team === 0 ? 0x4a7dd6 : 0xd65c5c);
+    portrait.alt = '';
+    btn.appendChild(portrait);
+    const body = el('div', 'menu-champ-body');
+    body.appendChild(el('div', 'menu-champ-name', c.name));
     const role = el('div', 'menu-champ-role', c.role);
     role.style.color = ROLE_COLORS[c.role] ?? '#c9d8ae';
-    btn.appendChild(role);
-    btn.appendChild(el('div', 'menu-champ-blurb', c.blurb));
+    body.appendChild(role);
+    body.appendChild(el('div', 'menu-champ-blurb', c.blurb));
+    btn.appendChild(body);
     attachTooltip(btn, () => [
       `${c.name} (${c.role})`,
       c.blurb,

@@ -90,12 +90,28 @@ export function buildSnapshot(
   const projectiles: SnapMobile[] = [];
   for (const p of sim.projectiles.values()) {
     if (p.team !== team && !sim.isPointVisible(team, p.pos.x, p.pos.z)) continue;
-    projectiles.push({ i: p.id, x: round2(p.pos.x), z: round2(p.pos.z), r: p.radius, t: p.team });
+    const rec: SnapMobile = {
+      i: p.id,
+      x: round2(p.pos.x),
+      z: round2(p.pos.z),
+      r: p.radius,
+      t: p.team,
+    };
+    if (p.vfx) rec.v = p.vfx;
+    projectiles.push(rec);
   }
   const zones: SnapMobile[] = [];
   for (const z of sim.zones.values()) {
     if (z.team !== team && !sim.isPointVisible(team, z.pos.x, z.pos.z)) continue;
-    zones.push({ i: z.id, x: round2(z.pos.x), z: round2(z.pos.z), r: z.radius, t: z.team });
+    const rec: SnapMobile = {
+      i: z.id,
+      x: round2(z.pos.x),
+      z: round2(z.pos.z),
+      r: z.radius,
+      t: z.team,
+    };
+    if (z.vfx) rec.v = z.vfx;
+    zones.push(rec);
   }
 
   let self: SelfSnap | null = null;
