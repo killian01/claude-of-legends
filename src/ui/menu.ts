@@ -145,7 +145,7 @@ export function showHome(container: HTMLElement): Promise<HomeChoice> {
 }
 
 export interface QueueController {
-  setStatus(count: number, needed: number): void;
+  setStatus(count: number, needed: number, startsIn: number | null, ready: boolean): void;
   remove(): void;
 }
 
@@ -157,7 +157,7 @@ export function showQueue(
   const { root, card } = screen(container);
   card.append(el('h1', 'menu-title', 'In queue'));
   const status = el('div', 'menu-status', 'Waiting for players...');
-  const startNow = el('button', 'menu-btn primary', 'Start now (bots fill empty seats later)');
+  const startNow = el('button', 'menu-btn primary', 'Start now with bots') as HTMLButtonElement;
   startNow.addEventListener('click', onStartNow);
   const cancel = el('button', 'menu-btn', 'Cancel');
   cancel.addEventListener('click', () => {
@@ -166,8 +166,17 @@ export function showQueue(
   });
   card.append(status, startNow, cancel);
   return {
-    setStatus(count, needed) {
-      status.textContent = `${count} / ${needed} in queue`;
+    setStatus(count, needed, startsIn, ready) {
+      let line = `${count} / ${needed} in queue.`;
+      if (startsIn !== null) {
+        line += ready
+          ? ` Starting with bots in ${startsIn}s; others can still join.`
+          : ` A bot-filled match starts in ${startsIn}s. Join it, or keep waiting for humans.`;
+      }
+      status.textContent = line;
+      startNow.textContent =
+        startsIn !== null && !ready ? `Join the bot match (${startsIn}s)` : 'Start now with bots';
+      startNow.disabled = ready;
     },
     remove() {
       root.remove();

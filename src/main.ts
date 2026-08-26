@@ -115,7 +115,7 @@ function startOnline(choice: HomeChoice): void {
     }
     switch (msg.t) {
       case 'queue_status':
-        queueUi?.setStatus(msg.count, msg.needed);
+        queueUi?.setStatus(msg.count, msg.needed, msg.startsIn, msg.ready);
         break;
       case 'lobby':
         lobbyUi?.update(msg.code, msg.host, msg.players);
