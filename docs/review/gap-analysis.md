@@ -118,7 +118,71 @@ emotes, item actives.
 
 ## F. Reviewer reports
 
-Pending: sim/server correctness.
+All four reports landed.
+
+### F.2 Sim/server correctness reviewer (landed)
+
+- [P0][high] FOG LEAK ON THE WIRE: projectiles AND zones go to every client
+  unfiltered (server/snapshot.ts), so enemy skillshots and zones appear
+  inside the fog and reveal hidden champion positions: a maphack vector,
+  violating the fog-on-the-wire invariant. Death events (unit + killer ids)
+  are likewise unscoped.
+- [P1][high] Root cause of the online death bug confirmed: Sim.isVisible
+  tests `u.dead` BEFORE `u.team === team`, so a player's own dead champion
+  is invisible to its own team; reproduced through snapshot `gone`.
+- [P2][medium] Ghost matches: when every player disconnects, the Match keeps
+  ticking and building snapshots until a Sanctum falls; combined with
+  never-ending matches (F.0) this is a CPU leak and a DoS vector.
+- [P2][medium] Queue double-booking: queueing during an unstarted select
+  auto-locks you into that match AND re-queues you; matchId gets overwritten
+  and the first match keeps a ghost player.
+- [P2][medium] Grievous wounds reduce heals but NOT shields: anti-heal is
+  half-ineffective against shield kits.
+- [P2][medium] Respawn slot uses `id % 5` while spawn uses team count:
+  two same-team champions can respawn on the same exact coordinate.
+- [P2][low] Ability dashes bypass roots (executeCast writes pos directly):
+  a rooted champion can dash out of the root.
+- [P2][low] Auto-attacks keep striking a target that entered stealth (tower
+  and minion AI drop it; champion orders do not), and keep chasing targets
+  that entered the fog.
+- [P2][low] Post-victory, respawns and passive gold keep running; double
+  Sanctum death in one tick resolves by Set insertion order.
+- [P2][low] buyItem has no negative-cost guard (safe with current data).
+- Determinism audit: clean. No wall-clock or unseeded randomness in the sim,
+  the only sort has a deterministic tie-break, A* is deterministic.
+
+## G. Proposed fix plan (batched, in order)
+
+- **Batch 0, the game must be able to END (sim and balance)**: unstick the
+  side-lane minions (waypoint reach radius vs tower footprints), real
+  fountain regen (hp and mana), break the wave-annihilation equilibrium
+  (siege minion every third wave plus wave scaling), make towers takeable
+  (hp/armor tuning, minion damage to structures), accelerate the XP curve to
+  the 20-25 min target, stop bots from suicide-diving towers, expose
+  structure invulnerability in the Policy observation, let bots buy
+  duplicate components, seed-driven match variety, guard post-victory
+  respawn and gold.
+- **Batch 1, death and combat readability**: fix the online death end to end
+  (dead allies stay in the snapshot with a dead flag, SLAIN overlay online,
+  camera holds), floating combat text with last-hit gold, self and enemy
+  status display, cast and hit feedback (telegraphs, flashes), health bar
+  redesign (backing, borders, self marker, champion vs minion), legible kill
+  feed (team colors, unique bot names, killed-by-tower), semi-transparent
+  minimap above-fixed shop, game clock and XP bar.
+- **Batch 2, information and controls**: tooltips everywhere (abilities,
+  sigils, items) from the data records, keybind hint bar, shop icons and
+  HUD inventory, buy feedback, richer select screen (kit summaries, random
+  button, team uniqueness enforced), match start countdown and
+  announcements, Tab hold fix, Escape menu, recall on B (shop stays on P),
+  attack-move on A, team chat and pings.
+- **Batch 3, visual and audio identity**: distinct champion silhouettes and
+  nameplates, per-champion VFX tinting, map art pass (river, bases, wall vs
+  brush contrast), procedural item and ability icons, minimap champion
+  marks, a minimal procedural SFX set (attack, cast, kill, tower, victory).
+- **Batch 4, server hardening before any public URL**: fog-filter
+  projectiles, zones, and events; reap ghost matches; queue double-booking;
+  the sim P2s (grievous vs shields, rooted dashes, stealth drop, respawn
+  slots, cost guard).
 
 ### F.3 Browser UX reviewer (landed; 31 screenshots, zero console errors)
 
