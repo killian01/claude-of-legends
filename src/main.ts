@@ -3,9 +3,11 @@
 // ticks at exactly 20 Hz regardless of display refresh rate.
 
 import { setupInput } from './game/input';
+import { pickEnemyAt } from './game/picking';
 import { Renderer } from './render/renderer';
 import { Sim } from './sim/sim';
 import { DT } from './sim/types';
+import { Hud } from './ui/hud';
 import type { IWorld } from './world_api';
 
 const app = document.querySelector<HTMLElement>('#app');
@@ -21,10 +23,13 @@ sim.addChampion(1, { x: 80, z: 80 });
 
 const renderer = new Renderer(app, world);
 renderer.followUnit(self.id);
+const hud = new Hud(app, world, self.id);
 setupInput(renderer, {
-  selfTeam: self.team,
-  onMove: (p) => sim.orderMove(self.id, p.x, p.z),
-  onAttackUnit: (id) => sim.orderAttack(self.id, id),
+  onRightClick: (p) => {
+    const enemy = pickEnemyAt(world, p, self.team);
+    if (enemy) sim.orderAttack(self.id, enemy.id);
+    else sim.orderMove(self.id, p.x, p.z);
+  },
   onCast: (key, aim) => sim.castAbility(self.id, key, aim),
 });
 
@@ -38,6 +43,7 @@ function frame(now: number): void {
   while (acc >= TICK_MS) {
     sim.tick();
     renderer.onSimTick();
+    hud.update();
     acc -= TICK_MS;
   }
   renderer.render(acc / TICK_MS);
