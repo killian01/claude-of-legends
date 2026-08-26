@@ -128,6 +128,9 @@ export function startPresentation(
       }
     }
     const ok = world.castAbility(selfId, key, aim);
+    // The sim can still refuse (decision budget, stun): that denial must be
+    // audible, never a silently dead key.
+    if (!ok) playSfx('deny');
     // Instant abilities spawn no projectile or zone: flash their shape in
     // the ability's school color so the cast visibly happened.
     if (
@@ -206,26 +209,29 @@ export function startPresentation(
       renderer.setHoverTarget(enemy?.id ?? null);
       renderer.domElement.style.cursor = enemy ? 'crosshair' : 'default';
     },
-    onAimStart: (key) => {
+    onCast: (key, aim) => {
+      // Quickcast with indicator: fire NOW, keep the range preview up while
+      // the key stays held (it helps the follow-up cast).
       const u = world.units.get(selfId);
       const def = u?.championId ? world.championDef(u.championId) : null;
       const ab = def?.abilities[key];
-      if (!u || u.dead || !ab) return;
-      aimingKey = key;
-      const spec = ab.spec as { radius?: number; range?: number; halfAngle?: number };
-      renderer.showAimPreview({
-        castRange: ab.castRange,
-        kind: ab.spec.kind,
-        radius: spec.radius,
-        range: spec.range,
-        halfAngle: spec.halfAngle,
-      });
+      if (u && !u.dead && ab) {
+        aimingKey = key;
+        const spec = ab.spec as { radius?: number; range?: number; halfAngle?: number };
+        renderer.showAimPreview({
+          castRange: ab.castRange,
+          kind: ab.spec.kind,
+          radius: spec.radius,
+          range: spec.range,
+          halfAngle: spec.halfAngle,
+        });
+      }
+      tryCast(key, aim);
     },
-    onAimCommit: (key, aim) => {
-      renderer.hideAimPreview();
+    onAimEnd: (key) => {
       if (aimingKey !== key) return;
       aimingKey = null;
-      tryCast(key, aim);
+      renderer.hideAimPreview();
     },
     onCastSigil: (slot, aim) => {
       pendingCast = null;
@@ -244,6 +250,11 @@ export function startPresentation(
     onRecall: () => {
       pendingCast = null;
       world.startRecall(selfId);
+    },
+    onStop: () => {
+      pendingCast = null;
+      world.orderStop(selfId);
+      renderer.setAttackTarget(null);
     },
     onRecenterCamera: () => renderer.recenterCamera(),
     onToggleShop: () => hud.toggleShop(),

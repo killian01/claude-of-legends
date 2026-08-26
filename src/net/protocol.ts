@@ -19,6 +19,7 @@ export type ClientMsg =
   | { t: 'move'; x: number; z: number }
   | { t: 'attack'; targetId: number }
   | { t: 'attack_move'; x: number; z: number }
+  | { t: 'stop' }
   | { t: 'recall' }
   | { t: 'cast'; key: AbilityKey; x: number; z: number }
   | { t: 'sigil'; slot: number; x: number; z: number }

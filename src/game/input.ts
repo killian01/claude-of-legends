@@ -11,10 +11,12 @@ export interface InputHandlers {
   // Left-click selects a unit (target frame) or clears the selection.
   onLeftClick(screenX: number, screenY: number): void;
   onHover(screenX: number, screenY: number): void;
-  // Hold-to-aim: keydown shows the range preview, keyup casts at the cursor.
-  onAimStart(key: AbilityKey): void;
-  onAimCommit(key: AbilityKey, aim: Vec2): void;
+  // Quickcast with indicator: keydown casts AT ONCE at the cursor (and
+  // shows the range preview while held); keyup only hides the preview.
+  onCast(key: AbilityKey, aim: Vec2): void;
+  onAimEnd(key: AbilityKey): void;
   onCastSigil(slot: number, aim: Vec2): void;
+  onStop(): void;
   onAttackMove(aim: Vec2): void;
   onRecall(): void;
   onRecenterCamera(): void;
@@ -100,6 +102,10 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): void {
       if (p) handlers.onPing(p);
       return;
     }
+    if (lower === 's') {
+      handlers.onStop();
+      return;
+    }
     const sigilSlot = SIGIL_KEYS[lower];
     if (sigilSlot !== undefined) {
       const p = aim();
@@ -108,14 +114,13 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): void {
     }
     const key = ABILITY_KEYS[lower];
     if (!key) return;
-    handlers.onAimStart(key);
+    const p = aim();
+    if (p) handlers.onCast(key, p);
   });
 
   window.addEventListener('keyup', (e) => {
     if (handlers.isTyping()) return;
     const key = ABILITY_KEYS[e.key.toLowerCase()];
-    if (!key) return;
-    const p = renderer.groundPointAt(mouseX, mouseY);
-    if (p) handlers.onAimCommit(key, p);
+    if (key) handlers.onAimEnd(key);
   });
 }

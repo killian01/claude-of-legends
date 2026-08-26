@@ -8,7 +8,7 @@ import type { Sim } from './sim';
 
 export function stepIdleDefense(sim: Sim): void {
   for (const u of sim.units.values()) {
-    if (u.kind !== 'champion' || u.dead) continue;
+    if (u.kind !== 'champion' || u.dead || u.holding) continue;
     if (u.attackTargetId !== null || u.attackMoveTarget !== null || u.path.length > 0) continue;
     if (isRecalling(u, sim.time) || isStunned(u, sim.time)) continue;
     let best: number | null = null;

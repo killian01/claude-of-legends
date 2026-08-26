@@ -27,6 +27,7 @@ export interface IWorld {
   orderMove(unitId: number, x: number, z: number): void;
   orderAttack(unitId: number, targetId: number): void;
   orderAttackMove(unitId: number, x: number, z: number): void;
+  orderStop(unitId: number): void;
   startRecall(unitId: number): void;
   castAbility(unitId: number, key: AbilityKey, aim: Vec2): boolean;
   castSigil(unitId: number, slot: number, aim: Vec2): boolean;

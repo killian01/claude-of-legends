@@ -12,10 +12,14 @@ function pickVoice(): void {
   const voices = speechSynthesis.getVoices();
   if (voices.length === 0) return;
   voiceLoaded = true;
-  // Prefer an English voice; the exact one varies per browser and OS.
+  // The genre's announcer is a calm female voice: prefer known female
+  // English voices (Zira on Windows, Samantha on macOS, Google UK Female),
+  // then any English voice.
+  const en = voices.filter((v) => v.lang.startsWith('en'));
   voice =
-    voices.find((v) => v.lang.startsWith('en') && v.localService) ??
-    voices.find((v) => v.lang.startsWith('en')) ??
+    en.find((v) => /zira|samantha|female|aria|jenny/i.test(v.name)) ??
+    en.find((v) => v.localService) ??
+    en[0] ??
     null;
 }
 
@@ -34,9 +38,10 @@ export function announceVoice(line: string, priority = false): void {
   }
   const u = new SpeechSynthesisUtterance(line);
   if (voice) u.voice = voice;
-  u.rate = 0.92;
-  u.pitch = 0.55;
-  u.volume = 0.9;
+  // Calm and deliberate, not a robot bark: near-natural pitch, slow rate.
+  u.rate = 0.85;
+  u.pitch = 0.8;
+  u.volume = 1.0;
   speechSynthesis.speak(u);
   lastSpokeAt = now;
   lastLine = line;

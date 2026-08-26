@@ -52,6 +52,9 @@ export interface ObsSelf {
   // Which champion this policy is driving. Additive v0 field (like
   // `abilityRanks`): policies use it to pick role-appropriate item builds.
   championId: string | null;
+  // The lane this participant was assigned, null for unassigned (humans).
+  // Additive v0 field; bots use it to hold a lane instead of flocking.
+  lane: 'top' | 'mid' | 'bot' | null;
 }
 
 export interface Observation {

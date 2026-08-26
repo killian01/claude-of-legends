@@ -65,6 +65,9 @@ export interface Unit {
   attackReadyAt: number;
   // Attack-move destination; enemies encountered on the way are engaged.
   attackMoveTarget: Vec2 | null;
+  // Stop order (S): while held, idle defense keeps its hands off; any
+  // movement or attack order clears it. Freezing a wave is a verb again.
+  holding: boolean;
   // Remaining waypoints toward the current move order; empty when idle.
   path: Vec2[];
   // Progression and economy (champions).
@@ -160,6 +163,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     attackTargetId: null,
     attackReadyAt: 0,
     attackMoveTarget: null,
+    holding: false,
     path: [],
     level: 1,
     xp: 0,

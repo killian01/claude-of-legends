@@ -88,6 +88,9 @@ export class Match {
       case 'attack_move':
         if (isFiniteVec(msg.x, msg.z)) this.sim.orderAttackMove(p.unitId, msg.x, msg.z);
         break;
+      case 'stop':
+        this.sim.orderStop(p.unitId);
+        break;
       case 'recall':
         this.sim.startRecall(p.unitId);
         break;

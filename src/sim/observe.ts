@@ -77,6 +77,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       sigilReady,
       items: [...u.items],
       championId: u.championId,
+      lane: u.kind === 'champion' ? (u.lane as 'top' | 'mid' | 'bot' | null) : null,
     },
     units,
     objectiveSpawnAt: sim.objectiveSpawnAt(),
