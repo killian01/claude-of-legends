@@ -31,15 +31,19 @@ export function computeVisibility(
   }
   for (const target of units.values()) {
     if (target.dead || isStealthed(target, time)) continue;
-    const observer = (1 - target.team) as TeamId;
+    // A team's own units need no visibility entry; a NEUTRAL unit (jungle
+    // camps) sits in the fog for BOTH teams and must be sighted by each.
+    const observers: readonly TeamId[] = target.neutral ? [0, 1] : [(1 - target.team) as TeamId];
     const targetBrush = brush.get(target.id) ?? -1;
-    for (const src of units.values()) {
-      if (src.team !== observer || src.dead) continue;
-      const d = Math.hypot(src.pos.x - target.pos.x, src.pos.z - target.pos.z);
-      if (d > src.sightRange * sightFactor(src, time)) continue;
-      if (targetBrush !== -1 && brush.get(src.id) !== targetBrush) continue;
-      sets[observer].add(target.id);
-      break;
+    for (const observer of observers) {
+      for (const src of units.values()) {
+        if (src.team !== observer || src.neutral || src.dead) continue;
+        const d = Math.hypot(src.pos.x - target.pos.x, src.pos.z - target.pos.z);
+        if (d > src.sightRange * sightFactor(src, time)) continue;
+        if (targetBrush !== -1 && brush.get(src.id) !== targetBrush) continue;
+        sets[observer].add(target.id);
+        break;
+      }
     }
   }
   return sets;

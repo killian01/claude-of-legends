@@ -25,7 +25,7 @@ export interface ItemDef {
   id: string;
   name: string;
   cost: number;
-  tier: 1 | 2;
+  tier: 1 | 2 | 3;
   stats: ItemStats;
   buildsFrom?: readonly string[];
 }
@@ -160,8 +160,62 @@ const T2: readonly ItemDef[] = [
   },
 ];
 
+// Tier 3 (snowball review): a big lead was ~3000 g of unspendable dead gold
+// against a 6-slot tier-2 ceiling. Legendary upgrades give the fed player
+// something decisive to buy; each consumes a finished item plus a component.
+const T3: readonly ItemDef[] = [
+  {
+    id: 'doombrand',
+    name: 'Doombrand',
+    cost: 2900,
+    tier: 3,
+    stats: { ad: 95 },
+    buildsFrom: ['warbrand', 'iron_blade'],
+  },
+  {
+    id: 'tempest_core',
+    name: 'Tempest Core',
+    cost: 3200,
+    tier: 3,
+    stats: { ap: 175 },
+    buildsFrom: ['storm_staff', 'spark_rod'],
+  },
+  {
+    id: 'rendfang',
+    name: 'Rendfang',
+    cost: 2900,
+    tier: 3,
+    stats: { ad: 55, armorPenPct: 0.45 },
+    buildsFrom: ['sunder_axe', 'iron_blade'],
+  },
+  {
+    id: 'null_engine',
+    name: 'Null Engine',
+    cost: 3000,
+    tier: 3,
+    stats: { ap: 90, mrPenPct: 0.45 },
+    buildsFrom: ['void_crystal', 'spark_rod'],
+  },
+  {
+    id: 'skyshear',
+    name: 'Skyshear',
+    cost: 2800,
+    tier: 3,
+    stats: { ad: 60, attackSpeedPct: 0.55, moveSpeed: 0.35 },
+    buildsFrom: ['windrazor', 'swift_fang'],
+  },
+  {
+    id: 'worldheart',
+    name: 'Worldheart',
+    cost: 3000,
+    tier: 3,
+    stats: { hp: 650, armor: 25, mr: 25 },
+    buildsFrom: ['colossus_heart', 'guard_plate'],
+  },
+];
+
 export const ITEMS: Readonly<Record<string, ItemDef>> = Object.fromEntries(
-  [...T1, ...T2].map((i) => [i.id, i]),
+  [...T1, ...T2, ...T3].map((i) => [i.id, i]),
 );
 
 // The price after consuming owned components, mirroring the sim's buy rule.
@@ -180,4 +234,4 @@ export function effectiveItemCost(itemId: string, owned: readonly string[]): num
   return def.cost - discount;
 }
 
-export const ITEM_LIST: readonly ItemDef[] = [...T1, ...T2];
+export const ITEM_LIST: readonly ItemDef[] = [...T1, ...T2, ...T3];

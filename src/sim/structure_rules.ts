@@ -20,6 +20,16 @@ function hasAliveTower(
   return false;
 }
 
+// True when `team` has no lane tower left on `lane`: the lane is open and
+// the OPPOSING team's waves there escalate with a Vanguard minion.
+export function laneFullyOpen(
+  units: ReadonlyMap<number, Unit>,
+  team: number,
+  lane: LaneId,
+): boolean {
+  return !hasAliveTower(units, team, (o) => o.structure!.lane === lane);
+}
+
 export function isInvulnerable(units: ReadonlyMap<number, Unit>, u: Unit): boolean {
   if (u.kind === 'tower' && u.structure) {
     const s = u.structure;

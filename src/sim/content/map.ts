@@ -50,6 +50,14 @@ export interface GameMap {
   brush: readonly WallShape[];
   // The two mirrored river pits the Warden alternates between.
   wardenPits: readonly Vec2[];
+  // Jungle camp spots, mirrored pairs; one per half grants a personal buff.
+  camps: readonly CampSpot[];
+}
+
+export interface CampSpot {
+  x: number;
+  z: number;
+  buff: boolean;
 }
 
 const SIZE = 150;
@@ -85,6 +93,14 @@ const NW_WALLS: readonly WallShape[] = [
   { x: 38, z: 115, r: 7 },
   { x: 65, z: 90, r: 6 },
   { x: 28, z: 68, r: 6 },
+];
+
+// Jungle camps of the northwest half; the southeast half is their rotation.
+// Each sits in a wall gap off the lanes; the first is the buff camp.
+const NW_CAMPS: readonly CampSpot[] = [
+  { x: 42, z: 62, buff: true },
+  { x: 40, z: 100, buff: false },
+  { x: 58, z: 108, buff: false },
 ];
 
 const NW_BRUSH: readonly WallShape[] = [
@@ -151,4 +167,5 @@ export const GAME_MAP: GameMap = {
   // On the river diagonal (x + z = SIZE), clear of the jungle walls, and
   // point-symmetric so neither team owns the pit.
   wardenPits: [{ x: 58, z: 92 }, mirrorPoint(58, 92)],
+  camps: [...NW_CAMPS, ...NW_CAMPS.map((c) => ({ ...mirrorPoint(c.x, c.z), buff: c.buff }))],
 };

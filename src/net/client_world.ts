@@ -61,7 +61,7 @@ function materializeUnit(s: SnapUnit): Unit {
   return {
     id: s.i,
     team: s.t ?? 0,
-    neutral: (s.k ?? 'champion') === 'warden',
+    neutral: s.k === 'warden' || s.k === 'camp',
     kind: s.k ?? 'champion',
     championId: s.c ?? null,
     pos: { x: s.x, z: s.z },

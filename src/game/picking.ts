@@ -33,7 +33,7 @@ function pickable(world: IWorld, u: Readonly<Unit>, selfTeam: TeamId): boolean {
 
 function kindPriority(u: Readonly<Unit>): number {
   if (u.kind === 'champion') return 0;
-  if (u.kind === 'minion' || u.kind === 'warden') return 1;
+  if (u.kind === 'minion' || u.kind === 'warden' || u.kind === 'camp') return 1;
   return 2;
 }
 
@@ -43,6 +43,7 @@ function bodyHeight(u: Readonly<Unit>): number {
   if (u.kind === 'champion') return 1.2;
   if (u.kind === 'minion') return 0.6;
   if (u.kind === 'warden') return 1.4;
+  if (u.kind === 'camp') return 0.8;
   return 3.0;
 }
 
