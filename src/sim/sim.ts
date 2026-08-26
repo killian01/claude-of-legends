@@ -72,6 +72,8 @@ export type SimEvent =
 
 const RESPAWN_BASE = 8;
 const RESPAWN_PER_LEVEL = 1.5;
+// How long a champion's damage on a victim keeps earning an assist.
+const ASSIST_WINDOW_S = 10;
 const SHOP_RANGE_PAD = 2;
 const INVENTORY_SLOTS = 6;
 
@@ -170,6 +172,8 @@ export class Sim {
         level: u.level,
         kills: u.kills,
         deaths: u.deaths,
+        assists: u.assists,
+        cs: u.cs,
       });
     }
     return rows;
@@ -383,10 +387,20 @@ export class Sim {
     for (const id of this.dead) {
       const u = this.units.get(id);
       if (!u) continue;
-      grantKillRewards(ctx, u, this.killers.get(id) ?? 0);
+      const killerId = this.killers.get(id) ?? 0;
+      grantKillRewards(ctx, u, killerId);
       if (u.kind === 'champion') {
-        const killer = this.units.get(this.killers.get(id) ?? 0);
+        const killer = this.units.get(killerId);
         if (killer && killer.kind === 'champion' && killer.team !== u.team) killer.kills += 1;
+        // Assists: every enemy champion that damaged the victim within the
+        // window, killer excluded. Dead helpers still earn theirs.
+        for (const r of u.recentDamagers) {
+          if (r.id === killerId) continue;
+          if (this.time - r.at > ASSIST_WINDOW_S) continue;
+          const helper = this.units.get(r.id);
+          if (helper && helper.kind === 'champion' && helper.team !== u.team) helper.assists += 1;
+        }
+        u.recentDamagers = [];
         u.deaths += 1;
         u.dead = true;
         u.hp = 0;
@@ -395,6 +409,11 @@ export class Sim {
         u.attackTargetId = null;
         u.statuses = [];
       } else {
+        // Creep score: a minion last-hit by an enemy champion.
+        if (u.kind === 'minion') {
+          const killer = this.units.get(killerId);
+          if (killer && killer.kind === 'champion' && killer.team !== u.team) killer.cs += 1;
+        }
         if (u.moveSpeed <= 0) this.nav.unblockCircle(u.pos.x, u.pos.z, staticFootprint(u));
         this.units.delete(id);
         if (u.kind === 'sanctum' && this.winner === null) {

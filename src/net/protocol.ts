@@ -84,6 +84,9 @@ export type SnapEvent =
   | { e: 'death'; unitId: number; killerId: number }
   | { e: 'gold'; amount: number }
   | { e: 'cast'; unitId: number }
+  // Personal: damage THIS client dealt to another unit, for its own
+  // floating combat numbers only.
+  | { e: 'dmg'; targetId: number; amount: number }
   | { e: 'victory'; team: TeamId };
 
 export interface SelectPlayer {
