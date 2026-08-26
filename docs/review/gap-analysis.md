@@ -151,6 +151,39 @@ All four reports landed.
 - Determinism audit: clean. No wall-clock or unseeded randomness in the sim,
   the only sort has a deterministic tie-break, A* is deterministic.
 
+Expanded report additions:
+
+- [P1][high] SELF-CAST STEALING: executeCast 'self_or_ally' never compares
+  the caster (default only), so Mend or a shield aimed at yourself lands on
+  any ally within the search radius instead; a dying player pressing Mend
+  next to a full-hp ally dies. Fix: the caster competes at distance 0.
+- [P1][medium] CC applies to STRUCTURES: piercing skillshots stun towers
+  (Torv R) and taunt forces a tower to retarget (Torv W); structures need CC
+  immunity.
+- [P1][medium] Rooted champions escape with any dash or Riftstep (dash specs
+  write pos directly, root only gates path movement).
+- [P1][medium] Auto-attacks never release a target that stealths (only
+  towers and minions drop it), and sim-side orderAttack accepts stealthed or
+  fogged targets (only the server validates for humans; bots and taunts
+  bypass).
+- [P1][medium] IN-MATCH REJOIN CORRUPTION: a client already in a match can
+  send queue or create_lobby (no matchId guard); it ends up in two matches
+  whose snapshots interleave into one ClientWorld (colliding ids, wrong
+  identities).
+- [P2] Death refreshes ability cooldowns (R included): dying is a free ult
+  reset; sigil cooldowns correctly persist. Inconsistent and exploitable.
+- [P2] isInvulnerable ignores units dying this tick: one ghost-protection
+  tick when the outer tower dies.
+- [P2] Homing bolts on the wire trace their fogged target's position tick
+  by tick (part of the fog leak).
+- [P2] Disconnect during select still seats the dead clientId (AFK champion,
+  no bot substitution, no reconnection path); commands stay accepted for
+  20 s after victory; a repeated match.tick() throw leaves a zombie match;
+  static file guard `startsWith(DIST)` lacks a path separator (a sibling
+  dist-old would be servable); 60 msg/s of move each trigger a full A*
+  (cheap DoS); tower/minion last hits evaporate the 300 g champion bounty
+  and kill XP goes to enemies who never participated; no item selling.
+
 ## G. Proposed fix plan (batched, in order)
 
 - **Batch 0, the game must be able to END (sim and balance)**: unstick the
@@ -179,10 +212,12 @@ All four reports landed.
   nameplates, per-champion VFX tinting, map art pass (river, bases, wall vs
   brush contrast), procedural item and ability icons, minimap champion
   marks, a minimal procedural SFX set (attack, cast, kill, tower, victory).
-- **Batch 4, server hardening before any public URL**: fog-filter
-  projectiles, zones, and events; reap ghost matches; queue double-booking;
-  the sim P2s (grievous vs shields, rooted dashes, stealth drop, respawn
-  slots, cost guard).
+- **Batch 4, correctness and server hardening before any public URL**:
+  fog-filter projectiles, zones, and death events; reap ghost matches; queue
+  double-booking and in-match rejoin guards; self-cast preference fix; CC
+  immunity for structures; rooted dashes; stealth released by auto-attacks;
+  no cooldown refresh on death; grievous vs shields; respawn slots; cost
+  guard; post-victory command and respawn freeze; static path guard.
 
 ### F.3 Browser UX reviewer (landed; 31 screenshots, zero console errors)
 
