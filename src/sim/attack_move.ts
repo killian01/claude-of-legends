@@ -17,7 +17,8 @@ export function stepAttackMove(sim: Sim): void {
       let best: number | null = null;
       let bestD = Number.POSITIVE_INFINITY;
       for (const o of sim.units.values()) {
-        if (o.team === u.team || o.dead) continue;
+        // Attack-move never auto-engages the neutral Warden.
+        if (o.team === u.team || o.neutral || o.dead) continue;
         if (!sim.isVisible(u.team, o.id)) continue;
         const d = Math.hypot(o.pos.x - u.pos.x, o.pos.z - u.pos.z);
         if (d <= ACQUIRE_RADIUS && d < bestD) {

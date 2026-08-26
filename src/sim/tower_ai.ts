@@ -15,7 +15,8 @@ function nearest(ctx: CombatCtx, tower: Unit, kinds: readonly string[]): Unit | 
   let best: Unit | null = null;
   let bestD = Number.POSITIVE_INFINITY;
   for (const o of ctx.units.values()) {
-    if (o.team === tower.team || o.dead || ctx.dead.has(o.id)) continue;
+    // Towers ignore the neutral Warden entirely.
+    if (o.team === tower.team || o.neutral || o.dead || ctx.dead.has(o.id)) continue;
     if (isStealthed(o, ctx.time)) continue;
     if (!kinds.includes(o.kind)) continue;
     if (!inRange(tower, o)) continue;
@@ -39,7 +40,7 @@ function aggressorInRange(ctx: CombatCtx, tower: Unit): Unit | null {
     if (!inRange(tower, ally)) continue;
     const attacker = ctx.units.get(ally.lastHitByChampion);
     if (!attacker || attacker.dead || ctx.dead.has(attacker.id)) continue;
-    if (attacker.team === tower.team) continue;
+    if (attacker.team === tower.team || attacker.neutral) continue;
     if (isStealthed(attacker, ctx.time)) continue;
     if (inRange(tower, attacker)) return attacker;
   }

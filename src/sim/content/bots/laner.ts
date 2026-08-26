@@ -196,6 +196,22 @@ const policy: Policy = (obs, rng: Rng): Action => {
     return { kind: 'attack', targetId: champ.id };
   }
 
+  // Contest the Warden: a live one in reach is worth a detour, but never
+  // alone; deliberately dumb (systems review v1).
+  const warden = enemies.find((u) => u.kind === 'warden');
+  if (warden) {
+    const dw = dist(s.x, s.z, warden);
+    const alliesNearWarden = obs.units.filter(
+      (v) => v.friendly && v.kind === 'champion' && dist(warden.x, warden.z, v) <= 14,
+    ).length;
+    if (dw <= FARM_RANGE && alliesNearWarden >= 1) {
+      return { kind: 'attack', targetId: warden.id };
+    }
+    if (dw > FARM_RANGE && dw <= 35 && alliesNearWarden >= 1) {
+      return { kind: 'move', x: warden.x, z: warden.z };
+    }
+  }
+
   // Farm: nearest enemy minion, then a vulnerable structure WITH an escort.
   const minion = nearest(
     enemies.filter((u) => u.kind === 'minion'),

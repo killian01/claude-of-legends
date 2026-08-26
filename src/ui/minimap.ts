@@ -156,6 +156,15 @@ export class Minimap {
         g.lineTo(x - 4, z);
         g.closePath();
         g.fill();
+      } else if (u.kind === 'warden') {
+        // The Warden: a violet blotch both teams can track.
+        g.fillStyle = '#c06ae8';
+        g.beginPath();
+        g.arc(x, z, 5, 0, Math.PI * 2);
+        g.fill();
+        g.strokeStyle = '#f0d8ff';
+        g.lineWidth = 1.5;
+        g.stroke();
       } else if (u.kind === 'champion') {
         g.fillStyle = color;
         g.beginPath();

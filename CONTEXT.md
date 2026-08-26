@@ -39,3 +39,11 @@ _Avoid_: movement command (implies one-shot)
 **Skin**:
 A purely cosmetic appearance variant of a champion, chosen at champion select and visible to everyone. Never affects gameplay, stats, or the Policy observation.
 _Avoid_: costume, chroma
+
+**Warden**:
+The neutral river monster. It spawns in one of two mirrored river pits on an announced clock, is always visible to both teams, fights only champions, and the team that lands the killing blow claims the Warden's Boon.
+_Avoid_: dragon, boss
+
+**Warden's Boon**:
+The team-wide, death-surviving damage buff granted when a team slays the Warden. Stacks a limited number of times.
+_Avoid_: soul, objective buff

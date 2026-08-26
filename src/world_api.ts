@@ -20,6 +20,10 @@ export interface IWorld {
   championDef(championId: string): ChampionDef | null;
   scoreboard(): readonly ScoreRow[];
   isVisible(team: TeamId, unitId: number): boolean;
+  // The Warden's Boon state for a team, null when inactive.
+  teamBuff(team: TeamId): { until: number; stacks: number } | null;
+  // When the next Warden rises; null while one is alive.
+  objectiveSpawnAt(): number | null;
   orderMove(unitId: number, x: number, z: number): void;
   orderAttack(unitId: number, targetId: number): void;
   orderAttackMove(unitId: number, x: number, z: number): void;

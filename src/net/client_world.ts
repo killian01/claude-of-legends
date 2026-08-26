@@ -61,6 +61,7 @@ function materializeUnit(s: SnapUnit): Unit {
   return {
     id: s.i,
     team: s.t ?? 0,
+    neutral: (s.k ?? 'champion') === 'warden',
     kind: s.k ?? 'champion',
     championId: s.c ?? null,
     pos: { x: s.x, z: s.z },
@@ -133,6 +134,8 @@ export class ClientWorld implements IWorld {
   selfUnitId = 0;
   selfTeam: TeamId = 0;
   private scoreRows: readonly ScoreRow[] = [];
+  private objAt: number | null = null;
+  private boon: { until: number; stacks: number } | null = null;
 
   constructor(private readonly send: (msg: ClientMsg) => void) {}
 
@@ -142,6 +145,16 @@ export class ClientWorld implements IWorld {
 
   scoreboard(): readonly ScoreRow[] {
     return this.scoreRows;
+  }
+
+  // Only the viewer's own Boon rides the wire; the enemy's reads null.
+  teamBuff(team: TeamId): { until: number; stacks: number } | null {
+    if (team !== this.selfTeam) return null;
+    return this.boon && this.boon.until > this.time ? this.boon : null;
+  }
+
+  objectiveSpawnAt(): number | null {
+    return this.objAt;
   }
 
   // The server already scoped the snapshot to this team's vision.
@@ -219,7 +232,12 @@ export class ClientWorld implements IWorld {
       applyWireStatuses(unit, s.st, ccUntil);
     }
 
+    this.objAt = msg.objAt ?? null;
     if (msg.self) {
+      this.boon =
+        msg.self.boonUntil !== undefined
+          ? { until: msg.self.boonUntil, stacks: msg.self.boonStacks ?? 1 }
+          : null;
       const self = this.units.get(this.selfUnitId);
       if (self) {
         self.mana = msg.self.mana;

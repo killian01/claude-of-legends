@@ -23,14 +23,18 @@ const CLICK_SLOP_PX = 24;
 export type ScreenProjector = (x: number, y: number, z: number) => { x: number; y: number } | null;
 
 function pickable(world: IWorld, u: Readonly<Unit>, selfTeam: TeamId): boolean {
-  if (u.team === selfTeam || u.dead) return false;
+  if (u.dead) return false;
+  // Neutral units (the Warden) are attackable by both teams.
+  if (!u.neutral && u.team === selfTeam) return false;
   if (!world.isVisible(selfTeam, u.id)) return false;
   if ((u.kind === 'tower' || u.kind === 'sanctum') && isInvulnerable(world.units, u)) return false;
   return true;
 }
 
 function kindPriority(u: Readonly<Unit>): number {
-  return u.kind === 'champion' ? 0 : u.kind === 'minion' ? 1 : 2;
+  if (u.kind === 'champion') return 0;
+  if (u.kind === 'minion' || u.kind === 'warden') return 1;
+  return 2;
 }
 
 // The visual center height of a unit's body, so clicks land on what the
@@ -38,6 +42,7 @@ function kindPriority(u: Readonly<Unit>): number {
 function bodyHeight(u: Readonly<Unit>): number {
   if (u.kind === 'champion') return 1.2;
   if (u.kind === 'minion') return 0.6;
+  if (u.kind === 'warden') return 1.4;
   return 3.0;
 }
 

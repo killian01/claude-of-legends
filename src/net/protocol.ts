@@ -80,6 +80,9 @@ export interface SelfSnap {
   sigils: string[];
   // The client's own full status list, for the HUD chips.
   statuses: { k: string; until: number; v?: number }[];
+  // The viewer team's Warden's Boon, absent when inactive.
+  boonUntil?: number;
+  boonStacks?: number;
 }
 
 export type SnapEvent =
@@ -123,6 +126,8 @@ export type ServerMsg =
       self: SelfSnap | null;
       events: SnapEvent[];
       winner: TeamId | null;
+      // When the next Warden rises; null while one is alive.
+      objAt?: number | null;
     }
   | { t: 'score'; rows: ScoreRow[] }
   | { t: 'chat'; from: string; team: TeamId; text: string }

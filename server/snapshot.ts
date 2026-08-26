@@ -142,6 +142,11 @@ export function buildSnapshot(
         .filter((s) => s.until > sim.time)
         .map((s) => ({ k: s.kind, until: round2(s.until), v: statusValue(s) })),
     };
+    const boon = sim.teamBuff(team);
+    if (boon) {
+      self.boonUntil = round2(boon.until);
+      self.boonStacks = boon.stacks;
+    }
   }
 
   const snapEvents: SnapEvent[] = [];
@@ -179,5 +184,6 @@ export function buildSnapshot(
     self,
     events: snapEvents,
     winner: sim.winner,
+    objAt: sim.objectiveSpawnAt(),
   };
 }

@@ -48,6 +48,8 @@ export interface GameMap {
   walls: readonly WallShape[];
   // Circular brush patches; walkable, will hide occupants when vision lands.
   brush: readonly WallShape[];
+  // The two mirrored river pits the Warden alternates between.
+  wardenPits: readonly Vec2[];
 }
 
 const SIZE = 150;
@@ -146,4 +148,7 @@ export const GAME_MAP: GameMap = {
   },
   walls: [...NW_WALLS, ...NW_WALLS.map((w) => ({ ...mirrorPoint(w.x, w.z), r: w.r }))],
   brush: [...NW_BRUSH, ...NW_BRUSH.map((b) => ({ ...mirrorPoint(b.x, b.z), r: b.r }))],
+  // On the river diagonal (x + z = SIZE), clear of the jungle walls, and
+  // point-symmetric so neither team owns the pit.
+  wardenPits: [{ x: 58, z: 92 }, mirrorPoint(58, 92)],
 };

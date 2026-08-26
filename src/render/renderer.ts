@@ -656,6 +656,40 @@ export class Renderer {
       collectSpinners(holder);
       return { holder, barY: 7.2 };
     }
+    if (kind === 'warden') {
+      // The neutral river beast: dark jade bulk with glowing violet crystals.
+      const bodyMat = new THREE.MeshLambertMaterial({ color: 0x3f6a55, flatShading: true });
+      const crystalMat = new THREE.MeshLambertMaterial({
+        color: 0xb06ae8,
+        emissive: 0x8a4fd0,
+        emissiveIntensity: 0.55,
+        flatShading: true,
+      });
+      const body = new THREE.Mesh(new THREE.IcosahedronGeometry(1.25, 0), bodyMat);
+      body.position.y = 1.35;
+      body.scale.set(1, 1.15, 1.2);
+      holder.add(body);
+      const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 0), bodyMat);
+      head.position.set(0, 2.35, 0.85);
+      holder.add(head);
+      for (const side of [-1, 1]) {
+        const horn = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.85, 5), crystalMat);
+        horn.position.set(side * 0.45, 2.9, 0.6);
+        horn.rotation.z = -side * 0.35;
+        holder.add(horn);
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 0.9, 5), bodyMat);
+        leg.position.set(side * 0.75, 0.45, 0.2);
+        holder.add(leg);
+      }
+      for (let i = 0; i < 3; i++) {
+        const spike = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.1 - i * 0.2, 4), crystalMat);
+        spike.position.set(0, 2.5 - i * 0.25, -0.4 - i * 0.5);
+        spike.rotation.x = -0.5;
+        holder.add(spike);
+      }
+      enableShadows(holder);
+      return { holder, barY: 4.0 };
+    }
     const figure = buildChampionMesh(u.championId, color, u.skin);
     holder.add(figure);
     // Surface the figure's limb pivots on the holder the render loop sees;
@@ -713,7 +747,7 @@ export class Renderer {
         const { holder, barY } = this.buildUnitMesh(u);
         // Minion bars widen with their max hp so a beefy siege minion never
         // reads as "almost dead" while it still soaks several hits.
-        const structure = u.kind === 'tower' || u.kind === 'sanctum';
+        const structure = u.kind === 'tower' || u.kind === 'sanctum' || u.kind === 'warden';
         const barWidth =
           u.kind === 'champion'
             ? 1.8
@@ -829,6 +863,8 @@ export class Renderer {
       // A living unit always keeps a visible sliver of bar.
       t.hpFill.scale.x = Math.max(0.07, t.barWidth * frac);
       let fillColor = this.barColor(id, u.team);
+      // The neutral Warden's bar is violet for everyone.
+      if (u.kind === 'warden') fillColor = 0xc06ae8;
       // Last-hit aid: an enemy minion that one of the player's autos would
       // finish turns its bar gold, like the genre's execute indicators.
       if (u.kind === 'minion' && u.team !== this.viewerTeam) {
@@ -846,7 +882,7 @@ export class Renderer {
 
       // Damaged structures print their remaining hp: thousands of points
       // do not fit in a bar's pixels alone.
-      if (u.kind === 'tower' || u.kind === 'sanctum') {
+      if (u.kind === 'tower' || u.kind === 'sanctum' || u.kind === 'warden') {
         const showLabel = barVisible && u.hp < u.maxHp - 1;
         const key = showLabel ? String(Math.ceil(u.hp / 10) * 10) : '';
         if (key !== t.hpLabelKey) {

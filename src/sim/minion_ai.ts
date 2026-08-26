@@ -48,7 +48,8 @@ function acquire(ctx: CombatCtx, u: Unit): void {
   let bestRank = Number.POSITIVE_INFINITY;
   let bestDist = Number.POSITIVE_INFINITY;
   for (const o of ctx.units.values()) {
-    if (o.team === u.team || o.dead || ctx.dead.has(o.id)) continue;
+    // Minions never fight the neutral Warden; only champions do.
+    if (o.team === u.team || o.neutral || o.dead || ctx.dead.has(o.id)) continue;
     if (isStealthed(o, ctx.time)) continue;
     const d = Math.hypot(o.pos.x - u.pos.x, o.pos.z - u.pos.z);
     if (d > AGGRO_RADIUS) continue;
@@ -66,7 +67,7 @@ function acquire(ctx: CombatCtx, u: Unit): void {
 function currentTargetValid(ctx: CombatCtx, u: Unit): boolean {
   if (u.attackTargetId === null) return false;
   const t = ctx.units.get(u.attackTargetId);
-  if (!t || t.dead || ctx.dead.has(t.id) || t.team === u.team) return false;
+  if (!t || t.dead || ctx.dead.has(t.id) || t.team === u.team || t.neutral) return false;
   if (isStealthed(t, ctx.time)) return false;
   return Math.hypot(t.pos.x - u.pos.x, t.pos.z - u.pos.z) <= LEASH_RADIUS;
 }
