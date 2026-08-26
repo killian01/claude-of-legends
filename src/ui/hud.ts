@@ -6,8 +6,7 @@
 
 import { ITEM_LIST, ITEMS, type ItemStats } from '../sim/content/items';
 import { SIGILS } from '../sim/content/sigils';
-import { ULT_LEVEL } from '../sim/sim';
-import type { AbilityKey, TeamId } from '../sim/types';
+import { type AbilityKey, type TeamId, ULT_LEVEL } from '../sim/types';
 import type { IWorld } from '../world_api';
 
 const KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];

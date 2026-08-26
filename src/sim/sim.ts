@@ -5,6 +5,7 @@
 //   auto-attacks -> movement -> projectiles -> zones -> deaths -> respawns ->
 //   vision -> clock.
 
+import { runBotDecisions } from './bot_driver';
 import { stepAutoAttacks } from './combat/auto_attack';
 import { castAbility, executeCast } from './combat/casting';
 import { stepDots } from './combat/dots';
@@ -13,11 +14,13 @@ import { CHAMPIONS, DEFAULT_CHAMPION_ID } from './content/champions';
 import { ITEMS } from './content/items';
 import { GAME_MAP, type GameMap } from './content/map';
 import { SIGILS } from './content/sigils';
+import { hasDecisionToken, spendDecisionToken } from './decision_budget';
 import { createMapUnits } from './map_units';
 import { stepMinionAi } from './minion_ai';
 import { stepMovement } from './movement';
 import { NavGrid } from './navgrid';
 import { findPath } from './pathfind';
+import type { Policy } from './policy';
 import type { Projectile } from './projectiles';
 import { stepProjectiles } from './projectiles';
 import { grantKillRewards, grantPassiveGold } from './rewards';
@@ -25,7 +28,7 @@ import { Rng } from './rng';
 import type { CombatCtx } from './sim_context';
 import { recalcChampion } from './stats';
 import { stepTowerAi } from './tower_ai';
-import { type AbilityKey, type DamageType, DT, type TeamId, type Vec2 } from './types';
+import { type AbilityKey, type DamageType, DT, type TeamId, ULT_LEVEL, type Vec2 } from './types';
 import { createChampion, staticFootprint, type Unit } from './unit';
 import { computeVisibility } from './vision';
 import { FIRST_WAVE_AT, spawnWave, WAVE_EVERY } from './waves';
@@ -39,7 +42,6 @@ export type SimEvent =
   | { type: 'sigil'; unitId: number; slot: number }
   | { type: 'victory'; team: TeamId };
 
-export const ULT_LEVEL = 6;
 const RESPAWN_BASE = 8;
 const RESPAWN_PER_LEVEL = 1.5;
 const SHOP_RANGE_PAD = 2;
@@ -61,6 +63,8 @@ export class Sim {
   readonly units = new Map<number, Unit>();
   readonly projectiles = new Map<number, Projectile>();
   readonly zones = new Map<number, Zone>();
+  // Bots: sim entities driven in-tick by an attached Policy (ADR 0002).
+  readonly policies = new Map<number, Policy>();
   time = 0;
   tickCount = 0;
   winner: TeamId | null = null;
@@ -116,6 +120,12 @@ export class Sim {
     return CHAMPIONS[championId] ?? null;
   }
 
+  attachPolicy(unitId: number, policy: Policy): void {
+    const u = this.units.get(unitId);
+    if (!u || u.kind !== 'champion') return;
+    this.policies.set(unitId, policy);
+  }
+
   isVisible(team: TeamId, unitId: number): boolean {
     const u = this.units.get(unitId);
     if (!u || u.dead) return false;
@@ -147,7 +157,10 @@ export class Sim {
     if (key === 'R' && u.level < ULT_LEVEL) return false;
     const def = CHAMPIONS[u.championId]?.abilities[key];
     if (!def) return false;
-    return castAbility(this.ctx(), u, key, def, aim);
+    if (!hasDecisionToken(u, this.time)) return false;
+    const ok = castAbility(this.ctx(), u, key, def, aim);
+    if (ok) spendDecisionToken(u, this.time);
+    return ok;
   }
 
   castSigil(unitId: number, slot: number, aim: Vec2): boolean {
@@ -158,11 +171,13 @@ export class Sim {
     const def = sigilId ? SIGILS[sigilId] : undefined;
     if (!def) return false;
     if ((u.sigilCooldowns[slot] ?? 0) > this.time) return false;
+    if (!hasDecisionToken(u, this.time)) return false;
     const ok = executeCast(this.ctx(), u, def.spec, def.castRange, aim, {
       ad: u.stats.ad,
       ap: u.stats.ap,
     });
     if (!ok) return false;
+    spendDecisionToken(u, this.time);
     u.sigilCooldowns[slot] = this.time + def.cooldown;
     breakStealth(u);
     this.events.push({ type: 'sigil', unitId, slot });
@@ -211,6 +226,8 @@ export class Sim {
       if (u.stats.hpRegen > 0) u.hp = Math.min(u.maxHp, u.hp + u.stats.hpRegen * DT);
       if (u.stats.manaRegen > 0) u.mana = Math.min(u.maxMana, u.mana + u.stats.manaRegen * DT);
     }
+
+    runBotDecisions(this, this.policies);
 
     if (this.winner === null && this.time >= this.nextWaveAt) {
       spawnWave(ctx, this.map);

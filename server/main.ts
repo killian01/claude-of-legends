@@ -9,6 +9,7 @@ import path from 'node:path';
 import { type WebSocket, WebSocketServer } from 'ws';
 import { parseClientMsg, type ServerMsg } from '../src/net/protocol';
 import { DT } from '../src/sim/types';
+import { fillWithBots } from './bot_fill';
 import { Match } from './match';
 import { Matchmaker } from './matchmaker';
 
@@ -53,7 +54,7 @@ function send(clientId: number, msg: ServerMsg): void {
 
 const matchmaker = new Matchmaker(send, (picks) => {
   const id = nextMatchId++;
-  const match = new Match((Date.now() % 2_000_000_000) + id, picks);
+  const match = new Match((Date.now() % 2_000_000_000) + id, fillWithBots(picks));
   matches.set(id, { match, endedAt: null });
   for (const p of picks) {
     const c = clients.get(p.clientId);
