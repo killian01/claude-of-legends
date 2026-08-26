@@ -1,6 +1,7 @@
 // The minimap: a 2D canvas projection of the world, fog-respecting (it only
 // draws what IWorld exposes as visible to the viewer's team). Right-click on
-// it issues a move order at the corresponding world point.
+// it issues a move order at the corresponding world point; left-click points
+// the camera there (Space snaps it back to the champion).
 
 import type { TeamId, Vec2 } from '../sim/types';
 import type { IWorld } from '../world_api';
@@ -24,6 +25,7 @@ export class Minimap {
     viewerTeam: TeamId,
     selfId: number,
     onMoveOrder: (p: Vec2) => void,
+    onLook: (p: Vec2) => void,
   ) {
     this.world = world;
     this.viewerTeam = viewerTeam;
@@ -40,11 +42,12 @@ export class Minimap {
 
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     this.canvas.addEventListener('pointerdown', (e) => {
-      if (e.button !== 2) return;
+      if (e.button !== 0 && e.button !== 2) return;
       const rect = this.canvas.getBoundingClientRect();
       const x = ((e.clientX - rect.left) / rect.width) * world.map.size;
       const z = (1 - (e.clientY - rect.top) / rect.height) * world.map.size;
-      onMoveOrder({ x, z });
+      if (e.button === 2) onMoveOrder({ x, z });
+      else onLook({ x, z });
     });
 
     const g = this.canvas.getContext('2d');

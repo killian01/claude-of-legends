@@ -66,6 +66,12 @@ export interface Unit {
   items: string[];
   kills: number;
   deaths: number;
+  assists: number;
+  // Creep score: minions last-hit by this champion.
+  cs: number;
+  // Enemy champions that damaged this champion recently, newest timestamp
+  // per attacker; consumed for assist credit on death.
+  recentDamagers: { id: number; at: number }[];
   // Death state: champions stay in the sim while dead; everything else is
   // removed on death.
   dead: boolean;
@@ -138,6 +144,9 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     items: [],
     kills: 0,
     deaths: 0,
+    assists: 0,
+    cs: 0,
+    recentDamagers: [],
     dead: false,
     respawnAt: 0,
     lastHitByChampion: 0,

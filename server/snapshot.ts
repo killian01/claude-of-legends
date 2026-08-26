@@ -156,6 +156,9 @@ export function buildSnapshot(
     } else if (ev.type === 'gold' && ev.unitId === selfUnitId) {
       // Personal: your own last-hit and kill income only.
       snapEvents.push({ e: 'gold', amount: ev.amount });
+    } else if (ev.type === 'damage' && ev.sourceId === selfUnitId && ev.targetId !== selfUnitId) {
+      // Personal: only the damage YOU deal travels, for your own numbers.
+      snapEvents.push({ e: 'dmg', targetId: ev.targetId, amount: Math.round(ev.amount) });
     } else if (ev.type === 'cast' && sim.isVisible(team, ev.unitId)) {
       snapEvents.push({ e: 'cast', unitId: ev.unitId });
     } else if (ev.type === 'victory') {

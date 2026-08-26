@@ -30,4 +30,6 @@ export interface ScoreRow {
   level: number;
   kills: number;
   deaths: number;
+  assists: number;
+  cs: number;
 }

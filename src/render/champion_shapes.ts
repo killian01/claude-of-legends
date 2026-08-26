@@ -53,11 +53,20 @@ export function buildChampionMesh(
   });
   const accentMat = new THREE.MeshLambertMaterial({ color: palette.accent, flatShading: true });
 
-  // Legs, hips, torso, shoulders, arms, head: a figure, not a pill.
+  // Legs, hips, torso, shoulders, arms, head: a figure, not a pill. Legs and
+  // arms hang from pivot groups at hip and shoulder height so the renderer
+  // can swing them in a walk cycle; the pivots (plus torso and head) are
+  // published on holder.userData.anim.
+  const legs: THREE.Group[] = [];
+  const arms: THREE.Group[] = [];
   for (const side of [-1, 1]) {
+    const pivot = new THREE.Group();
+    pivot.position.set(side * 0.18 * b, 0.78, 0);
     const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.13 * b, 0.4, 3, 6), darkMat);
-    leg.position.set(side * 0.18 * b, 0.42, 0);
-    holder.add(leg);
+    leg.position.y = -0.36;
+    pivot.add(leg);
+    holder.add(pivot);
+    legs.push(pivot);
   }
   const hips = new THREE.Mesh(new THREE.BoxGeometry(0.52 * b, 0.26, 0.36 * b), darkMat);
   hips.position.y = 0.78;
@@ -69,14 +78,19 @@ export function buildChampionMesh(
     const pad = new THREE.Mesh(new THREE.SphereGeometry(0.18 * b, 6, 5), accentMat);
     pad.position.set(side * (0.42 * b + 0.06), 1.66, 0);
     holder.add(pad);
+    const pivot = new THREE.Group();
+    pivot.position.set(side * (0.5 * b + 0.06), 1.5, 0.04);
+    pivot.rotation.z = side * 0.14;
     const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.1 * b, 0.42, 3, 6), bodyMat);
-    arm.position.set(side * (0.5 * b + 0.06), 1.22, 0.04);
-    arm.rotation.z = side * 0.14;
-    holder.add(arm);
+    arm.position.y = -0.28;
+    pivot.add(arm);
+    holder.add(pivot);
+    arms.push(pivot);
   }
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.26 * b, 8, 6), accentMat);
   head.position.y = 2.02;
   holder.add(head);
+  holder.userData.anim = { legs, arms, torso, head };
 
   // Team allegiance survives any skin: a colored ring at the feet.
   const ring = new THREE.Mesh(

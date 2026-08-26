@@ -54,6 +54,44 @@ describe('auto-attacks', () => {
     expect(after).toBeLessThan(before);
   });
 
+  it('places a zone at the exact aim point when within cast range', () => {
+    const sim = new Sim(11);
+    const a = sim.addChampion(0, { x: 75, z: 75 }, 'elowen');
+    expect(sim.castAbility(a.id, 'W', { x: 78, z: 72 })).toBe(true);
+    const zone = [...sim.zones.values()].at(-1)!;
+    expect(zone.pos.x).toBeCloseTo(78, 5);
+    expect(zone.pos.z).toBeCloseTo(72, 5);
+  });
+
+  it('clamps a zone to max range along the aim direction when aimed beyond', () => {
+    const sim = new Sim(11);
+    const a = sim.addChampion(0, { x: 75, z: 75 }, 'elowen');
+    // Elowen's Veil has cast range 8; aiming 20 away lands at 8.
+    expect(sim.castAbility(a.id, 'W', { x: 95, z: 75 })).toBe(true);
+    const zone = [...sim.zones.values()].at(-1)!;
+    expect(zone.pos.x).toBeCloseTo(83, 5);
+    expect(zone.pos.z).toBeCloseTo(75, 5);
+  });
+
+  it('a tower switches onto an enemy that damaged an allied champion in range', () => {
+    const sim = new Sim(11);
+    // Team 1's vulnerable OUTER mid tower stands at (93, 93).
+    const tower = [...sim.units.values()].find(
+      (u) => u.kind === 'tower' && u.team === 1 && Math.hypot(u.pos.x - 93, u.pos.z - 93) < 2,
+    )!;
+    const bystander = sim.addChampion(0, { x: 91.5, z: 93 });
+    const attacker = sim.addChampion(0, { x: 96.5, z: 93 });
+    const victim = sim.addChampion(1, { x: 94.5, z: 93 });
+    sim.tick();
+    // Locked onto the nearest enemy champion first.
+    expect(tower.attackTargetId).toBe(bystander.id);
+    // The dive: the farther enemy hits the tower's allied champion.
+    victim.lastHitByChampion = attacker.id;
+    victim.lastHitAt = sim.time;
+    sim.tick();
+    expect(tower.attackTargetId).toBe(attacker.id);
+  });
+
   it('kills, emits a death event, and marks the champion dead', () => {
     const { sim, a, b } = duel();
     b.hp = 30;

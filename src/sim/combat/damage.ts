@@ -54,6 +54,11 @@ export function dealDamage(
     if (source && source.kind === 'champion' && source.team !== target.team) {
       target.lastHitByChampion = sourceId;
       target.lastHitAt = ctx.time;
+      // Assist bookkeeping: newest hit time per enemy champion, insertion
+      // order preserved for determinism.
+      const seen = target.recentDamagers.find((r) => r.id === sourceId);
+      if (seen) seen.at = ctx.time;
+      else target.recentDamagers.push({ id: sourceId, at: ctx.time });
     }
   }
   target.hp -= after;

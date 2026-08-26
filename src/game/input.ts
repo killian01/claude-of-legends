@@ -1,17 +1,19 @@
 // Local input, kept dumb: it reports ground points and key presses; the
 // entry point decides what they mean. Keys: right-click move/attack, A
 // attack-move, B recall, QWER abilities, DF sigils, P shop, Tab scoreboard,
-// Enter chat, G ping, Escape menu.
+// Enter chat, G ping, Space center camera, Escape menu.
 
 import type { Renderer } from '../render/renderer';
 import type { AbilityKey, Vec2 } from '../sim/types';
 
 export interface InputHandlers {
-  onRightClick(p: Vec2): void;
+  onRightClick(p: Vec2, screenX: number, screenY: number): void;
+  onHover(screenX: number, screenY: number): void;
   onCast(key: AbilityKey, aim: Vec2): void;
   onCastSigil(slot: number, aim: Vec2): void;
   onAttackMove(aim: Vec2): void;
   onRecall(): void;
+  onRecenterCamera(): void;
   onToggleShop(): void;
   onToggleScoreboard(): void;
   onToggleMenu(): void;
@@ -37,6 +39,7 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): void {
   el.addEventListener('pointermove', (e) => {
     mouseX = e.clientX;
     mouseY = e.clientY;
+    handlers.onHover(e.clientX, e.clientY);
   });
 
   el.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -46,7 +49,7 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): void {
     mouseX = e.clientX;
     mouseY = e.clientY;
     const p = renderer.groundPointAt(e.clientX, e.clientY);
-    if (p) handlers.onRightClick(p);
+    if (p) handlers.onRightClick(p, e.clientX, e.clientY);
   });
 
   window.addEventListener('keydown', (e) => {
@@ -62,6 +65,10 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): void {
     }
     if (e.key === 'Enter') {
       handlers.onOpenChat();
+      return;
+    }
+    if (e.key === ' ') {
+      handlers.onRecenterCamera();
       return;
     }
     if (e.repeat) return;
