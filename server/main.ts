@@ -42,7 +42,7 @@ interface Client {
 }
 
 const clients = new Map<number, Client>();
-const matches = new Map<number, { match: Match; endedAt: number | null }>();
+const matches = new Map<number, { match: Match; endedAt: number | null; failures: number }>();
 let nextClientId = 1;
 let nextMatchId = 1;
 
@@ -55,7 +55,7 @@ function send(clientId: number, msg: ServerMsg): void {
 const matchmaker = new Matchmaker(send, (picks) => {
   const id = nextMatchId++;
   const match = new Match((Date.now() % 2_000_000_000) + id, fillWithBots(picks));
-  matches.set(id, { match, endedAt: null });
+  matches.set(id, { match, endedAt: null, failures: 0 });
   for (const p of picks) {
     const c = clients.get(p.clientId);
     if (!c) continue;
@@ -77,7 +77,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     let filePath = path.join(DIST, url === '/' ? 'index.html' : url);
-    if (!filePath.startsWith(DIST)) {
+    if (filePath !== DIST && !filePath.startsWith(DIST + path.sep)) {
       res.writeHead(403).end();
       return;
     }
@@ -137,24 +137,27 @@ wss.on('connection', (ws) => {
     }
     if (client.name === null) return;
 
+    // A client already seated in a live match cannot re-enter matchmaking
+    // (review F.2: interleaved double-match snapshots corrupted the mirror).
+    const inMatch = client.matchId !== null;
     switch (msg.t) {
       case 'queue':
-        matchmaker.addToQueue(id, client.name, now);
+        if (!inMatch) matchmaker.addToQueue(id, client.name, now);
         break;
       case 'start_now':
-        matchmaker.startNow(id, now);
+        if (!inMatch) matchmaker.startNow(id, now);
         break;
       case 'leave':
         matchmaker.removeEverywhere(id);
         break;
       case 'create_lobby':
-        matchmaker.createLobby(id, client.name);
+        if (!inMatch) matchmaker.createLobby(id, client.name);
         break;
       case 'join_lobby':
-        matchmaker.joinLobby(id, client.name, String(msg.code ?? ''));
+        if (!inMatch) matchmaker.joinLobby(id, client.name, String(msg.code ?? ''));
         break;
       case 'start_lobby':
-        matchmaker.startLobby(id, now);
+        if (!inMatch) matchmaker.startLobby(id, now);
         break;
       case 'pick':
         matchmaker.pick(id, msg.championId, msg.sigils);
@@ -196,7 +199,20 @@ wss.on('connection', (ws) => {
 
   ws.on('close', () => {
     matchmaker.removeEverywhere(id);
+    const matchId = client.matchId;
     clients.delete(id);
+    // Reap matches whose players are all gone (review F.2: ghost matches
+    // kept ticking until a Sanctum fell).
+    if (matchId !== null) {
+      const entry = matches.get(matchId);
+      if (entry) {
+        const anyConnected = [...entry.match.players.keys()].some((cid) => clients.has(cid));
+        if (!anyConnected) {
+          matches.delete(matchId);
+          console.log(`match ${matchId} reaped: all players disconnected`);
+        }
+      }
+    }
   });
 });
 
@@ -231,8 +247,19 @@ setInterval(() => {
           matches.delete(matchId);
           console.log(`match ${matchId} closed`);
         }
+        entry.failures = 0;
       } catch (err) {
         console.error(`match ${matchId} tick failed`, err);
+        entry.failures += 1;
+        if (entry.failures > 200) {
+          for (const player of entry.match.players.values()) {
+            const c = clients.get(player.clientId);
+            if (c) c.matchId = null;
+            send(player.clientId, { t: 'match_end' });
+          }
+          matches.delete(matchId);
+          console.error(`match ${matchId} force-closed after repeated tick failures`);
+        }
       }
     }
   }

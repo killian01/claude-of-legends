@@ -59,7 +59,22 @@ export function applyEffects(
   target: Unit,
   specs: readonly EffectSpec[],
 ): void {
+  // Structures are immune to crowd control and displacement (review F.2:
+  // towers could be stunned and even taunted).
+  const structure = target.kind === 'tower' || target.kind === 'sanctum';
   for (const spec of specs) {
+    if (
+      structure &&
+      (spec.kind === 'slow' ||
+        spec.kind === 'root' ||
+        spec.kind === 'stun' ||
+        spec.kind === 'taunt' ||
+        spec.kind === 'knockback' ||
+        spec.kind === 'pull' ||
+        spec.kind === 'blind')
+    ) {
+      continue;
+    }
     switch (spec.kind) {
       case 'damage': {
         const amount = spec.base + (spec.adRatio ?? 0) * power.ad + (spec.apRatio ?? 0) * power.ap;
@@ -67,6 +82,7 @@ export function applyEffects(
         break;
       }
       case 'heal': {
+        if (target.dead || ctx.dead.has(target.id)) break;
         const amount = (spec.base + (spec.apRatio ?? 0) * power.ap) * healFactor(target, ctx.time);
         target.hp = Math.min(target.maxHp, target.hp + amount);
         break;
@@ -110,7 +126,8 @@ export function applyEffects(
         break;
       }
       case 'shield': {
-        const value = spec.base + (spec.apRatio ?? 0) * power.ap;
+        // Grievous wounds cut shields like heals (review F.2).
+        const value = (spec.base + (spec.apRatio ?? 0) * power.ap) * healFactor(target, ctx.time);
         addStatus(target, {
           kind: 'shield',
           until: ctx.time + spec.duration,

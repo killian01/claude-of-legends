@@ -47,6 +47,7 @@ export function buildSnapshot(
 ): ServerMsg {
   const units: SnapUnit[] = [];
   const visibleNow = new Set<number>();
+  const knownBefore = new Set(known);
   for (const u of sim.units.values()) {
     if (!sim.isVisible(team, u.id)) continue;
     visibleNow.add(u.id);
@@ -81,14 +82,17 @@ export function buildSnapshot(
     }
   }
 
-  // Projectiles and zones ship unfiltered for now; scoping them by the
-  // visibility of their source is a noted refinement.
+  // Fog-scoped: an enemy projectile or zone only ships while its position
+  // is inside the team's sight (review F.2: unfiltered projectiles were a
+  // maphack vector).
   const projectiles: SnapMobile[] = [];
   for (const p of sim.projectiles.values()) {
+    if (p.team !== team && !sim.isPointVisible(team, p.pos.x, p.pos.z)) continue;
     projectiles.push({ i: p.id, x: round2(p.pos.x), z: round2(p.pos.z), r: p.radius, t: p.team });
   }
   const zones: SnapMobile[] = [];
   for (const z of sim.zones.values()) {
+    if (z.team !== team && !sim.isPointVisible(team, z.pos.x, z.pos.z)) continue;
     zones.push({ i: z.id, x: round2(z.pos.x), z: round2(z.pos.z), r: z.radius, t: z.team });
   }
 
@@ -116,7 +120,13 @@ export function buildSnapshot(
   const snapEvents: SnapEvent[] = [];
   for (const ev of events) {
     if (ev.type === 'death') {
-      snapEvents.push({ e: 'death', unitId: ev.unitId, killerId: ev.killerId });
+      // Champion deaths are global (the kill feed, genre standard); other
+      // deaths only reach clients that could see the unit.
+      const victim = sim.units.get(ev.unitId);
+      const isChampion = victim?.kind === 'champion';
+      if (isChampion || knownBefore.has(ev.unitId)) {
+        snapEvents.push({ e: 'death', unitId: ev.unitId, killerId: ev.killerId });
+      }
     } else if (ev.type === 'gold' && ev.unitId === selfUnitId) {
       // Personal: your own last-hit and kill income only.
       snapEvents.push({ e: 'gold', amount: ev.amount });

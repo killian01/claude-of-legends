@@ -93,15 +93,17 @@ describe('waves push', () => {
 });
 
 describe('a full bot match progresses to an end', () => {
-  it('destroys towers, reaches ultimates, completes items, and stays bounded', () => {
+  it('ENDS, destroys towers, reaches ultimates, completes items, stays bounded', () => {
     const sim = botMatch(55);
     let winnerAt: number | null = null;
-    for (let i = 0; i < 9600 && winnerAt === null; i++) {
+    // Cap at 25 sim-minutes: the match must conclude on its own inside it.
+    for (let i = 0; i < 30000 && winnerAt === null; i++) {
       sim.tick();
       if (sim.winner !== null) winnerAt = i;
     }
+    expect(sim.winner, 'the match must END on its own').not.toBeNull();
     const towers = [...sim.units.values()].filter((u) => u.kind === 'tower');
-    expect(towers.length, 'at least one tower must fall within 8 minutes').toBeLessThan(16);
+    expect(towers.length, 'towers must fall').toBeLessThan(16);
     const champions = [...sim.units.values()].filter((u) => u.kind === 'champion');
     expect(Math.max(...champions.map((c) => c.level))).toBeGreaterThanOrEqual(6);
     const tier2Owned = champions.some((c) =>
