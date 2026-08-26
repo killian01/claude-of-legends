@@ -9,7 +9,9 @@ describe('self-cast preference', () => {
   it('mend aimed at yourself heals YOU even next to a full-hp ally', () => {
     const sim = new Sim(23);
     const me = sim.addChampion(0, { x: 75, z: 75 });
+    me.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     const ally = sim.addChampion(0, { x: 76.5, z: 75 });
+    ally.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     me.hp = 100;
     expect(sim.castSigil(me.id, 1, { x: me.pos.x, z: me.pos.z })).toBe(true);
     expect(me.hp).toBeCloseTo(320, 0);
@@ -22,6 +24,7 @@ describe('structures are immune to crowd control', () => {
     const sim = new Sim(23);
     // Torv next to the enemy OUTER mid tower (vulnerable).
     const torv = sim.addChampion(0, { x: 91, z: 93 }, 'torv');
+    torv.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     torv.level = 6;
     const tower = [...sim.units.values()].find(
       (u) =>
@@ -39,6 +42,7 @@ describe('roots block dashes', () => {
   it('a rooted champion cannot riftstep or dash', () => {
     const sim = new Sim(23);
     const fenn = sim.addChampion(0, { x: 75, z: 75 }, 'fenn');
+    fenn.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     fenn.statuses.push({ kind: 'root', until: sim.time + 5 });
     expect(isRooted(fenn, sim.time)).toBe(true);
     expect(sim.castSigil(fenn.id, 0, { x: 80, z: 75 })).toBe(false); // riftstep
@@ -51,7 +55,9 @@ describe('stealth drops auto-attackers', () => {
   it('an attacker loses its order when the target stealths', () => {
     const sim = new Sim(23);
     const attacker = sim.addChampion(0, { x: 75, z: 75 });
+    attacker.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     const fenn = sim.addChampion(1, { x: 78, z: 75 }, 'fenn');
+    fenn.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     sim.tick();
     sim.orderAttack(attacker.id, fenn.id);
     sim.tick();
@@ -66,6 +72,7 @@ describe('death economics', () => {
   it('does not refresh ability cooldowns', () => {
     const sim = new Sim(23);
     const a = sim.addChampion(0, { x: 75, z: 75 });
+    a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     sim.castAbility(a.id, 'Q', { x: 80, z: 75 });
     const cd = a.cooldowns.Q ?? 0;
     expect(cd).toBeGreaterThan(0);
@@ -82,6 +89,7 @@ describe('grievous wounds', () => {
   it('cut shields as well as heals', () => {
     const sim = new Sim(23);
     const a = sim.addChampion(0, { x: 75, z: 75 });
+    a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     a.statuses.push({ kind: 'grievous', until: sim.time + 10, factor: 0.4 });
     expect(healFactor(a, sim.time)).toBeCloseTo(0.6, 5);
     sim.castAbility(a.id, 'E', { x: a.pos.x, z: a.pos.z }); // Verdant Shell, base 70
@@ -98,6 +106,7 @@ describe('fog scoping of projectiles and zones on the wire', () => {
     ]);
     const bobId = match.players.get(2)!.unitId;
     // Bob drops his W at his own fountain, far outside alice's vision.
+    match.sim.units.get(bobId)!.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     match.sim.castAbility(bobId, 'W', { x: 140, z: 140 });
     match.tick();
     const aliceSnap = match.buildSnapshotFor(1);
@@ -111,6 +120,7 @@ describe('recall interactions', () => {
   it('attack-move cancels a recall', () => {
     const sim = new Sim(23);
     const a = sim.addChampion(0, { x: 75, z: 75 });
+    a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     sim.startRecall(a.id);
     expect(isRecalling(a, sim.time)).toBe(true);
     sim.orderAttackMove(a.id, 90, 75);

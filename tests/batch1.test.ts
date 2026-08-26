@@ -80,6 +80,7 @@ describe('statuses on the wire', () => {
     const { match, a, step } = wire();
     step(1);
     const selfId = a.selfUnitId;
+    match.sim.units.get(selfId)!.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     match.sim.castAbility(selfId, 'E', { x: 75, z: 75 }); // Verdant Shell on self
     step(2);
     const self = a.units.get(selfId)!;
@@ -121,6 +122,7 @@ describe('combat notes on the wire', () => {
     step(1);
     // Bob casts at his own fountain, far outside alice's vision.
     const bobId = match.players.get(2)!.unitId;
+    match.sim.units.get(bobId)!.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     match.sim.castAbility(bobId, 'W', { x: 140, z: 140 });
     const snaps = step(1);
     for (const s of snaps.a) {

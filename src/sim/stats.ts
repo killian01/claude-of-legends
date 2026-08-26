@@ -99,7 +99,8 @@ export function gainXp(u: Unit, amount: number): void {
 export function effectiveRank(u: Unit, key: 'Q' | 'W' | 'E' | 'R'): number {
   const stored = u.abilityRanks[key] ?? 0;
   if (key === 'R') return stored > 0 ? stored : u.level >= 6 ? 1 : 0;
-  return Math.max(1, stored);
+  // Basics are EARNED: rank 0 means unlearned (the level 1 skill choice).
+  return stored;
 }
 
 export const BASIC_MAX_RANK = 5;

@@ -61,7 +61,12 @@ export const DAIN: ChampionDef = {
       spec: {
         kind: 'burst',
         radius: 2.5,
-        effects: [{ kind: 'damage', base: 81, apRatio: 0.4, dtype: 'magic' }],
+        // The roster's burn-while-held: enemies caught in the guard keep
+        // burning while the shield holds.
+        effects: [
+          { kind: 'damage', base: 40, apRatio: 0.2, dtype: 'magic' },
+          { kind: 'dot', duration: 3, perSecond: 22, dtype: 'magic' },
+        ],
         selfEffects: [{ kind: 'shield', base: 90, duration: 3 }],
       },
     },

@@ -2,7 +2,7 @@
 // blind, stealth, and attack speed buffs, each through a real champion kit.
 
 import { describe, expect, it } from 'vitest';
-import { addStatus, effectiveMoveSpeed, isStunned } from '../src/sim/combat/status';
+import { addStatus, effectiveMoveSpeed, isAirborne, isStunned } from '../src/sim/combat/status';
 import { Sim } from '../src/sim/sim';
 import type { Unit } from '../src/sim/unit';
 
@@ -14,7 +14,9 @@ function arena(
 ): { sim: Sim; a: Unit; b: Unit } {
   const sim = new Sim(13);
   const a = sim.addChampion(0, aPos, aChamp);
+  a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
   const b = sim.addChampion(1, bPos, bChamp);
+  b.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
   return { sim, a, b };
 }
 
@@ -42,12 +44,50 @@ describe('combat primitives', () => {
     expect(a.hp).toBeLessThan(a.maxHp);
   });
 
-  it('knockback pushes enemies away from the wave', () => {
+  it('the great wave knocks its victims airborne', () => {
     const { sim, a, b } = arena('maera', 'sylra', { x: 75, z: 75 }, { x: 79, z: 75 });
     a.level = 6;
     expect(sim.castAbility(a.id, 'R', { x: 79, z: 75 })).toBe(true);
+    // 0.5 s windup, then the wave travels; the hit lifts the target.
+    let lifted = false;
+    for (let i = 0; i < 40 && !lifted; i++) {
+      sim.tick();
+      if (isAirborne(b, sim.time)) lifted = true;
+    }
+    expect(lifted).toBe(true);
+    // Airborne acts as a stun: no moving out of it.
+    sim.orderMove(b.id, 95, 75);
+    const before = { ...b.pos };
+    sim.tick();
+    expect(b.pos).toEqual(before);
+  });
+
+  it('a windup delays the cast and a stun during it cancels the spell', () => {
+    const { sim, a } = arena('vesk', 'sylra', { x: 75, z: 75 }, { x: 83, z: 75 });
+    a.level = 6;
+    // Horizon Shot has a 0.6 s windup: paid at press, fired later.
+    expect(sim.castAbility(a.id, 'R', { x: 83, z: 75 })).toBe(true);
+    sim.tick();
+    expect(sim.projectiles.size).toBe(0);
+    for (let i = 0; i < 13; i++) sim.tick();
+    expect(sim.projectiles.size).toBe(1);
+
+    const { sim: sim2, a: a2 } = arena('vesk', 'sylra', { x: 75, z: 75 }, { x: 83, z: 75 });
+    a2.level = 6;
+    expect(sim2.castAbility(a2.id, 'R', { x: 83, z: 75 })).toBe(true);
+    addStatus(a2, { kind: 'stun', until: sim2.time + 1 });
+    for (let i = 0; i < 20; i++) sim2.tick();
+    expect(sim2.projectiles.size).toBe(0);
+    expect(a2.pendingSpell).toBeNull();
+  });
+
+  it('untargetable units take no damage and drop attackers', () => {
+    const { sim, a, b } = arena('vesk', 'fenn', { x: 75, z: 75 }, { x: 79, z: 75 });
+    addStatus(b, { kind: 'untargetable', until: sim.time + 2 });
+    sim.orderAttack(a.id, b.id);
     for (let i = 0; i < 20; i++) sim.tick();
-    expect(b.pos.x).toBeGreaterThan(80);
+    expect(b.hp).toBe(b.maxHp);
+    expect(a.attackTargetId).toBeNull();
   });
 
   it('pull drags the victim toward the caster', () => {
@@ -60,8 +100,11 @@ describe('combat primitives', () => {
   it('piercing skillshots hit everyone along the line', () => {
     const sim = new Sim(13);
     const a = sim.addChampion(0, { x: 75, z: 75 }, 'vesk');
+    a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     const b1 = sim.addChampion(1, { x: 78, z: 75 }, 'sylra');
+    b1.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     const b2 = sim.addChampion(1, { x: 82, z: 75 }, 'sylra');
+    b2.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     expect(sim.castAbility(a.id, 'Q', { x: 82, z: 75 })).toBe(true);
     for (let i = 0; i < 20; i++) sim.tick();
     expect(b1.hp).toBeLessThan(b1.maxHp);
@@ -71,8 +114,11 @@ describe('combat primitives', () => {
   it('ally waves heal friends and damage foes on one cast', () => {
     const sim = new Sim(13);
     const a = sim.addChampion(0, { x: 75, z: 75 }, 'maera');
+    a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     const ally = sim.addChampion(0, { x: 78, z: 75 }, 'fenn');
+    ally.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     const enemy = sim.addChampion(1, { x: 81, z: 75 }, 'sylra');
+    enemy.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     ally.hp = 300;
     expect(sim.castAbility(a.id, 'Q', { x: 81, z: 75 })).toBe(true);
     for (let i = 0; i < 20; i++) sim.tick();
@@ -83,7 +129,9 @@ describe('combat primitives', () => {
   it('blind shrinks an observer sight radius', () => {
     const sim = new Sim(13);
     const watcher = sim.addChampion(0, { x: 70, z: 75 });
+    watcher.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     const enemy = sim.addChampion(1, { x: 78, z: 75 });
+    enemy.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     sim.tick();
     expect(sim.isVisible(0, enemy.id)).toBe(true);
     addStatus(watcher, { kind: 'blind', until: 1000, factor: 0.4 });
@@ -94,7 +142,9 @@ describe('combat primitives', () => {
   it('stealth hides a champion and breaks on attacking', () => {
     const sim = new Sim(13);
     const watcher = sim.addChampion(0, { x: 72, z: 75 });
+    watcher.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     const fenn = sim.addChampion(1, { x: 75, z: 75 }, 'fenn');
+    fenn.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     sim.tick();
     expect(sim.isVisible(0, fenn.id)).toBe(true);
     expect(sim.castAbility(fenn.id, 'E', { x: 75, z: 75 })).toBe(true);
@@ -110,7 +160,9 @@ describe('combat primitives', () => {
     const dps = (buffed: boolean): number => {
       const sim = new Sim(13);
       const a = sim.addChampion(0, { x: 75, z: 75 }, 'vesk');
+      a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
       const b = sim.addChampion(1, { x: 79, z: 75 }, 'korrath');
+      b.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
       if (buffed) addStatus(a, { kind: 'buff', until: 1000, msPct: 0, asPct: 1, armor: 0, mr: 0 });
       sim.orderAttack(a.id, b.id);
       for (let i = 0; i < 80; i++) sim.tick();
@@ -122,6 +174,7 @@ describe('combat primitives', () => {
   it('zephyr-style move speed buffs stack onto effective speed', () => {
     const sim = new Sim(13);
     const a = sim.addChampion(0, { x: 75, z: 75 });
+    a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     const base = effectiveMoveSpeed(a, sim.time);
     addStatus(a, { kind: 'buff', until: 1000, msPct: 0.35, asPct: 0, armor: 0, mr: 0 });
     expect(effectiveMoveSpeed(a, sim.time)).toBeCloseTo(base * 1.35, 5);

@@ -31,15 +31,21 @@ export function schoolColorOf(spec: CastSpec): { main: number; glow: number } {
   return schoolOf(spec);
 }
 
-function schoolOf(spec: CastSpec): School {
+// The school tag for a cast spec; also keys the per-school cast sounds.
+export function schoolTagOf(spec: CastSpec): string {
   const json = JSON.stringify(spec);
   const has = (w: string): boolean => json.includes(`"${w}"`);
-  if (has('dot') || has('burn')) return SCHOOLS.fire!;
-  if (has('heal') || has('shield')) return SCHOOLS.life!;
-  if (has('stun') || has('taunt') || has('knockback') || has('pull')) return SCHOOLS.control!;
-  if (spec.kind === 'dash' || has('haste')) return SCHOOLS.wind!;
-  if (json.includes('adRatio')) return SCHOOLS.steel!;
-  return SCHOOLS.arcane!;
+  if (has('dot') || has('burn')) return 'fire';
+  if (has('heal') || has('shield')) return 'life';
+  if (has('stun') || has('taunt') || has('knockback') || has('pull') || has('knockup'))
+    return 'control';
+  if (spec.kind === 'dash' || has('haste')) return 'wind';
+  if (json.includes('adRatio')) return 'steel';
+  return 'arcane';
+}
+
+function schoolOf(spec: CastSpec): School {
+  return SCHOOLS[schoolTagOf(spec)] ?? SCHOOLS.arcane!;
 }
 
 // 'championId_KEY' or 'sigil_id' back to the cast spec it came from.
@@ -90,12 +96,15 @@ export function buildProjectileMesh(
       }),
     );
   }
+  // Blend a third of the team color into the school color: friend and foe
+  // casting the same spell must read differently (player review).
   const school = schoolOf(spec);
+  const main = new THREE.Color(school.main).lerp(new THREE.Color(teamLight), 0.35);
   const holder = new THREE.Group();
   const r = Math.max(0.32, p.radius * 0.85);
   const coreMat = new THREE.MeshLambertMaterial({
-    color: school.main,
-    emissive: school.main,
+    color: main,
+    emissive: main,
     emissiveIntensity: 0.8,
     flatShading: true,
   });
@@ -131,10 +140,12 @@ export function buildZoneMesh(z: Readonly<Zone>, world: IWorld, teamColor: numbe
     );
     return mesh;
   }
+  // Team-tinted like projectiles: your zone and theirs never match.
   const school = schoolOf(spec);
+  const main = new THREE.Color(school.main).lerp(new THREE.Color(teamColor), 0.35);
   const holder = new THREE.Group();
   const fillMat = new THREE.MeshBasicMaterial({
-    color: school.main,
+    color: main,
     transparent: true,
     opacity: 0.2,
     depthWrite: false,
@@ -144,7 +155,7 @@ export function buildZoneMesh(z: Readonly<Zone>, world: IWorld, teamColor: numbe
   fill.rotation.x = -Math.PI / 2;
   fill.position.y = 0.1;
   holder.add(fill);
-  const rimMat = new THREE.MeshBasicMaterial({ color: school.main });
+  const rimMat = new THREE.MeshBasicMaterial({ color: main });
   rimMat.toneMapped = false;
   const rim = new THREE.Mesh(new THREE.TorusGeometry(z.radius, 0.13, 6, 36), rimMat);
   rim.rotation.x = -Math.PI / 2;

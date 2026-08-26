@@ -202,6 +202,19 @@ export function startMusic(): void {
   state = s;
 }
 
+// Briefly lowers the score under the announcer's voice, then swells back.
+export function duckMusic(durationMs = 1200): void {
+  const b = audioBus();
+  if (!b || !state) return;
+  const g = state.out.gain;
+  const t = b.ctx.currentTime;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(g.value, t);
+  g.linearRampToValueAtTime(MUSIC_VOL * 0.3, t + 0.15);
+  g.setValueAtTime(MUSIC_VOL * 0.3, t + durationMs / 1000);
+  g.linearRampToValueAtTime(MUSIC_VOL, t + durationMs / 1000 + 0.7);
+}
+
 // Fades the score out (end of match); safe to call repeatedly.
 export function stopMusic(fadeS = 2.5): void {
   const b = audioBus();

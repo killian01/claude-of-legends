@@ -83,6 +83,7 @@ describe('auto-attacks', () => {
   it('places a zone at the exact aim point when within cast range', () => {
     const sim = new Sim(11);
     const a = sim.addChampion(0, { x: 75, z: 75 }, 'elowen');
+    a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     expect(sim.castAbility(a.id, 'W', { x: 78, z: 72 })).toBe(true);
     const zone = [...sim.zones.values()].at(-1)!;
     expect(zone.pos.x).toBeCloseTo(78, 5);
@@ -92,6 +93,7 @@ describe('auto-attacks', () => {
   it('clamps a zone to max range along the aim direction when aimed beyond', () => {
     const sim = new Sim(11);
     const a = sim.addChampion(0, { x: 75, z: 75 }, 'elowen');
+    a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     // Elowen's Veil has cast range 8; aiming 20 away lands at 8.
     expect(sim.castAbility(a.id, 'W', { x: 95, z: 75 })).toBe(true);
     const zone = [...sim.zones.values()].at(-1)!;

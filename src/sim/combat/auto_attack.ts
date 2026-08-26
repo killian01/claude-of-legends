@@ -10,7 +10,14 @@ import { findPath } from '../pathfind';
 import type { CombatCtx } from '../sim_context';
 import { hostile, type Unit } from '../unit';
 import { dealDamage } from './damage';
-import { attackSpeedBonusPct, breakStealth, isStealthed, isStunned, tauntSourceId } from './status';
+import {
+  attackSpeedBonusPct,
+  breakStealth,
+  isStealthed,
+  isStunned,
+  isUntargetable,
+  tauntSourceId,
+} from './status';
 
 const RANGED_THRESHOLD = 2;
 const BOLT_SPEED = 30;
@@ -80,7 +87,8 @@ export function stepAutoAttacks(ctx: CombatCtx, nav: NavGrid): void {
       target.dead ||
       ctx.dead.has(target.id) ||
       !hostile(u, target) ||
-      isStealthed(target, ctx.time)
+      isStealthed(target, ctx.time) ||
+      isUntargetable(target, ctx.time)
     ) {
       u.attackTargetId = null;
       continue;

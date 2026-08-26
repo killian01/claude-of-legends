@@ -16,8 +16,15 @@ function ccChips(u: Unit, time: number): { k: string; v?: number }[] {
   const out: { k: string; v?: number }[] = [];
   for (const s of u.statuses) {
     if (s.until <= time) continue;
-    if (s.kind === 'stun' || s.kind === 'root' || s.kind === 'recall') out.push({ k: s.kind });
-    else if (s.kind === 'slow') out.push({ k: 'slow', v: round2(s.pct) });
+    if (
+      s.kind === 'stun' ||
+      s.kind === 'root' ||
+      s.kind === 'recall' ||
+      s.kind === 'airborne' ||
+      s.kind === 'untargetable'
+    ) {
+      out.push({ k: s.kind });
+    } else if (s.kind === 'slow') out.push({ k: 'slow', v: round2(s.pct) });
   }
   return out;
 }

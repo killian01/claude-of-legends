@@ -30,6 +30,8 @@ export type EffectSpec =
   | { kind: 'blind'; duration: number; factor: number }
   | { kind: 'knockback'; distance: number }
   | { kind: 'pull'; distance: number }
+  | { kind: 'knockup'; duration: number }
+  | { kind: 'untargetable'; duration: number }
   | { kind: 'shield'; base: number; apRatio?: number; duration: number }
   | { kind: 'dot'; duration: number; perSecond: number; dtype: DamageType }
   | { kind: 'grievous'; duration: number; factor: number }
@@ -77,6 +79,7 @@ export function applyEffects(
         spec.kind === 'taunt' ||
         spec.kind === 'knockback' ||
         spec.kind === 'pull' ||
+        spec.kind === 'knockup' ||
         spec.kind === 'blind')
     ) {
       continue;
@@ -135,6 +138,14 @@ export function applyEffects(
         if (travel > 0) displace(ctx, target, dx, dz, travel);
         break;
       }
+      case 'knockup':
+        // Airborne: acts as a stun in the rules, renders as a lift.
+        addStatus(target, { kind: 'airborne', until: ctx.time + spec.duration });
+        target.path = [];
+        break;
+      case 'untargetable':
+        addStatus(target, { kind: 'untargetable', until: ctx.time + spec.duration });
+        break;
       case 'shield': {
         // Grievous wounds cut shields like heals (review F.2).
         const value =

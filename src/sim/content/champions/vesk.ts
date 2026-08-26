@@ -83,6 +83,7 @@ export const VESK: ChampionDef = {
       manaCost: 85,
       cooldown: 67.5,
       castRange: 40,
+      windup: 0.6,
       spec: {
         kind: 'skillshot',
         speed: 34,

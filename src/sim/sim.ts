@@ -9,7 +9,7 @@ import { stepAttackMove } from './attack_move';
 import { runBotDecisions } from './bot_driver';
 import { initialCampStates, onCampSlain, stepCamps } from './camps';
 import { stepAutoAttacks } from './combat/auto_attack';
-import { castAbility, executeCast } from './combat/casting';
+import { castAbility, executeCast, stepWindups } from './combat/casting';
 import { stepDots } from './combat/dots';
 import {
   breakStealth,
@@ -392,6 +392,27 @@ export class Sim {
     return true;
   }
 
+  // Sells the item in `slot` for 70 percent of its own price, fountain
+  // only (player review: one misclick should not be gold gone forever).
+  sellItem(unitId: number, slot: number): boolean {
+    if (this.winner !== null) return false;
+    const u = this.units.get(unitId);
+    if (!u || u.kind !== 'champion' || u.dead || this.dead.has(unitId)) return false;
+    const fountain = this.map.fountains.find((f) => f.team === u.team);
+    if (!fountain) return false;
+    if (Math.hypot(u.pos.x - fountain.x, u.pos.z - fountain.z) > fountain.r + SHOP_RANGE_PAD) {
+      return false;
+    }
+    const itemId = u.items[slot];
+    if (itemId === undefined) return false;
+    const def = ITEMS[itemId];
+    if (!def) return false;
+    u.items = u.items.filter((_, i) => i !== slot);
+    u.gold += Math.floor(def.cost * 0.7);
+    recalcChampion(u);
+    return true;
+  }
+
   tick(): SimEvent[] {
     const ctx = this.ctx();
 
@@ -423,10 +444,13 @@ export class Sim {
     stepTowerAi(ctx);
     stepAttackMove(this);
     stepIdleDefense(this);
+    stepWindups(ctx, (championId) => CHAMPIONS[championId]?.abilities ?? null);
     stepAutoAttacks(ctx, this.nav);
 
     for (const u of this.units.values()) {
       if (u.path.length === 0 || u.dead || this.dead.has(u.id)) continue;
+      // Winding up a cast plants the caster.
+      if (u.pendingSpell) continue;
       const speed = effectiveMoveSpeed(u, this.time);
       if (speed > 0) stepMovement(u, DT, speed);
     }

@@ -11,7 +11,7 @@ import type { CombatCtx } from '../sim_context';
 import { isInvulnerable } from '../structure_rules';
 import type { DamageType } from '../types';
 import type { Unit } from '../unit';
-import { absorbWithShields, armorBonus, cancelRecall, mrBonus } from './status';
+import { absorbWithShields, armorBonus, cancelRecall, isUntargetable, mrBonus } from './status';
 
 // Buff-granted armor/mr counts; expired statuses are pruned at tick start so
 // no time parameter is needed here. Percent penetration shreds the resist
@@ -42,6 +42,8 @@ export function dealDamage(
   via: DamageVia = 'other',
 ): void {
   if (ctx.dead.has(target.id) || target.dead) return;
+  // Untargetable units (Fenn's Shadow Flurry) take nothing from anyone.
+  if (isUntargetable(target, ctx.time)) return;
   if ((target.kind === 'tower' || target.kind === 'sanctum') && isInvulnerable(ctx.units, target)) {
     return;
   }

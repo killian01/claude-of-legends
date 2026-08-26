@@ -18,6 +18,23 @@ export function brushIndexAt(map: GameMap, p: Vec2): number {
   return -1;
 }
 
+// True when the sight line from a to b passes through a jungle wall blob:
+// rock blocks sight, not just movement (player review: units were visible
+// straight through terrain).
+export function sightBlocked(map: GameMap, a: Vec2, b: Vec2): boolean {
+  const abx = b.x - a.x;
+  const abz = b.z - a.z;
+  const len2 = abx * abx + abz * abz;
+  for (const w of map.walls) {
+    const t =
+      len2 > 0 ? Math.max(0, Math.min(1, ((w.x - a.x) * abx + (w.z - a.z) * abz) / len2)) : 0;
+    const cx = a.x + abx * t;
+    const cz = a.z + abz * t;
+    if (Math.hypot(w.x - cx, w.z - cz) <= w.r) return true;
+  }
+  return false;
+}
+
 // For each team, the set of ENEMY unit ids that team can currently see.
 export function computeVisibility(
   map: GameMap,
@@ -41,6 +58,7 @@ export function computeVisibility(
         const d = Math.hypot(src.pos.x - target.pos.x, src.pos.z - target.pos.z);
         if (d > src.sightRange * sightFactor(src, time)) continue;
         if (targetBrush !== -1 && brush.get(src.id) !== targetBrush) continue;
+        if (sightBlocked(map, src.pos, target.pos)) continue;
         sets[observer].add(target.id);
         break;
       }

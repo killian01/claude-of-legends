@@ -87,6 +87,8 @@ export const FENN: ChampionDef = {
         kind: 'enemy_target',
         searchRadius: 2,
         effects: [{ kind: 'damage', base: 228, adRatio: 1.9, dtype: 'physical' }],
+        // The roster's promised untouchability during the flurry.
+        selfEffects: [{ kind: 'untargetable', duration: 1.0 }],
       },
     },
   },

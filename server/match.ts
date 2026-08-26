@@ -91,6 +91,9 @@ export class Match {
       case 'stop':
         this.sim.orderStop(p.unitId);
         break;
+      case 'sell':
+        if (typeof msg.slot === 'number') this.sim.sellItem(p.unitId, msg.slot);
+        break;
       case 'recall':
         this.sim.startRecall(p.unitId);
         break;

@@ -13,6 +13,8 @@ export interface ChampionPassive {
   description: string;
   // After an auto-attack of `self` lands on `target`.
   onAttackHit?(ctx: CombatCtx, self: Unit, target: Unit): void;
+  // After `self` pays for an ability cast (before it resolves).
+  onCast?(ctx: CombatCtx, self: Unit, key: 'Q' | 'W' | 'E' | 'R'): void;
   // Before mitigation of damage dealt BY `self`; returns the new amount.
   modifyDamage?(
     ctx: CombatCtx,

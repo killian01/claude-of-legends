@@ -15,12 +15,18 @@ export const ASHVYN: ChampionDef = {
   blurb: 'A mobile duelist marksman who weaves in and out of range.',
   passive: {
     name: 'Twinshot',
-    description: 'Every third attack strikes twice (the echo deals 50 percent damage).',
+    description:
+      'Every third attack strikes twice (the echo deals 50 percent damage). ' +
+      "Casting Hunter's Step readies the echo instantly.",
     onAttackHit(ctx, self, target) {
       self.passiveStacks += 1;
       if (self.passiveStacks < TWINSHOT_EVERY) return;
       self.passiveStacks = 0;
       dealDamage(ctx, self.id, target, self.stats.ad * TWINSHOT_RATIO, 'physical', 'other');
+    },
+    // The roster's promised W synergy: the dash primes the next echo.
+    onCast(_ctx, self, key) {
+      if (key === 'W') self.passiveStacks = TWINSHOT_EVERY - 1;
     },
   },
   base: {

@@ -10,6 +10,10 @@ export type Status =
   | { kind: 'root'; until: number }
   | { kind: 'recall'; until: number }
   | { kind: 'stun'; until: number }
+  // Knocked into the air: acts like a stun and renders as a lift.
+  | { kind: 'airborne'; until: number }
+  // Cannot be damaged or targeted (Fenn's Shadow Flurry).
+  | { kind: 'untargetable'; until: number }
   | { kind: 'taunt'; until: number; sourceId: number }
   | { kind: 'stealth'; until: number }
   | { kind: 'blind'; until: number; factor: number }
@@ -68,11 +72,19 @@ function has(u: Unit, kind: Status['kind'], time: number): boolean {
 }
 
 export function isRooted(u: Unit, time: number): boolean {
-  return has(u, 'root', time) || has(u, 'stun', time);
+  return has(u, 'root', time) || isStunned(u, time);
 }
 
 export function isStunned(u: Unit, time: number): boolean {
-  return has(u, 'stun', time);
+  return has(u, 'stun', time) || has(u, 'airborne', time);
+}
+
+export function isAirborne(u: Unit, time: number): boolean {
+  return has(u, 'airborne', time);
+}
+
+export function isUntargetable(u: Unit, time: number): boolean {
+  return has(u, 'untargetable', time);
 }
 
 export function isStealthed(u: Unit, time: number): boolean {

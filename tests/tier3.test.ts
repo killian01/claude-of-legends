@@ -22,6 +22,23 @@ describe('tier 3 items', () => {
     }
   });
 
+  it('selling refunds 70 percent at the fountain only', () => {
+    const sim = new Sim(11);
+    const a = sim.addChampion(0);
+    a.items = ['warbrand'];
+    recalcChampion(a);
+    const adWith = a.stats.ad;
+    const goldBefore = a.gold;
+    expect(sim.sellItem(a.id, 0)).toBe(true);
+    expect(a.items).toHaveLength(0);
+    expect(a.gold - goldBefore).toBe(Math.floor(1300 * 0.7));
+    expect(a.stats.ad).toBeLessThan(adWith);
+    // Away from the fountain, no sale.
+    a.items = ['warbrand'];
+    a.pos = { x: 75, z: 75 };
+    expect(sim.sellItem(a.id, 0)).toBe(false);
+  });
+
   it('buying a legendary consumes the parts and applies the stat line', () => {
     const sim = new Sim(11);
     const a = sim.addChampion(0);

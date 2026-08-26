@@ -30,6 +30,7 @@ describe('the roster', () => {
     for (const def of CHAMPION_LIST) {
       const sim = new Sim(4);
       const a = sim.addChampion(0, { x: 75, z: 75 }, def.id);
+      a.abilityRanks = { Q: 1, W: 1, E: 1, R: 1 };
       const b = sim.addChampion(1, { x: 77, z: 75 }, 'sylra');
       a.level = 6;
       a.mana = 999;
