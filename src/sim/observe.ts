@@ -7,6 +7,7 @@ import { CHAMPIONS } from './content/champions';
 import { SIGILS } from './content/sigils';
 import type { Observation, ObsUnit } from './policy';
 import type { Sim } from './sim';
+import { isInvulnerable } from './structure_rules';
 import { type AbilityKey, ULT_LEVEL } from './types';
 
 const KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
@@ -35,7 +36,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
   for (const other of sim.units.values()) {
     if (other.id === u.id) continue;
     if (!sim.isVisible(u.team, other.id)) continue;
-    units.push({
+    const row: ObsUnit = {
       id: other.id,
       kind: other.kind,
       friendly: other.team === u.team,
@@ -43,7 +44,11 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       z: other.pos.z,
       hpFrac: other.maxHp > 0 ? other.hp / other.maxHp : 0,
       radius: other.radius,
-    });
+    };
+    if (other.kind === 'tower' || other.kind === 'sanctum') {
+      row.invulnerable = isInvulnerable(sim.units, other);
+    }
+    units.push(row);
   }
 
   return {

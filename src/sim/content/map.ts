@@ -116,13 +116,15 @@ export const GAME_MAP: GameMap = {
       }),
     ),
   ],
+  // No polyline VERTEX may coincide with a tower spot: a tower footprint
+  // makes the cells around it unwalkable and minions could never "reach"
+  // such a waypoint (review finding F.0). tests/map.test.ts pins this.
   lanes: {
     top: [
       { x: 17, z: 23 },
       { x: 13, z: 50 },
       { x: 13, z: 128 },
       { x: 22, z: 137 },
-      { x: 50, z: 137 },
       { x: 127, z: 137 },
       { x: 133, z: 133 },
     ],
@@ -138,7 +140,6 @@ export const GAME_MAP: GameMap = {
       { x: 50, z: 13 },
       { x: 128, z: 13 },
       { x: 137, z: 22 },
-      { x: 137, z: 50 },
       { x: 137, z: 127 },
       { x: 133, z: 133 },
     ],

@@ -21,6 +21,9 @@ export interface ObsUnit {
   z: number;
   hpFrac: number;
   radius: number;
+  // Structures only: true while layer protection makes it immune (additive
+  // v0 field; without it a policy cannot know a target is untouchable).
+  invulnerable?: boolean;
 }
 
 export interface ObsSelf {

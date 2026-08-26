@@ -48,9 +48,11 @@ export function recalcChampion(u: Unit): void {
   u.moveSpeed = def.base.moveSpeed + items.moveSpeed;
 }
 
-// XP needed to go from `level` to `level + 1`.
+// XP needed to go from `level` to `level + 1`. Tuned down after review F.0
+// measured levels 2-4 after 10 minutes (ultimates were dead content); the
+// full curve now totals ~10900 xp, reachable inside the 20-25 min target.
 export function xpForNext(level: number): number {
-  return 180 + 100 * level;
+  return 100 + 60 * level;
 }
 
 export const MAX_LEVEL = 18;

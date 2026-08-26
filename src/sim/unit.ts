@@ -8,7 +8,7 @@ import type { AbilityKey, TeamId, Vec2 } from './types';
 
 export type UnitKind = 'champion' | 'minion' | 'tower' | 'sanctum';
 
-export type MinionVariant = 'melee' | 'caster';
+export type MinionVariant = 'melee' | 'caster' | 'siege';
 
 export interface UnitStats {
   ad: number;
@@ -159,12 +159,15 @@ export function createChampion(id: number, team: TeamId, pos: Vec2, def: Champio
   return u;
 }
 
+// `scale` grows minions with game time (review F.0: identical waves
+// annihilate each other exactly and no pressure ever reaches a tower).
 export function createMinion(
   id: number,
   team: TeamId,
   variant: MinionVariant,
   lane: LaneId,
   pos: Vec2,
+  scale = 1,
 ): Unit {
   const u = baseUnit(id, team, 'minion', pos);
   u.lane = lane;
@@ -173,33 +176,45 @@ export function createMinion(
   if (variant === 'melee') {
     u.radius = 0.5;
     u.hp = 455;
-    u.maxHp = 455;
     u.stats.ad = 12;
     u.stats.attackRange = 0.5;
     u.stats.attackSpeed = 1.25;
     u.goldBounty = 21;
     u.xpBounty = 60;
-  } else {
+  } else if (variant === 'caster') {
     u.radius = 0.4;
     u.hp = 290;
-    u.maxHp = 290;
     u.stats.ad = 23;
     u.stats.attackRange = 6;
     u.stats.attackSpeed = 0.67;
     u.goldBounty = 14;
     u.xpBounty = 30;
+  } else {
+    // Siege: the wave-breaker that actually threatens towers.
+    u.radius = 0.6;
+    u.hp = 900;
+    u.stats.ad = 45;
+    u.stats.attackRange = 4;
+    u.stats.attackSpeed = 0.5;
+    u.goldBounty = 60;
+    u.xpBounty = 90;
   }
+  u.hp = Math.round(u.hp * scale);
+  u.maxHp = u.hp;
+  u.stats.ad = Math.round(u.stats.ad * scale);
   return u;
 }
 
 export function createTower(id: number, team: TeamId, pos: Vec2, structure: StructureMeta): Unit {
   const u = baseUnit(id, team, 'tower', pos);
   u.radius = 1.4;
-  u.hp = 2500;
-  u.maxHp = 2500;
+  // Tuned down from 2500/40 after review F.0 measured towers as
+  // mechanically unkillable (~96 s of uninterrupted champion dps).
+  u.hp = 1800;
+  u.maxHp = 1800;
   u.stats.ad = 170;
-  u.stats.armor = 40;
-  u.stats.mr = 40;
+  u.stats.armor = 25;
+  u.stats.mr = 25;
   u.stats.attackRange = 9;
   u.stats.attackSpeed = 0.83;
   u.sightRange = 10;
@@ -214,7 +229,7 @@ export function createSanctum(id: number, team: TeamId, pos: Vec2): Unit {
   u.radius = 2.2;
   u.hp = 3000;
   u.maxHp = 3000;
-  u.stats.armor = 40;
-  u.stats.mr = 40;
+  u.stats.armor = 25;
+  u.stats.mr = 25;
   return u;
 }
