@@ -118,7 +118,56 @@ emotes, item actives.
 
 ## F. Reviewer reports
 
-Pending: playability-by-simulation, sim/server correctness, browser UX.
+Pending: sim/server correctness, browser UX.
+
+### F.0 Playability-by-simulation reviewer (landed)
+
+Verdict: a full 5v5 bot match NEVER ends. Three seeds, 10 sim-minutes: zero
+towers destroyed, both Sanctums intact, all champions AFK at their fountains
+by minute 10. Root causes, all measured:
+
+- [P0][high] MATCH NEVER ENDS: convergence of the three findings below.
+- [P0][high] TEAM 1 SIDE-LANE MINIONS STUCK FOREVER: the top and bot tier-1
+  towers at (50,137) and (137,50) sit exactly ON lane polyline waypoints;
+  their navgrid footprint pushes the nearest walkable cell to ~2.12 from the
+  waypoint, beyond WAYPOINT_REACHED = 2 in minion_ai.ts, so laneProgress
+  never advances. 56 minions measured stacked per side lane at 6 min, while
+  team 0 waves arrive 5 at a time and get slaughtered: frozen side lanes and
+  a structural asymmetry favoring team 1. Fix: reach radius vs footprints,
+  or move waypoints off tower spots.
+- [P0][high] FOUNTAIN REGEN MISSING (confirms F.1): healing 32% to 85% at
+  base regen takes a measured 337 s; by minute 10 both entire teams idle at
+  their fountains (51-84% of champion time AFK at base). Mana never refills
+  either.
+- [P0][high] TOWERS ARE MECHANICALLY UNKILLABLE: 2500 hp and 40 armor vs a
+  champion's ~26 dps means ~96 s of uninterrupted dps while the tower kills
+  a full-hp fighter in 5.1 s; and opposing minion waves annihilate each
+  other exactly (spawn cadence = kill cadence, measured), so minion pressure
+  never reaches a tower. No tower falls, so no Sanctum, so no end.
+- [P1][high] Unbounded entity growth: minions 41 to 210 in 10 min
+  (+19/min net), tick cost 0.43 to 1.17 ms and climbing linearly.
+- [P1][high] XP curve far too slow for the 20-25 min target: levels 2-4
+  after 10 min; level 6 nearly unreachable, so ultimates are dead content.
+- [P1][high] The laner bot suicide-dives towers: it attacks structures at
+  FARM_RANGE 8 while towers reach ~9 plus radii, and only flees at 32% hp;
+  10 of 23 deaths were to towers.
+- [P1][high] The Policy observation cannot express structure invulnerability
+  (ObsUnit has no flag; dealDamage silently ignores protected structures):
+  an ADR 0002 contract gap, bots waste commands on immune targets.
+- [P1][high] Every all-bot match is IDENTICAL across seeds: the sim Rng is
+  never consumed anywhere and bots are deterministic, so zero match variety.
+- [P1][medium] Bot shopping cannot complete two-component recipes needing
+  duplicates (won't buy a second heart_gem for colossus_heart); no tier 2
+  ever completed; gold pools unspent.
+- [P1][medium] Out-of-game time is crushing: ~40 s per early death
+  (respawn 8+1.5xlevel plus a 28.6 s walk to mid), 5-6 min per retreat.
+- [P2][high] A move order onto a structure's footprint strands the unit
+  beside it with no terminal state.
+- [P2][low] The stacked minion blob (no unit collision) is a degenerate AoE
+  farm and bodyblocks better than the tower it hugs.
+- Healthy signals: no projectile/zone leaks, per-seed determinism holds,
+  champion-vs-champion kills do happen (23 in 10 min), bots buy, level, and
+  fight; they are alive in lane, just unable to close or defend a game.
 
 ### F.1 Spec-coverage reviewer (landed)
 
