@@ -7,7 +7,7 @@ import type { CombatCtx } from '../sim_context';
 import type { AbilityKey, Vec2 } from '../types';
 import type { Unit } from '../unit';
 import { applyEffects, type EffectSpec, type Power } from './effects';
-import { breakStealth, isStealthed, isStunned } from './status';
+import { breakStealth, isRooted, isStealthed, isStunned } from './status';
 
 export type CastSpec =
   | {
@@ -143,7 +143,8 @@ export function executeCast(
         team: caster.team,
         pos: at,
         radius: spec.radius,
-        until: ctx.time + spec.duration,
+        // A zone always survives long enough to detonate.
+        until: ctx.time + Math.max(spec.duration, (spec.detonateDelay ?? 0) + 0.05),
         tickEvery,
         nextTickAt: ctx.time + tickEvery,
         power,
@@ -158,13 +159,17 @@ export function executeCast(
     }
     case 'self_or_ally': {
       const at = clampToRange(caster.pos, aim, castRange);
+      // The caster COMPETES at its own distance to the aim (review F.2: a
+      // dying player pressing Mend next to a full-hp ally used to heal the
+      // ally instead). An ally only steals the cast by being strictly
+      // closer to the aim point.
       let target = caster;
-      let bestD = spec.searchRadius;
+      let bestD = Math.min(spec.searchRadius, Math.hypot(caster.pos.x - at.x, caster.pos.z - at.z));
       for (const u of ctx.units.values()) {
         if (u.team !== caster.team || u.kind !== 'champion' || u.id === caster.id) continue;
         if (u.dead || ctx.dead.has(u.id)) continue;
         const d = Math.hypot(u.pos.x - at.x, u.pos.z - at.z);
-        if (d <= bestD) {
+        if (d < bestD) {
           bestD = d;
           target = u;
         }
@@ -226,6 +231,8 @@ export function castAbility(
 ): boolean {
   if (ctx.dead.has(caster.id) || caster.dead) return false;
   if (isStunned(caster, ctx.time)) return false;
+  // A rooted champion cannot dash out of the root (review F.2).
+  if (def.spec.kind === 'dash' && isRooted(caster, ctx.time)) return false;
   if ((caster.cooldowns[key] ?? 0) > ctx.time) return false;
   if (caster.mana < def.manaCost) return false;
 

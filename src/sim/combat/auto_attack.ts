@@ -9,7 +9,7 @@ import { findPath } from '../pathfind';
 import type { CombatCtx } from '../sim_context';
 import type { Unit } from '../unit';
 import { dealDamage } from './damage';
-import { attackSpeedBonusPct, breakStealth, isStunned, tauntSourceId } from './status';
+import { attackSpeedBonusPct, breakStealth, isStealthed, isStunned, tauntSourceId } from './status';
 
 const RANGED_THRESHOLD = 2;
 const BOLT_SPEED = 30;
@@ -39,7 +39,7 @@ function fire(ctx: CombatCtx, u: Unit, target: Unit): void {
   } else {
     dealDamage(ctx, u.id, target, u.stats.ad, 'physical');
   }
-  const cadence = u.stats.attackSpeed * (1 + attackSpeedBonusPct(u, ctx.time));
+  const cadence = Math.max(0.1, u.stats.attackSpeed * (1 + attackSpeedBonusPct(u, ctx.time)));
   u.attackReadyAt = ctx.time + 1 / cadence;
 }
 
@@ -57,7 +57,13 @@ export function stepAutoAttacks(ctx: CombatCtx, nav: NavGrid): void {
 
     if (u.attackTargetId === null) continue;
     const target = ctx.units.get(u.attackTargetId);
-    if (!target || target.dead || ctx.dead.has(target.id) || target.team === u.team) {
+    if (
+      !target ||
+      target.dead ||
+      ctx.dead.has(target.id) ||
+      target.team === u.team ||
+      isStealthed(target, ctx.time)
+    ) {
       u.attackTargetId = null;
       continue;
     }

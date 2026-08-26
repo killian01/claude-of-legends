@@ -15,6 +15,7 @@ import {
   cancelRecall,
   effectiveMoveSpeed,
   expireStatuses,
+  isRooted,
   isStunned,
 } from './combat/status';
 import { CHAMPIONS, DEFAULT_CHAMPION_ID } from './content/champions';
@@ -164,6 +165,16 @@ export class Sim {
     return rows;
   }
 
+  // True when any alive friendly unit has the point in sight range; used to
+  // fog-scope projectiles and zones on the wire.
+  isPointVisible(team: TeamId, x: number, z: number): boolean {
+    for (const u of this.units.values()) {
+      if (u.team !== team || u.dead) continue;
+      if (Math.hypot(u.pos.x - x, u.pos.z - z) <= u.sightRange) return true;
+    }
+    return false;
+  }
+
   isVisible(team: TeamId, unitId: number): boolean {
     const u = this.units.get(unitId);
     if (!u) return false;
@@ -249,6 +260,7 @@ export class Sim {
     const sigilId = u.sigils[slot];
     const def = sigilId ? SIGILS[sigilId] : undefined;
     if (!def) return false;
+    if (def.spec.kind === 'dash' && isRooted(u, this.time)) return false;
     if ((u.sigilCooldowns[slot] ?? 0) > this.time) return false;
     if (!hasDecisionToken(u, this.time)) return false;
     const ok = executeCast(this.ctx(), u, def.spec, def.castRange, aim, {
@@ -268,7 +280,7 @@ export class Sim {
     if (this.winner !== null) return false;
     const u = this.units.get(unitId);
     const def = ITEMS[itemId];
-    if (!u || !def || u.kind !== 'champion' || u.dead) return false;
+    if (!u || !def || u.kind !== 'champion' || u.dead || this.dead.has(unitId)) return false;
     const fountain = this.map.fountains.find((f) => f.team === u.team);
     if (!fountain) return false;
     const d = Math.hypot(u.pos.x - fountain.x, u.pos.z - fountain.z);
@@ -284,7 +296,7 @@ export class Sim {
         discount += ITEMS[compId]?.cost ?? 0;
       }
     }
-    const cost = def.cost - discount;
+    const cost = Math.max(0, def.cost - discount);
     if (u.gold < cost) return false;
     if (u.items.length - consumedIndices.length >= INVENTORY_SLOTS) return false;
 
@@ -361,13 +373,19 @@ export class Sim {
       if (this.winner !== null) break;
       if (u.kind !== 'champion' || !u.dead || this.time < u.respawnAt) continue;
       const fountain = this.map.fountains.find((f) => f.team === u.team)!;
-      const slot = SPAWN_SLOTS[u.id % SPAWN_SLOTS.length]!;
+      // Slot by teammate order so two teammates can never share an exact
+      // respawn coordinate; cooldowns persist through death (review F.2:
+      // dying was a free ultimate refresh).
+      let teammateIndex = 0;
+      for (const o of this.units.values()) {
+        if (o.kind === 'champion' && o.team === u.team && o.id < u.id) teammateIndex++;
+      }
+      const slot = SPAWN_SLOTS[teammateIndex % SPAWN_SLOTS.length]!;
       u.dead = false;
       u.pos = { x: fountain.x + slot.x, z: fountain.z + slot.z };
       u.hp = u.maxHp;
       u.mana = u.maxMana;
       u.statuses = [];
-      u.cooldowns = {};
     }
 
     this.visibility = computeVisibility(this.map, this.units, this.time);

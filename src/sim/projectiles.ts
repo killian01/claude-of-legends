@@ -62,7 +62,7 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
       continue;
     }
 
-    const step = p.speed * dt;
+    const step = Math.min(p.speed * dt, Math.max(0, p.maxRange - p.traveled));
     p.pos.x += p.dir.x * step;
     p.pos.z += p.dir.z * step;
     p.traveled += step;
@@ -100,6 +100,6 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
       }
     }
 
-    if (p.traveled >= p.maxRange) ctx.projectiles.delete(p.id);
+    if (p.traveled >= p.maxRange - 1e-9) ctx.projectiles.delete(p.id);
   }
 }
