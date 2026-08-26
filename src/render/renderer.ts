@@ -1,12 +1,14 @@
 // Three.js top-down renderer. Reads the world through IWorld only and never
-// mutates it. Static map geometry is built once; unit meshes are synced each
-// sim tick and interpolated between ticks for smooth motion.
+// mutates it. Static map geometry is built once; units, projectiles, and
+// zones are synced each sim tick, and moving things are interpolated between
+// ticks for smooth motion.
 
 import * as THREE from 'three';
 import type { Vec2 } from '../sim/types';
 import type { IWorld } from '../world_api';
 
 const TEAM_COLORS: readonly number[] = [0x4a7dd6, 0xd65c5c];
+const TEAM_LIGHT: readonly number[] = [0x9dbcf5, 0xf5a3a3];
 
 const COLOR_BACKGROUND = 0x131c0d;
 const COLOR_GROUND = 0x2f4d1f;
@@ -14,8 +16,17 @@ const COLOR_LANE = 0x8a7a55;
 const COLOR_WALL = 0x24401a;
 const COLOR_BRUSH = 0x3e7a2c;
 const COLOR_TOWER_BASE = 0x6b6b60;
+const COLOR_BAR_BACK = 0x1a1a1a;
 
 interface TrackedUnit {
+  mesh: THREE.Object3D;
+  hpFill: THREE.Sprite;
+  barWidth: number;
+  prev: Vec2;
+  curr: Vec2;
+}
+
+interface TrackedMobile {
   mesh: THREE.Object3D;
   prev: Vec2;
   curr: Vec2;
@@ -28,7 +39,10 @@ export class Renderer {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly raycaster = new THREE.Raycaster();
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  private readonly unitLayer = new THREE.Group();
   private readonly tracked = new Map<number, TrackedUnit>();
+  private readonly trackedProjectiles = new Map<number, TrackedMobile>();
+  private readonly trackedZones = new Map<number, THREE.Object3D>();
   private readonly cameraOffset = new THREE.Vector3(0, 40, 24);
   private followId: number | null = null;
 
@@ -39,6 +53,7 @@ export class Renderer {
     this.gl.setSize(container.clientWidth, container.clientHeight);
     container.appendChild(this.gl.domElement);
     this.scene.background = new THREE.Color(COLOR_BACKGROUND);
+    this.scene.add(this.unitLayer);
 
     const aspect = container.clientWidth / Math.max(1, container.clientHeight);
     this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 500);
@@ -129,10 +144,10 @@ export class Renderer {
     }
   }
 
-  private buildUnitMesh(kind: string, team: number): THREE.Object3D {
+  private buildUnitMesh(kind: string, team: number): { holder: THREE.Group; barY: number } {
     const color = TEAM_COLORS[team] ?? 0xffffff;
+    const holder = new THREE.Group();
     if (kind === 'tower') {
-      const group = new THREE.Group();
       const base = new THREE.Mesh(
         new THREE.CylinderGeometry(1.1, 1.4, 5, 10),
         new THREE.MeshLambertMaterial({ color: COLOR_TOWER_BASE }),
@@ -143,8 +158,8 @@ export class Renderer {
         new THREE.MeshLambertMaterial({ color }),
       );
       top.position.y = 6;
-      group.add(base, top);
-      return group;
+      holder.add(base, top);
+      return { holder, barY: 7.6 };
     }
     if (kind === 'sanctum') {
       const mesh = new THREE.Mesh(
@@ -152,43 +167,117 @@ export class Renderer {
         new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.35 }),
       );
       mesh.position.y = 3;
-      const holder = new THREE.Group();
       holder.add(mesh);
-      return holder;
+      return { holder, barY: 6.2 };
     }
     const capsule = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.65, 1.0, 4, 12),
       new THREE.MeshLambertMaterial({ color }),
     );
     capsule.position.y = 1.15;
-    const holder = new THREE.Group();
     holder.add(capsule);
-    return holder;
+    return { holder, barY: 2.9 };
+  }
+
+  private buildHpBar(holder: THREE.Group, team: number, barY: number, width: number): THREE.Sprite {
+    const back = new THREE.Sprite(new THREE.SpriteMaterial({ color: COLOR_BAR_BACK }));
+    back.center.set(0, 0.5);
+    back.scale.set(width + 0.1, 0.24, 1);
+    back.position.set(-(width + 0.1) / 2, barY, 0);
+    const fill = new THREE.Sprite(
+      new THREE.SpriteMaterial({ color: TEAM_LIGHT[team] ?? 0xffffff }),
+    );
+    fill.center.set(0, 0.5);
+    fill.scale.set(width, 0.16, 1);
+    fill.position.set(-width / 2, barY, 0);
+    holder.add(back, fill);
+    return fill;
   }
 
   // Called once after every sim tick: shifts interpolation history and syncs
-  // the mesh set with the world's units.
+  // the mesh sets with the world's units, projectiles, and zones.
   onSimTick(): void {
     for (const [id, u] of this.world.units) {
-      const t = this.tracked.get(id);
+      let t = this.tracked.get(id);
       if (!t) {
-        const mesh = this.buildUnitMesh(u.kind, u.team);
-        mesh.position.set(u.pos.x, 0, u.pos.z);
-        this.scene.add(mesh);
-        this.tracked.set(id, {
-          mesh,
+        const { holder, barY } = this.buildUnitMesh(u.kind, u.team);
+        const barWidth = u.kind === 'champion' ? 1.6 : 2.2;
+        const hpFill = this.buildHpBar(holder, u.team, barY, barWidth);
+        holder.position.set(u.pos.x, 0, u.pos.z);
+        holder.userData.unitId = id;
+        holder.userData.team = u.team;
+        this.unitLayer.add(holder);
+        t = {
+          mesh: holder,
+          hpFill,
+          barWidth,
           prev: { x: u.pos.x, z: u.pos.z },
           curr: { x: u.pos.x, z: u.pos.z },
-        });
+        };
+        this.tracked.set(id, t);
       } else {
         t.prev = t.curr;
         t.curr = { x: u.pos.x, z: u.pos.z };
       }
+      const frac = Math.max(0, Math.min(1, u.hp / u.maxHp));
+      t.hpFill.scale.x = Math.max(0.001, t.barWidth * frac);
     }
     for (const [id, t] of this.tracked) {
       if (!this.world.units.has(id)) {
-        this.scene.remove(t.mesh);
+        this.unitLayer.remove(t.mesh);
         this.tracked.delete(id);
+      }
+    }
+
+    for (const [id, p] of this.world.projectiles) {
+      const t = this.trackedProjectiles.get(id);
+      if (!t) {
+        const mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(Math.max(0.25, p.radius), 10, 8),
+          new THREE.MeshLambertMaterial({
+            color: TEAM_LIGHT[p.team] ?? 0xffffff,
+            emissive: TEAM_LIGHT[p.team] ?? 0xffffff,
+            emissiveIntensity: 0.5,
+          }),
+        );
+        mesh.position.set(p.pos.x, 1.2, p.pos.z);
+        this.scene.add(mesh);
+        this.trackedProjectiles.set(id, {
+          mesh,
+          prev: { x: p.pos.x, z: p.pos.z },
+          curr: { x: p.pos.x, z: p.pos.z },
+        });
+      } else {
+        t.prev = t.curr;
+        t.curr = { x: p.pos.x, z: p.pos.z };
+      }
+    }
+    for (const [id, t] of this.trackedProjectiles) {
+      if (!this.world.projectiles.has(id)) {
+        this.scene.remove(t.mesh);
+        this.trackedProjectiles.delete(id);
+      }
+    }
+
+    for (const [id, z] of this.world.zones) {
+      if (!this.trackedZones.has(id)) {
+        const mesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(z.radius, z.radius, 0.15, 24),
+          new THREE.MeshLambertMaterial({
+            color: TEAM_COLORS[z.team] ?? 0xffffff,
+            transparent: true,
+            opacity: 0.3,
+          }),
+        );
+        mesh.position.set(z.pos.x, 0.1, z.pos.z);
+        this.scene.add(mesh);
+        this.trackedZones.set(id, mesh);
+      }
+    }
+    for (const [id, mesh] of this.trackedZones) {
+      if (!this.world.zones.has(id)) {
+        this.scene.remove(mesh);
+        this.trackedZones.delete(id);
       }
     }
   }
@@ -202,6 +291,11 @@ export class Renderer {
       t.mesh.position.set(x, 0, z);
       if (id === this.followId) followPos = new THREE.Vector3(x, 0, z);
     }
+    for (const t of this.trackedProjectiles.values()) {
+      const x = t.prev.x + (t.curr.x - t.prev.x) * alpha;
+      const z = t.prev.z + (t.curr.z - t.prev.z) * alpha;
+      t.mesh.position.set(x, 1.2, z);
+    }
     const target =
       followPos ?? new THREE.Vector3(this.world.map.size / 2, 0, this.world.map.size / 2);
     this.camera.position.copy(target).add(this.cameraOffset);
@@ -211,16 +305,36 @@ export class Renderer {
 
   // Unprojects a client-space pointer position onto the ground plane.
   groundPointAt(clientX: number, clientY: number): Vec2 | null {
+    this.setRayFrom(clientX, clientY);
+    const hit = new THREE.Vector3();
+    if (this.raycaster.ray.intersectPlane(this.groundPlane, hit)) {
+      return { x: hit.x, z: hit.z };
+    }
+    return null;
+  }
+
+  // The unit under the pointer, if any.
+  unitAt(clientX: number, clientY: number): { id: number; team: number } | null {
+    this.setRayFrom(clientX, clientY);
+    const hits = this.raycaster.intersectObjects(this.unitLayer.children, true);
+    for (const h of hits) {
+      let obj: THREE.Object3D | null = h.object;
+      while (obj) {
+        if (typeof obj.userData.unitId === 'number') {
+          return { id: obj.userData.unitId, team: obj.userData.team as number };
+        }
+        obj = obj.parent;
+      }
+    }
+    return null;
+  }
+
+  private setRayFrom(clientX: number, clientY: number): void {
     const rect = this.gl.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
       ((clientX - rect.left) / rect.width) * 2 - 1,
       -((clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.camera);
-    const hit = new THREE.Vector3();
-    if (this.raycaster.ray.intersectPlane(this.groundPlane, hit)) {
-      return { x: hit.x, z: hit.z };
-    }
-    return null;
   }
 }

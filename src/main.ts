@@ -15,9 +15,18 @@ const sim = new Sim(42);
 const world: IWorld = sim;
 const self = sim.addChampion(0);
 
+// Practice dummies on mid lane until real opponents land (phases 4 and 7).
+sim.addChampion(1, { x: 66, z: 66 });
+sim.addChampion(1, { x: 80, z: 80 });
+
 const renderer = new Renderer(app, world);
 renderer.followUnit(self.id);
-setupInput(renderer, (p) => sim.orderMove(self.id, p.x, p.z));
+setupInput(renderer, {
+  selfTeam: self.team,
+  onMove: (p) => sim.orderMove(self.id, p.x, p.z),
+  onAttackUnit: (id) => sim.orderAttack(self.id, id),
+  onCast: (key, aim) => sim.castAbility(self.id, key, aim),
+});
 
 const TICK_MS = DT * 1000;
 let last = performance.now();
