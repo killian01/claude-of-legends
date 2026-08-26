@@ -8,7 +8,7 @@ import { NavGrid } from './navgrid';
 import { findPath } from './pathfind';
 import { Rng } from './rng';
 import { DT, type TeamId } from './types';
-import { createChampion, type Unit } from './unit';
+import { createChampion, staticFootprint, type Unit } from './unit';
 
 export interface SimEvent {
   type: string;
@@ -35,7 +35,10 @@ export class Sim {
   constructor(seed: number) {
     this.rng = new Rng(seed);
     this.nav = new NavGrid(this.map.size, this.map.walls, this.map.borderMargin);
-    for (const u of createMapUnits(this.map, () => this.nextId++)) this.units.set(u.id, u);
+    for (const u of createMapUnits(this.map, () => this.nextId++)) {
+      this.units.set(u.id, u);
+      this.nav.blockCircle(u.pos.x, u.pos.z, staticFootprint(u));
+    }
   }
 
   addChampion(team: TeamId): Unit {
