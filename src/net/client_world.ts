@@ -21,6 +21,8 @@ function toStatus(k: string, until: number, v: number | undefined): Status | nul
       return { kind: 'stun', until };
     case 'root':
       return { kind: 'root', until };
+    case 'recall':
+      return { kind: 'recall', until };
     case 'stealth':
       return { kind: 'stealth', until };
     case 'slow':
@@ -82,6 +84,7 @@ function materializeUnit(s: SnapUnit): Unit {
     cooldowns: {},
     attackTargetId: null,
     attackReadyAt: 0,
+    attackMoveTarget: null,
     path: [],
     level: s.l ?? 1,
     xp: 0,
@@ -136,6 +139,14 @@ export class ClientWorld implements IWorld {
 
   orderAttack(_unitId: number, targetId: number): void {
     this.send({ t: 'attack', targetId });
+  }
+
+  orderAttackMove(_unitId: number, x: number, z: number): void {
+    this.send({ t: 'attack_move', x, z });
+  }
+
+  startRecall(_unitId: number): void {
+    this.send({ t: 'recall' });
   }
 
   castAbility(_unitId: number, key: AbilityKey, aim: Vec2): boolean {

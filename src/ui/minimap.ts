@@ -15,6 +15,7 @@ export class Minimap {
   private readonly canvas: HTMLCanvasElement;
   private readonly g: CanvasRenderingContext2D;
   private readonly scale: number;
+  private readonly pings: { x: number; z: number; until: number }[] = [];
 
   constructor(
     container: HTMLElement,
@@ -48,6 +49,10 @@ export class Minimap {
     const g = this.canvas.getContext('2d');
     if (!g) throw new Error('minimap canvas 2d context unavailable');
     this.g = g;
+  }
+
+  addPing(x: number, z: number): void {
+    this.pings.push({ x, z, until: performance.now() + 2500 });
   }
 
   // World z points "up" on the minimap: flip the vertical axis.
@@ -118,6 +123,21 @@ export class Minimap {
         g.fillStyle = color;
         g.fillRect(x - 1, z - 1, 2, 2);
       }
+    }
+
+    const now = performance.now();
+    for (let i = this.pings.length - 1; i >= 0; i--) {
+      const p = this.pings[i]!;
+      if (now > p.until) {
+        this.pings.splice(i, 1);
+        continue;
+      }
+      const age = 1 - (p.until - now) / 2500;
+      g.strokeStyle = '#ffd94a';
+      g.lineWidth = 2;
+      g.beginPath();
+      g.arc(this.px(p.x), this.pz(p.z), 4 + age * 10, 0, Math.PI * 2);
+      g.stroke();
     }
   }
 }

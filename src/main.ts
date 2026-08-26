@@ -143,7 +143,13 @@ function startOnline(choice: HomeChoice): void {
         });
         break;
       case 'select_update':
-        selectUi?.setLocked(msg.locked, msg.total);
+        selectUi?.setLocked(msg.locked, msg.total, msg.taken);
+        break;
+      case 'chat':
+        pres?.pushChat(msg.from, msg.team, msg.text);
+        break;
+      case 'ping':
+        pres?.showPing(msg.x, msg.z, msg.from, msg.team);
         break;
       case 'match_start':
         world.applyServer(msg);
@@ -154,6 +160,10 @@ function startOnline(choice: HomeChoice): void {
         const changed = world.applyServer(msg);
         if (!pres && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) {
           pres = startPresentation(container, world, world.selfUnitId, world.selfTeam);
+          pres.setNetHooks({
+            sendChat: (text) => ws.send(JSON.stringify({ t: 'chat', text })),
+            sendPing: (x, z) => ws.send(JSON.stringify({ t: 'ping', x, z })),
+          });
         }
         if (changed) {
           const kills: { unitId: number; killerId: number }[] = [];

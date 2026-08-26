@@ -5,9 +5,9 @@
 // online).
 
 import { Renderer } from '../render/renderer';
-import type { TeamId } from '../sim/types';
+import type { TeamId, Vec2 } from '../sim/types';
 import { DT } from '../sim/types';
-import { Hud } from '../ui/hud';
+import { Hud, type NetHooks } from '../ui/hud';
 import { Minimap } from '../ui/minimap';
 import type { IWorld } from '../world_api';
 import { setupInput } from './input';
@@ -28,6 +28,9 @@ export interface WorldNotes {
 export interface Presentation {
   // Call once after every world tick (sim tick offline, snapshot online).
   onWorldTick(notes?: WorldNotes): void;
+  pushChat(from: string, team: TeamId, text: string): void;
+  showPing(x: number, z: number, from: string, team: TeamId): void;
+  setNetHooks(hooks: NetHooks): void;
 }
 
 const TICK_MS = DT * 1000;
@@ -47,8 +50,15 @@ export function startPresentation(
     renderer.flashMarker(p.x, p.z);
   });
 
+  let hooks: NetHooks = {};
+  const showPing = (x: number, z: number, from: string, team: TeamId): void => {
+    renderer.flashMarker(x, z, 0xffd94a);
+    minimap.addPing(x, z);
+    hud.pushChat(from, team, 'pinged the map');
+  };
+
   setupInput(renderer, {
-    onRightClick: (p) => {
+    onRightClick: (p: Vec2) => {
       const enemy = pickEnemyAt(world, p, selfTeam);
       if (enemy) {
         world.orderAttack(selfId, enemy.id);
@@ -59,8 +69,20 @@ export function startPresentation(
     },
     onCast: (key, aim) => world.castAbility(selfId, key, aim),
     onCastSigil: (slot, aim) => world.castSigil(selfId, slot, aim),
+    onAttackMove: (aim) => {
+      world.orderAttackMove(selfId, aim.x, aim.z);
+      renderer.flashMarker(aim.x, aim.z, 0xffa53e);
+    },
+    onRecall: () => world.startRecall(selfId),
     onToggleShop: () => hud.toggleShop(),
     onToggleScoreboard: () => hud.toggleScoreboard(),
+    onToggleMenu: () => hud.toggleEscapeMenu(),
+    onOpenChat: () => hud.openChat(),
+    onPing: (aim) => {
+      if (hooks.sendPing) hooks.sendPing(aim.x, aim.z);
+      else showPing(aim.x, aim.z, 'You', selfTeam);
+    },
+    isTyping: () => hud.isChatOpen(),
   });
 
   let lastTick = performance.now();
@@ -82,5 +104,13 @@ export function startPresentation(
   }
   requestAnimationFrame(frame);
 
-  return { onWorldTick };
+  return {
+    onWorldTick,
+    pushChat: (from, team, text) => hud.pushChat(from, team, text),
+    showPing,
+    setNetHooks: (h) => {
+      hooks = h;
+      hud.setNetHooks(h);
+    },
+  };
 }

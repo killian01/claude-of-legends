@@ -44,6 +44,8 @@ export interface Unit {
   cooldowns: Partial<Record<AbilityKey, number>>;
   attackTargetId: number | null;
   attackReadyAt: number;
+  // Attack-move destination; enemies encountered on the way are engaged.
+  attackMoveTarget: Vec2 | null;
   // Remaining waypoints toward the current move order; empty when idle.
   path: Vec2[];
   // Progression and economy (champions).
@@ -108,6 +110,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     cooldowns: {},
     attackTargetId: null,
     attackReadyAt: 0,
+    attackMoveTarget: null,
     path: [],
     level: 1,
     xp: 0,

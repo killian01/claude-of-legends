@@ -15,7 +15,7 @@ function ccChips(u: Unit, time: number): { k: string; v?: number }[] {
   const out: { k: string; v?: number }[] = [];
   for (const s of u.statuses) {
     if (s.until <= time) continue;
-    if (s.kind === 'stun' || s.kind === 'root') out.push({ k: s.kind });
+    if (s.kind === 'stun' || s.kind === 'root' || s.kind === 'recall') out.push({ k: s.kind });
     else if (s.kind === 'slow') out.push({ k: 'slow', v: round2(s.pct) });
   }
   return out;

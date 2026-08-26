@@ -7,7 +7,7 @@ import { readFile, stat } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { type WebSocket, WebSocketServer } from 'ws';
-import { parseClientMsg, type ServerMsg } from '../src/net/protocol';
+import { isFiniteVec, parseClientMsg, type ServerMsg } from '../src/net/protocol';
 import { DT } from '../src/sim/types';
 import { fillWithBots } from './bot_fill';
 import { Match } from './match';
@@ -159,6 +159,33 @@ wss.on('connection', (ws) => {
       case 'pick':
         matchmaker.pick(id, msg.championId, msg.sigils);
         break;
+      case 'chat':
+      case 'ping': {
+        if (client.matchId === null) break;
+        const entry = matches.get(client.matchId);
+        const player = entry?.match.players.get(id);
+        if (!entry || !player) break;
+        if (msg.t === 'chat') {
+          const text = String(msg.text ?? '')
+            .trim()
+            .slice(0, 200);
+          if (!text) break;
+          for (const p of entry.match.players.values()) {
+            send(p.clientId, { t: 'chat', from: player.name, team: player.team, text });
+          }
+        } else if (isFiniteVec(msg.x, msg.z)) {
+          for (const p of entry.match.players.values()) {
+            send(p.clientId, {
+              t: 'ping',
+              from: player.name,
+              team: player.team,
+              x: msg.x,
+              z: msg.z,
+            });
+          }
+        }
+        break;
+      }
       default: {
         if (client.matchId === null) return;
         const entry = matches.get(client.matchId);

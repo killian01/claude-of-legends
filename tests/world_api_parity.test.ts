@@ -20,6 +20,8 @@ const IWORLD_MEMBERS: readonly { name: string; kind: 'value' | 'function' }[] = 
   { name: 'isVisible', kind: 'function' },
   { name: 'orderMove', kind: 'function' },
   { name: 'orderAttack', kind: 'function' },
+  { name: 'orderAttackMove', kind: 'function' },
+  { name: 'startRecall', kind: 'function' },
   { name: 'castAbility', kind: 'function' },
   { name: 'castSigil', kind: 'function' },
   { name: 'buyItem', kind: 'function' },

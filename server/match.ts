@@ -83,6 +83,12 @@ export class Match {
           this.sim.orderAttack(p.unitId, msg.targetId);
         }
         break;
+      case 'attack_move':
+        if (isFiniteVec(msg.x, msg.z)) this.sim.orderAttackMove(p.unitId, msg.x, msg.z);
+        break;
+      case 'recall':
+        this.sim.startRecall(p.unitId);
+        break;
       case 'cast':
         if (typeof msg.key === 'string' && ABILITY_KEYS.has(msg.key) && isFiniteVec(msg.x, msg.z)) {
           this.sim.castAbility(p.unitId, msg.key, { x: msg.x, z: msg.z });

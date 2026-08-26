@@ -4,7 +4,7 @@
 // is handed to the injected callback as a list of picks.
 
 import type { ServerMsg } from '../src/net/protocol';
-import { CHAMPIONS, DEFAULT_CHAMPION_ID } from '../src/sim/content/champions';
+import { CHAMPION_LIST, CHAMPIONS, DEFAULT_CHAMPION_ID } from '../src/sim/content/champions';
 import { SIGILS } from '../src/sim/content/sigils';
 import type { TeamId } from '../src/sim/types';
 import type { MatchPick } from './match';
@@ -186,7 +186,15 @@ export class Matchmaker {
     if (!session) return;
     const entry = session.entries.find((e) => e.clientId === clientId);
     if (!entry) return;
-    const champ = CHAMPIONS[championId] ? championId : DEFAULT_CHAMPION_ID;
+    let champ = CHAMPIONS[championId] ? championId : DEFAULT_CHAMPION_ID;
+    // No duplicate champions within a team (game definition): a taken pick
+    // falls back to the first free champion in roster order.
+    const teamTaken = session.entries
+      .filter((e) => e.team === entry.team && e.clientId !== clientId && e.locked)
+      .map((e) => e.locked?.championId);
+    if (teamTaken.includes(champ)) {
+      champ = CHAMPION_LIST.find((c) => !teamTaken.includes(c.id))?.id ?? DEFAULT_CHAMPION_ID;
+    }
     const valid =
       Array.isArray(sigils) &&
       sigils.length === 2 &&
@@ -195,7 +203,15 @@ export class Matchmaker {
     entry.locked = { championId: champ, sigils: valid ? [sigils[0], sigils[1]] : DEFAULT_SIGILS };
     const locked = session.entries.filter((e) => e.locked).length;
     for (const e of session.entries) {
-      this.send(e.clientId, { t: 'select_update', locked, total: session.entries.length });
+      const taken = session.entries
+        .filter((o) => o.team === e.team && o.locked)
+        .map((o) => o.locked?.championId ?? '');
+      this.send(e.clientId, {
+        t: 'select_update',
+        locked,
+        total: session.entries.length,
+        taken,
+      });
     }
     if (locked === session.entries.length) this.finishSelect(session);
   }

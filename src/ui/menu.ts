@@ -4,7 +4,9 @@
 import type { SelectPlayer } from '../net/protocol';
 import { CHAMPION_LIST } from '../sim/content/champions';
 import { SIGIL_LIST } from '../sim/content/sigils';
-import type { TeamId } from '../sim/types';
+import type { AbilityKey, TeamId } from '../sim/types';
+import { describeAbility, describeSigil } from './describe';
+import { attachTooltip } from './tooltips';
 
 const CSS = `
 .menu, .menu * { box-sizing: border-box; }
@@ -220,7 +222,7 @@ export function showLobby(
 }
 
 export interface SelectController {
-  setLocked(locked: number, total: number): void;
+  setLocked(locked: number, total: number, taken?: readonly string[]): void;
   remove(): void;
 }
 
@@ -255,13 +257,20 @@ export function showSelect(
   }
 
   let championId: string | null = null;
+  let takenSet = new Set<string>();
   const sigils: string[] = ['riftstep', 'mend'];
 
   const grid = el('div', 'menu-grid');
   const champButtons = new Map<string, HTMLButtonElement>();
+  const ABILITY_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
   for (const c of CHAMPION_LIST) {
     const btn = el('button', 'menu-champ', c.name) as HTMLButtonElement;
+    attachTooltip(btn, () => [
+      c.name,
+      ...ABILITY_KEYS.map((k) => describeAbility(k, c.abilities[k]).slice(0, 3).join(' ')),
+    ]);
     btn.addEventListener('click', () => {
+      if (takenSet.has(c.id)) return;
       championId = c.id;
       for (const [id, b] of champButtons) b.classList.toggle('picked', id === c.id);
       lock.disabled = false;
@@ -277,6 +286,7 @@ export function showSelect(
   };
   for (const s of SIGIL_LIST) {
     const btn = el('button', 'menu-sigil', s.name) as HTMLButtonElement;
+    attachTooltip(btn, () => describeSigil(s));
     btn.addEventListener('click', () => {
       const idx = sigils.indexOf(s.id);
       if (idx !== -1) sigils.splice(idx, 1);
@@ -301,10 +311,18 @@ export function showSelect(
     onLock(championId, [sigils[0]!, sigils[1]!]);
   });
 
+  const randomBtn = el('button', 'menu-btn', 'Random champion');
+  randomBtn.addEventListener('click', () => {
+    const free = CHAMPION_LIST.filter((c) => !takenSet.has(c.id));
+    const pick = free[Math.floor(Math.random() * free.length)];
+    if (pick) champButtons.get(pick.id)?.click();
+  });
+
   card.append(
-    el('div', 'menu-label', 'Pick your champion'),
+    el('div', 'menu-label', 'Pick your champion (hover for the kit)'),
     grid,
-    el('div', 'menu-label', 'Pick two sigils (D and F)'),
+    randomBtn,
+    el('div', 'menu-label', 'Pick two sigils (first goes on D, second on F)'),
     sigilRow,
     lock,
     status,
@@ -321,9 +339,17 @@ export function showSelect(
   }
 
   return {
-    setLocked(locked, total) {
+    setLocked(locked, total, taken) {
       status.dataset.locked = `${locked}/${total} locked.`;
       if (deadline === null) status.textContent = `${locked}/${total} locked.`;
+      if (taken) {
+        takenSet = new Set(taken.filter((id) => id !== championId));
+        for (const [id, b] of champButtons) {
+          const isTaken = takenSet.has(id);
+          b.style.opacity = isTaken ? '0.35' : '';
+          b.style.pointerEvents = isTaken ? 'none' : '';
+        }
+      }
     },
     remove() {
       if (timer !== null) window.clearInterval(timer);

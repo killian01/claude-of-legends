@@ -8,6 +8,7 @@ import type { Unit } from '../unit';
 export type Status =
   | { kind: 'slow'; until: number; pct: number }
   | { kind: 'root'; until: number }
+  | { kind: 'recall'; until: number }
   | { kind: 'stun'; until: number }
   | { kind: 'taunt'; until: number; sourceId: number }
   | { kind: 'stealth'; until: number }
@@ -149,4 +150,13 @@ export function addMarkStack(u: Unit, duration: number, time: number): number {
 
 export function clearMarks(u: Unit): void {
   u.statuses = u.statuses.filter((s) => s.kind !== 'mark');
+}
+
+export function isRecalling(u: Unit, time: number): boolean {
+  return u.statuses.some((s) => s.kind === 'recall' && s.until > time);
+}
+
+// Any damage or any accepted order cancels a recall channel.
+export function cancelRecall(u: Unit): void {
+  u.statuses = u.statuses.filter((s) => s.kind !== 'recall');
 }

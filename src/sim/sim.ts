@@ -5,11 +5,18 @@
 //   auto-attacks -> movement -> projectiles -> zones -> deaths -> respawns ->
 //   vision -> clock.
 
+import { stepAttackMove } from './attack_move';
 import { runBotDecisions } from './bot_driver';
 import { stepAutoAttacks } from './combat/auto_attack';
 import { castAbility, executeCast } from './combat/casting';
 import { stepDots } from './combat/dots';
-import { breakStealth, effectiveMoveSpeed, expireStatuses, isStunned } from './combat/status';
+import {
+  breakStealth,
+  cancelRecall,
+  effectiveMoveSpeed,
+  expireStatuses,
+  isStunned,
+} from './combat/status';
 import { CHAMPIONS, DEFAULT_CHAMPION_ID } from './content/champions';
 import { ITEMS } from './content/items';
 import { GAME_MAP, type GameMap } from './content/map';
@@ -24,6 +31,7 @@ import { findPath } from './pathfind';
 import type { Policy } from './policy';
 import type { Projectile } from './projectiles';
 import { stepProjectiles } from './projectiles';
+import { startRecall, stepRecalls } from './recall';
 import { grantKillRewards, grantPassiveGold } from './rewards';
 import { Rng } from './rng';
 import type { CombatCtx } from './sim_context';
@@ -173,7 +181,17 @@ export class Sim {
     if (this.winner !== null) return;
     const u = this.units.get(unitId);
     if (!u || u.moveSpeed <= 0 || u.dead || this.dead.has(unitId)) return;
+    cancelRecall(u);
     u.attackTargetId = null;
+    u.attackMoveTarget = null;
+    u.path = findPath(this.nav, u.pos, { x, z });
+  }
+
+  // System-driven pathing (attack-move) that does not clear the standing
+  // intent the way a player move order does.
+  orderPath(unitId: number, x: number, z: number): void {
+    const u = this.units.get(unitId);
+    if (!u || u.moveSpeed <= 0 || u.dead) return;
     u.path = findPath(this.nav, u.pos, { x, z });
   }
 
@@ -184,7 +202,27 @@ export class Sim {
     if (!u || !target || u.dead || target.dead) return;
     if (this.dead.has(unitId) || this.dead.has(targetId)) return;
     if (target.team === u.team) return;
+    cancelRecall(u);
+    u.attackMoveTarget = null;
     u.attackTargetId = targetId;
+  }
+
+  orderAttackMove(unitId: number, x: number, z: number): void {
+    if (this.winner !== null) return;
+    const u = this.units.get(unitId);
+    if (!u || u.kind !== 'champion' || u.dead || this.dead.has(unitId)) return;
+    cancelRecall(u);
+    u.attackTargetId = null;
+    u.attackMoveTarget = { x, z };
+    u.path = findPath(this.nav, u.pos, { x, z });
+  }
+
+  startRecall(unitId: number): void {
+    if (this.winner !== null) return;
+    const u = this.units.get(unitId);
+    if (!u || u.kind !== 'champion' || u.dead || this.dead.has(unitId)) return;
+    if (isStunned(u, this.time)) return;
+    startRecall(u, this.time);
   }
 
   castAbility(unitId: number, key: AbilityKey, aim: Vec2): boolean {
@@ -196,7 +234,10 @@ export class Sim {
     if (!def) return false;
     if (!hasDecisionToken(u, this.time)) return false;
     const ok = castAbility(this.ctx(), u, key, def, aim);
-    if (ok) spendDecisionToken(u, this.time);
+    if (ok) {
+      spendDecisionToken(u, this.time);
+      cancelRecall(u);
+    }
     return ok;
   }
 
@@ -216,6 +257,7 @@ export class Sim {
     });
     if (!ok) return false;
     spendDecisionToken(u, this.time);
+    cancelRecall(u);
     u.sigilCooldowns[slot] = this.time + def.cooldown;
     breakStealth(u);
     this.events.push({ type: 'sigil', unitId, slot });
@@ -256,6 +298,7 @@ export class Sim {
   tick(): SimEvent[] {
     const ctx = this.ctx();
 
+    stepRecalls(ctx, this.map);
     for (const u of this.units.values()) expireStatuses(u, this.time);
 
     stepDots(ctx);
@@ -276,6 +319,7 @@ export class Sim {
 
     stepMinionAi(ctx, this.nav, this.map, this.tickCount);
     stepTowerAi(ctx);
+    stepAttackMove(this);
     stepAutoAttacks(ctx, this.nav);
 
     for (const u of this.units.values()) {
