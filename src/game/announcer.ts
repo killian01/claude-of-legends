@@ -6,16 +6,15 @@
 
 import { duckMusic } from './music';
 
-// Best-known voices first; the Google ones are the closest to a real
-// announcer readily available in a browser.
+// Preference order settled by playtest: the local female voices (Zira on
+// Windows) read as the better announcer; the remote Google ones follow.
 const PREFERRED: readonly RegExp[] = [
-  /google uk english female/i,
-  /google us english/i,
+  /\bzira\b/i,
+  /samantha/i,
   /\baria\b/i,
   /\bjenny\b/i,
-  /\bzira\b/i,
   /female/i,
-  /samantha/i,
+  /google us english/i,
 ];
 
 let voice: SpeechSynthesisVoice | null = null;
