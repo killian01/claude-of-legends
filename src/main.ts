@@ -51,10 +51,14 @@ function startOffline(championId: string, sigils: [string, string]): void {
     last = now;
     while (acc >= TICK_MS) {
       const kills: { unitId: number; killerId: number }[] = [];
+      const golds: number[] = [];
+      const casts: number[] = [];
       for (const ev of sim.tick()) {
         if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
+        else if (ev.type === 'gold' && ev.unitId === self.id) golds.push(ev.amount);
+        else if (ev.type === 'cast' || ev.type === 'sigil') casts.push(ev.unitId);
       }
-      pres.onWorldTick(kills);
+      pres.onWorldTick({ kills, golds, casts });
       acc -= TICK_MS;
     }
     requestAnimationFrame(frame);
@@ -152,10 +156,15 @@ function startOnline(choice: HomeChoice): void {
           pres = startPresentation(container, world, world.selfUnitId, world.selfTeam);
         }
         if (changed) {
-          const kills = msg.events
-            .filter((e) => e.e === 'death')
-            .map((e) => ({ unitId: e.unitId, killerId: e.killerId }));
-          pres?.onWorldTick(kills);
+          const kills: { unitId: number; killerId: number }[] = [];
+          const golds: number[] = [];
+          const casts: number[] = [];
+          for (const e of msg.events) {
+            if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
+            else if (e.e === 'gold') golds.push(e.amount);
+            else if (e.e === 'cast') casts.push(e.unitId);
+          }
+          pres?.onWorldTick({ kills, golds, casts });
         }
         break;
       }

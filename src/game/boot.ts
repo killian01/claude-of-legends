@@ -18,9 +18,16 @@ export interface KillNote {
   killerId: number;
 }
 
+// One-shot combat notes accompanying a world tick.
+export interface WorldNotes {
+  kills: readonly KillNote[];
+  golds: readonly number[];
+  casts: readonly number[];
+}
+
 export interface Presentation {
   // Call once after every world tick (sim tick offline, snapshot online).
-  onWorldTick(kills?: readonly KillNote[]): void;
+  onWorldTick(notes?: WorldNotes): void;
 }
 
 const TICK_MS = DT * 1000;
@@ -57,12 +64,15 @@ export function startPresentation(
   });
 
   let lastTick = performance.now();
-  const onWorldTick = (kills?: readonly KillNote[]): void => {
+  const onWorldTick = (notes?: WorldNotes): void => {
     lastTick = performance.now();
     renderer.onSimTick();
     hud.update();
     minimap.update();
-    if (kills && kills.length > 0) hud.pushKills(kills);
+    if (notes) {
+      if (notes.kills.length > 0) hud.pushKills(notes.kills);
+      if (notes.golds.length > 0 || notes.casts.length > 0) renderer.onCombatNotes(notes);
+    }
   };
 
   function frame(now: number): void {

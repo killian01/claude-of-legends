@@ -4,6 +4,7 @@
 // server scopes snapshots to this client's team before sending.
 // Transport-agnostic: give it a send function, feed it server messages.
 
+import type { Status } from '../sim/combat/status';
 import { CHAMPIONS, type ChampionDef } from '../sim/content/champions';
 import { GAME_MAP, type GameMap } from '../sim/content/map';
 import type { Projectile } from '../sim/projectiles';
@@ -12,6 +13,47 @@ import type { Unit } from '../sim/unit';
 import type { Zone } from '../sim/zones';
 import type { IWorld } from '../world_api';
 import type { ClientMsg, ServerMsg, SnapUnit } from './protocol';
+
+// Rebuilds a displayable Status from its wire chip.
+function toStatus(k: string, until: number, v: number | undefined): Status | null {
+  switch (k) {
+    case 'stun':
+      return { kind: 'stun', until };
+    case 'root':
+      return { kind: 'root', until };
+    case 'stealth':
+      return { kind: 'stealth', until };
+    case 'slow':
+      return { kind: 'slow', until, pct: v ?? 0 };
+    case 'shield':
+      return { kind: 'shield', until, remaining: v ?? 0 };
+    case 'mark':
+      return { kind: 'mark', until, stacks: v ?? 1 };
+    case 'dot':
+      return { kind: 'dot', until, perSecond: v ?? 0, sourceId: 0, dtype: 'magic' };
+    case 'grievous':
+      return { kind: 'grievous', until, factor: v ?? 0 };
+    case 'taunt':
+      return { kind: 'taunt', until, sourceId: 0 };
+    case 'buff':
+      return { kind: 'buff', until, msPct: 0, asPct: 0, armor: 0, mr: 0 };
+    default:
+      return null;
+  }
+}
+
+function applyWireStatuses(
+  u: Unit,
+  st: { k: string; v?: number }[] | undefined,
+  until: number,
+): void {
+  u.statuses = [];
+  if (!st) return;
+  for (const entry of st) {
+    const status = toStatus(entry.k, until, entry.v);
+    if (status) u.statuses.push(status);
+  }
+}
 
 function materializeUnit(s: SnapUnit): Unit {
   return {
@@ -128,17 +170,21 @@ export class ClientWorld implements IWorld {
     this.winner = msg.winner;
 
     for (const id of msg.gone) this.units.delete(id);
+    const ccUntil = msg.time + 0.35;
     for (const s of msg.units) {
-      const existing = this.units.get(s.i);
-      if (!existing) {
-        this.units.set(s.i, materializeUnit(s));
+      let unit = this.units.get(s.i);
+      if (!unit) {
+        unit = materializeUnit(s);
+        this.units.set(s.i, unit);
       } else {
-        existing.pos.x = s.x;
-        existing.pos.z = s.z;
-        existing.hp = s.h;
-        existing.maxHp = s.m;
-        if (s.l !== undefined) existing.level = s.l;
+        unit.pos.x = s.x;
+        unit.pos.z = s.z;
+        unit.hp = s.h;
+        unit.maxHp = s.m;
+        if (s.l !== undefined) unit.level = s.l;
       }
+      unit.dead = s.d === 1;
+      applyWireStatuses(unit, s.st, ccUntil);
     }
 
     if (msg.self) {
@@ -155,6 +201,11 @@ export class ClientWorld implements IWorld {
         self.sigilCooldowns = msg.self.sigilCooldowns;
         self.items = msg.self.items;
         self.sigils = msg.self.sigils;
+        self.statuses = [];
+        for (const entry of msg.self.statuses) {
+          const status = toStatus(entry.k, entry.until, entry.v);
+          if (status) self.statuses.push(status);
+        }
       }
     }
 

@@ -33,7 +33,7 @@ export class Minimap {
     this.canvas.height = SIZE_PX;
     this.canvas.style.cssText =
       'position:absolute;right:12px;bottom:12px;border:1px solid #466030;' +
-      'border-radius:6px;pointer-events:auto;z-index:5;';
+      'border-radius:6px;pointer-events:auto;z-index:5;opacity:0.88;';
     container.appendChild(this.canvas);
 
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());

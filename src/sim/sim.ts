@@ -49,6 +49,7 @@ export type SimEvent =
   | { type: 'death'; unitId: number; killerId: number }
   | { type: 'cast'; unitId: number; key: AbilityKey }
   | { type: 'sigil'; unitId: number; slot: number }
+  | { type: 'gold'; unitId: number; amount: number }
   | { type: 'victory'; team: TeamId };
 
 const RESPAWN_BASE = 8;
@@ -157,8 +158,12 @@ export class Sim {
 
   isVisible(team: TeamId, unitId: number): boolean {
     const u = this.units.get(unitId);
-    if (!u || u.dead) return false;
+    if (!u) return false;
+    // Your own team always sees its units, DEAD INCLUDED: review finding
+    // F.1/F.3, a dead champion vanishing from its own snapshot froze the
+    // online HUD and killed the death screen.
     if (u.team === team) return true;
+    if (u.dead) return false;
     // Structures are always revealed, like the genre.
     if (u.kind === 'tower' || u.kind === 'sanctum') return true;
     return this.visibility[team].has(unitId);

@@ -4,10 +4,42 @@
 // is data-as-code it may read directly. The full HUD (scoreboard, minimap)
 // lands in phase 8.
 
+import type { Status } from '../sim/combat/status';
 import { ITEM_LIST, ITEMS, type ItemStats } from '../sim/content/items';
 import { SIGILS } from '../sim/content/sigils';
+import { MAX_LEVEL, xpForNext } from '../sim/stats';
 import { type AbilityKey, type TeamId, ULT_LEVEL } from '../sim/types';
 import type { IWorld } from '../world_api';
+
+const TEAM_TEXT_COLORS = ['#9dbcf5', '#f5a3a3'];
+
+function statusLabel(s: Status, time: number): string {
+  const left = Math.max(0, s.until - time);
+  switch (s.kind) {
+    case 'stun':
+      return `STUN ${left.toFixed(1)}`;
+    case 'root':
+      return `ROOT ${left.toFixed(1)}`;
+    case 'slow':
+      return `SLOW ${Math.round(s.pct * 100)}%`;
+    case 'shield':
+      return `SHIELD ${Math.round(s.remaining)}`;
+    case 'mark':
+      return `MARK x${s.stacks}`;
+    case 'dot':
+      return 'BURNING';
+    case 'grievous':
+      return 'GRIEVOUS';
+    case 'stealth':
+      return 'HIDDEN';
+    case 'taunt':
+      return 'TAUNTED';
+    case 'buff':
+      return 'BOOSTED';
+    default:
+      return '';
+  }
+}
 
 const KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
 
@@ -20,6 +52,23 @@ const CSS = `
   user-select: none;
   pointer-events: none;
   color: #d8e6c0;
+  z-index: 6;
+}
+.hud-statuses {
+  display: flex;
+  gap: 4px;
+  min-height: 18px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.hud-chip {
+  background: #3d3312;
+  border: 1px solid #8a6d2c;
+  border-radius: 4px;
+  color: #f0dfae;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
 }
 .hud-bottom {
   position: absolute;
@@ -126,10 +175,13 @@ export class Hud {
   private readonly selfId: number;
   private readonly selfTeam: TeamId;
   private readonly metaText: HTMLElement;
+  private readonly statusRow: HTMLElement;
   private readonly hpFill: HTMLElement;
   private readonly hpText: HTMLElement;
   private readonly manaFill: HTMLElement;
   private readonly manaText: HTMLElement;
+  private readonly xpFill: HTMLElement;
+  private readonly xpText: HTMLElement;
   private readonly slots = new Map<AbilityKey, { root: HTMLElement; cd: HTMLElement }>();
   private readonly sigilSlots: { root: HTMLElement; cd: HTMLElement; label: HTMLElement }[] = [];
   private readonly shop: HTMLElement;
@@ -178,10 +230,16 @@ export class Hud {
     };
     const hp = mkBar('#3f9b45');
     const mana = mkBar('#3763b8');
+    const xp = mkBar('#8a5fc9');
     this.hpFill = hp.fill;
     this.hpText = hp.text;
     this.manaFill = mana.fill;
     this.manaText = mana.text;
+    this.xpFill = xp.fill;
+    this.xpText = xp.text;
+
+    this.statusRow = document.createElement('div');
+    this.statusRow.className = 'hud-statuses';
 
     const slots = document.createElement('div');
     slots.className = 'hud-slots';
@@ -220,7 +278,7 @@ export class Hud {
       this.sigilSlots.push({ root: slot, cd, label });
     }
 
-    bottom.append(this.metaText, bars, slots);
+    bottom.append(this.statusRow, this.metaText, bars, slots);
 
     this.shop = document.createElement('div');
     this.shop.className = 'hud-shop';
@@ -305,18 +363,35 @@ export class Hud {
     this.update();
   }
 
-  // One feed line per champion death; entries fade out on their own.
+  // One feed line per champion death, team-colored; entries fade on their
+  // own. Non-champion killers are attributed by kind (tower, minions).
   pushKills(kills: readonly { unitId: number; killerId: number }[]): void {
     if (kills.length === 0) return;
     const rows = this.world.scoreboard();
-    const nameOf = (id: number): string | null => rows.find((r) => r.unitId === id)?.name ?? null;
+    const rowOf = (id: number) => rows.find((r) => r.unitId === id);
     for (const k of kills) {
-      const victim = nameOf(k.unitId);
-      if (!victim) continue;
-      const killer = nameOf(k.killerId) ?? 'The lane';
+      const victimRow = rowOf(k.unitId);
+      if (!victimRow) continue;
+      const killerRow = rowOf(k.killerId);
+      let killerName = killerRow?.name ?? 'The lane';
+      let killerColor = killerRow ? TEAM_TEXT_COLORS[killerRow.team] : '#c9d8ae';
+      if (!killerRow) {
+        const killerUnit = this.world.units.get(k.killerId);
+        if (killerUnit?.kind === 'tower') killerName = 'A tower';
+        else if (killerUnit?.kind === 'minion') killerName = 'Minions';
+        if (killerUnit) killerColor = TEAM_TEXT_COLORS[killerUnit.team];
+      }
       const entry = document.createElement('div');
       entry.className = 'hud-feed-entry';
-      entry.textContent = `${killer} killed ${victim}`;
+      const killer = document.createElement('span');
+      killer.textContent = killerName;
+      killer.style.color = killerColor ?? '#c9d8ae';
+      const middle = document.createElement('span');
+      middle.textContent = ' killed ';
+      const victim = document.createElement('span');
+      victim.textContent = victimRow.name;
+      victim.style.color = TEAM_TEXT_COLORS[victimRow.team] ?? '#c9d8ae';
+      entry.append(killer, middle, victim);
       this.feed.appendChild(entry);
       window.setTimeout(() => entry.remove(), 6000);
     }
@@ -340,11 +415,26 @@ export class Hud {
     const u = this.world.units.get(this.selfId);
     if (!u) return;
 
-    this.metaText.textContent = `Lv ${u.level} · ${Math.floor(u.gold)}g`;
+    const total = Math.max(0, Math.floor(this.world.time));
+    const clock = `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+    this.metaText.textContent = `${clock} · Lv ${u.level} · ${Math.floor(u.gold)}g`;
     this.hpFill.style.transform = `scaleX(${Math.max(0, u.hp / u.maxHp)})`;
     this.hpText.textContent = `${Math.ceil(u.hp)} / ${Math.round(u.maxHp)}`;
     this.manaFill.style.transform = `scaleX(${Math.max(0, u.mana / u.maxMana)})`;
     this.manaText.textContent = `${Math.floor(u.mana)} / ${Math.round(u.maxMana)}`;
+    const xpFrac = u.level >= MAX_LEVEL ? 1 : Math.min(1, u.xp / xpForNext(u.level));
+    this.xpFill.style.transform = `scaleX(${xpFrac})`;
+    this.xpText.textContent =
+      u.level >= MAX_LEVEL ? 'max level' : `XP ${Math.floor(u.xp)} / ${xpForNext(u.level)}`;
+
+    this.statusRow.textContent = '';
+    for (const s of u.statuses) {
+      if (s.until <= this.world.time) continue;
+      const chip = document.createElement('span');
+      chip.className = 'hud-chip';
+      chip.textContent = statusLabel(s, this.world.time);
+      this.statusRow.appendChild(chip);
+    }
 
     const def = u.championId ? this.world.championDef(u.championId) : null;
     for (const key of KEYS) {
