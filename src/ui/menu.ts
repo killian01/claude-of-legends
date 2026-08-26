@@ -7,7 +7,7 @@ import { SIGIL_LIST } from '../sim/content/sigils';
 import { SKINS } from '../sim/content/skins';
 import type { AbilityKey, TeamId } from '../sim/types';
 import { describeAbility, describeSigil } from './describe';
-import { attachTooltip } from './tooltips';
+import { attachTooltip, hideTooltip } from './tooltips';
 
 // One color per role so classes read at a glance on the select grid.
 const ROLE_COLORS: Readonly<Record<ChampionRole, string>> = {
@@ -461,6 +461,7 @@ export function showSelect(
     },
     remove() {
       if (timer !== null) window.clearInterval(timer);
+      hideTooltip();
       root.remove();
     },
   };
