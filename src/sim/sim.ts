@@ -21,7 +21,7 @@ import {
 } from './combat/status';
 import { CHAMPIONS, DEFAULT_CHAMPION_ID } from './content/champions';
 import { ITEMS } from './content/items';
-import { GAME_MAP, type GameMap } from './content/map';
+import { GAME_MAP, type GameMap, type LaneId } from './content/map';
 import { SIGILS } from './content/sigils';
 import { clampSkin } from './content/skins';
 import { hasDecisionToken, spendDecisionToken } from './decision_budget';
@@ -81,6 +81,9 @@ const RESPAWN_PER_LEVEL = 1.3;
 const ASSIST_WINDOW_S = 10;
 const SHOP_RANGE_PAD = 2;
 const INVENTORY_SLOTS = 6;
+
+// Bot lane assignment order: mid first, then the side lanes.
+const BOT_LANES: readonly LaneId[] = ['mid', 'top', 'bot'];
 
 // Deterministic spawn offsets around the fountain center, by join order.
 const SPAWN_SLOTS: readonly { x: number; z: number }[] = [
@@ -165,6 +168,13 @@ export class Sim {
   attachPolicy(unitId: number, policy: Policy): void {
     const u = this.units.get(unitId);
     if (!u || u.kind !== 'champion') return;
+    // Assign a lane round-robin per team (playtest review: all ten
+    // participants used to funnel into whichever lane was furthest pushed).
+    let teamBots = 0;
+    for (const id of this.policies.keys()) {
+      if (this.units.get(id)?.team === u.team) teamBots++;
+    }
+    u.lane = BOT_LANES[teamBots % BOT_LANES.length]!;
     this.policies.set(unitId, policy);
   }
 
@@ -229,9 +239,22 @@ export class Sim {
     const u = this.units.get(unitId);
     if (!u || u.moveSpeed <= 0 || u.dead || this.dead.has(unitId)) return;
     cancelRecall(u);
+    u.holding = false;
     u.attackTargetId = null;
     u.attackMoveTarget = null;
     u.path = findPath(this.nav, u.pos, { x, z });
+  }
+
+  // Stop (S): halt in place and HOLD, opting out of idle auto-defense until
+  // the next movement or attack order. The genre's wave-freeze verb.
+  orderStop(unitId: number): void {
+    if (this.winner !== null) return;
+    const u = this.units.get(unitId);
+    if (!u || u.kind !== 'champion' || u.dead || this.dead.has(unitId)) return;
+    u.holding = true;
+    u.path = [];
+    u.attackTargetId = null;
+    u.attackMoveTarget = null;
   }
 
   // System-driven pathing (attack-move) that does not clear the standing
@@ -250,6 +273,7 @@ export class Sim {
     if (this.dead.has(unitId) || this.dead.has(targetId)) return;
     if (!hostile(u, target)) return;
     cancelRecall(u);
+    u.holding = false;
     u.attackMoveTarget = null;
     u.attackTargetId = targetId;
   }
@@ -259,6 +283,7 @@ export class Sim {
     const u = this.units.get(unitId);
     if (!u || u.kind !== 'champion' || u.dead || this.dead.has(unitId)) return;
     cancelRecall(u);
+    u.holding = false;
     u.attackTargetId = null;
     u.attackMoveTarget = { x, z };
     u.path = findPath(this.nav, u.pos, { x, z });

@@ -267,13 +267,32 @@ const policy: Policy = (obs, rng: Rng): Action => {
     return { kind: 'attack', targetId: structure.id };
   }
 
-  // Push: follow the most advanced friendly minion wave, else walk at the
-  // enemy Sanctum. A little jitter differentiates matches across seeds.
+  // Push MY lane: follow the most advanced friendly minion near the
+  // assigned lane's polyline, else walk that lane's waypoints. Unassigned
+  // participants keep the old any-lane behavior. A little jitter
+  // differentiates matches across seeds (playtest review: all ten
+  // champions used to funnel into one lane).
   const jx = (rng.next() * 2 - 1) * 1.5;
   const jz = (rng.next() * 2 - 1) * 1.5;
+  const myLane = s.lane ? GAME_MAP.lanes[s.lane] : null;
+  const laneDist = (x: number, z: number): number => {
+    if (!myLane) return 0;
+    let best = Number.POSITIVE_INFINITY;
+    for (let i = 0; i + 1 < myLane.length; i++) {
+      const a = myLane[i]!;
+      const b = myLane[i + 1]!;
+      const abx = b.x - a.x;
+      const abz = b.z - a.z;
+      const len2 = abx * abx + abz * abz || 1;
+      const t = Math.max(0, Math.min(1, ((x - a.x) * abx + (z - a.z) * abz) / len2));
+      best = Math.min(best, Math.hypot(x - (a.x + abx * t), z - (a.z + abz * t)));
+    }
+    return best;
+  };
   let vanguard: ObsUnit | null = null;
   let bestD = Number.POSITIVE_INFINITY;
   for (const m of friendlyMinions) {
+    if (laneDist(m.x, m.z) > 7) continue;
     const d = Math.hypot(m.x - enemySanctum.x, m.z - enemySanctum.z);
     if (d < bestD) {
       bestD = d;
@@ -281,6 +300,21 @@ const policy: Policy = (obs, rng: Rng): Action => {
     }
   }
   if (vanguard) return { kind: 'move', x: vanguard.x + jx, z: vanguard.z + jz };
+  if (myLane) {
+    // No wave to follow yet: walk the lane toward the enemy end.
+    const oriented = s.team === 0 ? myLane : [...myLane].reverse();
+    let idx = 0;
+    let nearest = Number.POSITIVE_INFINITY;
+    oriented.forEach((p, i) => {
+      const d = Math.hypot(p.x - s.x, p.z - s.z);
+      if (d < nearest) {
+        nearest = d;
+        idx = i;
+      }
+    });
+    const next = oriented[Math.min(idx + 1, oriented.length - 1)]!;
+    return { kind: 'move', x: next.x + jx, z: next.z + jz };
+  }
   return { kind: 'move', x: enemySanctum.x + jx, z: enemySanctum.z + jz };
 };
 

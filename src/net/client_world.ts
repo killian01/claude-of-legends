@@ -95,6 +95,7 @@ function materializeUnit(s: SnapUnit): Unit {
     attackTargetId: null,
     attackReadyAt: 0,
     attackMoveTarget: null,
+    holding: false,
     path: [],
     level: s.l ?? 1,
     xp: 0,
@@ -176,6 +177,10 @@ export class ClientWorld implements IWorld {
 
   startRecall(_unitId: number): void {
     this.send({ t: 'recall' });
+  }
+
+  orderStop(_unitId: number): void {
+    this.send({ t: 'stop' });
   }
 
   castAbility(_unitId: number, key: AbilityKey, aim: Vec2): boolean {

@@ -847,14 +847,18 @@ export class Renderer {
       manaFill.position.set(-width / 2, barY - 0.12, 0);
       holder.add(manaFill);
     }
-    // Segment ticks on thick (structure) bars: chunks visibly disappear,
-    // so thousands of hp read as progress instead of a static bar.
+    // Segment notches on thick (structure) bars: chunks visibly disappear,
+    // so thousands of hp read as progress instead of a static bar. Slim,
+    // translucent, and only partial height, so they read as etched marks
+    // rather than prison bars.
     if (thick && segments > 1) {
       for (let i = 1; i < segments; i++) {
-        const tick = new THREE.Sprite(new THREE.SpriteMaterial({ color: COLOR_BAR_BACK }));
-        tick.center.set(0.5, 0.5);
-        tick.scale.set(0.05, thick ? 0.44 : 0.24, 1);
-        tick.position.set(-width / 2 + (width * i) / segments, barY, 0.01);
+        const tick = new THREE.Sprite(
+          new THREE.SpriteMaterial({ color: 0x000000, transparent: true, opacity: 0.35 }),
+        );
+        tick.center.set(0.5, 1);
+        tick.scale.set(0.028, 0.2, 1);
+        tick.position.set(-width / 2 + (width * i) / segments, barY + 0.22, 0.01);
         tick.renderOrder = 1;
         holder.add(tick);
       }

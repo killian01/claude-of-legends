@@ -397,6 +397,7 @@ export class Hud {
   private lastKillAt = 0;
   private killChain = 0;
   private lastWardenUp: boolean | null = null;
+  private deathRecap = '';
   private readonly deathOverlay: HTMLElement;
   private readonly deathSub: HTMLElement;
   private readonly endOverlay: HTMLElement;
@@ -579,10 +580,10 @@ export class Hud {
 
     const hints = el('div', 'hud-hints');
     hints.textContent =
-      'Right-click: move / attack. A: attack-move. B: recall. Q W E R: hold to aim ' +
-      '(blue range preview), release to cast. D F: sigils. P: shop. Tab: scoreboard. ' +
-      'Enter: chat. G: ping. Esc: menu. Screen edges pan the camera; Space recenters; ' +
-      'left-click the minimap to look. Level up: click + above an ability.';
+      'Right-click: move / attack. A: attack-move. S: stop and hold. B: recall. ' +
+      'Q W E R: cast at cursor (hold to keep the range preview). D F: sigils. P: shop. ' +
+      'Tab: scoreboard. Enter: chat. G: ping. Esc: menu. Screen edges pan the camera; ' +
+      'Space recenters; left-click the minimap to look. Level up: click + above an ability.';
 
     // The always-visible personal score, MOBA style: K / D / A plus creep
     // score, top right.
@@ -997,6 +998,26 @@ export class Hud {
       if (k.unitId === this.selfId) {
         playSfx('death');
         announceVoice('You have been slain', true);
+        // Death recap: who did it, and who helped inside the assist window
+        // (recentDamagers is live offline; online it may be empty).
+        const killerRow2 = rowOf(k.killerId);
+        const killerUnit2 = this.world.units.get(k.killerId);
+        let recap = killerRow2
+          ? `Killed by ${killerRow2.name}`
+          : killerUnit2?.kind === 'tower'
+            ? 'Killed by a tower'
+            : killerUnit2?.kind === 'warden'
+              ? 'Killed by the Warden'
+              : 'Killed by minions';
+        const me = this.world.units.get(this.selfId);
+        if (me) {
+          const helpers = me.recentDamagers
+            .filter((r) => r.id !== k.killerId && this.world.time - r.at <= 10)
+            .map((r) => rowOf(r.id)?.name)
+            .filter((n): n is string => n !== undefined);
+          if (helpers.length > 0) recap += ` (with ${helpers.join(', ')})`;
+        }
+        this.deathRecap = recap;
       } else if (k.killerId === this.selfId) {
         playSfx('kill');
         // Kill confirmation, center screen in gold; chained kills escalate.
@@ -1330,7 +1351,8 @@ export class Hud {
 
     this.deathOverlay.classList.toggle('open', u.dead);
     if (u.dead) {
-      this.deathSub.textContent = `Respawn in ${Math.max(0, u.respawnAt - this.world.time).toFixed(1)}s`;
+      const respawn = `Respawn in ${Math.max(0, u.respawnAt - this.world.time).toFixed(1)}s`;
+      this.deathSub.textContent = this.deathRecap ? `${this.deathRecap} · ${respawn}` : respawn;
     }
 
     const winner = this.world.winner;
