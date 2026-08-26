@@ -1,13 +1,29 @@
-// Timed statuses on units: slows, roots, shields, and marks. Pure functions
-// over the unit's status list; expiry is driven by sim time, never wall-clock.
+// Timed statuses on units and the pure helpers that read them. Expiry is
+// driven by sim time, never wall-clock. Champion passives that need per-tick
+// hooks are deferred (see docs/design/roster.md); everything here is generic.
 
+import type { DamageType } from '../types';
 import type { Unit } from '../unit';
 
 export type Status =
   | { kind: 'slow'; until: number; pct: number }
   | { kind: 'root'; until: number }
+  | { kind: 'stun'; until: number }
+  | { kind: 'taunt'; until: number; sourceId: number }
+  | { kind: 'stealth'; until: number }
+  | { kind: 'blind'; until: number; factor: number }
   | { kind: 'shield'; until: number; remaining: number }
-  | { kind: 'mark'; until: number; stacks: number };
+  | { kind: 'mark'; until: number; stacks: number }
+  | { kind: 'dot'; until: number; perSecond: number; sourceId: number; dtype: DamageType }
+  | { kind: 'grievous'; until: number; factor: number }
+  | {
+      kind: 'buff';
+      until: number;
+      msPct: number;
+      asPct: number;
+      armor: number;
+      mr: number;
+    };
 
 export function expireStatuses(u: Unit, time: number): void {
   if (u.statuses.length === 0) return;
@@ -18,8 +34,31 @@ export function addStatus(u: Unit, s: Status): void {
   u.statuses.push(s);
 }
 
+function has(u: Unit, kind: Status['kind'], time: number): boolean {
+  return u.statuses.some((s) => s.kind === kind && s.until > time);
+}
+
 export function isRooted(u: Unit, time: number): boolean {
-  return u.statuses.some((s) => s.kind === 'root' && s.until > time);
+  return has(u, 'root', time) || has(u, 'stun', time);
+}
+
+export function isStunned(u: Unit, time: number): boolean {
+  return has(u, 'stun', time);
+}
+
+export function isStealthed(u: Unit, time: number): boolean {
+  return has(u, 'stealth', time);
+}
+
+export function breakStealth(u: Unit): void {
+  u.statuses = u.statuses.filter((s) => s.kind !== 'stealth');
+}
+
+export function tauntSourceId(u: Unit, time: number): number | null {
+  for (const s of u.statuses) {
+    if (s.kind === 'taunt' && s.until > time) return s.sourceId;
+  }
+  return null;
 }
 
 export function slowPct(u: Unit, time: number): number {
@@ -30,9 +69,55 @@ export function slowPct(u: Unit, time: number): number {
   return strongest;
 }
 
+function buffSum(
+  u: Unit,
+  time: number,
+  pick: (b: { msPct: number; asPct: number; armor: number; mr: number }) => number,
+): number {
+  let sum = 0;
+  for (const s of u.statuses) {
+    if (s.kind === 'buff' && s.until > time) sum += pick(s);
+  }
+  return sum;
+}
+
+export function moveSpeedBonusPct(u: Unit, time: number): number {
+  return buffSum(u, time, (b) => b.msPct);
+}
+
+export function attackSpeedBonusPct(u: Unit, time: number): number {
+  return buffSum(u, time, (b) => b.asPct);
+}
+
+export function armorBonus(u: Unit, time: number): number {
+  return buffSum(u, time, (b) => b.armor);
+}
+
+export function mrBonus(u: Unit, time: number): number {
+  return buffSum(u, time, (b) => b.mr);
+}
+
 export function effectiveMoveSpeed(u: Unit, time: number): number {
   if (isRooted(u, time)) return 0;
-  return u.moveSpeed * (1 - slowPct(u, time));
+  return u.moveSpeed * (1 - slowPct(u, time)) * (1 + moveSpeedBonusPct(u, time));
+}
+
+// Sight multiplier from blinds: the strongest (smallest factor) wins.
+export function sightFactor(u: Unit, time: number): number {
+  let factor = 1;
+  for (const s of u.statuses) {
+    if (s.kind === 'blind' && s.until > time && s.factor < factor) factor = s.factor;
+  }
+  return factor;
+}
+
+// Healing multiplier from grievous wounds: the strongest reduction wins.
+export function healFactor(u: Unit, time: number): number {
+  let strongest = 0;
+  for (const s of u.statuses) {
+    if (s.kind === 'grievous' && s.until > time && s.factor > strongest) strongest = s.factor;
+  }
+  return 1 - strongest;
 }
 
 // Consumes shields oldest-first and returns the damage left after absorption.

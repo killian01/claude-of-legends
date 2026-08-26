@@ -22,5 +22,6 @@ export interface IWorld {
   orderMove(unitId: number, x: number, z: number): void;
   orderAttack(unitId: number, targetId: number): void;
   castAbility(unitId: number, key: AbilityKey, aim: Vec2): boolean;
+  castSigil(unitId: number, slot: number, aim: Vec2): boolean;
   buyItem(unitId: number, itemId: string): boolean;
 }

@@ -5,11 +5,17 @@ import type { CombatCtx } from '../sim_context';
 import { isInvulnerable } from '../structure_rules';
 import type { DamageType } from '../types';
 import type { Unit } from '../unit';
-import { absorbWithShields } from './status';
+import { absorbWithShields, armorBonus, mrBonus } from './status';
 
+// Buff-granted armor/mr counts; expired statuses are pruned at tick start so
+// no time parameter is needed here.
 export function mitigationMultiplier(target: Unit, dtype: DamageType): number {
-  if (dtype === 'physical') return 100 / (100 + Math.max(0, target.stats.armor));
-  if (dtype === 'magic') return 100 / (100 + Math.max(0, target.stats.mr));
+  if (dtype === 'physical') {
+    return 100 / (100 + Math.max(0, target.stats.armor + armorBonus(target, 0)));
+  }
+  if (dtype === 'magic') {
+    return 100 / (100 + Math.max(0, target.stats.mr + mrBonus(target, 0)));
+  }
   return 1;
 }
 

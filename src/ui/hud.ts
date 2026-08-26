@@ -5,6 +5,7 @@
 // lands in phase 8.
 
 import { ITEM_LIST, ITEMS, type ItemStats } from '../sim/content/items';
+import { SIGILS } from '../sim/content/sigils';
 import { ULT_LEVEL } from '../sim/sim';
 import type { AbilityKey, TeamId } from '../sim/types';
 import type { IWorld } from '../world_api';
@@ -108,6 +109,7 @@ export class Hud {
   private readonly manaFill: HTMLElement;
   private readonly manaText: HTMLElement;
   private readonly slots = new Map<AbilityKey, { root: HTMLElement; cd: HTMLElement }>();
+  private readonly sigilSlots: { root: HTMLElement; cd: HTMLElement; label: HTMLElement }[] = [];
   private readonly shop: HTMLElement;
   private readonly shopStatus: HTMLElement;
   private readonly shopInv: HTMLElement;
@@ -176,6 +178,21 @@ export class Hud {
       }
       slots.appendChild(slot);
       this.slots.set(key, { root: slot, cd });
+    }
+    for (const keyLabel of ['D', 'F']) {
+      const slot = document.createElement('div');
+      slot.className = 'hud-slot';
+      slot.style.borderColor = '#6b5a2e';
+      slot.textContent = keyLabel;
+      const cd = document.createElement('div');
+      cd.className = 'hud-slot-cd';
+      cd.style.display = 'none';
+      slot.appendChild(cd);
+      const label = document.createElement('div');
+      label.className = 'hud-slot-name';
+      slot.appendChild(label);
+      slots.appendChild(slot);
+      this.sigilSlots.push({ root: slot, cd, label });
     }
 
     bottom.append(this.metaText, bars, slots);
@@ -276,6 +293,19 @@ export class Hud {
       }
       const cost = def ? def.abilities[key].manaCost : 0;
       slot.root.classList.toggle('nomana', u.mana < cost);
+    }
+
+    for (let i = 0; i < this.sigilSlots.length; i++) {
+      const slot = this.sigilSlots[i]!;
+      const sigil = u.sigils[i] ? SIGILS[u.sigils[i]!] : undefined;
+      slot.label.textContent = sigil ? sigil.name : '';
+      const remaining = (u.sigilCooldowns[i] ?? 0) - this.world.time;
+      if (remaining > 0) {
+        slot.cd.style.display = 'flex';
+        slot.cd.textContent = String(Math.ceil(remaining));
+      } else {
+        slot.cd.style.display = 'none';
+      }
     }
 
     if (this.shop.classList.contains('open')) {

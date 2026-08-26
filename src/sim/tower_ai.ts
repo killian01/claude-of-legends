@@ -2,6 +2,7 @@
 // genre), prefers minions over champions when acquiring. Firing rides the
 // shared auto-attack system.
 
+import { isStealthed } from './combat/status';
 import type { CombatCtx } from './sim_context';
 import type { Unit } from './unit';
 
@@ -15,6 +16,7 @@ function nearest(ctx: CombatCtx, tower: Unit, kinds: readonly string[]): Unit | 
   let bestD = Number.POSITIVE_INFINITY;
   for (const o of ctx.units.values()) {
     if (o.team === tower.team || o.dead || ctx.dead.has(o.id)) continue;
+    if (isStealthed(o, ctx.time)) continue;
     if (!kinds.includes(o.kind)) continue;
     if (!inRange(tower, o)) continue;
     const d = Math.hypot(o.pos.x - tower.pos.x, o.pos.z - tower.pos.z);
@@ -31,7 +33,16 @@ export function stepTowerAi(ctx: CombatCtx): void {
     if (u.kind !== 'tower' || u.dead || ctx.dead.has(u.id)) continue;
     if (u.attackTargetId !== null) {
       const t = ctx.units.get(u.attackTargetId);
-      if (t && !t.dead && !ctx.dead.has(t.id) && t.team !== u.team && inRange(u, t)) continue;
+      if (
+        t &&
+        !t.dead &&
+        !ctx.dead.has(t.id) &&
+        t.team !== u.team &&
+        !isStealthed(t, ctx.time) &&
+        inRange(u, t)
+      ) {
+        continue;
+      }
       u.attackTargetId = null;
     }
     const target = nearest(ctx, u, ['minion']) ?? nearest(ctx, u, ['champion']);
