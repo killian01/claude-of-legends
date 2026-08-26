@@ -18,6 +18,13 @@ export interface Unit {
   path: Vec2[];
 }
 
+// Ground a static unit (tower, Sanctum) blocks in the NavGrid while it
+// stands, slightly padded so champions keep visual separation from it.
+// Blocked at spawn, unblocked at death, with this exact same value.
+export function staticFootprint(u: Unit): number {
+  return u.radius + 0.4;
+}
+
 export function createChampion(id: number, team: TeamId, pos: Vec2): Unit {
   return {
     id,

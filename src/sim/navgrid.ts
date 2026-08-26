@@ -1,17 +1,20 @@
 // Walkability grid, 1 unit per cell, derived deterministically from the map's
 // wall shapes. Used by both collision and pathfinding so they can never
-// disagree about what is walkable.
+// disagree about what is walkable. Cells hold a blocker COUNT, not a flag:
+// static geometry contributes one blocker, and static units (towers,
+// Sanctums) add and remove theirs at spawn and death, so overlapping
+// footprints unblock correctly.
 
 import type { WallShape } from './content/map';
 import type { Vec2 } from './types';
 
 export class NavGrid {
   readonly cells: number;
-  private readonly blocked: Uint8Array;
+  private readonly blockers: Uint8Array;
 
   constructor(size: number, walls: readonly WallShape[], borderMargin: number) {
     this.cells = Math.round(size);
-    this.blocked = new Uint8Array(this.cells * this.cells);
+    this.blockers = new Uint8Array(this.cells * this.cells);
     for (let cz = 0; cz < this.cells; cz++) {
       for (let cx = 0; cx < this.cells; cx++) {
         const x = cx + 0.5;
@@ -31,14 +34,43 @@ export class NavGrid {
             }
           }
         }
-        if (b) this.blocked[cz * this.cells + cx] = 1;
+        if (b) this.blockers[cz * this.cells + cx] = 1;
       }
     }
   }
 
   isWalkableCell(cx: number, cz: number): boolean {
     if (cx < 0 || cz < 0 || cx >= this.cells || cz >= this.cells) return false;
-    return this.blocked[cz * this.cells + cx] === 0;
+    return this.blockers[cz * this.cells + cx] === 0;
+  }
+
+  // Adds one blocker to every cell whose center lies within the circle.
+  blockCircle(x: number, z: number, r: number): void {
+    this.forEachCellInCircle(x, z, r, (i) => {
+      if (this.blockers[i]! < 255) this.blockers[i]!++;
+    });
+  }
+
+  // Removes one blocker from every cell whose center lies within the circle.
+  // Must mirror a prior blockCircle with the same shape.
+  unblockCircle(x: number, z: number, r: number): void {
+    this.forEachCellInCircle(x, z, r, (i) => {
+      if (this.blockers[i]! > 0) this.blockers[i]!--;
+    });
+  }
+
+  private forEachCellInCircle(x: number, z: number, r: number, fn: (idx: number) => void): void {
+    const minX = Math.max(0, Math.floor(x - r));
+    const maxX = Math.min(this.cells - 1, Math.ceil(x + r));
+    const minZ = Math.max(0, Math.floor(z - r));
+    const maxZ = Math.min(this.cells - 1, Math.ceil(z + r));
+    for (let cz = minZ; cz <= maxZ; cz++) {
+      for (let cx = minX; cx <= maxX; cx++) {
+        const dx = cx + 0.5 - x;
+        const dz = cz + 0.5 - z;
+        if (dx * dx + dz * dz <= r * r) fn(cz * this.cells + cx);
+      }
+    }
   }
 
   worldToCell(x: number, z: number): { cx: number; cz: number } {
