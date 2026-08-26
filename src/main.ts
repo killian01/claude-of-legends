@@ -61,6 +61,7 @@ function startOnline(choice: HomeChoice): void {
   let lobbyUi: LobbyController | null = null;
   let selectUi: SelectController | null = null;
   let pres: ReturnType<typeof startPresentation> | null = null;
+  let opened = false;
 
   const clearMenus = (): void => {
     queueUi?.remove();
@@ -70,6 +71,7 @@ function startOnline(choice: HomeChoice): void {
   };
 
   ws.addEventListener('open', () => {
+    opened = true;
     ws.send(JSON.stringify({ t: 'hello', name: choice.name }));
     if (choice.mode === 'queue') {
       ws.send(JSON.stringify({ t: 'queue' }));
@@ -152,7 +154,16 @@ function startOnline(choice: HomeChoice): void {
   });
 
   ws.addEventListener('close', () => {
-    if (!pres) showNotice(container, 'Disconnected', 'Lost the connection to the server.');
+    if (!opened) {
+      showNotice(
+        container,
+        'Server unreachable',
+        'Could not reach the game server. Start it in another terminal with "pnpm server" ' +
+          '(keep it running), restart "pnpm dev" if it predates vite.config.ts, then try again.',
+      );
+    } else {
+      showNotice(container, 'Disconnected', 'Lost the connection to the server.');
+    }
   });
 }
 
