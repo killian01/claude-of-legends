@@ -87,6 +87,10 @@ export class Sim {
     return champ;
   }
 
+  championDef(championId: string): (typeof CHAMPIONS)[string] | null {
+    return CHAMPIONS[championId] ?? null;
+  }
+
   orderMove(unitId: number, x: number, z: number): void {
     const u = this.units.get(unitId);
     if (!u || u.moveSpeed <= 0 || this.dead.has(unitId)) return;

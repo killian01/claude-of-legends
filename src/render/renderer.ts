@@ -313,22 +313,6 @@ export class Renderer {
     return null;
   }
 
-  // The unit under the pointer, if any.
-  unitAt(clientX: number, clientY: number): { id: number; team: number } | null {
-    this.setRayFrom(clientX, clientY);
-    const hits = this.raycaster.intersectObjects(this.unitLayer.children, true);
-    for (const h of hits) {
-      let obj: THREE.Object3D | null = h.object;
-      while (obj) {
-        if (typeof obj.userData.unitId === 'number') {
-          return { id: obj.userData.unitId, team: obj.userData.team as number };
-        }
-        obj = obj.parent;
-      }
-    }
-    return null;
-  }
-
   private setRayFrom(clientX: number, clientY: number): void {
     const rect = this.gl.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
