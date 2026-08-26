@@ -94,7 +94,9 @@ describe('economy', () => {
     runTicks(sim, 40);
     expect(b.dead).toBe(true);
     expect(a.gold).toBe(800);
-    expect(a.xp).toBe(200);
+    // 200 kill xp crosses the level 2 threshold (160) on the tuned curve.
+    expect(a.level).toBe(2);
+    expect(a.xp).toBe(40);
   });
 
   it('pays minion bounties on last hit', () => {

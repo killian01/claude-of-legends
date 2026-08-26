@@ -15,7 +15,10 @@ import type { Unit } from './unit';
 const AGGRO_RADIUS = 7;
 const LEASH_RADIUS = 10.5;
 const ACQUIRE_PERIOD_TICKS = 10;
-const WAYPOINT_REACHED = 2;
+// Must exceed the largest static footprint blocking radius (~2.12 measured
+// next to a tower) or a waypoint near a structure becomes unreachable and
+// the lane freezes (review finding F.0).
+const WAYPOINT_REACHED = 3;
 
 function targetRank(u: Unit): number {
   if (u.kind === 'minion') return 0;

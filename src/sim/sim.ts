@@ -15,6 +15,7 @@ import { ITEMS } from './content/items';
 import { GAME_MAP, type GameMap } from './content/map';
 import { SIGILS } from './content/sigils';
 import { hasDecisionToken, spendDecisionToken } from './decision_budget';
+import { applyFountainRegen } from './fountain';
 import { createMapUnits } from './map_units';
 import { stepMinionAi } from './minion_ai';
 import { stepMovement } from './movement';
@@ -78,6 +79,7 @@ export class Sim {
   winner: TeamId | null = null;
   private visibility: [Set<number>, Set<number>] = [new Set(), new Set()];
   private nextWaveAt = FIRST_WAVE_AT;
+  private waveCount = 0;
   private nextId = 1;
   private events: SimEvent[] = [];
   private readonly dead = new Set<number>();
@@ -163,6 +165,7 @@ export class Sim {
   }
 
   orderMove(unitId: number, x: number, z: number): void {
+    if (this.winner !== null) return;
     const u = this.units.get(unitId);
     if (!u || u.moveSpeed <= 0 || u.dead || this.dead.has(unitId)) return;
     u.attackTargetId = null;
@@ -170,6 +173,7 @@ export class Sim {
   }
 
   orderAttack(unitId: number, targetId: number): void {
+    if (this.winner !== null) return;
     const u = this.units.get(unitId);
     const target = this.units.get(targetId);
     if (!u || !target || u.dead || target.dead) return;
@@ -179,6 +183,7 @@ export class Sim {
   }
 
   castAbility(unitId: number, key: AbilityKey, aim: Vec2): boolean {
+    if (this.winner !== null) return false;
     const u = this.units.get(unitId);
     if (!u || u.championId === null || u.dead) return false;
     if (key === 'R' && u.level < ULT_LEVEL) return false;
@@ -191,6 +196,7 @@ export class Sim {
   }
 
   castSigil(unitId: number, slot: number, aim: Vec2): boolean {
+    if (this.winner !== null) return false;
     const u = this.units.get(unitId);
     if (!u || u.kind !== 'champion' || u.dead || this.dead.has(unitId)) return false;
     if (isStunned(u, this.time)) return false;
@@ -212,6 +218,7 @@ export class Sim {
   }
 
   buyItem(unitId: number, itemId: string): boolean {
+    if (this.winner !== null) return false;
     const u = this.units.get(unitId);
     const def = ITEMS[itemId];
     if (!u || !def || u.kind !== 'champion' || u.dead) return false;
@@ -247,17 +254,18 @@ export class Sim {
     for (const u of this.units.values()) expireStatuses(u, this.time);
 
     stepDots(ctx);
-    grantPassiveGold(ctx);
+    if (this.winner === null) grantPassiveGold(ctx);
     for (const u of this.units.values()) {
       if (u.dead) continue;
       if (u.stats.hpRegen > 0) u.hp = Math.min(u.maxHp, u.hp + u.stats.hpRegen * DT);
       if (u.stats.manaRegen > 0) u.mana = Math.min(u.maxMana, u.mana + u.stats.manaRegen * DT);
     }
+    applyFountainRegen(ctx, this.map);
 
     runBotDecisions(this, this.policies);
 
     if (this.winner === null && this.time >= this.nextWaveAt) {
-      spawnWave(ctx, this.map);
+      spawnWave(ctx, this.map, this.waveCount++);
       this.nextWaveAt += WAVE_EVERY;
     }
 
@@ -301,6 +309,7 @@ export class Sim {
     this.killers.clear();
 
     for (const u of this.units.values()) {
+      if (this.winner !== null) break;
       if (u.kind !== 'champion' || !u.dead || this.time < u.respawnAt) continue;
       const fountain = this.map.fountains.find((f) => f.team === u.team)!;
       const slot = SPAWN_SLOTS[u.id % SPAWN_SLOTS.length]!;
