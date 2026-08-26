@@ -3,12 +3,13 @@
 // immediate effects. Content only declares; this module executes. Sigils
 // reuse executeCast with their own bookkeeping.
 
+import { passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
 import { effectiveRank, RANK_BASE_SCALE, RANK_CD_SCALE } from '../stats';
 import type { AbilityKey, Vec2 } from '../types';
 import { hostile, type Unit } from '../unit';
 import { applyEffects, type EffectSpec, type Power } from './effects';
-import { breakStealth, isRooted, isStealthed, isStunned } from './status';
+import { breakStealth, isRooted, isStealthed, isStunned, isUntargetable } from './status';
 
 export type CastSpec =
   | {
@@ -32,7 +33,12 @@ export type CastSpec =
       onDetonate?: readonly EffectSpec[];
     }
   | { kind: 'self_or_ally'; searchRadius: number; effects: readonly EffectSpec[] }
-  | { kind: 'enemy_target'; searchRadius: number; effects: readonly EffectSpec[] }
+  | {
+      kind: 'enemy_target';
+      searchRadius: number;
+      effects: readonly EffectSpec[];
+      selfEffects?: readonly EffectSpec[];
+    }
   | { kind: 'cone'; range: number; halfAngle: number; onHit: readonly EffectSpec[] }
   | {
       kind: 'burst';
@@ -53,6 +59,10 @@ export interface AbilityDef {
   manaCost: number;
   cooldown: number;
   castRange: number;
+  // Cast time in seconds: costs are paid at press, the spell resolves after
+  // the windup, and a stun during it cancels the cast. The counterplay
+  // window big ultimates deserve; instant when absent.
+  windup?: number;
   spec: CastSpec;
 }
 
@@ -75,7 +85,7 @@ function findEnemyTarget(
   let bestD = Number.POSITIVE_INFINITY;
   for (const u of ctx.units.values()) {
     if (!hostile(caster, u) || u.dead || ctx.dead.has(u.id)) continue;
-    if (isStealthed(u, ctx.time)) continue;
+    if (isStealthed(u, ctx.time) || isUntargetable(u, ctx.time)) continue;
     const toCaster =
       Math.hypot(u.pos.x - caster.pos.x, u.pos.z - caster.pos.z) - caster.radius - u.radius;
     if (toCaster > castRange) continue;
@@ -186,6 +196,7 @@ export function executeCast(
       const target = findEnemyTarget(ctx, caster, at, spec.searchRadius, castRange);
       if (!target) return false;
       applyEffects(ctx, caster.id, power, target, spec.effects);
+      if (spec.selfEffects) applyEffects(ctx, caster.id, power, caster, spec.selfEffects);
       return true;
     }
     case 'cone': {
@@ -257,7 +268,15 @@ export function castAbility(
   caster.cooldowns[key] = ctx.time + def.cooldown * (1 - RANK_CD_SCALE * (rank - 1));
   caster.mana -= def.manaCost;
   breakStealth(caster);
+  passiveOf(caster)?.onCast?.(ctx, caster, key);
   ctx.events.push({ type: 'cast', unitId: caster.id, key });
+  if (def.windup && def.windup > 0) {
+    // Deferred resolution: the sim's windup step fires it (or a stun
+    // cancels it). Costs stay paid either way.
+    caster.pendingSpell = { key, aim: { x: aim.x, z: aim.z }, resolveAt: ctx.time + def.windup };
+    caster.path = [];
+    return true;
+  }
   return executeCast(
     ctx,
     caster,
@@ -267,4 +286,41 @@ export function castAbility(
     power,
     `${caster.championId}_${key}`,
   );
+}
+
+// Resolves champions' pending windup casts: fire when the clock is up,
+// cancel when the caster is stunned or dead. Called from the fixed tick
+// order right before auto-attacks.
+export function stepWindups(
+  ctx: CombatCtx,
+  abilitiesOf: (championId: string) => Record<AbilityKey, AbilityDef> | null,
+): void {
+  for (const u of ctx.units.values()) {
+    if (!u.pendingSpell) continue;
+    if (u.dead || ctx.dead.has(u.id) || isStunned(u, ctx.time)) {
+      u.pendingSpell = null;
+      continue;
+    }
+    if (ctx.time < u.pendingSpell.resolveAt) continue;
+    const pending = u.pendingSpell;
+    u.pendingSpell = null;
+    if (u.championId === null) continue;
+    const def = abilitiesOf(u.championId)?.[pending.key];
+    if (!def) continue;
+    const rank = effectiveRank(u, pending.key);
+    const power = {
+      ad: u.stats.ad,
+      ap: u.stats.ap,
+      scale: 1 + RANK_BASE_SCALE * (Math.max(1, rank) - 1),
+    };
+    executeCast(
+      ctx,
+      u,
+      def.spec,
+      def.castRange,
+      pending.aim,
+      power,
+      `${u.championId}_${pending.key}`,
+    );
+  }
 }

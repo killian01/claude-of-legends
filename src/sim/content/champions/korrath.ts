@@ -88,13 +88,14 @@ export const KORRATH: ChampionDef = {
       manaCost: 85,
       cooldown: 67.5,
       castRange: 6.5,
+      windup: 0.4,
       spec: {
         kind: 'dash',
         range: 6.5,
         landRadius: 3,
         onLand: [
           { kind: 'damage', base: 203, adRatio: 0.5, dtype: 'magic' },
-          { kind: 'stun', duration: 1.0 },
+          { kind: 'knockup', duration: 1.0 },
         ],
       },
     },

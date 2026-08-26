@@ -659,7 +659,8 @@ export class Renderer {
       );
     }
     if (impacted) playSfx('impact');
-    if (notes.casts.length > 0) playSfx('cast');
+    // The player's own casts already played their school sound in boot.
+    if (notes.casts.some((id) => id !== this.followId)) playSfx('cast');
     for (const casterId of notes.casts) {
       const caster = this.world.units.get(casterId);
       if (!caster) continue;
@@ -1227,7 +1228,14 @@ export class Renderer {
       }
 
       const phase = now * 0.013 + id * 1.7;
-      const bobY = Math.abs(Math.sin(phase)) * 0.1 * t.walkAmp;
+      let bobY = Math.abs(Math.sin(phase)) * 0.1 * t.walkAmp;
+      // Airborne (knockups): the whole body lifts and hangs.
+      if (living) {
+        const unit = this.world.units.get(id);
+        if (unit?.statuses.some((st) => st.kind === 'airborne' && st.until > this.world.time)) {
+          bobY = 1.2 + Math.sin(now * 0.02) * 0.15;
+        }
+      }
       // Auto-attack lunge: a short hop toward the victim.
       const swinging = t.swingUntil > now;
       const swingK = swinging ? Math.sin((1 - (t.swingUntil - now) / 200) * Math.PI) : 0;

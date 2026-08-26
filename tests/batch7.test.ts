@@ -20,20 +20,22 @@ const fakeCtx = (sim: Sim): CombatCtx =>
   }) as unknown as CombatCtx;
 
 describe('skill points and ability ranks', () => {
-  it('level ups grant one skill point each', () => {
+  it('level 1 starts with one point to place, level ups grant one each', () => {
     const sim = new Sim(7);
     const a = sim.addChampion(0, { x: 75, z: 75 });
-    expect(a.skillPoints).toBe(0);
+    // Every rank is earned now: nothing is learned until the point lands.
+    expect(a.skillPoints).toBe(1);
+    expect(effectiveRank(a, 'Q')).toBe(0);
     gainXp(a, xpForNext(1) + xpForNext(2));
     expect(a.level).toBe(3);
-    expect(a.skillPoints).toBe(2);
+    expect(a.skillPoints).toBe(3);
   });
 
   it('basics cap at rank 5 and R gates at levels 6/11/16', () => {
     const sim = new Sim(7);
     const a = sim.addChampion(0, { x: 75, z: 75 });
     a.skillPoints = 20;
-    for (let i = 0; i < 4; i++) expect(sim.levelAbility(a.id, 'Q')).toBe(true);
+    for (let i = 0; i < 5; i++) expect(sim.levelAbility(a.id, 'Q')).toBe(true);
     expect(effectiveRank(a, 'Q')).toBe(5);
     expect(sim.levelAbility(a.id, 'Q')).toBe(false);
 
@@ -55,13 +57,14 @@ describe('skill points and ability ranks', () => {
   it('spending a point requires having one', () => {
     const sim = new Sim(7);
     const a = sim.addChampion(0, { x: 75, z: 75 });
-    expect(a.skillPoints).toBe(0);
+    a.skillPoints = 0;
     expect(sim.levelAbility(a.id, 'W')).toBe(false);
   });
 
   it('higher rank raises base damage and shortens the cooldown', () => {
     const sim = new Sim(7);
     const korrath = sim.addChampion(0, { x: 75, z: 75 }, 'korrath');
+    korrath.abilityRanks = { Q: 1, W: 0, E: 0, R: 0 };
     const dummy = sim.addChampion(1, { x: 77, z: 75 });
     sim.tick();
 
@@ -92,7 +95,8 @@ describe('skill points and ability ranks', () => {
     a.level = 6;
     const obs = buildObservation(sim, a.id)!;
     expect(obs.self.skillPoints).toBe(3);
-    expect(obs.self.abilityRanks).toEqual({ Q: 1, W: 1, E: 1, R: 1 });
+    // Unspent basics read rank 0; R reads its free rank 1 at level 6.
+    expect(obs.self.abilityRanks).toEqual({ Q: 0, W: 0, E: 0, R: 1 });
   });
 });
 

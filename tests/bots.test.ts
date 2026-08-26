@@ -15,6 +15,7 @@ describe('observations', () => {
   it('exclude fogged enemies and include what the team sees', () => {
     const sim = new Sim(41);
     const me = sim.addChampion(0, { x: 75, z: 75 });
+    me.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     const hidden = sim.addChampion(1, { x: 140, z: 140 });
     const seen = sim.addChampion(1, { x: 80, z: 75 });
     sim.tick();

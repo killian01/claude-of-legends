@@ -49,13 +49,14 @@ export const TORV: ChampionDef = {
       manaCost: 45,
       cooldown: 7.5,
       castRange: 5.5,
+      windup: 0.25,
       spec: {
         kind: 'dash',
         range: 5.5,
         landRadius: 2,
         onLand: [
           { kind: 'damage', base: 108, adRatio: 0.5, dtype: 'physical' },
-          { kind: 'knockback', distance: 2 },
+          { kind: 'knockup', duration: 0.75 },
         ],
       },
     },

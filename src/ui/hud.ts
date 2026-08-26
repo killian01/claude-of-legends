@@ -43,6 +43,10 @@ function statusLabel(s: Status, time: number): string {
   switch (s.kind) {
     case 'stun':
       return `STUN ${left.toFixed(1)}`;
+    case 'airborne':
+      return `AIRBORNE ${left.toFixed(1)}`;
+    case 'untargetable':
+      return 'UNTOUCHABLE';
     case 'root':
       return `ROOT ${left.toFixed(1)}`;
     case 'recall':
@@ -570,7 +574,30 @@ export class Hud {
         const u = this.world.units.get(this.selfId);
         const itemId = u?.items[i];
         const itemDef = itemId ? ITEMS[itemId] : undefined;
-        return itemDef ? describeItem(itemDef, statLabel(itemDef.stats)) : [];
+        return itemDef
+          ? [
+              ...describeItem(itemDef, statLabel(itemDef.stats)),
+              'Right-click to sell (70 percent back, at fountain).',
+            ]
+          : [];
+      });
+      // Right-click sells at the fountain for 70 percent of the price.
+      slot.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const u = this.world.units.get(this.selfId);
+        const itemId = u?.items[i];
+        if (!u || itemId === undefined) return;
+        if (!this.atFountain()) {
+          playSfx('deny');
+          this.toast('You can only sell at your fountain.');
+          return;
+        }
+        const def = ITEMS[itemId];
+        if (this.world.sellItem(this.selfId, i)) {
+          playSfx('buy');
+          if (def) this.toast(`Sold ${def.name} for ${Math.floor(def.cost * 0.7)}g.`);
+          this.update();
+        }
       });
       inv.appendChild(slot);
       this.invSlots.push(slot);
@@ -583,7 +610,7 @@ export class Hud {
       'Right-click: move / attack. A: attack-move. S: stop and hold. B: recall. ' +
       'Q W E R: cast at cursor (hold to keep the range preview). D F: sigils. P: shop. ' +
       'Tab: scoreboard. Enter: chat. G: ping. Esc: menu. Screen edges pan the camera; ' +
-      'Space recenters; left-click the minimap to look. Level up: click + above an ability.';
+      'Space recenters; left-click the minimap to look. Level up: Alt+key or click +.';
 
     // The always-visible personal score, MOBA style: K / D / A plus creep
     // score, top right.
@@ -1176,7 +1203,9 @@ export class Hud {
       const remaining = (u.cooldowns[key] ?? 0) - this.world.time;
       if (rank <= 0) {
         slot.cd.style.display = 'flex';
-        slot.cd.textContent = `Lv${ULT_RANK_LEVELS[0]}`;
+        // R waits on champion level; basics wait on a skill point.
+        slot.cd.textContent =
+          key === 'R' && u.level < ULT_RANK_LEVELS[0]! ? `Lv${ULT_RANK_LEVELS[0]}` : '+';
       } else if (remaining > 0) {
         slot.cd.style.display = 'flex';
         slot.cd.textContent = remaining >= 1 ? String(Math.ceil(remaining)) : remaining.toFixed(1);

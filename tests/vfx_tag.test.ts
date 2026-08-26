@@ -13,6 +13,7 @@ describe('ability vfx tags in the sim', () => {
   it('tags skillshot projectiles and zones with champion and key', () => {
     const sim = new Sim(11);
     const a = sim.addChampion(0, { x: 75, z: 75 });
+    a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     expect(sim.castAbility(a.id, 'Q', { x: 85, z: 75 })).toBe(true);
     expect([...sim.projectiles.values()][0]?.vfx).toBe('sylra_Q');
     expect(sim.castAbility(a.id, 'W', { x: 80, z: 75 })).toBe(true);
@@ -22,7 +23,9 @@ describe('ability vfx tags in the sim', () => {
   it('leaves auto-attack bolts untagged', () => {
     const sim = new Sim(11);
     const a = sim.addChampion(0, { x: 75, z: 75 }, 'vesk');
+    a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     const b = sim.addChampion(1, { x: 78, z: 75 });
+    b.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     sim.orderAttack(a.id, b.id);
     for (let i = 0; i < 20 && sim.projectiles.size === 0; i++) sim.tick();
     expect(sim.projectiles.size).toBeGreaterThan(0);
@@ -39,6 +42,7 @@ describe('ability vfx tags on the wire', () => {
     const a = new ClientWorld((msg) => match.handleCommand(1, msg));
     a.applyServer({ t: 'match_start', selfUnitId: match.players.get(1)!.unitId, team: 0 });
     const aliceId = match.players.get(1)!.unitId;
+    match.sim.units.get(aliceId)!.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     match.sim.castAbility(aliceId, 'W', { x: 20, z: 20 });
     match.tick();
     const snap = match.buildSnapshotFor(1);

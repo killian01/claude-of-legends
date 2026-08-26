@@ -6,7 +6,7 @@
 // toasts fire here from mirrored state, before (or instead of) the
 // authoritative answer.
 
-import { schoolColorOf } from '../render/ability_vfx';
+import { schoolColorOf, schoolTagOf } from '../render/ability_vfx';
 import { Renderer } from '../render/renderer';
 import { effectiveRank, ULT_RANK_LEVELS } from '../sim/stats';
 import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
@@ -17,7 +17,7 @@ import type { IWorld } from '../world_api';
 import { setupInput } from './input';
 import { startMusic, stopMusic } from './music';
 import { pickEnemyAt, pickEnemyOnScreen, pickUnitOnScreen } from './picking';
-import { playSfx } from './sfx';
+import { playCastSfx, playSfx } from './sfx';
 
 export interface KillNote {
   unitId: number;
@@ -101,10 +101,13 @@ export function startPresentation(
     const def = u?.championId ? world.championDef(u.championId) : null;
     const ab = def?.abilities[key];
     if (u && ab) {
-      // Basics floor at rank 1, so a zero rank can only be a locked ultimate.
       if (effectiveRank(u, key) <= 0) {
         playSfx('deny');
-        hud.toast(`${ab.name} unlocks at level ${ULT_RANK_LEVELS[0]}.`);
+        hud.toast(
+          key === 'R' && u.level < ULT_RANK_LEVELS[0]!
+            ? `${ab.name} unlocks at level ${ULT_RANK_LEVELS[0]}.`
+            : `${ab.name} needs a skill point: Alt+${key} or click the +.`,
+        );
         return;
       }
       if ((u.cooldowns[key] ?? 0) > world.time) {
@@ -131,6 +134,8 @@ export function startPresentation(
     // The sim can still refuse (decision budget, stun): that denial must be
     // audible, never a silently dead key.
     if (!ok) playSfx('deny');
+    // Your own casts sound like THEIR school, not the shared whoosh.
+    if (ok && ab) playCastSfx(schoolTagOf(ab.spec));
     // Instant abilities spawn no projectile or zone: flash their shape in
     // the ability's school color so the cast visibly happened.
     if (
@@ -232,6 +237,10 @@ export function startPresentation(
       if (aimingKey !== key) return;
       aimingKey = null;
       renderer.hideAimPreview();
+    },
+    onLevelAbility: (key) => {
+      if (world.levelAbility(selfId, key)) playSfx('buy');
+      else playSfx('deny');
     },
     onCastSigil: (slot, aim) => {
       pendingCast = null;

@@ -23,6 +23,10 @@ function toStatus(k: string, until: number, v: number | undefined): Status | nul
       return { kind: 'root', until };
     case 'recall':
       return { kind: 'recall', until };
+    case 'airborne':
+      return { kind: 'airborne', until };
+    case 'untargetable':
+      return { kind: 'untargetable', until };
     case 'stealth':
       return { kind: 'stealth', until };
     case 'slow':
@@ -96,6 +100,7 @@ function materializeUnit(s: SnapUnit): Unit {
     attackReadyAt: 0,
     attackMoveTarget: null,
     holding: false,
+    pendingSpell: null,
     path: [],
     level: s.l ?? 1,
     xp: 0,
@@ -195,6 +200,11 @@ export class ClientWorld implements IWorld {
 
   buyItem(_unitId: number, itemId: string): boolean {
     this.send({ t: 'buy', itemId });
+    return true;
+  }
+
+  sellItem(_unitId: number, slot: number): boolean {
+    this.send({ t: 'sell', slot });
     return true;
   }
 

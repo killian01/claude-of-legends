@@ -24,6 +24,7 @@ export type ClientMsg =
   | { t: 'cast'; key: AbilityKey; x: number; z: number }
   | { t: 'sigil'; slot: number; x: number; z: number }
   | { t: 'buy'; itemId: string }
+  | { t: 'sell'; slot: number }
   | { t: 'skill'; key: AbilityKey }
   | { t: 'chat'; text: string }
   | { t: 'ping'; x: number; z: number };

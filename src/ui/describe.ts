@@ -44,6 +44,10 @@ function fmtEffect(e: EffectSpec): string {
       return `knocks back ${e.distance}`;
     case 'pull':
       return `pulls ${e.distance} closer`;
+    case 'knockup':
+      return `knocks airborne for ${e.duration}s`;
+    case 'untargetable':
+      return `untargetable for ${e.duration}s`;
     case 'dot':
       return `${e.perSecond}/s ${e.dtype} damage over ${e.duration}s`;
     case 'grievous':

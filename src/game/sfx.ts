@@ -176,6 +176,64 @@ const MIN_INTERVAL_MS: Partial<Record<SfxName, number>> = {
   towershot: 120,
 };
 
+// Per-school cast sounds for the player's OWN abilities: six sonic
+// identities instead of one shared whoosh (player review).
+export function playCastSfx(school: string): void {
+  const b = audioBus();
+  if (!b || b.ctx.state === 'suspended') return;
+  const now = performance.now();
+  if (now - (lastPlay.get('cast') ?? 0) < 90) return;
+  lastPlay.set('cast', now);
+  const j = 0.94 + Math.random() * 0.12;
+  switch (school) {
+    case 'steel':
+      // A metallic schwing.
+      noise(b, { dur: 0.12, freq: 1400 * j, slideTo: 3800 * j, q: 2.2, vol: 0.5 });
+      tone(b, { freq: 2300 * j, dur: 0.1, type: 'triangle', vol: 0.18, verb: 0.3 });
+      break;
+    case 'fire':
+      // A crackling roar.
+      noise(b, { dur: 0.3, freq: 1500 * j, slideTo: 300, type: 'lowpass', vol: 0.65, verb: 0.3 });
+      tone(b, { freq: 110 * j, slideTo: 65, dur: 0.25, type: 'sawtooth', vol: 0.3, lpf: 500 });
+      break;
+    case 'life':
+      // A warm double chime.
+      tone(b, { freq: 660 * j, dur: 0.2, type: 'sine', vol: 0.3, verb: 0.6 });
+      tone(b, { freq: 990 * j, dur: 0.25, type: 'sine', delay: 0.06, vol: 0.25, verb: 0.6 });
+      break;
+    case 'control':
+      // A heavy low slam.
+      tone(b, {
+        freq: 200 * j,
+        slideTo: 90,
+        dur: 0.3,
+        type: 'square',
+        vol: 0.4,
+        lpf: 600,
+        verb: 0.4,
+      });
+      noise(b, { dur: 0.12, freq: 500, slideTo: 150, type: 'lowpass', vol: 0.5 });
+      break;
+    case 'wind':
+      // A fast breathy sweep.
+      noise(b, { dur: 0.22, freq: 900 * j, slideTo: 5200 * j, q: 0.6, vol: 0.55, verb: 0.4 });
+      break;
+    default:
+      // Arcane: the airy whoosh with a shimmer above it.
+      noise(b, { dur: 0.26, freq: 350 * j, slideTo: 1800 * j, q: 0.9, vol: 0.6, verb: 0.4 });
+      noise(b, {
+        dur: 0.18,
+        freq: 3200 * j,
+        slideTo: 6400,
+        q: 1.4,
+        vol: 0.18,
+        delay: 0.05,
+        verb: 0.6,
+      });
+      break;
+  }
+}
+
 export function playSfx(name: SfxName): void {
   const b = audioBus();
   if (!b || b.ctx.state === 'suspended') return;

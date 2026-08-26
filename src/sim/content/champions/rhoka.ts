@@ -8,6 +8,8 @@ import type { ChampionDef } from './index';
 const REND_DURATION_S = 2.5;
 const REND_BASE_DPS = 3;
 const REND_DPS_PER_LEVEL = 0.6;
+const REND_ABILITY_BONUS_PER_STACK = 0.15;
+const REND_MAX_STACKS = 3;
 
 export const RHOKA: ChampionDef = {
   id: 'rhoka',
@@ -16,7 +18,9 @@ export const RHOKA: ChampionDef = {
   blurb: 'A diving brawler who feeds on extended fights and bleeds targets out.',
   passive: {
     name: 'Rend',
-    description: 'Attacks apply a stacking short bleed.',
+    description:
+      'Attacks apply a stacking short bleed. Abilities deal 15 percent more ' +
+      'damage per bleed on the target (up to 3).',
     onAttackHit(ctx, self, target) {
       if (target.kind === 'tower' || target.kind === 'sanctum') return;
       addStatus(target, {
@@ -26,6 +30,14 @@ export const RHOKA: ChampionDef = {
         sourceId: self.id,
         dtype: 'physical',
       });
+    },
+    // The roster's promised per-stack payoff on ability damage.
+    modifyDamage(ctx, self, target, amount, _dtype, via) {
+      if (via !== 'ability') return amount;
+      const bleeds = target.statuses.filter(
+        (s) => s.kind === 'dot' && s.sourceId === self.id && s.until > ctx.time,
+      ).length;
+      return amount * (1 + REND_ABILITY_BONUS_PER_STACK * Math.min(bleeds, REND_MAX_STACKS));
     },
   },
   base: {

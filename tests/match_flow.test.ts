@@ -83,6 +83,7 @@ describe('online match flow', () => {
     const { match, a, step } = wire();
     step(1);
     const selfId = a.selfUnitId;
+    match.sim.units.get(selfId)!.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     a.castAbility(selfId, 'Q', { x: 20, z: 20 });
     step(2);
     const self = a.units.get(selfId)!;

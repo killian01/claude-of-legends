@@ -68,6 +68,8 @@ export interface Unit {
   // Stop order (S): while held, idle defense keeps its hands off; any
   // movement or attack order clears it. Freezing a wave is a verb again.
   holding: boolean;
+  // A paid cast waiting out its windup; stuns cancel it.
+  pendingSpell: { key: AbilityKey; aim: Vec2; resolveAt: number } | null;
   // Remaining waypoints toward the current move order; empty when idle.
   path: Vec2[];
   // Progression and economy (champions).
@@ -155,7 +157,9 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     },
     statuses: [],
     cooldowns: {},
-    abilityRanks: { Q: 1, W: 1, E: 1, R: 0 },
+    // Every rank is earned: level 1 grants one point to place (the level 1
+    // skill choice the genre opens with).
+    abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
     skillPoints: 0,
     skin: 0,
     passiveStacks: 0,
@@ -164,6 +168,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     attackReadyAt: 0,
     attackMoveTarget: null,
     holding: false,
+    pendingSpell: null,
     path: [],
     level: 1,
     xp: 0,
@@ -217,6 +222,7 @@ export function createChampion(id: number, team: TeamId, pos: Vec2, def: Champio
     mrPenPct: 0,
   };
   u.gold = 500;
+  u.skillPoints = 1;
   u.sightRange = 12;
   u.goldBounty = 300;
   u.xpBounty = 200;

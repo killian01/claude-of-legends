@@ -99,6 +99,7 @@ export const MAERA: ChampionDef = {
       manaCost: 85,
       cooldown: 67.5,
       castRange: 10,
+      windup: 0.5,
       spec: {
         kind: 'skillshot',
         speed: 16,
@@ -107,7 +108,7 @@ export const MAERA: ChampionDef = {
         pierce: true,
         onHit: [
           { kind: 'damage', base: 132, apRatio: 1.14, dtype: 'magic' },
-          { kind: 'knockback', distance: 2.5 },
+          { kind: 'knockup', duration: 0.75 },
         ],
         allyEffects: [{ kind: 'shield', base: 150, apRatio: 0.5, duration: 3 }],
       },

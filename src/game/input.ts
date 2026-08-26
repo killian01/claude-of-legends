@@ -15,6 +15,7 @@ export interface InputHandlers {
   // shows the range preview while held); keyup only hides the preview.
   onCast(key: AbilityKey, aim: Vec2): void;
   onAimEnd(key: AbilityKey): void;
+  onLevelAbility(key: AbilityKey): void;
   onCastSigil(slot: number, aim: Vec2): void;
   onStop(): void;
   onAttackMove(aim: Vec2): void;
@@ -84,6 +85,15 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): void {
     if (e.repeat) return;
     const aim = (): Vec2 | null => renderer.groundPointAt(mouseX, mouseY);
     const lower = e.key.toLowerCase();
+    // Alt + ability key spends a skill point (Ctrl is browser-reserved).
+    if (e.altKey) {
+      const levelKey = ABILITY_KEYS[lower];
+      if (levelKey) {
+        e.preventDefault();
+        handlers.onLevelAbility(levelKey);
+        return;
+      }
+    }
     if (lower === 'p') {
       handlers.onToggleShop();
       return;

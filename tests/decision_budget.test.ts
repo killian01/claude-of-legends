@@ -9,6 +9,7 @@ describe('decision budget', () => {
   it('caps ability casts at the bucket size, then refills over time', () => {
     const sim = new Sim(31);
     const a = sim.addChampion(0, { x: 75, z: 75 });
+    a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     const b = sim.addChampion(1, { x: 79, z: 75 });
     expect(DECISION_CAP).toBe(2);
     // Two casts burst through, the third is budget-rejected even though the
@@ -24,6 +25,7 @@ describe('decision budget', () => {
   it('sigils draw from the same bucket', () => {
     const sim = new Sim(31);
     const a = sim.addChampion(0, { x: 75, z: 75 });
+    a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     const b = sim.addChampion(1, { x: 79, z: 75 });
     expect(sim.castAbility(a.id, 'Q', { x: b.pos.x, z: b.pos.z })).toBe(true);
     expect(sim.castAbility(a.id, 'W', { x: b.pos.x, z: b.pos.z })).toBe(true);
@@ -35,6 +37,7 @@ describe('decision budget', () => {
   it('never throttles movement or attack intentions', () => {
     const sim = new Sim(31);
     const a = sim.addChampion(0, { x: 75, z: 75 });
+    a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     const b = sim.addChampion(1, { x: 79, z: 75 });
     sim.castAbility(a.id, 'Q', { x: 79, z: 75 });
     sim.castAbility(a.id, 'W', { x: 79, z: 75 });
@@ -48,6 +51,7 @@ describe('decision budget', () => {
   it('a failed cast does not burn a token', () => {
     const sim = new Sim(31);
     const a = sim.addChampion(0, { x: 75, z: 75 });
+    a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     // R is level-locked: rejected before the budget, so Q and W still burst.
     expect(sim.castAbility(a.id, 'R', { x: 80, z: 75 })).toBe(false);
     expect(sim.castAbility(a.id, 'Q', { x: 80, z: 75 })).toBe(true);

@@ -17,7 +17,9 @@ import { createChampion } from '../src/sim/unit';
 function duel(): { sim: Sim; a: Unit; b: Unit } {
   const sim = new Sim(11);
   const a = sim.addChampion(0, { x: 75, z: 75 });
+  a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
   const b = sim.addChampion(1, { x: 85, z: 75 });
+  b.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
   return { sim, a, b };
 }
 
@@ -64,6 +66,7 @@ describe('Sylra', () => {
   it('E prefers a nearby ally at the aim point', () => {
     const { sim, a } = duel();
     const ally = sim.addChampion(0, { x: 77, z: 75 });
+    ally.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     sim.castAbility(a.id, 'E', { x: ally.pos.x, z: ally.pos.z });
     expect(ally.statuses.some((s) => s.kind === 'shield')).toBe(true);
     expect(a.statuses.some((s) => s.kind === 'shield')).toBe(false);
@@ -137,7 +140,9 @@ describe('Sylra', () => {
     const run = () => {
       const sim = new Sim(5);
       const a = sim.addChampion(0, { x: 75, z: 75 });
+      a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
       const b = sim.addChampion(1, { x: 81, z: 75 });
+      b.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
       sim.castAbility(a.id, 'W', { x: 81, z: 75 });
       sim.castAbility(a.id, 'Q', { x: 81, z: 75 });
       sim.orderAttack(a.id, b.id);
