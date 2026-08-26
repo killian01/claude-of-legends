@@ -118,7 +118,54 @@ emotes, item actives.
 
 ## F. Reviewer reports
 
-Pending: sim/server correctness, browser UX.
+Pending: sim/server correctness.
+
+### F.3 Browser UX reviewer (landed; 31 screenshots, zero console errors)
+
+Confirms with evidence (already listed above): the ONLINE DEATH P0 (died 3
+times, never saw a death screen, HUD frozen at 50/650, camera teleported to
+map center), invisible casts, zero control hints, blind champion/sigil
+select with no tooltips anywhere, no damage feedback, unreadable statuses,
+no recall and fountain that does not heal, no XP bar, total silence, fog
+with no visual feedback, no chat or pings.
+
+New findings:
+
+- [P1][high] The opaque minimap HIDES the world behind it, including enemy
+  towers and champions mid-fight; the shop panel itself renders UNDER the
+  minimap (last items hidden).
+- [P1][high] World health bars nearly unreadable: hairline-thin, light on
+  light lanes, stair-stacked in waves, same size for champions and minions,
+  no mana or level over heads.
+- [P1][high] Kill feed illegible: tower deaths read "The lane killed guest";
+  bot names repeat identically on BOTH teams with no team color anywhere.
+- [P1][high] Inventory invisible outside the shop panel; failed buys are
+  100% silent (no toast, nothing).
+- [P1][high] Sigil cooldowns render as raw "210" covering the D/F letters;
+  trivially wasted with no tooltip warning of a 210 s cooldown.
+- [P1][high] End of match: VICTORY/DEFEAT for ~20 s then a hard page reload,
+  no stats, no rematch, no warning; disconnection likewise.
+- [P1][medium] Walls vs brush indistinguishable (dark green discs vs green
+  discs); nothing shows what blocks movement vs what conceals.
+- [P1][medium] Locked high camera, no zoom: champion ~30 px; at the base
+  more than half the screen is off-map void (looks broken at spawn).
+- [P2] Empty name silently becomes "guest"; no input placeholder.
+- [P2] "Practice vs dummies (offline)" actually launches a full bot 5v5:
+  misleading label.
+- [P2] Select screen: enemy team shows "-" forever; a third sigil click
+  silently ejects the oldest; nothing says which sigil lands on D vs F.
+- [P2] HOLDING Tab (the MOBA reflex) makes the scoreboard flicker open and
+  closed on key repeat.
+- [P2] Scoreboard lacks assists/CS/gold/items; teams labeled Team 1/2
+  without marking yours.
+- [P2] No game clock, no CS counter, no personal KDA outside Tab; 8 px
+  ability names unreadable; "Lv6" covers the R name.
+- [P2] Escape does nothing: no pause/options/quit menu at all.
+- [P2] No order feedback on attack clicks (no target marker); move marker
+  only 0.6 s; off-map clicks silently ignored.
+- Works well (preserve): the whole menu-queue-select-game flow is smooth
+  and error-free, minimap right-click move, auto-lock countdown, honest
+  "Return to your fountain to buy" message, window resize.
 
 ### F.0 Playability-by-simulation reviewer (landed)
 
