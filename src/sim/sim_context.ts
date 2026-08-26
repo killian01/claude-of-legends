@@ -16,5 +16,7 @@ export interface CombatCtx {
   readonly zones: Map<number, Zone>;
   readonly events: SimEvent[];
   readonly dead: Set<number>;
+  // Who last-hit each unit in `dead`, for kill rewards.
+  readonly killers: Map<number, number>;
   allocId(): number;
 }

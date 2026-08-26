@@ -39,7 +39,7 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
 
     if (p.homingTargetId !== null) {
       const target = ctx.units.get(p.homingTargetId);
-      if (!target || ctx.dead.has(target.id)) {
+      if (!target || target.dead || ctx.dead.has(target.id)) {
         ctx.projectiles.delete(p.id);
         continue;
       }
@@ -65,7 +65,7 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
     let hit: Unit | null = null;
     let hitDist = Number.POSITIVE_INFINITY;
     for (const u of ctx.units.values()) {
-      if (u.team === p.team || ctx.dead.has(u.id)) continue;
+      if (u.team === p.team || u.dead || ctx.dead.has(u.id)) continue;
       if (segmentDistance(u.pos, from, p.pos) > p.radius + u.radius) continue;
       const d = Math.hypot(u.pos.x - from.x, u.pos.z - from.z);
       if (d < hitDist) {

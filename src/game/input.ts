@@ -1,5 +1,5 @@
 // Local input, kept dumb: it reports ground points and key presses; the
-// entry point decides what they mean (move, attack, cast).
+// entry point decides what they mean (move, attack, cast, shop).
 
 import type { Renderer } from '../render/renderer';
 import type { AbilityKey, Vec2 } from '../sim/types';
@@ -7,6 +7,7 @@ import type { AbilityKey, Vec2 } from '../sim/types';
 export interface InputHandlers {
   onRightClick(p: Vec2): void;
   onCast(key: AbilityKey, aim: Vec2): void;
+  onToggleShop(): void;
 }
 
 const ABILITY_KEYS: Readonly<Record<string, AbilityKey>> = {
@@ -37,7 +38,12 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): void {
   });
 
   window.addEventListener('keydown', (e) => {
-    const key = ABILITY_KEYS[e.key.toLowerCase()];
+    const lower = e.key.toLowerCase();
+    if (lower === 'p' || lower === 'b') {
+      handlers.onToggleShop();
+      return;
+    }
+    const key = ABILITY_KEYS[lower];
     if (!key) return;
     const aim = renderer.groundPointAt(mouseX, mouseY);
     if (aim) handlers.onCast(key, aim);

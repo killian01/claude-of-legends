@@ -50,7 +50,7 @@ export function castAbility(
   def: AbilityDef,
   aim: Vec2,
 ): boolean {
-  if (ctx.dead.has(caster.id)) return false;
+  if (ctx.dead.has(caster.id) || caster.dead) return false;
   if ((caster.cooldowns[key] ?? 0) > ctx.time) return false;
   if (caster.mana < def.manaCost) return false;
 

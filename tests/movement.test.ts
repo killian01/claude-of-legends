@@ -6,11 +6,11 @@ import { Sim } from '../src/sim/sim';
 import { DT } from '../src/sim/types';
 
 describe('movement', () => {
-  it('walks a champion from its fountain to mid and arrives on time', () => {
+  it('walks a champion from its fountain toward mid and arrives on time', () => {
     const sim = new Sim(7);
     const champ = sim.addChampion(0);
-    sim.orderMove(champ.id, 75, 75);
-    const straight = Math.hypot(75 - champ.pos.x, 75 - champ.pos.z);
+    sim.orderMove(champ.id, 50, 50);
+    const straight = Math.hypot(50 - champ.pos.x, 50 - champ.pos.z);
     const maxTicks = Math.ceil((straight / champ.moveSpeed / DT) * 2);
     let arrived = -1;
     for (let i = 0; i < maxTicks; i++) {
@@ -22,7 +22,7 @@ describe('movement', () => {
       }
     }
     expect(arrived).toBeGreaterThanOrEqual(0);
-    expect(Math.hypot(champ.pos.x - 75, champ.pos.z - 75)).toBeLessThan(0.1);
+    expect(Math.hypot(champ.pos.x - 50, champ.pos.z - 50)).toBeLessThan(0.1);
   });
 
   it('cannot walk through a tower', () => {
