@@ -18,6 +18,7 @@ import {
 } from '../sim/stats';
 import type { AbilityKey, TeamId } from '../sim/types';
 import type { IWorld } from '../world_api';
+import { abilityIconUrl, sigilIconUrl } from './ability_icons';
 import { describeAbility, describeItem, describeSigil } from './describe';
 import { iconDataUrl, itemIconUrl } from './icons';
 import { attachTooltip } from './tooltips';
@@ -112,6 +113,11 @@ const CSS = `
   font-size: 19px; font-weight: 700;
 }
 .hud-slot.nomana { border-color: #27436e; color: #6f8cb8; }
+.hud-slot.nomana { filter: saturate(0.35) brightness(0.75); }
+.hud-slot-key {
+  position: absolute; right: 3px; top: 1px;
+  font-size: 11px; font-weight: 800; color: #f2f6e4; text-shadow: 0 1px 3px #000;
+}
 .hud-slot-cd {
   position: absolute; inset: 0; border-radius: 6px; background: rgba(0,0,0,0.72);
   color: #fff; display: flex; align-items: center; justify-content: center;
@@ -342,8 +348,17 @@ export class Hud {
 
     const slots = el('div', 'hud-slots');
     for (const key of KEYS) {
-      const slot = el('div', 'hud-slot', key);
-      tintSlot(slot, key);
+      const slot = el('div', 'hud-slot');
+      if (def) {
+        // A painted icon derived from the ability record itself; the hotkey
+        // moves to a corner badge so the art stays readable.
+        slot.style.backgroundImage = `url(${abilityIconUrl(key, def.abilities[key])})`;
+        slot.style.backgroundSize = 'cover';
+        slot.appendChild(el('span', 'hud-slot-key', key));
+      } else {
+        slot.textContent = key;
+        tintSlot(slot, key);
+      }
       const cd = el('div', 'hud-slot-cd');
       cd.style.display = 'none';
       slot.appendChild(cd);
@@ -365,9 +380,18 @@ export class Hud {
       this.slots.set(key, { root: slot, cd, pips, up });
     }
     for (const [i, keyLabel] of (['D', 'F'] as const).entries()) {
-      const slot = el('div', 'hud-slot', keyLabel);
+      const slot = el('div', 'hud-slot');
       slot.style.borderColor = '#6b5a2e';
-      tintSlot(slot, keyLabel);
+      const sigilId = self?.sigils[i];
+      const sigilDef = sigilId ? SIGILS[sigilId] : undefined;
+      if (sigilDef) {
+        slot.style.backgroundImage = `url(${sigilIconUrl(sigilDef)})`;
+        slot.style.backgroundSize = 'cover';
+        slot.appendChild(el('span', 'hud-slot-key', keyLabel));
+      } else {
+        slot.textContent = keyLabel;
+        tintSlot(slot, keyLabel);
+      }
       const cd = el('div', 'hud-slot-cd');
       cd.style.display = 'none';
       slot.appendChild(cd);
