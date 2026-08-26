@@ -4,8 +4,10 @@
 // ticks for smooth motion.
 
 import * as THREE from 'three';
+import { isRooted, isStunned } from '../sim/combat/status';
 import type { Vec2 } from '../sim/types';
 import type { IWorld } from '../world_api';
+import { FloatingText, makeTextSprite } from './floating_text';
 
 const TEAM_COLORS: readonly number[] = [0x4a7dd6, 0xd65c5c];
 const TEAM_LIGHT: readonly number[] = [0x9dbcf5, 0xf5a3a3];
@@ -21,9 +23,19 @@ const COLOR_BAR_BACK = 0x1a1a1a;
 interface TrackedUnit {
   mesh: THREE.Object3D;
   hpFill: THREE.Sprite;
+  hpBack: THREE.Sprite;
   barWidth: number;
+  barY: number;
+  lastHp: number;
+  stunMark: THREE.Sprite | null;
+  rootMark: THREE.Mesh | null;
   prev: Vec2;
   curr: Vec2;
+}
+
+export interface CombatNotes {
+  golds: readonly number[];
+  casts: readonly number[];
 }
 
 interface TrackedMobile {
@@ -45,11 +57,14 @@ export class Renderer {
   private readonly trackedZones = new Map<number, THREE.Object3D>();
   private readonly cameraOffset = new THREE.Vector3(0, 40, 24);
   private readonly markerGeometry = new THREE.RingGeometry(0.5, 0.8, 24);
+  private readonly rootGeometry = new THREE.RingGeometry(0.7, 0.95, 18);
   private readonly markers: {
     mesh: THREE.Mesh;
     material: THREE.MeshBasicMaterial;
     bornAt: number;
   }[] = [];
+  private readonly fct: FloatingText;
+  private readonly selfRing: THREE.Mesh;
   private followId: number | null = null;
   private viewerTeam = 0;
 
@@ -71,6 +86,16 @@ export class Renderer {
       this.camera.updateProjectionMatrix();
     });
 
+    this.fct = new FloatingText(this.scene);
+    this.selfRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.85, 1.05, 28),
+      new THREE.MeshBasicMaterial({ color: 0x86e06d, transparent: true, opacity: 0.8 }),
+    );
+    this.selfRing.rotation.x = -Math.PI / 2;
+    this.selfRing.position.y = 0.07;
+    this.selfRing.visible = false;
+    this.scene.add(this.selfRing);
+
     this.buildLights();
     this.buildMap();
     this.onSimTick();
@@ -91,10 +116,10 @@ export class Renderer {
     this.viewerTeam = team;
   }
 
-  // A brief ground ring where a move order landed.
-  flashMarker(x: number, z: number): void {
+  // A brief ground ring: move orders (green) and cast flashes (team tint).
+  flashMarker(x: number, z: number, color = 0x9be86a): void {
     const material = new THREE.MeshBasicMaterial({
-      color: 0x9be86a,
+      color,
       transparent: true,
       opacity: 0.9,
       side: THREE.DoubleSide,
@@ -104,6 +129,23 @@ export class Renderer {
     mesh.position.set(x, 0.15, z);
     this.scene.add(mesh);
     this.markers.push({ mesh, material, bornAt: performance.now() });
+  }
+
+  // One-shot combat notes from world events: gold popups over the followed
+  // champion, cast flashes on visible casters.
+  onCombatNotes(notes: CombatNotes): void {
+    const self = this.followId !== null ? this.world.units.get(this.followId) : undefined;
+    for (const amount of notes.golds) {
+      if (self) this.fct.spawn(`+${amount}g`, '#ffd94a', self.pos.x, 3.4, self.pos.z, 0.9);
+    }
+    for (const casterId of notes.casts) {
+      const caster = this.world.units.get(casterId);
+      if (!caster) continue;
+      // Offline guard: never flash a cast the viewer's team cannot see.
+      if (!this.world.isVisible(this.viewerTeam as 0 | 1, casterId)) continue;
+      const color = caster.team === this.viewerTeam ? 0x9dbcf5 : 0xf5a3a3;
+      this.flashMarker(caster.pos.x, caster.pos.z, color);
+    }
   }
 
   private buildLights(): void {
@@ -225,19 +267,28 @@ export class Renderer {
     return { holder, barY: 2.9 };
   }
 
-  private buildHpBar(holder: THREE.Group, team: number, barY: number, width: number): THREE.Sprite {
+  private buildHpBar(
+    holder: THREE.Group,
+    barY: number,
+    width: number,
+  ): { fill: THREE.Sprite; back: THREE.Sprite } {
     const back = new THREE.Sprite(new THREE.SpriteMaterial({ color: COLOR_BAR_BACK }));
     back.center.set(0, 0.5);
-    back.scale.set(width + 0.1, 0.24, 1);
-    back.position.set(-(width + 0.1) / 2, barY, 0);
-    const fill = new THREE.Sprite(
-      new THREE.SpriteMaterial({ color: TEAM_LIGHT[team] ?? 0xffffff }),
-    );
+    back.scale.set(width + 0.14, 0.34, 1);
+    back.position.set(-(width + 0.14) / 2, barY, 0);
+    const fill = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xffffff }));
     fill.center.set(0, 0.5);
-    fill.scale.set(width, 0.16, 1);
+    fill.scale.set(width, 0.24, 1);
     fill.position.set(-width / 2, barY, 0);
     holder.add(back, fill);
-    return fill;
+    return { fill, back };
+  }
+
+  // Health bar color by relation to the viewer: green self, blue allies,
+  // red enemies (readability review F.3).
+  private barColor(unitId: number, team: number): number {
+    if (team !== this.viewerTeam) return 0xe0574a;
+    return unitId === this.followId ? 0x58d84e : 0x5f96e8;
   }
 
   // Called once after every sim tick: shifts interpolation history and syncs
@@ -247,16 +298,21 @@ export class Renderer {
       let t = this.tracked.get(id);
       if (!t) {
         const { holder, barY } = this.buildUnitMesh(u.kind, u.team, u.stats.attackRange);
-        const barWidth = u.kind === 'champion' ? 1.6 : u.kind === 'minion' ? 1.0 : 2.2;
-        const hpFill = this.buildHpBar(holder, u.team, barY, barWidth);
+        const barWidth = u.kind === 'champion' ? 1.8 : u.kind === 'minion' ? 1.0 : 2.2;
+        const { fill, back } = this.buildHpBar(holder, barY, barWidth);
         holder.position.set(u.pos.x, 0, u.pos.z);
         holder.userData.unitId = id;
         holder.userData.team = u.team;
         this.unitLayer.add(holder);
         t = {
           mesh: holder,
-          hpFill,
+          hpFill: fill,
+          hpBack: back,
           barWidth,
+          barY,
+          lastHp: u.hp,
+          stunMark: null,
+          rootMark: null,
           prev: { x: u.pos.x, z: u.pos.z },
           curr: { x: u.pos.x, z: u.pos.z },
         };
@@ -265,11 +321,52 @@ export class Renderer {
         t.prev = t.curr;
         t.curr = { x: u.pos.x, z: u.pos.z };
       }
-      const frac = Math.max(0, Math.min(1, u.hp / u.maxHp));
-      t.hpFill.scale.x = Math.max(0.001, t.barWidth * frac);
-      t.mesh.visible =
+      const visible =
         !u.dead &&
         (u.team === this.viewerTeam || this.world.isVisible(this.viewerTeam as 0 | 1, id));
+      t.mesh.visible = visible;
+
+      // Floating damage numbers from hp deltas: no wire cost, works in both
+      // hosts, and heals at the fountain stay silent.
+      const dhp = t.lastHp - u.hp;
+      if (visible && dhp >= 1) {
+        const color = u.team === this.viewerTeam ? '#ff6a5e' : '#ffe9a8';
+        this.fct.spawn(`-${Math.round(dhp)}`, color, u.pos.x, t.barY + 0.9, u.pos.z);
+      }
+      t.lastHp = u.hp;
+
+      const frac = Math.max(0, Math.min(1, u.hp / u.maxHp));
+      t.hpFill.scale.x = Math.max(0.001, t.barWidth * frac);
+      (t.hpFill.material as THREE.SpriteMaterial).color.set(this.barColor(id, u.team));
+      // Minion bars only show once damaged, like the genre: less clutter.
+      const barVisible = visible && (u.kind !== 'minion' || u.hp < u.maxHp - 1);
+      t.hpFill.visible = barVisible;
+      t.hpBack.visible = barVisible;
+
+      // Crowd-control telegraphs: a yellow "!" for stuns, a ground ring for
+      // roots (fairness rule: never hide actionable state).
+      const stunned = visible && isStunned(u, this.world.time);
+      if (stunned && !t.stunMark) {
+        const mark = makeTextSprite('!', '#ffd94a', 0.8);
+        if (mark) {
+          mark.position.set(0, t.barY + 0.55, 0);
+          t.mesh.add(mark);
+          t.stunMark = mark;
+        }
+      }
+      if (t.stunMark) t.stunMark.visible = stunned;
+      const rooted = visible && !stunned && isRooted(u, this.world.time);
+      if (rooted && !t.rootMark) {
+        const ring = new THREE.Mesh(
+          this.rootGeometry,
+          new THREE.MeshBasicMaterial({ color: 0xb0733a, transparent: true, opacity: 0.85 }),
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.09;
+        t.mesh.add(ring);
+        t.rootMark = ring;
+      }
+      if (t.rootMark) t.rootMark.visible = rooted;
     }
     for (const [id, t] of this.tracked) {
       if (!this.world.units.has(id)) {
@@ -358,6 +455,15 @@ export class Renderer {
         m.material.opacity = 0.9 * (1 - age);
       }
     }
+
+    this.fct.update(now);
+
+    if (followPos) {
+      this.selfRing.position.x = followPos.x;
+      this.selfRing.position.z = followPos.z;
+    }
+    const selfUnit = this.followId !== null ? this.world.units.get(this.followId) : undefined;
+    this.selfRing.visible = selfUnit !== undefined && !selfUnit.dead;
 
     const target =
       followPos ?? new THREE.Vector3(this.world.map.size / 2, 0, this.world.map.size / 2);

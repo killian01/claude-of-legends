@@ -6,8 +6,37 @@
 import type { SelfSnap, ServerMsg, SnapEvent, SnapMobile, SnapUnit } from '../src/net/protocol';
 import type { Sim, SimEvent } from '../src/sim/sim';
 import type { TeamId } from '../src/sim/types';
+import type { Unit } from '../src/sim/unit';
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+// Display-relevant crowd control carried on every visible unit.
+function ccChips(u: Unit, time: number): { k: string; v?: number }[] {
+  const out: { k: string; v?: number }[] = [];
+  for (const s of u.statuses) {
+    if (s.until <= time) continue;
+    if (s.kind === 'stun' || s.kind === 'root') out.push({ k: s.kind });
+    else if (s.kind === 'slow') out.push({ k: 'slow', v: round2(s.pct) });
+  }
+  return out;
+}
+
+function statusValue(s: Unit['statuses'][number]): number | undefined {
+  switch (s.kind) {
+    case 'slow':
+      return round2(s.pct);
+    case 'shield':
+      return Math.round(s.remaining);
+    case 'mark':
+      return s.stacks;
+    case 'dot':
+      return s.perSecond;
+    case 'grievous':
+      return round2(s.factor);
+    default:
+      return undefined;
+  }
+}
 
 export function buildSnapshot(
   sim: Sim,
@@ -29,6 +58,9 @@ export function buildSnapshot(
       m: Math.round(u.maxHp),
     };
     if (u.kind === 'champion') snap.l = u.level;
+    if (u.dead) snap.d = 1;
+    const cc = ccChips(u, sim.time);
+    if (cc.length > 0) snap.st = cc;
     if (!known.has(u.id)) {
       known.add(u.id);
       snap.k = u.kind;
@@ -75,14 +107,24 @@ export function buildSnapshot(
       sigilCooldowns: [...selfUnit.sigilCooldowns],
       items: [...selfUnit.items],
       sigils: [...selfUnit.sigils],
+      statuses: selfUnit.statuses
+        .filter((s) => s.until > sim.time)
+        .map((s) => ({ k: s.kind, until: round2(s.until), v: statusValue(s) })),
     };
   }
 
   const snapEvents: SnapEvent[] = [];
   for (const ev of events) {
-    if (ev.type === 'death')
+    if (ev.type === 'death') {
       snapEvents.push({ e: 'death', unitId: ev.unitId, killerId: ev.killerId });
-    else if (ev.type === 'victory') snapEvents.push({ e: 'victory', team: ev.team });
+    } else if (ev.type === 'gold' && ev.unitId === selfUnitId) {
+      // Personal: your own last-hit and kill income only.
+      snapEvents.push({ e: 'gold', amount: ev.amount });
+    } else if (ev.type === 'cast' && sim.isVisible(team, ev.unitId)) {
+      snapEvents.push({ e: 'cast', unitId: ev.unitId });
+    } else if (ev.type === 'victory') {
+      snapEvents.push({ e: 'victory', team: ev.team });
+    }
   }
 
   return {

@@ -23,6 +23,7 @@ export function grantKillRewards(ctx: CombatCtx, victim: Unit, killerId: number)
     const killer = ctx.units.get(killerId);
     if (killer && killer.kind === 'champion' && killer.team !== victim.team) {
       killer.gold += victim.goldBounty;
+      ctx.events.push({ type: 'gold', unitId: killer.id, amount: victim.goldBounty });
     }
   }
   if (victim.xpBounty > 0) {

@@ -31,6 +31,10 @@ export interface SnapUnit {
   h: number;
   m: number;
   l?: number;
+  // Dead flag (champions linger while dead for their own team).
+  d?: 1;
+  // Active display-relevant statuses (crowd control), with an optional value.
+  st?: { k: string; v?: number }[];
   k?: UnitKind;
   t?: TeamId;
   c?: string | null;
@@ -59,10 +63,14 @@ export interface SelfSnap {
   sigilCooldowns: number[];
   items: string[];
   sigils: string[];
+  // The client's own full status list, for the HUD chips.
+  statuses: { k: string; until: number; v?: number }[];
 }
 
 export type SnapEvent =
   | { e: 'death'; unitId: number; killerId: number }
+  | { e: 'gold'; amount: number }
+  | { e: 'cast'; unitId: number }
   | { e: 'victory'; team: TeamId };
 
 export interface SelectPlayer {
