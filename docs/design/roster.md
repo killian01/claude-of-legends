@@ -1,6 +1,6 @@
 # Roster and vocabulary (draft)
 
-Status: prototype for reaction, nothing here is locked. Numbers are deliberately absent; balance lands with implementation. See ADR 0004 for the naming policy.
+Status: accepted (grill round 3). Numbers are deliberately absent; balance lands with implementation. See ADR 0004 for the naming policy.
 
 ## Game vocabulary
 
