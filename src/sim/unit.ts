@@ -51,6 +51,8 @@ export interface Unit {
   xp: number;
   gold: number;
   items: string[];
+  kills: number;
+  deaths: number;
   // Death state: champions stay in the sim while dead; everything else is
   // removed on death.
   dead: boolean;
@@ -111,6 +113,8 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     xp: 0,
     gold: 0,
     items: [],
+    kills: 0,
+    deaths: 0,
     dead: false,
     respawnAt: 0,
     sightRange: 8,

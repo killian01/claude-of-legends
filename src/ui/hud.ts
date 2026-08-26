@@ -83,6 +83,29 @@ const CSS = `
 .hud-overlay.open { display: flex; }
 .hud-overlay-title { font-size: 52px; font-weight: 800; letter-spacing: 2px; }
 .hud-overlay-sub { font-size: 16px; margin-top: 6px; }
+.hud-feed {
+  position: absolute; top: 12px; left: 12px; display: flex; flex-direction: column;
+  gap: 4px; font-size: 12px; text-shadow: 0 1px 2px #000;
+}
+.hud-feed-entry {
+  background: rgba(14, 20, 9, 0.8); border: 1px solid #3a4f28; border-radius: 4px;
+  padding: 3px 8px;
+}
+.hud-score {
+  position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
+  width: 440px; max-width: 92vw; background: rgba(14, 20, 9, 0.95);
+  border: 1px solid #466030; border-radius: 10px; padding: 12px 16px; display: none;
+}
+.hud-score.open { display: block; }
+.hud-score h3 { margin: 0 0 8px; font-size: 14px; text-align: center; }
+.hud-score-teams { display: flex; gap: 16px; }
+.hud-score-team { flex: 1; }
+.hud-score-team h4 { margin: 0 0 4px; font-size: 12px; }
+.hud-score-team.blue h4 { color: #9dbcf5; }
+.hud-score-team.red h4 { color: #f5a3a3; }
+.hud-score-row { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
+.hud-score-row.self { color: #e8f5c8; font-weight: 700; }
+.hud-score-kda { color: #93a87c; white-space: nowrap; margin-left: 8px; }
 `;
 
 function statLabel(s: ItemStats): string {
@@ -117,6 +140,9 @@ export class Hud {
   private readonly deathSub: HTMLElement;
   private readonly endOverlay: HTMLElement;
   private readonly endTitle: HTMLElement;
+  private readonly feed: HTMLElement;
+  private readonly score: HTMLElement;
+  private readonly scoreTeams: [HTMLElement, HTMLElement];
 
   constructor(container: HTMLElement, world: IWorld, selfId: number, selfTeam: TeamId) {
     this.world = world;
@@ -247,8 +273,53 @@ export class Hud {
     this.endTitle.className = 'hud-overlay-title';
     this.endOverlay.append(this.endTitle);
 
-    root.append(bottom, this.shop, this.deathOverlay, this.endOverlay);
+    this.feed = document.createElement('div');
+    this.feed.className = 'hud-feed';
+
+    this.score = document.createElement('div');
+    this.score.className = 'hud-score';
+    const scoreTitle = document.createElement('h3');
+    scoreTitle.textContent = 'Scoreboard (Tab)';
+    const teamsWrap = document.createElement('div');
+    teamsWrap.className = 'hud-score-teams';
+    const mkTeam = (cls: string, label: string): HTMLElement => {
+      const box = document.createElement('div');
+      box.className = `hud-score-team ${cls}`;
+      const h = document.createElement('h4');
+      h.textContent = label;
+      box.appendChild(h);
+      const rows = document.createElement('div');
+      box.appendChild(rows);
+      teamsWrap.appendChild(box);
+      return rows;
+    };
+    this.scoreTeams = [mkTeam('blue', 'Team 1'), mkTeam('red', 'Team 2')];
+    this.score.append(scoreTitle, teamsWrap);
+
+    root.append(bottom, this.shop, this.deathOverlay, this.endOverlay, this.feed, this.score);
     container.appendChild(root);
+  }
+
+  toggleScoreboard(): void {
+    this.score.classList.toggle('open');
+    this.update();
+  }
+
+  // One feed line per champion death; entries fade out on their own.
+  pushKills(kills: readonly { unitId: number; killerId: number }[]): void {
+    if (kills.length === 0) return;
+    const rows = this.world.scoreboard();
+    const nameOf = (id: number): string | null => rows.find((r) => r.unitId === id)?.name ?? null;
+    for (const k of kills) {
+      const victim = nameOf(k.unitId);
+      if (!victim) continue;
+      const killer = nameOf(k.killerId) ?? 'The lane';
+      const entry = document.createElement('div');
+      entry.className = 'hud-feed-entry';
+      entry.textContent = `${killer} killed ${victim}`;
+      this.feed.appendChild(entry);
+      window.setTimeout(() => entry.remove(), 6000);
+    }
   }
 
   toggleShop(): void {
@@ -319,6 +390,25 @@ export class Hud {
       for (const item of ITEM_LIST) {
         const btn = this.itemButtons.get(item.id);
         if (btn) btn.classList.toggle('cant', !shopOk || u.gold < item.cost);
+      }
+    }
+
+    if (this.score.classList.contains('open')) {
+      const rows = this.world.scoreboard();
+      for (const team of [0, 1] as const) {
+        const box = this.scoreTeams[team];
+        box.textContent = '';
+        for (const r of rows.filter((x) => x.team === team)) {
+          const row = document.createElement('div');
+          row.className = r.unitId === this.selfId ? 'hud-score-row self' : 'hud-score-row';
+          const name = document.createElement('span');
+          name.textContent = `${r.name} (Lv ${r.level})`;
+          const kda = document.createElement('span');
+          kda.className = 'hud-score-kda';
+          kda.textContent = `${r.kills} / ${r.deaths}`;
+          row.append(name, kda);
+          box.appendChild(row);
+        }
       }
     }
 

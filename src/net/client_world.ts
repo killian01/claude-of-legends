@@ -7,7 +7,7 @@
 import { CHAMPIONS, type ChampionDef } from '../sim/content/champions';
 import { GAME_MAP, type GameMap } from '../sim/content/map';
 import type { Projectile } from '../sim/projectiles';
-import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
+import type { AbilityKey, ScoreRow, TeamId, Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { Zone } from '../sim/zones';
 import type { IWorld } from '../world_api';
@@ -45,6 +45,8 @@ function materializeUnit(s: SnapUnit): Unit {
     xp: 0,
     gold: 0,
     items: [],
+    kills: 0,
+    deaths: 0,
     dead: false,
     respawnAt: 0,
     sightRange: 0,
@@ -69,11 +71,16 @@ export class ClientWorld implements IWorld {
   winner: TeamId | null = null;
   selfUnitId = 0;
   selfTeam: TeamId = 0;
+  private scoreRows: readonly ScoreRow[] = [];
 
   constructor(private readonly send: (msg: ClientMsg) => void) {}
 
   championDef(championId: string): ChampionDef | null {
     return CHAMPIONS[championId] ?? null;
+  }
+
+  scoreboard(): readonly ScoreRow[] {
+    return this.scoreRows;
   }
 
   // The server already scoped the snapshot to this team's vision.
@@ -109,6 +116,10 @@ export class ClientWorld implements IWorld {
     if (msg.t === 'match_start') {
       this.selfUnitId = msg.selfUnitId;
       this.selfTeam = msg.team;
+      return false;
+    }
+    if (msg.t === 'score') {
+      this.scoreRows = msg.rows;
       return false;
     }
     if (msg.t !== 'snap') return false;

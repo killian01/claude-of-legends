@@ -188,9 +188,11 @@ setInterval(() => {
     for (const [matchId, entry] of matches) {
       try {
         entry.match.tick();
+        const score = entry.match.sim.tickCount % 40 === 0 ? entry.match.buildScore() : null;
         for (const player of entry.match.players.values()) {
           const snap = entry.match.buildSnapshotFor(player.clientId);
           if (snap) send(player.clientId, snap);
+          if (score) send(player.clientId, score);
         }
         if (entry.match.sim.winner !== null && entry.endedAt === null) entry.endedAt = now;
         if (entry.endedAt !== null && now - entry.endedAt > MATCH_LINGER_MS) {

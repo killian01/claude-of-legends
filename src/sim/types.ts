@@ -19,3 +19,15 @@ export interface Vec2 {
   x: number;
   z: number;
 }
+
+// One scoreboard line per champion; shared by the sim, the wire protocol,
+// and the IWorld seam. Carries no position, so it can safely cross the fog.
+export interface ScoreRow {
+  unitId: number;
+  name: string;
+  championId: string;
+  team: TeamId;
+  level: number;
+  kills: number;
+  deaths: number;
+}

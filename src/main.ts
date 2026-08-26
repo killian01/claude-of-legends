@@ -50,8 +50,11 @@ function startOffline(championId: string, sigils: [string, string]): void {
     acc += Math.min(now - last, 250);
     last = now;
     while (acc >= TICK_MS) {
-      sim.tick();
-      pres.onWorldTick();
+      const kills: { unitId: number; killerId: number }[] = [];
+      for (const ev of sim.tick()) {
+        if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
+      }
+      pres.onWorldTick(kills);
       acc -= TICK_MS;
     }
     requestAnimationFrame(frame);
@@ -148,9 +151,17 @@ function startOnline(choice: HomeChoice): void {
         if (!pres && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) {
           pres = startPresentation(container, world, world.selfUnitId, world.selfTeam);
         }
-        if (changed) pres?.onWorldTick();
+        if (changed) {
+          const kills = msg.events
+            .filter((e) => e.e === 'death')
+            .map((e) => ({ unitId: e.unitId, killerId: e.killerId }));
+          pres?.onWorldTick(kills);
+        }
         break;
       }
+      case 'score':
+        world.applyServer(msg);
+        break;
       case 'match_end':
         window.location.reload();
         break;

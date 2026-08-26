@@ -9,6 +9,7 @@ export interface InputHandlers {
   onCast(key: AbilityKey, aim: Vec2): void;
   onCastSigil(slot: number, aim: Vec2): void;
   onToggleShop(): void;
+  onToggleScoreboard(): void;
 }
 
 const SIGIL_KEYS: Readonly<Record<string, number>> = { d: 0, f: 1 };
@@ -41,6 +42,11 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): void {
   });
 
   window.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      handlers.onToggleScoreboard();
+      return;
+    }
     const lower = e.key.toLowerCase();
     if (lower === 'p' || lower === 'b') {
       handlers.onToggleShop();
