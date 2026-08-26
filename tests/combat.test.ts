@@ -99,6 +99,28 @@ describe('auto-attacks', () => {
     expect(zone.pos.z).toBeCloseTo(75, 5);
   });
 
+  it('tower shots ramp up against a diving champion', () => {
+    const sim = new Sim(11);
+    const diver = sim.addChampion(0, { x: 94.5, z: 93 });
+    diver.maxHp = 4000;
+    diver.hp = 4000;
+    const towerId = [...sim.units.values()].find(
+      (u) => u.kind === 'tower' && u.team === 1 && Math.hypot(u.pos.x - 93, u.pos.z - 93) < 2,
+    )!.id;
+    const hits: number[] = [];
+    for (let i = 0; i < 140 && hits.length < 3; i++) {
+      for (const ev of sim.tick()) {
+        if (ev.type === 'damage' && ev.sourceId === towerId && ev.targetId === diver.id) {
+          hits.push(ev.amount);
+        }
+      }
+    }
+    expect(hits.length).toBeGreaterThanOrEqual(3);
+    // Each consecutive shot on the same champion hits ~35% harder.
+    expect(hits[1]!).toBeGreaterThan(hits[0]! * 1.25);
+    expect(hits[2]!).toBeGreaterThan(hits[1]! * 1.2);
+  });
+
   it('a tower switches onto an enemy that damaged an allied champion in range', () => {
     const sim = new Sim(11);
     // Team 1's vulnerable OUTER mid tower stands at (93, 93).

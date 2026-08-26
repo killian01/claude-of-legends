@@ -50,9 +50,11 @@ function aggressorInRange(ctx: CombatCtx, tower: Unit): Unit | null {
 export function stepTowerAi(ctx: CombatCtx): void {
   for (const u of ctx.units.values()) {
     if (u.kind !== 'tower' || u.dead || ctx.dead.has(u.id)) continue;
+    const before = u.attackTargetId;
     const aggressor = aggressorInRange(ctx, u);
     if (aggressor) {
       u.attackTargetId = aggressor.id;
+      if (u.attackTargetId !== before) u.passiveStacks = 0;
       continue;
     }
     if (u.attackTargetId !== null) {
@@ -71,5 +73,7 @@ export function stepTowerAi(ctx: CombatCtx): void {
     }
     const target = nearest(ctx, u, ['minion']) ?? nearest(ctx, u, ['champion']);
     u.attackTargetId = target ? target.id : null;
+    // Heat (the ramping shot damage) resets on every target change.
+    if (u.attackTargetId !== before) u.passiveStacks = 0;
   }
 }
