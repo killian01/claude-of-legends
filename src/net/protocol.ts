@@ -72,7 +72,15 @@ export interface SelectPlayer {
 
 export type ServerMsg =
   | { t: 'welcome'; clientId: number }
-  | { t: 'queue_status'; count: number; needed: number }
+  | {
+      t: 'queue_status';
+      count: number;
+      needed: number;
+      // Seconds until the opt-in bot-filled match starts, null when nobody
+      // has opted in; `ready` is whether THIS client opted in.
+      startsIn: number | null;
+      ready: boolean;
+    }
   | { t: 'lobby'; code: string; host: boolean; players: string[] }
   | { t: 'select_start'; team: TeamId; players: SelectPlayer[]; deadline: number }
   | { t: 'select_update'; locked: number; total: number }
