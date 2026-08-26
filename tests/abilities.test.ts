@@ -27,7 +27,8 @@ describe('Sylra', () => {
     expect(sim.projectiles.size).toBe(1);
     for (let i = 0; i < 10; i++) sim.tick();
     expect(sim.projectiles.size).toBe(0);
-    const expected = 80 * (100 / (100 + b.stats.mr));
+    // Base 70 after the snowball pass shifted damage into the AP ratio.
+    const expected = 70 * (100 / (100 + b.stats.mr));
     expect(b.maxHp - b.hp).toBeGreaterThan(expected - 2);
     expect(b.statuses.some((s) => s.kind === 'mark' && s.stacks === 1)).toBe(true);
   });
@@ -55,7 +56,7 @@ describe('Sylra', () => {
     expect(b.statuses.some((s) => s.kind === 'shield' && s.remaining === 70)).toBe(true);
     sim.castAbility(a.id, 'Q', { x: b.pos.x, z: b.pos.z });
     for (let i = 0; i < 10; i++) sim.tick();
-    // 80 magic vs 30 mr is about 61.5: fully absorbed by the 70 shield.
+    // 70 magic vs 30 mr is about 54: fully absorbed by the 70 shield.
     expect(b.hp).toBe(b.maxHp);
   });
 
@@ -75,7 +76,8 @@ describe('Sylra', () => {
     // 1 second in: not yet detonated.
     expect(b.hp).toBe(b.maxHp);
     for (let i = 0; i < 10; i++) sim.tick();
-    const expected = 180 * (100 / (100 + b.stats.mr));
+    // Base 158 after the snowball pass shifted damage into the AP ratio.
+    const expected = 158 * (100 / (100 + b.stats.mr));
     expect(b.maxHp - b.hp).toBeGreaterThan(expected - 3);
     expect(isRooted(b, sim.time)).toBe(true);
     // Rooted units cannot move.

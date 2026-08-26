@@ -1,118 +1,179 @@
-// Procedural ambient score: a slow four-chord pad, sparse pentatonic plucks,
-// and a wind bed, all synthesized on the shared audio bus. Presentation only;
-// nothing here touches the sim, so Math.random is fine.
+// Procedural battle score: a beat grid at 96 bpm with a kick pulse, a bass
+// line, string-like chord pads, and a composed lead motif per chord, over a
+// deep drone and wind bed. All synthesized on the shared audio bus.
+// Presentation only; nothing here touches the sim, so Math.random is fine.
 
 import { audioBus } from './sfx';
 
-const MUSIC_VOL = 0.24;
-const CHORD_LEN_S = 6.4;
-const PLUCK_SLOT_S = 0.8;
+const MUSIC_VOL = 0.22;
+const BEAT_S = 0.625; // 96 bpm
+const BEATS_PER_CHORD = 8; // two bars
 const ROOT_HZ = 110;
 
-// Semitone offsets from A2 per chord: Am, F, C, G. A calm minor loop that
-// never fights the combat sounds.
+// Semitone offsets from A2: Am, F, C, G with an octave on top.
 const CHORDS: readonly (readonly number[])[] = [
-  [0, 3, 7, 12],
-  [-4, 0, 3, 8],
-  [3, 7, 10, 15],
-  [-2, 2, 5, 10],
+  [0, 7, 12, 19],
+  [-4, 3, 8, 15],
+  [3, 10, 15, 22],
+  [-2, 5, 10, 17],
 ];
+const CHORD_ROOTS: readonly number[] = [0, -4, 3, -2];
 
-// A minor pentatonic pool for the pluck line, an octave or two up.
-const PLUCK_POOL: readonly number[] = [12, 15, 17, 19, 22, 24, 27];
+// One eight-beat phrase per chord, chord tones with passing notes; null is
+// a rest. Played an octave up.
+const MELODY: readonly (readonly (number | null)[])[] = [
+  [12, 15, 19, 15, 12, 10, 12, null],
+  [8, 12, 15, 12, 8, 7, 8, null],
+  [15, 19, 22, 19, 15, 14, 15, null],
+  [10, 14, 17, 14, 12, 10, 7, 10],
+];
 
 const hz = (semi: number): number => ROOT_HZ * 2 ** (semi / 12);
 
 interface MusicState {
   out: GainNode;
   timer: number;
-  nextChordAt: number;
-  chordIdx: number;
-  nextPluckAt: number;
-  wind: { src: AudioBufferSourceNode; lfo: OscillatorNode } | null;
+  nextBeatAt: number;
+  beatIdx: number;
+  bed: { sources: AudioScheduledSourceNode[] } | null;
 }
 
 let state: MusicState | null = null;
 
-function schedulePad(out: GainNode, chord: readonly number[], t0: number): void {
+function envOsc(
+  out: GainNode,
+  freq: number,
+  t0: number,
+  dur: number,
+  vol: number,
+  type: OscillatorType,
+  opts: { slideTo?: number; lpf?: number; verb?: number; attack?: number } = {},
+): void {
   const b = audioBus();
   if (!b) return;
-  for (const semi of chord) {
-    for (const detune of [-5, 5]) {
-      const osc = b.ctx.createOscillator();
-      osc.type = 'triangle';
-      osc.frequency.value = hz(semi);
-      osc.detune.value = detune;
-      const lp = b.ctx.createBiquadFilter();
-      lp.type = 'lowpass';
-      lp.frequency.value = 780;
-      const gain = b.ctx.createGain();
-      gain.gain.setValueAtTime(0.0001, t0);
-      gain.gain.linearRampToValueAtTime(0.045, t0 + 2.2);
-      gain.gain.setValueAtTime(0.045, t0 + CHORD_LEN_S - 1.6);
-      gain.gain.linearRampToValueAtTime(0.0001, t0 + CHORD_LEN_S + 0.4);
-      osc.connect(lp);
-      lp.connect(gain);
-      gain.connect(out);
-      const send = b.ctx.createGain();
-      send.gain.value = 0.5;
-      gain.connect(send);
-      send.connect(b.verb);
-      osc.start(t0);
-      osc.stop(t0 + CHORD_LEN_S + 0.6);
+  const osc = b.ctx.createOscillator();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t0);
+  if (opts.slideTo !== undefined)
+    osc.frequency.exponentialRampToValueAtTime(opts.slideTo, t0 + dur);
+  const gain = b.ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.linearRampToValueAtTime(vol, t0 + (opts.attack ?? 0.012));
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  let head: AudioNode = osc;
+  if (opts.lpf !== undefined) {
+    const lp = b.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = opts.lpf;
+    head.connect(lp);
+    head = lp;
+  }
+  head.connect(gain);
+  gain.connect(out);
+  if (opts.verb) {
+    const send = b.ctx.createGain();
+    send.gain.value = opts.verb;
+    gain.connect(send);
+    send.connect(b.verb);
+  }
+  osc.start(t0);
+  osc.stop(t0 + dur + 0.05);
+}
+
+// Everything that happens on one beat of the grid.
+function scheduleBeat(out: GainNode, beat: number, t0: number): void {
+  const chordIdx = Math.floor(beat / BEATS_PER_CHORD) % CHORDS.length;
+  const step = beat % BEATS_PER_CHORD;
+
+  // Kick pulse: every beat, heavier on the downbeat.
+  const downbeat = beat % 4 === 0;
+  envOsc(out, 105, t0, 0.13, downbeat ? 0.085 : 0.05, 'sine', { slideTo: 42 });
+
+  // Bass: the chord root, low, on a push rhythm.
+  if (step % 4 === 0 || step % 4 === 2 || step % 4 === 3) {
+    const root = CHORD_ROOTS[chordIdx] ?? 0;
+    envOsc(out, hz(root - 12), t0, 0.3, 0.055, 'sawtooth', { lpf: 260 });
+  }
+
+  // Chord pad: a slow string swell at each chord change.
+  if (step === 0) {
+    const chord = CHORDS[chordIdx] ?? CHORDS[0]!;
+    const len = BEATS_PER_CHORD * BEAT_S;
+    for (const semi of chord) {
+      for (const detune of [-6, 6]) {
+        envOsc(out, hz(semi) * 2 ** (detune / 1200), t0, len + 0.6, 0.02, 'sawtooth', {
+          lpf: 620,
+          verb: 0.6,
+          attack: 0.9,
+        });
+      }
     }
+  }
+
+  // Lead motif: the composed phrase, doubled an octave apart, echoing.
+  const note = MELODY[chordIdx]?.[step] ?? null;
+  if (note !== null) {
+    envOsc(out, hz(note + 12), t0, 0.5, 0.06, 'triangle', { verb: 0.7 });
+    envOsc(out, hz(note), t0, 0.45, 0.03, 'sine', { verb: 0.5 });
   }
 }
 
-function schedulePluck(out: GainNode, t0: number): void {
-  const b = audioBus();
-  if (!b) return;
-  const semi = PLUCK_POOL[Math.floor(Math.random() * PLUCK_POOL.length)] ?? 12;
-  const osc = b.ctx.createOscillator();
-  osc.type = 'sine';
-  osc.frequency.value = hz(semi);
-  const gain = b.ctx.createGain();
-  gain.gain.setValueAtTime(0.0001, t0);
-  gain.gain.linearRampToValueAtTime(0.075, t0 + 0.015);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.9);
-  osc.connect(gain);
-  gain.connect(out);
-  const send = b.ctx.createGain();
-  send.gain.value = 0.9;
-  gain.connect(send);
-  send.connect(b.verb);
-  osc.start(t0);
-  osc.stop(t0 + 1.0);
-}
-
-function startWind(out: GainNode): MusicState['wind'] {
+// The continuous bed: a deep detuned root drone plus breathing wind.
+function startBed(out: GainNode): MusicState['bed'] {
   const b = audioBus();
   if (!b) return null;
+  const sources: AudioScheduledSourceNode[] = [];
+
+  for (const detune of [-5, 5]) {
+    const osc = b.ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.value = ROOT_HZ / 2;
+    osc.detune.value = detune;
+    const lp = b.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 220;
+    const gain = b.ctx.createGain();
+    gain.gain.value = 0.016;
+    const lfo = b.ctx.createOscillator();
+    lfo.frequency.value = 0.05;
+    const lfoGain = b.ctx.createGain();
+    lfoGain.gain.value = 70;
+    lfo.connect(lfoGain);
+    lfoGain.connect(lp.frequency);
+    osc.connect(lp);
+    lp.connect(gain);
+    gain.connect(out);
+    osc.start();
+    lfo.start();
+    sources.push(osc, lfo);
+  }
+
   const len = b.ctx.sampleRate * 2;
   const buf = b.ctx.createBuffer(1, len, b.ctx.sampleRate);
   const data = buf.getChannelData(0);
   for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
-  const src = b.ctx.createBufferSource();
-  src.buffer = buf;
-  src.loop = true;
-  const lp = b.ctx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.frequency.value = 320;
-  const gain = b.ctx.createGain();
-  gain.gain.value = 0.05;
-  // A very slow swell so the wind breathes instead of hissing statically.
-  const lfo = b.ctx.createOscillator();
-  lfo.frequency.value = 0.07;
-  const lfoGain = b.ctx.createGain();
-  lfoGain.gain.value = 0.03;
-  lfo.connect(lfoGain);
-  lfoGain.connect(gain.gain);
-  src.connect(lp);
-  lp.connect(gain);
-  gain.connect(out);
-  src.start();
-  lfo.start();
-  return { src, lfo };
+  const wind = b.ctx.createBufferSource();
+  wind.buffer = buf;
+  wind.loop = true;
+  const windLp = b.ctx.createBiquadFilter();
+  windLp.type = 'lowpass';
+  windLp.frequency.value = 300;
+  const windGain = b.ctx.createGain();
+  windGain.gain.value = 0.028;
+  const windLfo = b.ctx.createOscillator();
+  windLfo.frequency.value = 0.07;
+  const windLfoGain = b.ctx.createGain();
+  windLfoGain.gain.value = 0.018;
+  windLfo.connect(windLfoGain);
+  windLfoGain.connect(windGain.gain);
+  wind.connect(windLp);
+  windLp.connect(windGain);
+  windGain.connect(out);
+  wind.start();
+  windLfo.start();
+  sources.push(wind, windLfo);
+
+  return { sources };
 }
 
 export function startMusic(): void {
@@ -121,37 +182,23 @@ export function startMusic(): void {
   const out = b.ctx.createGain();
   out.gain.value = MUSIC_VOL;
   out.connect(b.master);
-  const s: MusicState = {
-    out,
-    timer: 0,
-    nextChordAt: 0,
-    chordIdx: 0,
-    nextPluckAt: 0,
-    wind: null,
-  };
+  const s: MusicState = { out, timer: 0, nextBeatAt: 0, beatIdx: 0, bed: null };
   // Lookahead scheduler: while the context is suspended (before the first
   // user gesture) keep the timeline pinned to "now" so nothing piles up and
   // fires all at once on resume.
   s.timer = window.setInterval(() => {
     if (b.ctx.state !== 'running') {
-      s.nextChordAt = b.ctx.currentTime + 0.2;
-      s.nextPluckAt = b.ctx.currentTime + 0.6;
+      s.nextBeatAt = b.ctx.currentTime + 0.2;
       return;
     }
-    if (!s.wind) s.wind = startWind(out);
-    const horizon = b.ctx.currentTime + 1.4;
-    while (s.nextChordAt < horizon) {
-      const chord = CHORDS[s.chordIdx % CHORDS.length] ?? CHORDS[0]!;
-      schedulePad(out, chord, Math.max(s.nextChordAt, b.ctx.currentTime + 0.05));
-      s.chordIdx++;
-      s.nextChordAt = Math.max(s.nextChordAt, b.ctx.currentTime) + CHORD_LEN_S;
+    if (!s.bed) s.bed = startBed(out);
+    const horizon = b.ctx.currentTime + 1.2;
+    while (s.nextBeatAt < horizon) {
+      scheduleBeat(out, s.beatIdx, Math.max(s.nextBeatAt, b.ctx.currentTime + 0.05));
+      s.beatIdx++;
+      s.nextBeatAt = Math.max(s.nextBeatAt, b.ctx.currentTime) + BEAT_S;
     }
-    while (s.nextPluckAt < horizon) {
-      if (Math.random() < 0.4)
-        schedulePluck(out, Math.max(s.nextPluckAt, b.ctx.currentTime + 0.05));
-      s.nextPluckAt = Math.max(s.nextPluckAt, b.ctx.currentTime) + PLUCK_SLOT_S;
-    }
-  }, 400);
+  }, 300);
   state = s;
 }
 
@@ -167,8 +214,7 @@ export function stopMusic(fadeS = 2.5): void {
   s.out.gain.linearRampToValueAtTime(0.0001, t + fadeS);
   window.setTimeout(
     () => {
-      s.wind?.src.stop();
-      s.wind?.lfo.stop();
+      for (const src of s.bed?.sources ?? []) src.stop();
       s.out.disconnect();
     },
     (fadeS + 0.2) * 1000,

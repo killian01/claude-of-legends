@@ -87,6 +87,8 @@ describe('online match flow', () => {
     step(2);
     const self = a.units.get(selfId)!;
     expect(self.mana).toBeLessThan(self.maxMana);
+    // Attack damage mirrors too, for the last-hit indicator.
+    expect(self.stats.ad).toBeGreaterThan(0);
     expect((self.cooldowns.Q ?? 0) > match.sim.time - 1).toBe(true);
     expect(match.sim.projectiles.size + a.projectiles.size).toBeGreaterThanOrEqual(0);
   });

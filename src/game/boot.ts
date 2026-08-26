@@ -15,7 +15,7 @@ import { Minimap } from '../ui/minimap';
 import type { IWorld } from '../world_api';
 import { setupInput } from './input';
 import { startMusic, stopMusic } from './music';
-import { pickEnemyAt, pickEnemyOnScreen } from './picking';
+import { pickEnemyAt, pickEnemyOnScreen, pickUnitOnScreen } from './picking';
 import { playSfx } from './sfx';
 
 export interface KillNote {
@@ -30,6 +30,8 @@ export interface WorldNotes {
   casts: readonly number[];
   // Damage the player dealt this tick, for personal combat numbers.
   hits: readonly { targetId: number; amount: number }[];
+  // Auto-attacks fired by visible units, for swing animations.
+  attacks: readonly { unitId: number; targetId: number }[];
 }
 
 export interface Presentation {
@@ -64,7 +66,9 @@ export function startPresentation(
     },
     (p) => renderer.lookAtPoint(p.x, p.z),
   );
-  renderer.setEdgePanGate(() => !hud.blocksCamera());
+  // No edge panning while a modal is up or the cursor sits on the minimap
+  // (its corner position would otherwise drag the camera while clicking it).
+  renderer.setEdgePanGate(() => !hud.blocksCamera() && !minimap.hovered);
 
   let hooks: NetHooks = {};
   const showPing = (x: number, z: number, from: string, team: TeamId): void => {
@@ -81,6 +85,12 @@ export function startPresentation(
   // other order cancels it. Client-side only: the sim contract (and the
   // bots) keep the instant clamped cast.
   let pendingCast: { key: AbilityKey; aim: Vec2 } | null = null;
+  // The ability key currently held for aiming (range preview visible).
+  let aimingKey: AbilityKey | null = null;
+  window.addEventListener('blur', () => {
+    aimingKey = null;
+    renderer.hideAimPreview();
+  });
 
   // Client-side cast gate: the sim (or server) still decides, but the player
   // hears and reads WHY nothing happened instead of pressing a dead key.
@@ -149,11 +159,21 @@ export function startPresentation(
       if (enemy) {
         world.orderAttack(selfId, enemy.id);
         renderer.setAttackTarget(enemy.id);
+        hud.setTarget(enemy.id);
       } else {
+        // A move order drops the attack reticle but keeps the SELECTION
+        // frame, like the genre; left-click on ground clears that.
         world.orderMove(selfId, p.x, p.z);
         renderer.setAttackTarget(null);
         renderer.flashMarker(p.x, p.z);
       }
+    },
+    onLeftClick: (sx, sy) => {
+      // LoL-style selection: any visible unit shows its frame with exact
+      // health; clicking empty ground clears it (an attack order still
+      // repopulates it).
+      const unit = pickUnitOnScreen(world, selfTeam, sx, sy, project);
+      hud.setTarget(unit?.id ?? null);
     },
     onHover: (sx, sy) => {
       const now = performance.now();
@@ -163,7 +183,27 @@ export function startPresentation(
       renderer.setHoverTarget(enemy?.id ?? null);
       renderer.domElement.style.cursor = enemy ? 'crosshair' : 'default';
     },
-    onCast: (key, aim) => tryCast(key, aim),
+    onAimStart: (key) => {
+      const u = world.units.get(selfId);
+      const def = u?.championId ? world.championDef(u.championId) : null;
+      const ab = def?.abilities[key];
+      if (!u || u.dead || !ab) return;
+      aimingKey = key;
+      const spec = ab.spec as { radius?: number; range?: number; halfAngle?: number };
+      renderer.showAimPreview({
+        castRange: ab.castRange,
+        kind: ab.spec.kind,
+        radius: spec.radius,
+        range: spec.range,
+        halfAngle: spec.halfAngle,
+      });
+    },
+    onAimCommit: (key, aim) => {
+      renderer.hideAimPreview();
+      if (aimingKey !== key) return;
+      aimingKey = null;
+      tryCast(key, aim);
+    },
     onCastSigil: (slot, aim) => {
       pendingCast = null;
       const u = world.units.get(selfId);
@@ -205,7 +245,12 @@ export function startPresentation(
     minimap.update();
     if (notes) {
       if (notes.kills.length > 0) hud.pushKills(notes.kills);
-      if (notes.golds.length > 0 || notes.casts.length > 0 || notes.hits.length > 0)
+      if (
+        notes.golds.length > 0 ||
+        notes.casts.length > 0 ||
+        notes.hits.length > 0 ||
+        notes.attacks.length > 0
+      )
         renderer.onCombatNotes(notes);
     }
     if (world.winner !== null) stopMusic();

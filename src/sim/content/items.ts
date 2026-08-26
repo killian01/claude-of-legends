@@ -12,6 +12,13 @@ export interface ItemStats {
   mr?: number;
   attackSpeedPct?: number;
   moveSpeed?: number;
+  // Flat penetration: ignores that much of the target's armor or mr.
+  armorPen?: number;
+  mrPen?: number;
+  // Percent penetration: shreds a fraction of the resist BEFORE flat pen,
+  // so it scales against stacked tanks instead of squishies.
+  armorPenPct?: number;
+  mrPenPct?: number;
 }
 
 export interface ItemDef {
@@ -34,13 +41,17 @@ const T1: readonly ItemDef[] = [
   { id: 'traveler_soles', name: 'Traveler Soles', cost: 300, tier: 1, stats: { moveSpeed: 0.25 } },
 ];
 
+// Offensive tier 2 stats run HOT on purpose (snowball review): a gold lead
+// spent on damage must feel decisive. Defensive items stay put so stacking
+// tanks cannot keep pace, and the two penetration items are the explicit
+// anti-tank answer.
 const T2: readonly ItemDef[] = [
   {
     id: 'warbrand',
     name: 'Warbrand',
     cost: 1300,
     tier: 2,
-    stats: { ad: 40 },
+    stats: { ad: 56 },
     buildsFrom: ['iron_blade', 'iron_blade'],
   },
   {
@@ -48,31 +59,47 @@ const T2: readonly ItemDef[] = [
     name: 'Storm Staff',
     cost: 1600,
     tier: 2,
-    stats: { ap: 75 },
+    stats: { ap: 105 },
     buildsFrom: ['spark_rod', 'spark_rod'],
+  },
+  {
+    id: 'sunder_axe',
+    name: 'Sunder Axe',
+    cost: 1350,
+    tier: 2,
+    stats: { ad: 30, armorPenPct: 0.35 },
+    buildsFrom: ['iron_blade', 'traveler_soles'],
+  },
+  {
+    id: 'void_crystal',
+    name: 'Void Crystal',
+    cost: 1450,
+    tier: 2,
+    stats: { ap: 50, mrPenPct: 0.35 },
+    buildsFrom: ['spark_rod', 'null_cloak'],
   },
   {
     id: 'stone_bulwark',
     name: 'Stone Bulwark',
-    cost: 1100,
+    cost: 1300,
     tier: 2,
-    stats: { armor: 30, hp: 250 },
+    stats: { armor: 20, hp: 180 },
     buildsFrom: ['guard_plate', 'heart_gem'],
   },
   {
     id: 'spirit_ward',
     name: 'Spirit Ward',
-    cost: 1250,
+    cost: 1400,
     tier: 2,
-    stats: { mr: 30, hp: 250 },
+    stats: { mr: 20, hp: 180 },
     buildsFrom: ['null_cloak', 'heart_gem'],
   },
   {
     id: 'colossus_heart',
     name: 'Colossus Heart',
-    cost: 1200,
+    cost: 1400,
     tier: 2,
-    stats: { hp: 450 },
+    stats: { hp: 350 },
     buildsFrom: ['heart_gem', 'heart_gem'],
   },
   {
@@ -80,7 +107,7 @@ const T2: readonly ItemDef[] = [
     name: 'Archmind',
     cost: 1300,
     tier: 2,
-    stats: { ap: 40, mana: 300 },
+    stats: { ap: 60, mana: 300 },
     buildsFrom: ['mind_gem', 'spark_rod'],
   },
   {
@@ -88,7 +115,7 @@ const T2: readonly ItemDef[] = [
     name: 'Windrazor',
     cost: 1150,
     tier: 2,
-    stats: { ad: 25, attackSpeedPct: 0.25 },
+    stats: { ad: 35, attackSpeedPct: 0.35 },
     buildsFrom: ['swift_fang', 'iron_blade'],
   },
   {
@@ -96,7 +123,7 @@ const T2: readonly ItemDef[] = [
     name: 'Titan Cleaver',
     cost: 1250,
     tier: 2,
-    stats: { ad: 25, hp: 200 },
+    stats: { ad: 35, hp: 200 },
     buildsFrom: ['iron_blade', 'heart_gem'],
   },
   {
@@ -104,7 +131,7 @@ const T2: readonly ItemDef[] = [
     name: 'Runeblade',
     cost: 1300,
     tier: 2,
-    stats: { ad: 20, ap: 30 },
+    stats: { ad: 28, ap: 42 },
     buildsFrom: ['iron_blade', 'spark_rod'],
   },
   {

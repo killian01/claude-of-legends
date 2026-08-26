@@ -18,6 +18,8 @@ export class Minimap {
   private readonly scale: number;
   private readonly fog = document.createElement('canvas');
   private readonly pings: { x: number; z: number; until: number }[] = [];
+  // True while the cursor is over the minimap; the edge-pan gate reads it.
+  hovered = false;
 
   constructor(
     container: HTMLElement,
@@ -41,11 +43,17 @@ export class Minimap {
     container.appendChild(this.canvas);
 
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    this.canvas.addEventListener('pointerenter', () => {
+      this.hovered = true;
+    });
+    this.canvas.addEventListener('pointerleave', () => {
+      this.hovered = false;
+    });
     this.canvas.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 && e.button !== 2) return;
       const rect = this.canvas.getBoundingClientRect();
       const x = ((e.clientX - rect.left) / rect.width) * world.map.size;
-      const z = (1 - (e.clientY - rect.top) / rect.height) * world.map.size;
+      const z = ((e.clientY - rect.top) / rect.height) * world.map.size;
       if (e.button === 2) onMoveOrder({ x, z });
       else onLook({ x, z });
     });
@@ -59,12 +67,14 @@ export class Minimap {
     this.pings.push({ x, z, until: performance.now() + 2500 });
   }
 
-  // World z points "up" on the minimap: flip the vertical axis.
+  // The minimap matches the camera: on screen, +z runs DOWN (the camera
+  // sits at +z looking back), so the minimap maps +z down too. What you see
+  // bottom-right in the world is bottom-right on the map.
   private px(x: number): number {
     return x * this.scale;
   }
   private pz(z: number): number {
-    return SIZE_PX - z * this.scale;
+    return z * this.scale;
   }
 
   update(): void {

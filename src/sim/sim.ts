@@ -64,14 +64,16 @@ import { stepZones } from './zones';
 
 export type SimEvent =
   | { type: 'damage'; sourceId: number; targetId: number; amount: number; dtype: DamageType }
+  | { type: 'attack'; unitId: number; targetId: number }
   | { type: 'death'; unitId: number; killerId: number }
   | { type: 'cast'; unitId: number; key: AbilityKey }
   | { type: 'sigil'; unitId: number; slot: number }
   | { type: 'gold'; unitId: number; amount: number }
   | { type: 'victory'; team: TeamId };
 
-const RESPAWN_BASE = 8;
-const RESPAWN_PER_LEVEL = 1.5;
+// Shortened by the pacing review: less time watching the death screen.
+const RESPAWN_BASE = 6;
+const RESPAWN_PER_LEVEL = 1.3;
 // How long a champion's damage on a victim keeps earning an assist.
 const ASSIST_WINDOW_S = 10;
 const SHOP_RANGE_PAD = 2;
@@ -391,7 +393,10 @@ export class Sim {
       grantKillRewards(ctx, u, killerId);
       if (u.kind === 'champion') {
         const killer = this.units.get(killerId);
-        if (killer && killer.kind === 'champion' && killer.team !== u.team) killer.kills += 1;
+        if (killer && killer.kind === 'champion' && killer.team !== u.team) {
+          killer.kills += 1;
+          killer.killStreak += 1;
+        }
         // Assists: every enemy champion that damaged the victim within the
         // window, killer excluded. Dead helpers still earn theirs.
         for (const r of u.recentDamagers) {
@@ -401,6 +406,7 @@ export class Sim {
           if (helper && helper.kind === 'champion' && helper.team !== u.team) helper.assists += 1;
         }
         u.recentDamagers = [];
+        u.killStreak = 0;
         u.deaths += 1;
         u.dead = true;
         u.hp = 0;

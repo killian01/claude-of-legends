@@ -32,29 +32,29 @@ export const ASHVYN: ChampionDef = {
     mr: 30,
     attackRange: 5.5,
     attackSpeed: 0.75,
-    moveSpeed: 3.45,
+    moveSpeed: 3.7,
     hpRegen: 1.4,
     manaRegen: 1.3,
     radius: 0.6,
   },
-  growth: { hp: 90, mana: 30, ad: 4, armor: 3.8, mr: 1.3 },
+  growth: { hp: 90, mana: 30, ad: 5.5, armor: 2.2, mr: 1.3 },
   abilities: {
     Q: {
       name: 'Shadow Volley',
-      manaCost: 45,
-      cooldown: 7,
+      manaCost: 40,
+      cooldown: 5.5,
       castRange: 5.5,
       spec: {
         kind: 'cone',
         range: 5.5,
         halfAngle: Math.PI / 6,
-        onHit: [{ kind: 'damage', base: 70, adRatio: 0.7, dtype: 'physical' }],
+        onHit: [{ kind: 'damage', base: 62, adRatio: 1.33, dtype: 'physical' }],
       },
     },
     W: {
       name: "Hunter's Step",
-      manaCost: 40,
-      cooldown: 9,
+      manaCost: 35,
+      cooldown: 7,
       castRange: 3.5,
       spec: {
         kind: 'dash',
@@ -64,8 +64,8 @@ export const ASHVYN: ChampionDef = {
     },
     E: {
       name: 'Pinning Arrow',
-      manaCost: 55,
-      cooldown: 11,
+      manaCost: 45,
+      cooldown: 8.5,
       castRange: 9,
       spec: {
         kind: 'skillshot',
@@ -73,15 +73,15 @@ export const ASHVYN: ChampionDef = {
         radius: 0.55,
         range: 9,
         onHit: [
-          { kind: 'damage', base: 60, adRatio: 0.5, dtype: 'physical' },
+          { kind: 'damage', base: 53, adRatio: 0.95, dtype: 'physical' },
           { kind: 'root', duration: 1.0 },
         ],
       },
     },
     R: {
       name: 'Eclipse Rain',
-      manaCost: 100,
-      cooldown: 85,
+      manaCost: 85,
+      cooldown: 64,
       castRange: 9,
       spec: {
         kind: 'zone',
@@ -89,7 +89,7 @@ export const ASHVYN: ChampionDef = {
         duration: 3,
         tickEvery: 0.5,
         onTick: [
-          { kind: 'damage', base: 55, adRatio: 0.35, dtype: 'physical' },
+          { kind: 'damage', base: 48, adRatio: 0.66, dtype: 'physical' },
           { kind: 'slow', pct: 0.3, duration: 1 },
         ],
       },

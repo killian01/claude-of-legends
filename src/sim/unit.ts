@@ -1,4 +1,4 @@
-// The shared unit model. Champions, minions, towers, and Sanctums are all
+﻿// The shared unit model. Champions, minions, towers, and Sanctums are all
 // units; what varies is data (stats, kind), not the entity shape.
 
 import type { Status } from './combat/status';
@@ -19,6 +19,11 @@ export interface UnitStats {
   attackSpeed: number;
   hpRegen: number;
   manaRegen: number;
+  // Penetration from items: pct shreds the resist first, flat subtracts.
+  armorPen: number;
+  mrPen: number;
+  armorPenPct: number;
+  mrPenPct: number;
 }
 
 export interface StructureMeta {
@@ -69,6 +74,8 @@ export interface Unit {
   assists: number;
   // Creep score: minions last-hit by this champion.
   cs: number;
+  // Kills since last death; feeds the shutdown bounty on this unit's head.
+  killStreak: number;
   // Enemy champions that damaged this champion recently, newest timestamp
   // per attacker; consumed for assist credit on death.
   recentDamagers: { id: number; at: number }[];
@@ -126,6 +133,10 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
       attackSpeed: 0,
       hpRegen: 0,
       manaRegen: 0,
+      armorPen: 0,
+      mrPen: 0,
+      armorPenPct: 0,
+      mrPenPct: 0,
     },
     statuses: [],
     cooldowns: {},
@@ -146,6 +157,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     deaths: 0,
     assists: 0,
     cs: 0,
+    killStreak: 0,
     recentDamagers: [],
     dead: false,
     respawnAt: 0,
@@ -183,6 +195,10 @@ export function createChampion(id: number, team: TeamId, pos: Vec2, def: Champio
     attackSpeed: b.attackSpeed,
     hpRegen: b.hpRegen,
     manaRegen: b.manaRegen,
+    armorPen: 0,
+    mrPen: 0,
+    armorPenPct: 0,
+    mrPenPct: 0,
   };
   u.gold = 500;
   u.sightRange = 12;

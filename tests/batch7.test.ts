@@ -67,7 +67,7 @@ describe('skill points and ability ranks', () => {
     expect(sim.castAbility(korrath.id, 'Q', { x: dummy.pos.x, z: dummy.pos.z })).toBe(true);
     const d1 = before1 - dummy.hp;
     const cd1 = (korrath.cooldowns.Q ?? 0) - sim.time;
-    expect(cd1).toBeCloseTo(6, 5);
+    expect(cd1).toBeCloseTo(4.5, 5);
 
     korrath.skillPoints = 1;
     expect(sim.levelAbility(korrath.id, 'Q')).toBe(true);
@@ -80,7 +80,7 @@ describe('skill points and ability ranks', () => {
     const d2 = before2 - dummy.hp;
     const cd2 = (korrath.cooldowns.Q ?? 0) - sim.time;
     expect(d2).toBeGreaterThan(d1);
-    expect(cd2).toBeCloseTo(6 * 0.94, 5);
+    expect(cd2).toBeCloseTo(4.5 * 0.94, 5);
   });
 
   it('the observation exposes ranks and skill points', () => {

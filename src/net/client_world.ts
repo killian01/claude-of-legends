@@ -79,6 +79,10 @@ function materializeUnit(s: SnapUnit): Unit {
       attackSpeed: 0,
       hpRegen: 0,
       manaRegen: 0,
+      armorPen: 0,
+      mrPen: 0,
+      armorPenPct: 0,
+      mrPenPct: 0,
     },
     statuses: [],
     cooldowns: {},
@@ -99,6 +103,7 @@ function materializeUnit(s: SnapUnit): Unit {
     deaths: 0,
     assists: 0,
     cs: 0,
+    killStreak: 0,
     recentDamagers: [],
     dead: false,
     respawnAt: 0,
@@ -219,6 +224,7 @@ export class ClientWorld implements IWorld {
       if (self) {
         self.mana = msg.self.mana;
         self.maxMana = msg.self.maxMana;
+        self.stats.ad = msg.self.ad ?? 0;
         self.gold = msg.self.gold;
         self.level = msg.self.level;
         self.xp = msg.self.xp;

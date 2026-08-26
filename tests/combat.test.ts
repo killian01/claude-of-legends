@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { mitigationMultiplier } from '../src/sim/combat/damage';
 import { Sim } from '../src/sim/sim';
+import { recalcChampion } from '../src/sim/stats';
 import type { Unit } from '../src/sim/unit';
 
 // Open mid-lane ground, far from towers and jungle walls, and OUTSIDE
@@ -22,6 +23,24 @@ describe('damage pipeline', () => {
     expect(mitigationMultiplier(b, 'true')).toBe(1);
   });
 
+  it('penetration cuts mitigation and comes from items', () => {
+    const { a, b } = duel();
+    // Flat pen and percent pen both weaken mitigation; percent applies first.
+    expect(mitigationMultiplier(b, 'physical', 18)).toBeGreaterThan(
+      mitigationMultiplier(b, 'physical'),
+    );
+    expect(mitigationMultiplier(b, 'physical', 0, 0.35)).toBeGreaterThan(
+      mitigationMultiplier(b, 'physical'),
+    );
+    a.items.push('sunder_axe');
+    recalcChampion(a);
+    expect(a.stats.armorPenPct).toBeCloseTo(0.35, 5);
+    a.items[a.items.length - 1] = 'void_crystal';
+    recalcChampion(a);
+    expect(a.stats.mrPenPct).toBeCloseTo(0.35, 5);
+    expect(a.stats.armorPenPct).toBe(0);
+  });
+
   it('regenerates hp and mana over time', () => {
     const { sim, a } = duel();
     a.hp = 100;
@@ -36,7 +55,14 @@ describe('auto-attacks', () => {
   it('attacks a target in range on the attack speed cadence', () => {
     const { sim, a, b } = duel();
     sim.orderAttack(a.id, b.id);
-    for (let i = 0; i < 100; i++) sim.tick();
+    let attackEvents = 0;
+    for (let i = 0; i < 100; i++) {
+      for (const ev of sim.tick()) {
+        if (ev.type === 'attack' && ev.unitId === a.id) attackEvents += 1;
+      }
+    }
+    // Each strike emits the presentation event driving swing animations.
+    expect(attackEvents).toBeGreaterThanOrEqual(3);
     // 5 seconds at 0.65 attacks/s: at least 3 bolts have landed.
     const perHit = a.stats.ad * (100 / (100 + b.stats.armor));
     const regenBack = 5 * b.stats.hpRegen;

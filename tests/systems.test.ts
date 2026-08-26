@@ -94,9 +94,9 @@ describe('economy', () => {
     runTicks(sim, 40);
     expect(b.dead).toBe(true);
     expect(a.gold).toBe(800);
-    // 200 kill xp crosses the level 2 threshold (160) on the tuned curve.
+    // 140 kill xp (120 + 20 x level 1) crosses the level 2 threshold (137).
     expect(a.level).toBe(2);
-    expect(a.xp).toBe(40);
+    expect(a.xp).toBe(3);
   });
 
   it('pays minion bounties on last hit', () => {
@@ -116,7 +116,8 @@ describe('economy', () => {
     const sim = new Sim(21);
     const a = sim.addChampion(0);
     runTicks(sim, 300);
-    expect(a.gold).toBeCloseTo(510, 0);
+    // 5 s of income at the pacing-review rate of 2.5/s.
+    expect(a.gold).toBeCloseTo(512.5, 0);
   });
 
   it('levels up on xp thresholds and grows stats', () => {
@@ -140,7 +141,8 @@ describe('items', () => {
     expect(sim.buyItem(a.id, 'warbrand')).toBe(true);
     expect(a.gold).toBe(1050);
     expect(a.items).toEqual(['warbrand']);
-    expect(a.stats.ad).toBe(92);
+    // Base 52 plus Warbrand's 56 on the snowball-review stat line.
+    expect(a.stats.ad).toBe(108);
   });
 
   it('rejects buying away from the fountain or with a full inventory', () => {

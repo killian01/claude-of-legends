@@ -48,6 +48,44 @@ describe('assists', () => {
   });
 });
 
+describe('kill credit', () => {
+  it('an executing tower credits the last champion to damage the victim', () => {
+    const sim = new Sim(11);
+    const attacker = sim.addChampion(1, { x: 75, z: 75 });
+    // The victim stands in reach of team 1's outer mid tower at 1 hp; the
+    // attacker softened it moments ago from afar.
+    const victim = sim.addChampion(0, { x: 94.5, z: 93 });
+    victim.hp = 1;
+    victim.lastHitByChampion = attacker.id;
+    victim.lastHitAt = sim.time;
+    const goldBefore = attacker.gold;
+    for (let i = 0; i < 100 && !victim.dead; i++) sim.tick();
+    expect(victim.dead).toBe(true);
+    expect(attacker.kills).toBe(1);
+    expect(attacker.killStreak).toBe(1);
+    expect(attacker.gold - goldBefore).toBe(300);
+  });
+});
+
+describe('bounties snowball', () => {
+  it('pays more for a higher-level victim on a kill streak, then resets it', () => {
+    const sim = new Sim(11);
+    const killer = sim.addChampion(0, { x: 75, z: 75 });
+    const victim = sim.addChampion(1, { x: 77, z: 75 });
+    victim.level = 5;
+    victim.killStreak = 3;
+    victim.hp = 10;
+    const before = killer.gold;
+    sim.orderAttack(killer.id, victim.id);
+    for (let i = 0; i < 60 && !victim.dead; i++) sim.tick();
+    expect(victim.dead).toBe(true);
+    // 300 base + 25 x 4 levels + 60 x 3 shutdown = 580.
+    expect(killer.gold - before).toBe(580);
+    expect(killer.killStreak).toBe(1);
+    expect(victim.killStreak).toBe(0);
+  });
+});
+
 describe('creep score', () => {
   it('counts minions last-hit by a champion', () => {
     const sim = new Sim(11);

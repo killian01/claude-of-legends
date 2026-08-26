@@ -55,14 +55,16 @@ function startOffline(championId: string, sigils: [string, string], skin: number
       const golds: number[] = [];
       const casts: number[] = [];
       const hits: { targetId: number; amount: number }[] = [];
+      const attacks: { unitId: number; targetId: number }[] = [];
       for (const ev of sim.tick()) {
         if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
         else if (ev.type === 'gold' && ev.unitId === self.id) golds.push(ev.amount);
         else if (ev.type === 'cast' || ev.type === 'sigil') casts.push(ev.unitId);
+        else if (ev.type === 'attack') attacks.push({ unitId: ev.unitId, targetId: ev.targetId });
         else if (ev.type === 'damage' && ev.sourceId === self.id && ev.targetId !== self.id)
           hits.push({ targetId: ev.targetId, amount: ev.amount });
       }
-      pres.onWorldTick({ kills, golds, casts, hits });
+      pres.onWorldTick({ kills, golds, casts, hits, attacks });
       acc -= TICK_MS;
     }
     requestAnimationFrame(frame);
@@ -181,13 +183,15 @@ function startOnline(choice: HomeChoice): void {
           const golds: number[] = [];
           const casts: number[] = [];
           const hits: { targetId: number; amount: number }[] = [];
+          const attacks: { unitId: number; targetId: number }[] = [];
           for (const e of msg.events) {
             if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
             else if (e.e === 'gold') golds.push(e.amount);
             else if (e.e === 'cast') casts.push(e.unitId);
+            else if (e.e === 'atk') attacks.push({ unitId: e.unitId, targetId: e.targetId });
             else if (e.e === 'dmg') hits.push({ targetId: e.targetId, amount: e.amount });
           }
-          pres?.onWorldTick({ kills, golds, casts, hits });
+          pres?.onWorldTick({ kills, golds, casts, hits, attacks });
         }
         break;
       }

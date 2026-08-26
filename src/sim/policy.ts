@@ -49,6 +49,9 @@ export interface ObsSelf {
   sigils: readonly string[];
   sigilReady: readonly boolean[];
   items: readonly string[];
+  // Which champion this policy is driving. Additive v0 field (like
+  // `abilityRanks`): policies use it to pick role-appropriate item builds.
+  championId: string | null;
 }
 
 export interface Observation {

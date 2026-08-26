@@ -8,6 +8,7 @@
 
 import type { Action, ObsUnit, Policy } from '../../policy';
 import type { Rng } from '../../rng';
+import { CHAMPIONS } from '../champions';
 import { effectiveItemCost } from '../items';
 import { GAME_MAP } from '../map';
 
@@ -18,7 +19,9 @@ export interface BotDef {
 }
 
 const RETREAT_HP_FRAC = 0.32;
-const REJOIN_HP_FRAC = 0.85;
+// 0.7, down from 0.85: bots leave the fountain sooner, so lanes stand
+// empty less often (pacing review).
+const REJOIN_HP_FRAC = 0.7;
 const CAST_RANGE = 7;
 const CHAMPION_ATTACK_RANGE = 9;
 const FARM_RANGE = 8;
@@ -47,12 +50,52 @@ function nearest(list: ObsUnit[], x: number, z: number): ObsUnit | null {
   return best;
 }
 
-// Deterministic build plan that CAN buy duplicate components (review F.0:
-// the old list never completed a two-component recipe). Returns the next
-// item id to buy, or null when the build is done.
-function nextPurchase(items: readonly string[]): string | null {
+// Deterministic ROLE-AWARE build plans that CAN buy duplicate components
+// (review F.0: the old list never completed a two-component recipe; the
+// snowball review found every bot on every champion building full tank).
+// Returns the next item id to buy, or null when the build is done.
+function nextPurchase(items: readonly string[], championId: string | null): string | null {
   const has = (id: string): boolean => items.includes(id);
   const count = (id: string): number => items.filter((x) => x === id).length;
+  const role = championId ? CHAMPIONS[championId]?.role : undefined;
+
+  if (role === 'Marksman' || role === 'Assassin' || role === 'Skirmisher') {
+    if (!has('warbrand')) {
+      if (count('iron_blade') < 2) return 'iron_blade';
+      return 'warbrand';
+    }
+    if (!has('sunder_axe')) {
+      if (!has('traveler_soles')) return 'traveler_soles';
+      if (count('iron_blade') < 1) return 'iron_blade';
+      return 'sunder_axe';
+    }
+    if (!has('windrazor')) {
+      if (!has('swift_fang')) return 'swift_fang';
+      if (count('iron_blade') < 1) return 'iron_blade';
+      return 'windrazor';
+    }
+    if (!has('heart_gem')) return 'heart_gem';
+    return null;
+  }
+  if (role === 'Mage' || role === 'Battlemage') {
+    if (!has('storm_staff')) {
+      if (count('spark_rod') < 2) return 'spark_rod';
+      return 'storm_staff';
+    }
+    if (!has('void_crystal')) {
+      if (!has('null_cloak')) return 'null_cloak';
+      if (count('spark_rod') < 1) return 'spark_rod';
+      return 'void_crystal';
+    }
+    if (!has('archmind')) {
+      if (!has('mind_gem')) return 'mind_gem';
+      if (count('spark_rod') < 1) return 'spark_rod';
+      return 'archmind';
+    }
+    if (!has('heart_gem')) return 'heart_gem';
+    return null;
+  }
+  // Tanks, fighters, and supports keep the defensive shell.
   if (!has('colossus_heart')) {
     if (count('heart_gem') < 2) return 'heart_gem';
     return 'colossus_heart';
@@ -101,7 +144,7 @@ const policy: Policy = (obs, rng: Rng): Action => {
 
   // Shop while home.
   if (atFountain && s.items.length < 6) {
-    const wanted = nextPurchase(s.items);
+    const wanted = nextPurchase(s.items, s.championId);
     if (wanted && s.gold >= effectiveItemCost(wanted, s.items)) {
       return { kind: 'buy', itemId: wanted };
     }

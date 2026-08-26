@@ -120,6 +120,7 @@ export function buildSnapshot(
     self = {
       mana: Math.round(selfUnit.mana),
       maxMana: Math.round(selfUnit.maxMana),
+      ad: Math.round(selfUnit.stats.ad),
       gold: Math.floor(selfUnit.gold),
       level: selfUnit.level,
       xp: Math.round(selfUnit.xp),
@@ -161,6 +162,8 @@ export function buildSnapshot(
       snapEvents.push({ e: 'dmg', targetId: ev.targetId, amount: Math.round(ev.amount) });
     } else if (ev.type === 'cast' && sim.isVisible(team, ev.unitId)) {
       snapEvents.push({ e: 'cast', unitId: ev.unitId });
+    } else if (ev.type === 'attack' && sim.isVisible(team, ev.unitId)) {
+      snapEvents.push({ e: 'atk', unitId: ev.unitId, targetId: ev.targetId });
     } else if (ev.type === 'victory') {
       snapEvents.push({ e: 'victory', team: ev.team });
     }
