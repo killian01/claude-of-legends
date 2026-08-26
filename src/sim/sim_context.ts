@@ -6,6 +6,7 @@ import type { NavGrid } from './navgrid';
 import type { Projectile } from './projectiles';
 import type { Rng } from './rng';
 import type { SimEvent } from './sim';
+import type { TeamBuffs } from './team_buffs';
 import type { Unit } from './unit';
 import type { Zone } from './zones';
 
@@ -20,5 +21,7 @@ export interface CombatCtx {
   readonly dead: Set<number>;
   // Who last-hit each unit in `dead`, for kill rewards.
   readonly killers: Map<number, number>;
+  // Team-wide, death-surviving buffs (the Warden's Boon).
+  readonly teamBuffs: TeamBuffs;
   allocId(): number;
 }

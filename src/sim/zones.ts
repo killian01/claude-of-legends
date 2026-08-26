@@ -32,7 +32,8 @@ function unitsInside(ctx: CombatCtx, z: Zone, enemies: boolean): Unit[] {
   const out: Unit[] = [];
   for (const u of ctx.units.values()) {
     if (u.dead || ctx.dead.has(u.id)) continue;
-    if (enemies ? u.team === z.team : u.team !== z.team) continue;
+    // Neutral units count as enemies for zones and never as allies.
+    if (enemies ? !u.neutral && u.team === z.team : u.neutral || u.team !== z.team) continue;
     if (Math.hypot(u.pos.x - z.pos.x, u.pos.z - z.pos.z) <= z.radius + u.radius) out.push(u);
   }
   return out;

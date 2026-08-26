@@ -6,7 +6,7 @@
 import type { CombatCtx } from '../sim_context';
 import { effectiveRank, RANK_BASE_SCALE, RANK_CD_SCALE } from '../stats';
 import type { AbilityKey, Vec2 } from '../types';
-import type { Unit } from '../unit';
+import { hostile, type Unit } from '../unit';
 import { applyEffects, type EffectSpec, type Power } from './effects';
 import { breakStealth, isRooted, isStealthed, isStunned } from './status';
 
@@ -74,7 +74,7 @@ function findEnemyTarget(
   let best: Unit | null = null;
   let bestD = Number.POSITIVE_INFINITY;
   for (const u of ctx.units.values()) {
-    if (u.team === caster.team || u.dead || ctx.dead.has(u.id)) continue;
+    if (!hostile(caster, u) || u.dead || ctx.dead.has(u.id)) continue;
     if (isStealthed(u, ctx.time)) continue;
     const toCaster =
       Math.hypot(u.pos.x - caster.pos.x, u.pos.z - caster.pos.z) - caster.radius - u.radius;
@@ -92,7 +92,7 @@ function findEnemyTarget(
 function enemiesWithin(ctx: CombatCtx, caster: Unit, center: Vec2, radius: number): Unit[] {
   const out: Unit[] = [];
   for (const u of ctx.units.values()) {
-    if (u.team === caster.team || u.dead || ctx.dead.has(u.id)) continue;
+    if (!hostile(caster, u) || u.dead || ctx.dead.has(u.id)) continue;
     if (Math.hypot(u.pos.x - center.x, u.pos.z - center.z) <= radius + u.radius) out.push(u);
   }
   return out;

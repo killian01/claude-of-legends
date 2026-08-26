@@ -7,6 +7,7 @@ import { buildObservation } from '../src/sim/observe';
 import { Sim } from '../src/sim/sim';
 import type { CombatCtx } from '../src/sim/sim_context';
 import { effectiveRank, gainXp, xpForNext } from '../src/sim/stats';
+import { TeamBuffs } from '../src/sim/team_buffs';
 
 const fakeCtx = (sim: Sim): CombatCtx =>
   ({
@@ -15,6 +16,7 @@ const fakeCtx = (sim: Sim): CombatCtx =>
     dead: new Set(),
     killers: new Map(),
     events: [],
+    teamBuffs: new TeamBuffs(),
   }) as unknown as CombatCtx;
 
 describe('skill points and ability ranks', () => {

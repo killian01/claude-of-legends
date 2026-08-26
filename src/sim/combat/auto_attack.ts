@@ -8,7 +8,7 @@ import type { NavGrid } from '../navgrid';
 import { passiveOf } from '../passives';
 import { findPath } from '../pathfind';
 import type { CombatCtx } from '../sim_context';
-import type { Unit } from '../unit';
+import { hostile, type Unit } from '../unit';
 import { dealDamage } from './damage';
 import { attackSpeedBonusPct, breakStealth, isStealthed, isStunned, tauntSourceId } from './status';
 
@@ -67,7 +67,7 @@ export function stepAutoAttacks(ctx: CombatCtx, nav: NavGrid): void {
       !target ||
       target.dead ||
       ctx.dead.has(target.id) ||
-      target.team === u.team ||
+      !hostile(u, target) ||
       isStealthed(target, ctx.time)
     ) {
       u.attackTargetId = null;

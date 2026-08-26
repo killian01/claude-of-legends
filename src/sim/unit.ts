@@ -6,7 +6,7 @@ import type { ChampionDef } from './content/champions';
 import type { LaneId } from './content/map';
 import type { AbilityKey, TeamId, Vec2 } from './types';
 
-export type UnitKind = 'champion' | 'minion' | 'tower' | 'sanctum';
+export type UnitKind = 'champion' | 'minion' | 'tower' | 'sanctum' | 'warden';
 
 export type MinionVariant = 'melee' | 'caster' | 'siege';
 
@@ -34,6 +34,9 @@ export interface StructureMeta {
 export interface Unit {
   id: number;
   team: TeamId;
+  // Neutral units (the Warden) carry a nominal team but are hostile to
+  // everyone; use hostile() instead of comparing teams directly.
+  neutral: boolean;
   kind: UnitKind;
   championId: string | null;
   pos: Vec2;
@@ -111,10 +114,19 @@ export function staticFootprint(u: Unit): number {
   return u.radius + 0.4;
 }
 
+// The one hostility rule: a neutral unit is hostile to every other unit,
+// otherwise hostility is being on different teams.
+export function hostile(a: Unit, b: Unit): boolean {
+  if (a.id === b.id) return false;
+  if (a.neutral || b.neutral) return true;
+  return a.team !== b.team;
+}
+
 function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
   return {
     id,
     team,
+    neutral: false,
     kind,
     championId: null,
     pos: { x: pos.x, z: pos.z },
@@ -252,6 +264,26 @@ export function createMinion(
   u.hp = Math.round(u.hp * scale);
   u.maxHp = u.hp;
   u.stats.ad = Math.round(u.stats.ad * scale);
+  return u;
+}
+
+// The Warden (CONTEXT.md): the neutral river monster. Nominal team 0, but
+// neutral: true makes it hostile to everyone via hostile().
+export function createWarden(id: number, pos: Vec2): Unit {
+  const u = baseUnit(id, 0, 'warden', pos);
+  u.neutral = true;
+  u.radius = 1.1;
+  u.moveSpeed = 3.0;
+  u.hp = 2500;
+  u.maxHp = 2500;
+  u.stats.ad = 80;
+  u.stats.armor = 40;
+  u.stats.mr = 40;
+  u.stats.attackRange = 2;
+  u.stats.attackSpeed = 0.55;
+  u.sightRange = 8;
+  u.goldBounty = 150;
+  u.xpBounty = 200;
   return u;
 }
 

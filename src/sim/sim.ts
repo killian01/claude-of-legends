@@ -30,6 +30,7 @@ import { createMapUnits } from './map_units';
 import { stepMinionAi } from './minion_ai';
 import { stepMovement } from './movement';
 import { NavGrid } from './navgrid';
+import { initialObjectiveState, onWardenSlain, stepObjectives } from './objectives';
 import { stepPassives } from './passives';
 import { findPath } from './pathfind';
 import type { Policy } from './policy';
@@ -47,6 +48,7 @@ import {
   ULT_MAX_RANK,
   ULT_RANK_LEVELS,
 } from './stats';
+import { TeamBuffs } from './team_buffs';
 import { stepTowerAi } from './tower_ai';
 import {
   type AbilityKey,
@@ -56,7 +58,7 @@ import {
   type TeamId,
   type Vec2,
 } from './types';
-import { createChampion, staticFootprint, type Unit } from './unit';
+import { createChampion, hostile, staticFootprint, type Unit } from './unit';
 import { computeVisibility } from './vision';
 import { FIRST_WAVE_AT, spawnWave, WAVE_EVERY } from './waves';
 import type { Zone } from './zones';
@@ -107,6 +109,9 @@ export class Sim {
   private events: SimEvent[] = [];
   private readonly dead = new Set<number>();
   private readonly killers = new Map<number, number>();
+  // The Warden's Boon lives outside units so it survives deaths.
+  readonly teamBuffs = new TeamBuffs();
+  private readonly objectives = initialObjectiveState();
 
   constructor(seed: number) {
     this.rng = new Rng(seed);
@@ -129,6 +134,7 @@ export class Sim {
       events: this.events,
       dead: this.dead,
       killers: this.killers,
+      teamBuffs: this.teamBuffs,
       allocId: () => this.nextId++,
     };
   }
@@ -199,9 +205,20 @@ export class Sim {
     // online HUD and killed the death screen.
     if (u.team === team) return true;
     if (u.dead) return false;
-    // Structures are always revealed, like the genre.
-    if (u.kind === 'tower' || u.kind === 'sanctum') return true;
+    // Structures are always revealed, like the genre; so is the Warden
+    // (both teams watch its health bar, that IS the drama).
+    if (u.kind === 'tower' || u.kind === 'sanctum' || u.kind === 'warden') return true;
     return this.visibility[team].has(unitId);
+  }
+
+  // The Warden's Boon state for a team, null when inactive (IWorld).
+  teamBuff(team: TeamId): { until: number; stacks: number } | null {
+    return this.teamBuffs.boon(team, this.time);
+  }
+
+  // When the next Warden rises; null while one is alive (IWorld).
+  objectiveSpawnAt(): number | null {
+    return this.objectives.wardenId === null ? this.objectives.nextSpawnAt : null;
   }
 
   orderMove(unitId: number, x: number, z: number): void {
@@ -228,7 +245,7 @@ export class Sim {
     const target = this.units.get(targetId);
     if (!u || !target || u.dead || target.dead) return;
     if (this.dead.has(unitId) || this.dead.has(targetId)) return;
-    if (target.team === u.team) return;
+    if (!hostile(u, target)) return;
     cancelRecall(u);
     u.attackMoveTarget = null;
     u.attackTargetId = targetId;
@@ -369,6 +386,7 @@ export class Sim {
       spawnWave(ctx, this.map, this.waveCount++);
       this.nextWaveAt += WAVE_EVERY;
     }
+    if (this.winner === null) stepObjectives(ctx, this.map, this.objectives);
 
     stepMinionAi(ctx, this.nav, this.map, this.tickCount);
     stepTowerAi(ctx);
@@ -419,6 +437,15 @@ export class Sim {
         if (u.kind === 'minion') {
           const killer = this.units.get(killerId);
           if (killer && killer.kind === 'champion' && killer.team !== u.team) killer.cs += 1;
+        }
+        // The Warden falls: the killing team claims the Boon and the
+        // respawn clock starts.
+        if (u.kind === 'warden') {
+          const killer = this.units.get(killerId);
+          if (killer && killer.kind === 'champion') {
+            this.teamBuffs.grantBoon(killer.team, this.time);
+          }
+          onWardenSlain(this.objectives, this.time);
         }
         if (u.moveSpeed <= 0) this.nav.unblockCircle(u.pos.x, u.pos.z, staticFootprint(u));
         this.units.delete(id);

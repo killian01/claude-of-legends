@@ -40,7 +40,8 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     const row: ObsUnit = {
       id: other.id,
       kind: other.kind,
-      friendly: other.team === u.team,
+      // The neutral Warden reads as hostile to BOTH teams.
+      friendly: !other.neutral && other.team === u.team,
       x: other.pos.x,
       z: other.pos.z,
       hpFrac: other.maxHp > 0 ? other.hp / other.maxHp : 0,
@@ -78,5 +79,6 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       championId: u.championId,
     },
     units,
+    objectiveSpawnAt: sim.objectiveSpawnAt(),
   };
 }

@@ -61,6 +61,9 @@ export interface Observation {
   self: ObsSelf;
   // Everything the team currently sees, self excluded.
   units: readonly ObsUnit[];
+  // When the next Warden rises, null while one is alive. Additive v0 field:
+  // the spawn clock is the one objective fact unit rows cannot carry.
+  objectiveSpawnAt?: number | null;
 }
 
 export type Action =

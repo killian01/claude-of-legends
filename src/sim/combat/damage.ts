@@ -52,6 +52,11 @@ export function dealDamage(
     if (passive?.modifyDamage) {
       amount = passive.modifyDamage(ctx, source, target, amount, dtype, via);
     }
+    // The Warden's Boon: a team-wide damage amplifier (neutral units have
+    // no team buffs by definition).
+    if (!source.neutral) {
+      amount *= ctx.teamBuffs.damageMultiplier(source.team, ctx.time);
+    }
   }
   const penFlat =
     source === undefined ? 0 : dtype === 'physical' ? source.stats.armorPen : source.stats.mrPen;

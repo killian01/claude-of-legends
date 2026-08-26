@@ -37,27 +37,32 @@ export function championBounty(victim: Unit): number {
 // Called once when a unit dies: gold to the killing champion, xp shared among
 // enemy champions near the death.
 export function grantKillRewards(ctx: CombatCtx, victim: Unit, killerId: number): void {
+  const killer = ctx.units.get(killerId);
   const bounty = victim.kind === 'champion' ? championBounty(victim) : victim.goldBounty;
   if (bounty > 0) {
-    const killer = ctx.units.get(killerId);
-    if (killer && killer.kind === 'champion' && killer.team !== victim.team) {
+    if (killer && killer.kind === 'champion' && (victim.neutral || killer.team !== victim.team)) {
       killer.gold += bounty;
       ctx.events.push({ type: 'gold', unitId: killer.id, amount: bounty });
     }
   }
   // Champion kill xp scales with the victim's level, so taking down the fed
-  // enemy accelerates your own spike (snowball review).
+  // enemy accelerates your own spike (snowball review). A neutral victim
+  // (the Warden) shares its xp among the KILLER's team nearby.
   const xpBounty = victim.kind === 'champion' ? 120 + 20 * victim.level : victim.xpBounty;
   if (xpBounty > 0) {
-    const nearby: Unit[] = [];
-    for (const u of ctx.units.values()) {
-      if (u.kind !== 'champion' || u.dead || u.team === victim.team) continue;
-      const d = Math.hypot(u.pos.x - victim.pos.x, u.pos.z - victim.pos.z);
-      if (d <= XP_SHARE_RADIUS) nearby.push(u);
-    }
-    if (nearby.length > 0) {
-      const share = xpBounty / nearby.length;
-      for (const u of nearby) gainXp(u, share);
+    const xpTeam = victim.neutral ? killer?.team : undefined;
+    if (!victim.neutral || xpTeam !== undefined) {
+      const nearby: Unit[] = [];
+      for (const u of ctx.units.values()) {
+        if (u.kind !== 'champion' || u.dead) continue;
+        if (victim.neutral ? u.team !== xpTeam : u.team === victim.team) continue;
+        const d = Math.hypot(u.pos.x - victim.pos.x, u.pos.z - victim.pos.z);
+        if (d <= XP_SHARE_RADIUS) nearby.push(u);
+      }
+      if (nearby.length > 0) {
+        const share = xpBounty / nearby.length;
+        for (const u of nearby) gainXp(u, share);
+      }
     }
   }
 }

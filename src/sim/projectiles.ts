@@ -79,10 +79,12 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
     p.pos.z += p.dir.z * step;
     p.traveled += step;
 
-    // Enemies crossed this step, nearest-first for determinism.
+    // Enemies crossed this step, nearest-first for determinism. Neutral
+    // units (the Warden) block and take skillshots from both teams.
     const crossed: { u: Unit; d: number }[] = [];
     for (const u of ctx.units.values()) {
-      if (u.team === p.team || u.dead || ctx.dead.has(u.id) || p.hitIds.has(u.id)) continue;
+      if ((!u.neutral && u.team === p.team) || u.dead || ctx.dead.has(u.id)) continue;
+      if (p.hitIds.has(u.id) || u.id === p.sourceId) continue;
       if (segmentDistance(u.pos, from, p.pos) > p.radius + u.radius) continue;
       crossed.push({ u, d: Math.hypot(u.pos.x - from.x, u.pos.z - from.z) });
     }

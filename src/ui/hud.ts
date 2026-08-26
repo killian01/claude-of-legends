@@ -395,6 +395,7 @@ export class Hud {
   private lastLevel = -1;
   private lastKillAt = 0;
   private killChain = 0;
+  private lastWardenUp: boolean | null = null;
   private readonly deathOverlay: HTMLElement;
   private readonly deathSub: HTMLElement;
   private readonly endOverlay: HTMLElement;
@@ -1055,7 +1056,32 @@ export class Hud {
 
     const total = Math.max(0, Math.floor(this.world.time));
     const clock = `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-    this.metaText.textContent = clock;
+    // The Warden clock rides the meta line; state edges drive announcements
+    // (works identically offline and online, no extra wire events).
+    const objAt = this.world.objectiveSpawnAt();
+    const wardenUp = objAt === null;
+    if (wardenUp) {
+      this.metaText.textContent = `${clock} · Warden LIVE`;
+    } else {
+      const left = Math.max(0, Math.ceil(objAt - this.world.time));
+      this.metaText.textContent = `${clock} · Warden ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+    }
+    if (this.lastWardenUp !== null && wardenUp !== this.lastWardenUp) {
+      if (wardenUp) {
+        this.announce('The Warden has awoken', '#d8a6f5');
+        playSfx('tower');
+      } else {
+        const mine = this.world.teamBuff(this.selfTeam);
+        if (mine && mine.until > this.world.time + 100) {
+          this.announce("Your team claims the Warden's Boon", '#ffd94a');
+          playSfx('levelup');
+        } else {
+          this.announce("The enemy claims the Warden's Boon", '#f5a3a3');
+          playSfx('deny');
+        }
+      }
+    }
+    this.lastWardenUp = wardenUp;
     this.levelBadge.textContent = String(u.level);
     this.goldText.textContent = `${Math.floor(u.gold)}g`;
     if (this.lastLevel !== -1 && u.level > this.lastLevel) {
@@ -1075,6 +1101,17 @@ export class Hud {
       u.level >= MAX_LEVEL ? 'max level' : `XP ${Math.floor(u.xp)} / ${xpForNext(u.level)}`;
 
     this.statusRow.textContent = '';
+    // The Warden's Boon is a team buff, not a Status: its chip is built here.
+    const boon = this.world.teamBuff(this.selfTeam);
+    if (boon) {
+      const chip = document.createElement('span');
+      chip.className = 'hud-chip';
+      chip.style.borderColor = '#a06ae8';
+      chip.style.color = '#e6c8ff';
+      chip.style.background = '#2c1a3d';
+      chip.textContent = `BOON x${boon.stacks} ${Math.ceil(boon.until - this.world.time)}s`;
+      this.statusRow.appendChild(chip);
+    }
     for (const s of u.statuses) {
       if (s.until <= this.world.time) continue;
       const chip = document.createElement('span');
@@ -1198,11 +1235,21 @@ export class Hud {
           this.targetName.textContent = `${row?.name ?? target.championId} (Lv ${target.level})`;
         } else {
           const label =
-            target.kind === 'tower' ? 'Tower' : target.kind === 'sanctum' ? 'Sanctum' : 'Minion';
-          this.targetPortrait.src = iconDataUrl(label[0] ?? '?', '#5a1f1f', '#a04040');
+            target.kind === 'tower'
+              ? 'Tower'
+              : target.kind === 'sanctum'
+                ? 'Sanctum'
+                : target.kind === 'warden'
+                  ? 'Warden'
+                  : 'Minion';
+          this.targetPortrait.src =
+            target.kind === 'warden'
+              ? iconDataUrl('W', '#3d2a5a', '#a06ae8')
+              : iconDataUrl(label[0] ?? '?', '#5a1f1f', '#a04040');
           this.targetName.textContent = label;
         }
-        this.targetName.style.color = TEAM_TEXT_COLORS[target.team] ?? '#f5a3a3';
+        this.targetName.style.color =
+          target.kind === 'warden' ? '#d8a6f5' : (TEAM_TEXT_COLORS[target.team] ?? '#f5a3a3');
       }
       this.targetHpFill.style.transform = `scaleX(${Math.max(0, target.hp / target.maxHp)})`;
       this.targetHpText.textContent = `${Math.ceil(target.hp)} / ${Math.round(target.maxHp)}`;

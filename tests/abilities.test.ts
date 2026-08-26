@@ -9,6 +9,7 @@ import { NavGrid } from '../src/sim/navgrid';
 import { Rng } from '../src/sim/rng';
 import { Sim } from '../src/sim/sim';
 import type { CombatCtx } from '../src/sim/sim_context';
+import { TeamBuffs } from '../src/sim/team_buffs';
 import type { Unit } from '../src/sim/unit';
 import { createChampion } from '../src/sim/unit';
 
@@ -100,6 +101,7 @@ describe('Sylra', () => {
       events: [],
       dead: new Set(),
       killers: new Map(),
+      teamBuffs: new TeamBuffs(),
       allocId: () => 100,
     };
     const mark: EffectSpec = {
