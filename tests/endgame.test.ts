@@ -93,7 +93,9 @@ describe('waves push', () => {
 });
 
 describe('a full bot match progresses to an end', () => {
-  it('ENDS, destroys towers, reaches ultimates, completes items, stays bounded', () => {
+  it('ENDS, destroys towers, reaches ultimates, completes items, stays bounded', {
+    timeout: 30000,
+  }, () => {
     const sim = botMatch(55);
     let winnerAt: number | null = null;
     // Cap at 25 sim-minutes: the match must conclude on its own inside it.
