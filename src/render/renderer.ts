@@ -394,7 +394,7 @@ export class Renderer {
       holder.add(mesh);
       return { holder, barY: 6.2 };
     }
-    holder.add(buildChampionMesh(u.championId, color));
+    holder.add(buildChampionMesh(u.championId, color, u.skin));
     return { holder, barY: 3.0 };
   }
 

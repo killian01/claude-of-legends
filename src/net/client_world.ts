@@ -84,6 +84,7 @@ function materializeUnit(s: SnapUnit): Unit {
     cooldowns: {},
     abilityRanks: { Q: 1, W: 1, E: 1, R: 0 },
     skillPoints: 0,
+    skin: s.sk ?? 0,
     passiveStacks: 0,
     lastDamagedAt: -999,
     attackTargetId: null,

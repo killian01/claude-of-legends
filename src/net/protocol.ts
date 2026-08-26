@@ -15,7 +15,7 @@ export type ClientMsg =
   | { t: 'create_lobby' }
   | { t: 'join_lobby'; code: string }
   | { t: 'start_lobby' }
-  | { t: 'pick'; championId: string; sigils: [string, string] }
+  | { t: 'pick'; championId: string; sigils: [string, string]; skin?: number }
   | { t: 'move'; x: number; z: number }
   | { t: 'attack'; targetId: number }
   | { t: 'attack_move'; x: number; z: number }
@@ -43,6 +43,8 @@ export interface SnapUnit {
   k?: UnitKind;
   t?: TeamId;
   c?: string | null;
+  // Cosmetic skin index (champions), identity block only.
+  sk?: number;
   r?: number;
   rg?: number;
   s?: StructureMeta;

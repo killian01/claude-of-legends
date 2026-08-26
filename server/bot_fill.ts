@@ -26,6 +26,8 @@ export function fillWithBots(picks: readonly MatchPick[], teamSize = TEAM_SIZE):
         team,
         championId: c.id,
         sigils: ['riftstep', 'mend'],
+        // Deterministic cosmetic variety; the sim clamps out-of-range picks.
+        skin: (count + team) % 3,
         bot: DEFAULT_BOT_ID,
       });
       count++;

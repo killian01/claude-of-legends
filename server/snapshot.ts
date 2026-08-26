@@ -68,6 +68,7 @@ export function buildSnapshot(
       snap.k = u.kind;
       snap.t = u.team;
       snap.c = u.championId;
+      if (u.kind === 'champion') snap.sk = u.skin;
       snap.r = u.radius;
       snap.rg = u.stats.attackRange;
       if (u.structure) snap.s = u.structure;

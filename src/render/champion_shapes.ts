@@ -1,11 +1,13 @@
 // Distinct procedural silhouettes per champion so you can tell WHO is on
 // screen at a glance (review finding: all ten champions were identical
-// capsules). Presentation data only; the sim never reads this.
+// capsules). Colors come from the skin palette (src/sim/content/skins.ts);
+// a team-colored base ring keeps allegiance readable when a skin recolors
+// the body. Presentation only; the sim never reads this.
 
 import * as THREE from 'three';
+import { skinOf } from '../sim/content/skins';
 
 interface ChampionLook {
-  accent: number;
   deco:
     | 'shield'
     | 'fists'
@@ -21,23 +23,28 @@ interface ChampionLook {
 }
 
 const LOOKS: Readonly<Record<string, ChampionLook>> = {
-  korrath: { accent: 0x8f9aa8, deco: 'shield', bulk: 1.25 },
-  dain: { accent: 0xe07a3a, deco: 'fists', bulk: 1.1 },
-  sylra: { accent: 0x64c95e, deco: 'orb', bulk: 0.95 },
-  fenn: { accent: 0x9a63d8, deco: 'blades', bulk: 0.85 },
-  elowen: { accent: 0xbfe4f0, deco: 'halo', bulk: 0.95 },
-  vesk: { accent: 0xc9b458, deco: 'rifle', bulk: 0.9 },
-  ashvyn: { accent: 0x5f5f8a, deco: 'bow', bulk: 0.9 },
-  maera: { accent: 0x4fb8c9, deco: 'staff', bulk: 0.95 },
-  torv: { accent: 0xb0733a, deco: 'horns', bulk: 1.3 },
-  rhoka: { accent: 0xd85e5e, deco: 'claws', bulk: 1.0 },
+  korrath: { deco: 'shield', bulk: 1.25 },
+  dain: { deco: 'fists', bulk: 1.1 },
+  sylra: { deco: 'orb', bulk: 0.95 },
+  fenn: { deco: 'blades', bulk: 0.85 },
+  elowen: { deco: 'halo', bulk: 0.95 },
+  vesk: { deco: 'rifle', bulk: 0.9 },
+  ashvyn: { deco: 'bow', bulk: 0.9 },
+  maera: { deco: 'staff', bulk: 0.95 },
+  torv: { deco: 'horns', bulk: 1.3 },
+  rhoka: { deco: 'claws', bulk: 1.0 },
 };
 
-export function buildChampionMesh(championId: string | null, teamColor: number): THREE.Group {
+export function buildChampionMesh(
+  championId: string | null,
+  teamColor: number,
+  skin = 0,
+): THREE.Group {
   const holder = new THREE.Group();
-  const look = (championId && LOOKS[championId]) || { accent: 0xffffff, deco: 'orb', bulk: 1 };
-  const bodyMat = new THREE.MeshLambertMaterial({ color: teamColor });
-  const accentMat = new THREE.MeshLambertMaterial({ color: look.accent });
+  const look = (championId && LOOKS[championId]) || { deco: 'orb', bulk: 1 };
+  const palette = skinOf(championId, skin);
+  const bodyMat = new THREE.MeshLambertMaterial({ color: palette.body ?? teamColor });
+  const accentMat = new THREE.MeshLambertMaterial({ color: palette.accent });
 
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.6 * look.bulk, 1.0, 4, 12), bodyMat);
   body.position.y = 1.1;
@@ -45,6 +52,14 @@ export function buildChampionMesh(championId: string | null, teamColor: number):
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.32 * look.bulk, 10, 8), accentMat);
   head.position.y = 2.05;
   holder.add(head);
+  // Team allegiance survives any skin: a colored ring at the feet.
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.72 * look.bulk, 0.07, 6, 24),
+    new THREE.MeshLambertMaterial({ color: teamColor }),
+  );
+  ring.position.y = 0.12;
+  ring.rotation.x = Math.PI / 2;
+  holder.add(ring);
 
   switch (look.deco) {
     case 'shield': {

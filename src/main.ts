@@ -26,19 +26,20 @@ const app = document.querySelector<HTMLElement>('#app');
 if (!app) throw new Error('missing #app root element');
 const container = app;
 
-function startOffline(championId: string, sigils: [string, string]): void {
+function startOffline(championId: string, sigils: [string, string], skin: number): void {
   const sim = new Sim(42);
   const world: IWorld = sim;
-  const self = sim.addChampion(0, undefined, championId);
+  const self = sim.addChampion(0, undefined, championId, skin);
   self.sigils = [...sigils];
-  // A full 5v5: your four allies and all five opponents are Policy bots.
+  // A full 5v5: your four allies and all five opponents are Policy bots,
+  // with deterministic skin variety (the sim clamps out-of-range picks).
   const roster = CHAMPION_LIST.filter((c) => c.id !== championId).map((c) => c.id);
   for (let i = 0; i < 4; i++) {
-    const ally = sim.addChampion(0, undefined, roster[i]!);
+    const ally = sim.addChampion(0, undefined, roster[i]!, i % 3);
     sim.attachPolicy(ally.id, BOTS[DEFAULT_BOT_ID]!.policy);
   }
   for (let i = 0; i < 5; i++) {
-    const enemy = sim.addChampion(1, undefined, roster[(i + 4) % roster.length]!);
+    const enemy = sim.addChampion(1, undefined, roster[(i + 4) % roster.length]!, i % 3);
     sim.attachPolicy(enemy.id, BOTS[DEFAULT_BOT_ID]!.policy);
   }
 
@@ -139,9 +140,15 @@ function startOnline(choice: HomeChoice): void {
         break;
       case 'select_start':
         clearMenus();
-        selectUi = showSelect(container, msg.players, msg.team, msg.deadline, (champ, sigils) => {
-          ws.send(JSON.stringify({ t: 'pick', championId: champ, sigils }));
-        });
+        selectUi = showSelect(
+          container,
+          msg.players,
+          msg.team,
+          msg.deadline,
+          (champ, sigils, skin) => {
+            ws.send(JSON.stringify({ t: 'pick', championId: champ, sigils, skin }));
+          },
+        );
         break;
       case 'select_update':
         selectUi?.setLocked(msg.locked, msg.total, msg.taken);
@@ -216,9 +223,9 @@ function startOnline(choice: HomeChoice): void {
 async function boot(): Promise<void> {
   const choice = await showHome(container);
   if (choice.mode === 'practice') {
-    const picker = showSelect(container, null, 0, null, (championId, sigils) => {
+    const picker = showSelect(container, null, 0, null, (championId, sigils, skin) => {
       picker.remove();
-      startOffline(championId, sigils);
+      startOffline(championId, sigils, skin);
     });
     return;
   }

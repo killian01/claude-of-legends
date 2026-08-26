@@ -22,6 +22,7 @@ import { CHAMPIONS, DEFAULT_CHAMPION_ID } from './content/champions';
 import { ITEMS } from './content/items';
 import { GAME_MAP, type GameMap } from './content/map';
 import { SIGILS } from './content/sigils';
+import { clampSkin } from './content/skins';
 import { hasDecisionToken, spendDecisionToken } from './decision_budget';
 import { applyFountainRegen } from './fountain';
 import { stepIdleDefense } from './idle_defense';
@@ -128,7 +129,7 @@ export class Sim {
     };
   }
 
-  addChampion(team: TeamId, at?: Vec2, championId: string = DEFAULT_CHAMPION_ID): Unit {
+  addChampion(team: TeamId, at?: Vec2, championId: string = DEFAULT_CHAMPION_ID, skin = 0): Unit {
     const def = CHAMPIONS[championId];
     if (!def) throw new Error(`unknown champion ${championId}`);
     const fountain = this.map.fountains.find((f) => f.team === team);
@@ -140,6 +141,7 @@ export class Sim {
     const slot = SPAWN_SLOTS[count % SPAWN_SLOTS.length]!;
     const pos = at ?? { x: fountain.x + slot.x, z: fountain.z + slot.z };
     const champ = createChampion(this.nextId++, team, pos, def);
+    champ.skin = clampSkin(championId, skin);
     this.units.set(champ.id, champ);
     return champ;
   }

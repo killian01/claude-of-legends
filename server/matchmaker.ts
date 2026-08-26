@@ -6,6 +6,7 @@
 import type { ServerMsg } from '../src/net/protocol';
 import { CHAMPION_LIST, CHAMPIONS, DEFAULT_CHAMPION_ID } from '../src/sim/content/champions';
 import { SIGILS } from '../src/sim/content/sigils';
+import { clampSkin } from '../src/sim/content/skins';
 import type { TeamId } from '../src/sim/types';
 import type { MatchPick } from './match';
 
@@ -26,7 +27,7 @@ interface QueueEntry extends Pending {
 
 interface SelectEntry extends Pending {
   team: TeamId;
-  locked: { championId: string; sigils: [string, string] } | null;
+  locked: { championId: string; sigils: [string, string]; skin: number } | null;
 }
 
 interface SelectSession {
@@ -181,7 +182,7 @@ export class Matchmaker {
     }
   }
 
-  pick(clientId: number, championId: string, sigils: [string, string]): void {
+  pick(clientId: number, championId: string, sigils: [string, string], skin?: number): void {
     const session = this.inSelect(clientId);
     if (!session) return;
     const entry = session.entries.find((e) => e.clientId === clientId);
@@ -200,7 +201,11 @@ export class Matchmaker {
       sigils.length === 2 &&
       sigils[0] !== sigils[1] &&
       sigils.every((s) => typeof s === 'string' && SIGILS[s]);
-    entry.locked = { championId: champ, sigils: valid ? [sigils[0], sigils[1]] : DEFAULT_SIGILS };
+    entry.locked = {
+      championId: champ,
+      sigils: valid ? [sigils[0], sigils[1]] : DEFAULT_SIGILS,
+      skin: clampSkin(champ, skin),
+    };
     const locked = session.entries.filter((e) => e.locked).length;
     for (const e of session.entries) {
       const taken = session.entries
@@ -252,6 +257,7 @@ export class Matchmaker {
       team: e.team,
       championId: e.locked?.championId ?? DEFAULT_CHAMPION_ID,
       sigils: e.locked?.sigils ?? DEFAULT_SIGILS,
+      skin: e.locked?.skin ?? 0,
     }));
     this.onMatchReady(picks);
   }
@@ -289,7 +295,7 @@ export class Matchmaker {
     if (session) {
       const entry = session.entries.find((e) => e.clientId === clientId);
       if (entry && !entry.locked) {
-        entry.locked = { championId: DEFAULT_CHAMPION_ID, sigils: DEFAULT_SIGILS };
+        entry.locked = { championId: DEFAULT_CHAMPION_ID, sigils: DEFAULT_SIGILS, skin: 0 };
         if (session.entries.every((e) => e.locked)) this.finishSelect(session);
       }
     }
