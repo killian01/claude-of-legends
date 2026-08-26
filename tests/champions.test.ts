@@ -37,6 +37,8 @@ describe('the roster', () => {
         expect(sim.castAbility(a.id, key, { x: b.pos.x, z: b.pos.z }), `${def.id} ${key}`).toBe(
           true,
         );
+        // Let the decision budget refill between casts (ADR 0003).
+        for (let i = 0; i < 10; i++) sim.tick();
       }
       for (let i = 0; i < 60; i++) sim.tick();
       expect(b.maxHp - b.hp, `${def.id} dealt no damage`).toBeGreaterThan(0);

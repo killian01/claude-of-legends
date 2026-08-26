@@ -1,18 +1,64 @@
 // The single abstraction behind every bot, scripted or trained (ADR 0002).
-// A Policy is deterministic, does zero I/O, and sees only what its team sees.
-// The observation/action space and the decision budget (ADR 0003) form a
-// public contract: bump POLICY_CONTRACT_VERSION deliberately, never casually.
+// A Policy is deterministic, does zero I/O, and sees only what its team sees
+// (the observation is built from team vision; see observe.ts). Contract
+// version 0, FROZEN at phase 7: the headless Gym env will expose exactly
+// this observation and action space, and changing it breaks every
+// community-trained bot, so it is versioned and evolved deliberately.
+// The static map (src/sim/content/map.ts) is a known constant of the
+// contract; policies may read it directly.
 
 import type { Rng } from './rng';
+import type { AbilityKey, TeamId } from './types';
+import type { UnitKind } from './unit';
 
 export const POLICY_CONTRACT_VERSION = 0;
 
-// Team vision only, never global sim state. Grows as systems land; every
-// addition must remain derivable from what the participant's team can see.
-export interface Observation {
-  tick: number;
+export interface ObsUnit {
+  id: number;
+  kind: UnitKind;
+  friendly: boolean;
+  x: number;
+  z: number;
+  hpFrac: number;
+  radius: number;
 }
 
-export type Action = { kind: 'noop' } | { kind: 'move'; x: number; z: number };
+export interface ObsSelf {
+  id: number;
+  team: TeamId;
+  x: number;
+  z: number;
+  hp: number;
+  maxHp: number;
+  hpFrac: number;
+  mana: number;
+  maxMana: number;
+  level: number;
+  gold: number;
+  dead: boolean;
+  // Cooldown, mana, and level gates resolved; the decision budget is not
+  // part of readiness (a ready ability can still be budget-rejected).
+  abilityReady: Record<AbilityKey, boolean>;
+  sigils: readonly string[];
+  sigilReady: readonly boolean[];
+  items: readonly string[];
+}
+
+export interface Observation {
+  tick: number;
+  time: number;
+  winner: TeamId | null;
+  self: ObsSelf;
+  // Everything the team currently sees, self excluded.
+  units: readonly ObsUnit[];
+}
+
+export type Action =
+  | { kind: 'noop' }
+  | { kind: 'move'; x: number; z: number }
+  | { kind: 'attack'; targetId: number }
+  | { kind: 'cast'; key: AbilityKey; x: number; z: number }
+  | { kind: 'sigil'; slot: number; x: number; z: number }
+  | { kind: 'buy'; itemId: string };
 
 export type Policy = (obs: Observation, rng: Rng) => Action;

@@ -8,6 +8,9 @@ export type TeamId = 0 | 1;
 
 export type AbilityKey = 'Q' | 'W' | 'E' | 'R';
 
+// Champion level required to rank the ultimate (game definition).
+export const ULT_LEVEL = 6;
+
 export type DamageType = 'physical' | 'magic' | 'true';
 
 // Ground-plane coordinates. Named x/z so the Three.js renderer maps them onto

@@ -5,6 +5,7 @@
 
 import type { ServerMsg } from '../src/net/protocol';
 import { type ClientMsg, isFiniteVec } from '../src/net/protocol';
+import { BOTS, DEFAULT_BOT_ID } from '../src/sim/content/bots';
 import type { SimEvent } from '../src/sim/sim';
 import { Sim } from '../src/sim/sim';
 import type { TeamId } from '../src/sim/types';
@@ -16,6 +17,8 @@ export interface MatchPick {
   team: TeamId;
   championId: string;
   sigils: [string, string];
+  // Bot policy id: this seat is driven in-sim, not by a connection.
+  bot?: string;
 }
 
 interface MatchPlayer {
@@ -38,6 +41,11 @@ export class Match {
     for (const p of picks) {
       const unit = this.sim.addChampion(p.team, undefined, p.championId);
       unit.sigils = [...p.sigils];
+      if (p.bot) {
+        const def = BOTS[p.bot] ?? BOTS[DEFAULT_BOT_ID];
+        if (def) this.sim.attachPolicy(unit.id, def.policy);
+        continue;
+      }
       this.players.set(p.clientId, {
         clientId: p.clientId,
         name: p.name,

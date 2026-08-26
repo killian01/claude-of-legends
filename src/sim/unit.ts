@@ -62,6 +62,9 @@ export interface Unit {
   // The two equipped sigils and their ready-at times (champions).
   sigils: string[];
   sigilCooldowns: number[];
+  // Decision budget token bucket (ADR 0003), identical for humans and bots.
+  decisionTokens: number;
+  decisionRefillAt: number;
   // Structure metadata (towers only; the Sanctum core is identified by kind).
   structure: StructureMeta | null;
   // Lane minion state.
@@ -115,6 +118,8 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     xpBounty: 0,
     sigils: [],
     sigilCooldowns: [],
+    decisionTokens: 2,
+    decisionRefillAt: 0,
     structure: null,
     lane: null,
     laneProgress: 0,

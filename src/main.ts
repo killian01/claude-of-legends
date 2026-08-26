@@ -5,6 +5,8 @@
 import { startPresentation } from './game/boot';
 import { ClientWorld } from './net/client_world';
 import type { ServerMsg } from './net/protocol';
+import { BOTS, DEFAULT_BOT_ID } from './sim/content/bots';
+import { CHAMPION_LIST } from './sim/content/champions';
 import { Sim } from './sim/sim';
 import { DT } from './sim/types';
 import {
@@ -29,9 +31,16 @@ function startOffline(championId: string, sigils: [string, string]): void {
   const world: IWorld = sim;
   const self = sim.addChampion(0, undefined, championId);
   self.sigils = [...sigils];
-  // Practice dummies until Policy bots land in phase 7.
-  sim.addChampion(1, { x: 66, z: 66 }, 'korrath');
-  sim.addChampion(1, { x: 80, z: 80 }, 'vesk');
+  // A full 5v5: your four allies and all five opponents are Policy bots.
+  const roster = CHAMPION_LIST.filter((c) => c.id !== championId).map((c) => c.id);
+  for (let i = 0; i < 4; i++) {
+    const ally = sim.addChampion(0, undefined, roster[i]!);
+    sim.attachPolicy(ally.id, BOTS[DEFAULT_BOT_ID]!.policy);
+  }
+  for (let i = 0; i < 5; i++) {
+    const enemy = sim.addChampion(1, undefined, roster[(i + 4) % roster.length]!);
+    sim.attachPolicy(enemy.id, BOTS[DEFAULT_BOT_ID]!.policy);
+  }
 
   const pres = startPresentation(container, world, self.id, self.team);
   const TICK_MS = DT * 1000;

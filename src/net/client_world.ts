@@ -52,6 +52,8 @@ function materializeUnit(s: SnapUnit): Unit {
     xpBounty: 0,
     sigils: [],
     sigilCooldowns: [],
+    decisionTokens: 0,
+    decisionRefillAt: 0,
     structure: s.s ?? null,
     lane: null,
     laneProgress: 0,
