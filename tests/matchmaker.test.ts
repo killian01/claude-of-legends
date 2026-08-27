@@ -99,7 +99,10 @@ describe('matchmaker', () => {
 
     mm.joinLobby(2, 'friend', code);
     const joined = last(sent.get(2), 'lobby');
-    expect(joined?.t === 'lobby' && joined.players).toEqual(['host', 'friend']);
+    expect(joined?.t === 'lobby' && joined.players).toEqual([
+      { name: 'host', team: 0 },
+      { name: 'friend', team: 1 },
+    ]);
 
     mm.joinLobby(3, 'lost', 'ZZZZZ');
     expect(last(sent.get(3), 'error')).toBeDefined();
@@ -110,6 +113,56 @@ describe('matchmaker', () => {
     mm.pick(1, 'maera', ['mend', 'zephyr']);
     mm.pick(2, 'torv', ['riftstep', 'sear']);
     expect(matches).toHaveLength(1);
+  });
+
+  it('lobby sides are pickable and survive into the match', () => {
+    const { mm, sent, matches } = harness();
+    mm.createLobby(1, 'host');
+    const lobbyMsg = last(sent.get(1), 'lobby');
+    const code = lobbyMsg?.t === 'lobby' ? lobbyMsg.code : '';
+    mm.joinLobby(2, 'friend', code);
+    // The joiner lands on the emptier side by default.
+    let view = last(sent.get(2), 'lobby');
+    expect(view?.t === 'lobby' && view.team).toBe(1);
+    // Then moves next to the host: a duo against the bot fill.
+    mm.setLobbyTeam(2, 0);
+    view = last(sent.get(2), 'lobby');
+    expect(view?.t === 'lobby' && view.team).toBe(0);
+    const hostView = last(sent.get(1), 'lobby');
+    expect(hostView?.t === 'lobby' && hostView.players).toEqual([
+      { name: 'host', team: 0 },
+      { name: 'friend', team: 0 },
+    ]);
+    // Junk team values are ignored.
+    mm.setLobbyTeam(2, 5);
+    mm.setLobbyTeam(2, 'red');
+    mm.startLobby(1, 0);
+    expect(last(sent.get(1), 'select_start')).toMatchObject({ team: 0 });
+    expect(last(sent.get(2), 'select_start')).toMatchObject({ team: 0 });
+    mm.pick(1, 'korrath', ['riftstep', 'sear']);
+    mm.pick(2, 'fenn', ['zephyr', 'mend']);
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject([
+      { clientId: 1, team: 0 },
+      { clientId: 2, team: 0 },
+    ]);
+  });
+
+  it('a full side takes nobody else', () => {
+    const { mm, sent } = harness();
+    mm.createLobby(1, 'host');
+    const lobbyMsg = last(sent.get(1), 'lobby');
+    const code = lobbyMsg?.t === 'lobby' ? lobbyMsg.code : '';
+    for (let i = 2; i <= 10; i++) mm.joinLobby(i, `p${i}`, code);
+    // Balanced joins fill both sides to five.
+    const full = last(sent.get(1), 'lobby');
+    const players = full?.t === 'lobby' ? full.players : [];
+    expect(players.filter((p) => p.team === 0)).toHaveLength(5);
+    // Client 2 sits on team 1; team 0 is full, the switch is refused
+    // silently (no broadcast, same team on the last view).
+    mm.setLobbyTeam(2, 0);
+    const after = last(sent.get(2), 'lobby');
+    expect(after?.t === 'lobby' && after.team).toBe(1);
   });
 
   it('auto-locks a player who disconnects during select', () => {

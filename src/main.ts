@@ -7,6 +7,7 @@
 import { type Presentation, startPresentation } from './game/boot';
 import { nextStep, type PostMatchAction } from './game/flow';
 import { requestGameFullscreen } from './game/fullscreen';
+import { parseJoinCode } from './game/invite';
 import { getSettings } from './game/settings';
 import { ClientWorld } from './net/client_world';
 import type { ServerMsg } from './net/protocol';
@@ -173,6 +174,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           container,
           () => ws.send(JSON.stringify({ t: 'start_lobby' })),
           () => finish('menu'),
+          (team) => ws.send(JSON.stringify({ t: 'lobby_team', team })),
         );
       } else if (choice.mode === 'join' && choice.code) {
         ws.send(JSON.stringify({ t: 'join_lobby', code: choice.code }));
@@ -180,6 +182,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           container,
           () => undefined,
           () => finish('menu'),
+          (team) => ws.send(JSON.stringify({ t: 'lobby_team', team })),
         );
       }
     });
@@ -197,7 +200,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           queueUi?.setStatus(msg.count, msg.needed, msg.startsIn, msg.ready);
           break;
         case 'lobby':
-          lobbyUi?.update(msg.code, msg.host, msg.players);
+          lobbyUi?.update(msg.code, msg.host, msg.team, msg.players);
           break;
         case 'select_start':
           clearMenus();
@@ -323,12 +326,27 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
 async function boot(): Promise<void> {
   // Load and apply the stored player settings before any audio plays.
   getSettings();
+  // An invite link (?join=CODE) deep-links into the friend's lobby: with a
+  // stored name we go straight in; a first-time visitor gets the home
+  // screen with the code prefilled. Consumed once, so reloads stay home.
+  let joinCode = parseJoinCode(window.location.search);
+  if (joinCode !== null) window.history.replaceState(null, '', window.location.pathname);
   // The app loop: home, one match, back, forever on the same page. 'again'
   // replays the same offline pick or re-enters the public queue (flow.ts).
   let next: HomeChoice | null = null;
   let lastPick: OfflinePick | null = null;
+  if (joinCode !== null) {
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem('loc-name');
+    } catch {
+      // storage may be unavailable
+    }
+    if (stored) next = { name: stored, mode: 'join', code: joinCode };
+  }
   for (;;) {
-    const choice: HomeChoice = next ?? (await showHome(container));
+    const choice: HomeChoice = next ?? (await showHome(container, joinCode ?? undefined));
+    joinCode = null;
     next = null;
     let action: PostMatchAction;
     if (choice.mode === 'practice') {

@@ -12,6 +12,7 @@ import type { TeamId } from '../src/sim/types';
 import type { MatchPick } from './match';
 
 export const MATCH_SIZE = 10;
+export const TEAM_CAP = MATCH_SIZE / 2;
 export const SELECT_SECONDS = 45;
 const DEFAULT_SIGILS: [string, string] = ['riftstep', 'mend'];
 
@@ -40,10 +41,16 @@ interface SelectSession {
   started: boolean;
 }
 
+// Lobby seats carry a chosen side, so friends can play TOGETHER against
+// the bot fill instead of always being split by join order.
+interface LobbyEntry extends Pending {
+  team: TeamId;
+}
+
 interface Lobby {
   code: string;
   hostId: number;
-  players: Pending[];
+  players: LobbyEntry[];
   createdAt: number;
 }
 
@@ -132,7 +139,12 @@ export class Matchmaker {
       this.send(clientId, { t: 'error', message: 'Could not create a lobby, try again.' });
       return;
     }
-    const lobby: Lobby = { code, hostId: clientId, players: [{ clientId, name }], createdAt: now };
+    const lobby: Lobby = {
+      code,
+      hostId: clientId,
+      players: [{ clientId, name, team: 0 }],
+      createdAt: now,
+    };
     this.lobbies.set(code, lobby);
     this.broadcastLobby(lobby);
   }
@@ -144,8 +156,27 @@ export class Matchmaker {
       return;
     }
     this.removeEverywhere(clientId);
-    lobby.players.push({ clientId, name });
+    // Default to the emptier side; anyone can switch afterwards.
+    const count0 = lobby.players.filter((p) => p.team === 0).length;
+    const count1 = lobby.players.length - count0;
+    lobby.players.push({ clientId, name, team: count0 <= count1 ? 0 : 1 });
     this.broadcastLobby(lobby);
+  }
+
+  // A lobby member picks their side. A full side refuses silently: the
+  // client greys the button out, and the 'error' channel would tear the
+  // lobby screen down (it is reserved for closed and expired lobbies).
+  setLobbyTeam(clientId: number, team: unknown): void {
+    if (team !== 0 && team !== 1) return;
+    for (const lobby of this.lobbies.values()) {
+      const entry = lobby.players.find((p) => p.clientId === clientId);
+      if (!entry) continue;
+      if (entry.team === team) return;
+      if (lobby.players.filter((p) => p.team === team).length >= TEAM_CAP) return;
+      entry.team = team;
+      this.broadcastLobby(lobby);
+      return;
+    }
   }
 
   startLobby(clientId: number, now: number): void {
@@ -163,17 +194,21 @@ export class Matchmaker {
         t: 'lobby',
         code: lobby.code,
         host: p.clientId === lobby.hostId,
-        players: lobby.players.map((x) => x.name),
+        team: p.team,
+        players: lobby.players.map((x) => ({ name: x.name, team: x.team })),
       });
     }
   }
 
-  private startSelect(players: Pending[], now: number): void {
+  // Queue entries alternate sides by position; lobby entries carry the side
+  // their players chose and keep it.
+  private startSelect(players: (Pending & { team?: TeamId })[], now: number): void {
     if (players.length === 0) return;
     const session: SelectSession = {
       entries: players.map((p, i) => ({
-        ...p,
-        team: (i % 2) as TeamId,
+        clientId: p.clientId,
+        name: p.name,
+        team: p.team ?? ((i % 2) as TeamId),
         locked: null,
       })),
       deadline: now + SELECT_SECONDS * 1000,

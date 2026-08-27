@@ -118,11 +118,14 @@ ranking exists.
 Missing: any way to play together on purpose, beyond reading a lobby
 code aloud.
 
-- Lobby team picker: host assigns seats (or players toggle their side),
-  enabling duo vs bots, the single cheapest high-value social feature.
-  Effort: small (protocol msg, lobby UI, matchmaker test).
-- Invite links: `https://host/?join=CODE` auto-joins the lobby after
-  name entry. Effort: tiny.
+- FIXED: lobby team picker. The lobby screen shows two team columns
+  with a switch button ('lobby_team' message); joins balance sides by
+  default, a full side refuses, and the chosen sides survive into the
+  match, so a duo vs bots finally works.
+- FIXED: invite links. 'Copy invite link' in the lobby yields
+  `/?join=CODE`; a visitor with a stored name deep-links straight into
+  the lobby, a first-timer gets the home screen with the code
+  prefilled (src/game/invite.ts, consumed once at boot).
 - Party queue: a group that queues together and lands on the same team.
   Effort: medium.
 - Friends list / presence: needs identity first; defer until profiles
@@ -179,8 +182,7 @@ progression (9), integrity (10)  [after 4 and 5]
 ## Recommended order of attack
 
 1. DONE: match lifecycle without reload plus the post-game exits (6).
-2. Lobby team picker and invite links (7a). Tiny, immediate social win,
-   no storage required.
+2. DONE: lobby team picker and invite links (7a).
 3. Storage module plus player identity (2, 1). The keystone batch;
    pure modules, heavy on tests.
 4. Match log, history, profile screen (3, 5).
