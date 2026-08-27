@@ -153,13 +153,14 @@ cheap and the old review already called this out:
 
 ### 9. Progression and cosmetics
 
-Missing: account levels, unlocks, mastery. Deliberately thin today:
-all champions and skins are free picks. Recommendation: keep everything
-free (it is a portfolio game, not a store); if progression is wanted,
-make it purely cosmetic and derived from the match log (champion mastery
-levels on the profile, title strings on the loading screen). Effort:
-small, but only worth it after profiles exist. No monetization, ever,
-without a licensing review of the CC0 asset base.
+Deliberately thin: all champions and skins stay free picks, no
+monetization ever without a licensing review of the CC0 asset base.
+
+FIXED (the cosmetic slice): champion Mastery (CONTEXT.md term), a
+per-champion rank derived from recorded online games
+(`server/mastery.ts` thresholds, Novice through Legend), stamped on
+the profile's champion lines as a title chip. Nothing else unlocks
+and nothing touches gameplay.
 
 ### 10. Ranked integrity (only once ranking exists)
 
@@ -169,7 +170,12 @@ Rating creates incentives; these arrive with it, not before:
   match costs a flat rating penalty (no rated game counted) plus a
   60 second queue lockout with a clear refusal message; a dropped
   connection is never punished, its seat reservation and the rejoin
-  grace stand. AFK detection (present but idle) remains open.
+  grace stand.
+- FIXED (AFK): a connected player silent for two minutes in a live
+  match with other humans is walked out through the same path (bot
+  takeover, team notice, penalty when rated) and told why; commands
+  and rejoins reset the idle clock, and a solo-vs-bots match is
+  never swept.
 - Name squatting and impersonation: solved by the discriminator.
 - Smurfing: accept it; token identity makes new identities free and
   fighting that means accounts, which we rejected.
@@ -202,6 +208,6 @@ progression (9), integrity (10)  [after 4 and 5]
 6. DONE: party queue (7).
 7. DONE: deterministic replays with the in-browser viewer (8).
 8. DONE: live spectator (8).
-9. Then by appetite: mastery cosmetics (9), AFK detection (10),
-   a friends list if demand shows up (7), replay scrubbing and a
-   free camera (8).
+9. DONE: champion mastery (9) and the AFK sweep (10).
+10. Left on the shelf: a friends list if demand shows up (7), replay
+    scrubbing and a free camera (8), an identity recovery code (1).

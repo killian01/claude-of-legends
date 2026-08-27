@@ -19,6 +19,10 @@ const CSS = `
   background: #1d2a14; color: #c9d8ae; font-size: 10px; font-weight: 700; cursor: pointer;
 }
 .prof-watch:hover { border-color: #7ca050; }
+.prof-mastery {
+  color: #c9a84a; font-size: 10px; font-weight: 800; letter-spacing: 0.5px;
+  border: 1px solid #6b5a2e; border-radius: 4px; padding: 0 5px; text-transform: uppercase;
+}
 `;
 
 let cssInstalled = false;
@@ -49,6 +53,8 @@ export interface ApiProfile {
       deaths: number;
       assists: number;
       cs: number;
+      mastery: number;
+      masteryTitle: string;
     }[];
     recent: {
       at: number;
@@ -104,8 +110,14 @@ export function renderProfile(box: HTMLElement, data: ApiProfile): void {
   box.append(el('div', 'prof-section', 'Champions'));
   for (const c of p.perChampion.slice(0, 5)) {
     const line = el('div', 'prof-line');
+    const left = el('span', '');
+    left.append(document.createTextNode(`${champName(c.championId)} (${c.games})`));
+    if (c.mastery > 0) {
+      left.append(document.createTextNode(' '));
+      left.append(el('span', 'prof-mastery', c.masteryTitle));
+    }
     line.append(
-      el('span', '', `${champName(c.championId)} (${c.games})`),
+      left,
       el(
         'span',
         '',

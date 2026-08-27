@@ -2,6 +2,7 @@
 // a linear pass beats any precomputed aggregate that could drift. Pure,
 // so the numbers the profile screen shows are pinned by tests.
 
+import { masteryRank, masteryTitle } from './mastery';
 import type { MatchRecord } from './records';
 
 export interface ChampionLine {
@@ -12,6 +13,9 @@ export interface ChampionLine {
   deaths: number;
   assists: number;
   cs: number;
+  // Cosmetic mastery (CONTEXT.md), stamped from games at build time.
+  mastery: number;
+  masteryTitle: string;
 }
 
 export interface RecentMatch {
@@ -72,6 +76,8 @@ export function buildProfile(records: readonly MatchRecord[], playerId: number):
         deaths: 0,
         assists: 0,
         cs: 0,
+        mastery: 0,
+        masteryTitle: masteryTitle(0),
       };
       perChamp.set(me.championId, line);
     }
@@ -93,6 +99,10 @@ export function buildProfile(records: readonly MatchRecord[], playerId: number):
       ...(me.ratingDelta !== undefined ? { ratingDelta: me.ratingDelta } : {}),
       ...(rec.replayId !== undefined ? { replayId: rec.replayId } : {}),
     });
+  }
+  for (const line of perChamp.values()) {
+    line.mastery = masteryRank(line.games);
+    line.masteryTitle = masteryTitle(line.mastery);
   }
   out.perChampion = [...perChamp.values()].sort((a, b) => b.games - a.games);
   out.recent.sort((a, b) => b.at - a.at);

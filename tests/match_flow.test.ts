@@ -180,6 +180,21 @@ describe('online match flow', () => {
     expect(aliceMoved).toBe(0);
   });
 
+  it('tracks idle players for the AFK sweep, reset by commands and rejoins', () => {
+    const { match, step } = wire();
+    step(10);
+    match.handleCommand(1, { t: 'stop' });
+    // Alice just acted, bob has been silent for the whole ten ticks.
+    expect(match.idleClientIds(15)).toEqual([]);
+    step(10);
+    expect(match.idleClientIds(15)).toEqual([2]);
+    expect(match.idleClientIds(5).sort()).toEqual([1, 2]);
+    // A rejoin starts a fresh idle clock instead of being flagged at once.
+    const seat = match.handleDisconnect(2)!;
+    match.restorePlayer(9, seat);
+    expect(match.idleClientIds(15)).toEqual([]);
+  });
+
   it('streams seatless spectator snapshots on one team fog, self always null', () => {
     const { match } = wire();
     expect(match.addSpectator(99, 0)).toBe(true);
