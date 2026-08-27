@@ -24,6 +24,35 @@ export interface ObsUnit {
   // Structures only: true while layer protection makes it immune (additive
   // v0 field; without it a policy cannot know a target is untouchable).
   invulnerable?: boolean;
+  // Champions only: a cast mid-windup, the telegraph made observable
+  // (additive v0 field). x/z is the LANDING center (the caster itself for
+  // bursts and cones), resolveAt the sim time it lands. Fairness mirror of
+  // the on-screen telegraph: whoever sees the caster sees the charge.
+  windup?: { key: AbilityKey; x: number; z: number; resolveAt: number };
+}
+
+// A projectile the team can see (additive v0 block: dodging is impossible
+// without it). dir is normalized; homing bolts (auto-attacks) cannot be
+// dodged and are flagged so policies skip them.
+export interface ObsProjectile {
+  x: number;
+  z: number;
+  dirX: number;
+  dirZ: number;
+  speed: number;
+  radius: number;
+  friendly: boolean;
+  homing: boolean;
+}
+
+// A ground zone the team can see (additive v0 block). detonateAt is the
+// sim time a delayed zone explodes, null for persistent fields.
+export interface ObsZone {
+  x: number;
+  z: number;
+  radius: number;
+  friendly: boolean;
+  detonateAt: number | null;
 }
 
 export interface ObsSelf {
@@ -67,6 +96,10 @@ export interface Observation {
   // When the next Warden rises, null while one is alive. Additive v0 field:
   // the spawn clock is the one objective fact unit rows cannot carry.
   objectiveSpawnAt?: number | null;
+  // Threats in flight and on the ground, filtered by team vision (additive
+  // v0 fields; a policy that ignores them keeps its old behavior).
+  projectiles?: readonly ObsProjectile[];
+  zones?: readonly ObsZone[];
 }
 
 export type Action =

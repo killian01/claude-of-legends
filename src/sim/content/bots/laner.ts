@@ -32,6 +32,13 @@ const TOWER_DANGER_RANGE = 11;
 const ESCORT_RADIUS = 7;
 const ESCORT_MIN = 3;
 const KILL_SECURE_HP_FRAC = 0.3;
+// Dodging: the bot's own body radius (champions run 0.6 to 0.75), how far a
+// sidestep goes, how soon a projectile must arrive to be worth reacting to,
+// and how close a windup's landing spot must be to step off it.
+const SELF_RADIUS = 0.75;
+const DODGE_STEP = 2.6;
+const DODGE_ETA_S = 1.0;
+const WINDUP_DANGER_RADIUS = 3.4;
 
 function dist(ax: number, az: number, b: ObsUnit): number {
   return Math.hypot(b.x - ax, b.z - az);
@@ -138,6 +145,45 @@ function nextPurchase(items: readonly string[], championId: string | null): stri
 const policy: Policy = (obs, rng: Rng): Action => {
   const s = obs.self;
   if (s.dead) return { kind: 'noop' };
+
+  // Dodge before anything else: the observation now carries threats, and a
+  // sidestep is free (movement is never budgeted). Skillshots on a
+  // collision course get a perpendicular step; hostile zones get walked out
+  // of; an enemy windup landing here gets stepped off.
+  for (const p of obs.projectiles ?? []) {
+    if (p.friendly || p.homing) continue;
+    const relX = s.x - p.x;
+    const relZ = s.z - p.z;
+    const along = relX * p.dirX + relZ * p.dirZ;
+    if (along < 0) continue;
+    if (along / Math.max(1, p.speed) > DODGE_ETA_S) continue;
+    const lateral = relX * -p.dirZ + relZ * p.dirX;
+    if (Math.abs(lateral) > p.radius + SELF_RADIUS + 0.5) continue;
+    // Step out on the side the bolt already misses toward.
+    const side = lateral >= 0 ? 1 : -1;
+    return {
+      kind: 'move',
+      x: s.x - p.dirZ * side * DODGE_STEP,
+      z: s.z + p.dirX * side * DODGE_STEP,
+    };
+  }
+  for (const zn of obs.zones ?? []) {
+    if (zn.friendly) continue;
+    const d = Math.hypot(s.x - zn.x, s.z - zn.z);
+    if (d > zn.radius + SELF_RADIUS) continue;
+    const ux = d > 0.05 ? (s.x - zn.x) / d : 1;
+    const uz = d > 0.05 ? (s.z - zn.z) / d : 0;
+    const out = zn.radius + SELF_RADIUS + 1.0;
+    return { kind: 'move', x: zn.x + ux * out, z: zn.z + uz * out };
+  }
+  for (const e of obs.units) {
+    if (e.friendly || e.kind !== 'champion' || !e.windup) continue;
+    const d = Math.hypot(s.x - e.windup.x, s.z - e.windup.z);
+    if (d > WINDUP_DANGER_RADIUS) continue;
+    const ux = d > 0.05 ? (s.x - e.windup.x) / d : 1;
+    const uz = d > 0.05 ? (s.z - e.windup.z) / d : 0;
+    return { kind: 'move', x: s.x + ux * DODGE_STEP, z: s.z + uz * DODGE_STEP };
+  }
 
   // Spend skill points as soon as they exist: R at its level gates (6/11/16),
   // then Q > W > E. A free action, but one decision slot this period.
