@@ -1,6 +1,8 @@
 node_modules/
 dist/
 dist-server/
+# Runtime server state (players, match log); never version player data.
+data/
 .turbo/
 .env
 .env.*

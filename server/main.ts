@@ -1,7 +1,9 @@
 // The authoritative game server: one process, one port. Serves the built
 // client from dist/, upgrades /ws to WebSocket, runs every live match's Sim
 // on a fixed-step 20 Hz accumulator, and streams team-scoped snapshots.
-// No accounts, no database: guests only (game definition v1).
+// No accounts and no database: guests only (game definition v1), but the
+// session token doubles as a persistent identity (server/players.ts) and
+// finished matches land in a JSON match log under DATA_DIR.
 
 import { randomBytes } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
@@ -13,9 +15,16 @@ import { DT, type TeamId } from '../src/sim/types';
 import { fillWithBots } from './bot_fill';
 import { Match } from './match';
 import { Matchmaker } from './matchmaker';
+import { handleOf, type PlayerRecord, PlayerRegistry } from './players';
+import { buildProfile } from './profile';
+import { buildMatchRecord, type MatchRecord } from './records';
+import { appendJsonl, readJsonl } from './store';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DIST = path.resolve(process.cwd(), 'dist');
+// Runtime state on disk: player identities and the match log. DATA_DIR is
+// the volume to mount in production; nothing else persists.
+const DATA_DIR = process.env.DATA_DIR ?? path.resolve(process.cwd(), 'data');
 const TICK_MS = DT * 1000;
 const MATCH_LINGER_MS = 20_000;
 // How long a match with zero connected players keeps running so a dropped
@@ -78,6 +87,25 @@ function pruneReservations(matchId: number): void {
 let nextClientId = 1;
 let nextMatchId = 1;
 
+const registry = new PlayerRegistry(path.join(DATA_DIR, 'players.json'));
+const MATCHES_FILE = path.join(DATA_DIR, 'matches.jsonl');
+// The whole log stays in memory for profile queries; one line per match,
+// appended as each ends (kilobytes each, guests-scale).
+const matchLog: MatchRecord[] = readJsonl<MatchRecord>(MATCHES_FILE);
+
+// The public shape of a player: everything BUT the token (it is the key
+// to the seat and the profile; it must never leave the server).
+function describePlayer(p: PlayerRecord): unknown {
+  return {
+    id: p.id,
+    name: p.name,
+    disc: p.disc,
+    handle: handleOf(p),
+    createdAt: p.createdAt,
+    profile: buildProfile(matchLog, p.id),
+  };
+}
+
 function send(clientId: number, msg: ServerMsg): void {
   const c = clients.get(clientId);
   if (!c || c.ws.readyState !== c.ws.OPEN) return;
@@ -103,6 +131,29 @@ const matchmaker = new Matchmaker(send, (picks) => {
 const server = http.createServer(async (req, res) => {
   try {
     const url = (req.url ?? '/').split('?')[0]!;
+    // The meta API: identity and career, read-only JSON. /api/me answers
+    // to the session token (own profile only); /api/player/<id> is public.
+    if (url === '/api/me') {
+      const q = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+      const token = q.get('token') ?? '';
+      const p = token.length > 0 && token.length <= 64 ? registry.findByToken(token) : undefined;
+      res.writeHead(p ? 200 : 404, {
+        'content-type': 'application/json',
+        'cache-control': 'no-store',
+      });
+      res.end(JSON.stringify(p ? describePlayer(p) : { error: 'unknown player' }));
+      return;
+    }
+    const playerUrl = /^\/api\/player\/(\d{1,9})$/.exec(url);
+    if (playerUrl) {
+      const p = registry.findById(Number(playerUrl[1]));
+      res.writeHead(p ? 200 : 404, {
+        'content-type': 'application/json',
+        'cache-control': 'no-store',
+      });
+      res.end(JSON.stringify(p ? describePlayer(p) : { error: 'unknown player' }));
+      return;
+    }
     if (url === '/healthz') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(
@@ -188,6 +239,9 @@ wss.on('connection', (ws, req) => {
       // (the bot stand-in steps aside). The later queue/lobby message from
       // the same client is then ignored by the in-match guard.
       const token = typeof msg.token === 'string' && msg.token.length <= 64 ? msg.token : null;
+      // Every hello lands in the player registry: first contact creates
+      // the identity, later ones refresh the name and last-seen.
+      registry.getOrCreate(token ?? client.token, client.name, Date.now());
       if (token) {
         client.token = token;
         const seat = reservations.get(token);
@@ -372,7 +426,34 @@ setInterval(() => {
           if (snap) send(player.clientId, snap);
           if (score) send(player.clientId, score);
         }
-        if (entry.match.sim.winner !== null && entry.endedAt === null) entry.endedAt = now;
+        if (entry.match.sim.winner !== null && entry.endedAt === null) {
+          entry.endedAt = now;
+          // Record the finished match once, the moment the winner lands:
+          // seats still held by a connected human carry their player id.
+          const playerIdByUnit = new Map<number, number>();
+          for (const p of entry.match.players.values()) {
+            const c = clients.get(p.clientId);
+            const reg = c ? registry.findByToken(c.token) : undefined;
+            if (reg) playerIdByUnit.set(p.unitId, reg.id);
+          }
+          const score = entry.match.buildScore();
+          if (score.t === 'score') {
+            const rec = buildMatchRecord(
+              score.rows,
+              playerIdByUnit,
+              entry.match.sim.winner,
+              entry.match.sim.time,
+              now,
+            );
+            matchLog.push(rec);
+            try {
+              appendJsonl(MATCHES_FILE, rec);
+            } catch (err) {
+              console.error('match log append failed', err);
+            }
+            console.log(`match ${matchId} recorded (${playerIdByUnit.size} human seat(s))`);
+          }
+        }
         if (entry.endedAt !== null && now - entry.endedAt > MATCH_LINGER_MS) {
           for (const player of entry.match.players.values()) {
             const c = clients.get(player.clientId);

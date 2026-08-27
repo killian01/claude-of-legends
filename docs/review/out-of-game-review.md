@@ -82,12 +82,13 @@ queue-plus-bot-fill path.
 
 ## Accepted v1 scope, worth naming
 
-Guests only with zero persistence (no accounts, history, or profiles),
-no spectators, no replays (frustrating: the deterministic sim makes
-seed-plus-command replay nearly free), FIFO matchmaking with no skill
-signal, no cosmetics economy (skins are free picks, server range-clamps
-only), no touch or mobile support, and "Practice vs dummies" actually
-launches a full bot 5v5 rather than a practice range.
+Guests only (no accounts; since the meta-game review batches, the
+session token IS a persistent identity with history and a career
+profile), no spectators, no replays (frustrating: the deterministic sim
+makes seed-plus-command replay nearly free), FIFO matchmaking with no
+skill signal, no cosmetics economy (skins are free picks, server
+range-clamps only), no touch or mobile support, and "Practice vs
+dummies" actually launches a full bot 5v5 rather than a practice range.
 
 ## Suggested order of attack
 

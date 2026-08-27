@@ -16,6 +16,8 @@ ENV NODE_ENV=production
 ENV PORT=8787
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/dist-server ./dist-server
+# Runtime state (player identities, match log); mount a volume here.
+RUN mkdir -p /app/data && chown node:node /app/data
 EXPOSE 8787
 USER node
 CMD ["node", "dist-server/server.cjs"]
