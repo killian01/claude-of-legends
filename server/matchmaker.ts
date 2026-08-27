@@ -3,6 +3,7 @@
 // injected send, wall-clock time comes in as arguments, and a ready match
 // is handed to the injected callback as a list of picks.
 
+import { randomInt } from 'node:crypto';
 import type { ServerMsg } from '../src/net/protocol';
 import { CHAMPION_LIST, CHAMPIONS, DEFAULT_CHAMPION_ID } from '../src/sim/content/champions';
 import { SIGILS } from '../src/sim/content/sigils';
@@ -15,6 +16,9 @@ export const SELECT_SECONDS = 45;
 const DEFAULT_SIGILS: [string, string] = ['riftstep', 'mend'];
 
 export const BOT_START_COUNTDOWN_MS = 10_000;
+// An unstarted lobby expires after this long; abandoned codes must not pin
+// memory or stay joinable forever.
+export const LOBBY_TTL_MS = 30 * 60_000;
 
 interface Pending {
   clientId: number;
@@ -40,19 +44,18 @@ interface Lobby {
   code: string;
   hostId: number;
   players: Pending[];
+  createdAt: number;
 }
 
 type Send = (clientId: number, msg: ServerMsg) => void;
 type OnMatchReady = (picks: MatchPick[]) => void;
 
-function toCode(n: number): string {
-  const letters = 'ABCDEFGHJKMNPQRSTUVWXYZ';
+// Crypto-random codes: a counter transform was reproducible offline, so any
+// third party could enumerate live lobbies. Ambiguous letters are excluded.
+const CODE_LETTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ';
+function randomCode(): string {
   let code = '';
-  let v = n;
-  for (let i = 0; i < 5; i++) {
-    code += letters[v % letters.length];
-    v = Math.floor(v / letters.length) + 7;
-  }
+  for (let i = 0; i < 5; i++) code += CODE_LETTERS[randomInt(CODE_LETTERS.length)];
   return code;
 }
 
@@ -60,7 +63,6 @@ export class Matchmaker {
   private readonly queue: QueueEntry[] = [];
   private readonly lobbies = new Map<string, Lobby>();
   private readonly selects: SelectSession[] = [];
-  private lobbyCounter = 1;
   // Deadline of the opt-in bot-filled start, null when nobody opted in.
   private botStartAt: number | null = null;
   private lastCountdownSecond = -1;
@@ -68,6 +70,8 @@ export class Matchmaker {
   constructor(
     private readonly send: Send,
     private readonly onMatchReady: OnMatchReady,
+    // Injectable for tests; production uses the crypto-random default.
+    private readonly codeGen: () => string = randomCode,
   ) {}
 
   private broadcastQueue(now: number): void {
@@ -120,10 +124,15 @@ export class Matchmaker {
     this.broadcastQueue(now);
   }
 
-  createLobby(clientId: number, name: string): void {
-    this.removeEverywhere(clientId);
-    const code = toCode(this.lobbyCounter++);
-    const lobby: Lobby = { code, hostId: clientId, players: [{ clientId, name }] };
+  createLobby(clientId: number, name: string, now: number = Date.now()): void {
+    this.removeEverywhere(clientId, now);
+    let code = this.codeGen();
+    for (let guard = 0; this.lobbies.has(code) && guard < 50; guard++) code = this.codeGen();
+    if (this.lobbies.has(code)) {
+      this.send(clientId, { t: 'error', message: 'Could not create a lobby, try again.' });
+      return;
+    }
+    const lobby: Lobby = { code, hostId: clientId, players: [{ clientId, name }], createdAt: now };
     this.lobbies.set(code, lobby);
     this.broadcastLobby(lobby);
   }
@@ -221,9 +230,17 @@ export class Matchmaker {
     if (locked === session.entries.length) this.finishSelect(session);
   }
 
-  // Expires select deadlines and the bot-fill countdown; call regularly with
-  // the current wall clock.
+  // Expires select deadlines, stale lobbies, and the bot-fill countdown;
+  // call regularly with the current wall clock.
   tickClock(now: number): void {
+    for (const lobby of [...this.lobbies.values()]) {
+      if (now - lobby.createdAt > LOBBY_TTL_MS) {
+        this.lobbies.delete(lobby.code);
+        for (const p of lobby.players) {
+          this.send(p.clientId, { t: 'error', message: 'Lobby expired.' });
+        }
+      }
+    }
     for (const session of this.selects) {
       if (!session.started && now >= session.deadline) this.finishSelect(session);
     }

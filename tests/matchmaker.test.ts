@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { MatchPick } from '../server/match';
-import { BOT_START_COUNTDOWN_MS, Matchmaker } from '../server/matchmaker';
+import { BOT_START_COUNTDOWN_MS, LOBBY_TTL_MS, Matchmaker } from '../server/matchmaker';
 import type { ServerMsg } from '../src/net/protocol';
 
 function harness(): {
@@ -134,5 +134,45 @@ describe('matchmaker', () => {
     expect(bobStatus?.t === 'queue_status' && bobStatus.startsIn).toBeNull();
     mm.tickClock(BOT_START_COUNTDOWN_MS + 1);
     expect(last(sent.get(2), 'select_start')).toBeUndefined();
+  });
+
+  it('lobby codes are unpredictable, unique, and 5 uppercase letters', () => {
+    const { mm, sent } = harness();
+    const codes = new Set<string>();
+    for (let i = 1; i <= 40; i++) {
+      mm.createLobby(i, `host${i}`, 0);
+      const msg = last(sent.get(i), 'lobby');
+      if (msg?.t === 'lobby') codes.add(msg.code);
+    }
+    expect(codes.size).toBe(40);
+    for (const code of codes) expect(code).toMatch(/^[A-HJ-NP-Z]{5}$/);
+  });
+
+  it('retries code collisions and expires stale lobbies', () => {
+    const sent = new Map<number, ServerMsg[]>();
+    // A generator that collides once before yielding a fresh code.
+    const codeSeq = ['AAAAA', 'AAAAA', 'BBBBB'];
+    const mm = new Matchmaker(
+      (clientId, msg) => {
+        const list = sent.get(clientId) ?? [];
+        list.push(msg);
+        sent.set(clientId, list);
+      },
+      () => undefined,
+      () => codeSeq.shift() ?? 'CCCCC',
+    );
+    mm.createLobby(1, 'alice', 0);
+    mm.createLobby(2, 'bob', 0);
+    const bobLobby = last(sent.get(2), 'lobby');
+    expect(bobLobby?.t === 'lobby' && bobLobby.code).toBe('BBBBB');
+
+    // Both lobbies expire once the TTL passes; players are told.
+    mm.tickClock(LOBBY_TTL_MS + 1);
+    const notice = last(sent.get(1), 'error');
+    expect(notice?.t === 'error' && notice.message).toBe('Lobby expired.');
+    // The expired code is joinable no more.
+    mm.joinLobby(3, 'carol', 'BBBBB');
+    const refusal = last(sent.get(3), 'error');
+    expect(refusal?.t === 'error' && refusal.message).toBe('Lobby not found or full.');
   });
 });
