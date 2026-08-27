@@ -21,7 +21,9 @@ export interface Power {
 
 export type EffectSpec =
   | { kind: 'damage'; base: number; adRatio?: number; apRatio?: number; dtype: DamageType }
-  | { kind: 'heal'; base: number; apRatio?: number }
+  // maxHpPct heals a fraction of the TARGET's max health, so a flat heal
+  // (Mend) can keep mattering at level 18 without a rank to scale on.
+  | { kind: 'heal'; base: number; apRatio?: number; maxHpPct?: number }
   | { kind: 'slow'; pct: number; duration: number }
   | { kind: 'root'; duration: number }
   | { kind: 'stun'; duration: number }
@@ -94,7 +96,10 @@ export function applyEffects(
       case 'heal': {
         if (target.dead || ctx.dead.has(target.id)) break;
         const amount =
-          (spec.base * scale + (spec.apRatio ?? 0) * power.ap) * healFactor(target, ctx.time);
+          (spec.base * scale +
+            (spec.apRatio ?? 0) * power.ap +
+            (spec.maxHpPct ?? 0) * target.maxHp) *
+          healFactor(target, ctx.time);
         target.hp = Math.min(target.maxHp, target.hp + amount);
         const source = ctx.units.get(sourceId);
         if (source && amount > 0) passiveOf(source)?.onHealGiven?.(ctx, source, target, amount);

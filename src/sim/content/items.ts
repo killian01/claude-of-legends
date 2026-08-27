@@ -1,7 +1,8 @@
 // The launch shop: about 20 items in 2 tiers (ADR and game definition).
 // Tier 1 items are components; tier 2 items build from them and their cost is
-// the COMBINED price (owning a component discounts it). Stat sticks only for
-// now; actives and passives are a community frontier.
+// the COMBINED price (owning a component discounts it). Some tier 3 items
+// carry signature passives (src/sim/content/item_passives.ts); actives are
+// still a community frontier.
 
 export interface ItemStats {
   hp?: number;

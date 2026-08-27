@@ -199,8 +199,23 @@ const policy: Policy = (obs, rng: Rng): Action => {
   const enemySanctum = GAME_MAP.sanctums.find((c) => c.team !== s.team)!;
   const atFountain = Math.hypot(s.x - fountain.x, s.z - fountain.z) <= fountain.r + 2;
 
-  // Survive: mend if equipped and ready, otherwise run home.
+  // Survive: with a chaser on top of it, Riftstep toward home (or Zephyr to
+  // outrun); otherwise Mend if ready; otherwise run.
   if (s.hpFrac < RETREAT_HP_FRAC) {
+    const chaser = obs.units.some(
+      (u) => !u.friendly && u.kind === 'champion' && Math.hypot(u.x - s.x, u.z - s.z) <= 6,
+    );
+    if (chaser) {
+      const rift = s.sigils.findIndex((id, i) => id === 'riftstep' && s.sigilReady[i] === true);
+      if (rift !== -1) {
+        const dxf = fountain.x - s.x;
+        const dzf = fountain.z - s.z;
+        const df = Math.hypot(dxf, dzf) || 1;
+        return { kind: 'sigil', slot: rift, x: s.x + (dxf / df) * 6, z: s.z + (dzf / df) * 6 };
+      }
+      const zephyr = s.sigils.findIndex((id, i) => id === 'zephyr' && s.sigilReady[i] === true);
+      if (zephyr !== -1) return { kind: 'sigil', slot: zephyr, x: s.x, z: s.z };
+    }
     const mendSlot = s.sigils.findIndex((id, i) => id === 'mend' && s.sigilReady[i] === true);
     if (mendSlot !== -1) return { kind: 'sigil', slot: mendSlot, x: s.x, z: s.z };
     return { kind: 'move', x: fountain.x, z: fountain.z };
@@ -252,9 +267,14 @@ const policy: Policy = (obs, rng: Rng): Action => {
     return { kind: 'attack', targetId: sanctumTarget.id };
   }
 
-  // Fight: throw a ready ability at a close champion, otherwise attack it.
+  // Fight: Sear a kill-range target (the heal cut closes the escape),
+  // throw a ready ability at a close champion, otherwise attack it.
   if (champ && dist(s.x, s.z, champ) <= CHAMPION_ATTACK_RANGE) {
     if (dist(s.x, s.z, champ) <= CAST_RANGE) {
+      if (champ.hpFrac < KILL_SECURE_HP_FRAC) {
+        const sear = s.sigils.findIndex((id, i) => id === 'sear' && s.sigilReady[i] === true);
+        if (sear !== -1) return { kind: 'sigil', slot: sear, x: champ.x, z: champ.z };
+      }
       for (const key of ['Q', 'W', 'E', 'R'] as const) {
         if (s.abilityReady[key]) return { kind: 'cast', key, x: champ.x, z: champ.z };
       }

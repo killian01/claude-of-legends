@@ -217,7 +217,8 @@ describe('champion passives', () => {
     nearby.hp = 100;
     // Mend rides the default sigil loadout in slot 1.
     expect(sim.castSigil(maera.id, 1, { x: wounded.pos.x, z: wounded.pos.z })).toBe(true);
-    expect(wounded.hp).toBeCloseTo(320, 0);
-    expect(nearby.hp).toBeCloseTo(100 + 220 * 0.35, 0);
+    const mendHeal = 100 + 0.15 * wounded.maxHp;
+    expect(wounded.hp).toBeCloseTo(100 + mendHeal, 0);
+    expect(nearby.hp).toBeCloseTo(100 + mendHeal * 0.35, 0);
   });
 });
