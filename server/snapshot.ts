@@ -70,6 +70,16 @@ export function buildSnapshot(
     if (u.dead) snap.d = 1;
     const cc = ccChips(u, sim.time);
     if (cc.length > 0) snap.st = cc;
+    // Windup telegraph: while a champion charges a cast, everyone who can
+    // see the champion also sees what is coming and where.
+    if (u.pendingSpell) {
+      snap.w = {
+        k: u.pendingSpell.key,
+        x: round2(u.pendingSpell.aim.x),
+        z: round2(u.pendingSpell.aim.z),
+        u: round2(u.pendingSpell.resolveAt),
+      };
+    }
     if (!known.has(u.id)) {
       known.add(u.id);
       snap.k = u.kind;
@@ -173,6 +183,9 @@ export function buildSnapshot(
       // Personal: only the damage YOU deal travels, for your own numbers.
       snapEvents.push({ e: 'dmg', targetId: ev.targetId, amount: Math.round(ev.amount) });
     } else if (ev.type === 'cast' && sim.isVisible(team, ev.unitId)) {
+      snapEvents.push({ e: 'cast', unitId: ev.unitId, k: ev.key });
+    } else if (ev.type === 'sigil' && sim.isVisible(team, ev.unitId)) {
+      // Sigils relay as keyless casts: the flash and pulse still show.
       snapEvents.push({ e: 'cast', unitId: ev.unitId });
     } else if (ev.type === 'attack' && sim.isVisible(team, ev.unitId)) {
       snapEvents.push({ e: 'atk', unitId: ev.unitId, targetId: ev.targetId });

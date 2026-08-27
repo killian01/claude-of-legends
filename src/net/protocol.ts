@@ -50,6 +50,10 @@ export interface SnapUnit {
   r?: number;
   rg?: number;
   s?: StructureMeta;
+  // Pending windup cast: ability key, aim point, and resolve time. Rides
+  // every snapshot while the champion charges, so BOTH teams see the
+  // telegraph (the counterplay window is only fair if it is visible).
+  w?: { k: AbilityKey; x: number; z: number; u: number };
 }
 
 export interface SnapMobile {
@@ -90,7 +94,9 @@ export interface SelfSnap {
 export type SnapEvent =
   | { e: 'death'; unitId: number; killerId: number }
   | { e: 'gold'; amount: number }
-  | { e: 'cast'; unitId: number }
+  // The ability key rides along so clients can pick per-spell cast visuals
+  // and sounds; sigil casts relay without one.
+  | { e: 'cast'; unitId: number; k?: AbilityKey }
   // Personal: damage THIS client dealt to another unit, for its own
   // floating combat numbers only.
   | { e: 'dmg'; targetId: number; amount: number }

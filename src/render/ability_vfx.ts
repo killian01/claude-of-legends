@@ -49,7 +49,7 @@ function schoolOf(spec: CastSpec): School {
 }
 
 // 'championId_KEY' or 'sigil_id' back to the cast spec it came from.
-function resolveSpec(vfx: string | null, world: IWorld): CastSpec | null {
+export function resolveSpec(vfx: string | null, world: IWorld): CastSpec | null {
   if (!vfx) return null;
   if (vfx.startsWith('sigil_')) return SIGILS[vfx.slice(6)]?.spec ?? null;
   const sep = vfx.lastIndexOf('_');
@@ -57,6 +57,23 @@ function resolveSpec(vfx: string | null, world: IWorld): CastSpec | null {
   const key = vfx.slice(sep + 1);
   if (key !== 'Q' && key !== 'W' && key !== 'E' && key !== 'R') return null;
   return world.championDef(vfx.slice(0, sep))?.abilities[key].spec ?? null;
+}
+
+// The display palette for a tagged projectile or zone: the school color
+// blended a third toward the team tint (friend and foe casting the same
+// spell must read apart). Untagged effects keep the plain team tint.
+export function spellColorsOf(
+  vfx: string | null,
+  world: IWorld,
+  teamTint: number,
+): { main: number; glow: number } {
+  const spec = resolveSpec(vfx, world);
+  if (!spec) return { main: teamTint, glow: teamTint };
+  const school = schoolOf(spec);
+  return {
+    main: new THREE.Color(school.main).lerp(new THREE.Color(teamTint), 0.35).getHex(),
+    glow: school.glow,
+  };
 }
 
 let glowTex: THREE.Texture | null = null;

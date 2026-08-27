@@ -5,16 +5,32 @@
 
 import * as THREE from 'three';
 import { playSfx } from '../game/sfx';
+import type { CastSpec } from '../sim/combat/casting';
 import { isRooted, isStunned } from '../sim/combat/status';
-import type { Vec2 } from '../sim/types';
+import type { AbilityKey, Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
-import { buildProjectileMesh, buildZoneMesh } from './ability_vfx';
+import {
+  buildProjectileMesh,
+  buildZoneMesh,
+  resolveSpec,
+  schoolColorOf,
+  spellColorsOf,
+} from './ability_vfx';
 import { buildChampionMesh } from './champion_shapes';
 import { FloatingText, makeTextSprite } from './floating_text';
 import { buildMapDressing, type MapDressing, SKIRT_COLOR } from './map_dressing';
 import { buildMinionMesh } from './minion_shapes';
 import { buildSanctumMesh, buildTowerMesh } from './structure_shapes';
+import {
+  genericDetonate,
+  genericImpact,
+  genericWindupTick,
+  type SchoolColors,
+  type SpellVisual,
+  spellVisualOf,
+} from './vfx/catalog';
+import { VfxSystem } from './vfx/system';
 
 const TEAM_COLORS: readonly number[] = [0x4a7dd6, 0xd65c5c];
 const TEAM_LIGHT: readonly number[] = [0x9dbcf5, 0xf5a3a3];
@@ -83,6 +99,8 @@ interface TrackedUnit {
   // Auto-attack swing: lunge direction and end time.
   swingUntil: number;
   swingDir: Vec2;
+  // Spell cast pose: both arms raise while this runs.
+  castUntil: number;
   // Recall channel effect, created on first use and toggled by the status.
   recallFx: THREE.Group | null;
   // Structures show their hp as a number; rebuilt only when it changes.
@@ -103,7 +121,8 @@ interface AnimParts {
 
 export interface CombatNotes {
   golds: readonly number[];
-  casts: readonly number[];
+  // The key is present for ability casts and absent for sigils.
+  casts: readonly { unitId: number; key?: AbilityKey }[];
   // Damage the viewer dealt to others; the only cross-unit numbers shown.
   hits: readonly { targetId: number; amount: number }[];
   // Auto-attacks fired by visible units, for swing animations.
@@ -124,6 +143,44 @@ interface TrackedMobile {
   color: number;
   prev: Vec2;
   curr: Vec2;
+  // Per-spell presentation: the vfx tag, its palette, and its catalog entry.
+  tag: string | null;
+  colors: SchoolColors;
+  vis: SpellVisual | null;
+}
+
+interface TrackedZone {
+  mesh: THREE.Object3D;
+  tag: string | null;
+  colors: SchoolColors;
+  vis: SpellVisual | null;
+  radius: number;
+  x: number;
+  z: number;
+  bornAt: number;
+  // A delayed zone's despawn IS its detonation.
+  hasDetonate: boolean;
+  // Catalog-built meshes animate themselves; only defaults pulse and spin.
+  custom: boolean;
+}
+
+// A live windup telegraph: the shape of what is coming, a progress fill,
+// and the charge effect at the caster.
+interface WindupFx {
+  key: AbilityKey;
+  group: THREE.Group;
+  fill: THREE.Mesh | null;
+  fillMode: 'length' | 'radial' | null;
+  aim: Vec2;
+  len: number;
+  width: number;
+  startMs: number;
+  durMs: number;
+  colors: SchoolColors;
+  vis: SpellVisual | null;
+  specKind: CastSpec['kind'];
+  // Line shapes re-aim from the caster's live position each frame.
+  followCaster: boolean;
 }
 
 export class Renderer {
@@ -136,7 +193,11 @@ export class Renderer {
   private readonly unitLayer = new THREE.Group();
   private readonly tracked = new Map<number, TrackedUnit>();
   private readonly trackedProjectiles = new Map<number, TrackedMobile>();
-  private readonly trackedZones = new Map<number, THREE.Object3D>();
+  private readonly trackedZones = new Map<number, TrackedZone>();
+  // The pooled spell VFX engine and the live windup telegraphs.
+  private readonly vfx: VfxSystem;
+  private readonly windups = new Map<number, WindupFx>();
+  private readonly camDir = new THREE.Vector3(0, -1, 0);
   private readonly cameraOffset = new THREE.Vector3(0, 40, 24);
   private readonly markerGeometry = new THREE.RingGeometry(0.5, 0.8, 24);
   private readonly rootGeometry = new THREE.RingGeometry(0.7, 0.95, 18);
@@ -173,8 +234,9 @@ export class Renderer {
   private pointerX = -1;
   private pointerY = -1;
   private edgePanGate: () => boolean = () => true;
-  // Camera kick while the player is being hit.
-  private shakeUntil = 0;
+  // Camera trauma: squared on apply so small hits barely register and big
+  // impacts kick; decays every frame, capped so fights cannot stack it.
+  private shakeAmp = 0;
   // The display-grade vignette div; doubles as the low-hp warning.
   private readonly vignette: HTMLDivElement;
   private lowHpActive = false;
@@ -212,10 +274,21 @@ export class Renderer {
     const aspect = container.clientWidth / Math.max(1, container.clientHeight);
     this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 500);
 
+    this.vfx = new VfxSystem(this.scene);
+    this.vfx.onShake = (k) => this.addShake(k);
+    this.vfx.particles.setViewport(
+      Math.max(1, container.clientHeight),
+      (this.camera.fov * Math.PI) / 180,
+    );
+
     window.addEventListener('resize', () => {
       this.gl.setSize(container.clientWidth, container.clientHeight);
       this.camera.aspect = container.clientWidth / Math.max(1, container.clientHeight);
       this.camera.updateProjectionMatrix();
+      this.vfx.particles.setViewport(
+        Math.max(1, container.clientHeight),
+        (this.camera.fov * Math.PI) / 180,
+      );
     });
 
     // Mouse-wheel zoom within sane bounds.
@@ -660,18 +733,44 @@ export class Renderer {
     }
     if (impacted) playSfx('impact');
     // The player's own casts already played their school sound in boot.
-    if (notes.casts.some((id) => id !== this.followId)) playSfx('cast');
-    for (const casterId of notes.casts) {
-      const caster = this.world.units.get(casterId);
+    if (notes.casts.some((c) => c.unitId !== this.followId)) playSfx('cast');
+    for (const cast of notes.casts) {
+      const caster = this.world.units.get(cast.unitId);
       if (!caster) continue;
       // Offline guard: never flash a cast the viewer's team cannot see.
-      if (!this.world.isVisible(this.viewerTeam as 0 | 1, casterId)) continue;
-      const color = caster.team === this.viewerTeam ? 0x9dbcf5 : 0xf5a3a3;
+      if (!this.world.isVisible(this.viewerTeam as 0 | 1, cast.unitId)) continue;
+      const t = this.tracked.get(cast.unitId);
+      let color = caster.team === this.viewerTeam ? 0x9dbcf5 : 0xf5a3a3;
+      // With the key on the wire the flash wears the spell's own school
+      // color, and the catalog can fire its authored cast effect.
+      if (cast.key && caster.championId) {
+        const def = this.world.championDef(caster.championId)?.abilities[cast.key];
+        if (def) {
+          color = schoolColorOf(def.spec).main;
+          const vis = spellVisualOf(`${caster.championId}_${cast.key}`);
+          if (vis?.castFx && !(def.windup && def.windup > 0)) {
+            const yaw = t?.yaw ?? 0;
+            vis.castFx(
+              this.vfx,
+              caster.pos.x,
+              caster.pos.z,
+              Math.sin(yaw),
+              Math.cos(yaw),
+              schoolColorOf(def.spec),
+            );
+          }
+          if (t) t.castUntil = performance.now() + 420;
+        }
+      }
       this.flashMarker(caster.pos.x, caster.pos.z, color);
       // A quick body pulse on the caster sells the cast without a rig.
-      const t = this.tracked.get(casterId);
       if (t) t.pulseUntil = performance.now() + 280;
     }
+  }
+
+  // Adds trauma to the camera shake. Applied squared, decayed per frame.
+  addShake(strength: number): void {
+    this.shakeAmp = Math.min(1, this.shakeAmp + strength);
   }
 
   private buildLights(): void {
@@ -927,6 +1026,7 @@ export class Renderer {
           flashMats: null,
           swingUntil: 0,
           swingDir: { x: 0, z: 1 },
+          castUntil: 0,
           recallFx: null,
           hpLabel: null,
           hpLabelKey: '',
@@ -966,7 +1066,7 @@ export class Renderer {
         if (id === this.followId) {
           this.fct.spawn(`-${Math.round(dhp)}`, '#ff6a5e', u.pos.x, t.barY + 1.4, u.pos.z);
           playSfx('hit');
-          if (dhp >= u.maxHp * 0.05) this.shakeUntil = performance.now() + 200;
+          if (dhp >= u.maxHp * 0.05) this.addShake(0.28);
         }
       }
       t.lastHp = u.hp;
@@ -1127,15 +1227,22 @@ export class Renderer {
     for (const [id, p] of this.world.projectiles) {
       const t = this.trackedProjectiles.get(id);
       if (!t) {
-        const color = TEAM_LIGHT[p.team] ?? 0xffffff;
-        const mesh = buildProjectileMesh(p, this.world, color);
+        const teamLight = TEAM_LIGHT[p.team] ?? 0xffffff;
+        const colors = spellColorsOf(p.vfx, this.world, teamLight);
+        const vis = spellVisualOf(p.vfx);
+        const mesh = vis?.projectile
+          ? vis.projectile(p.radius, colors)
+          : buildProjectileMesh(p, this.world, teamLight);
         mesh.position.set(p.pos.x, 1.2, p.pos.z);
         this.scene.add(mesh);
         this.trackedProjectiles.set(id, {
           mesh,
-          color,
+          color: colors.main,
           prev: { x: p.pos.x, z: p.pos.z },
           curr: { x: p.pos.x, z: p.pos.z },
+          tag: p.vfx,
+          colors,
+          vis,
         });
       } else {
         t.prev = t.curr;
@@ -1144,8 +1251,11 @@ export class Renderer {
     }
     for (const [id, t] of this.trackedProjectiles) {
       if (!this.world.projectiles.has(id)) {
-        // Impact burst where the bolt ended, in its own color.
-        this.flashMarker(t.curr.x, t.curr.z, t.color);
+        // Authored impact where the bolt ended; auto-attacks keep the small
+        // ring, tagged spells burst in their own school.
+        if (t.vis?.impact) t.vis.impact(this.vfx, t.curr.x, t.curr.z, t.colors);
+        else if (t.tag) genericImpact(this.vfx, t.curr.x, t.curr.z, t.colors);
+        else this.flashMarker(t.curr.x, t.curr.z, t.color);
         this.scene.remove(t.mesh);
         disposeDeep(t.mesh);
         this.trackedProjectiles.delete(id);
@@ -1154,21 +1264,268 @@ export class Renderer {
 
     for (const [id, z] of this.world.zones) {
       if (!this.trackedZones.has(id)) {
-        const mesh = buildZoneMesh(z, this.world, TEAM_COLORS[z.team] ?? 0xffffff);
+        const colors = spellColorsOf(z.vfx, this.world, TEAM_COLORS[z.team] ?? 0xffffff);
+        const vis = spellVisualOf(z.vfx);
+        const hostile = z.team !== this.viewerTeam;
+        const mesh = vis?.zone
+          ? vis.zone(z.radius, colors, hostile)
+          : buildZoneMesh(z, this.world, TEAM_COLORS[z.team] ?? 0xffffff);
         mesh.position.set(z.pos.x, 0.1, z.pos.z);
+        // Telegraphs must never lose the draw-order lottery against the
+        // river's translucent layers: lift catalog meshes above them.
+        if (vis?.zone) {
+          mesh.traverse((c) => {
+            if (c.renderOrder === 0) c.renderOrder = 4;
+          });
+        }
         this.scene.add(mesh);
-        this.trackedZones.set(id, mesh);
+        const spec = resolveSpec(z.vfx, this.world);
+        this.trackedZones.set(id, {
+          mesh,
+          tag: z.vfx,
+          colors,
+          vis,
+          radius: z.radius,
+          x: z.pos.x,
+          z: z.pos.z,
+          bornAt: performance.now(),
+          hasDetonate: spec?.kind === 'zone' && spec.detonateDelay !== undefined,
+          custom: vis?.zone !== undefined,
+        });
       }
     }
-    for (const [id, mesh] of this.trackedZones) {
+    for (const [id, tz] of this.trackedZones) {
       if (!this.world.zones.has(id)) {
-        this.scene.remove(mesh);
-        disposeDeep(mesh);
+        // A delayed zone leaving the world IS the detonation moment.
+        if (tz.hasDetonate) {
+          if (tz.vis?.detonate) tz.vis.detonate(this.vfx, tz.x, tz.z, tz.radius, tz.colors);
+          else genericDetonate(this.vfx, tz.x, tz.z, tz.radius, tz.colors);
+        }
+        this.scene.remove(tz.mesh);
+        disposeDeep(tz.mesh);
         this.trackedZones.delete(id);
       }
     }
 
+    this.syncWindups();
     this.paintFog();
+  }
+
+  // Windup telegraphs: build one for every visible champion charging a
+  // cast, release or drop it when the charge resolves or cancels. The
+  // fairness rule: if the enemy can see the caster, the enemy sees the aim.
+  private syncWindups(): void {
+    for (const [id, u] of this.world.units) {
+      const t = this.tracked.get(id);
+      const visible = t?.mesh.visible ?? false;
+      const pending = u.kind === 'champion' && !u.dead && visible ? u.pendingSpell : null;
+      const existing = this.windups.get(id);
+      if (pending && u.championId) {
+        if (existing && existing.key === pending.key) continue;
+        if (existing) this.dropWindup(id, false);
+        this.buildWindupFx(id, u, pending.key, pending.aim, pending.resolveAt);
+      } else if (existing) {
+        // Gone from pendingSpell: fired if the caster is alive and free,
+        // canceled if a stun or death broke the charge.
+        const fired = !u.dead && !isStunned(u, this.world.time);
+        this.dropWindup(id, fired);
+      }
+    }
+    for (const id of [...this.windups.keys()]) {
+      if (!this.world.units.has(id)) this.dropWindup(id, false);
+    }
+  }
+
+  private buildWindupFx(
+    id: number,
+    u: Readonly<Unit>,
+    key: AbilityKey,
+    aim: Vec2,
+    resolveAt: number,
+  ): void {
+    if (!u.championId) return;
+    const def = this.world.championDef(u.championId)?.abilities[key];
+    if (!def?.windup) return;
+    const spec = def.spec;
+    const school = schoolColorOf(spec);
+    const hostile = u.team !== this.viewerTeam;
+    // Warning orange for enemy charges, targeting blue for allied ones.
+    const tone = hostile ? 0xff6a3a : 0x64c8ff;
+    const group = new THREE.Group();
+    const mat = (opacity: number): THREE.MeshBasicMaterial => {
+      const m = new THREE.MeshBasicMaterial({
+        color: tone,
+        transparent: true,
+        opacity,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      m.toneMapped = false;
+      return m;
+    };
+    const flat = (mesh: THREE.Mesh, y: number): THREE.Mesh => {
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.y = y;
+      return mesh;
+    };
+    let fill: THREE.Mesh | null = null;
+    let fillMode: WindupFx['fillMode'] = null;
+    let len = 0;
+    let width = 1;
+    let followCaster = false;
+    const clampAim = (range: number): Vec2 => {
+      const dx = aim.x - u.pos.x;
+      const dz = aim.z - u.pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d <= range || d === 0) return { x: aim.x, z: aim.z };
+      return { x: u.pos.x + (dx / d) * range, z: u.pos.z + (dz / d) * range };
+    };
+    let shownAim = aim;
+    if (spec.kind === 'skillshot' || spec.kind === 'dash') {
+      followCaster = true;
+      len = spec.range;
+      width = Math.max(0.8, (spec.kind === 'skillshot' ? spec.radius : 0.5) * 2);
+      if (spec.kind === 'dash') {
+        shownAim = clampAim(spec.range);
+        len = Math.hypot(shownAim.x - u.pos.x, shownAim.z - u.pos.z) || spec.range;
+      }
+      const outlineGeo = new THREE.PlaneGeometry(width, 1);
+      outlineGeo.translate(0, 0.5, 0);
+      const outline = flat(new THREE.Mesh(outlineGeo, mat(0.24)), 0.12);
+      outline.scale.y = len;
+      group.add(outline);
+      const fillGeo = new THREE.PlaneGeometry(width * 0.92, 1);
+      fillGeo.translate(0, 0.5, 0);
+      fill = flat(new THREE.Mesh(fillGeo, mat(0.48)), 0.13);
+      fill.scale.y = 0.001;
+      group.add(fill);
+      fillMode = 'length';
+      // Hard edge rails: the LoL read that survives any ground color.
+      const rails: THREE.Mesh[] = [];
+      for (const side of [-1, 1]) {
+        const railGeo = new THREE.PlaneGeometry(0.14, 1);
+        railGeo.translate((side * width) / 2, 0.5, 0);
+        const rail = flat(new THREE.Mesh(railGeo, mat(0.85)), 0.14);
+        rail.scale.y = len;
+        group.add(rail);
+        rails.push(rail);
+      }
+      // The line meshes re-aim per frame; updateWindups spins these.
+      group.userData.line = [outline, fill, ...rails];
+      if (spec.kind === 'dash' && spec.landRadius) {
+        const land = flat(
+          new THREE.Mesh(
+            new THREE.RingGeometry(spec.landRadius - 0.14, spec.landRadius, 36),
+            mat(0.7),
+          ),
+          0.12,
+        );
+        group.userData.landRing = land;
+        group.add(land);
+      }
+      group.position.set(u.pos.x, 0, u.pos.z);
+    } else if (spec.kind === 'zone') {
+      shownAim = clampAim(def.castRange);
+      group.add(
+        flat(
+          new THREE.Mesh(new THREE.RingGeometry(spec.radius - 0.32, spec.radius, 44), mat(0.85)),
+          0.12,
+        ),
+      );
+      fill = flat(new THREE.Mesh(new THREE.CircleGeometry(spec.radius, 40), mat(0.3)), 0.13);
+      fill.scale.setScalar(0.01);
+      group.add(fill);
+      fillMode = 'radial';
+      group.position.set(shownAim.x, 0, shownAim.z);
+    } else {
+      // Burst, cone, targeted: a charging circle around the caster.
+      followCaster = true;
+      const r =
+        spec.kind === 'burst'
+          ? spec.radius
+          : spec.kind === 'cone'
+            ? spec.range
+            : Math.max(2, def.castRange);
+      group.add(flat(new THREE.Mesh(new THREE.RingGeometry(r - 0.14, r, 44), mat(0.7)), 0.12));
+      fill = flat(new THREE.Mesh(new THREE.CircleGeometry(r, 40), mat(0.24)), 0.13);
+      fill.scale.setScalar(0.01);
+      group.add(fill);
+      fillMode = 'radial';
+      group.position.set(u.pos.x, 0, u.pos.z);
+    }
+    this.scene.add(group);
+    const durMs = def.windup * 1000;
+    const remainingMs = Math.max(0, (resolveAt - this.world.time) * 1000);
+    this.windups.set(id, {
+      key,
+      group,
+      fill,
+      fillMode,
+      aim: shownAim,
+      len,
+      width,
+      startMs: performance.now() - (durMs - remainingMs),
+      durMs,
+      colors: school,
+      vis: spellVisualOf(`${u.championId}_${key}`),
+      specKind: spec.kind,
+      followCaster,
+    });
+  }
+
+  private dropWindup(id: number, fired: boolean): void {
+    const w = this.windups.get(id);
+    if (!w) return;
+    this.windups.delete(id);
+    const t = this.tracked.get(id);
+    const fromX = t?.curr.x ?? w.aim.x;
+    const fromZ = t?.curr.z ?? w.aim.z;
+    if (fired) {
+      if (w.vis?.release) {
+        w.vis.release(this.vfx, fromX, fromZ, w.aim.x, w.aim.z, w.colors);
+      } else if (w.specKind === 'dash') {
+        // A landing dash without authored art still thumps.
+        this.vfx.sparkBurst(w.aim.x, 0.7, w.aim.z, w.colors.main, 8, 7, { life: 0.4 });
+        this.vfx.rings.spawn(w.aim.x, w.aim.z, 2, w.colors.main, 420, { alpha: 0.6 });
+      }
+    }
+    this.scene.remove(w.group);
+    disposeDeep(w.group);
+  }
+
+  // Per-frame telegraph upkeep: follow the caster, re-aim line shapes,
+  // grow the progress fill, and run the charge effect at the caster.
+  private updateWindups(now: number, alpha: number): void {
+    for (const [id, w] of this.windups) {
+      const t = this.tracked.get(id);
+      if (!t) continue;
+      const cx = t.prev.x + (t.curr.x - t.prev.x) * alpha;
+      const cz = t.prev.z + (t.curr.z - t.prev.z) * alpha;
+      w.group.visible = t.mesh.visible;
+      if (!w.group.visible) continue;
+      if (w.followCaster) {
+        w.group.position.x = cx;
+        w.group.position.z = cz;
+      }
+      const line = w.group.userData.line as THREE.Mesh[] | undefined;
+      if (line) {
+        const dx = w.aim.x - cx;
+        const dz = w.aim.z - cz;
+        if (Math.hypot(dx, dz) > 0.05) {
+          const rot = Math.atan2(dx, dz) + Math.PI;
+          for (const m of line) m.rotation.z = rot;
+        }
+      }
+      const landRing = w.group.userData.landRing as THREE.Mesh | undefined;
+      if (landRing) landRing.position.set(w.aim.x - cx, 0.12, w.aim.z - cz);
+      const progress = Math.max(0, Math.min(1, (now - w.startMs) / w.durMs));
+      if (w.fill) {
+        if (w.fillMode === 'length') w.fill.scale.y = Math.max(0.001, progress * w.len);
+        else w.fill.scale.setScalar(Math.max(0.01, progress));
+      }
+      if (w.vis?.windupTick) w.vis.windupTick(this.vfx, cx, cz, progress, w.colors, 16);
+      else genericWindupTick(this.vfx, cx, cz, progress, w.colors);
+    }
   }
 
   // Dark ground where the viewer's team has no sight, soft-edged holes
@@ -1251,6 +1608,16 @@ export class Renderer {
         anim.arms[0]!.rotation.x = -swing * 0.5;
         // The right arm strikes during an auto-attack swing.
         anim.arms[1]!.rotation.x = swinging ? -1.7 * swingK : swing * 0.5;
+        // Spell casts read on the body: both arms raise, held high for the
+        // whole charge of a windup.
+        if (this.windups.has(id)) {
+          anim.arms[0]!.rotation.x = -2.3;
+          anim.arms[1]!.rotation.x = -2.3;
+        } else if (t.castUntil > now && !swinging) {
+          const castK = Math.sin(((t.castUntil - now) / 420) * Math.PI);
+          anim.arms[0]!.rotation.x = -2.1 * castK;
+          anim.arms[1]!.rotation.x = -2.1 * castK;
+        }
         const breath = Math.sin(now * 0.0021 + id) * (1 - t.walkAmp);
         anim.torso.scale.y = 1 + breath * 0.025;
         anim.head.position.y = 2.02 + breath * 0.03;
@@ -1320,15 +1687,31 @@ export class Renderer {
       const ddz = t.curr.z - t.prev.z;
       if (Math.hypot(ddx, ddz) > 0.01) {
         t.mesh.rotation.y = -Math.atan2(ddz, ddx);
-        t.mesh.scale.set(1.7, 0.85, 0.85);
+        // Catalog meshes author their own proportions.
+        if (t.mesh.userData.stretch !== false) t.mesh.scale.set(1.7, 0.85, 0.85);
       }
+      t.vis?.projectileTick?.(this.vfx, x, z, dtMs, t.colors, now, t.mesh);
     }
-    for (const [id, mesh] of this.trackedZones) {
-      const s = 1 + 0.05 * Math.sin(now * 0.006 + id);
-      mesh.scale.set(s, 1, s);
-      const marks = mesh.userData.marks as THREE.Object3D | undefined;
-      if (marks) marks.rotation.y = now * 0.0012;
+    for (const [id, tz] of this.trackedZones) {
+      if (!tz.custom) {
+        const s = 1 + 0.05 * Math.sin(now * 0.006 + id);
+        tz.mesh.scale.set(s, 1, s);
+        const marks = tz.mesh.userData.marks as THREE.Object3D | undefined;
+        if (marks) marks.rotation.y = now * 0.0012;
+      }
+      tz.vis?.zoneTick?.(
+        this.vfx,
+        tz.mesh,
+        tz.x,
+        tz.z,
+        tz.radius,
+        now - tz.bornAt,
+        tz.colors,
+        dtMs,
+      );
     }
+    this.updateWindups(now, alpha);
+    this.vfx.update(now, dtMs, this.camDir);
     for (let i = this.dying.length - 1; i >= 0; i--) {
       const d = this.dying[i]!;
       const age = (now - d.start) / 380;
@@ -1424,12 +1807,14 @@ export class Renderer {
       followPos ??
       new THREE.Vector3(this.world.map.size / 2, 0, this.world.map.size / 2);
     this.camera.position.copy(target).addScaledVector(this.cameraOffset, this.zoom);
-    if (this.shakeUntil > now) {
-      const k = ((this.shakeUntil - now) / 200) * 0.3;
+    if (this.shakeAmp > 0.001) {
+      const k = this.shakeAmp * this.shakeAmp * 0.55;
       this.camera.position.x += (Math.random() * 2 - 1) * k;
       this.camera.position.z += (Math.random() * 2 - 1) * k;
+      this.shakeAmp = Math.max(0, this.shakeAmp - dtMs * 0.0021);
     }
     this.camera.lookAt(target);
+    this.camera.getWorldDirection(this.camDir);
     this.gl.render(this.scene, this.camera);
   }
 
