@@ -3,6 +3,7 @@
 // server snapshots). Both paths run the exact same presentation over IWorld.
 
 import { startPresentation } from './game/boot';
+import { requestGameFullscreen } from './game/fullscreen';
 import { ClientWorld } from './net/client_world';
 import type { ServerMsg } from './net/protocol';
 import { BOTS, DEFAULT_BOT_ID } from './sim/content/bots';
@@ -96,7 +97,15 @@ function startOnline(choice: HomeChoice): void {
 
   ws.addEventListener('open', () => {
     opened = true;
-    ws.send(JSON.stringify({ t: 'hello', name: choice.name }));
+    // The stored session token lets the server hand back a seat we lost to
+    // a disconnect or a reload; absent or expired it is simply ignored.
+    let token: string | null = null;
+    try {
+      token = localStorage.getItem('loc-token');
+    } catch {
+      // storage may be unavailable
+    }
+    ws.send(JSON.stringify({ t: 'hello', name: choice.name, token: token ?? undefined }));
     if (choice.mode === 'queue') {
       ws.send(JSON.stringify({ t: 'queue' }));
       queueUi = showQueue(
@@ -152,6 +161,8 @@ function startOnline(choice: HomeChoice): void {
           msg.team,
           msg.deadline,
           (champ, sigils, skin) => {
+            // Inside the lock-in click gesture, so the browser grants it.
+            requestGameFullscreen();
             ws.send(JSON.stringify({ t: 'pick', championId: champ, sigils, skin }));
           },
         );
@@ -165,11 +176,26 @@ function startOnline(choice: HomeChoice): void {
       case 'player_left':
         pres?.pushChat('System', msg.team, `${msg.name} disconnected; a bot takes over.`);
         break;
+      case 'player_back':
+        pres?.pushChat('System', msg.team, `${msg.name} reconnected.`);
+        break;
       case 'ping':
         pres?.showPing(msg.x, msg.z, msg.from, msg.team);
         break;
+      case 'welcome':
+        // Keep the browser's existing token: the server adopts a presented
+        // token, so overwriting it with the fresh one would orphan the next
+        // reconnect. Only a first-time browser stores the issued token.
+        try {
+          if (!localStorage.getItem('loc-token')) localStorage.setItem('loc-token', msg.token);
+        } catch {
+          // ignore
+        }
+        break;
       case 'match_start':
         world.applyServer(msg);
+        // A rejoin can arrive while the queue or lobby screen is still up.
+        clearMenus();
         selectUi?.remove();
         selectUi = null;
         break;
@@ -236,7 +262,12 @@ function startOnline(choice: HomeChoice): void {
           '(keep it running), restart "pnpm dev" if it predates vite.config.ts, then try again.',
       );
     } else {
-      showNotice(container, 'Disconnected', 'Lost the connection to the server.');
+      showNotice(
+        container,
+        'Disconnected',
+        'Lost the connection to the server. If you were in a match, go back to the menu and ' +
+          'hit "Play online": your champion is waiting.',
+      );
     }
   });
 }
@@ -245,6 +276,8 @@ async function boot(): Promise<void> {
   const choice = await showHome(container);
   if (choice.mode === 'practice') {
     const picker = showSelect(container, null, 0, null, (championId, sigils, skin) => {
+      // Inside the lock-in click gesture, so the browser grants it.
+      requestGameFullscreen();
       picker.remove();
       startOffline(championId, sigils, skin);
     });

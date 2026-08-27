@@ -3,12 +3,13 @@
 // on a fixed-step 20 Hz accumulator, and streams team-scoped snapshots.
 // No accounts, no database: guests only (game definition v1).
 
+import { randomBytes } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { type WebSocket, WebSocketServer } from 'ws';
 import { isFiniteVec, parseClientMsg, type ServerMsg } from '../src/net/protocol';
-import { DT } from '../src/sim/types';
+import { DT, type TeamId } from '../src/sim/types';
 import { fillWithBots } from './bot_fill';
 import { Match } from './match';
 import { Matchmaker } from './matchmaker';
@@ -17,6 +18,9 @@ const PORT = Number(process.env.PORT ?? 8787);
 const DIST = path.resolve(process.cwd(), 'dist');
 const TICK_MS = DT * 1000;
 const MATCH_LINGER_MS = 20_000;
+// How long a match with zero connected players keeps running so a dropped
+// player (or a reloading solo player) can claim their seat back.
+const REJOIN_GRACE_MS = 60_000;
 const MAX_MSG_BYTES = 4096;
 const MAX_MSGS_PER_SEC = 60;
 
@@ -38,13 +42,36 @@ interface Client {
   id: number;
   ws: WebSocket;
   name: string | null;
+  // Session token: survives the connection in the browser's storage, so a
+  // reconnecting player can claim their reserved seat back.
+  token: string;
   matchId: number | null;
   msgWindowStart: number;
   msgCount: number;
 }
 
 const clients = new Map<number, Client>();
-const matches = new Map<number, { match: Match; endedAt: number | null; failures: number }>();
+interface MatchEntry {
+  match: Match;
+  endedAt: number | null;
+  failures: number;
+  // Set when the last connected player drops; the match survives a grace
+  // window for rejoins instead of being reaped on the spot.
+  abandonedAt: number | null;
+}
+const matches = new Map<number, MatchEntry>();
+// Seats abandoned by a dropped connection, keyed by session token; a bot
+// holds the champion meanwhile. Reservations die with their match.
+const reservations = new Map<
+  string,
+  { matchId: number; name: string; team: TeamId; unitId: number }
+>();
+
+function pruneReservations(matchId: number): void {
+  for (const [token, r] of reservations) {
+    if (r.matchId === matchId) reservations.delete(token);
+  }
+}
 let nextClientId = 1;
 let nextMatchId = 1;
 
@@ -57,7 +84,7 @@ function send(clientId: number, msg: ServerMsg): void {
 const matchmaker = new Matchmaker(send, (picks) => {
   const id = nextMatchId++;
   const match = new Match((Date.now() % 2_000_000_000) + id, fillWithBots(picks));
-  matches.set(id, { match, endedAt: null, failures: 0 });
+  matches.set(id, { match, endedAt: null, failures: 0, abandonedAt: null });
   for (const p of picks) {
     const c = clients.get(p.clientId);
     if (!c) continue;
@@ -110,12 +137,13 @@ wss.on('connection', (ws) => {
     id,
     ws,
     name: null,
+    token: randomBytes(12).toString('hex'),
     matchId: null,
     msgWindowStart: Date.now(),
     msgCount: 0,
   };
   clients.set(id, client);
-  send(id, { t: 'welcome', clientId: id });
+  send(id, { t: 'welcome', clientId: id, token: client.token });
 
   ws.on('message', (data) => {
     const raw = data.toString();
@@ -135,6 +163,29 @@ wss.on('connection', (ws) => {
         .trim()
         .slice(0, 24);
       client.name = name.length > 0 ? name : `guest${id}`;
+      // A returning browser presents its previous token: adopt it, and if a
+      // live match still holds a reserved seat for it, hand the seat back
+      // (the bot stand-in steps aside). The later queue/lobby message from
+      // the same client is then ignored by the in-match guard.
+      const token = typeof msg.token === 'string' && msg.token.length <= 64 ? msg.token : null;
+      if (token) {
+        client.token = token;
+        const seat = reservations.get(token);
+        if (seat) {
+          reservations.delete(token);
+          const entry = matches.get(seat.matchId);
+          if (entry) {
+            entry.match.restorePlayer(id, seat);
+            entry.abandonedAt = null;
+            client.matchId = seat.matchId;
+            send(id, { t: 'match_start', selfUnitId: seat.unitId, team: seat.team });
+            for (const cid of entry.match.players.keys()) {
+              if (cid !== id) send(cid, { t: 'player_back', name: seat.name, team: seat.team });
+            }
+            console.log(`match ${seat.matchId}: ${seat.name} reconnected`);
+          }
+        }
+      }
       return;
     }
     if (client.name === null) return;
@@ -210,18 +261,22 @@ wss.on('connection', (ws) => {
     if (matchId !== null) {
       const entry = matches.get(matchId);
       if (entry) {
-        // Hand the abandoned champion to a bot and tell the team; a 4v5
-        // against an inert unit is the worst outcome for everyone else.
+        // Hand the abandoned champion to a bot, tell the team, and reserve
+        // the seat against the session token so the player can come back.
         const left = entry.match.handleDisconnect(id);
         if (left) {
+          reservations.set(client.token, { matchId, ...left });
           for (const cid of entry.match.players.keys()) {
             send(cid, { t: 'player_left', name: left.name, team: left.team });
           }
         }
+        // Not reaped on the spot: the seat reservations above deserve a
+        // grace window, so an accidental reload can come back (the world
+        // loop reaps once the window closes).
         const anyConnected = [...entry.match.players.keys()].some((cid) => clients.has(cid));
-        if (!anyConnected) {
-          matches.delete(matchId);
-          console.log(`match ${matchId} reaped: all players disconnected`);
+        if (!anyConnected && entry.abandonedAt === null) {
+          entry.abandonedAt = Date.now();
+          console.log(`match ${matchId} abandoned: holding for rejoin grace`);
         }
       }
     }
@@ -237,6 +292,15 @@ setInterval(() => {
   acc += Math.min(now - last, 500);
   last = now;
   matchmaker.tickClock(now);
+
+  // Reap abandoned matches whose rejoin grace ran out.
+  for (const [matchId, entry] of matches) {
+    if (entry.abandonedAt !== null && now - entry.abandonedAt > REJOIN_GRACE_MS) {
+      matches.delete(matchId);
+      pruneReservations(matchId);
+      console.log(`match ${matchId} reaped: rejoin grace expired`);
+    }
+  }
 
   while (acc >= TICK_MS) {
     acc -= TICK_MS;
@@ -257,6 +321,7 @@ setInterval(() => {
             send(player.clientId, { t: 'match_end' });
           }
           matches.delete(matchId);
+          pruneReservations(matchId);
           console.log(`match ${matchId} closed`);
         }
         entry.failures = 0;
@@ -270,6 +335,7 @@ setInterval(() => {
             send(player.clientId, { t: 'match_end' });
           }
           matches.delete(matchId);
+          pruneReservations(matchId);
           console.error(`match ${matchId} force-closed after repeated tick failures`);
         }
       }

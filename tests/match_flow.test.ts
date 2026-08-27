@@ -131,7 +131,7 @@ describe('online match flow', () => {
     const before = { ...unit.pos };
 
     const left = match.handleDisconnect(1);
-    expect(left).toEqual({ name: 'alice', team: 0 });
+    expect(left).toEqual({ name: 'alice', team: 0, unitId: pa.unitId });
     // The seat is gone from the wire: no snapshots, no recipients.
     expect(match.players.has(1)).toBe(false);
     expect(match.buildSnapshotFor(1)).toBeNull();
@@ -144,6 +144,26 @@ describe('online match flow', () => {
     expect(moved).toBeGreaterThan(3);
     // A second disconnect for the same seat is a no-op.
     expect(match.handleDisconnect(1)).toBeNull();
+  });
+
+  it('restores a reconnected player seat and detaches the stand-in bot', () => {
+    const { match, step } = wire();
+    step(1);
+    const seat = match.handleDisconnect(1)!;
+    expect(match.sim.policies.has(seat.unitId)).toBe(true);
+    step(20);
+
+    // A new connection presents the reservation and takes the seat back.
+    match.restorePlayer(9, seat);
+    expect(match.sim.policies.has(seat.unitId)).toBe(false);
+    expect(match.players.get(9)?.unitId).toBe(seat.unitId);
+    // Snapshots flow to the new client id again.
+    match.tick();
+    expect(match.buildSnapshotFor(9)).not.toBeNull();
+    // The scoreboard row drops the bot tag.
+    const score = match.buildScore() as { t: 'score'; rows: { name: string }[] };
+    expect(score.rows.some((r) => r.name === 'alice')).toBe(true);
+    expect(score.rows.some((r) => r.name === 'alice (bot)')).toBe(false);
   });
 
   it('rejects commands for units the client does not own', () => {

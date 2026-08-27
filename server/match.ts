@@ -71,15 +71,31 @@ export class Match {
 
   // A dropped player's champion keeps fighting: the seat is handed to the
   // default bot policy instead of standing inert for the rest of the match,
-  // and the scoreboard row says so. Returns who left, for the team notice.
-  handleDisconnect(clientId: number): { name: string; team: TeamId } | null {
+  // and the scoreboard row says so. Returns the seat, for the team notice
+  // and the rejoin reservation.
+  handleDisconnect(clientId: number): { name: string; team: TeamId; unitId: number } | null {
     const p = this.players.get(clientId);
     if (!p) return null;
     this.players.delete(clientId);
     const def = BOTS[DEFAULT_BOT_ID];
     if (def) this.sim.attachPolicy(p.unitId, def.policy);
     this.unitNames.set(p.unitId, `${p.name} (bot)`);
-    return { name: p.name, team: p.team };
+    return { name: p.name, team: p.team, unitId: p.unitId };
+  }
+
+  // The reverse: a reconnected player takes the seat back from the bot.
+  // The fresh known set makes the snapshot layer resend every identity, so
+  // the new mirror world starts complete.
+  restorePlayer(clientId: number, seat: { name: string; team: TeamId; unitId: number }): void {
+    this.sim.detachPolicy(seat.unitId);
+    this.unitNames.set(seat.unitId, seat.name);
+    this.players.set(clientId, {
+      clientId,
+      name: seat.name,
+      team: seat.team,
+      unitId: seat.unitId,
+      known: new Set(),
+    });
   }
 
   // Scoreboard rows with real player and bot names.
