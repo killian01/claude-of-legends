@@ -1,6 +1,8 @@
 // Elowen, Mistward. Battlemage (docs/design/roster.md). Passive Mistborne
 // (ability damage grants move speed) is deferred with the passive-hook
 // system. Her W exercises the blind primitive: enemy sight shrinks inside.
+// Q weaves: every second Mist Lance on the same target bursts and slows
+// (mist marks), the internal combo the kit audit found missing.
 
 import { refreshBuff } from '../../combat/status';
 import type { ChampionDef } from './index';
@@ -50,7 +52,21 @@ export const ELOWEN: ChampionDef = {
         radius: 0.6,
         range: 9.5,
         pierce: true,
-        onHit: [{ kind: 'damage', base: 62, apRatio: 0.95, dtype: 'magic' }],
+        onHit: [
+          { kind: 'damage', base: 62, apRatio: 0.95, dtype: 'magic' },
+          // The mist clings: the second lance on a marked target bursts and
+          // slows. Duration outlives the rank-1 cooldown so the weave works
+          // from level 1.
+          {
+            kind: 'mark',
+            duration: 5.5,
+            stacksToTrigger: 2,
+            onTrigger: [
+              { kind: 'damage', base: 55, apRatio: 0.4, dtype: 'magic' },
+              { kind: 'slow', pct: 0.25, duration: 1 },
+            ],
+          },
+        ],
       },
     },
     W: {

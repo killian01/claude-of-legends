@@ -189,9 +189,9 @@ export function applyEffects(
         });
         break;
       case 'mark': {
-        const stacks = addMarkStack(target, spec.duration, ctx.time);
+        const stacks = addMarkStack(target, spec.duration, ctx.time, sourceId);
         if (stacks >= spec.stacksToTrigger) {
-          clearMarks(target);
+          clearMarks(target, sourceId);
           applyEffects(ctx, sourceId, power, target, spec.onTrigger);
         }
         break;

@@ -34,7 +34,8 @@ function toStatus(k: string, until: number, v: number | undefined): Status | nul
     case 'shield':
       return { kind: 'shield', until, remaining: v ?? 0 };
     case 'mark':
-      return { kind: 'mark', until, stacks: v ?? 1 };
+      // Display-only mirror: the source pool is server business.
+      return { kind: 'mark', until, stacks: v ?? 1, sourceId: 0 };
     case 'dot':
       return { kind: 'dot', until, perSecond: v ?? 0, sourceId: 0, dtype: 'magic' };
     case 'grievous':
