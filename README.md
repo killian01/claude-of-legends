@@ -56,11 +56,13 @@ With Docker:
 
 ```
 docker build -t claude-of-legends .
-docker run -p 8787:8787 claude-of-legends
+docker run -p 8787:8787 -v loc-data:/app/data claude-of-legends
 ```
 
 `PORT` overrides the listen port. TLS termination (for wss) belongs to
-whatever proxy sits in front.
+whatever proxy sits in front. Player identities and the match log live
+as JSON files under `data/` (`DATA_DIR` overrides the location); mount
+it as a volume or careers reset with the container.
 
 ## Development
 

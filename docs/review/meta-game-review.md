@@ -34,11 +34,12 @@ profiles are all keyed by identity; none can exist before it does.
 What fits here: NOT accounts. No passwords, no email, no OAuth; that is a
 liability and a signup wall a ten-champion browser MOBA does not need. We
 already have the right primitive: `loc-token` proves "same browser" for
-reconnection. Promote it to a persistent player record server side:
-token -> { playerId, handle, createdAt }. Handle uniqueness via a
-discriminator (`bob#4821`) so display names stay free. Add an explicit
-"recovery code" the player can copy to move their identity to another
-browser. Effort: small, once storage exists.
+reconnection.
+
+FIXED: `server/players.ts` promotes the token to a persistent player
+record (id, name, per-name discriminator, created and last-seen); every
+hello creates or refreshes it, and handles display as `bob#4821`. Still
+open: a "recovery code" flow to move an identity to another browser.
 
 ### 2. Server persistence (the enabling layer)
 
@@ -49,10 +50,10 @@ Missing: any storage at all. Options, given the tiny-dependency rule:
 - SQLite (`better-sqlite3`): proper queries, but a native module that
   complicates the slim Docker image and the Windows dev loop.
 
-Recommendation: a small `server/store.ts` module over JSON files
-(`data/players.json`, `data/matches.jsonl` append-only), behind an
-interface so SQLite can replace it if the files ever hurt. Effort: small.
-Test-first like everything else.
+FIXED as recommended: `server/store.ts` over JSON files
+(`data/players.json` atomic tmp-then-rename, `data/matches.jsonl`
+append-only with torn-line tolerance), `DATA_DIR` overridable, the
+Docker image ships a node-owned `/app/data` for the volume.
 
 ### 3. Match results and history
 
@@ -60,11 +61,11 @@ Missing: the server discards the match at the victory event. It already
 holds everything worth keeping in `ScoreRow` (kills, deaths, assists, cs,
 level) plus winner, duration, champions, and which seats were human.
 
-Wanted: on victory, append one match record; serve `GET /api/history/:playerId`
-and show "Recent matches" on the profile (result, champion, KDA, duration,
-date). Effort: small once storage exists. Record whether each seat was a
-human, a bot fill, or a disconnect takeover; every consumer below needs
-that flag.
+FIXED: the moment a winner lands, `server/records.ts` builds one record
+from the final scoreboard (seats held by a connected human carry their
+playerId, bot fill and walk-outs carry null) and it is appended to the
+match log. "Recent matches" shows on the home career panel with result,
+champion, KDA, CS, duration, and date.
 
 ### 4. Ranking and leaderboard (the headline request)
 
@@ -90,11 +91,11 @@ and one screen.
 
 ### 5. Profiles and career stats
 
-Missing: any aggregate view of a player. Wanted: profile screen (own by
-default, anyone from the leaderboard) with games, winrate, rating, and a
-per-champion table (games, winrate, KDA, cs per minute). Cheap to derive
-from the match log at request time at our scale; no precomputation
-needed. Effort: small-medium, mostly UI.
+MOSTLY FIXED: `server/profile.ts` derives games, winrate, K/D/A, and
+per-champion lines from the match log at request time; the home screen
+gained "Profile and history" (`/api/me` by token). `/api/player/:id` is
+already public for other players, but no UI links to it yet; that
+arrives with the ladder. Rating joins once ranking exists.
 
 ### 6. Post-game screen and match lifecycle (no more reload)
 
@@ -183,14 +184,9 @@ progression (9), integrity (10)  [after 4 and 5]
 
 1. DONE: match lifecycle without reload plus the post-game exits (6).
 2. DONE: lobby team picker and invite links (7a).
-3. Storage module plus player identity (2, 1). The keystone batch;
-   pure modules, heavy on tests.
-4. Match log, history, profile screen (3, 5).
+3. DONE: storage module plus player identity (2, 1).
+4. DONE: match log, history, career panel (3, 5).
 5. Elo plus ladder screen plus rating delta on the post-game (4), with
    the rated-match policy above.
 6. Then by appetite: party queue (7), replays and spectator (8),
    mastery cosmetics (9), ranked integrity (10).
-
-Batches 1 and 2 need no persistence and could ship this week; batch 3 is
-where the server grows a disk for the first time and deserves its own
-careful change with a store parity test.

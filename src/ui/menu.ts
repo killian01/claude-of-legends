@@ -11,6 +11,7 @@ import { SKINS } from '../sim/content/skins';
 import type { AbilityKey, TeamId } from '../sim/types';
 import { describeAbility, describeSigil } from './describe';
 import { startHomeShowcase } from './home_showcase';
+import { buildProfilePanel } from './profile_panel';
 import { buildSettingsPanel } from './settings_panel';
 import { attachTooltip, hideTooltip } from './tooltips';
 
@@ -292,6 +293,20 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
       }
     });
     card.append(el('div', 'menu-label', 'Options'), settingsBtn, settingsBox);
+
+    // Career: identity handle plus online history, rebuilt fresh per open.
+    const profileBtn = el('button', 'menu-btn', 'Profile and history');
+    const profileBox = el('div', '');
+    profileBox.style.display = 'none';
+    profileBtn.addEventListener('click', () => {
+      const open = profileBox.style.display === 'none';
+      profileBox.style.display = open ? 'block' : 'none';
+      if (open) {
+        profileBox.textContent = '';
+        profileBox.appendChild(buildProfilePanel());
+      }
+    });
+    card.append(el('div', 'menu-label', 'Your career'), profileBtn, profileBox);
 
     // The out-of-game roster browser: every champion with role, passive,
     // and kit, readable before ever entering a queue.
