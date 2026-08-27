@@ -83,6 +83,8 @@ export const FENN: ChampionDef = {
       manaCost: 85,
       cooldown: 56.5,
       castRange: 3,
+      // Point-and-click execute: the crouch telegraphs before the flurry.
+      windup: 0.35,
       spec: {
         kind: 'enemy_target',
         searchRadius: 2,

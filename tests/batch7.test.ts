@@ -65,25 +65,32 @@ describe('skill points and ability ranks', () => {
     const sim = new Sim(7);
     const korrath = sim.addChampion(0, { x: 75, z: 75 }, 'korrath');
     korrath.abilityRanks = { Q: 1, W: 0, E: 0, R: 0 };
-    const dummy = sim.addChampion(1, { x: 77, z: 75 });
+    // In Q's cone but outside auto range, so only the slam moves the hp bar
+    // while the windup resolves.
+    const dummy = sim.addChampion(1, { x: 77.8, z: 75 });
     sim.tick();
 
     const before1 = dummy.hp;
     expect(sim.castAbility(korrath.id, 'Q', { x: dummy.pos.x, z: dummy.pos.z })).toBe(true);
-    const d1 = before1 - dummy.hp;
     const cd1 = (korrath.cooldowns.Q ?? 0) - sim.time;
     expect(cd1).toBeCloseTo(4.5, 5);
+    // The slam winds up before it lands (telegraph gate).
+    for (let i = 0; i < 8; i++) sim.tick();
+    const d1 = before1 - dummy.hp;
+    expect(d1).toBeGreaterThan(0);
 
     korrath.skillPoints = 1;
     expect(sim.levelAbility(korrath.id, 'Q')).toBe(true);
     korrath.cooldowns.Q = 0;
     dummy.hp = dummy.maxHp;
+    dummy.pos = { x: 77.8, z: 75 };
     for (let i = 0; i < 10; i++) sim.tick();
 
     const before2 = dummy.hp;
     expect(sim.castAbility(korrath.id, 'Q', { x: dummy.pos.x, z: dummy.pos.z })).toBe(true);
-    const d2 = before2 - dummy.hp;
     const cd2 = (korrath.cooldowns.Q ?? 0) - sim.time;
+    for (let i = 0; i < 8; i++) sim.tick();
+    const d2 = before2 - dummy.hp;
     expect(d2).toBeGreaterThan(d1);
     expect(cd2).toBeCloseTo(4.5 * 0.94, 5);
   });

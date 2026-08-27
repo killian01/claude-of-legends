@@ -50,6 +50,8 @@ export const ASHVYN: ChampionDef = {
       manaCost: 40,
       cooldown: 5.5,
       castRange: 5.5,
+      // Instant scaling cone: the draw telegraphs before the volley flies.
+      windup: 0.25,
       spec: {
         kind: 'cone',
         range: 5.5,

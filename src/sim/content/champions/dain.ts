@@ -75,6 +75,8 @@ export const DAIN: ChampionDef = {
       manaCost: 40,
       cooldown: 6,
       castRange: 4,
+      // Instant heavy cone: the wave telegraphs before it lands.
+      windup: 0.3,
       spec: {
         kind: 'cone',
         range: 4,

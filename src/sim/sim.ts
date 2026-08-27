@@ -542,6 +542,21 @@ export class Sim {
 
     this.visibility = computeVisibility(this.map, this.units, this.time);
 
+    // Fairness: a champion's attack order must not keep tracking a target
+    // its team cannot see; the blind chase would both leak the unseen
+    // position and walk the chaser across the map. Evaluated on the tick's
+    // FRESH visibility (a strike already winding up still resolves under
+    // its own rules).
+    for (const u of this.units.values()) {
+      if (u.kind !== 'champion' || u.dead || u.attackTargetId === null) continue;
+      const t = this.units.get(u.attackTargetId);
+      if (t && !t.dead && !this.isVisible(u.team, t.id)) {
+        u.attackTargetId = null;
+        // The chase path dies with the order, or the blind walk continues.
+        u.path = [];
+      }
+    }
+
     this.time += DT;
     this.tickCount += 1;
     const out = this.events;

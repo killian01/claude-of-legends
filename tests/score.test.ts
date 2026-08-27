@@ -91,10 +91,13 @@ describe('creep score', () => {
     const sim = new Sim(11);
     const champ = sim.addChampion(0, { x: 40, z: 40 });
     // Run past the first wave spawn, then feed the champion a dying minion.
+    // The duel moves to open map center: near a tower the tower's faster
+    // strike steals the last hit, which is genre-real but not this test.
     for (let i = 0; i < 11 * 20; i++) sim.tick();
     const minion = [...sim.units.values()].find((u) => u.kind === 'minion' && u.team === 1);
     expect(minion).toBeDefined();
-    minion!.pos = { x: 42, z: 40 };
+    champ.pos = { x: 75, z: 75 };
+    minion!.pos = { x: 77, z: 75 };
     minion!.hp = 1;
     sim.orderAttack(champ.id, minion!.id);
     for (let i = 0; i < 60 && sim.units.has(minion!.id); i++) sim.tick();

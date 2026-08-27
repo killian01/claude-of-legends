@@ -49,7 +49,7 @@ The team-wide, death-surviving damage buff granted when a team slays the Warden.
 _Avoid_: soul, objective buff
 
 **Windup**:
-The cast time of an ability: costs are paid at press, the spell resolves after the delay, and a stun during it cancels the cast. The counterplay window big spells owe their victims.
+The commitment beat before a hit lands. For an ability: costs are paid at press, the spell resolves after the delay, and a stun during it cancels the cast. For an auto-attack: the strike resolves a beat after the swing starts; moving, a stun, or a dash cancels it and refunds the attack timer (the orb-walk rule), and a target that blinks out of reach makes the committed strike whiff. The counterplay window big hits owe their victims.
 _Avoid_: cast bar, channel (a channel would persist after resolving; no ability has one yet)
 
 **Telegraph**:
