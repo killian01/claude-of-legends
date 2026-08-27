@@ -18,7 +18,9 @@ export type Status =
   | { kind: 'stealth'; until: number }
   | { kind: 'blind'; until: number; factor: number }
   | { kind: 'shield'; until: number; remaining: number }
-  | { kind: 'mark'; until: number; stacks: number }
+  // Marks are keyed per SOURCE: two casters stacking marks on one target
+  // build separate pools, so their trigger thresholds never cross.
+  | { kind: 'mark'; until: number; stacks: number; sourceId: number }
   | { kind: 'dot'; until: number; perSecond: number; sourceId: number; dtype: DamageType }
   | { kind: 'grievous'; until: number; factor: number }
   | {
@@ -176,20 +178,23 @@ export function absorbWithShields(u: Unit, amount: number, time: number): number
   return left;
 }
 
-// Adds one mark stack (refreshing expiry) and reports the new stack count.
-export function addMarkStack(u: Unit, duration: number, time: number): number {
-  const existing = u.statuses.find((s) => s.kind === 'mark' && s.until > time);
+// Adds one mark stack from this source (refreshing expiry) and reports the
+// new stack count of THAT source's pool.
+export function addMarkStack(u: Unit, duration: number, time: number, sourceId: number): number {
+  const existing = u.statuses.find(
+    (s) => s.kind === 'mark' && s.sourceId === sourceId && s.until > time,
+  );
   if (existing && existing.kind === 'mark') {
     existing.stacks += 1;
     existing.until = time + duration;
     return existing.stacks;
   }
-  u.statuses.push({ kind: 'mark', until: time + duration, stacks: 1 });
+  u.statuses.push({ kind: 'mark', until: time + duration, stacks: 1, sourceId });
   return 1;
 }
 
-export function clearMarks(u: Unit): void {
-  u.statuses = u.statuses.filter((s) => s.kind !== 'mark');
+export function clearMarks(u: Unit, sourceId: number): void {
+  u.statuses = u.statuses.filter((s) => !(s.kind === 'mark' && s.sourceId === sourceId));
 }
 
 export function isRecalling(u: Unit, time: number): boolean {

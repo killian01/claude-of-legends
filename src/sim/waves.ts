@@ -21,11 +21,25 @@ export const WAVE_SCALING_PER_MIN = 0.03;
 // Past this, EVERY wave carries a siege minion so late games close out
 // instead of stalling on the defender's infinite home waves.
 export const LATE_GAME_S = 18 * 60;
+// After LATE_GAME_S the growth slope triples: matches must CONVERGE on the
+// 20-25 minute target instead of drifting as champions get harder to kill
+// (dodging bots, escape sigils, scaling sustain all lengthen fights).
+export const LATE_WAVE_SCALING_PER_MIN = 0.09;
+
+// The wave stat multiplier at a given sim time; exported for the pacing gate.
+export function waveScale(time: number): number {
+  const lateS = Math.max(0, time - LATE_GAME_S);
+  return (
+    1 +
+    WAVE_SCALING_PER_MIN * (Math.min(time, LATE_GAME_S) / 60) +
+    LATE_WAVE_SCALING_PER_MIN * (lateS / 60)
+  );
+}
 
 const LANES: readonly LaneId[] = ['top', 'mid', 'bot'];
 
 export function spawnWave(ctx: CombatCtx, map: GameMap, waveIndex: number): void {
-  const scale = 1 + WAVE_SCALING_PER_MIN * (ctx.time / 60);
+  const scale = waveScale(ctx.time);
   const withSiege =
     waveIndex % SIEGE_WAVE_EVERY === SIEGE_WAVE_EVERY - 1 || ctx.time >= LATE_GAME_S;
   for (const team of [0, 1] as const) {

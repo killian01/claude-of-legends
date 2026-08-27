@@ -8,6 +8,7 @@ import { BOTS, DEFAULT_BOT_ID } from '../src/sim/content/bots';
 import { CHAMPION_LIST } from '../src/sim/content/champions';
 import { GAME_MAP } from '../src/sim/content/map';
 import { Sim } from '../src/sim/sim';
+import { waveScale } from '../src/sim/waves';
 
 const laner = BOTS[DEFAULT_BOT_ID]!.policy;
 
@@ -79,6 +80,13 @@ describe('fountain regen', () => {
 });
 
 describe('waves push', () => {
+  it('escalates wave scaling past the late-game mark so matches converge', () => {
+    // Linear early; markedly steeper after 18 minutes.
+    expect(waveScale(10 * 60)).toBeCloseTo(1.3, 5);
+    expect(waveScale(18 * 60)).toBeCloseTo(1.54, 5);
+    expect(waveScale(25 * 60)).toBeGreaterThan(1 + 0.03 * 25 + 0.2);
+  });
+
   it('adds a siege minion every third wave and scales waves over time', () => {
     const sim = new Sim(21);
     // Third wave spawns at t=70; run to 75 s.
