@@ -178,6 +178,11 @@ export class Sim {
     this.policies.set(unitId, policy);
   }
 
+  // A reconnected player takes their champion back from the stand-in bot.
+  detachPolicy(unitId: number): void {
+    this.policies.delete(unitId);
+  }
+
   // One row per champion; position-free, so it crosses the fog safely.
   scoreboard(): readonly ScoreRow[] {
     const rows: ScoreRow[] = [];

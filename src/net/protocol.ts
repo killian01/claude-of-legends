@@ -8,7 +8,9 @@ import type { AbilityKey, ScoreRow, TeamId } from '../sim/types';
 import type { StructureMeta, UnitKind } from '../sim/unit';
 
 export type ClientMsg =
-  | { t: 'hello'; name: string }
+  // token: the session token from a previous welcome; presenting it lets
+  // the server hand back a seat abandoned by a dropped connection.
+  | { t: 'hello'; name: string; token?: string }
   | { t: 'queue' }
   | { t: 'start_now' }
   | { t: 'leave' }
@@ -110,7 +112,8 @@ export interface SelectPlayer {
 }
 
 export type ServerMsg =
-  | { t: 'welcome'; clientId: number }
+  // token identifies this browser across connections, for match rejoin.
+  | { t: 'welcome'; clientId: number; token: string }
   | {
       t: 'queue_status';
       count: number;
@@ -142,6 +145,8 @@ export type ServerMsg =
   | { t: 'ping'; from: string; team: TeamId; x: number; z: number }
   // A teammate's connection dropped; a bot policy took the seat over.
   | { t: 'player_left'; name: string; team: TeamId }
+  // A dropped teammate reconnected and took their champion back.
+  | { t: 'player_back'; name: string; team: TeamId }
   | { t: 'match_end' }
   | { t: 'error'; message: string };
 
