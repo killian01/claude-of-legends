@@ -24,12 +24,22 @@ export type SfxName =
 export interface AudioBus {
   ctx: AudioContext;
   master: GainNode;
+  // Sound effects route through their own gain so the settings panel can
+  // trim them without touching the music (which feeds master directly).
+  sfx: GainNode;
   verb: GainNode;
 }
 
 let bus: AudioBus | null = null;
 let noiseBuffer: AudioBuffer | null = null;
 const lastPlay = new Map<SfxName, number>();
+let sfxVolume = 1;
+
+// User setting, 0..1; applies live and to a bus built later.
+export function setSfxVolume(v: number): void {
+  sfxVolume = v;
+  if (bus) bus.sfx.gain.value = v;
+}
 
 // Lazily builds the shared context, master chain, and reverb loop; also used
 // by the music layer so everything shares one output bus.
@@ -45,6 +55,9 @@ export function audioBus(): AudioBus | null {
     const master = ctx.createGain();
     master.gain.value = 0.8;
     master.connect(comp);
+    const sfx = ctx.createGain();
+    sfx.gain.value = sfxVolume;
+    sfx.connect(master);
     // Small-room reverb: a lowpassed feedback delay fed by a send gain.
     const verb = ctx.createGain();
     verb.gain.value = 0.6;
@@ -65,7 +78,7 @@ export function audioBus(): AudioBus | null {
     };
     window.addEventListener('pointerdown', resume, { once: true });
     window.addEventListener('keydown', resume, { once: true });
-    bus = { ctx, master, verb };
+    bus = { ctx, master, sfx, verb };
   }
   return bus;
 }
@@ -114,7 +127,7 @@ function tone(b: AudioBus, o: ToneOpts): void {
     head = lp;
   }
   head.connect(gain);
-  gain.connect(b.master);
+  gain.connect(b.sfx);
   if (o.verb) {
     const send = b.ctx.createGain();
     send.gain.value = o.verb;
@@ -155,7 +168,7 @@ function noise(b: AudioBus, o: NoiseOpts): void {
   gain.gain.exponentialRampToValueAtTime(0.0001, t0 + o.dur);
   src.connect(filter);
   filter.connect(gain);
-  gain.connect(b.master);
+  gain.connect(b.sfx);
   if (o.verb) {
     const send = b.ctx.createGain();
     send.gain.value = o.verb;

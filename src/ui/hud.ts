@@ -24,6 +24,7 @@ import type { IWorld } from '../world_api';
 import { abilityIconUrl, sigilIconUrl } from './ability_icons';
 import { describeAbility, describeItem, describeSigil } from './describe';
 import { iconDataUrl, itemIconUrl } from './icons';
+import { buildSettingsPanel } from './settings_panel';
 import { attachTooltip } from './tooltips';
 
 const KEY_TINTS: Readonly<Record<string, [string, string]>> = {
@@ -769,6 +770,7 @@ export class Hud {
     this.escapeOverlay.append(
       el('div', 'hud-overlay-title', 'Paused view'),
       resume,
+      buildSettingsPanel(),
       fullscreenBtn,
       quit,
     );
