@@ -65,6 +65,8 @@ export const TORV: ChampionDef = {
       manaCost: 50,
       cooldown: 10.5,
       castRange: 0,
+      // Hard CC telegraphs itself: the roar is seen before it takes hold.
+      windup: 0.25,
       spec: {
         kind: 'burst',
         radius: 3,
@@ -76,6 +78,8 @@ export const TORV: ChampionDef = {
       manaCost: 40,
       cooldown: 6,
       castRange: 0,
+      // The stomp is a heavy instant nuke: it owes its victims a beat.
+      windup: 0.3,
       spec: {
         kind: 'burst',
         radius: 3.2,

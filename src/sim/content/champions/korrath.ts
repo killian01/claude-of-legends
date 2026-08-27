@@ -46,6 +46,8 @@ export const KORRATH: ChampionDef = {
       manaCost: 35,
       cooldown: 4.5,
       castRange: 3,
+      // Instant heavy cone: the slam telegraphs before it lands.
+      windup: 0.3,
       spec: {
         kind: 'cone',
         range: 3,

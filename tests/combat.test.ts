@@ -69,10 +69,13 @@ describe('auto-attacks', () => {
     expect(b.maxHp - b.hp).toBeGreaterThan(3 * perHit - regenBack - 1);
   });
 
-  it('chases a target that is out of range', () => {
+  it('chases a target that is out of range while the team sees it', () => {
     const sim = new Sim(11);
     const a = sim.addChampion(0, { x: 70, z: 70 });
     const b = sim.addChampion(1, { x: 90, z: 90 });
+    // A scout keeps b inside team 0's vision: attack orders only track what
+    // the team can see (the blind cross-map chase was a fog leak).
+    sim.addChampion(0, { x: 88, z: 88 });
     sim.orderAttack(a.id, b.id);
     const before = Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z);
     for (let i = 0; i < 40; i++) sim.tick();

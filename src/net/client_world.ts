@@ -101,6 +101,7 @@ function materializeUnit(s: SnapUnit): Unit {
     attackMoveTarget: null,
     holding: false,
     pendingSpell: null,
+    pendingAttack: null,
     path: [],
     level: s.l ?? 1,
     xp: 0,

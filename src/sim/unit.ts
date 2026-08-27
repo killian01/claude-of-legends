@@ -70,6 +70,10 @@ export interface Unit {
   holding: boolean;
   // A paid cast waiting out its windup; stuns cancel it.
   pendingSpell: { key: AbilityKey; aim: Vec2; resolveAt: number } | null;
+  // An auto-attack strike winding up: locked to its target, landing at
+  // resolveAt. Moving, a stun, a dash, or losing the target cancels it and
+  // refunds the attack timer (the orb-walk rule).
+  pendingAttack: { targetId: number; resolveAt: number; startX: number; startZ: number } | null;
   // Remaining waypoints toward the current move order; empty when idle.
   path: Vec2[];
   // Progression and economy (champions).
@@ -169,6 +173,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     attackMoveTarget: null,
     holding: false,
     pendingSpell: null,
+    pendingAttack: null,
     path: [],
     level: 1,
     xp: 0,

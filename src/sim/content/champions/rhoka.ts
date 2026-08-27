@@ -73,6 +73,8 @@ export const RHOKA: ChampionDef = {
       manaCost: 45,
       cooldown: 6,
       castRange: 0,
+      // Instant heavy burst: the sweep telegraphs before it lands.
+      windup: 0.3,
       spec: {
         kind: 'burst',
         radius: 2.4,

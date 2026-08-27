@@ -39,10 +39,12 @@ describe('combat primitives', () => {
   });
 
   it('taunt forces the victim to attack the taunter', () => {
-    const { sim, a, b } = arena('torv', 'sylra', { x: 75, z: 75 }, { x: 77, z: 75 });
+    // Close enough that the fleeing victim is still inside the burst when
+    // the windup resolves: running out during the roar is the counterplay.
+    const { sim, a, b } = arena('torv', 'sylra', { x: 75, z: 75 }, { x: 76, z: 75 });
     sim.orderMove(b.id, 90, 75);
     expect(sim.castAbility(a.id, 'W', { x: 75, z: 75 })).toBe(true);
-    sim.tick();
+    for (let i = 0; i < 7; i++) sim.tick();
     expect(b.attackTargetId).toBe(a.id);
     for (let i = 0; i < 20; i++) sim.tick();
     expect(a.hp).toBeLessThan(a.maxHp);
