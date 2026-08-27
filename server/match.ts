@@ -60,6 +60,28 @@ export class Match {
     }
   }
 
+  // Client ids on the same team as the sender. Chat and pings route through
+  // this: the snapshot layer is fog-scoped, so the social layer must be
+  // team-scoped too or a ping leaks a map coordinate to the enemy.
+  teamRecipients(senderClientId: number): number[] {
+    const sender = this.players.get(senderClientId);
+    if (!sender) return [];
+    return [...this.players.values()].filter((p) => p.team === sender.team).map((p) => p.clientId);
+  }
+
+  // A dropped player's champion keeps fighting: the seat is handed to the
+  // default bot policy instead of standing inert for the rest of the match,
+  // and the scoreboard row says so. Returns who left, for the team notice.
+  handleDisconnect(clientId: number): { name: string; team: TeamId } | null {
+    const p = this.players.get(clientId);
+    if (!p) return null;
+    this.players.delete(clientId);
+    const def = BOTS[DEFAULT_BOT_ID];
+    if (def) this.sim.attachPolicy(p.unitId, def.policy);
+    this.unitNames.set(p.unitId, `${p.name} (bot)`);
+    return { name: p.name, team: p.team };
+  }
+
   // Scoreboard rows with real player and bot names.
   buildScore(): ServerMsg {
     const rows = this.sim.scoreboard().map((r) => ({

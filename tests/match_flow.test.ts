@@ -110,6 +110,42 @@ describe('online match flow', () => {
     }
   });
 
+  it('scopes chat and ping recipients to the sender team', () => {
+    const match = new Match(7, [
+      { clientId: 1, name: 'alice', team: 0, championId: 'sylra', sigils: ['riftstep', 'mend'] },
+      { clientId: 2, name: 'ana', team: 0, championId: 'maera', sigils: ['riftstep', 'mend'] },
+      { clientId: 3, name: 'bob', team: 1, championId: 'fenn', sigils: ['zephyr', 'sear'] },
+    ]);
+    // A ping must never hand the enemy a coordinate: the social layer is
+    // team-scoped exactly like the snapshot layer.
+    expect(match.teamRecipients(1).sort()).toEqual([1, 2]);
+    expect(match.teamRecipients(3)).toEqual([3]);
+    expect(match.teamRecipients(99)).toEqual([]);
+  });
+
+  it('hands a disconnected player seat to a bot that keeps playing', () => {
+    const { match, step } = wire();
+    step(1);
+    const pa = match.players.get(1)!;
+    const unit = match.sim.units.get(pa.unitId)!;
+    const before = { ...unit.pos };
+
+    const left = match.handleDisconnect(1);
+    expect(left).toEqual({ name: 'alice', team: 0 });
+    // The seat is gone from the wire: no snapshots, no recipients.
+    expect(match.players.has(1)).toBe(false);
+    expect(match.buildSnapshotFor(1)).toBeNull();
+    // The scoreboard row says who this champion was.
+    const score = match.buildScore() as { t: 'score'; rows: { name: string }[] };
+    expect(score.rows.some((r) => r.name === 'alice (bot)')).toBe(true);
+    // The champion is not inert: the bot policy walks it out of the fountain.
+    step(200);
+    const moved = Math.hypot(unit.pos.x - before.x, unit.pos.z - before.z);
+    expect(moved).toBeGreaterThan(3);
+    // A second disconnect for the same seat is a no-op.
+    expect(match.handleDisconnect(1)).toBeNull();
+  });
+
   it('rejects commands for units the client does not own', () => {
     const { match, b, step } = wire();
     step(1);

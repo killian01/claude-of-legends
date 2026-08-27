@@ -140,6 +140,8 @@ export type ServerMsg =
   | { t: 'score'; rows: ScoreRow[] }
   | { t: 'chat'; from: string; team: TeamId; text: string }
   | { t: 'ping'; from: string; team: TeamId; x: number; z: number }
+  // A teammate's connection dropped; a bot policy took the seat over.
+  | { t: 'player_left'; name: string; team: TeamId }
   | { t: 'match_end' }
   | { t: 'error'; message: string };
 
