@@ -10,6 +10,7 @@ import { SKINS } from '../sim/content/skins';
 import type { AbilityKey, TeamId } from '../sim/types';
 import { describeAbility, describeSigil } from './describe';
 import { startHomeShowcase } from './home_showcase';
+import { buildSettingsPanel } from './settings_panel';
 import { attachTooltip, hideTooltip } from './tooltips';
 
 // One color per role so classes read at a glance on the select grid.
@@ -268,6 +269,21 @@ export function showHome(container: HTMLElement): Promise<HomeChoice> {
     row.append(code, join);
 
     card.append(play, practice, create, el('div', 'menu-label', 'Play with friends'), row);
+
+    // Options: audio settings, collapsible like the roster browser.
+    const settingsBtn = el('button', 'menu-btn', 'Settings');
+    const settingsBox = el('div', '');
+    settingsBox.style.display = 'none';
+    let settingsBuilt = false;
+    settingsBtn.addEventListener('click', () => {
+      const open = settingsBox.style.display === 'none';
+      settingsBox.style.display = open ? 'block' : 'none';
+      if (!settingsBuilt) {
+        settingsBuilt = true;
+        settingsBox.appendChild(buildSettingsPanel());
+      }
+    });
+    card.append(el('div', 'menu-label', 'Options'), settingsBtn, settingsBox);
 
     // The out-of-game roster browser: every champion with role, passive,
     // and kit, readable before ever entering a queue.

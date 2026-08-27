@@ -8,6 +8,21 @@
 import { audioBus } from './sfx';
 
 const MUSIC_VOL = 0.22;
+let userMusicVolume = 1;
+const musicVol = (): number => MUSIC_VOL * userMusicVolume;
+
+// User setting, 0..1 over the authored level; ramps live when playing.
+export function setMusicVolume(v: number): void {
+  userMusicVolume = v;
+  const b = audioBus();
+  if (!b || !state) return;
+  const g = state.out.gain;
+  const t = b.ctx.currentTime;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(g.value, t);
+  g.linearRampToValueAtTime(musicVol(), t + 0.15);
+}
+
 const BEAT_S = 0.714; // 84 bpm
 const BEATS_PER_CHORD = 8; // two bars
 const ROOT_HZ = 110;
@@ -290,7 +305,7 @@ export function startMusic(): void {
   const b = audioBus();
   if (!b || state) return;
   const out = b.ctx.createGain();
-  out.gain.value = MUSIC_VOL;
+  out.gain.value = musicVol();
   out.connect(b.master);
   const s: MusicState = { out, timer: 0, nextBeatAt: 0, beatIdx: 0, bed: null };
   // Lookahead scheduler: while the context is suspended (before the first
@@ -320,9 +335,9 @@ export function duckMusic(durationMs = 1200): void {
   const t = b.ctx.currentTime;
   g.cancelScheduledValues(t);
   g.setValueAtTime(g.value, t);
-  g.linearRampToValueAtTime(MUSIC_VOL * 0.3, t + 0.15);
-  g.setValueAtTime(MUSIC_VOL * 0.3, t + durationMs / 1000);
-  g.linearRampToValueAtTime(MUSIC_VOL, t + durationMs / 1000 + 0.7);
+  g.linearRampToValueAtTime(musicVol() * 0.3, t + 0.15);
+  g.setValueAtTime(musicVol() * 0.3, t + durationMs / 1000);
+  g.linearRampToValueAtTime(musicVol(), t + durationMs / 1000 + 0.7);
 }
 
 // Fades the score out (end of match); safe to call repeatedly.

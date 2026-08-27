@@ -4,6 +4,7 @@
 
 import { startPresentation } from './game/boot';
 import { requestGameFullscreen } from './game/fullscreen';
+import { getSettings } from './game/settings';
 import { ClientWorld } from './net/client_world';
 import type { ServerMsg } from './net/protocol';
 import { BOTS, DEFAULT_BOT_ID } from './sim/content/bots';
@@ -273,6 +274,8 @@ function startOnline(choice: HomeChoice): void {
 }
 
 async function boot(): Promise<void> {
+  // Load and apply the stored player settings before any audio plays.
+  getSettings();
   const choice = await showHome(container);
   if (choice.mode === 'practice') {
     const picker = showSelect(container, null, 0, null, (championId, sigils, skin) => {

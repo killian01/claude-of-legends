@@ -48,7 +48,16 @@ function pickVoice(): void {
 
 // priority: true lines (kills, objectives) interrupt whatever is playing;
 // others are dropped while speech is busy.
+let announcerEnabled = true;
+
+// User setting; turning it off also silences a line mid-sentence.
+export function setAnnouncerEnabled(on: boolean): void {
+  announcerEnabled = on;
+  if (!on && typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
+}
+
 export function announceVoice(line: string, priority = false): void {
+  if (!announcerEnabled) return;
   if (typeof speechSynthesis === 'undefined') return;
   pickVoice();
   const now = performance.now();
