@@ -10,6 +10,7 @@ import { SIGILS } from '../src/sim/content/sigils';
 import { clampSkin } from '../src/sim/content/skins';
 import type { TeamId } from '../src/sim/types';
 import type { MatchPick } from './match';
+import { packGroups } from './party';
 
 export const MATCH_SIZE = 10;
 export const TEAM_CAP = MATCH_SIZE / 2;
@@ -26,7 +27,10 @@ interface Pending {
   name: string;
 }
 
-interface QueueEntry extends Pending {
+// The queue holds GROUPS: a solo player is a group of one, a party (a
+// lobby that queued together) stays whole and lands on one side.
+interface QueueGroup {
+  members: Pending[];
   botReady: boolean;
 }
 
@@ -72,7 +76,7 @@ function randomCode(): string {
 }
 
 export class Matchmaker {
-  private readonly queue: QueueEntry[] = [];
+  private readonly queue: QueueGroup[] = [];
   private readonly lobbies = new Map<string, Lobby>();
   private readonly selects: SelectSession[] = [];
   // Deadline of the opt-in bot-filled start, null when nobody opted in.
@@ -86,17 +90,26 @@ export class Matchmaker {
     private readonly codeGen: () => string = randomCode,
   ) {}
 
+  private queuedSeats(): number {
+    let seats = 0;
+    for (const g of this.queue) seats += g.members.length;
+    return seats;
+  }
+
   private broadcastQueue(now: number): void {
     const startsIn =
       this.botStartAt !== null ? Math.max(0, Math.ceil((this.botStartAt - now) / 1000)) : null;
-    for (const p of this.queue) {
-      this.send(p.clientId, {
-        t: 'queue_status',
-        count: this.queue.length,
-        needed: MATCH_SIZE,
-        startsIn,
-        ready: p.botReady,
-      });
+    const count = this.queuedSeats();
+    for (const g of this.queue) {
+      for (const p of g.members) {
+        this.send(p.clientId, {
+          t: 'queue_status',
+          count,
+          needed: MATCH_SIZE,
+          startsIn,
+          ready: g.botReady,
+        });
+      }
     }
   }
 
@@ -109,26 +122,89 @@ export class Matchmaker {
 
   addToQueue(clientId: number, name: string, now: number): void {
     this.removeEverywhere(clientId, now);
-    this.queue.push({ clientId, name, botReady: false });
-    if (this.queue.length >= MATCH_SIZE) {
-      this.startSelect(this.queue.splice(0, MATCH_SIZE), now, 'queue');
-      if (!this.queue.some((p) => p.botReady)) this.botStartAt = null;
-    }
+    this.queue.push({ members: [{ clientId, name }], botReady: false });
+    this.tryFormFullMatch(now);
     this.broadcastQueue(now);
   }
 
-  // Opt-in bot fill: marks THIS player ready to start with bots. Starts
-  // immediately when everyone queued agrees; otherwise announces a countdown
-  // the others may join. Nobody is dragged into a bot game they did not ask
-  // for: non-volunteers stay queued for a human match.
+  // A whole lobby enters the public queue as one group on one side. Only
+  // the host may pull the trigger, and a party larger than a team cannot
+  // queue (a full lobby should start its own match).
+  queuePartyFromLobby(hostId: number, now: number): void {
+    for (const lobby of this.lobbies.values()) {
+      if (lobby.hostId !== hostId) continue;
+      if (lobby.players.length > TEAM_CAP) {
+        this.send(hostId, {
+          t: 'error',
+          message: 'A party of up to five can queue together; a full lobby starts its own match.',
+        });
+        return;
+      }
+      this.lobbies.delete(lobby.code);
+      this.queue.push({
+        members: lobby.players.map((p) => ({ clientId: p.clientId, name: p.name })),
+        botReady: false,
+      });
+      this.tryFormFullMatch(now);
+      this.broadcastQueue(now);
+      return;
+    }
+  }
+
+  // Ten seats worth of whole groups: seat them (parties stay together)
+  // and take those groups out of the queue. Groups that do not pack wait.
+  private tryFormFullMatch(now: number): void {
+    if (this.queuedSeats() < MATCH_SIZE) return;
+    const seated = packGroups(
+      this.queue.map((g) => g.members.length),
+      MATCH_SIZE,
+      TEAM_CAP,
+      { exact: true },
+    );
+    if (!seated) return;
+    const players: (Pending & { team: TeamId })[] = [];
+    for (const s of seated) {
+      for (const m of this.queue[s.index]!.members) players.push({ ...m, team: s.team });
+    }
+    for (const s of [...seated].sort((a, b) => b.index - a.index)) this.queue.splice(s.index, 1);
+    if (!this.queue.some((g) => g.botReady)) this.botStartAt = null;
+    this.startSelect(players, now, 'queue');
+  }
+
+  // Seat every bot-ready group into as many bot-filled matches as needed
+  // (successive loose packs; a party never splits).
+  private startReadyGroups(now: number): void {
+    for (;;) {
+      const ready = this.queue.filter((g) => g.botReady);
+      if (ready.length === 0) return;
+      const seated = packGroups(
+        ready.map((g) => g.members.length),
+        MATCH_SIZE,
+        TEAM_CAP,
+        { exact: false },
+      );
+      if (!seated || seated.length === 0) return;
+      const players: (Pending & { team: TeamId })[] = [];
+      for (const s of seated) {
+        const group = ready[s.index]!;
+        for (const m of group.members) players.push({ ...m, team: s.team });
+        this.queue.splice(this.queue.indexOf(group), 1);
+      }
+      this.startSelect(players, now, 'queue');
+    }
+  }
+
+  // Opt-in bot fill: marks THIS player's group ready to start with bots.
+  // Starts immediately when everyone queued agrees; otherwise announces a
+  // countdown the others may join. Nobody is dragged into a bot game they
+  // did not ask for: non-volunteers stay queued for a human match.
   startNow(clientId: number, now: number): void {
-    const entry = this.queue.find((p) => p.clientId === clientId);
+    const entry = this.queue.find((g) => g.members.some((m) => m.clientId === clientId));
     if (!entry) return;
     entry.botReady = true;
-    if (this.queue.every((p) => p.botReady)) {
-      const players = this.queue.splice(0, this.queue.length);
+    if (this.queue.every((g) => g.botReady)) {
       this.botStartAt = null;
-      this.startSelect(players, now, 'queue');
+      this.startReadyGroups(now);
       this.broadcastQueue(now);
       return;
     }
@@ -293,11 +369,7 @@ export class Matchmaker {
     if (now >= this.botStartAt) {
       this.botStartAt = null;
       this.lastCountdownSecond = -1;
-      const ready: QueueEntry[] = [];
-      for (let i = this.queue.length - 1; i >= 0; i--) {
-        if (this.queue[i]!.botReady) ready.unshift(...this.queue.splice(i, 1));
-      }
-      if (ready.length > 0) this.startSelect(ready, now, 'queue');
+      this.startReadyGroups(now);
       this.broadcastQueue(now);
       return;
     }
@@ -325,15 +397,18 @@ export class Matchmaker {
   }
 
   removeEverywhere(clientId: number, now: number = Date.now()): void {
-    const qi = this.queue.findIndex((p) => p.clientId === clientId);
-    if (qi !== -1) {
-      this.queue.splice(qi, 1);
-      if (this.queue.length > 0 && this.queue.every((p) => p.botReady)) {
+    const qg = this.queue.find((g) => g.members.some((m) => m.clientId === clientId));
+    if (qg) {
+      qg.members.splice(
+        qg.members.findIndex((m) => m.clientId === clientId),
+        1,
+      );
+      if (qg.members.length === 0) this.queue.splice(this.queue.indexOf(qg), 1);
+      if (this.queue.length > 0 && this.queue.every((g) => g.botReady)) {
         // Everyone still queued already agreed: start them now.
-        const players = this.queue.splice(0, this.queue.length);
         this.botStartAt = null;
-        this.startSelect(players, now, 'queue');
-      } else if (!this.queue.some((p) => p.botReady)) {
+        this.startReadyGroups(now);
+      } else if (!this.queue.some((g) => g.botReady)) {
         this.botStartAt = null;
       }
       this.broadcastQueue(now);

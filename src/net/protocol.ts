@@ -20,6 +20,9 @@ export type ClientMsg =
   // seats used to alternate by join order with no way to play together).
   | { t: 'lobby_team'; team: TeamId }
   | { t: 'start_lobby' }
+  // Host only: the whole lobby enters the public queue as one party,
+  // landing on the same side of whatever match forms.
+  | { t: 'queue_party' }
   | { t: 'pick'; championId: string; sigils: [string, string]; skin?: number }
   | { t: 'move'; x: number; z: number }
   | { t: 'attack'; targetId: number }

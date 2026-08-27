@@ -370,6 +370,16 @@ wss.on('connection', (ws, req) => {
       case 'lobby_team':
         if (!inMatch) matchmaker.setLobbyTeam(id, msg.team);
         break;
+      case 'queue_party':
+        if (inMatch) break;
+        if (atCapacity) refuseCapacity();
+        else if ((queueLocks.get(client.token) ?? 0) > now) {
+          send(id, {
+            t: 'error',
+            message: `You left a rated match. The queue unlocks in ${Math.ceil(((queueLocks.get(client.token) ?? 0) - now) / 1000)}s.`,
+          });
+        } else matchmaker.queuePartyFromLobby(id, now);
+        break;
       case 'start_lobby':
         if (!inMatch) matchmaker.startLobby(id, now);
         break;

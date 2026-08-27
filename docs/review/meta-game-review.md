@@ -119,8 +119,11 @@ code aloud.
   `/?join=CODE`; a visitor with a stored name deep-links straight into
   the lobby, a first-timer gets the home screen with the code
   prefilled (src/game/invite.ts, consumed once at boot).
-- Party queue: a group that queues together and lands on the same team.
-  Effort: medium.
+- FIXED: party queue. The lobby host can "Queue as a party" (up to
+  five): the whole lobby enters the public queue as one group, both
+  screens swap to the queue, and `server/party.ts` packs whole groups
+  onto the two sides (balancing solos across teams, so mixed matches
+  stay rateable). Groups that cannot pack simply wait their turn.
 - Friends list / presence: needs identity first; defer until profiles
   exist and demand is proven.
 
@@ -185,5 +188,6 @@ progression (9), integrity (10)  [after 4 and 5]
 5. DONE: Elo, the ladder screen, and rating deltas in history (4),
    then the delta on the in-game end screen and ranked integrity for
    walk-outs and lobby boosting (10).
-6. Then by appetite: party queue (7), replays and spectator (8),
-   mastery cosmetics (9), AFK detection (10).
+6. DONE: party queue (7).
+7. Then by appetite: replays and spectator (8), mastery cosmetics (9),
+   AFK detection (10), a friends list if demand shows up (7).

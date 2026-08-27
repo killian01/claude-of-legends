@@ -179,6 +179,74 @@ describe('matchmaker', () => {
     expect(after?.t === 'lobby' && after.team).toBe(1);
   });
 
+  it('a lobby queues as a party and lands whole on one side', () => {
+    const { mm, sent, matches, sources } = harness();
+    mm.createLobby(1, 'host');
+    const lobbyMsg = last(sent.get(1), 'lobby');
+    const code = lobbyMsg?.t === 'lobby' ? lobbyMsg.code : '';
+    mm.joinLobby(2, 'friend', code);
+    mm.queuePartyFromLobby(1, 0);
+    // The lobby is gone; both members are queued as one group of two.
+    mm.joinLobby(3, 'late', code);
+    expect(last(sent.get(3), 'error')).toBeDefined();
+    const status = last(sent.get(2), 'queue_status');
+    expect(status?.t === 'queue_status' && status.count).toBe(2);
+    // Any member can opt the party into the bot fill.
+    mm.startNow(2, 0);
+    expect(last(sent.get(1), 'select_start')).toBeDefined();
+    const t1 = last(sent.get(1), 'select_start');
+    const t2 = last(sent.get(2), 'select_start');
+    expect(t1?.t === 'select_start' && t2?.t === 'select_start' && t1.team === t2.team).toBe(true);
+    mm.pick(1, 'korrath', ['riftstep', 'sear']);
+    mm.pick(2, 'fenn', ['zephyr', 'mend']);
+    expect(matches).toHaveLength(1);
+    expect(matches[0]![0]!.team).toBe(matches[0]![1]!.team);
+    expect(sources).toEqual(['queue']);
+  });
+
+  it('a party and solos pack into a full match with the party whole', () => {
+    const { mm, sent, matches } = harness();
+    // A party of four...
+    mm.createLobby(1, 'host');
+    const code0 = (() => {
+      const m = last(sent.get(1), 'lobby');
+      return m?.t === 'lobby' ? m.code : '';
+    })();
+    for (let i = 2; i <= 4; i++) mm.joinLobby(i, `p${i}`, code0);
+    mm.queuePartyFromLobby(1, 0);
+    // ...plus six solos: ten seats, the match forms.
+    for (let i = 5; i <= 10; i++) mm.addToQueue(i, `s${i}`, 0);
+    for (let i = 1; i <= 10; i++) {
+      const sel = last(sent.get(i), 'select_start');
+      expect(sel?.t).toBe('select_start');
+    }
+    // The party's four share one side.
+    const partyTeams = [1, 2, 3, 4].map((i) => {
+      const m = last(sent.get(i), 'select_start');
+      return m?.t === 'select_start' ? m.team : -1;
+    });
+    expect(new Set(partyTeams).size).toBe(1);
+    for (let i = 1; i <= 10; i++) mm.pick(i, 'sylra', ['riftstep', 'mend']);
+    expect(matches).toHaveLength(1);
+    expect(matches[0]!.filter((p) => p.team === 0)).toHaveLength(5);
+  });
+
+  it('refuses to queue a party larger than a team', () => {
+    const { mm, sent } = harness();
+    mm.createLobby(1, 'host');
+    const code = (() => {
+      const m = last(sent.get(1), 'lobby');
+      return m?.t === 'lobby' ? m.code : '';
+    })();
+    for (let i = 2; i <= 6; i++) mm.joinLobby(i, `p${i}`, code);
+    mm.queuePartyFromLobby(1, 0);
+    const refusal = last(sent.get(1), 'error');
+    expect(refusal?.t === 'error' && refusal.message).toContain('up to five');
+    // The lobby survives the refusal.
+    mm.joinLobby(7, 'p7', code);
+    expect(last(sent.get(7), 'lobby')?.t).toBe('lobby');
+  });
+
   it('auto-locks a player who disconnects during select', () => {
     const { mm, matches } = harness();
     mm.addToQueue(1, 'alice', 0);
