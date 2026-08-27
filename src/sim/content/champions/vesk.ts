@@ -82,13 +82,15 @@ export const VESK: ChampionDef = {
       name: 'Horizon Shot',
       manaCost: 85,
       cooldown: 67.5,
-      castRange: 40,
+      // Map-crossing artillery (the map is 150 across): the shot itself is
+      // the fantasy, so the range covers anything Vesk can draw a line to.
+      castRange: 120,
       windup: 0.6,
       spec: {
         kind: 'skillshot',
-        speed: 34,
+        speed: 40,
         radius: 0.9,
-        range: 40,
+        range: 120,
         onHit: [
           { kind: 'damage', base: 220, adRatio: 1.9, dtype: 'physical' },
           { kind: 'slow', pct: 0.5, duration: 2 },

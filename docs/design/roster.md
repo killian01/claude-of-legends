@@ -41,7 +41,7 @@ A brawler who wants extended trades.
 - Q, Blazing Jab: short dash plus strike.
 - W, Cinder Guard: self shield that burns nearby enemies while it holds.
 - E, Ember Wave: cone burst that slows.
-- R, Molten Grasp: empowered melee strike that stuns the target.
+- R, Emberfall: calls a comet down on a telegraphed zone; the impact stuns and leaves the ground burning.
 
 ### Sylra, Thornweaver (Mage, mid)
 
@@ -81,7 +81,7 @@ Artillery range, immobile and terrifying.
 - Q, Piercing Round: very long line skillshot.
 - W, Caltrops: zone slow.
 - E, Backstep: small hop backward plus an attack speed reload.
-- R, Horizon Shot: near-global slow projectile.
+- R, Horizon Shot: map-crossing slow projectile.
 
 ### Ashvyn, Nightbow (Marksman, bot)
 

@@ -21,11 +21,15 @@ function arena(
 }
 
 describe('combat primitives', () => {
-  it('stun blocks movement and casting', () => {
+  it('emberfall telegraphs before it lands, then its stun blocks movement and casting', () => {
     const { sim, a, b } = arena('dain', 'sylra', { x: 75, z: 75 }, { x: 76.8, z: 75 });
     a.level = 6;
     expect(sim.castAbility(a.id, 'R', { x: b.pos.x, z: b.pos.z })).toBe(true);
     sim.tick();
+    // The comet is still falling: the telegraph window is real counterplay.
+    expect(sim.zones.size).toBe(1);
+    expect(isStunned(b, sim.time)).toBe(false);
+    for (let i = 0; i < 24 && !isStunned(b, sim.time); i++) sim.tick();
     expect(isStunned(b, sim.time)).toBe(true);
     expect(sim.castAbility(b.id, 'Q', { x: 75, z: 75 })).toBe(false);
     sim.orderMove(b.id, 90, 75);
