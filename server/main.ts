@@ -23,6 +23,9 @@ const MATCH_LINGER_MS = 20_000;
 const REJOIN_GRACE_MS = 60_000;
 const MAX_MSG_BYTES = 4096;
 const MAX_MSGS_PER_SEC = 60;
+// Abuse bounds: sockets per remote address, and live sims per process.
+const MAX_CONN_PER_IP = 8;
+const MAX_MATCHES = 50;
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -101,8 +104,15 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = (req.url ?? '/').split('?')[0]!;
     if (url === '/healthz') {
-      res.writeHead(200, { 'content-type': 'text/plain' });
-      res.end('ok');
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          ok: true,
+          clients: clients.size,
+          matches: matches.size,
+          uptimeS: Math.round(process.uptime()),
+        }),
+      );
       return;
     }
     let filePath = path.join(DIST, url === '/' ? 'index.html' : url);
@@ -131,7 +141,17 @@ const server = http.createServer(async (req, res) => {
 
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 16 * 1024 });
 
-wss.on('connection', (ws) => {
+// Sockets per remote address, so one machine cannot farm connections.
+const ipCounts = new Map<string, number>();
+
+wss.on('connection', (ws, req) => {
+  const ip = req.socket.remoteAddress ?? 'unknown';
+  const ipCount = ipCounts.get(ip) ?? 0;
+  if (ipCount >= MAX_CONN_PER_IP) {
+    ws.close(1013, 'too many connections');
+    return;
+  }
+  ipCounts.set(ip, ipCount + 1);
   const id = nextClientId++;
   const client: Client = {
     id,
@@ -193,9 +213,16 @@ wss.on('connection', (ws) => {
     // A client already seated in a live match cannot re-enter matchmaking
     // (review F.2: interleaved double-match snapshots corrupted the mirror).
     const inMatch = client.matchId !== null;
+    // Capacity gate at the entry points: a full server refuses new games
+    // politely instead of degrading every running one.
+    const atCapacity = matches.size >= MAX_MATCHES;
+    const refuseCapacity = (): void =>
+      send(id, { t: 'error', message: 'The server is at capacity, try again in a bit.' });
     switch (msg.t) {
       case 'queue':
-        if (!inMatch) matchmaker.addToQueue(id, client.name, now);
+        if (inMatch) break;
+        if (atCapacity) refuseCapacity();
+        else matchmaker.addToQueue(id, client.name, now);
         break;
       case 'start_now':
         if (!inMatch) matchmaker.startNow(id, now);
@@ -204,7 +231,9 @@ wss.on('connection', (ws) => {
         matchmaker.removeEverywhere(id);
         break;
       case 'create_lobby':
-        if (!inMatch) matchmaker.createLobby(id, client.name);
+        if (inMatch) break;
+        if (atCapacity) refuseCapacity();
+        else matchmaker.createLobby(id, client.name, now);
         break;
       case 'join_lobby':
         if (!inMatch) matchmaker.joinLobby(id, client.name, String(msg.code ?? ''));
@@ -253,6 +282,9 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
+    const remaining = (ipCounts.get(ip) ?? 1) - 1;
+    if (remaining <= 0) ipCounts.delete(ip);
+    else ipCounts.set(ip, remaining);
     matchmaker.removeEverywhere(id);
     const matchId = client.matchId;
     clients.delete(id);
