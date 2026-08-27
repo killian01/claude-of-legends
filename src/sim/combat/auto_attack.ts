@@ -102,7 +102,9 @@ function strike(ctx: CombatCtx, u: Unit, target: Unit): void {
       onHit: [{ kind: 'damage', base: 0, adRatio: 1, dtype: 'physical' }],
       allyEffects: [],
       via: 'attack',
-      vfx: null,
+      // Champion bolts carry a cosmetic auto tag ('vesk_A') so renderers
+      // can author per-champion tracers; minion and tower bolts stay null.
+      vfx: u.kind === 'champion' && u.championId ? `${u.championId}_A` : null,
     });
   } else {
     dealDamage(ctx, u.id, target, ad, 'physical', 'attack');

@@ -29,8 +29,9 @@ export interface Projectile {
   allyEffects: readonly EffectSpec[];
   // 'attack' for auto-attack bolts (feeds on-hit passives); default 'ability'.
   via?: DamageVia;
-  // Cosmetic source tag ('championId_KEY' or 'sigil_id'), null for auto
-  // attacks. Renderers pick per-ability visuals from it; never gameplay.
+  // Cosmetic source tag: 'championId_KEY' for abilities, 'sigil_id' for
+  // sigils, 'championId_A' for champion auto bolts, null for minion and
+  // tower bolts. Renderers pick per-source visuals from it; never gameplay.
   vfx: string | null;
 }
 

@@ -94,6 +94,24 @@ describe('spell wire', () => {
     expect(client.units.get(veskId)?.pendingSpell).toBeNull();
   });
 
+  it('projectiles carry their shooter so bolts can spawn at the muzzle', () => {
+    const { match, veskId } = veskMatch();
+    expect(match.sim.castAbility(veskId, 'Q', { x: 40, z: 44 })).toBe(true);
+    // Past the Q windup: the bolt is in flight and rides the wire with its
+    // shooter's id, which the client mirror restores for the renderer.
+    for (let i = 0; i < 8; i++) match.tick();
+    const snap = match.buildSnapshotFor(1);
+    if (snap?.t !== 'snap') throw new Error('expected a snap message');
+    const bolt = snap.projectiles[0];
+    expect(bolt).toBeDefined();
+    expect(bolt?.s).toBe(veskId);
+
+    const client = new ClientWorld(() => undefined);
+    client.applyServer({ t: 'match_start', selfUnitId: veskId, team: 0 });
+    client.applyServer(snap);
+    expect(client.projectiles.get(bolt?.i ?? -1)?.sourceId).toBe(veskId);
+  });
+
   it('sigil casts relay as keyless cast events', () => {
     const { match, veskId } = veskMatch();
     expect(match.sim.castSigil(veskId, 1, { x: 40, z: 40 })).toBe(true);

@@ -120,6 +120,7 @@ export function buildSnapshot(
       t: p.team,
     };
     if (p.vfx) rec.v = p.vfx;
+    if (p.sourceId) rec.s = p.sourceId;
     projectiles.push(rec);
   }
   const zones: SnapMobile[] = [];

@@ -12,6 +12,7 @@ import { clone as cloneRig } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { skinOf } from '../../sim/content/skins';
 import { CHAMPION_VISUALS, type ChampionVisualDef } from './manifest';
 import { buildChampionProp } from './props';
+import { pinTrackToFirstKey } from './tracks';
 
 export interface ChampionTemplate {
   def: ChampionVisualDef;
@@ -21,6 +22,9 @@ export interface ChampionTemplate {
   // puts its feet on y = 0 after scaling.
   scale: number;
   groundY: number;
+  // GLB prop scenes by manifest url, normalized (centered, sized); cloned
+  // per instance. A prop that fails to load is simply absent.
+  props: ReadonlyMap<string, THREE.Group>;
 }
 
 const templates = new Map<string, ChampionTemplate>();
@@ -107,6 +111,37 @@ function stripRootRotation(clip: THREE.AnimationClip, def: ChampionVisualDef): T
   return new THREE.AnimationClip(clip.name, clip.duration, tracks);
 }
 
+// Nodes that carry a clip's baked ground travel: the hip bone on Meshy's
+// biped rigs, plus the same root candidates the rotation strip watches.
+const HIP_TRACK_NODES = new Set(['Hips', ...ROOT_TRACK_NODES]);
+
+// Pins the hip position track of a def's inPlaceClips (see the manifest):
+// the clip plays on the spot and the sim keeps sole authority on movement.
+function toInPlace(clip: THREE.AnimationClip, def: ChampionVisualDef): THREE.AnimationClip {
+  if (!def.inPlaceClips?.includes(clip.name)) return clip;
+  for (const track of clip.tracks) {
+    const dot = track.name.lastIndexOf('.');
+    if (track.name.slice(dot + 1) !== 'position') continue;
+    if (!HIP_TRACK_NODES.has(track.name.slice(0, dot))) continue;
+    pinTrackToFirstKey(track.values);
+  }
+  return clip;
+}
+
+// Wraps a GLB prop so its bounding-box center sits on the origin and its
+// longest axis spans `size` world units; the anchor then poses it exactly
+// like a procedural prop.
+function normalizeProp(scene: THREE.Group, size: number): THREE.Group {
+  const box = new THREE.Box3().setFromObject(scene);
+  const span = box.getSize(new THREE.Vector3());
+  const s = size / Math.max(span.x, span.y, span.z, 0.001);
+  scene.scale.setScalar(s);
+  scene.position.copy(box.getCenter(new THREE.Vector3()).multiplyScalar(-s));
+  const holder = new THREE.Group();
+  holder.add(scene);
+  return holder;
+}
+
 // Loader init needs the live WebGLRenderer (KTX2 support detection), so the
 // renderer calls this once from its constructor and every champion GLB
 // starts loading immediately.
@@ -115,23 +150,40 @@ export function preloadChampionAssets(renderer: THREE.WebGLRenderer): void {
   const ktx2 = new KTX2Loader().setTranscoderPath('/vendor/basis/').detectSupport(renderer);
   const loader = new GLTFLoader().setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder);
   for (const [championId, def] of Object.entries(CHAMPION_VISUALS)) {
-    const promise = loader
-      .loadAsync(def.url)
-      .then((gltf) => {
+    // GLB props load alongside the champion; one failing never blocks the
+    // rig, the prop is just absent from the template.
+    const propDefs = (def.props ?? []).filter((p) => p.url !== undefined);
+    const propScenes = Promise.all(
+      propDefs.map((p) =>
+        loader
+          .loadAsync(p.url as string)
+          .then((g) => ({ url: p.url as string, scene: g.scene, size: p.size ?? 1 }))
+          .catch(() => null),
+      ),
+    );
+    const promise = Promise.all([loader.loadAsync(def.url), propScenes])
+      .then(([gltf, loadedProps]) => {
         const scene = gltf.scene;
         const box = measureScene(scene);
         const height = Math.max(0.001, box.max.y - box.min.y);
         const scale = def.height / height;
         toLambert(scene, def);
         const clips = new Map(
-          gltf.animations.map((clip) => [clip.name, stripRootRotation(clip, def)]),
+          gltf.animations.map((clip) => [clip.name, stripRootRotation(toInPlace(clip, def), def)]),
         );
+        const props = new Map<string, THREE.Group>();
+        for (const p of loadedProps) {
+          if (!p) continue;
+          toLambert(p.scene, def);
+          props.set(p.url, normalizeProp(p.scene, p.size));
+        }
         const template: ChampionTemplate = {
           def,
           scene,
           clips,
           scale,
           groundY: -box.min.y * scale,
+          props,
         };
         templates.set(championId, template);
         return template;
@@ -159,16 +211,56 @@ function findBone(root: THREE.Object3D, name: string): THREE.Object3D | null {
   return root.getObjectByName(name) ?? root.getObjectByName(name.replace(/[^\w-]/g, '')) ?? null;
 }
 
+// One mount for a prop: the bone it rides plus the authored pose of the
+// prop inside the anchor (the manifest's rot/pos semantics).
+interface PropMount {
+  bone: THREE.Object3D;
+  rot?: readonly [number, number, number];
+  pos?: readonly [number, number, number];
+}
+
 // A signature prop riding a rig bone. The prop lives OUTSIDE the bone
 // hierarchy (a unit-scale holder under the visual root) and copies the
 // bone's world pose every frame: these rigs bake quantization compensation
 // into their bone scales, so a direct child would inherit arbitrary sizing.
-// restInv is the inverse of the bone's root-space rest orientation, captured
-// once the idle pose has settled; until then only position syncs.
+// restInv is the inverse of the hand bone's root-space rest orientation,
+// captured once the idle pose has settled; until then only position syncs.
+// `hand` is the in-combat mount; `stowed`, when authored, is where the prop
+// rests out of combat (a rifle slung on the back), toggled via `armed`.
 export interface PropAnchor {
-  bone: THREE.Object3D;
   holder: THREE.Group;
+  prop: THREE.Object3D;
+  hand: PropMount;
+  stowed?: PropMount;
+  armed: boolean;
+  // Position-only follow: the prop never inherits the hand rotation delta
+  // (see the manifest's fixedPose).
+  fixedPose: boolean;
+  // Muzzle point in the prop's local space (the +Y tip of a GLB weapon),
+  // for spawning projectiles at the barrel's actual end. Null for
+  // procedural props.
+  tip: THREE.Vector3 | null;
   restInv: THREE.Quaternion | null;
+}
+
+// Applies the active mount's authored pose to the prop inside its holder.
+function applyMountPose(a: PropAnchor): void {
+  const m = a.armed || !a.stowed ? a.hand : a.stowed;
+  const rot = m.rot ?? [0, 0, 0];
+  const pos = m.pos ?? [0, 0, 0];
+  a.prop.rotation.set(rot[0], rot[1], rot[2]);
+  a.prop.position.set(pos[0], pos[1], pos[2]);
+}
+
+// Arms or stows every anchor that has a stowed mount. Armed rides the hand
+// with the rotation-delta follow; stowed rides the alternate bone with its
+// authored pose only (a back barely rotates through idle and run).
+export function setPropsArmed(anchors: readonly PropAnchor[], armed: boolean): void {
+  for (const a of anchors) {
+    if (!a.stowed || a.armed === armed) continue;
+    a.armed = armed;
+    applyMountPose(a);
+  }
 }
 
 // Snaps every prop anchor to its bone's current world pose, expressed in
@@ -187,14 +279,19 @@ export function syncPropAnchors(
 ): void {
   root.getWorldQuaternion(ROOT_QUAT_INV).invert();
   for (const a of anchors) {
-    a.bone.getWorldPosition(ANCHOR_POS);
+    // The hand rest orientation captures regardless of the active mount, so
+    // a stowed weapon still learns its in-hand rest pose during idle.
+    a.hand.bone.getWorldQuaternion(BONE_QUAT).premultiply(ROOT_QUAT_INV);
+    if (a.restInv === null && captureRest) a.restInv = BONE_QUAT.clone().invert();
+    const inHand = a.armed || !a.stowed;
+    const mount = inHand ? a.hand : (a.stowed as PropMount);
+    mount.bone.getWorldPosition(ANCHOR_POS);
     a.holder.position.copy(root.worldToLocal(ANCHOR_POS));
-    a.bone.getWorldQuaternion(BONE_QUAT).premultiply(ROOT_QUAT_INV);
-    if (a.restInv === null) {
-      if (captureRest) a.restInv = BONE_QUAT.clone().invert();
-      continue;
+    if (inHand && !a.fixedPose && a.restInv !== null) {
+      a.holder.quaternion.copy(BONE_QUAT).multiply(a.restInv);
+    } else {
+      a.holder.quaternion.identity();
     }
-    a.holder.quaternion.copy(BONE_QUAT).multiply(a.restInv);
   }
 }
 
@@ -245,15 +342,46 @@ export function instantiateChampion(
     const bone = findBone(rig, propDef.bone);
     if (!bone) continue;
     const holder = new THREE.Group();
-    const prop = buildChampionProp(propDef.kind, palette.accent);
+    // A GLB prop clones from the template with per-instance materials, so a
+    // hit flash on one champion never lights another's weapon; a procedural
+    // prop is built fresh each time.
+    let prop: THREE.Object3D;
+    if (propDef.url !== undefined) {
+      const source = template.props.get(propDef.url);
+      if (!source) continue;
+      prop = source.clone(true);
+      prop.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (!(mesh as { isMesh?: boolean }).isMesh) return;
+        mesh.userData.sharedGeo = true;
+        const own = (mat: THREE.Material): THREE.Material => mat.clone();
+        mesh.material = Array.isArray(mesh.material) ? mesh.material.map(own) : own(mesh.material);
+      });
+    } else {
+      prop = buildChampionProp(propDef.kind ?? 'sword', palette.accent);
+    }
     // The pose is authored in the manifest, relative to the champion's
     // facing; the anchor follows the bone's position, plus its rotation
     // delta once syncPropAnchors has captured the rest orientation.
-    if (propDef.rot) prop.rotation.set(propDef.rot[0], propDef.rot[1], propDef.rot[2]);
-    if (propDef.pos) prop.position.set(propDef.pos[0], propDef.pos[1], propDef.pos[2]);
     holder.add(prop);
     root.add(holder);
-    anchors.push({ bone, holder, restInv: null });
+    const stowedBone = propDef.stowed ? findBone(rig, propDef.stowed.bone) : null;
+    const anchor: PropAnchor = {
+      holder,
+      prop,
+      hand: { bone, rot: propDef.rot, pos: propDef.pos },
+      stowed:
+        stowedBone && propDef.stowed
+          ? { bone: stowedBone, rot: propDef.stowed.rot, pos: propDef.stowed.pos }
+          : undefined,
+      // Champions spawn at rest: a prop with a stowed mount starts on it.
+      armed: false,
+      fixedPose: propDef.fixedPose ?? false,
+      tip: propDef.url !== undefined ? new THREE.Vector3(0, (propDef.size ?? 1) / 2, 0) : null,
+      restInv: null,
+    };
+    applyMountPose(anchor);
+    anchors.push(anchor);
   }
   // Team allegiance survives any skin or model: a colored ring at the feet,
   // sized to the silhouette so a colossus is claimed as loudly as a goblin.

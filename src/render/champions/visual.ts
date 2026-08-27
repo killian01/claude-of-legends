@@ -15,8 +15,9 @@ import {
   FADE_SHOT,
   ONESHOT_SECONDS,
   runTimeScale,
+  WEAPON_STOW_DELAY_MS,
 } from './anim';
-import { type ChampionTemplate, type PropAnchor, syncPropAnchors } from './assets';
+import { type ChampionTemplate, type PropAnchor, setPropsArmed, syncPropAnchors } from './assets';
 
 type ShotKey = 'attack' | 'cast' | 'hit' | 'death';
 
@@ -30,6 +31,16 @@ export class ChampionVisual {
   private base: ChampionBaseState = 'idle';
   private current: THREE.AnimationAction | null = null;
   private shot: THREE.AnimationAction | null = null;
+  // True while the playing one-shot is an attack or cast: the weapon must
+  // be in hand, not stowed on the back.
+  private combatShot = false;
+  // The weapon stays in hand until this age after the last combat action,
+  // so it never flickers to the back between two chained autos.
+  private armedUntilMs = 0;
+  // Champions with a stowable weapon hold the aim loop (windup) instead of
+  // the breathing idle while the armed window runs: a marksman between two
+  // autos keeps the rifle shouldered.
+  private readonly combatIdles: boolean;
   // Time lived, to arm the prop rest-pose capture after the idle fade-in.
   private ageMs = 0;
 
@@ -41,6 +52,7 @@ export class ChampionVisual {
   ) {
     this.root = root;
     this.anchors = anchors;
+    this.combatIdles = template.def.props?.some((p) => p.stowed !== undefined) ?? false;
     this.runSpeed = template.def.runSpeed ?? DEFAULT_RUN_SPEED;
     this.mixer = new THREE.AnimationMixer(rig);
     const clips = template.def.clips;
@@ -58,6 +70,7 @@ export class ChampionVisual {
     this.mixer.addEventListener('finished', (e) => {
       if (e.action !== this.shot) return;
       this.shot = null;
+      this.combatShot = false;
       // Death clamps on its last frame; everything else hands the rig back.
       if (this.base !== 'dead') this.beginBase(this.base, true);
     });
@@ -87,12 +100,32 @@ export class ChampionVisual {
     if (!a) return;
     const prevShot = this.shot;
     this.shot = a;
+    this.combatShot = key === 'attack' || key === 'cast';
     a.setLoop(THREE.LoopOnce, 1);
     a.clampWhenFinished = true;
     this.startAction(a, FADE_SHOT);
     a.setDuration(seconds);
     if (prevShot && prevShot !== a) prevShot.fadeOut(FADE_SHOT);
     else if (!prevShot) this.current?.fadeOut(FADE_SHOT);
+  }
+
+  // World position of the weapon's muzzle: the tip of the first GLB prop,
+  // posed in hand as if armed, so even the first shot out of the stow
+  // leaves the barrel and not the back. Only fixedPose props qualify (the
+  // pose math assumes the identity holder orientation). False when the rig
+  // carries no such weapon.
+  muzzleWorld(out: THREE.Vector3): boolean {
+    for (const a of this.anchors) {
+      if (!a.tip || !a.fixedPose) continue;
+      setPropsArmed([a], true);
+      a.hand.bone.getWorldPosition(out);
+      a.holder.position.copy(this.root.worldToLocal(out));
+      a.holder.quaternion.identity();
+      a.holder.updateMatrixWorld(true);
+      out.copy(a.tip).applyMatrix4(a.prop.matrixWorld);
+      return true;
+    }
+    return false;
   }
 
   playAttack(): void {
@@ -110,7 +143,15 @@ export class ChampionVisual {
   }
 
   update(dtMs: number, input: ChampionAnimInput): void {
-    const desired = desiredBaseState(input);
+    // The armed window: real combat signals (a charging cast, an attack or
+    // cast one-shot) extend it; inside it the weapon stays in hand, and a
+    // standing champion with a stowable weapon holds the aim loop instead
+    // of the breathing idle.
+    const fighting = input.windingUp || this.combatShot;
+    if (fighting) this.armedUntilMs = this.ageMs + WEAPON_STOW_DELAY_MS;
+    const armed = fighting || this.ageMs < this.armedUntilMs;
+    let desired = desiredBaseState(input);
+    if (desired === 'idle' && armed && this.combatIdles) desired = 'windup';
     if (desired !== this.base) {
       if (desired === 'dead') {
         // Death edge: override any one-shot with the fall, then clamp.
@@ -120,6 +161,7 @@ export class ChampionVisual {
         // Revive edge.
         this.shot?.fadeOut(FADE_BASE);
         this.shot = null;
+        this.combatShot = false;
         this.beginBase(desired, true);
       } else {
         this.beginBase(desired, false);
@@ -140,6 +182,7 @@ export class ChampionVisual {
     // stage's random attacks) would bake a mid-swing hand as "rest" and
     // leave the weapon permanently twisted.
     const settled = this.ageMs > 300 && this.shot === null && this.base === 'idle';
+    setPropsArmed(this.anchors, armed);
     syncPropAnchors(this.root, this.anchors, settled);
   }
 

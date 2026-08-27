@@ -18,6 +18,17 @@ of CC0 source art.
 | `knight.glb`, `barbarian.glb`, `mage.glb`, `rogue_hooded.glb` | KayKit Character Pack: Adventurers (https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0) | Kay Lousberg (KayKit) | CC0 1.0 |
 | `skeleton_rogue.glb` | KayKit Character Pack: Skeletons (https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0) | Kay Lousberg (KayKit) | CC0 1.0 |
 | `ghost.glb`, `goblin.glb`, `glubevolved.glb`, `demonalt.glb`, `velociraptor.glb` | Quaternius animated creature packs (https://quaternius.com, https://poly.pizza/u/Quaternius) | Quaternius | CC0 1.0 |
+| `vesk.glb`, `vesk_rifle.glb` | Generated with Meshy AI (https://meshy.ai) from original Vesk concept art, rigged and animated in the Meshy workspace | killian01 via Meshy AI | Per the Meshy plan's asset terms (CC BY 4.0 on the free plan) |
+
+## Champion splash art (`public/portraits/`)
+
+Card illustrations for the champion select screen; the resolution chain
+falls back to the in-engine cinematic render when a file is missing
+(docs/design/portrait-prompts.md).
+
+| Files | Source | License |
+|---|---|---|
+| `vesk.png` | Generated with Google Gemini from original Vesk concept art | Google Gemini output terms |
 
 ## Vendor runtime files (`public/vendor/`)
 

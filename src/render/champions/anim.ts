@@ -51,3 +51,8 @@ export const ONESHOT_SECONDS = {
 // harder so an attack lands on the beat.
 export const FADE_BASE = 0.16;
 export const FADE_SHOT = 0.08;
+
+// How long a stowable weapon stays in hand after the last swing or cast
+// before going back on the back. Autos chain at roughly 1.5 s apart, so the
+// weapon must never flicker to the back between two of them.
+export const WEAPON_STOW_DELAY_MS = 3500;
