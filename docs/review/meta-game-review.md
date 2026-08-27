@@ -141,9 +141,15 @@ cheap and the old review already called this out:
   REPLAY bar (pause, 1x/2x/4x, exit). Disconnect takeovers and rejoins
   replay too. tests/replay.test.ts pins the exact-state round trip.
   Still open: timeline scrubbing and a free camera.
-- Spectator (live): still open; a fog-free (or delayed) snapshot
-  stream to a client with no seat; the fog-scoping code already
-  branches per recipient. Effort: medium.
+- FIXED: live spectator. "Watch a live match" on the home screen
+  lists running matches (/api/live); watching is a seatless snapshot
+  stream on ONE team's fog (selfUnitId 0, self null; the existing
+  snapshot builder needed nothing new), capped per match, rendered by
+  a spectator presentation (renderer plus minimap, follow-cycling,
+  no orders possible). A spectator leaving is never a leaver; a team
+  POV also means spectating leaks nothing beyond what that team sees,
+  though second-browser ghosting of the enemy POV remains possible
+  and accepted at this scale.
 
 ### 9. Progression and cosmetics
 
@@ -195,5 +201,7 @@ progression (9), integrity (10)  [after 4 and 5]
    walk-outs and lobby boosting (10).
 6. DONE: party queue (7).
 7. DONE: deterministic replays with the in-browser viewer (8).
-8. Then by appetite: live spectator (8), mastery cosmetics (9),
-   AFK detection (10), a friends list if demand shows up (7).
+8. DONE: live spectator (8).
+9. Then by appetite: mastery cosmetics (9), AFK detection (10),
+   a friends list if demand shows up (7), replay scrubbing and a
+   free camera (8).

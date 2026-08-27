@@ -23,6 +23,10 @@ export type ClientMsg =
   // Host only: the whole lobby enters the public queue as one party,
   // landing on the same side of whatever match forms.
   | { t: 'queue_party' }
+  // Watch a live match from one team's point of view (fog included): the
+  // server answers with match_start carrying selfUnitId 0, then streams
+  // that team's snapshots with self null.
+  | { t: 'spectate'; matchId: number; team: TeamId }
   | { t: 'pick'; championId: string; sigils: [string, string]; skin?: number }
   | { t: 'move'; x: number; z: number }
   | { t: 'attack'; targetId: number }

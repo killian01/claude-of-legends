@@ -179,4 +179,29 @@ describe('online match flow', () => {
     const aliceMoved = Math.hypot(aliceUnit.pos.x - before.x, aliceUnit.pos.z - before.z);
     expect(aliceMoved).toBe(0);
   });
+
+  it('streams seatless spectator snapshots on one team fog, self always null', () => {
+    const { match } = wire();
+    expect(match.addSpectator(99, 0)).toBe(true);
+    match.tick();
+    const first = match.buildSpectatorSnapshotFor(99);
+    if (first?.t !== 'snap') throw new Error('no spectator snapshot');
+    expect(first.self).toBeNull();
+    expect(first.units.length).toBeGreaterThan(0);
+    // Identity fields ship once: the second snapshot sends lite records.
+    match.tick();
+    const second = match.buildSpectatorSnapshotFor(99);
+    if (second?.t !== 'snap') throw new Error('no second snapshot');
+    const resent = second.units.filter((u) => u.k !== undefined);
+    expect(resent).toHaveLength(0);
+    // The fog holds for spectators too: exactly what team 0 sees.
+    const playerSnap = match.buildSnapshotFor(1);
+    if (playerSnap?.t !== 'snap') throw new Error('no player snapshot');
+    expect(second.units.map((u) => u.i).sort()).toEqual(playerSnap.units.map((u) => u.i).sort());
+    // Removal stops the stream; the cap refuses a crowd.
+    match.removeSpectator(99);
+    expect(match.buildSpectatorSnapshotFor(99)).toBeNull();
+    for (let i = 0; i < 10; i++) expect(match.addSpectator(200 + i, 1)).toBe(true);
+    expect(match.addSpectator(300, 1)).toBe(false);
+  });
 });
