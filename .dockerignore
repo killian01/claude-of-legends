@@ -1,0 +1,9 @@
+node_modules
+dist
+dist-server
+.git
+.claude
+docs/screenshots
+*.log
+.env
+.env.*
