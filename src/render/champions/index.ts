@@ -11,14 +11,22 @@ export { ChampionVisual, preloadChampionAssets };
 
 // Resolves to null (procedural figure stays) when the champion has no GLB
 // def or its asset failed to load; the renderer treats null as "keep what
-// you have", so this can never blank a champion.
+// you have", so this can never blank a champion. options.ring: false drops
+// the team ring at the feet (cinematic stages, not gameplay).
 export async function createChampionVisual(
   championId: string | null,
   teamColor: number,
   skin: number,
+  options?: { ring?: boolean },
 ): Promise<ChampionVisual | null> {
   const template = await whenChampionTemplateReady(championId);
   if (!template || !championId) return null;
-  const { root, rig, anchors } = instantiateChampion(championId, template, teamColor, skin);
+  const { root, rig, anchors } = instantiateChampion(
+    championId,
+    template,
+    teamColor,
+    skin,
+    options,
+  );
   return new ChampionVisual(template, root, rig, anchors);
 }

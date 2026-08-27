@@ -34,6 +34,9 @@ let bus: AudioBus | null = null;
 let noiseBuffer: AudioBuffer | null = null;
 const lastPlay = new Map<SfxName, number>();
 let sfxVolume = 1;
+// Per-call gain multiplier, set by playSfx/playCastSfx for the voices they
+// schedule synchronously; distance attenuation for other units' combat.
+let callGain = 1;
 
 // User setting, 0..1; applies live and to a bus built later.
 export function setSfxVolume(v: number): void {
@@ -113,7 +116,7 @@ function tone(b: AudioBus, o: ToneOpts): void {
   osc.frequency.setValueAtTime(o.freq, t0);
   if (o.slideTo !== undefined) osc.frequency.exponentialRampToValueAtTime(o.slideTo, t0 + o.dur);
   const gain = b.ctx.createGain();
-  const vol = (o.vol ?? 0.5) * 0.16;
+  const vol = (o.vol ?? 0.5) * 0.16 * callGain;
   const attack = o.attack ?? 0.005;
   gain.gain.setValueAtTime(0.0001, t0);
   gain.gain.linearRampToValueAtTime(vol, t0 + attack);
@@ -162,7 +165,7 @@ function noise(b: AudioBus, o: NoiseOpts): void {
   filter.frequency.setValueAtTime(o.freq, t0);
   if (o.slideTo !== undefined) filter.frequency.exponentialRampToValueAtTime(o.slideTo, t0 + o.dur);
   const gain = b.ctx.createGain();
-  const vol = (o.vol ?? 0.5) * 0.16;
+  const vol = (o.vol ?? 0.5) * 0.16 * callGain;
   gain.gain.setValueAtTime(0.0001, t0);
   gain.gain.linearRampToValueAtTime(vol, t0 + (o.attack ?? 0.005));
   gain.gain.exponentialRampToValueAtTime(0.0001, t0 + o.dur);
@@ -189,14 +192,15 @@ const MIN_INTERVAL_MS: Partial<Record<SfxName, number>> = {
   towershot: 120,
 };
 
-// Per-school cast sounds for the player's OWN abilities: six sonic
-// identities instead of one shared whoosh (player review).
-export function playCastSfx(school: string): void {
+// Per-school cast sounds, six sonic identities instead of one shared
+// whoosh (player review). gain < 1 for other units' casts, by distance.
+export function playCastSfx(school: string, gain = 1): void {
   const b = audioBus();
-  if (!b || b.ctx.state === 'suspended') return;
+  if (!b || b.ctx.state === 'suspended' || gain <= 0.02) return;
   const now = performance.now();
   if (now - (lastPlay.get('cast') ?? 0) < 90) return;
   lastPlay.set('cast', now);
+  callGain = Math.min(1.5, gain);
   const j = 0.94 + Math.random() * 0.12;
   switch (school) {
     case 'steel':
@@ -245,15 +249,20 @@ export function playCastSfx(school: string): void {
       });
       break;
   }
+  callGain = 1;
 }
 
-export function playSfx(name: SfxName): void {
+// gain scales the whole sound (1 = authored volume); combat events from
+// other units pass a distance-attenuated gain so nearby fights are audible
+// without the whole map playing at your ear.
+export function playSfx(name: SfxName, gain = 1): void {
   const b = audioBus();
-  if (!b || b.ctx.state === 'suspended') return;
+  if (!b || b.ctx.state === 'suspended' || gain <= 0.02) return;
   const now = performance.now();
   const min = MIN_INTERVAL_MS[name] ?? 0;
   if (min > 0 && now - (lastPlay.get(name) ?? 0) < min) return;
   lastPlay.set(name, now);
+  callGain = Math.min(1.5, gain);
 
   // A little pitch jitter keeps rapid-fire combat sounds from stuttering
   // like one looped sample.
@@ -367,4 +376,5 @@ export function playSfx(name: SfxName): void {
     default:
       break;
   }
+  callGain = 1;
 }
