@@ -1,8 +1,9 @@
 // The cosmetic vfx tag: projectiles and zones remember the ability that
-// spawned them ('championId_KEY' or 'sigil_id'), auto-attack bolts stay
-// untagged, the tag rides the team-scoped snapshot, and the client mirror
-// materializes it. Cosmetic only: the Policy observation has no projectile
-// or zone channel, so the contract is untouched.
+// spawned them ('championId_KEY' or 'sigil_id'), champion auto bolts carry
+// 'championId_A' so renderers can author per-champion tracers, minion and
+// tower bolts stay untagged, the tag rides the team-scoped snapshot, and
+// the client mirror materializes it. Cosmetic only: the Policy observation
+// has no projectile or zone channel, so the contract is untouched.
 
 import { describe, expect, it } from 'vitest';
 import { Match } from '../server/match';
@@ -20,7 +21,7 @@ describe('ability vfx tags in the sim', () => {
     expect([...sim.zones.values()][0]?.vfx).toBe('sylra_W');
   });
 
-  it('leaves auto-attack bolts untagged', () => {
+  it('tags champion auto bolts with the champion and A', () => {
     const sim = new Sim(11);
     const a = sim.addChampion(0, { x: 75, z: 75 }, 'vesk');
     a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
@@ -29,7 +30,7 @@ describe('ability vfx tags in the sim', () => {
     sim.orderAttack(a.id, b.id);
     for (let i = 0; i < 20 && sim.projectiles.size === 0; i++) sim.tick();
     expect(sim.projectiles.size).toBeGreaterThan(0);
-    expect([...sim.projectiles.values()][0]?.vfx).toBeNull();
+    expect([...sim.projectiles.values()][0]?.vfx).toBe('vesk_A');
   });
 });
 

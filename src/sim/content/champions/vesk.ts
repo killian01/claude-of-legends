@@ -42,6 +42,9 @@ export const VESK: ChampionDef = {
       manaCost: 45,
       cooldown: 6,
       castRange: 14,
+      // The marksman shoulders his rifle before the shot: a short windup
+      // that telegraphs the line and lets the target step off it.
+      windup: 0.3,
       spec: {
         kind: 'skillshot',
         speed: 30,

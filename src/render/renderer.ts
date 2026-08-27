@@ -8,6 +8,7 @@ import { playCastSfx, playSfx } from '../game/sfx';
 import { attackWindupSeconds, RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import type { CastSpec } from '../sim/combat/casting';
 import { isRooted, isStunned } from '../sim/combat/status';
+import type { Projectile } from '../sim/projectiles';
 import { type AbilityKey, DT, type Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
@@ -166,7 +167,17 @@ interface TrackedMobile {
   tag: string | null;
   colors: SchoolColors;
   vis: SpellVisual | null;
+  // Muzzle spawn offset, decaying over the first instants of flight so a
+  // rifle bolt visibly leaves the barrel tip while the sim path stays the
+  // truth for every hit test. Null once converged (or never authored).
+  spawnOfs: { x: number; y: number; z: number } | null;
+  bornAt: number;
 }
+
+// How long a projectile takes to converge from its muzzle spawn onto the
+// sim-true path, milliseconds.
+const MUZZLE_BLEND_MS = 130;
+const MUZZLE_V3 = new THREE.Vector3();
 
 interface TrackedZone {
   mesh: THREE.Object3D;
@@ -779,7 +790,14 @@ export class Renderer {
       }
       // Every visible swing is audible; other units fade with distance so
       // a nearby fight has a soundtrack without the whole map whipping air.
-      playSfx('swing', atk.unitId === this.followId ? 1 : 0.6 * this.sfxGain(t.curr.x, t.curr.z));
+      // A muzzle-armed champion's autos crack like a rifle, not a whip.
+      const firearm =
+        attacker?.kind === 'champion' &&
+        championVisualDef(attacker.championId)?.muzzle !== undefined;
+      playSfx(
+        firearm ? 'gunshot' : 'swing',
+        atk.unitId === this.followId ? 1 : 0.6 * this.sfxGain(t.curr.x, t.curr.z),
+      );
       // Melee autos never reach the projectile-impact path; schedule the
       // contact spark on the sim's own strike beat (the attack windup), so
       // the flash lands exactly when the damage does.
@@ -1134,6 +1152,33 @@ export class Renderer {
   private barColor(unitId: number, team: number): number {
     if (team !== this.viewerTeam) return 0xe0574a;
     return unitId === this.followId ? 0x58d84e : 0x5f96e8;
+  }
+
+  // Visual muzzle spawn: a projectile fired by a champion with an authored
+  // muzzle begins its rendered flight at the barrel tip. The live rigged
+  // weapon gives the exact tip; the manifest's forward/y estimate covers
+  // the procedural figure while the asset loads. Returns the offset from
+  // the sim position, or null when the shooter is unknown or muzzle-less.
+  private muzzleOffset(p: Readonly<Projectile>): { x: number; y: number; z: number } | null {
+    const src = p.sourceId ? this.world.units.get(p.sourceId) : undefined;
+    if (src?.kind !== 'champion') return null;
+    const muzzle = championVisualDef(src.championId)?.muzzle;
+    if (!muzzle) return null;
+    const cv = this.championVisuals.get(src.id);
+    if (cv?.muzzleWorld(MUZZLE_V3)) {
+      return { x: MUZZLE_V3.x - p.pos.x, y: MUZZLE_V3.y - 1.2, z: MUZZLE_V3.z - p.pos.z };
+    }
+    let dx = p.pos.x - src.pos.x;
+    let dz = p.pos.z - src.pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 0.01) return null;
+    dx /= d;
+    dz /= d;
+    return {
+      x: src.pos.x + dx * muzzle.forward - p.pos.x,
+      y: muzzle.y - 1.2,
+      z: src.pos.z + dz * muzzle.forward - p.pos.z,
+    };
   }
 
   // Called once after every sim tick: shifts interpolation history and syncs
@@ -1519,7 +1564,12 @@ export class Renderer {
         const mesh = vis?.projectile
           ? vis.projectile(p.radius, colors)
           : buildProjectileMesh(p, this.world, teamLight);
-        mesh.position.set(p.pos.x, 1.2, p.pos.z);
+        const spawnOfs = this.muzzleOffset(p);
+        mesh.position.set(
+          p.pos.x + (spawnOfs?.x ?? 0),
+          1.2 + (spawnOfs?.y ?? 0),
+          p.pos.z + (spawnOfs?.z ?? 0),
+        );
         this.scene.add(mesh);
         this.trackedProjectiles.set(id, {
           mesh,
@@ -1529,6 +1579,8 @@ export class Renderer {
           tag: p.vfx,
           colors,
           vis,
+          spawnOfs,
+          bornAt: performance.now(),
         });
       } else {
         t.prev = t.curr;
@@ -1538,10 +1590,12 @@ export class Renderer {
     for (const [id, t] of this.trackedProjectiles) {
       if (!this.world.projectiles.has(id)) {
         // Authored impact where the bolt ended; tagged spells burst in
-        // their own school; untagged auto-attack bolts land a real contact
+        // their own school; auto-attack bolts without authored art (the
+        // '_A' tags and the untagged minion bolts) land a real contact
         // spark at body height instead of a flat ground ring.
         if (t.vis?.impact) t.vis.impact(this.vfx, t.curr.x, t.curr.z, t.colors);
-        else if (t.tag) genericImpact(this.vfx, t.curr.x, t.curr.z, t.colors);
+        else if (t.tag && !t.tag.endsWith('_A'))
+          genericImpact(this.vfx, t.curr.x, t.curr.z, t.colors);
         else {
           this.vfx.sparkBurst(t.curr.x, 1.0, t.curr.z, t.color, 5, 4.5, {
             life: 0.3,
@@ -1775,6 +1829,11 @@ export class Renderer {
     const fromX = t?.curr.x ?? w.aim.x;
     const fromZ = t?.curr.z ?? w.aim.z;
     if (fired) {
+      // The authored release bang (a rifle shot), distance attenuated like
+      // every other combat sound.
+      if (w.vis?.releaseSfx) {
+        playSfx(w.vis.releaseSfx, id === this.followId ? 1 : 0.7 * this.sfxGain(fromX, fromZ));
+      }
       if (w.vis?.release) {
         w.vis.release(this.vfx, fromX, fromZ, w.aim.x, w.aim.z, w.colors);
       } else if (w.specKind === 'dash') {
@@ -2010,7 +2069,21 @@ export class Renderer {
     for (const t of this.trackedProjectiles.values()) {
       const x = t.prev.x + (t.curr.x - t.prev.x) * alpha;
       const z = t.prev.z + (t.curr.z - t.prev.z) * alpha;
-      t.mesh.position.set(x, 1.2, z);
+      let px = x;
+      let py = 1.2;
+      let pz = z;
+      if (t.spawnOfs) {
+        // Muzzle convergence: at the barrel tip at birth, on the sim path
+        // a beat later.
+        const k = 1 - (now - t.bornAt) / MUZZLE_BLEND_MS;
+        if (k <= 0) t.spawnOfs = null;
+        else {
+          px += t.spawnOfs.x * k;
+          py += t.spawnOfs.y * k;
+          pz += t.spawnOfs.z * k;
+        }
+      }
+      t.mesh.position.set(px, py, pz);
       const ddx = t.curr.x - t.prev.x;
       const ddz = t.curr.z - t.prev.z;
       if (Math.hypot(ddx, ddz) > 0.01) {

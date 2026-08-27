@@ -294,7 +294,7 @@ export class ClientWorld implements IWorld {
       } else {
         this.projectiles.set(p.i, {
           id: p.i,
-          sourceId: 0,
+          sourceId: p.s ?? 0,
           team: p.t,
           pos: { x: p.x, z: p.z },
           dir: { x: 1, z: 0 },

@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { desiredBaseState } from '../src/render/champions/anim';
 import { CHAMPION_VISUALS } from '../src/render/champions/manifest';
+import { pinTrackToFirstKey } from '../src/render/champions/tracks';
 import { CHAMPIONS } from '../src/sim/content/champions';
 
 interface GlbMeta {
@@ -57,7 +58,7 @@ describe('champion visual manifest', () => {
       const meta = readGlbMeta(def.url);
 
       it('names only clips the GLB ships', () => {
-        for (const clip of Object.values(def.clips)) {
+        for (const clip of [...Object.values(def.clips), ...(def.inPlaceClips ?? [])]) {
           expect(meta.animations, `clip ${clip}`).toContain(clip);
         }
       });
@@ -78,6 +79,12 @@ describe('champion visual manifest', () => {
       it('hangs props on bones the rig has', () => {
         for (const prop of def.props ?? []) {
           expect(hasNode(meta, prop.bone), `bone ${prop.bone}`).toBe(true);
+          if (prop.stowed) {
+            expect(hasNode(meta, prop.stowed.bone), `stowed bone ${prop.stowed.bone}`).toBe(true);
+          }
+          expect(prop.kind ?? prop.url, 'a prop names a kind or a url').toBeTruthy();
+          // A GLB prop must ship; readGlbMeta throws when the file is absent.
+          if (prop.url) expect(readGlbMeta(prop.url).meshes.length).toBeGreaterThan(0);
         }
       });
 
@@ -93,6 +100,14 @@ describe('champion visual manifest', () => {
       });
     });
   }
+});
+
+describe('pinTrackToFirstKey', () => {
+  it('pins every later key to the first, removing baked root travel', () => {
+    const values = [1, 2, 3, 10, 20, 30, 100, 200, 300];
+    pinTrackToFirstKey(values);
+    expect(values).toEqual([1, 2, 3, 1, 2, 3, 1, 2, 3]);
+  });
 });
 
 describe('champion base state selection', () => {

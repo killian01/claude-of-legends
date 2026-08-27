@@ -112,6 +112,11 @@ describe('combat primitives', () => {
     const b2 = sim.addChampion(1, { x: 82, z: 75 }, 'sylra');
     b2.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     expect(sim.castAbility(a.id, 'Q', { x: 82, z: 75 })).toBe(true);
+    // Piercing Round shoulders the rifle first: no projectile until the
+    // 0.3 s windup resolves.
+    expect(sim.projectiles.size).toBe(0);
+    for (let i = 0; i < 7; i++) sim.tick();
+    expect(sim.projectiles.size).toBe(1);
     for (let i = 0; i < 20; i++) sim.tick();
     expect(b1.hp).toBeLessThan(b1.maxHp);
     expect(b2.hp).toBeLessThan(b2.maxHp);

@@ -10,6 +10,7 @@ import { skinOf } from '../../sim/content/skins';
 import {
   type ChampionTemplate,
   instantiateChampion,
+  setPropsArmed,
   preloadChampionAssets,
   syncPropAnchors,
   whenChampionTemplateReady,
@@ -113,6 +114,8 @@ function renderPortrait(
   inst.root.rotation.y = pose.yaw ?? 0.55;
   r.mount.add(inst.root);
   inst.root.updateMatrixWorld(true);
+  // Portraits are heroic: the weapon poses in hand, never stowed.
+  setPropsArmed(inst.anchors, true);
   syncPropAnchors(inst.root, inst.anchors);
 
   // Heroic low-ish framing driven by the silhouette's height.

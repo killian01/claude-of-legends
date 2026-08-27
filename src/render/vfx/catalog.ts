@@ -4,6 +4,7 @@
 // (the woc declining-claim pattern). Data-as-code: this table is the art.
 
 import * as THREE from 'three';
+import type { SfxName } from '../../game/sfx';
 import { SPRITE } from './sprites';
 import type { VfxSystem } from './system';
 
@@ -72,6 +73,9 @@ export interface SpellVisual {
     aimZ: number,
     colors: SchoolColors,
   ) => void;
+  // Sound played by the renderer when the windup resolves, distance
+  // attenuated like combat sfx (a rifle shot banging at release).
+  releaseSfx?: SfxName;
 }
 
 // ---------------------------------------------------------------- generics
@@ -202,6 +206,25 @@ const SHADOW = { main: 0x9a5df0, glow: 0xd0b2ff };
 const VERDANT = { main: 0x7ad05a, glow: 0xc8ff9a };
 const GOLD = { main: 0xffd94a, glow: 0xfff0b0 };
 
+// A rifle bullet: a slim bright tracer with a thin additive sheath,
+// authored along X (the flight axis) with its own proportions. Used for
+// Vesk's auto bolts and his Q.
+export function buildBulletMesh(color: number): THREE.Object3D {
+  const holder = new THREE.Group();
+  holder.userData.stretch = false;
+  const core = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.3),
+    new THREE.MeshBasicMaterial({ color: 0xfff6d8 }),
+  );
+  (core.material as THREE.MeshBasicMaterial).toneMapped = false;
+  core.scale.set(2.6, 0.22, 0.22);
+  holder.add(core);
+  const sheath = new THREE.Mesh(new THREE.OctahedronGeometry(0.4), basicMat(color, 0.4, true));
+  sheath.scale.set(3.4, 0.4, 0.4);
+  holder.add(sheath);
+  return holder;
+}
+
 export const SPELL_VFX: Readonly<Record<string, SpellVisual>> = {
   // Dain R: a comet called down on a telegraphed zone. The rock falls in at
   // an angle for the whole fuse, then the impact layers flash, shockwaves,
@@ -298,6 +321,30 @@ export const SPELL_VFX: Readonly<Record<string, SpellVisual>> = {
     },
   },
 
+  // Vesk autos: rifle rounds. A slim golden tracer, unmistakably a bullet,
+  // never the generic team orb the minions share.
+  vesk_A: {
+    projectile: () => buildBulletMesh(GOLD.main),
+    impact: (fx, x, z) => {
+      fx.sparkBurst(x, 1.0, z, GOLD.main, 6, 5, { life: 0.25, size: 0.3 });
+      fx.glowFlash(x, 1.1, z, 1.0, 0xfff0b0, 0.12);
+    },
+  },
+
+  // Vesk Q: a piercing rifle round. A supersonic tracer, not a magic orb;
+  // the release is the muzzle flash.
+  vesk_Q: {
+    release: (fx, fromX, fromZ) => {
+      fx.glowFlash(fromX, 1.4, fromZ, 1.5, 0xfff0b0, 0.1);
+    },
+    releaseSfx: 'gunshot',
+    projectile: () => buildBulletMesh(GOLD.main),
+    impact: (fx, x, z) => {
+      fx.sparkBurst(x, 1.1, z, GOLD.main, 10, 8, { life: 0.3, size: 0.3 });
+      fx.glowFlash(x, 1.2, z, 1.6, 0xfff0b0, 0.14);
+    },
+  },
+
   // Vesk R: the map-crossing shot. The charge converges on the rifle, the
   // tracer is a meter-long golden lance shedding sonic rings, the hit is a
   // gold detonation.
@@ -306,6 +353,7 @@ export const SPELL_VFX: Readonly<Record<string, SpellVisual>> = {
       genericWindupTick(fx, x, z, progress, GOLD);
       fx.glowFlash(x, 1.3, z, 0.6 + progress * 2.2, 0xfff0b0, 0.08);
     },
+    releaseSfx: 'gunshot',
     projectile: () => {
       const holder = new THREE.Group();
       holder.userData.stretch = false;

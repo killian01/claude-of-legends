@@ -3,50 +3,20 @@
 
 import { inviteUrl } from '../game/invite';
 import type { LobbyPlayer, SelectPlayer } from '../net/protocol';
-import { cinematicPortraitUrl } from '../render/champions';
-import { championPortraitUrl } from '../render/portraits';
-import { CHAMPION_LIST, type ChampionRole } from '../sim/content/champions';
+import { CHAMPION_LIST } from '../sim/content/champions';
 import { SIGIL_LIST } from '../sim/content/sigils';
 import { SKINS } from '../sim/content/skins';
 import type { AbilityKey, TeamId } from '../sim/types';
+import { ROLE_COLORS, setPortrait } from './champion_art';
 import { describeAbility, describeSigil } from './describe';
 import { startHomeShowcase } from './home_showcase';
 import { buildLadderPanel } from './ladder_panel';
 import { buildLivePanel } from './live_panel';
 import { startMenuBackdrop } from './menu_backdrop';
 import { buildProfilePanel } from './profile_panel';
+import { openRosterBrowser } from './roster_browser';
 import { buildSettingsPanel } from './settings_panel';
 import { attachTooltip, hideTooltip } from './tooltips';
-
-// One color per role so classes read at a glance on the select grid.
-const ROLE_COLORS: Readonly<Record<ChampionRole, string>> = {
-  Tank: '#8fb3d9',
-  Fighter: '#d9925a',
-  Mage: '#a67ee8',
-  Battlemage: '#c96fc0',
-  Assassin: '#e86a6a',
-  Marksman: '#e8c862',
-  Support: '#6fd9a8',
-  Skirmisher: '#d9d15a',
-};
-
-// Champion art resolution chain, best first: a hand-authored illustration in
-// public/portraits/ (see docs/design/portrait-prompts.md), then the
-// cinematic 3D render, and the instant procedural figure while both load.
-function setPortrait(img: HTMLImageElement, championId: string, teamColor: number): void {
-  img.src = championPortraitUrl(championId, 0, teamColor);
-  const illustration = `/portraits/${championId}.png`;
-  const probe = new Image();
-  probe.onload = () => {
-    img.src = illustration;
-  };
-  probe.onerror = () => {
-    void cinematicPortraitUrl(championId, 0, teamColor).then((url) => {
-      if (url) img.src = url;
-    });
-  };
-  probe.src = illustration;
-}
 
 const CSS = `
 .menu, .menu * { box-sizing: border-box; }
@@ -119,11 +89,11 @@ const CSS = `
 .menu-status { font-size: 13px; color: #aac2dd; margin-top: 12px; min-height: 18px; }
 .menu-code { font-size: 30px; font-weight: 800; letter-spacing: 6px; text-align: center; margin: 8px 0; }
 .menu-players { font-size: 13px; margin: 6px 0 10px; color: #aac2dd; }
-.menu-card.select { width: min(1500px, 96vw); max-height: 94vh; }
+.menu-card.select { width: min(1780px, 97vw); max-height: 96vh; }
 .menu-select-layout { display: flex; gap: 22px; align-items: flex-start; }
 .menu-select-main { flex: 1; min-width: 0; }
 .menu-select-side { width: 300px; flex: none; }
-.menu-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 6px 0 4px; }
+.menu-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 6px 0 4px; }
 .menu-champ {
   padding: 0; border-radius: 10px; border: 1px solid #28405e; background: #0f1930;
   color: #c9d9ee; font-size: 12px; text-align: left; cursor: pointer;
@@ -174,23 +144,6 @@ const CSS = `
   position: absolute; left: 7px; top: 50%; transform: translateY(-50%);
   width: 13px; height: 13px; border-radius: 3px; border: 1px solid #0008;
 }
-.menu-roster { margin-top: 10px; }
-.menu-roster-champ {
-  padding: 9px 10px; border-radius: 6px; border: 1px solid #28405e; background: #0f1930;
-  margin-bottom: 6px; font-size: 12px; line-height: 1.45;
-  display: flex; gap: 10px; align-items: flex-start;
-}
-.menu-roster-portrait {
-  width: 56px; height: 56px; border-radius: 6px; flex: none;
-  background: radial-gradient(circle at 40% 35%, #1d3a63 0%, #0a1120 90%);
-  border: 1px solid #21344e;
-}
-.menu-roster-body { min-width: 0; }
-.menu-roster-name { font-weight: 700; font-size: 13px; }
-.menu-roster-role { font-size: 11px; font-weight: 700; margin-left: 6px; }
-.menu-roster-blurb { color: #7e93b2; margin: 2px 0 4px; }
-.menu-roster-line { color: #aac2dd; font-size: 11px; }
-.menu-roster-line b { color: #e8dfae; font-weight: 700; }
 .menu-teams { display: flex; gap: 14px; font-size: 12px; margin-bottom: 6px; }
 .menu-team { flex: 1; }
 .menu-team h4 { margin: 0 0 3px; font-size: 12px; }
@@ -368,49 +321,11 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
     freshSection('Ladder', buildLadderPanel);
     freshSection('Watch a live match', buildLivePanel);
 
-    // The out-of-game roster browser: every champion with role, passive,
-    // and kit, readable before ever entering a queue.
+    // The out-of-game roster browser: a full-page view of every champion
+    // with role, passive, and kit, readable before ever entering a queue.
     const rosterBtn = el('button', 'menu-btn', 'Browse the champions');
-    const roster = el('div', 'menu-roster');
-    roster.style.display = 'none';
-    let rosterBuilt = false;
-    rosterBtn.addEventListener('click', () => {
-      const open = roster.style.display === 'none';
-      roster.style.display = open ? 'block' : 'none';
-      rosterBtn.textContent = open ? 'Hide the champions' : 'Browse the champions';
-      if (!rosterBuilt) {
-        rosterBuilt = true;
-        const keys: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
-        for (const c of CHAMPION_LIST) {
-          const box = el('div', 'menu-roster-champ');
-          const portrait = document.createElement('img');
-          portrait.className = 'menu-roster-portrait';
-          setPortrait(portrait, c.id, 0x4a7dd6);
-          portrait.alt = '';
-          box.appendChild(portrait);
-          const body = el('div', 'menu-roster-body');
-          const head = el('div', '');
-          head.appendChild(el('span', 'menu-roster-name', c.name));
-          const role = el('span', 'menu-roster-role', c.role);
-          role.style.color = ROLE_COLORS[c.role] ?? '#c9d8ae';
-          head.appendChild(role);
-          body.appendChild(head);
-          body.appendChild(el('div', 'menu-roster-blurb', c.blurb));
-          const passive = el('div', 'menu-roster-line');
-          passive.innerHTML = `<b>Passive, ${c.passive.name}:</b> ${c.passive.description}`;
-          body.appendChild(passive);
-          for (const k of keys) {
-            const lines = describeAbility(k, c.abilities[k]);
-            const line = el('div', 'menu-roster-line');
-            line.innerHTML = `<b>${lines[0] ?? ''}</b> ${lines.slice(2).join(' ')}`;
-            body.appendChild(line);
-          }
-          box.appendChild(body);
-          roster.appendChild(box);
-        }
-      }
-    });
-    card.append(el('div', 'menu-label', 'Learn the game'), rosterBtn, roster);
+    rosterBtn.addEventListener('click', () => openRosterBrowser(container));
+    card.append(el('div', 'menu-label', 'Learn the game'), rosterBtn);
   });
 }
 

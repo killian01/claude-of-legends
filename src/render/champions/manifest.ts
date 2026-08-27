@@ -24,8 +24,27 @@ export interface ChampionClipNames {
 // Bone names are tried raw and GLTFLoader-sanitized ("handslot.r" arrives as
 // "handslotr").
 export interface ChampionPropDef {
-  kind: 'sword' | 'shield' | 'daggers' | 'staff' | 'rifle' | 'bow';
+  // A procedural prop shape built in props.ts, or, when url is set instead,
+  // a static GLB loaded alongside the champion (a Meshy weapon export).
+  kind?: 'sword' | 'shield' | 'daggers' | 'staff' | 'rifle' | 'bow';
+  // GLB prop model; overrides kind. Normalized at load so its bounding-box
+  // center sits on the anchor and its longest axis spans `size` world units.
+  url?: string;
+  size?: number;
   bone: string;
+  // The prop keeps its authored orientation and follows its bone in
+  // position only, skipping the hand rotation delta. For a two-handed GLB
+  // weapon the delta would tilt it with the raising arm (a rifle pointing
+  // skyward mid-aim); a fixed pose keeps the barrel level.
+  fixedPose?: boolean;
+  // Out-of-combat mount: while the champion idles or runs the prop rides
+  // this bone instead (weapon slung on the back); combat (windup, attack,
+  // cast) snaps it back to `bone`. rot and pos mirror the main fields.
+  stowed?: {
+    bone: string;
+    rot?: readonly [number, number, number];
+    pos?: readonly [number, number, number];
+  };
   // Euler XYZ rotation of the prop inside its anchor, radians.
   rot?: readonly [number, number, number];
   // Position offset inside the anchor, world units, for fine placement.
@@ -53,6 +72,10 @@ export interface ChampionVisualDef {
   yawOffset?: number;
   // Health bar height above the feet for this silhouette.
   barY: number;
+  // Where projectiles visually leave the weapon: world units ahead of the
+  // unit center along the fire direction, and height above the feet. The
+  // renderer converges the bolt onto the sim-true path right after spawn.
+  muzzle?: { forward: number; y: number };
   clips: ChampionClipNames;
   // Node names removed from the clone (baked accessories we replace or drop).
   hide?: readonly string[];
@@ -68,6 +91,10 @@ export interface ChampionVisualDef {
   // a different root facing into individual clips (the goblin's Idle turns
   // it around); stripping the track keeps facing stable across clips.
   stripRootRotation?: boolean;
+  // Clips whose ground travel is baked into the hip bone (Meshy motions ship
+  // with root motion): the loader pins their hip position track to its first
+  // key so they play on the spot; the sim stays the only source of movement.
+  inPlaceClips?: readonly string[];
   // Cinematic portrait pose; portrait.ts falls back to idle when absent.
   portrait?: ChampionPortraitPose;
   // Material names recolored outright (flat-colored creature rigs only).
@@ -161,26 +188,48 @@ export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
     portrait: { clip: 'idle', time: 0.3, yaw: 0.45 },
   },
   // Vesk, the Longshot: a goblin artillerist lugging a rifle taller than he is.
+  // Meshy-generated model with the rifle baked into the mesh (CREDITS.md).
   vesk: {
-    url: '/models/champions/goblin.glb',
-    height: 1.55,
-    barY: 2.2,
+    url: '/models/champions/vesk.glb',
+    height: 2.2,
+    // Above the stowed rifle's tip, so the bar never crosses the silhouette.
+    barY: 3.6,
+    // Bolts leave at the rifle's front, shoulder high.
+    muzzle: { forward: 2.3, y: 1.4 },
+    // The export has no standing shot; Run_and_Shoot (0.67s) is the only
+    // clip that actually fires, and the one-shot window compresses it to
+    // attack tempo. The aim scan loops while a cast charges.
     clips: {
-      idle: 'Idle',
-      run: 'Run',
-      attack: 'Attack',
-      cast: 'Attack',
-      windup: 'Attack',
-      death: 'Death',
-      hit: 'HitRecieve',
+      idle: 'Long_Breathe_and_Look_Around',
+      run: 'Running',
+      attack: 'Run_and_Shoot',
+      cast: 'Run_and_Shoot',
+      windup: 'Archery_Aim_with_Lateral_Scan',
+      death: 'Knock_Down_1',
+      hit: 'Hit_Reaction_with_Bow',
     },
-    // The shipped atlas paints this goblin slate grey; the tint reads goblin.
-    tint: 0xa8d890,
+    inPlaceClips: ['Run_and_Shoot'],
     runSpeed: 3.0,
-    stripRootRotation: true,
     portrait: { clip: 'run', time: 0.3, yaw: 0.3, zoom: 0.72 },
-    // The rifle leans across him, muzzle high: the silhouette IS the joke.
-    props: [{ kind: 'rifle', bone: 'Arm.R', rot: [-1.05, 0, 0.25] }],
+    // The Meshy rifle export rides the right hand, long as the goblin is
+    // tall: the silhouette IS the joke. Authored muzzle-up along Y, laid
+    // forward by the rotation.
+    props: [
+      {
+        url: '/models/champions/vesk_rifle.glb',
+        size: 3.9,
+        bone: 'RightHand',
+        // X lays the Y-authored barrel forward; the Y roll turns the
+        // magazine from the side to straight down. The Z offset slides the
+        // rifle forward so the hand grips at the magazine, not the barrel.
+        rot: [Math.PI / 2, Math.PI / 2, 0],
+        pos: [0, 0, 0.45],
+        fixedPose: true,
+        // At rest the rifle stands near-vertical on the back: magazine at
+        // mid-back, barrel up, tip still below the health bar.
+        stowed: { bone: 'Spine02', rot: [0.2, 0, 0.35], pos: [0, 0, -0.4] },
+      },
+    ],
   },
   // Ashvyn, Nightbow: an undead archer, hood up, eyes burning.
   ashvyn: {

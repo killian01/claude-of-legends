@@ -77,6 +77,9 @@ export interface SnapMobile {
   // Cosmetic ability tag ('championId_KEY' or 'sigil_id'); absent for auto
   // attacks. Clients pick per-ability visuals from it.
   v?: string;
+  // Shooter's unit id (projectiles only), so renderers can spawn the bolt
+  // at the weapon's muzzle. Cosmetic: hit tests stay on the sim positions.
+  s?: number;
 }
 
 export interface SelfSnap {

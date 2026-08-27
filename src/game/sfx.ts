@@ -18,6 +18,7 @@ export type SfxName =
   | 'levelup'
   | 'buy'
   | 'swing'
+  | 'gunshot'
   | 'impact'
   | 'towershot';
 
@@ -188,6 +189,7 @@ const MIN_INTERVAL_MS: Partial<Record<SfxName, number>> = {
   gold: 60,
   deny: 160,
   swing: 90,
+  gunshot: 90,
   impact: 70,
   towershot: 120,
 };
@@ -299,6 +301,20 @@ export function playSfx(name: SfxName, gain = 1): void {
     case 'swing':
       // A quick air whip for the player's own auto-attacks.
       noise(b, { dur: 0.08, freq: 700 * j, slideTo: 2200 * j, q: 1.1, vol: 0.3 });
+      break;
+    case 'gunshot':
+      // A rifle report: an instant wideband crack, a low powder thump, and
+      // a short reverb tail that sells the caliber.
+      noise(b, { dur: 0.05, freq: 3200 * j, slideTo: 1100, q: 0.4, vol: 0.85, attack: 0.001 });
+      noise(b, {
+        dur: 0.18,
+        freq: 900 * j,
+        slideTo: 180,
+        type: 'lowpass',
+        vol: 0.55,
+        verb: 0.5,
+      });
+      tone(b, { freq: 150 * j, slideTo: 55, dur: 0.12, type: 'sine', vol: 0.5 });
       break;
     case 'impact':
       // The crack of YOUR damage landing on someone else.
