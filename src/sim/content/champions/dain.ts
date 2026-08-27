@@ -86,16 +86,22 @@ export const DAIN: ChampionDef = {
       },
     },
     R: {
-      name: 'Molten Grasp',
+      name: 'Emberfall',
       manaCost: 75,
       cooldown: 60,
-      castRange: 2.2,
+      castRange: 6,
+      // A called-down comet: the zone telegraphs for just over a second
+      // (real counterplay, you can walk out), then the impact stuns and
+      // leaves the ground burning.
       spec: {
-        kind: 'enemy_target',
-        searchRadius: 2,
-        effects: [
-          { kind: 'damage', base: 270, adRatio: 0.8, dtype: 'magic' },
+        kind: 'zone',
+        radius: 3,
+        duration: 1.1,
+        detonateDelay: 1.05,
+        onDetonate: [
+          { kind: 'damage', base: 250, adRatio: 0.8, dtype: 'magic' },
           { kind: 'stun', duration: 1.2 },
+          { kind: 'dot', duration: 2, perSecond: 30, dtype: 'magic' },
         ],
       },
     },

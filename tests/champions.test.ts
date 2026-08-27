@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { CHAMPION_LIST, CHAMPIONS } from '../src/sim/content/champions';
+import { GAME_MAP } from '../src/sim/content/map';
 import { Sim } from '../src/sim/sim';
 import type { AbilityKey } from '../src/sim/types';
 
@@ -43,6 +44,24 @@ describe('the roster', () => {
       }
       for (let i = 0; i < 60; i++) sim.tick();
       expect(b.maxHp - b.hp, `${def.id} dealt no damage`).toBeGreaterThan(0);
+    }
+  });
+
+  it('horizon shot stays a map-crossing skillshot', () => {
+    const r = CHAMPIONS.vesk!.abilities.R;
+    expect(r.spec.kind).toBe('skillshot');
+    if (r.spec.kind === 'skillshot') {
+      expect(r.spec.range).toBeGreaterThanOrEqual(GAME_MAP.size * 0.8);
+      expect(r.castRange).toBeGreaterThanOrEqual(GAME_MAP.size * 0.8);
+    }
+  });
+
+  it('emberfall detonates late enough to dodge', () => {
+    const r = CHAMPIONS.dain!.abilities.R;
+    expect(r.spec.kind).toBe('zone');
+    if (r.spec.kind === 'zone') {
+      expect(r.spec.detonateDelay ?? 0).toBeGreaterThanOrEqual(0.8);
+      expect(r.spec.onDetonate?.some((e) => e.kind === 'stun')).toBe(true);
     }
   });
 
