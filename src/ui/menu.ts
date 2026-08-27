@@ -217,8 +217,10 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 export interface HomeChoice {
   name: string;
-  mode: 'practice' | 'queue' | 'create' | 'join';
+  mode: 'practice' | 'queue' | 'create' | 'join' | 'replay';
   code?: string;
+  // For mode 'replay': the saved replay to watch.
+  replayId?: number;
 }
 
 // prefillCode: an invite link's lobby code (?join=CODE) when the visitor
@@ -244,6 +246,18 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
     }
     card.appendChild(name);
 
+    // A Watch button on a career or ladder panel fires this event; the
+    // home screen owns the flow, so it is the one that resolves.
+    const onWatchReplay = (e: Event): void => {
+      const id = (e as CustomEvent<number>).detail;
+      if (typeof id !== 'number') return;
+      window.removeEventListener('loc:replay', onWatchReplay);
+      stopShowcase();
+      root.remove();
+      resolve({ name: name.value.trim() || 'guest', mode: 'replay', replayId: id });
+    };
+    window.addEventListener('loc:replay', onWatchReplay);
+
     const done = (mode: HomeChoice['mode'], code?: string): void => {
       const trimmed = name.value.trim() || 'guest';
       try {
@@ -251,6 +265,7 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
       } catch {
         // ignore
       }
+      window.removeEventListener('loc:replay', onWatchReplay);
       stopShowcase();
       root.remove();
       resolve({ name: trimmed, mode, code });

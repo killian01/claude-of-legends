@@ -14,6 +14,11 @@ const CSS = `
 .prof-section { font-size: 11px; color: #93a87c; margin: 10px 0 3px; }
 .prof-win { color: #8fd06a; font-weight: 700; }
 .prof-loss { color: #d06a6a; font-weight: 700; }
+.prof-watch {
+  margin-left: 8px; padding: 1px 8px; border-radius: 4px; border: 1px solid #466030;
+  background: #1d2a14; color: #c9d8ae; font-size: 10px; font-weight: 700; cursor: pointer;
+}
+.prof-watch:hover { border-color: #7ca050; }
 `;
 
 let cssInstalled = false;
@@ -55,6 +60,7 @@ export interface ApiProfile {
       assists: number;
       cs: number;
       ratingDelta?: number;
+      replayId?: number;
     }[];
   };
 }
@@ -125,6 +131,17 @@ export function renderProfile(box: HTMLElement, data: ApiProfile): void {
           `${m.ratingDelta >= 0 ? '+' : ''}${m.ratingDelta}`,
         ),
       );
+    }
+    if (m.replayId !== undefined) {
+      const replayId = m.replayId;
+      const watch = document.createElement('button');
+      watch.className = 'prof-watch';
+      watch.textContent = 'Watch';
+      // The home screen listens and routes into the replay viewer.
+      watch.addEventListener('click', () => {
+        window.dispatchEvent(new CustomEvent('loc:replay', { detail: replayId }));
+      });
+      left.append(watch);
     }
     const mins = Math.floor(m.durationS / 60);
     const secs = String(m.durationS % 60).padStart(2, '0');

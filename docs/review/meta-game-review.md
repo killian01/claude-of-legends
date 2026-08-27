@@ -132,13 +132,18 @@ code aloud.
 Missing: both. Notable because the architecture makes them unusually
 cheap and the old review already called this out:
 
-- Replay: record per-tick command streams plus the seed server side
-  (the sim is deterministic); replay is "re-run the sim and render".
-  Storage is kilobytes per match. Effort: medium, mostly UI (timeline,
-  speed, free camera).
-- Spectator: a fog-free (or delayed) snapshot stream to a client with
-  no seat; the fog-scoping code already branches per recipient.
-  Effort: medium.
+- FIXED: replays, exactly as sketched. `src/net/replay.ts` is the
+  shared construction and command-application path (server/match.ts
+  builds and applies THROUGH it, so live and replay cannot drift), the
+  server saves (seed, picks, events) per finished match under
+  data/replays (last 40 kept), and a Watch button on the career panel
+  runs the match in the browser behind a read-only world with a
+  REPLAY bar (pause, 1x/2x/4x, exit). Disconnect takeovers and rejoins
+  replay too. tests/replay.test.ts pins the exact-state round trip.
+  Still open: timeline scrubbing and a free camera.
+- Spectator (live): still open; a fog-free (or delayed) snapshot
+  stream to a client with no seat; the fog-scoping code already
+  branches per recipient. Effort: medium.
 
 ### 9. Progression and cosmetics
 
@@ -189,5 +194,6 @@ progression (9), integrity (10)  [after 4 and 5]
    then the delta on the in-game end screen and ranked integrity for
    walk-outs and lobby boosting (10).
 6. DONE: party queue (7).
-7. Then by appetite: replays and spectator (8), mastery cosmetics (9),
+7. DONE: deterministic replays with the in-browser viewer (8).
+8. Then by appetite: live spectator (8), mastery cosmetics (9),
    AFK detection (10), a friends list if demand shows up (7).
