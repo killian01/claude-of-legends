@@ -28,7 +28,7 @@ import { FloatingText, makeTextSprite } from './floating_text';
 import { buildMapDressing, type MapDressing, SKIRT_COLOR } from './map_dressing';
 import { buildMinionMesh } from './minion_shapes';
 import { buildSanctumMesh, buildTowerMesh } from './structure_shapes';
-import { createOutlineRenderer, toonifyMaterials } from './toon';
+import { toonifyMaterials } from './toon';
 import {
   genericDetonate,
   genericImpact,
@@ -202,7 +202,6 @@ export class Renderer {
   private readonly raycaster = new THREE.Raycaster();
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private readonly unitLayer = new THREE.Group();
-  private readonly outline: ReturnType<typeof createOutlineRenderer>;
   private readonly tracked = new Map<number, TrackedUnit>();
   // Rigged GLB visuals for champions whose asset has arrived; champions
   // absent here still animate through the procedural AnimParts path.
@@ -424,10 +423,8 @@ export class Renderer {
 
     this.buildLights();
     this.buildMap();
-    // The stylized pass: stepped toon lighting over everything the map
-    // built, and an outline wrapper the render loop draws through.
+    // The stylized pass: stepped toon lighting over everything the map built.
     toonifyMaterials(this.scene);
-    this.outline = createOutlineRenderer(this.gl);
     this.onSimTick();
     // First sync has no history: snap prev onto curr so nothing lerps from 0,0.
     for (const t of this.tracked.values()) t.prev = { ...t.curr };
@@ -1246,30 +1243,44 @@ export class Renderer {
         const recalling =
           visible && u.statuses.some((s) => s.kind === 'recall' && s.until > this.world.time);
         if (recalling && !t.recallFx) {
+          // Big and unmistakable: a wide pulsing ring, a lit ground disc,
+          // and a tall column of light (playtest: the old one was invisible).
           const fx = new THREE.Group();
           const ring = new THREE.Mesh(
-            new THREE.RingGeometry(0.85, 1.1, 24),
+            new THREE.RingGeometry(1.6, 2.05, 32),
             new THREE.MeshBasicMaterial({
               color: 0x6ac9e8,
               transparent: true,
-              opacity: 0.75,
-              side: THREE.DoubleSide,
-            }),
-          );
-          ring.rotation.x = -Math.PI / 2;
-          ring.position.y = 0.14;
-          const beam = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.55, 0.9, 3.4, 12, 1, true),
-            new THREE.MeshBasicMaterial({
-              color: 0x9fe0ff,
-              transparent: true,
-              opacity: 0.25,
+              opacity: 0.9,
               side: THREE.DoubleSide,
               depthWrite: false,
             }),
           );
-          beam.position.y = 1.7;
-          fx.add(ring, beam);
+          ring.rotation.x = -Math.PI / 2;
+          ring.position.y = 0.14;
+          const glow = new THREE.Mesh(
+            new THREE.CircleGeometry(1.6, 32),
+            new THREE.MeshBasicMaterial({
+              color: 0x9fe0ff,
+              transparent: true,
+              opacity: 0.3,
+              depthWrite: false,
+            }),
+          );
+          glow.rotation.x = -Math.PI / 2;
+          glow.position.y = 0.12;
+          const beam = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.9, 1.55, 8, 16, 1, true),
+            new THREE.MeshBasicMaterial({
+              color: 0x9fe0ff,
+              transparent: true,
+              opacity: 0.42,
+              side: THREE.DoubleSide,
+              depthWrite: false,
+            }),
+          );
+          beam.position.y = 4;
+          fx.add(ring, glow, beam);
           t.mesh.add(fx);
           t.recallFx = fx;
         }
@@ -1711,13 +1722,15 @@ export class Renderer {
         }
       }
 
-      // Recall channel spin.
+      // Recall channel spin: the ring breathes and the column throbs.
       if (t.recallFx?.visible) {
         t.recallFx.rotation.y = now * 0.004;
-        const beamMat = (t.recallFx.children[1] as THREE.Mesh | undefined)?.material as
+        const ringMesh = t.recallFx.children[0] as THREE.Mesh | undefined;
+        if (ringMesh) ringMesh.scale.setScalar(1 + 0.1 * Math.sin(now * 0.006));
+        const beamMat = (t.recallFx.children[2] as THREE.Mesh | undefined)?.material as
           | THREE.MeshBasicMaterial
           | undefined;
-        if (beamMat) beamMat.opacity = 0.2 + 0.12 * Math.sin(now * 0.008);
+        if (beamMat) beamMat.opacity = 0.32 + 0.18 * Math.sin(now * 0.008);
       }
 
       // Cast pulse: a brief swell of the whole body.
@@ -1900,7 +1913,7 @@ export class Renderer {
     }
     this.camera.lookAt(target);
     this.camera.getWorldDirection(this.camDir);
-    this.outline.render(this.scene, this.camera);
+    this.gl.render(this.scene, this.camera);
   }
 
   // Places the attack reticle and hover ring on their units' interpolated

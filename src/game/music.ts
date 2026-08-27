@@ -1,31 +1,54 @@
-// Procedural battle score: a beat grid at 96 bpm with a kick pulse, a bass
-// line, string-like chord pads, and a composed lead motif per chord, over a
-// deep drone and wind bed. All synthesized on the shared audio bus.
-// Presentation only; nothing here touches the sim, so Math.random is fine.
+// Procedural battle score, MOBA register: taiko booms and rolls, martial
+// noise ticks, a staccato low-string ostinato, dark slow pads over a
+// lament-bass progression (Am, G, F, E from the harmonic minor), and a
+// sparse horn call instead of a running melody. All synthesized on the
+// shared audio bus. Presentation only; nothing here touches the sim, so
+// Math.random is fine.
 
 import { audioBus } from './sfx';
 
 const MUSIC_VOL = 0.22;
-const BEAT_S = 0.625; // 96 bpm
+const BEAT_S = 0.714; // 84 bpm
 const BEATS_PER_CHORD = 8; // two bars
 const ROOT_HZ = 110;
 
-// Semitone offsets from A2: Am, F, C, G with an octave on top.
+// Semitone offsets from A2. Open-fifth voicings; the E chord carries the
+// raised leading tone (G sharp) for the harmonic-minor pull home.
 const CHORDS: readonly (readonly number[])[] = [
-  [0, 7, 12, 19],
-  [-4, 3, 8, 15],
-  [3, 10, 15, 22],
-  [-2, 5, 10, 17],
+  [0, 7, 12],
+  [-2, 5, 10],
+  [-4, 3, 8],
+  [-5, -1, 2, 7],
 ];
-const CHORD_ROOTS: readonly number[] = [0, -4, 3, -2];
+const CHORD_ROOTS: readonly number[] = [0, -2, -4, -5];
 
-// One eight-beat phrase per chord, chord tones with passing notes; null is
-// a rest. Played an octave up.
-const MELODY: readonly (readonly (number | null)[])[] = [
-  [12, 15, 19, 15, 12, 10, 12, null],
-  [8, 12, 15, 12, 8, 7, 8, null],
-  [15, 19, 22, 19, 15, 14, 15, null],
-  [10, 14, 17, 14, 12, 10, 7, 10],
+// A sparse horn call per chord: long chord tones with room to breathe.
+// b is the beat offset inside the chord, n semitones from A2, d in beats.
+interface HornNote {
+  b: number;
+  n: number;
+  d: number;
+}
+const HORN: readonly (readonly HornNote[])[] = [
+  [
+    { b: 0, n: 12, d: 3 },
+    { b: 3, n: 15, d: 2 },
+    { b: 5, n: 19, d: 3 },
+  ],
+  [
+    { b: 0, n: 17, d: 2.5 },
+    { b: 4, n: 15, d: 1.5 },
+    { b: 5.5, n: 14, d: 2.5 },
+  ],
+  [
+    { b: 0, n: 15, d: 3 },
+    { b: 4, n: 12, d: 4 },
+  ],
+  [
+    { b: 0, n: 11, d: 2 },
+    { b: 2, n: 14, d: 2 },
+    { b: 4, n: 19, d: 4 },
+  ],
 ];
 
 const hz = (semi: number): number => ROOT_HZ * 2 ** (semi / 12);
@@ -80,41 +103,128 @@ function envOsc(
   osc.stop(t0 + dur + 0.05);
 }
 
+// Shared noise buffer for the percussion (ticks, rolls, crash).
+let noiseBuf: AudioBuffer | null = null;
+function noiseBuffer(ctx: AudioContext): AudioBuffer {
+  if (noiseBuf) return noiseBuf;
+  const len = ctx.sampleRate;
+  noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = noiseBuf.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+  return noiseBuf;
+}
+
+function envNoise(
+  out: GainNode,
+  t0: number,
+  dur: number,
+  vol: number,
+  opts: { bpf?: number; hpf?: number; verb?: number } = {},
+): void {
+  const b = audioBus();
+  if (!b) return;
+  const src = b.ctx.createBufferSource();
+  src.buffer = noiseBuffer(b.ctx);
+  src.loop = true;
+  let head: AudioNode = src;
+  if (opts.bpf !== undefined) {
+    const bp = b.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = opts.bpf;
+    bp.Q.value = 1.2;
+    head.connect(bp);
+    head = bp;
+  }
+  if (opts.hpf !== undefined) {
+    const hp = b.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = opts.hpf;
+    head.connect(hp);
+    head = hp;
+  }
+  const gain = b.ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.linearRampToValueAtTime(vol, t0 + 0.008);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  head.connect(gain);
+  gain.connect(out);
+  if (opts.verb) {
+    const send = b.ctx.createGain();
+    send.gain.value = opts.verb;
+    gain.connect(send);
+    send.connect(b.verb);
+  }
+  src.start(t0);
+  src.stop(t0 + dur + 0.05);
+}
+
+// A taiko-like boom: a sine drop with a touch of noise skin.
+function taiko(out: GainNode, t0: number, vol: number): void {
+  envOsc(out, 96, t0, 0.28, vol, 'sine', { slideTo: 34 });
+  envNoise(out, t0, 0.06, vol * 0.35, { bpf: 420 });
+}
+
 // Everything that happens on one beat of the grid.
 function scheduleBeat(out: GainNode, beat: number, t0: number): void {
   const chordIdx = Math.floor(beat / BEATS_PER_CHORD) % CHORDS.length;
   const step = beat % BEATS_PER_CHORD;
+  const half = BEAT_S / 2;
 
-  // Kick pulse: every beat, heavier on the downbeat.
-  const downbeat = beat % 4 === 0;
-  envOsc(out, 105, t0, 0.13, downbeat ? 0.085 : 0.05, 'sine', { slideTo: 42 });
-
-  // Bass: the chord root, low, on a push rhythm.
-  if (step % 4 === 0 || step % 4 === 2 || step % 4 === 3) {
-    const root = CHORD_ROOTS[chordIdx] ?? 0;
-    envOsc(out, hz(root - 12), t0, 0.3, 0.055, 'sawtooth', { lpf: 260 });
+  // War drums: heavy hands on 0 and 4, a pickup double before each, and a
+  // rising four-hit roll at the end of every chord.
+  if (step === 0) taiko(out, t0, 0.13);
+  if (step === 4) taiko(out, t0, 0.1);
+  if (step === 3 || step === 7) taiko(out, t0 + half, 0.06);
+  if (step === 7) {
+    for (let i = 0; i < 4; i++) {
+      taiko(out, t0 + (i * BEAT_S) / 4, 0.045 + i * 0.02);
+    }
   }
 
-  // Chord pad: a slow string swell at each chord change.
+  // Martial tick on every offbeat: a dry snare-edge pulse.
+  envNoise(out, t0 + half, 0.05, 0.022, { bpf: 2100 });
+  if (step % 2 === 1) envNoise(out, t0, 0.04, 0.014, { bpf: 3200 });
+
+  // Low string ostinato: staccato eighth pulses on the chord root, with
+  // accents on the drum hands.
+  const root = CHORD_ROOTS[chordIdx] ?? 0;
+  const accent = step % 4 === 0 ? 0.055 : 0.038;
+  envOsc(out, hz(root - 12), t0, 0.12, accent, 'sawtooth', { lpf: 520 });
+  envOsc(out, hz(root - 12), t0 + half, 0.1, 0.03, 'sawtooth', { lpf: 480 });
+
+  // Dark pad: a slow swell at each chord change, plus a cycle-start crash.
   if (step === 0) {
     const chord = CHORDS[chordIdx] ?? CHORDS[0]!;
     const len = BEATS_PER_CHORD * BEAT_S;
     for (const semi of chord) {
-      for (const detune of [-6, 6]) {
-        envOsc(out, hz(semi) * 2 ** (detune / 1200), t0, len + 0.6, 0.02, 'sawtooth', {
-          lpf: 620,
-          verb: 0.6,
-          attack: 0.9,
+      for (const detune of [-7, 7]) {
+        envOsc(out, hz(semi) * 2 ** (detune / 1200), t0, len + 0.8, 0.018, 'sawtooth', {
+          lpf: 460,
+          verb: 0.65,
+          attack: 1.2,
         });
       }
     }
+    if (chordIdx === 0) envNoise(out, t0, 1.1, 0.045, { hpf: 2600, verb: 0.8 });
   }
 
-  // Lead motif: the composed phrase, doubled an octave apart, echoing.
-  const note = MELODY[chordIdx]?.[step] ?? null;
-  if (note !== null) {
-    envOsc(out, hz(note + 12), t0, 0.5, 0.06, 'triangle', { verb: 0.7 });
-    envOsc(out, hz(note), t0, 0.45, 0.03, 'sine', { verb: 0.5 });
+  // The horn call: sparse long tones, doubled an octave down, far back in
+  // the hall. Scheduled once per chord.
+  if (step === 0) {
+    for (const note of HORN[chordIdx] ?? []) {
+      const nt = t0 + note.b * BEAT_S;
+      const dur = note.d * BEAT_S;
+      envOsc(out, hz(note.n + 12), nt, dur, 0.05, 'sawtooth', {
+        lpf: 1150,
+        verb: 0.75,
+        attack: 0.07,
+      });
+      envOsc(out, hz(note.n), nt, dur, 0.028, 'sawtooth', {
+        lpf: 700,
+        verb: 0.6,
+        attack: 0.07,
+      });
+    }
   }
 }
 

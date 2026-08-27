@@ -12,7 +12,7 @@ import {
 } from '../render/champions';
 import { CHAMPION_VISUALS } from '../render/champions/manifest';
 import type { ChampionVisual } from '../render/champions/visual';
-import { createOutlineRenderer, toonifyMaterials } from '../render/toon';
+import { toonifyMaterials } from '../render/toon';
 
 const params = new URLSearchParams(location.search);
 
@@ -90,7 +90,6 @@ function runLineup(): void {
   }
 
   toonifyMaterials(scene);
-  const outline = createOutlineRenderer(renderer);
 
   // Phase cycle so a screenshot at a known time shows a known pose.
   let last = performance.now();
@@ -105,7 +104,7 @@ function runLineup(): void {
       v.update(dt, { moving: phase === 1, windingUp: false, dead: false, speed: 3.7 });
     }
     lastPhase = phase;
-    outline.render(scene, camera);
+    renderer.render(scene, camera);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
