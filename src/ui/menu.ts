@@ -2,12 +2,14 @@
 // select. Pure DOM, callback-driven; the entry point owns the flow.
 
 import type { SelectPlayer } from '../net/protocol';
+import { cinematicPortraitUrl } from '../render/champions';
 import { championPortraitUrl } from '../render/portraits';
 import { CHAMPION_LIST, type ChampionRole } from '../sim/content/champions';
 import { SIGIL_LIST } from '../sim/content/sigils';
 import { SKINS } from '../sim/content/skins';
 import type { AbilityKey, TeamId } from '../sim/types';
 import { describeAbility, describeSigil } from './describe';
+import { startHomeShowcase } from './home_showcase';
 import { attachTooltip, hideTooltip } from './tooltips';
 
 // One color per role so classes read at a glance on the select grid.
@@ -22,6 +24,24 @@ const ROLE_COLORS: Readonly<Record<ChampionRole, string>> = {
   Skirmisher: '#d9d15a',
 };
 
+// Champion art resolution chain, best first: a hand-authored illustration in
+// public/portraits/ (see docs/design/portrait-prompts.md), then the
+// cinematic 3D render, and the instant procedural figure while both load.
+function setPortrait(img: HTMLImageElement, championId: string, teamColor: number): void {
+  img.src = championPortraitUrl(championId, 0, teamColor);
+  const illustration = `/portraits/${championId}.png`;
+  const probe = new Image();
+  probe.onload = () => {
+    img.src = illustration;
+  };
+  probe.onerror = () => {
+    void cinematicPortraitUrl(championId, 0, teamColor).then((url) => {
+      if (url) img.src = url;
+    });
+  };
+  probe.src = illustration;
+}
+
 const CSS = `
 .menu, .menu * { box-sizing: border-box; }
 .menu {
@@ -35,6 +55,33 @@ const CSS = `
 }
 .menu-title { font-size: 26px; font-weight: 800; letter-spacing: 1px; margin: 0 0 2px; }
 .menu-sub { font-size: 12px; color: #93a87c; margin: 0 0 16px; }
+.menu.home { justify-content: flex-start; padding-left: clamp(24px, 7vw, 140px); }
+.menu-showcase-canvas { position: absolute; inset: 0; display: block; }
+.menu.home::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 62% 45%, transparent 40%, rgba(5, 9, 3, 0.65) 100%);
+}
+.menu-card.home {
+  position: relative; z-index: 1; width: 440px;
+  background: rgba(10, 15, 7, 0.84); backdrop-filter: blur(6px);
+  border: 1px solid #6b5a2e; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+}
+.menu-card.home .menu-title {
+  font-family: Cinzel, Georgia, 'Times New Roman', serif;
+  font-size: 38px; line-height: 1.1; letter-spacing: 3px; text-transform: uppercase;
+  background: linear-gradient(180deg, #f7e7b0 0%, #d8b45a 55%, #a07830 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.55));
+}
+.menu-card.home .menu-sub { letter-spacing: 0.5px; margin-bottom: 20px; }
+.menu .menu-btn.primary {
+  background: linear-gradient(180deg, #e8cc74 0%, #c9a84a 55%, #a07830 100%);
+  border-color: #f0deae; color: #241a08; font-weight: 800; letter-spacing: 0.5px;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.menu .menu-btn.primary:hover:not(:disabled) {
+  box-shadow: 0 0 18px rgba(216, 180, 90, 0.45); border-color: #fff2c8;
+}
 .menu-label { font-size: 11px; color: #93a87c; margin: 10px 0 4px; }
 .menu-input {
   width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #466030;
@@ -54,23 +101,44 @@ const CSS = `
 .menu-status { font-size: 13px; color: #c9d8ae; margin-top: 12px; min-height: 18px; }
 .menu-code { font-size: 30px; font-weight: 800; letter-spacing: 6px; text-align: center; margin: 8px 0; }
 .menu-players { font-size: 13px; margin: 6px 0 10px; color: #c9d8ae; }
-.menu-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 6px 0 4px; }
+.menu-card.select { width: min(1500px, 96vw); max-height: 94vh; }
+.menu-select-layout { display: flex; gap: 22px; align-items: flex-start; }
+.menu-select-main { flex: 1; min-width: 0; }
+.menu-select-side { width: 300px; flex: none; }
+.menu-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 6px 0 4px; }
 .menu-champ {
-  padding: 7px 8px; border-radius: 6px; border: 1px solid #3a4f28; background: #17210f;
+  padding: 0; border-radius: 10px; border: 1px solid #3a4f28; background: #17210f;
   color: #d8e6c0; font-size: 12px; text-align: left; cursor: pointer;
-  display: flex; gap: 8px; align-items: flex-start;
+  position: relative; aspect-ratio: 3 / 4; overflow: hidden; display: block;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
 }
-.menu-champ:hover { border-color: #7ca050; }
-.menu-champ.picked { border-color: #a3c96a; background: #2c4a1c; }
+.menu-champ:hover {
+  border-color: #7ca050; transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+}
+.menu-champ.picked {
+  border-color: #a3c96a;
+  box-shadow: 0 0 0 2px rgba(163, 201, 106, 0.45), 0 10px 24px rgba(0, 0, 0, 0.5);
+}
 .menu-champ-portrait {
-  width: 44px; height: 44px; border-radius: 6px; flex: none;
-  background: radial-gradient(circle at 40% 35%, #2c4a1c 0%, #101a09 90%);
-  border: 1px solid #2c3d1e;
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  background: radial-gradient(circle at 50% 38%, #2c4a1c 0%, #101a09 90%);
 }
-.menu-champ-body { min-width: 0; }
-.menu-champ-name { font-weight: 700; }
+.menu-champ-body {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 10px 9px; min-width: 0;
+  background: linear-gradient(180deg, rgba(4, 8, 2, 0) 0%, rgba(4, 8, 2, 0.92) 62%);
+}
+.menu-champ-name { font-weight: 800; font-size: 15px; letter-spacing: 0.3px; }
 .menu-champ-role { font-size: 10px; font-weight: 700; margin-top: 2px; }
-.menu-champ-blurb { font-size: 10px; color: #93a87c; margin-top: 1px; line-height: 1.35; }
+.menu-champ-blurb {
+  font-size: 10px; color: #93a87c; margin-top: 2px; line-height: 1.35;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+@media (max-width: 1100px) {
+  .menu-select-layout { flex-direction: column; }
+  .menu-select-side { width: 100%; }
+  .menu-grid { grid-template-columns: repeat(3, 1fr); }
+}
 .menu-sigils { display: flex; gap: 6px; margin: 6px 0; }
 .menu-sigil {
   flex: 1; padding: 7px 4px; border-radius: 6px; border: 1px solid #4d451f; background: #1c190d;
@@ -152,6 +220,10 @@ export interface HomeChoice {
 export function showHome(container: HTMLElement): Promise<HomeChoice> {
   return new Promise((resolve) => {
     const { root, card } = screen(container);
+    root.classList.add('home');
+    card.classList.add('home');
+    // The living backdrop: champions idling behind the card.
+    const stopShowcase = startHomeShowcase(root);
     card.append(
       el('h1', 'menu-title', 'Claude of Legends'),
       el('p', 'menu-sub', '5v5 in the browser. No account, no install.'),
@@ -173,6 +245,7 @@ export function showHome(container: HTMLElement): Promise<HomeChoice> {
       } catch {
         // ignore
       }
+      stopShowcase();
       root.remove();
       resolve({ name: trimmed, mode, code });
     };
@@ -213,7 +286,7 @@ export function showHome(container: HTMLElement): Promise<HomeChoice> {
           const box = el('div', 'menu-roster-champ');
           const portrait = document.createElement('img');
           portrait.className = 'menu-roster-portrait';
-          portrait.src = championPortraitUrl(c.id);
+          setPortrait(portrait, c.id, 0x4a7dd6);
           portrait.alt = '';
           box.appendChild(portrait);
           const body = el('div', 'menu-roster-body');
@@ -330,8 +403,10 @@ export function showSelect(
   onLock: (championId: string, sigils: [string, string], skin: number) => void,
 ): SelectController {
   const { root, card } = screen(container);
+  card.classList.add('select');
   card.append(el('h1', 'menu-title', 'Champion select'));
 
+  let teamsBox: HTMLElement | null = null;
   if (roster) {
     const teams = el('div', 'menu-teams');
     for (const t of [0, 1] as const) {
@@ -349,7 +424,7 @@ export function showSelect(
       );
       teams.appendChild(box);
     }
-    card.appendChild(teams);
+    teamsBox = teams;
   }
 
   let championId: string | null = null;
@@ -386,7 +461,7 @@ export function showSelect(
     const btn = el('button', 'menu-champ') as HTMLButtonElement;
     const portrait = document.createElement('img');
     portrait.className = 'menu-champ-portrait';
-    portrait.src = championPortraitUrl(c.id, 0, team === 0 ? 0x4a7dd6 : 0xd65c5c);
+    setPortrait(portrait, c.id, team === 0 ? 0x4a7dd6 : 0xd65c5c);
     portrait.alt = '';
     btn.appendChild(portrait);
     const body = el('div', 'menu-champ-body');
@@ -453,10 +528,14 @@ export function showSelect(
     if (pick) champButtons.get(pick.id)?.click();
   });
 
-  card.append(
-    el('div', 'menu-label', 'Pick your champion (hover for the kit)'),
-    grid,
-    randomBtn,
+  // Full-width layout: the champion cards own the screen; team rosters,
+  // skins, sigils, and the lock live in a side rail.
+  const layout = el('div', 'menu-select-layout');
+  const main = el('div', 'menu-select-main');
+  const side = el('div', 'menu-select-side');
+  main.append(el('div', 'menu-label', 'Pick your champion (hover for the kit)'), grid, randomBtn);
+  if (teamsBox) side.appendChild(teamsBox);
+  side.append(
     el('div', 'menu-label', 'Skin (cosmetic only)'),
     skinRow,
     el('div', 'menu-label', 'Pick two sigils (first goes on D, second on F)'),
@@ -464,6 +543,8 @@ export function showSelect(
     lock,
     status,
   );
+  layout.append(main, side);
+  card.appendChild(layout);
 
   let timer: number | null = null;
   if (deadline !== null) {
