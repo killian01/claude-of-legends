@@ -25,6 +25,8 @@ export interface RecentMatch {
   cs: number;
   // Signed Elo movement when the match was rated.
   ratingDelta?: number;
+  // Saved replay id, when the server kept one.
+  replayId?: number;
 }
 
 export interface ProfileStats {
@@ -89,6 +91,7 @@ export function buildProfile(records: readonly MatchRecord[], playerId: number):
       assists: me.assists,
       cs: me.cs,
       ...(me.ratingDelta !== undefined ? { ratingDelta: me.ratingDelta } : {}),
+      ...(rec.replayId !== undefined ? { replayId: rec.replayId } : {}),
     });
   }
   out.perChampion = [...perChamp.values()].sort((a, b) => b.games - a.games);

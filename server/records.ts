@@ -28,6 +28,8 @@ export interface MatchRecord {
   winner: TeamId;
   // Rated: at least one human on each side (server/rating.ts policy).
   rated: boolean;
+  // Saved replay id (the match id), absent when no replay was kept.
+  replayId?: number;
   players: MatchPlayerRecord[];
 }
 
@@ -38,12 +40,14 @@ export function buildMatchRecord(
   durationS: number,
   at: number,
   rating?: { rated: boolean; deltas: ReadonlyMap<number, number> },
+  replayId?: number,
 ): MatchRecord {
   return {
     at,
     durationS: Math.round(durationS),
     winner,
     rated: rating?.rated ?? false,
+    ...(replayId !== undefined ? { replayId } : {}),
     players: rows.map((r) => {
       const playerId = playerIdByUnit.get(r.unitId) ?? null;
       const delta = playerId !== null ? rating?.deltas.get(playerId) : undefined;

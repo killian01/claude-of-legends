@@ -5,7 +5,13 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { appendJsonl, loadJson, readJsonl, saveJsonAtomic } from '../server/store';
+import {
+  appendJsonl,
+  loadJson,
+  pruneNumberedJson,
+  readJsonl,
+  saveJsonAtomic,
+} from '../server/store';
 
 const dirs: string[] = [];
 function tmp(): string {
@@ -30,6 +36,20 @@ describe('json store', () => {
     const file = path.join(tmp(), 'bad.json');
     writeFileSync(file, '{nope');
     expect(loadJson(file, { ok: true })).toEqual({ ok: true });
+  });
+
+  it('prunes numbered json files, keeping the highest numbers', () => {
+    const dir = tmp();
+    for (const n of [3, 10, 7, 1, 22]) saveJsonAtomic(path.join(dir, `${n}.json`), { n });
+    saveJsonAtomic(path.join(dir, 'players.json'), []);
+    const doomed = pruneNumberedJson(dir, 2);
+    expect(doomed.sort((a, b) => a - b)).toEqual([1, 3, 7]);
+    expect(loadJson(path.join(dir, '22.json'), null)).toEqual({ n: 22 });
+    expect(loadJson(path.join(dir, '10.json'), null)).toEqual({ n: 10 });
+    expect(loadJson(path.join(dir, '3.json'), null)).toBeNull();
+    // Non-numbered files are never touched; a missing dir is a no-op.
+    expect(loadJson(path.join(dir, 'players.json'), null)).toEqual([]);
+    expect(pruneNumberedJson(path.join(dir, 'nope'), 2)).toEqual([]);
   });
 
   it('appends jsonl lines and skips a torn last line', () => {

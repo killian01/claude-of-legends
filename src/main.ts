@@ -8,13 +8,15 @@ import { type Presentation, startPresentation } from './game/boot';
 import { nextStep, type PostMatchAction } from './game/flow';
 import { requestGameFullscreen } from './game/fullscreen';
 import { parseJoinCode } from './game/invite';
+import { ReplayWorld } from './game/replay_world';
 import { getSettings } from './game/settings';
 import { ClientWorld } from './net/client_world';
 import type { ServerMsg } from './net/protocol';
+import { applyReplayEvent, buildMatchSim, type ReplayRecord } from './net/replay';
 import { BOTS, DEFAULT_BOT_ID } from './sim/content/bots';
 import { CHAMPION_LIST } from './sim/content/champions';
 import { Sim } from './sim/sim';
-import { type AbilityKey, DT } from './sim/types';
+import { type AbilityKey, DT, type TeamId } from './sim/types';
 import {
   type HomeChoice,
   type LobbyController,
@@ -26,6 +28,7 @@ import {
   showQueue,
   showSelect,
 } from './ui/menu';
+import { buildReplayBar } from './ui/replay_bar';
 import type { IWorld } from './world_api';
 
 const app = document.querySelector<HTMLElement>('#app');
@@ -99,6 +102,95 @@ function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
         pres.onWorldTick({ kills, golds, casts, hits, attacks });
         acc -= TICK_MS;
       }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  });
+}
+
+// Watch a saved match: rebuild the sim from the record (deterministic, so
+// the whole match is seed plus commands) and run it through the normal
+// presentation behind a read-only world, with a speed bar on top.
+async function runReplay(replayId: number): Promise<PostMatchAction> {
+  let record: ReplayRecord | null = null;
+  try {
+    const res = await fetch(`/api/replay/${replayId}`);
+    if (res.ok) record = (await res.json()) as ReplayRecord;
+  } catch {
+    // handled below
+  }
+  if (!record || record.version !== 1 || !Array.isArray(record.picks)) {
+    await showNotice(
+      container,
+      'Replay unavailable',
+      'This replay is gone: the server keeps only the most recent matches.',
+    );
+    return 'menu';
+  }
+  const rec = record;
+  return new Promise((resolve) => {
+    const { sim, unitIds } = buildMatchSim(rec.seed, rec.picks);
+    const unitTeams = new Map<number, TeamId>();
+    rec.picks.forEach((p, i) => unitTeams.set(unitIds[i]!, p.team));
+    // Follow the first human seat: their team, their fog, their story.
+    const viewerIdx = Math.max(
+      0,
+      rec.picks.findIndex((p) => !p.bot),
+    );
+    const world = new ReplayWorld(sim);
+    let stopped = false;
+    let bar: HTMLElement | null = null;
+    const finish = (action: PostMatchAction): void => {
+      if (stopped) return;
+      stopped = true;
+      bar?.remove();
+      pres.dispose();
+      resolve(action);
+    };
+    const pres = startPresentation(
+      container,
+      world,
+      unitIds[viewerIdx]!,
+      rec.picks[viewerIdx]!.team,
+      finish,
+    );
+    let speed = 1;
+    bar = buildReplayBar({
+      onSpeed: (m) => {
+        speed = m;
+      },
+      onExit: () => finish('menu'),
+    });
+    container.appendChild(bar);
+
+    const TICK_MS = DT * 1000;
+    let last = performance.now();
+    let acc = 0;
+    let next = 0;
+    function frame(now: number): void {
+      if (stopped) return;
+      acc += Math.min(now - last, 250) * speed;
+      last = now;
+      while (acc >= TICK_MS && sim.tickCount < rec.ticks) {
+        while (next < rec.events.length && rec.events[next]!.k <= sim.tickCount) {
+          applyReplayEvent(sim, unitTeams, rec.events[next]!);
+          next++;
+        }
+        const kills: { unitId: number; killerId: number }[] = [];
+        const casts: { unitId: number; key?: AbilityKey }[] = [];
+        const attacks: { unitId: number; targetId: number }[] = [];
+        for (const ev of sim.tick()) {
+          if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
+          else if (ev.type === 'cast') casts.push({ unitId: ev.unitId, key: ev.key });
+          else if (ev.type === 'sigil') casts.push({ unitId: ev.unitId });
+          else if (ev.type === 'attack') attacks.push({ unitId: ev.unitId, targetId: ev.targetId });
+        }
+        pres.onWorldTick({ kills, golds: [], casts, hits: [], attacks });
+        acc -= TICK_MS;
+      }
+      // The record's end: freeze (the end overlay is already up if a
+      // winner landed; a truncated record simply stops).
+      if (sim.tickCount >= rec.ticks) acc = 0;
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
@@ -369,6 +461,8 @@ async function boot(): Promise<void> {
       const pick: OfflinePick = lastPick ?? (await pickForPractice());
       lastPick = pick;
       action = await runOffline(pick);
+    } else if (choice.mode === 'replay' && choice.replayId !== undefined) {
+      action = await runReplay(choice.replayId);
     } else {
       action = await runOnline(choice);
     }

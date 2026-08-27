@@ -3,11 +3,16 @@
 // a sim method (ADR 0001). Transport-agnostic and fully testable without a
 // socket.
 
-import type { ServerMsg } from '../src/net/protocol';
-import { type ClientMsg, isFiniteVec } from '../src/net/protocol';
+import type { ClientMsg, ServerMsg } from '../src/net/protocol';
+import {
+  applySimCommand,
+  buildMatchSim,
+  REPLAY_EVENT_CAP,
+  type ReplayEvent,
+  type ReplayPick,
+} from '../src/net/replay';
 import { BOTS, DEFAULT_BOT_ID } from '../src/sim/content/bots';
-import type { SimEvent } from '../src/sim/sim';
-import { Sim } from '../src/sim/sim';
+import type { Sim, SimEvent } from '../src/sim/sim';
 import type { TeamId } from '../src/sim/types';
 import { buildSnapshot } from './snapshot';
 
@@ -31,33 +36,52 @@ interface MatchPlayer {
   known: Set<number>;
 }
 
-const ABILITY_KEYS = new Set(['Q', 'W', 'E', 'R']);
-
 export class Match {
   readonly sim: Sim;
+  readonly seed: number;
   readonly players = new Map<number, MatchPlayer>();
+  // What a replay needs: the exact picks and every event that steered the
+  // sim (src/net/replay.ts rebuilds the match from these plus the seed).
+  readonly replayPicks: ReplayPick[];
+  readonly replayEvents: ReplayEvent[] = [];
   private readonly unitNames = new Map<number, string>();
   private eventsThisTick: SimEvent[] = [];
 
   constructor(seed: number, picks: readonly MatchPick[]) {
-    this.sim = new Sim(seed);
-    for (const p of picks) {
-      const unit = this.sim.addChampion(p.team, undefined, p.championId, p.skin ?? 0);
-      unit.sigils = [...p.sigils];
-      this.unitNames.set(unit.id, p.name);
-      if (p.bot) {
-        const def = BOTS[p.bot] ?? BOTS[DEFAULT_BOT_ID];
-        if (def) this.sim.attachPolicy(unit.id, def.policy);
-        continue;
-      }
+    this.seed = seed;
+    this.replayPicks = picks.map((p) => ({
+      name: p.name,
+      team: p.team,
+      championId: p.championId,
+      sigils: [p.sigils[0], p.sigils[1]],
+      ...(p.skin !== undefined ? { skin: p.skin } : {}),
+      ...(p.bot !== undefined ? { bot: p.bot } : {}),
+    }));
+    // The shared builder IS the live construction: a replayed sim starts
+    // from the same seed, picks, and policy attachments by definition.
+    const { sim, unitIds } = buildMatchSim(seed, this.replayPicks);
+    this.sim = sim;
+    picks.forEach((p, i) => {
+      const unitId = unitIds[i]!;
+      this.unitNames.set(unitId, p.name);
+      if (p.bot) return;
       this.players.set(p.clientId, {
         clientId: p.clientId,
         name: p.name,
         team: p.team,
-        unitId: unit.id,
+        unitId,
         known: new Set(),
       });
-    }
+    });
+  }
+
+  private recordReplay(ev: ReplayEvent): void {
+    if (this.replayEvents.length < REPLAY_EVENT_CAP) this.replayEvents.push(ev);
+  }
+
+  // True when the log stayed within bounds and is worth saving.
+  get replayComplete(): boolean {
+    return this.replayEvents.length < REPLAY_EVENT_CAP;
   }
 
   // Client ids on the same team as the sender. Chat and pings route through
@@ -79,6 +103,7 @@ export class Match {
     this.players.delete(clientId);
     const def = BOTS[DEFAULT_BOT_ID];
     if (def) this.sim.attachPolicy(p.unitId, def.policy);
+    this.recordReplay({ k: this.sim.tickCount, u: p.unitId, e: 'bot_on' });
     this.unitNames.set(p.unitId, `${p.name} (bot)`);
     return { name: p.name, team: p.team, unitId: p.unitId };
   }
@@ -88,6 +113,7 @@ export class Match {
   // the new mirror world starts complete.
   restorePlayer(clientId: number, seat: { name: string; team: TeamId; unitId: number }): void {
     this.sim.detachPolicy(seat.unitId);
+    this.recordReplay({ k: this.sim.tickCount, u: seat.unitId, e: 'bot_off' });
     this.unitNames.set(seat.unitId, seat.name);
     this.players.set(clientId, {
       clientId,
@@ -114,48 +140,10 @@ export class Match {
   handleCommand(clientId: number, msg: ClientMsg): void {
     const p = this.players.get(clientId);
     if (!p) return;
-    switch (msg.t) {
-      case 'move':
-        if (isFiniteVec(msg.x, msg.z)) this.sim.orderMove(p.unitId, msg.x, msg.z);
-        break;
-      case 'attack':
-        if (typeof msg.targetId === 'number' && this.sim.isVisible(p.team, msg.targetId)) {
-          this.sim.orderAttack(p.unitId, msg.targetId);
-        }
-        break;
-      case 'attack_move':
-        if (isFiniteVec(msg.x, msg.z)) this.sim.orderAttackMove(p.unitId, msg.x, msg.z);
-        break;
-      case 'stop':
-        this.sim.orderStop(p.unitId);
-        break;
-      case 'sell':
-        if (typeof msg.slot === 'number') this.sim.sellItem(p.unitId, msg.slot);
-        break;
-      case 'recall':
-        this.sim.startRecall(p.unitId);
-        break;
-      case 'cast':
-        if (typeof msg.key === 'string' && ABILITY_KEYS.has(msg.key) && isFiniteVec(msg.x, msg.z)) {
-          this.sim.castAbility(p.unitId, msg.key, { x: msg.x, z: msg.z });
-        }
-        break;
-      case 'sigil':
-        if ((msg.slot === 0 || msg.slot === 1) && isFiniteVec(msg.x, msg.z)) {
-          this.sim.castSigil(p.unitId, msg.slot, { x: msg.x, z: msg.z });
-        }
-        break;
-      case 'buy':
-        if (typeof msg.itemId === 'string') this.sim.buyItem(p.unitId, msg.itemId);
-        break;
-      case 'skill':
-        if (msg.key === 'Q' || msg.key === 'W' || msg.key === 'E' || msg.key === 'R') {
-          this.sim.levelAbility(p.unitId, msg.key);
-        }
-        break;
-      default:
-        break;
-    }
+    // Recorded raw, then applied through the SAME validated path a replay
+    // uses: an invalid command no-ops identically live and replayed.
+    this.recordReplay({ k: this.sim.tickCount, u: p.unitId, e: 'cmd', c: msg });
+    applySimCommand(this.sim, p.team, p.unitId, msg);
   }
 
   buildSnapshotFor(clientId: number): ServerMsg | null {

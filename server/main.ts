@@ -20,7 +20,7 @@ import { handleOf, type PlayerRecord, PlayerRegistry } from './players';
 import { buildProfile } from './profile';
 import { isRated, LEAVER_LOCKOUT_MS, leaverPenalty, type RatedSeat, ratingDeltas } from './rating';
 import { buildMatchRecord, type MatchRecord } from './records';
-import { appendJsonl, readJsonl } from './store';
+import { appendJsonl, pruneNumberedJson, readJsonl, saveJsonAtomic } from './store';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DIST = path.resolve(process.cwd(), 'dist');
@@ -97,6 +97,9 @@ let nextMatchId = 1;
 
 const registry = new PlayerRegistry(path.join(DATA_DIR, 'players.json'));
 const MATCHES_FILE = path.join(DATA_DIR, 'matches.jsonl');
+const REPLAYS_DIR = path.join(DATA_DIR, 'replays');
+// How many finished-match replays stay on disk (named by match id).
+const REPLAY_KEEP = 40;
 // The whole log stays in memory for profile queries; one line per match,
 // appended as each ends (kilobytes each, guests-scale).
 const matchLog: MatchRecord[] = readJsonl<MatchRecord>(MATCHES_FILE);
@@ -163,6 +166,18 @@ const server = http.createServer(async (req, res) => {
     if (url === '/api/ladder') {
       res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
       res.end(JSON.stringify(buildLadder(registry.all())));
+      return;
+    }
+    const replayUrl = /^\/api\/replay\/(\d{1,9})$/.exec(url);
+    if (replayUrl) {
+      try {
+        const body = await readFile(path.join(REPLAYS_DIR, `${replayUrl[1]}.json`));
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+        res.end(body);
+      } catch {
+        res.writeHead(404, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: 'replay not found' }));
+      }
       return;
     }
     const playerUrl = /^\/api\/player\/(\d{1,9})$/.exec(url);
@@ -530,6 +545,23 @@ setInterval(() => {
               rating: reg.rating,
             });
           }
+          // Save the replay first so the match record can point at it.
+          let replayId: number | undefined;
+          if (entry.match.replayComplete) {
+            try {
+              saveJsonAtomic(path.join(REPLAYS_DIR, `${matchId}.json`), {
+                version: 1,
+                seed: entry.match.seed,
+                picks: entry.match.replayPicks,
+                events: entry.match.replayEvents,
+                ticks: entry.match.sim.tickCount,
+              });
+              replayId = matchId;
+              pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP);
+            } catch (err) {
+              console.error('replay save failed', err);
+            }
+          }
           const score = entry.match.buildScore();
           if (score.t === 'score') {
             const rec = buildMatchRecord(
@@ -539,6 +571,7 @@ setInterval(() => {
               entry.match.sim.time,
               now,
               { rated, deltas },
+              replayId,
             );
             matchLog.push(rec);
             try {
