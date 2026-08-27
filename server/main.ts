@@ -262,6 +262,9 @@ wss.on('connection', (ws, req) => {
       case 'join_lobby':
         if (!inMatch) matchmaker.joinLobby(id, client.name, String(msg.code ?? ''));
         break;
+      case 'lobby_team':
+        if (!inMatch) matchmaker.setLobbyTeam(id, msg.team);
+        break;
       case 'start_lobby':
         if (!inMatch) matchmaker.startLobby(id, now);
         break;

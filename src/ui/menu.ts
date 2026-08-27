@@ -1,7 +1,8 @@
 // Pre-game screens: home (name + mode), queue, private lobby, and champion
 // select. Pure DOM, callback-driven; the entry point owns the flow.
 
-import type { SelectPlayer } from '../net/protocol';
+import { inviteUrl } from '../game/invite';
+import type { LobbyPlayer, SelectPlayer } from '../net/protocol';
 import { cinematicPortraitUrl } from '../render/champions';
 import { championPortraitUrl } from '../render/portraits';
 import { CHAMPION_LIST, type ChampionRole } from '../sim/content/champions';
@@ -218,7 +219,9 @@ export interface HomeChoice {
   code?: string;
 }
 
-export function showHome(container: HTMLElement): Promise<HomeChoice> {
+// prefillCode: an invite link's lobby code (?join=CODE) when the visitor
+// has no stored name yet; the join field arrives filled, one click left.
+export function showHome(container: HTMLElement, prefillCode?: string): Promise<HomeChoice> {
   return new Promise((resolve) => {
     const { root, card } = screen(container);
     root.classList.add('home');
@@ -263,6 +266,11 @@ export function showHome(container: HTMLElement): Promise<HomeChoice> {
     code.placeholder = 'CODE';
     code.maxLength = 5;
     const join = el('button', 'menu-btn', 'Join lobby');
+    if (prefillCode) {
+      code.value = prefillCode;
+      join.classList.add('primary');
+      name.focus();
+    }
     join.addEventListener('click', () => {
       if (code.value.trim().length === 5) done('join', code.value.trim().toUpperCase());
     });
@@ -372,7 +380,7 @@ export function showQueue(
 }
 
 export interface LobbyController {
-  update(code: string, host: boolean, players: string[]): void;
+  update(code: string, host: boolean, selfTeam: TeamId, players: readonly LobbyPlayer[]): void;
   remove(): void;
 }
 
@@ -380,11 +388,40 @@ export function showLobby(
   container: HTMLElement,
   onStart: () => void,
   onLeave: () => void,
+  onPickTeam: (team: TeamId) => void,
 ): LobbyController {
   const { root, card } = screen(container);
   card.append(el('h1', 'menu-title', 'Private lobby'));
   const codeEl = el('div', 'menu-code', '-----');
-  const players = el('div', 'menu-players', '');
+
+  // The invite link: one click to share, one click for the friend to land
+  // here (src/main.ts consumes ?join=CODE at boot).
+  let link = '';
+  const copy = el('button', 'menu-btn', 'Copy invite link');
+  copy.addEventListener('click', () => {
+    if (!link) return;
+    void navigator.clipboard?.writeText(link).then(() => {
+      copy.textContent = 'Link copied!';
+      window.setTimeout(() => {
+        copy.textContent = 'Copy invite link';
+      }, 1600);
+    });
+  });
+
+  // Two team columns with a switch button each: friends duo on one side
+  // against the bot fill, or split into two human sides.
+  const teamsWrap = el('div', 'menu-teams');
+  const cols = ([0, 1] as const).map((team) => {
+    const box = el('div', `menu-team ${team === 0 ? 'blue' : 'red'}`);
+    box.appendChild(el('h4', '', `Team ${team + 1}`));
+    const list = el('div', '');
+    const btn = el('button', 'menu-btn', 'Play on this side');
+    btn.addEventListener('click', () => onPickTeam(team));
+    box.append(list, btn);
+    teamsWrap.appendChild(box);
+    return { list, btn };
+  });
+
   const start = el('button', 'menu-btn primary', 'Start match');
   start.style.display = 'none';
   start.addEventListener('click', onStart);
@@ -393,11 +430,20 @@ export function showLobby(
     root.remove();
     onLeave();
   });
-  card.append(el('div', 'menu-label', 'Share this code'), codeEl, players, start, leave);
+  card.append(el('div', 'menu-label', 'Share this code'), codeEl, copy, teamsWrap, start, leave);
   return {
-    update(code, host, names) {
+    update(code, host, selfTeam, players) {
       codeEl.textContent = code;
-      players.textContent = `Players: ${names.join(', ')}`;
+      link = inviteUrl(window.location.origin, code);
+      for (const team of [0, 1] as const) {
+        const col = cols[team]!;
+        const members = players.filter((p) => p.team === team);
+        col.list.textContent =
+          members.length > 0 ? members.map((p) => p.name).join(', ') : 'Empty (bots fill in)';
+        // Your own side needs no button; a full side takes nobody else.
+        col.btn.style.display = selfTeam === team ? 'none' : 'block';
+        col.btn.disabled = members.length >= 5;
+      }
       start.style.display = host ? 'block' : 'none';
     },
     remove() {

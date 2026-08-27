@@ -16,6 +16,9 @@ export type ClientMsg =
   | { t: 'leave' }
   | { t: 'create_lobby' }
   | { t: 'join_lobby'; code: string }
+  // Pick your side in a private lobby (duo vs bots needs a team choice;
+  // seats used to alternate by join order with no way to play together).
+  | { t: 'lobby_team'; team: TeamId }
   | { t: 'start_lobby' }
   | { t: 'pick'; championId: string; sigils: [string, string]; skin?: number }
   | { t: 'move'; x: number; z: number }
@@ -111,6 +114,11 @@ export interface SelectPlayer {
   team: TeamId;
 }
 
+export interface LobbyPlayer {
+  name: string;
+  team: TeamId;
+}
+
 export type ServerMsg =
   // token identifies this browser across connections, for match rejoin.
   | { t: 'welcome'; clientId: number; token: string }
@@ -123,7 +131,8 @@ export type ServerMsg =
       startsIn: number | null;
       ready: boolean;
     }
-  | { t: 'lobby'; code: string; host: boolean; players: string[] }
+  // team is the recipient's own side; players carry everyone's.
+  | { t: 'lobby'; code: string; host: boolean; team: TeamId; players: LobbyPlayer[] }
   | { t: 'select_start'; team: TeamId; players: SelectPlayer[]; deadline: number }
   | { t: 'select_update'; locked: number; total: number; taken: string[] }
   | { t: 'match_start'; selfUnitId: number; team: TeamId }
