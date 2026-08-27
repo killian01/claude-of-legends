@@ -163,20 +163,38 @@ function findBone(root: THREE.Object3D, name: string): THREE.Object3D | null {
 // hierarchy (a unit-scale holder under the visual root) and copies the
 // bone's world pose every frame: these rigs bake quantization compensation
 // into their bone scales, so a direct child would inherit arbitrary sizing.
+// restInv is the inverse of the bone's root-space rest orientation, captured
+// once the idle pose has settled; until then only position syncs.
 export interface PropAnchor {
   bone: THREE.Object3D;
   holder: THREE.Group;
+  restInv: THREE.Quaternion | null;
 }
 
-// Snaps every prop anchor to its bone's current world position, expressed in
-// root space. Shared by the per-frame visual update and the one-shot portrait
-// pose; callers make sure the rig's world matrices are current enough (one
-// frame of lag is invisible in motion, and portraits update explicitly).
+// Snaps every prop anchor to its bone's current world pose, expressed in
+// root space. Position always follows; rotation follows as a DELTA from the
+// captured rest orientation, so the manifest's authored prop pose is exact
+// at rest and the weapon swings with the hand during attack clips (before
+// this, a horizontal slice dragged a still-vertical blade through the body).
+// captureRest arms the one-time rest capture; portraits stay position-only.
 const ANCHOR_POS = new THREE.Vector3();
-export function syncPropAnchors(root: THREE.Object3D, anchors: readonly PropAnchor[]): void {
+const ROOT_QUAT_INV = new THREE.Quaternion();
+const BONE_QUAT = new THREE.Quaternion();
+export function syncPropAnchors(
+  root: THREE.Object3D,
+  anchors: readonly PropAnchor[],
+  captureRest = false,
+): void {
+  root.getWorldQuaternion(ROOT_QUAT_INV).invert();
   for (const a of anchors) {
     a.bone.getWorldPosition(ANCHOR_POS);
     a.holder.position.copy(root.worldToLocal(ANCHOR_POS));
+    a.bone.getWorldQuaternion(BONE_QUAT).premultiply(ROOT_QUAT_INV);
+    if (a.restInv === null) {
+      if (captureRest) a.restInv = BONE_QUAT.clone().invert();
+      continue;
+    }
+    a.holder.quaternion.copy(BONE_QUAT).multiply(a.restInv);
   }
 }
 
@@ -229,12 +247,13 @@ export function instantiateChampion(
     const holder = new THREE.Group();
     const prop = buildChampionProp(propDef.kind, palette.accent);
     // The pose is authored in the manifest, relative to the champion's
-    // facing; the anchor only follows the bone's position.
+    // facing; the anchor follows the bone's position, plus its rotation
+    // delta once syncPropAnchors has captured the rest orientation.
     if (propDef.rot) prop.rotation.set(propDef.rot[0], propDef.rot[1], propDef.rot[2]);
     if (propDef.pos) prop.position.set(propDef.pos[0], propDef.pos[1], propDef.pos[2]);
     holder.add(prop);
     root.add(holder);
-    anchors.push({ bone, holder });
+    anchors.push({ bone, holder, restInv: null });
   }
   // Team allegiance survives any skin or model: a colored ring at the feet,
   // sized to the silhouette so a colossus is claimed as loudly as a goblin.

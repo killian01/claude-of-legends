@@ -13,6 +13,7 @@ import { describeAbility, describeSigil } from './describe';
 import { startHomeShowcase } from './home_showcase';
 import { buildLadderPanel } from './ladder_panel';
 import { buildLivePanel } from './live_panel';
+import { startMenuBackdrop } from './menu_backdrop';
 import { buildProfilePanel } from './profile_panel';
 import { buildSettingsPanel } from './settings_panel';
 import { attachTooltip, hideTooltip } from './tooltips';
@@ -51,34 +52,44 @@ const CSS = `
 .menu, .menu * { box-sizing: border-box; }
 .menu {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  background: radial-gradient(ellipse at center, #22371a 0%, #101a0a 75%);
-  font-family: system-ui, sans-serif; color: #d8e6c0; z-index: 10;
+  background: radial-gradient(ellipse at center, #1c2c4a 0%, #0a1120 75%);
+  font-family: system-ui, sans-serif; color: #c9d9ee; z-index: 10;
+}
+.menu-backdrop-canvas { position: absolute; inset: 0; display: block; pointer-events: none; }
+@keyframes menu-card-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .menu-card {
-  background: rgba(14, 20, 9, 0.95); border: 1px solid #466030; border-radius: 12px;
+  position: relative; z-index: 1;
+  background: rgba(9, 14, 26, 0.95); border: 1px solid #2e4468; border-radius: 12px;
   padding: 26px 30px; width: 460px; max-width: 92vw; max-height: 90vh; overflow-y: auto;
+  animation: menu-card-in 0.45s ease-out;
 }
 .menu-title { font-size: 26px; font-weight: 800; letter-spacing: 1px; margin: 0 0 2px; }
-.menu-sub { font-size: 12px; color: #93a87c; margin: 0 0 16px; }
+.menu-sub { font-size: 12px; color: #7e93b2; margin: 0 0 16px; }
 .menu.home { justify-content: flex-start; padding-left: clamp(24px, 7vw, 140px); }
 .menu-showcase-canvas { position: absolute; inset: 0; display: block; }
 .menu.home::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(ellipse at 62% 45%, transparent 40%, rgba(5, 9, 3, 0.65) 100%);
+  background: radial-gradient(ellipse at 62% 45%, transparent 40%, rgba(3, 6, 14, 0.65) 100%);
 }
 .menu-card.home {
-  position: relative; z-index: 1; width: 440px;
-  background: rgba(10, 15, 7, 0.84); backdrop-filter: blur(6px);
+  width: 440px;
+  background: rgba(8, 12, 22, 0.84); backdrop-filter: blur(6px);
   border: 1px solid #6b5a2e; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
 }
 .menu-card.home .menu-title {
   font-family: Cinzel, Georgia, 'Times New Roman', serif;
-  font-size: 38px; line-height: 1.1; letter-spacing: 3px; text-transform: uppercase;
+  font-size: 40px; line-height: 1.1; letter-spacing: 3px; text-transform: uppercase;
   background: linear-gradient(180deg, #f7e7b0 0%, #d8b45a 55%, #a07830 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.55));
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 18px rgba(216, 180, 90, 0.25));
 }
-.menu-card.home .menu-sub { letter-spacing: 0.5px; margin-bottom: 20px; }
+.menu-card.home .menu-sub {
+  letter-spacing: 0.5px; margin-bottom: 20px;
+  padding-bottom: 14px; border-bottom: 1px solid rgba(216, 180, 90, 0.22);
+}
 .menu .menu-btn.primary {
   background: linear-gradient(180deg, #e8cc74 0%, #c9a84a 55%, #a07830 100%);
   border-color: #f0deae; color: #241a08; font-weight: 800; letter-spacing: 0.5px;
@@ -87,56 +98,58 @@ const CSS = `
 .menu .menu-btn.primary:hover:not(:disabled) {
   box-shadow: 0 0 18px rgba(216, 180, 90, 0.45); border-color: #fff2c8;
 }
-.menu-label { font-size: 11px; color: #93a87c; margin: 10px 0 4px; }
+.menu-label { font-size: 11px; color: #7e93b2; margin: 10px 0 4px; }
 .menu-input {
-  width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #466030;
-  background: #10160c; color: #d8e6c0; font-size: 14px; outline: none;
+  width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #2e4468;
+  background: #0b1220; color: #c9d9ee; font-size: 14px; outline: none;
 }
-.menu-input:focus { border-color: #7ca050; }
+.menu-input:focus { border-color: #5b84c9; }
 .menu-btn {
   display: block; width: 100%; margin-top: 8px; padding: 10px; border-radius: 6px;
-  border: 1px solid #466030; background: #1d2a14; color: #d8e6c0;
+  border: 1px solid #2e4468; background: #142038; color: #c9d9ee;
   font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
-.menu-btn:hover { border-color: #7ca050; }
-.menu-btn.primary { background: #2c4a1c; border-color: #5d8038; }
+.menu-btn:hover { border-color: #5b84c9; }
+.menu-btn:hover:not(:disabled) { transform: translateY(-1px); }
+.menu-btn.primary { background: #1d3a63; border-color: #3d6ba0; }
 .menu-btn:disabled { opacity: 0.4; cursor: default; }
 .menu-row { display: flex; gap: 8px; }
 .menu-row > * { flex: 1; }
-.menu-status { font-size: 13px; color: #c9d8ae; margin-top: 12px; min-height: 18px; }
+.menu-status { font-size: 13px; color: #aac2dd; margin-top: 12px; min-height: 18px; }
 .menu-code { font-size: 30px; font-weight: 800; letter-spacing: 6px; text-align: center; margin: 8px 0; }
-.menu-players { font-size: 13px; margin: 6px 0 10px; color: #c9d8ae; }
+.menu-players { font-size: 13px; margin: 6px 0 10px; color: #aac2dd; }
 .menu-card.select { width: min(1500px, 96vw); max-height: 94vh; }
 .menu-select-layout { display: flex; gap: 22px; align-items: flex-start; }
 .menu-select-main { flex: 1; min-width: 0; }
 .menu-select-side { width: 300px; flex: none; }
 .menu-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 6px 0 4px; }
 .menu-champ {
-  padding: 0; border-radius: 10px; border: 1px solid #3a4f28; background: #17210f;
-  color: #d8e6c0; font-size: 12px; text-align: left; cursor: pointer;
+  padding: 0; border-radius: 10px; border: 1px solid #28405e; background: #0f1930;
+  color: #c9d9ee; font-size: 12px; text-align: left; cursor: pointer;
   position: relative; aspect-ratio: 3 / 4; overflow: hidden; display: block;
   transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
 }
 .menu-champ:hover {
-  border-color: #7ca050; transform: translateY(-3px);
+  border-color: #5b84c9; transform: translateY(-3px);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
 }
 .menu-champ.picked {
-  border-color: #a3c96a;
-  box-shadow: 0 0 0 2px rgba(163, 201, 106, 0.45), 0 10px 24px rgba(0, 0, 0, 0.5);
+  border-color: #6aa8e8;
+  box-shadow: 0 0 0 2px rgba(106, 168, 232, 0.45), 0 10px 24px rgba(0, 0, 0, 0.5);
 }
 .menu-champ-portrait {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
-  background: radial-gradient(circle at 50% 38%, #2c4a1c 0%, #101a09 90%);
+  background: radial-gradient(circle at 50% 38%, #1d3a63 0%, #0a1120 90%);
 }
 .menu-champ-body {
   position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 10px 9px; min-width: 0;
-  background: linear-gradient(180deg, rgba(4, 8, 2, 0) 0%, rgba(4, 8, 2, 0.92) 62%);
+  background: linear-gradient(180deg, rgba(3, 6, 14, 0) 0%, rgba(3, 6, 14, 0.92) 62%);
 }
 .menu-champ-name { font-weight: 800; font-size: 15px; letter-spacing: 0.3px; }
 .menu-champ-role { font-size: 10px; font-weight: 700; margin-top: 2px; }
 .menu-champ-blurb {
-  font-size: 10px; color: #93a87c; margin-top: 2px; line-height: 1.35;
+  font-size: 10px; color: #7e93b2; margin-top: 2px; line-height: 1.35;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 @media (max-width: 1100px) {
@@ -146,37 +159,37 @@ const CSS = `
 }
 .menu-sigils { display: flex; gap: 6px; margin: 6px 0; }
 .menu-sigil {
-  flex: 1; padding: 7px 4px; border-radius: 6px; border: 1px solid #4d451f; background: #1c190d;
+  flex: 1; padding: 7px 4px; border-radius: 6px; border: 1px solid #55482a; background: #16141f;
   color: #d8c9a0; font-size: 11px; text-align: center; cursor: pointer;
 }
 .menu-sigil.picked { border-color: #d8b45a; background: #3d3312; }
 .menu-skins { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
 .menu-skin {
-  padding: 6px 10px 6px 26px; border-radius: 6px; border: 1px solid #3a4f28;
-  background: #17210f; color: #d8e6c0; font-size: 11px; cursor: pointer;
+  padding: 6px 10px 6px 26px; border-radius: 6px; border: 1px solid #28405e;
+  background: #0f1930; color: #c9d9ee; font-size: 11px; cursor: pointer;
   position: relative;
 }
-.menu-skin.picked { border-color: #a3c96a; background: #2c4a1c; }
+.menu-skin.picked { border-color: #6aa8e8; background: #1d3a63; }
 .menu-skin-swatch {
   position: absolute; left: 7px; top: 50%; transform: translateY(-50%);
   width: 13px; height: 13px; border-radius: 3px; border: 1px solid #0008;
 }
 .menu-roster { margin-top: 10px; }
 .menu-roster-champ {
-  padding: 9px 10px; border-radius: 6px; border: 1px solid #3a4f28; background: #17210f;
+  padding: 9px 10px; border-radius: 6px; border: 1px solid #28405e; background: #0f1930;
   margin-bottom: 6px; font-size: 12px; line-height: 1.45;
   display: flex; gap: 10px; align-items: flex-start;
 }
 .menu-roster-portrait {
   width: 56px; height: 56px; border-radius: 6px; flex: none;
-  background: radial-gradient(circle at 40% 35%, #2c4a1c 0%, #101a09 90%);
-  border: 1px solid #2c3d1e;
+  background: radial-gradient(circle at 40% 35%, #1d3a63 0%, #0a1120 90%);
+  border: 1px solid #21344e;
 }
 .menu-roster-body { min-width: 0; }
 .menu-roster-name { font-weight: 700; font-size: 13px; }
 .menu-roster-role { font-size: 11px; font-weight: 700; margin-left: 6px; }
-.menu-roster-blurb { color: #93a87c; margin: 2px 0 4px; }
-.menu-roster-line { color: #c9d8ae; font-size: 11px; }
+.menu-roster-blurb { color: #7e93b2; margin: 2px 0 4px; }
+.menu-roster-line { color: #aac2dd; font-size: 11px; }
 .menu-roster-line b { color: #e8dfae; font-weight: 700; }
 .menu-teams { display: flex; gap: 14px; font-size: 12px; margin-bottom: 6px; }
 .menu-team { flex: 1; }
@@ -194,10 +207,13 @@ function ensureCss(): void {
   document.head.appendChild(style);
 }
 
-function screen(container: HTMLElement): { root: HTMLElement; card: HTMLElement } {
+// backdrop: every pre-game screen gets the animated canvas behind its card;
+// the home screen opts out because its 3D champion showcase IS the backdrop.
+function screen(container: HTMLElement, backdrop = true): { root: HTMLElement; card: HTMLElement } {
   ensureCss();
   const root = document.createElement('div');
   root.className = 'menu';
+  if (backdrop) startMenuBackdrop(root);
   const card = document.createElement('div');
   card.className = 'menu-card';
   root.appendChild(card);
@@ -231,7 +247,7 @@ export interface HomeChoice {
 // has no stored name yet; the join field arrives filled, one click left.
 export function showHome(container: HTMLElement, prefillCode?: string): Promise<HomeChoice> {
   return new Promise((resolve) => {
-    const { root, card } = screen(container);
+    const { root, card } = screen(container, false);
     root.classList.add('home');
     card.classList.add('home');
     // The living backdrop: champions idling behind the card.

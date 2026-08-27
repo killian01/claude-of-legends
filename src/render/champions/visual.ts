@@ -30,6 +30,8 @@ export class ChampionVisual {
   private base: ChampionBaseState = 'idle';
   private current: THREE.AnimationAction | null = null;
   private shot: THREE.AnimationAction | null = null;
+  // Time lived, to arm the prop rest-pose capture after the idle fade-in.
+  private ageMs = 0;
 
   constructor(
     template: ChampionTemplate,
@@ -129,11 +131,16 @@ export class ChampionVisual {
       this.baseActions.run?.setEffectiveTimeScale(runTimeScale(input.speed, this.runSpeed));
     }
     this.mixer.update(dtMs / 1000);
-    // Sync prop anchors to their bones in root space: position only, at
-    // unit scale, so props keep their authored size and pose no matter what
-    // scale or orientation the bone chain carries. One frame of world-matrix
-    // lag is invisible.
-    syncPropAnchors(this.root, this.anchors);
+    this.ageMs += dtMs;
+    // Sync prop anchors to their bones in root space at unit scale, so
+    // props keep their authored size no matter what scale the bone chain
+    // carries. The rest orientation is captured only once the idle pose has
+    // fully faded in AND no one-shot holds the rig: a swing playing during
+    // the capture window (slow asset load into a live fight, or the home
+    // stage's random attacks) would bake a mid-swing hand as "rest" and
+    // leave the weapon permanently twisted.
+    const settled = this.ageMs > 300 && this.shot === null && this.base === 'idle';
+    syncPropAnchors(this.root, this.anchors, settled);
   }
 
   // Releases the mixer bindings and the per-clone skeletons. Geometry is the

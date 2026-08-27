@@ -4,7 +4,8 @@
 // ticks for smooth motion.
 
 import * as THREE from 'three';
-import { playSfx } from '../game/sfx';
+import { playCastSfx, playSfx } from '../game/sfx';
+import { attackWindupSeconds, RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import type { CastSpec } from '../sim/combat/casting';
 import { isRooted, isStunned } from '../sim/combat/status';
 import { type AbilityKey, DT, type Vec2 } from '../sim/types';
@@ -15,6 +16,7 @@ import {
   buildZoneMesh,
   resolveSpec,
   schoolColorOf,
+  schoolTagOf,
   spellColorsOf,
 } from './ability_vfx';
 import { buildChampionMesh } from './champion_shapes';
@@ -120,6 +122,8 @@ interface TrackedUnit {
   // Death presentation: champions fall for a beat instead of popping out.
   wasDead: boolean;
   deadUntil: number;
+  // Level edge detection, for the world-space level-up burst.
+  lastLevel: number;
 }
 
 // The limb pivots a champion mesh publishes for the walk cycle.
@@ -259,6 +263,14 @@ export class Renderer {
   private aimMeshes: THREE.Mesh[] = [];
   private aimGuide: THREE.Mesh | null = null;
   private aimSpot: THREE.Mesh | null = null;
+  // Where the camera looks this frame, for distance-attenuated combat audio.
+  private camFocus: Vec2 = { x: 0, z: 0 };
+  // Damage numbers for units the viewer did NOT hit are deferred one frame:
+  // onSimTick only sees hp deltas, and combat notes (which claim the
+  // viewer's own hits) arrive right after it, so flushing on the next
+  // render keeps a victim from printing the same damage twice.
+  private pendingDamage: { unitId: number; amount: number }[] = [];
+  private readonly selfHitTargets = new Set<number>();
   // Window-level listeners registered by the constructor, detached by
   // dispose(): matches end on the same page now, without a reload sweep.
   private readonly cleanups: (() => void)[] = [];
@@ -725,7 +737,7 @@ export class Renderer {
       const t = this.tracked.get(atk.unitId);
       const attacker = this.world.units.get(atk.unitId);
       const target = this.world.units.get(atk.targetId);
-      if (!t || !t.mesh.visible) continue;
+      if (!t?.mesh.visible) continue;
       t.swingUntil = performance.now() + 200;
       this.championVisuals.get(atk.unitId)?.playAttack();
       if (target) {
@@ -735,7 +747,26 @@ export class Renderer {
         t.swingDir = { x: dx / d, z: dz / d };
         t.yaw = Math.atan2(dx, dz);
       }
-      if (atk.unitId === this.followId) playSfx('swing');
+      // Every visible swing is audible; other units fade with distance so
+      // a nearby fight has a soundtrack without the whole map whipping air.
+      playSfx('swing', atk.unitId === this.followId ? 1 : 0.6 * this.sfxGain(t.curr.x, t.curr.z));
+      // Melee autos never reach the projectile-impact path; schedule the
+      // contact spark on the sim's own strike beat (the attack windup), so
+      // the flash lands exactly when the damage does.
+      if (attacker && target && attacker.stats.attackRange <= RANGED_THRESHOLD) {
+        const targetId = atk.targetId;
+        const sparkColor = TEAM_LIGHT[attacker.team] ?? 0xffffff;
+        const beatMs =
+          attackWindupSeconds(attacker.stats.attackSpeed, attacker.kind === 'champion') * 1000;
+        this.vfx.schedule(beatMs, () => {
+          const tt = this.tracked.get(targetId);
+          if (!tt?.mesh.visible) return;
+          const px = tt.mesh.position.x;
+          const pz = tt.mesh.position.z;
+          this.vfx.sparkBurst(px, 1.0, pz, sparkColor, 6, 5, { life: 0.3, size: 0.38 });
+          this.vfx.glowFlash(px, 1.1, pz, 0.9, sparkColor, 0.16);
+        });
+      }
       // Tower fire is unmistakable: a red flash on the victim and a heavy
       // bolt sound when it is shooting YOU.
       if (attacker?.kind === 'tower' && target) {
@@ -748,6 +779,9 @@ export class Renderer {
     let impacted = false;
     for (const hit of notes.hits) {
       if (hit.amount < 1) continue;
+      // Claimed: the deferred hp-delta pass must not print this victim's
+      // damage a second time this tick.
+      this.selfHitTargets.add(hit.targetId);
       const t = this.tracked.get(hit.targetId);
       const victim = this.world.units.get(hit.targetId);
       if (!t || !victim || !t.mesh.visible) continue;
@@ -763,14 +797,16 @@ export class Renderer {
       );
     }
     if (impacted) playSfx('impact');
-    // The player's own casts already played their school sound in boot.
-    if (notes.casts.some((c) => c.unitId !== this.followId)) playSfx('cast');
     for (const cast of notes.casts) {
       const caster = this.world.units.get(cast.unitId);
       if (!caster) continue;
       // Offline guard: never flash a cast the viewer's team cannot see.
       if (!this.world.isVisible(this.viewerTeam as 0 | 1, cast.unitId)) continue;
       const t = this.tracked.get(cast.unitId);
+      const others = cast.unitId !== this.followId;
+      // The local player's own casts already played their school sound in
+      // boot; everyone else's fade with distance.
+      const gain = others ? 0.7 * this.sfxGain(caster.pos.x, caster.pos.z) : 0;
       let color = caster.team === this.viewerTeam ? 0x9dbcf5 : 0xf5a3a3;
       // With the key on the wire the flash wears the spell's own school
       // color, and the catalog can fire its authored cast effect.
@@ -778,8 +814,10 @@ export class Renderer {
         const def = this.world.championDef(caster.championId)?.abilities[cast.key];
         if (def) {
           color = schoolColorOf(def.spec).main;
+          if (others) playCastSfx(schoolTagOf(def.spec), gain);
           const vis = spellVisualOf(`${caster.championId}_${cast.key}`);
-          if (vis?.castFx && !(def.windup && def.windup > 0)) {
+          const instant = !(def.windup && def.windup > 0);
+          if (vis?.castFx && instant) {
             const yaw = t?.yaw ?? 0;
             vis.castFx(
               this.vfx,
@@ -789,10 +827,35 @@ export class Renderer {
               Math.cos(yaw),
               schoolColorOf(def.spec),
             );
+          } else if (
+            others &&
+            instant &&
+            ['cone', 'burst', 'dash', 'enemy_target', 'self_or_ally'].includes(def.spec.kind)
+          ) {
+            // Other champions' instant abilities spawn no projectile and no
+            // zone; give them the same shape flash the local player gets,
+            // aimed along the caster's facing.
+            const yaw = t?.yaw ?? 0;
+            const spec = def.spec as { radius?: number; range?: number; halfAngle?: number };
+            this.spawnCastFx(
+              {
+                castRange: def.castRange,
+                kind: def.spec.kind,
+                radius: spec.radius,
+                range: spec.range,
+                halfAngle: spec.halfAngle,
+              },
+              color,
+              { x: caster.pos.x, z: caster.pos.z },
+              { x: caster.pos.x + Math.sin(yaw), z: caster.pos.z + Math.cos(yaw) },
+            );
           }
           if (t) t.castUntil = performance.now() + 420;
           this.championVisuals.get(cast.unitId)?.playCast();
         }
+      } else if (others) {
+        // Sigils and unknown keys: the shared whoosh, attenuated.
+        playSfx('cast', gain);
       }
       this.flashMarker(caster.pos.x, caster.pos.z, color);
       // A quick body pulse on the caster sells the cast without a rig.
@@ -803,6 +866,13 @@ export class Renderer {
   // Adds trauma to the camera shake. Applied squared, decayed per frame.
   addShake(strength: number): void {
     this.shakeAmp = Math.min(1, this.shakeAmp + strength);
+  }
+
+  // Distance attenuation for other units' combat sounds: full volume within
+  // earshot of the camera focus, silent past the edge of the view.
+  private sfxGain(x: number, z: number): number {
+    const d = Math.hypot(x - this.camFocus.x, z - this.camFocus.z);
+    return Math.max(0, Math.min(1, 1 - (d - 14) / 28));
   }
 
   private buildLights(): void {
@@ -1096,6 +1166,7 @@ export class Renderer {
           hpLabelKey: '',
           wasDead: false,
           deadUntil: 0,
+          lastLevel: u.level,
         };
         this.tracked.set(id, t);
       } else {
@@ -1107,7 +1178,23 @@ export class Renderer {
       const nowMs = performance.now();
       if (u.dead && !t.wasDead) {
         t.deadUntil = nowMs + 600;
-        if (t.mesh.visible) this.flashMarker(u.pos.x, u.pos.z, 0xff5a3a);
+        if (t.mesh.visible) {
+          this.flashMarker(u.pos.x, u.pos.z, 0xff5a3a);
+          // A champion death is a moment, not a despawn: a burst of light
+          // and sparks, a shockwave, smoke, and a kick if it happens close.
+          if (u.kind === 'champion' || u.kind === 'warden') {
+            const c = TEAM_LIGHT[u.team] ?? 0xd8b0f0;
+            const near = this.sfxGain(u.pos.x, u.pos.z);
+            this.vfx.glowFlash(u.pos.x, 1.2, u.pos.z, 3.4, c, 0.35);
+            this.vfx.sparkBurst(u.pos.x, 1.0, u.pos.z, c, 26, 9, { life: 0.6, size: 0.5 });
+            this.vfx.rings.spawn(u.pos.x, u.pos.z, 3.4, c, 520, { alpha: 0.7 });
+            this.vfx.lightPulse(u.pos.x, u.pos.z, c, 2.6, 420);
+            this.vfx.smokePuffs(u.pos.x, u.pos.z, 0x555560, 5, 1.2);
+            this.addShake(0.22 * near);
+            // The HUD already plays the full death knell for YOUR death.
+            if (id !== this.followId) playSfx('death', 0.7 * near);
+          }
+        }
       } else if (!u.dead && t.wasDead) {
         t.prev = { ...t.curr };
         t.deadUntil = 0;
@@ -1120,9 +1207,10 @@ export class Renderer {
         (u.team === this.viewerTeam || this.world.isVisible(this.viewerTeam as 0 | 1, id));
       t.mesh.visible = visible;
 
-      // Damage numbers are PERSONAL, like the genre: only what the player
-      // takes shows here (what the player deals arrives via combat notes).
-      // Every visible hit still lands a white flash and, on the player, a
+      // Damage numbers: your own taken damage in red, your dealt damage via
+      // combat notes in gold, and every other visible champion fight in a
+      // smaller neutral tone (deferred a frame so notes claim theirs first).
+      // Every visible hit also lands a white flash and, on the player, a
       // camera kick, so fights read as impacts rather than draining bars.
       const dhp = t.lastHp - u.hp;
       if (visible && dhp >= 1) {
@@ -1136,9 +1224,28 @@ export class Renderer {
           this.fct.spawn(`-${Math.round(dhp)}`, '#ff6a5e', u.pos.x, t.barY + 1.4, u.pos.z);
           playSfx('hit');
           if (dhp >= u.maxHp * 0.05) this.addShake(0.28);
+        } else if (u.kind === 'champion' || u.kind === 'warden') {
+          this.pendingDamage.push({ unitId: id, amount: dhp });
+          playSfx('hit', 0.5 * this.sfxGain(u.pos.x, u.pos.z));
         }
       }
       t.lastHp = u.hp;
+
+      // Level-up: a pillar of light on the champion, for everyone who can
+      // see it (the HUD adds the chime for your own).
+      if (u.kind === 'champion' && u.level > t.lastLevel) {
+        t.lastLevel = u.level;
+        if (visible) {
+          this.vfx.pillars.spawn(u.pos.x, u.pos.z, 1.1, 5.5, 0xffd94a, 900, 0.5);
+          this.vfx.rings.spawn(u.pos.x, u.pos.z, 2.2, 0xffd94a, 600, { alpha: 0.8 });
+          this.vfx.sparkBurst(u.pos.x, 0.6, u.pos.z, 0xffd94a, 14, 4, {
+            life: 0.7,
+            up: 7,
+            gravity: 2,
+          });
+          this.vfx.lightPulse(u.pos.x, u.pos.z, 0xffd94a, 1.8, 500);
+        }
+      }
 
       // Nameplate: player or bot name plus level, rebuilt on change only.
       // It floats a full step above the bars so the two never overlap.
@@ -1300,6 +1407,24 @@ export class Renderer {
     }
     for (const [id, t] of this.tracked) {
       if (!this.world.units.has(id)) {
+        // Removal IS death for everything that never respawns: minions get
+        // a small pop, structures collapse with debris, dust, and a shake.
+        if (t.mesh.visible) {
+          if (t.kind === 'minion') {
+            this.vfx.sparkBurst(t.curr.x, 0.8, t.curr.z, 0xd8d0c0, 4, 3.5, {
+              life: 0.3,
+              size: 0.28,
+            });
+          } else if (t.kind === 'tower' || t.kind === 'sanctum') {
+            const near = this.sfxGain(t.curr.x, t.curr.z);
+            this.vfx.debris.burst(t.curr.x, t.curr.z, 0x8a8a92, 14, { up: 11, size: 0.34 });
+            this.vfx.smokePuffs(t.curr.x, t.curr.z, 0x777770, 10, 2.4);
+            this.vfx.glowFlash(t.curr.x, 2.5, t.curr.z, 4.5, 0xffc878, 0.4);
+            this.vfx.rings.spawn(t.curr.x, t.curr.z, 5, 0xffc878, 650, { alpha: 0.6 });
+            this.vfx.lightPulse(t.curr.x, t.curr.z, 0xffc878, 3, 500);
+            this.addShake(0.2 + 0.3 * near);
+          }
+        }
         // Fade out instead of popping, then dispose for real (units churn
         // by the hundreds per match).
         this.dying.push({ mesh: t.mesh, start: performance.now() });
@@ -1341,11 +1466,19 @@ export class Renderer {
     }
     for (const [id, t] of this.trackedProjectiles) {
       if (!this.world.projectiles.has(id)) {
-        // Authored impact where the bolt ended; auto-attacks keep the small
-        // ring, tagged spells burst in their own school.
+        // Authored impact where the bolt ended; tagged spells burst in
+        // their own school; untagged auto-attack bolts land a real contact
+        // spark at body height instead of a flat ground ring.
         if (t.vis?.impact) t.vis.impact(this.vfx, t.curr.x, t.curr.z, t.colors);
         else if (t.tag) genericImpact(this.vfx, t.curr.x, t.curr.z, t.colors);
-        else this.flashMarker(t.curr.x, t.curr.z, t.color);
+        else {
+          this.vfx.sparkBurst(t.curr.x, 1.0, t.curr.z, t.color, 5, 4.5, {
+            life: 0.3,
+            size: 0.38,
+            gravity: 10,
+          });
+          this.vfx.glowFlash(t.curr.x, 1.1, t.curr.z, 1.0, t.color, 0.16);
+        }
         this.scene.remove(t.mesh);
         disposeDeep(t.mesh);
         this.trackedProjectiles.delete(id);
@@ -1651,6 +1784,21 @@ export class Renderer {
     const dtMs = Math.min(100, now - this.lastFrameAt);
     this.lastFrameAt = now;
     this.dressing?.animate(now);
+
+    // Flush the deferred damage numbers: combat notes have run by now, so
+    // any victim the viewer hit this tick is skipped (its gold number is
+    // already up) and the rest print small and neutral.
+    if (this.pendingDamage.length > 0) {
+      for (const p of this.pendingDamage) {
+        if (this.selfHitTargets.has(p.unitId)) continue;
+        const u = this.world.units.get(p.unitId);
+        const t = this.tracked.get(p.unitId);
+        if (!u || !t?.mesh.visible) continue;
+        this.fct.spawn(`-${Math.round(p.amount)}`, '#ded7c8', u.pos.x, t.barY + 1.1, u.pos.z, 0.7);
+      }
+      this.pendingDamage.length = 0;
+    }
+    this.selfHitTargets.clear();
     let followPos: THREE.Vector3 | null = null;
     for (const [id, t] of this.tracked) {
       const x = t.prev.x + (t.curr.x - t.prev.x) * alpha;
@@ -1915,6 +2063,8 @@ export class Renderer {
       this.freeCam ??
       followPos ??
       new THREE.Vector3(this.world.map.size / 2, 0, this.world.map.size / 2);
+    this.camFocus.x = target.x;
+    this.camFocus.z = target.z;
     this.camera.position.copy(target).addScaledVector(this.cameraOffset, this.zoom);
     if (this.shakeAmp > 0.001) {
       const k = this.shakeAmp * this.shakeAmp * 0.55;
