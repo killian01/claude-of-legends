@@ -3,7 +3,14 @@
 import { describe, expect, it } from 'vitest';
 import { type GameMode, nextStep } from '../src/game/flow';
 
-const ALL_MODES: readonly GameMode[] = ['practice', 'queue', 'create', 'join', 'replay'];
+const ALL_MODES: readonly GameMode[] = [
+  'practice',
+  'queue',
+  'create',
+  'join',
+  'replay',
+  'spectate',
+];
 
 describe('post-match flow', () => {
   it('returning to the menu always goes home, whatever the mode', () => {
@@ -16,6 +23,7 @@ describe('post-match flow', () => {
 
   it('play again restarts the same replay after watching one', () => {
     expect(nextStep('again', 'replay')).toBe('replay');
+    expect(nextStep('again', 'spectate')).toBe('replay');
   });
 
   it('play again re-enters the public queue after every online mode', () => {

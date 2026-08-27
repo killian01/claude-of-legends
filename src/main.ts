@@ -10,6 +10,7 @@ import { requestGameFullscreen } from './game/fullscreen';
 import { parseJoinCode } from './game/invite';
 import { ReplayWorld } from './game/replay_world';
 import { getSettings } from './game/settings';
+import { type SpectatorView, startSpectator } from './game/spectate';
 import { ClientWorld } from './net/client_world';
 import type { ServerMsg } from './net/protocol';
 import { applyReplayEvent, buildMatchSim, type ReplayRecord } from './net/replay';
@@ -194,6 +195,83 @@ async function runReplay(replayId: number): Promise<PostMatchAction> {
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
+  });
+}
+
+// Watch a live match: a seatless mirror world on one team's fog, driven
+// by the server's spectator snapshot stream.
+function runSpectate(matchId: number, team: TeamId): Promise<PostMatchAction> {
+  return new Promise((resolve) => {
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${window.location.host}/ws`);
+    // Spectators send no orders; the world's sender goes nowhere.
+    const world = new ClientWorld(() => undefined);
+    let view: SpectatorView | null = null;
+    let finished = false;
+    const finish = (action: PostMatchAction): void => {
+      if (finished) return;
+      finished = true;
+      view?.dispose();
+      view = null;
+      if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify({ t: 'leave' }));
+        ws.close();
+      }
+      resolve(action);
+    };
+    ws.addEventListener('open', () => {
+      // No token on purpose: watching needs no identity, and presenting
+      // one could pull a reserved seat back instead of spectating.
+      ws.send(JSON.stringify({ t: 'hello', name: 'spectator' }));
+      ws.send(JSON.stringify({ t: 'spectate', matchId, team }));
+    });
+    ws.addEventListener('message', (event) => {
+      if (finished) return;
+      let msg: ServerMsg;
+      try {
+        msg = JSON.parse(String(event.data)) as ServerMsg;
+      } catch {
+        return;
+      }
+      switch (msg.t) {
+        case 'match_start':
+        case 'score':
+          world.applyServer(msg);
+          break;
+        case 'snap': {
+          const changed = world.applyServer(msg);
+          if (!view && world.units.size > 0) {
+            view = startSpectator(container, world, team, () => finish('menu'));
+          }
+          if (changed && view) {
+            const kills: { unitId: number; killerId: number }[] = [];
+            const casts: { unitId: number; key?: AbilityKey }[] = [];
+            const attacks: { unitId: number; targetId: number }[] = [];
+            for (const e of msg.events) {
+              if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
+              else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
+              else if (e.e === 'atk') attacks.push({ unitId: e.unitId, targetId: e.targetId });
+            }
+            view.onWorldTick({ kills, golds: [], casts, hits: [], attacks });
+          }
+          break;
+        }
+        case 'match_end':
+          finish('menu');
+          break;
+        case 'error':
+          void showNotice(container, 'Notice', msg.message).then(() => finish('menu'));
+          break;
+        default:
+          break;
+      }
+    });
+    ws.addEventListener('close', () => {
+      if (finished) return;
+      void showNotice(container, 'Disconnected', 'Lost the connection to the match.').then(() =>
+        finish('menu'),
+      );
+    });
   });
 }
 
@@ -463,6 +541,8 @@ async function boot(): Promise<void> {
       action = await runOffline(pick);
     } else if (choice.mode === 'replay' && choice.replayId !== undefined) {
       action = await runReplay(choice.replayId);
+    } else if (choice.mode === 'spectate' && choice.matchId !== undefined) {
+      action = await runSpectate(choice.matchId, choice.team === 1 ? 1 : 0);
     } else {
       action = await runOnline(choice);
     }

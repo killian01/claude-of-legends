@@ -168,6 +168,20 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify(buildLadder(registry.all())));
       return;
     }
+    if (url === '/api/live') {
+      // Running matches open to spectators: never abandoned, not ended.
+      const live = [...matches.entries()]
+        .filter(([, e]) => e.endedAt === null && e.abandonedAt === null)
+        .map(([id, e]) => ({
+          id,
+          durationS: Math.round(e.match.sim.time),
+          spectators: e.match.spectators.size,
+          players: [...e.match.players.values()].map((p) => ({ name: p.name, team: p.team })),
+        }));
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.end(JSON.stringify(live));
+      return;
+    }
     const replayUrl = /^\/api\/replay\/(\d{1,9})$/.exec(url);
     if (replayUrl) {
       try {
@@ -339,6 +353,12 @@ wss.on('connection', (ws, req) => {
           client.matchId = null;
           reservations.delete(client.token);
           const entry = matches.get(leftMatchId);
+          // A spectator walking out only stops watching: no bot takeover,
+          // no penalty, no team notice.
+          if (entry && !entry.match.players.has(id)) {
+            entry.match.removeSpectator(id);
+            break;
+          }
           if (entry) {
             // Ranked integrity: walking out of a LIVE rated-eligible match
             // with humans on both sides costs rating and a queue lockout.
@@ -395,6 +415,21 @@ wss.on('connection', (ws, req) => {
           });
         } else matchmaker.queuePartyFromLobby(id, now);
         break;
+      case 'spectate': {
+        if (inMatch) break;
+        const target = typeof msg.matchId === 'number' ? matches.get(msg.matchId) : undefined;
+        if (!target || target.endedAt !== null || target.abandonedAt !== null) {
+          send(id, { t: 'error', message: 'That match is over or gone.' });
+          break;
+        }
+        if (!target.match.addSpectator(id, msg.team === 1 ? 1 : 0)) {
+          send(id, { t: 'error', message: 'That match has no spectator slots left.' });
+          break;
+        }
+        client.matchId = msg.matchId as number;
+        send(id, { t: 'match_start', selfUnitId: 0, team: msg.team === 1 ? 1 : 0 });
+        break;
+      }
       case 'start_lobby':
         if (!inMatch) matchmaker.startLobby(id, now);
         break;
@@ -450,6 +485,8 @@ wss.on('connection', (ws, req) => {
     if (matchId !== null) {
       const entry = matches.get(matchId);
       if (entry) {
+        // A dropped spectator just stops watching.
+        entry.match.removeSpectator(id);
         // Hand the abandoned champion to a bot, tell the team, and reserve
         // the seat against the session token so the player can come back.
         const left = entry.match.handleDisconnect(id);
@@ -501,6 +538,11 @@ setInterval(() => {
           const snap = entry.match.buildSnapshotFor(player.clientId);
           if (snap) send(player.clientId, snap);
           if (score) send(player.clientId, score);
+        }
+        for (const cid of entry.match.spectators.keys()) {
+          const snap = entry.match.buildSpectatorSnapshotFor(cid);
+          if (snap) send(cid, snap);
+          if (score) send(cid, score);
         }
         if (entry.match.sim.winner !== null && entry.endedAt === null) {
           entry.endedAt = now;
@@ -588,6 +630,11 @@ setInterval(() => {
             if (c) c.matchId = null;
             send(player.clientId, { t: 'match_end' });
           }
+          for (const cid of entry.match.spectators.keys()) {
+            const c = clients.get(cid);
+            if (c) c.matchId = null;
+            send(cid, { t: 'match_end' });
+          }
           matches.delete(matchId);
           pruneReservations(matchId);
           console.log(`match ${matchId} closed`);
@@ -601,6 +648,11 @@ setInterval(() => {
             const c = clients.get(player.clientId);
             if (c) c.matchId = null;
             send(player.clientId, { t: 'match_end' });
+          }
+          for (const cid of entry.match.spectators.keys()) {
+            const c = clients.get(cid);
+            if (c) c.matchId = null;
+            send(cid, { t: 'match_end' });
           }
           matches.delete(matchId);
           pruneReservations(matchId);

@@ -36,10 +36,14 @@ interface MatchPlayer {
   known: Set<number>;
 }
 
+// Seatless viewers per match; a small cap keeps the snapshot loop honest.
+export const MAX_SPECTATORS = 10;
+
 export class Match {
   readonly sim: Sim;
   readonly seed: number;
   readonly players = new Map<number, MatchPlayer>();
+  readonly spectators = new Map<number, { team: TeamId; known: Set<number> }>();
   // What a replay needs: the exact picks and every event that steered the
   // sim (src/net/replay.ts rebuilds the match from these plus the seed).
   readonly replayPicks: ReplayPick[];
@@ -150,5 +154,24 @@ export class Match {
     const p = this.players.get(clientId);
     if (!p) return null;
     return buildSnapshot(this.sim, p.team, p.unitId, p.known, this.eventsThisTick);
+  }
+
+  // Spectators: seatless viewers on one team's fog. selfUnitId 0 makes the
+  // snapshot builder ship self null and no personal events; their known
+  // sets live here so identities resend per spectator like any client.
+  addSpectator(clientId: number, team: TeamId): boolean {
+    if (this.spectators.size >= MAX_SPECTATORS) return false;
+    this.spectators.set(clientId, { team: team === 1 ? 1 : 0, known: new Set() });
+    return true;
+  }
+
+  removeSpectator(clientId: number): void {
+    this.spectators.delete(clientId);
+  }
+
+  buildSpectatorSnapshotFor(clientId: number): ServerMsg | null {
+    const s = this.spectators.get(clientId);
+    if (!s) return null;
+    return buildSnapshot(this.sim, s.team, 0, s.known, this.eventsThisTick);
   }
 }

@@ -12,6 +12,7 @@ import type { AbilityKey, TeamId } from '../sim/types';
 import { describeAbility, describeSigil } from './describe';
 import { startHomeShowcase } from './home_showcase';
 import { buildLadderPanel } from './ladder_panel';
+import { buildLivePanel } from './live_panel';
 import { buildProfilePanel } from './profile_panel';
 import { buildSettingsPanel } from './settings_panel';
 import { attachTooltip, hideTooltip } from './tooltips';
@@ -217,10 +218,13 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 export interface HomeChoice {
   name: string;
-  mode: 'practice' | 'queue' | 'create' | 'join' | 'replay';
+  mode: 'practice' | 'queue' | 'create' | 'join' | 'replay' | 'spectate';
   code?: string;
   // For mode 'replay': the saved replay to watch.
   replayId?: number;
+  // For mode 'spectate': the live match and the side whose fog to share.
+  matchId?: number;
+  team?: TeamId;
 }
 
 // prefillCode: an invite link's lobby code (?join=CODE) when the visitor
@@ -251,12 +255,30 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
     const onWatchReplay = (e: Event): void => {
       const id = (e as CustomEvent<number>).detail;
       if (typeof id !== 'number') return;
-      window.removeEventListener('loc:replay', onWatchReplay);
+      cleanupWatch();
       stopShowcase();
       root.remove();
       resolve({ name: name.value.trim() || 'guest', mode: 'replay', replayId: id });
     };
+    const onSpectate = (e: Event): void => {
+      const detail = (e as CustomEvent<{ matchId: number; team: TeamId }>).detail;
+      if (typeof detail?.matchId !== 'number') return;
+      cleanupWatch();
+      stopShowcase();
+      root.remove();
+      resolve({
+        name: name.value.trim() || 'guest',
+        mode: 'spectate',
+        matchId: detail.matchId,
+        team: detail.team === 1 ? 1 : 0,
+      });
+    };
+    const cleanupWatch = (): void => {
+      window.removeEventListener('loc:replay', onWatchReplay);
+      window.removeEventListener('loc:spectate', onSpectate);
+    };
     window.addEventListener('loc:replay', onWatchReplay);
+    window.addEventListener('loc:spectate', onSpectate);
 
     const done = (mode: HomeChoice['mode'], code?: string): void => {
       const trimmed = name.value.trim() || 'guest';
@@ -265,7 +287,7 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
       } catch {
         // ignore
       }
-      window.removeEventListener('loc:replay', onWatchReplay);
+      cleanupWatch();
       stopShowcase();
       root.remove();
       resolve({ name: trimmed, mode, code });
@@ -328,6 +350,7 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
     card.append(el('div', 'menu-label', 'Career and ladder'));
     freshSection('Profile and history', buildProfilePanel);
     freshSection('Ladder', buildLadderPanel);
+    freshSection('Watch a live match', buildLivePanel);
 
     // The out-of-game roster browser: every champion with role, passive,
     // and kit, readable before ever entering a queue.
