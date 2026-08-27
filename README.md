@@ -1,4 +1,4 @@
-# League of Claudegend
+# Claude of Legends
 
 A mini League of Legends style MOBA: 5v5, three lanes, ten champions, playable in a browser in under 60 seconds. Built in a 48 hour sprint on the architecture proven by [world-of-claudecraft](https://github.com/levy-street/world-of-claudecraft): one deterministic TypeScript simulation core, an authoritative server, and every non-human participant driven by a single `Policy` abstraction the community can extend by PR and, later, train with reinforcement learning.
 

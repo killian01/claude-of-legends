@@ -266,5 +266,5 @@ setInterval(() => {
 }, 25);
 
 server.listen(PORT, () => {
-  console.log(`league-of-claudegend server on :${PORT} (serving ${DIST})`);
+  console.log(`claude-of-legends server on :${PORT} (serving ${DIST})`);
 });

@@ -153,7 +153,7 @@ export function showHome(container: HTMLElement): Promise<HomeChoice> {
   return new Promise((resolve) => {
     const { root, card } = screen(container);
     card.append(
-      el('h1', 'menu-title', 'League of Claudegend'),
+      el('h1', 'menu-title', 'Claude of Legends'),
       el('p', 'menu-sub', '5v5 in the browser. No account, no install.'),
       el('div', 'menu-label', 'Your name'),
     );

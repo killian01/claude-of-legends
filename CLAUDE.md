@@ -1,9 +1,9 @@
-<!-- League of Claudegend, project-root CLAUDE.md. Keep this lean and strictly
+<!-- Claude of Legends, project-root CLAUDE.md. Keep this lean and strictly
      repo-wide; anchor guidance on stable paths, symbols, and pinned tests, never
      on counts that rot. HTML comments like this are stripped before load.
      No em dashes, en dashes, or emojis. -->
 
-# League of Claudegend
+# Claude of Legends
 
 A mini League of Legends style MOBA in the browser: 5v5, three lanes, ten champions,
 online-first, with every non-human participant behind one deterministic Policy

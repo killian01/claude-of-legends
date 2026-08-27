@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# QA stop-gate for League of Claudegend, adapted from world-of-claudecraft.
+# QA stop-gate for Claude of Legends, adapted from world-of-claudecraft.
 #
 # Runs at the end of EVERY Claude Code turn (the Stop hook). It does only instant,
 # near-zero-cost checks on the working tree's uncommitted added lines (tracked diff

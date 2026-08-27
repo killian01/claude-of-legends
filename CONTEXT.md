@@ -1,4 +1,4 @@
-# League of Claudegend
+# Claude of Legends
 
 A 5v5 three-lane MOBA in the browser. One deterministic simulation, an authoritative server, and bots behind a single Policy abstraction.
 
