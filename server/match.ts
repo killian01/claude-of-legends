@@ -34,7 +34,13 @@ interface MatchPlayer {
   team: TeamId;
   unitId: number;
   known: Set<number>;
+  // sim.tickCount of this player's last command, for the AFK sweep.
+  lastCommandAt: number;
 }
+
+// A connected player silent for this long in a multi-human match is
+// treated as a walk-out (two minutes at 20 Hz).
+export const AFK_IDLE_TICKS = 20 * 120;
 
 // Seatless viewers per match; a small cap keeps the snapshot loop honest.
 export const MAX_SPECTATORS = 10;
@@ -75,8 +81,18 @@ export class Match {
         team: p.team,
         unitId,
         known: new Set(),
+        lastCommandAt: 0,
       });
     });
+  }
+
+  // Connected players whose last command is older than maxIdleTicks.
+  idleClientIds(maxIdleTicks: number): number[] {
+    const out: number[] = [];
+    for (const p of this.players.values()) {
+      if (this.sim.tickCount - p.lastCommandAt > maxIdleTicks) out.push(p.clientId);
+    }
+    return out;
   }
 
   private recordReplay(ev: ReplayEvent): void {
@@ -125,6 +141,8 @@ export class Match {
       team: seat.team,
       unitId: seat.unitId,
       known: new Set(),
+      // A fresh idle clock: a rejoin must not be flagged AFK on arrival.
+      lastCommandAt: this.sim.tickCount,
     });
   }
 
@@ -144,6 +162,7 @@ export class Match {
   handleCommand(clientId: number, msg: ClientMsg): void {
     const p = this.players.get(clientId);
     if (!p) return;
+    p.lastCommandAt = this.sim.tickCount;
     // Recorded raw, then applied through the SAME validated path a replay
     // uses: an invalid command no-ops identically live and replayed.
     this.recordReplay({ k: this.sim.tickCount, u: p.unitId, e: 'cmd', c: msg });

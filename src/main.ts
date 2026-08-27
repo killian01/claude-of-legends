@@ -469,17 +469,24 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           matchEnded = true;
           if (!pres) finish('menu');
           break;
-        case 'error':
+        case 'error': {
           // Pre-game refusals (bad lobby code, closed lobby) must reach the
           // player, not the console: clear whichever menu is up and say it.
+          // Mid-match, a server verdict (removed for inactivity) ends the
+          // session: tear down first, then explain over the home screen.
           console.warn('server:', msg.message);
+          const message = msg.message;
           if (!pres) {
             clearMenus();
             selectUi?.remove();
             selectUi = null;
-            void showNotice(container, 'Notice', msg.message).then(() => finish('menu'));
+            void showNotice(container, 'Notice', message).then(() => finish('menu'));
+          } else {
+            finish('menu');
+            void showNotice(container, 'Notice', message);
           }
           break;
+        }
         default:
           break;
       }

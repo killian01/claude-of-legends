@@ -55,3 +55,7 @@ _Avoid_: cast bar, channel (a channel would persist after resolving; no ability 
 **Telegraph**:
 The visible warning a dangerous spell shows before it lands: the windup's aimed shape, or a delayed zone's marked ground. Fairness rule: whoever can see the caster sees the telegraph, both teams alike. Presentation reads it from the sim; it never changes gameplay.
 _Avoid_: indicator (that is the caster's own aim preview)
+
+**Mastery**:
+A purely cosmetic per-champion rank derived from a player's recorded online matches on that champion (server/mastery.ts thresholds). Shown on the career profile with a title per rank; never affects gameplay, matchmaking, or rating.
+_Avoid_: champion points, grind level

@@ -14,7 +14,7 @@ import { isFiniteVec, parseClientMsg, type ServerMsg } from '../src/net/protocol
 import { DT, type TeamId } from '../src/sim/types';
 import { fillWithBots } from './bot_fill';
 import { buildLadder } from './ladder';
-import { Match } from './match';
+import { AFK_IDLE_TICKS, Match } from './match';
 import { Matchmaker } from './matchmaker';
 import { handleOf, type PlayerRecord, PlayerRegistry } from './players';
 import { buildProfile } from './profile';
@@ -144,6 +144,41 @@ const matchmaker = new Matchmaker(send, (picks, source) => {
   }
   console.log(`match ${id} started with ${picks.length} player(s)`);
 });
+
+// A player leaves a live match FOR GOOD, by choice or by the AFK sweep:
+// rated walk-out penalty and queue lockout when it applies, champion to a
+// bot with NO seat reservation, team notice, abandon check. Reservations
+// are for dropped connections only.
+function walkOutOfMatch(client: Client, entry: MatchEntry, matchId: number): void {
+  client.matchId = null;
+  reservations.delete(client.token);
+  if (entry.ratedEligible && entry.match.sim.winner === null) {
+    const humansByTeam: [number, number] = [0, 0];
+    for (const p of entry.match.players.values()) {
+      if (clients.has(p.clientId)) humansByTeam[p.team] += 1;
+    }
+    const penalty = leaverPenalty(humansByTeam);
+    const reg = registry.findByToken(client.token);
+    if (penalty > 0 && reg) {
+      registry.penalize(reg.id, penalty);
+      queueLocks.set(client.token, Date.now() + LEAVER_LOCKOUT_MS);
+      console.log(
+        `match ${matchId}: ${client.name} left a rated match (-${penalty}, queue locked)`,
+      );
+    }
+  }
+  const left = entry.match.handleDisconnect(client.id);
+  if (left) {
+    for (const cid of entry.match.players.keys()) {
+      send(cid, { t: 'player_left', name: left.name, team: left.team });
+    }
+  }
+  const anyConnected = [...entry.match.players.keys()].some((cid) => clients.has(cid));
+  if (!anyConnected && entry.abandonedAt === null) {
+    entry.abandonedAt = Date.now();
+    console.log(`match ${matchId} abandoned: holding for rejoin grace`);
+  }
+}
 
 // --- HTTP: static client + health ---
 
@@ -350,46 +385,17 @@ wss.on('connection', (ws, req) => {
         // escape menu) must not be pulled back in by their next queue.
         const leftMatchId = client.matchId;
         if (leftMatchId !== null) {
-          client.matchId = null;
-          reservations.delete(client.token);
           const entry = matches.get(leftMatchId);
-          // A spectator walking out only stops watching: no bot takeover,
-          // no penalty, no team notice.
           if (entry && !entry.match.players.has(id)) {
+            // A spectator walking out only stops watching: no bot
+            // takeover, no penalty, no team notice.
+            client.matchId = null;
             entry.match.removeSpectator(id);
-            break;
-          }
-          if (entry) {
-            // Ranked integrity: walking out of a LIVE rated-eligible match
-            // with humans on both sides costs rating and a queue lockout.
-            // Computed before the seat is handed over, so the leaver still
-            // counts; end-screen leaves (winner decided) cost nothing.
-            if (entry.ratedEligible && entry.match.sim.winner === null) {
-              const humansByTeam: [number, number] = [0, 0];
-              for (const p of entry.match.players.values()) {
-                if (clients.has(p.clientId)) humansByTeam[p.team] += 1;
-              }
-              const penalty = leaverPenalty(humansByTeam);
-              const reg = registry.findByToken(client.token);
-              if (penalty > 0 && reg) {
-                registry.penalize(reg.id, penalty);
-                queueLocks.set(client.token, Date.now() + LEAVER_LOCKOUT_MS);
-                console.log(
-                  `match ${leftMatchId}: ${client.name} left a rated match (-${penalty}, queue locked)`,
-                );
-              }
-            }
-            const left = entry.match.handleDisconnect(id);
-            if (left) {
-              for (const cid of entry.match.players.keys()) {
-                send(cid, { t: 'player_left', name: left.name, team: left.team });
-              }
-            }
-            const anyConnected = [...entry.match.players.keys()].some((cid) => clients.has(cid));
-            if (!anyConnected && entry.abandonedAt === null) {
-              entry.abandonedAt = Date.now();
-              console.log(`match ${leftMatchId} abandoned: holding for rejoin grace`);
-            }
+          } else if (entry) {
+            walkOutOfMatch(client, entry, leftMatchId);
+          } else {
+            client.matchId = null;
+            reservations.delete(client.token);
           }
         }
         break;
@@ -543,6 +549,25 @@ setInterval(() => {
           const snap = entry.match.buildSpectatorSnapshotFor(cid);
           if (snap) send(cid, snap);
           if (score) send(cid, score);
+        }
+        // AFK sweep: a connected player silent for two minutes in a live
+        // match with other humans walks out (bot takeover, penalty when
+        // rated); a solo-vs-bots match harms nobody and is left alone.
+        if (
+          entry.match.sim.tickCount % 200 === 0 &&
+          entry.match.sim.winner === null &&
+          entry.match.players.size >= 2
+        ) {
+          for (const cid of entry.match.idleClientIds(AFK_IDLE_TICKS)) {
+            const c = clients.get(cid);
+            if (!c) continue;
+            send(cid, {
+              t: 'error',
+              message: 'Removed for inactivity: a bot takes your champion over.',
+            });
+            walkOutOfMatch(c, entry, matchId);
+            console.log(`match ${matchId}: ${c.name} removed for inactivity`);
+          }
         }
         if (entry.match.sim.winner !== null && entry.endedAt === null) {
           entry.endedAt = now;
