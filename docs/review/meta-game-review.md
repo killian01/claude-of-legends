@@ -101,8 +101,10 @@ requeueing after walking out no longer yanks the player back into the
 abandoned match. `window.location.reload()` is gone from the client;
 `scripts/e2e_lifecycle.mjs` drives both scenarios.
 
-Still open from this section: the rating delta on the post-game once
-ranking exists.
+The rating delta landed with ranked integrity: the server sends each
+human a `match_result` (rated flag, signed delta, new rating) the
+moment the match is recorded, and the end screen shows it above the
+final scoreboard.
 
 ### 7. Social: parties, invites, team choice
 
@@ -149,13 +151,17 @@ without a licensing review of the CC0 asset base.
 
 Rating creates incentives; these arrive with it, not before:
 
-- Dodge and AFK: leaving a rated match already triggers bot takeover;
-  add a loss plus a short queue lockout for the leaver, and make
-  "reconnected within grace" erase the penalty.
+- FIXED (walk-outs): a deliberate leave from a live rated-eligible
+  match costs a flat rating penalty (no rated game counted) plus a
+  60 second queue lockout with a clear refusal message; a dropped
+  connection is never punished, its seat reservation and the rejoin
+  grace stand. AFK detection (present but idle) remains open.
 - Name squatting and impersonation: solved by the discriminator.
 - Smurfing: accept it; token identity makes new identities free and
   fighting that means accounts, which we rejected.
-- Boosting via private lobbies: private lobbies are never rated.
+- FIXED (boosting): matches carry their source from the matchmaker,
+  and only public-queue matches can be rated; a private lobby match
+  never touches rating, whatever its seats.
 
 ## Dependency graph
 
@@ -176,7 +182,8 @@ progression (9), integrity (10)  [after 4 and 5]
 2. DONE: lobby team picker and invite links (7a).
 3. DONE: storage module plus player identity (2, 1).
 4. DONE: match log, history, career panel (3, 5).
-5. DONE: Elo, the ladder screen, and rating deltas in history (4).
-   Still open from this line: the delta on the in-game end screen.
+5. DONE: Elo, the ladder screen, and rating deltas in history (4),
+   then the delta on the in-game end screen and ranked integrity for
+   walk-outs and lobby boosting (10).
 6. Then by appetite: party queue (7), replays and spectator (8),
-   mastery cosmetics (9), ranked integrity (10).
+   mastery cosmetics (9), AFK detection (10).

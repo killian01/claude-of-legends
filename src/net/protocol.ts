@@ -156,6 +156,9 @@ export type ServerMsg =
   | { t: 'player_left'; name: string; team: TeamId }
   // A dropped teammate reconnected and took their champion back.
   | { t: 'player_back'; name: string; team: TeamId }
+  // Sent once to each human player when the finished match is recorded:
+  // this player's rating movement (zero and rated:false when unrated).
+  | { t: 'match_result'; rated: boolean; delta: number; rating: number }
   | { t: 'match_end' }
   | { t: 'error'; message: string };
 

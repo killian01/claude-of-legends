@@ -277,6 +277,9 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
         case 'score':
           world.applyServer(msg);
           break;
+        case 'match_result':
+          pres?.setMatchResult(msg.rated, msg.delta, msg.rating);
+          break;
         case 'match_end':
           // The end overlay (stats, Play again, Return to menu) owns the way
           // out; without a presentation there is nothing to look at, go home.

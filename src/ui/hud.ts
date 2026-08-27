@@ -365,6 +365,7 @@ const CSS = `
 .hud-end-row { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
 .hud-end-row span:last-child { color: #93a87c; margin-left: 12px; white-space: nowrap; }
 .hud-end-btns { display: flex; gap: 12px; }
+.hud-end-rating { font-size: 15px; font-weight: 700; margin-top: 4px; min-height: 18px; }
 `;
 
 export interface NetHooks {
@@ -411,6 +412,7 @@ export class Hud {
   private readonly endOverlay: HTMLElement;
   private readonly endTitle: HTMLElement;
   private readonly endSub: HTMLElement;
+  private readonly endRating: HTMLElement;
   private readonly endStats: HTMLElement;
   private readonly escapeOverlay: HTMLElement;
   private readonly feed: HTMLElement;
@@ -769,6 +771,7 @@ export class Hud {
     this.endOverlay = el('div', 'hud-overlay');
     this.endTitle = el('div', 'hud-overlay-title');
     this.endSub = el('div', 'hud-overlay-sub');
+    this.endRating = el('div', 'hud-end-rating');
     this.endStats = el('div', 'hud-end-card');
     const endAgain = el('button', 'hud-menu-btn', 'Play again');
     endAgain.addEventListener('click', () => onExit('again'));
@@ -776,7 +779,7 @@ export class Hud {
     endReturn.addEventListener('click', () => onExit('menu'));
     const endBtns = el('div', 'hud-end-btns');
     endBtns.append(endAgain, endReturn);
-    this.endOverlay.append(this.endTitle, this.endSub, this.endStats, endBtns);
+    this.endOverlay.append(this.endTitle, this.endSub, this.endRating, this.endStats, endBtns);
 
     this.escapeOverlay = el('div', 'hud-overlay');
     const resume = el('button', 'hud-menu-btn', 'Resume (Esc)');
@@ -813,6 +816,20 @@ export class Hud {
 
   setNetHooks(hooks: NetHooks): void {
     this.netHooks = hooks;
+  }
+
+  // The server's verdict on this player's rating, shown on the end screen
+  // (it arrives right after the winning snapshot).
+  setMatchResult(rated: boolean, delta: number, rating: number): void {
+    if (!rated) {
+      this.endRating.textContent =
+        'Not rated: rating needs a public queue match with humans on both sides.';
+      this.endRating.style.color = '#93a87c';
+      this.endRating.style.fontSize = '12px';
+      return;
+    }
+    this.endRating.textContent = `${delta >= 0 ? '+' : ''}${delta} rating (now ${rating})`;
+    this.endRating.style.color = delta >= 0 ? '#8fd06a' : '#d06a6a';
   }
 
   // Same-page teardown: the HUD tree and its stylesheet go; a floating

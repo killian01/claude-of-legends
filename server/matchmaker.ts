@@ -35,10 +35,15 @@ interface SelectEntry extends Pending {
   locked: { championId: string; sigils: [string, string]; skin: number } | null;
 }
 
+// Where a match came from: only public-queue matches are ever rated
+// (a private lobby would be a boosting machine otherwise).
+export type MatchSource = 'queue' | 'lobby';
+
 interface SelectSession {
   entries: SelectEntry[];
   deadline: number;
   started: boolean;
+  source: MatchSource;
 }
 
 // Lobby seats carry a chosen side, so friends can play TOGETHER against
@@ -55,7 +60,7 @@ interface Lobby {
 }
 
 type Send = (clientId: number, msg: ServerMsg) => void;
-type OnMatchReady = (picks: MatchPick[]) => void;
+type OnMatchReady = (picks: MatchPick[], source: MatchSource) => void;
 
 // Crypto-random codes: a counter transform was reproducible offline, so any
 // third party could enumerate live lobbies. Ambiguous letters are excluded.
@@ -106,7 +111,7 @@ export class Matchmaker {
     this.removeEverywhere(clientId, now);
     this.queue.push({ clientId, name, botReady: false });
     if (this.queue.length >= MATCH_SIZE) {
-      this.startSelect(this.queue.splice(0, MATCH_SIZE), now);
+      this.startSelect(this.queue.splice(0, MATCH_SIZE), now, 'queue');
       if (!this.queue.some((p) => p.botReady)) this.botStartAt = null;
     }
     this.broadcastQueue(now);
@@ -123,7 +128,7 @@ export class Matchmaker {
     if (this.queue.every((p) => p.botReady)) {
       const players = this.queue.splice(0, this.queue.length);
       this.botStartAt = null;
-      this.startSelect(players, now);
+      this.startSelect(players, now, 'queue');
       this.broadcastQueue(now);
       return;
     }
@@ -183,7 +188,7 @@ export class Matchmaker {
     for (const lobby of this.lobbies.values()) {
       if (lobby.hostId !== clientId) continue;
       this.lobbies.delete(lobby.code);
-      this.startSelect(lobby.players, now);
+      this.startSelect(lobby.players, now, 'lobby');
       return;
     }
   }
@@ -202,7 +207,11 @@ export class Matchmaker {
 
   // Queue entries alternate sides by position; lobby entries carry the side
   // their players chose and keep it.
-  private startSelect(players: (Pending & { team?: TeamId })[], now: number): void {
+  private startSelect(
+    players: (Pending & { team?: TeamId })[],
+    now: number,
+    source: MatchSource,
+  ): void {
     if (players.length === 0) return;
     const session: SelectSession = {
       entries: players.map((p, i) => ({
@@ -213,6 +222,7 @@ export class Matchmaker {
       })),
       deadline: now + SELECT_SECONDS * 1000,
       started: false,
+      source,
     };
     this.selects.push(session);
     const roster = session.entries.map((e) => ({ name: e.name, team: e.team }));
@@ -287,7 +297,7 @@ export class Matchmaker {
       for (let i = this.queue.length - 1; i >= 0; i--) {
         if (this.queue[i]!.botReady) ready.unshift(...this.queue.splice(i, 1));
       }
-      if (ready.length > 0) this.startSelect(ready, now);
+      if (ready.length > 0) this.startSelect(ready, now, 'queue');
       this.broadcastQueue(now);
       return;
     }
@@ -311,7 +321,7 @@ export class Matchmaker {
       sigils: e.locked?.sigils ?? DEFAULT_SIGILS,
       skin: e.locked?.skin ?? 0,
     }));
-    this.onMatchReady(picks);
+    this.onMatchReady(picks, session.source);
   }
 
   removeEverywhere(clientId: number, now: number = Date.now()): void {
@@ -322,7 +332,7 @@ export class Matchmaker {
         // Everyone still queued already agreed: start them now.
         const players = this.queue.splice(0, this.queue.length);
         this.botStartAt = null;
-        this.startSelect(players, now);
+        this.startSelect(players, now, 'queue');
       } else if (!this.queue.some((p) => p.botReady)) {
         this.botStartAt = null;
       }
