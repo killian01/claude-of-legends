@@ -14,6 +14,7 @@ import { DT } from '../sim/types';
 import { Hud, type NetHooks } from '../ui/hud';
 import { Minimap } from '../ui/minimap';
 import type { IWorld } from '../world_api';
+import type { PostMatchAction } from './flow';
 import { setupInput } from './input';
 import { startMusic, stopMusic } from './music';
 import { pickEnemyAt, pickEnemyOnScreen, pickUnitOnScreen } from './picking';
@@ -48,6 +49,9 @@ export interface Presentation {
   pushChat(from: string, team: TeamId, text: string): void;
   showPing(x: number, z: number, from: string, team: TeamId): void;
   setNetHooks(hooks: NetHooks): void;
+  // Same-page teardown: render loop, input, HUD, minimap, GL, music. The
+  // menu returns on the same document; nothing may keep running behind it.
+  dispose(): void;
 }
 
 const TICK_MS = DT * 1000;
@@ -58,11 +62,12 @@ export function startPresentation(
   world: IWorld,
   selfId: number,
   selfTeam: TeamId,
+  onExit: (action: PostMatchAction) => void,
 ): Presentation {
   const renderer = new Renderer(container, world);
   renderer.followUnit(selfId);
   renderer.setViewerTeam(selfTeam);
-  const hud = new Hud(container, world, selfId, selfTeam);
+  const hud = new Hud(container, world, selfId, selfTeam, onExit);
   const minimap = new Minimap(
     container,
     world,
@@ -95,10 +100,11 @@ export function startPresentation(
   let pendingCast: { key: AbilityKey; aim: Vec2 } | null = null;
   // The ability key currently held for aiming (range preview visible).
   let aimingKey: AbilityKey | null = null;
-  window.addEventListener('blur', () => {
+  const onWindowBlur = (): void => {
     aimingKey = null;
     renderer.hideAimPreview();
-  });
+  };
+  window.addEventListener('blur', onWindowBlur);
 
   // Client-side cast gate: the sim (or server) still decides, but the player
   // hears and reads WHY nothing happened instead of pressing a dead key.
@@ -189,7 +195,7 @@ export function startPresentation(
   };
 
   let lastHoverAt = 0;
-  setupInput(renderer, {
+  const teardownInput = setupInput(renderer, {
     onRightClick: (p: Vec2, sx, sy) => {
       pendingCast = null;
       const enemy =
@@ -318,12 +324,15 @@ export function startPresentation(
     if (world.winner !== null) stopMusic();
   };
 
+  let disposed = false;
+  let rafId = 0;
   function frame(now: number): void {
+    if (disposed) return;
     const alpha = Math.max(0, Math.min(1, (now - lastTick) / TICK_MS));
     renderer.render(alpha);
-    requestAnimationFrame(frame);
+    rafId = requestAnimationFrame(frame);
   }
-  requestAnimationFrame(frame);
+  rafId = requestAnimationFrame(frame);
 
   return {
     onWorldTick,
@@ -332,6 +341,17 @@ export function startPresentation(
     setNetHooks: (h) => {
       hooks = h;
       hud.setNetHooks(h);
+    },
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('blur', onWindowBlur);
+      teardownInput();
+      hud.dispose();
+      minimap.dispose();
+      renderer.dispose();
+      stopMusic();
     },
   };
 }

@@ -67,6 +67,11 @@ export class Minimap {
     this.pings.push({ x, z, until: performance.now() + 2500 });
   }
 
+  // Same-page teardown; the listeners die with the canvas.
+  dispose(): void {
+    this.canvas.remove();
+  }
+
   // The minimap matches the camera: on screen, +z runs DOWN (the camera
   // sits at +z looking back), so the minimap maps +z down too. What you see
   // bottom-right in the world is bottom-right on the map.

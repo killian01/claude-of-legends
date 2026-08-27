@@ -38,20 +38,25 @@ const ABILITY_KEYS: Readonly<Record<string, AbilityKey>> = {
 
 const SIGIL_KEYS: Readonly<Record<string, number>> = { d: 0, f: 1 };
 
-export function setupInput(renderer: Renderer, handlers: InputHandlers): void {
+// Returns a teardown that detaches every listener, so a match can end
+// without leaving dead handlers on the window (the menu comes back on the
+// same page now; there is no reload to sweep them away).
+export function setupInput(renderer: Renderer, handlers: InputHandlers): () => void {
   const el = renderer.domElement;
   let mouseX = 0;
   let mouseY = 0;
 
-  el.addEventListener('pointermove', (e) => {
+  const onPointerMove = (e: PointerEvent): void => {
     mouseX = e.clientX;
     mouseY = e.clientY;
     handlers.onHover(e.clientX, e.clientY);
-  });
+  };
+  el.addEventListener('pointermove', onPointerMove);
 
-  el.addEventListener('contextmenu', (e) => e.preventDefault());
+  const onContextMenu = (e: Event): void => e.preventDefault();
+  el.addEventListener('contextmenu', onContextMenu);
 
-  el.addEventListener('pointerdown', (e) => {
+  const onPointerDown = (e: PointerEvent): void => {
     mouseX = e.clientX;
     mouseY = e.clientY;
     if (e.button === 0) {
@@ -61,9 +66,10 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): void {
     if (e.button !== 2) return;
     const p = renderer.groundPointAt(e.clientX, e.clientY);
     if (p) handlers.onRightClick(p, e.clientX, e.clientY);
-  });
+  };
+  el.addEventListener('pointerdown', onPointerDown);
 
-  window.addEventListener('keydown', (e) => {
+  const onKeyDown = (e: KeyboardEvent): void => {
     if (handlers.isTyping()) return;
     if (e.key === 'Tab') {
       e.preventDefault();
@@ -126,11 +132,21 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): void {
     if (!key) return;
     const p = aim();
     if (p) handlers.onCast(key, p);
-  });
+  };
+  window.addEventListener('keydown', onKeyDown);
 
-  window.addEventListener('keyup', (e) => {
+  const onKeyUp = (e: KeyboardEvent): void => {
     if (handlers.isTyping()) return;
     const key = ABILITY_KEYS[e.key.toLowerCase()];
     if (key) handlers.onAimEnd(key);
-  });
+  };
+  window.addEventListener('keyup', onKeyUp);
+
+  return () => {
+    el.removeEventListener('pointermove', onPointerMove);
+    el.removeEventListener('contextmenu', onContextMenu);
+    el.removeEventListener('pointerdown', onPointerDown);
+    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('keyup', onKeyUp);
+  };
 }

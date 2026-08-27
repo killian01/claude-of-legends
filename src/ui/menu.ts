@@ -593,10 +593,17 @@ export function showSelect(
   };
 }
 
-export function showNotice(container: HTMLElement, title: string, body: string): void {
-  const { card } = screen(container);
-  card.append(el('h1', 'menu-title', title), el('p', 'menu-sub', body));
-  const reload = el('button', 'menu-btn primary', 'Back to menu');
-  reload.addEventListener('click', () => window.location.reload());
-  card.appendChild(reload);
+// Resolves when the player dismisses the notice; the caller decides what
+// "back to menu" means (no reload: the app routes on the same page now).
+export function showNotice(container: HTMLElement, title: string, body: string): Promise<void> {
+  return new Promise((resolve) => {
+    const { root, card } = screen(container);
+    card.append(el('h1', 'menu-title', title), el('p', 'menu-sub', body));
+    const back = el('button', 'menu-btn primary', 'Back to menu');
+    back.addEventListener('click', () => {
+      root.remove();
+      resolve();
+    });
+    card.appendChild(back);
+  });
 }

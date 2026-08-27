@@ -33,8 +33,9 @@ the change that landed this document.
 - No reconnection to a running match: no session token, client ids are
   per-connection integers, a reload strands the seat. Deferred in the
   roadmap; still the biggest lifecycle gap.
-- Every exit path is `window.location.reload()`: no rematch, no requeue,
-  full bundle re-download between matches.
+- FIXED (meta-game review batch 1): every exit is an in-app transition
+  now, with "Play again" on the end screen; `window.location.reload()`
+  is gone from the client.
 
 ## Settings: none exist
 
