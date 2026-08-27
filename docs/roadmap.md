@@ -34,7 +34,7 @@ Living document. The 48 hour build scope is defined by the ADRs in `docs/adr/` a
 - **Model-weights registry and server-side inference** for community-trained RL bots. For now trained bots join as normal clients only (bot-as-client, see ADR 0002).
 - **Headless Gym environment** (Phase 2 of ADR 0002): NDJSON stdio env plus Gymnasium bindings over the same Policy observation/action space.
 - **In-game map editor pipeline** (world-of-claudecraft pattern: editor to JSON to compiled TS module) and community-contributed map variants.
-- **Offline practice mode** in the browser (the sim already runs client-side by construction; only the entry point is deferred).
+- **Offline practice mode**: shipped ("Practice vs dummies" on the home screen boots a full local bot 5v5); a true practice range with target dummies remains deferred.
 - **Accounts, persistence, ranked matchmaking.**
 - **Mobile controls.**
 - **Visual upgrade of the map and units** (models, textures, terrain detail, VFX). Deliberately deferred: the renderer sits behind the IWorld seam, so art improves without touching gameplay code. A bounded readability and polish pass happens in phases 8 and 9 of the sprint; the real art pass is a flagship community contribution (the world-of-claudecraft image-to-GLB pipeline is reusable for champion and prop models).

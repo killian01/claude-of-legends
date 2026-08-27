@@ -26,7 +26,7 @@ Vitest · Biome. No UI framework; tiny dependency set.
 | `src/render/` | Three.js top-down renderer. Reads the world; never mutates it. |
 | `src/game/` | Local input and client glue. |
 | `src/ui/` | HUD (DOM + CSS). |
-| `src/net/` | Online client: auth + WebSocket mirror world. |
+| `src/net/` | Online client: wire protocol + WebSocket mirror world. |
 | `server/` | Authoritative game server. |
 | `tests/` | Vitest suite, including the structural gates. |
 
