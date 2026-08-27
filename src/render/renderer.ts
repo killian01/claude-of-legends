@@ -259,6 +259,9 @@ export class Renderer {
   private aimMeshes: THREE.Mesh[] = [];
   private aimGuide: THREE.Mesh | null = null;
   private aimSpot: THREE.Mesh | null = null;
+  // Window-level listeners registered by the constructor, detached by
+  // dispose(): matches end on the same page now, without a reload sweep.
+  private readonly cleanups: (() => void)[] = [];
 
   constructor(container: HTMLElement, world: IWorld) {
     this.world = world;
@@ -298,7 +301,7 @@ export class Renderer {
       (this.camera.fov * Math.PI) / 180,
     );
 
-    window.addEventListener('resize', () => {
+    const onResize = (): void => {
       this.gl.setSize(container.clientWidth, container.clientHeight);
       this.camera.aspect = container.clientWidth / Math.max(1, container.clientHeight);
       this.camera.updateProjectionMatrix();
@@ -306,7 +309,9 @@ export class Renderer {
         Math.max(1, container.clientHeight),
         (this.camera.fov * Math.PI) / 180,
       );
-    });
+    };
+    window.addEventListener('resize', onResize);
+    this.cleanups.push(() => window.removeEventListener('resize', onResize));
 
     // Mouse-wheel zoom within sane bounds.
     this.gl.domElement.addEventListener(
@@ -322,14 +327,16 @@ export class Renderer {
     // screen still register even over HUD elements. Leaving the window must
     // KEEP panning (the mouse is past the edge, the strongest pan intent),
     // so the exit position is recorded instead of cleared.
-    window.addEventListener('pointermove', (e) => {
+    const onPointerMove = (e: PointerEvent): void => {
       this.pointerX = e.clientX;
       this.pointerY = e.clientY;
-    });
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    this.cleanups.push(() => window.removeEventListener('pointermove', onPointerMove));
     // On a multi-monitor setup a fast exit can report a last position well
     // inside the window; snap it to the closest edge so panning continues
     // in the direction the cursor left.
-    window.addEventListener('mouseout', (e) => {
+    const onMouseOut = (e: MouseEvent): void => {
       if (e.relatedTarget !== null) return;
       const w = window.innerWidth;
       const h = window.innerHeight;
@@ -341,12 +348,16 @@ export class Renderer {
       else if (closest === 1) this.pointerX = w;
       else if (closest === 2) this.pointerY = 0;
       else this.pointerY = h;
-    });
+    };
+    window.addEventListener('mouseout', onMouseOut);
+    this.cleanups.push(() => window.removeEventListener('mouseout', onMouseOut));
     // Alt-tabbing away must not leave the camera drifting forever.
-    window.addEventListener('blur', () => {
+    const onWindowBlur = (): void => {
       this.pointerX = -1;
       this.pointerY = -1;
-    });
+    };
+    window.addEventListener('blur', onWindowBlur);
+    this.cleanups.push(() => window.removeEventListener('blur', onWindowBlur));
 
     // Fog-of-war ground overlay: dark where the viewer's team has no sight.
     this.fogCanvas.width = 128;
@@ -1961,5 +1972,21 @@ export class Renderer {
       -((clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.camera);
+  }
+
+  // Full teardown for the same-page return to menu: window listeners off,
+  // animation mixers stopped, DOM out, GL context released. Scene objects
+  // are not disposed one by one: losing the context reclaims the GPU side,
+  // and the JS side goes with this instance. The shared champion template
+  // cache (assets.ts) deliberately survives for the next match.
+  dispose(): void {
+    for (const off of this.cleanups) off();
+    this.cleanups.length = 0;
+    for (const cv of this.championVisuals.values()) cv.dispose();
+    this.championVisuals.clear();
+    this.fogTexture.dispose();
+    this.vignette.remove();
+    this.gl.domElement.remove();
+    this.gl.dispose();
   }
 }

@@ -227,9 +227,33 @@ wss.on('connection', (ws, req) => {
       case 'start_now':
         if (!inMatch) matchmaker.startNow(id, now);
         break;
-      case 'leave':
+      case 'leave': {
         matchmaker.removeEverywhere(id);
+        // A deliberate walk-out from a live match: hand the champion to a
+        // bot for good and hold NO seat reservation. Reservations are for
+        // dropped connections; a player who chose to leave (end screen,
+        // escape menu) must not be pulled back in by their next queue.
+        const leftMatchId = client.matchId;
+        if (leftMatchId !== null) {
+          client.matchId = null;
+          reservations.delete(client.token);
+          const entry = matches.get(leftMatchId);
+          if (entry) {
+            const left = entry.match.handleDisconnect(id);
+            if (left) {
+              for (const cid of entry.match.players.keys()) {
+                send(cid, { t: 'player_left', name: left.name, team: left.team });
+              }
+            }
+            const anyConnected = [...entry.match.players.keys()].some((cid) => clients.has(cid));
+            if (!anyConnected && entry.abandonedAt === null) {
+              entry.abandonedAt = Date.now();
+              console.log(`match ${leftMatchId} abandoned: holding for rejoin grace`);
+            }
+          }
+        }
         break;
+      }
       case 'create_lobby':
         if (inMatch) break;
         if (atCapacity) refuseCapacity();

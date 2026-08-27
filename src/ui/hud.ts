@@ -5,6 +5,7 @@
 // data (items, sigils, champions) is data-as-code it may read directly.
 
 import { announceVoice } from '../game/announcer';
+import type { PostMatchAction } from '../game/flow';
 import { toggleGameFullscreen } from '../game/fullscreen';
 import { playSfx } from '../game/sfx';
 import { championPortraitUrl } from '../render/portraits';
@@ -25,7 +26,7 @@ import { abilityIconUrl, sigilIconUrl } from './ability_icons';
 import { describeAbility, describeItem, describeSigil } from './describe';
 import { iconDataUrl, itemIconUrl } from './icons';
 import { buildSettingsPanel } from './settings_panel';
-import { attachTooltip } from './tooltips';
+import { attachTooltip, hideTooltip } from './tooltips';
 
 const KEY_TINTS: Readonly<Record<string, [string, string]>> = {
   Q: ['#7a2f1f', '#c96a3a'],
@@ -363,6 +364,7 @@ const CSS = `
 .hud-end-team.red h4 { color: #f5a3a3; }
 .hud-end-row { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
 .hud-end-row span:last-child { color: #93a87c; margin-left: 12px; white-space: nowrap; }
+.hud-end-btns { display: flex; gap: 12px; }
 `;
 
 export interface NetHooks {
@@ -433,8 +435,18 @@ export class Hud {
   private sawFirstBlood = false;
   private endPlayed = false;
   private lastTowerCount: number | null = null;
+  private readonly rootEl: HTMLElement;
+  private readonly styleEl: HTMLStyleElement;
 
-  constructor(container: HTMLElement, world: IWorld, selfId: number, selfTeam: TeamId) {
+  constructor(
+    container: HTMLElement,
+    world: IWorld,
+    selfId: number,
+    selfTeam: TeamId,
+    // Where the end screen and the escape menu exits go: main.ts decides
+    // what 'menu' and 'again' mean for the mode this match ran in.
+    onExit: (action: PostMatchAction) => void,
+  ) {
     this.world = world;
     this.selfId = selfId;
     this.selfTeam = selfTeam;
@@ -442,9 +454,11 @@ export class Hud {
     const style = document.createElement('style');
     style.textContent = CSS;
     document.head.appendChild(style);
+    this.styleEl = style;
 
     const root = document.createElement('div');
     root.className = 'hud';
+    this.rootEl = root;
     const el = <K extends keyof HTMLElementTagNameMap>(
       tag: K,
       cls: string,
@@ -756,9 +770,13 @@ export class Hud {
     this.endTitle = el('div', 'hud-overlay-title');
     this.endSub = el('div', 'hud-overlay-sub');
     this.endStats = el('div', 'hud-end-card');
+    const endAgain = el('button', 'hud-menu-btn', 'Play again');
+    endAgain.addEventListener('click', () => onExit('again'));
     const endReturn = el('button', 'hud-menu-btn', 'Return to menu');
-    endReturn.addEventListener('click', () => window.location.reload());
-    this.endOverlay.append(this.endTitle, this.endSub, this.endStats, endReturn);
+    endReturn.addEventListener('click', () => onExit('menu'));
+    const endBtns = el('div', 'hud-end-btns');
+    endBtns.append(endAgain, endReturn);
+    this.endOverlay.append(this.endTitle, this.endSub, this.endStats, endBtns);
 
     this.escapeOverlay = el('div', 'hud-overlay');
     const resume = el('button', 'hud-menu-btn', 'Resume (Esc)');
@@ -766,7 +784,7 @@ export class Hud {
     const fullscreenBtn = el('button', 'hud-menu-btn', 'Toggle fullscreen');
     fullscreenBtn.addEventListener('click', () => toggleGameFullscreen());
     const quit = el('button', 'hud-menu-btn', 'Leave match');
-    quit.addEventListener('click', () => window.location.reload());
+    quit.addEventListener('click', () => onExit('menu'));
     this.escapeOverlay.append(
       el('div', 'hud-overlay-title', 'Paused view'),
       resume,
@@ -795,6 +813,14 @@ export class Hud {
 
   setNetHooks(hooks: NetHooks): void {
     this.netHooks = hooks;
+  }
+
+  // Same-page teardown: the HUD tree and its stylesheet go; a floating
+  // tooltip attached to a removed element must not be left hanging.
+  dispose(): void {
+    hideTooltip();
+    this.rootEl.remove();
+    this.styleEl.remove();
   }
 
   toggleShop(): void {
