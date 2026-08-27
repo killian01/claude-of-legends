@@ -24,11 +24,18 @@ export interface KillNote {
   killerId: number;
 }
 
+// A visible cast: the key is present for abilities (per-spell visuals) and
+// absent for sigil casts.
+export interface CastNote {
+  unitId: number;
+  key?: AbilityKey;
+}
+
 // One-shot combat notes accompanying a world tick.
 export interface WorldNotes {
   kills: readonly KillNote[];
   golds: readonly number[];
-  casts: readonly number[];
+  casts: readonly CastNote[];
   // Damage the player dealt this tick, for personal combat numbers.
   hits: readonly { targetId: number; amount: number }[];
   // Auto-attacks fired by visible units, for swing animations.

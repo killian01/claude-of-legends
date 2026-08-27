@@ -245,6 +245,11 @@ export class ClientWorld implements IWorld {
       }
       unit.dead = s.d === 1;
       applyWireStatuses(unit, s.st, ccUntil);
+      // Windup telegraph mirror: the renderer reads pendingSpell to draw
+      // the charge and its aim for every visible champion.
+      unit.pendingSpell = s.w
+        ? { key: s.w.k, aim: { x: s.w.x, z: s.w.z }, resolveAt: s.w.u }
+        : null;
     }
 
     this.objAt = msg.objAt ?? null;

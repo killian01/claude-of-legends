@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>VFX showcase</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+      #app {
+        height: 100%;
+      }
+      #label {
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        color: #fff;
+        font: 600 22px system-ui, sans-serif;
+        z-index: 10;
+        text-shadow: 0 1px 4px #000;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="label"></div>
+    <script type="module" src="/src/dev/vfx_showcase.ts"></script>
+  </body>
+</html>

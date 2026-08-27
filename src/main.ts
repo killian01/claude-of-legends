@@ -8,7 +8,7 @@ import type { ServerMsg } from './net/protocol';
 import { BOTS, DEFAULT_BOT_ID } from './sim/content/bots';
 import { CHAMPION_LIST } from './sim/content/champions';
 import { Sim } from './sim/sim';
-import { DT } from './sim/types';
+import { type AbilityKey, DT } from './sim/types';
 import {
   type HomeChoice,
   type LobbyController,
@@ -53,13 +53,14 @@ function startOffline(championId: string, sigils: [string, string], skin: number
     while (acc >= TICK_MS) {
       const kills: { unitId: number; killerId: number }[] = [];
       const golds: number[] = [];
-      const casts: number[] = [];
+      const casts: { unitId: number; key?: AbilityKey }[] = [];
       const hits: { targetId: number; amount: number }[] = [];
       const attacks: { unitId: number; targetId: number }[] = [];
       for (const ev of sim.tick()) {
         if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
         else if (ev.type === 'gold' && ev.unitId === self.id) golds.push(ev.amount);
-        else if (ev.type === 'cast' || ev.type === 'sigil') casts.push(ev.unitId);
+        else if (ev.type === 'cast') casts.push({ unitId: ev.unitId, key: ev.key });
+        else if (ev.type === 'sigil') casts.push({ unitId: ev.unitId });
         else if (ev.type === 'attack') attacks.push({ unitId: ev.unitId, targetId: ev.targetId });
         else if (ev.type === 'damage' && ev.sourceId === self.id && ev.targetId !== self.id)
           hits.push({ targetId: ev.targetId, amount: ev.amount });
@@ -181,13 +182,13 @@ function startOnline(choice: HomeChoice): void {
         if (changed) {
           const kills: { unitId: number; killerId: number }[] = [];
           const golds: number[] = [];
-          const casts: number[] = [];
+          const casts: { unitId: number; key?: AbilityKey }[] = [];
           const hits: { targetId: number; amount: number }[] = [];
           const attacks: { unitId: number; targetId: number }[] = [];
           for (const e of msg.events) {
             if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
             else if (e.e === 'gold') golds.push(e.amount);
-            else if (e.e === 'cast') casts.push(e.unitId);
+            else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
             else if (e.e === 'atk') attacks.push({ unitId: e.unitId, targetId: e.targetId });
             else if (e.e === 'dmg') hits.push({ targetId: e.targetId, amount: e.amount });
           }
