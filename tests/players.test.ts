@@ -64,6 +64,16 @@ describe('player registry', () => {
     expect(reloaded.findById(a.id)).toMatchObject({ rating: 1007, ratedGames: 2 });
   });
 
+  it('a leaver penalty drops rating without counting a rated game', () => {
+    const file = tmpFile();
+    const reg = new PlayerRegistry(file, seqDisc);
+    const a = reg.getOrCreate('tok-a', 'bob', 1);
+    reg.penalize(a.id, 15);
+    expect(reg.findById(a.id)).toMatchObject({ rating: 985, ratedGames: 0 });
+    const reloaded = new PlayerRegistry(file, seqDisc);
+    expect(reloaded.findById(a.id)?.rating).toBe(985);
+  });
+
   it('survives a reload from disk with ids intact', () => {
     const file = tmpFile();
     const reg = new PlayerRegistry(file, seqDisc);

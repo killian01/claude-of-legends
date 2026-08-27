@@ -49,6 +49,8 @@ export interface Presentation {
   pushChat(from: string, team: TeamId, text: string): void;
   showPing(x: number, z: number, from: string, team: TeamId): void;
   setNetHooks(hooks: NetHooks): void;
+  // The server's rating verdict for this player, shown on the end screen.
+  setMatchResult(rated: boolean, delta: number, rating: number): void;
   // Same-page teardown: render loop, input, HUD, minimap, GL, music. The
   // menu returns on the same document; nothing may keep running behind it.
   dispose(): void;
@@ -342,6 +344,7 @@ export function startPresentation(
       hooks = h;
       hud.setNetHooks(h);
     },
+    setMatchResult: (rated, delta, rating) => hud.setMatchResult(rated, delta, rating),
     dispose: () => {
       if (disposed) return;
       disposed = true;

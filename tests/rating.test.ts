@@ -4,7 +4,14 @@
 import { describe, expect, it } from 'vitest';
 import { buildLadder, LADDER_CAP, MIN_RATED_GAMES } from '../server/ladder';
 import type { PlayerRecord } from '../server/players';
-import { isRated, K_MAX, type RatedSeat, ratingDeltas } from '../server/rating';
+import {
+  isRated,
+  K_MAX,
+  LEAVER_RATING_PENALTY,
+  leaverPenalty,
+  type RatedSeat,
+  ratingDeltas,
+} from '../server/rating';
 
 const seat = (playerId: number, team: 0 | 1, rating: number): RatedSeat => ({
   playerId,
@@ -52,6 +59,15 @@ describe('rating policy', () => {
 
   it('returns nothing when one side has no human seat', () => {
     expect(ratingDeltas([seat(1, 0, 1000)], 0).size).toBe(0);
+  });
+
+  it('punishes a walk-out only when the match was rateable', () => {
+    expect(leaverPenalty([1, 1])).toBe(LEAVER_RATING_PENALTY);
+    expect(leaverPenalty([3, 2])).toBe(LEAVER_RATING_PENALTY);
+    // Solo or duo against pure bot fill: leaving costs nothing.
+    expect(leaverPenalty([1, 0])).toBe(0);
+    expect(leaverPenalty([2, 0])).toBe(0);
+    expect(leaverPenalty([0, 0])).toBe(0);
   });
 });
 

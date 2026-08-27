@@ -3,25 +3,35 @@
 
 import { describe, expect, it } from 'vitest';
 import type { MatchPick } from '../server/match';
-import { BOT_START_COUNTDOWN_MS, LOBBY_TTL_MS, Matchmaker } from '../server/matchmaker';
+import {
+  BOT_START_COUNTDOWN_MS,
+  LOBBY_TTL_MS,
+  Matchmaker,
+  type MatchSource,
+} from '../server/matchmaker';
 import type { ServerMsg } from '../src/net/protocol';
 
 function harness(): {
   mm: Matchmaker;
   sent: Map<number, ServerMsg[]>;
   matches: MatchPick[][];
+  sources: MatchSource[];
 } {
   const sent = new Map<number, ServerMsg[]>();
   const matches: MatchPick[][] = [];
+  const sources: MatchSource[] = [];
   const mm = new Matchmaker(
     (clientId, msg) => {
       const list = sent.get(clientId) ?? [];
       list.push(msg);
       sent.set(clientId, list);
     },
-    (picks) => matches.push(picks),
+    (picks, source) => {
+      matches.push(picks);
+      sources.push(source);
+    },
   );
-  return { mm, sent, matches };
+  return { mm, sent, matches, sources };
 }
 
 const last = (msgs: ServerMsg[] | undefined, t: string): ServerMsg | undefined =>
@@ -36,7 +46,7 @@ describe('matchmaker', () => {
   });
 
   it('starts instantly once everyone queued has opted in', () => {
-    const { mm, sent, matches } = harness();
+    const { mm, sent, matches, sources } = harness();
     mm.addToQueue(1, 'alice', 0);
     mm.addToQueue(2, 'bob', 0);
     mm.startNow(1, 1000);
@@ -55,6 +65,8 @@ describe('matchmaker', () => {
       { clientId: 1, championId: 'fenn', team: 0 },
       { clientId: 2, championId: 'korrath', team: 1 },
     ]);
+    // Queue matches are flagged as such: they alone can ever be rated.
+    expect(sources).toEqual(['queue']);
   });
 
   it('the countdown takes only volunteers and leaves the rest queued', () => {
@@ -90,7 +102,7 @@ describe('matchmaker', () => {
   });
 
   it('runs private lobbies by code', () => {
-    const { mm, sent, matches } = harness();
+    const { mm, sent, matches, sources } = harness();
     mm.createLobby(1, 'host');
     const lobbyMsg = last(sent.get(1), 'lobby');
     expect(lobbyMsg?.t).toBe('lobby');
@@ -113,6 +125,8 @@ describe('matchmaker', () => {
     mm.pick(1, 'maera', ['mend', 'zephyr']);
     mm.pick(2, 'torv', ['riftstep', 'sear']);
     expect(matches).toHaveLength(1);
+    // A private lobby match is never rated; the source says so.
+    expect(sources).toEqual(['lobby']);
   });
 
   it('lobby sides are pickable and survive into the match', () => {

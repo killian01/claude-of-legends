@@ -111,6 +111,15 @@ export class PlayerRegistry {
     this.persist();
   }
 
+  // A leaver penalty: rating drops without counting a rated game (a
+  // walk-out must not speed a placement up).
+  penalize(id: number, amount: number): void {
+    const p = this.findById(id);
+    if (!p) return;
+    p.rating -= amount;
+    this.persist();
+  }
+
   all(): PlayerRecord[] {
     return [...this.byToken.values()];
   }

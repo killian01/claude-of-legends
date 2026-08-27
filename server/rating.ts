@@ -19,6 +19,17 @@ export function isRated(humansByTeam: readonly [number, number]): boolean {
   return humansByTeam[0] > 0 && humansByTeam[1] > 0;
 }
 
+// Walking out of a live rated match costs a flat chunk of rating and a
+// short queue lockout. Only deliberate leaves are punished: a dropped
+// connection keeps its seat reservation, and coming back through the
+// rejoin grace costs nothing.
+export const LEAVER_RATING_PENALTY = 15;
+export const LEAVER_LOCKOUT_MS = 60_000;
+
+export function leaverPenalty(humansByTeam: readonly [number, number]): number {
+  return isRated(humansByTeam) ? LEAVER_RATING_PENALTY : 0;
+}
+
 function average(values: readonly number[]): number {
   let sum = 0;
   for (const v of values) sum += v;

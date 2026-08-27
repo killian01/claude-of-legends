@@ -18,7 +18,7 @@ import { Match } from './match';
 import { Matchmaker } from './matchmaker';
 import { handleOf, type PlayerRecord, PlayerRegistry } from './players';
 import { buildProfile } from './profile';
-import { isRated, type RatedSeat, ratingDeltas } from './rating';
+import { isRated, LEAVER_LOCKOUT_MS, leaverPenalty, type RatedSeat, ratingDeltas } from './rating';
 import { buildMatchRecord, type MatchRecord } from './records';
 import { appendJsonl, readJsonl } from './store';
 
@@ -72,7 +72,13 @@ interface MatchEntry {
   // Set when the last connected player drops; the match survives a grace
   // window for rejoins instead of being reaped on the spot.
   abandonedAt: number | null;
+  // Only public-queue matches can be rated; a private lobby never is
+  // (it would be a boosting machine otherwise).
+  ratedEligible: boolean;
 }
+// Queue lockouts for rated-match leavers, by session token. In-memory on
+// purpose: a restart amnesties them, and that is fine.
+const queueLocks = new Map<string, number>();
 const matches = new Map<number, MatchEntry>();
 // Seats abandoned by a dropped connection, keyed by session token; a bot
 // holds the champion meanwhile. Reservations die with their match.
@@ -116,10 +122,16 @@ function send(clientId: number, msg: ServerMsg): void {
   c.ws.send(JSON.stringify(msg));
 }
 
-const matchmaker = new Matchmaker(send, (picks) => {
+const matchmaker = new Matchmaker(send, (picks, source) => {
   const id = nextMatchId++;
   const match = new Match((Date.now() % 2_000_000_000) + id, fillWithBots(picks));
-  matches.set(id, { match, endedAt: null, failures: 0, abandonedAt: null });
+  matches.set(id, {
+    match,
+    endedAt: null,
+    failures: 0,
+    abandonedAt: null,
+    ratedEligible: source === 'queue',
+  });
   for (const p of picks) {
     const c = clients.get(p.clientId);
     if (!c) continue;
@@ -282,11 +294,22 @@ wss.on('connection', (ws, req) => {
     const refuseCapacity = (): void =>
       send(id, { t: 'error', message: 'The server is at capacity, try again in a bit.' });
     switch (msg.t) {
-      case 'queue':
+      case 'queue': {
         if (inMatch) break;
+        // Rated-match leavers sit out a short lockout before requeueing.
+        const lockedUntil = queueLocks.get(client.token) ?? 0;
+        if (lockedUntil > now) {
+          send(id, {
+            t: 'error',
+            message: `You left a rated match. The queue unlocks in ${Math.ceil((lockedUntil - now) / 1000)}s.`,
+          });
+          break;
+        }
+        queueLocks.delete(client.token);
         if (atCapacity) refuseCapacity();
         else matchmaker.addToQueue(id, client.name, now);
         break;
+      }
       case 'start_now':
         if (!inMatch) matchmaker.startNow(id, now);
         break;
@@ -302,6 +325,25 @@ wss.on('connection', (ws, req) => {
           reservations.delete(client.token);
           const entry = matches.get(leftMatchId);
           if (entry) {
+            // Ranked integrity: walking out of a LIVE rated-eligible match
+            // with humans on both sides costs rating and a queue lockout.
+            // Computed before the seat is handed over, so the leaver still
+            // counts; end-screen leaves (winner decided) cost nothing.
+            if (entry.ratedEligible && entry.match.sim.winner === null) {
+              const humansByTeam: [number, number] = [0, 0];
+              for (const p of entry.match.players.values()) {
+                if (clients.has(p.clientId)) humansByTeam[p.team] += 1;
+              }
+              const penalty = leaverPenalty(humansByTeam);
+              const reg = registry.findByToken(client.token);
+              if (penalty > 0 && reg) {
+                registry.penalize(reg.id, penalty);
+                queueLocks.set(client.token, Date.now() + LEAVER_LOCKOUT_MS);
+                console.log(
+                  `match ${leftMatchId}: ${client.name} left a rated match (-${penalty}, queue locked)`,
+                );
+              }
+            }
             const left = entry.match.handleDisconnect(id);
             if (left) {
               for (const cid of entry.match.players.keys()) {
@@ -445,8 +487,9 @@ setInterval(() => {
             const reg = c ? registry.findByToken(c.token) : undefined;
             if (reg) playerIdByUnit.set(p.unitId, reg.id);
           }
-          // Rating policy (server/rating.ts): rated only with at least one
-          // human on each side; every human on a team moves together.
+          // Rating policy (server/rating.ts): only public-queue matches
+          // with at least one human on each side are rated; every human
+          // on a team moves together.
           const seats: RatedSeat[] = [];
           for (const p of entry.match.players.values()) {
             const pid = playerIdByUnit.get(p.unitId);
@@ -459,11 +502,24 @@ setInterval(() => {
             seats.filter((s) => s.team === 0).length,
             seats.filter((s) => s.team === 1).length,
           ];
-          const rated = isRated(humansByTeam);
+          const rated = entry.ratedEligible && isRated(humansByTeam);
           const deltas = rated
             ? ratingDeltas(seats, entry.match.sim.winner)
             : new Map<number, number>();
           for (const [pid, delta] of deltas) registry.applyRating(pid, delta);
+          // Tell each human what the match did to their rating; the end
+          // screen shows it next to the final scoreboard.
+          for (const p of entry.match.players.values()) {
+            const pid = playerIdByUnit.get(p.unitId);
+            const reg = pid !== undefined ? registry.findById(pid) : undefined;
+            if (pid === undefined || !reg) continue;
+            send(p.clientId, {
+              t: 'match_result',
+              rated,
+              delta: deltas.get(pid) ?? 0,
+              rating: reg.rating,
+            });
+          }
           const score = entry.match.buildScore();
           if (score.t === 'score') {
             const rec = buildMatchRecord(
