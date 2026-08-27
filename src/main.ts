@@ -162,6 +162,9 @@ function startOnline(choice: HomeChoice): void {
       case 'chat':
         pres?.pushChat(msg.from, msg.team, msg.text);
         break;
+      case 'player_left':
+        pres?.pushChat('System', msg.team, `${msg.name} disconnected; a bot takes over.`);
+        break;
       case 'ping':
         pres?.showPing(msg.x, msg.z, msg.from, msg.team);
         break;
@@ -206,7 +209,15 @@ function startOnline(choice: HomeChoice): void {
         if (!pres) window.location.reload();
         break;
       case 'error':
+        // Pre-game refusals (bad lobby code, closed lobby) must reach the
+        // player, not the console: clear whichever menu is up and say it.
         console.warn('server:', msg.message);
+        if (!pres) {
+          clearMenus();
+          selectUi?.remove();
+          selectUi = null;
+          showNotice(container, 'Notice', msg.message);
+        }
         break;
       default:
         break;

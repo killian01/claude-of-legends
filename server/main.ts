@@ -30,6 +30,8 @@ const MIME: Record<string, string> = {
   '.webp': 'image/webp',
   '.ico': 'image/x-icon',
   '.svg': 'image/svg+xml',
+  '.glb': 'model/gltf-binary',
+  '.wasm': 'application/wasm',
 };
 
 interface Client {
@@ -168,17 +170,19 @@ wss.on('connection', (ws) => {
         const entry = matches.get(client.matchId);
         const player = entry?.match.players.get(id);
         if (!entry || !player) break;
+        // Team-scoped, like the snapshots: a chat line or a ping must never
+        // hand the enemy a position (review: cross-team ping leak).
         if (msg.t === 'chat') {
           const text = String(msg.text ?? '')
             .trim()
             .slice(0, 200);
           if (!text) break;
-          for (const p of entry.match.players.values()) {
-            send(p.clientId, { t: 'chat', from: player.name, team: player.team, text });
+          for (const cid of entry.match.teamRecipients(id)) {
+            send(cid, { t: 'chat', from: player.name, team: player.team, text });
           }
         } else if (isFiniteVec(msg.x, msg.z)) {
-          for (const p of entry.match.players.values()) {
-            send(p.clientId, {
+          for (const cid of entry.match.teamRecipients(id)) {
+            send(cid, {
               t: 'ping',
               from: player.name,
               team: player.team,
@@ -206,6 +210,14 @@ wss.on('connection', (ws) => {
     if (matchId !== null) {
       const entry = matches.get(matchId);
       if (entry) {
+        // Hand the abandoned champion to a bot and tell the team; a 4v5
+        // against an inert unit is the worst outcome for everyone else.
+        const left = entry.match.handleDisconnect(id);
+        if (left) {
+          for (const cid of entry.match.players.keys()) {
+            send(cid, { t: 'player_left', name: left.name, team: left.team });
+          }
+        }
         const anyConnected = [...entry.match.players.keys()].some((cid) => clients.has(cid));
         if (!anyConnected) {
           matches.delete(matchId);
@@ -265,6 +277,34 @@ setInterval(() => {
   }
 }, 25);
 
+// Last-resort guards: a throw outside the per-match try/catch must never
+// take down every live match silently. Log loudly and keep serving; the
+// per-match failure counter already contains repeated sim faults.
+process.on('uncaughtException', (err) => {
+  console.error('uncaught exception (server kept alive)', err);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('unhandled rejection (server kept alive)', err);
+});
+
+// Graceful stop: close the sockets so clients get a clean disconnect notice
+// instead of a timeout.
+for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(sig, () => {
+    console.log(`${sig}: shutting down`);
+    for (const c of clients.values()) c.ws.close();
+    wss.close();
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 2000).unref();
+  });
+}
+
 server.listen(PORT, () => {
   console.log(`claude-of-legends server on :${PORT} (serving ${DIST})`);
+  // In dev the vite server owns the client and this warning is expected
+  // noise only when dist was never built; in production it means the image
+  // or the start script skipped `pnpm build`.
+  void stat(path.join(DIST, 'index.html')).catch(() => {
+    console.warn('dist/index.html not found: the client is not built (run "pnpm build")');
+  });
 });
