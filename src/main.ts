@@ -175,6 +175,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           () => ws.send(JSON.stringify({ t: 'start_lobby' })),
           () => finish('menu'),
           (team) => ws.send(JSON.stringify({ t: 'lobby_team', team })),
+          () => ws.send(JSON.stringify({ t: 'queue_party' })),
         );
       } else if (choice.mode === 'join' && choice.code) {
         ws.send(JSON.stringify({ t: 'join_lobby', code: choice.code }));
@@ -183,6 +184,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           () => undefined,
           () => finish('menu'),
           (team) => ws.send(JSON.stringify({ t: 'lobby_team', team })),
+          () => undefined,
         );
       }
     });
@@ -197,6 +199,17 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
       }
       switch (msg.t) {
         case 'queue_status':
+          // A lobby that queued as a party gets queue updates: swap the
+          // lobby screen for the queue screen the first time one lands.
+          if (lobbyUi && !queueUi) {
+            lobbyUi.remove();
+            lobbyUi = null;
+            queueUi = showQueue(
+              container,
+              () => ws.send(JSON.stringify({ t: 'start_now' })),
+              () => finish('menu'),
+            );
+          }
           queueUi?.setStatus(msg.count, msg.needed, msg.startsIn, msg.ready);
           break;
         case 'lobby':

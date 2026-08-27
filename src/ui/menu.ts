@@ -410,6 +410,7 @@ export function showLobby(
   onStart: () => void,
   onLeave: () => void,
   onPickTeam: (team: TeamId) => void,
+  onQueueParty: () => void,
 ): LobbyController {
   const { root, card } = screen(container);
   card.append(el('h1', 'menu-title', 'Private lobby'));
@@ -446,12 +447,25 @@ export function showLobby(
   const start = el('button', 'menu-btn primary', 'Start match');
   start.style.display = 'none';
   start.addEventListener('click', onStart);
+  // Host only, parties of up to five: the whole lobby queues publicly
+  // on ONE side (the two-column split above is for private matches).
+  const party = el('button', 'menu-btn', 'Queue as a party') as HTMLButtonElement;
+  party.style.display = 'none';
+  party.addEventListener('click', onQueueParty);
   const leave = el('button', 'menu-btn', 'Leave');
   leave.addEventListener('click', () => {
     root.remove();
     onLeave();
   });
-  card.append(el('div', 'menu-label', 'Share this code'), codeEl, copy, teamsWrap, start, leave);
+  card.append(
+    el('div', 'menu-label', 'Share this code'),
+    codeEl,
+    copy,
+    teamsWrap,
+    start,
+    party,
+    leave,
+  );
   return {
     update(code, host, selfTeam, players) {
       codeEl.textContent = code;
@@ -466,6 +480,8 @@ export function showLobby(
         col.btn.disabled = members.length >= 5;
       }
       start.style.display = host ? 'block' : 'none';
+      party.style.display = host ? 'block' : 'none';
+      party.disabled = players.length > 5;
     },
     remove() {
       root.remove();
