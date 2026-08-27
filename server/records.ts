@@ -17,6 +17,8 @@ export interface MatchPlayerRecord {
   deaths: number;
   assists: number;
   cs: number;
+  // Signed Elo movement, present only on rated human seats.
+  ratingDelta?: number;
 }
 
 export interface MatchRecord {
@@ -24,6 +26,8 @@ export interface MatchRecord {
   at: number;
   durationS: number;
   winner: TeamId;
+  // Rated: at least one human on each side (server/rating.ts policy).
+  rated: boolean;
   players: MatchPlayerRecord[];
 }
 
@@ -33,21 +37,28 @@ export function buildMatchRecord(
   winner: TeamId,
   durationS: number,
   at: number,
+  rating?: { rated: boolean; deltas: ReadonlyMap<number, number> },
 ): MatchRecord {
   return {
     at,
     durationS: Math.round(durationS),
     winner,
-    players: rows.map((r) => ({
-      playerId: playerIdByUnit.get(r.unitId) ?? null,
-      name: r.name,
-      championId: r.championId,
-      team: r.team,
-      level: r.level,
-      kills: r.kills,
-      deaths: r.deaths,
-      assists: r.assists ?? 0,
-      cs: r.cs ?? 0,
-    })),
+    rated: rating?.rated ?? false,
+    players: rows.map((r) => {
+      const playerId = playerIdByUnit.get(r.unitId) ?? null;
+      const delta = playerId !== null ? rating?.deltas.get(playerId) : undefined;
+      return {
+        playerId,
+        name: r.name,
+        championId: r.championId,
+        team: r.team,
+        level: r.level,
+        kills: r.kills,
+        deaths: r.deaths,
+        assists: r.assists ?? 0,
+        cs: r.cs ?? 0,
+        ...(delta !== undefined ? { ratingDelta: delta } : {}),
+      };
+    }),
   };
 }

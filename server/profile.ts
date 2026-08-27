@@ -23,6 +23,8 @@ export interface RecentMatch {
   deaths: number;
   assists: number;
   cs: number;
+  // Signed Elo movement when the match was rated.
+  ratingDelta?: number;
 }
 
 export interface ProfileStats {
@@ -86,6 +88,7 @@ export function buildProfile(records: readonly MatchRecord[], playerId: number):
       deaths: me.deaths,
       assists: me.assists,
       cs: me.cs,
+      ...(me.ratingDelta !== undefined ? { ratingDelta: me.ratingDelta } : {}),
     });
   }
   out.perChampion = [...perChamp.values()].sort((a, b) => b.games - a.games);

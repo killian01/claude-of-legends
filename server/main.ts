@@ -13,10 +13,12 @@ import { type WebSocket, WebSocketServer } from 'ws';
 import { isFiniteVec, parseClientMsg, type ServerMsg } from '../src/net/protocol';
 import { DT, type TeamId } from '../src/sim/types';
 import { fillWithBots } from './bot_fill';
+import { buildLadder } from './ladder';
 import { Match } from './match';
 import { Matchmaker } from './matchmaker';
 import { handleOf, type PlayerRecord, PlayerRegistry } from './players';
 import { buildProfile } from './profile';
+import { isRated, type RatedSeat, ratingDeltas } from './rating';
 import { buildMatchRecord, type MatchRecord } from './records';
 import { appendJsonl, readJsonl } from './store';
 
@@ -102,6 +104,8 @@ function describePlayer(p: PlayerRecord): unknown {
     disc: p.disc,
     handle: handleOf(p),
     createdAt: p.createdAt,
+    rating: p.rating,
+    ratedGames: p.ratedGames,
     profile: buildProfile(matchLog, p.id),
   };
 }
@@ -142,6 +146,11 @@ const server = http.createServer(async (req, res) => {
         'cache-control': 'no-store',
       });
       res.end(JSON.stringify(p ? describePlayer(p) : { error: 'unknown player' }));
+      return;
+    }
+    if (url === '/api/ladder') {
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.end(JSON.stringify(buildLadder(registry.all())));
       return;
     }
     const playerUrl = /^\/api\/player\/(\d{1,9})$/.exec(url);
@@ -436,6 +445,25 @@ setInterval(() => {
             const reg = c ? registry.findByToken(c.token) : undefined;
             if (reg) playerIdByUnit.set(p.unitId, reg.id);
           }
+          // Rating policy (server/rating.ts): rated only with at least one
+          // human on each side; every human on a team moves together.
+          const seats: RatedSeat[] = [];
+          for (const p of entry.match.players.values()) {
+            const pid = playerIdByUnit.get(p.unitId);
+            const reg = pid !== undefined ? registry.findById(pid) : undefined;
+            if (pid !== undefined && reg) {
+              seats.push({ playerId: pid, team: p.team, rating: reg.rating });
+            }
+          }
+          const humansByTeam: [number, number] = [
+            seats.filter((s) => s.team === 0).length,
+            seats.filter((s) => s.team === 1).length,
+          ];
+          const rated = isRated(humansByTeam);
+          const deltas = rated
+            ? ratingDeltas(seats, entry.match.sim.winner)
+            : new Map<number, number>();
+          for (const [pid, delta] of deltas) registry.applyRating(pid, delta);
           const score = entry.match.buildScore();
           if (score.t === 'score') {
             const rec = buildMatchRecord(
@@ -444,6 +472,7 @@ setInterval(() => {
               entry.match.sim.winner,
               entry.match.sim.time,
               now,
+              { rated, deltas },
             );
             matchLog.push(rec);
             try {

@@ -5,6 +5,7 @@
 // two bobs stay distinguishable in history and on a future ladder.
 
 import { randomInt } from 'node:crypto';
+import { BASE_RATING } from './rating';
 import { loadJson, saveJsonAtomic } from './store';
 
 export interface PlayerRecord {
@@ -14,6 +15,9 @@ export interface PlayerRecord {
   disc: number;
   createdAt: number;
   seenAt: number;
+  // Elo (server/rating.ts); only rated matches move it.
+  rating: number;
+  ratedGames: number;
 }
 
 export function handleOf(p: Pick<PlayerRecord, 'name' | 'disc'>): string {
@@ -40,6 +44,9 @@ export class PlayerRegistry {
     private readonly discGen: (used: ReadonlySet<number>) => number = randomDisc,
   ) {
     for (const p of loadJson<PlayerRecord[]>(file, [])) {
+      // Records written before ratings existed load at the base rating.
+      p.rating = typeof p.rating === 'number' ? p.rating : BASE_RATING;
+      p.ratedGames = typeof p.ratedGames === 'number' ? p.ratedGames : 0;
       this.byToken.set(p.token, p);
       this.nextId = Math.max(this.nextId, p.id + 1);
     }
@@ -87,10 +94,25 @@ export class PlayerRegistry {
       disc: this.discGen(this.usedDiscs(name)),
       createdAt: now,
       seenAt: now,
+      rating: BASE_RATING,
+      ratedGames: 0,
     };
     this.byToken.set(token, created);
     this.persist();
     return created;
+  }
+
+  // One rated match landed for this player; the delta is already signed.
+  applyRating(id: number, delta: number): void {
+    const p = this.findById(id);
+    if (!p) return;
+    p.rating += delta;
+    p.ratedGames += 1;
+    this.persist();
+  }
+
+  all(): PlayerRecord[] {
+    return [...this.byToken.values()];
   }
 
   findByToken(token: string): PlayerRecord | undefined {

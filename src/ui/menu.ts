@@ -11,6 +11,7 @@ import { SKINS } from '../sim/content/skins';
 import type { AbilityKey, TeamId } from '../sim/types';
 import { describeAbility, describeSigil } from './describe';
 import { startHomeShowcase } from './home_showcase';
+import { buildLadderPanel } from './ladder_panel';
 import { buildProfilePanel } from './profile_panel';
 import { buildSettingsPanel } from './settings_panel';
 import { attachTooltip, hideTooltip } from './tooltips';
@@ -294,19 +295,24 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
     });
     card.append(el('div', 'menu-label', 'Options'), settingsBtn, settingsBox);
 
-    // Career: identity handle plus online history, rebuilt fresh per open.
-    const profileBtn = el('button', 'menu-btn', 'Profile and history');
-    const profileBox = el('div', '');
-    profileBox.style.display = 'none';
-    profileBtn.addEventListener('click', () => {
-      const open = profileBox.style.display === 'none';
-      profileBox.style.display = open ? 'block' : 'none';
-      if (open) {
-        profileBox.textContent = '';
-        profileBox.appendChild(buildProfilePanel());
-      }
-    });
-    card.append(el('div', 'menu-label', 'Your career'), profileBtn, profileBox);
+    // Career and ladder: rebuilt fresh on every open so they never stale.
+    const freshSection = (label: string, build: () => HTMLElement): void => {
+      const btn = el('button', 'menu-btn', label);
+      const boxEl = el('div', '');
+      boxEl.style.display = 'none';
+      btn.addEventListener('click', () => {
+        const open = boxEl.style.display === 'none';
+        boxEl.style.display = open ? 'block' : 'none';
+        if (open) {
+          boxEl.textContent = '';
+          boxEl.appendChild(build());
+        }
+      });
+      card.append(btn, boxEl);
+    };
+    card.append(el('div', 'menu-label', 'Career and ladder'));
+    freshSection('Profile and history', buildProfilePanel);
+    freshSection('Ladder', buildLadderPanel);
 
     // The out-of-game roster browser: every champion with role, passive,
     // and kit, readable before ever entering a queue.
