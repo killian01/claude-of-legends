@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { playSfx } from '../game/sfx';
 import type { CastSpec } from '../sim/combat/casting';
 import { isRooted, isStunned } from '../sim/combat/status';
-import type { AbilityKey, Vec2 } from '../sim/types';
+import { type AbilityKey, DT, type Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import {
@@ -18,10 +18,17 @@ import {
   spellColorsOf,
 } from './ability_vfx';
 import { buildChampionMesh } from './champion_shapes';
+import {
+  type ChampionVisual,
+  championVisualDef,
+  createChampionVisual,
+  preloadChampionAssets,
+} from './champions';
 import { FloatingText, makeTextSprite } from './floating_text';
 import { buildMapDressing, type MapDressing, SKIRT_COLOR } from './map_dressing';
 import { buildMinionMesh } from './minion_shapes';
 import { buildSanctumMesh, buildTowerMesh } from './structure_shapes';
+import { createOutlineRenderer, toonifyMaterials } from './toon';
 import {
   genericDetonate,
   genericImpact,
@@ -70,6 +77,10 @@ function disposeDeep(obj: THREE.Object3D): void {
       mat?.map?.dispose();
       mat?.dispose();
     }
+    // Rigged champion clones carry per-clone skeletons whose bone textures
+    // the material/geometry sweep above never reaches.
+    const skinned = child as THREE.SkinnedMesh;
+    if (skinned.isSkinnedMesh) skinned.skeleton.dispose();
   });
 }
 
@@ -95,7 +106,7 @@ interface TrackedUnit {
   pulseUntil: number;
   // Hit flash: a brief white emissive blink when the unit takes damage.
   flashUntil: number;
-  flashMats: { mat: THREE.MeshLambertMaterial; orig: number }[] | null;
+  flashMats: { mat: THREE.MeshLambertMaterial | THREE.MeshToonMaterial; orig: number }[] | null;
   // Auto-attack swing: lunge direction and end time.
   swingUntil: number;
   swingDir: Vec2;
@@ -191,7 +202,11 @@ export class Renderer {
   private readonly raycaster = new THREE.Raycaster();
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private readonly unitLayer = new THREE.Group();
+  private readonly outline: ReturnType<typeof createOutlineRenderer>;
   private readonly tracked = new Map<number, TrackedUnit>();
+  // Rigged GLB visuals for champions whose asset has arrived; champions
+  // absent here still animate through the procedural AnimParts path.
+  private readonly championVisuals = new Map<number, ChampionVisual>();
   private readonly trackedProjectiles = new Map<number, TrackedMobile>();
   private readonly trackedZones = new Map<number, TrackedZone>();
   // The pooled spell VFX engine and the live windup telegraphs.
@@ -255,6 +270,9 @@ export class Renderer {
     // Plain PCF, not PCFSoft: it is the kernel that honors shadow.radius.
     this.gl.shadowMap.type = THREE.PCFShadowMap;
     this.gl.toneMapping = THREE.ACESFilmicToneMapping;
+    // Champion GLBs start loading immediately; views upgrade from the
+    // procedural figures as each asset lands.
+    preloadChampionAssets(this.gl);
     this.gl.toneMappingExposure = 1.18;
     container.appendChild(this.gl.domElement);
     this.scene.background = new THREE.Color(COLOR_BACKGROUND);
@@ -406,6 +424,10 @@ export class Renderer {
 
     this.buildLights();
     this.buildMap();
+    // The stylized pass: stepped toon lighting over everything the map
+    // built, and an outline wrapper the render loop draws through.
+    toonifyMaterials(this.scene);
+    this.outline = createOutlineRenderer(this.gl);
     this.onSimTick();
     // First sync has no history: snap prev onto curr so nothing lerps from 0,0.
     for (const t of this.tracked.values()) t.prev = { ...t.curr };
@@ -697,6 +719,7 @@ export class Renderer {
       const target = this.world.units.get(atk.targetId);
       if (!t || !t.mesh.visible) continue;
       t.swingUntil = performance.now() + 200;
+      this.championVisuals.get(atk.unitId)?.playAttack();
       if (target) {
         const dx = target.pos.x - t.curr.x;
         const dz = target.pos.z - t.curr.z;
@@ -760,6 +783,7 @@ export class Renderer {
             );
           }
           if (t) t.castUntil = performance.now() + 420;
+          this.championVisuals.get(cast.unitId)?.playCast();
         }
       }
       this.flashMarker(caster.pos.x, caster.pos.z, color);
@@ -915,7 +939,38 @@ export class Renderer {
     // without this hoist the walk cycle never runs.
     holder.userData.anim = figure.userData.anim;
     enableShadows(holder);
-    return { holder, barY: 3.0 };
+    const def = championVisualDef(u.championId);
+    if (def) this.upgradeChampionView(holder, figure, u.id, u.championId, color, u.skin);
+    return { holder, barY: def?.barY ?? 3.0 };
+  }
+
+  // Swaps a champion's procedural figure for its rigged GLB once the asset
+  // is ready. Fail-soft both ways: on an asset miss the figure stays, and a
+  // view that despawned while loading just discards the clone.
+  private upgradeChampionView(
+    holder: THREE.Group,
+    figure: THREE.Group,
+    unitId: number,
+    championId: string | null,
+    teamColor: number,
+    skin: number,
+  ): void {
+    void createChampionVisual(championId, teamColor, skin).then((visual) => {
+      if (!visual) return;
+      const t = this.tracked.get(unitId);
+      if (!t || t.mesh !== holder) {
+        visual.dispose();
+        disposeDeep(visual.root);
+        return;
+      }
+      holder.remove(figure);
+      disposeDeep(figure);
+      delete holder.userData.anim;
+      enableShadows(visual.root);
+      toonifyMaterials(visual.root);
+      holder.add(visual.root);
+      this.championVisuals.set(unitId, visual);
+    });
   }
 
   // Health bar, plus a thin mana strip stacked BELOW it for champions: two
@@ -981,6 +1036,7 @@ export class Renderer {
       let t = this.tracked.get(id);
       if (!t) {
         const { holder, barY } = this.buildUnitMesh(u);
+        toonifyMaterials(holder);
         // Minion bars widen with their max hp so a beefy siege minion never
         // reads as "almost dead" while it still soaks several hits.
         const structure = u.kind === 'tower' || u.kind === 'sanctum' || u.kind === 'warden';
@@ -1063,6 +1119,11 @@ export class Renderer {
       const dhp = t.lastHp - u.hp;
       if (visible && dhp >= 1) {
         t.flashUntil = performance.now() + 130;
+        // Rigged champions flinch on meaningful hits; the threshold keeps
+        // damage-over-time ticks from looping the react forever.
+        if (u.kind === 'champion' && dhp >= u.maxHp * 0.04) {
+          this.championVisuals.get(id)?.playHit();
+        }
         if (id === this.followId) {
           this.fct.spawn(`-${Math.round(dhp)}`, '#ff6a5e', u.pos.x, t.barY + 1.4, u.pos.z);
           playSfx('hit');
@@ -1221,6 +1282,13 @@ export class Renderer {
         // by the hundreds per match).
         this.dying.push({ mesh: t.mesh, start: performance.now() });
         this.tracked.delete(id);
+        const cv = this.championVisuals.get(id);
+        if (cv) {
+          // Stop the mixer now; the clone's GPU resources go with the mesh
+          // when the death fade hands it to disposeDeep.
+          cv.dispose();
+          this.championVisuals.delete(id);
+        }
       }
     }
 
@@ -1585,7 +1653,9 @@ export class Renderer {
       }
 
       const phase = now * 0.013 + id * 1.7;
-      let bobY = Math.abs(Math.sin(phase)) * 0.1 * t.walkAmp;
+      const cv = this.championVisuals.get(id);
+      // Rigged champions bob inside their clips; only figures fake it.
+      let bobY = cv ? 0 : Math.abs(Math.sin(phase)) * 0.1 * t.walkAmp;
       // Airborne (knockups): the whole body lifts and hangs.
       if (living) {
         const unit = this.world.units.get(id);
@@ -1600,7 +1670,18 @@ export class Renderer {
       if (swinging) t.mesh.rotation.y = t.yaw;
 
       const anim = t.mesh.userData.anim as AnimParts | undefined;
-      if (anim) {
+      if (cv) {
+        // The rigged path: the mixer owns the pose; one-shots (attack, cast,
+        // hit, death) are fired from combat notes and sync edges. Speed is
+        // the measured per-tick displacement, so slows and hastes read in
+        // the stride.
+        cv.update(dtMs, {
+          moving,
+          windingUp: this.windups.has(id),
+          dead: this.world.units.get(id)?.dead ?? false,
+          speed: Math.hypot(dx, dz) / DT,
+        });
+      } else if (anim) {
         // Walk cycle on the limb pivots; a slow breath at rest.
         const swing = Math.sin(phase) * t.walkAmp;
         anim.legs[0]!.rotation.x = swing * 0.7;
@@ -1645,8 +1726,8 @@ export class Renderer {
       if (living) t.mesh.scale.setScalar(s);
 
       // Champion death fall: tip over and sink through the brief window the
-      // corpse stays visible.
-      if (t.kind === 'champion') {
+      // corpse stays visible. Rigged champions play their death clip instead.
+      if (t.kind === 'champion' && !cv) {
         if (t.deadUntil > now) {
           const age = 1 - (t.deadUntil - now) / 600;
           t.mesh.rotation.x = age * 1.2;
@@ -1661,8 +1742,12 @@ export class Renderer {
         if (!t.flashMats) {
           t.flashMats = [];
           t.mesh.traverse((child) => {
-            const mat = (child as THREE.Mesh).material as THREE.MeshLambertMaterial | undefined;
-            if (mat?.isMeshLambertMaterial) t.flashMats?.push({ mat, orig: mat.emissive.getHex() });
+            const mat = (child as THREE.Mesh).material as
+              | (THREE.MeshLambertMaterial & THREE.MeshToonMaterial)
+              | undefined;
+            if (mat?.isMeshLambertMaterial || mat?.isMeshToonMaterial) {
+              t.flashMats?.push({ mat, orig: mat.emissive.getHex() });
+            }
           });
         }
         const k = (t.flashUntil - now) / 130;
@@ -1815,7 +1900,7 @@ export class Renderer {
     }
     this.camera.lookAt(target);
     this.camera.getWorldDirection(this.camDir);
-    this.gl.render(this.scene, this.camera);
+    this.outline.render(this.scene, this.camera);
   }
 
   // Places the attack reticle and hover ring on their units' interpolated
