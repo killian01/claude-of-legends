@@ -21,6 +21,35 @@ function veskMatch(): { match: Match; veskId: number } {
 }
 
 describe('spell wire', () => {
+  it('mark stacks on a visible enemy ride the wire as a summed chip', () => {
+    const { match, veskId } = veskMatch();
+    const vesk = match.sim.units.get(veskId)!;
+    // The enemy champion steps into sight and carries marks from two
+    // casters; the wire ships ONE summed display chip (the self unit
+    // instead ships its raw statuses in the self block).
+    const enemyId = match.players.get(2)!.unitId;
+    const enemy = match.sim.units.get(enemyId)!;
+    enemy.pos = { x: vesk.pos.x + 3, z: vesk.pos.z };
+    enemy.statuses.push({ kind: 'mark', until: match.sim.time + 4, stacks: 2, sourceId: 900 });
+    enemy.statuses.push({ kind: 'mark', until: match.sim.time + 4, stacks: 1, sourceId: 901 });
+    match.tick();
+    const snap = match.buildSnapshotFor(1);
+    if (snap?.t !== 'snap') throw new Error('expected a snap message');
+    const rec = snap.units.find((u) => u.i === enemyId);
+    const chip = rec?.st?.find((c) => c.k === 'mark');
+    expect(chip?.v).toBe(3);
+
+    const client = new ClientWorld(() => undefined);
+    client.applyServer({ t: 'match_start', selfUnitId: veskId, team: 0 });
+    client.applyServer(snap);
+    const mirrored = client.units.get(enemyId);
+    const totalStacks = (mirrored?.statuses ?? []).reduce(
+      (acc, s) => acc + (s.kind === 'mark' ? s.stacks : 0),
+      0,
+    );
+    expect(totalStacks).toBe(3);
+  });
+
   it('cast events carry the ability key', () => {
     const { match, veskId } = veskMatch();
     expect(match.sim.castAbility(veskId, 'Q', { x: 40, z: 40 })).toBe(true);

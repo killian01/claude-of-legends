@@ -76,7 +76,8 @@ function disposeDeep(obj: THREE.Object3D): void {
       else mat?.dispose();
     } else if (c.isSprite) {
       const mat = c.material as THREE.SpriteMaterial | undefined;
-      mat?.map?.dispose();
+      // Sprites flagged sharedMap ride a pooled texture (mark pips).
+      if (!child.userData.sharedMap) mat?.map?.dispose();
       mat?.dispose();
     }
     // Rigged champion clones carry per-clone skeletons whose bone textures
@@ -97,6 +98,9 @@ interface TrackedUnit {
   lastHp: number;
   stunMark: THREE.Sprite | null;
   rootMark: THREE.Mesh | null;
+  // Mark pips (Sylra thorns, Elowen mist): rebuilt when the count changes.
+  markPips: THREE.Group | null;
+  markKey: number;
   namePlate: THREE.Sprite | null;
   nameKey: string;
   prev: Vec2;
@@ -230,6 +234,9 @@ export class Renderer {
   private readonly trails: { sprite: THREE.Sprite; bornAt: number }[] = [];
   private lastTrailDropAt = 0;
   private trailTexture: THREE.Texture | null = null;
+  // Shared diamond texture for mark pips; built once, never disposed with
+  // any single unit (sprites carry userData.sharedMap).
+  private markTexture: THREE.Texture | null = null;
   private readonly fct: FloatingText;
   private readonly selfRing: THREE.Mesh;
   private readonly fogCanvas = document.createElement('canvas');
@@ -626,6 +633,29 @@ export class Renderer {
     }
     this.trailTexture = new THREE.CanvasTexture(canvas);
     return this.trailTexture;
+  }
+
+  // A soft-edged diamond for mark pips; built once.
+  private diamondTexture(): THREE.Texture {
+    if (this.markTexture) return this.markTexture;
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const g = canvas.getContext('2d');
+    if (g) {
+      g.shadowColor = 'rgba(255,255,255,0.9)';
+      g.shadowBlur = 4;
+      g.fillStyle = '#ffffff';
+      g.beginPath();
+      g.moveTo(16, 3);
+      g.lineTo(29, 16);
+      g.lineTo(16, 29);
+      g.lineTo(3, 16);
+      g.closePath();
+      g.fill();
+    }
+    this.markTexture = new THREE.CanvasTexture(canvas);
+    return this.markTexture;
   }
 
   hideAimPreview(): void {
@@ -1149,6 +1179,8 @@ export class Renderer {
           lastHp: u.hp,
           stunMark: null,
           rootMark: null,
+          markPips: null,
+          markKey: 0,
           namePlate: null,
           nameKey: '',
           prev: { x: u.pos.x, z: u.pos.z },
@@ -1354,6 +1386,45 @@ export class Renderer {
         t.rootMark = ring;
       }
       if (t.rootMark) t.rootMark.visible = rooted;
+
+      // Mark pips: a row of small violet diamonds above the bar, one per
+      // stack (Sylra thorns, Elowen mist). The victim sees the trigger
+      // building; the caster sees the combo cooking. Both hosts feed this
+      // from unit statuses (the wire ships a summed mark chip).
+      const markStacks = visible
+        ? u.statuses.reduce(
+            (acc, s) => acc + (s.kind === 'mark' && s.until > this.world.time ? s.stacks : 0),
+            0,
+          )
+        : 0;
+      const shownStacks = Math.min(markStacks, 5);
+      if (shownStacks !== t.markKey) {
+        t.markKey = shownStacks;
+        if (t.markPips) {
+          t.mesh.remove(t.markPips);
+          disposeDeep(t.markPips);
+          t.markPips = null;
+        }
+        if (shownStacks > 0) {
+          const group = new THREE.Group();
+          for (let i = 0; i < shownStacks; i++) {
+            const sprite = new THREE.Sprite(
+              new THREE.SpriteMaterial({
+                map: this.diamondTexture(),
+                color: 0xcf8aff,
+                transparent: true,
+                depthTest: false,
+              }),
+            );
+            sprite.userData.sharedMap = true;
+            sprite.scale.setScalar(0.42);
+            sprite.position.set((i - (shownStacks - 1) / 2) * 0.46, t.barY + 0.52, 0);
+            group.add(sprite);
+          }
+          t.mesh.add(group);
+          t.markPips = group;
+        }
+      }
 
       // Recall channel: a spinning blue ring and glow column while the
       // status runs, on any champion the viewer can see.

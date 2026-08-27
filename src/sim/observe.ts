@@ -3,32 +3,15 @@
 // is enforced by construction here, exactly like the server-side snapshot
 // scoping is for human clients.
 
-import { sightFactor } from './combat/status';
 import { CHAMPIONS } from './content/champions';
 import { SIGILS } from './content/sigils';
 import type { Observation, ObsProjectile, ObsUnit, ObsZone } from './policy';
 import type { Sim } from './sim';
 import { effectiveRank } from './stats';
 import { isInvulnerable } from './structure_rules';
-import type { AbilityKey, TeamId } from './types';
-import { sightBlocked } from './vision';
+import type { AbilityKey } from './types';
 
 const KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
-
-// A ground POINT is visible when some alive friendly unit has it in sight
-// range with no wall in between. Projectiles and zones have no unit id, so
-// the per-unit visibility sets cannot cover them.
-function pointVisible(sim: Sim, team: TeamId, x: number, z: number): boolean {
-  for (const src of sim.units.values()) {
-    if (src.team !== team || src.neutral || src.dead) continue;
-    if (Math.hypot(src.pos.x - x, src.pos.z - z) > src.sightRange * sightFactor(src, sim.time)) {
-      continue;
-    }
-    if (sightBlocked(sim.map, src.pos, { x, z })) continue;
-    return true;
-  }
-  return false;
-}
 
 export function buildObservation(sim: Sim, unitId: number): Observation | null {
   const u = sim.units.get(unitId);
@@ -88,7 +71,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
   const projectiles: ObsProjectile[] = [];
   for (const p of sim.projectiles.values()) {
     const friendly = p.team === u.team;
-    if (!friendly && !pointVisible(sim, u.team, p.pos.x, p.pos.z)) continue;
+    if (!friendly && !sim.isPointVisible(u.team, p.pos.x, p.pos.z)) continue;
     projectiles.push({
       x: p.pos.x,
       z: p.pos.z,
@@ -103,7 +86,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
   const zones: ObsZone[] = [];
   for (const z of sim.zones.values()) {
     const friendly = z.team === u.team;
-    if (!friendly && !pointVisible(sim, u.team, z.pos.x, z.pos.z)) continue;
+    if (!friendly && !sim.isPointVisible(u.team, z.pos.x, z.pos.z)) continue;
     zones.push({
       x: z.pos.x,
       z: z.pos.z,

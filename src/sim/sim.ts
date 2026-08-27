@@ -18,6 +18,7 @@ import {
   expireStatuses,
   isRooted,
   isStunned,
+  sightFactor,
 } from './combat/status';
 import { CHAMPIONS, DEFAULT_CHAMPION_ID } from './content/champions';
 import { ITEMS } from './content/items';
@@ -60,7 +61,7 @@ import {
   type Vec2,
 } from './types';
 import { createChampion, hostile, staticFootprint, type Unit } from './unit';
-import { computeVisibility } from './vision';
+import { computeVisibility, sightBlocked } from './vision';
 import { FIRST_WAVE_AT, spawnWave, WAVE_EVERY } from './waves';
 import type { Zone } from './zones';
 import { stepZones } from './zones';
@@ -204,12 +205,17 @@ export class Sim {
     return rows;
   }
 
-  // True when any alive friendly unit has the point in sight range; used to
-  // fog-scope projectiles and zones on the wire.
+  // True when any alive friendly unit has the point in sight range with no
+  // wall in between (blinds shrink the radius). Fog-scopes projectiles and
+  // zones on the wire AND in Policy observations: one rule, both consumers.
   isPointVisible(team: TeamId, x: number, z: number): boolean {
     for (const u of this.units.values()) {
-      if (u.team !== team || u.dead) continue;
-      if (Math.hypot(u.pos.x - x, u.pos.z - z) <= u.sightRange) return true;
+      if (u.team !== team || u.neutral || u.dead) continue;
+      if (Math.hypot(u.pos.x - x, u.pos.z - z) > u.sightRange * sightFactor(u, this.time)) {
+        continue;
+      }
+      if (sightBlocked(this.map, u.pos, { x, z })) continue;
+      return true;
     }
     return false;
   }
