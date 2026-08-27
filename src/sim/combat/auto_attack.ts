@@ -9,7 +9,7 @@
 // stealth at the start of the windup.
 
 import type { NavGrid } from '../navgrid';
-import { passiveOf } from '../passives';
+import { passiveOf, runItemAttackHits } from '../passives';
 import { findPath } from '../pathfind';
 import type { CombatCtx } from '../sim_context';
 import { hostile, type Unit } from '../unit';
@@ -107,6 +107,7 @@ function strike(ctx: CombatCtx, u: Unit, target: Unit): void {
   } else {
     dealDamage(ctx, u.id, target, ad, 'physical', 'attack');
     passiveOf(u)?.onAttackHit?.(ctx, u, target);
+    runItemAttackHits(ctx, u, target);
   }
 }
 

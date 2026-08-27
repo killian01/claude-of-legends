@@ -12,12 +12,15 @@ export interface SigilDef {
   spec: CastSpec;
 }
 
+// 150 s (down from 210) and range 5.5 (up from 4.5): the old blink was both
+// rarer and shorter than several champion dashes, which made the marquee
+// sigil read as a downgrade (gap analysis).
 const RIFTSTEP: SigilDef = {
   id: 'riftstep',
   name: 'Riftstep',
-  cooldown: 210,
-  castRange: 4.5,
-  spec: { kind: 'dash', range: 4.5 },
+  cooldown: 150,
+  castRange: 5.5,
+  spec: { kind: 'dash', range: 5.5 },
 };
 
 const ZEPHYR: SigilDef = {
@@ -32,6 +35,9 @@ const ZEPHYR: SigilDef = {
   },
 };
 
+// 100 plus 15 percent max health: the old flat 220 was 39 percent of a
+// level-1 bar and a rounding error at 18; the pct half keeps it a real
+// button all game.
 const MEND: SigilDef = {
   id: 'mend',
   name: 'Mend',
@@ -40,7 +46,7 @@ const MEND: SigilDef = {
   spec: {
     kind: 'self_or_ally',
     searchRadius: 2.5,
-    effects: [{ kind: 'heal', base: 220 }],
+    effects: [{ kind: 'heal', base: 100, maxHpPct: 0.15 }],
   },
 };
 

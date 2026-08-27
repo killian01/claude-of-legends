@@ -4,6 +4,7 @@
 
 import type { AbilityDef, CastSpec } from '../sim/combat/casting';
 import type { EffectSpec } from '../sim/combat/effects';
+import { ITEM_PASSIVES } from '../sim/content/item_passives';
 import { ITEMS, type ItemDef } from '../sim/content/items';
 import type { SigilDef } from '../sim/content/sigils';
 import type { AbilityKey } from '../sim/types';
@@ -20,6 +21,7 @@ function fmtEffect(e: EffectSpec): string {
     }
     case 'heal': {
       let s = `heals ${e.base}`;
+      if (e.maxHpPct) s += ` (+${pct(e.maxHpPct)} of the target's max health)`;
       if (e.apRatio) s += ` (+${pct(e.apRatio)} of your Ability Power)`;
       return s;
     }
@@ -138,6 +140,8 @@ export function describeSigil(def: SigilDef): string[] {
 
 export function describeItem(def: ItemDef, statLine: string): string[] {
   const lines = [`${def.name} (${def.cost}g)`, statLine];
+  const passive = ITEM_PASSIVES[def.id];
+  if (passive) lines.push(`Passive, ${passive.name}: ${passive.description}`);
   if (def.buildsFrom) {
     const names = def.buildsFrom.map((id) => ITEMS[id]?.name ?? id);
     lines.push(`Builds from: ${names.join(' + ')}.`);

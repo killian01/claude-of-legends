@@ -5,7 +5,7 @@
 
 import { applyEffects, type EffectSpec, type Power } from './combat/effects';
 import type { DamageVia } from './passive_types';
-import { passiveOf } from './passives';
+import { passiveOf, runItemAttackHits } from './passives';
 import type { CombatCtx } from './sim_context';
 import type { TeamId, Vec2 } from './types';
 import type { Unit } from './unit';
@@ -64,7 +64,10 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
         applyEffects(ctx, p.sourceId, p.power, target, p.onHit, via);
         if (via === 'attack') {
           const source = ctx.units.get(p.sourceId);
-          if (source && !source.dead) passiveOf(source)?.onAttackHit?.(ctx, source, target);
+          if (source && !source.dead) {
+            passiveOf(source)?.onAttackHit?.(ctx, source, target);
+            runItemAttackHits(ctx, source, target);
+          }
         }
         ctx.projectiles.delete(p.id);
         continue;

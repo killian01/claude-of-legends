@@ -6,7 +6,7 @@
 export const KILL_CREDIT_WINDOW_S = 10;
 
 import type { DamageVia } from '../passive_types';
-import { passiveOf } from '../passives';
+import { applyItemDamageModifiers, passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
 import { isInvulnerable } from '../structure_rules';
 import type { DamageType } from '../types';
@@ -47,13 +47,15 @@ export function dealDamage(
   if ((target.kind === 'tower' || target.kind === 'sanctum') && isInvulnerable(ctx.units, target)) {
     return;
   }
-  // Source passive damage modifier (Opportunist, Deadstill, Heat...).
+  // Source passive damage modifiers: the champion's (Opportunist,
+  // Deadstill, Heat...), then the item passives' (Deathmark...).
   const source = ctx.units.get(sourceId);
   if (source) {
     const passive = passiveOf(source);
     if (passive?.modifyDamage) {
       amount = passive.modifyDamage(ctx, source, target, amount, dtype, via);
     }
+    amount = applyItemDamageModifiers(ctx, source, target, amount, dtype, via);
     // The Warden's Boon: a team-wide damage amplifier (neutral units have
     // no team buffs by definition).
     if (!source.neutral) {

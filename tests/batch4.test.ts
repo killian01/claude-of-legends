@@ -14,7 +14,7 @@ describe('self-cast preference', () => {
     ally.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     me.hp = 100;
     expect(sim.castSigil(me.id, 1, { x: me.pos.x, z: me.pos.z })).toBe(true);
-    expect(me.hp).toBeCloseTo(320, 0);
+    expect(me.hp).toBeCloseTo(100 + 100 + 0.15 * me.maxHp, 0);
     expect(ally.hp).toBe(ally.maxHp);
   });
 });

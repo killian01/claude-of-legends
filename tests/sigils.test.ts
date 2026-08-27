@@ -21,12 +21,12 @@ describe('sigils', () => {
     expect(sim.castSigil(a.id, 0, { x: 85, z: 75 })).toBe(false);
   });
 
-  it('mend heals, and grievous wounds cut the heal', () => {
+  it('mend heals flat plus a slice of max health, and grievous cuts it', () => {
     const sim = new Sim(9);
     const a = sim.addChampion(0, { x: 75, z: 75 });
     a.hp = 200;
     expect(sim.castSigil(a.id, 1, { x: 75, z: 75 })).toBe(true);
-    expect(a.hp).toBeCloseTo(420, 0);
+    expect(a.hp).toBeCloseTo(200 + 100 + 0.15 * a.maxHp, 0);
 
     // Far from `a` so the searched ally is b itself.
     const b = sim.addChampion(0, { x: 95, z: 75 });
@@ -37,7 +37,7 @@ describe('sigils', () => {
     expect(healFactor(b, sim.time)).toBeCloseTo(0.6, 5);
     b.sigils = ['mend', 'mend'];
     expect(sim.castSigil(b.id, 0, { x: 95, z: 75 })).toBe(true);
-    expect(b.hp).toBeCloseTo(200 + 220 * 0.6, 0);
+    expect(b.hp).toBeCloseTo(200 + (100 + 0.15 * b.maxHp) * 0.6, 0);
   });
 
   it('sear ticks damage over time', () => {
