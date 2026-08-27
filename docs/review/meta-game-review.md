@@ -69,25 +69,15 @@ champion, KDA, CS, duration, and date.
 
 ### 4. Ranking and leaderboard (the headline request)
 
-Missing entirely: no rating, no ladder, no way to say who is good.
-
-What fits here: Elo (or Glicko-1 if we want confidence), one rating per
-player, updated at match end from the team result; the deterministic sim
-does not help here, this is pure bookkeeping. The design problem specific
-to us is BOTS: today most matches are one human plus nine fill bots.
-Policy proposal:
-
-- A match is RATED only if it has at least one human on each team.
-  Bot-filled seats neither gain nor lose rating.
-- Rate it as team Elo: average team rating vs average team rating,
-  K scaled down when few humans are involved.
-- Everything else (solo vs bots, practice) records history and stats
-  but never touches rating.
-
-Leaderboard: `GET /api/leaderboard` (top 50 by rating, min 5 rated
-matches), a "Ladder" tab on the home screen. Effort: medium; the rating
-math is a small pure module with table tests, the rest is one endpoint
-and one screen.
+FIXED, with the policy exactly as proposed: `server/rating.ts` is team
+Elo (average vs average, every human on a team moves together), a match
+is rated only with at least one human on each side, K scales with the
+human count, and bot seats never move. Ratings and rated-game counts
+persist on the player record; each rated match embeds the signed delta
+in its record, shown on the career panel's recent list. `server/ladder.ts`
+serves `GET /api/ladder` (top 50, three rated matches to place), and the
+home screen's Ladder panel renders it with each row expandable into that
+player's public profile (`/api/player/:id`).
 
 ### 5. Profiles and career stats
 
@@ -186,7 +176,7 @@ progression (9), integrity (10)  [after 4 and 5]
 2. DONE: lobby team picker and invite links (7a).
 3. DONE: storage module plus player identity (2, 1).
 4. DONE: match log, history, career panel (3, 5).
-5. Elo plus ladder screen plus rating delta on the post-game (4), with
-   the rated-match policy above.
+5. DONE: Elo, the ladder screen, and rating deltas in history (4).
+   Still open from this line: the delta on the in-game end screen.
 6. Then by appetite: party queue (7), replays and spectator (8),
    mastery cosmetics (9), ranked integrity (10).

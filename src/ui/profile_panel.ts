@@ -25,9 +25,11 @@ function ensureCss(): void {
   document.head.appendChild(style);
 }
 
-interface ApiProfile {
+export interface ApiProfile {
   handle: string;
   createdAt: number;
+  rating: number;
+  ratedGames: number;
   profile: {
     games: number;
     wins: number;
@@ -52,6 +54,7 @@ interface ApiProfile {
       deaths: number;
       assists: number;
       cs: number;
+      ratingDelta?: number;
     }[];
   };
 }
@@ -69,9 +72,15 @@ function el(tag: string, cls: string, text?: string): HTMLElement {
 
 const NO_CAREER = 'Play an online match to start your career.';
 
-function render(box: HTMLElement, data: ApiProfile): void {
+// Shared by the own-career panel and the ladder's public profiles.
+export function renderProfile(box: HTMLElement, data: ApiProfile): void {
   box.textContent = '';
   box.append(el('div', 'prof-handle', data.handle));
+  const rated =
+    data.ratedGames > 0
+      ? `Rating ${data.rating} over ${data.ratedGames} rated match${data.ratedGames > 1 ? 'es' : ''}.`
+      : 'Unrated: a match is rated with a human on each side.';
+  box.append(el('div', 'prof-sub', rated));
   const p = data.profile;
   if (p.games === 0) {
     box.append(el('div', 'prof-sub', 'No online matches recorded yet.'));
@@ -107,6 +116,16 @@ function render(box: HTMLElement, data: ApiProfile): void {
       el('span', m.win ? 'prof-win' : 'prof-loss', m.win ? 'WIN ' : 'LOSS '),
       document.createTextNode(champName(m.championId)),
     );
+    if (m.ratingDelta !== undefined) {
+      left.append(document.createTextNode(' '));
+      left.append(
+        el(
+          'span',
+          m.ratingDelta >= 0 ? 'prof-win' : 'prof-loss',
+          `${m.ratingDelta >= 0 ? '+' : ''}${m.ratingDelta}`,
+        ),
+      );
+    }
     const mins = Math.floor(m.durationS / 60);
     const secs = String(m.durationS % 60).padStart(2, '0');
     line.append(
@@ -138,11 +157,27 @@ export function buildProfilePanel(): HTMLElement {
   fetch(`/api/me?token=${encodeURIComponent(token)}`)
     .then((r) => (r.ok ? (r.json() as Promise<ApiProfile>) : null))
     .then((data) => {
-      if (data) render(box, data);
+      if (data) renderProfile(box, data);
       else box.textContent = NO_CAREER;
     })
     .catch(() => {
       box.textContent = 'Career unavailable: the game server is not reachable.';
+    });
+  return box;
+}
+
+// A public player card by id, used by the ladder rows.
+export function buildPublicProfilePanel(playerId: number): HTMLElement {
+  ensureCss();
+  const box = el('div', 'prof-panel', 'Loading player...');
+  fetch(`/api/player/${playerId}`)
+    .then((r) => (r.ok ? (r.json() as Promise<ApiProfile>) : null))
+    .then((data) => {
+      if (data) renderProfile(box, data);
+      else box.textContent = 'Unknown player.';
+    })
+    .catch(() => {
+      box.textContent = 'Player unavailable: the game server is not reachable.';
     });
   return box;
 }

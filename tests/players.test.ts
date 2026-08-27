@@ -52,6 +52,18 @@ describe('player registry', () => {
     expect(cAsBob.disc).not.toBe(b.disc);
   });
 
+  it('starts at the base rating and persists applied deltas', () => {
+    const file = tmpFile();
+    const reg = new PlayerRegistry(file, seqDisc);
+    const a = reg.getOrCreate('tok-a', 'bob', 1);
+    expect(a.rating).toBe(1000);
+    expect(a.ratedGames).toBe(0);
+    reg.applyRating(a.id, 12);
+    reg.applyRating(a.id, -5);
+    const reloaded = new PlayerRegistry(file, seqDisc);
+    expect(reloaded.findById(a.id)).toMatchObject({ rating: 1007, ratedGames: 2 });
+  });
+
   it('survives a reload from disk with ids intact', () => {
     const file = tmpFile();
     const reg = new PlayerRegistry(file, seqDisc);

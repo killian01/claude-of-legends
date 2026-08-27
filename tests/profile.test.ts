@@ -25,9 +25,39 @@ describe('match records', () => {
       row({ unitId: 2, name: 'Korrath (bot)', championId: 'korrath', team: 1 }),
     ];
     const rec = buildMatchRecord(rows, new Map([[1, 7]]), 0, 903.6, 1000);
-    expect(rec).toMatchObject({ at: 1000, durationS: 904, winner: 0 });
+    expect(rec).toMatchObject({ at: 1000, durationS: 904, winner: 0, rated: false });
     expect(rec.players[0]).toMatchObject({ playerId: 7, championId: 'fenn', kills: 5, cs: 41 });
+    expect(rec.players[0]!.ratingDelta).toBeUndefined();
     expect(rec.players[1]).toMatchObject({ playerId: null, team: 1 });
+  });
+
+  it('embeds rating deltas on rated human seats only', () => {
+    const rows = [
+      row({ unitId: 1, name: 'bob', kills: 1 }),
+      row({ unitId: 2, name: 'ana', team: 1 }),
+      row({ unitId: 3, name: 'Vesk (bot)', team: 1 }),
+    ];
+    const rec = buildMatchRecord(
+      rows,
+      new Map([
+        [1, 7],
+        [2, 8],
+      ]),
+      0,
+      600,
+      1000,
+      {
+        rated: true,
+        deltas: new Map([
+          [7, 3],
+          [8, -3],
+        ]),
+      },
+    );
+    expect(rec.rated).toBe(true);
+    expect(rec.players[0]).toMatchObject({ playerId: 7, ratingDelta: 3 });
+    expect(rec.players[1]).toMatchObject({ playerId: 8, ratingDelta: -3 });
+    expect(rec.players[2]!.ratingDelta).toBeUndefined();
   });
 });
 
@@ -35,6 +65,7 @@ const rec = (at: number, winner: 0 | 1, mine: Partial<MatchRecord['players'][0]>
   at,
   durationS: 600,
   winner,
+  rated: false,
   players: [
     {
       playerId: 7,
@@ -78,6 +109,13 @@ describe('career profile', () => {
     // Recent is newest first.
     expect(p.recent.map((r) => r.at)).toEqual([300, 200, 100]);
     expect(p.recent[0]).toMatchObject({ win: true, championId: 'vesk' });
+  });
+
+  it('carries rating deltas through to recent matches', () => {
+    const p = buildProfile([rec(100, 0, { ratingDelta: 12 })], 7);
+    expect(p.recent[0]!.ratingDelta).toBe(12);
+    const q = buildProfile([rec(100, 0, {})], 7);
+    expect(q.recent[0]!.ratingDelta).toBeUndefined();
   });
 
   it('ignores matches the player was not in and caps the recent list', () => {
