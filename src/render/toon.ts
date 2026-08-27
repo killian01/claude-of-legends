@@ -1,15 +1,10 @@
 // The stylized rendering pass: every lit Lambert material becomes a
-// MeshToonMaterial sharing one stepped lighting ramp, and the frame is drawn
-// through an inverted-hull OutlineEffect so solid silhouettes carry a dark
-// contour. Presentation only; glow materials (MeshBasicMaterial) and sprites
-// pass through untouched.
-//
-// Instanced meshes keep the toon ramp but opt out of outlines: the outline
-// shader's thickness math ignores instanceMatrix, so hulls on instanced
-// flora land at garbage positions.
+// MeshToonMaterial sharing one stepped lighting ramp. Presentation only;
+// glow materials (MeshBasicMaterial) and sprites pass through untouched.
+// An inverted-hull outline pass shipped here briefly and was pulled after
+// playtest feedback: the strokes read as dirt at the game's camera height.
 
 import * as THREE from 'three';
-import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 
 let ramp: THREE.DataTexture | null = null;
 
@@ -33,7 +28,6 @@ export function toonifyMaterials(root: THREE.Object3D): void {
   root.traverse((child) => {
     const mesh = child as THREE.Mesh;
     if (!mesh.isMesh) return;
-    const instanced = (mesh as unknown as THREE.InstancedMesh).isInstancedMesh === true;
     const convert = (mat: THREE.Material): THREE.Material => {
       const src = mat as THREE.MeshLambertMaterial;
       if (!src.isMeshLambertMaterial) return mat;
@@ -51,23 +45,11 @@ export function toonifyMaterials(root: THREE.Object3D): void {
       out.emissiveIntensity = src.emissiveIntensity;
       out.depthWrite = src.depthWrite;
       out.userData = src.userData;
-      if (instanced) out.userData.outlineParameters = { visible: false };
       src.dispose();
       return out;
     };
     mesh.material = Array.isArray(mesh.material)
       ? mesh.material.map(convert)
       : convert(mesh.material);
-  });
-}
-
-// The outline wrapper the renderer draws through instead of gl.render.
-// Thickness is in clip space (scales with distance); the color is a warm
-// near-black so contours sit in the palette instead of stamping pure black.
-export function createOutlineRenderer(gl: THREE.WebGLRenderer): OutlineEffect {
-  return new OutlineEffect(gl, {
-    defaultThickness: 0.009,
-    defaultColor: [0.05, 0.045, 0.03],
-    defaultAlpha: 1,
   });
 }

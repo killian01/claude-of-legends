@@ -5,6 +5,7 @@
 // data (items, sigils, champions) is data-as-code it may read directly.
 
 import { announceVoice } from '../game/announcer';
+import { toggleGameFullscreen } from '../game/fullscreen';
 import { playSfx } from '../game/sfx';
 import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
@@ -761,9 +762,16 @@ export class Hud {
     this.escapeOverlay = el('div', 'hud-overlay');
     const resume = el('button', 'hud-menu-btn', 'Resume (Esc)');
     resume.addEventListener('click', () => this.toggleEscapeMenu());
+    const fullscreenBtn = el('button', 'hud-menu-btn', 'Toggle fullscreen');
+    fullscreenBtn.addEventListener('click', () => toggleGameFullscreen());
     const quit = el('button', 'hud-menu-btn', 'Leave match');
     quit.addEventListener('click', () => window.location.reload());
-    this.escapeOverlay.append(el('div', 'hud-overlay-title', 'Paused view'), resume, quit);
+    this.escapeOverlay.append(
+      el('div', 'hud-overlay-title', 'Paused view'),
+      resume,
+      fullscreenBtn,
+      quit,
+    );
 
     root.append(
       bottom,

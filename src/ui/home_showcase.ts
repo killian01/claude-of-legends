@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { createChampionVisual, preloadChampionAssets } from '../render/champions';
 import { CHAMPION_VISUALS } from '../render/champions/manifest';
 import type { ChampionVisual } from '../render/champions/visual';
-import { createOutlineRenderer, toonifyMaterials } from '../render/toon';
+import { toonifyMaterials } from '../render/toon';
 
 export function startHomeShowcase(host: HTMLElement): () => void {
   const gl = new THREE.WebGLRenderer({ antialias: true });
@@ -69,7 +69,6 @@ export function startHomeShowcase(host: HTMLElement): () => void {
     });
   }
 
-  const outline = createOutlineRenderer(gl);
   let stopped = false;
   let raf = 0;
   let last = performance.now();
@@ -87,7 +86,7 @@ export function startHomeShowcase(host: HTMLElement): () => void {
       visuals[Math.floor(Math.random() * visuals.length)]?.playAttack();
     }
     for (const v of visuals) v.update(dt, { moving: false, windingUp: false, dead: false });
-    outline.render(scene, camera);
+    gl.render(scene, camera);
     raf = requestAnimationFrame(frame);
   };
   raf = requestAnimationFrame(frame);
