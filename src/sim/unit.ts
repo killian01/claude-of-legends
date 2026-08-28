@@ -4,6 +4,7 @@
 import type { Status } from './combat/status';
 import type { ChampionDef } from './content/champions';
 import type { LaneId } from './content/map';
+import type { DashState } from './dashes';
 import type { AbilityKey, TeamId, Vec2 } from './types';
 
 export type UnitKind = 'champion' | 'minion' | 'tower' | 'sanctum' | 'warden' | 'camp';
@@ -70,6 +71,12 @@ export interface Unit {
   holding: boolean;
   // A paid cast waiting out its windup; stuns cancel it.
   pendingSpell: { key: AbilityKey; aim: Vec2; resolveAt: number } | null;
+  // A traveling dash in flight (kits-v2): committed, visible, wall-stopped.
+  activeDash: DashState | null;
+  // A recast window armed by a cast (ADR 0005): pressing the same key again
+  // before `until` resolves the follow-up. v2's only recast returns the
+  // caster to `origin`.
+  recastArmed: { key: AbilityKey; until: number; origin: Vec2 } | null;
   // An auto-attack strike winding up: locked to its target, landing at
   // resolveAt. Moving, a stun, a dash, or losing the target cancels it and
   // refunds the attack timer (the orb-walk rule).
@@ -173,6 +180,8 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     attackMoveTarget: null,
     holding: false,
     pendingSpell: null,
+    activeDash: null,
+    recastArmed: null,
     pendingAttack: null,
     path: [],
     level: 1,

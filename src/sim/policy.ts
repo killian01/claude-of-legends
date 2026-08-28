@@ -55,6 +55,17 @@ export interface ObsZone {
   detonateAt: number | null;
 }
 
+// A temporary ability wall (additive v0 block). Walls are terrain: both
+// teams see every wall, exactly like the pathing they change.
+export interface ObsWall {
+  x1: number;
+  z1: number;
+  x2: number;
+  z2: number;
+  friendly: boolean;
+  until: number;
+}
+
 export interface ObsSelf {
   id: number;
   team: TeamId;
@@ -81,6 +92,10 @@ export interface ObsSelf {
   // Which champion this policy is driving. Additive v0 field (like
   // `abilityRanks`): policies use it to pick role-appropriate item builds.
   championId: string | null;
+  // The ability key whose recast window is armed right now, null otherwise
+  // (ADR 0005; additive v0 field). While armed, that key reads ready and
+  // the press resolves the follow-up instead of a fresh cast.
+  recastArmed?: AbilityKey | null;
   // The lane this participant was assigned, null for unassigned (humans).
   // Additive v0 field; bots use it to hold a lane instead of flocking.
   lane: 'top' | 'mid' | 'bot' | null;
@@ -100,6 +115,9 @@ export interface Observation {
   // v0 fields; a policy that ignores them keeps its old behavior).
   projectiles?: readonly ObsProjectile[];
   zones?: readonly ObsZone[];
+  // Ability walls, visible to both teams like the terrain they are
+  // (additive v0 field).
+  walls?: readonly ObsWall[];
 }
 
 export type Action =

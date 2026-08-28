@@ -9,6 +9,7 @@ import { isStealthed, sightFactor } from './combat/status';
 import type { GameMap } from './content/map';
 import type { TeamId, Vec2 } from './types';
 import type { Unit } from './unit';
+import type { Zone } from './zones';
 
 export function brushIndexAt(map: GameMap, p: Vec2): number {
   for (let i = 0; i < map.brush.length; i++) {
@@ -36,10 +37,13 @@ export function sightBlocked(map: GameMap, a: Vec2, b: Vec2): boolean {
 }
 
 // For each team, the set of ENEMY unit ids that team can currently see.
+// Reveal zones (kits-v2) add their area on top: enemies inside are seen
+// through brush and stealth alike.
 export function computeVisibility(
   map: GameMap,
   units: ReadonlyMap<number, Unit>,
   time: number,
+  zones?: ReadonlyMap<number, Zone>,
 ): [Set<number>, Set<number>] {
   const sets: [Set<number>, Set<number>] = [new Set(), new Set()];
   const brush = new Map<number, number>();
@@ -61,6 +65,17 @@ export function computeVisibility(
         if (sightBlocked(map, src.pos, target.pos)) continue;
         sets[observer].add(target.id);
         break;
+      }
+    }
+  }
+  if (zones) {
+    for (const z of zones.values()) {
+      if (!z.reveal || z.until <= time) continue;
+      for (const target of units.values()) {
+        if (target.dead) continue;
+        if (!target.neutral && target.team === z.team) continue;
+        const d = Math.hypot(target.pos.x - z.pos.x, target.pos.z - z.pos.z);
+        if (d <= z.radius + target.radius) sets[z.team].add(target.id);
       }
     }
   }

@@ -101,6 +101,7 @@ describe('Sylra', () => {
       units: new Map([[b.id, b]]),
       projectiles: new Map(),
       zones: new Map(),
+      walls: new Map(),
       events: [],
       dead: new Set(),
       killers: new Map(),

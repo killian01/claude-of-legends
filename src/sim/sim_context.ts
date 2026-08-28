@@ -8,6 +8,7 @@ import type { Rng } from './rng';
 import type { SimEvent } from './sim';
 import type { TeamBuffs } from './team_buffs';
 import type { Unit } from './unit';
+import type { Wall } from './walls';
 import type { Zone } from './zones';
 
 export interface CombatCtx {
@@ -17,6 +18,7 @@ export interface CombatCtx {
   readonly units: Map<number, Unit>;
   readonly projectiles: Map<number, Projectile>;
   readonly zones: Map<number, Zone>;
+  readonly walls: Map<number, Wall>;
   readonly events: SimEvent[];
   readonly dead: Set<number>;
   // Who last-hit each unit in `dead`, for kill rewards.
