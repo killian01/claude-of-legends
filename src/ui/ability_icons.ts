@@ -7,6 +7,7 @@
 import type { AbilityDef, CastSpec } from '../sim/combat/casting';
 import type { SigilDef } from '../sim/content/sigils';
 import type { AbilityKey } from '../sim/types';
+import { abilityImageUrl, sigilImageUrl } from './icon_images';
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -314,7 +315,14 @@ function pickPrimitive(spec: CastSpec, json: string): PrimitiveName {
   return 'burst';
 }
 
-export function abilityIconUrl(key: AbilityKey, ability: AbilityDef): string {
+export function abilityIconUrl(
+  key: AbilityKey,
+  ability: AbilityDef,
+  championId?: string | null,
+): string {
+  // A shipped painting always wins over the procedural fallback.
+  const image = abilityImageUrl(championId, key);
+  if (image) return image;
   const json = JSON.stringify(ability.spec);
   const cacheKey = `ability|${key}|${ability.name}|${json.length}`;
   const hit = cache.get(cacheKey);
@@ -336,6 +344,8 @@ const SIGIL_RECIPES: Record<string, { pal: PaletteName; prim: PrimitiveName }> =
 };
 
 export function sigilIconUrl(sigil: SigilDef): string {
+  const shipped = sigilImageUrl(sigil.id);
+  if (shipped) return shipped;
   const cacheKey = `sigil|${sigil.id}`;
   const hit = cache.get(cacheKey);
   if (hit) return hit;

@@ -1,7 +1,10 @@
 // Procedural 2D icons: a gradient tile with bold initials, generated once
 // per key and cached as data URLs. Items are tinted by their primary stat.
+// The painted image pipeline (icon_images.ts) always wins over this
+// fallback; see docs/design/icon-art-style.md.
 
 import type { ItemDef } from '../sim/content/items';
+import { itemImageUrl } from './icon_images';
 
 const cache = new Map<string, string>();
 
@@ -47,6 +50,8 @@ function itemTint(def: ItemDef): [string, string] {
 }
 
 export function itemIconUrl(def: ItemDef): string {
+  const image = itemImageUrl(def.id);
+  if (image) return image;
   const initials = def.id
     .split('_')
     .map((w) => (w[0] ?? '').toUpperCase())
