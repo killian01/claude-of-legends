@@ -297,6 +297,8 @@ function pickPrimitive(spec: CastSpec, json: string): PrimitiveName {
       return 'cone';
     case 'dash':
       return 'chevrons';
+    case 'wall':
+      return 'shield';
     case 'zone':
       return has(json, 'root') || has(json, 'mark') ? 'thorns' : 'ring';
     default:

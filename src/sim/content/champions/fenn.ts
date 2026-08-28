@@ -1,11 +1,14 @@
-// Fenn, the Quickblade. Assassin (docs/design/roster.md). Passive
-// Opportunist (execute bonus) is deferred with the passive-hook system; R's
-// untargetability is approximated until an untargetable status exists.
+// Fenn, the Quickblade. Assassin (docs/design/kits-v2.md): in, kill, out,
+// with every strike committed and visible. He hunts strays (W's isolation
+// bonus), snowballs through takedowns (Q resets), and his R is the roster's
+// only recast: commit forward with a banked, budgeted way home (ADR 0005).
 
 import type { ChampionDef } from './index';
 
 const OPPORTUNIST_THRESHOLD = 0.35;
 const OPPORTUNIST_BONUS = 1.15;
+// A takedown this soon after Fenn damaged the victim resets Lunge.
+const LUNGE_RESET_WINDOW_S = 2;
 
 export const FENN: ChampionDef = {
   id: 'fenn',
@@ -14,10 +17,16 @@ export const FENN: ChampionDef = {
   blurb: 'A single-target executioner who commits hard and finishes low targets.',
   passive: {
     name: 'Opportunist',
-    description: 'Deals 15 percent bonus damage to enemies below 35 percent health.',
+    description:
+      'Deals 15 percent bonus damage to enemies below 35 percent health. Takedowns on ' +
+      'recently struck champions reset Lunge.',
     modifyDamage(_ctx, _self, target, amount) {
       if (target.maxHp <= 0 || target.hp / target.maxHp >= OPPORTUNIST_THRESHOLD) return amount;
       return amount * OPPORTUNIST_BONUS;
+    },
+    onTakedown(ctx, self, victim) {
+      const hit = victim.recentDamagers.find((r) => r.id === self.id);
+      if (hit && ctx.time - hit.at <= LUNGE_RESET_WINDOW_S) self.cooldowns.Q = ctx.time;
     },
   },
   base: {
@@ -41,9 +50,12 @@ export const FENN: ChampionDef = {
       manaCost: 35,
       cooldown: 5.5,
       castRange: 5,
+      // A real flight now: visible, interceptable, and reset by takedowns
+      // (the passive), the assassin's snowball lever.
       spec: {
         kind: 'dash',
         range: 5,
+        speed: 18,
         landRadius: 1.8,
         onLand: [{ kind: 'damage', base: 79, adRatio: 1.52, dtype: 'physical' }],
       },
@@ -53,6 +65,8 @@ export const FENN: ChampionDef = {
       manaCost: 40,
       cooldown: 6,
       castRange: 8,
+      // Both fangs bite anyone; a target with no ally nearby takes the
+      // hunter's bonus. Fenn wants strays, not teamfights.
       spec: {
         kind: 'skillshot',
         speed: 26,
@@ -61,6 +75,11 @@ export const FENN: ChampionDef = {
         onHit: [
           { kind: 'damage', base: 40, adRatio: 0.66, dtype: 'physical' },
           { kind: 'damage', base: 40, adRatio: 0.66, dtype: 'physical' },
+          {
+            kind: 'conditional',
+            when: { kind: 'targetIsolated', radius: 4 },
+            effects: [{ kind: 'damage', base: 32, adRatio: 0.53, dtype: 'physical' }],
+          },
         ],
       },
     },
@@ -82,16 +101,26 @@ export const FENN: ChampionDef = {
       name: 'Shadow Flurry',
       manaCost: 85,
       cooldown: 56.5,
-      castRange: 3,
-      // Point-and-click execute: the crouch telegraphs before the flurry.
+      castRange: 5.5,
+      // The crouch telegraphs, then Fenn blurs down a short line, striking
+      // every champion passed, untouchable only while he travels. Pressing
+      // R again inside the window blinks him back to where he committed:
+      // the banked, budgeted way home (the roster's only recast, ADR 0005).
       windup: 0.35,
       spec: {
-        kind: 'enemy_target',
-        searchRadius: 2,
-        effects: [{ kind: 'damage', base: 228, adRatio: 1.9, dtype: 'physical' }],
-        // The roster's promised untouchability during the flurry.
-        selfEffects: [{ kind: 'untargetable', duration: 1.0 }],
+        kind: 'dash',
+        range: 5.5,
+        speed: 14,
+        untargetableDuringTravel: true,
+        passThrough: [
+          {
+            kind: 'conditional',
+            when: { kind: 'targetIsChampion' },
+            effects: [{ kind: 'damage', base: 228, adRatio: 1.9, dtype: 'physical' }],
+          },
+        ],
       },
+      recast: { window: 4, returnBlink: true },
     },
   },
 };

@@ -1,6 +1,6 @@
-// Ashvyn, Nightbow. Mobile marksman (docs/design/roster.md). Passive
-// Twinshot (every third attack strikes twice) and its W reset are deferred
-// with the passive-hook system; W keeps the dash and grants attack speed.
+// Ashvyn, Nightbow. Mobile marksman (docs/design/kits-v2.md): a tempo
+// archer on a rhythm of thirds. E finally honors the roster promise (root
+// at long range, slow up close); R's eclipse reveals everything under it.
 
 import { dealDamage } from '../../combat/damage';
 import type { ChampionDef } from './index';
@@ -67,6 +67,7 @@ export const ASHVYN: ChampionDef = {
       spec: {
         kind: 'dash',
         range: 3.5,
+        speed: 16,
         selfEffects: [{ kind: 'buff', duration: 2.5, asPct: 0.4 }],
       },
     },
@@ -75,6 +76,8 @@ export const ASHVYN: ChampionDef = {
       manaCost: 45,
       cooldown: 8.5,
       castRange: 9,
+      // The roster promise, delivered: a long flight pins (root), a
+      // point-blank shot only slows. Max-range picks, not melee spam.
       spec: {
         kind: 'skillshot',
         speed: 26,
@@ -82,7 +85,12 @@ export const ASHVYN: ChampionDef = {
         range: 9,
         onHit: [
           { kind: 'damage', base: 53, adRatio: 0.95, dtype: 'physical' },
-          { kind: 'root', duration: 1.0 },
+          {
+            kind: 'conditional',
+            when: { kind: 'distanceAtLeast', distance: 5.4 },
+            effects: [{ kind: 'root', duration: 1.0 }],
+            otherwise: [{ kind: 'slow', pct: 0.4, duration: 1 }],
+          },
         ],
       },
     },
@@ -91,11 +99,14 @@ export const ASHVYN: ChampionDef = {
       manaCost: 85,
       cooldown: 64,
       castRange: 9,
+      // Brush and stealth offer no cover under the eclipse: the zone
+      // reveals everything inside for its duration.
       spec: {
         kind: 'zone',
         radius: 4.5,
         duration: 3,
         tickEvery: 0.5,
+        reveal: true,
         onTick: [
           { kind: 'damage', base: 48, adRatio: 0.66, dtype: 'physical' },
           { kind: 'slow', pct: 0.3, duration: 1 },

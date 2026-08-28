@@ -1,6 +1,7 @@
-// Torv, Stonehorn. Engage support (docs/design/roster.md). Passive Bulwark
-// Aura (armor to nearby allies) is deferred with the passive-hook system.
-// His W exercises the taunt primitive.
+// Torv, Stonehorn. Engage support (docs/design/kits-v2.md): the mountain
+// charges and the earth answers. Q is a real charge that plows enemies
+// aside; E escalates on slowed targets (the combo the kit teaches); R's
+// fissure stays behind as impassable broken ground, splitting the fight.
 
 import { refreshBuff } from '../../combat/status';
 import type { ChampionDef } from './index';
@@ -50,9 +51,16 @@ export const TORV: ChampionDef = {
       cooldown: 7.5,
       castRange: 5.5,
       windup: 0.25,
+      // A real charge: interceptable, wall-blocked, plowing bystanders
+      // aside; only whoever stands at the impact point goes airborne.
       spec: {
         kind: 'dash',
         range: 5.5,
+        speed: 13,
+        passThrough: [
+          { kind: 'damage', base: 60, adRatio: 0.3, dtype: 'physical' },
+          { kind: 'knockback', distance: 1.8, direction: 'aside' },
+        ],
         landRadius: 2,
         onLand: [
           { kind: 'damage', base: 108, adRatio: 0.5, dtype: 'physical' },
@@ -80,12 +88,19 @@ export const TORV: ChampionDef = {
       castRange: 0,
       // The stomp is a heavy instant nuke: it owes its victims a beat.
       windup: 0.3,
+      // The escalation the kit teaches: a fresh target is slowed, an
+      // already-impaired one is rooted. Q into E, or any ally slow into E.
       spec: {
         kind: 'burst',
         radius: 3.2,
         effects: [
           { kind: 'damage', base: 81, adRatio: 0.4, dtype: 'magic' },
-          { kind: 'slow', pct: 0.3, duration: 1.5 },
+          {
+            kind: 'conditional',
+            when: { kind: 'targetSlowed' },
+            effects: [{ kind: 'root', duration: 0.9 }],
+            otherwise: [{ kind: 'slow', pct: 0.3, duration: 1.5 }],
+          },
         ],
       },
     },
@@ -94,6 +109,8 @@ export const TORV: ChampionDef = {
       manaCost: 85,
       cooldown: 67.5,
       castRange: 9,
+      // The fissure persists as impassable broken ground along the line,
+      // splitting the fight in two for a beat.
       spec: {
         kind: 'skillshot',
         speed: 18,
@@ -104,6 +121,7 @@ export const TORV: ChampionDef = {
           { kind: 'damage', base: 203, adRatio: 0.6, dtype: 'magic' },
           { kind: 'stun', duration: 1.2 },
         ],
+        leaveWall: { duration: 2 },
       },
     },
   },

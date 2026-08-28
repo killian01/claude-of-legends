@@ -1,6 +1,7 @@
-// Maera, Tidecaller. Healing support (docs/design/roster.md). Passive Spring
-// Tide (heal splash to a second ally) is deferred with the passive-hook
-// system. Her waves exercise ally-affecting piercing projectiles.
+// Maera, Tidecaller. Healing support (docs/design/kits-v2.md): the tide
+// gives and takes in the same wave. W triages (double healing under 40
+// percent); R finally honors the roster promise and SWEEPS enemies aside,
+// lateral to the wave, while shielding the allies it passes.
 
 import { healFactor } from '../../combat/status';
 import type { ChampionDef } from './index';
@@ -69,12 +70,20 @@ export const MAERA: ChampionDef = {
       manaCost: 60,
       cooldown: 10,
       castRange: 8,
+      // Triage made legible: allies under 40 percent health heal double.
       spec: {
         kind: 'zone',
         radius: 3,
         duration: 4,
         tickEvery: 0.5,
-        allyOnTick: [{ kind: 'heal', base: 18, apRatio: 0.12 }],
+        allyOnTick: [
+          {
+            kind: 'conditional',
+            when: { kind: 'targetHpBelow', frac: 0.4 },
+            effects: [{ kind: 'heal', base: 36, apRatio: 0.24 }],
+            otherwise: [{ kind: 'heal', base: 18, apRatio: 0.12 }],
+          },
+        ],
       },
     },
     E: {
@@ -100,6 +109,8 @@ export const MAERA: ChampionDef = {
       cooldown: 67.5,
       castRange: 10,
       windup: 0.5,
+      // The peel ultimate: the wave sweeps enemies OFF its path (aside,
+      // not airborne) and shields the allies it washes over.
       spec: {
         kind: 'skillshot',
         speed: 16,
@@ -108,7 +119,7 @@ export const MAERA: ChampionDef = {
         pierce: true,
         onHit: [
           { kind: 'damage', base: 132, apRatio: 1.14, dtype: 'magic' },
-          { kind: 'knockup', duration: 0.75 },
+          { kind: 'knockback', distance: 2.5, direction: 'aside' },
         ],
         allyEffects: [{ kind: 'shield', base: 150, apRatio: 0.5, duration: 3 }],
       },
