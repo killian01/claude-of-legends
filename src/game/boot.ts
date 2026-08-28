@@ -135,7 +135,7 @@ export function startPresentation(
         hud.flashMana();
         return;
       }
-      if (ab.spec.kind === 'zone') {
+      if (ab.spec.kind === 'zone' || ab.spec.kind === 'wall') {
         const d = Math.hypot(u.pos.x - aim.x, u.pos.z - aim.z);
         if (d > ab.castRange) {
           pendingCast = { key, aim: { x: aim.x, z: aim.z } };
@@ -237,13 +237,19 @@ export function startPresentation(
       const ab = def?.abilities[key];
       if (u && !u.dead && ab) {
         aimingKey = key;
-        const spec = ab.spec as { radius?: number; range?: number; halfAngle?: number };
+        const spec = ab.spec as {
+          radius?: number;
+          range?: number;
+          halfAngle?: number;
+          length?: number;
+        };
         renderer.showAimPreview({
           castRange: ab.castRange,
           kind: ab.spec.kind,
           radius: spec.radius,
           range: spec.range,
           halfAngle: spec.halfAngle,
+          length: spec.length,
         });
       }
       tryCast(key, aim);

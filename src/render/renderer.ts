@@ -156,6 +156,9 @@ export interface AimPreview {
   radius?: number;
   range?: number;
   halfAngle?: number;
+  // Wall casts: the rampart's length, previewed as a bar perpendicular to
+  // the cast direction at the cursor.
+  length?: number;
 }
 
 interface TrackedMobile {
@@ -227,6 +230,8 @@ export class Renderer {
   private readonly championVisuals = new Map<number, ChampionVisual>();
   private readonly trackedProjectiles = new Map<number, TrackedMobile>();
   private readonly trackedZones = new Map<number, TrackedZone>();
+  // Ability walls (kits-v2): one stone slab per wall id, dropped on expiry.
+  private readonly trackedWalls = new Map<number, THREE.Object3D>();
   // The pooled spell VFX engine and the live windup telegraphs.
   private readonly vfx: VfxSystem;
   private readonly windups = new Map<number, WindupFx>();
@@ -553,6 +558,10 @@ export class Renderer {
       );
     } else if (p.kind === 'zone') {
       this.aimSpot = add(new THREE.Mesh(new THREE.CircleGeometry(p.radius ?? 1, 32), mat(0.25)));
+    } else if (p.kind === 'wall') {
+      // A bar as long as the rampart, riding the cursor, kept perpendicular
+      // to the cast direction by updateAimPreview.
+      this.aimSpot = add(new THREE.Mesh(new THREE.PlaneGeometry(p.length ?? 4, 0.5), mat(0.3)));
     } else if (p.kind === 'burst') {
       add(new THREE.Mesh(new THREE.CircleGeometry(p.radius ?? 1, 32), mat(0.18)));
     }
@@ -706,6 +715,11 @@ export class Renderer {
       const max = this.aimPreview.castRange;
       const k = d > max && d > 0 ? max / d : 1;
       this.aimSpot.position.set(sx + dx * k, 0.12, sz + dz * k);
+      // The wall bar stays perpendicular to the cast direction, exactly the
+      // orientation the sim will give the rampart.
+      if (this.aimPreview.kind === 'wall' && d > 0.05) {
+        this.aimSpot.rotation.z = Math.atan2(dx, dz) + Math.PI;
+      }
     }
   }
 
@@ -1655,6 +1669,58 @@ export class Renderer {
       }
     }
 
+    // Ability walls: a raised stone slab along the segment, gone with the
+    // wall. The sim already blocks the ground; this is purely the read.
+    for (const [id, w] of this.world.walls) {
+      if (this.trackedWalls.has(id)) continue;
+      const dx = w.b.x - w.a.x;
+      const dz = w.b.z - w.a.z;
+      const length = Math.hypot(dx, dz);
+      const geo = new THREE.BoxGeometry(Math.max(0.5, length), 1.5, 0.9);
+      const matStone = new THREE.MeshLambertMaterial({ color: 0x8d8877 });
+      const slab = new THREE.Mesh(geo, matStone);
+      slab.position.set((w.a.x + w.b.x) / 2, 0.75, (w.a.z + w.b.z) / 2);
+      slab.rotation.y = -Math.atan2(dz, dx);
+      const cap = new THREE.Mesh(
+        new THREE.BoxGeometry(Math.max(0.5, length) * 0.94, 0.25, 1.05),
+        new THREE.MeshLambertMaterial({ color: 0x6f6a5b }),
+      );
+      cap.position.y = 0.85;
+      slab.add(cap);
+      this.scene.add(slab);
+      this.trackedWalls.set(id, slab);
+      // The earth answers: dust and sparks along the rising line.
+      const bursts = Math.max(2, Math.round(length / 1.2));
+      for (let i = 0; i <= bursts; i++) {
+        const t = i / bursts;
+        const x = w.a.x + dx * t;
+        const z = w.a.z + dz * t;
+        this.vfx.sparkBurst(x, 0.4, z, 0xb9b19a, 6, 5, { life: 0.45, size: 0.4, gravity: 9 });
+      }
+      this.vfx.glowFlash((w.a.x + w.b.x) / 2, 0.8, (w.a.z + w.b.z) / 2, 1.4, 0xcfc7ae, 0.2);
+    }
+    for (const [id, mesh] of this.trackedWalls) {
+      if (!this.world.walls.has(id)) {
+        // Crumble: a softer dust fall where the rampart stood.
+        this.vfx.sparkBurst(mesh.position.x, 0.9, mesh.position.z, 0x8d8877, 10, 3.5, {
+          life: 0.5,
+          size: 0.35,
+          gravity: 11,
+        });
+        this.scene.remove(mesh);
+        disposeDeep(mesh);
+        this.trackedWalls.delete(id);
+      }
+    }
+
+    // Traveling dashes read as motion: a short-lived streak dot under any
+    // unit in flight (offline worlds carry activeDash; the online mirror
+    // shows the fast position updates instead).
+    for (const [, u] of this.world.units) {
+      if (!u.activeDash || u.dead) continue;
+      this.vfx.glowFlash(u.pos.x, 0.35, u.pos.z, 0.55, 0xdfefff, 0.22);
+    }
+
     this.syncWindups();
     this.paintFog();
   }
@@ -1748,7 +1814,7 @@ export class Renderer {
       fill.scale.y = 0.001;
       group.add(fill);
       fillMode = 'length';
-      // Hard edge rails: the MOBA read that survives any ground color.
+      // Hard edge rails: the classic MOBA read that survives any ground color.
       const rails: THREE.Mesh[] = [];
       for (const side of [-1, 1]) {
         const railGeo = new THREE.PlaneGeometry(0.14, 1);
