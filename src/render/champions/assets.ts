@@ -128,15 +128,20 @@ function toInPlace(clip: THREE.AnimationClip, def: ChampionVisualDef): THREE.Ani
   return clip;
 }
 
-// Wraps a GLB prop so its bounding-box center sits on the origin and its
-// longest axis spans `size` world units; the anchor then poses it exactly
-// like a procedural prop.
-function normalizeProp(scene: THREE.Group, size: number): THREE.Group {
+// Wraps a GLB prop scaled so its longest axis spans `size` world units; the
+// anchor then poses it exactly like a procedural prop. By default the
+// bounding-box center sits on the origin; anchor 'origin' instead trusts the
+// GLB's authored origin (the grip point, placed in Blender), so the file
+// itself decides where the hand holds it and translation offsets in the
+// manifest become unnecessary.
+function normalizeProp(scene: THREE.Group, size: number, anchor?: 'origin'): THREE.Group {
   const box = new THREE.Box3().setFromObject(scene);
   const span = box.getSize(new THREE.Vector3());
   const s = size / Math.max(span.x, span.y, span.z, 0.001);
   scene.scale.setScalar(s);
-  scene.position.copy(box.getCenter(new THREE.Vector3()).multiplyScalar(-s));
+  if (anchor !== 'origin') {
+    scene.position.copy(box.getCenter(new THREE.Vector3()).multiplyScalar(-s));
+  }
   const holder = new THREE.Group();
   holder.add(scene);
   return holder;
@@ -157,7 +162,7 @@ export function preloadChampionAssets(renderer: THREE.WebGLRenderer): void {
       propDefs.map((p) =>
         loader
           .loadAsync(p.url as string)
-          .then((g) => ({ url: p.url as string, scene: g.scene, size: p.size ?? 1 }))
+          .then((g) => ({ url: p.url as string, scene: g.scene, size: p.size ?? 1, anchor: p.anchor }))
           .catch(() => null),
       ),
     );
@@ -175,7 +180,7 @@ export function preloadChampionAssets(renderer: THREE.WebGLRenderer): void {
         for (const p of loadedProps) {
           if (!p) continue;
           toLambert(p.scene, def);
-          props.set(p.url, normalizeProp(p.scene, p.size));
+          props.set(p.url, normalizeProp(p.scene, p.size, p.anchor));
         }
         const template: ChampionTemplate = {
           def,

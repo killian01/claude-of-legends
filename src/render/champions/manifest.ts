@@ -32,6 +32,11 @@ export interface ChampionPropDef {
   url?: string;
   size?: number;
   bone: string;
+  // 'origin' anchors the GLB's authored origin on the bone instead of the
+  // bounding-box center. The file is then authored in Blender with the grip
+  // point at the origin and the rest orientation in root space (facing +Z),
+  // so alignment lives in the asset, not in offset tuning here.
+  anchor?: 'origin';
   // The prop keeps its authored orientation and follows its bone in
   // position only, skipping the hand rotation delta. For a two-handed GLB
   // weapon the delta would tilt it with the raising arm (a rifle pointing
@@ -144,27 +149,28 @@ export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
     // The Walking clip reads planted around a slow colossus stride.
     runSpeed: 2.0,
     portrait: { clip: 'attack', time: 0.35, yaw: 0.55 },
+    // Both weapon GLBs are authored in Blender against the idle rest pose
+    // (the runtime's rest capture): grip point at the file origin, rest
+    // orientation in root space, so both mount with no offsets at all.
     props: [
-      // Carried over the right shoulder: the bbox centers on the hand, so the
-      // maul rides up and in, rolled so the head rests against the pauldron.
-      // The maul GLB centers its bbox on the anchor and the authored y=0
-      // slice is mid-handle (measured; the head spans y 0.17..0.5), so a
-      // zero offset puts the handle axis exactly through the hand bone in
-      // every animation frame.
+      // Head-down at rest, leaning slightly outward: the head is nearly a
+      // barrel and the pauldrons are castle towers, so any head-up carry
+      // buries it in the silhouette. Mid-handle grip; swings pivot the head
+      // up from the ground like the siege weapon it is.
       {
         url: '/models/champions/korrath_maul.glb',
         size: 3.1,
         bone: 'RightHand',
+        anchor: 'origin',
       },
-      // The shield mesh is a vertical slab, lion face +Z, grip straps on the
-      // back at authored z -0.135; the z offset lands those straps exactly on
-      // the hand bone (0.135 x scale 2.35). Position-only follow keeps the
-      // tower upright through arm swings.
+      // Upright tower, lion face forward, authored origin on the upper back
+      // rail where the fist grips. Position-only follow keeps it planted
+      // vertical through arm swings.
       {
         url: '/models/champions/korrath_shield.glb',
         size: 2.35,
         bone: 'LeftHand',
-        pos: [0, 0, 0.32],
+        anchor: 'origin',
         fixedPose: true,
       },
     ],
