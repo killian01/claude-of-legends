@@ -70,7 +70,10 @@ export const KORRATH: ChampionDef = {
       },
     },
     E: {
-      name: 'Grip Chain',
+      // A maul slam that sends a fissure of grasping stone along the ground;
+      // same skillshot-pull mechanics as the old Grip Chain, retimed to the
+      // hammer-and-shield model (no chain on the rig).
+      name: 'Earthgrip',
       manaCost: 50,
       cooldown: 9,
       castRange: 8,

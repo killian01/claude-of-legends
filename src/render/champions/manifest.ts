@@ -118,17 +118,55 @@ const KAYKIT_CLIPS = {
 } as const;
 
 export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
-  // Korrath, the Bulwark: a human knight in full plate behind a tower shield.
+  // Korrath, the Bulwark: a living rampart golem forged from fortress iron
+  // and masonry. Meshy-generated model; the tower shield and siege maul are
+  // separate Meshy GLB props riding the hands (CREDITS.md).
   korrath: {
-    url: '/models/champions/knight.glb',
-    height: 2.6,
-    barY: 3.3,
-    clips: { ...KAYKIT_CLIPS, attack: '1H_Melee_Attack_Slice_Horizontal' },
-    teamMeshes: ['Knight_Cape'],
+    url: '/models/champions/korrath.glb',
+    // The tallest silhouette on the roster: a rampart should dwarf even Torv.
+    height: 3.6,
+    barY: 4.4,
+    clips: {
+      idle: 'Short_Breathe_and_Look_Around',
+      // A fortress walks; it never jogs.
+      run: 'Walking',
+      // Autos and ability casts both swing the maul; the windup braces
+      // behind the tower shield while a cast charges.
+      attack: 'Right_Hand_Sword_Slash',
+      cast: 'Charged_Slash',
+      windup: 'Shield_Push_Left',
+      death: 'Dead',
+    },
+    // The combat clips lunge with baked hip travel (up to half a body width);
+    // pinned so the sim stays the only source of movement. Dead keeps its
+    // travel: the fall to the ground is the clip.
+    inPlaceClips: ['Right_Hand_Sword_Slash', 'Shield_Push_Left', 'Charged_Slash'],
+    // The Walking clip reads planted around a slow colossus stride.
+    runSpeed: 2.0,
     portrait: { clip: 'attack', time: 0.35, yaw: 0.55 },
     props: [
-      { kind: 'sword', bone: 'handslot.r' },
-      { kind: 'shield', bone: 'handslot.l' },
+      // Carried over the right shoulder: the bbox centers on the hand, so the
+      // maul rides up and in, rolled so the head rests against the pauldron.
+      // The maul GLB centers its bbox on the anchor and the authored y=0
+      // slice is mid-handle (measured; the head spans y 0.17..0.5), so a
+      // zero offset puts the handle axis exactly through the hand bone in
+      // every animation frame.
+      {
+        url: '/models/champions/korrath_maul.glb',
+        size: 3.1,
+        bone: 'RightHand',
+      },
+      // The shield mesh is a vertical slab, lion face +Z, grip straps on the
+      // back at authored z -0.135; the z offset lands those straps exactly on
+      // the hand bone (0.135 x scale 2.35). Position-only follow keeps the
+      // tower upright through arm swings.
+      {
+        url: '/models/champions/korrath_shield.glb',
+        size: 2.35,
+        bone: 'LeftHand',
+        pos: [0, 0, 0.32],
+        fixedPose: true,
+      },
     ],
   },
   // Dain, Emberfist: a bare-chested brawler whose fists smolder.
