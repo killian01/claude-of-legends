@@ -4,8 +4,11 @@ Status: accepted (maintainer validation, 2026-08-28), including the cooldown eve
 flagged below. Implemented the same day: primitives (tests/primitives_v2.test.ts), the ten kits
 (tests/kits_v2.test.ts), and the hint-driven bot brain (src/sim/content/bots/hints.ts,
 tests/bots_v2.test.ts). In the implementation the conditional effect's true branch is named
-`effects`, not `then` (a `then` property makes an object thenable). One deviation: Korrath's
-Iron Wall cooldown is 11 s, not 14, to respect the pacing gate on basic cooldowns.
+`effects`, not `then` (a `then` property makes an object thenable). Deviations: Korrath's
+Iron Wall cooldown is 11 s, not 14, to respect the pacing gate on basic cooldowns, and after
+the first playtest feel pass the wall lasts 4 s, not 2.5. The bots-v2 predictive aim and CC
+awareness below are implemented via two additive v0 observation fields (unit velocity and
+visible statuses; see `src/sim/policy.ts`).
 Companion research: `docs/research/moba-mechanics-catalogue.md`, a mechanics taxonomy distilled
 from a full parse of the genre-defining MOBA's roster (August 2026). That file cites competitor
 champions by name as research references, so it is deliberately untracked (`docs/research/` is
