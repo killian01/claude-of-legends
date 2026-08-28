@@ -72,7 +72,12 @@ export class ChampionVisual {
       this.shot = null;
       this.combatShot = false;
       // Death clamps on its last frame; everything else hands the rig back.
-      if (this.base !== 'dead') this.beginBase(this.base, true);
+      // The finished action must fade out too: clamped at full weight it
+      // would blend its final pose into every later base and warp the gait.
+      if (this.base !== 'dead') {
+        e.action.fadeOut(FADE_BASE);
+        this.beginBase(this.base, true);
+      }
     });
     this.beginBase('idle', false);
   }
@@ -158,8 +163,10 @@ export class ChampionVisual {
         this.base = 'dead';
         this.playShot('death', ONESHOT_SECONDS.death);
       } else if (this.base === 'dead') {
-        // Revive edge.
+        // Revive edge. The death one-shot has usually already finished and
+        // cleared this.shot, so release the clamped corpse pose explicitly.
         this.shot?.fadeOut(FADE_BASE);
+        this.shotActions.death?.fadeOut(FADE_BASE);
         this.shot = null;
         this.combatShot = false;
         this.beginBase(desired, true);
