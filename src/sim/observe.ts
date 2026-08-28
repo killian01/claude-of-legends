@@ -3,15 +3,47 @@
 // is enforced by construction here, exactly like the server-side snapshot
 // scoping is for human clients.
 
+import { effectiveMoveSpeed } from './combat/status';
 import { CHAMPIONS } from './content/champions';
 import { SIGILS } from './content/sigils';
-import type { Observation, ObsProjectile, ObsUnit, ObsWall, ObsZone } from './policy';
+import type { Observation, ObsProjectile, ObsStatus, ObsUnit, ObsWall, ObsZone } from './policy';
 import type { Sim } from './sim';
 import { effectiveRank } from './stats';
 import { isInvulnerable } from './structure_rules';
 import type { AbilityKey } from './types';
+import type { Unit } from './unit';
 
 const KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
+
+// The curated on-screen statuses a viewer reads at a glance (policy.ts
+// ObsStatus); everything else on the unit is internal bookkeeping.
+const OBS_STATUS_KINDS: readonly ObsStatus['kind'][] = [
+  'stun',
+  'root',
+  'airborne',
+  'slow',
+  'shield',
+];
+
+// The motion a viewer sees on screen: a dash in flight travels at its own
+// speed, a walking unit steps toward its next waypoint at effective speed
+// (zero while rooted, stunned, or airborne), everything else stands still.
+function velocityOf(u: Unit, time: number): { vx: number; vz: number } {
+  if (u.activeDash) {
+    return {
+      vx: u.activeDash.dir.x * u.activeDash.speed,
+      vz: u.activeDash.dir.z * u.activeDash.speed,
+    };
+  }
+  const wp = u.path[0];
+  if (!wp || u.pendingSpell) return { vx: 0, vz: 0 };
+  const dx = wp.x - u.pos.x;
+  const dz = wp.z - u.pos.z;
+  const d = Math.hypot(dx, dz);
+  if (d < 1e-6) return { vx: 0, vz: 0 };
+  const speed = effectiveMoveSpeed(u, time);
+  return { vx: (dx / d) * speed, vz: (dz / d) * speed };
+}
 
 export function buildObservation(sim: Sim, unitId: number): Observation | null {
   const u = sim.units.get(unitId);
@@ -54,6 +86,19 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     };
     if (other.kind === 'tower' || other.kind === 'sanctum') {
       row.invulnerable = isInvulnerable(sim.units, other);
+    }
+    const vel = velocityOf(other, sim.time);
+    row.vx = vel.vx;
+    row.vz = vel.vz;
+    if (other.kind === 'champion') {
+      const visible: ObsStatus[] = [];
+      for (const st of other.statuses) {
+        if (st.until <= sim.time) continue;
+        if ((OBS_STATUS_KINDS as readonly string[]).includes(st.kind)) {
+          visible.push({ kind: st.kind as ObsStatus['kind'], until: st.until });
+        }
+      }
+      if (visible.length > 0) row.statuses = visible;
     }
     // The observable telegraph: a visible champion mid-windup announces
     // where the cast lands. Bursts and cones land on the caster.

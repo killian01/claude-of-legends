@@ -9,7 +9,6 @@
 import type { AbilityDef } from '../../combat/casting';
 import type { Action, Observation, ObsSelf, ObsUnit, Policy } from '../../policy';
 import type { Rng } from '../../rng';
-import type { AbilityKey } from '../../types';
 import { CHAMPIONS } from '../champions';
 import { effectiveItemCost } from '../items';
 import { GAME_MAP } from '../map';
@@ -60,6 +59,37 @@ function nearest(list: ObsUnit[], x: number, z: number): ObsUnit | null {
   return best;
 }
 
+// A hard-CC'd target cannot dodge: skillshots against it are free hits, so
+// it is both the preferred victim and the one aimed at directly.
+function hardCCd(u: ObsUnit, time: number): boolean {
+  return (u.statuses ?? []).some(
+    (s) => (s.kind === 'stun' || s.kind === 'root' || s.kind === 'airborne') && s.until > time,
+  );
+}
+
+// Predictive aim (kits-v2 bots): lead a skillshot by the target's observed
+// velocity over the bolt's flight time; anything else fires at the body.
+// The lead never reaches past the bolt's max range.
+function aimAt(
+  s: ObsSelf,
+  target: ObsUnit,
+  def: AbilityDef,
+  time: number,
+): { x: number; z: number } {
+  const spec = def.spec;
+  if (spec.kind !== 'skillshot' || hardCCd(target, time)) return { x: target.x, z: target.z };
+  const d = Math.hypot(target.x - s.x, target.z - s.z);
+  const eta = d / spec.speed;
+  const px = target.x + (target.vx ?? 0) * eta;
+  const pz = target.z + (target.vz ?? 0) * eta;
+  const pd = Math.hypot(px - s.x, pz - s.z);
+  if (pd > spec.range) {
+    const k = spec.range / pd;
+    return { x: s.x + (px - s.x) * k, z: s.z + (pz - s.z) * k };
+  }
+  return { x: px, z: pz };
+}
+
 // The true reach of an ability, read from its CastSpec (kits-v2: the old
 // bot used one hardcoded 7 for everyone and refused to poke at range).
 function abilityRange(def: AbilityDef): number {
@@ -103,7 +133,8 @@ function pickCast(
       (hints.ult.minEnemies !== undefined && cluster >= hints.ult.minEnemies) ||
       (hints.ult.targetHpBelow !== undefined && champ.hpFrac < hints.ult.targetHpBelow);
     if (gate && dc <= range && dc >= minR) {
-      return { kind: 'cast', key: 'R', x: champ.x, z: champ.z };
+      const aim = aimAt(s, champ, r, obs.time);
+      return { kind: 'cast', key: 'R', x: aim.x, z: aim.z };
     }
   }
 
@@ -131,7 +162,10 @@ function pickCast(
       continue;
     }
     if (role === 'engage' && s.hpFrac < 0.5) continue;
-    if (dc <= range && dc >= minR) return { kind: 'cast', key, x: champ.x, z: champ.z };
+    if (dc <= range && dc >= minR) {
+      const aim = aimAt(s, champ, def.abilities[key], obs.time);
+      return { kind: 'cast', key, x: aim.x, z: aim.z };
+    }
   }
   return null;
 }
@@ -339,7 +373,12 @@ const policy: Policy = (obs, rng: Rng): Action => {
     friendlyMinions.filter((m) => Math.hypot(m.x - x, m.z - z) <= ESCORT_RADIUS).length;
 
   const enemyChampions = enemies.filter((u) => u.kind === 'champion');
-  const champ = nearest(enemyChampions, s.x, s.z);
+  // A stunned or rooted enemy in reach beats the merely nearest one: every
+  // cast against it is a guaranteed hit while the CC holds.
+  const ccdTarget = enemyChampions
+    .filter((u) => hardCCd(u, obs.time) && dist(s.x, s.z, u) <= CHAMPION_ATTACK_RANGE)
+    .sort((a, b) => dist(s.x, s.z, a) - dist(s.x, s.z, b))[0];
+  const champ = ccdTarget ?? nearest(enemyChampions, s.x, s.z);
 
   // Tower danger: standing in reach of a live enemy tower without an escort
   // is only worth it to secure a kill.

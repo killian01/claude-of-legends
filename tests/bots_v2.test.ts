@@ -4,6 +4,7 @@
 // recast is pressed to come home (ADR 0005).
 
 import { describe, expect, it } from 'vitest';
+import { addStatus } from '../src/sim/combat/status';
 import { LANER } from '../src/sim/content/bots/laner';
 import { buildObservation } from '../src/sim/observe';
 import { Rng } from '../src/sim/rng';
@@ -74,5 +75,62 @@ describe('bots v2', () => {
     const action = act(sim, a.id);
     expect(action.kind).toBe('cast');
     if (action.kind === 'cast') expect(action.key).toBe('R');
+  });
+
+  it('the observation carries visible statuses, and a stunned body reads as motionless', () => {
+    const sim = new Sim(31);
+    const a = sim.addChampion(0, { x: 75, z: 75 }, 'vesk');
+    ready(a);
+    const b = sim.addChampion(1, { x: 82, z: 75 }, 'sylra');
+    addStatus(b, { kind: 'stun', until: sim.time + 2 });
+    sim.orderMove(b.id, 82, 90);
+    sim.tick();
+    const obs = buildObservation(sim, a.id);
+    const row = obs?.units.find((u) => u.id === b.id);
+    expect(row?.statuses?.some((st) => st.kind === 'stun')).toBe(true);
+    expect(Math.hypot(row?.vx ?? 0, row?.vz ?? 0)).toBe(0);
+  });
+
+  it('a walking enemy reads its on-screen velocity', () => {
+    const sim = new Sim(31);
+    const a = sim.addChampion(0, { x: 75, z: 75 }, 'vesk');
+    ready(a);
+    const b = sim.addChampion(1, { x: 82, z: 75 }, 'sylra');
+    sim.orderMove(b.id, 82, 90);
+    sim.tick();
+    const obs = buildObservation(sim, a.id);
+    const row = obs?.units.find((u) => u.id === b.id);
+    expect(row?.vz ?? 0).toBeGreaterThan(2);
+    expect(Math.abs(row?.vx ?? 0)).toBeLessThan(1);
+  });
+
+  it('leads a skillshot ahead of a strafing target', () => {
+    const sim = new Sim(31);
+    const a = sim.addChampion(0, { x: 75, z: 75 }, 'fenn');
+    ready(a);
+    const b = sim.addChampion(1, { x: 82, z: 75 }, 'sylra');
+    sim.orderMove(b.id, 82, 90);
+    const action = act(sim, a.id);
+    expect(action.kind).toBe('cast');
+    if (action.kind === 'cast') {
+      expect(action.key).toBe('W');
+      // The fangs fly at where the target will be, not where it stands.
+      expect(action.z - b.pos.z).toBeGreaterThan(0.4);
+    }
+  });
+
+  it('prefers a rooted enemy in reach over the merely nearest one', () => {
+    const sim = new Sim(31);
+    const a = sim.addChampion(0, { x: 75, z: 75 }, 'fenn');
+    ready(a);
+    sim.addChampion(1, { x: 80, z: 75 }, 'sylra');
+    const held = sim.addChampion(1, { x: 75, z: 82 }, 'sylra');
+    addStatus(held, { kind: 'root', until: sim.time + 3 });
+    const action = act(sim, a.id);
+    expect(action.kind).toBe('cast');
+    if (action.kind === 'cast') {
+      // The cast flies at the held target: a guaranteed hit while it lasts.
+      expect(Math.abs(action.z - 82)).toBeLessThan(1.5);
+    }
   });
 });

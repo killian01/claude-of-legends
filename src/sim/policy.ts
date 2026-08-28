@@ -13,6 +13,14 @@ import type { UnitKind } from './unit';
 
 export const POLICY_CONTRACT_VERSION = 0;
 
+// A visible status on a champion, the on-screen state ring made observable
+// (additive v0 block). Curated to what a human viewer reads off the screen;
+// internal bookkeeping statuses (marks, empowers, buff stats) stay hidden.
+export interface ObsStatus {
+  kind: 'stun' | 'root' | 'airborne' | 'slow' | 'shield';
+  until: number;
+}
+
 export interface ObsUnit {
   id: number;
   kind: UnitKind;
@@ -29,6 +37,14 @@ export interface ObsUnit {
   // bursts and cones), resolveAt the sim time it lands. Fairness mirror of
   // the on-screen telegraph: whoever sees the caster sees the charge.
   windup?: { key: AbilityKey; x: number; z: number; resolveAt: number };
+  // World-frame velocity in units per second, the motion a viewer sees
+  // (additive v0 fields): the dash in flight, else the step toward the next
+  // waypoint at effective speed, else zero. Predictive aim reads this.
+  vx?: number;
+  vz?: number;
+  // Champions only: visible statuses, absent when there are none (additive
+  // v0 field). A policy that ignores them keeps its old behavior.
+  statuses?: readonly ObsStatus[];
 }
 
 // A projectile the team can see (additive v0 block: dodging is impossible
