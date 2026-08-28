@@ -4,6 +4,7 @@
 
 import type { DamageType } from '../types';
 import type { Unit } from '../unit';
+import type { EffectSpec, Power } from './effects';
 
 export type Status =
   | { kind: 'slow'; until: number; pct: number }
@@ -17,7 +18,30 @@ export type Status =
   | { kind: 'taunt'; until: number; sourceId: number }
   | { kind: 'stealth'; until: number }
   | { kind: 'blind'; until: number; factor: number }
-  | { kind: 'shield'; until: number; remaining: number }
+  // burst: a detonation payload fired when the shield breaks or expires
+  // (combat/shield_burst.ts); plain shields carry none.
+  | {
+      kind: 'shield';
+      until: number;
+      remaining: number;
+      burst?: {
+        radius: number;
+        onBreak: readonly EffectSpec[];
+        onExpire: readonly EffectSpec[];
+        sourceId: number;
+        power: Power;
+      };
+    }
+  // The holder's next auto attack carries `bonus` riders (and optionally a
+  // splash around the victim); consumed by the strike that spends it.
+  | {
+      kind: 'empower';
+      until: number;
+      bonus: readonly EffectSpec[];
+      splashRadius: number;
+      splash: readonly EffectSpec[];
+      scale: number;
+    }
   // Marks are keyed per SOURCE: two casters stacking marks on one target
   // build separate pools, so their trigger thresholds never cross.
   | { kind: 'mark'; until: number; stacks: number; sourceId: number }
@@ -164,6 +188,8 @@ export function healFactor(u: Unit, time: number): number {
 }
 
 // Consumes shields oldest-first and returns the damage left after absorption.
+// A drained shield with a burst payload survives the prune: the shield burst
+// step fires and removes it on the same tick.
 export function absorbWithShields(u: Unit, amount: number, time: number): number {
   let left = amount;
   for (const s of u.statuses) {
@@ -173,9 +199,25 @@ export function absorbWithShields(u: Unit, amount: number, time: number): number
     s.remaining -= absorbed;
     left -= absorbed;
   }
-  if (left !== amount)
-    u.statuses = u.statuses.filter((s) => s.kind !== 'shield' || s.remaining > 0);
+  if (left !== amount) {
+    u.statuses = u.statuses.filter(
+      (s) => s.kind !== 'shield' || s.remaining > 0 || s.burst !== undefined,
+    );
+  }
   return left;
+}
+
+// Takes the first live empowered-attack status off the unit and returns it;
+// the caller (the auto-attack strike) applies its riders.
+export function consumeEmpower(u: Unit, time: number): Extract<Status, { kind: 'empower' }> | null {
+  for (let i = 0; i < u.statuses.length; i++) {
+    const s = u.statuses[i]!;
+    if (s.kind === 'empower' && s.until > time) {
+      u.statuses.splice(i, 1);
+      return s;
+    }
+  }
+  return null;
 }
 
 // Adds one mark stack from this source (refreshing expiry) and reports the

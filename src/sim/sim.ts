@@ -11,6 +11,7 @@ import { initialCampStates, onCampSlain, stepCamps } from './camps';
 import { stepAutoAttacks } from './combat/auto_attack';
 import { castAbility, executeCast, stepWindups } from './combat/casting';
 import { stepDots } from './combat/dots';
+import { stepShieldBursts } from './combat/shield_burst';
 import {
   breakStealth,
   cancelRecall,
@@ -25,6 +26,7 @@ import { ITEMS } from './content/items';
 import { GAME_MAP, type GameMap, type LaneId } from './content/map';
 import { SIGILS } from './content/sigils';
 import { clampSkin } from './content/skins';
+import { stepDashes } from './dashes';
 import { hasDecisionToken, spendDecisionToken } from './decision_budget';
 import { applyFountainRegen } from './fountain';
 import { stepIdleDefense } from './idle_defense';
@@ -33,7 +35,7 @@ import { stepMinionAi } from './minion_ai';
 import { stepMovement } from './movement';
 import { NavGrid } from './navgrid';
 import { initialObjectiveState, onWardenSlain, stepObjectives } from './objectives';
-import { stepPassives } from './passives';
+import { passiveOf, stepPassives } from './passives';
 import { findPath } from './pathfind';
 import type { Policy } from './policy';
 import type { Projectile } from './projectiles';
@@ -62,6 +64,7 @@ import {
 } from './types';
 import { createChampion, hostile, staticFootprint, type Unit } from './unit';
 import { computeVisibility, sightBlocked } from './vision';
+import { clampThroughWalls, stepWalls, type Wall } from './walls';
 import { FIRST_WAVE_AT, spawnWave, WAVE_EVERY } from './waves';
 import type { Zone } from './zones';
 import { stepZones } from './zones';
@@ -102,6 +105,7 @@ export class Sim {
   readonly units = new Map<number, Unit>();
   readonly projectiles = new Map<number, Projectile>();
   readonly zones = new Map<number, Zone>();
+  readonly walls = new Map<number, Wall>();
   // Bots: sim entities driven in-tick by an attached Policy (ADR 0002).
   readonly policies = new Map<number, Policy>();
   time = 0;
@@ -137,6 +141,7 @@ export class Sim {
       units: this.units,
       projectiles: this.projectiles,
       zones: this.zones,
+      walls: this.walls,
       events: this.events,
       dead: this.dead,
       killers: this.killers,
@@ -428,7 +433,10 @@ export class Sim {
     const ctx = this.ctx();
 
     stepRecalls(ctx, this.map);
+    // Shield detonations must fire before generic expiry prunes them.
+    stepShieldBursts(ctx);
     for (const u of this.units.values()) expireStatuses(u, this.time);
+    stepWalls(ctx);
 
     stepDots(ctx);
     if (this.winner === null) grantPassiveGold(ctx);
@@ -457,13 +465,24 @@ export class Sim {
     stepIdleDefense(this);
     stepWindups(ctx, (championId) => CHAMPIONS[championId]?.abilities ?? null);
     stepAutoAttacks(ctx, this.nav);
+    stepDashes(ctx, DT);
 
     for (const u of this.units.values()) {
       if (u.path.length === 0 || u.dead || this.dead.has(u.id)) continue;
-      // Winding up a cast plants the caster.
-      if (u.pendingSpell) continue;
+      // Winding up a cast plants the caster; a dash in flight owns the body.
+      if (u.pendingSpell || u.activeDash) continue;
       const speed = effectiveMoveSpeed(u, this.time);
-      if (speed > 0) stepMovement(u, DT, speed);
+      if (speed > 0) {
+        // Stale paths can cross a wall raised after they were computed;
+        // clamp the step at the wall face instead of walking through.
+        if (this.walls.size > 0) {
+          const from = { x: u.pos.x, z: u.pos.z };
+          stepMovement(u, DT, speed);
+          clampThroughWalls(this.nav, from, u);
+        } else {
+          stepMovement(u, DT, speed);
+        }
+      }
     }
 
     stepSeparation(ctx, this.nav);
@@ -480,6 +499,7 @@ export class Sim {
         if (killer && killer.kind === 'champion' && killer.team !== u.team) {
           killer.kills += 1;
           killer.killStreak += 1;
+          passiveOf(killer)?.onTakedown?.(ctx, killer, u);
         }
         // Assists: every enemy champion that damaged the victim within the
         // window, killer excluded. Dead helpers still earn theirs.
@@ -487,7 +507,10 @@ export class Sim {
           if (r.id === killerId) continue;
           if (this.time - r.at > ASSIST_WINDOW_S) continue;
           const helper = this.units.get(r.id);
-          if (helper && helper.kind === 'champion' && helper.team !== u.team) helper.assists += 1;
+          if (helper && helper.kind === 'champion' && helper.team !== u.team) {
+            helper.assists += 1;
+            passiveOf(helper)?.onTakedown?.(ctx, helper, u);
+          }
         }
         u.recentDamagers = [];
         u.killStreak = 0;
@@ -546,7 +569,7 @@ export class Sim {
       u.statuses = [];
     }
 
-    this.visibility = computeVisibility(this.map, this.units, this.time);
+    this.visibility = computeVisibility(this.map, this.units, this.time, this.zones);
 
     // Fairness: a champion's attack order must not keep tracking a target
     // its team cannot see; the blind chase would both leak the unseen

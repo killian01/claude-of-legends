@@ -5,7 +5,7 @@
 
 import { CHAMPIONS } from './content/champions';
 import { SIGILS } from './content/sigils';
-import type { Observation, ObsProjectile, ObsUnit, ObsZone } from './policy';
+import type { Observation, ObsProjectile, ObsUnit, ObsWall, ObsZone } from './policy';
 import type { Sim } from './sim';
 import { effectiveRank } from './stats';
 import { isInvulnerable } from './structure_rules';
@@ -26,6 +26,11 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     abilityRanks[key] = effectiveRank(u, key);
     abilityReady[key] =
       (u.cooldowns[key] ?? 0) <= sim.time && u.mana >= a.manaCost && abilityRanks[key] > 0;
+    // ADR 0005: an armed recast window reads as ready; the press resolves
+    // the follow-up with no mana or cooldown gate.
+    if (u.recastArmed && u.recastArmed.key === key && u.recastArmed.until > sim.time) {
+      abilityReady[key] = true;
+    }
   }
 
   const sigilReady = u.sigils.map((id, slot) => {
@@ -95,6 +100,18 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       detonateAt: z.detonateAt,
     });
   }
+  // Walls are terrain: both teams always see them, like the pathing change.
+  const walls: ObsWall[] = [];
+  for (const w of sim.walls.values()) {
+    walls.push({
+      x1: w.a.x,
+      z1: w.a.z,
+      x2: w.b.x,
+      z2: w.b.z,
+      friendly: w.team === u.team,
+      until: w.until,
+    });
+  }
 
   return {
     tick: sim.tickCount,
@@ -120,11 +137,13 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       sigilReady,
       items: [...u.items],
       championId: u.championId,
+      recastArmed: u.recastArmed && u.recastArmed.until > sim.time ? u.recastArmed.key : null,
       lane: u.kind === 'champion' ? (u.lane as 'top' | 'mid' | 'bot' | null) : null,
     },
     units,
     objectiveSpawnAt: sim.objectiveSpawnAt(),
     projectiles,
     zones,
+    walls,
   };
 }

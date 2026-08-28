@@ -14,9 +14,11 @@ import { findPath } from '../pathfind';
 import type { CombatCtx } from '../sim_context';
 import { hostile, type Unit } from '../unit';
 import { dealDamage } from './damage';
+import { applyEffects } from './effects';
 import {
   attackSpeedBonusPct,
   breakStealth,
+  consumeEmpower,
   isStealthed,
   isStunned,
   isUntargetable,
@@ -83,6 +85,10 @@ function strike(ctx: CombatCtx, u: Unit, target: Unit): void {
     ad *= 1 + TOWER_RAMP_PER_HIT * Math.min(u.passiveStacks, TOWER_RAMP_CAP);
     u.passiveStacks += 1;
   }
+  // An empowered attack (kits-v2) spends its riders on this strike: bonus
+  // effects on the victim, optional splash around it. Consumed here so the
+  // same rule serves melee strikes and ranged bolts.
+  const empower = u.kind === 'champion' ? consumeEmpower(u, ctx.time) : null;
   if (u.stats.attackRange > RANGED_THRESHOLD) {
     const id = ctx.allocId();
     ctx.projectiles.set(id, {
@@ -98,9 +104,17 @@ function strike(ctx: CombatCtx, u: Unit, target: Unit): void {
       homingTargetId: target.id,
       pierce: false,
       hitIds: new Set(),
-      power: { ad, ap: u.stats.ap },
-      onHit: [{ kind: 'damage', base: 0, adRatio: 1, dtype: 'physical' }],
+      power: { ad, ap: u.stats.ap, scale: empower?.scale },
+      onHit: empower
+        ? [{ kind: 'damage', base: 0, adRatio: 1, dtype: 'physical' }, ...empower.bonus]
+        : [{ kind: 'damage', base: 0, adRatio: 1, dtype: 'physical' }],
       allyEffects: [],
+      chain: null,
+      leaveWall: null,
+      splashOnHit:
+        empower && empower.splash.length > 0
+          ? { radius: empower.splashRadius, effects: empower.splash }
+          : null,
       via: 'attack',
       // Champion bolts carry a cosmetic auto tag ('vesk_A') so renderers
       // can author per-champion tracers; minion and tower bolts stay null.
@@ -108,6 +122,19 @@ function strike(ctx: CombatCtx, u: Unit, target: Unit): void {
     });
   } else {
     dealDamage(ctx, u.id, target, ad, 'physical', 'attack');
+    if (empower) {
+      const power = { ad: u.stats.ad, ap: u.stats.ap, scale: empower.scale };
+      applyEffects(ctx, u.id, power, target, empower.bonus);
+      if (empower.splash.length > 0) {
+        for (const other of ctx.units.values()) {
+          if (!hostile(u, other) || other.dead || ctx.dead.has(other.id)) continue;
+          if (other.id === target.id) continue;
+          const d = Math.hypot(other.pos.x - target.pos.x, other.pos.z - target.pos.z);
+          if (d > empower.splashRadius + other.radius) continue;
+          applyEffects(ctx, u.id, power, other, empower.splash);
+        }
+      }
+    }
     passiveOf(u)?.onAttackHit?.(ctx, u, target);
     runItemAttackHits(ctx, u, target);
   }

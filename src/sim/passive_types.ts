@@ -28,4 +28,7 @@ export interface ChampionPassive {
   onTick?(ctx: CombatCtx, self: Unit): void;
   // After a heal from `self` landed on `target` for `amount`.
   onHealGiven?(ctx: CombatCtx, self: Unit, target: Unit, amount: number): void;
+  // After `self` earned a takedown (kill or assist) on an enemy champion
+  // (kits-v2 cooldown events: winning an exchange buys back the tools).
+  onTakedown?(ctx: CombatCtx, self: Unit, victim: Unit): void;
 }
