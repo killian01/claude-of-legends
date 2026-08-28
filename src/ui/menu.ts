@@ -9,7 +9,7 @@ import { SKINS } from '../sim/content/skins';
 import type { AbilityKey, TeamId } from '../sim/types';
 import { ROLE_COLORS, setPortrait } from './champion_art';
 import { describeAbility, describeSigil } from './describe';
-import { startHomeShowcase } from './home_showcase';
+import { startHomeIntro } from './home_intro';
 import { buildLadderPanel } from './ladder_panel';
 import { buildLivePanel } from './live_panel';
 import { startMenuBackdrop } from './menu_backdrop';
@@ -40,6 +40,10 @@ const CSS = `
 .menu-sub { font-size: 12px; color: #7e93b2; margin: 0 0 16px; }
 .menu.home { justify-content: flex-start; padding-left: clamp(24px, 7vw, 140px); }
 .menu-showcase-canvas { position: absolute; inset: 0; display: block; }
+.menu-intro-video {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  z-index: 1; background: #0a1120;
+}
 .menu.home::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
   background: radial-gradient(ellipse at 62% 45%, transparent 40%, rgba(3, 6, 14, 0.65) 100%);
@@ -161,7 +165,7 @@ function ensureCss(): void {
 }
 
 // backdrop: every pre-game screen gets the animated canvas behind its card;
-// the home screen opts out because its 3D champion showcase IS the backdrop.
+// the home screen opts out because its cinematic intro IS the backdrop.
 function screen(container: HTMLElement, backdrop = true): { root: HTMLElement; card: HTMLElement } {
   ensureCss();
   const root = document.createElement('div');
@@ -203,8 +207,9 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
     const { root, card } = screen(container, false);
     root.classList.add('home');
     card.classList.add('home');
-    // The living backdrop: champions idling behind the card.
-    const stopShowcase = startHomeShowcase(root);
+    // The backdrop: the cinematic intro plays once per page load and then
+    // holds on its final frame; later visits get that frame as a still.
+    const stopIntro = startHomeIntro(root, card);
     card.append(
       el('h1', 'menu-title', 'Claude of Legends'),
       el('p', 'menu-sub', '5v5 in the browser. No account, no install.'),
@@ -225,7 +230,7 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
       const id = (e as CustomEvent<number>).detail;
       if (typeof id !== 'number') return;
       cleanupWatch();
-      stopShowcase();
+      stopIntro();
       root.remove();
       resolve({ name: name.value.trim() || 'guest', mode: 'replay', replayId: id });
     };
@@ -233,7 +238,7 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
       const detail = (e as CustomEvent<{ matchId: number; team: TeamId }>).detail;
       if (typeof detail?.matchId !== 'number') return;
       cleanupWatch();
-      stopShowcase();
+      stopIntro();
       root.remove();
       resolve({
         name: name.value.trim() || 'guest',
@@ -257,7 +262,7 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
         // ignore
       }
       cleanupWatch();
-      stopShowcase();
+      stopIntro();
       root.remove();
       resolve({ name: trimmed, mode, code });
     };
