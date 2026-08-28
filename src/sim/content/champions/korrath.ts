@@ -48,13 +48,15 @@ export const KORRATH: ChampionDef = {
       name: 'Shield Slam',
       manaCost: 35,
       cooldown: 4.5,
-      castRange: 3,
-      // Instant heavy cone: the slam telegraphs before it lands.
+      castRange: 4,
+      // Instant heavy cone: the slam telegraphs before it lands. Widened
+      // and lengthened after the v2 playtest: the old sweep felt like a
+      // dagger on a champion this size.
       windup: 0.3,
       spec: {
         kind: 'cone',
-        range: 3,
-        halfAngle: Math.PI / 3.5,
+        range: 4,
+        halfAngle: Math.PI / 3,
         onHit: [
           { kind: 'damage', base: 95, adRatio: 0.4, dtype: 'physical' },
           { kind: 'slow', pct: 0.3, duration: 1.5 },
@@ -68,7 +70,7 @@ export const KORRATH: ChampionDef = {
       manaCost: 45,
       cooldown: 11,
       castRange: 7,
-      spec: { kind: 'wall', length: 4, duration: 2.5 },
+      spec: { kind: 'wall', length: 4, duration: 4 },
     },
     E: {
       // A maul slam that sends a fissure of grasping stone along the ground.
