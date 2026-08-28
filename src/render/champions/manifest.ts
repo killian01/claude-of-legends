@@ -152,23 +152,24 @@ export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
     runSpeed: 2.0,
     portrait: { clip: 'attack', time: 0.35, yaw: 0.55 },
     // Both weapon GLBs are authored in Blender against the idle rest pose
-    // (the runtime's rest capture): file origin on the wrist bone, grip at
-    // the measured palm centroid (0.20 below the wrist on this rig), rest
-    // orientation in root space, so both mount with no offsets at all.
+    // (the runtime's rest capture), hand-placed on the posed model: file
+    // origin on the wrist bone, weapon offset baked inside the file so both
+    // mount with no offsets here. The fists are sculpted closed in the mesh
+    // (the rig has no finger bones), handles pass through the fist volume.
     props: [
-      // Head-down at rest, leaning slightly outward, head grounded: the head
-      // is nearly a barrel and the pauldrons are castle towers, so any
-      // head-up carry buries it in the silhouette. Fist grips mid-handle;
-      // swings pivot the head up from the ground like the siege weapon it is.
+      // Planted head-down on the ground in front of him, handle rising to
+      // the closed right fist: a warlord leaning on his siege maul. Swings
+      // pivot it up around the grip. size is tuned so the in-game scale
+      // matches the authored Blender placement (bbox longest span 0.952).
       {
         url: '/models/champions/korrath_maul.glb',
-        size: 3.1,
+        size: 2.91,
         bone: 'RightHand',
         anchor: 'origin',
       },
-      // Upright tower, lion face forward, authored origin on the upper back
-      // rail where the fist grips. Position-only follow keeps it planted
-      // vertical through arm swings.
+      // Carried on the left flank, lion face outward, bottom at the ground,
+      // the fist pressed on the flat of the back between the carry rails.
+      // Position-only follow keeps it planted vertical through arm swings.
       {
         url: '/models/champions/korrath_shield.glb',
         size: 2.35,
