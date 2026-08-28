@@ -162,7 +162,12 @@ export function preloadChampionAssets(renderer: THREE.WebGLRenderer): void {
       propDefs.map((p) =>
         loader
           .loadAsync(p.url as string)
-          .then((g) => ({ url: p.url as string, scene: g.scene, size: p.size ?? 1, anchor: p.anchor }))
+          .then((g) => ({
+            url: p.url as string,
+            scene: g.scene,
+            size: p.size ?? 1,
+            anchor: p.anchor,
+          }))
           .catch(() => null),
       ),
     );

@@ -249,13 +249,15 @@ export const SPELL_VFX: Readonly<Record<string, SpellVisual>> = {
       return holder;
     },
     zoneTick: (fx, holder, x, z, _radius, ageMs, _colors, _dtMs) => {
-      const p = Math.min(1, ageMs / 1050);
+      // The fuse is 1.3 s (playtest round 2) and the rock now falls from
+      // the stratosphere: twice the comet deserves twice the sky.
+      const p = Math.min(1, ageMs / 1300);
       pulseRim(holder, ageMs, p);
       growSweep(holder, p);
       const rock = holder.userData.rock as THREE.Group | undefined;
       if (!rock) return;
       const fall = 1 - (1 - p) ** 2;
-      rock.position.set(5 * (1 - fall), 0.7 + 19 * (1 - fall), 0);
+      rock.position.set(9 * (1 - fall), 0.7 + 42 * (1 - fall), 0);
       rock.rotation.x += 0.11;
       rock.rotation.y += 0.07;
       // Ember wake behind the falling rock.
