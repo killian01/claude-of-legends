@@ -626,7 +626,7 @@ export class Hud {
     const hints = el('div', 'hud-hints');
     hints.textContent =
       'Right-click: move / attack. A: attack-move. S: stop and hold. B: recall. ' +
-      'Q W E R: cast at cursor (hold to keep the range preview). D F: sigils. P: shop. ' +
+      'Q W E R: hold to aim, release to cast (right-click cancels). D F: sigils. P: shop. ' +
       'Tab: scoreboard. Enter: chat. G: ping. Esc: menu. Screen edges pan the camera; ' +
       'Space recenters; left-click the minimap to look. Level up: Alt+key or click +.';
 

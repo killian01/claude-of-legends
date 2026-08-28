@@ -11,10 +11,13 @@ export interface InputHandlers {
   // Left-click selects a unit (target frame) or clears the selection.
   onLeftClick(screenX: number, screenY: number): void;
   onHover(screenX: number, screenY: number): void;
-  // Quickcast with indicator: keydown casts AT ONCE at the cursor (and
-  // shows the range preview while held); keyup only hides the preview.
+  // Aim-then-cast: keydown begins aiming (the range preview follows the
+  // cursor); keyup fires the cast at the cursor's CURRENT ground point. A
+  // quick tap therefore still casts almost instantly, and holding lets the
+  // player place the shape before committing. aim is null when the cursor
+  // has no ground under it at release.
   onCast(key: AbilityKey, aim: Vec2): void;
-  onAimEnd(key: AbilityKey): void;
+  onAimEnd(key: AbilityKey, aim: Vec2 | null): void;
   onLevelAbility(key: AbilityKey): void;
   onCastSigil(slot: number, aim: Vec2): void;
   onStop(): void;
@@ -138,7 +141,7 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): () => v
   const onKeyUp = (e: KeyboardEvent): void => {
     if (handlers.isTyping()) return;
     const key = ABILITY_KEYS[e.key.toLowerCase()];
-    if (key) handlers.onAimEnd(key);
+    if (key) handlers.onAimEnd(key, renderer.groundPointAt(mouseX, mouseY));
   };
   window.addEventListener('keyup', onKeyUp);
 
