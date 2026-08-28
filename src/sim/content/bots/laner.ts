@@ -6,11 +6,14 @@
 // all-bot games were identical across seeds).
 // Priorities: survive, avoid tower dives, fight, farm, push with the wave.
 
-import type { Action, ObsUnit, Policy } from '../../policy';
+import type { AbilityDef } from '../../combat/casting';
+import type { Action, Observation, ObsSelf, ObsUnit, Policy } from '../../policy';
 import type { Rng } from '../../rng';
+import type { AbilityKey } from '../../types';
 import { CHAMPIONS } from '../champions';
 import { effectiveItemCost } from '../items';
 import { GAME_MAP } from '../map';
+import { hintsFor } from './hints';
 
 export interface BotDef {
   id: string;
@@ -55,6 +58,82 @@ function nearest(list: ObsUnit[], x: number, z: number): ObsUnit | null {
     }
   }
   return best;
+}
+
+// The true reach of an ability, read from its CastSpec (kits-v2: the old
+// bot used one hardcoded 7 for everyone and refused to poke at range).
+function abilityRange(def: AbilityDef): number {
+  const spec = def.spec;
+  switch (spec.kind) {
+    case 'skillshot':
+    case 'cone':
+      return spec.range;
+    case 'dash':
+      return spec.range;
+    case 'burst':
+      return spec.radius + 0.5;
+    default:
+      return def.castRange;
+  }
+}
+
+// Hint-driven ability selection against the nearest enemy champion. The
+// generic rules per role; the per-champion intent lives in hints.ts.
+function pickCast(
+  s: ObsSelf,
+  champ: ObsUnit,
+  enemyChampions: ObsUnit[],
+  obs: Observation,
+): Action | null {
+  const def = s.championId ? CHAMPIONS[s.championId] : undefined;
+  if (!def) return null;
+  const hints = hintsFor(s.championId);
+  const dc = Math.hypot(champ.x - s.x, champ.z - s.z);
+
+  // The ultimate first, behind its gates: a held R is a threat, a wasted
+  // one is a minute of nothing.
+  if (s.abilityReady.R && s.recastArmed !== 'R') {
+    const r = def.abilities.R;
+    const range = abilityRange(r);
+    const minR = hints.minRange?.R ?? 0;
+    const cluster = enemyChampions.filter(
+      (e) => Math.hypot(e.x - champ.x, e.z - champ.z) <= (hints.ult.radius ?? 5),
+    ).length;
+    const gate =
+      (hints.ult.minEnemies !== undefined && cluster >= hints.ult.minEnemies) ||
+      (hints.ult.targetHpBelow !== undefined && champ.hpFrac < hints.ult.targetHpBelow);
+    if (gate && dc <= range && dc >= minR) {
+      return { kind: 'cast', key: 'R', x: champ.x, z: champ.z };
+    }
+  }
+
+  for (const key of ['Q', 'W', 'E'] as const) {
+    if (!s.abilityReady[key]) continue;
+    const role = hints.keys[key];
+    if (role === 'escape') continue; // held for the retreat
+    const range = abilityRange(def.abilities[key]);
+    const minR = hints.minRange?.[key] ?? 0;
+    if (role === 'steroid') {
+      if (dc <= CHAMPION_ATTACK_RANGE) return { kind: 'cast', key, x: s.x, z: s.z };
+      continue;
+    }
+    if (role === 'heal') {
+      const hurt = obs.units
+        .filter((u) => u.friendly && u.kind === 'champion' && u.hpFrac < 0.65)
+        .sort((a, b) => a.hpFrac - b.hpFrac)[0];
+      if (hurt && Math.hypot(hurt.x - s.x, hurt.z - s.z) <= def.abilities[key].castRange) {
+        return { kind: 'cast', key, x: hurt.x, z: hurt.z };
+      }
+      continue;
+    }
+    if (role === 'wall') {
+      if (champ.hpFrac < 0.5 && dc <= range) return { kind: 'cast', key, x: champ.x, z: champ.z };
+      continue;
+    }
+    if (role === 'engage' && s.hpFrac < 0.5) continue;
+    if (dc <= range && dc >= minR) return { kind: 'cast', key, x: champ.x, z: champ.z };
+  }
+  return null;
 }
 
 // Deterministic ROLE-AWARE build plans that CAN buy duplicate components
@@ -185,6 +264,18 @@ const policy: Policy = (obs, rng: Rng): Action => {
     return { kind: 'move', x: s.x + ux * DODGE_STEP, z: s.z + uz * DODGE_STEP };
   }
 
+  // ADR 0005: a banked recast is the way home. Press it the moment staying
+  // committed stops being worth it.
+  const hints = hintsFor(s.championId);
+  if (
+    s.recastArmed &&
+    hints.recastHomeBelow !== undefined &&
+    s.hpFrac < hints.recastHomeBelow &&
+    s.abilityReady[s.recastArmed]
+  ) {
+    return { kind: 'cast', key: s.recastArmed, x: s.x, z: s.z };
+  }
+
   // Spend skill points as soon as they exist: R at its level gates (6/11/16),
   // then Q > W > E. A free action, but one decision slot this period.
   if (s.skillPoints > 0) {
@@ -206,6 +297,17 @@ const policy: Policy = (obs, rng: Rng): Action => {
       (u) => !u.friendly && u.kind === 'champion' && Math.hypot(u.x - s.x, u.z - s.z) <= 6,
     );
     if (chaser) {
+      // The kit's own escape key first (hints.ts), aimed toward home; the
+      // sigils are the backup plan.
+      const escapeKey = (['Q', 'W', 'E'] as const).find(
+        (k) => hints.keys[k] === 'escape' && s.abilityReady[k],
+      );
+      if (escapeKey) {
+        const dxf = fountain.x - s.x;
+        const dzf = fountain.z - s.z;
+        const df = Math.hypot(dxf, dzf) || 1;
+        return { kind: 'cast', key: escapeKey, x: s.x + (dxf / df) * 6, z: s.z + (dzf / df) * 6 };
+      }
       const rift = s.sigils.findIndex((id, i) => id === 'riftstep' && s.sigilReady[i] === true);
       if (rift !== -1) {
         const dxf = fountain.x - s.x;
@@ -267,19 +369,18 @@ const policy: Policy = (obs, rng: Rng): Action => {
     return { kind: 'attack', targetId: sanctumTarget.id };
   }
 
-  // Fight: Sear a kill-range target (the heal cut closes the escape),
-  // throw a ready ability at a close champion, otherwise attack it.
-  if (champ && dist(s.x, s.z, champ) <= CHAMPION_ATTACK_RANGE) {
-    if (dist(s.x, s.z, champ) <= CAST_RANGE) {
-      if (champ.hpFrac < KILL_SECURE_HP_FRAC) {
-        const sear = s.sigils.findIndex((id, i) => id === 'sear' && s.sigilReady[i] === true);
-        if (sear !== -1) return { kind: 'sigil', slot: sear, x: champ.x, z: champ.z };
-      }
-      for (const key of ['Q', 'W', 'E', 'R'] as const) {
-        if (s.abilityReady[key]) return { kind: 'cast', key, x: champ.x, z: champ.z };
-      }
+  // Fight: Sear a kill-range target (the heal cut closes the escape), then
+  // the hint-driven kit (each ability at its TRUE range, the ultimate held
+  // behind its gates), otherwise attack.
+  if (champ) {
+    const dc = dist(s.x, s.z, champ);
+    if (dc <= CAST_RANGE && champ.hpFrac < KILL_SECURE_HP_FRAC) {
+      const sear = s.sigils.findIndex((id, i) => id === 'sear' && s.sigilReady[i] === true);
+      if (sear !== -1) return { kind: 'sigil', slot: sear, x: champ.x, z: champ.z };
     }
-    return { kind: 'attack', targetId: champ.id };
+    const cast = pickCast(s, champ, enemyChampions, obs);
+    if (cast) return cast;
+    if (dc <= CHAMPION_ATTACK_RANGE) return { kind: 'attack', targetId: champ.id };
   }
 
   // Contest the Warden: a live one in reach is worth a detour, but never
