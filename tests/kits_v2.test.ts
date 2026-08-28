@@ -28,7 +28,8 @@ describe('Korrath v2', () => {
     expect(sim.castAbility(a.id, 'W', { x: 80, z: 75 })).toBe(true);
     expect(sim.walls.size).toBe(1);
     expect(sim.nav.isWalkableAt(80, 75)).toBe(false);
-    for (let i = 0; i < 60; i++) sim.tick();
+    // Raised to 4 s by the playtest feel pass; gone shortly after.
+    for (let i = 0; i < 90; i++) sim.tick();
     expect(sim.walls.size).toBe(0);
     expect(sim.nav.isWalkableAt(80, 75)).toBe(true);
   });
