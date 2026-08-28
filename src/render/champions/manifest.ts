@@ -137,10 +137,10 @@ export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
       windup: 'Shield_Push_Left',
       death: 'Dead',
     },
-    // The combat clips lunge with baked hip travel (up to half a body width);
-    // pinned so the sim stays the only source of movement. Dead keeps its
+    // The combat clips shipped from Meshy with baked hip lunges; the GLB's
+    // hip tracks were flattened horizontally in Blender (vertical weight
+    // kept), so no runtime inPlaceClips pinning here. Dead keeps its full
     // travel: the fall to the ground is the clip.
-    inPlaceClips: ['Right_Hand_Sword_Slash', 'Shield_Push_Left', 'Charged_Slash'],
     // The Walking clip reads planted around a slow colossus stride.
     runSpeed: 2.0,
     portrait: { clip: 'attack', time: 0.35, yaw: 0.55 },
