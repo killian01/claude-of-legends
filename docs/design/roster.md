@@ -2,16 +2,21 @@
 
 Status: accepted (grill round 3). Numbers are deliberately absent; balance lands with implementation. See ADR 0004 for the naming policy.
 
+The per-champion ability lists below describe the LAUNCH kits and are superseded by
+`docs/design/kits-v2.md` (the kit redesign, accepted and implemented); identities, roles, and
+lanes are unchanged. This file remains authoritative for the vocabulary table and the roster's
+coverage intent.
+
 ## Game vocabulary
 
-| Concept | the genre-defining MOBA name (not used) | Our name |
-|---|---|---|
-| Team core structure | (withheld) | **Sanctum** |
-| Picked utility spells (2 per participant) | (withheld) | **Sigils** |
-| Blink sigil | (withheld) | **Riftstep** |
-| Move speed sigil | (withheld) | **Zephyr** |
-| Burst heal sigil | (withheld) | **Mend** |
-| Damage-over-time plus healing reduction sigil | (withheld) | **Sear** |
+| Concept | Our name |
+|---|---|
+| Team core structure | **Sanctum** |
+| Picked utility spells (2 per participant) | **Sigils** |
+| Blink sigil | **Riftstep** |
+| Move speed sigil | **Zephyr** |
+| Burst heal sigil | **Mend** |
+| Damage-over-time plus healing reduction sigil | **Sear** |
 
 Kept as generic genre vocabulary: tower, minion, lane, brush, recall, fog of war, fountain.
 
