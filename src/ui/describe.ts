@@ -44,6 +44,8 @@ function predicatePhrase(p: EffectPredicate): string {
       return `after flying at least ${p.distance}`;
     case 'targetHpBelow':
       return `against targets under ${span('tt-cc', pct(p.frac))} health`;
+    case 'targetDying':
+      return 'if the blow kills';
     case 'targetIsolated':
       return `against a target with no ally within ${p.radius}`;
     case 'targetSlowed':
@@ -169,6 +171,12 @@ function describeCast(spec: CastSpec, castRange: number): string[] {
       if (spec.leaveWall) {
         lines.push(`The scarred line stays impassable for ${spec.leaveWall.duration}s.`);
       }
+      if (spec.aftershock) {
+        lines.push(
+          `The whole line stays cracked and erupts again after ${spec.aftershock.delay}s: ` +
+            `${sentence(spec.aftershock.effects)}.`,
+        );
+      }
       return lines;
     }
     case 'zone': {
@@ -215,6 +223,7 @@ function describeCast(spec: CastSpec, castRange: number): string[] {
           ? `Dashes up to ${spec.range}; the flight is real, and walls stop it.`
           : `Blinks up to ${spec.range} instantly.`,
       ];
+      if (spec.toAlly) lines.push('Jumps to an ally in reach and lands against them.');
       if (spec.untargetableDuringTravel) lines.push('You cannot be touched while traveling.');
       if (spec.passThrough?.length) {
         lines.push(`Everyone you pass through: ${sentence(spec.passThrough)}.`);
