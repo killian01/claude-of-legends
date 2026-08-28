@@ -200,6 +200,12 @@ export function startPresentation(
   const teardownInput = setupInput(renderer, {
     onRightClick: (p: Vec2, sx, sy) => {
       pendingCast = null;
+      // The genre's cancel: a right-click while aiming drops the cast and
+      // the release becomes a no-op; the move or attack order still goes.
+      if (aimingKey !== null) {
+        aimingKey = null;
+        renderer.hideAimPreview();
+      }
       const enemy =
         pickEnemyOnScreen(world, selfTeam, sx, sy, project) ?? pickEnemyAt(world, p, selfTeam);
       if (enemy) {
@@ -229,9 +235,10 @@ export function startPresentation(
       renderer.setHoverTarget(enemy?.id ?? null);
       renderer.domElement.style.cursor = enemy ? 'crosshair' : 'default';
     },
-    onCast: (key, aim) => {
-      // Quickcast with indicator: fire NOW, keep the range preview up while
-      // the key stays held (it helps the follow-up cast).
+    onCast: (key, _aim) => {
+      // Aim-then-cast: the press only raises the preview; the cast fires on
+      // release, at wherever the cursor stands THEN. A quick tap still
+      // casts almost instantly; right-click cancels the aim.
       const u = world.units.get(selfId);
       const def = u?.championId ? world.championDef(u.championId) : null;
       const ab = def?.abilities[key];
@@ -252,12 +259,12 @@ export function startPresentation(
           length: spec.length,
         });
       }
-      tryCast(key, aim);
     },
-    onAimEnd: (key) => {
+    onAimEnd: (key, aim) => {
       if (aimingKey !== key) return;
       aimingKey = null;
       renderer.hideAimPreview();
+      if (aim) tryCast(key, aim);
     },
     onLevelAbility: (key) => {
       if (world.levelAbility(selfId, key)) playSfx('buy');
