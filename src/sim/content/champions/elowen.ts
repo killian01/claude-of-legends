@@ -1,8 +1,7 @@
-// Elowen, Mistward. Battlemage (docs/design/roster.md). Passive Mistborne
-// (ability damage grants move speed) is deferred with the passive-hook
-// system. Her W exercises the blind primitive: enemy sight shrinks inside.
-// Q weaves: every second Mist Lance on the same target bursts and slows
-// (mist marks), the internal combo the kit audit found missing.
+// Elowen, Mistward. Battlemage (docs/design/kits-v2.md): the mist decides
+// what you see and where you may go. W blinds enemies and conceals allies
+// inside; R's storm throws walkers back at its rim (dashes and blinks pass
+// free); Q weaves: every second Mist Lance on a target bursts and slows.
 
 import { refreshBuff } from '../../combat/status';
 import type { ChampionDef } from './index';
@@ -83,6 +82,16 @@ export const ELOWEN: ChampionDef = {
           { kind: 'blind', duration: 1, factor: 0.4 },
           { kind: 'damage', base: 10, apRatio: 0.19, dtype: 'magic' },
         ],
+        // The mist conceals: allied CHAMPIONS inside stay hidden (the zone
+        // itself is visible, so enemies know where the threat is, not what
+        // it does). Minions are exempt or the lane war would stall blind.
+        allyOnTick: [
+          {
+            kind: 'conditional',
+            when: { kind: 'targetIsChampion' },
+            effects: [{ kind: 'stealth', duration: 0.6 }],
+          },
+        ],
       },
     },
     E: {
@@ -106,6 +115,15 @@ export const ELOWEN: ChampionDef = {
           { kind: 'damage', base: 35, apRatio: 0.48, dtype: 'magic' },
           { kind: 'slow', pct: 0.45, duration: 1 },
         ],
+        // The storm's rim is a wall of wind: walking out throws you back
+        // toward the eye (once per 1.5 s each). A dash or blink escapes.
+        boundary: {
+          effects: [
+            { kind: 'knockback', distance: 2, direction: 'toCenter' },
+            { kind: 'damage', base: 25, apRatio: 0.2, dtype: 'magic' },
+          ],
+          perUnitEvery: 1.5,
+        },
       },
     },
   },

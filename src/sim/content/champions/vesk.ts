@@ -1,11 +1,14 @@
-// Vesk, the Longshot. Artillery marksman (docs/design/roster.md). Passive
-// Deadstill (bonus vs slowed/immobilized) is deferred with the passive-hook
-// system.
+// Vesk, the Longshot. Artillery marksman (docs/design/kits-v2.md): distance
+// IS damage. Q and R scale with the distance flown, so point-blank shots
+// are mistakes and max-range shots the reward; E's vault leaves caltrops at
+// the launch point (passive onCast, spawned at the pre-vault position).
 
 import { isRooted, slowPct } from '../../combat/status';
 import type { ChampionDef } from './index';
 
 const DEADSTILL_BONUS = 1.15;
+const BACKSTEP_PATCH_RADIUS = 1.5;
+const BACKSTEP_PATCH_DURATION_S = 1.5;
 
 export const VESK: ChampionDef = {
   id: 'vesk',
@@ -19,6 +22,37 @@ export const VESK: ChampionDef = {
       if (via !== 'attack') return amount;
       if (slowPct(target, ctx.time) <= 0 && !isRooted(target, ctx.time)) return amount;
       return amount * DEADSTILL_BONUS;
+    },
+    // Backstep scatters caltrops where the vault began: kiting leaves a
+    // trace that feeds Deadstill. onCast fires before the dash launches, so
+    // self.pos is still the launch point.
+    onCast(ctx, self, key) {
+      if (key !== 'E') return;
+      const tickEvery = 0.5;
+      const id = ctx.allocId();
+      ctx.zones.set(id, {
+        id,
+        sourceId: self.id,
+        team: self.team,
+        pos: { x: self.pos.x, z: self.pos.z },
+        radius: BACKSTEP_PATCH_RADIUS,
+        until: ctx.time + BACKSTEP_PATCH_DURATION_S,
+        tickEvery,
+        nextTickAt: ctx.time + tickEvery,
+        power: { ad: self.stats.ad, ap: self.stats.ap },
+        onEnter: [],
+        onTick: [{ kind: 'slow', pct: 0.35, duration: 1 }],
+        allyOnTick: [],
+        detonateAt: null,
+        onDetonate: [],
+        entered: new Set(),
+        reveal: false,
+        boundary: null,
+        boundaryNextAt: new Map(),
+        insideIds: new Set(),
+        leaveZone: null,
+        vfx: 'vesk_W',
+      });
     },
   },
   base: {
@@ -45,13 +79,21 @@ export const VESK: ChampionDef = {
       // The marksman shoulders his rifle before the shot: a short windup
       // that telegraphs the line and lets the target step off it.
       windup: 0.3,
+      // Damage grows with the distance flown: about +50 percent past 8.5.
       spec: {
         kind: 'skillshot',
         speed: 30,
         radius: 0.5,
         range: 14,
         pierce: true,
-        onHit: [{ kind: 'damage', base: 79, adRatio: 1.71, dtype: 'physical' }],
+        onHit: [
+          { kind: 'damage', base: 55, adRatio: 1.15, dtype: 'physical' },
+          {
+            kind: 'conditional',
+            when: { kind: 'distanceAtLeast', distance: 8.5 },
+            effects: [{ kind: 'damage', base: 28, adRatio: 0.57, dtype: 'physical' }],
+          },
+        ],
       },
     },
     W: {
@@ -75,9 +117,11 @@ export const VESK: ChampionDef = {
       manaCost: 35,
       cooldown: 7.5,
       castRange: 3,
+      // A real vault (caltrops land at the launch point via the passive).
       spec: {
         kind: 'dash',
         range: 3,
+        speed: 16,
         selfEffects: [{ kind: 'buff', duration: 3, asPct: 0.5 }],
       },
     },
@@ -87,6 +131,9 @@ export const VESK: ChampionDef = {
       cooldown: 67.5,
       // Map-crossing artillery (the map is 150 across): the shot itself is
       // the fantasy, so the range covers anything Vesk can draw a line to.
+      // The payoff is distance-tiered: a close shot only slows, a long one
+      // stuns, the longest stuns hard. The counterplay window (windup plus
+      // flight time) grows exactly as the payoff does.
       castRange: 120,
       windup: 0.6,
       spec: {
@@ -95,8 +142,28 @@ export const VESK: ChampionDef = {
         radius: 0.9,
         range: 120,
         onHit: [
-          { kind: 'damage', base: 220, adRatio: 1.9, dtype: 'physical' },
-          { kind: 'slow', pct: 0.5, duration: 2 },
+          {
+            kind: 'conditional',
+            when: { kind: 'distanceAtLeast', distance: 80 },
+            effects: [
+              { kind: 'damage', base: 220, adRatio: 1.9, dtype: 'physical' },
+              { kind: 'stun', duration: 1.5 },
+            ],
+            otherwise: [
+              {
+                kind: 'conditional',
+                when: { kind: 'distanceAtLeast', distance: 30 },
+                effects: [
+                  { kind: 'damage', base: 220, adRatio: 1.9, dtype: 'physical' },
+                  { kind: 'stun', duration: 0.75 },
+                ],
+                otherwise: [
+                  { kind: 'damage', base: 180, adRatio: 1.4, dtype: 'physical' },
+                  { kind: 'slow', pct: 0.5, duration: 2 },
+                ],
+              },
+            ],
+          },
         ],
       },
     },

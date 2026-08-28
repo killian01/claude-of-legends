@@ -1,4 +1,7 @@
-// Korrath, the Bulwark. Tank (docs/design/roster.md).
+// Korrath, the Bulwark. Tank (docs/design/kits-v2.md): the fight happens
+// where he says it does. W raises a real stone rampart; E's grip stuns
+// whoever it slams into terrain (his own rampart included); R is a true
+// leap whose epicenter, not its whole footprint, sends enemies airborne.
 
 import { addStatus } from '../../combat/status';
 import type { ChampionDef } from './index';
@@ -59,20 +62,18 @@ export const KORRATH: ChampionDef = {
       },
     },
     W: {
+      // The name finally means it: a stone rampart across the aim, real
+      // terrain that blocks walking and dashes for a beat.
       name: 'Iron Wall',
       manaCost: 45,
-      cooldown: 10.5,
-      castRange: 0,
-      spec: {
-        kind: 'self_or_ally',
-        searchRadius: 0,
-        effects: [{ kind: 'buff', duration: 3, armor: 40, mr: 40 }],
-      },
+      cooldown: 11,
+      castRange: 7,
+      spec: { kind: 'wall', length: 4, duration: 2.5 },
     },
     E: {
-      // A maul slam that sends a fissure of grasping stone along the ground;
-      // same skillshot-pull mechanics as the old Grip Chain, retimed to the
-      // hammer-and-shield model (no chain on the rig).
+      // A maul slam that sends a fissure of grasping stone along the ground.
+      // A target dragged into contact with terrain (map rock or his own
+      // rampart) is stunned: the wall and the grip are one kit.
       name: 'Earthgrip',
       manaCost: 50,
       cooldown: 9,
@@ -84,6 +85,13 @@ export const KORRATH: ChampionDef = {
         range: 8,
         onHit: [
           { kind: 'damage', base: 81, adRatio: 0.3, dtype: 'physical' },
+          // Evaluated BEFORE the pull: gripping someone who stands against
+          // terrain crushes them into it first, then drags.
+          {
+            kind: 'conditional',
+            when: { kind: 'targetNearTerrain', distance: 1.1 },
+            effects: [{ kind: 'stun', duration: 0.75 }],
+          },
           { kind: 'pull', distance: 6 },
         ],
       },
@@ -94,13 +102,26 @@ export const KORRATH: ChampionDef = {
       cooldown: 67.5,
       castRange: 6.5,
       windup: 0.4,
+      // A true leap with air time and a telegraphed landing: the epicenter
+      // sends enemies airborne, the rim only slows. Aim is the skill.
       spec: {
         kind: 'dash',
         range: 6.5,
+        speed: 14,
         landRadius: 3,
         onLand: [
-          { kind: 'damage', base: 203, adRatio: 0.5, dtype: 'magic' },
-          { kind: 'knockup', duration: 1.0 },
+          {
+            kind: 'conditional',
+            when: { kind: 'withinCenter', radius: 1.5 },
+            effects: [
+              { kind: 'damage', base: 203, adRatio: 0.5, dtype: 'magic' },
+              { kind: 'knockup', duration: 1.0 },
+            ],
+            otherwise: [
+              { kind: 'damage', base: 120, adRatio: 0.35, dtype: 'magic' },
+              { kind: 'slow', pct: 0.4, duration: 1.5 },
+            ],
+          },
         ],
       },
     },

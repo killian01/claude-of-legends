@@ -50,22 +50,25 @@ describe('combat primitives', () => {
     expect(a.hp).toBeLessThan(a.maxHp);
   });
 
-  it('the great wave knocks its victims airborne', () => {
+  it('the great wave sweeps its victims aside, not airborne (kits-v2)', () => {
     const { sim, a, b } = arena('maera', 'sylra', { x: 75, z: 75 }, { x: 79, z: 75 });
     a.level = 6;
+    const beforeZ = b.pos.z;
     expect(sim.castAbility(a.id, 'R', { x: 79, z: 75 })).toBe(true);
-    // 0.5 s windup, then the wave travels; the hit lifts the target.
-    let lifted = false;
-    for (let i = 0; i < 40 && !lifted; i++) {
+    // 0.5 s windup, then the wave travels; the hit shoves the target OFF
+    // the wave's path (lateral), never into the air.
+    let swept = false;
+    for (let i = 0; i < 40 && !swept; i++) {
       sim.tick();
-      if (isAirborne(b, sim.time)) lifted = true;
+      if (Math.abs(b.pos.z - beforeZ) > 1.5) swept = true;
+      expect(isAirborne(b, sim.time)).toBe(false);
     }
-    expect(lifted).toBe(true);
-    // Airborne acts as a stun: no moving out of it.
-    sim.orderMove(b.id, 95, 75);
+    expect(swept).toBe(true);
+    // A sweep displaces, it does not stun: the victim can walk again.
+    sim.orderMove(b.id, 95, b.pos.z);
     const before = { ...b.pos };
     sim.tick();
-    expect(b.pos).toEqual(before);
+    expect(b.pos).not.toEqual(before);
   });
 
   it('a windup delays the cast and a stun during it cancels the spell', () => {

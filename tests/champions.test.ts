@@ -56,12 +56,20 @@ describe('the roster', () => {
     }
   });
 
-  it('emberfall detonates late enough to dodge', () => {
+  it('emberfall detonates late enough to dodge and stuns only its epicenter', () => {
     const r = CHAMPIONS.dain!.abilities.R;
     expect(r.spec.kind).toBe('zone');
     if (r.spec.kind === 'zone') {
       expect(r.spec.detonateDelay ?? 0).toBeGreaterThanOrEqual(0.8);
-      expect(r.spec.onDetonate?.some((e) => e.kind === 'stun')).toBe(true);
+      // kits-v2: the stun lives behind the epicenter conditional, so the
+      // rim is escapable damage, not guaranteed hard CC.
+      const center = r.spec.onDetonate?.find((e) => e.kind === 'conditional');
+      expect(center?.kind).toBe('conditional');
+      if (center?.kind === 'conditional') {
+        expect(center.when.kind).toBe('withinCenter');
+        expect(center.effects.some((e) => e.kind === 'stun')).toBe(true);
+        expect(center.otherwise?.some((e) => e.kind === 'stun')).toBe(false);
+      }
     }
   });
 

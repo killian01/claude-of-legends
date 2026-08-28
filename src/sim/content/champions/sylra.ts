@@ -1,6 +1,7 @@
-// Sylra, Thornweaver. Zone-control mage (docs/design/roster.md): her passive
-// Barbed Marks is expressed as mark effects on Q, W entry, and R detonation;
-// the third mark roots and bites. Numbers are first-pass balance.
+// Sylra, Thornweaver. Zone-control mage (docs/design/kits-v2.md): her
+// passive Barbed Marks is expressed as mark effects on Q, W entry, E burst,
+// and R detonation; the third mark roots and bites. Standing near her poked
+// victims is itself a mistake: Q chains, E's shell bursts thorns.
 
 import type { EffectSpec } from '../../combat/effects';
 import type { ChampionDef } from './index';
@@ -59,6 +60,12 @@ export const SYLRA: ChampionDef = {
         radius: 0.7,
         range: 10.5,
         onHit: [{ kind: 'damage', base: 70, apRatio: 1.23, dtype: 'magic' }, BARBED_MARK],
+        // The bolt jumps once to the nearest other enemy: spread out, or a
+        // poked ally makes you the second victim (and the second mark).
+        chain: {
+          radius: 4,
+          onHit: [{ kind: 'damage', base: 49, apRatio: 0.86, dtype: 'magic' }, BARBED_MARK],
+        },
       },
     },
     W: {
@@ -83,10 +90,24 @@ export const SYLRA: ChampionDef = {
       manaCost: 50,
       cooldown: 8.5,
       castRange: 8,
+      // The shell bursts thorns when it breaks or expires: shielding the
+      // diver inside the enemy team is a play, not just a save.
       spec: {
         kind: 'self_or_ally',
         searchRadius: 2.5,
-        effects: [{ kind: 'shield', base: 70, apRatio: 0.6, duration: 2.5 }],
+        effects: [
+          {
+            kind: 'shield',
+            base: 70,
+            apRatio: 0.6,
+            duration: 2.5,
+            burst: {
+              radius: 2.6,
+              onBreak: [{ kind: 'damage', base: 55, apRatio: 0.45, dtype: 'magic' }, BARBED_MARK],
+              onExpire: [{ kind: 'damage', base: 55, apRatio: 0.45, dtype: 'magic' }, BARBED_MARK],
+            },
+          },
+        ],
       },
     },
     R: {
@@ -105,6 +126,31 @@ export const SYLRA: ChampionDef = {
           BARBED_MARK,
         ],
       },
+      // Rank 3: the detonation leaves a lingering bramble patch behind.
+      atRank: [
+        {
+          rank: 3,
+          spec: {
+            kind: 'zone',
+            radius: 4.2,
+            duration: 1.3,
+            detonateDelay: 1.25,
+            onDetonate: [
+              { kind: 'damage', base: 158, apRatio: 1.33, dtype: 'magic' },
+              { kind: 'root', duration: 1.6 },
+              BARBED_MARK,
+            ],
+            leaveZone: {
+              radius: 3.5,
+              duration: 2,
+              onTick: [
+                { kind: 'damage', base: 20, apRatio: 0.2, dtype: 'magic' },
+                { kind: 'slow', pct: 0.4, duration: 1 },
+              ],
+            },
+          },
+        },
+      ],
     },
   },
 };

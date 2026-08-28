@@ -1,6 +1,6 @@
-// Dain, Emberfist. Fighter (docs/design/roster.md). Passive Heat (attack
-// stacks empowering the next ability) is deferred with the passive-hook
-// system; W approximates "burns while it holds" with one burn pulse.
+// Dain, Emberfist. Fighter (docs/design/kits-v2.md): a momentum brawler who
+// banks Heat and spends it in beats. Q is a pass-through punch whose refund
+// loop rewards clean hits; W punishes shield-popping; E ignites his fists.
 
 import type { ChampionDef } from './index';
 
@@ -15,9 +15,13 @@ export const DAIN: ChampionDef = {
   passive: {
     name: 'Heat',
     description:
-      'Attacks build Heat (up to 4). At full Heat, the next ability deals 25 percent bonus damage.',
+      'Attacks build Heat (up to 4); Ember Flurry adds one. At full Heat, the next ability ' +
+      'deals 25 percent bonus damage.',
     onAttackHit(_ctx, self) {
       self.passiveStacks = Math.min(HEAT_MAX, self.passiveStacks + 1);
+    },
+    onCast(_ctx, self, key) {
+      if (key === 'E') self.passiveStacks = Math.min(HEAT_MAX, self.passiveStacks + 1);
     },
     modifyDamage(_ctx, self, _target, amount, _dtype, via) {
       if (via !== 'ability' || self.passiveStacks < HEAT_MAX) return amount;
@@ -46,11 +50,20 @@ export const DAIN: ChampionDef = {
       manaCost: 30,
       cooldown: 4,
       castRange: 3.5,
+      // A traveling punch through the line: hitting a champion refunds half
+      // the cooldown, the weave that keeps his trades alive.
       spec: {
         kind: 'dash',
         range: 3.5,
-        landRadius: 1.6,
-        onLand: [{ kind: 'damage', base: 95, adRatio: 0.7, dtype: 'physical' }],
+        speed: 18,
+        passThrough: [
+          { kind: 'damage', base: 95, adRatio: 0.7, dtype: 'physical' },
+          {
+            kind: 'conditional',
+            when: { kind: 'targetIsChampion' },
+            effects: [{ kind: 'cooldownRefund', key: 'Q', pctOfRemaining: 0.5 }],
+          },
+        ],
       },
     },
     W: {
@@ -67,23 +80,42 @@ export const DAIN: ChampionDef = {
           { kind: 'damage', base: 40, apRatio: 0.2, dtype: 'magic' },
           { kind: 'dot', duration: 3, perSecond: 22, dtype: 'magic' },
         ],
-        selfEffects: [{ kind: 'shield', base: 90, duration: 3 }],
+        // Breaking the guard early detonates it: attackers choose between
+        // popping the shield and eating the blast, or waiting it out.
+        selfEffects: [
+          {
+            kind: 'shield',
+            base: 90,
+            duration: 3,
+            burst: {
+              radius: 2.5,
+              onBreak: [
+                { kind: 'damage', base: 70, apRatio: 0.3, dtype: 'magic' },
+                { kind: 'slow', pct: 0.2, duration: 1 },
+              ],
+            },
+          },
+        ],
       },
     },
     E: {
-      name: 'Ember Wave',
-      manaCost: 40,
-      cooldown: 6,
-      castRange: 4,
-      // Instant heavy cone: the wave telegraphs before it lands.
-      windup: 0.3,
+      name: 'Ember Flurry',
+      manaCost: 30,
+      cooldown: 7,
+      castRange: 0,
+      // Ignited fists: the next auto hits harder, splashes behind the
+      // victim, and banks an extra Heat stack (passive onCast).
       spec: {
-        kind: 'cone',
-        range: 4,
-        halfAngle: Math.PI / 4,
-        onHit: [
-          { kind: 'damage', base: 108, adRatio: 0.5, dtype: 'magic' },
-          { kind: 'slow', pct: 0.25, duration: 1 },
+        kind: 'self_or_ally',
+        searchRadius: 0,
+        effects: [
+          {
+            kind: 'empower',
+            duration: 3,
+            bonus: [{ kind: 'damage', base: 60, adRatio: 0.4, dtype: 'magic' }],
+            splashRadius: 2,
+            splash: [{ kind: 'damage', base: 45, adRatio: 0.3, dtype: 'magic' }],
+          },
         ],
       },
     },
@@ -93,17 +125,27 @@ export const DAIN: ChampionDef = {
       cooldown: 60,
       castRange: 6,
       // A called-down comet: the zone telegraphs for just over a second
-      // (real counterplay, you can walk out), then the impact stuns and
-      // leaves the ground burning.
+      // (real counterplay, you can walk out). Only the epicenter stuns; the
+      // rim burns and slows, so the aim is the skill.
       spec: {
         kind: 'zone',
         radius: 3,
         duration: 1.1,
         detonateDelay: 1.05,
         onDetonate: [
-          { kind: 'damage', base: 250, adRatio: 0.8, dtype: 'magic' },
-          { kind: 'stun', duration: 1.2 },
-          { kind: 'dot', duration: 2, perSecond: 30, dtype: 'magic' },
+          {
+            kind: 'conditional',
+            when: { kind: 'withinCenter', radius: 1.4 },
+            effects: [
+              { kind: 'damage', base: 250, adRatio: 0.8, dtype: 'magic' },
+              { kind: 'stun', duration: 1.2 },
+              { kind: 'dot', duration: 2, perSecond: 30, dtype: 'magic' },
+            ],
+            otherwise: [
+              { kind: 'damage', base: 150, adRatio: 0.5, dtype: 'magic' },
+              { kind: 'slow', pct: 0.4, duration: 1.5 },
+            ],
+          },
         ],
       },
     },
