@@ -64,12 +64,34 @@ function runLineup(): void {
   const focusIdx = focus ? ids.indexOf(focus) : -1;
   if (focusIdx >= 0) {
     const fx = (focusIdx - (ids.length - 1) / 2) * spacing;
-    camera.position.set(fx, 3.2, 5.5);
-    camera.lookAt(fx, 1.3, 0);
+    // ?cam= picks the calibration view: game reproduces the in-match angle
+    // (renderer.ts cameraOffset 0,40,24 pulled close), side and top are the
+    // orthographic-ish profile and overhead views for prop alignment.
+    const cam = params.get('cam');
+    if (cam === 'game') {
+      camera.position.set(fx, 10, 6);
+      camera.lookAt(fx, 0, 0);
+    } else if (cam === 'side') {
+      // Close enough that the 4.2-spaced neighbor stays behind the camera.
+      camera.position.set(fx + 3.6, 2.0, 0);
+      camera.lookAt(fx, 1.8, 0);
+    } else if (cam === 'top') {
+      camera.position.set(fx, 14, 0.01);
+      camera.lookAt(fx, 0, 0);
+    } else {
+      camera.position.set(fx, 3.2, 5.5);
+      camera.lookAt(fx, 1.3, 0);
+    }
   } else {
     camera.position.set(0, 12, 26);
     camera.lookAt(0, 1.2, 0);
   }
+
+  // ?bones=RightHand,LeftHand draws a bright marker on each named bone of
+  // the focused champion, so prop offsets are aligned against the true
+  // animated anchor instead of eyeballed.
+  const markBones = (params.get('bones') ?? '').split(',').filter(Boolean);
+  const boneMarkers: { node: THREE.Object3D; mesh: THREE.Mesh }[] = [];
 
   preloadChampionAssets(renderer);
   const visuals = new Map<string, ChampionVisual>();
@@ -81,6 +103,16 @@ function runLineup(): void {
       toonifyMaterials(v.root);
       scene.add(v.root);
       visuals.set(id, v);
+      if (id === focus && markBones.length > 0) {
+        v.root.traverse((node) => {
+          if (!markBones.includes(node.name)) return;
+          const mat = new THREE.MeshBasicMaterial({ color: 0xff00ff, depthTest: false });
+          const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 8), mat);
+          mesh.renderOrder = 999;
+          scene.add(mesh);
+          boneMarkers.push({ node, mesh });
+        });
+      }
       const label = document.createElement('div');
       label.textContent = id;
       label.style.cssText = 'position:fixed;bottom:6px;color:#cfe;left:0;font:12px monospace';
@@ -103,6 +135,7 @@ function runLineup(): void {
       if (phase !== lastPhase && phase === 3) v.playCast();
       v.update(dt, { moving: phase === 1, windingUp: false, dead: false, speed: 3.7 });
     }
+    for (const marker of boneMarkers) marker.node.getWorldPosition(marker.mesh.position);
     lastPhase = phase;
     renderer.render(scene, camera);
     requestAnimationFrame(frame);

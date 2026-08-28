@@ -19,6 +19,7 @@ of CC0 source art.
 | `skeleton_rogue.glb` | KayKit Character Pack: Skeletons (https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0) | Kay Lousberg (KayKit) | CC0 1.0 |
 | `ghost.glb`, `goblin.glb`, `glubevolved.glb`, `demonalt.glb`, `velociraptor.glb` | Quaternius animated creature packs (https://quaternius.com, https://poly.pizza/u/Quaternius) | Quaternius | CC0 1.0 |
 | `vesk.glb`, `vesk_rifle.glb` | Generated with Meshy AI (https://meshy.ai) from original Vesk concept art, rigged and animated in the Meshy workspace | killian01 via Meshy AI | Per the Meshy plan's asset terms (CC BY 4.0 on the free plan) |
+| `korrath.glb`, `korrath_shield.glb`, `korrath_maul.glb` | Generated with Meshy AI (https://meshy.ai) from original Korrath concept art (docs/design/portrait-prompts.md), rigged and animated in the Meshy workspace | killian01 via Meshy AI | Per the Meshy plan's asset terms (CC BY 4.0 on the free plan) |
 
 ## Champion splash art (`public/portraits/`)
 
@@ -29,6 +30,8 @@ falls back to the in-engine cinematic render when a file is missing
 | Files | Source | License |
 |---|---|---|
 | `vesk.png` | Generated with Google Gemini from original Vesk concept art | Google Gemini output terms |
+| `korrath.png` | Generated with Google Gemini from the Korrath prompt in docs/design/portrait-prompts.md | Google Gemini output terms |
+| `dain.png`, `sylra.png`, `fenn.png`, `elowen.png`, `ashvyn.png`, `maera.png`, `torv.png`, `rhoka.png` | Generated with Google Gemini from the prompts in docs/design/portrait-prompts.md | Google Gemini output terms |
 
 ## Vendor runtime files (`public/vendor/`)
 

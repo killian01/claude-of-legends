@@ -28,13 +28,13 @@ set:
 
 | File | Prompt line |
 |---|---|
-| `korrath.png` | Korrath the Bulwark: a human knight in heavy grey plate armor, massive hexagonal tower shield raised forward, sword held low, steel-blue atmosphere, immovable stance. |
+| `korrath.png` | Korrath the Bulwark: a towering living rampart, a giant forged from fortress iron and dark masonry, crenellated shoulders like battlements, a portcullis grille for a chest, a massive tower shield in one hand and a colossal siege maul in the other, faint blue barrier shimmering over his surface, dust and rubble at his feet, steel-blue atmosphere, unstoppable bulk. |
 | `dain.png` | Dain Emberfist: a bald bearded human brawler, bare chest, fists and forearms glowing with molten ember cracks, orange fire atmosphere, mid-punch. |
 | `sylra.png` | Sylra Thornweaver: a moss-green witch under a wide pointed hat, thorned wooden staff with a glowing green seed, vines and brambles curling around her, verdant atmosphere. |
 | `fenn.png` | Fenn the Quickblade: a slight hooded assassin wrapped in a deep green cloak, twin violet daggers reversed in both hands, purple dusk atmosphere, coiled to strike. |
 | `elowen.png` | Elowen Mistward: a translucent pale-blue ghost spirit with pointed ears, drifting above the ground, wisps of mist trailing, cold white-blue atmosphere. |
 | `vesk.png` | Vesk the Longshot: a small green goblin artillerist hauling a brass long rifle far taller than himself over one shoulder, golden atmosphere, cocky grin. |
-| `ashvyn.png` | Ashvyn Nightbow: an undead skeleton archer in a violet hood and cape, glowing pale eyes, drawing a curved dark bow, indigo night atmosphere. |
+| `ashvyn.png` | Ashvyn Nightbow: a terrifying undead skeleton archer in perfect archery form, three-quarter view, left arm fully extended gripping the center of an upright curved blackened bone bow, right hand drawn back to the cheekbone, a glowing violet spectral arrow nocked perfectly horizontal and level with the ground, cracked grinning skull half-hidden under a ragged violet hood, sunken eye sockets burning with cold violet fire, torn funeral-shroud cape dissolving into black mist, grave mist coiling around the legs, crows scattering behind, indigo night atmosphere. |
 | `maera.png` | Maera Tidecaller: a small teal water spirit with fin wings, riding a rising wave, droplets suspended around her, seafoam turquoise atmosphere. |
 | `torv.png` | Torv Stonehorn: a towering stone-grey horned colossus with small bat wings and a broken dark halo, fists like boulders, granite atmosphere, protective bulk. |
 | `rhoka.png` | Rhoka Wildclaw: a russet-brown raptor beast mid-pounce, claws extended, feather-scaled crest, crimson atmosphere, feral motion. |

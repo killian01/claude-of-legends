@@ -30,7 +30,7 @@ An immovable frontline anchor.
 - Passive, Shieldskin: gains a small shield after a few seconds without taking damage.
 - Q, Shield Slam: melee cone strike that slows.
 - W, Iron Wall: brief self armor and magic resist surge.
-- E, Grip Chain: skillshot that pulls the first enemy hit to Korrath.
+- E, Earthgrip: maul slam sending a fissure of grasping stone; pulls the first enemy hit to Korrath.
 - R, Earthbreak: leap to a zone, knocking up enemies around the impact.
 
 ### Dain, Emberfist (Fighter, top)
