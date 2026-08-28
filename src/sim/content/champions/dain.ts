@@ -6,6 +6,9 @@ import type { ChampionDef } from './index';
 
 const HEAT_MAX = 4;
 const HEAT_BONUS = 1.25;
+// A takedown this soon after Dain's strike lands means the punch was the
+// killing blow: Blazing Jab resets outright.
+const JAB_KILL_WINDOW_S = 0.6;
 
 export const DAIN: ChampionDef = {
   id: 'dain',
@@ -16,7 +19,7 @@ export const DAIN: ChampionDef = {
     name: 'Heat',
     description:
       'Attacks build Heat (up to 4); Ember Flurry adds one. At full Heat, the next ability ' +
-      'deals 25 percent bonus damage.',
+      'deals 25 percent bonus damage. A kill moments after his strike resets Blazing Jab.',
     onAttackHit(_ctx, self) {
       self.passiveStacks = Math.min(HEAT_MAX, self.passiveStacks + 1);
     },
@@ -27,6 +30,10 @@ export const DAIN: ChampionDef = {
       if (via !== 'ability' || self.passiveStacks < HEAT_MAX) return amount;
       self.passiveStacks = 0;
       return amount * HEAT_BONUS;
+    },
+    onTakedown(ctx, self, victim) {
+      const hit = victim.recentDamagers.find((r) => r.id === self.id);
+      if (hit && ctx.time - hit.at <= JAB_KILL_WINDOW_S) self.cooldowns.Q = ctx.time;
     },
   },
   base: {
@@ -49,19 +56,30 @@ export const DAIN: ChampionDef = {
       name: 'Blazing Jab',
       manaCost: 30,
       cooldown: 4,
-      castRange: 3.5,
-      // A traveling punch through the line: hitting a champion refunds half
-      // the cooldown, the weave that keeps his trades alive.
+      castRange: 7,
+      // A traveling punch through the line (doubled reach, playtest round
+      // 2): hitting a champion refunds half the cooldown, a kill resets it
+      // outright (the passive), the weave that keeps his trades alive.
       spec: {
         kind: 'dash',
-        range: 3.5,
+        range: 7,
         speed: 18,
+        // Only champions move this cooldown: a hit refunds half, and the
+        // punch's own killing blow resets it outright. Minions and camps
+        // change nothing, so the weave is a duel tool, not a farm tool.
         passThrough: [
           { kind: 'damage', base: 95, adRatio: 0.7, dtype: 'physical' },
           {
             kind: 'conditional',
             when: { kind: 'targetIsChampion' },
-            effects: [{ kind: 'cooldownRefund', key: 'Q', pctOfRemaining: 0.5 }],
+            effects: [
+              { kind: 'cooldownRefund', key: 'Q', pctOfRemaining: 0.5 },
+              {
+                kind: 'conditional',
+                when: { kind: 'targetDying' },
+                effects: [{ kind: 'cooldownRefund', key: 'Q', pctOfRemaining: 1 }],
+              },
+            ],
           },
         ],
       },
@@ -70,13 +88,20 @@ export const DAIN: ChampionDef = {
       name: 'Cinder Guard',
       manaCost: 45,
       cooldown: 9,
-      castRange: 0,
+      castRange: 6.5,
+      // A rescue jump: it goes TO the aimed ally, landing against them, and
+      // the guard goes off where he lands. With no ally in reach there is
+      // nothing to jump to and the cast is refused, so the button always
+      // means the same thing.
       spec: {
-        kind: 'burst',
-        radius: 2.5,
+        kind: 'dash',
+        range: 6.5,
+        speed: 16,
+        toAlly: { searchRadius: 3.5 },
+        landRadius: 2.5,
         // The roster's burn-while-held: enemies caught in the guard keep
         // burning while the shield holds.
-        effects: [
+        onLand: [
           { kind: 'damage', base: 40, apRatio: 0.2, dtype: 'magic' },
           { kind: 'dot', duration: 3, perSecond: 22, dtype: 'magic' },
         ],
@@ -124,18 +149,18 @@ export const DAIN: ChampionDef = {
       manaCost: 75,
       cooldown: 60,
       castRange: 6,
-      // A called-down comet: the zone telegraphs for just over a second
-      // (real counterplay, you can walk out). Only the epicenter stuns; the
-      // rim burns and slows, so the aim is the skill.
+      // A called-down comet, doubled across (playtest round 2): the wider
+      // the threat, the longer the fuse (telegraph first). Only the small
+      // epicenter stuns; the rim burns and slows, so the aim is the skill.
       spec: {
         kind: 'zone',
-        radius: 3,
-        duration: 1.1,
-        detonateDelay: 1.05,
+        radius: 6,
+        duration: 1.35,
+        detonateDelay: 1.3,
         onDetonate: [
           {
             kind: 'conditional',
-            when: { kind: 'withinCenter', radius: 1.4 },
+            when: { kind: 'withinCenter', radius: 2.2 },
             effects: [
               { kind: 'damage', base: 250, adRatio: 0.8, dtype: 'magic' },
               { kind: 'stun', duration: 1.2 },

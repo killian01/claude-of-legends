@@ -136,8 +136,8 @@ describe('online match flow', () => {
     expect(match.players.has(1)).toBe(false);
     expect(match.buildSnapshotFor(1)).toBeNull();
     // The scoreboard row says who this champion was.
-    const score = match.buildScore() as { t: 'score'; rows: { name: string }[] };
-    expect(score.rows.some((r) => r.name === 'alice (bot)')).toBe(true);
+    const score = match.buildScore() as { t: 'score'; rows: { player: string | null }[] };
+    expect(score.rows.some((r) => r.player === 'alice (bot)')).toBe(true);
     // The champion is not inert: the bot policy walks it out of the fountain.
     step(200);
     const moved = Math.hypot(unit.pos.x - before.x, unit.pos.z - before.z);
@@ -161,9 +161,9 @@ describe('online match flow', () => {
     match.tick();
     expect(match.buildSnapshotFor(9)).not.toBeNull();
     // The scoreboard row drops the bot tag.
-    const score = match.buildScore() as { t: 'score'; rows: { name: string }[] };
-    expect(score.rows.some((r) => r.name === 'alice')).toBe(true);
-    expect(score.rows.some((r) => r.name === 'alice (bot)')).toBe(false);
+    const score = match.buildScore() as { t: 'score'; rows: { player: string | null }[] };
+    expect(score.rows.some((r) => r.player === 'alice')).toBe(true);
+    expect(score.rows.some((r) => r.player === 'alice (bot)')).toBe(false);
   });
 
   it('rejects commands for units the client does not own', () => {

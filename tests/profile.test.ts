@@ -9,12 +9,14 @@ const row = (over: Partial<ScoreRow>): ScoreRow => ({
   unitId: 1,
   name: 'x',
   championId: 'sylra',
+  player: null,
   team: 0,
   level: 10,
   kills: 0,
   deaths: 0,
   assists: 0,
   cs: 0,
+  items: [],
   ...over,
 });
 

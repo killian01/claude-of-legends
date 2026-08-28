@@ -39,6 +39,10 @@ export interface EffectCtx {
 export type EffectPredicate =
   | { kind: 'distanceAtLeast'; distance: number }
   | { kind: 'targetHpBelow'; frac: number }
+  // The target died to an earlier effect in this same list (effects apply
+  // in order, so a damage entry before this predicate makes it a killing
+  // blow check for the delivering ability, any victim kind).
+  | { kind: 'targetDying' }
   // No other champion of the target's team within `radius` of the target.
   | { kind: 'targetIsolated'; radius: number }
   | { kind: 'targetSlowed' }
@@ -62,6 +66,8 @@ export function evaluatePredicate(
       return (fx.distance ?? 0) >= p.distance;
     case 'targetHpBelow':
       return target.maxHp > 0 && target.hp / target.maxHp < p.frac;
+    case 'targetDying':
+      return target.dead || target.hp <= 0 || ctx.dead.has(target.id);
     case 'targetIsolated': {
       for (const u of ctx.units.values()) {
         if (u.id === target.id || u.dead || ctx.dead.has(u.id)) continue;
@@ -98,7 +104,16 @@ export function evaluatePredicate(
 }
 
 export type EffectSpec =
-  | { kind: 'damage'; base: number; adRatio?: number; apRatio?: number; dtype: DamageType }
+  // maxHpPct adds a fraction of the TARGET's max health, so a hit can keep
+  // mattering against a health stack (tower shots, ADR 0003 dive punish).
+  | {
+      kind: 'damage';
+      base: number;
+      adRatio?: number;
+      apRatio?: number;
+      maxHpPct?: number;
+      dtype: DamageType;
+    }
   // maxHpPct heals a fraction of the TARGET's max health, so a flat heal
   // (Mend) can keep mattering at level 18 without a rank to scale on.
   | { kind: 'heal'; base: number; apRatio?: number; maxHpPct?: number }
@@ -187,6 +202,11 @@ export function applyEffects(
   // Structures are immune to crowd control and displacement (review F.2:
   // towers could be stunned and even taunted).
   const structure = target.kind === 'tower' || target.kind === 'sanctum';
+  // And they are immune to spells outright: a tower or a Sanctum falls to
+  // attacks and to minions, never to an ability. One rule, one place, so
+  // every delivery (skillshot, zone, dash, burst, chain, shield burst)
+  // obeys it; auto-attack payloads come through with via 'attack'.
+  if (structure && via === 'ability') return;
   for (const spec of specs) {
     if (
       structure &&
@@ -204,7 +224,10 @@ export function applyEffects(
     switch (spec.kind) {
       case 'damage': {
         const amount =
-          spec.base * scale + (spec.adRatio ?? 0) * power.ad + (spec.apRatio ?? 0) * power.ap;
+          spec.base * scale +
+          (spec.adRatio ?? 0) * power.ad +
+          (spec.apRatio ?? 0) * power.ap +
+          (spec.maxHpPct ?? 0) * target.maxHp;
         dealDamage(ctx, sourceId, target, amount, spec.dtype, via);
         break;
       }

@@ -7,6 +7,7 @@
 
 import { applyEffects, type EffectSpec, type Power } from './combat/effects';
 import type { CombatCtx } from './sim_context';
+import { isSpellTarget } from './spell_targets';
 import type { Vec2 } from './types';
 import { hostile, type Unit } from './unit';
 
@@ -39,6 +40,7 @@ function land(ctx: CombatCtx, u: Unit, dash: DashState): void {
   if (dash.onLand.length > 0 && dash.landRadius > 0) {
     for (const other of ctx.units.values()) {
       if (!hostile(u, other) || other.dead || ctx.dead.has(other.id)) continue;
+      if (!isSpellTarget(other)) continue;
       const d = Math.hypot(other.pos.x - u.pos.x, other.pos.z - u.pos.z);
       if (d > dash.landRadius + other.radius) continue;
       applyEffects(ctx, u.id, dash.power, other, dash.onLand, 'ability', fx);
@@ -83,6 +85,7 @@ export function stepDashes(ctx: CombatCtx, dt: number): void {
     if (dash.passThrough.length > 0 && advanced > 0) {
       for (const other of ctx.units.values()) {
         if (!hostile(u, other) || other.dead || ctx.dead.has(other.id)) continue;
+        if (!isSpellTarget(other)) continue;
         if (dash.hitIds.has(other.id)) continue;
         const d = segmentDistance(other.pos, from, u.pos);
         if (d > 0.9 + other.radius) continue;

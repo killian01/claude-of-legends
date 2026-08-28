@@ -85,6 +85,12 @@ const TEAM0_TOWERS: readonly TowerSpot[] = [
 ];
 
 // Jungle blobs of the northwest half; the southeast half is their rotation.
+// The list is also mirrored ACROSS THE MID DIAGONAL (playtest round 3): the
+// authored blobs only ever flanked the top side of each base, leaving the
+// bot side of a team's own half an open field you could walk straight down
+// into the inner towers. Adding the transposes makes each half a matching
+// pair of jungles around its mid lane, and turns the outer towers into the
+// chokes they are supposed to be. Pinned by tests/tower_approach.test.ts.
 const NW_WALLS: readonly WallShape[] = [
   { x: 32, z: 55, r: 7 },
   { x: 50, z: 70, r: 8 },
@@ -93,12 +99,38 @@ const NW_WALLS: readonly WallShape[] = [
   { x: 38, z: 115, r: 7 },
   { x: 65, z: 90, r: 6 },
   { x: 28, z: 68, r: 6 },
+  { x: 55, z: 32, r: 7 },
+  { x: 70, z: 50, r: 8 },
+  { x: 85, z: 30, r: 8 },
+  { x: 68, z: 28, r: 6 },
+  // The mid choke: two small blobs flanking the outer mid tower, close
+  // enough along the lane that the tower's reach overlaps them. Past this
+  // pinch there is no way down the diagonal except through the tower.
+  { x: 48, z: 62, r: 5 },
+  { x: 62, z: 48, r: 5 },
+  // The side-lane chokes: the outer tower's reach stopped short of both the
+  // map border and the jungle, so you could simply walk around it. These
+  // close the two strips it cannot cover.
+  { x: 3, z: 91, r: 6 },
+  { x: 21, z: 91, r: 5 },
+  { x: 91, z: 3, r: 6 },
+  { x: 91, z: 21, r: 5 },
+  // And the pocket walls that stop the jungle from being a through-road
+  // from the river into the base. The paths through it stay open, but they
+  // are paths now, not an open field.
+  { x: 40, z: 64, r: 6 },
+  { x: 64, z: 40, r: 6 },
+  { x: 48, z: 84, r: 8 },
+  { x: 84, z: 48, r: 8 },
 ];
 
 // Jungle camps of the northwest half; the southeast half is their rotation.
 // Each sits in a wall gap off the lanes; the first is the buff camp.
 const NW_CAMPS: readonly CampSpot[] = [
-  { x: 42, z: 62, buff: true },
+  // Moved out of the mid corridor in round 3: the buff camp sat exactly
+  // where the pocket wall had to go. It now sits deeper in the pocket, a
+  // cul-de-sac off the top lane rather than a stop on a through-road.
+  { x: 38, z: 76, buff: true },
   { x: 40, z: 100, buff: false },
   { x: 58, z: 108, buff: false },
 ];
@@ -109,6 +141,23 @@ const NW_BRUSH: readonly WallShape[] = [
   { x: 24, z: 105, r: 3 },
   { x: 58, z: 80, r: 3 },
   { x: 70, z: 82, r: 3 },
+];
+
+// The top lane is authored once; the bot lane is its 180 degree rotation,
+// reversed so both polylines run from team 0's base toward team 1's.
+// Balance finding (playtest round 2, headless 12-seed measurement): the old
+// hand-written bot lane was NOT the top lane's mirror, and both side lanes
+// ended on ONE point beside team 1's sanctum, so team 1's waves spawned
+// stacked inside its base (a standing minion shield) while team 0's spawned
+// split and short of its own. Team 1 won 6 of 12 seeds, team 0 zero.
+// Symmetry is now by construction and pinned in tests/map.test.ts.
+const TOP_LANE: readonly Vec2[] = [
+  { x: 17, z: 23 },
+  { x: 13, z: 50 },
+  { x: 13, z: 128 },
+  { x: 22, z: 137 },
+  { x: 127, z: 137 },
+  { x: 131, z: 133 },
 ];
 
 export const GAME_MAP: GameMap = {
@@ -138,14 +187,7 @@ export const GAME_MAP: GameMap = {
   // makes the cells around it unwalkable and minions could never "reach"
   // such a waypoint (review finding F.0). tests/map.test.ts pins this.
   lanes: {
-    top: [
-      { x: 17, z: 23 },
-      { x: 13, z: 50 },
-      { x: 13, z: 128 },
-      { x: 22, z: 137 },
-      { x: 127, z: 137 },
-      { x: 133, z: 133 },
-    ],
+    top: TOP_LANE,
     mid: [
       { x: 19, z: 19 },
       { x: 45, z: 45 },
@@ -153,14 +195,7 @@ export const GAME_MAP: GameMap = {
       { x: 105, z: 105 },
       { x: 131, z: 131 },
     ],
-    bot: [
-      { x: 23, z: 17 },
-      { x: 50, z: 13 },
-      { x: 128, z: 13 },
-      { x: 137, z: 22 },
-      { x: 137, z: 127 },
-      { x: 133, z: 133 },
-    ],
+    bot: [...TOP_LANE].map((p) => mirrorPoint(p.x, p.z)).reverse(),
   },
   walls: [...NW_WALLS, ...NW_WALLS.map((w) => ({ ...mirrorPoint(w.x, w.z), r: w.r }))],
   brush: [...NW_BRUSH, ...NW_BRUSH.map((b) => ({ ...mirrorPoint(b.x, b.z), r: b.r }))],

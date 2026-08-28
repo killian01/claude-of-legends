@@ -84,7 +84,9 @@ const RESPAWN_PER_LEVEL = 1.3;
 // How long a champion's damage on a victim keeps earning an assist.
 const ASSIST_WINDOW_S = 10;
 const SHOP_RANGE_PAD = 2;
-const INVENTORY_SLOTS = 6;
+// Exported: the HUD draws exactly this many build slots, so a full bag and
+// an empty one read as the same shape.
+export const INVENTORY_SLOTS = 6;
 
 // Bot lane assignment order: mid first, then the side lanes.
 const BOT_LANES: readonly LaneId[] = ['mid', 'top', 'bot'];
@@ -112,6 +114,14 @@ export class Sim {
   tickCount = 0;
   winner: TeamId | null = null;
   private visibility: [Set<number>, Set<number>] = [new Set(), new Set()];
+  // Each team's fading memory of enemy champions: where one was last SEEN
+  // and how hurt it was. The honest mirror of a human remembering who ran
+  // into which brush; observe.ts exposes only fresh, currently-unseen
+  // entries (additive obs v0). Indexed by observing team, keyed by unit id.
+  readonly lastSeen: [
+    Map<number, { x: number; z: number; at: number; hpFrac: number }>,
+    Map<number, { x: number; z: number; at: number; hpFrac: number }>,
+  ] = [new Map(), new Map()];
   private nextWaveAt = FIRST_WAVE_AT;
   private waveCount = 0;
   private nextId = 1;
@@ -199,12 +209,15 @@ export class Sim {
         unitId: u.id,
         name: def ? (def.name.split(',')[0] ?? def.name) : u.championId,
         championId: u.championId,
+        // Seat identity lives above the sim; the server fills it in.
+        player: null,
         team: u.team,
         level: u.level,
         kills: u.kills,
         deaths: u.deaths,
         assists: u.assists,
         cs: u.cs,
+        items: [...u.items],
       });
     }
     return rows;
@@ -381,11 +394,15 @@ export class Sim {
     if (this.winner !== null) return false;
     const u = this.units.get(unitId);
     const def = ITEMS[itemId];
-    if (!u || !def || u.kind !== 'champion' || u.dead || this.dead.has(unitId)) return false;
+    if (!u || !def || u.kind !== 'champion') return false;
     const fountain = this.map.fountains.find((f) => f.team === u.team);
     if (!fountain) return false;
+    // Death is shopping time, like the genre: a corpse respawns at its own
+    // fountain, so the range check is waived while it waits. Selling still
+    // wants a live champion standing there.
+    const dead = u.dead || this.dead.has(unitId);
     const d = Math.hypot(u.pos.x - fountain.x, u.pos.z - fountain.z);
-    if (d > fountain.r + SHOP_RANGE_PAD) return false;
+    if (!dead && d > fountain.r + SHOP_RANGE_PAD) return false;
 
     // Consume owned components (one instance each) and discount their cost.
     const consumedIndices: number[] = [];
@@ -570,6 +587,25 @@ export class Sim {
     }
 
     this.visibility = computeVisibility(this.map, this.units, this.time, this.zones);
+
+    // Refresh each team's memory of the enemy champions it can see right
+    // now; a dead champion is forgotten (its corpse spot means nothing).
+    for (const u of this.units.values()) {
+      if (u.kind !== 'champion' || u.neutral) continue;
+      const observer = (1 - u.team) as TeamId;
+      if (u.dead) {
+        this.lastSeen[observer].delete(u.id);
+        continue;
+      }
+      if (this.visibility[observer].has(u.id)) {
+        this.lastSeen[observer].set(u.id, {
+          x: u.pos.x,
+          z: u.pos.z,
+          at: this.time,
+          hpFrac: u.maxHp > 0 ? u.hp / u.maxHp : 0,
+        });
+      }
+    }
 
     // Fairness: a champion's attack order must not keep tracking a target
     // its team cannot see; the blind chase would both leak the unseen

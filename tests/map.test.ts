@@ -41,6 +41,21 @@ describe('the launch map', () => {
       const twin = GAME_MAP.walls.find((o) => close(o.x, m.x) && close(o.z, m.z) && o.r === w.r);
       expect(twin, `mirrored wall at ${w.x},${w.z}`).toBeDefined();
     }
+    // The lane polylines too: everything anchored to their vertices (wave
+    // spawns, minion march, the bots' lane walk) inherits any skew, and the
+    // measured 6-0 team-1 bias came exactly from this hole in the pin.
+    const { top, mid, bot } = GAME_MAP.lanes;
+    expect(bot.length).toBe(top.length);
+    for (let i = 0; i < top.length; i++) {
+      const m = mirror(top[i]!.x, top[i]!.z);
+      const twin = bot[bot.length - 1 - i]!;
+      expect(close(twin.x, m.x) && close(twin.z, m.z), `bot mirrors top vertex ${i}`).toBe(true);
+    }
+    for (let i = 0; i < mid.length; i++) {
+      const m = mirror(mid[i]!.x, mid[i]!.z);
+      const twin = mid[mid.length - 1 - i]!;
+      expect(close(twin.x, m.x) && close(twin.z, m.z), `mid is self-mirrored at ${i}`).toBe(true);
+    }
   });
 
   it('keeps every gameplay anchor on walkable ground', () => {

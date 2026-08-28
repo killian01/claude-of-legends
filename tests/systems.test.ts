@@ -145,6 +145,20 @@ describe('items', () => {
     expect(a.stats.ad).toBe(108);
   });
 
+  it('buys while dead, wherever the corpse fell', () => {
+    const sim = new Sim(21);
+    const a = sim.addChampion(0);
+    // Died out in the lane: the wait is shopping time, since the respawn
+    // puts him back at his own fountain anyway.
+    a.pos = { x: 40, z: 40 };
+    a.dead = true;
+    a.gold = 1000;
+    expect(sim.buyItem(a.id, 'iron_blade')).toBe(true);
+    expect(a.items).toEqual(['iron_blade']);
+    // Selling still wants a live champion standing at the fountain.
+    expect(sim.sellItem(a.id, 0)).toBe(false);
+  });
+
   it('rejects buying away from the fountain or with a full inventory', () => {
     const sim = new Sim(21);
     const a = sim.addChampion(0);
