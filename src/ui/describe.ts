@@ -1,86 +1,144 @@
-// Generates human-readable tooltip lines from the data-as-code records:
-// abilities, sigils, and items describe THEMSELVES, so tooltips can never
-// drift from the live mechanics (the world-of-claudecraft tooltip rule).
+// Generates ability, sigil, and item descriptions from the data-as-code
+// records THEMSELVES, so a tooltip can never drift from the live mechanics
+// (the world-of-claudecraft tooltip rule). kits-v2 raised the bar from
+// keyword dumps to full sentences with the genre's color language: values
+// are wrapped in the classes of ui/rich_text.ts (physical red, magic blue,
+// true white, healing green, shields teal, crowd control gold). The lines
+// are trusted generated HTML, rendered via setRichLine / the tooltip layer.
 
 import type { AbilityDef, CastSpec } from '../sim/combat/casting';
-import type { EffectSpec } from '../sim/combat/effects';
+import type { EffectPredicate, EffectSpec } from '../sim/combat/effects';
 import { ITEM_PASSIVES } from '../sim/content/item_passives';
 import { ITEMS, type ItemDef } from '../sim/content/items';
 import type { SigilDef } from '../sim/content/sigils';
 import type { AbilityKey } from '../sim/types';
 
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
+const span = (cls: string, text: string): string => `<span class="${cls}">${text}</span>`;
 
-function fmtEffect(e: EffectSpec): string {
+const DTYPE_CLS: Record<string, string> = {
+  physical: 'tt-phys',
+  magic: 'tt-magic',
+  true: 'tt-true',
+};
+
+// A value with its scaling ratios, each colored by the stat it scales on.
+function amount(base: number, adRatio: number, apRatio: number, cls: string): string {
+  let s = span(cls, `${Math.round(base)}`);
+  if (adRatio) s += ` ${span('tt-phys', `(+${pct(adRatio)} AD)`)}`;
+  if (apRatio) s += ` ${span('tt-magic', `(+${pct(apRatio)} AP)`)}`;
+  return s;
+}
+
+// "a, b and c": clauses joined the way a sentence would.
+function joinAnd(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? '';
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
+const ORDINALS: Record<number, string> = { 1: 'first', 2: 'second', 3: 'third', 4: 'fourth' };
+
+function predicatePhrase(p: EffectPredicate): string {
+  switch (p.kind) {
+    case 'distanceAtLeast':
+      return `after flying at least ${p.distance}`;
+    case 'targetHpBelow':
+      return `against targets under ${span('tt-cc', pct(p.frac))} health`;
+    case 'targetIsolated':
+      return `against a target with no ally within ${p.radius}`;
+    case 'targetSlowed':
+      return 'against an already impaired target';
+    case 'targetNearTerrain':
+      return 'against a target caught at a wall';
+    case 'targetIsChampion':
+      return 'if a champion is hit';
+    case 'targetHasSourceDot':
+      return 'against prey you set bleeding';
+    case 'withinCenter':
+      return `at the epicenter (within ${p.radius})`;
+  }
+}
+
+// One effect as a verb-led clause, lowercase, no trailing period.
+function clause(e: EffectSpec): string {
   switch (e.kind) {
-    case 'damage': {
-      let s = `${e.base}`;
-      if (e.adRatio) s += ` (+${pct(e.adRatio)} of your Attack Damage)`;
-      if (e.apRatio) s += ` (+${pct(e.apRatio)} of your Ability Power)`;
-      return `${s} ${e.dtype} damage`;
-    }
+    case 'damage':
+      return `deals ${amount(e.base, e.adRatio ?? 0, e.apRatio ?? 0, DTYPE_CLS[e.dtype] ?? 'tt-true')} ${e.dtype} damage`;
     case 'heal': {
-      let s = `heals ${e.base}`;
-      if (e.maxHpPct) s += ` (+${pct(e.maxHpPct)} of the target's max health)`;
-      if (e.apRatio) s += ` (+${pct(e.apRatio)} of your Ability Power)`;
-      return s;
+      let s = `restores ${amount(e.base, 0, e.apRatio ?? 0, 'tt-heal')}`;
+      if (e.maxHpPct) s += ` plus ${span('tt-heal', `${pct(e.maxHpPct)} of max health`)}`;
+      return `${s} health`;
     }
     case 'shield': {
-      let s = `shields ${e.base}`;
-      if (e.apRatio) s += ` (+${pct(e.apRatio)} of your Ability Power)`;
-      return `${s} for ${e.duration}s`;
+      let s = `grants a ${amount(e.base, 0, e.apRatio ?? 0, 'tt-shield')} shield for ${e.duration}s`;
+      if (e.burst) {
+        const onBreak = e.burst.onBreak ?? [];
+        const onExpire = e.burst.onExpire ?? [];
+        const when =
+          onBreak.length > 0 && onExpire.length > 0
+            ? 'breaks or expires'
+            : onBreak.length > 0
+              ? 'is broken'
+              : 'expires';
+        const payload = joinAnd((onBreak.length > 0 ? onBreak : onExpire).map(clause));
+        s += `; when it ${when}, it detonates (radius ${e.burst.radius}): ${payload}`;
+      }
+      return s;
     }
     case 'slow':
-      return `slows ${pct(e.pct)} for ${e.duration}s`;
+      return `slows by ${span('tt-cc', pct(e.pct))} for ${e.duration}s`;
     case 'root':
-      return `roots for ${e.duration}s`;
+      return `roots for ${span('tt-cc', `${e.duration}s`)}`;
     case 'stun':
-      return `stuns for ${e.duration}s`;
+      return `stuns for ${span('tt-cc', `${e.duration}s`)}`;
     case 'taunt':
-      return `taunts for ${e.duration}s`;
+      return `taunts for ${span('tt-cc', `${e.duration}s`)}`;
     case 'stealth':
-      return `stealth for ${e.duration}s`;
+      return `grants ${span('tt-util', 'stealth')} for ${e.duration}s`;
     case 'blind':
-      return `cuts sight to ${pct(e.factor)} for ${e.duration}s`;
+      return `dims their sight to ${span('tt-cc', pct(e.factor))} for ${e.duration}s`;
     case 'knockback':
-      if (e.direction === 'aside') return `sweeps aside ${e.distance}`;
-      if (e.direction === 'toCenter') return `throws ${e.distance} back toward the center`;
-      return `knocks back ${e.distance}`;
+      if (e.direction === 'aside') return `sweeps them ${span('tt-cc', `${e.distance}`)} aside`;
+      if (e.direction === 'toCenter') {
+        return `hurls them ${span('tt-cc', `${e.distance}`)} back toward the center`;
+      }
+      return `knocks them back ${span('tt-cc', `${e.distance}`)}`;
     case 'pull':
-      return `pulls ${e.distance} closer`;
+      return `drags them ${span('tt-cc', `${e.distance}`)} closer`;
     case 'knockup':
-      return `knocks airborne for ${e.duration}s`;
+      return `knocks airborne for ${span('tt-cc', `${e.duration}s`)}`;
     case 'untargetable':
-      return `untargetable for ${e.duration}s`;
+      return `becomes ${span('tt-util', 'untargetable')} for ${e.duration}s`;
     case 'dot':
-      return `${e.perSecond}/s ${e.dtype} damage over ${e.duration}s`;
+      return `deals ${span(DTYPE_CLS[e.dtype] ?? 'tt-true', `${e.perSecond}/s`)} ${e.dtype} damage over ${e.duration}s`;
     case 'grievous':
-      return `cuts healing ${pct(e.factor)} for ${e.duration}s`;
+      return `cuts their healing by ${span('tt-cc', pct(e.factor))} for ${e.duration}s`;
     case 'buff': {
       const parts: string[] = [];
-      if (e.msPct) parts.push(`+${pct(e.msPct)} move speed`);
-      if (e.asPct) parts.push(`+${pct(e.asPct)} attack speed`);
-      if (e.armor) parts.push(`+${e.armor} armor`);
-      if (e.mr) parts.push(`+${e.mr} magic resist`);
-      return `${parts.join(', ')} for ${e.duration}s`;
+      if (e.msPct) parts.push(span('tt-util', `+${pct(e.msPct)} move speed`));
+      if (e.asPct) parts.push(span('tt-util', `+${pct(e.asPct)} attack speed`));
+      if (e.armor) parts.push(span('tt-util', `+${e.armor} armor`));
+      if (e.mr) parts.push(span('tt-util', `+${e.mr} magic resist`));
+      return `grants ${joinAnd(parts)} for ${e.duration}s`;
     }
-    case 'mark':
-      return `applies a mark; ${e.stacksToTrigger} marks trigger: ${e.onTrigger
-        .map(fmtEffect)
-        .join(', ')}`;
+    case 'mark': {
+      const trigger = joinAnd(e.onTrigger.map(clause));
+      const nth = ORDINALS[e.stacksToTrigger] ?? `${e.stacksToTrigger}th`;
+      return `applies a ${span('tt-util', 'mark')} for ${e.duration}s; the ${nth} mark ${trigger}`;
+    }
     case 'conditional': {
-      const branch = e.effects.map(fmtEffect).join(', ');
-      const other = e.otherwise?.length
-        ? `; otherwise ${e.otherwise.map(fmtEffect).join(', ')}`
-        : '';
-      return `${fmtPredicate(e.when)}: ${branch}${other}`;
+      let s = `${predicatePhrase(e.when)}, ${joinAnd(e.effects.map(clause))}`;
+      if (e.otherwise?.length) s += `; otherwise ${joinAnd(e.otherwise.map(clause))}`;
+      return s;
     }
     case 'cooldownRefund':
-      return `refunds ${pct(e.pctOfRemaining)} of ${e.key}'s remaining cooldown`;
+      return `refunds ${span('tt-util', pct(e.pctOfRemaining))} of ${e.key}'s remaining cooldown`;
     case 'empower': {
-      let s = `next attack within ${e.duration}s also: ${e.bonus.map(fmtEffect).join(', ')}`;
+      let s = `empowers your next attack within ${e.duration}s: ${joinAnd(e.bonus.map(clause))}`;
       if (e.splash?.length) {
-        s += `; splashes (radius ${e.splashRadius ?? 0}): ${e.splash.map(fmtEffect).join(', ')}`;
+        s += `; it splashes to enemies around the victim (radius ${e.splashRadius ?? 0}): ${joinAnd(
+          e.splash.map(clause),
+        )}`;
       }
       return s;
     }
@@ -89,102 +147,100 @@ function fmtEffect(e: EffectSpec): string {
   }
 }
 
-function fmtPredicate(p: Extract<EffectSpec, { kind: 'conditional' }>['when']): string {
-  switch (p.kind) {
-    case 'distanceAtLeast':
-      return `beyond ${p.distance} traveled`;
-    case 'targetHpBelow':
-      return `against targets under ${pct(p.frac)} health`;
-    case 'targetIsolated':
-      return `against a target with no ally within ${p.radius}`;
-    case 'targetSlowed':
-      return 'against an already impaired target';
-    case 'targetNearTerrain':
-      return 'against a target at a wall';
-    case 'targetIsChampion':
-      return 'if a champion was hit';
-    case 'targetHasSourceDot':
-      return 'against a target you set bleeding';
-    case 'withinCenter':
-      return `at the epicenter (radius ${p.radius})`;
-  }
-}
-
-const fmtList = (list: readonly EffectSpec[] | undefined): string =>
-  (list ?? []).map(fmtEffect).join('; ');
+const sentence = (list: readonly EffectSpec[] | undefined): string =>
+  joinAnd((list ?? []).map(clause));
 
 function describeCast(spec: CastSpec, castRange: number): string[] {
   switch (spec.kind) {
     case 'skillshot': {
-      const lines = [
-        `Skillshot, range ${spec.range}${spec.pierce ? ', piercing' : ''}.`,
-        `On hit: ${fmtList(spec.onHit)}.`,
-        ...(spec.allyEffects && spec.allyEffects.length > 0
-          ? [`Allies touched: ${fmtList(spec.allyEffects)}.`]
-          : []),
-      ];
+      const flight = spec.pierce
+        ? 'piercing every enemy in its path'
+        : 'stopping on the first enemy hit';
+      const lines = [`Hurls a bolt up to ${spec.range} away, ${flight}: ${sentence(spec.onHit)}.`];
+      if (spec.allyEffects?.length) {
+        lines.push(`Allies it washes over: ${sentence(spec.allyEffects)}.`);
+      }
       if (spec.chain) {
-        lines.push(`Chains once (within ${spec.chain.radius}): ${fmtList(spec.chain.onHit)}.`);
+        lines.push(
+          `The bolt then leaps to the nearest other enemy (within ${spec.chain.radius}): ` +
+            `${sentence(spec.chain.onHit)}.`,
+        );
       }
       if (spec.leaveWall) {
-        lines.push(`The traveled line stays impassable for ${spec.leaveWall.duration}s.`);
+        lines.push(`The scarred line stays impassable for ${spec.leaveWall.duration}s.`);
       }
       return lines;
     }
     case 'zone': {
-      const lines = [`Zone, radius ${spec.radius}, range ${castRange}, lasts ${spec.duration}s.`];
-      if (spec.onTick?.length)
-        lines.push(`Each ${spec.tickEvery ?? 0.5}s: ${fmtList(spec.onTick)}.`);
-      if (spec.allyOnTick?.length) lines.push(`Allies inside: ${fmtList(spec.allyOnTick)}.`);
-      if (spec.onEnter?.length) lines.push(`On entering: ${fmtList(spec.onEnter)}.`);
-      if (spec.detonateDelay !== undefined)
-        lines.push(`Detonates after ${spec.detonateDelay}s: ${fmtList(spec.onDetonate)}.`);
-      if (spec.reveal) lines.push('Reveals its area, brush and stealth included.');
+      const lines = [
+        `Marks the ground (radius ${spec.radius}, range ${castRange})` +
+          `${spec.detonateDelay === undefined ? ` for ${spec.duration}s` : ''}.`,
+      ];
+      if (spec.detonateDelay !== undefined) {
+        lines.push(`After ${spec.detonateDelay}s the area erupts: ${sentence(spec.onDetonate)}.`);
+      }
+      if (spec.onEnter?.length) lines.push(`Enemies entering it: ${sentence(spec.onEnter)}.`);
+      if (spec.onTick?.length) {
+        lines.push(`Enemies inside, every ${spec.tickEvery ?? 0.5}s: ${sentence(spec.onTick)}.`);
+      }
+      if (spec.allyOnTick?.length) {
+        lines.push(`Allies inside, every ${spec.tickEvery ?? 0.5}s: ${sentence(spec.allyOnTick)}.`);
+      }
+      if (spec.reveal) lines.push('Its area is revealed, brush and stealth included.');
       if (spec.boundary) {
-        lines.push(`Walking out through the rim: ${fmtList(spec.boundary.effects)}.`);
+        lines.push(
+          `Enemies walking out through the rim: ${sentence(spec.boundary.effects)} ` +
+            `(each at most once per ${spec.boundary.perUnitEvery}s; dashes and blinks pass free).`,
+        );
       }
       if (spec.leaveZone) {
+        const inner = spec.leaveZone.onTick?.length ? `: ${sentence(spec.leaveZone.onTick)}` : '';
         lines.push(
-          `Leaves a field (radius ${spec.leaveZone.radius}, ${spec.leaveZone.duration}s)` +
-            `${spec.leaveZone.onTick?.length ? `: ${fmtList(spec.leaveZone.onTick)}` : ''}.`,
+          `The blast leaves a field behind (radius ${spec.leaveZone.radius}, ` +
+            `${spec.leaveZone.duration}s)${inner}.`,
         );
       }
       return lines;
     }
     case 'cone':
-      return [`Cone, range ${spec.range}.`, `Hits: ${fmtList(spec.onHit)}.`];
+      return [`Sweeps an arc in front of you (reach ${spec.range}): ${sentence(spec.onHit)}.`];
     case 'burst': {
-      const lines = [`Around you, radius ${spec.radius}: ${fmtList(spec.effects)}.`];
-      if (spec.selfEffects?.length) lines.push(`On yourself: ${fmtList(spec.selfEffects)}.`);
+      const lines = [`Erupts around you (radius ${spec.radius}): ${sentence(spec.effects)}.`];
+      if (spec.selfEffects?.length) lines.push(`On yourself: ${sentence(spec.selfEffects)}.`);
       return lines;
     }
     case 'dash': {
       const lines = [
         spec.speed
-          ? `Dash, range ${spec.range}: a real flight, stopped by walls.`
-          : `Blink, range ${spec.range}.`,
+          ? `Dashes up to ${spec.range}; the flight is real, and walls stop it.`
+          : `Blinks up to ${spec.range} instantly.`,
       ];
-      if (spec.passThrough?.length)
-        lines.push(`Enemies passed through: ${fmtList(spec.passThrough)}.`);
-      if (spec.untargetableDuringTravel) lines.push('Untargetable while traveling.');
-      if (spec.onLand?.length)
-        lines.push(`On landing (radius ${spec.landRadius ?? 0}): ${fmtList(spec.onLand)}.`);
-      if (spec.selfEffects?.length) lines.push(`On yourself: ${fmtList(spec.selfEffects)}.`);
+      if (spec.untargetableDuringTravel) lines.push('You cannot be touched while traveling.');
+      if (spec.passThrough?.length) {
+        lines.push(`Everyone you pass through: ${sentence(spec.passThrough)}.`);
+      }
+      if (spec.onLand?.length) {
+        lines.push(`On landing (radius ${spec.landRadius ?? 0}): ${sentence(spec.onLand)}.`);
+      }
+      if (spec.selfEffects?.length) lines.push(`On yourself: ${sentence(spec.selfEffects)}.`);
       return lines;
     }
     case 'wall':
       return [
-        `Raises a wall (length ${spec.length}) across your aim for ${spec.duration}s.`,
-        'Blocks walking and dashes; shots pass over.',
+        `Raises a stone rampart (length ${spec.length}) across your aim for ${spec.duration}s.`,
+        'It blocks walking and dashes; shots pass over it.',
       ];
-    case 'enemy_target':
-      return [`Targets an enemy within ${castRange}.`, `Effect: ${fmtList(spec.effects)}.`];
+    case 'enemy_target': {
+      const lines = [`Strikes an enemy within ${castRange}: ${sentence(spec.effects)}.`];
+      if (spec.selfEffects?.length) lines.push(`On yourself: ${sentence(spec.selfEffects)}.`);
+      return lines;
+    }
     case 'self_or_ally':
       return [
         spec.searchRadius > 0
-          ? `Targets yourself or an ally near your aim (range ${castRange}).`
-          : 'Targets yourself.',
-        `Effect: ${fmtList(spec.effects)}.`,
+          ? `Blesses yourself or the ally nearest your aim (range ${castRange}): ` +
+            `${sentence(spec.effects)}.`
+          : `On yourself: ${sentence(spec.effects)}.`,
       ];
     default:
       return [];
@@ -192,17 +248,21 @@ function describeCast(spec: CastSpec, castRange: number): string[] {
 }
 
 export function describeAbility(key: AbilityKey, def: AbilityDef): string[] {
-  const lines = [
-    `${def.name} (${key})`,
-    `${def.manaCost} mana, ${def.cooldown}s cooldown.`,
-    ...describeCast(def.spec, def.castRange),
-  ];
+  const lines = [`${def.name} (${key})`, `${def.manaCost} mana. ${def.cooldown}s cooldown.`];
+  if (def.windup && def.windup > 0) {
+    lines.push(`Winds up for ${def.windup}s before it fires; both teams see the telegraph.`);
+  }
+  lines.push(...describeCast(def.spec, def.castRange));
   if (def.recast) {
-    lines.push(`Recast within ${def.recast.window}s: return to your cast position.`);
+    lines.push(
+      `${span('tt-util', 'Recast')} within ${def.recast.window}s: return to where you cast it.`,
+    );
   }
   if (def.atRank) {
     for (const o of def.atRank) {
-      lines.push(`Rank ${o.rank}: ${describeCast(o.spec, def.castRange).join(' ')}`);
+      lines.push(
+        `${span('tt-util', `Rank ${o.rank}`)}: ${describeCast(o.spec, def.castRange).join(' ')}`,
+      );
     }
   }
   return lines;
