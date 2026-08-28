@@ -230,8 +230,9 @@ export class Renderer {
   private readonly championVisuals = new Map<number, ChampionVisual>();
   private readonly trackedProjectiles = new Map<number, TrackedMobile>();
   private readonly trackedZones = new Map<number, TrackedZone>();
-  // Ability walls (kits-v2): one stone slab per wall id, dropped on expiry.
-  private readonly trackedWalls = new Map<number, THREE.Object3D>();
+  // Ability walls (kits-v2): one jagged stone rampart per wall id, risen
+  // from the ground on spawn and crumbled on expiry.
+  private readonly trackedWalls = new Map<number, { holder: THREE.Object3D; bornMs: number }>();
   // The pooled spell VFX engine and the live windup telegraphs.
   private readonly vfx: VfxSystem;
   private readonly windups = new Map<number, WindupFx>();
@@ -1669,26 +1670,50 @@ export class Renderer {
       }
     }
 
-    // Ability walls: a raised stone slab along the segment, gone with the
-    // wall. The sim already blocks the ground; this is purely the read.
+    // Ability walls: a rampart of jagged stone blocks along the segment,
+    // gone with the wall. The sim already blocks the ground; this is purely
+    // the read. Block shapes vary deterministically per wall id so a wall
+    // never reshuffles between frames.
     for (const [id, w] of this.world.walls) {
       if (this.trackedWalls.has(id)) continue;
       const dx = w.b.x - w.a.x;
       const dz = w.b.z - w.a.z;
-      const length = Math.hypot(dx, dz);
-      const geo = new THREE.BoxGeometry(Math.max(0.5, length), 1.5, 0.9);
-      const matStone = new THREE.MeshLambertMaterial({ color: 0x8d8877 });
-      const slab = new THREE.Mesh(geo, matStone);
-      slab.position.set((w.a.x + w.b.x) / 2, 0.75, (w.a.z + w.b.z) / 2);
-      slab.rotation.y = -Math.atan2(dz, dx);
-      const cap = new THREE.Mesh(
-        new THREE.BoxGeometry(Math.max(0.5, length) * 0.94, 0.25, 1.05),
-        new THREE.MeshLambertMaterial({ color: 0x6f6a5b }),
-      );
-      cap.position.y = 0.85;
-      slab.add(cap);
-      this.scene.add(slab);
-      this.trackedWalls.set(id, slab);
+      const length = Math.max(0.8, Math.hypot(dx, dz));
+      const holder = new THREE.Group();
+      const jitter = (i: number, k: number): number => {
+        const s = Math.sin((id + 1) * 374.61 + i * 12.9898 + k * 78.233) * 43758.5453;
+        return s - Math.floor(s);
+      };
+      const blocks = Math.max(3, Math.round(length / 0.75));
+      const pitch = length / blocks;
+      for (let i = 0; i < blocks; i++) {
+        const bw = pitch * (0.9 + jitter(i, 1) * 0.35);
+        const bh = 1.15 + jitter(i, 2) * 0.85;
+        const bd = 0.55 + jitter(i, 3) * 0.4;
+        const shade = 0.82 + jitter(i, 4) * 0.3;
+        const mat = new THREE.MeshLambertMaterial({
+          color: new THREE.Color(0x8d8877).multiplyScalar(shade),
+        });
+        const block = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), mat);
+        block.position.set(-length / 2 + (i + 0.5) * pitch, bh / 2, (jitter(i, 5) - 0.5) * 0.35);
+        block.rotation.y = (jitter(i, 6) - 0.5) * 0.5;
+        block.rotation.z = (jitter(i, 7) - 0.5) * 0.18;
+        holder.add(block);
+        // A jagged crown tooth on some stones.
+        if (jitter(i, 8) > 0.45) {
+          const tooth = new THREE.Mesh(
+            new THREE.ConeGeometry(bw * 0.34, 0.45 + jitter(i, 9) * 0.5, 4),
+            mat,
+          );
+          tooth.position.set(block.position.x, bh + 0.15, block.position.z);
+          tooth.rotation.y = jitter(i, 10) * Math.PI;
+          holder.add(tooth);
+        }
+      }
+      holder.position.set((w.a.x + w.b.x) / 2, -1.3, (w.a.z + w.b.z) / 2);
+      holder.rotation.y = -Math.atan2(dz, dx);
+      this.scene.add(holder);
+      this.trackedWalls.set(id, { holder, bornMs: performance.now() });
       // The earth answers: dust and sparks along the rising line.
       const bursts = Math.max(2, Math.round(length / 1.2));
       for (let i = 0; i <= bursts; i++) {
@@ -1699,18 +1724,20 @@ export class Renderer {
       }
       this.vfx.glowFlash((w.a.x + w.b.x) / 2, 0.8, (w.a.z + w.b.z) / 2, 1.4, 0xcfc7ae, 0.2);
     }
-    for (const [id, mesh] of this.trackedWalls) {
+    for (const [id, t] of this.trackedWalls) {
       if (!this.world.walls.has(id)) {
-        // Crumble: a softer dust fall where the rampart stood.
-        this.vfx.sparkBurst(mesh.position.x, 0.9, mesh.position.z, 0x8d8877, 10, 3.5, {
-          life: 0.5,
-          size: 0.35,
-          gravity: 11,
-        });
-        this.scene.remove(mesh);
-        disposeDeep(mesh);
+        // Crumble: rubble and a softer dust fall where the rampart stood.
+        const { x, z } = t.holder.position;
+        this.vfx.sparkBurst(x, 0.9, z, 0x8d8877, 10, 3.5, { life: 0.5, size: 0.35, gravity: 11 });
+        this.vfx.debris.burst(x, z, 0x6f6a5b, 8, { speed: 5, up: 7, size: 0.16 });
+        this.scene.remove(t.holder);
+        disposeDeep(t.holder);
         this.trackedWalls.delete(id);
+        continue;
       }
+      // The rise: the stones shove up out of the ground over the first beat.
+      const p = Math.min(1, (performance.now() - t.bornMs) / 240);
+      t.holder.position.y = -1.3 * (1 - p) * (1 - p);
     }
 
     // Traveling dashes read as motion: a short-lived streak dot under any

@@ -291,33 +291,58 @@ export const SPELL_VFX: Readonly<Record<string, SpellVisual>> = {
     },
   },
 
-  // Korrath R: the leap ends in an earthbreak. All the weight lands on the
-  // release: rock shrapnel, cracked earth, dust, a staggered double ring.
+  // Korrath R: a true leap now (kits-v2, speed 14 in korrath.ts), so the
+  // release kicks takeoff dust and the earthbreak itself waits out the
+  // flight: rock shrapnel, cracked earth, a staggered double ring at the
+  // moment the mountain actually lands.
   korrath_R: {
     windupTick: (fx, x, z, progress) => {
       genericWindupTick(fx, x, z, progress, EARTH);
     },
-    release: (fx, _fromX, _fromZ, aimX, aimZ) => {
-      fx.glowFlash(aimX, 1, aimZ, 5, EARTH.glow, 0.26);
-      fx.sparkBurst(aimX, 0.6, aimZ, 0xd8b890, 18, 9, { life: 0.5, gravity: 24 });
-      fx.debris.burst(aimX, aimZ, 0x6a5a48, 14, { speed: 8, up: 11 });
-      fx.rings.spawn(aimX, aimZ, 3.4, EARTH.main, 520);
-      fx.schedule(150, () => fx.rings.spawn(aimX, aimZ, 4.4, EARTH.glow, 480, { alpha: 0.55 }));
-      fx.decals.spawn(aimX, aimZ, 3.2, 'cracks', 6500, { alpha: 0.8 });
-      fx.pillars.spawn(aimX, aimZ, 1.6, 5, 0xd8b06a, 460, 0.24);
-      fx.smokePuffs(aimX, aimZ, 0xb09878, 5, 2.2);
-      fx.lightPulse(aimX, aimZ, 0xe8c886, 20, 420);
-      fx.onShake(0.5);
+    release: (fx, fromX, fromZ, aimX, aimZ) => {
+      fx.sparkBurst(fromX, 0.5, fromZ, 0xb9a888, 8, 6, { life: 0.35, gravity: 16 });
+      fx.smokePuffs(fromX, fromZ, 0xb09878, 3, 1.2);
+      const flightMs = (Math.hypot(aimX - fromX, aimZ - fromZ) / 14) * 1000;
+      fx.schedule(flightMs, () => {
+        fx.glowFlash(aimX, 1, aimZ, 5, EARTH.glow, 0.26);
+        fx.sparkBurst(aimX, 0.6, aimZ, 0xd8b890, 18, 9, { life: 0.5, gravity: 24 });
+        fx.debris.burst(aimX, aimZ, 0x6a5a48, 14, { speed: 8, up: 11 });
+        fx.rings.spawn(aimX, aimZ, 3.4, EARTH.main, 520);
+        fx.schedule(150, () => fx.rings.spawn(aimX, aimZ, 4.4, EARTH.glow, 480, { alpha: 0.55 }));
+        fx.decals.spawn(aimX, aimZ, 3.2, 'cracks', 6500, { alpha: 0.8 });
+        fx.pillars.spawn(aimX, aimZ, 1.6, 5, 0xd8b06a, 460, 0.24);
+        fx.smokePuffs(aimX, aimZ, 0xb09878, 5, 2.2);
+        fx.lightPulse(aimX, aimZ, 0xe8c886, 20, 420);
+        fx.onShake(0.5);
+      });
     },
   },
 
-  // Torv Q: a short charge that flings the first body hit aside.
+  // Torv Q (kits-v2): a real plowing charge (speed 13 in torv.ts). Gravel
+  // and dust march along the path in time with the run; the landing burst
+  // fires where and when the horn actually arrives.
   torv_Q: {
-    release: (fx, _fromX, _fromZ, aimX, aimZ) => {
-      fx.sparkBurst(aimX, 0.7, aimZ, EARTH.main, 8, 7, { life: 0.4, gravity: 22 });
-      fx.debris.burst(aimX, aimZ, 0x6a5a48, 5, { speed: 6, up: 8, size: 0.16 });
-      fx.rings.spawn(aimX, aimZ, 2.2, EARTH.main, 420, { alpha: 0.6 });
-      fx.onShake(0.2);
+    release: (fx, fromX, fromZ, aimX, aimZ) => {
+      const dx = aimX - fromX;
+      const dz = aimZ - fromZ;
+      const len = Math.hypot(dx, dz) || 1;
+      const flightMs = (len / 13) * 1000;
+      const steps = Math.max(2, Math.round(len / 1.6));
+      for (let i = 1; i < steps; i++) {
+        const t = i / steps;
+        fx.schedule(flightMs * t, () => {
+          const px = fromX + dx * t;
+          const pz = fromZ + dz * t;
+          fx.debris.burst(px, pz, 0x6a5a48, 3, { speed: 4, up: 7, size: 0.14 });
+          fx.smokePuffs(px, pz, 0xb09878, 2, 0.8);
+        });
+      }
+      fx.schedule(flightMs, () => {
+        fx.sparkBurst(aimX, 0.7, aimZ, EARTH.main, 10, 8, { life: 0.4, gravity: 22 });
+        fx.debris.burst(aimX, aimZ, 0x6a5a48, 6, { speed: 6, up: 9, size: 0.16 });
+        fx.rings.spawn(aimX, aimZ, 2.4, EARTH.main, 440, { alpha: 0.6 });
+        fx.onShake(0.25);
+      });
     },
   },
 
@@ -695,24 +720,38 @@ export const SPELL_VFX: Readonly<Record<string, SpellVisual>> = {
     },
   },
 
-  // Fenn R: a blur of shadow strikes; three staggered slashes of dark
-  // light around the caster's target area.
+  // Fenn R (kits-v2): the crouch gathers shadow, then he blurs down the
+  // line; violet shear flashes march along the path in time with the dash
+  // (speed 14 in fenn.ts) and the arrival snaps a ring where he lands.
   fenn_R: {
-    castFx: (fx, x, z) => {
-      fx.glowFlash(x, 1.3, z, 3.2, SHADOW.main, 0.22);
-      fx.rings.spawn(x, z, 2, SHADOW.main, 380, { alpha: 0.6 });
-      for (let beat = 0; beat < 3; beat++) {
-        fx.schedule(beat * 110, () => {
-          const a = Math.random() * Math.PI * 2;
-          fx.glowFlash(x + Math.cos(a) * 0.7, 1.4, z + Math.sin(a) * 0.7, 1.8, 0xd0b2ff, 0.12);
-          fx.sparkBurst(x, 1.2, z, SHADOW.main, 6, 8, {
-            life: 0.3,
-            size: 0.7,
+    windupTick: (fx, x, z, progress) => {
+      genericWindupTick(fx, x, z, progress, SHADOW);
+    },
+    release: (fx, fromX, fromZ, aimX, aimZ) => {
+      const dx = aimX - fromX;
+      const dz = aimZ - fromZ;
+      const len = Math.hypot(dx, dz) || 1;
+      const flightMs = (len / 14) * 1000;
+      const steps = Math.max(3, Math.round(len / 1.4));
+      fx.glowFlash(fromX, 1.2, fromZ, 2.4, SHADOW.main, 0.2);
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        fx.schedule(flightMs * t, () => {
+          const px = fromX + dx * t;
+          const pz = fromZ + dz * t;
+          fx.glowFlash(px, 1.2, pz, 1.6, 0xd0b2ff, 0.12);
+          fx.sparkBurst(px, 1.1, pz, SHADOW.main, 5, 7, {
+            life: 0.28,
+            size: 0.55,
             sprite: SPRITE.spark,
             gravity: 2,
           });
         });
       }
+      fx.schedule(flightMs, () => {
+        fx.rings.spawn(aimX, aimZ, 2, SHADOW.main, 400, { alpha: 0.6 });
+        fx.lightPulse(aimX, aimZ, SHADOW.main, 12, 320);
+      });
     },
   },
 
@@ -728,31 +767,51 @@ export const SPELL_VFX: Readonly<Record<string, SpellVisual>> = {
     },
   },
 
-  // Dain E: a fan of embers along the cone.
+  // Dain E (kits-v2): the fists ignite. Embers climb the body, the hands
+  // snap alight one after the other; nothing flies anywhere until he swings.
   dain_E: {
-    castFx: (fx, x, z, dirX, dirZ) => {
-      const base = Math.atan2(dirZ, dirX);
-      for (let i = 0; i < 14; i++) {
-        const a = base + (Math.random() - 0.5) * 1.4;
-        const v = 8 + Math.random() * 5;
+    castFx: (fx, x, z) => {
+      fx.glowFlash(x, 1.2, z, 2.2, FIRE.glow, 0.24);
+      fx.rings.spawn(x, z, 1.4, FIRE.main, 380, { alpha: 0.6 });
+      for (let i = 0; i < 12; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = 0.45 + Math.random() * 0.4;
         fx.particles.spawn({
-          x,
-          y: 1,
-          z,
-          vx: Math.cos(a) * v,
-          vy: 1.2,
-          vz: Math.sin(a) * v,
-          life: 0.42,
-          size0: 0.6,
-          size1: 0.15,
+          x: x + Math.cos(a) * r,
+          y: 0.35 + Math.random() * 0.8,
+          z: z + Math.sin(a) * r,
+          vx: Math.cos(a) * 0.6,
+          vy: 2.4 + Math.random() * 1.6,
+          vz: Math.sin(a) * 0.6,
+          life: 0.5,
+          size0: 0.4,
+          size1: 0.12,
           color0: 0xffc07a,
           color1: 0xff5a20,
-          alpha0: 0.9,
+          alpha0: 0.95,
           sprite: SPRITE.glow,
-          drag: 1.6,
         });
       }
-      fx.lightPulse(x, z, 0xff7a2a, 10, 300);
+      fx.schedule(90, () => fx.glowFlash(x + 0.45, 1.1, z, 0.9, 0xffe0a0, 0.16));
+      fx.schedule(190, () => fx.glowFlash(x - 0.45, 1.1, z, 0.9, 0xffe0a0, 0.16));
+      fx.lightPulse(x, z, FIRE.main, 10, 320);
+    },
+  },
+
+  // Korrath W (kits-v2): the maul hits the ground at his feet and a dust
+  // seam races downrange to where the rampart rises (the wall itself gets
+  // its rise and crumble in the renderer's wall tracking).
+  korrath_W: {
+    castFx: (fx, x, z, dirX, dirZ) => {
+      fx.sparkBurst(x, 0.4, z, 0xd8b890, 10, 6, { life: 0.4, gravity: 20 });
+      fx.debris.burst(x, z, 0x6a5a48, 6, { speed: 5, up: 8, size: 0.16 });
+      fx.rings.spawn(x, z, 1.8, EARTH.main, 420, { alpha: 0.6 });
+      for (let i = 1; i <= 4; i++) {
+        fx.schedule(i * 45, () => {
+          fx.smokePuffs(x + dirX * i * 1.5, z + dirZ * i * 1.5, 0xb09878, 2, 0.7);
+        });
+      }
+      fx.onShake(0.18);
     },
   },
 
