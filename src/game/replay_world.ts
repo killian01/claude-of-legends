@@ -9,6 +9,7 @@ import type { Projectile } from '../sim/projectiles';
 import type { Sim } from '../sim/sim';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
+import type { Wall } from '../sim/walls';
 import type { Zone } from '../sim/zones';
 import type { IWorld } from '../world_api';
 
@@ -32,6 +33,9 @@ export class ReplayWorld implements IWorld {
   }
   get zones(): ReadonlyMap<number, Readonly<Zone>> {
     return this.sim.zones;
+  }
+  get walls(): ReadonlyMap<number, Readonly<Wall>> {
+    return this.sim.walls;
   }
   championDef(championId: string): ChampionDef | null {
     return this.sim.championDef(championId);

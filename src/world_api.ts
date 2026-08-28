@@ -8,6 +8,7 @@ import type { GameMap } from './sim/content/map';
 import type { Projectile } from './sim/projectiles';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from './sim/types';
 import type { Unit } from './sim/unit';
+import type { Wall } from './sim/walls';
 import type { Zone } from './sim/zones';
 
 export interface IWorld {
@@ -17,6 +18,8 @@ export interface IWorld {
   readonly units: ReadonlyMap<number, Readonly<Unit>>;
   readonly projectiles: ReadonlyMap<number, Readonly<Projectile>>;
   readonly zones: ReadonlyMap<number, Readonly<Zone>>;
+  // Ability walls (kits-v2): terrain both teams always see.
+  readonly walls: ReadonlyMap<number, Readonly<Wall>>;
   championDef(championId: string): ChampionDef | null;
   scoreboard(): readonly ScoreRow[];
   isVisible(team: TeamId, unitId: number): boolean;
