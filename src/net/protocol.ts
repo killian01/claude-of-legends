@@ -82,6 +82,18 @@ export interface SnapMobile {
   s?: number;
 }
 
+// An ability wall (kits-v2): terrain both teams always see, so it never
+// fog-scopes. Endpoints plus expiry; the client draws and drops it.
+export interface SnapWall {
+  i: number;
+  x1: number;
+  z1: number;
+  x2: number;
+  z2: number;
+  t: TeamId;
+  u: number;
+}
+
 export interface SelfSnap {
   mana: number;
   maxMana: number;
@@ -153,6 +165,8 @@ export type ServerMsg =
       gone: number[];
       projectiles: SnapMobile[];
       zones: SnapMobile[];
+      // Ability walls; optional so pre-wall replays still parse.
+      walls?: SnapWall[];
       self: SelfSnap | null;
       events: SnapEvent[];
       winner: TeamId | null;

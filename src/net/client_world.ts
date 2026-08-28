@@ -10,6 +10,7 @@ import { GAME_MAP, type GameMap } from '../sim/content/map';
 import type { Projectile } from '../sim/projectiles';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
+import type { Wall } from '../sim/walls';
 import type { Zone } from '../sim/zones';
 import type { IWorld } from '../world_api';
 import type { ClientMsg, ServerMsg, SnapUnit } from './protocol';
@@ -102,6 +103,8 @@ function materializeUnit(s: SnapUnit): Unit {
     attackMoveTarget: null,
     holding: false,
     pendingSpell: null,
+    activeDash: null,
+    recastArmed: null,
     pendingAttack: null,
     path: [],
     level: s.l ?? 1,
@@ -137,6 +140,7 @@ export class ClientWorld implements IWorld {
   readonly units = new Map<number, Unit>();
   readonly projectiles = new Map<number, Projectile>();
   readonly zones = new Map<number, Zone>();
+  readonly walls = new Map<number, Wall>();
   time = 0;
   winner: TeamId | null = null;
   selfUnitId = 0;
@@ -308,6 +312,9 @@ export class ClientWorld implements IWorld {
           power: { ad: 0, ap: 0 },
           onHit: [],
           allyEffects: [],
+          chain: null,
+          leaveWall: null,
+          splashOnHit: null,
           vfx: p.v ?? null,
         });
       }
@@ -342,12 +349,37 @@ export class ClientWorld implements IWorld {
           detonateAt: null,
           onDetonate: [],
           entered: new Set(),
+          reveal: false,
+          boundary: null,
+          boundaryNextAt: new Map(),
+          insideIds: new Set(),
+          leaveZone: null,
           vfx: z.v ?? null,
         });
       }
     }
     for (const id of [...this.zones.keys()]) {
       if (!seenZ.has(id)) this.zones.delete(id);
+    }
+
+    const seenW = new Set<number>();
+    for (const w of msg.walls ?? []) {
+      seenW.add(w.i);
+      if (!this.walls.has(w.i)) {
+        this.walls.set(w.i, {
+          id: w.i,
+          sourceId: 0,
+          team: w.t,
+          a: { x: w.x1, z: w.z1 },
+          b: { x: w.x2, z: w.z2 },
+          until: w.u,
+          // The mirror never blocks or unblocks: pathing is server truth.
+          samples: [],
+        });
+      }
+    }
+    for (const id of [...this.walls.keys()]) {
+      if (!seenW.has(id)) this.walls.delete(id);
     }
 
     return true;

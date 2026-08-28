@@ -3,7 +3,14 @@
 // go out once per unit per client, tracked by the caller-owned `known` set;
 // a unit leaving vision lands in `gone` and is re-sent full when it returns.
 
-import type { SelfSnap, ServerMsg, SnapEvent, SnapMobile, SnapUnit } from '../src/net/protocol';
+import type {
+  SelfSnap,
+  ServerMsg,
+  SnapEvent,
+  SnapMobile,
+  SnapUnit,
+  SnapWall,
+} from '../src/net/protocol';
 import type { Sim, SimEvent } from '../src/sim/sim';
 import { effectiveRank } from '../src/sim/stats';
 import type { TeamId } from '../src/sim/types';
@@ -136,6 +143,20 @@ export function buildSnapshot(
     if (z.vfx) rec.v = z.vfx;
     zones.push(rec);
   }
+  // Walls are terrain: both teams always see them (they block everyone's
+  // pathing), so they never fog-scope.
+  const walls: SnapWall[] = [];
+  for (const w of sim.walls.values()) {
+    walls.push({
+      i: w.id,
+      x1: round2(w.a.x),
+      z1: round2(w.a.z),
+      x2: round2(w.b.x),
+      z2: round2(w.b.z),
+      t: w.team,
+      u: round2(w.until),
+    });
+  }
 
   let self: SelfSnap | null = null;
   const selfUnit = sim.units.get(selfUnitId);
@@ -207,6 +228,7 @@ export function buildSnapshot(
     gone,
     projectiles,
     zones,
+    walls,
     self,
     events: snapEvents,
     winner: sim.winner,
