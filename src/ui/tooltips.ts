@@ -2,6 +2,8 @@
 // a lazy line provider; content is computed at hover time so it always
 // reflects live data.
 
+import { setRichLine } from './rich_text';
+
 let tip: HTMLDivElement | null = null;
 
 function ensureTip(): HTMLDivElement {
@@ -29,7 +31,9 @@ export function attachTooltip(el: HTMLElement, lines: () => readonly string[]): 
     const content = lines();
     content.forEach((line, i) => {
       const row = document.createElement('div');
-      row.textContent = line;
+      // Lines are generated rich text (ui/describe.ts + rich_text.ts):
+      // built from the repo's own data records, never from user input.
+      setRichLine(row, line);
       if (i === 0) row.style.cssText = 'font-weight:700;color:#f2ffd9;margin-bottom:2px;';
       t.appendChild(row);
     });

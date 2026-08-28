@@ -8,6 +8,7 @@ import type { AbilityKey } from '../sim/types';
 import { ROLE_COLORS, setPortrait } from './champion_art';
 import { describeAbility } from './describe';
 import { startMenuBackdrop } from './menu_backdrop';
+import { setRichLine } from './rich_text';
 
 const CSS = `
 .rb, .rb * { box-sizing: border-box; }
@@ -156,7 +157,10 @@ export function openRosterBrowser(container: HTMLElement): void {
     for (const k of ABILITY_KEYS) {
       const lines = describeAbility(k, c.abilities[k]);
       const box = el('div', 'rb-ability');
-      box.append(el('b', '', lines[0] ?? ''), ` ${lines.slice(1).join(' ')}`);
+      const body = document.createElement('span');
+      // Generated rich text from the data records (ui/describe.ts).
+      setRichLine(body, ` ${lines.slice(1).join(' ')}`);
+      box.append(el('b', '', lines[0] ?? ''), body);
       detail.appendChild(box);
     }
   };
