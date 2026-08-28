@@ -2,7 +2,7 @@
 
 Master review checklist, opened after the first real playtest. Sources: the
 maintainer's playtest findings, an exhaustive feature comparison against
-League of Legends, and the four fresh reviewer reports (merged below as they
+the genre baseline, and the four fresh reviewer reports (merged below as they
 land). Severity: **P0** = a new player cannot play or understand the game
 without it; **P1** = hurts the experience badly; **P2** = polish or
 deliberately deferred (tracked in docs/roadmap.md).
@@ -55,7 +55,7 @@ deliberately deferred (tracked in docs/roadmap.md).
 - [P1] Team kill totals on a top bar.
 - [P2] Death recap details, damage breakdown.
 
-## C. Core gameplay missing vs League of Legends
+## C. Core gameplay missing vs the genre baseline
 
 Promised by docs/design/game-definition.md and absent:
 

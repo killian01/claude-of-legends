@@ -2,16 +2,21 @@
 
 Status: accepted (grill round 3). Numbers are deliberately absent; balance lands with implementation. See ADR 0004 for the naming policy.
 
+The per-champion ability lists below describe the LAUNCH kits and are superseded by
+`docs/design/kits-v2.md` (the kit redesign, accepted and implemented); identities, roles, and
+lanes are unchanged. This file remains authoritative for the vocabulary table and the roster's
+coverage intent.
+
 ## Game vocabulary
 
-| Concept | League of Legends name (not used) | Our name |
-|---|---|---|
-| Team core structure | Nexus | **Sanctum** |
-| Picked utility spells (2 per participant) | Summoner spells | **Sigils** |
-| Blink sigil | Flash | **Riftstep** |
-| Move speed sigil | Ghost | **Zephyr** |
-| Burst heal sigil | Heal | **Mend** |
-| Damage-over-time plus healing reduction sigil | Ignite | **Sear** |
+| Concept | Our name |
+|---|---|
+| Team core structure | **Sanctum** |
+| Picked utility spells (2 per participant) | **Sigils** |
+| Blink sigil | **Riftstep** |
+| Move speed sigil | **Zephyr** |
+| Burst heal sigil | **Mend** |
+| Damage-over-time plus healing reduction sigil | **Sear** |
 
 Kept as generic genre vocabulary: tower, minion, lane, brush, recall, fog of war, fountain.
 

@@ -5,7 +5,7 @@
 
 # Claude of Legends
 
-A mini League of Legends style MOBA in the browser: 5v5, three lanes, ten champions,
+A mini MOBA in the browser: 5v5, three lanes, ten champions,
 online-first, with every non-human participant behind one deterministic Policy
 abstraction. Built on the architecture proven by world-of-claudecraft (ADR 0001).
 Stack: TypeScript (ESM, `strict`) · Three.js renderer · `ws` WebSockets · Vite ·
@@ -59,7 +59,7 @@ keep this table honest as they land.
   `tests/architecture.test.ts` and `tests/determinism.test.ts`.
 - **The decision budget (ADR 0003) applies identically to humans and bots.** Server and
   headless env share its implementation, pinned by a parity test.
-- **Original naming, in English, everywhere (ADR 0004).** No Riot IP (names, icons, assets).
+- **Original naming, in English, everywhere (ADR 0004).** No borrowed IP (names, icons, assets).
   A new game term goes through `CONTEXT.md` first.
 - **No em dashes, en dashes, or emojis** anywhere: code, comments, docs, commits.
 - **Never commit `.env` or secrets.**

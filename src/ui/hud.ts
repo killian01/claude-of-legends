@@ -630,7 +630,7 @@ export class Hud {
       'Tab: scoreboard. Enter: chat. G: ping. Esc: menu. Screen edges pan the camera; ' +
       'Space recenters; left-click the minimap to look. Level up: Alt+key or click +.';
 
-    // The always-visible personal score, LoL style: K / D / A plus creep
+    // The always-visible personal score: K / D / A plus creep
     // score, top right.
     const kda = el('div', 'hud-kda');
     this.kdaText = el('div', '', '0 / 0 / 0');
@@ -638,7 +638,7 @@ export class Hud {
     kda.append(this.kdaText, this.kdaCs);
     attachTooltip(kda, () => ['Kills / Deaths / Assists', 'CS: minions last-hit.']);
 
-    // The attacked target's frame, LoL style: portrait, name, and health at
+    // The attacked target's frame: portrait, name, and health at
     // the top of the screen while an attack order stands.
     this.targetFrame = el('div', 'hud-target');
     this.targetPortrait = document.createElement('img');

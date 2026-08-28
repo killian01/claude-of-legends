@@ -1,6 +1,6 @@
 # Claude of Legends
 
-A mini League style 5v5 MOBA that runs entirely in the browser: three lanes,
+A mini 5v5 MOBA that runs entirely in the browser: three lanes,
 ten champions with full kits, jungle camps, a neutral objective, fog of war,
 items, and an authoritative server for online play. No account, no install.
 Built on the architecture proven by
@@ -75,8 +75,8 @@ it as a volume or careers reset with the container.
   `?portraits` and `?focus=<id>` modes) and `/vfx.html` (spell VFX).
 
 All project content, in the game and in the docs, is in English, with
-original fantasy naming only (no Riot IP, see
-`docs/adr/0004-original-naming-no-riot-ip.md`).
+original fantasy naming only (no borrowed IP, see
+`docs/adr/0004-original-naming-no-borrowed-ip.md`).
 
 License: MIT for the code (`LICENSE`). Art and model assets are covered by
 `CREDITS.md` (CC0 packs by KayKit and Quaternius, plus the three.js basis
