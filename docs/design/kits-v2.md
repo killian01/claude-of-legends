@@ -4,11 +4,14 @@ Status: accepted (maintainer validation, 2026-08-28), including the cooldown eve
 flagged below. Implemented the same day: primitives (tests/primitives_v2.test.ts), the ten kits
 (tests/kits_v2.test.ts), and the hint-driven bot brain (src/sim/content/bots/hints.ts,
 tests/bots_v2.test.ts). In the implementation the conditional effect's true branch is named
-`effects`, not `then` (a `then` property makes an object thenable). Deviations: Korrath's
-Iron Wall cooldown is 11 s, not 14, to respect the pacing gate on basic cooldowns, and after
-the first playtest feel pass the wall lasts 4 s, not 2.5. The bots-v2 predictive aim and CC
-awareness below are implemented via two additive v0 observation fields (unit velocity and
-visible statuses; see `src/sim/policy.ts`).
+`effects`, not `then` (a `then` property makes an object thenable). Deviations after the
+playtest passes: Korrath's Iron Wall cooldown is 11 s, not 14 (pacing gate), and the wall
+lasts 6 s, not 2.5; Dain's Q reaches 7 and resets outright on a punch kill, and Emberfall is
+radius 6 with a 1.3 s fuse; Torv's Faultline no longer leaves a wall (principle 7 below): the
+fissure erupts a second time instead (the aftershock, seeded as delayed-detonation zones).
+The bots-v2 predictive aim, CC awareness, brush pursuit, and tower discipline are implemented
+via additive v0 observation fields (unit velocity, visible statuses, last-seen memory; see
+`src/sim/policy.ts`).
 Companion research: `docs/research/moba-mechanics-catalogue.md`, a mechanics taxonomy distilled
 from a full parse of the genre-defining MOBA's roster (August 2026). That file cites competitor
 champions by name as research references, so it is deliberately untracked (`docs/research/` is
@@ -39,6 +42,10 @@ point blank at current positions. The v2 goal is that every ability asks a quest
    carries its bot playbook.
 6. **Coverage as a test matrix.** Every effect primitive, old and new, is exercised by at least
    one kit (see the coverage table), preserving the roster.md property.
+7. **One signature mechanic, one owner.** A kit-defining mechanic belongs to exactly one
+   champion: the wall to Korrath, the recast to Fenn, the chain to Sylra, the aftershock to
+   Torv. Sharing a signature makes both copies cheap (maintainer direction, playtest round 2).
+   Generic effects (damage, slows, shields, dashes) stay shared vocabulary.
 
 ## New engine primitives
 
@@ -51,7 +58,7 @@ definition of done for every one of them.
 | Conditional effects | An effect list gated by a deterministic predicate at resolution: distance traveled, target HP threshold, target isolation, target CC state, terrain contact, zone position (center vs rim), shield consumed, zone boundary crossing | Vesk Q R, Ashvyn E, Fenn W, Maera W, Torv E, Korrath E, Dain W R, Sylra E, Elowen R |
 | Traveling dash | Dashes gain a speed and a real path: interceptable, visible, optional pass-through hitting units along the way. Default for every dash in v2; Elowen E stays a true blink as her identity | Korrath R, Dain Q, Fenn Q R, Vesk E, Ashvyn W, Torv Q, Rhoka Q |
 | Chain | A projectile hit jumps once to the nearest other valid unit within a radius, at reduced effect | Sylra Q |
-| Wall | A temporary impassable terrain segment; blocks pathing and traveling dashes, not projectiles | Korrath W, Torv R |
+| Wall | A temporary impassable terrain segment; blocks pathing and traveling dashes, not projectiles | Korrath W (sole owner per principle 7) |
 | Reveal zone | A zone granting its team sight of its area, revealing brush and stealth inside | Ashvyn R |
 | Knock-aside | `knockback` gains a direction parameter (lateral to a wave's travel, or path-relative), finally honoring the roster promise | Maera R, Torv Q, Elowen R |
 | Per-rank overrides | Ability data may override numbers or gain effects at specific ranks, instead of the uniform rank multiplier | Sylra R |
@@ -92,11 +99,16 @@ A momentum brawler who banks Heat and spends it in beats. Anchor kept: the Heat 
 
 - **Passive, Heat. Keep.** Four auto-attack stacks; full Heat empowers the next ability by 25%.
 - **Q, Blazing Jab. Rework.** A traveling punch-dash that passes through enemies on its path,
-  damaging each; if it hit at least one champion, half of Q's cooldown is refunded
-  (cooldown event). His weave tool.
-- **W, Cinder Guard. Rework.** Self shield for 3 s plus a burn aura on adjacent enemies. New
+  damaging each; if it hit at least one champion, half of Q's cooldown is refunded, and a
+  champion killed by the punch resets it outright (cooldown events). His weave tool.
+  Playtest round 3: only champions move this cooldown. Minions and camps damage-only, so
+  the weave stays a duel tool and never becomes a wave-clear engine.
+- **W, Cinder Guard. Rework.** Self shield for 3 s plus a burn on enemies around him. New
   conditional: if the shield is fully consumed by enemy damage before expiring, it detonates
   around him (magic damage plus a brief slow). Attackers must choose: pop it or wait it out.
+  Playtest round 3: the cast is now a jump ONTO an ally. It goes to the ally nearest the aim
+  and lands against them, the guard goes off where he lands, and with nobody in reach the cast
+  is refused and costs nothing. Bringing the burn to a teammate under pressure is the button.
 - **E, Ember Flurry. Replace** (was a generic damage cone). Empowered attack: his next auto
   within 3 s deals bonus magic damage, splashes in a small cone behind the target, and grants
   one extra Heat stack.
@@ -216,10 +228,13 @@ The mountain charges and the earth answers. Anchor kept: Bulwark Aura, Challenge
 - **E, Tremor Stomp. Rework.** The self burst stays; CC escalation: enemies already slowed are
   rooted 0.9 s instead of slowed again. Q into E, or any ally slow into E, is the combo the
   whole kit teaches.
-- **R, Faultline. Rework.** The line stun stays; the fissure persists as impassable broken
-  ground along the line for 2 s (wall primitive), splitting the fight in two.
+- **R, Faultline. Rework.** The line stun stays; the crack then stays marked along the whole
+  line and erupts a second time 1.5 s later (the aftershock: delayed-detonation zones, damage
+  plus a heavy slow). Standing on the fissure is the mistake; the wall belongs to Korrath
+  (principle 7).
 - **Bot playbook:** Q into two or more enemies; W after landing among two or more; E whenever a
-  slowed enemy is adjacent; R to cut the enemy frontline from its backline.
+  slowed enemy is adjacent; R through the enemy frontline so the echo catches whoever holds
+  ground.
 
 ### Rhoka, Wildclaw (Skirmisher, flex)
 
@@ -270,7 +285,8 @@ dropped):
 | Grievous | Rhoka passive, sigil Sear |
 | Mark | Sylra kit, Elowen Q, Dain E prime |
 | Stat buff | Vesk E, Rhoka E R, Ashvyn W |
-| Wall | Korrath W, Torv R |
+| Wall | Korrath W |
+| Aftershock (delayed line re-eruption, built on delayed-detonation zones) | Torv R |
 | Reveal zone | Ashvyn R |
 | Chain | Sylra Q |
 | Conditional effects | see primitive table above |

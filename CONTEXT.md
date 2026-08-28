@@ -62,6 +62,25 @@ declared recast window. Each press is budgeted like any cast; the wire action is
 (ADR 0005). At most a few kits carry one.
 _Avoid_: toggle, double cast, channel
 
+**Aftershock**:
+A delayed second eruption along a line an ability already struck: the ground stays visibly
+marked, then detonates once more after a fixed delay. A telegraph by construction (both teams
+read the marked ground); standing on it is the mistake. Torv's Faultline is its owner.
+_Avoid_: echo, replay, second wall
+
 **Mastery**:
 A purely cosmetic per-champion rank derived from a player's recorded online matches on that champion (server/mastery.ts thresholds). Shown on the career profile with a title per rank; never affects gameplay, matchmaking, or rating.
 _Avoid_: champion points, grind level
+
+**Tower heat**:
+The count of consecutive shots a tower has fired at the same champion. It resets on every
+target change and drives both halves of the shot: the attack damage ramps, and so does the
+slice of the victim's max health the shot takes as true damage. What makes a dive a
+commitment rather than a visit.
+_Avoid_: tower stacks, turret aggro (that is the targeting rule, not the damage)
+
+**Structure**:
+A tower or a Sanctum. Structures are immune to spells outright: they fall to attacks and to
+minions, never to an ability, and they take no crowd control or displacement. Skillshots fly
+over them rather than being eaten by them.
+_Avoid_: building, objective (the Warden is an objective and is not a structure)
