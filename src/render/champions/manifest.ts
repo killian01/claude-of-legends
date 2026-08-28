@@ -135,7 +135,9 @@ export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
     barY: 4.4,
     clips: {
       idle: 'Short_Breathe_and_Look_Around',
-      // A fortress walks; it never jogs.
+      // A giant's gait: the Walking clip's leg swing is amplified 1.6x in
+      // the GLB (hips lowered to keep ground contact), so he covers ground
+      // in long slow strides instead of a sped-up stroll.
       run: 'Walking',
       // Autos and ability casts both swing the maul; the windup braces
       // behind the tower shield while a cast charges.
@@ -148,8 +150,9 @@ export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
     // hip tracks were flattened horizontally in Blender (vertical weight
     // kept), so no runtime inPlaceClips pinning here. Dead keeps its full
     // travel: the fall to the ground is the clip.
-    // The Walking clip reads planted around a slow colossus stride.
-    runSpeed: 2.0,
+    // Measured stance-phase ground speed of the amplified stride: at his
+    // real move speed the clip plays at ~0.76x, slow and heavy.
+    runSpeed: 4.9,
     portrait: { clip: 'attack', time: 0.35, yaw: 0.55 },
     // Both weapon GLBs are authored in Blender against the idle rest pose
     // (the runtime's rest capture), hand-placed on the posed model: file
