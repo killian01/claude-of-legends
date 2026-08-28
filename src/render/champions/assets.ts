@@ -131,8 +131,8 @@ function toInPlace(clip: THREE.AnimationClip, def: ChampionVisualDef): THREE.Ani
 // Wraps a GLB prop scaled so its longest axis spans `size` world units; the
 // anchor then poses it exactly like a procedural prop. By default the
 // bounding-box center sits on the origin; anchor 'origin' instead trusts the
-// GLB's authored origin (the grip point, placed in Blender), so the file
-// itself decides where the hand holds it and translation offsets in the
+// GLB's authored origin (placed on the bone point in Blender), so the file
+// itself decides how the hand holds it and translation offsets in the
 // manifest become unnecessary.
 function normalizeProp(scene: THREE.Group, size: number, anchor?: 'origin'): THREE.Group {
   const box = new THREE.Box3().setFromObject(scene);

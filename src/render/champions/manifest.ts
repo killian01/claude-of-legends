@@ -33,9 +33,11 @@ export interface ChampionPropDef {
   size?: number;
   bone: string;
   // 'origin' anchors the GLB's authored origin on the bone instead of the
-  // bounding-box center. The file is then authored in Blender with the grip
-  // point at the origin and the rest orientation in root space (facing +Z),
-  // so alignment lives in the asset, not in offset tuning here.
+  // bounding-box center. The file is then authored in Blender against the
+  // idle rest pose: origin on the bone point, rest orientation in root space
+  // (facing +Z), so alignment lives in the asset, not in offset tuning here.
+  // Hand bones sit at the WRIST joint; author the grip at the measured palm
+  // offset (the centroid of the hand-weighted vertices), not at the origin.
   anchor?: 'origin';
   // The prop keeps its authored orientation and follows its bone in
   // position only, skipping the hand rotation delta. For a two-handed GLB
@@ -150,13 +152,14 @@ export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
     runSpeed: 2.0,
     portrait: { clip: 'attack', time: 0.35, yaw: 0.55 },
     // Both weapon GLBs are authored in Blender against the idle rest pose
-    // (the runtime's rest capture): grip point at the file origin, rest
+    // (the runtime's rest capture): file origin on the wrist bone, grip at
+    // the measured palm centroid (0.20 below the wrist on this rig), rest
     // orientation in root space, so both mount with no offsets at all.
     props: [
-      // Head-down at rest, leaning slightly outward: the head is nearly a
-      // barrel and the pauldrons are castle towers, so any head-up carry
-      // buries it in the silhouette. Mid-handle grip; swings pivot the head
-      // up from the ground like the siege weapon it is.
+      // Head-down at rest, leaning slightly outward, head grounded: the head
+      // is nearly a barrel and the pauldrons are castle towers, so any
+      // head-up carry buries it in the silhouette. Fist grips mid-handle;
+      // swings pivot the head up from the ground like the siege weapon it is.
       {
         url: '/models/champions/korrath_maul.glb',
         size: 3.1,
