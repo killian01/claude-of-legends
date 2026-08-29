@@ -59,6 +59,16 @@ docker build -t claude-of-legends .
 docker run -p 8787:8787 -v loc-data:/app/data claude-of-legends
 ```
 
+Behind a proxy, set `TRUST_PROXY=1`. The server caps sockets per player
+address, and every proxied connection arrives carrying the proxy's own
+address, so without it the whole player base shares a single cap. The flag
+is opt-in because it tells the server to believe `X-Forwarded-For` (falling
+back to `X-Real-IP`): the proxy must overwrite both headers rather than
+append to what the client sent, or a player can pick their own key.
+`docker-compose.yml` at the repo root is the production deployment: no
+published port, the front proxy reaches the container over a shared
+Docker network.
+
 `PORT` overrides the listen port. TLS termination (for wss) belongs to
 whatever proxy sits in front. Player identities and the match log live
 as JSON files under `data/` (`DATA_DIR` overrides the location); mount
