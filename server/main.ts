@@ -14,6 +14,7 @@ import { isFiniteVec, parseClientMsg, type ServerMsg } from '../src/net/protocol
 import { DT, type TeamId } from '../src/sim/types';
 import { fillWithBots } from './bot_fill';
 import { resolveClientIp } from './client_ip';
+import { ConnectionLimiter } from './conn_limit';
 import { buildLadder } from './ladder';
 import { AFK_IDLE_TICKS, Match } from './match';
 import { Matchmaker } from './matchmaker';
@@ -35,12 +36,12 @@ const MATCH_LINGER_MS = 20_000;
 const REJOIN_GRACE_MS = 60_000;
 const MAX_MSG_BYTES = 4096;
 const MAX_MSGS_PER_SEC = 60;
-// Abuse bounds: sockets per remote address, and live sims per process.
-const MAX_CONN_PER_IP = 8;
+// Abuse bound on live sims per process. Sockets per address are capped by
+// server/conn_limit.ts.
 const MAX_MATCHES = 50;
 // Set only when a reverse proxy that overwrites the forwarding headers is the
 // sole way in (server/client_ip.ts): without it every proxied player shares
-// the proxy's address and the cap above applies to all of them together.
+// the proxy's address and the socket cap applies to all of them together.
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 
 const MIME: Record<string, string> = {
@@ -282,17 +283,15 @@ const server = http.createServer(async (req, res) => {
 
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 16 * 1024 });
 
-// Sockets per remote address, so one machine cannot farm connections.
-const ipCounts = new Map<string, number>();
+// Sockets per player address, so one machine cannot farm connections.
+const connections = new ConnectionLimiter();
 
 wss.on('connection', (ws, req) => {
   const ip = resolveClientIp(req.headers, req.socket.remoteAddress, TRUST_PROXY);
-  const ipCount = ipCounts.get(ip) ?? 0;
-  if (ipCount >= MAX_CONN_PER_IP) {
+  if (!connections.acquire(ip)) {
     ws.close(1013, 'too many connections');
     return;
   }
-  ipCounts.set(ip, ipCount + 1);
   const id = nextClientId++;
   const client: Client = {
     id,
@@ -485,9 +484,7 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('close', () => {
-    const remaining = (ipCounts.get(ip) ?? 1) - 1;
-    if (remaining <= 0) ipCounts.delete(ip);
-    else ipCounts.set(ip, remaining);
+    connections.release(ip);
     matchmaker.removeEverywhere(id);
     const matchId = client.matchId;
     clients.delete(id);
