@@ -100,3 +100,20 @@ A tower or a Sanctum. Structures are immune to spells outright: they fall to att
 minions, never to an ability, and they take no crowd control or displacement. Skillshots fly
 over them rather than being eaten by them.
 _Avoid_: building, objective (the Warden is an objective and is not a structure)
+
+**Account**:
+The persistent identity a person plays under: one name, unique across the server and owned by
+whoever registered it, plus the rating and match history earned with it. Reaching the server at
+all requires one; the offline practice match does not. The name is the whole public identity,
+so nothing is appended to it to tell two people apart.
+_Avoid_: profile (that is the screen that shows an account), user, login, player (ambiguous, see Participant)
+
+**Same name**:
+Two account names are the same name when they differ only by letter case or by the separators
+in them: Bob, bob, b_o_b and b-o-b are one name, and only one account may hold it. Uniqueness
+is judged on that reading, never on the raw text, so a name cannot be taken twice by dressing
+it differently. What the owner typed is what everyone sees. An account may change its name, but
+the name it leaves behind is never handed to anyone else: a name belongs, once and for all, to
+the first account that took it. Nobody inherits another player's name, and so nobody inherits
+what people remember about it.
+_Avoid_: slug, normalized name, canonical name
