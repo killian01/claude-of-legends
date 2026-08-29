@@ -173,17 +173,10 @@ export function renderProfile(box: HTMLElement, data: ApiProfile): void {
 export function buildProfilePanel(): HTMLElement {
   ensureCss();
   const box = el('div', 'prof-panel', 'Loading career...');
-  let token: string | null = null;
-  try {
-    token = localStorage.getItem('loc-token');
-  } catch {
-    // storage may be unavailable
-  }
-  if (!token) {
-    box.textContent = NO_CAREER;
-    return box;
-  }
-  fetch(`/api/me?token=${encodeURIComponent(token)}`)
+  // The session cookie is the identity and rides the request on its own;
+  // it used to be a token in the query string, where it landed in the
+  // proxy's access log and the browser's history (ADR 0006).
+  fetch('/api/me', { credentials: 'same-origin' })
     .then((r) => (r.ok ? (r.json() as Promise<ApiProfile>) : null))
     .then((data) => {
       if (data) renderProfile(box, data);

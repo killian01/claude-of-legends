@@ -13,7 +13,7 @@ const CSS = `
 }
 .lad-row:hover { border-color: #7ca050; }
 .lad-rank { color: #c9a84a; font-weight: 800; width: 26px; flex: none; }
-.lad-handle { flex: 1; text-align: left; font-weight: 600; }
+.lad-name { flex: 1; text-align: left; font-weight: 600; }
 .lad-rating { color: #e8dfae; font-weight: 700; }
 .lad-games { color: #93a87c; }
 .lad-sub { color: #93a87c; margin: 4px 0; }
@@ -32,7 +32,7 @@ function ensureCss(): void {
 interface LadderRow {
   rank: number;
   id: number;
-  handle: string;
+  name: string;
   rating: number;
   ratedGames: number;
 }
@@ -66,7 +66,7 @@ export function buildLadderPanel(): HTMLElement {
         };
         btn.append(
           mk('lad-rank', String(row.rank)),
-          mk('lad-handle', row.handle),
+          mk('lad-name', row.name),
           mk('lad-rating', String(row.rating)),
           mk('lad-games', `${row.ratedGames} rated`),
         );

@@ -166,7 +166,12 @@ function ensureCss(): void {
 
 // backdrop: every pre-game screen gets the animated canvas behind its card;
 // the home screen opts out because its cinematic intro IS the backdrop.
-function screen(container: HTMLElement, backdrop = true): { root: HTMLElement; card: HTMLElement } {
+// Exported so the sign-in screen (ui/auth.ts) is the same card as the rest
+// of the pre-game flow rather than a second look bolted in front of it.
+export function screen(
+  container: HTMLElement,
+  backdrop = true,
+): { root: HTMLElement; card: HTMLElement } {
   ensureCss();
   const root = document.createElement('div');
   root.className = 'menu';
@@ -178,7 +183,7 @@ function screen(container: HTMLElement, backdrop = true): { root: HTMLElement; c
   return { root, card };
 }
 
-function el<K extends keyof HTMLElementTagNameMap>(
+export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className: string,
   text?: string,
@@ -200,9 +205,16 @@ export interface HomeChoice {
   team?: TeamId;
 }
 
-// prefillCode: an invite link's lobby code (?join=CODE) when the visitor
-// has no stored name yet; the join field arrives filled, one click left.
-export function showHome(container: HTMLElement, prefillCode?: string): Promise<HomeChoice> {
+// accountName: who is signed in, shown on the card. Every screen past the
+// sign-in one has an account behind it (ADR 0006), so the home screen no
+// longer asks for a name: it states one.
+// prefillCode: an invite link's lobby code (?join=CODE); the join field
+// arrives filled, one click left.
+export function showHome(
+  container: HTMLElement,
+  accountName: string,
+  prefillCode?: string,
+): Promise<HomeChoice> {
   return new Promise((resolve) => {
     const { root, card } = screen(container, false);
     root.classList.add('home');
@@ -212,17 +224,8 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
     const stopIntro = startHomeIntro(root, card);
     card.append(
       el('h1', 'menu-title', 'Claude of Legends'),
-      el('p', 'menu-sub', '5v5 in the browser. No account, no install.'),
-      el('div', 'menu-label', 'Your name'),
+      el('p', 'menu-sub', `5v5 in the browser. Signed in as ${accountName}.`),
     );
-    const name = el('input', 'menu-input') as HTMLInputElement;
-    name.maxLength = 24;
-    try {
-      name.value = localStorage.getItem('loc-name') ?? '';
-    } catch {
-      // storage may be unavailable
-    }
-    card.appendChild(name);
 
     // A Watch button on a career or ladder panel fires this event; the
     // home screen owns the flow, so it is the one that resolves.
@@ -232,7 +235,7 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
       cleanupWatch();
       stopIntro();
       root.remove();
-      resolve({ name: name.value.trim() || 'guest', mode: 'replay', replayId: id });
+      resolve({ name: accountName, mode: 'replay', replayId: id });
     };
     const onSpectate = (e: Event): void => {
       const detail = (e as CustomEvent<{ matchId: number; team: TeamId }>).detail;
@@ -241,7 +244,7 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
       stopIntro();
       root.remove();
       resolve({
-        name: name.value.trim() || 'guest',
+        name: accountName,
         mode: 'spectate',
         matchId: detail.matchId,
         team: detail.team === 1 ? 1 : 0,
@@ -255,16 +258,10 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
     window.addEventListener('loc:spectate', onSpectate);
 
     const done = (mode: HomeChoice['mode'], code?: string): void => {
-      const trimmed = name.value.trim() || 'guest';
-      try {
-        localStorage.setItem('loc-name', trimmed);
-      } catch {
-        // ignore
-      }
       cleanupWatch();
       stopIntro();
       root.remove();
-      resolve({ name: trimmed, mode, code });
+      resolve({ name: accountName, mode, code });
     };
 
     const play = el('button', 'menu-btn primary', 'Play online');
@@ -282,7 +279,7 @@ export function showHome(container: HTMLElement, prefillCode?: string): Promise<
     if (prefillCode) {
       code.value = prefillCode;
       join.classList.add('primary');
-      name.focus();
+      join.focus();
     }
     join.addEventListener('click', () => {
       if (code.value.trim().length === 5) done('join', code.value.trim().toUpperCase());

@@ -18,6 +18,7 @@ import { BOTS, DEFAULT_BOT_ID } from './sim/content/bots';
 import { CHAMPION_LIST } from './sim/content/champions';
 import { Sim } from './sim/sim';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
+import { type AuthedAccount, currentAccount, showAuth } from './ui/auth';
 import {
   type HomeChoice,
   type LobbyController,
@@ -517,17 +518,30 @@ async function boot(): Promise<void> {
   // replays the same offline pick or re-enters the public queue (flow.ts).
   let next: HomeChoice | null = null;
   let lastPick: OfflinePick | null = null;
-  if (joinCode !== null) {
-    let stored: string | null = null;
-    try {
-      stored = localStorage.getItem('loc-name');
-    } catch {
-      // storage may be unavailable
-    }
-    if (stored) next = { name: stored, mode: 'join', code: joinCode };
-  }
+  // Who is signed in, or null while only the offline match is reachable.
+  // A live session cookie from a previous visit skips the sign-in screen.
+  let account: AuthedAccount | null = await currentAccount();
+
   for (;;) {
-    const choice: HomeChoice = next ?? (await showHome(container, joinCode ?? undefined));
+    // The way in (ADR 0006): everything but the offline practice match
+    // needs an account, so the sign-in screen stands in front of the home
+    // screen rather than beside it. An invite code survives the detour and
+    // lands in the join field on the other side.
+    if (account === null) {
+      const auth = await showAuth(container);
+      if (auth.kind === 'account') {
+        account = auth.account;
+      } else {
+        // Offline: one match against bots, then back to the way in.
+        const pick: OfflinePick = lastPick ?? (await pickForPractice());
+        lastPick = pick;
+        await runOffline(pick);
+        continue;
+      }
+    }
+    if (joinCode !== null) next = { name: account.name, mode: 'join', code: joinCode };
+    const choice: HomeChoice =
+      next ?? (await showHome(container, account.name, joinCode ?? undefined));
     joinCode = null;
     next = null;
     let action: PostMatchAction;
