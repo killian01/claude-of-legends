@@ -100,4 +100,22 @@ describe('ladder', () => {
     expect(many).toHaveLength(LADDER_CAP);
     expect(many[0]!.rating).toBe(1000 + LADDER_CAP + 9);
   });
+
+  it('breaks a tie on rated games, not on who signed up first', () => {
+    // The day-one board after a ladder reset: everyone within a few points
+    // of the base rating, because K scales with how many humans played.
+    const old = { ...account(1, 1003, 3), createdAt: 1 };
+    const proven = { ...account(2, 1003, 40), createdAt: 999 };
+    const rows = buildLadder([old, proven]);
+    // The account with forty rated games has earned the tie, however late
+    // it signed up. Ordering by createdAt would have made the ladder a
+    // signup-order list for the first days of a server's life.
+    expect(rows.map((r) => r.id)).toEqual([2, 1]);
+  });
+
+  it('still falls back to account age when everything else ties', () => {
+    const first = { ...account(1, 1003, 5), createdAt: 1 };
+    const second = { ...account(2, 1003, 5), createdAt: 999 };
+    expect(buildLadder([second, first]).map((r) => r.id)).toEqual([1, 2]);
+  });
 });
