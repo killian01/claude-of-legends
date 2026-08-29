@@ -94,14 +94,14 @@ export async function fetchStats(): Promise<PublicStats | null> {
   }
 }
 
-// Fills `into` once the server answers, and only with what it has to
-// report. A hard zero beside a green live dot advertises an empty server,
-// which reads worse than saying nothing at all.
+// Fills `into` once the server answers, with the true count either way: an
+// empty server says zero rather than hiding the line, because a counter
+// that comes and goes is harder to read than one that is simply honest.
+// Nothing is padded here; /api/public/stats is the whole truth.
 export function mountLiveStats(into: HTMLElement): void {
   void fetchStats().then((s) => {
     if (!s || !into.isConnected) return;
     const cell = (value: number, label: string, live = false): void => {
-      if (value <= 0) return;
       const box = el('div', live ? 'pg-stat pg-live' : 'pg-stat');
       box.append(el('b', '', String(value)), el('span', '', label));
       into.appendChild(box);

@@ -85,7 +85,7 @@ export function showLanding(container: HTMLElement): Promise<LandingResult> {
         'p',
         '',
         'An account keeps your rating, your match history and your place on the ladder, ' +
-          'on any machine you sign in from. Free, and no email.',
+          'on any machine you sign in from.',
       ),
       buildAuthForm((account) => finish({ kind: 'account', account })),
     );
