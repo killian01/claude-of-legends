@@ -27,6 +27,7 @@ import { describeAbility, describeItem, describeSigil, statLabel } from './descr
 import { iconDataUrl, itemIconUrl } from './icons';
 import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
+import { TeamScore } from './team_score';
 import { attachTooltip, hideTooltip } from './tooltips';
 
 const KEY_TINTS: Readonly<Record<string, [string, string]>> = {
@@ -371,7 +372,7 @@ const CSS = `
   font-size: 12px; outline: none; display: none;
 }
 .hud-announce {
-  position: absolute; top: 64px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: 106px; left: 50%; transform: translateX(-50%);
   font-size: 26px; font-weight: 800; letter-spacing: 1px; color: #f2ffd9;
   text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity 0.3s;
 }
@@ -441,8 +442,25 @@ const CSS = `
 .hud-score-build .slot {
   width: 30px; height: 30px; border-radius: 5px; border: 1px dashed #2c3d1e; box-sizing: border-box;
 }
+/* The top of the screen, in order: team kills, then the target frame, then
+   announcements. The score is the only one of the three that is always up,
+   so it takes the very top and the other two moved down to clear it. */
+.hud-teamscore {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  background: rgba(14, 20, 9, 0.85); border: 1px solid #3a4f28; border-radius: 6px;
+  padding: 3px 14px; text-shadow: 0 1px 2px #000;
+}
+.hud-teamscore-n {
+  font-size: 20px; font-weight: 800; min-width: 24px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.hud-teamscore-n.mine { text-shadow: 0 0 10px rgba(184, 155, 62, 0.55), 0 1px 2px #000; }
+.hud-teamscore-label {
+  font-size: 9px; font-weight: 700; letter-spacing: 2px; color: #93a87c;
+}
 .hud-target {
-  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: 46px; left: 50%; transform: translateX(-50%);
   display: none; align-items: center; gap: 9px; min-width: 200px;
   background: rgba(14, 20, 9, 0.9); border: 1px solid #466030; border-radius: 8px;
   padding: 6px 10px;
@@ -503,6 +521,7 @@ export class Hud {
   private readonly selfId: number;
   private readonly selfTeam: TeamId;
   private readonly metaText: HTMLElement;
+  private readonly teamScore: TeamScore;
   private readonly statusRow: HTMLElement;
   private readonly hpFill: HTMLElement;
   private readonly hpText: HTMLElement;
@@ -603,6 +622,7 @@ export class Hud {
     const bottom = el('div', 'hud-bottom');
     this.statusRow = el('div', 'hud-statuses');
     this.metaText = el('div', 'hud-meta');
+    this.teamScore = new TeamScore(TEAM_TEXT_COLORS, selfTeam);
 
     const bars = el('div', 'hud-bars');
     const mkBar = (color: string): { bar: HTMLElement; fill: HTMLElement; text: HTMLElement } => {
@@ -929,6 +949,7 @@ export class Hud {
       bottom,
       hints,
       kda,
+      this.teamScore.el,
       this.targetFrame,
       this.shop,
       this.feed,
@@ -1548,8 +1569,11 @@ export class Hud {
       this.targetKey = '';
     }
 
-    // The always-on personal score widget.
-    const selfRow = this.world.scoreboard().find((r) => r.unitId === this.selfId);
+    // The always-on score widgets: the team totals at the top, the personal
+    // line at the right. One scoreboard read feeds both.
+    const scoreRows = this.world.scoreboard();
+    this.teamScore.update(scoreRows);
+    const selfRow = scoreRows.find((r) => r.unitId === this.selfId);
     if (selfRow) {
       // Defensive ?? 0: an older server may send rows without these fields.
       this.kdaText.textContent = `${selfRow.kills} / ${selfRow.deaths} / ${selfRow.assists ?? 0}`;
@@ -1557,9 +1581,8 @@ export class Hud {
     }
 
     if (this.score.classList.contains('open')) {
-      const rows = this.world.scoreboard();
       for (const team of [0, 1] as const) {
-        renderScoreboardTeam(this.scoreTeams[team], rows, team, this.selfId);
+        renderScoreboardTeam(this.scoreTeams[team], scoreRows, team, this.selfId);
       }
     }
 
