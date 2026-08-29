@@ -23,7 +23,7 @@ export const ROLE_COLORS: Readonly<Record<ChampionRole, string>> = {
 // cinematic 3D render, and the instant procedural figure while both load.
 export function setPortrait(img: HTMLImageElement, championId: string, teamColor: number): void {
   img.src = championPortraitUrl(championId, 0, teamColor);
-  const illustration = `/portraits/${championId}.png`;
+  const illustration = `/portraits/${championId}.webp`;
   const probe = new Image();
   probe.onload = () => {
     img.src = illustration;

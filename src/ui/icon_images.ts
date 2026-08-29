@@ -5,7 +5,7 @@
 // breaks while the art lands incrementally. Every painting follows the art
 // contract in docs/design/icon-art-style.md.
 
-// Ability paintings shipped at public/icons/abilities/<championId>_<KEY>.png.
+// Ability paintings shipped at public/icons/abilities/<championId>_<KEY>.webp.
 export const ABILITY_ICON_IMAGES: ReadonlySet<string> = new Set<string>([
   'korrath_Q',
   'korrath_W',
@@ -44,7 +44,7 @@ export const ABILITY_ICON_IMAGES: ReadonlySet<string> = new Set<string>([
   'maera_E',
 ]);
 
-// Sigil paintings shipped at public/icons/sigils/<sigilId>.png.
+// Sigil paintings shipped at public/icons/sigils/<sigilId>.webp.
 export const SIGIL_ICON_IMAGES: ReadonlySet<string> = new Set<string>([
   'riftstep',
   'zephyr',
@@ -52,7 +52,7 @@ export const SIGIL_ICON_IMAGES: ReadonlySet<string> = new Set<string>([
   'sear',
 ]);
 
-// Item paintings shipped at public/icons/items/<itemId>.png.
+// Item paintings shipped at public/icons/items/<itemId>.webp.
 export const ITEM_ICON_IMAGES: ReadonlySet<string> = new Set<string>([
   'iron_blade',
   'spark_rod',
@@ -87,13 +87,13 @@ export const ITEM_ICON_IMAGES: ReadonlySet<string> = new Set<string>([
 export function abilityImageUrl(championId: string | null | undefined, key: string): string | null {
   if (!championId) return null;
   const id = `${championId}_${key}`;
-  return ABILITY_ICON_IMAGES.has(id) ? `/icons/abilities/${id}.png` : null;
+  return ABILITY_ICON_IMAGES.has(id) ? `/icons/abilities/${id}.webp` : null;
 }
 
 export function itemImageUrl(itemId: string): string | null {
-  return ITEM_ICON_IMAGES.has(itemId) ? `/icons/items/${itemId}.png` : null;
+  return ITEM_ICON_IMAGES.has(itemId) ? `/icons/items/${itemId}.webp` : null;
 }
 
 export function sigilImageUrl(sigilId: string): string | null {
-  return SIGIL_ICON_IMAGES.has(sigilId) ? `/icons/sigils/${sigilId}.png` : null;
+  return SIGIL_ICON_IMAGES.has(sigilId) ? `/icons/sigils/${sigilId}.webp` : null;
 }

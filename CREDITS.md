@@ -29,9 +29,9 @@ falls back to the in-engine cinematic render when a file is missing
 
 | Files | Source | License |
 |---|---|---|
-| `vesk.png` | Generated with Google Gemini from original Vesk concept art | Google Gemini output terms |
-| `korrath.png` | Generated with Google Gemini from the Korrath prompt in docs/design/portrait-prompts.md | Google Gemini output terms |
-| `dain.png`, `sylra.png`, `fenn.png`, `elowen.png`, `ashvyn.png`, `maera.png`, `torv.png`, `rhoka.png` | Generated with Google Gemini from the prompts in docs/design/portrait-prompts.md | Google Gemini output terms |
+| `vesk.webp` | Generated with Google Gemini from original Vesk concept art | Google Gemini output terms |
+| `korrath.webp` | Generated with Google Gemini from the Korrath prompt in docs/design/portrait-prompts.md | Google Gemini output terms |
+| `dain.webp`, `sylra.webp`, `fenn.webp`, `elowen.webp`, `ashvyn.webp`, `maera.webp`, `torv.webp`, `rhoka.webp` | Generated with Google Gemini from the prompts in docs/design/portrait-prompts.md | Google Gemini output terms |
 
 ## Vendor runtime files (`public/vendor/`)
 

@@ -14,8 +14,10 @@ the UI and must never be painted into the asset.
 
 ## Pipeline
 
-- Ability paintings ship at `public/icons/abilities/<championId>_<KEY>.png` (square, 512 px or
-  larger). Item paintings ship at `public/icons/items/<itemId>.png`.
+- Ability paintings ship at `public/icons/abilities/<championId>_<KEY>.webp` (square, 512 px).
+  Item paintings ship at `public/icons/items/<itemId>.webp`. The generators hand back PNG:
+  keep it in `art_src/`, and run `node scripts/convert_art.mjs` to produce what ships (the
+  512px PNG catalog was 36 MB of a 133 MB client, the same pixels as WebP are 2.5 MB).
 - `src/ui/icon_images.ts` lists every shipped painting as data-as-code; an id not listed falls
   back to the procedural canvas painter, so coverage never breaks while art lands incrementally
   (the woc declining-claim pattern, both tracks proven there: purchased premium packs for

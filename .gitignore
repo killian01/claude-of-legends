@@ -12,6 +12,8 @@ coverage/
 # Local research notes that cite competitor games by name (kit redesign catalogue).
 # Useful locally, never committed; see the header of docs/design/kits-v2.md.
 docs/research/
-# Raw 2048px icon sources as generated, kept locally for regeneration.
-# 200 MB and counting; what ships is the 512px conversion in public/icons/.
+# Raw art as generated, kept locally for regeneration: 2048px icon sources,
+# the untouched Meshy character exports and the intro master. 200 MB and
+# counting; what ships is the conversion under public/ (scripts/convert_art.mjs
+# for the paintings, scripts/shrink_models.mjs for the GLBs).
 art_src/

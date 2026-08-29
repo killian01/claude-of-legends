@@ -1,7 +1,8 @@
 // Structural gate for the painted icon manifest (src/ui/icon_images.ts).
 // The manifest is data-as-code that degrades silently in both directions: an
-// id listed without its PNG shows a broken image, and a PNG shipped without
-// its id stays invisible behind the procedural painter. Both are caught here.
+// id listed without its painting shows a broken image, and a painting shipped
+// without its id stays invisible behind the procedural painter. Both are
+// caught here. The paintings ship as WebP (scripts/convert_art.mjs).
 
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -13,12 +14,12 @@ import { ABILITY_ICON_IMAGES, ITEM_ICON_IMAGES, SIGIL_ICON_IMAGES } from '../src
 
 const ICONS = join(process.cwd(), 'public', 'icons');
 
-function pngsIn(dir: string): string[] {
+function paintingsIn(dir: string): string[] {
   const path = join(ICONS, dir);
   if (!existsSync(path)) return [];
   return readdirSync(path)
-    .filter((f) => f.endsWith('.png'))
-    .map((f) => f.slice(0, -4))
+    .filter((f) => f.endsWith('.webp'))
+    .map((f) => f.slice(0, -5))
     .sort();
 }
 
@@ -28,15 +29,15 @@ function listed(set: ReadonlySet<string>): string[] {
 
 describe('painted icon manifest', () => {
   it('lists exactly the ability paintings on disk', () => {
-    expect(listed(ABILITY_ICON_IMAGES)).toEqual(pngsIn('abilities'));
+    expect(listed(ABILITY_ICON_IMAGES)).toEqual(paintingsIn('abilities'));
   });
 
   it('lists exactly the item paintings on disk', () => {
-    expect(listed(ITEM_ICON_IMAGES)).toEqual(pngsIn('items'));
+    expect(listed(ITEM_ICON_IMAGES)).toEqual(paintingsIn('items'));
   });
 
   it('lists exactly the sigil paintings on disk', () => {
-    expect(listed(SIGIL_ICON_IMAGES)).toEqual(pngsIn('sigils'));
+    expect(listed(SIGIL_ICON_IMAGES)).toEqual(paintingsIn('sigils'));
   });
 
   it('names real champions, keys, items and sigils', () => {
