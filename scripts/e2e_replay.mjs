@@ -3,6 +3,7 @@
 // match with the control bar, speed changes stick, and Exit goes home on
 // the same page.
 import puppeteer from 'puppeteer-core';
+import { signInSeeded } from './e2e_signin.mjs';
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
@@ -44,9 +45,10 @@ const run = async () => {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(URL, { waitUntil: 'load' });
+  // The seeded account owns the seeded match record, so its career panel
+  // is the one with a Watch button (scripts/seed_replay.ts).
+  await signInSeeded(page);
   await page.evaluate(() => {
-    localStorage.setItem('loc-token', 'e2e-replay-tok');
-    localStorage.setItem('loc-name', 'seer');
     window.__lifeMarker = 'alive';
   });
   await page.reload({ waitUntil: 'load' });

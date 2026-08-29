@@ -2,8 +2,8 @@
 // K scaling with the human count, upsets paying more than favorites.
 
 import { describe, expect, it } from 'vitest';
+import type { Account } from '../server/accounts';
 import { buildLadder, LADDER_CAP, MIN_RATED_GAMES } from '../server/ladder';
-import type { PlayerRecord } from '../server/players';
 import {
   isRated,
   K_MAX,
@@ -13,8 +13,8 @@ import {
   ratingDeltas,
 } from '../server/rating';
 
-const seat = (playerId: number, team: 0 | 1, rating: number): RatedSeat => ({
-  playerId,
+const seat = (accountId: number, team: 0 | 1, rating: number): RatedSeat => ({
+  accountId,
   team,
   rating,
 });
@@ -71,11 +71,11 @@ describe('rating policy', () => {
   });
 });
 
-const player = (id: number, rating: number, ratedGames: number): PlayerRecord => ({
+const account = (id: number, rating: number, ratedGames: number): Account => ({
   id,
-  token: `tok-${id}`,
   name: `p${id}`,
-  disc: 1000 + id,
+  fold: `p${id}`,
+  password: { salt: 'salt', hash: 'hash' },
   createdAt: id,
   seenAt: id,
   rating,
@@ -84,20 +84,38 @@ const player = (id: number, rating: number, ratedGames: number): PlayerRecord =>
 
 describe('ladder', () => {
   it('ranks by rating, requires placement games, caps the list', () => {
-    const players = [
-      player(1, 1040, MIN_RATED_GAMES),
-      player(2, 1100, MIN_RATED_GAMES + 2),
-      player(3, 2000, MIN_RATED_GAMES - 1),
-      player(4, 990, MIN_RATED_GAMES),
+    const accounts = [
+      account(1, 1040, MIN_RATED_GAMES),
+      account(2, 1100, MIN_RATED_GAMES + 2),
+      account(3, 2000, MIN_RATED_GAMES - 1),
+      account(4, 990, MIN_RATED_GAMES),
     ];
-    const rows = buildLadder(players);
-    // Player 3 has not placed yet despite the highest rating.
+    const rows = buildLadder(accounts);
+    // Account 3 has not placed yet despite the highest rating.
     expect(rows.map((r) => r.id)).toEqual([2, 1, 4]);
-    expect(rows[0]).toMatchObject({ rank: 1, handle: 'p2#1002', rating: 1100 });
+    expect(rows[0]).toMatchObject({ rank: 1, name: 'p2', rating: 1100 });
     const many = buildLadder(
-      Array.from({ length: LADDER_CAP + 10 }, (_, i) => player(i + 1, 1000 + i, MIN_RATED_GAMES)),
+      Array.from({ length: LADDER_CAP + 10 }, (_, i) => account(i + 1, 1000 + i, MIN_RATED_GAMES)),
     );
     expect(many).toHaveLength(LADDER_CAP);
     expect(many[0]!.rating).toBe(1000 + LADDER_CAP + 9);
+  });
+
+  it('breaks a tie on rated games, not on who signed up first', () => {
+    // The day-one board after a ladder reset: everyone within a few points
+    // of the base rating, because K scales with how many humans played.
+    const old = { ...account(1, 1003, 3), createdAt: 1 };
+    const proven = { ...account(2, 1003, 40), createdAt: 999 };
+    const rows = buildLadder([old, proven]);
+    // The account with forty rated games has earned the tie, however late
+    // it signed up. Ordering by createdAt would have made the ladder a
+    // signup-order list for the first days of a server's life.
+    expect(rows.map((r) => r.id)).toEqual([2, 1]);
+  });
+
+  it('still falls back to account age when everything else ties', () => {
+    const first = { ...account(1, 1003, 5), createdAt: 1 };
+    const second = { ...account(2, 1003, 5), createdAt: 999 };
+    expect(buildLadder([second, first]).map((r) => r.id)).toEqual([1, 2]);
   });
 });

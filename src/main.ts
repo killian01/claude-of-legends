@@ -18,6 +18,7 @@ import { BOTS, DEFAULT_BOT_ID } from './sim/content/bots';
 import { CHAMPION_LIST } from './sim/content/champions';
 import { Sim } from './sim/sim';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
+import { type AuthedAccount, currentAccount, showAuth } from './ui/auth';
 import {
   type HomeChoice,
   type LobbyController,
@@ -322,15 +323,10 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
 
     ws.addEventListener('open', () => {
       opened = true;
-      // The stored session token lets the server hand back a seat we lost to
-      // a disconnect or a reload; absent or expired it is simply ignored.
-      let token: string | null = null;
-      try {
-        token = localStorage.getItem('loc-token');
-      } catch {
-        // storage may be unavailable
-      }
-      ws.send(JSON.stringify({ t: 'hello', name: choice.name, token: token ?? undefined }));
+      // No identity to send: the session cookie rode the upgrade, and the
+      // server refused it outright if there was none (ADR 0006). hello only
+      // asks whether a live match is still holding our seat.
+      ws.send(JSON.stringify({ t: 'hello' }));
       if (choice.mode === 'queue') {
         ws.send(JSON.stringify({ t: 'queue' }));
         queueUi = showQueue(
@@ -415,14 +411,8 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           pres?.showPing(msg.x, msg.z, msg.from, msg.team);
           break;
         case 'welcome':
-          // Keep the browser's existing token: the server adopts a presented
-          // token, so overwriting it with the fresh one would orphan the next
-          // reconnect. Only a first-time browser stores the issued token.
-          try {
-            if (!localStorage.getItem('loc-token')) localStorage.setItem('loc-token', msg.token);
-          } catch {
-            // ignore
-          }
+          // The server names the account this socket belongs to; nothing to
+          // store, the cookie is the identity.
           break;
         case 'match_start':
           world.applyServer(msg);
@@ -528,17 +518,30 @@ async function boot(): Promise<void> {
   // replays the same offline pick or re-enters the public queue (flow.ts).
   let next: HomeChoice | null = null;
   let lastPick: OfflinePick | null = null;
-  if (joinCode !== null) {
-    let stored: string | null = null;
-    try {
-      stored = localStorage.getItem('loc-name');
-    } catch {
-      // storage may be unavailable
-    }
-    if (stored) next = { name: stored, mode: 'join', code: joinCode };
-  }
+  // Who is signed in, or null while only the offline match is reachable.
+  // A live session cookie from a previous visit skips the sign-in screen.
+  let account: AuthedAccount | null = await currentAccount();
+
   for (;;) {
-    const choice: HomeChoice = next ?? (await showHome(container, joinCode ?? undefined));
+    // The way in (ADR 0006): everything but the offline practice match
+    // needs an account, so the sign-in screen stands in front of the home
+    // screen rather than beside it. An invite code survives the detour and
+    // lands in the join field on the other side.
+    if (account === null) {
+      const auth = await showAuth(container);
+      if (auth.kind === 'account') {
+        account = auth.account;
+      } else {
+        // Offline: one match against bots, then back to the way in.
+        const pick: OfflinePick = lastPick ?? (await pickForPractice());
+        lastPick = pick;
+        await runOffline(pick);
+        continue;
+      }
+    }
+    if (joinCode !== null) next = { name: account.name, mode: 'join', code: joinCode };
+    const choice: HomeChoice =
+      next ?? (await showHome(container, account.name, joinCode ?? undefined));
     joinCode = null;
     next = null;
     let action: PostMatchAction;

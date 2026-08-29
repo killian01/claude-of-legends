@@ -2,6 +2,7 @@
 // (rated-eligible, one per side), one walks out mid-match, and the
 // walk-out costs rating and locks the leaver's queue for a while.
 import puppeteer from 'puppeteer-core';
+import { apiFromPage, e2eName, signIn } from './e2e_signin.mjs';
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
@@ -36,11 +37,7 @@ async function newIsolatedPage(browser, name) {
   const page = await ctx.newPage();
   await page.setViewport({ width: 1500, height: 900 });
   await page.goto(URL, { waitUntil: 'load' });
-  await page.evaluate((n) => {
-    const input = document.querySelector('.menu-card input.menu-input');
-    input.value = n;
-    input.dispatchEvent(new Event('input'));
-  }, name);
+  await signIn(page, e2eName(name));
   return page;
 }
 
@@ -75,8 +72,7 @@ const run = async () => {
   await waitFor(bob, `!!document.querySelector('.hud')`, 'bob HUD');
   console.log('rated-eligible match running (queue, 1 human per side)');
 
-  const bobToken = await bob.evaluate(() => localStorage.getItem('loc-token'));
-  const before = await (await fetch(`http://localhost:8787/api/me?token=${bobToken}`)).json();
+  const before = (await apiFromPage(bob, '/api/me')).body;
 
   // Bob walks out mid-match.
   await bob.keyboard.press('Escape');
@@ -84,7 +80,7 @@ const run = async () => {
   await clickButton(bob, 'Leave match');
   await waitFor(bob, findBtn('Play online'), 'bob home after walk-out');
   await sleep(500);
-  const after = await (await fetch(`http://localhost:8787/api/me?token=${bobToken}`)).json();
+  const after = (await apiFromPage(bob, '/api/me')).body;
   if (after.rating !== before.rating - 15) {
     throw new Error(`penalty not applied: ${before.rating} -> ${after.rating}`);
   }

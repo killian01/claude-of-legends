@@ -3,7 +3,7 @@
 The consolidated result of the design grill (rounds 1 to 3). The ADRs in `docs/adr/` hold the why for the load-bearing choices; this file holds the what.
 
 - **Format**: 5v5, three lanes, one fixed map.
-- **Access**: browser, online-first. Guest pseudo, no accounts, no database in v1 (in-memory server).
+- **Access**: browser, online-first. A free account (unique name, password, no email) for anything that reaches the server; the offline practice match needs none. No database: JSON files on disk (ADR 0006).
 - **Matchmaking**: one queue; a "play now with bots" button; private lobbies joinable by code; bots backfill empty seats.
 - **Map**: 2 towers per lane plus 2 Sanctum towers; no intermediate structures (win condition: destroy the Sanctum towers, then the Sanctum); jungle terrain with brush between lanes, no camps in v1. Each half carries a matching jungle on both sides of its mid lane, and every outer tower stands in a choke: walking to an inner tower without passing an outer one is a long detour, never a stroll (`tests/tower_approach.test.ts`).
 - **Vision**: full team fog of war; brush hides its occupants. Policy observations are team vision, never global sim state.

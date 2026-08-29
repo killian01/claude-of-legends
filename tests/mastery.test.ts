@@ -33,7 +33,7 @@ describe('champion mastery', () => {
         rated: false,
         players: [
           {
-            playerId: 7,
+            accountId: 7,
             name: 'bob',
             championId: 'fenn',
             team: 0,

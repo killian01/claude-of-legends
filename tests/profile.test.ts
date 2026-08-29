@@ -28,9 +28,9 @@ describe('match records', () => {
     ];
     const rec = buildMatchRecord(rows, new Map([[1, 7]]), 0, 903.6, 1000);
     expect(rec).toMatchObject({ at: 1000, durationS: 904, winner: 0, rated: false });
-    expect(rec.players[0]).toMatchObject({ playerId: 7, championId: 'fenn', kills: 5, cs: 41 });
+    expect(rec.players[0]).toMatchObject({ accountId: 7, championId: 'fenn', kills: 5, cs: 41 });
     expect(rec.players[0]!.ratingDelta).toBeUndefined();
-    expect(rec.players[1]).toMatchObject({ playerId: null, team: 1 });
+    expect(rec.players[1]).toMatchObject({ accountId: null, team: 1 });
   });
 
   it('embeds rating deltas on rated human seats only', () => {
@@ -57,8 +57,8 @@ describe('match records', () => {
       },
     );
     expect(rec.rated).toBe(true);
-    expect(rec.players[0]).toMatchObject({ playerId: 7, ratingDelta: 3 });
-    expect(rec.players[1]).toMatchObject({ playerId: 8, ratingDelta: -3 });
+    expect(rec.players[0]).toMatchObject({ accountId: 7, ratingDelta: 3 });
+    expect(rec.players[1]).toMatchObject({ accountId: 8, ratingDelta: -3 });
     expect(rec.players[2]!.ratingDelta).toBeUndefined();
   });
 });
@@ -70,7 +70,7 @@ const rec = (at: number, winner: 0 | 1, mine: Partial<MatchRecord['players'][0]>
   rated: false,
   players: [
     {
-      playerId: 7,
+      accountId: 7,
       name: 'bob',
       championId: 'fenn',
       team: 0,
@@ -82,7 +82,7 @@ const rec = (at: number, winner: 0 | 1, mine: Partial<MatchRecord['players'][0]>
       ...mine,
     },
     {
-      playerId: null,
+      accountId: null,
       name: 'Sylra (bot)',
       championId: 'sylra',
       team: 1,

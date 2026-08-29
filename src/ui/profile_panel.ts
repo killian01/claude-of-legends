@@ -1,13 +1,13 @@
-// The career panel on the home screen: identity handle, headline numbers,
-// per-champion lines, and recent matches, fetched from /api/me with the
-// stored session token. Pure DOM, rebuilt on every open so it is always
-// fresh; offline practice is client-only and deliberately absent here.
+// The career panel on the home screen: account name, headline numbers,
+// per-champion lines, and recent matches, fetched from /api/me on the
+// session cookie. Pure DOM, rebuilt on every open so it is always fresh;
+// offline practice is client-only and deliberately absent here.
 
 import { CHAMPIONS } from '../sim/content/champions';
 
 const CSS = `
 .prof-panel { margin: 8px 0; font-size: 12px; color: #c9d8ae; text-align: left; }
-.prof-handle { font-size: 15px; font-weight: 800; color: #e8dfae; }
+.prof-name { font-size: 15px; font-weight: 800; color: #e8dfae; }
 .prof-sub { color: #93a87c; margin: 2px 0 8px; }
 .prof-line { display: flex; justify-content: space-between; padding: 3px 0; gap: 10px; }
 .prof-line span:last-child { color: #93a87c; white-space: nowrap; }
@@ -35,7 +35,7 @@ function ensureCss(): void {
 }
 
 export interface ApiProfile {
-  handle: string;
+  name: string;
   createdAt: number;
   rating: number;
   ratedGames: number;
@@ -87,7 +87,7 @@ const NO_CAREER = 'Play an online match to start your career.';
 // Shared by the own-career panel and the ladder's public profiles.
 export function renderProfile(box: HTMLElement, data: ApiProfile): void {
   box.textContent = '';
-  box.append(el('div', 'prof-handle', data.handle));
+  box.append(el('div', 'prof-name', data.name));
   const rated =
     data.ratedGames > 0
       ? `Rating ${data.rating} over ${data.ratedGames} rated match${data.ratedGames > 1 ? 'es' : ''}.`
@@ -173,17 +173,10 @@ export function renderProfile(box: HTMLElement, data: ApiProfile): void {
 export function buildProfilePanel(): HTMLElement {
   ensureCss();
   const box = el('div', 'prof-panel', 'Loading career...');
-  let token: string | null = null;
-  try {
-    token = localStorage.getItem('loc-token');
-  } catch {
-    // storage may be unavailable
-  }
-  if (!token) {
-    box.textContent = NO_CAREER;
-    return box;
-  }
-  fetch(`/api/me?token=${encodeURIComponent(token)}`)
+  // The session cookie is the identity and rides the request on its own;
+  // it used to be a token in the query string, where it landed in the
+  // proxy's access log and the browser's history (ADR 0006).
+  fetch('/api/me', { credentials: 'same-origin' })
     .then((r) => (r.ok ? (r.json() as Promise<ApiProfile>) : null))
     .then((data) => {
       if (data) renderProfile(box, data);
@@ -196,10 +189,10 @@ export function buildProfilePanel(): HTMLElement {
 }
 
 // A public player card by id, used by the ladder rows.
-export function buildPublicProfilePanel(playerId: number): HTMLElement {
+export function buildPublicProfilePanel(accountId: number): HTMLElement {
   ensureCss();
   const box = el('div', 'prof-panel', 'Loading player...');
-  fetch(`/api/player/${playerId}`)
+  fetch(`/api/account/${accountId}`)
     .then((r) => (r.ok ? (r.json() as Promise<ApiProfile>) : null))
     .then((data) => {
       if (data) renderProfile(box, data);

@@ -3,6 +3,7 @@
 // isolated browser contexts), switches to the host's side, and the match
 // starts with both players on team 1 (blue).
 import puppeteer from 'puppeteer-core';
+import { e2eName, signIn } from './e2e_signin.mjs';
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
@@ -37,7 +38,7 @@ async function newIsolatedPage(browser, name) {
   const page = await ctx.newPage();
   await page.setViewport({ width: 1500, height: 900 });
   await page.goto(URL, { waitUntil: 'load' });
-  await page.evaluate((n) => localStorage.setItem('loc-name', n), name);
+  await signIn(page, e2eName(name));
   return page;
 }
 

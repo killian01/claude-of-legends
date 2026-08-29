@@ -3,8 +3,8 @@
 One image, one process, one port. The game container publishes no port of its
 own: the only way in is the Caddy instance of the km01 stack, reached over the
 shared `km01_edge` Docker network. That is what makes `TRUST_PROXY=1` safe to
-set here, and it keeps this public, account-less server off the network where
-the database and the job queue live.
+set here, and it keeps this public game server off the network where the
+database and the job queue live.
 
 `docker-compose.yml` at the repo root is the whole deployment. There is no
 Caddy in it: the proxy belongs to the km01 stack, which owns `km01_edge` and
@@ -18,7 +18,10 @@ has to be up first on a fresh box.
   80 and 443. The game vhost lives at the bottom of that stack's `Caddyfile`.
 - A domain whose A record points at the box. Caddy issues and renews the
   certificate; the game process never sees TLS.
-- Nothing else. No database, no accounts, no external service.
+- Nothing else. No database and no external service: accounts, sessions and
+  the match log are JSON files under `DATA_DIR` (ADR 0006). Accounts have no
+  email, so there is no mail relay to configure and no password reset to
+  operate.
 
 ## The proxy contract
 
@@ -84,14 +87,35 @@ docker compose up -d --build
 
 The game container is replaced, which ends every live match. There is no drain
 and no rolling restart: deploy when nobody is playing, or accept that players
-are dropped back to the home screen. The data volume survives, so identities,
-the match log and the ladder do not reset.
+are dropped back to the home screen. The data volume survives, so accounts,
+sessions, the match log and the ladder do not reset.
+
+### Deploying the accounts change, once
+
+ADR 0006 replaced the token-keyed identity with real accounts and does not
+migrate what came before: `playerId` became `accountId` inside the persisted
+match record, so the old files are not readable by the new server and the
+ladder restarts. This is a deploy step rather than a commit. With the stack
+stopped, archive them and let the server create its own:
+
+```
+docker run --rm -v claude-of-legends_game_data:/data alpine sh -c \
+  'mkdir -p /data/pre-accounts && mv /data/players.json /data/matches.jsonl /data/pre-accounts/ 2>/dev/null; true'
+```
+
+Take a backup first (below). Nothing is deleted, so the old files stay
+readable if a number is ever needed from them.
 
 ## Backups
 
 Everything that outlives a container is in the `claude-of-legends_game_data`
-volume: `players.json` (identities and ratings), `matches.jsonl` (the match log
-that feeds profiles and the ladder) and `replays/` (the last 40 matches).
+volume: `accounts.json` (accounts, credentials and ratings), `sessions.json`
+(open sign-ins), `matches.jsonl` (the match log that feeds profiles and the
+ladder) and `replays/` (the last 40 matches).
+
+`accounts.json` holds password hashes. It is scrypt with a per-account salt,
+not plaintext, but a backup of it is still a credential file: keep it where you
+would keep one.
 
 ```
 docker run --rm -v claude-of-legends_game_data:/data -v "$PWD:/out" \

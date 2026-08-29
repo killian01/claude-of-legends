@@ -2,13 +2,13 @@
 // scoreboard the moment a winner is decided. Pure builder, so the shape
 // of what history and (later) ratings consume is pinned by tests. Seats
 // held by a connected human at the end carry that player's id; bot fill
-// and seats abandoned mid-match record playerId null (a walk-out earns
+// and seats abandoned mid-match record accountId null (a walk-out earns
 // no history line, deliberately).
 
 import type { ScoreRow, TeamId } from '../src/sim/types';
 
 export interface MatchPlayerRecord {
-  playerId: number | null;
+  accountId: number | null;
   name: string;
   championId: string;
   team: TeamId;
@@ -35,7 +35,7 @@ export interface MatchRecord {
 
 export function buildMatchRecord(
   rows: readonly ScoreRow[],
-  playerIdByUnit: ReadonlyMap<number, number>,
+  accountIdByUnit: ReadonlyMap<number, number>,
   winner: TeamId,
   durationS: number,
   at: number,
@@ -49,10 +49,10 @@ export function buildMatchRecord(
     rated: rating?.rated ?? false,
     ...(replayId !== undefined ? { replayId } : {}),
     players: rows.map((r) => {
-      const playerId = playerIdByUnit.get(r.unitId) ?? null;
-      const delta = playerId !== null ? rating?.deltas.get(playerId) : undefined;
+      const accountId = accountIdByUnit.get(r.unitId) ?? null;
+      const delta = accountId !== null ? rating?.deltas.get(accountId) : undefined;
       return {
-        playerId,
+        accountId,
         // The person, when there is one; the champion otherwise.
         name: r.player ?? r.name,
         championId: r.championId,

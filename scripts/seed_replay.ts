@@ -1,10 +1,11 @@
 // Dev seeding for the replay e2e: runs a short scripted match headless
 // through the REAL Match code, saves its replay under data/replays/, and
-// writes a matching match record and player identity so the career panel
-// shows a Watch button for the token 'e2e-replay-tok'. Run via
-// scripts/seed_replay.mjs; never in production.
+// writes a matching match record and account so the career panel shows a
+// Watch button. Sign in as 'seer' with the password below to see it. Run
+// via scripts/seed_replay.mjs; never in production.
 
 import path from 'node:path';
+import { AccountRegistry } from '../server/accounts';
 import { fillWithBots } from '../server/bot_fill';
 import { Match } from '../server/match';
 import { buildMatchRecord } from '../server/records';
@@ -42,9 +43,19 @@ saveJsonAtomic(path.join(DATA_DIR, 'replays', '1.json'), {
 
 const score = match.buildScore();
 if (score.t !== 'score') throw new Error('seed: no score');
+// The account first, so the match record can point at the id it really
+// got. Through the real registry, so the seeded account is hashed and
+// shaped exactly like a registered one rather than hand-written next to it.
+const SEED_PASSWORD = 'seed-replay-e2e';
+const registry = new AccountRegistry(path.join(DATA_DIR, 'accounts.json'));
+const created = registry.register('seer', SEED_PASSWORD, Date.now());
+// Re-seeding an existing data dir: the account is already there.
+const seer = created.ok ? created.value : registry.authenticate('seer', SEED_PASSWORD);
+if (!seer) throw new Error('seed: cannot make or reach the seer account');
+
 const rec = buildMatchRecord(
   score.rows,
-  new Map([[seat.unitId, 1]]),
+  new Map([[seat.unitId, seer.id]]),
   0,
   match.sim.time,
   Date.now(),
@@ -52,16 +63,5 @@ const rec = buildMatchRecord(
   1,
 );
 appendJsonl(path.join(DATA_DIR, 'matches.jsonl'), rec);
-saveJsonAtomic(path.join(DATA_DIR, 'players.json'), [
-  {
-    id: 1,
-    token: 'e2e-replay-tok',
-    name: 'seer',
-    disc: 1042,
-    createdAt: Date.now(),
-    seenAt: Date.now(),
-    rating: 1000,
-    ratedGames: 0,
-  },
-]);
 console.log(`seeded replay 1 (${match.replayEvents.length} events, ${TICKS} ticks)`);
+console.log(`sign in as "seer" / "${SEED_PASSWORD}" to see it on the career panel`);

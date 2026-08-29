@@ -46,7 +46,7 @@ export interface ProfileStats {
 
 export const RECENT_CAP = 10;
 
-export function buildProfile(records: readonly MatchRecord[], playerId: number): ProfileStats {
+export function buildProfile(records: readonly MatchRecord[], accountId: number): ProfileStats {
   const out: ProfileStats = {
     games: 0,
     wins: 0,
@@ -58,7 +58,7 @@ export function buildProfile(records: readonly MatchRecord[], playerId: number):
   };
   const perChamp = new Map<string, ChampionLine>();
   for (const rec of records) {
-    const me = rec.players.find((p) => p.playerId === playerId);
+    const me = rec.players.find((p) => p.accountId === accountId);
     if (!me) continue;
     const win = me.team === rec.winner;
     out.games++;
