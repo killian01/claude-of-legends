@@ -1,8 +1,8 @@
-// The ladder: players ranked by rating, pure over the registry's records.
+// The ladder: accounts ranked by rating, pure over the registry's records.
 // A handful of rated games is required before a rating means anything;
-// below that the player simply does not place yet.
+// below that the account simply does not place yet.
 
-import { handleOf, type PlayerRecord } from './players';
+import { type Account, handleOf } from './accounts';
 
 export const LADDER_CAP = 50;
 export const MIN_RATED_GAMES = 3;
@@ -15,8 +15,8 @@ export interface LadderRow {
   ratedGames: number;
 }
 
-export function buildLadder(players: readonly PlayerRecord[], cap = LADDER_CAP): LadderRow[] {
-  return players
+export function buildLadder(accounts: readonly Account[], cap = LADDER_CAP): LadderRow[] {
+  return accounts
     .filter((p) => p.ratedGames >= MIN_RATED_GAMES)
     .sort((a, b) => b.rating - a.rating || a.createdAt - b.createdAt)
     .slice(0, cap)

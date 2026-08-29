@@ -10,7 +10,7 @@ export const BASE_RATING = 1000;
 export const K_MAX = 32;
 
 export interface RatedSeat {
-  playerId: number;
+  accountId: number;
   team: TeamId;
   rating: number;
 }
@@ -37,7 +37,7 @@ function average(values: readonly number[]): number {
 }
 
 // Every human on a team moves by the same amount: the team won or lost as
-// a team. Returns playerId -> signed delta; empty when the match is not
+// a team. Returns accountId -> signed delta; empty when the match is not
 // rateable (a team with no human).
 export function ratingDeltas(seats: readonly RatedSeat[], winner: TeamId): Map<number, number> {
   const out = new Map<number, number>();
@@ -55,7 +55,7 @@ export function ratingDeltas(seats: readonly RatedSeat[], winner: TeamId): Map<n
     let delta = Math.round(k * (score - expected));
     // A decided match always moves the needle, if only by one point.
     if (delta === 0) delta = score === 1 ? 1 : -1;
-    for (const s of byTeam[team]) out.set(s.playerId, delta);
+    for (const s of byTeam[team]) out.set(s.accountId, delta);
   }
   return out;
 }

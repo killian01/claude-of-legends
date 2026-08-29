@@ -2,7 +2,7 @@
 // client from dist/, upgrades /ws to WebSocket, runs every live match's Sim
 // on a fixed-step 20 Hz accumulator, and streams team-scoped snapshots.
 // No accounts and no database: guests only (game definition v1), but the
-// session token doubles as a persistent identity (server/players.ts) and
+// session token doubles as a persistent identity (server/accounts.ts) and
 // finished matches land in a JSON match log under DATA_DIR.
 
 import { randomBytes } from 'node:crypto';
@@ -12,13 +12,13 @@ import path from 'node:path';
 import { type WebSocket, WebSocketServer } from 'ws';
 import { isFiniteVec, parseClientMsg, type ServerMsg } from '../src/net/protocol';
 import { DT, type TeamId } from '../src/sim/types';
+import { type Account, AccountRegistry, handleOf } from './accounts';
 import { fillWithBots } from './bot_fill';
 import { ConnectionLimiter } from './conn_limit';
 import { clientAddress, edgeConfig, originAllowed } from './edge';
 import { buildLadder } from './ladder';
 import { AFK_IDLE_TICKS, Match } from './match';
 import { Matchmaker } from './matchmaker';
-import { handleOf, type PlayerRecord, PlayerRegistry } from './players';
 import { buildProfile } from './profile';
 import { isRated, LEAVER_LOCKOUT_MS, leaverPenalty, type RatedSeat, ratingDeltas } from './rating';
 import { buildMatchRecord, type MatchRecord } from './records';
@@ -26,7 +26,7 @@ import { appendJsonl, pruneNumberedJson, readJsonl, saveJsonAtomic } from './sto
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DIST = path.resolve(process.cwd(), 'dist');
-// Runtime state on disk: player identities and the match log. DATA_DIR is
+// Runtime state on disk: account identities and the match log. DATA_DIR is
 // the volume to mount in production; nothing else persists.
 const DATA_DIR = process.env.DATA_DIR ?? path.resolve(process.cwd(), 'data');
 const TICK_MS = DT * 1000;
@@ -101,7 +101,7 @@ function pruneReservations(matchId: number): void {
 let nextClientId = 1;
 let nextMatchId = 1;
 
-const registry = new PlayerRegistry(path.join(DATA_DIR, 'players.json'));
+const registry = new AccountRegistry(path.join(DATA_DIR, 'accounts.json'));
 const MATCHES_FILE = path.join(DATA_DIR, 'matches.jsonl');
 const REPLAYS_DIR = path.join(DATA_DIR, 'replays');
 // How many finished-match replays stay on disk (named by match id).
@@ -110,9 +110,9 @@ const REPLAY_KEEP = 40;
 // appended as each ends (kilobytes each, guests-scale).
 const matchLog: MatchRecord[] = readJsonl<MatchRecord>(MATCHES_FILE);
 
-// The public shape of a player: everything BUT the token (it is the key
+// The public shape of an account: everything BUT the token (it is the key
 // to the seat and the profile; it must never leave the server).
-function describePlayer(p: PlayerRecord): unknown {
+function describeAccount(p: Account): unknown {
   return {
     id: p.id,
     name: p.name,
@@ -192,7 +192,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = (req.url ?? '/').split('?')[0]!;
     // The meta API: identity and career, read-only JSON. /api/me answers
-    // to the session token (own profile only); /api/player/<id> is public.
+    // to the session token (own profile only); /api/account/<id> is public.
     if (url === '/api/me') {
       const q = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
       const token = q.get('token') ?? '';
@@ -201,7 +201,7 @@ const server = http.createServer(async (req, res) => {
         'content-type': 'application/json',
         'cache-control': 'no-store',
       });
-      res.end(JSON.stringify(p ? describePlayer(p) : { error: 'unknown player' }));
+      res.end(JSON.stringify(p ? describeAccount(p) : { error: 'unknown player' }));
       return;
     }
     if (url === '/api/ladder') {
@@ -235,14 +235,14 @@ const server = http.createServer(async (req, res) => {
       }
       return;
     }
-    const playerUrl = /^\/api\/player\/(\d{1,9})$/.exec(url);
-    if (playerUrl) {
-      const p = registry.findById(Number(playerUrl[1]));
+    const accountUrl = /^\/api\/player\/(\d{1,9})$/.exec(url);
+    if (accountUrl) {
+      const p = registry.findById(Number(accountUrl[1]));
       res.writeHead(p ? 200 : 404, {
         'content-type': 'application/json',
         'cache-control': 'no-store',
       });
-      res.end(JSON.stringify(p ? describePlayer(p) : { error: 'unknown player' }));
+      res.end(JSON.stringify(p ? describeAccount(p) : { error: 'unknown player' }));
       return;
     }
     if (url === '/healthz') {
@@ -596,21 +596,21 @@ setInterval(() => {
           entry.endedAt = now;
           // Record the finished match once, the moment the winner lands:
           // seats still held by a connected human carry their player id.
-          const playerIdByUnit = new Map<number, number>();
+          const accountIdByUnit = new Map<number, number>();
           for (const p of entry.match.players.values()) {
             const c = clients.get(p.clientId);
             const reg = c ? registry.findByToken(c.token) : undefined;
-            if (reg) playerIdByUnit.set(p.unitId, reg.id);
+            if (reg) accountIdByUnit.set(p.unitId, reg.id);
           }
           // Rating policy (server/rating.ts): only public-queue matches
           // with at least one human on each side are rated; every human
           // on a team moves together.
           const seats: RatedSeat[] = [];
           for (const p of entry.match.players.values()) {
-            const pid = playerIdByUnit.get(p.unitId);
+            const pid = accountIdByUnit.get(p.unitId);
             const reg = pid !== undefined ? registry.findById(pid) : undefined;
             if (pid !== undefined && reg) {
-              seats.push({ playerId: pid, team: p.team, rating: reg.rating });
+              seats.push({ accountId: pid, team: p.team, rating: reg.rating });
             }
           }
           const humansByTeam: [number, number] = [
@@ -625,7 +625,7 @@ setInterval(() => {
           // Tell each human what the match did to their rating; the end
           // screen shows it next to the final scoreboard.
           for (const p of entry.match.players.values()) {
-            const pid = playerIdByUnit.get(p.unitId);
+            const pid = accountIdByUnit.get(p.unitId);
             const reg = pid !== undefined ? registry.findById(pid) : undefined;
             if (pid === undefined || !reg) continue;
             send(p.clientId, {
@@ -656,7 +656,7 @@ setInterval(() => {
           if (score.t === 'score') {
             const rec = buildMatchRecord(
               score.rows,
-              playerIdByUnit,
+              accountIdByUnit,
               entry.match.sim.winner,
               entry.match.sim.time,
               now,
@@ -669,7 +669,7 @@ setInterval(() => {
             } catch (err) {
               console.error('match log append failed', err);
             }
-            console.log(`match ${matchId} recorded (${playerIdByUnit.size} human seat(s))`);
+            console.log(`match ${matchId} recorded (${accountIdByUnit.size} human seat(s))`);
           }
         }
         if (entry.endedAt !== null && now - entry.endedAt > MATCH_LINGER_MS) {

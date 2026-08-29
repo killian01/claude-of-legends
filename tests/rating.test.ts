@@ -2,8 +2,8 @@
 // K scaling with the human count, upsets paying more than favorites.
 
 import { describe, expect, it } from 'vitest';
+import type { Account } from '../server/accounts';
 import { buildLadder, LADDER_CAP, MIN_RATED_GAMES } from '../server/ladder';
-import type { PlayerRecord } from '../server/players';
 import {
   isRated,
   K_MAX,
@@ -13,8 +13,8 @@ import {
   ratingDeltas,
 } from '../server/rating';
 
-const seat = (playerId: number, team: 0 | 1, rating: number): RatedSeat => ({
-  playerId,
+const seat = (accountId: number, team: 0 | 1, rating: number): RatedSeat => ({
+  accountId,
   team,
   rating,
 });
@@ -71,7 +71,7 @@ describe('rating policy', () => {
   });
 });
 
-const player = (id: number, rating: number, ratedGames: number): PlayerRecord => ({
+const player = (id: number, rating: number, ratedGames: number): Account => ({
   id,
   token: `tok-${id}`,
   name: `p${id}`,

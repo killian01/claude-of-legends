@@ -5,13 +5,13 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { handleOf, PlayerRegistry } from '../server/players';
+import { AccountRegistry, handleOf } from '../server/accounts';
 
 const dirs: string[] = [];
 function tmpFile(): string {
-  const d = mkdtempSync(path.join(tmpdir(), 'loc-players-'));
+  const d = mkdtempSync(path.join(tmpdir(), 'loc-accounts-'));
   dirs.push(d);
-  return path.join(d, 'players.json');
+  return path.join(d, 'accounts.json');
 }
 
 afterEach(() => {
@@ -25,7 +25,7 @@ const seqDisc = (used: ReadonlySet<number>): number => {
 
 describe('player registry', () => {
   it('creates once per token and refreshes name and last-seen', () => {
-    const reg = new PlayerRegistry(tmpFile(), seqDisc);
+    const reg = new AccountRegistry(tmpFile(), seqDisc);
     const a = reg.getOrCreate('tok-a', 'bob', 100);
     expect(a.id).toBe(1);
     expect(handleOf(a)).toBe('bob#1000');
@@ -40,7 +40,7 @@ describe('player registry', () => {
   });
 
   it('keeps two bobs apart, including through a rename collision', () => {
-    const reg = new PlayerRegistry(tmpFile(), seqDisc);
+    const reg = new AccountRegistry(tmpFile(), seqDisc);
     const a = reg.getOrCreate('tok-a', 'bob', 1);
     const b = reg.getOrCreate('tok-b', 'bob', 2);
     expect(a.disc).not.toBe(b.disc);
@@ -54,32 +54,32 @@ describe('player registry', () => {
 
   it('starts at the base rating and persists applied deltas', () => {
     const file = tmpFile();
-    const reg = new PlayerRegistry(file, seqDisc);
+    const reg = new AccountRegistry(file, seqDisc);
     const a = reg.getOrCreate('tok-a', 'bob', 1);
     expect(a.rating).toBe(1000);
     expect(a.ratedGames).toBe(0);
     reg.applyRating(a.id, 12);
     reg.applyRating(a.id, -5);
-    const reloaded = new PlayerRegistry(file, seqDisc);
+    const reloaded = new AccountRegistry(file, seqDisc);
     expect(reloaded.findById(a.id)).toMatchObject({ rating: 1007, ratedGames: 2 });
   });
 
   it('a leaver penalty drops rating without counting a rated game', () => {
     const file = tmpFile();
-    const reg = new PlayerRegistry(file, seqDisc);
+    const reg = new AccountRegistry(file, seqDisc);
     const a = reg.getOrCreate('tok-a', 'bob', 1);
     reg.penalize(a.id, 15);
     expect(reg.findById(a.id)).toMatchObject({ rating: 985, ratedGames: 0 });
-    const reloaded = new PlayerRegistry(file, seqDisc);
+    const reloaded = new AccountRegistry(file, seqDisc);
     expect(reloaded.findById(a.id)?.rating).toBe(985);
   });
 
   it('survives a reload from disk with ids intact', () => {
     const file = tmpFile();
-    const reg = new PlayerRegistry(file, seqDisc);
+    const reg = new AccountRegistry(file, seqDisc);
     reg.getOrCreate('tok-a', 'bob', 1);
     reg.getOrCreate('tok-b', 'ana', 2);
-    const reloaded = new PlayerRegistry(file, seqDisc);
+    const reloaded = new AccountRegistry(file, seqDisc);
     expect(reloaded.count).toBe(2);
     expect(reloaded.findByToken('tok-b')?.name).toBe('ana');
     // New creations continue the id sequence instead of reusing ids.

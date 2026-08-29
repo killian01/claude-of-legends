@@ -1,14 +1,15 @@
-// Player identity without accounts: the browser's session token IS the
-// key (the same token the reconnect flow already carries). The first
-// hello creates a player, later hellos update the name and last-seen.
-// Handles display as name#disc; the discriminator is unique per name so
-// two bobs stay distinguishable in history and on a future ladder.
+// Account identity, still keyed on the browser's session token (the same
+// token the reconnect flow already carries): the first hello creates an
+// account, later hellos update the name and last-seen. Handles display as
+// name#disc; the discriminator is unique per name so two bobs stay
+// distinguishable in history and on the ladder. The credential and the
+// owned name arrive in a later change (ADR 0006); this one only renames.
 
 import { randomInt } from 'node:crypto';
 import { BASE_RATING } from './rating';
 import { loadJson, saveJsonAtomic } from './store';
 
-export interface PlayerRecord {
+export interface Account {
   id: number;
   token: string;
   name: string;
@@ -20,7 +21,7 @@ export interface PlayerRecord {
   ratedGames: number;
 }
 
-export function handleOf(p: Pick<PlayerRecord, 'name' | 'disc'>): string {
+export function handleOf(p: Pick<Account, 'name' | 'disc'>): string {
   return `${p.name}#${p.disc}`;
 }
 
@@ -34,8 +35,8 @@ function randomDisc(used: ReadonlySet<number>): number {
   return 0;
 }
 
-export class PlayerRegistry {
-  private readonly byToken = new Map<string, PlayerRecord>();
+export class AccountRegistry {
+  private readonly byToken = new Map<string, Account>();
   private nextId = 1;
 
   constructor(
@@ -43,7 +44,7 @@ export class PlayerRegistry {
     // Injectable for tests; production uses the crypto-random default.
     private readonly discGen: (used: ReadonlySet<number>) => number = randomDisc,
   ) {
-    for (const p of loadJson<PlayerRecord[]>(file, [])) {
+    for (const p of loadJson<Account[]>(file, [])) {
       // Records written before ratings existed load at the base rating.
       p.rating = typeof p.rating === 'number' ? p.rating : BASE_RATING;
       p.ratedGames = typeof p.ratedGames === 'number' ? p.ratedGames : 0;
@@ -73,7 +74,7 @@ export class PlayerRegistry {
   // Called on every hello: creates the player, or refreshes name and
   // last-seen. A rename that lands on another player's name#disc gets a
   // fresh discriminator; otherwise the disc is stable for life.
-  getOrCreate(token: string, name: string, now: number): PlayerRecord {
+  getOrCreate(token: string, name: string, now: number): Account {
     const existing = this.byToken.get(token);
     if (existing) {
       const renamed = existing.name !== name;
@@ -87,7 +88,7 @@ export class PlayerRegistry {
       if (renamed) this.persist();
       return existing;
     }
-    const created: PlayerRecord = {
+    const created: Account = {
       id: this.nextId++,
       token,
       name,
@@ -120,15 +121,15 @@ export class PlayerRegistry {
     this.persist();
   }
 
-  all(): PlayerRecord[] {
+  all(): Account[] {
     return [...this.byToken.values()];
   }
 
-  findByToken(token: string): PlayerRecord | undefined {
+  findByToken(token: string): Account | undefined {
     return this.byToken.get(token);
   }
 
-  findById(id: number): PlayerRecord | undefined {
+  findById(id: number): Account | undefined {
     for (const p of this.byToken.values()) if (p.id === id) return p;
     return undefined;
   }

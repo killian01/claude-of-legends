@@ -196,10 +196,10 @@ export function buildProfilePanel(): HTMLElement {
 }
 
 // A public player card by id, used by the ladder rows.
-export function buildPublicProfilePanel(playerId: number): HTMLElement {
+export function buildPublicProfilePanel(accountId: number): HTMLElement {
   ensureCss();
   const box = el('div', 'prof-panel', 'Loading player...');
-  fetch(`/api/player/${playerId}`)
+  fetch(`/api/account/${accountId}`)
     .then((r) => (r.ok ? (r.json() as Promise<ApiProfile>) : null))
     .then((data) => {
       if (data) renderProfile(box, data);
