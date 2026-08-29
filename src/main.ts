@@ -18,7 +18,9 @@ import { BOTS, DEFAULT_BOT_ID } from './sim/content/bots';
 import { CHAMPION_LIST } from './sim/content/champions';
 import { Sim } from './sim/sim';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
-import { type AuthedAccount, currentAccount, showAuth } from './ui/auth';
+import { type AuthedAccount, currentAccount } from './ui/auth';
+import { preloadBackdrop } from './ui/home_backdrop';
+import { showLanding } from './ui/landing';
 import {
   type HomeChoice,
   type LobbyController,
@@ -514,6 +516,9 @@ async function boot(): Promise<void> {
   // screen with the code prefilled. Consumed once, so reloads stay home.
   let joinCode = parseJoinCode(window.location.search);
   if (joinCode !== null) window.history.replaceState(null, '', window.location.pathname);
+  // The landing art is the first thing on screen; ask for it before the
+  // session check so the two requests fly together.
+  preloadBackdrop();
   // The app loop: home, one match, back, forever on the same page. 'again'
   // replays the same offline pick or re-enters the public queue (flow.ts).
   let next: HomeChoice | null = null;
@@ -528,9 +533,9 @@ async function boot(): Promise<void> {
     // screen rather than beside it. An invite code survives the detour and
     // lands in the join field on the other side.
     if (account === null) {
-      const auth = await showAuth(container);
-      if (auth.kind === 'account') {
-        account = auth.account;
+      const entry = await showLanding(container);
+      if (entry.kind === 'account') {
+        account = entry.account;
       } else {
         // Offline: one match against bots, then back to the way in.
         const pick: OfflinePick = lastPick ?? (await pickForPractice());

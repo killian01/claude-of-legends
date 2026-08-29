@@ -96,6 +96,25 @@ describe('account secrets', () => {
     expect(leaks).toEqual([]);
   });
 
+  // The landing page needs live numbers, so /api/public/stats sits in
+  // front of the wall. It may carry counts and nothing else: the moment a
+  // name or an id joins them, the page has become a directory of who
+  // plays here, which is exactly what the wall exists to prevent.
+  it('keeps the one public route to counts only', () => {
+    const payload = { online: 3, matches: 1, accounts: 42 };
+    expect(Object.keys(payload).sort()).toEqual(['accounts', 'matches', 'online']);
+    for (const value of Object.values(payload)) expect(typeof value).toBe('number');
+    const source = readFileSync(
+      fileURLToPath(new URL('../server/main.ts', import.meta.url)),
+      'utf8',
+    );
+    const route = source.slice(source.indexOf("url === '/api/public/stats'"));
+    const body = route.slice(0, route.indexOf('return;'));
+    for (const banned of ['name', 'handle', 'players.values', 'registry.all']) {
+      expect(body).not.toContain(banned);
+    }
+  });
+
   it('keeps the fixture honest: the secrets really are in the account', () => {
     // If this ever fails, the gate above is passing for the wrong reason.
     const raw = JSON.stringify(account);

@@ -1,17 +1,15 @@
-// The way in. Every connection to the server belongs to an account
-// (ADR 0006), so this is the first screen a visitor meets, and the only
-// one they can reach without one.
+// Proving who someone is: the session already open from a previous visit,
+// the credential panel, and signing out. Every connection to the server
+// belongs to an account (ADR 0006), so one of these has to succeed before
+// anything else in the client can talk to it.
 //
-// Two things are deliberate here. The offline practice match is one click
-// away without an account, because it opens no connection and a login
-// wall in front of it would only add a dependency it does not have. And
-// the screen says plainly that a lost password cannot be recovered: there
-// is no email anywhere in this game, so that is not a detail to discover
-// later.
+// The panel only; the page it sits on is ui/landing.ts. Nothing here
+// decides layout, so the same form could sit anywhere.
 
-import { el, screen } from './menu';
+import { el, ensureMenuCss } from './menu';
 
 const CSS = `
+.auth-form { display: flex; flex-direction: column; }
 .auth-tabs { display: flex; gap: 8px; margin: 0 0 14px; }
 .auth-tab {
   flex: 1; padding: 8px 0; border-radius: 8px; cursor: pointer;
@@ -22,19 +20,22 @@ const CSS = `
 .auth-error {
   min-height: 16px; margin: 10px 0 0; font-size: 12px; color: #f5a3a3;
 }
-.auth-note { margin: 14px 0 0; font-size: 11px; color: #6d809c; line-height: 1.5; }
-.auth-offline {
-  display: block; margin: 16px 0 0; font-size: 12px; color: #7e93b2;
-  background: none; border: 0; cursor: pointer; text-decoration: underline; font: inherit;
-  font-size: 12px; padding: 0;
-}
-.auth-offline:hover { color: #c9d9ee; }
+.auth-note { margin: 12px 0 0; font-size: 11px; color: #6d809c; line-height: 1.5; }
+/* Only the register tab has a note; an empty one would hold open a gap
+   the sign-in tab has no use for. The error slot above keeps its height
+   on purpose, so a failed attempt does not shift the button under the
+   cursor. */
+.auth-note:empty { display: none; }
+.auth-form .menu-input { margin: 0 0 8px; }
+.auth-form .menu-btn { margin: 4px 0 0; }
 `;
 
 let cssInstalled = false;
 function ensureCss(): void {
   if (cssInstalled) return;
   cssInstalled = true;
+  // These screens use .menu-btn and .menu-input without opening a card.
+  ensureMenuCss();
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
@@ -46,12 +47,6 @@ export interface AuthedAccount {
   rating: number;
   ratedGames: number;
 }
-
-export type AuthResult =
-  // Signed in: everything the server allows is now reachable.
-  | { kind: 'account'; account: AuthedAccount }
-  // Chose the offline practice match instead, which needs no account.
-  | { kind: 'offline' };
 
 type Mode = 'login' | 'register';
 
@@ -98,102 +93,84 @@ async function submit(
   return { ok: true, account: body as AuthedAccount };
 }
 
-export function showAuth(container: HTMLElement): Promise<AuthResult> {
+// Just the credential panel: the tabs, the two fields, the error line and
+// the button. The page around it (ui/landing.ts) owns the layout, so this
+// module stays about proving who someone is and nothing else.
+export function buildAuthForm(onSignedIn: (account: AuthedAccount) => void): HTMLElement {
   ensureCss();
-  return new Promise((resolve) => {
-    const { root, card } = screen(container);
-    let mode: Mode = 'login';
-    let busy = false;
+  const root = el('div', 'auth-form');
+  let mode: Mode = 'login';
+  let busy = false;
 
-    card.append(
-      el('h1', 'menu-title', 'Claude of Legends'),
-      el('p', 'menu-sub', '5v5 in the browser. No install.'),
-    );
+  const tabs = el('div', 'auth-tabs');
+  const loginTab = el('button', 'auth-tab on', 'Sign in');
+  const registerTab = el('button', 'auth-tab', 'Create account');
+  tabs.append(loginTab, registerTab);
 
-    const tabs = el('div', 'auth-tabs');
-    const loginTab = el('button', 'auth-tab on', 'Sign in');
-    const registerTab = el('button', 'auth-tab', 'Create account');
-    tabs.append(loginTab, registerTab);
-    card.appendChild(tabs);
+  const name = el('input', 'menu-input') as HTMLInputElement;
+  name.maxLength = 16;
+  name.autocomplete = 'username';
+  name.placeholder = 'Your name';
 
-    card.appendChild(el('div', 'menu-label', 'Name'));
-    const name = el('input', 'menu-input') as HTMLInputElement;
-    name.maxLength = 16;
-    name.autocomplete = 'username';
-    card.appendChild(name);
+  const password = el('input', 'menu-input') as HTMLInputElement;
+  password.type = 'password';
+  password.maxLength = 200;
+  password.autocomplete = 'current-password';
+  password.placeholder = 'Password';
 
-    card.appendChild(el('div', 'menu-label', 'Password'));
-    const password = el('input', 'menu-input') as HTMLInputElement;
-    password.type = 'password';
-    password.maxLength = 200;
-    password.autocomplete = 'current-password';
-    card.appendChild(password);
+  const error = el('p', 'auth-error');
+  const go = el('button', 'menu-btn primary', 'Sign in');
+  const note = el('p', 'auth-note');
 
-    const error = el('p', 'auth-error');
-    card.appendChild(error);
+  root.append(tabs, name, password, error, go, note);
 
-    const go = el('button', 'menu-btn primary', 'Sign in');
-    card.appendChild(go);
+  const setMode = (next: Mode): void => {
+    mode = next;
+    loginTab.classList.toggle('on', next === 'login');
+    registerTab.classList.toggle('on', next === 'register');
+    go.textContent = next === 'login' ? 'Sign in' : 'Create account';
+    password.autocomplete = next === 'login' ? 'current-password' : 'new-password';
+    // Said out loud, on the tab where it matters: there is no email in
+    // this game, so there is no reset link to fall back on.
+    note.textContent =
+      next === 'login'
+        ? ''
+        : 'Letters, digits, _ and - , 3 to 16 characters. There is no email and no password ' +
+          'reset: lose the password and the account goes with it.';
+    error.textContent = '';
+    name.focus();
+  };
 
-    const note = el('p', 'auth-note');
-    card.appendChild(note);
-
-    const offline = el('button', 'auth-offline', 'Play offline against bots, no account needed');
-    card.appendChild(offline);
-
-    const setMode = (next: Mode): void => {
-      mode = next;
-      loginTab.classList.toggle('on', next === 'login');
-      registerTab.classList.toggle('on', next === 'register');
-      go.textContent = next === 'login' ? 'Sign in' : 'Create account';
-      password.autocomplete = next === 'login' ? 'current-password' : 'new-password';
-      // The whole reason to say this out loud: there is no email in this
-      // game, so there is no reset link to fall back on.
-      note.textContent =
-        next === 'login'
-          ? ''
-          : 'Letters, digits, _ and - , 3 to 16 characters. There is no email and no password ' +
-            'reset: if you lose the password, the account and its rating are gone.';
-      error.textContent = '';
-      name.focus();
-    };
-
-    const finish = (result: AuthResult): void => {
-      root.remove();
-      resolve(result);
-    };
-
-    const attempt = (): void => {
-      if (busy) return;
-      const typedName = name.value.trim();
-      const typedPassword = password.value;
-      if (typedName.length === 0 || typedPassword.length === 0) {
-        error.textContent = 'Both fields, please.';
-        return;
-      }
-      busy = true;
-      go.textContent = mode === 'login' ? 'Signing in...' : 'Creating...';
-      error.textContent = '';
-      void submit(mode, typedName, typedPassword).then((result) => {
-        busy = false;
-        go.textContent = mode === 'login' ? 'Sign in' : 'Create account';
-        if (result.ok) finish({ kind: 'account', account: result.account });
-        else error.textContent = result.error;
-      });
-    };
-
-    loginTab.addEventListener('click', () => setMode('login'));
-    registerTab.addEventListener('click', () => setMode('register'));
-    go.addEventListener('click', attempt);
-    offline.addEventListener('click', () => finish({ kind: 'offline' }));
-    for (const field of [name, password]) {
-      field.addEventListener('keydown', (e) => {
-        if ((e as KeyboardEvent).key === 'Enter') attempt();
-      });
+  const attempt = (): void => {
+    if (busy) return;
+    const typedName = name.value.trim();
+    const typedPassword = password.value;
+    if (typedName.length === 0 || typedPassword.length === 0) {
+      error.textContent = 'Both fields, please.';
+      return;
     }
+    busy = true;
+    go.textContent = mode === 'login' ? 'Signing in...' : 'Creating...';
+    error.textContent = '';
+    void submit(mode, typedName, typedPassword).then((result) => {
+      busy = false;
+      go.textContent = mode === 'login' ? 'Sign in' : 'Create account';
+      if (result.ok) onSignedIn(result.account);
+      else error.textContent = result.error;
+    });
+  };
 
-    setMode('login');
-  });
+  loginTab.addEventListener('click', () => setMode('login'));
+  registerTab.addEventListener('click', () => setMode('register'));
+  go.addEventListener('click', attempt);
+  for (const field of [name, password]) {
+    field.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Enter') attempt();
+    });
+  }
+
+  setMode('login');
+  return root;
 }
 
 // Ends the session on this machine, or everywhere. Everywhere is what a

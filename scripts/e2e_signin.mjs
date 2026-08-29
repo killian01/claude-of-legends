@@ -32,33 +32,32 @@ async function fill(page, selector, value) {
   );
 }
 
-async function clickText(page, text) {
-  const ok = await page.evaluate((t) => {
-    const el = [...document.querySelectorAll('button')].find((b) => b.textContent?.includes(t));
-    if (!el) return false;
-    el.click();
-    return true;
-  }, text);
-  if (!ok) throw new Error(`could not click "${text}"`);
-  return true;
-}
-
 // Leaves the page on the home screen, signed in as `name`. Idempotent: a
 // page that already has a live session cookie skips straight through.
-export async function signIn(page, name, timeout = 15000) {
-  await page.waitForSelector('.menu-card', { timeout });
+export async function signIn(page, name, timeout = 20000) {
+  // Either the landing page (not signed in) or the home card (a live
+  // session cookie carried us straight through).
+  await page.waitForSelector('.auth-form, .menu-card.home', { timeout });
   const needsAuth = await page.evaluate(() => document.querySelector('.auth-tabs') !== null);
   if (!needsAuth) return name;
 
   const attempt = async (mode) => {
-    await clickText(page, mode === 'register' ? 'Create account' : 'Sign in');
-    await fill(page, '.menu-card input.menu-input', name);
-    await fill(page, '.menu-card input[type="password"]', E2E_PASSWORD);
-    await clickText(page, mode === 'register' ? 'Create account' : 'Sign in');
+    // The tab first, then the fields, then submit. Tab and button carry
+    // the same label, so the submit is the last .menu-btn in the form.
+    await page.evaluate((m) => {
+      const label = m === 'register' ? 'Create account' : 'Sign in';
+      [...document.querySelectorAll('.auth-tab')]
+        .find((b) => b.textContent?.includes(label))
+        ?.click();
+    }, mode);
+    await fill(page, '.auth-form input.menu-input', name);
+    await fill(page, '.auth-form input[type="password"]', E2E_PASSWORD);
+    await page.evaluate(() => {
+      [...document.querySelectorAll('.auth-form .menu-btn')].pop()?.click();
+    });
     try {
-      await page.waitForFunction(() => document.querySelector('.auth-tabs') === null, {
-        timeout: 8000,
-      });
+      // Landing gone and the home card up: the only proof that worked.
+      await page.waitForSelector('.menu-card.home', { timeout: 10000 });
       return true;
     } catch {
       return false;
@@ -78,31 +77,16 @@ export async function signIn(page, name, timeout = 15000) {
 export const SEEDED_NAME = 'seer';
 export const SEEDED_PASSWORD = 'seed-replay-e2e';
 
-export async function signInSeeded(page, timeout = 15000) {
-  await page.waitForSelector('.menu-card', { timeout });
+export async function signInSeeded(page, timeout = 20000) {
+  await page.waitForSelector('.auth-form, .menu-card.home', { timeout });
   const needsAuth = await page.evaluate(() => document.querySelector('.auth-tabs') !== null);
   if (!needsAuth) return SEEDED_NAME;
-  await page.evaluate(
-    (name, password) => {
-      const buttons = [...document.querySelectorAll('button')];
-      buttons.find((b) => b.textContent?.includes('Sign in'))?.click();
-      const fields = [...document.querySelectorAll('.menu-card input')];
-      const [nameField, passwordField] = fields;
-      nameField.value = name;
-      nameField.dispatchEvent(new Event('input', { bubbles: true }));
-      passwordField.value = password;
-      passwordField.dispatchEvent(new Event('input', { bubbles: true }));
-      buttons
-        .filter((b) => b.textContent?.includes('Sign in'))
-        .pop()
-        ?.click();
-    },
-    SEEDED_NAME,
-    SEEDED_PASSWORD,
-  );
-  await page.waitForFunction(() => document.querySelector('.auth-tabs') === null, {
-    timeout: 8000,
+  await fill(page, '.auth-form input.menu-input', SEEDED_NAME);
+  await fill(page, '.auth-form input[type="password"]', SEEDED_PASSWORD);
+  await page.evaluate(() => {
+    [...document.querySelectorAll('.auth-form .menu-btn')].pop()?.click();
   });
+  await page.waitForSelector('.menu-card.home', { timeout: 10000 });
   return SEEDED_NAME;
 }
 

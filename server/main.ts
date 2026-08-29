@@ -309,6 +309,20 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // The landing page's counters, and the one hole in the wall. It is
+    // deliberately three integers: no name, no id, nothing that could be
+    // walked to learn who plays here. /healthz already published the same
+    // two live numbers to anyone who asked, so this adds no exposure, only
+    // an endpoint that says out loud that it is public.
+    if (url === '/api/public/stats') {
+      sendJson(res, 200, {
+        online: clients.size,
+        matches: [...matches.values()].filter((e) => e.endedAt === null).length,
+        accounts: registry.count,
+      });
+      return;
+    }
+
     if (url === '/api/logout') {
       const id = parseCookies(req.headers.cookie).get(COOKIE_NAME);
       const everywhere =
