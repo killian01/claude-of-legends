@@ -28,6 +28,14 @@ const CSS = `
 .auth-note:empty { display: none; }
 .auth-form .menu-input { margin: 0 0 8px; }
 .auth-form .menu-btn { margin: 4px 0 0; }
+/* A quiet way out of the sign-in tab. It is not a menu-btn: offering the
+   reset the same weight as signing in would suggest it is the usual way
+   through, and it is not. */
+.auth-alt {
+  background: none; border: 0; padding: 6px 0 0; margin: 0; font: inherit; font-size: 11.5px;
+  color: #6d829f; cursor: pointer; text-align: left; text-decoration: underline;
+}
+.auth-alt:hover { color: #dceaff; }
 `;
 
 let cssInstalled = false;
@@ -46,9 +54,16 @@ export interface AuthedAccount {
   name: string;
   rating: number;
   ratedGames: number;
+  // Your own address, and whether the link sent to it has been followed
+  // (ADR 0007). Null on an account old enough to predate addresses, and
+  // on one whose unconfirmed claim lapsed. Never present for any account
+  // but your own: the server has two shapes for exactly that reason.
+  email: string | null;
+  emailConfirmed: boolean;
 }
 
-type Mode = 'login' | 'register';
+// 'forgot' is not a way in, it is a way to be sent one.
+type Mode = 'login' | 'register' | 'forgot';
 
 // A session cookie from a previous visit, if it is still alive. Called
 // once at startup so a returning player never sees this screen.
@@ -66,9 +81,10 @@ export async function currentAccount(): Promise<AuthedAccount | null> {
 }
 
 async function submit(
-  mode: Mode,
+  mode: 'login' | 'register',
   name: string,
   password: string,
+  email: string,
 ): Promise<{ ok: true; account: AuthedAccount } | { ok: false; error: string }> {
   let res: Response;
   try {
@@ -76,7 +92,7 @@ async function submit(
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name, password }),
+      body: JSON.stringify(mode === 'login' ? { name, password } : { name, password, email }),
     });
   } catch {
     return { ok: false, error: 'Cannot reach the server. Check your connection.' };
@@ -93,9 +109,35 @@ async function submit(
   return { ok: true, account: body as AuthedAccount };
 }
 
-// Just the credential panel: the tabs, the two fields, the error line and
-// the button. The page around it (ui/landing.ts) owns the layout, so this
+// Asks for a reset link. The server answers the same way whether or not
+// it found anything, so there is nothing here to report but "we tried":
+// saying more would turn this form into a way to test whether an address
+// has an account on it.
+export async function requestReset(email: string): Promise<string | null> {
+  try {
+    const res = await fetch('/api/password/forgot', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (res.status === 429) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      return body?.error ?? 'Too many requests. Try again shortly.';
+    }
+    return null;
+  } catch {
+    return 'Cannot reach the server. Check your connection.';
+  }
+}
+
+// Just the credential panel: the tabs, the fields, the error line and the
+// button. The page around it (ui/landing.ts) owns the layout, so this
 // module stays about proving who someone is and nothing else.
+//
+// Three modes share one form because they share most of it. 'forgot' is
+// not a way in, it is a way to be sent one, which is why it has no tab of
+// its own and leaves by the same link that reached it.
 export function buildAuthForm(onSignedIn: (account: AuthedAccount) => void): HTMLElement {
   ensureCss();
   const root = el('div', 'auth-form');
@@ -107,12 +149,18 @@ export function buildAuthForm(onSignedIn: (account: AuthedAccount) => void): HTM
   const registerTab = el('button', 'auth-tab', 'Create account');
   tabs.append(loginTab, registerTab);
 
-  const name = el('input', 'menu-input') as HTMLInputElement;
+  const name = el('input', 'menu-input');
   name.maxLength = 16;
   name.autocomplete = 'username';
   name.placeholder = 'Your name';
 
-  const password = el('input', 'menu-input') as HTMLInputElement;
+  const email = el('input', 'menu-input');
+  email.type = 'email';
+  email.maxLength = 254;
+  email.autocomplete = 'email';
+  email.placeholder = 'Email address';
+
+  const password = el('input', 'menu-input');
   password.type = 'password';
   password.maxLength = 200;
   password.autocomplete = 'current-password';
@@ -121,40 +169,85 @@ export function buildAuthForm(onSignedIn: (account: AuthedAccount) => void): HTM
   const error = el('p', 'auth-error');
   const go = el('button', 'menu-btn primary', 'Sign in');
   const note = el('p', 'auth-note');
+  const alt = el('button', 'auth-alt', 'Forgot your password?');
 
-  root.append(tabs, name, password, error, go, note);
+  root.append(tabs, name, email, password, error, go, alt, note);
+
+  const LABELS: Record<Mode, { go: string; busy: string }> = {
+    login: { go: 'Sign in', busy: 'Signing in...' },
+    register: { go: 'Create account', busy: 'Creating...' },
+    forgot: { go: 'Send a reset link', busy: 'Sending...' },
+  };
 
   const setMode = (next: Mode): void => {
     mode = next;
     loginTab.classList.toggle('on', next === 'login');
     registerTab.classList.toggle('on', next === 'register');
-    go.textContent = next === 'login' ? 'Sign in' : 'Create account';
+    // Each mode asks for exactly what it needs and hides the rest, rather
+    // than showing a field the request will not carry.
+    name.hidden = next === 'forgot';
+    email.hidden = next === 'login';
+    password.hidden = next === 'forgot';
+    go.textContent = LABELS[next].go;
     password.autocomplete = next === 'login' ? 'current-password' : 'new-password';
-    // Said out loud, on the tab where it matters: there is no email in
-    // this game, so there is no reset link to fall back on.
+    alt.hidden = next === 'register';
+    alt.textContent = next === 'forgot' ? 'Back to signing in' : 'Forgot your password?';
     note.textContent =
-      next === 'login'
-        ? ''
-        : 'Letters, digits, _ and - , 3 to 16 characters. There is no email and no password ' +
-          'reset: lose the password and the account goes with it.';
+      next === 'register'
+        ? 'Letters, digits, _ and - , 3 to 16 characters. Your address is only ever used to ' +
+          'confirm the account and to reset a forgotten password; nobody else can see it.'
+        : next === 'forgot'
+          ? 'A link goes to the address on the account, if there is one and it has been ' +
+            'confirmed. An unconfirmed address cannot receive one, because it might not be yours.'
+          : '';
     error.textContent = '';
-    name.focus();
+    (next === 'forgot' ? email : name).focus();
   };
 
   const attempt = (): void => {
     if (busy) return;
     const typedName = name.value.trim();
+    const typedEmail = email.value.trim();
     const typedPassword = password.value;
+
+    if (mode === 'forgot') {
+      if (typedEmail.length === 0) {
+        error.textContent = 'Your email address, please.';
+        return;
+      }
+      busy = true;
+      go.textContent = LABELS.forgot.busy;
+      error.textContent = '';
+      void requestReset(typedEmail).then((failure) => {
+        busy = false;
+        go.textContent = LABELS.forgot.go;
+        if (failure) {
+          error.textContent = failure;
+          return;
+        }
+        // Deliberately the same words whether or not anything was found.
+        note.textContent =
+          'If that address is on a confirmed account, a reset link is on its way. ' +
+          'The link works once and expires in an hour.';
+        go.disabled = true;
+      });
+      return;
+    }
+
     if (typedName.length === 0 || typedPassword.length === 0) {
       error.textContent = 'Both fields, please.';
       return;
     }
+    if (mode === 'register' && typedEmail.length === 0) {
+      error.textContent = 'An email address, please.';
+      return;
+    }
     busy = true;
-    go.textContent = mode === 'login' ? 'Signing in...' : 'Creating...';
+    go.textContent = LABELS[mode].busy;
     error.textContent = '';
-    void submit(mode, typedName, typedPassword).then((result) => {
+    void submit(mode, typedName, typedPassword, typedEmail).then((result) => {
       busy = false;
-      go.textContent = mode === 'login' ? 'Sign in' : 'Create account';
+      go.textContent = LABELS[mode].go;
       if (result.ok) onSignedIn(result.account);
       else error.textContent = result.error;
     });
@@ -162,8 +255,12 @@ export function buildAuthForm(onSignedIn: (account: AuthedAccount) => void): HTM
 
   loginTab.addEventListener('click', () => setMode('login'));
   registerTab.addEventListener('click', () => setMode('register'));
+  alt.addEventListener('click', () => {
+    go.disabled = false;
+    setMode(mode === 'forgot' ? 'login' : 'forgot');
+  });
   go.addEventListener('click', attempt);
-  for (const field of [name, password]) {
+  for (const field of [name, email, password]) {
     field.addEventListener('keydown', (e) => {
       if ((e as KeyboardEvent).key === 'Enter') attempt();
     });

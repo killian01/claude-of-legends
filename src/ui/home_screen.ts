@@ -7,7 +7,8 @@
 // the promise with a HomeChoice and takes the page down.
 
 import type { TeamId } from '../sim/types';
-import { signOut } from './auth';
+import { type AuthedAccount, signOut } from './auth';
+import { buildEmailNotice, type ConfirmResult } from './email_status';
 import { startBackdrop } from './home_backdrop';
 import { buildLadderPanel } from './ladder_panel';
 import { buildLivePanel } from './live_panel';
@@ -73,10 +74,13 @@ function card(kind: string, title: string, blurb: string): HTMLElement {
 
 export function showHome(
   container: HTMLElement,
-  accountName: string,
+  account: AuthedAccount,
   prefillCode?: string,
+  // Set only on the page load a confirmation link redirected back to.
+  justConfirmed: ConfirmResult | null = null,
 ): Promise<HomeChoice> {
   ensureCss();
+  const accountName = account.name;
   return new Promise((resolve) => {
     const { root, inner, nav, hero } = buildPage('home');
     const stopBackdrop = startBackdrop(root);
@@ -105,6 +109,11 @@ export function showHome(
     const stats = el('div', 'pg-stats');
     hero.appendChild(stats);
     mountLiveStats(stats);
+
+    // Between the hero and the cards: read on the way past, never in the
+    // way of the button somebody came here to press.
+    const notice = buildEmailNotice(account, justConfirmed);
+    if (notice) inner.appendChild(notice);
 
     // --- teardown, shared by every way off this page ---
     const leave = (): void => {

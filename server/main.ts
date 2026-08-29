@@ -13,16 +13,21 @@ import { type WebSocket, WebSocketServer } from 'ws';
 import { isFiniteVec, parseClientMsg, type ServerMsg } from '../src/net/protocol';
 import { DT } from '../src/sim/types';
 import { foldName, nameErrorMessage } from './account_name';
-import { type Account, AccountRegistry, publicAccount } from './accounts';
+import { type Account, AccountRegistry, publicAccount, selfAccount } from './accounts';
+import { CONFIRM_TTL_MS, RESET_TTL_MS, TokenStore } from './action_tokens';
 import { fillWithBots } from './bot_fill';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, parseCookies, serializeCookie } from './cookies';
 import { clientAddress, edgeConfig, originAllowed } from './edge';
+import { emailErrorMessage } from './email_address';
+import { CLAIM_TTL_MS } from './email_claim';
 import { buildLadder } from './ladder';
 import { accountKey, addressKey, LoginThrottle } from './login_throttle';
+import { confirmMail, confirmUrl, publicOrigin, resetMail, resetUrl } from './mail_messages';
+import { mailerFromEnv } from './mailer';
 import { AFK_IDLE_TICKS, Match } from './match';
 import { Matchmaker } from './matchmaker';
-import { passwordErrorMessage } from './password';
+import { passwordErrorMessage, validatePassword } from './password';
 import { buildProfile } from './profile';
 import { isRated, LEAVER_LOCKOUT_MS, leaverPenalty, type RatedSeat, ratingDeltas } from './rating';
 import { buildMatchRecord, type MatchRecord } from './records';
@@ -109,6 +114,19 @@ const registry = new AccountRegistry(path.join(DATA_DIR, 'accounts.json'));
 const sessions = new SessionStore(path.join(DATA_DIR, 'sessions.json'));
 // What a wrong password costs the next attempt (server/login_throttle.ts).
 const logins = new LoginThrottle();
+// One-time links for confirming an address and for resetting a password
+// (ADR 0007). Persisted, because a deploy replaces the container and every
+// pending link in somebody's inbox would die with it.
+const tokens = new TokenStore(path.join(DATA_DIR, 'tokens.json'));
+// Asking for a reset makes this server send mail to a third party, so it
+// is rate limited per address on its own budget. "Attempt" here means
+// "request", not "wrong guess": the cost is the mail, not the mistake.
+const resets = new LoginThrottle();
+// The only third party this process talks to, and only outbound. Without
+// MAIL_API_KEY it logs links instead of sending them, and says so at boot.
+const mailer = mailerFromEnv(process.env);
+// What the links in those mails point at.
+const ORIGIN = publicOrigin(process.env, EDGE.origins, PORT);
 const MATCHES_FILE = path.join(DATA_DIR, 'matches.jsonl');
 const REPLAYS_DIR = path.join(DATA_DIR, 'replays');
 // How many finished-match replays stay on disk (named by match id).
@@ -122,6 +140,32 @@ const matchLog: MatchRecord[] = readJsonl<MatchRecord>(MATCHES_FILE);
 // holds that line for every route that ever serialises one.
 function describeAccount(a: Account): unknown {
   return { ...publicAccount(a), profile: buildProfile(matchLog, a.id) };
+}
+
+// The same, for the owner asking about themselves: it adds the address
+// they registered with and whether it is confirmed, which nobody else may
+// see. /api/account/:id stays on describeAccount for exactly that reason.
+function describeSelf(a: Account): unknown {
+  return { ...selfAccount(a), profile: buildProfile(matchLog, a.id) };
+}
+
+// Issues a fresh confirmation link and mails it. Deliberately not awaited
+// by its callers: a slow relay must not hold a registration open, and the
+// account works perfectly well unconfirmed (ADR 0007).
+async function sendConfirmation(account: Account): Promise<void> {
+  if (!account.email || account.email.confirmed) return;
+  const token = tokens.issue('confirm', account.id, account.email.address, Date.now());
+  const sent = await mailer.send(
+    confirmMail(
+      account.email.address,
+      account.name,
+      confirmUrl(ORIGIN, token.token),
+      CONFIRM_TTL_MS,
+    ),
+  );
+  // The address is a player's and stays out of the log; the id is enough
+  // to find them if someone reports never getting their mail.
+  if (!sent) console.error(`confirmation mail not delivered for account ${account.id}`);
 }
 
 function send(clientId: number, msg: ServerMsg): void {
@@ -264,6 +308,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readJsonBody(req);
       const name = typeof body?.name === 'string' ? body.name.trim() : '';
       const password = typeof body?.password === 'string' ? body.password : '';
+      const email = typeof body?.email === 'string' ? body.email.trim() : '';
       const now = Date.now();
       // Both keys, so neither a word list at one name nor one machine
       // sweeping many names gets a free run (server/login_throttle.ts).
@@ -280,24 +325,35 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (url === '/api/register') {
-        const created = registry.register(name, password, now);
+        const created = registry.register(name, password, email, now);
         if (!created.ok) {
           // A taken name is not a failed credential guess, but it is still
           // an attempt: rate it, or the signup form becomes the oracle the
           // login form refuses to be.
           for (const key of keys) logins.recordFailure(key, now);
+          // "Taken" for an address says an account exists on it, which is
+          // the same disclosure the login form refuses to make. It is
+          // unavoidable: uniqueness cannot be enforced without saying so.
+          // The throttle above is what keeps it from being enumerable.
           const message =
             created.error === 'name_taken'
               ? 'That name is taken.'
               : created.error === 'password_invalid'
                 ? passwordErrorMessage('too_short')
-                : nameErrorMessage('charset');
+                : created.error === 'email_taken'
+                  ? 'An account already uses that email address.'
+                  : created.error === 'email_invalid'
+                    ? emailErrorMessage('shape')
+                    : nameErrorMessage('charset');
           sendJson(res, 409, { error: message });
           return;
         }
         for (const key of keys) logins.recordSuccess(key);
         openSession(res, req, created.value);
-        sendJson(res, 200, publicAccount(created.value));
+        sendJson(res, 200, selfAccount(created.value));
+        // Not awaited: the account is usable now, the link can arrive when
+        // it arrives, and a broken relay must not break registration.
+        void sendConfirmation(created.value);
         return;
       }
       const account = registry.authenticate(name, password);
@@ -311,7 +367,7 @@ const server = http.createServer(async (req, res) => {
       for (const key of keys) logins.recordSuccess(key);
       registry.touch(account.id, now);
       openSession(res, req, account);
-      sendJson(res, 200, publicAccount(account));
+      sendJson(res, 200, selfAccount(account));
       return;
     }
 
@@ -326,6 +382,95 @@ const server = http.createServer(async (req, res) => {
         matches: [...matches.values()].filter((e) => e.endedAt === null).length,
         accounts: registry.count,
       });
+      return;
+    }
+
+    // Followed from a mail client, so it must be a plain GET and must end
+    // somewhere a person can read. Success and failure both land on the
+    // site; the query says which, and the page explains it.
+    if (url === '/api/email/confirm') {
+      const token = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('token') ?? '';
+      const now = Date.now();
+      const redeemed = tokens.redeem(token, 'confirm', now);
+      // The token carries the address it was issued for: an old link must
+      // not confirm an address the account moved to since.
+      const ok = redeemed ? registry.confirmEmail(redeemed.accountId, redeemed.email, now) : false;
+      res.writeHead(302, { location: `${ORIGIN}/?confirmed=${ok ? '1' : '0'}` });
+      res.end();
+      return;
+    }
+
+    // Asking for a reset link. Always answers the same way, whatever it
+    // finds: telling a caller that an address is on the server would make
+    // this the account directory the wall exists to prevent.
+    if (url === '/api/password/forgot') {
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'use POST' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const email = typeof body?.email === 'string' ? body.email.trim() : '';
+      const now = Date.now();
+      const key = addressKey(clientAddress(req.headers, req.socket.remoteAddress, EDGE));
+      const wait = resets.retryAfterMs(key, now);
+      if (wait > 0) {
+        res.setHeader('retry-after', String(Math.ceil(wait / 1000)));
+        sendJson(res, 429, {
+          error: `Too many requests. Try again in ${Math.ceil(wait / 1000)}s.`,
+        });
+        return;
+      }
+      resets.recordFailure(key, now);
+      // Confirmed addresses only. A mistyped address at signup belongs to
+      // a stranger who never asked for it, and resetting into their inbox
+      // would hand them somebody else's account.
+      const account = registry.findByConfirmedEmail(email);
+      if (account?.email) {
+        const token = tokens.issue('reset', account.id, account.email.address, now);
+        void mailer
+          .send(
+            resetMail(
+              account.email.address,
+              account.name,
+              resetUrl(ORIGIN, token.token),
+              RESET_TTL_MS,
+            ),
+          )
+          .then((sent) => {
+            if (!sent) console.error(`reset mail not delivered for account ${account.id}`);
+          });
+      }
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    // Spending a reset link.
+    if (url === '/api/password/reset') {
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'use POST' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const token = typeof body?.token === 'string' ? body.token : '';
+      const password = typeof body?.password === 'string' ? body.password : '';
+      // Checked BEFORE the token is spent: a password that is too short is
+      // the owner's typo, and it must not cost them the link as well.
+      const passErr = validatePassword(password);
+      if (passErr) {
+        sendJson(res, 400, { error: passwordErrorMessage(passErr) });
+        return;
+      }
+      const redeemed = tokens.redeem(token, 'reset', Date.now());
+      if (!redeemed || !registry.setPassword(redeemed.accountId, password)) {
+        sendJson(res, 400, { error: 'That link has expired or has already been used.' });
+        return;
+      }
+      // A reset is what someone reaches for when they believe another
+      // person has their password: every open session and every other
+      // outstanding link goes with it.
+      sessions.revokeAllFor(redeemed.accountId);
+      tokens.revokeAllFor(redeemed.accountId);
+      sendJson(res, 200, { ok: true });
       return;
     }
 
@@ -354,7 +499,53 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (url === '/api/me') {
-        sendJson(res, 200, describeAccount(me));
+        sendJson(res, 200, describeSelf(me));
+        return;
+      }
+      // Fixing a typo at signup, moving mailbox, or adding an address to
+      // an account old enough not to have one.
+      if (url === '/api/email') {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: 'use POST' });
+          return;
+        }
+        const body = await readJsonBody(req);
+        const email = typeof body?.email === 'string' ? body.email.trim() : '';
+        const result = registry.setEmail(me.id, email, Date.now());
+        if (!result.ok) {
+          sendJson(res, 409, {
+            error:
+              result.error === 'email_taken'
+                ? 'An account already uses that email address.'
+                : emailErrorMessage('shape'),
+          });
+          return;
+        }
+        sendJson(res, 200, selfAccount(result.value));
+        void sendConfirmation(result.value);
+        return;
+      }
+      // The link never arrived, or it sat too long. Rate limited on the
+      // same budget as a reset request, and for the same reason: it is a
+      // button that makes this server send mail.
+      if (url === '/api/email/resend') {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: 'use POST' });
+          return;
+        }
+        const now = Date.now();
+        const key = addressKey(clientAddress(req.headers, req.socket.remoteAddress, EDGE));
+        const wait = resets.retryAfterMs(key, now);
+        if (wait > 0) {
+          res.setHeader('retry-after', String(Math.ceil(wait / 1000)));
+          sendJson(res, 429, {
+            error: `Too many requests. Try again in ${Math.ceil(wait / 1000)}s.`,
+          });
+          return;
+        }
+        resets.recordFailure(key, now);
+        sendJson(res, 200, { ok: true });
+        void sendConfirmation(me);
         return;
       }
       if (url === '/api/ladder') {
@@ -914,8 +1105,28 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   });
 }
 
+// Housekeeping, hourly. None of this is load bearing: an expired session
+// and a spent link are already refused on read, and a lapsed email claim
+// is released the moment somebody asks for the address. This only stops
+// the three files growing with records nothing will ever ask about again.
+setInterval(() => {
+  const now = Date.now();
+  const sessionsDropped = sessions.purgeExpired(now);
+  const tokensDropped = tokens.purgeExpired(now);
+  const claimsReleased = registry.purgeExpiredClaims(now);
+  if (sessionsDropped + tokensDropped + claimsReleased > 0) {
+    console.log(
+      `housekeeping: ${sessionsDropped} session(s), ${tokensDropped} link(s), ` +
+        `${claimsReleased} email claim(s) released after ${Math.round(CLAIM_TTL_MS / 86_400_000)} days`,
+    );
+  }
+}, 60 * 60_000).unref();
+
 server.listen(PORT, () => {
   console.log(`claude-of-legends server on :${PORT} (serving ${DIST})`);
+  // Said at boot so a misconfigured relay is found now, rather than the
+  // first time a player forgets their password.
+  console.log(`mail: ${mailer.description}, links point at ${ORIGIN}`);
   console.log(
     `edge: ${EDGE.hops} trusted proxy hop(s), origins ${
       EDGE.origins.length > 0 ? EDGE.origins.join(' ') : 'same-host only'

@@ -1,0 +1,157 @@
+// The one piece of the account that needs saying on the home screen: an
+// address that has not been confirmed yet, and what to do about it.
+//
+// It is a strip rather than a modal because it is not urgent. An
+// unconfirmed account plays, is rated and places on the ladder exactly
+// like any other (ADR 0007); the only thing it cannot do is recover a
+// forgotten password. So this informs, offers the two useful actions, and
+// never blocks anything.
+
+import type { AuthedAccount } from './auth';
+import { el, ensureMenuCss } from './menu';
+import { ensurePageCss } from './page';
+
+const CSS = `
+.mail-note {
+  border: 1px solid #6b5a2e; border-radius: 12px; padding: 14px 16px;
+  background: rgba(30, 24, 8, 0.62); backdrop-filter: blur(7px);
+  margin: 18px 0 0; max-width: 900px; font-size: 12.5px; line-height: 1.55; color: #d8c9a0;
+}
+.mail-note.good { border-color: #35603c; background: rgba(12, 30, 16, 0.62); color: #b6d9bd; }
+.mail-note b { color: #f0deae; }
+.mail-note .mail-row { display: flex; gap: 8px; margin: 10px 0 0; flex-wrap: wrap; }
+.mail-note .menu-btn { width: auto; margin: 0; padding: 7px 14px; font-size: 12.5px; }
+.mail-note .menu-input { width: 260px; max-width: 100%; margin: 0; }
+.mail-note .mail-said { margin: 8px 0 0; font-size: 12px; color: #9db0c9; }
+`;
+
+let cssInstalled = false;
+function ensureCss(): void {
+  if (cssInstalled) return;
+  cssInstalled = true;
+  ensureMenuCss();
+  ensurePageCss();
+  const style = document.createElement('style');
+  style.textContent = CSS;
+  document.head.appendChild(style);
+}
+
+export type ConfirmResult = 'ok' | 'failed';
+
+// What the confirmation link redirected back with, if this page load came
+// from one. Read once and stripped from the address bar, so a reload does
+// not repeat the message.
+export function takeConfirmResult(loc: Location = window.location): ConfirmResult | null {
+  const raw = new URLSearchParams(loc.search).get('confirmed');
+  if (raw === null) return null;
+  window.history.replaceState(null, '', loc.pathname);
+  return raw === '1' ? 'ok' : 'failed';
+}
+
+async function post(path: string, body?: unknown): Promise<string | null> {
+  try {
+    const res = await fetch(path, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body ?? {}),
+    });
+    if (res.ok) return null;
+    const parsed = (await res.json().catch(() => null)) as { error?: string } | null;
+    return parsed?.error ?? 'That did not work.';
+  } catch {
+    return 'Cannot reach the server. Check your connection.';
+  }
+}
+
+// The strip, or null when there is nothing to say: a confirmed address
+// needs no notice, and a page that always carries one trains people to
+// stop reading it.
+export function buildEmailNotice(
+  account: AuthedAccount,
+  justConfirmed: ConfirmResult | null,
+): HTMLElement | null {
+  if (account.emailConfirmed && justConfirmed !== 'failed') {
+    if (justConfirmed !== 'ok') return null;
+    ensureCss();
+    const done = el('div', 'mail-note good');
+    done.append(el('span', '', 'Email confirmed. A forgotten password can be reset from now on.'));
+    return done;
+  }
+  ensureCss();
+  const note = el('div', 'mail-note');
+  const said = el('p', 'mail-said');
+
+  if (justConfirmed === 'failed') {
+    note.append(
+      el(
+        'span',
+        '',
+        'That confirmation link did not work. It may have been used already, or it may ' +
+          'have expired. Send yourself a fresh one:',
+      ),
+    );
+  } else if (account.email === null) {
+    note.append(
+      el(
+        'span',
+        '',
+        'This account has no email address. Adding one is the only way to recover a ' +
+          'forgotten password; nothing else changes, and nobody else can see it.',
+      ),
+    );
+  } else {
+    const line = el('span', '');
+    line.append(
+      document.createTextNode('Confirm '),
+      el('b', '', account.email),
+      document.createTextNode(
+        '. Until you do, a forgotten password cannot be reset, and the address is only ' +
+          'held for you for a week.',
+      ),
+    );
+    note.appendChild(line);
+  }
+
+  const row = el('div', 'mail-row');
+  const busy = (button: HTMLButtonElement, label: string, work: Promise<string | null>): void => {
+    const original = button.textContent ?? label;
+    button.disabled = true;
+    button.textContent = label;
+    void work.then((failure) => {
+      button.disabled = false;
+      button.textContent = original;
+      said.textContent = failure ?? 'Sent. Check your inbox, and the spam folder.';
+    });
+  };
+
+  if (account.email !== null) {
+    const resend = el('button', 'menu-btn', 'Send the link again');
+    resend.addEventListener('click', () => {
+      busy(resend, 'Sending...', post('/api/email/resend'));
+    });
+    row.appendChild(resend);
+  }
+
+  const field = el('input', 'menu-input');
+  field.type = 'email';
+  field.maxLength = 254;
+  field.autocomplete = 'email';
+  field.placeholder = account.email === null ? 'Email address' : 'A different address';
+  const save = el('button', 'menu-btn', account.email === null ? 'Add it' : 'Change it');
+  save.addEventListener('click', () => {
+    const typed = field.value.trim();
+    if (typed.length === 0) {
+      said.textContent = 'An email address, please.';
+      return;
+    }
+    busy(save, 'Saving...', post('/api/email', { email: typed }));
+  });
+  field.addEventListener('keydown', (e) => {
+    if ((e as KeyboardEvent).key === 'Enter') save.click();
+  });
+  row.append(field, save);
+
+  note.append(row, said);
+  return note;
+}

@@ -103,10 +103,20 @@ _Avoid_: building, objective (the Warden is an objective and is not a structure)
 
 **Account**:
 The persistent identity a person plays under: one name, unique across the server and owned by
-whoever registered it, plus the rating and match history earned with it. Reaching the server at
-all requires one; the offline practice match does not. The name is the whole public identity,
-so nothing is appended to it to tell two people apart.
+whoever registered it, one email address, plus the rating and match history earned with it.
+Reaching the server at all requires one; the offline practice match does not. The name is the
+whole public identity, so nothing is appended to it to tell two people apart, and the address is
+never part of it: only the account itself ever sees its own.
 _Avoid_: profile (that is the screen that shows an account), user, login, player (ambiguous, see Participant)
+
+**Confirmed address**:
+An email address whose owner has followed the link sent to it. Only a confirmed address can
+receive a password reset, and only a confirmed address is held forever. An address nobody has
+confirmed is held for a week and then goes back into circulation, so registering with someone
+else's address takes it out of their reach for seven days and no longer. Confirming changes
+nothing about playing: an account with an unconfirmed address queues, is rated and places on the
+ladder exactly like any other.
+_Avoid_: verified, validated, activated (an account is never inactive here)
 
 **Same name**:
 Two account names are the same name when they differ only by letter case or by the separators

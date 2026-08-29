@@ -18,10 +18,52 @@ has to be up first on a fresh box.
   80 and 443. The game vhost lives at the bottom of that stack's `Caddyfile`.
 - A domain whose A record points at the box. Caddy issues and renews the
   certificate; the game process never sees TLS.
-- Nothing else. No database and no external service: accounts, sessions and
-  the match log are JSON files under `DATA_DIR` (ADR 0006). Accounts have no
-  email, so there is no mail relay to configure and no password reset to
-  operate.
+- No database: accounts, sessions, pending links and the match log are JSON
+  files under `DATA_DIR` (ADR 0006).
+- One external service, and only one: a transactional mail provider, called
+  outbound over HTTPS to send confirmation and reset links (ADR 0007). It is
+  optional to run and required to be useful, see below.
+
+## Mail
+
+The game sends exactly two mails: confirm this address, and reset this
+password. Both are outbound HTTPS calls to Resend, so the container still
+publishes no port and still sits off the km01 network. Nothing ever arrives
+by mail; there is no inbox to run.
+
+Set both of these in a `.env` file beside `docker-compose.yml`. That file is
+gitignored, and `MAIL_API_KEY` is a credential: it must never be committed.
+`.env.example` is the template.
+
+```
+MAIL_API_KEY=re_...
+MAIL_FROM=Claude of Legends <no-reply@claudeoflegends.com>
+```
+
+`MAIL_FROM` must be at a domain verified with the provider, which means
+adding the DNS records they give you on `claudeoflegends.com`. Mail from an
+unverified domain is accepted by the API and then not delivered, which looks
+like success in the log and like silence to the player.
+
+`PUBLIC_URL` is what the links point at. It is set in the compose file
+because it is not a secret, and it must be the public name: a link built
+from the container's own address reaches nobody.
+
+**With neither variable set the server does not send mail. It writes the
+links to its own log and says so on the boot line:**
+
+```
+docker compose logs game | grep '^mail:'
+mail: resend, from Claude of Legends <no-reply@claudeoflegends.com>, links point at https://claudeoflegends.com
+```
+
+If that line says `log only`, mail is not configured, nobody can confirm an
+address or reset a password, and the log now contains bearer credentials.
+That is the intended behaviour for a developer and a misconfiguration in
+production.
+
+Delivery is best effort by design. A dead relay never fails a registration:
+the account is created and usable, and the player simply has no link yet.
 
 ## The proxy contract
 
@@ -109,13 +151,16 @@ readable if a number is ever needed from them.
 ## Backups
 
 Everything that outlives a container is in the `claude-of-legends_game_data`
-volume: `accounts.json` (accounts, credentials and ratings), `sessions.json`
-(open sign-ins), `matches.jsonl` (the match log that feeds profiles and the
+volume: `accounts.json` (accounts, credentials, email addresses and ratings),
+`sessions.json` (open sign-ins), `tokens.json` (confirmation and reset links
+still outstanding), `matches.jsonl` (the match log that feeds profiles and the
 ladder) and `replays/` (the last 40 matches).
 
-`accounts.json` holds password hashes. It is scrypt with a per-account salt,
-not plaintext, but a backup of it is still a credential file: keep it where you
-would keep one.
+`accounts.json` holds password hashes and email addresses. The hashes are
+scrypt with a per-account salt, not plaintext, but a backup of it is still a
+credential file AND a list of people's addresses: keep it where you would keep
+one. `tokens.json` is shorter lived and worse: every entry in it is a live way
+into an account until it expires.
 
 ```
 docker run --rm -v claude-of-legends_game_data:/data -v "$PWD:/out" \

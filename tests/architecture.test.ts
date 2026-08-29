@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import path, { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { AccountRegistry, publicAccount } from '../server/accounts';
+import { AccountRegistry, publicAccount, selfAccount } from '../server/accounts';
 import { buildLadder } from '../server/ladder';
 import { hashPassword } from '../server/password';
 import { buildProfile } from '../server/profile';
@@ -56,7 +56,7 @@ describe('sim architecture', () => {
 describe('account secrets', () => {
   const file = path.join(mkdtempSync(path.join(tmpdir(), 'loc-arch-')), 'accounts.json');
   const registry = new AccountRegistry(file);
-  const created = registry.register('bob', 'a good password', 0);
+  const created = registry.register('bob', 'a good password', 'bob@example.com', 0);
   if (!created.ok) throw new Error('fixture failed to register');
   const account = created.value;
   const sessions = new SessionStore(path.join(path.dirname(file), 'sessions.json'));
@@ -67,8 +67,12 @@ describe('account secrets', () => {
   const payloads: { what: string; body: unknown }[] = [
     { what: 'publicAccount', body: publicAccount(account) },
     {
-      what: '/api/me and /api/account',
+      what: '/api/account',
       body: { ...publicAccount(account), profile: buildProfile([], account.id) },
+    },
+    {
+      what: '/api/me',
+      body: { ...selfAccount(account), profile: buildProfile([], account.id) },
     },
     { what: '/api/ladder', body: buildLadder([account]) },
     { what: '/api/ladder (placed)', body: buildLadder([{ ...account, ratedGames: 10 }]) },
@@ -113,6 +117,40 @@ describe('account secrets', () => {
     for (const banned of ['name', 'handle', 'players.values', 'registry.all']) {
       expect(body).not.toContain(banned);
     }
+  });
+
+  // The address is not a credential, so the gate above would let it
+  // through; it is personal data, and it belongs to exactly one person.
+  // The line is between what an account may see about ITSELF and what any
+  // other signed-in player may see about it, which is the whole reason
+  // selfAccount and publicAccount are two functions.
+  it('shows an address to its owner and to nobody else', () => {
+    const address = 'bob@example.com';
+    expect(account.email?.address).toBe(address);
+
+    // Anything another player can ask for.
+    const forOthers: { what: string; body: unknown }[] = [
+      { what: 'publicAccount', body: publicAccount(account) },
+      {
+        what: '/api/account',
+        body: { ...publicAccount(account), profile: buildProfile([], account.id) },
+      },
+      { what: '/api/ladder', body: buildLadder([{ ...account, ratedGames: 10 }]) },
+    ];
+    const leaks: string[] = [];
+    for (const { what, body } of forOthers) {
+      const json = JSON.stringify(body);
+      if (json.includes(address)) leaks.push(`${what} leaks the email address`);
+      if (/"email/.test(json)) leaks.push(`${what} carries an email-shaped key`);
+    }
+    expect(leaks).toEqual([]);
+
+    // And the owner does see it, or the confirmation banner has nothing
+    // to read and this gate would pass by simply losing the feature.
+    const self = selfAccount(account);
+    expect(self.email).toBe(address);
+    expect(self.emailConfirmed).toBe(false);
+    expect(JSON.stringify(self)).not.toContain(account.password.hash);
   });
 
   it('keeps the fixture honest: the secrets really are in the account', () => {

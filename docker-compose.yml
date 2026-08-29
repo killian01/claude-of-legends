@@ -27,6 +27,16 @@ services:
       # empty; both public names are spelled out anyway, so a proxy that ever
       # rewrites Host cannot refuse every browser at once.
       ALLOWED_ORIGINS: "https://claudeoflegends.com,https://www.claudeoflegends.com"
+      # Where the links in confirmation and reset mails point. Must be the
+      # public name, not the container's, or every link is unreachable.
+      PUBLIC_URL: "https://claudeoflegends.com"
+      # Transactional mail (ADR 0007). Both come from a .env file beside
+      # this one, which is gitignored: MAIL_API_KEY is a credential and
+      # must never be committed. Without them the process logs links
+      # instead of sending them, and says which at boot. Outbound HTTPS
+      # only; the container still publishes no port of its own.
+      MAIL_API_KEY: "${MAIL_API_KEY:-}"
+      MAIL_FROM: "${MAIL_FROM:-}"
     volumes:
       # Player identities and the match log. Careers reset without this.
       - game_data:/app/data

@@ -19,6 +19,15 @@ export function e2eName(base, suffix = '') {
 // A password nobody has to remember: these accounts exist for one run.
 export const E2E_PASSWORD = 'e2e-password-01';
 
+// Registration needs an address now (ADR 0007). example.com is reserved by
+// RFC 2606 and can never be a real mailbox, so a run that somehow reached
+// a live relay would still send nothing anywhere real. It is never
+// confirmed, so these accounts have no reset path, which is correct: they
+// are burned after one run anyway.
+export function e2eEmail(name) {
+  return `${name}@example.com`;
+}
+
 async function fill(page, selector, value) {
   await page.evaluate(
     (sel, v) => {
@@ -51,6 +60,9 @@ export async function signIn(page, name, timeout = 20000) {
         ?.click();
     }, mode);
     await fill(page, '.auth-form input.menu-input', name);
+    if (mode === 'register') {
+      await fill(page, '.auth-form input[type="email"]', e2eEmail(name));
+    }
     await fill(page, '.auth-form input[type="password"]', E2E_PASSWORD);
     await page.evaluate(() => {
       [...document.querySelectorAll('.auth-form .menu-btn')].pop()?.click();

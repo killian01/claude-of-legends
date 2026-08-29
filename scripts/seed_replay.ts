@@ -48,7 +48,7 @@ if (score.t !== 'score') throw new Error('seed: no score');
 // shaped exactly like a registered one rather than hand-written next to it.
 const SEED_PASSWORD = 'seed-replay-e2e';
 const registry = new AccountRegistry(path.join(DATA_DIR, 'accounts.json'));
-const created = registry.register('seer', SEED_PASSWORD, Date.now());
+const created = registry.register('seer', SEED_PASSWORD, 'seer@example.com', Date.now());
 // Re-seeding an existing data dir: the account is already there.
 const seer = created.ok ? created.value : registry.authenticate('seer', SEED_PASSWORD);
 if (!seer) throw new Error('seed: cannot make or reach the seer account');

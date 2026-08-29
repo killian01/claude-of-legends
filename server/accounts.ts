@@ -1,21 +1,43 @@
 // Accounts: the persistent identity a person plays under (CONTEXT.md).
-// One name, owned; one password, the only secret; the rating and history
-// earned under it. Replaces the token-keyed identity ADR 0006 retired,
-// where a cleared localStorage made a new player and a free-text name
-// belonged to nobody.
+// One name, owned; one password, the only secret; one email address; the
+// rating and history earned under it. Replaces the token-keyed identity
+// ADR 0006 retired, where a cleared localStorage made a new player and a
+// free-text name belonged to nobody.
 //
-// The name index is the interesting part. It is keyed on the folded
-// reading of the name (server/account_name.ts), so Bob and b_o_b cannot
-// both exist, and an entry is NEVER removed. A name an account releases
-// by renaming stays pointed at that account: the name is also the login
-// identifier, so recycling it would send the old owner's password to a
-// stranger's login attempt, and let whoever grabbed the name inherit a
-// reputation earned by someone else.
+// Two indexes, and the difference between them is the whole design.
+//
+// The name index is keyed on the folded reading of the name
+// (server/account_name.ts) and an entry is NEVER removed. A name an
+// account releases by renaming stays pointed at that account: the name is
+// also the login identifier, so recycling it would send the old owner's
+// password to a stranger's login attempt.
+//
+// The email index CAN release, and must (ADR 0007). An address is held
+// from the moment someone registers with it, which is what keeps ten
+// accounts off one mailbox, and is also what would let someone hold a
+// stranger's address forever. So an unconfirmed claim lapses after a week
+// (server/email_claim.ts) and the address goes back into circulation. A
+// confirmed one never lapses: a real person has proven they read that
+// mailbox, and taking it from them would hand their password reset to
+// whoever registered it next.
 
 import { foldName, validateName } from './account_name';
+import { foldEmail, validateEmail } from './email_address';
+import { claimHolds } from './email_claim';
 import { hashPassword, type PasswordHash, validatePassword, verifyPassword } from './password';
 import { BASE_RATING } from './rating';
 import { loadJson, saveJsonAtomic } from './store';
+
+export interface AccountEmail {
+  // As the owner typed it; this is what mail is addressed to.
+  address: string;
+  // The folded reading uniqueness was judged on.
+  fold: string;
+  // When the claim was staked. The lapse window runs from here.
+  claimedAt: number;
+  // Set once the owner has followed the link sent to it.
+  confirmed: boolean;
+}
 
 export interface Account {
   id: number;
@@ -25,6 +47,10 @@ export interface Account {
   // not have to recompute the whole index from names.
   fold: string;
   password: PasswordHash;
+  // Absent on an account registered before ADR 0007, and on one whose
+  // unconfirmed claim lapsed. Such an account plays exactly as before; it
+  // simply has no way to recover a forgotten password until it adds one.
+  email?: AccountEmail;
   createdAt: number;
   seenAt: number;
   // Elo (server/rating.ts); only rated matches move it.
@@ -32,9 +58,10 @@ export interface Account {
   ratedGames: number;
 }
 
-// Everything about an account that may leave the server. The password
-// hash and salt are absent by construction rather than by deletion, and
-// tests/architecture.test.ts holds that line.
+// Everything about an account that may leave the server TO ANOTHER
+// PLAYER. The password hash and salt are absent by construction rather
+// than by deletion, and so is the email address, which is nobody else's
+// business. tests/architecture.test.ts holds both lines.
 export interface PublicAccount {
   id: number;
   name: string;
@@ -53,14 +80,38 @@ export function publicAccount(a: Account): PublicAccount {
   };
 }
 
-export type RegisterError = 'name_invalid' | 'name_taken' | 'password_invalid';
+// What an account may see about ITSELF, which is the public shape plus
+// the address it registered with and whether that address is confirmed.
+// Never built for anyone but the signed-in owner.
+export interface SelfAccount extends PublicAccount {
+  email: string | null;
+  emailConfirmed: boolean;
+}
+
+export function selfAccount(a: Account): SelfAccount {
+  return {
+    ...publicAccount(a),
+    email: a.email?.address ?? null,
+    emailConfirmed: a.email?.confirmed ?? false,
+  };
+}
+
+export type RegisterError =
+  | 'name_invalid'
+  | 'name_taken'
+  | 'password_invalid'
+  | 'email_invalid'
+  | 'email_taken';
 export type RenameError = 'name_invalid' | 'name_taken';
+export type SetEmailError = 'email_invalid' | 'email_taken' | 'unknown_account';
 
 export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
 
 // What the on-disk file holds: the accounts, plus every name ever taken.
 // Retired names have no account fields of their own; they are just a
-// claim that nobody else may have this one.
+// claim that nobody else may have this one. Email claims are NOT stored
+// separately: they live on the account and are rebuilt into an index at
+// boot, because unlike a name an address has exactly one holder at a time.
 interface StoredState {
   accounts: Account[];
   // folded name -> the account that holds or held it.
@@ -71,6 +122,8 @@ export class AccountRegistry {
   private readonly byId = new Map<number, Account>();
   // Folded name -> account id. Never shrinks: see the header.
   private readonly nameOwner = new Map<string, number>();
+  // Folded email -> account id. Shrinks when a claim lapses.
+  private readonly emailOwner = new Map<string, number>();
   private nextId = 1;
 
   constructor(private readonly file: string) {
@@ -82,8 +135,10 @@ export class AccountRegistry {
     for (const [fold, id] of state.names) this.nameOwner.set(fold, id);
     // A name index that lost entries (a hand-edited file) would let a
     // retired name be taken again, so rebuild what the accounts imply.
-    for (const a of this.byId.values())
+    for (const a of this.byId.values()) {
       if (!this.nameOwner.has(a.fold)) this.nameOwner.set(a.fold, a.id);
+      if (a.email) this.emailOwner.set(a.email.fold, a.id);
+    }
   }
 
   private persist(): void {
@@ -107,18 +162,54 @@ export class AccountRegistry {
     return owner === undefined || owner === forAccountId;
   }
 
-  register(name: string, password: string, now: number): Result<Account, RegisterError> {
+  // Whether this address is free, releasing it first if the claim on it
+  // has lapsed. Lazy rather than swept, so the answer is right the instant
+  // the week is up rather than at the next sweep.
+  private emailFree(fold: string, now: number, forAccountId?: number): boolean {
+    const owner = this.emailOwner.get(fold);
+    if (owner === undefined || owner === forAccountId) return true;
+    const holder = this.byId.get(owner);
+    if (!holder?.email || holder.email.fold !== fold) {
+      // The index outlived what it pointed at.
+      this.emailOwner.delete(fold);
+      return true;
+    }
+    if (claimHolds(holder.email, now)) return false;
+    this.releaseEmail(holder);
+    return true;
+  }
+
+  // Drops a lapsed claim: the address goes back into circulation and the
+  // account keeps its name, its rating and its whole history. Nothing is
+  // ever deleted here, which is what ADR 0006 promised and ADR 0007 keeps.
+  private releaseEmail(account: Account): void {
+    if (!account.email) return;
+    this.emailOwner.delete(account.email.fold);
+    account.email = undefined;
+  }
+
+  register(
+    name: string,
+    password: string,
+    email: string,
+    now: number,
+  ): Result<Account, RegisterError> {
     const nameErr = validateName(name);
     if (nameErr) return { ok: false, error: 'name_invalid' };
     const passErr = validatePassword(password);
     if (passErr) return { ok: false, error: 'password_invalid' };
+    const emailErr = validateEmail(email);
+    if (emailErr) return { ok: false, error: 'email_invalid' };
     const fold = foldName(name);
     if (!this.nameFree(fold)) return { ok: false, error: 'name_taken' };
+    const eFold = foldEmail(email);
+    if (!this.emailFree(eFold, now)) return { ok: false, error: 'email_taken' };
     const account: Account = {
       id: this.nextId++,
       name,
       fold,
       password: hashPassword(password),
+      email: { address: email.trim(), fold: eFold, claimedAt: now, confirmed: false },
       createdAt: now,
       seenAt: now,
       rating: BASE_RATING,
@@ -126,6 +217,7 @@ export class AccountRegistry {
     };
     this.byId.set(account.id, account);
     this.nameOwner.set(fold, account.id);
+    this.emailOwner.set(eFold, account.id);
     this.persist();
     return { ok: true, value: account };
   }
@@ -160,6 +252,81 @@ export class AccountRegistry {
     this.nameOwner.set(fold, id);
     this.persist();
     return { ok: true, value: account };
+  }
+
+  // Claims an address for an account: at registration through register(),
+  // afterwards through here (a typo at signup, a changed mailbox, or an
+  // account old enough to have none). The new claim starts unconfirmed
+  // whatever the old one was, so changing an address cannot inherit the
+  // trust of the address it replaced.
+  setEmail(id: number, email: string, now: number): Result<Account, SetEmailError> {
+    const account = this.byId.get(id);
+    if (!account) return { ok: false, error: 'unknown_account' };
+    const emailErr = validateEmail(email);
+    if (emailErr) return { ok: false, error: 'email_invalid' };
+    const fold = foldEmail(email);
+    if (!this.emailFree(fold, now, id)) return { ok: false, error: 'email_taken' };
+    // Setting the address you already have changes nothing, and must not:
+    // restaking the claim here would un-confirm a confirmed address and
+    // restart its week. Re-sending the link is a separate act.
+    if (account.email?.fold === fold) return { ok: true, value: account };
+    if (account.email && account.email.fold !== fold) {
+      this.emailOwner.delete(account.email.fold);
+    }
+    account.email = { address: email.trim(), fold, claimedAt: now, confirmed: false };
+    this.emailOwner.set(fold, id);
+    this.persist();
+    return { ok: true, value: account };
+  }
+
+  // The link was followed. `address` is what the link was issued for, and
+  // it has to still be the account's address: an old link must not
+  // confirm an address the account moved to afterwards.
+  confirmEmail(id: number, address: string, now: number): boolean {
+    const account = this.byId.get(id);
+    if (!account?.email) return false;
+    if (account.email.fold !== foldEmail(address)) return false;
+    if (!claimHolds(account.email, now)) return false;
+    account.email.confirmed = true;
+    this.emailOwner.set(account.email.fold, id);
+    this.persist();
+    return true;
+  }
+
+  // Who to send a reset link to. CONFIRMED only, and that is the point: a
+  // mistyped address at signup belongs to a stranger who never asked for
+  // it, and resetting into their inbox would hand them the account.
+  findByConfirmedEmail(email: string): Account | undefined {
+    const id = this.emailOwner.get(foldEmail(email));
+    if (id === undefined) return undefined;
+    const account = this.byId.get(id);
+    if (!account?.email?.confirmed) return undefined;
+    return account;
+  }
+
+  // A reset landed, or an owner changed their password deliberately.
+  setPassword(id: number, password: string): boolean {
+    const account = this.byId.get(id);
+    if (!account) return false;
+    if (validatePassword(password)) return false;
+    account.password = hashPassword(password);
+    this.persist();
+    return true;
+  }
+
+  // Releases every claim whose week is up. Lazily done on lookup too, so
+  // this is housekeeping rather than correctness: it keeps the index from
+  // holding addresses nothing will ever ask about again.
+  purgeExpiredClaims(now: number): number {
+    let released = 0;
+    for (const account of this.byId.values()) {
+      if (account.email && !claimHolds(account.email, now)) {
+        this.releaseEmail(account);
+        released++;
+      }
+    }
+    if (released > 0) this.persist();
+    return released;
   }
 
   // Last seen, moved in memory only: this happens on every connection and

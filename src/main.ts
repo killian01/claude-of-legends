@@ -19,6 +19,7 @@ import { CHAMPION_LIST } from './sim/content/champions';
 import { Sim } from './sim/sim';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
 import { type AuthedAccount, currentAccount } from './ui/auth';
+import { takeConfirmResult } from './ui/email_status';
 import { preloadBackdrop } from './ui/home_backdrop';
 import { type HomeChoice, showHome } from './ui/home_screen';
 import { showLanding } from './ui/landing';
@@ -31,6 +32,7 @@ import {
   showQueue,
   showSelect,
 } from './ui/menu';
+import { pendingResetToken, showPasswordReset } from './ui/password_reset';
 import { buildReplayBar } from './ui/replay_bar';
 import type { IWorld } from './world_api';
 
@@ -520,6 +522,14 @@ async function boot(): Promise<void> {
   // The landing art is the first thing on screen; ask for it before the
   // session check so the two requests fly together.
   preloadBackdrop();
+  // A reset link stands in front of everything, session or not: the whole
+  // premise is that this person cannot sign in. Completing one revokes
+  // every session the account had, so the check below then finds none.
+  const resetToken = pendingResetToken();
+  if (resetToken !== null) await showPasswordReset(container, resetToken);
+  // What a confirmation link redirected back with, if this load came from
+  // one. Read once, shown once, on the first home screen of the session.
+  let confirmed = takeConfirmResult();
   // The app loop: home, one match, back, forever on the same page. 'again'
   // replays the same offline pick or re-enters the public queue (flow.ts).
   let next: HomeChoice | null = null;
@@ -547,7 +557,8 @@ async function boot(): Promise<void> {
     }
     if (joinCode !== null) next = { name: account.name, mode: 'join', code: joinCode };
     const choice: HomeChoice =
-      next ?? (await showHome(container, account.name, joinCode ?? undefined));
+      next ?? (await showHome(container, account, joinCode ?? undefined, confirmed));
+    confirmed = null;
     joinCode = null;
     next = null;
     let action: PostMatchAction;
