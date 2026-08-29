@@ -4,6 +4,7 @@
 // B. online bot match -> Leave match -> Play online again lands in the QUEUE,
 //    not back inside the abandoned match (deliberate leave holds no seat).
 import puppeteer from 'puppeteer-core';
+import { e2eName, signIn } from './e2e_signin.mjs';
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
@@ -34,11 +35,6 @@ const findBtn = (t) =>
   `[...document.querySelectorAll('button')].some((e) => (e.textContent || '').trim().startsWith('${t}'))`;
 
 async function enterMatchOffline(page) {
-  await page.evaluate(() => {
-    const input = document.querySelector('.menu-card input.menu-input');
-    input.value = 'lifer';
-    input.dispatchEvent(new Event('input'));
-  });
   await clickButton(page, 'Practice vs dummies');
   await waitFor(page, findBtn('Lock in'), 'champion select');
   await page.evaluate(() => document.querySelector('button.menu-champ').click());
@@ -93,11 +89,6 @@ const run = async () => {
   await waitFor(page, findBtn('Play online'), 'home again');
 
   // --- Scenario B: online deliberate leave holds no seat ---
-  await page.evaluate(() => {
-    const input = document.querySelector('.menu-card input.menu-input');
-    input.value = 'leaver';
-    input.dispatchEvent(new Event('input'));
-  });
   await clickButton(page, 'Play online');
   await waitFor(page, findBtn('Start now with bots'), 'queue screen');
   await clickButton(page, 'Start now with bots');

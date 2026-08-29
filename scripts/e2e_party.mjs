@@ -2,6 +2,7 @@
 // both screens swap to the queue, one member opts into the bot fill, and
 // the match seats the duo on the same side.
 import puppeteer from 'puppeteer-core';
+import { e2eName, signIn } from './e2e_signin.mjs';
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
@@ -36,7 +37,7 @@ async function newIsolatedPage(browser, name) {
   const page = await ctx.newPage();
   await page.setViewport({ width: 1500, height: 900 });
   await page.goto(URL, { waitUntil: 'load' });
-  await page.evaluate((n) => localStorage.setItem('loc-name', n), name);
+  await signIn(page, e2eName(name));
   return page;
 }
 

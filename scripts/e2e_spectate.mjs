@@ -2,6 +2,7 @@
 // browser finds it on the home screen's live list, watches team 1's fog,
 // follows champions, and stops watching back to home on the same page.
 import puppeteer from 'puppeteer-core';
+import { e2eName, signIn } from './e2e_signin.mjs';
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
@@ -36,12 +37,7 @@ async function newIsolatedPage(browser, name) {
   const page = await ctx.newPage();
   await page.setViewport({ width: 1500, height: 900 });
   await page.goto(URL, { waitUntil: 'load' });
-  await page.evaluate((n) => {
-    localStorage.setItem('loc-name', n);
-    const input = document.querySelector('.menu-card input.menu-input');
-    input.value = n;
-    input.dispatchEvent(new Event('input'));
-  }, name);
+  await signIn(page, e2eName(name));
   return page;
 }
 

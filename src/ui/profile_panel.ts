@@ -1,13 +1,13 @@
-// The career panel on the home screen: identity handle, headline numbers,
-// per-champion lines, and recent matches, fetched from /api/me with the
-// stored session token. Pure DOM, rebuilt on every open so it is always
-// fresh; offline practice is client-only and deliberately absent here.
+// The career panel on the home screen: account name, headline numbers,
+// per-champion lines, and recent matches, fetched from /api/me on the
+// session cookie. Pure DOM, rebuilt on every open so it is always fresh;
+// offline practice is client-only and deliberately absent here.
 
 import { CHAMPIONS } from '../sim/content/champions';
 
 const CSS = `
 .prof-panel { margin: 8px 0; font-size: 12px; color: #c9d8ae; text-align: left; }
-.prof-handle { font-size: 15px; font-weight: 800; color: #e8dfae; }
+.prof-name { font-size: 15px; font-weight: 800; color: #e8dfae; }
 .prof-sub { color: #93a87c; margin: 2px 0 8px; }
 .prof-line { display: flex; justify-content: space-between; padding: 3px 0; gap: 10px; }
 .prof-line span:last-child { color: #93a87c; white-space: nowrap; }
@@ -35,7 +35,7 @@ function ensureCss(): void {
 }
 
 export interface ApiProfile {
-  handle: string;
+  name: string;
   createdAt: number;
   rating: number;
   ratedGames: number;
@@ -87,7 +87,7 @@ const NO_CAREER = 'Play an online match to start your career.';
 // Shared by the own-career panel and the ladder's public profiles.
 export function renderProfile(box: HTMLElement, data: ApiProfile): void {
   box.textContent = '';
-  box.append(el('div', 'prof-handle', data.handle));
+  box.append(el('div', 'prof-name', data.name));
   const rated =
     data.ratedGames > 0
       ? `Rating ${data.rating} over ${data.ratedGames} rated match${data.ratedGames > 1 ? 'es' : ''}.`

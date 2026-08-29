@@ -1,7 +1,9 @@
 // E2E for identity and the career panel: a fresh browser has no career;
 // touching the online flow (hello) creates the identity, and the panel
-// then shows the handle. The /api surface is also probed directly.
+// then shows the account name. The /api surface is also probed, from
+// inside the page so the session cookie rides the request.
 import puppeteer from 'puppeteer-core';
+import { apiFromPage, e2eName, signIn } from './e2e_signin.mjs';
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
@@ -32,12 +34,18 @@ const findBtn = (t) =>
   `[...document.querySelectorAll('button')].some((e) => (e.textContent || '').trim().startsWith('${t}'))`;
 
 const run = async () => {
-  // API guardrails first: junk tokens and unknown ids answer 404.
-  const bad = await fetch('http://localhost:8787/api/me?token=nope');
-  if (bad.status !== 404) throw new Error(`/api/me junk token: ${bad.status}`);
-  const missing = await fetch('http://localhost:8787/api/player/999999');
-  if (missing.status !== 404) throw new Error(`/api/player unknown: ${missing.status}`);
-  console.log('api guardrails OK');
+  // API guardrails first. Nothing under /api answers without a session
+  // now, not even to say that an id is unknown (ADR 0006): the wall comes
+  // before the lookup, so it cannot be used to probe which ids exist.
+  for (const route of ['/api/me', '/api/account/999999', '/api/ladder', '/api/live']) {
+    const res = await fetch(`http://localhost:8787${route}`);
+    if (res.status !== 401) throw new Error(`${route} answered ${res.status} with no session`);
+  }
+  const forged = await fetch('http://localhost:8787/api/me', {
+    headers: { cookie: 'loc_session=deadbeefdeadbeefdeadbeefdeadbeef' },
+  });
+  if (forged.status !== 401) throw new Error(`forged cookie answered ${forged.status}`);
+  console.log('api guardrails OK: every route refuses without a live session');
 
   const browser = await puppeteer.launch({
     executablePath: CHROME,
@@ -61,39 +69,41 @@ const run = async () => {
   );
   console.log('fresh browser shows no career');
 
-  // Touch the online flow: hello registers the identity, then leave.
-  await page.evaluate(() => {
-    const input = document.querySelector('.menu-card input.menu-input');
-    input.value = 'carrier';
-    input.dispatchEvent(new Event('input'));
-  });
+  // Touch the online flow, then leave: the career is empty until a match
+  // is recorded against the account, not merely because nobody signed in.
   await clickButton(page, 'Play online');
   await waitFor(page, findBtn('Start now with bots'), 'queue');
   await clickButton(page, 'Cancel');
   await waitFor(page, findBtn('Play online'), 'home back');
 
-  // The panel now greets the registered handle.
+  // The panel now greets the signed-in account.
   await clickButton(page, 'Profile and history');
   await waitFor(
     page,
-    `document.querySelector('.prof-handle')?.textContent.startsWith('carrier#')`,
-    'handle rendered',
+    `!!document.querySelector('.prof-name')?.textContent`,
+    'account name rendered',
   );
-  const handle = await page.evaluate(() => document.querySelector('.prof-handle').textContent);
-  if (!/^carrier#\d{4}$/.test(handle)) throw new Error(`bad handle shape: ${handle}`);
+  const shown = await page.evaluate(() => document.querySelector('.prof-name').textContent);
+  if (!/^[A-Za-z0-9_-]{3,16}$/.test(shown)) throw new Error(`bad name shape: ${shown}`);
   const empty = await page.evaluate(() =>
     document.querySelector('.prof-panel').textContent.includes('No online matches'),
   );
   if (!empty) throw new Error('expected the zero-matches line');
-  console.log('identity registered, handle', handle);
+  console.log('account signed in, name', shown);
 
-  // The same identity through the public endpoint, via the stored token.
-  const token = await page.evaluate(() => localStorage.getItem('loc-token'));
-  const me = await (await fetch(`http://localhost:8787/api/me?token=${token}`)).json();
-  if (me.handle !== handle) throw new Error(`api handle mismatch: ${me.handle} vs ${handle}`);
-  const pub = await (await fetch(`http://localhost:8787/api/player/${me.id}`)).json();
-  if (pub.handle !== handle || 'token' in pub) throw new Error('public player leaks or mismatches');
-  console.log('api identity consistent, token never echoed');
+  // The same account through the public endpoint. Both calls go through
+  // the page, so the session cookie rides them; from node they would be
+  // refused, which is itself worth asserting.
+  const me = (await apiFromPage(page, '/api/me')).body;
+  if (me.name !== shown) throw new Error(`api name mismatch: ${me.name} vs ${shown}`);
+  const pub = (await apiFromPage(page, `/api/account/${me.id}`)).body;
+  if (pub.name !== shown) throw new Error('public account mismatches');
+  for (const key of ['password', 'salt', 'hash', 'token', 'sessionId']) {
+    if (key in pub || key in me) throw new Error(`api leaks ${key}`);
+  }
+  const cookieless = await fetch('http://localhost:8787/api/me');
+  if (cookieless.status !== 401) throw new Error('api/me answered without a session');
+  console.log('api identity consistent, no credential echoed, refused without a session');
 
   if (errors.length > 0) {
     console.log('PAGE ERRORS:', errors.join('\n'));
