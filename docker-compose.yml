@@ -1,0 +1,51 @@
+# Claude of Legends in production: one image, one process, one port.
+#
+# The container publishes no host port. The only way in is the Caddy instance
+# of the km01 stack, reached over the shared `km01_edge` network, so a
+# compromise of this public, account-less server cannot reach the database or
+# the job queue that sit on the km01 network. The km01 compose file owns
+# `km01_edge`: bring that stack up first on a fresh box.
+#
+#   docker compose up -d --build     start or update the game
+#   docker compose logs -f game      follow the server log
+
+services:
+  game:
+    build: .
+    image: claude-of-legends:latest
+    container_name: claude_of_legends
+    restart: unless-stopped
+    environment:
+      PORT: "8787"
+      DATA_DIR: /app/data
+      # Caddy overwrites the forwarding headers, so the per-address abuse caps
+      # key on the real player and not on the proxy (server/client_ip.ts).
+      TRUST_PROXY: "1"
+    volumes:
+      # Player identities and the match log. Careers reset without this.
+      - game_data:/app/data
+    networks:
+      - edge
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8787/healthz').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  game_data:
+
+networks:
+  edge:
+    name: km01_edge
+    external: true
