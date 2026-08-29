@@ -13,6 +13,7 @@ import { type WebSocket, WebSocketServer } from 'ws';
 import { isFiniteVec, parseClientMsg, type ServerMsg } from '../src/net/protocol';
 import { DT, type TeamId } from '../src/sim/types';
 import { fillWithBots } from './bot_fill';
+import { clientAddress, edgeConfig, originAllowed } from './edge';
 import { buildLadder } from './ladder';
 import { AFK_IDLE_TICKS, Match } from './match';
 import { Matchmaker } from './matchmaker';
@@ -37,6 +38,10 @@ const MAX_MSGS_PER_SEC = 60;
 // Abuse bounds: sockets per remote address, and live sims per process.
 const MAX_CONN_PER_IP = 8;
 const MAX_MATCHES = 50;
+// What to believe about a connection that came through a proxy: how deep
+// the forwarded chain is (TRUST_PROXY) and which pages may open a socket
+// besides our own (ALLOWED_ORIGINS). Both default to trusting nothing.
+const EDGE = edgeConfig(process.env);
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -275,13 +280,27 @@ const server = http.createServer(async (req, res) => {
 
 // --- WebSocket ---
 
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 16 * 1024 });
+const wss = new WebSocketServer({
+  server,
+  path: '/ws',
+  maxPayload: 16 * 1024,
+  // A seat is handed out on the upgrade, so a page we never served does
+  // not get one. A client without an Origin header (a headless bot) does.
+  verifyClient: ({ req }, done) => {
+    if (originAllowed(req.headers, EDGE)) {
+      done(true);
+      return;
+    }
+    console.warn(`refused upgrade from origin ${String(req.headers.origin)}`);
+    done(false, 403, 'forbidden origin');
+  },
+});
 
 // Sockets per remote address, so one machine cannot farm connections.
 const ipCounts = new Map<string, number>();
 
 wss.on('connection', (ws, req) => {
-  const ip = req.socket.remoteAddress ?? 'unknown';
+  const ip = clientAddress(req.headers, req.socket.remoteAddress, EDGE);
   const ipCount = ipCounts.get(ip) ?? 0;
   if (ipCount >= MAX_CONN_PER_IP) {
     ws.close(1013, 'too many connections');
@@ -712,6 +731,11 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
 
 server.listen(PORT, () => {
   console.log(`claude-of-legends server on :${PORT} (serving ${DIST})`);
+  console.log(
+    `edge: ${EDGE.hops} trusted proxy hop(s), origins ${
+      EDGE.origins.length > 0 ? EDGE.origins.join(' ') : 'same-host only'
+    }`,
+  );
   // In dev the vite server owns the client and this warning is expected
   // noise only when dist was never built; in production it means the image
   // or the start script skipped `pnpm build`.
