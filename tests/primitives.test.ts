@@ -29,7 +29,8 @@ describe('combat primitives', () => {
     // The comet is still falling: the telegraph window is real counterplay.
     expect(sim.zones.size).toBe(1);
     expect(isStunned(b, sim.time)).toBe(false);
-    for (let i = 0; i < 24 && !isStunned(b, sim.time); i++) sim.tick();
+    // The fuse is 1.3 s now (playtest round 2: bigger comet, longer fuse).
+    for (let i = 0; i < 32 && !isStunned(b, sim.time); i++) sim.tick();
     expect(isStunned(b, sim.time)).toBe(true);
     expect(sim.castAbility(b.id, 'Q', { x: 75, z: 75 })).toBe(false);
     sim.orderMove(b.id, 90, 75);

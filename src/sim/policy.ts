@@ -82,6 +82,19 @@ export interface ObsWall {
   until: number;
 }
 
+// The team's fading memory of an enemy champion that broke line of sight
+// (additive v0 block): where it was last seen, when, and how hurt it was.
+// The honest mirror of a human remembering who ran into which brush.
+// Entries exist only while the champion is alive, OUT of sight, and the
+// sighting is fresh; a visible champion appears in `units` instead.
+export interface ObsLastSeen {
+  id: number;
+  x: number;
+  z: number;
+  at: number;
+  hpFrac: number;
+}
+
 export interface ObsSelf {
   id: number;
   team: TeamId;
@@ -134,6 +147,9 @@ export interface Observation {
   // Ability walls, visible to both teams like the terrain they are
   // (additive v0 field).
   walls?: readonly ObsWall[];
+  // Fresh memories of enemy champions currently out of sight (additive v0
+  // field; see ObsLastSeen).
+  lastSeen?: readonly ObsLastSeen[];
 }
 
 export type Action =

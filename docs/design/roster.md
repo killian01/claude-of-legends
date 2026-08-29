@@ -43,8 +43,8 @@ An immovable frontline anchor: the fight happens where he says it does.
 A momentum brawler who banks Heat and spends it in beats.
 
 - Passive, Heat: attacks build Heat; at full Heat the next ability deals bonus damage.
-- Q, Blazing Jab: traveling punch through enemies on its line; hitting a champion refunds half the cooldown.
-- W, Cinder Guard: self shield plus a burn on adjacent enemies; a shield broken by damage detonates around him.
+- Q, Blazing Jab: traveling punch through enemies on its line; hitting a champion refunds half the cooldown, killing one resets it. Minions and camps never move it.
+- W, Cinder Guard: a jump onto an ally in reach (no ally, no cast); self shield plus a burn on enemies where he lands, and a shield broken by damage detonates around him.
 - E, Ember Flurry: ignites the next attack: bonus damage, a splash behind the victim, one extra Heat stack.
 - R, Emberfall: calls a comet down on a telegraphed zone; the epicenter stuns and burns, the rim slows.
 
@@ -116,7 +116,7 @@ The one who starts the fight; the earth answers.
 - Q, Horn Charge: traveling charge that plows bystanders aside; the impact point knocks up.
 - W, Challenge: taunts nearby enemies briefly.
 - E, Tremor Stomp: area burst around self; already-slowed enemies are rooted instead of slowed again.
-- R, Faultline: line shockwave that stuns along its path; the fissure stays behind as impassable ground for a beat.
+- R, Faultline: line shockwave that stuns along its path; the crack stays marked and erupts a second time (the Aftershock).
 
 ### Rhoka, Wildclaw (Skirmisher, flex)
 

@@ -9,7 +9,7 @@
 import type { AbilityDef, CastSpec } from '../sim/combat/casting';
 import type { EffectPredicate, EffectSpec } from '../sim/combat/effects';
 import { ITEM_PASSIVES } from '../sim/content/item_passives';
-import { ITEMS, type ItemDef } from '../sim/content/items';
+import { ITEMS, type ItemDef, type ItemStats } from '../sim/content/items';
 import type { SigilDef } from '../sim/content/sigils';
 import type { AbilityKey } from '../sim/types';
 
@@ -44,6 +44,8 @@ function predicatePhrase(p: EffectPredicate): string {
       return `after flying at least ${p.distance}`;
     case 'targetHpBelow':
       return `against targets under ${span('tt-cc', pct(p.frac))} health`;
+    case 'targetDying':
+      return 'if the blow kills';
     case 'targetIsolated':
       return `against a target with no ally within ${p.radius}`;
     case 'targetSlowed':
@@ -169,6 +171,12 @@ function describeCast(spec: CastSpec, castRange: number): string[] {
       if (spec.leaveWall) {
         lines.push(`The scarred line stays impassable for ${spec.leaveWall.duration}s.`);
       }
+      if (spec.aftershock) {
+        lines.push(
+          `The whole line stays cracked and erupts again after ${spec.aftershock.delay}s: ` +
+            `${sentence(spec.aftershock.effects)}.`,
+        );
+      }
       return lines;
     }
     case 'zone': {
@@ -215,6 +223,7 @@ function describeCast(spec: CastSpec, castRange: number): string[] {
           ? `Dashes up to ${spec.range}; the flight is real, and walls stop it.`
           : `Blinks up to ${spec.range} instantly.`,
       ];
+      if (spec.toAlly) lines.push('Jumps to an ally in reach and lands against them.');
       if (spec.untargetableDuringTravel) lines.push('You cannot be touched while traveling.');
       if (spec.passThrough?.length) {
         lines.push(`Everyone you pass through: ${sentence(spec.passThrough)}.`);
@@ -274,6 +283,22 @@ export function describeSigil(def: SigilDef): string[] {
     `${def.cooldown}s cooldown.`,
     ...describeCast(def.spec, def.castRange),
   ];
+}
+
+// Full stat names, not initials: nobody should have to guess what AD means.
+export function statLabel(s: ItemStats): string {
+  const parts: string[] = [];
+  if (s.ad) parts.push(`+${s.ad} Attack Damage`);
+  if (s.ap) parts.push(`+${s.ap} Ability Power`);
+  if (s.hp) parts.push(`+${s.hp} Health`);
+  if (s.mana) parts.push(`+${s.mana} Mana`);
+  if (s.armor) parts.push(`+${s.armor} Armor`);
+  if (s.mr) parts.push(`+${s.mr} Magic Resist`);
+  if (s.attackSpeedPct) parts.push(`+${Math.round(s.attackSpeedPct * 100)}% Attack Speed`);
+  if (s.moveSpeed) parts.push(`+${s.moveSpeed} Move Speed`);
+  if (s.armorPen) parts.push(`+${s.armorPen} Armor Penetration`);
+  if (s.mrPen) parts.push(`+${s.mrPen} Magic Penetration`);
+  return parts.join(', ');
 }
 
 export function describeItem(def: ItemDef, statLine: string): string[] {

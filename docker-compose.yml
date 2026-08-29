@@ -18,9 +18,15 @@ services:
     environment:
       PORT: "8787"
       DATA_DIR: /app/data
-      # Caddy overwrites the forwarding headers, so the per-address abuse caps
-      # key on the real player and not on the proxy (server/client_ip.ts).
+      # Exactly one proxy sits in front (the km01 Caddy), and it overwrites the
+      # forwarding headers, so the per-address abuse caps key on the real
+      # player and not on the proxy (server/edge.ts).
       TRUST_PROXY: "1"
+      # Pages allowed to open a game socket. The client is served by this same
+      # process, so the host in the request is always allowed and this could be
+      # empty; both public names are spelled out anyway, so a proxy that ever
+      # rewrites Host cannot refuse every browser at once.
+      ALLOWED_ORIGINS: "https://claudeoflegends.com,https://www.claudeoflegends.com"
     volumes:
       # Player identities and the match log. Careers reset without this.
       - game_data:/app/data

@@ -146,11 +146,12 @@ export class Match {
     });
   }
 
-  // Scoreboard rows with real player and bot names.
+  // Scoreboard rows carrying the seat's real player or bot name alongside
+  // the champion name the sim already put in `name`.
   buildScore(): ServerMsg {
     const rows = this.sim.scoreboard().map((r) => ({
       ...r,
-      name: this.unitNames.get(r.unitId) ?? r.name,
+      player: this.unitNames.get(r.unitId) ?? null,
     }));
     return { t: 'score', rows };
   }

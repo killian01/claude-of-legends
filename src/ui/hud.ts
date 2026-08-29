@@ -10,7 +10,7 @@ import { toggleGameFullscreen } from '../game/fullscreen';
 import { playSfx } from '../game/sfx';
 import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
-import { effectiveItemCost, ITEM_LIST, ITEMS, type ItemStats } from '../sim/content/items';
+import { effectiveItemCost, ITEM_LIST, ITEMS } from '../sim/content/items';
 import { SIGILS } from '../sim/content/sigils';
 import {
   BASIC_MAX_RANK,
@@ -23,9 +23,11 @@ import {
 import type { AbilityKey, TeamId } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { abilityIconUrl, sigilIconUrl } from './ability_icons';
-import { describeAbility, describeItem, describeSigil } from './describe';
+import { describeAbility, describeItem, describeSigil, statLabel } from './describe';
 import { iconDataUrl, itemIconUrl } from './icons';
+import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
+import { TeamScore } from './team_score';
 import { attachTooltip, hideTooltip } from './tooltips';
 
 const KEY_TINTS: Readonly<Record<string, [string, string]>> = {
@@ -73,22 +75,6 @@ function statusLabel(s: Status, time: number): string {
     default:
       return '';
   }
-}
-
-// Full stat names, not initials: nobody should have to guess what AD means.
-function statLabel(s: ItemStats): string {
-  const parts: string[] = [];
-  if (s.ad) parts.push(`+${s.ad} Attack Damage`);
-  if (s.ap) parts.push(`+${s.ap} Ability Power`);
-  if (s.hp) parts.push(`+${s.hp} Health`);
-  if (s.mana) parts.push(`+${s.mana} Mana`);
-  if (s.armor) parts.push(`+${s.armor} Armor`);
-  if (s.mr) parts.push(`+${s.mr} Magic Resist`);
-  if (s.attackSpeedPct) parts.push(`+${Math.round(s.attackSpeedPct * 100)}% Attack Speed`);
-  if (s.moveSpeed) parts.push(`+${s.moveSpeed} Move Speed`);
-  if (s.armorPen) parts.push(`+${s.armorPen} Armor Penetration`);
-  if (s.mrPen) parts.push(`+${s.mrPen} Magic Penetration`);
-  return parts.join(', ');
 }
 
 function itemInitials(id: string): string {
@@ -194,77 +180,176 @@ const CSS = `
   position: absolute; left: 12px; bottom: 12px; font-size: 10px; color: #93a87c;
   text-shadow: 0 1px 2px #000; max-width: 240px; line-height: 1.6;
 }
+/* The shop reads as a carved war-chest lid: a bronze outer frame, a moss-dark
+   field inside it, and gold reserved for what costs or grants gold. Tier is
+   carried by the card frame itself so a glance sorts components from
+   legendaries without reading a word. */
 .hud-shop {
-  position: absolute; left: 50%; top: 5vh; transform: translateX(-50%);
-  width: min(880px, calc(100vw - 400px)); min-width: 620px; max-height: 82vh;
-  background: rgba(12, 17, 8, 0.97); border: 1px solid #6e8f4a; border-radius: 10px;
-  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.65);
-  display: none; flex-direction: column; pointer-events: auto; z-index: 8;
+  position: absolute; left: 50%; top: 4vh; transform: translateX(-50%);
+  width: min(1180px, calc(100vw - 220px)); min-width: 700px; max-height: 88vh;
+  background:
+    linear-gradient(180deg, rgba(34, 47, 22, 0.98) 0%, rgba(14, 20, 9, 0.985) 130px),
+    radial-gradient(120% 80% at 50% 0%, rgba(110, 143, 74, 0.16), transparent 60%),
+    rgba(11, 16, 7, 0.985);
+  border: 2px solid #6e5a24; border-radius: 12px;
+  box-shadow:
+    0 0 0 1px rgba(184, 155, 62, 0.5),
+    inset 0 0 0 1px rgba(184, 155, 62, 0.22),
+    inset 0 1px 0 rgba(232, 200, 98, 0.28),
+    inset 0 0 70px rgba(0, 0, 0, 0.75),
+    0 22px 60px rgba(0, 0, 0, 0.72);
+  display: none; flex-direction: column; pointer-events: auto; z-index: 12;
+  overflow: hidden;
 }
 .hud-shop.open { display: flex; }
+/* Corner studs, the cheapest way to make a panel read as forged metal. */
+.hud-shop::before, .hud-shop::after {
+  content: ''; position: absolute; top: 7px; width: 7px; height: 7px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f0dfae, #6e5a24 80%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.hud-shop::before { left: 8px; }
+.hud-shop::after { right: 8px; }
 .hud-shop-head {
-  flex: none; display: flex; align-items: center; gap: 14px;
-  padding: 10px 14px; border-bottom: 1px solid #3a4f28;
+  flex: none; display: flex; align-items: center; gap: 16px;
+  padding: 12px 22px 11px;
+  background: linear-gradient(180deg, rgba(59, 78, 34, 0.55), rgba(20, 28, 12, 0));
+  border-bottom: 2px solid #3a4f28;
+  box-shadow: 0 1px 0 rgba(184, 155, 62, 0.35), 0 6px 16px rgba(0, 0, 0, 0.45);
 }
-.hud-shop-head h3 { margin: 0; font-size: 16px; }
-.hud-shop-status { font-size: 11px; color: #93a87c; flex: 1; }
+.hud-shop-head h3 {
+  margin: 0; font-size: 19px; font-weight: 800; letter-spacing: 3px;
+  text-transform: uppercase; color: #f0dfae; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+.hud-shop-head .hud-gold { font-size: 18px; }
+.hud-shop-status { font-size: 11.5px; color: #93a87c; flex: 1; }
 .hud-shop-close {
-  pointer-events: auto; border: 1px solid #466030; background: #1d2a14; color: #d8e6c0;
-  border-radius: 5px; font-size: 12px; padding: 4px 10px; cursor: pointer;
+  pointer-events: auto; border: 1px solid #6e5a24; color: #e8dfb4;
+  background: linear-gradient(180deg, #33401f, #1a2410);
+  border-radius: 6px; font-size: 12px; font-weight: 700; padding: 6px 14px; cursor: pointer;
+  letter-spacing: 0.5px;
 }
-.hud-shop-close:hover { border-color: #7ca050; }
+.hud-shop-close:hover { border-color: #e8c862; color: #fff3cf; }
 .hud-shop-body { display: flex; min-height: 0; }
-.hud-shop-grid { flex: 1; overflow-y: auto; padding: 8px 12px 12px; }
+.hud-shop-grid { flex: 1; overflow-y: auto; padding: 12px 18px 18px; }
+/* Section headings stay pinned while the list scrolls: the grid is twice the
+   pane tall, so the tier you are looking at should always name itself. */
 .hud-shop-grid h4 {
-  margin: 10px 0 6px; font-size: 11px; letter-spacing: 1px;
-  color: #93a87c; text-transform: uppercase;
+  position: sticky; top: -12px; z-index: 2;
+  display: flex; align-items: center; gap: 10px;
+  margin: 18px -18px 10px; padding: 10px 18px 8px;
+  background: linear-gradient(180deg, #131c0b 0, #131c0b 82%, rgba(19, 28, 11, 0));
+  font-size: 11.5px; letter-spacing: 2px;
+  color: #b6cc92; text-transform: uppercase; font-weight: 700;
 }
-.hud-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
+.hud-shop-grid h4:first-child { margin-top: -10px; }
+.hud-shop-grid h4::before {
+  content: ''; width: 7px; height: 7px; flex: none; transform: rotate(45deg);
+  background: #b89b3e; box-shadow: 0 0 6px rgba(232, 200, 98, 0.5);
+}
+.hud-shop-grid h4::after {
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(90deg, rgba(184, 155, 62, 0.55), rgba(184, 155, 62, 0));
+}
+/* Scrollbars in the game's tones, both panes. Chrome ignores the
+   ::-webkit-scrollbar rules on any element that also sets scrollbar-width,
+   so the standard properties are kept for Firefox only. */
+@supports not selector(::-webkit-scrollbar) {
+  .hud-shop-grid, .hud-shop-detail { scrollbar-width: thin; scrollbar-color: #6e5a24 #10160c; }
+}
+.hud-shop-grid::-webkit-scrollbar, .hud-shop-detail::-webkit-scrollbar { width: 12px; }
+.hud-shop-grid::-webkit-scrollbar-track, .hud-shop-detail::-webkit-scrollbar-track {
+  background: #10160c; border-left: 1px solid #2c3d1e;
+}
+.hud-shop-grid::-webkit-scrollbar-thumb, .hud-shop-detail::-webkit-scrollbar-thumb {
+  border-radius: 6px; border: 2px solid #10160c;
+  background: linear-gradient(180deg, #7d6a2c, #46592c);
+}
+.hud-shop-grid::-webkit-scrollbar-thumb:hover, .hud-shop-detail::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #e8c862, #6e8f4a);
+}
+.hud-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(146px, 1fr)); gap: 10px; }
 .hud-card {
-  position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px;
-  background: #1d2a14; border: 1px solid #3a4f28; border-radius: 6px;
-  color: #d8e6c0; padding: 7px 4px 5px; cursor: pointer; font-size: 11px; text-align: center;
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 5px;
+  background: linear-gradient(180deg, #26341a, #151f0d);
+  border: 1px solid #3a4f28; border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(216, 230, 192, 0.12), 0 2px 6px rgba(0, 0, 0, 0.5);
+  color: #d8e6c0; padding: 10px 6px 8px; cursor: pointer; font-size: 12px; text-align: center;
+  transition: transform 0.09s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
-.hud-card:hover { border-color: #7ca050; }
-.hud-card.sel { border-color: #e8c862; box-shadow: 0 0 8px rgba(232, 200, 98, 0.35); }
-.hud-card.cant { opacity: 0.45; }
-.hud-card img { border-radius: 4px; }
-.hud-card-cost { color: #ffd94a; font-weight: 700; font-size: 11px; }
+/* Tier frames: stone, silver, gold. */
+.hud-card.tier1 { border-color: #4a5c34; }
+.hud-card.tier2 { border-color: #5f7b8c; }
+.hud-card.tier3 { border-color: #8d7530; background: linear-gradient(180deg, #33361a, #1a1c0c); }
+.hud-card:hover {
+  transform: translateY(-2px); border-color: #a8c078;
+  box-shadow: inset 0 1px 0 rgba(216, 230, 192, 0.18), 0 6px 14px rgba(0, 0, 0, 0.6);
+}
+.hud-card.sel {
+  border-color: #e8c862;
+  box-shadow: 0 0 0 1px #e8c862, 0 0 16px rgba(232, 200, 98, 0.45), inset 0 1px 0 rgba(255, 243, 207, 0.25);
+}
+.hud-card.cant { opacity: 0.42; }
+.hud-card img { border-radius: 5px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6); }
+.hud-card-name { line-height: 1.25; font-weight: 600; color: #e4f0cc; }
+.hud-card-cost {
+  color: #ffd94a; font-weight: 800; font-size: 12.5px; letter-spacing: 0.5px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
 .hud-card-own {
-  position: absolute; top: 2px; right: 3px; background: #2f6a2a; color: #e8f5c8;
-  border-radius: 3px; font-size: 9px; font-weight: 800; padding: 0 4px;
+  position: absolute; top: 4px; right: 4px; background: #2f6a2a; color: #e8f5c8;
+  border: 1px solid #58d84e; border-radius: 4px; font-size: 9px; font-weight: 800; padding: 0 4px;
 }
-.hud-card-recipe { display: flex; gap: 2px; justify-content: center; min-height: 14px; }
-.hud-card-recipe img { width: 13px; height: 13px; border-radius: 2px; opacity: 0.9; }
+.hud-card-recipe {
+  display: flex; gap: 4px; justify-content: center; min-height: 22px; align-items: center;
+}
+.hud-card-recipe img { width: 20px; height: 20px; border-radius: 4px; opacity: 0.92; }
 .hud-shop-detail {
-  flex: none; width: 300px; border-left: 1px solid #3a4f28;
-  padding: 12px; overflow-y: auto; font-size: 12px;
+  flex: none; width: 340px; border-left: 2px solid #3a4f28;
+  background: linear-gradient(180deg, rgba(30, 41, 19, 0.75), rgba(10, 15, 6, 0.75));
+  box-shadow: inset 1px 0 0 rgba(184, 155, 62, 0.28);
+  padding: 16px; overflow-y: auto; font-size: 12.5px;
 }
-.hud-detail-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.hud-detail-head img { border-radius: 6px; }
-.hud-detail-name { font-size: 15px; font-weight: 700; color: #f2ffd9; }
-.hud-detail-tier { font-size: 10px; color: #93a87c; }
-.hud-detail-stats { color: #b7cf96; margin-bottom: 10px; line-height: 1.5; }
-.hud-build-label { font-size: 10px; color: #93a87c; margin: 8px 0 4px; text-transform: uppercase; letter-spacing: 1px; }
+.hud-detail-head {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+  padding-bottom: 10px; border-bottom: 1px solid #2c3d1e;
+}
+.hud-detail-head img { border-radius: 7px; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.7); }
+.hud-detail-name { font-size: 17px; font-weight: 800; color: #f2ffd9; letter-spacing: 0.3px; }
+.hud-detail-tier { font-size: 10px; color: #93a87c; letter-spacing: 1.5px; text-transform: uppercase; }
+.hud-detail-stats { color: #c3dba0; margin-bottom: 12px; line-height: 1.6; }
+.hud-build-label {
+  font-size: 10px; color: #b6cc92; margin: 12px 0 6px;
+  text-transform: uppercase; letter-spacing: 1.6px; font-weight: 700;
+}
 .hud-build-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .hud-build-row .op { color: #93a87c; font-weight: 700; }
-.hud-build-icon { position: relative; width: 34px; height: 34px; cursor: pointer; }
-.hud-build-icon img { width: 34px; height: 34px; border-radius: 5px; border: 2px solid #3a4f28; display: block; }
+.hud-build-icon { position: relative; width: 44px; height: 44px; cursor: pointer; }
+.hud-build-icon img { width: 44px; height: 44px; border-radius: 5px; border: 2px solid #3a4f28; display: block; }
 .hud-build-icon.owned img { border-color: #58d84e; }
 .hud-build-icon .tick {
   position: absolute; right: -3px; bottom: -3px; width: 12px; height: 12px;
   border-radius: 50%; background: #2f6a2a; color: #e8f5c8; font-size: 9px;
   line-height: 12px; text-align: center; font-weight: 800;
 }
-.hud-detail-cost { margin: 10px 0 4px; }
-.hud-detail-cost .pay { color: #ffd94a; font-weight: 800; font-size: 14px; }
+.hud-detail-cost {
+  margin: 14px 0 4px; padding-top: 12px; border-top: 1px solid #2c3d1e;
+}
+.hud-detail-cost .pay {
+  color: #ffd94a; font-weight: 800; font-size: 17px; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
 .hud-detail-cost .full { color: #93a87c; font-size: 11px; }
 .hud-buy {
-  pointer-events: auto; width: 100%; margin-top: 8px; padding: 8px 0; border-radius: 6px;
-  border: 1px solid #b89b3e; background: #3d3312; color: #f0dfae;
-  font-size: 13px; font-weight: 700; cursor: pointer;
+  pointer-events: auto; width: 100%; margin-top: 10px; padding: 11px 0; border-radius: 7px;
+  border: 1px solid #b89b3e; color: #f7ecc4;
+  background: linear-gradient(180deg, #6a5a20, #3a3010);
+  box-shadow: inset 0 1px 0 rgba(255, 243, 207, 0.3), 0 3px 10px rgba(0, 0, 0, 0.55);
+  font-size: 14px; font-weight: 800; letter-spacing: 1.2px; text-transform: uppercase;
+  cursor: pointer;
 }
-.hud-buy:hover:not(:disabled) { background: #55491d; }
+.hud-buy:hover:not(:disabled) {
+  background: linear-gradient(180deg, #8a7529, #4b3e14); border-color: #e8c862;
+}
 .hud-buy:disabled { opacity: 0.45; cursor: default; }
 .hud-buy-why { font-size: 10px; color: #c9a08e; margin-top: 4px; text-align: center; }
 .hud-detail-empty { color: #93a87c; font-size: 12px; line-height: 1.5; }
@@ -287,7 +372,7 @@ const CSS = `
   font-size: 12px; outline: none; display: none;
 }
 .hud-announce {
-  position: absolute; top: 64px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: 106px; left: 50%; transform: translateX(-50%);
   font-size: 26px; font-weight: 800; letter-spacing: 1px; color: #f2ffd9;
   text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity 0.3s;
 }
@@ -296,29 +381,86 @@ const CSS = `
   background: rgba(61, 23, 16, 0.95); border: 1px solid #a05040; border-radius: 6px;
   color: #f5c9c0; font-size: 12px; padding: 6px 12px; opacity: 0; transition: opacity 0.25s;
 }
+/* The scoreboard answers three questions at a glance: who is behind the
+   champion, how the lane is going, and what they have built. The two teams
+   stack so every row is one full-width table line with room for the build. */
 .hud-score {
-  position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
-  width: 640px; max-width: 94vw; background: rgba(14, 20, 9, 0.95);
-  border: 1px solid #466030; border-radius: 10px; padding: 12px 16px; display: none; z-index: 9;
+  position: absolute; top: 36px; left: 50%; transform: translateX(-50%);
+  width: min(1020px, 96vw); max-height: 86vh; overflow-y: auto;
+  background:
+    linear-gradient(180deg, rgba(34, 47, 22, 0.98) 0%, rgba(14, 20, 9, 0.985) 110px),
+    rgba(11, 16, 7, 0.985);
+  border: 2px solid #6e5a24; border-radius: 12px; padding: 0 0 16px;
+  box-shadow:
+    0 0 0 1px rgba(184, 155, 62, 0.5),
+    inset 0 1px 0 rgba(232, 200, 98, 0.28),
+    0 22px 60px rgba(0, 0, 0, 0.72);
+  display: none; z-index: 9;
+  scrollbar-width: thin; scrollbar-color: #6e5a24 #10160c;
 }
 .hud-score.open { display: block; }
-.hud-score h3 { margin: 0 0 8px; font-size: 14px; text-align: center; }
-.hud-score-teams { display: flex; gap: 20px; }
-.hud-score-team { flex: 1; }
-.hud-score-team h4 { margin: 0 0 4px; font-size: 12px; }
+.hud-score h3 {
+  margin: 0 0 4px; padding: 12px 0 11px; font-size: 17px; font-weight: 800;
+  letter-spacing: 3px; text-transform: uppercase; text-align: center; color: #f0dfae;
+  background: linear-gradient(180deg, rgba(59, 78, 34, 0.55), rgba(20, 28, 12, 0));
+  border-bottom: 2px solid #3a4f28; box-shadow: 0 1px 0 rgba(184, 155, 62, 0.35);
+}
+.hud-score-teams { display: flex; flex-direction: column; gap: 14px; padding: 10px 20px 0; }
+.hud-score-team h4 {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 0 6px; font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+}
+.hud-score-team h4::after {
+  content: ''; flex: 1; height: 1px; background: currentColor; opacity: 0.35;
+}
 .hud-score-team.blue h4 { color: #9dbcf5; }
 .hud-score-team.red h4 { color: #f5a3a3; }
 .hud-score-row {
-  display: grid; grid-template-columns: 1fr 74px 40px; gap: 6px;
-  font-size: 12px; padding: 2px 0; align-items: baseline;
+  display: grid; grid-template-columns: 1.15fr 1fr 96px 54px 212px; gap: 10px;
+  font-size: 13px; padding: 5px 8px; align-items: center; border-radius: 6px;
 }
-.hud-score-row.head { color: #93a87c; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
-.hud-score-row.self { color: #e8f5c8; font-weight: 700; }
-.hud-score-kda { color: #93a87c; white-space: nowrap; text-align: right; }
-.hud-score-row.self .hud-score-kda { color: #e8f5c8; }
-.hud-score-cs { color: #93a87c; text-align: right; }
+.hud-score-row + .hud-score-row { border-top: 1px solid rgba(58, 79, 40, 0.55); }
+.hud-score-row.head {
+  color: #93a87c; font-size: 10px; text-transform: uppercase; letter-spacing: 1.4px;
+  border-top: 0; padding-bottom: 2px;
+}
+.hud-score-row.self {
+  color: #f2ffd9; font-weight: 700;
+  background: rgba(184, 155, 62, 0.12); box-shadow: inset 0 0 0 1px rgba(184, 155, 62, 0.4);
+}
+.hud-score-player { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hud-score-champ { color: #b6cc92; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hud-score-champ .lv { color: #93a87c; font-size: 11px; }
+.hud-score-row.self .hud-score-champ { color: #e4f0cc; }
+.hud-score-kda { color: #d8e6c0; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+.hud-score-cs { color: #93a87c; text-align: right; font-variant-numeric: tabular-nums; }
+.hud-score-row.self .hud-score-cs { color: #e8f5c8; }
+.hud-score-build { display: flex; gap: 4px; justify-content: flex-end; }
+.hud-score-build img {
+  width: 30px; height: 30px; border-radius: 5px; border: 1px solid #4a5c34; display: block;
+}
+.hud-score-build .slot {
+  width: 30px; height: 30px; border-radius: 5px; border: 1px dashed #2c3d1e; box-sizing: border-box;
+}
+/* The top of the screen, in order: team kills, then the target frame, then
+   announcements. The score is the only one of the three that is always up,
+   so it takes the very top and the other two moved down to clear it. */
+.hud-teamscore {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  background: rgba(14, 20, 9, 0.85); border: 1px solid #3a4f28; border-radius: 6px;
+  padding: 3px 14px; text-shadow: 0 1px 2px #000;
+}
+.hud-teamscore-n {
+  font-size: 20px; font-weight: 800; min-width: 24px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.hud-teamscore-n.mine { text-shadow: 0 0 10px rgba(184, 155, 62, 0.55), 0 1px 2px #000; }
+.hud-teamscore-label {
+  font-size: 9px; font-weight: 700; letter-spacing: 2px; color: #93a87c;
+}
 .hud-target {
-  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: 46px; left: 50%; transform: translateX(-50%);
   display: none; align-items: center; gap: 9px; min-width: 200px;
   background: rgba(14, 20, 9, 0.9); border: 1px solid #466030; border-radius: 8px;
   padding: 6px 10px;
@@ -339,8 +481,10 @@ const CSS = `
   text-shadow: 0 1px 2px #000; pointer-events: auto;
 }
 .hud-kda .cs { display: block; font-size: 11px; font-weight: 600; color: #93a87c; }
+/* Informational wash: it must never swallow clicks meant for the shop,
+   which stays usable while dead. Its own buttons opt back in. */
 .hud-overlay {
-  position: absolute; inset: 0; display: none;
+  position: absolute; inset: 0; display: none; pointer-events: none;
   align-items: center; justify-content: center; flex-direction: column;
   background: rgba(0, 0, 0, 0.45); text-shadow: 0 2px 8px #000; z-index: 10;
 }
@@ -353,17 +497,16 @@ const CSS = `
   font-size: 14px; font-weight: 600; cursor: pointer;
 }
 .hud-menu-btn:hover { border-color: #7ca050; }
+/* The end card holds the scoreboard table itself, so it takes the panel's
+   width and stacks the two teams the same way the Tab panel does. */
 .hud-end-card {
-  margin-top: 14px; padding: 14px 18px; border-radius: 10px;
+  margin-top: 14px; padding: 14px 20px; border-radius: 10px;
   background: rgba(14, 20, 9, 0.92); border: 1px solid #466030;
-  display: flex; gap: 26px; pointer-events: auto;
+  width: min(1020px, 96vw); max-height: 58vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px; pointer-events: auto;
+  text-shadow: none;
+  scrollbar-width: thin; scrollbar-color: #6e5a24 #10160c;
 }
-.hud-end-team { min-width: 170px; }
-.hud-end-team h4 { margin: 0 0 6px; font-size: 13px; }
-.hud-end-team.blue h4 { color: #9dbcf5; }
-.hud-end-team.red h4 { color: #f5a3a3; }
-.hud-end-row { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
-.hud-end-row span:last-child { color: #93a87c; margin-left: 12px; white-space: nowrap; }
 .hud-end-btns { display: flex; gap: 12px; }
 .hud-end-rating { font-size: 15px; font-weight: 700; margin-top: 4px; min-height: 18px; }
 `;
@@ -378,6 +521,7 @@ export class Hud {
   private readonly selfId: number;
   private readonly selfTeam: TeamId;
   private readonly metaText: HTMLElement;
+  private readonly teamScore: TeamScore;
   private readonly statusRow: HTMLElement;
   private readonly hpFill: HTMLElement;
   private readonly hpText: HTMLElement;
@@ -435,6 +579,9 @@ export class Hud {
   private announceUntil = 0;
   private sawBattleBegin = false;
   private sawFirstBlood = false;
+  // The opening buy is the easiest thing in the genre to forget, so the
+  // shop is already open when the match starts. Once, and only at the top.
+  private openedOpeningShop = false;
   private endPlayed = false;
   private lastTowerCount: number | null = null;
   private readonly rootEl: HTMLElement;
@@ -475,6 +622,7 @@ export class Hud {
     const bottom = el('div', 'hud-bottom');
     this.statusRow = el('div', 'hud-statuses');
     this.metaText = el('div', 'hud-meta');
+    this.teamScore = new TeamScore(TEAM_TEXT_COLORS, selfTeam);
 
     const bars = el('div', 'hud-bars');
     const mkBar = (color: string): { bar: HTMLElement; fill: HTMLElement; text: HTMLElement } => {
@@ -535,7 +683,7 @@ export class Hud {
       if (def) {
         // A painted icon derived from the ability record itself; the hotkey
         // moves to a corner badge so the art stays readable.
-        slot.style.backgroundImage = `url(${abilityIconUrl(key, def.abilities[key])})`;
+        slot.style.backgroundImage = `url(${abilityIconUrl(key, def.abilities[key], def.id)})`;
         slot.style.backgroundSize = 'cover';
         slot.appendChild(el('span', 'hud-slot-key', key));
       } else {
@@ -671,14 +819,15 @@ export class Hud {
     const shopBody = el('div', 'hud-shop-body');
     const shopGrid = el('div', 'hud-shop-grid');
     const makeCard = (item: (typeof ITEM_LIST)[number]): HTMLButtonElement => {
-      const btn = el('button', 'hud-card') as HTMLButtonElement;
+      // The tier class paints the card frame: stone, silver, gold.
+      const btn = el('button', `hud-card tier${item.tier}`) as HTMLButtonElement;
       btn.type = 'button';
       const own = el('span', 'hud-card-own');
       own.style.display = 'none';
       const icon = document.createElement('img');
       icon.src = itemIconUrl(item);
-      icon.width = 30;
-      icon.height = 30;
+      icon.width = 64;
+      icon.height = 64;
       const recipe = el('div', 'hud-card-recipe');
       for (const compId of item.buildsFrom ?? []) {
         const comp = ITEMS[compId];
@@ -690,7 +839,7 @@ export class Hud {
       btn.append(
         own,
         icon,
-        el('div', '', item.name),
+        el('div', 'hud-card-name', item.name),
         recipe,
         el('div', 'hud-card-cost', `${item.cost}g`),
       );
@@ -800,6 +949,7 @@ export class Hud {
       bottom,
       hints,
       kda,
+      this.teamScore.el,
       this.targetFrame,
       this.shop,
       this.feed,
@@ -911,9 +1061,13 @@ export class Hud {
     }, 1800);
   }
 
+  // Where the shop is usable: standing at your own fountain, or dead and
+  // waiting for it (the sim waives the range check for a corpse, so death
+  // is shopping time instead of dead time).
   private atFountain(): boolean {
     const u = this.world.units.get(this.selfId);
     if (!u) return false;
+    if (u.dead) return true;
     const fountain = this.world.map.fountains.find((f) => f.team === u.team);
     if (!fountain) return false;
     return Math.hypot(u.pos.x - fountain.x, u.pos.z - fountain.z) <= fountain.r + 2;
@@ -980,8 +1134,8 @@ export class Hud {
     const head = mk('hud-detail-head');
     const bigIcon = document.createElement('img');
     bigIcon.src = itemIconUrl(def);
-    bigIcon.width = 44;
-    bigIcon.height = 44;
+    bigIcon.width = 72;
+    bigIcon.height = 72;
     const title = mk('');
     title.append(
       mk('hud-detail-name', def.name),
@@ -1067,6 +1221,9 @@ export class Hud {
     if (kills.length === 0) return;
     const rows = this.world.scoreboard();
     const rowOf = (id: number) => rows.find((r) => r.unitId === id);
+    // Who a line is about: the person when a person holds the seat, the
+    // champion otherwise.
+    const who = (r: { player: string | null; name: string }) => r.player ?? r.name;
     for (const k of kills) {
       const victimRow = rowOf(k.unitId);
       if (!victimRow) continue;
@@ -1077,13 +1234,13 @@ export class Hud {
       }
       if (k.unitId === this.selfId) {
         playSfx('death');
-        announceVoice('You have been slain', true);
+        announceVoice('You have been slain', true, true);
         // Death recap: who did it, and who helped inside the assist window
         // (recentDamagers is live offline; online it may be empty).
         const killerRow2 = rowOf(k.killerId);
         const killerUnit2 = this.world.units.get(k.killerId);
         let recap = killerRow2
-          ? `Killed by ${killerRow2.name}`
+          ? `Killed by ${who(killerRow2)}`
           : killerUnit2?.kind === 'tower'
             ? 'Killed by a tower'
             : killerUnit2?.kind === 'warden'
@@ -1093,7 +1250,10 @@ export class Hud {
         if (me) {
           const helpers = me.recentDamagers
             .filter((r) => r.id !== k.killerId && this.world.time - r.at <= 10)
-            .map((r) => rowOf(r.id)?.name)
+            .map((r) => {
+              const hit = rowOf(r.id);
+              return hit ? who(hit) : undefined;
+            })
             .filter((n): n is string => n !== undefined);
           if (helpers.length > 0) recap += ` (with ${helpers.join(', ')})`;
         }
@@ -1113,6 +1273,10 @@ export class Hud {
                 ? 'RAMPAGE'
                 : `You killed ${victimRow.name}`;
         this.announce(chainText, '#ffd94a');
+        // The voice never names the champion (playtest round 3: a roster of
+        // ten invented names read aloud is noise, and the line runs long
+        // enough to still be talking over the next fight). Side and outcome
+        // is all it calls; the kill feed and the center text carry the name.
         announceVoice(
           this.killChain >= 4
             ? 'Rampage'
@@ -1122,10 +1286,18 @@ export class Hud {
                 ? 'Double kill'
                 : 'You have slain an enemy',
           true,
+          true,
         );
+      } else if (victimRow.team !== this.selfTeam) {
+        // An enemy vanishing off the screen is ambiguous: dead, or escaped
+        // into the fog? The voice settles it even when the takedown was a
+        // teammate's, which is the whole point of calling it.
+        announceVoice('An enemy has been slain', false, true);
+      } else {
+        announceVoice('An ally has been slain', false, true);
       }
       const killerRow = rowOf(k.killerId);
-      let killerName = killerRow?.name ?? 'The lane';
+      let killerName = killerRow ? who(killerRow) : 'The lane';
       let killerColor = killerRow ? TEAM_TEXT_COLORS[killerRow.team] : '#c9d8ae';
       if (!killerRow) {
         const killerUnit = this.world.units.get(k.killerId);
@@ -1141,7 +1313,7 @@ export class Hud {
       const middle = document.createElement('span');
       middle.textContent = ' killed ';
       const victim = document.createElement('span');
-      victim.textContent = victimRow.name;
+      victim.textContent = who(victimRow);
       victim.style.color = TEAM_TEXT_COLORS[victimRow.team] ?? '#c9d8ae';
       entry.append(killer, middle, victim);
       this.feed.appendChild(entry);
@@ -1153,6 +1325,13 @@ export class Hud {
   update(): void {
     const u = this.world.units.get(this.selfId);
     if (!u) return;
+
+    if (!this.openedOpeningShop) {
+      this.openedOpeningShop = true;
+      // Only at the top of a live match: a rejoin or a replay opens to the
+      // game, not to a shop nobody asked for.
+      if (this.world.time < 5 && this.world.winner === null) this.shop.classList.add('open');
+    }
 
     if (this.announceUntil !== 0 && performance.now() > this.announceUntil) {
       this.announceEl.style.opacity = '0';
@@ -1314,9 +1493,11 @@ export class Hud {
 
     if (this.shop.classList.contains('open')) {
       const shopOk = this.atFountain();
-      this.shopStatus.textContent = shopOk
-        ? 'Click an item to inspect it; Buy or double-click to purchase.'
-        : 'Browse anywhere; buying needs your fountain.';
+      this.shopStatus.textContent = u.dead
+        ? 'Dead, so spend the wait: buying works from here.'
+        : shopOk
+          ? 'Click an item to inspect it; Buy or double-click to purchase.'
+          : 'Browse anywhere; buying needs your fountain.';
       this.shopGoldText.textContent = `${Math.floor(u.gold)}g`;
       for (const item of ITEM_LIST) {
         const btn = this.itemButtons.get(item.id);
@@ -1388,8 +1569,11 @@ export class Hud {
       this.targetKey = '';
     }
 
-    // The always-on personal score widget.
-    const selfRow = this.world.scoreboard().find((r) => r.unitId === this.selfId);
+    // The always-on score widgets: the team totals at the top, the personal
+    // line at the right. One scoreboard read feeds both.
+    const scoreRows = this.world.scoreboard();
+    this.teamScore.update(scoreRows);
+    const selfRow = scoreRows.find((r) => r.unitId === this.selfId);
     if (selfRow) {
       // Defensive ?? 0: an older server may send rows without these fields.
       this.kdaText.textContent = `${selfRow.kills} / ${selfRow.deaths} / ${selfRow.assists ?? 0}`;
@@ -1397,37 +1581,8 @@ export class Hud {
     }
 
     if (this.score.classList.contains('open')) {
-      const rows = this.world.scoreboard();
       for (const team of [0, 1] as const) {
-        const box = this.scoreTeams[team];
-        box.textContent = '';
-        const head = document.createElement('div');
-        head.className = 'hud-score-row head';
-        for (const [cls, label] of [
-          ['', 'Champion'],
-          ['hud-score-kda', 'K / D / A'],
-          ['hud-score-cs', 'CS'],
-        ] as const) {
-          const cell = document.createElement('span');
-          cell.className = cls;
-          cell.textContent = label;
-          head.appendChild(cell);
-        }
-        box.appendChild(head);
-        for (const r of rows.filter((x) => x.team === team)) {
-          const row = document.createElement('div');
-          row.className = r.unitId === this.selfId ? 'hud-score-row self' : 'hud-score-row';
-          const name = document.createElement('span');
-          name.textContent = `${r.name} (Lv ${r.level})`;
-          const kda = document.createElement('span');
-          kda.className = 'hud-score-kda';
-          kda.textContent = `${r.kills} / ${r.deaths} / ${r.assists ?? 0}`;
-          const cs = document.createElement('span');
-          cs.className = 'hud-score-cs';
-          cs.textContent = String(r.cs ?? 0);
-          row.append(name, kda, cs);
-          box.appendChild(row);
-        }
+        renderScoreboardTeam(this.scoreTeams[team], scoreRows, team, this.selfId);
       }
     }
 
@@ -1447,30 +1602,20 @@ export class Hud {
       this.endTitle.style.color = winner === this.selfTeam ? '#8fd06a' : '#d06a6a';
       const total = Math.max(0, Math.floor(this.world.time));
       this.endSub.textContent = `Match time ${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-      // Final per-champion stats, built once at match end.
-      const mkDiv = (className: string): HTMLElement => {
-        const d = document.createElement('div');
-        d.className = className;
-        return d;
-      };
+      // The same scoreboard the match was played with: same columns, same
+      // builds, same layout, so the summary is the table you already know
+      // rather than a thinner second one.
       this.endStats.textContent = '';
       const rows = this.world.scoreboard();
       for (const t of [0, 1] as const) {
-        const box = mkDiv(`hud-end-team ${t === 0 ? 'blue' : 'red'}`);
-        const title = t === winner ? `Team ${t + 1} (winner)` : `Team ${t + 1}`;
+        const box = document.createElement('div');
+        box.className = `hud-score-team ${t === 0 ? 'blue' : 'red'}`;
         const h = document.createElement('h4');
-        h.textContent = title;
+        h.textContent = t === winner ? `Team ${t + 1} (winner)` : `Team ${t + 1}`;
         box.appendChild(h);
-        for (const row of rows.filter((r) => r.team === t)) {
-          const line = mkDiv('hud-end-row');
-          const name = document.createElement('span');
-          name.textContent = row.name;
-          if (row.unitId === this.selfId) name.style.color = '#e8f5c8';
-          const kda = document.createElement('span');
-          kda.textContent = `Lv ${row.level} · ${row.kills}/${row.deaths}/${row.assists ?? 0} · CS ${row.cs ?? 0}`;
-          line.append(name, kda);
-          box.appendChild(line);
-        }
+        const body = document.createElement('div');
+        renderScoreboardTeam(body, rows, t, this.selfId);
+        box.appendChild(body);
         this.endStats.appendChild(box);
       }
     }

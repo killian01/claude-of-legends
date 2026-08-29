@@ -28,6 +28,7 @@ Vitest · Biome. No UI framework; tiny dependency set.
 | `src/ui/` | HUD (DOM + CSS). |
 | `src/net/` | Online client: wire protocol + WebSocket mirror world. |
 | `server/` | Authoritative game server. |
+| `headless/` | The environment: a match stepped from outside the repo over NDJSON (ADR 0002 phase 2). |
 | `tests/` | Vitest suite, including the structural gates. |
 
 Directories that do not exist yet are created by their phase in `docs/plan-48h.md`;
@@ -37,6 +38,7 @@ keep this table honest as they land.
 
 - `pnpm install`: once per clone. `pnpm dev`: Vite client. `pnpm test`: Vitest.
   Prefer a single file while iterating: `pnpm vitest run tests/determinism.test.ts`.
+- `pnpm env`: builds and runs the headless environment on stdio (`headless/README.md`).
 - `pnpm check`: strict `tsc`, fast; run liberally while working.
 - `pnpm lint`: Biome (2-space, lineWidth 100, single quotes). Format only the files you changed.
 

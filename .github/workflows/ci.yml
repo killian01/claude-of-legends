@@ -1,0 +1,31 @@
+# Keeps main deployable: the same three commands the contributing guide asks
+# for locally. Nothing here deploys; deployment is docs/deploy.md.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+      # The repo carries a backlog of fixable Biome nits (optional chains,
+      # unused imports) that predate this workflow, so lint reports without
+      # failing the run. Drop continue-on-error once "pnpm biome check
+      # --write ." has been through review.
+      - run: pnpm lint
+        continue-on-error: true

@@ -37,10 +37,12 @@ import { NavGrid } from './navgrid';
 import { initialObjectiveState, onWardenSlain, stepObjectives } from './objectives';
 import { passiveOf, stepPassives } from './passives';
 import { findPath } from './pathfind';
-import type { Policy } from './policy';
+import type { Action, Observation, Policy } from './policy';
 import type { Projectile } from './projectiles';
 import { stepProjectiles } from './projectiles';
 import { startRecall, stepRecalls } from './recall';
+import { createRemoteSeat, type RemoteSeat, runRemoteDecisions } from './remote_policy';
+import { respawnDelay } from './respawn';
 import { grantKillRewards, grantPassiveGold } from './rewards';
 import { Rng } from './rng';
 import { stepSeparation } from './separation';
@@ -78,13 +80,12 @@ export type SimEvent =
   | { type: 'gold'; unitId: number; amount: number }
   | { type: 'victory'; team: TeamId };
 
-// Shortened by the pacing review: less time watching the death screen.
-const RESPAWN_BASE = 6;
-const RESPAWN_PER_LEVEL = 1.3;
 // How long a champion's damage on a victim keeps earning an assist.
 const ASSIST_WINDOW_S = 10;
 const SHOP_RANGE_PAD = 2;
-const INVENTORY_SLOTS = 6;
+// Exported: the HUD draws exactly this many build slots, so a full bag and
+// an empty one read as the same shape.
+export const INVENTORY_SLOTS = 6;
 
 // Bot lane assignment order: mid first, then the side lanes.
 const BOT_LANES: readonly LaneId[] = ['mid', 'top', 'bot'];
@@ -108,10 +109,20 @@ export class Sim {
   readonly walls = new Map<number, Wall>();
   // Bots: sim entities driven in-tick by an attached Policy (ADR 0002).
   readonly policies = new Map<number, Policy>();
+  // Seats whose Policy runs outside this process (remote_policy.ts).
+  readonly remoteSeats = new Map<number, RemoteSeat>();
   time = 0;
   tickCount = 0;
   winner: TeamId | null = null;
   private visibility: [Set<number>, Set<number>] = [new Set(), new Set()];
+  // Each team's fading memory of enemy champions: where one was last SEEN
+  // and how hurt it was. The honest mirror of a human remembering who ran
+  // into which brush; observe.ts exposes only fresh, currently-unseen
+  // entries (additive obs v0). Indexed by observing team, keyed by unit id.
+  readonly lastSeen: [
+    Map<number, { x: number; z: number; at: number; hpFrac: number }>,
+    Map<number, { x: number; z: number; at: number; hpFrac: number }>,
+  ] = [new Map(), new Map()];
   private nextWaveAt = FIRST_WAVE_AT;
   private waveCount = 0;
   private nextId = 1;
@@ -171,17 +182,62 @@ export class Sim {
     return CHAMPIONS[championId] ?? null;
   }
 
+  // Assign a lane round-robin per team (playtest review: all ten
+  // participants used to funnel into whichever lane was furthest pushed).
+  // Counts scripted and remote seats together: a lane is a lane whoever
+  // holds it, and counting only one kind stacked mixed teams into one lane.
+  private assignBotLane(unit: Unit): void {
+    let held = 0;
+    for (const id of this.policies.keys()) {
+      if (this.units.get(id)?.team === unit.team) held++;
+    }
+    for (const id of this.remoteSeats.keys()) {
+      if (this.units.get(id)?.team === unit.team) held++;
+    }
+    unit.lane = BOT_LANES[held % BOT_LANES.length]!;
+  }
+
   attachPolicy(unitId: number, policy: Policy): void {
     const u = this.units.get(unitId);
     if (!u || u.kind !== 'champion') return;
-    // Assign a lane round-robin per team (playtest review: all ten
-    // participants used to funnel into whichever lane was furthest pushed).
-    let teamBots = 0;
-    for (const id of this.policies.keys()) {
-      if (this.units.get(id)?.team === u.team) teamBots++;
-    }
-    u.lane = BOT_LANES[teamBots % BOT_LANES.length]!;
+    this.assignBotLane(u);
     this.policies.set(unitId, policy);
+  }
+
+  // Hand a seat to a Policy running outside the process. The sim ships that
+  // seat an observation every decision slot and takes one action back; it
+  // never learns what produced the action (ADR 0002 phase 2).
+  addRemoteSeat(unitId: number): boolean {
+    const u = this.units.get(unitId);
+    if (!u || u.kind !== 'champion') return false;
+    if (this.remoteSeats.has(unitId)) return true;
+    this.assignBotLane(u);
+    this.remoteSeats.set(unitId, createRemoteSeat(unitId));
+    return true;
+  }
+
+  removeRemoteSeat(unitId: number): void {
+    this.remoteSeats.delete(unitId);
+  }
+
+  // Queue the seat's next action. The latest one wins and it is consumed on
+  // the seat's next decision slot, so sending more than one per slot buys
+  // no extra throughput: the cap is structural, not policed after the fact.
+  queueRemoteAction(unitId: number, action: Action): boolean {
+    const seat = this.remoteSeats.get(unitId);
+    if (!seat) return false;
+    seat.pending = action;
+    return true;
+  }
+
+  // Drain the observation built on the seat's last slot, null when there is
+  // nothing new. Draining is what makes the next one arrive.
+  takeRemoteObservation(unitId: number): Observation | null {
+    const seat = this.remoteSeats.get(unitId);
+    if (!seat || !seat.observation) return null;
+    const obs = seat.observation;
+    seat.observation = null;
+    return obs;
   }
 
   // A reconnected player takes their champion back from the stand-in bot.
@@ -199,12 +255,15 @@ export class Sim {
         unitId: u.id,
         name: def ? (def.name.split(',')[0] ?? def.name) : u.championId,
         championId: u.championId,
+        // Seat identity lives above the sim; the server fills it in.
+        player: null,
         team: u.team,
         level: u.level,
         kills: u.kills,
         deaths: u.deaths,
         assists: u.assists,
         cs: u.cs,
+        items: [...u.items],
       });
     }
     return rows;
@@ -381,11 +440,15 @@ export class Sim {
     if (this.winner !== null) return false;
     const u = this.units.get(unitId);
     const def = ITEMS[itemId];
-    if (!u || !def || u.kind !== 'champion' || u.dead || this.dead.has(unitId)) return false;
+    if (!u || !def || u.kind !== 'champion') return false;
     const fountain = this.map.fountains.find((f) => f.team === u.team);
     if (!fountain) return false;
+    // Death is shopping time, like the genre: a corpse respawns at its own
+    // fountain, so the range check is waived while it waits. Selling still
+    // wants a live champion standing there.
+    const dead = u.dead || this.dead.has(unitId);
     const d = Math.hypot(u.pos.x - fountain.x, u.pos.z - fountain.z);
-    if (d > fountain.r + SHOP_RANGE_PAD) return false;
+    if (!dead && d > fountain.r + SHOP_RANGE_PAD) return false;
 
     // Consume owned components (one instance each) and discount their cost.
     const consumedIndices: number[] = [];
@@ -449,6 +512,7 @@ export class Sim {
     stepPassives(ctx, this.tickCount);
 
     runBotDecisions(this, this.policies);
+    runRemoteDecisions(this, this.remoteSeats);
 
     if (this.winner === null && this.time >= this.nextWaveAt) {
       spawnWave(ctx, this.map, this.waveCount++);
@@ -517,7 +581,7 @@ export class Sim {
         u.deaths += 1;
         u.dead = true;
         u.hp = 0;
-        u.respawnAt = this.time + RESPAWN_BASE + RESPAWN_PER_LEVEL * u.level;
+        u.respawnAt = this.time + respawnDelay(u.level);
         u.path = [];
         u.attackTargetId = null;
         u.statuses = [];
@@ -570,6 +634,25 @@ export class Sim {
     }
 
     this.visibility = computeVisibility(this.map, this.units, this.time, this.zones);
+
+    // Refresh each team's memory of the enemy champions it can see right
+    // now; a dead champion is forgotten (its corpse spot means nothing).
+    for (const u of this.units.values()) {
+      if (u.kind !== 'champion' || u.neutral) continue;
+      const observer = (1 - u.team) as TeamId;
+      if (u.dead) {
+        this.lastSeen[observer].delete(u.id);
+        continue;
+      }
+      if (this.visibility[observer].has(u.id)) {
+        this.lastSeen[observer].set(u.id, {
+          x: u.pos.x,
+          z: u.pos.z,
+          at: this.time,
+          hpFrac: u.maxHp > 0 ? u.hp / u.maxHp : 0,
+        });
+      }
+    }
 
     // Fairness: a champion's attack order must not keep tracking a target
     // its team cannot see; the blind chase would both leak the unseen

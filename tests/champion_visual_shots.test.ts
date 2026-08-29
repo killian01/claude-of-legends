@@ -6,8 +6,8 @@
 
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import type { ChampionTemplate } from '../src/render/champions/assets';
 import type { ChampionAnimInput } from '../src/render/champions/anim';
+import type { ChampionTemplate } from '../src/render/champions/assets';
 import { ChampionVisual } from '../src/render/champions/visual';
 
 function makeVisual(): ChampionVisual {
@@ -15,15 +15,31 @@ function makeVisual(): ChampionVisual {
   const root = new THREE.Group();
   root.add(rig);
   const clip = (name: string): THREE.AnimationClip =>
-    new THREE.AnimationClip(name, 1, [new THREE.NumberKeyframeTrack('.position[x]', [0, 1], [0, 0])]);
+    new THREE.AnimationClip(name, 1, [
+      new THREE.NumberKeyframeTrack('.position[x]', [0, 1], [0, 0]),
+    ]);
   const clips = new Map(['Idle', 'Run', 'Attack', 'Cast', 'Death'].map((n) => [n, clip(n)]));
   const def = {
     url: 'test.glb',
     height: 2,
     barY: 2,
-    clips: { idle: 'Idle', run: 'Run', attack: 'Attack', cast: 'Cast', windup: 'Idle', death: 'Death' },
+    clips: {
+      idle: 'Idle',
+      run: 'Run',
+      attack: 'Attack',
+      cast: 'Cast',
+      windup: 'Idle',
+      death: 'Death',
+    },
   };
-  const template = { def, scene: rig, clips, scale: 1, groundY: 0, props: new Map() } as unknown as ChampionTemplate;
+  const template = {
+    def,
+    scene: rig,
+    clips,
+    scale: 1,
+    groundY: 0,
+    props: new Map(),
+  } as unknown as ChampionTemplate;
   return new ChampionVisual(template, root, rig);
 }
 
@@ -31,7 +47,11 @@ function pump(v: ChampionVisual, ms: number, input: ChampionAnimInput): void {
   for (let t = 0; t < ms; t += 16) v.update(16, input);
 }
 
-function action(v: ChampionVisual, group: 'shotActions' | 'baseActions', key: string): THREE.AnimationAction {
+function action(
+  v: ChampionVisual,
+  group: 'shotActions' | 'baseActions',
+  key: string,
+): THREE.AnimationAction {
   const groups = v as unknown as Record<string, Record<string, THREE.AnimationAction | undefined>>;
   const a = groups[group]?.[key];
   if (!a) throw new Error(`missing action ${group}.${key}`);

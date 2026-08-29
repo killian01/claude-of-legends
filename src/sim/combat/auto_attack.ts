@@ -24,6 +24,7 @@ import {
   isUntargetable,
   tauntSourceId,
 } from './status';
+import { towerShotAd, towerShotHpPct } from './tower_shot';
 
 // Exported for presentation: the renderer schedules a melee contact spark
 // only for attackers below this range (ranged autos flash at bolt impact).
@@ -56,12 +57,10 @@ const DISPLACEMENT_CANCEL = 0.8;
 // or dashes out of reach. The burned attack timer is the blink's reward.
 const STRIKE_GRACE = 2;
 
-// Tower heat (dive punish): each consecutive tower shot at a CHAMPION hits
-// harder, like the genre, so diving past shot two is a commitment. Towers
-// reuse the generic passiveStacks counter as their heat; tower_ai resets it
-// on every target change.
-export const TOWER_RAMP_PER_HIT = 0.35;
-export const TOWER_RAMP_CAP = 4;
+// Tower heat (dive punish) lives in combat/tower_shot.ts: each consecutive
+// tower shot at a CHAMPION hits harder AND takes a bigger slice of its max
+// health. Towers reuse the generic passiveStacks counter as their heat;
+// tower_ai resets it on every target change.
 
 // The strike is announced and the attack timer starts here; the hit itself
 // lands in strike() when the windup resolves.
@@ -81,8 +80,12 @@ function beginWindup(ctx: CombatCtx, u: Unit, target: Unit): void {
 
 function strike(ctx: CombatCtx, u: Unit, target: Unit): void {
   let ad = u.stats.ad;
+  // The health slice a tower shot adds on top of its attack damage, rising
+  // with heat; zero for every other striker.
+  let hpPct = 0;
   if (u.kind === 'tower' && target.kind === 'champion') {
-    ad *= 1 + TOWER_RAMP_PER_HIT * Math.min(u.passiveStacks, TOWER_RAMP_CAP);
+    ad = towerShotAd(ad, u.passiveStacks);
+    hpPct = towerShotHpPct(u.passiveStacks);
     u.passiveStacks += 1;
   }
   // An empowered attack (kits-v2) spends its riders on this strike: bonus
@@ -105,12 +108,17 @@ function strike(ctx: CombatCtx, u: Unit, target: Unit): void {
       pierce: false,
       hitIds: new Set(),
       power: { ad, ap: u.stats.ap, scale: empower?.scale },
-      onHit: empower
-        ? [{ kind: 'damage', base: 0, adRatio: 1, dtype: 'physical' }, ...empower.bonus]
-        : [{ kind: 'damage', base: 0, adRatio: 1, dtype: 'physical' }],
+      onHit: [
+        { kind: 'damage', base: 0, adRatio: 1, dtype: 'physical' },
+        ...(hpPct > 0
+          ? ([{ kind: 'damage', base: 0, maxHpPct: hpPct, dtype: 'true' }] as const)
+          : []),
+        ...(empower ? empower.bonus : []),
+      ],
       allyEffects: [],
       chain: null,
       leaveWall: null,
+      aftershock: null,
       splashOnHit:
         empower && empower.splash.length > 0
           ? { radius: empower.splashRadius, effects: empower.splash }
@@ -122,6 +130,7 @@ function strike(ctx: CombatCtx, u: Unit, target: Unit): void {
     });
   } else {
     dealDamage(ctx, u.id, target, ad, 'physical', 'attack');
+    if (hpPct > 0) dealDamage(ctx, u.id, target, hpPct * target.maxHp, 'true', 'attack');
     if (empower) {
       const power = { ad: u.stats.ad, ap: u.stats.ap, scale: empower.scale };
       applyEffects(ctx, u.id, power, target, empower.bonus);

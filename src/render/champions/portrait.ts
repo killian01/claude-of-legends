@@ -10,8 +10,8 @@ import { skinOf } from '../../sim/content/skins';
 import {
   type ChampionTemplate,
   instantiateChampion,
-  setPropsArmed,
   preloadChampionAssets,
+  setPropsArmed,
   syncPropAnchors,
   whenChampionTemplateReady,
 } from './assets';

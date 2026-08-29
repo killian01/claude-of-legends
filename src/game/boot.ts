@@ -11,6 +11,7 @@ import { Renderer } from '../render/renderer';
 import { effectiveRank, ULT_RANK_LEVELS } from '../sim/stats';
 import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
 import { DT } from '../sim/types';
+import { attackCursor, defaultCursor } from '../ui/cursors';
 import { Hud, type NetHooks } from '../ui/hud';
 import { Minimap } from '../ui/minimap';
 import type { IWorld } from '../world_api';
@@ -69,6 +70,7 @@ export function startPresentation(
   const renderer = new Renderer(container, world);
   renderer.followUnit(selfId);
   renderer.setViewerTeam(selfTeam);
+  renderer.domElement.style.cursor = defaultCursor();
   const hud = new Hud(container, world, selfId, selfTeam, onExit);
   const minimap = new Minimap(
     container,
@@ -233,7 +235,9 @@ export function startPresentation(
       lastHoverAt = now;
       const enemy = pickEnemyOnScreen(world, selfTeam, sx, sy, project);
       renderer.setHoverTarget(enemy?.id ?? null);
-      renderer.domElement.style.cursor = enemy ? 'crosshair' : 'default';
+      // A drawn sword over anything attackable, the painted dart otherwise
+      // (playtest round 2: the browser crosshair read as a debug build).
+      renderer.domElement.style.cursor = enemy ? attackCursor() : defaultCursor();
     },
     onCast: (key, _aim) => {
       // Aim-then-cast: the press only raises the preview; the cast fires on

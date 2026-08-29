@@ -33,6 +33,9 @@ describe('the roster', () => {
       const a = sim.addChampion(0, { x: 75, z: 75 }, def.id);
       a.abilityRanks = { Q: 1, W: 1, E: 1, R: 1 };
       const b = sim.addChampion(1, { x: 77, z: 75 }, 'sylra');
+      // A teammate in reach: ally-seeking spells (Dain's guard jump) need
+      // someone to go to, the same way targeted spells need an enemy.
+      sim.addChampion(0, { x: 76, z: 73 }, 'korrath');
       a.level = 6;
       a.mana = 999;
       for (const key of KEYS) {

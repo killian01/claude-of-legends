@@ -94,6 +94,9 @@ interface TrackedUnit {
   hpFill: THREE.Sprite;
   hpBack: THREE.Sprite;
   manaFill: THREE.Sprite | null;
+  // Champion graduation ticks, rebuilt when maxHp crosses a 100-hp band.
+  hpTicks: THREE.Group | null;
+  hpTickKey: number;
   barWidth: number;
   barY: number;
   lastHp: number;
@@ -1126,7 +1129,13 @@ export class Renderer {
     segments = 0,
   ): { fill: THREE.Sprite; back: THREE.Sprite; manaFill: THREE.Sprite | null } {
     const backH = thick ? 0.56 : withMana ? 0.5 : 0.34;
-    const back = new THREE.Sprite(new THREE.SpriteMaterial({ color: COLOR_BAR_BACK }));
+    // The backing must never write depth: sprites depth-test at their
+    // CENTER, and the holder's yaw rotation could put the back a hair
+    // nearer than the fill, swallowing it whole (the black-bar bug on
+    // minions and camps). The fill draws after it instead.
+    const back = new THREE.Sprite(
+      new THREE.SpriteMaterial({ color: COLOR_BAR_BACK, depthWrite: false }),
+    );
     back.center.set(0, 0.5);
     back.scale.set(width + 0.14, backH, 1);
     back.position.set(-(width + 0.14) / 2, barY, 0);
@@ -1134,6 +1143,7 @@ export class Renderer {
     fill.center.set(0, 0.5);
     fill.scale.set(width, thick ? 0.44 : 0.24, 1);
     fill.position.set(-width / 2, barY + (withMana ? 0.09 : 0), 0);
+    fill.renderOrder = 1;
     holder.add(back, fill);
     let manaFill: THREE.Sprite | null = null;
     if (withMana) {
@@ -1141,6 +1151,7 @@ export class Renderer {
       manaFill.center.set(0, 0.5);
       manaFill.scale.set(width, 0.12, 1);
       manaFill.position.set(-width / 2, barY - 0.12, 0);
+      manaFill.renderOrder = 1;
       holder.add(manaFill);
     }
     // Segment notches on thick (structure) bars: chunks visibly disappear,
@@ -1155,11 +1166,59 @@ export class Renderer {
         tick.center.set(0.5, 1);
         tick.scale.set(0.028, 0.2, 1);
         tick.position.set(-width / 2 + (width * i) / segments, barY + 0.22, 0.01);
-        tick.renderOrder = 1;
+        tick.renderOrder = 2;
         holder.add(tick);
       }
     }
     return { fill, back, manaFill };
+  }
+
+  // Graduation ticks on champion bars (playtest round 2, redone in round 3):
+  // a fine mark every 100 hp and a heavier one every 1000, so a tank build
+  // reads at a glance. Drawn as ONE canvas-textured overlay sitting exactly
+  // over the bar rather than a sprite per mark: per-mark sprites were about
+  // a pixel wide at the play camera and simply vanished, and their fixed
+  // world height spilled out of the bar. A texture is crisp at any zoom and
+  // is clipped to the bar's rectangle by construction. Mipmaps are off for
+  // the same reason: they average thin marks into nothing.
+  private buildHpTicks(width: number, barY: number, maxHp: number): THREE.Group {
+    const group = new THREE.Group();
+    const marks = Math.floor(maxHp / 100);
+    if (marks < 1) return group;
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 32;
+    const g = canvas.getContext('2d');
+    if (!g) return group;
+    for (let i = 1; i <= marks; i++) {
+      const frac = (i * 100) / maxHp;
+      if (frac >= 0.995) continue;
+      const heavy = i % 10 === 0;
+      const x = Math.round(frac * canvas.width);
+      const w = heavy ? 3 : 2;
+      const top = heavy ? 0 : canvas.height * 0.22;
+      const h = heavy ? canvas.height : canvas.height * 0.56;
+      // A dark mark with a light edge: legible on a green fill, on a red
+      // one, and on the empty backing alike.
+      g.fillStyle = heavy ? 'rgba(0, 0, 0, 0.9)' : 'rgba(0, 0, 0, 0.62)';
+      g.fillRect(x, top, w, h);
+      g.fillStyle = 'rgba(255, 255, 255, 0.3)';
+      g.fillRect(x + w, top, 1, h);
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    const overlay = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }),
+    );
+    // Anchored and sized exactly like the fill, one row above it.
+    overlay.center.set(0, 0.5);
+    overlay.scale.set(width, 0.24, 1);
+    overlay.position.set(-width / 2, barY + 0.09, 0.02);
+    overlay.renderOrder = 2;
+    group.add(overlay);
+    return group;
   }
 
   // Health bar color by relation to the viewer: green self, blue allies,
@@ -1234,6 +1293,8 @@ export class Renderer {
           hpFill: fill,
           hpBack: back,
           manaFill,
+          hpTicks: null,
+          hpTickKey: -1,
           barWidth,
           barY,
           lastHp: u.hp,
@@ -1388,6 +1449,22 @@ export class Renderer {
       const barVisible = visible && (u.kind !== 'minion' || u.hp < u.maxHp - 1);
       t.hpFill.visible = barVisible;
       t.hpBack.visible = barVisible;
+
+      // Champion graduations follow the max hp as it grows with levels and
+      // items; rebuilt only when a new 100-hp band is crossed.
+      if (u.kind === 'champion') {
+        const tickKey = Math.floor(u.maxHp / 100);
+        if (tickKey !== t.hpTickKey) {
+          t.hpTickKey = tickKey;
+          if (t.hpTicks) {
+            t.mesh.remove(t.hpTicks);
+            disposeDeep(t.hpTicks);
+          }
+          t.hpTicks = this.buildHpTicks(t.barWidth, t.barY, u.maxHp);
+          t.mesh.add(t.hpTicks);
+        }
+        if (t.hpTicks) t.hpTicks.visible = barVisible;
+      }
 
       // Damaged structures print their remaining hp: thousands of points
       // do not fit in a bar's pixels alone.

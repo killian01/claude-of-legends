@@ -109,8 +109,9 @@ export const TORV: ChampionDef = {
       manaCost: 85,
       cooldown: 67.5,
       castRange: 9,
-      // The fissure persists as impassable broken ground along the line,
-      // splitting the fight in two for a beat.
+      // The earth answers twice: the crack stays marked along the line and
+      // erupts again after a beat. Walls belong to Korrath (kits-v2: one
+      // signature mechanic, one owner); Torv's signature is the echo.
       spec: {
         kind: 'skillshot',
         speed: 18,
@@ -121,7 +122,15 @@ export const TORV: ChampionDef = {
           { kind: 'damage', base: 203, adRatio: 0.6, dtype: 'magic' },
           { kind: 'stun', duration: 1.2 },
         ],
-        leaveWall: { duration: 2 },
+        aftershock: {
+          delay: 1.5,
+          radius: 1.4,
+          spacing: 2.2,
+          effects: [
+            { kind: 'damage', base: 110, adRatio: 0.35, dtype: 'magic' },
+            { kind: 'slow', pct: 0.45, duration: 1.5 },
+          ],
+        },
       },
     },
   },

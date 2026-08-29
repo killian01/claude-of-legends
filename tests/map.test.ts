@@ -41,8 +41,26 @@ describe('the launch map', () => {
       const twin = GAME_MAP.walls.find((o) => close(o.x, m.x) && close(o.z, m.z) && o.r === w.r);
       expect(twin, `mirrored wall at ${w.x},${w.z}`).toBeDefined();
     }
+    // The lane polylines too: everything anchored to their vertices (wave
+    // spawns, minion march, the bots' lane walk) inherits any skew, and the
+    // measured 6-0 team-1 bias came exactly from this hole in the pin.
+    const { top, mid, bot } = GAME_MAP.lanes;
+    expect(bot.length).toBe(top.length);
+    for (let i = 0; i < top.length; i++) {
+      const m = mirror(top[i]!.x, top[i]!.z);
+      const twin = bot[bot.length - 1 - i]!;
+      expect(close(twin.x, m.x) && close(twin.z, m.z), `bot mirrors top vertex ${i}`).toBe(true);
+    }
+    for (let i = 0; i < mid.length; i++) {
+      const m = mirror(mid[i]!.x, mid[i]!.z);
+      const twin = mid[mid.length - 1 - i]!;
+      expect(close(twin.x, m.x) && close(twin.z, m.z), `mid is self-mirrored at ${i}`).toBe(true);
+    }
   });
 
+  // Brush, camps and pits belong on this list as much as the towers do: the
+  // river pass moved a wall blob onto a brush patch and nothing complained,
+  // because only the structures and lane vertices were being checked.
   it('keeps every gameplay anchor on walkable ground', () => {
     const anchors: { x: number; z: number; what: string }[] = [];
     for (const f of GAME_MAP.fountains) anchors.push({ x: f.x, z: f.z, what: 'fountain' });
@@ -51,6 +69,9 @@ describe('the launch map', () => {
     for (const [lane, pts] of Object.entries(GAME_MAP.lanes)) {
       for (const p of pts) anchors.push({ x: p.x, z: p.z, what: `lane ${lane}` });
     }
+    for (const b of GAME_MAP.brush) anchors.push({ x: b.x, z: b.z, what: 'brush' });
+    for (const c of GAME_MAP.camps) anchors.push({ x: c.x, z: c.z, what: 'camp' });
+    for (const p of GAME_MAP.wardenPits) anchors.push({ x: p.x, z: p.z, what: 'warden pit' });
     const offenders = anchors.filter((a) => !grid.isWalkableAt(a.x, a.z));
     expect(offenders).toEqual([]);
   });

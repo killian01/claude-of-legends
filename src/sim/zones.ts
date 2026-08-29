@@ -4,6 +4,7 @@
 
 import { applyEffects, type EffectSpec, type Power } from './combat/effects';
 import type { CombatCtx } from './sim_context';
+import { isSpellTarget } from './spell_targets';
 import type { TeamId, Vec2 } from './types';
 import type { Unit } from './unit';
 
@@ -45,7 +46,7 @@ export interface Zone {
 function unitsInside(ctx: CombatCtx, z: Zone, enemies: boolean): Unit[] {
   const out: Unit[] = [];
   for (const u of ctx.units.values()) {
-    if (u.dead || ctx.dead.has(u.id)) continue;
+    if (u.dead || ctx.dead.has(u.id) || !isSpellTarget(u)) continue;
     // Neutral units count as enemies for zones and never as allies.
     if (enemies ? !u.neutral && u.team === z.team : u.neutral || u.team !== z.team) continue;
     if (Math.hypot(u.pos.x - z.pos.x, u.pos.z - z.pos.z) <= z.radius + u.radius) out.push(u);

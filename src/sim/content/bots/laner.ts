@@ -30,7 +30,9 @@ const FARM_RANGE = 8;
 // Review F.0: towers reach ~9 plus radii and the bot attacked structures at
 // range 8, diving to its death. It now stays out of tower reach unless its
 // minions are soaking, and only sieges with an escort.
-const TOWER_DANGER_RANGE = 11;
+// 11.5, up from 11: real reach is attackRange 9 plus tower and champion
+// radii, and the heaviest champions had a live sliver outside the band.
+const TOWER_DANGER_RANGE = 11.5;
 const ESCORT_RADIUS = 7;
 const ESCORT_MIN = 3;
 const KILL_SECURE_HP_FRAC = 0.3;
@@ -259,10 +261,19 @@ const policy: Policy = (obs, rng: Rng): Action => {
   const s = obs.self;
   if (s.dead) return { kind: 'noop' };
 
+  const fountain = GAME_MAP.fountains.find((f) => f.team === s.team)!;
+  // Enemy towers are always visible; every voluntary step must know
+  // whether it lands inside one's reach (playtest round 2: bots strolled
+  // under towers via dodges, pursuit, and wave-following).
+  const enemyTowers = obs.units.filter((u) => !u.friendly && u.kind === 'tower');
+  const inTowerReach = (x: number, z: number): boolean =>
+    enemyTowers.some((t) => Math.hypot(t.x - x, t.z - z) <= TOWER_DANGER_RANGE);
+
   // Dodge before anything else: the observation now carries threats, and a
   // sidestep is free (movement is never budgeted). Skillshots on a
   // collision course get a perpendicular step; hostile zones get walked out
-  // of; an enemy windup landing here gets stepped off.
+  // of; an enemy windup landing here gets stepped off. No dodge may carry
+  // the bot INTO tower fire: a bolt hurts less than a ramping turret.
   for (const p of obs.projectiles ?? []) {
     if (p.friendly || p.homing) continue;
     const relX = s.x - p.x;
@@ -272,13 +283,16 @@ const policy: Policy = (obs, rng: Rng): Action => {
     if (along / Math.max(1, p.speed) > DODGE_ETA_S) continue;
     const lateral = relX * -p.dirZ + relZ * p.dirX;
     if (Math.abs(lateral) > p.radius + SELF_RADIUS + 0.5) continue;
-    // Step out on the side the bolt already misses toward.
+    // Step out on the side the bolt already misses toward, unless that
+    // side is under a tower and this one is not.
     const side = lateral >= 0 ? 1 : -1;
-    return {
-      kind: 'move',
-      x: s.x - p.dirZ * side * DODGE_STEP,
-      z: s.z + p.dirX * side * DODGE_STEP,
-    };
+    let mx = s.x - p.dirZ * side * DODGE_STEP;
+    let mz = s.z + p.dirX * side * DODGE_STEP;
+    if (inTowerReach(mx, mz) && !inTowerReach(s.x, s.z)) {
+      mx = s.x + p.dirZ * side * DODGE_STEP;
+      mz = s.z - p.dirX * side * DODGE_STEP;
+    }
+    return { kind: 'move', x: mx, z: mz };
   }
   for (const zn of obs.zones ?? []) {
     if (zn.friendly) continue;
@@ -287,7 +301,18 @@ const policy: Policy = (obs, rng: Rng): Action => {
     const ux = d > 0.05 ? (s.x - zn.x) / d : 1;
     const uz = d > 0.05 ? (s.z - zn.z) / d : 0;
     const out = zn.radius + SELF_RADIUS + 1.0;
-    return { kind: 'move', x: zn.x + ux * out, z: zn.z + uz * out };
+    const mx = zn.x + ux * out;
+    const mz = zn.z + uz * out;
+    if (inTowerReach(mx, mz) && !inTowerReach(s.x, s.z)) {
+      // The radial escape leads under a tower: leave toward home instead.
+      const dh = Math.hypot(fountain.x - s.x, fountain.z - s.z) || 1;
+      return {
+        kind: 'move',
+        x: s.x + ((fountain.x - s.x) / dh) * out,
+        z: s.z + ((fountain.z - s.z) / dh) * out,
+      };
+    }
+    return { kind: 'move', x: mx, z: mz };
   }
   for (const e of obs.units) {
     if (e.friendly || e.kind !== 'champion' || !e.windup) continue;
@@ -295,7 +320,17 @@ const policy: Policy = (obs, rng: Rng): Action => {
     if (d > WINDUP_DANGER_RADIUS) continue;
     const ux = d > 0.05 ? (s.x - e.windup.x) / d : 1;
     const uz = d > 0.05 ? (s.z - e.windup.z) / d : 0;
-    return { kind: 'move', x: s.x + ux * DODGE_STEP, z: s.z + uz * DODGE_STEP };
+    const mx = s.x + ux * DODGE_STEP;
+    const mz = s.z + uz * DODGE_STEP;
+    if (inTowerReach(mx, mz) && !inTowerReach(s.x, s.z)) {
+      const dh = Math.hypot(fountain.x - s.x, fountain.z - s.z) || 1;
+      return {
+        kind: 'move',
+        x: s.x + ((fountain.x - s.x) / dh) * DODGE_STEP,
+        z: s.z + ((fountain.z - s.z) / dh) * DODGE_STEP,
+      };
+    }
+    return { kind: 'move', x: mx, z: mz };
   }
 
   // ADR 0005: a banked recast is the way home. Press it the moment staying
@@ -320,16 +355,20 @@ const policy: Policy = (obs, rng: Rng): Action => {
     }
   }
 
-  const fountain = GAME_MAP.fountains.find((f) => f.team === s.team)!;
   const enemySanctum = GAME_MAP.sanctums.find((c) => c.team !== s.team)!;
   const atFountain = Math.hypot(s.x - fountain.x, s.z - fountain.z) <= fountain.r + 2;
 
   // Survive: with a chaser on top of it, Riftstep toward home (or Zephyr to
-  // outrun); otherwise Mend if ready; otherwise run.
+  // outrun); otherwise Mend if ready; otherwise run. A hunter that just
+  // slipped into a brush is still a hunter (lastSeen memory).
   if (s.hpFrac < RETREAT_HP_FRAC) {
-    const chaser = obs.units.some(
-      (u) => !u.friendly && u.kind === 'champion' && Math.hypot(u.x - s.x, u.z - s.z) <= 6,
-    );
+    const chaser =
+      obs.units.some(
+        (u) => !u.friendly && u.kind === 'champion' && Math.hypot(u.x - s.x, u.z - s.z) <= 6,
+      ) ||
+      (obs.lastSeen ?? []).some(
+        (ls) => obs.time - ls.at <= 2 && Math.hypot(ls.x - s.x, ls.z - s.z) <= 6,
+      );
     if (chaser) {
       // The kit's own escape key first (hints.ts), aimed toward home; the
       // sigils are the backup plan.
@@ -380,20 +419,32 @@ const policy: Policy = (obs, rng: Rng): Action => {
     .sort((a, b) => dist(s.x, s.z, a) - dist(s.x, s.z, b))[0];
   const champ = ccdTarget ?? nearest(enemyChampions, s.x, s.z);
 
-  // Tower danger: standing in reach of a live enemy tower without an escort
-  // is only worth it to secure a kill.
-  const enemyTowers = enemies.filter((u) => u.kind === 'tower');
+  // Tower danger: standing in reach of a live enemy tower is only worth it
+  // with a minion escort AND a healthy body: the tower switches aggro to
+  // any champion that brawls under it, so a hurt bot leaves even escorted.
   const dangerTower = enemyTowers.find(
-    (t) => dist(s.x, s.z, t) <= TOWER_DANGER_RANGE && escortAt(t.x, t.z) < ESCORT_MIN,
+    (t) =>
+      dist(s.x, s.z, t) <= TOWER_DANGER_RANGE &&
+      (escortAt(t.x, t.z) < ESCORT_MIN || s.hpFrac < 0.65),
   );
   const securingKill =
-    champ !== null && champ.hpFrac < KILL_SECURE_HP_FRAC && dist(s.x, s.z, champ) <= CAST_RANGE;
+    champ !== null &&
+    s.hpFrac >= 0.4 &&
+    champ.hpFrac < KILL_SECURE_HP_FRAC &&
+    dist(s.x, s.z, champ) <= CAST_RANGE;
   if (dangerTower && !securingKill) {
-    // Step back toward home just far enough to leave the danger zone.
-    const dx = fountain.x - s.x;
-    const dz = fountain.z - s.z;
-    const d = Math.hypot(dx, dz) || 1;
-    return { kind: 'move', x: s.x + (dx / d) * 8, z: s.z + (dz / d) * 8 };
+    // Step OUT of the tower's reach, not a fixed hop: blend away-from-tower
+    // with toward-home and walk just past the edge of the danger band
+    // (playtest round 2: the fixed 8 toward home could stay under the gun
+    // in the bent side lanes, or even walk closer).
+    const dt = dist(s.x, s.z, dangerTower);
+    const la = Math.hypot(s.x - dangerTower.x, s.z - dangerTower.z) || 1;
+    const lh = Math.hypot(fountain.x - s.x, fountain.z - s.z) || 1;
+    const dirX = (s.x - dangerTower.x) / la + (fountain.x - s.x) / lh;
+    const dirZ = (s.z - dangerTower.z) / la + (fountain.z - s.z) / lh;
+    const ld = Math.hypot(dirX, dirZ) || 1;
+    const step = TOWER_DANGER_RANGE - dt + 2.5;
+    return { kind: 'move', x: s.x + (dirX / ld) * step, z: s.z + (dirZ / ld) * step };
   }
 
   // Close out the game: a vulnerable Sanctum in reach beats everything,
@@ -420,6 +471,20 @@ const policy: Policy = (obs, rng: Rng): Action => {
     const cast = pickCast(s, champ, enemyChampions, obs);
     if (cast) return cast;
     if (dc <= CHAMPION_ATTACK_RANGE) return { kind: 'attack', targetId: champ.id };
+  }
+
+  // The hunt into the dark: a nearly dead enemy that broke line of sight a
+  // breath ago is worth walking to its last seen spot, but never on low
+  // health and never into tower fire (lastSeen memory, playtest round 2).
+  if (!champ && s.hpFrac > 0.5) {
+    const prey = (obs.lastSeen ?? []).find(
+      (ls) =>
+        ls.hpFrac < KILL_SECURE_HP_FRAC &&
+        obs.time - ls.at <= 3 &&
+        Math.hypot(ls.x - s.x, ls.z - s.z) <= 12 &&
+        !inTowerReach(ls.x, ls.z),
+    );
+    if (prey) return { kind: 'move', x: prey.x, z: prey.z };
   }
 
   // Contest the Warden: a live one in reach is worth a detour, but never

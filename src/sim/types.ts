@@ -24,12 +24,19 @@ export interface Vec2 {
 // and the IWorld seam. Carries no position, so it can safely cross the fog.
 export interface ScoreRow {
   unitId: number;
+  // The champion's short name, always: the sim owns this one.
   name: string;
   championId: string;
+  // Who holds the seat (player or bot label). The sim cannot know it, so it
+  // is null offline and filled by the server, which does. Kept apart from
+  // `name` so a scoreboard can show both the person and the champion.
+  player: string | null;
   team: TeamId;
   level: number;
   kills: number;
   deaths: number;
   assists: number;
   cs: number;
+  // The build so far, in inventory order: item ids, for the scoreboard.
+  items: readonly string[];
 }

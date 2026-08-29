@@ -8,6 +8,7 @@ import { isStealthed, isUntargetable } from './combat/status';
 import type { DamageVia } from './passive_types';
 import { passiveOf, runItemAttackHits } from './passives';
 import type { CombatCtx } from './sim_context';
+import { isSpellTarget } from './spell_targets';
 import type { TeamId, Vec2 } from './types';
 import type { Unit } from './unit';
 import { createWallSegment } from './walls';
@@ -33,6 +34,14 @@ export interface Projectile {
   chain: { radius: number; onHit: readonly EffectSpec[] } | null;
   // The traveled line persists as a fissure when the bolt dies at max range.
   leaveWall: { duration: number } | null;
+  // The traveled line erupts a second time: delayed-detonation zones seeded
+  // along the path when the bolt dies at max range (Torv's Faultline).
+  aftershock: {
+    delay: number;
+    radius: number;
+    spacing: number;
+    effects: readonly EffectSpec[];
+  } | null;
   // Splash around the struck target (empowered auto riders on ranged bolts).
   splashOnHit: { radius: number; effects: readonly EffectSpec[] } | null;
   // 'attack' for auto-attack bolts (feeds on-hit passives); default 'ability'.
@@ -47,7 +56,7 @@ function applySplash(ctx: CombatCtx, p: Projectile, around: Unit): void {
   if (!p.splashOnHit) return;
   for (const u of ctx.units.values()) {
     if ((!u.neutral && u.team === p.team) || u.dead || ctx.dead.has(u.id)) continue;
-    if (u.id === around.id) continue;
+    if (u.id === around.id || !isSpellTarget(u)) continue;
     if (Math.hypot(u.pos.x - around.pos.x, u.pos.z - around.pos.z) > p.splashOnHit.radius) continue;
     applyEffects(ctx, p.sourceId, p.power, u, p.splashOnHit.effects);
   }
@@ -105,8 +114,12 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
     // Enemies crossed this step, nearest-first for determinism. Neutral
     // units (the Warden) block and take skillshots from both teams.
     const crossed: { u: Unit; d: number }[] = [];
+    const spellBolt = (p.via ?? 'ability') !== 'attack';
     for (const u of ctx.units.values()) {
       if ((!u.neutral && u.team === p.team) || u.dead || ctx.dead.has(u.id)) continue;
+      // A spell bolt flies OVER structures: it is neither eaten nor blocked
+      // by a tower standing on its line.
+      if (spellBolt && !isSpellTarget(u)) continue;
       if (p.hitIds.has(u.id) || u.id === p.sourceId) continue;
       if (segmentDistance(u.pos, from, p.pos) > p.radius + u.radius) continue;
       crossed.push({ u, d: Math.hypot(u.pos.x - from.x, u.pos.z - from.z) });
@@ -133,6 +146,7 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
           let bestD = Number.POSITIVE_INFINITY;
           for (const c of ctx.units.values()) {
             if ((!c.neutral && c.team === p.team) || c.dead || ctx.dead.has(c.id)) continue;
+            if (spellBolt && !isSpellTarget(c)) continue;
             if (p.hitIds.has(c.id) || c.id === p.sourceId) continue;
             if (isStealthed(c, ctx.time) || isUntargetable(c, ctx.time)) continue;
             const cd = Math.hypot(c.pos.x - u.pos.x, c.pos.z - u.pos.z);
@@ -146,6 +160,7 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
             p.onHit = p.chain.onHit;
             p.chain = null;
             p.leaveWall = null;
+            p.aftershock = null;
             despawned = false;
             break;
           }
@@ -172,9 +187,43 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
 
     if (p.traveled >= p.maxRange - 1e-9) {
       // A fissure bolt dies into terrain: the traveled line becomes an
-      // impassable wall for a few seconds (Torv's Faultline).
+      // impassable wall for a few seconds.
       if (p.leaveWall) {
         createWallSegment(ctx, p.sourceId, p.team, origin, p.pos, p.leaveWall.duration);
+      }
+      // The earth answers twice: telegraphed eruptions seeded along the
+      // whole traveled line, each detonating after the declared delay.
+      // Standing on the crack is the mistake (Torv's Faultline).
+      if (p.aftershock) {
+        const shock = p.aftershock;
+        const count = Math.max(1, Math.round(p.traveled / shock.spacing));
+        for (let i = 0; i <= count; i++) {
+          const t = count === 0 ? 0 : i / count;
+          const id = ctx.allocId();
+          ctx.zones.set(id, {
+            id,
+            sourceId: p.sourceId,
+            team: p.team,
+            pos: { x: origin.x + p.dir.x * p.traveled * t, z: origin.z + p.dir.z * p.traveled * t },
+            radius: shock.radius,
+            until: ctx.time + shock.delay + 0.1,
+            tickEvery: 0,
+            nextTickAt: Number.POSITIVE_INFINITY,
+            power: p.power,
+            onEnter: [],
+            onTick: [],
+            allyOnTick: [],
+            detonateAt: ctx.time + shock.delay,
+            onDetonate: shock.effects,
+            entered: new Set(),
+            reveal: false,
+            boundary: null,
+            boundaryNextAt: new Map(),
+            insideIds: new Set(),
+            leaveZone: null,
+            vfx: p.vfx,
+          });
+        }
       }
       ctx.projectiles.delete(p.id);
     }

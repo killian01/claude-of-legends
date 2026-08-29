@@ -314,6 +314,7 @@ export class ClientWorld implements IWorld {
           allyEffects: [],
           chain: null,
           leaveWall: null,
+          aftershock: null,
           splashOnHit: null,
           vfx: p.v ?? null,
         });

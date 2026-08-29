@@ -41,8 +41,12 @@ describe('scoreboard', () => {
     expect(score.t).toBe('score');
     if (score.t !== 'score') return;
     expect(score.rows).toHaveLength(10);
-    expect(score.rows.some((r) => r.name === 'killian')).toBe(true);
-    expect(score.rows.filter((r) => r.name.includes('(bot)'))).toHaveLength(9);
+    // The seat name rides alongside the champion name, never over it.
+    const mine = score.rows.find((r) => r.player === 'killian');
+    expect(mine).toBeDefined();
+    expect(mine!.championId).toBe('sylra');
+    expect(mine!.name).toBe('Sylra');
+    expect(score.rows.filter((r) => (r.player ?? '').includes('(bot)'))).toHaveLength(9);
 
     const client = new ClientWorld(() => undefined);
     client.applyServer(score);

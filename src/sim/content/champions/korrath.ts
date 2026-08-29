@@ -70,7 +70,7 @@ export const KORRATH: ChampionDef = {
       manaCost: 45,
       cooldown: 11,
       castRange: 7,
-      spec: { kind: 'wall', length: 4, duration: 4 },
+      spec: { kind: 'wall', length: 4, duration: 6 },
     },
     E: {
       // A maul slam that sends a fissure of grasping stone along the ground.

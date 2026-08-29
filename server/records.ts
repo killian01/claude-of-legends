@@ -53,7 +53,8 @@ export function buildMatchRecord(
       const delta = playerId !== null ? rating?.deltas.get(playerId) : undefined;
       return {
         playerId,
-        name: r.name,
+        // The person, when there is one; the champion otherwise.
+        name: r.player ?? r.name,
         championId: r.championId,
         team: r.team,
         level: r.level,

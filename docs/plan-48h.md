@@ -13,4 +13,4 @@ Phases in order; each phase ends green (`tsc` plus the Vitest suite). The sim is
 8. **HUD**: health bars, ability bar with cooldowns, shop, scoreboard, minimap, death screen, end screen.
 9. **Ship**: Docker image, deploy on the Hetzner machine, smoke test from a clean browser, play instructions in the README.
 
-Post-sprint (community phase, mapped later with wayfinder): headless Gym env, map editor pipeline, draft mode, accounts and persistence, new champions and items by PR.
+Post-sprint (community phase, mapped later with wayfinder): the environment (shipped, `headless/`) and Gym bindings over it, map editor pipeline, draft mode, accounts and persistence, new champions and items by PR.

@@ -304,18 +304,31 @@ export function buildFlora(map: GameMap, paint: MapPaint): Flora {
       });
     }
   }
-  const half = map.size / 2;
-  for (let i = 0; i < 9; i++) {
-    const t = (i / 8 - 0.5) * 2;
-    const along = t * 24;
+  // River stones, along the WHOLE band the map record declares rather than
+  // the middle of it: the scatter used to be nine boulders hard-coded around
+  // the map center, sized for a river that only spanned mid, and they stayed
+  // sitting there once the water ran corner to corner. They are also small
+  // and low on purpose. Every cell of the river is walkable by construction,
+  // so anything champion-sized standing in it reads as cover you can hide
+  // behind and then walk straight through. These are pebbles: half sunk,
+  // well inside the clear band, never mistakable for terrain.
+  const river = map.river;
+  const riverLen = Math.hypot(river.b.x - river.a.x, river.b.z - river.a.z);
+  const dirX = (river.b.x - river.a.x) / riverLen;
+  const dirZ = (river.b.z - river.a.z) / riverLen;
+  const stoneCount = Math.round(riverLen / 6);
+  for (let i = 0; i < stoneCount; i++) {
+    const along = ((i + 0.5) / stoneCount) * riverLen + (rnd() - 0.5) * 3;
     const side = i % 2 === 0 ? 1 : -1;
-    const off = 5.6 + rnd() * 2.5;
-    const s = 0.5 + rnd() * 0.5;
+    const off = side * river.width * (0.12 + rnd() * 0.33);
+    // Capped under a champion's own 0.6 radius, with margin: pinned by
+    // tests/river.test.ts.
+    const s = 0.26 + rnd() * 0.26;
     rockSpots.push({
-      x: half + (along + side * off) * Math.SQRT1_2,
-      z: half - (along - side * off) * Math.SQRT1_2,
+      x: river.a.x + dirX * along - dirZ * off,
+      z: river.a.z + dirZ * along + dirX * off,
       sx: s,
-      sy: s * 0.8,
+      sy: s * 0.45,
       sz: s,
     });
   }

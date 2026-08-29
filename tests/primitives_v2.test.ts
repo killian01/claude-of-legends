@@ -15,8 +15,8 @@ import { stepProjectiles } from '../src/sim/projectiles';
 import { Rng } from '../src/sim/rng';
 import { Sim } from '../src/sim/sim';
 import type { CombatCtx } from '../src/sim/sim_context';
-import { DT } from '../src/sim/types';
 import { TeamBuffs } from '../src/sim/team_buffs';
+import { DT } from '../src/sim/types';
 import type { Unit } from '../src/sim/unit';
 import { createChampion } from '../src/sim/unit';
 import { computeVisibility } from '../src/sim/vision';
@@ -108,10 +108,18 @@ describe('directional knockback', () => {
   it('aside pushes perpendicular to the travel line', () => {
     const { ctx } = mkCtx();
     const target = champ(ctx, 2, 1, 10, 11);
-    applyEffects(ctx, 1, POWER, target, [{ kind: 'knockback', distance: 2, direction: 'aside' }], 'ability', {
-      lineFrom: { x: 0, z: 10 },
-      lineDir: { x: 1, z: 0 },
-    });
+    applyEffects(
+      ctx,
+      1,
+      POWER,
+      target,
+      [{ kind: 'knockback', distance: 2, direction: 'aside' }],
+      'ability',
+      {
+        lineFrom: { x: 0, z: 10 },
+        lineDir: { x: 1, z: 0 },
+      },
+    );
     // Above the west-to-east line: pushed further north, x unchanged.
     expect(target.pos.x).toBeCloseTo(10, 5);
     expect(target.pos.z).toBeCloseTo(13, 5);
@@ -120,9 +128,17 @@ describe('directional knockback', () => {
   it('toCenter pushes toward the shape center', () => {
     const { ctx } = mkCtx();
     const target = champ(ctx, 2, 1, 14, 10);
-    applyEffects(ctx, 1, POWER, target, [{ kind: 'knockback', distance: 2, direction: 'toCenter' }], 'ability', {
-      center: { x: 10, z: 10 },
-    });
+    applyEffects(
+      ctx,
+      1,
+      POWER,
+      target,
+      [{ kind: 'knockback', distance: 2, direction: 'toCenter' }],
+      'ability',
+      {
+        center: { x: 10, z: 10 },
+      },
+    );
     expect(target.pos.x).toBeCloseTo(12, 5);
   });
 });

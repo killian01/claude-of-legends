@@ -13,8 +13,8 @@ import { type WebSocket, WebSocketServer } from 'ws';
 import { isFiniteVec, parseClientMsg, type ServerMsg } from '../src/net/protocol';
 import { DT, type TeamId } from '../src/sim/types';
 import { fillWithBots } from './bot_fill';
-import { resolveClientIp } from './client_ip';
 import { ConnectionLimiter } from './conn_limit';
+import { clientAddress, edgeConfig, originAllowed } from './edge';
 import { buildLadder } from './ladder';
 import { AFK_IDLE_TICKS, Match } from './match';
 import { Matchmaker } from './matchmaker';
@@ -39,10 +39,10 @@ const MAX_MSGS_PER_SEC = 60;
 // Abuse bound on live sims per process. Sockets per address are capped by
 // server/conn_limit.ts.
 const MAX_MATCHES = 50;
-// Set only when a reverse proxy that overwrites the forwarding headers is the
-// sole way in (server/client_ip.ts): without it every proxied player shares
-// the proxy's address and the socket cap applies to all of them together.
-const TRUST_PROXY = process.env.TRUST_PROXY === '1';
+// What to believe about a connection that came through a proxy: how deep
+// the forwarded chain is (TRUST_PROXY) and which pages may open a socket
+// besides our own (ALLOWED_ORIGINS). Both default to trusting nothing.
+const EDGE = edgeConfig(process.env);
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -269,8 +269,15 @@ const server = http.createServer(async (req, res) => {
       filePath = path.join(DIST, 'index.html');
     }
     const body = await readFile(filePath);
+    // The client shipped no caching headers at all, which leaves a browser
+    // free to serve a stale index.html and with it the previous build's
+    // hashed bundle: you reload after a change and see yesterday's game.
+    // Vite fingerprints everything under /assets/, so those are immutable
+    // and the entry document must always be revalidated.
+    const immutable = url.startsWith('/assets/');
     res.writeHead(200, {
       'content-type': MIME[path.extname(filePath)] ?? 'application/octet-stream',
+      'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
     });
     res.end(body);
   } catch {
@@ -281,13 +288,27 @@ const server = http.createServer(async (req, res) => {
 
 // --- WebSocket ---
 
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 16 * 1024 });
+const wss = new WebSocketServer({
+  server,
+  path: '/ws',
+  maxPayload: 16 * 1024,
+  // A seat is handed out on the upgrade, so a page we never served does
+  // not get one. A client without an Origin header (a headless bot) does.
+  verifyClient: ({ req }, done) => {
+    if (originAllowed(req.headers, EDGE)) {
+      done(true);
+      return;
+    }
+    console.warn(`refused upgrade from origin ${String(req.headers.origin)}`);
+    done(false, 403, 'forbidden origin');
+  },
+});
 
 // Sockets per player address, so one machine cannot farm connections.
 const connections = new ConnectionLimiter();
 
 wss.on('connection', (ws, req) => {
-  const ip = resolveClientIp(req.headers, req.socket.remoteAddress, TRUST_PROXY);
+  const ip = clientAddress(req.headers, req.socket.remoteAddress, EDGE);
   if (!connections.acquire(ip)) {
     ws.close(1013, 'too many connections');
     return;
@@ -714,6 +735,11 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
 
 server.listen(PORT, () => {
   console.log(`claude-of-legends server on :${PORT} (serving ${DIST})`);
+  console.log(
+    `edge: ${EDGE.hops} trusted proxy hop(s), origins ${
+      EDGE.origins.length > 0 ? EDGE.origins.join(' ') : 'same-host only'
+    }`,
+  );
   // In dev the vite server owns the client and this warning is expected
   // noise only when dist was never built; in production it means the image
   // or the start script skipped `pnpm build`.

@@ -6,7 +6,15 @@
 import { effectiveMoveSpeed } from './combat/status';
 import { CHAMPIONS } from './content/champions';
 import { SIGILS } from './content/sigils';
-import type { Observation, ObsProjectile, ObsStatus, ObsUnit, ObsWall, ObsZone } from './policy';
+import type {
+  Observation,
+  ObsLastSeen,
+  ObsProjectile,
+  ObsStatus,
+  ObsUnit,
+  ObsWall,
+  ObsZone,
+} from './policy';
 import type { Sim } from './sim';
 import { effectiveRank } from './stats';
 import { isInvulnerable } from './structure_rules';
@@ -145,6 +153,19 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       detonateAt: z.detonateAt,
     });
   }
+  // Memory of the vanished: enemy champions the team saw recently but
+  // cannot see now, at their last sighted spot (the human's memory of who
+  // ran into which brush, made observable).
+  const LAST_SEEN_FRESH_S = 4;
+  const lastSeen: ObsLastSeen[] = [];
+  for (const [id, rec] of sim.lastSeen[u.team]) {
+    if (sim.time - rec.at > LAST_SEEN_FRESH_S) continue;
+    const other = sim.units.get(id);
+    if (!other || other.dead) continue;
+    if (sim.isVisible(u.team, id)) continue;
+    lastSeen.push({ id, x: rec.x, z: rec.z, at: rec.at, hpFrac: rec.hpFrac });
+  }
+
   // Walls are terrain: both teams always see them, like the pathing change.
   const walls: ObsWall[] = [];
   for (const w of sim.walls.values()) {
@@ -190,5 +211,6 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     projectiles,
     zones,
     walls,
+    lastSeen,
   };
 }

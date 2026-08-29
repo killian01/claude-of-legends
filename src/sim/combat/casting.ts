@@ -5,10 +5,12 @@
 
 import { passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
+import { isSpellTarget } from '../spell_targets';
 import { effectiveRank, RANK_BASE_SCALE, RANK_CD_SCALE } from '../stats';
 import type { AbilityKey, Vec2 } from '../types';
 import { hostile, type Unit } from '../unit';
 import { raiseWall } from '../walls';
+import { allyDashAim } from './ally_dash';
 import { applyEffects, type EffectSpec, type Power } from './effects';
 import {
   addStatus,
@@ -35,6 +37,15 @@ export type CastSpec =
       // When the bolt despawns at max range, the traveled line persists as
       // an impassable fissure (walls.ts) for `duration` seconds.
       leaveWall?: { duration: number };
+      // When the bolt despawns at max range, telegraphed eruptions seed the
+      // traveled line and detonate after `delay` (Torv's Faultline: the
+      // earth answers twice).
+      aftershock?: {
+        delay: number;
+        radius: number;
+        spacing: number;
+        effects: readonly EffectSpec[];
+      };
     }
   | {
       kind: 'zone';
@@ -85,6 +96,10 @@ export type CastSpec =
       selfEffects?: readonly EffectSpec[];
       // Enemies crossed mid-flight are struck once each (traveling only).
       passThrough?: readonly EffectSpec[];
+      // The dash goes TO the allied champion nearest the aim, landing
+      // touching them; with no ally inside `range` the cast is refused
+      // and costs nothing (combat/ally_dash.ts).
+      toAlly?: { searchRadius: number };
       // The flight itself cannot be targeted or damaged (Fenn's R strike).
       untargetableDuringTravel?: boolean;
     }
@@ -141,6 +156,8 @@ function findEnemyTarget(
   let bestD = Number.POSITIVE_INFINITY;
   for (const u of ctx.units.values()) {
     if (!hostile(caster, u) || u.dead || ctx.dead.has(u.id)) continue;
+    // Structures are never a spell's target (spell_targets.ts).
+    if (!isSpellTarget(u)) continue;
     if (isStealthed(u, ctx.time) || isUntargetable(u, ctx.time)) continue;
     const toCaster =
       Math.hypot(u.pos.x - caster.pos.x, u.pos.z - caster.pos.z) - caster.radius - u.radius;
@@ -158,7 +175,7 @@ function findEnemyTarget(
 function enemiesWithin(ctx: CombatCtx, caster: Unit, center: Vec2, radius: number): Unit[] {
   const out: Unit[] = [];
   for (const u of ctx.units.values()) {
-    if (!hostile(caster, u) || u.dead || ctx.dead.has(u.id)) continue;
+    if (!hostile(caster, u) || u.dead || ctx.dead.has(u.id) || !isSpellTarget(u)) continue;
     if (Math.hypot(u.pos.x - center.x, u.pos.z - center.z) <= radius + u.radius) out.push(u);
   }
   return out;
@@ -200,6 +217,7 @@ export function executeCast(
         allyEffects: spec.allyEffects ?? [],
         chain: spec.chain ?? null,
         leaveWall: spec.leaveWall ?? null,
+        aftershock: spec.aftershock ?? null,
         splashOnHit: null,
         vfx,
       });
@@ -284,7 +302,15 @@ export function executeCast(
       return true;
     }
     case 'dash': {
-      const at = clampToRange(caster.pos, aim, spec.range);
+      let goal = aim;
+      if (spec.toAlly) {
+        // No ally in reach, no jump: the cast is refused before anything is
+        // paid, rather than throwing him at empty ground.
+        const beside = allyDashAim(ctx, caster, aim, spec.range, spec.toAlly.searchRadius);
+        if (!beside) return false;
+        goal = beside;
+      }
+      const at = clampToRange(caster.pos, goal, spec.range);
       if (spec.speed !== undefined && spec.speed > 0) {
         // A real flight (dashes.ts): the unit is committed on its line and
         // the landing payload resolves wherever the flight actually ends.
@@ -389,6 +415,11 @@ export function castAbility(
   if (spec.kind === 'enemy_target') {
     const at = clampToRange(caster.pos, aim, def.castRange);
     if (!findEnemyTarget(ctx, caster, at, spec.searchRadius, def.castRange)) return false;
+  }
+  // An ally-seeking dash needs an ally the same way: no jump, no charge.
+  if (spec.kind === 'dash' && spec.toAlly) {
+    const at = clampToRange(caster.pos, aim, def.castRange);
+    if (!allyDashAim(ctx, caster, at, spec.range, spec.toAlly.searchRadius)) return false;
   }
 
   caster.cooldowns[key] = ctx.time + def.cooldown * (1 - RANK_CD_SCALE * (rank - 1));

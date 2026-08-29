@@ -24,6 +24,13 @@ Living document. The 48 hour build scope is defined by the ADRs in `docs/adr/` a
   so allegiance always reads. New skins are an easy community
   contribution; real 3D skins ride the deferred model pipeline below.
 
+- **The environment** (batch 10, Phase 2 of ADR 0002): a match stepped from
+  outside the repo over NDJSON on stdio (`headless/`), one step per decision
+  slot, with remote policies driven through the same dispatch, the same slot
+  schedule, and the same decision budget as in-sim bots. Pinned by a parity
+  test: the same policy attached in-sim and driven remotely produces the
+  identical world.
+
 ## Future options (explicitly deferred)
 
 - **Reconnect to a live match**; a bot substituting for a disconnected
@@ -32,7 +39,8 @@ Living document. The 48 hour build scope is defined by the ADRs in `docs/adr/` a
   range indicators, fog terrain dimming.
 
 - **Model-weights registry and server-side inference** for community-trained RL bots. For now trained bots join as normal clients only (bot-as-client, see ADR 0002).
-- **Headless Gym environment** (Phase 2 of ADR 0002): NDJSON stdio env plus Gymnasium bindings over the same Policy observation/action space.
+- **Gymnasium bindings** over the environment stream (`headless/README.md`). The NDJSON stdio environment itself has shipped; the Python wrapper around it has not.
+- **Remote policies on the live server**: a trained bot connecting to the real server as a client (bot-as-client, ADR 0002). The sim seams exist (`Sim.addRemoteSeat`, `queueRemoteAction`, `takeRemoteObservation`); the wire messages and the seat handshake do not.
 - **In-game map editor pipeline** (world-of-claudecraft pattern: editor to JSON to compiled TS module) and community-contributed map variants.
 - **Offline practice mode**: shipped ("Practice vs dummies" on the home screen boots a full local bot 5v5); a true practice range with target dummies remains deferred.
 - **Accounts, persistence, ranked matchmaking.**

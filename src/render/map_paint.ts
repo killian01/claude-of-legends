@@ -25,10 +25,6 @@ export const GROUND_PALETTE = {
 
 export const TEAM_GROUND_TINT: readonly number[] = [0x3f6ec0, 0xc05353];
 
-// The river runs perpendicular to mid through the center; these endpoints
-// match the water plane in the dressing (rotation.y = PI/4, length 56).
-export const RIVER_HALF_WIDTH = 4.5;
-
 function segDist(px: number, pz: number, a: Vec2, b: Vec2): number {
   const abx = b.x - a.x;
   const abz = b.z - a.z;
@@ -53,9 +49,11 @@ export interface MapPaint {
 }
 
 export function buildMapPaint(map: GameMap): MapPaint {
-  const half = map.size / 2;
-  const riverA: Vec2 = { x: half - 20, z: half + 20 };
-  const riverB: Vec2 = { x: half + 20, z: half - 20 };
+  // The river band comes from the map record, so the painted water, the
+  // dressing's sheet and the walkable corridor are the same three numbers.
+  const riverA: Vec2 = map.river.a;
+  const riverB: Vec2 = map.river.b;
+  const riverHalf = map.river.width / 2;
   const laneSegs: [Vec2, Vec2][] = [];
   for (const lane of Object.values(map.lanes)) {
     for (let i = 0; i + 1 < lane.length; i++) laneSegs.push([lane[i]!, lane[i + 1]!]);
@@ -133,12 +131,12 @@ export function buildMapPaint(map: GameMap): MapPaint {
 
     // Riverbed and sandy banks; the water planes float above this paint.
     const rd = riverDist(x, z);
-    if (rd < RIVER_HALF_WIDTH) {
-      const depth = clamp01(1 - rd / RIVER_HALF_WIDTH);
+    if (rd < riverHalf) {
+      const depth = clamp01(1 - rd / riverHalf);
       c.lerp(riverBed, 0.9);
       c.lerp(riverDeep, depth * 0.8);
-    } else if (rd < RIVER_HALF_WIDTH + 2.4) {
-      c.lerp(sand, clamp01(1 - (rd - RIVER_HALF_WIDTH) / 2.4) * 0.65);
+    } else if (rd < riverHalf + 2.4) {
+      c.lerp(sand, clamp01(1 - (rd - riverHalf) / 2.4) * 0.65);
     }
 
     // Lanes: hard dirt core, feathered margin, tone broken by noise so the

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { mitigationMultiplier } from '../src/sim/combat/damage';
 import { Sim } from '../src/sim/sim';
 import { recalcChampion } from '../src/sim/stats';
-import type { Unit } from '../src/sim/unit';
+import { createMinion, type Unit } from '../src/sim/unit';
 
 // Open mid-lane ground, far from towers and jungle walls, and OUTSIDE
 // attack range so idle auto-defense does not start a fight on its own.
@@ -112,18 +112,67 @@ describe('auto-attacks', () => {
     const towerId = [...sim.units.values()].find(
       (u) => u.kind === 'tower' && u.team === 1 && Math.hypot(u.pos.x - 93, u.pos.z - 93) < 2,
     )!.id;
-    const hits: number[] = [];
-    for (let i = 0; i < 140 && hits.length < 3; i++) {
+    // One shot lands as two damage events (attack damage plus the max
+    // health slice), so shots are summed per tick.
+    const shots: number[] = [];
+    for (let i = 0; i < 140 && shots.length < 3; i++) {
+      let total = 0;
       for (const ev of sim.tick()) {
         if (ev.type === 'damage' && ev.sourceId === towerId && ev.targetId === diver.id) {
-          hits.push(ev.amount);
+          total += ev.amount;
         }
       }
+      if (total > 0) shots.push(total);
     }
-    expect(hits.length).toBeGreaterThanOrEqual(3);
-    // Each consecutive shot on the same champion hits ~35% harder.
-    expect(hits[1]!).toBeGreaterThan(hits[0]! * 1.25);
-    expect(hits[2]!).toBeGreaterThan(hits[1]! * 1.2);
+    expect(shots.length).toBeGreaterThanOrEqual(3);
+    // Each consecutive shot on the same champion hits markedly harder.
+    expect(shots[1]!).toBeGreaterThan(shots[0]! * 1.25);
+    expect(shots[2]!).toBeGreaterThan(shots[1]! * 1.2);
+    // And it hurts a health stack: the first shot alone takes more than the
+    // 3 percent of max health the slice is worth at zero heat.
+    expect(shots[0]!).toBeGreaterThan(0.03 * diver.maxHp);
+  });
+
+  it('a tower shot takes a slice of max health that grows with its heat', () => {
+    const sim = new Sim(11);
+    const diver = sim.addChampion(0, { x: 94.5, z: 93 });
+    diver.maxHp = 4000;
+    diver.hp = 4000;
+    // The slice is true damage, so it is the only true-typed hit landing.
+    const towerId = [...sim.units.values()].find(
+      (u) => u.kind === 'tower' && u.team === 1 && Math.hypot(u.pos.x - 93, u.pos.z - 93) < 2,
+    )!.id;
+    const slices: number[] = [];
+    for (let i = 0; i < 140 && slices.length < 3; i++) {
+      for (const ev of sim.tick()) {
+        if (ev.type !== 'damage' || ev.sourceId !== towerId || ev.targetId !== diver.id) continue;
+        if (ev.dtype === 'true') slices.push(ev.amount);
+      }
+    }
+    expect(slices).toHaveLength(3);
+    expect(slices[0]!).toBeCloseTo(0.03 * 4000, 5);
+    expect(slices[1]!).toBeCloseTo(0.05 * 4000, 5);
+    expect(slices[2]!).toBeCloseTo(0.07 * 4000, 5);
+  });
+
+  it('a tower takes no slice out of a minion', () => {
+    const sim = new Sim(11);
+    const towerId = [...sim.units.values()].find(
+      (u) => u.kind === 'tower' && u.team === 1 && Math.hypot(u.pos.x - 93, u.pos.z - 93) < 2,
+    )!.id;
+    const m = createMinion(9001, 0, 'melee', 'mid', { x: 94.5, z: 93 });
+    sim.units.set(m.id, m);
+    let trueHits = 0;
+    let anyHit = 0;
+    for (let i = 0; i < 80; i++) {
+      for (const ev of sim.tick()) {
+        if (ev.type !== 'damage' || ev.sourceId !== towerId || ev.targetId !== m.id) continue;
+        anyHit++;
+        if (ev.dtype === 'true') trueHits++;
+      }
+    }
+    expect(anyHit).toBeGreaterThan(0);
+    expect(trueHits).toBe(0);
   });
 
   it('a tower switches onto an enemy that damaged an allied champion in range', () => {

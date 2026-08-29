@@ -2,7 +2,7 @@
 //
 // The game has no accounts, so this is the only thing standing between it and
 // a script that opens sockets until the process runs out of memory. It counts
-// per player address (server/client_ip.ts), never per proxy, or it would cap
+// per player address (server/edge.ts), never per proxy, or it would cap
 // the whole player base together.
 //
 // The bound is not "how many players do we want", it is "how many people can

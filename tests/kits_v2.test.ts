@@ -5,8 +5,8 @@
 import { describe, expect, it } from 'vitest';
 import { addStatus, isRooted, isStunned, slowPct } from '../src/sim/combat/status';
 import { Sim } from '../src/sim/sim';
-import type { TeamId, Vec2 } from '../src/sim/types';
-import type { Unit } from '../src/sim/unit';
+import { DT, type TeamId, type Vec2 } from '../src/sim/types';
+import { createMinion, type Unit } from '../src/sim/unit';
 
 function arena(
   aChampion: string,
@@ -28,8 +28,8 @@ describe('Korrath v2', () => {
     expect(sim.castAbility(a.id, 'W', { x: 80, z: 75 })).toBe(true);
     expect(sim.walls.size).toBe(1);
     expect(sim.nav.isWalkableAt(80, 75)).toBe(false);
-    // Raised to 4 s by the playtest feel pass; gone shortly after.
-    for (let i = 0; i < 90; i++) sim.tick();
+    // Raised to 6 s by the playtest passes; gone shortly after.
+    for (let i = 0; i < 130; i++) sim.tick();
     expect(sim.walls.size).toBe(0);
     expect(sim.nav.isWalkableAt(80, 75)).toBe(true);
   });
@@ -58,6 +58,55 @@ describe('Dain v2', () => {
     expect(b.hp).toBeLessThan(b.maxHp);
     // Full cooldown is 4 s; the refund leaves clearly less than half.
     expect((a.cooldowns.Q ?? 0) - sim.time).toBeLessThan(2.5);
+  });
+
+  it('Q resets outright when the punch is the killing blow', () => {
+    const { sim, a, b } = arena('dain', 'sylra', { x: 75, z: 75 }, { x: 77, z: 75 });
+    b.hp = 40;
+    expect(sim.castAbility(a.id, 'Q', { x: 82, z: 75 })).toBe(true);
+    for (let i = 0; i < 10; i++) sim.tick();
+    expect(b.dead).toBe(true);
+    // The passive's takedown window catches the punch kill: Q is ready.
+    expect((a.cooldowns.Q ?? 0) - sim.time).toBeLessThanOrEqual(0);
+  });
+
+  it('Q leaves its cooldown untouched through minions, kill or no kill', () => {
+    const { sim, a } = arena('dain', 'sylra', { x: 75, z: 75 }, { x: 95, z: 95 });
+    const m = createMinion(9999, 1, 'melee', 'mid', { x: 78, z: 75 });
+    m.hp = 30;
+    sim.units.set(m.id, m);
+    expect(sim.castAbility(a.id, 'Q', { x: 82, z: 75 })).toBe(true);
+    const full = (a.cooldowns.Q ?? 0) - sim.time;
+    for (let i = 0; i < 10; i++) sim.tick();
+    expect(sim.units.has(m.id)).toBe(false);
+    // The weave is a duel tool: only champions move this cooldown, so the
+    // remaining time is exactly what the ticks burned off it.
+    expect((a.cooldowns.Q ?? 0) - sim.time).toBeCloseTo(full - 10 * DT, 5);
+  });
+
+  it('W jumps all the way onto the aimed ally and guards where it lands', () => {
+    const { sim, a } = arena('dain', 'sylra', { x: 75, z: 75 }, { x: 95, z: 95 });
+    const ally = sim.addChampion(0, { x: 81, z: 75 }, 'korrath');
+    // Aimed loosely at the ally, not exactly on them.
+    expect(sim.castAbility(a.id, 'W', { x: 80, z: 76 })).toBe(true);
+    for (let i = 0; i < 20; i++) sim.tick();
+    // He ends up against them, not merely pointed their way.
+    const gap = Math.hypot(a.pos.x - ally.pos.x, a.pos.z - ally.pos.z);
+    expect(gap).toBeLessThan(a.radius + ally.radius + 0.6);
+    // And the guard went up where he landed.
+    expect(a.statuses.some((s) => s.kind === 'shield')).toBe(true);
+  });
+
+  it('W is refused with no ally in reach, and pays nothing', () => {
+    const { sim, a } = arena('dain', 'sylra', { x: 75, z: 75 }, { x: 95, z: 95 });
+    const mana = a.mana;
+    expect(sim.castAbility(a.id, 'W', { x: 79, z: 75 })).toBe(false);
+    expect(a.pos.x).toBeCloseTo(75, 5);
+    expect(a.mana).toBe(mana);
+    expect(a.cooldowns.W ?? 0).toBe(0);
+    // An ally too far to reach is no ally at all.
+    sim.addChampion(0, { x: 90, z: 75 }, 'korrath');
+    expect(sim.castAbility(a.id, 'W', { x: 90, z: 75 })).toBe(false);
   });
 });
 
@@ -169,14 +218,26 @@ describe('Torv v2', () => {
     expect(rooted).toBe(true);
   });
 
-  it('R leaves the fissure as impassable ground for a beat', () => {
-    const { sim, a } = arena('torv', 'sylra', { x: 75, z: 75 }, { x: 110, z: 75 });
+  it('R erupts a second time along the line, never a wall (that is Korrath)', () => {
+    const { sim, a, b } = arena('torv', 'sylra', { x: 75, z: 75 }, { x: 80, z: 75 });
     a.level = 6;
     expect(sim.castAbility(a.id, 'R', { x: 84, z: 75 })).toBe(true);
-    for (let i = 0; i < 20; i++) sim.tick();
-    expect(sim.walls.size).toBe(1);
-    expect(sim.nav.isWalkableAt(80, 75)).toBe(false);
-    for (let i = 0; i < 50; i++) sim.tick();
+    // The bolt crosses the victim, then the crack stays marked on the
+    // ground: telegraphed zones both teams can read.
+    for (let i = 0; i < 15; i++) sim.tick();
+    expect(b.hp).toBeLessThan(b.maxHp);
+    expect(sim.walls.size).toBe(0);
+    expect(sim.zones.size).toBeGreaterThan(0);
+    const afterFirstHit = b.hp;
+    // The aftershock detonates 1.5 s after the bolt dies; standing on the
+    // crack is the mistake.
+    let slowed = false;
+    for (let i = 0; i < 45 && !slowed; i++) {
+      sim.tick();
+      if (slowPct(b, sim.time) > 0) slowed = true;
+    }
+    expect(slowed).toBe(true);
+    expect(b.hp).toBeLessThan(afterFirstHit);
     expect(sim.walls.size).toBe(0);
   });
 });

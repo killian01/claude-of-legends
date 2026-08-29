@@ -119,6 +119,53 @@ describe('bots v2', () => {
     }
   });
 
+  it('walks to the last seen spot of a nearly dead enemy that broke sight', () => {
+    const sim = new Sim(31);
+    const a = sim.addChampion(0, { x: 75, z: 75 }, 'fenn');
+    ready(a);
+    const b = sim.addChampion(1, { x: 78, z: 78 }, 'sylra');
+    b.hp = b.maxHp * 0.15;
+    sim.tick();
+    // The fugitive slips into the brush at (70, 82): gone from the
+    // observation, remembered by the team.
+    b.pos.x = 70;
+    b.pos.z = 82;
+    const action = act(sim, a.id);
+    expect(action.kind).toBe('move');
+    if (action.kind === 'move') {
+      expect(Math.hypot(action.x - 78, action.z - 78)).toBeLessThan(1);
+    }
+  });
+
+  it('a fleeing bot treats a hunter hidden in brush as a chaser', () => {
+    const sim = new Sim(31);
+    const a = sim.addChampion(0, { x: 75, z: 78 }, 'fenn');
+    ready(a);
+    a.hp = a.maxHp * 0.2;
+    const b = sim.addChampion(1, { x: 73, z: 79 }, 'sylra');
+    sim.tick();
+    b.pos.x = 70;
+    b.pos.z = 82;
+    // The hunter vanished into the brush, but the memory is 0.1 s old: the
+    // escape key goes out instead of a blind walk home.
+    const action = act(sim, a.id);
+    expect(action.kind).toBe('cast');
+    if (action.kind === 'cast') expect(action.key).toBe('E');
+  });
+
+  it('steps clean out of tower reach instead of a fixed hop', () => {
+    const sim = new Sim(31);
+    const a = sim.addChampion(0, { x: 91, z: 93 }, 'sylra');
+    ready(a);
+    const action = act(sim, a.id);
+    expect(action.kind).toBe('move');
+    if (action.kind === 'move') {
+      // The enemy outer mid tower sits at (93, 93); the step must land
+      // outside its whole danger band, not 8 fixed units toward home.
+      expect(Math.hypot(action.x - 93, action.z - 93)).toBeGreaterThan(11.5);
+    }
+  });
+
   it('prefers a rooted enemy in reach over the merely nearest one', () => {
     const sim = new Sim(31);
     const a = sim.addChampion(0, { x: 75, z: 75 }, 'fenn');
