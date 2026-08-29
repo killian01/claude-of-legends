@@ -1,27 +1,33 @@
 // The authoritative game server: one process, one port. Serves the built
 // client from dist/, upgrades /ws to WebSocket, runs every live match's Sim
 // on a fixed-step 20 Hz accumulator, and streams team-scoped snapshots.
-// No accounts and no database: guests only (game definition v1), but the
-// session token doubles as a persistent identity (server/accounts.ts) and
-// finished matches land in a JSON match log under DATA_DIR.
+// Every connection belongs to an account (ADR 0006): the upgrade itself is
+// refused without a live session, so nothing below this line has to wonder
+// who it is talking to. No database still: accounts, sessions and the
+// match log are JSON files under DATA_DIR.
 
-import { randomBytes } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { type WebSocket, WebSocketServer } from 'ws';
 import { isFiniteVec, parseClientMsg, type ServerMsg } from '../src/net/protocol';
-import { DT, type TeamId } from '../src/sim/types';
-import { type Account, AccountRegistry, handleOf } from './accounts';
+import { DT } from '../src/sim/types';
+import { foldName, nameErrorMessage } from './account_name';
+import { type Account, AccountRegistry, publicAccount } from './accounts';
 import { fillWithBots } from './bot_fill';
 import { ConnectionLimiter } from './conn_limit';
+import { clearCookie, parseCookies, serializeCookie } from './cookies';
 import { clientAddress, edgeConfig, originAllowed } from './edge';
 import { buildLadder } from './ladder';
+import { accountKey, addressKey, LoginThrottle } from './login_throttle';
 import { AFK_IDLE_TICKS, Match } from './match';
 import { Matchmaker } from './matchmaker';
+import { passwordErrorMessage } from './password';
 import { buildProfile } from './profile';
 import { isRated, LEAVER_LOCKOUT_MS, leaverPenalty, type RatedSeat, ratingDeltas } from './rating';
 import { buildMatchRecord, type MatchRecord } from './records';
+import { RejoinRegistry } from './rejoin';
+import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
 import { appendJsonl, pruneNumberedJson, readJsonl, saveJsonAtomic } from './store';
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -61,10 +67,13 @@ const MIME: Record<string, string> = {
 interface Client {
   id: number;
   ws: WebSocket;
-  name: string | null;
-  // Session token: survives the connection in the browser's storage, so a
-  // reconnecting player can claim their reserved seat back.
-  token: string;
+  // Both settled on the upgrade, from the session cookie: there is no
+  // anonymous window in which a client exists without an account.
+  accountId: number;
+  name: string;
+  // The session this socket came in on, so closing it can be traced back
+  // to a logout elsewhere.
+  sessionId: string;
   matchId: number | null;
   msgWindowStart: number;
   msgCount: number;
@@ -82,26 +91,18 @@ interface MatchEntry {
   // (it would be a boosting machine otherwise).
   ratedEligible: boolean;
 }
-// Queue lockouts for rated-match leavers, by session token. In-memory on
-// purpose: a restart amnesties them, and that is fine.
-const queueLocks = new Map<string, number>();
 const matches = new Map<number, MatchEntry>();
-// Seats abandoned by a dropped connection, keyed by session token; a bot
-// holds the champion meanwhile. Reservations die with their match.
-const reservations = new Map<
-  string,
-  { matchId: number; name: string; team: TeamId; unitId: number }
->();
-
-function pruneReservations(matchId: number): void {
-  for (const [token, r] of reservations) {
-    if (r.matchId === matchId) reservations.delete(token);
-  }
-}
+// Abandoned seats and leaver lockouts, both keyed on the account
+// (server/rejoin.ts): the seat comes back on whatever device its owner
+// logs in from, and the lockout follows the person who earned it.
+const rejoins = new RejoinRegistry();
 let nextClientId = 1;
 let nextMatchId = 1;
 
 const registry = new AccountRegistry(path.join(DATA_DIR, 'accounts.json'));
+const sessions = new SessionStore(path.join(DATA_DIR, 'sessions.json'));
+// What a wrong password costs the next attempt (server/login_throttle.ts).
+const logins = new LoginThrottle();
 const MATCHES_FILE = path.join(DATA_DIR, 'matches.jsonl');
 const REPLAYS_DIR = path.join(DATA_DIR, 'replays');
 // How many finished-match replays stay on disk (named by match id).
@@ -110,19 +111,11 @@ const REPLAY_KEEP = 40;
 // appended as each ends (kilobytes each, guests-scale).
 const matchLog: MatchRecord[] = readJsonl<MatchRecord>(MATCHES_FILE);
 
-// The public shape of an account: everything BUT the token (it is the key
-// to the seat and the profile; it must never leave the server).
-function describeAccount(p: Account): unknown {
-  return {
-    id: p.id,
-    name: p.name,
-    disc: p.disc,
-    handle: handleOf(p),
-    createdAt: p.createdAt,
-    rating: p.rating,
-    ratedGames: p.ratedGames,
-    profile: buildProfile(matchLog, p.id),
-  };
+// The public shape of an account: publicAccount() drops the credential by
+// construction rather than by deletion, and tests/architecture.test.ts
+// holds that line for every route that ever serialises one.
+function describeAccount(a: Account): unknown {
+  return { ...publicAccount(a), profile: buildProfile(matchLog, a.id) };
 }
 
 function send(clientId: number, msg: ServerMsg): void {
@@ -157,17 +150,17 @@ const matchmaker = new Matchmaker(send, (picks, source) => {
 // are for dropped connections only.
 function walkOutOfMatch(client: Client, entry: MatchEntry, matchId: number): void {
   client.matchId = null;
-  reservations.delete(client.token);
+  rejoins.drop(client.accountId);
   if (entry.ratedEligible && entry.match.sim.winner === null) {
     const humansByTeam: [number, number] = [0, 0];
     for (const p of entry.match.players.values()) {
       if (clients.has(p.clientId)) humansByTeam[p.team] += 1;
     }
     const penalty = leaverPenalty(humansByTeam);
-    const reg = registry.findByToken(client.token);
-    if (penalty > 0 && reg) {
-      registry.penalize(reg.id, penalty);
-      queueLocks.set(client.token, Date.now() + LEAVER_LOCKOUT_MS);
+    const account = registry.findById(client.accountId);
+    if (penalty > 0 && account) {
+      registry.penalize(account.id, penalty);
+      rejoins.lockQueue(client.accountId, Date.now() + LEAVER_LOCKOUT_MS);
       console.log(
         `match ${matchId}: ${client.name} left a rated match (-${penalty}, queue locked)`,
       );
@@ -186,63 +179,203 @@ function walkOutOfMatch(client: Client, entry: MatchEntry, matchId: number): voi
   }
 }
 
-// --- HTTP: static client + health ---
+// --- HTTP: auth, the meta API, the static client ---
+
+// Secure cookies need a secure context. Production is always HTTPS behind
+// Caddy; dev is http://localhost, which browsers already treat as secure,
+// so the flag is safe to set there too. A plain-http deployment on a bare
+// IP is the only case that has to go without.
+function cookieSecure(req: http.IncomingMessage): boolean {
+  if ((req.headers['x-forwarded-proto'] ?? '').toString().split(',')[0]?.trim() === 'https') {
+    return true;
+  }
+  const host = (req.headers.host ?? '').split(':')[0];
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
+
+// The account behind a request, or undefined. Every use rolls the session
+// forward in memory (server/sessions.ts explains why that is not a write).
+function accountForRequest(req: http.IncomingMessage, now: number): Account | undefined {
+  const id = parseCookies(req.headers.cookie).get(COOKIE_NAME);
+  if (!id) return undefined;
+  const session = sessions.resolve(id, now);
+  if (!session) return undefined;
+  const account = registry.findById(session.accountId);
+  if (!account) return undefined;
+  sessions.touch(id, now);
+  registry.touch(account.id, now);
+  return account;
+}
+
+function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+  res.end(JSON.stringify(body));
+}
+
+// Bodies here are tiny (a name and a password); anything larger is not a
+// login and is dropped rather than buffered.
+const MAX_BODY_BYTES = 2048;
+
+async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown> | null> {
+  let size = 0;
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > MAX_BODY_BYTES) return null;
+    chunks.push(chunk as Buffer);
+  }
+  try {
+    const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return typeof parsed === 'object' && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function openSession(res: http.ServerResponse, req: http.IncomingMessage, account: Account): void {
+  const session = sessions.create(account.id, Date.now());
+  res.setHeader(
+    'set-cookie',
+    serializeCookie(COOKIE_NAME, session.id, {
+      maxAgeS: Math.floor(SESSION_TTL_MS / 1000),
+      secure: cookieSecure(req),
+    }),
+  );
+}
 
 const server = http.createServer(async (req, res) => {
   try {
     const url = (req.url ?? '/').split('?')[0]!;
-    // The meta API: identity and career, read-only JSON. /api/me answers
-    // to the session token (own profile only); /api/account/<id> is public.
-    if (url === '/api/me') {
-      const q = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
-      const token = q.get('token') ?? '';
-      const p = token.length > 0 && token.length <= 64 ? registry.findByToken(token) : undefined;
-      res.writeHead(p ? 200 : 404, {
-        'content-type': 'application/json',
-        'cache-control': 'no-store',
-      });
-      res.end(JSON.stringify(p ? describeAccount(p) : { error: 'unknown player' }));
-      return;
-    }
-    if (url === '/api/ladder') {
-      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-      res.end(JSON.stringify(buildLadder(registry.all())));
-      return;
-    }
-    if (url === '/api/live') {
-      // Running matches open to spectators: never abandoned, not ended.
-      const live = [...matches.entries()]
-        .filter(([, e]) => e.endedAt === null && e.abandonedAt === null)
-        .map(([id, e]) => ({
-          id,
-          durationS: Math.round(e.match.sim.time),
-          spectators: e.match.spectators.size,
-          players: [...e.match.players.values()].map((p) => ({ name: p.name, team: p.team })),
-        }));
-      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-      res.end(JSON.stringify(live));
-      return;
-    }
-    const replayUrl = /^\/api\/replay\/(\d{1,9})$/.exec(url);
-    if (replayUrl) {
-      try {
-        const body = await readFile(path.join(REPLAYS_DIR, `${replayUrl[1]}.json`));
-        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-        res.end(body);
-      } catch {
-        res.writeHead(404, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: 'replay not found' }));
+
+    // --- auth: the only routes reachable without a session ---
+    if (url === '/api/register' || url === '/api/login') {
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'use POST' });
+        return;
       }
+      const body = await readJsonBody(req);
+      const name = typeof body?.name === 'string' ? body.name.trim() : '';
+      const password = typeof body?.password === 'string' ? body.password : '';
+      const now = Date.now();
+      // Both keys, so neither a word list at one name nor one machine
+      // sweeping many names gets a free run (server/login_throttle.ts).
+      const keys = [
+        accountKey(foldName(name)),
+        addressKey(clientAddress(req.headers, req.socket.remoteAddress, EDGE)),
+      ];
+      const wait = logins.retryAfterAny(keys, now);
+      if (wait > 0) {
+        res.setHeader('retry-after', String(Math.ceil(wait / 1000)));
+        sendJson(res, 429, {
+          error: `Too many attempts. Try again in ${Math.ceil(wait / 1000)}s.`,
+        });
+        return;
+      }
+      if (url === '/api/register') {
+        const created = registry.register(name, password, now);
+        if (!created.ok) {
+          // A taken name is not a failed credential guess, but it is still
+          // an attempt: rate it, or the signup form becomes the oracle the
+          // login form refuses to be.
+          for (const key of keys) logins.recordFailure(key, now);
+          const message =
+            created.error === 'name_taken'
+              ? 'That name is taken.'
+              : created.error === 'password_invalid'
+                ? passwordErrorMessage('too_short')
+                : nameErrorMessage('charset');
+          sendJson(res, 409, { error: message });
+          return;
+        }
+        for (const key of keys) logins.recordSuccess(key);
+        openSession(res, req, created.value);
+        sendJson(res, 200, publicAccount(created.value));
+        return;
+      }
+      const account = registry.authenticate(name, password);
+      if (!account) {
+        for (const key of keys) logins.recordFailure(key, now);
+        // One message for an unknown name and for a wrong password: the
+        // answer must not tell an attacker which names exist.
+        sendJson(res, 401, { error: 'Wrong name or password.' });
+        return;
+      }
+      for (const key of keys) logins.recordSuccess(key);
+      registry.touch(account.id, now);
+      openSession(res, req, account);
+      sendJson(res, 200, publicAccount(account));
       return;
     }
-    const accountUrl = /^\/api\/player\/(\d{1,9})$/.exec(url);
-    if (accountUrl) {
-      const p = registry.findById(Number(accountUrl[1]));
-      res.writeHead(p ? 200 : 404, {
-        'content-type': 'application/json',
-        'cache-control': 'no-store',
-      });
-      res.end(JSON.stringify(p ? describeAccount(p) : { error: 'unknown player' }));
+
+    if (url === '/api/logout') {
+      const id = parseCookies(req.headers.cookie).get(COOKIE_NAME);
+      const everywhere =
+        new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('all') === '1';
+      if (id) {
+        const session = sessions.resolve(id, Date.now());
+        // Logging out everywhere is what a player reaches for after
+        // playing on someone else's machine; it is why sessions are
+        // stored at all (ADR 0006).
+        if (everywhere && session) sessions.revokeAllFor(session.accountId);
+        else sessions.revoke(id);
+      }
+      res.setHeader('set-cookie', clearCookie(COOKIE_NAME, { secure: cookieSecure(req) }));
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    // --- everything else under /api needs an account ---
+    if (url.startsWith('/api/')) {
+      const me = accountForRequest(req, Date.now());
+      if (!me) {
+        sendJson(res, 401, { error: 'This needs an account.' });
+        return;
+      }
+      if (url === '/api/me') {
+        sendJson(res, 200, describeAccount(me));
+        return;
+      }
+      if (url === '/api/ladder') {
+        sendJson(res, 200, buildLadder(registry.all()));
+        return;
+      }
+      if (url === '/api/live') {
+        // Running matches open to spectators: never abandoned, not ended.
+        const live = [...matches.entries()]
+          .filter(([, e]) => e.endedAt === null && e.abandonedAt === null)
+          .map(([id, e]) => ({
+            id,
+            durationS: Math.round(e.match.sim.time),
+            spectators: e.match.spectators.size,
+            players: [...e.match.players.values()].map((p) => ({ name: p.name, team: p.team })),
+          }));
+        sendJson(res, 200, live);
+        return;
+      }
+      const replayUrl = /^\/api\/replay\/(\d{1,9})$/.exec(url);
+      if (replayUrl) {
+        try {
+          const body = await readFile(path.join(REPLAYS_DIR, `${replayUrl[1]}.json`));
+          res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+          res.end(body);
+        } catch {
+          sendJson(res, 404, { error: 'replay not found' });
+        }
+        return;
+      }
+      const accountUrl = /^\/api\/account\/(\d{1,9})$/.exec(url);
+      if (accountUrl) {
+        const a = registry.findById(Number(accountUrl[1]));
+        if (!a) {
+          sendJson(res, 404, { error: 'unknown account' });
+          return;
+        }
+        sendJson(res, 200, describeAccount(a));
+        return;
+      }
+      sendJson(res, 404, { error: 'unknown endpoint' });
       return;
     }
     if (url === '/healthz') {
@@ -292,15 +425,24 @@ const wss = new WebSocketServer({
   server,
   path: '/ws',
   maxPayload: 16 * 1024,
-  // A seat is handed out on the upgrade, so a page we never served does
-  // not get one. A client without an Origin header (a headless bot) does.
+  // A seat is handed out on the upgrade, so both gates live here: a page
+  // we never served does not get one (a client with no Origin header, a
+  // headless bot, does), and neither does a visitor with no live session.
+  // Refusing here rather than after the socket opens means nothing below
+  // has to carry an "unauthenticated client" state.
   verifyClient: ({ req }, done) => {
-    if (originAllowed(req.headers, EDGE)) {
-      done(true);
+    if (!originAllowed(req.headers, EDGE)) {
+      console.warn(`refused upgrade from origin ${String(req.headers.origin)}`);
+      done(false, 403, 'forbidden origin');
       return;
     }
-    console.warn(`refused upgrade from origin ${String(req.headers.origin)}`);
-    done(false, 403, 'forbidden origin');
+    const cookieId = parseCookies(req.headers.cookie).get(COOKIE_NAME);
+    const session = cookieId ? sessions.resolve(cookieId, Date.now()) : undefined;
+    if (!session || !registry.findById(session.accountId)) {
+      done(false, 401, 'this needs an account');
+      return;
+    }
+    done(true);
   },
 });
 
@@ -313,18 +455,45 @@ wss.on('connection', (ws, req) => {
     ws.close(1013, 'too many connections');
     return;
   }
+  // verifyClient already refused anything without a live session, so this
+  // can only fail if the session died in the microseconds since. Treat it
+  // as a refusal rather than trusting a half-identified socket.
+  const now = Date.now();
+  const cookieId = parseCookies(req.headers.cookie).get(COOKIE_NAME) ?? '';
+  const session = sessions.resolve(cookieId, now);
+  const account = session ? registry.findById(session.accountId) : undefined;
+  if (!session || !account) {
+    connections.release(ip);
+    ws.close(4401, 'this needs an account');
+    return;
+  }
+  sessions.touch(cookieId, now);
+  registry.touch(account.id, now);
+
+  // One game socket per account: a second connection takes the seat and
+  // the first is closed. Two sockets on one account could otherwise queue
+  // into both sides of the same match, which would make its Elo
+  // self-referential. The upside is the reason to prefer it to a refusal:
+  // when a laptop dies mid-match, the phone takes the seat back.
+  for (const other of clients.values()) {
+    if (other.accountId === account.id) {
+      other.ws.close(4409, 'this account connected somewhere else');
+    }
+  }
+
   const id = nextClientId++;
   const client: Client = {
     id,
     ws,
-    name: null,
-    token: randomBytes(12).toString('hex'),
+    accountId: account.id,
+    name: account.name,
+    sessionId: session.id,
     matchId: null,
-    msgWindowStart: Date.now(),
+    msgWindowStart: now,
     msgCount: 0,
   };
   clients.set(id, client);
-  send(id, { t: 'welcome', clientId: id, token: client.token });
+  send(id, { t: 'welcome', clientId: id, name: account.name });
 
   ws.on('message', (data) => {
     const raw = data.toString();
@@ -340,39 +509,28 @@ wss.on('connection', (ws, req) => {
     if (!msg) return;
 
     if (msg.t === 'hello') {
-      const name = String(msg.name ?? '')
-        .trim()
-        .slice(0, 24);
-      client.name = name.length > 0 ? name : `guest${id}`;
-      // A returning browser presents its previous token: adopt it, and if a
-      // live match still holds a reserved seat for it, hand the seat back
-      // (the bot stand-in steps aside). The later queue/lobby message from
-      // the same client is then ignored by the in-match guard.
-      const token = typeof msg.token === 'string' && msg.token.length <= 64 ? msg.token : null;
-      // Every hello lands in the player registry: first contact creates
-      // the identity, later ones refresh the name and last-seen.
-      registry.getOrCreate(token ?? client.token, client.name, Date.now());
-      if (token) {
-        client.token = token;
-        const seat = reservations.get(token);
-        if (seat) {
-          reservations.delete(token);
-          const entry = matches.get(seat.matchId);
-          if (entry) {
-            entry.match.restorePlayer(id, seat);
-            entry.abandonedAt = null;
-            client.matchId = seat.matchId;
-            send(id, { t: 'match_start', selfUnitId: seat.unitId, team: seat.team });
-            for (const cid of entry.match.players.keys()) {
-              if (cid !== id) send(cid, { t: 'player_back', name: seat.name, team: seat.team });
-            }
-            console.log(`match ${seat.matchId}: ${seat.name} reconnected`);
+      // Identity was settled on the upgrade, so hello carries none: it
+      // only asks whether a live match is still holding this account's
+      // seat. If it is, hand it back (the bot stand-in steps aside); the
+      // later queue/lobby message is then ignored by the in-match guard.
+      // Keyed on the account, so the seat comes back on whatever device
+      // the player reconnects from.
+      const seat = rejoins.claim(client.accountId);
+      if (seat) {
+        const entry = matches.get(seat.matchId);
+        if (entry) {
+          entry.match.restorePlayer(id, seat);
+          entry.abandonedAt = null;
+          client.matchId = seat.matchId;
+          send(id, { t: 'match_start', selfUnitId: seat.unitId, team: seat.team });
+          for (const cid of entry.match.players.keys()) {
+            if (cid !== id) send(cid, { t: 'player_back', name: seat.name, team: seat.team });
           }
+          console.log(`match ${seat.matchId}: ${seat.name} reconnected`);
         }
       }
       return;
     }
-    if (client.name === null) return;
 
     // A client already seated in a live match cannot re-enter matchmaking
     // (review F.2: interleaved double-match snapshots corrupted the mirror).
@@ -386,15 +544,14 @@ wss.on('connection', (ws, req) => {
       case 'queue': {
         if (inMatch) break;
         // Rated-match leavers sit out a short lockout before requeueing.
-        const lockedUntil = queueLocks.get(client.token) ?? 0;
-        if (lockedUntil > now) {
+        const locked = rejoins.queueLockRemaining(client.accountId, now);
+        if (locked > 0) {
           send(id, {
             t: 'error',
-            message: `You left a rated match. The queue unlocks in ${Math.ceil((lockedUntil - now) / 1000)}s.`,
+            message: `You left a rated match. The queue unlocks in ${Math.ceil(locked / 1000)}s.`,
           });
           break;
         }
-        queueLocks.delete(client.token);
         if (atCapacity) refuseCapacity();
         else matchmaker.addToQueue(id, client.name, now);
         break;
@@ -420,7 +577,7 @@ wss.on('connection', (ws, req) => {
             walkOutOfMatch(client, entry, leftMatchId);
           } else {
             client.matchId = null;
-            reservations.delete(client.token);
+            rejoins.drop(client.accountId);
           }
         }
         break;
@@ -439,10 +596,11 @@ wss.on('connection', (ws, req) => {
       case 'queue_party':
         if (inMatch) break;
         if (atCapacity) refuseCapacity();
-        else if ((queueLocks.get(client.token) ?? 0) > now) {
+        else if (rejoins.queueLockRemaining(client.accountId, now) > 0) {
+          const locked = rejoins.queueLockRemaining(client.accountId, now);
           send(id, {
             t: 'error',
-            message: `You left a rated match. The queue unlocks in ${Math.ceil(((queueLocks.get(client.token) ?? 0) - now) / 1000)}s.`,
+            message: `You left a rated match. The queue unlocks in ${Math.ceil(locked / 1000)}s.`,
           });
         } else matchmaker.queuePartyFromLobby(id, now);
         break;
@@ -517,10 +675,11 @@ wss.on('connection', (ws, req) => {
         // A dropped spectator just stops watching.
         entry.match.removeSpectator(id);
         // Hand the abandoned champion to a bot, tell the team, and reserve
-        // the seat against the session token so the player can come back.
+        // the seat against the account so the player can come back, from
+        // this browser or any other they log in on.
         const left = entry.match.handleDisconnect(id);
         if (left) {
-          reservations.set(client.token, { matchId, ...left });
+          rejoins.reserve(client.accountId, { matchId, ...left });
           for (const cid of entry.match.players.keys()) {
             send(cid, { t: 'player_left', name: left.name, team: left.team });
           }
@@ -552,7 +711,7 @@ setInterval(() => {
   for (const [matchId, entry] of matches) {
     if (entry.abandonedAt !== null && now - entry.abandonedAt > REJOIN_GRACE_MS) {
       matches.delete(matchId);
-      pruneReservations(matchId);
+      rejoins.pruneMatch(matchId);
       console.log(`match ${matchId} reaped: rejoin grace expired`);
     }
   }
@@ -599,8 +758,7 @@ setInterval(() => {
           const accountIdByUnit = new Map<number, number>();
           for (const p of entry.match.players.values()) {
             const c = clients.get(p.clientId);
-            const reg = c ? registry.findByToken(c.token) : undefined;
-            if (reg) accountIdByUnit.set(p.unitId, reg.id);
+            if (c) accountIdByUnit.set(p.unitId, c.accountId);
           }
           // Rating policy (server/rating.ts): only public-queue matches
           // with at least one human on each side are rated; every human
@@ -608,9 +766,9 @@ setInterval(() => {
           const seats: RatedSeat[] = [];
           for (const p of entry.match.players.values()) {
             const pid = accountIdByUnit.get(p.unitId);
-            const reg = pid !== undefined ? registry.findById(pid) : undefined;
-            if (pid !== undefined && reg) {
-              seats.push({ accountId: pid, team: p.team, rating: reg.rating });
+            const account = pid !== undefined ? registry.findById(pid) : undefined;
+            if (pid !== undefined && account) {
+              seats.push({ accountId: pid, team: p.team, rating: account.rating });
             }
           }
           const humansByTeam: [number, number] = [
@@ -626,13 +784,13 @@ setInterval(() => {
           // screen shows it next to the final scoreboard.
           for (const p of entry.match.players.values()) {
             const pid = accountIdByUnit.get(p.unitId);
-            const reg = pid !== undefined ? registry.findById(pid) : undefined;
-            if (pid === undefined || !reg) continue;
+            const account = pid !== undefined ? registry.findById(pid) : undefined;
+            if (pid === undefined || !account) continue;
             send(p.clientId, {
               t: 'match_result',
               rated,
               delta: deltas.get(pid) ?? 0,
-              rating: reg.rating,
+              rating: account.rating,
             });
           }
           // Save the replay first so the match record can point at it.
@@ -684,7 +842,7 @@ setInterval(() => {
             send(cid, { t: 'match_end' });
           }
           matches.delete(matchId);
-          pruneReservations(matchId);
+          rejoins.pruneMatch(matchId);
           console.log(`match ${matchId} closed`);
         }
         entry.failures = 0;
@@ -703,7 +861,7 @@ setInterval(() => {
             send(cid, { t: 'match_end' });
           }
           matches.delete(matchId);
-          pruneReservations(matchId);
+          rejoins.pruneMatch(matchId);
           console.error(`match ${matchId} force-closed after repeated tick failures`);
         }
       }
@@ -726,6 +884,9 @@ process.on('unhandledRejection', (err) => {
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
     console.log(`${sig}: shutting down`);
+    // Write the session expiry extensions that touch() only made in
+    // memory, so a restart does not send everyone back to the login form.
+    sessions.flush();
     for (const c of clients.values()) c.ws.close();
     wss.close();
     server.close(() => process.exit(0));

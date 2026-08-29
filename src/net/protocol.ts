@@ -8,9 +8,10 @@ import type { AbilityKey, ScoreRow, TeamId } from '../sim/types';
 import type { StructureMeta, UnitKind } from '../sim/unit';
 
 export type ClientMsg =
-  // token: the session token from a previous welcome; presenting it lets
-  // the server hand back a seat abandoned by a dropped connection.
-  | { t: 'hello'; name: string; token?: string }
+  // Carries no identity: the session cookie settled that on the upgrade
+  // (ADR 0006). It only asks whether a live match is still holding this
+  // account's seat, so a dropped connection can claim it back.
+  | { t: 'hello' }
   | { t: 'queue' }
   | { t: 'start_now' }
   | { t: 'leave' }
@@ -142,8 +143,9 @@ export interface LobbyPlayer {
 }
 
 export type ServerMsg =
-  // token identifies this browser across connections, for match rejoin.
-  | { t: 'welcome'; clientId: number; token: string }
+  // The account this socket belongs to, so the client can show who it is
+  // logged in as without a second round trip.
+  | { t: 'welcome'; clientId: number; name: string }
   | {
       t: 'queue_status';
       count: number;
