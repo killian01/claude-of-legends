@@ -1,0 +1,61 @@
+# One machine, two containers: the game process, and Caddy in front of it for
+# TLS and the public ports. The game never publishes a port of its own, so the
+# only way in is through the proxy, which is what makes TRUST_PROXY safe here.
+#
+# First run: cp .env.example .env, fill in DOMAIN, then docker compose up -d.
+# The runbook, including DNS and backups, is docs/deploy.md.
+
+services:
+  game:
+    build: .
+    restart: unless-stopped
+    environment:
+      PORT: 8787
+      # Caddy is the only thing that talks to this process and it is exactly
+      # one hop, so the address it forwards is the player's own. Without this
+      # the per-machine socket limit would count every player as the proxy.
+      TRUST_PROXY: 1
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+    volumes:
+      # Player identities, the match log and the replay ring. The only state
+      # that outlives a container.
+      - game-data:/app/data
+    expose:
+      - '8787'
+    healthcheck:
+      # The runtime image carries no curl, and node 22 has fetch built in.
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8787/healthz').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - game
+    ports:
+      - '80:80'
+      - '443:443'
+      # HTTP/3, which matters for a game where the snapshot stream shares the
+      # connection with a first load of asset requests.
+      - '443:443/udp'
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env, for example play.example.com}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The issued certificates: losing this volume means re-issuing on every
+      # restart, which the ACME rate limits will eventually refuse.
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  game-data:
+  caddy-data:
+  caddy-config:

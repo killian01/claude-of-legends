@@ -59,10 +59,40 @@ docker build -t claude-of-legends .
 docker run -p 8787:8787 -v loc-data:/app/data claude-of-legends
 ```
 
-`PORT` overrides the listen port. TLS termination (for wss) belongs to
-whatever proxy sits in front. Player identities and the match log live
-as JSON files under `data/` (`DATA_DIR` overrides the location); mount
-it as a volume or careers reset with the container.
+On a public host, the compose stack adds Caddy in front for TLS and the
+public ports, and declares the proxy to the server:
+
+```
+cp .env.example .env        # DOMAIN, ACME_EMAIL
+docker compose up -d --build
+```
+
+The full runbook (DNS, verification, updates, backups, sizing) is
+`docs/deploy.md`.
+
+`PORT` overrides the listen port. Player identities and the match log
+live as JSON files under `data/` (`DATA_DIR` overrides the location);
+mount it as a volume or careers reset with the container.
+
+TLS termination (for wss) belongs to whatever proxy sits in front, and
+the proxy has to be declared, or the server counts every player as one
+machine:
+
+```
+TRUST_PROXY=1      # how many proxies sit in front (0, the default: none)
+ALLOWED_ORIGINS=   # pages allowed to open a socket besides the one we serve
+```
+
+`TRUST_PROXY` is a hop count, not a switch: with 1, the address the
+nearest proxy saw is the player, which is what the per-machine socket
+limit counts and what `X-Forwarded-Host` is read from. Leave it at 0
+when the port faces the internet directly, or a forged header buys an
+attacker any address it likes.
+
+The client is served by this same process, so a page from the host in
+the request is always allowed and `ALLOWED_ORIGINS` stays empty for a
+normal deploy. Name origins in it (comma separated) only when the client
+is also served from somewhere else; `*` turns the check off.
 
 ## Development
 

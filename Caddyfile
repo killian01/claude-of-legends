@@ -1,0 +1,23 @@
+# TLS, HTTP/3 and compression in front of the game process. Caddy issues and
+# renews the certificate itself: the prerequisites are a DNS A record pointing
+# at this machine and ports 80 and 443 open to the internet.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	# Caddy compresses the text-ish content types only, so the WebP paintings,
+	# the GLB models and the intro video pass through untouched (they are
+	# already compressed) while the bundle, the HTML and the JSON APIs shrink.
+	encode zstd gzip
+
+	# The WebSocket upgrade needs no special case: /ws is proxied like the rest.
+	# This sets X-Forwarded-For and X-Forwarded-Host, which is exactly what
+	# TRUST_PROXY=1 reads on the other side (server/edge.ts).
+	reverse_proxy game:8787
+
+	log {
+		output stdout
+	}
+}

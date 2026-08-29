@@ -4,6 +4,8 @@ dist-server
 .git
 .claude
 docs/screenshots
+# Raw art sources: 200 MB that no build step reads.
+art_src
 *.log
 .env
 .env.*
