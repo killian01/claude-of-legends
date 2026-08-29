@@ -58,6 +58,12 @@ const MIME: Record<string, string> = {
   '.json': 'application/json',
   '.png': 'image/png',
   '.webp': 'image/webp',
+  // The landing art is the one jpg in the tree, and the first thing a
+  // visitor loads. Without this it went out as application/octet-stream,
+  // which browsers sniff past for an <img> but which makes the preload
+  // link in ui/home_backdrop.ts a coin flip.
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
   '.ico': 'image/x-icon',
   '.svg': 'image/svg+xml',
   '.glb': 'model/gltf-binary',
