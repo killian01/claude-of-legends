@@ -12,7 +12,9 @@
     "start": "vite build && node scripts/build_server.mjs && node dist-server/server.cjs",
     "test": "vitest run",
     "check": "tsc --noEmit",
-    "lint": "biome check ."
+    "lint": "biome check .",
+    "build:env": "node scripts/build_env.mjs",
+    "env": "node scripts/build_env.mjs && node dist-env/env.cjs"
   },
   "dependencies": {
     "three": "^0.185.1",

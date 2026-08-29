@@ -37,10 +37,11 @@ import { NavGrid } from './navgrid';
 import { initialObjectiveState, onWardenSlain, stepObjectives } from './objectives';
 import { passiveOf, stepPassives } from './passives';
 import { findPath } from './pathfind';
-import type { Policy } from './policy';
+import type { Action, Observation, Policy } from './policy';
 import type { Projectile } from './projectiles';
 import { stepProjectiles } from './projectiles';
 import { startRecall, stepRecalls } from './recall';
+import { createRemoteSeat, type RemoteSeat, runRemoteDecisions } from './remote_policy';
 import { respawnDelay } from './respawn';
 import { grantKillRewards, grantPassiveGold } from './rewards';
 import { Rng } from './rng';
@@ -108,6 +109,8 @@ export class Sim {
   readonly walls = new Map<number, Wall>();
   // Bots: sim entities driven in-tick by an attached Policy (ADR 0002).
   readonly policies = new Map<number, Policy>();
+  // Seats whose Policy runs outside this process (remote_policy.ts).
+  readonly remoteSeats = new Map<number, RemoteSeat>();
   time = 0;
   tickCount = 0;
   winner: TeamId | null = null;
@@ -179,17 +182,62 @@ export class Sim {
     return CHAMPIONS[championId] ?? null;
   }
 
+  // Assign a lane round-robin per team (playtest review: all ten
+  // participants used to funnel into whichever lane was furthest pushed).
+  // Counts scripted and remote seats together: a lane is a lane whoever
+  // holds it, and counting only one kind stacked mixed teams into one lane.
+  private assignBotLane(unit: Unit): void {
+    let held = 0;
+    for (const id of this.policies.keys()) {
+      if (this.units.get(id)?.team === unit.team) held++;
+    }
+    for (const id of this.remoteSeats.keys()) {
+      if (this.units.get(id)?.team === unit.team) held++;
+    }
+    unit.lane = BOT_LANES[held % BOT_LANES.length]!;
+  }
+
   attachPolicy(unitId: number, policy: Policy): void {
     const u = this.units.get(unitId);
     if (!u || u.kind !== 'champion') return;
-    // Assign a lane round-robin per team (playtest review: all ten
-    // participants used to funnel into whichever lane was furthest pushed).
-    let teamBots = 0;
-    for (const id of this.policies.keys()) {
-      if (this.units.get(id)?.team === u.team) teamBots++;
-    }
-    u.lane = BOT_LANES[teamBots % BOT_LANES.length]!;
+    this.assignBotLane(u);
     this.policies.set(unitId, policy);
+  }
+
+  // Hand a seat to a Policy running outside the process. The sim ships that
+  // seat an observation every decision slot and takes one action back; it
+  // never learns what produced the action (ADR 0002 phase 2).
+  addRemoteSeat(unitId: number): boolean {
+    const u = this.units.get(unitId);
+    if (!u || u.kind !== 'champion') return false;
+    if (this.remoteSeats.has(unitId)) return true;
+    this.assignBotLane(u);
+    this.remoteSeats.set(unitId, createRemoteSeat(unitId));
+    return true;
+  }
+
+  removeRemoteSeat(unitId: number): void {
+    this.remoteSeats.delete(unitId);
+  }
+
+  // Queue the seat's next action. The latest one wins and it is consumed on
+  // the seat's next decision slot, so sending more than one per slot buys
+  // no extra throughput: the cap is structural, not policed after the fact.
+  queueRemoteAction(unitId: number, action: Action): boolean {
+    const seat = this.remoteSeats.get(unitId);
+    if (!seat) return false;
+    seat.pending = action;
+    return true;
+  }
+
+  // Drain the observation built on the seat's last slot, null when there is
+  // nothing new. Draining is what makes the next one arrive.
+  takeRemoteObservation(unitId: number): Observation | null {
+    const seat = this.remoteSeats.get(unitId);
+    if (!seat || !seat.observation) return null;
+    const obs = seat.observation;
+    seat.observation = null;
+    return obs;
   }
 
   // A reconnected player takes their champion back from the stand-in bot.
@@ -464,6 +512,7 @@ export class Sim {
     stepPassives(ctx, this.tickCount);
 
     runBotDecisions(this, this.policies);
+    runRemoteDecisions(this, this.remoteSeats);
 
     if (this.winner === null && this.time >= this.nextWaveAt) {
       spawnWave(ctx, this.map, this.waveCount++);

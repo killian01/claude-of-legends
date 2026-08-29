@@ -36,6 +36,18 @@ _Avoid_: APM cap, input throttle
 A participant's persistent movement order. The sim samples the latest one every tick; replacing it costs no decision budget.
 _Avoid_: movement command (implies one-shot)
 
+**Decision slot**:
+The recurring opportunity in which a Policy produces exactly one action: one slot every five ticks, so four per second of sim time, staggered per participant so the ten seats do not all decide on the same tick. The slot is the scarce resource, not the decision budget: a slot spent restating a movement intention is a slot not spent casting.
+_Avoid_: policy tick, frame, turn
+
+**Remote policy**:
+A Policy that runs outside the sim process and drives a seat through the same observation and action contract as an in-sim one, one action per decision slot. What a trained bot uses to join: the sim never runs the model, it only ships observations and accepts actions.
+_Avoid_: agent, external AI, remote controller
+
+**Environment**:
+The headless host that runs a match with no browser and no server, exposing the Policy contract over a line stream so a trainer outside the repo can step the match. One step is one decision slot.
+_Avoid_: gym, harness, env wrapper
+
 **Skin**:
 A purely cosmetic appearance variant of a champion, chosen at champion select and visible to everyone. Never affects gameplay, stats, or the Policy observation.
 _Avoid_: costume, chroma
