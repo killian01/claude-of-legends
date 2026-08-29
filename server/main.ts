@@ -13,6 +13,7 @@ import { type WebSocket, WebSocketServer } from 'ws';
 import { isFiniteVec, parseClientMsg, type ServerMsg } from '../src/net/protocol';
 import { DT, type TeamId } from '../src/sim/types';
 import { fillWithBots } from './bot_fill';
+import { resolveClientIp } from './client_ip';
 import { buildLadder } from './ladder';
 import { AFK_IDLE_TICKS, Match } from './match';
 import { Matchmaker } from './matchmaker';
@@ -37,6 +38,10 @@ const MAX_MSGS_PER_SEC = 60;
 // Abuse bounds: sockets per remote address, and live sims per process.
 const MAX_CONN_PER_IP = 8;
 const MAX_MATCHES = 50;
+// Set only when a reverse proxy that overwrites the forwarding headers is the
+// sole way in (server/client_ip.ts): without it every proxied player shares
+// the proxy's address and the cap above applies to all of them together.
+const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -281,7 +286,7 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 16 * 1024 });
 const ipCounts = new Map<string, number>();
 
 wss.on('connection', (ws, req) => {
-  const ip = req.socket.remoteAddress ?? 'unknown';
+  const ip = resolveClientIp(req.headers, req.socket.remoteAddress, TRUST_PROXY);
   const ipCount = ipCounts.get(ip) ?? 0;
   if (ipCount >= MAX_CONN_PER_IP) {
     ws.close(1013, 'too many connections');
