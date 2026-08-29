@@ -1,9 +1,10 @@
 // How many sockets one address may hold at once.
 //
-// The game has no accounts, so this is the only thing standing between it and
-// a script that opens sockets until the process runs out of memory. It counts
-// per player address (server/edge.ts), never per proxy, or it would cap
-// the whole player base together.
+// A socket now needs an account to exist at all (ADR 0006), but registering
+// one is free and instant, so this is still what stands between the server
+// and a script that opens sockets until the process runs out of memory. It
+// counts per player address (server/edge.ts), never per proxy, or it would
+// cap the whole player base together.
 //
 // The bound is not "how many players do we want", it is "how many people can
 // legitimately share one internet connection": a flat, an office, a LAN party.

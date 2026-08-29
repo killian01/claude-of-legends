@@ -1,9 +1,13 @@
-// The server's disk: tiny JSON files, no database (guests-scale, game
-// definition v1). Everything loads once at boot and lives in memory;
-// writes are rare (a player created or renamed, a match ended), so sync
-// fs is fine. saveJsonAtomic writes tmp-then-rename so a crash mid-write
-// never leaves a corrupt file, and readJsonl skips a torn last line for
-// the same reason.
+// The server's disk: tiny JSON files, no database (game definition v1).
+// Everything loads once at boot and lives in memory; writes are rare (an
+// account registered, renamed or rated, a session opened or revoked, a
+// match ended), so sync fs is fine. "Rare" is a live constraint, not a
+// description: saveJsonAtomic rewrites a whole file on the thread that
+// steps matches at 20 Hz, which is why server/sessions.ts keeps its
+// per-request touches in memory instead of writing them.
+//
+// saveJsonAtomic writes tmp-then-rename so a crash mid-write never leaves
+// a corrupt file, and readJsonl skips a torn last line for the same reason.
 
 import {
   appendFileSync,

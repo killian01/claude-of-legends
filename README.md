@@ -2,7 +2,8 @@
 
 A mini 5v5 MOBA that runs entirely in the browser: three lanes,
 ten champions with full kits, jungle camps, a neutral objective, fog of war,
-items, and an authoritative server for online play. No account, no install.
+items, and an authoritative server for online play. No install. Online play needs
+a free account; the practice match against bots does not (ADR 0006).
 Built on the architecture proven by
 [world-of-claudecraft](https://github.com/levy-street/world-of-claudecraft):
 one deterministic TypeScript simulation core that runs identically in the
