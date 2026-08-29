@@ -10,9 +10,8 @@ import { toggleGameFullscreen } from '../game/fullscreen';
 import { playSfx } from '../game/sfx';
 import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
-import { effectiveItemCost, ITEM_LIST, ITEMS, type ItemStats } from '../sim/content/items';
+import { effectiveItemCost, ITEM_LIST, ITEMS } from '../sim/content/items';
 import { SIGILS } from '../sim/content/sigils';
-import { INVENTORY_SLOTS } from '../sim/sim';
 import {
   BASIC_MAX_RANK,
   effectiveRank,
@@ -24,8 +23,9 @@ import {
 import type { AbilityKey, TeamId } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { abilityIconUrl, sigilIconUrl } from './ability_icons';
-import { describeAbility, describeItem, describeSigil } from './describe';
+import { describeAbility, describeItem, describeSigil, statLabel } from './describe';
 import { iconDataUrl, itemIconUrl } from './icons';
+import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
 import { attachTooltip, hideTooltip } from './tooltips';
 
@@ -74,22 +74,6 @@ function statusLabel(s: Status, time: number): string {
     default:
       return '';
   }
-}
-
-// Full stat names, not initials: nobody should have to guess what AD means.
-function statLabel(s: ItemStats): string {
-  const parts: string[] = [];
-  if (s.ad) parts.push(`+${s.ad} Attack Damage`);
-  if (s.ap) parts.push(`+${s.ap} Ability Power`);
-  if (s.hp) parts.push(`+${s.hp} Health`);
-  if (s.mana) parts.push(`+${s.mana} Mana`);
-  if (s.armor) parts.push(`+${s.armor} Armor`);
-  if (s.mr) parts.push(`+${s.mr} Magic Resist`);
-  if (s.attackSpeedPct) parts.push(`+${Math.round(s.attackSpeedPct * 100)}% Attack Speed`);
-  if (s.moveSpeed) parts.push(`+${s.moveSpeed} Move Speed`);
-  if (s.armorPen) parts.push(`+${s.armorPen} Armor Penetration`);
-  if (s.mrPen) parts.push(`+${s.mrPen} Magic Penetration`);
-  return parts.join(', ');
 }
 
 function itemInitials(id: string): string {
@@ -495,17 +479,16 @@ const CSS = `
   font-size: 14px; font-weight: 600; cursor: pointer;
 }
 .hud-menu-btn:hover { border-color: #7ca050; }
+/* The end card holds the scoreboard table itself, so it takes the panel's
+   width and stacks the two teams the same way the Tab panel does. */
 .hud-end-card {
-  margin-top: 14px; padding: 14px 18px; border-radius: 10px;
+  margin-top: 14px; padding: 14px 20px; border-radius: 10px;
   background: rgba(14, 20, 9, 0.92); border: 1px solid #466030;
-  display: flex; gap: 26px; pointer-events: auto;
+  width: min(1020px, 96vw); max-height: 58vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px; pointer-events: auto;
+  text-shadow: none;
+  scrollbar-width: thin; scrollbar-color: #6e5a24 #10160c;
 }
-.hud-end-team { min-width: 170px; }
-.hud-end-team h4 { margin: 0 0 6px; font-size: 13px; }
-.hud-end-team.blue h4 { color: #9dbcf5; }
-.hud-end-team.red h4 { color: #f5a3a3; }
-.hud-end-row { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
-.hud-end-row span:last-child { color: #93a87c; margin-left: 12px; white-space: nowrap; }
 .hud-end-btns { display: flex; gap: 12px; }
 .hud-end-rating { font-size: 15px; font-weight: 700; margin-top: 4px; min-height: 18px; }
 `;
@@ -1230,8 +1213,7 @@ export class Hud {
       }
       if (k.unitId === this.selfId) {
         playSfx('death');
-        const slayer = rowOf(k.killerId);
-        announceVoice(slayer ? `Slain by ${slayer.name}` : 'You have been slain', true);
+        announceVoice('You have been slain', true, true);
         // Death recap: who did it, and who helped inside the assist window
         // (recentDamagers is live offline; online it may be empty).
         const killerRow2 = rowOf(k.killerId);
@@ -1270,25 +1252,28 @@ export class Hud {
                 ? 'RAMPAGE'
                 : `You killed ${victimRow.name}`;
         this.announce(chainText, '#ffd94a');
-        // Every kill line names the champion: hearing "an enemy" leaves you
-        // guessing which one just left the map.
+        // The voice never names the champion (playtest round 3: a roster of
+        // ten invented names read aloud is noise, and the line runs long
+        // enough to still be talking over the next fight). Side and outcome
+        // is all it calls; the kill feed and the center text carry the name.
         announceVoice(
           this.killChain >= 4
-            ? `Rampage, ${victimRow.name} down`
+            ? 'Rampage'
             : this.killChain === 3
-              ? `Triple kill, ${victimRow.name} down`
+              ? 'Triple kill'
               : this.killChain === 2
-                ? `Double kill, ${victimRow.name} down`
-                : `You have slain ${victimRow.name}`,
+                ? 'Double kill'
+                : 'You have slain an enemy',
+          true,
           true,
         );
       } else if (victimRow.team !== this.selfTeam) {
         // An enemy vanishing off the screen is ambiguous: dead, or escaped
         // into the fog? The voice settles it even when the takedown was a
         // teammate's, which is the whole point of calling it.
-        announceVoice(`${victimRow.name} has been slain`);
+        announceVoice('An enemy has been slain', false, true);
       } else {
-        announceVoice(`${victimRow.name} has fallen`);
+        announceVoice('An ally has been slain', false, true);
       }
       const killerRow = rowOf(k.killerId);
       let killerName = killerRow ? who(killerRow) : 'The lane';
@@ -1574,67 +1559,7 @@ export class Hud {
     if (this.score.classList.contains('open')) {
       const rows = this.world.scoreboard();
       for (const team of [0, 1] as const) {
-        const box = this.scoreTeams[team];
-        box.textContent = '';
-        const head = document.createElement('div');
-        head.className = 'hud-score-row head';
-        for (const [cls, label] of [
-          ['hud-score-player', 'Player'],
-          ['hud-score-champ', 'Champion'],
-          ['hud-score-kda', 'K / D / A'],
-          ['hud-score-cs', 'CS'],
-          ['hud-score-build', 'Build'],
-        ] as const) {
-          const cell = document.createElement('span');
-          cell.className = cls;
-          cell.textContent = label;
-          head.appendChild(cell);
-        }
-        box.appendChild(head);
-        for (const r of rows.filter((x) => x.team === team)) {
-          const row = document.createElement('div');
-          row.className = r.unitId === this.selfId ? 'hud-score-row self' : 'hud-score-row';
-          // Player and champion are two different facts and get two
-          // columns: offline nobody is named, so the seat says what it is.
-          const player = document.createElement('span');
-          player.className = 'hud-score-player';
-          player.textContent = r.player ?? (r.unitId === this.selfId ? 'You' : 'Bot');
-          const champ = document.createElement('span');
-          champ.className = 'hud-score-champ';
-          const lv = document.createElement('span');
-          lv.className = 'lv';
-          lv.textContent = ` Lv ${r.level}`;
-          champ.append(document.createTextNode(r.name), lv);
-          const kda = document.createElement('span');
-          kda.className = 'hud-score-kda';
-          kda.textContent = `${r.kills} / ${r.deaths} / ${r.assists ?? 0}`;
-          const cs = document.createElement('span');
-          cs.className = 'hud-score-cs';
-          cs.textContent = String(r.cs ?? 0);
-          // The build, six slots wide so a full inventory and an empty one
-          // read as the same shape.
-          const build = document.createElement('div');
-          build.className = 'hud-score-build';
-          const owned = r.items ?? [];
-          for (let i = 0; i < INVENTORY_SLOTS; i++) {
-            const id = owned[i];
-            const item = id ? ITEMS[id] : undefined;
-            if (item) {
-              const img = document.createElement('img');
-              img.src = itemIconUrl(item);
-              img.width = 30;
-              img.height = 30;
-              attachTooltip(img, () => describeItem(item, statLabel(item.stats)));
-              build.appendChild(img);
-            } else {
-              const slot = document.createElement('span');
-              slot.className = 'slot';
-              build.appendChild(slot);
-            }
-          }
-          row.append(player, champ, kda, cs, build);
-          box.appendChild(row);
-        }
+        renderScoreboardTeam(this.scoreTeams[team], rows, team, this.selfId);
       }
     }
 
@@ -1654,30 +1579,20 @@ export class Hud {
       this.endTitle.style.color = winner === this.selfTeam ? '#8fd06a' : '#d06a6a';
       const total = Math.max(0, Math.floor(this.world.time));
       this.endSub.textContent = `Match time ${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-      // Final per-champion stats, built once at match end.
-      const mkDiv = (className: string): HTMLElement => {
-        const d = document.createElement('div');
-        d.className = className;
-        return d;
-      };
+      // The same scoreboard the match was played with: same columns, same
+      // builds, same layout, so the summary is the table you already know
+      // rather than a thinner second one.
       this.endStats.textContent = '';
       const rows = this.world.scoreboard();
       for (const t of [0, 1] as const) {
-        const box = mkDiv(`hud-end-team ${t === 0 ? 'blue' : 'red'}`);
-        const title = t === winner ? `Team ${t + 1} (winner)` : `Team ${t + 1}`;
+        const box = document.createElement('div');
+        box.className = `hud-score-team ${t === 0 ? 'blue' : 'red'}`;
         const h = document.createElement('h4');
-        h.textContent = title;
+        h.textContent = t === winner ? `Team ${t + 1} (winner)` : `Team ${t + 1}`;
         box.appendChild(h);
-        for (const row of rows.filter((r) => r.team === t)) {
-          const line = mkDiv('hud-end-row');
-          const name = document.createElement('span');
-          name.textContent = row.name;
-          if (row.unitId === this.selfId) name.style.color = '#e8f5c8';
-          const kda = document.createElement('span');
-          kda.textContent = `Lv ${row.level} · ${row.kills}/${row.deaths}/${row.assists ?? 0} · CS ${row.cs ?? 0}`;
-          line.append(name, kda);
-          box.appendChild(line);
-        }
+        const body = document.createElement('div');
+        renderScoreboardTeam(body, rows, t, this.selfId);
+        box.appendChild(body);
         this.endStats.appendChild(box);
       }
     }

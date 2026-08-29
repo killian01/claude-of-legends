@@ -9,7 +9,7 @@
 import type { AbilityDef, CastSpec } from '../sim/combat/casting';
 import type { EffectPredicate, EffectSpec } from '../sim/combat/effects';
 import { ITEM_PASSIVES } from '../sim/content/item_passives';
-import { ITEMS, type ItemDef } from '../sim/content/items';
+import { ITEMS, type ItemDef, type ItemStats } from '../sim/content/items';
 import type { SigilDef } from '../sim/content/sigils';
 import type { AbilityKey } from '../sim/types';
 
@@ -283,6 +283,22 @@ export function describeSigil(def: SigilDef): string[] {
     `${def.cooldown}s cooldown.`,
     ...describeCast(def.spec, def.castRange),
   ];
+}
+
+// Full stat names, not initials: nobody should have to guess what AD means.
+export function statLabel(s: ItemStats): string {
+  const parts: string[] = [];
+  if (s.ad) parts.push(`+${s.ad} Attack Damage`);
+  if (s.ap) parts.push(`+${s.ap} Ability Power`);
+  if (s.hp) parts.push(`+${s.hp} Health`);
+  if (s.mana) parts.push(`+${s.mana} Mana`);
+  if (s.armor) parts.push(`+${s.armor} Armor`);
+  if (s.mr) parts.push(`+${s.mr} Magic Resist`);
+  if (s.attackSpeedPct) parts.push(`+${Math.round(s.attackSpeedPct * 100)}% Attack Speed`);
+  if (s.moveSpeed) parts.push(`+${s.moveSpeed} Move Speed`);
+  if (s.armorPen) parts.push(`+${s.armorPen} Armor Penetration`);
+  if (s.mrPen) parts.push(`+${s.mrPen} Magic Penetration`);
+  return parts.join(', ');
 }
 
 export function describeItem(def: ItemDef, statLine: string): string[] {

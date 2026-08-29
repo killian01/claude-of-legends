@@ -35,10 +35,20 @@ export interface TowerSpot {
   z: number;
 }
 
+// The open diagonal corridor between the two halves, mouth to mouth: it
+// starts at the top lane's crossing and ends at the bot lane's, so walking
+// the river is how you get from one lane to another without going home.
+export interface RiverBand {
+  a: Vec2;
+  b: Vec2;
+  width: number;
+}
+
 export interface GameMap {
   size: number;
   borderMargin: number;
   laneWidth: number;
+  river: RiverBand;
   fountains: readonly FountainSpot[];
   sanctums: readonly SanctumSpot[];
   towers: readonly TowerSpot[];
@@ -71,6 +81,21 @@ function flipLane(lane: LaneId | 'sanctum'): LaneId | 'sanctum' {
   if (lane === 'top') return 'bot';
   if (lane === 'bot') return 'top';
   return lane;
+}
+
+// The river runs the whole anti-diagonal (x + z = SIZE), from the point where
+// the top lane crosses it to the point where the bot lane does, so its two
+// mouths open straight onto the side lanes and mid cuts through its middle.
+// Self-mirrored by construction, as everything neutral has to be.
+const RIVER: RiverBand = { a: { x: 15, z: 135 }, b: mirrorPoint(15, 135), width: 9 };
+
+function segDist(px: number, pz: number, a: Vec2, b: Vec2): number {
+  const abx = b.x - a.x;
+  const abz = b.z - a.z;
+  const len2 = abx * abx + abz * abz;
+  const t0 = len2 > 0 ? ((px - a.x) * abx + (pz - a.z) * abz) / len2 : 0;
+  const t = t0 < 0 ? 0 : t0 > 1 ? 1 : t0;
+  return Math.hypot(px - a.x - abx * t, pz - a.z - abz * t);
 }
 
 const TEAM0_TOWERS: readonly TowerSpot[] = [
@@ -124,6 +149,50 @@ const NW_WALLS: readonly WallShape[] = [
   { x: 84, z: 48, r: 8 },
 ];
 
+// No jungle blob may stand in the river: playtest round 3 left three of them
+// ON the diagonal, which cut the water into disconnected pockets, so the only
+// way from the top lane's crossing to mid was back through your own jungle.
+// The clearance is enforced BY CONSTRUCTION here, the way team 1's geometry
+// is, rather than by hand-placing every blob. Pinned by tests/river.test.ts.
+//
+// A blob whose CENTER is clear of the water already leans to a bank, so it
+// slides to that one and keeps its radius. A blob authored ON the water is a
+// different animal: on this map the anti-diagonal is its own transpose, so
+// such a blob was a single wall doing both banks' work, and the round 3 pass
+// that gave every half a matching pair of jungles around its mid lane never
+// authored a transpose for it. Slide it to one bank and the other half of
+// its own team's jungle loses its wall: measured, that dropped the bot inner
+// tower's safe approach to 1.72 times straight-line while top stayed at 2.75.
+// So it becomes the two banks it was standing for, which for a blob on the
+// anti-diagonal is exactly the transpose pair round 3 would have written.
+// How far off the line a center may sit and still count as authored ON it.
+// Only a blob that close is its own transpose; one merely clipping the band
+// has a side of the map it belongs to, and gets slid to that side alone.
+const ON_THE_WATER = 0.5;
+// Each of the two banks a split blob becomes keeps half its area, so the
+// gorge holds the same amount of wall it always did rather than twice it.
+// At the full radius the pair seals its half outright: measured, every inner
+// tower became unreachable without ever standing in an outer tower's reach,
+// which closes the narrow jungle routes round 3 deliberately kept legal.
+const SPLIT_RADIUS = Math.SQRT1_2;
+
+function bankOffRiver(w: WallShape): readonly WallShape[] {
+  const need = w.r + RIVER.width / 2;
+  if (segDist(w.x, w.z, RIVER.a, RIVER.b) >= need) return [w];
+  // Signed distance to the river line, positive on team 1's side. The normal
+  // is (1, 1) / sqrt(2), so an equal nudge on both axes moves straight across.
+  const signed = (w.x + w.z - SIZE) / Math.SQRT2;
+  const bank = (side: 1 | -1, r = w.r): WallShape => {
+    const push = (side * (r + RIVER.width / 2) - signed) / Math.SQRT2;
+    return { x: w.x + push, z: w.z + push, r };
+  };
+  if (Math.abs(signed) > ON_THE_WATER) return [bank(signed > 0 ? 1 : -1)];
+  const half = w.r * SPLIT_RADIUS;
+  return [bank(-1, half), bank(1, half)];
+}
+
+const NW_BANKED_WALLS: readonly WallShape[] = NW_WALLS.flatMap(bankOffRiver);
+
 // Jungle camps of the northwest half; the southeast half is their rotation.
 // Each sits in a wall gap off the lanes; the first is the buff camp.
 const NW_CAMPS: readonly CampSpot[] = [
@@ -132,12 +201,16 @@ const NW_CAMPS: readonly CampSpot[] = [
   // cul-de-sac off the top lane rather than a stop on a through-road.
   { x: 38, z: 76, buff: true },
   { x: 40, z: 100, buff: false },
-  { x: 58, z: 108, buff: false },
+  // Was at 58,108: that is where the river's own bank wall has to stand once
+  // the water is a road, so the camp sits one bay deeper in the pocket.
+  { x: 52, z: 112, buff: false },
 ];
 
 const NW_BRUSH: readonly WallShape[] = [
   { x: 22, z: 45, r: 3 },
-  { x: 40, z: 90, r: 3 },
+  // Was at 40,90: opening the river slid the blob above it onto that spot.
+  // Same pocket, same job, one bay further up the bank.
+  { x: 34, z: 106, r: 3 },
   { x: 24, z: 105, r: 3 },
   { x: 58, z: 80, r: 3 },
   { x: 70, z: 82, r: 3 },
@@ -164,6 +237,7 @@ export const GAME_MAP: GameMap = {
   size: SIZE,
   borderMargin: 2,
   laneWidth: 8,
+  river: RIVER,
   fountains: [
     { team: 0, x: 7, z: 7, r: 4 },
     { team: 1, x: SIZE - 7, z: SIZE - 7, r: 4 },
@@ -197,7 +271,10 @@ export const GAME_MAP: GameMap = {
     ],
     bot: [...TOP_LANE].map((p) => mirrorPoint(p.x, p.z)).reverse(),
   },
-  walls: [...NW_WALLS, ...NW_WALLS.map((w) => ({ ...mirrorPoint(w.x, w.z), r: w.r }))],
+  walls: [
+    ...NW_BANKED_WALLS,
+    ...NW_BANKED_WALLS.map((w) => ({ ...mirrorPoint(w.x, w.z), r: w.r })),
+  ],
   brush: [...NW_BRUSH, ...NW_BRUSH.map((b) => ({ ...mirrorPoint(b.x, b.z), r: b.r }))],
   // On the river diagonal (x + z = SIZE), clear of the jungle walls, and
   // point-symmetric so neither team owns the pit.

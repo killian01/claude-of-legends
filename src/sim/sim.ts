@@ -41,6 +41,7 @@ import type { Policy } from './policy';
 import type { Projectile } from './projectiles';
 import { stepProjectiles } from './projectiles';
 import { startRecall, stepRecalls } from './recall';
+import { respawnDelay } from './respawn';
 import { grantKillRewards, grantPassiveGold } from './rewards';
 import { Rng } from './rng';
 import { stepSeparation } from './separation';
@@ -78,9 +79,6 @@ export type SimEvent =
   | { type: 'gold'; unitId: number; amount: number }
   | { type: 'victory'; team: TeamId };
 
-// Shortened by the pacing review: less time watching the death screen.
-const RESPAWN_BASE = 6;
-const RESPAWN_PER_LEVEL = 1.3;
 // How long a champion's damage on a victim keeps earning an assist.
 const ASSIST_WINDOW_S = 10;
 const SHOP_RANGE_PAD = 2;
@@ -534,7 +532,7 @@ export class Sim {
         u.deaths += 1;
         u.dead = true;
         u.hp = 0;
-        u.respawnAt = this.time + RESPAWN_BASE + RESPAWN_PER_LEVEL * u.level;
+        u.respawnAt = this.time + respawnDelay(u.level);
         u.path = [];
         u.attackTargetId = null;
         u.statuses = [];

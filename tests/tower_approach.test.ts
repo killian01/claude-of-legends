@@ -7,9 +7,19 @@
 //
 // The gate measures that walk. Narrow jungle routes into a half are good
 // design and stay legal; a stroll is not. The safe route has to be a real
-// detour: at least DETOUR_MIN times the straight-line distance, or no route
-// at all. Before the round 3 map pass the ratios were 1.29 (side lanes) and
-// 1.98 (mid), where 1.26 is the floor a four-connected grid can express.
+// detour: at least the floor for its lane times the straight-line distance,
+// or no route at all. Before the round 3 map pass the ratios were 1.29 (side
+// lanes) and 1.98 (mid), where 1.26 is what a four-connected grid can express
+// at its shortest.
+//
+// The two floors part company since the river opened. Round 3 measured 4.77
+// (mid) and 3.65 (side) on a map whose river was a chain of walled-off
+// pockets: the whole middle of the map was closed, so every walk into a half
+// went the long way round. A river you can travel is by definition a short
+// way round, and the side lanes pay for it, measuring 1.84 against mid's
+// 2.63. Both are still detours, not strolls, and the alternative measured on
+// the way here was worse: walling the gorge back up seals each half outright,
+// with no jungle route into it at all.
 
 import { describe, expect, it } from 'vitest';
 import { GAME_MAP } from '../src/sim/content/map';
@@ -21,7 +31,8 @@ import type { TeamId } from '../src/sim/types';
 const TOWER_REACH = 11;
 // Close enough to hit the tower itself, melee included.
 const STRIKE_GAP = 4;
-const DETOUR_MIN = 2.5;
+// Per lane, because the river costs the side lanes more than it costs mid.
+const DETOUR_MIN: Record<string, number> = { mid: 2.5, top: 1.8, bot: 1.8 };
 
 const sim = new Sim(7);
 const grid = sim.nav;
@@ -105,8 +116,27 @@ describe('lane approach', () => {
         expect(
           steps / straight,
           `team ${team} ${inner.lane} inner tower is a ${steps}-step walk over ${straight.toFixed(0)}`,
-        ).toBeGreaterThanOrEqual(DETOUR_MIN);
+        ).toBeGreaterThanOrEqual(DETOUR_MIN[inner.lane]!);
       }
+    });
+  }
+
+  // The mirror check below compares team 0 with team 1 and cannot see a half
+  // that is lopsided about its OWN mid lane. Round 3 made each half a
+  // matching pair of jungles by adding every blob's transpose, and the first
+  // river pass quietly undid that for the blobs authored on the diagonal,
+  // which are their own transpose: top measured 2.75 while bot measured 1.72.
+  for (const team of [0, 1] as const) {
+    it(`keeps team ${team}'s two side lanes equally hard to walk into`, () => {
+      const dist = safeStepMap(outerTowers(team));
+      const inners = innerTowers(team);
+      const top = inners.find((t) => t.lane === 'top');
+      const bot = inners.find((t) => t.lane === 'bot');
+      expect(top && bot).toBeTruthy();
+      if (!top || !bot) return;
+      const a = safeStepsTo(dist, top);
+      const b = safeStepsTo(dist, bot);
+      expect(Math.abs(a - b), `top ${a} vs bot ${b}`).toBeLessThanOrEqual(4);
     });
   }
 

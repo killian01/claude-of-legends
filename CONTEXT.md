@@ -40,6 +40,10 @@ _Avoid_: movement command (implies one-shot)
 A purely cosmetic appearance variant of a champion, chosen at champion select and visible to everyone. Never affects gameplay, stats, or the Policy observation.
 _Avoid_: costume, chroma
 
+**River**:
+The open diagonal corridor between the two halves, running from the point where the top lane crosses it to the point where the bot lane does. Neutral ground: it holds the two Warden pits, and it is the road between the lanes, so rotating from one lane to another goes along it instead of back through your own base. No jungle wall may stand in it.
+_Avoid_: stream, channel, mid river (it is one river, end to end)
+
 **Warden**:
 The neutral river monster. It spawns in one of two mirrored river pits on an announced clock, is always visible to both teams, fights only champions, and the team that lands the killing blow claims the Warden's Boon.
 _Avoid_: dragon, boss

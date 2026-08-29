@@ -268,8 +268,15 @@ const server = http.createServer(async (req, res) => {
       filePath = path.join(DIST, 'index.html');
     }
     const body = await readFile(filePath);
+    // The client shipped no caching headers at all, which leaves a browser
+    // free to serve a stale index.html and with it the previous build's
+    // hashed bundle: you reload after a change and see yesterday's game.
+    // Vite fingerprints everything under /assets/, so those are immutable
+    // and the entry document must always be revalidated.
+    const immutable = url.startsWith('/assets/');
     res.writeHead(200, {
       'content-type': MIME[path.extname(filePath)] ?? 'application/octet-stream',
+      'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
     });
     res.end(body);
   } catch {

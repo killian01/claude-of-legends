@@ -56,12 +56,16 @@ export function setAnnouncerEnabled(on: boolean): void {
   if (!on && typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
 }
 
-export function announceVoice(line: string, priority = false): void {
+// `repeatable` marks a line whose wording repeats across genuinely distinct
+// events: since the kill calls stopped naming the champion, two enemies
+// dying in one fight produce the same sentence, and the stutter guard below
+// would eat the second call.
+export function announceVoice(line: string, priority = false, repeatable = false): void {
   if (!announcerEnabled) return;
   if (typeof speechSynthesis === 'undefined') return;
   pickVoice();
   const now = performance.now();
-  if (line === lastLine && now - lastSpokeAt < 4000) return;
+  if (!repeatable && line === lastLine && now - lastSpokeAt < 4000) return;
   if (speechSynthesis.speaking) {
     if (!priority) return;
     speechSynthesis.cancel();

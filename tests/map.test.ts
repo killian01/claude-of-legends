@@ -58,6 +58,9 @@ describe('the launch map', () => {
     }
   });
 
+  // Brush, camps and pits belong on this list as much as the towers do: the
+  // river pass moved a wall blob onto a brush patch and nothing complained,
+  // because only the structures and lane vertices were being checked.
   it('keeps every gameplay anchor on walkable ground', () => {
     const anchors: { x: number; z: number; what: string }[] = [];
     for (const f of GAME_MAP.fountains) anchors.push({ x: f.x, z: f.z, what: 'fountain' });
@@ -66,6 +69,9 @@ describe('the launch map', () => {
     for (const [lane, pts] of Object.entries(GAME_MAP.lanes)) {
       for (const p of pts) anchors.push({ x: p.x, z: p.z, what: `lane ${lane}` });
     }
+    for (const b of GAME_MAP.brush) anchors.push({ x: b.x, z: b.z, what: 'brush' });
+    for (const c of GAME_MAP.camps) anchors.push({ x: c.x, z: c.z, what: 'camp' });
+    for (const p of GAME_MAP.wardenPits) anchors.push({ x: p.x, z: p.z, what: 'warden pit' });
     const offenders = anchors.filter((a) => !grid.isWalkableAt(a.x, a.z));
     expect(offenders).toEqual([]);
   });
