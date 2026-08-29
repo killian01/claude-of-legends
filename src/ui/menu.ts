@@ -1,5 +1,9 @@
-// Pre-game screens: home (name + mode), queue, private lobby, and champion
-// select. Pure DOM, callback-driven; the entry point owns the flow.
+// The transient pre-game screens: queue, private lobby, champion select and
+// notices. Pure DOM, callback-driven; the entry point owns the flow.
+//
+// Each is a card that interrupts, which is why they are cards. The two
+// screens you actually land on and read (the landing page and the
+// signed-in home) are full pages instead, over in ui/page.ts.
 
 import { inviteUrl } from '../game/invite';
 import type { LobbyPlayer, SelectPlayer } from '../net/protocol';
@@ -9,13 +13,7 @@ import { SKINS } from '../sim/content/skins';
 import type { AbilityKey, TeamId } from '../sim/types';
 import { ROLE_COLORS, setPortrait } from './champion_art';
 import { describeAbility, describeSigil } from './describe';
-import { startBackdrop } from './home_backdrop';
-import { buildLadderPanel } from './ladder_panel';
-import { buildLivePanel } from './live_panel';
 import { startMenuBackdrop } from './menu_backdrop';
-import { buildProfilePanel } from './profile_panel';
-import { openRosterBrowser } from './roster_browser';
-import { buildSettingsPanel } from './settings_panel';
 import { attachTooltip, hideTooltip } from './tooltips';
 
 const CSS = `
@@ -38,34 +36,17 @@ const CSS = `
 }
 .menu-title { font-size: 26px; font-weight: 800; letter-spacing: 1px; margin: 0 0 2px; }
 .menu-sub { font-size: 12px; color: #7e93b2; margin: 0 0 16px; }
-.menu.home { justify-content: flex-start; padding-left: clamp(24px, 7vw, 140px); }
 .menu-showcase-canvas { position: absolute; inset: 0; display: block; }
-.menu.home::after {
-  content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(ellipse at 62% 45%, transparent 40%, rgba(3, 6, 14, 0.65) 100%);
-}
-.menu-card.home {
-  width: 440px;
-  background: rgba(8, 12, 22, 0.84); backdrop-filter: blur(6px);
-  border: 1px solid #6b5a2e; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
-}
-.menu-card.home .menu-title {
-  font-family: Cinzel, Georgia, 'Times New Roman', serif;
-  font-size: 40px; line-height: 1.1; letter-spacing: 3px; text-transform: uppercase;
-  background: linear-gradient(180deg, #f7e7b0 0%, #d8b45a 55%, #a07830 100%);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 18px rgba(216, 180, 90, 0.25));
-}
-.menu-card.home .menu-sub {
-  letter-spacing: 0.5px; margin-bottom: 20px;
-  padding-bottom: 14px; border-bottom: 1px solid rgba(216, 180, 90, 0.22);
-}
-.menu .menu-btn.primary {
+/* Gold marks the one primary action on a screen. Scoped, because .primary
+   on its own is the plain blue below; both hosts have to be named or the
+   full-page screens (ui/page.ts) silently fall back to it, which is exactly
+   what happened when the home screen stopped being a menu card. */
+.menu .menu-btn.primary, .pg .menu-btn.primary {
   background: linear-gradient(180deg, #e8cc74 0%, #c9a84a 55%, #a07830 100%);
   border-color: #f0deae; color: #241a08; font-weight: 800; letter-spacing: 0.5px;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
 }
-.menu .menu-btn.primary:hover:not(:disabled) {
+.menu .menu-btn.primary:hover:not(:disabled), .pg .menu-btn.primary:hover:not(:disabled) {
   box-shadow: 0 0 18px rgba(216, 180, 90, 0.45); border-color: #fff2c8;
 }
 .menu-label { font-size: 11px; color: #7e93b2; margin: 10px 0 4px; }
@@ -163,8 +144,7 @@ export function ensureMenuCss(): void {
   document.head.appendChild(style);
 }
 
-// backdrop: every pre-game screen gets the animated canvas behind its card;
-// the home screen opts out because its cinematic intro IS the backdrop.
+// backdrop: every pre-game screen gets the animated canvas behind its card.
 // Exported so the sign-in screen (ui/auth.ts) is the same card as the rest
 // of the pre-game flow rather than a second look bolted in front of it.
 export function screen(
@@ -191,142 +171,6 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   e.className = className;
   if (text !== undefined) e.textContent = text;
   return e;
-}
-
-export interface HomeChoice {
-  name: string;
-  mode: 'practice' | 'queue' | 'create' | 'join' | 'replay' | 'spectate';
-  code?: string;
-  // For mode 'replay': the saved replay to watch.
-  replayId?: number;
-  // For mode 'spectate': the live match and the side whose fog to share.
-  matchId?: number;
-  team?: TeamId;
-}
-
-// accountName: who is signed in, shown on the card. Every screen past the
-// sign-in one has an account behind it (ADR 0006), so the home screen no
-// longer asks for a name: it states one.
-// prefillCode: an invite link's lobby code (?join=CODE); the join field
-// arrives filled, one click left.
-export function showHome(
-  container: HTMLElement,
-  accountName: string,
-  prefillCode?: string,
-): Promise<HomeChoice> {
-  return new Promise((resolve) => {
-    const { root, card } = screen(container, false);
-    root.classList.add('home');
-    card.classList.add('home');
-    // The backdrop art, behind the card.
-    const stopIntro = startBackdrop(root, card);
-    card.append(
-      el('h1', 'menu-title', 'Claude of Legends'),
-      el('p', 'menu-sub', `5v5 in the browser. Signed in as ${accountName}.`),
-    );
-
-    // A Watch button on a career or ladder panel fires this event; the
-    // home screen owns the flow, so it is the one that resolves.
-    const onWatchReplay = (e: Event): void => {
-      const id = (e as CustomEvent<number>).detail;
-      if (typeof id !== 'number') return;
-      cleanupWatch();
-      stopIntro();
-      root.remove();
-      resolve({ name: accountName, mode: 'replay', replayId: id });
-    };
-    const onSpectate = (e: Event): void => {
-      const detail = (e as CustomEvent<{ matchId: number; team: TeamId }>).detail;
-      if (typeof detail?.matchId !== 'number') return;
-      cleanupWatch();
-      stopIntro();
-      root.remove();
-      resolve({
-        name: accountName,
-        mode: 'spectate',
-        matchId: detail.matchId,
-        team: detail.team === 1 ? 1 : 0,
-      });
-    };
-    const cleanupWatch = (): void => {
-      window.removeEventListener('loc:replay', onWatchReplay);
-      window.removeEventListener('loc:spectate', onSpectate);
-    };
-    window.addEventListener('loc:replay', onWatchReplay);
-    window.addEventListener('loc:spectate', onSpectate);
-
-    const done = (mode: HomeChoice['mode'], code?: string): void => {
-      cleanupWatch();
-      stopIntro();
-      root.remove();
-      resolve({ name: accountName, mode, code });
-    };
-
-    const play = el('button', 'menu-btn primary', 'Play online');
-    play.addEventListener('click', () => done('queue'));
-    const practice = el('button', 'menu-btn', 'Practice vs dummies (offline)');
-    practice.addEventListener('click', () => done('practice'));
-    const create = el('button', 'menu-btn', 'Create private lobby');
-    create.addEventListener('click', () => done('create'));
-
-    const row = el('div', 'menu-row');
-    const code = el('input', 'menu-input') as HTMLInputElement;
-    code.placeholder = 'CODE';
-    code.maxLength = 5;
-    const join = el('button', 'menu-btn', 'Join lobby');
-    if (prefillCode) {
-      code.value = prefillCode;
-      join.classList.add('primary');
-      join.focus();
-    }
-    join.addEventListener('click', () => {
-      if (code.value.trim().length === 5) done('join', code.value.trim().toUpperCase());
-    });
-    row.append(code, join);
-
-    card.append(play, practice, create, el('div', 'menu-label', 'Play with friends'), row);
-
-    // Options: audio settings, collapsible like the roster browser.
-    const settingsBtn = el('button', 'menu-btn', 'Settings');
-    const settingsBox = el('div', '');
-    settingsBox.style.display = 'none';
-    let settingsBuilt = false;
-    settingsBtn.addEventListener('click', () => {
-      const open = settingsBox.style.display === 'none';
-      settingsBox.style.display = open ? 'block' : 'none';
-      if (!settingsBuilt) {
-        settingsBuilt = true;
-        settingsBox.appendChild(buildSettingsPanel());
-      }
-    });
-    card.append(el('div', 'menu-label', 'Options'), settingsBtn, settingsBox);
-
-    // Career and ladder: rebuilt fresh on every open so they never stale.
-    const freshSection = (label: string, build: () => HTMLElement): void => {
-      const btn = el('button', 'menu-btn', label);
-      const boxEl = el('div', '');
-      boxEl.style.display = 'none';
-      btn.addEventListener('click', () => {
-        const open = boxEl.style.display === 'none';
-        boxEl.style.display = open ? 'block' : 'none';
-        if (open) {
-          boxEl.textContent = '';
-          boxEl.appendChild(build());
-        }
-      });
-      card.append(btn, boxEl);
-    };
-    card.append(el('div', 'menu-label', 'Career and ladder'));
-    freshSection('Profile and history', buildProfilePanel);
-    freshSection('Ladder', buildLadderPanel);
-    freshSection('Watch a live match', buildLivePanel);
-
-    // The out-of-game roster browser: a full-page view of every champion
-    // with role, passive, and kit, readable before ever entering a queue.
-    const rosterBtn = el('button', 'menu-btn', 'Browse the champions');
-    rosterBtn.addEventListener('click', () => openRosterBrowser(container));
-    card.append(el('div', 'menu-label', 'Learn the game'), rosterBtn);
-  });
 }
 
 export interface QueueController {

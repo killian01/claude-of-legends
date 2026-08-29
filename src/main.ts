@@ -20,13 +20,12 @@ import { Sim } from './sim/sim';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
 import { type AuthedAccount, currentAccount } from './ui/auth';
 import { preloadBackdrop } from './ui/home_backdrop';
+import { type HomeChoice, showHome } from './ui/home_screen';
 import { showLanding } from './ui/landing';
 import {
-  type HomeChoice,
   type LobbyController,
   type QueueController,
   type SelectController,
-  showHome,
   showLobby,
   showNotice,
   showQueue,
@@ -135,7 +134,9 @@ async function runReplay(replayId: number): Promise<PostMatchAction> {
   return new Promise((resolve) => {
     const { sim, unitIds } = buildMatchSim(rec.seed, rec.picks);
     const unitTeams = new Map<number, TeamId>();
-    rec.picks.forEach((p, i) => unitTeams.set(unitIds[i]!, p.team));
+    rec.picks.forEach((p, i) => {
+      unitTeams.set(unitIds[i]!, p.team);
+    });
     // Follow the first human seat: their team, their fog, their story.
     const viewerIdx = Math.max(
       0,

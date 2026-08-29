@@ -37,7 +37,7 @@ async function fill(page, selector, value) {
 export async function signIn(page, name, timeout = 20000) {
   // Either the landing page (not signed in) or the home card (a live
   // session cookie carried us straight through).
-  await page.waitForSelector('.auth-form, .menu-card.home', { timeout });
+  await page.waitForSelector('.auth-form, .pg.home', { timeout });
   const needsAuth = await page.evaluate(() => document.querySelector('.auth-tabs') !== null);
   if (!needsAuth) return name;
 
@@ -57,7 +57,7 @@ export async function signIn(page, name, timeout = 20000) {
     });
     try {
       // Landing gone and the home card up: the only proof that worked.
-      await page.waitForSelector('.menu-card.home', { timeout: 10000 });
+      await page.waitForSelector('.pg.home', { timeout: 10000 });
       return true;
     } catch {
       return false;
@@ -78,7 +78,7 @@ export const SEEDED_NAME = 'seer';
 export const SEEDED_PASSWORD = 'seed-replay-e2e';
 
 export async function signInSeeded(page, timeout = 20000) {
-  await page.waitForSelector('.auth-form, .menu-card.home', { timeout });
+  await page.waitForSelector('.auth-form, .pg.home', { timeout });
   const needsAuth = await page.evaluate(() => document.querySelector('.auth-tabs') !== null);
   if (!needsAuth) return SEEDED_NAME;
   await fill(page, '.auth-form input.menu-input', SEEDED_NAME);
@@ -86,7 +86,7 @@ export async function signInSeeded(page, timeout = 20000) {
   await page.evaluate(() => {
     [...document.querySelectorAll('.auth-form .menu-btn')].pop()?.click();
   });
-  await page.waitForSelector('.menu-card.home', { timeout: 10000 });
+  await page.waitForSelector('.pg.home', { timeout: 10000 });
   return SEEDED_NAME;
 }
 
