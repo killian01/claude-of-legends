@@ -6,7 +6,7 @@
 // The panel only; the page it sits on is ui/landing.ts. Nothing here
 // decides layout, so the same form could sit anywhere.
 
-import { buildDiscordSignupRow, type DiscordResult } from './discord_link';
+import { buildDiscordEntry, type DiscordResult } from './discord_entry';
 import { el, ensureMenuCss } from './menu';
 
 const CSS = `
@@ -37,8 +37,8 @@ const CSS = `
   color: #6d829f; cursor: pointer; text-align: left; text-decoration: underline;
 }
 .auth-alt:hover { color: #dceaff; }
-/* Below the note, and only on the register tab: an optional step reads as
-   optional when it sits after everything the form actually requires. */
+/* Below the form on both tabs: the Discord door signs up and signs in
+   alike, so it belongs to neither tab more than the other. */
 .auth-discord { margin: 12px 0 0; }
 `;
 
@@ -64,8 +64,8 @@ export interface AuthedAccount {
   // but your own: the server has two shapes for exactly that reason.
   email: string | null;
   emailConfirmed: boolean;
-  // The Discord name this account is linked to, or null (ADR 0008). Like
-  // the address, it is only ever sent to the owner of the account.
+  // The Discord name this account was created from, or null (ADR 0009).
+  // Like the address, it is only ever sent to the owner of the account.
   discord: string | null;
 }
 
@@ -147,7 +147,7 @@ export async function requestReset(email: string): Promise<string | null> {
 // its own and leaves by the same link that reached it.
 //
 // `discordResult` is what a round trip through Discord came back with, if
-// this page load came from one (ADR 0008). The form only ever shows it;
+// this page load came from one (ADR 0009). The form only ever shows it;
 // what was linked, if anything, is the server's business.
 export function buildAuthForm(
   onSignedIn: (account: AuthedAccount) => void,
@@ -185,17 +185,11 @@ export function buildAuthForm(
   const note = el('p', 'auth-note');
   const alt = el('button', 'auth-alt', 'Forgot your password?');
 
-  // The Discord offer belongs to the register tab, so it lives in a box
-  // the mode hides. The row inside it hides itself as well, on a server
-  // with no Discord application: two switches, because they answer two
-  // different questions, and either one closes.
+  // The Discord door (ADR 0009). It hides itself on a server with no
+  // Discord application, and the 'forgot' mode hides it here: a password
+  // reset is about the password, and the door would only distract.
   const discordBox = el('div', 'auth-discord');
-  const discordRow = buildDiscordSignupRow(discordResult, () => {
-    // Coming back from Discord means creating an account, whatever tab
-    // the page would otherwise have opened on.
-    if (mode === 'login') setMode('register');
-  });
-  discordBox.appendChild(discordRow);
+  discordBox.appendChild(buildDiscordEntry(discordResult));
 
   root.append(tabs, name, email, password, error, go, alt, note, discordBox);
 
@@ -214,7 +208,7 @@ export function buildAuthForm(
     name.hidden = next === 'forgot';
     email.hidden = next === 'login';
     password.hidden = next === 'forgot';
-    discordBox.hidden = next !== 'register';
+    discordBox.hidden = next === 'forgot';
     go.textContent = LABELS[next].go;
     password.autocomplete = next === 'login' ? 'current-password' : 'new-password';
     alt.hidden = next === 'register';

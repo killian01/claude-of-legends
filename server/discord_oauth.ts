@@ -9,7 +9,7 @@
 // The access token is never stored. It is exchanged, used for one call to
 // /users/@me, and dropped with the function that held it: the account
 // keeps the id and the name that came back, which is all a link is
-// (ADR 0008). Nothing here can read a mailbox, a guild list, or a
+// (ADR 0009). Nothing here can read a mailbox, a guild list, or a
 // message, and nothing here can act on a player's behalf later.
 //
 // Delivery is best effort in exactly one direction: a Discord outage
@@ -68,7 +68,7 @@ export function discordConfigFromEnv(
 }
 
 // Where to send the browser. `state` is the whole CSRF story: it is
-// unguessable, single use, and server/discord_link.ts is what remembers
+// unguessable, single use, and server/discord_state.ts is what remembers
 // what it meant.
 export function authorizeUrl(cfg: DiscordConfig, state: string): string {
   const q = new URLSearchParams({

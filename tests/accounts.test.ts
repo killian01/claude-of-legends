@@ -200,8 +200,8 @@ describe('the public shape', () => {
     const a = unwrap(reg().register('bob', 'a good password', 'bob@example.com', 0));
     const pub = publicAccount(a);
     const json = JSON.stringify(pub);
-    expect(json).not.toContain(a.password.hash);
-    expect(json).not.toContain(a.password.salt);
+    expect(json).not.toContain(a.password!.hash);
+    expect(json).not.toContain(a.password!.salt);
     expect(Object.keys(pub).sort()).toEqual(['createdAt', 'id', 'name', 'ratedGames', 'rating']);
   });
 

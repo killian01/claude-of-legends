@@ -79,8 +79,8 @@ describe('account secrets', () => {
   ];
 
   const secrets: { what: string; value: string }[] = [
-    { what: 'password hash', value: account.password.hash },
-    { what: 'password salt', value: account.password.salt },
+    { what: 'password hash', value: account.password!.hash },
+    { what: 'password salt', value: account.password!.salt },
     { what: 'session id', value: session.id },
   ];
 
@@ -150,7 +150,7 @@ describe('account secrets', () => {
     const self = selfAccount(account);
     expect(self.email).toBe(address);
     expect(self.emailConfirmed).toBe(false);
-    expect(JSON.stringify(self)).not.toContain(account.password.hash);
+    expect(JSON.stringify(self)).not.toContain(account.password!.hash);
   });
 
   // A linked Discord is on exactly the same line as the address (ADR
@@ -182,14 +182,13 @@ describe('account secrets', () => {
     const self = JSON.stringify(selfAccount(account));
     expect(self).toContain('bo');
     expect(self).not.toContain('905512340000');
-    registry.unlinkDiscord(account.id);
   });
 
   it('keeps the fixture honest: the secrets really are in the account', () => {
     // If this ever fails, the gate above is passing for the wrong reason.
     const raw = JSON.stringify(account);
-    expect(raw).toContain(account.password.hash);
-    expect(raw).toContain(account.password.salt);
+    expect(raw).toContain(account.password!.hash);
+    expect(raw).toContain(account.password!.salt);
     expect(hashPassword('x').hash).not.toBe('');
   });
 });

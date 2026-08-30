@@ -19,7 +19,7 @@ import { CHAMPION_LIST } from './sim/content/champions';
 import { Sim } from './sim/sim';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
 import { type AuthedAccount, currentAccount } from './ui/auth';
-import { takeDiscordResult } from './ui/discord_link';
+import { takeDiscordResult } from './ui/discord_entry';
 import { takeConfirmResult } from './ui/email_status';
 import { preloadBackdrop } from './ui/home_backdrop';
 import { type HomeChoice, showHome } from './ui/home_screen';
@@ -530,8 +530,10 @@ async function boot(): Promise<void> {
   if (resetToken !== null) await showPasswordReset(container, resetToken);
   // What a confirmation link redirected back with, if this load came from
   // one. Read once, shown once, on the first home screen of the session.
-  // A round trip through Discord reports itself the same way (ADR 0008),
+  // A round trip through Discord reports itself the same way (ADR 0009),
   // and is read first only because both of them rewrite the address bar.
+  // A successful one arrives with a session already open, so only the
+  // failures ever have a screen to land on: the entry page shows them.
   let discordResult = takeDiscordResult();
   let confirmed = takeConfirmResult();
   // The app loop: home, one match, back, forever on the same page. 'again'
@@ -561,7 +563,7 @@ async function boot(): Promise<void> {
     }
     if (joinCode !== null) next = { name: account.name, mode: 'join', code: joinCode };
     const choice: HomeChoice =
-      next ?? (await showHome(container, account, joinCode ?? undefined, confirmed, discordResult));
+      next ?? (await showHome(container, account, joinCode ?? undefined, confirmed));
     confirmed = null;
     discordResult = null;
     joinCode = null;
