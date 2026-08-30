@@ -77,5 +77,11 @@ keep this table honest as they land.
   `src/sim/content/`, merged by one data module; never content tables inline in sim logic.
 - **Commits:** Conventional Commits with a scope (`feat(sim): ...`, `fix(net): ...`) and a
   short body saying what changed and why. Branches: `feature/<slug>`, `fix/<slug>`.
+- **Pull requests:** based on `main`, small and focused, following
+  `.github/PULL_REQUEST_TEMPLATE.md`. If the change is visual, add before/after screenshots
+  to the PR, committed under `docs/screenshots` and referenced from the PR body.
+  The contributor-facing walkthrough is `CONTRIBUTING.md`; keep the two consistent.
+- **Releases:** `main` is the development branch; releases are `vX.Y.Z` tags cut from `main`
+  by the maintainer, with `package.json` `version` bumped in the tagged commit.
 - **Every sim or server behavior change adds or updates a test in the same change.**
   Fix bugs test-first: reproduce with a failing test, then the smallest change to green.

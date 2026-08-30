@@ -1,0 +1,55 @@
+name: Feature request
+description: Suggest a feature, a balance change, or a quality-of-life improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing an idea. Tell us about the problem you want to
+        solve, not only the solution: that helps us design the right thing.
+
+        > You are welcome to write in your own language.
+  - type: checkboxes
+    attributes:
+      label: Before you start
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What is frustrating or missing today? Describe the player or developer experience.
+      placeholder: As a player, I cannot ... so I have to ...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to see? Note that every name in the game must be original (ADR 0004), so propose mechanics freely but expect naming to go through the glossary.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you thought about, and why this one seems best.
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the game does this touch? (Best guess is fine.)
+      options:
+        - Gameplay / combat / champions
+        - Content (items, sigils, map)
+        - Bots and Policies
+        - UI / HUD
+        - Multiplayer / server / accounts
+        - Headless environment / RL
+        - Rendering
+        - Other / not sure
+    validations:
+      required: false

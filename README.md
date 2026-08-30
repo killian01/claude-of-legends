@@ -108,6 +108,10 @@ is also served from somewhere else; `*` turns the check off.
 - Dev-only pages: `/dev_champions.html` (champion visual gallery, with
   `?portraits` and `?focus=<id>` modes) and `/vfx.html` (spell VFX).
 
+Contributions are welcome: [CONTRIBUTING.md](CONTRIBUTING.md) has the
+setup and the pull request checklist. Security issues go through
+[SECURITY.md](SECURITY.md), privately, never a public issue.
+
 All project content, in the game and in the docs, is in English, with
 original fantasy naming only (no borrowed IP, see
 `docs/adr/0004-original-naming-no-borrowed-ip.md`).

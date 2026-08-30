@@ -1,0 +1,69 @@
+name: Bug report
+description: Report something that is not working the way it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill out the
+        sections below so we can reproduce and fix it quickly.
+
+        > Not a native English speaker? Write in whatever language you are
+        > comfortable with and we will manage.
+  - type: checkboxes
+    attributes:
+      label: Before you start
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: When I do X, Y happens instead of Z.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can we make the bug happen? Champion, ability, and match situation help a lot for gameplay bugs.
+      placeholder: |
+        1. Start a practice match as '...'
+        2. Do '...'
+        3. See the error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Where did this happen?
+      options:
+        - Offline practice match (browser only)
+        - Online (multiplayer server)
+        - Self-hosted server
+        - Headless environment
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser / OS
+      description: e.g. "Chrome 130 on Windows 11", "Firefox on Ubuntu 24.04"
+    validations:
+      required: false
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots, recordings, or console logs
+      description: Drag images or videos here. Console errors (open the browser console with F12) are very helpful, and so is the match seed if you have it.
+    validations:
+      required: false
