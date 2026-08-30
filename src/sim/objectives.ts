@@ -9,8 +9,20 @@ import type { CombatCtx } from './sim_context';
 import type { Vec2 } from './types';
 import { createWarden, hostile, type Unit } from './unit';
 
-export const WARDEN_FIRST_SPAWN_S = 210;
-export const WARDEN_RESPAWN_S = 240;
+// 600 s: the Warden is the MID GAME's pivot, not an early skirmish prize
+// (playtest round 3: at 3:30 it dropped into the laning phase and the map
+// never got a laning phase back). The shorter respawn keeps 3 to 4 Wardens
+// inside a 20 minute match and, with BOON_DURATION_S above it, makes the
+// second Boon stack actually reachable by winning consecutive pits.
+export const WARDEN_FIRST_SPAWN_S = 600;
+export const WARDEN_RESPAWN_S = 150;
+// The Warden grows with the game clock, like waves do: spawning later must
+// not mean spawning trivial against six-item champions.
+export const WARDEN_SCALING_PER_MIN = 0.04;
+
+export function wardenScale(time: number): number {
+  return 1 + WARDEN_SCALING_PER_MIN * (time / 60);
+}
 // Beyond this range from its pit the Warden resets: full heal, walk home.
 export const WARDEN_LEASH_RANGE = 13;
 // How long after the last hit it keeps fighting before resetting.
@@ -50,7 +62,7 @@ export function stepObjectives(ctx: CombatCtx, map: GameMap, state: ObjectiveSta
     if (ctx.time >= state.nextSpawnAt) {
       const pit = map.wardenPits[state.spawnIndex % map.wardenPits.length]!;
       const id = ctx.allocId();
-      ctx.units.set(id, createWarden(id, pit));
+      ctx.units.set(id, createWarden(id, pit, wardenScale(ctx.time)));
       state.wardenId = id;
       state.spawnIndex += 1;
     }

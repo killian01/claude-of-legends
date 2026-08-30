@@ -1,6 +1,8 @@
-// The death timer curve. The complaint it answers: at the old flat ramp a
-// level 18 death was 29 s, short enough that throwing yourself at a fight
-// cost your team nothing, so dying carried no real disadvantage late.
+// The death timer curve. It scales with GAME TIME first, the design doc's
+// promise: an early death costs a wave, a late one costs your team the map,
+// whatever level the victim reached. The old curve scaled with level alone,
+// so a mid-level death at minute 20 still cost under 20 s and winning a
+// fight never opened the map.
 
 import { describe, expect, it } from 'vitest';
 import { CHAMPION_LIST } from '../src/sim/content/champions';
@@ -10,30 +12,32 @@ import { MAX_LEVEL } from '../src/sim/stats';
 import { DT } from '../src/sim/types';
 
 describe('the respawn delay', () => {
-  it('leaves the early game where the pacing review put it', () => {
-    // Levels 1 to 6 are unchanged from the old base + 1.3 per level ramp.
-    expect(respawnDelay(1)).toBeCloseTo(6.8, 5);
-    expect(respawnDelay(6)).toBeCloseTo(13.8, 5);
+  it('keeps an early death cheap', () => {
+    expect(respawnDelay(1, 0)).toBeCloseTo(6.4, 5);
+    expect(respawnDelay(3, 60)).toBeLessThan(10);
   });
 
-  it('accelerates, so each level costs more than the one before it', () => {
-    for (let l = 2; l <= MAX_LEVEL; l++) {
-      const step = respawnDelay(l) - respawnDelay(l - 1);
-      const prev = respawnDelay(l - 1) - respawnDelay(l - 2 < 1 ? 1 : l - 2);
-      expect(step).toBeGreaterThan(0);
-      if (l > 2) expect(step).toBeGreaterThan(prev);
-    }
+  it('scales with the game clock at a fixed level', () => {
+    const early = respawnDelay(9, 5 * 60);
+    const mid = respawnDelay(9, 10 * 60);
+    const late = respawnDelay(9, 20 * 60);
+    expect(mid).toBeGreaterThan(early + 5);
+    expect(late).toBeGreaterThan(mid + 10);
   });
 
-  it('makes a late death cost most of a minute', () => {
-    expect(respawnDelay(MAX_LEVEL)).toBeGreaterThan(45);
-    // Still under a full minute: a mini MOBA, not a 40 minute one.
-    expect(respawnDelay(MAX_LEVEL)).toBeLessThan(60);
+  it('still charges extra for the victim level, so the fed carry waits longer', () => {
+    expect(respawnDelay(18, 600)).toBeGreaterThan(respawnDelay(6, 600) + 3);
   });
 
-  it('clamps outside the level range rather than going negative or wild', () => {
-    expect(respawnDelay(0)).toBe(respawnDelay(1));
-    expect(respawnDelay(MAX_LEVEL + 5)).toBe(respawnDelay(MAX_LEVEL));
+  it('makes a late death cost most of a minute, capped under one', () => {
+    expect(respawnDelay(18, 22 * 60)).toBeGreaterThan(45);
+    expect(respawnDelay(18, 60 * 60)).toBeLessThanOrEqual(55);
+  });
+
+  it('clamps outside the valid ranges rather than going negative or wild', () => {
+    expect(respawnDelay(0, 100)).toBe(respawnDelay(1, 100));
+    expect(respawnDelay(MAX_LEVEL + 5, 100)).toBe(respawnDelay(MAX_LEVEL, 100));
+    expect(respawnDelay(3, -50)).toBe(respawnDelay(3, 0));
   });
 
   it('is what the sim actually puts on a corpse', () => {
@@ -46,9 +50,10 @@ describe('the respawn delay', () => {
     for (let i = 0; i < 100 && !b.dead; i++) sim.tick();
     expect(b.dead).toBe(true);
     // The clock is stamped during the tick that kills, so by the time the
-    // loop sees the corpse one tick of it has already run off.
+    // loop sees the corpse one tick of it has already run off (and the
+    // clock read now is a fraction later than the one stamped).
     const left = b.respawnAt - sim.time;
-    expect(left).toBeLessThanOrEqual(respawnDelay(12));
-    expect(left).toBeGreaterThan(respawnDelay(12) - DT - 1e-9);
+    expect(left).toBeLessThanOrEqual(respawnDelay(12, sim.time));
+    expect(left).toBeGreaterThan(respawnDelay(12, sim.time) - DT - 0.01);
   });
 });

@@ -5,9 +5,9 @@
 
 import { describe, expect, it } from 'vitest';
 import { GAME_MAP } from '../src/sim/content/map';
-import { WARDEN_FIRST_SPAWN_S, WARDEN_RESPAWN_S } from '../src/sim/objectives';
+import { WARDEN_FIRST_SPAWN_S, WARDEN_RESPAWN_S, wardenScale } from '../src/sim/objectives';
 import { Sim } from '../src/sim/sim';
-import { BOON_DAMAGE_PER_STACK } from '../src/sim/team_buffs';
+import { BOON_DAMAGE_PER_STACK, BOON_DURATION_S } from '../src/sim/team_buffs';
 import type { Unit } from '../src/sim/unit';
 
 const TICKS_PER_S = 20;
@@ -17,7 +17,10 @@ function findWarden(sim: Sim): Unit | undefined {
 }
 
 function runToFirstSpawn(sim: Sim): Unit {
-  for (let i = 0; i < (WARDEN_FIRST_SPAWN_S + 2) * TICKS_PER_S && !findWarden(sim); i++) {
+  // Rewind the spawn clock instead of ticking ten sim-minutes to meet the
+  // first Warden; the schedule itself is pinned by its own test below.
+  sim.objectives.nextSpawnAt = 1;
+  for (let i = 0; i < 3 * TICKS_PER_S && !findWarden(sim); i++) {
     sim.tick();
   }
   const w = findWarden(sim);
@@ -36,6 +39,29 @@ describe('the warden', () => {
     for (const pit of GAME_MAP.wardenPits) {
       expect(sim.nav.isWalkableAt(pit.x, pit.z), `pit ${pit.x},${pit.z}`).toBe(true);
     }
+  });
+
+  it('rises at ten minutes as a mid game objective, on a stackable cadence', () => {
+    // 600 s: the Warden must not drop into the laning phase (playtest
+    // round 3), and the Boon must outlive the respawn clock by a real kill
+    // window so winning consecutive pits can reach the second stack.
+    expect(WARDEN_FIRST_SPAWN_S).toBe(600);
+    expect(BOON_DURATION_S).toBeGreaterThanOrEqual(WARDEN_RESPAWN_S + 20);
+    const sim = new Sim(11);
+    sim.teamBuffs.grantBoon(1, 100);
+    sim.teamBuffs.grantBoon(1, 100 + WARDEN_RESPAWN_S + 15);
+    expect(sim.teamBuffs.boon(1, 100 + WARDEN_RESPAWN_S + 16)!.stacks).toBe(2);
+  });
+
+  it('grows with the game clock, so a late Warden is not a free Boon', () => {
+    const opener = new Sim(11);
+    const early = runToFirstSpawn(opener);
+    const late = new Sim(11);
+    late.time = WARDEN_FIRST_SPAWN_S; // the real first spawn moment
+    for (let i = 0; i < 3 && !findWarden(late); i++) late.tick();
+    const w = findWarden(late)!;
+    expect(w.maxHp).toBe(Math.round(2500 * wardenScale(WARDEN_FIRST_SPAWN_S)));
+    expect(w.maxHp).toBeGreaterThan(early.maxHp + 500);
   });
 
   it('spawns on the clock at the first pit, neutral and visible to both teams', () => {

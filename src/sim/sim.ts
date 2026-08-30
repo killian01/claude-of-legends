@@ -43,7 +43,7 @@ import { stepProjectiles } from './projectiles';
 import { startRecall, stepRecalls } from './recall';
 import { createRemoteSeat, type RemoteSeat, runRemoteDecisions } from './remote_policy';
 import { respawnDelay } from './respawn';
-import { grantKillRewards, grantPassiveGold } from './rewards';
+import { ASSIST_GOLD_FRAC, championBounty, grantKillRewards, grantPassiveGold } from './rewards';
 import { Rng } from './rng';
 import { stepSeparation } from './separation';
 import type { CombatCtx } from './sim_context';
@@ -87,8 +87,10 @@ const SHOP_RANGE_PAD = 2;
 // an empty one read as the same shape.
 export const INVENTORY_SLOTS = 6;
 
-// Bot lane assignment order: mid first, then the side lanes.
-const BOT_LANES: readonly LaneId[] = ['mid', 'top', 'bot'];
+// Bot lane assignment order for a five-seat team: one mid, two top, two
+// bot. The old three-entry cycle wrapped to mid,top,bot,mid,top: every team
+// permanently ran a duo mid, a duo top, and one abandoned solo bot lane.
+const BOT_LANES: readonly LaneId[] = ['mid', 'top', 'bot', 'top', 'bot'];
 
 // Deterministic spawn offsets around the fountain center, by join order.
 const SPAWN_SLOTS: readonly { x: number; z: number }[] = [
@@ -131,7 +133,9 @@ export class Sim {
   private readonly killers = new Map<number, number>();
   // The Warden's Boon lives outside units so it survives deaths.
   readonly teamBuffs = new TeamBuffs();
-  private readonly objectives = initialObjectiveState();
+  // Public like teamBuffs: tests rewind the spawn clock instead of ticking
+  // ten sim-minutes to meet the first Warden.
+  readonly objectives = initialObjectiveState();
   private readonly campStates = initialCampStates(GAME_MAP);
 
   constructor(seed: number) {
@@ -566,22 +570,34 @@ export class Sim {
           passiveOf(killer)?.onTakedown?.(ctx, killer, u);
         }
         // Assists: every enemy champion that damaged the victim within the
-        // window, killer excluded. Dead helpers still earn theirs.
+        // window, killer excluded. Dead helpers still earn theirs, and the
+        // helpers split an assist pot so a won team fight pays the team,
+        // not only the last hitter.
+        const assisters: Unit[] = [];
         for (const r of u.recentDamagers) {
           if (r.id === killerId) continue;
           if (this.time - r.at > ASSIST_WINDOW_S) continue;
           const helper = this.units.get(r.id);
           if (helper && helper.kind === 'champion' && helper.team !== u.team) {
-            helper.assists += 1;
-            passiveOf(helper)?.onTakedown?.(ctx, helper, u);
+            assisters.push(helper);
           }
+        }
+        const assistGold =
+          assisters.length > 0
+            ? Math.floor((championBounty(u) * ASSIST_GOLD_FRAC) / assisters.length)
+            : 0;
+        for (const helper of assisters) {
+          helper.assists += 1;
+          helper.gold += assistGold;
+          this.events.push({ type: 'gold', unitId: helper.id, amount: assistGold });
+          passiveOf(helper)?.onTakedown?.(ctx, helper, u);
         }
         u.recentDamagers = [];
         u.killStreak = 0;
         u.deaths += 1;
         u.dead = true;
         u.hp = 0;
-        u.respawnAt = this.time + respawnDelay(u.level);
+        u.respawnAt = this.time + respawnDelay(u.level, this.time);
         u.path = [];
         u.attackTargetId = null;
         u.statuses = [];

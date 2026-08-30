@@ -305,15 +305,16 @@ export function createMinion(
 }
 
 // The Warden (CONTEXT.md): the neutral river monster. Nominal team 0, but
-// neutral: true makes it hostile to everyone via hostile().
-export function createWarden(id: number, pos: Vec2): Unit {
+// neutral: true makes it hostile to everyone via hostile(). `scale` grows it
+// with the game clock (objectives.ts), the way waves grow.
+export function createWarden(id: number, pos: Vec2, scale = 1): Unit {
   const u = baseUnit(id, 0, 'warden', pos);
   u.neutral = true;
   u.radius = 1.1;
   u.moveSpeed = 3.0;
-  u.hp = 2500;
-  u.maxHp = 2500;
-  u.stats.ad = 80;
+  u.hp = Math.round(2500 * scale);
+  u.maxHp = u.hp;
+  u.stats.ad = Math.round(80 * scale);
   u.stats.armor = 40;
   u.stats.mr = 40;
   u.stats.attackRange = 2;

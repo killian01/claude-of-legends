@@ -26,6 +26,11 @@ export const CHAMPION_BOUNTY_PER_LEVEL = 25;
 export const SHUTDOWN_PER_KILL = 60;
 export const SHUTDOWN_STREAK_CAP = 5;
 
+// Assisters split a pot on top of the killer's full bounty (snowball
+// review, round 2: gold was strictly last-hit, so a won team fight paid one
+// bot and the team's lead never materialized as items).
+export const ASSIST_GOLD_FRAC = 0.5;
+
 export function championBounty(victim: Unit): number {
   return (
     CHAMPION_BOUNTY_BASE +

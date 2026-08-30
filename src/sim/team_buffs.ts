@@ -6,7 +6,10 @@
 import type { TeamId } from './types';
 
 export const BOON_DAMAGE_PER_STACK = 0.08;
-export const BOON_DURATION_S = 120;
+// 180 s, up from 120: longer than the Warden's respawn clock, so a team
+// that keeps winning the pit can actually reach the second stack (at 120 s
+// against a 240 s respawn the cap was unreachable through play).
+export const BOON_DURATION_S = 180;
 export const BOON_MAX_STACKS = 2;
 
 export interface TeamBuff {
