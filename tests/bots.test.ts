@@ -6,7 +6,9 @@ import { describe, expect, it } from 'vitest';
 import { fillWithBots } from '../server/bot_fill';
 import { Match } from '../server/match';
 import { BOTS, DEFAULT_BOT_ID } from '../src/sim/content/bots';
+import { REGROUP_AT_S } from '../src/sim/content/bots/laner';
 import { buildObservation } from '../src/sim/observe';
+import { Rng } from '../src/sim/rng';
 import { Sim } from '../src/sim/sim';
 
 const laner = BOTS[DEFAULT_BOT_ID]!.policy;
@@ -63,6 +65,84 @@ describe('the laner bot', () => {
     expect(bot.statuses.some((s) => s.kind === 'recall')).toBe(true);
     for (let i = 0; i < 180; i++) sim.tick();
     expect(Math.hypot(bot.pos.x - fountain.x, bot.pos.z - fountain.z)).toBeLessThan(2);
+  });
+
+  it('walks home from its own base instead of channeling a slower recall', () => {
+    const sim = new Sim(41);
+    // Inside RECALL_MIN_HOME_DIST of the fountain (the base perimeter):
+    // an 8 s channel here is strictly slower than walking.
+    const bot = sim.addChampion(0, { x: 20, z: 24 });
+    bot.sigils = ['riftstep', 'zephyr']; // no Mend: stay low, face the choice
+    bot.hp = bot.maxHp * 0.2;
+    sim.attachPolicy(bot.id, laner);
+    const fountain = sim.map.fountains.find((f) => f.team === 0)!;
+    const d0 = Math.hypot(bot.pos.x - fountain.x, bot.pos.z - fountain.z);
+    for (let i = 0; i < 60; i++) {
+      sim.tick();
+      expect(bot.statuses.some((s) => s.kind === 'recall')).toBe(false);
+    }
+    expect(Math.hypot(bot.pos.x - fountain.x, bot.pos.z - fountain.z)).toBeLessThan(d0);
+  });
+
+  it('holds a running channel while an enemy hovers outside break range', () => {
+    const sim = new Sim(41);
+    const bot = sim.addChampion(0, { x: 75, z: 75 });
+    bot.sigils = ['riftstep', 'zephyr']; // no Mend: stay low, start the channel
+    bot.hp = bot.maxHp * 0.2;
+    sim.attachPolicy(bot.id, laner);
+    for (let i = 0; i < 40 && !bot.statuses.some((s) => s.kind === 'recall'); i++) sim.tick();
+    expect(bot.statuses.some((s) => s.kind === 'recall')).toBe(true);
+    // 13 away: inside the old single 14-unit radius that used to cancel
+    // (and restart, and cancel, forever), outside the break radius.
+    sim.addChampion(1, { x: 88, z: 75 });
+    for (let i = 0; i < 30; i++) sim.tick();
+    expect(bot.statuses.some((s) => s.kind === 'recall')).toBe(true);
+  });
+
+  it('goes home to spend a heavy purse and converts it into items', () => {
+    const sim = new Sim(41);
+    const bot = sim.addChampion(0, { x: 75, z: 75 });
+    bot.gold = 3000;
+    sim.attachPolicy(bot.id, laner);
+    for (let i = 0; i < 700; i++) sim.tick();
+    expect(bot.items.length).toBeGreaterThanOrEqual(2);
+    expect(bot.gold).toBeLessThan(3000);
+  });
+
+  it('walks to a live Warden without waiting for an ally to go first', () => {
+    const sim = new Sim(41);
+    sim.objectives.nextSpawnAt = 1;
+    for (let i = 0; i < 60 && ![...sim.units.values()].some((u) => u.kind === 'warden'); i++) {
+      sim.tick();
+    }
+    const warden = [...sim.units.values()].find((u) => u.kind === 'warden')!;
+    const toward = {
+      x: warden.pos.x + (75 - warden.pos.x) * 0.8,
+      z: warden.pos.z + (75 - warden.pos.z) * 0.8,
+    };
+    const bot = sim.addChampion(0, toward);
+    sim.attachPolicy(bot.id, laner);
+    const d0 = Math.hypot(bot.pos.x - warden.pos.x, bot.pos.z - warden.pos.z);
+    for (let i = 0; i < 120; i++) sim.tick();
+    const d1 = Math.hypot(bot.pos.x - warden.pos.x, bot.pos.z - warden.pos.z);
+    expect(d1).toBeLessThan(d0 - 5);
+  });
+
+  it('after the regroup bell a side laner pushes mid instead of its lane', () => {
+    const sim = new Sim(41);
+    const bot = sim.addChampion(0, { x: 30, z: 105 });
+    sim.attachPolicy(bot.id, laner);
+    bot.lane = 'top';
+    bot.skillPoints = 0;
+    sim.time = REGROUP_AT_S + 1;
+    const obs = buildObservation(sim, bot.id)!;
+    const action = laner(obs, new Rng(7));
+    expect(action.kind).toBe('move');
+    if (action.kind === 'move') {
+      // Mid runs the map diagonal: the ordered step leaves the top arc
+      // (|x - z| = 75 at the start point) for it.
+      expect(Math.abs(action.x - action.z)).toBeLessThan(20);
+    }
   });
 });
 

@@ -43,6 +43,35 @@ const SELF_RADIUS = 0.75;
 const DODGE_STEP = 2.6;
 const DODGE_ETA_S = 1.0;
 const WINDUP_DANGER_RADIUS = 3.4;
+// Recall discipline (playtest round 3: bots parked beside their own Sanctum
+// channeling, canceling, and rechanneling forever). Break-even: an 8 s
+// channel at moveSpeed ~3.7 only beats walking past roughly 29 units, so
+// closer than this the bot walks home instead.
+const RECALL_MIN_HOME_DIST = 30;
+// Start a channel only when the spot is genuinely clear: no enemy champion
+// near or freshly remembered, and no enemy minions (their aggro breaks the
+// channel just as surely, and the bot used to restart on the same spot
+// without ever understanding why it kept dying).
+const RECALL_CLEAR_CHAMP_RANGE = 18;
+const RECALL_CLEAR_MEMORY_RANGE = 16;
+const RECALL_CLEAR_MINION_RANGE = 8;
+// Once channeling, hold unless an enemy champion is close enough to
+// actually break it. The gap between 18 and 10 is the hysteresis that kills
+// the start/cancel/restart oscillation an enemy hovering on one radius
+// used to produce.
+const RECALL_BREAK_RANGE = 10;
+// Go home to spend once the bank comfortably covers the next build step
+// (snowball review, round 2: the only recall trigger was low HP, so kill
+// gold sat unspent and a lead never became items).
+const SHOP_TRIP_GOLD = 1000;
+// Mid game macro: converge on a live Warden, pre-position at the nearest
+// pit shortly before the clock strikes, and past the regroup bell every bot
+// pushes mid as one group instead of five solo lanes forever.
+const WARDEN_APPROACH_RANGE = 40;
+const WARDEN_PREP_S = 20;
+const WARDEN_PREP_RANGE = 55;
+const WARDEN_FIGHT_HP_FRAC = 0.5;
+export const REGROUP_AT_S = 12 * 60;
 
 function dist(ax: number, az: number, b: ObsUnit): number {
   return Math.hypot(b.x - ax, b.z - az);
@@ -355,8 +384,42 @@ const policy: Policy = (obs, rng: Rng): Action => {
     }
   }
 
+  // A running channel is an investment: hold it with noop unless an enemy
+  // champion is close enough to break it anyway. Every branch below returns
+  // an order, and any order resets the 8 second clock (sim cancelRecall),
+  // so falling through here IS the cancel decision.
+  if (s.recalling) {
+    const breaker =
+      obs.units.some(
+        (u) =>
+          !u.friendly &&
+          u.kind === 'champion' &&
+          Math.hypot(u.x - s.x, u.z - s.z) <= RECALL_BREAK_RANGE,
+      ) ||
+      (obs.lastSeen ?? []).some(
+        (ls) => obs.time - ls.at <= 2 && Math.hypot(ls.x - s.x, ls.z - s.z) <= RECALL_BREAK_RANGE,
+      );
+    if (!breaker) return { kind: 'noop' };
+  }
+
   const enemySanctum = GAME_MAP.sanctums.find((c) => c.team !== s.team)!;
   const atFountain = Math.hypot(s.x - fountain.x, s.z - fountain.z) <= fountain.r + 2;
+
+  // Clear enough to START an 8 second channel here: no enemy champion near
+  // or freshly remembered, no enemy minions in aggro reach (their damage
+  // breaks the channel too), and out of tower fire.
+  const recallClear = (): boolean =>
+    !obs.units.some(
+      (u) =>
+        !u.friendly &&
+        ((u.kind === 'champion' && Math.hypot(u.x - s.x, u.z - s.z) <= RECALL_CLEAR_CHAMP_RANGE) ||
+          (u.kind === 'minion' && Math.hypot(u.x - s.x, u.z - s.z) <= RECALL_CLEAR_MINION_RANGE)),
+    ) &&
+    !(obs.lastSeen ?? []).some(
+      (ls) =>
+        obs.time - ls.at <= 3 && Math.hypot(ls.x - s.x, ls.z - s.z) <= RECALL_CLEAR_MEMORY_RANGE,
+    ) &&
+    !inTowerReach(s.x, s.z);
 
   // Survive: with a chaser on top of it, Riftstep toward home (or Zephyr to
   // outrun); otherwise Mend if ready; otherwise run. A hunter that just
@@ -391,23 +454,21 @@ const policy: Policy = (obs, rng: Rng): Action => {
       const zephyr = s.sigils.findIndex((id, i) => id === 'zephyr' && s.sigilReady[i] === true);
       if (zephyr !== -1) return { kind: 'sigil', slot: zephyr, x: s.x, z: s.z };
     }
-    const mendSlot = s.sigils.findIndex((id, i) => id === 'mend' && s.sigilReady[i] === true);
-    if (mendSlot !== -1) return { kind: 'sigil', slot: mendSlot, x: s.x, z: s.z };
-    // Recall home instead of the whole walk (playtest: bots never pressed
-    // B), but only once truly disengaged: no enemy champion in sight or in
-    // fresh memory nearby, and out of tower reach. A running channel is
-    // held with noop; any new order would reset the 8 second clock.
-    const engaged =
-      obs.units.some(
-        (u) => !u.friendly && u.kind === 'champion' && Math.hypot(u.x - s.x, u.z - s.z) <= 14,
-      ) ||
-      (obs.lastSeen ?? []).some(
-        (ls) => obs.time - ls.at <= 3 && Math.hypot(ls.x - s.x, ls.z - s.z) <= 12,
-      );
-    if (!engaged && !inTowerReach(s.x, s.z)) {
-      if (s.recalling) return { kind: 'noop' };
-      if (Math.hypot(s.x - fountain.x, s.z - fountain.z) > 15) return { kind: 'recall' };
+    if (!s.recalling) {
+      // Mend before a channel, never during one: casting a sigil cancels it.
+      const mendSlot = s.sigils.findIndex((id, i) => id === 'mend' && s.sigilReady[i] === true);
+      if (mendSlot !== -1) return { kind: 'sigil', slot: mendSlot, x: s.x, z: s.z };
+      // Recall home instead of the whole walk (playtest: bots never pressed
+      // B), but only once truly disengaged AND far enough out for the
+      // channel to beat walking: inside RECALL_MIN_HOME_DIST the walk is
+      // faster, and the whole home base sits inside that band.
+      if (recallClear() && Math.hypot(s.x - fountain.x, s.z - fountain.z) > RECALL_MIN_HOME_DIST) {
+        return { kind: 'recall' };
+      }
     }
+    // On the pad, just heal: re-issuing a move to the pad center every slot
+    // cleared the path and re-pathed for nothing.
+    if (atFountain) return { kind: 'noop' };
     return { kind: 'move', x: fountain.x, z: fountain.z };
   }
   // Heal up before walking back out (fountain regen makes this quick now).
@@ -418,6 +479,20 @@ const policy: Policy = (obs, rng: Rng): Action => {
     const wanted = nextPurchase(s.items, s.championId);
     if (wanted && s.gold >= effectiveItemCost(wanted, s.items)) {
       return { kind: 'buy', itemId: wanted };
+    }
+  }
+
+  // Shop trip: the bank covers the next build step and nobody is around, so
+  // go convert it into a power spike instead of drifting with a full purse
+  // (snowball review, round 2: bots only ever went home at death's door, so
+  // kill gold never became items and a lead never showed on the map).
+  if (!atFountain && s.items.length < 6 && s.gold >= SHOP_TRIP_GOLD) {
+    const wanted = nextPurchase(s.items, s.championId);
+    if (wanted && s.gold >= effectiveItemCost(wanted, s.items) && recallClear()) {
+      if (Math.hypot(s.x - fountain.x, s.z - fountain.z) > RECALL_MIN_HOME_DIST) {
+        return { kind: 'recall' };
+      }
+      return { kind: 'move', x: fountain.x, z: fountain.z };
     }
   }
 
@@ -523,19 +598,31 @@ const policy: Policy = (obs, rng: Rng): Action => {
     }
   }
 
-  // Contest the Warden: a live one in reach is worth a detour, but never
-  // alone; deliberately dumb (systems review v1).
+  // Contest the Warden: a live one is the team's one rendezvous. Walk to it
+  // healthy, fight it in reach. The old rule demanded an ally ALREADY at
+  // the pit before anyone would approach, so nobody ever went first and the
+  // rotation never started. Shortly before the spawn clock strikes, healthy
+  // bots pre-position at the nearest pit; both teams read the same clock,
+  // so the pit becomes the mid game's fight (obs.objectiveSpawnAt).
+  const jx = (rng.next() * 2 - 1) * 1.5;
+  const jz = (rng.next() * 2 - 1) * 1.5;
   const warden = enemies.find((u) => u.kind === 'warden');
   if (warden) {
     const dw = dist(s.x, s.z, warden);
-    const alliesNearWarden = obs.units.filter(
-      (v) => v.friendly && v.kind === 'champion' && dist(warden.x, warden.z, v) <= 14,
-    ).length;
-    if (dw <= FARM_RANGE && alliesNearWarden >= 1) {
-      return { kind: 'attack', targetId: warden.id };
+    if (dw <= FARM_RANGE) return { kind: 'attack', targetId: warden.id };
+    if (dw <= WARDEN_APPROACH_RANGE && s.hpFrac >= WARDEN_FIGHT_HP_FRAC) {
+      return { kind: 'move', x: warden.x + jx, z: warden.z + jz };
     }
-    if (dw > FARM_RANGE && dw <= 35 && alliesNearWarden >= 1) {
-      return { kind: 'move', x: warden.x, z: warden.z };
+  } else if (obs.objectiveSpawnAt != null && s.hpFrac >= WARDEN_FIGHT_HP_FRAC) {
+    const untilSpawn = obs.objectiveSpawnAt - obs.time;
+    if (untilSpawn >= 0 && untilSpawn <= WARDEN_PREP_S) {
+      let pit = GAME_MAP.wardenPits[0]!;
+      for (const p of GAME_MAP.wardenPits) {
+        if (Math.hypot(p.x - s.x, p.z - s.z) < Math.hypot(pit.x - s.x, pit.z - s.z)) pit = p;
+      }
+      const dp = Math.hypot(pit.x - s.x, pit.z - s.z);
+      if (dp <= 6) return { kind: 'noop' };
+      if (dp <= WARDEN_PREP_RANGE) return { kind: 'move', x: pit.x + jx, z: pit.z + jz };
     }
   }
 
@@ -576,12 +663,12 @@ const policy: Policy = (obs, rng: Rng): Action => {
 
   // Push MY lane: follow the most advanced friendly minion near the
   // assigned lane's polyline, else walk that lane's waypoints. Unassigned
-  // participants keep the old any-lane behavior. A little jitter
-  // differentiates matches across seeds (playtest review: all ten
-  // champions used to funnel into one lane).
-  const jx = (rng.next() * 2 - 1) * 1.5;
-  const jz = (rng.next() * 2 - 1) * 1.5;
-  const myLane = s.lane ? GAME_MAP.lanes[s.lane] : null;
+  // participants keep the old any-lane behavior. Past the regroup bell,
+  // every assigned bot plays mid as ONE push (playtest round 3: five solo
+  // pushes never converged, one bot sieged top alone all match). The jitter
+  // drawn above differentiates matches across seeds.
+  const laneId = s.lane !== null && obs.time >= REGROUP_AT_S ? 'mid' : s.lane;
+  const myLane = laneId ? GAME_MAP.lanes[laneId] : null;
   const laneDist = (x: number, z: number): number => {
     if (!myLane) return 0;
     let best = Number.POSITIVE_INFINITY;
