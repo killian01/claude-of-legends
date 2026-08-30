@@ -23,9 +23,9 @@ has to be up first on a fresh box.
 - One external service: a transactional mail provider, called outbound over
   HTTPS to send confirmation and reset links (ADR 0007). It is optional to
   run and required to be useful, see below.
-- Optionally a second, a Discord application, for players who want to link
-  their Discord account (ADR 0008). Nothing needs it: unconfigured, linking
-  is simply off and the rest of the game is unchanged.
+- Optionally a second, a Discord application, for the Continue with Discord
+  button (ADR 0009). Nothing needs it: unconfigured, the button never
+  appears and the rest of the game is unchanged.
 
 ## Mail
 
@@ -68,12 +68,14 @@ production.
 Delivery is best effort by design. A dead relay never fails a registration:
 the account is created and usable, and the player simply has no link yet.
 
-## Discord linking
+## Discord sign-in
 
-Optional, and off unless configured (ADR 0008). A player can attach the
-Discord account they proved they hold, while creating their account or from
-the home screen afterwards. It is never a way to sign in, and it is never
-shown to another player.
+Optional, and off unless configured (ADR 0009). The entry screen offers one
+button, Continue with Discord: it creates an account from the Discord
+identity that comes back (no name, password or email typed), and afterwards
+the same button signs that account back in. A name-and-password account can
+never be opened through Discord, and nothing stored is ever shown to another
+player.
 
 Make one application at `https://discord.com/developers/applications`, and
 under OAuth2 add a redirect that is exactly the public origin plus
@@ -103,11 +105,11 @@ never offers the button, and the boot line says so:**
 
 ```
 docker compose logs game | grep '^discord:'
-discord: linking on, redirect https://claudeoflegends.com/api/discord/callback
+discord: sign-in on, redirect https://claudeoflegends.com/api/discord/callback
 ```
 
-If that line says `off`, linking is not configured. Nothing else is affected:
-accounts are created, rated and played exactly as before.
+If that line says `off`, Discord sign-in is not configured. Nothing else is
+affected: accounts are created, rated and played exactly as before.
 
 ## The proxy contract
 

@@ -1,5 +1,10 @@
 # An account can link a Discord account, and linking proves nothing else
 
+> **Superseded by ADR 0009.** The Discord button now creates and signs into accounts, and the
+> link-to-an-existing-account flows this ADR describes are gone. The privacy decisions here (the
+> `identify`-only scope, no stored token, the id never leaving the server, one Discord one
+> account) survive unchanged and ADR 0009 leans on them.
+
 Players find each other on Discord before they find each other here. Today the two identities have
 nothing to do with one another: the name on the ladder and the name in the chat are two strings
 that happen to be typed by the same person, and there is no way to show that they are. This ADR

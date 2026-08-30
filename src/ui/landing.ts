@@ -11,7 +11,7 @@
 // The chrome it shares with the signed-in home lives in ui/page.ts.
 
 import { type AuthedAccount, buildAuthForm } from './auth';
-import type { DiscordResult } from './discord_link';
+import type { DiscordResult } from './discord_entry';
 import { startBackdrop } from './home_backdrop';
 import { el, ensureMenuCss } from './menu';
 import { buildPage, ensurePageCss, mountLiveStats, navLink, REPO } from './page';
@@ -43,7 +43,7 @@ export type LandingResult =
 
 // `discordResult` is what a round trip through Discord came back with, if
 // this load came from one; the credential panel is the only thing on this
-// page that has anything to say about it (ADR 0008).
+// page that has anything to say about it (ADR 0009).
 export function showLanding(
   container: HTMLElement,
   discordResult: DiscordResult | null = null,

@@ -21,14 +21,15 @@
 // mailbox, and taking it from them would hand their password reset to
 // whoever registered it next.
 //
-// A third index arrived with ADR 0008, and it behaves like neither. A
-// linked Discord id is verified the instant it exists, because it came
-// back from Discord itself rather than from a form, so there is nothing
-// to confirm and no claim to lapse. It is exclusive while it is held (one
-// Discord account, one game account) and it is released the moment the
-// owner unlinks, which is theirs to do: it is their Discord, not ours.
+// A third index arrived with ADR 0008 and became a door with ADR 0009,
+// and it behaves like neither of the others. A Discord id is verified the
+// instant it exists, because it came back from Discord itself rather than
+// from a form, so there is nothing to confirm and no claim to lapse. It
+// is exclusive for good (one Discord account, one game account), because
+// it is how that account's owner gets back in.
 
 import { foldName, validateName } from './account_name';
+import { deriveName } from './discord_name';
 import type { DiscordIdentity } from './discord_oauth';
 import { foldEmail, validateEmail } from './email_address';
 import { claimHolds } from './email_claim';
@@ -47,7 +48,7 @@ export interface AccountEmail {
   confirmed: boolean;
 }
 
-// A Discord account this one is linked to (ADR 0008). The id is what
+// The Discord identity behind this account (ADR 0009). The id is what
 // uniqueness is judged on and never changes; the name is a copy of what
 // Discord showed at link time, kept only so the owner recognises the link
 // they made, and it goes stale the day they rename themselves there.
@@ -64,14 +65,17 @@ export interface Account {
   // The folded reading uniqueness was judged on, stored so a reload does
   // not have to recompute the whole index from names.
   fold: string;
-  password: PasswordHash;
+  // Absent on an account created through Discord (ADR 0009): such an
+  // account has no password until a mailed reset lands one, and no
+  // password opens it in the meantime. authenticate() holds that line.
+  password?: PasswordHash;
   // Absent on an account registered before ADR 0007, and on one whose
   // unconfirmed claim lapsed. Such an account plays exactly as before; it
   // simply has no way to recover a forgotten password until it adds one.
   email?: AccountEmail;
-  // Absent unless the owner linked one, which is optional and always was:
-  // an account with no Discord queues, is rated and places on the ladder
-  // exactly like any other (ADR 0008).
+  // The Discord account that signs this one in, when the account was
+  // created through Discord (ADR 0009). Absent on a name-and-password
+  // account, which plays, is rated and places on the ladder identically.
   discord?: DiscordLink;
   createdAt: number;
   seenAt: number;
@@ -129,8 +133,7 @@ export type RegisterError =
   | 'name_taken'
   | 'password_invalid'
   | 'email_invalid'
-  | 'email_taken'
-  | 'discord_taken';
+  | 'email_taken';
 export type RenameError = 'name_invalid' | 'name_taken';
 export type SetEmailError = 'email_invalid' | 'email_taken' | 'unknown_account';
 export type LinkDiscordError = 'discord_taken' | 'unknown_account';
@@ -154,9 +157,8 @@ export class AccountRegistry {
   private readonly nameOwner = new Map<string, number>();
   // Folded email -> account id. Shrinks when a claim lapses.
   private readonly emailOwner = new Map<string, number>();
-  // Discord id -> account id. Shrinks only when the owner unlinks; there
-  // is nothing here to expire, since the link was verified when it was
-  // made and stays true until somebody undoes it.
+  // Discord id -> account id. Never shrinks: the id was verified the day
+  // it arrived, and it is the way back into the account it points at.
   private readonly discordOwner = new Map<string, number>();
   private nextId = 1;
 
@@ -223,17 +225,11 @@ export class AccountRegistry {
     account.email = undefined;
   }
 
-  // `discord` is the identity a round trip through Discord already
-  // proved, if the signup form carried one (ADR 0008). It is the last
-  // thing checked and the first thing that would be wasted, so nothing
-  // else about registration changes when it is absent, which is the
-  // normal case.
   register(
     name: string,
     password: string,
     email: string,
     now: number,
-    discord?: DiscordIdentity,
   ): Result<Account, RegisterError> {
     const nameErr = validateName(name);
     if (nameErr) return { ok: false, error: 'name_invalid' };
@@ -245,19 +241,12 @@ export class AccountRegistry {
     if (!this.nameFree(fold)) return { ok: false, error: 'name_taken' };
     const eFold = foldEmail(email);
     if (!this.emailFree(eFold, now)) return { ok: false, error: 'email_taken' };
-    // Through findByDiscordId rather than the index directly, so an index
-    // entry that outlived the account it pointed at (a hand-edited file)
-    // refuses nobody.
-    if (discord && this.findByDiscordId(discord.id)) {
-      return { ok: false, error: 'discord_taken' };
-    }
     const account: Account = {
       id: this.nextId++,
       name,
       fold,
       password: hashPassword(password),
       email: { address: email.trim(), fold: eFold, claimedAt: now, confirmed: false },
-      discord: discord ? { id: discord.id, username: discord.username, linkedAt: now } : undefined,
       createdAt: now,
       seenAt: now,
       rating: BASE_RATING,
@@ -266,7 +255,36 @@ export class AccountRegistry {
     this.byId.set(account.id, account);
     this.nameOwner.set(fold, account.id);
     this.emailOwner.set(eFold, account.id);
-    if (account.discord) this.discordOwner.set(account.discord.id, account.id);
+    this.persist();
+    return { ok: true, value: account };
+  }
+
+  // The other door in (ADR 0009): an identity a round trip through
+  // Discord already proved, and nothing typed at all. The name is derived
+  // from the Discord name, uniqueness included, and the account starts
+  // with no password and no email: Discord is how its owner gets back in,
+  // until they add an address and reset themselves a password.
+  registerWithDiscord(identity: DiscordIdentity, now: number): Result<Account, 'discord_taken'> {
+    // Through findByDiscordId rather than the index directly, so an index
+    // entry that outlived the account it pointed at (a hand-edited file)
+    // refuses nobody. The caller signs that account in instead of landing
+    // here, so this refusal is a race, not a flow.
+    if (this.findByDiscordId(identity.id)) return { ok: false, error: 'discord_taken' };
+    const name = deriveName(identity.username, (candidate) => this.nameFree(foldName(candidate)));
+    const fold = foldName(name);
+    const account: Account = {
+      id: this.nextId++,
+      name,
+      fold,
+      discord: { id: identity.id, username: identity.username, linkedAt: now },
+      createdAt: now,
+      seenAt: now,
+      rating: BASE_RATING,
+      ratedGames: 0,
+    };
+    this.byId.set(account.id, account);
+    this.nameOwner.set(fold, account.id);
+    this.discordOwner.set(identity.id, account.id);
     this.persist();
     return { ok: true, value: account };
   }
@@ -282,6 +300,9 @@ export class AccountRegistry {
     // A retired name points at an account whose current name is another
     // one; logging in with the old name must not work.
     if (!account || account.fold !== foldName(name)) return undefined;
+    // An account created through Discord has no password, and no guess at
+    // one may open it: its way in is the Discord callback (ADR 0009).
+    if (!account.password) return undefined;
     if (!verifyPassword(password, account.password)) return undefined;
     return account;
   }
@@ -353,14 +374,11 @@ export class AccountRegistry {
     return account;
   }
 
-  // Attaches a Discord identity that has already been proved (ADR 0008),
-  // either at signup through register() or afterwards through here. There
-  // is no unconfirmed state to pass through: this only ever runs on an
-  // answer that came back from Discord itself.
-  //
-  // Relinking the same Discord to the same account refreshes the name it
-  // shows and nothing else, so a player who renamed themselves on Discord
-  // can see the link catch up without unlinking first.
+  // Attaches a Discord identity that has already been proved. Today its
+  // one caller is the sign-in callback refreshing what Discord showed
+  // (ADR 0009): relinking the same Discord to the same account updates
+  // the stored name and nothing else, so a player who renamed themselves
+  // on Discord sees the change catch up at their next sign-in.
   linkDiscord(
     id: number,
     identity: DiscordIdentity,
@@ -381,19 +399,6 @@ export class AccountRegistry {
     this.discordOwner.set(identity.id, id);
     this.persist();
     return { ok: true, value: account };
-  }
-
-  // The owner's to undo, and it releases the id: it is their Discord, and
-  // holding it after they said no would be holding something we were only
-  // ever lent. The account keeps its name, rating and history, exactly as
-  // when an email claim lapses. Returns whether there was one to drop.
-  unlinkDiscord(id: number): boolean {
-    const account = this.byId.get(id);
-    if (!account?.discord) return false;
-    this.discordOwner.delete(account.discord.id);
-    account.discord = undefined;
-    this.persist();
-    return true;
   }
 
   findByDiscordId(discordId: string): Account | undefined {
