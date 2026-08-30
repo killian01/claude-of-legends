@@ -146,6 +146,8 @@ const CSS = `
 }
 .hud-slot.nomana { border-color: #27436e; color: #6f8cb8; }
 .hud-slot.nomana { filter: saturate(0.35) brightness(0.75); }
+/* A two-step touch cast is armed on this slot: tap the ground to fire. */
+.hud-slot.armed { border-color: #5fb8e8; box-shadow: 0 0 10px rgba(95, 184, 232, 0.75); }
 /* The passive: smaller and rounder than the castable keys, aligned to the
    bottom of the row, so it reads as innate rather than as a sixth button. */
 .hud-slot.passive {
@@ -521,6 +523,24 @@ const CSS = `
 }
 .hud-end-btns { display: flex; gap: 12px; }
 .hud-end-rating { font-size: 15px; font-weight: 700; margin-top: 4px; min-height: 18px; }
+/* Compact mode (touchscreens): the desktop sizes swallow a phone screen, so
+   the whole bottom block scales down, the chat goes (there is no way to type
+   in a match on a phone anyway; pings still flash on the map), and the hints
+   shrink and fade out once read. */
+.hud.compact .hud-bottom {
+  bottom: 4px; gap: 3px;
+  transform: translateX(-50%) scale(0.72); transform-origin: bottom center;
+}
+/* Post-scale the + is finger-sized again. */
+.hud.compact .hud-slot-up { width: 26px; height: 24px; top: -26px; font-size: 17px; line-height: 22px; }
+.hud.compact .hud-chat { display: none; }
+.hud.compact .hud-announce { font-size: 20px; top: 62px; }
+.hud.compact .hud-feed { font-size: 11px; }
+.hud.compact .hud-hints {
+  font-size: 9px; max-width: 170px; line-height: 1.45;
+  animation: hud-hints-fade 1s 25s forwards;
+}
+@keyframes hud-hints-fade { to { opacity: 0; visibility: hidden; } }
 `;
 
 export interface NetHooks {
@@ -593,6 +613,9 @@ export class Hud {
   private targetId: number | null = null;
   private targetKey = '';
   private netHooks: NetHooks = {};
+  // Touch two-step casting: a finger tap on an ability or sigil slot arms
+  // the cast through these callbacks (wired by boot to game/touch.ts).
+  private castTaps: { ability(key: AbilityKey): void; sigil(slot: number): void } | null = null;
   private announceUntil = 0;
   private sawBattleBegin = false;
   private sawFirstBlood = false;
@@ -623,7 +646,11 @@ export class Hud {
     this.styleEl = style;
 
     const root = document.createElement('div');
-    root.className = 'hud';
+    // Compact mode on touchscreens: a phone needs the middle of the screen
+    // for the game, so the fixed desktop sizes shrink (see the .compact CSS).
+    const coarsePointer =
+      typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+    root.className = coarsePointer ? 'hud compact' : 'hud';
     this.rootEl = root;
     const el = <K extends keyof HTMLElementTagNameMap>(
       tag: K,
@@ -737,6 +764,14 @@ export class Hud {
       // Names live in the tooltip only; labels under the bar collided with
       // the inventory row below.
       if (def) attachTooltip(slot, () => describeAbility(key, def.abilities[key]));
+      // Touch has no keyboard: a finger tap on the slot arms the two-step
+      // cast (game/touch.ts). Mouse pointers keep the tooltip-only slot.
+      slot.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'touch') return;
+        if (e.target === up) return;
+        e.preventDefault();
+        this.castTaps?.ability(key);
+      });
       slots.appendChild(slot);
       this.slots.set(key, { root: slot, cd, pips, up });
     }
@@ -760,6 +795,11 @@ export class Hud {
         const u = this.world.units.get(this.selfId);
         const sigil = u?.sigils[i] ? SIGILS[u.sigils[i]!] : undefined;
         return sigil ? describeSigil(sigil) : [];
+      });
+      slot.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'touch') return;
+        e.preventDefault();
+        this.castTaps?.sigil(i);
       });
       slots.appendChild(slot);
       this.sigilSlots.push({ root: slot, cd });
@@ -804,11 +844,14 @@ export class Hud {
     bottom.append(this.statusRow, this.metaText, mainRow, slots, inv);
 
     const hints = el('div', 'hud-hints');
-    hints.textContent =
-      'Right-click: move / attack. A: attack-move. S: stop and hold. B: recall. ' +
-      'Q W E R: hold to aim, release to cast (right-click cancels). D F: sigils. P: shop. ' +
-      'Tab: scoreboard. Enter: chat. G: ping. Esc: menu. Screen edges pan the camera; ' +
-      'Space recenters; left-click the minimap to look. Level up: Alt+key or click +.';
+    hints.textContent = coarsePointer
+      ? 'Tap: move / attack. Tap a spell, then tap the ground to cast it (tap the spell ' +
+        'again to cancel). Drag pans the camera, pinch zooms, Center snaps back to your ' +
+        'champion. Level up: tap the +.'
+      : 'Right-click: move / attack. A: attack-move. S: stop and hold. B: recall. ' +
+        'Q W E R: hold to aim, release to cast (right-click cancels). D F: sigils. P: shop. ' +
+        'Tab: scoreboard. Enter: chat. G: ping. Esc: menu. Screen edges pan the camera; ' +
+        'Space recenters; left-click the minimap to look. Level up: Alt+key or click +.';
 
     // The always-visible personal score: K / D / A plus creep
     // score, top right.
@@ -1043,6 +1086,19 @@ export class Hud {
 
   isChatOpen(): boolean {
     return this.chatInput.style.display === 'block';
+  }
+
+  // Wires the touch two-step cast: slot taps call these (boot provides them).
+  setCastTaps(taps: { ability(key: AbilityKey): void; sigil(slot: number): void }): void {
+    this.castTaps = taps;
+  }
+
+  // Highlights the slot whose cast is armed; null clears every highlight.
+  setArmedSlot(label: AbilityKey | 'D' | 'F' | null): void {
+    for (const [key, s] of this.slots) s.root.classList.toggle('armed', key === label);
+    for (const [i, s] of this.sigilSlots.entries()) {
+      s.root.classList.toggle('armed', (i === 0 ? 'D' : 'F') === label);
+    }
   }
 
   // The unit the player is attacking, mirrored into the target frame.

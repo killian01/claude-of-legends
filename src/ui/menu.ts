@@ -110,7 +110,10 @@ const CSS = `
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 @media (max-width: 1100px) {
-  .menu-select-layout { flex-direction: column; }
+  /* Column direction turns align-items horizontal: without stretch the main
+     column collapses to the grid's min-content and the champion cards
+     become unreadable slivers on a phone. */
+  .menu-select-layout { flex-direction: column; align-items: stretch; }
   .menu-select-side { width: 100%; }
   .menu-grid { grid-template-columns: repeat(3, 1fr); }
 }

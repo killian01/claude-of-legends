@@ -37,7 +37,14 @@ export class Minimap {
     this.canvas = document.createElement('canvas');
     this.canvas.width = SIZE_PX;
     this.canvas.height = SIZE_PX;
+    // Touchscreens are phone-sized: the map draws at full resolution but
+    // displays smaller, leaving the middle of the screen to the game. The
+    // click mapping below reads the on-screen rect, so it needs no change.
+    const coarse =
+      typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+    const displayPx = coarse ? 112 : SIZE_PX;
     this.canvas.style.cssText =
+      `width:${displayPx}px;height:${displayPx}px;` +
       'position:absolute;right:12px;bottom:12px;border:1px solid #466030;' +
       'border-radius:6px;pointer-events:auto;z-index:5;opacity:0.88;';
     container.appendChild(this.canvas);

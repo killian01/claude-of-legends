@@ -49,7 +49,10 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): () => v
   let mouseX = 0;
   let mouseY = 0;
 
+  // Touch pointers are not this module's: game/touch.ts gives them their
+  // own tap and drag semantics, and a finger has no hover.
   const onPointerMove = (e: PointerEvent): void => {
+    if (e.pointerType === 'touch') return;
     mouseX = e.clientX;
     mouseY = e.clientY;
     handlers.onHover(e.clientX, e.clientY);
@@ -60,6 +63,7 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): () => v
   el.addEventListener('contextmenu', onContextMenu);
 
   const onPointerDown = (e: PointerEvent): void => {
+    if (e.pointerType === 'touch') return;
     mouseX = e.clientX;
     mouseY = e.clientY;
     if (e.button === 0) {

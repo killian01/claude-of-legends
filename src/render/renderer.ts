@@ -186,6 +186,10 @@ interface TrackedMobile {
 // How long a projectile takes to converge from its muzzle spawn onto the
 // sim-true path, milliseconds.
 const MUZZLE_BLEND_MS = 130;
+
+// Zoom bounds shared by the mouse wheel and the touch pinch.
+const ZOOM_MIN = 0.65;
+const ZOOM_MAX = 1.45;
 const MUZZLE_V3 = new THREE.Vector3();
 
 interface TrackedZone {
@@ -360,7 +364,7 @@ export class Renderer {
       'wheel',
       (e) => {
         e.preventDefault();
-        this.zoom = Math.max(0.65, Math.min(1.45, this.zoom + e.deltaY * 0.0008));
+        this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, this.zoom + e.deltaY * 0.0008));
       },
       { passive: false },
     );
@@ -368,8 +372,12 @@ export class Renderer {
     // Track the pointer for edge panning; on the window so the edges of the
     // screen still register even over HUD elements. Leaving the window must
     // KEEP panning (the mouse is past the edge, the strongest pan intent),
-    // so the exit position is recorded instead of cleared.
+    // so the exit position is recorded instead of cleared. Touch pointers
+    // are skipped: a tap near a screen edge would otherwise leave the
+    // camera drifting forever (touch camera control is drag panning,
+    // game/touch.ts).
     const onPointerMove = (e: PointerEvent): void => {
+      if (e.pointerType === 'touch') return;
       this.pointerX = e.clientX;
       this.pointerY = e.clientY;
     };
@@ -519,6 +527,36 @@ export class Renderer {
   // Snap back to following the player (Space).
   recenterCamera(): void {
     this.freeCam = null;
+  }
+
+  // Camera pan for touch drags: slides the free camera by a world-space
+  // delta, starting from wherever the camera currently looks.
+  panBy(dx: number, dz: number): void {
+    const size = this.world.map.size;
+    if (!this.freeCam) this.freeCam = new THREE.Vector3(this.camFocus.x, 0, this.camFocus.z);
+    this.freeCam.x = Math.max(0, Math.min(size, this.freeCam.x + dx));
+    this.freeCam.z = Math.max(0, Math.min(size, this.freeCam.z + dz));
+  }
+
+  // Pinch zoom, sharing the wheel's bounds; a factor above 1 (fingers
+  // spreading) zooms in.
+  scaleZoom(factor: number): void {
+    if (!(factor > 0)) return;
+    this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, this.zoom / factor));
+  }
+
+  // Touch has no hover: an armed cast feeds the finger position here so the
+  // aim preview tracks it (the window pointermove tracker skips touch).
+  setPointerHint(x: number, y: number): void {
+    this.pointerX = x;
+    this.pointerY = y;
+  }
+
+  // Forget the hint once the cast fires or cancels, or a finger left near a
+  // screen edge would edge-pan the camera forever.
+  clearPointerHint(): void {
+    this.pointerX = -1;
+    this.pointerY = -1;
   }
 
   // Lets the HUD veto edge panning while a modal (the shop) is open.

@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <link rel="icon" href="data:," />
     <title>Claude of Legends</title>
     <!-- Display face for menu titles; falls back to Georgia offline. -->
@@ -28,6 +31,18 @@
       }
       canvas {
         display: block;
+        /* The game canvas owns its touch gestures (tap to move, drag to
+           pan, pinch to zoom); the browser must not scroll or zoom the
+           page from them. Menus and the landing page keep default touch
+           behavior so they still scroll. */
+        touch-action: none;
+      }
+      html,
+      body {
+        overscroll-behavior: none;
+      }
+      #app {
+        -webkit-tap-highlight-color: transparent;
       }
     </style>
   </head>

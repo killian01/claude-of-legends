@@ -14,13 +14,15 @@ import { DT } from '../sim/types';
 import { attackCursor, defaultCursor } from '../ui/cursors';
 import { Hud, type NetHooks } from '../ui/hud';
 import { Minimap } from '../ui/minimap';
+import { buildTouchBar } from '../ui/touch_bar';
 import type { IWorld } from '../world_api';
 import type { PostMatchAction } from './flow';
 import { requestGameFullscreen } from './fullscreen';
-import { setupInput } from './input';
+import { type InputHandlers, setupInput } from './input';
 import { startMusic, stopMusic } from './music';
 import { pickEnemyAt, pickEnemyOnScreen, pickUnitOnScreen } from './picking';
 import { playCastSfx, playSfx } from './sfx';
+import { setupTouchControls } from './touch';
 
 export interface KillNote {
   unitId: number;
@@ -207,7 +209,9 @@ export function startPresentation(
   };
 
   let lastHoverAt = 0;
-  const teardownInput = setupInput(renderer, {
+  // One handlers object for every input source: mouse and keyboard
+  // (setupInput), fingers (setupTouchControls), and the touch bar.
+  const inputHandlers: InputHandlers = {
     onRightClick: (p: Vec2, sx, sy) => {
       pendingCast = null;
       // The genre's cancel: a right-click while aiming drops the cast and
@@ -315,7 +319,30 @@ export function startPresentation(
       else showPing(aim.x, aim.z, 'You', selfTeam);
     },
     isTyping: () => hud.isChatOpen(),
+  };
+  const teardownInput = setupInput(renderer, inputHandlers);
+
+  // Touch: the same handlers behind finger gestures (tap to move or attack,
+  // two-step casts armed by tapping HUD slots). The gesture listeners are
+  // inert without a touchscreen; the button bar for key-only orders builds
+  // on coarse-pointer devices only.
+  const touch = setupTouchControls(renderer, inputHandlers, {
+    onArmedChange: (label) => hud.setArmedSlot(label),
   });
+  hud.setCastTaps({
+    ability: (key) => touch.armAbility(key),
+    sigil: (slot) => touch.armSigil(slot),
+  });
+  const coarsePointer =
+    typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+  const teardownTouchBar = coarsePointer
+    ? buildTouchBar(container, {
+        onRecall: () => inputHandlers.onRecall(),
+        onToggleShop: () => inputHandlers.onToggleShop(),
+        onToggleMenu: () => inputHandlers.onToggleMenu(),
+        onRecenterCamera: () => inputHandlers.onRecenterCamera(),
+      })
+    : null;
 
   startMusic();
 
@@ -377,6 +404,8 @@ export function startPresentation(
       container.removeEventListener('pointerdown', onFirstPointerDown);
       window.removeEventListener('blur', onWindowBlur);
       teardownInput();
+      touch.dispose();
+      teardownTouchBar?.();
       hud.dispose();
       minimap.dispose();
       renderer.dispose();
