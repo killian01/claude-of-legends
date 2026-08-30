@@ -11,6 +11,7 @@
 // The chrome it shares with the signed-in home lives in ui/page.ts.
 
 import { type AuthedAccount, buildAuthForm } from './auth';
+import type { DiscordResult } from './discord_link';
 import { startBackdrop } from './home_backdrop';
 import { el, ensureMenuCss } from './menu';
 import { buildPage, ensurePageCss, mountLiveStats, navLink, REPO } from './page';
@@ -40,7 +41,13 @@ export type LandingResult =
   // Chose the offline practice match, which needs no account.
   | { kind: 'offline' };
 
-export function showLanding(container: HTMLElement): Promise<LandingResult> {
+// `discordResult` is what a round trip through Discord came back with, if
+// this load came from one; the credential panel is the only thing on this
+// page that has anything to say about it (ADR 0008).
+export function showLanding(
+  container: HTMLElement,
+  discordResult: DiscordResult | null = null,
+): Promise<LandingResult> {
   ensureCss();
   return new Promise((resolve) => {
     const { root, inner, nav, hero } = buildPage('land');
@@ -87,7 +94,7 @@ export function showLanding(container: HTMLElement): Promise<LandingResult> {
         'An account keeps your rating, your match history and your place on the ladder, ' +
           'on any machine you sign in from.',
       ),
-      buildAuthForm((account) => finish({ kind: 'account', account })),
+      buildAuthForm((account) => finish({ kind: 'account', account }), discordResult),
     );
 
     const offline = el('section', 'pg-card plain');

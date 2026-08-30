@@ -13,11 +13,19 @@ import { type WebSocket, WebSocketServer } from 'ws';
 import { isFiniteVec, parseClientMsg, type ServerMsg } from '../src/net/protocol';
 import { DT } from '../src/sim/types';
 import { foldName, nameErrorMessage } from './account_name';
-import { type Account, AccountRegistry, publicAccount, selfAccount } from './accounts';
+import {
+  type Account,
+  AccountRegistry,
+  publicAccount,
+  type RegisterError,
+  selfAccount,
+} from './accounts';
 import { CONFIRM_TTL_MS, RESET_TTL_MS, TokenStore } from './action_tokens';
 import { fillWithBots } from './bot_fill';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, parseCookies, serializeCookie } from './cookies';
+import { DiscordFlows, PENDING_TTL_MS, TICKET_COOKIE } from './discord_link';
+import { authorizeUrl, CALLBACK_PATH, DiscordOauth, discordConfigFromEnv } from './discord_oauth';
 import { clientAddress, edgeConfig, originAllowed } from './edge';
 import { emailErrorMessage } from './email_address';
 import { CLAIM_TTL_MS } from './email_claim';
@@ -122,11 +130,19 @@ const tokens = new TokenStore(path.join(DATA_DIR, 'tokens.json'));
 // is rate limited per address on its own budget. "Attempt" here means
 // "request", not "wrong guess": the cost is the mail, not the mistake.
 const resets = new LoginThrottle();
-// The only third party this process talks to, and only outbound. Without
+// A third party this process talks to, and only outbound. Without
 // MAIL_API_KEY it logs links instead of sending them, and says so at boot.
 const mailer = mailerFromEnv(process.env);
 // What the links in those mails point at.
 const ORIGIN = publicOrigin(process.env, EDGE.origins, PORT);
+// The other one, and it is entirely optional (ADR 0008): without the two
+// Discord secrets the routes below answer "not configured", the client
+// never offers the button, and everything else works exactly as before.
+const DISCORD = discordConfigFromEnv(process.env, ORIGIN);
+const discord = DISCORD ? new DiscordOauth(DISCORD) : null;
+// The states in flight and the links waiting for a signup to finish.
+// In memory only: both are minutes old and their owner is watching.
+const discordFlows = new DiscordFlows();
 const MATCHES_FILE = path.join(DATA_DIR, 'matches.jsonl');
 const REPLAYS_DIR = path.join(DATA_DIR, 'replays');
 // How many finished-match replays stay on disk (named by match id).
@@ -134,6 +150,18 @@ const REPLAY_KEEP = 40;
 // The whole log stays in memory for profile queries; one line per match,
 // appended as each ends (kilobytes each, guests-scale).
 const matchLog: MatchRecord[] = readJsonl<MatchRecord>(MATCHES_FILE);
+
+// What a refused registration says, one line per way it can be refused.
+// A table rather than a chain of ternaries, so a new way to be refused is
+// one line and cannot be dropped by accident.
+const REGISTER_ERRORS: Record<RegisterError, string> = {
+  name_invalid: nameErrorMessage('charset'),
+  name_taken: 'That name is taken.',
+  password_invalid: passwordErrorMessage('too_short'),
+  email_invalid: emailErrorMessage('shape'),
+  email_taken: 'An account already uses that email address.',
+  discord_taken: 'That Discord account is already linked to another account here.',
+};
 
 // The public shape of an account: publicAccount() drops the credential by
 // construction rather than by deletion, and tests/architecture.test.ts
@@ -284,10 +312,20 @@ async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, u
   }
 }
 
+// Adds one Set-Cookie without dropping any already on the response. A
+// registration that came back from Discord sets two (the new session, and
+// the spent ticket being cleared), and setHeader would have kept only the
+// last one written.
+function addCookie(res: http.ServerResponse, cookie: string): void {
+  const existing = res.getHeader('set-cookie');
+  const already = Array.isArray(existing) ? existing : existing ? [String(existing)] : [];
+  res.setHeader('set-cookie', [...already, cookie]);
+}
+
 function openSession(res: http.ServerResponse, req: http.IncomingMessage, account: Account): void {
   const session = sessions.create(account.id, Date.now());
-  res.setHeader(
-    'set-cookie',
+  addCookie(
+    res,
     serializeCookie(COOKIE_NAME, session.id, {
       maxAgeS: Math.floor(SESSION_TTL_MS / 1000),
       secure: cookieSecure(req),
@@ -325,7 +363,13 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (url === '/api/register') {
-        const created = registry.register(name, password, email, now);
+        // A Discord round trip that finished before the form did leaves a
+        // ticket in a cookie (ADR 0008). Only peeked at here: a signup
+        // that fails on its name must not spend the link the player made,
+        // or they would have to go round again to fix a typo.
+        const ticket = parseCookies(req.headers.cookie).get(TICKET_COOKIE) ?? '';
+        const pending = ticket ? discordFlows.peek(ticket, now) : undefined;
+        const created = registry.register(name, password, email, now, pending);
         if (!created.ok) {
           // A taken name is not a failed credential guess, but it is still
           // an attempt: rate it, or the signup form becomes the oracle the
@@ -335,20 +379,17 @@ const server = http.createServer(async (req, res) => {
           // the same disclosure the login form refuses to make. It is
           // unavoidable: uniqueness cannot be enforced without saying so.
           // The throttle above is what keeps it from being enumerable.
-          const message =
-            created.error === 'name_taken'
-              ? 'That name is taken.'
-              : created.error === 'password_invalid'
-                ? passwordErrorMessage('too_short')
-                : created.error === 'email_taken'
-                  ? 'An account already uses that email address.'
-                  : created.error === 'email_invalid'
-                    ? emailErrorMessage('shape')
-                    : nameErrorMessage('charset');
-          sendJson(res, 409, { error: message });
+          sendJson(res, 409, { error: REGISTER_ERRORS[created.error] });
           return;
         }
         for (const key of keys) logins.recordSuccess(key);
+        // The account exists, so the link is spent and the cookie that
+        // carried it has no further use. Both, or a reload of the signup
+        // page would offer to attach a Discord that is already attached.
+        if (ticket) {
+          discordFlows.claim(ticket, now);
+          addCookie(res, clearCookie(TICKET_COOKIE, { secure: cookieSecure(req) }));
+        }
         openSession(res, req, created.value);
         sendJson(res, 200, selfAccount(created.value));
         // Not awaited: the account is usable now, the link can arrive when
@@ -397,6 +438,96 @@ const server = http.createServer(async (req, res) => {
       const ok = redeemed ? registry.confirmEmail(redeemed.accountId, redeemed.email, now) : false;
       res.writeHead(302, { location: `${ORIGIN}/?confirmed=${ok ? '1' : '0'}` });
       res.end();
+      return;
+    }
+
+    // --- linking a Discord account (ADR 0008) ---
+    // Reachable without a session on purpose: the whole point is that
+    // somebody can start the round trip while creating their account,
+    // before there is a session to start it under. A signed-in caller
+    // links to the account they are signed in as, and everyone else is
+    // linking to an account that does not exist yet.
+    if (url === '/api/discord/start') {
+      const now = Date.now();
+      if (!DISCORD) {
+        res.writeHead(302, { location: `${ORIGIN}/?discord=off`, 'cache-control': 'no-store' });
+        res.end();
+        return;
+      }
+      const me = accountForRequest(req, now);
+      const state = discordFlows.start(me?.id ?? null, now);
+      res.writeHead(302, {
+        location: authorizeUrl(DISCORD, state),
+        'cache-control': 'no-store',
+      });
+      res.end();
+      return;
+    }
+
+    // Where Discord sends the browser back. Like the confirmation link it
+    // is a plain GET that has to end somewhere a person can read, so every
+    // outcome lands on the site and the query says which one.
+    if (url === CALLBACK_PATH) {
+      const q = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+      const now = Date.now();
+      const land = (outcome: string): void => {
+        res.writeHead(302, {
+          location: `${ORIGIN}/?discord=${outcome}`,
+          'cache-control': 'no-store',
+        });
+        res.end();
+      };
+      // The state is the whole defence: unknown, expired and forged are
+      // one case, and it is spent whether or not the rest works out.
+      const flow = discordFlows.take(q.get('state') ?? '', now);
+      const code = q.get('code') ?? '';
+      // No code means the player said no on the consent screen, which is
+      // an answer and not a failure, but there is nothing to do with it
+      // either way.
+      if (!discord || !flow || code.length === 0 || code.length > 512) {
+        land('failed');
+        return;
+      }
+      const identity = await discord.exchange(code);
+      if (!identity) {
+        land('failed');
+        return;
+      }
+      // Held already, by this account or another: either way there is
+      // nothing to link. Saying so to the person who just proved they own
+      // that Discord discloses nothing they could not already check.
+      const held = registry.findByDiscordId(identity.id);
+      if (flow.accountId === null) {
+        if (held) {
+          land('taken');
+          return;
+        }
+        // Nothing to attach this to yet, so it waits under a ticket the
+        // browser carries into /api/register.
+        const ticket = discordFlows.hold(identity, now);
+        addCookie(
+          res,
+          serializeCookie(TICKET_COOKIE, ticket, {
+            maxAgeS: Math.floor(PENDING_TTL_MS / 1000),
+            secure: cookieSecure(req),
+          }),
+        );
+        land('ready');
+        return;
+      }
+      const linked = registry.linkDiscord(flow.accountId, identity, now);
+      land(linked.ok ? 'linked' : 'taken');
+      return;
+    }
+
+    // What is waiting under this browser's ticket, for the signup form to
+    // name the Discord it is about to attach. Peeked, never spent: only
+    // creating the account spends it. Answers about this caller's own
+    // cookie and nothing else, which is why it needs no session.
+    if (url === '/api/discord/pending') {
+      const ticket = parseCookies(req.headers.cookie).get(TICKET_COOKIE);
+      const waiting = ticket ? discordFlows.peek(ticket, Date.now()) : undefined;
+      sendJson(res, 200, { configured: DISCORD !== null, discord: waiting?.username ?? null });
       return;
     }
 
@@ -546,6 +677,19 @@ const server = http.createServer(async (req, res) => {
         resets.recordFailure(key, now);
         sendJson(res, 200, { ok: true });
         void sendConfirmation(me);
+        return;
+      }
+      // Undoing a link. The owner's to undo and nobody else's, so it is a
+      // POST on the session rather than anything a link could trigger,
+      // and it releases the Discord id for whatever account its owner
+      // wants to attach it to next (ADR 0008).
+      if (url === '/api/discord/unlink') {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: 'use POST' });
+          return;
+        }
+        registry.unlinkDiscord(me.id);
+        sendJson(res, 200, selfAccount(me));
         return;
       }
       if (url === '/api/ladder') {
@@ -1114,6 +1258,9 @@ setInterval(() => {
   const sessionsDropped = sessions.purgeExpired(now);
   const tokensDropped = tokens.purgeExpired(now);
   const claimsReleased = registry.purgeExpiredClaims(now);
+  // In memory and minutes old, so this is the one that would never grow
+  // anyway; swept here so nothing is left holding a state from last week.
+  discordFlows.purge(now);
   if (sessionsDropped + tokensDropped + claimsReleased > 0) {
     console.log(
       `housekeeping: ${sessionsDropped} session(s), ${tokensDropped} link(s), ` +
@@ -1127,6 +1274,11 @@ server.listen(PORT, () => {
   // Said at boot so a misconfigured relay is found now, rather than the
   // first time a player forgets their password.
   console.log(`mail: ${mailer.description}, links point at ${ORIGIN}`);
+  console.log(
+    DISCORD
+      ? `discord: linking on, redirect ${DISCORD.redirectUri}`
+      : 'discord: off (no DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET set)',
+  );
   console.log(
     `edge: ${EDGE.hops} trusted proxy hop(s), origins ${
       EDGE.origins.length > 0 ? EDGE.origins.join(' ') : 'same-host only'

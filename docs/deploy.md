@@ -20,9 +20,12 @@ has to be up first on a fresh box.
   certificate; the game process never sees TLS.
 - No database: accounts, sessions, pending links and the match log are JSON
   files under `DATA_DIR` (ADR 0006).
-- One external service, and only one: a transactional mail provider, called
-  outbound over HTTPS to send confirmation and reset links (ADR 0007). It is
-  optional to run and required to be useful, see below.
+- One external service: a transactional mail provider, called outbound over
+  HTTPS to send confirmation and reset links (ADR 0007). It is optional to
+  run and required to be useful, see below.
+- Optionally a second, a Discord application, for players who want to link
+  their Discord account (ADR 0008). Nothing needs it: unconfigured, linking
+  is simply off and the rest of the game is unchanged.
 
 ## Mail
 
@@ -64,6 +67,47 @@ production.
 
 Delivery is best effort by design. A dead relay never fails a registration:
 the account is created and usable, and the player simply has no link yet.
+
+## Discord linking
+
+Optional, and off unless configured (ADR 0008). A player can attach the
+Discord account they proved they hold, while creating their account or from
+the home screen afterwards. It is never a way to sign in, and it is never
+shown to another player.
+
+Make one application at `https://discord.com/developers/applications`, and
+under OAuth2 add a redirect that is exactly the public origin plus
+`/api/discord/callback`:
+
+```
+https://claudeoflegends.com/api/discord/callback
+```
+
+Discord matches that string byte for byte, so a trailing slash or the wrong
+host is a refused exchange and nothing else. Then set both of these in the
+same `.env` file as the mail keys, where `DISCORD_CLIENT_SECRET` is a
+credential and must never be committed:
+
+```
+DISCORD_CLIENT_ID=1234567890
+DISCORD_CLIENT_SECRET=...
+```
+
+The scope requested is `identify` and nothing else. The access token is used
+for one call and then dropped: the account stores the Discord id, the name
+that came back, and when. `DISCORD_REDIRECT_URI` overrides the callback for a
+deployment whose public origin is not `PUBLIC_URL`; it is not normally set.
+
+**With neither variable set the routes answer "not configured", the client
+never offers the button, and the boot line says so:**
+
+```
+docker compose logs game | grep '^discord:'
+discord: linking on, redirect https://claudeoflegends.com/api/discord/callback
+```
+
+If that line says `off`, linking is not configured. Nothing else is affected:
+accounts are created, rated and played exactly as before.
 
 ## The proxy contract
 

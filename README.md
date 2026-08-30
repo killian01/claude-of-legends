@@ -26,7 +26,9 @@
 A complete mini MOBA you can play right now: three lanes, ten champions with
 full kits, jungle camps, a neutral objective, fog of war, items, skins, a
 ladder, and an authoritative server for online play. No install. Online play
-needs a free account; the practice match against bots does not.
+needs a free account; the practice match against bots does not. An account can
+optionally be linked to a Discord account, which proves the two are the same
+person and nothing else: it is never a way to sign in (ADR 0008).
 
 The whole game was vibe coded with Claude in a 48 hour sprint, then polished
 in the open; the commit history is the real build log, kept intact. It runs
