@@ -37,6 +37,13 @@ services:
       # only; the container still publishes no port of its own.
       MAIL_API_KEY: "${MAIL_API_KEY:-}"
       MAIL_FROM: "${MAIL_FROM:-}"
+      # Optional Discord account linking (ADR 0008), from the same .env
+      # file: DISCORD_CLIENT_SECRET is a credential and must never be
+      # committed. Without both, linking is off, the client never offers
+      # it, and everything else works exactly as before. The redirect
+      # follows PUBLIC_URL unless DISCORD_REDIRECT_URI overrides it.
+      DISCORD_CLIENT_ID: "${DISCORD_CLIENT_ID:-}"
+      DISCORD_CLIENT_SECRET: "${DISCORD_CLIENT_SECRET:-}"
     volumes:
       # Player identities and the match log. Careers reset without this.
       - game_data:/app/data

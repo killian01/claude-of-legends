@@ -8,6 +8,7 @@
 
 import type { TeamId } from '../sim/types';
 import { type AuthedAccount, signOut } from './auth';
+import { buildDiscordNotice, type DiscordResult } from './discord_link';
 import { buildEmailNotice, type ConfirmResult } from './email_status';
 import { startBackdrop } from './home_backdrop';
 import { buildLadderPanel } from './ladder_panel';
@@ -78,6 +79,8 @@ export function showHome(
   prefillCode?: string,
   // Set only on the page load a confirmation link redirected back to.
   justConfirmed: ConfirmResult | null = null,
+  // The same, for a round trip through Discord (ADR 0008).
+  discordResult: DiscordResult | null = null,
 ): Promise<HomeChoice> {
   ensureCss();
   const accountName = account.name;
@@ -114,6 +117,9 @@ export function showHome(
     // way of the button somebody came here to press.
     const notice = buildEmailNotice(account, justConfirmed);
     if (notice) inner.appendChild(notice);
+    // Below it, and quieter: the address is something the account still
+    // needs from its owner, while the Discord link is only ever an offer.
+    inner.appendChild(buildDiscordNotice(account.discord, discordResult));
 
     // --- teardown, shared by every way off this page ---
     const leave = (): void => {

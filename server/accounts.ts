@@ -20,8 +20,16 @@
 // confirmed one never lapses: a real person has proven they read that
 // mailbox, and taking it from them would hand their password reset to
 // whoever registered it next.
+//
+// A third index arrived with ADR 0008, and it behaves like neither. A
+// linked Discord id is verified the instant it exists, because it came
+// back from Discord itself rather than from a form, so there is nothing
+// to confirm and no claim to lapse. It is exclusive while it is held (one
+// Discord account, one game account) and it is released the moment the
+// owner unlinks, which is theirs to do: it is their Discord, not ours.
 
 import { foldName, validateName } from './account_name';
+import type { DiscordIdentity } from './discord_oauth';
 import { foldEmail, validateEmail } from './email_address';
 import { claimHolds } from './email_claim';
 import { hashPassword, type PasswordHash, validatePassword, verifyPassword } from './password';
@@ -39,6 +47,16 @@ export interface AccountEmail {
   confirmed: boolean;
 }
 
+// A Discord account this one is linked to (ADR 0008). The id is what
+// uniqueness is judged on and never changes; the name is a copy of what
+// Discord showed at link time, kept only so the owner recognises the link
+// they made, and it goes stale the day they rename themselves there.
+export interface DiscordLink {
+  id: string;
+  username: string;
+  linkedAt: number;
+}
+
 export interface Account {
   id: number;
   // As the owner typed it; this is what everyone sees.
@@ -51,6 +69,10 @@ export interface Account {
   // unconfirmed claim lapsed. Such an account plays exactly as before; it
   // simply has no way to recover a forgotten password until it adds one.
   email?: AccountEmail;
+  // Absent unless the owner linked one, which is optional and always was:
+  // an account with no Discord queues, is rated and places on the ladder
+  // exactly like any other (ADR 0008).
+  discord?: DiscordLink;
   createdAt: number;
   seenAt: number;
   // Elo (server/rating.ts); only rated matches move it.
@@ -60,8 +82,9 @@ export interface Account {
 
 // Everything about an account that may leave the server TO ANOTHER
 // PLAYER. The password hash and salt are absent by construction rather
-// than by deletion, and so is the email address, which is nobody else's
-// business. tests/architecture.test.ts holds both lines.
+// than by deletion, and so are the email address and the linked Discord,
+// which are nobody else's business. tests/architecture.test.ts holds
+// every one of those lines.
 export interface PublicAccount {
   id: number;
   name: string;
@@ -81,11 +104,15 @@ export function publicAccount(a: Account): PublicAccount {
 }
 
 // What an account may see about ITSELF, which is the public shape plus
-// the address it registered with and whether that address is confirmed.
-// Never built for anyone but the signed-in owner.
+// the address it registered with, whether that address is confirmed, and
+// the Discord name it linked. Never built for anyone but the signed-in
+// owner. The Discord ID is deliberately not here either: the owner has no
+// use for a snowflake, and the name is what tells them which account they
+// linked.
 export interface SelfAccount extends PublicAccount {
   email: string | null;
   emailConfirmed: boolean;
+  discord: string | null;
 }
 
 export function selfAccount(a: Account): SelfAccount {
@@ -93,6 +120,7 @@ export function selfAccount(a: Account): SelfAccount {
     ...publicAccount(a),
     email: a.email?.address ?? null,
     emailConfirmed: a.email?.confirmed ?? false,
+    discord: a.discord?.username ?? null,
   };
 }
 
@@ -101,9 +129,11 @@ export type RegisterError =
   | 'name_taken'
   | 'password_invalid'
   | 'email_invalid'
-  | 'email_taken';
+  | 'email_taken'
+  | 'discord_taken';
 export type RenameError = 'name_invalid' | 'name_taken';
 export type SetEmailError = 'email_invalid' | 'email_taken' | 'unknown_account';
+export type LinkDiscordError = 'discord_taken' | 'unknown_account';
 
 export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
 
@@ -124,6 +154,10 @@ export class AccountRegistry {
   private readonly nameOwner = new Map<string, number>();
   // Folded email -> account id. Shrinks when a claim lapses.
   private readonly emailOwner = new Map<string, number>();
+  // Discord id -> account id. Shrinks only when the owner unlinks; there
+  // is nothing here to expire, since the link was verified when it was
+  // made and stays true until somebody undoes it.
+  private readonly discordOwner = new Map<string, number>();
   private nextId = 1;
 
   constructor(private readonly file: string) {
@@ -138,6 +172,7 @@ export class AccountRegistry {
     for (const a of this.byId.values()) {
       if (!this.nameOwner.has(a.fold)) this.nameOwner.set(a.fold, a.id);
       if (a.email) this.emailOwner.set(a.email.fold, a.id);
+      if (a.discord) this.discordOwner.set(a.discord.id, a.id);
     }
   }
 
@@ -188,11 +223,17 @@ export class AccountRegistry {
     account.email = undefined;
   }
 
+  // `discord` is the identity a round trip through Discord already
+  // proved, if the signup form carried one (ADR 0008). It is the last
+  // thing checked and the first thing that would be wasted, so nothing
+  // else about registration changes when it is absent, which is the
+  // normal case.
   register(
     name: string,
     password: string,
     email: string,
     now: number,
+    discord?: DiscordIdentity,
   ): Result<Account, RegisterError> {
     const nameErr = validateName(name);
     if (nameErr) return { ok: false, error: 'name_invalid' };
@@ -204,12 +245,19 @@ export class AccountRegistry {
     if (!this.nameFree(fold)) return { ok: false, error: 'name_taken' };
     const eFold = foldEmail(email);
     if (!this.emailFree(eFold, now)) return { ok: false, error: 'email_taken' };
+    // Through findByDiscordId rather than the index directly, so an index
+    // entry that outlived the account it pointed at (a hand-edited file)
+    // refuses nobody.
+    if (discord && this.findByDiscordId(discord.id)) {
+      return { ok: false, error: 'discord_taken' };
+    }
     const account: Account = {
       id: this.nextId++,
       name,
       fold,
       password: hashPassword(password),
       email: { address: email.trim(), fold: eFold, claimedAt: now, confirmed: false },
+      discord: discord ? { id: discord.id, username: discord.username, linkedAt: now } : undefined,
       createdAt: now,
       seenAt: now,
       rating: BASE_RATING,
@@ -218,6 +266,7 @@ export class AccountRegistry {
     this.byId.set(account.id, account);
     this.nameOwner.set(fold, account.id);
     this.emailOwner.set(eFold, account.id);
+    if (account.discord) this.discordOwner.set(account.discord.id, account.id);
     this.persist();
     return { ok: true, value: account };
   }
@@ -301,6 +350,58 @@ export class AccountRegistry {
     if (id === undefined) return undefined;
     const account = this.byId.get(id);
     if (!account?.email?.confirmed) return undefined;
+    return account;
+  }
+
+  // Attaches a Discord identity that has already been proved (ADR 0008),
+  // either at signup through register() or afterwards through here. There
+  // is no unconfirmed state to pass through: this only ever runs on an
+  // answer that came back from Discord itself.
+  //
+  // Relinking the same Discord to the same account refreshes the name it
+  // shows and nothing else, so a player who renamed themselves on Discord
+  // can see the link catch up without unlinking first.
+  linkDiscord(
+    id: number,
+    identity: DiscordIdentity,
+    now: number,
+  ): Result<Account, LinkDiscordError> {
+    const account = this.byId.get(id);
+    if (!account) return { ok: false, error: 'unknown_account' };
+    const holder = this.findByDiscordId(identity.id);
+    if (holder && holder.id !== id) return { ok: false, error: 'discord_taken' };
+    // This account swapping one Discord for another: the id it is leaving
+    // goes back into circulation on the spot, or a link its owner
+    // replaced would stay out of everyone's reach for nothing.
+    if (account.discord && account.discord.id !== identity.id) {
+      this.discordOwner.delete(account.discord.id);
+    }
+    const linkedAt = account.discord?.id === identity.id ? account.discord.linkedAt : now;
+    account.discord = { id: identity.id, username: identity.username, linkedAt };
+    this.discordOwner.set(identity.id, id);
+    this.persist();
+    return { ok: true, value: account };
+  }
+
+  // The owner's to undo, and it releases the id: it is their Discord, and
+  // holding it after they said no would be holding something we were only
+  // ever lent. The account keeps its name, rating and history, exactly as
+  // when an email claim lapses. Returns whether there was one to drop.
+  unlinkDiscord(id: number): boolean {
+    const account = this.byId.get(id);
+    if (!account?.discord) return false;
+    this.discordOwner.delete(account.discord.id);
+    account.discord = undefined;
+    this.persist();
+    return true;
+  }
+
+  findByDiscordId(discordId: string): Account | undefined {
+    const id = this.discordOwner.get(discordId);
+    if (id === undefined) return undefined;
+    const account = this.byId.get(id);
+    // The index outlived what it pointed at (a hand-edited file).
+    if (account?.discord?.id !== discordId) return undefined;
     return account;
   }
 

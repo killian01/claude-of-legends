@@ -153,6 +153,38 @@ describe('account secrets', () => {
     expect(JSON.stringify(self)).not.toContain(account.password.hash);
   });
 
+  // A linked Discord is on exactly the same line as the address (ADR
+  // 0008): personal data, the owner's alone. The id is stronger than a
+  // name, since it is the same everywhere on Discord, so it never leaves
+  // the server at all, not even to its owner.
+  it('shows a linked Discord to its owner, the id to nobody', () => {
+    const linked = registry.linkDiscord(account.id, { id: '905512340000', username: 'bo' }, 0);
+    expect(linked.ok).toBe(true);
+    expect(account.discord?.id).toBe('905512340000');
+
+    const forOthers: { what: string; body: unknown }[] = [
+      { what: 'publicAccount', body: publicAccount(account) },
+      {
+        what: '/api/account',
+        body: { ...publicAccount(account), profile: buildProfile([], account.id) },
+      },
+      { what: '/api/ladder', body: buildLadder([{ ...account, ratedGames: 10 }]) },
+    ];
+    const leaks: string[] = [];
+    for (const { what, body } of forOthers) {
+      const json = JSON.stringify(body);
+      if (json.includes('905512340000')) leaks.push(`${what} leaks the Discord id`);
+      if (json.includes('"bo"')) leaks.push(`${what} leaks the Discord name`);
+      if (/"discord/i.test(json)) leaks.push(`${what} carries a Discord-shaped key`);
+    }
+    expect(leaks).toEqual([]);
+
+    const self = JSON.stringify(selfAccount(account));
+    expect(self).toContain('bo');
+    expect(self).not.toContain('905512340000');
+    registry.unlinkDiscord(account.id);
+  });
+
   it('keeps the fixture honest: the secrets really are in the account', () => {
     // If this ever fails, the gate above is passing for the wrong reason.
     const raw = JSON.stringify(account);

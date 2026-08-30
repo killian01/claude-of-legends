@@ -118,6 +118,14 @@ nothing about playing: an account with an unconfirmed address queues, is rated a
 ladder exactly like any other.
 _Avoid_: verified, validated, activated (an account is never inactive here)
 
+**Linked Discord**:
+A Discord account whose owner has proved, once, that it is theirs, attached to exactly one account
+here. Optional everywhere: it is offered while an account is created and from the home screen
+afterwards, it is undone by its owner at any time, and an account without one plays, is rated and
+places on the ladder exactly like any other. It is never a way to sign in, and it is never visible
+to another player: like an email address, only the account itself sees its own.
+_Avoid_: Discord login, OAuth account, connected account, social login
+
 **Same name**:
 Two account names are the same name when they differ only by letter case or by the separators
 in them: Bob, bob, b_o_b and b-o-b are one name, and only one account may hold it. Uniqueness

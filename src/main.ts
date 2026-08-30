@@ -19,6 +19,7 @@ import { CHAMPION_LIST } from './sim/content/champions';
 import { Sim } from './sim/sim';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
 import { type AuthedAccount, currentAccount } from './ui/auth';
+import { takeDiscordResult } from './ui/discord_link';
 import { takeConfirmResult } from './ui/email_status';
 import { preloadBackdrop } from './ui/home_backdrop';
 import { type HomeChoice, showHome } from './ui/home_screen';
@@ -529,6 +530,9 @@ async function boot(): Promise<void> {
   if (resetToken !== null) await showPasswordReset(container, resetToken);
   // What a confirmation link redirected back with, if this load came from
   // one. Read once, shown once, on the first home screen of the session.
+  // A round trip through Discord reports itself the same way (ADR 0008),
+  // and is read first only because both of them rewrite the address bar.
+  let discordResult = takeDiscordResult();
   let confirmed = takeConfirmResult();
   // The app loop: home, one match, back, forever on the same page. 'again'
   // replays the same offline pick or re-enters the public queue (flow.ts).
@@ -544,7 +548,7 @@ async function boot(): Promise<void> {
     // screen rather than beside it. An invite code survives the detour and
     // lands in the join field on the other side.
     if (account === null) {
-      const entry = await showLanding(container);
+      const entry = await showLanding(container, discordResult);
       if (entry.kind === 'account') {
         account = entry.account;
       } else {
@@ -557,8 +561,9 @@ async function boot(): Promise<void> {
     }
     if (joinCode !== null) next = { name: account.name, mode: 'join', code: joinCode };
     const choice: HomeChoice =
-      next ?? (await showHome(container, account, joinCode ?? undefined, confirmed));
+      next ?? (await showHome(container, account, joinCode ?? undefined, confirmed, discordResult));
     confirmed = null;
+    discordResult = null;
     joinCode = null;
     next = null;
     let action: PostMatchAction;
