@@ -336,6 +336,20 @@ export function abilityIconUrl(
   return url;
 }
 
+// The passive's emblem: a shipped painting (<championId>_P.webp) when one
+// exists, else one procedural gold ring shared by every champion, so the
+// slot reads as "innate" rather than as a fifth castable ability.
+export function passiveIconUrl(championId?: string | null): string {
+  const image = abilityImageUrl(championId, 'P');
+  if (image) return image;
+  const cacheKey = 'passive';
+  const hit = cache.get(cacheKey);
+  if (hit) return hit;
+  const url = paint(PALETTES.control, 'ring', false);
+  cache.set(cacheKey, url);
+  return url;
+}
+
 const SIGIL_RECIPES: Record<string, { pal: PaletteName; prim: PrimitiveName }> = {
   riftstep: { pal: 'arcane', prim: 'chevrons' },
   zephyr: { pal: 'wind', prim: 'swirl' },

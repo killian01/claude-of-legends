@@ -5,6 +5,7 @@
 // screens you actually land on and read (the landing page and the
 // signed-in home) are full pages instead, over in ui/page.ts.
 
+import { requestGameFullscreen } from '../game/fullscreen';
 import { inviteUrl } from '../game/invite';
 import type { LobbyPlayer, SelectPlayer } from '../net/protocol';
 import { CHAMPION_LIST } from '../sim/content/champions';
@@ -65,8 +66,13 @@ const CSS = `
 .menu-btn:hover:not(:disabled) { transform: translateY(-1px); }
 .menu-btn.primary { background: #1d3a63; border-color: #3d6ba0; }
 .menu-btn:disabled { opacity: 0.4; cursor: default; }
-.menu-row { display: flex; gap: 8px; }
+/* The row carries the vertical rhythm itself and strips the button's own
+   top margin: inside a stretched flex row that margin made the input box
+   taller than its button and shoved it up into the control above (the
+   overlapping boxes on the play-with-friends card). */
+.menu-row { display: flex; gap: 8px; margin-top: 8px; }
 .menu-row > * { flex: 1; }
+.menu-row > .menu-btn { margin-top: 0; }
 .menu-status { font-size: 13px; color: #aac2dd; margin-top: 12px; min-height: 18px; }
 .menu-code { font-size: 30px; font-weight: 800; letter-spacing: 6px; text-align: center; margin: 8px 0; }
 .menu-players { font-size: 13px; margin: 6px 0 10px; color: #aac2dd; }
@@ -187,7 +193,11 @@ export function showQueue(
   card.append(el('h1', 'menu-title', 'In queue'));
   const status = el('div', 'menu-status', 'Waiting for players...');
   const startNow = el('button', 'menu-btn primary', 'Start now with bots') as HTMLButtonElement;
-  startNow.addEventListener('click', onStartNow);
+  startNow.addEventListener('click', () => {
+    // Inside the click gesture, so the match opens already fullscreen.
+    requestGameFullscreen();
+    onStartNow();
+  });
   const cancel = el('button', 'menu-btn', 'Cancel');
   cancel.addEventListener('click', () => {
     root.remove();
@@ -259,7 +269,11 @@ export function showLobby(
 
   const start = el('button', 'menu-btn primary', 'Start match');
   start.style.display = 'none';
-  start.addEventListener('click', onStart);
+  start.addEventListener('click', () => {
+    // Inside the click gesture, so the match opens already fullscreen.
+    requestGameFullscreen();
+    onStart();
+  });
   // Host only, parties of up to five: the whole lobby queues publicly
   // on ONE side (the two-column split above is for private matches).
   const party = el('button', 'menu-btn', 'Queue as a party') as HTMLButtonElement;

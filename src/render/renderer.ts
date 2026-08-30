@@ -94,6 +94,9 @@ interface TrackedUnit {
   hpFill: THREE.Sprite;
   hpBack: THREE.Sprite;
   manaFill: THREE.Sprite | null;
+  // Shield overlay: a pale extension of the health fill, created lazily
+  // the first time the unit carries a live shield status.
+  shieldFill: THREE.Sprite | null;
   // Champion graduation ticks, rebuilt when maxHp crosses a 100-hp band.
   hpTicks: THREE.Group | null;
   hpTickKey: number;
@@ -1293,6 +1296,7 @@ export class Renderer {
           hpFill: fill,
           hpBack: back,
           manaFill,
+          shieldFill: null,
           hpTicks: null,
           hpTickKey: -1,
           barWidth,
@@ -1495,6 +1499,40 @@ export class Renderer {
         const mfrac = u.maxMana > 0 ? Math.max(0, Math.min(1, u.mana / u.maxMana)) : 0;
         t.manaFill.scale.x = Math.max(0.001, t.barWidth * mfrac);
         t.manaFill.visible = barVisible;
+      }
+
+      // Shields read on the bar itself: a pale grey fill continuing where
+      // the health ends, capped at the bar's edge. Every shield spell
+      // (Verdant Shell and the rest) feeds the same status, so this covers
+      // them all, offline and over the wire alike.
+      if (u.kind === 'champion') {
+        const shield = u.statuses.reduce(
+          (acc, s) => acc + (s.kind === 'shield' && s.until > this.world.time ? s.remaining : 0),
+          0,
+        );
+        const shieldW =
+          u.maxHp > 0 ? t.barWidth * Math.max(0, Math.min(1, frac + shield / u.maxHp) - frac) : 0;
+        if (shieldW > 0.02 && barVisible) {
+          if (!t.shieldFill) {
+            const sf = new THREE.Sprite(
+              new THREE.SpriteMaterial({
+                color: 0xdfe9f2,
+                transparent: true,
+                opacity: 0.9,
+                depthWrite: false,
+              }),
+            );
+            sf.center.set(0, 0.5);
+            sf.renderOrder = 1;
+            t.mesh.add(sf);
+            t.shieldFill = sf;
+          }
+          t.shieldFill.scale.set(shieldW, 0.24, 1);
+          t.shieldFill.position.set(-t.barWidth / 2 + t.barWidth * frac, t.barY + 0.09, 0.01);
+          t.shieldFill.visible = true;
+        } else if (t.shieldFill) {
+          t.shieldFill.visible = false;
+        }
       }
 
       // Crowd-control telegraphs: a yellow "!" for stuns, a ground ring for

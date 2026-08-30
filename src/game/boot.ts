@@ -16,6 +16,7 @@ import { Hud, type NetHooks } from '../ui/hud';
 import { Minimap } from '../ui/minimap';
 import type { IWorld } from '../world_api';
 import type { PostMatchAction } from './flow';
+import { requestGameFullscreen } from './fullscreen';
 import { setupInput } from './input';
 import { startMusic, stopMusic } from './music';
 import { pickEnemyAt, pickEnemyOnScreen, pickUnitOnScreen } from './picking';
@@ -86,6 +87,13 @@ export function startPresentation(
   // No edge panning while a modal is up or the cursor sits on the minimap
   // (its corner position would otherwise drag the camera while clicking it).
   renderer.setEdgePanGate(() => !hud.blocksCamera() && !minimap.hovered);
+
+  // Fullscreen backstop: the entry clicks (lock-in, start buttons) usually
+  // took the screen already, but a match reached without one (auto-lock,
+  // rejoin) grabs it on the first click inside, the earliest gesture a
+  // browser accepts a fullscreen request from.
+  const onFirstPointerDown = (): void => requestGameFullscreen();
+  container.addEventListener('pointerdown', onFirstPointerDown, { once: true });
 
   let hooks: NetHooks = {};
   const showPing = (x: number, z: number, from: string, team: TeamId): void => {
@@ -366,6 +374,7 @@ export function startPresentation(
       if (disposed) return;
       disposed = true;
       cancelAnimationFrame(rafId);
+      container.removeEventListener('pointerdown', onFirstPointerDown);
       window.removeEventListener('blur', onWindowBlur);
       teardownInput();
       hud.dispose();

@@ -6,7 +6,7 @@
 
 import { announceVoice } from '../game/announcer';
 import type { PostMatchAction } from '../game/flow';
-import { toggleGameFullscreen } from '../game/fullscreen';
+import { requestGameFullscreen, toggleGameFullscreen } from '../game/fullscreen';
 import { playSfx } from '../game/sfx';
 import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
@@ -22,7 +22,7 @@ import {
 } from '../sim/stats';
 import type { AbilityKey, TeamId } from '../sim/types';
 import type { IWorld } from '../world_api';
-import { abilityIconUrl, sigilIconUrl } from './ability_icons';
+import { abilityIconUrl, passiveIconUrl, sigilIconUrl } from './ability_icons';
 import { describeAbility, describeItem, describeSigil, statLabel } from './describe';
 import { iconDataUrl, itemIconUrl } from './icons';
 import { renderScoreboardTeam } from './scoreboard_table';
@@ -127,6 +127,7 @@ const CSS = `
 }
 .hud-bars { width: 240px; display: flex; flex-direction: column; gap: 3px; }
 .hud-bar { position: relative; height: 12px; border-radius: 3px; background: #10160c; overflow: hidden; }
+.hud-bar-shield { position: absolute; top: 0; bottom: 0; background: rgba(223, 233, 242, 0.88); }
 .hud-bar.flash { animation: hud-mana-flash 0.4s ease-out 2; }
 @keyframes hud-mana-flash {
   0% { filter: brightness(1); }
@@ -144,6 +145,12 @@ const CSS = `
 }
 .hud-slot.nomana { border-color: #27436e; color: #6f8cb8; }
 .hud-slot.nomana { filter: saturate(0.35) brightness(0.75); }
+/* The passive: smaller and rounder than the castable keys, aligned to the
+   bottom of the row, so it reads as innate rather than as a sixth button. */
+.hud-slot.passive {
+  width: 34px; height: 34px; border-radius: 50%; align-self: flex-end;
+  border-color: #8a6d2c;
+}
 .hud-slot-key {
   position: absolute; right: 3px; top: 1px;
   font-size: 11px; font-weight: 800; color: #f2f6e4; text-shadow: 0 1px 3px #000;
@@ -459,6 +466,10 @@ const CSS = `
 .hud-teamscore-label {
   font-size: 9px; font-weight: 700; letter-spacing: 2px; color: #93a87c;
 }
+.hud-teamscore-clock {
+  font-size: 13px; font-weight: 700; color: #d8e6c0; min-width: 42px; text-align: right;
+  font-variant-numeric: tabular-nums; padding-left: 10px; border-left: 1px solid #3a4f28;
+}
 .hud-target {
   position: absolute; top: 46px; left: 50%; transform: translateX(-50%);
   display: none; align-items: center; gap: 9px; min-width: 200px;
@@ -524,6 +535,7 @@ export class Hud {
   private readonly teamScore: TeamScore;
   private readonly statusRow: HTMLElement;
   private readonly hpFill: HTMLElement;
+  private readonly hpShield: HTMLElement;
   private readonly hpText: HTMLElement;
   private readonly manaFill: HTMLElement;
   private readonly manaText: HTMLElement;
@@ -638,6 +650,11 @@ export class Hud {
     const mana = mkBar('#3763b8');
     const xp = mkBar('#8a5fc9');
     this.hpFill = hp.fill;
+    // The shield overlay continues the health fill in pale grey, exactly
+    // like the world-space bars, so a shielded champion reads shielded in
+    // both places at once.
+    this.hpShield = el('div', 'hud-bar-shield');
+    hp.bar.insertBefore(this.hpShield, hp.text);
     this.hpText = hp.text;
     this.manaBar = mana.bar;
     this.manaFill = mana.fill;
@@ -678,6 +695,16 @@ export class Hud {
     };
 
     const slots = el('div', 'hud-slots');
+    // The passive, visible in-game at last: a small round emblem ahead of
+    // Q whose tooltip carries the passive's name and what it does.
+    if (def) {
+      const passive = el('div', 'hud-slot passive');
+      passive.style.backgroundImage = `url(${passiveIconUrl(def.id)})`;
+      passive.style.backgroundSize = 'cover';
+      passive.appendChild(el('span', 'hud-slot-key', 'P'));
+      attachTooltip(passive, () => [`${def.passive.name} (passive)`, def.passive.description]);
+      slots.appendChild(passive);
+    }
     for (const key of KEYS) {
       const slot = el('div', 'hud-slot');
       if (def) {
@@ -923,7 +950,12 @@ export class Hud {
     this.endRating = el('div', 'hud-end-rating');
     this.endStats = el('div', 'hud-end-card');
     const endAgain = el('button', 'hud-menu-btn', 'Play again');
-    endAgain.addEventListener('click', () => onExit('again'));
+    endAgain.addEventListener('click', () => {
+      // The rematch may reuse the last pick and skip the lock-in click, so
+      // this click is the gesture that takes the next match fullscreen.
+      requestGameFullscreen();
+      onExit('again');
+    });
     const endReturn = el('button', 'hud-menu-btn', 'Return to menu');
     endReturn.addEventListener('click', () => onExit('menu'));
     const endBtns = el('div', 'hud-end-btns');
@@ -1359,6 +1391,8 @@ export class Hud {
 
     const total = Math.max(0, Math.floor(this.world.time));
     const clock = `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+    // Elapsed time at the top of the screen, on the team score box.
+    this.teamScore.setClock(clock);
     // The Warden clock rides the meta line; state edges drive announcements
     // (works identically offline and online, no extra wire events).
     const objAt = this.world.objectiveSpawnAt();
@@ -1397,8 +1431,21 @@ export class Hud {
       this.levelBadge.classList.add('pop');
     }
     this.lastLevel = u.level;
-    this.hpFill.style.transform = `scaleX(${Math.max(0, u.hp / u.maxHp)})`;
-    this.hpText.textContent = `${Math.ceil(u.hp)} / ${Math.round(u.maxHp)}`;
+    const hpFrac = Math.max(0, Math.min(1, u.hp / u.maxHp));
+    this.hpFill.style.transform = `scaleX(${hpFrac})`;
+    // Shields continue the fill in grey and print their total next to the
+    // health, so a shielded bar never reads as plain missing health.
+    const shield = u.statuses.reduce(
+      (acc, s) => acc + (s.kind === 'shield' && s.until > this.world.time ? s.remaining : 0),
+      0,
+    );
+    const shieldFrac = Math.max(0, Math.min(1, hpFrac + shield / u.maxHp) - hpFrac);
+    this.hpShield.style.left = `${hpFrac * 100}%`;
+    this.hpShield.style.width = `${shieldFrac * 100}%`;
+    this.hpText.textContent =
+      shield > 0
+        ? `${Math.ceil(u.hp)} (+${Math.round(shield)}) / ${Math.round(u.maxHp)}`
+        : `${Math.ceil(u.hp)} / ${Math.round(u.maxHp)}`;
     this.manaFill.style.transform = `scaleX(${Math.max(0, u.mana / u.maxMana)})`;
     this.manaText.textContent = `${Math.floor(u.mana)} / ${Math.round(u.maxMana)}`;
     const xpFrac = u.level >= MAX_LEVEL ? 1 : Math.min(1, u.xp / xpForNext(u.level));

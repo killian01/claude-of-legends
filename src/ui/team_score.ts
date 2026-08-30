@@ -14,8 +14,10 @@ export function teamKills(rows: readonly ScoreRow[]): readonly [number, number] 
 export class TeamScore {
   readonly el: HTMLElement;
   private readonly numbers: readonly [HTMLElement, HTMLElement];
+  private readonly clock: HTMLElement;
   // Last written pair, so a 20 Hz update does not touch the DOM every frame.
   private shown: [number, number] = [-1, -1];
+  private shownClock = '';
 
   constructor(colors: readonly string[], viewerTeam: TeamId) {
     const mk = (cls: string, text: string): HTMLElement => {
@@ -34,8 +36,17 @@ export class TeamScore {
     // only element in the HUD that means something different on each screen;
     // which side is yours is said by the glow instead.
     (viewerTeam === 0 ? zero : one).classList.add('mine');
-    this.el.append(zero, mk('hud-teamscore-label', 'KILLS'), one);
+    // The match clock rides the same box: elapsed time belongs at the top
+    // of the screen, next to the number the teams are fighting over.
+    this.clock = mk('hud-teamscore-clock', '0:00');
+    this.el.append(zero, mk('hud-teamscore-label', 'KILLS'), one, this.clock);
     this.numbers = [zero, one];
+  }
+
+  setClock(text: string): void {
+    if (text === this.shownClock) return;
+    this.shownClock = text;
+    this.clock.textContent = text;
   }
 
   update(rows: readonly ScoreRow[]): void {

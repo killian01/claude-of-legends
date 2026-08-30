@@ -50,6 +50,33 @@ describe('spell wire', () => {
     expect(totalStacks).toBe(3);
   });
 
+  it('a live shield on a visible enemy rides the wire for the bar overlay', () => {
+    const { match, veskId } = veskMatch();
+    const vesk = match.sim.units.get(veskId)!;
+    const enemyId = match.players.get(2)!.unitId;
+    const enemy = match.sim.units.get(enemyId)!;
+    // In sight but outside auto reach, so idle defense does not chip the
+    // shield before the snapshot is built.
+    enemy.pos = { x: vesk.pos.x + 8, z: vesk.pos.z };
+    enemy.statuses.push({ kind: 'shield', until: match.sim.time + 2.5, remaining: 120 });
+    match.tick();
+    const snap = match.buildSnapshotFor(1);
+    if (snap?.t !== 'snap') throw new Error('expected a snap message');
+    const rec = snap.units.find((u) => u.i === enemyId);
+    const chip = rec?.st?.find((c) => c.k === 'shield');
+    expect(chip?.v).toBe(120);
+
+    const client = new ClientWorld(() => undefined);
+    client.applyServer({ t: 'match_start', selfUnitId: veskId, team: 0 });
+    client.applyServer(snap);
+    const mirrored = client.units.get(enemyId);
+    const total = (mirrored?.statuses ?? []).reduce(
+      (acc, s) => acc + (s.kind === 'shield' ? s.remaining : 0),
+      0,
+    );
+    expect(total).toBe(120);
+  });
+
   it('cast events carry the ability key', () => {
     const { match, veskId } = veskMatch();
     expect(match.sim.castAbility(veskId, 'Q', { x: 40, z: 40 })).toBe(true);

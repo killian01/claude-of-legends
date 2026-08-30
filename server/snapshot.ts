@@ -19,8 +19,9 @@ import type { Unit } from '../src/sim/unit';
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 // Display-relevant statuses carried on every visible unit: crowd control,
-// plus the total mark stacks (Sylra's thorns, Elowen's mist) so a marked
-// victim can SEE the trigger building, both teams alike.
+// the total mark stacks (Sylra's thorns, Elowen's mist) so a marked victim
+// can SEE the trigger building, and live shields so every health bar can
+// draw the grey overlay, both teams alike.
 function ccChips(u: Unit, time: number): { k: string; v?: number }[] {
   const out: { k: string; v?: number }[] = [];
   let markStacks = 0;
@@ -35,6 +36,8 @@ function ccChips(u: Unit, time: number): { k: string; v?: number }[] {
     ) {
       out.push({ k: s.kind });
     } else if (s.kind === 'slow') out.push({ k: 'slow', v: round2(s.pct) });
+    else if (s.kind === 'shield' && s.remaining > 0)
+      out.push({ k: 'shield', v: Math.round(s.remaining) });
     else if (s.kind === 'mark') markStacks += s.stacks;
   }
   if (markStacks > 0) out.push({ k: 'mark', v: markStacks });
