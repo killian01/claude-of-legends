@@ -36,7 +36,7 @@ export const ASHVYN: ChampionDef = {
     ap: 0,
     armor: 24,
     mr: 30,
-    attackRange: 5.5,
+    attackRange: 5.9,
     attackSpeed: 0.75,
     moveSpeed: 3.7,
     hpRegen: 1.4,

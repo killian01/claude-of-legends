@@ -40,6 +40,8 @@ export function parseAction(raw: unknown): Action | null {
       return typeof a.itemId === 'string' ? { kind: 'buy', itemId: a.itemId } : null;
     case 'level':
       return isAbilityKey(a.key) ? { kind: 'level', key: a.key } : null;
+    case 'recall':
+      return { kind: 'recall' };
     default:
       return null;
   }

@@ -34,7 +34,7 @@ export const SYLRA: ChampionDef = {
     ap: 0,
     armor: 22,
     mr: 30,
-    attackRange: 5.5,
+    attackRange: 5.9,
     attackSpeed: 0.65,
     moveSpeed: 3.6,
     hpRegen: 1.1,
@@ -117,7 +117,7 @@ export const SYLRA: ChampionDef = {
       castRange: 9,
       spec: {
         kind: 'zone',
-        radius: 4.2,
+        radius: 4.8,
         duration: 1.3,
         detonateDelay: 1.25,
         onDetonate: [
@@ -132,7 +132,7 @@ export const SYLRA: ChampionDef = {
           rank: 3,
           spec: {
             kind: 'zone',
-            radius: 4.2,
+            radius: 4.8,
             duration: 1.3,
             detonateDelay: 1.25,
             onDetonate: [

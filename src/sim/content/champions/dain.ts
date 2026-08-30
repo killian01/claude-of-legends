@@ -43,7 +43,7 @@ export const DAIN: ChampionDef = {
     ap: 0,
     armor: 28,
     mr: 30,
-    attackRange: 1.25,
+    attackRange: 1.8,
     attackSpeed: 0.68,
     moveSpeed: 3.75,
     hpRegen: 1.8,

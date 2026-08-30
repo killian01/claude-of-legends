@@ -49,17 +49,20 @@ describe('the laner bot', () => {
     expect(victim.hp).toBeLessThan(victim.maxHp);
   });
 
-  it('retreats toward its fountain when low without a heal', () => {
+  it('recalls home when low with nobody around, and holds the channel', () => {
     const sim = new Sim(41);
     const bot = sim.addChampion(0, { x: 75, z: 75 });
     bot.sigils = ['riftstep', 'zephyr'];
     bot.hp = bot.maxHp * 0.2;
     sim.attachPolicy(bot.id, laner);
     const fountain = sim.map.fountains.find((f) => f.team === 0)!;
-    const before = Math.hypot(bot.pos.x - fountain.x, bot.pos.z - fountain.z);
-    for (let i = 0; i < 120; i++) sim.tick();
-    const after = Math.hypot(bot.pos.x - fountain.x, bot.pos.z - fountain.z);
-    expect(after).toBeLessThan(before - 10);
+    // Alone and hurt, far from home: the channel starts instead of the
+    // half-map walk, and later decisions keep noop-ing rather than
+    // resetting the 8 second clock with a fresh order.
+    for (let i = 0; i < 40; i++) sim.tick();
+    expect(bot.statuses.some((s) => s.kind === 'recall')).toBe(true);
+    for (let i = 0; i < 180; i++) sim.tick();
+    expect(Math.hypot(bot.pos.x - fountain.x, bot.pos.z - fountain.z)).toBeLessThan(2);
   });
 });
 

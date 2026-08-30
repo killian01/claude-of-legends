@@ -65,9 +65,10 @@ describe('skill points and ability ranks', () => {
     const sim = new Sim(7);
     const korrath = sim.addChampion(0, { x: 75, z: 75 }, 'korrath');
     korrath.abilityRanks = { Q: 1, W: 0, E: 0, R: 0 };
-    // In Q's cone but outside auto range, so only the slam moves the hp bar
-    // while the windup resolves.
-    const dummy = sim.addChampion(1, { x: 77.8, z: 75 });
+    // In Q's cone but outside auto range (edge 2.2 with the raised melee
+    // reach of 1.8), so only the slam moves the hp bar while the windup
+    // resolves.
+    const dummy = sim.addChampion(1, { x: 78.6, z: 75 });
     sim.tick();
 
     const before1 = dummy.hp;
@@ -83,7 +84,7 @@ describe('skill points and ability ranks', () => {
     expect(sim.levelAbility(korrath.id, 'Q')).toBe(true);
     korrath.cooldowns.Q = 0;
     dummy.hp = dummy.maxHp;
-    dummy.pos = { x: 77.8, z: 75 };
+    dummy.pos = { x: 78.6, z: 75 };
     for (let i = 0; i < 10; i++) sim.tick();
 
     const before2 = dummy.hp;

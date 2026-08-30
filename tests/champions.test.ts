@@ -2,6 +2,7 @@
 // of every kit executes end to end against a live target.
 
 import { describe, expect, it } from 'vitest';
+import { RANGED_THRESHOLD } from '../src/sim/combat/auto_attack';
 import { CHAMPION_LIST, CHAMPIONS } from '../src/sim/content/champions';
 import { GAME_MAP } from '../src/sim/content/map';
 import { Sim } from '../src/sim/sim';
@@ -73,6 +74,28 @@ describe('the roster', () => {
         expect(center.effects.some((e) => e.kind === 'stun')).toBe(true);
         expect(center.otherwise?.some((e) => e.kind === 'stun')).toBe(false);
       }
+    }
+  });
+
+  it('attack ranges stay dynamic without changing anyone class', () => {
+    // Pacing review: the shortest reaches were raised for livelier trades,
+    // but a melee champion must never cross the ranged threshold (it flips
+    // the auto-attack to a projectile and the minion silhouette logic).
+    const melee = ['korrath', 'dain', 'torv', 'fenn', 'rhoka'];
+    for (const c of CHAMPION_LIST) {
+      expect(c.base.attackRange, c.id).toBeGreaterThanOrEqual(1.8);
+      if (melee.includes(c.id)) {
+        expect(c.base.attackRange, `${c.id} stays melee`).toBeLessThanOrEqual(RANGED_THRESHOLD);
+      }
+    }
+  });
+
+  it('overgrowth covers a real arena at every rank', () => {
+    const r = CHAMPIONS.sylra!.abilities.R;
+    expect(r.spec.kind).toBe('zone');
+    if (r.spec.kind === 'zone') expect(r.spec.radius).toBeGreaterThanOrEqual(4.8);
+    for (const v of r.atRank ?? []) {
+      if (v.spec.kind === 'zone') expect(v.spec.radius).toBeGreaterThanOrEqual(4.8);
     }
   });
 

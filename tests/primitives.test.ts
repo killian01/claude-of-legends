@@ -156,7 +156,9 @@ describe('combat primitives', () => {
 
   it('stealth hides a champion and breaks on attacking', () => {
     const sim = new Sim(13);
-    const watcher = sim.addChampion(0, { x: 72, z: 75 });
+    // Outside both idle-defense ranges: standing in auto reach would break
+    // the stealth (or never let it start) through attacks nobody ordered.
+    const watcher = sim.addChampion(0, { x: 70, z: 75 });
     watcher.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
     const fenn = sim.addChampion(1, { x: 75, z: 75 }, 'fenn');
     fenn.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };

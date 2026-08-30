@@ -36,7 +36,7 @@ export const TORV: ChampionDef = {
     ap: 0,
     armor: 30,
     mr: 32,
-    attackRange: 1.25,
+    attackRange: 1.8,
     attackSpeed: 0.6,
     moveSpeed: 3.7,
     hpRegen: 2.0,

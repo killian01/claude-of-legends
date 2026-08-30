@@ -7,6 +7,7 @@ import { parseAction } from '../src/net/policy_wire';
 import { dispatchAction } from '../src/sim/action_dispatch';
 import { isDecisionSlot, POLICY_PERIOD_TICKS } from '../src/sim/bot_driver';
 import { DECISION_CAP } from '../src/sim/decision_budget';
+import { buildObservation } from '../src/sim/observe';
 import type { Action, Policy } from '../src/sim/policy';
 import { Sim } from '../src/sim/sim';
 
@@ -142,6 +143,15 @@ describe('remote actions obey the same rules as everyone', () => {
     expect(me.attackTargetId).toBeNull();
   });
 
+  it('a recall action starts the channel and the observation reports it', () => {
+    const sim = new Sim(31);
+    const me = sim.addChampion(0, { x: 75, z: 75 });
+    expect(dispatchAction(sim, me.id, { kind: 'recall' })).toBe(true);
+    expect(me.statuses.some((s) => s.kind === 'recall')).toBe(true);
+    const obs = buildObservation(sim, me.id);
+    expect(obs?.self.recalling).toBe(true);
+  });
+
   it('refuses malformed coordinates', () => {
     const sim = new Sim(31);
     const me = sim.addChampion(0, { x: 75, z: 75 });
@@ -169,6 +179,7 @@ describe('the action wire parser', () => {
     });
     expect(parseAction({ kind: 'buy', itemId: 'x' })).toEqual({ kind: 'buy', itemId: 'x' });
     expect(parseAction({ kind: 'level', key: 'R' })).toEqual({ kind: 'level', key: 'R' });
+    expect(parseAction({ kind: 'recall' })).toEqual({ kind: 'recall' });
   });
 
   it('rejects everything else', () => {

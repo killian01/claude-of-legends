@@ -36,7 +36,7 @@ export const FENN: ChampionDef = {
     ap: 0,
     armor: 24,
     mr: 30,
-    attackRange: 1.25,
+    attackRange: 1.8,
     attackSpeed: 0.7,
     moveSpeed: 3.85,
     hpRegen: 1.6,

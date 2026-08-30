@@ -393,6 +393,21 @@ const policy: Policy = (obs, rng: Rng): Action => {
     }
     const mendSlot = s.sigils.findIndex((id, i) => id === 'mend' && s.sigilReady[i] === true);
     if (mendSlot !== -1) return { kind: 'sigil', slot: mendSlot, x: s.x, z: s.z };
+    // Recall home instead of the whole walk (playtest: bots never pressed
+    // B), but only once truly disengaged: no enemy champion in sight or in
+    // fresh memory nearby, and out of tower reach. A running channel is
+    // held with noop; any new order would reset the 8 second clock.
+    const engaged =
+      obs.units.some(
+        (u) => !u.friendly && u.kind === 'champion' && Math.hypot(u.x - s.x, u.z - s.z) <= 14,
+      ) ||
+      (obs.lastSeen ?? []).some(
+        (ls) => obs.time - ls.at <= 3 && Math.hypot(ls.x - s.x, ls.z - s.z) <= 12,
+      );
+    if (!engaged && !inTowerReach(s.x, s.z)) {
+      if (s.recalling) return { kind: 'noop' };
+      if (Math.hypot(s.x - fountain.x, s.z - fountain.z) > 15) return { kind: 'recall' };
+    }
     return { kind: 'move', x: fountain.x, z: fountain.z };
   }
   // Heal up before walking back out (fountain regen makes this quick now).
@@ -485,6 +500,27 @@ const policy: Policy = (obs, rng: Rng): Action => {
         !inTowerReach(ls.x, ls.z),
     );
     if (prey) return { kind: 'move', x: prey.x, z: prey.z };
+  }
+
+  // The vanish response: an enemy that slipped into a brush right in front
+  // of the bot did not stop existing. Healthy, walk the last seen spot to
+  // force it back into sight; hurt, give ground instead of standing where
+  // it disappeared (playtest: bots shrugged and went back to farming).
+  if (!champ) {
+    const vanished = (obs.lastSeen ?? []).find(
+      (ls) => obs.time - ls.at <= 2.5 && Math.hypot(ls.x - s.x, ls.z - s.z) <= 9,
+    );
+    if (vanished) {
+      if (s.hpFrac >= 0.55 && !inTowerReach(vanished.x, vanished.z)) {
+        return { kind: 'move', x: vanished.x, z: vanished.z };
+      }
+      const dh = Math.hypot(fountain.x - s.x, fountain.z - s.z) || 1;
+      return {
+        kind: 'move',
+        x: s.x + ((fountain.x - s.x) / dh) * 6,
+        z: s.z + ((fountain.z - s.z) / dh) * 6,
+      };
+    }
   }
 
   // Contest the Warden: a live one in reach is worth a detour, but never

@@ -35,7 +35,7 @@ export const KORRATH: ChampionDef = {
     ap: 0,
     armor: 32,
     mr: 32,
-    attackRange: 1.25,
+    attackRange: 1.8,
     attackSpeed: 0.62,
     moveSpeed: 3.65,
     hpRegen: 2.2,

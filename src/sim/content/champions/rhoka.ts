@@ -85,7 +85,7 @@ export const RHOKA: ChampionDef = {
     ap: 0,
     armor: 27,
     mr: 30,
-    attackRange: 1.25,
+    attackRange: 1.8,
     attackSpeed: 0.72,
     moveSpeed: 3.8,
     hpRegen: 1.9,

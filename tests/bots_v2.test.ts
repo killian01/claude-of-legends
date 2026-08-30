@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { addStatus } from '../src/sim/combat/status';
 import { LANER } from '../src/sim/content/bots/laner';
+import { GAME_MAP } from '../src/sim/content/map';
 import { buildObservation } from '../src/sim/observe';
 import { Rng } from '../src/sim/rng';
 import { Sim } from '../src/sim/sim';
@@ -134,6 +135,42 @@ describe('bots v2', () => {
     expect(action.kind).toBe('move');
     if (action.kind === 'move') {
       expect(Math.hypot(action.x - 78, action.z - 78)).toBeLessThan(1);
+    }
+  });
+
+  it('facechecks the spot where a healthy enemy vanished under its nose', () => {
+    const sim = new Sim(31);
+    const a = sim.addChampion(0, { x: 75, z: 75 }, 'fenn');
+    ready(a);
+    const b = sim.addChampion(1, { x: 78, z: 78 }, 'sylra');
+    sim.tick();
+    // Full health, so the old prey rule stays shut; the bot must still walk
+    // the last seen spot to force the fugitive back into sight.
+    b.pos.x = 70;
+    b.pos.z = 82;
+    const action = act(sim, a.id);
+    expect(action.kind).toBe('move');
+    if (action.kind === 'move') {
+      expect(Math.hypot(action.x - 78, action.z - 78)).toBeLessThan(1);
+    }
+  });
+
+  it('a hurt bot gives ground when an enemy vanishes next to it', () => {
+    const sim = new Sim(31);
+    const a = sim.addChampion(0, { x: 75, z: 75 }, 'fenn');
+    ready(a);
+    a.hp = a.maxHp * 0.45;
+    const b = sim.addChampion(1, { x: 78, z: 78 }, 'sylra');
+    sim.tick();
+    b.pos.x = 70;
+    b.pos.z = 82;
+    const fountain = GAME_MAP.fountains.find((f) => f.team === 0)!;
+    const action = act(sim, a.id);
+    expect(action.kind).toBe('move');
+    if (action.kind === 'move') {
+      const before = Math.hypot(a.pos.x - fountain.x, a.pos.z - fountain.z);
+      const after = Math.hypot(action.x - fountain.x, action.z - fountain.z);
+      expect(after).toBeLessThan(before);
     }
   });
 

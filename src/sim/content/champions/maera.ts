@@ -41,7 +41,7 @@ export const MAERA: ChampionDef = {
     ap: 0,
     armor: 24,
     mr: 32,
-    attackRange: 5.25,
+    attackRange: 5.75,
     attackSpeed: 0.6,
     moveSpeed: 3.65,
     hpRegen: 1.4,

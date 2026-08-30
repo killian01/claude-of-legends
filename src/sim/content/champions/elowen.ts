@@ -31,7 +31,7 @@ export const ELOWEN: ChampionDef = {
     ap: 0,
     armor: 22,
     mr: 30,
-    attackRange: 5.25,
+    attackRange: 5.75,
     attackSpeed: 0.62,
     moveSpeed: 3.65,
     hpRegen: 1.2,

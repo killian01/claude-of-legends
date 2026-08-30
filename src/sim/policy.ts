@@ -128,6 +128,9 @@ export interface ObsSelf {
   // The lane this participant was assigned, null for unassigned (humans).
   // Additive v0 field; bots use it to hold a lane instead of flocking.
   lane: 'top' | 'mid' | 'bot' | null;
+  // True while the recall channel runs (additive v0 field). A policy that
+  // keeps issuing orders would reset its own channel forever without it.
+  recalling?: boolean;
 }
 
 export interface Observation {
@@ -160,6 +163,9 @@ export type Action =
   | { kind: 'sigil'; slot: number; x: number; z: number }
   | { kind: 'buy'; itemId: string }
   // Spends one skill point (free action, outside the decision budget).
-  | { kind: 'level'; key: AbilityKey };
+  | { kind: 'level'; key: AbilityKey }
+  // Starts the recall channel (additive v0 action): the same B humans
+  // press, with the same rules (standing still, damage cancels).
+  | { kind: 'recall' };
 
 export type Policy = (obs: Observation, rng: Rng) => Action;

@@ -51,6 +51,9 @@ export function dispatchAction(sim: Sim, unitId: number, action: Action): boolea
     case 'level':
       sim.levelAbility(unitId, action.key);
       return true;
+    case 'recall':
+      sim.startRecall(unitId);
+      return true;
     default:
       return true;
   }
