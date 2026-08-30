@@ -9,13 +9,24 @@ const OUT = process.env.SHOT_DIR ?? 'docs/screenshots';
 const CHROME =
   process.env.SHOT_CHROME ?? '/root/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome';
 
-const browser = await puppeteer.launch({
-  executablePath: CHROME,
-  headless: true,
-  args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
-  defaultViewport: { width: 1720, height: 960 },
-});
-const page = await browser.newPage();
+const VP = (process.env.SHOT_VP ?? '1720x960').split('x').map(Number);
+// SHOT_WS: attach to a chrome started by hand (needed for the GIF: the
+// CDP screencast records the real window, and a self-started chrome is
+// the only way to make that window the wanted size; puppeteer's launch
+// path pins it at 800x600 whatever args it gets). Otherwise launch, with
+// an emulated viewport, which page.screenshot captures correctly.
+const browser = process.env.SHOT_WS
+  ? await puppeteer.connect({ browserURL: process.env.SHOT_WS, defaultViewport: null })
+  : await puppeteer.launch({
+      executablePath: CHROME,
+      headless: true,
+      args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+      defaultViewport: { width: VP[0], height: VP[1] },
+    });
+// When attached, reuse the initial tab: a newPage would open a second
+// window at the 800x600 default instead of the one sized by the flags.
+const done = () => (process.env.SHOT_WS ? browser.disconnect() : browser.close());
+const page = process.env.SHOT_WS ? (await browser.pages())[0] : await browser.newPage();
 page.on('console', (m) => {
   if (m.type() === 'error') console.log('[console]', m.text().slice(0, 200));
 });
@@ -34,7 +45,7 @@ await sleep(7000); // let the showcase models and fonts land
 await page.screenshot({ path: `${OUT}/shot-home.png` });
 console.log('home captured');
 if (process.env.SHOT_HOME_ONLY) {
-  await browser.close();
+  await done();
   process.exit(0);
 }
 
@@ -84,11 +95,60 @@ await levelUp();
 // the lane keeps a level 1 champion alive; the wave fight comes to us.
 for (let i = 0; i < 22; i++) {
   await closeShop();
-  await page.mouse.click(1606, 886, { button: 'right' });
+  await page.mouse.click(VP[0] - 114, VP[1] - 74, { button: 'right' });
   await sleep(2000);
 }
 console.log('at lane, fighting');
 const shopOpen = () => page.evaluate(() => document.querySelector('.hud-shop.open') !== null);
+
+// GIF mode: instead of stills, grab frames continuously while driving one
+// fight sequence, for ffmpeg to assemble (SHOT_GIF=1).
+if (process.env.SHOT_GIF) {
+  // page.screenshot is seconds per frame under swiftshader; the CDP
+  // screencast pushes JPEG frames as they render instead.
+  const { writeFile } = await import('node:fs/promises');
+  const cdp = await page.createCDPSession();
+  let frame = 0;
+  const t0 = Date.now();
+  cdp.on('Page.screencastFrame', async (ev) => {
+    await cdp.send('Page.screencastFrameAck', { sessionId: ev.sessionId }).catch(() => {});
+    const n = frame++;
+    await writeFile(
+      `${OUT}/frame-${String(n).padStart(4, '0')}.jpg`,
+      Buffer.from(ev.data, 'base64'),
+    );
+  });
+  await cdp.send('Page.startScreencast', {
+    format: 'jpeg',
+    quality: 85,
+    maxWidth: 1280,
+    maxHeight: 720,
+    everyNthFrame: 1,
+  });
+  const grabber = sleep(16000).then(async () => {
+    await cdp.send('Page.stopScreencast');
+    console.log(`gif: ${frame} frames in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  });
+  for (let i = 0; i < 8; i++) {
+    await closeShop();
+    await levelUp();
+    await page.keyboard.press('Space');
+    await sleep(200);
+    const tx = Math.round((1000 + (i % 3) * 90) * (VP[0] / 1720));
+    const ty = Math.round((320 + (i % 2) * 80) * (VP[1] / 960));
+    await page.mouse.move(tx, ty);
+    await page.keyboard.press('a');
+    await page.mouse.click(tx, ty);
+    await sleep(500);
+    await page.keyboard.press(i % 2 === 0 ? 'q' : 'w');
+    await sleep(1300);
+  }
+  await grabber;
+  console.log(`gif frames: ${frame}`);
+  await done();
+  process.exit(0);
+}
+
 // Fight in front of the tower: recenter on our champion, attack-move up
 // the lane, cast toward the enemies, screenshot only with a clear HUD.
 for (let i = 0; i < 20; i++) {
@@ -96,8 +156,8 @@ for (let i = 0; i < 20; i++) {
   await levelUp();
   await page.keyboard.press('Space');
   await sleep(200);
-  const tx = 1000 + (i % 3) * 90;
-  const ty = 320 + (i % 2) * 80;
+  const tx = Math.round((1000 + (i % 3) * 90) * (VP[0] / 1720));
+  const ty = Math.round((320 + (i % 2) * 80) * (VP[1] / 960));
   await page.mouse.move(tx, ty);
   await page.keyboard.press('a');
   await page.mouse.click(tx, ty);
@@ -116,4 +176,4 @@ for (let i = 0; i < 20; i++) {
   await sleep(1800);
 }
 console.log('done');
-await browser.close();
+await done();

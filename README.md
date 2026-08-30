@@ -1,10 +1,36 @@
+<div align="center">
+
 # Claude of Legends
 
-A mini 5v5 MOBA that runs entirely in the browser: three lanes,
-ten champions with full kits, jungle camps, a neutral objective, fog of war,
-items, and an authoritative server for online play. No install. Online play needs
-a free account; the practice match against bots does not (ADR 0006).
-Built on the architecture proven by
+**A 5v5 MOBA born in a 48 hour vibe coding sprint: three lanes, ten champions, free in your browser right now.**
+
+**Play now: https://claudeoflegends.com/**
+
+[![CI](https://github.com/killian01/claude-of-legends/actions/workflows/ci.yml/badge.svg)](https://github.com/killian01/claude-of-legends/actions/workflows/ci.yml)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Three.js](https://img.shields.io/badge/Three.js-renderer-000000?logo=threedotjs&logoColor=white)](https://threejs.org/)
+[![Vite](https://img.shields.io/badge/Vite-client-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
+[![Vitest](https://img.shields.io/badge/Vitest-suite-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](package.json)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+[Play now](https://claudeoflegends.com/) · [Quick start](#quick-start) · [How to play](#how-to-play) · [Train a bot](#every-bot-is-a-policy-train-one) · [Contributing](CONTRIBUTING.md)
+
+![Gameplay](docs/screenshots/gameplay.gif)
+
+</div>
+
+## What this is
+
+A complete mini MOBA you can play right now: three lanes, ten champions with
+full kits, jungle camps, a neutral objective, fog of war, items, skins, a
+ladder, and an authoritative server for online play. No install. Online play
+needs a free account; the practice match against bots does not.
+
+The whole game was vibe coded with Claude in a 48 hour sprint, then polished
+in the open; the commit history is the real build log, kept intact. It runs
+on the architecture proven by
 [world-of-claudecraft](https://github.com/levy-street/world-of-claudecraft):
 one deterministic TypeScript simulation core that runs identically in the
 browser, on the server, and headless, with every non-human participant
@@ -43,6 +69,28 @@ Then "Play online" to queue (empty seats fill with bots on request), or
 - Enter: chat. G: ping. Esc: menu. Space recenters; screen edges pan.
 - Push a lane, take towers, and destroy the enemy Sanctum to win. The
   Warden in the river grants a team buff to whoever takes it down.
+
+## Every bot is a Policy: train one
+
+Every non-human participant is a deterministic function
+`(observation, rng) -> action` behind one versioned contract
+(`src/sim/policy.ts`, ADR 0002). The observation is team vision, never
+global state, and the decision budget that rate-limits actions applies
+identically to humans and bots (ADR 0003): a bot cannot out-click a person,
+only out-think one.
+
+That makes the game a reinforcement learning environment as much as a MOBA:
+
+- `pnpm env` runs a full match headless over NDJSON on stdio, one step per
+  decision slot, so a trainer outside the repo can drive any seat
+  (`headless/README.md`).
+- The scripted bots live one file per bot under `src/sim/content/bots/`;
+  writing a smarter laner is a self-contained, well-tested pull request.
+- A parity test pins that a policy attached in-sim and driven remotely
+  produces the identical world.
+
+Community bots, scripted or trained, are the flagship contribution this
+project is built around.
 
 ## Production
 
@@ -109,8 +157,10 @@ is also served from somewhere else; `*` turns the check off.
   `?portraits` and `?focus=<id>` modes) and `/vfx.html` (spell VFX).
 
 Contributions are welcome: [CONTRIBUTING.md](CONTRIBUTING.md) has the
-setup and the pull request checklist. Security issues go through
-[SECURITY.md](SECURITY.md), privately, never a public issue.
+setup and the pull request checklist. Issues labeled
+[`good first issue`](../../labels/good%20first%20issue) are the best entry
+points. Security issues go through [SECURITY.md](SECURITY.md), privately,
+never a public issue.
 
 All project content, in the game and in the docs, is in English, with
 original fantasy naming only (no borrowed IP, see
