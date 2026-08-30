@@ -78,6 +78,10 @@ export function buildEmailNotice(
     done.append(el('span', '', 'Email confirmed. A forgotten password can be reset from now on.'));
     return done;
   }
+  // A Discord account with no address gets no strip at all (ADR 0009):
+  // it has no password to recover, its way back in is the Discord button,
+  // and a notice about either would only be noise.
+  if (account.email === null && account.discord !== null) return null;
   ensureCss();
   const note = el('div', 'mail-note');
   const said = el('p', 'mail-said');

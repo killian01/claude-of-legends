@@ -41,9 +41,11 @@ with their blast radius kept small:
   holds a player's Discord holds only the game account that Discord created, which is exactly the
   deal every player of a "continue with" button already understands.
 - **A Discord outage locks out only Discord accounts,** and only until it ends. The name and
-  password door does not depend on Discord and never will. And a Discord account is not sealed
-  forever to its origin: its owner can add an email address from the home screen, confirm it, and
-  use the ADR 0007 reset to land themselves a password. From then on both doors open it.
+  password door does not depend on Discord and never will. A Discord account is not sealed forever
+  to its origin either: the email and reset routes of ADR 0007 accept it like any other account,
+  and a password landed that way opens the front door too. The home screen deliberately does not
+  advertise this: a strip asking a fresh Discord account for an email address, to recover a
+  password it does not have, read as noise and was cut.
 - **No password to guess.** Until that reset lands one, a Discord account has no password at all,
   and `authenticate()` refuses it outright rather than comparing against anything. There is
   nothing to brute-force; the only way in is a callback Discord itself signed off on.

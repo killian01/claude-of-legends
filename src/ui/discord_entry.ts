@@ -66,13 +66,11 @@ export async function fetchDiscordConfigured(): Promise<boolean> {
   }
 }
 
-const OFFER =
-  'No name or password to pick: your account is made from your Discord name, and Discord is ' +
-  'how you get back into it. We only ever read your name, never your messages.';
-
 // The door itself. Built hidden and shown only once the server has said
 // it can do this at all, so a deployment without a Discord application
-// never advertises a button that cannot work.
+// never advertises a button that cannot work. The button carries no
+// explanation: everyone has met a "Continue with" button, and the one
+// thing worth saying is that a round trip just failed.
 export function buildDiscordEntry(result: DiscordResult | null): HTMLElement {
   ensureCss();
   const row = el('div', 'dsc-row');
@@ -82,7 +80,7 @@ export function buildDiscordEntry(result: DiscordResult | null): HTMLElement {
   said.textContent =
     result === 'failed'
       ? 'That did not go through. Nothing was created or changed; you can try again.'
-      : OFFER;
+      : '';
   row.append(go, said);
   go.addEventListener('click', () => {
     go.disabled = true;
