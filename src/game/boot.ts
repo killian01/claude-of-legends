@@ -209,6 +209,8 @@ export function startPresentation(
   };
 
   let lastHoverAt = 0;
+  const coarsePointer =
+    typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
   // One handlers object for every input source: mouse and keyboard
   // (setupInput), fingers (setupTouchControls), and the touch bar.
   const inputHandlers: InputHandlers = {
@@ -228,10 +230,13 @@ export function startPresentation(
         hud.setTarget(enemy.id);
       } else {
         // A move order drops the attack reticle but keeps the SELECTION
-        // frame, like the genre; left-click on ground clears that.
+        // frame, like the genre; left-click on ground clears that. Touch
+        // has no left-click, so there a ground tap clears the frame too,
+        // or a tapped target would cover the top of the screen forever.
         world.orderMove(selfId, p.x, p.z);
         renderer.setAttackTarget(null);
         renderer.flashMarker(p.x, p.z);
+        if (coarsePointer) hud.setTarget(null);
       }
     },
     onLeftClick: (sx, sy) => {
@@ -333,8 +338,6 @@ export function startPresentation(
     ability: (key) => touch.armAbility(key),
     sigil: (slot) => touch.armSigil(slot),
   });
-  const coarsePointer =
-    typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
   const teardownTouchBar = coarsePointer
     ? buildTouchBar(container, {
         onRecall: () => inputHandlers.onRecall(),

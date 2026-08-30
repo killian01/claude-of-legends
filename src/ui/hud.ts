@@ -29,7 +29,7 @@ import { iconDataUrl, itemIconUrl } from './icons';
 import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
 import { TeamScore } from './team_score';
-import { attachTooltip, hideTooltip } from './tooltips';
+import { attachTooltip, hideTooltip, LONG_PRESS_MS } from './tooltips';
 
 const KEY_TINTS: Readonly<Record<string, [string, string]>> = {
   Q: ['#7a2f1f', '#c96a3a'],
@@ -764,12 +764,21 @@ export class Hud {
       // Names live in the tooltip only; labels under the bar collided with
       // the inventory row below.
       if (def) attachTooltip(slot, () => describeAbility(key, def.abilities[key]));
-      // Touch has no keyboard: a finger tap on the slot arms the two-step
-      // cast (game/touch.ts). Mouse pointers keep the tooltip-only slot.
+      // Touch has no keyboard: a QUICK tap on the slot arms the two-step
+      // cast (game/touch.ts). A press held past LONG_PRESS_MS is a read,
+      // the tooltip shows while the finger rests (tooltips.ts), and must
+      // not arm on release. Mouse pointers keep the hover-only slot.
+      let downAt = 0;
       slot.addEventListener('pointerdown', (e) => {
         if (e.pointerType !== 'touch') return;
         if (e.target === up) return;
         e.preventDefault();
+        downAt = performance.now();
+      });
+      slot.addEventListener('pointerup', (e) => {
+        if (e.pointerType !== 'touch') return;
+        if (e.target === up) return;
+        if (performance.now() - downAt >= LONG_PRESS_MS) return;
         this.castTaps?.ability(key);
       });
       slots.appendChild(slot);
@@ -796,9 +805,15 @@ export class Hud {
         const sigil = u?.sigils[i] ? SIGILS[u.sigils[i]!] : undefined;
         return sigil ? describeSigil(sigil) : [];
       });
+      let sigilDownAt = 0;
       slot.addEventListener('pointerdown', (e) => {
         if (e.pointerType !== 'touch') return;
         e.preventDefault();
+        sigilDownAt = performance.now();
+      });
+      slot.addEventListener('pointerup', (e) => {
+        if (e.pointerType !== 'touch') return;
+        if (performance.now() - sigilDownAt >= LONG_PRESS_MS) return;
         this.castTaps?.sigil(i);
       });
       slots.appendChild(slot);
