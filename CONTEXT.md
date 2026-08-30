@@ -22,11 +22,11 @@ _Avoid_: agent, brain, controller
 
 **Sanctum**:
 The team's core structure. Destroying the enemy Sanctum wins the match.
-_Avoid_: base core, citadel
+_Avoid_: base core, citadel, and the names other MOBAs give this structure
 
 **Sigil**:
 One of the utility spells a participant picks two of at champion select. Launch pool: Riftstep, Zephyr, Mend, Sear.
-_Avoid_: utility spell
+_Avoid_: utility spell, and the names other MOBAs give this pick
 
 **Decision budget**:
 The token bucket that rate-limits budgeted actions identically for every participant: refills at about 4 per second of sim time, capacity at most 2, both configurable. Ability casts are budgeted; movement is not.
@@ -58,11 +58,11 @@ _Avoid_: stream, channel, mid river (it is one river, end to end)
 
 **Warden**:
 The neutral river monster. It spawns in one of two mirrored river pits on an announced clock, is always visible to both teams, fights only champions, and the team that lands the killing blow claims the Warden's Boon.
-_Avoid_: dragon, boss
+_Avoid_: dragon, boss, monster names from other games
 
 **Warden's Boon**:
 The team-wide, death-surviving damage buff granted when a team slays the Warden. Stacks a limited number of times.
-_Avoid_: soul, objective buff
+_Avoid_: soul, objective buff, monster buff
 
 **Windup**:
 The commitment beat before a hit lands. For an ability: costs are paid at press, the spell resolves after the delay, and a stun during it cancels the cast. For an auto-attack: the strike resolves a beat after the swing starts; moving, a stun, or a dash cancels it and refunds the attack timer (the orb-walk rule), and a target that blinks out of reach makes the committed strike whiff. The counterplay window big hits owe their victims.
