@@ -117,6 +117,11 @@ export interface SelfSnap {
   // The viewer team's Warden's Boon, absent when inactive.
   boonUntil?: number;
   boonStacks?: number;
+  // The ENEMY team's Boon, absent when inactive. A team-wide +8 percent per
+  // stack is exactly the kind of fact a player must SEE to respect; no
+  // vision question applies, the claim is announced to both teams anyway.
+  enemyBoonUntil?: number;
+  enemyBoonStacks?: number;
 }
 
 export type SnapEvent =

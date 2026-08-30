@@ -20,6 +20,7 @@ import {
   ULT_RANK_LEVELS,
   xpForNext,
 } from '../sim/stats';
+import { BOON_DAMAGE_PER_STACK } from '../sim/team_buffs';
 import type { AbilityKey, TeamId } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { abilityIconUrl, passiveIconUrl, sigilIconUrl } from './ability_icons';
@@ -562,6 +563,10 @@ export class Hud {
   private lastKillAt = 0;
   private killChain = 0;
   private lastWardenUp: boolean | null = null;
+  // Latest Boon expiries seen per side: a grant is "until moved forward",
+  // which is how the claim announcement knows WHOSE it was.
+  private lastBoonMineUntil = 0;
+  private lastBoonEnemyUntil = 0;
   private deathRecap = '';
   private readonly deathOverlay: HTMLElement;
   private readonly deathSub: HTMLElement;
@@ -1403,25 +1408,29 @@ export class Hud {
       const left = Math.max(0, Math.ceil(objAt - this.world.time));
       this.metaText.textContent = `${clock} · Warden ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
     }
+    const mineBoon = this.world.teamBuff(this.selfTeam);
+    const enemyBoon = this.world.teamBuff((1 - this.selfTeam) as TeamId);
     if (this.lastWardenUp !== null && wardenUp !== this.lastWardenUp) {
       if (wardenUp) {
         this.announce('The Warden has awoken', '#d8a6f5');
         playSfx('tower');
         announceVoice('The Warden has awoken', true);
+      } else if (mineBoon && mineBoon.until > this.lastBoonMineUntil) {
+        // Whoever's expiry jumped forward this frame made the kill; the old
+        // heuristic (mine still long-lived) misread a refreshed own Boon as
+        // OUR claim when the enemy took the pit.
+        this.announce("Your team claims the Warden's Boon", '#ffd94a');
+        playSfx('levelup');
+        announceVoice('Your team has claimed the Boon', true);
       } else {
-        const mine = this.world.teamBuff(this.selfTeam);
-        if (mine && mine.until > this.world.time + 100) {
-          this.announce("Your team claims the Warden's Boon", '#ffd94a');
-          playSfx('levelup');
-          announceVoice('Your team has claimed the Boon', true);
-        } else {
-          this.announce("The enemy claims the Warden's Boon", '#f5a3a3');
-          playSfx('deny');
-          announceVoice('The enemy has claimed the Boon', true);
-        }
+        this.announce("The enemy claims the Warden's Boon", '#f5a3a3');
+        playSfx('deny');
+        announceVoice('The enemy has claimed the Boon', true);
       }
     }
     this.lastWardenUp = wardenUp;
+    if (mineBoon) this.lastBoonMineUntil = Math.max(this.lastBoonMineUntil, mineBoon.until);
+    if (enemyBoon) this.lastBoonEnemyUntil = Math.max(this.lastBoonEnemyUntil, enemyBoon.until);
     this.levelBadge.textContent = String(u.level);
     this.goldText.textContent = `${Math.floor(u.gold)}g`;
     if (this.lastLevel !== -1 && u.level > this.lastLevel) {
@@ -1454,15 +1463,27 @@ export class Hud {
       u.level >= MAX_LEVEL ? 'max level' : `XP ${Math.floor(u.xp)} / ${xpForNext(u.level)}`;
 
     this.statusRow.textContent = '';
-    // The Warden's Boon is a team buff, not a Status: its chip is built here.
-    const boon = this.world.teamBuff(this.selfTeam);
-    if (boon) {
+    // The Warden's Boon is a team buff, not a Status: its chips are built
+    // here, and they SAY what the buff does. The enemy's shows too: a team
+    // hitting 8 or 16 percent harder is a fact a player must see to respect.
+    if (mineBoon) {
       const chip = document.createElement('span');
       chip.className = 'hud-chip';
       chip.style.borderColor = '#a06ae8';
       chip.style.color = '#e6c8ff';
       chip.style.background = '#2c1a3d';
-      chip.textContent = `BOON x${boon.stacks} ${Math.ceil(boon.until - this.world.time)}s`;
+      const pct = Math.round(BOON_DAMAGE_PER_STACK * mineBoon.stacks * 100);
+      chip.textContent = `BOON +${pct}% DMG ${Math.ceil(mineBoon.until - this.world.time)}s`;
+      this.statusRow.appendChild(chip);
+    }
+    if (enemyBoon) {
+      const chip = document.createElement('span');
+      chip.className = 'hud-chip';
+      chip.style.borderColor = '#e86a7a';
+      chip.style.color = '#ffc8ce';
+      chip.style.background = '#3d1a20';
+      const pct = Math.round(BOON_DAMAGE_PER_STACK * enemyBoon.stacks * 100);
+      chip.textContent = `ENEMY BOON +${pct}% DMG ${Math.ceil(enemyBoon.until - this.world.time)}s`;
       this.statusRow.appendChild(chip);
     }
     for (const s of u.statuses) {

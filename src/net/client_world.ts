@@ -148,6 +148,7 @@ export class ClientWorld implements IWorld {
   private scoreRows: readonly ScoreRow[] = [];
   private objAt: number | null = null;
   private boon: { until: number; stacks: number } | null = null;
+  private enemyBoon: { until: number; stacks: number } | null = null;
 
   constructor(private readonly send: (msg: ClientMsg) => void) {}
 
@@ -159,10 +160,10 @@ export class ClientWorld implements IWorld {
     return this.scoreRows;
   }
 
-  // Only the viewer's own Boon rides the wire; the enemy's reads null.
+  // Both teams' Boons ride the wire (the HUD shows the enemy's threat too).
   teamBuff(team: TeamId): { until: number; stacks: number } | null {
-    if (team !== this.selfTeam) return null;
-    return this.boon && this.boon.until > this.time ? this.boon : null;
+    const b = team === this.selfTeam ? this.boon : this.enemyBoon;
+    return b && b.until > this.time ? b : null;
   }
 
   objectiveSpawnAt(): number | null {
@@ -263,6 +264,10 @@ export class ClientWorld implements IWorld {
       this.boon =
         msg.self.boonUntil !== undefined
           ? { until: msg.self.boonUntil, stacks: msg.self.boonStacks ?? 1 }
+          : null;
+      this.enemyBoon =
+        msg.self.enemyBoonUntil !== undefined
+          ? { until: msg.self.enemyBoonUntil, stacks: msg.self.enemyBoonStacks ?? 1 }
           : null;
       const self = this.units.get(this.selfUnitId);
       if (self) {

@@ -194,6 +194,11 @@ export function buildSnapshot(
       self.boonUntil = round2(boon.until);
       self.boonStacks = boon.stacks;
     }
+    const enemyBoon = sim.teamBuff((1 - team) as TeamId);
+    if (enemyBoon) {
+      self.enemyBoonUntil = round2(enemyBoon.until);
+      self.enemyBoonStacks = enemyBoon.stacks;
+    }
   }
 
   const snapEvents: SnapEvent[] = [];

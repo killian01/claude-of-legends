@@ -30,6 +30,18 @@ function wire(): { match: Match; a: ClientWorld; b: ClientWorld; step: (n: numbe
 }
 
 describe('online match flow', () => {
+  it('carries BOTH teams Boons on the wire, each mirror reading its side', () => {
+    const { match, a, b, step } = wire();
+    match.sim.teamBuffs.grantBoon(1, match.sim.time);
+    step(1);
+    // Team 0's mirror: no own Boon, the enemy's threat visible.
+    expect(a.teamBuff(0)).toBeNull();
+    expect(a.teamBuff(1)?.stacks).toBe(1);
+    // Team 1's mirror: its own Boon, no enemy one.
+    expect(b.teamBuff(1)?.stacks).toBe(1);
+    expect(b.teamBuff(0)).toBeNull();
+  });
+
   it('applies picks: champion and sigils reach the sim', () => {
     const { match } = wire();
     const units = [...match.sim.units.values()].filter((u) => u.kind === 'champion');
