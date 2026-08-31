@@ -12,7 +12,12 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { DisplayPropKind, ForgedDisplay } from '../../sim/forge/display';
 import { type ChampionTemplate, measureScene, normalizeProp, toLambert } from './assets';
-import { type RemovedTravel, resolveForgedClips, stripTravel } from './forged_clips';
+import {
+  type RemovedTravel,
+  resolveForgedClips,
+  stripStanceLead,
+  stripTravel,
+} from './forged_clips';
 import type { ChampionClipNames, ChampionVisualDef } from './manifest';
 
 // Middle of the roster's height range (manifest heights run 1.6 to 3.6);
@@ -268,6 +273,10 @@ export async function forgedChampionTemplate(
     if (run && !source.strippedRuns.has(def.clips.run)) {
       source.strippedRuns.add(def.clips.run);
       const removed = stripTravel(run);
+      // The trimmed preset starts mid-stride: rebase the detrended loop
+      // onto the idle stance so the cycle plays centered on the mover.
+      const idle = source.clips.get(def.clips.idle);
+      if (idle && idle !== run) stripStanceLead(run, idle, removed);
       const fix = travelYawFix(source.scene, removed, source.rawHeight * 0.15);
       if (fix !== null) source.travelYaw = fix;
     }

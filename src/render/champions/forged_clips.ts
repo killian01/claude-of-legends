@@ -117,3 +117,50 @@ export function stripTravel(clip: TravelClip): RemovedTravel[] {
   }
   return removed;
 }
+
+// Rebases a detrended run onto the stance clip (idle). The provider's run
+// preset is trimmed mid-stride: its first key already sits a large step
+// along the travel line (a live probe measured 56 percent of the model's
+// height), and stripTravel anchors the detrended loop on that first key,
+// so the whole cycle plays displaced in the run direction and the
+// champion overhangs its own circle. For each removed drift, the first
+// key's offset from the stance clip's first key is projected onto the
+// drift direction and subtracted from every key: the trim artifact goes,
+// while legitimate stance differences (a run crouch, a sideways lean)
+// survive on the perpendicular axes. Constant shifts leave cubic-spline
+// tangents untouched. Idempotent: after one pass the projection is zero.
+export function stripStanceLead(
+  clip: TravelClip,
+  stance: TravelClip,
+  removed: readonly RemovedTravel[],
+): void {
+  for (const r of removed) {
+    const mag = Math.hypot(r.drift[0], r.drift[1], r.drift[2]);
+    if (mag === 0) continue;
+    const unit = [r.drift[0] / mag, r.drift[1] / mag, r.drift[2] / mag];
+    const track = clip.tracks.find((t) => t.name === r.name);
+    const base = stance.tracks.find((t) => t.name === r.name);
+    if (!track || !base || track === base) continue;
+    const keys = track.times.length;
+    if (keys < 1 || base.times.length < 1) continue;
+    const stride = Math.round(track.values.length / keys);
+    if (stride !== 3 && stride !== 9) continue;
+    const valueAt = stride === 9 ? 3 : 0;
+    const baseStride = Math.round(base.values.length / base.times.length);
+    if (baseStride !== 3 && baseStride !== 9) continue;
+    const baseAt = baseStride === 9 ? 3 : 0;
+    let lead = 0;
+    for (let axis = 0; axis < 3; axis += 1) {
+      const first = track.values[valueAt + axis] ?? 0;
+      const stanceFirst = base.values[baseAt + axis] ?? 0;
+      lead += (first - stanceFirst) * (unit[axis] ?? 0);
+    }
+    if (lead === 0) continue;
+    for (let k = 0; k < keys; k += 1) {
+      for (let axis = 0; axis < 3; axis += 1) {
+        const at = k * stride + valueAt + axis;
+        track.values[at] = (track.values[at] ?? 0) - lead * (unit[axis] ?? 0);
+      }
+    }
+  }
+}

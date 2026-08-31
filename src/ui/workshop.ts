@@ -22,7 +22,11 @@ import {
   guessHandBone,
   travelYawFix,
 } from '../render/champions/forged';
-import { resolveForgedClips, stripTravel } from '../render/champions/forged_clips';
+import {
+  resolveForgedClips,
+  stripStanceLead,
+  stripTravel,
+} from '../render/champions/forged_clips';
 import type { ChampionClipNames } from '../render/champions/manifest';
 import {
   DISPLAY_BOUNDS,
@@ -421,6 +425,11 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     const runClip = runName !== undefined ? clips.find((c) => c.name === runName) : undefined;
     if (runClip) {
       const removed = stripTravel(runClip);
+      // The trimmed preset starts mid-stride: rebase the detrended loop
+      // onto the idle stance, exactly as the match does.
+      const idleName = roleName('idle');
+      const idleClip = idleName !== undefined ? clips.find((c) => c.name === idleName) : undefined;
+      if (idleClip && idleClip !== runClip) stripStanceLead(runClip, idleClip, removed);
       if (model && removed.length > 0) {
         const prevYaw = yawGroup.rotation.y;
         yawGroup.rotation.y = 0;
