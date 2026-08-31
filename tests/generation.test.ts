@@ -315,7 +315,11 @@ describe('the tripo provider against scripted responses', () => {
     expect(asset.url).toBe('https://cdn.example.com/model.glb');
     expect(asset.provenance).toMatchObject({ provider: 'tripo', taskId: 'task-1' });
     expect(calls[0]?.auth).toBe('Bearer key-1');
-    expect(calls[0]?.body).toMatchObject({ input: 'https://img.example.com/sheet.png' });
+    // The live API refuses the call without an explicit model version.
+    expect(calls[0]?.body).toMatchObject({
+      input: 'https://img.example.com/sheet.png',
+      model: 'v3.1-20260211',
+    });
     expect(polls).toBe(2);
   });
 
