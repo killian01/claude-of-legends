@@ -73,14 +73,41 @@ function cleanLine(line: string): string {
   return line.replace(/\s+/g, ' ').trim().slice(0, ART_LINE_MAX);
 }
 
+// Appended to every reference derivation: the image input IS the
+// character, and the words say so, because the provider's image-to-image
+// keeps only the broad concept on its own (learned live: the clock
+// survived, the hat, the copper and the teal did not).
+export const SHEET_MATCH =
+  'Exactly the same character as the input image: same face, same outfit, ' +
+  'same colors, same materials.';
+
+// The player's own words inside a stored splash prompt: what follows the
+// marker artPrompt wrote. Empty when the marker is missing.
+const SPLASH_LINE_MARKER = ' The champion: ';
+export function splashLine(prompt: string): string {
+  const i = prompt.indexOf(SPLASH_LINE_MARKER);
+  return i === -1 ? '' : prompt.slice(i + SPLASH_LINE_MARKER.length).trim();
+}
+
+// An iteration keeps the source candidate's FULL prompt (identity and
+// style included) and appends the player's note as an adjustment clause.
+// Sending the note alone replaces the character it was meant to correct
+// (learned live: 'make him more visible' produced a different champion).
+export function iterationPrompt(sourcePrompt: string, note: string): string {
+  return note === '' ? sourcePrompt : `${sourcePrompt} Adjustment: ${note}.`;
+}
+
 // The full prompt the provider sees: always the server's style block plus
-// the champion's own line, never raw client text alone.
-export function artPrompt(kind: ArtKind, row: ForgedRow, line: string): string {
+// the champion's own line, never raw client text alone. The model
+// reference additionally carries the splash's appearance words: the image
+// input alone holds the concept, the words hold the costume and colors.
+export function artPrompt(kind: ArtKind, row: ForgedRow, line: string, appearance = ''): string {
   if (kind === 'splash') return `${SPLASH_STYLE} The champion: ${line}`;
   if (kind === 'sheet') {
     const identity = [row.def.name, row.def.title].filter((s) => s.trim() !== '').join(', ');
+    const looks = appearance === '' ? '' : ` Appearance: ${appearance}.`;
     const detail = line === '' ? '' : ` ${line}.`;
-    return `${SHEET_STYLE} The character: ${identity}, a ${row.def.role.toLowerCase()} champion.${detail}`;
+    return `${SHEET_STYLE} The character: ${identity}, a ${row.def.role.toLowerCase()} champion.${looks}${detail} ${SHEET_MATCH}`;
   }
   const key = kind.slice('icon_'.length) as 'Q' | 'W' | 'E' | 'R';
   const ability = row.def.abilities[key];
@@ -155,20 +182,27 @@ export async function generateArt(
   if (blocked !== null) {
     return { ok: false, error: `pick different words: '${blocked}' cannot go in a prompt` };
   }
-  // The source image, when this generation starts from one.
+  // The source image, when this generation starts from one, and the
+  // prompt that rides with it: an iteration keeps its source's words,
+  // the reference derivation borrows the splash's.
   let sourcePath: string | null = null;
+  let prompt: string;
   if (req.fromCid !== undefined) {
     const from = deps.store.getArtCandidate(req.fromCid);
     if (!from || from.forgedId !== row.id || from.kind !== req.kind) {
       return { ok: false, error: 'no such candidate to iterate from' };
     }
     sourcePath = from.path;
+    prompt = iterationPrompt(from.prompt, line);
   } else if (req.kind === 'sheet') {
     const splash = deps.store.chosenArt(row.id, 'splash');
     if (!splash) {
       return { ok: false, error: 'pick a splash first: the model reference derives from it' };
     }
     sourcePath = splash.path;
+    prompt = artPrompt(req.kind, row, line, splashLine(splash.prompt));
+  } else {
+    prompt = artPrompt(req.kind, row, line);
   }
   if (sourcePath !== null && !deps.generation.provider.uploadImage) {
     return { ok: false, error: 'this provider cannot start from an image' };
@@ -176,7 +210,6 @@ export async function generateArt(
   const quota = checkQuota(deps.quota, accountId, 'gen2d');
   if (!quota.ok) return quota;
 
-  const prompt = artPrompt(req.kind, row, line);
   let asset: ProviderAsset;
   try {
     let image: string | undefined;

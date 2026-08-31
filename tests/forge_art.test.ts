@@ -16,9 +16,12 @@ import {
   deleteArtFor,
   generateArt,
   ICON_STYLE,
+  iterationPrompt,
   listArt,
+  SHEET_MATCH,
   SHEET_STYLE,
   SPLASH_STYLE,
+  splashLine,
   splashOf,
 } from '../server/art';
 import { saveDraft } from '../server/forge';
@@ -128,6 +131,10 @@ describe('generateArt', () => {
     const row = r.store.getArtCandidate(sheet.candidate.cid);
     expect(row?.prompt.startsWith(SHEET_STYLE)).toBe(true);
     expect(row?.prompt).toContain(r.def.name);
+    // The splash's appearance words ride the derivation: the image input
+    // alone keeps only the broad concept (learned live).
+    expect(row?.prompt).toContain('Appearance: a moss witch');
+    expect(row?.prompt).toContain(SHEET_MATCH);
   });
 
   it('iterates on an existing candidate via fromCid, same kind only', async () => {
@@ -150,6 +157,25 @@ describe('generateArt', () => {
     expect(upload?.req).toMatchObject({ name: path.basename(first.candidate.path) });
     const call = r.provider.seen.filter((s) => s.op === 'generate2D').at(-1);
     expect(call?.req).toMatchObject({ image: expect.stringContaining('mock-upload-') });
+    // The iteration KEEPS the source prompt and appends the note as an
+    // adjustment: the note alone would replace the character (learned
+    // live: 'make him more visible' produced a different champion).
+    const sourceRow = r.store.getArtCandidate(first.candidate.cid);
+    const refinedRow = r.store.getArtCandidate(refined.ok ? refined.candidate.cid : -1);
+    expect(sourceRow).not.toBeNull();
+    expect(refinedRow?.prompt).toBe(
+      `${sourceRow?.prompt} Adjustment: same witch, more thorns on the staff.`,
+    );
+    // An empty note is a pure re-roll from the image: same prompt.
+    const reroll = await generateArt(r.deps, ACCOUNT, {
+      id: r.def.id,
+      kind: 'splash',
+      line: '',
+      fromCid: first.candidate.cid,
+    });
+    expect(reroll.ok).toBe(true);
+    const rerollRow = r.store.getArtCandidate(reroll.ok ? reroll.candidate.cid : -1);
+    expect(rerollRow?.prompt).toBe(sourceRow?.prompt);
     // A candidate of another kind is not a valid starting point.
     const cross = await generateArt(r.deps, ACCOUNT, {
       id: r.def.id,
@@ -158,6 +184,13 @@ describe('generateArt', () => {
       fromCid: first.candidate.cid,
     });
     expect(cross).toMatchObject({ ok: false, error: expect.stringContaining('iterate') });
+  });
+
+  it('extracts the splash line and composes iteration prompts', () => {
+    expect(splashLine(`${SPLASH_STYLE} The champion: a moss witch`)).toBe('a moss witch');
+    expect(splashLine('no marker here')).toBe('');
+    expect(iterationPrompt('base prompt.', '')).toBe('base prompt.');
+    expect(iterationPrompt('base prompt.', 'lighter')).toBe('base prompt. Adjustment: lighter.');
   });
 
   it('composes icon prompts from the flat template and the ability name', async () => {

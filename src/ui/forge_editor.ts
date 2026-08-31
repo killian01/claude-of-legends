@@ -946,7 +946,11 @@ export function openForgeEditor(container: HTMLElement): void {
       );
       const hero = el('div', 'fe-hero');
       const line = el('input', 'fe-hero-input') as HTMLInputElement;
-      line.placeholder = 'Silhouette, materials, mood, one accent color, memorable details...';
+      // Iterating keeps the character: the input then asks for the change
+      // only, and the server appends it to the source image's prompt.
+      line.placeholder = refineFrom.splash
+        ? 'What should change? The character stays the same...'
+        : 'Silhouette, materials, mood, one accent color, memorable details...';
       line.maxLength = 400;
       line.value = artLines.splash ?? '';
       line.addEventListener('input', () => {
@@ -1020,7 +1024,9 @@ export function openForgeEditor(container: HTMLElement): void {
       );
       const heroRow = el('div', 'fe-hero');
       const notes = el('input', 'fe-hero-input') as HTMLInputElement;
-      notes.placeholder = 'Optional notes: fix the pose, the colors, the outfit...';
+      notes.placeholder = refineFrom.sheet
+        ? 'What should change? The character stays the same...'
+        : 'Optional notes: fix the pose, the colors, the outfit...';
       notes.maxLength = 400;
       notes.value = artLines.sheet ?? '';
       notes.addEventListener('input', () => {
