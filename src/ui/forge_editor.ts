@@ -122,14 +122,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return e;
 }
 
-function token(): string | null {
-  try {
-    return localStorage.getItem('loc-token');
-  } catch {
-    return null;
-  }
-}
-
 interface DraftRow {
   id: string;
   def: ForgedChampionDef;
@@ -137,14 +129,16 @@ interface DraftRow {
   updatedAt: number;
 }
 
+// Identity rides the session cookie (ADR 0006), never a token in the URL.
 async function api<T>(url: string, body?: unknown): Promise<T | null> {
   try {
     const res = await fetch(
       url,
       body === undefined
-        ? undefined
+        ? { credentials: 'same-origin' }
         : {
             method: 'POST',
+            credentials: 'same-origin',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(body),
           },
@@ -229,43 +223,8 @@ export function newDraft(): ForgedChampionDef {
   };
 }
 
-// The menu's gate: the Forge is an account feature (ADR 0007), visible to
-// everyone, locked for guests.
-export function buildForgeGatePanel(container: HTMLElement): HTMLElement {
-  const box = el('div', 'prof-panel', 'Checking the account...');
-  const tok = token();
-  const locked = (): void => {
-    box.textContent =
-      'The Forge is where you create your own champion: kit, stats, passive, all under ' +
-      'the power budget. It needs an account (Account section above); guests can look ' +
-      'but not forge.';
-  };
-  if (!tok) {
-    locked();
-    return box;
-  }
-  void fetch(`/api/me?token=${encodeURIComponent(tok)}`)
-    .then((r) => (r.ok ? (r.json() as Promise<{ account?: unknown | null }>) : null))
-    .then((me) => {
-      if (!me || me.account === null || me.account === undefined) {
-        locked();
-        return;
-      }
-      box.textContent = '';
-      const open = el('button', 'menu-btn primary', 'Open the Forge');
-      open.addEventListener('click', () => openForgeEditor(container));
-      box.append(open);
-    })
-    .catch(() => {
-      box.textContent = 'The Forge needs the game server, which is not reachable.';
-    });
-  return box;
-}
-
 export function openForgeEditor(container: HTMLElement): void {
   ensureCss();
-  const tok = token();
-  if (!tok) return;
   const root = el('div', 'fe');
   const stopBackdrop = startMenuBackdrop(root);
   const close = (): void => {
@@ -357,27 +316,23 @@ export function openForgeEditor(container: HTMLElement): void {
 
   saveBtn.addEventListener('click', () => {
     status.textContent = 'Saving...';
-    void api<{ ok: boolean; error?: string }>('/api/forge/draft', {
-      token: tok,
-      def: current,
-    }).then((r) => {
+    void api<{ ok: boolean; error?: string }>('/api/forge/draft', { def: current }).then((r) => {
       status.textContent = r?.ok ? 'Draft saved.' : (r?.error ?? 'save failed');
       if (r?.ok) void loadDrafts();
     });
   });
   deleteBtn.addEventListener('click', () => {
-    void api<{ ok: boolean; error?: string }>('/api/forge/draft/delete', {
-      token: tok,
-      id: current.id,
-    }).then((r) => {
-      status.textContent = r?.ok ? 'Draft deleted.' : (r?.error ?? 'delete failed');
-      if (r?.ok) {
-        current = newDraft();
-        void loadDrafts();
-        renderMain();
-        refresh();
-      }
-    });
+    void api<{ ok: boolean; error?: string }>('/api/forge/draft/delete', { id: current.id }).then(
+      (r) => {
+        status.textContent = r?.ok ? 'Draft deleted.' : (r?.error ?? 'delete failed');
+        if (r?.ok) {
+          current = newDraft();
+          void loadDrafts();
+          renderMain();
+          refresh();
+        }
+      },
+    );
   });
   testBtn.addEventListener('click', () => {
     const def = JSON.parse(JSON.stringify(current)) as ForgedChampionDef;
@@ -391,11 +346,10 @@ export function openForgeEditor(container: HTMLElement): void {
   // failure of any kind refunds the creation.
   finalizeBtn.addEventListener('click', () => {
     status.textContent = 'Saving, then finalizing...';
-    void api<{ ok: boolean; error?: string }>('/api/forge/draft', { token: tok, def: current })
+    void api<{ ok: boolean; error?: string }>('/api/forge/draft', { def: current })
       .then((saved) => {
         if (!saved?.ok) throw new Error(saved?.error ?? 'save failed');
         return api<{ ok: boolean; jobId?: number; error?: string }>('/api/forge/finalize', {
-          token: tok,
           id: current.id,
         });
       })
@@ -406,7 +360,7 @@ export function openForgeEditor(container: HTMLElement): void {
         }
         const poll = (): void => {
           void api<{ ok: boolean; status?: string; stage?: string; error?: string }>(
-            `/api/forge/job?token=${encodeURIComponent(tok)}&id=${started.jobId}`,
+            `/api/forge/job?id=${started.jobId}`,
           ).then((job) => {
             if (!job?.ok) {
               status.textContent = 'the job vanished; check your creations';
@@ -478,9 +432,7 @@ export function openForgeEditor(container: HTMLElement): void {
   };
 
   const loadDrafts = async (): Promise<void> => {
-    const r = await api<{ ok: boolean; drafts?: DraftRow[] }>(
-      `/api/forge/drafts?token=${encodeURIComponent(tok)}`,
-    );
+    const r = await api<{ ok: boolean; drafts?: DraftRow[] }>(`/api/forge/drafts`);
     drafts = r?.ok && r.drafts ? r.drafts : [];
     renderRail();
   };

@@ -6,9 +6,11 @@
 // It only decides; the entry point owns the flow. Everything here resolves
 // the promise with a HomeChoice and takes the page down.
 
+import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { TeamId } from '../sim/types';
 import { type AuthedAccount, signOut } from './auth';
 import { buildEmailNotice, type ConfirmResult } from './email_status';
+import { openForgeEditor } from './forge_editor';
 import { startBackdrop } from './home_backdrop';
 import { buildLadderPanel } from './ladder_panel';
 import { buildLivePanel } from './live_panel';
@@ -47,6 +49,8 @@ export interface HomeChoice {
   // For mode 'spectate': the live match to watch, and from whose side.
   matchId?: number;
   team?: TeamId;
+  // For mode 'practice': a Forge draft to test drive as the picked champion.
+  forged?: ForgedChampionDef;
 }
 
 // A button that shows or hides a panel, rebuilt fresh on every open so it
@@ -119,6 +123,7 @@ export function showHome(
     const leave = (): void => {
       window.removeEventListener('loc:replay', onWatchReplay);
       window.removeEventListener('loc:spectate', onSpectate);
+      window.removeEventListener('loc:forge-test', onForgeTest);
       stopBackdrop();
       root.remove();
     };
@@ -146,8 +151,17 @@ export function showHome(
         team: detail.team === 1 ? 1 : 0,
       });
     }
+    // The Forge editor's test drive: straight into an offline practice
+    // match with the draft as the picked champion.
+    function onForgeTest(e: Event): void {
+      const def = (e as CustomEvent<ForgedChampionDef>).detail;
+      if (typeof def !== 'object' || def === null) return;
+      leave();
+      resolve({ name: accountName, mode: 'practice', forged: def });
+    }
     window.addEventListener('loc:replay', onWatchReplay);
     window.addEventListener('loc:spectate', onSpectate);
+    window.addEventListener('loc:forge-test', onForgeTest);
 
     const cards = el('div', 'pg-cards');
 
@@ -189,6 +203,18 @@ export function showHome(
     row.append(code, join);
     friends.append(create, row);
 
+    // --- the Forge ---
+    const forge = card(
+      'plain',
+      'The Forge',
+      'Create your own champion: kit, stats, and passive, composed from the same ' +
+        'primitives the roster runs on, all under one power budget. Drafts are free and ' +
+        'unlimited; test drive any valid kit against bots.',
+    );
+    const forgeBtn = el('button', 'menu-btn', 'Open the Forge');
+    forgeBtn.addEventListener('click', () => openForgeEditor(container));
+    forge.appendChild(forgeBtn);
+
     // --- career ---
     const career = card(
       'plain',
@@ -212,7 +238,7 @@ export function showHome(
     learn.appendChild(roster);
     collapsible(learn, 'Settings', buildSettingsPanel);
 
-    cards.append(play, friends, career, learn);
+    cards.append(play, friends, forge, career, learn);
     inner.appendChild(cards);
   });
 }

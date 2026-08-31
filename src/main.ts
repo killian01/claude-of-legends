@@ -16,6 +16,7 @@ import type { ServerMsg } from './net/protocol';
 import { applyReplayEvent, buildMatchSim, type ReplayRecord } from './net/replay';
 import { BOTS, DEFAULT_BOT_ID } from './sim/content/bots';
 import { CHAMPION_LIST } from './sim/content/champions';
+import type { ForgedChampionDef } from './sim/forge/forged_def';
 import { Sim } from './sim/sim';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
 import { type AuthedAccount, currentAccount } from './ui/auth';
@@ -45,6 +46,9 @@ interface OfflinePick {
   championId: string;
   sigils: [string, string];
   skin: number;
+  // A Forge test drive: the draft to register in the offline sim before
+  // picking it (the stylized figure carries the render).
+  forged?: ForgedChampionDef;
 }
 
 function pickForPractice(): Promise<OfflinePick> {
@@ -62,6 +66,7 @@ function pickForPractice(): Promise<OfflinePick> {
 function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
   return new Promise((resolve) => {
     const sim = new Sim(42);
+    if (pick.forged) sim.addForgedChampion(pick.forged);
     const world: IWorld = sim;
     const self = sim.addChampion(0, undefined, pick.championId, pick.skin);
     self.sigils = [...pick.sigils];
@@ -135,7 +140,7 @@ async function runReplay(replayId: number): Promise<PostMatchAction> {
   }
   const rec = record;
   return new Promise((resolve) => {
-    const { sim, unitIds } = buildMatchSim(rec.seed, rec.picks);
+    const { sim, unitIds } = buildMatchSim(rec.seed, rec.picks, rec.forged ?? []);
     const unitTeams = new Map<number, TeamId>();
     rec.picks.forEach((p, i) => {
       unitTeams.set(unitIds[i]!, p.team);
@@ -570,7 +575,16 @@ async function boot(): Promise<void> {
     next = null;
     let action: PostMatchAction;
     if (choice.mode === 'practice') {
-      const pick: OfflinePick = lastPick ?? (await pickForPractice());
+      // A Forge test drive arrives with its draft; a plain practice run
+      // goes through champion select as always.
+      const pick: OfflinePick = choice.forged
+        ? {
+            championId: choice.forged.id,
+            sigils: ['riftstep', 'mend'],
+            skin: 0,
+            forged: choice.forged,
+          }
+        : (lastPick ?? (await pickForPractice()));
       lastPick = pick;
       action = await runOffline(pick);
     } else if (choice.mode === 'replay' && choice.replayId !== undefined) {
