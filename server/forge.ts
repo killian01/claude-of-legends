@@ -13,7 +13,8 @@ import type { ForgedRow, ForgeStore } from './forge_store';
 import {
   familyOf,
   type PipelineDeps,
-  startFinalize,
+  startAnimate,
+  startModelBuild,
   startWeaponForge,
 } from './generation/pipeline';
 import { WEAPON_FAMILIES, type WeaponFamily } from './generation/provider';
@@ -139,17 +140,17 @@ export function deleteDraft(deps: ForgeDeps, accountId: number, id: string): For
   return { ok: true };
 }
 
-// Finalize (plan-forge phase 5): the one gate where EVERYTHING must hold,
-// full validation included; the pipeline then debits the creation and
-// runs async. The returned `done` promise is for tests and shutdown; the
-// HTTP route answers with the job id alone.
-export function finalizeDraft(
+// The model build (plan-forge phase 5, first half): the one gate where
+// EVERYTHING must hold, full validation included; the pipeline then
+// debits the creation and runs async. The row stays a draft: the player
+// inspects the static model in the workshop, and animating (the second
+// half, below) is what seals. Running it again before the seal is a
+// rebuild and spends another creation. The returned `done` promise is
+// for tests and shutdown; the HTTP route answers with the job id alone.
+export function buildModel(
   deps: ForgeDeps,
   accountId: number,
   id: string,
-  // The player's explicit animation family; anything unrecognized falls
-  // back to the kit-implied one.
-  family?: string,
 ): ForgeOutcome<{ jobId: number; done: Promise<void> }> {
   if (!deps.generation) {
     return { ok: false, error: 'generation is not configured on this server yet' };
@@ -165,13 +166,13 @@ export function finalizeDraft(
   if (!v.ok) {
     return {
       ok: false,
-      error: `finalize needs a fully valid champion: ${v.errors.slice(0, 5).join('; ')}`,
+      error: `the build needs a fully valid champion: ${v.errors.slice(0, 5).join('; ')}`,
     };
   }
   // The splash is the creative anchor (ADR 0010) and the model reference
   // is the image the 3D literally builds from; both are the player's own
-  // picks, iterated in the editor. No pick, no seal, and no debit either:
-  // these gates run before the ledger moves.
+  // picks, iterated in the editor. No pick, no build, and no debit
+  // either: these gates run before the ledger moves.
   if (!deps.store.chosenArt(id, 'splash')) {
     return { ok: false, error: 'make the splash art first: the champion derives from it' };
   }
@@ -182,19 +183,40 @@ export function finalizeDraft(
     };
   }
   refreshWeeklyGrant(deps, accountId);
+  return startModelBuild(deps.generation, { def: row.def, accountId });
+}
+
+// The second half, always LAST and always the player's own click: rig
+// the built model, bake the chosen clip family, seal the champion. The
+// creation was spent at the build, so this moves the ledger in neither
+// direction and can simply run again after a failure.
+export function animateChampion(
+  deps: ForgeDeps,
+  accountId: number,
+  id: string,
+  // The player's explicit animation family; anything unrecognized falls
+  // back to the kit-implied one.
+  family?: string,
+): ForgeOutcome<{ jobId: number; done: Promise<void> }> {
+  if (!deps.generation) {
+    return { ok: false, error: 'generation is not configured on this server yet' };
+  }
+  const row = deps.store.getForged(id);
+  if (!row || row.accountId !== accountId) {
+    return { ok: false, error: 'no such champion on this account' };
+  }
+  if (row.status === 'finalized') {
+    return { ok: false, error: 'already animated and sealed (Reforge comes later)' };
+  }
   const picked = (WEAPON_FAMILIES as readonly string[]).includes(family ?? '')
     ? (family as WeaponFamily)
     : familyOf(row.def);
-  return startFinalize(deps.generation, {
-    def: row.def,
-    accountId,
-    family: picked,
-  });
+  return startAnimate(deps.generation, { forgedId: id, accountId, family: picked });
 }
 
-// The weapon-only build on a champion that sealed without one: the
-// creation covered the weapon (ADR 0011), so no new debit; once a weapon
-// exists, replacing it waits for Reforge.
+// The weapon-only build on a champion whose model exists without one:
+// the creation covered the weapon (ADR 0011), so no new debit; once a
+// weapon exists, replacing it waits for Reforge.
 export function forgeWeapon(
   deps: ForgeDeps,
   accountId: number,
@@ -207,11 +229,11 @@ export function forgeWeapon(
   if (!row || row.accountId !== accountId) {
     return { ok: false, error: 'no such champion on this account' };
   }
-  if (row.status !== 'finalized') {
-    return { ok: false, error: 'build the champion first: the weapon forges onto it' };
+  const assets = deps.store.forgedAssets(id) as { model?: string; weapon?: string } | null;
+  if (!assets?.model) {
+    return { ok: false, error: 'build the 3D model first: the weapon forges alongside it' };
   }
-  const assets = deps.store.forgedAssets(id) as { weapon?: string } | null;
-  if (assets?.weapon) {
+  if (assets.weapon) {
     return {
       ok: false,
       error: 'this champion already has its forged weapon (Reforge comes later)',

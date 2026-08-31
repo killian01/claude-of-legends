@@ -41,9 +41,10 @@ import { clientAddress, edgeConfig, originAllowed } from './edge';
 import { emailErrorMessage } from './email_address';
 import { CLAIM_TTL_MS } from './email_claim';
 import {
+  animateChampion,
+  buildModel,
   DRAFT_JSON_MAX,
   deleteDraft,
-  finalizeDraft,
   finalizeStatus,
   forgeWeapon,
   listDrafts,
@@ -823,9 +824,10 @@ const server = http.createServer(async (req, res) => {
       // --- the Forge (ADR 0010, ADR 0011): drafts, ledger, finalize ---
       if (url === '/api/forge/drafts') {
         const out = listDrafts(forgeDeps, me.id);
-        // Each row carries its current splash, and once finalized its
-        // model and sheet (relative asset paths), so the draft rail, the
-        // Forge-queue select, and the workshop can reach the real files.
+        // Each row carries its current splash, and once its model is
+        // built (sealed or not: the build lands assets on a draft too)
+        // its model and sheet (relative asset paths), so the draft rail,
+        // the Forge-queue select, and the workshop can reach the files.
         sendJson(
           res,
           200,
@@ -833,15 +835,12 @@ const server = http.createServer(async (req, res) => {
             ? {
                 ...out,
                 drafts: out.drafts.map((d) => {
-                  const assets =
-                    d.status === 'finalized'
-                      ? (forgeStore.forgedAssets(d.id) as {
-                          model?: string;
-                          sheet?: string;
-                          family?: string;
-                          weapon?: string;
-                        } | null)
-                      : null;
+                  const assets = forgeStore.forgedAssets(d.id) as {
+                    model?: string;
+                    sheet?: string;
+                    family?: string;
+                    weapon?: string;
+                  } | null;
                   return {
                     ...d,
                     splash: splashOf(forgeStore, d),
@@ -877,7 +876,7 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 200, outcome);
         return;
       }
-      if (url === '/api/forge/finalize' && req.method === 'POST') {
+      if (url === '/api/forge/build' && req.method === 'POST') {
         const body = await readJsonBody(req);
         const id = typeof body?.id === 'string' ? body.id : null;
         if (!id) {
@@ -885,8 +884,28 @@ const server = http.createServer(async (req, res) => {
           return;
         }
         // The daily generation quota (phase 8) is checked first and spent
-        // only when the chain actually starts: a refused finalize (invalid
+        // only when the chain actually starts: a refused build (invalid
         // kit, no credits) never burns a day's allowance.
+        const quota = checkQuota(quotaDeps, me.id, 'generation');
+        if (!quota.ok) {
+          sendJson(res, 200, quota);
+          return;
+        }
+        const outcome = buildModel(forgeDeps, me.id, id);
+        if (outcome.ok) spendQuota(quotaDeps, me.id, 'generation');
+        // `done` is the async job's settling; the wire answer is the id.
+        sendJson(res, 200, outcome.ok ? { ok: true, jobId: outcome.jobId } : outcome);
+        return;
+      }
+      if (url === '/api/forge/animate' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        if (!id) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        // Rides the same daily generation meter as the build (it is a 3D
+        // chain too), spent only when it actually starts.
         const quota = checkQuota(quotaDeps, me.id, 'generation');
         if (!quota.ok) {
           sendJson(res, 200, quota);
@@ -895,9 +914,8 @@ const server = http.createServer(async (req, res) => {
         // The animation family is the player's explicit pick (playtest: a
         // sword champion must swing a sword); absent, the kit implies it.
         const family = typeof body?.family === 'string' ? body.family : undefined;
-        const outcome = finalizeDraft(forgeDeps, me.id, id, family);
+        const outcome = animateChampion(forgeDeps, me.id, id, family);
         if (outcome.ok) spendQuota(quotaDeps, me.id, 'generation');
-        // `done` is the async job's settling; the wire answer is the id.
         sendJson(res, 200, outcome.ok ? { ok: true, jobId: outcome.jobId } : outcome);
         return;
       }
@@ -908,7 +926,7 @@ const server = http.createServer(async (req, res) => {
           sendJson(res, 400, { ok: false, error: 'malformed request' });
           return;
         }
-        // Rides the same daily generation meter as finalize (it is a 3D
+        // Rides the same daily generation meter as the build (it is a 3D
         // build), spent only when the chain actually starts.
         const quota = checkQuota(quotaDeps, me.id, 'generation');
         if (!quota.ok) {

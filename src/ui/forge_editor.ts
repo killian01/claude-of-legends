@@ -474,35 +474,42 @@ export function openForgeEditor(container: HTMLElement): void {
   const refineFrom: Record<string, ArtCandidate | undefined> = {};
   // The Spells tab's selected slot.
   let spellSlot: SpellSlot = 'Q';
-  // True while a finalize chain runs; Step 5 renders the stage checklist
+  // True while the model build runs; Step 4 renders the stage checklist
   // and the poll advances it through these rows when they are on screen.
   let finalizing = false;
-  // True while a weapon-only build runs (the post-seal claim).
+  // True while the animate chain runs (Step 5, the seal).
+  let animating = false;
+  // True while a weapon-only build runs (the claim).
   let weaponForging = false;
   let currentStage = '';
   let stageRows: Map<string, HTMLElement> | null = null;
   // The account's creation stock, from the drafts route; -1 = unknown.
   let creations = -1;
 
-  // The finalize chain's stages in order, worded for the player; the keys
-  // are the job stages the server records (generation/pipeline.ts).
+  // The chains' stages in order, worded for the player; the keys are the
+  // job stages the server records (generation/pipeline.ts). The build is
+  // the first half only: animation is ALWAYS the last step, its own
+  // click, never a side effect of the model build.
   const BUILD_STAGES: readonly { key: string; label: string }[] = [
     { key: 'reference', label: 'Sending your chosen reference' },
     { key: 'classify', label: 'Checking the image' },
     { key: 'model', label: 'Sculpting the 3D model' },
+    { key: 'weapon', label: 'Forging the weapon' },
+    { key: 'download', label: 'Bringing the model home' },
+  ];
+  const ANIM_STAGES: readonly { key: string; label: string }[] = [
     { key: 'rig', label: 'Rigging the skeleton' },
     { key: 'animate', label: 'Baking the five animations' },
-    { key: 'weapon', label: 'Forging the weapon' },
-    { key: 'download', label: 'Bringing your champion home' },
+    { key: 'download', label: 'Bringing the clips home' },
   ];
-  // The weapon-only chain (the post-seal claim) walks two of those same
-  // stages; its checklist is the same shape as the build's.
   const WEAPON_STAGES: readonly { key: string; label: string }[] = [
     { key: 'weapon', label: 'Forging the weapon' },
     { key: 'download', label: 'Bringing the weapon home' },
   ];
+  // Whichever chain is on screen owns the checklist.
+  let stageList: readonly { key: string; label: string }[] = BUILD_STAGES;
   // The attack-animation family, the player's explicit pick (a sword
-  // champion must swing a sword); sent with the build.
+  // champion must swing a sword); sent with the animate step.
   let animFamily = 'slashing';
   const FAMILY_CHOICES: readonly { value: string; label: string }[] = [
     { value: 'slashing', label: 'Blade strikes (sword, axe, spear)' },
@@ -513,13 +520,29 @@ export function openForgeEditor(container: HTMLElement): void {
   ];
   const applyStageState = (): void => {
     if (!stageRows) return;
-    const at = BUILD_STAGES.findIndex((s) => s.key === currentStage);
-    BUILD_STAGES.forEach((s, i) => {
+    const at = stageList.findIndex((s) => s.key === currentStage);
+    stageList.forEach((s, i) => {
       const row = stageRows?.get(s.key);
       if (!row) return;
       row.classList.toggle('done', at > i || currentStage === 'done');
       row.classList.toggle('active', at === i);
     });
+  };
+  // One ember bar plus checklist, shared by the three chains.
+  const stageChecklist = (stages: readonly { key: string; label: string }[]): HTMLElement[] => {
+    stageList = stages;
+    const bar = el('div', 'fe-forgebar');
+    bar.append(el('div', ''));
+    const list = el('div', 'fe-bstages');
+    stageRows = new Map();
+    for (const s of stages) {
+      const rowEl = el('div', 'fe-bstage');
+      rowEl.append(el('span', 'dot'), el('span', '', s.label));
+      stageRows.set(s.key, rowEl);
+      list.append(rowEl);
+    }
+    applyStageState();
+    return [bar, list];
   };
 
   const loadArt = async (): Promise<void> => {
@@ -745,7 +768,7 @@ export function openForgeEditor(container: HTMLElement): void {
     if (!validateForged(current).ok) return 'the kit must fully validate first';
     if (!chosenOf('splash')) return 'generate and pick a splash first';
     if (!chosenOf('sheet')) return 'generate and pick a model reference first';
-    if (finalizing) return 'already building';
+    if (finalizing || animating || weaponForging) return 'another build is running';
     return null;
   };
 
@@ -825,11 +848,11 @@ export function openForgeEditor(container: HTMLElement): void {
     window.dispatchEvent(new CustomEvent('loc:forge-test', { detail: def }));
   });
 
-  // The 3D build (finalize): save what is on screen, then start the chain
-  // and follow it. It runs on the CHOSEN model reference, the exact image
-  // approved in the Design tab (ADR 0006); a failure of any kind refunds
-  // the creation. Success opens the workshop on the fresh model: the 3D
-  // reveal is the payoff of the chain.
+  // The model build, the FIRST half only: save what is on screen, then
+  // start the chain and follow it. It runs on the CHOSEN model reference,
+  // the exact image approved in the Design tab (ADR 0006); a failure of
+  // any kind refunds the creation. Success opens the workshop on the
+  // fresh static model, for the player to validate BEFORE animating.
   const runForge = (): void => {
     const blocker = forgeBlocker();
     if (blocker !== null) {
@@ -850,9 +873,8 @@ export function openForgeEditor(container: HTMLElement): void {
     void api<{ ok: boolean; error?: string }>('/api/forge/draft', { def: current })
       .then((saved) => {
         if (!saved?.ok) throw new Error(saved?.error ?? 'save failed');
-        return api<{ ok: boolean; jobId?: number; error?: string }>('/api/forge/finalize', {
+        return api<{ ok: boolean; jobId?: number; error?: string }>('/api/forge/build', {
           id: current.id,
-          family: animFamily,
         });
       })
       .then((started) => {
@@ -870,9 +892,10 @@ export function openForgeEditor(container: HTMLElement): void {
             }
             if (job.status === 'success') {
               finalizing = false;
-              status.textContent = 'Done: the champion is sealed.';
-              // The seal changes what the panels offer; once the fresh
-              // rows land, the workshop opens on the new model.
+              status.textContent =
+                'The model is built: check it in the workshop, then bake the animations (Step 5).';
+              // Once the fresh rows land, the workshop opens on the new
+              // static model: validating it is exactly the point.
               void loadDrafts().then(() => {
                 renderMain();
                 openWorkshopHere();
@@ -884,7 +907,7 @@ export function openForgeEditor(container: HTMLElement): void {
               return;
             }
             currentStage = job.stage ?? '';
-            const named = BUILD_STAGES.find((s) => s.key === currentStage);
+            const named = stageList.find((s) => s.key === currentStage);
             status.textContent = `Building: ${named?.label.toLowerCase() ?? currentStage}...`;
             applyStageState();
             window.setTimeout(poll, 2000);
@@ -897,6 +920,62 @@ export function openForgeEditor(container: HTMLElement): void {
       });
   };
   finalizeBtn.addEventListener('click', runForge);
+
+  // The animate step, always LAST and always the player's own click: rig
+  // the validated model, bake the chosen clip family, seal the champion.
+  // Included in the creation already spent; a failure can simply retry.
+  const runAnimate = (): void => {
+    if (animating || finalizing || weaponForging) return;
+    animating = true;
+    currentStage = 'rig';
+    renderMain();
+    status.textContent = 'Baking the animations...';
+    const settle = (message: string): void => {
+      animating = false;
+      status.textContent = message;
+      renderMain();
+    };
+    void api<{ ok: boolean; jobId?: number; error?: string }>('/api/forge/animate', {
+      id: current.id,
+      family: animFamily,
+    }).then((started) => {
+      if (!started?.ok || started.jobId === undefined) {
+        settle(started?.error ?? 'the animations could not start');
+        return;
+      }
+      const poll = (): void => {
+        void api<{ ok: boolean; status?: string; stage?: string; error?: string }>(
+          `/api/forge/job?id=${started.jobId}`,
+        ).then((job) => {
+          if (!job?.ok) {
+            settle('the job vanished; reload and check your champion');
+            return;
+          }
+          if (job.status === 'success') {
+            animating = false;
+            status.textContent = 'Done: the champion moves, and it is sealed.';
+            void loadDrafts().then(() => {
+              renderMain();
+              openWorkshopHere();
+            });
+            return;
+          }
+          if (job.status === 'failed') {
+            settle(
+              `The animations failed (${job.error ?? 'unknown'}); nothing was spent, try again.`,
+            );
+            return;
+          }
+          currentStage = job.stage ?? currentStage;
+          const named = stageList.find((s) => s.key === currentStage);
+          status.textContent = `Animating: ${named?.label.toLowerCase() ?? currentStage}...`;
+          applyStageState();
+          window.setTimeout(poll, 2000);
+        });
+      };
+      poll();
+    });
+  };
 
   // The weapon-only build on a sealed champion that has none: the
   // creation covered it, so this spends nothing; a failure spends
@@ -1194,7 +1273,7 @@ export function openForgeEditor(container: HTMLElement): void {
           'fe-lead',
           sealed
             ? 'Your champion sealed without a weapon, but the creation covered one: generate ' +
-                'the weapon image below, pick it, then forge it in Step 5. It attaches in the ' +
+                'the weapon image below, pick it, then forge it in Step 4. It attaches in the ' +
                 'workshop.'
             : 'Your weapon, alone on a plain background, extracted from the splash. Iterate ' +
                 'until it is right: the 3D weapon builds from this exact image during the ' +
@@ -1223,61 +1302,23 @@ export function openForgeEditor(container: HTMLElement): void {
     weaponPanel.append(artStrip('weapon', true));
     main.append(weaponPanel);
 
-    // Step 4: the animations, chosen BEFORE the build so nothing about
-    // them is a surprise; after the build, what got baked.
-    const animPanel = el('div', 'fe-panel');
-    animPanel.append(el('h3', '', 'Step 4: animations'));
-    if (row?.model) {
-      const baked = FAMILY_CHOICES.find((c) => c.value === row.family)?.label;
-      animPanel.append(
-        el(
-          'p',
-          'fe-lead',
-          (baked ? `Baked in: ${baked}. ` : '') +
-            'Five clips ride your model: idle, run, attack, cast, death. Watch them play on it ' +
-            'in the workshop. Changing the style would need a rebuild (Reforge comes later).',
-        ),
-      );
-      const openAnim = el('button', 'fe-gen', 'See them move');
-      openAnim.addEventListener('click', openWorkshopHere);
-      animPanel.append(openAnim);
-    } else {
-      animPanel.append(
-        el(
-          'p',
-          'fe-lead',
-          'Pick the strikes your champion will throw: the attack and cast clips bake in this ' +
-            'style during the build (a sword must swing, a bow must loose). Idle, run and ' +
-            'death ride along in every style.',
-        ),
-      );
-      // The attack style is the player's call: nothing about a kit says
-      // what the hands hold.
-      const famRow = el('div', 'fe-artrow');
-      famRow.append(el('span', 'fe-field-label', 'Attack animations:'));
-      const famSelect = el('select', 'fe-select') as HTMLSelectElement;
-      for (const c of FAMILY_CHOICES) {
-        const opt = document.createElement('option');
-        opt.value = c.value;
-        opt.textContent = c.label;
-        famSelect.append(opt);
-      }
-      famSelect.value = animFamily;
-      famSelect.addEventListener('change', () => {
-        animFamily = famSelect.value;
-      });
-      famRow.append(famSelect);
-      animPanel.append(famRow);
-    }
-    main.append(animPanel);
-
-    // Step 5, the last act: everything above is chosen, the build spends
-    // the creation. The weapon-only forge (the post-seal claim) lives
-    // here too, with the same staged checklist as the build itself.
+    // Step 4: the model build, the first half only. Animation is ALWAYS
+    // the last step and lives in Step 5, behind its own button. The
+    // weapon-only forge (the claim) lives here too, with the same staged
+    // checklist as the build itself.
     const buildPanel = el('div', 'fe-panel');
-    buildPanel.append(el('h3', '', 'Step 5: build the 3D model'));
+    buildPanel.append(el('h3', '', 'Step 4: build the 3D model'));
     stageRows = null;
-    if (row?.model) {
+    if (finalizing) {
+      buildPanel.append(
+        el(
+          'p',
+          'fe-lead',
+          'The forge is working. A few minutes; stay and watch, or come back: the build keeps going.',
+        ),
+      );
+      buildPanel.append(...stageChecklist(BUILD_STAGES));
+    } else if (row?.model) {
       const cta = el('div', 'fe-model-cta');
       if (row.sheet) {
         const img = document.createElement('img');
@@ -1290,15 +1331,26 @@ export function openForgeEditor(container: HTMLElement): void {
         el(
           'div',
           'fe-lead',
-          'Your generated model is ready: turn it around, attach and adjust the weapon, then save the tuning. Matches use exactly what you save.',
+          sealed
+            ? 'Your model is built and sealed: turn it around, attach and adjust the weapon, then save the tuning. Matches use exactly what you save.'
+            : 'Your model is built: inspect it in the workshop. Happy with it? Bake the animations in Step 5. Not happy? Iterate the reference in Step 2 and rebuild (spends another creation).',
         ),
       );
       const open = el('button', 'fe-gen', 'Open the 3D workshop');
       open.addEventListener('click', openWorkshopHere);
       right.append(open);
+      if (!sealed) {
+        const rebuild = el('button', 'fe-gen', 'Rebuild the 3D model') as HTMLButtonElement;
+        const blocker = forgeBlocker();
+        rebuild.disabled = blocker !== null;
+        rebuild.title =
+          blocker ?? 'Replaces the model from your chosen reference; spends a creation';
+        rebuild.addEventListener('click', runForge);
+        right.append(rebuild);
+      }
       cta.append(right);
       buildPanel.append(cta);
-      if (sealed && !row.weapon) {
+      if (!row.weapon) {
         // The unclaimed weapon forges from here, exactly like the build:
         // same panel, same ember bar, same staged checklist.
         buildPanel.append(
@@ -1309,25 +1361,14 @@ export function openForgeEditor(container: HTMLElement): void {
           ),
         );
         if (weaponForging) {
-          const bar = el('div', 'fe-forgebar');
-          bar.append(el('div', ''));
-          const list = el('div', 'fe-bstages');
-          stageRows = new Map();
-          for (const s of WEAPON_STAGES) {
-            const rowEl = el('div', 'fe-bstage');
-            rowEl.append(el('span', 'dot'), el('span', '', s.label));
-            stageRows.set(s.key, rowEl);
-            list.append(rowEl);
-          }
-          applyStageState();
-          buildPanel.append(bar, list);
+          buildPanel.append(...stageChecklist(WEAPON_STAGES));
         } else {
           const claim = el(
             'button',
             'fe-gen',
             'Forge the 3D weapon (included in your creation)',
           ) as HTMLButtonElement;
-          claim.disabled = busy || !chosenOf('weapon');
+          claim.disabled = busy || finalizing || animating || !chosenOf('weapon');
           claim.title = chosenOf('weapon')
             ? 'Builds the 3D weapon from your chosen image; your creation already covered it'
             : 'Generate and pick a weapon image first (Step 3)';
@@ -1335,34 +1376,15 @@ export function openForgeEditor(container: HTMLElement): void {
           buildPanel.append(claim);
         }
       }
-    } else if (finalizing) {
-      buildPanel.append(
-        el(
-          'p',
-          'fe-lead',
-          'The forge is working. A few minutes; stay and watch, or come back: the build keeps going.',
-        ),
-      );
-      const bar = el('div', 'fe-forgebar');
-      bar.append(el('div', ''));
-      const list = el('div', 'fe-bstages');
-      stageRows = new Map();
-      for (const s of BUILD_STAGES) {
-        const rowEl = el('div', 'fe-bstage');
-        rowEl.append(el('span', 'dot'), el('span', '', s.label));
-        stageRows.set(s.key, rowEl);
-        list.append(rowEl);
-      }
-      applyStageState();
-      buildPanel.append(bar, list);
     } else {
       buildPanel.append(
         el(
           'p',
           'fe-lead',
-          'Builds the 3D from your chosen reference image (the exact one you picked), rigs it, ' +
-            'bakes the animations in the style you picked in Step 4, and forges your weapon if ' +
-            'you made one. Spends a creation; a failure refunds it.',
+          'Builds the static 3D model from your chosen reference image (the exact one you ' +
+            'picked), and forges your weapon if you made one. You inspect the result in the ' +
+            'workshop; the animations come AFTER, in Step 5. Spends a creation; a failure ' +
+            'refunds it.',
         ),
       );
       const build = el('button', 'fe-gen', 'Build the 3D model') as HTMLButtonElement;
@@ -1386,6 +1408,74 @@ export function openForgeEditor(container: HTMLElement): void {
       if (blocker) buildPanel.append(el('div', 'fe-desc', blocker));
     }
     main.append(buildPanel);
+
+    // Step 5: the animations, ALWAYS the last step, the player's own
+    // click once the model is validated. Baking seals the champion.
+    const animPanel = el('div', 'fe-panel');
+    animPanel.append(el('h3', '', 'Step 5: animations'));
+    if (sealed) {
+      const baked = FAMILY_CHOICES.find((c) => c.value === row?.family)?.label;
+      animPanel.append(
+        el(
+          'p',
+          'fe-lead',
+          (baked ? `Baked in: ${baked}. ` : '') +
+            'Five clips ride your model: idle, run, attack, cast, death. Watch them play on it ' +
+            'in the workshop. Changing the style would need a Reforge (coming later).',
+        ),
+      );
+      const openAnim = el('button', 'fe-gen', 'See them move');
+      openAnim.addEventListener('click', openWorkshopHere);
+      animPanel.append(openAnim);
+    } else if (animating) {
+      animPanel.append(
+        el(
+          'p',
+          'fe-lead',
+          'Rigging and baking. A few minutes; stay and watch, or come back: it keeps going.',
+        ),
+      );
+      animPanel.append(...stageChecklist(ANIM_STAGES));
+    } else {
+      animPanel.append(
+        el(
+          'p',
+          'fe-lead',
+          'Once the model is built and you are happy with it, pick the strikes your champion ' +
+            'will throw and bake the five clips onto it: idle, run, attack, cast, death. This ' +
+            'seals the champion. Included in the creation the build spent.',
+        ),
+      );
+      // The attack style is the player's call: nothing about a kit says
+      // what the hands hold.
+      const famRow = el('div', 'fe-artrow');
+      famRow.append(el('span', 'fe-field-label', 'Attack animations:'));
+      const famSelect = el('select', 'fe-select') as HTMLSelectElement;
+      for (const c of FAMILY_CHOICES) {
+        const opt = document.createElement('option');
+        opt.value = c.value;
+        opt.textContent = c.label;
+        famSelect.append(opt);
+      }
+      famSelect.value = animFamily;
+      famSelect.addEventListener('change', () => {
+        animFamily = famSelect.value;
+      });
+      famRow.append(famSelect);
+      animPanel.append(famRow);
+      const bake = el(
+        'button',
+        'fe-gen',
+        'Bake the animations (included in your creation)',
+      ) as HTMLButtonElement;
+      bake.disabled = !row?.model || busy || finalizing || weaponForging;
+      bake.title = row?.model
+        ? 'Rigs your validated model and bakes the chosen style; seals the champion'
+        : 'Build the 3D model first (Step 4)';
+      bake.addEventListener('click', runAnimate);
+      animPanel.append(bake);
+    }
+    main.append(animPanel);
 
     const card = el('div', 'fe-panel');
     card.append(el('h3', '', 'Identity'));

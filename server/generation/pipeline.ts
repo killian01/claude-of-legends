@@ -1,14 +1,15 @@
-// Finalization (ADR 0006, plan-forge phase 5): the server-side async job
-// that turns a validated draft into a finalized champion. The 2D stages
-// are the player's own, iterated in the editor (splash, then the model
-// reference derived from it, both art candidates); this job runs the 3D
-// half on the CHOSEN reference, exactly the image the player approved:
-// classification, image to 3D, auto-rig (biped, v1), the per-weapon-
-// family clip set, then download the artifacts next to the store and
-// seal the row with full provenance. The economy is ledger-first (ADR
-// 0007): one creation is debited when the job starts and refunded on ANY
-// failure, technical or content-blocked. Jobs persist in SQLite so a
-// crash mid-run is swept on boot: the job fails, the creation comes back.
+// The generation pipeline (ADR 0006, plan-forge phase 5), split in two
+// player-approved halves, because animation is the LAST step and never a
+// side effect: the MODEL BUILD turns the chosen reference into a static
+// 3D model (classification, image to 3D, the weapon when one was made),
+// which the player then inspects in the workshop; ANIMATE, a separate
+// click, rigs that exact model, bakes the chosen clip family onto it and
+// seals the champion. The economy is ledger-first (ADR 0007): the build
+// debits one creation and refunds it on ANY failure, technical or
+// content-blocked; animate and the weapon claim ride the same creation
+// and move the ledger in neither direction. Jobs persist in SQLite so a
+// crash mid-run is swept on boot: the job fails, and only a build job
+// gives its creation back.
 
 import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -40,8 +41,13 @@ export interface PipelineDeps {
   now?(): number;
 }
 
-export interface FinalizeRequest {
+export interface BuildRequest {
   def: ForgedChampionDef;
+  accountId: number;
+}
+
+export interface AnimateRequest {
+  forgedId: string;
   accountId: number;
   family: WeaponFamily;
 }
@@ -58,17 +64,20 @@ export function familyOf(def: ForgedChampionDef): WeaponFamily {
   return 'slashing';
 }
 
-export type FinalizeStart =
+export type PipelineStart =
   | { ok: true; jobId: number; done: Promise<void> }
   | { ok: false; error: string };
 
-// Synchronous gate, then the async run: the caller answers the HTTP
-// request with the job id while the generation grinds on. `done` exists
-// so tests (and a graceful shutdown) can await the settling.
-export function startFinalize(deps: PipelineDeps, req: FinalizeRequest): FinalizeStart {
+// The first half: the static 3D model, for the player to inspect before
+// anything animates. Synchronous gate, then the async run: the caller
+// answers the HTTP request with the job id while the generation grinds
+// on. `done` exists so tests (and a graceful shutdown) can await the
+// settling. Running it again on an unsealed champion is a REBUILD: it
+// debits another creation and replaces the model.
+export function startModelBuild(deps: PipelineDeps, req: BuildRequest): PipelineStart {
   const now = deps.now ?? Date.now;
   if (deps.storage.runningJobFor(req.def.id)) {
-    return { ok: false, error: 'this champion is already being finalized' };
+    return { ok: false, error: 'this champion is already being built' };
   }
   if (deps.storage.creditBalance(req.accountId) < 1) {
     return { ok: false, error: 'no creations left; the allocation refreshes weekly' };
@@ -81,15 +90,15 @@ export function startFinalize(deps: PipelineDeps, req: FinalizeRequest): Finaliz
     ref: req.def.id,
     at,
   });
-  const jobId = deps.storage.createGenerationJob(req.def.id, req.accountId, at);
-  const done = runFinalize(deps, jobId, req).catch((err) => {
-    // runFinalize settles the job itself; this guards the guard.
-    console.error('finalize job crashed outside its own handling', err);
+  const jobId = deps.storage.createGenerationJob(req.def.id, req.accountId, at, 'build');
+  const done = runModelBuild(deps, jobId, req).catch((err) => {
+    // runModelBuild settles the job itself; this guards the guard.
+    console.error('model build job crashed outside its own handling', err);
   });
   return { ok: true, jobId, done };
 }
 
-async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeRequest): Promise<void> {
+async function runModelBuild(deps: PipelineDeps, jobId: number, req: BuildRequest): Promise<void> {
   const now = deps.now ?? Date.now;
   const stage = (name: string): void => {
     deps.storage.updateGenerationJob(jobId, { stage: name }, now());
@@ -121,19 +130,13 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
     stage('model');
     const model = await deps.provider.imageTo3D({ image: sheetRef });
 
-    stage('rig');
-    const rigged = await deps.provider.rig({ modelTaskId: model.taskId, rigType: 'biped' });
-
-    stage('animate');
-    const animated = await deps.provider.animate({
-      riggedTaskId: rigged.taskId,
-      family: req.family,
-    });
-
     // The champion's own weapon, when the player generated and picked a
-    // weapon image: a static prop from that exact image, no rig and no
-    // clips (the Creation covers it, ADR 0011). No pick, no stage.
-    const weaponArt = deps.storage.chosenArt(req.def.id, 'weapon');
+    // weapon image and no weapon exists yet: a static prop from that
+    // exact image, no rig and no clips (the creation covers it, ADR
+    // 0011). A rebuild keeps the weapon it already forged.
+    const existing =
+      (deps.storage.forgedAssets(req.def.id) as Record<string, unknown> | null) ?? {};
+    const weaponArt = existing.weapon ? null : deps.storage.chosenArt(req.def.id, 'weapon');
     let weapon: Awaited<ReturnType<GenerationProvider['imageTo3D']>> | null = null;
     if (weaponArt) {
       stage('weapon');
@@ -149,47 +152,38 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
     const dir = path.join(deps.assetsDir, 'forged', req.def.id);
     mkdirSync(dir, { recursive: true });
     // Forward slashes on purpose: these are stored and later served as
-    // URL tails, on Windows dev machines included. The sheet is the
-    // chosen candidate copied in place (it was already on disk and
-    // already inside the image budget when it landed as a candidate).
+    // URL tails, on Windows dev machines included. The model file is
+    // named by its job so a rebuild (and later the animated file) is a
+    // NEW url no browser cache can serve stale. The sheet is the chosen
+    // candidate copied in place (it was already on disk and already
+    // inside the image budget when it landed as a candidate).
     const sheetPath = `forged/${req.def.id}/sheet.png`;
-    const modelPath = `forged/${req.def.id}/model.glb`;
+    const modelPath = `forged/${req.def.id}/model_${jobId}.glb`;
     const weaponPath = `forged/${req.def.id}/weapon.glb`;
     const copy = deps.copyFile ?? copyFileSync;
     copy(path.join(deps.assetsDir, sheet.path), path.join(deps.assetsDir, sheetPath));
-    await deps.download(animated.url, path.join(deps.assetsDir, modelPath));
+    await deps.download(model.url, path.join(deps.assetsDir, modelPath));
     if (weapon) await deps.download(weapon.url, path.join(deps.assetsDir, weaponPath));
     // The per-champion asset budgets (ADR 0010): an oversized artifact is
     // a technical failure, refunded like any other.
     checkBudget(deps, modelPath, deps.budgets?.modelKb);
     if (weapon) checkBudget(deps, weaponPath, deps.budgets?.modelKb);
 
-    // Sealed with the champion: the reference and model this run
-    // produced, the chosen splash and spell icons as they stand
-    // (candidate files are never pruned once chosen), and full
-    // provenance, the reference's own included.
-    const splash = deps.storage.chosenArt(req.def.id, 'splash');
-    const icons: Record<string, string> = {};
-    for (const key of ['Q', 'W', 'E', 'R']) {
-      const pick = deps.storage.chosenArt(req.def.id, `icon_${key}`);
-      if (pick) icons[key] = pick.path;
-    }
-    deps.storage.setForgedFinalized(
+    // The row stays a DRAFT: nothing seals until the player has seen the
+    // model and baked the animations. The model task id is what animate
+    // rigs later, so it is stored with the assets.
+    const provenance = Array.isArray(existing.provenance) ? existing.provenance : [];
+    deps.storage.updateForgedAssets(
       req.def.id,
       {
+        ...existing,
         sheet: sheetPath,
         model: modelPath,
-        family: req.family,
+        modelTask: model.taskId,
         ...(weapon ? { weapon: weaponPath } : {}),
-        ...(splash ? { splash: splash.path } : {}),
-        ...(Object.keys(icons).length > 0 ? { icons } : {}),
-        provenance: [
-          sheet.provenance,
-          model.provenance,
-          rigged.provenance,
-          animated.provenance,
-          weapon?.provenance,
-        ].filter((p) => p !== null && p !== undefined),
+        provenance: [...provenance, sheet.provenance, model.provenance, weapon?.provenance].filter(
+          (p) => p !== null && p !== undefined,
+        ),
       },
       now(),
     );
@@ -206,17 +200,104 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
   }
 }
 
-// The weapon-only build: a champion that sealed WITHOUT a weapon can
+// The second half, the player's own click AFTER validating the model:
+// rig the built model, bake the chosen clip family, download the
+// animated file and seal the champion. No ledger movement in either
+// direction: the creation was spent at the build, and a failed animate
+// can simply run again.
+export function startAnimate(deps: PipelineDeps, req: AnimateRequest): PipelineStart {
+  const now = deps.now ?? Date.now;
+  if (deps.storage.runningJobFor(req.forgedId)) {
+    return { ok: false, error: 'this champion is already being built' };
+  }
+  const assets = (deps.storage.forgedAssets(req.forgedId) as Record<string, unknown> | null) ?? {};
+  if (typeof assets.modelTask !== 'string' || typeof assets.model !== 'string') {
+    return { ok: false, error: 'build the 3D model first: the animations bake onto it' };
+  }
+  const jobId = deps.storage.createGenerationJob(req.forgedId, req.accountId, now(), 'animate');
+  const done = runAnimate(deps, jobId, req, assets.modelTask).catch((err) => {
+    console.error('animate job crashed outside its own handling', err);
+  });
+  return { ok: true, jobId, done };
+}
+
+async function runAnimate(
+  deps: PipelineDeps,
+  jobId: number,
+  req: AnimateRequest,
+  modelTask: string,
+): Promise<void> {
+  const now = deps.now ?? Date.now;
+  const stage = (name: string): void => {
+    deps.storage.updateGenerationJob(jobId, { stage: name }, now());
+  };
+  try {
+    stage('rig');
+    const rigged = await deps.provider.rig({ modelTaskId: modelTask, rigType: 'biped' });
+
+    stage('animate');
+    const animated = await deps.provider.animate({
+      riggedTaskId: rigged.taskId,
+      family: req.family,
+    });
+
+    stage('download');
+    const animatedPath = `forged/${req.forgedId}/animated_${jobId}.glb`;
+    await deps.download(animated.url, path.join(deps.assetsDir, animatedPath));
+    checkBudget(deps, animatedPath, deps.budgets?.modelKb);
+
+    // Sealed with the champion: the animated model replaces the static
+    // one as THE model, plus the chosen splash and spell icons as they
+    // stand (candidate files are never pruned once chosen) and the
+    // appended provenance.
+    const assets =
+      (deps.storage.forgedAssets(req.forgedId) as Record<string, unknown> | null) ?? {};
+    const splash = deps.storage.chosenArt(req.forgedId, 'splash');
+    const icons: Record<string, string> = {};
+    for (const key of ['Q', 'W', 'E', 'R']) {
+      const pick = deps.storage.chosenArt(req.forgedId, `icon_${key}`);
+      if (pick) icons[key] = pick.path;
+    }
+    const provenance = Array.isArray(assets.provenance) ? assets.provenance : [];
+    deps.storage.setForgedFinalized(
+      req.forgedId,
+      {
+        ...assets,
+        model: animatedPath,
+        family: req.family,
+        ...(splash ? { splash: splash.path } : {}),
+        ...(Object.keys(icons).length > 0 ? { icons } : {}),
+        provenance: [...provenance, rigged.provenance, animated.provenance].filter(
+          (p) => p !== null && p !== undefined,
+        ),
+      },
+      now(),
+    );
+    deps.storage.updateGenerationJob(jobId, { status: 'success', stage: 'done' }, now());
+  } catch (err) {
+    const blocked = err instanceof GenerationError && err.blocked;
+    const message = err instanceof Error ? err.message : String(err);
+    deps.storage.updateGenerationJob(
+      jobId,
+      { status: 'failed', error: blocked ? `blocked: ${message}` : message },
+      now(),
+    );
+    // Nothing to refund: the creation was spent at the build, and this
+    // half can run again for free.
+  }
+}
+
+// The weapon-only build: a champion that built WITHOUT a weapon can
 // still claim the one its creation covered (ADR 0011). Same job
-// machinery as finalize so the editor polls it identically, but no
-// ledger movement in either direction: the entitlement was paid at
-// finalize, and it is gone once a weapon exists (replacing one is
-// Reforge). Policy gates (owner, finalized, no weapon yet) live in
+// machinery as the build so the editor polls it identically, but no
+// ledger movement in either direction: the entitlement was paid at the
+// build, and it is gone once a weapon exists (replacing one is
+// Reforge). Policy gates (owner, model built, no weapon yet) live in
 // server/forge.ts; this only runs the chain.
 export function startWeaponForge(
   deps: PipelineDeps,
   req: { forgedId: string; accountId: number },
-): FinalizeStart {
+): PipelineStart {
   const now = deps.now ?? Date.now;
   if (deps.storage.runningJobFor(req.forgedId)) {
     return { ok: false, error: 'this champion is already being built' };
@@ -225,7 +306,7 @@ export function startWeaponForge(
   if (!art) {
     return { ok: false, error: 'generate and pick a weapon image first' };
   }
-  const jobId = deps.storage.createGenerationJob(req.forgedId, req.accountId, now());
+  const jobId = deps.storage.createGenerationJob(req.forgedId, req.accountId, now(), 'weapon');
   const done = runWeaponForge(deps, jobId, req.forgedId, art.path).catch((err) => {
     console.error('weapon forge job crashed outside its own handling', err);
   });
@@ -301,7 +382,9 @@ function refund(storage: ForgeStore, accountId: number, forgedId: string, at: nu
 }
 
 // The boot sweep: a job still marked running belonged to a process that
-// died mid-generation. Fail it and give the creation back.
+// died mid-generation. Fail it, and give the creation back only when one
+// was taken: builds debit, animate and weapon claims never do (a null
+// kind is a pre-split job, which always debited).
 export function recoverStaleJobs(storage: ForgeStore, now: () => number = Date.now): number {
   const stale = storage.staleRunningJobs();
   for (const job of stale) {
@@ -310,7 +393,9 @@ export function recoverStaleJobs(storage: ForgeStore, now: () => number = Date.n
       { status: 'failed', error: 'the server restarted mid-generation' },
       now(),
     );
-    refund(storage, job.accountId, job.forgedId, now());
+    if (job.kind === 'build' || job.kind === null) {
+      refund(storage, job.accountId, job.forgedId, now());
+    }
   }
   return stale.length;
 }

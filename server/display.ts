@@ -1,7 +1,7 @@
-// Display tuning for finalized forged champions (ADR 0010): the workshop's
-// adjustments to how the generated model is presented (height, facing,
-// ground offset, the weapon prop's grip), stored inside the sealed assets
-// blob. Owner-only and finalized-only; the payload is sanitized by the
+// Display tuning for forged champions with a built model (ADR 0010): the
+// workshop's adjustments to how the generated model is presented (height,
+// facing, ground offset, the weapon prop's grip), stored inside the assets
+// blob. Owner-only, model required; the payload is sanitized by the
 // shared clamp so a client can never store an unbounded number or an
 // unknown prop. Policy lives here; server/forge_store.ts only stores.
 
@@ -26,12 +26,14 @@ export function setForgedDisplay(
   if (!row || row.accountId !== accountId) {
     return { ok: false, error: 'no such champion on this account' };
   }
-  if (row.status !== 'finalized') {
-    return { ok: false, error: 'only a finalized champion has a model to tune' };
+  // A built-but-unsealed draft has a model to tune too: validating the
+  // static model in the workshop happens BEFORE it animates and seals.
+  const assets = (deps.store.forgedAssets(id) as Record<string, unknown> | null) ?? {};
+  if (row.status !== 'finalized' && typeof assets.model !== 'string') {
+    return { ok: false, error: 'only a champion with a built model can be tuned' };
   }
   const display = sanitizeForgedDisplay(raw);
   if (!display) return { ok: false, error: 'malformed display tuning' };
-  const assets = (deps.store.forgedAssets(id) as Record<string, unknown> | null) ?? {};
   deps.store.updateForgedAssets(id, { ...assets, display }, (deps.now ?? Date.now)());
   return { ok: true, display };
 }

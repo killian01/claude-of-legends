@@ -168,16 +168,20 @@ _Avoid_: atelier mode, custom game (that is a private lobby)
 
 **Draft**:
 A forged champion still being authored in the Forge: kit, stats, name, and splash art are
-edited freely and previewed on the engine's stylized figure. Drafts are unlimited and free;
-finalizing one spends a creation and generates the champion's model.
+edited freely and previewed on the engine's stylized figure. Drafts are unlimited and free.
+The 3D happens in two player-approved steps, both on the draft: the BUILD spends a creation
+and produces the static model, which the creator inspects in the workshop (and may rebuild,
+spending another); ANIMATE, always last and always its own click, rigs the validated model,
+bakes the chosen clip family, and seals the champion as finalized.
 _Avoid_: WIP champion, unfinished champion
 
 **Creation**:
-The consumable unit of the Forge economy: finalizing a draft spends one, covering its 3D
-generations: the model with a couple of attempts included, and the weapon when generated.
-The splash art belongs to the free drafting stage, before finalization. A technical failure
-refunds the creation. Every account receives a weekly allocation (ADR 0011); buying more
-arrives with payments.
+The consumable unit of the Forge economy: building a draft's 3D model spends one, covering
+everything that champion is owed: the static model, the later animate step that seals it,
+and the weapon when one is generated (at build time or claimed afterwards). The splash art
+belongs to the free drafting stage. A technical failure of the build refunds the creation;
+a failed animate or weapon claim costs nothing and simply runs again. Every account
+receives a weekly allocation (ADR 0011); buying more arrives with payments.
 _Avoid_: credit, generation token
 
 **Model reference**:
@@ -204,7 +208,8 @@ body mesh; it comes from the house weapon library or from its own generation.
 _Avoid_: attachment, accessory
 
 **Workshop view**:
-The 3D inspection and adjustment view of a finalized forged champion's generated model:
+The 3D inspection and adjustment view of a forged champion's generated model, from the
+static build onwards (validating the model BEFORE animating is the point):
 turntable orbit and zoom, playback of the clip set under readable names, team color
 preview, a match-view camera at in-game scale, and the display tuning (below) edited
 live by the creator. A view of one champion, not a place; the place players create in

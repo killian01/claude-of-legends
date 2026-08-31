@@ -1,21 +1,30 @@
 // The generation pipeline (ADR 0010, keyless half): the neutral provider
-// interface driven end to end on the mock, the ledger-first debit and
-// refund on every failure shape, the boot sweep for jobs a crash
-// orphaned, the finalize gates, and the Tripo provider pinned against
+// interface driven end to end on the mock, in its TWO player-approved
+// halves (the model build spends the creation, then animate rigs, bakes
+// and seals as its own later click), the ledger-first debit and refund
+// on every failure shape, the boot sweep for jobs a crash orphaned, the
+// build and animate gates, and the Tripo provider pinned against
 // scripted responses.
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { type ForgeDeps, finalizeDraft, forgeWeapon, saveDraft } from '../server/forge';
+import {
+  animateChampion,
+  buildModel,
+  type ForgeDeps,
+  forgeWeapon,
+  saveDraft,
+} from '../server/forge';
 import { ForgeStore } from '../server/forge_store';
 import { MockProvider } from '../server/generation/mock';
 import {
   familyOf,
   type PipelineDeps,
   recoverStaleJobs,
-  startFinalize,
+  startAnimate,
+  startModelBuild,
 } from '../server/generation/pipeline';
 import { placeholderPng } from '../server/generation/placeholder';
 import { CLIP_ROLES, GenerationError, WEAPON_FAMILIES } from '../server/generation/provider';
@@ -97,39 +106,97 @@ function rig(classify?: (url: string) => Promise<boolean>): Rig {
 }
 
 describe('the mock pipeline end to end', () => {
-  it('finalizes a champion: stages, assets, provenance, one creation spent', async () => {
+  it('builds the STATIC model first: the row stays a draft, one creation spent', async () => {
     const r = rig();
-    const start = startFinalize(r.pipeline, { def: r.def, accountId: ACCOUNT, family: 'staff' });
+    const start = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
     expect(start.ok).toBe(true);
     if (!start.ok) return;
     await start.done;
 
     const job = r.store.getGenerationJob(start.jobId);
     expect(job?.status).toBe('success');
-    expect(r.store.getForged(r.def.id)?.status).toBe('finalized');
+    expect(job?.kind).toBe('build');
+    // NOT sealed: the player inspects the model before anything animates.
+    expect(r.store.getForged(r.def.id)?.status).toBe('draft');
     const assets = r.store.forgedAssets(r.def.id) as {
       sheet: string;
       model: string;
-      family: string;
-      splash: string;
+      modelTask: string;
+      family?: string;
       provenance: { provider: string; taskId: string }[];
     };
-    expect(assets.family).toBe('staff');
-    expect(assets.model).toContain(r.def.id);
-    // The chosen splash is sealed with the champion (ADR 0010).
-    expect(assets.splash).toBe(r.splashRel);
-    expect(assets.provenance).toHaveLength(4);
-    expect(assets.provenance.every((p) => p.provider === 'mock')).toBe(true);
-    // Only the model is a provider download; the sealed sheet is the
-    // chosen reference candidate copied in place.
-    expect(r.downloads.map((d) => d.url)).toEqual([expect.stringContaining('mock://animated/')]);
+    // The static model, named by its job so a rebuild is a fresh URL, and
+    // the task id the later animate step rigs.
+    expect(assets.model).toBe(`forged/${r.def.id}/model_${start.jobId}.glb`);
+    expect(typeof assets.modelTask).toBe('string');
+    expect(assets.family).toBeUndefined();
+    expect(assets.provenance).toHaveLength(2);
+    // The static model is the only download; no rig, no animation pass.
+    expect(r.downloads.map((d) => d.url)).toEqual([expect.stringContaining('mock://model/')]);
+    expect(r.provider.seen.some((s) => s.op === 'rig' || s.op === 'animate')).toBe(false);
     // Ledger: 3 granted, 1 spent, nothing refunded.
     expect(r.store.creditBalance(ACCOUNT)).toBe(2);
   });
 
+  it('animates and seals as its own SECOND step, spending nothing more', async () => {
+    const r = rig();
+    const built = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    await built.done;
+    const modelTask = (r.store.forgedAssets(r.def.id) as { modelTask: string }).modelTask;
+
+    const start = startAnimate(r.pipeline, {
+      forgedId: r.def.id,
+      accountId: ACCOUNT,
+      family: 'staff',
+    });
+    expect(start.ok).toBe(true);
+    if (!start.ok) return;
+    await start.done;
+
+    const job = r.store.getGenerationJob(start.jobId);
+    expect(job?.status).toBe('success');
+    expect(job?.kind).toBe('animate');
+    expect(r.store.getForged(r.def.id)?.status).toBe('finalized');
+    const assets = r.store.forgedAssets(r.def.id) as {
+      model: string;
+      family: string;
+      splash: string;
+      provenance: { provider: string }[];
+    };
+    // The animated file replaces the static one as THE model.
+    expect(assets.model).toBe(`forged/${r.def.id}/animated_${start.jobId}.glb`);
+    expect(assets.family).toBe('staff');
+    // The chosen splash is sealed with the champion (ADR 0010).
+    expect(assets.splash).toBe(r.splashRel);
+    expect(assets.provenance).toHaveLength(4);
+    expect(assets.provenance.every((p) => p.provider === 'mock')).toBe(true);
+    // The rig ran on the EXACT model the player validated.
+    expect(r.provider.seen.find((s) => s.op === 'rig')?.req).toMatchObject({
+      modelTaskId: modelTask,
+    });
+    expect(r.downloads.at(-1)?.url).toContain('mock://animated/');
+    // The creation was spent at the build; animate moved nothing.
+    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+  });
+
+  it('refuses to animate before the model is built', () => {
+    const r = rig();
+    const start = startAnimate(r.pipeline, {
+      forgedId: r.def.id,
+      accountId: ACCOUNT,
+      family: 'staff',
+    });
+    expect(start).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('build the 3D model first'),
+    });
+  });
+
   it('builds the 3D from the uploaded chosen reference, never a regeneration', async () => {
     const r = rig();
-    const start = startFinalize(r.pipeline, { def: r.def, accountId: ACCOUNT, family: 'staff' });
+    const start = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
     expect(start.ok).toBe(true);
     if (!start.ok) return;
     await start.done;
@@ -137,7 +204,7 @@ describe('the mock pipeline end to end', () => {
     expect(upload?.req).toMatchObject({ name: 'sheet_seed.png' });
     const model = r.provider.seen.find((s) => s.op === 'imageTo3D');
     expect(model?.req).toMatchObject({ image: 'mock-upload-1' });
-    // The 2D stages are the player's, iterated in the editor: finalize
+    // The 2D stages are the player's, iterated in the editor: the build
     // never generates an image behind their back.
     expect(r.provider.seen.some((s) => s.op === 'generate2D')).toBe(false);
   });
@@ -156,35 +223,35 @@ describe('the mock pipeline end to end', () => {
       at: 1,
     });
     r.store.chooseArtCandidate(r.def.id, 'weapon', cid);
-    const start = startFinalize(r.pipeline, { def: r.def, accountId: ACCOUNT, family: 'slashing' });
+    const start = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
     expect(start.ok).toBe(true);
     if (!start.ok) return;
     await start.done;
     expect(r.store.getGenerationJob(start.jobId)?.status).toBe('success');
     const assets = r.store.forgedAssets(r.def.id) as { weapon?: string; provenance: unknown[] };
     expect(assets.weapon).toBe(`forged/${r.def.id}/weapon.glb`);
-    expect(assets.provenance).toHaveLength(5);
+    expect(assets.provenance).toHaveLength(3);
     // The chosen weapon image rode up and produced its own STATIC model:
-    // a second image-to-3D, but never a second rig or animation pass.
+    // a second image-to-3D, and nothing rigs during the build half.
     const uploads = r.provider.seen.filter((s) => s.op === 'uploadImage');
     expect(uploads.at(-1)?.req).toMatchObject({ name: 'weapon_seed.png' });
     expect(r.provider.seen.filter((s) => s.op === 'imageTo3D')).toHaveLength(2);
-    expect(r.provider.seen.filter((s) => s.op === 'rig')).toHaveLength(1);
+    expect(r.provider.seen.filter((s) => s.op === 'rig')).toHaveLength(0);
     expect(r.downloads.map((d) => d.url)).toEqual([
-      expect.stringContaining('mock://animated/'),
+      expect.stringContaining('mock://model/'),
       expect.stringContaining('mock://model/'),
     ]);
   });
 
-  it('forges the weapon onto a sealed champion without one, spending nothing', async () => {
+  it('forges the weapon onto a built champion without one, spending nothing', async () => {
     const r = rig();
     const deps: ForgeDeps = { store: r.store, generation: r.pipeline, now: () => 999 };
-    // A draft cannot claim a weapon; build the champion first.
+    // Nothing built yet: no model, no claim.
     expect(forgeWeapon(deps, ACCOUNT, r.def.id)).toMatchObject({
       ok: false,
-      error: expect.stringContaining('build the champion first'),
+      error: expect.stringContaining('build the 3D model first'),
     });
-    const built = finalizeDraft(deps, ACCOUNT, r.def.id, 'slashing');
+    const built = buildModel(deps, ACCOUNT, r.def.id);
     expect(built.ok).toBe(true);
     if (built.ok) await built.done;
     expect(r.store.creditBalance(ACCOUNT)).toBe(2);
@@ -210,7 +277,9 @@ describe('the mock pipeline end to end', () => {
     expect(claim.ok).toBe(true);
     if (!claim.ok) return;
     await claim.done;
-    expect(r.store.getGenerationJob(claim.jobId)?.status).toBe('success');
+    const claimJob = r.store.getGenerationJob(claim.jobId);
+    expect(claimJob?.status).toBe('success');
+    expect(claimJob?.kind).toBe('weapon');
     const assets = r.store.forgedAssets(r.def.id) as { weapon?: string; provenance: unknown[] };
     expect(assets.weapon).toBe(`forged/${r.def.id}/weapon.glb`);
     expect(assets.provenance).toHaveLength(before + 1);
@@ -221,6 +290,16 @@ describe('the mock pipeline end to end', () => {
       ok: false,
       error: expect.stringContaining('already has'),
     });
+    // A REBUILD before the seal replaces the model but keeps the forged
+    // weapon: no second weapon pass, no lost claim.
+    const rebuilt = buildModel(deps, ACCOUNT, r.def.id);
+    expect(rebuilt.ok).toBe(true);
+    if (rebuilt.ok) await rebuilt.done;
+    expect(r.store.creditBalance(ACCOUNT)).toBe(1);
+    const after = r.store.forgedAssets(r.def.id) as { weapon?: string };
+    expect(after.weapon).toBe(`forged/${r.def.id}/weapon.glb`);
+    // Three image-to-3D calls total: model, weapon, rebuilt model.
+    expect(r.provider.seen.filter((s) => s.op === 'imageTo3D')).toHaveLength(3);
   });
 
   it('honors the player-picked animation family over the kit-implied one', async () => {
@@ -228,7 +307,10 @@ describe('the mock pipeline end to end', () => {
     // sword champion must swing a sword).
     const r = rig();
     const deps: ForgeDeps = { store: r.store, generation: r.pipeline, now: () => 999 };
-    const out = finalizeDraft(deps, ACCOUNT, r.def.id, 'slashing');
+    const built = buildModel(deps, ACCOUNT, r.def.id);
+    expect(built.ok).toBe(true);
+    if (built.ok) await built.done;
+    const out = animateChampion(deps, ACCOUNT, r.def.id, 'slashing');
     expect(out.ok).toBe(true);
     if (out.ok) await out.done;
     expect((r.store.forgedAssets(r.def.id) as { family: string }).family).toBe('slashing');
@@ -239,8 +321,8 @@ describe('the mock pipeline end to end', () => {
   it('fails and refunds when an artifact lands over its budget', async () => {
     const r = rig();
     r.pipeline.budgets = { modelKb: 100 };
-    r.pipeline.fileSize = (p) => (p.endsWith('model.glb') ? 200 * 1024 : 10 * 1024);
-    const start = startFinalize(r.pipeline, { def: r.def, accountId: ACCOUNT, family: 'staff' });
+    r.pipeline.fileSize = (p) => (p.includes('model_') ? 200 * 1024 : 10 * 1024);
+    const start = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
     expect(start.ok).toBe(true);
     if (!start.ok) return;
     await start.done;
@@ -251,27 +333,59 @@ describe('the mock pipeline end to end', () => {
     expect(r.store.creditBalance(ACCOUNT)).toBe(3);
   });
 
-  it('refunds a technical failure and leaves the draft a draft', async () => {
+  it('refunds a build failure and leaves the draft a draft', async () => {
     const r = rig();
-    r.provider.failOn.add('rig');
-    const start = startFinalize(r.pipeline, {
-      def: r.def,
-      accountId: ACCOUNT,
-      family: 'slashing',
-    });
+    r.provider.failOn.add('imageTo3D');
+    const start = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
     expect(start.ok).toBe(true);
     if (!start.ok) return;
     await start.done;
     const job = r.store.getGenerationJob(start.jobId);
     expect(job?.status).toBe('failed');
-    expect(job?.stage).toBe('rig');
+    expect(job?.stage).toBe('model');
     expect(r.store.getForged(r.def.id)?.status).toBe('draft');
     expect(r.store.creditBalance(ACCOUNT)).toBe(3);
   });
 
+  it('spends nothing on an animate failure, and the retry succeeds', async () => {
+    const r = rig();
+    const built = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    await built.done;
+    r.provider.failOn.add('rig');
+    const failed = startAnimate(r.pipeline, {
+      forgedId: r.def.id,
+      accountId: ACCOUNT,
+      family: 'slashing',
+    });
+    expect(failed.ok).toBe(true);
+    if (!failed.ok) return;
+    await failed.done;
+    const job = r.store.getGenerationJob(failed.jobId);
+    expect(job?.status).toBe('failed');
+    expect(job?.stage).toBe('rig');
+    // Still an inspectable draft, and NOTHING moved on the ledger: the
+    // build's debit stands, no refund, no second debit.
+    expect(r.store.getForged(r.def.id)?.status).toBe('draft');
+    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+    // The retry is free and seals.
+    r.provider.failOn.delete('rig');
+    const retry = startAnimate(r.pipeline, {
+      forgedId: r.def.id,
+      accountId: ACCOUNT,
+      family: 'slashing',
+    });
+    expect(retry.ok).toBe(true);
+    if (!retry.ok) return;
+    await retry.done;
+    expect(r.store.getForged(r.def.id)?.status).toBe('finalized');
+    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+  });
+
   it('blocks and refunds on failed classification', async () => {
     const r = rig(() => Promise.resolve(false));
-    const start = startFinalize(r.pipeline, { def: r.def, accountId: ACCOUNT, family: 'bow' });
+    const start = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
     expect(start.ok).toBe(true);
     if (!start.ok) return;
     await start.done;
@@ -292,15 +406,11 @@ describe('the mock pipeline end to end', () => {
         at: 1,
       });
     }
-    const start = startFinalize(r.pipeline, {
-      def: r.def,
-      accountId: ACCOUNT,
-      family: 'unarmed',
-    });
+    const start = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
     expect(start).toMatchObject({ ok: false, error: expect.stringContaining('no creations') });
   });
 
-  it('sweeps and refunds jobs a dead process left running', () => {
+  it('sweeps stale jobs, refunding builds and never the free chains', () => {
     const r = rig();
     r.store.addCreditEntry({
       accountId: ACCOUNT,
@@ -309,19 +419,24 @@ describe('the mock pipeline end to end', () => {
       ref: r.def.id,
       at: 1,
     });
+    // A build (the default kind, what a pre-split row also reads as), an
+    // animate, and a weapon claim all died with the process.
     r.store.createGenerationJob(r.def.id, ACCOUNT, 1);
-    expect(recoverStaleJobs(r.store, () => 2)).toBe(1);
+    r.store.createGenerationJob(r.def.id, ACCOUNT, 1, 'animate');
+    r.store.createGenerationJob(r.def.id, ACCOUNT, 1, 'weapon');
+    expect(recoverStaleJobs(r.store, () => 2)).toBe(3);
+    // Exactly ONE refund: the build's. The free chains never debited.
     expect(r.store.creditBalance(ACCOUNT)).toBe(3);
     expect(r.store.staleRunningJobs()).toHaveLength(0);
   });
 });
 
-describe('the finalize gates (server/forge.ts)', () => {
+describe('the build and animate gates (server/forge.ts)', () => {
   it('demands a configured provider, full validity, and ownership', async () => {
     const r = rig();
     const deps: ForgeDeps = { store: r.store, generation: r.pipeline, now: () => 999 };
 
-    const unconfigured = finalizeDraft({ ...deps, generation: null }, ACCOUNT, r.def.id);
+    const unconfigured = buildModel({ ...deps, generation: null }, ACCOUNT, r.def.id);
     expect(unconfigured).toMatchObject({ ok: false, error: expect.stringContaining('configured') });
 
     // An over-budget draft saves fine but cannot finalize.
@@ -341,19 +456,19 @@ describe('the finalize gates (server/forge.ts)', () => {
     };
     greedy.growth = { hp: 130, mana: 60, ad: 7, armor: 4.5, mr: 3 };
     expect(saveDraft(deps, ACCOUNT, 'bob', greedy).ok).toBe(true);
-    expect(finalizeDraft(deps, ACCOUNT, greedy.id)).toMatchObject({
+    expect(buildModel(deps, ACCOUNT, greedy.id)).toMatchObject({
       ok: false,
       error: expect.stringContaining('fully valid'),
     });
 
-    // Another account cannot finalize what it does not own.
-    expect(finalizeDraft(deps, 99, r.def.id)).toMatchObject({ ok: false });
+    // Another account cannot build what it does not own.
+    expect(buildModel(deps, 99, r.def.id)).toMatchObject({ ok: false });
 
     // A fully valid kit with no chosen splash cannot seal: the art is the
     // anchor everything derives from (ADR 0010).
     const artless = { ...forgedTwin(CHAMPIONS.fenn!), id: 'forged_gen_artless' };
     expect(saveDraft(deps, ACCOUNT, 'bob', artless).ok).toBe(true);
-    expect(finalizeDraft(deps, ACCOUNT, artless.id)).toMatchObject({
+    expect(buildModel(deps, ACCOUNT, artless.id)).toMatchObject({
       ok: false,
       error: expect.stringContaining('splash'),
     });
@@ -370,18 +485,30 @@ describe('the finalize gates (server/forge.ts)', () => {
       at: 1,
     });
     r.store.chooseArtCandidate(artless.id, 'splash', refCid);
-    expect(finalizeDraft(deps, ACCOUNT, artless.id)).toMatchObject({
+    expect(buildModel(deps, ACCOUNT, artless.id)).toMatchObject({
       ok: false,
       error: expect.stringContaining('reference'),
     });
 
-    const good = finalizeDraft(deps, ACCOUNT, r.def.id);
+    const good = buildModel(deps, ACCOUNT, r.def.id);
     expect(good.ok).toBe(true);
     if (good.ok) await good.done;
-    // Sealed now: a second finalize refuses.
-    expect(finalizeDraft(deps, ACCOUNT, r.def.id)).toMatchObject({
+    // Built but unsealed: another account still cannot animate it, and
+    // the owner's animate with NO explicit family falls back to the
+    // kit-implied one (sylra reads as staff).
+    expect(animateChampion(deps, 99, r.def.id)).toMatchObject({ ok: false });
+    const sealed = animateChampion(deps, ACCOUNT, r.def.id);
+    expect(sealed.ok).toBe(true);
+    if (sealed.ok) await sealed.done;
+    expect((r.store.forgedAssets(r.def.id) as { family: string }).family).toBe('staff');
+    // Sealed now: both halves refuse.
+    expect(buildModel(deps, ACCOUNT, r.def.id)).toMatchObject({
       ok: false,
       error: expect.stringContaining('already finalized'),
+    });
+    expect(animateChampion(deps, ACCOUNT, r.def.id)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('already animated'),
     });
   });
 });

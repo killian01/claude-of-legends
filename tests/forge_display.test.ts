@@ -122,12 +122,27 @@ describe('setForgedDisplay', () => {
     store.close();
   });
 
-  it('refuses another account, a draft, and garbage', () => {
+  it('refuses another account, a modelless draft, and garbage', () => {
     const store = seeded();
     expect(setForgedDisplay({ store }, 2, 'forged_a', { height: 2 }).ok).toBe(false);
     expect(setForgedDisplay({ store }, 1, 'forged_draft', { height: 2 }).ok).toBe(false);
     expect(setForgedDisplay({ store }, 1, 'forged_a', 'garbage').ok).toBe(false);
     expect(displayOf(store, 'forged_a')).toBe(null);
+    store.close();
+  });
+
+  it('tunes a built-but-unsealed draft: validating happens BEFORE the seal', () => {
+    // The two-phase build leaves the static model on a draft row; the
+    // workshop must be able to save tuning on it.
+    const store = seeded();
+    store.updateForgedAssets(
+      'forged_draft',
+      { model: 'forged/forged_draft/model_1.glb', modelTask: 't-1' },
+      30,
+    );
+    const out = setForgedDisplay({ store, now: () => 50 }, 1, 'forged_draft', { height: 3.0 });
+    expect(out.ok).toBe(true);
+    expect(displayOf(store, 'forged_draft')).toEqual({ height: 3.0 });
     store.close();
   });
 });

@@ -40,6 +40,7 @@ create table if not exists generation_jobs (
   status text not null check (status in ('running', 'success', 'failed')),
   stage text not null,
   error text,
+  kind text,
   created_at integer not null,
   updated_at integer not null
 );
@@ -130,6 +131,11 @@ export interface ArtCandidateRow {
   at: number;
 }
 
+// What a generation job is for, because the boot sweep must know what to
+// give back: only a 'build' debited a creation. Legacy rows (pre-split)
+// carry null and are treated as builds.
+export type JobKind = 'build' | 'animate' | 'weapon';
+
 export interface GenerationJobRow {
   id: number;
   forgedId: string;
@@ -137,6 +143,7 @@ export interface GenerationJobRow {
   status: 'running' | 'success' | 'failed';
   stage: string;
   error: string | null;
+  kind: JobKind | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -190,6 +197,7 @@ interface JobRawRow {
   status: 'running' | 'success' | 'failed';
   stage: string;
   error: string | null;
+  kind: JobKind | null;
   created_at: number;
   updated_at: number;
 }
@@ -221,10 +229,14 @@ function toJob(r: JobRawRow): GenerationJobRow {
     status: r.status,
     stage: r.stage,
     error: r.error,
+    kind: r.kind ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
 }
+
+// Every column a GenerationJobRow is built from, shared by each job select.
+const JOB_COLS = 'id, forged_id, account_id, status, stage, error, kind, created_at, updated_at';
 
 export class ForgeStore {
   private readonly db: DatabaseSync;
@@ -240,6 +252,9 @@ export class ForgeStore {
     this.ensureColumn('forged_champions', 'listed', 'listed integer not null default 1');
     this.ensureColumn('forged_champions', 'shared', 'shared integer not null default 1');
     this.ensureColumn('forged_champions', 'taken_down', 'taken_down integer not null default 0');
+    // The two-phase build gave jobs a kind (what the boot sweep may
+    // refund); pre-split rows keep null and count as builds.
+    this.ensureColumn('generation_jobs', 'kind', 'kind text');
   }
 
   private ensureColumn(table: string, name: string, ddl: string): void {
@@ -584,13 +599,18 @@ export class ForgeStore {
 
   // -- generation jobs ----------------------------------------------------
 
-  createGenerationJob(forgedId: string, accountId: number, now: number): number {
+  createGenerationJob(
+    forgedId: string,
+    accountId: number,
+    now: number,
+    kind: JobKind = 'build',
+  ): number {
     const res = this.db
       .prepare(
-        `insert into generation_jobs (forged_id, account_id, status, stage, created_at, updated_at)
-         values (?, ?, 'running', 'queued', ?, ?)`,
+        `insert into generation_jobs (forged_id, account_id, status, stage, kind, created_at, updated_at)
+         values (?, ?, 'running', 'queued', ?, ?, ?)`,
       )
-      .run(forgedId, accountId, now, now);
+      .run(forgedId, accountId, kind, now, now);
     return Number(res.lastInsertRowid);
   }
 
@@ -615,11 +635,9 @@ export class ForgeStore {
   }
 
   getGenerationJob(id: number): GenerationJobRow | null {
-    const r = this.db
-      .prepare(
-        'select id, forged_id, account_id, status, stage, error, created_at, updated_at from generation_jobs where id = ?',
-      )
-      .get(id) as JobRawRow | undefined;
+    const r = this.db.prepare(`select ${JOB_COLS} from generation_jobs where id = ?`).get(id) as
+      | JobRawRow
+      | undefined;
     return r ? toJob(r) : null;
   }
 
@@ -627,8 +645,7 @@ export class ForgeStore {
   runningJobFor(forgedId: string): GenerationJobRow | null {
     const r = this.db
       .prepare(
-        `select id, forged_id, account_id, status, stage, error, created_at, updated_at
-         from generation_jobs where forged_id = ? and status = 'running' limit 1`,
+        `select ${JOB_COLS} from generation_jobs where forged_id = ? and status = 'running' limit 1`,
       )
       .get(forgedId) as JobRawRow | undefined;
     return r ? toJob(r) : null;
@@ -639,10 +656,7 @@ export class ForgeStore {
   // process.
   staleRunningJobs(): GenerationJobRow[] {
     const rows = this.db
-      .prepare(
-        `select id, forged_id, account_id, status, stage, error, created_at, updated_at
-         from generation_jobs where status = 'running'`,
-      )
+      .prepare(`select ${JOB_COLS} from generation_jobs where status = 'running'`)
       .all() as unknown as JobRawRow[];
     return rows.map(toJob);
   }
