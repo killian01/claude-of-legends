@@ -5,12 +5,14 @@ the Forge store (ADR 0011). Phases in order; each phase ends green (`tsc` plus t
 Vitest suite) and lands module-first behind existing seams. The terms are in
 `CONTEXT.md`: Forge, forged champion, draft, creation, power budget, Forge queue.
 
-State of play (2026-08-31): phases 1 to 3 are done, phase 4 is done except its
-generation-dependent corners, phase 5's keyless half is done (the neutral
-provider interface, the mock provider, the Tripo provider against its documented API,
-the finalize pipeline with the ledger), and phases 6 to 8 are done. What remains
-is phase 4's generation-dependent corners and phase 5's live-key half, both behind
-the paid Tripo key and their written UGC authorization; details inline.
+State of play (2026-08-31): phases 1 to 3 and 6 to 8 are done. Phase 4 is done
+except the agent endpoint (needs a Claude API key) and prop grip adjustment
+(needs the weapon prop, phase 5's Tripo half). Phase 5's keyless half is done
+(the neutral provider interface with the upload seam, the mock provider with
+real placeholder assets, the Tripo provider against its documented API, the
+finalize pipeline deriving from the splash with the ledger and the asset
+budgets). What remains is phase 5's live-key half, behind the paid Tripo key
+and their written UGC authorization; details inline.
 
 1. **Forged schema and validator**: DONE. `ForgedChampionDef` as pure data (no code
    passive; a passive is a parameterized template reference), the deterministic
@@ -29,25 +31,33 @@ the paid Tripo key and their written UGC authorization; details inline.
 4. **The Forge editor**: kit half DONE (stats, four abilities composed from the
    primitives, passive template picker, the power budget meter, card texts, drafts
    saved to the account, the test drive into offline practice on the stylized
-   figure). REMAINING: splash art first (the shared style block, free iteration on
-   the 2D quota, a candidate history to pick from), optional per-spell icon
-   generation under the flat icon template, the workshop view (turntable orbit and
-   zoom, playback of the six clips, prop grip adjustment, team color preview,
-   in-match-size icon preview), and the agent endpoint that compiles free-text
-   passives into primitives with refusal explanations.
+   figure). Art half DONE: splash art first (the shared style block held server
+   side, free iteration on the 2D quota, a per-kind candidate history with the
+   creator's pick, sealed at finalization; finalize refuses without a chosen
+   splash), optional per-spell icons under the flat icon template (previewed at
+   full and in-match size, the procedural icon stays the default), the workshop
+   view (turntable orbit and zoom, playback of the clip set, team color preview
+   on the ring, a match-view camera over a one-unit grid), and splash art on the
+   gallery and Forge-queue select cards. REMAINING: the agent endpoint that
+   compiles free-text passives into primitives with refusal explanations (needs
+   a Claude API key), and prop grip adjustment in the workshop view (needs the
+   weapon prop, phase 5's Tripo half).
 5. **Generation pipeline**: keyless half DONE: the neutral provider interface
-   (generate2D, imageTo3D, rig, animate) with Tripo first and a mock provider, the
-   spike on preset animation coverage and provider terms (see the ADR 0010
-   addendum), and the server-side async jobs: finalize derives the model sheet, runs
-   the second-pass classification hook (block and refund), then image-to-3D,
+   (generate2D, imageTo3D, rig, animate, plus the optional uploadImage seam that
+   turns a local file into a provider input token) with Tripo first and a mock
+   provider whose downloads write real placeholder files (a spec-valid PNG and an
+   animated GLB carrying the six clips), the spike on preset animation coverage
+   and provider terms (see the ADR 0010 addendum), and the server-side async
+   jobs: finalize uploads the chosen splash and derives the model sheet from it,
+   runs the second-pass classification hook (block and refund), then image-to-3D,
    auto-rigging (biped only in v1; the Creature beta waits for a provider with a
-   full six-clip story), the weapon-family clip set, download-before-expiry, asset
+   full six-clip story), the weapon-family clip set, download-before-expiry with
+   the per-champion asset budgets enforced (over budget fails and refunds), asset
    provenance, the creation debit with refunds on failure. REMAINING, needs a paid
-   Tripo key and their written UGC authorization: verify the live task envelope,
-   test whether v1.0 presets retarget onto v2.5 rigs, real splash-to-model-sheet
-   derivation, the weapon as a separate prop (house library or generated), a real
-   image classifier behind the hook, compression under the per-champion asset
-   budgets.
+   Tripo key and their written UGC authorization: verify the live task envelope
+   and the upload endpoint, test whether v1.0 presets retarget onto v2.5 rigs,
+   the weapon as a separate prop (house library or generated), a real image
+   classifier behind the hook, compression tuning under the budgets.
 6. **Forge queue**: DONE. The queue itself (a second Matchmaker instance behind the
    same wire, one seat across both queues), forged-definition distribution at match
    setup (ten clients, spectators, rejoins, and the saved replay all carry the defs),

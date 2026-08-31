@@ -200,6 +200,13 @@ with its own grip offsets. A forged champion's weapon is always a prop, never fu
 body mesh; it comes from the house weapon library or from its own generation.
 _Avoid_: attachment, accessory
 
+**Workshop view**:
+The 3D inspection view of a finalized forged champion's generated model: turntable orbit
+and zoom, playback of the clip set, team color preview, and a match-view camera at in-game
+scale. Prop grip adjustment joins it when the weapon prop lands. A view of one champion,
+not a place; the place players create in is the Forge.
+_Avoid_: model viewer, inspector, showroom
+
 **Splash art**:
 The painted illustration of a champion, in the shared style of the set: the champion's face
 at select, in the roster browser, and on the profile. For a forged champion it is also the
