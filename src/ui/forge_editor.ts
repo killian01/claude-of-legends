@@ -237,6 +237,18 @@ const CSS = `
 }
 .fe-lightbox-bar { display: flex; gap: 10px; }
 .fe-artrow { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.fe-mini {
+  flex: none; width: auto; display: inline-block; margin: 0; padding: 4px 12px;
+  border-radius: 6px; border: 1px solid #6b5a2e; background: #241c10; color: #e0d5b8;
+  font-size: 11px; font-weight: 700; cursor: pointer;
+}
+.fe-mini:hover:not(:disabled) { border-color: #d8b45a; }
+.fe-mini:disabled { opacity: 0.4; cursor: default; }
+.fe-mini.gold {
+  background: linear-gradient(180deg, #e8cc74 0%, #c9a84a 55%, #a07830 100%);
+  color: #241a08; border-color: #f0deae;
+}
+.fe-anim-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
 .fe-iconblock {
   display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; padding: 10px;
   border: 1px dashed #4a3a1c; border-radius: 8px;
@@ -502,7 +514,7 @@ export function openForgeEditor(container: HTMLElement): void {
   ];
   const ANIM_STAGES: readonly { key: string; label: string }[] = [
     { key: 'rig', label: 'Rigging the skeleton' },
-    { key: 'animate', label: 'Baking the picked animations' },
+    { key: 'animate', label: 'Applying your animations' },
     { key: 'download', label: 'Bringing the clips home' },
   ];
   const WEAPON_STAGES: readonly { key: string; label: string }[] = [
@@ -931,7 +943,7 @@ export function openForgeEditor(container: HTMLElement): void {
             if (job.status === 'success') {
               finalizing = false;
               status.textContent =
-                'The model is built: check it in the workshop, then bake the animations (Step 5).';
+                'The model is built: check it in the workshop, then give it its animations (Step 5).';
               // Once the fresh rows land, the workshop opens on the new
               // static model: validating it is exactly the point.
               void loadDrafts().then(() => {
@@ -970,7 +982,7 @@ export function openForgeEditor(container: HTMLElement): void {
     animating = true;
     currentStage = 'rig';
     renderMain();
-    status.textContent = 'Baking the animations...';
+    status.textContent = 'Applying the animations...';
     const settle = (message: string): void => {
       animating = false;
       status.textContent = message;
@@ -995,7 +1007,7 @@ export function openForgeEditor(container: HTMLElement): void {
           }
           if (job.status === 'success') {
             animating = false;
-            status.textContent = 'Done: the animations are baked onto your champion.';
+            status.textContent = 'Done: the animations are on your champion.';
             // The picks now on the row are the source of truth again.
             animSeededFor = null;
             void loadDrafts().then(() => {
@@ -1377,7 +1389,7 @@ export function openForgeEditor(container: HTMLElement): void {
           'fe-lead',
           sealed
             ? 'Your model is built and sealed: turn it around, attach and adjust the weapon, then save the tuning. Matches use exactly what you save.'
-            : 'Your model is built: inspect it in the workshop. Happy with it? Bake the animations in Step 5. Not happy? Iterate the reference in Step 2 and rebuild (spends another creation).',
+            : 'Your model is built: inspect it in the workshop. Happy with it? Give it its animations in Step 5. Not happy? Iterate the reference in Step 2 and rebuild (spends another creation).',
         ),
       );
       const open = el('button', 'fe-gen', 'Open the 3D workshop');
@@ -1462,7 +1474,7 @@ export function openForgeEditor(container: HTMLElement): void {
         el(
           'p',
           'fe-lead',
-          'Rigging and baking. A few minutes; stay and watch, or come back: it keeps going.',
+          'Rigging and animating. A few minutes; stay and watch, or come back: it keeps going.',
         ),
       );
       animPanel.append(...stageChecklist(ANIM_STAGES));
@@ -1488,11 +1500,11 @@ export function openForgeEditor(container: HTMLElement): void {
           'fe-lead',
           sealed
             ? 'The seal locks the kit, the art and the model, NEVER the animations: change ' +
-                'any clip below and bake JUST that one, free, as often as you like.'
-            : 'Once the model is built and you are happy with it, pick each of the five clips ' +
-                'from the catalog (every death for death, every strike for attack). Each pick ' +
-                'plays on the gray mannequin the moment you choose it. Baking seals the ' +
-                'champion, included in the creation the build spent.',
+                'any animation below and apply JUST that one, free, as often as you like.'
+            : 'Once the model is built and you are happy with it, pick each of the five ' +
+                'animations from the catalog (every death for death, every strike for attack). ' +
+                'Each pick plays on the gray mannequin the moment you choose it. Animating ' +
+                'seals the champion, included in the creation the build spent.',
         ),
       );
       // The preview stage: any preset plays on the neutral mannequin the
@@ -1545,7 +1557,7 @@ export function openForgeEditor(container: HTMLElement): void {
             renderMain();
           });
           rowEl.append(sel);
-          const play = el('button', 'fe-btn', 'Play') as HTMLButtonElement;
+          const play = el('button', 'fe-mini', 'Play') as HTMLButtonElement;
           play.title = 'Play this pick on the mannequin';
           play.addEventListener('click', () => animPreview?.show(sel.value, role));
           rowEl.append(play);
@@ -1553,11 +1565,11 @@ export function openForgeEditor(container: HTMLElement): void {
           const changed = bakedId !== undefined && sel.value !== bakedId;
           if (changed) changedRoles.push(role);
           if (bakedId !== undefined && !changed) {
-            const chip = el('span', 'fe-desc', 'baked');
+            const chip = el('span', 'fe-desc', 'in use');
             chip.title = bakedId;
             rowEl.append(chip);
           } else if (changed) {
-            const one = el('button', 'fe-gen', 'Bake this one (free)') as HTMLButtonElement;
+            const one = el('button', 'fe-mini gold', 'Apply this one (free)') as HTMLButtonElement;
             one.disabled = busy || finalizing || weaponForging;
             one.title = `Replaces only the ${label.toLowerCase()} animation; spends nothing`;
             one.addEventListener('click', () => {
@@ -1573,26 +1585,30 @@ export function openForgeEditor(container: HTMLElement): void {
           el('div', 'fe-desc', 'Loading the animation catalog... if it stays empty, reload.'),
         );
       }
-      // The set-level button: the first bake needs all five at once; a
-      // sealed champion only shows it when several rows changed (one
-      // changed row bakes from its own button).
+      // The bottom actions, spaced as their own row: the first pass
+      // applies all five at once; a sealed champion only gets the group
+      // button when several rows changed (one changed row applies from
+      // its own button).
+      const actions = el('div', 'fe-anim-actions');
       if (!sealed || bakedNow === null) {
         const bake = el(
           'button',
           'fe-gen',
-          sealed ? 'Bake the animations (free)' : 'Bake the animations (included in your creation)',
+          sealed
+            ? 'Animate the champion (free)'
+            : 'Animate the champion (included in your creation)',
         ) as HTMLButtonElement;
         bake.disabled = !row?.model || busy || finalizing || weaponForging;
         bake.title = !row?.model
           ? 'Build the 3D model first (Step 4)'
-          : 'Rigs your validated model and bakes your five picks; seals the champion';
+          : 'Rigs your validated model and applies your five picks; seals the champion';
         bake.addEventListener('click', () => runAnimate(animPicks));
-        animPanel.append(bake);
+        actions.append(bake);
       } else if (changedRoles.length >= 2) {
         const bake = el(
           'button',
           'fe-gen',
-          `Bake the ${changedRoles.length} changed animations (free)`,
+          `Apply the ${changedRoles.length} changed animations (free)`,
         ) as HTMLButtonElement;
         bake.disabled = busy || finalizing || weaponForging;
         bake.title = 'Replaces only the changed animations; spends nothing';
@@ -1604,13 +1620,14 @@ export function openForgeEditor(container: HTMLElement): void {
           }
           runAnimate(picks);
         });
-        animPanel.append(bake);
+        actions.append(bake);
       }
       if (sealed) {
         const openAnim = el('button', 'fe-gen', 'See them move');
         openAnim.addEventListener('click', openWorkshopHere);
-        animPanel.append(openAnim);
+        actions.append(openAnim);
       }
+      if (actions.childElementCount > 0) animPanel.append(actions);
     }
     main.append(animPanel);
 

@@ -29,8 +29,8 @@ export interface AnimPreview {
 export function createAnimPreview(): AnimPreview {
   const root = document.createElement('div');
   root.style.cssText =
-    'position:relative;width:100%;height:240px;border:1px solid #4a3a1c;' +
-    'border-radius:8px;overflow:hidden;background:#14100a;margin:8px 0;';
+    'position:relative;width:100%;height:360px;border:1px solid #4a3a1c;' +
+    'border-radius:8px;overflow:hidden;background:#14100a;margin:10px 0;';
   const note = document.createElement('div');
   note.style.cssText =
     'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;' +
@@ -126,7 +126,7 @@ export function createAnimPreview(): AnimPreview {
       if (!m || !manifest || disposed || token !== pending) return;
       const file = manifest.clips[preset];
       if (file === undefined) {
-        note.textContent = 'This preset has no baked preview yet.';
+        note.textContent = 'No preview for this one yet.';
         action?.stop();
         action = null;
         return;
@@ -135,7 +135,7 @@ export function createAnimPreview(): AnimPreview {
         if (disposed || token !== pending || !mixer || !model) return;
         const clip = anims?.find((a) => a.name === preset) ?? null;
         if (!clip) {
-          note.textContent = 'This preset has no baked preview yet.';
+          note.textContent = 'No preview for this one yet.';
           return;
         }
         note.textContent = '';
@@ -179,8 +179,9 @@ export function createAnimPreview(): AnimPreview {
       camera.updateProjectionMatrix();
     }
     mixer?.update(clock.getDelta());
-    camera.position.set(0, 1.15, 3.4);
-    camera.lookAt(0, 0.8, 0);
+    // Framed for the whole body, feet to head, with air above for jumps.
+    camera.position.set(0, 1.05, 4.4);
+    camera.lookAt(0, 0.85, 0);
     renderer.render(scene, camera);
   };
   loop();
