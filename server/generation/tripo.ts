@@ -1,13 +1,15 @@
-// Tripo, the first provider behind the neutral interface. Written against
-// the v3 API as documented on developers.tripo3d.ai (see
-// docs/research/generation-providers-spike.md): async tasks created per
-// endpoint, then polled on /v3/tasks/{id}. The 2D half is VERIFIED
-// against a live key (2026-08-31): the task envelope is
-// {code, data: {task_id, status, output}}, text-to-image and
-// image-to-image answer output.generated_image_url, the upload endpoint
-// lives on the v2 host, and an uploaded token rides as input.file_token.
-// The 3D half (image-to-model, rig, retarget) still follows the docs
-// alone and is verified by the first live finalize chain.
+// Tripo, the first provider behind the neutral interface. The 3D half
+// rides the v3 API (async tasks created per endpoint, polled on
+// /v3/tasks/{id}); the 2D half rides the v2 task queue's advanced
+// generate_image task (docs.tripo3d.ai advanced-image-generation) so a
+// real image model, chosen by model_version, does both generation and
+// instruction editing. Verified against a live key (2026-08-31): the
+// task envelope is {code, data: {task_id, status, output}}, the upload
+// endpoint lives on the v2 host, an uploaded token rides as
+// input.file_token on v3 routes and as file.file_token on the v2 task;
+// the advanced 2D envelope itself follows the docs and is proven by its
+// first live generation (a failure costs nothing, the 2D quota spends
+// only on success).
 //
 // v1 contract points from the spike: bipeds ride rig model v1.0-20240301
 // because only its 110-preset library tells the full six-clip story; the
@@ -32,11 +34,12 @@ const BALANCE_URL = 'https://api.tripo3d.ai/v2/openapi/user/balance';
 // The v2 task queue (docs.tripo3d.ai quick start): where the advanced
 // generate_image task lives. Submissions and polls both ride it.
 const TASK_URL = 'https://api.tripo3d.ai/v2/openapi/task';
-// The advanced image task's default editor model: FLUX.1 Kontext, an
-// instruction-edit model that changes what the prompt names and keeps
-// the rest of the input image (docs.tripo3d.ai advanced-image-generation;
-// alternatives include gpt_image_2 and gemini_3_pro_image_preview).
-const DEFAULT_IMAGE_MODEL = 'flux.1_kontext_pro';
+// The advanced image task's model: the strongest GPT image model Tripo
+// exposes (docs.tripo3d.ai advanced-image-generation), a deliberate
+// quality-over-cost default: it both generates and instruction-edits
+// well, so every 2D generation rides it. Alternatives include
+// flux.1_kontext_pro and gemini_3_pro_image_preview (TRIPO_IMAGE_MODEL).
+const DEFAULT_IMAGE_MODEL = 'gpt_image_2';
 // The rig model whose preset library covers every clip role (spike);
 // rig verified live 2026-08-31 (task type animate_rig, output model_url).
 const RIG_MODEL = 'v1.0-20240301';
@@ -170,28 +173,24 @@ export class TripoProvider implements GenerationProvider {
     }
   }
 
-  // Without a source image: plain text-to-image, verified against a live
-  // key (2026-08-31, output.generated_image_url). With one (an uploaded
-  // file token): the advanced generate_image task on the v2 queue
-  // (docs.tripo3d.ai advanced-image-generation), whose model_version
-  // selects a real edit model, so the prompt is an instruction over the
-  // input image instead of a fresh scene. t_pose stands the character in
-  // a rig-ready pose while keeping its look; the model reference
-  // derivation asks for it.
+  // Every 2D generation rides the advanced generate_image task on the v2
+  // queue (docs.tripo3d.ai advanced-image-generation): its model_version
+  // selects the actual image model, text-only included, so the splash is
+  // never made by a weaker default. With a source image (an uploaded file
+  // token) the same model instruction-edits it instead of reimagining.
+  // t_pose stands the character in a rig-ready pose while keeping its
+  // look; the model reference derivation asks for it. (The v3 basic
+  // text-to-image this replaced stays live-verified in git history.)
   async generate2D(req: {
     prompt: string;
     image?: string;
     tPose?: boolean;
   }): Promise<ProviderAsset> {
-    if (!req.image) {
-      const taskId = await this.post('/generation/text-to-image', { prompt: req.prompt });
-      return this.awaitTask(taskId, 'text-to-image');
-    }
     const taskId = await this.postAt(TASK_URL, {
       type: 'generate_image',
       model_version: this.imageModel,
       prompt: req.prompt,
-      file: { type: 'png', file_token: req.image },
+      ...(req.image ? { file: { type: 'png', file_token: req.image } } : {}),
       ...(req.tPose ? { t_pose: true } : {}),
     });
     return this.awaitTask(taskId, this.imageModel, TASK_URL);

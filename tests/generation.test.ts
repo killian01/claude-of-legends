@@ -411,23 +411,29 @@ describe('the tripo provider against scripted responses', () => {
     expect(token).toBe('tok-9');
     const asset = await provider.generate2D({ prompt: 'more thorns', image: token });
     expect(asset.url).toBe('https://x.example/sheet.png');
-    // With an image the advanced generate_image task carries the edit
-    // model; the basic image-to-image reimagines instead of editing.
+    // Every 2D generation rides the advanced generate_image task with the
+    // strong default model; with an image it instruction-edits it.
     expect(calls[1]?.url).toBe('https://api.tripo3d.ai/v2/openapi/task');
     expect(calls[1]?.body).toMatchObject({
       type: 'generate_image',
-      model_version: 'flux.1_kontext_pro',
+      model_version: 'gpt_image_2',
       prompt: 'more thorns',
       file: { type: 'png', file_token: 'tok-9' },
     });
     expect(calls[1]?.body).not.toHaveProperty('t_pose');
+    // Text-only (the first splash) rides the same task and model, with no
+    // file field at all.
+    await provider.generate2D({ prompt: 'a fresh splash' });
+    expect(calls[2]?.url).toBe('https://api.tripo3d.ai/v2/openapi/task');
+    expect(calls[2]?.body).toMatchObject({ type: 'generate_image', model_version: 'gpt_image_2' });
+    expect(calls[2]?.body).not.toHaveProperty('file');
     // The reference derivation asks for the rig-ready pose.
     await provider.generate2D({ prompt: 'reference', image: token, tPose: true });
-    expect(calls[2]?.body).toMatchObject({ t_pose: true });
+    expect(calls[3]?.body).toMatchObject({ t_pose: true });
     // The same token form drives image-to-model (the staged finalize path).
     await provider.imageTo3D({ image: token });
-    expect(calls[3]?.url).toContain('/generation/image-to-model');
-    expect(calls[3]?.body).toMatchObject({ input: { file_token: 'tok-9' } });
+    expect(calls[4]?.url).toContain('/generation/image-to-model');
+    expect(calls[4]?.body).toMatchObject({ input: { file_token: 'tok-9' } });
     // TRIPO_IMAGE_MODEL picks another documented edit model.
     const gemini = new TripoProvider('k', {
       fetchFn,
@@ -435,7 +441,7 @@ describe('the tripo provider against scripted responses', () => {
       imageModel: 'gemini_3_pro_image_preview',
     });
     await gemini.generate2D({ prompt: 'x', image: token });
-    expect(calls[4]?.body).toMatchObject({ model_version: 'gemini_3_pro_image_preview' });
+    expect(calls[5]?.body).toMatchObject({ model_version: 'gemini_3_pro_image_preview' });
   });
 
   it('reads the credit balance and answers -1 on any failure', async () => {
