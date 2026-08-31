@@ -31,6 +31,11 @@ const UPLOAD_URL = 'https://api.tripo3d.ai/v2/openapi/upload/sts';
 const BALANCE_URL = 'https://api.tripo3d.ai/v2/openapi/user/balance';
 // The rig model whose preset library covers all six clips (spike).
 const RIG_MODEL = 'v1.0-20240301';
+// image-to-model demands an explicit model in live (2026-08-31: allowed
+// P1-20260311, P2-20260801, v2.5-20250123, v3.0-20250812, v3.1-20260211).
+// The standard lineage; the low-poly P series is worth a trial once the
+// full chain stands, since UGC gameplay is its stated target.
+const IMAGE_TO_MODEL_VERSION = 'v3.1-20260211';
 
 // The six renderer clips as Tripo v1.0 rig presets, per weapon family.
 export const TRIPO_CLIPS: Readonly<Record<WeaponFamily, Readonly<Record<ClipRole, string>>>> =
@@ -193,14 +198,19 @@ export class TripoProvider implements GenerationProvider {
     imageTaskId?: string;
     seed?: number;
   }): Promise<ProviderAsset> {
+    // The URL is preferred over the task id: live (2026-08-31) a 2D task
+    // referenced by id is refused as inaccessible, while the signed
+    // output URL is accepted; the pipeline always calls this seconds
+    // after the sheet lands, well inside the URL's validity.
     const taskId = await this.post('/generation/image-to-model', {
-      input: req.imageTaskId ?? req.imageUrl,
+      model: IMAGE_TO_MODEL_VERSION,
+      input: req.imageUrl ?? req.imageTaskId,
       texture: true,
       compress: 'geometry',
       orientation: 'align_image',
       ...(req.seed !== undefined ? { model_seed: req.seed } : {}),
     });
-    return this.awaitTask(taskId, 'image-to-model');
+    return this.awaitTask(taskId, IMAGE_TO_MODEL_VERSION);
   }
 
   async rig(req: { modelTaskId: string; rigType: RigType }): Promise<ProviderAsset> {
