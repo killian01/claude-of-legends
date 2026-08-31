@@ -348,6 +348,7 @@ export interface CommunityPick {
   model?: string | null;
   family?: string | null;
   weapon?: string | null;
+  clips?: Record<string, string> | null;
   display?: import('../sim/forge/display').ForgedDisplay | null;
 }
 

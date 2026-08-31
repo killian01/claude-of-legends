@@ -18,6 +18,10 @@ export interface ForgedMatchAssets {
   family: string | null;
   // The champion's own generated weapon GLB (relative asset path), if built.
   weapon: string | null;
+  // The exact baked clip name per renderer role (idle, run, attack, cast,
+  // death), as the creator picked them; null on models sealed before the
+  // pick existed (the renderer then falls back to name matching).
+  clips: Record<string, string> | null;
   display: ForgedDisplay | null;
 }
 

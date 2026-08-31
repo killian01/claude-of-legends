@@ -17,6 +17,8 @@
 // over the actual clips (chop stands in for blunt).
 
 import {
+  CLIP_ROLES,
+  type ClipChoice,
   type ClipRole,
   GenerationError,
   type GenerationProvider,
@@ -49,8 +51,9 @@ const RIG_MODEL = 'v1.0-20240301';
 // full chain stands, since UGC gameplay is its stated target.
 const IMAGE_TO_MODEL_VERSION = 'v3.1-20260211';
 
-// The renderer clips as Tripo v1.0 rig presets, per weapon family. Five
-// on purpose: one live retarget task carries at most 5 animations.
+// The renderer clips as Tripo v1.0 rig presets, per weapon family: the
+// quick-pick prefill and the fallback. Five on purpose: one live
+// retarget task carries at most 5 animations.
 export const TRIPO_CLIPS: Readonly<Record<WeaponFamily, Readonly<Record<ClipRole, string>>>> =
   (() => {
     const shared = {
@@ -67,6 +70,56 @@ export const TRIPO_CLIPS: Readonly<Record<WeaponFamily, Readonly<Record<ClipRole
       unarmed: { ...shared, attack: 'preset:biped:box_01' },
     };
   })();
+
+// What the player picks from, per clip role: the fighting-shaped slice
+// of the v1.0 rig's preset library (developers.tripo3d.ai
+// animations-retarget, fetched 2026-08-31). Ids verbatim from the docs;
+// the greeting-and-hobby presets (sing, golf swing aside, phone calls)
+// stay out because a MOBA champion never plays them. Every family
+// default above appears in its role's list, pinned by test.
+export const TRIPO_CLIP_CHOICES: Readonly<Record<ClipRole, readonly ClipChoice[]>> = {
+  idle: [
+    { id: 'preset:biped:idle', label: 'Combat idle' },
+    { id: 'preset:biped:standing_relax', label: 'Relaxed stance' },
+    { id: 'preset:biped:wait', label: 'Impatient wait' },
+    { id: 'preset:biped:look_around', label: 'Look around' },
+    { id: 'preset:biped:fold_arms', label: 'Folded arms' },
+    { id: 'preset:biped:swagger', label: 'Swagger' },
+  ],
+  run: [
+    { id: 'preset:biped:run', label: 'Run' },
+    { id: 'preset:biped:walk', label: 'Walk' },
+    { id: 'preset:biped:flee_01', label: 'Panicked flee 1' },
+    { id: 'preset:biped:flee_02', label: 'Panicked flee 2' },
+  ],
+  attack: [
+    { id: 'preset:biped:slash', label: 'Sword slash' },
+    { id: 'preset:biped:chop', label: 'Heavy chop' },
+    { id: 'preset:biped:shoot', label: 'Bow shot' },
+    { id: 'preset:biped:fire', label: 'Ranged fire' },
+    { id: 'preset:biped:box_01', label: 'Punch combo 1' },
+    { id: 'preset:biped:box_02', label: 'Punch combo 2' },
+    { id: 'preset:biped:box_03', label: 'Punch combo 3' },
+    { id: 'preset:biped:front_kick_01', label: 'Front kick 1' },
+    { id: 'preset:biped:front_kick_02', label: 'Front kick 2' },
+    { id: 'preset:biped:pitch_baseball', label: 'Overhand throw' },
+    { id: 'preset:biped:golf', label: 'Low sweeping swing' },
+  ],
+  cast: [
+    { id: 'preset:biped:cast_a_spell', label: 'Spell cast' },
+    { id: 'preset:biped:fire', label: 'Channel and fire' },
+    { id: 'preset:biped:cheer', label: 'Battle cry' },
+    { id: 'preset:biped:angry_01', label: 'Furious shout' },
+    { id: 'preset:biped:clap', label: 'Thunder clap' },
+    { id: 'preset:biped:heart_pose', label: 'Heart pose' },
+  ],
+  death: [
+    { id: 'preset:biped:defeat_02', label: 'Defeat, variant 2' },
+    { id: 'preset:biped:defeat_03', label: 'Defeat, variant 3' },
+    { id: 'preset:biped:fall', label: 'Fall' },
+    { id: 'preset:biped:hurt', label: 'Hurt collapse' },
+  ],
+};
 
 interface TripoTaskEnvelope {
   code?: number;
@@ -270,11 +323,22 @@ export class TripoProvider implements GenerationProvider {
     return this.awaitTask(taskId, RIG_MODEL);
   }
 
-  async animate(req: { riggedTaskId: string; family: WeaponFamily }): Promise<ProviderAsset> {
-    const clips = TRIPO_CLIPS[req.family];
+  clipChoices(): Readonly<Record<ClipRole, readonly ClipChoice[]>> {
+    return TRIPO_CLIP_CHOICES;
+  }
+
+  clipDefaults(family: WeaponFamily): Readonly<Record<ClipRole, string>> {
+    return TRIPO_CLIPS[family];
+  }
+
+  async animate(req: {
+    riggedTaskId: string;
+    clips: Readonly<Record<ClipRole, string>>;
+  }): Promise<ProviderAsset> {
     const taskId = await this.post('/animations/retarget', {
       input: req.riggedTaskId,
-      animations: Object.values(clips),
+      // Role order, stable: the baked GLB names each clip by its preset id.
+      animations: CLIP_ROLES.map((role) => req.clips[role]),
       out_format: 'glb',
       bake_animation: true,
       export_with_geometry: true,

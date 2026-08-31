@@ -109,6 +109,9 @@ describe('setForgedDisplay', () => {
       model: 'forged/forged_a/model.glb',
       family: 'staff',
       weapon: null,
+      // Sealed before per-clip picks existed: the renderer falls back to
+      // clip-name matching.
+      clips: null,
       display: { height: 3.0 },
     });
     // An unknown or asset-less definition still answers, with nulls: the
@@ -117,6 +120,7 @@ describe('setForgedDisplay', () => {
       model: null,
       family: null,
       weapon: null,
+      clips: null,
       display: null,
     });
     store.close();

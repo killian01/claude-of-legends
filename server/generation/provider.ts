@@ -18,9 +18,19 @@
 export const CLIP_ROLES = ['idle', 'run', 'attack', 'cast', 'death'] as const;
 export type ClipRole = (typeof CLIP_ROLES)[number];
 
-// Per-weapon-family clip sets (ADR 0006): the family picks the attack.
+// Per-weapon-family clip sets (ADR 0006): the family is the quick-pick
+// that PREFILLS the five clips; the player then picks each one from the
+// provider's catalog (playtest: not a bundle, every animation their own).
 export const WEAPON_FAMILIES = ['slashing', 'blunt', 'bow', 'staff', 'unarmed'] as const;
 export type WeaponFamily = (typeof WEAPON_FAMILIES)[number];
+
+// One pickable animation in a provider's catalog: the provider's own clip
+// id (what animate accepts and what the baked GLB names the clip) and a
+// player-facing label.
+export interface ClipChoice {
+  id: string;
+  label: string;
+}
 
 // v1 body plan: bipeds only (spike verdict; the Creature beta waits for a
 // provider with a full six-clip story).
@@ -84,7 +94,17 @@ export interface GenerationProvider {
   }): Promise<ProviderAsset>;
   // Auto-rig a generated model.
   rig(req: { modelTaskId: string; rigType: RigType }): Promise<ProviderAsset>;
-  // Apply the family's six-clip set onto a rigged model; one animated GLB
-  // carrying every clip.
-  animate(req: { riggedTaskId: string; family: WeaponFamily }): Promise<ProviderAsset>;
+  // The catalog the player picks from, per renderer clip role: all the
+  // deaths for death, all the strikes for attack. Ids are the provider's
+  // own; the pipeline validates picks against this exact list.
+  clipChoices(): Readonly<Record<ClipRole, readonly ClipChoice[]>>;
+  // The family's suggested pick per role: the quick-pick prefill and the
+  // fallback for any role the player left untouched.
+  clipDefaults(family: WeaponFamily): Readonly<Record<ClipRole, string>>;
+  // Bake the five picked clips onto a rigged model; one animated GLB
+  // carrying every clip, each named by its id.
+  animate(req: {
+    riggedTaskId: string;
+    clips: Readonly<Record<ClipRole, string>>;
+  }): Promise<ProviderAsset>;
 }

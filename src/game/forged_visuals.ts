@@ -12,6 +12,8 @@ export interface ForgedAssetPointers {
   model?: string | null;
   family?: string | null;
   weapon?: string | null;
+  // The creator's exact clip pick per renderer role (baked names).
+  clips?: Record<string, string> | null;
   display?: ForgedDisplay | null;
 }
 
@@ -25,5 +27,6 @@ export function registerForgedAssets(id: string, a: ForgedAssetPointers): void {
     display: a.display ?? null,
     family: a.family ?? null,
     weapon: a.weapon ? forgedAssetUrl(a.weapon) : null,
+    clips: a.clips ?? null,
   });
 }

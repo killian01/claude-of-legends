@@ -5,6 +5,9 @@
 // localhost before a Tripo key exists.
 
 import {
+  CLIP_ROLES,
+  type ClipChoice,
+  type ClipRole,
   GenerationError,
   type GenerationProvider,
   type ProviderAsset,
@@ -70,7 +73,29 @@ export class MockProvider implements GenerationProvider {
     return this.produce('rig', 'rigged', req);
   }
 
-  animate(req: { riggedTaskId: string; family: WeaponFamily }): Promise<ProviderAsset> {
+  // The mock's catalog: each role offers its bare name (what the
+  // placeholder GLB names its clips) plus one alternate, so pick
+  // validation has something to accept and something to refuse.
+  clipChoices(): Readonly<Record<ClipRole, readonly ClipChoice[]>> {
+    return Object.fromEntries(
+      CLIP_ROLES.map((role) => [
+        role,
+        [
+          { id: role, label: `Mock ${role}` },
+          { id: `${role}_alt`, label: `Mock ${role} alt` },
+        ],
+      ]),
+    ) as Record<ClipRole, ClipChoice[]>;
+  }
+
+  clipDefaults(_family: WeaponFamily): Readonly<Record<ClipRole, string>> {
+    return Object.fromEntries(CLIP_ROLES.map((role) => [role, role])) as Record<ClipRole, string>;
+  }
+
+  animate(req: {
+    riggedTaskId: string;
+    clips: Readonly<Record<ClipRole, string>>;
+  }): Promise<ProviderAsset> {
     return this.produce('animate', 'animated', req);
   }
 }

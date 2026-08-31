@@ -47,6 +47,9 @@ afterEach(() => {
 
 const ACCOUNT = 7;
 
+// The mock provider's default pick per role (its clip ids ARE the roles).
+const MOCK_CLIPS = { idle: 'idle', run: 'run', attack: 'attack', cast: 'cast', death: 'death' };
+
 interface Rig {
   store: ForgeStore;
   provider: MockProvider;
@@ -150,6 +153,7 @@ describe('the mock pipeline end to end', () => {
       forgedId: r.def.id,
       accountId: ACCOUNT,
       family: 'staff',
+      clips: MOCK_CLIPS,
     });
     expect(start.ok).toBe(true);
     if (!start.ok) return;
@@ -163,11 +167,14 @@ describe('the mock pipeline end to end', () => {
       model: string;
       family: string;
       splash: string;
+      clips: Record<string, string>;
       provenance: { provider: string }[];
     };
-    // The animated file replaces the static one as THE model.
+    // The animated file replaces the static one as THE model, and the
+    // exact pick per role seals with it (the renderer plays THESE).
     expect(assets.model).toBe(`forged/${r.def.id}/animated_${start.jobId}.glb`);
     expect(assets.family).toBe('staff');
+    expect(assets.clips).toEqual(MOCK_CLIPS);
     // The chosen splash is sealed with the champion (ADR 0010).
     expect(assets.splash).toBe(r.splashRel);
     expect(assets.provenance).toHaveLength(4);
@@ -187,6 +194,7 @@ describe('the mock pipeline end to end', () => {
       forgedId: r.def.id,
       accountId: ACCOUNT,
       family: 'staff',
+      clips: MOCK_CLIPS,
     });
     expect(start).toMatchObject({
       ok: false,
@@ -315,7 +323,34 @@ describe('the mock pipeline end to end', () => {
     if (out.ok) await out.done;
     expect((r.store.forgedAssets(r.def.id) as { family: string }).family).toBe('slashing');
     const animate = r.provider.seen.find((s) => s.op === 'animate');
-    expect(animate?.req).toMatchObject({ family: 'slashing' });
+    expect(animate?.req).toMatchObject({ clips: MOCK_CLIPS });
+  });
+
+  it('honors per-clip picks over the style, and refuses catalog strangers', async () => {
+    const r = rig();
+    const deps: ForgeDeps = { store: r.store, generation: r.pipeline, now: () => 999 };
+    const built = buildModel(deps, ACCOUNT, r.def.id);
+    expect(built.ok).toBe(true);
+    if (built.ok) await built.done;
+    // A pick outside the catalog is refused loudly, never silently
+    // swapped for a default: the player chose it on purpose.
+    expect(
+      animateChampion(deps, ACCOUNT, r.def.id, 'slashing', { death: 'preset:nope' }),
+    ).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('unknown death animation'),
+    });
+    // Valid picks override the prefill role by role; untouched roles
+    // keep the style default.
+    const out = animateChampion(deps, ACCOUNT, r.def.id, 'slashing', {
+      attack: 'attack_alt',
+      death: 'death_alt',
+    });
+    expect(out.ok).toBe(true);
+    if (out.ok) await out.done;
+    const want = { ...MOCK_CLIPS, attack: 'attack_alt', death: 'death_alt' };
+    expect(r.provider.seen.find((s) => s.op === 'animate')?.req).toMatchObject({ clips: want });
+    expect((r.store.forgedAssets(r.def.id) as { clips: unknown }).clips).toEqual(want);
   });
 
   it('fails and refunds when an artifact lands over its budget', async () => {
@@ -358,6 +393,7 @@ describe('the mock pipeline end to end', () => {
       forgedId: r.def.id,
       accountId: ACCOUNT,
       family: 'slashing',
+      clips: MOCK_CLIPS,
     });
     expect(failed.ok).toBe(true);
     if (!failed.ok) return;
@@ -375,6 +411,7 @@ describe('the mock pipeline end to end', () => {
       forgedId: r.def.id,
       accountId: ACCOUNT,
       family: 'slashing',
+      clips: MOCK_CLIPS,
     });
     expect(retry.ok).toBe(true);
     if (!retry.ok) return;
@@ -595,8 +632,29 @@ describe('the tripo provider against scripted responses', () => {
       rig_type: 'biped',
       spec: 'tripo',
     });
-    await provider.animate({ riggedTaskId: 'rig-task', family: 'slashing' });
-    expect(bodies[1]?.animations).toEqual(Object.values(TRIPO_CLIPS.slashing));
+    // The retarget carries the PICKED clips, in stable role order.
+    await provider.animate({ riggedTaskId: 'rig-task', clips: TRIPO_CLIPS.slashing });
+    expect(bodies[1]?.animations).toEqual(CLIP_ROLES.map((role) => TRIPO_CLIPS.slashing[role]));
+  });
+
+  it('offers a catalog per role that contains every family default', () => {
+    const provider = new TripoProvider('k', { sleep: () => Promise.resolve() });
+    const choices = provider.clipChoices();
+    for (const role of CLIP_ROLES) {
+      expect(choices[role].length, role).toBeGreaterThan(1);
+      // Ids are the documented preset spellings, never invented.
+      for (const c of choices[role]) expect(c.id).toMatch(/^preset:biped:/);
+    }
+    // The quick-pick prefill always lands on a pickable entry.
+    for (const family of WEAPON_FAMILIES) {
+      const defaults = provider.clipDefaults(family);
+      for (const role of CLIP_ROLES) {
+        expect(
+          choices[role].some((c) => c.id === defaults[role]),
+          `${family}/${role}`,
+        ).toBe(true);
+      }
+    }
   });
 
   it('uploads to the v2 host and edits images through the advanced task', async () => {

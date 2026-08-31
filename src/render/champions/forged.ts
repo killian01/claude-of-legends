@@ -12,7 +12,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { DisplayPropKind, ForgedDisplay } from '../../sim/forge/display';
 import { type ChampionTemplate, measureScene, normalizeProp, toLambert } from './assets';
 import { resolveForgedClips, stripTravel } from './forged_clips';
-import type { ChampionVisualDef } from './manifest';
+import type { ChampionClipNames, ChampionVisualDef } from './manifest';
 
 // Middle of the roster's height range (manifest heights run 1.6 to 3.6);
 // the workshop's height slider overrides it per champion.
@@ -34,6 +34,9 @@ interface ForgedEntry {
   family: string | null;
   // The champion's own generated weapon GLB (asset-route URL), when built.
   weaponUrl: string | null;
+  // The creator's exact clip pick per renderer role (the baked names);
+  // null on models sealed before per-clip picks existed.
+  clips: Record<string, string> | null;
   source: Promise<ForgedSource | null>;
   // Cache against the display used to build it; invalidated on re-register
   // with fresh tuning.
@@ -112,8 +115,24 @@ export function forgedPropModel(
   return house ? { url: house.url, size: house.size * (height / FORGED_DEFAULT_HEIGHT) } : null;
 }
 
+// The creator picked every clip by name: play EXACTLY those when the file
+// carries them, and only fall back to name matching for models sealed
+// before per-clip picks existed (or a mapping the file cannot honor).
+function pickedClips(
+  picked: Record<string, string> | null,
+  available: ReadonlySet<string>,
+): ChampionClipNames | null {
+  if (!picked) return null;
+  const has = (n: string | undefined): n is string => n !== undefined && available.has(n);
+  const { idle, run, attack, cast, death } = picked;
+  if (!has(idle) || !has(run) || !has(attack) || !has(cast) || !has(death)) return null;
+  return { idle, run, attack, cast, windup: cast, death };
+}
+
 function buildDef(entry: ForgedEntry, source: ForgedSource): ChampionVisualDef | null {
-  const clips = resolveForgedClips([...source.clips.keys()]);
+  const clips =
+    pickedClips(entry.clips, new Set(source.clips.keys())) ??
+    resolveForgedClips([...source.clips.keys()]);
   if (!clips) return null;
   const d = entry.display;
   const height = d.height ?? FORGED_DEFAULT_HEIGHT;
@@ -147,7 +166,12 @@ function buildDef(entry: ForgedEntry, source: ForgedSource): ChampionVisualDef |
 export function registerForgedModel(
   championId: string,
   modelUrl: string,
-  opts?: { display?: ForgedDisplay | null; family?: string | null; weapon?: string | null },
+  opts?: {
+    display?: ForgedDisplay | null;
+    family?: string | null;
+    weapon?: string | null;
+    clips?: Record<string, string> | null;
+  },
 ): void {
   const existing = entries.get(championId);
   if (existing && existing.url === modelUrl) {
@@ -160,6 +184,10 @@ export function registerForgedModel(
       existing.weaponUrl = opts.weapon ?? null;
       existing.template = null;
     }
+    if (opts?.clips !== undefined) {
+      existing.clips = opts.clips ?? null;
+      existing.template = null;
+    }
     return;
   }
   entries.set(championId, {
@@ -167,6 +195,7 @@ export function registerForgedModel(
     display: opts?.display ?? {},
     family: opts?.family ?? null,
     weaponUrl: opts?.weapon ?? null,
+    clips: opts?.clips ?? null,
     source: loadForgedSource(modelUrl),
     template: null,
   });

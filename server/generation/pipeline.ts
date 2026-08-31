@@ -15,7 +15,12 @@ import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from '
 import path from 'node:path';
 import type { ForgedChampionDef } from '../../src/sim/forge/forged_def';
 import type { ForgeStore } from '../forge_store';
-import { GenerationError, type GenerationProvider, type WeaponFamily } from './provider';
+import {
+  type ClipRole,
+  GenerationError,
+  type GenerationProvider,
+  type WeaponFamily,
+} from './provider';
 
 export interface PipelineDeps {
   storage: ForgeStore;
@@ -49,7 +54,11 @@ export interface BuildRequest {
 export interface AnimateRequest {
   forgedId: string;
   accountId: number;
+  // The style the picks started from, kept for display.
   family: WeaponFamily;
+  // The player's own pick per clip role, validated against the provider
+  // catalog by server/forge.ts before this request exists.
+  clips: Readonly<Record<ClipRole, string>>;
 }
 
 // The weapon family a kit implies, until the workshop lets the author
@@ -201,7 +210,7 @@ async function runModelBuild(deps: PipelineDeps, jobId: number, req: BuildReques
 }
 
 // The second half, the player's own click AFTER validating the model:
-// rig the built model, bake the chosen clip family, download the
+// rig the built model, bake the five picked clips, download the
 // animated file and seal the champion. No ledger movement in either
 // direction: the creation was spent at the build, and a failed animate
 // can simply run again.
@@ -238,7 +247,7 @@ async function runAnimate(
     stage('animate');
     const animated = await deps.provider.animate({
       riggedTaskId: rigged.taskId,
-      family: req.family,
+      clips: req.clips,
     });
 
     stage('download');
@@ -265,6 +274,8 @@ async function runAnimate(
         ...assets,
         model: animatedPath,
         family: req.family,
+        // The exact pick per role: the renderer plays THESE, no guessing.
+        clips: req.clips,
         ...(splash ? { splash: splash.path } : {}),
         ...(Object.keys(icons).length > 0 ? { icons } : {}),
         provenance: [...provenance, rigged.provenance, animated.provenance].filter(

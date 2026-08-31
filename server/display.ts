@@ -58,11 +58,13 @@ export function forgedMatchAssets(
       model?: string;
       family?: string;
       weapon?: string;
+      clips?: Record<string, string>;
     } | null;
     out[def.id] = {
       model: assets?.model ?? null,
       family: assets?.family ?? null,
       weapon: assets?.weapon ?? null,
+      clips: assets?.clips ?? null,
       display: displayOf(store, def.id),
     };
   }

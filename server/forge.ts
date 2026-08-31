@@ -17,7 +17,12 @@ import {
   startModelBuild,
   startWeaponForge,
 } from './generation/pipeline';
-import { WEAPON_FAMILIES, type WeaponFamily } from './generation/provider';
+import {
+  CLIP_ROLES,
+  type ClipRole,
+  WEAPON_FAMILIES,
+  type WeaponFamily,
+} from './generation/provider';
 import { findBlockedWord } from './word_filter';
 
 // A hard abuse rail, not the product quota (that is plan phase 8).
@@ -187,16 +192,19 @@ export function buildModel(
 }
 
 // The second half, always LAST and always the player's own click: rig
-// the built model, bake the chosen clip family, seal the champion. The
+// the built model, bake the five picked clips, seal the champion. The
 // creation was spent at the build, so this moves the ledger in neither
-// direction and can simply run again after a failure.
+// direction and can simply run again after a failure. The family is the
+// style the picks started from; each role's pick is the player's own,
+// validated against the provider's catalog (playtest: not a bundle,
+// every animation its own choice), with the family default filling any
+// role left unpicked.
 export function animateChampion(
   deps: ForgeDeps,
   accountId: number,
   id: string,
-  // The player's explicit animation family; anything unrecognized falls
-  // back to the kit-implied one.
   family?: string,
+  clipsRaw?: unknown,
 ): ForgeOutcome<{ jobId: number; done: Promise<void> }> {
   if (!deps.generation) {
     return { ok: false, error: 'generation is not configured on this server yet' };
@@ -211,7 +219,22 @@ export function animateChampion(
   const picked = (WEAPON_FAMILIES as readonly string[]).includes(family ?? '')
     ? (family as WeaponFamily)
     : familyOf(row.def);
-  return startAnimate(deps.generation, { forgedId: id, accountId, family: picked });
+  const provider = deps.generation.provider;
+  const choices = provider.clipChoices();
+  const clips: Record<ClipRole, string> = { ...provider.clipDefaults(picked) };
+  if (typeof clipsRaw === 'object' && clipsRaw !== null) {
+    for (const role of CLIP_ROLES) {
+      const want = (clipsRaw as Record<string, unknown>)[role];
+      if (want === undefined) continue;
+      // A pick that is not in the catalog is refused loudly, never
+      // silently swapped for a default: the player chose it on purpose.
+      if (typeof want !== 'string' || !choices[role].some((c) => c.id === want)) {
+        return { ok: false, error: `unknown ${role} animation: pick one from the catalog` };
+      }
+      clips[role] = want;
+    }
+  }
+  return startAnimate(deps.generation, { forgedId: id, accountId, family: picked, clips });
 }
 
 // The weapon-only build on a champion whose model exists without one:

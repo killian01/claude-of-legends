@@ -120,6 +120,9 @@ export interface WorkshopSubject {
   sheetUrl?: string | null;
   // Weapon family sealed at finalize (informational).
   family?: string | null;
+  // The creator's exact clip pick per renderer role (baked names); labels
+  // the clip buttons without name guessing when present.
+  clips?: Record<string, string> | null;
   // The champion's own generated weapon GLB (asset-route URL), when built;
   // unlocks the 'generated' prop kind.
   weaponUrl?: string | null;
@@ -390,18 +393,25 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   };
 
   const buildClipButtons = (): void => {
-    // Friendly labels first (Idle, Run, Attack...), resolved the same way
-    // the in-match renderer does; unmatched clips keep their raw names.
+    // Friendly labels first (Idle, Run, Attack...): the creator's exact
+    // picks when the model carries them, name matching as the fallback
+    // (models sealed before per-clip picks); unmatched clips keep their
+    // raw names.
     const resolved = resolveForgedClips(clips.map((c) => c.name));
+    const picked = subject.clips ?? null;
+    const roleName = (role: keyof ChampionClipNames): string | undefined => {
+      const want = picked?.[role];
+      if (want !== undefined && clips.some((c) => c.name === want)) return want;
+      return resolved?.[role];
+    };
     // The run cycle plays on the spot here exactly as it will in match.
-    const runClip = resolved ? clips.find((c) => c.name === resolved.run) : undefined;
+    const runName = roleName('run');
+    const runClip = runName !== undefined ? clips.find((c) => c.name === runName) : undefined;
     if (runClip) stripTravel(runClip);
     const labeled = new Map<string, string>();
-    if (resolved) {
-      for (const { role, label } of CLIP_LABELS) {
-        const name = resolved[role];
-        if (name !== undefined && !labeled.has(name)) labeled.set(name, label);
-      }
+    for (const { role, label } of CLIP_LABELS) {
+      const name = roleName(role);
+      if (name !== undefined && !labeled.has(name)) labeled.set(name, label);
     }
     for (const clip of clips) {
       if (!labeled.has(clip.name)) labeled.set(clip.name, clip.name);
@@ -416,7 +426,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     if (clips.length === 0) {
       clipsPanel.append(el('div', 'ws-note', 'This model carries no animation clips.'));
     }
-    idleClipName = resolved?.idle ?? clips[0]?.name ?? '';
+    idleClipName = roleName('idle') ?? clips[0]?.name ?? '';
     playClip(idleClipName);
   };
 

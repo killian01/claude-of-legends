@@ -55,7 +55,7 @@ import { canPlayForged, listGallery, reportForged, setVisibility, toggleLike } f
 import { MockProvider } from './generation/mock';
 import { downloadToFile, type PipelineDeps, recoverStaleJobs } from './generation/pipeline';
 import { placeholderFor } from './generation/placeholder';
-import type { GenerationProvider } from './generation/provider';
+import { type GenerationProvider, WEAPON_FAMILIES } from './generation/provider';
 import { TripoProvider } from './generation/tripo';
 import { buildLadder } from './ladder';
 import { accountKey, addressKey, LoginThrottle } from './login_throttle';
@@ -840,6 +840,7 @@ const server = http.createServer(async (req, res) => {
                     sheet?: string;
                     family?: string;
                     weapon?: string;
+                    clips?: Record<string, string>;
                   } | null;
                   return {
                     ...d,
@@ -848,6 +849,7 @@ const server = http.createServer(async (req, res) => {
                     sheet: assets?.sheet ?? null,
                     family: assets?.family ?? null,
                     weapon: assets?.weapon ?? null,
+                    clips: assets?.clips ?? null,
                     display: assets ? displayOf(forgeStore, d.id) : null,
                   };
                 }),
@@ -911,12 +913,31 @@ const server = http.createServer(async (req, res) => {
           sendJson(res, 200, quota);
           return;
         }
-        // The animation family is the player's explicit pick (playtest: a
-        // sword champion must swing a sword); absent, the kit implies it.
+        // The style prefill plus the player's per-role picks (validated
+        // against the provider catalog in animateChampion).
         const family = typeof body?.family === 'string' ? body.family : undefined;
-        const outcome = animateChampion(forgeDeps, me.id, id, family);
+        const outcome = animateChampion(forgeDeps, me.id, id, family, body?.clips);
         if (outcome.ok) spendQuota(quotaDeps, me.id, 'generation');
         sendJson(res, 200, outcome.ok ? { ok: true, jobId: outcome.jobId } : outcome);
+        return;
+      }
+      if (url === '/api/forge/animations') {
+        // The pickable animation catalog, per clip role, plus each
+        // style's suggested set: what the editor's five selects render.
+        const provider = forgeDeps.generation?.provider;
+        sendJson(
+          res,
+          200,
+          provider
+            ? {
+                ok: true,
+                roles: provider.clipChoices(),
+                defaults: Object.fromEntries(
+                  WEAPON_FAMILIES.map((f) => [f, provider.clipDefaults(f)]),
+                ),
+              }
+            : { ok: false, error: 'generation is not configured on this server yet' },
+        );
         return;
       }
       if (url === '/api/forge/weapon' && req.method === 'POST') {

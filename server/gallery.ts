@@ -43,6 +43,7 @@ export interface GalleryEntry {
   model: string | null;
   family: string | null;
   weapon: string | null;
+  clips: Record<string, string> | null;
   display: ForgedDisplay | null;
 }
 
@@ -87,6 +88,7 @@ export function listGallery(
       model?: string;
       family?: string;
       weapon?: string;
+      clips?: Record<string, string>;
     } | null;
     return {
       id: r.id,
@@ -102,6 +104,7 @@ export function listGallery(
       model: assets?.model ?? null,
       family: assets?.family ?? null,
       weapon: assets?.weapon ?? null,
+      clips: assets?.clips ?? null,
       display: displayOf(deps.store, r.id),
     };
   });

@@ -33,6 +33,7 @@ export interface GalleryEntry {
   model: string | null;
   family: string | null;
   weapon: string | null;
+  clips: Record<string, string> | null;
   display: ForgedDisplay | null;
 }
 
@@ -254,6 +255,7 @@ export function openGallery(container: HTMLElement): void {
           modelUrl: `/api/forge/asset/${entry.model}`,
           splashUrl: entry.splash ? `/api/forge/asset/${entry.splash}` : null,
           family: entry.family,
+          clips: entry.clips,
           weaponUrl: entry.weapon ? `/api/forge/asset/${entry.weapon}` : null,
           display: entry.display,
           // Only the owner can tune and save; visitors just look around.

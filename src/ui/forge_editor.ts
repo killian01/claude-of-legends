@@ -282,6 +282,7 @@ interface DraftRow {
   sheet?: string | null;
   family?: string | null;
   weapon?: string | null;
+  clips?: Record<string, string> | null;
   display?: ForgedDisplay | null;
 }
 
@@ -508,8 +509,7 @@ export function openForgeEditor(container: HTMLElement): void {
   ];
   // Whichever chain is on screen owns the checklist.
   let stageList: readonly { key: string; label: string }[] = BUILD_STAGES;
-  // The attack-animation family, the player's explicit pick (a sword
-  // champion must swing a sword); sent with the animate step.
+  // The style quick-pick: prefills the five selects below, nothing more.
   let animFamily = 'slashing';
   const FAMILY_CHOICES: readonly { value: string; label: string }[] = [
     { value: 'slashing', label: 'Blade strikes (sword, axe, spear)' },
@@ -518,6 +518,36 @@ export function openForgeEditor(container: HTMLElement): void {
     { value: 'staff', label: 'Staff casting' },
     { value: 'unarmed', label: 'Bare fists' },
   ];
+  // The pickable animation catalog (GET /api/forge/animations): every
+  // choice per clip role, plus each style's suggested set. The player
+  // picks ANIMATION BY ANIMATION; the style only prefills.
+  interface AnimCatalog {
+    roles: Record<string, { id: string; label: string }[]>;
+    defaults: Record<string, Record<string, string>>;
+  }
+  let animCatalog: AnimCatalog | null = null;
+  // The pick per clip role, sent with the bake.
+  let animPicks: Record<string, string> = {};
+  const ROLE_LABELS: readonly { role: string; label: string }[] = [
+    { role: 'idle', label: 'Idle' },
+    { role: 'run', label: 'Run' },
+    { role: 'attack', label: 'Attack' },
+    { role: 'cast', label: 'Cast' },
+    { role: 'death', label: 'Death' },
+  ];
+  const applyFamilyDefaults = (): void => {
+    const d = animCatalog?.defaults[animFamily];
+    if (d) animPicks = { ...d };
+  };
+  const clipLabel = (role: string, id: string): string =>
+    animCatalog?.roles[role]?.find((c) => c.id === id)?.label ?? id;
+  const loadAnimations = async (): Promise<void> => {
+    const r = await api<{ ok: boolean } & AnimCatalog>('/api/forge/animations');
+    if (r?.ok && r.roles) {
+      animCatalog = { roles: r.roles, defaults: r.defaults };
+      if (Object.keys(animPicks).length === 0) applyFamilyDefaults();
+    }
+  };
   const applyStageState = (): void => {
     if (!stageRows) return;
     const at = stageList.findIndex((s) => s.key === currentStage);
@@ -736,6 +766,7 @@ export function openForgeEditor(container: HTMLElement): void {
       splashUrl: row.splash ? assetUrl(row.splash) : null,
       sheetUrl: row.sheet ? assetUrl(row.sheet) : null,
       family: row.family ?? null,
+      clips: row.clips ?? null,
       weaponUrl: row.weapon ? assetUrl(row.weapon) : null,
       display: row.display ?? null,
       editable: true,
@@ -938,6 +969,7 @@ export function openForgeEditor(container: HTMLElement): void {
     void api<{ ok: boolean; jobId?: number; error?: string }>('/api/forge/animate', {
       id: current.id,
       family: animFamily,
+      ...(Object.keys(animPicks).length > 0 ? { clips: animPicks } : {}),
     }).then((started) => {
       if (!started?.ok || started.jobId === undefined) {
         settle(started?.error ?? 'the animations could not start');
@@ -1414,16 +1446,30 @@ export function openForgeEditor(container: HTMLElement): void {
     const animPanel = el('div', 'fe-panel');
     animPanel.append(el('h3', '', 'Step 5: animations'));
     if (sealed) {
-      const baked = FAMILY_CHOICES.find((c) => c.value === row?.family)?.label;
-      animPanel.append(
-        el(
-          'p',
-          'fe-lead',
-          (baked ? `Baked in: ${baked}. ` : '') +
-            'Five clips ride your model: idle, run, attack, cast, death. Watch them play on it ' +
-            'in the workshop. Changing the style would need a Reforge (coming later).',
-        ),
-      );
+      if (row?.clips) {
+        const bakedList = ROLE_LABELS.map(
+          ({ role, label }) => `${label}: ${clipLabel(role, row.clips?.[role] ?? '')}`,
+        ).join('. ');
+        animPanel.append(
+          el(
+            'p',
+            'fe-lead',
+            `Baked in: ${bakedList}. Watch them play in the workshop. Changing them would ` +
+              'need a Reforge (coming later).',
+          ),
+        );
+      } else {
+        const baked = FAMILY_CHOICES.find((c) => c.value === row?.family)?.label;
+        animPanel.append(
+          el(
+            'p',
+            'fe-lead',
+            (baked ? `Baked in: ${baked}. ` : '') +
+              'Five clips ride your model: idle, run, attack, cast, death. Watch them play on ' +
+              'it in the workshop. Changing them would need a Reforge (coming later).',
+          ),
+        );
+      }
       const openAnim = el('button', 'fe-gen', 'See them move');
       openAnim.addEventListener('click', openWorkshopHere);
       animPanel.append(openAnim);
@@ -1441,15 +1487,14 @@ export function openForgeEditor(container: HTMLElement): void {
         el(
           'p',
           'fe-lead',
-          'Once the model is built and you are happy with it, pick the strikes your champion ' +
-            'will throw and bake the five clips onto it: idle, run, attack, cast, death. This ' +
-            'seals the champion. Included in the creation the build spent.',
+          'Once the model is built and you are happy with it, pick each of the five clips ' +
+            'from the catalog (every death for death, every strike for attack) and bake them ' +
+            'onto it. The style prefills the five; every pick is yours. Baking seals the ' +
+            'champion, included in the creation the build spent.',
         ),
       );
-      // The attack style is the player's call: nothing about a kit says
-      // what the hands hold.
       const famRow = el('div', 'fe-artrow');
-      famRow.append(el('span', 'fe-field-label', 'Attack animations:'));
+      famRow.append(el('span', 'fe-field-label', 'Style prefill:'));
       const famSelect = el('select', 'fe-select') as HTMLSelectElement;
       for (const c of FAMILY_CHOICES) {
         const opt = document.createElement('option');
@@ -1460,9 +1505,39 @@ export function openForgeEditor(container: HTMLElement): void {
       famSelect.value = animFamily;
       famSelect.addEventListener('change', () => {
         animFamily = famSelect.value;
+        applyFamilyDefaults();
+        renderMain();
       });
       famRow.append(famSelect);
       animPanel.append(famRow);
+      // One select per clip role: the whole catalog for that role, the
+      // player's own pick (playtest: not a bundle).
+      if (animCatalog) {
+        for (const { role, label } of ROLE_LABELS) {
+          const choices = animCatalog.roles[role] ?? [];
+          const rowEl = el('div', 'fe-artrow');
+          rowEl.append(el('span', 'fe-field-label', `${label}:`));
+          const sel = el('select', 'fe-select') as HTMLSelectElement;
+          for (const c of choices) {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.label;
+            opt.title = c.id;
+            sel.append(opt);
+          }
+          const picked = animPicks[role];
+          if (picked !== undefined && choices.some((c) => c.id === picked)) sel.value = picked;
+          sel.addEventListener('change', () => {
+            animPicks[role] = sel.value;
+          });
+          rowEl.append(sel);
+          animPanel.append(rowEl);
+        }
+      } else {
+        animPanel.append(
+          el('div', 'fe-desc', 'Loading the animation catalog... if it stays empty, reload.'),
+        );
+      }
       const bake = el(
         'button',
         'fe-gen',
@@ -1743,7 +1818,7 @@ export function openForgeEditor(container: HTMLElement): void {
   renderMain();
   refresh();
   void loadDrafts().then(() =>
-    loadArt().then(() => {
+    Promise.all([loadArt(), loadAnimations()]).then(() => {
       renderMain();
       refresh();
     }),
