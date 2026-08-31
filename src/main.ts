@@ -27,6 +27,7 @@ import { type HomeChoice, showHome } from './ui/home_screen';
 import { showLanding } from './ui/landing';
 import {
   type CommunityPick,
+  type ForgedPick,
   type LobbyController,
   type QueueController,
   type SelectController,
@@ -337,12 +338,17 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
     // and the community's shared ones: both fetched the moment the session
     // opens so the lists are ready (or nearly) when select_start lands;
     // the handler awaits them either way.
-    const forgedRoster: Promise<ForgedChampionDef[]> =
+    const forgedRoster: Promise<ForgedPick[]> =
       choice.mode === 'forge-queue'
         ? fetch('/api/forge/drafts', { credentials: 'same-origin' })
             .then((res) => (res.ok ? res.json() : { drafts: [] }))
-            .then((body: { drafts?: { def: ForgedChampionDef; status: string }[] }) =>
-              (body.drafts ?? []).filter((d) => d.status === 'finalized').map((d) => d.def),
+            .then(
+              (body: {
+                drafts?: { def: ForgedChampionDef; status: string; splash?: string | null }[];
+              }) =>
+                (body.drafts ?? [])
+                  .filter((d) => d.status === 'finalized')
+                  .map((d) => ({ def: d.def, splash: d.splash ?? null })),
             )
             .catch(() => [])
         : Promise.resolve([]);
@@ -422,7 +428,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
         case 'select_start': {
           clearMenus();
           const openSelect = (
-            forgedList: readonly ForgedChampionDef[],
+            forgedList: readonly ForgedPick[],
             community: readonly CommunityPick[],
           ): void => {
             if (finished || selectUi) return;

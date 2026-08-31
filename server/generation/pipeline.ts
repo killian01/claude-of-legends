@@ -145,8 +145,10 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
     stage('download');
     const dir = path.join(deps.assetsDir, 'forged', req.def.id);
     mkdirSync(dir, { recursive: true });
-    const sheetPath = path.join('forged', req.def.id, 'sheet.png');
-    const modelPath = path.join('forged', req.def.id, 'model.glb');
+    // Forward slashes on purpose: these are stored and later served as
+    // URL tails, on Windows dev machines included.
+    const sheetPath = `forged/${req.def.id}/sheet.png`;
+    const modelPath = `forged/${req.def.id}/model.glb`;
     await deps.download(sheet.url, path.join(deps.assetsDir, sheetPath));
     await deps.download(animated.url, path.join(deps.assetsDir, modelPath));
     // The per-champion asset budgets (ADR 0010): an oversized artifact is

@@ -15,6 +15,7 @@ import { FORGED_ROLES, validateForged } from '../sim/forge/validate';
 import type { AbilityKey } from '../sim/types';
 import { buildCastEditor, defaultCast, type KitHooks, numField } from './forge_kit';
 import { startMenuBackdrop } from './menu_backdrop';
+import { openWorkshop } from './workshop';
 
 const CSS = `
 .fe, .fe * { box-sizing: border-box; }
@@ -100,6 +101,21 @@ const CSS = `
 .fe-status { min-height: 16px; color: #aac2dd; margin-top: 8px; font-size: 11px; }
 .fe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
 .fe-desc { color: #97854f; font-style: italic; margin-top: 4px; line-height: 1.4; }
+.fe-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.fe-cand {
+  padding: 0; border: 2px solid #4a3a1c; border-radius: 6px; background: #120d06;
+  cursor: pointer; overflow: hidden; line-height: 0;
+}
+.fe-cand:hover { border-color: #a08030; }
+.fe-cand.chosen { border-color: #d8b45a; box-shadow: 0 0 6px rgba(216, 180, 90, 0.4); }
+.fe-cand img { display: block; object-fit: cover; }
+.fe-cand.splash img { width: 72px; height: 96px; }
+.fe-cand.icon img { width: 32px; height: 32px; }
+.fe-artrow { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.fe-artrow .fe-mini { flex: none; }
+.fe-icon-preview { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.fe-icon-preview img { border-radius: 4px; border: 1px solid #4a3a1c; }
+.fe-quota { color: #97854f; font-size: 11px; margin-left: auto; }
 `;
 
 let cssInstalled = false;
@@ -127,6 +143,20 @@ interface DraftRow {
   def: ForgedChampionDef;
   status: 'draft' | 'finalized';
   updatedAt: number;
+  // Relative asset paths the server enriches the row with; the splash on
+  // any row that has one, model and sheet once finalized.
+  splash?: string | null;
+  model?: string | null;
+  sheet?: string | null;
+}
+
+// One 2D candidate (splash or spell icon) as the art routes answer it.
+interface ArtCandidate {
+  cid: number;
+  kind: string;
+  path: string;
+  chosen: boolean;
+  at: number;
 }
 
 // Identity rides the session cookie (ADR 0006), never a token in the URL.
@@ -258,6 +288,89 @@ export function openForgeEditor(container: HTMLElement): void {
   let current: ForgedChampionDef = newDraft();
   const status = el('div', 'fe-status', '');
 
+  // --- 2D art state (plan-forge phase 4): candidates and the gen2d meter --
+
+  let artCandidates: ArtCandidate[] = [];
+  let artQuota = { used: 0, limit: 0 };
+  // The champion line typed per art kind, kept across rerenders.
+  const artLines: Record<string, string> = {};
+
+  const loadArt = async (): Promise<void> => {
+    const r = await api<{
+      ok: boolean;
+      candidates?: ArtCandidate[];
+      quota?: { used: number; limit: number };
+    }>(`/api/forge/art?id=${encodeURIComponent(current.id)}`);
+    artCandidates = r?.ok && r.candidates ? r.candidates : [];
+    artQuota = r?.ok && r.quota ? r.quota : { used: 0, limit: 0 };
+  };
+
+  const isSealed = (): boolean => drafts.find((d) => d.id === current.id)?.status === 'finalized';
+
+  // Save what is on screen (art hangs off a stored draft), generate, then
+  // reload the strip. The request is held open for the image: one 2D
+  // generation is seconds, not a finalize chain.
+  const generateArtKind = (kind: string, line: string): void => {
+    status.textContent = 'Generating the image...';
+    void api<{ ok: boolean; error?: string }>('/api/forge/draft', { def: current })
+      .then((saved) => {
+        if (!saved?.ok) throw new Error(saved?.error ?? 'save failed');
+        return api<{
+          ok: boolean;
+          error?: string;
+          quota?: { used: number; limit: number };
+        }>('/api/forge/art/generate', { id: current.id, kind, line });
+      })
+      .then((out) => {
+        if (!out?.ok) {
+          status.textContent = out?.error ?? 'generation failed';
+          return;
+        }
+        status.textContent = out.quota
+          ? `Generated. ${out.quota.used}/${out.quota.limit} images today.`
+          : 'Generated.';
+        void loadDrafts();
+        return loadArt().then(() => {
+          renderMain();
+        });
+      })
+      .catch((err: unknown) => {
+        status.textContent = err instanceof Error ? err.message : 'generation failed';
+      });
+  };
+
+  const pickArt = (cid: number): void => {
+    void api<{ ok: boolean; error?: string }>('/api/forge/art/pick', {
+      id: current.id,
+      cid,
+    }).then((r) => {
+      if (!r?.ok) {
+        status.textContent = r?.error ?? 'pick failed';
+        return;
+      }
+      return loadArt().then(() => {
+        renderMain();
+      });
+    });
+  };
+
+  const artStrip = (kind: string, big: boolean): HTMLElement => {
+    const sealed = isSealed();
+    const strip = el('div', 'fe-strip');
+    for (const c of artCandidates.filter((x) => x.kind === kind)) {
+      const btn = el('button', `fe-cand ${big ? 'splash' : 'icon'}`) as HTMLButtonElement;
+      btn.classList.toggle('chosen', c.chosen);
+      const img = document.createElement('img');
+      img.src = `/api/forge/asset/${c.path}`;
+      img.alt = '';
+      btn.appendChild(img);
+      btn.title = sealed ? 'Sealed at finalization' : c.chosen ? 'The pick' : 'Use this one';
+      if (!sealed) btn.addEventListener('click', () => pickArt(c.cid));
+      strip.appendChild(btn);
+    }
+    return strip;
+  };
+
   // --- right rail: the budget meter, verdict, and actions ---------------
 
   const meterFill = el('div', 'fe-meter-fill');
@@ -304,6 +417,7 @@ export function openForgeEditor(container: HTMLElement): void {
     testBtn.title = v.ok ? '' : 'The kit must fully validate before a test drive';
     finalizeBtn.disabled = !v.ok;
     finalizeBtn.title = v.ok ? '' : 'Finalize needs a fully valid champion';
+    workshopBtn.hidden = !drafts.find((d) => d.id === current.id)?.model;
   };
 
   const hooks: KitHooks = {
@@ -327,6 +441,7 @@ export function openForgeEditor(container: HTMLElement): void {
         status.textContent = r?.ok ? 'Draft deleted.' : (r?.error ?? 'delete failed');
         if (r?.ok) {
           current = newDraft();
+          artCandidates = [];
           void loadDrafts();
           renderMain();
           refresh();
@@ -368,7 +483,11 @@ export function openForgeEditor(container: HTMLElement): void {
             }
             if (job.status === 'success') {
               status.textContent = 'Finalized: the champion is sealed.';
-              void loadDrafts();
+              // The seal changes what the art panels offer: rerender once
+              // the fresh statuses land.
+              void loadDrafts().then(() => {
+                renderMain();
+              });
               return;
             }
             if (job.status === 'failed') {
@@ -386,13 +505,35 @@ export function openForgeEditor(container: HTMLElement): void {
       });
   });
 
+  // The workshop door: only a finalized champion has a model to turn.
+  const workshopBtn = el('button', 'fe-btn', 'Workshop (3D view)') as HTMLButtonElement;
+  workshopBtn.addEventListener('click', () => {
+    const row = drafts.find((d) => d.id === current.id);
+    if (!row?.model) return;
+    openWorkshop(container, {
+      name: current.name,
+      title: current.title,
+      modelUrl: `/api/forge/asset/${row.model}`,
+      splashUrl: row.splash ? `/api/forge/asset/${row.splash}` : null,
+      sheetUrl: row.sheet ? `/api/forge/asset/${row.sheet}` : null,
+    });
+  });
+
   const meterPanel = el('div', 'fe-panel');
   meterPanel.append(el('h3', '', 'Power budget'));
   const meterBar = el('div', 'fe-meter-bar');
   meterBar.append(meterFill);
   meterPanel.append(meterLine, meterBar, costBox, verdict);
   const actions = el('div', 'fe-panel');
-  actions.append(el('h3', '', 'Actions'), saveBtn, testBtn, finalizeBtn, deleteBtn, status);
+  actions.append(
+    el('h3', '', 'Actions'),
+    saveBtn,
+    testBtn,
+    finalizeBtn,
+    workshopBtn,
+    deleteBtn,
+    status,
+  );
   side.append(meterPanel, actions);
 
   // --- left rail: drafts -------------------------------------------------
@@ -416,6 +557,9 @@ export function openForgeEditor(container: HTMLElement): void {
         renderRail();
         renderMain();
         refresh();
+        void loadArt().then(() => {
+          renderMain();
+        });
       });
       panel.append(btn);
     }
@@ -423,6 +567,7 @@ export function openForgeEditor(container: HTMLElement): void {
     const fresh = el('button', 'fe-btn', 'New draft');
     fresh.addEventListener('click', () => {
       current = newDraft();
+      artCandidates = [];
       renderRail();
       renderMain();
       refresh();
@@ -435,6 +580,9 @@ export function openForgeEditor(container: HTMLElement): void {
     const r = await api<{ ok: boolean; drafts?: DraftRow[] }>(`/api/forge/drafts`);
     drafts = r?.ok && r.drafts ? r.drafts : [];
     renderRail();
+    // Statuses may have moved (a finalize landing): the workshop door and
+    // the seal-aware panels follow the fresh rows.
+    refresh();
   };
 
   // --- center: the champion ----------------------------------------------
@@ -507,6 +655,41 @@ export function openForgeEditor(container: HTMLElement): void {
     roleField.append(el('span', 'fe-field-label', 'role'), roleSelect);
     card.append(roleField);
     main.append(card);
+
+    // Splash art (ADR 0010): the creative anchor, iterated freely on the
+    // 2D quota while drafting; finalize derives the model from the pick.
+    const sealed = isSealed();
+    const splash = el('div', 'fe-panel');
+    splash.append(el('h3', '', 'Splash art (the anchor: the model derives from it)'));
+    if (sealed) {
+      splash.append(el('div', 'fe-desc', 'Sealed at finalization.'));
+    } else {
+      const line = el('input', 'fe-input') as HTMLInputElement;
+      line.placeholder = 'Describe the champion: silhouette, weapon, mood, one accent color';
+      line.maxLength = 400;
+      line.value = artLines.splash ?? '';
+      line.addEventListener('input', () => {
+        artLines.splash = line.value;
+      });
+      const row = el('div', 'fe-artrow');
+      const genBtn = el('button', 'fe-mini', 'Generate splash') as HTMLButtonElement;
+      genBtn.addEventListener('click', () => generateArtKind('splash', line.value));
+      const prefill = el('button', 'fe-mini', 'From card text');
+      prefill.addEventListener('click', () => {
+        const identity = [current.name, current.title].filter((s) => s.trim() !== '').join(', ');
+        line.value = current.tagline.trim() === '' ? identity : `${identity}: ${current.tagline}`;
+        artLines.splash = line.value;
+      });
+      const quota = el(
+        'span',
+        'fe-quota',
+        artQuota.limit > 0 ? `${artQuota.used}/${artQuota.limit} images today` : '',
+      );
+      row.append(genBtn, prefill, quota);
+      splash.append(line, row);
+    }
+    splash.append(artStrip('splash', true));
+    main.append(splash);
 
     const stats = el('div', 'fe-panel');
     stats.append(el('h3', '', 'Stats (every point above the floor costs budget)'));
@@ -608,6 +791,31 @@ export function openForgeEditor(container: HTMLElement): void {
       costs.append(numField('windup', ability, 'windup', ABILITY_BOUNDS.windup, hooks));
       panel.append(costs);
       panel.append(buildCastEditor(current.abilities[key], hooks));
+      // Optional generated icon (ADR 0010): the flat template on the 2D
+      // quota; the spec-derived procedural icon stays the default.
+      const iconRow = el('div', 'fe-artrow');
+      iconRow.append(el('span', 'fe-list-label', 'Icon'));
+      if (!sealed) {
+        const iconGen = el('button', 'fe-mini', 'Generate icon') as HTMLButtonElement;
+        iconGen.title = 'A flat generated icon; without one the procedural icon is used';
+        iconGen.addEventListener('click', () => generateArtKind(`icon_${key}`, ''));
+        iconRow.append(iconGen);
+      }
+      const chosenIcon = artCandidates.find((c) => c.kind === `icon_${key}` && c.chosen);
+      if (chosenIcon) {
+        // Full size and in-match size side by side, as the ADR asks.
+        const preview = el('div', 'fe-icon-preview');
+        for (const size of [56, 24]) {
+          const img = document.createElement('img');
+          img.src = `/api/forge/asset/${chosenIcon.path}`;
+          img.width = size;
+          img.height = size;
+          img.alt = '';
+          preview.append(img);
+        }
+        iconRow.append(preview);
+      }
+      panel.append(iconRow, artStrip(`icon_${key}`, false));
       main.append(panel);
     }
   }

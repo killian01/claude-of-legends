@@ -12,6 +12,7 @@ import { ROLE_COLORS } from './champion_art';
 import { describeAbility } from './describe';
 import { startMenuBackdrop } from './menu_backdrop';
 import { setRichLine } from './rich_text';
+import { openWorkshop } from './workshop';
 
 // The wire shape of one gallery card (server/gallery.ts).
 export interface GalleryEntry {
@@ -24,6 +25,9 @@ export interface GalleryEntry {
   listed: boolean;
   shared: boolean;
   updatedAt: number;
+  // Asset paths relative to /api/forge/asset/, when the champion has them.
+  splash: string | null;
+  model: string | null;
 }
 
 const CSS = `
@@ -82,6 +86,7 @@ const CSS = `
   background: radial-gradient(circle at 50% 38%, #3a2d63 0%, #0a1120 90%);
   color: #b9a8e8; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
 }
+.gal-splash { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .gal-card-body {
   position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 12px 10px; min-width: 0;
   background: linear-gradient(180deg, rgba(3, 6, 14, 0) 0%, rgba(3, 6, 14, 0.92) 62%);
@@ -233,6 +238,18 @@ export function openGallery(container: HTMLElement): void {
       window.dispatchEvent(new CustomEvent('loc:forge-test', { detail: def }));
     });
     actions.append(like, test);
+    if (entry.model) {
+      const workshop = el('button', 'gal-btn', 'Workshop view');
+      workshop.addEventListener('click', () => {
+        openWorkshop(container, {
+          name: def.name,
+          title: def.title,
+          modelUrl: `/api/forge/asset/${entry.model}`,
+          splashUrl: entry.splash ? `/api/forge/asset/${entry.splash}` : null,
+        });
+      });
+      actions.append(workshop);
+    }
     if (entry.mine) {
       const listedBtn = el('button', 'gal-btn', entry.listed ? 'Listed' : 'Unlisted');
       listedBtn.addEventListener('click', () => {
@@ -302,7 +319,15 @@ export function openGallery(container: HTMLElement): void {
     }
     for (const entry of entries) {
       const card = el('button', 'gal-card') as HTMLButtonElement;
-      card.appendChild(el('div', 'gal-mono', (entry.def.name[0] ?? '?').toUpperCase()));
+      if (entry.splash) {
+        const img = document.createElement('img');
+        img.className = 'gal-splash';
+        img.src = `/api/forge/asset/${entry.splash}`;
+        img.alt = '';
+        card.appendChild(img);
+      } else {
+        card.appendChild(el('div', 'gal-mono', (entry.def.name[0] ?? '?').toUpperCase()));
+      }
       card.appendChild(el('div', 'gal-likes', `${entry.likes}`));
       const body = el('div', 'gal-card-body');
       body.appendChild(el('div', 'gal-card-name', entry.def.name));

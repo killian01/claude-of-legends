@@ -71,7 +71,7 @@ function rig(classify?: (url: string) => Promise<boolean>): Rig {
   if (!saved.ok) throw new Error(saved.error);
   // The chosen splash the pipeline derives from (a real file: the mock's
   // uploadImage is fed its bytes).
-  const splashRel = path.join('forged', def.id, 'art', 'splash_seed.png');
+  const splashRel = `forged/${def.id}/art/splash_seed.png`;
   mkdirSync(path.dirname(path.join(dir, splashRel)), { recursive: true });
   writeFileSync(path.join(dir, splashRel), placeholderPng('gen-test'));
   const cid = store.addArtCandidate({

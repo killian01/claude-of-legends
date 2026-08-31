@@ -791,13 +791,28 @@ const server = http.createServer(async (req, res) => {
       // --- the Forge (ADR 0010, ADR 0011): drafts, ledger, finalize ---
       if (url === '/api/forge/drafts') {
         const out = listDrafts(forgeDeps, me.id);
-        // Each row carries its current splash (relative asset path) so the
-        // draft rail and the Forge-queue select can draw real cards.
+        // Each row carries its current splash, and once finalized its
+        // model and sheet (relative asset paths), so the draft rail, the
+        // Forge-queue select, and the workshop can reach the real files.
         sendJson(
           res,
           200,
           out.ok
-            ? { ...out, drafts: out.drafts.map((d) => ({ ...d, splash: splashOf(forgeStore, d) })) }
+            ? {
+                ...out,
+                drafts: out.drafts.map((d) => {
+                  const assets =
+                    d.status === 'finalized'
+                      ? (forgeStore.forgedAssets(d.id) as { model?: string; sheet?: string } | null)
+                      : null;
+                  return {
+                    ...d,
+                    splash: splashOf(forgeStore, d),
+                    model: assets?.model ?? null,
+                    sheet: assets?.sheet ?? null,
+                  };
+                }),
+              }
             : out,
         );
         return;

@@ -341,6 +341,14 @@ export interface CommunityPick {
   creator: string;
   likes: number;
   likedByMe: boolean;
+  // Splash path relative to the server's asset route, when one exists.
+  splash?: string | null;
+}
+
+// One of the account's own finalized champions at Forge-queue select.
+export interface ForgedPick {
+  def: ForgedChampionDef;
+  splash?: string | null;
 }
 
 export function showSelect(
@@ -351,7 +359,7 @@ export function showSelect(
   onLock: (championId: string, sigils: [string, string], skin: number) => void,
   // Forge queue: the account's finalized forged champions, offered in
   // their own section under the roster grid.
-  forged?: readonly ForgedChampionDef[],
+  forged?: readonly ForgedPick[],
   // Forge queue: the community tab, every shared champion popular first.
   community?: readonly CommunityPick[],
 ): SelectController {
@@ -476,9 +484,21 @@ export function showSelect(
 
   // Forge queue: forged cards (own and community) share one builder wired
   // into the same pick, taken, and lock machinery as the roster cards.
-  const forgedCard = (def: ForgedChampionDef, meta: string): HTMLButtonElement => {
+  const forgedCard = (
+    def: ForgedChampionDef,
+    meta: string,
+    splash?: string | null,
+  ): HTMLButtonElement => {
     const btn = el('button', 'menu-champ') as HTMLButtonElement;
-    btn.appendChild(el('div', 'menu-champ-monogram', (def.name[0] ?? '?').toUpperCase()));
+    if (splash) {
+      const img = document.createElement('img');
+      img.className = 'menu-champ-portrait';
+      img.src = `/api/forge/asset/${splash}`;
+      img.alt = '';
+      btn.appendChild(img);
+    } else {
+      btn.appendChild(el('div', 'menu-champ-monogram', (def.name[0] ?? '?').toUpperCase()));
+    }
     const body = el('div', 'menu-champ-body');
     body.appendChild(el('div', 'menu-champ-name', def.name));
     const role = el('div', 'menu-champ-role', meta);
@@ -508,7 +528,7 @@ export function showSelect(
   let forgedBlock: HTMLElement[] = [];
   if (forged && forged.length > 0) {
     const forgedGrid = el('div', 'menu-grid');
-    for (const def of forged) forgedGrid.appendChild(forgedCard(def, def.role));
+    for (const f of forged) forgedGrid.appendChild(forgedCard(f.def, f.def.role, f.splash));
     forgedBlock = [el('div', 'menu-label', 'Your forged champions'), forgedGrid];
   }
 
@@ -534,7 +554,7 @@ export function showSelect(
         .sort((a, b) => Number(b.likedByMe) - Number(a.likedByMe));
       for (const c of list) {
         communityGrid.appendChild(
-          forgedCard(c.def, `${c.def.role}, by ${c.creator} (${c.likes} likes)`),
+          forgedCard(c.def, `${c.def.role}, by ${c.creator} (${c.likes} likes)`, c.splash),
         );
       }
     };

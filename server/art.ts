@@ -150,8 +150,9 @@ export async function generateArt(
     };
   }
   // Provider URLs expire: download NOW, own forever (same rule as the
-  // finalize pipeline).
-  const rel = path.join('forged', row.id, 'art', `${req.kind}_${asset.taskId}.png`);
+  // finalize pipeline). Relative paths are stored with forward slashes so
+  // they double as URL tails on every platform.
+  const rel = `forged/${row.id}/art/${req.kind}_${asset.taskId}.png`;
   try {
     await deps.generation.download(asset.url, path.join(deps.generation.assetsDir, rel));
   } catch {
