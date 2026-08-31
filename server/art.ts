@@ -7,7 +7,7 @@
 // pick is what finalization seals. Identity arrives already resolved, like
 // the rest of the Forge surface (ADR 0006).
 
-import { statSync, unlinkSync } from 'node:fs';
+import { readFileSync, statSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import type { ForgeOutcome } from './forge';
 import type { ForgedRow, ForgeStore } from './forge_store';
@@ -16,8 +16,10 @@ import { GenerationError, type ProviderAsset } from './generation/provider';
 import { checkQuota, type QuotaDeps, spendQuota } from './quotas';
 import { findBlockedWord } from './word_filter';
 
-// The art each champion can carry: the splash, and one icon per spell.
-export const ART_KINDS = ['splash', 'icon_Q', 'icon_W', 'icon_E', 'icon_R'] as const;
+// The art each champion can carry: the splash, the model reference (the
+// single-view image the 3D builds from, kind 'sheet'), and one icon per
+// spell.
+export const ART_KINDS = ['splash', 'sheet', 'icon_Q', 'icon_W', 'icon_E', 'icon_R'] as const;
 export type ArtKind = (typeof ART_KINDS)[number];
 
 // Candidates kept per (champion, kind); the oldest unchosen fall off.
@@ -32,6 +34,16 @@ export const SPLASH_STYLE =
   'dramatic rim light, dark moody backdrop with one dominant accent color as ' +
   'atmospheric glow, painterly brushwork, high contrast, game character card art, ' +
   'no text, no watermark.';
+
+// The model reference style: ONE figure, one view. The words matter: the
+// phrase 'model sheet' pulls image models toward multi-view triptychs,
+// and a multi-figure image becomes a multi-body 3D model (learned the
+// hard way: a three-view sheet generated three fused characters).
+export const SHEET_STYLE =
+  'One single character, exactly one figure, centered, full body from head to feet, ' +
+  'front view, standing A-pose with arms slightly out, empty hands, plain light gray ' +
+  'background, even neutral lighting, no other views, no duplicates, no props, no text, ' +
+  'no watermark.';
 
 // The flat icon template (ADR 0010): deliberately not the painterly splash
 // style, because an icon must read at in-match size.
@@ -65,6 +77,11 @@ function cleanLine(line: string): string {
 // the champion's own line, never raw client text alone.
 export function artPrompt(kind: ArtKind, row: ForgedRow, line: string): string {
   if (kind === 'splash') return `${SPLASH_STYLE} The champion: ${line}`;
+  if (kind === 'sheet') {
+    const identity = [row.def.name, row.def.title].filter((s) => s.trim() !== '').join(', ');
+    const detail = line === '' ? '' : ` ${line}.`;
+    return `${SHEET_STYLE} The character: ${identity}, a ${row.def.role.toLowerCase()} champion.${detail}`;
+  }
   const key = kind.slice('icon_'.length) as 'Q' | 'W' | 'E' | 'R';
   const ability = row.def.abilities[key];
   const detail = line === '' ? '' : `, ${line}`;
@@ -101,10 +118,15 @@ export function listArt(
 // is spent only when the provider actually produced something: a
 // technical failure burns nothing (the per-address rate limit bounds
 // abuse), which mirrors how finalize treats the generation meter.
+//
+// Image inputs (the staged, Tripo-style flow): `fromCid` iterates on an
+// existing candidate of the SAME kind (its file rides the generation as
+// the image input); the model reference ('sheet') without fromCid always
+// derives from the chosen splash, which it therefore requires.
 export async function generateArt(
   deps: ArtDeps,
   accountId: number,
-  req: { id: string; kind: string; line: string },
+  req: { id: string; kind: string; line: string; fromCid?: number },
 ): Promise<
   ForgeOutcome<{
     candidate: { cid: number; kind: string; path: string; chosen: boolean; at: number };
@@ -126,12 +148,30 @@ export async function generateArt(
     };
   }
   const line = cleanLine(req.line);
-  if (req.kind === 'splash' && line === '') {
+  if (req.kind === 'splash' && line === '' && req.fromCid === undefined) {
     return { ok: false, error: 'describe the champion: the splash starts from your words' };
   }
   const blocked = findBlockedWord([line]);
   if (blocked !== null) {
     return { ok: false, error: `pick different words: '${blocked}' cannot go in a prompt` };
+  }
+  // The source image, when this generation starts from one.
+  let sourcePath: string | null = null;
+  if (req.fromCid !== undefined) {
+    const from = deps.store.getArtCandidate(req.fromCid);
+    if (!from || from.forgedId !== row.id || from.kind !== req.kind) {
+      return { ok: false, error: 'no such candidate to iterate from' };
+    }
+    sourcePath = from.path;
+  } else if (req.kind === 'sheet') {
+    const splash = deps.store.chosenArt(row.id, 'splash');
+    if (!splash) {
+      return { ok: false, error: 'pick a splash first: the model reference derives from it' };
+    }
+    sourcePath = splash.path;
+  }
+  if (sourcePath !== null && !deps.generation.provider.uploadImage) {
+    return { ok: false, error: 'this provider cannot start from an image' };
   }
   const quota = checkQuota(deps.quota, accountId, 'gen2d');
   if (!quota.ok) return quota;
@@ -139,7 +179,18 @@ export async function generateArt(
   const prompt = artPrompt(req.kind, row, line);
   let asset: ProviderAsset;
   try {
-    asset = await deps.generation.provider.generate2D({ prompt });
+    let image: string | undefined;
+    if (sourcePath !== null && deps.generation.provider.uploadImage) {
+      const read = deps.generation.readFile ?? readFileSync;
+      image = await deps.generation.provider.uploadImage({
+        data: read(path.join(deps.generation.assetsDir, sourcePath)),
+        name: path.basename(sourcePath),
+      });
+    }
+    asset = await deps.generation.provider.generate2D({
+      prompt,
+      ...(image !== undefined ? { image } : {}),
+    });
   } catch (err) {
     const blockedGen = err instanceof GenerationError && err.blocked;
     return {

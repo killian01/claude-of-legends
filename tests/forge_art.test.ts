@@ -17,6 +17,7 @@ import {
   generateArt,
   ICON_STYLE,
   listArt,
+  SHEET_STYLE,
   SPLASH_STYLE,
   splashOf,
 } from '../server/art';
@@ -102,6 +103,61 @@ describe('generateArt', () => {
     const row = r.store.getArtCandidate(out.candidate.cid);
     expect(row?.prompt.startsWith(SPLASH_STYLE)).toBe(true);
     expect(row?.prompt).toContain('moss-green witch');
+  });
+
+  it('derives the model reference from the chosen splash, and requires one', async () => {
+    const r = rig();
+    // No chosen splash yet: the reference has nothing to derive from.
+    const early = await generateArt(r.deps, ACCOUNT, { id: r.def.id, kind: 'sheet', line: '' });
+    expect(early).toMatchObject({ ok: false, error: expect.stringContaining('splash') });
+
+    const splash = await generateArt(r.deps, ACCOUNT, {
+      id: r.def.id,
+      kind: 'splash',
+      line: 'a moss witch',
+    });
+    if (!splash.ok) throw new Error('setup');
+    const sheet = await generateArt(r.deps, ACCOUNT, { id: r.def.id, kind: 'sheet', line: '' });
+    expect(sheet.ok).toBe(true);
+    if (!sheet.ok) return;
+    // The chosen splash file rode up as the image input.
+    const upload = r.provider.seen.find((s) => s.op === 'uploadImage');
+    expect(upload?.req).toMatchObject({ name: path.basename(splash.candidate.path) });
+    const call = r.provider.seen.filter((s) => s.op === 'generate2D').at(-1);
+    expect(call?.req).toMatchObject({ image: expect.stringContaining('mock-upload-') });
+    const row = r.store.getArtCandidate(sheet.candidate.cid);
+    expect(row?.prompt.startsWith(SHEET_STYLE)).toBe(true);
+    expect(row?.prompt).toContain(r.def.name);
+  });
+
+  it('iterates on an existing candidate via fromCid, same kind only', async () => {
+    const r = rig();
+    const first = await generateArt(r.deps, ACCOUNT, {
+      id: r.def.id,
+      kind: 'splash',
+      line: 'a moss witch',
+    });
+    if (!first.ok) throw new Error('setup');
+    const refined = await generateArt(r.deps, ACCOUNT, {
+      id: r.def.id,
+      kind: 'splash',
+      line: 'same witch, more thorns on the staff',
+      fromCid: first.candidate.cid,
+    });
+    expect(refined.ok).toBe(true);
+    // The source candidate's file was uploaded and rode the generation.
+    const upload = r.provider.seen.find((s) => s.op === 'uploadImage');
+    expect(upload?.req).toMatchObject({ name: path.basename(first.candidate.path) });
+    const call = r.provider.seen.filter((s) => s.op === 'generate2D').at(-1);
+    expect(call?.req).toMatchObject({ image: expect.stringContaining('mock-upload-') });
+    // A candidate of another kind is not a valid starting point.
+    const cross = await generateArt(r.deps, ACCOUNT, {
+      id: r.def.id,
+      kind: 'icon_Q',
+      line: '',
+      fromCid: first.candidate.cid,
+    });
+    expect(cross).toMatchObject({ ok: false, error: expect.stringContaining('iterate') });
   });
 
   it('composes icon prompts from the flat template and the ability name', async () => {

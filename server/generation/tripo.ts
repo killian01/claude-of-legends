@@ -195,17 +195,21 @@ export class TripoProvider implements GenerationProvider {
   }
 
   async imageTo3D(req: {
+    image?: string;
     imageUrl?: string;
     imageTaskId?: string;
     seed?: number;
   }): Promise<ProviderAsset> {
-    // The URL is preferred over the task id: live (2026-08-31) a 2D task
-    // referenced by id is refused as inaccessible, while the signed
-    // output URL is accepted; the pipeline always calls this seconds
-    // after the sheet lands, well inside the URL's validity.
+    // Input preference: an uploaded file token first (the staged flow
+    // re-uploads the chosen local reference; tokens ride as the same
+    // object form image-to-image verified live), then the signed output
+    // URL, then the task id. Live (2026-08-31) a 2D task referenced by
+    // id is refused as inaccessible while the signed URL is accepted.
+    const input =
+      req.image !== undefined ? { file_token: req.image } : (req.imageUrl ?? req.imageTaskId);
     const taskId = await this.post('/generation/image-to-model', {
       model: IMAGE_TO_MODEL_VERSION,
-      input: req.imageUrl ?? req.imageTaskId,
+      input,
       texture: true,
       compress: 'geometry',
       orientation: 'align_image',

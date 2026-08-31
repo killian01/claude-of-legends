@@ -180,12 +180,15 @@ refunds the creation. Every account receives a weekly allocation (ADR 0011); buy
 arrives with payments.
 _Avoid_: credit, generation token
 
-**Model sheet**:
-The technical 2D image the 3D generation accepts as its input: one character, full body,
-front-facing A-pose, empty hands, neutral background. Derived by the pipeline from the
-draft's validated splash art, together with a separate weapon reference; the player never
-authors it directly.
-_Avoid_: concept art, reference image
+**Model reference**:
+The technical 2D image the 3D generation accepts as its input: exactly ONE character,
+full body, front view, A-pose, empty hands, plain background. One figure only, because
+the 3D builder reconstructs whatever the image shows: a multi-view sheet becomes a
+multi-body model. Derived from the draft's chosen splash art and iterated by the player
+like any other art kind (generate, view large, pick, iterate); the 3D build runs on the
+exact chosen image, never a hidden regeneration. Stored under the art kind and asset key
+`sheet` for continuity.
+_Avoid_: model sheet (the old multi-view term), concept art
 
 **Gallery**:
 The public browse space of finalized forged champions: every finalized champion is listed by

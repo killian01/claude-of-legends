@@ -159,10 +159,18 @@ export function finalizeDraft(
       error: `finalize needs a fully valid champion: ${v.errors.slice(0, 5).join('; ')}`,
     };
   }
-  // The splash is the creative anchor (ADR 0010): the model sheet, and
-  // from it the model, derive from the chosen splash. No splash, no seal.
+  // The splash is the creative anchor (ADR 0010) and the model reference
+  // is the image the 3D literally builds from; both are the player's own
+  // picks, iterated in the editor. No pick, no seal, and no debit either:
+  // these gates run before the ledger moves.
   if (!deps.store.chosenArt(id, 'splash')) {
     return { ok: false, error: 'make the splash art first: the champion derives from it' };
+  }
+  if (!deps.store.chosenArt(id, 'sheet')) {
+    return {
+      ok: false,
+      error: 'generate and pick a model reference: the 3D builds from that exact image',
+    };
   }
   refreshWeeklyGrant(deps, accountId);
   return startFinalize(deps.generation, {

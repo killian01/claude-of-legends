@@ -55,6 +55,7 @@ export class MockProvider implements GenerationProvider {
   }
 
   imageTo3D(req: {
+    image?: string;
     imageUrl?: string;
     imageTaskId?: string;
     seed?: number;

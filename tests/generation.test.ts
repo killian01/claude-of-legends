@@ -45,6 +45,7 @@ interface Rig {
   downloads: { url: string; dest: string }[];
   def: ForgedChampionDef;
   splashRel: string;
+  sheetRel: string;
 }
 
 function rig(classify?: (url: string) => Promise<boolean>): Rig {
@@ -69,22 +70,30 @@ function rig(classify?: (url: string) => Promise<boolean>): Rig {
   const def = { ...forgedTwin(CHAMPIONS.sylra!), id: 'forged_gen_test' };
   const saved = saveDraft({ store }, ACCOUNT, 'bob', def);
   if (!saved.ok) throw new Error(saved.error);
-  // The chosen splash the pipeline derives from (a real file: the mock's
-  // uploadImage is fed its bytes).
+  // The chosen splash and the chosen model reference (both real files:
+  // the reference's bytes ride the mock's uploadImage, and finalize
+  // copies its file into the sealed assets).
   const splashRel = `forged/${def.id}/art/splash_seed.png`;
+  const sheetRel = `forged/${def.id}/art/sheet_seed.png`;
   mkdirSync(path.dirname(path.join(dir, splashRel)), { recursive: true });
   writeFileSync(path.join(dir, splashRel), placeholderPng('gen-test'));
-  const cid = store.addArtCandidate({
-    forgedId: def.id,
-    accountId: ACCOUNT,
-    kind: 'splash',
-    prompt: 'p',
-    path: splashRel,
-    provenance: null,
-    at: 1,
-  });
-  store.chooseArtCandidate(def.id, 'splash', cid);
-  return { store, provider, pipeline, downloads, def, splashRel };
+  writeFileSync(path.join(dir, sheetRel), placeholderPng('gen-test-sheet'));
+  for (const [kind, rel] of [
+    ['splash', splashRel],
+    ['sheet', sheetRel],
+  ] as const) {
+    const cid = store.addArtCandidate({
+      forgedId: def.id,
+      accountId: ACCOUNT,
+      kind,
+      prompt: 'p',
+      path: rel,
+      provenance: { provider: 'mock', model: 'mock-1', at: 1, taskId: `cand-${kind}` },
+      at: 1,
+    });
+    store.chooseArtCandidate(def.id, kind, cid);
+  }
+  return { store, provider, pipeline, downloads, def, splashRel, sheetRel };
 }
 
 describe('the mock pipeline end to end', () => {
@@ -111,25 +120,26 @@ describe('the mock pipeline end to end', () => {
     expect(assets.splash).toBe(r.splashRel);
     expect(assets.provenance).toHaveLength(4);
     expect(assets.provenance.every((p) => p.provider === 'mock')).toBe(true);
-    // Both artifacts were downloaded before the provider URLs could expire.
-    expect(r.downloads.map((d) => d.url)).toEqual([
-      expect.stringContaining('mock://image/'),
-      expect.stringContaining('mock://animated/'),
-    ]);
+    // Only the model is a provider download; the sealed sheet is the
+    // chosen reference candidate copied in place.
+    expect(r.downloads.map((d) => d.url)).toEqual([expect.stringContaining('mock://animated/')]);
     // Ledger: 3 granted, 1 spent, nothing refunded.
     expect(r.store.creditBalance(ACCOUNT)).toBe(2);
   });
 
-  it('derives the model sheet from the uploaded splash', async () => {
+  it('builds the 3D from the uploaded chosen reference, never a regeneration', async () => {
     const r = rig();
     const start = startFinalize(r.pipeline, { def: r.def, accountId: ACCOUNT, family: 'staff' });
     expect(start.ok).toBe(true);
     if (!start.ok) return;
     await start.done;
     const upload = r.provider.seen.find((s) => s.op === 'uploadImage');
-    expect(upload?.req).toMatchObject({ name: 'splash_seed.png' });
-    const sheetCall = r.provider.seen.find((s) => s.op === 'generate2D');
-    expect(sheetCall?.req).toMatchObject({ image: 'mock-upload-1' });
+    expect(upload?.req).toMatchObject({ name: 'sheet_seed.png' });
+    const model = r.provider.seen.find((s) => s.op === 'imageTo3D');
+    expect(model?.req).toMatchObject({ image: 'mock-upload-1' });
+    // The 2D stages are the player's, iterated in the editor: finalize
+    // never generates an image behind their back.
+    expect(r.provider.seen.some((s) => s.op === 'generate2D')).toBe(false);
   });
 
   it('fails and refunds when an artifact lands over its budget', async () => {
@@ -252,6 +262,23 @@ describe('the finalize gates (server/forge.ts)', () => {
     expect(finalizeDraft(deps, ACCOUNT, artless.id)).toMatchObject({
       ok: false,
       error: expect.stringContaining('splash'),
+    });
+
+    // A chosen splash without a chosen model reference cannot seal either:
+    // the 3D builds from that exact image, so the player must pick it.
+    const refCid = r.store.addArtCandidate({
+      forgedId: artless.id,
+      accountId: ACCOUNT,
+      kind: 'splash',
+      prompt: 'p',
+      path: r.splashRel,
+      provenance: null,
+      at: 1,
+    });
+    r.store.chooseArtCandidate(artless.id, 'splash', refCid);
+    expect(finalizeDraft(deps, ACCOUNT, artless.id)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('reference'),
     });
 
     const good = finalizeDraft(deps, ACCOUNT, r.def.id);
@@ -383,6 +410,10 @@ describe('the tripo provider against scripted responses', () => {
     expect(asset.url).toBe('https://x.example/sheet.png');
     expect(calls[1]?.url).toContain('/generation/image-to-image');
     expect(calls[1]?.body).toMatchObject({ prompt: 'sheet', input: { file_token: 'tok-9' } });
+    // The same token form drives image-to-model (the staged finalize path).
+    await provider.imageTo3D({ image: token });
+    expect(calls[2]?.url).toContain('/generation/image-to-model');
+    expect(calls[2]?.body).toMatchObject({ input: { file_token: 'tok-9' } });
   });
 
   it('reads the credit balance and answers -1 on any failure', async () => {

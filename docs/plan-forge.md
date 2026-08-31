@@ -61,7 +61,10 @@ and their written UGC authorization; details inline.
    carries at most five animations; a victory clip returns in phase 2 as a second
    geometry-free task merged client-side), the spike on preset animation coverage
    and provider terms (see the ADR 0010 addendum), and the server-side async
-   jobs: finalize uploads the chosen splash and derives the model sheet from it,
+   jobs: the model reference is its own player-iterated art kind derived
+   from the chosen splash (one figure, one view; a multi-view sheet
+   becomes a multi-body model), finalize re-uploads the CHOSEN reference
+   and builds from that exact image,
    runs the second-pass classification hook (block and refund), then image-to-3D,
    auto-rigging (biped only in v1; the Creature beta waits for a provider with a
    full six-clip story), the weapon-family clip set, download-before-expiry with

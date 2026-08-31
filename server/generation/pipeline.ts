@@ -1,14 +1,16 @@
 // Finalization (ADR 0006, plan-forge phase 5): the server-side async job
-// that turns a validated draft into a finalized champion. Stages in ADR
-// order: derive the model sheet (2D), second-pass classification, image
-// to 3D, auto-rig (biped, v1), the per-weapon-family clip set, then
-// download the artifacts next to the store and seal the row with full
-// provenance. The economy is ledger-first (ADR 0007): one creation is
-// debited when the job starts and refunded on ANY failure, technical or
-// content-blocked. Jobs persist in SQLite so a crash mid-run is swept on
-// boot: the job fails, the creation comes back.
+// that turns a validated draft into a finalized champion. The 2D stages
+// are the player's own, iterated in the editor (splash, then the model
+// reference derived from it, both art candidates); this job runs the 3D
+// half on the CHOSEN reference, exactly the image the player approved:
+// classification, image to 3D, auto-rig (biped, v1), the per-weapon-
+// family clip set, then download the artifacts next to the store and
+// seal the row with full provenance. The economy is ledger-first (ADR
+// 0007): one creation is debited when the job starts and refunded on ANY
+// failure, technical or content-blocked. Jobs persist in SQLite so a
+// crash mid-run is swept on boot: the job fails, the creation comes back.
 
-import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { ForgedChampionDef } from '../../src/sim/forge/forged_def';
 import type { ForgeStore } from '../forge_store';
@@ -31,8 +33,9 @@ export interface PipelineDeps {
   // over its budget fails the job (and refunds the creation). Absent or
   // non-positive numbers disable a check.
   budgets?: { imageKb?: number; modelKb?: number };
-  // Local file reads and sizes, injectable for tests.
+  // Local file reads, copies, and sizes, injectable for tests.
   readFile?(absPath: string): Buffer;
+  copyFile?(src: string, dest: string): void;
   fileSize?(absPath: string): number;
   now?(): number;
 }
@@ -53,18 +56,6 @@ export function familyOf(def: ForgedChampionDef): WeaponFamily {
   if (def.role === 'Tank') return 'blunt';
   if (def.role === 'Support' || def.role === 'Mage' || def.role === 'Battlemage') return 'staff';
   return 'slashing';
-}
-
-// The model sheet derivation prompt (CONTEXT.md "Model sheet"): the
-// technical 2D image the 3D generation accepts, derived from the chosen
-// splash when the provider can take an image input.
-export function sheetPrompt(def: ForgedChampionDef): string {
-  const identity = [def.name, def.title].filter((s) => s.trim().length > 0).join(', ');
-  return (
-    `Technical character model sheet: one character, full body, front-facing A-pose, ` +
-    `arms slightly out, empty hands, neutral gray background, even lighting, no props. ` +
-    `The character: ${identity}, a ${def.role.toLowerCase()} champion. ${def.tagline}`.trim()
-  );
 }
 
 export type FinalizeStart =
@@ -104,33 +95,30 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
     deps.storage.updateGenerationJob(jobId, { stage: name }, now());
   };
   try {
-    // The splash is the creative anchor (ADR 0010): when the draft has a
-    // chosen splash and the provider accepts image input, the model sheet
-    // derives from it; otherwise the prompt stands alone.
-    stage('model_sheet');
-    const splash = deps.storage.chosenArt(req.def.id, 'splash');
-    let splashRef: string | undefined;
-    if (splash && deps.provider.uploadImage) {
-      const read = deps.readFile ?? readFileSync;
-      splashRef = await deps.provider.uploadImage({
-        data: read(path.join(deps.assetsDir, splash.path)),
-        name: path.basename(splash.path),
-      });
+    // The player already iterated the 2D stages in the editor: the model
+    // builds from the CHOSEN reference, that exact approved image, never
+    // a hidden regeneration. The reference is a local candidate file, so
+    // it rides up through the provider's upload seam.
+    stage('reference');
+    const sheet = deps.storage.chosenArt(req.def.id, 'sheet');
+    if (!sheet) {
+      throw new GenerationError('no chosen model reference: generate and pick one first');
     }
-    const sheet = await deps.provider.generate2D({
-      prompt: sheetPrompt(req.def),
-      ...(splashRef ? { image: splashRef } : {}),
+    if (!deps.provider.uploadImage) {
+      throw new GenerationError('this provider cannot take the chosen reference as input');
+    }
+    const read = deps.readFile ?? readFileSync;
+    const sheetRef = await deps.provider.uploadImage({
+      data: read(path.join(deps.assetsDir, sheet.path)),
+      name: path.basename(sheet.path),
     });
 
     stage('classify');
-    const allowed = deps.classifyImage ? await deps.classifyImage(sheet.url) : true;
-    if (!allowed) throw new GenerationError('the model sheet failed classification', true);
+    const allowed = deps.classifyImage ? await deps.classifyImage(sheet.path) : true;
+    if (!allowed) throw new GenerationError('the model reference failed classification', true);
 
     stage('model');
-    const model = await deps.provider.imageTo3D({
-      imageTaskId: sheet.taskId,
-      imageUrl: sheet.url,
-    });
+    const model = await deps.provider.imageTo3D({ image: sheetRef });
 
     stage('rig');
     const rigged = await deps.provider.rig({ modelTaskId: model.taskId, rigType: 'biped' });
@@ -146,19 +134,23 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
     const dir = path.join(deps.assetsDir, 'forged', req.def.id);
     mkdirSync(dir, { recursive: true });
     // Forward slashes on purpose: these are stored and later served as
-    // URL tails, on Windows dev machines included.
+    // URL tails, on Windows dev machines included. The sheet is the
+    // chosen candidate copied in place (it was already on disk and
+    // already inside the image budget when it landed as a candidate).
     const sheetPath = `forged/${req.def.id}/sheet.png`;
     const modelPath = `forged/${req.def.id}/model.glb`;
-    await deps.download(sheet.url, path.join(deps.assetsDir, sheetPath));
+    const copy = deps.copyFile ?? copyFileSync;
+    copy(path.join(deps.assetsDir, sheet.path), path.join(deps.assetsDir, sheetPath));
     await deps.download(animated.url, path.join(deps.assetsDir, modelPath));
     // The per-champion asset budgets (ADR 0010): an oversized artifact is
     // a technical failure, refunded like any other.
-    checkBudget(deps, sheetPath, deps.budgets?.imageKb);
     checkBudget(deps, modelPath, deps.budgets?.modelKb);
 
-    // Sealed with the champion: the sheet and model this run produced,
-    // the chosen splash and spell icons as they stand (candidate files
-    // are never pruned once chosen), and full provenance.
+    // Sealed with the champion: the reference and model this run
+    // produced, the chosen splash and spell icons as they stand
+    // (candidate files are never pruned once chosen), and full
+    // provenance, the reference's own included.
+    const splash = deps.storage.chosenArt(req.def.id, 'splash');
     const icons: Record<string, string> = {};
     for (const key of ['Q', 'W', 'E', 'R']) {
       const pick = deps.storage.chosenArt(req.def.id, `icon_${key}`);
@@ -172,7 +164,12 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
         family: req.family,
         ...(splash ? { splash: splash.path } : {}),
         ...(Object.keys(icons).length > 0 ? { icons } : {}),
-        provenance: [sheet.provenance, model.provenance, rigged.provenance, animated.provenance],
+        provenance: [
+          sheet.provenance,
+          model.provenance,
+          rigged.provenance,
+          animated.provenance,
+        ].filter((p) => p !== null && p !== undefined),
       },
       now(),
     );

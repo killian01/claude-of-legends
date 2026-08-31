@@ -65,8 +65,12 @@ export interface GenerationProvider {
   // text (the pipeline then derives the model sheet from the prompt
   // alone instead of the splash).
   uploadImage?(file: { data: Uint8Array; name: string }): Promise<string>;
-  // One 2D image to a textured GLB model.
+  // One 2D image to a textured GLB model. `image` is an uploadImage
+  // token (the staged flow: the chosen reference is a local file the
+  // pipeline re-uploads); imageUrl and imageTaskId remain for
+  // provider-fresh outputs still inside their URL validity.
   imageTo3D(req: {
+    image?: string;
     imageUrl?: string;
     imageTaskId?: string;
     seed?: number;

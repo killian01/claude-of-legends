@@ -921,13 +921,25 @@ const server = http.createServer(async (req, res) => {
         const id = typeof body?.id === 'string' ? body.id : null;
         const kind = typeof body?.kind === 'string' ? body.kind : '';
         const line = typeof body?.line === 'string' ? body.line : '';
+        // fromCid iterates on an existing candidate (its image rides the
+        // generation); absent means a fresh start.
+        const fromCid = Number.isInteger(body?.fromCid) ? (body?.fromCid as number) : undefined;
         if (!id) {
           sendJson(res, 400, { ok: false, error: 'malformed request' });
           return;
         }
         // Awaited on purpose: one 2D image is seconds, not the minutes of
         // a finalize chain, so the candidate answers on the same request.
-        sendJson(res, 200, await generateArt(artDeps, me.id, { id, kind, line }));
+        sendJson(
+          res,
+          200,
+          await generateArt(artDeps, me.id, {
+            id,
+            kind,
+            line,
+            ...(fromCid !== undefined ? { fromCid } : {}),
+          }),
+        );
         return;
       }
       if (url === '/api/forge/art/pick' && req.method === 'POST') {
