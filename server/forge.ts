@@ -159,6 +159,11 @@ export function finalizeDraft(
       error: `finalize needs a fully valid champion: ${v.errors.slice(0, 5).join('; ')}`,
     };
   }
+  // The splash is the creative anchor (ADR 0010): the model sheet, and
+  // from it the model, derive from the chosen splash. No splash, no seal.
+  if (!deps.store.chosenArt(id, 'splash')) {
+    return { ok: false, error: 'make the splash art first: the champion derives from it' };
+  }
   refreshWeeklyGrant(deps, accountId);
   return startFinalize(deps.generation, {
     def: row.def,

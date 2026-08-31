@@ -130,12 +130,38 @@ export class TripoProvider implements GenerationProvider {
     }
   }
 
-  async generate2D(req: { prompt: string; imageUrl?: string }): Promise<ProviderAsset> {
-    const taskId = await this.post('/generation/text-to-image', {
+  // With a source image (the validated splash, as an uploaded file token)
+  // this is the image-to-image derivation the ADR describes; without one
+  // it is plain text-to-image. Both routes follow Tripo's documented v3
+  // pattern and MUST be re-verified against a live key.
+  async generate2D(req: { prompt: string; image?: string }): Promise<ProviderAsset> {
+    const endpoint = req.image ? '/generation/image-to-image' : '/generation/text-to-image';
+    const taskId = await this.post(endpoint, {
       prompt: req.prompt,
-      ...(req.imageUrl ? { image: req.imageUrl } : {}),
+      ...(req.image ? { input: req.image } : {}),
     });
-    return this.awaitTask(taskId, 'text-to-image');
+    return this.awaitTask(taskId, endpoint.slice('/generation/'.length));
+  }
+
+  // The file upload that turns a local image into an input token. Written
+  // against Tripo's published upload pattern (the v2 API exposed
+  // /upload/sts answering data.image_token); MUST be re-verified against
+  // a live key alongside the task envelope.
+  async uploadImage(file: { data: Uint8Array; name: string }): Promise<string> {
+    const form = new FormData();
+    form.append('file', new Blob([new Uint8Array(file.data)]), file.name);
+    const res = await this.fetchFn(`${BASE}/upload/sts`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${this.apiKey}` },
+      body: form,
+    });
+    if (!res.ok) {
+      throw new GenerationError(`tripo upload refused: ${res.status} ${await res.text()}`);
+    }
+    const envelope = (await res.json()) as { data?: { image_token?: string } };
+    const token = envelope.data?.image_token;
+    if (!token) throw new GenerationError('tripo upload returned no image token');
+    return token;
   }
 
   async imageTo3D(req: {

@@ -4,7 +4,7 @@
 // orphaned, the finalize gates, and the Tripo provider pinned against
 // scripted responses.
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -17,6 +17,7 @@ import {
   recoverStaleJobs,
   startFinalize,
 } from '../server/generation/pipeline';
+import { placeholderPng } from '../server/generation/placeholder';
 import { CLIP_ROLES, GenerationError, WEAPON_FAMILIES } from '../server/generation/provider';
 import { TRIPO_CLIPS, TripoProvider } from '../server/generation/tripo';
 import { CHAMPIONS } from '../src/sim/content/champions';
@@ -43,6 +44,7 @@ interface Rig {
   pipeline: PipelineDeps;
   downloads: { url: string; dest: string }[];
   def: ForgedChampionDef;
+  splashRel: string;
 }
 
 function rig(classify?: (url: string) => Promise<boolean>): Rig {
@@ -52,10 +54,11 @@ function rig(classify?: (url: string) => Promise<boolean>): Rig {
   store.addCreditEntry({ accountId: ACCOUNT, delta: 3, reason: 'weekly_grant', at: 1 });
   const provider = new MockProvider(() => 777);
   const downloads: { url: string; dest: string }[] = [];
+  const dir = assetsDir();
   const pipeline: PipelineDeps = {
     storage: store,
     provider,
-    assetsDir: assetsDir(),
+    assetsDir: dir,
     download: (url, dest) => {
       downloads.push({ url, dest });
       return Promise.resolve();
@@ -66,7 +69,22 @@ function rig(classify?: (url: string) => Promise<boolean>): Rig {
   const def = { ...forgedTwin(CHAMPIONS.sylra!), id: 'forged_gen_test' };
   const saved = saveDraft({ store }, ACCOUNT, 'bob', def);
   if (!saved.ok) throw new Error(saved.error);
-  return { store, provider, pipeline, downloads, def };
+  // The chosen splash the pipeline derives from (a real file: the mock's
+  // uploadImage is fed its bytes).
+  const splashRel = path.join('forged', def.id, 'art', 'splash_seed.png');
+  mkdirSync(path.dirname(path.join(dir, splashRel)), { recursive: true });
+  writeFileSync(path.join(dir, splashRel), placeholderPng('gen-test'));
+  const cid = store.addArtCandidate({
+    forgedId: def.id,
+    accountId: ACCOUNT,
+    kind: 'splash',
+    prompt: 'p',
+    path: splashRel,
+    provenance: null,
+    at: 1,
+  });
+  store.chooseArtCandidate(def.id, 'splash', cid);
+  return { store, provider, pipeline, downloads, def, splashRel };
 }
 
 describe('the mock pipeline end to end', () => {
@@ -84,10 +102,13 @@ describe('the mock pipeline end to end', () => {
       sheet: string;
       model: string;
       family: string;
+      splash: string;
       provenance: { provider: string; taskId: string }[];
     };
     expect(assets.family).toBe('staff');
     expect(assets.model).toContain(r.def.id);
+    // The chosen splash is sealed with the champion (ADR 0010).
+    expect(assets.splash).toBe(r.splashRel);
     expect(assets.provenance).toHaveLength(4);
     expect(assets.provenance.every((p) => p.provider === 'mock')).toBe(true);
     // Both artifacts were downloaded before the provider URLs could expire.
@@ -97,6 +118,33 @@ describe('the mock pipeline end to end', () => {
     ]);
     // Ledger: 3 granted, 1 spent, nothing refunded.
     expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+  });
+
+  it('derives the model sheet from the uploaded splash', async () => {
+    const r = rig();
+    const start = startFinalize(r.pipeline, { def: r.def, accountId: ACCOUNT, family: 'staff' });
+    expect(start.ok).toBe(true);
+    if (!start.ok) return;
+    await start.done;
+    const upload = r.provider.seen.find((s) => s.op === 'uploadImage');
+    expect(upload?.req).toMatchObject({ name: 'splash_seed.png' });
+    const sheetCall = r.provider.seen.find((s) => s.op === 'generate2D');
+    expect(sheetCall?.req).toMatchObject({ image: 'mock-upload-1' });
+  });
+
+  it('fails and refunds when an artifact lands over its budget', async () => {
+    const r = rig();
+    r.pipeline.budgets = { modelKb: 100 };
+    r.pipeline.fileSize = (p) => (p.endsWith('model.glb') ? 200 * 1024 : 10 * 1024);
+    const start = startFinalize(r.pipeline, { def: r.def, accountId: ACCOUNT, family: 'staff' });
+    expect(start.ok).toBe(true);
+    if (!start.ok) return;
+    await start.done;
+    const job = r.store.getGenerationJob(start.jobId);
+    expect(job?.status).toBe('failed');
+    expect(job?.error).toContain('budget');
+    expect(r.store.getForged(r.def.id)?.status).toBe('draft');
+    expect(r.store.creditBalance(ACCOUNT)).toBe(3);
   });
 
   it('refunds a technical failure and leaves the draft a draft', async () => {
@@ -196,6 +244,15 @@ describe('the finalize gates (server/forge.ts)', () => {
 
     // Another account cannot finalize what it does not own.
     expect(finalizeDraft(deps, 99, r.def.id)).toMatchObject({ ok: false });
+
+    // A fully valid kit with no chosen splash cannot seal: the art is the
+    // anchor everything derives from (ADR 0010).
+    const artless = { ...forgedTwin(CHAMPIONS.fenn!), id: 'forged_gen_artless' };
+    expect(saveDraft(deps, ACCOUNT, 'bob', artless).ok).toBe(true);
+    expect(finalizeDraft(deps, ACCOUNT, artless.id)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('splash'),
+    });
 
     const good = finalizeDraft(deps, ACCOUNT, r.def.id);
     expect(good.ok).toBe(true);

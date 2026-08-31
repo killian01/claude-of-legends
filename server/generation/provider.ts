@@ -53,9 +53,15 @@ export class GenerationError extends Error {
 
 export interface GenerationProvider {
   readonly id: string;
-  // Text (and optionally a source image) to a 2D image: the model sheet
-  // derivation and, later, the splash iteration both live here.
-  generate2D(req: { prompt: string; imageUrl?: string }): Promise<ProviderAsset>;
+  // Text (and optionally a source image) to a 2D image: the splash
+  // iteration and the model sheet derivation both live here. `image` is a
+  // provider file token or URL, whichever uploadImage returned.
+  generate2D(req: { prompt: string; image?: string }): Promise<ProviderAsset>;
+  // Push a local file to the provider and get back a reference usable as
+  // an image input. Optional: a provider without it limits generate2D to
+  // text (the pipeline then derives the model sheet from the prompt
+  // alone instead of the splash).
+  uploadImage?(file: { data: Uint8Array; name: string }): Promise<string>;
   // One 2D image to a textured GLB model.
   imageTo3D(req: {
     imageUrl?: string;

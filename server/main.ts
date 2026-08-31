@@ -6,6 +6,7 @@
 // who it is talking to. No database still: accounts, sessions and the
 // match log are JSON files under DATA_DIR.
 
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
@@ -24,6 +25,7 @@ import {
 } from './accounts';
 import { CONFIRM_TTL_MS, RESET_TTL_MS, TokenStore } from './action_tokens';
 import { API_RATE_PER_MIN, ApiLimiter } from './api_limit';
+import { chooseArt, deleteArtFor, generateArt, listArt, splashOf } from './art';
 import { fillWithBots } from './bot_fill';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, parseCookies, serializeCookie } from './cookies';
@@ -44,6 +46,7 @@ import { ForgeStore } from './forge_store';
 import { canPlayForged, listGallery, reportForged, setVisibility, toggleLike } from './gallery';
 import { MockProvider } from './generation/mock';
 import { downloadToFile, type PipelineDeps, recoverStaleJobs } from './generation/pipeline';
+import { placeholderFor } from './generation/placeholder';
 import type { GenerationProvider } from './generation/provider';
 import { TripoProvider } from './generation/tripo';
 import { buildLadder } from './ladder';
@@ -168,6 +171,9 @@ const discordFlows = new DiscordFlows();
 // creation ledger, and generation jobs; accounts stay in their JSON
 // registry and rows here reference their ids.
 const forgeStore = new ForgeStore(path.join(DATA_DIR, 'forge.sqlite3'));
+// Where every generated file lives (splash candidates, model sheets,
+// models), served back to logged-in clients by the asset route below.
+const ASSETS_DIR = path.join(DATA_DIR, 'assets');
 // The generation provider (ADR 0010): Tripo with a key, the mock when
 // asked for keyless dev, otherwise absent and finalize says so.
 function generationFromEnv(): PipelineDeps | null {
@@ -181,12 +187,21 @@ function generationFromEnv(): PipelineDeps | null {
   return {
     storage: forgeStore,
     provider,
-    assetsDir: path.join(DATA_DIR, 'assets'),
+    assetsDir: ASSETS_DIR,
+    // Per-champion asset budgets (ADR 0010), server-configurable like
+    // every other number in the plan; zero disables one.
+    budgets: {
+      imageKb: envNumber('ASSET_MAX_IMAGE_KB', 4096),
+      modelKb: envNumber('ASSET_MAX_MODEL_KB', 30720),
+    },
     download:
       provider.id === 'mock'
         ? (url, dest) => {
-            // Mock URLs are not fetchable; a placeholder file stands in.
-            saveJsonAtomic(dest, { placeholder: url });
+            // Mock URLs are not fetchable; a real placeholder (a valid PNG
+            // or animated GLB, picked by extension) stands in so every
+            // surface downstream renders something honest in keyless dev.
+            mkdirSync(path.dirname(dest), { recursive: true });
+            writeFileSync(dest, placeholderFor(url, dest));
             return Promise.resolve();
           }
         : downloadToFile,
@@ -229,6 +244,14 @@ const quotaDeps = {
     gen2d: envNumber('QUOTA_2D_PER_DAY', 40),
     agent: envNumber('QUOTA_AGENT_PER_DAY', 20),
   },
+};
+// The 2D art surface (plan-forge phase 4): splash and icon candidates on
+// the gen2d meter, sharing the pipeline's provider and assets dir.
+const artDeps = {
+  store: forgeStore,
+  generation,
+  quota: quotaDeps,
+  historyCap: envNumber('ART_HISTORY_CAP', 12),
 };
 // The blanket per-address rate limit over /api (phase 8); the login
 // throttle keeps its own sharper backoff. Zero disables it.
@@ -767,7 +790,16 @@ const server = http.createServer(async (req, res) => {
       }
       // --- the Forge (ADR 0010, ADR 0011): drafts, ledger, finalize ---
       if (url === '/api/forge/drafts') {
-        sendJson(res, 200, listDrafts(forgeDeps, me.id));
+        const out = listDrafts(forgeDeps, me.id);
+        // Each row carries its current splash (relative asset path) so the
+        // draft rail and the Forge-queue select can draw real cards.
+        sendJson(
+          res,
+          200,
+          out.ok
+            ? { ...out, drafts: out.drafts.map((d) => ({ ...d, splash: splashOf(forgeStore, d) })) }
+            : out,
+        );
         return;
       }
       if (url === '/api/forge/draft' && req.method === 'POST') {
@@ -782,11 +814,12 @@ const server = http.createServer(async (req, res) => {
       if (url === '/api/forge/draft/delete' && req.method === 'POST') {
         const body = await readJsonBody(req);
         const id = typeof body?.id === 'string' ? body.id : null;
-        sendJson(
-          res,
-          200,
-          id ? deleteDraft(forgeDeps, me.id, id) : { ok: false, error: 'malformed request' },
-        );
+        const outcome = id
+          ? deleteDraft(forgeDeps, me.id, id)
+          : { ok: false as const, error: 'malformed request' };
+        // A deleted draft takes its art candidates and their files along.
+        if (outcome.ok && id) deleteArtFor(artDeps, id);
+        sendJson(res, 200, outcome);
         return;
       }
       if (url === '/api/forge/finalize' && req.method === 'POST') {
@@ -820,6 +853,69 @@ const server = http.createServer(async (req, res) => {
             ? finalizeStatus(forgeDeps, me.id, jobId)
             : { ok: false, error: 'malformed request' },
         );
+        return;
+      }
+      // --- 2D art candidates (plan-forge phase 4): splash and icons ---
+      if (url === '/api/forge/art') {
+        const q = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+        const id = q.get('id');
+        sendJson(
+          res,
+          200,
+          id ? listArt(artDeps, me.id, id) : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      if (url === '/api/forge/art/generate' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        const kind = typeof body?.kind === 'string' ? body.kind : '';
+        const line = typeof body?.line === 'string' ? body.line : '';
+        if (!id) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        // Awaited on purpose: one 2D image is seconds, not the minutes of
+        // a finalize chain, so the candidate answers on the same request.
+        sendJson(res, 200, await generateArt(artDeps, me.id, { id, kind, line }));
+        return;
+      }
+      if (url === '/api/forge/art/pick' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        const cid = Number(body?.cid);
+        sendJson(
+          res,
+          200,
+          id && Number.isInteger(cid)
+            ? chooseArt(artDeps, me.id, { id, cid })
+            : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      // Generated files (splash art, model sheets, models) for logged-in
+      // clients. Paths are relative to ASSETS_DIR and produced by this
+      // server alone; the join is still guarded against traversal.
+      const assetUrl = /^\/api\/forge\/asset\/(.+)$/.exec(url);
+      if (assetUrl) {
+        const rel = decodeURIComponent(assetUrl[1] ?? '');
+        const filePath = path.join(ASSETS_DIR, rel);
+        if (!filePath.startsWith(ASSETS_DIR + path.sep) || rel.includes('..')) {
+          sendJson(res, 403, { error: 'no' });
+          return;
+        }
+        try {
+          const body = await readFile(filePath);
+          res.writeHead(200, {
+            'content-type': MIME[path.extname(filePath)] ?? 'application/octet-stream',
+            // Candidate files are content-stable (one file per generation);
+            // the finalize outputs only change on a future Reforge.
+            'cache-control': 'private, max-age=3600',
+          });
+          res.end(body);
+        } catch {
+          sendJson(res, 404, { error: 'no such asset' });
+        }
         return;
       }
       // --- the gallery (plan-forge phase 7): browse, likes, reports ---

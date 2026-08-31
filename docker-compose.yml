@@ -60,6 +60,9 @@ services:
       QUOTA_2D_PER_DAY: "${QUOTA_2D_PER_DAY:-}"
       QUOTA_AGENT_PER_DAY: "${QUOTA_AGENT_PER_DAY:-}"
       API_RATE_PER_MIN: "${API_RATE_PER_MIN:-}"
+      ART_HISTORY_CAP: "${ART_HISTORY_CAP:-}"
+      ASSET_MAX_IMAGE_KB: "${ASSET_MAX_IMAGE_KB:-}"
+      ASSET_MAX_MODEL_KB: "${ASSET_MAX_MODEL_KB:-}"
     volumes:
       # Player identities, the match log, and the Forge store. Careers and
       # forged champions reset without this.

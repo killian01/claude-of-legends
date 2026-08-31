@@ -21,10 +21,14 @@ export class MockProvider implements GenerationProvider {
   // refusal instead of a technical one.
   readonly failOn = new Set<MockOp>();
   blockOn: MockOp | null = null;
+  // Every request, in order, so tests can pin what rode along (the splash
+  // token on the model sheet derivation, for one).
+  readonly seen: { op: string; req: unknown }[] = [];
 
   constructor(private readonly now: () => number = Date.now) {}
 
-  private produce(op: MockOp, kind: string): Promise<ProviderAsset> {
+  private produce(op: MockOp, kind: string, req: unknown): Promise<ProviderAsset> {
+    this.seen.push({ op, req });
     if (this.blockOn === op) {
       return Promise.reject(new GenerationError(`mock ${op} refused the content`, true));
     }
@@ -40,23 +44,29 @@ export class MockProvider implements GenerationProvider {
     });
   }
 
-  generate2D(_req: { prompt: string; imageUrl?: string }): Promise<ProviderAsset> {
-    return this.produce('generate2D', 'image');
+  generate2D(req: { prompt: string; image?: string }): Promise<ProviderAsset> {
+    return this.produce('generate2D', 'image', req);
   }
 
-  imageTo3D(_req: {
+  uploadImage(file: { data: Uint8Array; name: string }): Promise<string> {
+    this.seen.push({ op: 'uploadImage', req: { name: file.name, bytes: file.data.length } });
+    this.counter += 1;
+    return Promise.resolve(`mock-upload-${this.counter}`);
+  }
+
+  imageTo3D(req: {
     imageUrl?: string;
     imageTaskId?: string;
     seed?: number;
   }): Promise<ProviderAsset> {
-    return this.produce('imageTo3D', 'model');
+    return this.produce('imageTo3D', 'model', req);
   }
 
-  rig(_req: { modelTaskId: string; rigType: RigType }): Promise<ProviderAsset> {
-    return this.produce('rig', 'rigged');
+  rig(req: { modelTaskId: string; rigType: RigType }): Promise<ProviderAsset> {
+    return this.produce('rig', 'rigged', req);
   }
 
-  animate(_req: { riggedTaskId: string; family: WeaponFamily }): Promise<ProviderAsset> {
-    return this.produce('animate', 'animated');
+  animate(req: { riggedTaskId: string; family: WeaponFamily }): Promise<ProviderAsset> {
+    return this.produce('animate', 'animated', req);
   }
 }

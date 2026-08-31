@@ -5,6 +5,7 @@
 // resolved, like the rest of the Forge surface (ADR 0006).
 
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
+import { splashOf } from './art';
 import type { ForgeOutcome } from './forge';
 import type { ForgedRow, ForgeStore } from './forge_store';
 
@@ -32,6 +33,11 @@ export interface GalleryEntry {
   listed: boolean;
   shared: boolean;
   updatedAt: number;
+  // Sealed asset paths relative to the assets dir (null while absent); the
+  // client prefixes its asset route. splash draws the card, model feeds
+  // the workshop view.
+  splash: string | null;
+  model: string | null;
 }
 
 export type GallerySort = 'recent' | 'popular';
@@ -70,8 +76,9 @@ export function listGallery(
         r.def.title.toLowerCase().includes(needle) ||
         r.def.creator.toLowerCase().includes(needle),
     );
-  const entries = rows.map(
-    (r): GalleryEntry => ({
+  const entries = rows.map((r): GalleryEntry => {
+    const assets = deps.store.forgedAssets(r.id) as { model?: string } | null;
+    return {
       id: r.id,
       def: r.def,
       creator: r.def.creator,
@@ -81,8 +88,10 @@ export function listGallery(
       listed: r.listed,
       shared: r.shared,
       updatedAt: r.updatedAt,
-    }),
-  );
+      splash: splashOf(deps.store, r),
+      model: assets?.model ?? null,
+    };
+  });
   // listFinalized comes back recent-first already; popular re-sorts by
   // likes with recency as the tiebreak.
   if (query.sort === 'popular') {

@@ -74,6 +74,17 @@ create table if not exists quota_events (
   action text not null,
   at integer not null
 );
+create table if not exists art_candidates (
+  id integer primary key autoincrement,
+  forged_id text not null,
+  account_id integer not null,
+  kind text not null,
+  prompt text not null,
+  path text not null,
+  provenance text not null,
+  chosen integer not null default 0,
+  at integer not null
+);
 `;
 
 export interface ForgedRow {
@@ -101,6 +112,24 @@ export interface CreditEntry {
   at: number;
 }
 
+// One generated 2D candidate (splash art or a spell icon) on a draft: the
+// file it was downloaded to (relative to the assets dir), the prompt that
+// made it, and whether the creator picked it. History, not state: rows
+// append per generation and are pruned oldest-first past the cap.
+export interface ArtCandidateRow {
+  id: number;
+  forgedId: string;
+  accountId: number;
+  // 'splash' | 'icon_Q' | ... : the store keeps the string, policy lives
+  // in server/art.ts.
+  kind: string;
+  prompt: string;
+  path: string;
+  provenance: unknown;
+  chosen: boolean;
+  at: number;
+}
+
 export interface GenerationJobRow {
   id: number;
   forgedId: string;
@@ -122,6 +151,36 @@ interface ForgedRawRow {
   listed: number;
   shared: number;
   taken_down: number;
+}
+
+interface ArtRawRow {
+  id: number;
+  forged_id: string;
+  account_id: number;
+  kind: string;
+  prompt: string;
+  path: string;
+  provenance: string;
+  chosen: number;
+  at: number;
+}
+
+function toArt(r: ArtRawRow): ArtCandidateRow {
+  let provenance: unknown = null;
+  try {
+    provenance = JSON.parse(r.provenance);
+  } catch {}
+  return {
+    id: r.id,
+    forgedId: r.forged_id,
+    accountId: r.account_id,
+    kind: r.kind,
+    prompt: r.prompt,
+    path: r.path,
+    provenance,
+    chosen: r.chosen === 1,
+    at: r.at,
+  };
 }
 
 interface JobRawRow {
@@ -291,6 +350,72 @@ export class ForgeStore {
     } catch {
       return null;
     }
+  }
+
+  // -- art candidates (plan-forge phase 4) ---------------------------------
+
+  addArtCandidate(c: Omit<ArtCandidateRow, 'id' | 'chosen'>): number {
+    const res = this.db
+      .prepare(
+        `insert into art_candidates (forged_id, account_id, kind, prompt, path, provenance, at)
+         values (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(c.forgedId, c.accountId, c.kind, c.prompt, c.path, JSON.stringify(c.provenance), c.at);
+    return Number(res.lastInsertRowid);
+  }
+
+  listArtCandidates(forgedId: string): ArtCandidateRow[] {
+    const rows = this.db
+      .prepare('select * from art_candidates where forged_id = ? order by at, id')
+      .all(forgedId) as unknown as ArtRawRow[];
+    return rows.map(toArt);
+  }
+
+  getArtCandidate(id: number): ArtCandidateRow | null {
+    const r = this.db.prepare('select * from art_candidates where id = ?').get(id) as
+      | ArtRawRow
+      | undefined;
+    return r ? toArt(r) : null;
+  }
+
+  // The creator's pick: at most one chosen candidate per (champion, kind).
+  chooseArtCandidate(forgedId: string, kind: string, id: number): void {
+    this.db
+      .prepare('update art_candidates set chosen = 0 where forged_id = ? and kind = ?')
+      .run(forgedId, kind);
+    this.db.prepare('update art_candidates set chosen = 1 where id = ?').run(id);
+  }
+
+  chosenArt(forgedId: string, kind: string): ArtCandidateRow | null {
+    const r = this.db
+      .prepare('select * from art_candidates where forged_id = ? and kind = ? and chosen = 1')
+      .get(forgedId, kind) as ArtRawRow | undefined;
+    return r ? toArt(r) : null;
+  }
+
+  // Drops the oldest unchosen candidates past `keep` for one (champion,
+  // kind) and returns their file paths so the caller can unlink them; the
+  // chosen candidate is never pruned.
+  pruneArtCandidates(forgedId: string, kind: string, keep: number): string[] {
+    const rows = this.db
+      .prepare(
+        `select id, path from art_candidates
+         where forged_id = ? and kind = ? and chosen = 0 order by at desc, id desc`,
+      )
+      .all(forgedId, kind) as unknown as { id: number; path: string }[];
+    const stale = rows.slice(Math.max(0, keep));
+    for (const row of stale) this.db.prepare('delete from art_candidates where id = ?').run(row.id);
+    return stale.map((r) => r.path);
+  }
+
+  // Every candidate of one champion, gone (a deleted draft); returns the
+  // file paths for the caller to unlink.
+  deleteArtCandidates(forgedId: string): string[] {
+    const rows = this.db
+      .prepare('select path from art_candidates where forged_id = ?')
+      .all(forgedId) as unknown as { path: string }[];
+    this.db.prepare('delete from art_candidates where forged_id = ?').run(forgedId);
+    return rows.map((r) => r.path);
   }
 
   // -- the creation ledger ------------------------------------------------

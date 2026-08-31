@@ -8,7 +8,7 @@
 // content-blocked. Jobs persist in SQLite so a crash mid-run is swept on
 // boot: the job fails, the creation comes back.
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { ForgedChampionDef } from '../../src/sim/forge/forged_def';
 import type { ForgeStore } from '../forge_store';
@@ -27,6 +27,13 @@ export interface PipelineDeps {
   // block. The default passes everything; the hook exists so a real
   // classifier lands without touching this flow.
   classifyImage?(url: string): Promise<boolean>;
+  // Per-champion asset budgets in kilobytes (ADR 0010): a downloaded file
+  // over its budget fails the job (and refunds the creation). Absent or
+  // non-positive numbers disable a check.
+  budgets?: { imageKb?: number; modelKb?: number };
+  // Local file reads and sizes, injectable for tests.
+  readFile?(absPath: string): Buffer;
+  fileSize?(absPath: string): number;
   now?(): number;
 }
 
@@ -49,8 +56,8 @@ export function familyOf(def: ForgedChampionDef): WeaponFamily {
 }
 
 // The model sheet derivation prompt (CONTEXT.md "Model sheet"): the
-// technical 2D image the 3D generation accepts. The splash-art source
-// image joins this call once the splash editor exists.
+// technical 2D image the 3D generation accepts, derived from the chosen
+// splash when the provider can take an image input.
 export function sheetPrompt(def: ForgedChampionDef): string {
   const identity = [def.name, def.title].filter((s) => s.trim().length > 0).join(', ');
   return (
@@ -97,8 +104,23 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
     deps.storage.updateGenerationJob(jobId, { stage: name }, now());
   };
   try {
+    // The splash is the creative anchor (ADR 0010): when the draft has a
+    // chosen splash and the provider accepts image input, the model sheet
+    // derives from it; otherwise the prompt stands alone.
     stage('model_sheet');
-    const sheet = await deps.provider.generate2D({ prompt: sheetPrompt(req.def) });
+    const splash = deps.storage.chosenArt(req.def.id, 'splash');
+    let splashRef: string | undefined;
+    if (splash && deps.provider.uploadImage) {
+      const read = deps.readFile ?? readFileSync;
+      splashRef = await deps.provider.uploadImage({
+        data: read(path.join(deps.assetsDir, splash.path)),
+        name: path.basename(splash.path),
+      });
+    }
+    const sheet = await deps.provider.generate2D({
+      prompt: sheetPrompt(req.def),
+      ...(splashRef ? { image: splashRef } : {}),
+    });
 
     stage('classify');
     const allowed = deps.classifyImage ? await deps.classifyImage(sheet.url) : true;
@@ -127,13 +149,27 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
     const modelPath = path.join('forged', req.def.id, 'model.glb');
     await deps.download(sheet.url, path.join(deps.assetsDir, sheetPath));
     await deps.download(animated.url, path.join(deps.assetsDir, modelPath));
+    // The per-champion asset budgets (ADR 0010): an oversized artifact is
+    // a technical failure, refunded like any other.
+    checkBudget(deps, sheetPath, deps.budgets?.imageKb);
+    checkBudget(deps, modelPath, deps.budgets?.modelKb);
 
+    // Sealed with the champion: the sheet and model this run produced,
+    // the chosen splash and spell icons as they stand (candidate files
+    // are never pruned once chosen), and full provenance.
+    const icons: Record<string, string> = {};
+    for (const key of ['Q', 'W', 'E', 'R']) {
+      const pick = deps.storage.chosenArt(req.def.id, `icon_${key}`);
+      if (pick) icons[key] = pick.path;
+    }
     deps.storage.setForgedFinalized(
       req.def.id,
       {
         sheet: sheetPath,
         model: modelPath,
         family: req.family,
+        ...(splash ? { splash: splash.path } : {}),
+        ...(Object.keys(icons).length > 0 ? { icons } : {}),
         provenance: [sheet.provenance, model.provenance, rigged.provenance, animated.provenance],
       },
       now(),
@@ -148,6 +184,25 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
       now(),
     );
     refund(deps.storage, req.accountId, req.def.id, now());
+  }
+}
+
+// Fails the job when a downloaded artifact exceeds its budget; a missing
+// file measures as zero on purpose (tests inject recording downloads).
+function checkBudget(deps: PipelineDeps, rel: string, limitKb: number | undefined): void {
+  if (!limitKb || limitKb <= 0) return;
+  const size = deps.fileSize ?? ((p: string) => statOrZero(p));
+  const kb = size(path.join(deps.assetsDir, rel)) / 1024;
+  if (kb > limitKb) {
+    throw new GenerationError(`${rel} is ${Math.round(kb)} KB, over the ${limitKb} KB budget`);
+  }
+}
+
+function statOrZero(absPath: string): number {
+  try {
+    return statSync(absPath).size;
+  } catch {
+    return 0;
   }
 }
 
