@@ -202,7 +202,10 @@ function generationFromEnv(): PipelineDeps | null {
     // every other number in the plan; zero disables one.
     budgets: {
       imageKb: envNumber('ASSET_MAX_IMAGE_KB', 4096),
-      modelKb: envNumber('ASSET_MAX_MODEL_KB', 30720),
+      // A real five-clip baked GLB measured 58 MB live (2026-08-31): the
+      // ceiling bounds abuse, not the normal case, until compression
+      // tuning lands.
+      modelKb: envNumber('ASSET_MAX_MODEL_KB', 81920),
     },
     download:
       provider.id === 'mock'
