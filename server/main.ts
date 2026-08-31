@@ -185,7 +185,9 @@ const ASSETS_DIR = path.join(DATA_DIR, 'assets');
 function generationFromEnv(): PipelineDeps | null {
   let provider: GenerationProvider | null = null;
   if (process.env.TRIPO_API_KEY) {
-    const tripo = new TripoProvider(process.env.TRIPO_API_KEY);
+    const tripo = new TripoProvider(process.env.TRIPO_API_KEY, {
+      ...(process.env.TRIPO_IMAGE_MODEL ? { imageModel: process.env.TRIPO_IMAGE_MODEL } : {}),
+    });
     provider = tripo;
     // Fire and forget: the balance names the key live (or not) at boot
     // without holding the server's start on a third party.

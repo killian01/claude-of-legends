@@ -89,12 +89,25 @@ export function splashLine(prompt: string): string {
   return i === -1 ? '' : prompt.slice(i + SPLASH_LINE_MARKER.length).trim();
 }
 
-// An iteration keeps the source candidate's FULL prompt (identity and
-// style included) and appends the player's note as an adjustment clause.
-// Sending the note alone replaces the character it was meant to correct
-// (learned live: 'make him more visible' produced a different champion).
+// An iteration against a REIMAGINING provider keeps the source
+// candidate's FULL prompt (identity and style included) and appends the
+// player's note as an adjustment clause. Sending the note alone replaces
+// the character it was meant to correct (learned live: 'make him more
+// visible' produced a different champion).
 export function iterationPrompt(sourcePrompt: string, note: string): string {
   return note === '' ? sourcePrompt : `${sourcePrompt} Adjustment: ${note}.`;
+}
+
+// An iteration against an EDIT-capable provider (provider.editsImages)
+// speaks to the image instead: the prompt is the change, and the model
+// keeps what the instruction does not touch.
+export const EDIT_KEEP =
+  'Keep everything else exactly the same: same character, same face, same outfit, ' +
+  'same colors, same style, same composition.';
+export function editInstruction(note: string): string {
+  return note === ''
+    ? 'Create a close variation of this image. Same character, same outfit, same colors, same style.'
+    : `${note}. ${EDIT_KEEP}`;
 }
 
 // The full prompt the provider sees: always the server's style block plus
@@ -193,7 +206,9 @@ export async function generateArt(
       return { ok: false, error: 'no such candidate to iterate from' };
     }
     sourcePath = from.path;
-    prompt = iterationPrompt(from.prompt, line);
+    prompt = deps.generation.provider.editsImages
+      ? editInstruction(line)
+      : iterationPrompt(from.prompt, line);
   } else if (req.kind === 'sheet') {
     const splash = deps.store.chosenArt(row.id, 'splash');
     if (!splash) {
@@ -223,6 +238,9 @@ export async function generateArt(
     asset = await deps.generation.provider.generate2D({
       prompt,
       ...(image !== undefined ? { image } : {}),
+      // The model reference wants a rig-ready standing pose; providers
+      // that know the flag keep the look and fix the stance.
+      ...(req.kind === 'sheet' ? { tPose: true } : {}),
     });
   } catch (err) {
     const blockedGen = err instanceof GenerationError && err.blocked;

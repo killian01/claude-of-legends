@@ -29,6 +29,14 @@ const BASE = 'https://openapi.tripo3d.ai/v3';
 const UPLOAD_URL = 'https://api.tripo3d.ai/v2/openapi/upload/sts';
 // Same host: the account's credit balance, logged at boot for ops.
 const BALANCE_URL = 'https://api.tripo3d.ai/v2/openapi/user/balance';
+// The v2 task queue (docs.tripo3d.ai quick start): where the advanced
+// generate_image task lives. Submissions and polls both ride it.
+const TASK_URL = 'https://api.tripo3d.ai/v2/openapi/task';
+// The advanced image task's default editor model: FLUX.1 Kontext, an
+// instruction-edit model that changes what the prompt names and keeps
+// the rest of the input image (docs.tripo3d.ai advanced-image-generation;
+// alternatives include gpt_image_2 and gemini_3_pro_image_preview).
+const DEFAULT_IMAGE_MODEL = 'flux.1_kontext_pro';
 // The rig model whose preset library covers every clip role (spike);
 // rig verified live 2026-08-31 (task type animate_rig, output model_url).
 const RIG_MODEL = 'v1.0-20240301';
@@ -72,14 +80,21 @@ export interface TripoOptions {
   sleep?: (ms: number) => Promise<void>;
   pollEveryMs?: number;
   timeoutMs?: number;
+  // The advanced image task's model_version (TRIPO_IMAGE_MODEL).
+  imageModel?: string;
 }
 
 export class TripoProvider implements GenerationProvider {
   readonly id = 'tripo';
+  // Image-driven 2D goes through the advanced generate_image task, whose
+  // models edit the input image under the prompt instead of loosely
+  // reimagining it.
+  readonly editsImages = true;
   private readonly fetchFn: typeof fetch;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly pollEveryMs: number;
   private readonly timeoutMs: number;
+  private readonly imageModel: string;
 
   constructor(
     private readonly apiKey: string,
@@ -90,10 +105,11 @@ export class TripoProvider implements GenerationProvider {
     this.pollEveryMs = options.pollEveryMs ?? 3000;
     // A generation task can legitimately take minutes; ten is a hang.
     this.timeoutMs = options.timeoutMs ?? 10 * 60 * 1000;
+    this.imageModel = options.imageModel || DEFAULT_IMAGE_MODEL;
   }
 
-  private async post(path: string, body: unknown): Promise<string> {
-    const res = await this.fetchFn(`${BASE}${path}`, {
+  private async postAt(url: string, body: unknown): Promise<string> {
+    const res = await this.fetchFn(url, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${this.apiKey}`,
@@ -102,20 +118,30 @@ export class TripoProvider implements GenerationProvider {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      throw new GenerationError(`tripo ${path} refused: ${res.status} ${await res.text()}`);
+      throw new GenerationError(`tripo ${url} refused: ${res.status} ${await res.text()}`);
     }
     const envelope = (await res.json()) as TripoTaskEnvelope;
     const taskId = envelope.data?.task_id;
-    if (!taskId) throw new GenerationError(`tripo ${path} returned no task id`);
+    if (!taskId) throw new GenerationError(`tripo ${url} returned no task id`);
     return taskId;
+  }
+
+  private post(path: string, body: unknown): Promise<string> {
+    return this.postAt(`${BASE}${path}`, body);
   }
 
   // Poll until the task settles; the first URL in the output is the file
   // (Tripo names it model, pbr_model, or image depending on the task).
-  private async awaitTask(taskId: string, model: string): Promise<ProviderAsset> {
+  // Both queues speak the same envelope; pollBase picks the queue the
+  // task was submitted on (v3 generations, or the v2 task queue).
+  private async awaitTask(
+    taskId: string,
+    model: string,
+    pollBase = `${BASE}/tasks`,
+  ): Promise<ProviderAsset> {
     const deadline = Date.now() + this.timeoutMs;
     for (;;) {
-      const res = await this.fetchFn(`${BASE}/tasks/${taskId}`, {
+      const res = await this.fetchFn(`${pollBase}/${taskId}`, {
         headers: { authorization: `Bearer ${this.apiKey}` },
       });
       if (!res.ok) throw new GenerationError(`tripo task poll refused: ${res.status}`);
@@ -144,19 +170,31 @@ export class TripoProvider implements GenerationProvider {
     }
   }
 
-  // With a source image (the validated splash, as an uploaded file token)
-  // this is the image-to-image derivation the ADR describes; without one
-  // it is plain text-to-image. Both verified against a live key
-  // (2026-08-31): the token rides as input.file_token (a bare token
-  // string is refused as "input task not found"), and the output arrives
-  // as output.generated_image_url.
-  async generate2D(req: { prompt: string; image?: string }): Promise<ProviderAsset> {
-    const endpoint = req.image ? '/generation/image-to-image' : '/generation/text-to-image';
-    const taskId = await this.post(endpoint, {
+  // Without a source image: plain text-to-image, verified against a live
+  // key (2026-08-31, output.generated_image_url). With one (an uploaded
+  // file token): the advanced generate_image task on the v2 queue
+  // (docs.tripo3d.ai advanced-image-generation), whose model_version
+  // selects a real edit model, so the prompt is an instruction over the
+  // input image instead of a fresh scene. t_pose stands the character in
+  // a rig-ready pose while keeping its look; the model reference
+  // derivation asks for it.
+  async generate2D(req: {
+    prompt: string;
+    image?: string;
+    tPose?: boolean;
+  }): Promise<ProviderAsset> {
+    if (!req.image) {
+      const taskId = await this.post('/generation/text-to-image', { prompt: req.prompt });
+      return this.awaitTask(taskId, 'text-to-image');
+    }
+    const taskId = await this.postAt(TASK_URL, {
+      type: 'generate_image',
+      model_version: this.imageModel,
       prompt: req.prompt,
-      ...(req.image ? { input: { file_token: req.image } } : {}),
+      file: { type: 'png', file_token: req.image },
+      ...(req.tPose ? { t_pose: true } : {}),
     });
-    return this.awaitTask(taskId, endpoint.slice('/generation/'.length));
+    return this.awaitTask(taskId, this.imageModel, TASK_URL);
   }
 
   // The file upload that turns a local image into an input token

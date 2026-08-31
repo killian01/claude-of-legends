@@ -56,10 +56,17 @@ export class GenerationError extends Error {
 
 export interface GenerationProvider {
   readonly id: string;
+  // True when generate2D with an image performs instruction-guided
+  // EDITING that preserves the input character (the prompt says only the
+  // change). Absent or false means the image is loose inspiration and the
+  // prompt must restate everything; art.ts composes prompts on this flag.
+  readonly editsImages?: boolean;
   // Text (and optionally a source image) to a 2D image: the splash
   // iteration and the model sheet derivation both live here. `image` is a
-  // provider file token or URL, whichever uploadImage returned.
-  generate2D(req: { prompt: string; image?: string }): Promise<ProviderAsset>;
+  // provider file token or URL, whichever uploadImage returned. `tPose`
+  // asks the provider to stand the character in a rig-ready pose while
+  // keeping its look (the model reference derivation sets it).
+  generate2D(req: { prompt: string; image?: string; tPose?: boolean }): Promise<ProviderAsset>;
   // Push a local file to the provider and get back a reference usable as
   // an image input. Optional: a provider without it limits generate2D to
   // text (the pipeline then derives the model sheet from the prompt

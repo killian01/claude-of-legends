@@ -378,8 +378,11 @@ describe('the tripo provider against scripted responses', () => {
     expect(bodies[1]?.animations).toEqual(Object.values(TRIPO_CLIPS.slashing));
   });
 
-  it('uploads to the v2 host and rides the token as input.file_token', async () => {
-    // Shapes verified against a live key (2026-08-31).
+  it('uploads to the v2 host and edits images through the advanced task', async () => {
+    // Upload and image-to-model shapes verified against a live key
+    // (2026-08-31); the advanced generate_image task follows
+    // docs.tripo3d.ai (its first live 400 costs nothing: the 2D quota is
+    // spent only on success).
     const calls: { url: string; body?: unknown }[] = [];
     const fetchFn = (async (url: string | URL, init?: RequestInit) => {
       const u = String(url);
@@ -406,14 +409,33 @@ describe('the tripo provider against scripted responses', () => {
     const provider = new TripoProvider('k', { fetchFn, sleep: () => Promise.resolve() });
     const token = await provider.uploadImage({ data: new Uint8Array([1, 2]), name: 'splash.png' });
     expect(token).toBe('tok-9');
-    const asset = await provider.generate2D({ prompt: 'sheet', image: token });
+    const asset = await provider.generate2D({ prompt: 'more thorns', image: token });
     expect(asset.url).toBe('https://x.example/sheet.png');
-    expect(calls[1]?.url).toContain('/generation/image-to-image');
-    expect(calls[1]?.body).toMatchObject({ prompt: 'sheet', input: { file_token: 'tok-9' } });
+    // With an image the advanced generate_image task carries the edit
+    // model; the basic image-to-image reimagines instead of editing.
+    expect(calls[1]?.url).toBe('https://api.tripo3d.ai/v2/openapi/task');
+    expect(calls[1]?.body).toMatchObject({
+      type: 'generate_image',
+      model_version: 'flux.1_kontext_pro',
+      prompt: 'more thorns',
+      file: { type: 'png', file_token: 'tok-9' },
+    });
+    expect(calls[1]?.body).not.toHaveProperty('t_pose');
+    // The reference derivation asks for the rig-ready pose.
+    await provider.generate2D({ prompt: 'reference', image: token, tPose: true });
+    expect(calls[2]?.body).toMatchObject({ t_pose: true });
     // The same token form drives image-to-model (the staged finalize path).
     await provider.imageTo3D({ image: token });
-    expect(calls[2]?.url).toContain('/generation/image-to-model');
-    expect(calls[2]?.body).toMatchObject({ input: { file_token: 'tok-9' } });
+    expect(calls[3]?.url).toContain('/generation/image-to-model');
+    expect(calls[3]?.body).toMatchObject({ input: { file_token: 'tok-9' } });
+    // TRIPO_IMAGE_MODEL picks another documented edit model.
+    const gemini = new TripoProvider('k', {
+      fetchFn,
+      sleep: () => Promise.resolve(),
+      imageModel: 'gemini_3_pro_image_preview',
+    });
+    await gemini.generate2D({ prompt: 'x', image: token });
+    expect(calls[4]?.body).toMatchObject({ model_version: 'gemini_3_pro_image_preview' });
   });
 
   it('reads the credit balance and answers -1 on any failure', async () => {

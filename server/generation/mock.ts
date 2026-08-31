@@ -16,6 +16,9 @@ export type MockOp = 'generate2D' | 'imageTo3D' | 'rig' | 'animate';
 
 export class MockProvider implements GenerationProvider {
   readonly id = 'mock';
+  // Mirrors production Tripo (instruction-edit models behind generate2D);
+  // tests flip it to cover the reimagining-provider prompt path.
+  editsImages = true;
   private counter = 0;
   // Ops that must fail, by name; `blocked` failures simulate a content
   // refusal instead of a technical one.
@@ -44,7 +47,7 @@ export class MockProvider implements GenerationProvider {
     });
   }
 
-  generate2D(req: { prompt: string; image?: string }): Promise<ProviderAsset> {
+  generate2D(req: { prompt: string; image?: string; tPose?: boolean }): Promise<ProviderAsset> {
     return this.produce('generate2D', 'image', req);
   }
 

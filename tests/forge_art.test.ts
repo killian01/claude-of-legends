@@ -14,6 +14,8 @@ import {
   chooseArt,
   chosenIcons,
   deleteArtFor,
+  EDIT_KEEP,
+  editInstruction,
   generateArt,
   ICON_STYLE,
   iterationPrompt,
@@ -135,6 +137,8 @@ describe('generateArt', () => {
     // alone keeps only the broad concept (learned live).
     expect(row?.prompt).toContain('Appearance: a moss witch');
     expect(row?.prompt).toContain(SHEET_MATCH);
+    // And the reference asks the provider for the rig-ready pose.
+    expect(call?.req).toMatchObject({ tPose: true });
   });
 
   it('iterates on an existing candidate via fromCid, same kind only', async () => {
@@ -157,16 +161,11 @@ describe('generateArt', () => {
     expect(upload?.req).toMatchObject({ name: path.basename(first.candidate.path) });
     const call = r.provider.seen.filter((s) => s.op === 'generate2D').at(-1);
     expect(call?.req).toMatchObject({ image: expect.stringContaining('mock-upload-') });
-    // The iteration KEEPS the source prompt and appends the note as an
-    // adjustment: the note alone would replace the character (learned
-    // live: 'make him more visible' produced a different champion).
-    const sourceRow = r.store.getArtCandidate(first.candidate.cid);
+    // An edit-capable provider (the default) receives the CHANGE as the
+    // prompt, with the keep-everything clause; the image holds the rest.
     const refinedRow = r.store.getArtCandidate(refined.ok ? refined.candidate.cid : -1);
-    expect(sourceRow).not.toBeNull();
-    expect(refinedRow?.prompt).toBe(
-      `${sourceRow?.prompt} Adjustment: same witch, more thorns on the staff.`,
-    );
-    // An empty note is a pure re-roll from the image: same prompt.
+    expect(refinedRow?.prompt).toBe(`same witch, more thorns on the staff. ${EDIT_KEEP}`);
+    // An empty note is a close-variation request, never an empty prompt.
     const reroll = await generateArt(r.deps, ACCOUNT, {
       id: r.def.id,
       kind: 'splash',
@@ -175,7 +174,7 @@ describe('generateArt', () => {
     });
     expect(reroll.ok).toBe(true);
     const rerollRow = r.store.getArtCandidate(reroll.ok ? reroll.candidate.cid : -1);
-    expect(rerollRow?.prompt).toBe(sourceRow?.prompt);
+    expect(rerollRow?.prompt).toBe(editInstruction(''));
     // A candidate of another kind is not a valid starting point.
     const cross = await generateArt(r.deps, ACCOUNT, {
       id: r.def.id,
@@ -191,6 +190,32 @@ describe('generateArt', () => {
     expect(splashLine('no marker here')).toBe('');
     expect(iterationPrompt('base prompt.', '')).toBe('base prompt.');
     expect(iterationPrompt('base prompt.', 'lighter')).toBe('base prompt. Adjustment: lighter.');
+    expect(editInstruction('lighter')).toBe(`lighter. ${EDIT_KEEP}`);
+    expect(editInstruction('')).toContain('close variation');
+  });
+
+  it('restates the full prompt when the provider only reimagines', async () => {
+    // A provider without instruction editing gets the source candidate's
+    // whole prompt back, with the note as an adjustment clause: the note
+    // alone would replace the character it was meant to correct.
+    const r = rig();
+    r.provider.editsImages = false;
+    const first = await generateArt(r.deps, ACCOUNT, {
+      id: r.def.id,
+      kind: 'splash',
+      line: 'a moss witch',
+    });
+    if (!first.ok) throw new Error('setup');
+    const refined = await generateArt(r.deps, ACCOUNT, {
+      id: r.def.id,
+      kind: 'splash',
+      line: 'more visible',
+      fromCid: first.candidate.cid,
+    });
+    expect(refined.ok).toBe(true);
+    const sourceRow = r.store.getArtCandidate(first.candidate.cid);
+    const refinedRow = r.store.getArtCandidate(refined.ok ? refined.candidate.cid : -1);
+    expect(refinedRow?.prompt).toBe(`${sourceRow?.prompt} Adjustment: more visible.`);
   });
 
   it('composes icon prompts from the flat template and the ability name', async () => {
