@@ -47,20 +47,58 @@ describe('resolveForgedClips', () => {
 });
 
 describe('stripTravel', () => {
-  it('pins X and Z of position tracks, keeps the height bob, spares rotations', () => {
-    // A run cycle whose root walks forward along Z while bobbing on Y.
+  it('removes the net drift on every axis, keeps the bob, spares rotations', () => {
+    // A run cycle whose root drifts on X and Z while bobbing on Y (all
+    // values dyadic so the detrending arithmetic is exact).
     const clip = {
       tracks: [
-        { name: 'Hips.position', values: [1, 0.9, 0, 1.2, 1.05, 0.5, 1.4, 0.9, 1.0] },
-        { name: 'Hips.quaternion', values: [0, 0, 0, 1, 0, 0.2, 0, 0.98] },
+        {
+          name: 'Hips.position',
+          times: [0, 0.5, 1],
+          values: [1, 0.75, 0, 1.25, 1, 0.5, 1.5, 0.75, 1],
+        },
+        { name: 'Hips.quaternion', times: [0, 1], values: [0, 0, 0, 1, 0, 0.25, 0, 0.75] },
       ],
     };
     stripTravel(clip);
-    // X and Z hold the first frame; Y still bobs.
-    expect(clip.tracks[0]?.values).toEqual([1, 0.9, 0, 1, 1.05, 0, 1, 0.9, 0]);
-    expect(clip.tracks[1]?.values).toEqual([0, 0, 0, 1, 0, 0.2, 0, 0.98]);
-    // Idempotent: a second pass changes nothing.
+    // X and Z lose their straight-line drift; the Y bob has none to lose.
+    expect(clip.tracks[0]?.values).toEqual([1, 0.75, 0, 1, 1, 0, 1, 0.75, 0]);
+    expect(clip.tracks[1]?.values).toEqual([0, 0, 0, 1, 0, 0.25, 0, 0.75]);
+    // Idempotent: a detrended track has zero drift left.
     stripTravel(clip);
-    expect(clip.tracks[0]?.values).toEqual([1, 0.9, 0, 1, 1.05, 0, 1, 0.9, 0]);
+    expect(clip.tracks[0]?.values).toEqual([1, 0.75, 0, 1, 1, 0, 1, 0.75, 0]);
+  });
+
+  it('catches travel hidden on the local Y axis by a rotated armature', () => {
+    // A quarter-turned export puts the world's forward on the bone's local
+    // Y: the old X/Z pinning missed exactly this (live playtest bug).
+    const clip = {
+      tracks: [
+        {
+          name: 'Hips.position',
+          times: [0, 0.5, 1],
+          values: [0, 0, 0, 0, 0.5, 0.25, 0, 1, 0],
+        },
+      ],
+    };
+    stripTravel(clip);
+    // The Y drift is gone; the Z bob (returns to its start) survives.
+    expect(clip.tracks[0]?.values).toEqual([0, 0, 0, 0, 0, 0.25, 0, 0, 0]);
+  });
+
+  it('detrends glTF cubic-spline tracks, values and tangents alike', () => {
+    // Stride 9: in-tangent, value, out-tangent per key. Y drifts by 2 over
+    // one second with matching slope-2 tangents.
+    const clip = {
+      tracks: [
+        {
+          name: 'Hips.position',
+          times: [0, 1],
+          values: [0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 2, 0, 0, 2, 0, 0, 2, 0],
+        },
+      ],
+    };
+    stripTravel(clip);
+    expect(clip.tracks[0]?.values).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
   });
 });

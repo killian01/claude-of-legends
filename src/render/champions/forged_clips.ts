@@ -50,25 +50,53 @@ export function resolveForgedClips(names: readonly string[]): ChampionClipNames 
 
 // The structural slice of THREE.AnimationClip stripTravel touches, typed
 // structurally so this module stays three-free and node-testable.
+interface NumberArray {
+  length: number;
+  [i: number]: number;
+}
 export interface TravelClip {
-  tracks: { name: string; values: { length: number; [i: number]: number } }[];
+  tracks: { name: string; times: NumberArray; values: NumberArray }[];
 }
 
-// Kills horizontal root travel inside one clip, in place. A run cycle
-// baked to move forward fights both the workshop turntable and the
-// in-match mover, which owns all translation; the champion must run on
-// the spot. Every '.position' track keeps its height curve (the bob) and
-// has X and Z pinned to their first frame; a bone whose position never
-// moves is untouched by construction. Idempotent.
+// Kills root travel inside one clip, in place. A run cycle baked to move
+// fights both the workshop turntable and the in-match mover, which owns
+// all translation; the champion must run on the spot. Rigs disagree on
+// which LOCAL bone axis is the world's forward (exports often rotate the
+// armature a quarter turn), so no axis is special here: every '.position'
+// track loses its net drift, the straight line from its first to its last
+// key, on all three axes. The bob and sway survive on whatever axis they
+// live, because an oscillation that returns to its start has no drift.
+// Handles plain vec3 keys (stride 3) and glTF cubic-spline keys (stride
+// 9, packed in-tangent, value, out-tangent). Idempotent: a detrended
+// track has zero drift left to remove.
 export function stripTravel(clip: TravelClip): void {
   for (const track of clip.tracks) {
     if (!track.name.endsWith('.position')) continue;
+    const keys = track.times.length;
+    if (keys < 2) continue;
     const v = track.values;
-    const x0 = v[0] ?? 0;
-    const z0 = v[2] ?? 0;
-    for (let i = 0; i + 2 < v.length; i += 3) {
-      v[i] = x0;
-      v[i + 2] = z0;
+    const stride = Math.round(v.length / keys);
+    if (stride !== 3 && stride !== 9) continue;
+    const valueAt = stride === 9 ? 3 : 0;
+    const t0 = track.times[0] ?? 0;
+    const span = (track.times[keys - 1] ?? 0) - t0;
+    if (span <= 0) continue;
+    for (let axis = 0; axis < 3; axis += 1) {
+      const first = v[valueAt + axis] ?? 0;
+      const last = v[(keys - 1) * stride + valueAt + axis] ?? 0;
+      const speed = (last - first) / span;
+      if (speed === 0) continue;
+      for (let k = 0; k < keys; k += 1) {
+        const at = k * stride + valueAt + axis;
+        v[at] = (v[at] ?? 0) - speed * ((track.times[k] ?? 0) - t0);
+        if (stride === 9) {
+          // Tangents are slopes, so the removed constant speed leaves
+          // them too.
+          const key = k * stride + axis;
+          v[key] = (v[key] ?? 0) - speed;
+          v[key + 6] = (v[key + 6] ?? 0) - speed;
+        }
+      }
     }
   }
 }
