@@ -40,6 +40,7 @@ import {
   saveDraft,
 } from './forge';
 import { ForgeStore } from './forge_store';
+import { canPlayForged, listGallery, reportForged, setVisibility, toggleLike } from './gallery';
 import { MockProvider } from './generation/mock';
 import { downloadToFile, type PipelineDeps, recoverStaleJobs } from './generation/pipeline';
 import type { GenerationProvider } from './generation/provider';
@@ -201,6 +202,14 @@ const forgeDeps = {
   generation,
   creationsGrant: Number(process.env.CREATIONS_PER_WEEK ?? 3),
 };
+// The gallery (plan-forge phase 7) shares the store; the takedown
+// threshold is server-configurable like the creation grant.
+const galleryDeps = {
+  store: forgeStore,
+  ...(process.env.REPORT_TAKEDOWN_THRESHOLD
+    ? { reportThreshold: Number(process.env.REPORT_TAKEDOWN_THRESHOLD) }
+    : {}),
+};
 
 const MATCHES_FILE = path.join(DATA_DIR, 'matches.jsonl');
 const REPLAYS_DIR = path.join(DATA_DIR, 'replays');
@@ -301,17 +310,18 @@ function onMatchReady(forge: boolean) {
 
 const matchmaker = new Matchmaker(send, onMatchReady(false));
 // The Forge queue (plan-forge phase 6): a second matchmaker whose selects
-// offer forged champions. The resolver is the account boundary: only a
-// finalized champion owned by the picking account comes back, re-validated
-// so a stored def that predates a validator tightening cannot reach match
-// setup (where the registry throws on invalid input).
+// offer forged champions. The resolver is the account boundary: the
+// owner's finalized champions and anyone's shared ones (the gallery rule,
+// server/gallery.ts), re-validated so a stored def that predates a
+// validator tightening cannot reach match setup (where the registry
+// throws on invalid input).
 const forgeMatchmaker = new Matchmaker(send, onMatchReady(true), undefined, {
   forge: true,
   resolveForged: (clientId, championId) => {
     const c = clients.get(clientId);
     if (!c) return null;
     const row = forgeStore.getForged(championId);
-    if (row?.status !== 'finalized' || row.accountId !== c.accountId) return null;
+    if (!row || !canPlayForged(row, c.accountId)) return null;
     return validateForged(row.def).ok ? row.def : null;
   },
 });
@@ -764,6 +774,60 @@ const server = http.createServer(async (req, res) => {
           200,
           Number.isInteger(jobId)
             ? finalizeStatus(forgeDeps, me.id, jobId)
+            : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      // --- the gallery (plan-forge phase 7): browse, likes, reports ---
+      if (url === '/api/gallery') {
+        const q = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+        sendJson(
+          res,
+          200,
+          listGallery(galleryDeps, me.id, {
+            sort: q.get('sort') === 'popular' ? 'popular' : 'recent',
+            q: q.get('q') ?? '',
+            playable: q.get('playable') === '1',
+          }),
+        );
+        return;
+      }
+      if (url === '/api/gallery/like' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        sendJson(
+          res,
+          200,
+          id
+            ? toggleLike(galleryDeps, me.id, id, body?.on === true)
+            : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      if (url === '/api/gallery/report' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        const reason = typeof body?.reason === 'string' ? body.reason : '';
+        sendJson(
+          res,
+          200,
+          id
+            ? reportForged(galleryDeps, me.id, id, reason)
+            : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      if (url === '/api/gallery/visibility' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        sendJson(
+          res,
+          200,
+          id
+            ? setVisibility(galleryDeps, me.id, id, {
+                ...(typeof body?.listed === 'boolean' ? { listed: body.listed } : {}),
+                ...(typeof body?.shared === 'boolean' ? { shared: body.shared } : {}),
+              })
             : { ok: false, error: 'malformed request' },
         );
         return;

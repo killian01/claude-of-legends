@@ -8,8 +8,8 @@ Vitest suite) and lands module-first behind existing seams. The terms are in
 State of play (2026-08-31): phases 1 to 3 are done, phase 4 is done except its
 generation-dependent corners, phase 5's keyless half is done (the neutral
 provider interface, the mock provider, the Tripo provider against its documented API,
-the finalize pipeline with the ledger), and phase 6 is done. What remains of each
-is noted inline.
+the finalize pipeline with the ledger), and phases 6 and 7 are done. What remains
+of each is noted inline.
 
 1. **Forged schema and validator**: DONE. `ForgedChampionDef` as pure data (no code
    passive; a passive is a parameterized template reference), the deterministic
@@ -54,11 +54,15 @@ is noted inline.
    grid, the queue's own rating pair in the Forge store (same Elo policy, separate
    ladder, leaver penalties included), bot backfill from the roster. Sharing other
    creators' champions into this select is phase 7's community tab.
-7. **The gallery**: the public browse space (every finalized champion listed by
-   default, creator removal), sort by recent and popular, likes, reports with
-   takedown and account warnings, the free practice test-drive, the per-champion
-   "others may play it" toggle (on by default), and the community tab at Forge-queue
-   select (all shared champions, popular first, search, pinned favorites).
+7. **The gallery**: DONE. The public browse space (every finalized champion listed
+   by default, the creator can unlist and relist), sort by recent and popular,
+   search over names and creators, likes (one per account), reports with automatic
+   takedown at a configurable distinct-account threshold plus a warning on the
+   creator's account, the free practice test-drive from the gallery card, the
+   per-champion "others may play it" toggle (on by default, enforced by the Forge
+   queue's resolver), and the community tab at Forge-queue select (all shared
+   champions, popular first, search, your liked ones pinned in front). Takedown
+   review tooling (lifting one, reading reports) is an ops surface for later.
 8. **Quotas, moderation, ops**: per-account daily quotas (2D generations, agent
    calls), edge IP rate limits, and server config for every number in this plan.
    (The word filter landed early with phase 3, since draft saves needed it.)

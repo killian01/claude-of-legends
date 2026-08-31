@@ -20,7 +20,10 @@ create table if not exists forged_champions (
   status text not null check (status in ('draft', 'finalized')),
   assets text,
   created_at integer not null,
-  updated_at integer not null
+  updated_at integer not null,
+  listed integer not null default 1,
+  shared integer not null default 1,
+  taken_down integer not null default 0
 );
 create table if not exists credits (
   id integer primary key autoincrement,
@@ -45,6 +48,26 @@ create table if not exists forge_ratings (
   rating integer not null,
   games integer not null
 );
+create table if not exists likes (
+  account_id integer not null,
+  forged_id text not null,
+  at integer not null,
+  primary key (account_id, forged_id)
+);
+create table if not exists reports (
+  account_id integer not null,
+  forged_id text not null,
+  reason text not null,
+  at integer not null,
+  primary key (account_id, forged_id)
+);
+create table if not exists warnings (
+  id integer primary key autoincrement,
+  account_id integer not null,
+  forged_id text not null,
+  reason text not null,
+  at integer not null
+);
 `;
 
 export interface ForgedRow {
@@ -54,6 +77,12 @@ export interface ForgedRow {
   status: 'draft' | 'finalized';
   createdAt: number;
   updatedAt: number;
+  // Gallery visibility: on by default, the creator can remove and relist.
+  listed: boolean;
+  // "Others may play it": on by default (game definition of the gallery).
+  shared: boolean;
+  // Moderation takedown: hidden and unplayable everywhere until lifted.
+  takenDown: boolean;
 }
 
 export interface CreditEntry {
@@ -84,6 +113,9 @@ interface ForgedRawRow {
   status: 'draft' | 'finalized';
   created_at: number;
   updated_at: number;
+  listed: number;
+  shared: number;
+  taken_down: number;
 }
 
 interface JobRawRow {
@@ -105,8 +137,16 @@ function toForged(r: ForgedRawRow): ForgedRow {
     status: r.status,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    listed: r.listed === 1,
+    shared: r.shared === 1,
+    takenDown: r.taken_down === 1,
   };
 }
+
+// Every column a ForgedRow is built from, shared by each select below so a
+// new column cannot be forgotten in one of them.
+const FORGED_COLS =
+  'id, account_id, def, status, created_at, updated_at, listed, shared, taken_down';
 
 function toJob(r: JobRawRow): GenerationJobRow {
   return {
@@ -130,6 +170,18 @@ export class ForgeStore {
     this.db = new DatabaseSync(file);
     this.db.exec('pragma journal_mode = wal');
     this.db.exec(SCHEMA);
+    // A store created before the gallery gains its columns in place;
+    // create-if-not-exists alone never alters an existing table.
+    this.ensureColumn('forged_champions', 'listed', 'listed integer not null default 1');
+    this.ensureColumn('forged_champions', 'shared', 'shared integer not null default 1');
+    this.ensureColumn('forged_champions', 'taken_down', 'taken_down integer not null default 0');
+  }
+
+  private ensureColumn(table: string, name: string, ddl: string): void {
+    const cols = this.db.prepare(`pragma table_info(${table})`).all() as unknown as {
+      name: string;
+    }[];
+    if (!cols.some((c) => c.name === name)) this.db.exec(`alter table ${table} add column ${ddl}`);
   }
 
   close(): void {
@@ -140,7 +192,9 @@ export class ForgeStore {
 
   // Upserts a forged champion row. Validation is the caller's duty (the
   // deterministic validator gates every def before it is worth storing).
-  saveForged(row: Omit<ForgedRow, 'updatedAt'> & { updatedAt: number }): void {
+  // The gallery switches are not part of a save: they default on insert
+  // and only setForgedVisibility and setTakenDown ever move them.
+  saveForged(row: Omit<ForgedRow, 'listed' | 'shared' | 'takenDown'>): void {
     this.db
       .prepare(
         `insert into forged_champions (id, account_id, def, status, created_at, updated_at)
@@ -159,22 +213,52 @@ export class ForgeStore {
   }
 
   getForged(id: string): ForgedRow | null {
-    const r = this.db
-      .prepare(
-        'select id, account_id, def, status, created_at, updated_at from forged_champions where id = ?',
-      )
-      .get(id) as ForgedRawRow | undefined;
+    const r = this.db.prepare(`select ${FORGED_COLS} from forged_champions where id = ?`).get(id) as
+      | ForgedRawRow
+      | undefined;
     return r ? toForged(r) : null;
   }
 
   listForgedByAccount(accountId: number): ForgedRow[] {
     const rows = this.db
       .prepare(
-        `select id, account_id, def, status, created_at, updated_at
-         from forged_champions where account_id = ? order by created_at`,
+        `select ${FORGED_COLS} from forged_champions where account_id = ? order by created_at`,
       )
       .all(accountId) as unknown as ForgedRawRow[];
     return rows.map(toForged);
+  }
+
+  // The gallery's raw material: every finalized champion that is not taken
+  // down, with its like count. Listing policy (listed, shared, search,
+  // sort) lives with the callers in server/gallery.ts.
+  listFinalized(): (ForgedRow & { likes: number })[] {
+    const rows = this.db
+      .prepare(
+        `select ${FORGED_COLS.split(', ')
+          .map((c) => `f.${c}`)
+          .join(', ')},
+           (select count(*) from likes l where l.forged_id = f.id) as likes
+         from forged_champions f
+         where f.status = 'finalized' and f.taken_down = 0
+         order by f.updated_at desc`,
+      )
+      .all() as unknown as (ForgedRawRow & { likes: number })[];
+    return rows.map((r) => ({ ...toForged(r), likes: r.likes }));
+  }
+
+  // The creator's two switches: gallery listing and "others may play it".
+  setForgedVisibility(id: string, fields: { listed?: boolean; shared?: boolean }): void {
+    const row = this.getForged(id);
+    if (!row) return;
+    this.db
+      .prepare('update forged_champions set listed = ?, shared = ? where id = ?')
+      .run((fields.listed ?? row.listed) ? 1 : 0, (fields.shared ?? row.shared) ? 1 : 0, id);
+  }
+
+  setTakenDown(id: string, down: boolean): void {
+    this.db
+      .prepare('update forged_champions set taken_down = ? where id = ?')
+      .run(down ? 1 : 0, id);
   }
 
   deleteForged(id: string): void {
@@ -225,6 +309,76 @@ export class ForgeStore {
       .prepare('select max(at) as at from credits where account_id = ? and reason = ?')
       .get(accountId, reason) as { at: number | null };
     return r.at;
+  }
+
+  // -- likes, reports, warnings (plan-forge phase 7) -----------------------
+
+  // One like per account per champion; liking twice is a no-op, so is
+  // unliking what was never liked.
+  setLike(accountId: number, forgedId: string, on: boolean, at: number): void {
+    if (on) {
+      this.db
+        .prepare(
+          'insert into likes (account_id, forged_id, at) values (?, ?, ?) on conflict do nothing',
+        )
+        .run(accountId, forgedId, at);
+    } else {
+      this.db
+        .prepare('delete from likes where account_id = ? and forged_id = ?')
+        .run(accountId, forgedId);
+    }
+  }
+
+  likeCount(forgedId: string): number {
+    const r = this.db
+      .prepare('select count(*) as n from likes where forged_id = ?')
+      .get(forgedId) as { n: number };
+    return r.n;
+  }
+
+  likedBy(accountId: number, forgedId: string): boolean {
+    return (
+      this.db
+        .prepare('select 1 from likes where account_id = ? and forged_id = ?')
+        .get(accountId, forgedId) !== undefined
+    );
+  }
+
+  likedIds(accountId: number): Set<string> {
+    const rows = this.db
+      .prepare('select forged_id from likes where account_id = ?')
+      .all(accountId) as unknown as { forged_id: string }[];
+    return new Set(rows.map((r) => r.forged_id));
+  }
+
+  // One report per account per champion, first reason kept.
+  addReport(accountId: number, forgedId: string, reason: string, at: number): void {
+    this.db
+      .prepare(
+        `insert into reports (account_id, forged_id, reason, at) values (?, ?, ?, ?)
+         on conflict do nothing`,
+      )
+      .run(accountId, forgedId, reason, at);
+  }
+
+  reportCount(forgedId: string): number {
+    const r = this.db
+      .prepare('select count(*) as n from reports where forged_id = ?')
+      .get(forgedId) as { n: number };
+    return r.n;
+  }
+
+  addWarning(accountId: number, forgedId: string, reason: string, at: number): void {
+    this.db
+      .prepare('insert into warnings (account_id, forged_id, reason, at) values (?, ?, ?, ?)')
+      .run(accountId, forgedId, reason, at);
+  }
+
+  warningCount(accountId: number): number {
+    const r = this.db
+      .prepare('select count(*) as n from warnings where account_id = ?')
+      .get(accountId) as { n: number };
+    return r.n;
   }
 
   // -- the Forge queue's own rating (plan-forge phase 6) -------------------
