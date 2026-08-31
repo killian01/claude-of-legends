@@ -184,12 +184,6 @@ const TRACKS: readonly Track[] = [
     times: [0, 0.8],
     values: [pitchQuat(0), pitchQuat(-Math.PI / 2)],
   },
-  {
-    name: 'victory',
-    path: 'rotation',
-    times: [0, 0.75, 1.5],
-    values: [yawQuat(0), yawQuat(Math.PI), yawQuat(Math.PI * 2 - 0.001)],
-  },
 ];
 
 // One unit cube, 24 vertices so every face is flat-shaded correctly.
@@ -386,8 +380,8 @@ export function placeholderGlb(seed: string): Buffer {
   return Buffer.concat([header, jsonHead, jsonChunk, binHead, bin]);
 }
 
-// Guard used by tests and callers alike: the six clips the renderer
-// expects are exactly the tracks built above.
+// Guard used by tests and callers alike: the clips the renderer expects
+// are exactly the tracks built above.
 export const PLACEHOLDER_CLIPS: readonly string[] = TRACKS.map((t) => t.name);
 if (PLACEHOLDER_CLIPS.length !== CLIP_ROLES.length) {
   throw new Error('placeholder clips out of step with CLIP_ROLES');

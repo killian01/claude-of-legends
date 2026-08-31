@@ -1,6 +1,6 @@
 // The neutral generation provider interface (ADR 0006): generate2D,
 // imageTo3D, rig, animate, spoken in OUR vocabulary (weapon families and
-// the six renderer clip roles), never a vendor's. Tripo is the first
+// the renderer clip roles), never a vendor's. Tripo is the first
 // implementation (tripo.ts); the mock (mock.ts) runs the pipeline in
 // tests and keyless dev. The interface is the insurance on a market that
 // ships a capability per quarter: swapping vendors must never touch the
@@ -11,8 +11,11 @@
 // six-clip story for creatures), and provenance must pin provider, model
 // version, task id, and date per asset.
 
-// The six clips the renderer expects of every champion.
-export const CLIP_ROLES = ['idle', 'run', 'attack', 'cast', 'death', 'victory'] as const;
+// The clips the renderer actually consumes in match, and exactly what one
+// Tripo retarget task may carry (live 2026-08-31: animations size <= 5).
+// A victory clip returns in phase 2 as a second, geometry-free task
+// merged client-side; the in-match renderer never consumed one.
+export const CLIP_ROLES = ['idle', 'run', 'attack', 'cast', 'death'] as const;
 export type ClipRole = (typeof CLIP_ROLES)[number];
 
 // Per-weapon-family clip sets (ADR 0006): the family picks the attack.

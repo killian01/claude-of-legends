@@ -46,7 +46,9 @@ and their written UGC authorization; details inline.
    (generate2D, imageTo3D, rig, animate, plus the optional uploadImage seam that
    turns a local file into a provider input token) with Tripo first and a mock
    provider whose downloads write real placeholder files (a spec-valid PNG and an
-   animated GLB carrying the six clips), the spike on preset animation coverage
+   animated GLB carrying the clip set: five clips, because one live retarget task
+   carries at most five animations; a victory clip returns in phase 2 as a second
+   geometry-free task merged client-side), the spike on preset animation coverage
    and provider terms (see the ADR 0010 addendum), and the server-side async
    jobs: finalize uploads the chosen splash and derives the model sheet from it,
    runs the second-pass classification hook (block and refund), then image-to-3D,

@@ -29,7 +29,8 @@ const BASE = 'https://openapi.tripo3d.ai/v3';
 const UPLOAD_URL = 'https://api.tripo3d.ai/v2/openapi/upload/sts';
 // Same host: the account's credit balance, logged at boot for ops.
 const BALANCE_URL = 'https://api.tripo3d.ai/v2/openapi/user/balance';
-// The rig model whose preset library covers all six clips (spike).
+// The rig model whose preset library covers every clip role (spike);
+// rig verified live 2026-08-31 (task type animate_rig, output model_url).
 const RIG_MODEL = 'v1.0-20240301';
 // image-to-model demands an explicit model in live (2026-08-31: allowed
 // P1-20260311, P2-20260801, v2.5-20250123, v3.0-20250812, v3.1-20260211).
@@ -37,7 +38,8 @@ const RIG_MODEL = 'v1.0-20240301';
 // full chain stands, since UGC gameplay is its stated target.
 const IMAGE_TO_MODEL_VERSION = 'v3.1-20260211';
 
-// The six renderer clips as Tripo v1.0 rig presets, per weapon family.
+// The renderer clips as Tripo v1.0 rig presets, per weapon family. Five
+// on purpose: one live retarget task carries at most 5 animations.
 export const TRIPO_CLIPS: Readonly<Record<WeaponFamily, Readonly<Record<ClipRole, string>>>> =
   (() => {
     const shared = {
@@ -45,7 +47,6 @@ export const TRIPO_CLIPS: Readonly<Record<WeaponFamily, Readonly<Record<ClipRole
       run: 'preset:biped:run',
       cast: 'preset:biped:cast_a_spell',
       death: 'preset:biped:defeat_02',
-      victory: 'preset:biped:victory_celebration',
     };
     return {
       slashing: { ...shared, attack: 'preset:biped:slash' },

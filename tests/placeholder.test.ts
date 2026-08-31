@@ -1,8 +1,8 @@
 // The mock provider's placeholder assets: real files, not stubs. The PNG
 // must be a spec-valid PNG and the GLB a spec-valid binary glTF carrying
-// exactly the six renderer clips, because keyless dev renders these in the
-// same surfaces (gallery, splash strip, workshop) that will later show
-// provider output.
+// exactly the renderer clip roles, because keyless dev renders these in
+// the same surfaces (gallery, splash strip, workshop) that will later
+// show provider output.
 
 import { inflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
@@ -63,7 +63,7 @@ function parseGlb(glb: Buffer): { json: GltfJson; binLength: number } {
 }
 
 describe('placeholderGlb', () => {
-  it('emits a binary glTF 2.0 with the six renderer clips by name', () => {
+  it('emits a binary glTF 2.0 with the renderer clip roles by name', () => {
     const { json } = parseGlb(placeholderGlb('mock://animated/mock-animate-1'));
     expect(json.asset.version).toBe('2.0');
     expect(json.animations.map((a) => a.name)).toEqual([...CLIP_ROLES]);
