@@ -58,18 +58,28 @@ export interface TravelClip {
   tracks: { name: string; times: NumberArray; values: NumberArray }[];
 }
 
-// Kills root travel inside one clip, in place. A run cycle baked to move
-// fights both the workshop turntable and the in-match mover, which owns
-// all translation; the champion must run on the spot. Rigs disagree on
-// which LOCAL bone axis is the world's forward (exports often rotate the
-// armature a quarter turn), so no axis is special here: every '.position'
-// track loses its net drift, the straight line from its first to its last
-// key, on all three axes. The bob and sway survive on whatever axis they
-// live, because an oscillation that returns to its start has no drift.
-// Handles plain vec3 keys (stride 3) and glTF cubic-spline keys (stride
-// 9, packed in-tangent, value, out-tangent). Idempotent: a detrended
-// track has zero drift left to remove.
-export function stripTravel(clip: TravelClip): void {
+// One removed drift: the bone-local straight line a '.position' track
+// traveled over the clip, handed back so the caller can recover the run
+// direction (the whole-model facing fix derives from it).
+export interface RemovedTravel {
+  name: string;
+  drift: [number, number, number];
+}
+
+// Kills root travel inside one clip, in place, and returns what it
+// removed. A run cycle baked to move fights both the workshop turntable
+// and the in-match mover, which owns all translation; the champion must
+// run on the spot. Rigs disagree on which LOCAL bone axis is the world's
+// forward (exports often rotate the armature a quarter turn), so no axis
+// is special here: every '.position' track loses its net drift, the
+// straight line from its first to its last key, on all three axes. The
+// bob and sway survive on whatever axis they live, because an
+// oscillation that returns to its start has no drift. Handles plain vec3
+// keys (stride 3) and glTF cubic-spline keys (stride 9, packed
+// in-tangent, value, out-tangent). Idempotent on the clip; the returned
+// drifts describe THIS pass only, so capture them on the first call.
+export function stripTravel(clip: TravelClip): RemovedTravel[] {
+  const removed: RemovedTravel[] = [];
   for (const track of clip.tracks) {
     if (!track.name.endsWith('.position')) continue;
     const keys = track.times.length;
@@ -81,10 +91,13 @@ export function stripTravel(clip: TravelClip): void {
     const t0 = track.times[0] ?? 0;
     const span = (track.times[keys - 1] ?? 0) - t0;
     if (span <= 0) continue;
+    const drift: [number, number, number] = [0, 0, 0];
     for (let axis = 0; axis < 3; axis += 1) {
       const first = v[valueAt + axis] ?? 0;
       const last = v[(keys - 1) * stride + valueAt + axis] ?? 0;
-      const speed = (last - first) / span;
+      const moved = last - first;
+      drift[axis] = moved;
+      const speed = moved / span;
       if (speed === 0) continue;
       for (let k = 0; k < keys; k += 1) {
         const at = k * stride + valueAt + axis;
@@ -98,5 +111,9 @@ export function stripTravel(clip: TravelClip): void {
         }
       }
     }
+    if (drift[0] !== 0 || drift[1] !== 0 || drift[2] !== 0) {
+      removed.push({ name: track.name, drift });
+    }
   }
+  return removed;
 }

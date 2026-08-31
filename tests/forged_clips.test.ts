@@ -60,12 +60,14 @@ describe('stripTravel', () => {
         { name: 'Hips.quaternion', times: [0, 1], values: [0, 0, 0, 1, 0, 0.25, 0, 0.75] },
       ],
     };
-    stripTravel(clip);
+    const removed = stripTravel(clip);
     // X and Z lose their straight-line drift; the Y bob has none to lose.
     expect(clip.tracks[0]?.values).toEqual([1, 0.75, 0, 1, 1, 0, 1, 0.75, 0]);
     expect(clip.tracks[1]?.values).toEqual([0, 0, 0, 1, 0, 0.25, 0, 0.75]);
-    // Idempotent: a detrended track has zero drift left.
-    stripTravel(clip);
+    // The removed drift is handed back: the facing fix derives from it.
+    expect(removed).toEqual([{ name: 'Hips.position', drift: [0.5, 0, 1] }]);
+    // Idempotent: a detrended track has zero drift left to remove.
+    expect(stripTravel(clip)).toEqual([]);
     expect(clip.tracks[0]?.values).toEqual([1, 0.75, 0, 1, 1, 0, 1, 0.75, 0]);
   });
 
@@ -81,9 +83,10 @@ describe('stripTravel', () => {
         },
       ],
     };
-    stripTravel(clip);
+    const removed = stripTravel(clip);
     // The Y drift is gone; the Z bob (returns to its start) survives.
     expect(clip.tracks[0]?.values).toEqual([0, 0, 0, 0, 0, 0.25, 0, 0, 0]);
+    expect(removed).toEqual([{ name: 'Hips.position', drift: [0, 1, 0] }]);
   });
 
   it('detrends glTF cubic-spline tracks, values and tangents alike', () => {

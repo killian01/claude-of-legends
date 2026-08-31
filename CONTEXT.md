@@ -172,7 +172,9 @@ edited freely and previewed on the engine's stylized figure. Drafts are unlimite
 The 3D happens in two player-approved steps, both on the draft: the BUILD spends a creation
 and produces the static model, which the creator inspects in the workshop (and may rebuild,
 spending another); ANIMATE, always last and always its own click, rigs the validated model,
-bakes the chosen clip family, and seals the champion as finalized.
+bakes the five clips the creator picked from the provider catalog, and seals the champion as
+finalized. The seal locks the kit, the art and the model, never the animations: a sealed
+champion re-bakes its clips freely, at no creation cost.
 _Avoid_: WIP champion, unfinished champion
 
 **Creation**:

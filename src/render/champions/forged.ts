@@ -7,11 +7,12 @@
 // a clipless model keeps the figure. Presentation only.
 
 import type * as THREE from 'three';
+import { Quaternion, Vector3 } from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { DisplayPropKind, ForgedDisplay } from '../../sim/forge/display';
 import { type ChampionTemplate, measureScene, normalizeProp, toLambert } from './assets';
-import { resolveForgedClips, stripTravel } from './forged_clips';
+import { type RemovedTravel, resolveForgedClips, stripTravel } from './forged_clips';
 import type { ChampionClipNames, ChampionVisualDef } from './manifest';
 
 // Middle of the roster's height range (manifest heights run 1.6 to 3.6);
@@ -26,6 +27,39 @@ export interface ForgedSource {
   rawHeight: number;
   minY: number;
   boneNames: string[];
+  // The facing fix measured from the run clip's removed travel (below);
+  // zero until a traveling run has been stripped.
+  travelYaw: number;
+  // Which clips already had their travel stripped (stripping is in
+  // place, so a template rebuild must not re-measure a flat clip).
+  strippedRuns: Set<string>;
+}
+
+// The whole-model facing fix, measured and never guessed: a generated
+// model arrives facing whatever axis its rig liked (a live probe showed
+// rest facing world +X), and the run preset travels the way the body
+// faces. So the direction stripTravel removed, taken to WORLD space
+// through the traveling bone's parents, IS the model's forward; the yaw
+// that rotates it onto +Z (the renderer's forward) makes the champion
+// face where it moves, idle and run alike. Null when the clip barely
+// traveled: nothing trustworthy to measure.
+export function travelYawFix(
+  scene: THREE.Object3D,
+  removed: readonly RemovedTravel[],
+  minTravel: number,
+): number | null {
+  scene.updateMatrixWorld(true);
+  let best: { dir: THREE.Vector3; mag: number } | null = null;
+  for (const r of removed) {
+    const node = scene.getObjectByName(r.name.slice(0, r.name.lastIndexOf('.')));
+    if (!node) continue;
+    const v = new Vector3(r.drift[0], r.drift[1], r.drift[2]);
+    if (node.parent) v.applyQuaternion(node.parent.getWorldQuaternion(new Quaternion()));
+    const mag = Math.hypot(v.x, v.z);
+    if (!best || mag > best.mag) best = { dir: v, mag };
+  }
+  if (!best || best.mag < minTravel) return null;
+  return -Math.atan2(best.dir.x, best.dir.z);
 }
 
 interface ForgedEntry {
@@ -71,6 +105,8 @@ export function loadForgedSource(url: string): Promise<ForgedSource | null> {
         rawHeight,
         minY: box.min.y,
         boneNames,
+        travelYaw: 0,
+        strippedRuns: new Set<string>(),
       };
     })
     .catch((err) => {
@@ -224,9 +260,18 @@ export async function forgedChampionTemplate(
   if (!entry.template) {
     const def = buildDef(entry, source);
     if (!def) return null;
-    // The run cycle plays on the spot: the mover owns all translation.
+    // The run cycle plays on the spot (the mover owns all translation),
+    // and the direction it traveled reveals the model's true forward:
+    // the whole model turns so that direction lands on the renderer's
+    // +Z, on top of whatever facing the creator tuned.
     const run = source.clips.get(def.clips.run);
-    if (run) stripTravel(run);
+    if (run && !source.strippedRuns.has(def.clips.run)) {
+      source.strippedRuns.add(def.clips.run);
+      const removed = stripTravel(run);
+      const fix = travelYawFix(source.scene, removed, source.rawHeight * 0.15);
+      if (fix !== null) source.travelYaw = fix;
+    }
+    if (source.travelYaw !== 0) def.yawOffset = (def.yawOffset ?? 0) + source.travelYaw;
     // The weapon GLB (house library or the champion's own) loads
     // alongside; a failure leaves the hand empty, never blocks the model.
     const props = new Map<string, THREE.Group>();

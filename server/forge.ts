@@ -198,7 +198,10 @@ export function buildModel(
 // style the picks started from; each role's pick is the player's own,
 // validated against the provider's catalog (playtest: not a bundle,
 // every animation its own choice), with the family default filling any
-// role left unpicked.
+// role left unpicked. A SEALED champion may run this again: the seal
+// locks the kit, the art and the model, never the animations (playtest:
+// creators keep re-picking clips after the seal), so a re-bake simply
+// replaces the animated file and the stored picks.
 export function animateChampion(
   deps: ForgeDeps,
   accountId: number,
@@ -212,9 +215,6 @@ export function animateChampion(
   const row = deps.store.getForged(id);
   if (!row || row.accountId !== accountId) {
     return { ok: false, error: 'no such champion on this account' };
-  }
-  if (row.status === 'finalized') {
-    return { ok: false, error: 'already animated and sealed (Reforge comes later)' };
   }
   const picked = (WEAPON_FAMILIES as readonly string[]).includes(family ?? '')
     ? (family as WeaponFamily)

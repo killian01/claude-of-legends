@@ -538,15 +538,59 @@ describe('the build and animate gates (server/forge.ts)', () => {
     expect(sealed.ok).toBe(true);
     if (sealed.ok) await sealed.done;
     expect((r.store.forgedAssets(r.def.id) as { family: string }).family).toBe('staff');
-    // Sealed now: both halves refuse.
+    // Sealed now: the build refuses, but the animations stay the
+    // player's to change: a re-bake replaces the clips, spending nothing.
     expect(buildModel(deps, ACCOUNT, r.def.id)).toMatchObject({
       ok: false,
       error: expect.stringContaining('already finalized'),
     });
-    expect(animateChampion(deps, ACCOUNT, r.def.id)).toMatchObject({
-      ok: false,
-      error: expect.stringContaining('already animated'),
+    const rebake = animateChampion(deps, ACCOUNT, r.def.id, 'slashing', { attack: 'attack_alt' });
+    expect(rebake.ok).toBe(true);
+    if (rebake.ok) await rebake.done;
+    expect(r.store.getForged(r.def.id)?.status).toBe('finalized');
+    const clips = (r.store.forgedAssets(r.def.id) as { clips: Record<string, string> }).clips;
+    expect(clips.attack).toBe('attack_alt');
+    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+  });
+
+  it('re-animates a legacy champion through its provenance model task', async () => {
+    const r = rig();
+    // A champion sealed by the ONE-SHOT pipeline: no modelTask stored,
+    // provenance in its fixed order (reference, model, rig, animate).
+    r.store.setForgedFinalized(
+      r.def.id,
+      {
+        sheet: `forged/${r.def.id}/sheet.png`,
+        model: `forged/${r.def.id}/model.glb`,
+        family: 'staff',
+        provenance: [
+          { provider: 'tripo', model: 'gpt_image_2', at: 1, taskId: 'sheet-task' },
+          { provider: 'tripo', model: 'v3.1-20260211', at: 1, taskId: 'model-task-9' },
+          { provider: 'tripo', model: 'v1.0-20240301', at: 1, taskId: 'rig-task' },
+          { provider: 'tripo', model: 'v1.0-20240301', at: 1, taskId: 'anim-task' },
+        ],
+      },
+      5,
+    );
+    const start = startAnimate(r.pipeline, {
+      forgedId: r.def.id,
+      accountId: ACCOUNT,
+      family: 'slashing',
+      clips: MOCK_CLIPS,
     });
+    expect(start.ok).toBe(true);
+    if (!start.ok) return;
+    await start.done;
+    // The rig ran on the task the old provenance kept at index 1.
+    expect(r.provider.seen.find((s) => s.op === 'rig')?.req).toMatchObject({
+      modelTaskId: 'model-task-9',
+    });
+    expect(r.store.getForged(r.def.id)?.status).toBe('finalized');
+    expect((r.store.forgedAssets(r.def.id) as { clips: Record<string, string> }).clips).toEqual(
+      MOCK_CLIPS,
+    );
+    // Nothing moved on the ledger.
+    expect(r.store.creditBalance(ACCOUNT)).toBe(3);
   });
 });
 

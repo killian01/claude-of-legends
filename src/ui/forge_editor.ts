@@ -528,6 +528,9 @@ export function openForgeEditor(container: HTMLElement): void {
   let animCatalog: AnimCatalog | null = null;
   // The pick per clip role, sent with the bake.
   let animPicks: Record<string, string> = {};
+  // Which champion the picks were seeded for (sealed picks or defaults);
+  // switching drafts reseeds.
+  let animSeededFor: string | null = null;
   const ROLE_LABELS: readonly { role: string; label: string }[] = [
     { role: 'idle', label: 'Idle' },
     { role: 'run', label: 'Run' },
@@ -985,7 +988,9 @@ export function openForgeEditor(container: HTMLElement): void {
           }
           if (job.status === 'success') {
             animating = false;
-            status.textContent = 'Done: the champion moves, and it is sealed.';
+            status.textContent = 'Done: the animations are baked onto your champion.';
+            // The picks now on the row are the source of truth again.
+            animSeededFor = null;
             void loadDrafts().then(() => {
               renderMain();
               openWorkshopHere();
@@ -1445,35 +1450,7 @@ export function openForgeEditor(container: HTMLElement): void {
     // click once the model is validated. Baking seals the champion.
     const animPanel = el('div', 'fe-panel');
     animPanel.append(el('h3', '', 'Step 5: animations'));
-    if (sealed) {
-      if (row?.clips) {
-        const bakedList = ROLE_LABELS.map(
-          ({ role, label }) => `${label}: ${clipLabel(role, row.clips?.[role] ?? '')}`,
-        ).join('. ');
-        animPanel.append(
-          el(
-            'p',
-            'fe-lead',
-            `Baked in: ${bakedList}. Watch them play in the workshop. Changing them would ` +
-              'need a Reforge (coming later).',
-          ),
-        );
-      } else {
-        const baked = FAMILY_CHOICES.find((c) => c.value === row?.family)?.label;
-        animPanel.append(
-          el(
-            'p',
-            'fe-lead',
-            (baked ? `Baked in: ${baked}. ` : '') +
-              'Five clips ride your model: idle, run, attack, cast, death. Watch them play on ' +
-              'it in the workshop. Changing them would need a Reforge (coming later).',
-          ),
-        );
-      }
-      const openAnim = el('button', 'fe-gen', 'See them move');
-      openAnim.addEventListener('click', openWorkshopHere);
-      animPanel.append(openAnim);
-    } else if (animating) {
+    if (animating) {
       animPanel.append(
         el(
           'p',
@@ -1483,14 +1460,32 @@ export function openForgeEditor(container: HTMLElement): void {
       );
       animPanel.append(...stageChecklist(ANIM_STAGES));
     } else {
+      // The picks start from what the champion carries: its baked clips
+      // when sealed, the style defaults otherwise; switching drafts
+      // reseeds.
+      if (animSeededFor !== current.id && row) {
+        if (row.clips) {
+          animPicks = { ...row.clips };
+          if (FAMILY_CHOICES.some((c) => c.value === row.family)) {
+            animFamily = row.family as string;
+          }
+          animSeededFor = current.id;
+        } else if (animCatalog) {
+          applyFamilyDefaults();
+          animSeededFor = current.id;
+        }
+      }
       animPanel.append(
         el(
           'p',
           'fe-lead',
-          'Once the model is built and you are happy with it, pick each of the five clips ' +
-            'from the catalog (every death for death, every strike for attack) and bake them ' +
-            'onto it. The style prefills the five; every pick is yours. Baking seals the ' +
-            'champion, included in the creation the build spent.',
+          sealed
+            ? 'The seal locks the kit, the art and the model, NEVER the animations: re-pick ' +
+                'any of the five clips below and rebake, free, as often as you like.'
+            : 'Once the model is built and you are happy with it, pick each of the five clips ' +
+                'from the catalog (every death for death, every strike for attack) and bake ' +
+                'them onto it. The style prefills the five; every pick is yours. Baking seals ' +
+                'the champion, included in the creation the build spent.',
         ),
       );
       const famRow = el('div', 'fe-artrow');
@@ -1541,14 +1536,21 @@ export function openForgeEditor(container: HTMLElement): void {
       const bake = el(
         'button',
         'fe-gen',
-        'Bake the animations (included in your creation)',
+        sealed ? 'Rebake the animations (free)' : 'Bake the animations (included in your creation)',
       ) as HTMLButtonElement;
       bake.disabled = !row?.model || busy || finalizing || weaponForging;
-      bake.title = row?.model
-        ? 'Rigs your validated model and bakes the chosen style; seals the champion'
-        : 'Build the 3D model first (Step 4)';
+      bake.title = !row?.model
+        ? 'Build the 3D model first (Step 4)'
+        : sealed
+          ? 'Replaces the current animations with your new picks; spends nothing'
+          : 'Rigs your validated model and bakes your picks; seals the champion';
       bake.addEventListener('click', runAnimate);
       animPanel.append(bake);
+      if (sealed) {
+        const openAnim = el('button', 'fe-gen', 'See them move');
+        openAnim.addEventListener('click', openWorkshopHere);
+        animPanel.append(openAnim);
+      }
     }
     main.append(animPanel);
 

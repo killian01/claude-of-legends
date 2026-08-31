@@ -214,17 +214,32 @@ async function runModelBuild(deps: PipelineDeps, jobId: number, req: BuildReques
 // animated file and seal the champion. No ledger movement in either
 // direction: the creation was spent at the build, and a failed animate
 // can simply run again.
+// The image-to-3D task a legacy champion's provenance kept: the one-shot
+// pipeline stored no modelTask, but its provenance rode in a fixed order
+// (reference, model, rig, animate, then the weapon when one was built),
+// so the model task sits at index 1.
+function legacyModelTask(assets: Record<string, unknown>): string | null {
+  if (!Array.isArray(assets.provenance)) return null;
+  const entry = assets.provenance[1] as { taskId?: unknown } | undefined;
+  return typeof entry?.taskId === 'string' ? entry.taskId : null;
+}
+
 export function startAnimate(deps: PipelineDeps, req: AnimateRequest): PipelineStart {
   const now = deps.now ?? Date.now;
   if (deps.storage.runningJobFor(req.forgedId)) {
     return { ok: false, error: 'this champion is already being built' };
   }
   const assets = (deps.storage.forgedAssets(req.forgedId) as Record<string, unknown> | null) ?? {};
-  if (typeof assets.modelTask !== 'string' || typeof assets.model !== 'string') {
+  if (typeof assets.model !== 'string') {
     return { ok: false, error: 'build the 3D model first: the animations bake onto it' };
   }
+  const modelTask =
+    typeof assets.modelTask === 'string' ? assets.modelTask : legacyModelTask(assets);
+  if (!modelTask) {
+    return { ok: false, error: 'this model kept no build task to rig; rebuild the model first' };
+  }
   const jobId = deps.storage.createGenerationJob(req.forgedId, req.accountId, now(), 'animate');
-  const done = runAnimate(deps, jobId, req, assets.modelTask).catch((err) => {
+  const done = runAnimate(deps, jobId, req, modelTask).catch((err) => {
     console.error('animate job crashed outside its own handling', err);
   });
   return { ok: true, jobId, done };

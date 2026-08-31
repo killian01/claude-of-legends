@@ -16,7 +16,12 @@ import {
   type PropAnchor,
   syncPropAnchors,
 } from '../render/champions/assets';
-import { FORGED_DEFAULT_HEIGHT, forgedPropModel, guessHandBone } from '../render/champions/forged';
+import {
+  FORGED_DEFAULT_HEIGHT,
+  forgedPropModel,
+  guessHandBone,
+  travelYawFix,
+} from '../render/champions/forged';
 import { resolveForgedClips, stripTravel } from '../render/champions/forged_clips';
 import type { ChampionClipNames } from '../render/champions/manifest';
 import {
@@ -299,6 +304,10 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   const rawCenter = new THREE.Vector3();
   let boneNames: string[] = [];
 
+  // The measured facing fix (from the run clip's removed travel), the
+  // exact rotation the match applies; the facing slider adjusts on top.
+  let autoYaw = 0;
+
   const applyModelTuning = (): void => {
     if (!model) return;
     const scale = tuning.height / rawHeight;
@@ -310,7 +319,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       -rawMinY * scale + tuning.yOffset,
       -rawCenter.z * scale,
     );
-    yawGroup.rotation.y = tuning.yawOffset;
+    yawGroup.rotation.y = autoYaw + tuning.yawOffset;
   };
 
   let anchors: PropAnchor[] = [];
@@ -404,10 +413,25 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       if (want !== undefined && clips.some((c) => c.name === want)) return want;
       return resolved?.[role];
     };
-    // The run cycle plays on the spot here exactly as it will in match.
+    // The run cycle plays on the spot here exactly as it will in match,
+    // and the direction it traveled sets the model's true forward (the
+    // same measured fix the match applies). Measured with the facing
+    // slider zeroed so the saved tuning cannot pollute the reading.
     const runName = roleName('run');
     const runClip = runName !== undefined ? clips.find((c) => c.name === runName) : undefined;
-    if (runClip) stripTravel(runClip);
+    if (runClip) {
+      const removed = stripTravel(runClip);
+      if (model && removed.length > 0) {
+        const prevYaw = yawGroup.rotation.y;
+        yawGroup.rotation.y = 0;
+        const fix = travelYawFix(model, removed, rawHeight * 0.15);
+        yawGroup.rotation.y = prevYaw;
+        if (fix !== null) {
+          autoYaw = fix;
+          applyModelTuning();
+        }
+      }
+    }
     const labeled = new Map<string, string>();
     for (const { role, label } of CLIP_LABELS) {
       const name = roleName(role);
