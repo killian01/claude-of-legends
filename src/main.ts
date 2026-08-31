@@ -26,6 +26,7 @@ import { preloadBackdrop } from './ui/home_backdrop';
 import { type HomeChoice, showHome } from './ui/home_screen';
 import { showLanding } from './ui/landing';
 import {
+  type CommunityPick,
   type LobbyController,
   type QueueController,
   type SelectController,
@@ -332,15 +333,26 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
       resolve(action);
     };
 
-    // The Forge queue's select offers the account's finalized creations:
-    // fetched the moment the session opens so the list is ready (or nearly)
-    // when select_start lands; the handler awaits it either way.
+    // The Forge queue's select offers the account's finalized creations
+    // and the community's shared ones: both fetched the moment the session
+    // opens so the lists are ready (or nearly) when select_start lands;
+    // the handler awaits them either way.
     const forgedRoster: Promise<ForgedChampionDef[]> =
       choice.mode === 'forge-queue'
         ? fetch('/api/forge/drafts', { credentials: 'same-origin' })
             .then((res) => (res.ok ? res.json() : { drafts: [] }))
             .then((body: { drafts?: { def: ForgedChampionDef; status: string }[] }) =>
               (body.drafts ?? []).filter((d) => d.status === 'finalized').map((d) => d.def),
+            )
+            .catch(() => [])
+        : Promise.resolve([]);
+    const communityList: Promise<CommunityPick[]> =
+      choice.mode === 'forge-queue'
+        ? fetch('/api/gallery?playable=1&sort=popular', { credentials: 'same-origin' })
+            .then((res) => (res.ok ? res.json() : { entries: [] }))
+            .then((body: { entries?: (CommunityPick & { mine?: boolean })[] }) =>
+              // Own champions already sit in their own section.
+              (body.entries ?? []).filter((e) => e.mine !== true),
             )
             .catch(() => [])
         : Promise.resolve([]);
@@ -409,7 +421,10 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           break;
         case 'select_start': {
           clearMenus();
-          const openSelect = (forgedList: readonly ForgedChampionDef[]): void => {
+          const openSelect = (
+            forgedList: readonly ForgedChampionDef[],
+            community: readonly CommunityPick[],
+          ): void => {
             if (finished || selectUi) return;
             selectUi = showSelect(
               container,
@@ -422,12 +437,16 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
                 ws.send(JSON.stringify({ t: 'pick', championId: champ, sigils, skin }));
               },
               forgedList,
+              community,
             );
           };
-          // A Forge select waits for the forged roster (already in flight
+          // A Forge select waits for the forged lists (already in flight
           // since the session opened); a classic select opens on the spot.
-          if (msg.forge) void forgedRoster.then(openSelect);
-          else openSelect([]);
+          if (msg.forge) {
+            void Promise.all([forgedRoster, communityList]).then(([own, community]) =>
+              openSelect(own, community),
+            );
+          } else openSelect([], []);
           break;
         }
         case 'select_update':

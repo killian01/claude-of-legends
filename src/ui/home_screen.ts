@@ -11,6 +11,7 @@ import type { TeamId } from '../sim/types';
 import { type AuthedAccount, signOut } from './auth';
 import { buildEmailNotice, type ConfirmResult } from './email_status';
 import { openForgeEditor } from './forge_editor';
+import { openGallery } from './gallery';
 import { startBackdrop } from './home_backdrop';
 import { buildLadderPanel } from './ladder_panel';
 import { buildLivePanel } from './live_panel';
@@ -218,7 +219,9 @@ export function showHome(
     forgeBtn.addEventListener('click', () => openForgeEditor(container));
     const forgeQueueBtn = el('button', 'menu-btn', 'Forge queue');
     forgeQueueBtn.addEventListener('click', () => done('forge-queue'));
-    forge.append(forgeBtn, forgeQueueBtn);
+    const galleryBtn = el('button', 'menu-btn', 'Browse the gallery');
+    galleryBtn.addEventListener('click', () => openGallery(container));
+    forge.append(forgeBtn, forgeQueueBtn, galleryBtn);
 
     // --- career ---
     const career = card(

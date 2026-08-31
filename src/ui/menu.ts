@@ -334,6 +334,15 @@ export interface SelectController {
   remove(): void;
 }
 
+// One community card at Forge-queue select: another creator's shared
+// champion (the gallery's playable listing), liked ones pinned first.
+export interface CommunityPick {
+  def: ForgedChampionDef;
+  creator: string;
+  likes: number;
+  likedByMe: boolean;
+}
+
 export function showSelect(
   container: HTMLElement,
   roster: SelectPlayer[] | null,
@@ -343,6 +352,8 @@ export function showSelect(
   // Forge queue: the account's finalized forged champions, offered in
   // their own section under the roster grid.
   forged?: readonly ForgedChampionDef[],
+  // Forge queue: the community tab, every shared champion popular first.
+  community?: readonly CommunityPick[],
 ): SelectController {
   const { root, card } = screen(container);
   card.classList.add('select');
@@ -463,41 +474,77 @@ export function showSelect(
     onLock(championId, [sigils[0]!, sigils[1]!], skinIndex);
   });
 
-  // Forge queue: the account's forged champions in their own grid, wired
+  // Forge queue: forged cards (own and community) share one builder wired
   // into the same pick, taken, and lock machinery as the roster cards.
+  const forgedCard = (def: ForgedChampionDef, meta: string): HTMLButtonElement => {
+    const btn = el('button', 'menu-champ') as HTMLButtonElement;
+    btn.appendChild(el('div', 'menu-champ-monogram', (def.name[0] ?? '?').toUpperCase()));
+    const body = el('div', 'menu-champ-body');
+    body.appendChild(el('div', 'menu-champ-name', def.name));
+    const role = el('div', 'menu-champ-role', meta);
+    role.style.color = ROLE_COLORS[def.role] ?? '#c9d8ae';
+    body.appendChild(role);
+    body.appendChild(el('div', 'menu-champ-blurb', def.tagline));
+    btn.appendChild(body);
+    const resolved = resolveForgedChampion(def);
+    attachTooltip(btn, () => [
+      `${def.name}, ${def.title} (${def.role})`,
+      def.tagline,
+      `Passive, ${resolved.passive.name}: ${resolved.passive.description}`,
+      ...ABILITY_KEYS.map((k) => describeAbility(k, resolved.abilities[k]).slice(0, 3).join(' ')),
+    ]);
+    btn.addEventListener('click', () => {
+      if (takenSet.has(def.id)) return;
+      championId = def.id;
+      skinIndex = 0;
+      renderSkins();
+      for (const [id, b] of champButtons) b.classList.toggle('picked', id === def.id);
+      lock.disabled = false;
+    });
+    champButtons.set(def.id, btn);
+    return btn;
+  };
+
   let forgedBlock: HTMLElement[] = [];
   if (forged && forged.length > 0) {
     const forgedGrid = el('div', 'menu-grid');
-    for (const def of forged) {
-      const btn = el('button', 'menu-champ') as HTMLButtonElement;
-      const mono = el('div', 'menu-champ-monogram', (def.name[0] ?? '?').toUpperCase());
-      btn.appendChild(mono);
-      const body = el('div', 'menu-champ-body');
-      body.appendChild(el('div', 'menu-champ-name', def.name));
-      const role = el('div', 'menu-champ-role', def.role);
-      role.style.color = ROLE_COLORS[def.role] ?? '#c9d8ae';
-      body.appendChild(role);
-      body.appendChild(el('div', 'menu-champ-blurb', def.tagline));
-      btn.appendChild(body);
-      const resolved = resolveForgedChampion(def);
-      attachTooltip(btn, () => [
-        `${def.name}, ${def.title} (${def.role})`,
-        def.tagline,
-        `Passive, ${resolved.passive.name}: ${resolved.passive.description}`,
-        ...ABILITY_KEYS.map((k) => describeAbility(k, resolved.abilities[k]).slice(0, 3).join(' ')),
-      ]);
-      btn.addEventListener('click', () => {
-        if (takenSet.has(def.id)) return;
-        championId = def.id;
-        skinIndex = 0;
-        renderSkins();
-        for (const [id, b] of champButtons) b.classList.toggle('picked', id === def.id);
-        lock.disabled = false;
-      });
-      champButtons.set(def.id, btn);
-      forgedGrid.appendChild(btn);
-    }
+    for (const def of forged) forgedGrid.appendChild(forgedCard(def, def.role));
     forgedBlock = [el('div', 'menu-label', 'Your forged champions'), forgedGrid];
+  }
+
+  // The community tab (plan-forge phase 7): every shared champion, popular
+  // first (the server's order), your liked ones pinned in front, and a
+  // search over names and creators.
+  let communityBlock: HTMLElement[] = [];
+  if (community && community.length > 0) {
+    const communityGrid = el('div', 'menu-grid');
+    const searchBox = el('input', 'menu-input') as HTMLInputElement;
+    searchBox.placeholder = 'Search shared champions or creators';
+    const renderCommunity = (): void => {
+      communityGrid.textContent = '';
+      const needle = searchBox.value.trim().toLowerCase();
+      const list = community
+        .filter(
+          (c) =>
+            needle === '' ||
+            c.def.name.toLowerCase().includes(needle) ||
+            c.creator.toLowerCase().includes(needle),
+        )
+        // Stable, so the server's popular order holds within each half.
+        .sort((a, b) => Number(b.likedByMe) - Number(a.likedByMe));
+      for (const c of list) {
+        communityGrid.appendChild(
+          forgedCard(c.def, `${c.def.role}, by ${c.creator} (${c.likes} likes)`),
+        );
+      }
+    };
+    searchBox.addEventListener('input', renderCommunity);
+    renderCommunity();
+    communityBlock = [
+      el('div', 'menu-label', 'Community champions (popular first, your liked ones pinned)'),
+      searchBox,
+      communityGrid,
+    ];
   }
 
   const randomBtn = el('button', 'menu-btn', 'Random champion');
@@ -513,7 +560,7 @@ export function showSelect(
   const main = el('div', 'menu-select-main');
   const side = el('div', 'menu-select-side');
   main.append(el('div', 'menu-label', 'Pick your champion (hover for the kit)'), grid);
-  main.append(...forgedBlock, randomBtn);
+  main.append(...forgedBlock, ...communityBlock, randomBtn);
   if (teamsBox) side.appendChild(teamsBox);
   side.append(
     el('div', 'menu-label', 'Skin (cosmetic only)'),
