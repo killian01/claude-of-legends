@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { type ForgeDeps, finalizeDraft, saveDraft } from '../server/forge';
+import { type ForgeDeps, finalizeDraft, forgeWeapon, saveDraft } from '../server/forge';
 import { ForgeStore } from '../server/forge_store';
 import { MockProvider } from '../server/generation/mock';
 import {
@@ -174,6 +174,53 @@ describe('the mock pipeline end to end', () => {
       expect.stringContaining('mock://animated/'),
       expect.stringContaining('mock://model/'),
     ]);
+  });
+
+  it('forges the weapon onto a sealed champion without one, spending nothing', async () => {
+    const r = rig();
+    const deps: ForgeDeps = { store: r.store, generation: r.pipeline, now: () => 999 };
+    // A draft cannot claim a weapon; build the champion first.
+    expect(forgeWeapon(deps, ACCOUNT, r.def.id)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('build the champion first'),
+    });
+    const built = finalizeDraft(deps, ACCOUNT, r.def.id, 'slashing');
+    expect(built.ok).toBe(true);
+    if (built.ok) await built.done;
+    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+    // No chosen weapon image yet: the chain refuses before any job.
+    expect(forgeWeapon(deps, ACCOUNT, r.def.id)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('weapon image'),
+    });
+    const weaponRel = `forged/${r.def.id}/art/weapon_seed.png`;
+    writeFileSync(path.join(r.pipeline.assetsDir, weaponRel), placeholderPng('late-weapon'));
+    const cid = r.store.addArtCandidate({
+      forgedId: r.def.id,
+      accountId: ACCOUNT,
+      kind: 'weapon',
+      prompt: 'p',
+      path: weaponRel,
+      provenance: { provider: 'mock', model: 'mock-1', at: 1, taskId: 'cand-weapon' },
+      at: 1,
+    });
+    r.store.chooseArtCandidate(r.def.id, 'weapon', cid);
+    const before = (r.store.forgedAssets(r.def.id) as { provenance: unknown[] }).provenance.length;
+    const claim = forgeWeapon(deps, ACCOUNT, r.def.id);
+    expect(claim.ok).toBe(true);
+    if (!claim.ok) return;
+    await claim.done;
+    expect(r.store.getGenerationJob(claim.jobId)?.status).toBe('success');
+    const assets = r.store.forgedAssets(r.def.id) as { weapon?: string; provenance: unknown[] };
+    expect(assets.weapon).toBe(`forged/${r.def.id}/weapon.glb`);
+    expect(assets.provenance).toHaveLength(before + 1);
+    // The creation covered the weapon: the ledger never moved.
+    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+    // And only once: with the weapon in place, the claim is closed.
+    expect(forgeWeapon(deps, ACCOUNT, r.def.id)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('already has'),
+    });
   });
 
   it('honors the player-picked animation family over the kit-implied one', async () => {

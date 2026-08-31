@@ -218,6 +218,37 @@ describe('generateArt', () => {
     expect(refinedRow?.prompt).toBe(`${sourceRow?.prompt} Adjustment: more visible.`);
   });
 
+  it('keeps only the unclaimed weapon open after the seal', async () => {
+    const r = rig();
+    const splash = await generateArt(r.deps, ACCOUNT, {
+      id: r.def.id,
+      kind: 'splash',
+      line: 'a moss witch',
+    });
+    if (!splash.ok) throw new Error('setup');
+    // Sealed without a weapon: the creation covered one, so the weapon
+    // kind still generates and picks; everything else is sealed.
+    r.store.setForgedFinalized(r.def.id, { model: `forged/${r.def.id}/model.glb` }, 5);
+    const splashAgain = await generateArt(r.deps, ACCOUNT, {
+      id: r.def.id,
+      kind: 'splash',
+      line: 'another witch',
+    });
+    expect(splashAgain).toMatchObject({ ok: false, error: expect.stringContaining('sealed') });
+    const weapon = await generateArt(r.deps, ACCOUNT, { id: r.def.id, kind: 'weapon', line: '' });
+    expect(weapon.ok).toBe(true);
+    if (!weapon.ok) return;
+    expect(chooseArt(r.deps, ACCOUNT, { id: r.def.id, cid: weapon.candidate.cid }).ok).toBe(true);
+    // Once the weapon asset exists, the seal is complete.
+    r.store.updateForgedAssets(
+      r.def.id,
+      { model: `forged/${r.def.id}/model.glb`, weapon: `forged/${r.def.id}/weapon.glb` },
+      6,
+    );
+    const closed = await generateArt(r.deps, ACCOUNT, { id: r.def.id, kind: 'weapon', line: '' });
+    expect(closed).toMatchObject({ ok: false, error: expect.stringContaining('sealed') });
+  });
+
   it('composes icon prompts from the flat template and the ability name', async () => {
     const r = rig();
     const out = await generateArt(r.deps, ACCOUNT, { id: r.def.id, kind: 'icon_Q', line: '' });

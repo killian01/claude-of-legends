@@ -477,6 +477,8 @@ export function openForgeEditor(container: HTMLElement): void {
   // True while a finalize chain runs; Step 3 renders the stage checklist
   // and the poll advances it through these rows when they are on screen.
   let finalizing = false;
+  // True while a weapon-only build runs (the post-seal claim).
+  let weaponForging = false;
   let currentStage = '';
   let stageRows: Map<string, HTMLElement> | null = null;
   // The account's creation stock, from the drafts route; -1 = unknown.
@@ -540,7 +542,12 @@ export function openForgeEditor(container: HTMLElement): void {
     generating = kind;
     renderMain();
     status.textContent = 'Generating the image...';
-    void api<{ ok: boolean; error?: string }>('/api/forge/draft', { def: current })
+    // A sealed champion cannot be re-saved as a draft; its one open art
+    // kind (the unclaimed weapon) generates against the stored row.
+    const saveFirst: Promise<{ ok: boolean; error?: string } | null> = isSealed()
+      ? Promise.resolve({ ok: true })
+      : api<{ ok: boolean; error?: string }>('/api/forge/draft', { def: current });
+    void saveFirst
       .then((saved) => {
         if (!saved?.ok) throw new Error(saved?.error ?? 'save failed');
         return api<{
@@ -885,6 +892,52 @@ export function openForgeEditor(container: HTMLElement): void {
   };
   finalizeBtn.addEventListener('click', runForge);
 
+  // The weapon-only build on a sealed champion that has none: the
+  // creation covered it, so this spends nothing; a failure spends
+  // nothing either.
+  const forgeWeaponNow = (): void => {
+    if (weaponForging) return;
+    weaponForging = true;
+    renderMain();
+    status.textContent = 'Forging the weapon...';
+    void api<{ ok: boolean; jobId?: number; error?: string }>('/api/forge/weapon', {
+      id: current.id,
+    }).then((started) => {
+      if (!started?.ok || started.jobId === undefined) {
+        weaponForging = false;
+        status.textContent = started?.error ?? 'the weapon build could not start';
+        renderMain();
+        return;
+      }
+      const poll = (): void => {
+        void api<{ ok: boolean; status?: string; error?: string }>(
+          `/api/forge/job?id=${started.jobId}`,
+        ).then((job) => {
+          if (!job?.ok) {
+            weaponForging = false;
+            status.textContent = 'the job vanished; reload and check your champion';
+            renderMain();
+            return;
+          }
+          if (job.status === 'success') {
+            weaponForging = false;
+            status.textContent = 'The weapon is forged: attach it in the workshop.';
+            void loadDrafts().then(() => renderMain());
+            return;
+          }
+          if (job.status === 'failed') {
+            weaponForging = false;
+            status.textContent = `The weapon build failed (${job.error ?? 'unknown'}); nothing was spent.`;
+            renderMain();
+            return;
+          }
+          window.setTimeout(poll, 2000);
+        });
+      };
+      poll();
+    });
+  };
+
   // The workshop door: only a finalized champion has a model to turn.
   const workshopBtn = el('button', 'fe-btn', 'Workshop (3D view)') as HTMLButtonElement;
   workshopBtn.addEventListener('click', openWorkshopHere);
@@ -1110,7 +1163,9 @@ export function openForgeEditor(container: HTMLElement): void {
     // fused geometry); the weapon gets its own image and its own 3D.
     const weaponPanel = el('div', 'fe-panel');
     weaponPanel.append(el('h3', '', 'Step 3: weapon (optional)'));
-    if (sealed) {
+    // A champion sealed WITHOUT a weapon keeps this zone open: the
+    // creation covered the weapon, so it can still be claimed here.
+    if (sealed && row?.weapon) {
       weaponPanel.append(el('div', 'fe-lead', 'Sealed with the champion.'));
     } else if (!chosenOf('splash')) {
       weaponPanel.append(
@@ -1126,10 +1181,13 @@ export function openForgeEditor(container: HTMLElement): void {
         el(
           'p',
           'fe-lead',
-          'Your weapon, alone on a plain background, extracted from the splash. Iterate until ' +
-            'it is right: the 3D weapon builds from this exact image during the champion ' +
-            'build, then attaches to a hand in the workshop. Skip it to fight bare-handed ' +
-            'or wear a weapon from the house armory.',
+          sealed
+            ? 'Your champion sealed without a weapon, but the creation covered one: generate ' +
+                'the weapon image below, pick it, then forge it. It attaches in the workshop.'
+            : 'Your weapon, alone on a plain background, extracted from the splash. Iterate ' +
+                'until it is right: the 3D weapon builds from this exact image during the ' +
+                'champion build, then attaches to a hand in the workshop. Skip it to fight ' +
+                'bare-handed or wear a weapon from the house armory.',
         ),
       );
       const weaponRow = el('div', 'fe-hero');
@@ -1149,6 +1207,28 @@ export function openForgeEditor(container: HTMLElement): void {
       weaponPanel.append(weaponRow);
       const wBadge = refineBadge('weapon');
       if (wBadge) weaponPanel.append(wBadge);
+      if (sealed) {
+        if (weaponForging) {
+          const busyLine = el('div', 'fe-stagerow');
+          busyLine.append(
+            el('div', 'fe-spin small'),
+            el('span', '', 'Forging the weapon... a few minutes.'),
+          );
+          weaponPanel.append(busyLine);
+        } else {
+          const claim = el(
+            'button',
+            'fe-gen',
+            'Forge the 3D weapon (included in your creation)',
+          ) as HTMLButtonElement;
+          claim.disabled = busy || !chosenOf('weapon');
+          claim.title = chosenOf('weapon')
+            ? 'Builds the 3D weapon from your chosen image; your creation already covered it'
+            : 'Generate and pick a weapon image first';
+          claim.addEventListener('click', forgeWeaponNow);
+          weaponPanel.append(claim);
+        }
+      }
     }
     weaponPanel.append(artStrip('weapon', true));
     main.append(weaponPanel);

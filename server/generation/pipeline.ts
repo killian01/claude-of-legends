@@ -206,6 +206,77 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
   }
 }
 
+// The weapon-only build: a champion that sealed WITHOUT a weapon can
+// still claim the one its creation covered (ADR 0011). Same job
+// machinery as finalize so the editor polls it identically, but no
+// ledger movement in either direction: the entitlement was paid at
+// finalize, and it is gone once a weapon exists (replacing one is
+// Reforge). Policy gates (owner, finalized, no weapon yet) live in
+// server/forge.ts; this only runs the chain.
+export function startWeaponForge(
+  deps: PipelineDeps,
+  req: { forgedId: string; accountId: number },
+): FinalizeStart {
+  const now = deps.now ?? Date.now;
+  if (deps.storage.runningJobFor(req.forgedId)) {
+    return { ok: false, error: 'this champion is already being built' };
+  }
+  const art = deps.storage.chosenArt(req.forgedId, 'weapon');
+  if (!art) {
+    return { ok: false, error: 'generate and pick a weapon image first' };
+  }
+  const jobId = deps.storage.createGenerationJob(req.forgedId, req.accountId, now());
+  const done = runWeaponForge(deps, jobId, req.forgedId, art.path).catch((err) => {
+    console.error('weapon forge job crashed outside its own handling', err);
+  });
+  return { ok: true, jobId, done };
+}
+
+async function runWeaponForge(
+  deps: PipelineDeps,
+  jobId: number,
+  forgedId: string,
+  artPath: string,
+): Promise<void> {
+  const now = deps.now ?? Date.now;
+  const stage = (name: string): void => {
+    deps.storage.updateGenerationJob(jobId, { stage: name }, now());
+  };
+  try {
+    stage('weapon');
+    if (!deps.provider.uploadImage) {
+      throw new GenerationError('this provider cannot take the weapon image as input');
+    }
+    const read = deps.readFile ?? readFileSync;
+    const token = await deps.provider.uploadImage({
+      data: read(path.join(deps.assetsDir, artPath)),
+      name: path.basename(artPath),
+    });
+    const weapon = await deps.provider.imageTo3D({ image: token });
+    stage('download');
+    const weaponPath = `forged/${forgedId}/weapon.glb`;
+    await deps.download(weapon.url, path.join(deps.assetsDir, weaponPath));
+    checkBudget(deps, weaponPath, deps.budgets?.modelKb);
+    const assets = (deps.storage.forgedAssets(forgedId) as Record<string, unknown> | null) ?? {};
+    const provenance = Array.isArray(assets.provenance) ? assets.provenance : [];
+    deps.storage.updateForgedAssets(
+      forgedId,
+      { ...assets, weapon: weaponPath, provenance: [...provenance, weapon.provenance] },
+      now(),
+    );
+    deps.storage.updateGenerationJob(jobId, { status: 'success', stage: 'done' }, now());
+  } catch (err) {
+    const blocked = err instanceof GenerationError && err.blocked;
+    const message = err instanceof Error ? err.message : String(err);
+    deps.storage.updateGenerationJob(
+      jobId,
+      { status: 'failed', error: blocked ? `blocked: ${message}` : message },
+      now(),
+    );
+    // Nothing to refund: this chain never debited anything.
+  }
+}
+
 // Fails the job when a downloaded artifact exceeds its budget; a missing
 // file measures as zero on purpose (tests inject recording downloads).
 function checkBudget(deps: PipelineDeps, rel: string, limitKb: number | undefined): void {

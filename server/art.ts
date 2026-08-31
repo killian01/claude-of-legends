@@ -87,6 +87,16 @@ function isArtKind(kind: string): kind is ArtKind {
   return (ART_KINDS as readonly string[]).includes(kind);
 }
 
+// The one crack in the seal: a finalized champion that sealed WITHOUT a
+// weapon may still make its weapon image and forge it (the creation
+// covered the weapon, ADR 0011). Once weapon.glb exists, sealed means
+// sealed until Reforge.
+function weaponStillOpen(store: ForgeStore, row: ForgedRow, kind: string): boolean {
+  if (kind !== 'weapon') return false;
+  const assets = store.forgedAssets(row.id) as { weapon?: string } | null;
+  return !assets?.weapon;
+}
+
 // One line of user text inside a prompt: single line, bounded.
 function cleanLine(line: string): string {
   return line.replace(/\s+/g, ' ').trim().slice(0, ART_LINE_MAX);
@@ -204,7 +214,7 @@ export async function generateArt(
   if (!row || row.accountId !== accountId) {
     return { ok: false, error: 'no such champion on this account' };
   }
-  if (row.status !== 'draft') {
+  if (row.status !== 'draft' && !weaponStillOpen(deps.store, row, req.kind)) {
     return {
       ok: false,
       error: 'a finalized champion is sealed, art included (Reforge comes later)',
@@ -334,15 +344,15 @@ export function chooseArt(
   if (!row || row.accountId !== accountId) {
     return { ok: false, error: 'no such champion on this account' };
   }
-  if (row.status !== 'draft') {
+  const candidate = deps.store.getArtCandidate(req.cid);
+  if (!candidate || candidate.forgedId !== row.id) {
+    return { ok: false, error: 'no such candidate on this champion' };
+  }
+  if (row.status !== 'draft' && !weaponStillOpen(deps.store, row, candidate.kind)) {
     return {
       ok: false,
       error: 'a finalized champion is sealed, art included (Reforge comes later)',
     };
-  }
-  const candidate = deps.store.getArtCandidate(req.cid);
-  if (!candidate || candidate.forgedId !== row.id) {
-    return { ok: false, error: 'no such candidate on this champion' };
   }
   deps.store.chooseArtCandidate(row.id, candidate.kind, candidate.id);
   return { ok: true };

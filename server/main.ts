@@ -45,6 +45,7 @@ import {
   deleteDraft,
   finalizeDraft,
   finalizeStatus,
+  forgeWeapon,
   listDrafts,
   saveDraft,
 } from './forge';
@@ -897,6 +898,25 @@ const server = http.createServer(async (req, res) => {
         const outcome = finalizeDraft(forgeDeps, me.id, id, family);
         if (outcome.ok) spendQuota(quotaDeps, me.id, 'generation');
         // `done` is the async job's settling; the wire answer is the id.
+        sendJson(res, 200, outcome.ok ? { ok: true, jobId: outcome.jobId } : outcome);
+        return;
+      }
+      if (url === '/api/forge/weapon' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        if (!id) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        // Rides the same daily generation meter as finalize (it is a 3D
+        // build), spent only when the chain actually starts.
+        const quota = checkQuota(quotaDeps, me.id, 'generation');
+        if (!quota.ok) {
+          sendJson(res, 200, quota);
+          return;
+        }
+        const outcome = forgeWeapon(forgeDeps, me.id, id);
+        if (outcome.ok) spendQuota(quotaDeps, me.id, 'generation');
         sendJson(res, 200, outcome.ok ? { ok: true, jobId: outcome.jobId } : outcome);
         return;
       }

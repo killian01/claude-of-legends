@@ -10,7 +10,12 @@
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { FORGED_ID_PATTERN, validateForged } from '../src/sim/forge/validate';
 import type { ForgedRow, ForgeStore } from './forge_store';
-import { familyOf, type PipelineDeps, startFinalize } from './generation/pipeline';
+import {
+  familyOf,
+  type PipelineDeps,
+  startFinalize,
+  startWeaponForge,
+} from './generation/pipeline';
 import { WEAPON_FAMILIES, type WeaponFamily } from './generation/provider';
 import { findBlockedWord } from './word_filter';
 
@@ -185,6 +190,34 @@ export function finalizeDraft(
     accountId,
     family: picked,
   });
+}
+
+// The weapon-only build on a champion that sealed without one: the
+// creation covered the weapon (ADR 0011), so no new debit; once a weapon
+// exists, replacing it waits for Reforge.
+export function forgeWeapon(
+  deps: ForgeDeps,
+  accountId: number,
+  id: string,
+): ForgeOutcome<{ jobId: number; done: Promise<void> }> {
+  if (!deps.generation) {
+    return { ok: false, error: 'generation is not configured on this server yet' };
+  }
+  const row = deps.store.getForged(id);
+  if (!row || row.accountId !== accountId) {
+    return { ok: false, error: 'no such champion on this account' };
+  }
+  if (row.status !== 'finalized') {
+    return { ok: false, error: 'build the champion first: the weapon forges onto it' };
+  }
+  const assets = deps.store.forgedAssets(id) as { weapon?: string } | null;
+  if (assets?.weapon) {
+    return {
+      ok: false,
+      error: 'this champion already has its forged weapon (Reforge comes later)',
+    };
+  }
+  return startWeaponForge(deps.generation, { forgedId: id, accountId });
 }
 
 export function finalizeStatus(
