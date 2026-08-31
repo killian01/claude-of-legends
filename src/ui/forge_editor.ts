@@ -119,15 +119,6 @@ const CSS = `
   border: none; background: none; color: #e8cc74; font-weight: 800; cursor: pointer; font-size: 13px;
   padding: 0 2px;
 }
-.fe-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.fe-step { border: 1px solid #33270f; border-radius: 8px; background: rgba(26, 19, 10, 0.6); padding: 8px; }
-.fe-step-num { color: #c9a84a; font-weight: 800; font-size: 10.5px; letter-spacing: 0.6px; text-transform: uppercase; }
-.fe-step-thumb {
-  height: 92px; display: flex; align-items: center; justify-content: center;
-  margin: 6px 0; border-radius: 6px; background: #120d06; overflow: hidden;
-  color: #6b5a2e; font-size: 22px; font-weight: 800;
-}
-.fe-step-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 .fe-step-text { color: #97854f; font-size: 10.5px; line-height: 1.45; }
 .fe-field { display: inline-flex; align-items: center; gap: 5px; margin: 2px 8px 2px 0; }
 .fe-field-label { color: #97854f; font-size: 11px; }
@@ -923,8 +914,8 @@ export function openForgeEditor(container: HTMLElement): void {
     return input;
   }
 
-  // Tab 1, Design: the splash art hero, the model reference derived from
-  // it, the pipeline with its own 3D button, and the card identity.
+  // Tab 1, Design: four step panels in creation order (splash art, model
+  // reference, the 3D build, the animations), then the card identity.
   function renderDesign(): void {
     const sealed = isSealed();
     const row = currentRow();
@@ -1043,108 +1034,12 @@ export function openForgeEditor(container: HTMLElement): void {
     refPanel.append(artStrip('sheet', true));
     main.append(refPanel);
 
-    // The pipeline, visible and CLICKABLE: each step is the player's own
-    // move, with the champion's images as they exist.
-    const pipe = el('div', 'fe-panel');
-    pipe.append(el('h3', '', 'From splash to champion'));
-    const steps = el('div', 'fe-steps');
-    const step = (
-      num: string,
-      text: string,
-      thumb: string | null,
-      placeholder: string,
-    ): HTMLElement => {
-      const box = el('div', 'fe-step');
-      box.append(el('div', 'fe-step-num', num));
-      const t = el('div', 'fe-step-thumb');
-      if (thumb) {
-        const img = document.createElement('img');
-        img.src = thumb;
-        img.alt = '';
-        t.append(img);
-      } else {
-        t.textContent = placeholder;
-      }
-      box.append(t, el('div', 'fe-step-text', text));
-      return box;
-    };
-    const splashUrl = row?.splash
-      ? assetUrl(row.splash)
-      : chosenOf('splash')
-        ? assetUrl(chosenOf('splash')?.path ?? '')
-        : null;
-    steps.append(
-      step('1. Splash art', 'Your prompt paints it. Pick your favorite above.', splashUrl, '?'),
-    );
-    const sheetUrl = row?.sheet
-      ? assetUrl(row.sheet)
-      : chosenOf('sheet')
-        ? assetUrl(chosenOf('sheet')?.path ?? '')
-        : null;
-    steps.append(
-      step(
-        '2. Model reference',
-        'One figure, one view, plain background: generate and check it above.',
-        sheetUrl,
-        '2D',
-      ),
-    );
-    const modelStep = el('div', 'fe-step');
-    modelStep.append(el('div', 'fe-step-num', '3. 3D model'));
-    const modelThumb = el('div', 'fe-step-thumb', '3D');
+    // Step 3, a full panel like the two before it: the build is the
+    // player's own click, never a side effect of a recap strip.
+    const buildPanel = el('div', 'fe-panel');
+    buildPanel.append(el('h3', '', 'Step 3: build the 3D model'));
     stageLine = null;
     if (row?.model) {
-      modelStep.append(modelThumb);
-      const open = el('button', 'fe-gen small', 'Open the workshop');
-      open.addEventListener('click', openWorkshopHere);
-      modelStep.append(open);
-    } else if (finalizing) {
-      modelThumb.textContent = '';
-      modelThumb.append(el('div', 'fe-spin'));
-      modelStep.append(modelThumb);
-      stageLine = el('div', 'fe-stagerow', 'building...');
-      modelStep.append(stageLine);
-    } else {
-      modelStep.append(modelThumb);
-      const build = el('button', 'fe-gen small', 'Build the 3D model') as HTMLButtonElement;
-      const blocker = forgeBlocker();
-      build.disabled = blocker !== null;
-      build.title = blocker ?? 'Runs on your chosen reference and spends a creation';
-      build.addEventListener('click', runForge);
-      modelStep.append(build);
-      modelStep.append(
-        el(
-          'div',
-          'fe-step-text',
-          'Builds from your chosen reference, then rigs it. Spends a creation.',
-        ),
-      );
-    }
-    steps.append(modelStep);
-    const animStep = el('div', 'fe-step');
-    animStep.append(el('div', 'fe-step-num', '4. Animations'));
-    animStep.append(el('div', 'fe-step-thumb', '5 clips'));
-    if (row?.model) {
-      const openAnim = el('button', 'fe-gen small', 'See them move');
-      openAnim.addEventListener('click', openWorkshopHere);
-      animStep.append(openAnim);
-    } else {
-      animStep.append(
-        el(
-          'div',
-          'fe-step-text',
-          'Five clips land with the build: idle, run, attack, cast, death. Adjust everything in the workshop after.',
-        ),
-      );
-    }
-    steps.append(animStep);
-    pipe.append(steps);
-    main.append(pipe);
-
-    // The model card: once finalized, the 3D result is one click away.
-    if (row?.model) {
-      const modelPanel = el('div', 'fe-panel');
-      modelPanel.append(el('h3', '', 'The model'));
       const cta = el('div', 'fe-model-cta');
       if (row.sheet) {
         const img = document.createElement('img');
@@ -1157,16 +1052,70 @@ export function openForgeEditor(container: HTMLElement): void {
         el(
           'div',
           'fe-lead',
-          'Your generated model is ready: turn it around, play its animations, attach and adjust the weapon, then save the tuning. Matches use exactly what you save.',
+          'Your generated model is ready: turn it around, attach and adjust the weapon, then save the tuning. Matches use exactly what you save.',
         ),
       );
-      const open = el('button', 'fe-gen small', 'Open the 3D workshop');
+      const open = el('button', 'fe-gen', 'Open the 3D workshop');
       open.addEventListener('click', openWorkshopHere);
       right.append(open);
       cta.append(right);
-      modelPanel.append(cta);
-      main.append(modelPanel);
+      buildPanel.append(cta);
+    } else if (finalizing) {
+      const busyRow = el('div', 'fe-model-cta');
+      busyRow.append(el('div', 'fe-spin'));
+      stageLine = el('div', 'fe-stagerow', 'building...');
+      busyRow.append(stageLine);
+      buildPanel.append(
+        el(
+          'p',
+          'fe-lead',
+          'Building: the 3D from your chosen reference, then the rig, then the animations. A few minutes; stay or come back.',
+        ),
+        busyRow,
+      );
+    } else {
+      buildPanel.append(
+        el(
+          'p',
+          'fe-lead',
+          'Builds the 3D from your chosen reference image (the exact one you picked), then rigs it. Spends a creation; a failure refunds it.',
+        ),
+      );
+      const build = el('button', 'fe-gen', 'Build the 3D model') as HTMLButtonElement;
+      const blocker = forgeBlocker();
+      build.disabled = blocker !== null;
+      build.title = blocker ?? 'Runs on your chosen reference and spends a creation';
+      build.addEventListener('click', runForge);
+      buildPanel.append(build);
+      if (blocker) buildPanel.append(el('div', 'fe-desc', blocker));
     }
+    main.append(buildPanel);
+
+    // Step 4, its own panel too: the clips land with the build and the
+    // workshop is where they play.
+    const animPanel = el('div', 'fe-panel');
+    animPanel.append(el('h3', '', 'Step 4: animations'));
+    if (row?.model) {
+      animPanel.append(
+        el(
+          'p',
+          'fe-lead',
+          'Five clips ride your model: idle, run, attack, cast, death. Watch them play on it in the workshop.',
+        ),
+      );
+      const openAnim = el('button', 'fe-gen', 'See them move');
+      openAnim.addEventListener('click', openWorkshopHere);
+      animPanel.append(openAnim);
+    } else {
+      animPanel.append(
+        el(
+          'p',
+          'fe-lead',
+          'Five clips land with the build: idle, run, attack, cast, death. You will watch and tune everything in the workshop afterwards.',
+        ),
+      );
+    }
+    main.append(animPanel);
 
     const card = el('div', 'fe-panel');
     card.append(el('h3', '', 'Identity'));
