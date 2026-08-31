@@ -50,6 +50,16 @@ services:
       # works. See .env.example for the Tripo terms caveat before opening
       # the Forge to players.
       TRIPO_API_KEY: "${TRIPO_API_KEY:-}"
+      # Forge tuning (plan-forge phase 8): quotas, caps, and the meta-API
+      # rate limit, all optional. Empty falls back to the defaults listed
+      # in .env.example; the server treats an empty string as unset.
+      CREATIONS_PER_WEEK: "${CREATIONS_PER_WEEK:-}"
+      FORGE_DRAFT_CAP: "${FORGE_DRAFT_CAP:-}"
+      REPORT_TAKEDOWN_THRESHOLD: "${REPORT_TAKEDOWN_THRESHOLD:-}"
+      GENERATIONS_PER_DAY: "${GENERATIONS_PER_DAY:-}"
+      QUOTA_2D_PER_DAY: "${QUOTA_2D_PER_DAY:-}"
+      QUOTA_AGENT_PER_DAY: "${QUOTA_AGENT_PER_DAY:-}"
+      API_RATE_PER_MIN: "${API_RATE_PER_MIN:-}"
     volumes:
       # Player identities, the match log, and the Forge store. Careers and
       # forged champions reset without this.

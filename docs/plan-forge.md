@@ -8,8 +8,9 @@ Vitest suite) and lands module-first behind existing seams. The terms are in
 State of play (2026-08-31): phases 1 to 3 are done, phase 4 is done except its
 generation-dependent corners, phase 5's keyless half is done (the neutral
 provider interface, the mock provider, the Tripo provider against its documented API,
-the finalize pipeline with the ledger), and phases 6 and 7 are done. What remains
-of each is noted inline.
+the finalize pipeline with the ledger), and phases 6 to 8 are done. What remains
+is phase 4's generation-dependent corners and phase 5's live-key half, both behind
+the paid Tripo key and their written UGC authorization; details inline.
 
 1. **Forged schema and validator**: DONE. `ForgedChampionDef` as pure data (no code
    passive; a passive is a parameterized template reference), the deterministic
@@ -63,9 +64,14 @@ of each is noted inline.
    queue's resolver), and the community tab at Forge-queue select (all shared
    champions, popular first, search, your liked ones pinned in front). Takedown
    review tooling (lifting one, reading reports) is an ops surface for later.
-8. **Quotas, moderation, ops**: per-account daily quotas (2D generations, agent
-   calls), edge IP rate limits, and server config for every number in this plan.
-   (The word filter landed early with phase 3, since draft saves needed it.)
+8. **Quotas, moderation, ops**: DONE. Per-account daily quotas on a rolling window
+   over an append-only event table (the generation meter backstops the weekly
+   ledger today; the 2D and agent meters are wired and wait for their phase 4
+   surfaces), a blanket per-address rate limit over /api (the login throttle keeps
+   its own backoff), and server config for every number in this plan through
+   environment variables listed in .env.example, empty-safe for compose
+   pass-through. (The word filter landed early with phase 3, since draft saves
+   needed it.)
 
 Phase 2, after the Forge proves itself: Stripe Checkout on the existing ledger, bots
 playing forged champions through author-declared hints, mastery and skins for forged

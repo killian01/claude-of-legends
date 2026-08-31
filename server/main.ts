@@ -23,6 +23,7 @@ import {
   selfAccount,
 } from './accounts';
 import { CONFIRM_TTL_MS, RESET_TTL_MS, TokenStore } from './action_tokens';
+import { API_RATE_PER_MIN, ApiLimiter } from './api_limit';
 import { fillWithBots } from './bot_fill';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, parseCookies, serializeCookie } from './cookies';
@@ -53,6 +54,7 @@ import { AFK_IDLE_TICKS, Match, type MatchPick } from './match';
 import { Matchmaker, type MatchSource } from './matchmaker';
 import { passwordErrorMessage, validatePassword } from './password';
 import { buildProfile } from './profile';
+import { checkQuota, DAY_MS, spendQuota } from './quotas';
 import { isRated, LEAVER_LOCKOUT_MS, leaverPenalty, type RatedSeat, ratingDeltas } from './rating';
 import { buildMatchRecord, type MatchRecord } from './records';
 import { RejoinRegistry } from './rejoin';
@@ -197,19 +199,40 @@ const generation = generationFromEnv();
   const swept = recoverStaleJobs(forgeStore);
   if (swept > 0) console.log(`generation: refunded ${swept} job(s) killed by the last shutdown`);
 }
+// Every plan number is server-configurable (plan-forge phase 8); an unset
+// or unparseable variable falls back, so a compose pass-through of an
+// empty string never silently becomes zero.
+function envNumber(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
 const forgeDeps = {
   store: forgeStore,
   generation,
-  creationsGrant: Number(process.env.CREATIONS_PER_WEEK ?? 3),
+  creationsGrant: envNumber('CREATIONS_PER_WEEK', 3),
+  draftCap: envNumber('FORGE_DRAFT_CAP', 50),
 };
 // The gallery (plan-forge phase 7) shares the store; the takedown
 // threshold is server-configurable like the creation grant.
 const galleryDeps = {
   store: forgeStore,
-  ...(process.env.REPORT_TAKEDOWN_THRESHOLD
-    ? { reportThreshold: Number(process.env.REPORT_TAKEDOWN_THRESHOLD) }
-    : {}),
+  reportThreshold: envNumber('REPORT_TAKEDOWN_THRESHOLD', 3),
 };
+// Daily quotas (plan-forge phase 8): generation chains per account per
+// rolling day, plus the reserved 2D and agent meters. Zero disables one.
+const quotaDeps = {
+  store: forgeStore,
+  limits: {
+    generation: envNumber('GENERATIONS_PER_DAY', 5),
+    gen2d: envNumber('QUOTA_2D_PER_DAY', 40),
+    agent: envNumber('QUOTA_AGENT_PER_DAY', 20),
+  },
+};
+// The blanket per-address rate limit over /api (phase 8); the login
+// throttle keeps its own sharper backoff. Zero disables it.
+const apiLimiter = new ApiLimiter(envNumber('API_RATE_PER_MIN', API_RATE_PER_MIN));
 
 const MATCHES_FILE = path.join(DATA_DIR, 'matches.jsonl');
 const REPLAYS_DIR = path.join(DATA_DIR, 'replays');
@@ -452,6 +475,18 @@ function openSession(res: http.ServerResponse, req: http.IncomingMessage, accoun
 const server = http.createServer(async (req, res) => {
   try {
     const url = (req.url ?? '/').split('?')[0]!;
+
+    // The blanket meta-API rate limit, in front of everything /api
+    // including the sign-in routes: a script pays here before any route
+    // does work. Static files and the socket upgrade are not metered.
+    if (url.startsWith('/api/')) {
+      const address = clientAddress(req.headers, req.socket.remoteAddress, EDGE);
+      if (!apiLimiter.allow(address, Date.now())) {
+        res.setHeader('retry-after', '60');
+        sendJson(res, 429, { error: 'Too many requests; slow down.' });
+        return;
+      }
+    }
 
     // --- auth: the only routes reachable without a session ---
     if (url === '/api/register' || url === '/api/login') {
@@ -761,7 +796,16 @@ const server = http.createServer(async (req, res) => {
           sendJson(res, 400, { ok: false, error: 'malformed request' });
           return;
         }
+        // The daily generation quota (phase 8) is checked first and spent
+        // only when the chain actually starts: a refused finalize (invalid
+        // kit, no credits) never burns a day's allowance.
+        const quota = checkQuota(quotaDeps, me.id, 'generation');
+        if (!quota.ok) {
+          sendJson(res, 200, quota);
+          return;
+        }
         const outcome = finalizeDraft(forgeDeps, me.id, id);
+        if (outcome.ok) spendQuota(quotaDeps, me.id, 'generation');
         // `done` is the async job's settling; the wire answer is the id.
         sendJson(res, 200, outcome.ok ? { ok: true, jobId: outcome.jobId } : outcome);
         return;
@@ -1482,6 +1526,10 @@ setInterval(() => {
   // In memory and minutes old, so this is the one that would never grow
   // anyway; swept here so nothing is left holding a state from last week.
   discordFlows.purge(now);
+  // Rate-limit windows are a minute long; addresses idle past one go.
+  apiLimiter.purge(now);
+  // Quota events older than the day window will never be counted again.
+  forgeStore.pruneQuotaEvents(now - DAY_MS);
   if (sessionsDropped + tokensDropped + claimsReleased > 0) {
     console.log(
       `housekeeping: ${sessionsDropped} session(s), ${tokensDropped} link(s), ` +

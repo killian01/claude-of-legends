@@ -68,6 +68,12 @@ create table if not exists warnings (
   reason text not null,
   at integer not null
 );
+create table if not exists quota_events (
+  id integer primary key autoincrement,
+  account_id integer not null,
+  action text not null,
+  at integer not null
+);
 `;
 
 export interface ForgedRow {
@@ -379,6 +385,33 @@ export class ForgeStore {
       .prepare('select count(*) as n from warnings where account_id = ?')
       .get(accountId) as { n: number };
     return r.n;
+  }
+
+  // -- daily quota events (plan-forge phase 8) -----------------------------
+  // Append-only, like the credits ledger: usage is derived by counting a
+  // window, never stored. Policy (limits, the window) lives in
+  // server/quotas.ts.
+
+  addQuotaEvent(accountId: number, action: string, at: number): void {
+    this.db
+      .prepare('insert into quota_events (account_id, action, at) values (?, ?, ?)')
+      .run(accountId, action, at);
+  }
+
+  quotaCountSince(accountId: number, action: string, since: number): number {
+    const r = this.db
+      .prepare(
+        'select count(*) as n from quota_events where account_id = ? and action = ? and at > ?',
+      )
+      .get(accountId, action, since) as { n: number };
+    return r.n;
+  }
+
+  // Housekeeping: events older than the widest window will never be
+  // counted again; dropping them keeps the table bounded.
+  pruneQuotaEvents(before: number): number {
+    const res = this.db.prepare('delete from quota_events where at <= ?').run(before);
+    return Number(res.changes);
   }
 
   // -- the Forge queue's own rating (plan-forge phase 6) -------------------

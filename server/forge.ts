@@ -28,6 +28,9 @@ export interface ForgeDeps {
   // the finalize surface answering honestly instead of pretending.
   generation?: PipelineDeps | null;
   creationsGrant?: number;
+  // The per-account draft ceiling; DRAFT_CAP when absent (phase 8: every
+  // number in the plan is server-configurable).
+  draftCap?: number;
   now?: () => number;
 }
 
@@ -102,8 +105,9 @@ export function saveDraft(
   if (existing?.status === 'finalized') {
     return { ok: false, error: 'a finalized champion is sealed (Reforge comes later)' };
   }
-  if (!existing && deps.store.listForgedByAccount(accountId).length >= DRAFT_CAP) {
-    return { ok: false, error: `draft cap reached (${DRAFT_CAP}); delete one first` };
+  const cap = deps.draftCap ?? DRAFT_CAP;
+  if (!existing && deps.store.listForgedByAccount(accountId).length >= cap) {
+    return { ok: false, error: `draft cap reached (${cap}); delete one first` };
   }
   const at = (deps.now ?? Date.now)();
   deps.store.saveForged({
