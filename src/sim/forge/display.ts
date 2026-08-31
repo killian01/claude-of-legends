@@ -20,6 +20,8 @@ export interface ForgedDisplayProp {
   // world units: the grip correction the workshop tunes by hand.
   rot: [number, number, number];
   pos: [number, number, number];
+  // Uniform multiplier on the weapon's derived base size; absent means 1.
+  scale?: number;
 }
 
 export interface ForgedDisplay {
@@ -39,6 +41,9 @@ export const DISPLAY_BOUNDS = {
   yOffset: { min: 0, max: 1.5, fallback: 0 },
   yawOffset: { min: -Math.PI, max: Math.PI, fallback: 0 },
   propOffset: { min: -2, max: 2 },
+  // Enough to fix a sword lost in a fist or swallowing the arm; a per-axis
+  // stretch would shear the texture, so the scale stays uniform.
+  propScale: { min: 0.4, max: 2.5, fallback: 1 },
   boneNameMax: 64,
 } as const;
 
@@ -73,11 +78,13 @@ export function sanitizeForgedDisplay(raw: unknown): ForgedDisplay | null {
     const bone =
       typeof prop.bone === 'string' ? prop.bone.slice(0, DISPLAY_BOUNDS.boneNameMax) : '';
     if (kind !== undefined && (bone !== '' || kind === 'none')) {
+      const scale = clamp(prop.scale, DISPLAY_BOUNDS.propScale.min, DISPLAY_BOUNDS.propScale.max);
       out.prop = {
         kind,
         bone,
         rot: triple(prop.rot, DISPLAY_BOUNDS.yawOffset.min, DISPLAY_BOUNDS.yawOffset.max),
         pos: triple(prop.pos, DISPLAY_BOUNDS.propOffset.min, DISPLAY_BOUNDS.propOffset.max),
+        ...(scale !== undefined ? { scale } : {}),
       };
     }
   }

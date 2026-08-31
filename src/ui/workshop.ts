@@ -22,11 +22,7 @@ import {
   guessHandBone,
   travelYawFix,
 } from '../render/champions/forged';
-import {
-  resolveForgedClips,
-  stripStanceLead,
-  stripTravel,
-} from '../render/champions/forged_clips';
+import { resolveForgedClips, stripStanceLead, stripTravel } from '../render/champions/forged_clips';
 import type { ChampionClipNames } from '../render/champions/manifest';
 import {
   DISPLAY_BOUNDS,
@@ -35,6 +31,7 @@ import {
   type ForgedDisplay,
   type ForgedDisplayProp,
 } from '../sim/forge/display';
+import { createAxesOverlay, createWeaponGizmo, type GizmoMode } from './workshop_gizmo';
 
 const CSS = `
 .ws, .ws * { box-sizing: border-box; }
@@ -239,24 +236,33 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
 
   const canvas = renderer.domElement;
   let dragging = false;
+  // True while a gizmo handle drags: orbit sleeps, clicks are not picks.
+  let gizmoBusy = false;
   let lastX = 0;
   let lastY = 0;
+  let downX = 0;
+  let downY = 0;
   canvas.addEventListener('pointerdown', (e) => {
     dragging = true;
     autoSpin = false;
     lastX = e.clientX;
     lastY = e.clientY;
+    downX = e.clientX;
+    downY = e.clientY;
     canvas.setPointerCapture(e.pointerId);
   });
   canvas.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
+    if (!dragging || gizmoBusy) return;
     yaw -= (e.clientX - lastX) * 0.008;
     pitch = Math.min(1.2, Math.max(-0.1, pitch + (e.clientY - lastY) * 0.005));
     lastX = e.clientX;
     lastY = e.clientY;
   });
-  canvas.addEventListener('pointerup', () => {
+  canvas.addEventListener('pointerup', (e) => {
     dragging = false;
+    // A still click (no orbit, no gizmo drag) selects or deselects the
+    // weapon, editor style.
+    if (!gizmoBusy && Math.hypot(e.clientX - downX, e.clientY - downY) < 6) tryPickWeapon(e);
   });
   canvas.addEventListener(
     'wheel',
@@ -348,6 +354,8 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   let propBuildToken = 0;
   const rebuildProp = (keepRest: boolean): void => {
     const restInv = keepRest ? (anchors[0]?.restInv ?? null) : null;
+    const wasAttached = gizmo?.attached() ?? false;
+    gizmo?.detach();
     const token = ++propBuildToken;
     if (propHolder) {
       modelRoot.remove(propHolder);
@@ -364,6 +372,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       const built = normalizeProp(source.clone(true), spec.size);
       built.rotation.set(prop.rot[0], prop.rot[1], prop.rot[2]);
       built.position.set(prop.pos[0], prop.pos[1], prop.pos[2]);
+      built.scale.setScalar(prop.scale ?? 1);
       propHolder = new THREE.Group();
       propHolder.add(built);
       modelRoot.add(propHolder);
@@ -378,7 +387,66 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
           restInv,
         },
       ];
+      if (wasAttached) gizmo?.attach(built);
     });
+  };
+
+  // Live grip updates (sliders and gizmo both land here): the built prop
+  // is retransformed in place, no async rebuild, no gizmo detach.
+  const applyPropTuning = (): void => {
+    const built = anchors[0]?.prop;
+    if (!built) return;
+    built.rotation.set(prop.rot[0] ?? 0, prop.rot[1] ?? 0, prop.rot[2] ?? 0);
+    built.position.set(prop.pos[0] ?? 0, prop.pos[1] ?? 0, prop.pos[2] ?? 0);
+    built.scale.setScalar(prop.scale ?? 1);
+  };
+
+  // Assigned by buildWeaponControls once the rows exist; the gizmo calls
+  // them to keep the numeric fields honest during a drag.
+  let syncWeaponSliders: () => void = () => {};
+  let highlightMode: (mode: GizmoMode) => void = () => {};
+
+  const gizmo = createWeaponGizmo({
+    camera,
+    dom: canvas,
+    scene,
+    posLimit: DISPLAY_BOUNDS.propOffset.max,
+    scaleMin: DISPLAY_BOUNDS.propScale.min,
+    scaleMax: DISPLAY_BOUNDS.propScale.max,
+    onChange: (obj) => {
+      prop.rot[0] = obj.rotation.x;
+      prop.rot[1] = obj.rotation.y;
+      prop.rot[2] = obj.rotation.z;
+      prop.pos[0] = obj.position.x;
+      prop.pos[1] = obj.position.y;
+      prop.pos[2] = obj.position.z;
+      prop.scale = obj.scale.x;
+      syncWeaponSliders();
+    },
+    onDragging: (active) => {
+      gizmoBusy = active;
+      if (active) dragging = false;
+    },
+    onModeChange: (mode) => highlightMode(mode),
+  });
+
+  const axesOverlay = createAxesOverlay();
+  const pickRay = new THREE.Raycaster();
+  const tryPickWeapon = (e: PointerEvent): void => {
+    const built = anchors[0]?.prop ?? null;
+    if (built && propHolder && subject.editable === true) {
+      const rect = canvas.getBoundingClientRect();
+      const ndc = new THREE.Vector2(
+        ((e.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1,
+        -((e.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1,
+      );
+      pickRay.setFromCamera(ndc, camera);
+      if (pickRay.intersectObject(propHolder, true).length > 0) {
+        gizmo.attach(built);
+        return;
+      }
+    }
+    gizmo.detach();
   };
 
   // --- the model and its clips -------------------------------------------
@@ -654,10 +722,77 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       rebuildProp(false);
     });
     weaponControls.append(kindSelect, boneSelect);
+
+    // The gizmo toolbar: the editor-grade path to the same numbers. A
+    // click arms the gizmo on the weapon when nothing was selected yet.
+    const modeBar = el('div', '');
+    const modeButtons = new Map<GizmoMode, HTMLButtonElement>();
+    const modeDefs: readonly [GizmoMode, string][] = [
+      ['translate', 'Move (G)'],
+      ['rotate', 'Rotate (R)'],
+      ['scale', 'Scale (S)'],
+    ];
+    for (const [mode, label] of modeDefs) {
+      const btn = el('button', 'ws-btn', label) as HTMLButtonElement;
+      btn.addEventListener('click', () => {
+        const built = anchors[0]?.prop;
+        if (built && !gizmo.attached()) gizmo.attach(built);
+        gizmo.setMode(mode);
+      });
+      modeButtons.set(mode, btn);
+      modeBar.append(btn);
+    }
+    highlightMode = (mode) => {
+      for (const [m, b] of modeButtons) b.classList.toggle('picked', m === mode);
+    };
+    highlightMode('translate');
+    weaponControls.append(modeBar);
+
+    // Slider rows that the gizmo can write back into: same numbers, two
+    // hands on them.
+    const weaponSetters = new Map<string, (v: number) => void>();
+    const syncedRow = (
+      key: string,
+      label: string,
+      min: number,
+      max: number,
+      step: number,
+      value: number,
+      format: (v: number) => string,
+      onInput: (v: number) => void,
+    ): HTMLElement => {
+      const row = el('div', 'ws-slider');
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = String(min);
+      input.max = String(max);
+      input.step = String(step);
+      input.value = String(value);
+      const out = el('output', '', format(value));
+      input.addEventListener('input', () => {
+        const v = Number(input.value);
+        out.textContent = format(v);
+        onInput(v);
+      });
+      row.append(el('label', '', label), input, out);
+      weaponSetters.set(key, (v) => {
+        input.value = String(v);
+        out.textContent = format(v);
+      });
+      return row;
+    };
+    syncWeaponSliders = () => {
+      for (let i = 0; i < 3; i++) {
+        weaponSetters.get(`rot${i}`)?.(((prop.rot[i] ?? 0) * 180) / Math.PI);
+        weaponSetters.get(`pos${i}`)?.(prop.pos[i] ?? 0);
+      }
+      weaponSetters.get('size')?.(prop.scale ?? 1);
+    };
     const axes = ['X', 'Y', 'Z'] as const;
     for (let i = 0; i < 3; i++) {
       weaponControls.append(
-        sliderRow(
+        syncedRow(
+          `rot${i}`,
           `Turn ${axes[i]}`,
           -180,
           180,
@@ -666,32 +801,50 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
           (v) => `${Math.round(v)}`,
           (v) => {
             prop.rot[i] = (v * Math.PI) / 180;
-            rebuildProp(true);
+            applyPropTuning();
           },
         ),
       );
     }
     for (let i = 0; i < 3; i++) {
       weaponControls.append(
-        sliderRow(
+        syncedRow(
+          `pos${i}`,
           `Slide ${axes[i]}`,
-          -1,
-          1,
+          DISPLAY_BOUNDS.propOffset.min,
+          DISPLAY_BOUNDS.propOffset.max,
           0.01,
           prop.pos[i] ?? 0,
           (v) => v.toFixed(2),
           (v) => {
             prop.pos[i] = v;
-            rebuildProp(true);
+            applyPropTuning();
           },
         ),
       );
     }
     weaponControls.append(
+      syncedRow(
+        'size',
+        'Size',
+        DISPLAY_BOUNDS.propScale.min,
+        DISPLAY_BOUNDS.propScale.max,
+        0.05,
+        prop.scale ?? 1,
+        (v) => `${v.toFixed(2)}x`,
+        (v) => {
+          prop.scale = v;
+          applyPropTuning();
+        },
+      ),
+    );
+    weaponControls.append(
       el(
         'div',
         'ws-note',
-        'Pick the weapon and the bone it rides, then turn and slide it until the grip sits in the hand. Play Attack to check the swing.',
+        'Click the weapon on the stage to grab it: drag the arrows, rings and handles ' +
+          '(G move, R rotate, S scale, hold Ctrl to snap, Escape to release). The sliders ' +
+          'show the same numbers for fine touches. Play Attack to check the swing.',
       ),
     );
   };
@@ -711,6 +864,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
           bone: prop.bone,
           rot: copyTriple(prop.rot),
           pos: copyTriple(prop.pos),
+          ...(prop.scale !== undefined ? { scale: prop.scale } : {}),
         },
       };
       void fetch('/api/forge/display', {
@@ -802,6 +956,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     }
     applyCamera();
     renderer.render(scene, camera);
+    axesOverlay.render(renderer, camera);
   };
   resize();
   loop();
@@ -810,10 +965,14 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     cancelAnimationFrame(frame);
     observer.disconnect();
     window.removeEventListener('keydown', onKey);
+    gizmo.dispose();
     renderer.dispose();
     root.remove();
   };
   const onKey = (e: KeyboardEvent): void => {
+    // The gizmo eats its shortcuts first: Escape releases the weapon
+    // before it ever closes the workshop.
+    if (gizmo.handleKey(e)) return;
     if (e.key === 'Escape') close();
   };
   window.addEventListener('keydown', onKey);

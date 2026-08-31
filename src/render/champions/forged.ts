@@ -194,7 +194,15 @@ function buildDef(entry: ForgedEntry, source: ForgedSource): ChampionVisualDef |
     ...(model && prop
       ? {
           props: [
-            { url: model.url, size: model.size, bone: prop.bone, rot: prop.rot, pos: prop.pos },
+            {
+              url: model.url,
+              // The workshop's uniform size multiplier folds into the
+              // normalized span so the muzzle tip (size/2) stays true.
+              size: model.size * (prop.scale ?? 1),
+              bone: prop.bone,
+              rot: prop.rot,
+              pos: prop.pos,
+            },
           ],
         }
       : {}),

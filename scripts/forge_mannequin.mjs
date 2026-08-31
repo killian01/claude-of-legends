@@ -138,10 +138,6 @@ function writeManifest(m) {
   writeFileSync(MANIFEST, `${JSON.stringify(m, null, 2)}\n`);
 }
 
-function clipFileName(preset) {
-  return `clips/${preset.replace('preset:biped:', '')}.glb`;
-}
-
 // Structural read of a GLB's JSON chunk: enough to prove a geometry-free
 // clip file targets the rig's own node names before any browser tries it.
 function glbJson(file) {

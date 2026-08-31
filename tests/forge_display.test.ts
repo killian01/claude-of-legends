@@ -47,16 +47,24 @@ describe('sanitizeForgedDisplay', () => {
     expect(out).toEqual({ yOffset: 0.25 });
   });
 
-  it('accepts a prop, clamps its triples, refuses unknown kinds', () => {
+  it('accepts a prop, clamps its triples and scale, refuses unknown kinds', () => {
     const out = sanitizeForgedDisplay({
-      prop: { kind: 'maul', bone: 'R_Hand', rot: [9, -9, 0.5], pos: [3, 'x', -3] },
+      prop: { kind: 'maul', bone: 'R_Hand', rot: [9, -9, 0.5], pos: [3, 'x', -3], scale: 9 },
     });
     expect(out?.prop).toEqual({
       kind: 'maul',
       bone: 'R_Hand',
       rot: [Math.PI, -Math.PI, 0.5],
       pos: [2, 0, -2],
+      scale: 2.5,
     });
+    // No scale sent: none stored (the renderer default of 1 applies).
+    expect(
+      sanitizeForgedDisplay({ prop: { kind: 'maul', bone: 'R_Hand' } })?.prop,
+    ).not.toHaveProperty('scale');
+    expect(
+      sanitizeForgedDisplay({ prop: { kind: 'maul', bone: 'R_Hand', scale: 0.1 } })?.prop,
+    ).toMatchObject({ scale: 0.4 });
     expect(sanitizeForgedDisplay({ prop: { kind: 'bazooka', bone: 'R_Hand' } })?.prop).toBe(
       undefined,
     );
