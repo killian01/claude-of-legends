@@ -11,11 +11,11 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { ForgedChampionDef } from '../../src/sim/forge/forged_def';
-import type { Storage } from '../storage';
+import type { ForgeStore } from '../forge_store';
 import { GenerationError, type GenerationProvider, type WeaponFamily } from './provider';
 
 export interface PipelineDeps {
-  storage: Storage;
+  storage: ForgeStore;
   provider: GenerationProvider;
   // Where downloaded artifacts live (DATA_DIR/assets); paths stored on
   // the row are relative to it.
@@ -151,13 +151,13 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
   }
 }
 
-function refund(storage: Storage, accountId: number, forgedId: string, at: number): void {
+function refund(storage: ForgeStore, accountId: number, forgedId: string, at: number): void {
   storage.addCreditEntry({ accountId, delta: 1, reason: 'refund', ref: forgedId, at });
 }
 
 // The boot sweep: a job still marked running belonged to a process that
 // died mid-generation. Fail it and give the creation back.
-export function recoverStaleJobs(storage: Storage, now: () => number = Date.now): number {
+export function recoverStaleJobs(storage: ForgeStore, now: () => number = Date.now): number {
   const stale = storage.staleRunningJobs();
   for (const job of stale) {
     storage.updateGenerationJob(

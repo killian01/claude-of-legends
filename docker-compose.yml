@@ -44,8 +44,15 @@ services:
       # unless DISCORD_REDIRECT_URI overrides it.
       DISCORD_CLIENT_ID: "${DISCORD_CLIENT_ID:-}"
       DISCORD_CLIENT_SECRET: "${DISCORD_CLIENT_SECRET:-}"
+      # The Forge's generation provider (ADR 0010), from the same .env
+      # file: TRIPO_API_KEY is a credential and must never be committed.
+      # Without it, finalize answers "not configured" and everything else
+      # works. See .env.example for the Tripo terms caveat before opening
+      # the Forge to players.
+      TRIPO_API_KEY: "${TRIPO_API_KEY:-}"
     volumes:
-      # Player identities and the match log. Careers reset without this.
+      # Player identities, the match log, and the Forge store. Careers and
+      # forged champions reset without this.
       - game_data:/app/data
     networks:
       - edge

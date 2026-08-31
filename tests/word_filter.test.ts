@@ -3,10 +3,8 @@
 // merely contain a blocked word pass (the Scunthorpe rule).
 
 import { describe, expect, it } from 'vitest';
-import { AuthService } from '../server/auth';
 import { deleteDraft, saveDraft } from '../server/forge';
-import { PlayerRegistry } from '../server/players';
-import { Storage } from '../server/storage';
+import { ForgeStore } from '../server/forge_store';
 import { findBlockedWord } from '../server/word_filter';
 import { CHAMPIONS } from '../src/sim/content/champions';
 import { forgedTwin } from './forged_twins';
@@ -29,28 +27,20 @@ describe('word filter', () => {
   });
 
   it('gates draft saves on every authored string', () => {
-    const storage = new Storage(':memory:');
-    const registry = new PlayerRegistry(storage, (used) => {
-      for (let d = 1000; ; d++) if (!used.has(d)) return d;
-    });
-    const auth = new AuthService(
-      storage,
-      registry,
-      { send: () => Promise.resolve() },
-      { origin: 'https://play.example.com', creationsGrant: 3 },
-    );
-    auth.signup('tok-a', 'bob@example.com', 'longenough');
-    const deps = { storage, auth };
+    const store = new ForgeStore(':memory:');
+    const deps = { store };
 
     const rude = { ...forgedTwin(CHAMPIONS.sylra!), id: 'forged_rude', title: 'the Sh1t' };
-    expect(saveDraft(deps, 'tok-a', rude)).toMatchObject({
+    expect(saveDraft(deps, 1, 'bob', rude)).toMatchObject({
       ok: false,
       error: expect.stringContaining('shit'),
     });
 
     const clean = { ...forgedTwin(CHAMPIONS.sylra!), id: 'forged_clean' };
-    expect(saveDraft(deps, 'tok-a', clean)).toEqual({ ok: true });
-    expect(deleteDraft(deps, 'tok-a', 'forged_clean')).toEqual({ ok: true });
-    storage.close();
+    expect(saveDraft(deps, 1, 'bob', clean)).toEqual({ ok: true });
+    // The creator signature is the server's stamp, never the client's.
+    expect(store.getForged('forged_clean')?.def.creator).toBe('bob');
+    expect(deleteDraft(deps, 1, 'forged_clean')).toEqual({ ok: true });
+    store.close();
   });
 });

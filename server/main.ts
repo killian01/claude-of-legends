@@ -11,6 +11,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { type WebSocket, WebSocketServer } from 'ws';
 import { isFiniteVec, parseClientMsg, type ServerMsg } from '../src/net/protocol';
+import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { DT } from '../src/sim/types';
 import { foldName, nameErrorMessage } from './account_name';
 import {
@@ -29,6 +30,19 @@ import { DiscordFlows } from './discord_state';
 import { clientAddress, edgeConfig, originAllowed } from './edge';
 import { emailErrorMessage } from './email_address';
 import { CLAIM_TTL_MS } from './email_claim';
+import {
+  DRAFT_JSON_MAX,
+  deleteDraft,
+  finalizeDraft,
+  finalizeStatus,
+  listDrafts,
+  saveDraft,
+} from './forge';
+import { ForgeStore } from './forge_store';
+import { MockProvider } from './generation/mock';
+import { downloadToFile, type PipelineDeps, recoverStaleJobs } from './generation/pipeline';
+import type { GenerationProvider } from './generation/provider';
+import { TripoProvider } from './generation/tripo';
 import { buildLadder } from './ladder';
 import { accountKey, addressKey, LoginThrottle } from './login_throttle';
 import { confirmMail, confirmUrl, publicOrigin, resetMail, resetUrl } from './mail_messages';
@@ -143,6 +157,47 @@ const discord = DISCORD ? new DiscordOauth(DISCORD) : null;
 // The anti-forgery states in flight. In memory only: a state is minutes
 // old and its owner is watching.
 const discordFlows = new DiscordFlows();
+// The Forge's own store (ADR 0011): SQLite for forged champions, the
+// creation ledger, and generation jobs; accounts stay in their JSON
+// registry and rows here reference their ids.
+const forgeStore = new ForgeStore(path.join(DATA_DIR, 'forge.sqlite3'));
+// The generation provider (ADR 0010): Tripo with a key, the mock when
+// asked for keyless dev, otherwise absent and finalize says so.
+function generationFromEnv(): PipelineDeps | null {
+  let provider: GenerationProvider | null = null;
+  if (process.env.TRIPO_API_KEY) provider = new TripoProvider(process.env.TRIPO_API_KEY);
+  else if (process.env.GENERATION_PROVIDER === 'mock') {
+    console.log('generation: mock provider (GENERATION_PROVIDER=mock), placeholder assets');
+    provider = new MockProvider();
+  }
+  if (!provider) return null;
+  return {
+    storage: forgeStore,
+    provider,
+    assetsDir: path.join(DATA_DIR, 'assets'),
+    download:
+      provider.id === 'mock'
+        ? (url, dest) => {
+            // Mock URLs are not fetchable; a placeholder file stands in.
+            saveJsonAtomic(dest, { placeholder: url });
+            return Promise.resolve();
+          }
+        : downloadToFile,
+  };
+}
+const generation = generationFromEnv();
+{
+  // A crash mid-generation is swept on boot: the job fails, the creation
+  // refunds.
+  const swept = recoverStaleJobs(forgeStore);
+  if (swept > 0) console.log(`generation: refunded ${swept} job(s) killed by the last shutdown`);
+}
+const forgeDeps = {
+  store: forgeStore,
+  generation,
+  creationsGrant: Number(process.env.CREATIONS_PER_WEEK ?? 3),
+};
+
 const MATCHES_FILE = path.join(DATA_DIR, 'matches.jsonl');
 const REPLAYS_DIR = path.join(DATA_DIR, 'replays');
 // How many finished-match replays stay on disk (named by match id).
@@ -293,12 +348,17 @@ function sendJson(res: http.ServerResponse, status: number, body: unknown): void
 // login and is dropped rather than buffered.
 const MAX_BODY_BYTES = 2048;
 
-async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown> | null> {
+async function readJsonBody(
+  req: http.IncomingMessage,
+  // Auth bodies are tiny; a forged draft is the one legitimate big body
+  // and its route says so explicitly.
+  maxBytes = MAX_BODY_BYTES,
+): Promise<Record<string, unknown> | null> {
   let size = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES) return null;
+    if (size > maxBytes) return null;
     chunks.push(chunk as Buffer);
   }
   try {
@@ -611,6 +671,54 @@ const server = http.createServer(async (req, res) => {
       }
       if (url === '/api/me') {
         sendJson(res, 200, describeSelf(me));
+        return;
+      }
+      // --- the Forge (ADR 0010, ADR 0011): drafts, ledger, finalize ---
+      if (url === '/api/forge/drafts') {
+        sendJson(res, 200, listDrafts(forgeDeps, me.id));
+        return;
+      }
+      if (url === '/api/forge/draft' && req.method === 'POST') {
+        const body = await readJsonBody(req, DRAFT_JSON_MAX + 1024);
+        if (!body || typeof body.def !== 'object' || body.def === null) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        sendJson(res, 200, saveDraft(forgeDeps, me.id, me.name, body.def as ForgedChampionDef));
+        return;
+      }
+      if (url === '/api/forge/draft/delete' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        sendJson(
+          res,
+          200,
+          id ? deleteDraft(forgeDeps, me.id, id) : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      if (url === '/api/forge/finalize' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        if (!id) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        const outcome = finalizeDraft(forgeDeps, me.id, id);
+        // `done` is the async job's settling; the wire answer is the id.
+        sendJson(res, 200, outcome.ok ? { ok: true, jobId: outcome.jobId } : outcome);
+        return;
+      }
+      if (url === '/api/forge/job') {
+        const q = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+        const jobId = Number(q.get('id'));
+        sendJson(
+          res,
+          200,
+          Number.isInteger(jobId)
+            ? finalizeStatus(forgeDeps, me.id, jobId)
+            : { ok: false, error: 'malformed request' },
+        );
         return;
       }
       // Fixing a typo at signup, moving mailbox, or adding an address to
