@@ -179,8 +179,16 @@ const ASSETS_DIR = path.join(DATA_DIR, 'assets');
 function generationFromEnv(): PipelineDeps | null {
   let provider: GenerationProvider | null = null;
   if (process.env.TRIPO_API_KEY) {
-    console.log('generation: tripo (TRIPO_API_KEY set), real generations from here on');
-    provider = new TripoProvider(process.env.TRIPO_API_KEY);
+    const tripo = new TripoProvider(process.env.TRIPO_API_KEY);
+    provider = tripo;
+    // Fire and forget: the balance names the key live (or not) at boot
+    // without holding the server's start on a third party.
+    void tripo.balance().then((credits) => {
+      console.log(
+        `generation: tripo (TRIPO_API_KEY set), real generations from here on; ` +
+          `credit balance ${credits < 0 ? 'unavailable' : credits}`,
+      );
+    });
   } else if (process.env.GENERATION_PROVIDER === 'mock') {
     console.log('generation: mock provider (GENERATION_PROVIDER=mock), placeholder assets');
     provider = new MockProvider();

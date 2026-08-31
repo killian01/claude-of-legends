@@ -347,6 +347,55 @@ describe('the tripo provider against scripted responses', () => {
     expect(bodies[1]?.animations).toEqual(Object.values(TRIPO_CLIPS.slashing));
   });
 
+  it('uploads to the v2 host and rides the token as input.file_token', async () => {
+    // Shapes verified against a live key (2026-08-31).
+    const calls: { url: string; body?: unknown }[] = [];
+    const fetchFn = (async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u === 'https://api.tripo3d.ai/v2/openapi/upload/sts') {
+        calls.push({ url: u });
+        expect(init?.body).toBeInstanceOf(FormData);
+        return new Response(JSON.stringify({ code: 0, data: { image_token: 'tok-9' } }));
+      }
+      if (init?.method === 'POST') {
+        calls.push({ url: u, body: JSON.parse(init.body as string) });
+        return new Response(JSON.stringify({ code: 0, data: { task_id: 't' } }));
+      }
+      return new Response(
+        JSON.stringify({
+          code: 0,
+          data: {
+            task_id: 't',
+            status: 'success',
+            output: { generated_image_url: 'https://x.example/sheet.png' },
+          },
+        }),
+      );
+    }) as typeof fetch;
+    const provider = new TripoProvider('k', { fetchFn, sleep: () => Promise.resolve() });
+    const token = await provider.uploadImage({ data: new Uint8Array([1, 2]), name: 'splash.png' });
+    expect(token).toBe('tok-9');
+    const asset = await provider.generate2D({ prompt: 'sheet', image: token });
+    expect(asset.url).toBe('https://x.example/sheet.png');
+    expect(calls[1]?.url).toContain('/generation/image-to-image');
+    expect(calls[1]?.body).toMatchObject({ prompt: 'sheet', input: { file_token: 'tok-9' } });
+  });
+
+  it('reads the credit balance and answers -1 on any failure', async () => {
+    const fetchFn = (async (url: string | URL) => {
+      if (String(url) === 'https://api.tripo3d.ai/v2/openapi/user/balance') {
+        return new Response(JSON.stringify({ code: 0, data: { balance: 995, frozen: 0 } }));
+      }
+      return new Response('no', { status: 500 });
+    }) as typeof fetch;
+    const provider = new TripoProvider('k', { fetchFn, sleep: () => Promise.resolve() });
+    expect(await provider.balance()).toBe(995);
+    const failing = new TripoProvider('k', {
+      fetchFn: (() => Promise.reject(new Error('down'))) as typeof fetch,
+    });
+    expect(await failing.balance()).toBe(-1);
+  });
+
   it('turns a banned task into a blocked GenerationError', async () => {
     const fetchFn = ((_url: string | URL, init?: RequestInit) => {
       if (init?.method === 'POST') {

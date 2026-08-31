@@ -1,10 +1,13 @@
 // Tripo, the first provider behind the neutral interface. Written against
-// the v3 API as documented on developers.tripo3d.ai (read 2026-08-31, see
+// the v3 API as documented on developers.tripo3d.ai (see
 // docs/research/generation-providers-spike.md): async tasks created per
-// endpoint, then polled on /v3/tasks/{id}. The task envelope shape
-// ({code, data.status, data.output}) follows Tripo's published pattern
-// and MUST be re-verified against a live key before production; the
-// fetch is injectable exactly so tests pin our side of the contract now.
+// endpoint, then polled on /v3/tasks/{id}. The 2D half is VERIFIED
+// against a live key (2026-08-31): the task envelope is
+// {code, data: {task_id, status, output}}, text-to-image and
+// image-to-image answer output.generated_image_url, the upload endpoint
+// lives on the v2 host, and an uploaded token rides as input.file_token.
+// The 3D half (image-to-model, rig, retarget) still follows the docs
+// alone and is verified by the first live finalize chain.
 //
 // v1 contract points from the spike: bipeds ride rig model v1.0-20240301
 // because only its 110-preset library tells the full six-clip story; the
@@ -21,6 +24,11 @@ import {
 } from './provider';
 
 const BASE = 'https://openapi.tripo3d.ai/v3';
+// The upload endpoint never moved to v3: it lives on the v2 host and
+// answers a file token (verified against a live key, 2026-08-31).
+const UPLOAD_URL = 'https://api.tripo3d.ai/v2/openapi/upload/sts';
+// Same host: the account's credit balance, logged at boot for ops.
+const BALANCE_URL = 'https://api.tripo3d.ai/v2/openapi/user/balance';
 // The rig model whose preset library covers all six clips (spike).
 const RIG_MODEL = 'v1.0-20240301';
 
@@ -132,25 +140,25 @@ export class TripoProvider implements GenerationProvider {
 
   // With a source image (the validated splash, as an uploaded file token)
   // this is the image-to-image derivation the ADR describes; without one
-  // it is plain text-to-image. Both routes follow Tripo's documented v3
-  // pattern and MUST be re-verified against a live key.
+  // it is plain text-to-image. Both verified against a live key
+  // (2026-08-31): the token rides as input.file_token (a bare token
+  // string is refused as "input task not found"), and the output arrives
+  // as output.generated_image_url.
   async generate2D(req: { prompt: string; image?: string }): Promise<ProviderAsset> {
     const endpoint = req.image ? '/generation/image-to-image' : '/generation/text-to-image';
     const taskId = await this.post(endpoint, {
       prompt: req.prompt,
-      ...(req.image ? { input: req.image } : {}),
+      ...(req.image ? { input: { file_token: req.image } } : {}),
     });
     return this.awaitTask(taskId, endpoint.slice('/generation/'.length));
   }
 
-  // The file upload that turns a local image into an input token. Written
-  // against Tripo's published upload pattern (the v2 API exposed
-  // /upload/sts answering data.image_token); MUST be re-verified against
-  // a live key alongside the task envelope.
+  // The file upload that turns a local image into an input token
+  // (data.image_token). Lives on the v2 host; verified live 2026-08-31.
   async uploadImage(file: { data: Uint8Array; name: string }): Promise<string> {
     const form = new FormData();
     form.append('file', new Blob([new Uint8Array(file.data)]), file.name);
-    const res = await this.fetchFn(`${BASE}/upload/sts`, {
+    const res = await this.fetchFn(UPLOAD_URL, {
       method: 'POST',
       headers: { authorization: `Bearer ${this.apiKey}` },
       body: form,
@@ -162,6 +170,22 @@ export class TripoProvider implements GenerationProvider {
     const token = envelope.data?.image_token;
     if (!token) throw new GenerationError('tripo upload returned no image token');
     return token;
+  }
+
+  // The account's credit balance ({balance, frozen}); -1 when the call
+  // fails, so a boot log never blocks on it. Tripo-specific, not part of
+  // the neutral interface.
+  async balance(): Promise<number> {
+    try {
+      const res = await this.fetchFn(BALANCE_URL, {
+        headers: { authorization: `Bearer ${this.apiKey}` },
+      });
+      if (!res.ok) return -1;
+      const envelope = (await res.json()) as { data?: { balance?: number } };
+      return envelope.data?.balance ?? -1;
+    } catch {
+      return -1;
+    }
   }
 
   async imageTo3D(req: {
