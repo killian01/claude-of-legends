@@ -137,7 +137,7 @@ function toInPlace(clip: THREE.AnimationClip, def: ChampionVisualDef): THREE.Ani
 // GLB's authored origin (placed on the bone point in Blender), so the file
 // itself decides how the hand holds it and translation offsets in the
 // manifest become unnecessary.
-function normalizeProp(scene: THREE.Group, size: number, anchor?: 'origin'): THREE.Group {
+export function normalizeProp(scene: THREE.Group, size: number, anchor?: 'origin'): THREE.Group {
   const box = new THREE.Box3().setFromObject(scene);
   const span = box.getSize(new THREE.Vector3());
   const s = size / Math.max(span.x, span.y, span.z, 0.001);

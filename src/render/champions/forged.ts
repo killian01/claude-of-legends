@@ -9,8 +9,8 @@
 import type * as THREE from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import type { ForgedDisplay } from '../../sim/forge/display';
-import { type ChampionTemplate, measureScene, toLambert } from './assets';
+import type { DisplayPropKind, ForgedDisplay } from '../../sim/forge/display';
+import { type ChampionTemplate, measureScene, normalizeProp, toLambert } from './assets';
 import { resolveForgedClips, stripTravel } from './forged_clips';
 import type { ChampionVisualDef } from './manifest';
 
@@ -32,6 +32,8 @@ interface ForgedEntry {
   url: string;
   display: ForgedDisplay;
   family: string | null;
+  // The champion's own generated weapon GLB (asset-route URL), when built.
+  weaponUrl: string | null;
   source: Promise<ForgedSource | null>;
   // Cache against the display used to build it; invalidated on re-register
   // with fresh tuning.
@@ -83,6 +85,33 @@ export function guessHandBone(boneNames: readonly string[]): string | null {
   return boneNames.find((n) => /hand/i.test(n)) ?? null;
 }
 
+// The house weapon library: the roster's own generated 3D weapon models
+// (CREDITS.md), the only props a forged champion may wear besides its own
+// generated weapon. Base size is for the default height and scales with
+// the champion; bounding-box centering (no 'origin' anchor) so the grip
+// sliders do the placing on whatever rig this is.
+export const FORGED_PROP_MODELS: Readonly<
+  Partial<Record<DisplayPropKind, { url: string; size: number }>>
+> = {
+  maul: { url: '/models/champions/korrath_maul.glb', size: 1.95 },
+  shield: { url: '/models/champions/korrath_shield.glb', size: 1.55 },
+  rifle: { url: '/models/champions/vesk_rifle.glb', size: 2.6 },
+};
+
+// Resolves a saved prop kind to the GLB it wears: a house weapon from the
+// table, or the champion's own generated weapon file. Null hides it.
+export function forgedPropModel(
+  kind: DisplayPropKind,
+  height: number,
+  weaponUrl: string | null,
+): { url: string; size: number } | null {
+  if (kind === 'generated') {
+    return weaponUrl ? { url: weaponUrl, size: 1.7 * (height / FORGED_DEFAULT_HEIGHT) } : null;
+  }
+  const house = FORGED_PROP_MODELS[kind];
+  return house ? { url: house.url, size: house.size * (height / FORGED_DEFAULT_HEIGHT) } : null;
+}
+
 function buildDef(entry: ForgedEntry, source: ForgedSource): ChampionVisualDef | null {
   const clips = resolveForgedClips([...source.clips.keys()]);
   if (!clips) return null;
@@ -91,6 +120,10 @@ function buildDef(entry: ForgedEntry, source: ForgedSource): ChampionVisualDef |
   // Only the creator's saved prop shows: no silent default weapon
   // (playtest: the family fallback read as clutter, not as a gift).
   const prop = d.prop;
+  const model =
+    prop && prop.kind !== 'none' && prop.bone !== ''
+      ? forgedPropModel(prop.kind, height, entry.weaponUrl)
+      : null;
   return {
     url: entry.url,
     height,
@@ -98,8 +131,12 @@ function buildDef(entry: ForgedEntry, source: ForgedSource): ChampionVisualDef |
     ...(d.yOffset !== undefined ? { yOffset: d.yOffset } : {}),
     ...(d.yawOffset !== undefined ? { yawOffset: d.yawOffset } : {}),
     clips,
-    ...(prop && prop.kind !== 'none' && prop.bone !== ''
-      ? { props: [{ kind: prop.kind, bone: prop.bone, rot: prop.rot, pos: prop.pos }] }
+    ...(model && prop
+      ? {
+          props: [
+            { url: model.url, size: model.size, bone: prop.bone, rot: prop.rot, pos: prop.pos },
+          ],
+        }
       : {}),
   };
 }
@@ -110,7 +147,7 @@ function buildDef(entry: ForgedEntry, source: ForgedSource): ChampionVisualDef |
 export function registerForgedModel(
   championId: string,
   modelUrl: string,
-  opts?: { display?: ForgedDisplay | null; family?: string | null },
+  opts?: { display?: ForgedDisplay | null; family?: string | null; weapon?: string | null },
 ): void {
   const existing = entries.get(championId);
   if (existing && existing.url === modelUrl) {
@@ -119,12 +156,17 @@ export function registerForgedModel(
       existing.template = null;
     }
     if (opts?.family !== undefined) existing.family = opts.family;
+    if (opts?.weapon !== undefined && existing.weaponUrl !== (opts.weapon ?? null)) {
+      existing.weaponUrl = opts.weapon ?? null;
+      existing.template = null;
+    }
     return;
   }
   entries.set(championId, {
     url: modelUrl,
     display: opts?.display ?? {},
     family: opts?.family ?? null,
+    weaponUrl: opts?.weapon ?? null,
     source: loadForgedSource(modelUrl),
     template: null,
   });
@@ -156,6 +198,18 @@ export async function forgedChampionTemplate(
     // The run cycle plays on the spot: the mover owns all translation.
     const run = source.clips.get(def.clips.run);
     if (run) stripTravel(run);
+    // The weapon GLB (house library or the champion's own) loads
+    // alongside; a failure leaves the hand empty, never blocks the model.
+    const props = new Map<string, THREE.Group>();
+    for (const p of def.props ?? []) {
+      if (p.url === undefined) continue;
+      const gltf = await gltfLoader()
+        .loadAsync(p.url)
+        .catch(() => null);
+      if (!gltf) continue;
+      toLambert(gltf.scene, {});
+      props.set(p.url, normalizeProp(gltf.scene, p.size ?? 1, p.anchor));
+    }
     const scale = def.height / source.rawHeight;
     entry.template = {
       def,
@@ -163,7 +217,7 @@ export async function forgedChampionTemplate(
       clips: source.clips,
       scale,
       groundY: -source.minY * scale,
-      props: new Map(),
+      props,
     };
   }
   return entry.template;

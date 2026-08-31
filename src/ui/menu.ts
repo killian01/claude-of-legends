@@ -347,6 +347,7 @@ export interface CommunityPick {
   // community champion plays as its generated model.
   model?: string | null;
   family?: string | null;
+  weapon?: string | null;
   display?: import('../sim/forge/display').ForgedDisplay | null;
 }
 

@@ -4,17 +4,12 @@
 // stores it and the clients that apply it; zero engine effect, exactly like
 // skins. All fields optional: absent means the renderer default.
 
-// Procedural weapon kinds the renderer can attach (src/render/champions/
-// props.ts); 'none' hides the weapon outright.
-export const DISPLAY_PROP_KINDS = [
-  'none',
-  'sword',
-  'shield',
-  'daggers',
-  'staff',
-  'rifle',
-  'bow',
-] as const;
+// Weapon kinds the renderer can attach: the house 3D weapon models (the
+// roster's own generated GLBs, mapped in src/render/champions/forged.ts),
+// plus 'generated' for the champion's OWN weapon built by the Forge, and
+// 'none' for an empty hand. The old procedural shapes are gone: boxes and
+// cylinders read as clutter next to a generated model.
+export const DISPLAY_PROP_KINDS = ['none', 'maul', 'shield', 'rifle', 'generated'] as const;
 export type DisplayPropKind = (typeof DISPLAY_PROP_KINDS)[number];
 
 export interface ForgedDisplayProp {
@@ -39,7 +34,9 @@ export interface ForgedDisplay {
 
 export const DISPLAY_BOUNDS = {
   height: { min: 1.2, max: 4.5, fallback: 2.4 },
-  yOffset: { min: -0.5, max: 1.5, fallback: 0 },
+  // Zero is feet on the ground; the offset only ever lifts (hovering
+  // champions), never sinks the model into the floor.
+  yOffset: { min: 0, max: 1.5, fallback: 0 },
   yawOffset: { min: -Math.PI, max: Math.PI, fallback: 0 },
   propOffset: { min: -2, max: 2 },
   boneNameMax: 64,

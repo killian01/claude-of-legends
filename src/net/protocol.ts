@@ -16,6 +16,8 @@ import type { StructureMeta, UnitKind } from '../sim/unit';
 export interface ForgedMatchAssets {
   model: string | null;
   family: string | null;
+  // The champion's own generated weapon GLB (relative asset path), if built.
+  weapon: string | null;
   display: ForgedDisplay | null;
 }
 

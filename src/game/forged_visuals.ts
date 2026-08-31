@@ -11,6 +11,7 @@ import type { ForgedDisplay } from '../sim/forge/display';
 export interface ForgedAssetPointers {
   model?: string | null;
   family?: string | null;
+  weapon?: string | null;
   display?: ForgedDisplay | null;
 }
 
@@ -23,5 +24,6 @@ export function registerForgedAssets(id: string, a: ForgedAssetPointers): void {
   registerForgedModel(id, forgedAssetUrl(a.model), {
     display: a.display ?? null,
     family: a.family ?? null,
+    weapon: a.weapon ? forgedAssetUrl(a.weapon) : null,
   });
 }

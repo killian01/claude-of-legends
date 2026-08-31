@@ -281,6 +281,7 @@ interface DraftRow {
   model?: string | null;
   sheet?: string | null;
   family?: string | null;
+  weapon?: string | null;
   display?: ForgedDisplay | null;
 }
 
@@ -489,7 +490,18 @@ export function openForgeEditor(container: HTMLElement): void {
     { key: 'model', label: 'Sculpting the 3D model' },
     { key: 'rig', label: 'Rigging the skeleton' },
     { key: 'animate', label: 'Baking the five animations' },
+    { key: 'weapon', label: 'Forging the weapon' },
     { key: 'download', label: 'Bringing your champion home' },
+  ];
+  // The attack-animation family, the player's explicit pick (a sword
+  // champion must swing a sword); sent with the build.
+  let animFamily = 'slashing';
+  const FAMILY_CHOICES: readonly { value: string; label: string }[] = [
+    { value: 'slashing', label: 'Blade strikes (sword, axe, spear)' },
+    { value: 'blunt', label: 'Heavy crushing blows (maul, hammer)' },
+    { value: 'bow', label: 'Bow shots' },
+    { value: 'staff', label: 'Staff casting' },
+    { value: 'unarmed', label: 'Bare fists' },
   ];
   const applyStageState = (): void => {
     if (!stageRows) return;
@@ -688,6 +700,7 @@ export function openForgeEditor(container: HTMLElement): void {
       splashUrl: row.splash ? assetUrl(row.splash) : null,
       sheetUrl: row.sheet ? assetUrl(row.sheet) : null,
       family: row.family ?? null,
+      weaponUrl: row.weapon ? assetUrl(row.weapon) : null,
       display: row.display ?? null,
       editable: true,
       onSaved: (display) => {
@@ -826,6 +839,7 @@ export function openForgeEditor(container: HTMLElement): void {
         if (!saved?.ok) throw new Error(saved?.error ?? 'save failed');
         return api<{ ok: boolean; jobId?: number; error?: string }>('/api/forge/finalize', {
           id: current.id,
+          family: animFamily,
         });
       })
       .then((started) => {
@@ -1091,10 +1105,58 @@ export function openForgeEditor(container: HTMLElement): void {
     refPanel.append(artStrip('sheet', true));
     main.append(refPanel);
 
-    // Step 3, a full panel like the two before it: the build is the
+    // Step 3: the champion's own weapon, its own generation zone. The
+    // reference deliberately shows empty hands (a fused weapon becomes
+    // fused geometry); the weapon gets its own image and its own 3D.
+    const weaponPanel = el('div', 'fe-panel');
+    weaponPanel.append(el('h3', '', 'Step 3: weapon (optional)'));
+    if (sealed) {
+      weaponPanel.append(el('div', 'fe-lead', 'Sealed with the champion.'));
+    } else if (!chosenOf('splash')) {
+      weaponPanel.append(
+        el(
+          'div',
+          'fe-lead',
+          'Pick a splash first: the weapon is extracted from it. The reference keeps empty ' +
+            'hands on purpose; the weapon becomes its own 3D piece, attached in the workshop.',
+        ),
+      );
+    } else {
+      weaponPanel.append(
+        el(
+          'p',
+          'fe-lead',
+          'Your weapon, alone on a plain background, extracted from the splash. Iterate until ' +
+            'it is right: the 3D weapon builds from this exact image during the champion ' +
+            'build, then attaches to a hand in the workshop. Skip it to fight bare-handed ' +
+            'or wear a weapon from the house armory.',
+        ),
+      );
+      const weaponRow = el('div', 'fe-hero');
+      const wNotes = el('input', 'fe-hero-input') as HTMLInputElement;
+      wNotes.placeholder = refineFrom.weapon
+        ? 'What should change? The weapon stays the same...'
+        : 'Optional notes: which weapon, what to fix...';
+      wNotes.maxLength = 400;
+      wNotes.value = artLines.weapon ?? '';
+      wNotes.addEventListener('input', () => {
+        artLines.weapon = wNotes.value;
+      });
+      const genWeapon = el('button', 'fe-gen', 'Generate the weapon image') as HTMLButtonElement;
+      genWeapon.disabled = busy;
+      genWeapon.addEventListener('click', () => generateArtKind('weapon', wNotes.value));
+      weaponRow.append(wNotes, genWeapon);
+      weaponPanel.append(weaponRow);
+      const wBadge = refineBadge('weapon');
+      if (wBadge) weaponPanel.append(wBadge);
+    }
+    weaponPanel.append(artStrip('weapon', true));
+    main.append(weaponPanel);
+
+    // Step 4, a full panel like the ones before it: the build is the
     // player's own click, never a side effect of a recap strip.
     const buildPanel = el('div', 'fe-panel');
-    buildPanel.append(el('h3', '', 'Step 3: build the 3D model'));
+    buildPanel.append(el('h3', '', 'Step 4: build the 3D model'));
     stageRows = null;
     if (row?.model) {
       const cta = el('div', 'fe-model-cta');
@@ -1142,9 +1204,28 @@ export function openForgeEditor(container: HTMLElement): void {
         el(
           'p',
           'fe-lead',
-          'Builds the 3D from your chosen reference image (the exact one you picked), then rigs it. Spends a creation; a failure refunds it.',
+          'Builds the 3D from your chosen reference image (the exact one you picked), rigs it, ' +
+            'bakes the animations you choose below, and forges your weapon if you made one. ' +
+            'Spends a creation; a failure refunds it.',
         ),
       );
+      // The attack style is the player's call: nothing about a kit says
+      // what the hands hold.
+      const famRow = el('div', 'fe-artrow');
+      famRow.append(el('span', 'fe-field-label', 'Attack animations:'));
+      const famSelect = el('select', 'fe-select') as HTMLSelectElement;
+      for (const c of FAMILY_CHOICES) {
+        const opt = document.createElement('option');
+        opt.value = c.value;
+        opt.textContent = c.label;
+        famSelect.append(opt);
+      }
+      famSelect.value = animFamily;
+      famSelect.addEventListener('change', () => {
+        animFamily = famSelect.value;
+      });
+      famRow.append(famSelect);
+      buildPanel.append(famRow);
       const build = el('button', 'fe-gen', 'Build the 3D model') as HTMLButtonElement;
       const blocker = forgeBlocker();
       build.disabled = blocker !== null;
@@ -1167,10 +1248,10 @@ export function openForgeEditor(container: HTMLElement): void {
     }
     main.append(buildPanel);
 
-    // Step 4, its own panel too: the clips land with the build and the
+    // Step 5, its own panel too: the clips land with the build and the
     // workshop is where they play.
     const animPanel = el('div', 'fe-panel');
-    animPanel.append(el('h3', '', 'Step 4: animations'));
+    animPanel.append(el('h3', '', 'Step 5: animations'));
     if (row?.model) {
       animPanel.append(
         el(
@@ -1187,7 +1268,7 @@ export function openForgeEditor(container: HTMLElement): void {
         el(
           'p',
           'fe-lead',
-          'Five clips land with the build: idle, run, attack, cast, death. You will watch and tune everything in the workshop afterwards.',
+          'Five clips land with the build, in the attack style you picked above: idle, run, attack, cast, death. You will watch and tune everything in the workshop afterwards.',
         ),
       );
     }

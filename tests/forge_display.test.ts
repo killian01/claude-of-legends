@@ -38,7 +38,8 @@ function seeded(): ForgeStore {
 describe('sanitizeForgedDisplay', () => {
   it('clamps every numeric field into its bounds', () => {
     const out = sanitizeForgedDisplay({ height: 99, yOffset: -9, yawOffset: 42 });
-    expect(out).toEqual({ height: 4.5, yOffset: -0.5, yawOffset: Math.PI });
+    // yOffset floors at zero: the ground is the ground (playtest).
+    expect(out).toEqual({ height: 4.5, yOffset: 0, yawOffset: Math.PI });
   });
 
   it('keeps only recognized fields and drops non-numbers', () => {
@@ -48,10 +49,10 @@ describe('sanitizeForgedDisplay', () => {
 
   it('accepts a prop, clamps its triples, refuses unknown kinds', () => {
     const out = sanitizeForgedDisplay({
-      prop: { kind: 'staff', bone: 'R_Hand', rot: [9, -9, 0.5], pos: [3, 'x', -3] },
+      prop: { kind: 'maul', bone: 'R_Hand', rot: [9, -9, 0.5], pos: [3, 'x', -3] },
     });
     expect(out?.prop).toEqual({
-      kind: 'staff',
+      kind: 'maul',
       bone: 'R_Hand',
       rot: [Math.PI, -Math.PI, 0.5],
       pos: [2, 0, -2],
@@ -59,8 +60,16 @@ describe('sanitizeForgedDisplay', () => {
     expect(sanitizeForgedDisplay({ prop: { kind: 'bazooka', bone: 'R_Hand' } })?.prop).toBe(
       undefined,
     );
+    // The old procedural kinds are gone; a stored one drops cleanly.
+    expect(sanitizeForgedDisplay({ prop: { kind: 'sword', bone: 'R_Hand' } })?.prop).toBe(
+      undefined,
+    );
+    // The champion's own generated weapon is a kind of its own.
+    expect(
+      sanitizeForgedDisplay({ prop: { kind: 'generated', bone: 'R_Hand' } })?.prop,
+    ).toMatchObject({ kind: 'generated' });
     // A prop needs a bone, except the explicit empty hand.
-    expect(sanitizeForgedDisplay({ prop: { kind: 'sword', bone: '' } })?.prop).toBe(undefined);
+    expect(sanitizeForgedDisplay({ prop: { kind: 'maul', bone: '' } })?.prop).toBe(undefined);
     expect(sanitizeForgedDisplay({ prop: { kind: 'none', bone: '' } })?.prop).toMatchObject({
       kind: 'none',
     });
@@ -78,7 +87,7 @@ describe('setForgedDisplay', () => {
     const out = setForgedDisplay({ store, now: () => 50 }, 1, 'forged_a', {
       height: 3.1,
       yawOffset: 0.5,
-      prop: { kind: 'sword', bone: 'R_Hand', rot: [0, 0, 0], pos: [0, 0.1, 0] },
+      prop: { kind: 'maul', bone: 'R_Hand', rot: [0, 0, 0], pos: [0, 0.1, 0] },
     });
     expect(out.ok).toBe(true);
     const assets = store.forgedAssets('forged_a') as Record<string, unknown>;
@@ -99,11 +108,17 @@ describe('setForgedDisplay', () => {
     expect(block.forged_a).toEqual({
       model: 'forged/forged_a/model.glb',
       family: 'staff',
+      weapon: null,
       display: { height: 3.0 },
     });
     // An unknown or asset-less definition still answers, with nulls: the
     // client keeps the procedural figure.
-    expect(block.forged_missing).toEqual({ model: null, family: null, display: null });
+    expect(block.forged_missing).toEqual({
+      model: null,
+      family: null,
+      weapon: null,
+      display: null,
+    });
     store.close();
   });
 

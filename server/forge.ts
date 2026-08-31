@@ -11,6 +11,7 @@ import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { FORGED_ID_PATTERN, validateForged } from '../src/sim/forge/validate';
 import type { ForgedRow, ForgeStore } from './forge_store';
 import { familyOf, type PipelineDeps, startFinalize } from './generation/pipeline';
+import { WEAPON_FAMILIES, type WeaponFamily } from './generation/provider';
 import { findBlockedWord } from './word_filter';
 
 // A hard abuse rail, not the product quota (that is plan phase 8).
@@ -141,6 +142,9 @@ export function finalizeDraft(
   deps: ForgeDeps,
   accountId: number,
   id: string,
+  // The player's explicit animation family; anything unrecognized falls
+  // back to the kit-implied one.
+  family?: string,
 ): ForgeOutcome<{ jobId: number; done: Promise<void> }> {
   if (!deps.generation) {
     return { ok: false, error: 'generation is not configured on this server yet' };
@@ -173,10 +177,13 @@ export function finalizeDraft(
     };
   }
   refreshWeeklyGrant(deps, accountId);
+  const picked = (WEAPON_FAMILIES as readonly string[]).includes(family ?? '')
+    ? (family as WeaponFamily)
+    : familyOf(row.def);
   return startFinalize(deps.generation, {
     def: row.def,
     accountId,
-    family: familyOf(row.def),
+    family: picked,
   });
 }
 

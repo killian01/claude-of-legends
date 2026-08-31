@@ -142,6 +142,53 @@ describe('the mock pipeline end to end', () => {
     expect(r.provider.seen.some((s) => s.op === 'generate2D')).toBe(false);
   });
 
+  it('forges the chosen weapon image into its own prop model', async () => {
+    const r = rig();
+    const weaponRel = `forged/${r.def.id}/art/weapon_seed.png`;
+    writeFileSync(path.join(r.pipeline.assetsDir, weaponRel), placeholderPng('gen-test-weapon'));
+    const cid = r.store.addArtCandidate({
+      forgedId: r.def.id,
+      accountId: ACCOUNT,
+      kind: 'weapon',
+      prompt: 'p',
+      path: weaponRel,
+      provenance: { provider: 'mock', model: 'mock-1', at: 1, taskId: 'cand-weapon' },
+      at: 1,
+    });
+    r.store.chooseArtCandidate(r.def.id, 'weapon', cid);
+    const start = startFinalize(r.pipeline, { def: r.def, accountId: ACCOUNT, family: 'slashing' });
+    expect(start.ok).toBe(true);
+    if (!start.ok) return;
+    await start.done;
+    expect(r.store.getGenerationJob(start.jobId)?.status).toBe('success');
+    const assets = r.store.forgedAssets(r.def.id) as { weapon?: string; provenance: unknown[] };
+    expect(assets.weapon).toBe(`forged/${r.def.id}/weapon.glb`);
+    expect(assets.provenance).toHaveLength(5);
+    // The chosen weapon image rode up and produced its own STATIC model:
+    // a second image-to-3D, but never a second rig or animation pass.
+    const uploads = r.provider.seen.filter((s) => s.op === 'uploadImage');
+    expect(uploads.at(-1)?.req).toMatchObject({ name: 'weapon_seed.png' });
+    expect(r.provider.seen.filter((s) => s.op === 'imageTo3D')).toHaveLength(2);
+    expect(r.provider.seen.filter((s) => s.op === 'rig')).toHaveLength(1);
+    expect(r.downloads.map((d) => d.url)).toEqual([
+      expect.stringContaining('mock://animated/'),
+      expect.stringContaining('mock://model/'),
+    ]);
+  });
+
+  it('honors the player-picked animation family over the kit-implied one', async () => {
+    // Sylra's kit implies staff; the player says blades (playtest: a
+    // sword champion must swing a sword).
+    const r = rig();
+    const deps: ForgeDeps = { store: r.store, generation: r.pipeline, now: () => 999 };
+    const out = finalizeDraft(deps, ACCOUNT, r.def.id, 'slashing');
+    expect(out.ok).toBe(true);
+    if (out.ok) await out.done;
+    expect((r.store.forgedAssets(r.def.id) as { family: string }).family).toBe('slashing');
+    const animate = r.provider.seen.find((s) => s.op === 'animate');
+    expect(animate?.req).toMatchObject({ family: 'slashing' });
+  });
+
   it('fails and refunds when an artifact lands over its budget', async () => {
     const r = rig();
     r.pipeline.budgets = { modelKb: 100 };

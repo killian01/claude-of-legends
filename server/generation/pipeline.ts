@@ -107,8 +107,9 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
     if (!deps.provider.uploadImage) {
       throw new GenerationError('this provider cannot take the chosen reference as input');
     }
+    const upload = deps.provider.uploadImage.bind(deps.provider);
     const read = deps.readFile ?? readFileSync;
-    const sheetRef = await deps.provider.uploadImage({
+    const sheetRef = await upload({
       data: read(path.join(deps.assetsDir, sheet.path)),
       name: path.basename(sheet.path),
     });
@@ -129,6 +130,20 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
       family: req.family,
     });
 
+    // The champion's own weapon, when the player generated and picked a
+    // weapon image: a static prop from that exact image, no rig and no
+    // clips (the Creation covers it, ADR 0011). No pick, no stage.
+    const weaponArt = deps.storage.chosenArt(req.def.id, 'weapon');
+    let weapon: Awaited<ReturnType<GenerationProvider['imageTo3D']>> | null = null;
+    if (weaponArt) {
+      stage('weapon');
+      const weaponRef = await upload({
+        data: read(path.join(deps.assetsDir, weaponArt.path)),
+        name: path.basename(weaponArt.path),
+      });
+      weapon = await deps.provider.imageTo3D({ image: weaponRef });
+    }
+
     // Provider URLs expire (Tripo: 24 hours): download NOW, own forever.
     stage('download');
     const dir = path.join(deps.assetsDir, 'forged', req.def.id);
@@ -139,12 +154,15 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
     // already inside the image budget when it landed as a candidate).
     const sheetPath = `forged/${req.def.id}/sheet.png`;
     const modelPath = `forged/${req.def.id}/model.glb`;
+    const weaponPath = `forged/${req.def.id}/weapon.glb`;
     const copy = deps.copyFile ?? copyFileSync;
     copy(path.join(deps.assetsDir, sheet.path), path.join(deps.assetsDir, sheetPath));
     await deps.download(animated.url, path.join(deps.assetsDir, modelPath));
+    if (weapon) await deps.download(weapon.url, path.join(deps.assetsDir, weaponPath));
     // The per-champion asset budgets (ADR 0010): an oversized artifact is
     // a technical failure, refunded like any other.
     checkBudget(deps, modelPath, deps.budgets?.modelKb);
+    if (weapon) checkBudget(deps, weaponPath, deps.budgets?.modelKb);
 
     // Sealed with the champion: the reference and model this run
     // produced, the chosen splash and spell icons as they stand
@@ -162,6 +180,7 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
         sheet: sheetPath,
         model: modelPath,
         family: req.family,
+        ...(weapon ? { weapon: weaponPath } : {}),
         ...(splash ? { splash: splash.path } : {}),
         ...(Object.keys(icons).length > 0 ? { icons } : {}),
         provenance: [
@@ -169,6 +188,7 @@ async function runFinalize(deps: PipelineDeps, jobId: number, req: FinalizeReque
           model.provenance,
           rigged.provenance,
           animated.provenance,
+          weapon?.provenance,
         ].filter((p) => p !== null && p !== undefined),
       },
       now(),

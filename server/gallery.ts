@@ -42,6 +42,7 @@ export interface GalleryEntry {
   splash: string | null;
   model: string | null;
   family: string | null;
+  weapon: string | null;
   display: ForgedDisplay | null;
 }
 
@@ -82,7 +83,11 @@ export function listGallery(
         r.def.creator.toLowerCase().includes(needle),
     );
   const entries = rows.map((r): GalleryEntry => {
-    const assets = deps.store.forgedAssets(r.id) as { model?: string; family?: string } | null;
+    const assets = deps.store.forgedAssets(r.id) as {
+      model?: string;
+      family?: string;
+      weapon?: string;
+    } | null;
     return {
       id: r.id,
       def: r.def,
@@ -96,6 +101,7 @@ export function listGallery(
       splash: splashOf(deps.store, r),
       model: assets?.model ?? null,
       family: assets?.family ?? null,
+      weapon: assets?.weapon ?? null,
       display: displayOf(deps.store, r.id),
     };
   });

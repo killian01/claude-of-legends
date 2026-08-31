@@ -838,6 +838,7 @@ const server = http.createServer(async (req, res) => {
                           model?: string;
                           sheet?: string;
                           family?: string;
+                          weapon?: string;
                         } | null)
                       : null;
                   return {
@@ -846,6 +847,7 @@ const server = http.createServer(async (req, res) => {
                     model: assets?.model ?? null,
                     sheet: assets?.sheet ?? null,
                     family: assets?.family ?? null,
+                    weapon: assets?.weapon ?? null,
                     display: assets ? displayOf(forgeStore, d.id) : null,
                   };
                 }),
@@ -889,7 +891,10 @@ const server = http.createServer(async (req, res) => {
           sendJson(res, 200, quota);
           return;
         }
-        const outcome = finalizeDraft(forgeDeps, me.id, id);
+        // The animation family is the player's explicit pick (playtest: a
+        // sword champion must swing a sword); absent, the kit implies it.
+        const family = typeof body?.family === 'string' ? body.family : undefined;
+        const outcome = finalizeDraft(forgeDeps, me.id, id, family);
         if (outcome.ok) spendQuota(quotaDeps, me.id, 'generation');
         // `done` is the async job's settling; the wire answer is the id.
         sendJson(res, 200, outcome.ok ? { ok: true, jobId: outcome.jobId } : outcome);

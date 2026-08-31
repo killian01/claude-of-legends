@@ -10,11 +10,15 @@
 import * as THREE from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { findBone, type PropAnchor, syncPropAnchors } from '../render/champions/assets';
-import { FORGED_DEFAULT_HEIGHT, guessHandBone } from '../render/champions/forged';
+import {
+  findBone,
+  normalizeProp,
+  type PropAnchor,
+  syncPropAnchors,
+} from '../render/champions/assets';
+import { FORGED_DEFAULT_HEIGHT, forgedPropModel, guessHandBone } from '../render/champions/forged';
 import { resolveForgedClips, stripTravel } from '../render/champions/forged_clips';
 import type { ChampionClipNames } from '../render/champions/manifest';
-import { buildChampionProp } from '../render/champions/props';
 import {
   DISPLAY_BOUNDS,
   DISPLAY_PROP_KINDS,
@@ -114,8 +118,11 @@ export interface WorkshopSubject {
   modelUrl: string;
   splashUrl?: string | null;
   sheetUrl?: string | null;
-  // Weapon family sealed at finalize; picks the default prop kind.
+  // Weapon family sealed at finalize (informational).
   family?: string | null;
+  // The champion's own generated weapon GLB (asset-route URL), when built;
+  // unlocks the 'generated' prop kind.
+  weaponUrl?: string | null;
   // The saved display tuning, when any; the sliders start from it.
   display?: ForgedDisplay | null;
   // Owners tune and save; visitors get the stage without the controls.
@@ -189,28 +196,6 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   ring.position.y = 0.02;
   scene.add(ring);
 
-  // The size reference: a roster-height silhouette (2.4 units, the middle
-  // of the range) standing beside the podium, toggled from the View panel.
-  const reference = new THREE.Group();
-  {
-    const mat = new THREE.MeshLambertMaterial({ color: 0x596070, transparent: true, opacity: 0.9 });
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1.25, 6, 14), mat);
-    body.position.y = 0.925;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 14, 12), mat);
-    head.position.y = 2.1;
-    const base = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.5, 0.55, 0.05, 24),
-      new THREE.MeshLambertMaterial({ color: 0x33270f }),
-    );
-    base.position.y = 0.025;
-    reference.add(body, head, base);
-    const measured = new THREE.Box3().setFromObject(reference);
-    reference.scale.setScalar(FORGED_DEFAULT_HEIGHT / Math.max(0.001, measured.max.y));
-    reference.position.set(2.3, 0, 0);
-    reference.visible = false;
-    scene.add(reference);
-  }
-
   // The match-scale reference: one unit per cell, the way the map grid
   // runs; visible only in match view.
   const grid = new THREE.GridHelper(24, 24, 0x4a3a1c, 0x33270f);
@@ -227,14 +212,11 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   let autoSpin = true;
   let matchView = false;
 
+  // One free orbit in both views: match view only changes the starting
+  // vantage (the in-match top-down angle) and shows the grid; dragging
+  // still turns around the champion.
   const applyCamera = (): void => {
-    if (matchView) {
-      // The in-match top-down framing, near enough for a size read.
-      camera.position.set(0, 11.5, 6.8);
-      camera.lookAt(0, 0.5, 0);
-      return;
-    }
-    const target = new THREE.Vector3(0, tuning.height * 0.45, 0);
+    const target = new THREE.Vector3(0, matchView ? 0.5 : tuning.height * 0.45, 0);
     camera.position.set(
       target.x + dist * Math.cos(pitch) * Math.sin(yaw),
       target.y + dist * Math.sin(pitch),
@@ -330,33 +312,57 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
 
   let anchors: PropAnchor[] = [];
   let propHolder: THREE.Group | null = null;
+  // Weapon GLBs (the house library or the champion's own generated one),
+  // fetched once per url and cloned per rebuild.
+  const propScenes = new Map<string, Promise<THREE.Group | null>>();
+  const loadPropScene = (url: string): Promise<THREE.Group | null> => {
+    let cached = propScenes.get(url);
+    if (!cached) {
+      cached = new GLTFLoader()
+        .setMeshoptDecoder(MeshoptDecoder)
+        .loadAsync(url)
+        .then((g) => g.scene)
+        .catch(() => null);
+      propScenes.set(url, cached);
+    }
+    return cached;
+  };
+  // Rebuilds are async (the GLB may still be fetching); the token drops a
+  // stale build landing after a newer choice.
+  let propBuildToken = 0;
   const rebuildProp = (keepRest: boolean): void => {
     const restInv = keepRest ? (anchors[0]?.restInv ?? null) : null;
+    const token = ++propBuildToken;
     if (propHolder) {
       modelRoot.remove(propHolder);
       propHolder = null;
     }
     anchors = [];
     if (!model || prop.kind === 'none' || prop.bone === '') return;
-    const bone = findBone(model, prop.bone);
-    if (!bone) return;
-    const built = buildChampionProp(prop.kind, ACCENT);
-    built.rotation.set(prop.rot[0], prop.rot[1], prop.rot[2]);
-    built.position.set(prop.pos[0], prop.pos[1], prop.pos[2]);
-    propHolder = new THREE.Group();
-    propHolder.add(built);
-    modelRoot.add(propHolder);
-    anchors = [
-      {
-        holder: propHolder,
-        prop: built,
-        hand: { bone, rot: prop.rot, pos: prop.pos },
-        armed: true,
-        fixedPose: false,
-        tip: null,
-        restInv,
-      },
-    ];
+    const spec = forgedPropModel(prop.kind, tuning.height, subject.weaponUrl ?? null);
+    if (!spec) return;
+    void loadPropScene(spec.url).then((source) => {
+      if (!source || token !== propBuildToken || !model) return;
+      const bone = findBone(model, prop.bone);
+      if (!bone) return;
+      const built = normalizeProp(source.clone(true), spec.size);
+      built.rotation.set(prop.rot[0], prop.rot[1], prop.rot[2]);
+      built.position.set(prop.pos[0], prop.pos[1], prop.pos[2]);
+      propHolder = new THREE.Group();
+      propHolder.add(built);
+      modelRoot.add(propHolder);
+      anchors = [
+        {
+          holder: propHolder,
+          prop: built,
+          hand: { bone, rot: prop.rot, pos: prop.pos },
+          armed: true,
+          fixedPose: false,
+          tip: null,
+          restInv,
+        },
+      ];
+    });
   };
 
   // --- the model and its clips -------------------------------------------
@@ -491,6 +497,8 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
         (v) => {
           tuning.height = v;
           applyModelTuning();
+          // The weapon scales with the champion.
+          rebuildProp(true);
         },
       ),
       sliderRow(
@@ -540,10 +548,20 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       return;
     }
     const kindSelect = el('select', 'ws-select') as HTMLSelectElement;
+    // Real 3D weapon models only: the roster's generated ones, plus the
+    // champion's own forged weapon once it exists.
+    const propLabels: Record<DisplayPropKind, string> = {
+      none: 'No weapon',
+      maul: 'Siege maul (Korrath)',
+      shield: 'Tower shield (Korrath)',
+      rifle: 'Long rifle (Vesk)',
+      generated: 'My forged weapon',
+    };
     for (const k of DISPLAY_PROP_KINDS) {
+      if (k === 'generated' && !subject.weaponUrl) continue;
       const opt = document.createElement('option');
       opt.value = k;
-      opt.textContent = k === 'none' ? 'No weapon' : k;
+      opt.textContent = propLabels[k];
       kindSelect.append(opt);
     }
     kindSelect.value = prop.kind;
@@ -683,23 +701,22 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   const setView = (match: boolean): void => {
     matchView = match;
     grid.visible = match;
+    // Each view starts from its own vantage (match: the in-game top-down
+    // angle) and stays freely orbitable from there.
+    pitch = match ? 1.04 : 0.32;
+    dist = match ? 13.4 : 6.2;
+    if (match) autoSpin = false;
     podiumBtn.classList.toggle('picked', !match);
     matchBtn.classList.toggle('picked', match);
   };
   podiumBtn.addEventListener('click', () => setView(false));
   matchBtn.addEventListener('click', () => setView(true));
-  const refBtn = el('button', 'ws-btn', 'Size reference');
-  refBtn.addEventListener('click', () => {
-    reference.visible = !reference.visible;
-    refBtn.classList.toggle('picked', reference.visible);
-  });
-  viewPanel.append(podiumBtn, matchBtn, refBtn);
+  viewPanel.append(podiumBtn, matchBtn);
   viewPanel.append(
     el(
       'div',
       'ws-note',
-      'Drag to orbit, wheel to zoom. Match view shows one map unit per cell. The size ' +
-        'reference is a roster-average silhouette (2.4 units) to judge your height against.',
+      'Drag to orbit, wheel to zoom, in both views. Match view shows one map unit per cell.',
     ),
   );
 

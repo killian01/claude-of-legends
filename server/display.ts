@@ -52,10 +52,15 @@ export function forgedMatchAssets(
 ): Record<string, ForgedMatchAssets> {
   const out: Record<string, ForgedMatchAssets> = {};
   for (const def of defs) {
-    const assets = store.forgedAssets(def.id) as { model?: string; family?: string } | null;
+    const assets = store.forgedAssets(def.id) as {
+      model?: string;
+      family?: string;
+      weapon?: string;
+    } | null;
     out[def.id] = {
       model: assets?.model ?? null,
       family: assets?.family ?? null,
+      weapon: assets?.weapon ?? null,
       display: displayOf(store, def.id),
     };
   }

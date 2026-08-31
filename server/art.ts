@@ -17,9 +17,18 @@ import { checkQuota, type QuotaDeps, spendQuota } from './quotas';
 import { findBlockedWord } from './word_filter';
 
 // The art each champion can carry: the splash, the model reference (the
-// single-view image the 3D builds from, kind 'sheet'), and one icon per
-// spell.
-export const ART_KINDS = ['splash', 'sheet', 'icon_Q', 'icon_W', 'icon_E', 'icon_R'] as const;
+// single-view image the 3D builds from, kind 'sheet'), the weapon image
+// (the champion's own weapon alone, the optional prop's 3D input), and
+// one icon per spell.
+export const ART_KINDS = [
+  'splash',
+  'sheet',
+  'weapon',
+  'icon_Q',
+  'icon_W',
+  'icon_E',
+  'icon_R',
+] as const;
 export type ArtKind = (typeof ART_KINDS)[number];
 
 // Candidates kept per (champion, kind); the oldest unchosen fall off.
@@ -44,6 +53,16 @@ export const SHEET_STYLE =
   'front view, standing A-pose with arms slightly out, empty hands, plain light gray ' +
   'background, even neutral lighting, no other views, no duplicates, no props, no text, ' +
   'no watermark.';
+
+// The weapon extraction: ONLY the weapon, out of the character's hands.
+// Derived from the chosen splash the same way the model reference is; the
+// resulting image is what the weapon's own 3D build reads, so anything
+// else in frame becomes geometry.
+export const WEAPON_STYLE =
+  'Only the weapon: extract the exact weapon this character holds and show it completely ' +
+  'alone, centered, at a three-quarter angle, floating on a plain light gray background, ' +
+  'the whole weapon visible from grip to tip, no hands, no character, no other objects, ' +
+  'no text, no watermark.';
 
 // The flat icon template (ADR 0010): deliberately not the painterly splash
 // style, because an icon must read at in-match size.
@@ -121,6 +140,10 @@ export function artPrompt(kind: ArtKind, row: ForgedRow, line: string, appearanc
     const looks = appearance === '' ? '' : ` Appearance: ${appearance}.`;
     const detail = line === '' ? '' : ` ${line}.`;
     return `${SHEET_STYLE} The character: ${identity}, a ${row.def.role.toLowerCase()} champion.${looks}${detail} ${SHEET_MATCH}`;
+  }
+  if (kind === 'weapon') {
+    const detail = line === '' ? '' : ` ${line}.`;
+    return `${WEAPON_STYLE}${detail} Exactly the same weapon as in the input image: same shape, same materials, same colors.`;
   }
   const key = kind.slice('icon_'.length) as 'Q' | 'W' | 'E' | 'R';
   const ability = row.def.abilities[key];
@@ -209,10 +232,11 @@ export async function generateArt(
     prompt = deps.generation.provider.editsImages
       ? editInstruction(line)
       : iterationPrompt(from.prompt, line);
-  } else if (req.kind === 'sheet') {
+  } else if (req.kind === 'sheet' || req.kind === 'weapon') {
     const splash = deps.store.chosenArt(row.id, 'splash');
     if (!splash) {
-      return { ok: false, error: 'pick a splash first: the model reference derives from it' };
+      const what = req.kind === 'sheet' ? 'model reference' : 'weapon';
+      return { ok: false, error: `pick a splash first: the ${what} derives from it` };
     }
     sourcePath = splash.path;
     prompt = artPrompt(req.kind, row, line, splashLine(splash.prompt));
