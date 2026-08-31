@@ -1,14 +1,17 @@
-// The Forge editor, phase 4's playable slice: drafts on the account, kit
-// editing over the exact primitives the engine runs (stats, four
-// abilities, a passive template), the live power budget meter, card
-// texts, and a test drive that drops the draft into an offline practice
-// match on the stylized figure. Splash art, icon generation, the agent
-// prefill, and the 3D workshop arrive with the generation pipeline; this
-// screen is the kit half of the Forge, complete.
+// The Forge editor, phase 4's playable slice, reworked as a guided studio
+// (the Tripo-style flow, in the game's theme): three tabs in creation
+// order. Design first (the splash art the whole champion derives from,
+// with examples and the visible splash-to-model pipeline), then Spells
+// (kit editing plus per-spell icon generation), then Tuning (stats and
+// growth against the power budget). The right rail keeps the budget meter
+// and the actions in creation order; a finalize that lands opens the 3D
+// workshop on the fresh model.
 
+import { registerForgedAssets } from '../game/forged_visuals';
 import type { ChampionBaseStats, ChampionGrowth, ChampionRole } from '../sim/content/champions';
 import { ABILITY_BOUNDS, BASE_STAT_BOUNDS, GROWTH_BOUNDS } from '../sim/forge/bounds';
 import { budgetOf, POWER_BUDGET } from '../sim/forge/budget';
+import type { ForgedDisplay } from '../sim/forge/display';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import { PASSIVE_TEMPLATE_LIST, PASSIVE_TEMPLATES } from '../sim/forge/passive_templates';
 import { FORGED_ROLES, validateForged } from '../sim/forge/validate';
@@ -25,6 +28,11 @@ const CSS = `
   background: radial-gradient(ellipse at center, #241c10 0%, #0f0a04 80%);
   font-family: system-ui, sans-serif; color: #d8cdb0; font-size: 12px;
 }
+.fe *::-webkit-scrollbar { width: 10px; height: 10px; }
+.fe *::-webkit-scrollbar-track { background: #120d06; }
+.fe *::-webkit-scrollbar-thumb { background: #4a3a1c; border-radius: 5px; }
+.fe *::-webkit-scrollbar-thumb:hover { background: #a08030; }
+.fe * { scrollbar-width: thin; scrollbar-color: #4a3a1c #120d06; }
 .fe-head {
   position: relative; z-index: 1; display: flex; align-items: baseline; gap: 14px;
   padding: 14px 22px 10px; border-bottom: 1px solid #4a3a1c;
@@ -36,15 +44,26 @@ const CSS = `
   background: #241c10; color: #d8cdb0; font-size: 13px; font-weight: 700; cursor: pointer;
 }
 .fe-back:hover { border-color: #d8b45a; }
+.fe-tabs {
+  position: relative; z-index: 1; display: flex; gap: 8px; padding: 10px 22px 0;
+}
+.fe-tab {
+  padding: 9px 20px; border-radius: 8px 8px 0 0; border: 1px solid #4a3a1c;
+  border-bottom: none; background: #16100a; color: #97854f;
+  font-size: 13px; font-weight: 700; cursor: pointer; letter-spacing: 0.3px;
+}
+.fe-tab:hover { color: #d8cdb0; }
+.fe-tab.on { background: #2c2210; color: #e8cc74; border-color: #6b5a2e; }
 .fe-body { position: relative; z-index: 1; flex: 1; display: flex; gap: 14px; padding: 12px 22px; min-height: 0; }
 .fe-rail { width: 210px; flex: none; overflow-y: auto; }
 .fe-main { flex: 1; min-width: 0; overflow-y: auto; padding-right: 6px; }
 .fe-side { width: 270px; flex: none; overflow-y: auto; }
 .fe-panel {
   background: rgba(14, 10, 4, 0.85); border: 1px solid #4a3a1c; border-radius: 10px;
-  padding: 10px 12px; margin-bottom: 10px;
+  padding: 12px 14px; margin-bottom: 10px;
 }
 .fe-panel h3 { margin: 0 0 8px; font-size: 12px; color: #c9a84a; letter-spacing: 0.6px; text-transform: uppercase; }
+.fe-lead { color: #b0a37e; font-size: 12.5px; line-height: 1.5; margin: 0 0 10px; }
 .fe-draft {
   display: block; width: 100%; text-align: left; margin-bottom: 6px; padding: 7px 9px;
   border-radius: 6px; border: 1px solid #4a3a1c; background: #1a130a; color: #d8cdb0;
@@ -67,6 +86,37 @@ const CSS = `
   background: #120d06; color: #e0d5b8; font-size: 13px; outline: none; margin-bottom: 6px;
 }
 .fe-input:focus { border-color: #d8b45a; }
+.fe-hero { display: flex; gap: 10px; align-items: stretch; }
+.fe-hero-input {
+  flex: 1; padding: 12px 14px; border-radius: 8px; border: 1px solid #6b5a2e;
+  background: #120d06; color: #e0d5b8; font-size: 14px; outline: none;
+}
+.fe-hero-input:focus { border-color: #d8b45a; }
+.fe-gen {
+  flex: none; padding: 12px 22px; border-radius: 8px; border: 1px solid #f0deae;
+  background: linear-gradient(180deg, #e8cc74 0%, #c9a84a 55%, #a07830 100%);
+  color: #241a08; font-size: 14px; font-weight: 800; cursor: pointer; letter-spacing: 0.3px;
+}
+.fe-gen:hover:not(:disabled) { filter: brightness(1.08); }
+.fe-gen:disabled { opacity: 0.5; cursor: default; }
+.fe-gen.small { padding: 8px 14px; font-size: 12px; }
+.fe-heromess { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.fe-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
+.fe-chip {
+  padding: 4px 11px; border-radius: 999px; border: 1px solid #4a3a1c; background: #1a130a;
+  color: #b0a37e; font-size: 11px; cursor: pointer;
+}
+.fe-chip:hover { border-color: #a08030; color: #d8cdb0; }
+.fe-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.fe-step { border: 1px solid #33270f; border-radius: 8px; background: rgba(26, 19, 10, 0.6); padding: 8px; }
+.fe-step-num { color: #c9a84a; font-weight: 800; font-size: 10.5px; letter-spacing: 0.6px; text-transform: uppercase; }
+.fe-step-thumb {
+  height: 92px; display: flex; align-items: center; justify-content: center;
+  margin: 6px 0; border-radius: 6px; background: #120d06; overflow: hidden;
+  color: #6b5a2e; font-size: 22px; font-weight: 800;
+}
+.fe-step-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.fe-step-text { color: #97854f; font-size: 10.5px; line-height: 1.45; }
 .fe-field { display: inline-flex; align-items: center; gap: 5px; margin: 2px 8px 2px 0; }
 .fe-field-label { color: #97854f; font-size: 11px; }
 .fe-num { width: 74px; padding: 4px 6px; border-radius: 5px; border: 1px solid #4a3a1c; background: #120d06; color: #e0d5b8; font-size: 12px; }
@@ -100,26 +150,33 @@ const CSS = `
 .fe-ok { color: #8fd06a; font-weight: 700; margin-top: 8px; }
 .fe-status { min-height: 16px; color: #aac2dd; margin-top: 8px; font-size: 11px; }
 .fe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
-.fe-panel-label {
-  margin: 2px 0 8px; font-size: 12px; color: #c9a84a; letter-spacing: 0.6px;
-  text-transform: uppercase; font-weight: 700;
-}
 .fe-desc { color: #97854f; font-style: italic; margin-top: 4px; line-height: 1.4; }
-.fe-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.fe-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .fe-cand {
-  padding: 0; border: 2px solid #4a3a1c; border-radius: 6px; background: #120d06;
-  cursor: pointer; overflow: hidden; line-height: 0;
+  padding: 0; border: 2px solid #4a3a1c; border-radius: 8px; background: #120d06;
+  cursor: pointer; overflow: hidden; line-height: 0; position: relative;
 }
 .fe-cand:hover { border-color: #a08030; }
-.fe-cand.chosen { border-color: #d8b45a; box-shadow: 0 0 6px rgba(216, 180, 90, 0.4); }
+.fe-cand.chosen { border-color: #d8b45a; box-shadow: 0 0 8px rgba(216, 180, 90, 0.45); }
+.fe-cand.chosen::after {
+  content: 'PICKED'; position: absolute; left: 0; right: 0; bottom: 0;
+  background: rgba(216, 180, 90, 0.9); color: #241a08; font-size: 9px; font-weight: 800;
+  text-align: center; padding: 2px 0; letter-spacing: 1px; line-height: 1.2;
+}
 .fe-cand img { display: block; object-fit: cover; }
-.fe-cand.splash img { width: 72px; height: 96px; }
-.fe-cand.icon img { width: 32px; height: 32px; }
+.fe-cand.splash img { width: 104px; height: 138px; }
+.fe-cand.icon img { width: 44px; height: 44px; }
 .fe-artrow { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .fe-artrow .fe-mini { flex: none; }
-.fe-icon-preview { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.fe-iconblock {
+  display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px 10px;
+  border: 1px dashed #4a3a1c; border-radius: 8px;
+}
+.fe-icon-preview { display: flex; align-items: center; gap: 6px; }
 .fe-icon-preview img { border-radius: 4px; border: 1px solid #4a3a1c; }
 .fe-quota { color: #97854f; font-size: 11px; margin-left: auto; }
+.fe-model-cta { display: flex; gap: 12px; align-items: center; }
+.fe-model-cta img { width: 96px; height: 72px; object-fit: cover; border-radius: 6px; border: 1px solid #4a3a1c; }
 `;
 
 let cssInstalled = false;
@@ -148,10 +205,12 @@ interface DraftRow {
   status: 'draft' | 'finalized';
   updatedAt: number;
   // Relative asset paths the server enriches the row with; the splash on
-  // any row that has one, model and sheet once finalized.
+  // any row that has one, model, sheet, family and display once finalized.
   splash?: string | null;
   model?: string | null;
   sheet?: string | null;
+  family?: string | null;
+  display?: ForgedDisplay | null;
 }
 
 // One 2D candidate (splash or spell icon) as the art routes answer it.
@@ -162,6 +221,14 @@ interface ArtCandidate {
   chosen: boolean;
   at: number;
 }
+
+// Example splash lines, clickable chips beside the prompt: they show the
+// shape of a line that works (silhouette, weapon, mood, one accent color).
+const EXAMPLE_LINES = [
+  'A moss-covered forest witch with a crooked wooden staff, calm and ancient, deep green',
+  'A brass clockwork duelist with one oversized gauntlet, proud, copper and teal',
+  'A storm-called spear fighter wrapped in torn sails, lean and quick, pale lightning blue',
+] as const;
 
 // Identity rides the session cookie (ADR 0006), never a token in the URL.
 async function api<T>(url: string, body?: unknown): Promise<T | null> {
@@ -257,6 +324,8 @@ export function newDraft(): ForgedChampionDef {
   };
 }
 
+type EditorTab = 'design' | 'spells' | 'tuning';
+
 export function openForgeEditor(container: HTMLElement): void {
   ensureCss();
   const root = el('div', 'fe');
@@ -276,16 +345,37 @@ export function openForgeEditor(container: HTMLElement): void {
   back.addEventListener('click', close);
   head.append(
     el('h1', 'fe-title', 'The Forge'),
-    el('span', 'fe-sub', 'Forge a champion from the primitives the roster is made of'),
+    el('span', 'fe-sub', 'Design the art, shape the kit, tune the numbers'),
     back,
   );
+
+  // The three tabs, in creation order.
+  let tab: EditorTab = 'design';
+  const tabs = el('div', 'fe-tabs');
+  const tabButtons = new Map<EditorTab, HTMLButtonElement>();
+  const TAB_DEFS: readonly { key: EditorTab; label: string }[] = [
+    { key: 'design', label: '1. Design' },
+    { key: 'spells', label: '2. Spells' },
+    { key: 'tuning', label: '3. Tuning' },
+  ];
+  for (const { key, label } of TAB_DEFS) {
+    const btn = el('button', 'fe-tab', label) as HTMLButtonElement;
+    btn.addEventListener('click', () => {
+      tab = key;
+      for (const [k, b] of tabButtons) b.classList.toggle('on', k === tab);
+      renderMain();
+    });
+    tabButtons.set(key, btn);
+    tabs.append(btn);
+  }
+  tabButtons.get('design')?.classList.add('on');
 
   const body = el('div', 'fe-body');
   const rail = el('div', 'fe-rail');
   const main = el('div', 'fe-main');
   const side = el('div', 'fe-side');
   body.append(rail, main, side);
-  root.append(head, body);
+  root.append(head, tabs, body);
   container.appendChild(root);
 
   let drafts: DraftRow[] = [];
@@ -309,7 +399,8 @@ export function openForgeEditor(container: HTMLElement): void {
     artQuota = r?.ok && r.quota ? r.quota : { used: 0, limit: 0 };
   };
 
-  const isSealed = (): boolean => drafts.find((d) => d.id === current.id)?.status === 'finalized';
+  const currentRow = (): DraftRow | undefined => drafts.find((d) => d.id === current.id);
+  const isSealed = (): boolean => currentRow()?.status === 'finalized';
 
   // Save what is on screen (art hangs off a stored draft), generate, then
   // reload the strip. The request is held open for the image: one 2D
@@ -375,6 +466,32 @@ export function openForgeEditor(container: HTMLElement): void {
     return strip;
   };
 
+  const chosenSplashUrl = (): string | null => {
+    const c = artCandidates.find((x) => x.kind === 'splash' && x.chosen);
+    return c ? `/api/forge/asset/${c.path}` : null;
+  };
+
+  // The workshop over the current champion's model; only exists finalized.
+  const openWorkshopHere = (): void => {
+    const row = currentRow();
+    if (!row?.model) return;
+    openWorkshop(container, {
+      id: current.id,
+      name: current.name,
+      title: current.title,
+      modelUrl: `/api/forge/asset/${row.model}`,
+      splashUrl: row.splash ? `/api/forge/asset/${row.splash}` : null,
+      sheetUrl: row.sheet ? `/api/forge/asset/${row.sheet}` : null,
+      family: row.family ?? null,
+      display: row.display ?? null,
+      editable: true,
+      onSaved: (display) => {
+        row.display = display;
+        registerForgedAssets(row.id, row);
+      },
+    });
+  };
+
   // --- right rail: the budget meter, verdict, and actions ---------------
 
   const meterFill = el('div', 'fe-meter-fill');
@@ -423,7 +540,7 @@ export function openForgeEditor(container: HTMLElement): void {
     finalizeBtn.title = v.ok ? '' : 'Finalize needs a fully valid champion';
     // style.display, not the hidden attribute: .fe-btn sets display and
     // author CSS beats the attribute's user-agent rule.
-    workshopBtn.style.display = drafts.find((d) => d.id === current.id)?.model ? '' : 'none';
+    workshopBtn.style.display = currentRow()?.model ? '' : 'none';
   };
 
   const hooks: KitHooks = {
@@ -464,7 +581,8 @@ export function openForgeEditor(container: HTMLElement): void {
   // Finalize: save what is on screen, then start the generation job and
   // follow it. The pipeline (ADR 0006) derives the model sheet, generates
   // and rigs the model, applies the clip set, and seals the champion; a
-  // failure of any kind refunds the creation.
+  // failure of any kind refunds the creation. Success opens the workshop
+  // on the fresh model: the 3D reveal IS the payoff of the chain.
   finalizeBtn.addEventListener('click', () => {
     status.textContent = 'Saving, then finalizing...';
     void api<{ ok: boolean; error?: string }>('/api/forge/draft', { def: current })
@@ -489,10 +607,11 @@ export function openForgeEditor(container: HTMLElement): void {
             }
             if (job.status === 'success') {
               status.textContent = 'Finalized: the champion is sealed.';
-              // The seal changes what the art panels offer: rerender once
-              // the fresh statuses land.
+              // The seal changes what the panels offer; once the fresh
+              // rows land, the workshop opens on the new model.
               void loadDrafts().then(() => {
                 renderMain();
+                openWorkshopHere();
               });
               return;
             }
@@ -513,17 +632,7 @@ export function openForgeEditor(container: HTMLElement): void {
 
   // The workshop door: only a finalized champion has a model to turn.
   const workshopBtn = el('button', 'fe-btn', 'Workshop (3D view)') as HTMLButtonElement;
-  workshopBtn.addEventListener('click', () => {
-    const row = drafts.find((d) => d.id === current.id);
-    if (!row?.model) return;
-    openWorkshop(container, {
-      name: current.name,
-      title: current.title,
-      modelUrl: `/api/forge/asset/${row.model}`,
-      splashUrl: row.splash ? `/api/forge/asset/${row.splash}` : null,
-      sheetUrl: row.sheet ? `/api/forge/asset/${row.sheet}` : null,
-    });
-  });
+  workshopBtn.addEventListener('click', openWorkshopHere);
 
   const meterPanel = el('div', 'fe-panel');
   meterPanel.append(el('h3', '', 'Power budget'));
@@ -587,13 +696,16 @@ export function openForgeEditor(container: HTMLElement): void {
   const loadDrafts = async (): Promise<void> => {
     const r = await api<{ ok: boolean; drafts?: DraftRow[] }>(`/api/forge/drafts`);
     drafts = r?.ok && r.drafts ? r.drafts : [];
+    // Finalized champions announce their models to the render registry, so
+    // a test drive straight from here plays the generated model.
+    for (const d of drafts) registerForgedAssets(d.id, d);
     renderRail();
     // Statuses may have moved (a finalize landing): the workshop door and
     // the seal-aware panels follow the fresh rows.
     refresh();
   };
 
-  // --- center: the champion ----------------------------------------------
+  // --- center: the tabs --------------------------------------------------
 
   function textInput(
     placeholder: string,
@@ -612,28 +724,39 @@ export function openForgeEditor(container: HTMLElement): void {
     return input;
   }
 
-  function renderMain(): void {
-    main.textContent = '';
-
-    // The creation order (ADR 0010): the champion starts with its art.
-    // Design first, identity second, numbers and spells after.
+  // Tab 1, Design: the splash art hero (the champion derives from it), the
+  // visible splash-to-model pipeline, and the card identity.
+  function renderDesign(): void {
     const sealed = isSealed();
+    const row = currentRow();
+
     const splash = el('div', 'fe-panel');
-    splash.append(el('h3', '', '1. Design: splash art (the model derives from it)'));
+    splash.append(el('h3', '', 'Splash art'));
     if (sealed) {
-      splash.append(el('div', 'fe-desc', 'Sealed at finalization.'));
+      splash.append(
+        el('div', 'fe-lead', 'This champion is sealed: its art is final. Admire it below.'),
+      );
     } else {
-      const line = el('input', 'fe-input') as HTMLInputElement;
-      line.placeholder = 'Describe the champion: silhouette, weapon, mood, one accent color';
+      splash.append(
+        el(
+          'p',
+          'fe-lead',
+          'Describe your champion in one line and generate the splash art. Everything derives from it: the 3D model is built from this exact picture, so make it the champion you want to play.',
+        ),
+      );
+      const hero = el('div', 'fe-hero');
+      const line = el('input', 'fe-hero-input') as HTMLInputElement;
+      line.placeholder = 'Silhouette, weapon, mood, one accent color...';
       line.maxLength = 400;
       line.value = artLines.splash ?? '';
       line.addEventListener('input', () => {
         artLines.splash = line.value;
       });
-      const row = el('div', 'fe-artrow');
-      const genBtn = el('button', 'fe-mini', 'Generate splash') as HTMLButtonElement;
+      const genBtn = el('button', 'fe-gen', 'Generate splash art') as HTMLButtonElement;
       genBtn.addEventListener('click', () => generateArtKind('splash', line.value));
-      const prefill = el('button', 'fe-mini', 'From card text');
+      hero.append(line, genBtn);
+      const mess = el('div', 'fe-heromess');
+      const prefill = el('button', 'fe-mini', 'Use my card text');
       prefill.addEventListener('click', () => {
         const identity = [current.name, current.title].filter((s) => s.trim() !== '').join(', ');
         line.value = current.tagline.trim() === '' ? identity : `${identity}: ${current.tagline}`;
@@ -644,14 +767,128 @@ export function openForgeEditor(container: HTMLElement): void {
         'fe-quota',
         artQuota.limit > 0 ? `${artQuota.used}/${artQuota.limit} images today` : '',
       );
-      row.append(genBtn, prefill, quota);
-      splash.append(line, row);
+      mess.append(prefill, quota);
+      const chips = el('div', 'fe-chips');
+      chips.append(el('span', 'fe-field-label', 'Try an example:'));
+      for (const ex of EXAMPLE_LINES) {
+        const chip = el('button', 'fe-chip', `${ex.slice(0, 46)}...`);
+        chip.title = ex;
+        chip.addEventListener('click', () => {
+          line.value = ex;
+          artLines.splash = ex;
+        });
+        chips.append(chip);
+      }
+      splash.append(hero, mess, chips);
+      if (artCandidates.filter((c) => c.kind === 'splash').length === 0) {
+        splash.append(
+          el('div', 'fe-desc', 'No splash yet. Generate a few and pick the one that feels right.'),
+        );
+      }
     }
     splash.append(artStrip('splash', true));
     main.append(splash);
 
+    // The pipeline, visible: what happens between the splash and the
+    // playable model, with the champion's own images once they exist.
+    const pipe = el('div', 'fe-panel');
+    pipe.append(el('h3', '', 'From splash to champion'));
+    const steps = el('div', 'fe-steps');
+    const step = (
+      num: string,
+      text: string,
+      thumb: string | null,
+      placeholder: string,
+    ): HTMLElement => {
+      const box = el('div', 'fe-step');
+      box.append(el('div', 'fe-step-num', num));
+      const t = el('div', 'fe-step-thumb');
+      if (thumb) {
+        const img = document.createElement('img');
+        img.src = thumb;
+        img.alt = '';
+        t.append(img);
+      } else {
+        t.textContent = placeholder;
+      }
+      box.append(t, el('div', 'fe-step-text', text));
+      return box;
+    };
+    const splashUrl = row?.splash ? `/api/forge/asset/${row.splash}` : chosenSplashUrl();
+    steps.append(
+      step('1. Splash art', 'Your one-line prompt paints it. Pick your favorite.', splashUrl, '?'),
+    );
+    steps.append(
+      step(
+        '2. Model sheet',
+        'Derived automatically at finalize: the same character, three views, empty hands, white background. This is what the 3D builder reads.',
+        row?.sheet ? `/api/forge/asset/${row.sheet}` : null,
+        '2D',
+      ),
+    );
+    const modelStep = el('div', 'fe-step');
+    modelStep.append(el('div', 'fe-step-num', '3. 3D model'));
+    const modelThumb = el('div', 'fe-step-thumb', '3D');
+    modelStep.append(modelThumb);
+    if (row?.model) {
+      const open = el('button', 'fe-gen small', 'Open the workshop');
+      open.addEventListener('click', openWorkshopHere);
+      modelStep.append(open);
+    } else {
+      modelStep.append(
+        el('div', 'fe-step-text', 'Built from the sheet, textured, then rigged on a biped.'),
+      );
+    }
+    steps.append(modelStep);
+    steps.append(
+      step(
+        '4. Animations',
+        'Five clips land on the rig: idle, run, attack, cast, death. See them in the workshop.',
+        null,
+        '5 clips',
+      ),
+    );
+    pipe.append(steps);
+    pipe.append(
+      el(
+        'div',
+        'fe-desc',
+        sealed
+          ? 'This champion went through the whole chain; the workshop shows the result.'
+          : 'Finalize (right rail) runs steps 2 to 4 on your chosen splash and spends a creation.',
+      ),
+    );
+    main.append(pipe);
+
+    // The model card: once finalized, the 3D result is one click away.
+    if (row?.model) {
+      const modelPanel = el('div', 'fe-panel');
+      modelPanel.append(el('h3', '', 'The model'));
+      const cta = el('div', 'fe-model-cta');
+      if (row.sheet) {
+        const img = document.createElement('img');
+        img.src = `/api/forge/asset/${row.sheet}`;
+        img.alt = '';
+        cta.append(img);
+      }
+      const right = el('div', '');
+      right.append(
+        el(
+          'div',
+          'fe-lead',
+          'Your generated model is ready: turn it around, play its animations, attach and adjust the weapon, then save the tuning. Matches use exactly what you save.',
+        ),
+      );
+      const open = el('button', 'fe-gen small', 'Open the 3D workshop');
+      open.addEventListener('click', openWorkshopHere);
+      right.append(open);
+      cta.append(right);
+      modelPanel.append(cta);
+      main.append(modelPanel);
+    }
+
     const card = el('div', 'fe-panel');
-    card.append(el('h3', '', '2. Card: name, title, role'));
+    card.append(el('h3', '', 'Identity'));
     card.append(
       textInput(
         'Name',
@@ -698,26 +935,15 @@ export function openForgeEditor(container: HTMLElement): void {
     roleField.append(el('span', 'fe-field-label', 'role'), roleSelect);
     card.append(roleField);
     main.append(card);
+  }
 
-    const stats = el('div', 'fe-panel');
-    stats.append(el('h3', '', '3. Stats (every point above the floor costs budget)'));
-    const statsGrid = el('div', 'fe-grid');
-    const base = current.base as unknown as Record<string, unknown>;
-    for (const key of Object.keys(BASE_STAT_BOUNDS) as (keyof ChampionBaseStats)[]) {
-      if (key === 'ap') continue;
-      statsGrid.append(numField(key, base, key, BASE_STAT_BOUNDS[key], hooks));
-    }
-    stats.append(statsGrid, el('h3', '', 'Growth per level'));
-    const growthGrid = el('div', 'fe-grid');
-    const growth = current.growth as unknown as Record<string, unknown>;
-    for (const key of Object.keys(GROWTH_BOUNDS) as (keyof ChampionGrowth)[]) {
-      growthGrid.append(numField(key, growth, key, GROWTH_BOUNDS[key], hooks));
-    }
-    stats.append(growthGrid);
-    main.append(stats);
+  // Tab 2, Spells: the passive and the four abilities, each with its own
+  // generated icon front and center.
+  function renderSpells(): void {
+    const sealed = isSealed();
 
     const passive = el('div', 'fe-panel');
-    passive.append(el('h3', '', '4. Passive (a template the engine owns; you set the numbers)'));
+    passive.append(el('h3', '', 'Passive (a template the engine owns; you set the numbers)'));
     const tplSelect = el('select', 'fe-select') as HTMLSelectElement;
     for (const tpl of PASSIVE_TEMPLATE_LIST) {
       const opt = document.createElement('option');
@@ -769,7 +995,6 @@ export function openForgeEditor(container: HTMLElement): void {
     }
     main.append(passive);
 
-    main.append(el('div', 'fe-panel-label', '5. Spells'));
     for (const key of ['Q', 'W', 'E', 'R'] as AbilityKey[]) {
       const ability = current.abilities[key] as unknown as Record<string, unknown>;
       const panel = el('div', 'fe-panel fe-ability');
@@ -800,19 +1025,12 @@ export function openForgeEditor(container: HTMLElement): void {
       costs.append(numField('windup', ability, 'windup', ABILITY_BOUNDS.windup, hooks));
       panel.append(costs);
       panel.append(buildCastEditor(current.abilities[key], hooks));
-      // Optional generated icon (ADR 0010): the flat template on the 2D
-      // quota; the spec-derived procedural icon stays the default.
-      const iconRow = el('div', 'fe-artrow');
-      iconRow.append(el('span', 'fe-list-label', 'Icon'));
-      if (!sealed) {
-        const iconGen = el('button', 'fe-mini', 'Generate icon') as HTMLButtonElement;
-        iconGen.title = 'A flat generated icon; without one the procedural icon is used';
-        iconGen.addEventListener('click', () => generateArtKind(`icon_${key}`, ''));
-        iconRow.append(iconGen);
-      }
+      // The spell icon block (ADR 0010): the flat generated icon on the 2D
+      // quota, in-match sizes previewed; the procedural icon stays the
+      // fallback when none is generated.
+      const iconBlock = el('div', 'fe-iconblock');
       const chosenIcon = artCandidates.find((c) => c.kind === `icon_${key}` && c.chosen);
       if (chosenIcon) {
-        // Full size and in-match size side by side, as the ADR asks.
         const preview = el('div', 'fe-icon-preview');
         for (const size of [56, 24]) {
           const img = document.createElement('img');
@@ -822,11 +1040,53 @@ export function openForgeEditor(container: HTMLElement): void {
           img.alt = '';
           preview.append(img);
         }
-        iconRow.append(preview);
+        iconBlock.append(preview);
       }
-      panel.append(iconRow, artStrip(`icon_${key}`, false));
+      const iconText = el(
+        'div',
+        'fe-step-text',
+        chosenIcon
+          ? 'The icon, at full size and at in-match size.'
+          : 'No generated icon yet: the procedural one plays until you make one.',
+      );
+      iconBlock.append(iconText);
+      if (!sealed) {
+        const iconGen = el('button', 'fe-gen small', 'Generate icon') as HTMLButtonElement;
+        iconGen.title = 'A flat spell icon in the game style, derived from this spell';
+        iconGen.style.marginLeft = 'auto';
+        iconGen.addEventListener('click', () => generateArtKind(`icon_${key}`, ''));
+        iconBlock.append(iconGen);
+      }
+      panel.append(iconBlock, artStrip(`icon_${key}`, false));
       main.append(panel);
     }
+  }
+
+  // Tab 3, Tuning: the numbers against the power budget.
+  function renderTuning(): void {
+    const stats = el('div', 'fe-panel');
+    stats.append(el('h3', '', 'Stats (every point above the floor costs budget)'));
+    const statsGrid = el('div', 'fe-grid');
+    const base = current.base as unknown as Record<string, unknown>;
+    for (const key of Object.keys(BASE_STAT_BOUNDS) as (keyof ChampionBaseStats)[]) {
+      if (key === 'ap') continue;
+      statsGrid.append(numField(key, base, key, BASE_STAT_BOUNDS[key], hooks));
+    }
+    stats.append(statsGrid, el('h3', '', 'Growth per level'));
+    const growthGrid = el('div', 'fe-grid');
+    const growth = current.growth as unknown as Record<string, unknown>;
+    for (const key of Object.keys(GROWTH_BOUNDS) as (keyof ChampionGrowth)[]) {
+      growthGrid.append(numField(key, growth, key, GROWTH_BOUNDS[key], hooks));
+    }
+    stats.append(growthGrid);
+    main.append(stats);
+  }
+
+  function renderMain(): void {
+    main.textContent = '';
+    if (tab === 'design') renderDesign();
+    else if (tab === 'spells') renderSpells();
+    else renderTuning();
   }
 
   renderMain();

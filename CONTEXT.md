@@ -201,10 +201,18 @@ body mesh; it comes from the house weapon library or from its own generation.
 _Avoid_: attachment, accessory
 
 **Workshop view**:
-The 3D inspection view of a finalized forged champion's generated model: turntable orbit
-and zoom, playback of the clip set, team color preview, and a match-view camera at in-game
-scale. Prop grip adjustment joins it when the weapon prop lands. A view of one champion,
-not a place; the place players create in is the Forge.
+The 3D inspection and adjustment view of a finalized forged champion's generated model:
+turntable orbit and zoom, playback of the clip set under readable names, team color
+preview, a match-view camera at in-game scale, and the display tuning (below) edited
+live by the creator. A view of one champion, not a place; the place players create in
+is the Forge.
+
+**Display tuning**:
+The creator's saved adjustments to how a forged champion's generated model is presented:
+height, facing, ground offset, and the weapon prop's kind, bone, and grip offsets.
+Stored server-side in the sealed assets, clamped by shared bounds, and read by every
+client in a match; pure presentation with zero gameplay effect, exactly like skins.
+_Avoid_: model settings, transform
 _Avoid_: model viewer, inspector, showroom
 
 **Splash art**:

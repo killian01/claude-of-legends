@@ -4,7 +4,9 @@
 // creator's switches) in a rail on the right. Pure DOM over /api/gallery;
 // Escape or Back closes it to whatever screen opened it.
 
+import { registerForgedAssets } from '../game/forged_visuals';
 import type { ChampionRole } from '../sim/content/champions';
+import type { ForgedDisplay } from '../sim/forge/display';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import { resolveForgedChampion } from '../sim/forge/resolve';
 import type { AbilityKey } from '../sim/types';
@@ -25,9 +27,12 @@ export interface GalleryEntry {
   listed: boolean;
   shared: boolean;
   updatedAt: number;
-  // Asset paths relative to /api/forge/asset/, when the champion has them.
+  // Asset paths relative to /api/forge/asset/, when the champion has them;
+  // family and display drive the weapon prop and the saved model tuning.
   splash: string | null;
   model: string | null;
+  family: string | null;
+  display: ForgedDisplay | null;
 }
 
 const CSS = `
@@ -242,10 +247,19 @@ export function openGallery(container: HTMLElement): void {
       const workshop = el('button', 'gal-btn', 'Workshop view');
       workshop.addEventListener('click', () => {
         openWorkshop(container, {
+          id: entry.id,
           name: def.name,
           title: def.title,
           modelUrl: `/api/forge/asset/${entry.model}`,
           splashUrl: entry.splash ? `/api/forge/asset/${entry.splash}` : null,
+          family: entry.family,
+          display: entry.display,
+          // Only the owner can tune and save; visitors just look around.
+          editable: entry.mine,
+          onSaved: (display) => {
+            entry.display = display;
+            registerForgedAssets(entry.id, entry);
+          },
         });
       });
       actions.append(workshop);
@@ -345,6 +359,9 @@ export function openGallery(container: HTMLElement): void {
     const q = encodeURIComponent(search.value.trim());
     void api(`/api/gallery?sort=${sort}&q=${q}`).then((r) => {
       entries = r?.ok && Array.isArray(r.entries) ? (r.entries as GalleryEntry[]) : [];
+      // Announce every model to the render registry, so a test drive from
+      // here plays the generated model, not the procedural figure.
+      for (const e of entries) registerForgedAssets(e.id, e);
       renderGrid();
     });
   };

@@ -38,10 +38,21 @@ and their written UGC authorization; details inline.
    full and in-match size, the procedural icon stays the default), the workshop
    view (turntable orbit and zoom, playback of the clip set, team color preview
    on the ring, a match-view camera over a one-unit grid), and splash art on the
-   gallery and Forge-queue select cards. REMAINING: the agent endpoint that
+   gallery and Forge-queue select cards. Studio rework DONE (2026-08-31, on
+   playtest feedback): the editor is three tabs in creation order (Design with
+   the splash hero, example lines and the visible splash-to-model pipeline;
+   Spells with per-spell icon blocks; Tuning with the stats), a finalize that
+   lands opens the workshop, and the workshop is the adjustment atelier: live
+   display tuning (height, facing, ground offset) and the weapon prop attached
+   to a chosen rig bone with hand-tuned grip offsets, saved server-side
+   (/api/forge/display, clamped by the shared sanitizer) and applied in-match.
+   Forged champions PLAY as their generated models everywhere: the render
+   registry loads the sealed GLB (clip names resolved by substring, so preset
+   and placeholder spellings both land), announced from drafts, the gallery,
+   and the match_start forgedAssets block. REMAINING: the agent endpoint that
    compiles free-text passives into primitives with refusal explanations (needs
-   a Claude API key), and prop grip adjustment in the workshop view (needs the
-   weapon prop, phase 5's Tripo half).
+   a Claude API key); the generated weapon prop itself stays phase 5's Tripo
+   half (the procedural prop library carries the grip flow until then).
 5. **Generation pipeline**: keyless half DONE: the neutral provider interface
    (generate2D, imageTo3D, rig, animate, plus the optional uploadImage seam that
    turns a local file into a provider input token) with Tripo first and a mock
