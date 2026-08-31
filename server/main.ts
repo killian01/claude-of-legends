@@ -52,6 +52,7 @@ import {
 } from './forge';
 import { ForgeStore } from './forge_store';
 import { canPlayForged, listGallery, reportForged, setVisibility, toggleLike } from './gallery';
+import { catalogRoles } from './generation/house_clips';
 import { MockProvider } from './generation/mock';
 import { downloadToFile, type PipelineDeps, recoverStaleJobs } from './generation/pipeline';
 import { placeholderFor } from './generation/placeholder';
@@ -208,6 +209,8 @@ function generationFromEnv(): PipelineDeps | null {
     storage: forgeStore,
     provider,
     assetsDir: ASSETS_DIR,
+    // The house clip library ships inside the served client build.
+    publicDir: DIST,
     // Per-champion asset budgets (ADR 0010), server-configurable like
     // every other number in the plan; zero disables one.
     budgets: {
@@ -928,7 +931,9 @@ const server = http.createServer(async (req, res) => {
           provider
             ? {
                 ok: true,
-                roles: provider.clipChoices(),
+                // The provider's presets plus the house library, the
+                // same merged catalog the bake validates against.
+                roles: catalogRoles(provider),
                 defaults: Object.fromEntries(
                   WEAPON_FAMILIES.map((f) => [f, provider.clipDefaults(f)]),
                 ),

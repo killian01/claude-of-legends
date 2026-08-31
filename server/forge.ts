@@ -10,6 +10,7 @@
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { FORGED_ID_PATTERN, validateForged } from '../src/sim/forge/validate';
 import type { ForgedRow, ForgeStore } from './forge_store';
+import { catalogRoles } from './generation/house_clips';
 import {
   familyOf,
   type PipelineDeps,
@@ -225,7 +226,8 @@ export function animateChampion(
       ? (storedFamily as WeaponFamily)
       : familyOf(row.def);
   const provider = deps.generation.provider;
-  const choices = provider.clipChoices();
+  // The pickable catalog: the provider's presets plus the house library.
+  const choices = catalogRoles(provider);
   // The baseline under the player's picks: what is already baked first
   // (so an untouched role never re-bakes), the family default only for a
   // role that has never been baked at all.

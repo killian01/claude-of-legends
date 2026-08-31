@@ -15,6 +15,7 @@ import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from '
 import path from 'node:path';
 import type { ForgedChampionDef } from '../../src/sim/forge/forged_def';
 import type { ForgeStore } from '../forge_store';
+import { houseClipFile, isHouseClip } from './house_clips';
 import {
   CLIP_ROLES,
   type ClipRole,
@@ -29,6 +30,10 @@ export interface PipelineDeps {
   // Where downloaded artifacts live (DATA_DIR/assets); paths stored on
   // the row are relative to it.
   assetsDir: string;
+  // The served static root (the built client dir), where the house clip
+  // library lives; absent means house picks fail loudly instead of
+  // pretending.
+  publicDir?: string;
   // Fetches a produced file to disk. Injectable: tests hand mock:// URLs
   // a writer, production streams over fetch.
   download(url: string, dest: string): Promise<void>;
@@ -274,8 +279,13 @@ async function runAnimate(
     const delta = CLIP_ROLES.filter(
       (role) => req.clips[role] !== prevClips[role] || typeof prevFiles[role] !== 'string',
     );
+    // House picks never touch the provider: their shared file copies
+    // into the champion's assets. Only provider presets retarget.
+    const providerDelta = delta.filter((role) => !isHouseClip(req.clips[role]));
+    const houseDelta = delta.filter((role) => isHouseClip(req.clips[role]));
 
-    // Rig once, keep forever: the stored rig task feeds every later bake.
+    // Rig once, keep forever: the stored rig task feeds every later bake
+    // (house clips ride the rigged body too, so any first bake rigs).
     let rigTask = typeof before.rigTask === 'string' ? before.rigTask : null;
     let riggedPath = typeof before.rigged === 'string' ? before.rigged : null;
     let rigProvenance: unknown = null;
@@ -291,9 +301,9 @@ async function runAnimate(
 
     let clipsPath: string | null = null;
     let bakeProvenance: unknown = null;
-    if (delta.length > 0 && rigTask !== null) {
+    if (providerDelta.length > 0 && rigTask !== null) {
       stage('animate');
-      const animations = [...new Set(delta.map((role) => req.clips[role]))];
+      const animations = [...new Set(providerDelta.map((role) => req.clips[role]))];
       const baked = await deps.provider.animate({
         riggedTaskId: rigTask,
         animations,
@@ -306,6 +316,22 @@ async function runAnimate(
       bakeProvenance = baked.provenance;
     }
 
+    const houseFiles: Record<string, string> = {};
+    if (houseDelta.length > 0) {
+      if (!deps.publicDir) {
+        throw new GenerationError('house clips are not available on this server');
+      }
+      const copy = deps.copyFile ?? copyFileSync;
+      for (const role of houseDelta) {
+        const src = houseClipFile(req.clips[role]);
+        if (!src) throw new GenerationError(`unknown house clip: ${req.clips[role]}`);
+        const dest = `forged/${req.forgedId}/house_${jobId}_${role}.glb`;
+        mkdirSync(path.dirname(path.join(deps.assetsDir, dest)), { recursive: true });
+        copy(path.join(deps.publicDir, src), path.join(deps.assetsDir, dest));
+        houseFiles[role] = dest;
+      }
+    }
+
     // Sealed with the champion: the rigged body, the pick and the clip
     // file per role, plus the chosen splash and spell icons as they
     // stand and the appended provenance. Re-read after the awaits so a
@@ -314,7 +340,11 @@ async function runAnimate(
       (deps.storage.forgedAssets(req.forgedId) as Record<string, unknown> | null) ?? {};
     const clipFiles: Record<string, string> = { ...prevFiles };
     if (clipsPath !== null) {
-      for (const role of delta) clipFiles[role] = clipsPath;
+      for (const role of providerDelta) clipFiles[role] = clipsPath;
+    }
+    for (const role of houseDelta) {
+      const dest = houseFiles[role];
+      if (dest !== undefined) clipFiles[role] = dest;
     }
     const splash = deps.storage.chosenArt(req.forgedId, 'splash');
     const icons: Record<string, string> = {};

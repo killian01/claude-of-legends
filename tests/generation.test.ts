@@ -440,6 +440,61 @@ describe('the mock pipeline end to end', () => {
     expect((r.store.forgedAssets(r.def.id) as { clips: unknown }).clips).toEqual(want);
   });
 
+  it('applies a house clip by copy: no provider call, no cost, free swap', async () => {
+    const r = rig();
+    const copies: { src: string; dest: string }[] = [];
+    r.pipeline.publicDir = 'PUB';
+    r.pipeline.copyFile = (src, dest) => {
+      copies.push({ src, dest });
+    };
+    const deps: ForgeDeps = { store: r.store, generation: r.pipeline, now: () => 999 };
+    const built = buildModel(deps, ACCOUNT, r.def.id);
+    expect(built.ok).toBe(true);
+    if (built.ok) await built.done;
+
+    // A stranger to BOTH catalogs is still refused loudly.
+    expect(
+      animateChampion(deps, ACCOUNT, r.def.id, 'slashing', { attack: 'house:nope' }),
+    ).toMatchObject({ ok: false, error: expect.stringContaining('unknown attack animation') });
+
+    const first = animateChampion(deps, ACCOUNT, r.def.id, 'slashing', {
+      attack: 'house:sns_attack_01',
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    await first.done;
+    expect(r.store.getGenerationJob(first.jobId)?.status).toBe('success');
+    // The provider baked only the four preset roles; the house attack
+    // arrived by copy from the shared library.
+    expect(r.provider.seen.find((s) => s.op === 'animate')?.req).toMatchObject({
+      animations: ['idle', 'run', 'cast', 'death'],
+    });
+    expect(copies.at(-1)?.src.replaceAll('\\', '/')).toBe(
+      'PUB/models/mannequin/clips/house_sns_attack_01.glb',
+    );
+    const assets = r.store.forgedAssets(r.def.id) as {
+      clips: Record<string, string>;
+      clipFiles: Record<string, string>;
+    };
+    expect(assets.clips.attack).toBe('house:sns_attack_01');
+    expect(assets.clipFiles.attack).toBe(`forged/${r.def.id}/house_${first.jobId}_attack.glb`);
+    expect(r.store.getForged(r.def.id)?.status).toBe('finalized');
+
+    // Swapping one house clip for another: pure copy, zero provider ops.
+    const swap = animateChampion(deps, ACCOUNT, r.def.id, 'slashing', {
+      attack: 'house:sns_attack_02',
+    });
+    expect(swap.ok).toBe(true);
+    if (!swap.ok) return;
+    await swap.done;
+    expect(r.provider.seen.filter((s) => s.op === 'animate')).toHaveLength(1);
+    expect(r.provider.seen.filter((s) => s.op === 'rig')).toHaveLength(1);
+    expect((r.store.forgedAssets(r.def.id) as { clips: Record<string, string> }).clips.attack).toBe(
+      'house:sns_attack_02',
+    );
+    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+  });
+
   it('fails and refunds when an artifact lands over its budget', async () => {
     const r = rig();
     r.pipeline.budgets = { modelKb: 100 };
