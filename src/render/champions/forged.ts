@@ -9,9 +9,9 @@
 import type * as THREE from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import type { DisplayPropKind, ForgedDisplay } from '../../sim/forge/display';
+import type { ForgedDisplay } from '../../sim/forge/display';
 import { type ChampionTemplate, measureScene, toLambert } from './assets';
-import { resolveForgedClips } from './forged_clips';
+import { resolveForgedClips, stripTravel } from './forged_clips';
 import type { ChampionVisualDef } from './manifest';
 
 // Middle of the roster's height range (manifest heights run 1.6 to 3.6);
@@ -74,28 +74,13 @@ export function loadForgedSource(url: string): Promise<ForgedSource | null> {
     });
 }
 
-// The hand bone a weapon defaults to: right hand first, any hand second.
-// Rig naming varies per provider ("R_Hand", "RightHand", "hand.r").
+// The hand bone the workshop suggests when the creator picks a weapon:
+// right hand first, any hand second. Rig naming varies per provider
+// ("R_Hand", "RightHand", "hand.r").
 export function guessHandBone(boneNames: readonly string[]): string | null {
   const right = boneNames.find((n) => /r[_.]?hand|righthand|hand[_.]?r\b/i.test(n));
   if (right) return right;
   return boneNames.find((n) => /hand/i.test(n)) ?? null;
-}
-
-// The weapon family recorded at finalize picks the default prop; the
-// workshop can override kind and grip afterward.
-export function familyPropKind(family: string | null): DisplayPropKind | null {
-  switch (family) {
-    case 'slashing':
-    case 'blunt':
-      return 'sword';
-    case 'bow':
-      return 'bow';
-    case 'staff':
-      return 'staff';
-    default:
-      return null;
-  }
 }
 
 function buildDef(entry: ForgedEntry, source: ForgedSource): ChampionVisualDef | null {
@@ -103,15 +88,9 @@ function buildDef(entry: ForgedEntry, source: ForgedSource): ChampionVisualDef |
   if (!clips) return null;
   const d = entry.display;
   const height = d.height ?? FORGED_DEFAULT_HEIGHT;
-  // The saved prop wins; without one the weapon family attaches its default
-  // to the best-guess hand so the champion never fights bare-handed by
-  // accident. 'none' is an explicit empty hand.
-  let prop = d.prop;
-  if (prop === undefined) {
-    const kind = familyPropKind(entry.family);
-    const bone = kind ? guessHandBone(source.boneNames) : null;
-    if (kind && bone) prop = { kind, bone, rot: [0, 0, 0], pos: [0, 0, 0] };
-  }
+  // Only the creator's saved prop shows: no silent default weapon
+  // (playtest: the family fallback read as clutter, not as a gift).
+  const prop = d.prop;
   return {
     url: entry.url,
     height,
@@ -174,6 +153,9 @@ export async function forgedChampionTemplate(
   if (!entry.template) {
     const def = buildDef(entry, source);
     if (!def) return null;
+    // The run cycle plays on the spot: the mover owns all translation.
+    const run = source.clips.get(def.clips.run);
+    if (run) stripTravel(run);
     const scale = def.height / source.rawHeight;
     entry.template = {
       def,

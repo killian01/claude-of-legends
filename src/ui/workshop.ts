@@ -11,8 +11,8 @@ import * as THREE from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { findBone, type PropAnchor, syncPropAnchors } from '../render/champions/assets';
-import { FORGED_DEFAULT_HEIGHT, familyPropKind, guessHandBone } from '../render/champions/forged';
-import { resolveForgedClips } from '../render/champions/forged_clips';
+import { FORGED_DEFAULT_HEIGHT, guessHandBone } from '../render/champions/forged';
+import { resolveForgedClips, stripTravel } from '../render/champions/forged_clips';
 import type { ChampionClipNames } from '../render/champions/manifest';
 import { buildChampionProp } from '../render/champions/props';
 import {
@@ -123,9 +123,11 @@ export interface WorkshopSubject {
   onSaved?: (display: ForgedDisplay) => void;
 }
 
-const TEAM_COLORS = { blue: 0x4a7dd6, red: 0xd65c5c } as const;
 // Prop and stage accent, the Forge gold.
 const ACCENT = 0xc9a84a;
+// A cool rim light so the silhouette reads; deliberately not a team
+// color, allegiance is a match concern.
+const RIM_COLOR = 0x7d8bb0;
 
 // Friendly names over the provider's clip spellings, in play order.
 const CLIP_LABELS: readonly { role: keyof ChampionClipNames; label: string }[] = [
@@ -167,12 +169,12 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   const key = new THREE.DirectionalLight(0xffffff, 1.6);
   key.position.set(4, 7, 5);
   scene.add(key);
-  const rim = new THREE.DirectionalLight(TEAM_COLORS.blue, 1.2);
+  const rim = new THREE.DirectionalLight(RIM_COLOR, 1.2);
   rim.position.set(-5, 4, -6);
   scene.add(rim);
 
-  // The podium: a disc underfoot plus the team ring the in-match renderer
-  // draws, so allegiance previews exactly where it shows in play.
+  // The podium: a disc underfoot plus a gold ground ring at the in-match
+  // radius, so the footprint previews where the team ring will draw.
   const disc = new THREE.Mesh(
     new THREE.CylinderGeometry(1.6, 1.7, 0.08, 48),
     new THREE.MeshLambertMaterial({ color: 0x2c2210 }),
@@ -181,11 +183,33 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   scene.add(disc);
   const ring = new THREE.Mesh(
     new THREE.TorusGeometry(0.85, 0.05, 10, 48),
-    new THREE.MeshBasicMaterial({ color: TEAM_COLORS.blue }),
+    new THREE.MeshBasicMaterial({ color: ACCENT }),
   );
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = 0.02;
   scene.add(ring);
+
+  // The size reference: a roster-height silhouette (2.4 units, the middle
+  // of the range) standing beside the podium, toggled from the View panel.
+  const reference = new THREE.Group();
+  {
+    const mat = new THREE.MeshLambertMaterial({ color: 0x596070, transparent: true, opacity: 0.9 });
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1.25, 6, 14), mat);
+    body.position.y = 0.925;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 14, 12), mat);
+    head.position.y = 2.1;
+    const base = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.5, 0.55, 0.05, 24),
+      new THREE.MeshLambertMaterial({ color: 0x33270f }),
+    );
+    base.position.y = 0.025;
+    reference.add(body, head, base);
+    const measured = new THREE.Box3().setFromObject(reference);
+    reference.scale.setScalar(FORGED_DEFAULT_HEIGHT / Math.max(0.001, measured.max.y));
+    reference.position.set(2.3, 0, 0);
+    reference.visible = false;
+    scene.add(reference);
+  }
 
   // The match-scale reference: one unit per cell, the way the map grid
   // runs; visible only in match view.
@@ -274,7 +298,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     t[1],
     t[2],
   ];
-  let prop: ForgedDisplayProp = saved.prop
+  const prop: ForgedDisplayProp = saved.prop
     ? { ...saved.prop, rot: copyTriple(saved.prop.rot), pos: copyTriple(saved.prop.pos) }
     : { kind: 'none', bone: '', rot: [0, 0, 0], pos: [0, 0, 0] };
 
@@ -363,6 +387,9 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     // Friendly labels first (Idle, Run, Attack...), resolved the same way
     // the in-match renderer does; unmatched clips keep their raw names.
     const resolved = resolveForgedClips(clips.map((c) => c.name));
+    // The run cycle plays on the spot here exactly as it will in match.
+    const runClip = resolved ? clips.find((c) => c.name === resolved.run) : undefined;
+    if (runClip) stripTravel(runClip);
     const labeled = new Map<string, string>();
     if (resolved) {
       for (const { role, label } of CLIP_LABELS) {
@@ -404,13 +431,6 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       model.traverse((child) => {
         if ((child as THREE.Bone).isBone) boneNames.push(child.name);
       });
-      // A fresh champion with no saved grip: attach the family's default
-      // weapon to the best-guess hand, exactly like the match will.
-      if (!saved.prop) {
-        const kind = familyPropKind(subject.family ?? null);
-        const bone = kind ? guessHandBone(boneNames) : null;
-        if (kind && bone) prop = { kind, bone, rot: [0, 0, 0], pos: [0, 0, 0] };
-      }
       applyModelTuning();
       rebuildProp(false);
       buildWeaponControls();
@@ -424,7 +444,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     },
   );
 
-  // --- rail: tuning, weapon, team color, view, art -----------------------
+  // --- rail: tuning, weapon, clips, view, art ----------------------------
 
   const status = el('div', 'ws-status', '');
 
@@ -537,19 +557,34 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     });
     const boneSelect = el('select', 'ws-select') as HTMLSelectElement;
     // Hand bones first (where a weapon belongs), then the whole rig for
-    // the odd model whose rig names surprise us.
+    // the odd model whose rig names surprise us. Labels are human words
+    // ('Left hand'), the rig's raw spelling stays the stored value.
+    const prettyBone = (raw: string): string => {
+      let s = raw;
+      if (/^l[_.-]/i.test(s)) s = `Left ${s.slice(2)}`;
+      else if (/^r[_.-]/i.test(s)) s = `Right ${s.slice(2)}`;
+      else if (/^left/i.test(s)) s = `Left ${s.slice(4)}`;
+      else if (/^right/i.test(s)) s = `Right ${s.slice(5)}`;
+      else if (/[_.-]l$/i.test(s)) s = `Left ${s.slice(0, -2)}`;
+      else if (/[_.-]r$/i.test(s)) s = `Right ${s.slice(0, -2)}`;
+      s = s
+        .replace(/[_.-]+/g, ' ')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .replace(/(\d+)/g, ' $1')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+      return s === '' ? raw : s.charAt(0).toUpperCase() + s.slice(1);
+    };
     const hands = boneNames.filter((n) => /hand/i.test(n));
     const rest = boneNames.filter((n) => !/hand/i.test(n)).slice(0, 60);
-    for (const n of [...hands, ...rest]) {
+    const listed = [...hands, ...rest];
+    if (prop.bone !== '' && !listed.includes(prop.bone)) listed.push(prop.bone);
+    for (const n of listed) {
       const opt = document.createElement('option');
       opt.value = n;
-      opt.textContent = n;
-      boneSelect.append(opt);
-    }
-    if (prop.bone !== '' && !boneNames.includes(prop.bone)) {
-      const opt = document.createElement('option');
-      opt.value = prop.bone;
-      opt.textContent = prop.bone;
+      opt.textContent = prettyBone(n);
+      opt.title = n;
       boneSelect.append(opt);
     }
     boneSelect.value = prop.bone;
@@ -641,21 +676,6 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     weaponPanel.append(save, status);
   }
 
-  const teamPanel = el('div', 'ws-panel');
-  teamPanel.append(el('h3', '', 'Team color'));
-  const teamButtons: HTMLButtonElement[] = [];
-  for (const [name, color] of Object.entries(TEAM_COLORS)) {
-    const btn = el('button', 'ws-btn', name === 'blue' ? 'Blue side' : 'Red side');
-    btn.classList.toggle('picked', name === 'blue');
-    btn.addEventListener('click', () => {
-      (ring.material as THREE.MeshBasicMaterial).color.setHex(color);
-      rim.color.setHex(color);
-      for (const b of teamButtons) b.classList.toggle('picked', b === btn);
-    });
-    teamButtons.push(btn as HTMLButtonElement);
-    teamPanel.append(btn);
-  }
-
   const viewPanel = el('div', 'ws-panel');
   viewPanel.append(el('h3', '', 'View'));
   const podiumBtn = el('button', 'ws-btn picked', 'Podium');
@@ -668,9 +688,19 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   };
   podiumBtn.addEventListener('click', () => setView(false));
   matchBtn.addEventListener('click', () => setView(true));
-  viewPanel.append(podiumBtn, matchBtn);
+  const refBtn = el('button', 'ws-btn', 'Size reference');
+  refBtn.addEventListener('click', () => {
+    reference.visible = !reference.visible;
+    refBtn.classList.toggle('picked', reference.visible);
+  });
+  viewPanel.append(podiumBtn, matchBtn, refBtn);
   viewPanel.append(
-    el('div', 'ws-note', 'Drag to orbit, wheel to zoom. Match view shows one map unit per cell.'),
+    el(
+      'div',
+      'ws-note',
+      'Drag to orbit, wheel to zoom. Match view shows one map unit per cell. The size ' +
+        'reference is a roster-average silhouette (2.4 units) to judge your height against.',
+    ),
   );
 
   const artPanel = el('div', 'ws-panel');
@@ -678,7 +708,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   let anyArt = false;
   for (const [label, url] of [
     ['Splash', subject.splashUrl],
-    ['Model sheet', subject.sheetUrl],
+    ['Model reference', subject.sheetUrl],
   ] as const) {
     if (!url) continue;
     anyArt = true;
@@ -691,7 +721,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   }
   if (!anyArt) artPanel.append(el('div', 'ws-note', 'No 2D art recorded for this champion.'));
 
-  rail.append(modelPanel, weaponPanel, clipsPanel, teamPanel, viewPanel, artPanel);
+  rail.append(modelPanel, weaponPanel, clipsPanel, viewPanel, artPanel);
 
   // --- loop and teardown --------------------------------------------------
 

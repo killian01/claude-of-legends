@@ -200,6 +200,31 @@ const CSS = `
 .fe-spin.small { width: 14px; height: 14px; border-width: 2px; }
 @keyframes fe-spin { to { transform: rotate(360deg); } }
 .fe-stagerow { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: #e8cc74; font-size: 11px; font-weight: 700; }
+.fe-stock { margin-top: 8px; color: #e8cc74; font-size: 12px; font-weight: 700; }
+.fe-forgebar {
+  height: 6px; border-radius: 3px; margin: 10px 0 2px; background: #1a130a;
+  border: 1px solid #33270f; overflow: hidden;
+}
+.fe-forgebar div {
+  height: 100%; width: 38%; border-radius: 3px;
+  background: linear-gradient(90deg, transparent, #e8cc74 35%, #ff9a3d 65%, transparent);
+  animation: fe-forge 1.6s linear infinite;
+}
+@keyframes fe-forge { from { transform: translateX(-110%); } to { transform: translateX(380%); } }
+.fe-bstages { margin-top: 10px; display: flex; flex-direction: column; gap: 7px; }
+.fe-bstage { display: flex; align-items: center; gap: 10px; color: #6b5a2e; font-size: 12px; transition: color 0.3s; }
+.fe-bstage .dot {
+  width: 13px; height: 13px; border-radius: 50%; border: 2px solid #4a3a1c; flex: none;
+  transition: background 0.3s, border-color 0.3s;
+}
+.fe-bstage.active { color: #e8cc74; font-weight: 700; }
+.fe-bstage.active .dot { border-color: #e8cc74; animation: fe-ember 1.1s ease-in-out infinite; }
+.fe-bstage.done { color: #97854f; }
+.fe-bstage.done .dot { background: #c9a84a; border-color: #c9a84a; }
+@keyframes fe-ember {
+  0%, 100% { box-shadow: 0 0 10px rgba(255, 154, 61, 0.9); }
+  50% { box-shadow: 0 0 2px rgba(255, 154, 61, 0.2); }
+}
 .fe-lightbox {
   position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 14px;
@@ -219,7 +244,10 @@ const CSS = `
 .fe-icon-preview img { border-radius: 4px; border: 1px solid #4a3a1c; }
 .fe-quota { color: #97854f; font-size: 11px; margin-left: auto; }
 .fe-model-cta { display: flex; gap: 12px; align-items: center; }
-.fe-model-cta img { width: 96px; height: 72px; object-fit: cover; border-radius: 6px; border: 1px solid #4a3a1c; }
+.fe-model-cta img {
+  width: 104px; height: 138px; object-fit: contain; background: #120d06;
+  border-radius: 6px; border: 1px solid #4a3a1c;
+}
 `;
 
 let cssInstalled = false;
@@ -445,10 +473,34 @@ export function openForgeEditor(container: HTMLElement): void {
   const refineFrom: Record<string, ArtCandidate | undefined> = {};
   // The Spells tab's selected slot.
   let spellSlot: SpellSlot = 'Q';
-  // True while a finalize chain runs; the pipeline's 3D step shows the
-  // live stage through this element when it is on screen.
+  // True while a finalize chain runs; Step 3 renders the stage checklist
+  // and the poll advances it through these rows when they are on screen.
   let finalizing = false;
-  let stageLine: HTMLElement | null = null;
+  let currentStage = '';
+  let stageRows: Map<string, HTMLElement> | null = null;
+  // The account's creation stock, from the drafts route; -1 = unknown.
+  let creations = -1;
+
+  // The finalize chain's stages in order, worded for the player; the keys
+  // are the job stages the server records (generation/pipeline.ts).
+  const BUILD_STAGES: readonly { key: string; label: string }[] = [
+    { key: 'reference', label: 'Sending your chosen reference' },
+    { key: 'classify', label: 'Checking the image' },
+    { key: 'model', label: 'Sculpting the 3D model' },
+    { key: 'rig', label: 'Rigging the skeleton' },
+    { key: 'animate', label: 'Baking the five animations' },
+    { key: 'download', label: 'Bringing your champion home' },
+  ];
+  const applyStageState = (): void => {
+    if (!stageRows) return;
+    const at = BUILD_STAGES.findIndex((s) => s.key === currentStage);
+    BUILD_STAGES.forEach((s, i) => {
+      const row = stageRows?.get(s.key);
+      if (!row) return;
+      row.classList.toggle('done', at > i || currentStage === 'done');
+      row.classList.toggle('active', at === i);
+    });
+  };
 
   const loadArt = async (): Promise<void> => {
     const r = await api<{
@@ -759,6 +811,7 @@ export function openForgeEditor(container: HTMLElement): void {
       return;
     }
     finalizing = true;
+    currentStage = '';
     renderMain();
     refresh();
     status.textContent = 'Saving, then starting the 3D build...';
@@ -803,9 +856,10 @@ export function openForgeEditor(container: HTMLElement): void {
               settle(`The build failed (${job.error ?? 'unknown'}); the creation was refunded.`);
               return;
             }
-            const label = `building: ${job.stage ?? '...'}`;
-            status.textContent = label;
-            if (stageLine) stageLine.textContent = label;
+            currentStage = job.stage ?? '';
+            const named = BUILD_STAGES.find((s) => s.key === currentStage);
+            status.textContent = `Building: ${named?.label.toLowerCase() ?? currentStage}...`;
+            applyStageState();
             window.setTimeout(poll, 2000);
           });
         };
@@ -884,8 +938,11 @@ export function openForgeEditor(container: HTMLElement): void {
   };
 
   const loadDrafts = async (): Promise<void> => {
-    const r = await api<{ ok: boolean; drafts?: DraftRow[] }>(`/api/forge/drafts`);
+    const r = await api<{ ok: boolean; drafts?: DraftRow[]; credits?: number }>(
+      `/api/forge/drafts`,
+    );
     drafts = r?.ok && r.drafts ? r.drafts : [];
+    if (r?.ok && typeof r.credits === 'number') creations = r.credits;
     // Finalized champions announce their models to the render registry, so
     // a test drive straight from here plays the generated model.
     for (const d of drafts) registerForgedAssets(d.id, d);
@@ -1038,7 +1095,7 @@ export function openForgeEditor(container: HTMLElement): void {
     // player's own click, never a side effect of a recap strip.
     const buildPanel = el('div', 'fe-panel');
     buildPanel.append(el('h3', '', 'Step 3: build the 3D model'));
-    stageLine = null;
+    stageRows = null;
     if (row?.model) {
       const cta = el('div', 'fe-model-cta');
       if (row.sheet) {
@@ -1061,18 +1118,25 @@ export function openForgeEditor(container: HTMLElement): void {
       cta.append(right);
       buildPanel.append(cta);
     } else if (finalizing) {
-      const busyRow = el('div', 'fe-model-cta');
-      busyRow.append(el('div', 'fe-spin'));
-      stageLine = el('div', 'fe-stagerow', 'building...');
-      busyRow.append(stageLine);
       buildPanel.append(
         el(
           'p',
           'fe-lead',
-          'Building: the 3D from your chosen reference, then the rig, then the animations. A few minutes; stay or come back.',
+          'The forge is working. A few minutes; stay and watch, or come back: the build keeps going.',
         ),
-        busyRow,
       );
+      const bar = el('div', 'fe-forgebar');
+      bar.append(el('div', ''));
+      const list = el('div', 'fe-bstages');
+      stageRows = new Map();
+      for (const s of BUILD_STAGES) {
+        const rowEl = el('div', 'fe-bstage');
+        rowEl.append(el('span', 'dot'), el('span', '', s.label));
+        stageRows.set(s.key, rowEl);
+        list.append(rowEl);
+      }
+      applyStageState();
+      buildPanel.append(bar, list);
     } else {
       buildPanel.append(
         el(
@@ -1087,6 +1151,18 @@ export function openForgeEditor(container: HTMLElement): void {
       build.title = blocker ?? 'Runs on your chosen reference and spends a creation';
       build.addEventListener('click', runForge);
       buildPanel.append(build);
+      // Creations are a limited stock, and the player should know before
+      // pressing, not after.
+      buildPanel.append(
+        el(
+          'div',
+          'fe-stock',
+          creations >= 0
+            ? `${creations} creation${creations === 1 ? '' : 's'} left. Each build spends one; ` +
+                `the stock refills weekly and unspent ones roll over.`
+            : 'Creations are a limited weekly stock: each build spends one.',
+        ),
+      );
       if (blocker) buildPanel.append(el('div', 'fe-desc', blocker));
     }
     main.append(buildPanel);
@@ -1374,7 +1450,7 @@ export function openForgeEditor(container: HTMLElement): void {
 
   function renderMain(): void {
     main.textContent = '';
-    stageLine = null;
+    stageRows = null;
     if (tab === 'design') renderDesign();
     else if (tab === 'spells') renderSpells();
     else renderTuning();

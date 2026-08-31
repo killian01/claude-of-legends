@@ -47,3 +47,28 @@ export function resolveForgedClips(names: readonly string[]): ChampionClipNames 
     ...(hit !== undefined ? { hit } : {}),
   };
 }
+
+// The structural slice of THREE.AnimationClip stripTravel touches, typed
+// structurally so this module stays three-free and node-testable.
+export interface TravelClip {
+  tracks: { name: string; values: { length: number; [i: number]: number } }[];
+}
+
+// Kills horizontal root travel inside one clip, in place. A run cycle
+// baked to move forward fights both the workshop turntable and the
+// in-match mover, which owns all translation; the champion must run on
+// the spot. Every '.position' track keeps its height curve (the bob) and
+// has X and Z pinned to their first frame; a bone whose position never
+// moves is untouched by construction. Idempotent.
+export function stripTravel(clip: TravelClip): void {
+  for (const track of clip.tracks) {
+    if (!track.name.endsWith('.position')) continue;
+    const v = track.values;
+    const x0 = v[0] ?? 0;
+    const z0 = v[2] ?? 0;
+    for (let i = 0; i + 2 < v.length; i += 3) {
+      v[i] = x0;
+      v[i + 2] = z0;
+    }
+  }
+}

@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { CLIP_ROLES } from '../server/generation/provider';
-import { resolveForgedClips } from '../src/render/champions/forged_clips';
+import { resolveForgedClips, stripTravel } from '../src/render/champions/forged_clips';
 
 describe('resolveForgedClips', () => {
   it('maps the live provider preset names onto the clip vocabulary', () => {
@@ -43,5 +43,24 @@ describe('resolveForgedClips', () => {
     expect(resolveForgedClips([])).toBe(null);
     // No idle at all: the first clip stands in.
     expect(resolveForgedClips(['weird_a', 'weird_b'])?.idle).toBe('weird_a');
+  });
+});
+
+describe('stripTravel', () => {
+  it('pins X and Z of position tracks, keeps the height bob, spares rotations', () => {
+    // A run cycle whose root walks forward along Z while bobbing on Y.
+    const clip = {
+      tracks: [
+        { name: 'Hips.position', values: [1, 0.9, 0, 1.2, 1.05, 0.5, 1.4, 0.9, 1.0] },
+        { name: 'Hips.quaternion', values: [0, 0, 0, 1, 0, 0.2, 0, 0.98] },
+      ],
+    };
+    stripTravel(clip);
+    // X and Z hold the first frame; Y still bobs.
+    expect(clip.tracks[0]?.values).toEqual([1, 0.9, 0, 1, 1.05, 0, 1, 0.9, 0]);
+    expect(clip.tracks[1]?.values).toEqual([0, 0, 0, 1, 0, 0.2, 0, 0.98]);
+    // Idempotent: a second pass changes nothing.
+    stripTravel(clip);
+    expect(clip.tracks[0]?.values).toEqual([1, 0.9, 0, 1, 1.05, 0, 1, 0.9, 0]);
   });
 });
