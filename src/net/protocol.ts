@@ -4,6 +4,7 @@
 // full identity fields sent once per unit per client ("full" vs "lite"
 // records, the world-of-claudecraft pattern).
 
+import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { AbilityKey, ScoreRow, TeamId } from '../sim/types';
 import type { StructureMeta, UnitKind } from '../sim/unit';
 
@@ -12,7 +13,9 @@ export type ClientMsg =
   // (ADR 0006). It only asks whether a live match is still holding this
   // account's seat, so a dropped connection can claim it back.
   | { t: 'hello' }
-  | { t: 'queue' }
+  // forge: enter the Forge queue instead (plan-forge phase 6), where
+  // select also offers the account's finalized forged champions.
+  | { t: 'queue'; forge?: boolean }
   | { t: 'start_now' }
   | { t: 'leave' }
   | { t: 'create_lobby' }
@@ -162,9 +165,14 @@ export type ServerMsg =
     }
   // team is the recipient's own side; players carry everyone's.
   | { t: 'lobby'; code: string; host: boolean; team: TeamId; players: LobbyPlayer[] }
-  | { t: 'select_start'; team: TeamId; players: SelectPlayer[]; deadline: number }
+  // forge marks a Forge-queue select, so the client also offers the
+  // account's own finalized forged champions.
+  | { t: 'select_start'; team: TeamId; players: SelectPlayer[]; deadline: number; forge?: boolean }
   | { t: 'select_update'; locked: number; total: number; taken: string[] }
-  | { t: 'match_start'; selfUnitId: number; team: TeamId }
+  // forged: the match's forged champion definitions, embedded whole
+  // (ADR 0010), so every client and spectator can resolve them before the
+  // first snapshot names one. Absent for roster-only matches.
+  | { t: 'match_start'; selfUnitId: number; team: TeamId; forged?: ForgedChampionDef[] }
   | {
       t: 'snap';
       time: number;
@@ -189,7 +197,9 @@ export type ServerMsg =
   | { t: 'player_back'; name: string; team: TeamId }
   // Sent once to each human player when the finished match is recorded:
   // this player's rating movement (zero and rated:false when unrated).
-  | { t: 'match_result'; rated: boolean; delta: number; rating: number }
+  // queue 'forge' means the numbers are the Forge queue's own rating
+  // (ADR 0011), not the classic ladder's.
+  | { t: 'match_result'; rated: boolean; delta: number; rating: number; queue?: 'forge' }
   | { t: 'match_end' }
   | { t: 'error'; message: string };
 

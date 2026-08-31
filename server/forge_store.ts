@@ -10,6 +10,7 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
+import { BASE_RATING } from './rating';
 
 const SCHEMA = `
 create table if not exists forged_champions (
@@ -38,6 +39,11 @@ create table if not exists generation_jobs (
   error text,
   created_at integer not null,
   updated_at integer not null
+);
+create table if not exists forge_ratings (
+  account_id integer primary key,
+  rating integer not null,
+  games integer not null
 );
 `;
 
@@ -219,6 +225,41 @@ export class ForgeStore {
       .prepare('select max(at) as at from credits where account_id = ? and reason = ?')
       .get(accountId, reason) as { at: number | null };
     return r.at;
+  }
+
+  // -- the Forge queue's own rating (plan-forge phase 6) -------------------
+  // Mirrors the account registry's Elo pair (rating, ratedGames) for the
+  // Forge queue alone: same policy (server/rating.ts), separate ladder,
+  // stored with the rest of the Forge domain (ADR 0011).
+
+  forgeRating(accountId: number): { rating: number; games: number } {
+    const r = this.db
+      .prepare('select rating, games from forge_ratings where account_id = ?')
+      .get(accountId) as { rating: number; games: number } | undefined;
+    return r ?? { rating: BASE_RATING, games: 0 };
+  }
+
+  // One rated Forge-queue match landed; the delta is already signed.
+  applyForgeRating(accountId: number, delta: number): void {
+    const cur = this.forgeRating(accountId);
+    this.db
+      .prepare(
+        `insert into forge_ratings (account_id, rating, games) values (?, ?, ?)
+         on conflict (account_id) do update set rating = excluded.rating, games = excluded.games`,
+      )
+      .run(accountId, cur.rating + delta, cur.games + 1);
+  }
+
+  // A leaver penalty: rating drops without counting a game, exactly like
+  // the classic ladder's penalize().
+  penalizeForgeRating(accountId: number, amount: number): void {
+    const cur = this.forgeRating(accountId);
+    this.db
+      .prepare(
+        `insert into forge_ratings (account_id, rating, games) values (?, ?, ?)
+         on conflict (account_id) do update set rating = excluded.rating`,
+      )
+      .run(accountId, cur.rating - amount, cur.games);
   }
 
   // -- generation jobs ----------------------------------------------------

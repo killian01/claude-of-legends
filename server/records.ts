@@ -28,6 +28,9 @@ export interface MatchRecord {
   winner: TeamId;
   // Rated: at least one human on each side (server/rating.ts policy).
   rated: boolean;
+  // Which ladder the deltas belong to: absent for the classic queue,
+  // 'forge' when they moved the Forge queue's own rating (ADR 0011).
+  queue?: 'forge';
   // Saved replay id (the match id), absent when no replay was kept.
   replayId?: number;
   players: MatchPlayerRecord[];
@@ -39,7 +42,7 @@ export function buildMatchRecord(
   winner: TeamId,
   durationS: number,
   at: number,
-  rating?: { rated: boolean; deltas: ReadonlyMap<number, number> },
+  rating?: { rated: boolean; deltas: ReadonlyMap<number, number>; queue?: 'forge' },
   replayId?: number,
 ): MatchRecord {
   return {
@@ -47,6 +50,7 @@ export function buildMatchRecord(
     durationS: Math.round(durationS),
     winner,
     rated: rating?.rated ?? false,
+    ...(rating?.queue !== undefined ? { queue: rating.queue } : {}),
     ...(replayId !== undefined ? { replayId } : {}),
     players: rows.map((r) => {
       const accountId = accountIdByUnit.get(r.unitId) ?? null;

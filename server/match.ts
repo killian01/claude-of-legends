@@ -12,6 +12,7 @@ import {
   type ReplayPick,
 } from '../src/net/replay';
 import { BOTS, DEFAULT_BOT_ID } from '../src/sim/content/bots';
+import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import type { Sim, SimEvent } from '../src/sim/sim';
 import type { TeamId } from '../src/sim/types';
 import { buildSnapshot } from './snapshot';
@@ -26,6 +27,9 @@ export interface MatchPick {
   skin?: number;
   // Bot policy id: this seat is driven in-sim, not by a connection.
   bot?: string;
+  // Forge queue: the picked champion's definition, already resolved and
+  // approved for this seat by the matchmaker's account boundary.
+  forged?: ForgedChampionDef;
 }
 
 interface MatchPlayer {
@@ -54,6 +58,9 @@ export class Match {
   // sim (src/net/replay.ts rebuilds the match from these plus the seed).
   readonly replayPicks: ReplayPick[];
   readonly replayEvents: ReplayEvent[] = [];
+  // The match's forged definitions, unique and in pick order: what match
+  // setup distributes to every client and what the saved replay embeds.
+  readonly forgedDefs: readonly ForgedChampionDef[];
   private readonly unitNames = new Map<number, string>();
   private eventsThisTick: SimEvent[] = [];
 
@@ -67,9 +74,14 @@ export class Match {
       ...(p.skin !== undefined ? { skin: p.skin } : {}),
       ...(p.bot !== undefined ? { bot: p.bot } : {}),
     }));
+    const forged = new Map<string, ForgedChampionDef>();
+    for (const p of picks) {
+      if (p.forged && !forged.has(p.forged.id)) forged.set(p.forged.id, p.forged);
+    }
+    this.forgedDefs = [...forged.values()];
     // The shared builder IS the live construction: a replayed sim starts
     // from the same seed, picks, and policy attachments by definition.
-    const { sim, unitIds } = buildMatchSim(seed, this.replayPicks);
+    const { sim, unitIds } = buildMatchSim(seed, this.replayPicks, this.forgedDefs);
     this.sim = sim;
     picks.forEach((p, i) => {
       const unitId = unitIds[i]!;

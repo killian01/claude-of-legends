@@ -6,9 +6,10 @@ Vitest suite) and lands module-first behind existing seams. The terms are in
 `CONTEXT.md`: Forge, forged champion, draft, creation, power budget, Forge queue.
 
 State of play (2026-08-31): phases 1 to 3 are done, phase 4 is done except its
-generation-dependent corners, and phase 5's keyless half is done (the neutral
+generation-dependent corners, phase 5's keyless half is done (the neutral
 provider interface, the mock provider, the Tripo provider against its documented API,
-the finalize pipeline with the ledger). What remains of each is noted inline.
+the finalize pipeline with the ledger), and phase 6 is done. What remains of each
+is noted inline.
 
 1. **Forged schema and validator**: DONE. `ForgedChampionDef` as pure data (no code
    passive; a passive is a parameterized template reference), the deterministic
@@ -46,9 +47,13 @@ the finalize pipeline with the ledger). What remains of each is noted inline.
    derivation, the weapon as a separate prop (house library or generated), a real
    image classifier behind the hook, compression under the per-champion asset
    budgets.
-6. **Forge queue**: the queue itself, forged-definition distribution at match setup
-   (ten clients, spectators), champion select showing the account's forged roster,
-   the queue's own rating, bot backfill from the roster.
+6. **Forge queue**: DONE. The queue itself (a second Matchmaker instance behind the
+   same wire, one seat across both queues), forged-definition distribution at match
+   setup (ten clients, spectators, rejoins, and the saved replay all carry the defs),
+   champion select showing the account's finalized forged roster next to the roster
+   grid, the queue's own rating pair in the Forge store (same Elo policy, separate
+   ladder, leaver penalties included), bot backfill from the roster. Sharing other
+   creators' champions into this select is phase 7's community tab.
 7. **The gallery**: the public browse space (every finalized champion listed by
    default, creator removal), sort by recent and popular, likes, reports with
    takedown and account warnings, the free practice test-drive, the per-champion

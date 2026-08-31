@@ -8,6 +8,7 @@ import type { ServerMsg } from '../src/net/protocol';
 import { CHAMPION_LIST, CHAMPIONS, DEFAULT_CHAMPION_ID } from '../src/sim/content/champions';
 import { SIGILS } from '../src/sim/content/sigils';
 import { clampSkin } from '../src/sim/content/skins';
+import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import type { TeamId } from '../src/sim/types';
 import type { MatchPick } from './match';
 import { packGroups } from './party';
@@ -36,7 +37,14 @@ interface QueueGroup {
 
 interface SelectEntry extends Pending {
   team: TeamId;
-  locked: { championId: string; sigils: [string, string]; skin: number } | null;
+  // forged rides along when the locked champion is a forged definition the
+  // resolver approved for this client; match setup embeds it in the picks.
+  locked: {
+    championId: string;
+    sigils: [string, string];
+    skin: number;
+    forged?: ForgedChampionDef;
+  } | null;
 }
 
 // Where a match came from: only public-queue matches are ever rated
@@ -66,6 +74,16 @@ interface Lobby {
 type Send = (clientId: number, msg: ServerMsg) => void;
 type OnMatchReady = (picks: MatchPick[], source: MatchSource) => void;
 
+// The Forge queue (plan-forge phase 6) is a second Matchmaker instance
+// with these options: its selects are tagged so clients offer the forged
+// roster, and the resolver is the account boundary, answering with the
+// definition when THIS client may play that forged champion and null
+// otherwise. The Matchmaker itself stays account-blind.
+export interface MatchmakerOptions {
+  forge?: boolean;
+  resolveForged?: (clientId: number, championId: string) => ForgedChampionDef | null;
+}
+
 // Crypto-random codes: a counter transform was reproducible offline, so any
 // third party could enumerate live lobbies. Ambiguous letters are excluded.
 const CODE_LETTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ';
@@ -88,6 +106,7 @@ export class Matchmaker {
     private readonly onMatchReady: OnMatchReady,
     // Injectable for tests; production uses the crypto-random default.
     private readonly codeGen: () => string = randomCode,
+    private readonly opts: MatchmakerOptions = {},
   ) {}
 
   private queuedSeats(): number {
@@ -308,6 +327,7 @@ export class Matchmaker {
         team: e.team,
         players: roster,
         deadline: session.deadline,
+        ...(this.opts.forge ? { forge: true } : {}),
       });
     }
   }
@@ -318,6 +338,18 @@ export class Matchmaker {
     const entry = session.entries.find((e) => e.clientId === clientId);
     if (!entry) return;
     let champ = CHAMPIONS[championId] ? championId : DEFAULT_CHAMPION_ID;
+    // A Forge-queue pick outside the roster asks the resolver: only the
+    // definition of a forged champion THIS client may play comes back.
+    // Anything unresolved falls back to the default champion, like any
+    // other invalid pick.
+    let forged: ForgedChampionDef | undefined;
+    if (!CHAMPIONS[championId] && this.opts.forge) {
+      const def = this.opts.resolveForged?.(clientId, championId) ?? null;
+      if (def) {
+        champ = championId;
+        forged = def;
+      }
+    }
     // No duplicate champions within a team (game definition): a taken pick
     // falls back to the first free champion in roster order.
     const teamTaken = session.entries
@@ -325,6 +357,7 @@ export class Matchmaker {
       .map((e) => e.locked?.championId);
     if (teamTaken.includes(champ)) {
       champ = CHAMPION_LIST.find((c) => !teamTaken.includes(c.id))?.id ?? DEFAULT_CHAMPION_ID;
+      forged = undefined;
     }
     const valid =
       Array.isArray(sigils) &&
@@ -335,6 +368,7 @@ export class Matchmaker {
       championId: champ,
       sigils: valid ? [sigils[0], sigils[1]] : DEFAULT_SIGILS,
       skin: clampSkin(champ, skin),
+      ...(forged ? { forged } : {}),
     };
     const locked = session.entries.filter((e) => e.locked).length;
     for (const e of session.entries) {
@@ -392,6 +426,7 @@ export class Matchmaker {
       championId: e.locked?.championId ?? DEFAULT_CHAMPION_ID,
       sigils: e.locked?.sigils ?? DEFAULT_SIGILS,
       skin: e.locked?.skin ?? 0,
+      ...(e.locked?.forged ? { forged: e.locked.forged } : {}),
     }));
     this.onMatchReady(picks, session.source);
   }

@@ -165,8 +165,13 @@ export class ClientWorld implements IWorld {
     return this.champions.get(championId);
   }
 
+  // Idempotent on purpose: match_start can arrive again on a rejoin, and
+  // re-registering the same match's definitions must not throw the mirror
+  // down mid-claim.
   registerForged(defs: readonly ForgedChampionDef[]): void {
-    for (const def of defs) this.champions.addForged(def);
+    for (const def of defs) {
+      if (this.champions.get(def.id) === null) this.champions.addForged(def);
+    }
   }
 
   scoreboard(): readonly ScoreRow[] {
@@ -238,6 +243,9 @@ export class ClientWorld implements IWorld {
     if (msg.t === 'match_start') {
       this.selfUnitId = msg.selfUnitId;
       this.selfTeam = msg.team;
+      // Forge queue: the match's forged definitions land here, before any
+      // snapshot can name one of them.
+      if (msg.forged) this.registerForged(msg.forged);
       return false;
     }
     if (msg.t === 'score') {

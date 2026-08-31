@@ -12,6 +12,7 @@ import path from 'node:path';
 import { type WebSocket, WebSocketServer } from 'ws';
 import { isFiniteVec, parseClientMsg, type ServerMsg } from '../src/net/protocol';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
+import { validateForged } from '../src/sim/forge/validate';
 import { DT } from '../src/sim/types';
 import { foldName, nameErrorMessage } from './account_name';
 import {
@@ -47,8 +48,8 @@ import { buildLadder } from './ladder';
 import { accountKey, addressKey, LoginThrottle } from './login_throttle';
 import { confirmMail, confirmUrl, publicOrigin, resetMail, resetUrl } from './mail_messages';
 import { mailerFromEnv } from './mailer';
-import { AFK_IDLE_TICKS, Match } from './match';
-import { Matchmaker } from './matchmaker';
+import { AFK_IDLE_TICKS, Match, type MatchPick } from './match';
+import { Matchmaker, type MatchSource } from './matchmaker';
 import { passwordErrorMessage, validatePassword } from './password';
 import { buildProfile } from './profile';
 import { isRated, LEAVER_LOCKOUT_MS, leaverPenalty, type RatedSeat, ratingDeltas } from './rating';
@@ -123,6 +124,9 @@ interface MatchEntry {
   // Only public-queue matches can be rated; a private lobby never is
   // (it would be a boosting machine otherwise).
   ratedEligible: boolean;
+  // A Forge-queue match: its deltas land on the Forge queue's own rating
+  // (ADR 0011), never the classic ladder.
+  forge: boolean;
 }
 const matches = new Map<number, MatchEntry>();
 // Abandoned seats and leaver lockouts, both keyed on the account
@@ -256,25 +260,64 @@ function send(clientId: number, msg: ServerMsg): void {
   c.ws.send(JSON.stringify(msg));
 }
 
-const matchmaker = new Matchmaker(send, (picks, source) => {
-  const id = nextMatchId++;
-  const match = new Match((Date.now() % 2_000_000_000) + id, fillWithBots(picks));
-  matches.set(id, {
-    match,
-    endedAt: null,
-    failures: 0,
-    abandonedAt: null,
-    ratedEligible: source === 'queue',
-  });
-  for (const p of picks) {
-    const c = clients.get(p.clientId);
-    if (!c) continue;
-    c.matchId = id;
-    const player = match.players.get(p.clientId);
-    if (player) send(p.clientId, { t: 'match_start', selfUnitId: player.unitId, team: p.team });
-  }
-  console.log(`match ${id} started with ${picks.length} player(s)`);
+// The match_start block carrying the forged definitions, when the match
+// has any: sent at setup, on rejoin, and to spectators alike, so every
+// mirror world can resolve a forged champion before its first snapshot.
+function forgedPayload(match: Match): { forged?: ForgedChampionDef[] } {
+  return match.forgedDefs.length > 0 ? { forged: [...match.forgedDefs] } : {};
+}
+
+// Both queues (classic and Forge) start their matches the same way; the
+// flag only decides which ladder the result will move.
+function onMatchReady(forge: boolean) {
+  return (picks: MatchPick[], source: MatchSource) => {
+    const id = nextMatchId++;
+    const match = new Match((Date.now() % 2_000_000_000) + id, fillWithBots(picks));
+    matches.set(id, {
+      match,
+      endedAt: null,
+      failures: 0,
+      abandonedAt: null,
+      ratedEligible: source === 'queue',
+      forge,
+    });
+    for (const p of picks) {
+      const c = clients.get(p.clientId);
+      if (!c) continue;
+      c.matchId = id;
+      const player = match.players.get(p.clientId);
+      if (player) {
+        send(p.clientId, {
+          t: 'match_start',
+          selfUnitId: player.unitId,
+          team: p.team,
+          ...forgedPayload(match),
+        });
+      }
+    }
+    console.log(`match ${id} started with ${picks.length} player(s)${forge ? ' (forge)' : ''}`);
+  };
+}
+
+const matchmaker = new Matchmaker(send, onMatchReady(false));
+// The Forge queue (plan-forge phase 6): a second matchmaker whose selects
+// offer forged champions. The resolver is the account boundary: only a
+// finalized champion owned by the picking account comes back, re-validated
+// so a stored def that predates a validator tightening cannot reach match
+// setup (where the registry throws on invalid input).
+const forgeMatchmaker = new Matchmaker(send, onMatchReady(true), undefined, {
+  forge: true,
+  resolveForged: (clientId, championId) => {
+    const c = clients.get(clientId);
+    if (!c) return null;
+    const row = forgeStore.getForged(championId);
+    if (row?.status !== 'finalized' || row.accountId !== c.accountId) return null;
+    return validateForged(row.def).ok ? row.def : null;
+  },
 });
+// Every pre-match surface acts on both queues: a message routes to the one
+// holding the client and no-ops on the other.
+const matchmakers = [matchmaker, forgeMatchmaker];
 
 // A player leaves a live match FOR GOOD, by choice or by the AFK sweep:
 // rated walk-out penalty and queue lockout when it applies, champion to a
@@ -291,7 +334,11 @@ function walkOutOfMatch(client: Client, entry: MatchEntry, matchId: number): voi
     const penalty = leaverPenalty(humansByTeam);
     const account = registry.findById(client.accountId);
     if (penalty > 0 && account) {
-      registry.penalize(account.id, penalty);
+      // The walk-out costs the ladder it was climbing: the Forge queue's
+      // own rating for a Forge match, the classic one otherwise. The
+      // lockout is shared; leaving is leaving.
+      if (entry.forge) forgeStore.penalizeForgeRating(account.id, penalty);
+      else registry.penalize(account.id, penalty);
       rejoins.lockQueue(client.accountId, Date.now() + LEAVER_LOCKOUT_MS);
       console.log(
         `match ${matchId}: ${client.name} left a rated match (-${penalty}, queue locked)`,
@@ -952,7 +999,12 @@ wss.on('connection', (ws, req) => {
           entry.match.restorePlayer(id, seat);
           entry.abandonedAt = null;
           client.matchId = seat.matchId;
-          send(id, { t: 'match_start', selfUnitId: seat.unitId, team: seat.team });
+          send(id, {
+            t: 'match_start',
+            selfUnitId: seat.unitId,
+            team: seat.team,
+            ...forgedPayload(entry.match),
+          });
           for (const cid of entry.match.players.keys()) {
             if (cid !== id) send(cid, { t: 'player_back', name: seat.name, team: seat.team });
           }
@@ -983,14 +1035,19 @@ wss.on('connection', (ws, req) => {
           break;
         }
         if (atCapacity) refuseCapacity();
-        else matchmaker.addToQueue(id, client.name, now);
+        else {
+          // One seat across both queues: entering one leaves the other.
+          const mm = msg.forge === true ? forgeMatchmaker : matchmaker;
+          for (const other of matchmakers) if (other !== mm) other.removeEverywhere(id, now);
+          mm.addToQueue(id, client.name, now);
+        }
         break;
       }
       case 'start_now':
-        if (!inMatch) matchmaker.startNow(id, now);
+        if (!inMatch) for (const mm of matchmakers) mm.startNow(id, now);
         break;
       case 'leave': {
-        matchmaker.removeEverywhere(id);
+        for (const mm of matchmakers) mm.removeEverywhere(id);
         // A deliberate walk-out from a live match: hand the champion to a
         // bot for good and hold NO seat reservation. Reservations are for
         // dropped connections; a player who chose to leave (end screen,
@@ -1015,10 +1072,18 @@ wss.on('connection', (ws, req) => {
       case 'create_lobby':
         if (inMatch) break;
         if (atCapacity) refuseCapacity();
-        else matchmaker.createLobby(id, client.name, now);
+        else {
+          // Lobbies live on the classic matchmaker; a Forge-queue seat is
+          // given up on the way in, like any other queue switch.
+          forgeMatchmaker.removeEverywhere(id, now);
+          matchmaker.createLobby(id, client.name, now);
+        }
         break;
       case 'join_lobby':
-        if (!inMatch) matchmaker.joinLobby(id, client.name, String(msg.code ?? ''));
+        if (!inMatch) {
+          forgeMatchmaker.removeEverywhere(id, now);
+          matchmaker.joinLobby(id, client.name, String(msg.code ?? ''));
+        }
         break;
       case 'lobby_team':
         if (!inMatch) matchmaker.setLobbyTeam(id, msg.team);
@@ -1046,14 +1111,19 @@ wss.on('connection', (ws, req) => {
           break;
         }
         client.matchId = msg.matchId as number;
-        send(id, { t: 'match_start', selfUnitId: 0, team: msg.team === 1 ? 1 : 0 });
+        send(id, {
+          t: 'match_start',
+          selfUnitId: 0,
+          team: msg.team === 1 ? 1 : 0,
+          ...forgedPayload(target.match),
+        });
         break;
       }
       case 'start_lobby':
         if (!inMatch) matchmaker.startLobby(id, now);
         break;
       case 'pick':
-        matchmaker.pick(id, msg.championId, msg.sigils, msg.skin);
+        for (const mm of matchmakers) mm.pick(id, msg.championId, msg.sigils, msg.skin);
         break;
       case 'chat':
       case 'ping': {
@@ -1094,7 +1164,7 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', () => {
     connections.release(ip);
-    matchmaker.removeEverywhere(id);
+    for (const mm of matchmakers) mm.removeEverywhere(id);
     const matchId = client.matchId;
     clients.delete(id);
     // Reap matches whose players are all gone (review F.2: ghost matches
@@ -1135,7 +1205,7 @@ setInterval(() => {
   const now = Date.now();
   acc += Math.min(now - last, 500);
   last = now;
-  matchmaker.tickClock(now);
+  for (const mm of matchmakers) mm.tickClock(now);
 
   // Reap abandoned matches whose rejoin grace ran out.
   for (const [matchId, entry] of matches) {
@@ -1192,13 +1262,18 @@ setInterval(() => {
           }
           // Rating policy (server/rating.ts): only public-queue matches
           // with at least one human on each side are rated; every human
-          // on a team moves together.
+          // on a team moves together. A Forge match reads and moves the
+          // Forge queue's own rating (ADR 0011), same policy, own ladder.
           const seats: RatedSeat[] = [];
           for (const p of entry.match.players.values()) {
             const pid = accountIdByUnit.get(p.unitId);
             const account = pid !== undefined ? registry.findById(pid) : undefined;
             if (pid !== undefined && account) {
-              seats.push({ accountId: pid, team: p.team, rating: account.rating });
+              seats.push({
+                accountId: pid,
+                team: p.team,
+                rating: entry.forge ? forgeStore.forgeRating(pid).rating : account.rating,
+              });
             }
           }
           const humansByTeam: [number, number] = [
@@ -1209,7 +1284,10 @@ setInterval(() => {
           const deltas = rated
             ? ratingDeltas(seats, entry.match.sim.winner)
             : new Map<number, number>();
-          for (const [pid, delta] of deltas) registry.applyRating(pid, delta);
+          for (const [pid, delta] of deltas) {
+            if (entry.forge) forgeStore.applyForgeRating(pid, delta);
+            else registry.applyRating(pid, delta);
+          }
           // Tell each human what the match did to their rating; the end
           // screen shows it next to the final scoreboard.
           for (const p of entry.match.players.values()) {
@@ -1220,7 +1298,8 @@ setInterval(() => {
               t: 'match_result',
               rated,
               delta: deltas.get(pid) ?? 0,
-              rating: account.rating,
+              rating: entry.forge ? forgeStore.forgeRating(pid).rating : account.rating,
+              ...(entry.forge ? { queue: 'forge' as const } : {}),
             });
           }
           // Save the replay first so the match record can point at it.
@@ -1233,6 +1312,9 @@ setInterval(() => {
                 picks: entry.match.replayPicks,
                 events: entry.match.replayEvents,
                 ticks: entry.match.sim.tickCount,
+                // A forged id means nothing outside its match: the replay
+                // carries the definitions themselves (ADR 0010).
+                ...forgedPayload(entry.match),
               });
               replayId = matchId;
               pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP);
@@ -1248,7 +1330,7 @@ setInterval(() => {
               entry.match.sim.winner,
               entry.match.sim.time,
               now,
-              { rated, deltas },
+              { rated, deltas, ...(entry.forge ? { queue: 'forge' as const } : {}) },
               replayId,
             );
             matchLog.push(rec);
