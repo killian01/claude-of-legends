@@ -4,7 +4,6 @@
 // scoping is for human clients.
 
 import { effectiveMoveSpeed } from './combat/status';
-import { CHAMPIONS } from './content/champions';
 import { SIGILS } from './content/sigils';
 import type {
   Observation,
@@ -56,7 +55,7 @@ function velocityOf(u: Unit, time: number): { vx: number; vz: number } {
 export function buildObservation(sim: Sim, unitId: number): Observation | null {
   const u = sim.units.get(unitId);
   if (!u || u.kind !== 'champion' || u.championId === null) return null;
-  const def = CHAMPIONS[u.championId];
+  const def = u.champion;
   if (!def) return null;
 
   const abilityReady = { Q: false, W: false, E: false, R: false };
@@ -112,7 +111,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     // where the cast lands. Bursts and cones land on the caster.
     if (other.kind === 'champion' && other.pendingSpell && other.championId) {
       const pending = other.pendingSpell;
-      const spec = CHAMPIONS[other.championId]?.abilities[pending.key]?.spec;
+      const spec = other.champion?.abilities[pending.key]?.spec;
       const selfCentered = spec?.kind === 'burst' || spec?.kind === 'cone';
       row.windup = {
         key: pending.key,

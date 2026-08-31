@@ -12,6 +12,7 @@ import { buildMatchSim, type ReplayPick } from '../src/net/replay';
 import { POLICY_PERIOD_TICKS } from '../src/sim/bot_driver';
 import { DEFAULT_BOT_ID } from '../src/sim/content/bots';
 import { CHAMPION_LIST } from '../src/sim/content/champions';
+import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import type { Action, Observation } from '../src/sim/policy';
 import { POLICY_CONTRACT_VERSION } from '../src/sim/policy';
 import type { Sim } from '../src/sim/sim';
@@ -37,6 +38,10 @@ export interface EnvConfig {
   seed?: number;
   seats?: readonly EnvSeatSpec[];
   maxTicks?: number;
+  // Forged champion definitions for this match (plan-forge phase 2): seats
+  // may then pick their ids. Validated by the registry inside buildMatchSim,
+  // the same seam the live server and replays construct through.
+  forged?: readonly ForgedChampionDef[];
 }
 
 export interface EnvStepResult {
@@ -86,10 +91,13 @@ export class Env {
   readonly unitIds: readonly number[];
   private readonly remoteIndexes: readonly number[];
 
+  readonly forged: readonly ForgedChampionDef[];
+
   constructor(config: EnvConfig = {}) {
     this.seed = config.seed ?? 1;
     this.maxTicks = config.maxTicks ?? DEFAULT_MAX_TICKS;
     this.seats = config.seats ?? defaultSeats();
+    this.forged = config.forged ?? [];
     const picks: ReplayPick[] = this.seats.map((s, i) => ({
       name: `seat${i}`,
       team: s.team,
@@ -97,7 +105,7 @@ export class Env {
       sigils: s.sigils ?? ['riftstep', 'mend'],
       ...(s.remote ? {} : { bot: s.bot ?? DEFAULT_BOT_ID }),
     }));
-    const { sim, unitIds } = buildMatchSim(this.seed, picks);
+    const { sim, unitIds } = buildMatchSim(this.seed, picks, this.forged);
     this.sim = sim;
     this.unitIds = unitIds;
     const remote: number[] = [];

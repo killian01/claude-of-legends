@@ -4,9 +4,11 @@
 // server scopes snapshots to this client's team before sending.
 // Transport-agnostic: give it a send function, feed it server messages.
 
+import { ChampionRegistry } from '../sim/champion_registry';
 import type { Status } from '../sim/combat/status';
-import { CHAMPIONS, type ChampionDef } from '../sim/content/champions';
+import type { ChampionDef } from '../sim/content/champions';
 import { GAME_MAP, type GameMap } from '../sim/content/map';
+import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { Projectile } from '../sim/projectiles';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
@@ -70,6 +72,8 @@ function materializeUnit(s: SnapUnit): Unit {
     neutral: s.k === 'warden' || s.k === 'camp',
     kind: s.k ?? 'champion',
     championId: s.c ?? null,
+    // Resolved against the match registry by the caller (applyServer).
+    champion: null,
     pos: { x: s.x, z: s.z },
     radius: s.r ?? 0.6,
     moveSpeed: 0,
@@ -150,10 +154,19 @@ export class ClientWorld implements IWorld {
   private boon: { until: number; stacks: number } | null = null;
   private enemyBoon: { until: number; stacks: number } | null = null;
 
+  // Match-scoped champion resolution, mirroring the server sim's registry:
+  // the Forge queue delivers the match's forged definitions at setup and
+  // registerForged() loads them before the first snapshot arrives.
+  readonly champions = new ChampionRegistry();
+
   constructor(private readonly send: (msg: ClientMsg) => void) {}
 
   championDef(championId: string): ChampionDef | null {
-    return CHAMPIONS[championId] ?? null;
+    return this.champions.get(championId);
+  }
+
+  registerForged(defs: readonly ForgedChampionDef[]): void {
+    for (const def of defs) this.champions.addForged(def);
   }
 
   scoreboard(): readonly ScoreRow[] {
@@ -242,6 +255,7 @@ export class ClientWorld implements IWorld {
       let unit = this.units.get(s.i);
       if (!unit) {
         unit = materializeUnit(s);
+        unit.champion = unit.championId ? this.champions.get(unit.championId) : null;
         this.units.set(s.i, unit);
       } else {
         unit.pos.x = s.x;

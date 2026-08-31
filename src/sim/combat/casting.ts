@@ -446,11 +446,9 @@ export function castAbility(
 
 // Resolves champions' pending windup casts: fire when the clock is up,
 // cancel when the caster is stunned or dead. Called from the fixed tick
-// order right before auto-attacks.
-export function stepWindups(
-  ctx: CombatCtx,
-  abilitiesOf: (championId: string) => Record<AbilityKey, AbilityDef> | null,
-): void {
+// order right before auto-attacks. Abilities come off the unit's own
+// resolved definition (roster or forged), never a global table.
+export function stepWindups(ctx: CombatCtx): void {
   for (const u of ctx.units.values()) {
     if (!u.pendingSpell) continue;
     if (u.dead || ctx.dead.has(u.id) || isStunned(u, ctx.time)) {
@@ -463,8 +461,7 @@ export function stepWindups(
     if (ctx.time < u.pendingSpell.resolveAt) continue;
     const pending = u.pendingSpell;
     u.pendingSpell = null;
-    if (u.championId === null) continue;
-    const def = abilitiesOf(u.championId)?.[pending.key];
+    const def = u.champion?.abilities[pending.key];
     if (!def) continue;
     const rank = effectiveRank(u, pending.key);
     const power = {

@@ -6,6 +6,7 @@
 // path and the replay path cannot drift apart.
 
 import { BOTS, DEFAULT_BOT_ID } from '../sim/content/bots';
+import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import { Sim } from '../sim/sim';
 import type { TeamId } from '../sim/types';
 import { type ClientMsg, isFiniteVec } from './protocol';
@@ -45,15 +46,22 @@ export interface ReplayRecord {
   events: ReplayEvent[];
   // Total ticks the live match ran to its winner.
   ticks: number;
+  // The match's forged champion definitions, embedded whole (ADR 0010): a
+  // forged id means nothing outside its match, so the replay carries the
+  // data, not the reference. Absent for roster-only matches.
+  forged?: ForgedChampionDef[];
 }
 
 // The one sim construction for a match, live and replayed alike: same
-// seed, same picks in the same order, same policy attachments.
+// seed, same forged definitions in the same order, same picks in the same
+// order, same policy attachments.
 export function buildMatchSim(
   seed: number,
   picks: readonly ReplayPick[],
+  forged: readonly ForgedChampionDef[] = [],
 ): { sim: Sim; unitIds: number[] } {
   const sim = new Sim(seed);
+  for (const def of forged) sim.addForgedChampion(def);
   const unitIds: number[] = [];
   for (const p of picks) {
     const unit = sim.addChampion(p.team, undefined, p.championId, p.skin ?? 0);

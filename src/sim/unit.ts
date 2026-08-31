@@ -40,6 +40,11 @@ export interface Unit {
   neutral: boolean;
   kind: UnitKind;
   championId: string | null;
+  // The resolved definition this champion was created from, roster or
+  // forged: stats, passives, casting, and observations read it from here,
+  // so nothing downstream consults a global table (champion resolution is
+  // match-scoped, plan-forge phase 2). Data only; safe to share.
+  champion: ChampionDef | null;
   pos: Vec2;
   radius: number;
   moveSpeed: number;
@@ -145,6 +150,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     neutral: false,
     kind,
     championId: null,
+    champion: null,
     pos: { x: pos.x, z: pos.z },
     radius: 0.6,
     moveSpeed: 0,
@@ -215,6 +221,7 @@ export function createChampion(id: number, team: TeamId, pos: Vec2, def: Champio
   const b = def.base;
   const u = baseUnit(id, team, 'champion', pos);
   u.championId = def.id;
+  u.champion = def;
   u.radius = b.radius;
   u.moveSpeed = b.moveSpeed;
   u.hp = b.hp;

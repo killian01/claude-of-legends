@@ -8,6 +8,7 @@
 import { stepAttackMove } from './attack_move';
 import { runBotDecisions } from './bot_driver';
 import { initialCampStates, onCampSlain, stepCamps } from './camps';
+import { ChampionRegistry } from './champion_registry';
 import { stepAutoAttacks } from './combat/auto_attack';
 import { castAbility, executeCast, stepWindups } from './combat/casting';
 import { stepDots } from './combat/dots';
@@ -21,13 +22,14 @@ import {
   isStunned,
   sightFactor,
 } from './combat/status';
-import { CHAMPIONS, DEFAULT_CHAMPION_ID } from './content/champions';
+import { type ChampionDef, DEFAULT_CHAMPION_ID } from './content/champions';
 import { ITEMS } from './content/items';
 import { GAME_MAP, type GameMap, type LaneId } from './content/map';
 import { SIGILS } from './content/sigils';
 import { clampSkin } from './content/skins';
 import { stepDashes } from './dashes';
 import { hasDecisionToken, spendDecisionToken } from './decision_budget';
+import type { ForgedChampionDef } from './forge/forged_def';
 import { applyFountainRegen } from './fountain';
 import { stepIdleDefense } from './idle_defense';
 import { createMapUnits } from './map_units';
@@ -105,6 +107,10 @@ export class Sim {
   readonly rng: Rng;
   readonly map: GameMap = GAME_MAP;
   readonly nav: NavGrid;
+  // Match-scoped champion resolution: the roster plus this match's forged
+  // definitions (plan-forge phase 2). Register forged champions BEFORE
+  // adding their units; the registration order is part of match identity.
+  readonly champions = new ChampionRegistry();
   readonly units = new Map<number, Unit>();
   readonly projectiles = new Map<number, Projectile>();
   readonly zones = new Map<number, Zone>();
@@ -165,8 +171,15 @@ export class Sim {
     };
   }
 
+  // Register a forged champion for this match; its id becomes pickable by
+  // addChampion. Validation happens inside the registry (throws on an
+  // invalid or duplicate def).
+  addForgedChampion(def: ForgedChampionDef): void {
+    this.champions.addForged(def);
+  }
+
   addChampion(team: TeamId, at?: Vec2, championId: string = DEFAULT_CHAMPION_ID, skin = 0): Unit {
-    const def = CHAMPIONS[championId];
+    const def = this.champions.get(championId);
     if (!def) throw new Error(`unknown champion ${championId}`);
     const fountain = this.map.fountains.find((f) => f.team === team);
     if (!fountain) throw new Error(`no fountain for team ${team}`);
@@ -182,8 +195,8 @@ export class Sim {
     return champ;
   }
 
-  championDef(championId: string): (typeof CHAMPIONS)[string] | null {
-    return CHAMPIONS[championId] ?? null;
+  championDef(championId: string): ChampionDef | null {
+    return this.champions.get(championId);
   }
 
   // Assign a lane round-robin per team (playtest review: all ten
@@ -254,7 +267,7 @@ export class Sim {
     const rows: ScoreRow[] = [];
     for (const u of this.units.values()) {
       if (u.kind !== 'champion' || u.championId === null) continue;
-      const def = CHAMPIONS[u.championId];
+      const def = u.champion;
       rows.push({
         unitId: u.id,
         name: def ? (def.name.split(',')[0] ?? def.name) : u.championId,
@@ -380,7 +393,7 @@ export class Sim {
     if (this.winner !== null) return false;
     const u = this.units.get(unitId);
     if (!u || u.championId === null || u.dead) return false;
-    const def = CHAMPIONS[u.championId]?.abilities[key];
+    const def = u.champion?.abilities[key];
     if (!def) return false;
     if (!hasDecisionToken(u, this.time)) return false;
     const ok = castAbility(this.ctx(), u, key, def, aim);
@@ -531,7 +544,7 @@ export class Sim {
     stepTowerAi(ctx);
     stepAttackMove(this);
     stepIdleDefense(this);
-    stepWindups(ctx, (championId) => CHAMPIONS[championId]?.abilities ?? null);
+    stepWindups(ctx);
     stepAutoAttacks(ctx, this.nav);
     stepDashes(ctx, DT);
 
