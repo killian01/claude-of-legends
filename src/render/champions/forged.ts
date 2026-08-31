@@ -1,0 +1,188 @@
+// Forged champion models in the match itself: a runtime registry mapping a
+// forged champion id to its generated GLB (served by the asset route) plus
+// the display tuning saved from the workshop. The client registers models
+// wherever it learns about them (drafts, gallery, match_start); the
+// renderer then upgrades the procedural figure exactly like it does for
+// roster champions. Fail-soft everywhere: an unknown id, a missing file, or
+// a clipless model keeps the figure. Presentation only.
+
+import type * as THREE from 'three';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import type { DisplayPropKind, ForgedDisplay } from '../../sim/forge/display';
+import { type ChampionTemplate, measureScene, toLambert } from './assets';
+import { resolveForgedClips } from './forged_clips';
+import type { ChampionVisualDef } from './manifest';
+
+// Middle of the roster's height range (manifest heights run 1.6 to 3.6);
+// the workshop's height slider overrides it per champion.
+export const FORGED_DEFAULT_HEIGHT = 2.4;
+
+// The loaded model, measured once; templates rebuild from it whenever the
+// display tuning changes without re-fetching the file.
+export interface ForgedSource {
+  scene: THREE.Group;
+  clips: Map<string, THREE.AnimationClip>;
+  rawHeight: number;
+  minY: number;
+  boneNames: string[];
+}
+
+interface ForgedEntry {
+  url: string;
+  display: ForgedDisplay;
+  family: string | null;
+  source: Promise<ForgedSource | null>;
+  // Cache against the display used to build it; invalidated on re-register
+  // with fresh tuning.
+  template: ChampionTemplate | null;
+}
+
+const entries = new Map<string, ForgedEntry>();
+
+let loader: GLTFLoader | null = null;
+function gltfLoader(): GLTFLoader {
+  // Generated GLBs carry plain textures (no KTX2), so the loader needs no
+  // renderer handshake and can exist before the first canvas does.
+  if (!loader) loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  return loader;
+}
+
+export function loadForgedSource(url: string): Promise<ForgedSource | null> {
+  return gltfLoader()
+    .loadAsync(url)
+    .then((gltf) => {
+      const scene = gltf.scene;
+      const box = measureScene(scene);
+      const rawHeight = Math.max(0.001, box.max.y - box.min.y);
+      toLambert(scene, {});
+      const boneNames: string[] = [];
+      scene.traverse((child) => {
+        if ((child as THREE.Bone).isBone) boneNames.push(child.name);
+      });
+      return {
+        scene,
+        clips: new Map(gltf.animations.map((c) => [c.name, c])),
+        rawHeight,
+        minY: box.min.y,
+        boneNames,
+      };
+    })
+    .catch((err) => {
+      console.warn(`forged model failed to load (${url}), keeping figure:`, err);
+      return null;
+    });
+}
+
+// The hand bone a weapon defaults to: right hand first, any hand second.
+// Rig naming varies per provider ("R_Hand", "RightHand", "hand.r").
+export function guessHandBone(boneNames: readonly string[]): string | null {
+  const right = boneNames.find((n) => /r[_.]?hand|righthand|hand[_.]?r\b/i.test(n));
+  if (right) return right;
+  return boneNames.find((n) => /hand/i.test(n)) ?? null;
+}
+
+// The weapon family recorded at finalize picks the default prop; the
+// workshop can override kind and grip afterward.
+export function familyPropKind(family: string | null): DisplayPropKind | null {
+  switch (family) {
+    case 'slashing':
+    case 'blunt':
+      return 'sword';
+    case 'bow':
+      return 'bow';
+    case 'staff':
+      return 'staff';
+    default:
+      return null;
+  }
+}
+
+function buildDef(entry: ForgedEntry, source: ForgedSource): ChampionVisualDef | null {
+  const clips = resolveForgedClips([...source.clips.keys()]);
+  if (!clips) return null;
+  const d = entry.display;
+  const height = d.height ?? FORGED_DEFAULT_HEIGHT;
+  // The saved prop wins; without one the weapon family attaches its default
+  // to the best-guess hand so the champion never fights bare-handed by
+  // accident. 'none' is an explicit empty hand.
+  let prop = d.prop;
+  if (prop === undefined) {
+    const kind = familyPropKind(entry.family);
+    const bone = kind ? guessHandBone(source.boneNames) : null;
+    if (kind && bone) prop = { kind, bone, rot: [0, 0, 0], pos: [0, 0, 0] };
+  }
+  return {
+    url: entry.url,
+    height,
+    barY: height + 0.7,
+    ...(d.yOffset !== undefined ? { yOffset: d.yOffset } : {}),
+    ...(d.yawOffset !== undefined ? { yawOffset: d.yawOffset } : {}),
+    clips,
+    ...(prop && prop.kind !== 'none' && prop.bone !== ''
+      ? { props: [{ kind: prop.kind, bone: prop.bone, rot: prop.rot, pos: prop.pos }] }
+      : {}),
+  };
+}
+
+// Announces a forged champion's model to the renderer. Idempotent; calling
+// again with fresh display tuning rebuilds the next template. The url is
+// the full asset-route path (the caller owns the prefix).
+export function registerForgedModel(
+  championId: string,
+  modelUrl: string,
+  opts?: { display?: ForgedDisplay | null; family?: string | null },
+): void {
+  const existing = entries.get(championId);
+  if (existing && existing.url === modelUrl) {
+    if (opts?.display !== undefined) {
+      existing.display = opts.display ?? {};
+      existing.template = null;
+    }
+    if (opts?.family !== undefined) existing.family = opts.family;
+    return;
+  }
+  entries.set(championId, {
+    url: modelUrl,
+    display: opts?.display ?? {},
+    family: opts?.family ?? null,
+    source: loadForgedSource(modelUrl),
+    template: null,
+  });
+}
+
+// Sync lookup for the renderer's spawn path: the health-bar height, known
+// as soon as the champion is registered (before the model finishes
+// loading). Null for anything that is not a registered forged champion.
+export function forgedBarY(championId: string | null): number | null {
+  if (!championId) return null;
+  const entry = entries.get(championId);
+  if (!entry) return null;
+  return (entry.display.height ?? FORGED_DEFAULT_HEIGHT) + 0.7;
+}
+
+// Resolves the champion's template once its model is loaded; templates are
+// rebuilt lazily after a display change. Null when unregistered or failed.
+export async function forgedChampionTemplate(
+  championId: string | null,
+): Promise<ChampionTemplate | null> {
+  if (!championId) return null;
+  const entry = entries.get(championId);
+  if (!entry) return null;
+  const source = await entry.source;
+  if (!source) return null;
+  if (!entry.template) {
+    const def = buildDef(entry, source);
+    if (!def) return null;
+    const scale = def.height / source.rawHeight;
+    entry.template = {
+      def,
+      scene: source.scene,
+      clips: source.clips,
+      scale,
+      groundY: -source.minY * scale,
+      props: new Map(),
+    };
+  }
+  return entry.template;
+}

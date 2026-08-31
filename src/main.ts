@@ -6,13 +6,14 @@
 
 import { type Presentation, startPresentation } from './game/boot';
 import { nextStep, type PostMatchAction } from './game/flow';
+import { registerForgedAssets } from './game/forged_visuals';
 import { requestGameFullscreen } from './game/fullscreen';
 import { parseJoinCode } from './game/invite';
 import { ReplayWorld } from './game/replay_world';
 import { getSettings } from './game/settings';
 import { type SpectatorView, startSpectator } from './game/spectate';
 import { ClientWorld } from './net/client_world';
-import type { ServerMsg } from './net/protocol';
+import type { ForgedMatchAssets, ServerMsg } from './net/protocol';
 import { applyReplayEvent, buildMatchSim, type ReplayRecord } from './net/replay';
 import { BOTS, DEFAULT_BOT_ID } from './sim/content/bots';
 import { CHAMPION_LIST } from './sim/content/champions';
@@ -43,6 +44,10 @@ import type { IWorld } from './world_api';
 const app = document.querySelector<HTMLElement>('#app');
 if (!app) throw new Error('missing #app root element');
 const container = app;
+
+function registerForgedFromMatch(assets: Record<string, ForgedMatchAssets> | undefined): void {
+  for (const [id, a] of Object.entries(assets ?? {})) registerForgedAssets(id, a);
+}
 
 interface OfflinePick {
   championId: string;
@@ -249,6 +254,9 @@ function runSpectate(matchId: number, team: TeamId): Promise<PostMatchAction> {
       }
       switch (msg.t) {
         case 'match_start':
+          registerForgedFromMatch(msg.forgedAssets);
+          world.applyServer(msg);
+          break;
         case 'score':
           world.applyServer(msg);
           break;
@@ -344,11 +352,21 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
             .then((res) => (res.ok ? res.json() : { drafts: [] }))
             .then(
               (body: {
-                drafts?: { def: ForgedChampionDef; status: string; splash?: string | null }[];
+                drafts?: {
+                  def: ForgedChampionDef;
+                  status: string;
+                  splash?: string | null;
+                  model?: string | null;
+                  family?: string | null;
+                  display?: import('./sim/forge/display').ForgedDisplay | null;
+                }[];
               }) =>
                 (body.drafts ?? [])
                   .filter((d) => d.status === 'finalized')
-                  .map((d) => ({ def: d.def, splash: d.splash ?? null })),
+                  .map((d) => {
+                    registerForgedAssets(d.def.id, d);
+                    return { def: d.def, splash: d.splash ?? null };
+                  }),
             )
             .catch(() => [])
         : Promise.resolve([]);
@@ -356,10 +374,11 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
       choice.mode === 'forge-queue'
         ? fetch('/api/gallery?playable=1&sort=popular', { credentials: 'same-origin' })
             .then((res) => (res.ok ? res.json() : { entries: [] }))
-            .then((body: { entries?: (CommunityPick & { mine?: boolean })[] }) =>
+            .then((body: { entries?: (CommunityPick & { mine?: boolean })[] }) => {
+              for (const e of body.entries ?? []) registerForgedAssets(e.def.id, e);
               // Own champions already sit in their own section.
-              (body.entries ?? []).filter((e) => e.mine !== true),
-            )
+              return (body.entries ?? []).filter((e) => e.mine !== true);
+            })
             .catch(() => [])
         : Promise.resolve([]);
 
@@ -475,6 +494,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           // store, the cookie is the identity.
           break;
         case 'match_start':
+          registerForgedFromMatch(msg.forgedAssets);
           world.applyServer(msg);
           // A rejoin can arrive while the queue or lobby screen is still up.
           clearMenus();

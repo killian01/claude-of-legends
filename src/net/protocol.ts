@@ -4,9 +4,20 @@
 // full identity fields sent once per unit per client ("full" vs "lite"
 // records, the world-of-claudecraft pattern).
 
+import type { ForgedDisplay } from '../sim/forge/display';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { AbilityKey, ScoreRow, TeamId } from '../sim/types';
 import type { StructureMeta, UnitKind } from '../sim/unit';
+
+// The sealed asset pointers a match carries per forged champion, so every
+// client in it can load the generated model: the model path is relative to
+// the asset route, family picks the default weapon prop, display is the
+// workshop's saved tuning.
+export interface ForgedMatchAssets {
+  model: string | null;
+  family: string | null;
+  display: ForgedDisplay | null;
+}
 
 export type ClientMsg =
   // Carries no identity: the session cookie settled that on the upgrade
@@ -171,8 +182,17 @@ export type ServerMsg =
   | { t: 'select_update'; locked: number; total: number; taken: string[] }
   // forged: the match's forged champion definitions, embedded whole
   // (ADR 0010), so every client and spectator can resolve them before the
-  // first snapshot names one. Absent for roster-only matches.
-  | { t: 'match_start'; selfUnitId: number; team: TeamId; forged?: ForgedChampionDef[] }
+  // first snapshot names one. Absent for roster-only matches. forgedAssets
+  // rides beside it, keyed by forged id: the sealed model path (relative,
+  // for the asset route), the weapon family, and the workshop's display
+  // tuning, so every client renders the generated model, not the figure.
+  | {
+      t: 'match_start';
+      selfUnitId: number;
+      team: TeamId;
+      forged?: ForgedChampionDef[];
+      forgedAssets?: Record<string, ForgedMatchAssets>;
+    }
   | {
       t: 'snap';
       time: number;

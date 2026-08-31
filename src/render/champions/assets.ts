@@ -36,7 +36,7 @@ const pending = new Map<string, Promise<ChampionTemplate | null>>();
 // dequantization. SkinnedMesh.computeBoundingBox applies the bone transform
 // per vertex, which lands in the mesh's local space; regular meshes keep the
 // plain expand.
-function measureScene(scene: THREE.Object3D): THREE.Box3 {
+export function measureScene(scene: THREE.Object3D): THREE.Box3 {
   scene.updateMatrixWorld(true);
   const box = new THREE.Box3();
   const sub = new THREE.Box3();
@@ -58,7 +58,10 @@ function measureScene(scene: THREE.Object3D): THREE.Box3 {
 // Rebuilds every material as MeshLambertMaterial: it matches the flat-lit
 // map dressing, and the renderer's hit-flash path only drives Lambert
 // emissives. Applies the def's recolor/tint/opacity while it walks.
-function toLambert(scene: THREE.Group, def: ChampionVisualDef): void {
+export function toLambert(
+  scene: THREE.Group,
+  def: Pick<ChampionVisualDef, 'recolor' | 'tint' | 'opacity'>,
+): void {
   scene.traverse((child) => {
     const mesh = child as THREE.Mesh;
     if (
@@ -217,7 +220,7 @@ export function whenChampionTemplateReady(
 
 // GLTFLoader sanitizes node names ("handslot.r" arrives as "handslotr");
 // resolve a manifest bone name against both spellings.
-function findBone(root: THREE.Object3D, name: string): THREE.Object3D | null {
+export function findBone(root: THREE.Object3D, name: string): THREE.Object3D | null {
   return root.getObjectByName(name) ?? root.getObjectByName(name.replace(/[^\w-]/g, '')) ?? null;
 }
 

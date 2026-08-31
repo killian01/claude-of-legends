@@ -343,6 +343,11 @@ export interface CommunityPick {
   likedByMe: boolean;
   // Splash path relative to the server's asset route, when one exists.
   splash?: string | null;
+  // Model pointers the select screen forwards to the render registry, so a
+  // community champion plays as its generated model.
+  model?: string | null;
+  family?: string | null;
+  display?: import('../sim/forge/display').ForgedDisplay | null;
 }
 
 // One of the account's own finalized champions at Forge-queue select.

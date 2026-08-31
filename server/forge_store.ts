@@ -352,6 +352,14 @@ export class ForgeStore {
     }
   }
 
+  // Rewrites the sealed assets blob in place (the workshop's display
+  // tuning); the caller owns merging into what forgedAssets returned.
+  updateForgedAssets(id: string, assets: unknown, now: number): void {
+    this.db
+      .prepare('update forged_champions set assets = ?, updated_at = ? where id = ?')
+      .run(JSON.stringify(assets), now, id);
+  }
+
   // -- art candidates (plan-forge phase 4) ---------------------------------
 
   addArtCandidate(c: Omit<ArtCandidateRow, 'id' | 'chosen'>): number {

@@ -11,7 +11,12 @@ import { readFile, stat } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { type WebSocket, WebSocketServer } from 'ws';
-import { isFiniteVec, parseClientMsg, type ServerMsg } from '../src/net/protocol';
+import {
+  type ForgedMatchAssets,
+  isFiniteVec,
+  parseClientMsg,
+  type ServerMsg,
+} from '../src/net/protocol';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { validateForged } from '../src/sim/forge/validate';
 import { DT } from '../src/sim/types';
@@ -31,6 +36,7 @@ import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, parseCookies, serializeCookie } from './cookies';
 import { authorizeUrl, CALLBACK_PATH, DiscordOauth, discordConfigFromEnv } from './discord_oauth';
 import { DiscordFlows } from './discord_state';
+import { displayOf, forgedMatchAssets, setForgedDisplay } from './display';
 import { clientAddress, edgeConfig, originAllowed } from './edge';
 import { emailErrorMessage } from './email_address';
 import { CLAIM_TTL_MS } from './email_claim';
@@ -331,8 +337,18 @@ function send(clientId: number, msg: ServerMsg): void {
 // The match_start block carrying the forged definitions, when the match
 // has any: sent at setup, on rejoin, and to spectators alike, so every
 // mirror world can resolve a forged champion before its first snapshot.
-function forgedPayload(match: Match): { forged?: ForgedChampionDef[] } {
-  return match.forgedDefs.length > 0 ? { forged: [...match.forgedDefs] } : {};
+// Each definition rides with its sealed asset pointers (model path, weapon
+// family, display tuning), so every client in the match can load the
+// generated model instead of the procedural figure.
+function forgedPayload(match: Match): {
+  forged?: ForgedChampionDef[];
+  forgedAssets?: Record<string, ForgedMatchAssets>;
+} {
+  if (match.forgedDefs.length === 0) return {};
+  return {
+    forged: [...match.forgedDefs],
+    forgedAssets: forgedMatchAssets(forgeStore, match.forgedDefs),
+  };
 }
 
 // Both queues (classic and Forge) start their matches the same way; the
@@ -816,13 +832,19 @@ const server = http.createServer(async (req, res) => {
                 drafts: out.drafts.map((d) => {
                   const assets =
                     d.status === 'finalized'
-                      ? (forgeStore.forgedAssets(d.id) as { model?: string; sheet?: string } | null)
+                      ? (forgeStore.forgedAssets(d.id) as {
+                          model?: string;
+                          sheet?: string;
+                          family?: string;
+                        } | null)
                       : null;
                   return {
                     ...d,
                     splash: splashOf(forgeStore, d),
                     model: assets?.model ?? null,
                     sheet: assets?.sheet ?? null,
+                    family: assets?.family ?? null,
+                    display: assets ? displayOf(forgeStore, d.id) : null,
                   };
                 }),
               }
@@ -917,6 +939,20 @@ const server = http.createServer(async (req, res) => {
           200,
           id && Number.isInteger(cid)
             ? chooseArt(artDeps, me.id, { id, cid })
+            : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      // The workshop's display tuning (height, facing, weapon grip):
+      // owner-only, finalized-only, clamped by the shared sanitizer.
+      if (url === '/api/forge/display' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        sendJson(
+          res,
+          200,
+          id
+            ? setForgedDisplay({ store: forgeStore }, me.id, id, body?.display)
             : { ok: false, error: 'malformed request' },
         );
         return;

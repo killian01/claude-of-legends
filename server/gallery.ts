@@ -4,8 +4,10 @@
 // lives here; server/forge_store.ts only stores. Identity arrives already
 // resolved, like the rest of the Forge surface (ADR 0006).
 
+import type { ForgedDisplay } from '../src/sim/forge/display';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { splashOf } from './art';
+import { displayOf } from './display';
 import type { ForgeOutcome } from './forge';
 import type { ForgedRow, ForgeStore } from './forge_store';
 
@@ -35,9 +37,12 @@ export interface GalleryEntry {
   updatedAt: number;
   // Sealed asset paths relative to the assets dir (null while absent); the
   // client prefixes its asset route. splash draws the card, model feeds
-  // the workshop view.
+  // the workshop view and the in-match renderer, family and display drive
+  // the weapon prop and the saved model tuning.
   splash: string | null;
   model: string | null;
+  family: string | null;
+  display: ForgedDisplay | null;
 }
 
 export type GallerySort = 'recent' | 'popular';
@@ -77,7 +82,7 @@ export function listGallery(
         r.def.creator.toLowerCase().includes(needle),
     );
   const entries = rows.map((r): GalleryEntry => {
-    const assets = deps.store.forgedAssets(r.id) as { model?: string } | null;
+    const assets = deps.store.forgedAssets(r.id) as { model?: string; family?: string } | null;
     return {
       id: r.id,
       def: r.def,
@@ -90,6 +95,8 @@ export function listGallery(
       updatedAt: r.updatedAt,
       splash: splashOf(deps.store, r),
       model: assets?.model ?? null,
+      family: assets?.family ?? null,
+      display: displayOf(deps.store, r.id),
     };
   });
   // listFinalized comes back recent-first already; popular re-sorts by

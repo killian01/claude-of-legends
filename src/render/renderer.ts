@@ -25,6 +25,7 @@ import {
   type ChampionVisual,
   championVisualDef,
   createChampionVisual,
+  forgedBarY,
   preloadChampionAssets,
 } from './champions';
 import { FloatingText, makeTextSprite } from './floating_text';
@@ -1124,9 +1125,14 @@ export class Renderer {
     // without this hoist the walk cycle never runs.
     holder.userData.anim = figure.userData.anim;
     enableShadows(holder);
+    // Roster champions resolve through the static manifest; forged ones
+    // through the runtime registry their generated model was announced to.
     const def = championVisualDef(u.championId);
-    if (def) this.upgradeChampionView(holder, figure, u.id, u.championId, color, u.skin);
-    return { holder, barY: def?.barY ?? 3.0 };
+    const forgedBar = forgedBarY(u.championId);
+    if (def || forgedBar !== null) {
+      this.upgradeChampionView(holder, figure, u.id, u.championId, color, u.skin);
+    }
+    return { holder, barY: def?.barY ?? forgedBar ?? 3.0 };
   }
 
   // Swaps a champion's procedural figure for its rigged GLB once the asset
