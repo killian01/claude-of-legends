@@ -72,10 +72,12 @@ export const TRIPO_CLIPS: Readonly<Record<WeaponFamily, Readonly<Record<ClipRole
 
 // What the player picks from, per clip role: the fighting-shaped slice
 // of the v1.0 rig's preset library (developers.tripo3d.ai
-// animations-retarget, fetched 2026-08-31). Ids verbatim from the docs;
-// the greeting-and-hobby presets (sing, golf swing aside, phone calls)
-// stay out because a MOBA champion never plays them. Every family
-// default above appears in its role's list, pinned by test.
+// animations-retarget, fetched 2026-08-31). Ids verbatim from the docs.
+// Curated ON THE MANNEQUIN (playtest round 9c, every preset watched):
+// swagger is a walk, not an idle; the flee presets, golf, hurt, and the
+// emote-shaped casts (cheer, angry, clap, heart pose) read wrong on a
+// champion and are out. Every family default above appears in its
+// role's list, pinned by test.
 export const TRIPO_CLIP_CHOICES: Readonly<Record<ClipRole, readonly ClipChoice[]>> = {
   idle: [
     { id: 'preset:biped:idle', label: 'Combat idle' },
@@ -83,13 +85,11 @@ export const TRIPO_CLIP_CHOICES: Readonly<Record<ClipRole, readonly ClipChoice[]
     { id: 'preset:biped:wait', label: 'Impatient wait' },
     { id: 'preset:biped:look_around', label: 'Look around' },
     { id: 'preset:biped:fold_arms', label: 'Folded arms' },
-    { id: 'preset:biped:swagger', label: 'Swagger' },
   ],
   run: [
     { id: 'preset:biped:run', label: 'Run' },
     { id: 'preset:biped:walk', label: 'Walk' },
-    { id: 'preset:biped:flee_01', label: 'Panicked flee 1' },
-    { id: 'preset:biped:flee_02', label: 'Panicked flee 2' },
+    { id: 'preset:biped:swagger', label: 'Swagger walk' },
   ],
   attack: [
     { id: 'preset:biped:slash', label: 'Sword slash' },
@@ -102,21 +102,15 @@ export const TRIPO_CLIP_CHOICES: Readonly<Record<ClipRole, readonly ClipChoice[]
     { id: 'preset:biped:front_kick_01', label: 'Front kick 1' },
     { id: 'preset:biped:front_kick_02', label: 'Front kick 2' },
     { id: 'preset:biped:pitch_baseball', label: 'Overhand throw' },
-    { id: 'preset:biped:golf', label: 'Low sweeping swing' },
   ],
   cast: [
     { id: 'preset:biped:cast_a_spell', label: 'Spell cast' },
     { id: 'preset:biped:fire', label: 'Channel and fire' },
-    { id: 'preset:biped:cheer', label: 'Battle cry' },
-    { id: 'preset:biped:angry_01', label: 'Furious shout' },
-    { id: 'preset:biped:clap', label: 'Thunder clap' },
-    { id: 'preset:biped:heart_pose', label: 'Heart pose' },
   ],
   death: [
     { id: 'preset:biped:defeat_02', label: 'Defeat, variant 2' },
     { id: 'preset:biped:defeat_03', label: 'Defeat, variant 3' },
     { id: 'preset:biped:fall', label: 'Fall' },
-    { id: 'preset:biped:hurt', label: 'Hurt collapse' },
   ],
 };
 
