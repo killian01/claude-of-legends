@@ -178,8 +178,10 @@ const ASSETS_DIR = path.join(DATA_DIR, 'assets');
 // asked for keyless dev, otherwise absent and finalize says so.
 function generationFromEnv(): PipelineDeps | null {
   let provider: GenerationProvider | null = null;
-  if (process.env.TRIPO_API_KEY) provider = new TripoProvider(process.env.TRIPO_API_KEY);
-  else if (process.env.GENERATION_PROVIDER === 'mock') {
+  if (process.env.TRIPO_API_KEY) {
+    console.log('generation: tripo (TRIPO_API_KEY set), real generations from here on');
+    provider = new TripoProvider(process.env.TRIPO_API_KEY);
+  } else if (process.env.GENERATION_PROVIDER === 'mock') {
     console.log('generation: mock provider (GENERATION_PROVIDER=mock), placeholder assets');
     provider = new MockProvider();
   }
