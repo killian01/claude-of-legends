@@ -42,7 +42,9 @@ function ensureCss(): void {
 
 export interface HomeChoice {
   name: string;
-  mode: 'practice' | 'queue' | 'create' | 'join' | 'replay' | 'spectate';
+  // 'forge-queue' is the Forge's own public queue (plan-forge phase 6):
+  // same flow as 'queue', a separate ladder, forged champions in select.
+  mode: 'practice' | 'queue' | 'forge-queue' | 'create' | 'join' | 'replay' | 'spectate';
   code?: string;
   // For mode 'replay': the saved replay to watch.
   replayId?: number;
@@ -209,11 +211,14 @@ export function showHome(
       'The Forge',
       'Create your own champion: kit, stats, and passive, composed from the same ' +
         'primitives the roster runs on, all under one power budget. Drafts are free and ' +
-        'unlimited; test drive any valid kit against bots.',
+        'unlimited; test drive any valid kit against bots. The Forge queue is where ' +
+        'finalized creations play, on its own rating.',
     );
     const forgeBtn = el('button', 'menu-btn', 'Open the Forge');
     forgeBtn.addEventListener('click', () => openForgeEditor(container));
-    forge.appendChild(forgeBtn);
+    const forgeQueueBtn = el('button', 'menu-btn', 'Forge queue');
+    forgeQueueBtn.addEventListener('click', () => done('forge-queue'));
+    forge.append(forgeBtn, forgeQueueBtn);
 
     // --- career ---
     const career = card(

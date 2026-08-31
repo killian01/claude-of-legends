@@ -1064,8 +1064,9 @@ export class Hud {
   }
 
   // The server's verdict on this player's rating, shown on the end screen
-  // (it arrives right after the winning snapshot).
-  setMatchResult(rated: boolean, delta: number, rating: number): void {
+  // (it arrives right after the winning snapshot). The Forge queue names
+  // its own ladder so the number is never mistaken for the classic one.
+  setMatchResult(rated: boolean, delta: number, rating: number, queue?: 'forge'): void {
     if (!rated) {
       this.endRating.textContent =
         'Not rated: rating needs a public queue match with humans on both sides.';
@@ -1073,7 +1074,8 @@ export class Hud {
       this.endRating.style.fontSize = '12px';
       return;
     }
-    this.endRating.textContent = `${delta >= 0 ? '+' : ''}${delta} rating (now ${rating})`;
+    const label = queue === 'forge' ? 'Forge rating' : 'rating';
+    this.endRating.textContent = `${delta >= 0 ? '+' : ''}${delta} ${label} (now ${rating})`;
     this.endRating.style.color = delta >= 0 ? '#8fd06a' : '#d06a6a';
   }
 

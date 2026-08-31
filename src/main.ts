@@ -332,14 +332,29 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
       resolve(action);
     };
 
+    // The Forge queue's select offers the account's finalized creations:
+    // fetched the moment the session opens so the list is ready (or nearly)
+    // when select_start lands; the handler awaits it either way.
+    const forgedRoster: Promise<ForgedChampionDef[]> =
+      choice.mode === 'forge-queue'
+        ? fetch('/api/forge/drafts', { credentials: 'same-origin' })
+            .then((res) => (res.ok ? res.json() : { drafts: [] }))
+            .then((body: { drafts?: { def: ForgedChampionDef; status: string }[] }) =>
+              (body.drafts ?? []).filter((d) => d.status === 'finalized').map((d) => d.def),
+            )
+            .catch(() => [])
+        : Promise.resolve([]);
+
     ws.addEventListener('open', () => {
       opened = true;
       // No identity to send: the session cookie rode the upgrade, and the
       // server refused it outright if there was none (ADR 0006). hello only
       // asks whether a live match is still holding our seat.
       ws.send(JSON.stringify({ t: 'hello' }));
-      if (choice.mode === 'queue') {
-        ws.send(JSON.stringify({ t: 'queue' }));
+      if (choice.mode === 'queue' || choice.mode === 'forge-queue') {
+        ws.send(
+          JSON.stringify({ t: 'queue', ...(choice.mode === 'forge-queue' ? { forge: true } : {}) }),
+        );
         queueUi = showQueue(
           container,
           () => ws.send(JSON.stringify({ t: 'start_now' })),
@@ -392,20 +407,29 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
         case 'lobby':
           lobbyUi?.update(msg.code, msg.host, msg.team, msg.players);
           break;
-        case 'select_start':
+        case 'select_start': {
           clearMenus();
-          selectUi = showSelect(
-            container,
-            msg.players,
-            msg.team,
-            msg.deadline,
-            (champ, sigils, skin) => {
-              // Inside the lock-in click gesture, so the browser grants it.
-              requestGameFullscreen();
-              ws.send(JSON.stringify({ t: 'pick', championId: champ, sigils, skin }));
-            },
-          );
+          const openSelect = (forgedList: readonly ForgedChampionDef[]): void => {
+            if (finished || selectUi) return;
+            selectUi = showSelect(
+              container,
+              msg.players,
+              msg.team,
+              msg.deadline,
+              (champ, sigils, skin) => {
+                // Inside the lock-in click gesture, so the browser grants it.
+                requestGameFullscreen();
+                ws.send(JSON.stringify({ t: 'pick', championId: champ, sigils, skin }));
+              },
+              forgedList,
+            );
+          };
+          // A Forge select waits for the forged roster (already in flight
+          // since the session opened); a classic select opens on the spot.
+          if (msg.forge) void forgedRoster.then(openSelect);
+          else openSelect([]);
           break;
+        }
         case 'select_update':
           selectUi?.setLocked(msg.locked, msg.total, msg.taken);
           break;
@@ -462,7 +486,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           world.applyServer(msg);
           break;
         case 'match_result':
-          pres?.setMatchResult(msg.rated, msg.delta, msg.rating);
+          pres?.setMatchResult(msg.rated, msg.delta, msg.rating, msg.queue);
           break;
         case 'match_end':
           // The end overlay (stats, Play again, Return to menu) owns the way
@@ -598,7 +622,11 @@ async function boot(): Promise<void> {
     if (step === 'replay') {
       next = choice;
     } else if (step === 'requeue') {
-      next = { name: choice.name, mode: 'queue' };
+      // Play again re-enters the queue the match came from.
+      next = {
+        name: choice.name,
+        mode: choice.mode === 'forge-queue' ? 'forge-queue' : 'queue',
+      };
     } else {
       lastPick = null;
     }

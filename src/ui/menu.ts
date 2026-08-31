@@ -11,6 +11,8 @@ import type { LobbyPlayer, SelectPlayer } from '../net/protocol';
 import { CHAMPION_LIST } from '../sim/content/champions';
 import { SIGIL_LIST } from '../sim/content/sigils';
 import { SKINS } from '../sim/content/skins';
+import type { ForgedChampionDef } from '../sim/forge/forged_def';
+import { resolveForgedChampion } from '../sim/forge/resolve';
 import type { AbilityKey, TeamId } from '../sim/types';
 import { ROLE_COLORS, setPortrait } from './champion_art';
 import { describeAbility, describeSigil } from './describe';
@@ -98,6 +100,14 @@ const CSS = `
 .menu-champ-portrait {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
   background: radial-gradient(circle at 50% 38%, #1d3a63 0%, #0a1120 90%);
+}
+/* Forged champions have no art pipeline yet: a monogram stands where the
+   portrait chain would. */
+.menu-champ-monogram {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  padding-bottom: 26px; font-size: 46px; font-weight: 800; letter-spacing: 1px;
+  background: radial-gradient(circle at 50% 38%, #3a2d63 0%, #0a1120 90%);
+  color: #b9a8e8; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
 }
 .menu-champ-body {
   position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 10px 9px; min-width: 0;
@@ -330,6 +340,9 @@ export function showSelect(
   team: TeamId,
   deadline: number | null,
   onLock: (championId: string, sigils: [string, string], skin: number) => void,
+  // Forge queue: the account's finalized forged champions, offered in
+  // their own section under the roster grid.
+  forged?: readonly ForgedChampionDef[],
 ): SelectController {
   const { root, card } = screen(container);
   card.classList.add('select');
@@ -450,6 +463,43 @@ export function showSelect(
     onLock(championId, [sigils[0]!, sigils[1]!], skinIndex);
   });
 
+  // Forge queue: the account's forged champions in their own grid, wired
+  // into the same pick, taken, and lock machinery as the roster cards.
+  let forgedBlock: HTMLElement[] = [];
+  if (forged && forged.length > 0) {
+    const forgedGrid = el('div', 'menu-grid');
+    for (const def of forged) {
+      const btn = el('button', 'menu-champ') as HTMLButtonElement;
+      const mono = el('div', 'menu-champ-monogram', (def.name[0] ?? '?').toUpperCase());
+      btn.appendChild(mono);
+      const body = el('div', 'menu-champ-body');
+      body.appendChild(el('div', 'menu-champ-name', def.name));
+      const role = el('div', 'menu-champ-role', def.role);
+      role.style.color = ROLE_COLORS[def.role] ?? '#c9d8ae';
+      body.appendChild(role);
+      body.appendChild(el('div', 'menu-champ-blurb', def.tagline));
+      btn.appendChild(body);
+      const resolved = resolveForgedChampion(def);
+      attachTooltip(btn, () => [
+        `${def.name}, ${def.title} (${def.role})`,
+        def.tagline,
+        `Passive, ${resolved.passive.name}: ${resolved.passive.description}`,
+        ...ABILITY_KEYS.map((k) => describeAbility(k, resolved.abilities[k]).slice(0, 3).join(' ')),
+      ]);
+      btn.addEventListener('click', () => {
+        if (takenSet.has(def.id)) return;
+        championId = def.id;
+        skinIndex = 0;
+        renderSkins();
+        for (const [id, b] of champButtons) b.classList.toggle('picked', id === def.id);
+        lock.disabled = false;
+      });
+      champButtons.set(def.id, btn);
+      forgedGrid.appendChild(btn);
+    }
+    forgedBlock = [el('div', 'menu-label', 'Your forged champions'), forgedGrid];
+  }
+
   const randomBtn = el('button', 'menu-btn', 'Random champion');
   randomBtn.addEventListener('click', () => {
     const free = CHAMPION_LIST.filter((c) => !takenSet.has(c.id));
@@ -462,7 +512,8 @@ export function showSelect(
   const layout = el('div', 'menu-select-layout');
   const main = el('div', 'menu-select-main');
   const side = el('div', 'menu-select-side');
-  main.append(el('div', 'menu-label', 'Pick your champion (hover for the kit)'), grid, randomBtn);
+  main.append(el('div', 'menu-label', 'Pick your champion (hover for the kit)'), grid);
+  main.append(...forgedBlock, randomBtn);
   if (teamsBox) side.appendChild(teamsBox);
   side.append(
     el('div', 'menu-label', 'Skin (cosmetic only)'),
