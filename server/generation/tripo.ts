@@ -238,15 +238,19 @@ export class TripoProvider implements GenerationProvider {
     seed?: number;
   }): Promise<ProviderAsset> {
     // Input preference: an uploaded file token first (the staged flow
-    // re-uploads the chosen local reference; tokens ride as the same
-    // object form image-to-image verified live), then the signed output
-    // URL, then the task id. Live (2026-08-31) a 2D task referenced by
-    // id is refused as inaccessible while the signed URL is accepted.
-    const input =
-      req.image !== undefined ? { file_token: req.image } : (req.imageUrl ?? req.imageTaskId);
+    // re-uploads the chosen local reference), then the signed output URL,
+    // then the task id. Live corrections: a token must ride as
+    // file.file_token, the same shape as the advanced 2D task (an
+    // input.file_token object is refused with 1004 "file is required",
+    // 2026-08-31); a URL rides as input (verified by the first live
+    // build); a 2D task referenced by id is refused as inaccessible.
+    const source =
+      req.image !== undefined
+        ? { file: { type: 'png', file_token: req.image } }
+        : { input: req.imageUrl ?? req.imageTaskId };
     const taskId = await this.post('/generation/image-to-model', {
       model: IMAGE_TO_MODEL_VERSION,
-      input,
+      ...source,
       texture: true,
       compress: 'geometry',
       orientation: 'align_image',

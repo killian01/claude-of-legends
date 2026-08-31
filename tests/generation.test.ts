@@ -430,10 +430,12 @@ describe('the tripo provider against scripted responses', () => {
     // The reference derivation asks for the rig-ready pose.
     await provider.generate2D({ prompt: 'reference', image: token, tPose: true });
     expect(calls[3]?.body).toMatchObject({ t_pose: true });
-    // The same token form drives image-to-model (the staged finalize path).
+    // The token drives image-to-model as file.file_token (the staged
+    // finalize path; input.file_token is refused live with 1004).
     await provider.imageTo3D({ image: token });
     expect(calls[4]?.url).toContain('/generation/image-to-model');
-    expect(calls[4]?.body).toMatchObject({ input: { file_token: 'tok-9' } });
+    expect(calls[4]?.body).toMatchObject({ file: { type: 'png', file_token: 'tok-9' } });
+    expect(calls[4]?.body).not.toHaveProperty('input');
     // TRIPO_IMAGE_MODEL picks another documented edit model.
     const gemini = new TripoProvider('k', {
       fetchFn,
