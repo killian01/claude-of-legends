@@ -100,6 +100,10 @@ const CSS = `
 .fe-ok { color: #8fd06a; font-weight: 700; margin-top: 8px; }
 .fe-status { min-height: 16px; color: #aac2dd; margin-top: 8px; font-size: 11px; }
 .fe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.fe-panel-label {
+  margin: 2px 0 8px; font-size: 12px; color: #c9a84a; letter-spacing: 0.6px;
+  text-transform: uppercase; font-weight: 700;
+}
 .fe-desc { color: #97854f; font-style: italic; margin-top: 4px; line-height: 1.4; }
 .fe-strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .fe-cand {
@@ -417,7 +421,9 @@ export function openForgeEditor(container: HTMLElement): void {
     testBtn.title = v.ok ? '' : 'The kit must fully validate before a test drive';
     finalizeBtn.disabled = !v.ok;
     finalizeBtn.title = v.ok ? '' : 'Finalize needs a fully valid champion';
-    workshopBtn.hidden = !drafts.find((d) => d.id === current.id)?.model;
+    // style.display, not the hidden attribute: .fe-btn sets display and
+    // author CSS beats the attribute's user-agent rule.
+    workshopBtn.style.display = drafts.find((d) => d.id === current.id)?.model ? '' : 'none';
   };
 
   const hooks: KitHooks = {
@@ -524,13 +530,15 @@ export function openForgeEditor(container: HTMLElement): void {
   const meterBar = el('div', 'fe-meter-bar');
   meterBar.append(meterFill);
   meterPanel.append(meterLine, meterBar, costBox, verdict);
+  // Creation order: save the work, seal it, inspect the model, play it.
+  // Delete stays last, away from the flow.
   const actions = el('div', 'fe-panel');
   actions.append(
     el('h3', '', 'Actions'),
     saveBtn,
-    testBtn,
     finalizeBtn,
     workshopBtn,
+    testBtn,
     deleteBtn,
     status,
   );
@@ -607,8 +615,43 @@ export function openForgeEditor(container: HTMLElement): void {
   function renderMain(): void {
     main.textContent = '';
 
+    // The creation order (ADR 0010): the champion starts with its art.
+    // Design first, identity second, numbers and spells after.
+    const sealed = isSealed();
+    const splash = el('div', 'fe-panel');
+    splash.append(el('h3', '', '1. Design: splash art (the model derives from it)'));
+    if (sealed) {
+      splash.append(el('div', 'fe-desc', 'Sealed at finalization.'));
+    } else {
+      const line = el('input', 'fe-input') as HTMLInputElement;
+      line.placeholder = 'Describe the champion: silhouette, weapon, mood, one accent color';
+      line.maxLength = 400;
+      line.value = artLines.splash ?? '';
+      line.addEventListener('input', () => {
+        artLines.splash = line.value;
+      });
+      const row = el('div', 'fe-artrow');
+      const genBtn = el('button', 'fe-mini', 'Generate splash') as HTMLButtonElement;
+      genBtn.addEventListener('click', () => generateArtKind('splash', line.value));
+      const prefill = el('button', 'fe-mini', 'From card text');
+      prefill.addEventListener('click', () => {
+        const identity = [current.name, current.title].filter((s) => s.trim() !== '').join(', ');
+        line.value = current.tagline.trim() === '' ? identity : `${identity}: ${current.tagline}`;
+        artLines.splash = line.value;
+      });
+      const quota = el(
+        'span',
+        'fe-quota',
+        artQuota.limit > 0 ? `${artQuota.used}/${artQuota.limit} images today` : '',
+      );
+      row.append(genBtn, prefill, quota);
+      splash.append(line, row);
+    }
+    splash.append(artStrip('splash', true));
+    main.append(splash);
+
     const card = el('div', 'fe-panel');
-    card.append(el('h3', '', 'Card'));
+    card.append(el('h3', '', '2. Card: name, title, role'));
     card.append(
       textInput(
         'Name',
@@ -656,43 +699,8 @@ export function openForgeEditor(container: HTMLElement): void {
     card.append(roleField);
     main.append(card);
 
-    // Splash art (ADR 0010): the creative anchor, iterated freely on the
-    // 2D quota while drafting; finalize derives the model from the pick.
-    const sealed = isSealed();
-    const splash = el('div', 'fe-panel');
-    splash.append(el('h3', '', 'Splash art (the anchor: the model derives from it)'));
-    if (sealed) {
-      splash.append(el('div', 'fe-desc', 'Sealed at finalization.'));
-    } else {
-      const line = el('input', 'fe-input') as HTMLInputElement;
-      line.placeholder = 'Describe the champion: silhouette, weapon, mood, one accent color';
-      line.maxLength = 400;
-      line.value = artLines.splash ?? '';
-      line.addEventListener('input', () => {
-        artLines.splash = line.value;
-      });
-      const row = el('div', 'fe-artrow');
-      const genBtn = el('button', 'fe-mini', 'Generate splash') as HTMLButtonElement;
-      genBtn.addEventListener('click', () => generateArtKind('splash', line.value));
-      const prefill = el('button', 'fe-mini', 'From card text');
-      prefill.addEventListener('click', () => {
-        const identity = [current.name, current.title].filter((s) => s.trim() !== '').join(', ');
-        line.value = current.tagline.trim() === '' ? identity : `${identity}: ${current.tagline}`;
-        artLines.splash = line.value;
-      });
-      const quota = el(
-        'span',
-        'fe-quota',
-        artQuota.limit > 0 ? `${artQuota.used}/${artQuota.limit} images today` : '',
-      );
-      row.append(genBtn, prefill, quota);
-      splash.append(line, row);
-    }
-    splash.append(artStrip('splash', true));
-    main.append(splash);
-
     const stats = el('div', 'fe-panel');
-    stats.append(el('h3', '', 'Stats (every point above the floor costs budget)'));
+    stats.append(el('h3', '', '3. Stats (every point above the floor costs budget)'));
     const statsGrid = el('div', 'fe-grid');
     const base = current.base as unknown as Record<string, unknown>;
     for (const key of Object.keys(BASE_STAT_BOUNDS) as (keyof ChampionBaseStats)[]) {
@@ -709,7 +717,7 @@ export function openForgeEditor(container: HTMLElement): void {
     main.append(stats);
 
     const passive = el('div', 'fe-panel');
-    passive.append(el('h3', '', 'Passive (a template the engine owns; you set the numbers)'));
+    passive.append(el('h3', '', '4. Passive (a template the engine owns; you set the numbers)'));
     const tplSelect = el('select', 'fe-select') as HTMLSelectElement;
     for (const tpl of PASSIVE_TEMPLATE_LIST) {
       const opt = document.createElement('option');
@@ -761,6 +769,7 @@ export function openForgeEditor(container: HTMLElement): void {
     }
     main.append(passive);
 
+    main.append(el('div', 'fe-panel-label', '5. Spells'));
     for (const key of ['Q', 'W', 'E', 'R'] as AbilityKey[]) {
       const ability = current.abilities[key] as unknown as Record<string, unknown>;
       const panel = el('div', 'fe-panel fe-ability');
