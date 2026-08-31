@@ -138,3 +138,77 @@ the name it leaves behind is never handed to anyone else: a name belongs, once a
 the first account that took it. Nobody inherits another player's name, and so nobody inherits
 what people remember about it.
 _Avoid_: slug, normalized name, canonical name
+
+**Roster**:
+The ten champions shipped with the game (`docs/design/roster.md`), as opposed to forged
+champions. The roster browser is the screen that lists champions.
+_Avoid_: base champions, default cast
+
+**Tagline**:
+The one-line play-style intent under a champion's name at select and in the roster browser.
+On a forged champion it carries real weight: it is what tells four allies what an unknown
+kit does.
+_Avoid_: blurb (the legacy field name in code), motto, description
+
+**Forge**:
+The in-game workshop where a participant creates a forged champion from scratch: name,
+appearance, stats, and spells, without leaving the game. An account feature (ADR 0006).
+_Avoid_: editor, character creator, workshop
+
+**Forged champion**:
+A champion authored by a participant in the Forge rather than shipped in the roster. Its kit
+is data composed from the same spell primitives as the roster and must fit the power budget.
+Playable only in the Forge queue.
+_Avoid_: custom champion, user-generated champion
+
+**Forge queue**:
+The matchmaking queue where forged champions are allowed, alongside roster champions. Every
+other queue is roster-only. Ranked on its own rating, separate from the standard queue's.
+_Avoid_: atelier mode, custom game (that is a private lobby)
+
+**Draft**:
+A forged champion still being authored in the Forge: kit, stats, name, and splash art are
+edited freely and previewed on the engine's stylized figure. Drafts are unlimited and free;
+finalizing one spends a creation and generates the champion's model.
+_Avoid_: WIP champion, unfinished champion
+
+**Creation**:
+The consumable unit of the Forge economy: finalizing a draft spends one, covering its 3D
+generations: the model with a couple of attempts included, and the weapon when generated.
+The splash art belongs to the free drafting stage, before finalization. A technical failure
+refunds the creation. Every account receives a weekly allocation (ADR 0011); buying more
+arrives with payments.
+_Avoid_: credit, generation token
+
+**Model sheet**:
+The technical 2D image the 3D generation accepts as its input: one character, full body,
+front-facing A-pose, empty hands, neutral background. Derived by the pipeline from the
+draft's validated splash art, together with a separate weapon reference; the player never
+authors it directly.
+_Avoid_: concept art, reference image
+
+**Gallery**:
+The public browse space of finalized forged champions: every finalized champion is listed by
+default (the creator can remove it), sorted by recent or popular, with likes, reports, and a
+free practice test-drive. Champions whose creator leaves sharing on (the default) are
+playable by anyone from the community tab at Forge-queue select.
+_Avoid_: workshop, hub, marketplace
+
+**Prop**:
+A separate model hung on a named bone of a champion's rig, the hand-held weapon foremost,
+with its own grip offsets. A forged champion's weapon is always a prop, never fused into the
+body mesh; it comes from the house weapon library or from its own generation.
+_Avoid_: attachment, accessory
+
+**Splash art**:
+The painted illustration of a champion, in the shared style of the set: the champion's face
+at select, in the roster browser, and on the profile. For a forged champion it is also the
+creative starting point: the first thing the player makes in the Forge, and the source
+everything else (model sheet, then model) derives from.
+_Avoid_: portrait (the legacy name in code for the resolution chain), painting
+
+**Power budget**:
+The point envelope a forged champion must fit inside: every stat point and every effect
+primitive in the kit has a cost, on top of hard per-field bounds. What makes forging a set
+of trade-offs instead of a max-everything form.
+_Avoid_: balance score, point buy

@@ -15,7 +15,7 @@ Vitest · Biome. No UI framework; tiny dependency set.
 
 - `docs/design/game-definition.md`: what the game is. `docs/design/roster.md`: the ten champions.
 - `docs/adr/`: the decisions and why. `CONTEXT.md`: the glossary; use its terms in code and docs.
-- `docs/plan-48h.md`: the build plan and phase order.
+- `docs/plan-48h.md`: the build plan and phase order. `docs/plan-forge.md`: the Forge build plan.
 
 ## Repo map
 
@@ -27,7 +27,7 @@ Vitest · Biome. No UI framework; tiny dependency set.
 | `src/game/` | Local input and client glue. |
 | `src/ui/` | HUD (DOM + CSS). |
 | `src/net/` | Online client: wire protocol + WebSocket mirror world. |
-| `server/` | Authoritative game server. |
+| `server/` | Authoritative game server; `server/generation/` is the Forge's provider seam (ADR 0010). |
 | `headless/` | The environment: a match stepped from outside the repo over NDJSON (ADR 0002 phase 2). |
 | `tests/` | Vitest suite, including the structural gates. |
 
