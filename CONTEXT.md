@@ -171,11 +171,25 @@ A forged champion still being authored in the Forge: kit, stats, name, and splas
 edited freely and previewed on the engine's stylized figure. Drafts are unlimited and free.
 The 3D happens in two player-approved steps, both on the draft: the BUILD spends a creation
 and produces the static model, which the creator inspects in the workshop (and may rebuild,
-spending another); ANIMATE, always last and always its own click, rigs the validated model,
-bakes the five clips the creator picked from the provider catalog, and seals the champion as
-finalized. The seal locks the kit, the art and the model, never the animations: a sealed
-champion re-bakes its clips freely, at no creation cost.
+spending another); ANIMATE, always last and always its own click, rigs the validated model
+once, bakes the clips the creator picked from the provider catalog, and seals the champion
+as finalized. The seal locks the kit, the art and the model, never the animations: a sealed
+champion changes any single clip and re-bakes JUST that one, freely, at no creation cost.
 _Avoid_: WIP champion, unfinished champion
+
+**Clip file**:
+An animation-only model file carrying one baked batch of preset clips, no geometry, riding
+beside a champion's rigged body: the unit of the per-clip bake. Changing one animation
+produces one new clip file; the other roles keep theirs. Champions sealed before the split
+carry their clips inside a single model file instead.
+_Avoid_: animation pack, clip bundle
+
+**Mannequin**:
+The neutral gray biped every catalog animation can be previewed on, instantly and at no
+cost, before it is baked onto a champion. An app asset generated once (body, rig, and the
+whole preset catalog as clip files) and shipped with the client, not a champion and not
+anyone's creation.
+_Avoid_: preview dummy, test character
 
 **Creation**:
 The consumable unit of the Forge economy: building a draft's 3D model spends one, covering
@@ -219,8 +233,8 @@ is the Forge.
 
 **Display tuning**:
 The creator's saved adjustments to how a forged champion's generated model is presented:
-height, facing, ground offset, and the weapon prop's kind, bone, and grip offsets.
-Stored server-side in the sealed assets, clamped by shared bounds, and read by every
+height, facing, ground offset, and the weapon prop's kind, bone, grip offsets, and uniform
+size. Stored server-side in the sealed assets, clamped by shared bounds, and read by every
 client in a match; pure presentation with zero gameplay effect, exactly like skins.
 _Avoid_: model settings, transform
 _Avoid_: model viewer, inspector, showroom

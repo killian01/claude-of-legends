@@ -9,7 +9,7 @@
 // is a slot bar (passive plus Q W E R) with the selected spell's icon
 // generation and parameters below it.
 
-import { registerForgedAssets } from '../game/forged_visuals';
+import { forgedClipFileUrls, registerForgedAssets } from '../game/forged_visuals';
 import type { ChampionBaseStats, ChampionGrowth, ChampionRole } from '../sim/content/champions';
 import { ABILITY_BOUNDS, BASE_STAT_BOUNDS, GROWTH_BOUNDS } from '../sim/forge/bounds';
 import { budgetOf, POWER_BUDGET } from '../sim/forge/budget';
@@ -18,6 +18,7 @@ import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import { PASSIVE_TEMPLATE_LIST, PASSIVE_TEMPLATES } from '../sim/forge/passive_templates';
 import { FORGED_ROLES, validateForged } from '../sim/forge/validate';
 import type { AbilityKey } from '../sim/types';
+import { type AnimPreview, createAnimPreview } from './anim_preview';
 import { buildCastEditor, defaultCast, type KitHooks, numField } from './forge_kit';
 import { startMenuBackdrop } from './menu_backdrop';
 import { openWorkshop } from './workshop';
@@ -283,6 +284,7 @@ interface DraftRow {
   family?: string | null;
   weapon?: string | null;
   clips?: Record<string, string> | null;
+  clipFiles?: Record<string, string> | null;
   display?: ForgedDisplay | null;
 }
 
@@ -500,7 +502,7 @@ export function openForgeEditor(container: HTMLElement): void {
   ];
   const ANIM_STAGES: readonly { key: string; label: string }[] = [
     { key: 'rig', label: 'Rigging the skeleton' },
-    { key: 'animate', label: 'Baking the five animations' },
+    { key: 'animate', label: 'Baking the picked animations' },
     { key: 'download', label: 'Bringing the clips home' },
   ];
   const WEAPON_STAGES: readonly { key: string; label: string }[] = [
@@ -526,6 +528,9 @@ export function openForgeEditor(container: HTMLElement): void {
     defaults: Record<string, Record<string, string>>;
   }
   let animCatalog: AnimCatalog | null = null;
+  // The mannequin preview stage, created lazily on the first Step 5
+  // render and reattached across renders.
+  let animPreview: AnimPreview | null = null;
   // The pick per clip role, sent with the bake.
   let animPicks: Record<string, string> = {};
   // Which champion the picks were seeded for (sealed picks or defaults);
@@ -542,8 +547,6 @@ export function openForgeEditor(container: HTMLElement): void {
     const d = animCatalog?.defaults[animFamily];
     if (d) animPicks = { ...d };
   };
-  const clipLabel = (role: string, id: string): string =>
-    animCatalog?.roles[role]?.find((c) => c.id === id)?.label ?? id;
   const loadAnimations = async (): Promise<void> => {
     const r = await api<{ ok: boolean } & AnimCatalog>('/api/forge/animations');
     if (r?.ok && r.roles) {
@@ -770,6 +773,7 @@ export function openForgeEditor(container: HTMLElement): void {
       sheetUrl: row.sheet ? assetUrl(row.sheet) : null,
       family: row.family ?? null,
       clips: row.clips ?? null,
+      clipFiles: forgedClipFileUrls(row.clipFiles),
       weaponUrl: row.weapon ? assetUrl(row.weapon) : null,
       display: row.display ?? null,
       editable: true,
@@ -956,9 +960,12 @@ export function openForgeEditor(container: HTMLElement): void {
   finalizeBtn.addEventListener('click', runForge);
 
   // The animate step, always LAST and always the player's own click: rig
-  // the validated model, bake the chosen clip family, seal the champion.
+  // the validated model once, bake the picked clips, seal the champion.
   // Included in the creation already spent; a failure can simply retry.
-  const runAnimate = (): void => {
+  // `picks` names only the roles this click bakes: a per-row button sends
+  // its one role, the full-set button sends all five; the server keeps
+  // whatever is already baked for the rest.
+  const runAnimate = (picks: Record<string, string>): void => {
     if (animating || finalizing || weaponForging) return;
     animating = true;
     currentStage = 'rig';
@@ -972,7 +979,7 @@ export function openForgeEditor(container: HTMLElement): void {
     void api<{ ok: boolean; jobId?: number; error?: string }>('/api/forge/animate', {
       id: current.id,
       family: animFamily,
-      ...(Object.keys(animPicks).length > 0 ? { clips: animPicks } : {}),
+      ...(Object.keys(picks).length > 0 ? { clips: picks } : {}),
     }).then((started) => {
       if (!started?.ok || started.jobId === undefined) {
         settle(started?.error ?? 'the animations could not start');
@@ -1480,14 +1487,19 @@ export function openForgeEditor(container: HTMLElement): void {
           'p',
           'fe-lead',
           sealed
-            ? 'The seal locks the kit, the art and the model, NEVER the animations: re-pick ' +
-                'any of the five clips below and rebake, free, as often as you like.'
+            ? 'The seal locks the kit, the art and the model, NEVER the animations: change ' +
+                'any clip below and bake JUST that one, free, as often as you like.'
             : 'Once the model is built and you are happy with it, pick each of the five clips ' +
-                'from the catalog (every death for death, every strike for attack) and bake ' +
-                'them onto it. The style prefills the five; every pick is yours. Baking seals ' +
-                'the champion, included in the creation the build spent.',
+                'from the catalog (every death for death, every strike for attack). Each pick ' +
+                'plays on the gray mannequin the moment you choose it. Baking seals the ' +
+                'champion, included in the creation the build spent.',
         ),
       );
+      // The preview stage: any preset plays on the neutral mannequin the
+      // moment it is picked, before anything bakes. One three.js stage,
+      // created lazily and reattached across renders.
+      if (!animPreview) animPreview = createAnimPreview();
+      animPanel.append(animPreview.el);
       const famRow = el('div', 'fe-artrow');
       famRow.append(el('span', 'fe-field-label', 'Style prefill:'));
       const famSelect = el('select', 'fe-select') as HTMLSelectElement;
@@ -1505,8 +1517,13 @@ export function openForgeEditor(container: HTMLElement): void {
       });
       famRow.append(famSelect);
       animPanel.append(famRow);
-      // One select per clip role: the whole catalog for that role, the
-      // player's own pick (playtest: not a bundle).
+      // One row per clip role: the whole catalog for that role, the
+      // player's own pick (playtest: not a bundle), its baked state, and
+      // its OWN bake button the moment the pick differs from what is
+      // baked (playtest round 9: validate each animation, never five at
+      // a time).
+      const bakedNow = row?.clips ?? null;
+      const changedRoles: string[] = [];
       if (animCatalog) {
         for (const { role, label } of ROLE_LABELS) {
           const choices = animCatalog.roles[role] ?? [];
@@ -1524,8 +1541,31 @@ export function openForgeEditor(container: HTMLElement): void {
           if (picked !== undefined && choices.some((c) => c.id === picked)) sel.value = picked;
           sel.addEventListener('change', () => {
             animPicks[role] = sel.value;
+            animPreview?.show(sel.value, role);
+            renderMain();
           });
           rowEl.append(sel);
+          const play = el('button', 'fe-btn', 'Play') as HTMLButtonElement;
+          play.title = 'Play this pick on the mannequin';
+          play.addEventListener('click', () => animPreview?.show(sel.value, role));
+          rowEl.append(play);
+          const bakedId = bakedNow?.[role];
+          const changed = bakedId !== undefined && sel.value !== bakedId;
+          if (changed) changedRoles.push(role);
+          if (bakedId !== undefined && !changed) {
+            const chip = el('span', 'fe-desc', 'baked');
+            chip.title = bakedId;
+            rowEl.append(chip);
+          } else if (changed) {
+            const one = el('button', 'fe-gen', 'Bake this one (free)') as HTMLButtonElement;
+            one.disabled = busy || finalizing || weaponForging;
+            one.title = `Replaces only the ${label.toLowerCase()} animation; spends nothing`;
+            one.addEventListener('click', () => {
+              const pick = animPicks[role];
+              if (pick !== undefined) runAnimate({ [role]: pick });
+            });
+            rowEl.append(one);
+          }
           animPanel.append(rowEl);
         }
       } else {
@@ -1533,19 +1573,39 @@ export function openForgeEditor(container: HTMLElement): void {
           el('div', 'fe-desc', 'Loading the animation catalog... if it stays empty, reload.'),
         );
       }
-      const bake = el(
-        'button',
-        'fe-gen',
-        sealed ? 'Rebake the animations (free)' : 'Bake the animations (included in your creation)',
-      ) as HTMLButtonElement;
-      bake.disabled = !row?.model || busy || finalizing || weaponForging;
-      bake.title = !row?.model
-        ? 'Build the 3D model first (Step 4)'
-        : sealed
-          ? 'Replaces the current animations with your new picks; spends nothing'
-          : 'Rigs your validated model and bakes your picks; seals the champion';
-      bake.addEventListener('click', runAnimate);
-      animPanel.append(bake);
+      // The set-level button: the first bake needs all five at once; a
+      // sealed champion only shows it when several rows changed (one
+      // changed row bakes from its own button).
+      if (!sealed || bakedNow === null) {
+        const bake = el(
+          'button',
+          'fe-gen',
+          sealed ? 'Bake the animations (free)' : 'Bake the animations (included in your creation)',
+        ) as HTMLButtonElement;
+        bake.disabled = !row?.model || busy || finalizing || weaponForging;
+        bake.title = !row?.model
+          ? 'Build the 3D model first (Step 4)'
+          : 'Rigs your validated model and bakes your five picks; seals the champion';
+        bake.addEventListener('click', () => runAnimate(animPicks));
+        animPanel.append(bake);
+      } else if (changedRoles.length >= 2) {
+        const bake = el(
+          'button',
+          'fe-gen',
+          `Bake the ${changedRoles.length} changed animations (free)`,
+        ) as HTMLButtonElement;
+        bake.disabled = busy || finalizing || weaponForging;
+        bake.title = 'Replaces only the changed animations; spends nothing';
+        bake.addEventListener('click', () => {
+          const picks: Record<string, string> = {};
+          for (const role of changedRoles) {
+            const pick = animPicks[role];
+            if (pick !== undefined) picks[role] = pick;
+          }
+          runAnimate(picks);
+        });
+        animPanel.append(bake);
+      }
       if (sealed) {
         const openAnim = el('button', 'fe-gen', 'See them move');
         openAnim.addEventListener('click', openWorkshopHere);

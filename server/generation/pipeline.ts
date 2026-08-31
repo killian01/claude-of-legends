@@ -16,6 +16,7 @@ import path from 'node:path';
 import type { ForgedChampionDef } from '../../src/sim/forge/forged_def';
 import type { ForgeStore } from '../forge_store';
 import {
+  CLIP_ROLES,
   type ClipRole,
   GenerationError,
   type GenerationProvider,
@@ -56,8 +57,9 @@ export interface AnimateRequest {
   accountId: number;
   // The style the picks started from, kept for display.
   family: WeaponFamily;
-  // The player's own pick per clip role, validated against the provider
-  // catalog by server/forge.ts before this request exists.
+  // The player's FULL target: one pick per clip role, validated against
+  // the provider catalog by server/forge.ts before this request exists.
+  // The pipeline itself works out which roles actually need baking.
   clips: Readonly<Record<ClipRole, string>>;
 }
 
@@ -245,6 +247,13 @@ export function startAnimate(deps: PipelineDeps, req: AnimateRequest): PipelineS
   return { ok: true, jobId, done };
 }
 
+// The per-clip bake (playtest round 9: validate each animation on its
+// own, never five at a time). The rig happens ONCE and its task id and
+// file are kept on the assets; every bake after that retargets only the
+// roles whose pick changed (or that never had a clip file), as an
+// animation-only GLB. The displayed model becomes the rigged body plus
+// the per-role clip files; champions baked before the split keep their
+// single embedded model until their first re-bake transitions them.
 async function runAnimate(
   deps: PipelineDeps,
   jobId: number,
@@ -256,26 +265,57 @@ async function runAnimate(
     deps.storage.updateGenerationJob(jobId, { stage: name }, now());
   };
   try {
-    stage('rig');
-    const rigged = await deps.provider.rig({ modelTaskId: modelTask, rigType: 'biped' });
+    const before =
+      (deps.storage.forgedAssets(req.forgedId) as Record<string, unknown> | null) ?? {};
+    const prevClips = (before.clips ?? {}) as Record<string, string>;
+    const prevFiles = (before.clipFiles ?? {}) as Record<string, string>;
+    // What actually bakes: a changed pick, or a role with no clip file
+    // yet (the first bake, and the pre-split champion's transition).
+    const delta = CLIP_ROLES.filter(
+      (role) => req.clips[role] !== prevClips[role] || typeof prevFiles[role] !== 'string',
+    );
 
-    stage('animate');
-    const animated = await deps.provider.animate({
-      riggedTaskId: rigged.taskId,
-      clips: req.clips,
-    });
+    // Rig once, keep forever: the stored rig task feeds every later bake.
+    let rigTask = typeof before.rigTask === 'string' ? before.rigTask : null;
+    let riggedPath = typeof before.rigged === 'string' ? before.rigged : null;
+    let rigProvenance: unknown = null;
+    if (delta.length > 0 && (rigTask === null || riggedPath === null)) {
+      stage('rig');
+      const rigged = await deps.provider.rig({ modelTaskId: modelTask, rigType: 'biped' });
+      riggedPath = `forged/${req.forgedId}/rigged_${jobId}.glb`;
+      await deps.download(rigged.url, path.join(deps.assetsDir, riggedPath));
+      checkBudget(deps, riggedPath, deps.budgets?.modelKb);
+      rigTask = rigged.taskId;
+      rigProvenance = rigged.provenance;
+    }
 
-    stage('download');
-    const animatedPath = `forged/${req.forgedId}/animated_${jobId}.glb`;
-    await deps.download(animated.url, path.join(deps.assetsDir, animatedPath));
-    checkBudget(deps, animatedPath, deps.budgets?.modelKb);
+    let clipsPath: string | null = null;
+    let bakeProvenance: unknown = null;
+    if (delta.length > 0 && rigTask !== null) {
+      stage('animate');
+      const animations = [...new Set(delta.map((role) => req.clips[role]))];
+      const baked = await deps.provider.animate({
+        riggedTaskId: rigTask,
+        animations,
+        withGeometry: false,
+      });
+      stage('download');
+      clipsPath = `forged/${req.forgedId}/clips_${jobId}.glb`;
+      await deps.download(baked.url, path.join(deps.assetsDir, clipsPath));
+      checkBudget(deps, clipsPath, deps.budgets?.modelKb);
+      bakeProvenance = baked.provenance;
+    }
 
-    // Sealed with the champion: the animated model replaces the static
-    // one as THE model, plus the chosen splash and spell icons as they
-    // stand (candidate files are never pruned once chosen) and the
-    // appended provenance.
+    // Sealed with the champion: the rigged body, the pick and the clip
+    // file per role, plus the chosen splash and spell icons as they
+    // stand and the appended provenance. Re-read after the awaits so a
+    // concurrent art choice is not clobbered.
     const assets =
       (deps.storage.forgedAssets(req.forgedId) as Record<string, unknown> | null) ?? {};
+    const clipFiles: Record<string, string> = { ...prevFiles };
+    if (clipsPath !== null) {
+      for (const role of delta) clipFiles[role] = clipsPath;
+    }
     const splash = deps.storage.chosenArt(req.forgedId, 'splash');
     const icons: Record<string, string> = {};
     for (const key of ['Q', 'W', 'E', 'R']) {
@@ -287,13 +327,14 @@ async function runAnimate(
       req.forgedId,
       {
         ...assets,
-        model: animatedPath,
+        ...(rigTask !== null && riggedPath !== null ? { rigTask, rigged: riggedPath } : {}),
         family: req.family,
         // The exact pick per role: the renderer plays THESE, no guessing.
         clips: req.clips,
+        clipFiles,
         ...(splash ? { splash: splash.path } : {}),
         ...(Object.keys(icons).length > 0 ? { icons } : {}),
-        provenance: [...provenance, rigged.provenance, animated.provenance].filter(
+        provenance: [...provenance, rigProvenance, bakeProvenance].filter(
           (p) => p !== null && p !== undefined,
         ),
       },

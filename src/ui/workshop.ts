@@ -20,9 +20,10 @@ import {
   FORGED_DEFAULT_HEIGHT,
   forgedPropModel,
   guessHandBone,
-  travelYawFix,
+  loadForgedClipFiles,
+  prepareForgedRun,
 } from '../render/champions/forged';
-import { resolveForgedClips, stripStanceLead, stripTravel } from '../render/champions/forged_clips';
+import { resolveForgedClips } from '../render/champions/forged_clips';
 import type { ChampionClipNames } from '../render/champions/manifest';
 import {
   DISPLAY_BOUNDS,
@@ -129,6 +130,9 @@ export interface WorkshopSubject {
   // The creator's exact clip pick per renderer role (baked names); labels
   // the clip buttons without name guessing when present.
   clips?: Record<string, string> | null;
+  // Per-role animation-only GLBs (asset-route URLs) riding beside a
+  // rigged model; merged into the playable clip set on load.
+  clipFiles?: Record<string, string> | null;
   // The champion's own generated weapon GLB (asset-route URL), when built;
   // unlocks the 'generated' prop kind.
   weaponUrl?: string | null;
@@ -491,22 +495,19 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     // slider zeroed so the saved tuning cannot pollute the reading.
     const runName = roleName('run');
     const runClip = runName !== undefined ? clips.find((c) => c.name === runName) : undefined;
-    if (runClip) {
-      const removed = stripTravel(runClip);
-      // The trimmed preset starts mid-stride: rebase the detrended loop
-      // onto the idle stance, exactly as the match does.
+    if (runClip && model) {
+      // Measured with the facing slider zeroed so the saved tuning
+      // cannot pollute the reading; when the match already stripped and
+      // measured this very clip object, the stored fix comes back.
       const idleName = roleName('idle');
       const idleClip = idleName !== undefined ? clips.find((c) => c.name === idleName) : undefined;
-      if (idleClip && idleClip !== runClip) stripStanceLead(runClip, idleClip, removed);
-      if (model && removed.length > 0) {
-        const prevYaw = yawGroup.rotation.y;
-        yawGroup.rotation.y = 0;
-        const fix = travelYawFix(model, removed, rawHeight * 0.15);
-        yawGroup.rotation.y = prevYaw;
-        if (fix !== null) {
-          autoYaw = fix;
-          applyModelTuning();
-        }
+      const prevYaw = yawGroup.rotation.y;
+      yawGroup.rotation.y = 0;
+      const fix = prepareForgedRun(model, runClip, idleClip, rawHeight);
+      yawGroup.rotation.y = prevYaw;
+      if (fix !== null) {
+        autoYaw = fix;
+        applyModelTuning();
       }
     }
     const labeled = new Map<string, string>();
@@ -551,9 +552,18 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       applyModelTuning();
       rebuildProp(false);
       buildWeaponControls();
-      mixer = new THREE.AnimationMixer(model);
-      clips = gltf.animations;
-      buildClipButtons();
+      const rig = model;
+      // A per-clip-baked champion keeps its animations in files beside
+      // the rigged body; merge them before the buttons build.
+      const extra =
+        subject.clipFiles && Object.keys(subject.clipFiles).length > 0
+          ? loadForgedClipFiles(subject.clipFiles, subject.clips ?? null)
+          : Promise.resolve([]);
+      void extra.then((loaded) => {
+        mixer = new THREE.AnimationMixer(rig);
+        clips = [...gltf.animations, ...loaded];
+        buildClipButtons();
+      });
     },
     undefined,
     () => {

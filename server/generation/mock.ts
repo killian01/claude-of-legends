@@ -94,7 +94,8 @@ export class MockProvider implements GenerationProvider {
 
   animate(req: {
     riggedTaskId: string;
-    clips: Readonly<Record<ClipRole, string>>;
+    animations: readonly string[];
+    withGeometry: boolean;
   }): Promise<ProviderAsset> {
     return this.produce('animate', 'animated', req);
   }

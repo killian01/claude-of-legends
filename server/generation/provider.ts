@@ -101,10 +101,14 @@ export interface GenerationProvider {
   // The family's suggested pick per role: the quick-pick prefill and the
   // fallback for any role the player left untouched.
   clipDefaults(family: WeaponFamily): Readonly<Record<ClipRole, string>>;
-  // Bake the five picked clips onto a rigged model; one animated GLB
-  // carrying every clip, each named by its id.
+  // Bake a batch of preset clips onto a rigged model (at most 5 per
+  // task, the live retarget limit): one GLB naming each clip by its
+  // preset id. withGeometry false asks for an animation-only file, the
+  // per-clip bake architecture's small artifact; true bakes a full
+  // self-contained model (how pre-split champions were sealed).
   animate(req: {
     riggedTaskId: string;
-    clips: Readonly<Record<ClipRole, string>>;
+    animations: readonly string[];
+    withGeometry: boolean;
   }): Promise<ProviderAsset>;
 }

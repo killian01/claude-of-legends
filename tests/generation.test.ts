@@ -147,7 +147,10 @@ describe('the mock pipeline end to end', () => {
     expect(built.ok).toBe(true);
     if (!built.ok) return;
     await built.done;
-    const modelTask = (r.store.forgedAssets(r.def.id) as { modelTask: string }).modelTask;
+    if (!built.ok) return;
+    const assets0 = r.store.forgedAssets(r.def.id) as { modelTask: string; model: string };
+    const modelTask = assets0.modelTask;
+    const staticModel = assets0.model;
 
     const start = startAnimate(r.pipeline, {
       forgedId: r.def.id,
@@ -165,27 +168,107 @@ describe('the mock pipeline end to end', () => {
     expect(r.store.getForged(r.def.id)?.status).toBe('finalized');
     const assets = r.store.forgedAssets(r.def.id) as {
       model: string;
+      rigged: string;
+      rigTask: string;
       family: string;
       splash: string;
       clips: Record<string, string>;
+      clipFiles: Record<string, string>;
       provenance: { provider: string }[];
     };
-    // The animated file replaces the static one as THE model, and the
-    // exact pick per role seals with it (the renderer plays THESE).
-    expect(assets.model).toBe(`forged/${r.def.id}/animated_${start.jobId}.glb`);
+    // The per-clip architecture: the static model stays THE model record,
+    // the rigged body and the animation-only clip file land beside it,
+    // and the exact pick per role seals with them.
+    expect(assets.model).toBe(staticModel);
+    expect(assets.rigged).toBe(`forged/${r.def.id}/rigged_${start.jobId}.glb`);
+    expect(typeof assets.rigTask).toBe('string');
     expect(assets.family).toBe('staff');
     expect(assets.clips).toEqual(MOCK_CLIPS);
+    const clipsPath = `forged/${r.def.id}/clips_${start.jobId}.glb`;
+    expect(assets.clipFiles).toEqual(
+      Object.fromEntries(CLIP_ROLES.map((role) => [role, clipsPath])),
+    );
     // The chosen splash is sealed with the champion (ADR 0010).
     expect(assets.splash).toBe(r.splashRel);
     expect(assets.provenance).toHaveLength(4);
     expect(assets.provenance.every((p) => p.provider === 'mock')).toBe(true);
-    // The rig ran on the EXACT model the player validated.
+    // The rig ran on the EXACT model the player validated, and the bake
+    // asked for an animation-only file of the five picks in role order.
     expect(r.provider.seen.find((s) => s.op === 'rig')?.req).toMatchObject({
       modelTaskId: modelTask,
     });
-    expect(r.downloads.at(-1)?.url).toContain('mock://animated/');
+    expect(r.provider.seen.find((s) => s.op === 'animate')?.req).toEqual({
+      riggedTaskId: assets.rigTask,
+      animations: CLIP_ROLES.map((role) => MOCK_CLIPS[role]),
+      withGeometry: false,
+    });
+    expect(r.downloads.map((d) => d.url)).toEqual([
+      expect.stringContaining('mock://model/'),
+      expect.stringContaining('mock://rigged/'),
+      expect.stringContaining('mock://animated/'),
+    ]);
     // The creation was spent at the build; animate moved nothing.
     expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+  });
+
+  it('re-bakes ONLY the changed role, on the stored rig, and spends nothing', async () => {
+    const r = rig();
+    const built = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+    await built.done;
+    const first = startAnimate(r.pipeline, {
+      forgedId: r.def.id,
+      accountId: ACCOUNT,
+      family: 'staff',
+      clips: MOCK_CLIPS,
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    await first.done;
+    const firstFiles = (r.store.forgedAssets(r.def.id) as { clipFiles: Record<string, string> })
+      .clipFiles;
+
+    const rebake = startAnimate(r.pipeline, {
+      forgedId: r.def.id,
+      accountId: ACCOUNT,
+      family: 'staff',
+      clips: { ...MOCK_CLIPS, attack: 'attack_alt' },
+    });
+    expect(rebake.ok).toBe(true);
+    if (!rebake.ok) return;
+    await rebake.done;
+
+    // ONE rig total: the stored rig task fed the second bake, which
+    // carried only the changed role.
+    expect(r.provider.seen.filter((s) => s.op === 'rig')).toHaveLength(1);
+    const bakes = r.provider.seen.filter((s) => s.op === 'animate');
+    expect(bakes).toHaveLength(2);
+    expect(bakes[1]?.req).toMatchObject({ animations: ['attack_alt'], withGeometry: false });
+    const assets = r.store.forgedAssets(r.def.id) as {
+      clips: Record<string, string>;
+      clipFiles: Record<string, string>;
+    };
+    expect(assets.clips).toEqual({ ...MOCK_CLIPS, attack: 'attack_alt' });
+    // The attack points at the fresh file; every other role keeps its
+    // first bake.
+    expect(assets.clipFiles.attack).toBe(`forged/${r.def.id}/clips_${rebake.jobId}.glb`);
+    expect(assets.clipFiles.idle).toBe(firstFiles.idle);
+    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+
+    // Nothing changed at all: no provider call, still sealed, still free.
+    const noop = startAnimate(r.pipeline, {
+      forgedId: r.def.id,
+      accountId: ACCOUNT,
+      family: 'staff',
+      clips: { ...MOCK_CLIPS, attack: 'attack_alt' },
+    });
+    expect(noop.ok).toBe(true);
+    if (!noop.ok) return;
+    await noop.done;
+    expect(r.store.getGenerationJob(noop.jobId)?.status).toBe('success');
+    expect(r.provider.seen.filter((s) => s.op === 'animate')).toHaveLength(2);
+    expect(r.store.getForged(r.def.id)?.status).toBe('finalized');
   });
 
   it('refuses to animate before the model is built', () => {
@@ -323,7 +406,9 @@ describe('the mock pipeline end to end', () => {
     if (out.ok) await out.done;
     expect((r.store.forgedAssets(r.def.id) as { family: string }).family).toBe('slashing');
     const animate = r.provider.seen.find((s) => s.op === 'animate');
-    expect(animate?.req).toMatchObject({ clips: MOCK_CLIPS });
+    expect(animate?.req).toMatchObject({
+      animations: CLIP_ROLES.map((role) => MOCK_CLIPS[role]),
+    });
   });
 
   it('honors per-clip picks over the style, and refuses catalog strangers', async () => {
@@ -349,7 +434,9 @@ describe('the mock pipeline end to end', () => {
     expect(out.ok).toBe(true);
     if (out.ok) await out.done;
     const want = { ...MOCK_CLIPS, attack: 'attack_alt', death: 'death_alt' };
-    expect(r.provider.seen.find((s) => s.op === 'animate')?.req).toMatchObject({ clips: want });
+    expect(r.provider.seen.find((s) => s.op === 'animate')?.req).toMatchObject({
+      animations: CLIP_ROLES.map((role) => want[role]),
+    });
     expect((r.store.forgedAssets(r.def.id) as { clips: unknown }).clips).toEqual(want);
   });
 
@@ -550,6 +637,13 @@ describe('the build and animate gates (server/forge.ts)', () => {
     expect(r.store.getForged(r.def.id)?.status).toBe('finalized');
     const clips = (r.store.forgedAssets(r.def.id) as { clips: Record<string, string> }).clips;
     expect(clips.attack).toBe('attack_alt');
+    // The untouched roles kept the FIRST bake's picks: the request named
+    // only the attack, so only the attack baked, on the stored rig.
+    expect(clips.idle).toBe('idle');
+    expect(r.provider.seen.filter((s) => s.op === 'rig')).toHaveLength(1);
+    expect(r.provider.seen.filter((s) => s.op === 'animate').at(-1)?.req).toMatchObject({
+      animations: ['attack_alt'],
+    });
     expect(r.store.creditBalance(ACCOUNT)).toBe(2);
   });
 
@@ -676,9 +770,19 @@ describe('the tripo provider against scripted responses', () => {
       rig_type: 'biped',
       spec: 'tripo',
     });
-    // The retarget carries the PICKED clips, in stable role order.
-    await provider.animate({ riggedTaskId: 'rig-task', clips: TRIPO_CLIPS.slashing });
-    expect(bodies[1]?.animations).toEqual(CLIP_ROLES.map((role) => TRIPO_CLIPS.slashing[role]));
+    // The retarget carries exactly the requested presets, and the
+    // per-clip architecture's geometry-free flag rides through.
+    await provider.animate({
+      riggedTaskId: 'rig-task',
+      animations: CLIP_ROLES.map((role) => TRIPO_CLIPS.slashing[role]),
+      withGeometry: false,
+    });
+    expect(bodies[1]).toMatchObject({
+      input: 'rig-task',
+      animations: CLIP_ROLES.map((role) => TRIPO_CLIPS.slashing[role]),
+      bake_animation: true,
+      export_with_geometry: false,
+    });
   });
 
   it('offers a catalog per role that contains every family default', () => {

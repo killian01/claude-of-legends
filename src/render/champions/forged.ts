@@ -35,9 +35,33 @@ export interface ForgedSource {
   // The facing fix measured from the run clip's removed travel (below);
   // zero until a traveling run has been stripped.
   travelYaw: number;
-  // Which clips already had their travel stripped (stripping is in
-  // place, so a template rebuild must not re-measure a flat clip).
-  strippedRuns: Set<string>;
+}
+
+// Which clip objects already had their travel stripped, and what facing
+// fix that first pass measured: stripping is in place, so whoever
+// arrives second (the workshop and the match share cached clip-file
+// objects) must read the stored measurement instead of measuring a
+// clip that is already flat.
+const strippedClips = new WeakSet<THREE.AnimationClip>();
+const measuredRunYaw = new WeakMap<THREE.AnimationClip, number | null>();
+
+// Strips the run clip's travel exactly once per clip object (rebasing
+// it onto the idle stance), and returns the facing fix measured from
+// the removed travel: null when the clip barely traveled. Safe to call
+// from every template rebuild and from the workshop alike.
+export function prepareForgedRun(
+  scene: THREE.Object3D,
+  run: THREE.AnimationClip,
+  idle: THREE.AnimationClip | undefined,
+  rawHeight: number,
+): number | null {
+  if (!strippedClips.has(run)) {
+    strippedClips.add(run);
+    const removed = stripTravel(run);
+    if (idle && idle !== run) stripStanceLead(run, idle, removed);
+    measuredRunYaw.set(run, travelYawFix(scene, removed, rawHeight * 0.15));
+  }
+  return measuredRunYaw.get(run) ?? null;
 }
 
 // The whole-model facing fix, measured and never guessed: a generated
@@ -76,6 +100,9 @@ interface ForgedEntry {
   // The creator's exact clip pick per renderer role (the baked names);
   // null on models sealed before per-clip picks existed.
   clips: Record<string, string> | null;
+  // Per-role animation-only GLBs (asset-route URLs) riding beside a
+  // rigged model; null when the model file carries its clips itself.
+  clipFiles: Record<string, string> | null;
   source: Promise<ForgedSource | null>;
   // Cache against the display used to build it; invalidated on re-register
   // with fresh tuning.
@@ -111,7 +138,6 @@ export function loadForgedSource(url: string): Promise<ForgedSource | null> {
         minY: box.min.y,
         boneNames,
         travelYaw: 0,
-        strippedRuns: new Set<string>(),
       };
     })
     .catch((err) => {
@@ -127,6 +153,50 @@ export function guessHandBone(boneNames: readonly string[]): string | null {
   const right = boneNames.find((n) => /r[_.]?hand|righthand|hand[_.]?r\b/i.test(n));
   if (right) return right;
   return boneNames.find((n) => /hand/i.test(n)) ?? null;
+}
+
+// Animation-only clip files, fetched once per URL and shared by every
+// template rebuild (the files are job-numbered, so a URL's content never
+// changes). Returns the clips named as baked; when a picked name is
+// missing from its file, the file's first clip stands in under the
+// picked name, so a provider spelling surprise degrades to the right
+// motion instead of a frozen champion.
+const clipFileCache = new Map<string, Promise<THREE.AnimationClip[] | null>>();
+
+export async function loadForgedClipFiles(
+  files: Record<string, string>,
+  picked: Record<string, string> | null,
+): Promise<THREE.AnimationClip[]> {
+  const byUrl = new Map<string, string[]>();
+  for (const [role, url] of Object.entries(files)) {
+    byUrl.set(url, [...(byUrl.get(url) ?? []), role]);
+  }
+  const out: THREE.AnimationClip[] = [];
+  for (const [url, roles] of byUrl) {
+    let cached = clipFileCache.get(url);
+    if (!cached) {
+      cached = gltfLoader()
+        .loadAsync(url)
+        .then((g) => g.animations)
+        .catch((err) => {
+          console.warn(`forged clip file failed to load (${url}):`, err);
+          return null;
+        });
+      clipFileCache.set(url, cached);
+    }
+    const anims = await cached;
+    if (!anims || anims.length === 0) continue;
+    out.push(...anims);
+    for (const role of roles) {
+      const want = picked?.[role];
+      const first = anims[0];
+      if (want === undefined || first === undefined || anims.some((a) => a.name === want)) continue;
+      const alias = first.clone();
+      alias.name = want;
+      out.push(alias);
+    }
+  }
+  return out;
 }
 
 // The house weapon library: the roster's own generated 3D weapon models
@@ -170,10 +240,8 @@ function pickedClips(
   return { idle, run, attack, cast, windup: cast, death };
 }
 
-function buildDef(entry: ForgedEntry, source: ForgedSource): ChampionVisualDef | null {
-  const clips =
-    pickedClips(entry.clips, new Set(source.clips.keys())) ??
-    resolveForgedClips([...source.clips.keys()]);
+function buildDef(entry: ForgedEntry, clipNames: ReadonlySet<string>): ChampionVisualDef | null {
+  const clips = pickedClips(entry.clips, clipNames) ?? resolveForgedClips([...clipNames]);
   if (!clips) return null;
   const d = entry.display;
   const height = d.height ?? FORGED_DEFAULT_HEIGHT;
@@ -220,6 +288,7 @@ export function registerForgedModel(
     family?: string | null;
     weapon?: string | null;
     clips?: Record<string, string> | null;
+    clipFiles?: Record<string, string> | null;
   },
 ): void {
   const existing = entries.get(championId);
@@ -237,6 +306,13 @@ export function registerForgedModel(
       existing.clips = opts.clips ?? null;
       existing.template = null;
     }
+    if (opts?.clipFiles !== undefined) {
+      const next = opts.clipFiles ?? null;
+      if (JSON.stringify(existing.clipFiles) !== JSON.stringify(next)) {
+        existing.clipFiles = next;
+        existing.template = null;
+      }
+    }
     return;
   }
   entries.set(championId, {
@@ -245,6 +321,7 @@ export function registerForgedModel(
     family: opts?.family ?? null,
     weaponUrl: opts?.weapon ?? null,
     clips: opts?.clips ?? null,
+    clipFiles: opts?.clipFiles ?? null,
     source: loadForgedSource(modelUrl),
     template: null,
   });
@@ -271,21 +348,24 @@ export async function forgedChampionTemplate(
   const source = await entry.source;
   if (!source) return null;
   if (!entry.template) {
-    const def = buildDef(entry, source);
+    // The playable clip set: the model's own animations plus the
+    // per-role clip files when the champion bakes per clip (the rigged
+    // body itself carries none).
+    const clips = new Map(source.clips);
+    if (entry.clipFiles) {
+      for (const clip of await loadForgedClipFiles(entry.clipFiles, entry.clips)) {
+        clips.set(clip.name, clip);
+      }
+    }
+    const def = buildDef(entry, new Set(clips.keys()));
     if (!def) return null;
     // The run cycle plays on the spot (the mover owns all translation),
     // and the direction it traveled reveals the model's true forward:
     // the whole model turns so that direction lands on the renderer's
     // +Z, on top of whatever facing the creator tuned.
-    const run = source.clips.get(def.clips.run);
-    if (run && !source.strippedRuns.has(def.clips.run)) {
-      source.strippedRuns.add(def.clips.run);
-      const removed = stripTravel(run);
-      // The trimmed preset starts mid-stride: rebase the detrended loop
-      // onto the idle stance so the cycle plays centered on the mover.
-      const idle = source.clips.get(def.clips.idle);
-      if (idle && idle !== run) stripStanceLead(run, idle, removed);
-      const fix = travelYawFix(source.scene, removed, source.rawHeight * 0.15);
+    const run = clips.get(def.clips.run);
+    if (run) {
+      const fix = prepareForgedRun(source.scene, run, clips.get(def.clips.idle), source.rawHeight);
       if (fix !== null) source.travelYaw = fix;
     }
     if (source.travelYaw !== 0) def.yawOffset = (def.yawOffset ?? 0) + source.travelYaw;
@@ -305,7 +385,7 @@ export async function forgedChampionTemplate(
     entry.template = {
       def,
       scene: source.scene,
-      clips: source.clips,
+      clips,
       scale,
       groundY: -source.minY * scale,
       props,

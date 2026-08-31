@@ -14,11 +14,23 @@ export interface ForgedAssetPointers {
   weapon?: string | null;
   // The creator's exact clip pick per renderer role (baked names).
   clips?: Record<string, string> | null;
+  // Per-role animation-only GLBs riding beside a rigged model.
+  clipFiles?: Record<string, string> | null;
   display?: ForgedDisplay | null;
 }
 
 export function forgedAssetUrl(rel: string): string {
   return `/api/forge/asset/${rel}`;
+}
+
+// Prefixes every clip-file path with the asset route, role keys intact.
+export function forgedClipFileUrls(
+  files: Record<string, string> | null | undefined,
+): Record<string, string> | null {
+  if (!files) return null;
+  return Object.fromEntries(
+    Object.entries(files).map(([role, rel]) => [role, forgedAssetUrl(rel)]),
+  );
 }
 
 export function registerForgedAssets(id: string, a: ForgedAssetPointers): void {
@@ -28,5 +40,6 @@ export function registerForgedAssets(id: string, a: ForgedAssetPointers): void {
     family: a.family ?? null,
     weapon: a.weapon ? forgedAssetUrl(a.weapon) : null,
     clips: a.clips ?? null,
+    clipFiles: forgedClipFileUrls(a.clipFiles),
   });
 }

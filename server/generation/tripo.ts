@@ -17,7 +17,6 @@
 // over the actual clips (chop stands in for blunt).
 
 import {
-  CLIP_ROLES,
   type ClipChoice,
   type ClipRole,
   GenerationError,
@@ -333,15 +332,16 @@ export class TripoProvider implements GenerationProvider {
 
   async animate(req: {
     riggedTaskId: string;
-    clips: Readonly<Record<ClipRole, string>>;
+    animations: readonly string[];
+    withGeometry: boolean;
   }): Promise<ProviderAsset> {
     const taskId = await this.post('/animations/retarget', {
       input: req.riggedTaskId,
-      // Role order, stable: the baked GLB names each clip by its preset id.
-      animations: CLIP_ROLES.map((role) => req.clips[role]),
+      // The baked GLB names each clip by its preset id.
+      animations: [...req.animations],
       out_format: 'glb',
       bake_animation: true,
-      export_with_geometry: true,
+      export_with_geometry: req.withGeometry,
     });
     return this.awaitTask(taskId, RIG_MODEL);
   }

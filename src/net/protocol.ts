@@ -22,6 +22,10 @@ export interface ForgedMatchAssets {
   // death), as the creator picked them; null on models sealed before the
   // pick existed (the renderer then falls back to name matching).
   clips: Record<string, string> | null;
+  // Per-role animation-only GLBs riding beside a rigged model (relative
+  // asset paths): the per-clip bake architecture. Null when the model is
+  // a single self-contained file (pre-split bakes, and the mock).
+  clipFiles: Record<string, string> | null;
   display: ForgedDisplay | null;
 }
 

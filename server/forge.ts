@@ -192,16 +192,16 @@ export function buildModel(
 }
 
 // The second half, always LAST and always the player's own click: rig
-// the built model, bake the five picked clips, seal the champion. The
+// the built model once, bake the picked clips, seal the champion. The
 // creation was spent at the build, so this moves the ledger in neither
-// direction and can simply run again after a failure. The family is the
-// style the picks started from; each role's pick is the player's own,
-// validated against the provider's catalog (playtest: not a bundle,
-// every animation its own choice), with the family default filling any
-// role left unpicked. A SEALED champion may run this again: the seal
-// locks the kit, the art and the model, never the animations (playtest:
-// creators keep re-picking clips after the seal), so a re-bake simply
-// replaces the animated file and the stored picks.
+// direction and can simply run again after a failure. Each role's pick
+// is the player's own, validated against the provider's catalog
+// (playtest: not a bundle, every animation its own choice); roles the
+// request leaves out keep what is already baked, family defaults fill
+// only never-baked roles, and the pipeline retargets ONLY the roles
+// that changed (playtest round 9: one animation bakes on its own). A
+// SEALED champion may run this again: the seal locks the kit, the art
+// and the model, never the animations.
 export function animateChampion(
   deps: ForgeDeps,
   accountId: number,
@@ -216,12 +216,27 @@ export function animateChampion(
   if (!row || row.accountId !== accountId) {
     return { ok: false, error: 'no such champion on this account' };
   }
+  const assets =
+    (deps.store.forgedAssets(id) as { family?: unknown; clips?: unknown } | null) ?? {};
+  const storedFamily = typeof assets.family === 'string' ? assets.family : '';
   const picked = (WEAPON_FAMILIES as readonly string[]).includes(family ?? '')
     ? (family as WeaponFamily)
-    : familyOf(row.def);
+    : (WEAPON_FAMILIES as readonly string[]).includes(storedFamily)
+      ? (storedFamily as WeaponFamily)
+      : familyOf(row.def);
   const provider = deps.generation.provider;
   const choices = provider.clipChoices();
-  const clips: Record<ClipRole, string> = { ...provider.clipDefaults(picked) };
+  // The baseline under the player's picks: what is already baked first
+  // (so an untouched role never re-bakes), the family default only for a
+  // role that has never been baked at all.
+  const baked = (
+    typeof assets.clips === 'object' && assets.clips !== null ? assets.clips : {}
+  ) as Record<string, unknown>;
+  const defaults = provider.clipDefaults(picked);
+  const clips = {} as Record<ClipRole, string>;
+  for (const role of CLIP_ROLES) {
+    clips[role] = typeof baked[role] === 'string' ? (baked[role] as string) : defaults[role];
+  }
   if (typeof clipsRaw === 'object' && clipsRaw !== null) {
     for (const role of CLIP_ROLES) {
       const want = (clipsRaw as Record<string, unknown>)[role];

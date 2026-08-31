@@ -118,8 +118,9 @@ describe('setForgedDisplay', () => {
       family: 'staff',
       weapon: null,
       // Sealed before per-clip picks existed: the renderer falls back to
-      // clip-name matching.
+      // clip-name matching, and there are no per-role clip files.
       clips: null,
+      clipFiles: null,
       display: { height: 3.0 },
     });
     // An unknown or asset-less definition still answers, with nulls: the
@@ -129,7 +130,31 @@ describe('setForgedDisplay', () => {
       family: null,
       weapon: null,
       clips: null,
+      clipFiles: null,
       display: null,
+    });
+    store.close();
+  });
+
+  it('shows the rigged body plus clip files once a champion bakes per clip', () => {
+    const store = seeded();
+    store.setForgedFinalized(
+      'forged_a',
+      {
+        model: 'forged/forged_a/model_1.glb',
+        rigged: 'forged/forged_a/rigged_2.glb',
+        rigTask: 'rig-t',
+        family: 'staff',
+        clips: { idle: 'preset:biped:idle' },
+        clipFiles: { idle: 'forged/forged_a/clips_2.glb' },
+      },
+      20,
+    );
+    const block = forgedMatchAssets(store, [twin(0, 'forged_a', 'alice')]);
+    expect(block.forged_a).toMatchObject({
+      model: 'forged/forged_a/rigged_2.glb',
+      clips: { idle: 'preset:biped:idle' },
+      clipFiles: { idle: 'forged/forged_a/clips_2.glb' },
     });
     store.close();
   });

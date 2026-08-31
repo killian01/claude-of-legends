@@ -4,7 +4,7 @@
 // creator's switches) in a rail on the right. Pure DOM over /api/gallery;
 // Escape or Back closes it to whatever screen opened it.
 
-import { registerForgedAssets } from '../game/forged_visuals';
+import { forgedClipFileUrls, registerForgedAssets } from '../game/forged_visuals';
 import type { ChampionRole } from '../sim/content/champions';
 import type { ForgedDisplay } from '../sim/forge/display';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
@@ -34,6 +34,7 @@ export interface GalleryEntry {
   family: string | null;
   weapon: string | null;
   clips: Record<string, string> | null;
+  clipFiles: Record<string, string> | null;
   display: ForgedDisplay | null;
 }
 
@@ -256,6 +257,7 @@ export function openGallery(container: HTMLElement): void {
           splashUrl: entry.splash ? `/api/forge/asset/${entry.splash}` : null,
           family: entry.family,
           clips: entry.clips,
+          clipFiles: forgedClipFileUrls(entry.clipFiles),
           weaponUrl: entry.weapon ? `/api/forge/asset/${entry.weapon}` : null,
           display: entry.display,
           // Only the owner can tune and save; visitors just look around.

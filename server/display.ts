@@ -46,6 +46,36 @@ export function displayOf(store: ForgeStore, id: string): ForgedDisplay | null {
   return sanitizeForgedDisplay(assets.display);
 }
 
+// The model a client should SHOW for an assets blob: with the per-clip
+// bake architecture that is the rigged body plus the animation-only clip
+// file per role; a champion baked before the split (or not yet baked)
+// keeps its single model and no clip files.
+export function modelPointers(assets: Record<string, unknown> | null): {
+  model: string | null;
+  clips: Record<string, string> | null;
+  clipFiles: Record<string, string> | null;
+} {
+  const a = (assets ?? {}) as {
+    model?: unknown;
+    rigged?: unknown;
+    clips?: unknown;
+    clipFiles?: unknown;
+  };
+  const clips =
+    typeof a.clips === 'object' && a.clips !== null ? (a.clips as Record<string, string>) : null;
+  const clipFiles =
+    typeof a.clipFiles === 'object' && a.clipFiles !== null && Object.keys(a.clipFiles).length > 0
+      ? (a.clipFiles as Record<string, string>)
+      : null;
+  const model =
+    clipFiles !== null && typeof a.rigged === 'string'
+      ? a.rigged
+      : typeof a.model === 'string'
+        ? a.model
+        : null;
+  return { model, clips, clipFiles: clipFiles !== null && model === a.rigged ? clipFiles : null };
+}
+
 // The match_start forgedAssets block: per forged definition, the sealed
 // pointers every client in the match needs to render the generated model.
 export function forgedMatchAssets(
@@ -54,17 +84,15 @@ export function forgedMatchAssets(
 ): Record<string, ForgedMatchAssets> {
   const out: Record<string, ForgedMatchAssets> = {};
   for (const def of defs) {
-    const assets = store.forgedAssets(def.id) as {
-      model?: string;
-      family?: string;
-      weapon?: string;
-      clips?: Record<string, string>;
-    } | null;
+    const assets = store.forgedAssets(def.id) as Record<string, unknown> | null;
+    const pointers = modelPointers(assets);
+    const a = assets as { family?: string; weapon?: string } | null;
     out[def.id] = {
-      model: assets?.model ?? null,
-      family: assets?.family ?? null,
-      weapon: assets?.weapon ?? null,
-      clips: assets?.clips ?? null,
+      model: pointers.model,
+      family: a?.family ?? null,
+      weapon: a?.weapon ?? null,
+      clips: pointers.clips,
+      clipFiles: pointers.clipFiles,
       display: displayOf(store, def.id),
     };
   }

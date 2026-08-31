@@ -36,7 +36,7 @@ import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, parseCookies, serializeCookie } from './cookies';
 import { authorizeUrl, CALLBACK_PATH, DiscordOauth, discordConfigFromEnv } from './discord_oauth';
 import { DiscordFlows } from './discord_state';
-import { displayOf, forgedMatchAssets, setForgedDisplay } from './display';
+import { displayOf, forgedMatchAssets, modelPointers, setForgedDisplay } from './display';
 import { clientAddress, edgeConfig, originAllowed } from './edge';
 import { emailErrorMessage } from './email_address';
 import { CLAIM_TTL_MS } from './email_claim';
@@ -835,21 +835,18 @@ const server = http.createServer(async (req, res) => {
             ? {
                 ...out,
                 drafts: out.drafts.map((d) => {
-                  const assets = forgeStore.forgedAssets(d.id) as {
-                    model?: string;
-                    sheet?: string;
-                    family?: string;
-                    weapon?: string;
-                    clips?: Record<string, string>;
-                  } | null;
+                  const assets = forgeStore.forgedAssets(d.id) as Record<string, unknown> | null;
+                  const pointers = modelPointers(assets);
+                  const a = assets as { sheet?: string; family?: string; weapon?: string } | null;
                   return {
                     ...d,
                     splash: splashOf(forgeStore, d),
-                    model: assets?.model ?? null,
-                    sheet: assets?.sheet ?? null,
-                    family: assets?.family ?? null,
-                    weapon: assets?.weapon ?? null,
-                    clips: assets?.clips ?? null,
+                    model: pointers.model,
+                    sheet: a?.sheet ?? null,
+                    family: a?.family ?? null,
+                    weapon: a?.weapon ?? null,
+                    clips: pointers.clips,
+                    clipFiles: pointers.clipFiles,
                     display: assets ? displayOf(forgeStore, d.id) : null,
                   };
                 }),

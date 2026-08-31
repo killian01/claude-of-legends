@@ -7,7 +7,7 @@
 import type { ForgedDisplay } from '../src/sim/forge/display';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { splashOf } from './art';
-import { displayOf } from './display';
+import { displayOf, modelPointers } from './display';
 import type { ForgeOutcome } from './forge';
 import type { ForgedRow, ForgeStore } from './forge_store';
 
@@ -44,6 +44,9 @@ export interface GalleryEntry {
   family: string | null;
   weapon: string | null;
   clips: Record<string, string> | null;
+  // Per-role animation-only files riding beside a rigged model (the
+  // per-clip bake architecture); null for pre-split single-file models.
+  clipFiles: Record<string, string> | null;
   display: ForgedDisplay | null;
 }
 
@@ -84,12 +87,9 @@ export function listGallery(
         r.def.creator.toLowerCase().includes(needle),
     );
   const entries = rows.map((r): GalleryEntry => {
-    const assets = deps.store.forgedAssets(r.id) as {
-      model?: string;
-      family?: string;
-      weapon?: string;
-      clips?: Record<string, string>;
-    } | null;
+    const assets = deps.store.forgedAssets(r.id) as Record<string, unknown> | null;
+    const pointers = modelPointers(assets);
+    const a = assets as { family?: string; weapon?: string } | null;
     return {
       id: r.id,
       def: r.def,
@@ -101,10 +101,11 @@ export function listGallery(
       shared: r.shared,
       updatedAt: r.updatedAt,
       splash: splashOf(deps.store, r),
-      model: assets?.model ?? null,
-      family: assets?.family ?? null,
-      weapon: assets?.weapon ?? null,
-      clips: assets?.clips ?? null,
+      model: pointers.model,
+      family: a?.family ?? null,
+      weapon: a?.weapon ?? null,
+      clips: pointers.clips,
+      clipFiles: pointers.clipFiles,
       display: displayOf(deps.store, r.id),
     };
   });
