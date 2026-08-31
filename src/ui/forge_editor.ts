@@ -1,11 +1,13 @@
 // The Forge editor, phase 4's playable slice, reworked as a guided studio
 // (the Tripo-style flow, in the game's theme): three tabs in creation
-// order. Design first (the splash art the whole champion derives from,
-// with examples and the visible splash-to-model pipeline), then Spells
-// (kit editing plus per-spell icon generation), then Tuning (stats and
-// growth against the power budget). The right rail keeps the budget meter
-// and the actions in creation order; a finalize that lands opens the 3D
-// workshop on the fresh model.
+// order, and every generation step the player's own. Design leads with
+// the splash art hero, then the model reference (the single-view image
+// the 3D literally builds from) iterated the same way, then the visible
+// pipeline whose 3D step is a button, not a side effect. Candidates open
+// in a lightbox (view large, pick, iterate from that exact image), a
+// generation in flight shows as a live skeleton card, and the Spells tab
+// is a slot bar (passive plus Q W E R) with the selected spell's icon
+// generation and parameters below it.
 
 import { registerForgedAssets } from '../game/forged_visuals';
 import type { ChampionBaseStats, ChampionGrowth, ChampionRole } from '../sim/content/champions';
@@ -107,6 +109,16 @@ const CSS = `
   color: #b0a37e; font-size: 11px; cursor: pointer;
 }
 .fe-chip:hover { border-color: #a08030; color: #d8cdb0; }
+.fe-refine {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 8px; padding: 4px 10px 4px 4px;
+  border: 1px solid #d8b45a; border-radius: 999px; background: #2c2210; color: #e8cc74;
+  font-size: 11px; font-weight: 700;
+}
+.fe-refine img { width: 26px; height: 26px; object-fit: cover; border-radius: 999px; display: block; }
+.fe-refine button {
+  border: none; background: none; color: #e8cc74; font-weight: 800; cursor: pointer; font-size: 13px;
+  padding: 0 2px;
+}
 .fe-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .fe-step { border: 1px solid #33270f; border-radius: 8px; background: rgba(26, 19, 10, 0.6); padding: 8px; }
 .fe-step-num { color: #c9a84a; font-weight: 800; font-size: 10.5px; letter-spacing: 0.6px; text-transform: uppercase; }
@@ -135,11 +147,27 @@ const CSS = `
 .fe-effect-head { display: flex; align-items: center; gap: 8px; }
 .fe-pred { margin: 4px 0; padding-left: 6px; }
 .fe-cast { margin-top: 6px; }
-.fe-ability { margin-bottom: 12px; }
 .fe-ability-head { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
 .fe-key {
   width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
   border-radius: 6px; background: #2c2210; border: 1px solid #6b5a2e; color: #e8cc74; font-weight: 800;
+}
+.fe-slots { display: flex; gap: 10px; }
+.fe-slot {
+  width: 66px; padding: 0; border-radius: 10px; border: 2px solid #4a3a1c; background: #120d06;
+  cursor: pointer; overflow: hidden;
+}
+.fe-slot:hover { border-color: #a08030; }
+.fe-slot.on { border-color: #d8b45a; box-shadow: 0 0 8px rgba(216, 180, 90, 0.35); }
+.fe-slot-img {
+  width: 100%; height: 58px; display: flex; align-items: center; justify-content: center;
+  color: #6b5a2e; font-weight: 800; font-size: 22px; overflow: hidden;
+}
+.fe-slot-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fe-slot-key {
+  font-size: 10px; color: #97854f; padding: 3px 2px 5px; font-weight: 700;
+  letter-spacing: 0.4px; text-align: center; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis;
 }
 .fe-meter-bar { height: 14px; border-radius: 7px; background: #1a130a; border: 1px solid #4a3a1c; overflow: hidden; margin: 6px 0; }
 .fe-meter-fill { height: 100%; background: linear-gradient(90deg, #7ca050, #c9a84a); transition: width 0.15s ease; }
@@ -154,7 +182,7 @@ const CSS = `
 .fe-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .fe-cand {
   padding: 0; border: 2px solid #4a3a1c; border-radius: 8px; background: #120d06;
-  cursor: pointer; overflow: hidden; line-height: 0; position: relative;
+  cursor: zoom-in; overflow: hidden; line-height: 0; position: relative;
 }
 .fe-cand:hover { border-color: #a08030; }
 .fe-cand.chosen { border-color: #d8b45a; box-shadow: 0 0 8px rgba(216, 180, 90, 0.45); }
@@ -166,10 +194,34 @@ const CSS = `
 .fe-cand img { display: block; object-fit: cover; }
 .fe-cand.splash img { width: 104px; height: 138px; }
 .fe-cand.icon img { width: 44px; height: 44px; }
+.fe-skel {
+  border: 2px dashed #6b5a2e; border-radius: 8px; background: #1a130a;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  color: #97854f; font-size: 10px;
+}
+.fe-skel.splash { width: 108px; height: 142px; }
+.fe-skel.icon { width: 48px; height: 48px; }
+.fe-spin {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 3px solid #4a3a1c; border-top-color: #e8cc74;
+  animation: fe-spin 0.9s linear infinite;
+}
+.fe-spin.small { width: 14px; height: 14px; border-width: 2px; }
+@keyframes fe-spin { to { transform: rotate(360deg); } }
+.fe-stagerow { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: #e8cc74; font-size: 11px; font-weight: 700; }
+.fe-lightbox {
+  position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px;
+  background: rgba(5, 3, 1, 0.88);
+}
+.fe-lightbox img {
+  max-width: 72vw; max-height: 74vh; border-radius: 10px; border: 1px solid #6b5a2e;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7); display: block;
+}
+.fe-lightbox-bar { display: flex; gap: 10px; }
 .fe-artrow { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.fe-artrow .fe-mini { flex: none; }
 .fe-iconblock {
-  display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px 10px;
+  display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; padding: 10px;
   border: 1px dashed #4a3a1c; border-radius: 8px;
 }
 .fe-icon-preview { display: flex; align-items: center; gap: 6px; }
@@ -213,7 +265,8 @@ interface DraftRow {
   display?: ForgedDisplay | null;
 }
 
-// One 2D candidate (splash or spell icon) as the art routes answer it.
+// One 2D candidate (splash, model reference, or spell icon) as the art
+// routes answer it.
 interface ArtCandidate {
   cid: number;
   kind: string;
@@ -222,12 +275,18 @@ interface ArtCandidate {
   at: number;
 }
 
-// Example splash lines, clickable chips beside the prompt: they show the
-// shape of a line that works (silhouette, weapon, mood, one accent color).
+// Example splash lines, clickable chips beside the prompt: full lines
+// with the level of detail that actually pays off (silhouette, materials,
+// mood, one accent color, a couple of memorable specifics).
 const EXAMPLE_LINES = [
-  'A moss-covered forest witch with a crooked wooden staff, calm and ancient, deep green',
-  'A brass clockwork duelist with one oversized gauntlet, proud, copper and teal',
-  'A storm-called spear fighter wrapped in torn sails, lean and quick, pale lightning blue',
+  'A moss-covered forest witch, ancient and calm, a crooked living-wood staff taller than ' +
+    'she is, robes of layered lichen and bark, deep green glowing runes, fireflies drifting ' +
+    'around her hood',
+  'A brass clockwork duelist with one oversized steam-driven gauntlet, proud fencing ' +
+    'stance, cracked porcelain mask, copper filigree armor with teal enamel inlays, gears ' +
+    'visible at every joint',
+  'A storm-called spear fighter wrapped in torn gray sails, lean and quick, braided rope ' +
+    'belt hung with fishing hooks, pale lightning-blue eyes, spear tip crackling with static',
 ] as const;
 
 // Identity rides the session cookie (ADR 0006), never a token in the URL.
@@ -325,6 +384,7 @@ export function newDraft(): ForgedChampionDef {
 }
 
 type EditorTab = 'design' | 'spells' | 'tuning';
+type SpellSlot = 'P' | AbilityKey;
 
 export function openForgeEditor(container: HTMLElement): void {
   ensureCss();
@@ -388,6 +448,16 @@ export function openForgeEditor(container: HTMLElement): void {
   let artQuota = { used: 0, limit: 0 };
   // The champion line typed per art kind, kept across rerenders.
   const artLines: Record<string, string> = {};
+  // The art kind whose generation is in flight (skeleton card, disabled
+  // buttons), and per-kind iteration sources picked in the lightbox.
+  let generating: string | null = null;
+  const refineFrom: Record<string, ArtCandidate | undefined> = {};
+  // The Spells tab's selected slot.
+  let spellSlot: SpellSlot = 'Q';
+  // True while a finalize chain runs; the pipeline's 3D step shows the
+  // live stage through this element when it is on screen.
+  let finalizing = false;
+  let stageLine: HTMLElement | null = null;
 
   const loadArt = async (): Promise<void> => {
     const r = await api<{
@@ -401,11 +471,19 @@ export function openForgeEditor(container: HTMLElement): void {
 
   const currentRow = (): DraftRow | undefined => drafts.find((d) => d.id === current.id);
   const isSealed = (): boolean => currentRow()?.status === 'finalized';
+  const chosenOf = (kind: string): ArtCandidate | undefined =>
+    artCandidates.find((c) => c.kind === kind && c.chosen);
+  const assetUrl = (rel: string): string => `/api/forge/asset/${rel}`;
 
   // Save what is on screen (art hangs off a stored draft), generate, then
   // reload the strip. The request is held open for the image: one 2D
-  // generation is seconds, not a finalize chain.
+  // generation is seconds, not a finalize chain. While it runs the strip
+  // shows a live skeleton card so nobody thinks the button was dead.
   const generateArtKind = (kind: string, line: string): void => {
+    if (generating !== null) return;
+    const from = refineFrom[kind];
+    generating = kind;
+    renderMain();
     status.textContent = 'Generating the image...';
     void api<{ ok: boolean; error?: string }>('/api/forge/draft', { def: current })
       .then((saved) => {
@@ -414,23 +492,34 @@ export function openForgeEditor(container: HTMLElement): void {
           ok: boolean;
           error?: string;
           quota?: { used: number; limit: number };
-        }>('/api/forge/art/generate', { id: current.id, kind, line });
+        }>('/api/forge/art/generate', {
+          id: current.id,
+          kind,
+          line,
+          ...(from ? { fromCid: from.cid } : {}),
+        });
       })
       .then((out) => {
+        generating = null;
         if (!out?.ok) {
           status.textContent = out?.error ?? 'generation failed';
+          renderMain();
           return;
         }
+        delete refineFrom[kind];
         status.textContent = out.quota
           ? `Generated. ${out.quota.used}/${out.quota.limit} images today.`
           : 'Generated.';
         void loadDrafts();
         return loadArt().then(() => {
           renderMain();
+          refresh();
         });
       })
       .catch((err: unknown) => {
+        generating = null;
         status.textContent = err instanceof Error ? err.message : 'generation failed';
+        renderMain();
       });
   };
 
@@ -445,30 +534,103 @@ export function openForgeEditor(container: HTMLElement): void {
       }
       return loadArt().then(() => {
         renderMain();
+        refresh();
       });
     });
   };
 
-  const artStrip = (kind: string, big: boolean): HTMLElement => {
+  // The lightbox: view a candidate large, pick it, or iterate from it.
+  // Its Escape closes only itself (capture beats the editor's handler).
+  const openLightbox = (c: ArtCandidate): void => {
     const sealed = isSealed();
+    const overlay = el('div', 'fe-lightbox');
+    const img = document.createElement('img');
+    img.src = assetUrl(c.path);
+    img.alt = '';
+    const bar = el('div', 'fe-lightbox-bar');
+    const closeBox = (): void => {
+      window.removeEventListener('keydown', onBoxKey, true);
+      overlay.remove();
+    };
+    const onBoxKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return;
+      e.stopImmediatePropagation();
+      closeBox();
+    };
+    window.addEventListener('keydown', onBoxKey, true);
+    if (!sealed && !c.chosen) {
+      const use = el('button', 'fe-gen small', 'Use this one');
+      use.addEventListener('click', () => {
+        closeBox();
+        pickArt(c.cid);
+      });
+      bar.append(use);
+    }
+    if (!sealed) {
+      const iterate = el('button', 'fe-btn', 'Iterate from this image');
+      iterate.style.width = 'auto';
+      iterate.style.marginTop = '0';
+      iterate.title = 'The next generation starts from this exact image plus your notes';
+      iterate.addEventListener('click', () => {
+        refineFrom[c.kind] = c;
+        closeBox();
+        renderMain();
+      });
+      bar.append(iterate);
+    }
+    const done = el('button', 'fe-btn', 'Close');
+    done.style.width = 'auto';
+    done.style.marginTop = '0';
+    done.addEventListener('click', closeBox);
+    bar.append(done);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeBox();
+    });
+    overlay.append(img, bar);
+    root.append(overlay);
+  };
+
+  // The candidate strip of one kind, plus the in-flight skeleton card.
+  // Clicking a candidate opens the lightbox; the pick happens there, with
+  // the image seen large first.
+  const artStrip = (kind: string, big: boolean): HTMLElement => {
     const strip = el('div', 'fe-strip');
     for (const c of artCandidates.filter((x) => x.kind === kind)) {
       const btn = el('button', `fe-cand ${big ? 'splash' : 'icon'}`) as HTMLButtonElement;
       btn.classList.toggle('chosen', c.chosen);
       const img = document.createElement('img');
-      img.src = `/api/forge/asset/${c.path}`;
+      img.src = assetUrl(c.path);
       img.alt = '';
       btn.appendChild(img);
-      btn.title = sealed ? 'Sealed at finalization' : c.chosen ? 'The pick' : 'Use this one';
-      if (!sealed) btn.addEventListener('click', () => pickArt(c.cid));
+      btn.title = 'View large';
+      btn.addEventListener('click', () => openLightbox(c));
       strip.appendChild(btn);
+    }
+    if (generating === kind) {
+      const skel = el('div', `fe-skel ${big ? 'splash' : 'icon'}`);
+      skel.append(el('div', 'fe-spin'));
+      if (big) skel.append(el('span', '', 'generating...'));
+      strip.appendChild(skel);
     }
     return strip;
   };
 
-  const chosenSplashUrl = (): string | null => {
-    const c = artCandidates.find((x) => x.kind === 'splash' && x.chosen);
-    return c ? `/api/forge/asset/${c.path}` : null;
+  // The refine badge: shows which image the next generation starts from.
+  const refineBadge = (kind: string): HTMLElement | null => {
+    const from = refineFrom[kind];
+    if (!from) return null;
+    const badge = el('span', 'fe-refine');
+    const img = document.createElement('img');
+    img.src = assetUrl(from.path);
+    img.alt = '';
+    const clear = el('button', '', 'x');
+    clear.title = 'Back to a fresh generation';
+    clear.addEventListener('click', () => {
+      delete refineFrom[kind];
+      renderMain();
+    });
+    badge.append(img, document.createTextNode('iterating from this image'), clear);
+    return badge;
   };
 
   // The workshop over the current champion's model; only exists finalized.
@@ -479,9 +641,9 @@ export function openForgeEditor(container: HTMLElement): void {
       id: current.id,
       name: current.name,
       title: current.title,
-      modelUrl: `/api/forge/asset/${row.model}`,
-      splashUrl: row.splash ? `/api/forge/asset/${row.splash}` : null,
-      sheetUrl: row.sheet ? `/api/forge/asset/${row.sheet}` : null,
+      modelUrl: assetUrl(row.model),
+      splashUrl: row.splash ? assetUrl(row.splash) : null,
+      sheetUrl: row.sheet ? assetUrl(row.sheet) : null,
       family: row.family ?? null,
       display: row.display ?? null,
       editable: true,
@@ -500,8 +662,23 @@ export function openForgeEditor(container: HTMLElement): void {
   const verdict = el('div', 'fe-errors');
   const testBtn = el('button', 'fe-btn', 'Test drive (practice)') as HTMLButtonElement;
   const saveBtn = el('button', 'fe-btn primary', 'Save draft') as HTMLButtonElement;
-  const finalizeBtn = el('button', 'fe-btn', 'Finalize (spends a creation)') as HTMLButtonElement;
+  const finalizeBtn = el(
+    'button',
+    'fe-btn',
+    'Build the 3D (spends a creation)',
+  ) as HTMLButtonElement;
   const deleteBtn = el('button', 'fe-btn danger', 'Delete draft') as HTMLButtonElement;
+
+  // Everything the 3D build needs, mirrored client-side so the buttons
+  // can say WHY they are disabled (the server gates stay authoritative).
+  const forgeBlocker = (): string | null => {
+    if (isSealed()) return 'already finalized';
+    if (!validateForged(current).ok) return 'the kit must fully validate first';
+    if (!chosenOf('splash')) return 'generate and pick a splash first';
+    if (!chosenOf('sheet')) return 'generate and pick a model reference first';
+    if (finalizing) return 'already building';
+    return null;
+  };
 
   const refresh = (): void => {
     const v = validateForged(current);
@@ -536,8 +713,9 @@ export function openForgeEditor(container: HTMLElement): void {
       : v.errors.slice(0, 8).join('\n');
     testBtn.disabled = !v.ok;
     testBtn.title = v.ok ? '' : 'The kit must fully validate before a test drive';
-    finalizeBtn.disabled = !v.ok;
-    finalizeBtn.title = v.ok ? '' : 'Finalize needs a fully valid champion';
+    const blocker = forgeBlocker();
+    finalizeBtn.disabled = blocker !== null;
+    finalizeBtn.title = blocker ?? '';
     // style.display, not the hidden attribute: .fe-btn sets display and
     // author CSS beats the attribute's user-agent rule.
     workshopBtn.style.display = currentRow()?.model ? '' : 'none';
@@ -578,13 +756,27 @@ export function openForgeEditor(container: HTMLElement): void {
     window.dispatchEvent(new CustomEvent('loc:forge-test', { detail: def }));
   });
 
-  // Finalize: save what is on screen, then start the generation job and
-  // follow it. The pipeline (ADR 0006) derives the model sheet, generates
-  // and rigs the model, applies the clip set, and seals the champion; a
-  // failure of any kind refunds the creation. Success opens the workshop
-  // on the fresh model: the 3D reveal IS the payoff of the chain.
-  finalizeBtn.addEventListener('click', () => {
-    status.textContent = 'Saving, then finalizing...';
+  // The 3D build (finalize): save what is on screen, then start the chain
+  // and follow it. It runs on the CHOSEN model reference, the exact image
+  // approved in the Design tab (ADR 0006); a failure of any kind refunds
+  // the creation. Success opens the workshop on the fresh model: the 3D
+  // reveal is the payoff of the chain.
+  const runForge = (): void => {
+    const blocker = forgeBlocker();
+    if (blocker !== null) {
+      status.textContent = blocker;
+      return;
+    }
+    finalizing = true;
+    renderMain();
+    refresh();
+    status.textContent = 'Saving, then starting the 3D build...';
+    const settle = (message: string): void => {
+      finalizing = false;
+      status.textContent = message;
+      renderMain();
+      refresh();
+    };
     void api<{ ok: boolean; error?: string }>('/api/forge/draft', { def: current })
       .then((saved) => {
         if (!saved?.ok) throw new Error(saved?.error ?? 'save failed');
@@ -594,7 +786,7 @@ export function openForgeEditor(container: HTMLElement): void {
       })
       .then((started) => {
         if (!started?.ok || started.jobId === undefined) {
-          status.textContent = started?.error ?? 'finalize failed';
+          settle(started?.error ?? 'the build could not start');
           return;
         }
         const poll = (): void => {
@@ -602,11 +794,12 @@ export function openForgeEditor(container: HTMLElement): void {
             `/api/forge/job?id=${started.jobId}`,
           ).then((job) => {
             if (!job?.ok) {
-              status.textContent = 'the job vanished; check your creations';
+              settle('the job vanished; check your creations');
               return;
             }
             if (job.status === 'success') {
-              status.textContent = 'Finalized: the champion is sealed.';
+              finalizing = false;
+              status.textContent = 'Done: the champion is sealed.';
               // The seal changes what the panels offer; once the fresh
               // rows land, the workshop opens on the new model.
               void loadDrafts().then(() => {
@@ -616,19 +809,22 @@ export function openForgeEditor(container: HTMLElement): void {
               return;
             }
             if (job.status === 'failed') {
-              status.textContent = `Finalize failed (${job.error ?? 'unknown'}); the creation was refunded.`;
+              settle(`The build failed (${job.error ?? 'unknown'}); the creation was refunded.`);
               return;
             }
-            status.textContent = `Finalizing: ${job.stage ?? '...'}`;
+            const label = `building: ${job.stage ?? '...'}`;
+            status.textContent = label;
+            if (stageLine) stageLine.textContent = label;
             window.setTimeout(poll, 2000);
           });
         };
         poll();
       })
       .catch((err: unknown) => {
-        status.textContent = err instanceof Error ? err.message : 'finalize failed';
+        settle(err instanceof Error ? err.message : 'the build could not start');
       });
-  });
+  };
+  finalizeBtn.addEventListener('click', runForge);
 
   // The workshop door: only a finalized champion has a model to turn.
   const workshopBtn = el('button', 'fe-btn', 'Workshop (3D view)') as HTMLButtonElement;
@@ -639,7 +835,7 @@ export function openForgeEditor(container: HTMLElement): void {
   const meterBar = el('div', 'fe-meter-bar');
   meterBar.append(meterFill);
   meterPanel.append(meterLine, meterBar, costBox, verdict);
-  // Creation order: save the work, seal it, inspect the model, play it.
+  // Creation order: save the work, build the model, inspect it, play it.
   // Delete stays last, away from the flow.
   const actions = el('div', 'fe-panel');
   actions.append(
@@ -663,10 +859,12 @@ export function openForgeEditor(container: HTMLElement): void {
       const btn = el('button', 'fe-draft');
       btn.classList.toggle('picked', row.id === current.id);
       btn.append(document.createTextNode(row.def.name));
+      // The tagline or the status; never the internal id, which reads as
+      // a bug to anyone who did not write the store.
       const sub = el(
         'small',
         '',
-        row.status === 'finalized' ? 'finalized' : row.def.tagline || row.id,
+        row.status === 'finalized' ? 'finalized' : row.def.tagline || 'draft',
       );
       btn.append(sub);
       btn.addEventListener('click', () => {
@@ -676,6 +874,7 @@ export function openForgeEditor(container: HTMLElement): void {
         refresh();
         void loadArt().then(() => {
           renderMain();
+          refresh();
         });
       });
       panel.append(btn);
@@ -724,14 +923,15 @@ export function openForgeEditor(container: HTMLElement): void {
     return input;
   }
 
-  // Tab 1, Design: the splash art hero (the champion derives from it), the
-  // visible splash-to-model pipeline, and the card identity.
+  // Tab 1, Design: the splash art hero, the model reference derived from
+  // it, the pipeline with its own 3D button, and the card identity.
   function renderDesign(): void {
     const sealed = isSealed();
     const row = currentRow();
+    const busy = generating !== null;
 
     const splash = el('div', 'fe-panel');
-    splash.append(el('h3', '', 'Splash art'));
+    splash.append(el('h3', '', 'Step 1: splash art'));
     if (sealed) {
       splash.append(
         el('div', 'fe-lead', 'This champion is sealed: its art is final. Admire it below.'),
@@ -741,18 +941,19 @@ export function openForgeEditor(container: HTMLElement): void {
         el(
           'p',
           'fe-lead',
-          'Describe your champion in one line and generate the splash art. Everything derives from it: the 3D model is built from this exact picture, so make it the champion you want to play.',
+          'Describe your champion and generate the splash art. It is the creative anchor: the card, the model reference, and from it the 3D all derive from this picture. Click any result to see it large, pick it, or iterate on it.',
         ),
       );
       const hero = el('div', 'fe-hero');
       const line = el('input', 'fe-hero-input') as HTMLInputElement;
-      line.placeholder = 'Silhouette, weapon, mood, one accent color...';
+      line.placeholder = 'Silhouette, materials, mood, one accent color, memorable details...';
       line.maxLength = 400;
       line.value = artLines.splash ?? '';
       line.addEventListener('input', () => {
         artLines.splash = line.value;
       });
       const genBtn = el('button', 'fe-gen', 'Generate splash art') as HTMLButtonElement;
+      genBtn.disabled = busy;
       genBtn.addEventListener('click', () => generateArtKind('splash', line.value));
       hero.append(line, genBtn);
       const mess = el('div', 'fe-heromess');
@@ -768,10 +969,13 @@ export function openForgeEditor(container: HTMLElement): void {
         artQuota.limit > 0 ? `${artQuota.used}/${artQuota.limit} images today` : '',
       );
       mess.append(prefill, quota);
+      splash.append(hero, mess);
+      const badge = refineBadge('splash');
+      if (badge) splash.append(badge);
       const chips = el('div', 'fe-chips');
       chips.append(el('span', 'fe-field-label', 'Try an example:'));
       for (const ex of EXAMPLE_LINES) {
-        const chip = el('button', 'fe-chip', `${ex.slice(0, 46)}...`);
+        const chip = el('button', 'fe-chip', `${ex.slice(0, 42)}...`);
         chip.title = ex;
         chip.addEventListener('click', () => {
           line.value = ex;
@@ -779,8 +983,11 @@ export function openForgeEditor(container: HTMLElement): void {
         });
         chips.append(chip);
       }
-      splash.append(hero, mess, chips);
-      if (artCandidates.filter((c) => c.kind === 'splash').length === 0) {
+      splash.append(chips);
+      if (
+        artCandidates.filter((c) => c.kind === 'splash').length === 0 &&
+        generating !== 'splash'
+      ) {
         splash.append(
           el('div', 'fe-desc', 'No splash yet. Generate a few and pick the one that feels right.'),
         );
@@ -789,8 +996,49 @@ export function openForgeEditor(container: HTMLElement): void {
     splash.append(artStrip('splash', true));
     main.append(splash);
 
-    // The pipeline, visible: what happens between the splash and the
-    // playable model, with the champion's own images once they exist.
+    // Step 2: the model reference, the player's own generation. One
+    // figure, one view: this exact image is what the 3D builder reads.
+    const refPanel = el('div', 'fe-panel');
+    refPanel.append(el('h3', '', 'Step 2: model reference (what the 3D is built from)'));
+    if (sealed) {
+      refPanel.append(el('div', 'fe-lead', 'Sealed with the champion.'));
+    } else if (!chosenOf('splash')) {
+      refPanel.append(
+        el(
+          'div',
+          'fe-lead',
+          'Pick a splash first: the reference derives from it. Then generate the reference here, check it, and iterate until it shows exactly ONE character, full body, facing you, on a plain background.',
+        ),
+      );
+    } else {
+      refPanel.append(
+        el(
+          'p',
+          'fe-lead',
+          'Derived from your chosen splash: one character, full body, front view, plain background. The 3D builder reads this exact image, so check it before building: one single figure, no split views. Iterate with notes until it is right.',
+        ),
+      );
+      const heroRow = el('div', 'fe-hero');
+      const notes = el('input', 'fe-hero-input') as HTMLInputElement;
+      notes.placeholder = 'Optional notes: fix the pose, the colors, the outfit...';
+      notes.maxLength = 400;
+      notes.value = artLines.sheet ?? '';
+      notes.addEventListener('input', () => {
+        artLines.sheet = notes.value;
+      });
+      const genRef = el('button', 'fe-gen', 'Generate the reference') as HTMLButtonElement;
+      genRef.disabled = busy;
+      genRef.addEventListener('click', () => generateArtKind('sheet', notes.value));
+      heroRow.append(notes, genRef);
+      refPanel.append(heroRow);
+      const badge = refineBadge('sheet');
+      if (badge) refPanel.append(badge);
+    }
+    refPanel.append(artStrip('sheet', true));
+    main.append(refPanel);
+
+    // The pipeline, visible and CLICKABLE: each step is the player's own
+    // move, with the champion's images as they exist.
     const pipe = el('div', 'fe-panel');
     pipe.append(el('h3', '', 'From splash to champion'));
     const steps = el('div', 'fe-steps');
@@ -814,50 +1062,77 @@ export function openForgeEditor(container: HTMLElement): void {
       box.append(t, el('div', 'fe-step-text', text));
       return box;
     };
-    const splashUrl = row?.splash ? `/api/forge/asset/${row.splash}` : chosenSplashUrl();
+    const splashUrl = row?.splash
+      ? assetUrl(row.splash)
+      : chosenOf('splash')
+        ? assetUrl(chosenOf('splash')?.path ?? '')
+        : null;
     steps.append(
-      step('1. Splash art', 'Your one-line prompt paints it. Pick your favorite.', splashUrl, '?'),
+      step('1. Splash art', 'Your prompt paints it. Pick your favorite above.', splashUrl, '?'),
     );
+    const sheetUrl = row?.sheet
+      ? assetUrl(row.sheet)
+      : chosenOf('sheet')
+        ? assetUrl(chosenOf('sheet')?.path ?? '')
+        : null;
     steps.append(
       step(
-        '2. Model sheet',
-        'Derived automatically at finalize: the same character, three views, empty hands, white background. This is what the 3D builder reads.',
-        row?.sheet ? `/api/forge/asset/${row.sheet}` : null,
+        '2. Model reference',
+        'One figure, one view, plain background: generate and check it above.',
+        sheetUrl,
         '2D',
       ),
     );
     const modelStep = el('div', 'fe-step');
     modelStep.append(el('div', 'fe-step-num', '3. 3D model'));
     const modelThumb = el('div', 'fe-step-thumb', '3D');
-    modelStep.append(modelThumb);
+    stageLine = null;
     if (row?.model) {
+      modelStep.append(modelThumb);
       const open = el('button', 'fe-gen small', 'Open the workshop');
       open.addEventListener('click', openWorkshopHere);
       modelStep.append(open);
+    } else if (finalizing) {
+      modelThumb.textContent = '';
+      modelThumb.append(el('div', 'fe-spin'));
+      modelStep.append(modelThumb);
+      stageLine = el('div', 'fe-stagerow', 'building...');
+      modelStep.append(stageLine);
     } else {
+      modelStep.append(modelThumb);
+      const build = el('button', 'fe-gen small', 'Build the 3D model') as HTMLButtonElement;
+      const blocker = forgeBlocker();
+      build.disabled = blocker !== null;
+      build.title = blocker ?? 'Runs on your chosen reference and spends a creation';
+      build.addEventListener('click', runForge);
+      modelStep.append(build);
       modelStep.append(
-        el('div', 'fe-step-text', 'Built from the sheet, textured, then rigged on a biped.'),
+        el(
+          'div',
+          'fe-step-text',
+          'Builds from your chosen reference, then rigs it. Spends a creation.',
+        ),
       );
     }
     steps.append(modelStep);
-    steps.append(
-      step(
-        '4. Animations',
-        'Five clips land on the rig: idle, run, attack, cast, death. See them in the workshop.',
-        null,
-        '5 clips',
-      ),
-    );
+    const animStep = el('div', 'fe-step');
+    animStep.append(el('div', 'fe-step-num', '4. Animations'));
+    animStep.append(el('div', 'fe-step-thumb', '5 clips'));
+    if (row?.model) {
+      const openAnim = el('button', 'fe-gen small', 'See them move');
+      openAnim.addEventListener('click', openWorkshopHere);
+      animStep.append(openAnim);
+    } else {
+      animStep.append(
+        el(
+          'div',
+          'fe-step-text',
+          'Five clips land with the build: idle, run, attack, cast, death. Adjust everything in the workshop after.',
+        ),
+      );
+    }
+    steps.append(animStep);
     pipe.append(steps);
-    pipe.append(
-      el(
-        'div',
-        'fe-desc',
-        sealed
-          ? 'This champion went through the whole chain; the workshop shows the result.'
-          : 'Finalize (right rail) runs steps 2 to 4 on your chosen splash and spends a creation.',
-      ),
-    );
     main.append(pipe);
 
     // The model card: once finalized, the 3D result is one click away.
@@ -867,7 +1142,7 @@ export function openForgeEditor(container: HTMLElement): void {
       const cta = el('div', 'fe-model-cta');
       if (row.sheet) {
         const img = document.createElement('img');
-        img.src = `/api/forge/asset/${row.sheet}`;
+        img.src = assetUrl(row.sheet);
         img.alt = '';
         cta.append(img);
       }
@@ -937,11 +1212,61 @@ export function openForgeEditor(container: HTMLElement): void {
     main.append(card);
   }
 
-  // Tab 2, Spells: the passive and the four abilities, each with its own
-  // generated icon front and center.
+  // Tab 2, Spells: the slot bar (passive plus Q W E R), the selected
+  // spell's icon generation front and center, its parameters below.
   function renderSpells(): void {
     const sealed = isSealed();
 
+    const slotsPanel = el('div', 'fe-panel');
+    slotsPanel.append(el('h3', '', 'Spells'));
+    slotsPanel.append(
+      el(
+        'p',
+        'fe-lead',
+        'Pick a slot; its icon and parameters edit below. Every spell can carry a generated icon (the procedural one plays until then).',
+      ),
+    );
+    const slots = el('div', 'fe-slots');
+    const slotDefs: readonly { key: SpellSlot; label: string }[] = [
+      { key: 'P', label: 'Passive' },
+      { key: 'Q', label: 'Q' },
+      { key: 'W', label: 'W' },
+      { key: 'E', label: 'E' },
+      { key: 'R', label: 'R' },
+    ];
+    for (const { key, label } of slotDefs) {
+      const slot = el('button', 'fe-slot') as HTMLButtonElement;
+      slot.classList.toggle('on', spellSlot === key);
+      const face = el('div', 'fe-slot-img');
+      const chosenIcon = key === 'P' ? undefined : chosenOf(`icon_${key}`);
+      if (chosenIcon) {
+        const img = document.createElement('img');
+        img.src = assetUrl(chosenIcon.path);
+        img.alt = '';
+        face.append(img);
+      } else {
+        face.textContent = key === 'P' ? 'P' : '+';
+      }
+      const name =
+        key === 'P' ? current.passive.name || 'Passive' : current.abilities[key].name || label;
+      slot.append(face, el('div', 'fe-slot-key', `${label === name ? name : `${label} ${name}`}`));
+      slot.addEventListener('click', () => {
+        spellSlot = key;
+        renderMain();
+      });
+      slots.append(slot);
+    }
+    slotsPanel.append(slots);
+    main.append(slotsPanel);
+
+    if (spellSlot === 'P') {
+      renderPassiveEditor(sealed);
+    } else {
+      renderAbilityEditor(spellSlot, sealed);
+    }
+  }
+
+  function renderPassiveEditor(_sealed: boolean): void {
     const passive = el('div', 'fe-panel');
     passive.append(el('h3', '', 'Passive (a template the engine owns; you set the numbers)'));
     const tplSelect = el('select', 'fe-select') as HTMLSelectElement;
@@ -994,72 +1319,82 @@ export function openForgeEditor(container: HTMLElement): void {
       });
     }
     main.append(passive);
+  }
 
-    for (const key of ['Q', 'W', 'E', 'R'] as AbilityKey[]) {
-      const ability = current.abilities[key] as unknown as Record<string, unknown>;
-      const panel = el('div', 'fe-panel fe-ability');
-      const headRow = el('div', 'fe-ability-head');
-      headRow.append(el('span', 'fe-key', key));
-      const nameInput = el('input', 'fe-input') as HTMLInputElement;
-      nameInput.style.marginBottom = '0';
-      nameInput.maxLength = 40;
-      nameInput.value = String(ability.name ?? '');
-      nameInput.addEventListener('input', () => {
-        ability.name = nameInput.value;
-        refresh();
-      });
-      headRow.append(nameInput);
-      panel.append(headRow);
-      const costs = el('div', 'fe-fields');
-      costs.append(numField('mana', ability, 'manaCost', ABILITY_BOUNDS.manaCost, hooks));
-      costs.append(
-        numField(
-          'cooldown',
-          ability,
-          'cooldown',
-          key === 'R' ? ABILITY_BOUNDS.ultCooldown : ABILITY_BOUNDS.basicCooldown,
-          hooks,
-        ),
-      );
-      costs.append(numField('cast range', ability, 'castRange', ABILITY_BOUNDS.castRange, hooks));
-      costs.append(numField('windup', ability, 'windup', ABILITY_BOUNDS.windup, hooks));
-      panel.append(costs);
-      panel.append(buildCastEditor(current.abilities[key], hooks));
-      // The spell icon block (ADR 0010): the flat generated icon on the 2D
-      // quota, in-match sizes previewed; the procedural icon stays the
-      // fallback when none is generated.
-      const iconBlock = el('div', 'fe-iconblock');
-      const chosenIcon = artCandidates.find((c) => c.kind === `icon_${key}` && c.chosen);
-      if (chosenIcon) {
-        const preview = el('div', 'fe-icon-preview');
-        for (const size of [56, 24]) {
-          const img = document.createElement('img');
-          img.src = `/api/forge/asset/${chosenIcon.path}`;
-          img.width = size;
-          img.height = size;
-          img.alt = '';
-          preview.append(img);
-        }
-        iconBlock.append(preview);
+  function renderAbilityEditor(key: AbilityKey, sealed: boolean): void {
+    const ability = current.abilities[key] as unknown as Record<string, unknown>;
+
+    // The icon first: generation front and center, like every other step.
+    const iconPanel = el('div', 'fe-panel');
+    iconPanel.append(el('h3', '', `Spell icon (${key})`));
+    const iconBlock = el('div', 'fe-iconblock');
+    const chosenIcon = chosenOf(`icon_${key}`);
+    if (chosenIcon) {
+      const preview = el('div', 'fe-icon-preview');
+      for (const size of [56, 24]) {
+        const img = document.createElement('img');
+        img.src = assetUrl(chosenIcon.path);
+        img.width = size;
+        img.height = size;
+        img.alt = '';
+        preview.append(img);
       }
-      const iconText = el(
+      iconBlock.append(preview);
+    }
+    iconBlock.append(
+      el(
         'div',
         'fe-step-text',
         chosenIcon
-          ? 'The icon, at full size and at in-match size.'
+          ? 'The icon at full size and at in-match size. Click a candidate below to view or iterate.'
           : 'No generated icon yet: the procedural one plays until you make one.',
-      );
-      iconBlock.append(iconText);
-      if (!sealed) {
-        const iconGen = el('button', 'fe-gen small', 'Generate icon') as HTMLButtonElement;
-        iconGen.title = 'A flat spell icon in the game style, derived from this spell';
-        iconGen.style.marginLeft = 'auto';
-        iconGen.addEventListener('click', () => generateArtKind(`icon_${key}`, ''));
-        iconBlock.append(iconGen);
-      }
-      panel.append(iconBlock, artStrip(`icon_${key}`, false));
-      main.append(panel);
+      ),
+    );
+    if (!sealed) {
+      const iconGen = el('button', 'fe-gen small', 'Generate icon') as HTMLButtonElement;
+      iconGen.disabled = generating !== null;
+      iconGen.title = 'A flat spell icon in the game style, derived from this spell';
+      iconGen.style.marginLeft = 'auto';
+      iconGen.addEventListener('click', () => generateArtKind(`icon_${key}`, ''));
+      iconBlock.append(iconGen);
     }
+    iconPanel.append(iconBlock);
+    const badge = refineBadge(`icon_${key}`);
+    if (badge) iconPanel.append(badge);
+    iconPanel.append(artStrip(`icon_${key}`, false));
+    main.append(iconPanel);
+
+    // Then the parameters, for this spell alone.
+    const panel = el('div', 'fe-panel');
+    panel.append(el('h3', '', `Parameters (${key})`));
+    const headRow = el('div', 'fe-ability-head');
+    headRow.append(el('span', 'fe-key', key));
+    const nameInput = el('input', 'fe-input') as HTMLInputElement;
+    nameInput.style.marginBottom = '0';
+    nameInput.maxLength = 40;
+    nameInput.value = String(ability.name ?? '');
+    nameInput.addEventListener('input', () => {
+      ability.name = nameInput.value;
+      refresh();
+    });
+    headRow.append(nameInput);
+    panel.append(headRow);
+    const costs = el('div', 'fe-fields');
+    costs.append(numField('mana', ability, 'manaCost', ABILITY_BOUNDS.manaCost, hooks));
+    costs.append(
+      numField(
+        'cooldown',
+        ability,
+        'cooldown',
+        key === 'R' ? ABILITY_BOUNDS.ultCooldown : ABILITY_BOUNDS.basicCooldown,
+        hooks,
+      ),
+    );
+    costs.append(numField('cast range', ability, 'castRange', ABILITY_BOUNDS.castRange, hooks));
+    costs.append(numField('windup', ability, 'windup', ABILITY_BOUNDS.windup, hooks));
+    panel.append(costs);
+    panel.append(buildCastEditor(current.abilities[key], hooks));
+    main.append(panel);
   }
 
   // Tab 3, Tuning: the numbers against the power budget.
@@ -1084,6 +1419,7 @@ export function openForgeEditor(container: HTMLElement): void {
 
   function renderMain(): void {
     main.textContent = '';
+    stageLine = null;
     if (tab === 'design') renderDesign();
     else if (tab === 'spells') renderSpells();
     else renderTuning();
@@ -1091,5 +1427,10 @@ export function openForgeEditor(container: HTMLElement): void {
 
   renderMain();
   refresh();
-  void loadDrafts();
+  void loadDrafts().then(() =>
+    loadArt().then(() => {
+      renderMain();
+      refresh();
+    }),
+  );
 }
