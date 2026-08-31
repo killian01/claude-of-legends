@@ -1,0 +1,10 @@
+{
+  "generatedAt": "2026-08-31T19:31:07.175Z",
+  "provider": "tripo",
+  "modelTask": "d2f3776d-362d-476e-a778-1dad67765e9e",
+  "rigTask": "c7b0b25e-08de-469f-b6fc-07de769af9d9",
+  "model": "mannequin.glb",
+  "clips": {
+    "preset:biped:run": "clips/batch_b381c7f8-28df-46ab-bb80-3f61ca43c41d.glb"
+  }
+}
