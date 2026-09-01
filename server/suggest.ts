@@ -5,11 +5,14 @@
 // server prepends the game's grammar, the price schedule, and the
 // budget arithmetic, replays the thread to the model, and validates
 // every proposal through validateForged before it reaches the editor.
-// A valid kit that spends too little of the power budget goes back to
-// the model for strengthening; a timid kit that survives every retry
-// still returns, bill in plain sight, because a playable proposal
-// beats an error. Metered on the 'agent' quota: one player message,
-// one unit, however many internal retries it takes.
+// The numbers are not the model's job: every proposal is fitted to the
+// budget line by the power dial's own scaling (one shared factor across
+// the four spells) before validation, so the model owns structure and
+// theme and a well-shaped answer lands in one call. A kit too light
+// even at the dial's maximum goes back for more structure; one that
+// survives every retry still returns, bill in plain sight, because a
+// playable proposal beats an error. Metered on the 'agent' quota: one
+// player message, one unit, however many internal retries it takes.
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -26,6 +29,7 @@ import {
 } from '../src/sim/forge/budget';
 import type { ForgedChampionDef, ForgedPassiveRef } from '../src/sim/forge/forged_def';
 import { PASSIVE_TEMPLATE_LIST } from '../src/sim/forge/passive_templates';
+import { fitKitPower, POWER_DIAL_MAX, POWER_DIAL_MIN } from '../src/sim/forge/spell_power';
 import { validateForged } from '../src/sim/forge/validate';
 import type { ForgeOutcome } from './forge';
 import type { ForgeStore } from './forge_store';
@@ -49,6 +53,10 @@ export const BUDGET_FLOOR_DEFAULT = 0.85;
 // Model calls per player message: the first answer plus corrective
 // retries (validation errors or a timid budget).
 export const SUGGEST_ATTEMPTS = 3;
+// One model call's wall-clock allowance: past it the call is abandoned
+// and the creator gets a plain "try again" instead of a bubble that
+// thinks forever.
+export const SUGGEST_CALL_TIMEOUT_MS = 120_000;
 
 // One turn of the conversation as the client keeps it: user turns are
 // the creator's own words, assistant turns are the model's raw answers
@@ -113,7 +121,10 @@ function costSchedule(): string {
     `Delivery prices and multipliers: ${JSON.stringify(CAST_PRICES)}.`,
     `An ability's bill is its delivery cost times ${AVAIL_PIVOT}/(${AVAIL_SOFT}+cooldown),`,
     'relieved up to 20 percent each by mana cost and windup.',
-    'Aim to spend 90 to 100 percent of what the budget leaves the kit: a timid kit loses lanes.',
+    'Size the amounts roughly: the server then scales every amount (damage, healing, crowd ' +
+      `control durations) by one shared factor between ${POWER_DIAL_MIN} and ${POWER_DIAL_MAX} ` +
+      'so the kit lands exactly on the budget line. Structure, shapes and rhythm are yours and ' +
+      'never scaled: land within a factor of two of the line and spend your care on the design.',
   ].join(' ');
 }
 
@@ -146,7 +157,8 @@ function preamble(def: ForgedChampionDef): string {
     '"passive": { "template": id, "params": {..}, "name": string }, "abilities": ' +
     '{ "Q": Ability, "W": Ability, "E": Ability, "R": Ability } }. "comment" is one ' +
     'or two plain sentences to the creator about what you proposed or changed. ' +
-    'Spell names must be original English, no borrowed game IP.';
+    'Spell names must be original English, no borrowed game IP. Compact JSON: no ' +
+    'indentation, no line breaks.';
   const bounds = `Numeric bounds per ability field: ${JSON.stringify(ABILITY_BOUNDS)} (cooldown uses basicCooldown for Q W E and ultCooldown for R).`;
   const current = `The champion (name, role, stats stay as they are; you rework passive and abilities): ${JSON.stringify(
     {
@@ -271,6 +283,7 @@ async function askModel(deps: SuggestDeps, messages: readonly ApiMessage[]): Pro
       max_tokens: 4000,
       messages,
     }),
+    signal: AbortSignal.timeout(SUGGEST_CALL_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`suggestion service answered ${res.status}`);
   const body = (await res.json()) as { content?: { type: string; text?: string }[] };
@@ -293,6 +306,10 @@ export interface KitProposal {
   // turn next time.
   raw: string;
   budget: { total: number; cap: number };
+  // The shared factor the fit applied to the model's amounts: 1 means
+  // the model's own numbers, above it they were raised to the line,
+  // below it trimmed to fit.
+  fit: number;
 }
 
 export async function suggestKit(
@@ -349,7 +366,10 @@ export async function suggestKit(
     try {
       text = await askModel(deps, apiMessages);
     } catch (err) {
-      return { ok: false, error: `the suggestion call failed: ${(err as Error).message}` };
+      const e = err as Error;
+      const why =
+        e.name === 'TimeoutError' ? 'the model took too long to answer; try again' : e.message;
+      return { ok: false, error: `the suggestion call failed: ${why}` };
     }
     const retry = (feedback: string): void => {
       apiMessages.push({ role: 'assistant', content: text }, { role: 'user', content: feedback });
@@ -360,11 +380,22 @@ export async function suggestKit(
       retry('That was not the requested JSON object; answer with ONLY the JSON.');
       continue;
     }
-    const candidate: ForgedChampionDef = {
+    const drafted: ForgedChampionDef = {
       ...base,
       passive: suggestion.passive,
       abilities: suggestion.abilities,
     };
+    // The fit: every amount at one shared factor so the kit lands on the
+    // budget line, the power dial's own scaling. An unvalidated shape may
+    // not scale at all: a fit that throws or finds no factor leaves the
+    // draft as it is for the validator to describe.
+    let fit: ReturnType<typeof fitKitPower> = null;
+    try {
+      fit = fitKitPower(drafted);
+    } catch {
+      fit = null;
+    }
+    const candidate: ForgedChampionDef = fit ? { ...drafted, abilities: fit.abilities } : drafted;
     const v = validateForged(candidate);
     if (!v.ok) {
       lastErrors = v.errors;
@@ -379,18 +410,23 @@ export async function suggestKit(
       ok: true,
       comment: suggestion.comment,
       passive: suggestion.passive,
-      abilities: suggestion.abilities,
+      abilities: candidate.abilities,
       raw: text.slice(0, CHAT_RAW_TEXT_MAX),
       budget: { total: Math.round(bill.total), cap: POWER_BUDGET },
+      fit: fit?.factor ?? 1,
     };
     if (floor <= 0 || kit.cap <= 0 || kit.spend >= floor * kit.cap) return proposal;
-    // Valid but timid: keep it as the fallback and push for more.
+    // Valid but too light even at the dial's maximum: the structure is
+    // the problem, not the amounts. Keep it as the fallback and push for
+    // more.
     fallback = proposal;
     lastErrors = [];
     retry(
-      `Valid, but timid: the passive plus abilities spend ${Math.round(kit.spend)} of the ` +
-        `${Math.round(kit.cap)} the budget leaves them (${Math.round((100 * kit.spend) / kit.cap)} percent). ` +
-        `Strengthen the kit to spend 90 to 100 percent. The bill today: ${billLine(bill)}. ` +
+      `Valid, but too light: even with every amount scaled up to ${POWER_DIAL_MAX} times, the ` +
+        `passive plus abilities spend ${Math.round(kit.spend)} of the ${Math.round(kit.cap)} the ` +
+        `budget leaves them (${Math.round((100 * kit.spend) / kit.cap)} percent). Amounts cannot ` +
+        'fix this: add substance to the structure (more effects per spell, shorter cooldowns, ' +
+        `wider shapes, a pricier passive). The bill today: ${billLine(bill)}. ` +
         'Answer with ONLY the JSON object.',
     );
   }

@@ -4,14 +4,16 @@
 
 import { describe, expect, it } from 'vitest';
 import type { AbilityDef } from '../src/sim/combat/casting';
-import { EFFECT_BOUNDS } from '../src/sim/forge/bounds';
+import { BASE_STAT_BOUNDS, EFFECT_BOUNDS, GROWTH_BOUNDS } from '../src/sim/forge/bounds';
 import { budgetOf, POWER_BUDGET } from '../src/sim/forge/budget';
+import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import {
+  fitKitPower,
   grantSpellPower,
   POWER_DIAL_MAX,
   POWER_DIAL_MIN,
   scaleAbility,
-} from '../src/ui/spell_power';
+} from '../src/sim/forge/spell_power';
 import { FORGED_TWINS } from './forged_twins';
 
 const BOLT: AbilityDef = {
@@ -49,7 +51,7 @@ describe('scaleAbility', () => {
     expect(up.cooldown).toBe(8);
     expect(up.manaCost).toBe(40);
     // The anchor itself was never mutated.
-    expect((BOLT.spec as { onHit: { base?: number }[] }).onHit[0]?.base).toBe(80);
+    expect((BOLT.spec as unknown as { onHit: { base?: number }[] }).onHit[0]?.base).toBe(80);
   });
 
   it('clamps down to the field floors at the dial minimum', () => {
@@ -91,5 +93,99 @@ describe('grantSpellPower', () => {
     if (budgetOf(def).total > POWER_BUDGET) {
       expect(out.factor).toBe(POWER_DIAL_MIN);
     }
+  });
+});
+
+// Every base and growth stat at its rail: the heaviest body the bounds
+// allow, for kits that must overspend no matter the amounts.
+function maxedBody(def: ForgedChampionDef): ForgedChampionDef {
+  const base = { ...def.base };
+  const growth = { ...def.growth };
+  for (const key of Object.keys(BASE_STAT_BOUNDS) as (keyof typeof BASE_STAT_BOUNDS)[]) {
+    base[key] = BASE_STAT_BOUNDS[key].max;
+  }
+  for (const key of Object.keys(GROWTH_BOUNDS) as (keyof typeof GROWTH_BOUNDS)[]) {
+    growth[key] = GROWTH_BOUNDS[key].max;
+  }
+  return { ...def, base, growth };
+}
+
+function withKit(def: ForgedChampionDef, ability: AbilityDef): ForgedChampionDef {
+  return { ...def, abilities: { Q: ability, W: ability, E: ability, R: ability } };
+}
+
+describe('fitKitPower', () => {
+  it('raises a light kit to the line at one shared factor, structure and rhythm untouched', () => {
+    const base = FORGED_TWINS[0]!;
+    expect(budgetOf(base).total).toBeLessThan(POWER_BUDGET);
+    const fit = fitKitPower(base);
+    expect(fit).not.toBeNull();
+    if (!fit) return;
+    expect(fit.factor).toBeGreaterThan(1);
+    const total = budgetOf({ ...base, abilities: fit.abilities }).total;
+    expect(total).toBeLessThanOrEqual(POWER_BUDGET);
+    expect(total).toBeGreaterThan(POWER_BUDGET - 0.5);
+    for (const key of ['Q', 'W', 'E', 'R'] as const) {
+      expect(fit.abilities[key].spec.kind).toBe(base.abilities[key].spec.kind);
+      expect(fit.abilities[key].cooldown).toBe(base.abilities[key].cooldown);
+      expect(fit.abilities[key].manaCost).toBe(base.abilities[key].manaCost);
+      expect(fit.abilities[key].castRange).toBe(base.abilities[key].castRange);
+    }
+  });
+
+  it('trims a heavy kit down to the line', () => {
+    const base = FORGED_TWINS[1]!;
+    const heavy: ForgedChampionDef = {
+      ...base,
+      abilities: {
+        Q: scaleAbility(base.abilities.Q, 2),
+        W: scaleAbility(base.abilities.W, 2),
+        E: scaleAbility(base.abilities.E, 2),
+        R: scaleAbility(base.abilities.R, 2),
+      },
+    };
+    expect(budgetOf(heavy).total).toBeGreaterThan(POWER_BUDGET);
+    const fit = fitKitPower(heavy);
+    expect(fit).not.toBeNull();
+    if (!fit) return;
+    expect(fit.factor).toBeLessThan(1);
+    const total = budgetOf({ ...heavy, abilities: fit.abilities }).total;
+    expect(total).toBeLessThanOrEqual(POWER_BUDGET);
+    expect(total).toBeGreaterThan(POWER_BUDGET - 0.5);
+  });
+
+  it('stops at the dial maximum when even that stays under the line', () => {
+    const faint: AbilityDef = {
+      ...BOLT,
+      cooldown: 20,
+      spec: {
+        ...BOLT.spec,
+        onHit: [{ kind: 'damage', base: 5, dtype: 'magic' }],
+      } as AbilityDef['spec'],
+    };
+    const fit = fitKitPower(withKit(FORGED_TWINS[0]!, faint));
+    expect(fit?.factor).toBe(POWER_DIAL_MAX);
+  });
+
+  it('finds no factor when the structure overspends at the floor', () => {
+    // Four long blinks, untargetable in flight, on the shortest cooldown:
+    // all delivery, no amounts to trim, on the heaviest body allowed.
+    const blink = {
+      name: 'Blink',
+      manaCost: 0,
+      cooldown: 2,
+      castRange: 8,
+      spec: {
+        kind: 'dash',
+        range: 8,
+        landRadius: 0,
+        onLand: [],
+        selfEffects: [],
+        passThrough: [],
+        untargetableDuringTravel: true,
+      },
+    } as unknown as AbilityDef;
+    const def = maxedBody(withKit(FORGED_TWINS[0]!, blink));
+    expect(fitKitPower(def)).toBeNull();
   });
 });

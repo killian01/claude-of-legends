@@ -301,7 +301,8 @@ vertex stops where the power budget runs out, so overspending is impossible by
 construction, and the numbers are read at the axis tips, never typed. Growth per level
 is a second, smaller polygon. The melee or ranged choice is a toggle beside it, an
 identity, not an axis: a melee champion's reach is pinned off the polygon, a ranged
-champion's reach is one more axis.
+champion's reach is one more axis. The polygon only pushes back when the kit already
+claims its share of the budget, so the fresh draft's kit weighs what a roster kit weighs.
 _Avoid_: radar chart, spider chart, stat sliders
 
 **Power dial**:
@@ -310,5 +311,7 @@ control durations) inside the engine's bounds and stops where the power budget r
 out, exactly like a Stat polygon vertex. Structure (the cast kind, the effect kinds,
 the shapes) is not its business: that comes from the kit suggestion or the advanced
 editor. Rhythm (cooldown, mana cost, cast range, windup) stays typed beside it, in
-plain units.
+plain units. The kit conversation's proposals arrive already fitted to the budget line by
+the same scaling, one shared factor across the four spells: the model sizes roughly, the
+arithmetic lands the numbers.
 _Avoid_: power slider, spell level

@@ -2,12 +2,15 @@
 // works only for the owner's drafts with a chosen splash, replays the
 // client-kept thread with the preamble and image on the first turn and
 // the live form state on the last, and NOTHING lands unchecked: every
-// proposal must clear validateForged, and a valid but timid kit is sent
-// back for strengthening before being accepted as the fallback.
+// proposal is fitted to the budget line by the power dial's own scaling
+// and must then clear validateForged, and a kit too light even at the
+// dial's maximum is sent back for more structure before being accepted
+// as the fallback.
 
 import { describe, expect, it } from 'vitest';
 import { ForgeStore } from '../server/forge_store';
 import {
+  BUDGET_FLOOR_DEFAULT,
   type ChatTurn,
   SUGGEST_ATTEMPTS,
   type SuggestDeps,
@@ -17,6 +20,7 @@ import {
 import type { AbilityDef } from '../src/sim/combat/casting';
 import { budgetOf, POWER_BUDGET } from '../src/sim/forge/budget';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
+import { scaleAbility } from '../src/sim/forge/spell_power';
 import { FORGED_TWINS } from './forged_twins';
 
 function twin(i: number, id: string): ForgedChampionDef {
@@ -297,7 +301,7 @@ describe('suggestKit', () => {
     expect(out.ok).toBe(true);
     if (out.ok) expect(out.abilities.Q.name).toBe(GOOD_KIT.abilities.Q.name);
     expect(n).toBe(2);
-    expect(feedback[1]).toContain('timid');
+    expect(feedback[1]).toContain('too light');
     // Always timid: the valid weak kit still returns, never an error.
     let m = 0;
     const alwaysWeak = (() => {
@@ -311,6 +315,103 @@ describe('suggestKit', () => {
     expect(m).toBe(SUGGEST_ATTEMPTS);
     expect(timid.ok).toBe(true);
     if (timid.ok) expect(timid.abilities.Q.name).toBe('Faint Bolt');
+    store.close();
+  });
+});
+
+describe('the fit', () => {
+  it('lands a light kit on the budget line in one call and reports the factor', async () => {
+    const store = seeded();
+    let n = 0;
+    let signals = 0;
+    const fetchFn = ((_url: string, init?: RequestInit) => {
+      n += 1;
+      if (init?.signal instanceof AbortSignal) signals += 1;
+      return Promise.resolve(answer(JSON.stringify({ comment: 'ok', ...GOOD_KIT })));
+    }) as unknown as typeof fetch;
+    const base = twin(0, 'forged_d');
+    expect(budgetOf({ ...base, ...GOOD_KIT }).total).toBeLessThan(POWER_BUDGET);
+    const out = await suggestKit(deps(store, fetchFn, BUDGET_FLOOR_DEFAULT), 1, {
+      id: 'forged_d',
+      messages: ASK,
+    });
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.fit).toBeGreaterThan(1);
+      expect(out.budget.total).toBeLessThanOrEqual(POWER_BUDGET);
+      expect(out.budget.total).toBeGreaterThanOrEqual(POWER_BUDGET - 1);
+      // Structure and rhythm stay the model's; the raw answer is replayed
+      // as it was said.
+      expect(out.abilities.Q.spec.kind).toBe(GOOD_KIT.abilities.Q.spec.kind);
+      expect(out.abilities.Q.cooldown).toBe(GOOD_KIT.abilities.Q.cooldown);
+      expect(out.raw).toContain(GOOD_KIT.abilities.Q.name);
+    }
+    // One call, no strengthening round trip; and the call carries a
+    // timeout signal, so a stuck model cannot hang the conversation.
+    expect(n).toBe(1);
+    expect(signals).toBe(1);
+    store.close();
+  });
+
+  it('trims a heavy kit to the line instead of sending it back', async () => {
+    const store = seeded();
+    const heavy = {
+      passive: GOOD_KIT.passive,
+      abilities: {
+        Q: scaleAbility(GOOD_KIT.abilities.Q, 2.4),
+        W: scaleAbility(GOOD_KIT.abilities.W, 2.4),
+        E: scaleAbility(GOOD_KIT.abilities.E, 2.4),
+        R: scaleAbility(GOOD_KIT.abilities.R, 2.4),
+      },
+    };
+    expect(budgetOf({ ...twin(0, 'forged_d'), ...heavy }).total).toBeGreaterThan(POWER_BUDGET);
+    let n = 0;
+    const fetchFn = (() => {
+      n += 1;
+      return Promise.resolve(answer(JSON.stringify({ comment: 'big', ...heavy })));
+    }) as unknown as typeof fetch;
+    const out = await suggestKit(deps(store, fetchFn, BUDGET_FLOOR_DEFAULT), 1, {
+      id: 'forged_d',
+      messages: ASK,
+    });
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.fit).toBeLessThan(1);
+      expect(out.budget.total).toBeLessThanOrEqual(POWER_BUDGET);
+    }
+    expect(n).toBe(1);
+    store.close();
+  });
+
+  it('never crashes on a shapeless answer: the validator speaks instead', async () => {
+    const store = seeded();
+    const shapeless = {
+      passive: GOOD_KIT.passive,
+      abilities: { Q: { name: 'q' }, W: { name: 'w' }, E: 'nope', R: null },
+    };
+    let n = 0;
+    const fetchFn = (() => {
+      n += 1;
+      return Promise.resolve(answer(JSON.stringify(shapeless)));
+    }) as unknown as typeof fetch;
+    const out = await suggestKit(deps(store, fetchFn), 1, { id: 'forged_d', messages: ASK });
+    expect(out).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('did not clear validation'),
+    });
+    expect(n).toBe(SUGGEST_ATTEMPTS);
+    store.close();
+  });
+
+  it('reports a stuck model call plainly', async () => {
+    const store = seeded();
+    const fetchFn = (() => {
+      const err = new Error('signal timed out');
+      err.name = 'TimeoutError';
+      return Promise.reject(err);
+    }) as unknown as typeof fetch;
+    const out = await suggestKit(deps(store, fetchFn), 1, { id: 'forged_d', messages: ASK });
+    expect(out).toMatchObject({ ok: false, error: expect.stringContaining('too long') });
     store.close();
   });
 });

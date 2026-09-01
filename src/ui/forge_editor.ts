@@ -16,15 +16,16 @@ import { ABILITY_BOUNDS, BASE_STAT_BOUNDS, GROWTH_BOUNDS } from '../sim/forge/bo
 import { budgetOf, POWER_BUDGET } from '../sim/forge/budget';
 import type { ForgedDisplay } from '../sim/forge/display';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
+import { freshDraftDef } from '../sim/forge/fresh_draft';
 import { PASSIVE_TEMPLATE_LIST, PASSIVE_TEMPLATES } from '../sim/forge/passive_templates';
+import { grantSpellPower, POWER_DIAL_MAX, POWER_DIAL_MIN } from '../sim/forge/spell_power';
 import { FORGED_ROLES, validateForged } from '../sim/forge/validate';
 import type { AbilityKey } from '../sim/types';
 import { type AnimPreview, createAnimPreview } from './anim_preview';
 import { describeAbility } from './describe';
-import { buildCastEditor, defaultCast, type KitHooks, numField } from './forge_kit';
+import { buildCastEditor, type KitHooks, numField } from './forge_kit';
 import { startMenuBackdrop } from './menu_backdrop';
 import { setRichLine } from './rich_text';
-import { grantSpellPower, POWER_DIAL_MAX, POWER_DIAL_MIN } from './spell_power';
 import { grantStat, MELEE_REACH, RANGED_MIN } from './stat_budget';
 import { type PolyAxis, statPolygon } from './stat_polygon';
 import { openWorkshop } from './workshop';
@@ -391,77 +392,13 @@ async function api<T>(url: string, body?: unknown): Promise<T | null> {
 }
 
 // A fresh draft: legal out of the box, middle of the road everywhere, so
-// the first minutes are spent shaping, not fixing.
+// the first minutes are spent shaping, not fixing. The def itself is sim
+// data (fresh_draft.ts); only the id is minted here.
 export function newDraft(): ForgedChampionDef {
   const bytes = new Uint8Array(6);
   crypto.getRandomValues(bytes);
   const suffix = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
-  return {
-    id: `forged_${suffix}`,
-    name: 'New Champion',
-    title: '',
-    tagline: '',
-    role: 'Fighter',
-    creator: '',
-    passive: { template: 'kit_inscribed', params: {}, name: 'Unwritten' },
-    base: {
-      hp: 580,
-      mana: 350,
-      ad: 55,
-      ap: 0,
-      armor: 25,
-      mr: 30,
-      attackRange: 5.5,
-      attackSpeed: 0.65,
-      moveSpeed: 3.7,
-      hpRegen: 1.5,
-      manaRegen: 1.4,
-      radius: 0.65,
-    },
-    growth: { hp: 90, mana: 35, ad: 4, armor: 2.5, mr: 1.5 },
-    abilities: {
-      Q: {
-        name: 'First Strike',
-        manaCost: 40,
-        cooldown: 6,
-        castRange: 9,
-        spec: defaultCast('skillshot'),
-      },
-      W: {
-        name: 'Second Wind',
-        manaCost: 50,
-        cooldown: 10,
-        castRange: 7,
-        spec: defaultCast('zone'),
-      },
-      E: {
-        name: 'Third Step',
-        manaCost: 35,
-        cooldown: 9,
-        castRange: 4.5,
-        spec: defaultCast('dash'),
-      },
-      R: {
-        name: 'The Answer',
-        manaCost: 85,
-        cooldown: 70,
-        castRange: 8,
-        spec: {
-          kind: 'zone',
-          radius: 3.5,
-          duration: 1.5,
-          detonateDelay: 1.2,
-          onEnter: [],
-          onTick: [],
-          allyOnTick: [],
-          onDetonate: [
-            { kind: 'damage', base: 180, apRatio: 1, dtype: 'magic' },
-            { kind: 'stun', duration: 0.9 },
-          ],
-        },
-      },
-    },
-  };
+  return freshDraftDef(`forged_${suffix}`);
 }
 
 type EditorTab = 'design' | 'spells' | 'tuning';
@@ -542,8 +479,12 @@ export function openForgeEditor(container: HTMLElement): void {
   let animating = false;
   // True while a weapon-only build runs (the claim).
   let weaponForging = false;
-  // True while a kit conversation request is in flight (Spells tab).
+  // True while a kit conversation request is in flight (Spells tab),
+  // since when (wall clock: this is presentation, not sim), and the
+  // ticker that keeps the Thinking bubble honest about the wait.
   let suggesting = false;
+  let suggestStartedAt = 0;
+  let thinkingTimer: number | null = null;
   // The kit conversation, session-lived: the wire thread (assistant
   // turns hold the model's raw answers, replayed so it can iterate on
   // its own proposals) and the short text each turn shows as a bubble.
@@ -553,6 +494,8 @@ export function openForgeEditor(container: HTMLElement): void {
     passive: ForgedChampionDef['passive'];
     abilities: ForgedChampionDef['abilities'];
     budget: { total: number; cap: number };
+    // The shared factor the server's fit applied to the model's amounts.
+    fit: number;
   } | null = null;
   // The unsent chat input, preserved across re-renders.
   let chatDraft = '';
@@ -1849,8 +1792,8 @@ export function openForgeEditor(container: HTMLElement): void {
           'p',
           'fe-lead',
           'Reads your chosen splash. Say what you want ("an ice theme", "more mobility ' +
-            'on the E"); each answer proposes a full kit below, and nothing touches ' +
-            'your spells until you apply it.',
+            'on the E"); each answer proposes a full kit below, fitted to the budget ' +
+            'line, and nothing touches your spells until you apply it.',
         ),
       );
       const log = el('div', 'fe-chatlog');
@@ -1860,7 +1803,20 @@ export function openForgeEditor(container: HTMLElement): void {
       for (const turn of chat) {
         log.append(el('div', `fe-bubble ${turn.role === 'user' ? 'user' : 'ai'}`, turn.bubble));
       }
-      if (suggesting) log.append(el('div', 'fe-bubble ai', 'Thinking...'));
+      if (suggesting) {
+        // The wait, counted out loud: a silent bubble reads as a hang.
+        const bubble = el('div', 'fe-bubble ai', '');
+        const tick = (): void => {
+          const secs = Math.round((Date.now() - suggestStartedAt) / 1000);
+          bubble.textContent =
+            `Thinking... ${secs} s. A proposal usually lands in under a minute; a draft ` +
+            'that breaks a rule is sent back for a fix and takes as long again.';
+        };
+        tick();
+        if (thinkingTimer !== null) window.clearInterval(thinkingTimer);
+        thinkingTimer = window.setInterval(tick, 1000);
+        log.append(bubble);
+      }
       sug.append(log);
       const row = el('div', 'fe-chatrow');
       const input = el('input', 'fe-input') as HTMLInputElement;
@@ -1883,6 +1839,7 @@ export function openForgeEditor(container: HTMLElement): void {
         chatDraft = '';
         chat.push({ role: 'user', text, bubble: text });
         suggesting = true;
+        suggestStartedAt = Date.now();
         renderMain();
         void api<{
           ok: boolean;
@@ -1891,6 +1848,7 @@ export function openForgeEditor(container: HTMLElement): void {
           abilities?: ForgedChampionDef['abilities'];
           raw?: string;
           budget?: { total: number; cap: number };
+          fit?: number;
           error?: string;
         }>('/api/forge/suggest', {
           id: current.id,
@@ -1898,6 +1856,10 @@ export function openForgeEditor(container: HTMLElement): void {
           messages: chat.map((t) => ({ role: t.role, text: t.text })),
         }).then((r) => {
           suggesting = false;
+          if (thinkingTimer !== null) {
+            window.clearInterval(thinkingTimer);
+            thinkingTimer = null;
+          }
           if (!r?.ok || !r.passive || !r.abilities || typeof r.raw !== 'string') {
             // The model never saw this message: take it back into the
             // input so the thread matches what was actually answered.
@@ -1916,6 +1878,7 @@ export function openForgeEditor(container: HTMLElement): void {
             passive: r.passive,
             abilities: r.abilities,
             budget: r.budget ?? { total: 0, cap: 0 },
+            fit: r.fit ?? 1,
           };
           renderMain();
         });
@@ -1972,6 +1935,16 @@ export function openForgeEditor(container: HTMLElement): void {
         prop.append(
           el('p', 'fe-lead', `This kit uses ${p.budget.total} / ${p.budget.cap} of the budget.`),
         );
+        if (Math.abs(p.fit - 1) >= 0.005) {
+          prop.append(
+            el(
+              'p',
+              'fe-desc',
+              `Amounts ${p.fit > 1 ? 'raised' : 'trimmed'} to ${p.fit.toFixed(2)} times the ` +
+                'answer to sit on the budget line; the power dials move them again.',
+            ),
+          );
+        }
         if (!sealed) {
           const apply = el('button', 'fe-gen small', 'Apply this kit (free)') as HTMLButtonElement;
           apply.title = 'Fills the form with this kit; nothing is saved until you save';

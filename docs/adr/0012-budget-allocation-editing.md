@@ -20,3 +20,17 @@ Considered and rejected: labeled bounds and per-spell cost lines on the raw fiel
 (still invites maxing, still asks the creator to know what a number means), and
 curated presets per cast kind (a second content surface to balance, duplicating what
 the conversation already does better).
+
+Playtest follow-up (2026-09-01). The polygon only plays when the kit already claims its
+share: the fresh draft carried a placeholder kit so light that every vertex reached its
+rail with budget to spare, so the fresh draft now carries a kit that weighs what a roster
+kit weighs (`src/sim/forge/fresh_draft.ts`). And the kit conversation no longer asks the
+model to land the numbers: every proposal is fitted to the budget line by the power
+dial's own scaling, one shared factor across the four spells (`fitKitPower`), before
+validation. The model owns structure and theme, the arithmetic owns the amounts, and a
+well-shaped answer lands in one model call instead of the two or three the old
+"spend 90 to 100 percent" retry loop needed, which is what made the conversation feel
+unresponsive. Left open on purpose: a creator who deliberately lightens the kit below
+roughly half the budget can still reach every stat rail, because the rails sit inside
+what the budget affords a bare kit. That is the budget's verdict, not a defect; widening
+the rails or capping the stat share would be a separate balance decision.

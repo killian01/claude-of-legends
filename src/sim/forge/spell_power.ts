@@ -7,12 +7,12 @@
 // ranges) and its RHYTHM (cooldown, mana, cast range, windup) are not
 // its business.
 
-import type { AbilityDef, CastSpec } from '../sim/combat/casting';
-import type { EffectSpec } from '../sim/combat/effects';
-import { type Bound, CAST_BOUNDS, EFFECT_BOUNDS } from '../sim/forge/bounds';
-import { budgetOf, POWER_BUDGET } from '../sim/forge/budget';
-import type { ForgedChampionDef } from '../sim/forge/forged_def';
-import type { AbilityKey } from '../sim/types';
+import type { AbilityDef, CastSpec } from '../combat/casting';
+import type { EffectSpec } from '../combat/effects';
+import type { AbilityKey } from '../types';
+import { type Bound, CAST_BOUNDS, EFFECT_BOUNDS } from './bounds';
+import { budgetOf, POWER_BUDGET } from './budget';
+import type { ForgedChampionDef } from './forged_def';
 
 export const POWER_DIAL_MIN = 0.25;
 export const POWER_DIAL_MAX = 2.5;
@@ -157,4 +157,40 @@ export function grantSpellPower(
   }
   at = totalAt(lo);
   return { ability: at.ability, factor: lo };
+}
+
+export interface KitFit {
+  abilities: Record<AbilityKey, AbilityDef>;
+  factor: number;
+}
+
+// The whole kit at one shared factor: the largest the budget affords
+// inside the dial's range, so a proposal lands on the budget line with
+// its spells' relative weights intact. This is how the kit conversation
+// hands the numbers to the arithmetic instead of the model: the model
+// owns structure and theme, the fit owns the amounts. Null when even the
+// floor overspends: the structure itself is too heavy, and no trimming
+// of amounts can help.
+export function fitKitPower(def: ForgedChampionDef): KitFit | null {
+  const at = (factor: number): KitFit & { total: number } => {
+    const abilities = {
+      Q: scaleAbility(def.abilities.Q, factor),
+      W: scaleAbility(def.abilities.W, factor),
+      E: scaleAbility(def.abilities.E, factor),
+      R: scaleAbility(def.abilities.R, factor),
+    };
+    return { abilities, factor, total: budgetOf({ ...def, abilities }).total };
+  };
+  const top = at(POWER_DIAL_MAX);
+  if (top.total <= POWER_BUDGET) return { abilities: top.abilities, factor: top.factor };
+  if (!(at(POWER_DIAL_MIN).total <= POWER_BUDGET)) return null;
+  let lo = POWER_DIAL_MIN;
+  let hi = POWER_DIAL_MAX;
+  for (let i = 0; i < 32; i += 1) {
+    const mid = (lo + hi) / 2;
+    if (at(mid).total <= POWER_BUDGET) lo = mid;
+    else hi = mid;
+  }
+  const fit = at(lo);
+  return { abilities: fit.abilities, factor: lo };
 }
