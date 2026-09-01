@@ -293,3 +293,13 @@ The point envelope a forged champion must fit inside: every stat point and every
 primitive in the kit has a cost, on top of hard per-field bounds. What makes forging a set
 of trade-offs instead of a max-everything form.
 _Avoid_: balance score, point buy
+
+**Stat polygon**:
+The Tuning tab's stat editor: an interactive polygon, one axis per priced base stat,
+whose vertices the creator pulls outward to buy a stat and inward to free points. A
+vertex stops where the power budget runs out, so overspending is impossible by
+construction, and the numbers are read at the axis tips, never typed. Growth per level
+is a second, smaller polygon. The melee or ranged choice is a toggle beside it, an
+identity, not an axis: a melee champion's reach is pinned off the polygon, a ranged
+champion's reach is one more axis.
+_Avoid_: radar chart, spider chart, stat sliders

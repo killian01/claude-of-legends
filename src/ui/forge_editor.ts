@@ -10,6 +10,7 @@
 // generation and parameters below it.
 
 import { forgedClipFileUrls, registerForgedAssets } from '../game/forged_visuals';
+import { RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import type { ChampionBaseStats, ChampionGrowth, ChampionRole } from '../sim/content/champions';
 import { ABILITY_BOUNDS, BASE_STAT_BOUNDS, GROWTH_BOUNDS } from '../sim/forge/bounds';
 import { budgetOf, POWER_BUDGET } from '../sim/forge/budget';
@@ -22,7 +23,31 @@ import { type AnimPreview, createAnimPreview } from './anim_preview';
 import { describeAbility } from './describe';
 import { buildCastEditor, defaultCast, type KitHooks, numField } from './forge_kit';
 import { startMenuBackdrop } from './menu_backdrop';
+import { grantStat, MELEE_REACH, RANGED_MIN } from './stat_budget';
+import { type PolyAxis, statPolygon } from './stat_polygon';
 import { openWorkshop } from './workshop';
+
+// The polygon's base-stat axes, in reading order; reach joins as a tenth
+// axis only while the champion is ranged, and ap (pinned at zero) and
+// radius (free) stay off it.
+const BASE_AXES: readonly { key: keyof ChampionBaseStats; label: string }[] = [
+  { key: 'hp', label: 'HP' },
+  { key: 'mana', label: 'Mana' },
+  { key: 'ad', label: 'Attack' },
+  { key: 'armor', label: 'Armor' },
+  { key: 'mr', label: 'MR' },
+  { key: 'attackSpeed', label: 'Atk speed' },
+  { key: 'moveSpeed', label: 'Speed' },
+  { key: 'hpRegen', label: 'HP regen' },
+  { key: 'manaRegen', label: 'MP regen' },
+];
+const GROWTH_LABELS: Record<string, string> = {
+  hp: 'HP',
+  mana: 'Mana',
+  ad: 'Attack',
+  armor: 'Armor',
+  mr: 'MR',
+};
 
 const CSS = `
 .fe, .fe * { box-sizing: border-box; }
@@ -180,6 +205,12 @@ const CSS = `
 .fe-chatrow .fe-input { margin-bottom: 0; }
 .fe-prop-spell { margin: 6px 0; }
 .fe-prop-spell strong { color: #d8cdb0; font-size: 12.5px; }
+.fe-poly { display: block; touch-action: none; user-select: none; max-width: 100%; }
+.fe-poly [data-axis] { cursor: grab; }
+.fe-poly.off [data-axis] { cursor: default; }
+.fe-polyrow { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: flex-start; margin: 8px 0; }
+.fe-polywrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.fe-mini.on { border-color: #d8b45a; color: #e8cc74; background: #2c2210; }
 .fe-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .fe-cand {
   padding: 0; border: 2px solid #4a3a1c; border-radius: 8px; background: #120d06;
@@ -2211,30 +2242,154 @@ export function openForgeEditor(container: HTMLElement): void {
       panel.append(row);
       main.append(panel);
     }
+    const sealed = isSealed();
     const stats = el('div', 'fe-panel');
-    stats.append(el('h3', '', 'Stats (every point above the floor costs budget)'));
-    const statsGrid = el('div', 'fe-grid');
-    const base = current.base as unknown as Record<string, unknown>;
-    for (const key of Object.keys(BASE_STAT_BOUNDS) as (keyof ChampionBaseStats)[]) {
-      if (key === 'ap') continue;
-      statsGrid.append(numField(key, base, key, BASE_STAT_BOUNDS[key], hooks));
-    }
+    stats.append(el('h3', '', 'Stat polygon'));
     stats.append(
-      statsGrid,
       el(
         'p',
-        'fe-desc',
-        'attackRange decides how the champion fights: 2 or under is a melee strike, ' +
-          'above 2 every basic attack fires a bolt.',
+        'fe-lead',
+        'Pull a vertex outward to buy a stat, inward to free points. Every point above ' +
+          'a floor costs budget, shared with the kit: a vertex stops where the budget ' +
+          'runs out, so overspending is impossible.',
       ),
     );
-    stats.append(el('h3', '', 'Growth per level'));
-    const growthGrid = el('div', 'fe-grid');
-    const growth = current.growth as unknown as Record<string, unknown>;
-    for (const key of Object.keys(GROWTH_BOUNDS) as (keyof ChampionGrowth)[]) {
-      growthGrid.append(numField(key, growth, key, GROWTH_BOUNDS[key], hooks));
+
+    // Melee or ranged: an identity choice, not an axis to optimize. A
+    // melee champion's reach is pinned off the polygon; a ranged one's
+    // reach joins it as one more axis (playtest round 15).
+    const ranged = current.base.attackRange > RANGED_THRESHOLD;
+    const reachRow = el('div', 'fe-artrow');
+    const meleeBtn = el('button', `fe-mini${ranged ? '' : ' on'}`, 'Melee') as HTMLButtonElement;
+    const rangedBtn = el('button', `fe-mini${ranged ? ' on' : ''}`, 'Ranged') as HTMLButtonElement;
+    meleeBtn.disabled = sealed;
+    rangedBtn.disabled = sealed;
+    meleeBtn.title = 'Strike up close; reach pinned, off the polygon';
+    rangedBtn.title = 'Every basic attack fires a bolt; reach becomes an axis';
+    meleeBtn.addEventListener('click', () => {
+      if (!ranged) return;
+      current.base.attackRange = MELEE_REACH;
+      refresh();
+      renderMain();
+    });
+    rangedBtn.addEventListener('click', () => {
+      if (ranged) return;
+      const granted = grantStat(current, 'base', 'attackRange', 5.5);
+      if (granted < RANGED_MIN) {
+        status.textContent = 'No budget left for a ranged reach: free some points first.';
+        return;
+      }
+      current.base.attackRange = granted;
+      refresh();
+      renderMain();
+    });
+    reachRow.append(
+      meleeBtn,
+      rangedBtn,
+      el(
+        'span',
+        'fe-step-text',
+        ranged
+          ? 'Ranged: basic attacks fire a bolt; the reach axis is on the polygon.'
+          : `Melee: strikes up close, reach pinned at ${MELEE_REACH}.`,
+      ),
+    );
+    stats.append(reachRow);
+
+    const asNumbers = (obj: unknown): Record<string, number> => obj as Record<string, number>;
+    const polyRow = el('div', 'fe-polyrow');
+    const baseAxes: PolyAxis[] = BASE_AXES.map(({ key, label }) => ({
+      key,
+      label,
+      min: BASE_STAT_BOUNDS[key].min,
+      max: BASE_STAT_BOUNDS[key].max,
+      value: current.base[key],
+    }));
+    if (ranged) {
+      baseAxes.push({
+        key: 'attackRange',
+        label: 'Reach',
+        min: RANGED_MIN,
+        max: BASE_STAT_BOUNDS.attackRange.max,
+        value: current.base.attackRange,
+      });
     }
-    stats.append(growthGrid);
+    const baseWrap = el('div', 'fe-polywrap');
+    baseWrap.append(el('div', 'fe-step-text', 'Base stats'));
+    baseWrap.append(
+      statPolygon(baseAxes, {
+        enabled: !sealed,
+        grant: (key, want) => {
+          const g = grantStat(current, 'base', key, want);
+          // The reach axis never grants below the ranged floor: better a
+          // vertex that refuses to move than a champion silently melee.
+          if (key === 'attackRange' && g < RANGED_MIN) return current.base.attackRange;
+          asNumbers(current.base)[key] = g;
+          hooks.refresh();
+          return g;
+        },
+      }),
+    );
+    polyRow.append(baseWrap);
+    const growthAxes: PolyAxis[] = (Object.keys(GROWTH_BOUNDS) as (keyof ChampionGrowth)[]).map(
+      (key) => ({
+        key,
+        label: GROWTH_LABELS[key] ?? key,
+        min: GROWTH_BOUNDS[key].min,
+        max: GROWTH_BOUNDS[key].max,
+        value: current.growth[key],
+      }),
+    );
+    const growthWrap = el('div', 'fe-polywrap');
+    growthWrap.append(el('div', 'fe-step-text', 'Growth per level'));
+    growthWrap.append(
+      statPolygon(growthAxes, {
+        size: 250,
+        enabled: !sealed,
+        grant: (key, want) => {
+          const g = grantStat(current, 'growth', key, want);
+          asNumbers(current.growth)[key] = g;
+          hooks.refresh();
+          return g;
+        },
+      }),
+    );
+    polyRow.append(growthWrap);
+    stats.append(polyRow);
+
+    // The one typed field left: body size is free (price zero) and not a
+    // power tradeoff, so it stays a plain number.
+    const radiusRow = el('div', 'fe-fields');
+    radiusRow.append(
+      numField(
+        'body radius (free)',
+        current.base as unknown as Record<string, unknown>,
+        'radius',
+        BASE_STAT_BOUNDS.radius,
+        hooks,
+      ),
+    );
+    stats.append(radiusRow);
+    if (budgetOf(current).total > POWER_BUDGET) {
+      stats.append(
+        el(
+          'p',
+          'fe-desc',
+          'Over budget: the kit consumes everything. Axes can only come down here; ' +
+            'lighten a spell on the Spells tab to make room.',
+        ),
+      );
+    }
+    if (sealed) {
+      stats.append(
+        el(
+          'p',
+          'fe-desc',
+          'This champion is sealed: the polygon is read-only. Unseal it (Design tab, ' +
+            'animations block) to retune; the reach still moves through Reforge above.',
+        ),
+      );
+    }
     main.append(stats);
   }
 
