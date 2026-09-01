@@ -6,7 +6,7 @@
 // provider's spelling. Pure lookup, zero three.js imports, testable from
 // plain node.
 
-import type { ChampionClipNames } from './manifest';
+import type { ChampionClipNames, SpellClipNames } from './manifest';
 
 // Substring candidates per role, tried in order; matching is
 // case-insensitive over the full clip name.
@@ -46,6 +46,22 @@ export function resolveForgedClips(names: readonly string[]): ChampionClipNames 
     death: find('death') ?? idle,
     ...(hit !== undefined ? { hit } : {}),
   };
+}
+
+// The creator's per-spell cast picks, read from the same picked-clips map
+// the roles ride ('castQ'..'castR'). Only picks the loaded files actually
+// carry survive; a missing one falls back to the shared cast at play time.
+export function spellClipPicks(
+  picked: Record<string, string> | null,
+  available: ReadonlySet<string>,
+): SpellClipNames | undefined {
+  if (!picked) return undefined;
+  const out: Partial<Record<'Q' | 'W' | 'E' | 'R', string>> = {};
+  for (const key of ['Q', 'W', 'E', 'R'] as const) {
+    const name = picked[`cast${key}`];
+    if (name !== undefined && available.has(name)) out[key] = name;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 // The structural slice of THREE.AnimationClip stripTravel touches, typed

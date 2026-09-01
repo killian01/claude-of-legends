@@ -15,6 +15,7 @@ import { type ChampionTemplate, measureScene, normalizeProp, toLambert } from '.
 import {
   type RemovedTravel,
   resolveForgedClips,
+  spellClipPicks,
   stripStanceLead,
   stripTravel,
 } from './forged_clips';
@@ -244,6 +245,7 @@ function pickedClips(
 function buildDef(entry: ForgedEntry, clipNames: ReadonlySet<string>): ChampionVisualDef | null {
   const clips = pickedClips(entry.clips, clipNames) ?? resolveForgedClips([...clipNames]);
   if (!clips) return null;
+  const spellClips = spellClipPicks(entry.clips, clipNames);
   const d = entry.display;
   const height = d.height ?? FORGED_DEFAULT_HEIGHT;
   // Only the creator's saved prop shows: no silent default weapon
@@ -260,6 +262,7 @@ function buildDef(entry: ForgedEntry, clipNames: ReadonlySet<string>): ChampionV
     ...(d.yOffset !== undefined ? { yOffset: d.yOffset } : {}),
     ...(d.yawOffset !== undefined ? { yawOffset: d.yawOffset } : {}),
     clips,
+    ...(spellClips ? { spellClips } : {}),
     ...(model && prop
       ? {
           props: [

@@ -17,6 +17,10 @@ export interface ChampionClipNames {
   hit?: string;
 }
 
+// Per-ability cast overrides (forged champions: the creator's own pick
+// per spell slot). An absent key plays the shared cast clip.
+export type SpellClipNames = Partial<Record<'Q' | 'W' | 'E' | 'R', string>>;
+
 // A signature prop built procedurally (props.ts) and riding a rig bone. The
 // anchor follows the bone's POSITION only: bone orientations and scales vary
 // wildly across these rigs (quantization compensation, per-pack conventions),
@@ -84,6 +88,9 @@ export interface ChampionVisualDef {
   // renderer converges the bolt onto the sim-true path right after spawn.
   muzzle?: { forward: number; y: number };
   clips: ChampionClipNames;
+  // Per-ability cast overrides (forged champions only so far): the key's
+  // own clip instead of the shared cast.
+  spellClips?: SpellClipNames;
   // Node names removed from the clone (baked accessories we replace or drop).
   hide?: readonly string[];
   // Mesh names tinted with the skin body color (team color on default skins):

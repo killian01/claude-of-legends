@@ -496,6 +496,8 @@ export function openForgeEditor(container: HTMLElement): void {
   let animating = false;
   // True while a weapon-only build runs (the claim).
   let weaponForging = false;
+  // True while a kit suggestion request is in flight (Spells tab).
+  let suggesting = false;
   let currentStage = '';
   let stageRows: Map<string, HTMLElement> | null = null;
   // The account's creation stock, from the drafts route; -1 = unknown.
@@ -1740,6 +1742,54 @@ export function openForgeEditor(container: HTMLElement): void {
     slotsPanel.append(slots);
     main.append(slotsPanel);
 
+    // Kit suggestion from the splash art (drafts only: a sealed kit is
+    // locked). The suggestion lands in the draft on screen, saved only
+    // when the player saves; the server validates it in full first.
+    if (!sealed) {
+      const sug = el('div', 'fe-panel');
+      sug.append(el('h3', '', 'Suggest the kit from the splash art'));
+      sug.append(
+        el(
+          'p',
+          'fe-lead',
+          'Reads your chosen splash and proposes a themed passive and four spells, ' +
+            'written into the draft for you to review, tweak, and save.',
+        ),
+      );
+      const go = el('button', 'fe-gen', suggesting ? 'Asking...' : 'Suggest a kit (AI)');
+      const splashChosen = chosenOf('splash') !== undefined;
+      (go as HTMLButtonElement).disabled = !splashChosen || suggesting;
+      go.addEventListener('click', () => {
+        if (suggesting) return;
+        suggesting = true;
+        renderMain();
+        status.textContent = 'Asking for a kit suggestion...';
+        void api<{
+          ok: boolean;
+          passive?: ForgedChampionDef['passive'];
+          abilities?: ForgedChampionDef['abilities'];
+          error?: string;
+        }>('/api/forge/suggest', { id: current.id }).then((r) => {
+          suggesting = false;
+          if (!r?.ok || !r.passive || !r.abilities) {
+            status.textContent = r?.error ?? 'the suggestion failed';
+            renderMain();
+            return;
+          }
+          current.passive = r.passive;
+          current.abilities = r.abilities;
+          status.textContent = 'A suggested kit is in the draft: review each spell, then save.';
+          renderMain();
+          refresh();
+        });
+      });
+      sug.append(go);
+      if (!splashChosen) {
+        sug.append(el('p', 'fe-desc', 'Locked until a splash art is chosen on the Design tab.'));
+      }
+      main.append(sug);
+    }
+
     if (spellSlot === 'P') {
       renderPassiveEditor(sealed);
     } else {
@@ -1875,6 +1925,71 @@ export function openForgeEditor(container: HTMLElement): void {
     costs.append(numField('windup', ability, 'windup', ABILITY_BOUNDS.windup, hooks));
     panel.append(costs);
     panel.append(buildCastEditor(current.abilities[key], hooks));
+    main.append(panel);
+    renderSpellAnimation(key);
+  }
+
+  // The spell's own animation (playtest round 6 ask): each ability key
+  // gets a dedicated pick from the cast and strike catalogs, previewed
+  // on the mannequin, applied on its own like any clip change. A spell
+  // without a pick plays the shared cast animation.
+  function renderSpellAnimation(key: AbilityKey): void {
+    const panel = el('div', 'fe-panel');
+    panel.append(el('h3', '', `${key} animation`));
+    const row = currentRow();
+    const slot = `cast${key}`;
+    const bakedPick = row?.clips?.[slot];
+    const choices = [...(animCatalog?.roles.cast ?? []), ...(animCatalog?.roles.attack ?? [])];
+    const rowEl = el('div', 'fe-artrow');
+    const sel = el('select', 'fe-select') as HTMLSelectElement;
+    const shared = document.createElement('option');
+    shared.value = '';
+    shared.textContent = 'Shared cast animation';
+    sel.append(shared);
+    for (const c of choices) {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.label;
+      opt.title = c.id;
+      sel.append(opt);
+    }
+    if (bakedPick !== undefined && choices.some((c) => c.id === bakedPick)) sel.value = bakedPick;
+    rowEl.append(sel);
+    const play = el('button', 'fe-mini', 'Play') as HTMLButtonElement;
+    play.title = 'Play this pick on the mannequin';
+    play.addEventListener('click', () => {
+      if (sel.value !== '') animPreview?.show(sel.value, 'cast');
+    });
+    rowEl.append(play);
+    const apply = el('button', 'fe-mini gold', 'Apply (free)') as HTMLButtonElement;
+    const syncApply = (): void => {
+      apply.hidden = sel.value === '' || sel.value === bakedPick;
+    };
+    apply.disabled = !row?.model || animating || finalizing || weaponForging;
+    apply.title = !row?.model
+      ? 'Build the 3D model first (Step 4)'
+      : `Bakes this animation for ${key} alone; spends nothing`;
+    apply.addEventListener('click', () => {
+      if (sel.value !== '') runAnimate({ [slot]: sel.value });
+    });
+    rowEl.append(apply);
+    sel.addEventListener('change', () => {
+      syncApply();
+      if (sel.value !== '') animPreview?.show(sel.value, 'cast');
+    });
+    syncApply();
+    panel.append(rowEl);
+    panel.append(
+      el(
+        'p',
+        'fe-desc',
+        bakedPick === undefined
+          ? 'This spell plays the shared cast animation until you give it one of its own.'
+          : 'This spell has its own animation; picking another replaces it.',
+      ),
+    );
+    if (!animPreview) animPreview = createAnimPreview();
+    panel.append(animPreview.el);
     main.append(panel);
   }
 

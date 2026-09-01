@@ -21,6 +21,8 @@ import {
   type ClipRole,
   GenerationError,
   type GenerationProvider,
+  SPELL_CLIP_SLOTS,
+  type SpellClipSlot,
   type WeaponFamily,
 } from './provider';
 
@@ -62,10 +64,11 @@ export interface AnimateRequest {
   accountId: number;
   // The style the picks started from, kept for display.
   family: WeaponFamily;
-  // The player's FULL target: one pick per clip role, validated against
-  // the provider catalog by server/forge.ts before this request exists.
-  // The pipeline itself works out which roles actually need baking.
-  clips: Readonly<Record<ClipRole, string>>;
+  // The player's FULL target: one pick per clip role plus any per-spell
+  // slots, validated against the provider catalog by server/forge.ts
+  // before this request exists. The pipeline itself works out which
+  // slots actually need baking.
+  clips: Readonly<Record<ClipRole, string> & Partial<Record<SpellClipSlot, string>>>;
 }
 
 // The weapon family a kit implies, until the workshop lets the author
@@ -274,15 +277,21 @@ async function runAnimate(
       (deps.storage.forgedAssets(req.forgedId) as Record<string, unknown> | null) ?? {};
     const prevClips = (before.clips ?? {}) as Record<string, string>;
     const prevFiles = (before.clipFiles ?? {}) as Record<string, string>;
-    // What actually bakes: a changed pick, or a role with no clip file
+    // What actually bakes: a changed pick, or a slot with no clip file
     // yet (the first bake, and the pre-split champion's transition).
-    const delta = CLIP_ROLES.filter(
-      (role) => req.clips[role] !== prevClips[role] || typeof prevFiles[role] !== 'string',
+    // Spell slots only exist when the request carries them.
+    const slots: readonly string[] = [
+      ...CLIP_ROLES,
+      ...SPELL_CLIP_SLOTS.filter((s) => typeof req.clips[s] === 'string'),
+    ];
+    const picks = req.clips as Readonly<Record<string, string>>;
+    const delta = slots.filter(
+      (role) => picks[role] !== prevClips[role] || typeof prevFiles[role] !== 'string',
     );
     // House picks never touch the provider: their shared file copies
     // into the champion's assets. Only provider presets retarget.
-    const providerDelta = delta.filter((role) => !isHouseClip(req.clips[role]));
-    const houseDelta = delta.filter((role) => isHouseClip(req.clips[role]));
+    const providerDelta = delta.filter((role) => !isHouseClip(picks[role] ?? ''));
+    const houseDelta = delta.filter((role) => isHouseClip(picks[role] ?? ''));
 
     // Rig once, keep forever: the stored rig task feeds every later bake
     // (house clips ride the rigged body too, so any first bake rigs).
@@ -303,7 +312,9 @@ async function runAnimate(
     let bakeProvenance: unknown = null;
     if (providerDelta.length > 0 && rigTask !== null) {
       stage('animate');
-      const animations = [...new Set(providerDelta.map((role) => req.clips[role]))];
+      const animations = [...new Set(providerDelta.map((role) => picks[role] ?? ''))].filter(
+        (id) => id !== '',
+      );
       const baked = await deps.provider.animate({
         riggedTaskId: rigTask,
         animations,
@@ -323,8 +334,8 @@ async function runAnimate(
       }
       const copy = deps.copyFile ?? copyFileSync;
       for (const role of houseDelta) {
-        const src = houseClipFile(req.clips[role]);
-        if (!src) throw new GenerationError(`unknown house clip: ${req.clips[role]}`);
+        const src = houseClipFile(picks[role] ?? '');
+        if (!src) throw new GenerationError(`unknown house clip: ${picks[role]}`);
         const dest = `forged/${req.forgedId}/house_${jobId}_${role}.glb`;
         mkdirSync(path.dirname(path.join(deps.assetsDir, dest)), { recursive: true });
         copy(path.join(deps.publicDir, src), path.join(deps.assetsDir, dest));

@@ -495,6 +495,53 @@ describe('the mock pipeline end to end', () => {
     expect(r.store.creditBalance(ACCOUNT)).toBe(2);
   });
 
+  it('bakes a per-spell slot, keeps it across re-bakes, refuses strangers', async () => {
+    const r = rig();
+    const copies: { src: string; dest: string }[] = [];
+    r.pipeline.publicDir = 'PUB';
+    r.pipeline.copyFile = (src, dest) => {
+      copies.push({ src, dest });
+    };
+    const deps: ForgeDeps = { store: r.store, generation: r.pipeline, now: () => 999 };
+    const built = buildModel(deps, ACCOUNT, r.def.id);
+    expect(built.ok).toBe(true);
+    if (built.ok) await built.done;
+    // A spell slot draws on the cast AND attack catalogs, nothing else.
+    expect(
+      animateChampion(deps, ACCOUNT, r.def.id, 'slashing', { castQ: 'idle_alt' }),
+    ).toMatchObject({ ok: false, error: expect.stringContaining('unknown castQ animation') });
+    // A strike is a valid spell animation; the slot bakes with the roles.
+    const out = animateChampion(deps, ACCOUNT, r.def.id, 'slashing', { castQ: 'attack_alt' });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    await out.done;
+    const sealed = r.store.forgedAssets(r.def.id) as {
+      clips: Record<string, string>;
+      clipFiles: Record<string, string>;
+    };
+    expect(sealed.clips.castQ).toBe('attack_alt');
+    expect(sealed.clipFiles.castQ).toBe(`forged/${r.def.id}/clips_${out.jobId}.glb`);
+    // Re-baking another role never drops the spell pick; a house pick
+    // for another slot arrives by copy under its own slot name.
+    const rebake = animateChampion(deps, ACCOUNT, r.def.id, 'slashing', {
+      death: 'death_alt',
+      castW: 'house:magic_cast_01',
+    });
+    expect(rebake.ok).toBe(true);
+    if (!rebake.ok) return;
+    await rebake.done;
+    const after = r.store.forgedAssets(r.def.id) as {
+      clips: Record<string, string>;
+      clipFiles: Record<string, string>;
+    };
+    expect(after.clips.castQ).toBe('attack_alt');
+    expect(after.clips.castW).toBe('house:magic_cast_01');
+    expect(after.clipFiles.castW).toBe(`forged/${r.def.id}/house_${rebake.jobId}_castW.glb`);
+    expect(copies.at(-1)?.src.replaceAll('\\', '/')).toBe(
+      'PUB/models/mannequin/clips/house_magic_cast_01.glb',
+    );
+  });
+
   it('fails and refunds when an artifact lands over its budget', async () => {
     const r = rig();
     r.pipeline.budgets = { modelKb: 100 };

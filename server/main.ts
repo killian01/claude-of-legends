@@ -73,6 +73,7 @@ import { setForgedAttackRange } from './reforge';
 import { RejoinRegistry } from './rejoin';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
 import { appendJsonl, pruneNumberedJson, readJsonl, saveJsonAtomic } from './store';
+import { suggestKit } from './suggest';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DIST = path.resolve(process.cwd(), 'dist');
@@ -272,6 +273,20 @@ const quotaDeps = {
     agent: envNumber('QUOTA_AGENT_PER_DAY', 20),
   },
 };
+// Kit suggestions from the splash art (the agent surface): behind an
+// Anthropic key, answering honestly when unconfigured, on the 'agent'
+// meter that has waited for it.
+const suggestDeps = {
+  store: forgeStore,
+  apiKey: process.env.ANTHROPIC_API_KEY?.trim() || null,
+  assetsDir: ASSETS_DIR,
+  ...(process.env.SUGGEST_MODEL?.trim() ? { model: process.env.SUGGEST_MODEL.trim() } : {}),
+};
+console.log(
+  suggestDeps.apiKey
+    ? 'suggestions: on (ANTHROPIC_API_KEY set), kit suggestions from the splash art'
+    : 'suggestions: off (no ANTHROPIC_API_KEY set)',
+);
 // The 2D art surface (plan-forge phase 4): splash and icon candidates on
 // the gen2d meter, sharing the pipeline's provider and assets dir.
 const artDeps = {
@@ -1036,6 +1051,25 @@ const server = http.createServer(async (req, res) => {
             ? setForgedDisplay({ store: forgeStore }, me.id, id, body?.display)
             : { ok: false, error: 'malformed request' },
         );
+        return;
+      }
+      // Kit suggestions from the splash art: owner-only, drafts only,
+      // metered on the agent quota, spent only when a suggestion lands.
+      if (url === '/api/forge/suggest' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        if (!id) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        const quota = checkQuota(quotaDeps, me.id, 'agent');
+        if (!quota.ok) {
+          sendJson(res, 200, quota);
+          return;
+        }
+        const outcome = await suggestKit(suggestDeps, me.id, id);
+        if (outcome.ok) spendQuota(quotaDeps, me.id, 'agent');
+        sendJson(res, 200, outcome);
         return;
       }
       // Reforge, first slice: a sealed champion's basic-attack reach.

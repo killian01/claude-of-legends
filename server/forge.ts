@@ -21,6 +21,8 @@ import {
 import {
   CLIP_ROLES,
   type ClipRole,
+  SPELL_CLIP_SLOTS,
+  type SpellClipSlot,
   WEAPON_FAMILIES,
   type WeaponFamily,
 } from './generation/provider';
@@ -235,9 +237,15 @@ export function animateChampion(
     typeof assets.clips === 'object' && assets.clips !== null ? assets.clips : {}
   ) as Record<string, unknown>;
   const defaults = provider.clipDefaults(picked);
-  const clips = {} as Record<ClipRole, string>;
+  const clips = {} as Record<ClipRole, string> & Partial<Record<SpellClipSlot, string>>;
   for (const role of CLIP_ROLES) {
     clips[role] = typeof baked[role] === 'string' ? (baked[role] as string) : defaults[role];
+  }
+  // Per-spell slots have no default: absent means the shared cast clip.
+  // Already-baked slot picks carry over so re-baking a role never drops
+  // a spell animation.
+  for (const slot of SPELL_CLIP_SLOTS) {
+    if (typeof baked[slot] === 'string') clips[slot] = baked[slot] as string;
   }
   if (typeof clipsRaw === 'object' && clipsRaw !== null) {
     for (const role of CLIP_ROLES) {
@@ -249,6 +257,17 @@ export function animateChampion(
         return { ok: false, error: `unknown ${role} animation: pick one from the catalog` };
       }
       clips[role] = want;
+    }
+    // A spell slot draws on the cast AND attack catalogs: a spell may
+    // just as well be a strike as an incantation.
+    for (const slot of SPELL_CLIP_SLOTS) {
+      const want = (clipsRaw as Record<string, unknown>)[slot];
+      if (want === undefined) continue;
+      const known = (c: { id: string }): boolean => c.id === want;
+      if (typeof want !== 'string' || !(choices.cast.some(known) || choices.attack.some(known))) {
+        return { ok: false, error: `unknown ${slot} animation: pick one from the catalog` };
+      }
+      clips[slot] = want;
     }
   }
   return startAnimate(deps.generation, { forgedId: id, accountId, family: picked, clips });

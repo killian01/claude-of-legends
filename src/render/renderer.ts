@@ -959,7 +959,7 @@ export class Renderer {
             );
           }
           if (t) t.castUntil = performance.now() + 420;
-          this.championVisuals.get(cast.unitId)?.playCast();
+          this.championVisuals.get(cast.unitId)?.playCast(cast.key);
         }
       } else if (others) {
         // Sigils and unknown keys: the shared whoosh, attenuated.

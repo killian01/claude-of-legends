@@ -28,6 +28,9 @@ export class ChampionVisual {
   private readonly mixer: THREE.AnimationMixer;
   private readonly baseActions: Partial<Record<ChampionBaseState, THREE.AnimationAction>> = {};
   private readonly shotActions: Partial<Record<ShotKey, THREE.AnimationAction>> = {};
+  // Per-ability cast overrides (forged creators pick one per spell); an
+  // ability without its own falls back to the shared cast action.
+  private readonly spellActions: Partial<Record<'Q' | 'W' | 'E' | 'R', THREE.AnimationAction>> = {};
   private base: ChampionBaseState = 'idle';
   private current: THREE.AnimationAction | null = null;
   private shot: THREE.AnimationAction | null = null;
@@ -67,6 +70,10 @@ export class ChampionVisual {
     this.shotActions.cast = action(clips.cast);
     this.shotActions.hit = action(clips.hit);
     this.shotActions.death = action(clips.death);
+    for (const key of ['Q', 'W', 'E', 'R'] as const) {
+      const own = action(template.def.spellClips?.[key]);
+      if (own) this.spellActions[key] = own;
+    }
     this.mixer.addEventListener('finished', (e) => {
       if (e.action !== this.shot) return;
       this.shot = null;
@@ -99,9 +106,9 @@ export class ChampionVisual {
     if (prev && prev !== next) prev.fadeOut(FADE_BASE);
   }
 
-  private playShot(key: ShotKey, seconds: number): void {
+  private playShot(key: ShotKey, seconds: number, override?: THREE.AnimationAction): void {
     if (this.base === 'dead' && key !== 'death') return;
-    const a = this.shotActions[key];
+    const a = override ?? this.shotActions[key];
     if (!a) return;
     const prevShot = this.shot;
     this.shot = a;
@@ -137,8 +144,10 @@ export class ChampionVisual {
     this.playShot('attack', ONESHOT_SECONDS.attack);
   }
 
-  playCast(): void {
-    this.playShot('cast', ONESHOT_SECONDS.cast);
+  // With an ability key, that spell's own picked clip plays when the
+  // creator gave it one; the shared cast otherwise.
+  playCast(key?: 'Q' | 'W' | 'E' | 'R'): void {
+    this.playShot('cast', ONESHOT_SECONDS.cast, key ? this.spellActions[key] : undefined);
   }
 
   playHit(): void {

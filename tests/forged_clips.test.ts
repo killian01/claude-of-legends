@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { CLIP_ROLES } from '../server/generation/provider';
 import {
   resolveForgedClips,
+  spellClipPicks,
   stripStanceLead,
   stripTravel,
 } from '../src/render/champions/forged_clips';
@@ -197,5 +198,27 @@ describe('stripStanceLead', () => {
     expect(run.tracks[0]?.values).toEqual([0, 5, 0, 0, 1, 0, 0, 5, 0, 0, 5, 0, 0, 1, 0, 0, 5, 0]);
     // No Chest track in the stance: left alone rather than guessed.
     expect(run.tracks[1]?.values).toEqual([1, 1, 1, 1, 1, 1]);
+  });
+});
+
+describe('spellClipPicks', () => {
+  it('keeps only the slots whose clip the loaded files actually carry', () => {
+    const picks = {
+      cast: 'preset:biped:cast_a_spell',
+      castQ: 'house:magic_cast_01',
+      castW: 'preset:biped:slash',
+      castR: 'missing_from_files',
+    };
+    const available = new Set(['house:magic_cast_01', 'preset:biped:slash']);
+    expect(spellClipPicks(picks, available)).toEqual({
+      Q: 'house:magic_cast_01',
+      W: 'preset:biped:slash',
+    });
+  });
+
+  it('answers undefined with no picks map or no surviving slot', () => {
+    expect(spellClipPicks(null, new Set(['x']))).toBe(undefined);
+    expect(spellClipPicks({ cast: 'x' }, new Set(['x']))).toBe(undefined);
+    expect(spellClipPicks({ castQ: 'gone' }, new Set(['x']))).toBe(undefined);
   });
 });

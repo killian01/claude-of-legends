@@ -18,6 +18,15 @@
 export const CLIP_ROLES = ['idle', 'run', 'attack', 'cast', 'death'] as const;
 export type ClipRole = (typeof CLIP_ROLES)[number];
 
+// Optional per-spell overrides riding beside the five roles: an ability
+// key's own cast animation (playtest round 6 ask). A slot's pick comes
+// from the cast and attack catalogs (a spell may be a strike); a slot
+// without a pick plays the shared cast clip. Slots travel the same
+// clips/clipFiles maps as the roles, so the wire and the store need no
+// new shape.
+export const SPELL_CLIP_SLOTS = ['castQ', 'castW', 'castE', 'castR'] as const;
+export type SpellClipSlot = (typeof SPELL_CLIP_SLOTS)[number];
+
 // Per-weapon-family clip sets (ADR 0006): the family is the quick-pick
 // that PREFILLS the five clips; the player then picks each one from the
 // provider's catalog (playtest: not a bundle, every animation their own).
