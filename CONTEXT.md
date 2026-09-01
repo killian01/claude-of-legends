@@ -223,6 +223,15 @@ with its own grip offsets. A forged champion's weapon is always a prop, never fu
 body mesh; it comes from the house weapon library or from its own generation.
 _Avoid_: attachment, accessory
 
+**House clip**:
+An animation the repo ships itself: a Mixamo clip retargeted once onto the shared rig
+skeleton (every forged biped shares its bone names) and served as an app asset, so applying
+one to a champion is a file copy, no provider call, no credits. Curated in weapon-family
+sets (sword and shield, great sword, magic); every house clip is baked facing the rig's
+rest forward and performs on the spot, because the game aligns a champion to its rest
+forward and owns all movement. `scripts/bake_house_clips.mjs` is the curation record.
+_Avoid_: stock animation, builtin animation
+
 **Workshop view**:
 The 3D inspection and adjustment view of a forged champion's generated model, from the
 static build onwards (validating the model BEFORE animating is the point):

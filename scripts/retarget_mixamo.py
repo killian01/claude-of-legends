@@ -13,15 +13,34 @@
 # height ratio. Twist bones stay at rest (they smooth skinning, not
 # motion).
 #
+# The source rig is first yawed so its rest faces world +X, the Tripo
+# rig convention (the preset run clip travels along +X exactly, and the
+# client aligns every model by that travel). Mixamo FBX rigs import
+# facing -Y; without this alignment the copied hip travel and every
+# lean axis land ~90 degrees off, which is how the first bake gave the
+# run a crab gait. The facing is measured from the shoulder line, never
+# assumed.
+#
 # Usage (Blender 4/5, headless):
 #   blender --background --python scripts/retarget_mixamo.py -- \
-#     <source.fbx> <clip_id> <out.glb> [--render <dir>]
+#     <source.fbx> <clip_id> <out.glb> [--render <dir>] [--yaw <deg>] [--inplace]
 # --render also writes 4 workbench frames to <dir> for a visual check.
+# --yaw counter-rotates the whole animated character about world up, in
+#   the sign convention of the curation scan: pass a clip's measured
+#   facing offset verbatim and it comes out facing the rig's rest
+#   forward. Many Mixamo clips are authored angled (the sword-and-shield
+#   stance sits ~55 degrees off), and the game aligns every clip to the
+#   rig's rest facing, so the offset must go at bake time.
+# --inplace freezes the hip's horizontal travel at its first-frame value
+#   (the vertical bob stays), for strike clips authored as lunges: in the
+#   game an attack plays on a standing champion, so the travel is wrong
+#   by construction.
 
+import math
 import sys
 
 import bpy
-from mathutils import Matrix
+from mathutils import Matrix, Vector
 
 # Tripo bone -> Mixamo bone (without the mixamorig prefix), parents first.
 BONE_MAP = [
@@ -67,6 +86,8 @@ def main():
         fail('usage: -- <source.fbx> <clip_id> <out.glb> [--render <dir>]')
     src_path, clip_id, out_path = argv[0], argv[1], argv[2]
     render_dir = argv[argv.index('--render') + 1] if '--render' in argv else None
+    yaw_deg = float(argv[argv.index('--yaw') + 1]) if '--yaw' in argv else 0.0
+    inplace = '--inplace' in argv
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = bpy.context.scene
@@ -97,6 +118,23 @@ def main():
     if prefix is None:
         fail('no Hips bone in the FBX; not a Mixamo rig?')
 
+    # Align the source rest facing onto world +X (the Tripo rig
+    # convention) before anything reads a transform, so world deltas
+    # transfer in the right frame. Facing is the shoulder line crossed
+    # with up.
+    def shoulder_facing(obj, lname, rname):
+        for n in (lname, rname):
+            if n not in obj.data.bones:
+                fail(f'facing bone missing: {n}')
+        lw = (obj.matrix_world @ obj.data.bones[lname].matrix_local).to_translation()
+        rw = (obj.matrix_world @ obj.data.bones[rname].matrix_local).to_translation()
+        f = (lw - rw).cross(Vector((0.0, 0.0, 1.0)))
+        return math.atan2(f.y, f.x)
+
+    src_facing = shoulder_facing(src, prefix + 'LeftArm', prefix + 'RightArm')
+    print(f'  source rest facing: {math.degrees(src_facing):.1f} deg, aligning to +X')
+    src.matrix_world = Matrix.Rotation(-src_facing, 4, 'Z') @ src.matrix_world
+
     pairs = []
     for tname, sname in BONE_MAP:
         if tname not in tgt.data.bones:
@@ -126,6 +164,10 @@ def main():
     view = bpy.context.view_layer
     tgt_inv = tgt.matrix_world.inverted()
     prev_quat = {}
+    # The facing fix, about world up. The scan measures the offset with
+    # yaw = atan2((face x fwd).z, face . fwd), so +yaw here undoes it.
+    fix_q = Matrix.Rotation(math.radians(yaw_deg), 4, 'Z').to_quaternion()
+    hip_delta0 = None
 
     for f in range(f0, f1 + 1):
         scene.frame_set(f)
@@ -134,12 +176,17 @@ def main():
             tpb = tgt.pose.bones[tname]
             s_world = src.matrix_world @ spb.matrix
             rot = (
-                s_world.to_quaternion()
+                fix_q
+                @ s_world.to_quaternion()
                 @ src_rest[sname].to_quaternion().inverted()
                 @ tgt_rest[tname].to_quaternion()
             )
             if tname == hip_t:
-                delta = s_world.to_translation() - src_rest[sname].to_translation()
+                delta = fix_q @ (s_world.to_translation() - src_rest[sname].to_translation())
+                if hip_delta0 is None:
+                    hip_delta0 = delta.copy()
+                if inplace:
+                    delta.x, delta.y = hip_delta0.x, hip_delta0.y
                 loc = tgt_rest[tname].to_translation() + delta * ratio
             else:
                 loc = (tgt.matrix_world @ tpb.matrix).to_translation()
@@ -178,8 +225,11 @@ def main():
             aim = bpy.data.objects.new('aim', None)
             aim.location = (cx, cy, cz)
             scene.collection.objects.link(aim)
+            # High three-quarter view from the rig's front (rest facing is
+            # world +X), close to the game camera, so a wrongly oriented
+            # clip is obvious in the check frames.
             cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam'))
-            cam.location = (cx + size * 1.6, cy - size * 2.4, cz + size * 0.6)
+            cam.location = (cx + size * 2.2, cy - size * 1.1, cz + size * 1.7)
             scene.collection.objects.link(cam)
             track = cam.constraints.new('TRACK_TO')
             track.target = aim
