@@ -391,6 +391,83 @@ async function api<T>(url: string, body?: unknown): Promise<T | null> {
   }
 }
 
+// One line of the kit conversation's streamed answer: the model's own
+// words as they arrive, or a stage the server announces between calls.
+interface SuggestLine {
+  progress?: 'text' | 'stage';
+  text?: string;
+}
+
+// The kit conversation's request: a POST whose answer streams as NDJSON,
+// progress lines first and the outcome last, so the bubble can read the
+// comment as the model writes it. A plain JSON answer still lands as the
+// outcome.
+async function suggestStream<T>(
+  body: unknown,
+  onLine: (line: SuggestLine) => void,
+): Promise<T | null> {
+  try {
+    const res = await fetch('/api/forge/suggest', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.body) return (await res.json()) as T;
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let pending = '';
+    let last: T | null = null;
+    const take = (line: string): void => {
+      if (line.trim() === '') return;
+      const parsed = JSON.parse(line) as SuggestLine;
+      if (parsed.progress) onLine(parsed);
+      else last = parsed as unknown as T;
+    };
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      pending += decoder.decode(value, { stream: true });
+      let cut = pending.indexOf('\n');
+      while (cut >= 0) {
+        take(pending.slice(0, cut));
+        pending = pending.slice(cut + 1);
+        cut = pending.indexOf('\n');
+      }
+    }
+    if (pending.trim() !== '') take(pending);
+    return last;
+  } catch {
+    return null;
+  }
+}
+
+// The comment as far as the model has written it: the first string of
+// the answer, read out of the raw JSON while it is still incomplete.
+function commentSoFar(raw: string): string {
+  const m = /"comment"\s*:\s*"/.exec(raw);
+  if (!m) return '';
+  let out = '';
+  for (let i = m.index + m[0].length; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (ch === '\\') {
+      const next = raw[i + 1];
+      if (next === undefined) break;
+      out += next === 'n' ? ' ' : next;
+      i += 1;
+      continue;
+    }
+    if (ch === '"') break;
+    out += ch;
+  }
+  return out;
+}
+
+// Which parts of the kit the model has reached so far, by their keys.
+function partsSoFar(raw: string): string[] {
+  return ['passive', 'Q', 'W', 'E', 'R'].filter((key) => raw.includes(`"${key}":`));
+}
+
 // A fresh draft: legal out of the box, middle of the road everywhere, so
 // the first minutes are spent shaping, not fixing. The def itself is sim
 // data (fresh_draft.ts); only the id is minted here.
@@ -485,6 +562,11 @@ export function openForgeEditor(container: HTMLElement): void {
   let suggesting = false;
   let suggestStartedAt = 0;
   let thinkingTimer: number | null = null;
+  // What has streamed in so far (the model's raw answer for this call,
+  // the server's current stage) and the bubble's redraw.
+  let thinkingText = '';
+  let thinkingStage = '';
+  let thinkingTick: (() => void) | null = null;
   // The kit conversation, session-lived: the wire thread (assistant
   // turns hold the model's raw answers, replayed so it can iterate on
   // its own proposals) and the short text each turn shows as a bubble.
@@ -1808,11 +1890,14 @@ export function openForgeEditor(container: HTMLElement): void {
         const bubble = el('div', 'fe-bubble ai', '');
         const tick = (): void => {
           const secs = Math.round((Date.now() - suggestStartedAt) / 1000);
+          const comment = commentSoFar(thinkingText);
+          const parts = partsSoFar(thinkingText);
+          const writing = parts.length > 0 ? ` Writing: ${parts.join(', ')}.` : '';
           bubble.textContent =
-            `Thinking... ${secs} s. A proposal usually lands in under a minute; a draft ` +
-            'that breaks a rule is sent back for a fix and takes as long again.';
+            comment !== '' ? `${comment}${writing}` : `${thinkingStage || 'Thinking'}... ${secs} s`;
         };
         tick();
+        thinkingTick = tick;
         if (thinkingTimer !== null) window.clearInterval(thinkingTimer);
         thinkingTimer = window.setInterval(tick, 1000);
         log.append(bubble);
@@ -1841,7 +1926,7 @@ export function openForgeEditor(container: HTMLElement): void {
         suggesting = true;
         suggestStartedAt = Date.now();
         renderMain();
-        void api<{
+        void suggestStream<{
           ok: boolean;
           comment?: string;
           passive?: ForgedChampionDef['passive'];
@@ -1850,12 +1935,26 @@ export function openForgeEditor(container: HTMLElement): void {
           budget?: { total: number; cap: number };
           fit?: number;
           error?: string;
-        }>('/api/forge/suggest', {
-          id: current.id,
-          def: current,
-          messages: chat.map((t) => ({ role: t.role, text: t.text })),
-        }).then((r) => {
+        }>(
+          {
+            id: current.id,
+            def: current,
+            messages: chat.map((t) => ({ role: t.role, text: t.text })),
+          },
+          (line) => {
+            if (line.progress === 'stage') {
+              thinkingStage = line.text ?? '';
+              thinkingText = '';
+            } else if (line.progress === 'text') {
+              thinkingText += line.text ?? '';
+            }
+            thinkingTick?.();
+          },
+        ).then((r) => {
           suggesting = false;
+          thinkingText = '';
+          thinkingStage = '';
+          thinkingTick = null;
           if (thinkingTimer !== null) {
             window.clearInterval(thinkingTimer);
             thinkingTimer = null;

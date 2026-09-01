@@ -1083,13 +1083,25 @@ const server = http.createServer(async (req, res) => {
           sendJson(res, 200, quota);
           return;
         }
+        // Streamed as NDJSON: progress lines while the model writes (its
+        // words as they come, the stages between calls), the outcome as
+        // the last line, so the conversation reads like a chat instead
+        // of a silent wait.
+        res.writeHead(200, {
+          'content-type': 'application/x-ndjson',
+          'cache-control': 'no-store',
+          'x-accel-buffering': 'no',
+        });
         const outcome = await suggestKit(suggestDeps, me.id, {
           id,
           messages: body.messages as { role: 'user' | 'assistant'; text: string }[],
           ...(body.def !== undefined ? { def: body.def } : {}),
+          onProgress: (p) => {
+            res.write(`${JSON.stringify({ progress: p.kind, text: p.text })}\n`);
+          },
         });
         if (outcome.ok) spendQuota(quotaDeps, me.id, 'agent');
-        sendJson(res, 200, outcome);
+        res.end(`${JSON.stringify(outcome)}\n`);
         return;
       }
       // Reforge, first slice: a sealed champion's basic-attack reach.

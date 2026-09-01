@@ -158,7 +158,9 @@ function preamble(def: ForgedChampionDef): string {
     '{ "Q": Ability, "W": Ability, "E": Ability, "R": Ability } }. "comment" is one ' +
     'or two plain sentences to the creator about what you proposed or changed. ' +
     'Spell names must be original English, no borrowed game IP. Compact JSON: no ' +
-    'indentation, no line breaks.';
+    'indentation, no line breaks. The creator may write in any language: answer them in ' +
+    'their own language inside "comment", but every name (the passive and the four ' +
+    'spells) is plain English, like every other champion in the game.';
   const bounds = `Numeric bounds per ability field: ${JSON.stringify(ABILITY_BOUNDS)} (cooldown uses basicCooldown for Q W E and ultCooldown for R).`;
   const current = `The champion (name, role, stats stay as they are; you rework passive and abilities): ${JSON.stringify(
     {
@@ -269,7 +271,57 @@ function toApiMessages(
   });
 }
 
-async function askModel(deps: SuggestDeps, messages: readonly ApiMessage[]): Promise<string> {
+// The Messages API's server-sent events, text deltas only: the answer
+// grows as the model writes it, and the caller hears every piece.
+async function readEventStream(
+  res: Response,
+  onText: ((delta: string) => void) | undefined,
+): Promise<string> {
+  if (!res.body) return '';
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+  let text = '';
+  const take = (frame: string): void => {
+    for (const line of frame.split('\n')) {
+      if (!line.startsWith('data:')) continue;
+      let event: {
+        type?: string;
+        delta?: { type?: string; text?: string };
+        error?: { message?: string };
+      };
+      try {
+        event = JSON.parse(line.slice(5).trim());
+      } catch {
+        continue;
+      }
+      if (event.type === 'error') throw new Error(event.error?.message ?? 'the stream broke');
+      if (event.type !== 'content_block_delta' || event.delta?.type !== 'text_delta') continue;
+      if (typeof event.delta.text !== 'string') continue;
+      text += event.delta.text;
+      onText?.(event.delta.text);
+    }
+  };
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    pending += decoder.decode(value, { stream: true });
+    let cut = pending.indexOf('\n\n');
+    while (cut >= 0) {
+      take(pending.slice(0, cut));
+      pending = pending.slice(cut + 2);
+      cut = pending.indexOf('\n\n');
+    }
+  }
+  if (pending.trim() !== '') take(pending);
+  return text;
+}
+
+async function askModel(
+  deps: SuggestDeps,
+  messages: readonly ApiMessage[],
+  onText?: (delta: string) => void,
+): Promise<string> {
   const doFetch = deps.fetchFn ?? fetch;
   const res = await doFetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -281,14 +333,56 @@ async function askModel(deps: SuggestDeps, messages: readonly ApiMessage[]): Pro
     body: JSON.stringify({
       model: deps.model ?? SUGGEST_MODEL_DEFAULT,
       max_tokens: 4000,
+      // No hidden reasoning: a kit is a design, not a proof, and the fit
+      // owns the arithmetic. Measured 2026-09-01 on the default (adaptive
+      // thinking, implicit on this model): 42 s per call, 34 of them
+      // silent; disabled: 11 s.
+      thinking: { type: 'disabled' },
+      stream: true,
       messages,
     }),
     signal: AbortSignal.timeout(SUGGEST_CALL_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`suggestion service answered ${res.status}`);
+  const type = res.headers.get('content-type') ?? '';
+  if (type.includes('text/event-stream')) return readEventStream(res, onText);
+  // A whole message at once: a stub, or a service that ignored the stream.
   const body = (await res.json()) as { content?: { type: string; text?: string }[] };
-  return body.content?.find((c) => c.type === 'text')?.text ?? '';
+  const text = body.content?.find((c) => c.type === 'text')?.text ?? '';
+  onText?.(text);
+  return text;
 }
+
+// The image's real type, from its bytes: the art pipeline names every
+// download .png and most live splashes are JPEG underneath, which the
+// model service rejects outright when declared wrong.
+export function imageMediaType(
+  bytes: Buffer,
+): 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif' {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF') {
+    if (bytes.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
+  }
+  if (bytes.length >= 4 && bytes.toString('ascii', 0, 4) === 'GIF8') return 'image/gif';
+  return 'image/png';
+}
+
+// Names the game cannot show: anything outside plain printable ASCII is
+// not the English the roster speaks (ADR 0004), whatever language the
+// creator wrote in. Plain words in another language slip through here;
+// the prompt carries that rule.
+function foreignNames(s: Suggestion): string[] {
+  const a = s.abilities ?? ({} as Suggestion['abilities']);
+  const names = [s.passive?.name, a.Q?.name, a.W?.name, a.E?.name, a.R?.name];
+  return names.filter((n): n is string => typeof n === 'string' && !/^[\x20-\x7e]*$/.test(n));
+}
+
+// What the surface reports while a proposal is in the making: the
+// model's own words as they stream (the client reads the comment as it
+// is written) and the server's stages between calls.
+export type SuggestProgress = { kind: 'text'; text: string } | { kind: 'stage'; text: string };
 
 export interface SuggestRequest {
   id: string;
@@ -296,6 +390,7 @@ export interface SuggestRequest {
   // The def as it stands on the form, unsaved edits included; absent
   // falls back to the stored draft.
   def?: unknown;
+  onProgress?: (progress: SuggestProgress) => void;
 }
 
 export interface KitProposal {
@@ -349,7 +444,7 @@ export async function suggestKit(
   } catch {
     return { ok: false, error: 'the chosen splash file is missing on this server' };
   }
-  const mediaType = splash.path.toLowerCase().endsWith('.jpg') ? 'image/jpeg' : 'image/png';
+  const mediaType = imageMediaType(image);
 
   const apiMessages = toApiMessages(
     req.messages,
@@ -361,23 +456,41 @@ export async function suggestKit(
   const floor = deps.budgetFloor ?? BUDGET_FLOOR_DEFAULT;
   let fallback: ForgeOutcome<KitProposal> | null = null;
   let lastErrors: readonly string[] = [];
+  const progress = req.onProgress ?? (() => {});
+  let stage = 'Reading the splash and writing the kit';
   for (let attempt = 0; attempt < SUGGEST_ATTEMPTS; attempt += 1) {
+    progress({ kind: 'stage', text: stage });
     let text: string;
     try {
-      text = await askModel(deps, apiMessages);
+      text = await askModel(deps, apiMessages, (delta) => progress({ kind: 'text', text: delta }));
     } catch (err) {
       const e = err as Error;
       const why =
         e.name === 'TimeoutError' ? 'the model took too long to answer; try again' : e.message;
       return { ok: false, error: `the suggestion call failed: ${why}` };
     }
-    const retry = (feedback: string): void => {
+    progress({ kind: 'stage', text: 'Fitting the budget and checking the rules' });
+    const retry = (feedback: string, next: string): void => {
       apiMessages.push({ role: 'assistant', content: text }, { role: 'user', content: feedback });
+      stage = next;
     };
     const suggestion = parseSuggestion(text);
     if (!suggestion) {
       lastErrors = ['the answer was not the requested JSON object'];
-      retry('That was not the requested JSON object; answer with ONLY the JSON.');
+      retry(
+        'That was not the requested JSON object; answer with ONLY the JSON.',
+        'The answer was not a kit, asking again',
+      );
+      continue;
+    }
+    const foreign = foreignNames(suggestion);
+    if (foreign.length > 0) {
+      lastErrors = [`names not in English: ${foreign.join(', ')}`];
+      retry(
+        `These names are not plain English: ${foreign.join(', ')}. Rename them in English ` +
+          '(ASCII letters only), keep everything else, and answer with ONLY the JSON object.',
+        'The names were not English, asking again',
+      );
       continue;
     }
     const drafted: ForgedChampionDef = {
@@ -401,6 +514,7 @@ export async function suggestKit(
       lastErrors = v.errors;
       retry(
         `Your kit failed validation with these errors, fix them precisely: ${v.errors.join('; ')}`,
+        'The draft broke a rule, asking for a fix',
       );
       continue;
     }
@@ -428,6 +542,7 @@ export async function suggestKit(
         'fix this: add substance to the structure (more effects per spell, shorter cooldowns, ' +
         `wider shapes, a pricier passive). The bill today: ${billLine(bill)}. ` +
         'Answer with ONLY the JSON object.',
+      'The kit was too light, asking for more',
     );
   }
   if (fallback) return fallback;

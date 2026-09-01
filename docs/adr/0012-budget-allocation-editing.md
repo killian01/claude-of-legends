@@ -29,8 +29,12 @@ model to land the numbers: every proposal is fitted to the budget line by the po
 dial's own scaling, one shared factor across the four spells (`fitKitPower`), before
 validation. The model owns structure and theme, the arithmetic owns the amounts, and a
 well-shaped answer lands in one model call instead of the two or three the old
-"spend 90 to 100 percent" retry loop needed, which is what made the conversation feel
-unresponsive. Left open on purpose: a creator who deliberately lightens the kit below
+"spend 90 to 100 percent" retry loop needed. Measured the same day: the model call itself
+took 42 seconds with the default adaptive thinking (34 of them silent reasoning) and 11
+seconds with thinking disabled, so the conversation now runs without hidden reasoning and
+streams the answer into the bubble as it is written; a message that used to take well
+over a minute lands in about ten seconds, the comment within three. Left open on
+purpose: a creator who deliberately lightens the kit below
 roughly half the budget can still reach every stat rail, because the rails sit inside
 what the budget affords a bare kit. That is the budget's verdict, not a defect; widening
 the rails or capping the stat share would be a separate balance decision.

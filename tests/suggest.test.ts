@@ -12,6 +12,7 @@ import { ForgeStore } from '../server/forge_store';
 import {
   BUDGET_FLOOR_DEFAULT,
   type ChatTurn,
+  imageMediaType,
   SUGGEST_ATTEMPTS,
   type SuggestDeps,
   suggestKit,
@@ -412,6 +413,120 @@ describe('the fit', () => {
     }) as unknown as typeof fetch;
     const out = await suggestKit(deps(store, fetchFn), 1, { id: 'forged_d', messages: ASK });
     expect(out).toMatchObject({ ok: false, error: expect.stringContaining('too long') });
+    store.close();
+  });
+});
+
+describe('the stream', () => {
+  // The Messages API's server-sent events for one text answer, chunked
+  // twice: text deltas of `chunk` chars, then the byte stream cut at
+  // arbitrary points, so the reader must reassemble frames.
+  function sse(text: string, chunk = 40): Response {
+    const frames = ['event: message_start\ndata: {"type":"message_start"}\n\n'];
+    for (let i = 0; i < text.length; i += chunk) {
+      const delta = { type: 'text_delta', text: text.slice(i, i + chunk) };
+      const event = { type: 'content_block_delta', index: 0, delta };
+      frames.push(`event: content_block_delta\ndata: ${JSON.stringify(event)}\n\n`);
+    }
+    frames.push('event: message_stop\ndata: {"type":"message_stop"}\n\n');
+    const whole = frames.join('');
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let i = 0; i < whole.length; i += 57) {
+          controller.enqueue(new TextEncoder().encode(whole.slice(i, i + 57)));
+        }
+        controller.close();
+      },
+    });
+    return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+  }
+
+  it('reads the answer off server-sent events and reports every piece', async () => {
+    const store = seeded();
+    const full = JSON.stringify({ comment: 'Un kit de givre, tres mobile.', ...GOOD_KIT });
+    let asked: Record<string, unknown> = {};
+    const fetchFn = ((_u: string, init?: RequestInit) => {
+      asked = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Promise.resolve(sse(full));
+    }) as unknown as typeof fetch;
+    const heard: string[] = [];
+    const stages: string[] = [];
+    const out = await suggestKit(deps(store, fetchFn), 1, {
+      id: 'forged_d',
+      messages: ASK,
+      onProgress: (p) => {
+        if (p.kind === 'text') heard.push(p.text);
+        else stages.push(p.text);
+      },
+    });
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.raw).toBe(full);
+      expect(out.comment).toBe('Un kit de givre, tres mobile.');
+    }
+    // Streamed, and without hidden reasoning: the wait is the writing.
+    expect(asked.stream).toBe(true);
+    expect(asked.thinking).toEqual({ type: 'disabled' });
+    expect(heard.join('')).toBe(full);
+    expect(heard.length).toBeGreaterThan(1);
+    expect(stages[0]).toContain('writing');
+    expect(stages[1]).toContain('Fitting');
+    store.close();
+  });
+
+  it('declares the image type from its bytes, whatever the file is called', async () => {
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]);
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    for (const [bytes, type] of [
+      [jpeg, 'image/jpeg'],
+      [png, 'image/png'],
+    ] as const) {
+      // The seeded splash is called splash_1.png either way.
+      const store = seeded();
+      let declared = '';
+      const fetchFn = ((_u: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body)) as {
+          messages: { content: { source?: { media_type: string } }[] }[];
+        };
+        declared = body.messages[0]?.content[0]?.source?.media_type ?? '';
+        return Promise.resolve(answer(JSON.stringify({ comment: 'ok', ...GOOD_KIT })));
+      }) as unknown as typeof fetch;
+      const d: SuggestDeps = { ...deps(store, fetchFn), readImage: () => bytes };
+      expect((await suggestKit(d, 1, { id: 'forged_d', messages: ASK })).ok).toBe(true);
+      expect(declared).toBe(type);
+      store.close();
+    }
+    expect(imageMediaType(Buffer.from('RIFF\u0000\u0000\u0000\u0000WEBPVP8 '))).toBe('image/webp');
+    expect(imageMediaType(Buffer.from('GIF89a'))).toBe('image/gif');
+  });
+
+  it('sends names that are not plain English back, whatever the creator spoke', async () => {
+    const store = seeded();
+    const accented = {
+      passive: GOOD_KIT.passive,
+      abilities: { ...GOOD_KIT.abilities, Q: { ...GOOD_KIT.abilities.Q, name: 'Epee de Givre' } },
+    };
+    (accented.abilities.Q as { name: string }).name = '\u00c9p\u00e9e de Givre';
+    let n = 0;
+    const feedback: string[] = [];
+    const fetchFn = ((_u: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as {
+        messages: { role: string; content: unknown }[];
+      };
+      const last = body.messages[body.messages.length - 1];
+      feedback.push(typeof last?.content === 'string' ? last.content : '');
+      n += 1;
+      return Promise.resolve(answer(JSON.stringify(n === 1 ? accented : GOOD_KIT)));
+    }) as unknown as typeof fetch;
+    const out = await suggestKit(deps(store, fetchFn), 1, {
+      id: 'forged_d',
+      messages: [{ role: 'user', text: 'un kit de glace' }],
+    });
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.abilities.Q.name).toBe(GOOD_KIT.abilities.Q.name);
+    expect(n).toBe(2);
+    expect(feedback[1]).toContain('English');
+    expect(feedback[1]).toContain('\u00c9p\u00e9e de Givre');
     store.close();
   });
 });
