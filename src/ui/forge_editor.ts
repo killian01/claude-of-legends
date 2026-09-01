@@ -23,6 +23,8 @@ import { type AnimPreview, createAnimPreview } from './anim_preview';
 import { describeAbility } from './describe';
 import { buildCastEditor, defaultCast, type KitHooks, numField } from './forge_kit';
 import { startMenuBackdrop } from './menu_backdrop';
+import { setRichLine } from './rich_text';
+import { grantSpellPower, POWER_DIAL_MAX, POWER_DIAL_MIN } from './spell_power';
 import { grantStat, MELEE_REACH, RANGED_MIN } from './stat_budget';
 import { type PolyAxis, statPolygon } from './stat_polygon';
 import { openWorkshop } from './workshop';
@@ -211,6 +213,10 @@ const CSS = `
 .fe-polyrow { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: flex-start; margin: 8px 0; }
 .fe-polywrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .fe-mini.on { border-color: #d8b45a; color: #e8cc74; background: #2c2210; }
+.fe-dial { flex: 1; min-width: 120px; accent-color: #c9a84a; }
+.fe-advanced { margin-top: 8px; }
+.fe-advanced summary { cursor: pointer; color: #97854f; font-size: 11px; }
+.fe-advanced summary:hover { color: #d8cdb0; }
 .fe-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .fe-cand {
   padding: 0; border: 2px solid #4a3a1c; border-radius: 8px; background: #120d06;
@@ -1958,7 +1964,9 @@ export function openForgeEditor(container: HTMLElement): void {
           const a = p.abilities[key];
           const block = el('div', 'fe-prop-spell');
           block.append(el('strong', '', `${key}: ${a.name}`));
-          block.append(el('p', 'fe-desc', describeAbility(key, a).join(' ')));
+          const line = el('p', 'fe-desc');
+          setRichLine(line, describeAbility(key, a).join(' '));
+          block.append(line);
           prop.append(block);
         }
         prop.append(
@@ -2105,17 +2113,20 @@ export function openForgeEditor(container: HTMLElement): void {
     // edit actually does, in words, live as the numbers move.
     const desc = el('p', 'fe-desc');
     const syncDesc = (): void => {
-      desc.textContent = describeAbility(key, current.abilities[key]).join(' ');
+      // Rich generated HTML (colored values), not plain text.
+      setRichLine(desc, describeAbility(key, current.abilities[key]).join(' '));
     };
     syncDesc();
     panel.append(desc);
     panel.addEventListener('input', syncDesc);
     panel.addEventListener('change', syncDesc);
+    // The rhythm, in plain units: when the button is available and what
+    // a press costs. These stay typed; they are choices, not amounts.
     const costs = el('div', 'fe-fields');
-    costs.append(numField('mana', ability, 'manaCost', ABILITY_BOUNDS.manaCost, hooks));
+    costs.append(numField('mana cost', ability, 'manaCost', ABILITY_BOUNDS.manaCost, hooks));
     costs.append(
       numField(
-        'cooldown',
+        'cooldown (s)',
         ability,
         'cooldown',
         key === 'R' ? ABILITY_BOUNDS.ultCooldown : ABILITY_BOUNDS.basicCooldown,
@@ -2123,9 +2134,79 @@ export function openForgeEditor(container: HTMLElement): void {
       ),
     );
     costs.append(numField('cast range', ability, 'castRange', ABILITY_BOUNDS.castRange, hooks));
-    costs.append(numField('windup', ability, 'windup', ABILITY_BOUNDS.windup, hooks));
+    costs.append(numField('windup (s)', ability, 'windup', ABILITY_BOUNDS.windup, hooks));
     panel.append(costs);
-    panel.append(buildCastEditor(current.abilities[key], hooks));
+
+    // The power dial: one control scaling every amount (damage, healing,
+    // crowd control durations) inside the bounds, stopped by the budget
+    // like a Stat polygon vertex. Structure comes from the kit
+    // conversation, or from the advanced editor below.
+    const anchor = structuredClone(current.abilities[key]);
+    let advancedStale = true;
+    const advBody = el('div', '');
+    const rebuildAdvanced = (): void => {
+      advBody.textContent = '';
+      advBody.append(buildCastEditor(current.abilities[key], hooks));
+      advancedStale = false;
+    };
+    const dialRow = el('div', 'fe-artrow');
+    dialRow.append(el('span', 'fe-field-label', 'Power'));
+    const dial = el('input', 'fe-dial') as HTMLInputElement;
+    dial.type = 'range';
+    dial.min = String(Math.round(POWER_DIAL_MIN * 100));
+    dial.max = String(Math.round(POWER_DIAL_MAX * 100));
+    dial.step = '1';
+    dial.value = '100';
+    dial.disabled = sealed;
+    dial.title = sealed
+      ? 'This champion is sealed; unseal it to retune'
+      : 'Scales the amounts of this spell; the budget is the wall';
+    const costNote = el('span', 'fe-step-text', '');
+    const syncCost = (): void => {
+      const bill = budgetOf(current);
+      costNote.textContent = `this spell costs ${Math.round(bill.abilities[key])}; the champion uses ${Math.round(bill.total)} / ${POWER_BUDGET}`;
+    };
+    syncCost();
+    panel.addEventListener('input', syncCost);
+    panel.addEventListener('change', syncCost);
+    dial.addEventListener('input', () => {
+      const live = current.abilities[key];
+      // The anchor's rhythm may be stale (typed since render): cost the
+      // scale against what is really on the form.
+      const anchorNow: typeof anchor = {
+        ...anchor,
+        manaCost: live.manaCost,
+        cooldown: live.cooldown,
+        castRange: live.castRange,
+        ...(live.windup !== undefined ? { windup: live.windup } : {}),
+      };
+      const granted = grantSpellPower(current, key, anchorNow, Number(dial.value) / 100);
+      // In place, so the rhythm fields above stay bound to the object.
+      live.spec = granted.ability.spec;
+      if (granted.ability.atRank) live.atRank = granted.ability.atRank;
+      dial.value = String(Math.round(granted.factor * 100));
+      advancedStale = true;
+      hooks.refresh();
+      syncDesc();
+      syncCost();
+    });
+    dialRow.append(dial, costNote);
+    panel.append(dialRow);
+
+    // Advanced: the full structural editor, collapsed and rebuilt on
+    // open so a dial change never leaves stale fields behind.
+    const advanced = document.createElement('details');
+    advanced.className = 'fe-advanced';
+    const sum = document.createElement('summary');
+    sum.textContent = 'Advanced: edit the spell structure by hand';
+    advanced.append(sum, advBody);
+    advanced.addEventListener('toggle', () => {
+      if (advanced.open && advancedStale) rebuildAdvanced();
+    });
+    dial.addEventListener('change', () => {
+      if (advanced.open && advancedStale) rebuildAdvanced();
+    });
+    panel.append(advanced);
     main.append(panel);
     renderSpellAnimation(key);
   }

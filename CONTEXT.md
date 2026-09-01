@@ -303,3 +303,12 @@ is a second, smaller polygon. The melee or ranged choice is a toggle beside it, 
 identity, not an axis: a melee champion's reach is pinned off the polygon, a ranged
 champion's reach is one more axis.
 _Avoid_: radar chart, spider chart, stat sliders
+
+**Power dial**:
+A spell's one intensity control: it scales the spell's amounts (damage, healing, crowd
+control durations) inside the engine's bounds and stops where the power budget runs
+out, exactly like a Stat polygon vertex. Structure (the cast kind, the effect kinds,
+the shapes) is not its business: that comes from the kit suggestion or the advanced
+editor. Rhythm (cooldown, mana cost, cast range, windup) stays typed beside it, in
+plain units.
+_Avoid_: power slider, spell level
