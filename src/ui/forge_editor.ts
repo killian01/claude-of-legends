@@ -172,6 +172,14 @@ const CSS = `
 .fe-status { min-height: 16px; color: #aac2dd; margin-top: 8px; font-size: 11px; }
 .fe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
 .fe-desc { color: #97854f; font-style: italic; margin-top: 4px; line-height: 1.4; }
+.fe-chatlog { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; margin: 4px 0 8px; }
+.fe-bubble { max-width: 85%; padding: 6px 10px; border-radius: 10px; font-size: 12.5px; line-height: 1.45; white-space: pre-wrap; }
+.fe-bubble.user { align-self: flex-end; background: #2c2210; border: 1px solid #6b5a2e; color: #e0d5b8; }
+.fe-bubble.ai { align-self: flex-start; background: #1a130a; border: 1px solid #4a3a1c; color: #b0a37e; }
+.fe-chatrow { display: flex; gap: 8px; align-items: center; }
+.fe-chatrow .fe-input { margin-bottom: 0; }
+.fe-prop-spell { margin: 6px 0; }
+.fe-prop-spell strong { color: #d8cdb0; font-size: 12.5px; }
 .fe-strip { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .fe-cand {
   padding: 0; border: 2px solid #4a3a1c; border-radius: 8px; background: #120d06;
@@ -497,8 +505,20 @@ export function openForgeEditor(container: HTMLElement): void {
   let animating = false;
   // True while a weapon-only build runs (the claim).
   let weaponForging = false;
-  // True while a kit suggestion request is in flight (Spells tab).
+  // True while a kit conversation request is in flight (Spells tab).
   let suggesting = false;
+  // The kit conversation, session-lived: the wire thread (assistant
+  // turns hold the model's raw answers, replayed so it can iterate on
+  // its own proposals) and the short text each turn shows as a bubble.
+  const chat: { role: 'user' | 'assistant'; text: string; bubble: string }[] = [];
+  // The latest validated proposal, awaiting the creator's Apply.
+  let proposal: {
+    passive: ForgedChampionDef['passive'];
+    abilities: ForgedChampionDef['abilities'];
+    budget: { total: number; cap: number };
+  } | null = null;
+  // The unsent chat input, preserved across re-renders.
+  let chatDraft = '';
   let currentStage = '';
   let stageRows: Map<string, HTMLElement> | null = null;
   // The account's creation stock, from the drafts route; -1 = unknown.
@@ -1778,50 +1798,106 @@ export function openForgeEditor(container: HTMLElement): void {
     slotsPanel.append(slots);
     main.append(slotsPanel);
 
-    // Kit suggestion from the splash art (drafts only: a sealed kit is
-    // locked). The suggestion lands in the draft on screen, saved only
-    // when the player saves; the server validates it in full first. The
-    // panel shows on sealed champions too, disabled with its reason in
-    // plain sight: an absent button reads as broken (playtest).
+    // The kit conversation (playtest: iterate before applying). The
+    // thread lives in this editor session only; each answer lands as a
+    // whole proposed kit in the panel below, validated by the server
+    // against the full game rules, and NOTHING touches the form until
+    // Apply. Shown on sealed champions too, disabled with its reason in
+    // plain sight: an absent control reads as broken.
     {
       const sug = el('div', 'fe-panel');
-      sug.append(el('h3', '', 'Suggest the kit from the splash art'));
+      sug.append(el('h3', '', 'Kit conversation (AI)'));
       sug.append(
         el(
           'p',
           'fe-lead',
-          'Reads your chosen splash and proposes a themed passive and four spells, ' +
-            'written into the draft for you to review, tweak, and save.',
+          'Reads your chosen splash. Say what you want ("an ice theme", "more mobility ' +
+            'on the E"); each answer proposes a full kit below, and nothing touches ' +
+            'your spells until you apply it.',
         ),
       );
-      const go = el('button', 'fe-gen', suggesting ? 'Asking...' : 'Suggest a kit (AI)');
+      const log = el('div', 'fe-chatlog');
+      if (chat.length === 0 && !suggesting) {
+        log.append(el('div', 'fe-step-text', 'No messages yet.'));
+      }
+      for (const turn of chat) {
+        log.append(el('div', `fe-bubble ${turn.role === 'user' ? 'user' : 'ai'}`, turn.bubble));
+      }
+      if (suggesting) log.append(el('div', 'fe-bubble ai', 'Thinking...'));
+      sug.append(log);
+      const row = el('div', 'fe-chatrow');
+      const input = el('input', 'fe-input') as HTMLInputElement;
+      input.placeholder = 'What should this kit be?';
+      input.maxLength = 2000;
+      input.value = chatDraft;
+      input.addEventListener('input', () => {
+        chatDraft = input.value;
+      });
       const splashChosen = chosenOf('splash') !== undefined;
-      (go as HTMLButtonElement).disabled = sealed || !splashChosen || suggesting;
-      go.addEventListener('click', () => {
-        if (suggesting) return;
+      const send = el(
+        'button',
+        'fe-gen small',
+        suggesting ? 'Asking...' : 'Send',
+      ) as HTMLButtonElement;
+      send.disabled = sealed || !splashChosen || suggesting;
+      const submit = (): void => {
+        const text = input.value.trim();
+        if (text === '' || send.disabled) return;
+        chatDraft = '';
+        chat.push({ role: 'user', text, bubble: text });
         suggesting = true;
         renderMain();
-        status.textContent = 'Asking for a kit suggestion...';
         void api<{
           ok: boolean;
+          comment?: string;
           passive?: ForgedChampionDef['passive'];
           abilities?: ForgedChampionDef['abilities'];
+          raw?: string;
+          budget?: { total: number; cap: number };
           error?: string;
-        }>('/api/forge/suggest', { id: current.id }).then((r) => {
+        }>('/api/forge/suggest', {
+          id: current.id,
+          def: current,
+          messages: chat.map((t) => ({ role: t.role, text: t.text })),
+        }).then((r) => {
           suggesting = false;
-          if (!r?.ok || !r.passive || !r.abilities) {
+          if (!r?.ok || !r.passive || !r.abilities || typeof r.raw !== 'string') {
+            // The model never saw this message: take it back into the
+            // input so the thread matches what was actually answered.
+            chat.pop();
+            chatDraft = text;
             status.textContent = r?.error ?? 'the suggestion failed';
             renderMain();
             return;
           }
-          current.passive = r.passive;
-          current.abilities = r.abilities;
-          status.textContent = 'A suggested kit is in the draft: review each spell, then save.';
+          chat.push({
+            role: 'assistant',
+            text: r.raw,
+            bubble: r.comment ? r.comment : 'Here is a kit proposal.',
+          });
+          proposal = {
+            passive: r.passive,
+            abilities: r.abilities,
+            budget: r.budget ?? { total: 0, cap: 0 },
+          };
           renderMain();
-          refresh();
         });
+      };
+      send.addEventListener('click', submit);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submit();
       });
-      sug.append(go);
+      row.append(input, send);
+      if (chat.length > 0 && !suggesting) {
+        const clear = el('button', 'fe-mini', 'Start over') as HTMLButtonElement;
+        clear.title = 'Forget this conversation (the proposal below stays)';
+        clear.addEventListener('click', () => {
+          chat.length = 0;
+          renderMain();
+        });
+        row.append(clear);
+      }
+      sug.append(row);
       if (sealed) {
         sug.append(
           el(
@@ -1835,6 +1911,42 @@ export function openForgeEditor(container: HTMLElement): void {
         sug.append(el('p', 'fe-desc', 'Locked until a splash art is chosen on the Design tab.'));
       }
       main.append(sug);
+
+      // The latest proposal, whole-kit: the same derived descriptions
+      // the roster shows, the budget bill, one Apply for all of it.
+      if (proposal !== null) {
+        const p = proposal;
+        const prop = el('div', 'fe-panel');
+        prop.append(el('h3', '', 'Proposed kit'));
+        const tpl = PASSIVE_TEMPLATES[p.passive.template];
+        const pass = el('div', 'fe-prop-spell');
+        pass.append(el('strong', '', `Passive: ${p.passive.name || 'Passive'}`));
+        if (tpl) pass.append(el('p', 'fe-desc', tpl.describe(p.passive.params)));
+        prop.append(pass);
+        for (const key of ['Q', 'W', 'E', 'R'] as const) {
+          const a = p.abilities[key];
+          const block = el('div', 'fe-prop-spell');
+          block.append(el('strong', '', `${key}: ${a.name}`));
+          block.append(el('p', 'fe-desc', describeAbility(key, a).join(' ')));
+          prop.append(block);
+        }
+        prop.append(
+          el('p', 'fe-lead', `This kit uses ${p.budget.total} / ${p.budget.cap} of the budget.`),
+        );
+        if (!sealed) {
+          const apply = el('button', 'fe-gen small', 'Apply this kit (free)') as HTMLButtonElement;
+          apply.title = 'Fills the form with this kit; nothing is saved until you save';
+          apply.addEventListener('click', () => {
+            current.passive = structuredClone(p.passive);
+            current.abilities = structuredClone(p.abilities);
+            status.textContent = 'The proposed kit is on the form: review, tweak, then save.';
+            renderMain();
+            refresh();
+          });
+          prop.append(apply);
+        }
+        main.append(prop);
+      }
     }
 
     if (spellSlot === 'P') {
