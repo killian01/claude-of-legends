@@ -13,6 +13,7 @@ import type { ForgeOutcome } from './forge';
 import type { ForgedRow, ForgeStore } from './forge_store';
 import type { PipelineDeps } from './generation/pipeline';
 import { GenerationError, type ProviderAsset } from './generation/provider';
+import { iconPhrase } from './icon_phrase';
 import { checkQuota, type QuotaDeps, spendQuota } from './quotas';
 import { findBlockedWord } from './word_filter';
 
@@ -158,7 +159,9 @@ export function artPrompt(kind: ArtKind, row: ForgedRow, line: string, appearanc
   const key = kind.slice('icon_'.length) as 'Q' | 'W' | 'E' | 'R';
   const ability = row.def.abilities[key];
   const detail = line === '' ? '' : `, ${line}`;
-  return `${ICON_STYLE} The ability: ${ability.name}${detail}.`;
+  // The mechanics ride along, derived from the spec itself: the name
+  // alone told the image model nothing about what the spell does.
+  return `${ICON_STYLE} The ability: ${ability.name}, ${iconPhrase(ability)}${detail}.`;
 }
 
 // The strip the editor renders: every candidate of the draft, oldest

@@ -31,6 +31,7 @@ import { ForgeStore } from '../server/forge_store';
 import { MockProvider } from '../server/generation/mock';
 import type { PipelineDeps } from '../server/generation/pipeline';
 import { placeholderFor } from '../server/generation/placeholder';
+import { iconPhrase } from '../server/icon_phrase';
 import type { QuotaDeps } from '../server/quotas';
 import { CHAMPIONS } from '../src/sim/content/champions';
 import { forgedTwin } from './forged_twins';
@@ -249,7 +250,7 @@ describe('generateArt', () => {
     expect(closed).toMatchObject({ ok: false, error: expect.stringContaining('sealed') });
   });
 
-  it('composes icon prompts from the flat template and the ability name', async () => {
+  it('composes icon prompts from the template, the name, and the mechanics', async () => {
     const r = rig();
     const out = await generateArt(r.deps, ACCOUNT, { id: r.def.id, kind: 'icon_Q', line: '' });
     expect(out.ok).toBe(true);
@@ -257,6 +258,9 @@ describe('generateArt', () => {
     const row = r.store.getArtCandidate(out.candidate.cid);
     expect(row?.prompt.startsWith(ICON_STYLE)).toBe(true);
     expect(row?.prompt).toContain(r.def.abilities.Q.name);
+    // The prefab prompt carries what the spell DOES, derived from its
+    // spec: no typing needed for an icon that matches the mechanics.
+    expect(row?.prompt).toContain(iconPhrase(r.def.abilities.Q));
   });
 
   it('refuses past the daily limit, and a provider failure burns nothing', async () => {
