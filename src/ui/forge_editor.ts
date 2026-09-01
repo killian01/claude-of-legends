@@ -1744,8 +1744,10 @@ export function openForgeEditor(container: HTMLElement): void {
 
     // Kit suggestion from the splash art (drafts only: a sealed kit is
     // locked). The suggestion lands in the draft on screen, saved only
-    // when the player saves; the server validates it in full first.
-    if (!sealed) {
+    // when the player saves; the server validates it in full first. The
+    // panel shows on sealed champions too, disabled with its reason in
+    // plain sight: an absent button reads as broken (playtest).
+    {
       const sug = el('div', 'fe-panel');
       sug.append(el('h3', '', 'Suggest the kit from the splash art'));
       sug.append(
@@ -1758,7 +1760,7 @@ export function openForgeEditor(container: HTMLElement): void {
       );
       const go = el('button', 'fe-gen', suggesting ? 'Asking...' : 'Suggest a kit (AI)');
       const splashChosen = chosenOf('splash') !== undefined;
-      (go as HTMLButtonElement).disabled = !splashChosen || suggesting;
+      (go as HTMLButtonElement).disabled = sealed || !splashChosen || suggesting;
       go.addEventListener('click', () => {
         if (suggesting) return;
         suggesting = true;
@@ -1784,7 +1786,15 @@ export function openForgeEditor(container: HTMLElement): void {
         });
       });
       sug.append(go);
-      if (!splashChosen) {
+      if (sealed) {
+        sug.append(
+          el(
+            'p',
+            'fe-desc',
+            'This champion is sealed: its kit is locked, so suggestions rework drafts only.',
+          ),
+        );
+      } else if (!splashChosen) {
         sug.append(el('p', 'fe-desc', 'Locked until a splash art is chosen on the Design tab.'));
       }
       main.append(sug);
