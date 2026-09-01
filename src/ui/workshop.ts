@@ -25,6 +25,7 @@ import {
 } from '../render/champions/forged';
 import { resolveForgedClips } from '../render/champions/forged_clips';
 import type { ChampionClipNames } from '../render/champions/manifest';
+import { gripAlignment, HAND_GRIP_AXIS, orientLongAxisY } from '../render/champions/orient';
 import {
   DISPLAY_BOUNDS,
   DISPLAY_PROP_KINDS,
@@ -83,9 +84,16 @@ const CSS = `
 .ws-note { color: #97854f; font-size: 11px; line-height: 1.5; }
 .ws-status { min-height: 15px; color: #aac2dd; font-size: 11px; margin-top: 6px; }
 .ws-slider { display: grid; grid-template-columns: 62px 1fr 44px; gap: 6px; align-items: center; margin: 4px 0; }
+.ws-slider.with-steps { grid-template-columns: 62px 1fr 44px auto; }
 .ws-slider label { color: #97854f; font-size: 11px; }
 .ws-slider output { color: #d8cdb0; font-size: 11px; text-align: right; }
 .ws-slider input[type=range] { width: 100%; accent-color: #c9a84a; margin: 0; }
+.ws-steps { display: flex; gap: 2px; }
+.ws-step {
+  padding: 2px 5px; border-radius: 4px; border: 1px solid #4a3a1c; background: #1a130a;
+  color: #d8cdb0; font-size: 10px; cursor: pointer;
+}
+.ws-step:hover { border-color: #a08030; }
 .ws-select {
   width: 100%; padding: 4px 6px; border-radius: 5px; border: 1px solid #4a3a1c;
   background: #120d06; color: #e0d5b8; font-size: 12px; margin-bottom: 4px;
@@ -266,7 +274,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     dragging = false;
     // A still click (no orbit, no gizmo drag) selects or deselects the
     // weapon, editor style.
-    if (!gizmoBusy && Math.hypot(e.clientX - downX, e.clientY - downY) < 6) tryPickWeapon(e);
+    if (!gizmoBusy && Math.hypot(e.clientX - downX, e.clientY - downY) < 6) handleStillClick(e);
   });
   canvas.addEventListener(
     'wheel',
@@ -366,6 +374,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       propHolder = null;
     }
     anchors = [];
+    refreshMarkerBone();
     if (!model || prop.kind === 'none' || prop.bone === '') return;
     const spec = forgedPropModel(prop.kind, tuning.height, subject.weaponUrl ?? null);
     if (!spec) return;
@@ -373,7 +382,10 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       if (!source || token !== propBuildToken || !model) return;
       const bone = findBone(model, prop.bone);
       if (!bone) return;
-      const built = normalizeProp(source.clone(true), spec.size);
+      // Long axis up before the wrap (orient.ts): +Y is 'along the
+      // blade' for every weapon, generated ones included, and the match
+      // renderer applies the exact same normalization.
+      const built = normalizeProp(orientLongAxisY(source.clone(true)) as THREE.Group, spec.size);
       built.rotation.set(prop.rot[0], prop.rot[1], prop.rot[2]);
       built.position.set(prop.pos[0], prop.pos[1], prop.pos[2]);
       built.scale.setScalar(prop.scale ?? 1);
@@ -415,8 +427,6 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     dom: canvas,
     scene,
     posLimit: DISPLAY_BOUNDS.propOffset.max,
-    scaleMin: DISPLAY_BOUNDS.propScale.min,
-    scaleMax: DISPLAY_BOUNDS.propScale.max,
     onChange: (obj) => {
       prop.rot[0] = obj.rotation.x;
       prop.rot[1] = obj.rotation.y;
@@ -424,7 +434,6 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       prop.pos[0] = obj.position.x;
       prop.pos[1] = obj.position.y;
       prop.pos[2] = obj.position.z;
-      prop.scale = obj.scale.x;
       syncWeaponSliders();
     },
     onDragging: (active) => {
@@ -436,20 +445,126 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
 
   const axesOverlay = createAxesOverlay();
   const pickRay = new THREE.Raycaster();
-  const tryPickWeapon = (e: PointerEvent): void => {
+  const ndcOf = (e: PointerEvent): THREE.Vector2 => {
+    const rect = canvas.getBoundingClientRect();
+    return new THREE.Vector2(
+      ((e.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1,
+      -((e.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1,
+    );
+  };
+  const tryPickWeapon = (e: PointerEvent): boolean => {
     const built = anchors[0]?.prop ?? null;
-    if (built && propHolder && subject.editable === true) {
-      const rect = canvas.getBoundingClientRect();
-      const ndc = new THREE.Vector2(
-        ((e.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1,
-        -((e.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1,
-      );
-      pickRay.setFromCamera(ndc, camera);
-      if (pickRay.intersectObject(propHolder, true).length > 0) {
-        gizmo.attach(built);
-        return;
-      }
+    if (!built || !propHolder || subject.editable !== true) return false;
+    pickRay.setFromCamera(ndcOf(e), camera);
+    if (pickRay.intersectObject(propHolder, true).length === 0) return false;
+    gizmo.attach(built);
+    return true;
+  };
+
+  // --- the rig view: skeleton overlay, mount-bone marker, joint picks ----
+
+  let rigVisible = false;
+  let skeletonHelper: THREE.SkeletonHelper | null = null;
+  let markerBone: THREE.Object3D | null = null;
+  const boneMarker = new THREE.Mesh(
+    new THREE.SphereGeometry(0.035, 12, 8),
+    new THREE.MeshBasicMaterial({ color: ACCENT, depthTest: false }),
+  );
+  boneMarker.renderOrder = 30;
+  boneMarker.visible = false;
+  scene.add(boneMarker);
+  const refreshMarkerBone = (): void => {
+    markerBone = model !== null && prop.bone !== '' ? findBone(model, prop.bone) : null;
+  };
+  const setRigVisible = (on: boolean): void => {
+    rigVisible = on;
+    if (on && skeletonHelper === null && model) {
+      skeletonHelper = new THREE.SkeletonHelper(model);
+      // Drawn through the mesh: a skeleton you cannot see is no help.
+      (skeletonHelper.material as THREE.LineBasicMaterial).depthTest = false;
+      skeletonHelper.renderOrder = 29;
+      scene.add(skeletonHelper);
     }
+    if (skeletonHelper) skeletonHelper.visible = on;
+    refreshMarkerBone();
+  };
+  // Assigned by buildWeaponControls: a joint pick lands in the bone
+  // select like any manual choice.
+  let applyBonePick: (name: string) => void = () => {};
+  const tryPickJoint = (e: PointerEvent): boolean => {
+    if (!rigVisible || !model || subject.editable !== true) return false;
+    const rect = canvas.getBoundingClientRect();
+    const v = new THREE.Vector3();
+    let bestName: string | null = null;
+    // Twist bones overlap the limb they smooth; picking them by click
+    // would be noise. The bone select still lists everything.
+    let bestD = 14;
+    model.traverse((child) => {
+      if (!(child as THREE.Bone).isBone || /twist/i.test(child.name)) return;
+      child.getWorldPosition(v).project(camera);
+      if (v.z >= 1) return;
+      const px = ((v.x + 1) / 2) * rect.width + rect.left;
+      const py = ((1 - v.y) / 2) * rect.height + rect.top;
+      const d = Math.hypot(px - e.clientX, py - e.clientY);
+      if (d < bestD) {
+        bestD = d;
+        bestName = child.name;
+      }
+    });
+    if (bestName === null) return false;
+    applyBonePick(bestName);
+    return true;
+  };
+
+  // --- 'Hold it here': click the weapon where the hand should hold it ---
+
+  let aiming = false;
+  let setAimButton: (on: boolean) => void = () => {};
+  const setAiming = (on: boolean): void => {
+    aiming = on;
+    canvas.style.cursor = on ? 'crosshair' : '';
+    status.textContent = on ? 'Click the weapon where the hand should hold it.' : '';
+    setAimButton(on);
+  };
+  const tryGripPick = (e: PointerEvent): void => {
+    const a = anchors[0];
+    if (!a || !propHolder) return;
+    pickRay.setFromCamera(ndcOf(e), camera);
+    const hit = pickRay.intersectObject(propHolder, true)[0];
+    if (!hit) return; // Missed the weapon: stay armed, the player retries.
+    const built = a.prop;
+    const gripLocal = built.worldToLocal(hit.point.clone());
+    // The hand's grip axis: a bone-local constant of the shared rig,
+    // taken through the bone's CURRENT orientation into the holder's
+    // frame, so the alignment is right in any pose, mid-clip included.
+    const rootQ = modelRoot.getWorldQuaternion(new THREE.Quaternion()).invert();
+    const boneQ = a.hand.bone.getWorldQuaternion(new THREE.Quaternion()).premultiply(rootQ);
+    const axisHolder = new THREE.Vector3()
+      .copy(HAND_GRIP_AXIS)
+      .applyQuaternion(boneQ)
+      .applyQuaternion(a.holder.quaternion.clone().invert());
+    const fit = gripAlignment(gripLocal, axisHolder, built.scale.x);
+    const euler = new THREE.Euler().setFromQuaternion(fit.quaternion, 'XYZ');
+    prop.rot[0] = euler.x;
+    prop.rot[1] = euler.y;
+    prop.rot[2] = euler.z;
+    const lim = DISPLAY_BOUNDS.propOffset;
+    prop.pos[0] = Math.min(lim.max, Math.max(lim.min, fit.position.x));
+    prop.pos[1] = Math.min(lim.max, Math.max(lim.min, fit.position.y));
+    prop.pos[2] = Math.min(lim.max, Math.max(lim.min, fit.position.z));
+    applyPropTuning();
+    syncWeaponSliders();
+    setAiming(false);
+    gizmo.attach(built);
+  };
+
+  const handleStillClick = (e: PointerEvent): void => {
+    if (aiming) {
+      tryGripPick(e);
+      return;
+    }
+    if (tryPickWeapon(e)) return;
+    if (tryPickJoint(e)) return;
     gizmo.detach();
   };
 
@@ -552,6 +667,8 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       applyModelTuning();
       rebuildProp(false);
       buildWeaponControls();
+      // The rig toggle may have been armed while the model still loaded.
+      if (rigVisible) setRigVisible(true);
       const rig = model;
       // A per-clip-baked champion keeps its animations in files beside
       // the rigged body; merge them before the buttons build.
@@ -731,16 +848,28 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       prop.bone = boneSelect.value;
       rebuildProp(false);
     });
+    applyBonePick = (name) => {
+      prop.bone = name;
+      boneSelect.value = name;
+      rebuildProp(false);
+    };
     weaponControls.append(kindSelect, boneSelect);
+
+    // 'Hold it here' is the fast path: arm it, click the weapon where
+    // the hand should hold it, and the grip snaps into the fist with the
+    // blade along the hand's grip axis (orient.ts does the math).
+    const holdBtn = el('button', 'ws-btn', 'Hold it here') as HTMLButtonElement;
+    holdBtn.addEventListener('click', () => setAiming(!aiming));
+    setAimButton = (on) => holdBtn.classList.toggle('picked', on);
 
     // The gizmo toolbar: the editor-grade path to the same numbers. A
     // click arms the gizmo on the weapon when nothing was selected yet.
     const modeBar = el('div', '');
+    modeBar.append(holdBtn);
     const modeButtons = new Map<GizmoMode, HTMLButtonElement>();
     const modeDefs: readonly [GizmoMode, string][] = [
       ['translate', 'Move (G)'],
       ['rotate', 'Rotate (R)'],
-      ['scale', 'Scale (S)'],
     ];
     for (const [mode, label] of modeDefs) {
       const btn = el('button', 'ws-btn', label) as HTMLButtonElement;
@@ -756,7 +885,6 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       for (const [m, b] of modeButtons) b.classList.toggle('picked', m === mode);
     };
     highlightMode('translate');
-    weaponControls.append(modeBar);
 
     // Slider rows that the gizmo can write back into: same numbers, two
     // hands on them.
@@ -798,23 +926,65 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       }
       weaponSetters.get('size')?.(prop.scale ?? 1);
     };
+    // Size sits right under the selectors, alone: the one number the
+    // gizmo does not touch (playtest: scaling by axis handles felt
+    // wrong, a slider like the champion's Height is the way).
+    weaponControls.append(
+      syncedRow(
+        'size',
+        'Size',
+        DISPLAY_BOUNDS.propScale.min,
+        DISPLAY_BOUNDS.propScale.max,
+        0.05,
+        prop.scale ?? 1,
+        (v) => `${v.toFixed(2)}x`,
+        (v) => {
+          prop.scale = v;
+          applyPropTuning();
+        },
+      ),
+    );
+    weaponControls.append(modeBar);
+    // Quarter turns compose about the corner marker's axes, exactly like
+    // the world-space rotate rings, so 'turn it 90 about X' means the
+    // same thing everywhere.
+    const quarter = (axisIndex: number, dir: 1 | -1): void => {
+      const axis = new THREE.Vector3();
+      axis.setComponent(axisIndex, 1);
+      const turned = new THREE.Quaternion()
+        .setFromEuler(new THREE.Euler(prop.rot[0], prop.rot[1], prop.rot[2]))
+        .premultiply(new THREE.Quaternion().setFromAxisAngle(axis, (dir * Math.PI) / 2));
+      const euler = new THREE.Euler().setFromQuaternion(turned, 'XYZ');
+      prop.rot[0] = euler.x;
+      prop.rot[1] = euler.y;
+      prop.rot[2] = euler.z;
+      applyPropTuning();
+      syncWeaponSliders();
+    };
     const axes = ['X', 'Y', 'Z'] as const;
     for (let i = 0; i < 3; i++) {
-      weaponControls.append(
-        syncedRow(
-          `rot${i}`,
-          `Turn ${axes[i]}`,
-          -180,
-          180,
-          1,
-          ((prop.rot[i] ?? 0) * 180) / Math.PI,
-          (v) => `${Math.round(v)}`,
-          (v) => {
-            prop.rot[i] = (v * Math.PI) / 180;
-            applyPropTuning();
-          },
-        ),
+      const row = syncedRow(
+        `rot${i}`,
+        `Turn ${axes[i]}`,
+        -180,
+        180,
+        1,
+        ((prop.rot[i] ?? 0) * 180) / Math.PI,
+        (v) => `${Math.round(v)}`,
+        (v) => {
+          prop.rot[i] = (v * Math.PI) / 180;
+          applyPropTuning();
+        },
       );
+      row.classList.add('with-steps');
+      const steps = el('span', 'ws-steps');
+      for (const dir of [-1, 1] as const) {
+        const btn = el('button', 'ws-step', dir === 1 ? '+90' : '-90');
+        btn.addEventListener('click', () => quarter(i, dir));
+        steps.append(btn);
+      }
+      row.append(steps);
+      weaponControls.append(row);
     }
     for (let i = 0; i < 3; i++) {
       weaponControls.append(
@@ -833,28 +1003,27 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
         ),
       );
     }
-    weaponControls.append(
-      syncedRow(
-        'size',
-        'Size',
-        DISPLAY_BOUNDS.propScale.min,
-        DISPLAY_BOUNDS.propScale.max,
-        0.05,
-        prop.scale ?? 1,
-        (v) => `${v.toFixed(2)}x`,
-        (v) => {
-          prop.scale = v;
-          applyPropTuning();
-        },
-      ),
-    );
+    const resetBtn = el('button', 'ws-btn', 'Reset grip');
+    resetBtn.addEventListener('click', () => {
+      prop.rot[0] = 0;
+      prop.rot[1] = 0;
+      prop.rot[2] = 0;
+      prop.pos[0] = 0;
+      prop.pos[1] = 0;
+      prop.pos[2] = 0;
+      prop.scale = 1;
+      applyPropTuning();
+      syncWeaponSliders();
+    });
+    weaponControls.append(resetBtn);
     weaponControls.append(
       el(
         'div',
         'ws-note',
-        'Click the weapon on the stage to grab it: drag the arrows, rings and handles ' +
-          '(G move, R rotate, S scale, hold Ctrl to snap, Escape to release). The sliders ' +
-          'show the same numbers for fine touches. Play Attack to check the swing.',
+        'Hold it here, then click the weapon where the hand should hold it: the grip ' +
+          'snaps into the fist, blade along the hand. Or grab the weapon with a click and ' +
+          'drag the arrows and rings (G move, R rotate, hold Ctrl to snap, Escape to ' +
+          'release); the corner marker names the axes. Play Attack to check the swing.',
       ),
     );
   };
@@ -918,12 +1087,19 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   };
   podiumBtn.addEventListener('click', () => setView(false));
   matchBtn.addEventListener('click', () => setView(true));
-  viewPanel.append(podiumBtn, matchBtn);
+  const rigBtn = el('button', 'ws-btn', 'Show the rig');
+  rigBtn.addEventListener('click', () => {
+    setRigVisible(!rigVisible);
+    rigBtn.classList.toggle('picked', rigVisible);
+  });
+  viewPanel.append(podiumBtn, matchBtn, rigBtn);
   viewPanel.append(
     el(
       'div',
       'ws-note',
-      'Drag to orbit, wheel to zoom, in both views. Match view shows one map unit per cell.',
+      'Drag to orbit, wheel to zoom, in both views. Match view shows one map unit per cell. ' +
+        'Show the rig draws the skeleton with the weapon bone marked; with it on, click a ' +
+        'joint to hang the weapon there.',
     ),
   );
 
@@ -964,6 +1140,10 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       const settled = ageMs > 400 && activeClipName === idleClipName;
       syncPropAnchors(modelRoot, anchors, settled);
     }
+    // The mount-bone marker follows its joint (bones scale strangely on
+    // these rigs, so it tracks by world position, never parents).
+    boneMarker.visible = rigVisible && markerBone !== null;
+    if (rigVisible && markerBone) markerBone.getWorldPosition(boneMarker.position);
     applyCamera();
     renderer.render(scene, camera);
     axesOverlay.render(renderer, camera);
@@ -980,8 +1160,12 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     root.remove();
   };
   const onKey = (e: KeyboardEvent): void => {
-    // The gizmo eats its shortcuts first: Escape releases the weapon
-    // before it ever closes the workshop.
+    // Escape unwinds one layer at a time: the grip aim first, then the
+    // gizmo selection, and only then the workshop itself.
+    if (e.key === 'Escape' && aiming) {
+      setAiming(false);
+      return;
+    }
     if (gizmo.handleKey(e)) return;
     if (e.key === 'Escape') close();
   };

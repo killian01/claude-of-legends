@@ -1,25 +1,25 @@
 // The workshop's editor-grade manipulation layer (playtest round 9: grip
 // placement by sliders alone is too hard): click the weapon, get the
-// standard three.js transform gizmo with move arrows, rotate rings and a
-// uniform scale handle, plus a fixed corner axes marker to stay oriented.
-// This module owns the TransformControls lifecycle, the mode shortcuts
-// (G move, R rotate, S scale, Escape deselect, Ctrl snaps), and the value
-// clamping that keeps every manipulation inside what the server-side
-// sanitizer accepts. The workshop wires it to the prop and the sliders.
+// standard three.js transform gizmo with move arrows and rotate rings,
+// plus a fixed corner axes marker to stay oriented. This module owns the
+// TransformControls lifecycle, the mode shortcuts (G move, R rotate,
+// Escape deselect, Ctrl snaps), and the value clamping that keeps every
+// manipulation inside what the server-side sanitizer accepts. The
+// workshop wires it to the prop and the sliders. Size has no gizmo mode
+// on purpose (playtest: scaling by axis handles felt wrong), the Size
+// slider owns it.
 
 import * as THREE from 'three';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 
-export type GizmoMode = 'translate' | 'rotate' | 'scale';
+export type GizmoMode = 'translate' | 'rotate';
 
 export interface WeaponGizmoOpts {
   camera: THREE.Camera;
   dom: HTMLElement;
   scene: THREE.Scene;
-  // The sanitizer's bounds: position per axis, uniform scale range.
+  // The sanitizer's bound: position per axis.
   posLimit: number;
-  scaleMin: number;
-  scaleMax: number;
   // Fired after every manipulation, transform already clamped.
   onChange(obj: THREE.Object3D): void;
   // Orbit control must sleep while a handle drags.
@@ -57,14 +57,14 @@ function isTyping(e: KeyboardEvent): boolean {
 
 export function createWeaponGizmo(opts: WeaponGizmoOpts): WeaponGizmo {
   const controls = new TransformControls(opts.camera, opts.dom);
-  // Local space: the arrows ride the weapon, so 'along the blade' is
-  // always one axis no matter how the grip is turned.
-  controls.setSpace('local');
+  // World space: the arrows and rings match the corner axes marker, so
+  // what the tripod names is what a drag does. The weapon's own axes are
+  // trustworthy anyway: its geometry is normalized long-axis-up at load.
+  controls.setSpace('world');
   controls.setSize(0.9);
   opts.scene.add(controls.getHelper());
 
   let target: THREE.Object3D | null = null;
-  let lastScale = 1;
 
   controls.addEventListener('dragging-changed', (e) => {
     opts.onDragging((e as unknown as { value: boolean }).value === true);
@@ -72,18 +72,6 @@ export function createWeaponGizmo(opts: WeaponGizmoOpts): WeaponGizmo {
 
   controls.addEventListener('objectChange', () => {
     if (!target) return;
-    if (controls.mode === 'scale') {
-      // Uniform on purpose (per-axis stretch shears the texture): the
-      // axis the handle moved farthest wins and sets all three.
-      const s = target.scale;
-      const dx = Math.abs(s.x - lastScale);
-      const dy = Math.abs(s.y - lastScale);
-      const dz = Math.abs(s.z - lastScale);
-      let next = dx >= dy && dx >= dz ? s.x : dy >= dz ? s.y : s.z;
-      next = Math.min(opts.scaleMax, Math.max(opts.scaleMin, next));
-      s.setScalar(next);
-      lastScale = next;
-    }
     const p = target.position;
     p.set(
       Math.min(opts.posLimit, Math.max(-opts.posLimit, p.x)),
@@ -99,7 +87,6 @@ export function createWeaponGizmo(opts: WeaponGizmoOpts): WeaponGizmo {
   const setSnaps = (on: boolean): void => {
     controls.setTranslationSnap(on ? 0.05 : null);
     controls.setRotationSnap(on ? (5 * Math.PI) / 180 : null);
-    controls.setScaleSnap(on ? 0.05 : null);
   };
   const onSnapKey = (e: KeyboardEvent): void => setSnaps(e.ctrlKey);
   window.addEventListener('keydown', onSnapKey);
@@ -113,7 +100,6 @@ export function createWeaponGizmo(opts: WeaponGizmoOpts): WeaponGizmo {
   return {
     attach(obj) {
       target = obj;
-      lastScale = obj.scale.x;
       controls.attach(obj);
     },
     detach() {
@@ -135,9 +121,7 @@ export function createWeaponGizmo(opts: WeaponGizmoOpts): WeaponGizmo {
           ? 'translate'
           : e.key === 'r' || e.key === 'R'
             ? 'rotate'
-            : e.key === 's' || e.key === 'S'
-              ? 'scale'
-              : null;
+            : null;
       if (mode === null || target === null) return false;
       setMode(mode);
       return true;

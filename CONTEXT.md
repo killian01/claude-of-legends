@@ -243,8 +243,10 @@ is the Forge.
 **Display tuning**:
 The creator's saved adjustments to how a forged champion's generated model is presented:
 height, facing, ground offset, and the weapon prop's kind, bone, grip offsets, and uniform
-size. Stored server-side in the sealed assets, clamped by shared bounds, and read by every
-client in a match; pure presentation with zero gameplay effect, exactly like skins.
+size. The grip is the point of the weapon the hand holds: the workshop lets the creator
+designate it with one click on the weapon itself, and the handle aligns onto the rig's
+grip axis. Stored server-side in the sealed assets, clamped by shared bounds, and read by
+every client in a match; pure presentation with zero gameplay effect, exactly like skins.
 _Avoid_: model settings, transform
 _Avoid_: model viewer, inspector, showroom
 

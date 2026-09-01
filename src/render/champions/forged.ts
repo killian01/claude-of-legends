@@ -19,6 +19,7 @@ import {
   stripTravel,
 } from './forged_clips';
 import type { ChampionClipNames, ChampionVisualDef } from './manifest';
+import { orientLongAxisY } from './orient';
 
 // Middle of the roster's height range (manifest heights run 1.6 to 3.6);
 // the workshop's height slider overrides it per champion.
@@ -379,7 +380,10 @@ export async function forgedChampionTemplate(
         .catch(() => null);
       if (!gltf) continue;
       toLambert(gltf.scene, {});
-      props.set(p.url, normalizeProp(gltf.scene, p.size ?? 1, p.anchor));
+      // Long axis up before the wrap, so the match reads the same axes
+      // the creator tuned against in the workshop (orient.ts).
+      const oriented = orientLongAxisY(gltf.scene) as THREE.Group;
+      props.set(p.url, normalizeProp(oriented, p.size ?? 1, p.anchor));
     }
     const scale = def.height / source.rawHeight;
     entry.template = {
