@@ -64,6 +64,8 @@
     "house:magic_cast_03": "clips/house_magic_cast_03.glb",
     "house:magic_cast_04": "clips/house_magic_cast_04.glb",
     "house:magic_death_01": "clips/house_magic_death_01.glb",
-    "house:magic_death_02": "clips/house_magic_death_02.glb"
+    "house:magic_death_02": "clips/house_magic_death_02.glb",
+    "house:gs_run": "clips/house_gs_run.glb",
+    "house:magic_run": "clips/house_magic_run.glb"
   }
 }

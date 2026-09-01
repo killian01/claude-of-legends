@@ -35,7 +35,11 @@ export const HOUSE_CLIP_CHOICES: Readonly<Record<ClipRole, readonly HouseClip[]>
     clip('magic_idle', 'Mage stance'),
     clip('magic_guard', 'Mage guard stance'),
   ],
-  run: [clip('sns_run', 'Sword and shield run')],
+  run: [
+    clip('sns_run', 'Sword and shield run'),
+    clip('gs_run', 'Great sword run'),
+    clip('magic_run', 'Mage run'),
+  ],
   attack: [
     clip('sns_attack_01', 'Sword combo'),
     clip('sns_attack_02', 'Spinning slash'),

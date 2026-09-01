@@ -59,6 +59,9 @@ const CLIPS = [
   { name: 'gs_cast_03', src: 'great_sword/great sword casting.fbx', yaw: 3.1 },
   { name: 'gs_death_01', src: 'great_sword/two handed sword death.fbx', yaw: -0.2 },
   { name: 'gs_death_02', src: 'great_sword/two handed sword death (2).fbx', yaw: 3.3 },
+  // The pack's other run ('great sword run.fbx') travels BACKWARD
+  // (travel_yaw -180, a backpedal): skipped like sns run_02 was.
+  { name: 'gs_run', src: 'great_sword/great sword run (2).fbx', yaw: 0.0 },
 
   // The magic set (pro magic pack).
   { name: 'magic_idle', src: 'magic/standing idle.fbx', yaw: 56.0 },
@@ -72,6 +75,7 @@ const CLIPS = [
   { name: 'magic_cast_04', src: 'magic/Standing 2H Magic Area Attack 02.fbx', yaw: 20.6 },
   { name: 'magic_death_01', src: 'magic/Standing React Death Forward.fbx', yaw: 2.6 },
   { name: 'magic_death_02', src: 'magic/Standing React Death Backward.fbx', yaw: -7.9 },
+  { name: 'magic_run', src: 'magic/Standing Run Forward.fbx', yaw: 0.0 },
 ];
 
 function main() {
