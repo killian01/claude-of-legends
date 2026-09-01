@@ -118,7 +118,7 @@ export function saveDraft(
     return { ok: false, error: 'this id belongs to another creator' };
   }
   if (existing?.status === 'finalized') {
-    return { ok: false, error: 'a finalized champion is sealed (Reforge comes later)' };
+    return { ok: false, error: 'this champion is sealed: unseal it in the editor to edit it' };
   }
   const cap = deps.draftCap ?? DRAFT_CAP;
   if (!existing && deps.store.listForgedByAccount(accountId).length >= cap) {
@@ -142,7 +142,7 @@ export function deleteDraft(deps: ForgeDeps, accountId: number, id: string): For
     return { ok: false, error: 'no such draft on this account' };
   }
   if (existing.status === 'finalized') {
-    return { ok: false, error: 'a finalized champion cannot be deleted here' };
+    return { ok: false, error: 'a sealed champion cannot be deleted: unseal it first' };
   }
   deps.store.deleteForged(id);
   return { ok: true };
@@ -168,7 +168,7 @@ export function buildModel(
     return { ok: false, error: 'no such draft on this account' };
   }
   if (row.status === 'finalized') {
-    return { ok: false, error: 'already finalized (Reforge comes later)' };
+    return { ok: false, error: 'this champion is sealed: unseal it to rebuild the model' };
   }
   const v = validateForged(row.def);
   if (!v.ok) {
@@ -195,16 +195,17 @@ export function buildModel(
 }
 
 // The second half, always LAST and always the player's own click: rig
-// the built model once, bake the picked clips, seal the champion. The
-// creation was spent at the build, so this moves the ledger in neither
-// direction and can simply run again after a failure. Each role's pick
-// is the player's own, validated against the provider's catalog
-// (playtest: not a bundle, every animation its own choice); roles the
-// request leaves out keep what is already baked, family defaults fill
-// only never-baked roles, and the pipeline retargets ONLY the roles
-// that changed (playtest round 9: one animation bakes on its own). A
-// SEALED champion may run this again: the seal locks the kit, the art
-// and the model, never the animations.
+// the built model once, bake the picked clips. The creation was spent
+// at the build, so this moves the ledger in neither direction and can
+// simply run again after a failure. Each role's pick is the player's
+// own, validated against the provider's catalog (playtest: not a
+// bundle, every animation its own choice); roles the request leaves out
+// keep what is already baked, family defaults fill only never-baked
+// roles, and the pipeline retargets ONLY the roles that changed
+// (playtest round 9: one animation bakes on its own). Animating no
+// longer seals: the seal is its own click (server/seal.ts), and a
+// SEALED champion may still re-bake any clip freely: the seal locks
+// the kit, the art and the model, never the animations.
 export function animateChampion(
   deps: ForgeDeps,
   accountId: number,

@@ -172,11 +172,18 @@ edited freely and previewed on the engine's stylized figure. Drafts are unlimite
 The 3D happens in two player-approved steps, both on the draft: the BUILD spends a creation
 and produces the static model, which the creator inspects in the workshop (and may rebuild,
 spending another); ANIMATE, always last and always its own click, rigs the validated model
-once, bakes the clips the creator picked from the provider catalog, and seals the champion
-as finalized. The seal locks the kit, the art and the model, never the animations: a sealed
-champion changes any single clip and re-bakes JUST that one, freely, at no creation cost.
-Reforge (its own entry) is the seal's one kit exception.
+once and bakes the clips the creator picked from the provider catalog. Animating never
+seals: the Seal (its own entry) is the creator's own separate click.
 _Avoid_: WIP champion, unfinished champion
+
+**Seal**:
+The creator's explicit click that marks a champion finalized: the kit, the art and the
+model lock, and the champion may enter the gallery. Never a side effect of another step
+(playtest: a lock that arrives unasked reads as a bug). The seal spares the animations: a
+sealed champion re-bakes any clip freely. Unsealing is the same door in reverse, any time,
+owner-only: the champion returns to a draft and leaves the gallery until resealed. Reforge
+(its own entry) is the seal's one in-place kit exception.
+_Avoid_: finalize button, lock, publish
 
 **Reforge**:
 Moving a sealed champion's kit numbers after the seal. One slice is live: the basic attack

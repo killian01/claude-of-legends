@@ -29,6 +29,7 @@ import {
 import { placeholderPng } from '../server/generation/placeholder';
 import { CLIP_ROLES, GenerationError, WEAPON_FAMILIES } from '../server/generation/provider';
 import { TRIPO_CLIPS, TripoProvider } from '../server/generation/tripo';
+import { sealChampion } from '../server/seal';
 import { CHAMPIONS } from '../src/sim/content/champions';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { forgedTwin } from './forged_twins';
@@ -141,7 +142,7 @@ describe('the mock pipeline end to end', () => {
     expect(r.store.creditBalance(ACCOUNT)).toBe(2);
   });
 
-  it('animates and seals as its own SECOND step, spending nothing more', async () => {
+  it('animates as its own SECOND step; the seal is a separate click', async () => {
     const r = rig();
     const built = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
     expect(built.ok).toBe(true);
@@ -165,6 +166,10 @@ describe('the mock pipeline end to end', () => {
     const job = r.store.getGenerationJob(start.jobId);
     expect(job?.status).toBe('success');
     expect(job?.kind).toBe('animate');
+    // Animating no longer seals (the lock is its own click): the row
+    // stays a draft until sealChampion, which demands model and clips.
+    expect(r.store.getForged(r.def.id)?.status).toBe('draft');
+    expect(sealChampion({ store: r.store }, ACCOUNT, r.def.id).ok).toBe(true);
     expect(r.store.getForged(r.def.id)?.status).toBe('finalized');
     const assets = r.store.forgedAssets(r.def.id) as {
       model: string;
@@ -255,6 +260,9 @@ describe('the mock pipeline end to end', () => {
     expect(assets.clipFiles.attack).toBe(`forged/${r.def.id}/clips_${rebake.jobId}.glb`);
     expect(assets.clipFiles.idle).toBe(firstFiles.idle);
     expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+
+    // A seal survives re-bakes: the seal locks the kit, never the clips.
+    expect(sealChampion({ store: r.store }, ACCOUNT, r.def.id).ok).toBe(true);
 
     // Nothing changed at all: no provider call, still sealed, still free.
     const noop = startAnimate(r.pipeline, {
@@ -478,7 +486,9 @@ describe('the mock pipeline end to end', () => {
     };
     expect(assets.clips.attack).toBe('house:sns_attack_01');
     expect(assets.clipFiles.attack).toBe(`forged/${r.def.id}/house_${first.jobId}_attack.glb`);
-    expect(r.store.getForged(r.def.id)?.status).toBe('finalized');
+    // Animating no longer seals; the explicit seal accepts the baked row.
+    expect(r.store.getForged(r.def.id)?.status).toBe('draft');
+    expect(sealChampion({ store: r.store }, ACCOUNT, r.def.id).ok).toBe(true);
 
     // Swapping one house clip for another: pure copy, zero provider ops.
     const swap = animateChampion(deps, ACCOUNT, r.def.id, 'slashing', {
@@ -605,6 +615,9 @@ describe('the mock pipeline end to end', () => {
     expect(retry.ok).toBe(true);
     if (!retry.ok) return;
     await retry.done;
+    // The retry bakes; sealing stays the player's own separate click.
+    expect(r.store.getForged(r.def.id)?.status).toBe('draft');
+    expect(sealChampion({ store: r.store }, ACCOUNT, r.def.id).ok).toBe(true);
     expect(r.store.getForged(r.def.id)?.status).toBe('finalized');
     expect(r.store.creditBalance(ACCOUNT)).toBe(2);
   });
@@ -723,15 +736,17 @@ describe('the build and animate gates (server/forge.ts)', () => {
     // the owner's animate with NO explicit family falls back to the
     // kit-implied one (sylra reads as staff).
     expect(animateChampion(deps, 99, r.def.id)).toMatchObject({ ok: false });
-    const sealed = animateChampion(deps, ACCOUNT, r.def.id);
-    expect(sealed.ok).toBe(true);
-    if (sealed.ok) await sealed.done;
+    const animated = animateChampion(deps, ACCOUNT, r.def.id);
+    expect(animated.ok).toBe(true);
+    if (animated.ok) await animated.done;
     expect((r.store.forgedAssets(r.def.id) as { family: string }).family).toBe('staff');
-    // Sealed now: the build refuses, but the animations stay the
-    // player's to change: a re-bake replaces the clips, spending nothing.
+    // The seal is its own click. Sealed, the build refuses, but the
+    // animations stay the player's to change: a re-bake replaces the
+    // clips, spending nothing.
+    expect(sealChampion({ store: r.store }, ACCOUNT, r.def.id).ok).toBe(true);
     expect(buildModel(deps, ACCOUNT, r.def.id)).toMatchObject({
       ok: false,
-      error: expect.stringContaining('already finalized'),
+      error: expect.stringContaining('sealed'),
     });
     const rebake = animateChampion(deps, ACCOUNT, r.def.id, 'slashing', { attack: 'attack_alt' });
     expect(rebake.ok).toBe(true);

@@ -364,7 +364,10 @@ async function runAnimate(
       if (pick) icons[key] = pick.path;
     }
     const provenance = Array.isArray(assets.provenance) ? assets.provenance : [];
-    deps.storage.setForgedFinalized(
+    // Assets only: animating no longer seals (playtest: the lock must be
+    // its own click, server/seal.ts). A draft stays a draft; a champion
+    // already sealed keeps its seal.
+    deps.storage.updateForgedAssets(
       req.forgedId,
       {
         ...assets,

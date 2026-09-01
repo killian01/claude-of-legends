@@ -71,6 +71,7 @@ import { isRated, LEAVER_LOCKOUT_MS, leaverPenalty, type RatedSeat, ratingDeltas
 import { buildMatchRecord, type MatchRecord } from './records';
 import { setForgedAttackRange } from './reforge';
 import { RejoinRegistry } from './rejoin';
+import { sealChampion, unsealChampion } from './seal';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
 import { appendJsonl, pruneNumberedJson, readJsonl, saveJsonAtomic } from './store';
 import { suggestKit } from './suggest';
@@ -1050,6 +1051,19 @@ const server = http.createServer(async (req, res) => {
           id
             ? setForgedDisplay({ store: forgeStore }, me.id, id, body?.display)
             : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      // The explicit seal and unseal (playtest: a lock must be its own
+      // click, never a side effect of animating). Owner-only, free.
+      if ((url === '/api/forge/seal' || url === '/api/forge/unseal') && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        const act = url === '/api/forge/seal' ? sealChampion : unsealChampion;
+        sendJson(
+          res,
+          200,
+          id ? act({ store: forgeStore }, me.id, id) : { ok: false, error: 'malformed request' },
         );
         return;
       }

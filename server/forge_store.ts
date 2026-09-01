@@ -355,6 +355,13 @@ export class ForgeStore {
       .run(JSON.stringify(assets), now, id);
   }
 
+  // The explicit seal and unseal (server/seal.ts owns the policy).
+  setForgedStatus(id: string, status: 'draft' | 'finalized', now: number): void {
+    this.db
+      .prepare('update forged_champions set status = ?, updated_at = ? where id = ?')
+      .run(status, now, id);
+  }
+
   forgedAssets(id: string): unknown {
     const r = this.db.prepare('select assets from forged_champions where id = ?').get(id) as
       | { assets: string | null }

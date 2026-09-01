@@ -19,6 +19,7 @@ import { PASSIVE_TEMPLATE_LIST, PASSIVE_TEMPLATES } from '../sim/forge/passive_t
 import { FORGED_ROLES, validateForged } from '../sim/forge/validate';
 import type { AbilityKey } from '../sim/types';
 import { type AnimPreview, createAnimPreview } from './anim_preview';
+import { describeAbility } from './describe';
 import { buildCastEditor, defaultCast, type KitHooks, numField } from './forge_kit';
 import { startMenuBackdrop } from './menu_backdrop';
 import { openWorkshop } from './workshop';
@@ -1603,7 +1604,7 @@ export function openForgeEditor(container: HTMLElement): void {
         bake.disabled = !row?.model || busy || finalizing || weaponForging;
         bake.title = !row?.model
           ? 'Build the 3D model first (Step 4)'
-          : 'Rigs your validated model and applies your five picks; seals the champion';
+          : 'Rigs your validated model and applies your five picks';
         bake.addEventListener('click', () => runAnimate(animPicks));
         actions.append(bake);
         // Said in plain sight, not only in the hover title: a grayed
@@ -1640,6 +1641,41 @@ export function openForgeEditor(container: HTMLElement): void {
         const openAnim = el('button', 'fe-gen', 'See them move');
         openAnim.addEventListener('click', openWorkshopHere);
         actions.append(openAnim);
+      }
+      // The explicit seal (playtest: animating used to seal as a side
+      // effect, and a creator found their champion locked without ever
+      // choosing it). Sealing and unsealing are their own clicks, free,
+      // with what they do said in plain words.
+      const flipSeal = (route: string, doing: string): void => {
+        status.textContent = doing;
+        void api<{ ok: boolean; error?: string }>(route, { id: current.id }).then((r) => {
+          status.textContent = r?.ok
+            ? route.endsWith('/seal')
+              ? 'Sealed: the kit, art and model are locked; animations stay editable.'
+              : 'Unsealed: the kit is editable again; the champion leaves the gallery until resealed.'
+            : (r?.error ?? 'that did not work');
+          if (r?.ok) void loadDrafts().then(() => renderMain());
+        });
+      };
+      if (!sealed && bakedNow !== null && row?.model) {
+        const sealBtn = el('button', 'fe-gen', 'Seal the champion') as HTMLButtonElement;
+        sealBtn.disabled = busy || finalizing || weaponForging;
+        sealBtn.addEventListener('click', () => flipSeal('/api/forge/seal', 'Sealing...'));
+        actions.append(sealBtn);
+        actions.append(
+          el(
+            'div',
+            'fe-desc',
+            'Sealing locks the kit, the art and the model (animations stay editable) and ' +
+              'lets the champion into the gallery. Unseal any time from here.',
+          ),
+        );
+      }
+      if (sealed) {
+        const unBtn = el('button', 'fe-mini', 'Unseal (edit the kit again)') as HTMLButtonElement;
+        unBtn.disabled = busy || finalizing || weaponForging;
+        unBtn.addEventListener('click', () => flipSeal('/api/forge/unseal', 'Unsealing...'));
+        actions.append(unBtn);
       }
       if (actions.childElementCount > 0) animPanel.append(actions);
     }
@@ -1791,7 +1827,8 @@ export function openForgeEditor(container: HTMLElement): void {
           el(
             'p',
             'fe-desc',
-            'This champion is sealed: its kit is locked, so suggestions rework drafts only.',
+            'This champion is sealed: its kit is locked. Unseal it (Design tab, ' +
+              'animations block) to rework the kit.',
           ),
         );
       } else if (!splashChosen) {
@@ -1920,6 +1957,17 @@ export function openForgeEditor(container: HTMLElement): void {
     });
     headRow.append(nameInput);
     panel.append(headRow);
+    // The spell's full text, derived from its mechanics exactly like
+    // every other champion's (describe.ts): what a suggestion or a hand
+    // edit actually does, in words, live as the numbers move.
+    const desc = el('p', 'fe-desc');
+    const syncDesc = (): void => {
+      desc.textContent = describeAbility(key, current.abilities[key]).join(' ');
+    };
+    syncDesc();
+    panel.append(desc);
+    panel.addEventListener('input', syncDesc);
+    panel.addEventListener('change', syncDesc);
     const costs = el('div', 'fe-fields');
     costs.append(numField('mana', ability, 'manaCost', ABILITY_BOUNDS.manaCost, hooks));
     costs.append(
