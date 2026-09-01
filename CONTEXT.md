@@ -175,7 +175,15 @@ spending another); ANIMATE, always last and always its own click, rigs the valid
 once, bakes the clips the creator picked from the provider catalog, and seals the champion
 as finalized. The seal locks the kit, the art and the model, never the animations: a sealed
 champion changes any single clip and re-bakes JUST that one, freely, at no creation cost.
+Reforge (its own entry) is the seal's one kit exception.
 _Avoid_: WIP champion, unfinished champion
+
+**Reforge**:
+Moving a sealed champion's kit numbers after the seal. One slice is live: the basic attack
+reach, which decides melee or ranged, a feel a creator only discovers in a real match.
+Owner-only and free; the changed champion is revalidated in full and must still clear the
+power budget, so no reforge moves power past the seal.
+_Avoid_: respec, rework, nerf/buff
 
 **Clip file**:
 An animation-only model file carrying one baked batch of preset clips, no geometry, riding

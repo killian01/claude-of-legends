@@ -69,6 +69,7 @@ import { buildProfile } from './profile';
 import { checkQuota, DAY_MS, spendQuota } from './quotas';
 import { isRated, LEAVER_LOCKOUT_MS, leaverPenalty, type RatedSeat, ratingDeltas } from './rating';
 import { buildMatchRecord, type MatchRecord } from './records';
+import { setForgedAttackRange } from './reforge';
 import { RejoinRegistry } from './rejoin';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
 import { appendJsonl, pruneNumberedJson, readJsonl, saveJsonAtomic } from './store';
@@ -1033,6 +1034,21 @@ const server = http.createServer(async (req, res) => {
           200,
           id
             ? setForgedDisplay({ store: forgeStore }, me.id, id, body?.display)
+            : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      // Reforge, first slice: a sealed champion's basic-attack reach.
+      // Owner-only; the patched def must clear the full validation gate
+      // (bounds and power budget) before it is stored.
+      if (url === '/api/forge/reach' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        sendJson(
+          res,
+          200,
+          id
+            ? setForgedAttackRange({ store: forgeStore }, me.id, id, body?.attackRange)
             : { ok: false, error: 'malformed request' },
         );
         return;

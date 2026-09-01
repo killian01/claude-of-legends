@@ -1604,6 +1604,18 @@ export function openForgeEditor(container: HTMLElement): void {
           : 'Rigs your validated model and applies your five picks; seals the champion';
         bake.addEventListener('click', () => runAnimate(animPicks));
         actions.append(bake);
+        // Said in plain sight, not only in the hover title: a grayed
+        // button with no visible reason reads as broken (playtest).
+        if (!row?.model) {
+          actions.append(
+            el(
+              'div',
+              'fe-desc',
+              'Locked until the 3D model is built (Step 4). Until then this champion ' +
+                'plays as the plain placeholder figure in a match.',
+            ),
+          );
+        }
       } else if (changedRoles.length >= 2) {
         const bake = el(
           'button',
@@ -1868,6 +1880,52 @@ export function openForgeEditor(container: HTMLElement): void {
 
   // Tab 3, Tuning: the numbers against the power budget.
   function renderTuning(): void {
+    // Reforge, first slice: the one number a sealed champion may still
+    // move, because melee versus ranged is a feel the creator only
+    // discovers in a real match. The server revalidates in full.
+    if (isSealed()) {
+      const panel = el('div', 'fe-panel');
+      panel.append(el('h3', '', 'Reforge: basic attack reach'));
+      panel.append(
+        el(
+          'p',
+          'fe-lead',
+          'A sealed champion keeps its kit, but its basic attack reach may still move. ' +
+            'At 2 or under the champion strikes in melee; above 2 every basic attack ' +
+            'fires a bolt. The change must still fit the power budget.',
+        ),
+      );
+      const row = el('div', 'fe-artrow');
+      const input = el('input', 'fe-num') as HTMLInputElement;
+      input.type = 'number';
+      input.min = String(BASE_STAT_BOUNDS.attackRange.min);
+      input.max = String(BASE_STAT_BOUNDS.attackRange.max);
+      input.step = 'any';
+      input.value = String(current.base.attackRange);
+      const apply = el('button', 'fe-gen', 'Reforge the reach') as HTMLButtonElement;
+      apply.addEventListener('click', () => {
+        const v = Number(input.value);
+        if (!Number.isFinite(v)) return;
+        status.textContent = 'Reforging...';
+        void api<{ ok: boolean; melee?: boolean; error?: string }>('/api/forge/reach', {
+          id: current.id,
+          attackRange: v,
+        }).then((r) => {
+          if (!r?.ok) {
+            status.textContent = r?.error ?? 'reforge failed';
+            return;
+          }
+          current.base.attackRange = v;
+          status.textContent = r.melee
+            ? 'Reforged: this champion now strikes in melee.'
+            : 'Reforged: basic attacks now fire a bolt.';
+          void loadDrafts().then(() => renderMain());
+        });
+      });
+      row.append(input, apply);
+      panel.append(row);
+      main.append(panel);
+    }
     const stats = el('div', 'fe-panel');
     stats.append(el('h3', '', 'Stats (every point above the floor costs budget)'));
     const statsGrid = el('div', 'fe-grid');
@@ -1876,7 +1934,16 @@ export function openForgeEditor(container: HTMLElement): void {
       if (key === 'ap') continue;
       statsGrid.append(numField(key, base, key, BASE_STAT_BOUNDS[key], hooks));
     }
-    stats.append(statsGrid, el('h3', '', 'Growth per level'));
+    stats.append(
+      statsGrid,
+      el(
+        'p',
+        'fe-desc',
+        'attackRange decides how the champion fights: 2 or under is a melee strike, ' +
+          'above 2 every basic attack fires a bolt.',
+      ),
+    );
+    stats.append(el('h3', '', 'Growth per level'));
     const growthGrid = el('div', 'fe-grid');
     const growth = current.growth as unknown as Record<string, unknown>;
     for (const key of Object.keys(GROWTH_BOUNDS) as (keyof ChampionGrowth)[]) {
