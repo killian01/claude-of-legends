@@ -120,9 +120,12 @@ Briefing, and the before/after screenshots under `docs/screenshots`.
    eight or five minutes (50%), dodge reflex off (0%: the reflex is vital), orb walk
    on the attack clock (44%, kept as the honest kite), regroup on an ally when
    outnumbered (44%), fall back under the tower when outnumbered (67%), join an ally
-   in a fight within 40 (90%, then 11-5-4 on twenty fresh seeds: 77% of decided over
-   thirty). The Laner now joins fights; the language gained the allyFighting trigger
-   and the joinAlly and fallBack behaviors.
+   in a fight within 40 (90%, then 11-5-4 on seeds 11 to 30 at a 25 minute cap, then
+   16-4 on seeds 31 to 50 at the Arena's 40 minute cap: 36-10-4 over fifty seeds, 78%
+   of decided). On top of joining, regrouping mid at eight minutes (65% on seeds 31 to
+   50), falling back under the tower when outnumbered (50%) and focusing the lowest
+   (50%) all lost ground and were dropped. The Laner now joins fights; the language
+   gained the allyFighting trigger and the joinAlly and fallBack behaviors.
 11. **Adaptation: the opponent in the observation**. Both teams' champions and roles,
    the items on visible enemies, the lane opponent (a per-lane sighting memory over the
    last three minutes), all additive contract fields; the triggers over them (enemy
