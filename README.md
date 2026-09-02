@@ -134,7 +134,9 @@ docker compose up -d --build
 The full runbook (the proxy contract, verification, updates, backups,
 sizing) is `docs/deploy.md`.
 
-`PORT` overrides the listen port. Player identities and the match log
+`PORT` overrides the listen port, for the server and for the dev client's
+proxy alike, so two checkouts run side by side with one line in each
+`.env`. Player identities and the match log
 live as JSON files under `data/` (`DATA_DIR` overrides the location);
 mount it as a volume or careers reset with the container.
 

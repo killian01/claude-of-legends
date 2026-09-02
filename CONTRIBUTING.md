@@ -56,6 +56,10 @@ run the authoritative server in a second terminal:
 pnpm server       # server on :8787; the dev client proxies /ws to it
 ```
 
+Two checkouts at once (a worktree for a second branch, say) each want their
+own server: put `PORT=8788` in the second one's `.env` and both `pnpm server`
+and `pnpm dev` there follow it; Vite picks the next free client port itself.
+
 No database: the server keeps its state as JSON files under `data/`
 (ADR 0006). No `.env` is needed for development; without mail credentials the
 server logs confirmation links instead of sending them (see `.env.example`).
