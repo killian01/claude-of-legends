@@ -92,6 +92,10 @@ Briefing, and the before/after screenshots under `docs/screenshots`.
    validator and the patch operation, a whole sparring on an owner build ending with
    no leftover and the bank spent. Exit: a Vesk bot with a seven-item build ends a
    sparring on that build, and the maintainer can change it from the Academy.
+   DONE (41c229a). Measured on the way out: the new default Laner against the
+   pre-kit one (`node scripts/laner_gate.mjs --prev e9fcfff --seeds 20`) went 11 wins
+   to 9, fifty-five percent: the auto kite is neutral, not a regression and not yet the
+   improvement the ADR hoped for. Phase 10 opens on that number.
 10. **Reasoning: the scouting report, the engine's fight, the default Laner rewritten,
    and the optimizing loop**. First the report: `scripts/scout.mjs` plays ten sparrings
    and measures, per bot and per minute, fights taken outnumbered, deaths under towers
