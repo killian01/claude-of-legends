@@ -11,10 +11,13 @@
 
 import { hintsFor } from '../src/sim/content/bots/hints';
 import { CHAMPIONS } from '../src/sim/content/champions';
+import { ITEM_LIST } from '../src/sim/content/items';
 import { GAME_MAP } from '../src/sim/content/map';
+import { MAX_BUILD, roleBuild } from '../src/sim/playbook/kit';
+import { RANGED_MIN_RANGE } from '../src/sim/playbook/micro';
 import { applyPatchOp, isPatchOp, type PatchOp } from '../src/sim/playbook/patch';
 import type { PlaybookDef } from '../src/sim/playbook/types';
-import { MAX_PLAYS, validatePlaybook } from '../src/sim/playbook/validate';
+import { MAX_PLAYS, MAX_VARIANTS, validatePlaybook } from '../src/sim/playbook/validate';
 import type { BotStore } from './bot_store';
 import type { BotOutcome } from './bots';
 import { CHAT_RAW_TEXT_MAX, type ChatTurn, threadError } from './suggest';
@@ -67,15 +70,40 @@ export interface CoachAnswer {
   raw: string;
 }
 
+// The shop, for the kit: every item with its price and what it gives.
+function catalog(): string {
+  const stat = (s: Record<string, number | undefined>): string =>
+    Object.entries(s)
+      .filter((e): e is [string, number] => e[1] !== undefined)
+      .map(([k, v]) => `${k} ${v < 1 && v > 0 ? `${Math.round(v * 100)}%` : v}`)
+      .join(' ');
+  return ITEM_LIST.map(
+    (i) =>
+      `${i.id} (${i.name}, ${i.cost}g, tier ${i.tier}${i.buildsFrom ? `, from ${i.buildsFrom.join('+')}` : ''}): ${stat(i.stats as Record<string, number | undefined>)}`,
+  ).join('\n ');
+}
+
 // The playbook grammar, told compactly. Kept by hand beside
 // src/sim/playbook/types.ts and validate.ts; the validator catches drift.
 const GRAMMAR = `
-A playbook is {"version":1,"plays":[Play...]}, at most ${MAX_PLAYS} plays. Each decision slot
-(four per second) the bot walks the list top down; the first play whose trigger holds AND whose
-behavior can act this slot is the one that acts. A behavior that cannot act (nothing to farm,
-nothing affordable) passes to the next play. Reflexes run before the list and are not yours to
-write: dodging skillshots and zones, the banked recast home, spending skill points, holding a
-recall channel. The micro (last hits, aim, which key is the escape) is the engine's too.
+A playbook is {"version":2,"plays":[Play...],"kit"?:Kit}, at most ${MAX_PLAYS} plays. Each decision
+slot (four per second) the bot walks the list top down; the first play whose trigger holds AND
+whose behavior can act this slot is the one that acts. A behavior that cannot act (nothing to
+farm, nothing affordable) passes to the next play. Reflexes run before the list and are not yours
+to write: dodging skillshots and zones, the banked recast home, spending skill points, holding a
+recall channel. The micro (last hits, aim, which key is the escape, the steps of a kite) is the
+engine's too.
+The kit is what the bot works toward, as opposed to what it does now:
+Kit: {"build"?:[itemId...],"skills"?:["Q"|"W"|"E" x3],"variants"?:[{"when":Trigger,"build"?:[...],"skills"?:[...]}...]}
+ build: FINISHED items in order, 1 to ${MAX_BUILD}, no duplicates; the engine buys the components in
+ recipe order and an item consumed into a later one still counts as owned. Absent: the champion's
+ role build. Past a full bag the next target replaces the cheapest item once the gold covers it, and
+ a leftover the build no longer wants is sold first (the bot sells at the fountain for 70%).
+ skills: the order of Q, W, E to max; R goes at levels 6, 11, 16. Absent: Q, W, E.
+ variants: at most ${MAX_VARIANTS}; the first whose trigger holds is the kit in force, decided again
+ at every purchase and skill point; each needs a build or a skill order.
+Items:
+ ${catalog()}
 Play: {"id":"lowercase-kebab","when":Trigger,"do":Behavior,"enabled"?:bool}
 Trigger is ONE of (numeric fields: "below" strictly less, "atLeast" greater or equal; give at
 least one of the two):
@@ -90,11 +118,12 @@ least one of the two):
 Behavior is ONE of (every parameter optional, default in parentheses):
  {"kind":"retreat"} run home by the fastest means; always acts.
  {"kind":"hold"} do nothing this slot; always acts.
- {"kind":"shop"} buy the next item of the role build when affordable; only acts at the fountain.
- {"kind":"goShop"} go home to spend when the next item is affordable and the spot is clear.
+ {"kind":"shop"} the kit's next step at the fountain: buy the next item or component, sell what the build no longer wants, replace the cheapest past a full bag.
+ {"kind":"goShop"} go home to spend when the next step is affordable and the spot is clear.
+ {"kind":"sell","item":itemId} sell the named item at the fountain when the bag holds it.
  {"kind":"avoidTower","escortMin"?:int 0..10 (3),"hpBelow"?:0..1 (0.65)} step out of an enemy tower's reach unless escorted and healthy, or securing a kill.
  {"kind":"finishSanctum"} hit a vulnerable enemy Sanctum in reach when it is low or escorted.
- {"kind":"fight"} Sear in kill range, the kit by its hints, then attacks; acts only with an enemy champion in sight.
+ {"kind":"fight","stance"?:"auto"|"kite"|"front"|"poke" ("auto"),"target"?:"nearest"|"lowest"|"squishiest"|"order" ("nearest")} Sear in kill range, the kit by its hints, then attacks, holding distance by the stance: kite attacks from the edge of its own range and steps away from whoever closes; front walks in and chases a little; poke casts and steps back, never trading attacks; auto is kite on a ranged champion, front on a melee one. Target: the nearest, the lowest in health, the squishiest by role (carries first), or the coach's focus. Acts only with an enemy champion in sight.
  {"kind":"hunt","hpAbove"?:0..1 (0.5)} walk to where a nearly dead enemy was last seen.
  {"kind":"answerVanish","hpAtLeast"?:0..1 (0.55)} an enemy just vanished nearby: walk its spot when healthy, give ground when hurt.
  {"kind":"contestWarden","hpAtLeast"?:0..1 (0.5),"prepSeconds"?:0..300 (20)} attack a live Warden in reach, walk to it healthy, pre-position at the pit before it spawns.
@@ -109,6 +138,7 @@ Patch operations, ONE compact JSON object per line:
  {"op":"remove","id":id}
  {"op":"move","id":id,"before":id|null} (null: to the end)
  {"op":"set","id":id,"play":{"when"?:Trigger,"do"?:Behavior,"enabled"?:bool}} change parts of a play in place
+ {"op":"kit","kit":{"build"?:[...]|null,"skills"?:[...]|null,"variants"?:[...]|null}} change parts of the kit; a part given replaces it, null clears it back to the default, absent leaves it
  {"op":"replace","playbook":Playbook} a whole rewrite, ONLY when the owner asks for one
 `;
 
@@ -136,8 +166,14 @@ function formState(championId: string, playbook: PlaybookDef): string {
   const def = CHAMPIONS[championId];
   const hints = hintsFor(championId);
   const keys = (['Q', 'W', 'E'] as const).map((k) => `${k} ${hints.keys[k]}`).join(', ');
+  const range = def?.base.attackRange;
+  const reach =
+    range === undefined
+      ? ''
+      : ` Attack range ${range} (${range >= RANGED_MIN_RANGE ? 'ranged, kites by default' : 'melee, walks in by default'}).`;
   return [
-    `The bot plays ${def?.name ?? championId} (${def?.role ?? 'unknown role'}); its keys by role: ${keys}; R is its ultimate.`,
+    `The bot plays ${def?.name ?? championId} (${def?.role ?? 'unknown role'}); its keys by role: ${keys}; R is its ultimate.${reach}`,
+    `Its role build, used when the kit names none: ${roleBuild(championId).join(', ')}.`,
     `The playbook on the form right now: ${JSON.stringify(playbook)}`,
   ].join(' ');
 }

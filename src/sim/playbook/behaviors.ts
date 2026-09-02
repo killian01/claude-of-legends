@@ -5,20 +5,27 @@
 // that set them); the playbook overrides them per play.
 
 import { GOTO_DONE_RADIUS } from '../coach';
+import { CHAMPIONS, type ChampionRole } from '../content/champions';
 import { GAME_MAP } from '../content/map';
 import type { Action, ObsUnit } from '../policy';
+import { nextKitStep } from './kit';
 import {
-  affordablePurchase,
   CAST_RANGE,
   CHAMPION_ATTACK_RANGE,
+  CHASE_RANGE,
   dist,
   ESCORT_MIN,
   FARM_RANGE,
+  FIGHT_TARGET_RADIUS,
+  hardCCd,
   homewardPoint,
   KILL_SECURE_HP_FRAC,
+  KITE_DANGER_FRAC,
+  KITE_STEP,
   laneDistance,
   nearest,
   pickCast,
+  RANGED_MIN_RANGE,
   RECALL_MIN_HOME_DIST,
   REGROUP_AT_S,
   readySigil,
@@ -30,7 +37,7 @@ import {
   WARDEN_PREP_RANGE,
   WARDEN_PREP_S,
 } from './micro';
-import type { Behavior, LaneId } from './types';
+import type { Behavior, LaneId, Stance, TargetRule } from './types';
 
 export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
   switch (b.kind) {
@@ -42,12 +49,14 @@ export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
       return shop(ctx);
     case 'goShop':
       return goShop(ctx);
+    case 'sell':
+      return sellNamed(ctx, b.item);
     case 'avoidTower':
       return avoidTower(ctx, b.escortMin ?? ESCORT_MIN, b.hpBelow ?? 0.65);
     case 'finishSanctum':
       return finishSanctum(ctx);
     case 'fight':
-      return fight(ctx);
+      return fight(ctx, b.stance ?? 'auto', b.target ?? 'nearest');
     case 'hunt':
       return hunt(ctx, b.hpAbove ?? 0.5);
     case 'answerVanish':
@@ -125,9 +134,20 @@ function retreat(ctx: SlotContext): Action {
   return { kind: 'move', x: fountain.x, z: fountain.z };
 }
 
+// The kit's next step (ADR 0014): the next purchase toward the build in
+// force, or the sale that makes room for it. Both need the fountain; the
+// sim refuses either elsewhere, and a sale is never worth a wasted slot.
 function shop(ctx: SlotContext): Action | null {
-  const wanted = affordablePurchase(ctx.s);
-  return wanted ? { kind: 'buy', itemId: wanted } : null;
+  const step = nextKitStep(ctx.kit().build, ctx.s.items, ctx.s.gold);
+  if (!step || !ctx.atFountain) return null;
+  return step;
+}
+
+// Sell one named item, the owner's own rule.
+function sellNamed(ctx: SlotContext, item: string): Action | null {
+  if (!ctx.atFountain) return null;
+  const slot = ctx.s.items.indexOf(item);
+  return slot === -1 ? null : { kind: 'sell', slot };
 }
 
 // Shop trip: the bank covers the next build step and nobody is around, so
@@ -136,7 +156,7 @@ function shop(ctx: SlotContext): Action | null {
 // kill gold never became items and a lead never showed on the map).
 function goShop(ctx: SlotContext): Action | null {
   const { fountain } = ctx;
-  if (!affordablePurchase(ctx.s) || !ctx.recallClear()) return null;
+  if (!nextKitStep(ctx.kit().build, ctx.s.items, ctx.s.gold) || !ctx.recallClear()) return null;
   if (ctx.distHome() > RECALL_MIN_HOME_DIST) return { kind: 'recall' };
   return { kind: 'move', x: fountain.x, z: fountain.z };
 }
@@ -191,17 +211,107 @@ function finishSanctum(ctx: SlotContext): Action | null {
 // Fight: Sear a kill-range target (the heal cut closes the escape), then
 // the hint-driven kit (each ability at its TRUE range, the ultimate held
 // behind its gates), otherwise attack.
-function fight(ctx: SlotContext): Action | null {
-  const { s, champ } = ctx;
+// Squishiness by role, for the squishiest target rule: the carries first,
+// the front line last.
+const SQUISH: Readonly<Record<ChampionRole, number>> = {
+  Marksman: 0,
+  Mage: 0,
+  Assassin: 1,
+  Battlemage: 1,
+  Skirmisher: 2,
+  Support: 2,
+  Fighter: 3,
+  Tank: 4,
+};
+
+// Whom to fight (ADR 0014): a hard-controlled enemy champion in attack
+// range beats every rule (each cast against it lands); then the rule: the
+// coach's focus target while in sight, the lowest in health nearby, the
+// squishiest by role nearby, else the nearest.
+function pickTarget(ctx: SlotContext, rule: TargetRule): ObsUnit | null {
+  const { s, obs } = ctx;
+  const cands = ctx.enemyChampions;
+  if (cands.length === 0) return null;
+  const ccd = cands
+    .filter((u) => hardCCd(u, obs.time) && dist(s.x, s.z, u) <= CHAMPION_ATTACK_RANGE)
+    .sort((a, b) => dist(s.x, s.z, a) - dist(s.x, s.z, b))[0];
+  if (ccd) return ccd;
+  if (rule === 'order') {
+    const order = s.coachOrder ?? null;
+    const focus = order?.kind === 'focus' ? cands.find((u) => u.id === order.targetId) : undefined;
+    if (focus) return focus;
+  }
+  const near = cands.filter((u) => dist(s.x, s.z, u) <= FIGHT_TARGET_RADIUS);
+  const byDistance = (a: ObsUnit, b: ObsUnit): number => dist(s.x, s.z, a) - dist(s.x, s.z, b);
+  if (rule === 'lowest' && near.length > 0) {
+    return [...near].sort((a, b) => a.hpFrac - b.hpFrac || byDistance(a, b))[0]!;
+  }
+  if (rule === 'squishiest' && near.length > 0) {
+    const squish = (u: ObsUnit): number => {
+      const role = u.championId ? CHAMPIONS[u.championId]?.role : undefined;
+      return role ? SQUISH[role] : 2;
+    };
+    return [...near].sort((a, b) => squish(a) - squish(b) || byDistance(a, b))[0]!;
+  }
+  return nearest(cands, s.x, s.z);
+}
+
+// A kite's step: straight away from the threat, never into tower fire
+// (home instead when the straight line lands under one).
+function kiteStep(ctx: SlotContext, threat: ObsUnit): Action {
+  const { s } = ctx;
+  const d = dist(s.x, s.z, threat) || 1;
+  const mx = s.x + ((s.x - threat.x) / d) * KITE_STEP;
+  const mz = s.z + ((s.z - threat.z) / d) * KITE_STEP;
+  if (ctx.inTowerReach(mx, mz) && !ctx.inTowerReach(s.x, s.z)) return towardHome(ctx, KITE_STEP);
+  return { kind: 'move', x: mx, z: mz };
+}
+
+// The fight (ADR 0014): Sear in kill range, the kit by its hints, then
+// attacks, holding distance by the stance. Front walks in and chases a
+// little; kite attacks from the edge of its own range and steps away from
+// whoever closes, unless a kill is right there; poke casts and steps back
+// and never trades attacks. Auto is kite on a ranged champion, front on a
+// melee one.
+function fight(ctx: SlotContext, stance: Stance, rule: TargetRule): Action | null {
+  const { s } = ctx;
+  const champ = pickTarget(ctx, rule);
   if (!champ) return null;
   const dc = dist(s.x, s.z, champ);
   if (dc <= CAST_RANGE && champ.hpFrac < KILL_SECURE_HP_FRAC) {
     const sear = readySigil(s, 'sear');
     if (sear !== -1) return { kind: 'sigil', slot: sear, x: champ.x, z: champ.z };
   }
+  const range = ctx.attackRange;
+  const mode = stance === 'auto' ? (range >= RANGED_MIN_RANGE ? 'kite' : 'front') : stance;
   const cast = pickCast(ctx, champ);
+  if (mode === 'front') {
+    if (cast) return cast;
+    if (dc <= CHAMPION_ATTACK_RANGE) return { kind: 'attack', targetId: champ.id };
+    if (dc <= CHASE_RANGE && !ctx.inTowerReach(champ.x, champ.z)) {
+      return { kind: 'move', x: champ.x, z: champ.z };
+    }
+    return null;
+  }
+  const threat = nearest(ctx.enemyChampions, s.x, s.z);
+  const td = threat ? dist(s.x, s.z, threat) : Number.POSITIVE_INFINITY;
+  const securing = champ.hpFrac < KILL_SECURE_HP_FRAC && dc <= range + 1;
+  if (mode === 'poke') {
+    if (cast) return cast;
+    if (threat && td < range) return kiteStep(ctx, threat);
+    return null;
+  }
+  // kite
+  if (threat && td < range * KITE_DANGER_FRAC && !securing) return kiteStep(ctx, threat);
   if (cast) return cast;
-  if (dc <= CHAMPION_ATTACK_RANGE) return { kind: 'attack', targetId: champ.id };
+  if (dc <= range + 0.5) return { kind: 'attack', targetId: champ.id };
+  if (dc <= CHASE_RANGE) {
+    // Close to the edge of range, not past it.
+    const k = (dc - (range - 0.5)) / dc;
+    const ax = s.x + (champ.x - s.x) * k;
+    const az = s.z + (champ.z - s.z) * k;
+    if (!ctx.inTowerReach(ax, az)) return { kind: 'move', x: ax, z: az };
+  }
   return null;
 }
 

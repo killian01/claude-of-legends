@@ -7,7 +7,7 @@
 // client (local validation, no round trip) and the server (the same
 // arithmetic before it forwards an operation).
 
-import type { PlaybookDef, PlayDef } from './types';
+import type { KitDef, PlaybookDef, PlayDef } from './types';
 import { type PlaybookValidation, validatePlaybook } from './validate';
 
 export type PatchOp =
@@ -18,6 +18,9 @@ export type PatchOp =
   | { op: 'move'; id: string; before: string | null }
   // Rewrite parts of a play in place; the id never changes.
   | { op: 'set'; id: string; play: Partial<Omit<PlayDef, 'id'>> }
+  // Change parts of the kit (ADR 0014): a part given replaces that part,
+  // null clears it back to the engine's default, absent leaves it.
+  | { op: 'kit'; kit: { [K in keyof KitDef]?: KitDef[K] | null } }
   // A whole new playbook, the "rewrite everything" answer.
   | { op: 'replace'; playbook: PlaybookDef };
 
@@ -40,6 +43,8 @@ export function isPatchOp(raw: unknown): raw is PatchOp {
       return typeof raw.id === 'string' && (typeof raw.before === 'string' || raw.before === null);
     case 'set':
       return typeof raw.id === 'string' && isRecord(raw.play);
+    case 'kit':
+      return isRecord(raw.kit);
     case 'replace':
       return isRecord(raw.playbook);
     default:
@@ -59,6 +64,10 @@ function finish(v: PlaybookValidation): PatchResult {
 // Never mutates its inputs.
 export function applyPatchOp(def: PlaybookDef, op: PatchOp): PatchResult {
   const plays = def.plays.map((p) => ({ ...p }));
+  const withPlays = (next: PlayDef[]): PatchResult =>
+    finish(
+      validatePlaybook({ version: def.version, plays: next, ...(def.kit ? { kit: def.kit } : {}) }),
+    );
   switch (op.op) {
     case 'add': {
       const play = op.play as PlayDef;
@@ -72,13 +81,13 @@ export function applyPatchOp(def: PlaybookDef, op: PatchOp): PatchResult {
       } else {
         plays.push(play);
       }
-      return finish(validatePlaybook({ version: def.version, plays }));
+      return withPlays(plays);
     }
     case 'remove': {
       const at = indexOf(plays, op.id);
       if (at < 0) return { ok: false, error: `no play named "${op.id}" to remove` };
       plays.splice(at, 1);
-      return finish(validatePlaybook({ version: def.version, plays }));
+      return withPlays(plays);
     }
     case 'move': {
       const at = indexOf(plays, op.id);
@@ -90,7 +99,7 @@ export function applyPatchOp(def: PlaybookDef, op: PatchOp): PatchResult {
         if (to < 0) return { ok: false, error: `no play named "${op.before}" to move before` };
         plays.splice(to, 0, moved!);
       }
-      return finish(validatePlaybook({ version: def.version, plays }));
+      return withPlays(plays);
     }
     case 'set': {
       const at = indexOf(plays, op.id);
@@ -101,7 +110,23 @@ export function applyPatchOp(def: PlaybookDef, op: PatchOp): PatchResult {
         if (patch[key] !== undefined) next[key] = patch[key];
       }
       plays[at] = next as unknown as PlayDef;
-      return finish(validatePlaybook({ version: def.version, plays }));
+      return withPlays(plays);
+    }
+    case 'kit': {
+      const patch = op.kit as Record<string, unknown>;
+      const next: Record<string, unknown> = { ...(def.kit ?? {}) };
+      for (const key of ['build', 'skills', 'variants'] as const) {
+        if (patch[key] === undefined) continue;
+        if (patch[key] === null) delete next[key];
+        else next[key] = patch[key];
+      }
+      return finish(
+        validatePlaybook({
+          version: Math.max(def.version, 2),
+          plays,
+          ...(Object.keys(next).length > 0 ? { kit: next } : {}),
+        }),
+      );
     }
     case 'replace':
       return finish(validatePlaybook(op.playbook));

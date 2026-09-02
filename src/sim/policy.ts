@@ -46,6 +46,10 @@ export interface ObsUnit {
   // Champions only: visible statuses, absent when there are none (additive
   // v0 field). A policy that ignores them keeps its old behavior.
   statuses?: readonly ObsStatus[];
+  // Champions only: which champion this is (additive v0 field, ADR 0014):
+  // the face every viewer reads off the screen, so a policy may pick its
+  // target by role.
+  championId?: string;
 }
 
 // A projectile the team can see (additive v0 block: dodging is impossible
@@ -122,6 +126,9 @@ export interface ObsSelf {
   // Which champion this policy is driving. Additive v0 field (like
   // `abilityRanks`): policies use it to pick role-appropriate item builds.
   championId: string | null;
+  // Own attack range in units (additive v0 field, ADR 0014): what a kite
+  // holds. Absent on observations older than the field.
+  attackRange?: number;
   // The ability key whose recast window is armed right now, null otherwise
   // (ADR 0005; additive v0 field). While armed, that key reads ready and
   // the press resolves the follow-up instead of a fresh cast.
@@ -170,6 +177,9 @@ export type Action =
   | { kind: 'level'; key: AbilityKey }
   // Starts the recall channel (additive v0 action): the same B humans
   // press, with the same rules (standing still, damage cancels).
-  | { kind: 'recall' };
+  | { kind: 'recall' }
+  // Sells the item in a bag slot (additive v0 action, ADR 0014): the same
+  // rule humans get, at the fountain, for seventy percent of its price.
+  | { kind: 'sell'; slot: number };
 
 export type Policy = (obs: Observation, rng: Rng) => Action;

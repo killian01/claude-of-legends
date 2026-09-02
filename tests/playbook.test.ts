@@ -1,9 +1,10 @@
-// Playbook gate (ADR 0013): the default playbook IS the scripted Laner,
-// tick for tick; the validator is the only door untrusted data goes
-// through; the interpreter reports the play that acted.
+// Playbook gate (ADR 0013, ADR 0014): the default bot is the playbook
+// Laner; the validator is the only door untrusted data goes through; the
+// interpreter reports the play that acted. The tick-for-tick pin to the
+// scripted Laner retired with ADR 0014 (scripts/laner_gate.mjs measures the
+// default Laner against its previous version instead).
 
 import { describe, expect, it } from 'vitest';
-import { fillWithBots } from '../server/bot_fill';
 import { BOTS, DEFAULT_BOT_ID } from '../src/sim/content/bots';
 import { LANER } from '../src/sim/content/bots/laner';
 import { LANER_PLAYBOOK } from '../src/sim/content/playbooks/laner';
@@ -18,62 +19,13 @@ import {
 } from '../src/sim/playbook';
 import { buildSlotContext } from '../src/sim/playbook/micro';
 import { holds } from '../src/sim/playbook/triggers';
-import type { Policy } from '../src/sim/policy';
 import { Rng } from '../src/sim/rng';
 import { Sim } from '../src/sim/sim';
-import { LEGACY_LANER } from './fixtures/legacy_laner';
 
-// A deterministic world digest: every unit's position, health, mana, gold
-// and level. Two sims agree only if nothing at all diverged.
-function digest(sim: Sim): string {
-  return [...sim.units.values()]
-    .sort((a, b) => a.id - b.id)
-    .map(
-      (u) =>
-        `${u.id}:${u.pos.x.toFixed(6)}:${u.pos.z.toFixed(6)}:${u.hp.toFixed(6)}:` +
-        `${u.mana.toFixed(6)}:${u.gold.toFixed(6)}:${u.level}`,
-    )
-    .join('|');
-}
-
-// A full 5v5 with every seat on the given policy, built exactly like a
-// server match (server/bot_fill.ts picks, src/net/replay.ts construction).
-function fullMatch(seed: number, policy: Policy): Sim {
-  const sim = new Sim(seed);
-  for (const p of fillWithBots([])) {
-    const unit = sim.addChampion(p.team, undefined, p.championId, p.skin ?? 0);
-    unit.sigils = [...p.sigils];
-    sim.attachPolicy(unit.id, policy);
-  }
-  return sim;
-}
-
-function firstDivergence(seed: number, ticks: number): string | null {
-  const legacy = fullMatch(seed, LEGACY_LANER.policy);
-  const fresh = fullMatch(seed, LANER.policy);
-  for (let t = 1; t <= ticks; t++) {
-    legacy.tick();
-    fresh.tick();
-    if (t % 20 === 0 && digest(legacy) !== digest(fresh)) return `seed ${seed} tick ${t}`;
-  }
-  // The rng streams must have advanced identically too: the jitter is drawn
-  // at the same slots or not at all.
-  if (legacy.rng.next() !== fresh.rng.next()) return `seed ${seed}: rng streams diverged`;
-  return null;
-}
-
-describe('the playbook Laner is the scripted Laner', () => {
-  it('is the default bot', () => {
+describe('the default bot', () => {
+  it('is the playbook Laner, and validates', () => {
     expect(BOTS[DEFAULT_BOT_ID]).toBe(LANER);
     expect(validatePlaybook(LANER_PLAYBOOK).ok).toBe(true);
-  });
-
-  it('drives a full 5v5 tick for tick like the scripted Laner (early game)', () => {
-    for (const seed of [1, 2, 3]) expect(firstDivergence(seed, 3600)).toBeNull();
-  });
-
-  it('drives a full 5v5 tick for tick like the scripted Laner (through the first Warden)', () => {
-    expect(firstDivergence(4, 13_500)).toBeNull();
   });
 });
 
@@ -192,7 +144,7 @@ describe('the validator', () => {
       stray: 1,
       plays: [{ ...LANER_PLAYBOOK.plays[0]!, note: 'x', do: { kind: 'retreat', bogus: 2 } }],
     });
-    expect(def).toEqual({ version: 1, plays: [LANER_PLAYBOOK.plays[0]] });
+    expect(def).toEqual({ version: LANER_PLAYBOOK.version, plays: [LANER_PLAYBOOK.plays[0]] });
   });
 
   it('accepts every version up to the current one and refuses newer ones', () => {

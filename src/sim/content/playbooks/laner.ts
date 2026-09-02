@@ -5,13 +5,15 @@
 // as an ordered list of plays interpreted by src/sim/playbook/. Each
 // behavior falls back to its engine default parameters; only the trigger
 // thresholds are spelled out here because they are the play's condition.
-// tests/playbook.test.ts pins this playbook tick for tick to the scripted
-// Laner it replaced (tests/fixtures/legacy_laner.ts).
+// The scripted Laner it replaced was pinned to it tick for tick in phase 1
+// and retired with ADR 0014; scripts/laner_gate.mjs now plays this playbook
+// against its previous version over fixed seeds. No kit: the role build and
+// Q, W, E; the fight's auto stance kites on ranged champions.
 
 import type { PlaybookDef } from '../../playbook/types';
 
 export const LANER_PLAYBOOK: PlaybookDef = {
-  version: 1,
+  version: 2,
   plays: [
     // Survive first: under a third of health, run home by the fastest
     // means (escape key, Riftstep, Zephyr, Mend, recall, feet).

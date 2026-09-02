@@ -3,8 +3,11 @@
 // built from. Pure functions over the data; the validator stays the
 // authority on what is legal, these only make it readable and editable.
 
+import { ITEM_LIST, ITEMS } from '../sim/content/items';
 import type { PatchOp } from '../sim/playbook/patch';
-import type { Behavior, LaneId, Trigger } from '../sim/playbook/types';
+import type { Behavior, KitDef, LaneId, SkillKey, Trigger } from '../sim/playbook/types';
+
+export const itemName = (id: string): string => ITEMS[id]?.name ?? id;
 
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
 
@@ -83,8 +86,27 @@ export function describeBehavior(b: Behavior): string {
       )})`;
     case 'finishSanctum':
       return 'finish the Sanctum';
-    case 'fight':
-      return 'fight the nearest enemy champion';
+    case 'fight': {
+      const whom =
+        b.target === 'lowest'
+          ? 'the lowest enemy champion'
+          : b.target === 'squishiest'
+            ? 'the squishiest enemy champion'
+            : b.target === 'order'
+              ? "the coach's focus, else the nearest enemy"
+              : 'the nearest enemy champion';
+      const how =
+        b.stance === 'kite'
+          ? ', kiting'
+          : b.stance === 'front'
+            ? ', walking in'
+            : b.stance === 'poke'
+              ? ', poking'
+              : '';
+      return `fight ${whom}${how}`;
+    }
+    case 'sell':
+      return `sell ${itemName(b.item)}`;
     case 'hunt':
       return `hunt a dying enemy out of sight (health above ${pct(b.hpAbove ?? 0.5)})`;
     case 'answerVanish':
@@ -130,6 +152,8 @@ export interface ChoiceSpec {
   key: string;
   label: string;
   options: readonly string[];
+  // What each option reads as, when the value itself is not readable.
+  labels?: readonly string[];
 }
 
 export interface KindForm {
@@ -232,7 +256,34 @@ export const BEHAVIOR_FORMS: Readonly<Record<Behavior['kind'], KindForm>> = {
     ],
   },
   finishSanctum: { label: 'finish the Sanctum' },
-  fight: { label: 'fight the nearest enemy champion' },
+  fight: {
+    label: 'fight an enemy champion',
+    choices: [
+      {
+        key: 'stance',
+        label: 'stance',
+        options: ['auto', 'kite', 'front', 'poke'],
+        labels: ['auto (kite when ranged)', 'kite', 'walk in', 'poke'],
+      },
+      {
+        key: 'target',
+        label: 'target',
+        options: ['nearest', 'lowest', 'squishiest', 'order'],
+        labels: ['the nearest', 'the lowest', 'the squishiest', "the coach's focus"],
+      },
+    ],
+  },
+  sell: {
+    label: 'sell an item',
+    choices: [
+      {
+        key: 'item',
+        label: 'item',
+        options: ITEM_LIST.map((i) => i.id),
+        labels: ITEM_LIST.map((i) => `${i.name} (${i.cost})`),
+      },
+    ],
+  },
   hunt: {
     label: 'hunt a dying enemy out of sight',
     nums: [{ key: 'hpAbove', label: 'when health above', min: 0, max: 1, step: 0.05, pct: true }],
@@ -321,6 +372,8 @@ export function freshBehavior(kind: Behavior['kind']): Behavior {
   switch (kind) {
     case 'holdPosition':
       return { kind, x: 100, z: 100 };
+    case 'sell':
+      return { kind, item: 'heart_gem' };
     case 'push':
       return { kind, lane: 'assigned' as LaneId | 'assigned' };
     default:
@@ -351,7 +404,32 @@ export function describeOp(op: PatchOp): string {
       if (op.play.enabled !== undefined) parts.push(op.play.enabled ? 'enabled' : 'disabled');
       return `change "${op.id}": ${parts.join(', ') || 'nothing'}`;
     }
+    case 'kit': {
+      const parts: string[] = [];
+      const k = op.kit;
+      if (k.build === null) parts.push('build back to the role build');
+      else if (k.build) parts.push(`build ${k.build.map(itemName).join(', ')}`);
+      if (k.skills === null) parts.push('max order back to Q, W, E');
+      else if (k.skills) parts.push(`max ${k.skills.join(' then ')}`);
+      if (k.variants === null) parts.push('no variants');
+      else if (k.variants) parts.push(`${k.variants.length} variant(s)`);
+      return `kit: ${parts.join('; ') || 'nothing'}`;
+    }
     case 'replace':
       return `replace the whole playbook (${op.playbook.plays.length} plays)`;
   }
+}
+
+// The kit in words: what the bot works toward, for the Briefing and the
+// rail. Absent parts read as the engine's defaults.
+export function describeKit(kit: KitDef | undefined, roleBuild: readonly string[]): string {
+  const build = kit?.build ?? roleBuild;
+  const skills: readonly SkillKey[] = kit?.skills ?? ['Q', 'W', 'E'];
+  const parts = [
+    `build ${build.map(itemName).join(', ')}${kit?.build ? '' : ' (the role build)'}`,
+    `max ${skills.join(' then ')}`,
+  ];
+  const n = kit?.variants?.length ?? 0;
+  if (n > 0) parts.push(`${n} variant${n > 1 ? 's' : ''}`);
+  return parts.join('; ');
 }

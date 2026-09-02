@@ -2,18 +2,19 @@
 // hands, as opposed to what the playbook decides it should be doing. Grown
 // out of the scripted Laner (ADR 0002 phase 1, kits v2, three playtest
 // rounds): the dodge reflexes, hint-driven ability selection, predictive
-// aim, role builds, recall discipline, and the per-slot context every
-// trigger and behavior reads. Pure over the observation; the only
+// aim, the kit walked to its next purchase, recall discipline, and the
+// per-slot context every trigger and behavior reads. Pure over the observation; the only
 // randomness is the movement jitter, drawn through the sim's Rng at most
 // once per slot, the first time a behavior asks for it.
 
 import type { AbilityDef } from '../combat/casting';
 import { type ChampionHints, hintsFor } from '../content/bots/hints';
 import { CHAMPIONS } from '../content/champions';
-import { effectiveItemCost } from '../content/items';
 import { GAME_MAP } from '../content/map';
 import type { Action, Observation, ObsSelf, ObsUnit } from '../policy';
 import type { Rng } from '../rng';
+import { type ActiveKit, resolveKit } from './kit';
+import type { KitDef } from './types';
 
 type ChampionDef = NonNullable<(typeof CHAMPIONS)[string]>;
 
@@ -196,98 +197,18 @@ export function pickCast(ctx: SlotContext, champ: ObsUnit): Action | null {
   return null;
 }
 
-// Deterministic ROLE-AWARE build plans that CAN buy duplicate components
-// (review F.0: the old list never completed a two-component recipe; the
-// snowball review found every bot on every champion building full tank).
-// Returns the next item id to buy, or null when the build is done.
-export function nextPurchase(items: readonly string[], championId: string | null): string | null {
-  const has = (id: string): boolean => items.includes(id);
-  const count = (id: string): number => items.filter((x) => x === id).length;
-  const role = championId ? CHAMPIONS[championId]?.role : undefined;
-
-  if (role === 'Marksman' || role === 'Assassin' || role === 'Skirmisher') {
-    if (!has('warbrand')) {
-      if (count('iron_blade') < 2) return 'iron_blade';
-      return 'warbrand';
-    }
-    if (!has('sunder_axe')) {
-      if (!has('traveler_soles')) return 'traveler_soles';
-      if (count('iron_blade') < 1) return 'iron_blade';
-      return 'sunder_axe';
-    }
-    if (!has('windrazor')) {
-      if (!has('swift_fang')) return 'swift_fang';
-      if (count('iron_blade') < 1) return 'iron_blade';
-      return 'windrazor';
-    }
-    if (!has('heart_gem')) return 'heart_gem';
-    if (!has('doombrand')) {
-      if (!has('iron_blade')) return 'iron_blade';
-      return 'doombrand';
-    }
-    if (!has('skyshear')) {
-      if (!has('swift_fang')) return 'swift_fang';
-      return 'skyshear';
-    }
-    return null;
-  }
-  if (role === 'Mage' || role === 'Battlemage') {
-    if (!has('storm_staff')) {
-      if (count('spark_rod') < 2) return 'spark_rod';
-      return 'storm_staff';
-    }
-    if (!has('void_crystal')) {
-      if (!has('null_cloak')) return 'null_cloak';
-      if (count('spark_rod') < 1) return 'spark_rod';
-      return 'void_crystal';
-    }
-    if (!has('archmind')) {
-      if (!has('mind_gem')) return 'mind_gem';
-      if (count('spark_rod') < 1) return 'spark_rod';
-      return 'archmind';
-    }
-    if (!has('heart_gem')) return 'heart_gem';
-    if (!has('tempest_core')) {
-      if (!has('spark_rod')) return 'spark_rod';
-      return 'tempest_core';
-    }
-    if (!has('null_engine')) {
-      if (!has('spark_rod')) return 'spark_rod';
-      return 'null_engine';
-    }
-    return null;
-  }
-  // Tanks, fighters, and supports keep the defensive shell.
-  if (!has('colossus_heart')) {
-    if (count('heart_gem') < 2) return 'heart_gem';
-    return 'colossus_heart';
-  }
-  if (!has('stone_bulwark')) {
-    if (!has('guard_plate')) return 'guard_plate';
-    if (count('heart_gem') < 1) return 'heart_gem';
-    return 'stone_bulwark';
-  }
-  if (!has('spirit_ward')) {
-    if (!has('null_cloak')) return 'null_cloak';
-    if (count('heart_gem') < 1) return 'heart_gem';
-    return 'spirit_ward';
-  }
-  if (!has('iron_blade')) return 'iron_blade';
-  if (!has('swift_fang')) return 'swift_fang';
-  if (!has('worldheart')) {
-    if (!has('guard_plate')) return 'guard_plate';
-    return 'worldheart';
-  }
-  return null;
-}
-
-// The next affordable step of the role build, null when there is none.
-export function affordablePurchase(s: ObsSelf): string | null {
-  if (s.items.length >= 6) return null;
-  const wanted = nextPurchase(s.items, s.championId);
-  if (wanted && s.gold >= effectiveItemCost(wanted, s.items)) return wanted;
-  return null;
-}
+// The fight's distance (ADR 0014). A champion whose attack range reaches
+// this far is ranged and kites by default; a kite steps away from any enemy
+// champion closer than this fraction of its own range, by this many units;
+// a front stance chases a target this far; the lowest and squishiest target
+// rules look this far around the bot.
+export const RANGED_MIN_RANGE = 4;
+export const KITE_DANGER_FRAC = 0.6;
+export const KITE_STEP = 3.5;
+export const CHASE_RANGE = 15;
+export const FIGHT_TARGET_RADIUS = 25;
+// Own attack range when the observation predates the field.
+const ATTACK_RANGE_FALLBACK = 6;
 
 type Fountain = (typeof GAME_MAP.fountains)[number];
 type Sanctum = (typeof GAME_MAP.sanctums)[number];
@@ -309,6 +230,8 @@ export interface SlotContext {
   // The fight target: a hard-CC'd enemy champion in attack range beats the
   // merely nearest one (every cast against it lands while the CC holds).
   readonly champ: ObsUnit | null;
+  // Own attack range in units: what a kite holds.
+  readonly attackRange: number;
   readonly atFountain: boolean;
   // Enemy towers are always visible; every voluntary step must know whether
   // it lands inside one's reach (playtest round 2: bots strolled under
@@ -321,9 +244,11 @@ export interface SlotContext {
   recallClear(): boolean;
   distHome(): number;
   jitter(): { jx: number; jz: number };
+  // The kit in force this slot (ADR 0014), resolved once when first asked.
+  kit(): ActiveKit;
 }
 
-export function buildSlotContext(obs: Observation, rng: Rng): SlotContext {
+export function buildSlotContext(obs: Observation, rng: Rng, kitDef?: KitDef): SlotContext {
   const s = obs.self;
   const fountain = GAME_MAP.fountains.find((f) => f.team === s.team)!;
   const enemySanctum = GAME_MAP.sanctums.find((c) => c.team !== s.team)!;
@@ -353,10 +278,12 @@ export function buildSlotContext(obs: Observation, rng: Rng): SlotContext {
     ) &&
     !inTowerReach(s.x, s.z);
   let drawn: { jx: number; jz: number } | null = null;
-  return {
+  let resolved: ActiveKit | null = null;
+  const ctx: SlotContext = {
     obs,
     s,
     def: s.championId ? CHAMPIONS[s.championId] : undefined,
+    attackRange: s.attackRange ?? ATTACK_RANGE_FALLBACK,
     hints: hintsFor(s.championId),
     fountain,
     enemySanctum,
@@ -376,7 +303,12 @@ export function buildSlotContext(obs: Observation, rng: Rng): SlotContext {
       }
       return drawn;
     },
+    kit: () => {
+      if (!resolved) resolved = resolveKit(kitDef, s.championId, ctx);
+      return resolved;
+    },
   };
+  return ctx;
 }
 
 // The point `len` units from the bot toward home.
@@ -467,13 +399,14 @@ export function recastHome(ctx: SlotContext): Action | null {
 }
 
 // Spend skill points as soon as they exist: R at its level gates (6/11/16),
-// then Q > W > E. A free action, but one decision slot this period.
+// then the kit's skill order (Q, W, E unless the owner said otherwise). A
+// free action, but one decision slot this period.
 export function levelUp(ctx: SlotContext): Action | null {
   const { s } = ctx;
   if (s.skillPoints > 0) {
     const ultGate = [6, 11, 16][s.abilityRanks.R];
     if (ultGate !== undefined && s.level >= ultGate) return { kind: 'level', key: 'R' };
-    for (const key of ['Q', 'W', 'E'] as const) {
+    for (const key of ctx.kit().skills) {
       if (s.abilityRanks[key] < 5) return { kind: 'level', key };
     }
   }

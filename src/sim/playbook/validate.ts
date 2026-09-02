@@ -6,19 +6,30 @@
 // unexpected rides into the sim.
 
 import type { CoachOrder } from '../coach';
+import { ITEMS } from '../content/items';
 import { GAME_MAP } from '../content/map';
 import type { AbilityKey } from '../types';
+import { MAX_BUILD } from './kit';
 import {
   type Behavior,
+  type KitDef,
+  type KitVariant,
   PLAYBOOK_FORMAT_VERSION,
   type PlaybookDef,
   type PlayDef,
+  type SkillKey,
+  type Stance,
+  type TargetRule,
   type Trigger,
 } from './types';
 
 export const MAX_PLAYS = 48;
 export const MAX_TRIGGER_DEPTH = 4;
+export const MAX_VARIANTS = 8;
 const MAX_BRANCHES = 8;
+const STANCES: readonly Stance[] = ['auto', 'kite', 'front', 'poke'];
+const TARGET_RULES: readonly TargetRule[] = ['nearest', 'lowest', 'squishiest', 'order'];
+const SKILL_KEYS: readonly SkillKey[] = ['Q', 'W', 'E'];
 const ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 const ABILITY_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
 const LANES = ['top', 'mid', 'bot'] as const;
@@ -223,7 +234,6 @@ function behavior(raw: unknown, at: string, errors: Errors): Behavior {
     case 'shop':
     case 'goShop':
     case 'finishSanctum':
-    case 'fight':
     case 'farm':
     case 'takeCamp':
     case 'obeyOrder':
@@ -232,6 +242,27 @@ function behavior(raw: unknown, at: string, errors: Errors): Behavior {
       let b: Behavior = { kind: 'avoidTower' };
       b = withOpt(b, 'escortMin', opt('escortMin', 0, 10, true));
       return withOpt(b, 'hpBelow', opt('hpBelow', 0, 1));
+    }
+    case 'fight': {
+      const b: Behavior = { kind: 'fight' };
+      if (raw.stance !== undefined) {
+        if (!(STANCES as readonly unknown[]).includes(raw.stance)) {
+          errors.add(`${at}: stance must be one of ${STANCES.join(', ')}`);
+        } else b.stance = raw.stance as Stance;
+      }
+      if (raw.target !== undefined) {
+        if (!(TARGET_RULES as readonly unknown[]).includes(raw.target)) {
+          errors.add(`${at}: target must be one of ${TARGET_RULES.join(', ')}`);
+        } else b.target = raw.target as TargetRule;
+      }
+      return b;
+    }
+    case 'sell': {
+      if (typeof raw.item !== 'string' || ITEMS[raw.item] === undefined) {
+        errors.add(`${at}: sell needs an item id from the shop`);
+        return { kind: 'sell', item: 'iron_blade' };
+      }
+      return { kind: 'sell', item: raw.item };
     }
     case 'hunt':
       return withOpt({ kind: 'hunt' }, 'hpAbove', opt('hpAbove', 0, 1));
@@ -304,6 +335,79 @@ function play(raw: unknown, index: number, seen: Set<string>, errors: Errors): P
   return out;
 }
 
+// A build: finished item ids from the shop, in order, no duplicates.
+function build(raw: unknown, at: string, errors: Errors): string[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_BUILD) {
+    errors.add(`${at}: build must list 1 to ${MAX_BUILD} items`);
+    return undefined;
+  }
+  const out: string[] = [];
+  for (const id of raw) {
+    if (typeof id !== 'string' || ITEMS[id] === undefined) {
+      errors.add(`${at}: unknown item "${String(id)}"`);
+      return undefined;
+    }
+    if (out.includes(id)) {
+      errors.add(`${at}: "${id}" is listed twice`);
+      return undefined;
+    }
+    out.push(id);
+  }
+  return out;
+}
+
+// A skill order: Q, W and E, each once.
+function skills(raw: unknown, at: string, errors: Errors): SkillKey[] | undefined {
+  if (raw === undefined) return undefined;
+  if (
+    !Array.isArray(raw) ||
+    raw.length !== 3 ||
+    !raw.every((k) => (SKILL_KEYS as readonly unknown[]).includes(k)) ||
+    new Set(raw).size !== 3
+  ) {
+    errors.add(`${at}: skills must order Q, W and E, each once`);
+    return undefined;
+  }
+  return raw as SkillKey[];
+}
+
+function kit(raw: unknown, errors: Errors): KitDef | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) {
+    errors.add('kit must be an object');
+    return undefined;
+  }
+  const out: KitDef = {};
+  const b = build(raw.build, 'kit', errors);
+  if (b) out.build = b;
+  const s = skills(raw.skills, 'kit', errors);
+  if (s) out.skills = s;
+  if (raw.variants !== undefined) {
+    if (!Array.isArray(raw.variants) || raw.variants.length > MAX_VARIANTS) {
+      errors.add(`kit: at most ${MAX_VARIANTS} variants`);
+    } else {
+      const variants: KitVariant[] = [];
+      raw.variants.forEach((v, i) => {
+        const at = `kit.variants[${i}]`;
+        if (!isRecord(v)) {
+          errors.add(`${at}: a variant is an object`);
+          return;
+        }
+        const variant: KitVariant = { when: trigger(v.when, `${at}.when`, 1, errors) };
+        const vb = build(v.build, at, errors);
+        if (vb) variant.build = vb;
+        const vs = skills(v.skills, at, errors);
+        if (vs) variant.skills = vs;
+        if (!vb && !vs) errors.add(`${at}: a variant needs a build or a skill order`);
+        variants.push(variant);
+      });
+      if (variants.length > 0) out.variants = variants;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export function validatePlaybook(raw: unknown): PlaybookValidation {
   const errors = new Errors();
   if (!isRecord(raw)) return { ok: false, errors: ['a playbook is an object'] };
@@ -324,6 +428,7 @@ export function validatePlaybook(raw: unknown): PlaybookValidation {
   }
   const seen = new Set<string>();
   const out = plays.map((p, i) => play(p, i, seen, errors));
+  const k = kit(raw.kit, errors);
   if (errors.list.length > 0) return { ok: false, errors: errors.list };
-  return { ok: true, def: { version: version as number, plays: out } };
+  return { ok: true, def: { version: version as number, plays: out, ...(k ? { kit: k } : {}) } };
 }

@@ -11,13 +11,20 @@ import type { SparResult } from '../game/sparring_core';
 import { type CoachTurn, commentOf } from '../net/coach_chat';
 import type { ReplayRecord } from '../net/replay';
 import { CHAMPION_LIST, CHAMPIONS } from '../sim/content/champions';
+import { ITEM_LIST, ITEMS } from '../sim/content/items';
 import { SIGIL_LIST } from '../sim/content/sigils';
 import {
   applyPatchOp,
   type Behavior,
+  type KitDef,
+  type KitVariant,
+  MAX_BUILD,
+  MAX_VARIANTS,
   type PatchOp,
   type PlaybookDef,
   type PlayDef,
+  roleBuild,
+  type SkillKey,
   type Trigger,
   validatePlaybook,
 } from '../sim/playbook';
@@ -123,6 +130,8 @@ const CSS = `
 .ac-table th { color: #6cc3e0; font-size: 10.5px; text-transform: uppercase; }
 .ac-table td.num { text-align: right; }
 .ac-form { display: flex; flex-direction: column; gap: 4px; }
+.ac-panel h4 { margin: 6px 8px 4px 0; font-size: 11px; color: #6cc3e0; text-transform: uppercase; letter-spacing: 0.5px; }
+.ac-kit-item { flex: 1; color: #c8d6e0; }
 `;
 
 let cssInstalled = false;
@@ -295,6 +304,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
   let working: PlaybookDef | null = null;
   let dirty = false;
   let editingId: string | null = null;
+  let editingVariant: number | null = null;
   let status = '';
   let statusBad = false;
   let confirmDelete = false;
@@ -380,9 +390,38 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     if (!working) return;
     const plays = structuredClone(working.plays);
     mutate(plays);
-    const v = validatePlaybook({ version: working.version, plays });
+    const v = validatePlaybook({
+      version: working.version,
+      plays,
+      ...(working.kit ? { kit: working.kit } : {}),
+    });
     if (!v.ok) {
       say(v.errors[0] ?? 'invalid playbook', true);
+      return;
+    }
+    working = v.def;
+    dirty = true;
+    status = '';
+    renderMain();
+  };
+
+  // The same door for the kit (ADR 0014): empty parts drop away so a kit
+  // that says nothing is no kit at all, and a kit lifts the format to 2.
+  const editKit = (mutate: (kit: KitDef) => void): void => {
+    if (!working) return;
+    const kit: KitDef = structuredClone(working.kit ?? {});
+    mutate(kit);
+    const cleaned: KitDef = {};
+    if (kit.build && kit.build.length > 0) cleaned.build = kit.build;
+    if (kit.skills) cleaned.skills = kit.skills;
+    if (kit.variants && kit.variants.length > 0) cleaned.variants = kit.variants;
+    const v = validatePlaybook({
+      version: Math.max(working.version, 2),
+      plays: working.plays,
+      ...(Object.keys(cleaned).length > 0 ? { kit: cleaned } : {}),
+    });
+    if (!v.ok) {
+      say(v.errors[0] ?? 'invalid kit', true);
       return;
     }
     working = v.def;
@@ -664,6 +703,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       top.append(table);
     }
     main.append(top);
+    main.append(kitPanel(bot, def));
 
     // The play list.
     const list = el('div', 'ac-panel');
@@ -693,6 +733,280 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     });
     list.append(add);
     main.append(list);
+  }
+
+  // --- the kit: what the bot works toward (ADR 0014) ---
+  const itemLabel = (id: string): string => {
+    const it = ITEMS[id];
+    return it ? `${it.name} (${it.cost})` : id;
+  };
+  const itemNames = (ids: readonly string[]): string =>
+    ids.map((id) => ITEMS[id]?.name ?? id).join(', ');
+
+  function miniTools(): {
+    tools: HTMLElement;
+    mk: (label: string, title: string, fn: () => void, disabled?: boolean) => void;
+  } {
+    const tools = el('span', 'ac-play-tools');
+    const mk = (label: string, title: string, fn: () => void, disabled = false): void => {
+      const b = el('button', 'ac-btn mini', label) as HTMLButtonElement;
+      b.title = title;
+      b.disabled = disabled || coaching;
+      b.addEventListener('click', fn);
+      tools.append(b);
+    };
+    return { tools, mk };
+  }
+
+  function buildEditor(items: readonly string[], onChange: (next: string[]) => void): HTMLElement {
+    const box = el('div', '');
+    const swapped = (a: number, b: number): string[] => {
+      const n = [...items];
+      const va = n[a]!;
+      n[a] = n[b]!;
+      n[b] = va;
+      return n;
+    };
+    items.forEach((id, i) => {
+      const row = el('div', 'ac-row');
+      row.append(el('span', 'ac-kit-item', `${i + 1}. ${itemLabel(id)}`));
+      const { tools, mk } = miniTools();
+      mk('up', 'Buy it earlier', () => onChange(swapped(i, i - 1)), i === 0);
+      mk('down', 'Buy it later', () => onChange(swapped(i, i + 1)), i === items.length - 1);
+      mk('x', 'Drop it from the build', () => onChange(items.filter((_, j) => j !== i)));
+      row.append(tools);
+      box.append(row);
+    });
+    if (items.length < MAX_BUILD) {
+      const addRow = el('div', 'ac-row');
+      const sel = el('select', 'ac-select') as HTMLSelectElement;
+      for (const tier of [3, 2, 1] as const) {
+        const group = document.createElement('optgroup');
+        group.label = tier === 1 ? 'Components' : `Tier ${tier}`;
+        for (const it of ITEM_LIST) {
+          if (it.tier !== tier || items.includes(it.id)) continue;
+          const o = document.createElement('option');
+          o.value = it.id;
+          o.textContent = itemLabel(it.id);
+          group.append(o);
+        }
+        if (group.children.length > 0) sel.append(group);
+      }
+      sel.disabled = coaching;
+      const add = el('button', 'ac-btn mini', '+ add');
+      add.disabled = coaching;
+      add.addEventListener('click', () => {
+        if (sel.value) onChange([...items, sel.value]);
+      });
+      addRow.append(sel, add);
+      box.append(addRow);
+    }
+    return box;
+  }
+
+  const SKILL_ORDERS: readonly (readonly [SkillKey, SkillKey, SkillKey])[] = [
+    ['Q', 'W', 'E'],
+    ['Q', 'E', 'W'],
+    ['W', 'Q', 'E'],
+    ['W', 'E', 'Q'],
+    ['E', 'Q', 'W'],
+    ['E', 'W', 'Q'],
+  ];
+  function skillsSelect(
+    current: readonly SkillKey[] | undefined,
+    onChange: (next: SkillKey[] | undefined) => void,
+  ): HTMLSelectElement {
+    const s = el('select', 'ac-select') as HTMLSelectElement;
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = 'as the default (Q then W then E)';
+    s.append(none);
+    for (const order of SKILL_ORDERS) {
+      const o = document.createElement('option');
+      o.value = order.join('');
+      o.textContent = order.join(' then ');
+      s.append(o);
+    }
+    s.value = current ? current.join('') : '';
+    s.disabled = coaching;
+    s.addEventListener('change', () =>
+      onChange(s.value === '' ? undefined : (s.value.split('') as SkillKey[])),
+    );
+    return s;
+  }
+
+  function kitPanel(bot: BotView, def: PlaybookDef): HTMLElement {
+    const panel = el('div', 'ac-panel');
+    panel.append(el('h3', '', 'The kit'));
+    panel.append(
+      el(
+        'p',
+        'ac-lead',
+        'What the bot works toward: its build, finished items in the order it buys them (the ' +
+          'engine buys the pieces, sells what the build no longer wants, and past a full bag ' +
+          'replaces the cheapest item), and which spell it maxes first. A variant swaps them ' +
+          'while its condition holds; the first that holds wins, checked at every purchase.',
+      ),
+    );
+    const kit = def.kit ?? {};
+    const champ = CHAMPIONS[bot.championId];
+    const role = roleBuild(bot.championId);
+    const buildHead = el('div', 'ac-row');
+    buildHead.append(el('h4', '', 'Build'));
+    if (kit.build) {
+      const back = el('button', 'ac-btn mini', `Back to the ${champ?.role ?? 'role'} build`);
+      back.disabled = coaching;
+      back.addEventListener('click', () =>
+        editKit((k) => {
+          delete k.build;
+        }),
+      );
+      buildHead.append(back);
+      panel.append(buildHead);
+      panel.append(
+        buildEditor(kit.build, (next) =>
+          editKit((k) => {
+            if (next.length === 0) delete k.build;
+            else k.build = next;
+          }),
+        ),
+      );
+    } else {
+      buildHead.append(
+        el('span', 'ac-sub', `The ${champ?.role ?? 'role'} build: ${itemNames(role)}`),
+      );
+      const own = el('button', 'ac-btn mini', 'Write my own');
+      own.disabled = coaching;
+      own.addEventListener('click', () =>
+        editKit((k) => {
+          k.build = [...role];
+        }),
+      );
+      buildHead.append(own);
+      panel.append(buildHead);
+    }
+    const skillRow = el('div', 'ac-row');
+    skillRow.append(
+      el('h4', '', 'Max order'),
+      skillsSelect(kit.skills, (next) =>
+        editKit((k) => {
+          if (next) k.skills = next;
+          else delete k.skills;
+        }),
+      ),
+      el('span', 'ac-sub', 'R at levels 6, 11 and 16'),
+    );
+    panel.append(skillRow);
+    const vHead = el('div', 'ac-row');
+    vHead.append(
+      el('h4', '', 'Variants'),
+      el('span', 'ac-sub', 'the first whose condition holds wins'),
+    );
+    panel.append(vHead);
+    for (const [i, v] of (kit.variants ?? []).entries()) panel.append(variantRow(v, i));
+    if ((kit.variants?.length ?? 0) < MAX_VARIANTS) {
+      const add = el('button', 'ac-btn mini', '+ Add a variant');
+      add.disabled = coaching;
+      add.addEventListener('click', () => {
+        const n = kit.variants?.length ?? 0;
+        editKit((k) => {
+          k.variants = [
+            ...(k.variants ?? []),
+            { when: { kind: 'time', atLeast: 600 }, build: [...(k.build ?? role)] },
+          ];
+        });
+        editingVariant = n;
+        renderMain();
+      });
+      panel.append(add);
+    }
+    return panel;
+  }
+
+  function variantRow(v: KitVariant, i: number): HTMLElement {
+    const row = el('div', 'ac-play');
+    const head = el('div', 'ac-play-head');
+    const text = el('span', 'ac-play-text');
+    const parts: string[] = [];
+    if (v.build) parts.push(`build ${itemNames(v.build)}`);
+    if (v.skills) parts.push(`max ${v.skills.join(' then ')}`);
+    text.append(
+      el('b', '', 'when '),
+      describeTrigger(v.when),
+      el('b', '', ' then '),
+      parts.join('; '),
+    );
+    const { tools, mk } = miniTools();
+    mk(editingVariant === i ? 'close' : 'edit', 'Edit this variant', () => {
+      editingVariant = editingVariant === i ? null : i;
+      renderMain();
+    });
+    mk('x', 'Remove this variant', () => {
+      editingVariant = null;
+      editKit((k) => {
+        k.variants = (k.variants ?? []).filter((_, j) => j !== i);
+      });
+    });
+    head.append(el('span', 'ac-play-id', `variant ${i + 1}`), text, tools);
+    row.append(head);
+    if (editingVariant !== i) return row;
+    const box = el('div', 'ac-editor');
+    box.append(el('h4', '', 'When'));
+    box.append(
+      triggerEditor(
+        v.when,
+        (t) =>
+          editKit((k) => {
+            k.variants![i]!.when = t;
+          }),
+        1,
+      ),
+    );
+    const buildHead = el('div', 'ac-row');
+    buildHead.append(el('h4', '', 'Build'));
+    const own = el('label', 'ac-check');
+    const cb = el('input', '') as HTMLInputElement;
+    cb.type = 'checkbox';
+    cb.checked = v.build !== undefined;
+    cb.disabled = coaching;
+    cb.addEventListener('change', () =>
+      editKit((k) => {
+        const vv = k.variants![i]!;
+        if (cb.checked) vv.build = [...(k.build ?? roleBuild(current?.championId ?? null))];
+        else {
+          delete vv.build;
+          if (!vv.skills) vv.skills = ['Q', 'W', 'E'];
+        }
+      }),
+    );
+    own.append(cb, document.createTextNode('its own build'));
+    buildHead.append(own);
+    box.append(buildHead);
+    if (v.build) {
+      box.append(
+        buildEditor(v.build, (next) =>
+          editKit((k) => {
+            const vv = k.variants![i]!;
+            if (next.length === 0) delete vv.build;
+            else vv.build = next;
+          }),
+        ),
+      );
+    }
+    const skillRow = el('div', 'ac-row');
+    skillRow.append(
+      el('h4', '', 'Max order'),
+      skillsSelect(v.skills, (next) =>
+        editKit((k) => {
+          const vv = k.variants![i]!;
+          if (next) vv.skills = next;
+          else delete vv.skills;
+        }),
+      ),
+    );
+    box.append(skillRow);
+    row.append(box);
+    return row;
   }
 
   function playRow(play: PlayDef, index: number): HTMLElement {
@@ -820,12 +1134,12 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     for (const c of form.choices ?? []) {
       const f = el('label', 'ac-field');
       const s = el('select', 'ac-select') as HTMLSelectElement;
-      for (const opt of c.options) {
+      c.options.forEach((opt, i) => {
         const o = document.createElement('option');
         o.value = opt;
-        o.textContent = opt;
+        o.textContent = c.labels?.[i] ?? opt;
         s.append(o);
-      }
+      });
       s.value = String(obj[c.key] ?? c.options[0]);
       s.addEventListener('change', () => onChange({ ...obj, [c.key]: s.value }));
       f.append(el('span', '', c.label), s);

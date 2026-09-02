@@ -106,6 +106,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
         }
       }
       if (visible.length > 0) row.statuses = visible;
+      if (other.championId) row.championId = other.championId;
     }
     // The observable telegraph: a visible champion mid-windup announces
     // where the cast lands. Bursts and cones land on the caster.
@@ -202,6 +203,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       sigilReady,
       items: [...u.items],
       championId: u.championId,
+      attackRange: u.stats.attackRange,
       recastArmed: u.recastArmed && u.recastArmed.until > sim.time ? u.recastArmed.key : null,
       lane: u.kind === 'champion' ? (u.lane as 'top' | 'mid' | 'bot' | null) : null,
       recalling: u.statuses.some((s) => s.kind === 'recall' && s.until > sim.time),

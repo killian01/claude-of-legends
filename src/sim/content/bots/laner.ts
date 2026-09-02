@@ -1,9 +1,9 @@
 // The Laner: the default bot (ADR 0002 phase 1). Since ADR 0013 it is the
 // default PLAYBOOK (src/sim/content/playbooks/laner.ts) run by the shared
 // interpreter and micro (src/sim/playbook/); the scripted brain it grew out
-// of lives on as tests/fixtures/legacy_laner.ts, which pins the playbook to
-// it tick for tick. One file per bot, contributable by PR: implement or
-// compose a Policy, register in index.ts, done.
+// of was retired with ADR 0014 once the playbook was proven tick for tick.
+// One file per bot, contributable by PR: implement or compose a Policy,
+// register in index.ts, done.
 
 import { playbookPolicy } from '../../playbook/interpreter';
 import type { PlaybookDef } from '../../playbook/types';

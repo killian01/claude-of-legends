@@ -1,18 +1,21 @@
 // The playbook: a bot's whole decision policy as data (docs/design/bots.md,
-// ADR 0013). An ordered list of plays; each decision slot the interpreter
-// walks it top down, and the first play whose trigger holds AND whose
-// behavior can act is the one that acts. A behavior that cannot act (no
-// minion to farm, nothing affordable) passes to the next play.
+// ADR 0013, ADR 0014). An ordered list of plays; each decision slot the
+// interpreter walks it top down, and the first play whose trigger holds AND
+// whose behavior can act is the one that acts. A behavior that cannot act
+// (no minion to farm, nothing affordable) passes to the next play. Beside
+// the plays, the kit: what the bot works toward (its build and skill order)
+// rather than what it does now, with variants on the same triggers.
 //
 // The format is versioned like the Policy contract and grows only
 // additively: a playbook written against version 1 keeps playing under
 // every later version. New trigger and behavior kinds are added, never
-// changed; a parameter's default never moves once shipped.
+// changed; a parameter's default never moves once shipped. Version 2 added
+// the kit, the fight's stance and target, and the sell behavior.
 
 import type { CoachOrder } from '../coach';
 import type { AbilityKey } from '../types';
 
-export const PLAYBOOK_FORMAT_VERSION = 1;
+export const PLAYBOOK_FORMAT_VERSION = 2;
 
 export type LaneId = 'top' | 'mid' | 'bot';
 
@@ -51,6 +54,15 @@ export type Trigger =
   | { kind: 'all'; of: Trigger[] }
   | { kind: 'any'; of: Trigger[] };
 
+// How the fight behavior holds distance (the Stance of the glossary).
+// `auto` kites on a ranged champion and walks in on a melee one.
+export type Stance = 'auto' | 'kite' | 'front' | 'poke';
+
+// Whom the fight behavior goes for: the nearest enemy champion, the one
+// lowest in health, the squishiest by role, or the coach's focus target. A
+// hard-controlled enemy in reach beats the rule.
+export type TargetRule = 'nearest' | 'lowest' | 'squishiest' | 'order';
+
 // A macro intent the engine turns into movement, attacks and casts through
 // the shared micro (last hits, dodging, key roles, aim). Every parameter is
 // optional and defaults to what the default playbook (the Laner) uses.
@@ -60,18 +72,23 @@ export type Behavior =
   | { kind: 'retreat' }
   // Do nothing this slot. Always acts.
   | { kind: 'hold' }
-  // Buy the next item of the role build when at the fountain and affordable.
+  // The next step of the kit's build: buy the next item or component when
+  // affordable, sell what the build no longer wants when the bag is full,
+  // replace the cheapest item past a full bag. Buying and selling both
+  // need the fountain.
   | { kind: 'shop' }
   // Go home to spend: recall when clear and far, walk when close.
   | { kind: 'goShop' }
+  // Sell one named item, at the fountain, when the bag holds it.
+  | { kind: 'sell'; item: string }
   // Step out of a tower's reach unless escorted and healthy, or securing
   // a kill.
   | { kind: 'avoidTower'; escortMin?: number; hpBelow?: number }
   // Hit a vulnerable enemy Sanctum in reach when it is low or escorted.
   | { kind: 'finishSanctum' }
   // Fight the target champion: Sear in kill range, the hint-driven kit,
-  // then attacks.
-  | { kind: 'fight' }
+  // then attacks, holding distance by the stance.
+  | { kind: 'fight'; stance?: Stance; target?: TargetRule }
   // Walk to where a nearly dead enemy was last seen, when healthy.
   | { kind: 'hunt'; hpAbove?: number }
   // An enemy just vanished nearby: walk its spot when healthy, give ground
@@ -109,7 +126,28 @@ export interface PlayDef {
   enabled?: boolean;
 }
 
+// The three skills a bot ranks by choice; R goes at its level gates.
+export type SkillKey = Exclude<AbilityKey, 'R'>;
+
+// One conditional entry of the kit: while its trigger holds, its build or
+// skill order stands in for the defaults.
+export interface KitVariant {
+  when: Trigger;
+  build?: string[];
+  skills?: SkillKey[];
+}
+
+// What the bot works toward (docs/design/bots.md, ADR 0014). A build is an
+// ordered list of finished item ids; absent, the champion's role build.
+// Skills is the order of Q, W and E to max; absent, Q then W then E.
+export interface KitDef {
+  build?: string[];
+  skills?: SkillKey[];
+  variants?: KitVariant[];
+}
+
 export interface PlaybookDef {
   version: number;
   plays: PlayDef[];
+  kit?: KitDef;
 }

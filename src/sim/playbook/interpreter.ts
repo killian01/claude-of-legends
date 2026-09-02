@@ -40,7 +40,7 @@ export type PlayTrace = (playId: string, unitId: number) => void;
 export function playbookPolicy(def: PlaybookDef, trace?: PlayTrace): Policy {
   return (obs, rng) => {
     if (obs.self.dead) return { kind: 'noop' };
-    const ctx = buildSlotContext(obs, rng);
+    const ctx = buildSlotContext(obs, rng, def.kit);
     for (const reflex of REFLEXES) {
       const action = reflex.run(ctx);
       if (action) {
