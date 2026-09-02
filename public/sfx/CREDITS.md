@@ -16,6 +16,16 @@ packs, all CC0:
 - pyranostudios (opengameart.org): Air whoosh.
 - kurt (opengameart.org): Gunshots.
 - tabasco (opengameart.org): Gunshot Sounds.
+- qubodup (opengameart.org): Earth element magic spell, Sand spell, Ghost breath.
+- Almitory (opengameart.org): Fantasy magic spell.
+- bart (opengameart.org): Ice spells.
+- Ogrebane (opengameart.org): Teleport Spell.
+- themightyglider (opengameart.org): Catching fire.
+- pauliuw (opengameart.org): Flight or spell sound.
+- Spring Spring (opengameart.org): Magic Words + Healing Sound Effect.
+- fvcalderan (opengameart.org): Gravity Inverter.
+- Sorth (opengameart.org): Ghost Voice Pack.
+- Ecrivain (opengameart.org): Random SFX.
 
 CC0 asks for no attribution; these credits are kept out of respect for
 the recordists. docs/design/sound.md explains how the bank is built and

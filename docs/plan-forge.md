@@ -83,7 +83,10 @@ and their written UGC authorization; details inline.
    sound from the palette (`src/sim/content/sounds.ts`, heard on pick, carried by
    the definition, bounded by the validator); the palette and the combat sounds
    play recordings from the CC0 bank (`public/sfx/`, `docs/design/sound.md`),
-   the synthesis standing in until it decodes. REMAINING: the agent endpoint that
+   the synthesis standing in until it decodes; the palette then grew from
+   nine casts to fifty-five in six groups and twenty attacks (playtest: far
+   too few for a MOBA), each pick a recording, synthesized through its
+   school family until the bank lands. REMAINING: the agent endpoint that
    compiles free-text passives into primitives with refusal explanations (needs
    a Claude API key); the generated weapon prop itself stays phase 5's Tripo
    half (the procedural prop library carries the grip flow until then).

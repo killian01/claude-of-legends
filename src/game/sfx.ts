@@ -7,6 +7,7 @@
 // bursts read far less "beepy" than raw oscillators. The AudioContext
 // resumes on the first user gesture per browser policy.
 
+import { type AttackSoundId, attackFamilyOf, castFamilyOf } from '../sim/content/sounds';
 import { playSfxBank, preloadSfxBank } from './sfx_bank';
 
 export type SfxName =
@@ -22,16 +23,12 @@ export type SfxName =
   | 'deny'
   | 'levelup'
   | 'buy'
-  | 'swing'
-  | 'gunshot'
-  // The rest of the basic-attack palette a forged creator picks from
-  // (src/sim/content/sounds.ts).
-  | 'blade'
-  | 'heavy'
-  | 'bow'
-  | 'bolt'
   | 'impact'
-  | 'towershot';
+  | 'towershot'
+  // The basic-attack palette a forged creator picks from
+  // (src/sim/content/sounds.ts): swing and gunshot the roster's own, the
+  // rest recordings in the bank, synthesized through their family.
+  | AttackSoundId;
 
 export interface AudioBus {
   ctx: AudioContext;
@@ -208,20 +205,16 @@ const MIN_INTERVAL_MS: Partial<Record<SfxName, number>> = {
   hit: 120,
   gold: 60,
   deny: 160,
-  swing: 90,
-  gunshot: 90,
-  blade: 90,
-  heavy: 90,
-  bow: 90,
-  bolt: 90,
   impact: 70,
   towershot: 120,
 };
+const MIN_ATTACK_INTERVAL_MS = 90;
 
-// Per-school cast sounds, six sonic identities instead of one shared
-// whoosh (player review), plus three more a forged creator can pick
-// (frost, shadow, thunder; the palette in src/sim/content/sounds.ts).
-// gain < 1 for other units' casts, by distance.
+// A cast sound by id: a school (six sonic identities instead of one
+// shared whoosh, player review) or any pick from the palette
+// (src/sim/content/sounds.ts). The bank plays the recording; the
+// synthesis below knows the nine schools and plays a pick through its
+// family. gain < 1 for other units' casts, by distance.
 export function playCastSfx(school: string, gain = 1): void {
   const b = audioBus();
   if (!b || b.ctx.state === 'suspended' || gain <= 0.02) return;
@@ -231,7 +224,7 @@ export function playCastSfx(school: string, gain = 1): void {
   if (playSfxBank(b, `cast_${school}`, gain, 0.15)) return;
   callGain = Math.min(1.5, gain);
   const j = 0.94 + Math.random() * 0.12;
-  switch (school) {
+  switch (castFamilyOf(school)) {
     case 'steel':
       // A metallic schwing.
       noise(b, { dur: 0.12, freq: 1400 * j, slideTo: 3800 * j, q: 2.2, vol: 0.5 });
@@ -322,7 +315,7 @@ export function playSfx(name: SfxName, gain = 1): void {
   const b = audioBus();
   if (!b || b.ctx.state === 'suspended' || gain <= 0.02) return;
   const now = performance.now();
-  const min = MIN_INTERVAL_MS[name] ?? 0;
+  const min = MIN_INTERVAL_MS[name] ?? (attackFamilyOf(name) ? MIN_ATTACK_INTERVAL_MS : 0);
   if (min > 0 && now - (lastPlay.get(name) ?? 0) < min) return;
   lastPlay.set(name, now);
   if (playSfxBank(b, name, gain)) return;
@@ -332,7 +325,8 @@ export function playSfx(name: SfxName, gain = 1): void {
   // like one looped sample.
   const j = 0.92 + Math.random() * 0.16;
 
-  switch (name) {
+  // An attack from the wider palette synthesizes as its family.
+  switch (attackFamilyOf(name) ?? name) {
     case 'cast':
       // Pure air, no oscillator: a body whoosh, a bright breath above it,
       // and a low push underneath.

@@ -158,9 +158,11 @@ const run = async () => {
   );
   if (soundSelects !== 2)
     throw new Error(`expected the attack and the Q sound selects, saw ${soundSelects}`);
-  await pickSound(0, 'bow');
-  await pickSound(1, 'thunder');
-  await waitSaved({ attack: 'bow', q: 'thunder' }, 'picked');
+  // Picks from the wider palette (grouped options), so the server's
+  // validator is shown to know them.
+  await pickSound(0, 'crossbow');
+  await pickSound(1, 'lich');
+  await waitSaved({ attack: 'crossbow', q: 'lich' }, 'picked');
   console.log('sounds OK: the attack and Q picks autosaved with the def');
   await pickSound(0, '');
   await pickSound(1, '');
@@ -229,7 +231,7 @@ const run = async () => {
   const bank = await page.evaluate(async () => {
     const ctx = new AudioContext();
     const out = [];
-    for (const file of ['swing_1.ogg', 'cast_thunder_1.ogg', 'gunshot_1.ogg']) {
+    for (const file of ['swing_1.ogg', 'cast_thunder_1.ogg', 'crossbow_1.ogg', 'cast_lich_1.ogg']) {
       const r = await fetch(`/sfx/${file}`);
       const type = r.headers.get('content-type');
       const buf = r.ok ? await ctx.decodeAudioData(await r.arrayBuffer()) : null;

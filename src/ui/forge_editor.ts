@@ -15,9 +15,9 @@ import { playCastSfx, playSfx, preloadSfx } from '../game/sfx';
 import { RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import type { ChampionBaseStats, ChampionGrowth, ChampionRole } from '../sim/content/champions';
 import {
-  ATTACK_SOUNDS,
+  ATTACK_SOUND_GROUPS,
   type AttackSoundId,
-  CAST_SOUNDS,
+  CAST_SOUND_GROUPS,
   type CastSoundId,
 } from '../sim/content/sounds';
 import { ABILITY_BOUNDS, BASE_STAT_BOUNDS, FLAVOR_MAX, GROWTH_BOUNDS } from '../sim/forge/bounds';
@@ -358,6 +358,28 @@ function ensureCss(): void {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
+}
+
+// The sound palette as grouped options (src/sim/content/sounds.ts), the
+// select's first option (Auto) already in place.
+function appendSoundGroups(
+  select: HTMLSelectElement,
+  groups: ReadonlyArray<{
+    readonly group: string;
+    readonly sounds: ReadonlyArray<{ readonly id: string; readonly label: string }>;
+  }>,
+): void {
+  for (const g of groups) {
+    const og = document.createElement('optgroup');
+    og.label = g.group;
+    for (const s of g.sounds) {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.label;
+      og.append(opt);
+    }
+    select.append(og);
+  }
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -2188,12 +2210,7 @@ export function openForgeEditor(container: HTMLElement): void {
     atkAuto.value = '';
     atkAuto.textContent = 'Auto: a whip of air';
     atkSel.append(atkAuto);
-    for (const s of ATTACK_SOUNDS) {
-      const opt = document.createElement('option');
-      opt.value = s.id;
-      opt.textContent = s.label;
-      atkSel.append(opt);
-    }
+    appendSoundGroups(atkSel, ATTACK_SOUND_GROUPS);
     atkSel.value = current.attackSound ?? '';
     atkSel.disabled = sealed;
     atkSel.addEventListener('change', () => {
@@ -2574,12 +2591,7 @@ export function openForgeEditor(container: HTMLElement): void {
     auto.value = '';
     auto.textContent = `Auto: the ${castSoundOf({ ...ability, sound: undefined })} school`;
     soundSel.append(auto);
-    for (const s of CAST_SOUNDS) {
-      const opt = document.createElement('option');
-      opt.value = s.id;
-      opt.textContent = s.label;
-      soundSel.append(opt);
-    }
+    appendSoundGroups(soundSel, CAST_SOUND_GROUPS);
     soundSel.value = ability.sound ?? '';
     soundSel.disabled = sealed;
     soundSel.addEventListener('change', () => {

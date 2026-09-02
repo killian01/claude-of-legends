@@ -13,7 +13,7 @@ import { ATTACK_SOUNDS, CAST_SOUNDS } from '../src/sim/content/sounds';
 
 const DIR = join(process.cwd(), 'public', 'sfx');
 const FILE_MAX_KB = 80;
-const BANK_MAX_KB = 1200;
+const BANK_MAX_KB = 3000;
 
 describe('the recorded sound bank', () => {
   it('lists exactly the recordings on disk', () => {

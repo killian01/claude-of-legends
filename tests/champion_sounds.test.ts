@@ -7,7 +7,18 @@
 import { describe, expect, it } from 'vitest';
 import { attackSoundOf, castSoundOf } from '../src/game/champion_sounds';
 import { schoolTagOf } from '../src/render/ability_vfx';
-import { ATTACK_SOUNDS, CAST_SOUNDS, isAttackSound, isCastSound } from '../src/sim/content/sounds';
+import {
+  ATTACK_FAMILIES,
+  ATTACK_SOUND_GROUPS,
+  ATTACK_SOUNDS,
+  attackFamilyOf,
+  CAST_FAMILIES,
+  CAST_SOUND_GROUPS,
+  CAST_SOUNDS,
+  castFamilyOf,
+  isAttackSound,
+  isCastSound,
+} from '../src/sim/content/sounds';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { freshDraftDef } from '../src/sim/forge/fresh_draft';
 import { resolveForgedChampion } from '../src/sim/forge/resolve';
@@ -34,6 +45,30 @@ describe('the sound palette', () => {
     expect(isAttackSound(7)).toBe(false);
   });
 
+  it('is wide, grouped, and synthesizes every pick through a family', () => {
+    // Playtest: nine casts were far too few for a MOBA's worth of spells.
+    expect(CAST_SOUNDS.length).toBeGreaterThanOrEqual(50);
+    expect(ATTACK_SOUNDS.length).toBeGreaterThanOrEqual(18);
+    expect(CAST_SOUND_GROUPS.length).toBeGreaterThanOrEqual(5);
+    expect(ATTACK_SOUND_GROUPS.length).toBeGreaterThanOrEqual(2);
+    for (const g of CAST_SOUND_GROUPS) expect(g.sounds.length).toBeGreaterThan(0);
+    // Every family is a school the synthesis plays, and a school is its
+    // own family, so "auto" and a pick of the school sound the same.
+    for (const s of CAST_SOUNDS) {
+      expect(CAST_FAMILIES).toContain(s.family);
+      expect(s.label.startsWith(s.id.charAt(0).toUpperCase())).toBe(true);
+    }
+    for (const f of CAST_FAMILIES) expect(castFamilyOf(f)).toBe(f);
+    expect(castFamilyOf('fireball')).toBe('fire');
+    expect(castFamilyOf('lich')).toBe('shadow');
+    expect(castFamilyOf('kazoo')).toBe('arcane');
+    for (const s of ATTACK_SOUNDS) expect(ATTACK_FAMILIES).toContain(s.family);
+    for (const f of ATTACK_FAMILIES) expect(attackFamilyOf(f)).toBe(f);
+    expect(attackFamilyOf('pistol')).toBe('gunshot');
+    expect(attackFamilyOf('crossbow')).toBe('bow');
+    expect(attackFamilyOf('kazoo')).toBeUndefined();
+  });
+
   it('validates a pick from the palette and refuses anything else', () => {
     const def = twin();
     def.abilities.Q.sound = 'thunder';
@@ -44,7 +79,7 @@ describe('the sound palette', () => {
     expect(badCast.ok).toBe(false);
     if (!badCast.ok) expect(badCast.errors.join(' ')).toContain('abilities.Q.sound');
     def.abilities.Q.sound = undefined;
-    (def as { attackSound?: unknown }).attackSound = 'laser';
+    (def as { attackSound?: unknown }).attackSound = 'kazoo';
     const badAttack = validateForged(def);
     expect(badAttack.ok).toBe(false);
     if (!badAttack.ok) expect(badAttack.errors.join(' ')).toContain('attackSound');

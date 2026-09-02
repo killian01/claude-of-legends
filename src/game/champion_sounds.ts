@@ -7,7 +7,6 @@
 import { schoolTagOf } from '../render/ability_vfx';
 import type { AbilityDef } from '../sim/combat/casting';
 import type { AttackSoundId } from '../sim/content/sounds';
-import type { SfxName } from './sfx';
 
 export function castSoundOf(ability: AbilityDef): string {
   return ability.sound ?? schoolTagOf(ability.spec);
@@ -16,6 +15,6 @@ export function castSoundOf(ability: AbilityDef): string {
 export function attackSoundOf(
   def: { attackSound?: AttackSoundId } | null | undefined,
   firearm: boolean,
-): SfxName {
+): AttackSoundId {
   return def?.attackSound ?? (firearm ? 'gunshot' : 'swing');
 }

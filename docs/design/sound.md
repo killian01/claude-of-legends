@@ -21,12 +21,19 @@ step.
 
 ## Ids
 
-- Basic attacks, the `SfxName` the renderer plays and the attack palette a
-  forged creator picks from (`src/sim/content/sounds.ts`): `swing`,
-  `blade`, `heavy`, `bow`, `bolt`, `gunshot`.
-- Casts, keyed `cast_<school>` over the cast palette: `arcane`, `steel`,
-  `fire`, `life`, `control`, `wind`, `frost`, `shadow`, `thunder`; plus
-  `cast`, the shared whoosh of sigils.
+The palette is `src/sim/content/sounds.ts`, data-as-code, listed by group
+in the Forge editor. Playtest, 2026-09-02: nine cast sounds were far too
+few for a MOBA's worth of spells, so the palette grew to fifty-five
+casts in six groups (Elements, Arcane, Light and nature, Shadow, Steel
+and body, Tech) and twenty basic attacks in two (Melee, Ranged). Every
+pick carries a family, one of the nine school sounds for a cast (`arcane`,
+`steel`, `fire`, `life`, `control`, `wind`, `frost`, `shadow`, `thunder`)
+and one of the six original attacks for an attack (`swing`, `blade`,
+`heavy`, `bow`, `bolt`, `gunshot`): the family is what the synthesis
+plays for the pick while the bank has no recording of it.
+
+- Basic attacks are keyed by their id, the `SfxName` the renderer plays.
+- Casts are keyed `cast_<id>`; plus `cast`, the shared whoosh of sigils.
 - Combat: `hit` (a body thud), `impact` (your damage landing), `towershot`.
 
 Several variants per id; the player picks one at random with a touch of
@@ -60,12 +67,26 @@ the packs unpacked under these names:
 | `whoosh2_0.wav` | pyranostudios, Air whoosh |
 | `pistol22.wav`, `magnum22.wav` | kurt, Gunshots |
 | `gunsounds/sounds` | tabasco, Gunshot Sounds |
+| `blackpowder.wav` | kurt, Gunshots (the black-powder shot) |
+| `earth_spell.flac`, `sand_spell.flac`, `ghostbreath.flac` | qubodup, Earth element magic spell, Sand spell, Ghost breath |
+| `fantasy_magic_button_1.mp3` | Almitory, Fantasy magic spell |
+| `icespells` | bart, Ice spells |
+| `teleport.wav` | Ogrebane, Teleport Spell |
+| `flame_0.ogg` | themightyglider, Catching fire |
+| `flight_sound.mp3` | pauliuw, Flight or spell sound |
+| `health_restore.wav`, `magic_words.wav` | Spring Spring, Magic Words + Healing Sound Effect |
+| `gravity_inverter.ogg` | fvcalderan, Gravity Inverter |
+| `ghostvoices/Ghost and Lich Voice Pack` | Sorth, Ghost Voice Pack |
+| `randomsfx/SFX` | Ecrivain, Random SFX |
 
 Then:
 
 ```
-SFX_SRC=<dir> node scripts/build_sfx.mjs [--only <id>] [--list]
+SFX_SRC=<dir> node scripts/build_sfx.mjs [--only <id>] [--list] [--manifest]
 ```
+
+`--manifest` prints the bank manifest for `src/game/sfx_bank.ts` from the
+recipes, one line per id with its variant count.
 
 Each recipe in the script is a list of layers (a recording, trimmed,
 pitched, filtered, delayed and gained) mixed through ffmpeg, a
