@@ -18,6 +18,8 @@ export interface ForgedPassiveRef {
   params: Record<string, number>;
   // Authored display name (word-filtered upstream, like the card texts).
   name: string;
+  // One authored line of story beside the template's derived text.
+  flavor?: string;
 }
 
 // An ability on a forged champion is the exact roster AbilityDef shape: it

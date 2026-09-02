@@ -50,6 +50,10 @@ export const GROWTH_BOUNDS: Record<keyof ChampionGrowth, Bound> = {
 
 // Per-ability numbers. Basics and ultimates get different cooldown rails: a
 // 4 second ultimate must be impossible even for a kit that could afford it.
+// The flavor line (CONTEXT.md): one authored sentence per spell and for
+// the passive, capped so a card stays a card.
+export const FLAVOR_MAX = 160;
+
 export const ABILITY_BOUNDS = {
   manaCost: B(0, 120),
   castRange: B(0, 130),
@@ -426,6 +430,9 @@ function checkAbility(errors: string[], key: string, def: unknown): void {
     return;
   }
   const a = def as Record<string, unknown> & Partial<AbilityDef>;
+  if (a.flavor !== undefined && (typeof a.flavor !== 'string' || a.flavor.length > FLAVOR_MAX)) {
+    errors.push(`${path}.flavor: must be a string of at most ${FLAVOR_MAX} characters`);
+  }
   checkNum(errors, `${path}.manaCost`, a.manaCost, ABILITY_BOUNDS.manaCost);
   checkNum(errors, `${path}.castRange`, a.castRange, ABILITY_BOUNDS.castRange);
   checkOptNum(errors, `${path}.windup`, a.windup, ABILITY_BOUNDS.windup);

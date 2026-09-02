@@ -9,7 +9,7 @@
 import type { CastSpec } from '../combat/casting';
 import type { EffectSpec } from '../combat/effects';
 import type { ChampionRole } from '../content/champions';
-import { boundsErrors } from './bounds';
+import { boundsErrors, FLAVOR_MAX } from './bounds';
 import { type BudgetBreakdown, budgetOf } from './budget';
 import { burstErrors } from './burst';
 import { envelopeErrors } from './envelopes';
@@ -106,6 +106,8 @@ function passiveErrors(def: ForgedChampionDef): string[] {
   const ref = def.passive;
   if (typeof ref !== 'object' || ref === null) return ['passive: must be a template reference'];
   checkString(errors, 'passive.name', ref.name, NAME_MAX, true);
+  if (ref.flavor !== undefined)
+    checkString(errors, 'passive.flavor', ref.flavor, FLAVOR_MAX, false);
   const tpl = typeof ref.template === 'string' ? PASSIVE_TEMPLATES[ref.template] : undefined;
   if (!tpl) {
     errors.push(`passive.template: unknown template '${String(ref.template)}'`);

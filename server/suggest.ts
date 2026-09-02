@@ -18,7 +18,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { AbilityDef } from '../src/sim/combat/casting';
-import { ABILITY_BOUNDS } from '../src/sim/forge/bounds';
+import { ABILITY_BOUNDS, FLAVOR_MAX } from '../src/sim/forge/bounds';
 import {
   AVAIL_PIVOT,
   AVAIL_SOFT,
@@ -77,8 +77,8 @@ export const CHAT_RAW_TEXT_MAX = 24000;
 // the sim executes (src/sim/combat/casting.ts, effects.ts). Kept by hand
 // beside those types; validateForged catches any drift the hard way.
 const GRAMMAR = `
-An ability is: { "name": string, "manaCost": n, "cooldown": n, "castRange": n,
-  "windup"?: seconds, "spec": CastSpec }.
+An ability is: { "name": string, "flavor": string, "manaCost": n, "cooldown": n,
+  "castRange": n, "windup"?: seconds, "spec": CastSpec }.
 CastSpec is ONE of:
   { "kind": "skillshot", "speed": n, "radius": n, "range": n, "pierce"?: bool, "onHit": Effect[] }
   { "kind": "zone", "radius": n, "duration": n, "tickEvery"?: n, "onEnter"?: Effect[], "onTick"?: Effect[], "detonateDelay"?: n, "onDetonate"?: Effect[], "reveal"?: bool }
@@ -103,6 +103,14 @@ Rules: distances are world units (a lane is ~12 wide, castRange tops out
 around 10 for most spells). An INSTANT stun, root, knockup or long
 knockback needs "windup" >= 0.35 (the telegraph rule). R is the
 ultimate: bigger, longer cooldown.
+Text: what players read about a spell is DERIVED from its mechanics by the
+game, in the game's own words, the same for every champion; that wording
+is not yours to change, so to change what a spell does, change its spec.
+What IS yours is "flavor": one short line of story per spell and for the
+passive (plain English, at most ${FLAVOR_MAX} characters), the image of the
+spell in the champion's world, no numbers; it shows above the derived text.
+Give every spell and the passive one, and rewrite it when the creator asks
+for a different feel.
 `;
 
 function templateCatalog(): string {
@@ -161,7 +169,7 @@ function preamble(def: ForgedChampionDef): string {
     'then rework your latest proposal as the creator asks.';
   const task =
     'Every answer is ONLY a JSON object, no prose around it: { "comment": string, ' +
-    '"passive": { "template": id, "params": {..}, "name": string }, "abilities": ' +
+    '"passive": { "template": id, "params": {..}, "name": string, "flavor": string }, "abilities": ' +
     '{ "Q": Ability, "W": Ability, "E": Ability, "R": Ability } }. "comment" is one ' +
     'or two plain sentences to the creator about what you proposed or changed. ' +
     'Spell names must be original English, no borrowed game IP. Compact JSON: no ' +
@@ -376,14 +384,18 @@ export function imageMediaType(
   return 'image/png';
 }
 
-// Names the game cannot show: anything outside plain printable ASCII is
-// not the English the roster speaks (ADR 0004), whatever language the
-// creator wrote in. Plain words in another language slip through here;
-// the prompt carries that rule.
+// Names and flavor lines the game cannot show: anything outside plain
+// printable ASCII is not the English the roster speaks (ADR 0004),
+// whatever language the creator wrote in. Plain words in another
+// language slip through here; the prompt carries that rule.
 function foreignNames(s: Suggestion): string[] {
   const a = s.abilities ?? ({} as Suggestion['abilities']);
-  const names = [s.passive?.name, a.Q?.name, a.W?.name, a.E?.name, a.R?.name];
-  return names.filter((n): n is string => typeof n === 'string' && !/^[\x20-\x7e]*$/.test(n));
+  const texts = [
+    s.passive?.name,
+    s.passive?.flavor,
+    ...(['Q', 'W', 'E', 'R'] as const).flatMap((k) => [a[k]?.name, a[k]?.flavor]),
+  ];
+  return texts.filter((n): n is string => typeof n === 'string' && !/^[\x20-\x7e]*$/.test(n));
 }
 
 // What the surface reports while a proposal is in the making: the
@@ -497,8 +509,9 @@ export async function suggestKit(
     if (foreign.length > 0) {
       lastErrors = [`names not in English: ${foreign.join(', ')}`];
       retry(
-        `These names are not plain English: ${foreign.join(', ')}. Rename them in English ` +
-          '(ASCII letters only), keep everything else, and answer with ONLY the JSON object.',
+        `These names or flavor lines are not plain English: ${foreign.join(', ')}. Rewrite ` +
+          'them in English (ASCII letters only), keep everything else, and answer with ONLY ' +
+          'the JSON object.',
         'The names were not English, asking again',
       );
       continue;

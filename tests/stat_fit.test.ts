@@ -12,9 +12,10 @@ import { fitStats, MELEE_REACH, RANGED_MIN, reachOf } from '../src/sim/forge/sta
 import { validateForged } from '../src/sim/forge/validate';
 import { FORGED_TWINS } from './forged_twins';
 
-// Landing within the rounding step of the line: never over, and short
-// by no more than what rounding down every axis can cost.
-const ROUNDING_ROOM = 3;
+// Landing on the line: never over, and short by no more than what
+// flooring every axis at four decimals can cost (a hundredth of a point,
+// so the envelope reads full).
+const ROUNDING_ROOM = 0.05;
 
 describe('fitStats', () => {
   it('lands a light line and a heavy line on both envelopes', () => {

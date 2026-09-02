@@ -252,6 +252,8 @@ export class ForgeStore {
     this.ensureColumn('forged_champions', 'listed', 'listed integer not null default 1');
     this.ensureColumn('forged_champions', 'shared', 'shared integer not null default 1');
     this.ensureColumn('forged_champions', 'taken_down', 'taken_down integer not null default 0');
+    // The editor's conversations (kit, stats) travel with the draft.
+    this.ensureColumn('forged_champions', 'chats', 'chats text');
     // The two-phase build gave jobs a kind (what the boot sweep may
     // refund); pre-split rows keep null and count as builds.
     this.ensureColumn('generation_jobs', 'kind', 'kind text');
@@ -372,6 +374,26 @@ export class ForgeStore {
     } catch {
       return null;
     }
+  }
+
+  // The editor's saved conversations, JSON beside the def: editor state,
+  // not champion data, so it never touches updated_at.
+  forgedChats(id: string): unknown {
+    const r = this.db.prepare('select chats from forged_champions where id = ?').get(id) as
+      | { chats: string | null }
+      | undefined;
+    if (!r?.chats) return null;
+    try {
+      return JSON.parse(r.chats);
+    } catch {
+      return null;
+    }
+  }
+
+  setForgedChats(id: string, chats: unknown): void {
+    this.db
+      .prepare('update forged_champions set chats = ? where id = ?')
+      .run(JSON.stringify(chats), id);
   }
 
   // Rewrites the sealed assets blob in place (the workshop's display

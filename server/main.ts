@@ -75,6 +75,7 @@ import { sealChampion, unsealChampion } from './seal';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
 import { appendJsonl, pruneNumberedJson, readJsonl, saveJsonAtomic } from './store';
 import { suggestKit } from './suggest';
+import { CHAT_JSON_MAX, chatsOf, saveChat } from './forge_chats';
 import { suggestStats } from './suggest_stats';
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -872,6 +873,8 @@ const server = http.createServer(async (req, res) => {
                     clips: pointers.clips,
                     clipFiles: pointers.clipFiles,
                     display: assets ? displayOf(forgeStore, d.id) : null,
+                    // The editor's conversations, so a reload finds them.
+                    chats: chatsOf(forgeStore, d.id),
                   };
                 }),
               }
@@ -886,6 +889,28 @@ const server = http.createServer(async (req, res) => {
           return;
         }
         sendJson(res, 200, saveDraft(forgeDeps, me.id, me.name, body.def as ForgedChampionDef));
+        return;
+      }
+      // A conversation saved with its draft: the whole thread and the
+      // latest proposal, owner-only. Wide cap: assistant turns hold raw
+      // model answers.
+      if (url === '/api/forge/chat' && req.method === 'POST') {
+        const body = await readJsonBody(req, CHAT_JSON_MAX);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        if (!id) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        sendJson(
+          res,
+          200,
+          saveChat({ store: forgeStore }, me.id, {
+            id,
+            kind: body?.kind,
+            turns: body?.turns,
+            proposal: body?.proposal,
+          }),
+        );
         return;
       }
       if (url === '/api/forge/draft/delete' && req.method === 'POST') {

@@ -214,6 +214,43 @@ describe('suggestKit', () => {
     store.close();
   });
 
+  it('keeps the flavor lines through the fit, and sends a foreign one back', async () => {
+    const store = seeded();
+    const flavored = {
+      passive: { ...GOOD_KIT.passive, flavor: 'The cold remembers every wound.' },
+      abilities: {
+        ...GOOD_KIT.abilities,
+        Q: { ...GOOD_KIT.abilities.Q, flavor: 'A shard of frozen night streaks out.' },
+      },
+    };
+    const out = await suggestKit(
+      deps(store, async () => answer(JSON.stringify(flavored))),
+      1,
+      {
+        id: 'forged_d',
+        messages: ASK,
+      },
+    );
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.abilities.Q.flavor).toBe('A shard of frozen night streaks out.');
+      expect(out.passive.flavor).toBe('The cold remembers every wound.');
+    }
+    let calls = 0;
+    const foreign = {
+      ...flavored,
+      abilities: { ...flavored.abilities, W: { ...GOOD_KIT.abilities.W, flavor: 'Un éclat.' } },
+    };
+    const fetchFn: typeof fetch = async () => {
+      calls += 1;
+      return answer(JSON.stringify(calls === 1 ? foreign : flavored));
+    };
+    const fixed = await suggestKit(deps(store, fetchFn), 1, { id: 'forged_d', messages: ASK });
+    expect(fixed.ok).toBe(true);
+    expect(calls).toBe(2);
+    store.close();
+  });
+
   it('replays the thread: image and preamble first, form state last', async () => {
     const store = seeded();
     const bodies: { messages: { role: string; content: unknown }[] }[] = [];

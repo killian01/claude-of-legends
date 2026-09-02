@@ -8,8 +8,9 @@
 // ranged choice and its reach (an identity, pinned or held as asked), AP
 // (zero, like the roster), and body size (free). A shape with no point
 // above any floor borrows the fresh draft's, so a flat answer still lands
-// on the line instead of at the floors. Values come back rounded DOWN to
-// the step the polygon reads them at, so rounding never crosses a line.
+// on the line instead of at the floors. Values come back rounded DOWN at
+// four decimals (the polygon's own drags are continuous), so the spend
+// sits on the line to within a hundredth of a point and never over it.
 
 import { RANGED_THRESHOLD } from '../combat/auto_attack';
 import type { ChampionBaseStats, ChampionGrowth } from '../content/champions';
@@ -29,23 +30,22 @@ export const RANGED_MIN = RANGED_THRESHOLD + 0.5;
 // a floor reaches its rail.
 export const STAT_FIT_MAX = 64;
 
-// The base axes the fit scales, each with the step its value is read at.
-// Reach, AP and body size are held, never scaled.
-const BASE_STEPS = {
-  hp: 1,
-  mana: 1,
-  ad: 0.1,
-  armor: 0.1,
-  mr: 0.1,
-  attackSpeed: 0.01,
-  moveSpeed: 0.01,
-  hpRegen: 0.01,
-  manaRegen: 0.01,
-} as const;
-const GROWTH_STEPS = { hp: 1, mana: 1, ad: 0.1, armor: 0.1, mr: 0.1 } as const;
-type ScaledBase = keyof typeof BASE_STEPS;
-const BASE_KEYS = Object.keys(BASE_STEPS) as ScaledBase[];
-const GROWTH_KEYS = Object.keys(GROWTH_STEPS) as (keyof ChampionGrowth)[];
+// The base axes the fit scales. Reach, AP and body size are held, never
+// scaled.
+const BASE_KEYS = [
+  'hp',
+  'mana',
+  'ad',
+  'armor',
+  'mr',
+  'attackSpeed',
+  'moveSpeed',
+  'hpRegen',
+  'manaRegen',
+] as const;
+const GROWTH_KEYS = ['hp', 'mana', 'ad', 'armor', 'mr'] as const;
+// The precision values come back at, floored so the line is never crossed.
+const PRECISION = 1e-4;
 
 export interface StatFit {
   base: ChampionBaseStats;
@@ -64,10 +64,10 @@ function num(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 }
 
-// Rounded down onto the step grid (every floor sits on it).
-function floorTo(v: number, step: number): number {
-  const decimals = step >= 1 ? 0 : Math.round(-Math.log10(step));
-  return Number((Math.floor(v / step + 1e-9) * step).toFixed(decimals));
+// Rounded down to the precision (every floor sits on its grid). Down and
+// only down: a value nudged up by float noise could cross the line.
+function floorTo(v: number): number {
+  return Number((Math.floor(v / PRECISION) * PRECISION).toFixed(4));
 }
 
 // The reach as the proposal means it: at or under the threshold, melee
@@ -132,7 +132,7 @@ export function fitStats(
   };
   const baseFactor = factorFor((f) => costOfBaseStats(baseAt(f)), STAT_ENVELOPE);
   const fitBase = baseAt(baseFactor);
-  for (const k of BASE_KEYS) fitBase[k] = floorTo(fitBase[k], BASE_STEPS[k]);
+  for (const k of BASE_KEYS) fitBase[k] = floorTo(fitBase[k]);
 
   // Growth: every axis scales.
   const growthShape = shapeOf(GROWTH_KEYS, growth, GROWTH_BOUNDS, GROWTH_PRICES, fresh.growth);
@@ -146,7 +146,7 @@ export function fitStats(
   };
   const growthFactor = factorFor((f) => costOfGrowth(growthAt(f)), GROWTH_ENVELOPE);
   const fitGrowth = growthAt(growthFactor);
-  for (const k of GROWTH_KEYS) fitGrowth[k] = floorTo(fitGrowth[k], GROWTH_STEPS[k]);
+  for (const k of GROWTH_KEYS) fitGrowth[k] = floorTo(fitGrowth[k]);
 
   return {
     base: fitBase,

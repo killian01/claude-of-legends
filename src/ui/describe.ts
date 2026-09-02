@@ -16,6 +16,18 @@ import type { AbilityKey } from '../sim/types';
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
 const span = (cls: string, text: string): string => `<span class="${cls}">${text}</span>`;
 
+// Authored strings (a forged champion's names and flavor lines) are the
+// one user input these lines carry; everything else is the repo's own
+// data. They are escaped here, once, so every renderer that sets these
+// lines as HTML stays safe.
+export function escapeAuthored(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 const DTYPE_CLS: Record<string, string> = {
   physical: 'tt-phys',
   magic: 'tt-magic',
@@ -257,7 +269,11 @@ function describeCast(spec: CastSpec, castRange: number): string[] {
 }
 
 export function describeAbility(key: AbilityKey, def: AbilityDef): string[] {
-  const lines = [`${def.name} (${key})`, `${def.manaCost} mana. ${def.cooldown}s cooldown.`];
+  const lines = [`${escapeAuthored(def.name)} (${key})`];
+  // The flavor line first, the story; the mechanics follow in the game's
+  // own words, derived, the same for every champion.
+  if (def.flavor) lines.push(span('tt-flavor', escapeAuthored(def.flavor)));
+  lines.push(`${def.manaCost} mana. ${def.cooldown}s cooldown.`);
   if (def.windup && def.windup > 0) {
     lines.push(`Winds up for ${def.windup}s before it fires; both teams see the telegraph.`);
   }

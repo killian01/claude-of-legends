@@ -108,6 +108,10 @@ export type CastSpec =
 
 export interface AbilityDef {
   name: string;
+  // One authored line of story, shown above the derived mechanics text
+  // (ui/describe.ts): the spell's image, never its numbers. Forged
+  // champions carry it; the roster reads well enough without.
+  flavor?: string;
   manaCost: number;
   cooldown: number;
   castRange: number;

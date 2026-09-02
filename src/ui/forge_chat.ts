@@ -32,6 +32,14 @@ export interface ChatState {
   tick: (() => void) | null;
 }
 
+// A conversation as the server keeps it beside the draft: the turns and
+// the latest proposal, per kind (server/forge_chats.ts).
+export interface SavedChat {
+  turns: ChatTurnView[];
+  proposal: unknown;
+}
+export type SavedChats = Partial<Record<'kit' | 'stats', SavedChat>>;
+
 export function newChatState(): ChatState {
   return {
     turns: [],
@@ -152,6 +160,9 @@ export interface ChatPanelOpts<T> {
   accept(result: T | null): { raw: string; bubble: string } | { error: string };
   report(message: string): void;
   rerender(): void;
+  // The thread changed (an answer landed, or it was started over): the
+  // caller persists it.
+  changed?(): void;
 }
 
 export function chatPanel<T>(state: ChatState, opts: ChatPanelOpts<T>): HTMLElement {
@@ -236,6 +247,7 @@ export function chatPanel<T>(state: ChatState, opts: ChatPanelOpts<T>): HTMLElem
           opts.report(read.error);
         } else {
           state.turns.push({ role: 'assistant', text: read.raw, bubble: read.bubble });
+          opts.changed?.();
         }
         opts.rerender();
       });
@@ -250,6 +262,7 @@ export function chatPanel<T>(state: ChatState, opts: ChatPanelOpts<T>): HTMLElem
     clear.title = 'Forget this conversation (the proposal below stays)';
     clear.addEventListener('click', () => {
       state.turns.length = 0;
+      opts.changed?.();
       opts.rerender();
     });
     row.append(clear);

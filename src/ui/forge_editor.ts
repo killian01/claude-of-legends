@@ -12,7 +12,7 @@
 import { forgedClipFileUrls, registerForgedAssets } from '../game/forged_visuals';
 import { RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import type { ChampionBaseStats, ChampionGrowth, ChampionRole } from '../sim/content/champions';
-import { ABILITY_BOUNDS, BASE_STAT_BOUNDS, GROWTH_BOUNDS } from '../sim/forge/bounds';
+import { ABILITY_BOUNDS, BASE_STAT_BOUNDS, FLAVOR_MAX, GROWTH_BOUNDS } from '../sim/forge/bounds';
 import { budgetOf } from '../sim/forge/budget';
 import { burstCapOf, burstOf } from '../sim/forge/burst';
 import type { ForgedDisplay } from '../sim/forge/display';
@@ -33,7 +33,7 @@ import {
   kitOverview,
   type LiveView,
 } from './forge_budget_view';
-import { chatPanel, chatStream, newChatState } from './forge_chat';
+import { chatPanel, chatStream, newChatState, type SavedChats } from './forge_chat';
 import { buildCastEditor, type KitHooks, numField } from './forge_kit';
 import { startMenuBackdrop } from './menu_backdrop';
 import { setRichLine } from './rich_text';
@@ -209,6 +209,9 @@ const CSS = `
 .fe-errors { color: #d06a6a; font-size: 11px; margin-top: 8px; line-height: 1.5; max-height: 30vh; overflow-y: auto; }
 .fe-ok { color: #8fd06a; font-weight: 700; margin-top: 8px; }
 .fe-status { min-height: 16px; color: #aac2dd; margin-top: 8px; font-size: 11px; }
+.fe-savestate { min-height: 14px; color: #97854f; margin-top: 4px; font-size: 11px; }
+.fe-savestate.err { color: #d06a6a; }
+.fe-flavor { color: #c9bfa3; font-style: italic; }
 .fe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
 .fe-desc { color: #97854f; font-style: italic; margin-top: 4px; line-height: 1.4; }
 .fe-chatlog { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; margin: 4px 0 8px; }
@@ -370,6 +373,8 @@ interface DraftRow {
   clips?: Record<string, string> | null;
   clipFiles?: Record<string, string> | null;
   display?: ForgedDisplay | null;
+  // The editor's saved conversations (kit, stats), restored on open.
+  chats?: SavedChats | null;
 }
 
 // One 2D candidate (splash, model reference, or spell icon) as the art
@@ -484,6 +489,8 @@ export function openForgeEditor(container: HTMLElement): void {
   let drafts: DraftRow[] = [];
   let current: ForgedChampionDef = newDraft();
   const status = el('div', 'fe-status', '');
+  // Autosave's word: saving, saved, or why not.
+  const saveState = el('div', 'fe-savestate', '');
 
   // --- 2D art state (plan-forge phase 4): candidates and the gen2d meter --
 
@@ -639,6 +646,122 @@ export function openForgeEditor(container: HTMLElement): void {
     artCandidates.find((c) => c.kind === kind && c.chosen);
   const assetUrl = (rel: string): string => `/api/forge/asset/${rel}`;
 
+  // Autosave: the form as last stored, compared by value after every
+  // refresh; a difference schedules a save, so nothing is lost to a
+  // reload or a rebuild. Fresh and freshly loaded drafts start as saved
+  // (a pristine new draft makes no row until it is touched or talked
+  // to). One save in flight at a time; a change during it saves again.
+  const snapshot = (): string => JSON.stringify(current);
+  let lastSaved = snapshot();
+  let lastSaveError: string | null = null;
+  let saveTimer: number | null = null;
+  let saving: Promise<boolean> | null = null;
+  let saveAgain = false;
+  const setSaveState = (text: string, err = false): void => {
+    saveState.textContent = text;
+    saveState.className = `fe-savestate${err ? ' err' : ''}`;
+  };
+  const saveNow = (): Promise<boolean> => {
+    if (saveTimer !== null) {
+      window.clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    if (isSealed()) return Promise.resolve(true);
+    if (saving) {
+      saveAgain = true;
+      return saving;
+    }
+    const snap = snapshot();
+    setSaveState('Saving...');
+    saving = api<{ ok: boolean; error?: string }>('/api/forge/draft', { def: current }).then(
+      (r) => {
+        saving = null;
+        if (r?.ok) {
+          lastSaved = snap;
+          lastSaveError = null;
+          setSaveState('All changes saved');
+          void loadDrafts();
+        } else {
+          lastSaveError = r?.error ?? 'save failed';
+          setSaveState(`Not saved: ${lastSaveError}`, true);
+        }
+        if (saveAgain) {
+          saveAgain = false;
+          return saveNow();
+        }
+        return r?.ok === true;
+      },
+    );
+    return saving;
+  };
+  const scheduleSave = (): void => {
+    if (isSealed()) return;
+    if (saveTimer !== null) window.clearTimeout(saveTimer);
+    setSaveState('Unsaved changes...');
+    saveTimer = window.setTimeout(() => {
+      saveTimer = null;
+      void saveNow();
+    }, 1200);
+  };
+  // True once the row exists and holds the form as it stands: what the
+  // art flow and the conversations need before they can run.
+  const ensureSaved = (): Promise<boolean> => {
+    const stored = drafts.some((d) => d.id === current.id);
+    if (stored && snapshot() === lastSaved && !saving) return Promise.resolve(true);
+    return saveNow();
+  };
+
+  // The conversations travel with the draft (server/forge_chats.ts):
+  // each accepted answer and each start-over lands the thread and its
+  // latest proposal beside the def; opening a draft brings them back.
+  const persistChat = (kind: 'kit' | 'stats'): void => {
+    const state = kind === 'kit' ? kitChat : statChat;
+    const prop = kind === 'kit' ? proposal : statProposal;
+    void ensureSaved().then((ok) => {
+      if (!ok) return;
+      return api<{ ok: boolean; error?: string }>('/api/forge/chat', {
+        id: current.id,
+        kind,
+        turns: state.turns,
+        proposal: prop,
+      }).then((r) => {
+        if (!r?.ok) status.textContent = r?.error ?? 'the conversation could not be saved';
+      });
+    });
+  };
+  const restoreChats = (row: DraftRow | undefined): void => {
+    const kit = row?.chats?.kit;
+    kitChat.turns = kit ? [...kit.turns] : [];
+    kitChat.draft = '';
+    const kp = kit?.proposal as Partial<NonNullable<typeof proposal>> | null | undefined;
+    proposal =
+      kp?.passive && kp.abilities
+        ? {
+            passive: kp.passive,
+            abilities: kp.abilities,
+            budget: kp.budget ?? { total: 0, cap: 0 },
+            fit: kp.fit ?? 1,
+            held: kp.held ?? [],
+          }
+        : null;
+    const st = row?.chats?.stats;
+    statChat.turns = st ? [...st.turns] : [];
+    statChat.draft = '';
+    const sp = st?.proposal as Partial<NonNullable<typeof statProposal>> | null | undefined;
+    statProposal =
+      sp?.base && sp.growth
+        ? {
+            base: sp.base,
+            growth: sp.growth,
+            budget: sp.budget ?? {
+              stats: { spend: 0, cap: ENVELOPES.stats },
+              growth: { spend: 0, cap: ENVELOPES.growth },
+            },
+            fit: sp.fit ?? { stats: 1, growth: 1 },
+          }
+        : null;
+  };
+
   // Save what is on screen (art hangs off a stored draft), generate, then
   // reload the strip. The request is held open for the image: one 2D
   // generation is seconds, not a finalize chain. While it runs the strip
@@ -651,11 +774,6 @@ export function openForgeEditor(container: HTMLElement): void {
     generating = jobs[0]?.kind ?? null;
     renderMain();
     status.textContent = 'Generating the image...';
-    // A sealed champion cannot be re-saved as a draft; its one open art
-    // kind (the unclaimed weapon) generates against the stored row.
-    const saveFirst: Promise<{ ok: boolean; error?: string } | null> = isSealed()
-      ? Promise.resolve({ ok: true })
-      : api<{ ok: boolean; error?: string }>('/api/forge/draft', { def: current });
     let quotaNote = '';
     const runOne = async (job: { kind: string; line: string }): Promise<void> => {
       const from = refineFrom[job.kind];
@@ -677,9 +795,11 @@ export function openForgeEditor(container: HTMLElement): void {
       await loadArt();
       renderMain();
     };
-    void saveFirst
+    // A sealed champion cannot be re-saved as a draft (ensureSaved says
+    // yes at once); its one open art kind generates against the row.
+    void ensureSaved()
       .then(async (saved) => {
-        if (!saved?.ok) throw new Error(saved?.error ?? 'save failed');
+        if (!saved) throw new Error(lastSaveError ?? 'save failed');
         for (const job of jobs) await runOne(job);
       })
       .then(() => {
@@ -840,7 +960,7 @@ export function openForgeEditor(container: HTMLElement): void {
   const costBox = el('div', '');
   const verdict = el('div', 'fe-errors');
   const testBtn = el('button', 'fe-btn', 'Test drive (practice)') as HTMLButtonElement;
-  const saveBtn = el('button', 'fe-btn primary', 'Save draft') as HTMLButtonElement;
+  const saveBtn = el('button', 'fe-btn primary', 'Save now') as HTMLButtonElement;
   const finalizeBtn = el(
     'button',
     'fe-btn',
@@ -860,6 +980,7 @@ export function openForgeEditor(container: HTMLElement): void {
   };
 
   const refresh = (): void => {
+    if (!isSealed() && snapshot() !== lastSaved) scheduleSave();
     const v = validateForged(current);
     const cost = v.cost ?? (v.ok ? v.cost : null);
     const bill = cost ?? budgetOf(current);
@@ -902,11 +1023,10 @@ export function openForgeEditor(container: HTMLElement): void {
     },
   };
 
+  saveBtn.title = 'Every change saves on its own; this saves this instant';
   saveBtn.addEventListener('click', () => {
-    status.textContent = 'Saving...';
-    void api<{ ok: boolean; error?: string }>('/api/forge/draft', { def: current }).then((r) => {
-      status.textContent = r?.ok ? 'Draft saved.' : (r?.error ?? 'save failed');
-      if (r?.ok) void loadDrafts();
+    void saveNow().then((ok) => {
+      status.textContent = ok ? 'Draft saved.' : (lastSaveError ?? 'save failed');
     });
   });
   deleteBtn.addEventListener('click', () => {
@@ -916,6 +1036,9 @@ export function openForgeEditor(container: HTMLElement): void {
         if (r?.ok) {
           current = newDraft();
           artCandidates = [];
+          lastSaved = snapshot();
+          setSaveState('');
+          restoreChats(undefined);
           void loadDrafts();
           renderMain();
           refresh();
@@ -1133,6 +1256,7 @@ export function openForgeEditor(container: HTMLElement): void {
     testBtn,
     deleteBtn,
     status,
+    saveState,
   );
   side.append(meterPanel, actions);
 
@@ -1161,6 +1285,9 @@ export function openForgeEditor(container: HTMLElement): void {
       btn.append(sub);
       btn.addEventListener('click', () => {
         current = JSON.parse(JSON.stringify(row.def)) as ForgedChampionDef;
+        lastSaved = snapshot();
+        setSaveState('');
+        restoreChats(row);
         renderRail();
         renderMain();
         refresh();
@@ -1176,6 +1303,9 @@ export function openForgeEditor(container: HTMLElement): void {
     fresh.addEventListener('click', () => {
       current = newDraft();
       artCandidates = [];
+      lastSaved = snapshot();
+      setSaveState('');
+      restoreChats(undefined);
       renderRail();
       renderMain();
       refresh();
@@ -1200,6 +1330,25 @@ export function openForgeEditor(container: HTMLElement): void {
   };
 
   // --- center: the tabs --------------------------------------------------
+
+  // The flavor line's field (CONTEXT.md): the one authored text on a
+  // spell or the passive, the story above the derived mechanics. Empty
+  // means none; the word filter reads it at save like every card text.
+  function flavorInput(
+    get: () => string | undefined,
+    set: (v: string | undefined) => void,
+  ): HTMLInputElement {
+    const input = el('input', 'fe-input fe-flavor') as HTMLInputElement;
+    input.maxLength = FLAVOR_MAX;
+    input.placeholder = 'One line of story (optional): the image of the spell, not its numbers';
+    input.value = get() ?? '';
+    input.addEventListener('input', () => {
+      const v = input.value;
+      set(v.trim() === '' ? undefined : v);
+      refresh();
+    });
+    return input;
+  }
 
   function textInput(
     placeholder: string,
@@ -1800,8 +1949,9 @@ export function openForgeEditor(container: HTMLElement): void {
         title: 'Kit conversation (AI)',
         lead:
           'Reads your chosen splash. Say what you want ("an ice theme", "more mobility ' +
-          'on the E"); each answer proposes a full kit below, fitted to the kit envelope ' +
-          'line, and nothing touches your spells until you apply it.',
+          'on the E", "a darker line of story for the Q"); each answer proposes a full kit ' +
+          'below, fitted to the kit envelope line, with a line of story per spell above ' +
+          'the derived text. Nothing touches your spells until you apply it.',
         placeholder: 'What should this kit be?',
         locked: sealed
           ? 'This champion is sealed: its kit is locked. Unseal it (Design tab, ' +
@@ -1811,7 +1961,11 @@ export function openForgeEditor(container: HTMLElement): void {
             : 'Locked until a splash art is chosen on the Design tab.',
         parts: ['passive', 'Q', 'W', 'E', 'R'],
         request: (messages, onLine) =>
-          chatStream('/api/forge/suggest', { id: current.id, def: current, messages }, onLine),
+          ensureSaved().then((ok) =>
+            ok
+              ? chatStream('/api/forge/suggest', { id: current.id, def: current, messages }, onLine)
+              : { ok: false, error: lastSaveError ?? 'the draft could not be saved' },
+          ),
         accept: (r) => {
           if (!r?.ok || !r.passive || !r.abilities || typeof r.raw !== 'string') {
             return { error: r?.error ?? 'the suggestion failed' };
@@ -1829,6 +1983,7 @@ export function openForgeEditor(container: HTMLElement): void {
           status.textContent = message;
         },
         rerender: renderMain,
+        changed: () => persistChat('kit'),
       }),
     );
 
@@ -1841,6 +1996,7 @@ export function openForgeEditor(container: HTMLElement): void {
       const tpl = PASSIVE_TEMPLATES[p.passive.template];
       const pass = el('div', 'fe-prop-spell');
       pass.append(el('strong', '', `Passive: ${p.passive.name || 'Passive'}`));
+      if (p.passive.flavor) pass.append(el('p', 'fe-desc fe-flavor', p.passive.flavor));
       if (tpl) pass.append(el('p', 'fe-desc', tpl.describe(p.passive.params)));
       prop.append(pass);
       for (const key of ['Q', 'W', 'E', 'R'] as const) {
@@ -2027,6 +2183,15 @@ export function openForgeEditor(container: HTMLElement): void {
     });
     headRow.append(nameInput);
     panel.append(headRow);
+    panel.append(
+      flavorInput(
+        () => current.passive.flavor,
+        (v) => {
+          if (v === undefined) delete current.passive.flavor;
+          else current.passive.flavor = v;
+        },
+      ),
+    );
     const tpl = PASSIVE_TEMPLATES[current.passive.template];
     const desc = el('p', 'fe-desc', tpl ? tpl.describe(current.passive.params) : '');
     panel.append(desc);
@@ -2091,6 +2256,15 @@ export function openForgeEditor(container: HTMLElement): void {
     });
     headRow.append(nameInput);
     panel.append(headRow);
+    panel.append(
+      flavorInput(
+        () => (typeof ability.flavor === 'string' ? ability.flavor : undefined),
+        (v) => {
+          if (v === undefined) delete ability.flavor;
+          else ability.flavor = v;
+        },
+      ),
+    );
     // The spell's full text, derived from its mechanics exactly like
     // every other champion's (describe.ts): what a suggestion or a hand
     // edit actually does, in words, live as the numbers move.
@@ -2381,10 +2555,14 @@ export function openForgeEditor(container: HTMLElement): void {
           : null,
         parts: ['base', 'growth'],
         request: (messages, onLine) =>
-          chatStream(
-            '/api/forge/suggest-stats',
-            { id: current.id, def: current, messages },
-            onLine,
+          ensureSaved().then((ok) =>
+            ok
+              ? chatStream(
+                  '/api/forge/suggest-stats',
+                  { id: current.id, def: current, messages },
+                  onLine,
+                )
+              : { ok: false, error: lastSaveError ?? 'the draft could not be saved' },
           ),
         accept: (r) => {
           if (!r?.ok || !r.base || !r.growth || typeof r.raw !== 'string') {
@@ -2405,6 +2583,7 @@ export function openForgeEditor(container: HTMLElement): void {
           status.textContent = message;
         },
         rerender: renderMain,
+        changed: () => persistChat('stats'),
       }),
     );
 

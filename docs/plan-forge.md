@@ -63,7 +63,11 @@ and their written UGC authorization; details inline.
    share one chat panel (`src/ui/forge_chat.ts`); the Spells tab reads overview,
    conversation, proposal, then the five slots wearing their icons (generated one
    at a time or all four at once) and the selected slot's parameters, the passive
-   a slot like the others. REMAINING: the agent endpoint that
+   a slot like the others. The draft autosaves (compared by value after every
+   refresh, debounced) and both conversations travel with it
+   (`server/forge_chats.ts`, restored on open); spells and the passive carry a
+   flavor line the conversation writes and the creator edits, above the derived
+   text, which stays the game's. REMAINING: the agent endpoint that
    compiles free-text passives into primitives with refusal explanations (needs
    a Claude API key); the generated weapon prop itself stays phase 5's Tripo
    half (the procedural prop library carries the grip flow until then).
