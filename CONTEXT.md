@@ -338,6 +338,36 @@ is the engine's, never the playbook's. The Laner is the default playbook every b
 as. Versioned like the Policy contract, and it grows only additively.
 _Avoid_: brain, script, behavior tree, AI
 
+**Kit**:
+The part of a playbook that says what a bot works toward rather than what it does now: a
+build, a skill order, and variants, each a trigger with its own build or skill order. The
+first variant whose trigger holds is the kit in force, decided again at every purchase and
+every skill point; none holding, the defaults are.
+_Avoid_: loadout, profile, settings
+
+**Build**:
+An ordered list of items a bot buys toward, components resolved by the engine in order.
+Longer than the bag: past six items the next one replaces the cheapest in the bag once the
+gold covers the difference, and what the build does not want is sold first.
+_Avoid_: item set, shopping list, item plan
+
+**Variant**:
+One conditional entry of a kit: a trigger plus the build or skill order to use while it
+holds, ahead of the defaults.
+_Avoid_: branch, override, situational build (that is what a variant is for, not its name)
+
+**Stance**:
+How the fight behavior holds distance: kite (attack from the edge of range and give ground
+to whoever closes), front (walk in), poke (cast, then step back). Auto picks kite for a
+ranged champion and front for a melee one.
+_Avoid_: positioning mode, aggression, range setting
+
+**Lane opponent**:
+The enemy champion the team has seen the most inside the bot's assigned lane over the last
+three minutes; none when nobody was seen there. What "adapt to the opponent" adapts to
+before a fight starts.
+_Avoid_: laner, matchup, counterpart, vis-a-vis
+
 **Coach order**:
 The one live instruction a bot's owner can give it during a match: go to a lane or point,
 take the Warden, focus a target, back off, group on an ally, hold, free. One active at a

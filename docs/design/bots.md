@@ -1,9 +1,11 @@
 # Bots: play with a bot instead of by hand
 
-Status: design accepted (grill rounds 1 to 4, 2026-09-02); nothing implemented yet.
-The why is ADR 0013; the build order is `docs/plan-bots.md`; the terms are in
-`CONTEXT.md`: Bot, House bot, Play, Playbook, Coach order, Academy, Arena, Sparring,
-Briefing, Rating.
+Status: design accepted (grill rounds 1 to 4, 2026-09-02), phases 0 to 8 built, then
+redrawn after the second playtest round (grill rounds 5 to 7, the same day): the kit,
+selling, the fight stance, and the reasoning bar. The why is ADR 0013 and ADR 0014; the
+build order is `docs/plan-bots.md`; the terms are in `CONTEXT.md`: Bot, House bot,
+Play, Playbook, Kit, Build, Variant, Stance, Lane opponent, Coach order, Academy,
+Arena, Sparring, Briefing, Rating.
 
 ## The mode in one paragraph
 
@@ -89,15 +91,41 @@ holds is the one that acts. The interpreter is one Policy in `src/sim/`, determi
 I/O free, so a bot seat is a house bot seat with different data: same slot schedule, same
 decision budget, same team vision, replays for free.
 
-The split that keeps it playable without expertise:
+The split that keeps it playable without expertise, on one rule (ADR 0014): everything
+that is a choice is the playbook's, everything that is execution is the engine's.
 
-- **The playbook owns the macro**: when to farm, poke, engage, retreat, recall, siege,
-  rotate, contest the Warden, group. These are the decisions micro locks newcomers out of
-  in a MOBA.
-- **The engine owns the micro**: last hits, projectile and windup dodging, tower
+- **The playbook owns every choice**: when to farm, poke, engage, retreat, recall, siege,
+  rotate, contest the Warden, group; what to build and in which order; which spell to
+  max; whom to fight and how to hold distance; where to lane. These are the decisions
+  micro locks newcomers out of in a MOBA.
+- **The engine owns the execution**: last hits, projectile and windup dodging, tower
   discipline, which key is the escape and which the engage (the per-champion hints of
-  kits v2), predictive aim, orb walking. Every bot has the same hands; the ladder ranks
-  decisions.
+  kits v2), predictive aim, the steps of a kite. Every bot has the same hands; the
+  ladder ranks decisions.
+
+**The kit** is the part of the playbook that says what the bot works toward rather than
+what it does now: a build (an ordered list of items), a skill order (which of Q, W, E to
+max first; R goes at its level gates), and variants, each a trigger with its own build
+or skill order. The first variant whose trigger holds is the kit in force, decided again
+at every purchase and every skill point; none holding, the defaults are. A kit that
+names no build gets the role build the engine shipped with (damage for marksmen,
+assassins and skirmishers; magic for mages; the defensive shell for the rest), so every
+existing bot keeps its build until its owner writes one. Components are the engine's:
+the build names finished items and the walker buys the pieces in recipe order, and an
+item consumed into a later one still counts as owned.
+
+**Selling** follows the human rule, at the fountain for seventy percent, through a new
+action of the Policy contract. Three rules, all on by default: a leftover the build no
+longer wants is sold first when the bag is full; a build may be longer than the bag,
+and past six items the next target replaces the cheapest item once the gold covers the
+difference; and a `sell` play sells a named item on the owner's own condition.
+
+**The fight** takes two choices. The stance says how the bot holds distance: `kite`
+attacks from the edge of its range and steps away from whoever closes, `front` walks
+in, `poke` casts and steps back, and `auto` (the default) kites on a ranged champion
+and walks in on a melee one. The target rule says whom: the nearest, the lowest in
+health, the squishiest by role, or the coach's focus. A hard-controlled enemy in reach
+beats the rule, because every cast against it lands.
 
 **Triggers** (v1) are predicates over the observation and the static map, combinable
 with and/or/not: own health, mana, level, gold, and time thresholds; enemy or ally
@@ -171,6 +199,44 @@ thirty seconds back or forward, a scrub slider over the whole match and a time t
 Seeking rides determinism: forward steps the sim silently to the tick; backward rebuilds
 it from the record and steps from the start, chunked over frames so the page stays
 responsive (a few seconds for a late minute, shown as seeking on the clock).
+
+## Adapting to the opponent
+
+A player reads the other team before the first fight; a bot needs the same facts in its
+observation, all of them things a viewer reads off the screen: both teams' champions and
+roles (public from champion select), the items on a visible enemy, and the lane
+opponent (the enemy champion the team has seen the most inside the bot's lane over the
+last three minutes). Triggers over them make variants and plays situational: the enemy
+has a given champion, at least so many mages, mostly magic damage, a visible enemy
+wearing a given item, the lane opponent being a given champion. Additive contract
+growth, like every observation field since v0 (ADR 0005).
+
+## The bar
+
+The maintainer set the bar as four questions, and each has a measure:
+
+1. **Breadth**: how much the language lets an owner express. The measure is a list of
+   player intents ("kite and focus the carry", "roam mid after the first tower", "build
+   against magic when three mages are across") that the coach must be able to write and
+   that show in a sparring replay; the list grows with every phase and is pinned by tests.
+2. **Fun to optimize over time**: every change must show its effect, or the owner edits
+   blind and stops. Sparring is therefore a series, not one match: five seeds, the win
+   rate and the stats per play, compared with the previous version of the bot ("v4
+   against v3: four wins to two"). The post-match report per play is the other half.
+3. **Variety**: within a match, through the phases (time, level, items owned, the Warden
+   clock) and the kit changing variant; between matches, through several house styles
+   drawn by seed (a brawler, a sieger, an objective player, beside the Laner) instead of
+   one brain on every seat, then through the Arena population as other owners iterate.
+4. **Winning against the other bots**: an iterated bot climbs the Arena ladder, and beats
+   the default Laner most of the time, the Laner being the floor.
+
+Underneath, an internal guard: a changed default Laner ships only if it wins at least
+seventy percent of twenty sparring matches against the previous version over fixed
+seeds (`scripts/laner_gate.mjs`). It keeps engine changes honest and blocks regressions;
+it is not the bar. The scouting report that opens every reasoning phase measures, per
+bot and per minute of a sparring, what a player would have done differently: fights
+taken outnumbered, deaths under towers, gold unspent, time far from the team, objectives
+given away.
 
 ## Seeing what the bot thinks
 

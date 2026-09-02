@@ -84,7 +84,9 @@ restating an unchanged intention is a step wasted.
 `src/sim/policy.ts` is the whole contract: `Observation` in, `Action` out,
 version 0, frozen. `info` reports the version it speaks. It changes only by
 additive optional fields (ADR 0005), because a breaking change breaks every bot
-trained against it.
+trained against it. Additive action kinds count too: `recall` and `sell`
+(`{"kind":"sell","slot":n}`, the human rule: at the fountain, seventy percent
+back) arrived after v0 shipped, and a policy that never sends them is unaffected.
 
 The observation is built from team vision, never global sim state: the fog
 applies to a remote policy exactly as it does to a human. Acting is fogged too,

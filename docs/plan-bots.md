@@ -12,12 +12,12 @@ built in its own worktree beside the Forge session. It never touches a Forge fil
 get their own store module and their own conversation module.
 
 State of play (2026-09-02): phases 0 to 8 done on `feature/bots`, unmerged, plus the
-first playtest round: bots on their own select tab, the coach bar moved under the KDA
-box with the standing order and the running play read back from the snapshot, the
-replay player (ten times, seek, scrub, typed time), the way back from a replay to the
-Academy, and the coach conversation kept with the bot. What the maintainer still owes
-the PR: a second click-through of those, the Briefing, and the before/after screenshots
-under `docs/screenshots`.
+first playtest round (bots on their own select tab, the coach bar under the KDA box
+reading the standing order back, the replay player, the way back to the Academy, the
+conversation kept with the bot). The second playtest round redrew the boundary (ADR
+0014) and added phases 9 to 11 below, in the order the maintainer chose: control, then
+reasoning, then adaptation. What the maintainer still owes the PR: a click-through, the
+Briefing, and the before/after screenshots under `docs/screenshots`.
 
 0. **Design**: DONE. Grill rounds 1 to 4, `docs/design/bots.md`, ADR 0013, the glossary
    terms, this plan.
@@ -76,6 +76,46 @@ under `docs/screenshots`.
 8. **Ship**: DONE except the screenshots. README and CONTRIBUTING (a playbook trigger or
    behavior as a community contribution), every number in `.env.example`,
    `docs/deploy.md` on the worker thread and the new store file, the repo map.
+
+9. **Control: the kit, selling, the fight's stance and target** (ADR 0014). Playbook
+   format 2, additive: the `kit` (build, skills, variants on triggers), `fight` with
+   `stance` and `target`, the `sell` behavior; the `sell` action and the champion id
+   of visible champions in the Policy contract; one generic recipe walker replacing
+   the three hand-written role plans, which become the default builds; the three
+   selling rules; kiting in the engine, `auto` kiting on ranged champions so house bots
+   and existing bots improve with no edit; the Kit panel in the Academy; the coach's
+   `kit` operation and the item catalog in its grammar. The scripted Laner parity pin
+   and its fixture retire; `scripts/laner_gate.mjs` plays the default Laner against
+   a frozen copy of the previous one over fixed seeds and prints the win rate. Tests:
+   the walker (components, consumption, leftovers sold, the beyond-six replacement
+   without churn), variants, the skill order, the stance and target rules, the
+   validator and the patch operation, a whole sparring on an owner build ending with
+   no leftover and the bank spent. Exit: a Vesk bot with a seven-item build ends a
+   sparring on that build, and the maintainer can change it from the Academy.
+10. **Reasoning: the scouting report, the engine's fight, the default Laner rewritten,
+   and the optimizing loop**. First the report: `scripts/scout.mjs` plays ten sparrings
+   and measures, per bot and per minute, fights taken outnumbered, deaths under towers
+   and by play, gold unspent, distance to the nearest ally, objectives given away, time
+   idle, with the numbers recorded in this plan. Then, gap by gap: new triggers on the
+   state of the match (an item owned, towers down on either side, the wave ahead or
+   behind, an ally fighting nearby, an enemy low in reach, a numbers advantage), the
+   behaviors they need (join a fight, peel, back before the wave, group on a timer,
+   rotate to a losing lane), and the default Laner rewritten to use them, gated by the
+   win rate against its previous version. Then the loop the bar asks for: sparring as a
+   series (five seeds, win rate, stats per play) compared with the bot's previous
+   version in the Academy, and three house styles beside the Laner (a brawler, a
+   sieger, an objective player) drawn by seed so sparring opponents vary. Exit: the
+   gate passes at seventy percent, a change shows its effect in the series, two
+   sparrings on different seeds play visibly differently, and the maintainer's match
+   says the bots reason.
+11. **Adaptation: the opponent in the observation**. Both teams' champions and roles,
+   the items on visible enemies, the lane opponent (a per-lane sighting memory over the
+   last three minutes), all additive contract fields; the triggers over them (enemy
+   champion, enemy role count, damage mostly magic or physical, enemy item seen, lane
+   opponent is); the coach and the Kit panel offering them on variants. Lane
+   preference: an ordered list on the bot, served before house bots at seating;
+   rotation stays a play (`push` takes a lane). Exit: a variant "against three mages,
+   build Spirit Ward second" plays in sparring against a mage-heavy fill.
 
 Follow-ups, in order of value: house bots obeying their team's pings (phase 5's
 mechanism), bot sharing and a playbook gallery, bots on forged champions once the Forge
