@@ -32,6 +32,18 @@ import { CONFIRM_TTL_MS, RESET_TTL_MS, TokenStore } from './action_tokens';
 import { API_RATE_PER_MIN, ApiLimiter } from './api_limit';
 import { chooseArt, deleteArtFor, generateArt, listArt, splashOf } from './art';
 import { fillWithBots } from './bot_fill';
+import { BotStore } from './bot_store';
+import {
+  type BotDeps,
+  createBot,
+  deleteBot,
+  listBots,
+  listVersions,
+  PLAYBOOK_JSON_MAX,
+  revertBot,
+  saveBot,
+  setDeposited,
+} from './bots';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, parseCookies, serializeCookie } from './cookies';
 import { authorizeUrl, CALLBACK_PATH, DiscordOauth, discordConfigFromEnv } from './discord_oauth';
@@ -183,6 +195,9 @@ const discordFlows = new DiscordFlows();
 // creation ledger, and generation jobs; accounts stay in their JSON
 // registry and rows here reference their ids.
 const forgeStore = new ForgeStore(path.join(DATA_DIR, 'forge.sqlite3'));
+// Bots on the account (ADR 0013): their own SQLite beside the Forge's, so
+// the two land in parallel without sharing a file or a module.
+const botStore = new BotStore(path.join(DATA_DIR, 'bots.sqlite3'));
 // Where every generated file lives (splash candidates, model sheets,
 // models), served back to logged-in clients by the asset route below.
 const ASSETS_DIR = path.join(DATA_DIR, 'assets');
@@ -252,6 +267,11 @@ function envNumber(name: string, fallback: number): number {
   const n = Number(raw);
   return Number.isFinite(n) ? n : fallback;
 }
+const botDeps: BotDeps = {
+  store: botStore,
+  botCap: envNumber('BOT_CAP', 100),
+  depositCap: envNumber('BOT_DEPOSIT_CAP', 3),
+};
 const forgeDeps = {
   store: forgeStore,
   generation,
@@ -839,6 +859,41 @@ const server = http.createServer(async (req, res) => {
       }
       if (url === '/api/me') {
         sendJson(res, 200, describeSelf(me));
+        return;
+      }
+      // --- bots on the account (ADR 0013): the Academy's store ---
+      if (url === '/api/bots') {
+        sendJson(res, 200, listBots(botDeps, me.id));
+        return;
+      }
+      if (url === '/api/bots/create' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, createBot(botDeps, me.id, body));
+        return;
+      }
+      if (url === '/api/bots/save' && req.method === 'POST') {
+        const body = await readJsonBody(req, PLAYBOOK_JSON_MAX + 4096);
+        sendJson(res, 200, saveBot(botDeps, me.id, body));
+        return;
+      }
+      if (url === '/api/bots/delete' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, deleteBot(botDeps, me.id, body?.id));
+        return;
+      }
+      if (url === '/api/bots/deposit' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, setDeposited(botDeps, me.id, body?.id, body?.on));
+        return;
+      }
+      if (url === '/api/bots/versions' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, listVersions(botDeps, me.id, body?.id));
+        return;
+      }
+      if (url === '/api/bots/revert' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, revertBot(botDeps, me.id, body?.id, body?.version));
         return;
       }
       // --- the Forge (ADR 0010, ADR 0011): drafts, ledger, finalize ---
