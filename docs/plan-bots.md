@@ -11,7 +11,10 @@ rating pair, the agent quota, and the streaming conversation live there, not on 
 built in its own worktree beside the Forge session. It never touches a Forge file: bots
 get their own store module and their own conversation module.
 
-State of play (2026-09-02): phases 0 to 7 done.
+State of play (2026-09-02): phases 0 to 8 done on `feature/bots`, unmerged. What the
+maintainer still owes the PR: a click-through of the Academy, the select with a bot,
+the coach bar and the Briefing (the UI was type-checked and bundled, never clicked),
+and the before/after screenshots under `docs/screenshots`.
 
 0. **Design**: DONE. Grill rounds 1 to 4, `docs/design/bots.md`, ADR 0013, the glossary
    terms, this plan.
@@ -67,9 +70,9 @@ State of play (2026-09-02): phases 0 to 7 done.
    on the agent quota, reading the structured report), the gate (applied only if sparring
    wins more; auto-apply opt-in; versions reversible), and the Briefing screen. Tests:
    the gate pure, proposal validation, the allocation.
-8. **Ship**: README and CONTRIBUTING (a playbook trigger or behavior as a community
-   contribution), screenshots for the PR, every number in `.env.example`, `docs/deploy.md`
-   on the worker thread.
+8. **Ship**: DONE except the screenshots. README and CONTRIBUTING (a playbook trigger or
+   behavior as a community contribution), every number in `.env.example`,
+   `docs/deploy.md` on the worker thread and the new store file, the repo map.
 
 Follow-ups, in order of value: house bots obeying their team's pings (phase 5's
 mechanism), bot sharing and a playbook gallery, bots on forged champions once the Forge

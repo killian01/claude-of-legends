@@ -200,7 +200,16 @@ Everything that outlives a container is in the `claude-of-legends_game_data`
 volume: `accounts.json` (accounts, credentials, email addresses and ratings),
 `sessions.json` (open sign-ins), `tokens.json` (confirmation and reset links
 still outstanding), `matches.jsonl` (the match log that feeds profiles and the
-ladder) and `replays/` (the last 40 matches).
+ladder), `replays/` (the last 40 matches, Arena matches included),
+`forge.sqlite3` (the Forge, ADR 0011) and `bots.sqlite3` (the accounts' bots,
+their playbook versions, their live and Arena ratings, the Arena reports and
+the night coach's proposals, ADR 0013).
+
+The Arena plays its matches in a worker thread bundled beside the server
+(`dist-server/arena_worker.cjs`, built by `pnpm build:server`); a server
+started without that file says so at boot and runs Arena matches inline,
+blocking the live loop for about ten seconds each, which is fine on a dev
+machine and wrong in production.
 
 `accounts.json` holds password hashes and email addresses. The hashes are
 scrypt with a per-account salt, not plaintext, but a backup of it is still a

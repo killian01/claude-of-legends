@@ -14,10 +14,15 @@ By participating, you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 - **Code.** Fix a bug, improve a system, sharpen the renderer. Issues labeled
   `good first issue` and `help wanted` are the best places to start.
 - **Bots.** Every non-human participant is a deterministic `Policy`
-  (`src/sim/policy.ts`), and the scripted bots live one file per bot under
-  `src/sim/content/bots/`. Writing a smarter laner is a self-contained,
-  well-tested kind of PR. Trained bots join later through the headless
-  environment (`headless/README.md`).
+  (`src/sim/policy.ts`). Since ADR 0013 a bot is data: a playbook of plays
+  run by `src/sim/playbook/`, and the house Laner is the default playbook
+  (`src/sim/content/playbooks/laner.ts`). Two kinds of PR fit here: a
+  better default playbook, and a new trigger or behavior in the language.
+  A new kind lands in five places kept in step: the types, the validator
+  (`src/sim/playbook/`), the words and forms (`src/ui/playbook_text.ts`),
+  and the coach's grammar (`server/playbook_suggest.ts`), with a test.
+  Trained bots join later through the headless environment
+  (`headless/README.md`).
 - **Content and balance.** Champions, items, and sigils are data-as-code under
   `src/sim/content/`. Balance changes are welcome when they come with the
   reasoning and pass the pacing tests.
