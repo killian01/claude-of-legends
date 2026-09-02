@@ -15,6 +15,7 @@ import {
   POWER_DIAL_MAX,
   POWER_DIAL_MIN,
   scaleAbility,
+  snapAmount,
 } from '../src/sim/forge/spell_power';
 import { FORGED_TWINS } from './forged_twins';
 
@@ -66,7 +67,77 @@ describe('scaleAbility', () => {
     const dmg = spec.onHit[0] as { base: number };
     const slow = spec.onHit[1] as { pct: number };
     expect(dmg.base).toBe(20);
-    expect(slow.pct).toBeCloseTo(Math.max(EFFECT_BOUNDS.slow?.pct?.min ?? 0, 0.075), 6);
+    // 0.3 at the floor factor is 0.075, read on the hundredth step: 0.08.
+    expect(slow.pct).toBe(Math.max(EFFECT_BOUNDS.slow?.pct?.min ?? 0, 0.08));
+  });
+
+  it('lands every scaled amount on the step it is read in', () => {
+    // 1.37 is a factor no amount here divides cleanly by: whole damage,
+    // hundredth ratios and percentages, tick durations, tenth distances.
+    const heavy: AbilityDef = {
+      ...BOLT,
+      spec: {
+        kind: 'skillshot',
+        speed: 20,
+        radius: 0.8,
+        range: 7,
+        onHit: [
+          { kind: 'damage', base: 73, adRatio: 0.55, apRatio: 0.35, dtype: 'magic' },
+          { kind: 'slow', pct: 0.3, duration: 1.5 },
+          { kind: 'stun', duration: 0.75 },
+          { kind: 'knockback', distance: 1.3 },
+          { kind: 'dot', perSecond: 12, duration: 3, dtype: 'magic' },
+        ],
+      },
+    } as AbilityDef;
+    const up = scaleAbility(heavy, 1.37);
+    const hit = (up.spec as Extract<AbilityDef['spec'], { kind: 'skillshot' }>)
+      .onHit as unknown as Record<string, number>[];
+    expect(hit[0]?.base).toBe(100);
+    expect(hit[0]?.adRatio).toBe(0.75);
+    expect(hit[0]?.apRatio).toBe(0.48);
+    expect(hit[1]?.pct).toBe(0.41);
+    expect(hit[2]?.duration).toBe(1.05);
+    expect(hit[3]?.distance).toBe(1.8);
+    expect(hit[4]?.perSecond).toBe(16);
+    expect(snapAmount('duration', 1.0372)).toBe(1.05);
+    expect(snapAmount('base', 73.2841)).toBe(73);
+    expect(snapAmount('adRatio', 0.6849999)).toBe(0.68);
+  });
+
+  it('fits a kit with amounts that read on their steps', () => {
+    const AMOUNTS = new Set([
+      'base',
+      'adRatio',
+      'apRatio',
+      'maxHpPct',
+      'perSecond',
+      'pct',
+      'duration',
+      'distance',
+      'factor',
+      'msPct',
+      'asPct',
+      'armor',
+      'mr',
+      'pctOfRemaining',
+    ]);
+    const walk = (v: unknown): void => {
+      if (Array.isArray(v)) for (const x of v) walk(x);
+      else if (v && typeof v === 'object') {
+        for (const [k, x] of Object.entries(v)) {
+          if (typeof x === 'number' && AMOUNTS.has(k)) expect(Number(x.toFixed(2))).toBe(x);
+          else walk(x);
+        }
+      }
+    };
+    // Every roster twin, light or heavy: the fit moves them all.
+    for (const twin of FORGED_TWINS) {
+      const fit = fitKitPower(twin);
+      expect(fit).not.toBeNull();
+      if (!fit) continue;
+      for (const key of ['Q', 'W', 'E', 'R'] as const) walk(fit.abilities[key].spec);
+    }
   });
 });
 

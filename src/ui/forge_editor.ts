@@ -313,6 +313,14 @@ const CSS = `
 .fe-slotcol { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .fe-slot-gen { padding: 2px 10px; font-size: 10px; }
 .fe-slot-img .fe-spin { width: 22px; height: 22px; }
+.fe-keytabs { display: inline-flex; gap: 4px; flex: none; }
+.fe-keytab { cursor: pointer; opacity: 0.5; font-size: 12px; }
+.fe-keytab:hover { opacity: 1; border-color: #a08030; }
+.fe-keytab.on { opacity: 1; border-color: #d8b45a; box-shadow: 0 0 6px rgba(216, 180, 90, 0.35); }
+.fe-alert {
+  margin: 8px 0 0; padding: 8px 12px; border-radius: 8px; border: 1px solid #b04a3a;
+  background: rgba(120, 30, 20, 0.4); color: #f0c8bc; font-size: 12px; font-weight: 600;
+}
 .fe-iconrow {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px;
   padding-top: 8px; border-top: 1px dashed #4a3a1c;
@@ -401,6 +409,19 @@ const EXAMPLE_LINES = [
     'belt hung with fishing hooks, pale lightning-blue eyes, spear tip crackling with static',
 ] as const;
 
+// The editor's ear for calls that fail as a whole: the server not
+// answering, or answering that the session is gone. The open editor sets
+// it; the message goes on a banner above everything, not on the small
+// status line, because a playtest met a dead session as icons that
+// vanished and a Save that "did nothing", which read as lost work.
+let apiTrouble: ((message: string | null) => void) | null = null;
+export const API_TROUBLE = {
+  session:
+    'Your session has ended: reload the page and sign in again. Your drafts, icons and ' +
+    'conversations are kept on the server.',
+  network: 'The server did not answer. Check that it is running, then reload the page.',
+} as const;
+
 // Identity rides the session cookie (ADR 0006), never a token in the URL.
 async function api<T>(url: string, body?: unknown): Promise<T | null> {
   try {
@@ -415,8 +436,10 @@ async function api<T>(url: string, body?: unknown): Promise<T | null> {
             body: JSON.stringify(body),
           },
     );
+    apiTrouble?.(res.status === 401 ? API_TROUBLE.session : null);
     return (await res.json()) as T;
   } catch {
+    apiTrouble?.(API_TROUBLE.network);
     return null;
   }
 }
@@ -441,6 +464,7 @@ export function openForgeEditor(container: HTMLElement): void {
   const close = (): void => {
     window.removeEventListener('keydown', onKey);
     stopBackdrop();
+    apiTrouble = null;
     root.remove();
   };
   const onKey = (e: KeyboardEvent): void => {
@@ -483,7 +507,15 @@ export function openForgeEditor(container: HTMLElement): void {
   const main = el('div', 'fe-main');
   const side = el('div', 'fe-side');
   body.append(rail, main, side);
-  root.append(head, tabs, body);
+  // Calls that fail as a whole (server gone, session ended) say so here,
+  // above the tabs' content, while the lists below keep what they showed.
+  const trouble = el('div', 'fe-alert', '');
+  trouble.hidden = true;
+  apiTrouble = (message) => {
+    trouble.textContent = message ?? '';
+    trouble.hidden = message === null;
+  };
+  root.append(head, tabs, trouble, body);
   container.appendChild(root);
 
   let drafts: DraftRow[] = [];
@@ -636,8 +668,11 @@ export function openForgeEditor(container: HTMLElement): void {
       candidates?: ArtCandidate[];
       quota?: { used: number; limit: number };
     }>(`/api/forge/art?id=${encodeURIComponent(current.id)}`);
-    artCandidates = r?.ok && r.candidates ? r.candidates : [];
-    artQuota = r?.ok && r.quota ? r.quota : { used: 0, limit: 0 };
+    // A failed call is not an empty gallery: what is shown stays shown,
+    // and the banner says why nothing fresh came.
+    if (!r?.ok) return;
+    artCandidates = r.candidates ?? [];
+    artQuota = r.quota ?? { used: 0, limit: 0 };
   };
 
   const currentRow = (): DraftRow | undefined => drafts.find((d) => d.id === current.id);
@@ -1284,6 +1319,9 @@ export function openForgeEditor(container: HTMLElement): void {
       if (row.status === 'finalized' && row.valid === false) sub.style.color = '#d06a6a';
       btn.append(sub);
       btn.addEventListener('click', () => {
+        // Another draft's art must not linger while this one's loads;
+        // the same draft keeps its icons up through a failed reload.
+        if (row.id !== current.id) artCandidates = [];
         current = JSON.parse(JSON.stringify(row.def)) as ForgedChampionDef;
         lastSaved = snapshot();
         setSaveState('');
@@ -1318,8 +1356,10 @@ export function openForgeEditor(container: HTMLElement): void {
     const r = await api<{ ok: boolean; drafts?: DraftRow[]; credits?: number }>(
       `/api/forge/drafts`,
     );
-    drafts = r?.ok && r.drafts ? r.drafts : [];
-    if (r?.ok && typeof r.credits === 'number') creations = r.credits;
+    // A failed call is not an empty rail: the rows already shown stay.
+    if (!r?.ok) return;
+    drafts = r.drafts ?? [];
+    if (typeof r.credits === 'number') creations = r.credits;
     // Finalized champions announce their models to the render registry, so
     // a test drive straight from here plays the generated model.
     for (const d of drafts) registerForgedAssets(d.id, d);
@@ -2163,6 +2203,27 @@ export function openForgeEditor(container: HTMLElement): void {
     }
   }
 
+  // The slot switch beside a panel's title, for the creator deep in the
+  // parameters or the animation: the other spells are one click away
+  // without the way back up to the slot row (playtest: "no way to switch
+  // between the spells for parameters and animation").
+  function keyTabs(): HTMLElement {
+    const row = el('div', 'fe-keytabs');
+    for (const key of ['P', 'Q', 'W', 'E', 'R'] as const) {
+      const b = el('button', 'fe-key fe-keytab', key) as HTMLButtonElement;
+      b.type = 'button';
+      b.classList.toggle('on', spellSlot === key);
+      b.title = key === 'P' ? 'Edit the passive' : `Edit ${key}`;
+      b.addEventListener('click', () => {
+        if (spellSlot === key) return;
+        spellSlot = key;
+        renderMain();
+      });
+      row.append(b);
+    }
+    return row;
+  }
+
   // The passive's parameters, in the same panel shape as a spell's: the
   // key, the name, then the template (one the engine owns) and its
   // numbers, described live. Structure comes from the kit conversation
@@ -2171,7 +2232,7 @@ export function openForgeEditor(container: HTMLElement): void {
     const panel = el('div', 'fe-panel');
     panel.append(el('h3', '', 'Parameters (P)'));
     const headRow = el('div', 'fe-ability-head');
-    headRow.append(el('span', 'fe-key', 'P'));
+    headRow.append(keyTabs());
     const nameInput = el('input', 'fe-input') as HTMLInputElement;
     nameInput.style.marginBottom = '0';
     nameInput.maxLength = 40;
@@ -2245,7 +2306,7 @@ export function openForgeEditor(container: HTMLElement): void {
     const panel = el('div', 'fe-panel');
     panel.append(el('h3', '', `Parameters (${key})`));
     const headRow = el('div', 'fe-ability-head');
-    headRow.append(el('span', 'fe-key', key));
+    headRow.append(keyTabs());
     const nameInput = el('input', 'fe-input') as HTMLInputElement;
     nameInput.style.marginBottom = '0';
     nameInput.maxLength = 40;
@@ -2425,6 +2486,9 @@ export function openForgeEditor(container: HTMLElement): void {
       if (sel.value !== '') runAnimate({ [slot]: sel.value });
     });
     rowEl.append(apply);
+    const tabsHere = keyTabs();
+    tabsHere.style.marginLeft = 'auto';
+    rowEl.append(tabsHere);
     sel.addEventListener('change', () => {
       syncApply();
       if (sel.value !== '') animPreview?.show(sel.value, 'cast');

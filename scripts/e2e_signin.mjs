@@ -65,7 +65,7 @@ export async function signIn(page, name, timeout = 20000) {
     }
     await fill(page, '.auth-form input[type="password"]', E2E_PASSWORD);
     await page.evaluate(() => {
-      [...document.querySelectorAll('.auth-form .menu-btn')].pop()?.click();
+      document.querySelector('.auth-form .menu-btn.primary')?.click();
     });
     try {
       // Landing gone and the home card up: the only proof that worked.

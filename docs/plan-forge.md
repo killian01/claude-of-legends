@@ -67,7 +67,13 @@ and their written UGC authorization; details inline.
    refresh, debounced) and both conversations travel with it
    (`server/forge_chats.ts`, restored on open); spells and the passive carry a
    flavor line the conversation writes and the creator edits, above the derived
-   text, which stays the game's. REMAINING: the agent endpoint that
+   text, which stays the game's. Playtest round after (2026-09-02): the dial and
+   the fit write amounts on their reading steps (`snapAmount` in
+   `src/sim/forge/spell_power.ts`) and the fit tops the kit back up to the line
+   one step at a time; key tabs (P Q W E R) beside the parameters and animation
+   titles switch spells in place; a failed call (server gone, session ended)
+   shows a banner instead of emptying the rail and the icons, and the
+   Forge e2e (`scripts/e2e_forge.mjs`) walks all of it. REMAINING: the agent endpoint that
    compiles free-text passives into primitives with refusal explanations (needs
    a Claude API key); the generated weapon prop itself stays phase 5's Tripo
    half (the procedural prop library carries the grip flow until then).

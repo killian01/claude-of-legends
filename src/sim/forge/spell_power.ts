@@ -46,82 +46,134 @@ function clampTo(bound: Bound | undefined, v: number): number {
   return Math.min(bound.max, Math.max(bound.min, v));
 }
 
-function scaleEffects(list: readonly EffectSpec[] | undefined, f: number): void {
+// The step each amount is read in: a scaled amount lands on it, so
+// neither the dial nor a fit hands the creator 1.0372 seconds or 73.284
+// damage. Whole points for damage, healing, shields and resistances;
+// hundredths for ratios and percentages; one tick (DT) for durations; a
+// tenth of a unit for distances. Every bound above sits on its step.
+const STEP_WHOLE = 1;
+const STEP_RATIO = 0.01;
+const STEP_TIME = 0.05;
+const STEP_DISTANCE = 0.1;
+const AMOUNT_STEPS: Record<string, number> = {
+  base: STEP_WHOLE,
+  perSecond: STEP_WHOLE,
+  armor: STEP_WHOLE,
+  mr: STEP_WHOLE,
+  adRatio: STEP_RATIO,
+  apRatio: STEP_RATIO,
+  maxHpPct: STEP_RATIO,
+  pct: STEP_RATIO,
+  factor: STEP_RATIO,
+  msPct: STEP_RATIO,
+  asPct: STEP_RATIO,
+  pctOfRemaining: STEP_RATIO,
+  duration: STEP_TIME,
+  distance: STEP_DISTANCE,
+};
+
+// `v` on the nearest step of `field`, written with that step's decimals
+// so the number is exactly what the creator reads.
+const stepOf = (field: string): number => AMOUNT_STEPS[field] ?? STEP_RATIO;
+
+export function snapAmount(field: string, v: number): number {
+  const step = stepOf(field);
+  const decimals = step >= 1 ? 0 : Math.ceil(-Math.log10(step));
+  return Number((Math.round(v / step + 1e-9) * step).toFixed(decimals));
+}
+
+// One visit per amount, in a fixed order: the scale and the top-up
+// below are this same walk with a different hand.
+type AmountFn = (field: string, v: number, bound: Bound | undefined) => number;
+
+function mapEffects(list: readonly EffectSpec[] | undefined, fn: AmountFn): void {
   for (const e of list ?? []) {
     const fields = EFFECT_AMOUNTS[e.kind] ?? [];
     const bounds = EFFECT_BOUNDS[e.kind] ?? {};
     const rec = e as unknown as Record<string, unknown>;
     for (const field of fields) {
       const v = rec[field];
-      if (typeof v === 'number') rec[field] = clampTo(bounds[field], v * f);
+      if (typeof v === 'number') rec[field] = fn(field, v, bounds[field]);
     }
-    // Effects that carry effects scale what they carry.
-    if (e.kind === 'mark') scaleEffects(e.onTrigger, f);
+    // Effects that carry effects walk what they carry.
+    if (e.kind === 'mark') mapEffects(e.onTrigger, fn);
     if (e.kind === 'conditional') {
-      scaleEffects(e.effects, f);
-      scaleEffects(e.otherwise, f);
+      mapEffects(e.effects, fn);
+      mapEffects(e.otherwise, fn);
     }
     if (e.kind === 'empower') {
-      scaleEffects(e.bonus, f);
-      scaleEffects(e.splash, f);
+      mapEffects(e.bonus, fn);
+      mapEffects(e.splash, fn);
     }
     if (e.kind === 'shield' && e.burst) {
-      scaleEffects(e.burst.onBreak, f);
-      scaleEffects(e.burst.onExpire, f);
+      mapEffects(e.burst.onBreak, fn);
+      mapEffects(e.burst.onExpire, fn);
     }
   }
 }
 
-function scaleSpec(spec: CastSpec, f: number): void {
+function mapSpec(spec: CastSpec, fn: AmountFn): void {
   switch (spec.kind) {
     case 'skillshot':
-      scaleEffects(spec.onHit, f);
-      scaleEffects(spec.allyEffects, f);
-      if (spec.chain) scaleEffects(spec.chain.onHit, f);
-      if (spec.aftershock) scaleEffects(spec.aftershock.effects, f);
+      mapEffects(spec.onHit, fn);
+      mapEffects(spec.allyEffects, fn);
+      if (spec.chain) mapEffects(spec.chain.onHit, fn);
+      if (spec.aftershock) mapEffects(spec.aftershock.effects, fn);
       break;
     case 'zone':
-      scaleEffects(spec.onEnter, f);
-      scaleEffects(spec.onTick, f);
-      scaleEffects(spec.allyOnTick, f);
-      scaleEffects(spec.onDetonate, f);
-      if (spec.boundary) scaleEffects(spec.boundary.effects, f);
-      if (spec.leaveZone) scaleEffects(spec.leaveZone.onTick, f);
+      mapEffects(spec.onEnter, fn);
+      mapEffects(spec.onTick, fn);
+      mapEffects(spec.allyOnTick, fn);
+      mapEffects(spec.onDetonate, fn);
+      if (spec.boundary) mapEffects(spec.boundary.effects, fn);
+      if (spec.leaveZone) mapEffects(spec.leaveZone.onTick, fn);
       break;
     case 'self_or_ally':
-      scaleEffects(spec.effects, f);
+      mapEffects(spec.effects, fn);
       break;
     case 'enemy_target':
-      scaleEffects(spec.effects, f);
-      scaleEffects(spec.selfEffects, f);
+      mapEffects(spec.effects, fn);
+      mapEffects(spec.selfEffects, fn);
       break;
     case 'cone':
-      scaleEffects(spec.onHit, f);
+      mapEffects(spec.onHit, fn);
       break;
     case 'burst':
-      scaleEffects(spec.effects, f);
-      scaleEffects(spec.selfEffects, f);
+      mapEffects(spec.effects, fn);
+      mapEffects(spec.selfEffects, fn);
       break;
     case 'dash':
-      scaleEffects(spec.onLand, f);
-      scaleEffects(spec.selfEffects, f);
-      scaleEffects(spec.passThrough, f);
+      mapEffects(spec.onLand, fn);
+      mapEffects(spec.selfEffects, fn);
+      mapEffects(spec.passThrough, fn);
       break;
     case 'wall':
       // A wall's whole payload is how long it stands.
-      (spec as { duration: number }).duration = clampTo(
+      (spec as { duration: number }).duration = fn(
+        'duration',
+        spec.duration,
         CAST_BOUNDS.wall?.duration,
-        spec.duration * f,
       );
       break;
   }
 }
 
+function mapAbility(ability: AbilityDef, fn: AmountFn): void {
+  mapSpec(ability.spec, fn);
+  for (const o of ability.atRank ?? []) mapSpec(o.spec, fn);
+}
+
+// The scale's hand: every amount at `factor` times its value, on its
+// step, inside its bound.
+const scaledBy =
+  (factor: number): AmountFn =>
+  (field, v, bound) =>
+    clampTo(bound, snapAmount(field, v * factor));
+
 // The ability at `factor` times the anchor's amounts, bounds respected.
 export function scaleAbility(anchor: AbilityDef, factor: number): AbilityDef {
   const out = structuredClone(anchor) as AbilityDef;
-  scaleSpec(out.spec, factor);
-  for (const o of out.atRank ?? []) scaleSpec(o.spec, factor);
+  mapAbility(out, scaledBy(factor));
   return out;
 }
 
@@ -201,6 +253,58 @@ export interface KitFit {
 
 const KIT_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
 
+// How many amounts an ability carries, so each can be addressed by its
+// place in the walk.
+function amountCount(ability: AbilityDef): number {
+  let n = 0;
+  mapAbility(structuredClone(ability) as AbilityDef, (_field, v) => {
+    n += 1;
+    return v;
+  });
+  return n;
+}
+
+// The ability with its `index`th amount one step up, inside its bound;
+// null when that amount is already at its ceiling.
+function raisedAt(ability: AbilityDef, index: number): AbilityDef | null {
+  const out = structuredClone(ability) as AbilityDef;
+  let seen = 0;
+  let raised = false;
+  mapAbility(out, (field, v, bound) => {
+    const here = seen;
+    seen += 1;
+    if (here !== index) return v;
+    const next = clampTo(bound, snapAmount(field, v + stepOf(field)));
+    raised = next > v;
+    return next;
+  });
+  return raised ? out : null;
+}
+
+// The steps' price: amounts land on what the creator reads, so the
+// shared factor stops where the next step of some amount would cross
+// the line, a point or two under it. The top-up takes that room back:
+// one pass over every amount of every spell, each raised a single step
+// where the envelope and the caps still hold. One step is invisible to
+// the design (a point of damage, a hundredth of a ratio, a tick of
+// crowd control); more than one would let the cheapest amounts drift.
+function topUp(
+  def: ForgedChampionDef,
+  start: Record<AbilityKey, AbilityDef>,
+): Record<AbilityKey, AbilityDef> {
+  let abilities = start;
+  for (const key of KIT_KEYS) {
+    const count = amountCount(abilities[key]);
+    for (let i = 0; i < count; i += 1) {
+      const trial = raisedAt(abilities[key], i);
+      if (!trial) continue;
+      const next = { ...abilities, [key]: trial };
+      if (kitFits(def, next)) abilities = next;
+    }
+  }
+  return abilities;
+}
+
 // The whole kit at one shared factor: the largest the kit envelope and
 // the burst caps afford inside the dial's range, so a proposal lands on
 // the envelope line with its spells' relative weights intact. When a
@@ -267,5 +371,8 @@ export function fitKitPower(def: ForgedChampionDef): KitFit | null {
     }
     if (!caught) break;
   }
+  // Not past the dial's ceiling: there the kit is as strong as its
+  // structure allows and the line is not the stop.
+  if (factor < POWER_DIAL_MAX) abilities = topUp(def, abilities);
   return { abilities, factor, held: [...held] };
 }
