@@ -41,6 +41,7 @@ import {
   type BotDeps,
   createBot,
   deleteBot,
+  getVersion,
   listBots,
   listVersions,
   ownedBot,
@@ -988,6 +989,11 @@ const server = http.createServer(async (req, res) => {
       if (url === '/api/bots/versions' && req.method === 'POST') {
         const body = await readJsonBody(req);
         sendJson(res, 200, listVersions(botDeps, me.id, body?.id));
+        return;
+      }
+      if (url === '/api/bots/version' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, getVersion(botDeps, me.id, body?.id, body?.version));
         return;
       }
       if (url === '/api/bots/briefing' && req.method === 'POST') {

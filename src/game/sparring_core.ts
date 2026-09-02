@@ -9,7 +9,7 @@ import { FAST_MATCH_MAX_TICKS, type FastMatchRequest, runFastMatch } from '../fa
 import type { ReplayPick, ReplayRecord } from '../net/replay';
 import { DEFAULT_BOT_ID } from '../sim/content/bots';
 import { fillTeam } from '../sim/fill';
-import type { PlayReport } from '../sim/playbook/report';
+import type { PlayReport, PlayStats } from '../sim/playbook/report';
 import type { PlaybookDef } from '../sim/playbook/types';
 import { Rng } from '../sim/rng';
 import type { TeamId } from '../sim/types';
@@ -22,7 +22,9 @@ export interface SparBot {
   playbook: PlaybookDef;
 }
 
-export type SparRequest = FastMatchRequest;
+// A match request, plus which pick is the sparring bot's (the first by
+// default; the series seats it on either side).
+export type SparRequest = FastMatchRequest & { botIndex?: number };
 
 export interface SparResult {
   winner: TeamId | null;
@@ -34,6 +36,10 @@ export interface SparResult {
 }
 
 export const SPAR_MAX_TICKS = FAST_MATCH_MAX_TICKS;
+
+// A series is five seeds (docs/design/bots.md, the bar: a change must show
+// its effect, and one match cannot).
+export const SERIES_SEEDS = 5;
 
 // The sparring bot on team 0, seat 0, then house bots on every other seat
 // from the fill (src/sim/fill.ts) drawn from the seed: its own team
@@ -78,7 +84,93 @@ export function sparMatch(req: SparRequest): SparResult {
     winner: r.winner,
     ticks: r.ticks,
     report: r.report,
-    botUnitId: r.unitIds[0]!,
+    botUnitId: r.unitIds[req.botIndex ?? 0]!,
     record: r.record,
   };
+}
+
+// The series' seats: the bot on `team` (its first seat), the previous
+// version of the same bot on the other team's first seat when there is
+// one (the same champion on both sides is allowed: only a team forbids
+// duplicates), house bots on every other seat from the fill. Sides
+// alternate from seed to seed so the map favors neither version.
+export function seriesPicks(
+  bot: SparBot,
+  previous: PlaybookDef | null,
+  seed: number,
+  team: TeamId,
+): { picks: ReplayPick[]; botIndex: number } {
+  const rng = new Rng(seed);
+  const picks: ReplayPick[] = [];
+  let botIndex = 0;
+  for (const t of [0, 1] as const) {
+    const held: { championId: string }[] = [];
+    if (t === team) {
+      botIndex = picks.length;
+      picks.push({
+        name: bot.name,
+        team: t,
+        championId: bot.championId,
+        sigils: bot.sigils,
+        skin: bot.skin,
+        playbook: bot.playbook,
+      });
+      held.push({ championId: bot.championId });
+    } else if (previous) {
+      picks.push({
+        name: `${bot.name} (previous)`,
+        team: t,
+        championId: bot.championId,
+        sigils: bot.sigils,
+        skin: bot.skin,
+        playbook: previous,
+      });
+      held.push({ championId: bot.championId });
+    }
+    for (const [i, championId] of fillTeam(held, rng).entries()) {
+      picks.push({
+        name: 'House bot',
+        team: t,
+        championId,
+        sigils: ['riftstep', 'mend'],
+        skin: i % 3,
+        bot: DEFAULT_BOT_ID,
+      });
+    }
+  }
+  return { picks, botIndex };
+}
+
+export interface SeriesMatch {
+  seed: number;
+  // The team the bot played on.
+  team: TeamId;
+  result: SparResult;
+}
+
+export interface SeriesSummary {
+  wins: number;
+  losses: number;
+  draws: number;
+  // The bot's plays summed over the series.
+  plays: Record<string, PlayStats>;
+  deaths: number;
+}
+
+// The series in numbers: wins from the bot's side, and its plays summed.
+export function summarizeSeries(matches: readonly SeriesMatch[]): SeriesSummary {
+  const out: SeriesSummary = { wins: 0, losses: 0, draws: 0, plays: {}, deaths: 0 };
+  for (const m of matches) {
+    if (m.result.winner === null) out.draws++;
+    else if (m.result.winner === m.team) out.wins++;
+    else out.losses++;
+    const mine = m.result.report.units.find((u) => u.unitId === m.result.botUnitId);
+    if (!mine) continue;
+    out.deaths += mine.deaths;
+    for (const [id, s] of Object.entries(mine.plays)) {
+      const acc = out.plays[id] ?? { ticks: 0, deaths: 0 };
+      out.plays[id] = { ticks: acc.ticks + s.ticks, deaths: acc.deaths + s.deaths };
+    }
+  }
+  return out;
 }

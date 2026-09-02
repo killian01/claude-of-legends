@@ -10,6 +10,7 @@ import {
   createBot,
   deleteBot,
   listBots,
+  getVersion,
   listVersions,
   revertBot,
   saveBot,
@@ -99,6 +100,13 @@ describe('bots on the account', () => {
       [1, 'owner'],
       [2, 'owner'],
     ]);
+
+    // A stored version reads back whole, for the sparring series.
+    const first = getVersion(deps, 1, bot.id, 1);
+    expect(first.ok && first.version.playbook).toEqual(NEW_BOT_PLAYBOOK);
+    expect(getVersion(deps, 1, bot.id, 9).ok).toBe(false);
+    expect(getVersion(deps, 2, bot.id, 1).ok).toBe(false);
+    expect(getVersion(deps, 1, bot.id, 'one').ok).toBe(false);
 
     const back = revertBot(deps, 1, bot.id, 1);
     expect(back.ok && back.bot.version).toBe(3);

@@ -197,6 +197,15 @@ browser, then opens the replay with the active-play overlay; leaving the replay 
 back in the Academy on the same bot. The test drive into offline practice (the Forge's
 pattern) stays available for watching at real speed.
 
+The series is the same sparring five seeds at a time, with the previous version of the
+bot on the other side of the table: the current playbook (the unsaved edit, or the saved
+version) on one team, the version before it on the other, both on the bot's champion,
+house bots around each, the side alternating from seed to seed so the map favors
+neither. It answers "v4 against v3: three won, two lost" in a minute, with the plays
+summed over the five matches and a replay per seed; a bot with no previous version spars
+its series against house bots alone. Five seeds is a reading, not a proof: ten seeds
+move a rate by fifteen points, so a change that looks like a coin flip is one.
+
 A replay is for analysis, so it is a player, not a tape: pause, one to ten times speed,
 thirty seconds back or forward, a scrub slider over the whole match and a time to type.
 Seeking rides determinism: forward steps the sim silently to the tick; backward rebuilds

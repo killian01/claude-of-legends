@@ -254,6 +254,27 @@ export function listVersions(
   return { ok: true, versions: deps.store.listVersions(found.bot.id) };
 }
 
+// One stored version, playbook included: what the sparring series plays
+// the current playbook against.
+export function getVersion(
+  deps: BotDeps,
+  accountId: number,
+  id: unknown,
+  version: unknown,
+): BotOutcome<{ version: { version: number; author: string; at: number; playbook: PlaybookDef } }> {
+  const found = owned(deps, accountId, id);
+  if (!found.ok) return found;
+  if (typeof version !== 'number' || !Number.isInteger(version)) {
+    return { ok: false, error: 'malformed request' };
+  }
+  const row = deps.store.getVersion(found.bot.id, version);
+  if (!row) return { ok: false, error: 'no such version' };
+  return {
+    ok: true,
+    version: { version, author: row.author, at: row.at, playbook: row.playbook },
+  };
+}
+
 // Returning to an earlier playbook is itself a new version, so the history
 // only ever grows and nothing is lost by changing one's mind twice.
 export function revertBot(

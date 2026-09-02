@@ -412,6 +412,8 @@ _Avoid_: tournament, league, bot queue, night mode
 An unrated match run only to test a bot: locally in the Academy at full speed against
 house bots, or on the server to decide whether a proposed playbook change wins more before
 it is applied. Never moves a rating; every bot gets the same server sparring allocation.
+A series is five such matches at once, the bot's current playbook against its previous
+version on the other side, the side alternating, summed into one reading.
 _Avoid_: practice match (that is the human's offline match), test match, simulation
 
 **Briefing**:

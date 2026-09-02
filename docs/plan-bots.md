@@ -161,6 +161,12 @@ Briefing, and the before/after screenshots under `docs/screenshots`.
    the guard; its pair variant (one ally) 13-7 on twenty. Nothing reached the stop: the
    Laner is unchanged, the round is closed, and the group push stays a play any owner
    can write today. Phase 12 next, as agreed.
+   The loop's first half landed after phase 12 (2026-09-02): the series in the Academy,
+   five seeds in five workers at once, the current playbook against the previous
+   version of the same bot on the other side (the saved one while an edit is unsaved,
+   the version before otherwise, read back through `/api/bots/version`), sides
+   alternating, the plays summed and a replay per seed (`runSeries`, `seriesPicks`,
+   `summarizeSeries` in src/game/sparring_core.ts). House styles remain.
 11. **The fill and the home lanes** (grill Q15 and Q16, 2026-09-02). Nothing
    constrained a lineup: house bots took the first free roster champions in order (an
    all-bot match was Korrath, Dain, Sylra, Fenn, Elowen on both sides, no marksman, no

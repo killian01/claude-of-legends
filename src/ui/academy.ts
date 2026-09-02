@@ -6,8 +6,14 @@
 // playbook on screen is always one the engine can run: every edit and
 // every coach operation goes through the validator before it lands.
 
-import { runSparring } from '../game/sparring';
-import type { SparResult } from '../game/sparring_core';
+import { runSeries, runSparring } from '../game/sparring';
+import {
+  SERIES_SEEDS,
+  type SeriesMatch,
+  type SeriesSummary,
+  type SparResult,
+  summarizeSeries,
+} from '../game/sparring_core';
 import { type CoachTurn, commentOf } from '../net/coach_chat';
 import type { ReplayRecord } from '../net/replay';
 import { CHAMPION_LIST, CHAMPIONS, homeLane } from '../sim/content/champions';
@@ -267,6 +273,14 @@ function fmtSeconds(ticks: number): string {
 // the replay leaves the Academy and comes back to it.
 const lastSpar = new Map<string, SparResult>();
 
+// A series as the Academy keeps it: who played whom, the matches, the sum.
+interface SeriesView {
+  versus: string;
+  matches: SeriesMatch[];
+  summary: SeriesSummary;
+}
+const lastSeries = new Map<string, SeriesView>();
+
 export function openAcademy(container: HTMLElement, opts: { botId?: string } = {}): void {
   ensureCss();
   const root = el('div', 'ac');
@@ -320,6 +334,10 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
   let sparRunning = false;
   let sparResult: SparResult | null = null;
   let sparError: string | null = null;
+  let seriesRunning = false;
+  let seriesDone = 0;
+  let seriesResult: SeriesView | null = null;
+  let seriesError: string | null = null;
   let arenaRunning = false;
   let briefing: BriefingView | null = null;
   let briefingLoading = false;
@@ -343,6 +361,8 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     coachText = '';
     coachRefused = [];
     sparResult = bot ? (lastSpar.get(bot.id) ?? null) : null;
+    seriesResult = bot ? (lastSeries.get(bot.id) ?? null) : null;
+    seriesError = null;
     // The conversation lives with the bot on the server: fetched on every
     // open, so a new session starts where the last one stopped.
     chatLoading = bot !== null;
@@ -1508,6 +1528,68 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         });
     });
     sparBox.append(sparBtn);
+    // The series (docs/design/bots.md, the bar): five seeds, the current
+    // playbook against the previous version of the same bot on the other
+    // side (the saved one while an edit is unsaved, the version before
+    // otherwise), house bots around both, sides alternating; against house
+    // bots alone when there is no previous version yet.
+    const seriesBtn = el(
+      'button',
+      'ac-btn',
+      seriesRunning
+        ? `Series: ${seriesDone} of ${SERIES_SEEDS} played...`
+        : 'Spar a series (5 seeds)',
+    ) as HTMLButtonElement;
+    seriesBtn.disabled = seriesRunning || coaching;
+    seriesBtn.addEventListener('click', () => {
+      seriesRunning = true;
+      seriesDone = 0;
+      seriesError = null;
+      seriesResult = null;
+      renderSide();
+      const sparBot = {
+        name: bot.name,
+        championId: bot.championId,
+        sigils: bot.sigils,
+        skin: bot.skin,
+        playbook: def,
+      };
+      const base = Math.floor(Math.random() * 1_000_000_000);
+      const seeds = Array.from({ length: SERIES_SEEDS }, (_, i) => base + i);
+      const previous: Promise<{ playbook: PlaybookDef | null; versus: string }> = dirty
+        ? Promise.resolve({ playbook: bot.playbook, versus: `your edit against v${bot.version}` })
+        : bot.version > 1
+          ? api<{ version: { playbook: PlaybookDef } }>('/api/bots/version', {
+              id: bot.id,
+              version: bot.version - 1,
+            }).then((r) =>
+              r.ok
+                ? {
+                    playbook: r.version.playbook,
+                    versus: `v${bot.version} against v${bot.version - 1}`,
+                  }
+                : { playbook: null, versus: `v${bot.version} against house bots` },
+            )
+          : Promise.resolve({ playbook: null, versus: `v${bot.version} against house bots` });
+      void previous
+        .then(({ playbook, versus }) =>
+          runSeries(sparBot, playbook, seeds, (done) => {
+            seriesDone = done;
+            renderSide();
+          }).then((matches) => {
+            seriesResult = { versus, matches, summary: summarizeSeries(matches) };
+            lastSeries.set(bot.id, seriesResult);
+          }),
+        )
+        .catch((e: Error) => {
+          seriesError = e.message;
+        })
+        .finally(() => {
+          seriesRunning = false;
+          renderSide();
+        });
+    });
+    sparBox.append(seriesBtn);
     // The Arena, now (docs/design/bots.md): one rated match on demand, played
     // by the server in seconds against the deposited bots nearest in rating.
     const arenaBtn = el(
@@ -1559,6 +1641,68 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         });
         sparBox.append(watch);
       }
+    }
+    if (seriesError) sparBox.append(el('div', 'ac-status bad', seriesError));
+    if (seriesResult) {
+      const sr = seriesResult;
+      const s = sr.summary;
+      const line = el('div', 'ac-row');
+      line.append(
+        el(
+          'div',
+          'ac-status',
+          `${sr.versus}: ${s.wins} won, ${s.losses} lost` +
+            (s.draws > 0 ? `, ${s.draws} without a winner` : '') +
+            ` over ${sr.matches.length} seeds; ${s.deaths} deaths.`,
+        ),
+      );
+      const dismiss = el('button', 'ac-btn mini', 'Dismiss');
+      dismiss.title = 'Put the series away';
+      dismiss.addEventListener('click', () => {
+        seriesResult = null;
+        lastSeries.delete(bot.id);
+        renderSide();
+      });
+      line.append(dismiss);
+      sparBox.append(line);
+      const table = el('table', 'ac-table');
+      const hr = el('tr', '');
+      for (const h of ['Play', 'Time', 'Deaths']) hr.append(el('th', '', h));
+      table.append(hr);
+      const rows = Object.entries(s.plays).sort((a, b) => b[1].ticks - a[1].ticks);
+      for (const [id, st] of rows) {
+        const tr = el('tr', '');
+        tr.append(
+          el('td', '', id),
+          el('td', 'num', fmtSeconds(st.ticks)),
+          el('td', 'num', String(st.deaths)),
+        );
+        table.append(tr);
+      }
+      sparBox.append(table);
+      const list = el('table', 'ac-table');
+      for (const m of sr.matches) {
+        const tr = el('tr', '');
+        const outcome =
+          m.result.winner === null ? 'no winner' : m.result.winner === m.team ? 'won' : 'lost';
+        tr.append(
+          el('td', '', `seed ${m.seed}`),
+          el('td', '', `${outcome} after ${fmtSeconds(m.result.ticks)}`),
+        );
+        const cell = el('td', 'num');
+        const watch = el('button', 'ac-btn mini', 'Watch');
+        watch.addEventListener('click', () => {
+          const record: ReplayRecord = m.result.record;
+          close();
+          window.dispatchEvent(
+            new CustomEvent('loc:replay-record', { detail: { record, botId: bot.id } }),
+          );
+        });
+        cell.append(watch);
+        tr.append(cell);
+        list.append(tr);
+      }
+      sparBox.append(list);
     }
     if (sparError) sparBox.append(el('div', 'ac-status bad', sparError));
     if (sparResult) {
