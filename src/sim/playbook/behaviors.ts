@@ -10,6 +10,7 @@ import { GAME_MAP } from '../content/map';
 import type { Action, ObsUnit } from '../policy';
 import { nextKitStep } from './kit';
 import {
+  BESIDE_RANGE,
   CAST_RANGE,
   CHAMPION_ATTACK_RANGE,
   CHASE_RANGE,
@@ -19,7 +20,9 @@ import {
   FIGHT_TARGET_RADIUS,
   hardCCd,
   homewardPoint,
+  JOIN_RANGE,
   KILL_SECURE_HP_FRAC,
+  KITE_APPROACH,
   KITE_DANGER_FRAC,
   KITE_STEP,
   laneDistance,
@@ -83,6 +86,10 @@ export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
       return obeyOrder(ctx);
     case 'followAlly':
       return followAlly(ctx, b.keep ?? 3);
+    case 'joinAlly':
+      return joinAlly(ctx, b.within ?? JOIN_RANGE);
+    case 'fallBack':
+      return fallBack(ctx);
     case 'holdPosition':
       return holdPosition(ctx, b.x, b.z, b.within ?? 2);
   }
@@ -269,12 +276,15 @@ function kiteStep(ctx: SlotContext, threat: ObsUnit): Action {
 
 // The fight (ADR 0014): Sear in kill range, the kit by its hints, then
 // attacks, holding distance by the stance. Front walks in and chases a
-// little; kite attacks from the edge of its own range and steps away from
-// whoever closes, unless a kill is right there; poke casts and steps back
-// and never trades attacks. Auto is kite on a ranged champion, front on a
-// melee one.
+// little. Kite is an orb walk on the auto-attack clock the observation
+// carries: never interrupt a swing, strike the moment the clock allows and
+// the target is in reach, and between strikes step away from whoever
+// closes (the first kite ran from every chaser and never struck back;
+// scouting round 1 counted it as deaths on the retreat play). Poke casts
+// and steps back and never trades attacks. Auto is kite on a ranged
+// champion, front on a melee one.
 function fight(ctx: SlotContext, stance: Stance, rule: TargetRule): Action | null {
-  const { s } = ctx;
+  const { s, obs } = ctx;
   const champ = pickTarget(ctx, rule);
   if (!champ) return null;
   const dc = dist(s.x, s.z, champ);
@@ -296,16 +306,23 @@ function fight(ctx: SlotContext, stance: Stance, rule: TargetRule): Action | nul
   const threat = nearest(ctx.enemyChampions, s.x, s.z);
   const td = threat ? dist(s.x, s.z, threat) : Number.POSITIVE_INFINITY;
   const securing = champ.hpFrac < KILL_SECURE_HP_FRAC && dc <= range + 1;
+  const swinging = s.attackSwingUntil != null && s.attackSwingUntil > obs.time;
+  if (swinging) return { kind: 'noop' };
   if (mode === 'poke') {
     if (cast) return cast;
     if (threat && td < range) return kiteStep(ctx, threat);
     return null;
   }
-  // kite
-  if (threat && td < range * KITE_DANGER_FRAC && !securing) return kiteStep(ctx, threat);
+  // kite: the kit's spells first (offensive stats run hot, and a spell
+  // held for a strike is damage lost), then the strike on the clock, then
+  // the step between strikes.
   if (cast) return cast;
-  if (dc <= range + 0.5) return { kind: 'attack', targetId: champ.id };
-  if (dc <= CHASE_RANGE) {
+  const ready = (s.attackReadyAt ?? 0) <= obs.time;
+  const inReach = dc <= range + 0.5;
+  if (ready && inReach) return { kind: 'attack', targetId: champ.id };
+  if (threat && td < range * KITE_DANGER_FRAC && !securing) return kiteStep(ctx, threat);
+  if (inReach) return { kind: 'noop' };
+  if (dc <= range + KITE_APPROACH) {
     // Close to the edge of range, not past it.
     const k = (dc - (range - 0.5)) / dc;
     const ax = s.x + (champ.x - s.x) * k;
@@ -480,6 +497,32 @@ function followAlly(ctx: SlotContext, keep: number): Action | null {
   if (dist(s.x, s.z, ally) <= keep) return { kind: 'noop' };
   const { jx, jz } = ctx.jitter();
   return { kind: 'move', x: ally.x + jx, z: ally.z + jz };
+}
+
+// Join the nearest ally in a fight (scouting round 1: fights were taken
+// one bot at a time, and a third of the deaths were outnumbered). Beside
+// it, or with nobody fighting, the turn passes to the plays below.
+function joinAlly(ctx: SlotContext, within: number): Action | null {
+  const { s } = ctx;
+  const ally = ctx.engagedAllies(within)[0];
+  if (!ally || dist(s.x, s.z, ally) <= BESIDE_RANGE) return null;
+  const { jx, jz } = ctx.jitter();
+  return { kind: 'move', x: ally.x + jx, z: ally.z + jz };
+}
+
+// Fall back under the nearest live allied tower instead of all the way
+// home: the lane is kept, the tower shoots whoever follows, and the plays
+// below (fight, farm) go on there once under it.
+function fallBack(ctx: SlotContext): Action | null {
+  const { s, obs } = ctx;
+  const tower = nearest(
+    obs.units.filter((u) => u.friendly && u.kind === 'tower'),
+    s.x,
+    s.z,
+  );
+  if (!tower || dist(s.x, s.z, tower) <= BESIDE_RANGE) return null;
+  const { jx, jz } = ctx.jitter();
+  return { kind: 'move', x: tower.x + jx, z: tower.z + jz };
 }
 
 // The coach's order, done the playbook's way: the bot's own hands, the

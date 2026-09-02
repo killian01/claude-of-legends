@@ -206,6 +206,13 @@ export const RANGED_MIN_RANGE = 4;
 export const KITE_DANGER_FRAC = 0.6;
 export const KITE_STEP = 3.5;
 export const CHASE_RANGE = 15;
+// How far past its own range a kiting champion steps in to reach a target.
+export const KITE_APPROACH = 4;
+// An ally is in a fight when an enemy champion stands this close to it;
+// a bot is beside an ally, or under a tower, within this much.
+export const ENGAGED_RANGE = 10;
+export const BESIDE_RANGE = 6;
+export const JOIN_RANGE = 40;
 export const FIGHT_TARGET_RADIUS = 25;
 // Own attack range when the observation predates the field.
 const ATTACK_RANGE_FALLBACK = 6;
@@ -243,6 +250,9 @@ export interface SlotContext {
   // breaks the channel too), and out of tower fire.
   recallClear(): boolean;
   distHome(): number;
+  // Allied champions within the radius that have an enemy champion within
+  // ENGAGED_RANGE of them, nearest first.
+  engagedAllies(within: number): ObsUnit[];
   jitter(): { jx: number; jz: number };
   // The kit in force this slot (ADR 0014), resolved once when first asked.
   kit(): ActiveKit;
@@ -297,6 +307,16 @@ export function buildSlotContext(obs: Observation, rng: Rng, kitDef?: KitDef): S
     escortAt,
     recallClear,
     distHome: () => Math.hypot(s.x - fountain.x, s.z - fountain.z),
+    engagedAllies: (within: number) =>
+      obs.units
+        .filter(
+          (u) =>
+            u.friendly &&
+            u.kind === 'champion' &&
+            dist(s.x, s.z, u) <= within &&
+            enemyChampions.some((e) => dist(u.x, u.z, e) <= ENGAGED_RANGE),
+        )
+        .sort((a, b) => dist(s.x, s.z, a) - dist(s.x, s.z, b)),
     jitter: () => {
       if (!drawn) {
         drawn = { jx: (rng.next() * 2 - 1) * JITTER, jz: (rng.next() * 2 - 1) * JITTER };

@@ -114,6 +114,7 @@ least one of the two):
  {"kind":"enemyVisible"} {"kind":"atFountain"} {"kind":"underTower"}
  {"kind":"warden","state":"up"|"spawning"|"down","within"?:seconds} (spawning: due within the seconds, default 20)
  {"kind":"abilityReady","key":"Q"|"W"|"E"|"R"} {"kind":"sigilReady","id":"riftstep"|"zephyr"|"mend"|"sear"} {"kind":"lane","is":"top"|"mid"|"bot"}
+ {"kind":"allyFighting","within":0..200} an allied champion within the radius has an enemy champion within 10 of it
  {"kind":"not","of":Trigger} {"kind":"all","of":[Trigger...]} {"kind":"any","of":[Trigger...]} (nested at most 4 deep)
 Behavior is ONE of (every parameter optional, default in parentheses):
  {"kind":"retreat"} run home by the fastest means; always acts.
@@ -132,6 +133,8 @@ Behavior is ONE of (every parameter optional, default in parentheses):
  {"kind":"siege","escortMin"?:int 0..10 (3)} attack a vulnerable structure in reach with a minion escort.
  {"kind":"push","lane"?:"assigned"|"top"|"mid"|"bot" ("assigned"),"regroupAt"?:seconds|null (720)} follow the wave down the lane, else walk it, else walk at the enemy Sanctum; always acts. Past regroupAt every assigned bot pushes mid as one group; null disables the bell.
  {"kind":"followAlly","keep"?:0..50 (3)} walk to the nearest allied champion and stay within keep.
+ {"kind":"joinAlly","within"?:0..200 (40)} walk to the nearest ally in a fight within the radius; passes the turn beside it or when nobody is fighting.
+ {"kind":"fallBack"} walk back under the nearest live allied tower; passes the turn once under it, so the plays below go on there.
  {"kind":"holdPosition","x":0..${GAME_MAP.size},"z":0..${GAME_MAP.size},"within"?:0..50 (2)} walk to a point and hold; always acts.
 Patch operations, ONE compact JSON object per line:
  {"op":"add","play":Play,"before"?:id|null} insert before the named play, append when absent

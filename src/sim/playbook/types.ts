@@ -50,6 +50,9 @@ export type Trigger =
   | { kind: 'lane'; is: LaneId }
   // The owner's coach order is active (ADR 0013), optionally of one kind.
   | { kind: 'order'; is?: CoachOrder['kind'] }
+  // An allied champion within the radius is in a fight: an enemy champion
+  // stands within 10 units of it.
+  | { kind: 'allyFighting'; within: number }
   | { kind: 'not'; of: Trigger }
   | { kind: 'all'; of: Trigger[] }
   | { kind: 'any'; of: Trigger[] };
@@ -113,6 +116,12 @@ export type Behavior =
   | { kind: 'push'; lane?: LaneId | 'assigned'; regroupAt?: number | null }
   // Walk to the nearest allied champion and stay within `keep` units.
   | { kind: 'followAlly'; keep?: number }
+  // Walk to the nearest allied champion that is in a fight, within the
+  // radius; passes the turn once beside it or when nobody is fighting.
+  | { kind: 'joinAlly'; within?: number }
+  // Walk back to the nearest live allied tower; passes the turn once under
+  // it, so the plays below (fight, farm) go on there.
+  | { kind: 'fallBack' }
   // Walk to a point and hold there. Always acts.
   | { kind: 'holdPosition'; x: number; z: number; within?: number };
 

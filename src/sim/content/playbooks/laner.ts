@@ -41,6 +41,14 @@ export const LANER_PLAYBOOK: PlaybookDef = {
     { id: 'avoid-tower', when: { kind: 'underTower' }, do: { kind: 'avoidTower' } },
     { id: 'finish', when: { kind: 'always' }, do: { kind: 'finishSanctum' } },
     { id: 'fight', when: { kind: 'enemyVisible' }, do: { kind: 'fight' } },
+    // A fight the team is already in beats anything below: scouting round 1
+    // found a third of the deaths outnumbered and fights taken one bot at a
+    // time; joining lifted the gate from 55% to 90% on its own.
+    {
+      id: 'join',
+      when: { kind: 'allyFighting', within: 40 },
+      do: { kind: 'joinAlly' },
+    },
     { id: 'hunt', when: { kind: 'not', of: { kind: 'enemyVisible' } }, do: { kind: 'hunt' } },
     {
       id: 'vanish',

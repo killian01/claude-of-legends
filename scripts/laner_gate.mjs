@@ -5,11 +5,11 @@
 // seed. A Policy is a pure function of the observation, so the previous
 // brain runs unchanged inside today's sim, and the win rate is what an
 // engine or playbook change did. Usage:
-//   node scripts/laner_gate.mjs [--prev <git-ref>] [--seeds 20] [--max-ticks 30000]
+//   node scripts/laner_gate.mjs [--prev <git-ref>] [--seeds 20] [--max-ticks 48000]
 // Prints the tally and PASS or FAIL at seventy percent of decided matches.
 
 import { execSync } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { build } from 'esbuild';
@@ -21,18 +21,26 @@ const opt = (name, fallback) => {
 };
 const ref = opt('--prev', 'HEAD');
 const seeds = Number(opt('--seeds', '20'));
-const maxTicks = Number(opt('--max-ticks', String(20 * 60 * 25)));
+// The first seed, so a confirmation run can use seeds the search never saw.
+const firstSeed = Number(opt('--from', '1'));
+// The Arena's own cap (src/fast_match.ts): past it a match is a draw.
+const maxTicks = Number(opt('--max-ticks', String(20 * 60 * 40)));
+// A candidate playbook (JSON) to drive the current side instead of the
+// working tree's Laner: the way to try a play list before it is the Laner.
+const candidate = opt('--playbook', null);
+// The build directory, so several gates can run side by side.
+const distName = opt('--dist', 'dist-gate');
 const BAR = 0.7;
 
 const root = process.cwd();
-const dist = path.join(root, 'dist-gate');
+const dist = path.join(root, distName);
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(path.join(dist, 'prev'), { recursive: true });
 
 // The previous tree, src only, straight out of git. Relative paths: the
 // Windows tar reads a drive letter as a remote host.
-execSync(`git archive --format=tar -o dist-gate/prev.tar ${ref} src`, { stdio: 'inherit' });
-execSync('tar -xf dist-gate/prev.tar -C dist-gate/prev', { stdio: 'inherit' });
+execSync(`git archive --format=tar -o ${distName}/prev.tar ${ref} src`, { stdio: 'inherit' });
+execSync(`tar -xf ${distName}/prev.tar -C ${distName}/prev`, { stdio: 'inherit' });
 
 writeFileSync(
   path.join(dist, 'current.ts'),
@@ -40,6 +48,7 @@ writeFileSync(
     "export { Sim } from '../src/sim/sim';",
     "export { CHAMPION_LIST } from '../src/sim/content/champions';",
     "export { LANER } from '../src/sim/content/bots/laner';",
+    "export { playbookPolicy, validatePlaybook } from '../src/sim/playbook';",
     '',
   ].join('\n'),
 );
@@ -68,6 +77,12 @@ await build({
 const require = createRequire(import.meta.url);
 const cur = require(path.join(dist, 'current.cjs'));
 const prev = require(path.join(dist, 'prev.cjs'));
+let currentPolicy = cur.LANER.policy;
+if (candidate) {
+  const v = cur.validatePlaybook(JSON.parse(readFileSync(candidate, 'utf8')));
+  if (!v.ok) throw new Error(`candidate playbook: ${v.errors.join('; ')}`);
+  currentPolicy = cur.playbookPolicy(v.def);
+}
 
 // One full 5v5, five roster champions a side, every seat a Laner: the
 // working tree's on `curTeam`, the previous one's on the other.
@@ -78,7 +93,7 @@ function play(seed, curTeam) {
     const team = i < 5 ? 0 : 1;
     const unit = sim.addChampion(team, undefined, roster[i % roster.length], i % 3);
     unit.sigils = ['riftstep', 'mend'];
-    sim.attachPolicy(unit.id, team === curTeam ? cur.LANER.policy : prev.LANER.policy);
+    sim.attachPolicy(unit.id, team === curTeam ? currentPolicy : prev.LANER.policy);
   }
   while (sim.winner === null && sim.tickCount < maxTicks) sim.tick();
   return { winner: sim.winner, seconds: Math.round(sim.time) };
@@ -88,7 +103,7 @@ let wins = 0;
 let losses = 0;
 let draws = 0;
 const started = Date.now();
-for (let seed = 1; seed <= seeds; seed++) {
+for (let seed = firstSeed; seed < firstSeed + seeds; seed++) {
   const curTeam = seed % 2 === 0 ? 1 : 0;
   const { winner, seconds } = play(seed, curTeam);
   const outcome = winner === null ? 'draw' : winner === curTeam ? 'win' : 'loss';

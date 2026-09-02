@@ -182,6 +182,8 @@ function trigger(raw: unknown, at: string, depth: number, errors: Errors): Trigg
       }
       return { kind: 'sigilReady', id };
     }
+    case 'allyFighting':
+      return { kind: 'allyFighting', within: reqNumber(raw, 'within', 0, 200, at, errors) };
     case 'order': {
       const is = raw.is;
       if (is === undefined) return { kind: 'order' };
@@ -294,6 +296,10 @@ function behavior(raw: unknown, at: string, errors: Errors): Behavior {
     }
     case 'followAlly':
       return withOpt({ kind: 'followAlly' }, 'keep', opt('keep', 0, 50));
+    case 'joinAlly':
+      return withOpt({ kind: 'joinAlly' }, 'within', opt('within', 0, 200));
+    case 'fallBack':
+      return { kind: 'fallBack' };
     case 'holdPosition': {
       const b: Behavior = {
         kind: 'holdPosition',

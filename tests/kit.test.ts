@@ -225,24 +225,44 @@ describe('the kit in force', () => {
 });
 
 describe('the fight', () => {
-  function duel(enemyAt: number, enemyId = 'korrath'): { sim: Sim; ctx: SlotContext; foe: number } {
+  function duel(
+    enemyAt: number,
+    enemyId = 'korrath',
+  ): { sim: Sim; ctx: SlotContext; foe: number; me: number } {
     const sim = new Sim(7);
     const me = sim.addChampion(0, { x: 60, z: 60 }, 'vesk');
     const foe = sim.addChampion(1, { x: 60 + enemyAt, z: 60 }, enemyId);
     sim.tick();
-    return { sim, ctx: ctxOf(sim, me.id), foe: foe.id };
+    return { sim, ctx: ctxOf(sim, me.id), foe: foe.id, me: me.id };
   }
+  // The same duel with the auto-attack clock set by hand.
+  const clocked = (d: ReturnType<typeof duel>, patch: Record<string, unknown>): SlotContext =>
+    ctxOf(d.sim, d.me, undefined, { self: { ...d.ctx.s, ...patch } });
 
-  it('kites on a ranged champion: steps away from a close threat, attacks at the edge', () => {
+  it('kites on a ranged champion: strikes on the clock, steps away between strikes', () => {
+    // The clock allows a strike and the threat is in reach: strike, even
+    // point blank.
     const close = duel(2);
-    const step = runBehavior({ kind: 'fight' }, close.ctx) as Action;
+    expect(runBehavior({ kind: 'fight' }, close.ctx)).toEqual({
+      kind: 'attack',
+      targetId: close.foe,
+    });
+    // The clock does not: step away from the close threat.
+    const between = clocked(close, { attackReadyAt: close.ctx.obs.time + 1 });
+    const step = runBehavior({ kind: 'fight' }, between) as Action;
     expect(step.kind).toBe('move');
     if (step.kind === 'move') expect(step.x).toBeLessThan(60);
+    // Mid-swing, nothing interrupts it.
+    const swinging = clocked(close, { attackSwingUntil: close.ctx.obs.time + 0.3 });
+    expect(runBehavior({ kind: 'fight' }, swinging)).toEqual({ kind: 'noop' });
     const edge = duel(5.5);
     expect(runBehavior({ kind: 'fight' }, edge.ctx)).toEqual({
       kind: 'attack',
       targetId: edge.foe,
     });
+    // The clock does not and nobody is close: hold the spot, no chase.
+    const waiting = clocked(edge, { attackReadyAt: edge.ctx.obs.time + 1 });
+    expect(runBehavior({ kind: 'fight' }, waiting)).toEqual({ kind: 'noop' });
     // Front walks in whatever the range.
     expect(runBehavior({ kind: 'fight', stance: 'front' }, close.ctx)).toEqual({
       kind: 'attack',

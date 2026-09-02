@@ -112,6 +112,17 @@ Briefing, and the before/after screenshots under `docs/screenshots`.
    gate passes at seventy percent, a change shows its effect in the series, two
    sparrings on different seeds play visibly differently, and the maintainer's match
    says the bots reason.
+   IN PROGRESS. Round 1 (2026-09-02): `scripts/scout.mjs` measured the kit engine
+   against the pre-kit one at parity on kills and deaths, fewer towers lost, gold spent,
+   and a third of the deaths outnumbered with fights taken one bot at a time. Tried and
+   measured with `--playbook` candidates over ten seeds: focus the lowest (44%), retreat
+   when outnumbered (20%), disengage when hurt (25%), front stance (30%), regroup at
+   eight or five minutes (50%), dodge reflex off (0%: the reflex is vital), orb walk
+   on the attack clock (44%, kept as the honest kite), regroup on an ally when
+   outnumbered (44%), fall back under the tower when outnumbered (67%), join an ally
+   in a fight within 40 (90%, then 11-5-4 on twenty fresh seeds: 77% of decided over
+   thirty). The Laner now joins fights; the language gained the allyFighting trigger
+   and the joinAlly and fallBack behaviors.
 11. **Adaptation: the opponent in the observation**. Both teams' champions and roles,
    the items on visible enemies, the lane opponent (a per-lane sighting memory over the
    last three minutes), all additive contract fields; the triggers over them (enemy

@@ -129,6 +129,12 @@ export interface ObsSelf {
   // Own attack range in units (additive v0 field, ADR 0014): what a kite
   // holds. Absent on observations older than the field.
   attackRange?: number;
+  // The auto-attack clock (additive v0 fields, ADR 0014): when the next
+  // strike may start, and until when the current swing lands (null when
+  // none is in the air). A move order during a swing wastes it; a move
+  // between swings costs nothing. This is what orb walking reads.
+  attackReadyAt?: number;
+  attackSwingUntil?: number | null;
   // The ability key whose recast window is armed right now, null otherwise
   // (ADR 0005; additive v0 field). While armed, that key reads ready and
   // the press resolves the follow-up instead of a fresh cast.

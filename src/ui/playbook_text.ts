@@ -61,6 +61,8 @@ export function describeTrigger(t: Trigger): string {
       return `assigned to ${t.is}`;
     case 'order':
       return t.is === undefined ? 'the coach gave an order' : `the coach ordered ${t.is}`;
+    case 'allyFighting':
+      return `an ally within ${t.within} is fighting`;
     case 'not':
       return `not (${describeTrigger(t.of)})`;
     case 'all':
@@ -131,6 +133,10 @@ export function describeBehavior(b: Behavior): string {
     }
     case 'followAlly':
       return `follow the nearest ally within ${b.keep ?? 3}`;
+    case 'joinAlly':
+      return `join an ally fighting within ${b.within ?? 40}`;
+    case 'fallBack':
+      return 'fall back under the nearest tower';
     case 'holdPosition':
       return `hold position at ${Math.round(b.x)}, ${Math.round(b.z)}`;
   }
@@ -238,6 +244,10 @@ export const TRIGGER_FORMS: Readonly<Record<Trigger['kind'], KindForm>> = {
       },
     ],
   },
+  allyFighting: {
+    label: 'an ally is fighting',
+    nums: [{ key: 'within', label: 'within', min: 0, max: 200, step: 1 }],
+  },
   not: { label: 'not' },
   all: { label: 'all of' },
   any: { label: 'any of' },
@@ -324,6 +334,11 @@ export const BEHAVIOR_FORMS: Readonly<Record<Behavior['kind'], KindForm>> = {
     label: 'follow the nearest ally',
     nums: [{ key: 'keep', label: 'stay within', min: 0, max: 50, step: 1 }],
   },
+  joinAlly: {
+    label: 'join an ally in a fight',
+    nums: [{ key: 'within', label: 'within', min: 0, max: 200, step: 5 }],
+  },
+  fallBack: { label: 'fall back under the nearest tower' },
   holdPosition: {
     label: 'hold a position',
     nums: [
@@ -358,6 +373,8 @@ export function freshTrigger(kind: Trigger['kind']): Trigger {
       return { kind, id: 'mend' };
     case 'lane':
       return { kind, is: 'mid' };
+    case 'allyFighting':
+      return { kind, within: 40 };
     case 'not':
       return { kind, of: { kind: 'enemyVisible' } };
     case 'all':
