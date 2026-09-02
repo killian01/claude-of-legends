@@ -42,6 +42,15 @@ create table if not exists bot_ratings (
   games integer not null,
   primary key (account_id, way)
 );
+create table if not exists arena_meta (
+  key text primary key,
+  value integer not null
+);
+create table if not exists arena_events (
+  id integer primary key autoincrement,
+  account_id integer not null,
+  at integer not null
+);
 `;
 
 // The two ways an account's bot is rated (ADR 0013): in live matches
@@ -276,5 +285,40 @@ export class BotStore {
       .prepare('select account_id, rating, games from bot_ratings where way = ?')
       .all(way) as unknown as { account_id: number; rating: number; games: number }[];
     return rows.map((r) => ({ accountId: r.account_id, rating: r.rating, games: r.games }));
+  }
+
+  // -- the Arena ----------------------------------------------------------
+
+  arenaLastRoundAt(): number | null {
+    const r = this.db.prepare("select value from arena_meta where key = 'last_round_at'").get() as
+      | { value: number }
+      | undefined;
+    return r ? r.value : null;
+  }
+
+  setArenaLastRoundAt(at: number): void {
+    this.db
+      .prepare(
+        "insert into arena_meta (key, value) values ('last_round_at', ?) " +
+          'on conflict (key) do update set value = excluded.value',
+      )
+      .run(at);
+  }
+
+  // On-demand Arena matches, for the daily allocation.
+  addArenaEvent(accountId: number, at: number): void {
+    this.db.prepare('insert into arena_events (account_id, at) values (?, ?)').run(accountId, at);
+  }
+
+  arenaEventsSince(accountId: number, since: number): number {
+    const r = this.db
+      .prepare('select count(*) as n from arena_events where account_id = ? and at >= ?')
+      .get(accountId, since) as { n: number } | undefined;
+    return r?.n ?? 0;
+  }
+
+  pruneArenaEvents(before: number): number {
+    const r = this.db.prepare('delete from arena_events where at < ?').run(before);
+    return Number(r.changes);
   }
 }

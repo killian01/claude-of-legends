@@ -282,6 +282,8 @@ export function openAcademy(container: HTMLElement): void {
   let sparRunning = false;
   let sparResult: SparResult | null = null;
   let sparError: string | null = null;
+  let arenaRunning = false;
+  let arenaResult: { text: string; replayId: number | null } | null = null;
 
   const say = (text: string, bad = false): void => {
     status = text;
@@ -302,6 +304,7 @@ export function openAcademy(container: HTMLElement): void {
     coachRefused = [];
     sparResult = null;
     sparError = null;
+    arenaResult = null;
     status = '';
     renderAll();
   };
@@ -1081,6 +1084,58 @@ export function openAcademy(container: HTMLElement): void {
         });
     });
     sparBox.append(sparBtn);
+    // The Arena, now (docs/design/bots.md): one rated match on demand, played
+    // by the server in seconds against the deposited bots nearest in rating.
+    const arenaBtn = el(
+      'button',
+      'ac-btn',
+      arenaRunning ? 'Playing in the Arena...' : 'Play now in the Arena (rated)',
+    ) as HTMLButtonElement;
+    arenaBtn.disabled = arenaRunning || coaching || dirty;
+    arenaBtn.title = dirty ? 'Save first: the Arena plays the saved playbook' : '';
+    arenaBtn.addEventListener('click', () => {
+      arenaRunning = true;
+      arenaResult = null;
+      renderSide();
+      void api<{
+        winner: 0 | 1 | null;
+        ticks: number;
+        rated: boolean;
+        replayId?: number;
+        seats: { accountId: number; botId: string; team: 0 | 1; delta: number; rating: number }[];
+      }>('/api/bots/playnow', { id: bot.id }).then((r) => {
+        arenaRunning = false;
+        if (!r.ok) {
+          say(r.error, true);
+          renderSide();
+          return;
+        }
+        const mine = r.seats.find((s) => s.botId === bot.id);
+        arenaResult = {
+          text:
+            (r.winner === 0 ? 'Won' : r.winner === 1 ? 'Lost' : 'No winner') +
+            ` after ${fmtSeconds(r.ticks)}` +
+            (r.rated && mine
+              ? `, ${mine.delta >= 0 ? '+' : ''}${mine.delta} Arena rating (now ${mine.rating})`
+              : ', unrated'),
+          replayId: r.replayId ?? null,
+        };
+        renderSide();
+      });
+    });
+    sparBox.append(arenaBtn);
+    if (arenaResult) {
+      sparBox.append(el('div', 'ac-status', arenaResult.text));
+      if (arenaResult.replayId !== null) {
+        const id = arenaResult.replayId;
+        const watch = el('button', 'ac-btn', 'Watch the Arena replay');
+        watch.addEventListener('click', () => {
+          close();
+          window.dispatchEvent(new CustomEvent('loc:replay', { detail: id }));
+        });
+        sparBox.append(watch);
+      }
+    }
     if (sparError) sparBox.append(el('div', 'ac-status bad', sparError));
     if (sparResult) {
       const r = sparResult;

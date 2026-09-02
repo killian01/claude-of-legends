@@ -31,8 +31,9 @@ export interface MatchRecord {
   // Rated: at least one human on each side (server/rating.ts policy).
   rated: boolean;
   // Which ladder the deltas belong to: absent for the classic queue,
-  // 'forge' when they moved the Forge queue's own rating (ADR 0011).
-  queue?: 'forge';
+  // 'forge' when they moved the Forge queue's own rating (ADR 0011),
+  // 'arena' for a server-run Arena match (ADR 0013).
+  queue?: 'forge' | 'arena';
   // Saved replay id (the match id), absent when no replay was kept.
   replayId?: number;
   players: MatchPlayerRecord[];
@@ -47,7 +48,7 @@ export function buildMatchRecord(
   rating?: {
     rated: boolean;
     deltas: ReadonlyMap<number, number>;
-    queue?: 'forge';
+    queue?: 'forge' | 'arena';
     // Bot seats by unit id.
     ways?: ReadonlyMap<number, 'bot'>;
   },

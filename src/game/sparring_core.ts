@@ -1,13 +1,15 @@
 // Local sparring (docs/design/bots.md): a whole match against house bots
-// at full speed, in the browser, free and unrated. The DOM-free core: the
-// seats, the run, and what comes back (the winner, the play report, and a
-// replay record embedding the playbook that played), so the worker and the
-// tests share one implementation.
+// at full speed, in the browser, free and unrated. The DOM-free half: the
+// seats and what comes back (the winner, the play report, and a replay
+// record embedding the playbook that played), on the one fast runner the
+// Arena uses too (src/fast_match.ts), so the worker and the tests share
+// one implementation.
 
-import { buildMatchSim, REPLAY_VERSION, type ReplayPick, type ReplayRecord } from '../net/replay';
+import { FAST_MATCH_MAX_TICKS, type FastMatchRequest, runFastMatch } from '../fast_match';
+import type { ReplayPick, ReplayRecord } from '../net/replay';
 import { DEFAULT_BOT_ID } from '../sim/content/bots';
 import { CHAMPION_LIST } from '../sim/content/champions';
-import { PlayLedger, type PlayReport } from '../sim/playbook/report';
+import type { PlayReport } from '../sim/playbook/report';
 import type { PlaybookDef } from '../sim/playbook/types';
 import type { TeamId } from '../sim/types';
 
@@ -19,11 +21,7 @@ export interface SparBot {
   playbook: PlaybookDef;
 }
 
-export interface SparRequest {
-  seed: number;
-  picks: ReplayPick[];
-  maxTicks: number;
-}
+export type SparRequest = FastMatchRequest;
 
 export interface SparResult {
   winner: TeamId | null;
@@ -34,9 +32,7 @@ export interface SparResult {
   record: ReplayRecord;
 }
 
-// A full match at 20 Hz runs 18 to 25 minutes; past this the spar is
-// called a draw rather than running forever.
-export const SPAR_MAX_TICKS = 20 * 60 * 40;
+export const SPAR_MAX_TICKS = FAST_MATCH_MAX_TICKS;
 
 // The sparring bot on team 0, seat 0, then house bots on every other seat
 // in roster order, no duplicate champion inside a team: the same shape the
@@ -77,23 +73,12 @@ export function sparringPicks(bot: SparBot): ReplayPick[] {
 }
 
 export function sparMatch(req: SparRequest): SparResult {
-  const { sim, unitIds } = buildMatchSim(req.seed, req.picks);
-  const ledger = new PlayLedger();
-  while (sim.winner === null && sim.tickCount < req.maxTicks) {
-    ledger.observe(sim.tickCount + 1, sim.tick());
-  }
-  const record: ReplayRecord = {
-    version: REPLAY_VERSION,
-    seed: req.seed,
-    picks: req.picks,
-    events: [],
-    ticks: sim.tickCount,
-  };
+  const r = runFastMatch(req);
   return {
-    winner: sim.winner,
-    ticks: sim.tickCount,
-    report: ledger.report(),
-    botUnitId: unitIds[0]!,
-    record,
+    winner: r.winner,
+    ticks: r.ticks,
+    report: r.report,
+    botUnitId: r.unitIds[0]!,
+    record: r.record,
   };
 }

@@ -6,7 +6,7 @@
 // who it is talking to. No database still: accounts, sessions and the
 // match log are JSON files under DATA_DIR.
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
@@ -31,6 +31,9 @@ import {
 } from './accounts';
 import { CONFIRM_TTL_MS, RESET_TTL_MS, TokenStore } from './action_tokens';
 import { API_RATE_PER_MIN, ApiLimiter } from './api_limit';
+import { ARENA_PLAY_NOW_PER_DAY } from './arena';
+import { ArenaRunner } from './arena_runner';
+import { type ArenaDeps, playNow, roundDue, runArenaRound } from './arena_service';
 import { chooseArt, deleteArtFor, generateArt, listArt, splashOf } from './art';
 import { fillWithBots } from './bot_fill';
 import { BotStore } from './bot_store';
@@ -340,6 +343,29 @@ const REPLAY_KEEP = 40;
 // The whole log stays in memory for profile queries; one line per match,
 // appended as each ends (kilobytes each, guests-scale).
 const matchLog: MatchRecord[] = readJsonl<MatchRecord>(MATCHES_FILE);
+// The Arena (docs/design/bots.md): matches off the live loop in a worker
+// thread bundled beside the server, inline when the bundle is missing
+// (a dev host running the TypeScript straight). Match ids are shared with
+// live matches so replay ids never collide.
+const ARENA_WORKER = path.join(__dirname, 'arena_worker.cjs');
+const arenaRunner = new ArenaRunner(existsSync(ARENA_WORKER) ? ARENA_WORKER : null);
+const arenaDeps: ArenaDeps = {
+  store: botStore,
+  runner: arenaRunner,
+  nameOf: (aid) => registry.findById(aid)?.name ?? null,
+  nextMatchId: () => nextMatchId++,
+  saveReplay: (id, record) => {
+    saveJsonAtomic(path.join(REPLAYS_DIR, `${id}.json`), record);
+    pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP);
+  },
+  recordMatch: (rec) => {
+    matchLog.push(rec);
+    appendJsonl(MATCHES_FILE, rec);
+  },
+  roundMs: envNumber('ARENA_ROUND_MINUTES', 60) * 60_000,
+  playNowPerDay: envNumber('ARENA_PLAY_NOW_PER_DAY', ARENA_PLAY_NOW_PER_DAY),
+  log: (line) => console.log(line),
+};
 
 // What a refused registration says, one line per way it can be refused.
 // A table rather than a chain of ternaries, so a new way to be refused is
@@ -933,6 +959,11 @@ const server = http.createServer(async (req, res) => {
       if (url === '/api/bots/versions' && req.method === 'POST') {
         const body = await readJsonBody(req);
         sendJson(res, 200, listVersions(botDeps, me.id, body?.id));
+        return;
+      }
+      if (url === '/api/bots/playnow' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, await playNow(arenaDeps, me.id, body?.id));
         return;
       }
       if (url === '/api/bots/revert' && req.method === 'POST') {
@@ -2012,6 +2043,7 @@ setInterval(() => {
   apiLimiter.purge(now);
   // Quota events older than the day window will never be counted again.
   forgeStore.pruneQuotaEvents(now - DAY_MS);
+  botStore.pruneArenaEvents(now - DAY_MS);
   if (sessionsDropped + tokensDropped + claimsReleased > 0) {
     console.log(
       `housekeeping: ${sessionsDropped} session(s), ${tokensDropped} link(s), ` +
@@ -2020,11 +2052,27 @@ setInterval(() => {
   }
 }, 60 * 60_000).unref();
 
+// The Arena's rounds: checked every minute, run when due, one round at a
+// time; the round stamps itself first so a crash never replays it.
+let arenaRoundRunning = false;
+setInterval(() => {
+  if (arenaRoundRunning || !roundDue(arenaDeps)) return;
+  arenaRoundRunning = true;
+  void runArenaRound(arenaDeps)
+    .catch((err) => console.error('arena round failed', err))
+    .finally(() => {
+      arenaRoundRunning = false;
+    });
+}, 60_000).unref();
+
 server.listen(PORT, () => {
   console.log(`claude-of-legends server on :${PORT} (serving ${DIST})`);
   // Said at boot so a misconfigured relay is found now, rather than the
   // first time a player forgets their password.
   console.log(`mail: ${mailer.description}, links point at ${ORIGIN}`);
+  console.log(
+    `arena: ${arenaRunner.hasWorker ? 'worker thread' : 'inline (no worker bundle found)'}`,
+  );
   console.log(
     DISCORD
       ? `discord: sign-in on, redirect ${DISCORD.redirectUri}`
