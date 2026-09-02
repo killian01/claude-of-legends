@@ -9,6 +9,7 @@ import { buildSnapshot } from '../server/snapshot';
 import { ClientWorld } from '../src/net/client_world';
 import type { ServerMsg } from '../src/net/protocol';
 import { buildMatchSim } from '../src/net/replay';
+import { BOTS } from '../src/sim/content/bots';
 import { LANER } from '../src/sim/content/bots/laner';
 import { LANER_PLAYBOOK } from '../src/sim/content/playbooks/laner';
 import { PlayLedger } from '../src/sim/playbook';
@@ -68,7 +69,8 @@ describe('the active play', () => {
     for (const p of fillWithBots([])) {
       const unit = bare.addChampion(p.team, undefined, p.championId, p.skin ?? 0);
       unit.sigils = [...p.sigils];
-      bare.attachPolicy(unit.id, LANER.policy);
+      // The same house style on each seat, attached bare instead of traced.
+      bare.attachPolicy(unit.id, BOTS[p.bot ?? LANER.id]!.policy);
     }
     for (let i = 0; i < 2000; i++) {
       traced.tick();

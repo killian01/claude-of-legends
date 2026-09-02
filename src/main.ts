@@ -15,8 +15,8 @@ import { type SpectatorView, startSpectator } from './game/spectate';
 import { ClientWorld } from './net/client_world';
 import type { ForgedMatchAssets, ServerMsg } from './net/protocol';
 import { applyReplayEvent, buildMatchSim, type ReplayRecord } from './net/replay';
-import { BOTS, DEFAULT_BOT_ID } from './sim/content/bots';
-import { fillTeam } from './sim/fill';
+import { attachBot } from './sim/content/bots';
+import { houseSeats } from './sim/content/bots/house';
 import type { ForgedChampionDef } from './sim/forge/forged_def';
 import { Rng } from './sim/rng';
 import { Sim } from './sim/sim';
@@ -93,19 +93,19 @@ function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
     const world: IWorld = sim;
     const self = sim.addChampion(0, undefined, pick.championId, pick.skin);
     self.sigils = [...pick.sigils];
-    // A full 5v5: your four allies and all five opponents are Policy bots
+    // A full 5v5: your four allies and all five opponents are house bots
     // on the fill (src/sim/fill.ts), the roster's lanes completed around
-    // your pick, with deterministic skin variety (the sim clamps
-    // out-of-range picks).
+    // your pick, each on a house style drawn from the seed, with
+    // deterministic skin variety (the sim clamps out-of-range picks).
     const rng = new Rng(42);
-    const allies = fillTeam([{ championId: pick.championId, role: pick.forged?.role }], rng);
-    for (const [i, id] of allies.entries()) {
-      const ally = sim.addChampion(0, undefined, id, i % 3);
-      sim.attachPolicy(ally.id, BOTS[DEFAULT_BOT_ID]!.policy);
+    const allies = houseSeats([{ championId: pick.championId, role: pick.forged?.role }], rng);
+    for (const [i, seat] of allies.entries()) {
+      const ally = sim.addChampion(0, undefined, seat.championId, i % 3);
+      attachBot(sim, ally.id, seat.bot);
     }
-    for (const [i, id] of fillTeam([], rng).entries()) {
-      const enemy = sim.addChampion(1, undefined, id, i % 3);
-      sim.attachPolicy(enemy.id, BOTS[DEFAULT_BOT_ID]!.policy);
+    for (const [i, seat] of houseSeats([], rng).entries()) {
+      const enemy = sim.addChampion(1, undefined, seat.championId, i % 3);
+      attachBot(sim, enemy.id, seat.bot);
     }
 
     let stopped = false;

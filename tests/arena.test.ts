@@ -25,6 +25,7 @@ import { type BotRow, BotStore } from '../server/bot_store';
 import { BASE_RATING } from '../server/rating';
 import type { MatchRecord } from '../server/records';
 import { type FastMatchRequest, runFastMatch } from '../src/fast_match';
+import { HOUSE_STYLE_IDS } from '../src/sim/content/bots/house';
 import { NEW_BOT_PLAYBOOK } from '../src/sim/content/playbooks/new_bot';
 
 const CHAMPS = [
@@ -125,7 +126,9 @@ describe('play now', () => {
     expect(picks).toHaveLength(10);
     expect(picks[0]).toMatchObject({ name: 'acc1 (Bot 1)', team: 0, playbook: NEW_BOT_PLAYBOOK });
     expect(picks[1]).toMatchObject({ name: 'acc3 (Bot 3)', team: 1 });
-    expect(picks.slice(2).every((p) => p.bot === 'laner')).toBe(true);
+    expect(
+      picks.slice(2).every((p) => p.bot !== undefined && HOUSE_STYLE_IDS.includes(p.bot)),
+    ).toBe(true);
     for (const team of [0, 1] as const) {
       const champs = picks.filter((p) => p.team === team).map((p) => p.championId);
       expect(new Set(champs).size).toBe(5);

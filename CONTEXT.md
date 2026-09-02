@@ -19,9 +19,15 @@ always means this owned one; the server's unowned filler is always called a hous
 _Avoid_: AI, NPC, computer player, golem, agent
 
 **House bot**:
-The server's own unowned bot that fills a seat nobody took: the default playbook on the
-roster champion the fill hands it. Never rated, named by no one, obeys no one.
+The server's own unowned bot that fills a seat nobody took: a house style on the roster
+champion the fill hands it. Never rated, named by no one, obeys no one.
 _Avoid_: bot fill, backfill bot, default bot
+
+**House style**:
+One of the brains a house bot plays: the Laner, the Brawler, the Sieger or the Objective
+player, each a playbook anyone can read. Drawn from the match seed for every seat the fill
+hands out, on every host, so two matches on different seeds are not played the same way.
+_Avoid_: personality, difficulty, AI level, preset, house playbook
 
 **Fill**:
 The champions house bots take to complete a team: the roster's lanes completed around the

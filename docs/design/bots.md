@@ -206,6 +206,19 @@ summed over the five matches and a replay per seed; a bot with no previous versi
 its series against house bots alone. Five seeds is a reading, not a proof: ten seeds
 move a rate by fifteen points, so a change that looks like a coin flip is one.
 
+House bots do not all play the same brain. Each seat the fill hands out draws a house
+style from the match seed: the Laner; the Brawler (the fight first: front stance on any
+champion, engaging with nobody beside it, joining a fight from across the map, retreating
+late, no camps, the group push at eight minutes); the Sieger (the wave and the towers: a
+structure in reach with any escort before the wave, a fight that holds alone, the Warden
+only when healthy and close to its spawn, the group push at ten); the Objective player
+(the Warden and the camps: at the pit forty-five seconds early, ground given under the
+tower when outnumbered alone, the camps before the wave). Each is one playbook file under
+`src/sim/content/playbooks/`, readable and copyable by any owner, and the draw runs on
+every host, so the server's backfill, the Arena, sparring, the series, offline practice
+and the environment vary the same way: two sparrings on different seeds meet different
+lineups played differently. The scoreboard says the style ("House sieger").
+
 A replay is for analysis, so it is a player, not a tape: pause, one to ten times speed,
 thirty seconds back or forward, a scrub slider over the whole match and a time to type.
 Seeking rides determinism: forward steps the sim silently to the tick; backward rebuilds

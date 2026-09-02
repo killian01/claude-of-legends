@@ -166,7 +166,16 @@ Briefing, and the before/after screenshots under `docs/screenshots`.
    version of the same bot on the other side (the saved one while an edit is unsaved,
    the version before otherwise, read back through `/api/bots/version`), sides
    alternating, the plays summed and a replay per seed (`runSeries`, `seriesPicks`,
-   `summarizeSeries` in src/game/sparring_core.ts). House styles remain.
+   `summarizeSeries` in src/game/sparring_core.ts). The second half followed the same
+   day: the house styles (src/sim/content/bots/house.ts), the Brawler, the Sieger and the
+   Objective player beside the Laner, one playbook file each under
+   src/sim/content/playbooks/, drawn from the seed for every seat the fill hands out on
+   every host, the style said on the scoreboard ("House sieger"), pinned by
+   tests/house.test.ts (the Brawler walks in where the Sieger holds, the Objective player
+   is at the pit forty seconds early, the Sieger sieges ahead of the wave). Of the exit,
+   the series and the visible difference are in; the seventy percent gate was not reached
+   (rounds 1 to 3 closed under the guard, the Laner unchanged) and the maintainer's match
+   is the maintainer's. Term: House style.
 11. **The fill and the home lanes** (grill Q15 and Q16, 2026-09-02). Nothing
    constrained a lineup: house bots took the first free roster champions in order (an
    all-bot match was Korrath, Dain, Sylra, Fenn, Elowen on both sides, no marksman, no

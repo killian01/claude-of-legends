@@ -13,6 +13,7 @@ import {
   summarizeSeries,
 } from '../src/game/sparring_core';
 import { buildMatchSim } from '../src/net/replay';
+import { HOUSE_STYLE_IDS } from '../src/sim/content/bots/house';
 import { LANER_PLAYBOOK } from '../src/sim/content/playbooks/laner';
 
 const BOT: SparBot = {
@@ -39,7 +40,9 @@ describe('sparring', () => {
       const champs = picks.filter((p) => p.team === team).map((p) => p.championId);
       expect(new Set(champs).size).toBe(5);
     }
-    expect(picks.slice(1).every((p) => p.bot === 'laner')).toBe(true);
+    expect(
+      picks.slice(1).every((p) => p.bot !== undefined && HOUSE_STYLE_IDS.includes(p.bot)),
+    ).toBe(true);
   });
 
   it('plays the bot’s own playbook, reports on it, and hands back a replayable record', () => {
@@ -82,7 +85,9 @@ describe('the series', () => {
       expect(new Set(champs).size).toBe(5);
       expect(champs).toContain('vesk');
     }
-    expect(picks.filter((p) => p.bot === 'laner')).toHaveLength(8);
+    expect(
+      picks.filter((p) => p.bot !== undefined && HOUSE_STYLE_IDS.includes(p.bot)),
+    ).toHaveLength(8);
     // No previous version: house bots alone across, the bot still on its side.
     const alone = seriesPicks(BOT, null, 5, 0);
     expect(alone.picks[alone.botIndex]).toMatchObject({ team: 0, name: BOT.name });

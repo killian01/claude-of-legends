@@ -94,8 +94,8 @@ That makes the game a reinforcement learning environment as much as a MOBA:
 - `pnpm env` runs a full match headless over NDJSON on stdio, one step per
   decision slot, so a trainer outside the repo can drive any seat
   (`headless/README.md`).
-- The house bot, the Laner, is itself a playbook
-  (`src/sim/content/playbooks/laner.ts`, ADR 0013): an ordered list of
+- Every house bot, the Laner and the three styles beside it, is a playbook
+  (`src/sim/content/playbooks/`, ADR 0013): an ordered list of
   plays run by the interpreter in `src/sim/playbook/`, the same one every
   account's bot runs. A new trigger or behavior there is a contribution
   every bot on the server can use the next morning; a smarter default

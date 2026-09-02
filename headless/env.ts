@@ -11,7 +11,8 @@
 import { buildMatchSim, type ReplayPick } from '../src/net/replay';
 import { POLICY_PERIOD_TICKS } from '../src/sim/bot_driver';
 import { DEFAULT_BOT_ID } from '../src/sim/content/bots';
-import { fillTeam, TEAM_SIZE } from '../src/sim/fill';
+import { houseSeats } from '../src/sim/content/bots/house';
+import { TEAM_SIZE } from '../src/sim/fill';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import type { Action, Observation } from '../src/sim/policy';
 import { POLICY_CONTRACT_VERSION } from '../src/sim/policy';
@@ -64,15 +65,21 @@ export interface EnvInfo {
 }
 
 // The default table: a full 5v5 where seat 0 is remote and the other nine
-// run the default scripted bot. Champions come from the fill
-// (src/sim/fill.ts) drawn from the seed, the rule server/bot_fill.ts uses,
-// so a default environment match and a default server match line up.
+// run a house style. Champions and styles come from the fill
+// (src/sim/fill.ts, src/sim/content/bots/house.ts) drawn from the seed,
+// the rule server/bot_fill.ts uses, so a default environment match and a
+// default server match line up.
 export function defaultSeats(remoteSeats = 1, seed = 1): EnvSeatSpec[] {
   const rng = new Rng(seed);
   const out: EnvSeatSpec[] = [];
   for (const team of [0, 1] as const satisfies readonly TeamId[]) {
-    for (const championId of fillTeam([], rng)) {
-      out.push({ team, championId, remote: team === 0 && out.length < remoteSeats });
+    for (const seat of houseSeats([], rng)) {
+      out.push({
+        team,
+        championId: seat.championId,
+        bot: seat.bot,
+        remote: team === 0 && out.length < remoteSeats,
+      });
     }
   }
   return out;

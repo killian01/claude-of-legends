@@ -513,7 +513,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       el(
         'p',
         'ac-lead',
-        'A name, a champion, two sigils. It starts as the Laner, the house playbook, and ' +
+        'A name, a champion, two sigils. It starts as the Laner, the default playbook, and ' +
           'becomes yours from the first edit.',
       ),
     );

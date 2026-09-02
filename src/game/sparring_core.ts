@@ -7,8 +7,7 @@
 
 import { FAST_MATCH_MAX_TICKS, type FastMatchRequest, runFastMatch } from '../fast_match';
 import type { ReplayPick, ReplayRecord } from '../net/replay';
-import { DEFAULT_BOT_ID } from '../sim/content/bots';
-import { fillTeam } from '../sim/fill';
+import { houseName, houseSeats } from '../sim/content/bots/house';
 import type { PlayReport, PlayStats } from '../sim/playbook/report';
 import type { PlaybookDef } from '../sim/playbook/types';
 import { Rng } from '../sim/rng';
@@ -42,10 +41,11 @@ export const SPAR_MAX_TICKS = FAST_MATCH_MAX_TICKS;
 export const SERIES_SEEDS = 5;
 
 // The sparring bot on team 0, seat 0, then house bots on every other seat
-// from the fill (src/sim/fill.ts) drawn from the seed: its own team
+// from the fill (src/sim/fill.ts) drawn from the seed, each on a house
+// style drawn from it too (src/sim/content/bots/house.ts): its own team
 // completed around its champion, the other team drawn whole, so two
-// sparrings on different seeds meet different lineups. The same shape the
-// offline practice match builds.
+// sparrings on different seeds meet different lineups played differently.
+// The same shape the offline practice match builds.
 export function sparringPicks(bot: SparBot, seed = 1): ReplayPick[] {
   const rng = new Rng(seed);
   const picks: ReplayPick[] = [
@@ -59,17 +59,17 @@ export function sparringPicks(bot: SparBot, seed = 1): ReplayPick[] {
     },
   ];
   const house = (team: 0 | 1, held: string[]): void => {
-    for (const [i, championId] of fillTeam(
+    for (const [i, seat] of houseSeats(
       held.map((id) => ({ championId: id })),
       rng,
     ).entries()) {
       picks.push({
-        name: 'House bot',
+        name: houseName(seat.bot),
         team,
-        championId,
+        championId: seat.championId,
         sigils: ['riftstep', 'mend'],
         skin: i % 3,
-        bot: DEFAULT_BOT_ID,
+        bot: seat.bot,
       });
     }
   };
@@ -92,8 +92,9 @@ export function sparMatch(req: SparRequest): SparResult {
 // The series' seats: the bot on `team` (its first seat), the previous
 // version of the same bot on the other team's first seat when there is
 // one (the same champion on both sides is allowed: only a team forbids
-// duplicates), house bots on every other seat from the fill. Sides
-// alternate from seed to seed so the map favors neither version.
+// duplicates), house bots on every other seat from the fill, on house
+// styles drawn from the seed. Sides alternate from seed to seed so the map
+// favors neither version.
 export function seriesPicks(
   bot: SparBot,
   previous: PlaybookDef | null,
@@ -127,14 +128,14 @@ export function seriesPicks(
       });
       held.push({ championId: bot.championId });
     }
-    for (const [i, championId] of fillTeam(held, rng).entries()) {
+    for (const [i, seat] of houseSeats(held, rng).entries()) {
       picks.push({
-        name: 'House bot',
+        name: houseName(seat.bot),
         team: t,
-        championId,
+        championId: seat.championId,
         sigils: ['riftstep', 'mend'],
         skin: i % 3,
-        bot: DEFAULT_BOT_ID,
+        bot: seat.bot,
       });
     }
   }

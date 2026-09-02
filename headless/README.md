@@ -45,9 +45,10 @@ decision slot during the step. A dead seat gets none, exactly like a bot.
 ## Seats
 
 By default the environment runs a full 5v5 where seat 0 is remote and the other
-nine run the Laner, the default scripted bot. Champions are handed out in roster
-order with no duplicate inside a team, the same deterministic rule the server
-uses, so a default environment match and a default server match line up.
+nine run a house style (`laner`, `brawler`, `sieger` or `objective`) drawn from
+the seed. Champions come from the fill: the roster's lanes completed by role, no
+duplicate inside a team, drawn from the seed, the same deterministic rule the
+server uses, so a default environment match and a default server match line up.
 
 To choose your own, pass a seat table to `reset`:
 
@@ -59,8 +60,8 @@ To choose your own, pass a seat table to `reset`:
 ]}
 ```
 
-`remote` seats are stepped by you. Everything else runs the named scripted bot
-in-sim (default: the Laner).
+`remote` seats are stepped by you. Everything else runs the named house style
+in-sim (`laner`, `brawler`, `sieger` or `objective`; default: the Laner).
 
 ## One step is one decision slot
 
