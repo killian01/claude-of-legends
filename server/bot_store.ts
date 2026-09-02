@@ -9,6 +9,9 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import type { ReplayPick } from '../src/net/replay';
+import type { PatchOp } from '../src/sim/playbook/patch';
+import type { PlayReport } from '../src/sim/playbook/report';
 import type { PlaybookDef } from '../src/sim/playbook/types';
 import { BASE_RATING } from './rating';
 
@@ -51,6 +54,29 @@ create table if not exists arena_events (
   account_id integer not null,
   at integer not null
 );
+create table if not exists bot_reports (
+  id integer primary key autoincrement,
+  match_id integer not null,
+  bot_id text not null,
+  seat_index integer not null,
+  unit_id integer not null default 0,
+  picks text not null,
+  report text not null,
+  at integer not null
+);
+create index if not exists bot_reports_by_bot on bot_reports (bot_id, at);
+create table if not exists bot_proposals (
+  id integer primary key autoincrement,
+  bot_id text not null,
+  at integer not null,
+  comment text not null,
+  ops text not null,
+  current_wins integer not null,
+  candidate_wins integer not null,
+  matches integer not null,
+  status text not null check (status in ('pending', 'applied', 'dismissed')),
+  applied_version integer
+);
 `;
 
 // The two ways an account's bot is rated (ADR 0013): in live matches
@@ -69,6 +95,8 @@ export interface BotRow {
   version: number;
   // In the Arena's pool (docs/design/bots.md).
   deposited: boolean;
+  // The night coach's passing proposals become versions on their own.
+  autoApply: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -93,12 +121,14 @@ interface RawBot {
   playbook: string;
   version: number;
   deposited: number;
+  auto_apply: number;
   created_at: number;
   updated_at: number;
 }
 
 const BOT_COLS =
-  'id, account_id, name, champion_id, sigils, skin, playbook, version, deposited, created_at, updated_at';
+  'id, account_id, name, champion_id, sigils, skin, playbook, version, deposited, auto_apply, ' +
+  'created_at, updated_at';
 
 function toBot(r: RawBot): BotRow {
   return {
@@ -111,6 +141,7 @@ function toBot(r: RawBot): BotRow {
     playbook: JSON.parse(r.playbook) as PlaybookDef,
     version: r.version,
     deposited: r.deposited === 1,
+    autoApply: r.auto_apply === 1,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -125,6 +156,17 @@ export class BotStore {
     this.db = new DatabaseSync(file);
     this.db.exec('pragma journal_mode = wal');
     this.db.exec(SCHEMA);
+    // A store created before the night coach gains its columns in place;
+    // create-if-not-exists alone never alters an existing table.
+    this.ensureColumn('bots', 'auto_apply', 'auto_apply integer not null default 0');
+    this.ensureColumn('bots', 'last_coached_at', 'last_coached_at integer');
+  }
+
+  private ensureColumn(table: string, name: string, ddl: string): void {
+    const cols = this.db.prepare(`pragma table_info(${table})`).all() as unknown as {
+      name: string;
+    }[];
+    if (!cols.some((c) => c.name === name)) this.db.exec(`alter table ${table} add column ${ddl}`);
   }
 
   close(): void {
@@ -137,7 +179,7 @@ export class BotStore {
     this.db
       .prepare(
         `insert into bots (${BOT_COLS})
-         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         row.id,
@@ -149,6 +191,7 @@ export class BotStore {
         JSON.stringify(row.playbook),
         row.version,
         row.deposited ? 1 : 0,
+        row.autoApply ? 1 : 0,
         row.createdAt,
         row.updatedAt,
       );
@@ -211,6 +254,21 @@ export class BotStore {
 
   setDeposited(id: string, on: boolean): void {
     this.db.prepare('update bots set deposited = ? where id = ?').run(on ? 1 : 0, id);
+  }
+
+  setAutoApply(id: string, on: boolean): void {
+    this.db.prepare('update bots set auto_apply = ? where id = ?').run(on ? 1 : 0, id);
+  }
+
+  botLastCoachedAt(id: string): number | null {
+    const r = this.db.prepare('select last_coached_at as at from bots where id = ?').get(id) as
+      | { at: number | null }
+      | undefined;
+    return r?.at ?? null;
+  }
+
+  setBotLastCoachedAt(id: string, at: number): void {
+    this.db.prepare('update bots set last_coached_at = ? where id = ?').run(at, id);
   }
 
   depositedCount(accountId: number): number {
@@ -321,4 +379,172 @@ export class BotStore {
     const r = this.db.prepare('delete from arena_events where at < ?').run(before);
     return Number(r.changes);
   }
+
+  arenaLastNightAt(): number | null {
+    const r = this.db.prepare("select value from arena_meta where key = 'last_night_at'").get() as
+      | { value: number }
+      | undefined;
+    return r ? r.value : null;
+  }
+
+  setArenaLastNightAt(at: number): void {
+    this.db
+      .prepare(
+        "insert into arena_meta (key, value) values ('last_night_at', ?) " +
+          'on conflict (key) do update set value = excluded.value',
+      )
+      .run(at);
+  }
+
+  // -- reports and proposals (the night coach) -----------------------------
+
+  // What a bot seat did in one Arena match: the match's picks (its
+  // opponents, for sparring) and the play report.
+  addBotReport(row: BotReportRow): void {
+    this.db
+      .prepare(
+        'insert into bot_reports (match_id, bot_id, seat_index, unit_id, picks, report, at) values (?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        row.matchId,
+        row.botId,
+        row.seatIndex,
+        row.unitId,
+        JSON.stringify(row.picks),
+        JSON.stringify(row.report),
+        row.at,
+      );
+  }
+
+  listBotReports(botId: string, since: number): BotReportRow[] {
+    const rows = this.db
+      .prepare(
+        'select match_id, bot_id, seat_index, unit_id, picks, report, at from bot_reports where bot_id = ? and at >= ? order by at',
+      )
+      .all(botId, since) as unknown as {
+      match_id: number;
+      bot_id: string;
+      seat_index: number;
+      unit_id: number;
+      picks: string;
+      report: string;
+      at: number;
+    }[];
+    return rows.map((r) => ({
+      matchId: r.match_id,
+      botId: r.bot_id,
+      seatIndex: r.seat_index,
+      unitId: r.unit_id,
+      picks: JSON.parse(r.picks) as ReplayPick[],
+      report: JSON.parse(r.report) as PlayReport,
+      at: r.at,
+    }));
+  }
+
+  pruneBotReports(before: number): number {
+    const r = this.db.prepare('delete from bot_reports where at < ?').run(before);
+    return Number(r.changes);
+  }
+
+  addProposal(p: Omit<ProposalRow, 'id' | 'appliedVersion'>): number {
+    const r = this.db
+      .prepare(
+        `insert into bot_proposals (bot_id, at, comment, ops, current_wins, candidate_wins, matches, status)
+         values (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        p.botId,
+        p.at,
+        p.comment,
+        JSON.stringify(p.ops),
+        p.currentWins,
+        p.candidateWins,
+        p.matches,
+        p.status,
+      );
+    return Number(r.lastInsertRowid);
+  }
+
+  getProposal(id: number): ProposalRow | null {
+    const r = this.db.prepare(`select ${PROPOSAL_COLS} from bot_proposals where id = ?`).get(id) as
+      | RawProposal
+      | undefined;
+    return r ? toProposal(r) : null;
+  }
+
+  // The newest proposal still awaiting the owner, if any.
+  pendingProposal(botId: string): ProposalRow | null {
+    const r = this.db
+      .prepare(
+        `select ${PROPOSAL_COLS} from bot_proposals where bot_id = ? and status = 'pending' order by at desc limit 1`,
+      )
+      .get(botId) as RawProposal | undefined;
+    return r ? toProposal(r) : null;
+  }
+
+  setProposalStatus(
+    id: number,
+    status: ProposalRow['status'],
+    appliedVersion: number | null,
+  ): void {
+    this.db
+      .prepare('update bot_proposals set status = ?, applied_version = ? where id = ?')
+      .run(status, appliedVersion, id);
+  }
+}
+
+export interface BotReportRow {
+  matchId: number;
+  botId: string;
+  seatIndex: number;
+  unitId: number;
+  picks: ReplayPick[];
+  report: PlayReport;
+  at: number;
+}
+
+// A night coach proposal (docs/design/bots.md): the patch, what sparring
+// said, and what the owner did with it.
+export interface ProposalRow {
+  id: number;
+  botId: string;
+  at: number;
+  comment: string;
+  ops: PatchOp[];
+  currentWins: number;
+  candidateWins: number;
+  matches: number;
+  status: 'pending' | 'applied' | 'dismissed';
+  appliedVersion: number | null;
+}
+
+interface RawProposal {
+  id: number;
+  bot_id: string;
+  at: number;
+  comment: string;
+  ops: string;
+  current_wins: number;
+  candidate_wins: number;
+  matches: number;
+  status: ProposalRow['status'];
+  applied_version: number | null;
+}
+
+const PROPOSAL_COLS =
+  'id, bot_id, at, comment, ops, current_wins, candidate_wins, matches, status, applied_version';
+
+function toProposal(r: RawProposal): ProposalRow {
+  return {
+    id: r.id,
+    botId: r.bot_id,
+    at: r.at,
+    comment: r.comment,
+    ops: JSON.parse(r.ops) as PatchOp[],
+    currentWins: r.current_wins,
+    candidateWins: r.candidate_wins,
+    matches: r.matches,
+    status: r.status,
+    appliedVersion: r.applied_version,
+  };
 }

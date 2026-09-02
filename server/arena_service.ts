@@ -144,6 +144,18 @@ export async function runArenaMatch(
     }
   });
   const rows = result.score.map((r) => ({ ...r, player: nameByUnit.get(r.unitId) ?? r.player }));
+  // What each bot seat did, for its owner's Briefing and the night coach.
+  plan.seats.forEach((s, i) => {
+    deps.store.addBotReport({
+      matchId,
+      botId: s.bot.id,
+      seatIndex: i,
+      unitId: result.unitIds[i] ?? 0,
+      picks,
+      report: result.report,
+      at: now,
+    });
+  });
   deps.recordMatch(
     buildMatchRecord(
       rows,

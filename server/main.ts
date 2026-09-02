@@ -43,9 +43,11 @@ import {
   deleteBot,
   listBots,
   listVersions,
+  ownedBot,
   PLAYBOOK_JSON_MAX,
   revertBot,
   saveBot,
+  setAutoApply,
   setDeposited,
 } from './bots';
 import { ConnectionLimiter } from './conn_limit';
@@ -81,6 +83,13 @@ import { mailerFromEnv } from './mailer';
 import { AFK_IDLE_TICKS, Match, type MatchPick } from './match';
 import { type OwnedSeat, type RatingBook, rateMatch } from './match_rating';
 import { Matchmaker, type MatchSource } from './matchmaker';
+import {
+  answerProposal,
+  buildBriefing,
+  type NightCoachDeps,
+  nightDue,
+  runNight,
+} from './night_coach';
 import { passwordErrorMessage, validatePassword } from './password';
 import { type CoachDeps, coachPlaybook } from './playbook_suggest';
 import { buildProfile } from './profile';
@@ -364,6 +373,24 @@ const arenaDeps: ArenaDeps = {
   },
   roundMs: envNumber('ARENA_ROUND_MINUTES', 60) * 60_000,
   playNowPerDay: envNumber('ARENA_PLAY_NOW_PER_DAY', ARENA_PLAY_NOW_PER_DAY),
+  log: (line) => console.log(line),
+};
+// The night coach (docs/design/bots.md): the same coach as the Academy,
+// asked once per bot per night about its Arena report; sparring on the
+// Arena's runner decides whether the proposal stands.
+const nightCoachDeps: NightCoachDeps = {
+  store: botStore,
+  runner: arenaRunner,
+  coach: coachDeps.apiKey
+    ? (accountId, botId, message) =>
+        coachPlaybook(coachDeps, accountId, {
+          id: botId,
+          messages: [{ role: 'user', text: message }],
+          depth: 'quick',
+        })
+    : null,
+  records: () => matchLog,
+  sparringPerSide: envNumber('SPARRING_PER_SIDE', 3),
   log: (line) => console.log(line),
 };
 
@@ -959,6 +986,33 @@ const server = http.createServer(async (req, res) => {
       if (url === '/api/bots/versions' && req.method === 'POST') {
         const body = await readJsonBody(req);
         sendJson(res, 200, listVersions(botDeps, me.id, body?.id));
+        return;
+      }
+      if (url === '/api/bots/briefing' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const found = ownedBot(botDeps, me.id, body?.id);
+        sendJson(
+          res,
+          200,
+          found.ok ? { ok: true, ...buildBriefing(nightCoachDeps, found.bot) } : found,
+        );
+        return;
+      }
+      if (url === '/api/bots/proposal' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const found = ownedBot(botDeps, me.id, body?.id);
+        sendJson(
+          res,
+          200,
+          found.ok
+            ? answerProposal(nightCoachDeps, found.bot, body?.proposalId, body?.action)
+            : found,
+        );
+        return;
+      }
+      if (url === '/api/bots/autoapply' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, setAutoApply(botDeps, me.id, body?.id, body?.on));
         return;
       }
       if (url === '/api/bots/playnow' && req.method === 'POST') {
@@ -2044,6 +2098,8 @@ setInterval(() => {
   // Quota events older than the day window will never be counted again.
   forgeStore.pruneQuotaEvents(now - DAY_MS);
   botStore.pruneArenaEvents(now - DAY_MS);
+  // Reports older than a week have been briefed and coached on already.
+  botStore.pruneBotReports(now - 7 * DAY_MS);
   if (sessionsDropped + tokensDropped + claimsReleased > 0) {
     console.log(
       `housekeeping: ${sessionsDropped} session(s), ${tokensDropped} link(s), ` +
@@ -2056,6 +2112,18 @@ setInterval(() => {
 // time; the round stamps itself first so a crash never replays it.
 let arenaRoundRunning = false;
 setInterval(() => {
+  // The night: once a day, after the rounds, every deposited bot is
+  // briefed and coached, one after another on the same runner.
+  if (!arenaRoundRunning && nightDue(botStore.arenaLastNightAt(), Date.now())) {
+    arenaRoundRunning = true;
+    botStore.setArenaLastNightAt(Date.now());
+    void runNight(nightCoachDeps)
+      .catch((err) => console.error('night coach failed', err))
+      .finally(() => {
+        arenaRoundRunning = false;
+      });
+    return;
+  }
   if (arenaRoundRunning || !roundDue(arenaDeps)) return;
   arenaRoundRunning = true;
   void runArenaRound(arenaDeps)

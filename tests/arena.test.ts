@@ -51,6 +51,7 @@ function bot(n: number, accountId = n, championId = CHAMPS[n % CHAMPS.length]!):
     playbook: NEW_BOT_PLAYBOOK,
     version: 1,
     deposited: true,
+    autoApply: false,
     createdAt: n,
     updatedAt: n,
   };

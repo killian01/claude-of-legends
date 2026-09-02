@@ -26,6 +26,7 @@ import {
   BEHAVIOR_FORMS,
   BEHAVIOR_KINDS,
   describeBehavior,
+  describeOp,
   describeTrigger,
   freshBehavior,
   freshTrigger,
@@ -142,6 +143,27 @@ interface BotView {
   playbook: PlaybookDef;
   version: number;
   deposited: boolean;
+  autoApply?: boolean;
+}
+
+// The Briefing as the API returns it (server/night_coach.ts Briefing).
+interface BriefingView {
+  since: number;
+  matches: { at: number; win: boolean; delta: number; replayId?: number }[];
+  wins: number;
+  losses: number;
+  ratingDelta: number;
+  rating: number;
+  plays: Record<string, { ticks: number; deaths: number }>;
+  proposal: {
+    id: number;
+    comment: string;
+    ops: PatchOp[];
+    currentWins: number;
+    candidateWins: number;
+    matches: number;
+  } | null;
+  autoApply: boolean;
 }
 
 interface ChatBubble {
@@ -283,6 +305,8 @@ export function openAcademy(container: HTMLElement): void {
   let sparResult: SparResult | null = null;
   let sparError: string | null = null;
   let arenaRunning = false;
+  let briefing: BriefingView | null = null;
+  let briefingLoading = false;
   let arenaResult: { text: string; replayId: number | null } | null = null;
 
   const say = (text: string, bad = false): void => {
@@ -305,6 +329,8 @@ export function openAcademy(container: HTMLElement): void {
     sparResult = null;
     sparError = null;
     arenaResult = null;
+    briefing = null;
+    briefingLoading = false;
     status = '';
     renderAll();
   };
@@ -1173,6 +1199,153 @@ export function openAcademy(container: HTMLElement): void {
       sparBox.append(watch);
     }
     side.append(sparBox);
+
+    // The Briefing (docs/design/bots.md): what the Arena did to this bot
+    // since yesterday, play by play, and the night coach's proposal with
+    // what sparring said about it.
+    const brief = el('div', 'ac-panel');
+    brief.append(el('h3', '', 'The Briefing'));
+    if (!briefing) {
+      const load = el(
+        'button',
+        'ac-btn',
+        briefingLoading ? 'Loading...' : 'Read the Briefing',
+      ) as HTMLButtonElement;
+      load.disabled = briefingLoading;
+      load.addEventListener('click', () => {
+        briefingLoading = true;
+        renderSide();
+        void api<BriefingView>('/api/bots/briefing', { id: bot.id }).then((r) => {
+          briefingLoading = false;
+          if (!r.ok) {
+            say(r.error, true);
+            renderSide();
+            return;
+          }
+          briefing = r;
+          renderSide();
+        });
+      });
+      brief.append(
+        el(
+          'p',
+          'ac-lead',
+          'Every night the Arena plays your deposited bots and the coach reads the report. ' +
+            'Come back in the morning.',
+        ),
+        load,
+      );
+    } else {
+      const b = briefing;
+      brief.append(
+        el(
+          'div',
+          'ac-status',
+          `Last 24 hours in the Arena: ${b.wins} won, ${b.losses} lost, ` +
+            `${b.ratingDelta >= 0 ? '+' : ''}${b.ratingDelta} (Arena rating ${b.rating}).`,
+        ),
+      );
+      const rows = Object.entries(b.plays).sort((x, y) => y[1].ticks - x[1].ticks);
+      if (rows.length > 0) {
+        const table = el('table', 'ac-table');
+        const hr = el('tr', '');
+        for (const h of ['Play', 'Time', 'Deaths']) hr.append(el('th', '', h));
+        table.append(hr);
+        for (const [id, s] of rows) {
+          const tr = el('tr', '');
+          tr.append(
+            el('td', '', id),
+            el('td', 'num', fmtSeconds(s.ticks)),
+            el('td', 'num', String(s.deaths)),
+          );
+          table.append(tr);
+        }
+        brief.append(table);
+      }
+      for (const m of b.matches.slice(-5).reverse()) {
+        const line = el('div', 'ac-row');
+        line.append(
+          el(
+            'span',
+            '',
+            `${new Date(m.at).toLocaleString()}: ${m.win ? 'won' : 'lost'}, ${m.delta >= 0 ? '+' : ''}${m.delta}`,
+          ),
+        );
+        if (m.replayId !== undefined) {
+          const id = m.replayId;
+          const watch = el('button', 'ac-btn mini', 'Watch');
+          watch.addEventListener('click', () => {
+            close();
+            window.dispatchEvent(new CustomEvent('loc:replay', { detail: id }));
+          });
+          line.append(watch);
+        }
+        brief.append(line);
+      }
+      if (b.proposal) {
+        const p = b.proposal;
+        const box = el('div', 'ac-play');
+        box.append(el('div', 'ac-play-id', 'The coach proposes'));
+        box.append(el('div', 'ac-play-text', p.comment));
+        for (const op of p.ops) box.append(el('div', 'ac-sub', describeOp(op)));
+        box.append(
+          el(
+            'div',
+            'ac-status',
+            `Sparring: ${p.candidateWins} wins with it, ${p.currentWins} without, over ${p.matches} matches.`,
+          ),
+        );
+        const answer = (action: 'apply' | 'dismiss'): void => {
+          void api<{ version?: number }>('/api/bots/proposal', {
+            id: bot.id,
+            proposalId: p.id,
+            action,
+          }).then((r) => {
+            if (!r.ok) {
+              say(r.error, true);
+              return;
+            }
+            say(action === 'apply' ? `Applied as v${r.version}.` : 'Dismissed.');
+            void load(bot.id);
+          });
+        };
+        const apply = el('button', 'ac-btn primary', 'Apply');
+        apply.addEventListener('click', () => answer('apply'));
+        const dismiss = el('button', 'ac-btn', 'Dismiss');
+        dismiss.addEventListener('click', () => answer('dismiss'));
+        box.append(apply, dismiss);
+        brief.append(box);
+      } else {
+        brief.append(el('div', 'ac-sub', 'No proposal waiting.'));
+      }
+      const auto = el('label', 'ac-check');
+      const autoBox = el('input', '') as HTMLInputElement;
+      autoBox.type = 'checkbox';
+      autoBox.checked = b.autoApply;
+      autoBox.addEventListener('change', () => {
+        void api<{ bot: BotView }>('/api/bots/autoapply', { id: bot.id, on: autoBox.checked }).then(
+          (r) => {
+            if (!r.ok) {
+              autoBox.checked = b.autoApply;
+              say(r.error, true);
+              return;
+            }
+            b.autoApply = autoBox.checked;
+          },
+        );
+      });
+      auto.append(
+        autoBox,
+        document.createTextNode("Apply the coach's passing proposals on their own"),
+      );
+      const refresh = el('button', 'ac-btn mini', 'Refresh');
+      refresh.addEventListener('click', () => {
+        briefing = null;
+        renderSide();
+      });
+      brief.append(auto, refresh);
+    }
+    side.append(brief);
   }
 
   function renderAll(): void {

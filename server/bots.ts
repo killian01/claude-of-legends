@@ -143,6 +143,7 @@ export function createBot(
     playbook: NEW_BOT_PLAYBOOK,
     version: 1,
     deposited: false,
+    autoApply: false,
     createdAt: at,
     updatedAt: at,
   };
@@ -217,6 +218,30 @@ export function setDeposited(
   }
   deps.store.setDeposited(bot.id, on);
   return { ok: true, bot: { ...bot, deposited: on } };
+}
+
+// The night coach's passing proposals become versions on their own, or
+// wait for the owner: the choice is the owner's (docs/design/bots.md).
+export function setAutoApply(
+  deps: BotDeps,
+  accountId: number,
+  id: unknown,
+  on: unknown,
+): BotOutcome<{ bot: BotRow }> {
+  if (typeof on !== 'boolean') return { ok: false, error: 'malformed request' };
+  const found = owned(deps, accountId, id);
+  if (!found.ok) return found;
+  deps.store.setAutoApply(found.bot.id, on);
+  return { ok: true, bot: { ...found.bot, autoApply: on } };
+}
+
+// The owner's bot, for the surfaces that act on one (the Briefing).
+export function ownedBot(
+  deps: BotDeps,
+  accountId: number,
+  id: unknown,
+): BotOutcome<{ bot: BotRow }> {
+  return owned(deps, accountId, id);
 }
 
 export function listVersions(

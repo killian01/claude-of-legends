@@ -3,6 +3,7 @@
 // built from. Pure functions over the data; the validator stays the
 // authority on what is legal, these only make it readable and editable.
 
+import type { PatchOp } from '../sim/playbook/patch';
 import type { Behavior, LaneId, Trigger } from '../sim/playbook/types';
 
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
@@ -329,3 +330,28 @@ export function freshBehavior(kind: Behavior['kind']): Behavior {
 
 export const TRIGGER_KINDS = Object.keys(TRIGGER_FORMS) as Trigger['kind'][];
 export const BEHAVIOR_KINDS = Object.keys(BEHAVIOR_FORMS) as Behavior['kind'][];
+
+// A patch operation in words, for the Briefing's proposal.
+export function describeOp(op: PatchOp): string {
+  switch (op.op) {
+    case 'add': {
+      const where = op.before ? ` before "${op.before}"` : ' at the end';
+      return `add "${op.play.id}"${where}: when ${describeTrigger(op.play.when)}, ${describeBehavior(op.play.do)}`;
+    }
+    case 'remove':
+      return `remove "${op.id}"`;
+    case 'move':
+      return op.before === null
+        ? `move "${op.id}" to the end`
+        : `move "${op.id}" before "${op.before}"`;
+    case 'set': {
+      const parts: string[] = [];
+      if (op.play.when) parts.push(`when ${describeTrigger(op.play.when)}`);
+      if (op.play.do) parts.push(describeBehavior(op.play.do));
+      if (op.play.enabled !== undefined) parts.push(op.play.enabled ? 'enabled' : 'disabled');
+      return `change "${op.id}": ${parts.join(', ') || 'nothing'}`;
+    }
+    case 'replace':
+      return `replace the whole playbook (${op.playbook.plays.length} plays)`;
+  }
+}
