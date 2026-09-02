@@ -11,10 +11,13 @@ rating pair, the agent quota, and the streaming conversation live there, not on 
 built in its own worktree beside the Forge session. It never touches a Forge file: bots
 get their own store module and their own conversation module.
 
-State of play (2026-09-02): phases 0 to 8 done on `feature/bots`, unmerged. What the
-maintainer still owes the PR: a click-through of the Academy, the select with a bot,
-the coach bar and the Briefing (the UI was type-checked and bundled, never clicked),
-and the before/after screenshots under `docs/screenshots`.
+State of play (2026-09-02): phases 0 to 8 done on `feature/bots`, unmerged, plus the
+first playtest round: bots on their own select tab, the coach bar moved under the KDA
+box with the standing order and the running play read back from the snapshot, the
+replay player (ten times, seek, scrub, typed time), the way back from a replay to the
+Academy, and the coach conversation kept with the bot. What the maintainer still owes
+the PR: a second click-through of those, the Briefing, and the before/after screenshots
+under `docs/screenshots`.
 
 0. **Design**: DONE. Grill rounds 1 to 4, `docs/design/bots.md`, ADR 0013, the glossary
    terms, this plan.

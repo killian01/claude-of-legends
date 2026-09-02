@@ -69,10 +69,11 @@ The night is for the Briefing and for server sparring, not for the right to play
   sigils, a skin, a playbook, a record. Another champion is another bot.
 - **Unlimited** bots per account; at most three **deposited** in the Arena at once (a
   toggle), to bound server CPU.
-- **Champion select** in the live queue offers the account's bots beside the roster grid,
-  the way the Forge queue select offers forged champions; picking a bot fixes the
-  champion. In the Arena there is no select: the bot carries its pick. No duplicate
-  champion within a team, in the Arena as in the live queue.
+- **Champion select** in the live queue offers the account's bots on their own tab
+  beside the roster (a bot card wears its champion's face and a BOT badge; mixed into
+  the grid it read as the same champion twice); picking a bot fixes the champion. In
+  the Arena there is no select: the bot carries its pick. No duplicate champion within
+  a team, in the Arena as in the live queue.
 - **Versions**: every applied playbook change is a version. An edit applies from the next
   match; the replay embeds the version that played, the way it embeds forged definitions
   (ADR 0010), so what you rewatch is what ran.
@@ -142,6 +143,9 @@ The place where an account writes and tests a bot. Conversation first, the play 
 always visible and editable beside it (reorder, edit parameters, enable and disable):
 the conversation is the door for people who would rather describe a style; the list is
 the truth everyone ends up touching. Every bot starts as the Laner on its champion.
+The conversation is kept with the bot on the server, session after session, so the
+coach remembers what was done: the model reads the newest turns (the thread cap), the
+store keeps a hundred exchanges, and Start over forgets the thread, never the plays.
 
 The conversation must be reactive, and reactive is measured: on a short request, the first
 changed play appears in under two seconds. Four rules make that true:
@@ -158,8 +162,15 @@ changed play appears in under two seconds. Four rules make that true:
    reference, never from memory.
 
 Sparring in the Academy runs a whole match against house bots at full speed in the
-browser, then opens the replay with the active-play overlay. The test drive into offline
-practice (the Forge's pattern) stays available for watching at real speed.
+browser, then opens the replay with the active-play overlay; leaving the replay lands
+back in the Academy on the same bot. The test drive into offline practice (the Forge's
+pattern) stays available for watching at real speed.
+
+A replay is for analysis, so it is a player, not a tape: pause, one to ten times speed,
+thirty seconds back or forward, a scrub slider over the whole match and a time to type.
+Seeking rides determinism: forward steps the sim silently to the tick; backward rebuilds
+it from the record and steps from the start, chunked over frames so the page stays
+responsive (a few seconds for a late minute, shown as seeking on the clock).
 
 ## Seeing what the bot thinks
 

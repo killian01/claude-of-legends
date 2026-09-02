@@ -2,6 +2,8 @@
 // (render, HUD, minimap, fog), but viewer input must never steer the
 // recorded match, so every order and purchase is a no-op. castAbility
 // answering false makes the deny sound an honest reply in a replay.
+// A backward seek rebuilds the sim from the record and rebinds it here, so
+// the presentation keeps reading through the same world.
 
 import type { ChampionDef } from '../sim/content/champions';
 import type { GameMap } from '../sim/content/map';
@@ -14,7 +16,15 @@ import type { Zone } from '../sim/zones';
 import type { IWorld } from '../world_api';
 
 export class ReplayWorld implements IWorld {
-  constructor(private readonly sim: Sim) {}
+  private sim: Sim;
+
+  constructor(sim: Sim) {
+    this.sim = sim;
+  }
+
+  rebind(sim: Sim): void {
+    this.sim = sim;
+  }
 
   get map(): GameMap {
     return this.sim.map;

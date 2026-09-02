@@ -286,6 +286,7 @@ export class ClientWorld implements IWorld {
       }
       unit.dead = s.d === 1;
       unit.play = s.p ?? null;
+      unit.coachOrder = s.co ?? null;
       applyWireStatuses(unit, s.st, ccUntil);
       // Windup telegraph mirror: the renderer reads pendingSpell to draw
       // the charge and its aim for every visible champion.

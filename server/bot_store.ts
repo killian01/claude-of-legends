@@ -6,6 +6,7 @@
 // the playbook validator gates every def before it is worth storing, and
 // server/bots.ts is the caller that does.
 
+import type { CoachTurn } from '../src/net/coach_chat';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -76,6 +77,11 @@ create table if not exists bot_proposals (
   matches integer not null,
   status text not null check (status in ('pending', 'applied', 'dismissed')),
   applied_version integer
+);
+create table if not exists bot_chats (
+  bot_id text primary key,
+  turns text not null,
+  updated_at integer not null
 );
 `;
 
@@ -249,6 +255,7 @@ export class BotStore {
 
   deleteBot(id: string): void {
     this.db.prepare('delete from bot_versions where bot_id = ?').run(id);
+    this.db.prepare('delete from bot_chats where bot_id = ?').run(id);
     this.db.prepare('delete from bots where id = ?').run(id);
   }
 
@@ -444,6 +451,27 @@ export class BotStore {
   pruneBotReports(before: number): number {
     const r = this.db.prepare('delete from bot_reports where at < ?').run(before);
     return Number(r.changes);
+  }
+
+  // The coach conversation kept with the bot (server/bot_chats.ts).
+  getChat(botId: string): CoachTurn[] {
+    const r = this.db.prepare('select turns from bot_chats where bot_id = ?').get(botId) as
+      | { turns: string }
+      | undefined;
+    return r ? (JSON.parse(r.turns) as CoachTurn[]) : [];
+  }
+
+  setChat(botId: string, turns: readonly CoachTurn[], at: number): void {
+    this.db
+      .prepare(
+        `insert into bot_chats (bot_id, turns, updated_at) values (?, ?, ?)
+         on conflict(bot_id) do update set turns = excluded.turns, updated_at = excluded.updated_at`,
+      )
+      .run(botId, JSON.stringify(turns), at);
+  }
+
+  clearChat(botId: string): void {
+    this.db.prepare('delete from bot_chats where bot_id = ?').run(botId);
   }
 
   addProposal(p: Omit<ProposalRow, 'id' | 'appliedVersion'>): number {

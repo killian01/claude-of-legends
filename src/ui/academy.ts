@@ -7,6 +7,7 @@
 // every coach operation goes through the validator before it lands.
 
 import { runSparring } from '../game/sparring';
+import { type CoachTurn, commentOf } from '../net/coach_chat';
 import type { SparResult } from '../game/sparring_core';
 import type { ReplayRecord } from '../net/replay';
 import { CHAMPION_LIST, CHAMPIONS } from '../sim/content/champions';
@@ -253,7 +254,11 @@ function fmtSeconds(ticks: number): string {
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
 }
 
-export function openAcademy(container: HTMLElement): void {
+// The last sparring result per bot, kept while the page lives: watching
+// the replay leaves the Academy and comes back to it.
+const lastSpar = new Map<string, SparResult>();
+
+export function openAcademy(container: HTMLElement, opts: { botId?: string } = {}): void {
   ensureCss();
   const root = el('div', 'ac');
   const stopBackdrop = startMenuBackdrop(root);
@@ -295,6 +300,7 @@ export function openAcademy(container: HTMLElement): void {
   let confirmDelete = false;
   let versions: { version: number; author: string; at: number }[] | null = null;
   const chat: ChatBubble[] = [];
+  let chatLoading = false;
   let chatDraft = '';
   let coaching = false;
   let coachText = '';
@@ -326,7 +332,28 @@ export function openAcademy(container: HTMLElement): void {
     chatDraft = '';
     coachText = '';
     coachRefused = [];
-    sparResult = null;
+    sparResult = bot ? (lastSpar.get(bot.id) ?? null) : null;
+    // The conversation lives with the bot on the server: fetched on every
+    // open, so a new session starts where the last one stopped.
+    chatLoading = bot !== null;
+    if (bot) {
+      const id = bot.id;
+      void api<{ turns: CoachTurn[] }>('/api/bots/chat', { id }).then((r) => {
+        if (current?.id !== id) return;
+        chatLoading = false;
+        if (r.ok) {
+          for (const t of r.turns) {
+            chat.push({
+              role: t.role,
+              text: t.text,
+              bubble: t.role === 'user' ? t.text : commentOf(t.text),
+              ...(t.refused ? { refused: t.refused } : {}),
+            });
+          }
+        }
+        renderSide();
+      });
+    }
     sparError = null;
     arenaResult = null;
     briefing = null;
@@ -936,11 +963,16 @@ export function openAcademy(container: HTMLElement): void {
         'ac-lead',
         'Say how the bot should play ("safer under towers", "take every Warden", "farm ' +
           'until level six, then fight"). Each answer edits the play list as it streams; ' +
-          'nothing is saved until you press Save.',
+          'nothing is saved until you press Save. The conversation stays with the bot, ' +
+          'session after session.',
       ),
     );
     const log = el('div', 'ac-chatlog');
-    if (chat.length === 0 && !coaching) log.append(el('div', 'ac-sub', 'No messages yet.'));
+    if (chat.length === 0 && !coaching) {
+      log.append(
+        el('div', 'ac-sub', chatLoading ? 'Opening the conversation...' : 'No messages yet.'),
+      );
+    }
     for (const turn of chat) {
       const bubble = el('div', `ac-bubble ${turn.role === 'user' ? 'user' : 'ai'}`, turn.bubble);
       if (turn.refused && turn.refused.length > 0) {
@@ -994,7 +1026,7 @@ export function openAcademy(container: HTMLElement): void {
       }>(
         {
           id: bot.id,
-          messages: chat.map((t) => ({ role: t.role, text: t.text })),
+          text,
           playbook: def,
           depth: deep ? 'deep' : 'quick',
         },
@@ -1060,6 +1092,7 @@ export function openAcademy(container: HTMLElement): void {
       clear.addEventListener('click', () => {
         chat.length = 0;
         renderSide();
+        void api('/api/bots/chat/clear', { id: bot.id });
       });
       opts.append(clear);
     }
@@ -1100,6 +1133,7 @@ export function openAcademy(container: HTMLElement): void {
       )
         .then((r) => {
           sparResult = r;
+          lastSpar.set(bot.id, r);
         })
         .catch((e: Error) => {
           sparError = e.message;
@@ -1194,7 +1228,9 @@ export function openAcademy(container: HTMLElement): void {
       watch.addEventListener('click', () => {
         const record: ReplayRecord = r.record;
         close();
-        window.dispatchEvent(new CustomEvent('loc:replay-record', { detail: record }));
+        window.dispatchEvent(
+          new CustomEvent('loc:replay-record', { detail: { record, botId: bot.id } }),
+        );
       });
       sparBox.append(watch);
     }
@@ -1355,5 +1391,5 @@ export function openAcademy(container: HTMLElement): void {
   }
 
   renderAll();
-  void load(null);
+  void load(opts.botId ?? null);
 }

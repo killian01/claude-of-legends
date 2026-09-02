@@ -50,6 +50,7 @@ import {
   setAutoApply,
   setDeposited,
 } from './bots';
+import { appendExchange, botChat, clearBotChat, windowTurns } from './bot_chats';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, parseCookies, serializeCookie } from './cookies';
 import { authorizeUrl, CALLBACK_PATH, DiscordOauth, discordConfigFromEnv } from './discord_oauth';
@@ -1027,13 +1028,29 @@ const server = http.createServer(async (req, res) => {
       }
       // The coach: streamed as NDJSON like the kit conversation, the
       // comment as the model writes it and each operation as it applies.
+      // The conversation kept with the bot (server/bot_chats.ts): read on
+      // opening the bot in the Academy, cleared on Start over.
+      if (url === '/api/bots/chat' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, botChat(botDeps, me.id, body?.id));
+        return;
+      }
+      if (url === '/api/bots/chat/clear' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, clearBotChat(botDeps, me.id, body?.id));
+        return;
+      }
       if (url === '/api/bots/suggest' && req.method === 'POST') {
         const body = await readJsonBody(req, PLAYBOOK_JSON_MAX + 160_000);
         const id = typeof body?.id === 'string' ? body.id : null;
-        if (!id || !Array.isArray(body?.messages)) {
+        // A new message rides the thread kept with the bot; a whole thread
+        // in the body (the older client) still answers, unkept.
+        const text = typeof body?.text === 'string' ? body.text : null;
+        if (!id || (text === null && !Array.isArray(body?.messages))) {
           sendJson(res, 400, { ok: false, error: 'malformed request' });
           return;
         }
+        const stored = text !== null ? botStore.getChat(id) : [];
         const quota = checkQuota(quotaDeps, me.id, 'agent');
         if (!quota.ok) {
           sendJson(res, 200, quota);
@@ -1046,14 +1063,31 @@ const server = http.createServer(async (req, res) => {
         });
         const outcome = await coachPlaybook(coachDeps, me.id, {
           id,
-          messages: body.messages as { role: 'user' | 'assistant'; text: string }[],
-          ...(body.playbook !== undefined ? { playbook: body.playbook } : {}),
-          depth: body.depth === 'deep' ? 'deep' : 'quick',
+          messages:
+            text !== null
+              ? windowTurns(stored, text)
+              : (body?.messages as { role: 'user' | 'assistant'; text: string }[]),
+          ...(body?.playbook !== undefined ? { playbook: body.playbook } : {}),
+          depth: body?.depth === 'deep' ? 'deep' : 'quick',
           onProgress: (p) => {
             res.write(`${JSON.stringify({ progress: p.kind, ...p })}\n`);
           },
         });
-        if (outcome.ok) spendQuota(quotaDeps, me.id, 'agent');
+        if (outcome.ok) {
+          spendQuota(quotaDeps, me.id, 'agent');
+          if (text !== null) {
+            botStore.setChat(
+              id,
+              appendExchange(
+                stored,
+                text,
+                outcome.raw,
+                outcome.refused.map((r) => r.error),
+              ),
+              Date.now(),
+            );
+          }
+        }
         res.end(`${JSON.stringify(outcome)}\n`);
         return;
       }

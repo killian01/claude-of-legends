@@ -4,7 +4,7 @@
 // full identity fields sent once per unit per client ("full" vs "lite"
 // records, the world-of-claudecraft pattern).
 
-import type { CoachOrderKind } from '../sim/coach';
+import type { CoachOrder, CoachOrderKind } from '../sim/coach';
 import type { ForgedDisplay } from '../sim/forge/display';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { AbilityKey, ScoreRow, TeamId } from '../sim/types';
@@ -101,6 +101,10 @@ export interface SnapUnit {
   // The active play of an ALLIED bot (ADR 0013), for the overlay. Never
   // sent for the other team: a bot's decisions are its own team's business.
   p?: string;
+  // The coach order an ALLIED bot stands under (ADR 0013), for the coach
+  // bar to answer with what the sim holds rather than what was clicked.
+  // Team-scoped like the play.
+  co?: CoachOrder;
 }
 
 export interface SnapMobile {

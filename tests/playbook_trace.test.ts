@@ -93,6 +93,11 @@ describe('the active play', () => {
     for (let i = 0; i < 100; i++) sim.tick();
     const champions = [...sim.units.values()].filter((u) => u.kind === 'champion');
     const mine = champions.find((u) => u.team === 0)!;
+    // A coach order rides along the same way: the ally's stands in the
+    // snapshot, the enemy's never leaves the server.
+    const theirs = champions.find((u) => u.team === 1)!;
+    sim.setCoachOrder(mine.id, { kind: 'warden' });
+    sim.setCoachOrder(theirs.id, { kind: 'back' });
     const snap = buildSnapshot(sim, 0, mine.id, new Set(), []);
     if (snap.t !== 'snap') throw new Error('expected a snapshot');
     for (const row of snap.units) {
@@ -100,11 +105,14 @@ describe('the active play', () => {
       if (u.kind !== 'champion') continue;
       if (u.team === 0) expect(row.p, `ally ${u.id}`).toBe(u.play);
       else expect(row.p, `enemy ${u.id}`).toBeUndefined();
+      if (u.id === mine.id) expect(row.co).toEqual({ kind: 'warden' });
+      if (u.id === theirs.id) expect(row.co).toBeUndefined();
     }
     const world = new ClientWorld(() => undefined);
     world.applyServer(snap as ServerMsg);
     for (const row of snap.units) {
       expect(world.units.get(row.i)?.play ?? null).toBe(row.p ?? null);
+      expect(world.units.get(row.i)?.coachOrder ?? null).toEqual(row.co ?? null);
     }
   });
 });

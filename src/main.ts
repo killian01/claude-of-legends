@@ -21,7 +21,7 @@ import type { ForgedChampionDef } from './sim/forge/forged_def';
 import { Sim } from './sim/sim';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
 import { type AuthedAccount, currentAccount } from './ui/auth';
-import { buildCoachBar } from './ui/coach_bar';
+import { buildCoachBar, type CoachBar } from './ui/coach_bar';
 import { takeDiscordResult } from './ui/discord_entry';
 import { takeConfirmResult } from './ui/email_status';
 import { preloadBackdrop } from './ui/home_backdrop';
@@ -40,7 +40,7 @@ import {
   showSelect,
 } from './ui/menu';
 import { pendingResetToken, showPasswordReset } from './ui/password_reset';
-import { buildReplayBar } from './ui/replay_bar';
+import { buildReplayBar, type ReplayBar } from './ui/replay_bar';
 import type { IWorld } from './world_api';
 
 const app = document.querySelector<HTMLElement>('#app');
@@ -143,9 +143,15 @@ function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
 
 // Watch a saved match: rebuild the sim from the record (deterministic, so
 // the whole match is seed plus commands) and run it through the normal
-// presentation behind a read-only world, with a speed bar on top.
+// presentation behind a read-only world, with a control bar on top.
+// Seeking rides the same determinism: forward steps the sim silently to
+// the tick, backward rebuilds it from the record first. A seek is chunked
+// over frames so the page stays responsive while it steps.
 // A record handed over directly (a local sparring match from the Academy)
 // skips the fetch: the same viewer, the same rules.
+// Ticks a replay steps per animation frame while seeking or at top speed.
+const REPLAY_TICKS_PER_FRAME = 400;
+
 async function runReplay(source: number | ReplayRecord): Promise<PostMatchAction> {
   let record: ReplayRecord | null = null;
   if (typeof source !== 'number') record = source;
@@ -167,7 +173,11 @@ async function runReplay(source: number | ReplayRecord): Promise<PostMatchAction
   }
   const rec = record;
   return new Promise((resolve) => {
-    const { sim, unitIds } = buildMatchSim(rec.seed, rec.picks, rec.forged ?? []);
+    const build = (): Sim => buildMatchSim(rec.seed, rec.picks, rec.forged ?? []).sim;
+    // Unit ids are deterministic too: the first build names the seats and
+    // every rebuild lands the same ids.
+    const { sim: first, unitIds } = buildMatchSim(rec.seed, rec.picks, rec.forged ?? []);
+    let sim = first;
     const unitTeams = new Map<number, TeamId>();
     rec.picks.forEach((p, i) => {
       unitTeams.set(unitIds[i]!, p.team);
@@ -179,11 +189,11 @@ async function runReplay(source: number | ReplayRecord): Promise<PostMatchAction
     );
     const world = new ReplayWorld(sim);
     let stopped = false;
-    let bar: HTMLElement | null = null;
+    let bar: ReplayBar | null = null;
     const finish = (action: PostMatchAction): void => {
       if (stopped) return;
       stopped = true;
-      bar?.remove();
+      bar?.el.remove();
       pres.dispose();
       resolve(action);
     };
@@ -195,42 +205,78 @@ async function runReplay(source: number | ReplayRecord): Promise<PostMatchAction
       finish,
     );
     let speed = 1;
+    let next = 0;
+    // A seek in progress: the tick to reach, stepped silently.
+    let target: number | null = null;
+    const seekTo = (tick: number): void => {
+      const t = Math.max(0, Math.min(rec.ticks, Math.round(tick)));
+      if (t < sim.tickCount) {
+        sim = build();
+        next = 0;
+        world.rebind(sim);
+      }
+      target = t;
+    };
     bar = buildReplayBar({
+      ticks: rec.ticks,
       onSpeed: (m) => {
         speed = m;
       },
+      onSeek: seekTo,
       onExit: () => finish('menu'),
     });
-    container.appendChild(bar);
+    container.appendChild(bar.el);
+
+    // One recorded tick: the commands due, then the sim; the presentation
+    // hears the events only while playing, never while seeking.
+    const stepOnce = (silent: boolean): void => {
+      while (next < rec.events.length && rec.events[next]!.k <= sim.tickCount) {
+        applyReplayEvent(sim, unitTeams, rec.events[next]!);
+        next++;
+      }
+      const kills: { unitId: number; killerId: number }[] = [];
+      const casts: { unitId: number; key?: AbilityKey }[] = [];
+      const attacks: { unitId: number; targetId: number }[] = [];
+      for (const ev of sim.tick()) {
+        if (silent) continue;
+        if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
+        else if (ev.type === 'cast') casts.push({ unitId: ev.unitId, key: ev.key });
+        else if (ev.type === 'sigil') casts.push({ unitId: ev.unitId });
+        else if (ev.type === 'attack') attacks.push({ unitId: ev.unitId, targetId: ev.targetId });
+      }
+      if (!silent) pres.onWorldTick({ kills, golds: [], casts, hits: [], attacks });
+    };
 
     const TICK_MS = DT * 1000;
     let last = performance.now();
     let acc = 0;
-    let next = 0;
     function frame(now: number): void {
       if (stopped) return;
+      if (target !== null) {
+        // Seeking: a slice of ticks per frame, the clock frozen meanwhile.
+        for (let i = 0; i < REPLAY_TICKS_PER_FRAME && sim.tickCount < target; i++) stepOnce(true);
+        if (sim.tickCount >= target) target = null;
+        last = now;
+        acc = 0;
+        bar?.setTime(sim.tickCount, target !== null);
+        requestAnimationFrame(frame);
+        return;
+      }
       acc += Math.min(now - last, 250) * speed;
       last = now;
-      while (acc >= TICK_MS && sim.tickCount < rec.ticks) {
-        while (next < rec.events.length && rec.events[next]!.k <= sim.tickCount) {
-          applyReplayEvent(sim, unitTeams, rec.events[next]!);
-          next++;
-        }
-        const kills: { unitId: number; killerId: number }[] = [];
-        const casts: { unitId: number; key?: AbilityKey }[] = [];
-        const attacks: { unitId: number; targetId: number }[] = [];
-        for (const ev of sim.tick()) {
-          if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
-          else if (ev.type === 'cast') casts.push({ unitId: ev.unitId, key: ev.key });
-          else if (ev.type === 'sigil') casts.push({ unitId: ev.unitId });
-          else if (ev.type === 'attack') attacks.push({ unitId: ev.unitId, targetId: ev.targetId });
-        }
-        pres.onWorldTick({ kills, golds: [], casts, hits: [], attacks });
+      // Ten times speed is two hundred ticks a second: bounded per frame
+      // so a slow frame cannot snowball into a stall.
+      let budget = REPLAY_TICKS_PER_FRAME;
+      while (acc >= TICK_MS && sim.tickCount < rec.ticks && budget > 0) {
+        stepOnce(false);
         acc -= TICK_MS;
+        budget--;
       }
+      if (budget === 0) acc = 0;
       // The record's end: freeze (the end overlay is already up if a
       // winner landed; a truncated record simply stops).
       if (sim.tickCount >= rec.ticks) acc = 0;
+      bar?.setTime(sim.tickCount, false);
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
@@ -331,7 +377,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
     let lobbyUi: LobbyController | null = null;
     let selectUi: SelectController | null = null;
     let pres: Presentation | null = null;
-    let removeCoachBar: (() => void) | null = null;
+    let coachBar: CoachBar | null = null;
     let opened = false;
     let matchEnded = false;
     let finished = false;
@@ -356,8 +402,8 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
       selectUi = null;
       pres?.dispose();
       pres = null;
-      removeCoachBar?.();
-      removeCoachBar = null;
+      coachBar?.remove();
+      coachBar = null;
       if (ws.readyState === ws.OPEN) {
         ws.send(JSON.stringify({ t: 'leave' }));
         ws.close();
@@ -544,7 +590,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
             // A coach seat (ADR 0013): the bar for the orders with no place to
             // click; right-click already goes and focuses through the mirror.
             if (world.coach) {
-              removeCoachBar = buildCoachBar(container, (kind) =>
+              coachBar = buildCoachBar(container, (kind) =>
                 ws.send(JSON.stringify({ t: 'order', kind })),
               );
             }
@@ -554,6 +600,10 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
             });
           }
           if (changed) {
+            // The coached bot answers through its snapshot: the order it holds
+            // and the play it is running.
+            const me = world.units.get(world.selfUnitId);
+            if (me) coachBar?.update(me.coachOrder, me.play);
             const kills: { unitId: number; killerId: number }[] = [];
             const golds: number[] = [];
             const casts: { unitId: number; key?: AbilityKey }[] = [];
@@ -656,6 +706,8 @@ async function boot(): Promise<void> {
   // The app loop: home, one match, back, forever on the same page. 'again'
   // replays the same offline pick or re-enters the public queue (flow.ts).
   let next: HomeChoice | null = null;
+  // A replay opened from the Academy returns there, on the same bot.
+  let reopenAcademy: { botId: string } | null = null;
   let lastPick: OfflinePick | null = null;
   // Who is signed in, or null while only the offline match is reachable.
   // A live session cookie from a previous visit skips the sign-in screen.
@@ -680,7 +732,8 @@ async function boot(): Promise<void> {
     }
     if (joinCode !== null) next = { name: account.name, mode: 'join', code: joinCode };
     const choice: HomeChoice =
-      next ?? (await showHome(container, account, joinCode ?? undefined, confirmed));
+      next ?? (await showHome(container, account, joinCode ?? undefined, confirmed, reopenAcademy));
+    reopenAcademy = null;
     confirmed = null;
     discordResult = null;
     joinCode = null;
@@ -708,6 +761,7 @@ async function boot(): Promise<void> {
     } else {
       action = await runOnline(choice);
     }
+    reopenAcademy = choice.academy ?? null;
     const step = nextStep(action, choice.mode);
     if (step === 'replay') {
       next = choice;

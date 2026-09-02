@@ -81,6 +81,21 @@ const CSS = `
 .menu-players { font-size: 13px; margin: 6px 0 10px; color: #aac2dd; }
 .menu-card.select { width: min(1780px, 97vw); max-height: 96vh; }
 .menu-select-layout { display: flex; gap: 22px; align-items: flex-start; }
+/* Champions and your bots on two tabs: a bot card wears its champion's
+   face, and beside the roster that read as the same champion twice. */
+.menu-tabs { display: flex; gap: 6px; margin: 2px 0 6px; }
+.menu-tab {
+  padding: 6px 14px; border-radius: 6px; border: 1px solid #2c4160; background: #101a2c;
+  color: #7e93b2; cursor: pointer; font-size: 12px; font-weight: 700;
+}
+.menu-tab:hover { border-color: #5b84c9; }
+.menu-tab.on { color: #e6eefc; border-color: #5b84c9; background: #1d3a63; }
+.menu-champ.bot { position: relative; }
+.menu-champ-badge {
+  position: absolute; top: 6px; left: 6px; z-index: 1; padding: 2px 6px; border-radius: 4px;
+  background: #1d3a63; border: 1px solid #5b84c9; color: #cfe3ff;
+  font-size: 9px; font-weight: 800; letter-spacing: 1px;
+}
 .menu-select-main { flex: 1; min-width: 0; }
 .menu-select-side { width: 300px; flex: none; }
 .menu-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 6px 0 4px; }
@@ -513,7 +528,8 @@ export function showSelect(
   if (bots && bots.length > 0) {
     const botsGrid = el('div', 'menu-grid');
     for (const b of bots) {
-      const btn = el('button', 'menu-champ') as HTMLButtonElement;
+      const btn = el('button', 'menu-champ bot') as HTMLButtonElement;
+      btn.appendChild(el('span', 'menu-champ-badge', 'BOT'));
       const portrait = document.createElement('img');
       portrait.className = 'menu-champ-portrait';
       setPortrait(portrait, b.championId, team === 0 ? 0x4a7dd6 : 0xd65c5c);
@@ -647,8 +663,35 @@ export function showSelect(
   const layout = el('div', 'menu-select-layout');
   const main = el('div', 'menu-select-main');
   const side = el('div', 'menu-select-side');
-  main.append(el('div', 'menu-label', 'Pick your champion (hover for the kit)'), grid);
-  main.append(...botsBlock, ...forgedBlock, ...communityBlock, randomBtn);
+  const champPane = el('div', 'menu-pane');
+  champPane.append(el('div', 'menu-label', 'Pick your champion (hover for the kit)'), grid);
+  champPane.append(...forgedBlock, ...communityBlock, randomBtn);
+  if (botsBlock.length > 0) {
+    // Your bots on their own tab (ADR 0013); the pick machinery is shared,
+    // so a card picked on one tab unpicks the other's.
+    const botsPane = el('div', 'menu-pane');
+    botsPane.append(...botsBlock);
+    botsPane.hidden = true;
+    const tabs = el('div', 'menu-tabs');
+    const panes: [HTMLElement, HTMLElement][] = [];
+    const tab = (label: string, pane: HTMLElement): HTMLElement => {
+      const b = el('button', 'menu-tab', label);
+      b.addEventListener('click', () => {
+        for (const [t, p] of panes) {
+          t.classList.toggle('on', t === b);
+          p.hidden = p !== pane;
+        }
+      });
+      panes.push([b, pane]);
+      tabs.appendChild(b);
+      return b;
+    };
+    tab('Champions', champPane).classList.add('on');
+    tab(`Your bots (${bots?.length ?? 0})`, botsPane);
+    main.append(tabs, champPane, botsPane);
+  } else {
+    main.append(champPane);
+  }
   if (teamsBox) side.appendChild(teamsBox);
   side.append(
     el('div', 'menu-label', 'Skin (cosmetic only)'),

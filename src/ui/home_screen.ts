@@ -53,6 +53,9 @@ export interface HomeChoice {
   // directly (a local sparring match from the Academy).
   replayId?: number;
   replay?: ReplayRecord;
+  // For a replay handed over by the Academy: the bot to reopen it on when
+  // the replay ends.
+  academy?: { botId: string };
   // For mode 'spectate': the live match to watch, and from whose side.
   matchId?: number;
   team?: TeamId;
@@ -89,6 +92,9 @@ export function showHome(
   prefillCode?: string,
   // Set only on the page load a confirmation link redirected back to.
   justConfirmed: ConfirmResult | null = null,
+  // Open the Academy on this bot at once: the way back from a replay it
+  // handed over.
+  reopen: { botId: string } | null = null,
 ): Promise<HomeChoice> {
   ensureCss();
   const accountName = account.name;
@@ -172,10 +178,15 @@ export function showHome(
     // The Academy's sparring: watch the match it just played, from the
     // record it holds in memory.
     function onReplayRecord(e: Event): void {
-      const record = (e as CustomEvent<ReplayRecord>).detail;
-      if (typeof record !== 'object' || record === null) return;
+      const detail = (e as CustomEvent<{ record: ReplayRecord; botId: string }>).detail;
+      if (typeof detail?.record !== 'object' || detail.record === null) return;
       leave();
-      resolve({ name: accountName, mode: 'replay', replay: record });
+      resolve({
+        name: accountName,
+        mode: 'replay',
+        replay: detail.record,
+        ...(typeof detail.botId === 'string' ? { academy: { botId: detail.botId } } : {}),
+      });
     }
     window.addEventListener('loc:forge-test', onForgeTest);
     window.addEventListener('loc:replay-record', onReplayRecord);
@@ -274,5 +285,6 @@ export function showHome(
 
     cards.append(play, friends, botsCard, forge, career, learn);
     inner.appendChild(cards);
+    if (reopen) openAcademy(container, { botId: reopen.botId });
   });
 }
