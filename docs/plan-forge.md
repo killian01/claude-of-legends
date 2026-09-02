@@ -53,7 +53,11 @@ and their written UGC authorization; details inline.
    lands opens the workshop, and the workshop is the adjustment atelier: live
    display tuning (height, facing, ground offset) and the weapon prop attached
    to a chosen rig bone with hand-tuned grip offsets, saved server-side
-   (/api/forge/display, clamped by the shared sanitizer) and applied in-match.
+   (/api/forge/display, clamped by the shared sanitizer) and applied in-match;
+   the pose freezes on demand (the clip clock stopped, a slider scrubbing the
+   frame, F to toggle) so the weapon is fitted against a still hand (playtest,
+   2026-09-02: even the idle sway made alignment a chase; walked by
+   `scripts/e2e_workshop.mjs`).
    Forged champions PLAY as their generated models everywhere: the render
    registry loads the sealed GLB (clip names resolved by substring, so preset
    and placeholder spellings both land), announced from drafts, the gallery,
