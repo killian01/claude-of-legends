@@ -46,7 +46,8 @@ writeFileSync(
   path.join(dist, 'current.ts'),
   [
     "export { Sim } from '../src/sim/sim';",
-    "export { CHAMPION_LIST } from '../src/sim/content/champions';",
+    "export { fillTeam } from '../src/sim/fill';",
+    "export { Rng } from '../src/sim/rng';",
     "export { LANER } from '../src/sim/content/bots/laner';",
     "export { playbookPolicy, validatePlaybook } from '../src/sim/playbook';",
     '',
@@ -84,16 +85,19 @@ if (candidate) {
   currentPolicy = cur.playbookPolicy(v.def);
 }
 
-// One full 5v5, five roster champions a side, every seat a Laner: the
-// working tree's on `curTeam`, the previous one's on the other.
+// One full 5v5, both teams on the fill drawn from the seed (src/sim/fill.ts:
+// the roster's lanes by role, so lineups vary like a real match's), every
+// seat a Laner: the working tree's on `curTeam`, the previous one's on the
+// other.
 function play(seed, curTeam) {
   const sim = new cur.Sim(seed);
-  const roster = cur.CHAMPION_LIST.map((c) => c.id);
-  for (let i = 0; i < 10; i++) {
-    const team = i < 5 ? 0 : 1;
-    const unit = sim.addChampion(team, undefined, roster[i % roster.length], i % 3);
-    unit.sigils = ['riftstep', 'mend'];
-    sim.attachPolicy(unit.id, team === curTeam ? currentPolicy : prev.LANER.policy);
+  const rng = new cur.Rng(seed);
+  for (const team of [0, 1]) {
+    for (const [i, championId] of cur.fillTeam([], rng).entries()) {
+      const unit = sim.addChampion(team, undefined, championId, i % 3);
+      unit.sigils = ['riftstep', 'mend'];
+      sim.attachPolicy(unit.id, team === curTeam ? currentPolicy : prev.LANER.policy);
+    }
   }
   while (sim.winner === null && sim.tickCount < maxTicks) sim.tick();
   return { winner: sim.winner, seconds: Math.round(sim.time) };

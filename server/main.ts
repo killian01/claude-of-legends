@@ -467,7 +467,8 @@ function forgedPayload(match: Match): {
 function onMatchReady(forge: boolean) {
   return (picks: MatchPick[], source: MatchSource) => {
     const id = nextMatchId++;
-    const match = new Match((Date.now() % 2_000_000_000) + id, fillWithBots(picks));
+    const seed = (Date.now() % 2_000_000_000) + id;
+    const match = new Match(seed, fillWithBots(picks, seed));
     const botSeats = new Map<number, { accountId: number; name: string }>();
     for (const p of picks) {
       if (p.playbook === undefined) continue;

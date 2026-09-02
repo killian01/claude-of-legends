@@ -200,6 +200,29 @@ Seeking rides determinism: forward steps the sim silently to the tick; backward 
 it from the record and steps from the start, chunked over frames so the page stays
 responsive (a few seconds for a late minute, shown as seeking on the clock).
 
+## The fill and the home lanes
+
+A match is seated by role before anyone plays it. The roster promises two top (the tank
+and the fighter), a mid (the mage, the assassin, the battlemage), a marksman and a support
+in bot, and one flex skirmisher (`docs/design/roster.md`); until the fill landed no host
+kept that promise. House bots took the first free roster champions in order, so an all-bot
+match was Korrath, Dain, Sylra, Fenn and Elowen on both sides, without a marksman or a
+support, and lanes went by seat order, the first seat mid whoever sat there (a sparring
+Vesk played mid). Two rules now hold on every host, the live queue, the Arena, sparring,
+offline practice and the environment alike:
+
+- **The fill** completes a team around what it holds, drawn from the match seed: a lone
+  marksman gets a support beside them, a held support gets a marksman, a forged champion
+  counts by its role, the flex and an unknown champion take the first seat open, and two
+  sparrings on different seeds meet different lineups (`src/sim/fill.ts`).
+- **The home lane** is the sim's call, from creation: a champion sits in its role's lane
+  while a seat is open there, the flex and the overflow take the lane with the most seats
+  open, and a human's seat counts like a bot's, so the fill's support lands in bot lane
+  beside a human marksman (`src/sim/lanes.ts`).
+
+Composition is therefore a fact of the match a playbook can read (both rosters go in the
+observation in plan-bots phase 12), not a constant the default Laner was tuned against.
+
 ## Adapting to the opponent
 
 A player reads the other team before the first fight; a bot needs the same facts in its
@@ -224,9 +247,10 @@ The maintainer set the bar as four questions, and each has a measure:
    rate and the stats per play, compared with the previous version of the bot ("v4
    against v3: four wins to two"). The post-match report per play is the other half.
 3. **Variety**: within a match, through the phases (time, level, items owned, the Warden
-   clock) and the kit changing variant; between matches, through several house styles
-   drawn by seed (a brawler, a sieger, an objective player, beside the Laner) instead of
-   one brain on every seat, then through the Arena population as other owners iterate.
+   clock) and the kit changing variant; between matches, through the fill (another
+   lineup on both sides every seed) and several house styles drawn by seed (a brawler, a
+   sieger, an objective player, beside the Laner) instead of one brain on every seat,
+   then through the Arena population as other owners iterate.
 4. **Winning against the other bots**: an iterated bot climbs the Arena ladder, and beats
    the default Laner most of the time, the Laner being the floor.
 

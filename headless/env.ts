@@ -11,14 +11,15 @@
 import { buildMatchSim, type ReplayPick } from '../src/net/replay';
 import { POLICY_PERIOD_TICKS } from '../src/sim/bot_driver';
 import { DEFAULT_BOT_ID } from '../src/sim/content/bots';
-import { CHAMPION_LIST } from '../src/sim/content/champions';
+import { fillTeam, TEAM_SIZE } from '../src/sim/fill';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import type { Action, Observation } from '../src/sim/policy';
 import { POLICY_CONTRACT_VERSION } from '../src/sim/policy';
+import { Rng } from '../src/sim/rng';
 import type { Sim } from '../src/sim/sim';
 import type { TeamId } from '../src/sim/types';
 
-export const TEAM_SIZE = 5;
+export { TEAM_SIZE };
 // A 20 minute match at 20 Hz. A trainer that wants longer says so; the cap
 // exists so a stalled self-play run cannot spin forever.
 export const DEFAULT_MAX_TICKS = 20 * 60 * 20;
@@ -63,21 +64,15 @@ export interface EnvInfo {
 }
 
 // The default table: a full 5v5 where seat 0 is remote and the other nine
-// run the default scripted bot. Champions are handed out in roster order
-// with no duplicate inside a team, the same deterministic rule
-// server/bot_fill.ts uses, so a default environment match and a default
-// server match line up.
-export function defaultSeats(remoteSeats = 1): EnvSeatSpec[] {
+// run the default scripted bot. Champions come from the fill
+// (src/sim/fill.ts) drawn from the seed, the rule server/bot_fill.ts uses,
+// so a default environment match and a default server match line up.
+export function defaultSeats(remoteSeats = 1, seed = 1): EnvSeatSpec[] {
+  const rng = new Rng(seed);
   const out: EnvSeatSpec[] = [];
   for (const team of [0, 1] as const satisfies readonly TeamId[]) {
-    const used = new Set(out.filter((s) => s.team === team).map((s) => s.championId));
-    let count = 0;
-    for (const c of CHAMPION_LIST) {
-      if (count >= TEAM_SIZE) break;
-      if (used.has(c.id)) continue;
-      used.add(c.id);
-      out.push({ team, championId: c.id, remote: team === 0 && out.length < remoteSeats });
-      count++;
+    for (const championId of fillTeam([], rng)) {
+      out.push({ team, championId, remote: team === 0 && out.length < remoteSeats });
     }
   }
   return out;
@@ -96,7 +91,7 @@ export class Env {
   constructor(config: EnvConfig = {}) {
     this.seed = config.seed ?? 1;
     this.maxTicks = config.maxTicks ?? DEFAULT_MAX_TICKS;
-    this.seats = config.seats ?? defaultSeats();
+    this.seats = config.seats ?? defaultSeats(1, this.seed);
     this.forged = config.forged ?? [];
     const picks: ReplayPick[] = this.seats.map((s, i) => ({
       name: `seat${i}`,

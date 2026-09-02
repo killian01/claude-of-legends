@@ -8,9 +8,10 @@
 import { FAST_MATCH_MAX_TICKS, type FastMatchRequest, runFastMatch } from '../fast_match';
 import type { ReplayPick, ReplayRecord } from '../net/replay';
 import { DEFAULT_BOT_ID } from '../sim/content/bots';
-import { CHAMPION_LIST } from '../sim/content/champions';
+import { fillTeam } from '../sim/fill';
 import type { PlayReport } from '../sim/playbook/report';
 import type { PlaybookDef } from '../sim/playbook/types';
+import { Rng } from '../sim/rng';
 import type { TeamId } from '../sim/types';
 
 export interface SparBot {
@@ -35,10 +36,12 @@ export interface SparResult {
 export const SPAR_MAX_TICKS = FAST_MATCH_MAX_TICKS;
 
 // The sparring bot on team 0, seat 0, then house bots on every other seat
-// in roster order, no duplicate champion inside a team: the same shape the
+// from the fill (src/sim/fill.ts) drawn from the seed: its own team
+// completed around its champion, the other team drawn whole, so two
+// sparrings on different seeds meet different lineups. The same shape the
 // offline practice match builds.
-export function sparringPicks(bot: SparBot): ReplayPick[] {
-  const roster = CHAMPION_LIST.filter((c) => c.id !== bot.championId).map((c) => c.id);
+export function sparringPicks(bot: SparBot, seed = 1): ReplayPick[] {
+  const rng = new Rng(seed);
   const picks: ReplayPick[] = [
     {
       name: bot.name,
@@ -49,26 +52,23 @@ export function sparringPicks(bot: SparBot): ReplayPick[] {
       playbook: bot.playbook,
     },
   ];
-  for (let i = 0; i < 4; i++) {
-    picks.push({
-      name: 'House bot',
-      team: 0,
-      championId: roster[i]!,
-      sigils: ['riftstep', 'mend'],
-      skin: i % 3,
-      bot: DEFAULT_BOT_ID,
-    });
-  }
-  for (let i = 0; i < 5; i++) {
-    picks.push({
-      name: 'House bot',
-      team: 1,
-      championId: roster[(i + 4) % roster.length]!,
-      sigils: ['riftstep', 'mend'],
-      skin: i % 3,
-      bot: DEFAULT_BOT_ID,
-    });
-  }
+  const house = (team: 0 | 1, held: string[]): void => {
+    for (const [i, championId] of fillTeam(
+      held.map((id) => ({ championId: id })),
+      rng,
+    ).entries()) {
+      picks.push({
+        name: 'House bot',
+        team,
+        championId,
+        sigils: ['riftstep', 'mend'],
+        skin: i % 3,
+        bot: DEFAULT_BOT_ID,
+      });
+    }
+  };
+  house(0, [bot.championId]);
+  house(1, []);
   return picks;
 }
 

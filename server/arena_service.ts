@@ -73,9 +73,10 @@ export async function runArenaMatch(
 ): Promise<ArenaMatchSummary> {
   const now = (deps.now ?? Date.now)();
   const matchId = deps.nextMatchId();
-  const picks = arenaPicks(plan);
+  const seed = (now % 2_000_000_000) + matchId;
+  const picks = arenaPicks(plan, seed);
   const result = await deps.runner.run({
-    seed: (now % 2_000_000_000) + matchId,
+    seed,
     picks,
     maxTicks: deps.maxTicks ?? ARENA_MAX_TICKS,
   });

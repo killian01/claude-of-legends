@@ -132,7 +132,7 @@ export function planPlayNow(
 // The match's picks: bot seats by name, playbook embedded, house bots on
 // every seat nobody took. The client ids are placeholders: nobody is
 // connected to an Arena match.
-export function arenaPicks(plan: ArenaMatchPlan): ReplayPick[] {
+export function arenaPicks(plan: ArenaMatchPlan, seed = 1): ReplayPick[] {
   const seats: MatchPick[] = plan.seats.map((s, i) => ({
     clientId: -1000 - i,
     name: `${s.owner} (${s.bot.name})`,
@@ -142,7 +142,7 @@ export function arenaPicks(plan: ArenaMatchPlan): ReplayPick[] {
     skin: s.bot.skin,
     playbook: s.bot.playbook,
   }));
-  return fillWithBots(seats, ARENA_TEAM_SIZE).map((p) => ({
+  return fillWithBots(seats, seed, ARENA_TEAM_SIZE).map((p) => ({
     name: p.name,
     team: p.team,
     championId: p.championId,

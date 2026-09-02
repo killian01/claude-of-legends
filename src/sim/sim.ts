@@ -23,9 +23,9 @@ import {
   isStunned,
   sightFactor,
 } from './combat/status';
-import { type ChampionDef, DEFAULT_CHAMPION_ID } from './content/champions';
+import { type ChampionDef, DEFAULT_CHAMPION_ID, homeLane } from './content/champions';
 import { ITEMS } from './content/items';
-import { GAME_MAP, type GameMap, type LaneId } from './content/map';
+import { GAME_MAP, type GameMap } from './content/map';
 import { SIGILS } from './content/sigils';
 import { clampSkin } from './content/skins';
 import { stepDashes } from './dashes';
@@ -33,6 +33,7 @@ import { hasDecisionToken, spendDecisionToken } from './decision_budget';
 import type { ForgedChampionDef } from './forge/forged_def';
 import { applyFountainRegen } from './fountain';
 import { stepIdleDefense } from './idle_defense';
+import { assignLanes } from './lanes';
 import { createMapUnits } from './map_units';
 import { stepMinionAi } from './minion_ai';
 import { stepMovement } from './movement';
@@ -94,11 +95,6 @@ const SHOP_RANGE_PAD = 2;
 // Exported: the HUD draws exactly this many build slots, so a full bag and
 // an empty one read as the same shape.
 export const INVENTORY_SLOTS = 6;
-
-// Bot lane assignment order for a five-seat team: one mid, two top, two
-// bot. The old three-entry cycle wrapped to mid,top,bot,mid,top: every team
-// permanently ran a duo mid, a duo top, and one abandoned solo bot lane.
-const BOT_LANES: readonly LaneId[] = ['mid', 'top', 'bot', 'top', 'bot'];
 
 // Deterministic spawn offsets around the fountain center, by join order.
 const SPAWN_SLOTS: readonly { x: number; z: number }[] = [
@@ -198,32 +194,39 @@ export class Sim {
     const champ = createChampion(this.nextId++, team, pos, def);
     champ.skin = clampSkin(championId, skin);
     this.units.set(champ.id, champ);
+    this.assignLanes(team);
     return champ;
+  }
+
+  // Every champion of a team holds a lane from creation (CONTEXT.md: Home
+  // lane; src/sim/lanes.ts): its role's home lane while the lane has a seat
+  // open, else the lane with the most seats open. A human's seat counts
+  // like a bot's, so the fill's support lands beside a human marksman and a
+  // stand-in bot on a dropped seat inherits the lane (playtest review: all
+  // ten participants once funneled into whichever lane was furthest
+  // pushed). Recomputed over the team in creation order whenever a
+  // champion joins it, which happens at setup only. A playbook's lane
+  // preference will go in ahead of the home lane (plan-bots phase 12).
+  private assignLanes(team: TeamId): void {
+    const seats: Unit[] = [];
+    for (const u of this.units.values()) {
+      if (u.kind === 'champion' && u.team === team) seats.push(u);
+    }
+    const lanes = assignLanes(
+      seats.map((u) => ({
+        home: homeLane(u.championId === null ? null : this.champions.get(u.championId)?.role),
+      })),
+    );
+    for (const [i, u] of seats.entries()) u.lane = lanes[i]!;
   }
 
   championDef(championId: string): ChampionDef | null {
     return this.champions.get(championId);
   }
 
-  // Assign a lane round-robin per team (playtest review: all ten
-  // participants used to funnel into whichever lane was furthest pushed).
-  // Counts scripted and remote seats together: a lane is a lane whoever
-  // holds it, and counting only one kind stacked mixed teams into one lane.
-  private assignBotLane(unit: Unit): void {
-    let held = 0;
-    for (const id of this.policies.keys()) {
-      if (this.units.get(id)?.team === unit.team) held++;
-    }
-    for (const id of this.remoteSeats.keys()) {
-      if (this.units.get(id)?.team === unit.team) held++;
-    }
-    unit.lane = BOT_LANES[held % BOT_LANES.length]!;
-  }
-
   attachPolicy(unitId: number, policy: Policy): void {
     const u = this.units.get(unitId);
     if (!u || u.kind !== 'champion') return;
-    this.assignBotLane(u);
     this.policies.set(unitId, policy);
   }
 
@@ -249,7 +252,6 @@ export class Sim {
     const u = this.units.get(unitId);
     if (!u || u.kind !== 'champion') return false;
     if (this.remoteSeats.has(unitId)) return true;
-    this.assignBotLane(u);
     this.remoteSeats.set(unitId, createRemoteSeat(unitId));
     return true;
   }

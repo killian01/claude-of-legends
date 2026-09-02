@@ -7,6 +7,7 @@
 import type { AbilityDef } from '../../combat/casting';
 import type { ChampionPassive } from '../../passive_types';
 import type { AbilityKey } from '../../types';
+import type { LaneId } from '../map';
 import { ASHVYN } from './ashvyn';
 import { DAIN } from './dain';
 import { ELOWEN } from './elowen';
@@ -50,6 +51,25 @@ export type ChampionRole =
   | 'Marksman'
   | 'Support'
   | 'Skirmisher';
+
+// The home lane of a role (docs/design/roster.md, the coverage check): top
+// for the tank and the fighter, mid for the mage, the assassin and the
+// battlemage, bot for the marksman and the support. The skirmisher is flex
+// and has none: it takes the lane with a seat open (src/sim/lanes.ts).
+export const HOME_LANES: Readonly<Record<ChampionRole, LaneId | null>> = {
+  Tank: 'top',
+  Fighter: 'top',
+  Mage: 'mid',
+  Battlemage: 'mid',
+  Assassin: 'mid',
+  Marksman: 'bot',
+  Support: 'bot',
+  Skirmisher: null,
+};
+
+export function homeLane(role: ChampionRole | null | undefined): LaneId | null {
+  return role ? HOME_LANES[role] : null;
+}
 
 export interface ChampionDef {
   id: string;

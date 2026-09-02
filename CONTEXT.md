@@ -19,9 +19,25 @@ always means this owned one; the server's unowned filler is always called a hous
 _Avoid_: AI, NPC, computer player, golem, agent
 
 **House bot**:
-The server's own unowned bot that fills a seat nobody took: the default playbook on the first
-free roster champion. Never rated, named by no one, obeys no one.
+The server's own unowned bot that fills a seat nobody took: the default playbook on the
+roster champion the fill hands it. Never rated, named by no one, obeys no one.
 _Avoid_: bot fill, backfill bot, default bot
+
+**Fill**:
+The champions house bots take to complete a team: the roster's lanes completed around the
+seats the team already holds, a tank or a fighter for each top seat, a mage, an assassin or
+a battlemage for mid, a marksman and a support for bot, the skirmisher wherever a seat is
+open, drawn from the match seed among the champions the team does not hold. The same rule
+on every host: the live queue, the Arena, sparring, offline practice, the environment.
+_Avoid_: draft (the Forge's term), autofill, backfill, composition
+
+**Home lane**:
+The lane a champion's role plays by default: top for the tank and the fighter, mid for the
+mage, the assassin and the battlemage, bot for the marksman and the support. The skirmisher
+has none and takes the lane with a seat open. A five-seat team holds one mid, two top and
+two bot; a champion sits in its home lane while a seat is open there, and every champion of
+a team holds a lane from the start, a human's seat counted like a bot's.
+_Avoid_: role lane, default lane, position, main lane
 
 **Policy**:
 A deterministic decision function (observation, rng) -> action, with the exact observation and action space the Gym environment exposes. The single abstraction behind every bot, scripted or trained.

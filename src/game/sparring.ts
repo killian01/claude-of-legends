@@ -18,6 +18,6 @@ export function runSparring(bot: SparBot, seed: number): Promise<SparResult> {
       worker.terminate();
       reject(new Error(e.message || 'the sparring worker failed'));
     };
-    worker.postMessage({ seed, picks: sparringPicks(bot), maxTicks: SPAR_MAX_TICKS });
+    worker.postMessage({ seed, picks: sparringPicks(bot, seed), maxTicks: SPAR_MAX_TICKS });
   });
 }

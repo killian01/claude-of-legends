@@ -1,30 +1,39 @@
-// Fills a match's empty seats with Policy bots (game definition: bots
-// backfill; ADR 0002 phase 1). Deterministic champion assignment: first
-// unused champion per team in roster order, no duplicates within a team.
-// Bots get negative client ids; Match never registers them as players.
+// Fills a match's empty seats with house bots (game definition: bots
+// backfill; ADR 0002 phase 1) on the fill (src/sim/fill.ts): each team's
+// roster lanes completed by role around the seats it holds, drawn from the
+// match seed, no duplicate inside a team. Bots get negative client ids;
+// Match never registers them as players.
 
 import { DEFAULT_BOT_ID } from '../src/sim/content/bots';
-import { CHAMPION_LIST } from '../src/sim/content/champions';
+import { CHAMPIONS } from '../src/sim/content/champions';
+import { fillTeam, TEAM_SIZE } from '../src/sim/fill';
+import { Rng } from '../src/sim/rng';
 import type { TeamId } from '../src/sim/types';
 import type { MatchPick } from './match';
 
-export const TEAM_SIZE = 5;
+export { TEAM_SIZE };
 
-export function fillWithBots(picks: readonly MatchPick[], teamSize = TEAM_SIZE): MatchPick[] {
+export function fillWithBots(
+  picks: readonly MatchPick[],
+  seed = 1,
+  teamSize = TEAM_SIZE,
+): MatchPick[] {
   const out: MatchPick[] = [...picks];
+  const rng = new Rng(seed);
   let botClientId = -1;
   for (const team of [0, 1] as const satisfies readonly TeamId[]) {
-    const used = new Set(out.filter((p) => p.team === team).map((p) => p.championId));
-    let count = out.filter((p) => p.team === team).length;
-    for (const c of CHAMPION_LIST) {
-      if (count >= teamSize) break;
-      if (used.has(c.id)) continue;
-      used.add(c.id);
+    const held = out
+      .filter((p) => p.team === team)
+      .map((p) => ({ championId: p.championId, role: p.forged?.role ?? null }));
+    let count = held.length;
+    for (const championId of fillTeam(held, rng, teamSize)) {
+      const c = CHAMPIONS[championId];
+      if (!c) continue;
       out.push({
         clientId: botClientId--,
         name: `${c.name.split(',')[0]} (bot)`,
         team,
-        championId: c.id,
+        championId,
         sigils: ['riftstep', 'mend'],
         // Deterministic cosmetic variety; the sim clamps out-of-range picks.
         skin: (count + team) % 3,

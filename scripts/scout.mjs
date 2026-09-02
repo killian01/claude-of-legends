@@ -41,7 +41,8 @@ writeFileSync(
   path.join(dist, 'current.ts'),
   [
     "export { Sim } from '../src/sim/sim';",
-    "export { CHAMPION_LIST } from '../src/sim/content/champions';",
+    "export { fillTeam } from '../src/sim/fill';",
+    "export { Rng } from '../src/sim/rng';",
     "export { LANER_PLAYBOOK } from '../src/sim/content/playbooks/laner';",
     "export { validatePlaybook } from '../src/sim/playbook';",
     '',
@@ -100,15 +101,17 @@ const sides = { current: tally(), previous: tally() };
 
 function play(seed, curTeam) {
   const sim = new cur.Sim(seed);
-  const roster = cur.CHAMPION_LIST.map((c) => c.id);
+  // Both teams on the fill drawn from the seed (src/sim/fill.ts).
+  const rng = new cur.Rng(seed);
   const sideOf = new Map();
-  for (let i = 0; i < 10; i++) {
-    const team = i < 5 ? 0 : 1;
-    const unit = sim.addChampion(team, undefined, roster[i % roster.length], i % 3);
-    unit.sigils = ['riftstep', 'mend'];
-    if (team === curTeam) sim.attachPlaybook(unit.id, playbook);
-    else sim.attachPolicy(unit.id, prev.LANER.policy);
-    sideOf.set(unit.id, team === curTeam ? 'current' : 'previous');
+  for (const team of [0, 1]) {
+    for (const [i, championId] of cur.fillTeam([], rng).entries()) {
+      const unit = sim.addChampion(team, undefined, championId, i % 3);
+      unit.sigils = ['riftstep', 'mend'];
+      if (team === curTeam) sim.attachPlaybook(unit.id, playbook);
+      else sim.attachPolicy(unit.id, prev.LANER.policy);
+      sideOf.set(unit.id, team === curTeam ? 'current' : 'previous');
+    }
   }
   const towersAtStart = { 0: 0, 1: 0 };
   for (const u of sim.units.values()) if (u.kind === 'tower') towersAtStart[u.team]++;

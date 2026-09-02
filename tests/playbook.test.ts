@@ -116,7 +116,9 @@ describe('triggers', () => {
     expect(holds({ kind: 'enemies', within: 50, atMost: 0 }, ctx)).toBe(true);
     expect(holds({ kind: 'underTower' }, ctx)).toBe(false);
     expect(holds({ kind: 'warden', state: 'down' }, ctx)).toBe(true);
-    expect(holds({ kind: 'lane', is: 'mid' }, ctx)).toBe(false);
+    // A mage seated alone holds mid from creation (src/sim/lanes.ts).
+    expect(holds({ kind: 'lane', is: 'mid' }, ctx)).toBe(true);
+    expect(holds({ kind: 'lane', is: 'top' }, ctx)).toBe(false);
     expect(holds({ kind: 'not', of: { kind: 'atFountain' } }, ctx)).toBe(false);
     expect(
       holds({ kind: 'all', of: [{ kind: 'atFountain' }, { kind: 'time', below: 10 }] }, ctx),

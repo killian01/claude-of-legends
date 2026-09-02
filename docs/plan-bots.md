@@ -4,7 +4,7 @@ Bots on the account (`docs/design/bots.md`, ADR 0013): playbooks interpreted in 
 the Academy, the live queue with coach orders, three ratings, then the Arena with the
 Briefing. Phases in order; each phase ends green (`tsc` plus the Vitest suite) and lands
 module-first behind existing seams. The terms are in `CONTEXT.md`: Bot, House bot, Play,
-Playbook, Coach order, Academy, Arena, Sparring, Briefing, Rating.
+Playbook, Coach order, Academy, Arena, Sparring, Briefing, Rating, Fill, Home lane.
 
 Branch `feature/bots`, cut from `feature/forge-on-main` (the second Matchmaker, the
 rating pair, the agent quota, and the streaming conversation live there, not on `main`),
@@ -15,8 +15,9 @@ State of play (2026-09-02): phases 0 to 8 done on `feature/bots`, unmerged, plus
 first playtest round (bots on their own select tab, the coach bar under the KDA box
 reading the standing order back, the replay player, the way back to the Academy, the
 conversation kept with the bot). The second playtest round redrew the boundary (ADR
-0014) and added phases 9 to 11 below, in the order the maintainer chose: control, then
-reasoning, then adaptation. What the maintainer still owes the PR: a click-through, the
+0014) and added phases 9 to 12 below, in the order the maintainer chose: control, then
+reasoning, then adaptation, with the fill and the home lanes slotted in before adaptation
+once the gate turned out to have measured two fixed lineups. What the maintainer still owes the PR: a click-through, the
 Briefing, and the before/after screenshots under `docs/screenshots`.
 
 0. **Design**: DONE. Grill rounds 1 to 4, `docs/design/bots.md`, ADR 0013, the glossary
@@ -126,14 +127,31 @@ Briefing, and the before/after screenshots under `docs/screenshots`.
    50), falling back under the tower when outnumbered (50%) and focusing the lowest
    (50%) all lost ground and were dropped. The Laner now joins fights; the language
    gained the allyFighting trigger and the joinAlly and fallBack behaviors.
-11. **Adaptation: the opponent in the observation**. Both teams' champions and roles,
-   the items on visible enemies, the lane opponent (a per-lane sighting memory over the
-   last three minutes), all additive contract fields; the triggers over them (enemy
-   champion, enemy role count, damage mostly magic or physical, enemy item seen, lane
-   opponent is); the coach and the Kit panel offering them on variants. Lane
-   preference: an ordered list on the bot, served before house bots at seating;
-   rotation stays a play (`push` takes a lane). Exit: a variant "against three mages,
-   build Spirit Ward second" plays in sparring against a mage-heavy fill.
+11. **The fill and the home lanes** (grill Q15 and Q16, 2026-09-02). Nothing
+   constrained a lineup: house bots took the first free roster champions in order (an
+   all-bot match was Korrath, Dain, Sylra, Fenn, Elowen on both sides, no marksman, no
+   support), lanes went by seat order (the first seat mid, so a sparring Vesk played
+   mid), and the gate had measured the Laner on two fixed lineups, the bruisers against
+   the marksmen and supports. Now `src/sim/fill.ts` completes a team by the roster's
+   lanes around what it holds, drawn from the match seed, on every host (server
+   backfill, Arena, sparring, offline practice, the environment, the gate and scout
+   scripts), and `src/sim/lanes.ts` seats every champion in its home lane from creation,
+   a human's seat counted, the flex and the overflow on the most open lane. Terms: Fill,
+   Home lane. DONE. The join Laner re-measured against the pre-kit Laner on the fill,
+   seeds 31 to 50 at the Arena cap: 12-8, 60% of decided, under the 70% guard, where
+   the same seeds on the two fixed lineups gave 16-4. Joining fights was worth less on
+   lineups seated by role (a marksman and a support in every bot lane, a mage mid), so
+   phase 10's next round starts from this number, on the fill.
+12. **Adaptation: both rosters in the observation** (grill Q17). Both teams' champions
+   and roles, the items on visible enemies, the lane opponent (a per-lane sighting memory
+   over the last three minutes), all additive contract fields; the triggers over them, on
+   either team (a champion present, a role count: three mages across, no tank on my
+   side; damage mostly magic or physical, enemy item seen, lane opponent is, lane
+   partner is); the coach and the Kit panel offering them on variants and plays. Lane
+   preference: an ordered list on the bot, taken ahead of the home lane at seating
+   (`src/sim/lanes.ts` reads it first); rotation stays a play (`push` takes a lane).
+   Exit: a variant "against three mages, build Spirit Ward second" plays in sparring
+   against a mage-heavy fill.
 
 Follow-ups, in order of value: house bots obeying their team's pings (phase 5's
 mechanism), bot sharing and a playbook gallery, bots on forged champions once the Forge
