@@ -7,7 +7,7 @@
 import type { ForgedDisplay } from '../src/sim/forge/display';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { validateForged } from '../src/sim/forge/validate';
-import { splashOf } from './art';
+import { iconsOf, splashOf } from './art';
 import { displayOf, modelPointers } from './display';
 import type { ForgeOutcome } from './forge';
 import type { ForgedRow, ForgeStore } from './forge_store';
@@ -54,6 +54,9 @@ export interface GalleryEntry {
   // per-clip bake architecture); null for pre-split single-file models.
   clipFiles: Record<string, string> | null;
   display: ForgedDisplay | null;
+  // The chosen spell icon per slot (Q W E R), for the HUD of a test drive
+  // from the card; empty when none was chosen.
+  icons: Record<string, string>;
 }
 
 export type GallerySort = 'recent' | 'popular';
@@ -119,6 +122,7 @@ export function listGallery(
       clips: pointers.clips,
       clipFiles: pointers.clipFiles,
       display: displayOf(deps.store, r.id),
+      icons: iconsOf(deps.store, r.id),
     };
   });
   // listFinalized comes back recent-first already; popular re-sorts by

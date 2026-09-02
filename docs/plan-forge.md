@@ -73,7 +73,11 @@ and their written UGC authorization; details inline.
    one step at a time; key tabs (P Q W E R) beside the parameters and animation
    titles switch spells in place; a failed call (server gone, session ended)
    shows a banner instead of emptying the rail and the icons, and the
-   Forge e2e (`scripts/e2e_forge.mjs`) walks all of it. REMAINING: the agent endpoint that
+   Forge e2e (`scripts/e2e_forge.mjs`) walks all of it. The chosen spell icons
+   reach the match: they ride the draft rows, the gallery entries and the
+   match_start assets block, the client registry (`src/ui/forged_icons.ts`) puts
+   them ahead of the shipped paintings, and `scripts/e2e_test_drive.mjs` reads
+   them off the HUD of a test drive. REMAINING: the agent endpoint that
    compiles free-text passives into primitives with refusal explanations (needs
    a Claude API key); the generated weapon prop itself stays phase 5's Tripo
    half (the procedural prop library carries the grip flow until then).

@@ -39,6 +39,8 @@ export interface GalleryEntry {
   clips: Record<string, string> | null;
   clipFiles: Record<string, string> | null;
   display: ForgedDisplay | null;
+  // The chosen spell icon per slot, for the HUD of a test drive.
+  icons: Record<string, string>;
 }
 
 const CSS = `

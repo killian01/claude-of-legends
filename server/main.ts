@@ -30,7 +30,7 @@ import {
 } from './accounts';
 import { CONFIRM_TTL_MS, RESET_TTL_MS, TokenStore } from './action_tokens';
 import { API_RATE_PER_MIN, ApiLimiter } from './api_limit';
-import { chooseArt, deleteArtFor, generateArt, listArt, splashOf } from './art';
+import { chooseArt, deleteArtFor, generateArt, iconsOf, listArt, splashOf } from './art';
 import { fillWithBots } from './bot_fill';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, parseCookies, serializeCookie } from './cookies';
@@ -50,6 +50,7 @@ import {
   listDrafts,
   saveDraft,
 } from './forge';
+import { CHAT_JSON_MAX, chatsOf, saveChat } from './forge_chats';
 import { ForgeStore } from './forge_store';
 import { canPlayForged, listGallery, reportForged, setVisibility, toggleLike } from './gallery';
 import { catalogRoles } from './generation/house_clips';
@@ -75,7 +76,6 @@ import { sealChampion, unsealChampion } from './seal';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
 import { appendJsonl, pruneNumberedJson, readJsonl, saveJsonAtomic } from './store';
 import { suggestKit } from './suggest';
-import { CHAT_JSON_MAX, chatsOf, saveChat } from './forge_chats';
 import { suggestStats } from './suggest_stats';
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -873,6 +873,8 @@ const server = http.createServer(async (req, res) => {
                     clips: pointers.clips,
                     clipFiles: pointers.clipFiles,
                     display: assets ? displayOf(forgeStore, d.id) : null,
+                    // The chosen spell icons, for the HUD of a test drive.
+                    icons: iconsOf(forgeStore, d.id),
                     // The editor's conversations, so a reload finds them.
                     chats: chatsOf(forgeStore, d.id),
                   };

@@ -7,8 +7,12 @@
 
 import { registerForgedModel } from '../render/champions';
 import type { ForgedDisplay } from '../sim/forge/display';
+import { registerForgedIcons } from '../ui/forged_icons';
 
 export interface ForgedAssetPointers {
+  // The chosen spell icon per slot (Q W E R), relative paths; an empty
+  // set means none chosen, absent means the source does not carry them.
+  icons?: Record<string, string> | null;
   model?: string | null;
   family?: string | null;
   weapon?: string | null;
@@ -34,6 +38,16 @@ export function forgedClipFileUrls(
 }
 
 export function registerForgedAssets(id: string, a: ForgedAssetPointers): void {
+  // Icons stand on their own: a draft with no model yet wears them in a
+  // test drive, and the announcement replaces the previous set.
+  if (a.icons !== undefined) {
+    registerForgedIcons(
+      id,
+      Object.fromEntries(
+        Object.entries(a.icons ?? {}).map(([key, rel]) => [key, forgedAssetUrl(rel)]),
+      ),
+    );
+  }
   if (!a.model) return;
   registerForgedModel(id, forgedAssetUrl(a.model), {
     display: a.display ?? null,

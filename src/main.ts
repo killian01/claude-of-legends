@@ -359,6 +359,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
                   model?: string | null;
                   family?: string | null;
                   display?: import('./sim/forge/display').ForgedDisplay | null;
+                  icons?: Record<string, string> | null;
                 }[];
               }) =>
                 (body.drafts ?? [])

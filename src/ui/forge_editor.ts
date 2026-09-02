@@ -381,6 +381,9 @@ interface DraftRow {
   clips?: Record<string, string> | null;
   clipFiles?: Record<string, string> | null;
   display?: ForgedDisplay | null;
+  // The chosen spell icon per slot, relative asset paths: the HUD of a
+  // test drive wears them.
+  icons?: Record<string, string> | null;
   // The editor's saved conversations (kit, stats), restored on open.
   chats?: SavedChats | null;
 }
@@ -1083,6 +1086,15 @@ export function openForgeEditor(container: HTMLElement): void {
   });
   testBtn.addEventListener('click', () => {
     const def = JSON.parse(JSON.stringify(current)) as ForgedChampionDef;
+    // The icons as chosen on screen, picked since the rail last loaded
+    // included: the test drive's HUD wears exactly what the Spells tab
+    // shows.
+    const icons: Record<string, string> = {};
+    for (const key of ['Q', 'W', 'E', 'R']) {
+      const pick = chosenOf(`icon_${key}`);
+      if (pick) icons[key] = pick.path;
+    }
+    registerForgedAssets(current.id, { icons });
     close();
     window.dispatchEvent(new CustomEvent('loc:forge-test', { detail: def }));
   });
