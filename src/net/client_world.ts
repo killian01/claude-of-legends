@@ -102,6 +102,7 @@ function materializeUnit(s: SnapUnit): Unit {
     skin: s.sk ?? 0,
     passiveStacks: 0,
     lastDamagedAt: -999,
+    play: null,
     attackTargetId: null,
     attackReadyAt: 0,
     attackMoveTarget: null,
@@ -273,6 +274,7 @@ export class ClientWorld implements IWorld {
         if (s.l !== undefined) unit.level = s.l;
       }
       unit.dead = s.d === 1;
+      unit.play = s.p ?? null;
       applyWireStatuses(unit, s.st, ccUntil);
       // Windup telegraph mirror: the renderer reads pendingSpell to draw
       // the charge and its aim for every visible champion.

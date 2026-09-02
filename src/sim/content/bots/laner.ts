@@ -6,6 +6,7 @@
 // compose a Policy, register in index.ts, done.
 
 import { playbookPolicy } from '../../playbook/interpreter';
+import type { PlaybookDef } from '../../playbook/types';
 import type { Policy } from '../../policy';
 import { LANER_PLAYBOOK } from '../playbooks/laner';
 
@@ -15,10 +16,14 @@ export interface BotDef {
   id: string;
   name: string;
   policy: Policy;
+  // Present when the policy is a playbook: attached through
+  // Sim.attachPlaybook so the active play is traced (ADR 0013).
+  playbook?: PlaybookDef;
 }
 
 export const LANER: BotDef = {
   id: 'laner',
   name: 'Laner',
   policy: playbookPolicy(LANER_PLAYBOOK),
+  playbook: LANER_PLAYBOOK,
 };

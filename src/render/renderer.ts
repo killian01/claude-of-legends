@@ -1452,7 +1452,10 @@ export class Renderer {
       // It floats a full step above the bars so the two never overlap.
       if (u.kind === 'champion') {
         const row = scoreRows.find((r) => r.unitId === id);
-        const label = `${row?.name ?? u.championId ?? ''}  Lv${u.level}`;
+        // An allied bot's active play rides the plate (ADR 0013): what it is
+        // doing, readable at a glance in spectate, replay and practice.
+        const play = u.play !== null && u.team === this.viewerTeam ? `  ${u.play}` : '';
+        const label = `${row?.name ?? u.championId ?? ''}  Lv${u.level}${play}`;
         if (t.nameKey !== label) {
           if (t.namePlate) {
             t.mesh.remove(t.namePlate);
@@ -1464,7 +1467,7 @@ export class Renderer {
             label,
             u.team === this.viewerTeam ? '#d8ecff' : '#ffd8d2',
             0.55,
-            256,
+            play ? 384 : 256,
             24,
           );
           if (plate) {

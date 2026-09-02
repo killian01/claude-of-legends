@@ -11,7 +11,7 @@ import {
   type ReplayEvent,
   type ReplayPick,
 } from '../src/net/replay';
-import { BOTS, DEFAULT_BOT_ID } from '../src/sim/content/bots';
+import { attachBot } from '../src/sim/content/bots';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import type { Sim, SimEvent } from '../src/sim/sim';
 import type { TeamId } from '../src/sim/types';
@@ -133,8 +133,7 @@ export class Match {
     const p = this.players.get(clientId);
     if (!p) return null;
     this.players.delete(clientId);
-    const def = BOTS[DEFAULT_BOT_ID];
-    if (def) this.sim.attachPolicy(p.unitId, def.policy);
+    attachBot(this.sim, p.unitId, undefined);
     this.recordReplay({ k: this.sim.tickCount, u: p.unitId, e: 'bot_on' });
     this.unitNames.set(p.unitId, `${p.name} (bot)`);
     return { name: p.name, team: p.team, unitId: p.unitId };

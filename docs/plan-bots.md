@@ -11,7 +11,7 @@ rating pair, the agent quota, and the streaming conversation live there, not on 
 built in its own worktree beside the Forge session. It never touches a Forge file: bots
 get their own store module and their own conversation module.
 
-State of play (2026-09-02): phases 0 and 1 done.
+State of play (2026-09-02): phases 0 to 2 done.
 
 0. **Design**: DONE. Grill rounds 1 to 4, `docs/design/bots.md`, ADR 0013, the glossary
    terms, this plan.

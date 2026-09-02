@@ -91,6 +91,9 @@ export interface SnapUnit {
   // every snapshot while the champion charges, so BOTH teams see the
   // telegraph (the counterplay window is only fair if it is visible).
   w?: { k: AbilityKey; x: number; z: number; u: number };
+  // The active play of an ALLIED bot (ADR 0013), for the overlay. Never
+  // sent for the other team: a bot's decisions are its own team's business.
+  p?: string;
 }
 
 export interface SnapMobile {

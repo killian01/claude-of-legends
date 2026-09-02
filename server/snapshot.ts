@@ -95,6 +95,9 @@ export function buildSnapshot(
         u: round2(u.pendingSpell.resolveAt),
       };
     }
+    // The active play of an allied bot: what it is doing, for the overlay.
+    // Team-scoped, like chat and pings.
+    if (u.play !== null && u.team === team) snap.p = u.play;
     if (!known.has(u.id)) {
       known.add(u.id);
       snap.k = u.kind;

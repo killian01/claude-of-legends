@@ -39,6 +39,8 @@ import { NavGrid } from './navgrid';
 import { initialObjectiveState, onWardenSlain, stepObjectives } from './objectives';
 import { passiveOf, stepPassives } from './passives';
 import { findPath } from './pathfind';
+import { playbookPolicy } from './playbook/interpreter';
+import type { PlaybookDef } from './playbook/types';
 import type { Action, Observation, Policy } from './policy';
 import type { Projectile } from './projectiles';
 import { stepProjectiles } from './projectiles';
@@ -80,6 +82,9 @@ export type SimEvent =
   | { type: 'cast'; unitId: number; key: AbilityKey }
   | { type: 'sigil'; unitId: number; slot: number }
   | { type: 'gold'; unitId: number; amount: number }
+  // A bot's active play changed (ADR 0013): the trace behind the overlay
+  // and the report. Emitted from inside the decision slot.
+  | { type: 'play'; unitId: number; playId: string }
   | { type: 'victory'; team: TeamId };
 
 // How long a champion's damage on a victim keeps earning an assist.
@@ -221,6 +226,21 @@ export class Sim {
     this.policies.set(unitId, policy);
   }
 
+  // A seat driven by a playbook (ADR 0013): the same in-tick attachment as
+  // attachPolicy, plus the active-play trace, which writes the unit's
+  // `play` and emits a 'play' event whenever it changes. The trace never
+  // influences a decision, so a traced playbook and a bare one drive the
+  // seat identically (tests/playbook.test.ts).
+  attachPlaybook(unitId: number, def: PlaybookDef): void {
+    const policy = playbookPolicy(def, (playId, id) => {
+      const u = this.units.get(id);
+      if (!u || u.play === playId) return;
+      u.play = playId;
+      this.events.push({ type: 'play', unitId: id, playId });
+    });
+    this.attachPolicy(unitId, policy);
+  }
+
   // Hand a seat to a Policy running outside the process. The sim ships that
   // seat an observation every decision slot and takes one action back; it
   // never learns what produced the action (ADR 0002 phase 2).
@@ -260,6 +280,8 @@ export class Sim {
   // A reconnected player takes their champion back from the stand-in bot.
   detachPolicy(unitId: number): void {
     this.policies.delete(unitId);
+    const u = this.units.get(unitId);
+    if (u) u.play = null;
   }
 
   // One row per champion; position-free, so it crosses the fog safely.

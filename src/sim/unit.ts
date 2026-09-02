@@ -67,6 +67,10 @@ export interface Unit {
   passiveStacks: number;
   // Last time ANY damage landed (Shieldskin-style passives).
   lastDamagedAt: number;
+  // The playbook play acting for this seat right now (bots, ADR 0013),
+  // null for seats played by hand. Presentation and reports read it; no
+  // sim rule ever does.
+  play: string | null;
   attackTargetId: number | null;
   attackReadyAt: number;
   // Attack-move destination; enemies encountered on the way are engaged.
@@ -181,6 +185,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     skin: 0,
     passiveStacks: 0,
     lastDamagedAt: -999,
+    play: null,
     attackTargetId: null,
     attackReadyAt: 0,
     attackMoveTarget: null,

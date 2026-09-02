@@ -35,7 +35,7 @@ const REFLEXES: readonly { id: string; run: (ctx: SlotContext) => Action | null 
   { id: REFLEX_IDS.holdRecall, run: holdRecall },
 ];
 
-export type PlayTrace = (playId: string) => void;
+export type PlayTrace = (playId: string, unitId: number) => void;
 
 export function playbookPolicy(def: PlaybookDef, trace?: PlayTrace): Policy {
   return (obs, rng) => {
@@ -44,7 +44,7 @@ export function playbookPolicy(def: PlaybookDef, trace?: PlayTrace): Policy {
     for (const reflex of REFLEXES) {
       const action = reflex.run(ctx);
       if (action) {
-        trace?.(reflex.id);
+        trace?.(reflex.id, obs.self.id);
         return action;
       }
     }
@@ -53,11 +53,11 @@ export function playbookPolicy(def: PlaybookDef, trace?: PlayTrace): Policy {
       if (!holds(play.when, ctx)) continue;
       const action = runBehavior(play.do, ctx);
       if (action) {
-        trace?.(play.id);
+        trace?.(play.id, obs.self.id);
         return action;
       }
     }
-    trace?.(IDLE_ID);
+    trace?.(IDLE_ID, obs.self.id);
     return { kind: 'noop' };
   };
 }

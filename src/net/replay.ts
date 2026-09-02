@@ -5,7 +5,7 @@
 // live sim and applies live commands THROUGH these functions, so the live
 // path and the replay path cannot drift apart.
 
-import { BOTS, DEFAULT_BOT_ID } from '../sim/content/bots';
+import { attachBot } from '../sim/content/bots';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import { Sim } from '../sim/sim';
 import type { TeamId } from '../sim/types';
@@ -68,8 +68,7 @@ export function buildMatchSim(
     unit.sigils = [...p.sigils];
     unitIds.push(unit.id);
     if (p.bot) {
-      const def = BOTS[p.bot] ?? BOTS[DEFAULT_BOT_ID];
-      if (def) sim.attachPolicy(unit.id, def.policy);
+      attachBot(sim, unit.id, p.bot);
     }
   }
   return { sim, unitIds };
@@ -138,8 +137,7 @@ export function applyReplayEvent(
     return;
   }
   if (ev.e === 'bot_on') {
-    const def = BOTS[DEFAULT_BOT_ID];
-    if (def) sim.attachPolicy(ev.u, def.policy);
+    attachBot(sim, ev.u, undefined);
     return;
   }
   sim.detachPolicy(ev.u);
