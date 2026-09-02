@@ -13,8 +13,10 @@ import { forgedClipFileUrls, registerForgedAssets } from '../game/forged_visuals
 import { RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import type { ChampionBaseStats, ChampionGrowth, ChampionRole } from '../sim/content/champions';
 import { ABILITY_BOUNDS, BASE_STAT_BOUNDS, GROWTH_BOUNDS } from '../sim/forge/bounds';
-import { budgetOf, POWER_BUDGET } from '../sim/forge/budget';
+import { budgetOf } from '../sim/forge/budget';
+import { burstCapOf, burstOf } from '../sim/forge/burst';
 import type { ForgedDisplay } from '../sim/forge/display';
+import { ENVELOPES, envelopeSpend } from '../sim/forge/envelopes';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import { freshDraftDef } from '../sim/forge/fresh_draft';
 import { PASSIVE_TEMPLATE_LIST, PASSIVE_TEMPLATES } from '../sim/forge/passive_templates';
@@ -23,6 +25,14 @@ import { FORGED_ROLES, validateForged } from '../sim/forge/validate';
 import type { AbilityKey } from '../sim/types';
 import { type AnimPreview, createAnimPreview } from './anim_preview';
 import { describeAbility } from './describe';
+import {
+  BUDGET_VIEW_CSS,
+  dialStopHint,
+  dialStopLabel,
+  envelopeStrip,
+  kitOverview,
+  type LiveView,
+} from './forge_budget_view';
 import { buildCastEditor, type KitHooks, numField } from './forge_kit';
 import { startMenuBackdrop } from './menu_backdrop';
 import { setRichLine } from './rich_text';
@@ -308,6 +318,7 @@ const CSS = `
   width: 104px; height: 138px; object-fit: contain; background: #120d06;
   border-radius: 6px; border: 1px solid #4a3a1c;
 }
+${BUDGET_VIEW_CSS}
 `;
 
 let cssInstalled = false;
@@ -335,6 +346,9 @@ interface DraftRow {
   def: ForgedChampionDef;
   status: 'draft' | 'finalized';
   updatedAt: number;
+  // False when the stored definition no longer clears the validator (a
+  // seal from before a rule tightening): the owner unseals and retunes.
+  valid?: boolean;
   // Relative asset paths the server enriches the row with; the splash on
   // any row that has one, model, sheet, family and display once finalized.
   splash?: string | null;
@@ -578,6 +592,8 @@ export function openForgeEditor(container: HTMLElement): void {
     budget: { total: number; cap: number };
     // The shared factor the server's fit applied to the model's amounts.
     fit: number;
+    // The spells a burst cap held while the others took the room.
+    held: string[];
   } | null = null;
   // The unsent chat input, preserved across re-renders.
   let chatDraft = '';
@@ -881,10 +897,12 @@ export function openForgeEditor(container: HTMLElement): void {
     });
   };
 
-  // --- right rail: the budget meter, verdict, and actions ---------------
+  // --- right rail: the three envelopes, the bill, verdict, and actions ---
 
-  const meterFill = el('div', 'fe-meter-fill');
-  const meterLine = el('div', 'fe-cost-line');
+  const strip = envelopeStrip();
+  // The kit overview at the head of the Spells tab, when that tab is up:
+  // fed by the same refresh so a dial drag moves it live.
+  let kitView: LiveView<ForgedChampionDef> | null = null;
   const costBox = el('div', '');
   const verdict = el('div', 'fe-errors');
   const testBtn = el('button', 'fe-btn', 'Test drive (practice)') as HTMLButtonElement;
@@ -911,14 +929,8 @@ export function openForgeEditor(container: HTMLElement): void {
     const v = validateForged(current);
     const cost = v.cost ?? (v.ok ? v.cost : null);
     const bill = cost ?? budgetOf(current);
-    const pct = Math.min(100, (100 * bill.total) / POWER_BUDGET);
-    meterFill.style.width = `${pct}%`;
-    meterFill.classList.toggle('over', bill.total > POWER_BUDGET);
-    meterLine.textContent = '';
-    meterLine.append(
-      el('span', '', 'Power budget'),
-      el('span', '', `${Math.round(bill.total)} / ${POWER_BUDGET}`),
-    );
+    strip.update(bill);
+    if (kitView?.el.isConnected) kitView.update(current);
     costBox.textContent = '';
     const rows: [string, number][] = [
       ['Stats', bill.stats],
@@ -936,7 +948,7 @@ export function openForgeEditor(container: HTMLElement): void {
     }
     verdict.className = v.ok ? 'fe-ok' : 'fe-errors';
     verdict.textContent = v.ok
-      ? 'Fits the budget: playable as is.'
+      ? 'Inside every envelope and under the burst caps: playable as is.'
       : v.errors.slice(0, 8).join('\n');
     testBtn.disabled = !v.ok;
     testBtn.title = v.ok ? '' : 'The kit must fully validate before a test drive';
@@ -1175,9 +1187,7 @@ export function openForgeEditor(container: HTMLElement): void {
 
   const meterPanel = el('div', 'fe-panel');
   meterPanel.append(el('h3', '', 'Power budget'));
-  const meterBar = el('div', 'fe-meter-bar');
-  meterBar.append(meterFill);
-  meterPanel.append(meterLine, meterBar, costBox, verdict);
+  meterPanel.append(strip.el, costBox, verdict);
   // Creation order: save the work, build the model, inspect it, play it.
   // Delete stays last, away from the flow.
   const actions = el('div', 'fe-panel');
@@ -1207,8 +1217,13 @@ export function openForgeEditor(container: HTMLElement): void {
       const sub = el(
         'small',
         '',
-        row.status === 'finalized' ? 'finalized' : row.def.tagline || 'draft',
+        row.status === 'finalized'
+          ? row.valid === false
+            ? 'finalized, needs a reforge: unseal, retune, seal again'
+            : 'finalized'
+          : row.def.tagline || 'draft',
       );
+      if (row.status === 'finalized' && row.valid === false) sub.style.color = '#d06a6a';
       btn.append(sub);
       btn.addEventListener('click', () => {
         current = JSON.parse(JSON.stringify(row.def)) as ForgedChampionDef;
@@ -1818,6 +1833,17 @@ export function openForgeEditor(container: HTMLElement): void {
   function renderSpells(): void {
     const sealed = isSealed();
 
+    // The kit overview first: the whole envelope cut into its parts, and
+    // the burst caps, so the creator sees where the room is before
+    // touching a spell.
+    const overview = el('div', 'fe-panel');
+    overview.append(el('h3', '', 'Kit overview'));
+    const view = kitOverview();
+    view.update(current);
+    overview.append(view.el);
+    kitView = view;
+    main.append(overview);
+
     const slotsPanel = el('div', 'fe-panel');
     slotsPanel.append(el('h3', '', 'Spells'));
     slotsPanel.append(
@@ -1934,6 +1960,7 @@ export function openForgeEditor(container: HTMLElement): void {
           raw?: string;
           budget?: { total: number; cap: number };
           fit?: number;
+          held?: string[];
           error?: string;
         }>(
           {
@@ -1978,6 +2005,7 @@ export function openForgeEditor(container: HTMLElement): void {
             abilities: r.abilities,
             budget: r.budget ?? { total: 0, cap: 0 },
             fit: r.fit ?? 1,
+            held: r.held ?? [],
           };
           renderMain();
         });
@@ -2032,7 +2060,11 @@ export function openForgeEditor(container: HTMLElement): void {
           prop.append(block);
         }
         prop.append(
-          el('p', 'fe-lead', `This kit uses ${p.budget.total} / ${p.budget.cap} of the budget.`),
+          el(
+            'p',
+            'fe-lead',
+            `This kit uses ${p.budget.total} / ${p.budget.cap} of the kit envelope.`,
+          ),
         );
         if (Math.abs(p.fit - 1) >= 0.005) {
           prop.append(
@@ -2040,7 +2072,16 @@ export function openForgeEditor(container: HTMLElement): void {
               'p',
               'fe-desc',
               `Amounts ${p.fit > 1 ? 'raised' : 'trimmed'} to ${p.fit.toFixed(2)} times the ` +
-                'answer to sit on the budget line; the power dials move them again.',
+                'answer to sit on the envelope line; the power dials move them again.',
+            ),
+          );
+        }
+        if (p.held.length > 0) {
+          prop.append(
+            el(
+              'p',
+              'fe-desc',
+              `${p.held.join(', ')} held by the burst cap while the other spells took the room.`,
             ),
           );
         }
@@ -2210,9 +2251,10 @@ export function openForgeEditor(container: HTMLElement): void {
     panel.append(costs);
 
     // The power dial: one control scaling every amount (damage, healing,
-    // crowd control durations) inside the bounds, stopped by the budget
-    // like a Stat polygon vertex. Structure comes from the kit
-    // conversation, or from the advanced editor below.
+    // crowd control durations) inside the bounds, stopped by the kit
+    // envelope or a burst cap like a Stat polygon vertex, and saying
+    // which. Structure comes from the kit conversation, or from the
+    // advanced editor below.
     const anchor = structuredClone(current.abilities[key]);
     let advancedStale = true;
     const advBody = el('div', '');
@@ -2232,11 +2274,16 @@ export function openForgeEditor(container: HTMLElement): void {
     dial.disabled = sealed;
     dial.title = sealed
       ? 'This champion is sealed; unseal it to retune'
-      : 'Scales the amounts of this spell; the budget is the wall';
+      : 'Scales the amounts of this spell; the kit envelope and the burst cap are the walls';
+    const stopTag = el('span', 'fe-stop', '');
     const costNote = el('span', 'fe-step-text', '');
     const syncCost = (): void => {
       const bill = budgetOf(current);
-      costNote.textContent = `this spell costs ${Math.round(bill.abilities[key])}; the champion uses ${Math.round(bill.total)} / ${POWER_BUDGET}`;
+      const kit = envelopeSpend(bill).kit;
+      const hit = burstOf(current).abilities[key];
+      costNote.textContent =
+        `costs ${Math.round(bill.abilities[key])} of the kit's ${Math.round(kit)} / ` +
+        `${ENVELOPES.kit}; one cast deals ${Math.round(hit)} of ${Math.round(burstCapOf(key))}`;
     };
     syncCost();
     panel.addEventListener('input', syncCost);
@@ -2252,17 +2299,24 @@ export function openForgeEditor(container: HTMLElement): void {
         castRange: live.castRange,
         ...(live.windup !== undefined ? { windup: live.windup } : {}),
       };
-      const granted = grantSpellPower(current, key, anchorNow, Number(dial.value) / 100);
+      const asked = Number(dial.value) / 100;
+      const granted = grantSpellPower(current, key, anchorNow, asked);
       // In place, so the rhythm fields above stay bound to the object.
       live.spec = granted.ability.spec;
       if (granted.ability.atRank) live.atRank = granted.ability.atRank;
       dial.value = String(Math.round(granted.factor * 100));
+      // The word: which line stopped the dial short, so the creator knows
+      // what to lighten. Silent when the ask was granted whole.
+      const stopped = granted.stop !== null && granted.factor < asked - 1e-6;
+      stopTag.textContent = stopped && granted.stop ? dialStopLabel(granted.stop) : '';
+      stopTag.className = `fe-stop${stopped && granted.stop ? ` ${granted.stop}` : ''}`;
+      stopTag.title = stopped && granted.stop ? dialStopHint(granted.stop) : '';
       advancedStale = true;
       hooks.refresh();
       syncDesc();
       syncCost();
     });
-    dialRow.append(dial, costNote);
+    dialRow.append(dial, stopTag, costNote);
     panel.append(dialRow);
 
     // Advanced: the full structural editor, collapsed and rebuilt on
@@ -2403,8 +2457,9 @@ export function openForgeEditor(container: HTMLElement): void {
         'p',
         'fe-lead',
         'Pull a vertex outward to buy a stat, inward to free points. Every point above ' +
-          'a floor costs budget, shared with the kit: a vertex stops where the budget ' +
-          'runs out, so overspending is impossible.',
+          "a floor spends the polygon's own envelope, never the kit's: a vertex stops " +
+          'where its envelope runs out, so overspending is impossible and no set of ' +
+          'vertices reaches every rail.',
       ),
     );
 
@@ -2467,8 +2522,20 @@ export function openForgeEditor(container: HTMLElement): void {
         value: current.base.attackRange,
       });
     }
+    // Each polygon's caption carries its envelope, live under the drag.
+    const caption = (label: string, group: 'stats' | 'growth'): HTMLElement => {
+      const cap = el('div', 'fe-step-text', '');
+      const sync = (): void => {
+        const spend = envelopeSpend(budgetOf(current))[group];
+        cap.textContent = `${label}: ${Math.round(spend)} / ${ENVELOPES[group]} of the envelope`;
+      };
+      sync();
+      cap.addEventListener('fe-sync', sync);
+      return cap;
+    };
     const baseWrap = el('div', 'fe-polywrap');
-    baseWrap.append(el('div', 'fe-step-text', 'Base stats'));
+    const baseCaption = caption('Base stats', 'stats');
+    baseWrap.append(baseCaption);
     baseWrap.append(
       statPolygon(baseAxes, {
         enabled: !sealed,
@@ -2479,6 +2546,7 @@ export function openForgeEditor(container: HTMLElement): void {
           if (key === 'attackRange' && g < RANGED_MIN) return current.base.attackRange;
           asNumbers(current.base)[key] = g;
           hooks.refresh();
+          baseCaption.dispatchEvent(new Event('fe-sync'));
           return g;
         },
       }),
@@ -2494,7 +2562,8 @@ export function openForgeEditor(container: HTMLElement): void {
       }),
     );
     const growthWrap = el('div', 'fe-polywrap');
-    growthWrap.append(el('div', 'fe-step-text', 'Growth per level'));
+    const growthCaption = caption('Growth per level', 'growth');
+    growthWrap.append(growthCaption);
     growthWrap.append(
       statPolygon(growthAxes, {
         size: 250,
@@ -2503,6 +2572,7 @@ export function openForgeEditor(container: HTMLElement): void {
           const g = grantStat(current, 'growth', key, want);
           asNumbers(current.growth)[key] = g;
           hooks.refresh();
+          growthCaption.dispatchEvent(new Event('fe-sync'));
           return g;
         },
       }),
@@ -2523,13 +2593,15 @@ export function openForgeEditor(container: HTMLElement): void {
       ),
     );
     stats.append(radiusRow);
-    if (budgetOf(current).total > POWER_BUDGET) {
+    const spend = envelopeSpend(budgetOf(current));
+    if (spend.stats > ENVELOPES.stats || spend.growth > ENVELOPES.growth) {
       stats.append(
         el(
           'p',
           'fe-desc',
-          'Over budget: the kit consumes everything. Axes can only come down here; ' +
-            'lighten a spell on the Spells tab to make room.',
+          `${spend.stats > ENVELOPES.stats ? 'The stat envelope' : 'The growth envelope'} is ` +
+            'over its line (a draft from before a tightening): its axes can only come down ' +
+            'until it fits.',
         ),
       );
     }

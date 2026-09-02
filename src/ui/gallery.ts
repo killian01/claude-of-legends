@@ -26,6 +26,9 @@ export interface GalleryEntry {
   mine: boolean;
   listed: boolean;
   shared: boolean;
+  // False on an own champion sealed before a rule tightening: it reaches
+  // no match until unsealed, retuned, and sealed again in the Forge.
+  valid: boolean;
   updatedAt: number;
   // Asset paths relative to /api/forge/asset/, when the champion has them;
   // family and display drive the weapon prop and the saved model tuning.
@@ -238,13 +241,29 @@ export function openGallery(container: HTMLElement): void {
         renderGrid();
       });
     });
-    const test = el('button', 'gal-btn', 'Test drive vs bots');
+    const test = el('button', 'gal-btn', 'Test drive vs bots') as HTMLButtonElement;
     test.addEventListener('click', () => {
       // The home screen owns the flow: it resolves into an offline
       // practice match with this definition (the Forge editor's path).
       close();
       window.dispatchEvent(new CustomEvent('loc:forge-test', { detail: def }));
     });
+    if (entry.valid === false) {
+      // Only the owner ever sees such a row (server/gallery.ts): the
+      // champion predates a rule tightening and plays nowhere until
+      // reforged.
+      test.disabled = true;
+      test.title = 'This champion no longer fits the Forge rules';
+      const warn = el(
+        'p',
+        'gal-detail-blurb',
+        'Needs a reforge: the Forge rules tightened since this champion was sealed, so it ' +
+          'cannot enter a match. Unseal it in the Forge, retune it inside the envelopes and ' +
+          'under the burst caps, then seal it again to bring it back.',
+      );
+      warn.style.color = '#e0a898';
+      detail.appendChild(warn);
+    }
     actions.append(like, test);
     if (entry.model) {
       const workshop = el('button', 'gal-btn', 'Workshop view');

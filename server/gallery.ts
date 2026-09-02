@@ -6,6 +6,7 @@
 
 import type { ForgedDisplay } from '../src/sim/forge/display';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
+import { validateForged } from '../src/sim/forge/validate';
 import { splashOf } from './art';
 import { displayOf, modelPointers } from './display';
 import type { ForgeOutcome } from './forge';
@@ -34,6 +35,11 @@ export interface GalleryEntry {
   mine: boolean;
   listed: boolean;
   shared: boolean;
+  // Whether the stored definition still clears the validator: a champion
+  // sealed before a rule tightening (ADR 0013) may not, and then it can
+  // reach no match until its owner unseals, retunes, and seals it again.
+  // Only the owner sees such a row; to everyone else it is gone.
+  valid: boolean;
   updatedAt: number;
   // Sealed asset paths relative to the assets dir (null while absent); the
   // client prefixes its asset route. splash draws the card, model feeds
@@ -78,6 +84,11 @@ export function listGallery(
   const needle = (query.q ?? '').trim().toLowerCase();
   const rows = deps.store
     .listFinalized()
+    .map((r) => ({ ...r, valid: validateForged(r.def).ok }))
+    // A champion that no longer validates is nobody's to play (the Forge
+    // queue's resolver refuses it too); it stays visible to its owner
+    // alone, flagged, so the reforge is one click away.
+    .filter((r) => r.valid || (!query.playable && r.accountId === accountId))
     .filter((r) => (query.playable ? r.shared && r.listed : r.listed || r.accountId === accountId))
     .filter(
       (r) =>
@@ -99,6 +110,7 @@ export function listGallery(
       mine: r.accountId === accountId,
       listed: r.listed,
       shared: r.shared,
+      valid: r.valid,
       updatedAt: r.updatedAt,
       splash: splashOf(deps.store, r),
       model: pointers.model,

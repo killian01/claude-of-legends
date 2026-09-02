@@ -3,7 +3,8 @@
 The Forge: player-authored champions (ADR 0010) on the account stack (ADR 0006) and
 the Forge store (ADR 0011). Phases in order; each phase ends green (`tsc` plus the
 Vitest suite) and lands module-first behind existing seams. The terms are in
-`CONTEXT.md`: Forge, forged champion, draft, creation, power budget, Forge queue.
+`CONTEXT.md`: Forge, forged champion, draft, creation, power budget (its Stat, Growth
+and Kit envelopes, and the Burst cap), Forge queue.
 
 State of play (2026-08-31): phases 1 to 3 and 6 to 8 are done. Phase 4 is done
 except the agent endpoint (needs a Claude API key) and prop grip adjustment
@@ -18,7 +19,14 @@ and their written UGC authorization; details inline.
    passive; a passive is a parameterized template reference), the deterministic
    validator (hard per-field bounds plus the power budget costing every stat point
    and effect primitive), and the passive template set in the engine. Tests: budget
-   arithmetic pinned, bounds rejections, roster-shaped kits validate.
+   arithmetic pinned, bounds rejections, roster-shaped kits validate. Reshaped by
+   ADR 0013 (2026-09-02): the budget is three envelopes (stats 190, growth 90, kit
+   820) that never trade points, each at the roster's maximum, plus a burst cap on
+   what one cast deals at rank 1 (`src/sim/forge/envelopes.ts`, `burst.ts`); the
+   fresh draft, the polygon, the dial and the kit conversation's fit follow. Left
+   for its own PR: raising the roster's kits toward the kit envelope (damage and heal
+   amounts only, bot matches before and after), so the envelopes stop being dictated
+   by single champions.
 2. **Runtime registry**: DONE. Champion resolution is match-scoped (roster plus the
    match's forged definitions) behind one seam used by Sim, ClientWorld, replay, and
    the headless env; replays embed forged definitions instead of ids alone. Tests:

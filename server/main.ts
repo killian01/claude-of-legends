@@ -860,6 +860,9 @@ const server = http.createServer(async (req, res) => {
                   const a = assets as { sheet?: string; family?: string; weapon?: string } | null;
                   return {
                     ...d,
+                    // A sealed champion from before a rule tightening may no
+                    // longer validate: the rail says so, the owner reforges.
+                    valid: validateForged(d.def).ok,
                     splash: splashOf(forgeStore, d),
                     model: pointers.model,
                     sheet: a?.sheet ?? null,
