@@ -246,7 +246,7 @@ export function threadError(messages: unknown): string | null {
 }
 
 type ApiContent = string | ({ type: string } & Record<string, unknown>)[];
-interface ApiMessage {
+export interface ApiMessage {
   role: 'user' | 'assistant';
   content: ApiContent;
 }
@@ -324,7 +324,7 @@ async function readEventStream(
   return text;
 }
 
-async function askModel(
+export async function askModel(
   deps: SuggestDeps,
   messages: readonly ApiMessage[],
   onText?: (delta: string) => void,

@@ -75,6 +75,7 @@ import { sealChampion, unsealChampion } from './seal';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
 import { appendJsonl, pruneNumberedJson, readJsonl, saveJsonAtomic } from './store';
 import { suggestKit } from './suggest';
+import { suggestStats } from './suggest_stats';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DIST = path.resolve(process.cwd(), 'dist');
@@ -285,7 +286,7 @@ const suggestDeps = {
 };
 console.log(
   suggestDeps.apiKey
-    ? 'suggestions: on (ANTHROPIC_API_KEY set), the kit conversation is live'
+    ? 'suggestions: on (ANTHROPIC_API_KEY set), the kit and stat conversations are live'
     : 'suggestions: off (no ANTHROPIC_API_KEY set)',
 );
 // The 2D art surface (plan-forge phase 4): splash and icon candidates on
@@ -1074,7 +1075,11 @@ const server = http.createServer(async (req, res) => {
       // agent quota, one unit per player message, spent only when a
       // proposal lands. The body carries the whole thread plus the
       // unsaved form state, hence the wide cap.
-      if (url === '/api/forge/suggest' && req.method === 'POST') {
+      // The stat conversation (Tuning tab) rides the same wire and meter.
+      if (
+        (url === '/api/forge/suggest' || url === '/api/forge/suggest-stats') &&
+        req.method === 'POST'
+      ) {
         const body = await readJsonBody(req, DRAFT_JSON_MAX + 160_000);
         const id = typeof body?.id === 'string' ? body.id : null;
         if (!id || !Array.isArray(body?.messages)) {
@@ -1095,7 +1100,8 @@ const server = http.createServer(async (req, res) => {
           'cache-control': 'no-store',
           'x-accel-buffering': 'no',
         });
-        const outcome = await suggestKit(suggestDeps, me.id, {
+        const ask = url === '/api/forge/suggest' ? suggestKit : suggestStats;
+        const outcome = await ask(suggestDeps, me.id, {
           id,
           messages: body.messages as { role: 'user' | 'assistant'; text: string }[],
           ...(body.def !== undefined ? { def: body.def } : {}),

@@ -57,7 +57,13 @@ and their written UGC authorization; details inline.
    Forged champions PLAY as their generated models everywhere: the render
    registry loads the sealed GLB (clip names resolved by substring, so preset
    and placeholder spellings both land), announced from drafts, the gallery,
-   and the match_start forgedAssets block. REMAINING: the agent endpoint that
+   and the match_start forgedAssets block. Conversations (2026-09-02): the kit
+   conversation on the Spells tab and its sibling, the stat conversation on the
+   Tuning tab (`server/suggest_stats.ts`, the fit in `src/sim/forge/stat_fit.ts`),
+   share one chat panel (`src/ui/forge_chat.ts`); the Spells tab reads overview,
+   conversation, proposal, then the five slots wearing their icons (generated one
+   at a time or all four at once) and the selected slot's parameters, the passive
+   a slot like the others. REMAINING: the agent endpoint that
    compiles free-text passives into primitives with refusal explanations (needs
    a Claude API key); the generated weapon prop itself stays phase 5's Tripo
    half (the procedural prop library carries the grip flow until then).
