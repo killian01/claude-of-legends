@@ -7,6 +7,7 @@
 
 import { attachBot } from '../sim/content/bots';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
+import type { PlaybookDef } from '../sim/playbook/types';
 import { Sim } from '../sim/sim';
 import type { TeamId } from '../sim/types';
 import { type ClientMsg, isFiniteVec } from './protocol';
@@ -24,6 +25,9 @@ export interface ReplayPick {
   skin?: number;
   // Bot policy id; seats without it are humans driven by recorded events.
   bot?: string;
+  // An account's own bot (ADR 0013): the playbook that played, embedded
+  // whole like a forged definition, so the replay runs what ran.
+  playbook?: PlaybookDef;
 }
 
 export interface ReplayEvent {
@@ -67,9 +71,8 @@ export function buildMatchSim(
     const unit = sim.addChampion(p.team, undefined, p.championId, p.skin ?? 0);
     unit.sigils = [...p.sigils];
     unitIds.push(unit.id);
-    if (p.bot) {
-      attachBot(sim, unit.id, p.bot);
-    }
+    if (p.playbook) sim.attachPlaybook(unit.id, p.playbook);
+    else if (p.bot) attachBot(sim, unit.id, p.bot);
   }
   return { sim, unitIds };
 }

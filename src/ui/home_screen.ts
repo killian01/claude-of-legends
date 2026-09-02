@@ -6,8 +6,10 @@
 // It only decides; the entry point owns the flow. Everything here resolves
 // the promise with a HomeChoice and takes the page down.
 
+import type { ReplayRecord } from '../net/replay';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { TeamId } from '../sim/types';
+import { openAcademy } from './academy';
 import { type AuthedAccount, signOut } from './auth';
 import { buildEmailNotice, type ConfirmResult } from './email_status';
 import { openForgeEditor } from './forge_editor';
@@ -47,8 +49,10 @@ export interface HomeChoice {
   // same flow as 'queue', a separate ladder, forged champions in select.
   mode: 'practice' | 'queue' | 'forge-queue' | 'create' | 'join' | 'replay' | 'spectate';
   code?: string;
-  // For mode 'replay': the saved replay to watch.
+  // For mode 'replay': the saved replay to watch, or a record handed over
+  // directly (a local sparring match from the Academy).
   replayId?: number;
+  replay?: ReplayRecord;
   // For mode 'spectate': the live match to watch, and from whose side.
   matchId?: number;
   team?: TeamId;
@@ -127,6 +131,7 @@ export function showHome(
       window.removeEventListener('loc:replay', onWatchReplay);
       window.removeEventListener('loc:spectate', onSpectate);
       window.removeEventListener('loc:forge-test', onForgeTest);
+      window.removeEventListener('loc:replay-record', onReplayRecord);
       stopBackdrop();
       root.remove();
     };
@@ -164,7 +169,16 @@ export function showHome(
     }
     window.addEventListener('loc:replay', onWatchReplay);
     window.addEventListener('loc:spectate', onSpectate);
+    // The Academy's sparring: watch the match it just played, from the
+    // record it holds in memory.
+    function onReplayRecord(e: Event): void {
+      const record = (e as CustomEvent<ReplayRecord>).detail;
+      if (typeof record !== 'object' || record === null) return;
+      leave();
+      resolve({ name: accountName, mode: 'replay', replay: record });
+    }
     window.addEventListener('loc:forge-test', onForgeTest);
+    window.addEventListener('loc:replay-record', onReplayRecord);
 
     const cards = el('div', 'pg-cards');
 
@@ -206,6 +220,18 @@ export function showHome(
     row.append(code, join);
     friends.append(create, row);
 
+    // --- bots ---
+    const botsCard = card(
+      'plain',
+      'Bots',
+      'Field a bot instead of playing by hand. Write its playbook in the Academy, by ' +
+        'talking to the coach or editing the plays, spar it against house bots in seconds, ' +
+        'and watch the replay with what it was thinking on its plate.',
+    );
+    const academyBtn = el('button', 'menu-btn', 'Open the Academy');
+    academyBtn.addEventListener('click', () => openAcademy(container));
+    botsCard.append(academyBtn);
+
     // --- the Forge ---
     const forge = card(
       'plain',
@@ -246,7 +272,7 @@ export function showHome(
     learn.appendChild(roster);
     collapsible(learn, 'Settings', buildSettingsPanel);
 
-    cards.append(play, friends, forge, career, learn);
+    cards.append(play, friends, botsCard, forge, career, learn);
     inner.appendChild(cards);
   });
 }

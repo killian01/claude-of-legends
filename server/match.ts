@@ -13,6 +13,7 @@ import {
 } from '../src/net/replay';
 import { attachBot } from '../src/sim/content/bots';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
+import type { PlaybookDef } from '../src/sim/playbook/types';
 import type { Sim, SimEvent } from '../src/sim/sim';
 import type { TeamId } from '../src/sim/types';
 import { buildSnapshot } from './snapshot';
@@ -30,6 +31,9 @@ export interface MatchPick {
   // Forge queue: the picked champion's definition, already resolved and
   // approved for this seat by the matchmaker's account boundary.
   forged?: ForgedChampionDef;
+  // An account's own bot in this seat (ADR 0013): its playbook, resolved
+  // by the account boundary like a forged definition.
+  playbook?: PlaybookDef;
 }
 
 interface MatchPlayer {
@@ -73,6 +77,7 @@ export class Match {
       sigils: [p.sigils[0], p.sigils[1]],
       ...(p.skin !== undefined ? { skin: p.skin } : {}),
       ...(p.bot !== undefined ? { bot: p.bot } : {}),
+      ...(p.playbook !== undefined ? { playbook: p.playbook } : {}),
     }));
     const forged = new Map<string, ForgedChampionDef>();
     for (const p of picks) {

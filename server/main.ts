@@ -77,6 +77,7 @@ import { mailerFromEnv } from './mailer';
 import { AFK_IDLE_TICKS, Match, type MatchPick } from './match';
 import { Matchmaker, type MatchSource } from './matchmaker';
 import { passwordErrorMessage, validatePassword } from './password';
+import { type CoachDeps, coachPlaybook } from './playbook_suggest';
 import { buildProfile } from './profile';
 import { checkQuota, DAY_MS, spendQuota } from './quotas';
 import { isRated, LEAVER_LOCKOUT_MS, leaverPenalty, type RatedSeat, ratingDeltas } from './rating';
@@ -271,6 +272,13 @@ const botDeps: BotDeps = {
   store: botStore,
   botCap: envNumber('BOT_CAP', 100),
   depositCap: envNumber('BOT_DEPOSIT_CAP', 3),
+};
+// The coach behind the Academy: the same key as the kit conversation,
+// one model, depth as effort.
+const coachDeps: CoachDeps = {
+  store: botStore,
+  apiKey: process.env.ANTHROPIC_API_KEY?.trim() || null,
+  ...(process.env.BOT_COACH_MODEL?.trim() ? { model: process.env.BOT_COACH_MODEL.trim() } : {}),
 };
 const forgeDeps = {
   store: forgeStore,
@@ -894,6 +902,38 @@ const server = http.createServer(async (req, res) => {
       if (url === '/api/bots/revert' && req.method === 'POST') {
         const body = await readJsonBody(req);
         sendJson(res, 200, revertBot(botDeps, me.id, body?.id, body?.version));
+        return;
+      }
+      // The coach: streamed as NDJSON like the kit conversation, the
+      // comment as the model writes it and each operation as it applies.
+      if (url === '/api/bots/suggest' && req.method === 'POST') {
+        const body = await readJsonBody(req, PLAYBOOK_JSON_MAX + 160_000);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        if (!id || !Array.isArray(body?.messages)) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        const quota = checkQuota(quotaDeps, me.id, 'agent');
+        if (!quota.ok) {
+          sendJson(res, 200, quota);
+          return;
+        }
+        res.writeHead(200, {
+          'content-type': 'application/x-ndjson',
+          'cache-control': 'no-store',
+          'x-accel-buffering': 'no',
+        });
+        const outcome = await coachPlaybook(coachDeps, me.id, {
+          id,
+          messages: body.messages as { role: 'user' | 'assistant'; text: string }[],
+          ...(body.playbook !== undefined ? { playbook: body.playbook } : {}),
+          depth: body.depth === 'deep' ? 'deep' : 'quick',
+          onProgress: (p) => {
+            res.write(`${JSON.stringify({ progress: p.kind, ...p })}\n`);
+          },
+        });
+        if (outcome.ok) spendQuota(quotaDeps, me.id, 'agent');
+        res.end(`${JSON.stringify(outcome)}\n`);
         return;
       }
       // --- the Forge (ADR 0010, ADR 0011): drafts, ledger, finalize ---

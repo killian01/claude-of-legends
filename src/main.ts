@@ -129,13 +129,18 @@ function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
 // Watch a saved match: rebuild the sim from the record (deterministic, so
 // the whole match is seed plus commands) and run it through the normal
 // presentation behind a read-only world, with a speed bar on top.
-async function runReplay(replayId: number): Promise<PostMatchAction> {
+// A record handed over directly (a local sparring match from the Academy)
+// skips the fetch: the same viewer, the same rules.
+async function runReplay(source: number | ReplayRecord): Promise<PostMatchAction> {
   let record: ReplayRecord | null = null;
-  try {
-    const res = await fetch(`/api/replay/${replayId}`);
-    if (res.ok) record = (await res.json()) as ReplayRecord;
-  } catch {
-    // handled below
+  if (typeof source !== 'number') record = source;
+  else {
+    try {
+      const res = await fetch(`/api/replay/${source}`);
+      if (res.ok) record = (await res.json()) as ReplayRecord;
+    } catch {
+      // handled below
+    }
   }
   if (!record || record.version !== 1 || !Array.isArray(record.picks)) {
     await showNotice(
@@ -656,6 +661,8 @@ async function boot(): Promise<void> {
         : (lastPick ?? (await pickForPractice()));
       lastPick = pick;
       action = await runOffline(pick);
+    } else if (choice.mode === 'replay' && choice.replay !== undefined) {
+      action = await runReplay(choice.replay);
     } else if (choice.mode === 'replay' && choice.replayId !== undefined) {
       action = await runReplay(choice.replayId);
     } else if (choice.mode === 'spectate' && choice.matchId !== undefined) {
