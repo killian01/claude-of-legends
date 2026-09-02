@@ -7,8 +7,8 @@
 // every coach operation goes through the validator before it lands.
 
 import { runSparring } from '../game/sparring';
-import { type CoachTurn, commentOf } from '../net/coach_chat';
 import type { SparResult } from '../game/sparring_core';
+import { type CoachTurn, commentOf } from '../net/coach_chat';
 import type { ReplayRecord } from '../net/replay';
 import { CHAMPION_LIST, CHAMPIONS } from '../sim/content/champions';
 import { SIGIL_LIST } from '../sim/content/sigils';
@@ -955,7 +955,12 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     coach.style.display = 'flex';
     coach.style.flexDirection = 'column';
     coach.style.flex = '1';
-    coach.style.minHeight = '0';
+    // The panel yields height to the sparring and Briefing panels below but
+    // never less than its own controls: shrunk further it spilled its text
+    // under the sparring summary (playtest round 2). Past this the side
+    // column scrolls, and the chat log scrolls inside.
+    coach.style.minHeight = '360px';
+    coach.style.overflow = 'hidden';
     coach.append(el('h3', '', 'The coach'));
     coach.append(
       el(
@@ -1205,7 +1210,17 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
           : r.winner === 1
             ? 'Your bot’s team lost'
             : 'No winner';
-      sparBox.append(el('div', 'ac-status', `${verdict} after ${fmtSeconds(r.ticks)}.`));
+      const line = el('div', 'ac-row');
+      line.append(el('div', 'ac-status', `${verdict} after ${fmtSeconds(r.ticks)}.`));
+      const dismiss = el('button', 'ac-btn mini', 'Dismiss');
+      dismiss.title = 'Put the summary away';
+      dismiss.addEventListener('click', () => {
+        sparResult = null;
+        lastSpar.delete(bot.id);
+        renderSide();
+      });
+      line.append(dismiss);
+      sparBox.append(line);
       const mine = r.report.units.find((u) => u.unitId === r.botUnitId);
       if (mine) {
         const table = el('table', 'ac-table');
