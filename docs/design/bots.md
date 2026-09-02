@@ -256,8 +256,10 @@ The maintainer set the bar as four questions, and each has a measure:
 
 Underneath, an internal guard: a changed default Laner ships only if it wins at least
 seventy percent of twenty sparring matches against the previous version over fixed
-seeds (`scripts/laner_gate.mjs`). It keeps engine changes honest and blocks regressions;
-it is not the bar. The scouting report that opens every reasoning phase measures, per
+seeds, on the fill, each seed played from both sides so the lineups drawn favor nobody
+(`scripts/laner_gate.mjs --mirror`). Ten seeds move the rate by fifteen points either
+way, so a candidate is confirmed on seeds the search never saw. It keeps engine changes
+honest and blocks regressions; it is not the bar. The scouting report that opens every reasoning phase measures, per
 bot and per minute of a sparring, what a player would have done differently: fights
 taken outnumbered, deaths under towers, gold unspent, time far from the team, objectives
 given away.

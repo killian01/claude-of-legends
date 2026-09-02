@@ -92,6 +92,9 @@ function tally() {
     goldAtDeath: 0,
     byPlay: new Map(),
     byMinute: new Map(),
+    // Kills and deaths per champion id: which roles carry and which feed.
+    killsBy: new Map(),
+    deathsBy: new Map(),
     kills: 0,
     bankAtEnd: 0,
     towersLost: 0,
@@ -124,8 +127,11 @@ function play(seed, curTeam) {
       const side = sides[sideOf.get(victim.id)];
       const killer = sim.units.get(ev.killerId);
       if (killer && killer.kind === 'champion' && sideOf.has(killer.id)) {
-        sides[sideOf.get(killer.id)].kills++;
+        const ks = sides[sideOf.get(killer.id)];
+        ks.kills++;
+        ks.killsBy.set(killer.championId, (ks.killsBy.get(killer.championId) ?? 0) + 1);
       }
+      side.deathsBy.set(victim.championId, (side.deathsBy.get(victim.championId) ?? 0) + 1);
       let allies = 0;
       let enemies = 0;
       let tower = false;
@@ -193,4 +199,10 @@ for (const [name, s] of Object.entries(sides)) {
   console.log(`deaths by play: ${plays.map(([p, n]) => `${p} ${n}`).join(', ')}`);
   const minutes = [...s.byMinute.entries()].sort((a, b) => a[0] - b[0]);
   console.log(`deaths by minute: ${minutes.map(([m, n]) => `${m}:${n}`).join(' ')}`);
+  const champs = [...new Set([...s.killsBy.keys(), ...s.deathsBy.keys()])].sort();
+  console.log(
+    `kills/deaths by champion: ${champs
+      .map((c) => `${c} ${s.killsBy.get(c) ?? 0}/${s.deathsBy.get(c) ?? 0}`)
+      .join(', ')}`,
+  );
 }

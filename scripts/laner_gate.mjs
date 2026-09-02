@@ -6,6 +6,7 @@
 // brain runs unchanged inside today's sim, and the win rate is what an
 // engine or playbook change did. Usage:
 //   node scripts/laner_gate.mjs [--prev <git-ref>] [--seeds 20] [--max-ticks 48000]
+//     [--from 1] [--playbook cand.json] [--dist dist-gate] [--mirror] [--cur <git-ref>]
 // Prints the tally and PASS or FAIL at seventy percent of decided matches.
 
 import { execSync } from 'node:child_process';
@@ -30,6 +31,14 @@ const maxTicks = Number(opt('--max-ticks', String(20 * 60 * 40)));
 const candidate = opt('--playbook', null);
 // The build directory, so several gates can run side by side.
 const distName = opt('--dist', 'dist-gate');
+// Mirror: every seed played twice, the current Laner on each side in turn,
+// so the lineups the fill drew for that seed favor nobody and a pair
+// (both won, split, both lost) reads the difference between the two
+// brains rather than the draw.
+const mirror = args.includes('--mirror');
+// The current side's brain from a git ref instead of the working tree: an
+// A/B of two engines inside today's sim, both playing the same playbook.
+const curRef = opt('--cur', null);
 const BAR = 0.7;
 
 const root = process.cwd();
@@ -42,14 +51,21 @@ mkdirSync(path.join(dist, 'prev'), { recursive: true });
 execSync(`git archive --format=tar -o ${distName}/prev.tar ${ref} src`, { stdio: 'inherit' });
 execSync(`tar -xf ${distName}/prev.tar -C ${distName}/prev`, { stdio: 'inherit' });
 
+let brain = '../src';
+if (curRef) {
+  mkdirSync(path.join(dist, 'cur'), { recursive: true });
+  execSync(`git archive --format=tar -o ${distName}/cur.tar ${curRef} src`, { stdio: 'inherit' });
+  execSync(`tar -xf ${distName}/cur.tar -C ${distName}/cur`, { stdio: 'inherit' });
+  brain = './cur/src';
+}
 writeFileSync(
   path.join(dist, 'current.ts'),
   [
     "export { Sim } from '../src/sim/sim';",
     "export { fillTeam } from '../src/sim/fill';",
     "export { Rng } from '../src/sim/rng';",
-    "export { LANER } from '../src/sim/content/bots/laner';",
-    "export { playbookPolicy, validatePlaybook } from '../src/sim/playbook';",
+    `export { LANER } from '${brain}/sim/content/bots/laner';`,
+    `export { playbookPolicy, validatePlaybook } from '${brain}/sim/playbook';`,
     '',
   ].join('\n'),
 );
@@ -106,23 +122,38 @@ function play(seed, curTeam) {
 let wins = 0;
 let losses = 0;
 let draws = 0;
+const pairs = { both: 0, split: 0, none: 0 };
 const started = Date.now();
 for (let seed = firstSeed; seed < firstSeed + seeds; seed++) {
-  const curTeam = seed % 2 === 0 ? 1 : 0;
-  const { winner, seconds } = play(seed, curTeam);
-  const outcome = winner === null ? 'draw' : winner === curTeam ? 'win' : 'loss';
-  if (outcome === 'win') wins++;
-  else if (outcome === 'loss') losses++;
-  else draws++;
-  console.log(
-    `seed ${seed}: current on team ${curTeam}, ${outcome} after ${seconds}s ` +
-      `(${wins}-${losses}-${draws}, ${Math.round((Date.now() - started) / 1000)}s elapsed)`,
-  );
+  const sides = mirror ? [0, 1] : [seed % 2 === 0 ? 1 : 0];
+  let seedWins = 0;
+  for (const curTeam of sides) {
+    const { winner, seconds } = play(seed, curTeam);
+    const outcome = winner === null ? 'draw' : winner === curTeam ? 'win' : 'loss';
+    if (outcome === 'win') {
+      wins++;
+      seedWins++;
+    } else if (outcome === 'loss') losses++;
+    else draws++;
+    console.log(
+      `seed ${seed}: current on team ${curTeam}, ${outcome} after ${seconds}s ` +
+        `(${wins}-${losses}-${draws}, ${Math.round((Date.now() - started) / 1000)}s elapsed)`,
+    );
+  }
+  if (mirror) {
+    if (seedWins === 2) pairs.both++;
+    else if (seedWins === 1) pairs.split++;
+    else pairs.none++;
+  }
 }
 const decided = wins + losses;
 const rate = decided > 0 ? wins / decided : 0;
+if (mirror) {
+  console.log(`mirror pairs: both ${pairs.both}, split ${pairs.split}, none ${pairs.none}`);
+}
 console.log(
-  `current Laner vs ${ref}: ${wins} wins, ${losses} losses, ${draws} draws over ${seeds} seeds; ` +
+  `current Laner${curRef ? ` (${curRef})` : ''} vs ${ref}: ${wins} wins, ${losses} losses, ${draws} draws over ${seeds} seeds` +
+    `${mirror ? ' mirrored' : ''}; ` +
     `${Math.round(rate * 100)}% of decided matches; ${rate >= BAR ? 'PASS' : 'FAIL'} at ${BAR * 100}%`,
 );
 process.exit(rate >= BAR ? 0 : 1);

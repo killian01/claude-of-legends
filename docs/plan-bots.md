@@ -127,6 +127,28 @@ Briefing, and the before/after screenshots under `docs/screenshots`.
    50), falling back under the tower when outnumbered (50%) and focusing the lowest
    (50%) all lost ground and were dropped. The Laner now joins fights; the language
    gained the allyFighting trigger and the joinAlly and fallBack behaviors.
+   Round 2 (2026-09-02, on the fill, after phase 11): the gate grew `--mirror` (every
+   seed played from both sides, so the lineups the fill drew favor nobody and a pair
+   reads the difference between the brains) and `--cur <ref>` (an A/B of two engines
+   inside today's sim); the scout counts kills and deaths per champion. Scouting on the
+   fill said 300 of 310 deaths came under the retreat play or the dodge reflex and the
+   melee fed (Korrath 20 kills for 60 deaths, Rhoka 46 for 60), so the round went at the
+   flight: a dodge leaning home when hurt and a chaser radius of ten spent an escape
+   tool against a marksman at range. Kills and deaths flipped on the same eight seeds
+   (302 for 276 instead of 260 for 310, towers lost 4.5 instead of 6.4) and the win rate
+   did not move (10-10 on seeds 31 to 50, 9-11 on 51 to 70, 14-6 mirrored against 15-5
+   without it), so it was dropped: the number decides. Playbook candidates, mirrored on
+   seeds 1 to 10 (twenty games): retreat at 40% 3-7, at 45% 15-5, at 50% 7-13, at 55%
+   13-7, join within 25 7-13, within 60 and 80 15-5 (identical to 40), join only above
+   60% health 12-8, front stance 12-8, no shopping at all 0-20 (items decide games), the
+   base 12-8. On twenty fresh seeds mirrored (forty games) retreat at 45% made 25-15 and
+   the base 24-16: the same brain, and the thresholds' spread on seeds 1 to 10 was the
+   seeds, not the parameter. Head to head, retreat at 45% against the current Laner on the same forty
+   games: 23-17, under the guard, so the Laner keeps its 32%. Conclusion: with the fight, farm and push
+   engine shared by both sides, parameters on top of it cap at about 60% against the
+   pre-kit Laner on the fill; the next lever is the engine's fight itself (focus fire,
+   melee engaging only beside an ally, grouping after a won fight), measured mirrored
+   and head to head against the current Laner.
 11. **The fill and the home lanes** (grill Q15 and Q16, 2026-09-02). Nothing
    constrained a lineup: house bots took the first free roster champions in order (an
    all-bot match was Korrath, Dain, Sylra, Fenn, Elowen on both sides, no marksman, no
