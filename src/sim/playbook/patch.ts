@@ -7,7 +7,7 @@
 // client (local validation, no round trip) and the server (the same
 // arithmetic before it forwards an operation).
 
-import type { KitDef, PlaybookDef, PlayDef } from './types';
+import type { KitDef, LaneId, PlaybookDef, PlayDef } from './types';
 import { type PlaybookValidation, validatePlaybook } from './validate';
 
 export type PatchOp =
@@ -21,6 +21,8 @@ export type PatchOp =
   // Change parts of the kit (ADR 0014): a part given replaces that part,
   // null clears it back to the engine's default, absent leaves it.
   | { op: 'kit'; kit: { [K in keyof KitDef]?: KitDef[K] | null } }
+  // The lane preference (phase 12): the lanes in order, null for none.
+  | { op: 'lanes'; lanes: LaneId[] | null }
   // A whole new playbook, the "rewrite everything" answer.
   | { op: 'replace'; playbook: PlaybookDef };
 
@@ -45,6 +47,8 @@ export function isPatchOp(raw: unknown): raw is PatchOp {
       return typeof raw.id === 'string' && isRecord(raw.play);
     case 'kit':
       return isRecord(raw.kit);
+    case 'lanes':
+      return Array.isArray(raw.lanes) || raw.lanes === null;
     case 'replace':
       return isRecord(raw.playbook);
     default:
@@ -64,10 +68,12 @@ function finish(v: PlaybookValidation): PatchResult {
 // Never mutates its inputs.
 export function applyPatchOp(def: PlaybookDef, op: PatchOp): PatchResult {
   const plays = def.plays.map((p) => ({ ...p }));
+  const rest = {
+    ...(def.kit ? { kit: def.kit } : {}),
+    ...(def.lanes ? { lanes: def.lanes } : {}),
+  };
   const withPlays = (next: PlayDef[]): PatchResult =>
-    finish(
-      validatePlaybook({ version: def.version, plays: next, ...(def.kit ? { kit: def.kit } : {}) }),
-    );
+    finish(validatePlaybook({ version: def.version, plays: next, ...rest }));
   switch (op.op) {
     case 'add': {
       const play = op.play as PlayDef;
@@ -125,9 +131,19 @@ export function applyPatchOp(def: PlaybookDef, op: PatchOp): PatchResult {
           version: Math.max(def.version, 2),
           plays,
           ...(Object.keys(next).length > 0 ? { kit: next } : {}),
+          ...(def.lanes ? { lanes: def.lanes } : {}),
         }),
       );
     }
+    case 'lanes':
+      return finish(
+        validatePlaybook({
+          version: Math.max(def.version, 3),
+          plays,
+          ...(def.kit ? { kit: def.kit } : {}),
+          ...(op.lanes && op.lanes.length > 0 ? { lanes: op.lanes } : {}),
+        }),
+      );
     case 'replace':
       return finish(validatePlaybook(op.playbook));
   }

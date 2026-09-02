@@ -6,6 +6,7 @@
 // unexpected rides into the sim.
 
 import type { CoachOrder } from '../coach';
+import { type ChampionRole, CHAMPIONS, DEFAULT_CHAMPION_ID } from '../content/champions';
 import { ITEMS } from '../content/items';
 import { GAME_MAP } from '../content/map';
 import type { AbilityKey } from '../types';
@@ -18,6 +19,7 @@ import {
   PLAYBOOK_FORMAT_VERSION,
   type PlaybookDef,
   type PlayDef,
+  type Side,
   type SkillKey,
   type Stance,
   type TargetRule,
@@ -35,6 +37,17 @@ const SKILL_KEYS: readonly SkillKey[] = ['Q', 'W', 'E'];
 const ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 const ABILITY_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
 const LANES = ['top', 'mid', 'bot'] as const;
+const SIDES: readonly Side[] = ['own', 'enemy'];
+const ROLES: readonly ChampionRole[] = [
+  'Tank',
+  'Fighter',
+  'Mage',
+  'Battlemage',
+  'Assassin',
+  'Marksman',
+  'Support',
+  'Skirmisher',
+];
 const ORDER_KINDS: readonly CoachOrder['kind'][] = [
   'goto',
   'warden',
@@ -203,6 +216,44 @@ function trigger(raw: unknown, at: string, depth: number, errors: Errors): Trigg
       }
       return { kind: 'lane', is };
     }
+    case 'champion':
+      return { kind: 'champion', side: side(raw, at, errors), is: champion(raw, at, errors) };
+    case 'roles': {
+      const role = raw.role;
+      const known = typeof role === 'string' && (ROLES as readonly string[]).includes(role);
+      if (!known) errors.add(`${at}: roles needs a role among ${ROLES.join(', ')}`);
+      const atLeast = optNumber(raw, 'atLeast', 0, 5, at, errors, true);
+      const atMost = optNumber(raw, 'atMost', 0, 5, at, errors, true);
+      if (atLeast === undefined && atMost === undefined) {
+        errors.add(`${at}: roles needs atLeast or atMost`);
+      }
+      return {
+        kind: 'roles',
+        side: side(raw, at, errors),
+        role: known ? (role as ChampionRole) : 'Mage',
+        ...(atLeast !== undefined ? { atLeast } : {}),
+        ...(atMost !== undefined ? { atMost } : {}),
+      };
+    }
+    case 'enemyDamage': {
+      const mostly = raw.mostly;
+      if (mostly !== 'magic' && mostly !== 'physical') {
+        errors.add(`${at}: enemyDamage mostly must be magic or physical`);
+        return { kind: 'enemyDamage', mostly: 'magic' };
+      }
+      return { kind: 'enemyDamage', mostly };
+    }
+    case 'enemyItem': {
+      if (typeof raw.item !== 'string' || ITEMS[raw.item] === undefined) {
+        errors.add(`${at}: enemyItem needs an item id from the shop`);
+        return { kind: 'enemyItem', item: 'iron_blade' };
+      }
+      return { kind: 'enemyItem', item: raw.item };
+    }
+    case 'laneOpponent':
+      return { kind: 'laneOpponent', is: champion(raw, at, errors) };
+    case 'lanePartner':
+      return { kind: 'lanePartner', is: champion(raw, at, errors) };
     case 'not':
       return { kind: 'not', of: trigger(raw.of, `${at}.not`, depth + 1, errors) };
     case 'all':
@@ -221,6 +272,26 @@ function trigger(raw: unknown, at: string, depth: number, errors: Errors): Trigg
       errors.add(`${at}: unknown trigger kind "${raw.kind}"`);
       return { kind: 'always' };
   }
+}
+
+// A side of the lineup, own by default when missing.
+function side(raw: Record<string, unknown>, at: string, errors: Errors): Side {
+  const v = raw.side;
+  if (typeof v !== 'string' || !(SIDES as readonly string[]).includes(v)) {
+    errors.add(`${at}: side must be own or enemy`);
+    return 'enemy';
+  }
+  return v as Side;
+}
+
+// A roster champion id in `is`.
+function champion(raw: Record<string, unknown>, at: string, errors: Errors): string {
+  const v = raw.is;
+  if (typeof v !== 'string' || CHAMPIONS[v] === undefined) {
+    errors.add(`${at}: ${String(raw.kind)} needs a roster champion id`);
+    return DEFAULT_CHAMPION_ID;
+  }
+  return v;
 }
 
 function behavior(raw: unknown, at: string, errors: Errors): Behavior {
@@ -442,6 +513,34 @@ export function validatePlaybook(raw: unknown): PlaybookValidation {
   const seen = new Set<string>();
   const out = plays.map((p, i) => play(p, i, seen, errors));
   const k = kit(raw.kit, errors);
+  const lanes = lanePreference(raw.lanes, errors);
   if (errors.list.length > 0) return { ok: false, errors: errors.list };
-  return { ok: true, def: { version: version as number, plays: out, ...(k ? { kit: k } : {}) } };
+  return {
+    ok: true,
+    def: {
+      version: version as number,
+      plays: out,
+      ...(k ? { kit: k } : {}),
+      ...(lanes ? { lanes } : {}),
+    },
+  };
+}
+
+// The lane preference: one to three distinct lanes, in order; absent when
+// the playbook states none.
+function lanePreference(raw: unknown, errors: Errors): ('top' | 'mid' | 'bot')[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 3) {
+    errors.add('lanes must list one to three lanes');
+    return undefined;
+  }
+  const out: ('top' | 'mid' | 'bot')[] = [];
+  for (const lane of raw) {
+    if ((lane !== 'top' && lane !== 'mid' && lane !== 'bot') || out.includes(lane)) {
+      errors.add('lanes must be distinct among top, mid and bot');
+      return undefined;
+    }
+    out.push(lane);
+  }
+  return out;
 }

@@ -71,6 +71,19 @@ export function homeLane(role: ChampionRole | null | undefined): LaneId | null {
   return role ? HOME_LANES[role] : null;
 }
 
+// The damage a role deals mostly, what "build against magic" reads
+// (plan-bots phase 12): the supports count on neither side.
+export const ROLE_DAMAGE: Readonly<Record<ChampionRole, 'magic' | 'physical' | 'mixed'>> = {
+  Tank: 'physical',
+  Fighter: 'physical',
+  Mage: 'magic',
+  Battlemage: 'magic',
+  Assassin: 'physical',
+  Marksman: 'physical',
+  Support: 'mixed',
+  Skirmisher: 'physical',
+};
+
 export interface ChampionDef {
   id: string;
   name: string;

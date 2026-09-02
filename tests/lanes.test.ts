@@ -60,7 +60,7 @@ describe('lanes by role', () => {
   });
 
   it('a preference beats the home lane, and a sixth seat reopens the lanes', () => {
-    expect(assignLanes([{ home: 'bot', prefer: 'mid' }, seat('mid')])).toEqual(['mid', 'top']);
+    expect(assignLanes([{ home: 'bot', prefer: ['mid'] }, seat('mid')])).toEqual(['mid', 'top']);
     const six = assignLanes([
       seat('mid'),
       seat('top'),

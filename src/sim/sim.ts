@@ -25,7 +25,7 @@ import {
 } from './combat/status';
 import { type ChampionDef, DEFAULT_CHAMPION_ID, homeLane } from './content/champions';
 import { ITEMS } from './content/items';
-import { GAME_MAP, type GameMap } from './content/map';
+import { GAME_MAP, type GameMap, type LaneId } from './content/map';
 import { SIGILS } from './content/sigils';
 import { clampSkin } from './content/skins';
 import { stepDashes } from './dashes';
@@ -33,7 +33,8 @@ import { hasDecisionToken, spendDecisionToken } from './decision_budget';
 import type { ForgedChampionDef } from './forge/forged_def';
 import { applyFountainRegen } from './fountain';
 import { stepIdleDefense } from './idle_defense';
-import { assignLanes } from './lanes';
+import { LaneSightings } from './lane_sightings';
+import { assignLanes, laneOf } from './lanes';
 import { createMapUnits } from './map_units';
 import { stepMinionAi } from './minion_ai';
 import { stepMovement } from './movement';
@@ -121,6 +122,9 @@ export class Sim {
   readonly policies = new Map<number, Policy>();
   // Seats whose Policy runs outside this process (remote_policy.ts).
   readonly remoteSeats = new Map<number, RemoteSeat>();
+  // Each team's memory of who stood in which lane (CONTEXT.md: Lane
+  // opponent), fed by the vision step.
+  readonly laneSightings = new LaneSightings();
   time = 0;
   tickCount = 0;
   winner: TeamId | null = null;
@@ -215,6 +219,7 @@ export class Sim {
     const lanes = assignLanes(
       seats.map((u) => ({
         home: homeLane(u.championId === null ? null : this.champions.get(u.championId)?.role),
+        prefer: u.lanePrefer,
       })),
     );
     for (const [i, u] of seats.entries()) u.lane = lanes[i]!;
@@ -222,6 +227,17 @@ export class Sim {
 
   championDef(championId: string): ChampionDef | null {
     return this.champions.get(championId);
+  }
+
+  // The lane opponents a team's memory names right now (CONTEXT.md): the
+  // enemy champion seen the most inside each lane over the last three
+  // minutes, null where nobody was seen.
+  laneOpponents(team: TeamId): Readonly<Record<LaneId, number | null>> {
+    return {
+      top: this.laneSightings.opponent(team, 'top', this.time),
+      mid: this.laneSightings.opponent(team, 'mid', this.time),
+      bot: this.laneSightings.opponent(team, 'bot', this.time),
+    };
   }
 
   attachPolicy(unitId: number, policy: Policy): void {
@@ -236,6 +252,13 @@ export class Sim {
   // influences a decision, so a traced playbook and a bare one drive the
   // seat identically (tests/playbook.test.ts).
   attachPlaybook(unitId: number, def: PlaybookDef): void {
+    // The playbook's lane preference is seated ahead of the home lane
+    // (phase 12): the team's lanes are dealt again with it in.
+    const seat = this.units.get(unitId);
+    if (seat && seat.kind === 'champion') {
+      seat.lanePrefer = def.lanes ? [...def.lanes] : null;
+      this.assignLanes(seat.team);
+    }
     const policy = playbookPolicy(def, (playId, id) => {
       const u = this.units.get(id);
       if (!u || u.play === playId) return;
@@ -718,6 +741,8 @@ export class Sim {
           at: this.time,
           hpFrac: u.maxHp > 0 ? u.hp / u.maxHp : 0,
         });
+        const lane = laneOf(u.pos.x, u.pos.z);
+        if (lane) this.laneSightings.record(observer, lane, u.id, this.time, DT);
       }
     }
 

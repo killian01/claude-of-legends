@@ -3,11 +3,20 @@
 // built from. Pure functions over the data; the validator stays the
 // authority on what is legal, these only make it readable and editable.
 
+import { CHAMPION_LIST, CHAMPIONS } from '../sim/content/champions';
 import { ITEM_LIST, ITEMS } from '../sim/content/items';
 import type { PatchOp } from '../sim/playbook/patch';
 import type { Behavior, KitDef, LaneId, SkillKey, Trigger } from '../sim/playbook/types';
 
 export const itemName = (id: string): string => ITEMS[id]?.name ?? id;
+export const championName = (id: string): string => CHAMPIONS[id]?.name.split(',')[0] ?? id;
+const sideName = (side: 'own' | 'enemy'): string => (side === 'own' ? 'my team' : 'the enemy');
+const roleCount = (t: { atLeast?: number; atMost?: number }): string => {
+  const parts: string[] = [];
+  if (t.atLeast !== undefined) parts.push(`at least ${t.atLeast}`);
+  if (t.atMost !== undefined) parts.push(`at most ${t.atMost}`);
+  return parts.join(' and ');
+};
 
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
 
@@ -63,6 +72,18 @@ export function describeTrigger(t: Trigger): string {
       return t.is === undefined ? 'the coach gave an order' : `the coach ordered ${t.is}`;
     case 'allyFighting':
       return `an ally within ${t.within} is fighting`;
+    case 'champion':
+      return `${sideName(t.side)} has ${championName(t.is)}`;
+    case 'roles':
+      return `${sideName(t.side)} fields ${roleCount(t)} ${t.role.toLowerCase()}`;
+    case 'enemyDamage':
+      return `the enemy deals mostly ${t.mostly} damage`;
+    case 'enemyItem':
+      return `a visible enemy wears ${itemName(t.item)}`;
+    case 'laneOpponent':
+      return `the lane opponent is ${championName(t.is)}`;
+    case 'lanePartner':
+      return `the lane partner is ${championName(t.is)}`;
     case 'not':
       return `not (${describeTrigger(t.of)})`;
     case 'all':
@@ -174,6 +195,19 @@ const HP: NumSpec[] = [
   { key: 'atLeast', label: 'at least', min: 0, max: 1, step: 0.05, pct: true },
 ];
 
+const SIDE_CHOICE: ChoiceSpec = {
+  key: 'side',
+  label: 'side',
+  options: ['own', 'enemy'],
+  labels: ['my team', 'the enemy'],
+};
+const CHAMPION_CHOICE: ChoiceSpec = {
+  key: 'is',
+  label: 'champion',
+  options: CHAMPION_LIST.map((c) => c.id),
+  labels: CHAMPION_LIST.map((c) => championName(c.id)),
+};
+
 export const TRIGGER_FORMS: Readonly<Record<Trigger['kind'], KindForm>> = {
   always: { label: 'always' },
   hp: { label: 'health', nums: HP },
@@ -249,6 +283,51 @@ export const TRIGGER_FORMS: Readonly<Record<Trigger['kind'], KindForm>> = {
     label: 'an ally is fighting',
     nums: [{ key: 'within', label: 'within', min: 0, max: 200, step: 1 }],
   },
+  champion: {
+    label: 'a champion is in the match',
+    choices: [SIDE_CHOICE, CHAMPION_CHOICE],
+  },
+  roles: {
+    label: 'a side fields a role',
+    choices: [
+      SIDE_CHOICE,
+      {
+        key: 'role',
+        label: 'role',
+        options: [
+          'Tank',
+          'Fighter',
+          'Mage',
+          'Battlemage',
+          'Assassin',
+          'Marksman',
+          'Support',
+          'Skirmisher',
+        ],
+      },
+    ],
+    nums: [
+      { key: 'atLeast', label: 'at least', min: 0, max: 5, step: 1 },
+      { key: 'atMost', label: 'at most', min: 0, max: 5, step: 1 },
+    ],
+  },
+  enemyDamage: {
+    label: 'the enemy deals mostly',
+    choices: [{ key: 'mostly', label: 'damage', options: ['magic', 'physical'] }],
+  },
+  enemyItem: {
+    label: 'a visible enemy wears',
+    choices: [
+      {
+        key: 'item',
+        label: 'item',
+        options: ITEM_LIST.map((i) => i.id),
+        labels: ITEM_LIST.map((i) => i.name),
+      },
+    ],
+  },
+  laneOpponent: { label: 'the lane opponent is', choices: [CHAMPION_CHOICE] },
+  lanePartner: { label: 'the lane partner is', choices: [CHAMPION_CHOICE] },
   not: { label: 'not' },
   all: { label: 'all of' },
   any: { label: 'any of' },
@@ -382,6 +461,17 @@ export function freshTrigger(kind: Trigger['kind']): Trigger {
       return { kind, is: 'mid' };
     case 'allyFighting':
       return { kind, within: 40 };
+    case 'champion':
+      return { kind, side: 'enemy', is: 'vesk' };
+    case 'roles':
+      return { kind, side: 'enemy', role: 'Mage', atLeast: 1 };
+    case 'enemyDamage':
+      return { kind, mostly: 'magic' };
+    case 'enemyItem':
+      return { kind, item: 'warbrand' };
+    case 'laneOpponent':
+    case 'lanePartner':
+      return { kind, is: 'vesk' };
     case 'not':
       return { kind, of: { kind: 'enemyVisible' } };
     case 'all':
@@ -439,6 +529,10 @@ export function describeOp(op: PatchOp): string {
       else if (k.variants) parts.push(`${k.variants.length} variant(s)`);
       return `kit: ${parts.join('; ') || 'nothing'}`;
     }
+    case 'lanes':
+      return op.lanes && op.lanes.length > 0
+        ? `lane preference: ${op.lanes.join(', then ')}`
+        : 'lane preference: none, the home lane';
     case 'replace':
       return `replace the whole playbook (${op.playbook.plays.length} plays)`;
   }

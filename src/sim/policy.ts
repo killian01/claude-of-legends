@@ -8,6 +8,7 @@
 // contract; policies may read it directly.
 
 import type { CoachOrder } from './coach';
+import type { ChampionRole } from './content/champions';
 import type { Rng } from './rng';
 import type { AbilityKey, TeamId } from './types';
 import type { UnitKind } from './unit';
@@ -50,6 +51,9 @@ export interface ObsUnit {
   // the face every viewer reads off the screen, so a policy may pick its
   // target by role.
   championId?: string;
+  // Champions only: the items in its bag (additive v0 field, plan-bots
+  // phase 12): what a viewer reads by clicking a visible champion.
+  items?: readonly string[];
 }
 
 // A projectile the team can see (additive v0 block: dodging is impossible
@@ -98,6 +102,20 @@ export interface ObsLastSeen {
   z: number;
   at: number;
   hpFrac: number;
+}
+
+// One of the match's ten seats (additive v0 block, plan-bots phase 12):
+// both teams' champions and roles are public from champion select, like
+// the scoreboard a viewer opens. `lane` is the seat's assigned lane, given
+// for the own team only (the enemy's plan is not on screen); `dead` is the
+// death timer every viewer sees.
+export interface ObsSeat {
+  id: number;
+  team: TeamId;
+  championId: string;
+  role: ChampionRole;
+  lane?: 'top' | 'mid' | 'bot' | null;
+  dead: boolean;
 }
 
 export interface ObsSelf {
@@ -170,6 +188,12 @@ export interface Observation {
   // Fresh memories of enemy champions currently out of sight (additive v0
   // field; see ObsLastSeen).
   lastSeen?: readonly ObsLastSeen[];
+  // The match's seats, both teams (additive v0 field; see ObsSeat).
+  seats?: readonly ObsSeat[];
+  // The team's lane opponents (CONTEXT.md; additive v0 field): per lane,
+  // the id of the enemy champion the team has seen there the most over
+  // the last three minutes, null where nobody was seen.
+  laneOpponents?: Readonly<Record<'top' | 'mid' | 'bot', number | null>>;
 }
 
 export type Action =

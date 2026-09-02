@@ -384,6 +384,11 @@ three minutes; none when nobody was seen there. What "adapt to the opponent" ada
 before a fight starts.
 _Avoid_: laner, matchup, counterpart, vis-a-vis
 
+**Lane partner**:
+The allied champion assigned to the same lane as the bot (two top, two bot, one mid): who
+a bot lanes beside, known from the start of the match.
+_Avoid_: duo, lane mate, buddy
+
 **Coach order**:
 The one live instruction a bot's owner can give it during a match: go to a lane or point,
 take the Warden, focus a target, back off, group on an ally, hold, free. One active at a

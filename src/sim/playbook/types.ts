@@ -10,14 +10,21 @@
 // additively: a playbook written against version 1 keeps playing under
 // every later version. New trigger and behavior kinds are added, never
 // changed; a parameter's default never moves once shipped. Version 2 added
-// the kit, the fight's stance and target, and the sell behavior.
+// the kit, the fight's stance and target, and the sell behavior. Version 3
+// added the lineup triggers (a champion in the match, a role count, the
+// enemy's damage, an item seen, the lane opponent and partner) and the
+// lane preference.
 
 import type { CoachOrder } from '../coach';
+import type { ChampionRole } from '../content/champions';
 import type { AbilityKey } from '../types';
 
-export const PLAYBOOK_FORMAT_VERSION = 2;
+export const PLAYBOOK_FORMAT_VERSION = 3;
 
 export type LaneId = 'top' | 'mid' | 'bot';
+
+// Which team a lineup trigger reads.
+export type Side = 'own' | 'enemy';
 
 // A predicate over the bot's own observation and the static map. Numeric
 // triggers compare with `below` (strictly less) and `atLeast` (greater or
@@ -53,6 +60,19 @@ export type Trigger =
   // An allied champion within the radius is in a fight: an enemy champion
   // stands within 10 units of it.
   | { kind: 'allyFighting'; within: number }
+  // The lineup (plan-bots phase 12), public from champion select: a
+  // champion is in the match on a side; a side fields so many of a role.
+  | { kind: 'champion'; side: Side; is: string }
+  | { kind: 'roles'; side: Side; role: ChampionRole; atLeast?: number; atMost?: number }
+  // The enemy's damage by roles: mages and battlemages deal magic, the
+  // rest physical, supports neither; "mostly" needs a strict majority.
+  | { kind: 'enemyDamage'; mostly: 'magic' | 'physical' }
+  // A visible enemy champion wears the item.
+  | { kind: 'enemyItem'; item: string }
+  // The lane opponent of the bot's assigned lane (CONTEXT.md) is this
+  // champion; the lane partner is an ally assigned to the same lane.
+  | { kind: 'laneOpponent'; is: string }
+  | { kind: 'lanePartner'; is: string }
   | { kind: 'not'; of: Trigger }
   | { kind: 'all'; of: Trigger[] }
   | { kind: 'any'; of: Trigger[] };
@@ -166,4 +186,7 @@ export interface PlaybookDef {
   version: number;
   plays: PlayDef[];
   kit?: KitDef;
+  // The lanes the bot asks for, in order (plan-bots phase 12): seated
+  // ahead of its champion's home lane, the first with a seat open.
+  lanes?: LaneId[];
 }

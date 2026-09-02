@@ -105,6 +105,7 @@ function materializeUnit(s: SnapUnit): Unit {
     play: null,
     coachOrder: null,
     coachOrderSeenAt: 0,
+    lanePrefer: null,
     attackTargetId: null,
     attackReadyAt: 0,
     attackMoveTarget: null,

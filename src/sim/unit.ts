@@ -135,6 +135,9 @@ export interface Unit {
   structure: StructureMeta | null;
   // Lane minion state.
   lane: LaneId | null;
+  // A bot's lane preferences (plan-bots phase 12), ahead of the home lane
+  // at seating; null for a seat that states none.
+  lanePrefer: LaneId[] | null;
   laneProgress: number;
 }
 
@@ -194,6 +197,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     play: null,
     coachOrder: null,
     coachOrderSeenAt: 0,
+    lanePrefer: null,
     attackTargetId: null,
     attackReadyAt: 0,
     attackMoveTarget: null,

@@ -186,6 +186,15 @@ Briefing, and the before/after screenshots under `docs/screenshots`.
    (`src/sim/lanes.ts` reads it first); rotation stays a play (`push` takes a lane).
    Exit: a variant "against three mages, build Spirit Ward second" plays in sparring
    against a mage-heavy fill.
+   DONE (2026-09-02). The observation carries `seats` (both teams, roles, the own
+   team's lanes, dead), `items` on visible champion rows, and `laneOpponents` from
+   `src/sim/lane_sightings.ts` (ten second buckets over three minutes, fed by the
+   vision step). Six triggers: champion, roles, enemyDamage, enemyItem, laneOpponent,
+   lanePartner; the playbook's `lanes` preference, seated by `assignLanes` ahead of the
+   home lane when the playbook attaches; format version 3; the coach grammar, the
+   words, the forms and a Lane select in the Kit panel. The roster holds two magic
+   roles, so the exit reads "against mostly magic damage, build Spirit Ward second":
+   pinned by tests/adaptation.test.ts against a mage-heavy enemy lineup.
 
 Follow-ups, in order of value: house bots obeying their team's pings (phase 5's
 mechanism), bot sharing and a playbook gallery, bots on forged champions once the Forge

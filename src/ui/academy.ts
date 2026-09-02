@@ -10,7 +10,7 @@ import { runSparring } from '../game/sparring';
 import type { SparResult } from '../game/sparring_core';
 import { type CoachTurn, commentOf } from '../net/coach_chat';
 import type { ReplayRecord } from '../net/replay';
-import { CHAMPION_LIST, CHAMPIONS } from '../sim/content/champions';
+import { CHAMPION_LIST, CHAMPIONS, homeLane } from '../sim/content/champions';
 import { ITEM_LIST, ITEMS } from '../sim/content/items';
 import { SIGIL_LIST } from '../sim/content/sigils';
 import {
@@ -394,6 +394,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       version: working.version,
       plays,
       ...(working.kit ? { kit: working.kit } : {}),
+      ...(working.lanes ? { lanes: working.lanes } : {}),
     });
     if (!v.ok) {
       say(v.errors[0] ?? 'invalid playbook', true);
@@ -419,9 +420,30 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       version: Math.max(working.version, 2),
       plays: working.plays,
       ...(Object.keys(cleaned).length > 0 ? { kit: cleaned } : {}),
+      ...(working.lanes ? { lanes: working.lanes } : {}),
     });
     if (!v.ok) {
       say(v.errors[0] ?? 'invalid kit', true);
+      return;
+    }
+    working = v.def;
+    dirty = true;
+    status = '';
+    renderMain();
+  };
+
+  // The lane preference (phase 12): the lanes asked for, in order; none
+  // means the champion's home lane. Lifts the format to 3.
+  const editLanes = (lanes: ('top' | 'mid' | 'bot')[] | null): void => {
+    if (!working) return;
+    const v = validatePlaybook({
+      version: Math.max(working.version, 3),
+      plays: working.plays,
+      ...(working.kit ? { kit: working.kit } : {}),
+      ...(lanes && lanes.length > 0 ? { lanes } : {}),
+    });
+    if (!v.ok) {
+      say(v.errors[0] ?? 'invalid lane preference', true);
       return;
     }
     working = v.def;
@@ -851,6 +873,29 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     const kit = def.kit ?? {};
     const champ = CHAMPIONS[bot.championId];
     const role = roleBuild(bot.championId);
+    // The lane the bot asks for, ahead of its home lane.
+    const laneRow = el('div', 'ac-row');
+    laneRow.append(el('h4', '', 'Lane'));
+    const laneSel = document.createElement('select');
+    for (const [value, label] of [
+      ['home', `home lane (${homeLane(champ?.role) ?? 'any'})`],
+      ['top', 'top'],
+      ['mid', 'mid'],
+      ['bot', 'bot'],
+    ] as const) {
+      const o = document.createElement('option');
+      o.value = value;
+      o.textContent = label;
+      laneSel.append(o);
+    }
+    laneSel.value = def.lanes?.[0] ?? 'home';
+    laneSel.disabled = coaching;
+    laneSel.addEventListener('change', () => {
+      const v = laneSel.value;
+      editLanes(v === 'top' || v === 'mid' || v === 'bot' ? [v] : null);
+    });
+    laneRow.append(laneSel);
+    panel.append(laneRow);
     const buildHead = el('div', 'ac-row');
     buildHead.append(el('h4', '', 'Build'));
     if (kit.build) {

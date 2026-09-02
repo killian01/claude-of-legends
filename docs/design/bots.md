@@ -228,14 +228,18 @@ observation in plan-bots phase 12), not a constant the default Laner was tuned a
 
 ## Adapting to the opponent
 
-A player reads the other team before the first fight; a bot needs the same facts in its
-observation, all of them things a viewer reads off the screen: both teams' champions and
-roles (public from champion select), the items on a visible enemy, and the lane
-opponent (the enemy champion the team has seen the most inside the bot's lane over the
-last three minutes). Triggers over them make variants and plays situational: the enemy
-has a given champion, at least so many mages, mostly magic damage, a visible enemy
-wearing a given item, the lane opponent being a given champion. Additive contract
-growth, like every observation field since v0 (ADR 0005).
+A player reads both teams before the first fight; a bot needs the same facts in its
+observation, all of them things a viewer reads off the screen: the match's seats, both
+teams' champions and roles (public from champion select, with the assigned lane for the
+own team), the items on a visible champion, and the lane opponents (per lane, the enemy
+champion the team has seen the most inside it over the last three minutes, a memory
+the sim keeps from what the team saw). Triggers over them make variants and plays
+situational, on either side: a champion is in the match, a side fields so many of a
+role ("no tank on my side", "two mages across"), the enemy deals mostly magic or
+physical damage (by roles, supports counting on neither side), a visible enemy wears an
+item, the lane opponent or the lane partner is a given champion. A bot also states the
+lanes it asks for, in order, seated ahead of its champion's home lane; rotation stays a
+play. Additive contract growth, like every observation field since v0 (ADR 0005).
 
 ## The bar
 

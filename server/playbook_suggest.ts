@@ -10,7 +10,7 @@
 // keeps its dependency set tiny.
 
 import { hintsFor } from '../src/sim/content/bots/hints';
-import { CHAMPIONS } from '../src/sim/content/champions';
+import { CHAMPION_LIST, CHAMPIONS } from '../src/sim/content/champions';
 import { ITEM_LIST } from '../src/sim/content/items';
 import { GAME_MAP } from '../src/sim/content/map';
 import { MAX_BUILD, roleBuild } from '../src/sim/playbook/kit';
@@ -86,7 +86,7 @@ function catalog(): string {
 // The playbook grammar, told compactly. Kept by hand beside
 // src/sim/playbook/types.ts and validate.ts; the validator catches drift.
 const GRAMMAR = `
-A playbook is {"version":2,"plays":[Play...],"kit"?:Kit}, at most ${MAX_PLAYS} plays. Each decision
+A playbook is {"version":3,"plays":[Play...],"kit"?:Kit,"lanes"?:["top"|"mid"|"bot"...]}, at most ${MAX_PLAYS} plays. lanes: the lanes the bot asks for, in order, one to three, seated ahead of its champion's home lane (the first with a seat open). Each decision
 slot (four per second) the bot walks the list top down; the first play whose trigger holds AND
 whose behavior can act this slot is the one that acts. A behavior that cannot act (nothing to
 farm, nothing affordable) passes to the next play. Reflexes run before the list and are not yours
@@ -115,6 +115,14 @@ least one of the two):
  {"kind":"warden","state":"up"|"spawning"|"down","within"?:seconds} (spawning: due within the seconds, default 20)
  {"kind":"abilityReady","key":"Q"|"W"|"E"|"R"} {"kind":"sigilReady","id":"riftstep"|"zephyr"|"mend"|"sear"} {"kind":"lane","is":"top"|"mid"|"bot"}
  {"kind":"allyFighting","within":0..200} an allied champion within the radius has an enemy champion within 10 of it
+ The lineup, public from champion select ("own" is the bot's team, itself included):
+ {"kind":"champion","side":"own"|"enemy","is":championId} that champion is in the match on that side
+ {"kind":"roles","side":"own"|"enemy","role":Role,"atLeast"?:0..5,"atMost"?:0..5} how many of a role that side fields
+ {"kind":"enemyDamage","mostly":"magic"|"physical"} by roles: mages and battlemages deal magic, supports count on neither side; a strict majority
+ {"kind":"enemyItem","item":itemId} a visible enemy champion wears the item right now
+ {"kind":"laneOpponent","is":championId} the enemy seen the most in the bot's lane over the last three minutes is that champion
+ {"kind":"lanePartner","is":championId} an ally assigned to the bot's lane is that champion
+ Champions (id, role): ${CHAMPION_LIST.map((c) => `${c.id} ${c.role}`).join(', ')}
  {"kind":"not","of":Trigger} {"kind":"all","of":[Trigger...]} {"kind":"any","of":[Trigger...]} (nested at most 4 deep)
 Behavior is ONE of (every parameter optional, default in parentheses):
  {"kind":"retreat"} run home by the fastest means; always acts.
@@ -142,6 +150,7 @@ Patch operations, ONE compact JSON object per line:
  {"op":"move","id":id,"before":id|null} (null: to the end)
  {"op":"set","id":id,"play":{"when"?:Trigger,"do"?:Behavior,"enabled"?:bool}} change parts of a play in place
  {"op":"kit","kit":{"build"?:[...]|null,"skills"?:[...]|null,"variants"?:[...]|null}} change parts of the kit; a part given replaces it, null clears it back to the default, absent leaves it
+ {"op":"lanes","lanes":["top"|"mid"|"bot"...]|null} set the lane preference, null for none
  {"op":"replace","playbook":Playbook} a whole rewrite, ONLY when the owner asks for one
 `;
 

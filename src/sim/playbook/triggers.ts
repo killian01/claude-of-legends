@@ -2,8 +2,10 @@
 // slot context; no trigger draws randomness or reads anything the team
 // cannot see.
 
+import { ROLE_DAMAGE } from '../content/champions';
+import type { ObsSeat } from '../policy';
 import type { SlotContext } from './micro';
-import type { Trigger } from './types';
+import type { Side, Trigger } from './types';
 
 function within(value: number, below: number | undefined, atLeast: number | undefined): boolean {
   return (below === undefined || value < below) && (atLeast === undefined || value >= atLeast);
@@ -15,6 +17,13 @@ function countWithin(
   atMost: number | undefined,
 ): boolean {
   return (atLeast === undefined || count >= atLeast) && (atMost === undefined || count <= atMost);
+}
+
+// The seats a lineup trigger reads: the bot's own team (itself included)
+// or the enemy's.
+function seatsOf(ctx: SlotContext, side: Side): ObsSeat[] {
+  const team = ctx.s.team;
+  return (ctx.obs.seats ?? []).filter((seat) => (seat.team === team) === (side === 'own'));
 }
 
 export function holds(t: Trigger, ctx: SlotContext): boolean {
@@ -70,6 +79,37 @@ export function holds(t: Trigger, ctx: SlotContext): boolean {
       const order = s.coachOrder ?? null;
       return order !== null && (t.is === undefined || order.kind === t.is);
     }
+    case 'champion':
+      return seatsOf(ctx, t.side).some((seat) => seat.championId === t.is);
+    case 'roles':
+      return countWithin(
+        seatsOf(ctx, t.side).filter((seat) => seat.role === t.role).length,
+        t.atLeast,
+        t.atMost,
+      );
+    case 'enemyDamage': {
+      const enemy = seatsOf(ctx, 'enemy');
+      const magic = enemy.filter((seat) => ROLE_DAMAGE[seat.role] === 'magic').length;
+      const physical = enemy.filter((seat) => ROLE_DAMAGE[seat.role] === 'physical').length;
+      return t.mostly === 'magic' ? magic > physical : physical > magic;
+    }
+    case 'enemyItem':
+      return obs.units.some(
+        (u) => !u.friendly && u.kind === 'champion' && (u.items ?? []).includes(t.item),
+      );
+    case 'laneOpponent': {
+      if (s.lane === null) return false;
+      const id = obs.laneOpponents?.[s.lane] ?? null;
+      if (id === null) return false;
+      return (obs.seats ?? []).some((seat) => seat.id === id && seat.championId === t.is);
+    }
+    case 'lanePartner':
+      return (
+        s.lane !== null &&
+        seatsOf(ctx, 'own').some(
+          (seat) => seat.id !== s.id && seat.lane === s.lane && seat.championId === t.is,
+        )
+      );
     case 'not':
       return !holds(t.of, ctx);
     case 'all':

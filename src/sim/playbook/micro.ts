@@ -466,17 +466,4 @@ export function readySigil(s: ObsSelf, id: string): number {
   return s.sigils.findIndex((sid, i) => sid === id && s.sigilReady[i] === true);
 }
 
-// The closest point of a lane's polyline to (x, z).
-export function laneDistance(lane: readonly { x: number; z: number }[], x: number, z: number) {
-  let best = Number.POSITIVE_INFINITY;
-  for (let i = 0; i + 1 < lane.length; i++) {
-    const a = lane[i]!;
-    const b = lane[i + 1]!;
-    const abx = b.x - a.x;
-    const abz = b.z - a.z;
-    const len2 = abx * abx + abz * abz || 1;
-    const t = Math.max(0, Math.min(1, ((x - a.x) * abx + (z - a.z) * abz) / len2));
-    best = Math.min(best, Math.hypot(x - (a.x + abx * t), z - (a.z + abz * t)));
-  }
-  return best;
-}
+export { laneDistance } from '../lanes';
