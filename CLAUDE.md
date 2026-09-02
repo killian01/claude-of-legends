@@ -16,6 +16,7 @@ Vitest · Biome. No UI framework; tiny dependency set.
 - `docs/design/game-definition.md`: what the game is. `docs/design/roster.md`: the ten champions.
 - `docs/adr/`: the decisions and why. `CONTEXT.md`: the glossary; use its terms in code and docs.
 - `docs/plan-48h.md`: the build plan and phase order. `docs/plan-forge.md`: the Forge build plan.
+  `docs/plan-bots.md`: the bots build plan (`docs/design/bots.md`, ADR 0013).
 
 ## Repo map
 

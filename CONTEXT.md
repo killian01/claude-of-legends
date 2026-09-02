@@ -9,12 +9,19 @@ A playable character a participant controls for the whole match. Ten exist at la
 _Avoid_: hero, character, class
 
 **Participant**:
-One of the ten seats in a match, human or bot.
+One of the ten seats in a match: a human, a bot, or a house bot.
 _Avoid_: player (ambiguous; say "human" for people)
 
 **Bot**:
-A participant whose actions come from a Policy instead of a human.
-_Avoid_: AI, NPC, computer player
+A participant whose actions come from a Policy instead of a human, owned and fielded by an
+account: a name, one champion with its sigils and skin, a playbook, and a record. "Bot" alone
+always means this owned one; the server's unowned filler is always called a house bot.
+_Avoid_: AI, NPC, computer player, golem, agent
+
+**House bot**:
+The server's own unowned bot that fills a seat nobody took: the default playbook on the first
+free roster champion. Never rated, named by no one, obeys no one.
+_Avoid_: bot fill, backfill bot, default bot
 
 **Policy**:
 A deterministic decision function (observation, rng) -> action, with the exact observation and action space the Gym environment exposes. The single abstraction behind every bot, scripted or trained.
@@ -317,3 +324,54 @@ plain units. The kit conversation's proposals arrive already fitted to the budge
 the same scaling, one shared factor across the four spells: the model sizes roughly, the
 arithmetic lands the numbers.
 _Avoid_: power slider, spell level
+
+**Play**:
+One rule of a playbook: a trigger over the observation plus the behavior to run while it
+holds, with its parameters. Each decision slot, the first play whose trigger holds is the
+one that acts.
+_Avoid_: rule, node, behavior (that is the play's second half)
+
+**Playbook**:
+A bot's whole decision policy as data: an ordered list of plays, evaluated top down and
+interpreted by one Policy in the sim. The micro (last hits, dodging, which key does what)
+is the engine's, never the playbook's. The Laner is the default playbook every bot starts
+as. Versioned like the Policy contract, and it grows only additively.
+_Avoid_: brain, script, behavior tree, AI
+
+**Coach order**:
+The one live instruction a bot's owner can give it during a match: go to a lane or point,
+take the Warden, focus a target, back off, group on an ally, hold, free. One active at a
+time, persistent until released or done, free like a movement intention, sent as a typed
+ping. A bot obeys only its owner.
+_Avoid_: command, directive, ping (the order rides on one, it is not one)
+
+**Academy**:
+The in-game place where an account writes and tests a bot: the conversation that edits the
+playbook as patches, the play list beside it, and local sparring at full speed. An account
+feature.
+_Avoid_: bot editor, bot forge, workshop, trainer
+
+**Arena**:
+The server-run competition of deposited bots: hourly rounds and on-demand "play now"
+matches, played at full speed with no one present and never coached, rated on the
+account's Arena rating, watched afterwards as replays.
+_Avoid_: tournament, league, bot queue, night mode
+
+**Sparring**:
+An unrated match run only to test a bot: locally in the Academy at full speed against
+house bots, or on the server to decide whether a proposed playbook change wins more before
+it is applied. Never moves a rating; every bot gets the same server sparring allocation.
+_Avoid_: practice match (that is the human's offline match), test match, simulation
+
+**Briefing**:
+The report a bot's owner reads after the Arena has played: results and rating movement,
+time and deaths per play, and the night coach's proposed playbook changes with what
+sparring said about them. Nothing is applied without the owner unless they opted in, and
+every applied change is a version they can undo.
+_Avoid_: night report, digest, summary
+
+**Rating**:
+An account's Elo on one ladder. An account holds one per way its seat was played: by hand,
+by its bot in a live match, by its bot in the Arena, plus the Forge queue's own. A match
+moves only the rating of the way each owned seat was played; house bots move none.
+_Avoid_: MMR, Elo (the algorithm, not the number), score

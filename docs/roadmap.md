@@ -33,6 +33,9 @@ Living document. The 48 hour build scope is defined by the ADRs in `docs/adr/` a
 
 ## Future options (explicitly deferred)
 
+- **Bots on the account** (playbooks, the Academy, coach orders, the Arena,
+  the Briefing): designed, `docs/design/bots.md` and `docs/plan-bots.md`,
+  not started.
 - **Reconnect to a live match**; a bot substituting for a disconnected
   player.
 - **Post-review polish tail**: health potions, assists, camera freedom,
