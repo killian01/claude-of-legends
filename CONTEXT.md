@@ -203,8 +203,9 @@ A proposed passive and four spells, written by a model from the champion's own c
 splash art. Suggestions arrive in a conversation the creator iterates in ("more mobility
 on the E"); each answer is a whole proposed kit, shown with its derived descriptions and
 its budget bill, and nothing touches the form until the creator applies it. A suggestion
-must clear the same validation a hand-written kit does, and arrives fitted to the power
-budget line rather than tiptoeing under it. The answer streams: the creator reads the
+must clear the same validation a hand-written kit does, and arrives fitted to the Kit
+envelope line rather than tiptoeing under it, held under the Burst caps. The answer
+streams: the creator reads the
 comment as the model writes it. The creator may write in any language; the comment
 answers in kind, the kit itself is English like the roster (ADR 0004). The thread is
 session-lived; nothing is stored unreviewed. Drafts only: a sealed kit is locked.
@@ -291,29 +292,55 @@ everything else (model sheet, then model) derives from.
 _Avoid_: portrait (the legacy name in code for the resolution chain), painting
 
 **Power budget**:
-The point envelope a forged champion must fit inside: every stat point and every effect
-primitive in the kit has a cost, on top of hard per-field bounds. What makes forging a set
-of trade-offs instead of a max-everything form.
+The point envelope a forged champion must fit inside, the sum of three envelopes (Stat,
+Growth, Kit) that never trade points with one another: every stat point and every effect
+primitive in the kit has a cost, on top of hard per-field bounds and the Burst cap. What
+makes forging a set of trade-offs instead of a max-everything form, and what makes a
+champion with every envelope full the equal of the roster, never its better.
 _Avoid_: balance score, point buy
+
+**Stat envelope**:
+The share of the power budget that base stats alone may spend, sized to the roster's
+statsiest champion. Points the kit leaves unspent never flow into it.
+_Avoid_: stat budget, stat cap
+
+**Growth envelope**:
+The share of the power budget that per-level growth alone may spend, sized to the
+roster's best scaler.
+_Avoid_: growth budget, scaling cap
+
+**Kit envelope**:
+The share of the power budget that the passive and the four spells together may spend,
+sized to the roster's priciest kit. The line the kit conversation fits its proposals to.
+_Avoid_: spell budget, kit budget
+
+**Burst cap**:
+The ceiling on what one cast may deal to a single target at rank 1, measured against a
+reference target fresh out of the fountain: one cap for a basic spell, a higher one for
+the ultimate, and one for the three basics together. It says what the power budget
+cannot: the budget prices damage per second of availability, never the size of one hit,
+so a nuke on a long cooldown was cheap and lethal at level 1 until the cap.
+_Avoid_: damage cap, lethality score, one-shot rule
 
 **Stat polygon**:
 The Tuning tab's stat editor: an interactive polygon, one axis per priced base stat,
 whose vertices the creator pulls outward to buy a stat and inward to free points. A
-vertex stops where the power budget runs out, so overspending is impossible by
+vertex stops where the Stat envelope runs out, so overspending is impossible by
 construction, and the numbers are read at the axis tips, never typed. Growth per level
-is a second, smaller polygon. The melee or ranged choice is a toggle beside it, an
-identity, not an axis: a melee champion's reach is pinned off the polygon, a ranged
-champion's reach is one more axis. The polygon only pushes back when the kit already
-claims its share of the budget, so the fresh draft's kit weighs what a roster kit weighs.
+is a second, smaller polygon on its own Growth envelope. The melee or ranged choice is a
+toggle beside it, an identity, not an axis: a melee champion's reach is pinned off the
+polygon, a ranged champion's reach is one more axis. The envelope is the polygon's own:
+lightening the kit never buys stat room, and no set of vertices reaches every rail.
 _Avoid_: radar chart, spider chart, stat sliders
 
 **Power dial**:
 A spell's one intensity control: it scales the spell's amounts (damage, healing, crowd
-control durations) inside the engine's bounds and stops where the power budget runs
-out, exactly like a Stat polygon vertex. Structure (the cast kind, the effect kinds,
-the shapes) is not its business: that comes from the kit suggestion or the advanced
-editor. Rhythm (cooldown, mana cost, cast range, windup) stays typed beside it, in
-plain units. The kit conversation's proposals arrive already fitted to the budget line by
-the same scaling, one shared factor across the four spells: the model sizes roughly, the
-arithmetic lands the numbers.
+control durations) inside the engine's bounds and stops where the Kit envelope or a
+Burst cap runs out, saying which, exactly like a Stat polygon vertex. Structure (the
+cast kind, the effect kinds, the shapes) is not its business: that comes from the kit
+suggestion or the advanced editor. Rhythm (cooldown, mana cost, cast range, windup)
+stays typed beside it, in plain units. The kit conversation's proposals arrive already
+fitted to the Kit envelope line by the same scaling, one shared factor across the four
+spells, the spells a Burst cap stops held there while the others take the room: the
+model sizes roughly, the arithmetic lands the numbers.
 _Avoid_: power slider, spell level

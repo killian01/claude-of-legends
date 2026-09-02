@@ -1,10 +1,12 @@
-// The power budget (ADR 0006): every stat point and every effect primitive
-// has a price, and a forged champion's total must fit POWER_BUDGET. This
-// costing is the sole balance authority; the per-field bounds in
-// forge/bounds.ts are only the rails around it. Pure arithmetic on the def:
-// same input, same cost, in every host. Calibrated so the ten roster
-// champions, converted to forged shape, all fit with the priciest just
-// under the line (tests/forge.test.ts pins this).
+// The power budget (ADR 0006, ADR 0013): every stat point and every effect
+// primitive has a price, and a forged champion's bill must fit the three
+// envelopes (forge/envelopes.ts) whose sum is POWER_BUDGET. This costing
+// is the balance authority for everything but the size of one hit (that
+// is forge/burst.ts); the per-field bounds in forge/bounds.ts are only
+// the rails around it. Pure arithmetic on the def: same input, same cost,
+// in every host. Calibrated so the ten roster champions, converted to
+// forged shape, all fit with the priciest just under each envelope
+// (tests/forge.test.ts pins this).
 
 import type { AbilityDef, CastSpec } from '../combat/casting';
 import { specForRank } from '../combat/casting';
@@ -12,10 +14,11 @@ import type { EffectSpec } from '../combat/effects';
 import type { ChampionBaseStats, ChampionGrowth } from '../content/champions';
 import type { AbilityKey } from '../types';
 import { BASE_STAT_BOUNDS, GROWTH_BOUNDS } from './bounds';
+import { GROWTH_ENVELOPE, KIT_ENVELOPE, STAT_ENVELOPE } from './envelopes';
 import type { ForgedChampionDef, ForgedPassiveRef } from './forged_def';
 import { PASSIVE_TEMPLATES } from './passive_templates';
 
-export const POWER_BUDGET = 1100;
+export const POWER_BUDGET = STAT_ENVELOPE + GROWTH_ENVELOPE + KIT_ENVELOPE;
 
 // One budget point is roughly one point of base damage on a single-target
 // hit; everything else is priced relative to that. RATIO_VALUE is what a

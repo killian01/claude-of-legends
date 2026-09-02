@@ -6,9 +6,10 @@
 // budget arithmetic, replays the thread to the model, and validates
 // every proposal through validateForged before it reaches the editor.
 // The numbers are not the model's job: every proposal is fitted to the
-// budget line by the power dial's own scaling (one shared factor across
-// the four spells) before validation, so the model owns structure and
-// theme and a well-shaped answer lands in one call. A kit too light
+// kit envelope line by the power dial's own scaling (one shared factor
+// across the four spells, any spell a burst cap catches held there)
+// before validation, so the model owns structure and theme and a
+// well-shaped answer lands in one call. A kit too light
 // even at the dial's maximum goes back for more structure; one that
 // survives every retry still returns, bill in plain sight, because a
 // playable proposal beats an error. Metered on the 'agent' quota: one
@@ -25,12 +26,14 @@ import {
   budgetOf,
   CAST_PRICES,
   EFFECT_PRICES,
-  POWER_BUDGET,
 } from '../src/sim/forge/budget';
+import { BURST_CAPS, BURST_REF } from '../src/sim/forge/burst';
+import { KIT_ENVELOPE, kitSpendOf } from '../src/sim/forge/envelopes';
 import type { ForgedChampionDef, ForgedPassiveRef } from '../src/sim/forge/forged_def';
 import { PASSIVE_TEMPLATE_LIST } from '../src/sim/forge/passive_templates';
 import { fitKitPower, POWER_DIAL_MAX, POWER_DIAL_MIN } from '../src/sim/forge/spell_power';
 import { validateForged } from '../src/sim/forge/validate';
+import type { AbilityKey } from '../src/sim/types';
 import type { ForgeOutcome } from './forge';
 import type { ForgeStore } from './forge_store';
 
@@ -116,26 +119,30 @@ function templateCatalog(): string {
 // still verifies against the real arithmetic after validation.
 function costSchedule(): string {
   return [
-    `Every kit fits a power budget of ${POWER_BUDGET} shared with base stats and growth.`,
+    "The passive and the four spells together fit the power budget's kit envelope of " +
+      `${KIT_ENVELOPE} points; base stats and growth have their own envelopes and never ` +
+      'trade with it.',
     `Effect prices (cost = value * price, durations in seconds): ${JSON.stringify(EFFECT_PRICES)}.`,
     `Delivery prices and multipliers: ${JSON.stringify(CAST_PRICES)}.`,
     `An ability's bill is its delivery cost times ${AVAIL_PIVOT}/(${AVAIL_SOFT}+cooldown),`,
     'relieved up to 20 percent each by mana cost and windup.',
     'Size the amounts roughly: the server then scales every amount (damage, healing, crowd ' +
       `control durations) by one shared factor between ${POWER_DIAL_MIN} and ${POWER_DIAL_MAX} ` +
-      'so the kit lands exactly on the budget line. Structure, shapes and rhythm are yours and ' +
+      'so the kit lands exactly on the envelope line. Structure, shapes and rhythm are yours and ' +
       'never scaled: land within a factor of two of the line and spend your care on the design.',
+    'One more rule the budget does not price, the burst cap: what one cast can deal to a ' +
+      `single target at rank 1 (measured at ${BURST_REF.ad} attack, no AP, ticks counted for ` +
+      `${BURST_REF.tickWindow} seconds) may not exceed ${Math.round(100 * BURST_CAPS.basic)} ` +
+      `percent of ${BURST_REF.hp} health for a basic spell, ${Math.round(100 * BURST_CAPS.ult)} ` +
+      `for the R, and Q, W and E together may not exceed ${Math.round(100 * BURST_CAPS.basics)}. ` +
+      'A spell the cap stops is held there while the others take the room, so spread damage ' +
+      'across the kit rather than stacking it in one nuke.',
   ].join(' ');
 }
 
-// What the budget leaves the kit once stats and growth are paid, and
-// what the current kit spends of it.
+// What the kit envelope holds and what the current kit spends of it.
 function kitBudgetOf(bill: BudgetBreakdown): { cap: number; spend: number } {
-  const a = bill.abilities;
-  return {
-    cap: POWER_BUDGET - bill.stats - bill.growth,
-    spend: bill.passive + a.Q + a.W + a.E + a.R,
-  };
+  return { cap: KIT_ENVELOPE, spend: kitSpendOf(bill) };
 }
 
 function billLine(bill: BudgetBreakdown): string {
@@ -400,11 +407,14 @@ export interface KitProposal {
   // The model's raw answer, for the client to replay as the assistant
   // turn next time.
   raw: string;
+  // What the kit spends of its envelope.
   budget: { total: number; cap: number };
   // The shared factor the fit applied to the model's amounts: 1 means
   // the model's own numbers, above it they were raised to the line,
   // below it trimmed to fit.
   fit: number;
+  // The spells a burst cap held while the others took the room.
+  held: readonly AbilityKey[];
 }
 
 export async function suggestKit(
@@ -499,9 +509,10 @@ export async function suggestKit(
       abilities: suggestion.abilities,
     };
     // The fit: every amount at one shared factor so the kit lands on the
-    // budget line, the power dial's own scaling. An unvalidated shape may
-    // not scale at all: a fit that throws or finds no factor leaves the
-    // draft as it is for the validator to describe.
+    // envelope line, the power dial's own scaling, any spell a burst cap
+    // catches held there. An unvalidated shape may not scale at all: a
+    // fit that throws or finds no factor leaves the draft as it is for
+    // the validator to describe.
     let fit: ReturnType<typeof fitKitPower> = null;
     try {
       fit = fitKitPower(drafted);
@@ -526,8 +537,9 @@ export async function suggestKit(
       passive: suggestion.passive,
       abilities: candidate.abilities,
       raw: text.slice(0, CHAT_RAW_TEXT_MAX),
-      budget: { total: Math.round(bill.total), cap: POWER_BUDGET },
+      budget: { total: Math.round(kit.spend), cap: kit.cap },
       fit: fit?.factor ?? 1,
+      held: fit?.held ?? [],
     };
     if (floor <= 0 || kit.cap <= 0 || kit.spend >= floor * kit.cap) return proposal;
     // Valid but too light even at the dial's maximum: the structure is
