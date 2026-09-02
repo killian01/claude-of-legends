@@ -5,6 +5,7 @@
 // by hand. Returns a fresh object holding only known fields, so nothing
 // unexpected rides into the sim.
 
+import type { CoachOrder } from '../coach';
 import { GAME_MAP } from '../content/map';
 import type { AbilityKey } from '../types';
 import {
@@ -21,6 +22,14 @@ const MAX_BRANCHES = 8;
 const ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 const ABILITY_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
 const LANES = ['top', 'mid', 'bot'] as const;
+const ORDER_KINDS: readonly CoachOrder['kind'][] = [
+  'goto',
+  'warden',
+  'focus',
+  'back',
+  'group',
+  'hold',
+];
 
 export type PlaybookValidation = { ok: true; def: PlaybookDef } | { ok: false; errors: string[] };
 
@@ -162,6 +171,15 @@ function trigger(raw: unknown, at: string, depth: number, errors: Errors): Trigg
       }
       return { kind: 'sigilReady', id };
     }
+    case 'order': {
+      const is = raw.is;
+      if (is === undefined) return { kind: 'order' };
+      if (typeof is !== 'string' || !(ORDER_KINDS as readonly string[]).includes(is)) {
+        errors.add(`${at}: order kind must be one of ${ORDER_KINDS.join(', ')}`);
+        return { kind: 'order' };
+      }
+      return { kind: 'order', is: is as CoachOrder['kind'] };
+    }
     case 'lane': {
       const is = raw.is;
       if (is !== 'top' && is !== 'mid' && is !== 'bot') {
@@ -208,6 +226,7 @@ function behavior(raw: unknown, at: string, errors: Errors): Behavior {
     case 'fight':
     case 'farm':
     case 'takeCamp':
+    case 'obeyOrder':
       return { kind: raw.kind };
     case 'avoidTower': {
       let b: Behavior = { kind: 'avoidTower' };

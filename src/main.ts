@@ -21,12 +21,14 @@ import type { ForgedChampionDef } from './sim/forge/forged_def';
 import { Sim } from './sim/sim';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
 import { type AuthedAccount, currentAccount } from './ui/auth';
+import { buildCoachBar } from './ui/coach_bar';
 import { takeDiscordResult } from './ui/discord_entry';
 import { takeConfirmResult } from './ui/email_status';
 import { preloadBackdrop } from './ui/home_backdrop';
 import { type HomeChoice, showHome } from './ui/home_screen';
 import { showLanding } from './ui/landing';
 import {
+  type BotPick,
   type CommunityPick,
   type ForgedPick,
   type LobbyController,
@@ -67,6 +69,19 @@ function pickForPractice(): Promise<OfflinePick> {
       resolve({ championId, sigils, skin });
     });
   });
+}
+
+// The account's bots for the classic select (ADR 0013); none when the
+// server is unreachable or the account has none.
+async function fetchBots(): Promise<BotPick[]> {
+  try {
+    const res = await fetch('/api/bots', { credentials: 'same-origin' });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { ok?: boolean; bots?: BotPick[] };
+    return body.ok && Array.isArray(body.bots) ? body.bots : [];
+  } catch {
+    return [];
+  }
 }
 
 // One offline practice match; resolves with the exit the player chose.
@@ -316,6 +331,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
     let lobbyUi: LobbyController | null = null;
     let selectUi: SelectController | null = null;
     let pres: Presentation | null = null;
+    let removeCoachBar: (() => void) | null = null;
     let opened = false;
     let matchEnded = false;
     let finished = false;
@@ -340,6 +356,8 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
       selectUi = null;
       pres?.dispose();
       pres = null;
+      removeCoachBar?.();
+      removeCoachBar = null;
       if (ws.readyState === ws.OPEN) {
         ws.send(JSON.stringify({ t: 'leave' }));
         ws.close();
@@ -454,6 +472,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           const openSelect = (
             forgedList: readonly ForgedPick[],
             community: readonly CommunityPick[],
+            botsList: readonly BotPick[] = [],
           ): void => {
             if (finished || selectUi) return;
             selectUi = showSelect(
@@ -461,13 +480,22 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
               msg.players,
               msg.team,
               msg.deadline,
-              (champ, sigils, skin) => {
+              (champ, sigils, skin, botId) => {
                 // Inside the lock-in click gesture, so the browser grants it.
                 requestGameFullscreen();
-                ws.send(JSON.stringify({ t: 'pick', championId: champ, sigils, skin }));
+                ws.send(
+                  JSON.stringify({
+                    t: 'pick',
+                    championId: champ,
+                    sigils,
+                    skin,
+                    ...(botId ? { bot: botId } : {}),
+                  }),
+                );
               },
               forgedList,
               community,
+              botsList,
             );
           };
           // A Forge select waits for the forged lists (already in flight
@@ -476,7 +504,10 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
             void Promise.all([forgedRoster, communityList]).then(([own, community]) =>
               openSelect(own, community),
             );
-          } else openSelect([], []);
+          } else {
+            // The classic select offers the account's bots (ADR 0013).
+            void fetchBots().then((bots) => openSelect([], [], bots));
+          }
           break;
         }
         case 'select_update':
@@ -510,6 +541,13 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           const changed = world.applyServer(msg);
           if (!pres && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) {
             pres = startPresentation(container, world, world.selfUnitId, world.selfTeam, finish);
+            // A coach seat (ADR 0013): the bar for the orders with no place to
+            // click; right-click already goes and focuses through the mirror.
+            if (world.coach) {
+              removeCoachBar = buildCoachBar(container, (kind) =>
+                ws.send(JSON.stringify({ t: 'order', kind })),
+              );
+            }
             pres.setNetHooks({
               sendChat: (text) => ws.send(JSON.stringify({ t: 'chat', text })),
               sendPing: (x, z) => ws.send(JSON.stringify({ t: 'ping', x, z })),
@@ -536,7 +574,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           world.applyServer(msg);
           break;
         case 'match_result':
-          pres?.setMatchResult(msg.rated, msg.delta, msg.rating, msg.queue);
+          pres?.setMatchResult(msg.rated, msg.delta, msg.rating, msg.queue, msg.way);
           break;
         case 'match_end':
           // The end overlay (stats, Play again, Return to menu) owns the way

@@ -55,7 +55,7 @@ export interface Presentation {
   setNetHooks(hooks: NetHooks): void;
   // The server's rating verdict for this player, shown on the end screen;
   // queue 'forge' labels the number as the Forge queue's own ladder.
-  setMatchResult(rated: boolean, delta: number, rating: number, queue?: 'forge'): void;
+  setMatchResult(rated: boolean, delta: number, rating: number, queue?: 'forge', way?: 'bot'): void;
   // Same-page teardown: render loop, input, HUD, minimap, GL, music. The
   // menu returns on the same document; nothing may keep running behind it.
   dispose(): void;
@@ -400,8 +400,8 @@ export function startPresentation(
       hooks = h;
       hud.setNetHooks(h);
     },
-    setMatchResult: (rated, delta, rating, queue) =>
-      hud.setMatchResult(rated, delta, rating, queue),
+    setMatchResult: (rated, delta, rating, queue, way) =>
+      hud.setMatchResult(rated, delta, rating, queue, way),
     dispose: () => {
       if (disposed) return;
       disposed = true;

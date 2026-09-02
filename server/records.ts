@@ -17,8 +17,10 @@ export interface MatchPlayerRecord {
   deaths: number;
   assists: number;
   cs: number;
-  // Signed Elo movement, present only on rated human seats.
+  // Signed Elo movement, present only on rated owned seats.
   ratingDelta?: number;
+  // The seat was the account's own bot (ADR 0013); absent for hand seats.
+  way?: 'bot';
 }
 
 export interface MatchRecord {
@@ -42,7 +44,13 @@ export function buildMatchRecord(
   winner: TeamId,
   durationS: number,
   at: number,
-  rating?: { rated: boolean; deltas: ReadonlyMap<number, number>; queue?: 'forge' },
+  rating?: {
+    rated: boolean;
+    deltas: ReadonlyMap<number, number>;
+    queue?: 'forge';
+    // Bot seats by unit id.
+    ways?: ReadonlyMap<number, 'bot'>;
+  },
   replayId?: number,
 ): MatchRecord {
   return {
@@ -67,6 +75,7 @@ export function buildMatchRecord(
         assists: r.assists ?? 0,
         cs: r.cs ?? 0,
         ...(delta !== undefined ? { ratingDelta: delta } : {}),
+        ...(rating?.ways?.get(r.unitId) === 'bot' ? { way: 'bot' as const } : {}),
       };
     }),
   };

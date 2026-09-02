@@ -64,6 +64,10 @@ export function holds(t: Trigger, ctx: SlotContext): boolean {
       return s.sigils.some((id, i) => id === t.id && s.sigilReady[i] === true);
     case 'lane':
       return s.lane === t.is;
+    case 'order': {
+      const order = s.coachOrder ?? null;
+      return order !== null && (t.is === undefined || order.kind === t.is);
+    }
     case 'not':
       return !holds(t.of, ctx);
     case 'all':

@@ -103,6 +103,8 @@ function materializeUnit(s: SnapUnit): Unit {
     passiveStacks: 0,
     lastDamagedAt: -999,
     play: null,
+    coachOrder: null,
+    coachOrderSeenAt: 0,
     attackTargetId: null,
     attackReadyAt: 0,
     attackMoveTarget: null,
@@ -150,6 +152,9 @@ export class ClientWorld implements IWorld {
   winner: TeamId | null = null;
   selfUnitId = 0;
   selfTeam: TeamId = 0;
+  // A coach seat (ADR 0013): the orders translate into coach orders and
+  // the hands-on verbs are refused here already; the bot plays by itself.
+  coach = false;
   private scoreRows: readonly ScoreRow[] = [];
   private objAt: number | null = null;
   private boon: { until: number; stacks: number } | null = null;
@@ -195,46 +200,51 @@ export class ClientWorld implements IWorld {
   }
 
   orderMove(_unitId: number, x: number, z: number): void {
-    this.send({ t: 'move', x, z });
+    this.send(this.coach ? { t: 'order', kind: 'goto', x, z } : { t: 'move', x, z });
   }
 
   orderAttack(_unitId: number, targetId: number): void {
-    this.send({ t: 'attack', targetId });
+    this.send(this.coach ? { t: 'order', kind: 'focus', targetId } : { t: 'attack', targetId });
   }
 
   orderAttackMove(_unitId: number, x: number, z: number): void {
-    this.send({ t: 'attack_move', x, z });
+    this.send(this.coach ? { t: 'order', kind: 'goto', x, z } : { t: 'attack_move', x, z });
   }
 
   startRecall(_unitId: number): void {
-    this.send({ t: 'recall' });
+    this.send(this.coach ? { t: 'order', kind: 'back' } : { t: 'recall' });
   }
 
   orderStop(_unitId: number): void {
-    this.send({ t: 'stop' });
+    this.send(this.coach ? { t: 'order', kind: 'hold' } : { t: 'stop' });
   }
 
   castAbility(_unitId: number, key: AbilityKey, aim: Vec2): boolean {
+    if (this.coach) return false;
     this.send({ t: 'cast', key, x: aim.x, z: aim.z });
     return true;
   }
 
   castSigil(_unitId: number, slot: number, aim: Vec2): boolean {
+    if (this.coach) return false;
     this.send({ t: 'sigil', slot, x: aim.x, z: aim.z });
     return true;
   }
 
   buyItem(_unitId: number, itemId: string): boolean {
+    if (this.coach) return false;
     this.send({ t: 'buy', itemId });
     return true;
   }
 
   sellItem(_unitId: number, slot: number): boolean {
+    if (this.coach) return false;
     this.send({ t: 'sell', slot });
     return true;
   }
 
   levelAbility(_unitId: number, key: AbilityKey): boolean {
+    if (this.coach) return false;
     this.send({ t: 'skill', key });
     return true;
   }
@@ -244,6 +254,7 @@ export class ClientWorld implements IWorld {
     if (msg.t === 'match_start') {
       this.selfUnitId = msg.selfUnitId;
       this.selfTeam = msg.team;
+      this.coach = msg.coach === true;
       // Forge queue: the match's forged definitions land here, before any
       // snapshot can name one of them.
       if (msg.forged) this.registerForged(msg.forged);

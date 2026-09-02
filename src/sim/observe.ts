@@ -205,6 +205,8 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       recastArmed: u.recastArmed && u.recastArmed.until > sim.time ? u.recastArmed.key : null,
       lane: u.kind === 'champion' ? (u.lane as 'top' | 'mid' | 'bot' | null) : null,
       recalling: u.statuses.some((s) => s.kind === 'recall' && s.until > sim.time),
+      // The owner's coach order, additive: absent for every uncoached seat.
+      ...(u.coachOrder ? { coachOrder: u.coachOrder } : {}),
     },
     units,
     objectiveSpawnAt: sim.objectiveSpawnAt(),

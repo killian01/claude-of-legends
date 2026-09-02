@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { BotStore } from '../server/bot_store';
 import { type BotDeps, createBot } from '../server/bots';
 import { type CoachDeps, type CoachProgress, coachPlaybook } from '../server/playbook_suggest';
-import { LANER_PLAYBOOK } from '../src/sim/content/playbooks/laner';
+import { NEW_BOT_PLAYBOOK } from '../src/sim/content/playbooks/new_bot';
 
 // A Messages API stub answering with server-sent events, the text cut
 // into pieces the way a real stream arrives, and recording the request.
@@ -163,6 +163,6 @@ describe('the coach', () => {
       messages: [{ role: 'user', text: 'x' }],
     });
     expect(out.ok).toBe(true);
-    expect(deps.store.getBot(botId)?.playbook).toEqual(LANER_PLAYBOOK);
+    expect(deps.store.getBot(botId)?.playbook).toEqual(NEW_BOT_PLAYBOOK);
   });
 });

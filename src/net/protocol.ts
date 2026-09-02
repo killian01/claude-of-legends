@@ -4,6 +4,7 @@
 // full identity fields sent once per unit per client ("full" vs "lite"
 // records, the world-of-claudecraft pattern).
 
+import type { CoachOrderKind } from '../sim/coach';
 import type { ForgedDisplay } from '../sim/forge/display';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { AbilityKey, ScoreRow, TeamId } from '../sim/types';
@@ -52,7 +53,13 @@ export type ClientMsg =
   // server answers with match_start carrying selfUnitId 0, then streams
   // that team's snapshots with self null.
   | { t: 'spectate'; matchId: number; team: TeamId }
-  | { t: 'pick'; championId: string; sigils: [string, string]; skin?: number }
+  // bot: lock the account's own bot into this seat (ADR 0013); the bot's
+  // champion, sigils and skin replace the three fields, which still ride
+  // for the fallback when the resolver says no.
+  | { t: 'pick'; championId: string; sigils: [string, string]; skin?: number; bot?: string }
+  // A coach order for the account's own bot seat (ADR 0013): one at a
+  // time, free releases it. Refused on any other seat.
+  | { t: 'order'; kind: CoachOrderKind; x?: number; z?: number; targetId?: number }
   | { t: 'move'; x: number; z: number }
   | { t: 'attack'; targetId: number }
   | { t: 'attack_move'; x: number; z: number }
@@ -203,6 +210,9 @@ export type ServerMsg =
       t: 'match_start';
       selfUnitId: number;
       team: TeamId;
+      // This seat is the account's own bot: the client coaches it and the
+      // hands-on verbs are refused (ADR 0013).
+      coach?: true;
       forged?: ForgedChampionDef[];
       forgedAssets?: Record<string, ForgedMatchAssets>;
     }
@@ -232,7 +242,15 @@ export type ServerMsg =
   // this player's rating movement (zero and rated:false when unrated).
   // queue 'forge' means the numbers are the Forge queue's own rating
   // (ADR 0011), not the classic ladder's.
-  | { t: 'match_result'; rated: boolean; delta: number; rating: number; queue?: 'forge' }
+  // way 'bot' means the numbers are the account's bot rating, live.
+  | {
+      t: 'match_result';
+      rated: boolean;
+      delta: number;
+      rating: number;
+      queue?: 'forge';
+      way?: 'bot';
+    }
   | { t: 'match_end' }
   | { t: 'error'; message: string };
 

@@ -1,6 +1,8 @@
 ﻿// The shared unit model. Champions, minions, towers, and Sanctums are all
+
 // units; what varies is data (stats, kind), not the entity shape.
 
+import type { CoachOrder } from './coach';
 import type { Status } from './combat/status';
 import type { ChampionDef } from './content/champions';
 import type { LaneId } from './content/map';
@@ -71,6 +73,10 @@ export interface Unit {
   // null for seats played by hand. Presentation and reports read it; no
   // sim rule ever does.
   play: string | null;
+  // The owner's live coach order (ADR 0013), null when none, and for a
+  // focus the last sim time its target was in sight.
+  coachOrder: CoachOrder | null;
+  coachOrderSeenAt: number;
   attackTargetId: number | null;
   attackReadyAt: number;
   // Attack-move destination; enemies encountered on the way are engaged.
@@ -186,6 +192,8 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     passiveStacks: 0,
     lastDamagedAt: -999,
     play: null,
+    coachOrder: null,
+    coachOrderSeenAt: 0,
     attackTargetId: null,
     attackReadyAt: 0,
     attackMoveTarget: null,

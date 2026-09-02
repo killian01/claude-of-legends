@@ -9,6 +9,7 @@ import { stepAttackMove } from './attack_move';
 import { runBotDecisions } from './bot_driver';
 import { initialCampStates, onCampSlain, stepCamps } from './camps';
 import { ChampionRegistry } from './champion_registry';
+import { type CoachOrder, stepCoachOrder } from './coach';
 import { stepAutoAttacks } from './combat/auto_attack';
 import { castAbility, executeCast, stepWindups } from './combat/casting';
 import { stepDots } from './combat/dots';
@@ -371,6 +372,16 @@ export class Sim {
     u.attackMoveTarget = null;
   }
 
+  // The owner's coach order for a bot seat (ADR 0013): sim state like any
+  // order, so it records and replays; null releases it.
+  setCoachOrder(unitId: number, order: CoachOrder | null): void {
+    if (this.winner !== null) return;
+    const u = this.units.get(unitId);
+    if (!u || u.kind !== 'champion') return;
+    u.coachOrder = order;
+    u.coachOrderSeenAt = this.time;
+  }
+
   // System-driven pathing (attack-move) that does not clear the standing
   // intent the way a player move order does.
   orderPath(unitId: number, x: number, z: number): void {
@@ -549,6 +560,9 @@ export class Sim {
     }
     applyFountainRegen(ctx, this.map);
     stepPassives(ctx, this.tickCount);
+    for (const u of this.units.values()) {
+      if (u.coachOrder) stepCoachOrder(this, u);
+    }
 
     runBotDecisions(this, this.policies);
     runRemoteDecisions(this, this.remoteSeats);

@@ -5,6 +5,7 @@
 // live sim and applies live commands THROUGH these functions, so the live
 // path and the replay path cannot drift apart.
 
+import { parseCoachOrder } from '../sim/coach';
 import { attachBot } from '../sim/content/bots';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { PlaybookDef } from '../sim/playbook/types';
@@ -122,6 +123,16 @@ export function applySimCommand(sim: Sim, team: TeamId, unitId: number, msg: Cli
         sim.levelAbility(unitId, msg.key);
       }
       break;
+    case 'order': {
+      const u = sim.units.get(unitId);
+      if (!u) break;
+      const order = parseCoachOrder(msg, u.pos);
+      if (order === undefined) break;
+      // Fogged like an attack: a focus names only what the team sees.
+      if (order?.kind === 'focus' && !sim.isVisible(team, order.targetId)) break;
+      sim.setCoachOrder(unitId, order);
+      break;
+    }
     default:
       break;
   }

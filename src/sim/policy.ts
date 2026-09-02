@@ -7,6 +7,7 @@
 // The static map (src/sim/content/map.ts) is a known constant of the
 // contract; policies may read it directly.
 
+import type { CoachOrder } from './coach';
 import type { Rng } from './rng';
 import type { AbilityKey, TeamId } from './types';
 import type { UnitKind } from './unit';
@@ -131,6 +132,9 @@ export interface ObsSelf {
   // True while the recall channel runs (additive v0 field). A policy that
   // keeps issuing orders would reset its own channel forever without it.
   recalling?: boolean;
+  // The owner's live coach order (ADR 0013; additive v0 field): what the
+  // person coaching this seat asked for, null or absent when nothing is.
+  coachOrder?: CoachOrder | null;
 }
 
 export interface Observation {

@@ -10,6 +10,7 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { PlaybookDef } from '../src/sim/playbook/types';
+import { BASE_RATING } from './rating';
 
 const SCHEMA = `
 create table if not exists bots (
@@ -34,7 +35,18 @@ create table if not exists bot_versions (
   at integer not null,
   primary key (bot_id, version)
 );
+create table if not exists bot_ratings (
+  account_id integer not null,
+  way text not null,
+  rating integer not null,
+  games integer not null,
+  primary key (account_id, way)
+);
 `;
+
+// The two ways an account's bot is rated (ADR 0013): in live matches
+// (coached or not) and in the Arena.
+export type BotWay = 'live' | 'arena';
 
 export interface BotRow {
   id: string;
@@ -237,5 +249,32 @@ export class BotStore {
       author: r.author,
       at: r.at,
     };
+  }
+
+  // -- ratings ------------------------------------------------------------
+
+  botRating(accountId: number, way: BotWay): { rating: number; games: number } {
+    const r = this.db
+      .prepare('select rating, games from bot_ratings where account_id = ? and way = ?')
+      .get(accountId, way) as { rating: number; games: number } | undefined;
+    return r ?? { rating: BASE_RATING, games: 0 };
+  }
+
+  applyBotRating(accountId: number, way: BotWay, delta: number): void {
+    const cur = this.botRating(accountId, way);
+    this.db
+      .prepare(
+        `insert into bot_ratings (account_id, way, rating, games) values (?, ?, ?, ?)
+         on conflict (account_id, way) do update set
+           rating = excluded.rating, games = excluded.games`,
+      )
+      .run(accountId, way, cur.rating + delta, cur.games + 1);
+  }
+
+  listBotRatings(way: BotWay): { accountId: number; rating: number; games: number }[] {
+    const rows = this.db
+      .prepare('select account_id, rating, games from bot_ratings where way = ?')
+      .all(way) as unknown as { account_id: number; rating: number; games: number }[];
+    return rows.map((r) => ({ accountId: r.account_id, rating: r.rating, games: r.games }));
   }
 }

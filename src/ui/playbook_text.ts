@@ -55,6 +55,8 @@ export function describeTrigger(t: Trigger): string {
       return `${t.id} is ready`;
     case 'lane':
       return `assigned to ${t.is}`;
+    case 'order':
+      return t.is === undefined ? 'the coach gave an order' : `the coach ordered ${t.is}`;
     case 'not':
       return `not (${describeTrigger(t.of)})`;
     case 'all':
@@ -96,6 +98,8 @@ export function describeBehavior(b: Behavior): string {
       return 'take a jungle camp';
     case 'siege':
       return `siege a structure with ${b.escortMin ?? 3} minions`;
+    case 'obeyOrder':
+      return 'do what the coach ordered';
     case 'push': {
       const lane = b.lane === undefined || b.lane === 'assigned' ? 'the assigned lane' : b.lane;
       const regroup =
@@ -199,6 +203,16 @@ export const TRIGGER_FORMS: Readonly<Record<Trigger['kind'], KindForm>> = {
     label: 'assigned lane',
     choices: [{ key: 'is', label: 'is', options: ['top', 'mid', 'bot'] }],
   },
+  order: {
+    label: 'the coach gave an order',
+    choices: [
+      {
+        key: 'is',
+        label: 'of kind',
+        options: ['goto', 'warden', 'focus', 'back', 'group', 'hold'],
+      },
+    ],
+  },
   not: { label: 'not' },
   all: { label: 'all of' },
   any: { label: 'any of' },
@@ -248,6 +262,7 @@ export const BEHAVIOR_FORMS: Readonly<Record<Behavior['kind'], KindForm>> = {
     label: 'siege a structure',
     nums: [{ key: 'escortMin', label: 'with minions', min: 0, max: 10, step: 1 }],
   },
+  obeyOrder: { label: 'do what the coach ordered' },
   push: {
     label: 'push a lane',
     choices: [{ key: 'lane', label: 'lane', options: ['assigned', 'top', 'mid', 'bot'] }],

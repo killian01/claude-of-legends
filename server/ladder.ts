@@ -36,3 +36,28 @@ export function buildLadder(accounts: readonly Account[], cap = LADDER_CAP): Lad
       ratedGames: a.ratedGames,
     }));
 }
+
+// The bot ladders (ADR 0013): the same ranking over the bots' store rows,
+// named through the registry; an account that vanished does not place.
+export function buildBotLadder(
+  rows: readonly { accountId: number; rating: number; games: number }[],
+  nameOf: (accountId: number) => string | null,
+  cap = LADDER_CAP,
+): LadderRow[] {
+  const named: { accountId: number; rating: number; games: number; name: string }[] = [];
+  for (const r of rows) {
+    if (r.games < MIN_RATED_GAMES) continue;
+    const name = nameOf(r.accountId);
+    if (name !== null) named.push({ ...r, name });
+  }
+  return named
+    .sort((a, b) => b.rating - a.rating || b.games - a.games || a.accountId - b.accountId)
+    .slice(0, cap)
+    .map((r, i) => ({
+      rank: i + 1,
+      id: r.accountId,
+      name: r.name,
+      rating: r.rating,
+      ratedGames: r.games,
+    }));
+}

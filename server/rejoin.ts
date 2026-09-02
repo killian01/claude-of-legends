@@ -23,6 +23,9 @@ export interface HeldSeat {
   name: string;
   team: TeamId;
   unitId: number;
+  // A coach seat (ADR 0013): the bot kept playing; the coach comes back
+  // to it, never to a stand-in.
+  coach?: true;
 }
 
 export class RejoinRegistry {

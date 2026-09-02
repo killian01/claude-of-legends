@@ -9,6 +9,7 @@
 // every later version. New trigger and behavior kinds are added, never
 // changed; a parameter's default never moves once shipped.
 
+import type { CoachOrder } from '../coach';
 import type { AbilityKey } from '../types';
 
 export const PLAYBOOK_FORMAT_VERSION = 1;
@@ -44,6 +45,8 @@ export type Trigger =
   | { kind: 'sigilReady'; id: string }
   // The lane this seat was assigned.
   | { kind: 'lane'; is: LaneId }
+  // The owner's coach order is active (ADR 0013), optionally of one kind.
+  | { kind: 'order'; is?: CoachOrder['kind'] }
   | { kind: 'not'; of: Trigger }
   | { kind: 'all'; of: Trigger[] }
   | { kind: 'any'; of: Trigger[] };
@@ -83,6 +86,10 @@ export type Behavior =
   | { kind: 'takeCamp' }
   // Attack a vulnerable structure in reach with a minion escort.
   | { kind: 'siege'; escortMin?: number }
+  // Do what the coach ordered: go there, take the Warden, focus the target,
+  // run home, group on an ally, hold. A focus on a target out of sight
+  // passes the turn.
+  | { kind: 'obeyOrder' }
   // Follow the wave down a lane (the assigned one by default), else walk the
   // lane, else walk at the enemy Sanctum. Past `regroupAt` seconds every
   // assigned bot pushes mid as one group; null disables the bell. Always acts.

@@ -13,6 +13,7 @@ import { SIGIL_LIST } from '../sim/content/sigils';
 import { SKINS } from '../sim/content/skins';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import { resolveForgedChampion } from '../sim/forge/resolve';
+import type { PlaybookDef } from '../sim/playbook/types';
 import type { AbilityKey, TeamId } from '../sim/types';
 import { ROLE_COLORS, setPortrait } from './champion_art';
 import { describeAbility, describeSigil } from './describe';
@@ -359,17 +360,31 @@ export interface ForgedPick {
   splash?: string | null;
 }
 
+// The account's own bots, offered at select (ADR 0013): picking one seats
+// the bot and makes the person its coach.
+export interface BotPick {
+  id: string;
+  name: string;
+  championId: string;
+  sigils: [string, string];
+  skin: number;
+  version: number;
+  playbook?: PlaybookDef;
+}
+
 export function showSelect(
   container: HTMLElement,
   roster: SelectPlayer[] | null,
   team: TeamId,
   deadline: number | null,
-  onLock: (championId: string, sigils: [string, string], skin: number) => void,
+  onLock: (championId: string, sigils: [string, string], skin: number, botId?: string) => void,
   // Forge queue: the account's finalized forged champions, offered in
   // their own section under the roster grid.
   forged?: readonly ForgedPick[],
   // Forge queue: the community tab, every shared champion popular first.
   community?: readonly CommunityPick[],
+  // The account's own bots (classic queue): the bot plays, the person coaches.
+  bots?: readonly BotPick[],
 ): SelectController {
   const { root, card } = screen(container);
   card.classList.add('select');
@@ -397,6 +412,7 @@ export function showSelect(
   }
 
   let championId: string | null = null;
+  let botId: string | null = null;
   let skinIndex = 0;
   let takenSet = new Set<string>();
   const sigils: string[] = ['riftstep', 'mend'];
@@ -449,6 +465,7 @@ export function showSelect(
     btn.addEventListener('click', () => {
       if (takenSet.has(c.id)) return;
       championId = c.id;
+      botId = null;
       skinIndex = 0;
       renderSkins();
       for (const [id, b] of champButtons) b.classList.toggle('picked', id === c.id);
@@ -487,8 +504,50 @@ export function showSelect(
     if (!championId || sigils.length !== 2) return;
     lock.disabled = true;
     lock.textContent = 'Locked';
-    onLock(championId, [sigils[0]!, sigils[1]!], skinIndex);
+    onLock(championId, [sigils[0]!, sigils[1]!], skinIndex, botId ?? undefined);
   });
+
+  // Your bots (ADR 0013): a card per bot, its champion's face; picking one
+  // brings the bot's champion, sigils and skin and seats the bot, coached.
+  let botsBlock: HTMLElement[] = [];
+  if (bots && bots.length > 0) {
+    const botsGrid = el('div', 'menu-grid');
+    for (const b of bots) {
+      const btn = el('button', 'menu-champ') as HTMLButtonElement;
+      const portrait = document.createElement('img');
+      portrait.className = 'menu-champ-portrait';
+      setPortrait(portrait, b.championId, team === 0 ? 0x4a7dd6 : 0xd65c5c);
+      portrait.alt = '';
+      btn.appendChild(portrait);
+      const body = el('div', 'menu-champ-body');
+      body.appendChild(el('div', 'menu-champ-name', b.name));
+      body.appendChild(el('div', 'menu-champ-role', `Your bot, v${b.version}`));
+      const champ = CHAMPION_LIST.find((c) => c.id === b.championId);
+      body.appendChild(
+        el(
+          'div',
+          'menu-champ-blurb',
+          champ ? `Plays ${champ.name.split(',')[0]}. You coach.` : 'You coach.',
+        ),
+      );
+      btn.appendChild(body);
+      btn.addEventListener('click', () => {
+        if (takenSet.has(b.championId)) return;
+        championId = b.championId;
+        botId = b.id;
+        skinIndex = b.skin;
+        sigils.splice(0, sigils.length, b.sigils[0], b.sigils[1]);
+        syncSigils();
+        renderSkins();
+        for (const [id, other] of champButtons)
+          other.classList.toggle('picked', id === `bot:${b.id}`);
+        lock.disabled = false;
+      });
+      champButtons.set(`bot:${b.id}`, btn);
+      botsGrid.appendChild(btn);
+    }
+    botsBlock = [el('div', 'menu-label', 'Your bots (the bot plays, you coach)'), botsGrid];
+  }
 
   // Forge queue: forged cards (own and community) share one builder wired
   // into the same pick, taken, and lock machinery as the roster cards.
@@ -524,6 +583,7 @@ export function showSelect(
     btn.addEventListener('click', () => {
       if (takenSet.has(def.id)) return;
       championId = def.id;
+      botId = null;
       skinIndex = 0;
       renderSkins();
       for (const [id, b] of champButtons) b.classList.toggle('picked', id === def.id);
@@ -588,7 +648,7 @@ export function showSelect(
   const main = el('div', 'menu-select-main');
   const side = el('div', 'menu-select-side');
   main.append(el('div', 'menu-label', 'Pick your champion (hover for the kit)'), grid);
-  main.append(...forgedBlock, ...communityBlock, randomBtn);
+  main.append(...botsBlock, ...forgedBlock, ...communityBlock, randomBtn);
   if (teamsBox) side.appendChild(teamsBox);
   side.append(
     el('div', 'menu-label', 'Skin (cosmetic only)'),
@@ -618,7 +678,11 @@ export function showSelect(
       if (taken) {
         takenSet = new Set(taken.filter((id) => id !== championId));
         for (const [id, b] of champButtons) {
-          const isTaken = takenSet.has(id);
+          // A bot card is taken when its champion is.
+          const champ = id.startsWith('bot:')
+            ? (bots?.find((x) => `bot:${x.id}` === id)?.championId ?? id)
+            : id;
+          const isTaken = takenSet.has(champ);
           b.style.opacity = isTaken ? '0.35' : '';
           b.style.pointerEvents = isTaken ? 'none' : '';
         }

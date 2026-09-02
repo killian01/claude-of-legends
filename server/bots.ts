@@ -1,7 +1,7 @@
 // Bots on the account, server side (ADR 0013): create, edit, version,
 // deposit, delete, every one gated on ownership and on the playbook
 // validator, the one door untrusted data goes through. Every bot starts
-// as the Laner on the champion its owner chose (docs/design/bots.md), and
+// as the Laner plus the coach play, on the champion its owner chose, and
 // every applied playbook change is a version the owner can return to.
 // Identity arrives already resolved: the routes in main.ts hand these
 // functions the account behind the session cookie (ADR 0006), never a raw
@@ -9,7 +9,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { CHAMPIONS } from '../src/sim/content/champions';
-import { LANER_PLAYBOOK } from '../src/sim/content/playbooks/laner';
+import { NEW_BOT_PLAYBOOK } from '../src/sim/content/playbooks/new_bot';
 import { SIGILS } from '../src/sim/content/sigils';
 import { clampSkin } from '../src/sim/content/skins';
 import type { PlaybookDef } from '../src/sim/playbook/types';
@@ -140,7 +140,7 @@ export function createBot(
     championId,
     sigils: sigils.sigils,
     skin: clampSkin(championId, input.skin),
-    playbook: LANER_PLAYBOOK,
+    playbook: NEW_BOT_PLAYBOOK,
     version: 1,
     deposited: false,
     createdAt: at,

@@ -19,6 +19,7 @@ import {
 } from '../src/net/protocol';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { validateForged } from '../src/sim/forge/validate';
+import { validatePlaybook } from '../src/sim/playbook/validate';
 import { DT } from '../src/sim/types';
 import { foldName, nameErrorMessage } from './account_name';
 import {
@@ -70,17 +71,18 @@ import { downloadToFile, type PipelineDeps, recoverStaleJobs } from './generatio
 import { placeholderFor } from './generation/placeholder';
 import { type GenerationProvider, WEAPON_FAMILIES } from './generation/provider';
 import { TripoProvider } from './generation/tripo';
-import { buildLadder } from './ladder';
+import { buildBotLadder, buildLadder } from './ladder';
 import { accountKey, addressKey, LoginThrottle } from './login_throttle';
 import { confirmMail, confirmUrl, publicOrigin, resetMail, resetUrl } from './mail_messages';
 import { mailerFromEnv } from './mailer';
 import { AFK_IDLE_TICKS, Match, type MatchPick } from './match';
+import { type OwnedSeat, type RatingBook, rateMatch } from './match_rating';
 import { Matchmaker, type MatchSource } from './matchmaker';
 import { passwordErrorMessage, validatePassword } from './password';
 import { type CoachDeps, coachPlaybook } from './playbook_suggest';
 import { buildProfile } from './profile';
 import { checkQuota, DAY_MS, spendQuota } from './quotas';
-import { isRated, LEAVER_LOCKOUT_MS, leaverPenalty, type RatedSeat, ratingDeltas } from './rating';
+import { BASE_RATING, LEAVER_LOCKOUT_MS, leaverPenalty } from './rating';
 import { buildMatchRecord, type MatchRecord } from './records';
 import { setForgedAttackRange } from './reforge';
 import { RejoinRegistry } from './rejoin';
@@ -155,6 +157,9 @@ interface MatchEntry {
   // Only public-queue matches can be rated; a private lobby never is
   // (it would be a boosting machine otherwise).
   ratedEligible: boolean;
+  // Bot seats by unit id (ADR 0013): the owning account and the seat name,
+  // kept here because a coach may close the tab and still be rated.
+  botSeats: Map<number, { accountId: number; name: string }>;
   // A Forge-queue match: its deltas land on the Forge queue's own rating
   // (ADR 0011), never the classic ladder.
   forge: boolean;
@@ -409,6 +414,13 @@ function onMatchReady(forge: boolean) {
   return (picks: MatchPick[], source: MatchSource) => {
     const id = nextMatchId++;
     const match = new Match((Date.now() % 2_000_000_000) + id, fillWithBots(picks));
+    const botSeats = new Map<number, { accountId: number; name: string }>();
+    for (const p of picks) {
+      if (p.playbook === undefined) continue;
+      const c = clients.get(p.clientId);
+      const player = match.players.get(p.clientId);
+      if (c && player) botSeats.set(player.unitId, { accountId: c.accountId, name: p.name });
+    }
     matches.set(id, {
       match,
       endedAt: null,
@@ -416,6 +428,7 @@ function onMatchReady(forge: boolean) {
       abandonedAt: null,
       ratedEligible: source === 'queue',
       forge,
+      botSeats,
     });
     for (const p of picks) {
       const c = clients.get(p.clientId);
@@ -427,6 +440,7 @@ function onMatchReady(forge: boolean) {
           t: 'match_start',
           selfUnitId: player.unitId,
           team: p.team,
+          ...(player.coach ? { coach: true as const } : {}),
           ...forgedPayload(match),
         });
       }
@@ -435,7 +449,26 @@ function onMatchReady(forge: boolean) {
   };
 }
 
-const matchmaker = new Matchmaker(send, onMatchReady(false));
+const matchmaker = new Matchmaker(send, onMatchReady(false), undefined, {
+  // Bot seats (ADR 0013): the resolver is the account boundary, answering
+  // with the seat when THIS client owns the bot, re-validated so a stored
+  // playbook that predates a validator tightening never reaches a match.
+  resolveBot: (clientId, botId) => {
+    const c = clients.get(clientId);
+    if (!c) return null;
+    const bot = botStore.getBot(botId);
+    if (!bot || bot.accountId !== c.accountId) return null;
+    const v = validatePlaybook(bot.playbook);
+    if (!v.ok) return null;
+    return {
+      name: bot.name,
+      championId: bot.championId,
+      sigils: bot.sigils,
+      skin: bot.skin,
+      playbook: v.def,
+    };
+  },
+});
 // The Forge queue (plan-forge phase 6): a second matchmaker whose selects
 // offer forged champions. The resolver is the account boundary: the
 // owner's finalized champions and anyone's shared ones (the gallery rule,
@@ -463,7 +496,10 @@ const matchmakers = [matchmaker, forgeMatchmaker];
 function walkOutOfMatch(client: Client, entry: MatchEntry, matchId: number): void {
   client.matchId = null;
   rejoins.drop(client.accountId);
-  if (entry.ratedEligible && entry.match.sim.winner === null) {
+  // A coach walking out leaves nothing behind: the bot keeps playing, so
+  // there is no leaver to punish.
+  const coach = entry.match.players.get(client.id)?.coach === true;
+  if (entry.ratedEligible && entry.match.sim.winner === null && !coach) {
     const humansByTeam: [number, number] = [0, 0];
     for (const p of entry.match.players.values()) {
       if (clients.has(p.clientId)) humansByTeam[p.team] += 1;
@@ -1340,6 +1376,20 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (url === '/api/ladder') {
+        // way=bot and way=arena are the bot ladders (ADR 0013); no way is
+        // the hand ladder, unchanged.
+        const way = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('way');
+        if (way === 'bot' || way === 'arena') {
+          sendJson(
+            res,
+            200,
+            buildBotLadder(
+              botStore.listBotRatings(way === 'bot' ? 'live' : 'arena'),
+              (aid) => registry.findById(aid)?.name ?? null,
+            ),
+          );
+          return;
+        }
         sendJson(res, 200, buildLadder(registry.all()));
         return;
       }
@@ -1528,6 +1578,7 @@ wss.on('connection', (ws, req) => {
             t: 'match_start',
             selfUnitId: seat.unitId,
             team: seat.team,
+            ...(seat.coach ? { coach: true as const } : {}),
             ...forgedPayload(entry.match),
           });
           for (const cid of entry.match.players.keys()) {
@@ -1648,7 +1699,7 @@ wss.on('connection', (ws, req) => {
         if (!inMatch) matchmaker.startLobby(id, now);
         break;
       case 'pick':
-        for (const mm of matchmakers) mm.pick(id, msg.championId, msg.sigils, msg.skin);
+        for (const mm of matchmakers) mm.pick(id, msg.championId, msg.sigils, msg.skin, msg.bot);
         break;
       case 'chat':
       case 'ping': {
@@ -1785,46 +1836,60 @@ setInterval(() => {
             const c = clients.get(p.clientId);
             if (c) accountIdByUnit.set(p.unitId, c.accountId);
           }
-          // Rating policy (server/rating.ts): only public-queue matches
-          // with at least one human on each side are rated; every human
-          // on a team moves together. A Forge match reads and moves the
-          // Forge queue's own rating (ADR 0011), same policy, own ladder.
-          const seats: RatedSeat[] = [];
+          // Rating policy (server/rating.ts, server/match_rating.ts): only
+          // public-queue matches with an OWNED seat on each side are rated,
+          // by hand or by the account's bot; every owned seat on a team
+          // moves together, each on the rating of its way. A Forge match
+          // reads and moves the Forge queue's own rating (ADR 0011), same
+          // policy, own ladder. A coach who closed the tab is still rated:
+          // the bot seat is the account's, connected or not.
+          const owned: OwnedSeat[] = [];
           for (const p of entry.match.players.values()) {
+            if (p.coach) continue;
             const pid = accountIdByUnit.get(p.unitId);
-            const account = pid !== undefined ? registry.findById(pid) : undefined;
-            if (pid !== undefined && account) {
-              seats.push({
-                accountId: pid,
-                team: p.team,
-                rating: entry.forge ? forgeStore.forgeRating(pid).rating : account.rating,
-              });
+            if (pid !== undefined && registry.findById(pid)) {
+              owned.push({ accountId: pid, team: p.team, way: 'hand' });
             }
           }
-          const humansByTeam: [number, number] = [
-            seats.filter((s) => s.team === 0).length,
-            seats.filter((s) => s.team === 1).length,
-          ];
-          const rated = entry.ratedEligible && isRated(humansByTeam);
-          const deltas = rated
-            ? ratingDeltas(seats, entry.match.sim.winner)
-            : new Map<number, number>();
-          for (const [pid, delta] of deltas) {
-            if (entry.forge) forgeStore.applyForgeRating(pid, delta);
-            else registry.applyRating(pid, delta);
+          const ways = new Map<number, 'bot'>();
+          for (const [unitId, seat] of entry.botSeats) {
+            const u = entry.match.sim.units.get(unitId);
+            if (!u || !registry.findById(seat.accountId)) continue;
+            accountIdByUnit.set(unitId, seat.accountId);
+            ways.set(unitId, 'bot');
+            owned.push({ accountId: seat.accountId, team: u.team, way: 'bot' });
           }
-          // Tell each human what the match did to their rating; the end
-          // screen shows it next to the final scoreboard.
+          const book: RatingBook = {
+            read: (pid, way) => {
+              if (way === 'bot') return botStore.botRating(pid, 'live').rating;
+              if (entry.forge) return forgeStore.forgeRating(pid).rating;
+              return registry.findById(pid)?.rating ?? BASE_RATING;
+            },
+            apply: (pid, way, delta) => {
+              if (way === 'bot') botStore.applyBotRating(pid, 'live', delta);
+              else if (entry.forge) forgeStore.applyForgeRating(pid, delta);
+              else registry.applyRating(pid, delta);
+            },
+          };
+          const outcome = rateMatch(owned, entry.match.sim.winner, entry.ratedEligible, book);
+          const rated = outcome.rated;
+          const deltas = new Map<number, number>();
+          for (const r of outcome.results) deltas.set(r.accountId, r.delta);
+          // Tell each connected owner what the match did to their rating;
+          // the end screen shows it next to the final scoreboard.
           for (const p of entry.match.players.values()) {
             const pid = accountIdByUnit.get(p.unitId);
-            const account = pid !== undefined ? registry.findById(pid) : undefined;
-            if (pid === undefined || !account) continue;
+            const result = outcome.results.find(
+              (r) => r.accountId === pid && r.way === (p.coach ? 'bot' : 'hand'),
+            );
+            if (pid === undefined || !result) continue;
             send(p.clientId, {
               t: 'match_result',
               rated,
-              delta: deltas.get(pid) ?? 0,
-              rating: entry.forge ? forgeStore.forgeRating(pid).rating : account.rating,
+              delta: result.delta,
+              rating: result.rating,
               ...(entry.forge ? { queue: 'forge' as const } : {}),
+              ...(p.coach ? { way: 'bot' as const } : {}),
             });
           }
           // Save the replay first so the match record can point at it.
@@ -1855,7 +1920,7 @@ setInterval(() => {
               entry.match.sim.winner,
               entry.match.sim.time,
               now,
-              { rated, deltas, ...(entry.forge ? { queue: 'forge' as const } : {}) },
+              { rated, deltas, ways, ...(entry.forge ? { queue: 'forge' as const } : {}) },
               replayId,
             );
             matchLog.push(rec);

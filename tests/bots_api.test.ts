@@ -15,7 +15,7 @@ import {
   saveBot,
   setDeposited,
 } from '../server/bots';
-import { LANER_PLAYBOOK } from '../src/sim/content/playbooks/laner';
+import { NEW_BOT_PLAYBOOK } from '../src/sim/content/playbooks/new_bot';
 import type { PlaybookDef } from '../src/sim/playbook';
 
 function rig(): BotDeps & { store: BotStore } {
@@ -59,7 +59,7 @@ describe('bots on the account', () => {
       version: 1,
       deposited: false,
     });
-    expect(bot.playbook).toEqual(LANER_PLAYBOOK);
+    expect(bot.playbook).toEqual(NEW_BOT_PLAYBOOK);
     expect(deps.store.getBot(bot.id)).toEqual(bot);
 
     const listed = listBots(deps, 1);
@@ -87,7 +87,7 @@ describe('bots on the account', () => {
   it('versions every applied playbook change, and reverting is a new version', () => {
     const deps = rig();
     const bot = make(deps);
-    const same = saveBot(deps, 1, { id: bot.id, playbook: LANER_PLAYBOOK });
+    const same = saveBot(deps, 1, { id: bot.id, playbook: NEW_BOT_PLAYBOOK });
     expect(same.ok && same.bot.version).toBe(1);
 
     const changed = saveBot(deps, 1, { id: bot.id, playbook: AGGRESSIVE });
@@ -102,7 +102,7 @@ describe('bots on the account', () => {
 
     const back = revertBot(deps, 1, bot.id, 1);
     expect(back.ok && back.bot.version).toBe(3);
-    expect(back.ok && back.bot.playbook).toEqual(LANER_PLAYBOOK);
+    expect(back.ok && back.bot.playbook).toEqual(NEW_BOT_PLAYBOOK);
     expect(deps.store.getVersion(bot.id, 3)?.author).toBe('revert:1');
     expect(revertBot(deps, 1, bot.id, 9).ok).toBe(false);
     deps.store.close();
@@ -125,7 +125,7 @@ describe('bots on the account', () => {
       playbook: { version: 1, plays: [], pad: 'x'.repeat(40_000) },
     });
     expect(!huge.ok && huge.error).toMatch(/too large/);
-    expect(deps.store.getBot(bot.id)?.playbook).toEqual(LANER_PLAYBOOK);
+    expect(deps.store.getBot(bot.id)?.playbook).toEqual(NEW_BOT_PLAYBOOK);
     expect(deps.store.getBot(bot.id)?.version).toBe(1);
     deps.store.close();
   });

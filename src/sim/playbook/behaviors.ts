@@ -4,6 +4,7 @@
 // number the scripted Laner shipped with (see micro.ts for the findings
 // that set them); the playbook overrides them per play.
 
+import { GOTO_DONE_RADIUS } from '../coach';
 import { GAME_MAP } from '../content/map';
 import type { Action, ObsUnit } from '../policy';
 import {
@@ -69,6 +70,8 @@ export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
         b.lane ?? 'assigned',
         b.regroupAt === undefined ? REGROUP_AT_S : b.regroupAt,
       );
+    case 'obeyOrder':
+      return obeyOrder(ctx);
     case 'followAlly':
       return followAlly(ctx, b.keep ?? 3);
     case 'holdPosition':
@@ -367,6 +370,48 @@ function followAlly(ctx: SlotContext, keep: number): Action | null {
   if (dist(s.x, s.z, ally) <= keep) return { kind: 'noop' };
   const { jx, jz } = ctx.jitter();
   return { kind: 'move', x: ally.x + jx, z: ally.z + jz };
+}
+
+// The coach's order, done the playbook's way: the bot's own hands, the
+// owner's intent. A goto walks there (the sim clears it on arrival), a
+// hold stays, a back runs home, a group sticks to the nearest ally, a
+// warden goes for it whatever the health, a focus fights the named target
+// while it is in sight and passes the turn otherwise.
+function obeyOrder(ctx: SlotContext): Action | null {
+  const { s } = ctx;
+  const order = s.coachOrder ?? null;
+  if (!order) return null;
+  switch (order.kind) {
+    case 'goto':
+      return holdPosition(ctx, order.x, order.z, GOTO_DONE_RADIUS);
+    case 'hold':
+      return holdPosition(ctx, order.x, order.z, 2);
+    case 'back':
+      return retreat(ctx);
+    case 'group':
+      return followAlly(ctx, 4);
+    case 'warden': {
+      const warden = ctx.enemies.find((u) => u.kind === 'warden');
+      if (warden) {
+        if (dist(s.x, s.z, warden) <= FARM_RANGE) return { kind: 'attack', targetId: warden.id };
+        return { kind: 'move', x: warden.x, z: warden.z };
+      }
+      let pit = GAME_MAP.wardenPits[0]!;
+      for (const p of GAME_MAP.wardenPits) {
+        if (Math.hypot(p.x - s.x, p.z - s.z) < Math.hypot(pit.x - s.x, pit.z - s.z)) pit = p;
+      }
+      return holdPosition(ctx, pit.x, pit.z, 6);
+    }
+    case 'focus': {
+      const target = ctx.enemies.find((u) => u.id === order.targetId);
+      if (!target) return null;
+      if (target.kind === 'champion') {
+        const cast = pickCast(ctx, target);
+        if (cast) return cast;
+      }
+      return { kind: 'attack', targetId: target.id };
+    }
+  }
 }
 
 function holdPosition(ctx: SlotContext, x: number, z: number, within: number): Action {
