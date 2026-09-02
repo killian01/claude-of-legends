@@ -586,7 +586,9 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   // moving target while aligning it). Frozen, the mixer's clock stops
   // and the model holds its current frame; the slider scrubs the frozen
   // clip so the hand is caught at any moment of a swing; a clip button
-  // lands on that clip's first frame. Releasing resumes the clips.
+  // lands on that clip's first frame. Releasing resumes the clips. The
+  // controls sit in the Weapon panel, where the grip is fitted (playtest:
+  // nobody hunts under Animations while placing a weapon).
   let frozen = false;
   let fadingAction: THREE.AnimationAction | null = null;
   const freezeBtn = el('button', 'ws-btn', 'Freeze the pose') as HTMLButtonElement;
@@ -633,15 +635,8 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     }
   };
   freezeBtn.addEventListener('click', () => setFrozen(!frozen));
-  clipsPanel.append(
-    freezeBtn,
-    frameRow,
-    el(
-      'div',
-      'ws-note',
-      'Frozen, the model holds one frame while you fit the weapon; the slider scrubs the clip.',
-    ),
-  );
+  const freezeBox = el('div', '');
+  freezeBox.append(freezeBtn, frameRow);
 
   const playClip = (name: string): void => {
     if (!mixer) return;
@@ -857,6 +852,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     if (!editable) {
       weaponControls.append(
         el('div', 'ws-note', 'The weapon rides a hand bone; the creator tunes the grip.'),
+        freezeBox,
       );
       return;
     }
@@ -1019,7 +1015,9 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
         },
       ),
     );
-    weaponControls.append(modeBar);
+    // The frozen pose first, then the grip tools: a still hand is what
+    // the tools below are aimed at.
+    weaponControls.append(freezeBox, modeBar);
     // Quarter turns compose about the corner marker's axes, exactly like
     // the world-space rotate rings, so 'turn it 90 about X' means the
     // same thing everywhere.
@@ -1095,10 +1093,12 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       el(
         'div',
         'ws-note',
-        'Hold it here, then click the weapon where the hand should hold it: the grip ' +
-          'snaps into the fist, blade along the hand. Or grab the weapon with a click and ' +
-          'drag the arrows and rings (G move, R rotate, hold Ctrl to snap, Escape to ' +
-          'release); the corner marker names the axes. Play Attack to check the swing.',
+        'Freeze the pose (F) to stop the idle sway; the Frame slider then holds the ' +
+          'hand at any moment of a clip. Hold it here, then click the weapon where the ' +
+          'hand should hold it: the grip snaps into the fist, blade along the hand. Or ' +
+          'grab the weapon with a click and drag the arrows and rings (G move, R rotate, ' +
+          'hold Ctrl to snap, Escape to release); the corner marker names the axes. ' +
+          'Play Attack to check the swing.',
       ),
     );
   };

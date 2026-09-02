@@ -104,10 +104,17 @@ const run = async () => {
         .find((p) => p.querySelector('h3')?.textContent === 'Animations')
         ?.querySelectorAll('button.ws-btn').length ?? 0,
   );
-  // The clip buttons plus the freeze button.
-  if (clipCount < 3)
-    throw new Error(`expected at least two clips and the freeze button, saw ${clipCount}`);
-  console.log(`workshop open, ${clipCount - 1} clip buttons`);
+  if (clipCount < 2) throw new Error(`expected at least two clips, saw ${clipCount}`);
+  // The freeze lives in the Weapon panel, beside the grip tools
+  // (playtest: nobody hunts under Animations while placing a weapon).
+  const freezeInWeapon = await page.evaluate(() =>
+    [...document.querySelectorAll('.ws-panel')]
+      .find((p) => p.querySelector('h3')?.textContent === 'Weapon')
+      ?.querySelector('button.ws-btn')
+      ?.textContent?.startsWith('Freeze the pose'),
+  );
+  if (!freezeInWeapon) throw new Error('the freeze button is not first in the Weapon panel');
+  console.log(`workshop open, ${clipCount} clip buttons, the freeze in the Weapon panel`);
 
   // The turntable sleeps after a drag on the stage, so the only motion
   // left is the clip itself.
