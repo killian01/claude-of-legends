@@ -22,7 +22,7 @@ import { requestGameFullscreen } from './fullscreen';
 import { type InputHandlers, setupInput } from './input';
 import { startMusic, stopMusic } from './music';
 import { pickEnemyAt, pickEnemyOnScreen, pickUnitOnScreen } from './picking';
-import { playCastSfx, playSfx } from './sfx';
+import { playCastSfx, playSfx, preloadSfx } from './sfx';
 import { setupTouchControls } from './touch';
 
 export interface KillNote {
@@ -73,6 +73,9 @@ export function startPresentation(
   onExit: (action: PostMatchAction) => void,
 ): Presentation {
   const renderer = new Renderer(container, world);
+  // The recorded bank decodes while the match loads, so the first swing
+  // plays a recording rather than the synthesis.
+  preloadSfx();
   renderer.followUnit(selfId);
   renderer.setViewerTeam(selfTeam);
   renderer.domElement.style.cursor = defaultCursor();

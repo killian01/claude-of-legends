@@ -11,7 +11,7 @@
 
 import { attackSoundOf, castSoundOf } from '../game/champion_sounds';
 import { forgedClipFileUrls, registerForgedAssets } from '../game/forged_visuals';
-import { playCastSfx, playSfx } from '../game/sfx';
+import { playCastSfx, playSfx, preloadSfx } from '../game/sfx';
 import { RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import type { ChampionBaseStats, ChampionGrowth, ChampionRole } from '../sim/content/champions';
 import {
@@ -470,6 +470,8 @@ type SpellSlot = 'P' | AbilityKey;
 
 export function openForgeEditor(container: HTMLElement): void {
   ensureCss();
+  // The sound palette's Play buttons play recordings: decode them now.
+  preloadSfx();
   const root = el('div', 'fe');
   const stopBackdrop = startMenuBackdrop(root);
   const close = (): void => {

@@ -116,6 +116,8 @@ const MIME: Record<string, string> = {
   '.svg': 'image/svg+xml',
   '.glb': 'model/gltf-binary',
   '.wasm': 'application/wasm',
+  // The recorded sound bank (public/sfx/).
+  '.ogg': 'audio/ogg',
 };
 
 interface Client {

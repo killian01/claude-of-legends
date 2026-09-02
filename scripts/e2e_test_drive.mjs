@@ -225,6 +225,23 @@ const run = async () => {
   }
   console.log('asset route OK:', loads.length, 'icons load as images');
 
+  // The recorded sound bank is served and decodes: one attack, one cast.
+  const bank = await page.evaluate(async () => {
+    const ctx = new AudioContext();
+    const out = [];
+    for (const file of ['swing_1.ogg', 'cast_thunder_1.ogg', 'gunshot_1.ogg']) {
+      const r = await fetch(`/sfx/${file}`);
+      const type = r.headers.get('content-type');
+      const buf = r.ok ? await ctx.decodeAudioData(await r.arrayBuffer()) : null;
+      out.push(`${r.status} ${type} ${file} ${buf ? buf.duration.toFixed(2) : 'undecodable'}s`);
+    }
+    return out;
+  });
+  for (const line of bank) {
+    if (!/^200 audio\/ogg .* \d/.test(line)) throw new Error(`sound bank: ${line}`);
+  }
+  console.log('sound bank OK:', bank.join(' | '));
+
   // For the pictures: the shop opens over the HUD at the start, and an
   // unlearned slot wears the "+" cover (forged or roster alike), so close
   // the shop and rank Q up to show its icon uncovered.

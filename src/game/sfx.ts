@@ -1,8 +1,13 @@
-// Procedural sound design over WebAudio: no assets, everything synthesized.
-// All sounds run through one shared bus (dry -> compressor -> speakers) with
-// a feedback-delay reverb send for space. Layered tones plus filtered noise
+// Sound over WebAudio. Combat and the spell palette play recordings from
+// the bank (sfx_bank.ts, public/sfx/) once it has decoded; everything
+// else, and every sound until then or without a recording, is synthesized
+// here (playtest: the synthesis alone read as cheap). All sounds run
+// through one shared bus (dry -> compressor -> speakers) with a
+// feedback-delay reverb send for space. Layered tones plus filtered noise
 // bursts read far less "beepy" than raw oscillators. The AudioContext
 // resumes on the first user gesture per browser policy.
+
+import { playSfxBank, preloadSfxBank } from './sfx_bank';
 
 export type SfxName =
   | 'cast'
@@ -89,8 +94,17 @@ export function audioBus(): AudioBus | null {
     window.addEventListener('pointerdown', resume, { once: true });
     window.addEventListener('keydown', resume, { once: true });
     bus = { ctx, master, sfx, verb };
+    // The recordings decode in the background from the first moment the
+    // bus exists; the synthesis covers the seconds until they land.
+    void preloadSfxBank(bus);
   }
   return bus;
+}
+
+// Builds the bus early (a screen that will play sounds soon, the Forge
+// editor, a match starting), so the bank is decoded by the first cast.
+export function preloadSfx(): void {
+  audioBus();
 }
 
 function getNoise(ctx: AudioContext): AudioBuffer {
@@ -214,6 +228,7 @@ export function playCastSfx(school: string, gain = 1): void {
   const now = performance.now();
   if (now - (lastPlay.get('cast') ?? 0) < 90) return;
   lastPlay.set('cast', now);
+  if (playSfxBank(b, `cast_${school}`, gain, 0.15)) return;
   callGain = Math.min(1.5, gain);
   const j = 0.94 + Math.random() * 0.12;
   switch (school) {
@@ -310,6 +325,7 @@ export function playSfx(name: SfxName, gain = 1): void {
   const min = MIN_INTERVAL_MS[name] ?? 0;
   if (min > 0 && now - (lastPlay.get(name) ?? 0) < min) return;
   lastPlay.set(name, now);
+  if (playSfxBank(b, name, gain)) return;
   callGain = Math.min(1.5, gain);
 
   // A little pitch jitter keeps rapid-fire combat sounds from stuttering
