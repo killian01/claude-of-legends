@@ -3,13 +3,16 @@
 // recorded match, so every order and purchase is a no-op. castAbility
 // answering false makes the deny sound an honest reply in a replay.
 // A backward seek rebuilds the sim from the record and rebinds it here, so
-// the presentation keeps reading through the same world.
+// the presentation keeps reading through the same world. The seats' names
+// come from the record's picks (the sim cannot know them): a bot's own
+// name, "House sieger", an owner and their bot; unit ids are deterministic,
+// so the names survive every rebuild.
 
 import type { ChampionDef } from '../sim/content/champions';
 import type { GameMap } from '../sim/content/map';
 import type { Projectile } from '../sim/projectiles';
 import type { Sim } from '../sim/sim';
-import type { AbilityKey, ScoreRow, TeamId, Vec2 } from '../sim/types';
+import type { ScoreRow, TeamId } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { Wall } from '../sim/walls';
 import type { Zone } from '../sim/zones';
@@ -17,9 +20,11 @@ import type { IWorld } from '../world_api';
 
 export class ReplayWorld implements IWorld {
   private sim: Sim;
+  private readonly seats: ReadonlyMap<number, string>;
 
-  constructor(sim: Sim) {
+  constructor(sim: Sim, seats: ReadonlyMap<number, string> = new Map()) {
     this.sim = sim;
+    this.seats = seats;
   }
 
   rebind(sim: Sim): void {
@@ -51,7 +56,9 @@ export class ReplayWorld implements IWorld {
     return this.sim.championDef(championId);
   }
   scoreboard(): readonly ScoreRow[] {
-    return this.sim.scoreboard();
+    return this.sim
+      .scoreboard()
+      .map((r) => ({ ...r, player: this.seats.get(r.unitId) ?? r.player }));
   }
   isVisible(team: TeamId, unitId: number): boolean {
     return this.sim.isVisible(team, unitId);

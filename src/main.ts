@@ -183,15 +183,17 @@ async function runReplay(source: number | ReplayRecord): Promise<PostMatchAction
     const { sim: first, unitIds } = buildMatchSim(rec.seed, rec.picks, rec.forged ?? []);
     let sim = first;
     const unitTeams = new Map<number, TeamId>();
+    const seatNames = new Map<number, string>();
     rec.picks.forEach((p, i) => {
       unitTeams.set(unitIds[i]!, p.team);
+      seatNames.set(unitIds[i]!, p.name);
     });
     // Follow the first human seat: their team, their fog, their story.
     const viewerIdx = Math.max(
       0,
       rec.picks.findIndex((p) => !p.bot),
     );
-    const world = new ReplayWorld(sim);
+    const world = new ReplayWorld(sim, seatNames);
     let stopped = false;
     let bar: ReplayBar | null = null;
     const finish = (action: PostMatchAction): void => {
