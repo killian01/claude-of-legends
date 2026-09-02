@@ -105,7 +105,8 @@ export function describeBehavior(b: Behavior): string {
             : b.stance === 'poke'
               ? ', poking'
               : '';
-      return `fight ${whom}${how}`;
+      const alone = b.alone === 'hold' ? ', holding when alone' : '';
+      return `fight ${whom}${how}${alone}`;
     }
     case 'sell':
       return `sell ${itemName(b.item)}`;
@@ -280,6 +281,12 @@ export const BEHAVIOR_FORMS: Readonly<Record<Behavior['kind'], KindForm>> = {
         label: 'target',
         options: ['nearest', 'lowest', 'squishiest', 'order'],
         labels: ['the nearest', 'the lowest', 'the squishiest', "the coach's focus"],
+      },
+      {
+        key: 'alone',
+        label: 'alone',
+        options: ['engage', 'hold'],
+        labels: ['engage anyway', 'hold, strike only in reach'],
       },
     ],
   },

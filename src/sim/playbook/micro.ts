@@ -212,6 +212,8 @@ export const KITE_APPROACH = 4;
 // a bot is beside an ally, or under a tower, within this much.
 export const ENGAGED_RANGE = 10;
 export const BESIDE_RANGE = 6;
+// An allied champion this close counts as company for a walk-in.
+export const ALONE_RANGE = 8;
 export const JOIN_RANGE = 40;
 export const FIGHT_TARGET_RADIUS = 25;
 // Own attack range when the observation predates the field.
@@ -253,6 +255,8 @@ export interface SlotContext {
   // Allied champions within the radius that have an enemy champion within
   // ENGAGED_RANGE of them, nearest first.
   engagedAllies(within: number): ObsUnit[];
+  // An allied champion stands within ALONE_RANGE.
+  besideAlly(): boolean;
   jitter(): { jx: number; jz: number };
   // The kit in force this slot (ADR 0014), resolved once when first asked.
   kit(): ActiveKit;
@@ -307,6 +311,10 @@ export function buildSlotContext(obs: Observation, rng: Rng, kitDef?: KitDef): S
     escortAt,
     recallClear,
     distHome: () => Math.hypot(s.x - fountain.x, s.z - fountain.z),
+    besideAlly: () =>
+      obs.units.some(
+        (u) => u.friendly && u.kind === 'champion' && dist(s.x, s.z, u) <= ALONE_RANGE,
+      ),
     engagedAllies: (within: number) =>
       obs.units
         .filter(

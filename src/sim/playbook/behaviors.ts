@@ -40,7 +40,7 @@ import {
   WARDEN_PREP_RANGE,
   WARDEN_PREP_S,
 } from './micro';
-import type { Behavior, LaneId, Stance, TargetRule } from './types';
+import type { Alone, Behavior, LaneId, Stance, TargetRule } from './types';
 
 export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
   switch (b.kind) {
@@ -59,7 +59,7 @@ export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
     case 'finishSanctum':
       return finishSanctum(ctx);
     case 'fight':
-      return fight(ctx, b.stance ?? 'auto', b.target ?? 'nearest');
+      return fight(ctx, b.stance ?? 'auto', b.target ?? 'nearest', b.alone ?? 'engage');
     case 'hunt':
       return hunt(ctx, b.hpAbove ?? 0.5);
     case 'answerVanish':
@@ -283,7 +283,7 @@ function kiteStep(ctx: SlotContext, threat: ObsUnit): Action {
 // scouting round 1 counted it as deaths on the retreat play). Poke casts
 // and steps back and never trades attacks. Auto is kite on a ranged
 // champion, front on a melee one.
-function fight(ctx: SlotContext, stance: Stance, rule: TargetRule): Action | null {
+function fight(ctx: SlotContext, stance: Stance, rule: TargetRule, alone: Alone): Action | null {
   const { s, obs } = ctx;
   const champ = pickTarget(ctx, rule);
   if (!champ) return null;
@@ -298,6 +298,9 @@ function fight(ctx: SlotContext, stance: Stance, rule: TargetRule): Action | nul
   if (mode === 'front') {
     if (cast) return cast;
     if (dc <= CHAMPION_ATTACK_RANGE) return { kind: 'attack', targetId: champ.id };
+    // Told to hold when alone: no walk-in without an allied champion
+    // beside; the plays below (join, farm) take the slot instead.
+    if (alone === 'hold' && !ctx.besideAlly()) return null;
     if (dc <= CHASE_RANGE && !ctx.inTowerReach(champ.x, champ.z)) {
       return { kind: 'move', x: champ.x, z: champ.z };
     }

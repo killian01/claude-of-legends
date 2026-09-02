@@ -120,12 +120,15 @@ longer wants is sold first when the bag is full; a build may be longer than the 
 and past six items the next target replaces the cheapest item once the gold covers the
 difference; and a `sell` play sells a named item on the owner's own condition.
 
-**The fight** takes two choices. The stance says how the bot holds distance: `kite`
+**The fight** takes three choices. The stance says how the bot holds distance: `kite`
 attacks from the edge of its range and steps away from whoever closes, `front` walks
 in, `poke` casts and steps back, and `auto` (the default) kites on a ranged champion
 and walks in on a melee one. The target rule says whom: the nearest, the lowest in
 health, the squishiest by role, or the coach's focus. A hard-controlled enemy in reach
-beats the rule, because every cast against it lands.
+beats the rule, because every cast against it lands. `alone` says what a walk-in does
+with no allied champion beside it: `engage` (the default) walks in anyway, `hold`
+strikes only what is already in reach and leaves the slot to the plays below (the
+scout on the fill: the melee fed, diving alone).
 
 **Triggers** (v1) are predicates over the observation and the static map, combinable
 with and/or/not: own health, mana, level, gold, and time thresholds; enemy or ally

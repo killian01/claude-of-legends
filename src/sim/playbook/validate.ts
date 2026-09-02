@@ -11,6 +11,7 @@ import { GAME_MAP } from '../content/map';
 import type { AbilityKey } from '../types';
 import { MAX_BUILD } from './kit';
 import {
+  type Alone,
   type Behavior,
   type KitDef,
   type KitVariant,
@@ -29,6 +30,7 @@ export const MAX_VARIANTS = 8;
 const MAX_BRANCHES = 8;
 const STANCES: readonly Stance[] = ['auto', 'kite', 'front', 'poke'];
 const TARGET_RULES: readonly TargetRule[] = ['nearest', 'lowest', 'squishiest', 'order'];
+const ALONES: readonly Alone[] = ['engage', 'hold'];
 const SKILL_KEYS: readonly SkillKey[] = ['Q', 'W', 'E'];
 const ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 const ABILITY_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
@@ -256,6 +258,11 @@ function behavior(raw: unknown, at: string, errors: Errors): Behavior {
         if (!(TARGET_RULES as readonly unknown[]).includes(raw.target)) {
           errors.add(`${at}: target must be one of ${TARGET_RULES.join(', ')}`);
         } else b.target = raw.target as TargetRule;
+      }
+      if (raw.alone !== undefined) {
+        if (!(ALONES as readonly unknown[]).includes(raw.alone)) {
+          errors.add(`${at}: alone must be one of ${ALONES.join(', ')}`);
+        } else b.alone = raw.alone as Alone;
       }
       return b;
     }

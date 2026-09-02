@@ -66,6 +66,12 @@ export type Stance = 'auto' | 'kite' | 'front' | 'poke';
 // hard-controlled enemy in reach beats the rule.
 export type TargetRule = 'nearest' | 'lowest' | 'squishiest' | 'order';
 
+// What a walk-in does with no allied champion beside it: engage as if
+// escorted, or hold and strike only what is already in reach (the scout on
+// the fill: the melee fed, Korrath twenty kills for sixty deaths, diving
+// alone).
+export type Alone = 'engage' | 'hold';
+
 // A macro intent the engine turns into movement, attacks and casts through
 // the shared micro (last hits, dodging, key roles, aim). Every parameter is
 // optional and defaults to what the default playbook (the Laner) uses.
@@ -90,8 +96,9 @@ export type Behavior =
   // Hit a vulnerable enemy Sanctum in reach when it is low or escorted.
   | { kind: 'finishSanctum' }
   // Fight the target champion: Sear in kill range, the hint-driven kit,
-  // then attacks, holding distance by the stance.
-  | { kind: 'fight'; stance?: Stance; target?: TargetRule }
+  // then attacks, holding distance by the stance; `alone` is what a walk-in
+  // does with nobody beside it (within 8): engage anyway, or hold.
+  | { kind: 'fight'; stance?: Stance; target?: TargetRule; alone?: Alone }
   // Walk to where a nearly dead enemy was last seen, when healthy.
   | { kind: 'hunt'; hpAbove?: number }
   // An enemy just vanished nearby: walk its spot when healthy, give ground

@@ -149,6 +149,18 @@ Briefing, and the before/after screenshots under `docs/screenshots`.
    pre-kit Laner on the fill; the next lever is the engine's fight itself (focus fire,
    melee engaging only beside an ally, grouping after a won fight), measured mirrored
    and head to head against the current Laner.
+   Round 3 (2026-09-02, the engine's fight, grill Q19, with a stop at 65% head to head
+   on forty fresh games): the fight gained `alone` (`engage`, the default, or `hold`: a
+   walk-in with no allied champion within 8 strikes only what is already in reach and
+   leaves the slot to the plays below), validated, described, offered by the coach and
+   the editor. Measured mirrored, head to head against the current Laner: hold when
+   alone 11-9 on seeds 91 to 100; target the lowest 5-15 (a chase after whoever runs);
+   the squishiest 9-11; a group push (two allies within 12, no enemy in sight, push mid
+   together, before farm) 13-7 on the screen and 24-16 on forty fresh games, 37-23 over
+   sixty, the most consistent lever found (two lost pairs in thirty) and still under
+   the guard; its pair variant (one ally) 13-7 on twenty. Nothing reached the stop: the
+   Laner is unchanged, the round is closed, and the group push stays a play any owner
+   can write today. Phase 12 next, as agreed.
 11. **The fill and the home lanes** (grill Q15 and Q16, 2026-09-02). Nothing
    constrained a lineup: house bots took the first free roster champions in order (an
    all-bot match was Korrath, Dain, Sylra, Fenn, Elowen on both sides, no marksman, no

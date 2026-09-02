@@ -293,6 +293,38 @@ describe('the fight', () => {
       targetId: carry.id,
     });
   });
+
+  it('holds when alone if told to: no walk-in without an ally beside, strikes in reach', () => {
+    const sim = new Sim(9);
+    const me = sim.addChampion(0, { x: 60, z: 60 }, 'korrath');
+    const foe = sim.addChampion(1, { x: 72, z: 60 }, 'vesk');
+    sim.tick();
+    const lone = ctxOf(sim, me.id);
+    const walkIn = runBehavior({ kind: 'fight' }, lone) as Action;
+    expect(walkIn.kind).toBe('move');
+    if (walkIn.kind === 'move') expect(walkIn.x).toBeGreaterThan(68);
+    expect(runBehavior({ kind: 'fight', alone: 'hold' }, lone)).toBeNull();
+    // In reach, the strike lands whatever the company.
+    foe.pos.x = 66;
+    sim.tick();
+    expect(runBehavior({ kind: 'fight', alone: 'hold' }, ctxOf(sim, me.id))).toEqual({
+      kind: 'attack',
+      targetId: foe.id,
+    });
+    // An ally beside: the walk-in is back.
+    foe.pos.x = 72;
+    sim.addChampion(0, { x: 58, z: 60 }, 'maera');
+    sim.tick();
+    const escorted = runBehavior({ kind: 'fight', alone: 'hold' }, ctxOf(sim, me.id)) as Action;
+    expect(escorted.kind).toBe('move');
+    if (escorted.kind === 'move') expect(escorted.x).toBeGreaterThan(68);
+    const v = validatePlaybook({
+      version: 2,
+      plays: [{ id: 'a', when: { kind: 'always' }, do: { kind: 'fight', alone: 'maybe' } }],
+    });
+    expect(v.ok).toBe(false);
+    if (!v.ok) expect(v.errors.join(' ')).toMatch(/alone/);
+  });
 });
 
 describe('selling', () => {
