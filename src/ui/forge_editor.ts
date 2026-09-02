@@ -9,9 +9,17 @@
 // is a slot bar (passive plus Q W E R) with the selected spell's icon
 // generation and parameters below it.
 
+import { attackSoundOf, castSoundOf } from '../game/champion_sounds';
 import { forgedClipFileUrls, registerForgedAssets } from '../game/forged_visuals';
+import { playCastSfx, playSfx } from '../game/sfx';
 import { RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import type { ChampionBaseStats, ChampionGrowth, ChampionRole } from '../sim/content/champions';
+import {
+  ATTACK_SOUNDS,
+  type AttackSoundId,
+  CAST_SOUNDS,
+  type CastSoundId,
+} from '../sim/content/sounds';
 import { ABILITY_BOUNDS, BASE_STAT_BOUNDS, FLAVOR_MAX, GROWTH_BOUNDS } from '../sim/forge/bounds';
 import { budgetOf } from '../sim/forge/budget';
 import { burstCapOf, burstOf } from '../sim/forge/burst';
@@ -2091,7 +2099,15 @@ export function openForgeEditor(container: HTMLElement): void {
         apply.title = 'Fills the form with this kit; nothing is saved until you save';
         apply.addEventListener('click', () => {
           current.passive = structuredClone(p.passive);
+          // The kit is the conversation's; the sounds stay the creator's.
+          const kept = current.abilities;
           current.abilities = structuredClone(p.abilities);
+          for (const key of ['Q', 'W', 'E', 'R'] as const) {
+            const sound = kept[key]?.sound;
+            if (sound !== undefined && current.abilities[key].sound === undefined) {
+              current.abilities[key].sound = sound;
+            }
+          }
           status.textContent = 'The proposed kit is on the form: review, tweak, then save.';
           renderMain();
           refresh();
@@ -2160,6 +2176,35 @@ export function openForgeEditor(container: HTMLElement): void {
       slots.append(col);
     }
     slotsPanel.append(slots);
+    // The basic attack's sound, from the palette (each spell picks its
+    // cast sound below, beside its animation): a pick plays at once, so
+    // it is heard before it is kept; autosave carries it with the def.
+    const atkRow = el('div', 'fe-artrow');
+    atkRow.append(el('span', 'fe-desc', 'Basic attack sound'));
+    const atkSel = el('select', 'fe-select fe-sound') as HTMLSelectElement;
+    const atkAuto = document.createElement('option');
+    atkAuto.value = '';
+    atkAuto.textContent = 'Auto: a whip of air';
+    atkSel.append(atkAuto);
+    for (const s of ATTACK_SOUNDS) {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.label;
+      atkSel.append(opt);
+    }
+    atkSel.value = current.attackSound ?? '';
+    atkSel.disabled = sealed;
+    atkSel.addEventListener('change', () => {
+      if (atkSel.value === '') current.attackSound = undefined;
+      else current.attackSound = atkSel.value as AttackSoundId;
+      playSfx(attackSoundOf(current, false));
+      refresh();
+    });
+    const atkHear = el('button', 'fe-mini', 'Play') as HTMLButtonElement;
+    atkHear.title = 'Hear the basic attack';
+    atkHear.addEventListener('click', () => playSfx(attackSoundOf(current, false)));
+    atkRow.append(atkSel, atkHear);
+    slotsPanel.append(atkRow);
     if (!sealed) {
       const all = el('div', 'fe-artrow');
       const genAll = el('button', 'fe-gen small', 'Generate all four icons') as HTMLButtonElement;
@@ -2451,16 +2496,16 @@ export function openForgeEditor(container: HTMLElement): void {
     });
     panel.append(advanced);
     main.append(panel);
-    renderSpellAnimation(key);
+    renderSpellAnimation(key, sealed);
   }
 
   // The spell's own animation (playtest round 6 ask): each ability key
   // gets a dedicated pick from the cast and strike catalogs, previewed
   // on the mannequin, applied on its own like any clip change. A spell
   // without a pick plays the shared cast animation.
-  function renderSpellAnimation(key: AbilityKey): void {
+  function renderSpellAnimation(key: AbilityKey, sealed: boolean): void {
     const panel = el('div', 'fe-panel');
-    panel.append(el('h3', '', `${key} animation`));
+    panel.append(el('h3', '', `${key} animation and sound`));
     const row = currentRow();
     const slot = `cast${key}`;
     const bakedPick = row?.clips?.[slot];
@@ -2516,6 +2561,36 @@ export function openForgeEditor(container: HTMLElement): void {
           : 'This spell has its own animation; picking another replaces it.',
       ),
     );
+    // The cast sound: the school's by default (derived from what the spell
+    // does), or one of the palette; a pick plays at once, so it is heard
+    // before it is kept. Presentation on the def: autosave carries it.
+    const ability = current.abilities[key];
+    const soundRow = el('div', 'fe-artrow');
+    soundRow.append(el('span', 'fe-desc', 'Sound'));
+    const soundSel = el('select', 'fe-select fe-sound') as HTMLSelectElement;
+    const auto = document.createElement('option');
+    auto.value = '';
+    auto.textContent = `Auto: the ${castSoundOf({ ...ability, sound: undefined })} school`;
+    soundSel.append(auto);
+    for (const s of CAST_SOUNDS) {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.label;
+      soundSel.append(opt);
+    }
+    soundSel.value = ability.sound ?? '';
+    soundSel.disabled = sealed;
+    soundSel.addEventListener('change', () => {
+      if (soundSel.value === '') ability.sound = undefined;
+      else ability.sound = soundSel.value as CastSoundId;
+      playCastSfx(castSoundOf(ability));
+      refresh();
+    });
+    const hear = el('button', 'fe-mini', 'Play') as HTMLButtonElement;
+    hear.title = 'Hear this cast';
+    hear.addEventListener('click', () => playCastSfx(castSoundOf(ability)));
+    soundRow.append(soundSel, hear);
+    panel.append(soundRow);
     if (!animPreview) animPreview = createAnimPreview();
     panel.append(animPreview.el);
     main.append(panel);

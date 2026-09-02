@@ -10,6 +10,7 @@
 import type { AbilityDef, CastSpec } from '../combat/casting';
 import type { EffectSpec } from '../combat/effects';
 import type { ChampionBaseStats, ChampionGrowth } from '../content/champions';
+import { CAST_SOUNDS, isCastSound } from '../content/sounds';
 import type { ForgedChampionDef } from './forged_def';
 
 export interface Bound {
@@ -432,6 +433,9 @@ function checkAbility(errors: string[], key: string, def: unknown): void {
   const a = def as Record<string, unknown> & Partial<AbilityDef>;
   if (a.flavor !== undefined && (typeof a.flavor !== 'string' || a.flavor.length > FLAVOR_MAX)) {
     errors.push(`${path}.flavor: must be a string of at most ${FLAVOR_MAX} characters`);
+  }
+  if (a.sound !== undefined && !isCastSound(a.sound)) {
+    errors.push(`${path}.sound: must be one of ${CAST_SOUNDS.map((s) => s.id).join(', ')}`);
   }
   checkNum(errors, `${path}.manaCost`, a.manaCost, ABILITY_BOUNDS.manaCost);
   checkNum(errors, `${path}.castRange`, a.castRange, ABILITY_BOUNDS.castRange);

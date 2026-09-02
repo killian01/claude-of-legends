@@ -7,6 +7,7 @@
 
 import type { AbilityDef } from '../combat/casting';
 import type { ChampionBaseStats, ChampionGrowth, ChampionRole } from '../content/champions';
+import type { AttackSoundId } from '../content/sounds';
 import type { AbilityKey } from '../types';
 
 // The passive is a reference into the engine's template set
@@ -43,4 +44,8 @@ export interface ForgedChampionDef {
   base: ChampionBaseStats;
   growth: ChampionGrowth;
   abilities: Record<AbilityKey, ForgedAbilityDef>;
+  // The basic attack's sound, picked from the palette (content/sounds.ts);
+  // each ability carries its own cast sound the same way. Presentation
+  // the sim ignores, validated like every field so the wire stays bounded.
+  attackSound?: AttackSoundId;
 }

@@ -32,5 +32,6 @@ export function resolveForgedChampion(def: ForgedChampionDef): ChampionDef {
     base: def.base,
     growth: def.growth,
     abilities: def.abilities,
+    ...(def.attackSound !== undefined ? { attackSound: def.attackSound } : {}),
   };
 }

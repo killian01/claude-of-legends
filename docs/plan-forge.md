@@ -77,7 +77,11 @@ and their written UGC authorization; details inline.
    reach the match: they ride the draft rows, the gallery entries and the
    match_start assets block, the client registry (`src/ui/forged_icons.ts`) puts
    them ahead of the shipped paintings, and `scripts/e2e_test_drive.mjs` reads
-   them off the HUD of a test drive. REMAINING: the agent endpoint that
+   them off the HUD of a test drive. The test drive opens with every champion at
+   the ultimate's level (`Sim.setLevel` walks the xp curve), so R is on the
+   table at once; and the creator picks a cast sound per spell and a basic-attack
+   sound from the procedural palette (`src/sim/content/sounds.ts`, heard on pick,
+   carried by the definition, bounded by the validator). REMAINING: the agent endpoint that
    compiles free-text passives into primitives with refusal explanations (needs
    a Claude API key); the generated weapon prop itself stays phase 5's Tripo
    half (the procedural prop library carries the grip flow until then).

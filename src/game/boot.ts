@@ -6,7 +6,7 @@
 // toasts fire here from mirrored state, before (or instead of) the
 // authoritative answer.
 
-import { schoolColorOf, schoolTagOf } from '../render/ability_vfx';
+import { schoolColorOf } from '../render/ability_vfx';
 import { Renderer } from '../render/renderer';
 import { effectiveRank, ULT_RANK_LEVELS } from '../sim/stats';
 import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
@@ -16,6 +16,7 @@ import { Hud, type NetHooks } from '../ui/hud';
 import { Minimap } from '../ui/minimap';
 import { buildTouchBar } from '../ui/touch_bar';
 import type { IWorld } from '../world_api';
+import { castSoundOf } from './champion_sounds';
 import type { PostMatchAction } from './flow';
 import { requestGameFullscreen } from './fullscreen';
 import { type InputHandlers, setupInput } from './input';
@@ -162,8 +163,9 @@ export function startPresentation(
     // The sim can still refuse (decision budget, stun): that denial must be
     // audible, never a silently dead key.
     if (!ok) playSfx('deny');
-    // Your own casts sound like THEIR school, not the shared whoosh.
-    if (ok && ab) playCastSfx(schoolTagOf(ab.spec));
+    // Your own casts sound like THEIR school (or the creator's pick), not
+    // the shared whoosh.
+    if (ok && ab) playCastSfx(castSoundOf(ab));
     // Instant abilities spawn no projectile or zone: flash their shape in
     // the ability's school color so the cast visibly happened.
     if (

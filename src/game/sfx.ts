@@ -19,6 +19,12 @@ export type SfxName =
   | 'buy'
   | 'swing'
   | 'gunshot'
+  // The rest of the basic-attack palette a forged creator picks from
+  // (src/sim/content/sounds.ts).
+  | 'blade'
+  | 'heavy'
+  | 'bow'
+  | 'bolt'
   | 'impact'
   | 'towershot';
 
@@ -190,12 +196,18 @@ const MIN_INTERVAL_MS: Partial<Record<SfxName, number>> = {
   deny: 160,
   swing: 90,
   gunshot: 90,
+  blade: 90,
+  heavy: 90,
+  bow: 90,
+  bolt: 90,
   impact: 70,
   towershot: 120,
 };
 
 // Per-school cast sounds, six sonic identities instead of one shared
-// whoosh (player review). gain < 1 for other units' casts, by distance.
+// whoosh (player review), plus three more a forged creator can pick
+// (frost, shadow, thunder; the palette in src/sim/content/sounds.ts).
+// gain < 1 for other units' casts, by distance.
 export function playCastSfx(school: string, gain = 1): void {
   const b = audioBus();
   if (!b || b.ctx.state === 'suspended' || gain <= 0.02) return;
@@ -236,6 +248,40 @@ export function playCastSfx(school: string, gain = 1): void {
     case 'wind':
       // A fast breathy sweep.
       noise(b, { dur: 0.22, freq: 900 * j, slideTo: 5200 * j, q: 0.6, vol: 0.55, verb: 0.4 });
+      break;
+    case 'frost':
+      // A glassy crystalline ring over a thin icy hiss.
+      tone(b, { freq: 1760 * j, dur: 0.35, type: 'sine', vol: 0.28, verb: 0.7 });
+      tone(b, { freq: 2637 * j, dur: 0.3, type: 'triangle', delay: 0.03, vol: 0.14, verb: 0.7 });
+      noise(b, { dur: 0.25, freq: 6000, slideTo: 9500, type: 'highpass', vol: 0.18, verb: 0.5 });
+      break;
+    case 'shadow':
+      // A dark hiss drawn inward: a slow-swelling breath closing down,
+      // over a sub growl.
+      noise(b, {
+        dur: 0.32,
+        freq: 2200 * j,
+        slideTo: 160,
+        type: 'lowpass',
+        vol: 0.6,
+        attack: 0.12,
+        verb: 0.5,
+      });
+      tone(b, {
+        freq: 70 * j,
+        slideTo: 40,
+        dur: 0.36,
+        type: 'sawtooth',
+        vol: 0.26,
+        lpf: 300,
+        verb: 0.4,
+      });
+      break;
+    case 'thunder':
+      // An instant crack, then the rumble rolling under it.
+      noise(b, { dur: 0.05, freq: 3600 * j, slideTo: 900, q: 0.5, vol: 0.9, attack: 0.001 });
+      noise(b, { dur: 0.5, freq: 420, slideTo: 80, type: 'lowpass', vol: 0.7, verb: 0.6 });
+      tone(b, { freq: 60 * j, slideTo: 34, dur: 0.45, type: 'sine', vol: 0.6 });
       break;
     default:
       // Arcane: the airy whoosh with a shimmer above it.
@@ -315,6 +361,33 @@ export function playSfx(name: SfxName, gain = 1): void {
         verb: 0.5,
       });
       tone(b, { freq: 150 * j, slideTo: 55, dur: 0.12, type: 'sine', vol: 0.5 });
+      break;
+    case 'blade':
+      // A metallic slash: the whip of air with steel ringing on top.
+      noise(b, { dur: 0.1, freq: 1200 * j, slideTo: 3600 * j, q: 1.8, vol: 0.4 });
+      tone(b, {
+        freq: 2600 * j,
+        slideTo: 1800,
+        dur: 0.08,
+        type: 'triangle',
+        vol: 0.16,
+        verb: 0.25,
+      });
+      break;
+    case 'heavy':
+      // A deep whoosh, then the thud of the weight landing.
+      noise(b, { dur: 0.14, freq: 300 * j, slideTo: 900 * j, type: 'lowpass', vol: 0.5 });
+      tone(b, { freq: 120 * j, slideTo: 50, dur: 0.14, type: 'sine', delay: 0.06, vol: 0.5 });
+      break;
+    case 'bow':
+      // The string's twang and the arrow's hiss leaving it.
+      tone(b, { freq: 440 * j, slideTo: 180, dur: 0.09, type: 'triangle', vol: 0.3 });
+      noise(b, { dur: 0.16, freq: 2500 * j, slideTo: 5500 * j, q: 1.5, vol: 0.25, delay: 0.02 });
+      break;
+    case 'bolt':
+      // A short arcane zap: a falling square tone with a bright snap.
+      tone(b, { freq: 900 * j, slideTo: 300, dur: 0.1, type: 'square', vol: 0.22, lpf: 1800 });
+      noise(b, { dur: 0.08, freq: 3000 * j, slideTo: 800, q: 1.2, vol: 0.3 });
       break;
     case 'impact':
       // The crack of YOUR damage landing on someone else.

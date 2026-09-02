@@ -1,9 +1,11 @@
-// E2E for a forged champion's spell icons in the match (plan-forge phase
-// 4, playtest: a test drive showed procedural icons over a champion whose
-// creator had chosen four). Signs in, opens a saved draft in the Forge,
-// reads the icons its Spells tab shows, starts the test drive, and checks
-// that the HUD's Q W E R slots wear the same files and that each one
-// loads from the asset route.
+// E2E for a forged champion's test drive (plan-forge phase 4, playtest: a
+// test drive showed procedural icons over a champion whose creator had
+// chosen four, opened at level 1 with R locked, and had no say on its
+// sounds). Signs in, opens a saved draft in the Forge, reads the icons its
+// Spells tab shows, picks a basic-attack and a cast sound and reads them
+// back from the drafts route, starts the test drive, and checks that the
+// HUD's Q W E R slots wear the same icon files (each loading from the
+// asset route) and that the match opens at the ultimate's level.
 //
 // Runs against the Vite client (E2E_URL, default :5173) over a game server;
 // point E2E_URL at a server's own port to test a built dist/ instead.
@@ -112,6 +114,58 @@ const run = async () => {
   console.log(`${chosen.length} chosen icons on the Spells tab`);
   if (chosen.length === 0) throw new Error(`draft ${draft} has no chosen icon to check`);
 
+  // The sounds: the basic attack's pick sits under the slots, each spell's
+  // cast pick beside its animation. A pick autosaves with the def, so the
+  // drafts route must read it back; then both go back to auto.
+  const pickSound = async (selectIndex, value) => {
+    await page.evaluate(
+      (i, v) => {
+        const sel = document.querySelectorAll('select.fe-sound')[i];
+        if (!sel) throw new Error(`no sound select ${i}`);
+        sel.value = v;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+      },
+      selectIndex,
+      value,
+    );
+  };
+  const savedSounds = async () => {
+    const r = await page.evaluate(async (d) => {
+      const res = await fetch('/api/forge/drafts', { credentials: 'same-origin' });
+      const body = await res.json();
+      const row = (body.drafts ?? []).find((x) => x.def.name === d);
+      return row
+        ? { attack: row.def.attackSound ?? null, q: row.def.abilities.Q.sound ?? null }
+        : null;
+    }, draft);
+    return r;
+  };
+  const waitSaved = async (want, label) => {
+    const start = Date.now();
+    while (Date.now() - start < 15000) {
+      const got = await savedSounds();
+      if (got && got.attack === want.attack && got.q === want.q) return;
+      await sleep(400);
+    }
+    throw new Error(
+      `autosave did not carry the sounds (${label}): ${JSON.stringify(await savedSounds())}`,
+    );
+  };
+  await page.evaluate(() => document.querySelectorAll('.fe-slot')[1].click());
+  await waitFor(page, findH3('Q animation and sound'), 'the Q sound row', 5000);
+  const soundSelects = await page.evaluate(
+    () => document.querySelectorAll('select.fe-sound').length,
+  );
+  if (soundSelects !== 2)
+    throw new Error(`expected the attack and the Q sound selects, saw ${soundSelects}`);
+  await pickSound(0, 'bow');
+  await pickSound(1, 'thunder');
+  await waitSaved({ attack: 'bow', q: 'thunder' }, 'picked');
+  console.log('sounds OK: the attack and Q picks autosaved with the def');
+  await pickSound(0, '');
+  await pickSound(1, '');
+  await waitSaved({ attack: null, q: null }, 'back to auto');
+
   // The test drive: the practice match with the draft, its HUD wearing
   // the same files.
   await clickButton(page, 'Test drive (practice)');
@@ -140,6 +194,18 @@ const run = async () => {
     }
   }
   console.log('HUD OK: every chosen icon is on its slot');
+
+  // The test drive opens at the ultimate's level: the badge reads 6 and R
+  // is not waiting on a level.
+  const level = await page.evaluate(() => document.querySelector('.hud-level')?.textContent ?? '');
+  if (level !== '6') throw new Error(`the test drive opened at level ${level}, not 6`);
+  const rCover = await page.evaluate(() => {
+    const r = document.querySelectorAll('.hud-slot:not(.passive)')[3];
+    const cd = r?.querySelector('.hud-slot-cd');
+    return cd && cd.style.display !== 'none' ? cd.textContent : '';
+  });
+  if (/^Lv/.test(rCover)) throw new Error(`R still waits on a level: ${rCover}`);
+  console.log('level OK: the test drive opens at level 6 with R on the table');
 
   // Each icon must actually load through the asset route: a pointer the
   // server refuses would paint an empty slot.

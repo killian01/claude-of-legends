@@ -9,6 +9,7 @@
 import type { CastSpec } from '../combat/casting';
 import type { EffectSpec } from '../combat/effects';
 import type { ChampionRole } from '../content/champions';
+import { ATTACK_SOUNDS, isAttackSound } from '../content/sounds';
 import { boundsErrors, FLAVOR_MAX } from './bounds';
 import { type BudgetBreakdown, budgetOf } from './budget';
 import { burstErrors } from './burst';
@@ -97,6 +98,9 @@ function structureErrors(def: ForgedChampionDef): string[] {
   checkString(errors, 'creator', def.creator, NAME_MAX, false);
   if (!FORGED_ROLES.includes(def.role)) {
     errors.push(`role: must be one of ${FORGED_ROLES.join(', ')}`);
+  }
+  if (def.attackSound !== undefined && !isAttackSound(def.attackSound)) {
+    errors.push(`attackSound: must be one of ${ATTACK_SOUNDS.map((s) => s.id).join(', ')}`);
   }
   return errors;
 }

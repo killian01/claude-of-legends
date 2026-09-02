@@ -3,6 +3,7 @@
 // immediate effects. Content only declares; this module executes. Sigils
 // reuse executeCast with their own bookkeeping.
 
+import type { CastSoundId } from '../content/sounds';
 import { passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
 import { isSpellTarget } from '../spell_targets';
@@ -112,6 +113,9 @@ export interface AbilityDef {
   // (ui/describe.ts): the spell's image, never its numbers. Forged
   // champions carry it; the roster reads well enough without.
   flavor?: string;
+  // The cast sound, one of the palette (content/sounds.ts); a forged
+  // creator's pick. Absent, the spell sounds like its school.
+  sound?: CastSoundId;
   manaCost: number;
   cooldown: number;
   castRange: number;

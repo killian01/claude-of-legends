@@ -19,6 +19,7 @@ import { BOTS, DEFAULT_BOT_ID } from './sim/content/bots';
 import { CHAMPION_LIST } from './sim/content/champions';
 import type { ForgedChampionDef } from './sim/forge/forged_def';
 import { Sim } from './sim/sim';
+import { ULT_RANK_LEVELS } from './sim/stats';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
 import { type AuthedAccount, currentAccount } from './ui/auth';
 import { takeDiscordResult } from './ui/discord_entry';
@@ -77,16 +78,25 @@ function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
     const world: IWorld = sim;
     const self = sim.addChampion(0, undefined, pick.championId, pick.skin);
     self.sigils = [...pick.sigils];
+    const champions = [self];
     // A full 5v5: your four allies and all five opponents are Policy bots,
     // with deterministic skin variety (the sim clamps out-of-range picks).
     const roster = CHAMPION_LIST.filter((c) => c.id !== pick.championId).map((c) => c.id);
     for (let i = 0; i < 4; i++) {
       const ally = sim.addChampion(0, undefined, roster[i]!, i % 3);
       sim.attachPolicy(ally.id, BOTS[DEFAULT_BOT_ID]!.policy);
+      champions.push(ally);
     }
     for (let i = 0; i < 5; i++) {
       const enemy = sim.addChampion(1, undefined, roster[(i + 4) % roster.length]!, i % 3);
       sim.attachPolicy(enemy.id, BOTS[DEFAULT_BOT_ID]!.policy);
+      champions.push(enemy);
+    }
+    // A Forge test drive opens at the level the ultimate unlocks, everyone
+    // alike: the creator came to try R too, and the bots meet it on equal
+    // footing (playtest).
+    if (pick.forged) {
+      for (const u of champions) sim.setLevel(u.id, ULT_RANK_LEVELS[0]!);
     }
 
     let stopped = false;
