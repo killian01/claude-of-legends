@@ -410,7 +410,7 @@ export class Sim {
   // skill points and stat growth land exactly as a match grants them.
   setLevel(unitId: number, level: number): void {
     const u = this.units.get(unitId);
-    if (!u || u.kind !== 'champion') return;
+    if (u?.kind !== 'champion') return;
     levelTo(u, level);
   }
 
