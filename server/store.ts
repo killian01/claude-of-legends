@@ -72,6 +72,25 @@ export function pruneNumberedJson(
   return doomed;
 }
 
+// The highest `<n>.json` in a directory, 0 when there is none: what the
+// match id counter restarts above at boot. Ids name replay files, so an
+// id handed out twice overwrites a replay an old Record entry or match
+// log line still points at.
+export function maxNumberedJson(dir: string): number {
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return 0;
+  }
+  let max = 0;
+  for (const n of names) {
+    const m = /^(\d+)\.json$/.exec(n);
+    if (m && Number(m[1]) > max) max = Number(m[1]);
+  }
+  return max;
+}
+
 export function readJsonl<T>(file: string): T[] {
   let raw: string;
   try {

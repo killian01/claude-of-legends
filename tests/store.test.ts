@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   appendJsonl,
   loadJson,
+  maxNumberedJson,
   pruneNumberedJson,
   readJsonl,
   saveJsonAtomic,
@@ -50,6 +51,18 @@ describe('json store', () => {
     // Non-numbered files are never touched; a missing dir is a no-op.
     expect(loadJson(path.join(dir, 'players.json'), null)).toEqual([]);
     expect(pruneNumberedJson(path.join(dir, 'nope'), 2)).toEqual([]);
+  });
+
+  // The regression behind it: match ids restarted at 1 on every boot, so
+  // a fresh match overwrote the replay file an older Record entry still
+  // pointed at, and its Match sheet opened somebody else's match.
+  it('reads the highest numbered json back, for the id restart at boot', () => {
+    const dir = tmp();
+    for (const n of [3, 10, 22]) saveJsonAtomic(path.join(dir, `${n}.json`), { n });
+    saveJsonAtomic(path.join(dir, 'players.json'), []);
+    expect(maxNumberedJson(dir)).toBe(22);
+    expect(maxNumberedJson(path.join(dir, 'nope'))).toBe(0);
+    expect(maxNumberedJson(tmp())).toBe(0);
   });
 
   it('appends jsonl lines and skips a torn last line', () => {

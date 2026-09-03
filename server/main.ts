@@ -113,7 +113,13 @@ import { setForgedAttackRange } from './reforge';
 import { RejoinRegistry } from './rejoin';
 import { sealChampion, unsealChampion } from './seal';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
-import { appendJsonl, pruneNumberedJson, readJsonl, saveJsonAtomic } from './store';
+import {
+  appendJsonl,
+  maxNumberedJson,
+  pruneNumberedJson,
+  readJsonl,
+  saveJsonAtomic,
+} from './store';
 import { suggestKit } from './suggest';
 import { suggestStats } from './suggest_stats';
 
@@ -371,6 +377,15 @@ const REPLAY_KEEP = 40;
 // The whole log stays in memory for profile queries; one line per match,
 // appended as each ends (kilobytes each, guests-scale).
 const matchLog: MatchRecord[] = readJsonl<MatchRecord>(MATCHES_FILE);
+// Match ids restart above everything already on disk: a replay file, a
+// replay a Record entry still holds, a match log line. Ids name replay
+// files, so an id handed out twice would overwrite a replay an older
+// entry still points at, and its Match sheet would open somebody else's
+// match.
+nextMatchId = maxNumberedJson(REPLAYS_DIR) + 1;
+for (const id of botStore.heldReplayIds()) if (id >= nextMatchId) nextMatchId = id + 1;
+for (const m of matchLog)
+  if (m.replayId !== undefined && m.replayId >= nextMatchId) nextMatchId = m.replayId + 1;
 // The Arena (docs/design/bots.md): matches off the live loop in a worker
 // thread bundled beside the server, inline when the bundle is missing
 // (a dev host running the TypeScript straight). Match ids are shared with
