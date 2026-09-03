@@ -27,6 +27,34 @@ function span(className: string, text?: string): HTMLSpanElement {
   return s;
 }
 
+// A build as a row of item icons, six slots wide so a full inventory and an
+// empty one read as the same shape; the Academy's summaries and the Record
+// draw the same row the scoreboard does.
+export function buildIcons(items: readonly string[] | undefined, size = 30): HTMLElement {
+  const build = document.createElement('div');
+  build.className = 'hud-score-build';
+  const owned = items ?? [];
+  for (let i = 0; i < INVENTORY_SLOTS; i++) {
+    const id = owned[i];
+    const item = id ? ITEMS[id] : undefined;
+    if (!item) {
+      const slot = span('slot');
+      slot.style.width = `${size}px`;
+      slot.style.height = `${size}px`;
+      build.appendChild(slot);
+      continue;
+    }
+    const img = document.createElement('img');
+    img.src = itemIconUrl(item);
+    img.width = size;
+    img.height = size;
+    img.alt = item.name;
+    attachTooltip(img, () => describeItem(item, statLabel(item.stats)));
+    build.appendChild(img);
+  }
+  return build;
+}
+
 export function scoreboardHead(): HTMLElement {
   const head = document.createElement('div');
   head.className = 'hud-score-row head';
@@ -53,26 +81,7 @@ export function renderScoreboardTeam(
     champ.append(document.createTextNode(r.name), span('lv', ` Lv ${r.level}`));
     const kda = span('hud-score-kda', `${r.kills} / ${r.deaths} / ${r.assists ?? 0}`);
     const cs = span('hud-score-cs', String(r.cs ?? 0));
-    // The build, six slots wide so a full inventory and an empty one read as
-    // the same shape.
-    const build = document.createElement('div');
-    build.className = 'hud-score-build';
-    const owned = r.items ?? [];
-    for (let i = 0; i < INVENTORY_SLOTS; i++) {
-      const id = owned[i];
-      const item = id ? ITEMS[id] : undefined;
-      if (!item) {
-        build.appendChild(span('slot'));
-        continue;
-      }
-      const img = document.createElement('img');
-      img.src = itemIconUrl(item);
-      img.width = 30;
-      img.height = 30;
-      attachTooltip(img, () => describeItem(item, statLabel(item.stats)));
-      build.appendChild(img);
-    }
-    row.append(player, champ, kda, cs, build);
+    row.append(player, champ, kda, cs, buildIcons(r.items));
     box.appendChild(row);
   }
 }

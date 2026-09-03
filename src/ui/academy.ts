@@ -8,6 +8,7 @@
 
 import { runSeries, runSparring } from '../game/sparring';
 import {
+  botRow,
   SERIES_SEEDS,
   type SeriesMatch,
   type SeriesSummary,
@@ -48,6 +49,7 @@ import {
   TRIGGER_FORMS,
   TRIGGER_KINDS,
 } from './playbook_text';
+import { buildIcons } from './scoreboard_table';
 
 const CSS = `
 .ac, .ac * { box-sizing: border-box; }
@@ -138,6 +140,15 @@ const CSS = `
 .ac-form { display: flex; flex-direction: column; gap: 4px; }
 .ac-panel h4 { margin: 6px 8px 4px 0; font-size: 11px; color: #6cc3e0; text-transform: uppercase; letter-spacing: 0.5px; }
 .ac-kit-item { flex: 1; color: #c8d6e0; }
+.ac-line { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 6px 0 2px; }
+.ac-line .verdict { font-weight: 800; font-size: 13px; color: #e0ecf3; }
+.ac-line .verdict.won { color: #9fe0a8; }
+.ac-line .verdict.lost { color: #f0a090; }
+.ac-line .kda { font-weight: 800; font-size: 14px; color: #e0c070; letter-spacing: 0.5px; }
+.ac-line .dim { color: #7f9cae; }
+.ac .hud-score-build { display: flex; gap: 3px; margin: 2px 0 6px; }
+.ac .hud-score-build img { border-radius: 4px; border: 1px solid #2c4d60; background: #070d12; display: block; }
+.ac .hud-score-build .slot { display: block; border-radius: 4px; border: 1px dashed #1f3644; background: #070d12; }
 `;
 
 let cssInstalled = false;
@@ -330,6 +341,10 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
   let coachText = '';
   let coachStage = '';
   let coachRefused: string[] = [];
+  // The chat log follows the conversation to its end unless the reader has
+  // scrolled up to re-read something (playtest round 3: every answer had to
+  // be scrolled to by hand).
+  let chatStick = true;
   let deep = false;
   let sparRunning = false;
   let sparResult: SparResult | null = null;
@@ -1325,10 +1340,16 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
 
   // --- the side: the coach, and sparring ---
   function renderSide(): void {
+    // The column is rebuilt whole; its scroll position is not part of what
+    // changed, so it comes back where it was.
+    const keepScroll = side.scrollTop;
     side.textContent = '';
     if (!current || !working) return;
     const bot = current;
     const def = working;
+    const stickLog = (log: HTMLElement): void => {
+      if (chatStick) log.scrollTop = log.scrollHeight;
+    };
 
     const coach = el('div', 'ac-panel');
     coach.style.display = 'flex';
@@ -1374,6 +1395,9 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         bubble.append(el('small', '', `Refused: ${coachRefused.join('; ')}`));
       log.append(bubble);
     }
+    log.addEventListener('scroll', () => {
+      chatStick = log.scrollTop + log.clientHeight >= log.scrollHeight - 12;
+    });
     coach.append(log);
     const row = el('div', 'ac-chatrow');
     const input = el('input', 'ac-input') as HTMLInputElement;
@@ -1398,6 +1422,9 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       coachText = '';
       coachStage = '';
       coachRefused = [];
+      // Sending is reading the answer: the log follows it whatever was
+      // scrolled before.
+      chatStick = true;
       renderSide();
       renderMain();
       void coachStream<{
@@ -1425,12 +1452,16 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
               renderMain();
             } else coachRefused.push(r.error);
           } else if (line.progress === 'refused') coachRefused.push(line.error ?? 'refused');
-          const bubble = log.lastElementChild as HTMLElement | null;
-          if (bubble) {
+          // The bubble grows in place while the answer streams; `log` here is
+          // whichever log the latest render built.
+          const live = side.querySelector('.ac-chatlog') as HTMLElement | null;
+          const bubble = live?.lastElementChild as HTMLElement | null;
+          if (live && bubble) {
             bubble.textContent = coachText !== '' ? coachText : `${coachStage || 'Thinking'}...`;
             if (coachRefused.length > 0) {
               bubble.append(el('small', '', `Refused: ${coachRefused.join('; ')}`));
             }
+            stickLog(live);
           }
         },
       ).then((r) => {
@@ -1482,6 +1513,8 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     }
     coach.append(opts);
     side.append(coach);
+    // Only in the document does the log have a height to scroll.
+    stickLog(log);
 
     const sparBox = el('div', 'ac-panel');
     sparBox.append(el('h3', '', 'Sparring'));
@@ -1646,15 +1679,17 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     if (seriesResult) {
       const sr = seriesResult;
       const s = sr.summary;
-      const line = el('div', 'ac-row');
+      const line = el('div', 'ac-line');
+      const cls = s.wins > s.losses ? 'won' : s.losses > s.wins ? 'lost' : '';
       line.append(
         el(
-          'div',
-          'ac-status',
+          'span',
+          `verdict ${cls}`,
           `${sr.versus}: ${s.wins} won, ${s.losses} lost` +
-            (s.draws > 0 ? `, ${s.draws} without a winner` : '') +
-            ` over ${sr.matches.length} seeds; ${s.deaths} deaths.`,
+            (s.draws > 0 ? `, ${s.draws} without a winner` : ''),
         ),
+        el('span', 'kda', `${s.kills} / ${s.deaths} / ${s.assists}`),
+        el('span', 'dim', `${s.cs} cs over ${sr.matches.length} seeds`),
       );
       const dismiss = el('button', 'ac-btn mini', 'Dismiss');
       dismiss.title = 'Put the series away';
@@ -1685,9 +1720,11 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         const tr = el('tr', '');
         const outcome =
           m.result.winner === null ? 'no winner' : m.result.winner === m.team ? 'won' : 'lost';
+        const row = botRow(m.result);
         tr.append(
           el('td', '', `seed ${m.seed}`),
           el('td', '', `${outcome} after ${fmtSeconds(m.result.ticks)}`),
+          el('td', 'num', row ? `${row.kills} / ${row.deaths} / ${row.assists ?? 0}` : ''),
         );
         const cell = el('td', 'num');
         const watch = el('button', 'ac-btn mini', 'Watch');
@@ -1707,14 +1744,20 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     if (sparError) sparBox.append(el('div', 'ac-status bad', sparError));
     if (sparResult) {
       const r = sparResult;
-      const verdict =
-        r.winner === 0
-          ? 'Your bot’s team won'
-          : r.winner === 1
-            ? 'Your bot’s team lost'
-            : 'No winner';
-      const line = el('div', 'ac-row');
-      line.append(el('div', 'ac-status', `${verdict} after ${fmtSeconds(r.ticks)}.`));
+      // The line first: the result, the bot's kills, deaths and assists,
+      // its creep score, then the build it ended on. The play table below
+      // explains it; it never led (playtest round 3).
+      const line = el('div', 'ac-line');
+      const won = r.winner === 0 ? 'won' : r.winner === 1 ? 'lost' : '';
+      const verdict = won === 'won' ? 'Won' : won === 'lost' ? 'Lost' : 'No winner';
+      line.append(el('span', `verdict ${won}`, `${verdict} after ${fmtSeconds(r.ticks)}`));
+      const row = botRow(r);
+      if (row) {
+        line.append(
+          el('span', 'kda', `${row.kills} / ${row.deaths} / ${row.assists ?? 0}`),
+          el('span', 'dim', `${row.cs ?? 0} cs`),
+        );
+      }
       const dismiss = el('button', 'ac-btn mini', 'Dismiss');
       dismiss.title = 'Put the summary away';
       dismiss.addEventListener('click', () => {
@@ -1724,6 +1767,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       });
       line.append(dismiss);
       sparBox.append(line);
+      if (row) sparBox.append(buildIcons(row.items, 26));
       const mine = r.report.units.find((u) => u.unitId === r.botUnitId);
       if (mine) {
         const table = el('table', 'ac-table');
@@ -1900,6 +1944,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       brief.append(auto, refresh);
     }
     side.append(brief);
+    side.scrollTop = keepScroll;
   }
 
   function renderAll(): void {

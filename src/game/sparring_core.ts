@@ -11,7 +11,7 @@ import { houseName, houseSeats } from '../sim/content/bots/house';
 import type { PlayReport, PlayStats } from '../sim/playbook/report';
 import type { PlaybookDef } from '../sim/playbook/types';
 import { Rng } from '../sim/rng';
-import type { TeamId } from '../sim/types';
+import type { ScoreRow, TeamId } from '../sim/types';
 
 export interface SparBot {
   name: string;
@@ -28,10 +28,21 @@ export type SparRequest = FastMatchRequest & { botIndex?: number };
 export interface SparResult {
   winner: TeamId | null;
   ticks: number;
+  // Sim seconds at the end.
+  time: number;
   report: PlayReport;
   // The sparring bot's unit id in the report and the replay.
   botUnitId: number;
+  // The scoreboard at the end, all ten seats: the line (kills, deaths,
+  // assists, creep score, the build) is what the summary leads with
+  // (playtest round 3: the play table alone said nothing about the match).
+  score: ScoreRow[];
   record: ReplayRecord;
+}
+
+// The sparring bot's own scoreboard row.
+export function botRow(r: SparResult): ScoreRow | undefined {
+  return r.score.find((s) => s.unitId === r.botUnitId);
 }
 
 export const SPAR_MAX_TICKS = FAST_MATCH_MAX_TICKS;
@@ -83,8 +94,10 @@ export function sparMatch(req: SparRequest): SparResult {
   return {
     winner: r.winner,
     ticks: r.ticks,
+    time: r.time,
     report: r.report,
     botUnitId: r.unitIds[req.botIndex ?? 0]!,
+    score: r.score,
     record: r.record,
   };
 }
@@ -156,15 +169,35 @@ export interface SeriesSummary {
   // The bot's plays summed over the series.
   plays: Record<string, PlayStats>;
   deaths: number;
+  // The bot's line summed over the series.
+  kills: number;
+  assists: number;
+  cs: number;
 }
 
-// The series in numbers: wins from the bot's side, and its plays summed.
+// The series in numbers: wins from the bot's side, its line and its plays
+// summed.
 export function summarizeSeries(matches: readonly SeriesMatch[]): SeriesSummary {
-  const out: SeriesSummary = { wins: 0, losses: 0, draws: 0, plays: {}, deaths: 0 };
+  const out: SeriesSummary = {
+    wins: 0,
+    losses: 0,
+    draws: 0,
+    plays: {},
+    deaths: 0,
+    kills: 0,
+    assists: 0,
+    cs: 0,
+  };
   for (const m of matches) {
     if (m.result.winner === null) out.draws++;
     else if (m.result.winner === m.team) out.wins++;
     else out.losses++;
+    const row = botRow(m.result);
+    if (row) {
+      out.kills += row.kills;
+      out.assists += row.assists ?? 0;
+      out.cs += row.cs ?? 0;
+    }
     const mine = m.result.report.units.find((u) => u.unitId === m.result.botUnitId);
     if (!mine) continue;
     out.deaths += mine.deaths;

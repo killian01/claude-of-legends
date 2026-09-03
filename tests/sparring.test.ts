@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  botRow,
   SERIES_SEEDS,
   type SeriesMatch,
   type SparBot,
@@ -55,6 +56,14 @@ describe('sparring', () => {
     expect(mine).toBeDefined();
     const total = Object.values(mine!.plays).reduce((n, s) => n + s.ticks, 0);
     expect(total).toBeGreaterThan(0);
+    // The line comes back with the report: ten seats scored, the bot's own
+    // row found by its unit id, with its build (playtest round 3).
+    expect(result.score).toHaveLength(10);
+    expect(result.time).toBeCloseTo(1500 / 20, 3);
+    const line = botRow(result);
+    expect(line).toMatchObject({ unitId: result.botUnitId, team: 0 });
+    expect(line!.deaths).toBe(mine!.deaths);
+    expect(Array.isArray(line!.items)).toBe(true);
     // The bot ran ITS list: 'careful' is a play only it has.
     const known = new Set(Object.keys(mine!.plays));
     for (const id of known)
@@ -109,29 +118,52 @@ describe('the series', () => {
       team: 0 | 1,
       winner: 0 | 1 | null,
       plays: Record<string, { ticks: number; deaths: number }>,
-    ): SeriesMatch => ({
-      seed: 1,
-      team,
-      result: {
-        winner,
-        ticks: 100,
-        botUnitId: 7,
-        report: {
+      kills = 0,
+    ): SeriesMatch => {
+      const deaths = Object.values(plays).reduce((n, s) => n + s.deaths, 0);
+      return {
+        seed: 1,
+        team,
+        result: {
+          winner,
           ticks: 100,
-          units: [
-            { unitId: 7, plays, deaths: Object.values(plays).reduce((n, s) => n + s.deaths, 0) },
+          time: 5,
+          botUnitId: 7,
+          report: { ticks: 100, units: [{ unitId: 7, plays, deaths }] },
+          score: [
+            {
+              unitId: 7,
+              team,
+              name: 'Vesk',
+              championId: 'vesk',
+              player: null,
+              level: 3,
+              kills,
+              deaths,
+              assists: 1,
+              cs: 10,
+              items: [],
+            },
           ],
+          record: result.record,
         },
-        record: result.record,
-      },
-    });
+      };
+    };
     const summary = summarizeSeries([
-      stub(0, 0, { fight: { ticks: 40, deaths: 1 } }),
-      stub(1, 1, { fight: { ticks: 10, deaths: 0 }, farm: { ticks: 30, deaths: 2 } }),
+      stub(0, 0, { fight: { ticks: 40, deaths: 1 } }, 4),
+      stub(1, 1, { fight: { ticks: 10, deaths: 0 }, farm: { ticks: 30, deaths: 2 } }, 1),
       stub(0, 1, { farm: { ticks: 5, deaths: 0 } }),
       stub(1, null, {}),
     ]);
-    expect(summary).toMatchObject({ wins: 2, losses: 1, draws: 1, deaths: 3 });
+    expect(summary).toMatchObject({
+      wins: 2,
+      losses: 1,
+      draws: 1,
+      deaths: 3,
+      kills: 5,
+      assists: 4,
+      cs: 40,
+    });
     expect(summary.plays).toEqual({
       fight: { ticks: 50, deaths: 1 },
       farm: { ticks: 35, deaths: 2 },
