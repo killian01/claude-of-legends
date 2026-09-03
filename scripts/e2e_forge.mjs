@@ -124,7 +124,8 @@ const run = async () => {
   for (const [key, index] of order) {
     await page.evaluate((i) => document.querySelectorAll('.fe-slot')[i].click(), index);
     await waitFor(page, findH3(`Parameters (${key})`), `parameters of ${key}`, 5000);
-    if (key !== 'P') await waitFor(page, findH3(`${key} animation`), `animation of ${key}`, 5000);
+    if (key !== 'P')
+      await waitFor(page, findH3(`${key} animation and sound`), `animation of ${key}`, 5000);
     const lit = await page.evaluate(() =>
       [...document.querySelectorAll('.fe-slot')].findIndex((s) => s.classList.contains('on')),
     );
