@@ -1,10 +1,11 @@
 // The fresh draft: what a new champion is before the creator touches
 // anything. Legal out of the box and middle of the road on every stat,
-// with a kit that weighs what a roster kit weighs (playtest: the first
-// fresh draft carried a placeholder kit so light that every Stat polygon
-// vertex could reach its rail without the budget ever saying no; the
-// polygon only plays when the kit already claims its share). Pure data:
-// the id comes from the caller, so this stays deterministic and hostable
+// with a kit that weighs what a roster kit weighs and sits under every
+// burst cap with room (the first thing a creator sees should be an
+// example of the rules, not a case at their edge). Each envelope is
+// spent to roughly four fifths, so the first pull on any polygon moves
+// and no rail comes free without dumping another axis. Pure data: the
+// id comes from the caller, so this stays deterministic and hostable
 // anywhere the sim is.
 
 import type { ForgedChampionDef } from './forged_def';
@@ -19,20 +20,20 @@ export function freshDraftDef(id: string): ForgedChampionDef {
     creator: '',
     passive: { template: 'battle_flow', params: { msPct: 0.1, duration: 1.5 }, name: 'Momentum' },
     base: {
-      hp: 580,
+      hp: 540,
       mana: 350,
-      ad: 55,
+      ad: 52,
       ap: 0,
-      armor: 25,
-      mr: 30,
+      armor: 24,
+      mr: 26,
       attackRange: 5.5,
-      attackSpeed: 0.65,
-      moveSpeed: 3.7,
-      hpRegen: 1.5,
-      manaRegen: 1.4,
+      attackSpeed: 0.6,
+      moveSpeed: 3.65,
+      hpRegen: 1.3,
+      manaRegen: 1.2,
       radius: 0.65,
     },
-    growth: { hp: 90, mana: 35, ad: 4, armor: 2.5, mr: 1.5 },
+    growth: { hp: 85, mana: 35, ad: 3.5, armor: 2.3, mr: 1.3 },
     abilities: {
       Q: {
         name: 'First Strike',
@@ -45,7 +46,7 @@ export function freshDraftDef(id: string): ForgedChampionDef {
           radius: 0.7,
           range: 9,
           onHit: [
-            { kind: 'damage', base: 140, adRatio: 1.0, dtype: 'physical' },
+            { kind: 'damage', base: 120, adRatio: 0.8, dtype: 'physical' },
             { kind: 'slow', pct: 0.4, duration: 1.5 },
           ],
         },
@@ -61,7 +62,7 @@ export function freshDraftDef(id: string): ForgedChampionDef {
           duration: 3,
           tickEvery: 0.5,
           onEnter: [{ kind: 'slow', pct: 0.45, duration: 2 }],
-          onTick: [{ kind: 'damage', base: 45, adRatio: 0.4, dtype: 'magic' }],
+          onTick: [{ kind: 'damage', base: 18, adRatio: 0.15, dtype: 'magic' }],
           allyOnTick: [{ kind: 'heal', base: 16 }],
         },
       },
@@ -75,7 +76,7 @@ export function freshDraftDef(id: string): ForgedChampionDef {
           range: 4.5,
           speed: 16,
           landRadius: 1.5,
-          onLand: [{ kind: 'damage', base: 80, adRatio: 0.7, dtype: 'physical' }],
+          onLand: [{ kind: 'damage', base: 80, adRatio: 0.5, dtype: 'physical' }],
           selfEffects: [{ kind: 'buff', duration: 3, asPct: 0.4 }],
           passThrough: [],
         },

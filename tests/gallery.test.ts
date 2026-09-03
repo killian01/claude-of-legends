@@ -107,6 +107,51 @@ describe('gallery listing', () => {
     expect(setVisibility(deps, 1, 'forged_draft', { shared: false }).ok).toBe(false);
     store.close();
   });
+
+  it('a seal that no longer validates shows its owner alone, flagged, and plays nowhere', () => {
+    const { store, deps } = seeded();
+    // A champion sealed before the burst cap (ADR 0015): one nuke on a
+    // long cooldown the budget was happy to sell.
+    const stale = twin(0, 'forged_stale', 'alice');
+    stale.abilities = {
+      ...stale.abilities,
+      Q: {
+        name: 'Old Nuke',
+        manaCost: 120,
+        cooldown: 20,
+        castRange: 9,
+        spec: {
+          kind: 'skillshot',
+          speed: 22,
+          radius: 0.7,
+          range: 9,
+          onHit: [{ kind: 'damage', base: 320, adRatio: 2.2, dtype: 'physical' }],
+        },
+      },
+    };
+    store.saveForged({
+      id: 'forged_stale',
+      accountId: 1,
+      def: stale,
+      status: 'finalized',
+      createdAt: 4,
+      updatedAt: 40,
+    });
+    const asOwner = listGallery(deps, 1);
+    if (!asOwner.ok) throw new Error('list failed');
+    expect(asOwner.entries.find((e) => e.id === 'forged_stale')).toMatchObject({
+      mine: true,
+      valid: false,
+    });
+    expect(asOwner.entries.find((e) => e.id === 'forged_a')?.valid).toBe(true);
+    const asOther = listGallery(deps, 2);
+    if (!asOther.ok) throw new Error('list failed');
+    expect(asOther.entries.map((e) => e.id)).not.toContain('forged_stale');
+    const playable = listGallery(deps, 1, { playable: true });
+    if (!playable.ok) throw new Error('list failed');
+    expect(playable.entries.map((e) => e.id)).not.toContain('forged_stale');
+    store.close();
+  });
 });
 
 describe('likes', () => {

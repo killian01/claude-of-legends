@@ -1,15 +1,19 @@
 // The deterministic validator (ADR 0006): the one gate every forged
 // champion passes before it exists anywhere (draft save, finalize, match
 // setup, replay load). Structure first, then the hard per-field bounds
-// (forge/bounds.ts), then the power budget (forge/budget.ts). Errors are
+// (forge/bounds.ts), then the power budget's three envelopes
+// (forge/envelopes.ts) and the burst cap (forge/burst.ts). Errors are
 // readable strings and the list is complete: the Forge editor shows them
 // all, and the agent endpoint explains refusals with them.
 
 import type { CastSpec } from '../combat/casting';
 import type { EffectSpec } from '../combat/effects';
 import type { ChampionRole } from '../content/champions';
-import { boundsErrors } from './bounds';
-import { type BudgetBreakdown, budgetOf, POWER_BUDGET } from './budget';
+import { ATTACK_SOUNDS, isAttackSound } from '../content/sounds';
+import { boundsErrors, FLAVOR_MAX } from './bounds';
+import { type BudgetBreakdown, budgetOf } from './budget';
+import { burstErrors } from './burst';
+import { envelopeErrors } from './envelopes';
 import type { ForgedChampionDef } from './forged_def';
 import { PASSIVE_TEMPLATES } from './passive_templates';
 
@@ -95,6 +99,9 @@ function structureErrors(def: ForgedChampionDef): string[] {
   if (!FORGED_ROLES.includes(def.role)) {
     errors.push(`role: must be one of ${FORGED_ROLES.join(', ')}`);
   }
+  if (def.attackSound !== undefined && !isAttackSound(def.attackSound)) {
+    errors.push(`attackSound: must be one of ${ATTACK_SOUNDS.map((s) => s.id).join(', ')}`);
+  }
   return errors;
 }
 
@@ -103,6 +110,8 @@ function passiveErrors(def: ForgedChampionDef): string[] {
   const ref = def.passive;
   if (typeof ref !== 'object' || ref === null) return ['passive: must be a template reference'];
   checkString(errors, 'passive.name', ref.name, NAME_MAX, true);
+  if (ref.flavor !== undefined)
+    checkString(errors, 'passive.flavor', ref.flavor, FLAVOR_MAX, false);
   const tpl = typeof ref.template === 'string' ? PASSIVE_TEMPLATES[ref.template] : undefined;
   if (!tpl) {
     errors.push(`passive.template: unknown template '${String(ref.template)}'`);
@@ -169,15 +178,8 @@ export function validateForged(def: ForgedChampionDef): ForgedValidation {
   if (errors.length > 0) return { ok: false, errors, cost: null };
   errors.push(...telegraphErrors(def));
   const cost = budgetOf(def);
-  if (cost.total > POWER_BUDGET) {
-    errors.push(
-      `power budget: ${cost.total.toFixed(1)} points of ${POWER_BUDGET} ` +
-        `(stats ${cost.stats.toFixed(1)}, growth ${cost.growth.toFixed(1)}, ` +
-        `Q ${cost.abilities.Q.toFixed(1)}, W ${cost.abilities.W.toFixed(1)}, ` +
-        `E ${cost.abilities.E.toFixed(1)}, R ${cost.abilities.R.toFixed(1)}, ` +
-        `passive ${cost.passive.toFixed(1)})`,
-    );
-  }
+  errors.push(...envelopeErrors(cost));
+  errors.push(...burstErrors(def));
   if (errors.length > 0) return { ok: false, errors, cost };
   return { ok: true, cost };
 }

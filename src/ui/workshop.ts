@@ -579,17 +579,86 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   const clipsPanel = el('div', 'ws-panel');
   clipsPanel.append(el('h3', '', 'Animations'));
   const clipButtons = new Map<string, HTMLButtonElement>();
+  const clipBox = el('div', '');
+  clipsPanel.append(clipBox);
+
+  // Freezing the pose (playtest: even the idle sway made the weapon a
+  // moving target while aligning it). Frozen, the mixer's clock stops
+  // and the model holds its current frame; the slider scrubs the frozen
+  // clip so the hand is caught at any moment of a swing; a clip button
+  // lands on that clip's first frame. Releasing resumes the clips. The
+  // controls sit in the Weapon panel, where the grip is fitted (playtest:
+  // nobody hunts under Animations while placing a weapon).
+  let frozen = false;
+  let fadingAction: THREE.AnimationAction | null = null;
+  const freezeBtn = el('button', 'ws-btn', 'Freeze the pose') as HTMLButtonElement;
+  freezeBtn.title = 'Hold the model still on this frame while you fit the weapon (F)';
+  const frameRow = el('div', 'ws-slider');
+  const frameInput = document.createElement('input');
+  frameInput.type = 'range';
+  frameInput.min = '0';
+  frameInput.max = '1';
+  frameInput.step = '0.01';
+  frameInput.value = '0';
+  const frameOut = el('output', '', '0.00 s');
+  frameRow.append(el('label', '', 'Frame'), frameInput, frameOut);
+  frameRow.hidden = true;
+  const syncFrameRow = (): void => {
+    if (!activeAction) return;
+    frameInput.max = String(Math.max(0.01, activeAction.getClip().duration));
+    frameInput.value = String(activeAction.time);
+    frameOut.textContent = `${activeAction.time.toFixed(2)} s`;
+  };
+  frameInput.addEventListener('input', () => {
+    if (!mixer || !activeAction || !frozen) return;
+    activeAction.time = Number(frameInput.value);
+    frameOut.textContent = `${activeAction.time.toFixed(2)} s`;
+    mixer.update(0);
+  });
+  const setFrozen = (on: boolean): void => {
+    frozen = on;
+    freezeBtn.classList.toggle('picked', on);
+    freezeBtn.textContent = on ? 'Release the pose' : 'Freeze the pose';
+    frameRow.hidden = !on;
+    if (!mixer) return;
+    mixer.timeScale = on ? 0 : 1;
+    if (on) {
+      // A crossfade caught midway would hold a blend forever: finish it.
+      fadingAction?.stop();
+      fadingAction = null;
+      if (activeAction) {
+        activeAction.stopFading();
+        activeAction.weight = 1;
+      }
+      mixer.update(0);
+      syncFrameRow();
+    }
+  };
+  freezeBtn.addEventListener('click', () => setFrozen(!frozen));
+  const freezeBox = el('div', '');
+  freezeBox.append(freezeBtn, frameRow);
 
   const playClip = (name: string): void => {
     if (!mixer) return;
     const clip = clips.find((c) => c.name === name);
     if (!clip) return;
     const action = mixer.clipAction(clip);
-    activeAction?.fadeOut(0.15);
-    action.reset().fadeIn(0.15).play();
+    if (frozen) {
+      // No crossfade while the clock is stopped: the first frame lands.
+      activeAction?.stop();
+      action.reset().play();
+    } else {
+      activeAction?.fadeOut(0.15);
+      fadingAction = activeAction;
+      action.reset().fadeIn(0.15).play();
+    }
     activeAction = action;
     activeClipName = name;
     for (const [n, b] of clipButtons) b.classList.toggle('picked', n === name);
+    if (frozen) {
+      mixer.update(0);
+      syncFrameRow();
+    }
   };
 
   const buildClipButtons = (): void => {
@@ -638,10 +707,10 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       btn.title = name;
       btn.addEventListener('click', () => playClip(name));
       clipButtons.set(name, btn);
-      clipsPanel.append(btn);
+      clipBox.append(btn);
     }
     if (clips.length === 0) {
-      clipsPanel.append(el('div', 'ws-note', 'This model carries no animation clips.'));
+      clipBox.append(el('div', 'ws-note', 'This model carries no animation clips.'));
     }
     idleClipName = roleName('idle') ?? clips[0]?.name ?? '';
     playClip(idleClipName);
@@ -678,6 +747,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
           : Promise.resolve([]);
       void extra.then((loaded) => {
         mixer = new THREE.AnimationMixer(rig);
+        mixer.timeScale = frozen ? 0 : 1;
         clips = [...gltf.animations, ...loaded];
         buildClipButtons();
       });
@@ -782,6 +852,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     if (!editable) {
       weaponControls.append(
         el('div', 'ws-note', 'The weapon rides a hand bone; the creator tunes the grip.'),
+        freezeBox,
       );
       return;
     }
@@ -944,7 +1015,9 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
         },
       ),
     );
-    weaponControls.append(modeBar);
+    // The frozen pose first, then the grip tools: a still hand is what
+    // the tools below are aimed at.
+    weaponControls.append(freezeBox, modeBar);
     // Quarter turns compose about the corner marker's axes, exactly like
     // the world-space rotate rings, so 'turn it 90 about X' means the
     // same thing everywhere.
@@ -1020,10 +1093,12 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       el(
         'div',
         'ws-note',
-        'Hold it here, then click the weapon where the hand should hold it: the grip ' +
-          'snaps into the fist, blade along the hand. Or grab the weapon with a click and ' +
-          'drag the arrows and rings (G move, R rotate, hold Ctrl to snap, Escape to ' +
-          'release); the corner marker names the axes. Play Attack to check the swing.',
+        'Freeze the pose (F) to stop the idle sway; the Frame slider then holds the ' +
+          'hand at any moment of a clip. Hold it here, then click the weapon where the ' +
+          'hand should hold it: the grip snaps into the fist, blade along the hand. Or ' +
+          'grab the weapon with a click and drag the arrows and rings (G move, R rotate, ' +
+          'hold Ctrl to snap, Escape to release); the corner marker names the axes. ' +
+          'Play Attack to check the swing.',
       ),
     );
   };
@@ -1168,6 +1243,9 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     }
     if (gizmo.handleKey(e)) return;
     if (e.key === 'Escape') close();
+    if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      setFrozen(!frozen);
+    }
   };
   window.addEventListener('keydown', onKey);
   back.addEventListener('click', close);

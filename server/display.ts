@@ -8,6 +8,7 @@
 import type { ForgedMatchAssets } from '../src/net/protocol';
 import { type ForgedDisplay, sanitizeForgedDisplay } from '../src/sim/forge/display';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
+import { iconsOf } from './art';
 import type { ForgeOutcome } from './forge';
 import type { ForgeStore } from './forge_store';
 
@@ -77,7 +78,8 @@ export function modelPointers(assets: Record<string, unknown> | null): {
 }
 
 // The match_start forgedAssets block: per forged definition, the sealed
-// pointers every client in the match needs to render the generated model.
+// pointers every client in the match needs to render the generated model,
+// and the chosen spell icons its HUD wears.
 export function forgedMatchAssets(
   store: ForgeStore,
   defs: readonly ForgedChampionDef[],
@@ -94,6 +96,7 @@ export function forgedMatchAssets(
       clips: pointers.clips,
       clipFiles: pointers.clipFiles,
       display: displayOf(store, def.id),
+      icons: iconsOf(store, def.id),
     };
   }
   return out;

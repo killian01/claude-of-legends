@@ -20,6 +20,7 @@ export function ensureRichTextStyles(): void {
     '.tt-heal{color:#8ce08a;font-weight:600}' +
     '.tt-shield{color:#7fe0c8;font-weight:600}' +
     '.tt-cc{color:#ffd35c;font-weight:600}' +
+    '.tt-flavor{color:#c9bfa3;font-style:italic}' +
     '.tt-util{color:#c9b2ff;font-weight:600}';
   document.head.appendChild(style);
 }

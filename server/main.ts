@@ -35,7 +35,7 @@ import { API_RATE_PER_MIN, ApiLimiter } from './api_limit';
 import { ARENA_PLAY_NOW_PER_DAY, ARENA_ROUND_MS } from './arena';
 import { ArenaRunner } from './arena_runner';
 import { type ArenaDeps, challenge, playNow, roundDue, runArenaRound } from './arena_service';
-import { chooseArt, deleteArtFor, generateArt, listArt, splashOf } from './art';
+import { chooseArt, deleteArtFor, generateArt, iconsOf, listArt, splashOf } from './art';
 import { appendExchange, botChat, clearBotChat, windowTurns } from './bot_chats';
 import { fillWithBots, type PoolSeat, TEAM_SIZE } from './bot_fill';
 import {
@@ -80,6 +80,7 @@ import {
   listDrafts,
   saveDraft,
 } from './forge';
+import { CHAT_JSON_MAX, chatsOf, saveChat } from './forge_chats';
 import { ForgeStore } from './forge_store';
 import { canPlayForged, listGallery, reportForged, setVisibility, toggleLike } from './gallery';
 import { catalogRoles } from './generation/house_clips';
@@ -114,6 +115,7 @@ import { sealChampion, unsealChampion } from './seal';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
 import { appendJsonl, pruneNumberedJson, readJsonl, saveJsonAtomic } from './store';
 import { suggestKit } from './suggest';
+import { suggestStats } from './suggest_stats';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DIST = path.resolve(process.cwd(), 'dist');
@@ -153,6 +155,8 @@ const MIME: Record<string, string> = {
   '.svg': 'image/svg+xml',
   '.glb': 'model/gltf-binary',
   '.wasm': 'application/wasm',
+  // The recorded sound bank (public/sfx/).
+  '.ogg': 'audio/ogg',
 };
 
 interface Client {
@@ -345,7 +349,7 @@ const suggestDeps = {
 };
 console.log(
   suggestDeps.apiKey
-    ? 'suggestions: on (ANTHROPIC_API_KEY set), the kit conversation is live'
+    ? 'suggestions: on (ANTHROPIC_API_KEY set), the kit and stat conversations are live'
     : 'suggestions: off (no ANTHROPIC_API_KEY set)',
 );
 // The 2D art surface (plan-forge phase 4): splash and icon candidates on
@@ -1337,6 +1341,9 @@ const server = http.createServer(async (req, res) => {
                   const a = assets as { sheet?: string; family?: string; weapon?: string } | null;
                   return {
                     ...d,
+                    // A sealed champion from before a rule tightening may no
+                    // longer validate: the rail says so, the owner reforges.
+                    valid: validateForged(d.def).ok,
                     splash: splashOf(forgeStore, d),
                     model: pointers.model,
                     sheet: a?.sheet ?? null,
@@ -1345,6 +1352,10 @@ const server = http.createServer(async (req, res) => {
                     clips: pointers.clips,
                     clipFiles: pointers.clipFiles,
                     display: assets ? displayOf(forgeStore, d.id) : null,
+                    // The chosen spell icons, for the HUD of a test drive.
+                    icons: iconsOf(forgeStore, d.id),
+                    // The editor's conversations, so a reload finds them.
+                    chats: chatsOf(forgeStore, d.id),
                   };
                 }),
               }
@@ -1359,6 +1370,28 @@ const server = http.createServer(async (req, res) => {
           return;
         }
         sendJson(res, 200, saveDraft(forgeDeps, me.id, me.name, body.def as ForgedChampionDef));
+        return;
+      }
+      // A conversation saved with its draft: the whole thread and the
+      // latest proposal, owner-only. Wide cap: assistant turns hold raw
+      // model answers.
+      if (url === '/api/forge/chat' && req.method === 'POST') {
+        const body = await readJsonBody(req, CHAT_JSON_MAX);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        if (!id) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        sendJson(
+          res,
+          200,
+          saveChat({ store: forgeStore }, me.id, {
+            id,
+            kind: body?.kind,
+            turns: body?.turns,
+            proposal: body?.proposal,
+          }),
+        );
         return;
       }
       if (url === '/api/forge/draft/delete' && req.method === 'POST') {
@@ -1548,7 +1581,11 @@ const server = http.createServer(async (req, res) => {
       // agent quota, one unit per player message, spent only when a
       // proposal lands. The body carries the whole thread plus the
       // unsaved form state, hence the wide cap.
-      if (url === '/api/forge/suggest' && req.method === 'POST') {
+      // The stat conversation (Tuning tab) rides the same wire and meter.
+      if (
+        (url === '/api/forge/suggest' || url === '/api/forge/suggest-stats') &&
+        req.method === 'POST'
+      ) {
         const body = await readJsonBody(req, DRAFT_JSON_MAX + 160_000);
         const id = typeof body?.id === 'string' ? body.id : null;
         if (!id || !Array.isArray(body?.messages)) {
@@ -1569,7 +1606,8 @@ const server = http.createServer(async (req, res) => {
           'cache-control': 'no-store',
           'x-accel-buffering': 'no',
         });
-        const outcome = await suggestKit(suggestDeps, me.id, {
+        const ask = url === '/api/forge/suggest' ? suggestKit : suggestStats;
+        const outcome = await ask(suggestDeps, me.id, {
           id,
           messages: body.messages as { role: 'user' | 'assistant'; text: string }[],
           ...(body.def !== undefined ? { def: body.def } : {}),

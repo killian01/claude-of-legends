@@ -4,6 +4,7 @@
 // ticks for smooth motion.
 
 import * as THREE from 'three';
+import { attackSoundOf, castSoundOf } from '../game/champion_sounds';
 import { playCastSfx, playSfx } from '../game/sfx';
 import { attackWindupSeconds, RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import type { CastSpec } from '../sim/combat/casting';
@@ -17,7 +18,6 @@ import {
   buildZoneMesh,
   resolveSpec,
   schoolColorOf,
-  schoolTagOf,
   spellColorsOf,
 } from './ability_vfx';
 import { buildChampionMesh } from './champion_shapes';
@@ -869,12 +869,17 @@ export class Renderer {
       }
       // Every visible swing is audible; other units fade with distance so
       // a nearby fight has a soundtrack without the whole map whipping air.
-      // A muzzle-armed champion's autos crack like a rifle, not a whip.
+      // A muzzle-armed champion's autos crack like a rifle, not a whip;
+      // a forged champion's creator may have picked its sound outright.
       const firearm =
         attacker?.kind === 'champion' &&
         championVisualDef(attacker.championId)?.muzzle !== undefined;
+      const attackerDef =
+        attacker?.kind === 'champion' && attacker.championId
+          ? this.world.championDef(attacker.championId)
+          : null;
       playSfx(
-        firearm ? 'gunshot' : 'swing',
+        attackSoundOf(attackerDef, firearm),
         atk.unitId === this.followId ? 1 : 0.6 * this.sfxGain(t.curr.x, t.curr.z),
       );
       // Melee autos never reach the projectile-impact path; schedule the
@@ -941,7 +946,7 @@ export class Renderer {
         const def = this.world.championDef(caster.championId)?.abilities[cast.key];
         if (def) {
           color = schoolColorOf(def.spec).main;
-          if (others) playCastSfx(schoolTagOf(def.spec), gain);
+          if (others) playCastSfx(castSoundOf(def), gain);
           const vis = spellVisualOf(`${caster.championId}_${cast.key}`);
           const instant = !(def.windup && def.windup > 0);
           if (vis?.castFx && instant) {

@@ -3,7 +3,10 @@
 // is listed here as data-as-code; anything not listed falls back to the
 // procedural canvas painter (ability_icons.ts, icons.ts) so coverage never
 // breaks while the art lands incrementally. Every painting follows the art
-// contract in docs/design/icon-art-style.md.
+// contract in docs/design/icon-art-style.md. A forged champion's generated
+// icons (forged_icons.ts) come first: they are the creator's own art.
+
+import { forgedIconUrl } from './forged_icons';
 
 // Ability paintings shipped at public/icons/abilities/<championId>_<KEY>.webp.
 export const ABILITY_ICON_IMAGES: ReadonlySet<string> = new Set<string>([
@@ -86,6 +89,8 @@ export const ITEM_ICON_IMAGES: ReadonlySet<string> = new Set<string>([
 
 export function abilityImageUrl(championId: string | null | undefined, key: string): string | null {
   if (!championId) return null;
+  const forged = forgedIconUrl(championId, key);
+  if (forged) return forged;
   const id = `${championId}_${key}`;
   return ABILITY_ICON_IMAGES.has(id) ? `/icons/abilities/${id}.webp` : null;
 }

@@ -23,6 +23,7 @@ import { houseSeats } from './sim/content/bots/house';
 import type { ForgedChampionDef } from './sim/forge/forged_def';
 import { Rng } from './sim/rng';
 import { Sim } from './sim/sim';
+import { ULT_RANK_LEVELS } from './sim/stats';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
 import { type AuthedAccount, currentAccount } from './ui/auth';
 import { buildCoachBar, type CoachBar } from './ui/coach_bar';
@@ -100,15 +101,24 @@ function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
     // on the fill (src/sim/fill.ts), the roster's lanes completed around
     // your pick, each on a house style drawn from the seed, with
     // deterministic skin variety (the sim clamps out-of-range picks).
+    const champions = [self];
     const rng = new Rng(42);
     const allies = houseSeats([{ championId: pick.championId, role: pick.forged?.role }], rng);
     for (const [i, seat] of allies.entries()) {
       const ally = sim.addChampion(0, undefined, seat.championId, i % 3);
       attachBot(sim, ally.id, seat.bot);
+      champions.push(ally);
     }
     for (const [i, seat] of houseSeats([], rng).entries()) {
       const enemy = sim.addChampion(1, undefined, seat.championId, i % 3);
       attachBot(sim, enemy.id, seat.bot);
+      champions.push(enemy);
+    }
+    // A Forge test drive opens at the level the ultimate unlocks, everyone
+    // alike: the creator came to try R too, and the bots meet it on equal
+    // footing (playtest).
+    if (pick.forged) {
+      for (const u of champions) sim.setLevel(u.id, ULT_RANK_LEVELS[0]!);
     }
 
     let stopped = false;
@@ -521,6 +531,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
                   model?: string | null;
                   family?: string | null;
                   display?: import('./sim/forge/display').ForgedDisplay | null;
+                  icons?: Record<string, string> | null;
                 }[];
               }) =>
                 (body.drafts ?? [])

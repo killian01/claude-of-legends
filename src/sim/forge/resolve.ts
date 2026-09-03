@@ -24,11 +24,14 @@ export function resolveForgedChampion(def: ForgedChampionDef): ChampionDef {
     blurb: def.tagline,
     passive: {
       name: def.passive.name,
-      description: tpl.describe(def.passive.params),
+      description: def.passive.flavor
+        ? `${def.passive.flavor} ${tpl.describe(def.passive.params)}`
+        : tpl.describe(def.passive.params),
       ...tpl.create(def.passive.params),
     },
     base: def.base,
     growth: def.growth,
     abilities: def.abilities,
+    ...(def.attackSound !== undefined ? { attackSound: def.attackSound } : {}),
   };
 }

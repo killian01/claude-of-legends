@@ -6,9 +6,10 @@
 // budget arithmetic, replays the thread to the model, and validates
 // every proposal through validateForged before it reaches the editor.
 // The numbers are not the model's job: every proposal is fitted to the
-// budget line by the power dial's own scaling (one shared factor across
-// the four spells) before validation, so the model owns structure and
-// theme and a well-shaped answer lands in one call. A kit too light
+// kit envelope line by the power dial's own scaling (one shared factor
+// across the four spells, any spell a burst cap catches held there)
+// before validation, so the model owns structure and theme and a
+// well-shaped answer lands in one call. A kit too light
 // even at the dial's maximum goes back for more structure; one that
 // survives every retry still returns, bill in plain sight, because a
 // playable proposal beats an error. Metered on the 'agent' quota: one
@@ -17,7 +18,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { AbilityDef } from '../src/sim/combat/casting';
-import { ABILITY_BOUNDS } from '../src/sim/forge/bounds';
+import { ABILITY_BOUNDS, FLAVOR_MAX } from '../src/sim/forge/bounds';
 import {
   AVAIL_PIVOT,
   AVAIL_SOFT,
@@ -25,12 +26,14 @@ import {
   budgetOf,
   CAST_PRICES,
   EFFECT_PRICES,
-  POWER_BUDGET,
 } from '../src/sim/forge/budget';
+import { BURST_CAPS, BURST_REF } from '../src/sim/forge/burst';
+import { KIT_ENVELOPE, kitSpendOf } from '../src/sim/forge/envelopes';
 import type { ForgedChampionDef, ForgedPassiveRef } from '../src/sim/forge/forged_def';
 import { PASSIVE_TEMPLATE_LIST } from '../src/sim/forge/passive_templates';
 import { fitKitPower, POWER_DIAL_MAX, POWER_DIAL_MIN } from '../src/sim/forge/spell_power';
 import { validateForged } from '../src/sim/forge/validate';
+import type { AbilityKey } from '../src/sim/types';
 import type { ForgeOutcome } from './forge';
 import type { ForgeStore } from './forge_store';
 
@@ -74,8 +77,8 @@ export const CHAT_RAW_TEXT_MAX = 24000;
 // the sim executes (src/sim/combat/casting.ts, effects.ts). Kept by hand
 // beside those types; validateForged catches any drift the hard way.
 const GRAMMAR = `
-An ability is: { "name": string, "manaCost": n, "cooldown": n, "castRange": n,
-  "windup"?: seconds, "spec": CastSpec }.
+An ability is: { "name": string, "flavor": string, "manaCost": n, "cooldown": n,
+  "castRange": n, "windup"?: seconds, "spec": CastSpec }.
 CastSpec is ONE of:
   { "kind": "skillshot", "speed": n, "radius": n, "range": n, "pierce"?: bool, "onHit": Effect[] }
   { "kind": "zone", "radius": n, "duration": n, "tickEvery"?: n, "onEnter"?: Effect[], "onTick"?: Effect[], "detonateDelay"?: n, "onDetonate"?: Effect[], "reveal"?: bool }
@@ -100,6 +103,14 @@ Rules: distances are world units (a lane is ~12 wide, castRange tops out
 around 10 for most spells). An INSTANT stun, root, knockup or long
 knockback needs "windup" >= 0.35 (the telegraph rule). R is the
 ultimate: bigger, longer cooldown.
+Text: what players read about a spell is DERIVED from its mechanics by the
+game, in the game's own words, the same for every champion; that wording
+is not yours to change, so to change what a spell does, change its spec.
+What IS yours is "flavor": one short line of story per spell and for the
+passive (plain English, at most ${FLAVOR_MAX} characters), the image of the
+spell in the champion's world, no numbers; it shows above the derived text.
+Give every spell and the passive one, and rewrite it when the creator asks
+for a different feel.
 `;
 
 function templateCatalog(): string {
@@ -116,26 +127,30 @@ function templateCatalog(): string {
 // still verifies against the real arithmetic after validation.
 function costSchedule(): string {
   return [
-    `Every kit fits a power budget of ${POWER_BUDGET} shared with base stats and growth.`,
+    "The passive and the four spells together fit the power budget's kit envelope of " +
+      `${KIT_ENVELOPE} points; base stats and growth have their own envelopes and never ` +
+      'trade with it.',
     `Effect prices (cost = value * price, durations in seconds): ${JSON.stringify(EFFECT_PRICES)}.`,
     `Delivery prices and multipliers: ${JSON.stringify(CAST_PRICES)}.`,
     `An ability's bill is its delivery cost times ${AVAIL_PIVOT}/(${AVAIL_SOFT}+cooldown),`,
     'relieved up to 20 percent each by mana cost and windup.',
     'Size the amounts roughly: the server then scales every amount (damage, healing, crowd ' +
       `control durations) by one shared factor between ${POWER_DIAL_MIN} and ${POWER_DIAL_MAX} ` +
-      'so the kit lands exactly on the budget line. Structure, shapes and rhythm are yours and ' +
+      'so the kit lands exactly on the envelope line. Structure, shapes and rhythm are yours and ' +
       'never scaled: land within a factor of two of the line and spend your care on the design.',
+    'One more rule the budget does not price, the burst cap: what one cast can deal to a ' +
+      `single target at rank 1 (measured at ${BURST_REF.ad} attack, no AP, ticks counted for ` +
+      `${BURST_REF.tickWindow} seconds) may not exceed ${Math.round(100 * BURST_CAPS.basic)} ` +
+      `percent of ${BURST_REF.hp} health for a basic spell, ${Math.round(100 * BURST_CAPS.ult)} ` +
+      `for the R, and Q, W and E together may not exceed ${Math.round(100 * BURST_CAPS.basics)}. ` +
+      'A spell the cap stops is held there while the others take the room, so spread damage ' +
+      'across the kit rather than stacking it in one nuke.',
   ].join(' ');
 }
 
-// What the budget leaves the kit once stats and growth are paid, and
-// what the current kit spends of it.
+// What the kit envelope holds and what the current kit spends of it.
 function kitBudgetOf(bill: BudgetBreakdown): { cap: number; spend: number } {
-  const a = bill.abilities;
-  return {
-    cap: POWER_BUDGET - bill.stats - bill.growth,
-    spend: bill.passive + a.Q + a.W + a.E + a.R,
-  };
+  return { cap: KIT_ENVELOPE, spend: kitSpendOf(bill) };
 }
 
 function billLine(bill: BudgetBreakdown): string {
@@ -154,7 +169,7 @@ function preamble(def: ForgedChampionDef): string {
     'then rework your latest proposal as the creator asks.';
   const task =
     'Every answer is ONLY a JSON object, no prose around it: { "comment": string, ' +
-    '"passive": { "template": id, "params": {..}, "name": string }, "abilities": ' +
+    '"passive": { "template": id, "params": {..}, "name": string, "flavor": string }, "abilities": ' +
     '{ "Q": Ability, "W": Ability, "E": Ability, "R": Ability } }. "comment" is one ' +
     'or two plain sentences to the creator about what you proposed or changed. ' +
     'Spell names must be original English, no borrowed game IP. Compact JSON: no ' +
@@ -239,7 +254,7 @@ export function threadError(messages: unknown): string | null {
 }
 
 type ApiContent = string | ({ type: string } & Record<string, unknown>)[];
-interface ApiMessage {
+export interface ApiMessage {
   role: 'user' | 'assistant';
   content: ApiContent;
 }
@@ -317,7 +332,7 @@ async function readEventStream(
   return text;
 }
 
-async function askModel(
+export async function askModel(
   deps: SuggestDeps,
   messages: readonly ApiMessage[],
   onText?: (delta: string) => void,
@@ -369,14 +384,18 @@ export function imageMediaType(
   return 'image/png';
 }
 
-// Names the game cannot show: anything outside plain printable ASCII is
-// not the English the roster speaks (ADR 0004), whatever language the
-// creator wrote in. Plain words in another language slip through here;
-// the prompt carries that rule.
+// Names and flavor lines the game cannot show: anything outside plain
+// printable ASCII is not the English the roster speaks (ADR 0004),
+// whatever language the creator wrote in. Plain words in another
+// language slip through here; the prompt carries that rule.
 function foreignNames(s: Suggestion): string[] {
   const a = s.abilities ?? ({} as Suggestion['abilities']);
-  const names = [s.passive?.name, a.Q?.name, a.W?.name, a.E?.name, a.R?.name];
-  return names.filter((n): n is string => typeof n === 'string' && !/^[\x20-\x7e]*$/.test(n));
+  const texts = [
+    s.passive?.name,
+    s.passive?.flavor,
+    ...(['Q', 'W', 'E', 'R'] as const).flatMap((k) => [a[k]?.name, a[k]?.flavor]),
+  ];
+  return texts.filter((n): n is string => typeof n === 'string' && !/^[\x20-\x7e]*$/.test(n));
 }
 
 // What the surface reports while a proposal is in the making: the
@@ -400,11 +419,14 @@ export interface KitProposal {
   // The model's raw answer, for the client to replay as the assistant
   // turn next time.
   raw: string;
+  // What the kit spends of its envelope.
   budget: { total: number; cap: number };
   // The shared factor the fit applied to the model's amounts: 1 means
   // the model's own numbers, above it they were raised to the line,
   // below it trimmed to fit.
   fit: number;
+  // The spells a burst cap held while the others took the room.
+  held: readonly AbilityKey[];
 }
 
 export async function suggestKit(
@@ -487,8 +509,9 @@ export async function suggestKit(
     if (foreign.length > 0) {
       lastErrors = [`names not in English: ${foreign.join(', ')}`];
       retry(
-        `These names are not plain English: ${foreign.join(', ')}. Rename them in English ` +
-          '(ASCII letters only), keep everything else, and answer with ONLY the JSON object.',
+        `These names or flavor lines are not plain English: ${foreign.join(', ')}. Rewrite ` +
+          'them in English (ASCII letters only), keep everything else, and answer with ONLY ' +
+          'the JSON object.',
         'The names were not English, asking again',
       );
       continue;
@@ -499,9 +522,10 @@ export async function suggestKit(
       abilities: suggestion.abilities,
     };
     // The fit: every amount at one shared factor so the kit lands on the
-    // budget line, the power dial's own scaling. An unvalidated shape may
-    // not scale at all: a fit that throws or finds no factor leaves the
-    // draft as it is for the validator to describe.
+    // envelope line, the power dial's own scaling, any spell a burst cap
+    // catches held there. An unvalidated shape may not scale at all: a
+    // fit that throws or finds no factor leaves the draft as it is for
+    // the validator to describe.
     let fit: ReturnType<typeof fitKitPower> = null;
     try {
       fit = fitKitPower(drafted);
@@ -526,8 +550,9 @@ export async function suggestKit(
       passive: suggestion.passive,
       abilities: candidate.abilities,
       raw: text.slice(0, CHAT_RAW_TEXT_MAX),
-      budget: { total: Math.round(bill.total), cap: POWER_BUDGET },
+      budget: { total: Math.round(kit.spend), cap: kit.cap },
       fit: fit?.factor ?? 1,
+      held: fit?.held ?? [],
     };
     if (floor <= 0 || kit.cap <= 0 || kit.spend >= floor * kit.cap) return proposal;
     // Valid but too light even at the dial's maximum: the structure is

@@ -122,6 +122,7 @@ describe('setForgedDisplay', () => {
       clips: null,
       clipFiles: null,
       display: { height: 3.0 },
+      icons: {},
     });
     // An unknown or asset-less definition still answers, with nulls: the
     // client keeps the procedural figure.
@@ -132,7 +133,47 @@ describe('setForgedDisplay', () => {
       clips: null,
       clipFiles: null,
       display: null,
+      icons: {},
     });
+    store.close();
+  });
+
+  it('carries the chosen spell icons, the sealed copy when no candidate remains', () => {
+    // Playtest: a forged champion played with procedural icons, the ones
+    // its creator chose never left the Forge. The block carries them by
+    // slot, as the Forge shows them (the chosen candidates), and falls
+    // back to the copy the pipeline sealed when the candidates are gone.
+    const store = seeded();
+    const candidate = (key: string, n: number): number =>
+      store.addArtCandidate({
+        forgedId: 'forged_a',
+        accountId: 1,
+        kind: `icon_${key}`,
+        prompt: 'p',
+        path: `forged/forged_a/art/icon_${key}_${n}.png`,
+        provenance: null,
+        at: n,
+      });
+    candidate('Q', 1);
+    store.chooseArtCandidate('forged_a', 'icon_Q', candidate('Q', 2));
+    store.chooseArtCandidate('forged_a', 'icon_R', candidate('R', 3));
+    // The sealed copy dates from the last animation: a later pick wins.
+    store.updateForgedAssets(
+      'forged_a',
+      { model: 'forged/forged_a/model.glb', family: 'staff', icons: { Q: 'forged/old_q.png' } },
+      30,
+    );
+    let block = forgedMatchAssets(store, [twin(0, 'forged_a', 'alice')]);
+    expect(block.forged_a?.icons).toEqual({
+      Q: 'forged/forged_a/art/icon_Q_2.png',
+      R: 'forged/forged_a/art/icon_R_3.png',
+    });
+    store.deleteArtCandidates('forged_a');
+    block = forgedMatchAssets(store, [twin(0, 'forged_a', 'alice')]);
+    expect(block.forged_a?.icons).toEqual({ Q: 'forged/old_q.png' });
+    // A malformed sealed copy reads as none, never as a crash.
+    store.updateForgedAssets('forged_a', { model: 'forged/forged_a/model.glb', icons: 7 }, 40);
+    expect(forgedMatchAssets(store, [twin(0, 'forged_a', 'alice')]).forged_a?.icons).toEqual({});
     store.close();
   });
 

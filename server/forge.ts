@@ -108,7 +108,11 @@ export function saveDraft(
     def.title,
     def.tagline,
     def.passive.name,
-    ...(['Q', 'W', 'E', 'R'] as const).map((k) => def.abilities[k]?.name ?? ''),
+    def.passive.flavor ?? '',
+    ...(['Q', 'W', 'E', 'R'] as const).flatMap((k) => [
+      def.abilities[k]?.name ?? '',
+      def.abilities[k]?.flavor ?? '',
+    ]),
   ]);
   if (blocked !== null) {
     return { ok: false, error: `pick different words: '${blocked}' cannot be on a card` };

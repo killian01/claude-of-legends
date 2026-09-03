@@ -8,6 +8,7 @@ import type { AbilityDef } from '../../combat/casting';
 import type { ChampionPassive } from '../../passive_types';
 import type { AbilityKey } from '../../types';
 import type { LaneId } from '../map';
+import type { AttackSoundId } from '../sounds';
 import { ASHVYN } from './ashvyn';
 import { DAIN } from './dain';
 import { ELOWEN } from './elowen';
@@ -94,6 +95,9 @@ export interface ChampionDef {
   base: ChampionBaseStats;
   growth: ChampionGrowth;
   abilities: Record<AbilityKey, AbilityDef>;
+  // The basic attack's sound, one of the palette (content/sounds.ts): a
+  // forged creator's pick. Absent, the model's weapon decides.
+  attackSound?: AttackSoundId;
 }
 
 const ALL: readonly ChampionDef[] = [

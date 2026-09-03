@@ -20,6 +20,7 @@ import {
 } from '../server/suggest';
 import type { AbilityDef } from '../src/sim/combat/casting';
 import { budgetOf, POWER_BUDGET } from '../src/sim/forge/budget';
+import { KIT_ENVELOPE, kitSpendOf } from '../src/sim/forge/envelopes';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { scaleAbility } from '../src/sim/forge/spell_power';
 import { FORGED_TWINS } from './forged_twins';
@@ -62,13 +63,10 @@ const WEAK_KIT = {
   },
 };
 
-// The share of the kit's own budget a kit spends, for picking a floor
+// The share of the kit envelope a kit spends, for picking a floor
 // between the weak and the good fixture deterministically.
 function kitShare(def: ForgedChampionDef): number {
-  const bill = budgetOf(def);
-  const spend =
-    bill.passive + bill.abilities.Q + bill.abilities.W + bill.abilities.E + bill.abilities.R;
-  return spend / (POWER_BUDGET - bill.stats - bill.growth);
+  return kitSpendOf(budgetOf(def)) / KIT_ENVELOPE;
 }
 
 function answer(text: string): Response {
@@ -204,14 +202,52 @@ describe('suggestKit', () => {
       expect(out.comment).toBe('Leaned into frost.');
       expect(out.passive).toEqual(GOOD_KIT.passive);
       expect(out.abilities.R.name).toBe(GOOD_KIT.abilities.R.name);
-      expect(out.budget.cap).toBe(POWER_BUDGET);
+      expect(out.budget.cap).toBe(KIT_ENVELOPE);
       expect(out.budget.total).toBeGreaterThan(0);
+      expect(out.held).toEqual([]);
       expect(out.raw).toContain('Leaned into frost.');
     }
     expect(calls).toHaveLength(1);
     expect(calls[0]?.url).toContain('api.anthropic.com');
     // Nothing was stored: the proposal is the editor's to apply.
     expect(store.getForged('forged_d')?.def.passive).toEqual(twin(0, 'forged_d').passive);
+    store.close();
+  });
+
+  it('keeps the flavor lines through the fit, and sends a foreign one back', async () => {
+    const store = seeded();
+    const flavored = {
+      passive: { ...GOOD_KIT.passive, flavor: 'The cold remembers every wound.' },
+      abilities: {
+        ...GOOD_KIT.abilities,
+        Q: { ...GOOD_KIT.abilities.Q, flavor: 'A shard of frozen night streaks out.' },
+      },
+    };
+    const out = await suggestKit(
+      deps(store, async () => answer(JSON.stringify(flavored))),
+      1,
+      {
+        id: 'forged_d',
+        messages: ASK,
+      },
+    );
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.abilities.Q.flavor).toBe('A shard of frozen night streaks out.');
+      expect(out.passive.flavor).toBe('The cold remembers every wound.');
+    }
+    let calls = 0;
+    const foreign = {
+      ...flavored,
+      abilities: { ...flavored.abilities, W: { ...GOOD_KIT.abilities.W, flavor: 'Un éclat.' } },
+    };
+    const fetchFn: typeof fetch = async () => {
+      calls += 1;
+      return answer(JSON.stringify(calls === 1 ? foreign : flavored));
+    };
+    const fixed = await suggestKit(deps(store, fetchFn), 1, { id: 'forged_d', messages: ASK });
+    expect(fixed.ok).toBe(true);
+    expect(calls).toBe(2);
     store.close();
   });
 
@@ -331,7 +367,7 @@ describe('the fit', () => {
       return Promise.resolve(answer(JSON.stringify({ comment: 'ok', ...GOOD_KIT })));
     }) as unknown as typeof fetch;
     const base = twin(0, 'forged_d');
-    expect(budgetOf({ ...base, ...GOOD_KIT }).total).toBeLessThan(POWER_BUDGET);
+    expect(kitSpendOf(budgetOf({ ...base, ...GOOD_KIT }))).toBeLessThan(KIT_ENVELOPE);
     const out = await suggestKit(deps(store, fetchFn, BUDGET_FLOOR_DEFAULT), 1, {
       id: 'forged_d',
       messages: ASK,
@@ -340,7 +376,11 @@ describe('the fit', () => {
     if (out.ok) {
       expect(out.fit).toBeGreaterThan(1);
       expect(out.budget.total).toBeLessThanOrEqual(POWER_BUDGET);
-      expect(out.budget.total).toBeGreaterThanOrEqual(POWER_BUDGET - 1);
+      // The kit lands on its envelope line: the whole bill is the body
+      // plus a full envelope.
+      const spend = kitSpendOf(budgetOf({ ...base, ...GOOD_KIT, abilities: out.abilities }));
+      expect(spend).toBeLessThanOrEqual(KIT_ENVELOPE);
+      expect(spend).toBeGreaterThanOrEqual(KIT_ENVELOPE - 1);
       // Structure and rhythm stay the model's; the raw answer is replayed
       // as it was said.
       expect(out.abilities.Q.spec.kind).toBe(GOOD_KIT.abilities.Q.spec.kind);
@@ -365,7 +405,9 @@ describe('the fit', () => {
         R: scaleAbility(GOOD_KIT.abilities.R, 2.4),
       },
     };
-    expect(budgetOf({ ...twin(0, 'forged_d'), ...heavy }).total).toBeGreaterThan(POWER_BUDGET);
+    expect(kitSpendOf(budgetOf({ ...twin(0, 'forged_d'), ...heavy }))).toBeGreaterThan(
+      KIT_ENVELOPE,
+    );
     let n = 0;
     const fetchFn = (() => {
       n += 1;

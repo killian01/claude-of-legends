@@ -24,7 +24,13 @@ import { BOON_DAMAGE_PER_STACK } from '../sim/team_buffs';
 import type { AbilityKey, TeamId } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { abilityIconUrl, passiveIconUrl, sigilIconUrl } from './ability_icons';
-import { describeAbility, describeItem, describeSigil, statLabel } from './describe';
+import {
+  describeAbility,
+  describeItem,
+  describeSigil,
+  escapeAuthored,
+  statLabel,
+} from './describe';
 import { iconDataUrl, itemIconUrl } from './icons';
 import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
@@ -734,7 +740,12 @@ export class Hud {
       passive.style.backgroundImage = `url(${passiveIconUrl(def.id)})`;
       passive.style.backgroundSize = 'cover';
       passive.appendChild(el('span', 'hud-slot-key', 'P'));
-      attachTooltip(passive, () => [`${def.passive.name} (passive)`, def.passive.description]);
+      // Authored text (a forged passive's name and flavor) rides these
+      // lines as HTML: escaped like every other authored string.
+      attachTooltip(passive, () => [
+        `${escapeAuthored(def.passive.name)} (passive)`,
+        escapeAuthored(def.passive.description),
+      ]);
       slots.appendChild(passive);
     }
     for (const key of KEYS) {

@@ -391,6 +391,25 @@ export function chosenIcons(store: ForgeStore, id: string): Record<string, strin
   return icons;
 }
 
+// The per-spell icons a champion currently shows in the match, keyed by
+// slot: the chosen candidates first, since the Forge shows those and the
+// pipeline's sealed copy dates from the last animation (a pick made
+// between animating and sealing lives only in the candidates); the
+// sealed copy when no candidate remains. Relative to the assets dir;
+// empty when none was ever chosen.
+export function iconsOf(store: ForgeStore, id: string): Record<string, string> {
+  const chosen = chosenIcons(store, id);
+  if (Object.keys(chosen).length > 0) return chosen;
+  const assets = store.forgedAssets(id) as { icons?: unknown } | null;
+  const sealed = assets?.icons;
+  if (typeof sealed !== 'object' || sealed === null) return {};
+  const out: Record<string, string> = {};
+  for (const [key, rel] of Object.entries(sealed as Record<string, unknown>)) {
+    if (typeof rel === 'string') out[key] = rel;
+  }
+  return out;
+}
+
 function bestEffortUnlink(absPath: string): void {
   try {
     unlinkSync(absPath);

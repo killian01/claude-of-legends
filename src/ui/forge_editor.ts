@@ -9,12 +9,22 @@
 // is a slot bar (passive plus Q W E R) with the selected spell's icon
 // generation and parameters below it.
 
+import { attackSoundOf, castSoundOf } from '../game/champion_sounds';
 import { forgedClipFileUrls, registerForgedAssets } from '../game/forged_visuals';
+import { playCastSfx, playSfx, preloadSfx } from '../game/sfx';
 import { RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import type { ChampionBaseStats, ChampionGrowth, ChampionRole } from '../sim/content/champions';
-import { ABILITY_BOUNDS, BASE_STAT_BOUNDS, GROWTH_BOUNDS } from '../sim/forge/bounds';
-import { budgetOf, POWER_BUDGET } from '../sim/forge/budget';
+import {
+  ATTACK_SOUND_GROUPS,
+  type AttackSoundId,
+  CAST_SOUND_GROUPS,
+  type CastSoundId,
+} from '../sim/content/sounds';
+import { ABILITY_BOUNDS, BASE_STAT_BOUNDS, FLAVOR_MAX, GROWTH_BOUNDS } from '../sim/forge/bounds';
+import { budgetOf } from '../sim/forge/budget';
+import { burstCapOf, burstOf } from '../sim/forge/burst';
 import type { ForgedDisplay } from '../sim/forge/display';
+import { ENVELOPES, envelopeSpend } from '../sim/forge/envelopes';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import { freshDraftDef } from '../sim/forge/fresh_draft';
 import { PASSIVE_TEMPLATE_LIST, PASSIVE_TEMPLATES } from '../sim/forge/passive_templates';
@@ -23,6 +33,15 @@ import { FORGED_ROLES, validateForged } from '../sim/forge/validate';
 import type { AbilityKey } from '../sim/types';
 import { type AnimPreview, createAnimPreview } from './anim_preview';
 import { describeAbility } from './describe';
+import {
+  BUDGET_VIEW_CSS,
+  dialStopHint,
+  dialStopLabel,
+  envelopeStrip,
+  kitOverview,
+  type LiveView,
+} from './forge_budget_view';
+import { chatPanel, chatStream, newChatState, type SavedChats } from './forge_chat';
 import { buildCastEditor, type KitHooks, numField } from './forge_kit';
 import { startMenuBackdrop } from './menu_backdrop';
 import { setRichLine } from './rich_text';
@@ -198,6 +217,9 @@ const CSS = `
 .fe-errors { color: #d06a6a; font-size: 11px; margin-top: 8px; line-height: 1.5; max-height: 30vh; overflow-y: auto; }
 .fe-ok { color: #8fd06a; font-weight: 700; margin-top: 8px; }
 .fe-status { min-height: 16px; color: #aac2dd; margin-top: 8px; font-size: 11px; }
+.fe-savestate { min-height: 14px; color: #97854f; margin-top: 4px; font-size: 11px; }
+.fe-savestate.err { color: #d06a6a; }
+.fe-flavor { color: #c9bfa3; font-style: italic; }
 .fe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
 .fe-desc { color: #97854f; font-style: italic; margin-top: 4px; line-height: 1.4; }
 .fe-chatlog { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; margin: 4px 0 8px; }
@@ -296,18 +318,37 @@ const CSS = `
   color: #241a08; border-color: #f0deae;
 }
 .fe-anim-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
-.fe-iconblock {
-  display: flex; align-items: center; gap: 10px; margin: 4px 0 10px; padding: 10px;
-  border: 1px dashed #4a3a1c; border-radius: 8px;
+.fe-slotcol { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.fe-slot-gen { padding: 2px 10px; font-size: 10px; }
+.fe-slot-img .fe-spin { width: 22px; height: 22px; }
+.fe-keytabs { display: inline-flex; gap: 4px; flex: none; }
+.fe-keytab { cursor: pointer; opacity: 0.5; font-size: 12px; }
+.fe-keytab:hover { opacity: 1; border-color: #a08030; }
+.fe-keytab.on { opacity: 1; border-color: #d8b45a; box-shadow: 0 0 6px rgba(216, 180, 90, 0.35); }
+.fe-alert {
+  margin: 8px 0 0; padding: 8px 12px; border-radius: 8px; border: 1px solid #b04a3a;
+  background: rgba(120, 30, 20, 0.4); color: #f0c8bc; font-size: 12px; font-weight: 600;
 }
-.fe-icon-preview { display: flex; align-items: center; gap: 6px; }
-.fe-icon-preview img { border-radius: 4px; border: 1px solid #4a3a1c; }
+.fe-iconrow {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px;
+  padding-top: 8px; border-top: 1px dashed #4a3a1c;
+}
+.fe-iconrow > img { border-radius: 4px; border: 1px solid #4a3a1c; }
+.fe-iconrow .fe-strip { margin-top: 0; }
+.fe-deltas { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; justify-content: center; }
+.fe-delta {
+  font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid #4a3a1c;
+  background: #1a130a; color: #b0a37e;
+}
+.fe-delta.up { border-color: #7ca050; color: #a8d080; }
+.fe-delta.down { border-color: #a06a4a; color: #d0a080; }
 .fe-quota { color: #97854f; font-size: 11px; margin-left: auto; }
 .fe-model-cta { display: flex; gap: 12px; align-items: center; }
 .fe-model-cta img {
   width: 104px; height: 138px; object-fit: contain; background: #120d06;
   border-radius: 6px; border: 1px solid #4a3a1c;
 }
+${BUDGET_VIEW_CSS}
 `;
 
 let cssInstalled = false;
@@ -317,6 +358,28 @@ function ensureCss(): void {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
+}
+
+// The sound palette as grouped options (src/sim/content/sounds.ts), the
+// select's first option (Auto) already in place.
+function appendSoundGroups(
+  select: HTMLSelectElement,
+  groups: ReadonlyArray<{
+    readonly group: string;
+    readonly sounds: ReadonlyArray<{ readonly id: string; readonly label: string }>;
+  }>,
+): void {
+  for (const g of groups) {
+    const og = document.createElement('optgroup');
+    og.label = g.group;
+    for (const s of g.sounds) {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.label;
+      og.append(opt);
+    }
+    select.append(og);
+  }
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -335,6 +398,9 @@ interface DraftRow {
   def: ForgedChampionDef;
   status: 'draft' | 'finalized';
   updatedAt: number;
+  // False when the stored definition no longer clears the validator (a
+  // seal from before a rule tightening): the owner unseals and retunes.
+  valid?: boolean;
   // Relative asset paths the server enriches the row with; the splash on
   // any row that has one, model, sheet, family and display once finalized.
   splash?: string | null;
@@ -345,6 +411,11 @@ interface DraftRow {
   clips?: Record<string, string> | null;
   clipFiles?: Record<string, string> | null;
   display?: ForgedDisplay | null;
+  // The chosen spell icon per slot, relative asset paths: the HUD of a
+  // test drive wears them.
+  icons?: Record<string, string> | null;
+  // The editor's saved conversations (kit, stats), restored on open.
+  chats?: SavedChats | null;
 }
 
 // One 2D candidate (splash, model reference, or spell icon) as the art
@@ -371,6 +442,19 @@ const EXAMPLE_LINES = [
     'belt hung with fishing hooks, pale lightning-blue eyes, spear tip crackling with static',
 ] as const;
 
+// The editor's ear for calls that fail as a whole: the server not
+// answering, or answering that the session is gone. The open editor sets
+// it; the message goes on a banner above everything, not on the small
+// status line, because a playtest met a dead session as icons that
+// vanished and a Save that "did nothing", which read as lost work.
+let apiTrouble: ((message: string | null) => void) | null = null;
+export const API_TROUBLE = {
+  session:
+    'Your session has ended: reload the page and sign in again. Your drafts, icons and ' +
+    'conversations are kept on the server.',
+  network: 'The server did not answer. Check that it is running, then reload the page.',
+} as const;
+
 // Identity rides the session cookie (ADR 0006), never a token in the URL.
 async function api<T>(url: string, body?: unknown): Promise<T | null> {
   try {
@@ -385,87 +469,12 @@ async function api<T>(url: string, body?: unknown): Promise<T | null> {
             body: JSON.stringify(body),
           },
     );
+    apiTrouble?.(res.status === 401 ? API_TROUBLE.session : null);
     return (await res.json()) as T;
   } catch {
+    apiTrouble?.(API_TROUBLE.network);
     return null;
   }
-}
-
-// One line of the kit conversation's streamed answer: the model's own
-// words as they arrive, or a stage the server announces between calls.
-interface SuggestLine {
-  progress?: 'text' | 'stage';
-  text?: string;
-}
-
-// The kit conversation's request: a POST whose answer streams as NDJSON,
-// progress lines first and the outcome last, so the bubble can read the
-// comment as the model writes it. A plain JSON answer still lands as the
-// outcome.
-async function suggestStream<T>(
-  body: unknown,
-  onLine: (line: SuggestLine) => void,
-): Promise<T | null> {
-  try {
-    const res = await fetch('/api/forge/suggest', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!res.body) return (await res.json()) as T;
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let pending = '';
-    let last: T | null = null;
-    const take = (line: string): void => {
-      if (line.trim() === '') return;
-      const parsed = JSON.parse(line) as SuggestLine;
-      if (parsed.progress) onLine(parsed);
-      else last = parsed as unknown as T;
-    };
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      pending += decoder.decode(value, { stream: true });
-      let cut = pending.indexOf('\n');
-      while (cut >= 0) {
-        take(pending.slice(0, cut));
-        pending = pending.slice(cut + 1);
-        cut = pending.indexOf('\n');
-      }
-    }
-    if (pending.trim() !== '') take(pending);
-    return last;
-  } catch {
-    return null;
-  }
-}
-
-// The comment as far as the model has written it: the first string of
-// the answer, read out of the raw JSON while it is still incomplete.
-function commentSoFar(raw: string): string {
-  const m = /"comment"\s*:\s*"/.exec(raw);
-  if (!m) return '';
-  let out = '';
-  for (let i = m.index + m[0].length; i < raw.length; i += 1) {
-    const ch = raw[i];
-    if (ch === '\\') {
-      const next = raw[i + 1];
-      if (next === undefined) break;
-      out += next === 'n' ? ' ' : next;
-      i += 1;
-      continue;
-    }
-    if (ch === '"') break;
-    out += ch;
-  }
-  return out;
-}
-
-// Which parts of the kit the model has reached so far, by their keys.
-function partsSoFar(raw: string): string[] {
-  return ['passive', 'Q', 'W', 'E', 'R'].filter((key) => raw.includes(`"${key}":`));
 }
 
 // A fresh draft: legal out of the box, middle of the road everywhere, so
@@ -483,11 +492,14 @@ type SpellSlot = 'P' | AbilityKey;
 
 export function openForgeEditor(container: HTMLElement): void {
   ensureCss();
+  // The sound palette's Play buttons play recordings: decode them now.
+  preloadSfx();
   const root = el('div', 'fe');
   const stopBackdrop = startMenuBackdrop(root);
   const close = (): void => {
     window.removeEventListener('keydown', onKey);
     stopBackdrop();
+    apiTrouble = null;
     root.remove();
   };
   const onKey = (e: KeyboardEvent): void => {
@@ -530,12 +542,22 @@ export function openForgeEditor(container: HTMLElement): void {
   const main = el('div', 'fe-main');
   const side = el('div', 'fe-side');
   body.append(rail, main, side);
-  root.append(head, tabs, body);
+  // Calls that fail as a whole (server gone, session ended) say so here,
+  // above the tabs' content, while the lists below keep what they showed.
+  const trouble = el('div', 'fe-alert', '');
+  trouble.hidden = true;
+  apiTrouble = (message) => {
+    trouble.textContent = message ?? '';
+    trouble.hidden = message === null;
+  };
+  root.append(head, tabs, trouble, body);
   container.appendChild(root);
 
   let drafts: DraftRow[] = [];
   let current: ForgedChampionDef = newDraft();
   const status = el('div', 'fe-status', '');
+  // Autosave's word: saving, saved, or why not.
+  const saveState = el('div', 'fe-savestate', '');
 
   // --- 2D art state (plan-forge phase 4): candidates and the gen2d meter --
 
@@ -556,31 +578,28 @@ export function openForgeEditor(container: HTMLElement): void {
   let animating = false;
   // True while a weapon-only build runs (the claim).
   let weaponForging = false;
-  // True while a kit conversation request is in flight (Spells tab),
-  // since when (wall clock: this is presentation, not sim), and the
-  // ticker that keeps the Thinking bubble honest about the wait.
-  let suggesting = false;
-  let suggestStartedAt = 0;
-  let thinkingTimer: number | null = null;
-  // What has streamed in so far (the model's raw answer for this call,
-  // the server's current stage) and the bubble's redraw.
-  let thinkingText = '';
-  let thinkingStage = '';
-  let thinkingTick: (() => void) | null = null;
-  // The kit conversation, session-lived: the wire thread (assistant
-  // turns hold the model's raw answers, replayed so it can iterate on
-  // its own proposals) and the short text each turn shows as a bubble.
-  const chat: { role: 'user' | 'assistant'; text: string; bubble: string }[] = [];
-  // The latest validated proposal, awaiting the creator's Apply.
+  // The two conversations, session-lived (forge_chat.ts): the kit's on
+  // the Spells tab, the stats' on the Tuning tab.
+  const kitChat = newChatState();
+  const statChat = newChatState();
+  // The latest validated kit proposal, awaiting the creator's Apply.
   let proposal: {
     passive: ForgedChampionDef['passive'];
     abilities: ForgedChampionDef['abilities'];
     budget: { total: number; cap: number };
     // The shared factor the server's fit applied to the model's amounts.
     fit: number;
+    // The spells a burst cap held while the others took the room.
+    held: string[];
   } | null = null;
-  // The unsent chat input, preserved across re-renders.
-  let chatDraft = '';
+  // The latest validated stat proposal, likewise: it lands on the
+  // polygons only when applied, and stays the creator's to pull after.
+  let statProposal: {
+    base: ChampionBaseStats;
+    growth: ChampionGrowth;
+    budget: { stats: { spend: number; cap: number }; growth: { spend: number; cap: number } };
+    fit: { stats: number; growth: number };
+  } | null = null;
   let currentStage = '';
   let stageRows: Map<string, HTMLElement> | null = null;
   // The account's creation stock, from the drafts route; -1 = unknown.
@@ -684,8 +703,11 @@ export function openForgeEditor(container: HTMLElement): void {
       candidates?: ArtCandidate[];
       quota?: { used: number; limit: number };
     }>(`/api/forge/art?id=${encodeURIComponent(current.id)}`);
-    artCandidates = r?.ok && r.candidates ? r.candidates : [];
-    artQuota = r?.ok && r.quota ? r.quota : { used: 0, limit: 0 };
+    // A failed call is not an empty gallery: what is shown stays shown,
+    // and the banner says why nothing fresh came.
+    if (!r?.ok) return;
+    artCandidates = r.candidates ?? [];
+    artQuota = r.quota ?? { used: 0, limit: 0 };
   };
 
   const currentRow = (): DraftRow | undefined => drafts.find((d) => d.id === current.id);
@@ -694,58 +716,176 @@ export function openForgeEditor(container: HTMLElement): void {
     artCandidates.find((c) => c.kind === kind && c.chosen);
   const assetUrl = (rel: string): string => `/api/forge/asset/${rel}`;
 
+  // Autosave: the form as last stored, compared by value after every
+  // refresh; a difference schedules a save, so nothing is lost to a
+  // reload or a rebuild. Fresh and freshly loaded drafts start as saved
+  // (a pristine new draft makes no row until it is touched or talked
+  // to). One save in flight at a time; a change during it saves again.
+  const snapshot = (): string => JSON.stringify(current);
+  let lastSaved = snapshot();
+  let lastSaveError: string | null = null;
+  let saveTimer: number | null = null;
+  let saving: Promise<boolean> | null = null;
+  let saveAgain = false;
+  const setSaveState = (text: string, err = false): void => {
+    saveState.textContent = text;
+    saveState.className = `fe-savestate${err ? ' err' : ''}`;
+  };
+  const saveNow = (): Promise<boolean> => {
+    if (saveTimer !== null) {
+      window.clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    if (isSealed()) return Promise.resolve(true);
+    if (saving) {
+      saveAgain = true;
+      return saving;
+    }
+    const snap = snapshot();
+    setSaveState('Saving...');
+    saving = api<{ ok: boolean; error?: string }>('/api/forge/draft', { def: current }).then(
+      (r) => {
+        saving = null;
+        if (r?.ok) {
+          lastSaved = snap;
+          lastSaveError = null;
+          setSaveState('All changes saved');
+          void loadDrafts();
+        } else {
+          lastSaveError = r?.error ?? 'save failed';
+          setSaveState(`Not saved: ${lastSaveError}`, true);
+        }
+        if (saveAgain) {
+          saveAgain = false;
+          return saveNow();
+        }
+        return r?.ok === true;
+      },
+    );
+    return saving;
+  };
+  const scheduleSave = (): void => {
+    if (isSealed()) return;
+    if (saveTimer !== null) window.clearTimeout(saveTimer);
+    setSaveState('Unsaved changes...');
+    saveTimer = window.setTimeout(() => {
+      saveTimer = null;
+      void saveNow();
+    }, 1200);
+  };
+  // True once the row exists and holds the form as it stands: what the
+  // art flow and the conversations need before they can run.
+  const ensureSaved = (): Promise<boolean> => {
+    const stored = drafts.some((d) => d.id === current.id);
+    if (stored && snapshot() === lastSaved && !saving) return Promise.resolve(true);
+    return saveNow();
+  };
+
+  // The conversations travel with the draft (server/forge_chats.ts):
+  // each accepted answer and each start-over lands the thread and its
+  // latest proposal beside the def; opening a draft brings them back.
+  const persistChat = (kind: 'kit' | 'stats'): void => {
+    const state = kind === 'kit' ? kitChat : statChat;
+    const prop = kind === 'kit' ? proposal : statProposal;
+    void ensureSaved().then((ok) => {
+      if (!ok) return;
+      return api<{ ok: boolean; error?: string }>('/api/forge/chat', {
+        id: current.id,
+        kind,
+        turns: state.turns,
+        proposal: prop,
+      }).then((r) => {
+        if (!r?.ok) status.textContent = r?.error ?? 'the conversation could not be saved';
+      });
+    });
+  };
+  const restoreChats = (row: DraftRow | undefined): void => {
+    const kit = row?.chats?.kit;
+    kitChat.turns = kit ? [...kit.turns] : [];
+    kitChat.draft = '';
+    const kp = kit?.proposal as Partial<NonNullable<typeof proposal>> | null | undefined;
+    proposal =
+      kp?.passive && kp.abilities
+        ? {
+            passive: kp.passive,
+            abilities: kp.abilities,
+            budget: kp.budget ?? { total: 0, cap: 0 },
+            fit: kp.fit ?? 1,
+            held: kp.held ?? [],
+          }
+        : null;
+    const st = row?.chats?.stats;
+    statChat.turns = st ? [...st.turns] : [];
+    statChat.draft = '';
+    const sp = st?.proposal as Partial<NonNullable<typeof statProposal>> | null | undefined;
+    statProposal =
+      sp?.base && sp.growth
+        ? {
+            base: sp.base,
+            growth: sp.growth,
+            budget: sp.budget ?? {
+              stats: { spend: 0, cap: ENVELOPES.stats },
+              growth: { spend: 0, cap: ENVELOPES.growth },
+            },
+            fit: sp.fit ?? { stats: 1, growth: 1 },
+          }
+        : null;
+  };
+
   // Save what is on screen (art hangs off a stored draft), generate, then
   // reload the strip. The request is held open for the image: one 2D
   // generation is seconds, not a finalize chain. While it runs the strip
   // shows a live skeleton card so nobody thinks the button was dead.
-  const generateArtKind = (kind: string, line: string): void => {
-    if (generating !== null) return;
-    const from = refineFrom[kind];
-    generating = kind;
+  // Several kinds in one go run one after the other (the four spell
+  // icons at once), each landing on screen as it arrives; the first
+  // failure stops the run and says why.
+  const generateArtKinds = (jobs: readonly { kind: string; line: string }[]): void => {
+    if (generating !== null || jobs.length === 0) return;
+    generating = jobs[0]?.kind ?? null;
     renderMain();
     status.textContent = 'Generating the image...';
-    // A sealed champion cannot be re-saved as a draft; its one open art
-    // kind (the unclaimed weapon) generates against the stored row.
-    const saveFirst: Promise<{ ok: boolean; error?: string } | null> = isSealed()
-      ? Promise.resolve({ ok: true })
-      : api<{ ok: boolean; error?: string }>('/api/forge/draft', { def: current });
-    void saveFirst
-      .then((saved) => {
-        if (!saved?.ok) throw new Error(saved?.error ?? 'save failed');
-        return api<{
-          ok: boolean;
-          error?: string;
-          quota?: { used: number; limit: number };
-        }>('/api/forge/art/generate', {
-          id: current.id,
-          kind,
-          line,
-          ...(from ? { fromCid: from.cid } : {}),
-        });
+    let quotaNote = '';
+    const runOne = async (job: { kind: string; line: string }): Promise<void> => {
+      const from = refineFrom[job.kind];
+      generating = job.kind;
+      renderMain();
+      const out = await api<{
+        ok: boolean;
+        error?: string;
+        quota?: { used: number; limit: number };
+      }>('/api/forge/art/generate', {
+        id: current.id,
+        kind: job.kind,
+        line: job.line,
+        ...(from ? { fromCid: from.cid } : {}),
+      });
+      if (!out?.ok) throw new Error(out?.error ?? 'generation failed');
+      delete refineFrom[job.kind];
+      quotaNote = out.quota ? ` ${out.quota.used}/${out.quota.limit} images today.` : '';
+      await loadArt();
+      renderMain();
+    };
+    // A sealed champion cannot be re-saved as a draft (ensureSaved says
+    // yes at once); its one open art kind generates against the row.
+    void ensureSaved()
+      .then(async (saved) => {
+        if (!saved) throw new Error(lastSaveError ?? 'save failed');
+        for (const job of jobs) await runOne(job);
       })
-      .then((out) => {
+      .then(() => {
         generating = null;
-        if (!out?.ok) {
-          status.textContent = out?.error ?? 'generation failed';
-          renderMain();
-          return;
-        }
-        delete refineFrom[kind];
-        status.textContent = out.quota
-          ? `Generated. ${out.quota.used}/${out.quota.limit} images today.`
-          : 'Generated.';
+        status.textContent = `Generated.${quotaNote}`;
         void loadDrafts();
-        return loadArt().then(() => {
-          renderMain();
-          refresh();
-        });
+        renderMain();
+        refresh();
       })
       .catch((err: unknown) => {
         generating = null;
         status.textContent = err instanceof Error ? err.message : 'generation failed';
-        renderMain();
+        void loadArt().then(() => renderMain());
       });
   };
+  const generateArtKind = (kind: string, line: string): void => generateArtKinds([{ kind, line }]);
 
   const pickArt = (cid: number): void => {
     void api<{ ok: boolean; error?: string }>('/api/forge/art/pick', {
@@ -881,14 +1021,16 @@ export function openForgeEditor(container: HTMLElement): void {
     });
   };
 
-  // --- right rail: the budget meter, verdict, and actions ---------------
+  // --- right rail: the three envelopes, the bill, verdict, and actions ---
 
-  const meterFill = el('div', 'fe-meter-fill');
-  const meterLine = el('div', 'fe-cost-line');
+  const strip = envelopeStrip();
+  // The kit overview at the head of the Spells tab, when that tab is up:
+  // fed by the same refresh so a dial drag moves it live.
+  let kitView: LiveView<ForgedChampionDef> | null = null;
   const costBox = el('div', '');
   const verdict = el('div', 'fe-errors');
   const testBtn = el('button', 'fe-btn', 'Test drive (practice)') as HTMLButtonElement;
-  const saveBtn = el('button', 'fe-btn primary', 'Save draft') as HTMLButtonElement;
+  const saveBtn = el('button', 'fe-btn primary', 'Save now') as HTMLButtonElement;
   const finalizeBtn = el(
     'button',
     'fe-btn',
@@ -908,17 +1050,12 @@ export function openForgeEditor(container: HTMLElement): void {
   };
 
   const refresh = (): void => {
+    if (!isSealed() && snapshot() !== lastSaved) scheduleSave();
     const v = validateForged(current);
     const cost = v.cost ?? (v.ok ? v.cost : null);
     const bill = cost ?? budgetOf(current);
-    const pct = Math.min(100, (100 * bill.total) / POWER_BUDGET);
-    meterFill.style.width = `${pct}%`;
-    meterFill.classList.toggle('over', bill.total > POWER_BUDGET);
-    meterLine.textContent = '';
-    meterLine.append(
-      el('span', '', 'Power budget'),
-      el('span', '', `${Math.round(bill.total)} / ${POWER_BUDGET}`),
-    );
+    strip.update(bill);
+    if (kitView?.el.isConnected) kitView.update(current);
     costBox.textContent = '';
     const rows: [string, number][] = [
       ['Stats', bill.stats],
@@ -936,7 +1073,7 @@ export function openForgeEditor(container: HTMLElement): void {
     }
     verdict.className = v.ok ? 'fe-ok' : 'fe-errors';
     verdict.textContent = v.ok
-      ? 'Fits the budget: playable as is.'
+      ? 'Inside every envelope and under the burst caps: playable as is.'
       : v.errors.slice(0, 8).join('\n');
     testBtn.disabled = !v.ok;
     testBtn.title = v.ok ? '' : 'The kit must fully validate before a test drive';
@@ -956,11 +1093,10 @@ export function openForgeEditor(container: HTMLElement): void {
     },
   };
 
+  saveBtn.title = 'Every change saves on its own; this saves this instant';
   saveBtn.addEventListener('click', () => {
-    status.textContent = 'Saving...';
-    void api<{ ok: boolean; error?: string }>('/api/forge/draft', { def: current }).then((r) => {
-      status.textContent = r?.ok ? 'Draft saved.' : (r?.error ?? 'save failed');
-      if (r?.ok) void loadDrafts();
+    void saveNow().then((ok) => {
+      status.textContent = ok ? 'Draft saved.' : (lastSaveError ?? 'save failed');
     });
   });
   deleteBtn.addEventListener('click', () => {
@@ -970,6 +1106,9 @@ export function openForgeEditor(container: HTMLElement): void {
         if (r?.ok) {
           current = newDraft();
           artCandidates = [];
+          lastSaved = snapshot();
+          setSaveState('');
+          restoreChats(undefined);
           void loadDrafts();
           renderMain();
           refresh();
@@ -979,6 +1118,15 @@ export function openForgeEditor(container: HTMLElement): void {
   });
   testBtn.addEventListener('click', () => {
     const def = JSON.parse(JSON.stringify(current)) as ForgedChampionDef;
+    // The icons as chosen on screen, picked since the rail last loaded
+    // included: the test drive's HUD wears exactly what the Spells tab
+    // shows.
+    const icons: Record<string, string> = {};
+    for (const key of ['Q', 'W', 'E', 'R']) {
+      const pick = chosenOf(`icon_${key}`);
+      if (pick) icons[key] = pick.path;
+    }
+    registerForgedAssets(current.id, { icons });
     close();
     window.dispatchEvent(new CustomEvent('loc:forge-test', { detail: def }));
   });
@@ -1175,9 +1323,7 @@ export function openForgeEditor(container: HTMLElement): void {
 
   const meterPanel = el('div', 'fe-panel');
   meterPanel.append(el('h3', '', 'Power budget'));
-  const meterBar = el('div', 'fe-meter-bar');
-  meterBar.append(meterFill);
-  meterPanel.append(meterLine, meterBar, costBox, verdict);
+  meterPanel.append(strip.el, costBox, verdict);
   // Creation order: save the work, build the model, inspect it, play it.
   // Delete stays last, away from the flow.
   const actions = el('div', 'fe-panel');
@@ -1189,6 +1335,7 @@ export function openForgeEditor(container: HTMLElement): void {
     testBtn,
     deleteBtn,
     status,
+    saveState,
   );
   side.append(meterPanel, actions);
 
@@ -1207,11 +1354,22 @@ export function openForgeEditor(container: HTMLElement): void {
       const sub = el(
         'small',
         '',
-        row.status === 'finalized' ? 'finalized' : row.def.tagline || 'draft',
+        row.status === 'finalized'
+          ? row.valid === false
+            ? 'finalized, needs a reforge: unseal, retune, seal again'
+            : 'finalized'
+          : row.def.tagline || 'draft',
       );
+      if (row.status === 'finalized' && row.valid === false) sub.style.color = '#d06a6a';
       btn.append(sub);
       btn.addEventListener('click', () => {
+        // Another draft's art must not linger while this one's loads;
+        // the same draft keeps its icons up through a failed reload.
+        if (row.id !== current.id) artCandidates = [];
         current = JSON.parse(JSON.stringify(row.def)) as ForgedChampionDef;
+        lastSaved = snapshot();
+        setSaveState('');
+        restoreChats(row);
         renderRail();
         renderMain();
         refresh();
@@ -1227,6 +1385,9 @@ export function openForgeEditor(container: HTMLElement): void {
     fresh.addEventListener('click', () => {
       current = newDraft();
       artCandidates = [];
+      lastSaved = snapshot();
+      setSaveState('');
+      restoreChats(undefined);
       renderRail();
       renderMain();
       refresh();
@@ -1239,8 +1400,10 @@ export function openForgeEditor(container: HTMLElement): void {
     const r = await api<{ ok: boolean; drafts?: DraftRow[]; credits?: number }>(
       `/api/forge/drafts`,
     );
-    drafts = r?.ok && r.drafts ? r.drafts : [];
-    if (r?.ok && typeof r.credits === 'number') creations = r.credits;
+    // A failed call is not an empty rail: the rows already shown stay.
+    if (!r?.ok) return;
+    drafts = r.drafts ?? [];
+    if (typeof r.credits === 'number') creations = r.credits;
     // Finalized champions announce their models to the render registry, so
     // a test drive straight from here plays the generated model.
     for (const d of drafts) registerForgedAssets(d.id, d);
@@ -1251,6 +1414,25 @@ export function openForgeEditor(container: HTMLElement): void {
   };
 
   // --- center: the tabs --------------------------------------------------
+
+  // The flavor line's field (CONTEXT.md): the one authored text on a
+  // spell or the passive, the story above the derived mechanics. Empty
+  // means none; the word filter reads it at save like every card text.
+  function flavorInput(
+    get: () => string | undefined,
+    set: (v: string | undefined) => void,
+  ): HTMLInputElement {
+    const input = el('input', 'fe-input fe-flavor') as HTMLInputElement;
+    input.maxLength = FLAVOR_MAX;
+    input.placeholder = 'One line of story (optional): the image of the spell, not its numbers';
+    input.value = get() ?? '';
+    input.addEventListener('input', () => {
+      const v = input.value;
+      set(v.trim() === '' ? undefined : v);
+      refresh();
+    });
+    return input;
+  }
 
   function textInput(
     placeholder: string,
@@ -1818,13 +2000,160 @@ export function openForgeEditor(container: HTMLElement): void {
   function renderSpells(): void {
     const sealed = isSealed();
 
+    // The kit overview first: the whole envelope cut into its parts, and
+    // the burst caps, so the creator sees where the room is before
+    // touching a spell.
+    const overview = el('div', 'fe-panel');
+    overview.append(el('h3', '', 'Kit overview'));
+    const view = kitOverview();
+    view.update(current);
+    overview.append(view.el);
+    kitView = view;
+    main.append(overview);
+
+    // The kit conversation (playtest: iterate before applying). The
+    // thread lives in this editor session only; each answer lands as a
+    // whole proposed kit in the panel below, validated by the server
+    // against the full game rules, and NOTHING touches the form until
+    // Apply. Shown on sealed champions too, disabled with its reason in
+    // plain sight: an absent control reads as broken.
+    const splashChosen = chosenOf('splash') !== undefined;
+    main.append(
+      chatPanel<{
+        ok: boolean;
+        comment?: string;
+        passive?: ForgedChampionDef['passive'];
+        abilities?: ForgedChampionDef['abilities'];
+        raw?: string;
+        budget?: { total: number; cap: number };
+        fit?: number;
+        held?: string[];
+        error?: string;
+      }>(kitChat, {
+        title: 'Kit conversation (AI)',
+        lead:
+          'Reads your chosen splash. Say what you want ("an ice theme", "more mobility ' +
+          'on the E", "a darker line of story for the Q"); each answer proposes a full kit ' +
+          'below, fitted to the kit envelope line, with a line of story per spell above ' +
+          'the derived text. Nothing touches your spells until you apply it.',
+        placeholder: 'What should this kit be?',
+        locked: sealed
+          ? 'This champion is sealed: its kit is locked. Unseal it (Design tab, ' +
+            'animations block) to rework the kit.'
+          : splashChosen
+            ? null
+            : 'Locked until a splash art is chosen on the Design tab.',
+        parts: ['passive', 'Q', 'W', 'E', 'R'],
+        request: (messages, onLine) =>
+          ensureSaved().then((ok) =>
+            ok
+              ? chatStream('/api/forge/suggest', { id: current.id, def: current, messages }, onLine)
+              : { ok: false, error: lastSaveError ?? 'the draft could not be saved' },
+          ),
+        accept: (r) => {
+          if (!r?.ok || !r.passive || !r.abilities || typeof r.raw !== 'string') {
+            return { error: r?.error ?? 'the suggestion failed' };
+          }
+          proposal = {
+            passive: r.passive,
+            abilities: r.abilities,
+            budget: r.budget ?? { total: 0, cap: 0 },
+            fit: r.fit ?? 1,
+            held: r.held ?? [],
+          };
+          return { raw: r.raw, bubble: r.comment ? r.comment : 'Here is a kit proposal.' };
+        },
+        report: (message) => {
+          status.textContent = message;
+        },
+        rerender: renderMain,
+        changed: () => persistChat('kit'),
+      }),
+    );
+
+    // The latest proposal, whole-kit: the same derived descriptions the
+    // roster shows, the budget bill, one Apply for all of it.
+    if (proposal !== null) {
+      const p = proposal;
+      const prop = el('div', 'fe-panel');
+      prop.append(el('h3', '', 'Proposed kit'));
+      const tpl = PASSIVE_TEMPLATES[p.passive.template];
+      const pass = el('div', 'fe-prop-spell');
+      pass.append(el('strong', '', `Passive: ${p.passive.name || 'Passive'}`));
+      if (p.passive.flavor) pass.append(el('p', 'fe-desc fe-flavor', p.passive.flavor));
+      if (tpl) pass.append(el('p', 'fe-desc', tpl.describe(p.passive.params)));
+      prop.append(pass);
+      for (const key of ['Q', 'W', 'E', 'R'] as const) {
+        const a = p.abilities[key];
+        const block = el('div', 'fe-prop-spell');
+        block.append(el('strong', '', `${key}: ${a.name}`));
+        const line = el('p', 'fe-desc');
+        setRichLine(line, describeAbility(key, a).join(' '));
+        block.append(line);
+        prop.append(block);
+      }
+      prop.append(
+        el(
+          'p',
+          'fe-lead',
+          `This kit uses ${p.budget.total} / ${p.budget.cap} of the kit envelope.`,
+        ),
+      );
+      if (Math.abs(p.fit - 1) >= 0.005) {
+        prop.append(
+          el(
+            'p',
+            'fe-desc',
+            `Amounts ${p.fit > 1 ? 'raised' : 'trimmed'} to ${p.fit.toFixed(2)} times the ` +
+              'answer to sit on the envelope line; the power dials move them again.',
+          ),
+        );
+      }
+      if (p.held.length > 0) {
+        prop.append(
+          el(
+            'p',
+            'fe-desc',
+            `${p.held.join(', ')} held by the burst cap while the other spells took the room.`,
+          ),
+        );
+      }
+      if (!sealed) {
+        const apply = el('button', 'fe-gen small', 'Apply this kit (free)') as HTMLButtonElement;
+        apply.title = 'Fills the form with this kit; nothing is saved until you save';
+        apply.addEventListener('click', () => {
+          current.passive = structuredClone(p.passive);
+          // The kit is the conversation's; the sounds stay the creator's.
+          const kept = current.abilities;
+          current.abilities = structuredClone(p.abilities);
+          for (const key of ['Q', 'W', 'E', 'R'] as const) {
+            const sound = kept[key]?.sound;
+            if (sound !== undefined && current.abilities[key].sound === undefined) {
+              current.abilities[key].sound = sound;
+            }
+          }
+          status.textContent = 'The proposed kit is on the form: review, tweak, then save.';
+          renderMain();
+          refresh();
+        });
+        prop.append(apply);
+      }
+      main.append(prop);
+    }
+
+    // The spells themselves, right under the proposal: one slot per key
+    // wearing its icon, the icon generation beside each (or all four at
+    // once), and the selected slot's candidates. The slot's parameters
+    // edit below.
     const slotsPanel = el('div', 'fe-panel');
     slotsPanel.append(el('h3', '', 'Spells'));
     slotsPanel.append(
       el(
         'p',
         'fe-lead',
-        'Pick a slot; its icon and parameters edit below. Every spell can carry a generated icon (the procedural one plays until then).',
+        'Pick a slot to edit it below. Every spell wears a generated icon in the game ' +
+          'style (the procedural one plays until then): make them one at a time, or all ' +
+          'four at once.',
       ),
     );
     const slots = el('div', 'fe-slots');
@@ -1836,11 +2165,14 @@ export function openForgeEditor(container: HTMLElement): void {
       { key: 'R', label: 'R' },
     ];
     for (const { key, label } of slotDefs) {
+      const col = el('div', 'fe-slotcol');
       const slot = el('button', 'fe-slot') as HTMLButtonElement;
       slot.classList.toggle('on', spellSlot === key);
       const face = el('div', 'fe-slot-img');
       const chosenIcon = key === 'P' ? undefined : chosenOf(`icon_${key}`);
-      if (chosenIcon) {
+      if (generating === `icon_${key}`) {
+        face.append(el('div', 'fe-spin'));
+      } else if (chosenIcon) {
         const img = document.createElement('img');
         img.src = assetUrl(chosenIcon.path);
         img.alt = '';
@@ -1855,210 +2187,90 @@ export function openForgeEditor(container: HTMLElement): void {
         spellSlot = key;
         renderMain();
       });
-      slots.append(slot);
+      col.append(slot);
+      if (key !== 'P' && !sealed) {
+        const gen = el('button', 'fe-mini fe-slot-gen', 'Icon') as HTMLButtonElement;
+        gen.disabled = generating !== null;
+        gen.title = chosenIcon
+          ? 'Generate another icon for this spell'
+          : 'Generate the icon of this spell';
+        gen.addEventListener('click', () => generateArtKind(`icon_${key}`, ''));
+        col.append(gen);
+      }
+      slots.append(col);
     }
     slotsPanel.append(slots);
-    main.append(slotsPanel);
-
-    // The kit conversation (playtest: iterate before applying). The
-    // thread lives in this editor session only; each answer lands as a
-    // whole proposed kit in the panel below, validated by the server
-    // against the full game rules, and NOTHING touches the form until
-    // Apply. Shown on sealed champions too, disabled with its reason in
-    // plain sight: an absent control reads as broken.
-    {
-      const sug = el('div', 'fe-panel');
-      sug.append(el('h3', '', 'Kit conversation (AI)'));
-      sug.append(
-        el(
-          'p',
-          'fe-lead',
-          'Reads your chosen splash. Say what you want ("an ice theme", "more mobility ' +
-            'on the E"); each answer proposes a full kit below, fitted to the budget ' +
-            'line, and nothing touches your spells until you apply it.',
+    // The basic attack's sound, from the palette (each spell picks its
+    // cast sound below, beside its animation): a pick plays at once, so
+    // it is heard before it is kept; autosave carries it with the def.
+    const atkRow = el('div', 'fe-artrow');
+    atkRow.append(el('span', 'fe-desc', 'Basic attack sound'));
+    const atkSel = el('select', 'fe-select fe-sound') as HTMLSelectElement;
+    const atkAuto = document.createElement('option');
+    atkAuto.value = '';
+    atkAuto.textContent = 'Auto: a whip of air';
+    atkSel.append(atkAuto);
+    appendSoundGroups(atkSel, ATTACK_SOUND_GROUPS);
+    atkSel.value = current.attackSound ?? '';
+    atkSel.disabled = sealed;
+    atkSel.addEventListener('change', () => {
+      if (atkSel.value === '') current.attackSound = undefined;
+      else current.attackSound = atkSel.value as AttackSoundId;
+      playSfx(attackSoundOf(current, false));
+      refresh();
+    });
+    const atkHear = el('button', 'fe-mini', 'Play') as HTMLButtonElement;
+    atkHear.title = 'Hear the basic attack';
+    atkHear.addEventListener('click', () => playSfx(attackSoundOf(current, false)));
+    atkRow.append(atkSel, atkHear);
+    slotsPanel.append(atkRow);
+    if (!sealed) {
+      const all = el('div', 'fe-artrow');
+      const genAll = el('button', 'fe-gen small', 'Generate all four icons') as HTMLButtonElement;
+      genAll.disabled = generating !== null;
+      genAll.title = 'One icon per spell, in order, each drawn from what that spell does';
+      genAll.addEventListener('click', () =>
+        generateArtKinds(
+          (['Q', 'W', 'E', 'R'] as const).map((k) => ({ kind: `icon_${k}`, line: '' })),
         ),
       );
-      const log = el('div', 'fe-chatlog');
-      if (chat.length === 0 && !suggesting) {
-        log.append(el('div', 'fe-step-text', 'No messages yet.'));
+      all.append(genAll);
+      if (artQuota.limit > 0) {
+        all.append(el('span', 'fe-quota', `${artQuota.used}/${artQuota.limit} images today`));
       }
-      for (const turn of chat) {
-        log.append(el('div', `fe-bubble ${turn.role === 'user' ? 'user' : 'ai'}`, turn.bubble));
-      }
-      if (suggesting) {
-        // The wait, counted out loud: a silent bubble reads as a hang.
-        const bubble = el('div', 'fe-bubble ai', '');
-        const tick = (): void => {
-          const secs = Math.round((Date.now() - suggestStartedAt) / 1000);
-          const comment = commentSoFar(thinkingText);
-          const parts = partsSoFar(thinkingText);
-          const writing = parts.length > 0 ? ` Writing: ${parts.join(', ')}.` : '';
-          bubble.textContent =
-            comment !== '' ? `${comment}${writing}` : `${thinkingStage || 'Thinking'}... ${secs} s`;
-        };
-        tick();
-        thinkingTick = tick;
-        if (thinkingTimer !== null) window.clearInterval(thinkingTimer);
-        thinkingTimer = window.setInterval(tick, 1000);
-        log.append(bubble);
-      }
-      sug.append(log);
-      const row = el('div', 'fe-chatrow');
-      const input = el('input', 'fe-input') as HTMLInputElement;
-      input.placeholder = 'What should this kit be?';
-      input.maxLength = 2000;
-      input.value = chatDraft;
-      input.addEventListener('input', () => {
-        chatDraft = input.value;
-      });
-      const splashChosen = chosenOf('splash') !== undefined;
-      const send = el(
-        'button',
-        'fe-gen small',
-        suggesting ? 'Asking...' : 'Send',
-      ) as HTMLButtonElement;
-      send.disabled = sealed || !splashChosen || suggesting;
-      const submit = (): void => {
-        const text = input.value.trim();
-        if (text === '' || send.disabled) return;
-        chatDraft = '';
-        chat.push({ role: 'user', text, bubble: text });
-        suggesting = true;
-        suggestStartedAt = Date.now();
-        renderMain();
-        void suggestStream<{
-          ok: boolean;
-          comment?: string;
-          passive?: ForgedChampionDef['passive'];
-          abilities?: ForgedChampionDef['abilities'];
-          raw?: string;
-          budget?: { total: number; cap: number };
-          fit?: number;
-          error?: string;
-        }>(
-          {
-            id: current.id,
-            def: current,
-            messages: chat.map((t) => ({ role: t.role, text: t.text })),
-          },
-          (line) => {
-            if (line.progress === 'stage') {
-              thinkingStage = line.text ?? '';
-              thinkingText = '';
-            } else if (line.progress === 'text') {
-              thinkingText += line.text ?? '';
-            }
-            thinkingTick?.();
-          },
-        ).then((r) => {
-          suggesting = false;
-          thinkingText = '';
-          thinkingStage = '';
-          thinkingTick = null;
-          if (thinkingTimer !== null) {
-            window.clearInterval(thinkingTimer);
-            thinkingTimer = null;
-          }
-          if (!r?.ok || !r.passive || !r.abilities || typeof r.raw !== 'string') {
-            // The model never saw this message: take it back into the
-            // input so the thread matches what was actually answered.
-            chat.pop();
-            chatDraft = text;
-            status.textContent = r?.error ?? 'the suggestion failed';
-            renderMain();
-            return;
-          }
-          chat.push({
-            role: 'assistant',
-            text: r.raw,
-            bubble: r.comment ? r.comment : 'Here is a kit proposal.',
-          });
-          proposal = {
-            passive: r.passive,
-            abilities: r.abilities,
-            budget: r.budget ?? { total: 0, cap: 0 },
-            fit: r.fit ?? 1,
-          };
-          renderMain();
-        });
-      };
-      send.addEventListener('click', submit);
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') submit();
-      });
-      row.append(input, send);
-      if (chat.length > 0 && !suggesting) {
-        const clear = el('button', 'fe-mini', 'Start over') as HTMLButtonElement;
-        clear.title = 'Forget this conversation (the proposal below stays)';
-        clear.addEventListener('click', () => {
-          chat.length = 0;
-          renderMain();
-        });
-        row.append(clear);
-      }
-      sug.append(row);
-      if (sealed) {
-        sug.append(
-          el(
-            'p',
-            'fe-desc',
-            'This champion is sealed: its kit is locked. Unseal it (Design tab, ' +
-              'animations block) to rework the kit.',
-          ),
-        );
-      } else if (!splashChosen) {
-        sug.append(el('p', 'fe-desc', 'Locked until a splash art is chosen on the Design tab.'));
-      }
-      main.append(sug);
-
-      // The latest proposal, whole-kit: the same derived descriptions
-      // the roster shows, the budget bill, one Apply for all of it.
-      if (proposal !== null) {
-        const p = proposal;
-        const prop = el('div', 'fe-panel');
-        prop.append(el('h3', '', 'Proposed kit'));
-        const tpl = PASSIVE_TEMPLATES[p.passive.template];
-        const pass = el('div', 'fe-prop-spell');
-        pass.append(el('strong', '', `Passive: ${p.passive.name || 'Passive'}`));
-        if (tpl) pass.append(el('p', 'fe-desc', tpl.describe(p.passive.params)));
-        prop.append(pass);
-        for (const key of ['Q', 'W', 'E', 'R'] as const) {
-          const a = p.abilities[key];
-          const block = el('div', 'fe-prop-spell');
-          block.append(el('strong', '', `${key}: ${a.name}`));
-          const line = el('p', 'fe-desc');
-          setRichLine(line, describeAbility(key, a).join(' '));
-          block.append(line);
-          prop.append(block);
-        }
-        prop.append(
-          el('p', 'fe-lead', `This kit uses ${p.budget.total} / ${p.budget.cap} of the budget.`),
-        );
-        if (Math.abs(p.fit - 1) >= 0.005) {
-          prop.append(
-            el(
-              'p',
-              'fe-desc',
-              `Amounts ${p.fit > 1 ? 'raised' : 'trimmed'} to ${p.fit.toFixed(2)} times the ` +
-                'answer to sit on the budget line; the power dials move them again.',
-            ),
-          );
-        }
-        if (!sealed) {
-          const apply = el('button', 'fe-gen small', 'Apply this kit (free)') as HTMLButtonElement;
-          apply.title = 'Fills the form with this kit; nothing is saved until you save';
-          apply.addEventListener('click', () => {
-            current.passive = structuredClone(p.passive);
-            current.abilities = structuredClone(p.abilities);
-            status.textContent = 'The proposed kit is on the form: review, tweak, then save.';
-            renderMain();
-            refresh();
-          });
-          prop.append(apply);
-        }
-        main.append(prop);
-      }
+      slotsPanel.append(all);
     }
+    // The selected spell's icon candidates: view large, pick, iterate.
+    if (spellSlot !== 'P') {
+      const kind = `icon_${spellSlot}`;
+      const chosenIcon = chosenOf(kind);
+      const has = artCandidates.some((c) => c.kind === kind) || generating === kind;
+      const iconRow = el('div', 'fe-iconrow');
+      iconRow.append(el('span', 'fe-field-label', `${spellSlot} icon`));
+      if (chosenIcon) {
+        const small = document.createElement('img');
+        small.src = assetUrl(chosenIcon.path);
+        small.width = 24;
+        small.height = 24;
+        small.alt = '';
+        small.title = 'At in-match size';
+        iconRow.append(small);
+      }
+      const badge = refineBadge(kind);
+      if (badge) iconRow.append(badge);
+      if (has) iconRow.append(artStrip(kind, false));
+      iconRow.append(
+        el(
+          'span',
+          'fe-step-text',
+          has
+            ? 'Click a candidate to view it large, pick it, or iterate from it.'
+            : 'No generated icon yet: the procedural one plays until you make one.',
+        ),
+      );
+      slotsPanel.append(iconRow);
+    }
+    main.append(slotsPanel);
 
     if (spellSlot === 'P') {
       renderPassiveEditor(sealed);
@@ -2067,40 +2279,83 @@ export function openForgeEditor(container: HTMLElement): void {
     }
   }
 
+  // The slot switch beside a panel's title, for the creator deep in the
+  // parameters or the animation: the other spells are one click away
+  // without the way back up to the slot row (playtest: "no way to switch
+  // between the spells for parameters and animation").
+  function keyTabs(): HTMLElement {
+    const row = el('div', 'fe-keytabs');
+    for (const key of ['P', 'Q', 'W', 'E', 'R'] as const) {
+      const b = el('button', 'fe-key fe-keytab', key) as HTMLButtonElement;
+      b.type = 'button';
+      b.classList.toggle('on', spellSlot === key);
+      b.title = key === 'P' ? 'Edit the passive' : `Edit ${key}`;
+      b.addEventListener('click', () => {
+        if (spellSlot === key) return;
+        spellSlot = key;
+        renderMain();
+      });
+      row.append(b);
+    }
+    return row;
+  }
+
+  // The passive's parameters, in the same panel shape as a spell's: the
+  // key, the name, then the template (one the engine owns) and its
+  // numbers, described live. Structure comes from the kit conversation
+  // or from the template pick here.
   function renderPassiveEditor(_sealed: boolean): void {
-    const passive = el('div', 'fe-panel');
-    passive.append(el('h3', '', 'Passive (a template the engine owns; you set the numbers)'));
+    const panel = el('div', 'fe-panel');
+    panel.append(el('h3', '', 'Parameters (P)'));
+    const headRow = el('div', 'fe-ability-head');
+    headRow.append(keyTabs());
+    const nameInput = el('input', 'fe-input') as HTMLInputElement;
+    nameInput.style.marginBottom = '0';
+    nameInput.maxLength = 40;
+    nameInput.placeholder = 'Passive name';
+    nameInput.value = current.passive.name;
+    nameInput.addEventListener('input', () => {
+      current.passive.name = nameInput.value;
+      refresh();
+    });
+    headRow.append(nameInput);
+    panel.append(headRow);
+    panel.append(
+      flavorInput(
+        () => current.passive.flavor,
+        (v) => {
+          if (v === undefined) delete current.passive.flavor;
+          else current.passive.flavor = v;
+        },
+      ),
+    );
+    const tpl = PASSIVE_TEMPLATES[current.passive.template];
+    const desc = el('p', 'fe-desc', tpl ? tpl.describe(current.passive.params) : '');
+    panel.append(desc);
+    const tplRow = el('label', 'fe-field');
+    tplRow.append(el('span', 'fe-field-label', 'template'));
     const tplSelect = el('select', 'fe-select') as HTMLSelectElement;
-    for (const tpl of PASSIVE_TEMPLATE_LIST) {
+    for (const t of PASSIVE_TEMPLATE_LIST) {
       const opt = document.createElement('option');
-      opt.value = tpl.id;
-      opt.textContent = `${tpl.id}: ${tpl.summary}`;
+      opt.value = t.id;
+      opt.textContent = `${t.id}: ${t.summary}`;
       tplSelect.append(opt);
     }
     tplSelect.value = current.passive.template;
     tplSelect.addEventListener('change', () => {
-      const tpl = PASSIVE_TEMPLATES[tplSelect.value];
-      if (!tpl) return;
+      const next = PASSIVE_TEMPLATES[tplSelect.value];
+      if (!next) return;
       const params: Record<string, number> = {};
-      for (const p of tpl.params) params[p.key] = p.min + (p.max - p.min) / 2;
-      for (const p of tpl.params) if (p.integer) params[p.key] = Math.round(params[p.key] ?? p.min);
-      current.passive = { template: tpl.id, params, name: current.passive.name };
+      for (const p of next.params) params[p.key] = p.min + (p.max - p.min) / 2;
+      for (const p of next.params)
+        if (p.integer) params[p.key] = Math.round(params[p.key] ?? p.min);
+      current.passive = { template: next.id, params, name: current.passive.name };
       hooks.rebuild();
     });
-    passive.append(tplSelect);
-    passive.append(
-      textInput(
-        'Passive name',
-        () => current.passive.name,
-        (v) => {
-          current.passive.name = v;
-        },
-        40,
-      ),
-    );
-    const tpl = PASSIVE_TEMPLATES[current.passive.template];
+    tplRow.append(tplSelect);
+    panel.append(tplRow);
     if (tpl) {
-      const paramRow = el('div', '');
+      const paramRow = el('div', 'fe-fields');
       for (const p of tpl.params) {
         paramRow.append(
           numField(
@@ -2112,64 +2367,22 @@ export function openForgeEditor(container: HTMLElement): void {
           ),
         );
       }
-      passive.append(paramRow);
-      const desc = el('div', 'fe-desc', tpl.describe(current.passive.params));
-      passive.append(desc);
+      panel.append(paramRow);
       paramRow.addEventListener('input', () => {
         desc.textContent = tpl.describe(current.passive.params);
       });
     }
-    main.append(passive);
+    main.append(panel);
   }
 
   function renderAbilityEditor(key: AbilityKey, sealed: boolean): void {
     const ability = current.abilities[key] as unknown as Record<string, unknown>;
 
-    // The icon first: generation front and center, like every other step.
-    const iconPanel = el('div', 'fe-panel');
-    iconPanel.append(el('h3', '', `Spell icon (${key})`));
-    const iconBlock = el('div', 'fe-iconblock');
-    const chosenIcon = chosenOf(`icon_${key}`);
-    if (chosenIcon) {
-      const preview = el('div', 'fe-icon-preview');
-      for (const size of [56, 24]) {
-        const img = document.createElement('img');
-        img.src = assetUrl(chosenIcon.path);
-        img.width = size;
-        img.height = size;
-        img.alt = '';
-        preview.append(img);
-      }
-      iconBlock.append(preview);
-    }
-    iconBlock.append(
-      el(
-        'div',
-        'fe-step-text',
-        chosenIcon
-          ? 'The icon at full size and at in-match size. Click a candidate below to view or iterate.'
-          : 'No generated icon yet: the procedural one plays until you make one.',
-      ),
-    );
-    if (!sealed) {
-      const iconGen = el('button', 'fe-gen small', 'Generate icon') as HTMLButtonElement;
-      iconGen.disabled = generating !== null;
-      iconGen.title = 'A flat spell icon in the game style, derived from this spell';
-      iconGen.style.marginLeft = 'auto';
-      iconGen.addEventListener('click', () => generateArtKind(`icon_${key}`, ''));
-      iconBlock.append(iconGen);
-    }
-    iconPanel.append(iconBlock);
-    const badge = refineBadge(`icon_${key}`);
-    if (badge) iconPanel.append(badge);
-    iconPanel.append(artStrip(`icon_${key}`, false));
-    main.append(iconPanel);
-
-    // Then the parameters, for this spell alone.
+    // The parameters, for this spell alone.
     const panel = el('div', 'fe-panel');
     panel.append(el('h3', '', `Parameters (${key})`));
     const headRow = el('div', 'fe-ability-head');
-    headRow.append(el('span', 'fe-key', key));
+    headRow.append(keyTabs());
     const nameInput = el('input', 'fe-input') as HTMLInputElement;
     nameInput.style.marginBottom = '0';
     nameInput.maxLength = 40;
@@ -2180,6 +2393,15 @@ export function openForgeEditor(container: HTMLElement): void {
     });
     headRow.append(nameInput);
     panel.append(headRow);
+    panel.append(
+      flavorInput(
+        () => (typeof ability.flavor === 'string' ? ability.flavor : undefined),
+        (v) => {
+          if (v === undefined) delete ability.flavor;
+          else ability.flavor = v;
+        },
+      ),
+    );
     // The spell's full text, derived from its mechanics exactly like
     // every other champion's (describe.ts): what a suggestion or a hand
     // edit actually does, in words, live as the numbers move.
@@ -2210,9 +2432,10 @@ export function openForgeEditor(container: HTMLElement): void {
     panel.append(costs);
 
     // The power dial: one control scaling every amount (damage, healing,
-    // crowd control durations) inside the bounds, stopped by the budget
-    // like a Stat polygon vertex. Structure comes from the kit
-    // conversation, or from the advanced editor below.
+    // crowd control durations) inside the bounds, stopped by the kit
+    // envelope or a burst cap like a Stat polygon vertex, and saying
+    // which. Structure comes from the kit conversation, or from the
+    // advanced editor below.
     const anchor = structuredClone(current.abilities[key]);
     let advancedStale = true;
     const advBody = el('div', '');
@@ -2232,11 +2455,16 @@ export function openForgeEditor(container: HTMLElement): void {
     dial.disabled = sealed;
     dial.title = sealed
       ? 'This champion is sealed; unseal it to retune'
-      : 'Scales the amounts of this spell; the budget is the wall';
+      : 'Scales the amounts of this spell; the kit envelope and the burst cap are the walls';
+    const stopTag = el('span', 'fe-stop', '');
     const costNote = el('span', 'fe-step-text', '');
     const syncCost = (): void => {
       const bill = budgetOf(current);
-      costNote.textContent = `this spell costs ${Math.round(bill.abilities[key])}; the champion uses ${Math.round(bill.total)} / ${POWER_BUDGET}`;
+      const kit = envelopeSpend(bill).kit;
+      const hit = burstOf(current).abilities[key];
+      costNote.textContent =
+        `costs ${Math.round(bill.abilities[key])} of the kit's ${Math.round(kit)} / ` +
+        `${ENVELOPES.kit}; one cast deals ${Math.round(hit)} of ${Math.round(burstCapOf(key))}`;
     };
     syncCost();
     panel.addEventListener('input', syncCost);
@@ -2252,17 +2480,24 @@ export function openForgeEditor(container: HTMLElement): void {
         castRange: live.castRange,
         ...(live.windup !== undefined ? { windup: live.windup } : {}),
       };
-      const granted = grantSpellPower(current, key, anchorNow, Number(dial.value) / 100);
+      const asked = Number(dial.value) / 100;
+      const granted = grantSpellPower(current, key, anchorNow, asked);
       // In place, so the rhythm fields above stay bound to the object.
       live.spec = granted.ability.spec;
       if (granted.ability.atRank) live.atRank = granted.ability.atRank;
       dial.value = String(Math.round(granted.factor * 100));
+      // The word: which line stopped the dial short, so the creator knows
+      // what to lighten. Silent when the ask was granted whole.
+      const stopped = granted.stop !== null && granted.factor < asked - 1e-6;
+      stopTag.textContent = stopped && granted.stop ? dialStopLabel(granted.stop) : '';
+      stopTag.className = `fe-stop${stopped && granted.stop ? ` ${granted.stop}` : ''}`;
+      stopTag.title = stopped && granted.stop ? dialStopHint(granted.stop) : '';
       advancedStale = true;
       hooks.refresh();
       syncDesc();
       syncCost();
     });
-    dialRow.append(dial, costNote);
+    dialRow.append(dial, stopTag, costNote);
     panel.append(dialRow);
 
     // Advanced: the full structural editor, collapsed and rebuilt on
@@ -2280,16 +2515,16 @@ export function openForgeEditor(container: HTMLElement): void {
     });
     panel.append(advanced);
     main.append(panel);
-    renderSpellAnimation(key);
+    renderSpellAnimation(key, sealed);
   }
 
   // The spell's own animation (playtest round 6 ask): each ability key
   // gets a dedicated pick from the cast and strike catalogs, previewed
   // on the mannequin, applied on its own like any clip change. A spell
   // without a pick plays the shared cast animation.
-  function renderSpellAnimation(key: AbilityKey): void {
+  function renderSpellAnimation(key: AbilityKey, sealed: boolean): void {
     const panel = el('div', 'fe-panel');
-    panel.append(el('h3', '', `${key} animation`));
+    panel.append(el('h3', '', `${key} animation and sound`));
     const row = currentRow();
     const slot = `cast${key}`;
     const bakedPick = row?.clips?.[slot];
@@ -2327,6 +2562,9 @@ export function openForgeEditor(container: HTMLElement): void {
       if (sel.value !== '') runAnimate({ [slot]: sel.value });
     });
     rowEl.append(apply);
+    const tabsHere = keyTabs();
+    tabsHere.style.marginLeft = 'auto';
+    rowEl.append(tabsHere);
     sel.addEventListener('change', () => {
       syncApply();
       if (sel.value !== '') animPreview?.show(sel.value, 'cast');
@@ -2342,10 +2580,66 @@ export function openForgeEditor(container: HTMLElement): void {
           : 'This spell has its own animation; picking another replaces it.',
       ),
     );
+    // The cast sound: the school's by default (derived from what the spell
+    // does), or one of the palette; a pick plays at once, so it is heard
+    // before it is kept. Presentation on the def: autosave carries it.
+    const ability = current.abilities[key];
+    const soundRow = el('div', 'fe-artrow');
+    soundRow.append(el('span', 'fe-desc', 'Sound'));
+    const soundSel = el('select', 'fe-select fe-sound') as HTMLSelectElement;
+    const auto = document.createElement('option');
+    auto.value = '';
+    auto.textContent = `Auto: the ${castSoundOf({ ...ability, sound: undefined })} school`;
+    soundSel.append(auto);
+    appendSoundGroups(soundSel, CAST_SOUND_GROUPS);
+    soundSel.value = ability.sound ?? '';
+    soundSel.disabled = sealed;
+    soundSel.addEventListener('change', () => {
+      if (soundSel.value === '') ability.sound = undefined;
+      else ability.sound = soundSel.value as CastSoundId;
+      playCastSfx(castSoundOf(ability));
+      refresh();
+    });
+    const hear = el('button', 'fe-mini', 'Play') as HTMLButtonElement;
+    hear.title = 'Hear this cast';
+    hear.addEventListener('click', () => playCastSfx(castSoundOf(ability)));
+    soundRow.append(soundSel, hear);
+    panel.append(soundRow);
     if (!animPreview) animPreview = createAnimPreview();
     panel.append(animPreview.el);
     main.append(panel);
   }
+
+  // The polygons' axes from a stat line: the live polygons and a
+  // proposal's read-only twins draw from the same tables. A ranged
+  // champion's reach is one more base axis; a melee one's is pinned off.
+  const baseAxesOf = (base: ChampionBaseStats): PolyAxis[] => {
+    const axes: PolyAxis[] = BASE_AXES.map(({ key, label }) => ({
+      key,
+      label,
+      min: BASE_STAT_BOUNDS[key].min,
+      max: BASE_STAT_BOUNDS[key].max,
+      value: base[key],
+    }));
+    if (base.attackRange > RANGED_THRESHOLD) {
+      axes.push({
+        key: 'attackRange',
+        label: 'Reach',
+        min: RANGED_MIN,
+        max: BASE_STAT_BOUNDS.attackRange.max,
+        value: base.attackRange,
+      });
+    }
+    return axes;
+  };
+  const growthAxesOf = (growth: ChampionGrowth): PolyAxis[] =>
+    (Object.keys(GROWTH_BOUNDS) as (keyof ChampionGrowth)[]).map((key) => ({
+      key,
+      label: GROWTH_LABELS[key] ?? key,
+      min: GROWTH_BOUNDS[key].min,
+      max: GROWTH_BOUNDS[key].max,
+      value: growth[key],
+    }));
 
   // Tab 3, Tuning: the numbers against the power budget.
   function renderTuning(): void {
@@ -2396,6 +2690,154 @@ export function openForgeEditor(container: HTMLElement): void {
       main.append(panel);
     }
     const sealed = isSealed();
+
+    // The stat conversation: the kit conversation's sibling. Each answer
+    // proposes base stats and growth, fitted to both envelope lines by
+    // the server, shown below as read-only polygons next to what moves;
+    // nothing touches the live polygons until Apply, and after it the
+    // vertices are still the creator's to pull.
+    main.append(
+      chatPanel<{
+        ok: boolean;
+        comment?: string;
+        base?: ChampionBaseStats;
+        growth?: ChampionGrowth;
+        raw?: string;
+        budget?: { stats: { spend: number; cap: number }; growth: { spend: number; cap: number } };
+        fit?: { stats: number; growth: number };
+        error?: string;
+      }>(statChat, {
+        title: 'Stat conversation (AI)',
+        lead:
+          'Reads your role and kit. Say what body this champion should have ("a tanky ' +
+          'frontliner", "faster but frailer", "ranged"); each answer proposes base stats and ' +
+          'growth below, fitted to both envelope lines, and nothing touches the polygons ' +
+          'until you apply it. Applied stats stay yours to pull.',
+        placeholder: 'What body should this champion have?',
+        locked: sealed
+          ? 'This champion is sealed: its stats are locked. Unseal it (Design tab, ' +
+            'animations block) to retune.'
+          : null,
+        parts: ['base', 'growth'],
+        request: (messages, onLine) =>
+          ensureSaved().then((ok) =>
+            ok
+              ? chatStream(
+                  '/api/forge/suggest-stats',
+                  { id: current.id, def: current, messages },
+                  onLine,
+                )
+              : { ok: false, error: lastSaveError ?? 'the draft could not be saved' },
+          ),
+        accept: (r) => {
+          if (!r?.ok || !r.base || !r.growth || typeof r.raw !== 'string') {
+            return { error: r?.error ?? 'the suggestion failed' };
+          }
+          statProposal = {
+            base: r.base,
+            growth: r.growth,
+            budget: r.budget ?? {
+              stats: { spend: 0, cap: ENVELOPES.stats },
+              growth: { spend: 0, cap: ENVELOPES.growth },
+            },
+            fit: r.fit ?? { stats: 1, growth: 1 },
+          };
+          return { raw: r.raw, bubble: r.comment ? r.comment : 'Here is a stat line.' };
+        },
+        report: (message) => {
+          status.textContent = message;
+        },
+        rerender: renderMain,
+        changed: () => persistChat('stats'),
+      }),
+    );
+
+    if (statProposal !== null) {
+      const p = statProposal;
+      const prop = el('div', 'fe-panel');
+      prop.append(el('h3', '', 'Proposed stats'));
+      const still = { enabled: false, grant: (_key: string, want: number) => want };
+      const row = el('div', 'fe-polyrow');
+      const baseWrap = el('div', 'fe-polywrap');
+      baseWrap.append(
+        el(
+          'div',
+          'fe-step-text',
+          `Base stats: ${p.budget.stats.spend} / ${p.budget.stats.cap} of the envelope`,
+        ),
+      );
+      baseWrap.append(statPolygon(baseAxesOf(p.base), { size: 250, ...still }));
+      const growthWrap = el('div', 'fe-polywrap');
+      growthWrap.append(
+        el(
+          'div',
+          'fe-step-text',
+          `Growth per level: ${p.budget.growth.spend} / ${p.budget.growth.cap} of the envelope`,
+        ),
+      );
+      growthWrap.append(statPolygon(growthAxesOf(p.growth), { size: 200, ...still }));
+      row.append(baseWrap, growthWrap);
+      prop.append(row);
+      // What moves, axis by axis, against the polygons as they stand.
+      const deltas = el('div', 'fe-deltas');
+      const fmt = (v: number): string =>
+        Math.abs(v) >= 100 ? String(Math.round(v)) : v.toFixed(2).replace(/\.?0+$/, '');
+      const chip = (label: string, from: number, to: number): void => {
+        if (Math.abs(to - from) < 0.005) return;
+        const c = el('span', `fe-delta ${to > from ? 'up' : 'down'}`);
+        c.textContent = `${label} ${fmt(from)} to ${fmt(to)}`;
+        deltas.append(c);
+      };
+      for (const { key, label } of BASE_AXES) chip(label, current.base[key], p.base[key]);
+      chip('Reach', current.base.attackRange, p.base.attackRange);
+      for (const key of Object.keys(GROWTH_BOUNDS) as (keyof ChampionGrowth)[]) {
+        chip(`${GROWTH_LABELS[key] ?? key} per level`, current.growth[key], p.growth[key]);
+      }
+      if (deltas.childElementCount === 0) {
+        deltas.append(el('span', 'fe-step-text', 'Exactly what the polygons already show.'));
+      }
+      prop.append(deltas);
+      prop.append(
+        el(
+          'p',
+          'fe-lead',
+          p.base.attackRange > RANGED_THRESHOLD
+            ? `Ranged, reach ${fmt(p.base.attackRange)}: basic attacks fire a bolt.`
+            : `Melee, reach pinned at ${MELEE_REACH}: strikes up close.`,
+        ),
+      );
+      const fitNotes: string[] = [];
+      if (Math.abs(p.fit.stats - 1) >= 0.005) {
+        fitNotes.push(
+          `base shape ${p.fit.stats > 1 ? 'raised' : 'trimmed'} to ${p.fit.stats.toFixed(2)} ` +
+            'times the answer to sit on the stat envelope line',
+        );
+      }
+      if (Math.abs(p.fit.growth - 1) >= 0.005) {
+        fitNotes.push(
+          `growth ${p.fit.growth > 1 ? 'raised' : 'trimmed'} to ${p.fit.growth.toFixed(2)} ` +
+            'times to sit on the growth envelope line',
+        );
+      }
+      if (fitNotes.length > 0) {
+        prop.append(el('p', 'fe-desc', `${fitNotes.join('; ')}.`));
+      }
+      if (!sealed) {
+        const apply = el('button', 'fe-gen small', 'Apply these stats (free)') as HTMLButtonElement;
+        apply.title = 'Puts these stats on the polygons; nothing is saved until you save';
+        apply.addEventListener('click', () => {
+          current.base = { ...p.base };
+          current.growth = { ...p.growth };
+          status.textContent =
+            'The proposed stats are on the polygons: pull any vertex to adjust, then save.';
+          renderMain();
+          refresh();
+        });
+        prop.append(apply);
+      }
+      main.append(prop);
+    }
+
     const stats = el('div', 'fe-panel');
     stats.append(el('h3', '', 'Stat polygon'));
     stats.append(
@@ -2403,8 +2845,10 @@ export function openForgeEditor(container: HTMLElement): void {
         'p',
         'fe-lead',
         'Pull a vertex outward to buy a stat, inward to free points. Every point above ' +
-          'a floor costs budget, shared with the kit: a vertex stops where the budget ' +
-          'runs out, so overspending is impossible.',
+          "a floor spends the polygon's own envelope, never the kit's: a vertex stops " +
+          'where its envelope runs out, so overspending is impossible and no set of ' +
+          'vertices reaches every rail. A proposal from the conversation above lands ' +
+          'here whole when you apply it; the vertices stay yours.',
       ),
     );
 
@@ -2451,26 +2895,22 @@ export function openForgeEditor(container: HTMLElement): void {
 
     const asNumbers = (obj: unknown): Record<string, number> => obj as Record<string, number>;
     const polyRow = el('div', 'fe-polyrow');
-    const baseAxes: PolyAxis[] = BASE_AXES.map(({ key, label }) => ({
-      key,
-      label,
-      min: BASE_STAT_BOUNDS[key].min,
-      max: BASE_STAT_BOUNDS[key].max,
-      value: current.base[key],
-    }));
-    if (ranged) {
-      baseAxes.push({
-        key: 'attackRange',
-        label: 'Reach',
-        min: RANGED_MIN,
-        max: BASE_STAT_BOUNDS.attackRange.max,
-        value: current.base.attackRange,
-      });
-    }
+    // Each polygon's caption carries its envelope, live under the drag.
+    const caption = (label: string, group: 'stats' | 'growth'): HTMLElement => {
+      const cap = el('div', 'fe-step-text', '');
+      const sync = (): void => {
+        const spend = envelopeSpend(budgetOf(current))[group];
+        cap.textContent = `${label}: ${Math.round(spend)} / ${ENVELOPES[group]} of the envelope`;
+      };
+      sync();
+      cap.addEventListener('fe-sync', sync);
+      return cap;
+    };
     const baseWrap = el('div', 'fe-polywrap');
-    baseWrap.append(el('div', 'fe-step-text', 'Base stats'));
+    const baseCaption = caption('Base stats', 'stats');
+    baseWrap.append(baseCaption);
     baseWrap.append(
-      statPolygon(baseAxes, {
+      statPolygon(baseAxesOf(current.base), {
         enabled: !sealed,
         grant: (key, want) => {
           const g = grantStat(current, 'base', key, want);
@@ -2479,30 +2919,24 @@ export function openForgeEditor(container: HTMLElement): void {
           if (key === 'attackRange' && g < RANGED_MIN) return current.base.attackRange;
           asNumbers(current.base)[key] = g;
           hooks.refresh();
+          baseCaption.dispatchEvent(new Event('fe-sync'));
           return g;
         },
       }),
     );
     polyRow.append(baseWrap);
-    const growthAxes: PolyAxis[] = (Object.keys(GROWTH_BOUNDS) as (keyof ChampionGrowth)[]).map(
-      (key) => ({
-        key,
-        label: GROWTH_LABELS[key] ?? key,
-        min: GROWTH_BOUNDS[key].min,
-        max: GROWTH_BOUNDS[key].max,
-        value: current.growth[key],
-      }),
-    );
     const growthWrap = el('div', 'fe-polywrap');
-    growthWrap.append(el('div', 'fe-step-text', 'Growth per level'));
+    const growthCaption = caption('Growth per level', 'growth');
+    growthWrap.append(growthCaption);
     growthWrap.append(
-      statPolygon(growthAxes, {
+      statPolygon(growthAxesOf(current.growth), {
         size: 250,
         enabled: !sealed,
         grant: (key, want) => {
           const g = grantStat(current, 'growth', key, want);
           asNumbers(current.growth)[key] = g;
           hooks.refresh();
+          growthCaption.dispatchEvent(new Event('fe-sync'));
           return g;
         },
       }),
@@ -2523,13 +2957,15 @@ export function openForgeEditor(container: HTMLElement): void {
       ),
     );
     stats.append(radiusRow);
-    if (budgetOf(current).total > POWER_BUDGET) {
+    const spend = envelopeSpend(budgetOf(current));
+    if (spend.stats > ENVELOPES.stats || spend.growth > ENVELOPES.growth) {
       stats.append(
         el(
           'p',
           'fe-desc',
-          'Over budget: the kit consumes everything. Axes can only come down here; ' +
-            'lighten a spell on the Spells tab to make room.',
+          `${spend.stats > ENVELOPES.stats ? 'The stat envelope' : 'The growth envelope'} is ` +
+            'over its line (a draft from before a tightening): its axes can only come down ' +
+            'until it fits.',
         ),
       );
     }

@@ -367,6 +367,8 @@ export interface CommunityPick {
   clips?: Record<string, string> | null;
   clipFiles?: Record<string, string> | null;
   display?: import('../sim/forge/display').ForgedDisplay | null;
+  // The chosen spell icon per slot, so the HUD wears the creator's art.
+  icons?: Record<string, string> | null;
 }
 
 // One of the account's own finalized champions at Forge-queue select.

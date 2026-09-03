@@ -18,6 +18,7 @@ import {
   editInstruction,
   generateArt,
   ICON_STYLE,
+  iconsOf,
   iterationPrompt,
   listArt,
   SHEET_MATCH,
@@ -381,6 +382,9 @@ describe('splashOf, chosenIcons, deleteArtFor', () => {
     }
     const icons = chosenIcons(r.store, r.def.id);
     expect(Object.keys(icons).sort()).toEqual(['E', 'Q', 'R', 'W']);
+    // What the match shows: the same picks, over a stale sealed copy.
+    r.store.updateForgedAssets(r.def.id, { icons: { Q: 'forged/x/stale_q.png' } }, 3000);
+    expect(iconsOf(r.store, r.def.id)).toEqual(icons);
     const all = listArt(r.deps, ACCOUNT, r.def.id);
     if (!all.ok) throw new Error('setup');
     const generation = r.deps.generation;

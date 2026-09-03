@@ -94,6 +94,16 @@ export function gainXp(u: Unit, amount: number): void {
   }
 }
 
+// Walks a champion up the xp curve to `level` (clamped to the cap) through
+// gainXp, so every level's skill point and stat recalc land exactly as a
+// match would grant them; xp toward the next level ends at zero. Practice
+// starts (a Forge test drive at the ultimate's level) use it.
+export function levelTo(u: Unit, level: number): void {
+  if (u.kind !== 'champion') return;
+  const target = Math.min(MAX_LEVEL, Math.floor(level));
+  while (u.level < target) gainXp(u, xpForNext(u.level) - u.xp);
+}
+
 // The live rank of an ability. Basics are always at least rank 1; R counts
 // as rank 1 from champion level 6 even before a point is invested.
 export function effectiveRank(u: Unit, key: 'Q' | 'W' | 'E' | 'R'): number {

@@ -3,7 +3,8 @@
 The Forge: player-authored champions (ADR 0010) on the account stack (ADR 0006) and
 the Forge store (ADR 0011). Phases in order; each phase ends green (`tsc` plus the
 Vitest suite) and lands module-first behind existing seams. The terms are in
-`CONTEXT.md`: Forge, forged champion, draft, creation, power budget, Forge queue.
+`CONTEXT.md`: Forge, forged champion, draft, creation, power budget (its Stat, Growth
+and Kit envelopes, and the Burst cap), Forge queue.
 
 State of play (2026-08-31): phases 1 to 3 and 6 to 8 are done. Phase 4 is done
 except the agent endpoint (needs a Claude API key) and prop grip adjustment
@@ -18,7 +19,14 @@ and their written UGC authorization; details inline.
    passive; a passive is a parameterized template reference), the deterministic
    validator (hard per-field bounds plus the power budget costing every stat point
    and effect primitive), and the passive template set in the engine. Tests: budget
-   arithmetic pinned, bounds rejections, roster-shaped kits validate.
+   arithmetic pinned, bounds rejections, roster-shaped kits validate. Reshaped by
+   ADR 0015 (2026-09-02): the budget is three envelopes (stats 190, growth 90, kit
+   820) that never trade points, each at the roster's maximum, plus a burst cap on
+   what one cast deals at rank 1 (`src/sim/forge/envelopes.ts`, `burst.ts`); the
+   fresh draft, the polygon, the dial and the kit conversation's fit follow. Left
+   for its own PR: raising the roster's kits toward the kit envelope (damage and heal
+   amounts only, bot matches before and after), so the envelopes stop being dictated
+   by single champions.
 2. **Runtime registry**: DONE. Champion resolution is match-scoped (roster plus the
    match's forged definitions) behind one seam used by Sim, ClientWorld, replay, and
    the headless env; replays embed forged definitions instead of ids alone. Tests:
@@ -45,11 +53,45 @@ and their written UGC authorization; details inline.
    lands opens the workshop, and the workshop is the adjustment atelier: live
    display tuning (height, facing, ground offset) and the weapon prop attached
    to a chosen rig bone with hand-tuned grip offsets, saved server-side
-   (/api/forge/display, clamped by the shared sanitizer) and applied in-match.
+   (/api/forge/display, clamped by the shared sanitizer) and applied in-match;
+   the Weapon panel freezes the pose on demand (the clip clock stopped, a
+   slider scrubbing the frame, F to toggle) so the weapon is fitted against a
+   still hand (playtest,
+   2026-09-02: even the idle sway made alignment a chase; walked by
+   `scripts/e2e_workshop.mjs`).
    Forged champions PLAY as their generated models everywhere: the render
    registry loads the sealed GLB (clip names resolved by substring, so preset
    and placeholder spellings both land), announced from drafts, the gallery,
-   and the match_start forgedAssets block. REMAINING: the agent endpoint that
+   and the match_start forgedAssets block. Conversations (2026-09-02): the kit
+   conversation on the Spells tab and its sibling, the stat conversation on the
+   Tuning tab (`server/suggest_stats.ts`, the fit in `src/sim/forge/stat_fit.ts`),
+   share one chat panel (`src/ui/forge_chat.ts`); the Spells tab reads overview,
+   conversation, proposal, then the five slots wearing their icons (generated one
+   at a time or all four at once) and the selected slot's parameters, the passive
+   a slot like the others. The draft autosaves (compared by value after every
+   refresh, debounced) and both conversations travel with it
+   (`server/forge_chats.ts`, restored on open); spells and the passive carry a
+   flavor line the conversation writes and the creator edits, above the derived
+   text, which stays the game's. Playtest round after (2026-09-02): the dial and
+   the fit write amounts on their reading steps (`snapAmount` in
+   `src/sim/forge/spell_power.ts`) and the fit tops the kit back up to the line
+   one step at a time; key tabs (P Q W E R) beside the parameters and animation
+   titles switch spells in place; a failed call (server gone, session ended)
+   shows a banner instead of emptying the rail and the icons, and the
+   Forge e2e (`scripts/e2e_forge.mjs`) walks all of it. The chosen spell icons
+   reach the match: they ride the draft rows, the gallery entries and the
+   match_start assets block, the client registry (`src/ui/forged_icons.ts`) puts
+   them ahead of the shipped paintings, and `scripts/e2e_test_drive.mjs` reads
+   them off the HUD of a test drive. The test drive opens with every champion at
+   the ultimate's level (`Sim.setLevel` walks the xp curve), so R is on the
+   table at once; and the creator picks a cast sound per spell and a basic-attack
+   sound from the palette (`src/sim/content/sounds.ts`, heard on pick, carried by
+   the definition, bounded by the validator); the palette and the combat sounds
+   play recordings from the CC0 bank (`public/sfx/`, `docs/design/sound.md`),
+   the synthesis standing in until it decodes; the palette then grew from
+   nine casts to fifty-five in six groups and twenty attacks (playtest: far
+   too few for a MOBA), each pick a recording, synthesized through its
+   school family until the bank lands. REMAINING: the agent endpoint that
    compiles free-text passives into primitives with refusal explanations (needs
    a Claude API key); the generated weapon prop itself stays phase 5's Tripo
    half (the procedural prop library carries the grip flow until then).

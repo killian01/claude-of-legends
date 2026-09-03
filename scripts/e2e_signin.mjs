@@ -64,14 +64,9 @@ export async function signIn(page, name, timeout = 20000) {
       await fill(page, '.auth-form input[type="email"]', e2eEmail(name));
     }
     await fill(page, '.auth-form input[type="password"]', E2E_PASSWORD);
-    // The submit carries the tab's label; it is no longer the last button
-    // in the form since Continue with Discord (ADR 0009) sits under it.
-    await page.evaluate((m) => {
-      const label = m === 'register' ? 'Create account' : 'Sign in';
-      [...document.querySelectorAll('.auth-form .menu-btn')]
-        .find((b) => (b.textContent || '').trim() === label)
-        ?.click();
-    }, mode);
+    await page.evaluate(() => {
+      document.querySelector('.auth-form .menu-btn.primary')?.click();
+    });
     try {
       // Landing gone and the home card up: the only proof that worked.
       await page.waitForSelector('.pg.home', { timeout: 10000 });

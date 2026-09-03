@@ -1,8 +1,14 @@
-// Procedural sound design over WebAudio: no assets, everything synthesized.
-// All sounds run through one shared bus (dry -> compressor -> speakers) with
-// a feedback-delay reverb send for space. Layered tones plus filtered noise
+// Sound over WebAudio. Combat and the spell palette play recordings from
+// the bank (sfx_bank.ts, public/sfx/) once it has decoded; everything
+// else, and every sound until then or without a recording, is synthesized
+// here (playtest: the synthesis alone read as cheap). All sounds run
+// through one shared bus (dry -> compressor -> speakers) with a
+// feedback-delay reverb send for space. Layered tones plus filtered noise
 // bursts read far less "beepy" than raw oscillators. The AudioContext
 // resumes on the first user gesture per browser policy.
+
+import { type AttackSoundId, attackFamilyOf, castFamilyOf } from '../sim/content/sounds';
+import { playSfxBank, preloadSfxBank } from './sfx_bank';
 
 export type SfxName =
   | 'cast'
@@ -17,10 +23,12 @@ export type SfxName =
   | 'deny'
   | 'levelup'
   | 'buy'
-  | 'swing'
-  | 'gunshot'
   | 'impact'
-  | 'towershot';
+  | 'towershot'
+  // The basic-attack palette a forged creator picks from
+  // (src/sim/content/sounds.ts): swing and gunshot the roster's own, the
+  // rest recordings in the bank, synthesized through their family.
+  | AttackSoundId;
 
 export interface AudioBus {
   ctx: AudioContext;
@@ -83,8 +91,17 @@ export function audioBus(): AudioBus | null {
     window.addEventListener('pointerdown', resume, { once: true });
     window.addEventListener('keydown', resume, { once: true });
     bus = { ctx, master, sfx, verb };
+    // The recordings decode in the background from the first moment the
+    // bus exists; the synthesis covers the seconds until they land.
+    void preloadSfxBank(bus);
   }
   return bus;
+}
+
+// Builds the bus early (a screen that will play sounds soon, the Forge
+// editor, a match starting), so the bank is decoded by the first cast.
+export function preloadSfx(): void {
+  audioBus();
 }
 
 function getNoise(ctx: AudioContext): AudioBuffer {
@@ -188,23 +205,26 @@ const MIN_INTERVAL_MS: Partial<Record<SfxName, number>> = {
   hit: 120,
   gold: 60,
   deny: 160,
-  swing: 90,
-  gunshot: 90,
   impact: 70,
   towershot: 120,
 };
+const MIN_ATTACK_INTERVAL_MS = 90;
 
-// Per-school cast sounds, six sonic identities instead of one shared
-// whoosh (player review). gain < 1 for other units' casts, by distance.
+// A cast sound by id: a school (six sonic identities instead of one
+// shared whoosh, player review) or any pick from the palette
+// (src/sim/content/sounds.ts). The bank plays the recording; the
+// synthesis below knows the nine schools and plays a pick through its
+// family. gain < 1 for other units' casts, by distance.
 export function playCastSfx(school: string, gain = 1): void {
   const b = audioBus();
   if (!b || b.ctx.state === 'suspended' || gain <= 0.02) return;
   const now = performance.now();
   if (now - (lastPlay.get('cast') ?? 0) < 90) return;
   lastPlay.set('cast', now);
+  if (playSfxBank(b, `cast_${school}`, gain, 0.15)) return;
   callGain = Math.min(1.5, gain);
   const j = 0.94 + Math.random() * 0.12;
-  switch (school) {
+  switch (castFamilyOf(school)) {
     case 'steel':
       // A metallic schwing.
       noise(b, { dur: 0.12, freq: 1400 * j, slideTo: 3800 * j, q: 2.2, vol: 0.5 });
@@ -237,6 +257,40 @@ export function playCastSfx(school: string, gain = 1): void {
       // A fast breathy sweep.
       noise(b, { dur: 0.22, freq: 900 * j, slideTo: 5200 * j, q: 0.6, vol: 0.55, verb: 0.4 });
       break;
+    case 'frost':
+      // A glassy crystalline ring over a thin icy hiss.
+      tone(b, { freq: 1760 * j, dur: 0.35, type: 'sine', vol: 0.28, verb: 0.7 });
+      tone(b, { freq: 2637 * j, dur: 0.3, type: 'triangle', delay: 0.03, vol: 0.14, verb: 0.7 });
+      noise(b, { dur: 0.25, freq: 6000, slideTo: 9500, type: 'highpass', vol: 0.18, verb: 0.5 });
+      break;
+    case 'shadow':
+      // A dark hiss drawn inward: a slow-swelling breath closing down,
+      // over a sub growl.
+      noise(b, {
+        dur: 0.32,
+        freq: 2200 * j,
+        slideTo: 160,
+        type: 'lowpass',
+        vol: 0.6,
+        attack: 0.12,
+        verb: 0.5,
+      });
+      tone(b, {
+        freq: 70 * j,
+        slideTo: 40,
+        dur: 0.36,
+        type: 'sawtooth',
+        vol: 0.26,
+        lpf: 300,
+        verb: 0.4,
+      });
+      break;
+    case 'thunder':
+      // An instant crack, then the rumble rolling under it.
+      noise(b, { dur: 0.05, freq: 3600 * j, slideTo: 900, q: 0.5, vol: 0.9, attack: 0.001 });
+      noise(b, { dur: 0.5, freq: 420, slideTo: 80, type: 'lowpass', vol: 0.7, verb: 0.6 });
+      tone(b, { freq: 60 * j, slideTo: 34, dur: 0.45, type: 'sine', vol: 0.6 });
+      break;
     default:
       // Arcane: the airy whoosh with a shimmer above it.
       noise(b, { dur: 0.26, freq: 350 * j, slideTo: 1800 * j, q: 0.9, vol: 0.6, verb: 0.4 });
@@ -261,16 +315,18 @@ export function playSfx(name: SfxName, gain = 1): void {
   const b = audioBus();
   if (!b || b.ctx.state === 'suspended' || gain <= 0.02) return;
   const now = performance.now();
-  const min = MIN_INTERVAL_MS[name] ?? 0;
+  const min = MIN_INTERVAL_MS[name] ?? (attackFamilyOf(name) ? MIN_ATTACK_INTERVAL_MS : 0);
   if (min > 0 && now - (lastPlay.get(name) ?? 0) < min) return;
   lastPlay.set(name, now);
+  if (playSfxBank(b, name, gain)) return;
   callGain = Math.min(1.5, gain);
 
   // A little pitch jitter keeps rapid-fire combat sounds from stuttering
   // like one looped sample.
   const j = 0.92 + Math.random() * 0.16;
 
-  switch (name) {
+  // An attack from the wider palette synthesizes as its family.
+  switch (attackFamilyOf(name) ?? name) {
     case 'cast':
       // Pure air, no oscillator: a body whoosh, a bright breath above it,
       // and a low push underneath.
@@ -315,6 +371,33 @@ export function playSfx(name: SfxName, gain = 1): void {
         verb: 0.5,
       });
       tone(b, { freq: 150 * j, slideTo: 55, dur: 0.12, type: 'sine', vol: 0.5 });
+      break;
+    case 'blade':
+      // A metallic slash: the whip of air with steel ringing on top.
+      noise(b, { dur: 0.1, freq: 1200 * j, slideTo: 3600 * j, q: 1.8, vol: 0.4 });
+      tone(b, {
+        freq: 2600 * j,
+        slideTo: 1800,
+        dur: 0.08,
+        type: 'triangle',
+        vol: 0.16,
+        verb: 0.25,
+      });
+      break;
+    case 'heavy':
+      // A deep whoosh, then the thud of the weight landing.
+      noise(b, { dur: 0.14, freq: 300 * j, slideTo: 900 * j, type: 'lowpass', vol: 0.5 });
+      tone(b, { freq: 120 * j, slideTo: 50, dur: 0.14, type: 'sine', delay: 0.06, vol: 0.5 });
+      break;
+    case 'bow':
+      // The string's twang and the arrow's hiss leaving it.
+      tone(b, { freq: 440 * j, slideTo: 180, dur: 0.09, type: 'triangle', vol: 0.3 });
+      noise(b, { dur: 0.16, freq: 2500 * j, slideTo: 5500 * j, q: 1.5, vol: 0.25, delay: 0.02 });
+      break;
+    case 'bolt':
+      // A short arcane zap: a falling square tone with a bright snap.
+      tone(b, { freq: 900 * j, slideTo: 300, dur: 0.1, type: 'square', vol: 0.22, lpf: 1800 });
+      noise(b, { dur: 0.08, freq: 3000 * j, slideTo: 800, q: 1.2, vol: 0.3 });
       break;
     case 'impact':
       // The crack of YOUR damage landing on someone else.

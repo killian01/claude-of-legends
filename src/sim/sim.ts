@@ -65,6 +65,7 @@ import {
 import {
   BASIC_MAX_RANK,
   effectiveRank,
+  levelTo,
   recalcChampion,
   ULT_MAX_RANK,
   ULT_RANK_LEVELS,
@@ -541,6 +542,15 @@ export class Sim {
       cancelRecall(u);
     }
     return ok;
+  }
+
+  // Starts a champion past level 1 (a Forge test drive opens at the
+  // ultimate's level so R is on the table): the xp curve is walked, so
+  // skill points and stat growth land exactly as a match grants them.
+  setLevel(unitId: number, level: number): void {
+    const u = this.units.get(unitId);
+    if (u?.kind !== 'champion') return;
+    levelTo(u, level);
   }
 
   // Spends one skill point to rank up an ability. Basics cap at rank 5; R

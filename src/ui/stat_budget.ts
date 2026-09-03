@@ -1,28 +1,28 @@
-// The budget-clamped grant behind the Stat polygon (CONTEXT.md): how far
-// an axis may actually extend. Pure arithmetic on the def, never
+// The envelope-clamped grant behind the Stat polygon (CONTEXT.md): how
+// far an axis may actually extend. Pure arithmetic on the def, never
 // mutating it, and exact rather than searched, because stat pricing is
 // linear: price times the points above the field's floor (budget.ts).
-// Overspending is impossible by construction; when the champion is
-// already over budget (a heavy kit), every raise resolves to a cut.
+// Each polygon spends its own envelope (envelopes.ts): base stats the
+// Stat envelope, growth the Growth envelope, and the kit never buys room
+// in either. Overspending is impossible by construction; when the
+// envelope is already over (a stored draft from before a tightening),
+// every raise resolves to a cut.
 
-import { RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import type { ChampionBaseStats, ChampionGrowth } from '../sim/content/champions';
 import { BASE_STAT_BOUNDS, GROWTH_BOUNDS } from '../sim/forge/bounds';
-import { BASE_STAT_PRICES, budgetOf, GROWTH_PRICES, POWER_BUDGET } from '../sim/forge/budget';
+import { BASE_STAT_PRICES, budgetOf, GROWTH_PRICES } from '../sim/forge/budget';
+import { ENVELOPES, envelopeSpend } from '../sim/forge/envelopes';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 
 export type StatGroup = 'base' | 'growth';
 
-// The melee pin: the roster's standard melee reach, safely under the
-// engine's ranged threshold (auto_attack.ts).
-export const MELEE_REACH = 1.8;
-// The ranged axis floor: clearly above the threshold, so an axis dragged
-// to its minimum never flips the champion back to melee by accident.
-export const RANGED_MIN = RANGED_THRESHOLD + 0.5;
+// The melee pin and the ranged axis floor are the sim's (stat_fit.ts):
+// the stat conversation's fit holds the same reach the polygon does.
+export { MELEE_REACH, RANGED_MIN } from '../sim/forge/stat_fit';
 
-// The value the budget actually grants when an axis asks for `want`:
+// The value the envelope actually grants when an axis asks for `want`:
 // clamped to the field's hard bounds first, then pulled back exactly to
-// the budget line when the raise would cross it.
+// the group's envelope line when the raise would cross it.
 export function grantStat(
   def: ForgedChampionDef,
   group: StatGroup,
@@ -44,9 +44,12 @@ export function grantStat(
       : def.growth[key as keyof ChampionGrowth];
   let v = Math.min(bound.max, Math.max(bound.min, want));
   if (price <= 0) return v;
-  const total = budgetOf(def).total + (v - have) * price;
-  if (total > POWER_BUDGET) {
-    v = Math.max(bound.min, v - (total - POWER_BUDGET) / price);
+  const spend = envelopeSpend(budgetOf(def));
+  const line = group === 'base' ? ENVELOPES.stats : ENVELOPES.growth;
+  const held = group === 'base' ? spend.stats : spend.growth;
+  const total = held + (v - have) * price;
+  if (total > line) {
+    v = Math.max(bound.min, v - (total - line) / price);
   }
   return bound.integer ? Math.floor(v) : v;
 }

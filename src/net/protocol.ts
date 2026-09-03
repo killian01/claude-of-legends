@@ -28,6 +28,11 @@ export interface ForgedMatchAssets {
   // a single self-contained file (pre-split bakes, and the mock).
   clipFiles: Record<string, string> | null;
   display: ForgedDisplay | null;
+  // The creator's chosen spell icon per slot (Q W E R), relative asset
+  // paths, so the champion's HUD wears its own art; empty when none was
+  // chosen (the procedural painting stands in). Absent on blocks saved
+  // before icons traveled: the client then keeps the painting.
+  icons?: Record<string, string>;
 }
 
 export type ClientMsg =

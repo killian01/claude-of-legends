@@ -37,4 +37,5 @@ over a minute lands in about ten seconds, the comment within three. Left open on
 purpose: a creator who deliberately lightens the kit below
 roughly half the budget can still reach every stat rail, because the rails sit inside
 what the budget affords a bare kit. That is the budget's verdict, not a defect; widening
-the rails or capping the stat share would be a separate balance decision.
+the rails or capping the stat share would be a separate balance decision. Closed by
+ADR 0015: three envelopes and a burst cap.
