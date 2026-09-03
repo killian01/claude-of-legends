@@ -55,6 +55,14 @@ import { Rng } from './rng';
 import { stepSeparation } from './separation';
 import type { CombatCtx } from './sim_context';
 import {
+  deepCopy,
+  freezeUnits,
+  refillMap,
+  refillSet,
+  type SimSnapshot,
+  thawUnits,
+} from './snapshot';
+import {
   BASIC_MAX_RANK,
   effectiveRank,
   recalcChampion,
@@ -308,6 +316,69 @@ export class Sim {
     this.policies.delete(unitId);
     const u = this.units.get(unitId);
     if (u) u.play = null;
+  }
+
+  // A world checkpoint (src/sim/snapshot.ts): every field that moves,
+  // as plain data, deep-copied. Policies and champion definitions are not
+  // state and are left where they are.
+  snapshot(): SimSnapshot {
+    return { tick: this.tickCount, state: deepCopy(this.gatherState()) };
+  }
+
+  // The checkpoint back into THIS sim, in place: the containers attached
+  // policies close over are refilled, never replaced. The snapshot stays
+  // intact and can be restored again.
+  restore(snap: SimSnapshot): void {
+    const s = deepCopy(snap.state) as ReturnType<Sim['gatherState']>;
+    this.time = s.time;
+    this.tickCount = s.tickCount;
+    this.winner = s.winner;
+    this.nextWaveAt = s.nextWaveAt;
+    this.waveCount = s.waveCount;
+    this.nextId = s.nextId;
+    this.rng.state = s.rng;
+    this.nav.restoreBlockers(s.nav);
+    thawUnits(this.units, s.units, this.champions);
+    refillMap(this.projectiles, s.projectiles);
+    refillMap(this.zones, s.zones);
+    refillMap(this.walls, s.walls);
+    this.visibility = s.visibility;
+    refillMap(this.lastSeen[0], s.lastSeen[0]);
+    refillMap(this.lastSeen[1], s.lastSeen[1]);
+    refillSet(this.dead, s.dead);
+    refillMap(this.killers, s.killers);
+    this.teamBuffs.restore(s.teamBuffs);
+    Object.assign(this.objectives, s.objectives);
+    this.campStates.splice(0, this.campStates.length, ...s.campStates);
+    this.laneSightings.restore(s.laneSightings);
+    this.events = [];
+  }
+
+  // Every field that moves, gathered by reference; snapshot() deep-copies
+  // the lot, so nothing here aliases past the copy.
+  private gatherState() {
+    return {
+      time: this.time,
+      tickCount: this.tickCount,
+      winner: this.winner,
+      nextWaveAt: this.nextWaveAt,
+      waveCount: this.waveCount,
+      nextId: this.nextId,
+      rng: this.rng.state,
+      nav: this.nav.snapshotBlockers(),
+      units: freezeUnits(this.units),
+      projectiles: new Map(this.projectiles),
+      zones: new Map(this.zones),
+      walls: new Map(this.walls),
+      visibility: this.visibility,
+      lastSeen: this.lastSeen,
+      dead: new Set(this.dead),
+      killers: new Map(this.killers),
+      teamBuffs: this.teamBuffs.snapshot(),
+      objectives: { ...this.objectives },
+      campStates: this.campStates.map((c) => ({ ...c })),
+      laneSightings: this.laneSightings.snapshot(),
+    };
   }
 
   // One row per champion; position-free, so it crosses the fog safely.

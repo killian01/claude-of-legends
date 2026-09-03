@@ -44,6 +44,16 @@ export class NavGrid {
     return this.blockers[cz * this.cells + cx] === 0;
   }
 
+  // The blocker counts as they stand, copied, for a world checkpoint
+  // (src/sim/snapshot.ts); restoring writes them back in place.
+  snapshotBlockers(): Uint8Array {
+    return new Uint8Array(this.blockers);
+  }
+
+  restoreBlockers(blockers: Uint8Array): void {
+    this.blockers.set(blockers);
+  }
+
   // Adds one blocker to every cell whose center lies within the circle.
   blockCircle(x: number, z: number, r: number): void {
     this.forEachCellInCircle(x, z, r, (i) => {

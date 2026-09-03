@@ -9,12 +9,15 @@ import { nextStep, type PostMatchAction } from './game/flow';
 import { registerForgedAssets } from './game/forged_visuals';
 import { requestGameFullscreen } from './game/fullscreen';
 import { parseJoinCode } from './game/invite';
+import { ReplayCursor } from './game/replay_cursor';
+import type { ReplayMark } from './game/replay_marks';
+import type { ReplayWorkerIn, ReplayWorkerOut } from './game/replay_worker';
 import { ReplayWorld } from './game/replay_world';
 import { getSettings } from './game/settings';
 import { type SpectatorView, startSpectator } from './game/spectate';
 import { ClientWorld } from './net/client_world';
 import type { ForgedMatchAssets, ServerMsg } from './net/protocol';
-import { applyReplayEvent, buildMatchSim, type ReplayRecord } from './net/replay';
+import { applyReplayEvent, buildMatchSim, type ReplayEvent, type ReplayRecord } from './net/replay';
 import { attachBot } from './sim/content/bots';
 import { houseSeats } from './sim/content/bots/house';
 import type { ForgedChampionDef } from './sim/forge/forged_def';
@@ -148,13 +151,28 @@ function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
 // Watch a saved match: rebuild the sim from the record (deterministic, so
 // the whole match is seed plus commands) and run it through the normal
 // presentation behind a read-only world, with a control bar on top.
-// Seeking rides the same determinism: forward steps the sim silently to
-// the tick, backward rebuilds it from the record first. A seek is chunked
-// over frames so the page stays responsive while it steps.
-// Opened at a tick when a Match sheet asked for one (a death, a few
-// seconds before): the first seek runs before the first frame.
+// Seeking rides the same determinism plus the world checkpoints a worker
+// ships while the match is played once ahead (src/game/replay_worker.ts):
+// any tick is the nearest checkpoint restored and at most ten seconds
+// stepped, forward or back, and reverse playback walks a denser ring
+// (src/game/replay_cursor.ts). Until the worker has covered a tick, a
+// backward seek falls back to rebuilding from the start, chunked over
+// frames. Opened at a tick when a Match sheet asked for one (a death, a
+// few seconds before): the first seek runs before the first frame.
 // Ticks a replay steps per animation frame while seeking or at top speed.
 const REPLAY_TICKS_PER_FRAME = 400;
+
+// The first event at or after `tick`, for the command cursor after a restore.
+function eventIndexAt(events: readonly ReplayEvent[], tick: number): number {
+  let lo = 0;
+  let hi = events.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (events[mid]!.k < tick) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
 
 async function runReplay(source: number, at?: number): Promise<PostMatchAction> {
   let record: ReplayRecord | null = null;
@@ -185,18 +203,27 @@ async function runReplay(source: number, at?: number): Promise<PostMatchAction> 
       unitTeams.set(unitIds[i]!, p.team);
       seatNames.set(unitIds[i]!, p.name);
     });
-    // Follow the first human seat: their team, their fog, their story.
+    // Follow the first seat that is not a house bot: their team, their
+    // fog, their story; their deaths are the red marks on the bar.
     const viewerIdx = Math.max(
       0,
       rec.picks.findIndex((p) => !p.bot),
     );
+    const ownUnitId = unitIds[viewerIdx] ?? null;
     const world = new ReplayWorld(sim, seatNames);
     let stopped = false;
     let bar: ReplayBar | null = null;
+    // The second pass: the match played once ahead in a worker, a
+    // checkpoint every ten seconds and the marks as they happen.
+    const worker = new Worker(new URL('./game/replay_worker.ts', import.meta.url), {
+      type: 'module',
+    });
+    const marks: ReplayMark[] = [];
     const finish = (action: PostMatchAction): void => {
       if (stopped) return;
       stopped = true;
-      bar?.el.remove();
+      worker.terminate();
+      bar?.dispose();
       pres.dispose();
       resolve(action);
     };
@@ -211,25 +238,6 @@ async function runReplay(source: number, at?: number): Promise<PostMatchAction> 
     let next = 0;
     // A seek in progress: the tick to reach, stepped silently.
     let target: number | null = null;
-    const seekTo = (tick: number): void => {
-      const t = Math.max(0, Math.min(rec.ticks, Math.round(tick)));
-      if (t < sim.tickCount) {
-        sim = build();
-        next = 0;
-        world.rebind(sim);
-      }
-      target = t;
-    };
-    bar = buildReplayBar({
-      ticks: rec.ticks,
-      onSpeed: (m) => {
-        speed = m;
-      },
-      onSeek: seekTo,
-      onExit: () => finish('menu'),
-    });
-    container.appendChild(bar.el);
-    if (at !== undefined && at > 0) seekTo(at);
 
     // One recorded tick: the commands due, then the sim; the presentation
     // hears the events only while playing, never while seeking.
@@ -251,18 +259,99 @@ async function runReplay(source: number, at?: number): Promise<PostMatchAction> 
       if (!silent) pres.onWorldTick({ kills, golds: [], casts, hits: [], attacks });
     };
 
+    const cursor = new ReplayCursor({
+      get sim() {
+        return sim;
+      },
+      step: () => stepOnce(true),
+      restored: (tick) => {
+        next = eventIndexAt(rec.events, tick);
+      },
+    });
+    worker.onmessage = (e: MessageEvent<ReplayWorkerOut>): void => {
+      const msg = e.data;
+      if (msg.kind === 'checkpoint') {
+        cursor.addCheckpoint(msg.snapshot);
+        bar?.setCovered(cursor.covered);
+        if (msg.marks.length > 0) {
+          marks.push(...msg.marks);
+          bar?.setMarks(marks, ownUnitId);
+        }
+      } else if (msg.kind === 'done') {
+        marks.push(...msg.marks);
+        bar?.setMarks(marks, ownUnitId);
+        bar?.setCovered(rec.ticks);
+      } else console.error('replay pass failed:', msg.message);
+    };
+    worker.postMessage({ record: rec } satisfies ReplayWorkerIn);
+
+    const seekTo = (tick: number): void => {
+      const t = Math.max(0, Math.min(rec.ticks, Math.round(tick)));
+      if (!cursor.prepare(t)) {
+        // Behind, and no checkpoint covers it yet: from the start.
+        sim = build();
+        next = 0;
+        world.rebind(sim);
+      }
+      target = t;
+    };
+    // One tick either way while paused.
+    const stepBy = (ticks: number): void => {
+      if (target !== null) return;
+      if (ticks > 0) {
+        if (sim.tickCount < rec.ticks) stepOnce(false);
+      } else if (sim.tickCount > 0 && cursor.backTo(sim.tickCount - 1)) {
+        pres.onWorldTick();
+      }
+      bar?.setTime(sim.tickCount, false);
+    };
+    bar = buildReplayBar({
+      ticks: rec.ticks,
+      onSpeed: (m) => {
+        if (m >= 0) cursor.dropRing();
+        speed = m;
+      },
+      onSeek: seekTo,
+      onStep: stepBy,
+      onExit: () => finish('menu'),
+      nameOf: (id) => seatNames.get(id) ?? sim.units.get(id)?.kind ?? `unit ${id}`,
+    });
+    container.appendChild(bar.el);
+    bar.setMarks(marks, ownUnitId);
+    if (at !== undefined && at > 0) seekTo(at);
+
     const TICK_MS = DT * 1000;
     let last = performance.now();
     let acc = 0;
     function frame(now: number): void {
       if (stopped) return;
       if (target !== null) {
-        // Seeking: a slice of ticks per frame, the clock frozen meanwhile.
-        for (let i = 0; i < REPLAY_TICKS_PER_FRAME && sim.tickCount < target; i++) stepOnce(true);
-        if (sim.tickCount >= target) target = null;
+        // Seeking: a slice of ticks per frame, the clock frozen meanwhile;
+        // the presentation catches up once the tick is reached.
+        if (cursor.advance(target, REPLAY_TICKS_PER_FRAME)) {
+          target = null;
+          pres.onWorldTick();
+        }
         last = now;
         acc = 0;
         bar?.setTime(sim.tickCount, target !== null);
+        requestAnimationFrame(frame);
+        return;
+      }
+      if (speed < 0) {
+        // Reverse: the tick to show this frame, restored from the ring.
+        acc += Math.min(now - last, 250) * -speed;
+        last = now;
+        const back = Math.floor(acc / TICK_MS);
+        if (back > 0) {
+          acc -= back * TICK_MS;
+          const t = sim.tickCount - back;
+          if (t <= 0 && sim.tickCount === 0) {
+            speed = 0;
+            bar?.setSpeed(0);
+          } else if (cursor.backTo(Math.max(0, t))) pres.onWorldTick();
+        }
+        bar?.setTime(sim.tickCount, false);
         requestAnimationFrame(frame);
         return;
       }

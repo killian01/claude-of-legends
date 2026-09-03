@@ -57,6 +57,10 @@ const run = async () => {
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('console', (m) => {
+    if (m.type() === 'error' || m.type() === 'warning')
+      console.error('console:', m.text().slice(0, 300));
+  });
   // A refused API call is the usual reason a step silently does nothing.
   page.on('response', (res) => {
     if (res.url().includes('/api/') && res.status() >= 400) {
@@ -194,10 +198,94 @@ const run = async () => {
   } else await clickButton(page, 'Watch the replay');
   await page.waitForSelector('.replay-bar', { timeout: 30000 });
   await sleep(3000);
-  const clock = await page.evaluate(
-    () => document.querySelector('.replay-time')?.textContent ?? '',
-  );
+  const clockOf = () =>
+    page.evaluate(() => document.querySelector('.replay-time')?.textContent ?? '');
+  const secondsOf = (clock) => {
+    const m = /^(\d+):(\d+)/.exec(clock);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : -1;
+  };
+  const clock = await clockOf();
   console.log('replay clock:', clock, rec.deathWatch > 0 ? '(opened at a death)' : '');
+  if (rec.deathWatch > 0 && secondsOf(clock) < 1)
+    throw new Error(`not opened at the death: ${clock}`);
+
+  // The worker's pass: the marks strip fills and the checkpoints cover the
+  // match within seconds.
+  try {
+    await waitFor(
+      page,
+      `document.querySelectorAll('.replay-slice').length > 0 &&
+        parseFloat(document.querySelector('.replay-covered')?.style.width || '0') >= 99`,
+      'the checkpoints cover the match',
+      90000,
+    );
+  } catch (e) {
+    const dump = await page.evaluate(() => ({
+      covered: document.querySelector('.replay-covered')?.style.width,
+      slices: document.querySelectorAll('.replay-slice').length,
+      clock: document.querySelector('.replay-time')?.textContent,
+    }));
+    console.error('coverage:', dump, 'page errors:', errors);
+    throw e;
+  }
+  const strip = await page.evaluate(() => ({
+    slices: document.querySelectorAll('.replay-slice').length,
+    heat: document.querySelectorAll('.replay-heat').length,
+    own: document.querySelectorAll('.replay-tick.own').length,
+    structures: document.querySelectorAll('.replay-tick.tower, .replay-tick.sanctum').length,
+    buttons: [...document.querySelectorAll('.replay-btn')].map((b) => b.textContent),
+  }));
+  console.log('strip:', strip);
+  if (strip.heat === 0) throw new Error('no kill density on the strip');
+  if (
+    !strip.buttons.includes('-5s') ||
+    !strip.buttons.includes('◀ 1x') ||
+    !strip.buttons.includes('10x')
+  ) {
+    throw new Error(`bar buttons: ${strip.buttons.join(' ')}`);
+  }
+
+  // Pause, then five seconds back: instant, from a checkpoint.
+  await page.keyboard.press('k');
+  await sleep(300);
+  const before = secondsOf(await clockOf());
+  const t0 = Date.now();
+  await page.keyboard.press('ArrowLeft');
+  await waitFor(page, `!document.querySelector('.replay-time.seeking')`, 'the seek', 5000);
+  const after = secondsOf(await clockOf());
+  const seekMs = Date.now() - t0;
+  console.log('seek back 5s:', before, '->', after, `in ${seekMs} ms`);
+  if (after !== before - 5) throw new Error(`the seek landed at ${after}, wanted ${before - 5}`);
+  if (seekMs > 1500) throw new Error(`the seek took ${seekMs} ms`);
+
+  // A far jump on the slider lands where asked, quickly.
+  const t1 = Date.now();
+  await page.evaluate(() => {
+    const s = document.querySelector('.replay-slider');
+    s.value = String(Math.floor(Number(s.max) * 0.75));
+    s.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await waitFor(page, `!document.querySelector('.replay-time.seeking')`, 'the far seek', 5000);
+  const far = secondsOf(await clockOf());
+  console.log('far seek:', far, `in ${Date.now() - t1} ms`);
+  if (far < before) throw new Error(`the far seek landed at ${far}`);
+
+  // Reverse playback: J walks backward, the clock decreases, K pauses.
+  await page.keyboard.press('j');
+  await sleep(1500);
+  const backTo = secondsOf(await clockOf());
+  await page.keyboard.press('k');
+  await sleep(200);
+  const paused = secondsOf(await clockOf());
+  await sleep(700);
+  const stillPaused = secondsOf(await clockOf());
+  console.log('reverse:', far, '->', backTo, '| paused at', paused, stillPaused);
+  if (!(backTo < far)) throw new Error(`reverse did not walk back: ${far} -> ${backTo}`);
+  if (paused !== stillPaused) throw new Error('K did not pause');
+  const backOn = await page.evaluate(() => document.querySelector('.replay-btn.back.on') !== null);
+  if (backOn) throw new Error('a backward speed stayed lit after K');
+  await page.mouse.move(750, 380);
+  await shot(page, 'academy-replay');
   await clickButton(page, 'Exit replay');
   await waitFor(page, findBtn('Spar vs house bots'), 'back in the Academy', 30000);
 

@@ -20,6 +20,25 @@ interface Bucket {
 export class LaneSightings {
   private readonly seen: [Map<string, Bucket[]>, Map<string, Bucket[]>] = [new Map(), new Map()];
 
+  // The memory as plain data, for a world checkpoint (src/sim/snapshot.ts).
+  snapshot(): [Map<string, Bucket[]>, Map<string, Bucket[]>] {
+    const copy = (m: Map<string, Bucket[]>): Map<string, Bucket[]> =>
+      new Map([...m].map(([k, list]) => [k, list.map((b) => ({ ...b }))]));
+    return [copy(this.seen[0]), copy(this.seen[1])];
+  }
+
+  restore(seen: [Map<string, Bucket[]>, Map<string, Bucket[]>]): void {
+    for (const team of [0, 1] as const) {
+      this.seen[team].clear();
+      for (const [k, list] of seen[team]) {
+        this.seen[team].set(
+          k,
+          list.map((b) => ({ ...b })),
+        );
+      }
+    }
+  }
+
   // One tick of an enemy champion seen inside a lane by a team.
   record(team: TeamId, lane: LaneId, enemyId: number, time: number, dt: number): void {
     const key = `${lane}:${enemyId}`;
