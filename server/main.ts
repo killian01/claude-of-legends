@@ -32,12 +32,12 @@ import {
 } from './accounts';
 import { CONFIRM_TTL_MS, RESET_TTL_MS, TokenStore } from './action_tokens';
 import { API_RATE_PER_MIN, ApiLimiter } from './api_limit';
-import { ARENA_PLAY_NOW_PER_DAY } from './arena';
+import { ARENA_PLAY_NOW_PER_DAY, ARENA_ROUND_MS } from './arena';
 import { ArenaRunner } from './arena_runner';
 import { type ArenaDeps, playNow, roundDue, runArenaRound } from './arena_service';
 import { chooseArt, deleteArtFor, generateArt, listArt, splashOf } from './art';
 import { appendExchange, botChat, clearBotChat, windowTurns } from './bot_chats';
-import { fillWithBots } from './bot_fill';
+import { fillWithBots, type PoolSeat, TEAM_SIZE } from './bot_fill';
 import {
   addEntry,
   getEntry,
@@ -481,13 +481,42 @@ function onMatchReady(forge: boolean) {
   return (picks: MatchPick[], source: MatchSource) => {
     const id = nextMatchId++;
     const seed = (Date.now() % 2_000_000_000) + id;
-    const match = new Match(seed, fillWithBots(picks, seed));
+    // The ranked pool fills before house bots (docs/design/bots.md): every
+    // ranked bot whose account holds no seat here is a candidate, seated
+    // from the seed, rated on its account's live way at the end.
+    const present = new Set<number>();
+    for (const p of picks) {
+      const c = clients.get(p.clientId);
+      if (c) present.add(c.accountId);
+    }
+    const pool: PoolSeat[] = [];
+    for (const bot of botStore.listDeposited()) {
+      if (present.has(bot.accountId)) continue;
+      const owner = registry.findById(bot.accountId)?.name;
+      if (owner) pool.push({ bot, owner });
+    }
+    const seated = fillWithBots(picks, seed, TEAM_SIZE, pool);
+    const match = new Match(seed, seated);
     const botSeats = new Map<
       number,
       { accountId: number; name: string; botId?: string; version?: number }
     >();
-    for (const p of picks) {
+    for (const p of seated) {
       if (p.playbook === undefined) continue;
+      if (p.ownerId !== undefined) {
+        // A pool seat: nobody connected; the unit id is the seat's index in
+        // pick order, as buildMatchSim allocates them.
+        const unitId = match.unitIdOfPick(seated.indexOf(p));
+        if (unitId !== undefined) {
+          botSeats.set(unitId, {
+            accountId: p.ownerId,
+            name: p.name,
+            ...(p.botId !== undefined ? { botId: p.botId } : {}),
+            ...(p.botVersion !== undefined ? { version: p.botVersion } : {}),
+          });
+        }
+        continue;
+      }
       const c = clients.get(p.clientId);
       const player = match.players.get(p.clientId);
       if (c && player) {
@@ -1108,6 +1137,23 @@ const server = http.createServer(async (req, res) => {
       if (url === '/api/bots/autoapply' && req.method === 'POST') {
         const body = await readJsonBody(req);
         sendJson(res, 200, setAutoApply(botDeps, me.id, body?.id, body?.on));
+        return;
+      }
+      // The Arena as it stands for this account: on-demand matches left
+      // today, the ranked pool's size, and the next round's time.
+      if (url === '/api/bots/arena') {
+        const now = Date.now();
+        const cap = arenaDeps.playNowPerDay ?? ARENA_PLAY_NOW_PER_DAY;
+        const used = botStore.arenaEventsSince(me.id, now - DAY_MS);
+        const last = botStore.arenaLastRoundAt();
+        const roundMs = arenaDeps.roundMs ?? ARENA_ROUND_MS;
+        sendJson(res, 200, {
+          ok: true,
+          left: cap <= 0 ? null : Math.max(0, cap - used),
+          cap,
+          pool: botStore.listDeposited().length,
+          nextRoundInMs: last === null ? 0 : Math.max(0, last + roundMs - now),
+        });
         return;
       }
       if (url === '/api/bots/playnow' && req.method === 'POST') {

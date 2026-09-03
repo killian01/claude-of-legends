@@ -37,6 +37,9 @@ export interface MatchPick {
   playbook?: PlaybookDef;
   botId?: string;
   botVersion?: number;
+  // A ranked bot the fill seated from the pool (docs/design/bots.md): the
+  // owning account, with nobody connected behind the seat.
+  ownerId?: number;
 }
 
 interface MatchPlayer {
@@ -72,6 +75,7 @@ export class Match {
   // setup distributes to every client and what the saved replay embeds.
   readonly forgedDefs: readonly ForgedChampionDef[];
   private readonly unitNames = new Map<number, string>();
+  private readonly pickUnitIds: readonly number[];
   private eventsThisTick: SimEvent[] = [];
 
   constructor(seed: number, picks: readonly MatchPick[]) {
@@ -94,10 +98,12 @@ export class Match {
     // from the same seed, picks, and policy attachments by definition.
     const { sim, unitIds } = buildMatchSim(seed, this.replayPicks, this.forgedDefs);
     this.sim = sim;
+    this.pickUnitIds = unitIds;
     picks.forEach((p, i) => {
       const unitId = unitIds[i]!;
       this.unitNames.set(unitId, p.name);
-      if (p.bot) return;
+      // House bots and pool bots have nobody behind them: no player row.
+      if (p.bot || p.ownerId !== undefined) return;
       this.players.set(p.clientId, {
         clientId: p.clientId,
         name: p.name,
@@ -108,6 +114,12 @@ export class Match {
         coach: p.playbook !== undefined,
       });
     });
+  }
+
+  // The unit a pick became, by its index in pick order (the ids are
+  // allocated in that order): for seats nobody is connected behind.
+  unitIdOfPick(index: number): number | undefined {
+    return this.pickUnitIds[index];
   }
 
   // Connected players whose last command is older than maxIdleTicks.

@@ -351,6 +351,9 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
   let recordOpen = false;
   let recordOpenId: number | null = null;
   let arenaRunning = false;
+  // The Arena as it stands: matches left today, the pool, the next round.
+  let arena: { left: number | null; cap: number; pool: number; nextRoundInMs: number } | null =
+    null;
   let briefing: BriefingView | null = null;
   let briefingLoading = false;
   let arenaResult: { text: string; replayId: number | null } | null = null;
@@ -376,7 +379,10 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     recordTally = { wins: 0, losses: 0 };
     recordOpen = false;
     recordOpenId = null;
-    if (bot) void loadRecord(bot.id);
+    if (bot) {
+      void loadRecord(bot.id);
+      void loadArena();
+    }
     seriesError = null;
     // The conversation lives with the bot on the server: fetched on every
     // open, so a new session starts where the last one stopped.
@@ -406,6 +412,16 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     status = '';
     renderAll();
   };
+
+  async function loadArena(): Promise<void> {
+    const r = await api<{ left: number | null; cap: number; pool: number; nextRoundInMs: number }>(
+      '/api/bots/arena',
+    );
+    if (r.ok) {
+      arena = { left: r.left, cap: r.cap, pool: r.pool, nextRoundInMs: r.nextRoundInMs };
+      renderSide();
+    }
+  }
 
   async function loadRecord(botId: string): Promise<void> {
     const r = await api<{ rows: RecordRow[]; tally: RecordTally }>('/api/bots/record/list', {
@@ -577,7 +593,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
             (b.tally && b.tally.wins + b.tally.losses > 0
               ? ` · ${b.tally.wins}-${b.tally.losses}`
               : '') +
-            (b.deposited ? ' · in the Arena' : ''),
+            (b.deposited ? ' · ranked' : ''),
         ),
       );
       btn.addEventListener('click', () => {
@@ -749,7 +765,10 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         },
       );
     });
-    deposit.append(depositBox, document.createTextNode('In the Arena pool'));
+    deposit.append(depositBox, document.createTextNode('Ranked'));
+    deposit.title =
+      'Available for rated play: the Arena plays it on the hour and whenever someone presses ' +
+      'Play now, and the live queue seats it in place of a house bot';
     const history = el('button', 'ac-btn', versions ? 'Hide history' : 'History');
     history.addEventListener('click', () => {
       if (versions) {
@@ -1595,13 +1614,13 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       el(
         'p',
         'ac-lead',
-        'A whole match against house bots, played here in seconds, unrated. Then watch the ' +
-          'replay with what the bot was thinking on its plate.',
+        'A ranked match against the pool, now, played by the server in seconds; or a whole ' +
+          'match against house bots, played here, unrated. Every match lands on the Record.',
       ),
     );
     const sparBtn = el(
       'button',
-      'ac-btn primary',
+      'ac-btn',
       sparRunning ? 'Sparring...' : 'Spar vs house bots',
     ) as HTMLButtonElement;
     sparBtn.disabled = sparRunning || coaching;
@@ -1711,11 +1730,17 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     // by the server in seconds against the deposited bots nearest in rating.
     const arenaBtn = el(
       'button',
-      'ac-btn',
-      arenaRunning ? 'Playing in the Arena...' : 'Play now in the Arena (rated)',
+      'ac-btn primary',
+      arenaRunning
+        ? 'Playing in the Arena...'
+        : `Play now, ranked${arena && arena.left !== null ? ` (${arena.left} left today)` : ''}`,
     ) as HTMLButtonElement;
-    arenaBtn.disabled = arenaRunning || coaching || dirty;
-    arenaBtn.title = dirty ? 'Save first: the Arena plays the saved playbook' : '';
+    arenaBtn.disabled = arenaRunning || coaching || dirty || (arena !== null && arena.left === 0);
+    arenaBtn.title = dirty
+      ? 'Save first: the Arena plays the saved playbook'
+      : arena
+        ? `${arena.pool} ranked bot(s) in the pool; next round in ${Math.ceil(arena.nextRoundInMs / 60000)} min`
+        : '';
     arenaBtn.addEventListener('click', () => {
       arenaRunning = true;
       arenaResult = null;
@@ -1745,6 +1770,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         };
         renderSide();
         void loadRecord(bot.id);
+        void loadArena();
       });
     });
     sparBox.append(arenaBtn);
@@ -1869,7 +1895,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         el(
           'p',
           'ac-lead',
-          'Every night the Arena plays your deposited bots and the coach reads the report. ' +
+          'The Arena plays ranked bots on the hour and whenever someone presses Play now; the coach reads the last day. ' +
             'Come back in the morning.',
         ),
         load,

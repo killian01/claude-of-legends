@@ -19,8 +19,9 @@ always means this owned one; the server's unowned filler is always called a hous
 _Avoid_: AI, NPC, computer player, golem, agent
 
 **House bot**:
-The server's own unowned bot that fills a seat nobody took: a house style on the roster
-champion the fill hands it. Never rated, named by no one, obeys no one.
+The server's own unowned bot that fills a seat nobody took and no ranked bot could take: a
+house style on the roster champion the fill hands it. Never rated, named by its style
+("House sieger"), obeys no one.
 _Avoid_: bot fill, backfill bot, default bot
 
 **House style**:
@@ -30,11 +31,13 @@ hands out, on every host, so two matches on different seeds are not played the s
 _Avoid_: personality, difficulty, AI level, preset, house playbook
 
 **Fill**:
-The champions house bots take to complete a team: the roster's lanes completed around the
-seats the team already holds, a tank or a fighter for each top seat, a mage, an assassin or
-a battlemage for mid, a marksman and a support for bot, the skirmisher wherever a seat is
-open, drawn from the match seed among the champions the team does not hold. The same rule
-on every host: the live queue, the Arena, sparring, offline practice, the environment.
+How a team's empty seats are completed. Ranked bots first: the pool's bots seated from the
+match seed, one per account, no champion twice inside a team, each an owned seat rated on
+its account's live way. Then house bots on the roster's lanes around what the team holds, a
+tank or a fighter for each top seat, a mage, an assassin or a battlemage for mid, a marksman
+and a support for bot, the skirmisher wherever a seat is open, drawn from the match seed
+among the champions the team does not hold. The same rule on every host: the live queue,
+the Arena (house bots only there), sparring, offline practice, the environment.
 _Avoid_: draft (the Forge's term), autofill, backfill, composition
 
 **Home lane**:
@@ -415,9 +418,15 @@ playbook as patches, the play list beside it, and local sparring at full speed. 
 feature.
 _Avoid_: bot editor, bot forge, workshop, trainer
 
+**Ranked**:
+A bot its owner marked available for rated play: the Arena's rounds and play now, and the
+empty seats of live matches, where it takes a seat before a house bot. The owner's one
+switch; off, the bot only spars.
+_Avoid_: deposited (the store's word), in the pool, active
+
 **Arena**:
-The server-run competition of deposited bots: hourly rounds and on-demand "play now"
-matches, played at full speed with no one present and never coached, rated on the
+The server-run competition of ranked bots: hourly rounds and on-demand "play now" matches
+against the pool, played at full speed with no one present and never coached, rated on the
 account's Arena rating, watched afterwards as replays.
 _Avoid_: tournament, league, bot queue, night mode
 
