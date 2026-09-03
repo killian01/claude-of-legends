@@ -199,6 +199,18 @@ function trigger(raw: unknown, at: string, depth: number, errors: Errors): Trigg
     }
     case 'allyFighting':
       return { kind: 'allyFighting', within: reqNumber(raw, 'within', 0, 200, at, errors) };
+    case 'numbers': {
+      const within = reqNumber(raw, 'within', 0, 200, at, errors);
+      const atLeast = optNumber(raw, 'atLeast', -10, 10, at, errors, true);
+      const atMost = optNumber(raw, 'atMost', -10, 10, at, errors, true);
+      if (atLeast === undefined && atMost === undefined) {
+        errors.add(`${at}: needs atLeast or atMost`);
+      }
+      const out: Trigger = { kind: 'numbers', within };
+      if (atLeast !== undefined) out.atLeast = atLeast;
+      if (atMost !== undefined) out.atMost = atMost;
+      return out;
+    }
     case 'order': {
       const is = raw.is;
       if (is === undefined) return { kind: 'order' };
@@ -378,6 +390,8 @@ function behavior(raw: unknown, at: string, errors: Errors): Behavior {
       return withOpt({ kind: 'joinAlly' }, 'within', opt('within', 0, 200));
     case 'fallBack':
       return { kind: 'fallBack' };
+    case 'splitPush':
+      return { kind: 'splitPush' };
     case 'holdPosition': {
       const b: Behavior = {
         kind: 'holdPosition',

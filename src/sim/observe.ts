@@ -239,5 +239,6 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     lastSeen,
     seats,
     laneOpponents: sim.laneOpponents(u.team),
+    laneActivity: sim.laneActivity(u.team),
   };
 }

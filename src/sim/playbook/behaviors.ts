@@ -90,6 +90,8 @@ export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
       return joinAlly(ctx, b.within ?? JOIN_RANGE);
     case 'fallBack':
       return fallBack(ctx);
+    case 'splitPush':
+      return push(ctx, quietestLane(ctx), null);
     case 'holdPosition':
       return holdPosition(ctx, b.x, b.z, b.within ?? 2);
   }
@@ -516,6 +518,35 @@ function joinAlly(ctx: SlotContext, within: number): Action | null {
 // Fall back under the nearest live allied tower instead of all the way
 // home: the lane is kept, the tower shoots whoever follows, and the plays
 // below (fight, farm) go on there once under it.
+// The lane a split pusher takes: the one enemies were seen in the least
+// over the last minute (obs.laneActivity), the farthest from the enemy
+// champions in sight on a tie, the assigned lane without the field.
+export function quietestLane(ctx: SlotContext): LaneId | 'assigned' {
+  const activity = ctx.obs.laneActivity;
+  if (!activity) return 'assigned';
+  const lanes: LaneId[] = ['top', 'mid', 'bot'];
+  const foes = ctx.enemyChampions;
+  const farness = (lane: LaneId): number => {
+    if (foes.length === 0) return 0;
+    const path = GAME_MAP.lanes[lane];
+    const mid = path[Math.floor(path.length / 2)]!;
+    let sum = 0;
+    for (const f of foes) sum += Math.hypot(f.x - mid.x, f.z - mid.z);
+    return sum / foes.length;
+  };
+  let best: LaneId = ctx.s.lane ?? 'mid';
+  let bestKey = Number.POSITIVE_INFINITY;
+  for (const lane of lanes) {
+    // Seconds seen weigh; the distance breaks ties (a small term).
+    const key = activity[lane] - farness(lane) / 1000;
+    if (key < bestKey) {
+      bestKey = key;
+      best = lane;
+    }
+  }
+  return best;
+}
+
 function fallBack(ctx: SlotContext): Action | null {
   const { s, obs } = ctx;
   const tower = nearest(

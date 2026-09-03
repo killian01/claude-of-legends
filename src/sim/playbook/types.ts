@@ -60,6 +60,10 @@ export type Trigger =
   // An allied champion within the radius is in a fight: an enemy champion
   // stands within 10 units of it.
   | { kind: 'allyFighting'; within: number }
+  // The numbers within a radius: allied champions (self included) minus
+  // enemy champions in sight. atLeast 0 is an even fight or better,
+  // atLeast 1 an advantage, atMost -1 outnumbered.
+  | { kind: 'numbers'; within: number; atLeast?: number; atMost?: number }
   // The lineup (plan-bots phase 12), public from champion select: a
   // champion is in the match on a side; a side fields so many of a role.
   | { kind: 'champion'; side: Side; is: string }
@@ -141,6 +145,10 @@ export type Behavior =
   // lane, else walk at the enemy Sanctum. Past `regroupAt` seconds every
   // assigned bot pushes mid as one group; null disables the bell. Always acts.
   | { kind: 'push'; lane?: LaneId | 'assigned'; regroupAt?: number | null }
+  // Push the quietest lane: the one enemies were seen in the least over
+  // the last minute, farthest from the enemies in sight on a tie; what a
+  // split pusher does while the enemy groups elsewhere.
+  | { kind: 'splitPush' }
   // Walk to the nearest allied champion and stay within `keep` units.
   | { kind: 'followAlly'; keep?: number }
   // Walk to the nearest allied champion that is in a fight, within the

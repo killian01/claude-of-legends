@@ -194,6 +194,9 @@ export interface Observation {
   // the id of the enemy champion the team has seen there the most over
   // the last three minutes, null where nobody was seen.
   laneOpponents?: Readonly<Record<'top' | 'mid' | 'bot', number | null>>;
+  // Seconds enemy champions were seen in each lane over the last minute
+  // (additive v0 field): how busy each lane is, for a split push.
+  laneActivity?: Readonly<Record<'top' | 'mid' | 'bot', number>>;
 }
 
 export type Action =

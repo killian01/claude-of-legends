@@ -10,6 +10,8 @@ import type { TeamId } from './types';
 
 export const SIGHTING_BUCKET_S = 10;
 export const SIGHTING_WINDOW_S = 180;
+// The window behind a lane's activity (the split push reads the quietest).
+export const LANE_ACTIVITY_WINDOW_S = 60;
 const BUCKETS = SIGHTING_WINDOW_S / SIGHTING_BUCKET_S;
 
 interface Bucket {
@@ -54,6 +56,20 @@ export class LaneSightings {
       list.push({ period, seconds: dt });
       if (list.length > BUCKETS) list.shift();
     }
+  }
+
+  // Seconds any enemy champion was seen in the lane over the last `windowS`
+  // seconds: how busy a lane is, for the split push (the quietest lane).
+  activity(team: TeamId, lane: LaneId, time: number, windowS: number): number {
+    const oldest =
+      Math.floor(time / SIGHTING_BUCKET_S) - Math.ceil(windowS / SIGHTING_BUCKET_S) + 1;
+    const prefix = `${lane}:`;
+    let total = 0;
+    for (const [key, list] of this.seen[team]) {
+      if (!key.startsWith(prefix)) continue;
+      for (const b of list) if (b.period >= oldest) total += b.seconds;
+    }
+    return Math.round(total * 10) / 10;
   }
 
   // The enemy champion seen the most in the lane over the last three minutes.

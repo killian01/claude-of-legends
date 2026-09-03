@@ -35,10 +35,20 @@ export const BRAWLER_PLAYBOOK: PlaybookDef = {
       do: { kind: 'avoidTower', escortMin: 2, hpBelow: 0.5 },
     },
     { id: 'finish', when: { kind: 'always' }, do: { kind: 'finishSanctum' } },
+    // The fight first, but with the numbers: even or better within 20.
     {
       id: 'fight',
-      when: { kind: 'enemyVisible' },
-      do: { kind: 'fight', stance: 'front', alone: 'engage' },
+      when: {
+        kind: 'all',
+        of: [{ kind: 'enemyVisible' }, { kind: 'numbers', within: 20, atLeast: 0 }],
+      },
+      do: { kind: 'fight', stance: 'auto', alone: 'engage' },
+    },
+    // Outnumbered: under the tower, where the numbers turn.
+    {
+      id: 'outnumbered',
+      when: { kind: 'numbers', within: 20, atMost: -1 },
+      do: { kind: 'fallBack' },
     },
     {
       id: 'join',

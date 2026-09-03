@@ -33,7 +33,7 @@ import { hasDecisionToken, spendDecisionToken } from './decision_budget';
 import type { ForgedChampionDef } from './forge/forged_def';
 import { applyFountainRegen } from './fountain';
 import { stepIdleDefense } from './idle_defense';
-import { LaneSightings } from './lane_sightings';
+import { LANE_ACTIVITY_WINDOW_S, LaneSightings } from './lane_sightings';
 import { assignLanes, laneOf } from './lanes';
 import { createMapUnits } from './map_units';
 import { stepMinionAi } from './minion_ai';
@@ -240,6 +240,16 @@ export class Sim {
   // The lane opponents a team's memory names right now (CONTEXT.md): the
   // enemy champion seen the most inside each lane over the last three
   // minutes, null where nobody was seen.
+  // Seconds enemies were seen in each lane over the last minute (the
+  // additive laneActivity observation field, behind the split push).
+  laneActivity(team: TeamId, windowS = LANE_ACTIVITY_WINDOW_S): Readonly<Record<LaneId, number>> {
+    return {
+      top: this.laneSightings.activity(team, 'top', this.time, windowS),
+      mid: this.laneSightings.activity(team, 'mid', this.time, windowS),
+      bot: this.laneSightings.activity(team, 'bot', this.time, windowS),
+    };
+  }
+
   laneOpponents(team: TeamId): Readonly<Record<LaneId, number | null>> {
     return {
       top: this.laneSightings.opponent(team, 'top', this.time),

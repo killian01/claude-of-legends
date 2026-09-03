@@ -53,6 +53,15 @@ export function holds(t: Trigger, ctx: SlotContext): boolean {
       ).length;
       return countWithin(n, t.atLeast, t.atMost);
     }
+    case 'numbers': {
+      const allies = obs.units.filter(
+        (u) => u.friendly && u.kind === 'champion' && Math.hypot(u.x - s.x, u.z - s.z) <= t.within,
+      ).length;
+      const enemies = ctx.enemyChampions.filter(
+        (u) => Math.hypot(u.x - s.x, u.z - s.z) <= t.within,
+      ).length;
+      return countWithin(allies + 1 - enemies, t.atLeast, t.atMost);
+    }
     case 'enemyVisible':
       return ctx.champ !== null;
     case 'atFountain':

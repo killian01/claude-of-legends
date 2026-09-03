@@ -72,6 +72,12 @@ export function describeTrigger(t: Trigger): string {
       return t.is === undefined ? 'the coach gave an order' : `the coach ordered ${t.is}`;
     case 'allyFighting':
       return `an ally within ${t.within} is fighting`;
+    case 'numbers': {
+      const parts: string[] = [];
+      if (t.atLeast !== undefined) parts.push(`at least ${t.atLeast > 0 ? '+' : ''}${t.atLeast}`);
+      if (t.atMost !== undefined) parts.push(`at most ${t.atMost > 0 ? '+' : ''}${t.atMost}`);
+      return `the numbers within ${t.within} are ${parts.join(' and ')}`;
+    }
     case 'champion':
       return `${sideName(t.side)} has ${championName(t.is)}`;
     case 'roles':
@@ -162,6 +168,8 @@ export function describeBehavior(b: Behavior): string {
       return `join an ally fighting within ${b.within ?? 40}`;
     case 'fallBack':
       return 'fall back under the nearest tower';
+    case 'splitPush':
+      return 'split push the quietest lane';
     case 'holdPosition':
       return `hold position at ${Math.round(b.x)}, ${Math.round(b.z)}`;
   }
@@ -292,6 +300,14 @@ export const TRIGGER_FORMS: Readonly<Record<Trigger['kind'], KindForm>> = {
   allyFighting: {
     label: 'an ally is fighting',
     nums: [{ key: 'within', label: 'within', min: 0, max: 200, step: 1 }],
+  },
+  numbers: {
+    label: 'the numbers (allies with me, minus enemies)',
+    nums: [
+      { key: 'within', label: 'within', min: 0, max: 200, step: 1 },
+      { key: 'atLeast', label: 'at least', min: -10, max: 10, step: 1 },
+      { key: 'atMost', label: 'at most', min: -10, max: 10, step: 1 },
+    ],
   },
   champion: {
     label: 'a champion is in the match',
@@ -442,6 +458,7 @@ export const BEHAVIOR_FORMS: Readonly<Record<Behavior['kind'], KindForm>> = {
     nums: [{ key: 'within', label: 'within', min: 0, max: 200, step: 5 }],
   },
   fallBack: { label: 'fall back under the nearest tower' },
+  splitPush: { label: 'split push the quietest lane' },
   holdPosition: {
     label: 'hold a position',
     nums: [
@@ -478,6 +495,8 @@ export function freshTrigger(kind: Trigger['kind']): Trigger {
       return { kind, is: 'mid' };
     case 'allyFighting':
       return { kind, within: 40 };
+    case 'numbers':
+      return { kind, within: 20, atLeast: 0 };
     case 'champion':
       return { kind, side: 'enemy', is: 'vesk' };
     case 'roles':
