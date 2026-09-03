@@ -151,6 +151,7 @@ export function createBot(
     version: 1,
     deposited: false,
     autoApply: false,
+    openPlaybook: false,
     createdAt: at,
     updatedAt: at,
   };
@@ -227,6 +228,21 @@ export function setDeposited(
   }
   deps.store.setDeposited(bot.id, on);
   return { ok: true, bot: { ...bot, deposited: on } };
+}
+
+// The playbook readable by anyone on the bot's page (CONTEXT.md: Bot
+// page): the owner's switch, off by default.
+export function setOpenPlaybook(
+  deps: BotDeps,
+  accountId: number,
+  id: unknown,
+  on: unknown,
+): BotOutcome<{ bot: BotRow }> {
+  if (typeof on !== 'boolean') return { ok: false, error: 'malformed request' };
+  const found = owned(deps, accountId, id);
+  if (!found.ok) return found;
+  deps.store.setOpenPlaybook(found.bot.id, on);
+  return { ok: true, bot: { ...found.bot, openPlaybook: on } };
 }
 
 // The night coach's passing proposals become versions on their own, or

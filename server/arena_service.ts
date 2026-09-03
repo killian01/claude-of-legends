@@ -71,6 +71,7 @@ function poolOf(deps: ArenaDeps) {
 export async function runArenaMatch(
   deps: ArenaDeps,
   plan: ArenaMatchPlan,
+  opts: { rated?: boolean } = {},
 ): Promise<ArenaMatchSummary> {
   const now = (deps.now ?? Date.now)();
   const matchId = deps.nextMatchId();
@@ -110,7 +111,7 @@ export async function runArenaMatch(
     read: (pid) => deps.store.botRating(pid, 'arena').rating,
     apply: (pid, _way, delta) => deps.store.applyBotRating(pid, 'arena', delta),
   };
-  const outcome = rateMatch(owned, winner, true, book);
+  const outcome = rateMatch(owned, winner, opts.rated !== false, book);
   summary.rated = outcome.rated;
   const deltas = new Map<number, number>();
   for (const r of outcome.results) deltas.set(r.accountId, r.delta);
@@ -191,6 +192,53 @@ export async function runArenaMatch(
       `(${plan.seats.length} bot seat(s))`,
   );
   return summary;
+}
+
+// A challenge (CONTEXT.md): the account's bot against one ranked bot it
+// chose, now, on the server, unrated, from the same daily allowance as
+// play now; house bots around both. Both Records get the match.
+export async function challenge(
+  deps: ArenaDeps,
+  accountId: number,
+  botId: unknown,
+  targetId: unknown,
+): Promise<BotOutcome<ArenaMatchSummary & { myTeam: 0 }>> {
+  if (typeof botId !== 'string' || typeof targetId !== 'string') {
+    return { ok: false, error: 'malformed request' };
+  }
+  const bot = deps.store.getBot(botId);
+  if (!bot || bot.accountId !== accountId) {
+    return { ok: false, error: 'no such bot on this account' };
+  }
+  const target = deps.store.getBot(targetId);
+  if (!target || !target.deposited) return { ok: false, error: 'that bot is not ranked' };
+  if (target.accountId === accountId) {
+    return { ok: false, error: 'challenge a bot of another account (spar your own)' };
+  }
+  const now = (deps.now ?? Date.now)();
+  const cap = deps.playNowPerDay ?? ARENA_PLAY_NOW_PER_DAY;
+  if (!playNowAllowed(deps.store.arenaEventsSince(accountId, now - DAY_MS), cap)) {
+    return {
+      ok: false,
+      error: `daily limit reached (${cap} Arena matches per day); try again tomorrow`,
+    };
+  }
+  const owner = deps.nameOf(accountId);
+  const theirs = deps.nameOf(target.accountId);
+  if (owner === null || theirs === null) return { ok: false, error: 'cannot enter the Arena' };
+  deps.store.addArenaEvent(accountId, now);
+  const plan: ArenaMatchPlan = {
+    seats: [
+      { bot, owner, team: 0 },
+      { bot: target, owner: theirs, team: 1 },
+    ],
+  };
+  try {
+    const summary = await runArenaMatch(deps, plan, { rated: false });
+    return { ok: true, ...summary, myTeam: 0 };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
 }
 
 export function roundDue(deps: ArenaDeps): boolean {

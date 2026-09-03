@@ -235,6 +235,23 @@ Briefing, and the before/after screenshots under `docs/screenshots`.
    to 190 KB as JSON, a tick 0.4 to 0.6 ms; the worker's pass over a twenty-minute
    match takes tens of seconds in headless Chrome under software GL, less with a GPU.
 
+14. **The ladder alive** (2026-09-03, after the third round's report). The meta
+   matrix (`scripts/meta_matrix.mjs`, every house style against every other, mirrored,
+   read for cycles): ten seeds say the Laner beats every other style (70, 55, 60
+   percent), no cycle, most pairs split: a flat ladder by construction. Then: the ranked
+   pool fills the live queue before house bots (`server/bot_fill.ts`, one bot per
+   account, rated on the live way, on the Record); the deposit is called Ranked and Play
+   now is the first action with its allowance (`/api/bots/arena`); house bots named by
+   their style everywhere; the Death card on the Match sheet
+   (`src/sim/playbook/death_context.ts`, the ledger given the sim); the Bot page
+   (`/api/bots/page`, `src/ui/bot_page.ts`, the open playbook switch), the Challenge
+   (`server/arena_service.ts`, unrated, both Records), the public pool on the ladder's
+   Arena tab (`/api/bots/pool`); the tiers (`src/net/tiers.ts`). Terms: Ranked, Death
+   card, Bot page, Challenge, Tier. DONE. Next, guided by the matrix: a lever that makes
+   the styles counter each other (the fight's engagement rules, wave management, the
+   siege's timing), measured mirrored until the matrix shows a cycle; then the seasonal
+   reset.
+
 Follow-ups, in order of value: house bots obeying their team's pings (phase 5's
 mechanism), bot sharing and a playbook gallery, bots on forged champions once the Forge
 ships author-declared hints, style presets measured from hand-play replays, seasons.

@@ -21,6 +21,15 @@
     }
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/dist-server", "!**/node_modules", "!**/.pnpm-store"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/dist-server",
+      "!**/dist-env",
+      "!**/dist-gate*",
+      "!**/dist-matrix",
+      "!**/node_modules",
+      "!**/.pnpm-store"
+    ]
   }
 }

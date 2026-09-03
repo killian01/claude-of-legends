@@ -314,6 +314,35 @@ Spectate and replay show it as an overlay on the bot; the post-match report coun
 in each play, deaths by play, and results per opponent. This is the mechanism that turns
 watching into learning: without it nobody can fix a rule, so nobody iterates.
 
+## The ladder alive
+
+The meta matrix (`scripts/meta_matrix.mjs`) plays every house style against every other,
+mirrored over fixed seeds, and reads the result: a cycle (A beats B beats C beats A) is a
+ladder with depth, a dominant style is a ladder one playbook solves. Ten seeds on
+2026-09-03: no cycle; the Laner beats the Brawler 70%, the Sieger 55% and the Objective
+player 60%, the order transitive Laner, Objective player, Sieger, Brawler, and most pairs
+split (the seed's lineups decide more than the brain). The default bot is the dominant
+style: the ladder is flat by construction until a lever creates counterplay. That lever
+is the next round's work, guided by this matrix; what follows makes the ladder live
+meanwhile.
+
+**Ranked** is the owner's one switch: a ranked bot plays the Arena's rounds and play now,
+and takes an empty seat of a live match before a house bot (the fill, above), rated on the
+account's live way. Every human match moves several bot ratings, and a human meets other
+people's bots without waiting for anyone. Play now is the Sparring panel's first action,
+with the day's allowance, the pool's size and the next round beside it; the hourly rounds
+stay as the heartbeat that converges the ratings when nobody is around.
+
+The pool is public: the ladder's Arena tab opens on every ranked bot, placed or not, each
+with its **Bot page**: owner, champion, rated tally, ratings by **Tier**, rated matches
+with lines, builds and replays, and the playbook when the owner opened it. From the page,
+a **Challenge**: the reader's bot against this one, now, unrated, from the same daily
+allowance, on both Records. Reading an opponent before playing it, and adapting through
+the lineup triggers and the variants, is where two good players separate.
+
+Tiers name the bands of a rating (Recruit, Regular, Veteran, Elite, Legend, by hundreds
+from the base rating) so a number reads as a place; a seasonal reset is a follow-up.
+
 ## The Record and the Match sheet
 
 A bot has a Record (CONTEXT.md): every match it played, newest first, sparring and series
@@ -335,8 +364,10 @@ result, duration, the line, the build as icons, Sheet and Watch; a series adds i
 summed line) and the tally beside each bot in the rail. The Record itself opens over
 the center and side columns: the list filtered by kind on the left (kind, result,
 K/D/A, build, version, when), the Match sheet of the selected entry on the right: both
-teams' scoreboard with their builds, time and deaths per play, and the deaths, each a
-link that opens the replay five seconds before. Nothing is dismissed: an entry stays.
+teams' scoreboard with their builds, time and deaths per play, and the deaths, each with
+its Death card (the scene: the spot, allies and enemies within reach, the tower over it,
+drawn as a thumbnail of the map) and a link that opens the replay five seconds before.
+Nothing is dismissed: an entry stays.
 
 ## Ladders and rating
 

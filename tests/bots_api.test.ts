@@ -9,12 +9,13 @@ import {
   type BotDeps,
   createBot,
   deleteBot,
-  listBots,
   getVersion,
+  listBots,
   listVersions,
   revertBot,
   saveBot,
   setDeposited,
+  setOpenPlaybook,
 } from '../server/bots';
 import { NEW_BOT_PLAYBOOK } from '../src/sim/content/playbooks/new_bot';
 import type { PlaybookDef } from '../src/sim/playbook';
@@ -191,5 +192,20 @@ describe('bots on the account', () => {
     const third = createBot(deps, 1, { name: 'C', championId: 'vesk' });
     expect(!third.ok && third.error).toMatch(/bot cap/);
     deps.store.close();
+  });
+});
+
+describe('the open playbook', () => {
+  it("is the owner's switch, off by default, gated on ownership", () => {
+    const deps: BotDeps = { store: new BotStore(':memory:'), newId: () => 'bot_00000000000000cc' };
+    const bot = make(deps);
+    expect(bot.openPlaybook).toBe(false);
+    expect(setOpenPlaybook(deps, 2, bot.id, true).ok).toBe(false);
+    expect(setOpenPlaybook(deps, 1, bot.id, 'yes').ok).toBe(false);
+    const on = setOpenPlaybook(deps, 1, bot.id, true);
+    expect(on.ok && on.bot.openPlaybook).toBe(true);
+    expect(deps.store.getBot(bot.id)?.openPlaybook).toBe(true);
+    const off = setOpenPlaybook(deps, 1, bot.id, false);
+    expect(off.ok && off.bot.openPlaybook).toBe(false);
   });
 });

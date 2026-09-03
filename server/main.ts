@@ -34,7 +34,7 @@ import { CONFIRM_TTL_MS, RESET_TTL_MS, TokenStore } from './action_tokens';
 import { API_RATE_PER_MIN, ApiLimiter } from './api_limit';
 import { ARENA_PLAY_NOW_PER_DAY, ARENA_ROUND_MS } from './arena';
 import { ArenaRunner } from './arena_runner';
-import { type ArenaDeps, playNow, roundDue, runArenaRound } from './arena_service';
+import { type ArenaDeps, challenge, playNow, roundDue, runArenaRound } from './arena_service';
 import { chooseArt, deleteArtFor, generateArt, listArt, splashOf } from './art';
 import { appendExchange, botChat, clearBotChat, windowTurns } from './bot_chats';
 import { fillWithBots, type PoolSeat, TEAM_SIZE } from './bot_fill';
@@ -60,6 +60,7 @@ import {
   saveBot,
   setAutoApply,
   setDeposited,
+  setOpenPlaybook,
 } from './bots';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, parseCookies, serializeCookie } from './cookies';
@@ -423,7 +424,21 @@ const REGISTER_ERRORS: Record<RegisterError, string> = {
 // construction rather than by deletion, and tests/architecture.test.ts
 // holds that line for every route that ever serialises one.
 function describeAccount(a: Account): unknown {
-  return { ...publicAccount(a), profile: buildProfile(matchLog, a.id) };
+  return {
+    ...publicAccount(a),
+    profile: buildProfile(matchLog, a.id),
+    // The account's ranked bots, for the ladder's detail: a page and a
+    // challenge each (CONTEXT.md: Bot page, Challenge).
+    bots: botStore
+      .listByAccount(a.id)
+      .filter((b) => b.deposited)
+      .map((b) => ({
+        id: b.id,
+        name: b.name,
+        championId: b.championId,
+        tally: botStore.tally(b.id),
+      })),
+  };
 }
 
 // The same, for the owner asking about themselves: it adds the address
@@ -1154,6 +1169,78 @@ const server = http.createServer(async (req, res) => {
           pool: botStore.listDeposited().length,
           nextRoundInMs: last === null ? 0 : Math.max(0, last + roundMs - now),
         });
+        return;
+      }
+      if (url === '/api/bots/open' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, setOpenPlaybook(botDeps, me.id, body?.id, body?.on));
+        return;
+      }
+      // A bot's page (CONTEXT.md): what anyone signed in may read of a
+      // bot: its identity, its rated play, its playbook when opened.
+      if (url === '/api/bots/page' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const bot = typeof body?.id === 'string' ? botStore.getBot(body.id) : null;
+        if (!bot) {
+          sendJson(res, 200, { ok: false, error: 'no such bot' });
+          return;
+        }
+        const rated = listEntries(botStore, bot.id).filter(
+          (r) => r.kind === 'arena' || r.kind === 'live',
+        );
+        let wins = 0;
+        let losses = 0;
+        for (const r of rated) {
+          if (r.winner === null) continue;
+          if (r.winner === r.team) wins++;
+          else losses++;
+        }
+        sendJson(res, 200, {
+          ok: true,
+          bot: {
+            id: bot.id,
+            name: bot.name,
+            championId: bot.championId,
+            skin: bot.skin,
+            sigils: bot.sigils,
+            version: bot.version,
+            ranked: bot.deposited,
+            openPlaybook: bot.openPlaybook,
+            owner: registry.findById(bot.accountId)?.name ?? null,
+            accountId: bot.accountId,
+            mine: bot.accountId === me.id,
+          },
+          tally: { wins, losses },
+          ratings: {
+            live: botStore.botRating(bot.accountId, 'live'),
+            arena: botStore.botRating(bot.accountId, 'arena'),
+          },
+          rows: rated.slice(0, 10),
+          ...(bot.openPlaybook || bot.accountId === me.id ? { playbook: bot.playbook } : {}),
+        });
+        return;
+      }
+      // The pool (CONTEXT.md: Ranked): every ranked bot on the server, for
+      // the ladder's Arena tab, a page each; the ladder itself needs three
+      // rated games, the pool none.
+      if (url === '/api/bots/pool') {
+        sendJson(res, 200, {
+          ok: true,
+          bots: botStore.listDeposited().map((b) => ({
+            id: b.id,
+            name: b.name,
+            championId: b.championId,
+            owner: registry.findById(b.accountId)?.name ?? null,
+            mine: b.accountId === me.id,
+            tally: botStore.tally(b.id),
+            arena: botStore.botRating(b.accountId, 'arena').rating,
+          })),
+        });
+        return;
+      }
+      if (url === '/api/bots/challenge' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, await challenge(arenaDeps, me.id, body?.id, body?.target));
         return;
       }
       if (url === '/api/bots/playnow' && req.method === 'POST') {

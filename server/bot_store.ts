@@ -114,6 +114,8 @@ export interface BotRow {
   deposited: boolean;
   // The night coach's passing proposals become versions on their own.
   autoApply: boolean;
+  // Anyone may read the playbook on the bot's page (CONTEXT.md: Bot page).
+  openPlaybook: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -139,13 +141,14 @@ interface RawBot {
   version: number;
   deposited: number;
   auto_apply: number;
+  open_playbook: number;
   created_at: number;
   updated_at: number;
 }
 
 const BOT_COLS =
   'id, account_id, name, champion_id, sigils, skin, playbook, version, deposited, auto_apply, ' +
-  'created_at, updated_at';
+  'open_playbook, created_at, updated_at';
 
 function toBot(r: RawBot): BotRow {
   return {
@@ -159,6 +162,7 @@ function toBot(r: RawBot): BotRow {
     version: r.version,
     deposited: r.deposited === 1,
     autoApply: r.auto_apply === 1,
+    openPlaybook: r.open_playbook === 1,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -177,6 +181,8 @@ export class BotStore {
     // create-if-not-exists alone never alters an existing table.
     this.ensureColumn('bots', 'auto_apply', 'auto_apply integer not null default 0');
     this.ensureColumn('bots', 'last_coached_at', 'last_coached_at integer');
+    // The bot's page shows its playbook when the owner opened it.
+    this.ensureColumn('bots', 'open_playbook', 'open_playbook integer not null default 0');
   }
 
   private ensureColumn(table: string, name: string, ddl: string): void {
@@ -196,7 +202,7 @@ export class BotStore {
     this.db
       .prepare(
         `insert into bots (${BOT_COLS})
-         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         row.id,
@@ -209,6 +215,7 @@ export class BotStore {
         row.version,
         row.deposited ? 1 : 0,
         row.autoApply ? 1 : 0,
+        row.openPlaybook ? 1 : 0,
         row.createdAt,
         row.updatedAt,
       );
@@ -276,6 +283,10 @@ export class BotStore {
 
   setAutoApply(id: string, on: boolean): void {
     this.db.prepare('update bots set auto_apply = ? where id = ?').run(on ? 1 : 0, id);
+  }
+
+  setOpenPlaybook(id: string, on: boolean): void {
+    this.db.prepare('update bots set open_playbook = ? where id = ?').run(on ? 1 : 0, id);
   }
 
   botLastCoachedAt(id: string): number | null {

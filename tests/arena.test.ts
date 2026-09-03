@@ -16,6 +16,7 @@ import {
 import { ArenaRunner } from '../server/arena_runner';
 import {
   type ArenaDeps,
+  challenge,
   playNow,
   roundDue,
   runArenaMatch,
@@ -53,6 +54,7 @@ function bot(n: number, accountId = n, championId = CHAMPS[n % CHAMPS.length]!):
     version: 1,
     deposited: true,
     autoApply: false,
+    openPlaybook: false,
     createdAt: n,
     updatedAt: n,
   };
@@ -265,5 +267,43 @@ describe('the runner', () => {
     expect(runner.queued).toBe(0);
     // Free again once the queue drained.
     expect((await runner.run(req(4))).record.seed).toBe(4);
+  });
+});
+
+describe('a challenge', () => {
+  it('plays the chosen ranked bot now, unrated, on both Records, from the allowance', async () => {
+    const runner = cannedRunner(0);
+    const { deps, store, replays } = rig(runner, 2);
+    const mine = bot(1, 1, 'vesk');
+    const theirs = bot(2, 2, 'dain');
+    const unranked = { ...bot(3, 3, 'sylra'), deposited: false };
+    for (const b of [mine, theirs, unranked]) store.insertBot(b);
+    const out = await challenge(deps, 1, mine.id, theirs.id);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out).toMatchObject({ winner: 0, rated: false, myTeam: 0 });
+    expect(out.seats.map((s) => s.delta)).toEqual([0, 0]);
+    expect(store.botRating(1, 'arena')).toEqual({ rating: BASE_RATING, games: 0 });
+    expect(store.botRating(2, 'arena')).toEqual({ rating: BASE_RATING, games: 0 });
+    expect(replays).toHaveLength(1);
+    // The picks: mine on team 0, theirs on team 1, house bots around.
+    const picks = runner.requests[0]!.picks;
+    expect(picks[0]).toMatchObject({ team: 0, championId: 'vesk' });
+    expect(picks[1]).toMatchObject({ team: 1, championId: 'dain' });
+    expect(picks.filter((p) => p.bot !== undefined)).toHaveLength(8);
+    // Both Records got the match, kind arena, no rating movement.
+    for (const id of [mine.id, theirs.id]) {
+      const rows = store.listRecords(id);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.entry).toMatchObject({ kind: 'arena', replayId: 500 });
+      expect((rows[0]!.entry as { ratingDelta?: number }).ratingDelta).toBeUndefined();
+    }
+    // Refusals: not ranked, own bot, someone else's bot as mine, the allowance.
+    expect((await challenge(deps, 1, mine.id, unranked.id)).ok).toBe(false);
+    expect((await challenge(deps, 1, mine.id, mine.id)).ok).toBe(false);
+    expect((await challenge(deps, 2, mine.id, theirs.id)).ok).toBe(false);
+    expect((await challenge(deps, 1, mine.id, theirs.id)).ok).toBe(true);
+    const third = await challenge(deps, 1, mine.id, theirs.id);
+    expect(!third.ok && third.error).toMatch(/daily limit/);
   });
 });

@@ -168,6 +168,7 @@ interface BotView {
   version: number;
   deposited: boolean;
   autoApply?: boolean;
+  openPlaybook?: boolean;
   // Won and lost over its Record (server/bots.ts listBots).
   tally?: RecordTally;
 }
@@ -803,7 +804,29 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         void load(null);
       });
     });
-    actions.append(save, deposit, history, del);
+    // The playbook readable by anyone on the bot's page (CONTEXT.md).
+    const open = el('label', 'ac-check');
+    const openBox = el('input', '') as HTMLInputElement;
+    openBox.type = 'checkbox';
+    openBox.checked = bot.openPlaybook === true;
+    openBox.addEventListener('change', () => {
+      void api<{ bot: BotView }>('/api/bots/open', { id: bot.id, on: openBox.checked }).then(
+        (r) => {
+          if (!r.ok) {
+            openBox.checked = bot.openPlaybook === true;
+            say(r.error, true);
+            return;
+          }
+          bots = bots.map((b) =>
+            b.id === r.bot.id ? { ...b, openPlaybook: r.bot.openPlaybook } : b,
+          );
+          if (current?.id === r.bot.id) current = { ...current, openPlaybook: r.bot.openPlaybook };
+        },
+      );
+    });
+    open.append(openBox, document.createTextNode('Open playbook'));
+    open.title = "Anyone may read this playbook on the bot's page, from the ladder";
+    actions.append(save, deposit, open, history, del);
     top.append(actions);
     const st = el('div', `ac-status${statusBad ? ' bad' : ''}`, status);
     top.append(st);

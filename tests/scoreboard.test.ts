@@ -46,7 +46,7 @@ describe('scoreboard', () => {
     expect(mine).toBeDefined();
     expect(mine!.championId).toBe('sylra');
     expect(mine!.name).toBe('Sylra');
-    expect(score.rows.filter((r) => (r.player ?? '').includes('(bot)'))).toHaveLength(9);
+    expect(score.rows.filter((r) => (r.player ?? '').startsWith('House '))).toHaveLength(9);
 
     const client = new ClientWorld(() => undefined);
     client.applyServer(score);

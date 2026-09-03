@@ -24,6 +24,7 @@ function bot(id: string, accountId: number, championId: string): BotRow {
     version: 3,
     deposited: true,
     autoApply: false,
+    openPlaybook: false,
     createdAt: 0,
     updatedAt: 0,
   };

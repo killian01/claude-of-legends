@@ -36,6 +36,7 @@ const BOT: BotRow = {
   version: 1,
   deposited: true,
   autoApply: false,
+    openPlaybook: false,
   createdAt: 0,
   updatedAt: 0,
 };

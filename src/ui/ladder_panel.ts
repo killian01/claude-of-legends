@@ -3,6 +3,8 @@
 // expandable into that player's public profile. Pure DOM, rebuilt fresh on
 // every open like the career panel.
 
+import { tierOf } from '../net/tiers';
+import { openBotPage } from './bot_page';
 import { buildPublicProfilePanel } from './profile_panel';
 
 const CSS = `
@@ -25,6 +27,15 @@ const CSS = `
 .lad-games { color: #93a87c; }
 .lad-sub { color: #93a87c; margin: 4px 0; }
 .lad-detail { margin: 2px 0 6px 12px; }
+.lad-tier { color: #c9a84a; font-size: 11px; margin-right: 6px; }
+.lad-pool { margin: 4px 0 10px; padding-bottom: 8px; border-bottom: 1px solid #3a4f28; }
+.lad-bots { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.lad-bot {
+  padding: 4px 9px; border-radius: 6px; border: 1px solid #3a4f28; background: #17210f;
+  color: #d8e6c0; cursor: pointer; font-size: 11.5px;
+}
+.lad-bot:hover { border-color: #7ca050; }
+.lad-bot small { color: #93a87c; margin-left: 4px; }
 `;
 
 let cssInstalled = false;
@@ -73,6 +84,9 @@ function fill(list: HTMLElement, way: Way): void {
     .then((r) => (r.ok ? (r.json() as Promise<LadderRow[]>) : null))
     .then((rows) => {
       list.textContent = '';
+      // The Arena tab opens on the pool: every ranked bot, placed or not,
+      // a page and a challenge each.
+      if (way === 'arena') list.appendChild(buildPool());
       if (!rows || rows.length === 0) {
         const sub = document.createElement('div');
         sub.className = 'lad-sub';
@@ -92,6 +106,7 @@ function fill(list: HTMLElement, way: Way): void {
         btn.append(
           mk('lad-rank', String(row.rank)),
           mk('lad-name', row.name),
+          mk('lad-tier', tierOf(row.rating).name),
           mk('lad-rating', String(row.rating)),
           mk('lad-games', `${row.ratedGames} rated`),
         );
@@ -105,6 +120,9 @@ function fill(list: HTMLElement, way: Way): void {
           if (open && !built) {
             built = true;
             detail.appendChild(buildPublicProfilePanel(row.id));
+            // The account's ranked bots: a page each (CONTEXT.md: Bot page),
+            // where a challenge waits.
+            if (way !== 'hand') detail.appendChild(buildRankedBots(row.id));
           }
         });
         list.append(btn, detail);
@@ -113,6 +131,120 @@ function fill(list: HTMLElement, way: Way): void {
     .catch(() => {
       list.textContent = 'Ladder unavailable: the game server is not reachable.';
     });
+}
+
+// The reader's own bots, for a challenge from a bot's page.
+async function myBots(): Promise<{ id: string; name: string; championId: string }[]> {
+  try {
+    const res = await fetch('/api/bots', { credentials: 'same-origin' });
+    if (!res.ok) return [];
+    const body = (await res.json()) as {
+      ok?: boolean;
+      bots?: { id: string; name: string; championId: string }[];
+    };
+    return body.ok && body.bots ? body.bots : [];
+  } catch {
+    return [];
+  }
+}
+
+function buildRankedBots(accountId: number): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'lad-bots';
+  fetch(`/api/account/${accountId}`)
+    .then((r) =>
+      r.ok
+        ? (r.json() as Promise<{
+            bots?: {
+              id: string;
+              name: string;
+              championId: string;
+              tally: { wins: number; losses: number };
+            }[];
+          }>)
+        : null,
+    )
+    .then((data) => {
+      const bots = data?.bots ?? [];
+      if (bots.length === 0) return;
+      for (const b of bots) {
+        const btn = document.createElement('button');
+        btn.className = 'lad-bot';
+        btn.textContent = b.name;
+        const small = document.createElement('small');
+        small.textContent = `${b.tally.wins}-${b.tally.losses}`;
+        btn.appendChild(small);
+        btn.title = "The bot's page: its record, its replays, its playbook when open, a challenge";
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          void myBots().then((mine) => {
+            openBotPage(document.body, b.id, {
+              myBots: mine,
+              onWatch: (id) => window.dispatchEvent(new CustomEvent('loc:replay', { detail: id })),
+            });
+          });
+        });
+        box.appendChild(btn);
+      }
+    })
+    .catch(() => undefined);
+  return box;
+}
+
+// The pool: the ranked bots of every account, by Arena rating, each a
+// button to its page.
+function buildPool(): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'lad-pool';
+  fetch('/api/bots/pool', { credentials: 'same-origin' })
+    .then((r) =>
+      r.ok
+        ? (r.json() as Promise<{
+            ok?: boolean;
+            bots?: {
+              id: string;
+              name: string;
+              championId: string;
+              owner: string | null;
+              mine: boolean;
+              tally: { wins: number; losses: number };
+              arena: number;
+            }[];
+          }>)
+        : null,
+    )
+    .then((data) => {
+      const bots = (data?.bots ?? []).sort((a, b) => b.arena - a.arena);
+      const title = document.createElement('div');
+      title.className = 'lad-sub';
+      title.textContent =
+        bots.length === 0
+          ? 'No ranked bot yet: mark one Ranked in the Academy.'
+          : `The pool: ${bots.length} ranked bot${bots.length > 1 ? 's' : ''}. Open one to read it, and to challenge it with yours.`;
+      box.appendChild(title);
+      const row = document.createElement('div');
+      row.className = 'lad-bots';
+      for (const b of bots) {
+        const btn = document.createElement('button');
+        btn.className = 'lad-bot';
+        btn.textContent = `${b.name}`;
+        const small = document.createElement('small');
+        small.textContent = `${b.owner ?? '?'} · ${tierOf(b.arena).name} · ${b.tally.wins}-${b.tally.losses}`;
+        btn.appendChild(small);
+        btn.addEventListener('click', () => {
+          void myBots().then((mine) => {
+            openBotPage(document.body, b.id, {
+              myBots: mine,
+              onWatch: (id) => window.dispatchEvent(new CustomEvent('loc:replay', { detail: id })),
+            });
+          });
+        });
+        row.appendChild(btn);
+      }
+      box.appendChild(row);
+    })
+    .catch(() => undefined);
+  return box;
 }
 
 export function buildLadderPanel(): HTMLElement {

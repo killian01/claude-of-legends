@@ -453,6 +453,33 @@ on), the playbook version that played, its plays, and its replay. Capped per bot
 oldest leaving first. The tally of won and lost is the record in the sports sense.
 _Avoid_: history, match log, ledger, and "record" for a stored replay (that is a replay)
 
+**Death card**:
+The scene of one death on a Match sheet: where the champion fell, the allies and enemies
+within reach, whether an enemy tower had it in range, and the champions and structures
+around it, in words and as a thumbnail of the map. What turns "six deaths on the chase
+play" into a rule to fix.
+_Avoid_: death recap, kill cam
+
+**Bot page**:
+What anyone signed in may read of a bot before playing it: its owner and champion, its
+rated tally and its ratings by tier, its rated matches with their lines, builds and
+replays, and its playbook when the owner opened it (the owner's switch, off by default).
+Reached from the ladder and the pool.
+_Avoid_: scouting report (the plan's measuring script), profile (that is an account's)
+
+**Challenge**:
+An on-demand Arena match against one ranked bot the challenger chose, from the bot's
+page: the challenger's bot on one side, the chosen one on the other, house bots around,
+played by the server now, unrated, from the same daily allowance as play now, on both
+Records.
+_Avoid_: duel, friendly, custom match
+
+**Tier**:
+The named band a rating sits in, the same on every ladder: Recruit below the base rating,
+then Regular, Veteran, Elite and Legend by steps of a hundred. A place a number reads as,
+never a separate score.
+_Avoid_: rank (that is the position on a ladder), league, division, and other games' metals
+
 **Match sheet**:
 The reading of one entry of a Record: both teams' scoreboard with their builds, time and
 deaths per play, the bot's deaths with their minute and the play that held, each a link
