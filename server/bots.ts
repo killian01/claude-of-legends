@@ -108,8 +108,15 @@ function owned(deps: BotDeps, accountId: number, id: unknown): BotOutcome<{ bot:
   return { ok: true, bot };
 }
 
-export function listBots(deps: BotDeps, accountId: number): BotOutcome<{ bots: BotRow[] }> {
-  return { ok: true, bots: deps.store.listByAccount(accountId) };
+// Each bot with its tally, won and lost over its Record (the sports sense
+// of the word), for the Academy's rail.
+export type BotWithTally = BotRow & { tally: { wins: number; losses: number } };
+
+export function listBots(deps: BotDeps, accountId: number): BotOutcome<{ bots: BotWithTally[] }> {
+  return {
+    ok: true,
+    bots: deps.store.listByAccount(accountId).map((b) => ({ ...b, tally: deps.store.tally(b.id) })),
+  };
 }
 
 // A new bot: a name, a roster champion, two sigils, a skin, and the default
@@ -195,6 +202,8 @@ export function saveBot(
 export function deleteBot(deps: BotDeps, accountId: number, id: unknown): BotOutcome {
   const found = owned(deps, accountId, id);
   if (!found.ok) return found;
+  // Its Record goes with it; the replays it held fall to the next prune.
+  deps.store.deleteRecordsOf(found.bot.id);
   deps.store.deleteBot(found.bot.id);
   return { ok: true };
 }

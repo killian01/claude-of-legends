@@ -21,6 +21,9 @@ export interface MatchPlayerRecord {
   ratingDelta?: number;
   // The seat was the account's own bot (ADR 0013); absent for hand seats.
   way?: 'bot';
+  // The build at the end, item ids in inventory order; absent on records
+  // written before it was kept.
+  items?: string[];
 }
 
 export interface MatchRecord {
@@ -77,6 +80,7 @@ export function buildMatchRecord(
         cs: r.cs ?? 0,
         ...(delta !== undefined ? { ratingDelta: delta } : {}),
         ...(rating?.ways?.get(r.unitId) === 'bot' ? { way: 'bot' as const } : {}),
+        ...(r.items && r.items.length > 0 ? { items: [...r.items] } : {}),
       };
     }),
   };

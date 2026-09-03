@@ -163,7 +163,8 @@ function preamble(): string {
     'there, keeping what already works.';
   const format =
     'Answer format, and nothing else: the first line starts with "# " followed by one or two ' +
-    "plain sentences to the owner, in the owner's own language, saying what you changed and " +
+    'plain sentences to the owner, in the language the owner wrote their latest message in ' +
+    '(English for an English message), saying what you changed and ' +
     'why; then one patch operation per line as compact JSON (no indentation, no line breaks ' +
     'inside an operation). No prose after the first line, no code fences, no numbering, no ' +
     'trailing commentary. Play ids are short lowercase English (letters, digits, hyphens). ' +

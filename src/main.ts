@@ -151,21 +151,18 @@ function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
 // Seeking rides the same determinism: forward steps the sim silently to
 // the tick, backward rebuilds it from the record first. A seek is chunked
 // over frames so the page stays responsive while it steps.
-// A record handed over directly (a local sparring match from the Academy)
-// skips the fetch: the same viewer, the same rules.
+// Opened at a tick when a Match sheet asked for one (a death, a few
+// seconds before): the first seek runs before the first frame.
 // Ticks a replay steps per animation frame while seeking or at top speed.
 const REPLAY_TICKS_PER_FRAME = 400;
 
-async function runReplay(source: number | ReplayRecord): Promise<PostMatchAction> {
+async function runReplay(source: number, at?: number): Promise<PostMatchAction> {
   let record: ReplayRecord | null = null;
-  if (typeof source !== 'number') record = source;
-  else {
-    try {
-      const res = await fetch(`/api/replay/${source}`);
-      if (res.ok) record = (await res.json()) as ReplayRecord;
-    } catch {
-      // handled below
-    }
+  try {
+    const res = await fetch(`/api/replay/${source}`);
+    if (res.ok) record = (await res.json()) as ReplayRecord;
+  } catch {
+    // handled below
   }
   if (!record || record.version !== 1 || !Array.isArray(record.picks)) {
     await showNotice(
@@ -232,6 +229,7 @@ async function runReplay(source: number | ReplayRecord): Promise<PostMatchAction
       onExit: () => finish('menu'),
     });
     container.appendChild(bar.el);
+    if (at !== undefined && at > 0) seekTo(at);
 
     // One recorded tick: the commands due, then the sim; the presentation
     // hears the events only while playing, never while seeking.
@@ -758,10 +756,8 @@ async function boot(): Promise<void> {
         : (lastPick ?? (await pickForPractice()));
       lastPick = pick;
       action = await runOffline(pick);
-    } else if (choice.mode === 'replay' && choice.replay !== undefined) {
-      action = await runReplay(choice.replay);
     } else if (choice.mode === 'replay' && choice.replayId !== undefined) {
-      action = await runReplay(choice.replayId);
+      action = await runReplay(choice.replayId, choice.replayAt);
     } else if (choice.mode === 'spectate' && choice.matchId !== undefined) {
       action = await runSpectate(choice.matchId, choice.team === 1 ? 1 : 0);
     } else {

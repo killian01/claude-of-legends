@@ -6,7 +6,6 @@
 // It only decides; the entry point owns the flow. Everything here resolves
 // the promise with a HomeChoice and takes the page down.
 
-import type { ReplayRecord } from '../net/replay';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { TeamId } from '../sim/types';
 import { openAcademy } from './academy';
@@ -49,11 +48,11 @@ export interface HomeChoice {
   // same flow as 'queue', a separate ladder, forged champions in select.
   mode: 'practice' | 'queue' | 'forge-queue' | 'create' | 'join' | 'replay' | 'spectate';
   code?: string;
-  // For mode 'replay': the saved replay to watch, or a record handed over
-  // directly (a local sparring match from the Academy).
+  // For mode 'replay': the saved replay to watch, and the tick to open it
+  // at when a Match sheet asked for one (a death, a few seconds before).
   replayId?: number;
-  replay?: ReplayRecord;
-  // For a replay handed over by the Academy: the bot to reopen it on when
+  replayAt?: number;
+  // For a replay opened from the Academy: the bot to reopen it on when
   // the replay ends.
   academy?: { botId: string };
   // For mode 'spectate': the live match to watch, and from whose side.
@@ -137,7 +136,6 @@ export function showHome(
       window.removeEventListener('loc:replay', onWatchReplay);
       window.removeEventListener('loc:spectate', onSpectate);
       window.removeEventListener('loc:forge-test', onForgeTest);
-      window.removeEventListener('loc:replay-record', onReplayRecord);
       stopBackdrop();
       root.remove();
     };
@@ -148,11 +146,25 @@ export function showHome(
 
     // A Watch button on a career or ladder panel fires these; this page
     // owns the flow, so it is the one that resolves.
+    // A bare id, or the Academy's form: the id, the tick to open at, and
+    // the bot to come back to.
     function onWatchReplay(e: Event): void {
-      const id = (e as CustomEvent<number>).detail;
+      const detail = (e as CustomEvent<number | { id: number; tick?: number; botId?: string }>)
+        .detail;
+      const id = typeof detail === 'number' ? detail : detail?.id;
       if (typeof id !== 'number') return;
       leave();
-      resolve({ name: accountName, mode: 'replay', replayId: id });
+      resolve({
+        name: accountName,
+        mode: 'replay',
+        replayId: id,
+        ...(typeof detail === 'object' && typeof detail.tick === 'number'
+          ? { replayAt: detail.tick }
+          : {}),
+        ...(typeof detail === 'object' && typeof detail.botId === 'string'
+          ? { academy: { botId: detail.botId } }
+          : {}),
+      });
     }
     function onSpectate(e: Event): void {
       const detail = (e as CustomEvent<{ matchId: number; team: TeamId }>).detail;
@@ -175,21 +187,7 @@ export function showHome(
     }
     window.addEventListener('loc:replay', onWatchReplay);
     window.addEventListener('loc:spectate', onSpectate);
-    // The Academy's sparring: watch the match it just played, from the
-    // record it holds in memory.
-    function onReplayRecord(e: Event): void {
-      const detail = (e as CustomEvent<{ record: ReplayRecord; botId: string }>).detail;
-      if (typeof detail?.record !== 'object' || detail.record === null) return;
-      leave();
-      resolve({
-        name: accountName,
-        mode: 'replay',
-        replay: detail.record,
-        ...(typeof detail.botId === 'string' ? { academy: { botId: detail.botId } } : {}),
-      });
-    }
     window.addEventListener('loc:forge-test', onForgeTest);
-    window.addEventListener('loc:replay-record', onReplayRecord);
 
     const cards = el('div', 'pg-cards');
 

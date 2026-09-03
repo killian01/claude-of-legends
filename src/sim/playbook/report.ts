@@ -14,10 +14,20 @@ export interface PlayStats {
   deaths: number;
 }
 
+// One death, dated: the tick, the play that held, and who landed it. What
+// the Match sheet links into the replay (playtest round 3).
+export interface DeathNote {
+  tick: number;
+  play: string | null;
+  killerId: number;
+}
+
 export interface UnitPlayReport {
   unitId: number;
   plays: Record<string, PlayStats>;
   deaths: number;
+  // Every death in order; absent on reports written before it existed.
+  deathsAt?: DeathNote[];
 }
 
 export interface PlayReport {
@@ -34,6 +44,7 @@ interface Span {
 export class PlayLedger {
   private readonly current = new Map<number, Span>();
   private readonly stats = new Map<number, Map<string, PlayStats>>();
+  private readonly deaths = new Map<number, DeathNote[]>();
   private lastTick = 0;
 
   private slot(unitId: number, playId: string): PlayStats {
@@ -63,6 +74,14 @@ export class PlayLedger {
       } else if (ev.type === 'death') {
         const open = this.current.get(ev.unitId);
         if (open) this.slot(ev.unitId, open.playId).deaths += 1;
+        // Only the units with plays are reported; a death before any play
+        // (or a unit without one) is noted but never surfaces.
+        let notes = this.deaths.get(ev.unitId);
+        if (!notes) {
+          notes = [];
+          this.deaths.set(ev.unitId, notes);
+        }
+        notes.push({ tick, play: open?.playId ?? null, killerId: ev.killerId });
       }
     }
   }
@@ -83,7 +102,12 @@ export class PlayLedger {
         const s = plays[open.playId] ?? { ticks: 0, deaths: 0 };
         plays[open.playId] = { ...s, ticks: s.ticks + (this.lastTick - open.since) };
       }
-      units.push({ unitId, plays, deaths });
+      units.push({
+        unitId,
+        plays,
+        deaths,
+        deathsAt: (this.deaths.get(unitId) ?? []).map((d) => ({ ...d })),
+      });
     }
     units.sort((a, b) => a.unitId - b.unitId);
     return { ticks: this.lastTick, units };

@@ -19,6 +19,7 @@ import {
 } from '../src/net/protocol';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { validateForged } from '../src/sim/forge/validate';
+import { PlayLedger } from '../src/sim/playbook/report';
 import { validatePlaybook } from '../src/sim/playbook/validate';
 import { DT } from '../src/sim/types';
 import { foldName, nameErrorMessage } from './account_name';
@@ -35,7 +36,16 @@ import { ARENA_PLAY_NOW_PER_DAY } from './arena';
 import { ArenaRunner } from './arena_runner';
 import { type ArenaDeps, playNow, roundDue, runArenaRound } from './arena_service';
 import { chooseArt, deleteArtFor, generateArt, listArt, splashOf } from './art';
+import { appendExchange, botChat, clearBotChat, windowTurns } from './bot_chats';
 import { fillWithBots } from './bot_fill';
+import {
+  addEntry,
+  getEntry,
+  listEntries,
+  parseUpload,
+  RECORD_UPLOAD_MAX,
+  rowOf,
+} from './bot_records';
 import { BotStore } from './bot_store';
 import {
   type BotDeps,
@@ -51,7 +61,6 @@ import {
   setAutoApply,
   setDeposited,
 } from './bots';
-import { appendExchange, botChat, clearBotChat, windowTurns } from './bot_chats';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, parseCookies, serializeCookie } from './cookies';
 import { authorizeUrl, CALLBACK_PATH, DiscordOauth, discordConfigFromEnv } from './discord_oauth';
@@ -172,8 +181,11 @@ interface MatchEntry {
   // (it would be a boosting machine otherwise).
   ratedEligible: boolean;
   // Bot seats by unit id (ADR 0013): the owning account and the seat name,
-  // kept here because a coach may close the tab and still be rated.
-  botSeats: Map<number, { accountId: number; name: string }>;
+  // kept here because a coach may close the tab and still be rated; the
+  // bot and its version, for the Record written at the end.
+  botSeats: Map<number, { accountId: number; name: string; botId?: string; version?: number }>;
+  // Time and deaths per play for the bot seats' Records (src/sim/playbook/report.ts).
+  ledger: PlayLedger;
   // A Forge-queue match: its deltas land on the Forge queue's own rating
   // (ADR 0011), never the classic ladder.
   forge: boolean;
@@ -367,7 +379,7 @@ const arenaDeps: ArenaDeps = {
   nextMatchId: () => nextMatchId++,
   saveReplay: (id, record) => {
     saveJsonAtomic(path.join(REPLAYS_DIR, `${id}.json`), record);
-    pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP);
+    pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP, botStore.heldReplayIds());
   },
   recordMatch: (rec) => {
     matchLog.push(rec);
@@ -470,12 +482,22 @@ function onMatchReady(forge: boolean) {
     const id = nextMatchId++;
     const seed = (Date.now() % 2_000_000_000) + id;
     const match = new Match(seed, fillWithBots(picks, seed));
-    const botSeats = new Map<number, { accountId: number; name: string }>();
+    const botSeats = new Map<
+      number,
+      { accountId: number; name: string; botId?: string; version?: number }
+    >();
     for (const p of picks) {
       if (p.playbook === undefined) continue;
       const c = clients.get(p.clientId);
       const player = match.players.get(p.clientId);
-      if (c && player) botSeats.set(player.unitId, { accountId: c.accountId, name: p.name });
+      if (c && player) {
+        botSeats.set(player.unitId, {
+          accountId: c.accountId,
+          name: p.name,
+          ...(p.botId !== undefined ? { botId: p.botId } : {}),
+          ...(p.botVersion !== undefined ? { version: p.botVersion } : {}),
+        });
+      }
     }
     matches.set(id, {
       match,
@@ -485,6 +507,7 @@ function onMatchReady(forge: boolean) {
       ratedEligible: source === 'queue',
       forge,
       botSeats,
+      ledger: new PlayLedger(),
     });
     for (const p of picks) {
       const c = clients.get(p.clientId);
@@ -522,6 +545,8 @@ const matchmaker = new Matchmaker(send, onMatchReady(false), undefined, {
       sigils: bot.sigils,
       skin: bot.skin,
       playbook: v.def,
+      botId: bot.id,
+      version: bot.version,
     };
   },
 });
@@ -994,6 +1019,68 @@ const server = http.createServer(async (req, res) => {
       if (url === '/api/bots/version' && req.method === 'POST') {
         const body = await readJsonBody(req);
         sendJson(res, 200, getVersion(botDeps, me.id, body?.id, body?.version));
+        return;
+      }
+      // The Record (server/bot_records.ts): the Academy's sparring lands
+      // here with its replay; the list and one entry come back from here.
+      if (url === '/api/bots/record/add' && req.method === 'POST') {
+        const body = await readJsonBody(req, RECORD_UPLOAD_MAX);
+        const found = ownedBot(botDeps, me.id, body?.id);
+        if (!found.ok) {
+          sendJson(res, 200, found);
+          return;
+        }
+        const parsed = parseUpload(body, Date.now());
+        if (!parsed.ok) {
+          sendJson(res, 200, { ok: false, error: `not a sparring result: ${parsed.error}` });
+          return;
+        }
+        // The replay first, on a match id of its own, so the entry can
+        // point at it; a save that fails leaves an entry without one.
+        let replayId: number | null = null;
+        try {
+          const id = nextMatchId++;
+          saveJsonAtomic(path.join(REPLAYS_DIR, `${id}.json`), parsed.value.record);
+          replayId = id;
+        } catch (err) {
+          console.error('sparring replay save failed', err);
+        }
+        const { id } = addEntry(botStore, found.bot.id, me.id, { ...parsed.value.entry, replayId });
+        pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP, botStore.heldReplayIds());
+        const entry = getEntry(botStore, found.bot.id, id);
+        sendJson(res, 200, {
+          ok: true,
+          row: entry ? rowOf(entry) : null,
+          tally: botStore.tally(found.bot.id),
+        });
+        return;
+      }
+      if (url === '/api/bots/record/list' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const found = ownedBot(botDeps, me.id, body?.id);
+        sendJson(
+          res,
+          200,
+          found.ok
+            ? {
+                ok: true,
+                rows: listEntries(botStore, found.bot.id),
+                tally: botStore.tally(found.bot.id),
+              }
+            : found,
+        );
+        return;
+      }
+      if (url === '/api/bots/record/entry' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const found = ownedBot(botDeps, me.id, body?.id);
+        if (!found.ok) {
+          sendJson(res, 200, found);
+          return;
+        }
+        const entryId = typeof body?.entryId === 'number' ? body.entryId : -1;
+        const entry = getEntry(botStore, found.bot.id, entryId);
+        sendJson(res, 200, entry ? { ok: true, entry } : { ok: false, error: 'no such entry' });
         return;
       }
       if (url === '/api/bots/briefing' && req.method === 'POST') {
@@ -1923,6 +2010,9 @@ setInterval(() => {
     for (const [matchId, entry] of matches) {
       try {
         entry.match.tick();
+        if (entry.botSeats.size > 0) {
+          entry.ledger.observe(entry.match.sim.tickCount, entry.match.lastEvents);
+        }
         const score = entry.match.sim.tickCount % 40 === 0 ? entry.match.buildScore() : null;
         for (const player of entry.match.players.values()) {
           const snap = entry.match.buildSnapshotFor(player.clientId);
@@ -2033,7 +2123,7 @@ setInterval(() => {
                 ...forgedPayload(entry.match),
               });
               replayId = matchId;
-              pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP);
+              pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP, botStore.heldReplayIds());
             } catch (err) {
               console.error('replay save failed', err);
             }
@@ -2056,6 +2146,34 @@ setInterval(() => {
               console.error('match log append failed', err);
             }
             console.log(`match ${matchId} recorded (${accountIdByUnit.size} human seat(s))`);
+            // The bot seats' Records: the same rows and the ledger's report,
+            // kind live, the rating movement when there was one.
+            const report = entry.ledger.report();
+            for (const [unitId, seat] of entry.botSeats) {
+              if (seat.botId === undefined) continue;
+              const u = entry.match.sim.units.get(unitId);
+              if (!u) continue;
+              const delta = deltas.get(seat.accountId);
+              try {
+                addEntry(botStore, seat.botId, seat.accountId, {
+                  kind: 'live',
+                  at: now,
+                  seed: entry.match.seed,
+                  team: u.team,
+                  winner: entry.match.sim.winner,
+                  ticks: entry.match.sim.tickCount,
+                  version: seat.version ?? 1,
+                  edited: false,
+                  botUnitId: unitId,
+                  score: score.rows,
+                  report,
+                  replayId: replayId ?? null,
+                  ...(rated && delta !== undefined ? { ratingDelta: delta } : {}),
+                });
+              } catch (err) {
+                console.error('record entry failed', err);
+              }
+            }
           }
         }
         if (entry.endedAt !== null && now - entry.endedAt > MATCH_LINGER_MS) {

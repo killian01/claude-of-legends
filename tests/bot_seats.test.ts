@@ -113,6 +113,8 @@ describe('a bot pick at select', () => {
     sigils: ['zephyr', 'sear'],
     skin: 2,
     playbook: NEW_BOT_PLAYBOOK,
+    botId: 'bot_0123456789abcdef',
+    version: 3,
   };
 
   it('seats the resolved bot with its own champion, sigils and skin', () => {

@@ -49,6 +49,8 @@ interface SelectEntry extends Pending {
     // account boundary; its playbook rides into the picks.
     playbook?: PlaybookDef;
     botName?: string;
+    botId?: string;
+    botVersion?: number;
   } | null;
 }
 
@@ -92,6 +94,9 @@ export interface BotSeat {
   sigils: [string, string];
   skin: number;
   playbook: PlaybookDef;
+  // The bot and the playbook version playing, for its Record at the end.
+  botId: string;
+  version: number;
 }
 
 export interface MatchmakerOptions {
@@ -403,7 +408,14 @@ export class Matchmaker {
       sigils: valid ? [sigils[0], sigils[1]] : DEFAULT_SIGILS,
       skin: clampSkin(champ, skin),
       ...(forged ? { forged } : {}),
-      ...(seat ? { playbook: seat.playbook, botName: seat.name } : {}),
+      ...(seat
+        ? {
+            playbook: seat.playbook,
+            botName: seat.name,
+            botId: seat.botId,
+            botVersion: seat.version,
+          }
+        : {}),
     };
     const locked = session.entries.filter((e) => e.locked).length;
     for (const e of session.entries) {
@@ -463,6 +475,8 @@ export class Matchmaker {
       skin: e.locked?.skin ?? 0,
       ...(e.locked?.forged ? { forged: e.locked.forged } : {}),
       ...(e.locked?.playbook ? { playbook: e.locked.playbook } : {}),
+      ...(e.locked?.botId !== undefined ? { botId: e.locked.botId } : {}),
+      ...(e.locked?.botVersion !== undefined ? { botVersion: e.locked.botVersion } : {}),
     }));
     this.onMatchReady(picks, session.source);
   }

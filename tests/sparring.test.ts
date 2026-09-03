@@ -61,7 +61,8 @@ describe('sparring', () => {
     expect(result.score).toHaveLength(10);
     expect(result.time).toBeCloseTo(1500 / 20, 3);
     const line = botRow(result);
-    expect(line).toMatchObject({ unitId: result.botUnitId, team: 0 });
+    expect(line).toMatchObject({ unitId: result.botUnitId, team: 0, player: 'Nightfall' });
+    expect(result.score.filter((r) => r.player?.startsWith('House '))).toHaveLength(9);
     expect(line!.deaths).toBe(mine!.deaths);
     expect(Array.isArray(line!.items)).toBe(true);
     // The bot ran ITS list: 'careful' is a play only it has.

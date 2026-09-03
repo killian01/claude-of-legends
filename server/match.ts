@@ -32,8 +32,11 @@ export interface MatchPick {
   // approved for this seat by the matchmaker's account boundary.
   forged?: ForgedChampionDef;
   // An account's own bot in this seat (ADR 0013): its playbook, resolved
-  // by the account boundary like a forged definition.
+  // by the account boundary like a forged definition, and which bot and
+  // version it is, for the bot's Record at the end.
   playbook?: PlaybookDef;
+  botId?: string;
+  botVersion?: number;
 }
 
 interface MatchPlayer {
@@ -190,6 +193,11 @@ export class Match {
 
   tick(): void {
     this.eventsThisTick = this.sim.tick();
+  }
+
+  // The last tick's events, for the play ledger a bot seat's Record wants.
+  get lastEvents(): readonly SimEvent[] {
+    return this.eventsThisTick;
   }
 
   handleCommand(clientId: number, msg: ClientMsg): void {

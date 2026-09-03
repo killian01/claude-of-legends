@@ -17,6 +17,7 @@ import {
   planRound,
   playNowAllowed,
 } from './arena';
+import { addEntry } from './bot_records';
 import type { BotStore } from './bot_store';
 import type { BotOutcome } from './bots';
 import { type OwnedSeat, type RatingBook, rateMatch } from './match_rating';
@@ -145,7 +146,8 @@ export async function runArenaMatch(
     }
   });
   const rows = result.score.map((r) => ({ ...r, player: nameByUnit.get(r.unitId) ?? r.player }));
-  // What each bot seat did, for its owner's Briefing and the night coach.
+  // What each bot seat did, for its owner's Briefing and the night coach,
+  // and one more entry on each bot's Record (server/bot_records.ts).
   plan.seats.forEach((s, i) => {
     deps.store.addBotReport({
       matchId,
@@ -155,6 +157,22 @@ export async function runArenaMatch(
       picks,
       report: result.report,
       at: now,
+    });
+    const delta = deltas.get(s.bot.accountId);
+    addEntry(deps.store, s.bot.id, s.bot.accountId, {
+      kind: 'arena',
+      at: now,
+      seed: result.record.seed,
+      team: s.team,
+      winner,
+      ticks: result.ticks,
+      version: s.bot.version,
+      edited: false,
+      botUnitId: result.unitIds[i] ?? 0,
+      score: rows,
+      report: result.report,
+      replayId: replayId ?? null,
+      ...(outcome.rated && delta !== undefined ? { ratingDelta: delta } : {}),
     });
   });
   deps.recordMatch(

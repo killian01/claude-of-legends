@@ -7,16 +7,9 @@
 // every coach operation goes through the validator before it lands.
 
 import { runSeries, runSparring } from '../game/sparring';
-import {
-  botRow,
-  SERIES_SEEDS,
-  type SeriesMatch,
-  type SeriesSummary,
-  type SparResult,
-  summarizeSeries,
-} from '../game/sparring_core';
+import { SERIES_SEEDS, type SparResult } from '../game/sparring_core';
 import { type CoachTurn, commentOf } from '../net/coach_chat';
-import type { ReplayRecord } from '../net/replay';
+import type { RecordEntry, RecordRow, RecordTally } from '../net/record';
 import { CHAMPION_LIST, CHAMPIONS, homeLane } from '../sim/content/champions';
 import { ITEMS } from '../sim/content/items';
 import { SIGIL_LIST } from '../sim/content/sigils';
@@ -35,6 +28,7 @@ import {
   type Trigger,
   validatePlaybook,
 } from '../sim/playbook';
+import type { TeamId } from '../sim/types';
 import { buildCounts, buildRow, itemCatalog } from './item_catalog';
 import { el } from './menu';
 import { startMenuBackdrop } from './menu_backdrop';
@@ -50,6 +44,7 @@ import {
   TRIGGER_FORMS,
   TRIGGER_KINDS,
 } from './playbook_text';
+import { fmtClock, kindLabel, renderRecordView, resultOf } from './record_view';
 import { buildIcons } from './scoreboard_table';
 
 const CSS = `
@@ -79,6 +74,7 @@ const CSS = `
 .ac-rail { width: 230px; flex: none; overflow-y: auto; }
 .ac-main { flex: 1; min-width: 0; overflow-y: auto; padding-right: 6px; }
 .ac-side { width: 330px; flex: none; overflow-y: auto; display: flex; flex-direction: column; }
+.ac-record { flex: 1; min-width: 0; min-height: 0; display: none; flex-direction: column; }
 .ac-panel {
   background: rgba(6, 12, 16, 0.86); border: 1px solid #1f3644; border-radius: 10px;
   padding: 12px 14px; margin-bottom: 10px;
@@ -172,6 +168,8 @@ interface BotView {
   version: number;
   deposited: boolean;
   autoApply?: boolean;
+  // Won and lost over its Record (server/bots.ts listBots).
+  tally?: RecordTally;
 }
 
 // The Briefing as the API returns it (server/night_coach.ts Briefing).
@@ -281,18 +279,6 @@ function fmtSeconds(ticks: number): string {
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
 }
 
-// The last sparring result per bot, kept while the page lives: watching
-// the replay leaves the Academy and comes back to it.
-const lastSpar = new Map<string, SparResult>();
-
-// A series as the Academy keeps it: who played whom, the matches, the sum.
-interface SeriesView {
-  versus: string;
-  matches: SeriesMatch[];
-  summary: SeriesSummary;
-}
-const lastSeries = new Map<string, SeriesView>();
-
 export function openAcademy(container: HTMLElement, opts: { botId?: string } = {}): void {
   ensureCss();
   const root = el('div', 'ac');
@@ -303,7 +289,11 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     root.remove();
   };
   const onKey = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') close();
+    if (e.key !== 'Escape') return;
+    if (recordOpen) {
+      recordOpen = false;
+      renderRecord();
+    } else close();
   };
   window.addEventListener('keydown', onKey);
 
@@ -319,7 +309,9 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
   const rail = el('div', 'ac-rail');
   const main = el('div', 'ac-main');
   const side = el('div', 'ac-side');
-  body.append(rail, main, side);
+  // The Record's view takes the center and the side; the rail stays.
+  const recordBox = el('div', 'ac-record');
+  body.append(rail, main, side, recordBox);
   root.append(head, body);
   container.appendChild(root);
 
@@ -348,12 +340,16 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
   let chatStick = true;
   let deep = false;
   let sparRunning = false;
-  let sparResult: SparResult | null = null;
   let sparError: string | null = null;
   let seriesRunning = false;
   let seriesDone = 0;
-  let seriesResult: SeriesView | null = null;
   let seriesError: string | null = null;
+  // The bot's Record (CONTEXT.md), newest first, read from the server on
+  // every select and after every sparring; and the view over it when open.
+  let record: RecordRow[] | null = null;
+  let recordTally: RecordTally = { wins: 0, losses: 0 };
+  let recordOpen = false;
+  let recordOpenId: number | null = null;
   let arenaRunning = false;
   let briefing: BriefingView | null = null;
   let briefingLoading = false;
@@ -376,8 +372,11 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     chatDraft = '';
     coachText = '';
     coachRefused = [];
-    sparResult = bot ? (lastSpar.get(bot.id) ?? null) : null;
-    seriesResult = bot ? (lastSeries.get(bot.id) ?? null) : null;
+    record = null;
+    recordTally = { wins: 0, losses: 0 };
+    recordOpen = false;
+    recordOpenId = null;
+    if (bot) void loadRecord(bot.id);
     seriesError = null;
     // The conversation lives with the bot on the server: fetched on every
     // open, so a new session starts where the last one stopped.
@@ -407,6 +406,68 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     status = '';
     renderAll();
   };
+
+  async function loadRecord(botId: string): Promise<void> {
+    const r = await api<{ rows: RecordRow[]; tally: RecordTally }>('/api/bots/record/list', {
+      id: botId,
+    });
+    if (current?.id !== botId) return;
+    if (r.ok) {
+      record = r.rows;
+      recordTally = r.tally;
+      const b = bots.find((x) => x.id === botId);
+      if (b) b.tally = r.tally;
+    } else {
+      record = [];
+      say(r.error, true);
+    }
+    renderRail();
+    renderSide();
+    if (recordOpen) renderRecord();
+  }
+
+  // A sparring's result onto the bot's Record (server/bot_records.ts): the
+  // ten rows, the report and the replay record; the server keeps the entry
+  // and saves the replay beside the others.
+  async function postEntry(
+    bot: BotView,
+    r: SparResult,
+    team: TeamId,
+    extra: Record<string, unknown>,
+  ): Promise<void> {
+    const res = await api<{ row: RecordRow | null }>('/api/bots/record/add', {
+      id: bot.id,
+      seed: r.record.seed,
+      team,
+      winner: r.winner,
+      ticks: r.ticks,
+      version: bot.version,
+      edited: dirty,
+      botUnitId: r.botUnitId,
+      score: r.score,
+      report: r.report,
+      record: r.record,
+      ...extra,
+    });
+    if (!res.ok) throw new Error(`the result was not recorded: ${res.error}`);
+  }
+
+  function openRecord(entryId: number | null): void {
+    recordOpen = true;
+    recordOpenId = entryId;
+    renderRecord();
+  }
+
+  // The replay viewer, then back here on the same bot; at a tick when the
+  // sheet asked for one (a death, a few seconds before).
+  function watchReplay(botId: string, replayId: number, tick?: number): void {
+    close();
+    window.dispatchEvent(
+      new CustomEvent('loc:replay', {
+        detail: { id: replayId, botId, ...(tick !== undefined ? { tick } : {}) },
+      }),
+    );
+  }
 
   async function load(keepId: string | null): Promise<void> {
     const r = await api<{ bots: BotView[] }>('/api/bots');
@@ -512,7 +573,9 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         el(
           'small',
           '',
-          `${champ?.name.split(',')[0] ?? b.championId} · v${b.version}${b.deposited ? ' · in the Arena' : ''}`,
+          `${champ?.name.split(',')[0] ?? b.championId} · v${b.version}` +
+            (b.tally ? ` · ${b.tally.wins}-${b.tally.losses}` : '') +
+            (b.deposited ? ' · in the Arena' : ''),
         ),
       );
       btn.addEventListener('click', () => {
@@ -1399,8 +1462,14 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         bubble.append(el('small', '', `Refused: ${coachRefused.join('; ')}`));
       log.append(bubble);
     }
+    // Scroll events arrive a frame late, after the streamed text grew
+    // again, so "at the bottom" alone would read false during a stream:
+    // only a scroll UP (the reader's, never the follow's) lets go.
+    let lastTop = log.scrollTop;
     log.addEventListener('scroll', () => {
-      chatStick = log.scrollTop + log.clientHeight >= log.scrollHeight - 12;
+      if (log.scrollTop + log.clientHeight >= log.scrollHeight - 12) chatStick = true;
+      else if (log.scrollTop < lastTop - 1) chatStick = false;
+      lastTop = log.scrollTop;
     });
     coach.append(log);
     const row = el('div', 'ac-chatrow');
@@ -1517,8 +1586,6 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     }
     coach.append(opts);
     side.append(coach);
-    // Only in the document does the log have a height to scroll.
-    stickLog(log);
 
     const sparBox = el('div', 'ac-panel');
     sparBox.append(el('h3', '', 'Sparring'));
@@ -1539,7 +1606,6 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     sparBtn.addEventListener('click', () => {
       sparRunning = true;
       sparError = null;
-      sparResult = null;
       renderSide();
       const seed = Math.floor(Math.random() * 1_000_000_000);
       runSparring(
@@ -1552,10 +1618,8 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         },
         seed,
       )
-        .then((r) => {
-          sparResult = r;
-          lastSpar.set(bot.id, r);
-        })
+        .then((r) => postEntry(bot, r, 0, { kind: 'sparring' }))
+        .then(() => loadRecord(bot.id))
         .catch((e: Error) => {
           sparError = e.message;
         })
@@ -1582,7 +1646,6 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       seriesRunning = true;
       seriesDone = 0;
       seriesError = null;
-      seriesResult = null;
       renderSide();
       const sparBot = {
         name: bot.name,
@@ -1614,8 +1677,23 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
             seriesDone = done;
             renderSide();
           }).then((matches) => {
-            seriesResult = { versus, matches, summary: summarizeSeries(matches) };
-            lastSeries.set(bot.id, seriesResult);
+            // Five entries sharing one series id, posted in seed order.
+            const seriesId = `s${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+            return matches
+              .reduce(
+                (chain, m, i) =>
+                  chain.then(() =>
+                    postEntry(bot, m.result, m.team, {
+                      kind: 'series',
+                      seriesId,
+                      seriesIndex: i + 1,
+                      seriesOf: matches.length,
+                      versus,
+                    }),
+                  ),
+                Promise.resolve(),
+              )
+              .then(() => loadRecord(bot.id));
           }),
         )
         .catch((e: Error) => {
@@ -1664,6 +1742,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
           replayId: r.replayId ?? null,
         };
         renderSide();
+        void loadRecord(bot.id);
       });
     });
     sparBox.append(arenaBtn);
@@ -1680,126 +1759,82 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       }
     }
     if (seriesError) sparBox.append(el('div', 'ac-status bad', seriesError));
-    if (seriesResult) {
-      const sr = seriesResult;
-      const s = sr.summary;
-      const line = el('div', 'ac-line');
-      const cls = s.wins > s.losses ? 'won' : s.losses > s.wins ? 'lost' : '';
-      line.append(
-        el(
-          'span',
-          `verdict ${cls}`,
-          `${sr.versus}: ${s.wins} won, ${s.losses} lost` +
-            (s.draws > 0 ? `, ${s.draws} without a winner` : ''),
-        ),
-        el('span', 'kda', `${s.kills} / ${s.deaths} / ${s.assists}`),
-        el('span', 'dim', `${s.cs} cs over ${sr.matches.length} seeds`),
-      );
-      const dismiss = el('button', 'ac-btn mini', 'Dismiss');
-      dismiss.title = 'Put the series away';
-      dismiss.addEventListener('click', () => {
-        seriesResult = null;
-        lastSeries.delete(bot.id);
-        renderSide();
-      });
-      line.append(dismiss);
-      sparBox.append(line);
-      const table = el('table', 'ac-table');
-      const hr = el('tr', '');
-      for (const h of ['Play', 'Time', 'Deaths']) hr.append(el('th', '', h));
-      table.append(hr);
-      const rows = Object.entries(s.plays).sort((a, b) => b[1].ticks - a[1].ticks);
-      for (const [id, st] of rows) {
-        const tr = el('tr', '');
-        tr.append(
-          el('td', '', id),
-          el('td', 'num', fmtSeconds(st.ticks)),
-          el('td', 'num', String(st.deaths)),
-        );
-        table.append(tr);
-      }
-      sparBox.append(table);
-      const list = el('table', 'ac-table');
-      for (const m of sr.matches) {
-        const tr = el('tr', '');
-        const outcome =
-          m.result.winner === null ? 'no winner' : m.result.winner === m.team ? 'won' : 'lost';
-        const row = botRow(m.result);
-        tr.append(
-          el('td', '', `seed ${m.seed}`),
-          el('td', '', `${outcome} after ${fmtSeconds(m.result.ticks)}`),
-          el('td', 'num', row ? `${row.kills} / ${row.deaths} / ${row.assists ?? 0}` : ''),
-        );
-        const cell = el('td', 'num');
-        const watch = el('button', 'ac-btn mini', 'Watch');
-        watch.addEventListener('click', () => {
-          const record: ReplayRecord = m.result.record;
-          close();
-          window.dispatchEvent(
-            new CustomEvent('loc:replay-record', { detail: { record, botId: bot.id } }),
-          );
-        });
-        cell.append(watch);
-        tr.append(cell);
-        list.append(tr);
-      }
-      sparBox.append(list);
-    }
     if (sparError) sparBox.append(el('div', 'ac-status bad', sparError));
-    if (sparResult) {
-      const r = sparResult;
-      // The line first: the result, the bot's kills, deaths and assists,
-      // its creep score, then the build it ended on. The play table below
-      // explains it; it never led (playtest round 3).
-      const line = el('div', 'ac-line');
-      const won = r.winner === 0 ? 'won' : r.winner === 1 ? 'lost' : '';
-      const verdict = won === 'won' ? 'Won' : won === 'lost' ? 'Lost' : 'No winner';
-      line.append(el('span', `verdict ${won}`, `${verdict} after ${fmtSeconds(r.ticks)}`));
-      const row = botRow(r);
-      if (row) {
-        line.append(
-          el('span', 'kda', `${row.kills} / ${row.deaths} / ${row.assists ?? 0}`),
-          el('span', 'dim', `${row.cs ?? 0} cs`),
-        );
-      }
-      const dismiss = el('button', 'ac-btn mini', 'Dismiss');
-      dismiss.title = 'Put the summary away';
-      dismiss.addEventListener('click', () => {
-        sparResult = null;
-        lastSpar.delete(bot.id);
-        renderSide();
-      });
-      line.append(dismiss);
-      sparBox.append(line);
-      if (row) sparBox.append(buildIcons(row.items, 26));
-      const mine = r.report.units.find((u) => u.unitId === r.botUnitId);
-      if (mine) {
-        const table = el('table', 'ac-table');
-        const hr = el('tr', '');
-        for (const h of ['Play', 'Time', 'Deaths']) hr.append(el('th', '', h));
-        table.append(hr);
-        const rows = Object.entries(mine.plays).sort((a, b) => b[1].ticks - a[1].ticks);
-        for (const [id, s] of rows) {
-          const tr = el('tr', '');
-          tr.append(
-            el('td', '', id),
-            el('td', 'num', fmtSeconds(s.ticks)),
-            el('td', 'num', String(s.deaths)),
-          );
-          table.append(tr);
+    // The Record's head (CONTEXT.md): the newest entry, its line and its
+    // build, the way into its sheet and its replay; the whole Record is the
+    // big view. Nothing to dismiss: an entry stays on the Record.
+    const latest = record?.[0] ?? null;
+    if (record === null) sparBox.append(el('div', 'ac-sub', 'Reading the Record...'));
+    else if (latest) {
+      if (latest.kind === 'series' && latest.seriesId !== undefined) {
+        // The series the newest entry belongs to, summed.
+        const seeds = record.filter((r) => r.seriesId === latest.seriesId);
+        let wins = 0;
+        let losses = 0;
+        let k = 0;
+        let d = 0;
+        let a = 0;
+        for (const r of seeds) {
+          const res = resultOf(r);
+          if (res.cls === 'won') wins++;
+          else if (res.cls === 'lost') losses++;
+          k += r.line?.kills ?? 0;
+          d += r.line?.deaths ?? 0;
+          a += r.line?.assists ?? 0;
         }
-        sparBox.append(table);
-      }
-      const watch = el('button', 'ac-btn', 'Watch the replay');
-      watch.addEventListener('click', () => {
-        const record: ReplayRecord = r.record;
-        close();
-        window.dispatchEvent(
-          new CustomEvent('loc:replay-record', { detail: { record, botId: bot.id } }),
+        const sum = el('div', 'ac-line');
+        sum.append(
+          el(
+            'span',
+            `verdict ${wins > losses ? 'won' : losses > wins ? 'lost' : ''}`,
+            `${latest.versus ?? 'The series'}: ${wins} won, ${losses} lost`,
+          ),
+          el('span', 'kda', `${k} / ${d} / ${a}`),
+          el('span', 'dim', `over ${seeds.length} seeds`),
         );
-      });
-      sparBox.append(watch);
+        sparBox.append(sum);
+      }
+      const res = resultOf(latest);
+      const line = el('div', 'ac-line');
+      line.append(
+        el('span', 'dim', kindLabel(latest)),
+        el('span', `verdict ${res.cls}`, `${res.text} after ${fmtClock(latest.ticks)}`),
+      );
+      if (latest.line) {
+        line.append(
+          el(
+            'span',
+            'kda',
+            `${latest.line.kills} / ${latest.line.deaths} / ${latest.line.assists ?? 0}`,
+          ),
+          el('span', 'dim', `${latest.line.cs ?? 0} cs`),
+        );
+      }
+      sparBox.append(line);
+      if (latest.line) sparBox.append(buildIcons(latest.line.items, 26));
+      const tools = el('div', 'ac-row');
+      const sheetBtn = el('button', 'ac-btn mini', 'Sheet');
+      sheetBtn.title = 'The match sheet: both teams, the plays, the deaths';
+      sheetBtn.addEventListener('click', () => openRecord(latest.id));
+      tools.append(sheetBtn);
+      if (latest.replayId !== null) {
+        const id = latest.replayId;
+        const watch = el('button', 'ac-btn mini', 'Watch');
+        watch.addEventListener('click', () => watchReplay(bot.id, id));
+        tools.append(watch);
+      }
+      sparBox.append(tools);
     }
+    const recordBtn = el(
+      'button',
+      'ac-btn',
+      record && record.length > 0
+        ? `The Record (${recordTally.wins} won, ${recordTally.losses} lost)`
+        : 'The Record',
+    ) as HTMLButtonElement;
+    recordBtn.disabled = !record || record.length === 0;
+    recordBtn.addEventListener('click', () => openRecord(null));
+    sparBox.append(recordBtn);
     side.append(sparBox);
 
     // The Briefing (docs/design/bots.md): what the Arena did to this bot
@@ -1863,26 +1898,6 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
           table.append(tr);
         }
         brief.append(table);
-      }
-      for (const m of b.matches.slice(-5).reverse()) {
-        const line = el('div', 'ac-row');
-        line.append(
-          el(
-            'span',
-            '',
-            `${new Date(m.at).toLocaleString()}: ${m.win ? 'won' : 'lost'}, ${m.delta >= 0 ? '+' : ''}${m.delta}`,
-          ),
-        );
-        if (m.replayId !== undefined) {
-          const id = m.replayId;
-          const watch = el('button', 'ac-btn mini', 'Watch');
-          watch.addEventListener('click', () => {
-            close();
-            window.dispatchEvent(new CustomEvent('loc:replay', { detail: id }));
-          });
-          line.append(watch);
-        }
-        brief.append(line);
       }
       if (b.proposal) {
         const p = b.proposal;
@@ -1949,12 +1964,41 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     }
     side.append(brief);
     side.scrollTop = keepScroll;
+    // Last, once every panel below has taken its share and the log has its
+    // final height: stuck earlier it would have been tall enough to hold
+    // everything and never scrolled.
+    stickLog(log);
+  }
+
+  function renderRecord(): void {
+    const open = recordOpen && current !== null;
+    main.style.display = open ? 'none' : '';
+    side.style.display = open ? 'none' : '';
+    recordBox.style.display = open ? 'flex' : 'none';
+    if (!open || !current) return;
+    const bot = current;
+    renderRecordView(recordBox, {
+      bot: { id: bot.id, name: bot.name },
+      rows: record ?? [],
+      tally: recordTally,
+      openId: recordOpenId,
+      fetchEntry: (id) =>
+        api<{ entry: RecordEntry }>('/api/bots/record/entry', { id: bot.id, entryId: id }).then(
+          (r) => (r.ok ? r.entry : null),
+        ),
+      onWatch: (replayId, tick) => watchReplay(bot.id, replayId, tick),
+      onBack: () => {
+        recordOpen = false;
+        renderRecord();
+      },
+    });
   }
 
   function renderAll(): void {
     renderRail();
     renderMain();
     renderSide();
+    renderRecord();
   }
 
   renderAll();

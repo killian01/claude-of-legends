@@ -6,10 +6,10 @@
 // the playbook validator gates every def before it is worth storing, and
 // server/bots.ts is the caller that does.
 
-import type { CoachTurn } from '../src/net/coach_chat';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import type { CoachTurn } from '../src/net/coach_chat';
 import type { ReplayPick } from '../src/net/replay';
 import type { PatchOp } from '../src/sim/playbook/patch';
 import type { PlayReport } from '../src/sim/playbook/report';
@@ -83,6 +83,17 @@ create table if not exists bot_chats (
   turns text not null,
   updated_at integer not null
 );
+create table if not exists bot_records (
+  id integer primary key autoincrement,
+  bot_id text not null,
+  account_id integer not null,
+  kind text not null,
+  at integer not null,
+  won integer,
+  replay_id integer,
+  entry text not null
+);
+create index if not exists bot_records_by_bot on bot_records (bot_id, at);
 `;
 
 // The two ways an account's bot is rated (ADR 0013): in live matches
@@ -451,6 +462,94 @@ export class BotStore {
   pruneBotReports(before: number): number {
     const r = this.db.prepare('delete from bot_reports where at < ?').run(before);
     return Number(r.changes);
+  }
+
+  // -- the Record (server/bot_records.ts) ----------------------------------
+
+  // One more match on a bot's Record; returns its id. `won` is null for a
+  // match without a winner.
+  addRecord(row: {
+    botId: string;
+    accountId: number;
+    kind: string;
+    at: number;
+    won: boolean | null;
+    replayId: number | null;
+    entry: unknown;
+  }): number {
+    const r = this.db
+      .prepare(
+        'insert into bot_records (bot_id, account_id, kind, at, won, replay_id, entry) values (?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        row.botId,
+        row.accountId,
+        row.kind,
+        row.at,
+        row.won === null ? null : row.won ? 1 : 0,
+        row.replayId,
+        JSON.stringify(row.entry),
+      );
+    return Number(r.lastInsertRowid);
+  }
+
+  // A bot's Record, newest first, entries parsed.
+  listRecords(botId: string): { id: number; entry: unknown }[] {
+    const rows = this.db
+      .prepare('select id, entry from bot_records where bot_id = ? order by at desc, id desc')
+      .all(botId) as unknown as { id: number; entry: string }[];
+    return rows.map((r) => ({ id: r.id, entry: JSON.parse(r.entry) as unknown }));
+  }
+
+  getRecord(id: number): { id: number; botId: string; accountId: number; entry: unknown } | null {
+    const r = this.db
+      .prepare('select id, bot_id, account_id, entry from bot_records where id = ?')
+      .get(id) as unknown as
+      | { id: number; bot_id: string; account_id: number; entry: string }
+      | undefined;
+    return r
+      ? { id: r.id, botId: r.bot_id, accountId: r.account_id, entry: JSON.parse(r.entry) }
+      : null;
+  }
+
+  // Keeps the newest `cap` entries of a bot; returns the replay ids the
+  // dropped entries referenced, so the caller can let those files go.
+  pruneRecords(botId: string, cap: number): number[] {
+    const doomed = this.db
+      .prepare(
+        'select id, replay_id from bot_records where bot_id = ? order by at desc, id desc limit -1 offset ?',
+      )
+      .all(botId, cap) as unknown as { id: number; replay_id: number | null }[];
+    const del = this.db.prepare('delete from bot_records where id = ?');
+    for (const d of doomed) del.run(d.id);
+    return doomed.map((d) => d.replay_id).filter((r): r is number => r !== null);
+  }
+
+  deleteRecordsOf(botId: string): number[] {
+    const rows = this.db
+      .prepare('select replay_id from bot_records where bot_id = ?')
+      .all(botId) as unknown as { replay_id: number | null }[];
+    this.db.prepare('delete from bot_records where bot_id = ?').run(botId);
+    return rows.map((r) => r.replay_id).filter((r): r is number => r !== null);
+  }
+
+  // Every replay id some Record still references: a file so held is not
+  // the global prune's to delete.
+  heldReplayIds(): Set<number> {
+    const rows = this.db
+      .prepare('select distinct replay_id from bot_records where replay_id is not null')
+      .all() as unknown as { replay_id: number }[];
+    return new Set(rows.map((r) => r.replay_id));
+  }
+
+  // Won and lost over the Record, the sports sense of the word.
+  tally(botId: string): { wins: number; losses: number } {
+    const r = this.db
+      .prepare(
+        'select sum(case when won = 1 then 1 else 0 end) as wins, sum(case when won = 0 then 1 else 0 end) as losses from bot_records where bot_id = ?',
+      )
+      .get(botId) as unknown as { wins: number | null; losses: number | null };
+    return { wins: Number(r.wins ?? 0), losses: Number(r.losses ?? 0) };
   }
 
   // The coach conversation kept with the bot (server/bot_chats.ts).

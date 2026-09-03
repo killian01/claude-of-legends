@@ -120,22 +120,86 @@ const run = async () => {
     'the sparring summary',
     120000,
   );
+  // The Record's head in the Sparring panel: kind, result, the line, the
+  // build, the way into the sheet and the replay, no Dismiss anywhere.
   const line = await page.evaluate(() => ({
+    kind: document.querySelector('.ac-line .dim')?.textContent ?? '',
     verdict: document.querySelector('.ac-line .verdict')?.textContent ?? '',
     kda: document.querySelector('.ac-line .kda')?.textContent ?? '',
-    cs: document.querySelector('.ac-line .dim')?.textContent ?? '',
-    icons: document.querySelectorAll('.ac .hud-score-build img').length,
-    slots: document.querySelectorAll('.ac .hud-score-build .slot').length,
-    playRows: document.querySelectorAll('.ac-table tr').length,
+    cs:
+      [...document.querySelectorAll('.ac-line .dim')]
+        .map((e) => e.textContent)
+        .find((t) => /cs$/.test(t ?? '')) ?? '',
+    icons: document.querySelectorAll('.ac-side .hud-score-build img').length,
+    slots: document.querySelectorAll('.ac-side .hud-score-build .slot').length,
+    dismiss: [...document.querySelectorAll('.ac button')].some((b) => b.textContent === 'Dismiss'),
+    rail: document.querySelector('.ac-bot.picked small')?.textContent ?? '',
   }));
+  if (line.kind !== 'Sparring') throw new Error(`kind: ${line.kind}`);
   if (!/^(Won|Lost|No winner) after /.test(line.verdict))
     throw new Error(`verdict: ${line.verdict}`);
   if (!/^\d+ \/ \d+ \/ \d+$/.test(line.kda)) throw new Error(`kda: ${line.kda}`);
   if (!/^\d+ cs$/.test(line.cs)) throw new Error(`cs: ${line.cs}`);
   if (line.icons + line.slots !== 6)
     throw new Error(`build row: ${line.icons} icons, ${line.slots} slots`);
-  console.log('summary:', line.verdict, '|', line.kda, '|', line.cs, '| icons', line.icons);
+  if (line.dismiss) throw new Error('a Dismiss button survived');
+  if (!/ \d+-\d+/.test(line.rail)) throw new Error(`the rail has no tally: ${line.rail}`);
+  console.log(
+    'summary:',
+    line.verdict,
+    '|',
+    line.kda,
+    '|',
+    line.cs,
+    '| icons',
+    line.icons,
+    '| rail',
+    line.rail,
+  );
   await shot(page, 'academy-summary');
+
+  // The Record: the big view over the center and the side, the list and
+  // the sheet, the deaths as links into the replay.
+  await clickButton(page, 'The Record');
+  await page.waitForSelector('.rv-table tr.row', { timeout: 10000 });
+  await waitFor(page, `document.querySelector('.rv-sheet .rv-line') !== null`, 'the sheet', 15000);
+  const rec = await page.evaluate(() => ({
+    rows: document.querySelectorAll('.rv-list tr.row').length,
+    tally: document.querySelector('.rv-tally')?.textContent ?? '',
+    sheetRes: document.querySelector('.rv-sheet .rv-res')?.textContent ?? '',
+    scoreRows: document.querySelectorAll('.rv-sheet .rv-table tr.self').length,
+    sections: [...document.querySelectorAll('.rv-sheet h4')].map((h) => h.textContent),
+    deathWatch: [...document.querySelectorAll('.rv-sheet button')].filter(
+      (b) => b.textContent === 'Watch',
+    ).length,
+    mainHidden: getComputedStyle(document.querySelector('.ac-main')).display === 'none',
+  }));
+  console.log('record:', rec);
+  if (rec.rows < 1) throw new Error('the Record lists nothing');
+  if (!/^\d+ won, \d+ lost$/.test(rec.tally)) throw new Error(`tally: ${rec.tally}`);
+  if (!/^(Won|Lost|No winner) after /.test(rec.sheetRes)) throw new Error(`sheet: ${rec.sheetRes}`);
+  if (rec.scoreRows !== 1) throw new Error(`the bot's row is not marked once: ${rec.scoreRows}`);
+  if (rec.sections.join() !== 'Scoreboard,Plays,Deaths')
+    throw new Error(`sections: ${rec.sections}`);
+  if (!rec.mainHidden) throw new Error('the playbook column is still shown under the Record');
+  await shot(page, 'academy-record');
+  // A death's Watch opens the replay a few seconds before it; the sheet's
+  // own Watch otherwise.
+  if (rec.deathWatch > 0) {
+    await page.evaluate(() => {
+      [...document.querySelectorAll('.rv-sheet button')]
+        .find((b) => b.textContent === 'Watch')
+        ?.click();
+    });
+  } else await clickButton(page, 'Watch the replay');
+  await page.waitForSelector('.replay-bar', { timeout: 30000 });
+  await sleep(3000);
+  const clock = await page.evaluate(
+    () => document.querySelector('.replay-time')?.textContent ?? '',
+  );
+  console.log('replay clock:', clock, rec.deathWatch > 0 ? '(opened at a death)' : '');
+  await clickButton(page, 'Exit replay');
+  await waitFor(page, findBtn('Spar vs house bots'), 'back in the Academy', 30000);
 
   // The coach: the log follows the answer to its end.
   await page.evaluate(() => {
@@ -179,16 +243,6 @@ const run = async () => {
     throw new Error(`the log did not follow the answer: ${JSON.stringify(scroll)}`);
   }
   await shot(page, 'academy-coach');
-
-  // The replay opens on the match, and the camera looks up the map.
-  await clickButton(page, 'Watch the replay');
-  await page.waitForSelector('.replay-bar', { timeout: 30000 });
-  await sleep(4000);
-  await page.mouse.move(750, 380);
-  await sleep(1500);
-  await shot(page, 'academy-replay');
-  await clickButton(page, 'Exit replay');
-  await waitFor(page, findBtn('Spar vs house bots'), 'back in the Academy', 30000);
 
   if (errors.length > 0) throw new Error(`page errors: ${errors.join(' | ')}`);
   await browser.close();

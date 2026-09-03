@@ -91,13 +91,19 @@ export function sparringPicks(bot: SparBot, seed = 1): ReplayPick[] {
 
 export function sparMatch(req: SparRequest): SparResult {
   const r = runFastMatch(req);
+  // The seats named from the picks (unit ids come in pick order), as the
+  // Arena and the replay viewer name them: the bot, "House sieger".
+  const score = r.score.map((row) => {
+    const i = r.unitIds.indexOf(row.unitId);
+    return i === -1 ? row : { ...row, player: req.picks[i]?.name ?? row.player };
+  });
   return {
     winner: r.winner,
     ticks: r.ticks,
     time: r.time,
     report: r.report,
     botUnitId: r.unitIds[req.botIndex ?? 0]!,
-    score: r.score,
+    score,
     record: r.record,
   };
 }

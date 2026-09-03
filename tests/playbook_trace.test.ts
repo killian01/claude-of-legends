@@ -140,8 +140,11 @@ describe('the play report', () => {
           fight: { ticks: 60, deaths: 1 },
           retreat: { ticks: 40, deaths: 0 },
         },
+        // Each death dated, with the play that held and who landed it: what
+        // the Match sheet links into the replay.
+        deathsAt: [{ tick: 150, play: 'fight', killerId: 2 }],
       },
-      { unitId: 2, deaths: 0, plays: { push: { ticks: 30, deaths: 0 } } },
+      { unitId: 2, deaths: 0, plays: { push: { ticks: 30, deaths: 0 } }, deathsAt: [] },
     ]);
     // Reading did not close the open spans: a later tick still extends them.
     at(220);

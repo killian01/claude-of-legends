@@ -41,9 +41,15 @@ export function appendJsonl(file: string, value: unknown): void {
 }
 
 // Keep only the `keep` highest-numbered `<n>.json` files in a directory
-// (replays are named by match id, so highest means newest). Returns the
-// numbers deleted, for the log.
-export function pruneNumberedJson(dir: string, keep: number): number[] {
+// (replays are named by match id, so highest means newest), plus every
+// number in `hold`: a replay a bot's Record still references lives as
+// long as its entry does (docs/design/bots.md). Returns the numbers
+// deleted, for the log.
+export function pruneNumberedJson(
+  dir: string,
+  keep: number,
+  hold: ReadonlySet<number> = new Set(),
+): number[] {
   let names: string[];
   try {
     names = readdirSync(dir);
@@ -55,7 +61,7 @@ export function pruneNumberedJson(dir: string, keep: number): number[] {
     .filter((n): n is string => n !== undefined)
     .map(Number)
     .sort((a, b) => b - a);
-  const doomed = numbers.slice(keep);
+  const doomed = numbers.slice(keep).filter((n) => !hold.has(n));
   for (const n of doomed) {
     try {
       unlinkSync(path.join(dir, `${n}.json`));
