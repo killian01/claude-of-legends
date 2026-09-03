@@ -5,7 +5,8 @@
 // turns watching into learning: "six deaths on the chase play" is a rule
 // the owner can go and fix.
 
-import type { SimEvent } from '../sim';
+import type { Sim, SimEvent } from '../sim';
+import { type DeathScene, deathScene } from './death_context';
 
 export interface PlayStats {
   // Ticks spent with this play active.
@@ -20,6 +21,8 @@ export interface DeathNote {
   tick: number;
   play: string | null;
   killerId: number;
+  // What stood around (death_context.ts), when the ledger had the sim.
+  scene?: DeathScene;
 }
 
 export interface UnitPlayReport {
@@ -62,8 +65,9 @@ export class PlayLedger {
   }
 
   // Feed one tick's events. The tick is the sim's tickCount after the tick
-  // ran, the same number a replay event carries.
-  observe(tick: number, events: readonly SimEvent[]): void {
+  // ran, the same number a replay event carries. With the sim at hand,
+  // every death is noted with its scene (the Death card).
+  observe(tick: number, events: readonly SimEvent[], sim?: Sim): void {
     this.lastTick = tick;
     for (const ev of events) {
       if (ev.type === 'play') {
@@ -81,7 +85,13 @@ export class PlayLedger {
           notes = [];
           this.deaths.set(ev.unitId, notes);
         }
-        notes.push({ tick, play: open?.playId ?? null, killerId: ev.killerId });
+        const scene = sim ? deathScene(sim, ev.unitId) : null;
+        notes.push({
+          tick,
+          play: open?.playId ?? null,
+          killerId: ev.killerId,
+          ...(scene ? { scene } : {}),
+        });
       }
     }
   }

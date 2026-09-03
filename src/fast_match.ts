@@ -37,7 +37,7 @@ export function runFastMatch(req: FastMatchRequest): FastMatchResult {
   const { sim, unitIds } = buildMatchSim(req.seed, req.picks, forged);
   const ledger = new PlayLedger();
   while (sim.winner === null && sim.tickCount < req.maxTicks) {
-    ledger.observe(sim.tickCount + 1, sim.tick());
+    ledger.observe(sim.tickCount + 1, sim.tick(), sim);
   }
   const record: ReplayRecord = {
     version: REPLAY_VERSION,

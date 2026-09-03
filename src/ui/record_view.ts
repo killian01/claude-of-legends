@@ -8,6 +8,7 @@
 
 import type { RecordEntry, RecordKind, RecordRow } from '../net/record';
 import { CHAMPIONS } from '../sim/content/champions';
+import { type DeathScene, SCENE_RADIUS } from '../sim/playbook/death_context';
 import type { ScoreRow, TeamId } from '../sim/types';
 import { el } from './menu';
 import { buildIcons } from './scoreboard_table';
@@ -59,6 +60,9 @@ const CSS = `
 .rv-btn:hover:not(:disabled) { border-color: #8ed6f0; }
 .rv-btn:disabled { opacity: 0.4; cursor: default; }
 .rv-btn.mini { padding: 1px 7px; font-size: 10.5px; }
+.rv-card { display: flex; align-items: center; gap: 6px; }
+.rv-card-map { width: 56px; height: 56px; border-radius: 4px; flex: none; }
+.rv-card-words { color: #8fa6b6; font-size: 11px; line-height: 1.3; }
 `;
 
 let cssInstalled = false;
@@ -134,6 +138,62 @@ export interface RecordViewOptions {
   // before it).
   onWatch: (replayId: number, tick?: number) => void;
   onBack: () => void;
+}
+
+// The Death card (CONTEXT.md): the scene of a death in words ("alone,
+// three enemies within twenty, under their tower") and as a thumbnail of
+// the map around the spot, allies blue, enemies red, structures square.
+export function sceneWords(s: DeathScene): string {
+  const parts: string[] = [];
+  parts.push(s.allies === 0 ? 'alone' : `${s.allies} ${s.allies === 1 ? 'ally' : 'allies'} near`);
+  parts.push(
+    s.enemies === 0 ? 'no enemy near' : `${s.enemies} ${s.enemies === 1 ? 'enemy' : 'enemies'}`,
+  );
+  if (s.underTower) parts.push('under their tower');
+  return parts.join(', ');
+}
+
+export function deathCard(s: DeathScene, ownTeam: TeamId): HTMLElement {
+  const card = el('div', 'rv-card');
+  const canvas = document.createElement('canvas');
+  const size = 56;
+  canvas.width = size;
+  canvas.height = size;
+  canvas.className = 'rv-card-map';
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    // Forty units of map across the card, the death at its center; +z up
+    // on screen, as the camera shows the map.
+    const span = SCENE_RADIUS * 2;
+    const px = (x: number): number => ((x - s.x) / span + 0.5) * size;
+    const pz = (z: number): number => (0.5 - (z - s.z) / span) * size;
+    ctx.fillStyle = '#0b141a';
+    ctx.fillRect(0, 0, size, size);
+    ctx.strokeStyle = '#1f3644';
+    ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
+    for (const u of s.around) {
+      const ally = u.team === ownTeam;
+      ctx.fillStyle = ally ? '#4f8fd6' : '#d65c4f';
+      const x = px(u.x);
+      const z = pz(u.z);
+      if (u.kind === 'champion') {
+        ctx.beginPath();
+        ctx.arc(x, z, 3, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillRect(x - 3, z - 3, 6, 6);
+      }
+    }
+    // The dead champion: a hollow ring at the center.
+    ctx.strokeStyle = '#ffd94a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, 4, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  canvas.title = `at ${s.x}, ${s.z}: ${sceneWords(s)}`;
+  card.append(canvas, el('span', 'rv-card-words', sceneWords(s)));
+  return card;
 }
 
 // One team's rows of a sheet: player, champion, level, K/D/A, CS, the build.
@@ -233,7 +293,7 @@ export function sheet(entry: RecordEntry, opts: RecordViewOptions): HTMLElement 
   } else {
     const table = el('table', 'rv-table');
     const hr = el('tr', '');
-    for (const h of ['At', 'Play', 'Killed by', '']) hr.append(el('th', '', h));
+    for (const h of ['At', 'Play', 'Killed by', 'Scene', '']) hr.append(el('th', '', h));
     table.append(hr);
     const nameOf = (unitId: number): string => {
       const r = entry.score.find((x) => x.unitId === unitId);
@@ -246,6 +306,12 @@ export function sheet(entry: RecordEntry, opts: RecordViewOptions): HTMLElement 
         el('td', '', d.play ?? 'no play'),
         el('td', '', nameOf(d.killerId)),
       );
+      // The Death card: the scene in words and as a thumbnail of the map.
+      const scene = el('td', 'rv-scene');
+      if (d.scene) {
+        scene.append(deathCard(d.scene, entry.team));
+      } else scene.append(el('span', 'dim', 'not recorded'));
+      tr.append(scene);
       const cell = el('td', 'num');
       if (entry.replayId !== null) {
         const id = entry.replayId;

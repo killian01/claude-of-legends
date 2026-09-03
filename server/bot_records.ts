@@ -13,6 +13,7 @@ import { REPLAY_VERSION, type ReplayPick, type ReplayRecord } from '../src/net/r
 import { CHAMPIONS } from '../src/sim/content/champions';
 import { ITEMS } from '../src/sim/content/items';
 import { SIGILS } from '../src/sim/content/sigils';
+import { type DeathScene, SCENE_CAP, type SceneUnit } from '../src/sim/playbook/death_context';
 import type { DeathNote, PlayReport, UnitPlayReport } from '../src/sim/playbook/report';
 import { validatePlaybook } from '../src/sim/playbook/validate';
 import { INVENTORY_SLOTS } from '../src/sim/sim';
@@ -136,6 +137,42 @@ const PLAY_ID_MAX = 48;
 const PLAYS_MAX = 64;
 const DEATHS_MAX = 200;
 
+const SCENE_KINDS = ['champion', 'tower', 'sanctum'] as const;
+
+function coord(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 200 ? v : null;
+}
+
+// The Death card's scene, bounded: a dozen units at most, coordinates on
+// the map, health as a fraction.
+function deathSceneOf(raw: unknown): DeathScene | null {
+  if (!isRecord(raw)) return null;
+  const x = coord(raw.x);
+  const z = coord(raw.z);
+  const allies = int(raw.allies, 0, 10);
+  const enemies = int(raw.enemies, 0, 10);
+  if (x === null || z === null || allies === null || enemies === null) return null;
+  if (typeof raw.underTower !== 'boolean') return null;
+  if (!Array.isArray(raw.around) || raw.around.length > SCENE_CAP) return null;
+  const around: SceneUnit[] = [];
+  for (const u of raw.around) {
+    if (!isRecord(u)) return null;
+    const id = int(u.id, 0, 100_000);
+    const ux = coord(u.x);
+    const uz = coord(u.z);
+    const t = team(u.team);
+    const hp = typeof u.hp === 'number' && u.hp >= 0 && u.hp <= 1 ? u.hp : null;
+    const kind = (SCENE_KINDS as readonly string[]).includes(String(u.kind))
+      ? (u.kind as SceneUnit['kind'])
+      : null;
+    if (id === null || ux === null || uz === null || t === null || hp === null || kind === null) {
+      return null;
+    }
+    around.push({ id, team: t, kind, x: ux, z: uz, hp });
+  }
+  return { x, z, underTower: raw.underTower, allies, enemies, around };
+}
+
 function unitReport(raw: unknown): UnitPlayReport | null {
   if (!isRecord(raw)) return null;
   const unitId = int(raw.unitId, 0, 100_000);
@@ -163,7 +200,13 @@ function unitReport(raw: unknown): UnitPlayReport | null {
       const killerId = int(n.killerId, 0, 100_000);
       const play = n.play === null ? null : str(n.play, PLAY_ID_MAX);
       if (tick === null || killerId === null || (play === null && n.play !== null)) return null;
-      notes.push({ tick, play, killerId });
+      const note: DeathNote = { tick, play, killerId };
+      if (n.scene !== undefined) {
+        const scene = deathSceneOf(n.scene);
+        if (!scene) return null;
+        note.scene = scene;
+      }
+      notes.push(note);
     }
     out.deathsAt = notes;
   }

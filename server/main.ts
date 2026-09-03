@@ -2057,7 +2057,7 @@ setInterval(() => {
       try {
         entry.match.tick();
         if (entry.botSeats.size > 0) {
-          entry.ledger.observe(entry.match.sim.tickCount, entry.match.lastEvents);
+          entry.ledger.observe(entry.match.sim.tickCount, entry.match.lastEvents, entry.match.sim);
         }
         const score = entry.match.sim.tickCount % 40 === 0 ? entry.match.buildScore() : null;
         for (const player of entry.match.players.values()) {
