@@ -60,7 +60,7 @@ export class Minimap {
       if (e.button !== 0 && e.button !== 2) return;
       const rect = this.canvas.getBoundingClientRect();
       const x = ((e.clientX - rect.left) / rect.width) * world.map.size;
-      const z = ((e.clientY - rect.top) / rect.height) * world.map.size;
+      const z = (1 - (e.clientY - rect.top) / rect.height) * world.map.size;
       if (e.button === 2) onMoveOrder({ x, z });
       else onLook({ x, z });
     });
@@ -79,14 +79,14 @@ export class Minimap {
     this.canvas.remove();
   }
 
-  // The minimap matches the camera: on screen, +z runs DOWN (the camera
-  // sits at +z looking back), so the minimap maps +z down too. What you see
-  // bottom-right in the world is bottom-right on the map.
+  // The minimap matches the camera: +z runs UP the screen (team 0 at the
+  // bottom-left, the top lane along the left and the top), so the minimap
+  // maps +z up too. What you see top-right in the world is top-right here.
   private px(x: number): number {
     return x * this.scale;
   }
   private pz(z: number): number {
-    return z * this.scale;
+    return SIZE_PX - z * this.scale;
   }
 
   update(): void {

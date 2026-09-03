@@ -248,7 +248,22 @@ export class Renderer {
   private readonly vfx: VfxSystem;
   private readonly windups = new Map<number, WindupFx>();
   private readonly camDir = new THREE.Vector3(0, -1, 0);
+  // The camera direction inside the scene, whose z axis is mirrored (see
+  // the constructor): what billboards and ribbons must face.
+  private readonly camDirScene = new THREE.Vector3(0, -1, 0);
   private readonly cameraOffset = new THREE.Vector3(0, 40, 24);
+  // Scene z of a sim z: the map is authored with +z up the screen (team 0
+  // bottom-left, the top lane along the left and the top), while a camera
+  // looking down at a right-handed world with +x right can only show +z
+  // running down. So the scene mirrors z about the map's middle and
+  // everything in sim coordinates lives inside it untouched; only the camera,
+  // the ray casts, and the screen projection cross the mirror, through these.
+  private sceneZ(z: number): number {
+    return this.world.map.size - z;
+  }
+  private toScene(p: THREE.Vector3): THREE.Vector3 {
+    return new THREE.Vector3(p.x, p.y, this.sceneZ(p.z));
+  }
   private readonly markerGeometry = new THREE.RingGeometry(0.5, 0.8, 24);
   private readonly rootGeometry = new THREE.RingGeometry(0.7, 0.95, 18);
   private readonly markers: {
@@ -340,6 +355,10 @@ export class Renderer {
 
     const aspect = container.clientWidth / Math.max(1, container.clientHeight);
     this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 500);
+    // The z mirror (see sceneZ). Three flips face winding under a negative
+    // scale and sprites stay upright, so nothing inside the scene notices.
+    this.scene.scale.z = -1;
+    this.scene.position.z = world.map.size;
 
     this.vfx = new VfxSystem(this.scene);
     this.vfx.onShake = (k) => this.addShake(k);
@@ -783,9 +802,9 @@ export class Renderer {
     let dz = 0;
     if (x < EDGE_PX) dx -= 1;
     else if (x > rect.width - EDGE_PX) dx += 1;
-    // The camera looks toward -z, so the top of the screen is -z world.
-    if (y < EDGE_PX) dz -= 1;
-    else if (y > rect.height - EDGE_PX) dz += 1;
+    // +z runs up the screen (the scene mirror), so the top edge pans to +z.
+    if (y < EDGE_PX) dz += 1;
+    else if (y > rect.height - EDGE_PX) dz -= 1;
     if (dx === 0 && dz === 0) return;
     if (!this.freeCam) {
       const size = this.world.map.size;
@@ -800,7 +819,7 @@ export class Renderer {
   // Projects a world point to client pixels; null when behind the camera.
   // Used by screen-space picking so clicks land on visible bodies.
   projectToScreen(x: number, y: number, z: number): { x: number; y: number } | null {
-    const v = new THREE.Vector3(x, y, z).project(this.camera);
+    const v = new THREE.Vector3(x, y, this.sceneZ(z)).project(this.camera);
     if (v.z > 1) return null;
     const rect = this.gl.domElement.getBoundingClientRect();
     return {
@@ -989,7 +1008,9 @@ export class Renderer {
     this.scene.add(new THREE.HemisphereLight(0xdcefff, 0x465f39, 1.15));
     const sun = new THREE.DirectionalLight(0xffdfaa, 2.4);
     const half = this.world.map.size / 2;
-    sun.position.set(half + 70, 120, half - 45);
+    // In sim coordinates, inside the mirror: the key sits up-screen and to
+    // the right, so shadows fall down and to the left of what casts them.
+    sun.position.set(half + 70, 120, half + 45);
     sun.target.position.set(half, 0, half);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -2367,7 +2388,7 @@ export class Renderer {
       );
     }
     this.updateWindups(now, alpha);
-    this.vfx.update(now, dtMs, this.camDir);
+    this.vfx.update(now, dtMs, this.camDirScene);
     for (let i = this.dying.length - 1; i >= 0; i--) {
       const d = this.dying[i]!;
       const age = (now - d.start) / 380;
@@ -2464,15 +2485,17 @@ export class Renderer {
       new THREE.Vector3(this.world.map.size / 2, 0, this.world.map.size / 2);
     this.camFocus.x = target.x;
     this.camFocus.z = target.z;
-    this.camera.position.copy(target).addScaledVector(this.cameraOffset, this.zoom);
+    const eye = this.toScene(target);
+    this.camera.position.copy(eye).addScaledVector(this.cameraOffset, this.zoom);
     if (this.shakeAmp > 0.001) {
       const k = this.shakeAmp * this.shakeAmp * 0.55;
       this.camera.position.x += (Math.random() * 2 - 1) * k;
       this.camera.position.z += (Math.random() * 2 - 1) * k;
       this.shakeAmp = Math.max(0, this.shakeAmp - dtMs * 0.0021);
     }
-    this.camera.lookAt(target);
+    this.camera.lookAt(eye);
     this.camera.getWorldDirection(this.camDir);
+    this.camDirScene.set(this.camDir.x, this.camDir.y, -this.camDir.z);
     this.gl.render(this.scene, this.camera);
   }
 
@@ -2509,7 +2532,7 @@ export class Renderer {
     this.setRayFrom(clientX, clientY);
     const hit = new THREE.Vector3();
     if (this.raycaster.ray.intersectPlane(this.groundPlane, hit)) {
-      return { x: hit.x, z: hit.z };
+      return { x: hit.x, z: this.sceneZ(hit.z) };
     }
     return null;
   }
