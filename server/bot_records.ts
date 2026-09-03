@@ -35,8 +35,8 @@ export function wonBy(e: { team: TeamId; winner: TeamId | null }): boolean | nul
 }
 
 export function rowOf(e: RecordEntry): RecordRow {
-  const { score, report: _report, botId: _botId, botUnitId, ...rest } = e;
-  return { ...rest, line: score.find((r) => r.unitId === botUnitId) ?? null };
+  const { score, report: _report, botId: _botId, ...rest } = e;
+  return { ...rest, line: score.find((r) => r.unitId === e.botUnitId) ?? null };
 }
 
 // One more entry, then the cap: returns the new id and the replay ids the

@@ -41,7 +41,8 @@ export interface RecordEntry {
 export type NewRecordEntry = Omit<RecordEntry, 'id' | 'botId'>;
 
 // A row of the Record's list: the entry without its scoreboard and its
-// report, the bot's own line kept.
+// report, the bot's own line and unit kept (the unit names the seat a
+// replay follows, src/game/replay_seat.ts).
 export interface RecordRow {
   id: number;
   kind: RecordKind;
@@ -56,6 +57,7 @@ export interface RecordRow {
   ticks: number;
   version: number;
   edited: boolean;
+  botUnitId: number;
   line: ScoreRow | null;
   replayId: number | null;
   ratingDelta?: number;

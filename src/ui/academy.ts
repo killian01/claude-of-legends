@@ -477,11 +477,16 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
 
   // The replay viewer, then back here on the same bot; at a tick when the
   // sheet asked for one (a death, a few seconds before).
-  function watchReplay(botId: string, replayId: number, tick?: number): void {
+  function watchReplay(botId: string, replayId: number, tick?: number, follow?: number): void {
     close();
     window.dispatchEvent(
       new CustomEvent('loc:replay', {
-        detail: { id: replayId, botId, ...(tick !== undefined ? { tick } : {}) },
+        detail: {
+          id: replayId,
+          botId,
+          ...(tick !== undefined ? { tick } : {}),
+          ...(follow !== undefined ? { follow } : {}),
+        },
       }),
     );
   }
@@ -2037,7 +2042,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         api<{ entry: RecordEntry }>('/api/bots/record/entry', { id: bot.id, entryId: id }).then(
           (r) => (r.ok ? r.entry : null),
         ),
-      onWatch: (replayId, tick) => watchReplay(bot.id, replayId, tick),
+      onWatch: (replayId, tick, follow) => watchReplay(bot.id, replayId, tick, follow),
       onBack: () => {
         recordOpen = false;
         renderRecord();

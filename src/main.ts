@@ -11,6 +11,7 @@ import { requestGameFullscreen } from './game/fullscreen';
 import { parseJoinCode } from './game/invite';
 import { ReplayCursor } from './game/replay_cursor';
 import type { ReplayMark } from './game/replay_marks';
+import { followedSeat } from './game/replay_seat';
 import type { ReplayWorkerIn, ReplayWorkerOut } from './game/replay_worker';
 import { ReplayWorld } from './game/replay_world';
 import { getSettings } from './game/settings';
@@ -184,7 +185,7 @@ function eventIndexAt(events: readonly ReplayEvent[], tick: number): number {
   return lo;
 }
 
-async function runReplay(source: number, at?: number): Promise<PostMatchAction> {
+async function runReplay(source: number, at?: number, follow?: number): Promise<PostMatchAction> {
   let record: ReplayRecord | null = null;
   try {
     const res = await fetch(`/api/replay/${source}`);
@@ -213,12 +214,11 @@ async function runReplay(source: number, at?: number): Promise<PostMatchAction> 
       unitTeams.set(unitIds[i]!, p.team);
       seatNames.set(unitIds[i]!, p.name);
     });
-    // Follow the first seat that is not a house bot: their team, their
-    // fog, their story; their deaths are the red marks on the bar.
-    const viewerIdx = Math.max(
-      0,
-      rec.picks.findIndex((p) => !p.bot),
-    );
+    // The seat the replay follows (src/game/replay_seat.ts): the unit the
+    // Match sheet asked for, else the first seat that is not a house bot.
+    // Their team, their fog, their story; their deaths are the red marks
+    // on the bar.
+    const viewerIdx = followedSeat(rec.picks, unitIds, follow);
     const ownUnitId = unitIds[viewerIdx] ?? null;
     const world = new ReplayWorld(sim, seatNames);
     let stopped = false;
@@ -857,7 +857,7 @@ async function boot(): Promise<void> {
       lastPick = pick;
       action = await runOffline(pick);
     } else if (choice.mode === 'replay' && choice.replayId !== undefined) {
-      action = await runReplay(choice.replayId, choice.replayAt);
+      action = await runReplay(choice.replayId, choice.replayAt, choice.replayFollow);
     } else if (choice.mode === 'spectate' && choice.matchId !== undefined) {
       action = await runSpectate(choice.matchId, choice.team === 1 ? 1 : 0);
     } else {

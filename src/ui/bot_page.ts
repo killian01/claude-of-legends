@@ -136,7 +136,9 @@ function playbookView(def: PlaybookDef): HTMLElement {
 export interface BotPageOptions {
   // The reader's own bots, for the challenge; none hides it.
   myBots?: { id: string; name: string; championId: string }[];
-  onWatch?: (replayId: number) => void;
+  // Open a replay, following the given unit (the row's own bot) when the
+  // caller can say which seat that is (src/game/replay_seat.ts).
+  onWatch?: (replayId: number, follow?: number) => void;
 }
 
 export function openBotPage(
@@ -277,7 +279,7 @@ export function openBotPage(
           const watch = el('button', 'bp-btn', 'Watch');
           watch.addEventListener('click', () => {
             close();
-            opts.onWatch?.(id);
+            opts.onWatch?.(id, row.botUnitId);
           });
           cell.append(watch);
         }

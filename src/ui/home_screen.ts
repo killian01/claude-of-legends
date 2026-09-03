@@ -52,6 +52,10 @@ export interface HomeChoice {
   // at when a Match sheet asked for one (a death, a few seconds before).
   replayId?: number;
   replayAt?: number;
+  // The unit the replay follows (the Record's bot): the picks alone
+  // cannot say which seat that is when both versions of one bot played
+  // (src/game/replay_seat.ts).
+  replayFollow?: number;
   // For a replay opened from the Academy: the bot to reopen it on when
   // the replay ends.
   academy?: { botId: string };
@@ -149,8 +153,9 @@ export function showHome(
     // A bare id, or the Academy's form: the id, the tick to open at, and
     // the bot to come back to.
     function onWatchReplay(e: Event): void {
-      const detail = (e as CustomEvent<number | { id: number; tick?: number; botId?: string }>)
-        .detail;
+      const detail = (
+        e as CustomEvent<number | { id: number; tick?: number; botId?: string; follow?: number }>
+      ).detail;
       const id = typeof detail === 'number' ? detail : detail?.id;
       if (typeof id !== 'number') return;
       leave();
@@ -160,6 +165,9 @@ export function showHome(
         replayId: id,
         ...(typeof detail === 'object' && typeof detail.tick === 'number'
           ? { replayAt: detail.tick }
+          : {}),
+        ...(typeof detail === 'object' && typeof detail.follow === 'number'
+          ? { replayFollow: detail.follow }
           : {}),
         ...(typeof detail === 'object' && typeof detail.botId === 'string'
           ? { academy: { botId: detail.botId } }

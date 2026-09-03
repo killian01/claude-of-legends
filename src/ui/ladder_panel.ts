@@ -180,7 +180,12 @@ function buildRankedBots(accountId: number): HTMLElement {
           void myBots().then((mine) => {
             openBotPage(document.body, b.id, {
               myBots: mine,
-              onWatch: (id) => window.dispatchEvent(new CustomEvent('loc:replay', { detail: id })),
+              onWatch: (id, follow) =>
+                window.dispatchEvent(
+                  new CustomEvent('loc:replay', {
+                    detail: { id, ...(follow !== undefined ? { follow } : {}) },
+                  }),
+                ),
             });
           });
         });
@@ -235,7 +240,12 @@ function buildPool(): HTMLElement {
           void myBots().then((mine) => {
             openBotPage(document.body, b.id, {
               myBots: mine,
-              onWatch: (id) => window.dispatchEvent(new CustomEvent('loc:replay', { detail: id })),
+              onWatch: (id, follow) =>
+                window.dispatchEvent(
+                  new CustomEvent('loc:replay', {
+                    detail: { id, ...(follow !== undefined ? { follow } : {}) },
+                  }),
+                ),
             });
           });
         });

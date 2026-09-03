@@ -135,8 +135,9 @@ export interface RecordViewOptions {
   openId?: number | null;
   fetchEntry: (id: number) => Promise<RecordEntry | null>;
   // Open the replay, at a tick when one is given (a death, a few seconds
-  // before it).
-  onWatch: (replayId: number, tick?: number) => void;
+  // before it), following the entry's own unit (both versions of one bot
+  // can be in a series match; the picks alone cannot say which is which).
+  onWatch: (replayId: number, tick?: number, follow?: number) => void;
   onBack: () => void;
 }
 
@@ -248,7 +249,7 @@ export function sheet(entry: RecordEntry, opts: RecordViewOptions): HTMLElement 
     watch.title = 'No replay was kept for this match';
   } else {
     const id = entry.replayId;
-    watch.addEventListener('click', () => opts.onWatch(id));
+    watch.addEventListener('click', () => opts.onWatch(id, undefined, entry.botUnitId));
   }
   tools.append(watch);
   box.append(tools);
@@ -318,7 +319,9 @@ export function sheet(entry: RecordEntry, opts: RecordViewOptions): HTMLElement 
         const go = el('button', 'rv-btn mini', 'Watch');
         go.title = 'Open the replay a few seconds before';
         // Five seconds before the death: the fight is on screen.
-        go.addEventListener('click', () => opts.onWatch(id, Math.max(0, d.tick - 100)));
+        go.addEventListener('click', () =>
+          opts.onWatch(id, Math.max(0, d.tick - 100), entry.botUnitId),
+        );
         cell.append(go);
       }
       tr.append(cell);
