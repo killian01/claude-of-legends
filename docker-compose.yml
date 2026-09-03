@@ -50,6 +50,13 @@ services:
       # works. See .env.example for the Tripo terms caveat before opening
       # the Forge to players.
       TRIPO_API_KEY: "${TRIPO_API_KEY:-}"
+      # The coach and the kit conversation (ADR 0013), from the same .env
+      # file: ANTHROPIC_API_KEY is a credential and must never be
+      # committed. Without it, suggestions are off and the server says so
+      # at boot; everything else works. BOT_COACH_MODEL is optional and
+      # falls back to the default in .env.example.
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      BOT_COACH_MODEL: "${BOT_COACH_MODEL:-}"
       # Forge tuning (plan-forge phase 8): quotas, caps, and the meta-API
       # rate limit, all optional. Empty falls back to the defaults listed
       # in .env.example; the server treats an empty string as unset.
