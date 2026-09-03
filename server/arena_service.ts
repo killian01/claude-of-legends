@@ -211,7 +211,7 @@ export async function challenge(
     return { ok: false, error: 'no such bot on this account' };
   }
   const target = deps.store.getBot(targetId);
-  if (!target || !target.deposited) return { ok: false, error: 'that bot is not ranked' };
+  if (!target?.deposited) return { ok: false, error: 'that bot is not ranked' };
   if (target.accountId === accountId) {
     return { ok: false, error: 'challenge a bot of another account (spar your own)' };
   }

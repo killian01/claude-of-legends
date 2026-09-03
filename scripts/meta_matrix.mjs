@@ -105,7 +105,7 @@ if (!isMainThread) {
     Math.min(Number(opt('--workers', String(os.cpus().length - 1))), allPairs.length),
   );
   const buckets = Array.from({ length: workers }, () => []);
-  allPairs.forEach((p, i) => buckets[i % workers].push(p));
+  for (const [i, p] of allPairs.entries()) buckets[i % workers].push(p);
   const started = Date.now();
   console.log(
     `meta matrix: ${ids.length} styles, ${allPairs.length} pairs, ${seeds} seeds mirrored ` +
