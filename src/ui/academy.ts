@@ -574,7 +574,9 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
           'small',
           '',
           `${champ?.name.split(',')[0] ?? b.championId} · v${b.version}` +
-            (b.tally ? ` · ${b.tally.wins}-${b.tally.losses}` : '') +
+            (b.tally && b.tally.wins + b.tally.losses > 0
+              ? ` · ${b.tally.wins}-${b.tally.losses}`
+              : '') +
             (b.deposited ? ' · in the Arena' : ''),
         ),
       );

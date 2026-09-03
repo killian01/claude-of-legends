@@ -8,6 +8,7 @@ import { BotStore } from '../server/bot_store';
 import { type BotDeps, createBot } from '../server/bots';
 import { type CoachDeps, type CoachProgress, coachPlaybook } from '../server/playbook_suggest';
 import { NEW_BOT_PLAYBOOK } from '../src/sim/content/playbooks/new_bot';
+import { BEHAVIOR_KINDS, TRIGGER_KINDS } from '../src/ui/playbook_text';
 
 // A Messages API stub answering with server-sent events, the text cut
 // into pieces the way a real stream arrives, and recording the request.
@@ -100,6 +101,24 @@ describe('the coach', () => {
     expect(kinds.indexOf('op')).toBeGreaterThan(kinds.lastIndexOf('text'));
     expect(kinds.filter((k) => k === 'refused').length).toBe(2);
     expect(out.raw).toBe(ANSWER);
+  });
+
+  it('teaches every trigger and behavior kind the editor offers', async () => {
+    // The default bot's "coach" play (trigger order, behavior obeyOrder)
+    // was missing from the grammar, so the model called it invalid and
+    // removed it (playtest round 3). The grammar and the editor's forms
+    // must know the same kinds.
+    const { deps, botId, requests } = rig('# ok\n');
+    await coachPlaybook(deps, 1, { id: botId, messages: [{ role: 'user', text: 'hi' }] });
+    const req = requests[0] as { system?: unknown };
+    const sys = req.system;
+    const text = Array.isArray(sys)
+      ? sys.map((b: { text?: string }) => b.text ?? '').join('\n')
+      : String(sys ?? '');
+    for (const kind of TRIGGER_KINDS) expect(text, `trigger ${kind}`).toContain(`"kind":"${kind}"`);
+    for (const kind of BEHAVIOR_KINDS) {
+      expect(text, `behavior ${kind}`).toContain(`"kind":"${kind}"`);
+    }
   });
 
   it('asks once, at low effort for a patch and high for a rework, with the form state last', async () => {

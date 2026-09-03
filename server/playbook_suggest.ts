@@ -115,6 +115,7 @@ least one of the two):
  {"kind":"warden","state":"up"|"spawning"|"down","within"?:seconds} (spawning: due within the seconds, default 20)
  {"kind":"abilityReady","key":"Q"|"W"|"E"|"R"} {"kind":"sigilReady","id":"riftstep"|"zephyr"|"mend"|"sear"} {"kind":"lane","is":"top"|"mid"|"bot"}
  {"kind":"allyFighting","within":0..200} an allied champion within the radius has an enemy champion within 10 of it
+ {"kind":"order","is"?:"goto"|"warden"|"focus"|"back"|"group"|"hold"} the owner gave the bot a live coach order (any kind, or that one); every new bot has the play "coach" (this trigger, behavior obeyOrder) right under retreat, and it is VALID: keep it unless the owner asks otherwise
  The lineup, public from champion select ("own" is the bot's team, itself included):
  {"kind":"champion","side":"own"|"enemy","is":championId} that champion is in the match on that side
  {"kind":"roles","side":"own"|"enemy","role":Role,"atLeast"?:0..5,"atMost"?:0..5} how many of a role that side fields
@@ -127,6 +128,7 @@ least one of the two):
 Behavior is ONE of (every parameter optional, default in parentheses):
  {"kind":"retreat"} run home by the fastest means; always acts.
  {"kind":"hold"} do nothing this slot; always acts.
+ {"kind":"obeyOrder"} do what the owner's live coach order says (go somewhere, take the Warden, focus, back off, group, hold); passes the turn with no order standing.
  {"kind":"shop"} the kit's next step at the fountain: buy the next item or component, sell what the build no longer wants, replace the cheapest past a full bag.
  {"kind":"goShop"} go home to spend when the next step is affordable and the spot is clear.
  {"kind":"sell","item":itemId} sell the named item at the fountain when the bag holds it.
