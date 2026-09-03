@@ -19,3 +19,5 @@ docs/research/
 # for the paintings, scripts/shrink_models.mjs for the GLBs).
 art_src/
 .pnpm-store/
+dist-gate*/
+dist-matrix*/

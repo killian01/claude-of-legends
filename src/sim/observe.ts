@@ -4,12 +4,12 @@
 // scoping is for human clients.
 
 import { effectiveMoveSpeed } from './combat/status';
-import { CHAMPIONS } from './content/champions';
 import { SIGILS } from './content/sigils';
 import type {
   Observation,
   ObsLastSeen,
   ObsProjectile,
+  ObsSeat,
   ObsStatus,
   ObsUnit,
   ObsWall,
@@ -56,7 +56,7 @@ function velocityOf(u: Unit, time: number): { vx: number; vz: number } {
 export function buildObservation(sim: Sim, unitId: number): Observation | null {
   const u = sim.units.get(unitId);
   if (!u || u.kind !== 'champion' || u.championId === null) return null;
-  const def = CHAMPIONS[u.championId];
+  const def = u.champion;
   if (!def) return null;
 
   const abilityReady = { Q: false, W: false, E: false, R: false };
@@ -90,6 +90,8 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       x: other.pos.x,
       z: other.pos.z,
       hpFrac: other.maxHp > 0 ? other.hp / other.maxHp : 0,
+      hp: other.hp,
+      maxHp: other.maxHp,
       radius: other.radius,
     };
     if (other.kind === 'tower' || other.kind === 'sanctum') {
@@ -107,12 +109,15 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
         }
       }
       if (visible.length > 0) row.statuses = visible;
+      if (other.championId) row.championId = other.championId;
+      row.items = [...other.items];
+      row.level = other.level;
     }
     // The observable telegraph: a visible champion mid-windup announces
     // where the cast lands. Bursts and cones land on the caster.
     if (other.kind === 'champion' && other.pendingSpell && other.championId) {
       const pending = other.pendingSpell;
-      const spec = CHAMPIONS[other.championId]?.abilities[pending.key]?.spec;
+      const spec = other.champion?.abilities[pending.key]?.spec;
       const selfCentered = spec?.kind === 'burst' || spec?.kind === 'cone';
       row.windup = {
         key: pending.key,
@@ -166,6 +171,23 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     lastSeen.push({ id, x: rec.x, z: rec.z, at: rec.at, hpFrac: rec.hpFrac });
   }
 
+  // The seats: every champion of both teams, public from champion select;
+  // the assigned lane only for the own team.
+  const seats: ObsSeat[] = [];
+  for (const other of sim.units.values()) {
+    if (other.kind !== 'champion' || other.neutral || !other.championId) continue;
+    const role = other.champion?.role;
+    if (!role) continue;
+    seats.push({
+      id: other.id,
+      team: other.team,
+      championId: other.championId,
+      role,
+      ...(other.team === u.team ? { lane: other.lane as 'top' | 'mid' | 'bot' | null } : {}),
+      dead: other.dead,
+    });
+  }
+
   // Walls are terrain: both teams always see them, like the pathing change.
   const walls: ObsWall[] = [];
   for (const w of sim.walls.values()) {
@@ -203,9 +225,16 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       sigilReady,
       items: [...u.items],
       championId: u.championId,
+      attackRange: u.stats.attackRange,
+      attackReadyAt: u.attackReadyAt,
+      attackDamage: u.stats.ad,
+      holding: u.holding,
+      attackSwingUntil: u.pendingAttack ? u.pendingAttack.resolveAt : null,
       recastArmed: u.recastArmed && u.recastArmed.until > sim.time ? u.recastArmed.key : null,
       lane: u.kind === 'champion' ? (u.lane as 'top' | 'mid' | 'bot' | null) : null,
       recalling: u.statuses.some((s) => s.kind === 'recall' && s.until > sim.time),
+      // The owner's coach order, additive: absent for every uncoached seat.
+      ...(u.coachOrder ? { coachOrder: u.coachOrder } : {}),
     },
     units,
     objectiveSpawnAt: sim.objectiveSpawnAt(),
@@ -213,5 +242,8 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     zones,
     walls,
     lastSeen,
+    seats,
+    laneOpponents: sim.laneOpponents(u.team),
+    laneActivity: sim.laneActivity(u.team),
   };
 }

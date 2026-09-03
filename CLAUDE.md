@@ -15,19 +15,21 @@ Vitest · Biome. No UI framework; tiny dependency set.
 
 - `docs/design/game-definition.md`: what the game is. `docs/design/roster.md`: the ten champions.
 - `docs/adr/`: the decisions and why. `CONTEXT.md`: the glossary; use its terms in code and docs.
-- `docs/plan-48h.md`: the build plan and phase order.
+- `docs/plan-48h.md`: the build plan and phase order. `docs/plan-forge.md`: the Forge build plan.
+  `docs/plan-bots.md`: the bots build plan (`docs/design/bots.md`, ADR 0013).
 
 ## Repo map
 
 | Path | What it is |
 |---|---|
 | `src/sim/` | **Deterministic game core, the source of truth.** No DOM/Three/network imports; runs in browser, server, and headless. |
-| `src/sim/content/` | Data-as-code: champions, items, sigils, the map, bots (`content/bots/`, one file per bot). |
+| `src/sim/content/` | Data-as-code: champions, items, sigils, the map, bots (`content/bots/`, one file per bot), the default playbooks (`content/playbooks/`). |
+| `src/sim/playbook/` | The playbook interpreter: a bot's decisions as data (ADR 0013), the validator, the patch operations, the play report. |
 | `src/render/` | Three.js top-down renderer. Reads the world; never mutates it. |
 | `src/game/` | Local input and client glue. |
 | `src/ui/` | HUD (DOM + CSS). |
 | `src/net/` | Online client: wire protocol + WebSocket mirror world. |
-| `server/` | Authoritative game server. |
+| `server/` | Authoritative game server; `server/generation/` is the Forge's provider seam (ADR 0010); the bots' store, the Arena and the night coach live beside it (ADR 0013). |
 | `headless/` | The environment: a match stepped from outside the repo over NDJSON (ADR 0002 phase 2). |
 | `tests/` | Vitest suite, including the structural gates. |
 

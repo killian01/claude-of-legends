@@ -45,9 +45,10 @@ decision slot during the step. A dead seat gets none, exactly like a bot.
 ## Seats
 
 By default the environment runs a full 5v5 where seat 0 is remote and the other
-nine run the Laner, the default scripted bot. Champions are handed out in roster
-order with no duplicate inside a team, the same deterministic rule the server
-uses, so a default environment match and a default server match line up.
+nine run a house style (`laner`, `brawler`, `sieger` or `objective`) drawn from
+the seed. Champions come from the fill: the roster's lanes completed by role, no
+duplicate inside a team, drawn from the seed, the same deterministic rule the
+server uses, so a default environment match and a default server match line up.
 
 To choose your own, pass a seat table to `reset`:
 
@@ -59,8 +60,8 @@ To choose your own, pass a seat table to `reset`:
 ]}
 ```
 
-`remote` seats are stepped by you. Everything else runs the named scripted bot
-in-sim (default: the Laner).
+`remote` seats are stepped by you. Everything else runs the named house style
+in-sim (`laner`, `brawler`, `sieger` or `objective`; default: the Laner).
 
 ## One step is one decision slot
 
@@ -84,7 +85,15 @@ restating an unchanged intention is a step wasted.
 `src/sim/policy.ts` is the whole contract: `Observation` in, `Action` out,
 version 0, frozen. `info` reports the version it speaks. It changes only by
 additive optional fields (ADR 0005), because a breaking change breaks every bot
-trained against it.
+trained against it. Additive action kinds count too: `recall` and `sell`
+(`{"kind":"sell","slot":n}`, the human rule: at the fountain, seventy percent
+back) arrived after v0 shipped, and a policy that never sends them is unaffected.
+Then the lineup: `seats` (both teams' champions and roles,
+with the assigned lane for the own team), `items` on a visible champion row, and
+`laneOpponents` (per lane, the enemy seen there the most over the last three minutes).
+The latest: `stop` (`{"kind":"stop"}`, the human S: hold still, idle defense off until
+the next order), `hp`, `maxHp` and `level` on visible unit rows, and `attackDamage` and
+`holding` on the self block, what a wave freeze and a fight's odds read.
 
 The observation is built from team vision, never global sim state: the fog
 applies to a remote policy exactly as it does to a human. Acting is fogged too,

@@ -9,12 +9,51 @@ A playable character a participant controls for the whole match. Ten exist at la
 _Avoid_: hero, character, class
 
 **Participant**:
-One of the ten seats in a match, human or bot.
+One of the ten seats in a match: a human, a bot, or a house bot.
 _Avoid_: player (ambiguous; say "human" for people)
 
 **Bot**:
-A participant whose actions come from a Policy instead of a human.
-_Avoid_: AI, NPC, computer player
+A participant whose actions come from a Policy instead of a human, owned and fielded by an
+account: a name, one champion with its sigils and skin, a playbook, and a record. "Bot" alone
+always means this owned one; the server's unowned filler is always called a house bot.
+_Avoid_: AI, NPC, computer player, golem, agent
+
+**House bot**:
+The server's own unowned bot that fills a seat nobody took and no ranked bot could take: a
+house style on the roster champion the fill hands it. Never rated, named by its style
+("House sieger"), obeys no one.
+_Avoid_: bot fill, backfill bot, default bot
+
+**House style**:
+One of the brains a house bot plays: the Laner, the Brawler, the Sieger or the Objective
+player, each a playbook anyone can read. Drawn from the match seed for every seat the fill
+hands out, on every host, so two matches on different seeds are not played the same way.
+_Avoid_: personality, difficulty, AI level, preset, house playbook
+
+**Fill**:
+How a team's empty seats are completed. Ranked bots first: the pool's bots seated from the
+match seed, one per account, no champion twice inside a team, each an owned seat rated on
+its account's live way. Then house bots on the roster's lanes around what the team holds, a
+tank or a fighter for each top seat, a mage, an assassin or a battlemage for mid, a marksman
+and a support for bot, the skirmisher wherever a seat is open, drawn from the match seed
+among the champions the team does not hold. The same rule on every host: the live queue,
+the Arena (house bots only there), sparring, offline practice, the environment.
+_Avoid_: draft (the Forge's term), autofill, backfill, composition
+
+**Home lane**:
+The lane a champion's role plays by default: top for the tank and the fighter, mid for the
+mage, the assassin and the battlemage, bot for the marksman and the support. The skirmisher
+has none and takes the lane with a seat open. A five-seat team holds one mid, two top and
+two bot; a champion sits in its home lane while a seat is open there, and every champion of
+a team holds a lane from the start, a human's seat counted like a bot's.
+_Avoid_: role lane, default lane, position, main lane
+
+**Bot lane**:
+The lane the marksman and the support call home, drawn along the bottom and the right of
+the screen for both teams, as the top lane is drawn along the left and the top. Always said
+in full, "bot lane" and "top lane", never "bot" alone: a bare "bot" is the owned
+participant. "Bottom" is the same word.
+_Avoid_: bot (alone), low lane, side lane
 
 **Policy**:
 A deterministic decision function (observation, rng) -> action, with the exact observation and action space the Gym environment exposes. The single abstraction behind every bot, scripted or trained.
@@ -61,7 +100,9 @@ The neutral river monster. It spawns in one of two mirrored river pits on an ann
 _Avoid_: dragon, boss, monster names from other games
 
 **Warden's Boon**:
-The team-wide, death-surviving damage buff granted when a team slays the Warden. Stacks a limited number of times.
+The team-wide, death-surviving damage buff granted when a team slays the Warden. Stacks a
+limited number of times. While it lasts, every wave the team sends carries a siege minion:
+holding the river turns into pressure on the lanes.
 _Avoid_: soul, objective buff, monster buff
 
 **Windup**:
@@ -138,3 +179,336 @@ the name it leaves behind is never handed to anyone else: a name belongs, once a
 the first account that took it. Nobody inherits another player's name, and so nobody inherits
 what people remember about it.
 _Avoid_: slug, normalized name, canonical name
+
+**Roster**:
+The ten champions shipped with the game (`docs/design/roster.md`), as opposed to forged
+champions. The roster browser is the screen that lists champions.
+_Avoid_: base champions, default cast
+
+**Tagline**:
+The one-line play-style intent under a champion's name at select and in the roster browser.
+On a forged champion it carries real weight: it is what tells four allies what an unknown
+kit does.
+_Avoid_: blurb (the legacy field name in code), motto, description
+
+**Forge**:
+The in-game workshop where a participant creates a forged champion from scratch: name,
+appearance, stats, and spells, without leaving the game. An account feature (ADR 0006).
+_Avoid_: editor, character creator, workshop
+
+**Forged champion**:
+A champion authored by a participant in the Forge rather than shipped in the roster. Its kit
+is data composed from the same spell primitives as the roster and must fit the power budget.
+Playable only in the Forge queue.
+_Avoid_: custom champion, user-generated champion
+
+**Forge queue**:
+The matchmaking queue where forged champions are allowed, alongside roster champions. Every
+other queue is roster-only. Ranked on its own rating, separate from the standard queue's.
+_Avoid_: atelier mode, custom game (that is a private lobby)
+
+**Draft**:
+A forged champion still being authored in the Forge: kit, stats, name, and splash art are
+edited freely and previewed on the engine's stylized figure. Drafts are unlimited and free.
+The 3D happens in two player-approved steps, both on the draft: the BUILD spends a creation
+and produces the static model, which the creator inspects in the workshop (and may rebuild,
+spending another); ANIMATE, always last and always its own click, rigs the validated model
+once and bakes the clips the creator picked from the provider catalog. Animating never
+seals: the Seal (its own entry) is the creator's own separate click.
+_Avoid_: WIP champion, unfinished champion
+
+**Seal**:
+The creator's explicit click that marks a champion finalized: the kit, the art and the
+model lock, and the champion may enter the gallery. Never a side effect of another step
+(playtest: a lock that arrives unasked reads as a bug). The seal spares the animations: a
+sealed champion re-bakes any clip freely. Unsealing is the same door in reverse, any time,
+owner-only: the champion returns to a draft and leaves the gallery until resealed. Reforge
+(its own entry) is the seal's one in-place kit exception.
+_Avoid_: finalize button, lock, publish
+
+**Reforge**:
+Moving a sealed champion's kit numbers after the seal. One slice is live: the basic attack
+reach, which decides melee or ranged, a feel a creator only discovers in a real match.
+Owner-only and free; the changed champion is revalidated in full and must still clear the
+power budget, so no reforge moves power past the seal.
+_Avoid_: respec, rework, nerf/buff
+
+**Spell animation**:
+An ability key's own cast animation, picked by the creator from the cast and strike
+catalogs in that spell's editor block. A spell without one plays the champion's shared
+cast clip. Baked and re-baked freely like any clip, seal or no seal.
+_Avoid_: ability clip, per-spell override
+
+**Kit suggestion**:
+A proposed passive and four spells, written by a model from the champion's own chosen
+splash art. Suggestions arrive in a conversation the creator iterates in ("more mobility
+on the E"); each answer is a whole proposed kit, shown with its derived descriptions and
+its budget bill, and nothing touches the form until the creator applies it. A suggestion
+must clear the same validation a hand-written kit does, and arrives fitted to the power
+budget line rather than tiptoeing under it. The answer streams: the creator reads the
+comment as the model writes it. The creator may write in any language; the comment
+answers in kind, the kit itself is English like the roster (ADR 0004). The thread is
+session-lived; nothing is stored unreviewed. Drafts only: a sealed kit is locked.
+_Avoid_: AI kit, autogenerated champion, chat bot
+
+**Clip file**:
+An animation-only model file carrying one baked batch of preset clips, no geometry, riding
+beside a champion's rigged body: the unit of the per-clip bake. Changing one animation
+produces one new clip file; the other roles keep theirs. Champions sealed before the split
+carry their clips inside a single model file instead.
+_Avoid_: animation pack, clip bundle
+
+**Mannequin**:
+The neutral gray biped every catalog animation can be previewed on, instantly and at no
+cost, before it is baked onto a champion. An app asset generated once (body, rig, and the
+whole preset catalog as clip files) and shipped with the client, not a champion and not
+anyone's creation.
+_Avoid_: preview dummy, test character
+
+**Creation**:
+The consumable unit of the Forge economy: building a draft's 3D model spends one, covering
+everything that champion is owed: the static model, the later animate step that seals it,
+and the weapon when one is generated (at build time or claimed afterwards). The splash art
+belongs to the free drafting stage. A technical failure of the build refunds the creation;
+a failed animate or weapon claim costs nothing and simply runs again. Every account
+receives a weekly allocation (ADR 0011); buying more arrives with payments.
+_Avoid_: credit, generation token
+
+**Model reference**:
+The technical 2D image the 3D generation accepts as its input: exactly ONE character,
+full body, front view, A-pose, empty hands, plain background. One figure only, because
+the 3D builder reconstructs whatever the image shows: a multi-view sheet becomes a
+multi-body model. Derived from the draft's chosen splash art and iterated by the player
+like any other art kind (generate, view large, pick, iterate); the 3D build runs on the
+exact chosen image, never a hidden regeneration. Stored under the art kind and asset key
+`sheet` for continuity.
+_Avoid_: model sheet (the old multi-view term), concept art
+
+**Gallery**:
+The public browse space of finalized forged champions: every finalized champion is listed by
+default (the creator can remove it), sorted by recent or popular, with likes, reports, and a
+free practice test-drive. Champions whose creator leaves sharing on (the default) are
+playable by anyone from the community tab at Forge-queue select.
+_Avoid_: workshop, hub, marketplace
+
+**Prop**:
+A separate model hung on a named bone of a champion's rig, the hand-held weapon foremost,
+with its own grip offsets. A forged champion's weapon is always a prop, never fused into the
+body mesh; it comes from the house weapon library or from its own generation.
+_Avoid_: attachment, accessory
+
+**House clip**:
+An animation the repo ships itself: a Mixamo clip retargeted once onto the shared rig
+skeleton (every forged biped shares its bone names) and served as an app asset, so applying
+one to a champion is a file copy, no provider call, no credits. Curated in weapon-family
+sets (sword and shield, great sword, magic); every house clip is baked facing the rig's
+rest forward and performs on the spot, because the game aligns a champion to its rest
+forward and owns all movement. `scripts/bake_house_clips.mjs` is the curation record.
+_Avoid_: stock animation, builtin animation
+
+**Workshop view**:
+The 3D inspection and adjustment view of a forged champion's generated model, from the
+static build onwards (validating the model BEFORE animating is the point):
+turntable orbit and zoom, playback of the clip set under readable names, team color
+preview, a match-view camera at in-game scale, and the display tuning (below) edited
+live by the creator. A view of one champion, not a place; the place players create in
+is the Forge.
+
+**Display tuning**:
+The creator's saved adjustments to how a forged champion's generated model is presented:
+height, facing, ground offset, and the weapon prop's kind, bone, grip offsets, and uniform
+size. The grip is the point of the weapon the hand holds: the workshop lets the creator
+designate it with one click on the weapon itself, and the handle aligns onto the rig's
+grip axis. Stored server-side in the sealed assets, clamped by shared bounds, and read by
+every client in a match; pure presentation with zero gameplay effect, exactly like skins.
+_Avoid_: model settings, transform
+_Avoid_: model viewer, inspector, showroom
+
+**Splash art**:
+The painted illustration of a champion, in the shared style of the set: the champion's face
+at select, in the roster browser, and on the profile. For a forged champion it is also the
+creative starting point: the first thing the player makes in the Forge, and the source
+everything else (model sheet, then model) derives from.
+_Avoid_: portrait (the legacy name in code for the resolution chain), painting
+
+**Power budget**:
+The point envelope a forged champion must fit inside: every stat point and every effect
+primitive in the kit has a cost, on top of hard per-field bounds. What makes forging a set
+of trade-offs instead of a max-everything form.
+_Avoid_: balance score, point buy
+
+**Stat polygon**:
+The Tuning tab's stat editor: an interactive polygon, one axis per priced base stat,
+whose vertices the creator pulls outward to buy a stat and inward to free points. A
+vertex stops where the power budget runs out, so overspending is impossible by
+construction, and the numbers are read at the axis tips, never typed. Growth per level
+is a second, smaller polygon. The melee or ranged choice is a toggle beside it, an
+identity, not an axis: a melee champion's reach is pinned off the polygon, a ranged
+champion's reach is one more axis. The polygon only pushes back when the kit already
+claims its share of the budget, so the fresh draft's kit weighs what a roster kit weighs.
+_Avoid_: radar chart, spider chart, stat sliders
+
+**Power dial**:
+A spell's one intensity control: it scales the spell's amounts (damage, healing, crowd
+control durations) inside the engine's bounds and stops where the power budget runs
+out, exactly like a Stat polygon vertex. Structure (the cast kind, the effect kinds,
+the shapes) is not its business: that comes from the kit suggestion or the advanced
+editor. Rhythm (cooldown, mana cost, cast range, windup) stays typed beside it, in
+plain units. The kit conversation's proposals arrive already fitted to the budget line by
+the same scaling, one shared factor across the four spells: the model sizes roughly, the
+arithmetic lands the numbers.
+_Avoid_: power slider, spell level
+
+**Play**:
+One rule of a playbook: a trigger over the observation plus the behavior to run while it
+holds, with its parameters. Each decision slot, the first play whose trigger holds is the
+one that acts.
+_Avoid_: rule, node, behavior (that is the play's second half)
+
+**Playbook**:
+A bot's whole decision policy as data: an ordered list of plays, evaluated top down and
+interpreted by one Policy in the sim. The micro (last hits, dodging, which key does what)
+is the engine's, never the playbook's. The Laner is the default playbook every bot starts
+as. Versioned like the Policy contract, and it grows only additively.
+_Avoid_: brain, script, behavior tree, AI
+
+**Kit**:
+The part of a playbook that says what a bot works toward rather than what it does now: a
+build, a skill order, and variants, each a trigger with its own build or skill order. The
+first variant whose trigger holds is the kit in force, decided again at every purchase and
+every skill point; none holding, the defaults are.
+_Avoid_: loadout, profile, settings
+
+**Build**:
+An ordered list of items a bot buys toward, components resolved by the engine in order.
+Longer than the bag: past six items the next one replaces the cheapest in the bag once the
+gold covers the difference, and what the build does not want is sold first.
+_Avoid_: item set, shopping list, item plan
+
+**Variant**:
+One conditional entry of a kit: a trigger plus the build or skill order to use while it
+holds, ahead of the defaults.
+_Avoid_: branch, override, situational build (that is what a variant is for, not its name)
+
+**Stance**:
+How the fight behavior holds distance: kite (attack from the edge of range and give ground
+to whoever closes), front (walk in), poke (cast, then step back). Auto picks kite for a
+ranged champion and front for a melee one.
+_Avoid_: positioning mode, aggression, range setting
+
+**Odds**:
+How a fight stands before it is taken, read from team vision: the strength of the allied
+champions within a radius (the bot included, each weighed by health and level) over both
+sides' together. One half is an even fight, above it an advantage. A play reads the odds
+as a trigger, and the fight's commit is the odds under which the bot never walks in.
+_Avoid_: win probability, power score, threat level
+
+**Freeze**:
+Keeping the enemy wave in front of one's own lane tower: last hits only, standing just
+ahead of the tower and holding still between them, so the wave dies to the tower, the
+gold is the freezer's, and the enemy laner must come deep for any farm at all. One of the
+two intents of the wave management behavior; the same verb as the human's S.
+_Avoid_: hold the lane, stall, camp the tower
+
+**Shove**:
+Hitting the wave to send it at the enemy tower, which is what farming the nearest minion
+does. The other intent of the wave management behavior; the Laner's default farm.
+_Avoid_: push (that is walking the lane with the wave), clear, fast push
+
+**Lane opponent**:
+The enemy champion the team has seen the most inside the bot's assigned lane over the last
+three minutes; none when nobody was seen there. What "adapt to the opponent" adapts to
+before a fight starts.
+_Avoid_: laner, matchup, counterpart, vis-a-vis
+
+**Lane partner**:
+The allied champion assigned to the same lane as the bot (two top, two bot, one mid): who
+a bot lanes beside, known from the start of the match.
+_Avoid_: duo, lane mate, buddy
+
+**Coach order**:
+The one live instruction a bot's owner can give it during a match: go to a lane or point,
+take the Warden, focus a target, back off, group on an ally, hold, free. One active at a
+time, persistent until released or done, free like a movement intention, sent as a typed
+ping. A bot obeys only its owner.
+_Avoid_: command, directive, ping (the order rides on one, it is not one)
+
+**Academy**:
+The in-game place where an account writes and tests a bot: the conversation that edits the
+playbook as patches, the play list beside it, and local sparring at full speed. An account
+feature.
+_Avoid_: bot editor, bot forge, workshop, trainer
+
+**Ranked**:
+A bot its owner marked available for rated play: the Arena's rounds and play now, and the
+empty seats of live matches, where it takes a seat before a house bot. The owner's one
+switch; off, the bot only spars.
+_Avoid_: deposited (the store's word), in the pool, active
+
+**Arena**:
+The server-run competition of ranked bots: hourly rounds and on-demand "play now" matches
+against the pool, played at full speed with no one present and never coached, rated on the
+account's Arena rating, watched afterwards as replays.
+_Avoid_: tournament, league, bot queue, night mode
+
+**Sparring**:
+An unrated match run only to test a bot: locally in the Academy at full speed against
+house bots, or on the server to decide whether a proposed playbook change wins more before
+it is applied. Never moves a rating; every bot gets the same server sparring allocation.
+A series is five such matches at once, the bot's current playbook against its previous
+version on the other side, the side alternating, summed into one reading.
+_Avoid_: practice match (that is the human's offline match), test match, simulation
+
+**Briefing**:
+The report a bot's owner reads after the Arena has played: results and rating movement,
+time and deaths per play, and the night coach's proposed playbook changes with what
+sparring said about them. Nothing is applied without the owner unless they opted in, and
+every applied change is a version they can undo.
+_Avoid_: night report, digest, summary
+
+**Record**:
+A bot's list of the matches it played, newest first: sparring and series in the Academy,
+Arena matches, and live matches where the account fielded it. Each entry carries its
+kind, its result, the bot's line (kills, deaths, assists, creep score, the build it ended
+on), the playbook version that played, its plays, and its replay. Capped per bot, the
+oldest leaving first. The tally of won and lost is the record in the sports sense.
+_Avoid_: history, match log, ledger, and "record" for a stored replay (that is a replay)
+
+**Death card**:
+The scene of one death on a Match sheet: where the champion fell, the allies and enemies
+within reach, whether an enemy tower had it in range, and the champions and structures
+around it, in words and as a thumbnail of the map. What turns "six deaths on the chase
+play" into a rule to fix.
+_Avoid_: death recap, kill cam
+
+**Bot page**:
+What anyone signed in may read of a bot before playing it: its owner and champion, its
+rated tally and its ratings by tier, its rated matches with their lines, builds and
+replays, and its playbook when the owner opened it (the owner's switch, off by default).
+Reached from the ladder and the pool.
+_Avoid_: scouting report (the plan's measuring script), profile (that is an account's)
+
+**Challenge**:
+An on-demand Arena match against one ranked bot the challenger chose, from the bot's
+page: the challenger's bot on one side, the chosen one on the other, house bots around,
+played by the server now, unrated, from the same daily allowance as play now, on both
+Records.
+_Avoid_: duel, friendly, custom match
+
+**Tier**:
+The named band a rating sits in, the same on every ladder: Recruit below the base rating,
+then Regular, Veteran, Elite and Legend by steps of a hundred. A place a number reads as,
+never a separate score.
+_Avoid_: rank (that is the position on a ladder), league, division, and other games' metals
+
+**Match sheet**:
+The reading of one entry of a Record: both teams' scoreboard with their builds, time and
+deaths per play, the bot's deaths with their minute and the play that held, each a link
+into the replay a few seconds before, and the replay itself.
+_Avoid_: match detail, post-game screen, summary, report (that is the Briefing's material)
+
+**Rating**:
+An account's Elo on one ladder. An account holds one per way its seat was played: by hand,
+by its bot in a live match, by its bot in the Arena, plus the Forge queue's own. A match
+moves only the rating of the way each owned seat was played; house bots move none.
+_Avoid_: MMR, Elo (the algorithm, not the number), score

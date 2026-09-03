@@ -25,6 +25,7 @@ import {
   type ChampionVisual,
   championVisualDef,
   createChampionVisual,
+  forgedBarY,
   preloadChampionAssets,
 } from './champions';
 import { FloatingText, makeTextSprite } from './floating_text';
@@ -977,7 +978,7 @@ export class Renderer {
             );
           }
           if (t) t.castUntil = performance.now() + 420;
-          this.championVisuals.get(cast.unitId)?.playCast();
+          this.championVisuals.get(cast.unitId)?.playCast(cast.key);
         }
       } else if (others) {
         // Sigils and unknown keys: the shared whoosh, attenuated.
@@ -1145,9 +1146,14 @@ export class Renderer {
     // without this hoist the walk cycle never runs.
     holder.userData.anim = figure.userData.anim;
     enableShadows(holder);
+    // Roster champions resolve through the static manifest; forged ones
+    // through the runtime registry their generated model was announced to.
     const def = championVisualDef(u.championId);
-    if (def) this.upgradeChampionView(holder, figure, u.id, u.championId, color, u.skin);
-    return { holder, barY: def?.barY ?? 3.0 };
+    const forgedBar = forgedBarY(u.championId);
+    if (def || forgedBar !== null) {
+      this.upgradeChampionView(holder, figure, u.id, u.championId, color, u.skin);
+    }
+    return { holder, barY: def?.barY ?? forgedBar ?? 3.0 };
   }
 
   // Swaps a champion's procedural figure for its rigged GLB once the asset
@@ -1467,7 +1473,10 @@ export class Renderer {
       // It floats a full step above the bars so the two never overlap.
       if (u.kind === 'champion') {
         const row = scoreRows.find((r) => r.unitId === id);
-        const label = `${row?.name ?? u.championId ?? ''}  Lv${u.level}`;
+        // An allied bot's active play rides the plate (ADR 0013): what it is
+        // doing, readable at a glance in spectate, replay and practice.
+        const play = u.play !== null && u.team === this.viewerTeam ? `  ${u.play}` : '';
+        const label = `${row?.name ?? u.championId ?? ''}  Lv${u.level}${play}`;
         if (t.nameKey !== label) {
           if (t.namePlate) {
             t.mesh.remove(t.namePlate);
@@ -1479,7 +1488,7 @@ export class Renderer {
             label,
             u.team === this.viewerTeam ? '#d8ecff' : '#ffd8d2',
             0.55,
-            256,
+            play ? 384 : 256,
             24,
           );
           if (plate) {

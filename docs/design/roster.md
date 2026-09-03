@@ -130,4 +130,4 @@ A diving brawler who feeds on extended fights.
 
 ## Coverage check
 
-Roles: 2 top (tank, fighter), 3 mid or flex (mage, assassin, battlemage), 2 marksman, 2 support (heal, engage), 1 skirmisher flex. Every crowd-control primitive, projectile shape, and zone type is exercised by at least one kit, so the roster doubles as a test matrix for the effect system.
+Roles: 2 top (tank, fighter), 3 mid or flex (mage, assassin, battlemage), 2 marksman, 2 support (heal, engage), 1 skirmisher flex. These are the home lanes (`CONTEXT.md`): the fill completes a team by them and the sim seats each champion in its own. Every crowd-control primitive, projectile shape, and zone type is exercised by at least one kit, so the roster doubles as a test matrix for the effect system.

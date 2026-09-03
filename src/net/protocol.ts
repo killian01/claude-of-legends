@@ -4,15 +4,40 @@
 // full identity fields sent once per unit per client ("full" vs "lite"
 // records, the world-of-claudecraft pattern).
 
+import type { CoachOrder, CoachOrderKind } from '../sim/coach';
+import type { ForgedDisplay } from '../sim/forge/display';
+import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { AbilityKey, ScoreRow, TeamId } from '../sim/types';
 import type { StructureMeta, UnitKind } from '../sim/unit';
+
+// The sealed asset pointers a match carries per forged champion, so every
+// client in it can load the generated model: the model path is relative to
+// the asset route, family picks the default weapon prop, display is the
+// workshop's saved tuning.
+export interface ForgedMatchAssets {
+  model: string | null;
+  family: string | null;
+  // The champion's own generated weapon GLB (relative asset path), if built.
+  weapon: string | null;
+  // The exact baked clip name per renderer role (idle, run, attack, cast,
+  // death), as the creator picked them; null on models sealed before the
+  // pick existed (the renderer then falls back to name matching).
+  clips: Record<string, string> | null;
+  // Per-role animation-only GLBs riding beside a rigged model (relative
+  // asset paths): the per-clip bake architecture. Null when the model is
+  // a single self-contained file (pre-split bakes, and the mock).
+  clipFiles: Record<string, string> | null;
+  display: ForgedDisplay | null;
+}
 
 export type ClientMsg =
   // Carries no identity: the session cookie settled that on the upgrade
   // (ADR 0006). It only asks whether a live match is still holding this
   // account's seat, so a dropped connection can claim it back.
   | { t: 'hello' }
-  | { t: 'queue' }
+  // forge: enter the Forge queue instead (plan-forge phase 6), where
+  // select also offers the account's finalized forged champions.
+  | { t: 'queue'; forge?: boolean }
   | { t: 'start_now' }
   | { t: 'leave' }
   | { t: 'create_lobby' }
@@ -28,7 +53,13 @@ export type ClientMsg =
   // server answers with match_start carrying selfUnitId 0, then streams
   // that team's snapshots with self null.
   | { t: 'spectate'; matchId: number; team: TeamId }
-  | { t: 'pick'; championId: string; sigils: [string, string]; skin?: number }
+  // bot: lock the account's own bot into this seat (ADR 0013); the bot's
+  // champion, sigils and skin replace the three fields, which still ride
+  // for the fallback when the resolver says no.
+  | { t: 'pick'; championId: string; sigils: [string, string]; skin?: number; bot?: string }
+  // A coach order for the account's own bot seat (ADR 0013): one at a
+  // time, free releases it. Refused on any other seat.
+  | { t: 'order'; kind: CoachOrderKind; x?: number; z?: number; targetId?: number }
   | { t: 'move'; x: number; z: number }
   | { t: 'attack'; targetId: number }
   | { t: 'attack_move'; x: number; z: number }
@@ -67,6 +98,13 @@ export interface SnapUnit {
   // every snapshot while the champion charges, so BOTH teams see the
   // telegraph (the counterplay window is only fair if it is visible).
   w?: { k: AbilityKey; x: number; z: number; u: number };
+  // The active play of an ALLIED bot (ADR 0013), for the overlay. Never
+  // sent for the other team: a bot's decisions are its own team's business.
+  p?: string;
+  // The coach order an ALLIED bot stands under (ADR 0013), for the coach
+  // bar to answer with what the sim holds rather than what was clicked.
+  // Team-scoped like the play.
+  co?: CoachOrder;
 }
 
 export interface SnapMobile {
@@ -162,9 +200,26 @@ export type ServerMsg =
     }
   // team is the recipient's own side; players carry everyone's.
   | { t: 'lobby'; code: string; host: boolean; team: TeamId; players: LobbyPlayer[] }
-  | { t: 'select_start'; team: TeamId; players: SelectPlayer[]; deadline: number }
+  // forge marks a Forge-queue select, so the client also offers the
+  // account's own finalized forged champions.
+  | { t: 'select_start'; team: TeamId; players: SelectPlayer[]; deadline: number; forge?: boolean }
   | { t: 'select_update'; locked: number; total: number; taken: string[] }
-  | { t: 'match_start'; selfUnitId: number; team: TeamId }
+  // forged: the match's forged champion definitions, embedded whole
+  // (ADR 0010), so every client and spectator can resolve them before the
+  // first snapshot names one. Absent for roster-only matches. forgedAssets
+  // rides beside it, keyed by forged id: the sealed model path (relative,
+  // for the asset route), the weapon family, and the workshop's display
+  // tuning, so every client renders the generated model, not the figure.
+  | {
+      t: 'match_start';
+      selfUnitId: number;
+      team: TeamId;
+      // This seat is the account's own bot: the client coaches it and the
+      // hands-on verbs are refused (ADR 0013).
+      coach?: true;
+      forged?: ForgedChampionDef[];
+      forgedAssets?: Record<string, ForgedMatchAssets>;
+    }
   | {
       t: 'snap';
       time: number;
@@ -189,7 +244,17 @@ export type ServerMsg =
   | { t: 'player_back'; name: string; team: TeamId }
   // Sent once to each human player when the finished match is recorded:
   // this player's rating movement (zero and rated:false when unrated).
-  | { t: 'match_result'; rated: boolean; delta: number; rating: number }
+  // queue 'forge' means the numbers are the Forge queue's own rating
+  // (ADR 0011), not the classic ladder's.
+  // way 'bot' means the numbers are the account's bot rating, live.
+  | {
+      t: 'match_result';
+      rated: boolean;
+      delta: number;
+      rating: number;
+      queue?: 'forge';
+      way?: 'bot';
+    }
   | { t: 'match_end' }
   | { t: 'error'; message: string };
 

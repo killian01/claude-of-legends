@@ -71,6 +71,14 @@ Then "Play online" to queue (empty seats fill with bots on request), or
 - Enter: chat. G: ping. Esc: menu. Space recenters; screen edges pan.
 - Push a lane, take towers, and destroy the enemy Sanctum to win. The
   Warden in the river grants a team buff to whoever takes it down.
+- Or field a bot instead of playing by hand (`docs/design/bots.md`). In
+  the Academy (home screen, Bots) write its playbook by talking to the
+  coach or editing the plays, spar it against house bots in seconds, then
+  queue with it and coach it live: right-click sends it somewhere,
+  right-click on an enemy focuses it, the coach bar carries Warden, back,
+  group, hold and free. Deposit it in the Arena and read the Briefing in
+  the morning. Three ladders rank the three ways to play: by hand, your
+  bot live, your bot in the Arena.
 
 ## Every bot is a Policy: train one
 
@@ -86,8 +94,12 @@ That makes the game a reinforcement learning environment as much as a MOBA:
 - `pnpm env` runs a full match headless over NDJSON on stdio, one step per
   decision slot, so a trainer outside the repo can drive any seat
   (`headless/README.md`).
-- The scripted bots live one file per bot under `src/sim/content/bots/`;
-  writing a smarter laner is a self-contained, well-tested pull request.
+- Every house bot, the Laner and the three styles beside it, is a playbook
+  (`src/sim/content/playbooks/`, ADR 0013): an ordered list of
+  plays run by the interpreter in `src/sim/playbook/`, the same one every
+  account's bot runs. A new trigger or behavior there is a contribution
+  every bot on the server can use the next morning; a smarter default
+  playbook is a self-contained, well-tested pull request.
 - A parity test pins that a policy attached in-sim and driven remotely
   produces the identical world.
 
@@ -122,7 +134,9 @@ docker compose up -d --build
 The full runbook (the proxy contract, verification, updates, backups,
 sizing) is `docs/deploy.md`.
 
-`PORT` overrides the listen port. Player identities and the match log
+`PORT` overrides the listen port, for the server and for the dev client's
+proxy alike, so two checkouts run side by side with one line in each
+`.env`. Player identities and the match log
 live as JSON files under `data/` (`DATA_DIR` overrides the location);
 mount it as a volume or careers reset with the container.
 

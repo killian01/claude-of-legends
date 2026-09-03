@@ -201,7 +201,9 @@ describe('full bot 5v5', () => {
       }
       let deaths = 0;
       const trace: number[] = [];
-      for (let i = 0; i < 900; i++) {
+      // Ninety seconds: the first waves have met and the lanes, seated by
+      // role, have traded.
+      for (let i = 0; i < 1800; i++) {
         for (const ev of sim.tick()) {
           if (ev.type === 'death') deaths++;
         }

@@ -6,11 +6,21 @@
 // who it is talking to. No database still: accounts, sessions and the
 // match log are JSON files under DATA_DIR.
 
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { type WebSocket, WebSocketServer } from 'ws';
-import { isFiniteVec, parseClientMsg, type ServerMsg } from '../src/net/protocol';
+import {
+  type ForgedMatchAssets,
+  isFiniteVec,
+  parseClientMsg,
+  type ServerMsg,
+} from '../src/net/protocol';
+import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
+import { validateForged } from '../src/sim/forge/validate';
+import { PlayLedger } from '../src/sim/playbook/report';
+import { validatePlaybook } from '../src/sim/playbook/validate';
 import { DT } from '../src/sim/types';
 import { foldName, nameErrorMessage } from './account_name';
 import {
@@ -21,27 +31,89 @@ import {
   selfAccount,
 } from './accounts';
 import { CONFIRM_TTL_MS, RESET_TTL_MS, TokenStore } from './action_tokens';
-import { fillWithBots } from './bot_fill';
+import { API_RATE_PER_MIN, ApiLimiter } from './api_limit';
+import { ARENA_PLAY_NOW_PER_DAY, ARENA_ROUND_MS } from './arena';
+import { ArenaRunner } from './arena_runner';
+import { type ArenaDeps, challenge, playNow, roundDue, runArenaRound } from './arena_service';
+import { chooseArt, deleteArtFor, generateArt, listArt, splashOf } from './art';
+import { appendExchange, botChat, clearBotChat, windowTurns } from './bot_chats';
+import { fillWithBots, type PoolSeat, TEAM_SIZE } from './bot_fill';
+import {
+  addEntry,
+  getEntry,
+  listEntries,
+  parseUpload,
+  RECORD_UPLOAD_MAX,
+  rowOf,
+} from './bot_records';
+import { BotStore } from './bot_store';
+import {
+  type BotDeps,
+  createBot,
+  deleteBot,
+  getVersion,
+  listBots,
+  listVersions,
+  ownedBot,
+  PLAYBOOK_JSON_MAX,
+  revertBot,
+  saveBot,
+  setAutoApply,
+  setDeposited,
+  setOpenPlaybook,
+} from './bots';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, parseCookies, serializeCookie } from './cookies';
 import { authorizeUrl, CALLBACK_PATH, DiscordOauth, discordConfigFromEnv } from './discord_oauth';
 import { DiscordFlows } from './discord_state';
+import { displayOf, forgedMatchAssets, modelPointers, setForgedDisplay } from './display';
 import { clientAddress, edgeConfig, originAllowed } from './edge';
 import { emailErrorMessage } from './email_address';
 import { CLAIM_TTL_MS } from './email_claim';
-import { buildLadder } from './ladder';
+import {
+  animateChampion,
+  buildModel,
+  DRAFT_JSON_MAX,
+  deleteDraft,
+  finalizeStatus,
+  forgeWeapon,
+  listDrafts,
+  saveDraft,
+} from './forge';
+import { ForgeStore } from './forge_store';
+import { canPlayForged, listGallery, reportForged, setVisibility, toggleLike } from './gallery';
+import { catalogRoles } from './generation/house_clips';
+import { MockProvider } from './generation/mock';
+import { downloadToFile, type PipelineDeps, recoverStaleJobs } from './generation/pipeline';
+import { placeholderFor } from './generation/placeholder';
+import { type GenerationProvider, WEAPON_FAMILIES } from './generation/provider';
+import { TripoProvider } from './generation/tripo';
+import { buildBotLadder, buildLadder } from './ladder';
 import { accountKey, addressKey, LoginThrottle } from './login_throttle';
 import { confirmMail, confirmUrl, publicOrigin, resetMail, resetUrl } from './mail_messages';
 import { mailerFromEnv } from './mailer';
-import { AFK_IDLE_TICKS, Match } from './match';
-import { Matchmaker } from './matchmaker';
+import { AFK_IDLE_TICKS, Match, type MatchPick } from './match';
+import { type OwnedSeat, type RatingBook, rateMatch } from './match_rating';
+import { Matchmaker, type MatchSource } from './matchmaker';
+import {
+  answerProposal,
+  buildBriefing,
+  type NightCoachDeps,
+  nightDue,
+  runNight,
+} from './night_coach';
 import { passwordErrorMessage, validatePassword } from './password';
+import { type CoachDeps, coachPlaybook } from './playbook_suggest';
 import { buildProfile } from './profile';
-import { isRated, LEAVER_LOCKOUT_MS, leaverPenalty, type RatedSeat, ratingDeltas } from './rating';
+import { checkQuota, DAY_MS, spendQuota } from './quotas';
+import { BASE_RATING, LEAVER_LOCKOUT_MS, leaverPenalty } from './rating';
 import { buildMatchRecord, type MatchRecord } from './records';
+import { setForgedAttackRange } from './reforge';
 import { RejoinRegistry } from './rejoin';
+import { sealChampion, unsealChampion } from './seal';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
 import { appendJsonl, pruneNumberedJson, readJsonl, saveJsonAtomic } from './store';
+import { suggestKit } from './suggest';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DIST = path.resolve(process.cwd(), 'dist');
@@ -109,6 +181,15 @@ interface MatchEntry {
   // Only public-queue matches can be rated; a private lobby never is
   // (it would be a boosting machine otherwise).
   ratedEligible: boolean;
+  // Bot seats by unit id (ADR 0013): the owning account and the seat name,
+  // kept here because a coach may close the tab and still be rated; the
+  // bot and its version, for the Record written at the end.
+  botSeats: Map<number, { accountId: number; name: string; botId?: string; version?: number }>;
+  // Time and deaths per play for the bot seats' Records (src/sim/playbook/report.ts).
+  ledger: PlayLedger;
+  // A Forge-queue match: its deltas land on the Forge queue's own rating
+  // (ADR 0011), never the classic ladder.
+  forge: boolean;
 }
 const matches = new Map<number, MatchEntry>();
 // Abandoned seats and leaver lockouts, both keyed on the account
@@ -143,6 +224,142 @@ const discord = DISCORD ? new DiscordOauth(DISCORD) : null;
 // The anti-forgery states in flight. In memory only: a state is minutes
 // old and its owner is watching.
 const discordFlows = new DiscordFlows();
+// The Forge's own store (ADR 0011): SQLite for forged champions, the
+// creation ledger, and generation jobs; accounts stay in their JSON
+// registry and rows here reference their ids.
+const forgeStore = new ForgeStore(path.join(DATA_DIR, 'forge.sqlite3'));
+// Bots on the account (ADR 0013): their own SQLite beside the Forge's, so
+// the two land in parallel without sharing a file or a module.
+const botStore = new BotStore(path.join(DATA_DIR, 'bots.sqlite3'));
+// Where every generated file lives (splash candidates, model sheets,
+// models), served back to logged-in clients by the asset route below.
+const ASSETS_DIR = path.join(DATA_DIR, 'assets');
+// The generation provider (ADR 0010): Tripo with a key, the mock when
+// asked for keyless dev, otherwise absent and finalize says so.
+function generationFromEnv(): PipelineDeps | null {
+  let provider: GenerationProvider | null = null;
+  if (process.env.TRIPO_API_KEY) {
+    const tripo = new TripoProvider(process.env.TRIPO_API_KEY, {
+      ...(process.env.TRIPO_IMAGE_MODEL ? { imageModel: process.env.TRIPO_IMAGE_MODEL } : {}),
+    });
+    provider = tripo;
+    // Fire and forget: the balance names the key live (or not) at boot
+    // without holding the server's start on a third party.
+    void tripo.balance().then((credits) => {
+      console.log(
+        `generation: tripo (TRIPO_API_KEY set), real generations from here on; ` +
+          `credit balance ${credits < 0 ? 'unavailable' : credits}`,
+      );
+    });
+  } else if (process.env.GENERATION_PROVIDER === 'mock') {
+    console.log('generation: mock provider (GENERATION_PROVIDER=mock), placeholder assets');
+    provider = new MockProvider();
+  }
+  if (!provider) return null;
+  return {
+    storage: forgeStore,
+    provider,
+    assetsDir: ASSETS_DIR,
+    // The house clip library ships inside the served client build.
+    publicDir: DIST,
+    // Per-champion asset budgets (ADR 0010), server-configurable like
+    // every other number in the plan; zero disables one.
+    budgets: {
+      imageKb: envNumber('ASSET_MAX_IMAGE_KB', 4096),
+      // A real five-clip baked GLB measured 58 MB live (2026-08-31): the
+      // ceiling bounds abuse, not the normal case, until compression
+      // tuning lands.
+      modelKb: envNumber('ASSET_MAX_MODEL_KB', 81920),
+    },
+    download:
+      provider.id === 'mock'
+        ? (url, dest) => {
+            // Mock URLs are not fetchable; a real placeholder (a valid PNG
+            // or animated GLB, picked by extension) stands in so every
+            // surface downstream renders something honest in keyless dev.
+            mkdirSync(path.dirname(dest), { recursive: true });
+            writeFileSync(dest, placeholderFor(url, dest));
+            return Promise.resolve();
+          }
+        : downloadToFile,
+  };
+}
+const generation = generationFromEnv();
+{
+  // A crash mid-generation is swept on boot: the job fails, the creation
+  // refunds.
+  const swept = recoverStaleJobs(forgeStore);
+  if (swept > 0) console.log(`generation: refunded ${swept} job(s) killed by the last shutdown`);
+}
+// Every plan number is server-configurable (plan-forge phase 8); an unset
+// or unparseable variable falls back, so a compose pass-through of an
+// empty string never silently becomes zero.
+function envNumber(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+const botDeps: BotDeps = {
+  store: botStore,
+  botCap: envNumber('BOT_CAP', 100),
+  depositCap: envNumber('BOT_DEPOSIT_CAP', 3),
+};
+// The coach behind the Academy: the same key as the kit conversation,
+// one model, depth as effort.
+const coachDeps: CoachDeps = {
+  store: botStore,
+  apiKey: process.env.ANTHROPIC_API_KEY?.trim() || null,
+  ...(process.env.BOT_COACH_MODEL?.trim() ? { model: process.env.BOT_COACH_MODEL.trim() } : {}),
+};
+const forgeDeps = {
+  store: forgeStore,
+  generation,
+  creationsGrant: envNumber('CREATIONS_PER_WEEK', 3),
+  draftCap: envNumber('FORGE_DRAFT_CAP', 50),
+};
+// The gallery (plan-forge phase 7) shares the store; the takedown
+// threshold is server-configurable like the creation grant.
+const galleryDeps = {
+  store: forgeStore,
+  reportThreshold: envNumber('REPORT_TAKEDOWN_THRESHOLD', 3),
+};
+// Daily quotas (plan-forge phase 8): generation chains per account per
+// rolling day, plus the reserved 2D and agent meters. Zero disables one.
+const quotaDeps = {
+  store: forgeStore,
+  limits: {
+    generation: envNumber('GENERATIONS_PER_DAY', 5),
+    gen2d: envNumber('QUOTA_2D_PER_DAY', 40),
+    agent: envNumber('QUOTA_AGENT_PER_DAY', 20),
+  },
+};
+// Kit suggestions from the splash art (the agent surface): behind an
+// Anthropic key, answering honestly when unconfigured, on the 'agent'
+// meter that has waited for it.
+const suggestDeps = {
+  store: forgeStore,
+  apiKey: process.env.ANTHROPIC_API_KEY?.trim() || null,
+  assetsDir: ASSETS_DIR,
+  ...(process.env.SUGGEST_MODEL?.trim() ? { model: process.env.SUGGEST_MODEL.trim() } : {}),
+};
+console.log(
+  suggestDeps.apiKey
+    ? 'suggestions: on (ANTHROPIC_API_KEY set), the kit conversation is live'
+    : 'suggestions: off (no ANTHROPIC_API_KEY set)',
+);
+// The 2D art surface (plan-forge phase 4): splash and icon candidates on
+// the gen2d meter, sharing the pipeline's provider and assets dir.
+const artDeps = {
+  store: forgeStore,
+  generation,
+  quota: quotaDeps,
+  historyCap: envNumber('ART_HISTORY_CAP', 12),
+};
+// The blanket per-address rate limit over /api (phase 8); the login
+// throttle keeps its own sharper backoff. Zero disables it.
+const apiLimiter = new ApiLimiter(envNumber('API_RATE_PER_MIN', API_RATE_PER_MIN));
+
 const MATCHES_FILE = path.join(DATA_DIR, 'matches.jsonl');
 const REPLAYS_DIR = path.join(DATA_DIR, 'replays');
 // How many finished-match replays stay on disk (named by match id).
@@ -150,6 +367,47 @@ const REPLAY_KEEP = 40;
 // The whole log stays in memory for profile queries; one line per match,
 // appended as each ends (kilobytes each, guests-scale).
 const matchLog: MatchRecord[] = readJsonl<MatchRecord>(MATCHES_FILE);
+// The Arena (docs/design/bots.md): matches off the live loop in a worker
+// thread bundled beside the server, inline when the bundle is missing
+// (a dev host running the TypeScript straight). Match ids are shared with
+// live matches so replay ids never collide.
+const ARENA_WORKER = path.join(__dirname, 'arena_worker.cjs');
+const arenaRunner = new ArenaRunner(existsSync(ARENA_WORKER) ? ARENA_WORKER : null);
+const arenaDeps: ArenaDeps = {
+  store: botStore,
+  runner: arenaRunner,
+  nameOf: (aid) => registry.findById(aid)?.name ?? null,
+  nextMatchId: () => nextMatchId++,
+  saveReplay: (id, record) => {
+    saveJsonAtomic(path.join(REPLAYS_DIR, `${id}.json`), record);
+    pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP, botStore.heldReplayIds());
+  },
+  recordMatch: (rec) => {
+    matchLog.push(rec);
+    appendJsonl(MATCHES_FILE, rec);
+  },
+  roundMs: envNumber('ARENA_ROUND_MINUTES', 60) * 60_000,
+  playNowPerDay: envNumber('ARENA_PLAY_NOW_PER_DAY', ARENA_PLAY_NOW_PER_DAY),
+  log: (line) => console.log(line),
+};
+// The night coach (docs/design/bots.md): the same coach as the Academy,
+// asked once per bot per night about its Arena report; sparring on the
+// Arena's runner decides whether the proposal stands.
+const nightCoachDeps: NightCoachDeps = {
+  store: botStore,
+  runner: arenaRunner,
+  coach: coachDeps.apiKey
+    ? (accountId, botId, message) =>
+        coachPlaybook(coachDeps, accountId, {
+          id: botId,
+          messages: [{ role: 'user', text: message }],
+          depth: 'quick',
+        })
+    : null,
+  records: () => matchLog,
+  sparringPerSide: envNumber('SPARRING_PER_SIDE', 3),
+  log: (line) => console.log(line),
+};
 
 // What a refused registration says, one line per way it can be refused.
 // A table rather than a chain of ternaries, so a new way to be refused is
@@ -166,7 +424,21 @@ const REGISTER_ERRORS: Record<RegisterError, string> = {
 // construction rather than by deletion, and tests/architecture.test.ts
 // holds that line for every route that ever serialises one.
 function describeAccount(a: Account): unknown {
-  return { ...publicAccount(a), profile: buildProfile(matchLog, a.id) };
+  return {
+    ...publicAccount(a),
+    profile: buildProfile(matchLog, a.id),
+    // The account's ranked bots, for the ladder's detail: a page and a
+    // challenge each (CONTEXT.md: Bot page, Challenge).
+    bots: botStore
+      .listByAccount(a.id)
+      .filter((b) => b.deposited)
+      .map((b) => ({
+        id: b.id,
+        name: b.name,
+        championId: b.championId,
+        tally: botStore.tally(b.id),
+      })),
+  };
 }
 
 // The same, for the owner asking about themselves: it adds the address
@@ -201,25 +473,146 @@ function send(clientId: number, msg: ServerMsg): void {
   c.ws.send(JSON.stringify(msg));
 }
 
-const matchmaker = new Matchmaker(send, (picks, source) => {
-  const id = nextMatchId++;
-  const match = new Match((Date.now() % 2_000_000_000) + id, fillWithBots(picks));
-  matches.set(id, {
-    match,
-    endedAt: null,
-    failures: 0,
-    abandonedAt: null,
-    ratedEligible: source === 'queue',
-  });
-  for (const p of picks) {
-    const c = clients.get(p.clientId);
-    if (!c) continue;
-    c.matchId = id;
-    const player = match.players.get(p.clientId);
-    if (player) send(p.clientId, { t: 'match_start', selfUnitId: player.unitId, team: p.team });
-  }
-  console.log(`match ${id} started with ${picks.length} player(s)`);
+// The match_start block carrying the forged definitions, when the match
+// has any: sent at setup, on rejoin, and to spectators alike, so every
+// mirror world can resolve a forged champion before its first snapshot.
+// Each definition rides with its sealed asset pointers (model path, weapon
+// family, display tuning), so every client in the match can load the
+// generated model instead of the procedural figure.
+function forgedPayload(match: Match): {
+  forged?: ForgedChampionDef[];
+  forgedAssets?: Record<string, ForgedMatchAssets>;
+} {
+  if (match.forgedDefs.length === 0) return {};
+  return {
+    forged: [...match.forgedDefs],
+    forgedAssets: forgedMatchAssets(forgeStore, match.forgedDefs),
+  };
+}
+
+// Both queues (classic and Forge) start their matches the same way; the
+// flag only decides which ladder the result will move.
+function onMatchReady(forge: boolean) {
+  return (picks: MatchPick[], source: MatchSource) => {
+    const id = nextMatchId++;
+    const seed = (Date.now() % 2_000_000_000) + id;
+    // The ranked pool fills before house bots (docs/design/bots.md): every
+    // ranked bot whose account holds no seat here is a candidate, seated
+    // from the seed, rated on its account's live way at the end.
+    const present = new Set<number>();
+    for (const p of picks) {
+      const c = clients.get(p.clientId);
+      if (c) present.add(c.accountId);
+    }
+    const pool: PoolSeat[] = [];
+    for (const bot of botStore.listDeposited()) {
+      if (present.has(bot.accountId)) continue;
+      const owner = registry.findById(bot.accountId)?.name;
+      if (owner) pool.push({ bot, owner });
+    }
+    const seated = fillWithBots(picks, seed, TEAM_SIZE, pool);
+    const match = new Match(seed, seated);
+    const botSeats = new Map<
+      number,
+      { accountId: number; name: string; botId?: string; version?: number }
+    >();
+    for (const p of seated) {
+      if (p.playbook === undefined) continue;
+      if (p.ownerId !== undefined) {
+        // A pool seat: nobody connected; the unit id is the seat's index in
+        // pick order, as buildMatchSim allocates them.
+        const unitId = match.unitIdOfPick(seated.indexOf(p));
+        if (unitId !== undefined) {
+          botSeats.set(unitId, {
+            accountId: p.ownerId,
+            name: p.name,
+            ...(p.botId !== undefined ? { botId: p.botId } : {}),
+            ...(p.botVersion !== undefined ? { version: p.botVersion } : {}),
+          });
+        }
+        continue;
+      }
+      const c = clients.get(p.clientId);
+      const player = match.players.get(p.clientId);
+      if (c && player) {
+        botSeats.set(player.unitId, {
+          accountId: c.accountId,
+          name: p.name,
+          ...(p.botId !== undefined ? { botId: p.botId } : {}),
+          ...(p.botVersion !== undefined ? { version: p.botVersion } : {}),
+        });
+      }
+    }
+    matches.set(id, {
+      match,
+      endedAt: null,
+      failures: 0,
+      abandonedAt: null,
+      ratedEligible: source === 'queue',
+      forge,
+      botSeats,
+      ledger: new PlayLedger(),
+    });
+    for (const p of picks) {
+      const c = clients.get(p.clientId);
+      if (!c) continue;
+      c.matchId = id;
+      const player = match.players.get(p.clientId);
+      if (player) {
+        send(p.clientId, {
+          t: 'match_start',
+          selfUnitId: player.unitId,
+          team: p.team,
+          ...(player.coach ? { coach: true as const } : {}),
+          ...forgedPayload(match),
+        });
+      }
+    }
+    console.log(`match ${id} started with ${picks.length} player(s)${forge ? ' (forge)' : ''}`);
+  };
+}
+
+const matchmaker = new Matchmaker(send, onMatchReady(false), undefined, {
+  // Bot seats (ADR 0013): the resolver is the account boundary, answering
+  // with the seat when THIS client owns the bot, re-validated so a stored
+  // playbook that predates a validator tightening never reaches a match.
+  resolveBot: (clientId, botId) => {
+    const c = clients.get(clientId);
+    if (!c) return null;
+    const bot = botStore.getBot(botId);
+    if (!bot || bot.accountId !== c.accountId) return null;
+    const v = validatePlaybook(bot.playbook);
+    if (!v.ok) return null;
+    return {
+      name: bot.name,
+      championId: bot.championId,
+      sigils: bot.sigils,
+      skin: bot.skin,
+      playbook: v.def,
+      botId: bot.id,
+      version: bot.version,
+    };
+  },
 });
+// The Forge queue (plan-forge phase 6): a second matchmaker whose selects
+// offer forged champions. The resolver is the account boundary: the
+// owner's finalized champions and anyone's shared ones (the gallery rule,
+// server/gallery.ts), re-validated so a stored def that predates a
+// validator tightening cannot reach match setup (where the registry
+// throws on invalid input).
+const forgeMatchmaker = new Matchmaker(send, onMatchReady(true), undefined, {
+  forge: true,
+  resolveForged: (clientId, championId) => {
+    const c = clients.get(clientId);
+    if (!c) return null;
+    const row = forgeStore.getForged(championId);
+    if (!row || !canPlayForged(row, c.accountId)) return null;
+    return validateForged(row.def).ok ? row.def : null;
+  },
+});
+// Every pre-match surface acts on both queues: a message routes to the one
+// holding the client and no-ops on the other.
+const matchmakers = [matchmaker, forgeMatchmaker];
 
 // A player leaves a live match FOR GOOD, by choice or by the AFK sweep:
 // rated walk-out penalty and queue lockout when it applies, champion to a
@@ -228,7 +621,10 @@ const matchmaker = new Matchmaker(send, (picks, source) => {
 function walkOutOfMatch(client: Client, entry: MatchEntry, matchId: number): void {
   client.matchId = null;
   rejoins.drop(client.accountId);
-  if (entry.ratedEligible && entry.match.sim.winner === null) {
+  // A coach walking out leaves nothing behind: the bot keeps playing, so
+  // there is no leaver to punish.
+  const coach = entry.match.players.get(client.id)?.coach === true;
+  if (entry.ratedEligible && entry.match.sim.winner === null && !coach) {
     const humansByTeam: [number, number] = [0, 0];
     for (const p of entry.match.players.values()) {
       if (clients.has(p.clientId)) humansByTeam[p.team] += 1;
@@ -236,7 +632,11 @@ function walkOutOfMatch(client: Client, entry: MatchEntry, matchId: number): voi
     const penalty = leaverPenalty(humansByTeam);
     const account = registry.findById(client.accountId);
     if (penalty > 0 && account) {
-      registry.penalize(account.id, penalty);
+      // The walk-out costs the ladder it was climbing: the Forge queue's
+      // own rating for a Forge match, the classic one otherwise. The
+      // lockout is shared; leaving is leaving.
+      if (entry.forge) forgeStore.penalizeForgeRating(account.id, penalty);
+      else registry.penalize(account.id, penalty);
       rejoins.lockQueue(client.accountId, Date.now() + LEAVER_LOCKOUT_MS);
       console.log(
         `match ${matchId}: ${client.name} left a rated match (-${penalty}, queue locked)`,
@@ -293,12 +693,17 @@ function sendJson(res: http.ServerResponse, status: number, body: unknown): void
 // login and is dropped rather than buffered.
 const MAX_BODY_BYTES = 2048;
 
-async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown> | null> {
+async function readJsonBody(
+  req: http.IncomingMessage,
+  // Auth bodies are tiny; a forged draft is the one legitimate big body
+  // and its route says so explicitly.
+  maxBytes = MAX_BODY_BYTES,
+): Promise<Record<string, unknown> | null> {
   let size = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES) return null;
+    if (size > maxBytes) return null;
     chunks.push(chunk as Buffer);
   }
   try {
@@ -335,6 +740,18 @@ function openSession(res: http.ServerResponse, req: http.IncomingMessage, accoun
 const server = http.createServer(async (req, res) => {
   try {
     const url = (req.url ?? '/').split('?')[0]!;
+
+    // The blanket meta-API rate limit, in front of everything /api
+    // including the sign-in routes: a script pays here before any route
+    // does work. Static files and the socket upgrade are not metered.
+    if (url.startsWith('/api/')) {
+      const address = clientAddress(req.headers, req.socket.remoteAddress, EDGE);
+      if (!apiLimiter.allow(address, Date.now())) {
+        res.setHeader('retry-after', '60');
+        sendJson(res, 429, { error: 'Too many requests; slow down.' });
+        return;
+      }
+    }
 
     // --- auth: the only routes reachable without a session ---
     if (url === '/api/register' || url === '/api/login') {
@@ -613,6 +1030,651 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 200, describeSelf(me));
         return;
       }
+      // --- bots on the account (ADR 0013): the Academy's store ---
+      if (url === '/api/bots') {
+        sendJson(res, 200, listBots(botDeps, me.id));
+        return;
+      }
+      if (url === '/api/bots/create' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, createBot(botDeps, me.id, body));
+        return;
+      }
+      if (url === '/api/bots/save' && req.method === 'POST') {
+        const body = await readJsonBody(req, PLAYBOOK_JSON_MAX + 4096);
+        sendJson(res, 200, saveBot(botDeps, me.id, body));
+        return;
+      }
+      if (url === '/api/bots/delete' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, deleteBot(botDeps, me.id, body?.id));
+        return;
+      }
+      if (url === '/api/bots/deposit' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, setDeposited(botDeps, me.id, body?.id, body?.on));
+        return;
+      }
+      if (url === '/api/bots/versions' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, listVersions(botDeps, me.id, body?.id));
+        return;
+      }
+      if (url === '/api/bots/version' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, getVersion(botDeps, me.id, body?.id, body?.version));
+        return;
+      }
+      // The Record (server/bot_records.ts): the Academy's sparring lands
+      // here with its replay; the list and one entry come back from here.
+      if (url === '/api/bots/record/add' && req.method === 'POST') {
+        const body = await readJsonBody(req, RECORD_UPLOAD_MAX);
+        const found = ownedBot(botDeps, me.id, body?.id);
+        if (!found.ok) {
+          sendJson(res, 200, found);
+          return;
+        }
+        const parsed = parseUpload(body, Date.now());
+        if (!parsed.ok) {
+          sendJson(res, 200, { ok: false, error: `not a sparring result: ${parsed.error}` });
+          return;
+        }
+        // The replay first, on a match id of its own, so the entry can
+        // point at it; a save that fails leaves an entry without one.
+        let replayId: number | null = null;
+        try {
+          const id = nextMatchId++;
+          saveJsonAtomic(path.join(REPLAYS_DIR, `${id}.json`), parsed.value.record);
+          replayId = id;
+        } catch (err) {
+          console.error('sparring replay save failed', err);
+        }
+        const { id } = addEntry(botStore, found.bot.id, me.id, { ...parsed.value.entry, replayId });
+        pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP, botStore.heldReplayIds());
+        const entry = getEntry(botStore, found.bot.id, id);
+        sendJson(res, 200, {
+          ok: true,
+          row: entry ? rowOf(entry) : null,
+          tally: botStore.tally(found.bot.id),
+        });
+        return;
+      }
+      if (url === '/api/bots/record/list' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const found = ownedBot(botDeps, me.id, body?.id);
+        sendJson(
+          res,
+          200,
+          found.ok
+            ? {
+                ok: true,
+                rows: listEntries(botStore, found.bot.id),
+                tally: botStore.tally(found.bot.id),
+              }
+            : found,
+        );
+        return;
+      }
+      if (url === '/api/bots/record/entry' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const found = ownedBot(botDeps, me.id, body?.id);
+        if (!found.ok) {
+          sendJson(res, 200, found);
+          return;
+        }
+        const entryId = typeof body?.entryId === 'number' ? body.entryId : -1;
+        const entry = getEntry(botStore, found.bot.id, entryId);
+        sendJson(res, 200, entry ? { ok: true, entry } : { ok: false, error: 'no such entry' });
+        return;
+      }
+      if (url === '/api/bots/briefing' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const found = ownedBot(botDeps, me.id, body?.id);
+        sendJson(
+          res,
+          200,
+          found.ok ? { ok: true, ...buildBriefing(nightCoachDeps, found.bot) } : found,
+        );
+        return;
+      }
+      if (url === '/api/bots/proposal' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const found = ownedBot(botDeps, me.id, body?.id);
+        sendJson(
+          res,
+          200,
+          found.ok
+            ? answerProposal(nightCoachDeps, found.bot, body?.proposalId, body?.action)
+            : found,
+        );
+        return;
+      }
+      if (url === '/api/bots/autoapply' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, setAutoApply(botDeps, me.id, body?.id, body?.on));
+        return;
+      }
+      // The Arena as it stands for this account: on-demand matches left
+      // today, the ranked pool's size, and the next round's time.
+      if (url === '/api/bots/arena') {
+        const now = Date.now();
+        const cap = arenaDeps.playNowPerDay ?? ARENA_PLAY_NOW_PER_DAY;
+        const used = botStore.arenaEventsSince(me.id, now - DAY_MS);
+        const last = botStore.arenaLastRoundAt();
+        const roundMs = arenaDeps.roundMs ?? ARENA_ROUND_MS;
+        sendJson(res, 200, {
+          ok: true,
+          left: cap <= 0 ? null : Math.max(0, cap - used),
+          cap,
+          pool: botStore.listDeposited().length,
+          nextRoundInMs: last === null ? 0 : Math.max(0, last + roundMs - now),
+        });
+        return;
+      }
+      if (url === '/api/bots/open' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, setOpenPlaybook(botDeps, me.id, body?.id, body?.on));
+        return;
+      }
+      // A bot's page (CONTEXT.md): what anyone signed in may read of a
+      // bot: its identity, its rated play, its playbook when opened.
+      if (url === '/api/bots/page' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const bot = typeof body?.id === 'string' ? botStore.getBot(body.id) : null;
+        if (!bot) {
+          sendJson(res, 200, { ok: false, error: 'no such bot' });
+          return;
+        }
+        const rated = listEntries(botStore, bot.id).filter(
+          (r) => r.kind === 'arena' || r.kind === 'live',
+        );
+        let wins = 0;
+        let losses = 0;
+        for (const r of rated) {
+          if (r.winner === null) continue;
+          if (r.winner === r.team) wins++;
+          else losses++;
+        }
+        sendJson(res, 200, {
+          ok: true,
+          bot: {
+            id: bot.id,
+            name: bot.name,
+            championId: bot.championId,
+            skin: bot.skin,
+            sigils: bot.sigils,
+            version: bot.version,
+            ranked: bot.deposited,
+            openPlaybook: bot.openPlaybook,
+            owner: registry.findById(bot.accountId)?.name ?? null,
+            accountId: bot.accountId,
+            mine: bot.accountId === me.id,
+          },
+          tally: { wins, losses },
+          ratings: {
+            live: botStore.botRating(bot.accountId, 'live'),
+            arena: botStore.botRating(bot.accountId, 'arena'),
+          },
+          rows: rated.slice(0, 10),
+          ...(bot.openPlaybook || bot.accountId === me.id ? { playbook: bot.playbook } : {}),
+        });
+        return;
+      }
+      // The pool (CONTEXT.md: Ranked): every ranked bot on the server, for
+      // the ladder's Arena tab, a page each; the ladder itself needs three
+      // rated games, the pool none.
+      if (url === '/api/bots/pool') {
+        sendJson(res, 200, {
+          ok: true,
+          bots: botStore.listDeposited().map((b) => ({
+            id: b.id,
+            name: b.name,
+            championId: b.championId,
+            owner: registry.findById(b.accountId)?.name ?? null,
+            mine: b.accountId === me.id,
+            tally: botStore.tally(b.id),
+            arena: botStore.botRating(b.accountId, 'arena').rating,
+          })),
+        });
+        return;
+      }
+      if (url === '/api/bots/challenge' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, await challenge(arenaDeps, me.id, body?.id, body?.target));
+        return;
+      }
+      if (url === '/api/bots/playnow' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, await playNow(arenaDeps, me.id, body?.id));
+        return;
+      }
+      if (url === '/api/bots/revert' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, revertBot(botDeps, me.id, body?.id, body?.version));
+        return;
+      }
+      // The coach: streamed as NDJSON like the kit conversation, the
+      // comment as the model writes it and each operation as it applies.
+      // The conversation kept with the bot (server/bot_chats.ts): read on
+      // opening the bot in the Academy, cleared on Start over.
+      if (url === '/api/bots/chat' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, botChat(botDeps, me.id, body?.id));
+        return;
+      }
+      if (url === '/api/bots/chat/clear' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        sendJson(res, 200, clearBotChat(botDeps, me.id, body?.id));
+        return;
+      }
+      if (url === '/api/bots/suggest' && req.method === 'POST') {
+        const body = await readJsonBody(req, PLAYBOOK_JSON_MAX + 160_000);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        // A new message rides the thread kept with the bot; a whole thread
+        // in the body (the older client) still answers, unkept.
+        const text = typeof body?.text === 'string' ? body.text : null;
+        if (!id || (text === null && !Array.isArray(body?.messages))) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        const stored = text !== null ? botStore.getChat(id) : [];
+        const quota = checkQuota(quotaDeps, me.id, 'agent');
+        if (!quota.ok) {
+          sendJson(res, 200, quota);
+          return;
+        }
+        res.writeHead(200, {
+          'content-type': 'application/x-ndjson',
+          'cache-control': 'no-store',
+          'x-accel-buffering': 'no',
+        });
+        const outcome = await coachPlaybook(coachDeps, me.id, {
+          id,
+          messages:
+            text !== null
+              ? windowTurns(stored, text)
+              : (body?.messages as { role: 'user' | 'assistant'; text: string }[]),
+          ...(body?.playbook !== undefined ? { playbook: body.playbook } : {}),
+          depth: body?.depth === 'deep' ? 'deep' : 'quick',
+          onProgress: (p) => {
+            res.write(`${JSON.stringify({ progress: p.kind, ...p })}\n`);
+          },
+        });
+        if (outcome.ok) {
+          spendQuota(quotaDeps, me.id, 'agent');
+          if (text !== null) {
+            botStore.setChat(
+              id,
+              appendExchange(
+                stored,
+                text,
+                outcome.raw,
+                outcome.refused.map((r) => r.error),
+              ),
+              Date.now(),
+            );
+          }
+        }
+        res.end(`${JSON.stringify(outcome)}\n`);
+        return;
+      }
+      // --- the Forge (ADR 0010, ADR 0011): drafts, ledger, finalize ---
+      if (url === '/api/forge/drafts') {
+        const out = listDrafts(forgeDeps, me.id);
+        // Each row carries its current splash, and once its model is
+        // built (sealed or not: the build lands assets on a draft too)
+        // its model and sheet (relative asset paths), so the draft rail,
+        // the Forge-queue select, and the workshop can reach the files.
+        sendJson(
+          res,
+          200,
+          out.ok
+            ? {
+                ...out,
+                drafts: out.drafts.map((d) => {
+                  const assets = forgeStore.forgedAssets(d.id) as Record<string, unknown> | null;
+                  const pointers = modelPointers(assets);
+                  const a = assets as { sheet?: string; family?: string; weapon?: string } | null;
+                  return {
+                    ...d,
+                    splash: splashOf(forgeStore, d),
+                    model: pointers.model,
+                    sheet: a?.sheet ?? null,
+                    family: a?.family ?? null,
+                    weapon: a?.weapon ?? null,
+                    clips: pointers.clips,
+                    clipFiles: pointers.clipFiles,
+                    display: assets ? displayOf(forgeStore, d.id) : null,
+                  };
+                }),
+              }
+            : out,
+        );
+        return;
+      }
+      if (url === '/api/forge/draft' && req.method === 'POST') {
+        const body = await readJsonBody(req, DRAFT_JSON_MAX + 1024);
+        if (!body || typeof body.def !== 'object' || body.def === null) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        sendJson(res, 200, saveDraft(forgeDeps, me.id, me.name, body.def as ForgedChampionDef));
+        return;
+      }
+      if (url === '/api/forge/draft/delete' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        const outcome = id
+          ? deleteDraft(forgeDeps, me.id, id)
+          : { ok: false as const, error: 'malformed request' };
+        // A deleted draft takes its art candidates and their files along.
+        if (outcome.ok && id) deleteArtFor(artDeps, id);
+        sendJson(res, 200, outcome);
+        return;
+      }
+      if (url === '/api/forge/build' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        if (!id) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        // The daily generation quota (phase 8) is checked first and spent
+        // only when the chain actually starts: a refused build (invalid
+        // kit, no credits) never burns a day's allowance.
+        const quota = checkQuota(quotaDeps, me.id, 'generation');
+        if (!quota.ok) {
+          sendJson(res, 200, quota);
+          return;
+        }
+        const outcome = buildModel(forgeDeps, me.id, id);
+        if (outcome.ok) spendQuota(quotaDeps, me.id, 'generation');
+        // `done` is the async job's settling; the wire answer is the id.
+        sendJson(res, 200, outcome.ok ? { ok: true, jobId: outcome.jobId } : outcome);
+        return;
+      }
+      if (url === '/api/forge/animate' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        if (!id) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        // Rides the same daily generation meter as the build (it is a 3D
+        // chain too), spent only when it actually starts.
+        const quota = checkQuota(quotaDeps, me.id, 'generation');
+        if (!quota.ok) {
+          sendJson(res, 200, quota);
+          return;
+        }
+        // The style prefill plus the player's per-role picks (validated
+        // against the provider catalog in animateChampion).
+        const family = typeof body?.family === 'string' ? body.family : undefined;
+        const outcome = animateChampion(forgeDeps, me.id, id, family, body?.clips);
+        if (outcome.ok) spendQuota(quotaDeps, me.id, 'generation');
+        sendJson(res, 200, outcome.ok ? { ok: true, jobId: outcome.jobId } : outcome);
+        return;
+      }
+      if (url === '/api/forge/animations') {
+        // The pickable animation catalog, per clip role, plus each
+        // style's suggested set: what the editor's five selects render.
+        const provider = forgeDeps.generation?.provider;
+        sendJson(
+          res,
+          200,
+          provider
+            ? {
+                ok: true,
+                // The provider's presets plus the house library, the
+                // same merged catalog the bake validates against.
+                roles: catalogRoles(provider),
+                defaults: Object.fromEntries(
+                  WEAPON_FAMILIES.map((f) => [f, provider.clipDefaults(f)]),
+                ),
+              }
+            : { ok: false, error: 'generation is not configured on this server yet' },
+        );
+        return;
+      }
+      if (url === '/api/forge/weapon' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        if (!id) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        // Rides the same daily generation meter as the build (it is a 3D
+        // build), spent only when the chain actually starts.
+        const quota = checkQuota(quotaDeps, me.id, 'generation');
+        if (!quota.ok) {
+          sendJson(res, 200, quota);
+          return;
+        }
+        const outcome = forgeWeapon(forgeDeps, me.id, id);
+        if (outcome.ok) spendQuota(quotaDeps, me.id, 'generation');
+        sendJson(res, 200, outcome.ok ? { ok: true, jobId: outcome.jobId } : outcome);
+        return;
+      }
+      if (url === '/api/forge/job') {
+        const q = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+        const jobId = Number(q.get('id'));
+        sendJson(
+          res,
+          200,
+          Number.isInteger(jobId)
+            ? finalizeStatus(forgeDeps, me.id, jobId)
+            : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      // --- 2D art candidates (plan-forge phase 4): splash and icons ---
+      if (url === '/api/forge/art') {
+        const q = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+        const id = q.get('id');
+        sendJson(
+          res,
+          200,
+          id ? listArt(artDeps, me.id, id) : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      if (url === '/api/forge/art/generate' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        const kind = typeof body?.kind === 'string' ? body.kind : '';
+        const line = typeof body?.line === 'string' ? body.line : '';
+        // fromCid iterates on an existing candidate (its image rides the
+        // generation); absent means a fresh start.
+        const fromCid = Number.isInteger(body?.fromCid) ? (body?.fromCid as number) : undefined;
+        if (!id) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        // Awaited on purpose: one 2D image is seconds, not the minutes of
+        // a finalize chain, so the candidate answers on the same request.
+        sendJson(
+          res,
+          200,
+          await generateArt(artDeps, me.id, {
+            id,
+            kind,
+            line,
+            ...(fromCid !== undefined ? { fromCid } : {}),
+          }),
+        );
+        return;
+      }
+      if (url === '/api/forge/art/pick' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        const cid = Number(body?.cid);
+        sendJson(
+          res,
+          200,
+          id && Number.isInteger(cid)
+            ? chooseArt(artDeps, me.id, { id, cid })
+            : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      // The workshop's display tuning (height, facing, weapon grip):
+      // owner-only, finalized-only, clamped by the shared sanitizer.
+      if (url === '/api/forge/display' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        sendJson(
+          res,
+          200,
+          id
+            ? setForgedDisplay({ store: forgeStore }, me.id, id, body?.display)
+            : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      // The explicit seal and unseal (playtest: a lock must be its own
+      // click, never a side effect of animating). Owner-only, free.
+      if ((url === '/api/forge/seal' || url === '/api/forge/unseal') && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        const act = url === '/api/forge/seal' ? sealChampion : unsealChampion;
+        sendJson(
+          res,
+          200,
+          id ? act({ store: forgeStore }, me.id, id) : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      // The kit conversation: owner-only, drafts only, metered on the
+      // agent quota, one unit per player message, spent only when a
+      // proposal lands. The body carries the whole thread plus the
+      // unsaved form state, hence the wide cap.
+      if (url === '/api/forge/suggest' && req.method === 'POST') {
+        const body = await readJsonBody(req, DRAFT_JSON_MAX + 160_000);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        if (!id || !Array.isArray(body?.messages)) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        const quota = checkQuota(quotaDeps, me.id, 'agent');
+        if (!quota.ok) {
+          sendJson(res, 200, quota);
+          return;
+        }
+        // Streamed as NDJSON: progress lines while the model writes (its
+        // words as they come, the stages between calls), the outcome as
+        // the last line, so the conversation reads like a chat instead
+        // of a silent wait.
+        res.writeHead(200, {
+          'content-type': 'application/x-ndjson',
+          'cache-control': 'no-store',
+          'x-accel-buffering': 'no',
+        });
+        const outcome = await suggestKit(suggestDeps, me.id, {
+          id,
+          messages: body.messages as { role: 'user' | 'assistant'; text: string }[],
+          ...(body.def !== undefined ? { def: body.def } : {}),
+          onProgress: (p) => {
+            res.write(`${JSON.stringify({ progress: p.kind, text: p.text })}\n`);
+          },
+        });
+        if (outcome.ok) spendQuota(quotaDeps, me.id, 'agent');
+        res.end(`${JSON.stringify(outcome)}\n`);
+        return;
+      }
+      // Reforge, first slice: a sealed champion's basic-attack reach.
+      // Owner-only; the patched def must clear the full validation gate
+      // (bounds and power budget) before it is stored.
+      if (url === '/api/forge/reach' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        sendJson(
+          res,
+          200,
+          id
+            ? setForgedAttackRange({ store: forgeStore }, me.id, id, body?.attackRange)
+            : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      // Generated files (splash art, model sheets, models) for logged-in
+      // clients. Paths are relative to ASSETS_DIR and produced by this
+      // server alone; the join is still guarded against traversal.
+      const assetUrl = /^\/api\/forge\/asset\/(.+)$/.exec(url);
+      if (assetUrl) {
+        const rel = decodeURIComponent(assetUrl[1] ?? '');
+        const filePath = path.join(ASSETS_DIR, rel);
+        if (!filePath.startsWith(ASSETS_DIR + path.sep) || rel.includes('..')) {
+          sendJson(res, 403, { error: 'no' });
+          return;
+        }
+        try {
+          const body = await readFile(filePath);
+          res.writeHead(200, {
+            'content-type': MIME[path.extname(filePath)] ?? 'application/octet-stream',
+            // Candidate files are content-stable (one file per generation);
+            // the finalize outputs only change on a future Reforge.
+            'cache-control': 'private, max-age=3600',
+          });
+          res.end(body);
+        } catch {
+          sendJson(res, 404, { error: 'no such asset' });
+        }
+        return;
+      }
+      // --- the gallery (plan-forge phase 7): browse, likes, reports ---
+      if (url === '/api/gallery') {
+        const q = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+        sendJson(
+          res,
+          200,
+          listGallery(galleryDeps, me.id, {
+            sort: q.get('sort') === 'popular' ? 'popular' : 'recent',
+            q: q.get('q') ?? '',
+            playable: q.get('playable') === '1',
+          }),
+        );
+        return;
+      }
+      if (url === '/api/gallery/like' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        sendJson(
+          res,
+          200,
+          id
+            ? toggleLike(galleryDeps, me.id, id, body?.on === true)
+            : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      if (url === '/api/gallery/report' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        const reason = typeof body?.reason === 'string' ? body.reason : '';
+        sendJson(
+          res,
+          200,
+          id
+            ? reportForged(galleryDeps, me.id, id, reason)
+            : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
+      if (url === '/api/gallery/visibility' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        sendJson(
+          res,
+          200,
+          id
+            ? setVisibility(galleryDeps, me.id, id, {
+                ...(typeof body?.listed === 'boolean' ? { listed: body.listed } : {}),
+                ...(typeof body?.shared === 'boolean' ? { shared: body.shared } : {}),
+              })
+            : { ok: false, error: 'malformed request' },
+        );
+        return;
+      }
       // Fixing a typo at signup, moving mailbox, or adding an address to
       // an account old enough not to have one.
       if (url === '/api/email') {
@@ -660,6 +1722,20 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (url === '/api/ladder') {
+        // way=bot and way=arena are the bot ladders (ADR 0013); no way is
+        // the hand ladder, unchanged.
+        const way = new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('way');
+        if (way === 'bot' || way === 'arena') {
+          sendJson(
+            res,
+            200,
+            buildBotLadder(
+              botStore.listBotRatings(way === 'bot' ? 'live' : 'arena'),
+              (aid) => registry.findById(aid)?.name ?? null,
+            ),
+          );
+          return;
+        }
         sendJson(res, 200, buildLadder(registry.all()));
         return;
       }
@@ -844,7 +1920,13 @@ wss.on('connection', (ws, req) => {
           entry.match.restorePlayer(id, seat);
           entry.abandonedAt = null;
           client.matchId = seat.matchId;
-          send(id, { t: 'match_start', selfUnitId: seat.unitId, team: seat.team });
+          send(id, {
+            t: 'match_start',
+            selfUnitId: seat.unitId,
+            team: seat.team,
+            ...(seat.coach ? { coach: true as const } : {}),
+            ...forgedPayload(entry.match),
+          });
           for (const cid of entry.match.players.keys()) {
             if (cid !== id) send(cid, { t: 'player_back', name: seat.name, team: seat.team });
           }
@@ -875,14 +1957,19 @@ wss.on('connection', (ws, req) => {
           break;
         }
         if (atCapacity) refuseCapacity();
-        else matchmaker.addToQueue(id, client.name, now);
+        else {
+          // One seat across both queues: entering one leaves the other.
+          const mm = msg.forge === true ? forgeMatchmaker : matchmaker;
+          for (const other of matchmakers) if (other !== mm) other.removeEverywhere(id, now);
+          mm.addToQueue(id, client.name, now);
+        }
         break;
       }
       case 'start_now':
-        if (!inMatch) matchmaker.startNow(id, now);
+        if (!inMatch) for (const mm of matchmakers) mm.startNow(id, now);
         break;
       case 'leave': {
-        matchmaker.removeEverywhere(id);
+        for (const mm of matchmakers) mm.removeEverywhere(id);
         // A deliberate walk-out from a live match: hand the champion to a
         // bot for good and hold NO seat reservation. Reservations are for
         // dropped connections; a player who chose to leave (end screen,
@@ -907,10 +1994,18 @@ wss.on('connection', (ws, req) => {
       case 'create_lobby':
         if (inMatch) break;
         if (atCapacity) refuseCapacity();
-        else matchmaker.createLobby(id, client.name, now);
+        else {
+          // Lobbies live on the classic matchmaker; a Forge-queue seat is
+          // given up on the way in, like any other queue switch.
+          forgeMatchmaker.removeEverywhere(id, now);
+          matchmaker.createLobby(id, client.name, now);
+        }
         break;
       case 'join_lobby':
-        if (!inMatch) matchmaker.joinLobby(id, client.name, String(msg.code ?? ''));
+        if (!inMatch) {
+          forgeMatchmaker.removeEverywhere(id, now);
+          matchmaker.joinLobby(id, client.name, String(msg.code ?? ''));
+        }
         break;
       case 'lobby_team':
         if (!inMatch) matchmaker.setLobbyTeam(id, msg.team);
@@ -938,14 +2033,19 @@ wss.on('connection', (ws, req) => {
           break;
         }
         client.matchId = msg.matchId as number;
-        send(id, { t: 'match_start', selfUnitId: 0, team: msg.team === 1 ? 1 : 0 });
+        send(id, {
+          t: 'match_start',
+          selfUnitId: 0,
+          team: msg.team === 1 ? 1 : 0,
+          ...forgedPayload(target.match),
+        });
         break;
       }
       case 'start_lobby':
         if (!inMatch) matchmaker.startLobby(id, now);
         break;
       case 'pick':
-        matchmaker.pick(id, msg.championId, msg.sigils, msg.skin);
+        for (const mm of matchmakers) mm.pick(id, msg.championId, msg.sigils, msg.skin, msg.bot);
         break;
       case 'chat':
       case 'ping': {
@@ -986,7 +2086,7 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', () => {
     connections.release(ip);
-    matchmaker.removeEverywhere(id);
+    for (const mm of matchmakers) mm.removeEverywhere(id);
     const matchId = client.matchId;
     clients.delete(id);
     // Reap matches whose players are all gone (review F.2: ghost matches
@@ -1027,7 +2127,7 @@ setInterval(() => {
   const now = Date.now();
   acc += Math.min(now - last, 500);
   last = now;
-  matchmaker.tickClock(now);
+  for (const mm of matchmakers) mm.tickClock(now);
 
   // Reap abandoned matches whose rejoin grace ran out.
   for (const [matchId, entry] of matches) {
@@ -1043,6 +2143,9 @@ setInterval(() => {
     for (const [matchId, entry] of matches) {
       try {
         entry.match.tick();
+        if (entry.botSeats.size > 0) {
+          entry.ledger.observe(entry.match.sim.tickCount, entry.match.lastEvents, entry.match.sim);
+        }
         const score = entry.match.sim.tickCount % 40 === 0 ? entry.match.buildScore() : null;
         for (const player of entry.match.players.values()) {
           const snap = entry.match.buildSnapshotFor(player.clientId);
@@ -1082,37 +2185,60 @@ setInterval(() => {
             const c = clients.get(p.clientId);
             if (c) accountIdByUnit.set(p.unitId, c.accountId);
           }
-          // Rating policy (server/rating.ts): only public-queue matches
-          // with at least one human on each side are rated; every human
-          // on a team moves together.
-          const seats: RatedSeat[] = [];
+          // Rating policy (server/rating.ts, server/match_rating.ts): only
+          // public-queue matches with an OWNED seat on each side are rated,
+          // by hand or by the account's bot; every owned seat on a team
+          // moves together, each on the rating of its way. A Forge match
+          // reads and moves the Forge queue's own rating (ADR 0011), same
+          // policy, own ladder. A coach who closed the tab is still rated:
+          // the bot seat is the account's, connected or not.
+          const owned: OwnedSeat[] = [];
           for (const p of entry.match.players.values()) {
+            if (p.coach) continue;
             const pid = accountIdByUnit.get(p.unitId);
-            const account = pid !== undefined ? registry.findById(pid) : undefined;
-            if (pid !== undefined && account) {
-              seats.push({ accountId: pid, team: p.team, rating: account.rating });
+            if (pid !== undefined && registry.findById(pid)) {
+              owned.push({ accountId: pid, team: p.team, way: 'hand' });
             }
           }
-          const humansByTeam: [number, number] = [
-            seats.filter((s) => s.team === 0).length,
-            seats.filter((s) => s.team === 1).length,
-          ];
-          const rated = entry.ratedEligible && isRated(humansByTeam);
-          const deltas = rated
-            ? ratingDeltas(seats, entry.match.sim.winner)
-            : new Map<number, number>();
-          for (const [pid, delta] of deltas) registry.applyRating(pid, delta);
-          // Tell each human what the match did to their rating; the end
-          // screen shows it next to the final scoreboard.
+          const ways = new Map<number, 'bot'>();
+          for (const [unitId, seat] of entry.botSeats) {
+            const u = entry.match.sim.units.get(unitId);
+            if (!u || !registry.findById(seat.accountId)) continue;
+            accountIdByUnit.set(unitId, seat.accountId);
+            ways.set(unitId, 'bot');
+            owned.push({ accountId: seat.accountId, team: u.team, way: 'bot' });
+          }
+          const book: RatingBook = {
+            read: (pid, way) => {
+              if (way === 'bot') return botStore.botRating(pid, 'live').rating;
+              if (entry.forge) return forgeStore.forgeRating(pid).rating;
+              return registry.findById(pid)?.rating ?? BASE_RATING;
+            },
+            apply: (pid, way, delta) => {
+              if (way === 'bot') botStore.applyBotRating(pid, 'live', delta);
+              else if (entry.forge) forgeStore.applyForgeRating(pid, delta);
+              else registry.applyRating(pid, delta);
+            },
+          };
+          const outcome = rateMatch(owned, entry.match.sim.winner, entry.ratedEligible, book);
+          const rated = outcome.rated;
+          const deltas = new Map<number, number>();
+          for (const r of outcome.results) deltas.set(r.accountId, r.delta);
+          // Tell each connected owner what the match did to their rating;
+          // the end screen shows it next to the final scoreboard.
           for (const p of entry.match.players.values()) {
             const pid = accountIdByUnit.get(p.unitId);
-            const account = pid !== undefined ? registry.findById(pid) : undefined;
-            if (pid === undefined || !account) continue;
+            const result = outcome.results.find(
+              (r) => r.accountId === pid && r.way === (p.coach ? 'bot' : 'hand'),
+            );
+            if (pid === undefined || !result) continue;
             send(p.clientId, {
               t: 'match_result',
               rated,
-              delta: deltas.get(pid) ?? 0,
-              rating: account.rating,
+              delta: result.delta,
+              rating: result.rating,
+              ...(entry.forge ? { queue: 'forge' as const } : {}),
+              ...(p.coach ? { way: 'bot' as const } : {}),
             });
           }
           // Save the replay first so the match record can point at it.
@@ -1125,9 +2251,12 @@ setInterval(() => {
                 picks: entry.match.replayPicks,
                 events: entry.match.replayEvents,
                 ticks: entry.match.sim.tickCount,
+                // A forged id means nothing outside its match: the replay
+                // carries the definitions themselves (ADR 0010).
+                ...forgedPayload(entry.match),
               });
               replayId = matchId;
-              pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP);
+              pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP, botStore.heldReplayIds());
             } catch (err) {
               console.error('replay save failed', err);
             }
@@ -1140,7 +2269,7 @@ setInterval(() => {
               entry.match.sim.winner,
               entry.match.sim.time,
               now,
-              { rated, deltas },
+              { rated, deltas, ways, ...(entry.forge ? { queue: 'forge' as const } : {}) },
               replayId,
             );
             matchLog.push(rec);
@@ -1150,6 +2279,34 @@ setInterval(() => {
               console.error('match log append failed', err);
             }
             console.log(`match ${matchId} recorded (${accountIdByUnit.size} human seat(s))`);
+            // The bot seats' Records: the same rows and the ledger's report,
+            // kind live, the rating movement when there was one.
+            const report = entry.ledger.report();
+            for (const [unitId, seat] of entry.botSeats) {
+              if (seat.botId === undefined) continue;
+              const u = entry.match.sim.units.get(unitId);
+              if (!u) continue;
+              const delta = deltas.get(seat.accountId);
+              try {
+                addEntry(botStore, seat.botId, seat.accountId, {
+                  kind: 'live',
+                  at: now,
+                  seed: entry.match.seed,
+                  team: u.team,
+                  winner: entry.match.sim.winner,
+                  ticks: entry.match.sim.tickCount,
+                  version: seat.version ?? 1,
+                  edited: false,
+                  botUnitId: unitId,
+                  score: score.rows,
+                  report,
+                  replayId: replayId ?? null,
+                  ...(rated && delta !== undefined ? { ratingDelta: delta } : {}),
+                });
+              } catch (err) {
+                console.error('record entry failed', err);
+              }
+            }
           }
         }
         if (entry.endedAt !== null && now - entry.endedAt > MATCH_LINGER_MS) {
@@ -1228,6 +2385,13 @@ setInterval(() => {
   // In memory and minutes old, so this is the one that would never grow
   // anyway; swept here so nothing is left holding a state from last week.
   discordFlows.purge(now);
+  // Rate-limit windows are a minute long; addresses idle past one go.
+  apiLimiter.purge(now);
+  // Quota events older than the day window will never be counted again.
+  forgeStore.pruneQuotaEvents(now - DAY_MS);
+  botStore.pruneArenaEvents(now - DAY_MS);
+  // Reports older than a week have been briefed and coached on already.
+  botStore.pruneBotReports(now - 7 * DAY_MS);
   if (sessionsDropped + tokensDropped + claimsReleased > 0) {
     console.log(
       `housekeeping: ${sessionsDropped} session(s), ${tokensDropped} link(s), ` +
@@ -1236,11 +2400,39 @@ setInterval(() => {
   }
 }, 60 * 60_000).unref();
 
+// The Arena's rounds: checked every minute, run when due, one round at a
+// time; the round stamps itself first so a crash never replays it.
+let arenaRoundRunning = false;
+setInterval(() => {
+  // The night: once a day, after the rounds, every deposited bot is
+  // briefed and coached, one after another on the same runner.
+  if (!arenaRoundRunning && nightDue(botStore.arenaLastNightAt(), Date.now())) {
+    arenaRoundRunning = true;
+    botStore.setArenaLastNightAt(Date.now());
+    void runNight(nightCoachDeps)
+      .catch((err) => console.error('night coach failed', err))
+      .finally(() => {
+        arenaRoundRunning = false;
+      });
+    return;
+  }
+  if (arenaRoundRunning || !roundDue(arenaDeps)) return;
+  arenaRoundRunning = true;
+  void runArenaRound(arenaDeps)
+    .catch((err) => console.error('arena round failed', err))
+    .finally(() => {
+      arenaRoundRunning = false;
+    });
+}, 60_000).unref();
+
 server.listen(PORT, () => {
   console.log(`claude-of-legends server on :${PORT} (serving ${DIST})`);
   // Said at boot so a misconfigured relay is found now, rather than the
   // first time a player forgets their password.
   console.log(`mail: ${mailer.description}, links point at ${ORIGIN}`);
+  console.log(
+    `arena: ${arenaRunner.hasWorker ? 'worker thread' : 'inline (no worker bundle found)'}`,
+  );
   console.log(
     DISCORD
       ? `discord: sign-in on, redirect ${DISCORD.redirectUri}`

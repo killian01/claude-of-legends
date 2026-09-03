@@ -63,7 +63,7 @@ describe('remote policy parity', () => {
     sim.addRemoteSeat(b.id);
     expect(a.lane).not.toBeNull();
     expect(b.lane).not.toBeNull();
-    // Round robin counts both kinds, so two seats never stack on one lane.
+    // Home lanes count every seat, so two seats never stack on one lane.
     expect(a.lane).not.toBe(b.lane);
   });
 });

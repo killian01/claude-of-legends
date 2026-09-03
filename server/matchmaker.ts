@@ -8,6 +8,8 @@ import type { ServerMsg } from '../src/net/protocol';
 import { CHAMPION_LIST, CHAMPIONS, DEFAULT_CHAMPION_ID } from '../src/sim/content/champions';
 import { SIGILS } from '../src/sim/content/sigils';
 import { clampSkin } from '../src/sim/content/skins';
+import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
+import type { PlaybookDef } from '../src/sim/playbook/types';
 import type { TeamId } from '../src/sim/types';
 import type { MatchPick } from './match';
 import { packGroups } from './party';
@@ -36,7 +38,20 @@ interface QueueGroup {
 
 interface SelectEntry extends Pending {
   team: TeamId;
-  locked: { championId: string; sigils: [string, string]; skin: number } | null;
+  // forged rides along when the locked champion is a forged definition the
+  // resolver approved for this client; match setup embeds it in the picks.
+  locked: {
+    championId: string;
+    sigils: [string, string];
+    skin: number;
+    forged?: ForgedChampionDef;
+    // A bot seat (ADR 0013): the account's own bot, resolved by the
+    // account boundary; its playbook rides into the picks.
+    playbook?: PlaybookDef;
+    botName?: string;
+    botId?: string;
+    botVersion?: number;
+  } | null;
 }
 
 // Where a match came from: only public-queue matches are ever rated
@@ -66,6 +81,30 @@ interface Lobby {
 type Send = (clientId: number, msg: ServerMsg) => void;
 type OnMatchReady = (picks: MatchPick[], source: MatchSource) => void;
 
+// The Forge queue (plan-forge phase 6) is a second Matchmaker instance
+// with these options: its selects are tagged so clients offer the forged
+// roster, and the resolver is the account boundary, answering with the
+// definition when THIS client may play that forged champion and null
+// otherwise. The Matchmaker itself stays account-blind.
+// The account's own bot in a seat (ADR 0013): what the resolver hands
+// back when THIS client owns the bot.
+export interface BotSeat {
+  name: string;
+  championId: string;
+  sigils: [string, string];
+  skin: number;
+  playbook: PlaybookDef;
+  // The bot and the playbook version playing, for its Record at the end.
+  botId: string;
+  version: number;
+}
+
+export interface MatchmakerOptions {
+  forge?: boolean;
+  resolveForged?: (clientId: number, championId: string) => ForgedChampionDef | null;
+  resolveBot?: (clientId: number, botId: string) => BotSeat | null;
+}
+
 // Crypto-random codes: a counter transform was reproducible offline, so any
 // third party could enumerate live lobbies. Ambiguous letters are excluded.
 const CODE_LETTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ';
@@ -88,6 +127,7 @@ export class Matchmaker {
     private readonly onMatchReady: OnMatchReady,
     // Injectable for tests; production uses the crypto-random default.
     private readonly codeGen: () => string = randomCode,
+    private readonly opts: MatchmakerOptions = {},
   ) {}
 
   private queuedSeats(): number {
@@ -308,16 +348,46 @@ export class Matchmaker {
         team: e.team,
         players: roster,
         deadline: session.deadline,
+        ...(this.opts.forge ? { forge: true } : {}),
       });
     }
   }
 
-  pick(clientId: number, championId: string, sigils: [string, string], skin?: number): void {
+  pick(
+    clientId: number,
+    championId: string,
+    sigils: [string, string],
+    skin?: number,
+    botId?: string,
+  ): void {
     const session = this.inSelect(clientId);
     if (!session) return;
     const entry = session.entries.find((e) => e.clientId === clientId);
     if (!entry) return;
+    // A bot pick (ADR 0013): the resolver is the account boundary; the
+    // bot's own champion, sigils and skin replace what the client sent.
+    let seat: BotSeat | null = null;
+    if (typeof botId === 'string' && this.opts.resolveBot) {
+      seat = this.opts.resolveBot(clientId, botId);
+      if (seat) {
+        championId = seat.championId;
+        sigils = seat.sigils;
+        skin = seat.skin;
+      }
+    }
     let champ = CHAMPIONS[championId] ? championId : DEFAULT_CHAMPION_ID;
+    // A Forge-queue pick outside the roster asks the resolver: only the
+    // definition of a forged champion THIS client may play comes back.
+    // Anything unresolved falls back to the default champion, like any
+    // other invalid pick.
+    let forged: ForgedChampionDef | undefined;
+    if (!CHAMPIONS[championId] && this.opts.forge) {
+      const def = this.opts.resolveForged?.(clientId, championId) ?? null;
+      if (def) {
+        champ = championId;
+        forged = def;
+      }
+    }
     // No duplicate champions within a team (game definition): a taken pick
     // falls back to the first free champion in roster order.
     const teamTaken = session.entries
@@ -325,6 +395,8 @@ export class Matchmaker {
       .map((e) => e.locked?.championId);
     if (teamTaken.includes(champ)) {
       champ = CHAMPION_LIST.find((c) => !teamTaken.includes(c.id))?.id ?? DEFAULT_CHAMPION_ID;
+      forged = undefined;
+      seat = null;
     }
     const valid =
       Array.isArray(sigils) &&
@@ -335,6 +407,15 @@ export class Matchmaker {
       championId: champ,
       sigils: valid ? [sigils[0], sigils[1]] : DEFAULT_SIGILS,
       skin: clampSkin(champ, skin),
+      ...(forged ? { forged } : {}),
+      ...(seat
+        ? {
+            playbook: seat.playbook,
+            botName: seat.name,
+            botId: seat.botId,
+            botVersion: seat.version,
+          }
+        : {}),
     };
     const locked = session.entries.filter((e) => e.locked).length;
     for (const e of session.entries) {
@@ -387,11 +468,15 @@ export class Matchmaker {
     if (idx !== -1) this.selects.splice(idx, 1);
     const picks: MatchPick[] = session.entries.map((e) => ({
       clientId: e.clientId,
-      name: e.name,
+      name: e.locked?.botName ? `${e.name} (${e.locked.botName})` : e.name,
       team: e.team,
       championId: e.locked?.championId ?? DEFAULT_CHAMPION_ID,
       sigils: e.locked?.sigils ?? DEFAULT_SIGILS,
       skin: e.locked?.skin ?? 0,
+      ...(e.locked?.forged ? { forged: e.locked.forged } : {}),
+      ...(e.locked?.playbook ? { playbook: e.locked.playbook } : {}),
+      ...(e.locked?.botId !== undefined ? { botId: e.locked.botId } : {}),
+      ...(e.locked?.botVersion !== undefined ? { botVersion: e.locked.botVersion } : {}),
     }));
     this.onMatchReady(picks, session.source);
   }

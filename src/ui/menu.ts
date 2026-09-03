@@ -11,6 +11,9 @@ import type { LobbyPlayer, SelectPlayer } from '../net/protocol';
 import { CHAMPION_LIST } from '../sim/content/champions';
 import { SIGIL_LIST } from '../sim/content/sigils';
 import { SKINS } from '../sim/content/skins';
+import type { ForgedChampionDef } from '../sim/forge/forged_def';
+import { resolveForgedChampion } from '../sim/forge/resolve';
+import type { PlaybookDef } from '../sim/playbook/types';
 import type { AbilityKey, TeamId } from '../sim/types';
 import { ROLE_COLORS, setPortrait } from './champion_art';
 import { describeAbility, describeSigil } from './describe';
@@ -78,6 +81,21 @@ const CSS = `
 .menu-players { font-size: 13px; margin: 6px 0 10px; color: #aac2dd; }
 .menu-card.select { width: min(1780px, 97vw); max-height: 96vh; }
 .menu-select-layout { display: flex; gap: 22px; align-items: flex-start; }
+/* Champions and your bots on two tabs: a bot card wears its champion's
+   face, and beside the roster that read as the same champion twice. */
+.menu-tabs { display: flex; gap: 6px; margin: 2px 0 6px; }
+.menu-tab {
+  padding: 6px 14px; border-radius: 6px; border: 1px solid #2c4160; background: #101a2c;
+  color: #7e93b2; cursor: pointer; font-size: 12px; font-weight: 700;
+}
+.menu-tab:hover { border-color: #5b84c9; }
+.menu-tab.on { color: #e6eefc; border-color: #5b84c9; background: #1d3a63; }
+.menu-champ.bot { position: relative; }
+.menu-champ-badge {
+  position: absolute; top: 6px; left: 6px; z-index: 1; padding: 2px 6px; border-radius: 4px;
+  background: #1d3a63; border: 1px solid #5b84c9; color: #cfe3ff;
+  font-size: 9px; font-weight: 800; letter-spacing: 1px;
+}
 .menu-select-main { flex: 1; min-width: 0; }
 .menu-select-side { width: 300px; flex: none; }
 .menu-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 6px 0 4px; }
@@ -98,6 +116,14 @@ const CSS = `
 .menu-champ-portrait {
   position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
   background: radial-gradient(circle at 50% 38%, #1d3a63 0%, #0a1120 90%);
+}
+/* Forged champions have no art pipeline yet: a monogram stands where the
+   portrait chain would. */
+.menu-champ-monogram {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  padding-bottom: 26px; font-size: 46px; font-weight: 800; letter-spacing: 1px;
+  background: radial-gradient(circle at 50% 38%, #3a2d63 0%, #0a1120 90%);
+  color: #b9a8e8; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6);
 }
 .menu-champ-body {
   position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 10px 9px; min-width: 0;
@@ -324,12 +350,56 @@ export interface SelectController {
   remove(): void;
 }
 
+// One community card at Forge-queue select: another creator's shared
+// champion (the gallery's playable listing), liked ones pinned first.
+export interface CommunityPick {
+  def: ForgedChampionDef;
+  creator: string;
+  likes: number;
+  likedByMe: boolean;
+  // Splash path relative to the server's asset route, when one exists.
+  splash?: string | null;
+  // Model pointers the select screen forwards to the render registry, so a
+  // community champion plays as its generated model.
+  model?: string | null;
+  family?: string | null;
+  weapon?: string | null;
+  clips?: Record<string, string> | null;
+  clipFiles?: Record<string, string> | null;
+  display?: import('../sim/forge/display').ForgedDisplay | null;
+}
+
+// One of the account's own finalized champions at Forge-queue select.
+export interface ForgedPick {
+  def: ForgedChampionDef;
+  splash?: string | null;
+}
+
+// The account's own bots, offered at select (ADR 0013): picking one seats
+// the bot and makes the person its coach.
+export interface BotPick {
+  id: string;
+  name: string;
+  championId: string;
+  sigils: [string, string];
+  skin: number;
+  version: number;
+  playbook?: PlaybookDef;
+}
+
 export function showSelect(
   container: HTMLElement,
   roster: SelectPlayer[] | null,
   team: TeamId,
   deadline: number | null,
-  onLock: (championId: string, sigils: [string, string], skin: number) => void,
+  onLock: (championId: string, sigils: [string, string], skin: number, botId?: string) => void,
+  // Forge queue: the account's finalized forged champions, offered in
+  // their own section under the roster grid.
+  forged?: readonly ForgedPick[],
+  // Forge queue: the community tab, every shared champion popular first.
+  community?: readonly CommunityPick[],
+  // The account's own bots (classic queue): the bot plays, the person coaches.
+  bots?: readonly BotPick[],
 ): SelectController {
   const { root, card } = screen(container);
   card.classList.add('select');
@@ -357,6 +427,7 @@ export function showSelect(
   }
 
   let championId: string | null = null;
+  let botId: string | null = null;
   let skinIndex = 0;
   let takenSet = new Set<string>();
   const sigils: string[] = ['riftstep', 'mend'];
@@ -409,6 +480,7 @@ export function showSelect(
     btn.addEventListener('click', () => {
       if (takenSet.has(c.id)) return;
       championId = c.id;
+      botId = null;
       skinIndex = 0;
       renderSkins();
       for (const [id, b] of champButtons) b.classList.toggle('picked', id === c.id);
@@ -447,8 +519,137 @@ export function showSelect(
     if (!championId || sigils.length !== 2) return;
     lock.disabled = true;
     lock.textContent = 'Locked';
-    onLock(championId, [sigils[0]!, sigils[1]!], skinIndex);
+    onLock(championId, [sigils[0]!, sigils[1]!], skinIndex, botId ?? undefined);
   });
+
+  // Your bots (ADR 0013): a card per bot, its champion's face; picking one
+  // brings the bot's champion, sigils and skin and seats the bot, coached.
+  let botsBlock: HTMLElement[] = [];
+  if (bots && bots.length > 0) {
+    const botsGrid = el('div', 'menu-grid');
+    for (const b of bots) {
+      const btn = el('button', 'menu-champ bot') as HTMLButtonElement;
+      btn.appendChild(el('span', 'menu-champ-badge', 'BOT'));
+      const portrait = document.createElement('img');
+      portrait.className = 'menu-champ-portrait';
+      setPortrait(portrait, b.championId, team === 0 ? 0x4a7dd6 : 0xd65c5c);
+      portrait.alt = '';
+      btn.appendChild(portrait);
+      const body = el('div', 'menu-champ-body');
+      body.appendChild(el('div', 'menu-champ-name', b.name));
+      body.appendChild(el('div', 'menu-champ-role', `Your bot, v${b.version}`));
+      const champ = CHAMPION_LIST.find((c) => c.id === b.championId);
+      body.appendChild(
+        el(
+          'div',
+          'menu-champ-blurb',
+          champ ? `Plays ${champ.name.split(',')[0]}. You coach.` : 'You coach.',
+        ),
+      );
+      btn.appendChild(body);
+      btn.addEventListener('click', () => {
+        if (takenSet.has(b.championId)) return;
+        championId = b.championId;
+        botId = b.id;
+        skinIndex = b.skin;
+        sigils.splice(0, sigils.length, b.sigils[0], b.sigils[1]);
+        syncSigils();
+        renderSkins();
+        for (const [id, other] of champButtons)
+          other.classList.toggle('picked', id === `bot:${b.id}`);
+        lock.disabled = false;
+      });
+      champButtons.set(`bot:${b.id}`, btn);
+      botsGrid.appendChild(btn);
+    }
+    botsBlock = [el('div', 'menu-label', 'Your bots (the bot plays, you coach)'), botsGrid];
+  }
+
+  // Forge queue: forged cards (own and community) share one builder wired
+  // into the same pick, taken, and lock machinery as the roster cards.
+  const forgedCard = (
+    def: ForgedChampionDef,
+    meta: string,
+    splash?: string | null,
+  ): HTMLButtonElement => {
+    const btn = el('button', 'menu-champ') as HTMLButtonElement;
+    if (splash) {
+      const img = document.createElement('img');
+      img.className = 'menu-champ-portrait';
+      img.src = `/api/forge/asset/${splash}`;
+      img.alt = '';
+      btn.appendChild(img);
+    } else {
+      btn.appendChild(el('div', 'menu-champ-monogram', (def.name[0] ?? '?').toUpperCase()));
+    }
+    const body = el('div', 'menu-champ-body');
+    body.appendChild(el('div', 'menu-champ-name', def.name));
+    const role = el('div', 'menu-champ-role', meta);
+    role.style.color = ROLE_COLORS[def.role] ?? '#c9d8ae';
+    body.appendChild(role);
+    body.appendChild(el('div', 'menu-champ-blurb', def.tagline));
+    btn.appendChild(body);
+    const resolved = resolveForgedChampion(def);
+    attachTooltip(btn, () => [
+      `${def.name}, ${def.title} (${def.role})`,
+      def.tagline,
+      `Passive, ${resolved.passive.name}: ${resolved.passive.description}`,
+      ...ABILITY_KEYS.map((k) => describeAbility(k, resolved.abilities[k]).slice(0, 3).join(' ')),
+    ]);
+    btn.addEventListener('click', () => {
+      if (takenSet.has(def.id)) return;
+      championId = def.id;
+      botId = null;
+      skinIndex = 0;
+      renderSkins();
+      for (const [id, b] of champButtons) b.classList.toggle('picked', id === def.id);
+      lock.disabled = false;
+    });
+    champButtons.set(def.id, btn);
+    return btn;
+  };
+
+  let forgedBlock: HTMLElement[] = [];
+  if (forged && forged.length > 0) {
+    const forgedGrid = el('div', 'menu-grid');
+    for (const f of forged) forgedGrid.appendChild(forgedCard(f.def, f.def.role, f.splash));
+    forgedBlock = [el('div', 'menu-label', 'Your forged champions'), forgedGrid];
+  }
+
+  // The community tab (plan-forge phase 7): every shared champion, popular
+  // first (the server's order), your liked ones pinned in front, and a
+  // search over names and creators.
+  let communityBlock: HTMLElement[] = [];
+  if (community && community.length > 0) {
+    const communityGrid = el('div', 'menu-grid');
+    const searchBox = el('input', 'menu-input') as HTMLInputElement;
+    searchBox.placeholder = 'Search shared champions or creators';
+    const renderCommunity = (): void => {
+      communityGrid.textContent = '';
+      const needle = searchBox.value.trim().toLowerCase();
+      const list = community
+        .filter(
+          (c) =>
+            needle === '' ||
+            c.def.name.toLowerCase().includes(needle) ||
+            c.creator.toLowerCase().includes(needle),
+        )
+        // Stable, so the server's popular order holds within each half.
+        .sort((a, b) => Number(b.likedByMe) - Number(a.likedByMe));
+      for (const c of list) {
+        communityGrid.appendChild(
+          forgedCard(c.def, `${c.def.role}, by ${c.creator} (${c.likes} likes)`, c.splash),
+        );
+      }
+    };
+    searchBox.addEventListener('input', renderCommunity);
+    renderCommunity();
+    communityBlock = [
+      el('div', 'menu-label', 'Community champions (popular first, your liked ones pinned)'),
+      searchBox,
+      communityGrid,
+    ];
+  }
 
   const randomBtn = el('button', 'menu-btn', 'Random champion');
   randomBtn.addEventListener('click', () => {
@@ -462,7 +663,35 @@ export function showSelect(
   const layout = el('div', 'menu-select-layout');
   const main = el('div', 'menu-select-main');
   const side = el('div', 'menu-select-side');
-  main.append(el('div', 'menu-label', 'Pick your champion (hover for the kit)'), grid, randomBtn);
+  const champPane = el('div', 'menu-pane');
+  champPane.append(el('div', 'menu-label', 'Pick your champion (hover for the kit)'), grid);
+  champPane.append(...forgedBlock, ...communityBlock, randomBtn);
+  if (botsBlock.length > 0) {
+    // Your bots on their own tab (ADR 0013); the pick machinery is shared,
+    // so a card picked on one tab unpicks the other's.
+    const botsPane = el('div', 'menu-pane');
+    botsPane.append(...botsBlock);
+    botsPane.hidden = true;
+    const tabs = el('div', 'menu-tabs');
+    const panes: [HTMLElement, HTMLElement][] = [];
+    const tab = (label: string, pane: HTMLElement): HTMLElement => {
+      const b = el('button', 'menu-tab', label);
+      b.addEventListener('click', () => {
+        for (const [t, p] of panes) {
+          t.classList.toggle('on', t === b);
+          p.hidden = p !== pane;
+        }
+      });
+      panes.push([b, pane]);
+      tabs.appendChild(b);
+      return b;
+    };
+    tab('Champions', champPane).classList.add('on');
+    tab(`Your bots (${bots?.length ?? 0})`, botsPane);
+    main.append(tabs, champPane, botsPane);
+  } else {
+    main.append(champPane);
+  }
   if (teamsBox) side.appendChild(teamsBox);
   side.append(
     el('div', 'menu-label', 'Skin (cosmetic only)'),
@@ -492,7 +721,11 @@ export function showSelect(
       if (taken) {
         takenSet = new Set(taken.filter((id) => id !== championId));
         for (const [id, b] of champButtons) {
-          const isTaken = takenSet.has(id);
+          // A bot card is taken when its champion is.
+          const champ = id.startsWith('bot:')
+            ? (bots?.find((x) => `bot:${x.id}` === id)?.championId ?? id)
+            : id;
+          const isTaken = takenSet.has(champ);
           b.style.opacity = isTaken ? '0.35' : '';
           b.style.pointerEvents = isTaken ? 'none' : '';
         }

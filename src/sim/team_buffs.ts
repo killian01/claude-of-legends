@@ -23,6 +23,16 @@ export class TeamBuffs {
     { until: 0, stacks: 0 },
   ];
 
+  // The boons as plain data, for a world checkpoint (src/sim/snapshot.ts).
+  snapshot(): [TeamBuff, TeamBuff] {
+    return [{ ...this.boons[0] }, { ...this.boons[1] }];
+  }
+
+  restore(boons: [TeamBuff, TeamBuff]): void {
+    Object.assign(this.boons[0], boons[0]);
+    Object.assign(this.boons[1], boons[1]);
+  }
+
   grantBoon(team: TeamId, time: number): void {
     const b = this.boons[team];
     b.stacks = b.until > time ? Math.min(BOON_MAX_STACKS, b.stacks + 1) : 1;

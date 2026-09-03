@@ -8,6 +8,8 @@
 import { stepAttackMove } from './attack_move';
 import { runBotDecisions } from './bot_driver';
 import { initialCampStates, onCampSlain, stepCamps } from './camps';
+import { ChampionRegistry } from './champion_registry';
+import { type CoachOrder, stepCoachOrder } from './coach';
 import { stepAutoAttacks } from './combat/auto_attack';
 import { castAbility, executeCast, stepWindups } from './combat/casting';
 import { stepDots } from './combat/dots';
@@ -21,15 +23,18 @@ import {
   isStunned,
   sightFactor,
 } from './combat/status';
-import { CHAMPIONS, DEFAULT_CHAMPION_ID } from './content/champions';
+import { type ChampionDef, DEFAULT_CHAMPION_ID, homeLane } from './content/champions';
 import { ITEMS } from './content/items';
 import { GAME_MAP, type GameMap, type LaneId } from './content/map';
 import { SIGILS } from './content/sigils';
 import { clampSkin } from './content/skins';
 import { stepDashes } from './dashes';
 import { hasDecisionToken, spendDecisionToken } from './decision_budget';
+import type { ForgedChampionDef } from './forge/forged_def';
 import { applyFountainRegen } from './fountain';
 import { stepIdleDefense } from './idle_defense';
+import { LANE_ACTIVITY_WINDOW_S, LaneSightings } from './lane_sightings';
+import { assignLanes, laneOf } from './lanes';
 import { createMapUnits } from './map_units';
 import { stepMinionAi } from './minion_ai';
 import { stepMovement } from './movement';
@@ -37,6 +42,8 @@ import { NavGrid } from './navgrid';
 import { initialObjectiveState, onWardenSlain, stepObjectives } from './objectives';
 import { passiveOf, stepPassives } from './passives';
 import { findPath } from './pathfind';
+import { playbookPolicy } from './playbook/interpreter';
+import type { PlaybookDef } from './playbook/types';
 import type { Action, Observation, Policy } from './policy';
 import type { Projectile } from './projectiles';
 import { stepProjectiles } from './projectiles';
@@ -47,6 +54,14 @@ import { ASSIST_GOLD_FRAC, championBounty, grantKillRewards, grantPassiveGold } 
 import { Rng } from './rng';
 import { stepSeparation } from './separation';
 import type { CombatCtx } from './sim_context';
+import {
+  deepCopy,
+  freezeUnits,
+  refillMap,
+  refillSet,
+  type SimSnapshot,
+  thawUnits,
+} from './snapshot';
 import {
   BASIC_MAX_RANK,
   effectiveRank,
@@ -78,6 +93,9 @@ export type SimEvent =
   | { type: 'cast'; unitId: number; key: AbilityKey }
   | { type: 'sigil'; unitId: number; slot: number }
   | { type: 'gold'; unitId: number; amount: number }
+  // A bot's active play changed (ADR 0013): the trace behind the overlay
+  // and the report. Emitted from inside the decision slot.
+  | { type: 'play'; unitId: number; playId: string }
   | { type: 'victory'; team: TeamId };
 
 // How long a champion's damage on a victim keeps earning an assist.
@@ -86,11 +104,6 @@ const SHOP_RANGE_PAD = 2;
 // Exported: the HUD draws exactly this many build slots, so a full bag and
 // an empty one read as the same shape.
 export const INVENTORY_SLOTS = 6;
-
-// Bot lane assignment order for a five-seat team: one mid, two top, two
-// bot. The old three-entry cycle wrapped to mid,top,bot,mid,top: every team
-// permanently ran a duo mid, a duo top, and one abandoned solo bot lane.
-const BOT_LANES: readonly LaneId[] = ['mid', 'top', 'bot', 'top', 'bot'];
 
 // Deterministic spawn offsets around the fountain center, by join order.
 const SPAWN_SLOTS: readonly { x: number; z: number }[] = [
@@ -105,6 +118,10 @@ export class Sim {
   readonly rng: Rng;
   readonly map: GameMap = GAME_MAP;
   readonly nav: NavGrid;
+  // Match-scoped champion resolution: the roster plus this match's forged
+  // definitions (plan-forge phase 2). Register forged champions BEFORE
+  // adding their units; the registration order is part of match identity.
+  readonly champions = new ChampionRegistry();
   readonly units = new Map<number, Unit>();
   readonly projectiles = new Map<number, Projectile>();
   readonly zones = new Map<number, Zone>();
@@ -113,6 +130,9 @@ export class Sim {
   readonly policies = new Map<number, Policy>();
   // Seats whose Policy runs outside this process (remote_policy.ts).
   readonly remoteSeats = new Map<number, RemoteSeat>();
+  // Each team's memory of who stood in which lane (CONTEXT.md: Lane
+  // opponent), fed by the vision step.
+  readonly laneSightings = new LaneSightings();
   time = 0;
   tickCount = 0;
   winner: TeamId | null = null;
@@ -165,8 +185,15 @@ export class Sim {
     };
   }
 
+  // Register a forged champion for this match; its id becomes pickable by
+  // addChampion. Validation happens inside the registry (throws on an
+  // invalid or duplicate def).
+  addForgedChampion(def: ForgedChampionDef): void {
+    this.champions.addForged(def);
+  }
+
   addChampion(team: TeamId, at?: Vec2, championId: string = DEFAULT_CHAMPION_ID, skin = 0): Unit {
-    const def = CHAMPIONS[championId];
+    const def = this.champions.get(championId);
     if (!def) throw new Error(`unknown champion ${championId}`);
     const fountain = this.map.fountains.find((f) => f.team === team);
     if (!fountain) throw new Error(`no fountain for team ${team}`);
@@ -179,33 +206,84 @@ export class Sim {
     const champ = createChampion(this.nextId++, team, pos, def);
     champ.skin = clampSkin(championId, skin);
     this.units.set(champ.id, champ);
+    this.assignLanes(team);
     return champ;
   }
 
-  championDef(championId: string): (typeof CHAMPIONS)[string] | null {
-    return CHAMPIONS[championId] ?? null;
+  // Every champion of a team holds a lane from creation (CONTEXT.md: Home
+  // lane; src/sim/lanes.ts): its role's home lane while the lane has a seat
+  // open, else the lane with the most seats open. A human's seat counts
+  // like a bot's, so the fill's support lands beside a human marksman and a
+  // stand-in bot on a dropped seat inherits the lane (playtest review: all
+  // ten participants once funneled into whichever lane was furthest
+  // pushed). Recomputed over the team in creation order whenever a
+  // champion joins it, which happens at setup only. A playbook's lane
+  // preference will go in ahead of the home lane (plan-bots phase 12).
+  private assignLanes(team: TeamId): void {
+    const seats: Unit[] = [];
+    for (const u of this.units.values()) {
+      if (u.kind === 'champion' && u.team === team) seats.push(u);
+    }
+    const lanes = assignLanes(
+      seats.map((u) => ({
+        home: homeLane(u.championId === null ? null : this.champions.get(u.championId)?.role),
+        prefer: u.lanePrefer,
+      })),
+    );
+    for (const [i, u] of seats.entries()) u.lane = lanes[i]!;
   }
 
-  // Assign a lane round-robin per team (playtest review: all ten
-  // participants used to funnel into whichever lane was furthest pushed).
-  // Counts scripted and remote seats together: a lane is a lane whoever
-  // holds it, and counting only one kind stacked mixed teams into one lane.
-  private assignBotLane(unit: Unit): void {
-    let held = 0;
-    for (const id of this.policies.keys()) {
-      if (this.units.get(id)?.team === unit.team) held++;
-    }
-    for (const id of this.remoteSeats.keys()) {
-      if (this.units.get(id)?.team === unit.team) held++;
-    }
-    unit.lane = BOT_LANES[held % BOT_LANES.length]!;
+  championDef(championId: string): ChampionDef | null {
+    return this.champions.get(championId);
+  }
+
+  // The lane opponents a team's memory names right now (CONTEXT.md): the
+  // enemy champion seen the most inside each lane over the last three
+  // minutes, null where nobody was seen.
+  // Seconds enemies were seen in each lane over the last minute (the
+  // additive laneActivity observation field, behind the split push).
+  laneActivity(team: TeamId, windowS = LANE_ACTIVITY_WINDOW_S): Readonly<Record<LaneId, number>> {
+    return {
+      top: this.laneSightings.activity(team, 'top', this.time, windowS),
+      mid: this.laneSightings.activity(team, 'mid', this.time, windowS),
+      bot: this.laneSightings.activity(team, 'bot', this.time, windowS),
+    };
+  }
+
+  laneOpponents(team: TeamId): Readonly<Record<LaneId, number | null>> {
+    return {
+      top: this.laneSightings.opponent(team, 'top', this.time),
+      mid: this.laneSightings.opponent(team, 'mid', this.time),
+      bot: this.laneSightings.opponent(team, 'bot', this.time),
+    };
   }
 
   attachPolicy(unitId: number, policy: Policy): void {
     const u = this.units.get(unitId);
     if (!u || u.kind !== 'champion') return;
-    this.assignBotLane(u);
     this.policies.set(unitId, policy);
+  }
+
+  // A seat driven by a playbook (ADR 0013): the same in-tick attachment as
+  // attachPolicy, plus the active-play trace, which writes the unit's
+  // `play` and emits a 'play' event whenever it changes. The trace never
+  // influences a decision, so a traced playbook and a bare one drive the
+  // seat identically (tests/playbook.test.ts).
+  attachPlaybook(unitId: number, def: PlaybookDef): void {
+    // The playbook's lane preference is seated ahead of the home lane
+    // (phase 12): the team's lanes are dealt again with it in.
+    const seat = this.units.get(unitId);
+    if (seat && seat.kind === 'champion') {
+      seat.lanePrefer = def.lanes ? [...def.lanes] : null;
+      this.assignLanes(seat.team);
+    }
+    const policy = playbookPolicy(def, (playId, id) => {
+      const u = this.units.get(id);
+      if (!u || u.play === playId) return;
+      u.play = playId;
+      this.events.push({ type: 'play', unitId: id, playId });
+    });
+    this.attachPolicy(unitId, policy);
   }
 
   // Hand a seat to a Policy running outside the process. The sim ships that
@@ -215,7 +293,6 @@ export class Sim {
     const u = this.units.get(unitId);
     if (!u || u.kind !== 'champion') return false;
     if (this.remoteSeats.has(unitId)) return true;
-    this.assignBotLane(u);
     this.remoteSeats.set(unitId, createRemoteSeat(unitId));
     return true;
   }
@@ -247,6 +324,71 @@ export class Sim {
   // A reconnected player takes their champion back from the stand-in bot.
   detachPolicy(unitId: number): void {
     this.policies.delete(unitId);
+    const u = this.units.get(unitId);
+    if (u) u.play = null;
+  }
+
+  // A world checkpoint (src/sim/snapshot.ts): every field that moves,
+  // as plain data, deep-copied. Policies and champion definitions are not
+  // state and are left where they are.
+  snapshot(): SimSnapshot {
+    return { tick: this.tickCount, state: deepCopy(this.gatherState()) };
+  }
+
+  // The checkpoint back into THIS sim, in place: the containers attached
+  // policies close over are refilled, never replaced. The snapshot stays
+  // intact and can be restored again.
+  restore(snap: SimSnapshot): void {
+    const s = deepCopy(snap.state) as ReturnType<Sim['gatherState']>;
+    this.time = s.time;
+    this.tickCount = s.tickCount;
+    this.winner = s.winner;
+    this.nextWaveAt = s.nextWaveAt;
+    this.waveCount = s.waveCount;
+    this.nextId = s.nextId;
+    this.rng.state = s.rng;
+    this.nav.restoreBlockers(s.nav);
+    thawUnits(this.units, s.units, this.champions);
+    refillMap(this.projectiles, s.projectiles);
+    refillMap(this.zones, s.zones);
+    refillMap(this.walls, s.walls);
+    this.visibility = s.visibility;
+    refillMap(this.lastSeen[0], s.lastSeen[0]);
+    refillMap(this.lastSeen[1], s.lastSeen[1]);
+    refillSet(this.dead, s.dead);
+    refillMap(this.killers, s.killers);
+    this.teamBuffs.restore(s.teamBuffs);
+    Object.assign(this.objectives, s.objectives);
+    this.campStates.splice(0, this.campStates.length, ...s.campStates);
+    this.laneSightings.restore(s.laneSightings);
+    this.events = [];
+  }
+
+  // Every field that moves, gathered by reference; snapshot() deep-copies
+  // the lot, so nothing here aliases past the copy.
+  private gatherState() {
+    return {
+      time: this.time,
+      tickCount: this.tickCount,
+      winner: this.winner,
+      nextWaveAt: this.nextWaveAt,
+      waveCount: this.waveCount,
+      nextId: this.nextId,
+      rng: this.rng.state,
+      nav: this.nav.snapshotBlockers(),
+      units: freezeUnits(this.units),
+      projectiles: new Map(this.projectiles),
+      zones: new Map(this.zones),
+      walls: new Map(this.walls),
+      visibility: this.visibility,
+      lastSeen: this.lastSeen,
+      dead: new Set(this.dead),
+      killers: new Map(this.killers),
+      teamBuffs: this.teamBuffs.snapshot(),
+      objectives: { ...this.objectives },
+      campStates: this.campStates.map((c) => ({ ...c })),
+      laneSightings: this.laneSightings.snapshot(),
+    };
   }
 
   // One row per champion; position-free, so it crosses the fog safely.
@@ -254,7 +396,7 @@ export class Sim {
     const rows: ScoreRow[] = [];
     for (const u of this.units.values()) {
       if (u.kind !== 'champion' || u.championId === null) continue;
-      const def = CHAMPIONS[u.championId];
+      const def = u.champion;
       rows.push({
         unitId: u.id,
         name: def ? (def.name.split(',')[0] ?? def.name) : u.championId,
@@ -336,6 +478,16 @@ export class Sim {
     u.attackMoveTarget = null;
   }
 
+  // The owner's coach order for a bot seat (ADR 0013): sim state like any
+  // order, so it records and replays; null releases it.
+  setCoachOrder(unitId: number, order: CoachOrder | null): void {
+    if (this.winner !== null) return;
+    const u = this.units.get(unitId);
+    if (!u || u.kind !== 'champion') return;
+    u.coachOrder = order;
+    u.coachOrderSeenAt = this.time;
+  }
+
   // System-driven pathing (attack-move) that does not clear the standing
   // intent the way a player move order does.
   orderPath(unitId: number, x: number, z: number): void {
@@ -380,7 +532,7 @@ export class Sim {
     if (this.winner !== null) return false;
     const u = this.units.get(unitId);
     if (!u || u.championId === null || u.dead) return false;
-    const def = CHAMPIONS[u.championId]?.abilities[key];
+    const def = u.champion?.abilities[key];
     if (!def) return false;
     if (!hasDecisionToken(u, this.time)) return false;
     const ok = castAbility(this.ctx(), u, key, def, aim);
@@ -514,6 +666,9 @@ export class Sim {
     }
     applyFountainRegen(ctx, this.map);
     stepPassives(ctx, this.tickCount);
+    for (const u of this.units.values()) {
+      if (u.coachOrder) stepCoachOrder(this, u);
+    }
 
     runBotDecisions(this, this.policies);
     runRemoteDecisions(this, this.remoteSeats);
@@ -531,7 +686,7 @@ export class Sim {
     stepTowerAi(ctx);
     stepAttackMove(this);
     stepIdleDefense(this);
-    stepWindups(ctx, (championId) => CHAMPIONS[championId]?.abilities ?? null);
+    stepWindups(ctx);
     stepAutoAttacks(ctx, this.nav);
     stepDashes(ctx, DT);
 
@@ -667,6 +822,8 @@ export class Sim {
           at: this.time,
           hpFrac: u.maxHp > 0 ? u.hp / u.maxHp : 0,
         });
+        const lane = laneOf(u.pos.x, u.pos.z);
+        if (lane) this.laneSightings.record(observer, lane, u.id, this.time, DT);
       }
     }
 

@@ -3,6 +3,7 @@
 // session cookie. Pure DOM, rebuilt on every open so it is always fresh;
 // offline practice is client-only and deliberately absent here.
 
+import { tierOf } from '../net/tiers';
 import { CHAMPIONS } from '../sim/content/champions';
 
 const CSS = `
@@ -90,7 +91,7 @@ export function renderProfile(box: HTMLElement, data: ApiProfile): void {
   box.append(el('div', 'prof-name', data.name));
   const rated =
     data.ratedGames > 0
-      ? `Rating ${data.rating} over ${data.ratedGames} rated match${data.ratedGames > 1 ? 'es' : ''}.`
+      ? `${tierOf(data.rating).name}, rating ${data.rating} over ${data.ratedGames} rated match${data.ratedGames > 1 ? 'es' : ''}.`
       : 'Unrated: a match is rated with a human on each side.';
   box.append(el('div', 'prof-sub', rated));
   const p = data.profile;

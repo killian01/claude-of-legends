@@ -2,7 +2,6 @@
 // + item stats. Called on level up and on inventory change. Max hp and mana
 // increases carry over to current values (buying hp heals by the delta).
 
-import { CHAMPIONS } from './content/champions';
 import { ITEMS, type ItemStats } from './content/items';
 import type { Unit } from './unit';
 
@@ -41,8 +40,9 @@ function sumItemStats(items: readonly string[]): Required<ItemStats> {
 }
 
 export function recalcChampion(u: Unit): void {
-  if (u.championId === null) return;
-  const def = CHAMPIONS[u.championId];
+  // The unit carries its resolved definition (roster or forged), so the
+  // recalc never consults a global table (match-scoped resolution).
+  const def = u.champion;
   if (!def) return;
   const lvl = u.level - 1;
   const items = sumItemStats(u.items);

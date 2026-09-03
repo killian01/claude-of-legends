@@ -17,8 +17,13 @@ export interface MatchPlayerRecord {
   deaths: number;
   assists: number;
   cs: number;
-  // Signed Elo movement, present only on rated human seats.
+  // Signed Elo movement, present only on rated owned seats.
   ratingDelta?: number;
+  // The seat was the account's own bot (ADR 0013); absent for hand seats.
+  way?: 'bot';
+  // The build at the end, item ids in inventory order; absent on records
+  // written before it was kept.
+  items?: string[];
 }
 
 export interface MatchRecord {
@@ -28,6 +33,10 @@ export interface MatchRecord {
   winner: TeamId;
   // Rated: at least one human on each side (server/rating.ts policy).
   rated: boolean;
+  // Which ladder the deltas belong to: absent for the classic queue,
+  // 'forge' when they moved the Forge queue's own rating (ADR 0011),
+  // 'arena' for a server-run Arena match (ADR 0013).
+  queue?: 'forge' | 'arena';
   // Saved replay id (the match id), absent when no replay was kept.
   replayId?: number;
   players: MatchPlayerRecord[];
@@ -39,7 +48,13 @@ export function buildMatchRecord(
   winner: TeamId,
   durationS: number,
   at: number,
-  rating?: { rated: boolean; deltas: ReadonlyMap<number, number> },
+  rating?: {
+    rated: boolean;
+    deltas: ReadonlyMap<number, number>;
+    queue?: 'forge' | 'arena';
+    // Bot seats by unit id.
+    ways?: ReadonlyMap<number, 'bot'>;
+  },
   replayId?: number,
 ): MatchRecord {
   return {
@@ -47,6 +62,7 @@ export function buildMatchRecord(
     durationS: Math.round(durationS),
     winner,
     rated: rating?.rated ?? false,
+    ...(rating?.queue !== undefined ? { queue: rating.queue } : {}),
     ...(replayId !== undefined ? { replayId } : {}),
     players: rows.map((r) => {
       const accountId = accountIdByUnit.get(r.unitId) ?? null;
@@ -63,6 +79,8 @@ export function buildMatchRecord(
         assists: r.assists ?? 0,
         cs: r.cs ?? 0,
         ...(delta !== undefined ? { ratingDelta: delta } : {}),
+        ...(rating?.ways?.get(r.unitId) === 'bot' ? { way: 'bot' as const } : {}),
+        ...(r.items && r.items.length > 0 ? { items: [...r.items] } : {}),
       };
     }),
   };

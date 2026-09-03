@@ -11,7 +11,9 @@ import {
   type ReplayEvent,
   type ReplayPick,
 } from '../src/net/replay';
-import { BOTS, DEFAULT_BOT_ID } from '../src/sim/content/bots';
+import { attachBot } from '../src/sim/content/bots';
+import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
+import type { PlaybookDef } from '../src/sim/playbook/types';
 import type { Sim, SimEvent } from '../src/sim/sim';
 import type { TeamId } from '../src/sim/types';
 import { buildSnapshot } from './snapshot';
@@ -26,6 +28,18 @@ export interface MatchPick {
   skin?: number;
   // Bot policy id: this seat is driven in-sim, not by a connection.
   bot?: string;
+  // Forge queue: the picked champion's definition, already resolved and
+  // approved for this seat by the matchmaker's account boundary.
+  forged?: ForgedChampionDef;
+  // An account's own bot in this seat (ADR 0013): its playbook, resolved
+  // by the account boundary like a forged definition, and which bot and
+  // version it is, for the bot's Record at the end.
+  playbook?: PlaybookDef;
+  botId?: string;
+  botVersion?: number;
+  // A ranked bot the fill seated from the pool (docs/design/bots.md): the
+  // owning account, with nobody connected behind the seat.
+  ownerId?: number;
 }
 
 interface MatchPlayer {
@@ -36,6 +50,9 @@ interface MatchPlayer {
   known: Set<number>;
   // sim.tickCount of this player's last command, for the AFK sweep.
   lastCommandAt: number;
+  // A coach seat (ADR 0013): the account's own bot plays; the person only
+  // orders. Never idle-swept, never handed to a stand-in, never a leaver.
+  coach: boolean;
 }
 
 // A connected player silent for this long in a multi-human match is
@@ -54,7 +71,11 @@ export class Match {
   // sim (src/net/replay.ts rebuilds the match from these plus the seed).
   readonly replayPicks: ReplayPick[];
   readonly replayEvents: ReplayEvent[] = [];
+  // The match's forged definitions, unique and in pick order: what match
+  // setup distributes to every client and what the saved replay embeds.
+  readonly forgedDefs: readonly ForgedChampionDef[];
   private readonly unitNames = new Map<number, string>();
+  private readonly pickUnitIds: readonly number[];
   private eventsThisTick: SimEvent[] = [];
 
   constructor(seed: number, picks: readonly MatchPick[]) {
@@ -66,15 +87,23 @@ export class Match {
       sigils: [p.sigils[0], p.sigils[1]],
       ...(p.skin !== undefined ? { skin: p.skin } : {}),
       ...(p.bot !== undefined ? { bot: p.bot } : {}),
+      ...(p.playbook !== undefined ? { playbook: p.playbook } : {}),
     }));
+    const forged = new Map<string, ForgedChampionDef>();
+    for (const p of picks) {
+      if (p.forged && !forged.has(p.forged.id)) forged.set(p.forged.id, p.forged);
+    }
+    this.forgedDefs = [...forged.values()];
     // The shared builder IS the live construction: a replayed sim starts
     // from the same seed, picks, and policy attachments by definition.
-    const { sim, unitIds } = buildMatchSim(seed, this.replayPicks);
+    const { sim, unitIds } = buildMatchSim(seed, this.replayPicks, this.forgedDefs);
     this.sim = sim;
+    this.pickUnitIds = unitIds;
     picks.forEach((p, i) => {
       const unitId = unitIds[i]!;
       this.unitNames.set(unitId, p.name);
-      if (p.bot) return;
+      // House bots and pool bots have nobody behind them: no player row.
+      if (p.bot || p.ownerId !== undefined) return;
       this.players.set(p.clientId, {
         clientId: p.clientId,
         name: p.name,
@@ -82,14 +111,22 @@ export class Match {
         unitId,
         known: new Set(),
         lastCommandAt: 0,
+        coach: p.playbook !== undefined,
       });
     });
+  }
+
+  // The unit a pick became, by its index in pick order (the ids are
+  // allocated in that order): for seats nobody is connected behind.
+  unitIdOfPick(index: number): number | undefined {
+    return this.pickUnitIds[index];
   }
 
   // Connected players whose last command is older than maxIdleTicks.
   idleClientIds(maxIdleTicks: number): number[] {
     const out: number[] = [];
     for (const p of this.players.values()) {
+      if (p.coach) continue;
       if (this.sim.tickCount - p.lastCommandAt > maxIdleTicks) out.push(p.clientId);
     }
     return out;
@@ -117,12 +154,16 @@ export class Match {
   // default bot policy instead of standing inert for the rest of the match,
   // and the scoreboard row says so. Returns the seat, for the team notice
   // and the rejoin reservation.
-  handleDisconnect(clientId: number): { name: string; team: TeamId; unitId: number } | null {
+  handleDisconnect(
+    clientId: number,
+  ): { name: string; team: TeamId; unitId: number; coach?: true } | null {
     const p = this.players.get(clientId);
     if (!p) return null;
     this.players.delete(clientId);
-    const def = BOTS[DEFAULT_BOT_ID];
-    if (def) this.sim.attachPolicy(p.unitId, def.policy);
+    // A coach leaving changes nothing on the map: the bot was playing
+    // already and keeps playing; the seat is held for the coach to return.
+    if (p.coach) return { name: p.name, team: p.team, unitId: p.unitId, coach: true };
+    attachBot(this.sim, p.unitId, undefined);
     this.recordReplay({ k: this.sim.tickCount, u: p.unitId, e: 'bot_on' });
     this.unitNames.set(p.unitId, `${p.name} (bot)`);
     return { name: p.name, team: p.team, unitId: p.unitId };
@@ -131,10 +172,15 @@ export class Match {
   // The reverse: a reconnected player takes the seat back from the bot.
   // The fresh known set makes the snapshot layer resend every identity, so
   // the new mirror world starts complete.
-  restorePlayer(clientId: number, seat: { name: string; team: TeamId; unitId: number }): void {
-    this.sim.detachPolicy(seat.unitId);
-    this.recordReplay({ k: this.sim.tickCount, u: seat.unitId, e: 'bot_off' });
-    this.unitNames.set(seat.unitId, seat.name);
+  restorePlayer(
+    clientId: number,
+    seat: { name: string; team: TeamId; unitId: number; coach?: true },
+  ): void {
+    if (!seat.coach) {
+      this.sim.detachPolicy(seat.unitId);
+      this.recordReplay({ k: this.sim.tickCount, u: seat.unitId, e: 'bot_off' });
+      this.unitNames.set(seat.unitId, seat.name);
+    }
     this.players.set(clientId, {
       clientId,
       name: seat.name,
@@ -143,6 +189,7 @@ export class Match {
       known: new Set(),
       // A fresh idle clock: a rejoin must not be flagged AFK on arrival.
       lastCommandAt: this.sim.tickCount,
+      coach: seat.coach === true,
     });
   }
 
@@ -160,9 +207,17 @@ export class Match {
     this.eventsThisTick = this.sim.tick();
   }
 
+  // The last tick's events, for the play ledger a bot seat's Record wants.
+  get lastEvents(): readonly SimEvent[] {
+    return this.eventsThisTick;
+  }
+
   handleCommand(clientId: number, msg: ClientMsg): void {
     const p = this.players.get(clientId);
     if (!p) return;
+    // A coach only orders; every hands-on verb belongs to the bot. And an
+    // order from a hand seat is nobody's to obey.
+    if (p.coach !== (msg.t === 'order')) return;
     p.lastCommandAt = this.sim.tickCount;
     // Recorded raw, then applied through the SAME validated path a replay
     // uses: an invalid command no-ops identically live and replayed.

@@ -6,25 +6,35 @@
 
 import { type Presentation, startPresentation } from './game/boot';
 import { nextStep, type PostMatchAction } from './game/flow';
+import { registerForgedAssets } from './game/forged_visuals';
 import { requestGameFullscreen } from './game/fullscreen';
 import { parseJoinCode } from './game/invite';
+import { ReplayCursor } from './game/replay_cursor';
+import type { ReplayMark } from './game/replay_marks';
+import type { ReplayWorkerIn, ReplayWorkerOut } from './game/replay_worker';
 import { ReplayWorld } from './game/replay_world';
 import { getSettings } from './game/settings';
 import { type SpectatorView, startSpectator } from './game/spectate';
 import { ClientWorld } from './net/client_world';
-import type { ServerMsg } from './net/protocol';
-import { applyReplayEvent, buildMatchSim, type ReplayRecord } from './net/replay';
-import { BOTS, DEFAULT_BOT_ID } from './sim/content/bots';
-import { CHAMPION_LIST } from './sim/content/champions';
+import type { ForgedMatchAssets, ServerMsg } from './net/protocol';
+import { applyReplayEvent, buildMatchSim, type ReplayEvent, type ReplayRecord } from './net/replay';
+import { attachBot } from './sim/content/bots';
+import { houseSeats } from './sim/content/bots/house';
+import type { ForgedChampionDef } from './sim/forge/forged_def';
+import { Rng } from './sim/rng';
 import { Sim } from './sim/sim';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
 import { type AuthedAccount, currentAccount } from './ui/auth';
+import { buildCoachBar, type CoachBar } from './ui/coach_bar';
 import { takeDiscordResult } from './ui/discord_entry';
 import { takeConfirmResult } from './ui/email_status';
 import { preloadBackdrop } from './ui/home_backdrop';
 import { type HomeChoice, showHome } from './ui/home_screen';
 import { showLanding } from './ui/landing';
 import {
+  type BotPick,
+  type CommunityPick,
+  type ForgedPick,
   type LobbyController,
   type QueueController,
   type SelectController,
@@ -34,17 +44,24 @@ import {
   showSelect,
 } from './ui/menu';
 import { pendingResetToken, showPasswordReset } from './ui/password_reset';
-import { buildReplayBar } from './ui/replay_bar';
+import { buildReplayBar, type ReplayBar } from './ui/replay_bar';
 import type { IWorld } from './world_api';
 
 const app = document.querySelector<HTMLElement>('#app');
 if (!app) throw new Error('missing #app root element');
 const container = app;
 
+function registerForgedFromMatch(assets: Record<string, ForgedMatchAssets> | undefined): void {
+  for (const [id, a] of Object.entries(assets ?? {})) registerForgedAssets(id, a);
+}
+
 interface OfflinePick {
   championId: string;
   sigils: [string, string];
   skin: number;
+  // A Forge test drive: the draft to register in the offline sim before
+  // picking it (the stylized figure carries the render).
+  forged?: ForgedChampionDef;
 }
 
 function pickForPractice(): Promise<OfflinePick> {
@@ -58,23 +75,40 @@ function pickForPractice(): Promise<OfflinePick> {
   });
 }
 
+// The account's bots for the classic select (ADR 0013); none when the
+// server is unreachable or the account has none.
+async function fetchBots(): Promise<BotPick[]> {
+  try {
+    const res = await fetch('/api/bots', { credentials: 'same-origin' });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { ok?: boolean; bots?: BotPick[] };
+    return body.ok && Array.isArray(body.bots) ? body.bots : [];
+  } catch {
+    return [];
+  }
+}
+
 // One offline practice match; resolves with the exit the player chose.
 function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
   return new Promise((resolve) => {
     const sim = new Sim(42);
+    if (pick.forged) sim.addForgedChampion(pick.forged);
     const world: IWorld = sim;
     const self = sim.addChampion(0, undefined, pick.championId, pick.skin);
     self.sigils = [...pick.sigils];
-    // A full 5v5: your four allies and all five opponents are Policy bots,
-    // with deterministic skin variety (the sim clamps out-of-range picks).
-    const roster = CHAMPION_LIST.filter((c) => c.id !== pick.championId).map((c) => c.id);
-    for (let i = 0; i < 4; i++) {
-      const ally = sim.addChampion(0, undefined, roster[i]!, i % 3);
-      sim.attachPolicy(ally.id, BOTS[DEFAULT_BOT_ID]!.policy);
+    // A full 5v5: your four allies and all five opponents are house bots
+    // on the fill (src/sim/fill.ts), the roster's lanes completed around
+    // your pick, each on a house style drawn from the seed, with
+    // deterministic skin variety (the sim clamps out-of-range picks).
+    const rng = new Rng(42);
+    const allies = houseSeats([{ championId: pick.championId, role: pick.forged?.role }], rng);
+    for (const [i, seat] of allies.entries()) {
+      const ally = sim.addChampion(0, undefined, seat.championId, i % 3);
+      attachBot(sim, ally.id, seat.bot);
     }
-    for (let i = 0; i < 5; i++) {
-      const enemy = sim.addChampion(1, undefined, roster[(i + 4) % roster.length]!, i % 3);
-      sim.attachPolicy(enemy.id, BOTS[DEFAULT_BOT_ID]!.policy);
+    for (const [i, seat] of houseSeats([], rng).entries()) {
+      const enemy = sim.addChampion(1, undefined, seat.championId, i % 3);
+      attachBot(sim, enemy.id, seat.bot);
     }
 
     let stopped = false;
@@ -116,11 +150,34 @@ function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
 
 // Watch a saved match: rebuild the sim from the record (deterministic, so
 // the whole match is seed plus commands) and run it through the normal
-// presentation behind a read-only world, with a speed bar on top.
-async function runReplay(replayId: number): Promise<PostMatchAction> {
+// presentation behind a read-only world, with a control bar on top.
+// Seeking rides the same determinism plus the world checkpoints a worker
+// ships while the match is played once ahead (src/game/replay_worker.ts):
+// any tick is the nearest checkpoint restored and at most ten seconds
+// stepped, forward or back, and reverse playback walks a denser ring
+// (src/game/replay_cursor.ts). Until the worker has covered a tick, a
+// backward seek falls back to rebuilding from the start, chunked over
+// frames. Opened at a tick when a Match sheet asked for one (a death, a
+// few seconds before): the first seek runs before the first frame.
+// Ticks a replay steps per animation frame while seeking or at top speed.
+const REPLAY_TICKS_PER_FRAME = 400;
+
+// The first event at or after `tick`, for the command cursor after a restore.
+function eventIndexAt(events: readonly ReplayEvent[], tick: number): number {
+  let lo = 0;
+  let hi = events.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (events[mid]!.k < tick) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+async function runReplay(source: number, at?: number): Promise<PostMatchAction> {
   let record: ReplayRecord | null = null;
   try {
-    const res = await fetch(`/api/replay/${replayId}`);
+    const res = await fetch(`/api/replay/${source}`);
     if (res.ok) record = (await res.json()) as ReplayRecord;
   } catch {
     // handled below
@@ -135,23 +192,38 @@ async function runReplay(replayId: number): Promise<PostMatchAction> {
   }
   const rec = record;
   return new Promise((resolve) => {
-    const { sim, unitIds } = buildMatchSim(rec.seed, rec.picks);
+    const build = (): Sim => buildMatchSim(rec.seed, rec.picks, rec.forged ?? []).sim;
+    // Unit ids are deterministic too: the first build names the seats and
+    // every rebuild lands the same ids.
+    const { sim: first, unitIds } = buildMatchSim(rec.seed, rec.picks, rec.forged ?? []);
+    let sim = first;
     const unitTeams = new Map<number, TeamId>();
+    const seatNames = new Map<number, string>();
     rec.picks.forEach((p, i) => {
       unitTeams.set(unitIds[i]!, p.team);
+      seatNames.set(unitIds[i]!, p.name);
     });
-    // Follow the first human seat: their team, their fog, their story.
+    // Follow the first seat that is not a house bot: their team, their
+    // fog, their story; their deaths are the red marks on the bar.
     const viewerIdx = Math.max(
       0,
       rec.picks.findIndex((p) => !p.bot),
     );
-    const world = new ReplayWorld(sim);
+    const ownUnitId = unitIds[viewerIdx] ?? null;
+    const world = new ReplayWorld(sim, seatNames);
     let stopped = false;
-    let bar: HTMLElement | null = null;
+    let bar: ReplayBar | null = null;
+    // The second pass: the match played once ahead in a worker, a
+    // checkpoint every ten seconds and the marks as they happen.
+    const worker = new Worker(new URL('./game/replay_worker.ts', import.meta.url), {
+      type: 'module',
+    });
+    const marks: ReplayMark[] = [];
     const finish = (action: PostMatchAction): void => {
       if (stopped) return;
       stopped = true;
-      bar?.remove();
+      worker.terminate();
+      bar?.dispose();
       pres.dispose();
       resolve(action);
     };
@@ -163,42 +235,141 @@ async function runReplay(replayId: number): Promise<PostMatchAction> {
       finish,
     );
     let speed = 1;
+    let next = 0;
+    // A seek in progress: the tick to reach, stepped silently.
+    let target: number | null = null;
+
+    // One recorded tick: the commands due, then the sim; the presentation
+    // hears the events only while playing, never while seeking.
+    const stepOnce = (silent: boolean): void => {
+      while (next < rec.events.length && rec.events[next]!.k <= sim.tickCount) {
+        applyReplayEvent(sim, unitTeams, rec.events[next]!);
+        next++;
+      }
+      const kills: { unitId: number; killerId: number }[] = [];
+      const casts: { unitId: number; key?: AbilityKey }[] = [];
+      const attacks: { unitId: number; targetId: number }[] = [];
+      for (const ev of sim.tick()) {
+        if (silent) continue;
+        if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
+        else if (ev.type === 'cast') casts.push({ unitId: ev.unitId, key: ev.key });
+        else if (ev.type === 'sigil') casts.push({ unitId: ev.unitId });
+        else if (ev.type === 'attack') attacks.push({ unitId: ev.unitId, targetId: ev.targetId });
+      }
+      if (!silent) pres.onWorldTick({ kills, golds: [], casts, hits: [], attacks });
+    };
+
+    const cursor = new ReplayCursor({
+      get sim() {
+        return sim;
+      },
+      step: () => stepOnce(true),
+      restored: (tick) => {
+        next = eventIndexAt(rec.events, tick);
+      },
+    });
+    worker.onmessage = (e: MessageEvent<ReplayWorkerOut>): void => {
+      const msg = e.data;
+      if (msg.kind === 'checkpoint') {
+        cursor.addCheckpoint(msg.snapshot);
+        bar?.setCovered(cursor.covered);
+        if (msg.marks.length > 0) {
+          marks.push(...msg.marks);
+          bar?.setMarks(marks, ownUnitId);
+        }
+      } else if (msg.kind === 'done') {
+        marks.push(...msg.marks);
+        bar?.setMarks(marks, ownUnitId);
+        bar?.setCovered(rec.ticks);
+      } else console.error('replay pass failed:', msg.message);
+    };
+    worker.postMessage({ record: rec } satisfies ReplayWorkerIn);
+
+    const seekTo = (tick: number): void => {
+      const t = Math.max(0, Math.min(rec.ticks, Math.round(tick)));
+      if (!cursor.prepare(t)) {
+        // Behind, and no checkpoint covers it yet: from the start.
+        sim = build();
+        next = 0;
+        world.rebind(sim);
+      }
+      target = t;
+    };
+    // One tick either way while paused.
+    const stepBy = (ticks: number): void => {
+      if (target !== null) return;
+      if (ticks > 0) {
+        if (sim.tickCount < rec.ticks) stepOnce(false);
+      } else if (sim.tickCount > 0 && cursor.backTo(sim.tickCount - 1)) {
+        pres.onWorldTick();
+      }
+      bar?.setTime(sim.tickCount, false);
+    };
     bar = buildReplayBar({
+      ticks: rec.ticks,
       onSpeed: (m) => {
+        if (m >= 0) cursor.dropRing();
         speed = m;
       },
+      onSeek: seekTo,
+      onStep: stepBy,
       onExit: () => finish('menu'),
+      nameOf: (id) => seatNames.get(id) ?? sim.units.get(id)?.kind ?? `unit ${id}`,
     });
-    container.appendChild(bar);
+    container.appendChild(bar.el);
+    bar.setMarks(marks, ownUnitId);
+    if (at !== undefined && at > 0) seekTo(at);
 
     const TICK_MS = DT * 1000;
     let last = performance.now();
     let acc = 0;
-    let next = 0;
     function frame(now: number): void {
       if (stopped) return;
+      if (target !== null) {
+        // Seeking: a slice of ticks per frame, the clock frozen meanwhile;
+        // the presentation catches up once the tick is reached.
+        if (cursor.advance(target, REPLAY_TICKS_PER_FRAME)) {
+          target = null;
+          pres.onWorldTick();
+        }
+        last = now;
+        acc = 0;
+        bar?.setTime(sim.tickCount, target !== null);
+        requestAnimationFrame(frame);
+        return;
+      }
+      if (speed < 0) {
+        // Reverse: the tick to show this frame, restored from the ring.
+        acc += Math.min(now - last, 250) * -speed;
+        last = now;
+        const back = Math.floor(acc / TICK_MS);
+        if (back > 0) {
+          acc -= back * TICK_MS;
+          const t = sim.tickCount - back;
+          if (t <= 0 && sim.tickCount === 0) {
+            speed = 0;
+            bar?.setSpeed(0);
+          } else if (cursor.backTo(Math.max(0, t))) pres.onWorldTick();
+        }
+        bar?.setTime(sim.tickCount, false);
+        requestAnimationFrame(frame);
+        return;
+      }
       acc += Math.min(now - last, 250) * speed;
       last = now;
-      while (acc >= TICK_MS && sim.tickCount < rec.ticks) {
-        while (next < rec.events.length && rec.events[next]!.k <= sim.tickCount) {
-          applyReplayEvent(sim, unitTeams, rec.events[next]!);
-          next++;
-        }
-        const kills: { unitId: number; killerId: number }[] = [];
-        const casts: { unitId: number; key?: AbilityKey }[] = [];
-        const attacks: { unitId: number; targetId: number }[] = [];
-        for (const ev of sim.tick()) {
-          if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
-          else if (ev.type === 'cast') casts.push({ unitId: ev.unitId, key: ev.key });
-          else if (ev.type === 'sigil') casts.push({ unitId: ev.unitId });
-          else if (ev.type === 'attack') attacks.push({ unitId: ev.unitId, targetId: ev.targetId });
-        }
-        pres.onWorldTick({ kills, golds: [], casts, hits: [], attacks });
+      // Ten times speed is two hundred ticks a second: bounded per frame
+      // so a slow frame cannot snowball into a stall.
+      let budget = REPLAY_TICKS_PER_FRAME;
+      while (acc >= TICK_MS && sim.tickCount < rec.ticks && budget > 0) {
+        stepOnce(false);
         acc -= TICK_MS;
+        budget--;
       }
+      if (budget === 0) acc = 0;
       // The record's end: freeze (the end overlay is already up if a
       // winner landed; a truncated record simply stops).
       if (sim.tickCount >= rec.ticks) acc = 0;
+      bar?.setTime(sim.tickCount, false);
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
@@ -242,6 +413,9 @@ function runSpectate(matchId: number, team: TeamId): Promise<PostMatchAction> {
       }
       switch (msg.t) {
         case 'match_start':
+          registerForgedFromMatch(msg.forgedAssets);
+          world.applyServer(msg);
+          break;
         case 'score':
           world.applyServer(msg);
           break;
@@ -296,6 +470,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
     let lobbyUi: LobbyController | null = null;
     let selectUi: SelectController | null = null;
     let pres: Presentation | null = null;
+    let coachBar: CoachBar | null = null;
     let opened = false;
     let matchEnded = false;
     let finished = false;
@@ -320,6 +495,8 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
       selectUi = null;
       pres?.dispose();
       pres = null;
+      coachBar?.remove();
+      coachBar = null;
       if (ws.readyState === ws.OPEN) {
         ws.send(JSON.stringify({ t: 'leave' }));
         ws.close();
@@ -327,14 +504,56 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
       resolve(action);
     };
 
+    // The Forge queue's select offers the account's finalized creations
+    // and the community's shared ones: both fetched the moment the session
+    // opens so the lists are ready (or nearly) when select_start lands;
+    // the handler awaits them either way.
+    const forgedRoster: Promise<ForgedPick[]> =
+      choice.mode === 'forge-queue'
+        ? fetch('/api/forge/drafts', { credentials: 'same-origin' })
+            .then((res) => (res.ok ? res.json() : { drafts: [] }))
+            .then(
+              (body: {
+                drafts?: {
+                  def: ForgedChampionDef;
+                  status: string;
+                  splash?: string | null;
+                  model?: string | null;
+                  family?: string | null;
+                  display?: import('./sim/forge/display').ForgedDisplay | null;
+                }[];
+              }) =>
+                (body.drafts ?? [])
+                  .filter((d) => d.status === 'finalized')
+                  .map((d) => {
+                    registerForgedAssets(d.def.id, d);
+                    return { def: d.def, splash: d.splash ?? null };
+                  }),
+            )
+            .catch(() => [])
+        : Promise.resolve([]);
+    const communityList: Promise<CommunityPick[]> =
+      choice.mode === 'forge-queue'
+        ? fetch('/api/gallery?playable=1&sort=popular', { credentials: 'same-origin' })
+            .then((res) => (res.ok ? res.json() : { entries: [] }))
+            .then((body: { entries?: (CommunityPick & { mine?: boolean })[] }) => {
+              for (const e of body.entries ?? []) registerForgedAssets(e.def.id, e);
+              // Own champions already sit in their own section.
+              return (body.entries ?? []).filter((e) => e.mine !== true);
+            })
+            .catch(() => [])
+        : Promise.resolve([]);
+
     ws.addEventListener('open', () => {
       opened = true;
       // No identity to send: the session cookie rode the upgrade, and the
       // server refused it outright if there was none (ADR 0006). hello only
       // asks whether a live match is still holding our seat.
       ws.send(JSON.stringify({ t: 'hello' }));
-      if (choice.mode === 'queue') {
-        ws.send(JSON.stringify({ t: 'queue' }));
+      if (choice.mode === 'queue' || choice.mode === 'forge-queue') {
+        ws.send(
+          JSON.stringify({ t: 'queue', ...(choice.mode === 'forge-queue' ? { forge: true } : {}) }),
+        );
         queueUi = showQueue(
           container,
           () => ws.send(JSON.stringify({ t: 'start_now' })),
@@ -387,20 +606,49 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
         case 'lobby':
           lobbyUi?.update(msg.code, msg.host, msg.team, msg.players);
           break;
-        case 'select_start':
+        case 'select_start': {
           clearMenus();
-          selectUi = showSelect(
-            container,
-            msg.players,
-            msg.team,
-            msg.deadline,
-            (champ, sigils, skin) => {
-              // Inside the lock-in click gesture, so the browser grants it.
-              requestGameFullscreen();
-              ws.send(JSON.stringify({ t: 'pick', championId: champ, sigils, skin }));
-            },
-          );
+          const openSelect = (
+            forgedList: readonly ForgedPick[],
+            community: readonly CommunityPick[],
+            botsList: readonly BotPick[] = [],
+          ): void => {
+            if (finished || selectUi) return;
+            selectUi = showSelect(
+              container,
+              msg.players,
+              msg.team,
+              msg.deadline,
+              (champ, sigils, skin, botId) => {
+                // Inside the lock-in click gesture, so the browser grants it.
+                requestGameFullscreen();
+                ws.send(
+                  JSON.stringify({
+                    t: 'pick',
+                    championId: champ,
+                    sigils,
+                    skin,
+                    ...(botId ? { bot: botId } : {}),
+                  }),
+                );
+              },
+              forgedList,
+              community,
+              botsList,
+            );
+          };
+          // A Forge select waits for the forged lists (already in flight
+          // since the session opened); a classic select opens on the spot.
+          if (msg.forge) {
+            void Promise.all([forgedRoster, communityList]).then(([own, community]) =>
+              openSelect(own, community),
+            );
+          } else {
+            // The classic select offers the account's bots (ADR 0013).
+            void fetchBots().then((bots) => openSelect([], [], bots));
+          }
           break;
+        }
         case 'select_update':
           selectUi?.setLocked(msg.locked, msg.total, msg.taken);
           break;
@@ -421,6 +669,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           // store, the cookie is the identity.
           break;
         case 'match_start':
+          registerForgedFromMatch(msg.forgedAssets);
           world.applyServer(msg);
           // A rejoin can arrive while the queue or lobby screen is still up.
           clearMenus();
@@ -431,12 +680,23 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           const changed = world.applyServer(msg);
           if (!pres && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) {
             pres = startPresentation(container, world, world.selfUnitId, world.selfTeam, finish);
+            // A coach seat (ADR 0013): the bar for the orders with no place to
+            // click; right-click already goes and focuses through the mirror.
+            if (world.coach) {
+              coachBar = buildCoachBar(container, (kind) =>
+                ws.send(JSON.stringify({ t: 'order', kind })),
+              );
+            }
             pres.setNetHooks({
               sendChat: (text) => ws.send(JSON.stringify({ t: 'chat', text })),
               sendPing: (x, z) => ws.send(JSON.stringify({ t: 'ping', x, z })),
             });
           }
           if (changed) {
+            // The coached bot answers through its snapshot: the order it holds
+            // and the play it is running.
+            const me = world.units.get(world.selfUnitId);
+            if (me) coachBar?.update(me.coachOrder, me.play);
             const kills: { unitId: number; killerId: number }[] = [];
             const golds: number[] = [];
             const casts: { unitId: number; key?: AbilityKey }[] = [];
@@ -457,7 +717,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           world.applyServer(msg);
           break;
         case 'match_result':
-          pres?.setMatchResult(msg.rated, msg.delta, msg.rating);
+          pres?.setMatchResult(msg.rated, msg.delta, msg.rating, msg.queue, msg.way);
           break;
         case 'match_end':
           // The end overlay (stats, Play again, Return to menu) owns the way
@@ -539,6 +799,8 @@ async function boot(): Promise<void> {
   // The app loop: home, one match, back, forever on the same page. 'again'
   // replays the same offline pick or re-enters the public queue (flow.ts).
   let next: HomeChoice | null = null;
+  // A replay opened from the Academy returns there, on the same bot.
+  let reopenAcademy: { botId: string } | null = null;
   let lastPick: OfflinePick | null = null;
   // Who is signed in, or null while only the offline match is reachable.
   // A live session cookie from a previous visit skips the sign-in screen.
@@ -563,28 +825,43 @@ async function boot(): Promise<void> {
     }
     if (joinCode !== null) next = { name: account.name, mode: 'join', code: joinCode };
     const choice: HomeChoice =
-      next ?? (await showHome(container, account, joinCode ?? undefined, confirmed));
+      next ?? (await showHome(container, account, joinCode ?? undefined, confirmed, reopenAcademy));
+    reopenAcademy = null;
     confirmed = null;
     discordResult = null;
     joinCode = null;
     next = null;
     let action: PostMatchAction;
     if (choice.mode === 'practice') {
-      const pick: OfflinePick = lastPick ?? (await pickForPractice());
+      // A Forge test drive arrives with its draft; a plain practice run
+      // goes through champion select as always.
+      const pick: OfflinePick = choice.forged
+        ? {
+            championId: choice.forged.id,
+            sigils: ['riftstep', 'mend'],
+            skin: 0,
+            forged: choice.forged,
+          }
+        : (lastPick ?? (await pickForPractice()));
       lastPick = pick;
       action = await runOffline(pick);
     } else if (choice.mode === 'replay' && choice.replayId !== undefined) {
-      action = await runReplay(choice.replayId);
+      action = await runReplay(choice.replayId, choice.replayAt);
     } else if (choice.mode === 'spectate' && choice.matchId !== undefined) {
       action = await runSpectate(choice.matchId, choice.team === 1 ? 1 : 0);
     } else {
       action = await runOnline(choice);
     }
+    reopenAcademy = choice.academy ?? null;
     const step = nextStep(action, choice.mode);
     if (step === 'replay') {
       next = choice;
     } else if (step === 'requeue') {
-      next = { name: choice.name, mode: 'queue' };
+      // Play again re-enters the queue the match came from.
+      next = {
+        name: choice.name,
+        mode: choice.mode === 'forge-queue' ? 'forge-queue' : 'queue',
+      };
     } else {
       lastPick = null;
     }

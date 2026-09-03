@@ -64,9 +64,14 @@ export async function signIn(page, name, timeout = 20000) {
       await fill(page, '.auth-form input[type="email"]', e2eEmail(name));
     }
     await fill(page, '.auth-form input[type="password"]', E2E_PASSWORD);
-    await page.evaluate(() => {
-      [...document.querySelectorAll('.auth-form .menu-btn')].pop()?.click();
-    });
+    // The submit carries the tab's label; it is no longer the last button
+    // in the form since Continue with Discord (ADR 0009) sits under it.
+    await page.evaluate((m) => {
+      const label = m === 'register' ? 'Create account' : 'Sign in';
+      [...document.querySelectorAll('.auth-form .menu-btn')]
+        .find((b) => (b.textContent || '').trim() === label)
+        ?.click();
+    }, mode);
     try {
       // Landing gone and the home card up: the only proof that worked.
       await page.waitForSelector('.pg.home', { timeout: 10000 });
@@ -96,7 +101,9 @@ export async function signInSeeded(page, timeout = 20000) {
   await fill(page, '.auth-form input.menu-input', SEEDED_NAME);
   await fill(page, '.auth-form input[type="password"]', SEEDED_PASSWORD);
   await page.evaluate(() => {
-    [...document.querySelectorAll('.auth-form .menu-btn')].pop()?.click();
+    [...document.querySelectorAll('.auth-form .menu-btn')]
+      .find((b) => (b.textContent || '').trim() === 'Sign in')
+      ?.click();
   });
   await page.waitForSelector('.pg.home', { timeout: 10000 });
   return SEEDED_NAME;

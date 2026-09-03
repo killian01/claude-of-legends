@@ -6,9 +6,13 @@
 // It only decides; the entry point owns the flow. Everything here resolves
 // the promise with a HomeChoice and takes the page down.
 
+import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { TeamId } from '../sim/types';
+import { openAcademy } from './academy';
 import { type AuthedAccount, signOut } from './auth';
 import { buildEmailNotice, type ConfirmResult } from './email_status';
+import { openForgeEditor } from './forge_editor';
+import { openGallery } from './gallery';
 import { startBackdrop } from './home_backdrop';
 import { buildLadderPanel } from './ladder_panel';
 import { buildLivePanel } from './live_panel';
@@ -40,13 +44,22 @@ function ensureCss(): void {
 
 export interface HomeChoice {
   name: string;
-  mode: 'practice' | 'queue' | 'create' | 'join' | 'replay' | 'spectate';
+  // 'forge-queue' is the Forge's own public queue (plan-forge phase 6):
+  // same flow as 'queue', a separate ladder, forged champions in select.
+  mode: 'practice' | 'queue' | 'forge-queue' | 'create' | 'join' | 'replay' | 'spectate';
   code?: string;
-  // For mode 'replay': the saved replay to watch.
+  // For mode 'replay': the saved replay to watch, and the tick to open it
+  // at when a Match sheet asked for one (a death, a few seconds before).
   replayId?: number;
+  replayAt?: number;
+  // For a replay opened from the Academy: the bot to reopen it on when
+  // the replay ends.
+  academy?: { botId: string };
   // For mode 'spectate': the live match to watch, and from whose side.
   matchId?: number;
   team?: TeamId;
+  // For mode 'practice': a Forge draft to test drive as the picked champion.
+  forged?: ForgedChampionDef;
 }
 
 // A button that shows or hides a panel, rebuilt fresh on every open so it
@@ -78,6 +91,9 @@ export function showHome(
   prefillCode?: string,
   // Set only on the page load a confirmation link redirected back to.
   justConfirmed: ConfirmResult | null = null,
+  // Open the Academy on this bot at once: the way back from a replay it
+  // handed over.
+  reopen: { botId: string } | null = null,
 ): Promise<HomeChoice> {
   ensureCss();
   const accountName = account.name;
@@ -119,6 +135,7 @@ export function showHome(
     const leave = (): void => {
       window.removeEventListener('loc:replay', onWatchReplay);
       window.removeEventListener('loc:spectate', onSpectate);
+      window.removeEventListener('loc:forge-test', onForgeTest);
       stopBackdrop();
       root.remove();
     };
@@ -129,11 +146,25 @@ export function showHome(
 
     // A Watch button on a career or ladder panel fires these; this page
     // owns the flow, so it is the one that resolves.
+    // A bare id, or the Academy's form: the id, the tick to open at, and
+    // the bot to come back to.
     function onWatchReplay(e: Event): void {
-      const id = (e as CustomEvent<number>).detail;
+      const detail = (e as CustomEvent<number | { id: number; tick?: number; botId?: string }>)
+        .detail;
+      const id = typeof detail === 'number' ? detail : detail?.id;
       if (typeof id !== 'number') return;
       leave();
-      resolve({ name: accountName, mode: 'replay', replayId: id });
+      resolve({
+        name: accountName,
+        mode: 'replay',
+        replayId: id,
+        ...(typeof detail === 'object' && typeof detail.tick === 'number'
+          ? { replayAt: detail.tick }
+          : {}),
+        ...(typeof detail === 'object' && typeof detail.botId === 'string'
+          ? { academy: { botId: detail.botId } }
+          : {}),
+      });
     }
     function onSpectate(e: Event): void {
       const detail = (e as CustomEvent<{ matchId: number; team: TeamId }>).detail;
@@ -146,8 +177,17 @@ export function showHome(
         team: detail.team === 1 ? 1 : 0,
       });
     }
+    // The Forge editor's test drive: straight into an offline practice
+    // match with the draft as the picked champion.
+    function onForgeTest(e: Event): void {
+      const def = (e as CustomEvent<ForgedChampionDef>).detail;
+      if (typeof def !== 'object' || def === null) return;
+      leave();
+      resolve({ name: accountName, mode: 'practice', forged: def });
+    }
     window.addEventListener('loc:replay', onWatchReplay);
     window.addEventListener('loc:spectate', onSpectate);
+    window.addEventListener('loc:forge-test', onForgeTest);
 
     const cards = el('div', 'pg-cards');
 
@@ -189,6 +229,35 @@ export function showHome(
     row.append(code, join);
     friends.append(create, row);
 
+    // --- bots ---
+    const botsCard = card(
+      'plain',
+      'Bots',
+      'Field a bot instead of playing by hand. Write its playbook in the Academy, by ' +
+        'talking to the coach or editing the plays, spar it against house bots in seconds, ' +
+        'and watch the replay with what it was thinking on its plate.',
+    );
+    const academyBtn = el('button', 'menu-btn', 'Open the Academy');
+    academyBtn.addEventListener('click', () => openAcademy(container));
+    botsCard.append(academyBtn);
+
+    // --- the Forge ---
+    const forge = card(
+      'plain',
+      'The Forge',
+      'Create your own champion: kit, stats, and passive, composed from the same ' +
+        'primitives the roster runs on, all under one power budget. Drafts are free and ' +
+        'unlimited; test drive any valid kit against bots. The Forge queue is where ' +
+        'finalized creations play, on its own rating.',
+    );
+    const forgeBtn = el('button', 'menu-btn', 'Open the Forge');
+    forgeBtn.addEventListener('click', () => openForgeEditor(container));
+    const forgeQueueBtn = el('button', 'menu-btn', 'Forge queue');
+    forgeQueueBtn.addEventListener('click', () => done('forge-queue'));
+    const galleryBtn = el('button', 'menu-btn', 'Browse the gallery');
+    galleryBtn.addEventListener('click', () => openGallery(container));
+    forge.append(forgeBtn, forgeQueueBtn, galleryBtn);
+
     // --- career ---
     const career = card(
       'plain',
@@ -212,7 +281,8 @@ export function showHome(
     learn.appendChild(roster);
     collapsible(learn, 'Settings', buildSettingsPanel);
 
-    cards.append(play, friends, career, learn);
+    cards.append(play, friends, botsCard, forge, career, learn);
     inner.appendChild(cards);
+    if (reopen) openAcademy(container, { botId: reopen.botId });
   });
 }

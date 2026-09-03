@@ -10,6 +10,16 @@ export class Rng {
     if (this.s === 0) this.s = 0x9e3779b9;
   }
 
+  // The stream's position, for a world checkpoint (src/sim/snapshot.ts):
+  // put back, the same numbers follow.
+  get state(): number {
+    return this.s;
+  }
+
+  set state(v: number) {
+    this.s = v >>> 0;
+  }
+
   /** Uniform float in [0, 1). */
   next(): number {
     this.s = (this.s + 0x6d2b79f5) >>> 0;

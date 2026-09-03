@@ -1,6 +1,8 @@
 ﻿// The shared unit model. Champions, minions, towers, and Sanctums are all
+
 // units; what varies is data (stats, kind), not the entity shape.
 
+import type { CoachOrder } from './coach';
 import type { Status } from './combat/status';
 import type { ChampionDef } from './content/champions';
 import type { LaneId } from './content/map';
@@ -40,6 +42,11 @@ export interface Unit {
   neutral: boolean;
   kind: UnitKind;
   championId: string | null;
+  // The resolved definition this champion was created from, roster or
+  // forged: stats, passives, casting, and observations read it from here,
+  // so nothing downstream consults a global table (champion resolution is
+  // match-scoped, plan-forge phase 2). Data only; safe to share.
+  champion: ChampionDef | null;
   pos: Vec2;
   radius: number;
   moveSpeed: number;
@@ -62,6 +69,14 @@ export interface Unit {
   passiveStacks: number;
   // Last time ANY damage landed (Shieldskin-style passives).
   lastDamagedAt: number;
+  // The playbook play acting for this seat right now (bots, ADR 0013),
+  // null for seats played by hand. Presentation and reports read it; no
+  // sim rule ever does.
+  play: string | null;
+  // The owner's live coach order (ADR 0013), null when none, and for a
+  // focus the last sim time its target was in sight.
+  coachOrder: CoachOrder | null;
+  coachOrderSeenAt: number;
   attackTargetId: number | null;
   attackReadyAt: number;
   // Attack-move destination; enemies encountered on the way are engaged.
@@ -120,6 +135,9 @@ export interface Unit {
   structure: StructureMeta | null;
   // Lane minion state.
   lane: LaneId | null;
+  // A bot's lane preferences (plan-bots phase 12), ahead of the home lane
+  // at seating; null for a seat that states none.
+  lanePrefer: LaneId[] | null;
   laneProgress: number;
 }
 
@@ -145,6 +163,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     neutral: false,
     kind,
     championId: null,
+    champion: null,
     pos: { x: pos.x, z: pos.z },
     radius: 0.6,
     moveSpeed: 0,
@@ -175,6 +194,10 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     skin: 0,
     passiveStacks: 0,
     lastDamagedAt: -999,
+    play: null,
+    coachOrder: null,
+    coachOrderSeenAt: 0,
+    lanePrefer: null,
     attackTargetId: null,
     attackReadyAt: 0,
     attackMoveTarget: null,
@@ -215,6 +238,7 @@ export function createChampion(id: number, team: TeamId, pos: Vec2, def: Champio
   const b = def.base;
   const u = baseUnit(id, team, 'champion', pos);
   u.championId = def.id;
+  u.champion = def;
   u.radius = b.radius;
   u.moveSpeed = b.moveSpeed;
   u.hp = b.hp;

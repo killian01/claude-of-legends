@@ -5,7 +5,10 @@
 // live sim and applies live commands THROUGH these functions, so the live
 // path and the replay path cannot drift apart.
 
-import { BOTS, DEFAULT_BOT_ID } from '../sim/content/bots';
+import { parseCoachOrder } from '../sim/coach';
+import { attachBot } from '../sim/content/bots';
+import type { ForgedChampionDef } from '../sim/forge/forged_def';
+import type { PlaybookDef } from '../sim/playbook/types';
 import { Sim } from '../sim/sim';
 import type { TeamId } from '../sim/types';
 import { type ClientMsg, isFiniteVec } from './protocol';
@@ -23,6 +26,9 @@ export interface ReplayPick {
   skin?: number;
   // Bot policy id; seats without it are humans driven by recorded events.
   bot?: string;
+  // An account's own bot (ADR 0013): the playbook that played, embedded
+  // whole like a forged definition, so the replay runs what ran.
+  playbook?: PlaybookDef;
 }
 
 export interface ReplayEvent {
@@ -45,24 +51,29 @@ export interface ReplayRecord {
   events: ReplayEvent[];
   // Total ticks the live match ran to its winner.
   ticks: number;
+  // The match's forged champion definitions, embedded whole (ADR 0010): a
+  // forged id means nothing outside its match, so the replay carries the
+  // data, not the reference. Absent for roster-only matches.
+  forged?: ForgedChampionDef[];
 }
 
 // The one sim construction for a match, live and replayed alike: same
-// seed, same picks in the same order, same policy attachments.
+// seed, same forged definitions in the same order, same picks in the same
+// order, same policy attachments.
 export function buildMatchSim(
   seed: number,
   picks: readonly ReplayPick[],
+  forged: readonly ForgedChampionDef[] = [],
 ): { sim: Sim; unitIds: number[] } {
   const sim = new Sim(seed);
+  for (const def of forged) sim.addForgedChampion(def);
   const unitIds: number[] = [];
   for (const p of picks) {
     const unit = sim.addChampion(p.team, undefined, p.championId, p.skin ?? 0);
     unit.sigils = [...p.sigils];
     unitIds.push(unit.id);
-    if (p.bot) {
-      const def = BOTS[p.bot] ?? BOTS[DEFAULT_BOT_ID];
-      if (def) sim.attachPolicy(unit.id, def.policy);
-    }
+    if (p.playbook) sim.attachPlaybook(unit.id, p.playbook);
+    else if (p.bot) attachBot(sim, unit.id, p.bot);
   }
   return { sim, unitIds };
 }
@@ -112,6 +123,16 @@ export function applySimCommand(sim: Sim, team: TeamId, unitId: number, msg: Cli
         sim.levelAbility(unitId, msg.key);
       }
       break;
+    case 'order': {
+      const u = sim.units.get(unitId);
+      if (!u) break;
+      const order = parseCoachOrder(msg, u.pos);
+      if (order === undefined) break;
+      // Fogged like an attack: a focus names only what the team sees.
+      if (order?.kind === 'focus' && !sim.isVisible(team, order.targetId)) break;
+      sim.setCoachOrder(unitId, order);
+      break;
+    }
     default:
       break;
   }
@@ -130,8 +151,7 @@ export function applyReplayEvent(
     return;
   }
   if (ev.e === 'bot_on') {
-    const def = BOTS[DEFAULT_BOT_ID];
-    if (def) sim.attachPolicy(ev.u, def.policy);
+    attachBot(sim, ev.u, undefined);
     return;
   }
   sim.detachPolicy(ev.u);

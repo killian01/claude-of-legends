@@ -1,9 +1,9 @@
 // Runs the champion AND item passive hooks. Passives are code-bearing
 // content (ChampionDef in src/sim/content/champions/, ITEM_PASSIVES in
-// src/sim/content/item_passives.ts); this module is the only place the
-// engine calls them from.
+// src/sim/content/item_passives.ts; a forged champion's come instantiated
+// from a template); this module is the only place the engine calls them
+// from.
 
-import { CHAMPIONS } from './content/champions';
 import { ITEM_PASSIVES, type ItemPassiveDef } from './content/item_passives';
 import type { ChampionPassive, DamageVia } from './passive_types';
 import type { CombatCtx } from './sim_context';
@@ -13,8 +13,8 @@ import type { Unit } from './unit';
 export const PASSIVE_PERIOD_TICKS = 5;
 
 export function passiveOf(u: Unit): ChampionPassive | undefined {
-  if (u.kind !== 'champion' || u.championId === null) return undefined;
-  return CHAMPIONS[u.championId]?.passive;
+  if (u.kind !== 'champion') return undefined;
+  return u.champion?.passive;
 }
 
 const NO_ITEM_PASSIVES: readonly ItemPassiveDef[] = [];

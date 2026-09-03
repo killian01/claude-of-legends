@@ -7,6 +7,8 @@
 // The static map (src/sim/content/map.ts) is a known constant of the
 // contract; policies may read it directly.
 
+import type { CoachOrder } from './coach';
+import type { ChampionRole } from './content/champions';
 import type { Rng } from './rng';
 import type { AbilityKey, TeamId } from './types';
 import type { UnitKind } from './unit';
@@ -29,6 +31,10 @@ export interface ObsUnit {
   z: number;
   hpFrac: number;
   radius: number;
+  // Health in points and its cap (additive v0 fields, plan-bots phase 16):
+  // the bar every viewer reads, in numbers, so a last hit can be timed.
+  hp?: number;
+  maxHp?: number;
   // Structures only: true while layer protection makes it immune (additive
   // v0 field; without it a policy cannot know a target is untouchable).
   invulnerable?: boolean;
@@ -45,6 +51,16 @@ export interface ObsUnit {
   // Champions only: visible statuses, absent when there are none (additive
   // v0 field). A policy that ignores them keeps its old behavior.
   statuses?: readonly ObsStatus[];
+  // Champions only: which champion this is (additive v0 field, ADR 0014):
+  // the face every viewer reads off the screen, so a policy may pick its
+  // target by role.
+  championId?: string;
+  // Champions only: the items in its bag (additive v0 field, plan-bots
+  // phase 12): what a viewer reads by clicking a visible champion.
+  items?: readonly string[];
+  // Champions only: the level on its health bar (additive v0 field,
+  // plan-bots phase 16), what the fight's odds weigh a champion by.
+  level?: number;
 }
 
 // A projectile the team can see (additive v0 block: dodging is impossible
@@ -95,6 +111,20 @@ export interface ObsLastSeen {
   hpFrac: number;
 }
 
+// One of the match's ten seats (additive v0 block, plan-bots phase 12):
+// both teams' champions and roles are public from champion select, like
+// the scoreboard a viewer opens. `lane` is the seat's assigned lane, given
+// for the own team only (the enemy's plan is not on screen); `dead` is the
+// death timer every viewer sees.
+export interface ObsSeat {
+  id: number;
+  team: TeamId;
+  championId: string;
+  role: ChampionRole;
+  lane?: 'top' | 'mid' | 'bot' | null;
+  dead: boolean;
+}
+
 export interface ObsSelf {
   id: number;
   team: TeamId;
@@ -121,6 +151,22 @@ export interface ObsSelf {
   // Which champion this policy is driving. Additive v0 field (like
   // `abilityRanks`): policies use it to pick role-appropriate item builds.
   championId: string | null;
+  // Own attack range in units (additive v0 field, ADR 0014): what a kite
+  // holds. Absent on observations older than the field.
+  attackRange?: number;
+  // The auto-attack clock (additive v0 fields, ADR 0014): when the next
+  // strike may start, and until when the current swing lands (null when
+  // none is in the air). A move order during a swing wastes it; a move
+  // between swings costs nothing. This is what orb walking reads.
+  attackReadyAt?: number;
+  attackSwingUntil?: number | null;
+  // Own attack damage in points (additive v0 field, plan-bots phase 16):
+  // what one strike takes off an unarmored minion, so a last hit can be
+  // timed.
+  attackDamage?: number;
+  // True while holding still on a stop order (additive v0 field, plan-bots
+  // phase 16): idle defense keeps its hands off until the next order.
+  holding?: boolean;
   // The ability key whose recast window is armed right now, null otherwise
   // (ADR 0005; additive v0 field). While armed, that key reads ready and
   // the press resolves the follow-up instead of a fresh cast.
@@ -131,6 +177,9 @@ export interface ObsSelf {
   // True while the recall channel runs (additive v0 field). A policy that
   // keeps issuing orders would reset its own channel forever without it.
   recalling?: boolean;
+  // The owner's live coach order (ADR 0013; additive v0 field): what the
+  // person coaching this seat asked for, null or absent when nothing is.
+  coachOrder?: CoachOrder | null;
 }
 
 export interface Observation {
@@ -153,6 +202,15 @@ export interface Observation {
   // Fresh memories of enemy champions currently out of sight (additive v0
   // field; see ObsLastSeen).
   lastSeen?: readonly ObsLastSeen[];
+  // The match's seats, both teams (additive v0 field; see ObsSeat).
+  seats?: readonly ObsSeat[];
+  // The team's lane opponents (CONTEXT.md; additive v0 field): per lane,
+  // the id of the enemy champion the team has seen there the most over
+  // the last three minutes, null where nobody was seen.
+  laneOpponents?: Readonly<Record<'top' | 'mid' | 'bot', number | null>>;
+  // Seconds enemy champions were seen in each lane over the last minute
+  // (additive v0 field): how busy each lane is, for a split push.
+  laneActivity?: Readonly<Record<'top' | 'mid' | 'bot', number>>;
 }
 
 export type Action =
@@ -166,6 +224,13 @@ export type Action =
   | { kind: 'level'; key: AbilityKey }
   // Starts the recall channel (additive v0 action): the same B humans
   // press, with the same rules (standing still, damage cancels).
-  | { kind: 'recall' };
+  | { kind: 'recall' }
+  // Sells the item in a bag slot (additive v0 action, ADR 0014): the same
+  // rule humans get, at the fountain, for seventy percent of its price.
+  | { kind: 'sell'; slot: number }
+  // Stops and holds (additive v0 action, plan-bots phase 16): the same S
+  // humans press, opting out of idle defense until the next order. What a
+  // wave freeze stands on. An intention like move, outside the budget.
+  | { kind: 'stop' };
 
 export type Policy = (obs: Observation, rng: Rng) => Action;

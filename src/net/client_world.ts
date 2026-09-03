@@ -4,9 +4,11 @@
 // server scopes snapshots to this client's team before sending.
 // Transport-agnostic: give it a send function, feed it server messages.
 
+import { ChampionRegistry } from '../sim/champion_registry';
 import type { Status } from '../sim/combat/status';
-import { CHAMPIONS, type ChampionDef } from '../sim/content/champions';
+import type { ChampionDef } from '../sim/content/champions';
 import { GAME_MAP, type GameMap } from '../sim/content/map';
+import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { Projectile } from '../sim/projectiles';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
@@ -70,6 +72,8 @@ function materializeUnit(s: SnapUnit): Unit {
     neutral: s.k === 'warden' || s.k === 'camp',
     kind: s.k ?? 'champion',
     championId: s.c ?? null,
+    // Resolved against the match registry by the caller (applyServer).
+    champion: null,
     pos: { x: s.x, z: s.z },
     radius: s.r ?? 0.6,
     moveSpeed: 0,
@@ -98,6 +102,10 @@ function materializeUnit(s: SnapUnit): Unit {
     skin: s.sk ?? 0,
     passiveStacks: 0,
     lastDamagedAt: -999,
+    play: null,
+    coachOrder: null,
+    coachOrderSeenAt: 0,
+    lanePrefer: null,
     attackTargetId: null,
     attackReadyAt: 0,
     attackMoveTarget: null,
@@ -145,15 +153,32 @@ export class ClientWorld implements IWorld {
   winner: TeamId | null = null;
   selfUnitId = 0;
   selfTeam: TeamId = 0;
+  // A coach seat (ADR 0013): the orders translate into coach orders and
+  // the hands-on verbs are refused here already; the bot plays by itself.
+  coach = false;
   private scoreRows: readonly ScoreRow[] = [];
   private objAt: number | null = null;
   private boon: { until: number; stacks: number } | null = null;
   private enemyBoon: { until: number; stacks: number } | null = null;
 
+  // Match-scoped champion resolution, mirroring the server sim's registry:
+  // the Forge queue delivers the match's forged definitions at setup and
+  // registerForged() loads them before the first snapshot arrives.
+  readonly champions = new ChampionRegistry();
+
   constructor(private readonly send: (msg: ClientMsg) => void) {}
 
   championDef(championId: string): ChampionDef | null {
-    return CHAMPIONS[championId] ?? null;
+    return this.champions.get(championId);
+  }
+
+  // Idempotent on purpose: match_start can arrive again on a rejoin, and
+  // re-registering the same match's definitions must not throw the mirror
+  // down mid-claim.
+  registerForged(defs: readonly ForgedChampionDef[]): void {
+    for (const def of defs) {
+      if (this.champions.get(def.id) === null) this.champions.addForged(def);
+    }
   }
 
   scoreboard(): readonly ScoreRow[] {
@@ -176,46 +201,51 @@ export class ClientWorld implements IWorld {
   }
 
   orderMove(_unitId: number, x: number, z: number): void {
-    this.send({ t: 'move', x, z });
+    this.send(this.coach ? { t: 'order', kind: 'goto', x, z } : { t: 'move', x, z });
   }
 
   orderAttack(_unitId: number, targetId: number): void {
-    this.send({ t: 'attack', targetId });
+    this.send(this.coach ? { t: 'order', kind: 'focus', targetId } : { t: 'attack', targetId });
   }
 
   orderAttackMove(_unitId: number, x: number, z: number): void {
-    this.send({ t: 'attack_move', x, z });
+    this.send(this.coach ? { t: 'order', kind: 'goto', x, z } : { t: 'attack_move', x, z });
   }
 
   startRecall(_unitId: number): void {
-    this.send({ t: 'recall' });
+    this.send(this.coach ? { t: 'order', kind: 'back' } : { t: 'recall' });
   }
 
   orderStop(_unitId: number): void {
-    this.send({ t: 'stop' });
+    this.send(this.coach ? { t: 'order', kind: 'hold' } : { t: 'stop' });
   }
 
   castAbility(_unitId: number, key: AbilityKey, aim: Vec2): boolean {
+    if (this.coach) return false;
     this.send({ t: 'cast', key, x: aim.x, z: aim.z });
     return true;
   }
 
   castSigil(_unitId: number, slot: number, aim: Vec2): boolean {
+    if (this.coach) return false;
     this.send({ t: 'sigil', slot, x: aim.x, z: aim.z });
     return true;
   }
 
   buyItem(_unitId: number, itemId: string): boolean {
+    if (this.coach) return false;
     this.send({ t: 'buy', itemId });
     return true;
   }
 
   sellItem(_unitId: number, slot: number): boolean {
+    if (this.coach) return false;
     this.send({ t: 'sell', slot });
     return true;
   }
 
   levelAbility(_unitId: number, key: AbilityKey): boolean {
+    if (this.coach) return false;
     this.send({ t: 'skill', key });
     return true;
   }
@@ -225,6 +255,10 @@ export class ClientWorld implements IWorld {
     if (msg.t === 'match_start') {
       this.selfUnitId = msg.selfUnitId;
       this.selfTeam = msg.team;
+      this.coach = msg.coach === true;
+      // Forge queue: the match's forged definitions land here, before any
+      // snapshot can name one of them.
+      if (msg.forged) this.registerForged(msg.forged);
       return false;
     }
     if (msg.t === 'score') {
@@ -242,6 +276,7 @@ export class ClientWorld implements IWorld {
       let unit = this.units.get(s.i);
       if (!unit) {
         unit = materializeUnit(s);
+        unit.champion = unit.championId ? this.champions.get(unit.championId) : null;
         this.units.set(s.i, unit);
       } else {
         unit.pos.x = s.x;
@@ -251,6 +286,8 @@ export class ClientWorld implements IWorld {
         if (s.l !== undefined) unit.level = s.l;
       }
       unit.dead = s.d === 1;
+      unit.play = s.p ?? null;
+      unit.coachOrder = s.co ?? null;
       applyWireStatuses(unit, s.st, ccUntil);
       // Windup telegraph mirror: the renderer reads pendingSpell to draw
       // the charge and its aim for every visible champion.
