@@ -1691,6 +1691,13 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         : 'Spar a series (5 seeds)',
     ) as HTMLButtonElement;
     seriesBtn.disabled = seriesRunning || coaching;
+    // Nothing else on this screen says who the series is against; the
+    // Record's "versus" only tells you afterwards (playtest, 2026-09-03).
+    seriesBtn.title = dirty
+      ? `Five matches of your edit against v${bot.version} (your last save), sides alternating, house bots around both`
+      : bot.version > 1
+        ? `Five matches of v${bot.version} against v${bot.version - 1} (its previous version), sides alternating, house bots around both`
+        : 'Five matches against house bots (no previous version to face yet)';
     seriesBtn.addEventListener('click', () => {
       seriesRunning = true;
       seriesDone = 0;
