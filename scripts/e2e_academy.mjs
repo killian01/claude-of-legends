@@ -1,0 +1,166 @@
+// E2E for the Academy against a dev server (PORT from .env, Vite on 5173):
+// a fresh account creates a bot, spars it, reads the line the summary
+// leads with (result, kills, deaths, assists, creep score, the build as
+// icons), asks the coach one thing and finds the log scrolled to the
+// answer, then opens the replay and leaves it. Playtest round 3's
+// complaints, each pinned by a check. Screenshots land in SHOT_DIR when
+// set.
+import { mkdirSync } from 'node:fs';
+import puppeteer from 'puppeteer-core';
+import { e2eName, signIn } from './e2e_signin.mjs';
+
+const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const URL = 'http://localhost:5173';
+const SHOT_DIR = process.env.SHOT_DIR ?? '';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// The exact label first: the home screen stays in the DOM under the
+// Academy overlay, and its "Create a lobby" would take a "Create" click.
+async function clickButton(page, text) {
+  const ok = await page.evaluate((t) => {
+    const visible = [...document.querySelectorAll('button')].filter((e) => e.offsetParent !== null);
+    const label = (e) => (e.textContent || '').trim();
+    const b = visible.find((e) => label(e) === t) ?? visible.find((e) => label(e).startsWith(t));
+    if (!b) return false;
+    b.click();
+    return true;
+  }, text);
+  if (!ok) throw new Error(`button not found: ${text}`);
+}
+
+async function waitFor(page, fnBody, label, timeout = 40000) {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    if (await page.evaluate(fnBody)) return;
+    await sleep(300);
+  }
+  throw new Error(`timeout waiting for: ${label}`);
+}
+
+const findBtn = (t) =>
+  `[...document.querySelectorAll('button')].some((e) => e.offsetParent !== null && (e.textContent || '').trim().startsWith('${t}'))`;
+
+async function shot(page, name) {
+  if (!SHOT_DIR) return;
+  mkdirSync(SHOT_DIR, { recursive: true });
+  await page.screenshot({ path: `${SHOT_DIR}/${name}.png` });
+}
+
+const run = async () => {
+  const browser = await puppeteer.launch({
+    executablePath: CHROME,
+    headless: 'new',
+    args: ['--use-gl=swiftshader', '--window-size=1500,760', '--mute-audio'],
+    defaultViewport: { width: 1500, height: 760 },
+  });
+  const ctx = await browser.createBrowserContext();
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  // A refused API call is the usual reason a step silently does nothing.
+  page.on('response', (res) => {
+    if (res.url().includes('/api/') && res.status() >= 400) {
+      void res
+        .text()
+        .then((t) => console.error(`api ${res.status()} ${res.url()}: ${t.slice(0, 200)}`));
+    }
+  });
+  await page.goto(URL, { waitUntil: 'load' });
+  await signIn(page, e2eName('acad', String(Date.now() % 1000000)));
+  await waitFor(page, findBtn('Open the Academy'), 'home');
+  await clickButton(page, 'Open the Academy');
+  await page.waitForSelector('.ac input[placeholder="Name"]', { timeout: 20000 });
+  await page.evaluate(() => {
+    const input = document.querySelector('.ac input[placeholder="Name"]');
+    input.value = 'Nightfall';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await clickButton(page, 'Create');
+  try {
+    await waitFor(page, findBtn('Spar vs house bots'), 'the bot is open');
+  } catch (e) {
+    const dump = await page.evaluate(() => ({
+      status: [...document.querySelectorAll('.ac-status')].map((s) => s.textContent),
+      buttons: [...document.querySelectorAll('.ac button')]
+        .filter((b) => b.offsetParent !== null)
+        .map((b) => (b.textContent || '').trim()),
+      rail: document.querySelector('.ac-rail')?.innerText.slice(0, 300),
+    }));
+    console.error(JSON.stringify(dump, null, 1));
+    await shot(page, 'academy-fail');
+    throw e;
+  }
+
+  // Sparring: the summary leads with the line.
+  await clickButton(page, 'Spar vs house bots');
+  await waitFor(
+    page,
+    `document.querySelector('.ac-line .kda') !== null`,
+    'the sparring summary',
+    120000,
+  );
+  const line = await page.evaluate(() => ({
+    verdict: document.querySelector('.ac-line .verdict')?.textContent ?? '',
+    kda: document.querySelector('.ac-line .kda')?.textContent ?? '',
+    cs: document.querySelector('.ac-line .dim')?.textContent ?? '',
+    icons: document.querySelectorAll('.ac .hud-score-build img').length,
+    slots: document.querySelectorAll('.ac .hud-score-build .slot').length,
+    playRows: document.querySelectorAll('.ac-table tr').length,
+  }));
+  if (!/^(Won|Lost|No winner) after /.test(line.verdict))
+    throw new Error(`verdict: ${line.verdict}`);
+  if (!/^\d+ \/ \d+ \/ \d+$/.test(line.kda)) throw new Error(`kda: ${line.kda}`);
+  if (!/^\d+ cs$/.test(line.cs)) throw new Error(`cs: ${line.cs}`);
+  if (line.icons + line.slots !== 6)
+    throw new Error(`build row: ${line.icons} icons, ${line.slots} slots`);
+  console.log('summary:', line.verdict, '|', line.kda, '|', line.cs, '| icons', line.icons);
+  await shot(page, 'academy-summary');
+
+  // The coach: the log follows the answer to its end.
+  await page.evaluate(() => {
+    const input = document.querySelector('.ac-chatrow .ac-input');
+    input.value = 'Farm safely until level six, then look for fights beside an ally.';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await clickButton(page, 'Send');
+  await waitFor(
+    page,
+    `document.querySelectorAll('.ac-bubble.ai').length >= 1 && ${findBtn('Send')}`,
+    'the coach answered',
+    120000,
+  );
+  const scroll = await page.evaluate(() => {
+    const log = document.querySelector('.ac-chatlog');
+    return {
+      top: log.scrollTop,
+      client: log.clientHeight,
+      height: log.scrollHeight,
+      bubbles: document.querySelectorAll('.ac-bubble').length,
+      last: (document.querySelector('.ac-bubble.ai:last-of-type')?.textContent ?? '').slice(0, 80),
+    };
+  });
+  console.log('chat:', scroll);
+  if (scroll.height > scroll.client && scroll.top + scroll.client < scroll.height - 12) {
+    throw new Error(`the log did not follow the answer: ${JSON.stringify(scroll)}`);
+  }
+  await shot(page, 'academy-coach');
+
+  // The replay opens on the match, and the camera looks up the map.
+  await clickButton(page, 'Watch the replay');
+  await page.waitForSelector('.replay-bar', { timeout: 30000 });
+  await sleep(4000);
+  await page.mouse.move(750, 380);
+  await sleep(1500);
+  await shot(page, 'academy-replay');
+  await clickButton(page, 'Exit replay');
+  await waitFor(page, findBtn('Spar vs house bots'), 'back in the Academy', 30000);
+
+  if (errors.length > 0) throw new Error(`page errors: ${errors.join(' | ')}`);
+  await browser.close();
+  console.log('e2e_academy: ok');
+};
+
+run().catch(async (e) => {
+  console.error(e);
+  process.exit(1);
+});
