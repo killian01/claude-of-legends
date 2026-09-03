@@ -50,7 +50,9 @@ function stylesOf(mod) {
 }
 
 // One pair of styles over the seeds, mirrored: returns wins for A, for B,
-// draws, and the pairs (both, split, none) from A's side.
+// draws, the pairs (both, split, none) from A's side, and what the games
+// were made of: kills and towers taken per game for each side, the average
+// length. The numbers behind a rate, so a round reads as a story.
 function playPair(mod, styles, a, b) {
   const styleA = styles.find((s) => s.id === a);
   const styleB = styles.find((s) => s.id === b);
@@ -58,6 +60,7 @@ function playPair(mod, styles, a, b) {
   let winsB = 0;
   let draws = 0;
   const pairs = { both: 0, split: 0, none: 0 };
+  const made = { killsA: 0, killsB: 0, towersA: 0, towersB: 0, seconds: 0, games: 0 };
   for (let seed = firstSeed; seed < firstSeed + seeds; seed++) {
     let seedWinsA = 0;
     for (const teamA of [0, 1]) {
@@ -71,6 +74,19 @@ function playPair(mod, styles, a, b) {
         }
       }
       while (sim.winner === null && sim.tickCount < maxTicks) sim.tick();
+      for (const u of sim.units.values()) {
+        const isA = u.team === teamA;
+        if (u.kind === 'champion') {
+          if (isA) made.killsA += u.kills;
+          else made.killsB += u.kills;
+        } else if (u.kind === 'tower' && u.dead) {
+          // A dead tower of B's is a tower A took.
+          if (isA) made.towersB += 1;
+          else made.towersA += 1;
+        }
+      }
+      made.seconds += sim.time;
+      made.games += 1;
       if (sim.winner === null) draws++;
       else if (sim.winner === teamA) {
         winsA++;
@@ -81,7 +97,7 @@ function playPair(mod, styles, a, b) {
     else if (seedWinsA === 1) pairs.split++;
     else pairs.none++;
   }
-  return { a, b, winsA, winsB, draws, pairs };
+  return { a, b, winsA, winsB, draws, pairs, made };
 }
 
 if (!isMainThread) {
@@ -159,9 +175,13 @@ if (!isMainThread) {
     const decided = r.winsA + r.winsB;
     rate.set(`${r.a}>${r.b}`, decided > 0 ? r.winsA / decided : 0.5);
     rate.set(`${r.b}>${r.a}`, decided > 0 ? r.winsB / decided : 0.5);
+    const m = r.made;
+    const per = (v) => (m.games > 0 ? (v / m.games).toFixed(1) : '0');
     console.log(
       `${names[r.a]} vs ${names[r.b]}: ${r.winsA}-${r.winsB}-${r.draws} ` +
-        `(pairs both ${r.pairs.both}, split ${r.pairs.split}, none ${r.pairs.none})`,
+        `(pairs both ${r.pairs.both}, split ${r.pairs.split}, none ${r.pairs.none}; ` +
+        `a game: kills ${per(m.killsA)}-${per(m.killsB)}, towers ${per(m.towersA)}-${per(m.towersB)}, ` +
+        `${Math.round(m.games > 0 ? m.seconds / m.games : 0)}s)`,
     );
   }
   const pad = (s, n) => String(s).padEnd(n);

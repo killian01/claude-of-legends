@@ -100,7 +100,9 @@ The neutral river monster. It spawns in one of two mirrored river pits on an ann
 _Avoid_: dragon, boss, monster names from other games
 
 **Warden's Boon**:
-The team-wide, death-surviving damage buff granted when a team slays the Warden. Stacks a limited number of times.
+The team-wide, death-surviving damage buff granted when a team slays the Warden. Stacks a
+limited number of times. While it lasts, every wave the team sends carries a siege minion:
+holding the river turns into pressure on the lanes.
 _Avoid_: soul, objective buff, monster buff
 
 **Windup**:

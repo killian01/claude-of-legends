@@ -1,7 +1,11 @@
 // Minion wave spawning: every WAVE_EVERY seconds, each team sends melee and
 // caster minions down each lane from its base end; every third wave adds a
 // siege minion, and waves scale with game time, so lanes eventually PUSH
-// instead of annihilating each other exactly (review finding F.0).
+// instead of annihilating each other exactly (review finding F.0). A team
+// holding the Warden's Boon sends a siege minion with EVERY wave while it
+// lasts (plan-bots phase 16): objective control becomes lane pressure, the
+// genre's trade, so a team that wins the pit and a team that takes towers
+// meanwhile have traded something real.
 
 import type { GameMap, LaneId } from './content/map';
 import type { CombatCtx } from './sim_context';
@@ -40,9 +44,10 @@ const LANES: readonly LaneId[] = ['top', 'mid', 'bot'];
 
 export function spawnWave(ctx: CombatCtx, map: GameMap, waveIndex: number): void {
   const scale = waveScale(ctx.time);
-  const withSiege =
+  const siegeWave =
     waveIndex % SIEGE_WAVE_EVERY === SIEGE_WAVE_EVERY - 1 || ctx.time >= LATE_GAME_S;
   for (const team of [0, 1] as const) {
+    const withSiege = siegeWave || ctx.teamBuffs.boon(team, ctx.time) !== null;
     for (const lane of LANES) {
       const pts = map.lanes[lane];
       const a = team === 0 ? pts[0]! : pts[pts.length - 1]!;
