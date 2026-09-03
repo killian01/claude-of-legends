@@ -20,4 +20,4 @@ docs/research/
 art_src/
 .pnpm-store/
 dist-gate*/
-dist-matrix/
+dist-matrix*/

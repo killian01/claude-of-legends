@@ -58,6 +58,9 @@ export function dispatchAction(sim: Sim, unitId: number, action: Action): boolea
       if (!Number.isInteger(action.slot) || action.slot < 0) return false;
       sim.sellItem(unitId, action.slot);
       return true;
+    case 'stop':
+      sim.orderStop(unitId);
+      return true;
     default:
       return true;
   }

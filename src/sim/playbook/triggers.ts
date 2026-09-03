@@ -5,6 +5,7 @@
 import { ROLE_DAMAGE } from '../content/champions';
 import type { ObsSeat } from '../policy';
 import type { SlotContext } from './micro';
+import { fightOdds, ODDS_RADIUS } from './odds';
 import type { Side, Trigger } from './types';
 
 function within(value: number, below: number | undefined, atLeast: number | undefined): boolean {
@@ -61,6 +62,16 @@ export function holds(t: Trigger, ctx: SlotContext): boolean {
         (u) => Math.hypot(u.x - s.x, u.z - s.z) <= t.within,
       ).length;
       return countWithin(allies + 1 - enemies, t.atLeast, t.atMost);
+    }
+    case 'odds':
+      return within(fightOdds(ctx, t.within ?? ODDS_RADIUS), t.below, t.atLeast);
+    case 'minions': {
+      const own = t.side === 'own';
+      const n = obs.units.filter(
+        (u) =>
+          u.kind === 'minion' && u.friendly === own && Math.hypot(u.x - s.x, u.z - s.z) <= t.within,
+      ).length;
+      return countWithin(n, t.atLeast, t.atMost);
     }
     case 'enemyVisible':
       return ctx.champ !== null;

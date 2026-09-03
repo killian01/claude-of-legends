@@ -13,13 +13,15 @@
 // the kit, the fight's stance and target, and the sell behavior. Version 3
 // added the lineup triggers (a champion in the match, a role count, the
 // enemy's damage, an item seen, the lane opponent and partner) and the
-// lane preference.
+// lane preference. Version 4 added the fight's odds (the odds trigger and
+// the fight's commit), the minions trigger, the farm's last-hit mode and
+// the wave management (freeze, shove).
 
 import type { CoachOrder } from '../coach';
 import type { ChampionRole } from '../content/champions';
 import type { AbilityKey } from '../types';
 
-export const PLAYBOOK_FORMAT_VERSION = 3;
+export const PLAYBOOK_FORMAT_VERSION = 4;
 
 export type LaneId = 'top' | 'mid' | 'bot';
 
@@ -64,6 +66,13 @@ export type Trigger =
   // enemy champions in sight. atLeast 0 is an even fight or better,
   // atLeast 1 an advantage, atMost -1 outnumbered.
   | { kind: 'numbers'; within: number; atLeast?: number; atMost?: number }
+  // The fight's odds within a radius (default 20): the strength of the
+  // allied champions there, the bot included, over both sides' together,
+  // each champion weighed by its health and level. 0.5 is an even fight,
+  // above it an advantage, 1 nobody to fight.
+  | { kind: 'odds'; within?: number; below?: number; atLeast?: number }
+  // Minions of a side within a radius of the bot: the size of the wave here.
+  | { kind: 'minions'; side: Side; within: number; atLeast?: number; atMost?: number }
   // The lineup (plan-bots phase 12), public from champion select: a
   // champion is in the match on a side; a side fields so many of a role.
   | { kind: 'champion'; side: Side; is: string }
@@ -96,6 +105,17 @@ export type TargetRule = 'nearest' | 'lowest' | 'squishiest' | 'order';
 // alone).
 export type Alone = 'engage' | 'hold';
 
+// How the farm behavior treats the wave: shove hits the nearest minion in
+// reach (the default), lastHit strikes only a minion one attack kills, so
+// the wave stays where it is.
+export type FarmMode = 'shove' | 'lastHit';
+
+// What the wave management wants of the lane: freeze holds the enemy wave
+// in front of the bot's own lane tower (last hits only, standing just
+// ahead of the tower, holding still between them), shove sends the wave at
+// the enemy tower.
+export type WaveIntent = 'freeze' | 'shove';
+
 // A macro intent the engine turns into movement, attacks and casts through
 // the shared micro (last hits, dodging, key roles, aim). Every parameter is
 // optional and defaults to what the default playbook (the Laner) uses.
@@ -122,7 +142,11 @@ export type Behavior =
   // Fight the target champion: Sear in kill range, the hint-driven kit,
   // then attacks, holding distance by the stance; `alone` is what a walk-in
   // does with nobody beside it (within 8): engage anyway, or hold.
-  | { kind: 'fight'; stance?: Stance; target?: TargetRule; alone?: Alone }
+  // `commitAt` is the odds (the odds trigger's, within 20) under which the
+  // bot never walks in: it strikes what reaches it, kites, holds its engage
+  // spell, and leaves the slot to the plays below. Absent, it commits
+  // whatever the odds.
+  | { kind: 'fight'; stance?: Stance; target?: TargetRule; alone?: Alone; commitAt?: number }
   // Walk to where a nearly dead enemy was last seen, when healthy.
   | { kind: 'hunt'; hpAbove?: number }
   // An enemy just vanished nearby: walk its spot when healthy, give ground
@@ -131,8 +155,15 @@ export type Behavior =
   // Attack a live Warden in reach, walk to it when healthy, pre-position at
   // the nearest pit shortly before it spawns.
   | { kind: 'contestWarden'; hpAtLeast?: number; prepSeconds?: number }
-  // Attack the nearest enemy minion in reach.
-  | { kind: 'farm' }
+  // Attack the nearest enemy minion in reach; in lastHit mode, only one
+  // the next strike kills.
+  | { kind: 'farm'; mode?: FarmMode }
+  // Manage the lane's wave: freeze it in front of the bot's own lane tower
+  // (last hits only, standing just ahead of the tower and holding still, so
+  // the wave dies to the tower and the enemy laner must come deep for its
+  // farm), or shove it at the enemy tower. A freeze always acts while a
+  // live allied tower stands on the bot's lane; without one it passes.
+  | { kind: 'manageWave'; intent: WaveIntent }
   // Attack a visible jungle camp in reach.
   | { kind: 'takeCamp' }
   // Attack a vulnerable structure in reach with a minion escort.

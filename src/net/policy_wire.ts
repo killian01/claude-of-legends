@@ -42,6 +42,12 @@ export function parseAction(raw: unknown): Action | null {
       return isAbilityKey(a.key) ? { kind: 'level', key: a.key } : null;
     case 'recall':
       return { kind: 'recall' };
+    case 'sell':
+      return typeof a.slot === 'number' && Number.isInteger(a.slot) && a.slot >= 0
+        ? { kind: 'sell', slot: a.slot }
+        : null;
+    case 'stop':
+      return { kind: 'stop' };
     default:
       return null;
   }

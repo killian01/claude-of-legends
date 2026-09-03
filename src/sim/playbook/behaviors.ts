@@ -40,7 +40,9 @@ import {
   WARDEN_PREP_RANGE,
   WARDEN_PREP_S,
 } from './micro';
+import { fightOdds } from './odds';
 import type { Alone, Behavior, LaneId, Stance, TargetRule } from './types';
+import { lastHit, manageWave } from './wave';
 
 export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
   switch (b.kind) {
@@ -59,7 +61,7 @@ export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
     case 'finishSanctum':
       return finishSanctum(ctx);
     case 'fight':
-      return fight(ctx, b.stance ?? 'auto', b.target ?? 'nearest', b.alone ?? 'engage');
+      return fight(ctx, b.stance ?? 'auto', b.target ?? 'nearest', b.alone ?? 'engage', b.commitAt);
     case 'hunt':
       return hunt(ctx, b.hpAbove ?? 0.5);
     case 'answerVanish':
@@ -71,7 +73,9 @@ export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
         b.prepSeconds ?? WARDEN_PREP_S,
       );
     case 'farm':
-      return farm(ctx);
+      return b.mode === 'lastHit' ? lastHit(ctx) : farm(ctx);
+    case 'manageWave':
+      return manageWave(ctx, b.intent);
     case 'takeCamp':
       return takeCamp(ctx);
     case 'siege':
@@ -284,11 +288,20 @@ function kiteStep(ctx: SlotContext, threat: ObsUnit): Action {
 // closes (the first kite ran from every chaser and never struck back;
 // scouting round 1 counted it as deaths on the retreat play). Poke casts
 // and steps back and never trades attacks. Auto is kite on a ranged
-// champion, front on a melee one.
-function fight(ctx: SlotContext, stance: Stance, rule: TargetRule, alone: Alone): Action | null {
+// champion, front on a melee one. The commit (plan-bots phase 16): under
+// the odds a play names, the bot never walks in (no chase, no approach, the
+// engage spell held) and passes the turn once nothing is in reach.
+function fight(
+  ctx: SlotContext,
+  stance: Stance,
+  rule: TargetRule,
+  alone: Alone,
+  commitAt?: number,
+): Action | null {
   const { s, obs } = ctx;
   const champ = pickTarget(ctx, rule);
   if (!champ) return null;
+  const committed = commitAt === undefined || fightOdds(ctx) >= commitAt;
   const dc = dist(s.x, s.z, champ);
   if (dc <= CAST_RANGE && champ.hpFrac < KILL_SECURE_HP_FRAC) {
     const sear = readySigil(s, 'sear');
@@ -296,13 +309,14 @@ function fight(ctx: SlotContext, stance: Stance, rule: TargetRule, alone: Alone)
   }
   const range = ctx.attackRange;
   const mode = stance === 'auto' ? (range >= RANGED_MIN_RANGE ? 'kite' : 'front') : stance;
-  const cast = pickCast(ctx, champ);
+  const cast = pickCast(ctx, champ, committed);
   if (mode === 'front') {
     if (cast) return cast;
     if (dc <= CHAMPION_ATTACK_RANGE) return { kind: 'attack', targetId: champ.id };
-    // Told to hold when alone: no walk-in without an allied champion
-    // beside; the plays below (join, farm) take the slot instead.
+    // Told to hold when alone, or the odds under the commit: no walk-in;
+    // the plays below (join, fall back, farm) take the slot instead.
     if (alone === 'hold' && !ctx.besideAlly()) return null;
+    if (!committed) return null;
     if (dc <= CHASE_RANGE && !ctx.inTowerReach(champ.x, champ.z)) {
       return { kind: 'move', x: champ.x, z: champ.z };
     }
@@ -327,6 +341,7 @@ function fight(ctx: SlotContext, stance: Stance, rule: TargetRule, alone: Alone)
   if (ready && inReach) return { kind: 'attack', targetId: champ.id };
   if (threat && td < range * KITE_DANGER_FRAC && !securing) return kiteStep(ctx, threat);
   if (inReach) return { kind: 'noop' };
+  if (!committed) return null;
   if (dc <= range + KITE_APPROACH) {
     // Close to the edge of range, not past it.
     const k = (dc - (range - 0.5)) / dc;

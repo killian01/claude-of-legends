@@ -130,6 +130,21 @@ with no allied champion beside it: `engage` (the default) walks in anyway, `hold
 strikes only what is already in reach and leaves the slot to the plays below (the
 scout on the fill: the melee fed, diving alone).
 
+**The odds and the wave** (plan-bots phase 16) are the two levers the meta matrix asked
+of the engine. The odds (CONTEXT.md) weigh each champion within twenty units by its
+health and level and give the bot's side its share of the total: a trigger any play can
+read, and the fight's `commitAt`, the odds under which the bot never walks in: it strikes
+what reaches it, kites, holds its engage spell, and passes the turn once nothing is in
+reach, so the plays below (fall back, join, farm) decide. The wave management behavior
+carries two intents. Freeze holds the enemy wave in front of the bot's own lane tower:
+last hits only (the minion's health and the bot's attack damage are on the observation,
+additive), standing just ahead of the tower, holding still between them through the same
+stop verb humans press so idle defense does not push the wave; the wave dies to the tower,
+the gold is the bot's, and the enemy laner must come deep, past its own wave, for any
+farm. Shove hits the wave to send it at the enemy tower, the Laner's default farm. The
+farm behavior gained a last-hit mode for the same reason. All of it additive, format
+version 4.
+
 **Triggers** (v1) are predicates over the observation and the static map, combinable
 with and/or/not: own health, mana, level, gold, and time thresholds; enemy or ally
 champions within a radius (count); an enemy champion missing (from the last-seen memory);

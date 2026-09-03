@@ -31,6 +31,10 @@ export interface ObsUnit {
   z: number;
   hpFrac: number;
   radius: number;
+  // Health in points and its cap (additive v0 fields, plan-bots phase 16):
+  // the bar every viewer reads, in numbers, so a last hit can be timed.
+  hp?: number;
+  maxHp?: number;
   // Structures only: true while layer protection makes it immune (additive
   // v0 field; without it a policy cannot know a target is untouchable).
   invulnerable?: boolean;
@@ -54,6 +58,9 @@ export interface ObsUnit {
   // Champions only: the items in its bag (additive v0 field, plan-bots
   // phase 12): what a viewer reads by clicking a visible champion.
   items?: readonly string[];
+  // Champions only: the level on its health bar (additive v0 field,
+  // plan-bots phase 16), what the fight's odds weigh a champion by.
+  level?: number;
 }
 
 // A projectile the team can see (additive v0 block: dodging is impossible
@@ -153,6 +160,13 @@ export interface ObsSelf {
   // between swings costs nothing. This is what orb walking reads.
   attackReadyAt?: number;
   attackSwingUntil?: number | null;
+  // Own attack damage in points (additive v0 field, plan-bots phase 16):
+  // what one strike takes off an unarmored minion, so a last hit can be
+  // timed.
+  attackDamage?: number;
+  // True while holding still on a stop order (additive v0 field, plan-bots
+  // phase 16): idle defense keeps its hands off until the next order.
+  holding?: boolean;
   // The ability key whose recast window is armed right now, null otherwise
   // (ADR 0005; additive v0 field). While armed, that key reads ready and
   // the press resolves the follow-up instead of a fresh cast.
@@ -213,6 +227,10 @@ export type Action =
   | { kind: 'recall' }
   // Sells the item in a bag slot (additive v0 action, ADR 0014): the same
   // rule humans get, at the fountain, for seventy percent of its price.
-  | { kind: 'sell'; slot: number };
+  | { kind: 'sell'; slot: number }
+  // Stops and holds (additive v0 action, plan-bots phase 16): the same S
+  // humans press, opting out of idle defense until the next order. What a
+  // wave freeze stands on. An intention like move, outside the budget.
+  | { kind: 'stop' };
 
 export type Policy = (obs: Observation, rng: Rng) => Action;

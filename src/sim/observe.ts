@@ -90,6 +90,8 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       x: other.pos.x,
       z: other.pos.z,
       hpFrac: other.maxHp > 0 ? other.hp / other.maxHp : 0,
+      hp: other.hp,
+      maxHp: other.maxHp,
       radius: other.radius,
     };
     if (other.kind === 'tower' || other.kind === 'sanctum') {
@@ -109,6 +111,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       if (visible.length > 0) row.statuses = visible;
       if (other.championId) row.championId = other.championId;
       row.items = [...other.items];
+      row.level = other.level;
     }
     // The observable telegraph: a visible champion mid-windup announces
     // where the cast lands. Bursts and cones land on the caster.
@@ -224,6 +227,8 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       championId: u.championId,
       attackRange: u.stats.attackRange,
       attackReadyAt: u.attackReadyAt,
+      attackDamage: u.stats.ad,
+      holding: u.holding,
       attackSwingUntil: u.pendingAttack ? u.pendingAttack.resolveAt : null,
       recastArmed: u.recastArmed && u.recastArmed.until > sim.time ? u.recastArmed.key : null,
       lane: u.kind === 'champion' ? (u.lane as 'top' | 'mid' | 'bot' | null) : null,

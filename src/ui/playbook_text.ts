@@ -78,6 +78,18 @@ export function describeTrigger(t: Trigger): string {
       if (t.atMost !== undefined) parts.push(`at most ${t.atMost > 0 ? '+' : ''}${t.atMost}`);
       return `the numbers within ${t.within} are ${parts.join(' and ')}`;
     }
+    case 'odds': {
+      const parts: string[] = [];
+      if (t.below !== undefined) parts.push(`below ${pct(t.below)}`);
+      if (t.atLeast !== undefined) parts.push(`at least ${pct(t.atLeast)}`);
+      return `the odds within ${t.within ?? 20} are ${parts.join(' and ')}`;
+    }
+    case 'minions': {
+      const parts: string[] = [];
+      if (t.atLeast !== undefined) parts.push(`at least ${t.atLeast}`);
+      if (t.atMost !== undefined) parts.push(`at most ${t.atMost}`);
+      return `${sideName(t.side)} has ${parts.join(' and ')} minions within ${t.within}`;
+    }
     case 'champion':
       return `${sideName(t.side)} has ${championName(t.is)}`;
     case 'roles':
@@ -133,7 +145,8 @@ export function describeBehavior(b: Behavior): string {
               ? ', poking'
               : '';
       const alone = b.alone === 'hold' ? ', holding when alone' : '';
-      return `fight ${whom}${how}${alone}`;
+      const commit = b.commitAt === undefined ? '' : `, walking in only at odds ${pct(b.commitAt)}`;
+      return `fight ${whom}${how}${alone}${commit}`;
     }
     case 'sell':
       return `sell ${itemName(b.item)}`;
@@ -146,7 +159,11 @@ export function describeBehavior(b: Behavior): string {
         b.prepSeconds ?? 20
       } s early)`;
     case 'farm':
-      return 'farm the nearest minion';
+      return b.mode === 'lastHit' ? 'last hit the wave' : 'farm the nearest minion';
+    case 'manageWave':
+      return b.intent === 'freeze'
+        ? 'freeze the wave in front of my tower'
+        : 'shove the wave at the enemy tower';
     case 'takeCamp':
       return 'take a jungle camp';
     case 'siege':
@@ -309,6 +326,23 @@ export const TRIGGER_FORMS: Readonly<Record<Trigger['kind'], KindForm>> = {
       { key: 'atMost', label: 'at most', min: -10, max: 10, step: 1 },
     ],
   },
+  odds: {
+    label: 'the odds of the fight (my side over both)',
+    nums: [
+      { key: 'within', label: 'within', min: 0, max: 200, step: 1 },
+      { key: 'below', label: 'below', min: 0, max: 1, step: 0.05, pct: true },
+      { key: 'atLeast', label: 'at least', min: 0, max: 1, step: 0.05, pct: true },
+    ],
+  },
+  minions: {
+    label: 'minions near (the wave here)',
+    choices: [SIDE_CHOICE],
+    nums: [
+      { key: 'within', label: 'within', min: 0, max: 200, step: 1 },
+      { key: 'atLeast', label: 'at least', min: 0, max: 30, step: 1 },
+      { key: 'atMost', label: 'at most', min: 0, max: 30, step: 1 },
+    ],
+  },
   champion: {
     label: 'a champion is in the match',
     choices: [SIDE_CHOICE, CHAMPION_CHOICE],
@@ -394,6 +428,16 @@ export const BEHAVIOR_FORMS: Readonly<Record<Behavior['kind'], KindForm>> = {
         labels: ['engage anyway', 'hold, strike only in reach'],
       },
     ],
+    nums: [
+      {
+        key: 'commitAt',
+        label: 'walk in only when the odds are at least',
+        min: 0,
+        max: 1,
+        step: 0.05,
+        pct: true,
+      },
+    ],
   },
   sell: {
     label: 'sell an item',
@@ -430,7 +474,28 @@ export const BEHAVIOR_FORMS: Readonly<Record<Behavior['kind'], KindForm>> = {
       { key: 'prepSeconds', label: 'prepare (s) before spawn', min: 0, max: 300, step: 5 },
     ],
   },
-  farm: { label: 'farm the nearest minion' },
+  farm: {
+    label: 'farm the wave',
+    choices: [
+      {
+        key: 'mode',
+        label: 'mode',
+        options: ['shove', 'lastHit'],
+        labels: ['hit the nearest minion', 'last hits only'],
+      },
+    ],
+  },
+  manageWave: {
+    label: 'manage the wave',
+    choices: [
+      {
+        key: 'intent',
+        label: 'intent',
+        options: ['freeze', 'shove'],
+        labels: ['freeze it in front of my tower', 'shove it at the enemy tower'],
+      },
+    ],
+  },
   takeCamp: { label: 'take a jungle camp' },
   siege: {
     label: 'siege a structure',
@@ -497,6 +562,10 @@ export function freshTrigger(kind: Trigger['kind']): Trigger {
       return { kind, within: 40 };
     case 'numbers':
       return { kind, within: 20, atLeast: 0 };
+    case 'odds':
+      return { kind, within: 20, atLeast: 0.5 };
+    case 'minions':
+      return { kind, side: 'enemy', within: 12, atLeast: 4 };
     case 'champion':
       return { kind, side: 'enemy', is: 'vesk' };
     case 'roles':
@@ -526,6 +595,8 @@ export function freshBehavior(kind: Behavior['kind']): Behavior {
       return { kind, item: 'heart_gem' };
     case 'push':
       return { kind, lane: 'assigned' as LaneId | 'assigned' };
+    case 'manageWave':
+      return { kind, intent: 'freeze' };
     default:
       return { kind } as Behavior;
   }

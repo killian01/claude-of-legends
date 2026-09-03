@@ -141,8 +141,10 @@ function abilityRange(def: AbilityDef): number {
 }
 
 // Hint-driven ability selection against the target champion. The generic
-// rules per role; the per-champion intent lives in hints.ts.
-export function pickCast(ctx: SlotContext, champ: ObsUnit): Action | null {
+// rules per role; the per-champion intent lives in hints.ts. With `engage`
+// false the engage spell is held: an uncommitted fight (behaviors.ts) does
+// not dash in.
+export function pickCast(ctx: SlotContext, champ: ObsUnit, engage = true): Action | null {
   const { s, obs, def, hints, enemyChampions } = ctx;
   if (!def) return null;
   const dc = Math.hypot(champ.x - s.x, champ.z - s.z);
@@ -188,7 +190,7 @@ export function pickCast(ctx: SlotContext, champ: ObsUnit): Action | null {
       if (champ.hpFrac < 0.5 && dc <= range) return { kind: 'cast', key, x: champ.x, z: champ.z };
       continue;
     }
-    if (role === 'engage' && s.hpFrac < 0.5) continue;
+    if (role === 'engage' && (s.hpFrac < 0.5 || !engage)) continue;
     if (dc <= range && dc >= minR) {
       const aim = aimAt(s, champ, def.abilities[key], obs.time);
       return { kind: 'cast', key, x: aim.x, z: aim.z };

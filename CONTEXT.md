@@ -394,6 +394,25 @@ to whoever closes), front (walk in), poke (cast, then step back). Auto picks kit
 ranged champion and front for a melee one.
 _Avoid_: positioning mode, aggression, range setting
 
+**Odds**:
+How a fight stands before it is taken, read from team vision: the strength of the allied
+champions within a radius (the bot included, each weighed by health and level) over both
+sides' together. One half is an even fight, above it an advantage. A play reads the odds
+as a trigger, and the fight's commit is the odds under which the bot never walks in.
+_Avoid_: win probability, power score, threat level
+
+**Freeze**:
+Keeping the enemy wave in front of one's own lane tower: last hits only, standing just
+ahead of the tower and holding still between them, so the wave dies to the tower, the
+gold is the freezer's, and the enemy laner must come deep for any farm at all. One of the
+two intents of the wave management behavior; the same verb as the human's S.
+_Avoid_: hold the lane, stall, camp the tower
+
+**Shove**:
+Hitting the wave to send it at the enemy tower, which is what farming the nearest minion
+does. The other intent of the wave management behavior; the Laner's default farm.
+_Avoid_: push (that is walking the lane with the wave), clear, fast push
+
 **Lane opponent**:
 The enemy champion the team has seen the most inside the bot's assigned lane over the last
 three minutes; none when nobody was seen there. What "adapt to the opponent" adapts to

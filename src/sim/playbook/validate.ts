@@ -14,6 +14,7 @@ import { MAX_BUILD } from './kit';
 import {
   type Alone,
   type Behavior,
+  type FarmMode,
   type KitDef,
   type KitVariant,
   PLAYBOOK_FORMAT_VERSION,
@@ -24,6 +25,7 @@ import {
   type Stance,
   type TargetRule,
   type Trigger,
+  type WaveIntent,
 } from './types';
 
 export const MAX_PLAYS = 48;
@@ -33,6 +35,10 @@ const MAX_BRANCHES = 8;
 const STANCES: readonly Stance[] = ['auto', 'kite', 'front', 'poke'];
 const TARGET_RULES: readonly TargetRule[] = ['nearest', 'lowest', 'squishiest', 'order'];
 const ALONES: readonly Alone[] = ['engage', 'hold'];
+const FARM_MODES: readonly FarmMode[] = ['shove', 'lastHit'];
+const WAVE_INTENTS: readonly WaveIntent[] = ['freeze', 'shove'];
+// A wave here counts at most this many minions.
+const MAX_MINIONS = 30;
 const SKILL_KEYS: readonly SkillKey[] = ['Q', 'W', 'E'];
 const ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 const ABILITY_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
@@ -211,6 +217,23 @@ function trigger(raw: unknown, at: string, depth: number, errors: Errors): Trigg
       if (atMost !== undefined) out.atMost = atMost;
       return out;
     }
+    case 'odds': {
+      const within = optNumber(raw, 'within', 0, 200, at, errors);
+      const r = range(raw, 0, 1, at, errors);
+      return { kind: 'odds', ...(within !== undefined ? { within } : {}), ...r };
+    }
+    case 'minions': {
+      const within = reqNumber(raw, 'within', 0, 200, at, errors);
+      const atLeast = optNumber(raw, 'atLeast', 0, MAX_MINIONS, at, errors, true);
+      const atMost = optNumber(raw, 'atMost', 0, MAX_MINIONS, at, errors, true);
+      if (atLeast === undefined && atMost === undefined) {
+        errors.add(`${at}: needs atLeast or atMost`);
+      }
+      const out: Trigger = { kind: 'minions', side: side(raw, at, errors), within };
+      if (atLeast !== undefined) out.atLeast = atLeast;
+      if (atMost !== undefined) out.atMost = atMost;
+      return out;
+    }
     case 'order': {
       const is = raw.is;
       if (is === undefined) return { kind: 'order' };
@@ -321,10 +344,24 @@ function behavior(raw: unknown, at: string, errors: Errors): Behavior {
     case 'shop':
     case 'goShop':
     case 'finishSanctum':
-    case 'farm':
     case 'takeCamp':
     case 'obeyOrder':
       return { kind: raw.kind };
+    case 'farm': {
+      if (raw.mode === undefined) return { kind: 'farm' };
+      if (!(FARM_MODES as readonly unknown[]).includes(raw.mode)) {
+        errors.add(`${at}: farm mode must be one of ${FARM_MODES.join(', ')}`);
+        return { kind: 'farm' };
+      }
+      return { kind: 'farm', mode: raw.mode as FarmMode };
+    }
+    case 'manageWave': {
+      if (!(WAVE_INTENTS as readonly unknown[]).includes(raw.intent)) {
+        errors.add(`${at}: manageWave intent must be one of ${WAVE_INTENTS.join(', ')}`);
+        return { kind: 'manageWave', intent: 'freeze' };
+      }
+      return { kind: 'manageWave', intent: raw.intent as WaveIntent };
+    }
     case 'avoidTower': {
       let b: Behavior = { kind: 'avoidTower' };
       b = withOpt(b, 'escortMin', opt('escortMin', 0, 10, true));
@@ -347,6 +384,8 @@ function behavior(raw: unknown, at: string, errors: Errors): Behavior {
           errors.add(`${at}: alone must be one of ${ALONES.join(', ')}`);
         } else b.alone = raw.alone as Alone;
       }
+      const commitAt = opt('commitAt', 0, 1);
+      if (commitAt !== undefined) b.commitAt = commitAt;
       return b;
     }
     case 'sell': {

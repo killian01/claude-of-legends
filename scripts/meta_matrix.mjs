@@ -6,10 +6,13 @@
 // transitive one (one style beats every other) is a ladder one playbook
 // solves. Usage:
 //   node scripts/meta_matrix.mjs [--seeds 10] [--from 1] [--max-ticks 48000]
-//     [--workers N] [--dist dist-matrix]
-// Matches run in worker threads, one pair of styles per worker.
+//     [--workers N] [--dist dist-matrix] [--override <styleId>=<playbook.json>]...
+// Matches run in worker threads, one pair of styles per worker. An override
+// seats a candidate playbook (JSON, validated) in a house style's place for
+// this run, so a variant is measured without editing the tree; the style
+// prints with a star.
 
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -28,12 +31,29 @@ const distName = opt('--dist', 'dist-matrix');
 const root = process.cwd();
 const dist = path.join(root, distName);
 const bundle = path.join(dist, 'matrix.cjs');
+const overrides = [];
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--override' && args[i + 1] !== undefined) overrides.push(args[i + 1]);
+}
+
+// The styles of this run: the house styles, a candidate playbook standing
+// in for each overridden one.
+function stylesOf(mod) {
+  return mod.HOUSE_STYLES.map((s) => {
+    const o = overrides.find((x) => x.startsWith(`${s.id}=`));
+    if (!o) return s;
+    const file = o.slice(s.id.length + 1);
+    const v = mod.validatePlaybook(JSON.parse(readFileSync(file, 'utf8')));
+    if (!v.ok) throw new Error(`${file}: ${v.errors.join('; ')}`);
+    return { ...s, name: `${s.name}*`, policy: mod.playbookPolicy(v.def), playbook: v.def };
+  });
+}
 
 // One pair of styles over the seeds, mirrored: returns wins for A, for B,
 // draws, and the pairs (both, split, none) from A's side.
-function playPair(mod, a, b) {
-  const styleA = mod.HOUSE_STYLES.find((s) => s.id === a);
-  const styleB = mod.HOUSE_STYLES.find((s) => s.id === b);
+function playPair(mod, styles, a, b) {
+  const styleA = styles.find((s) => s.id === a);
+  const styleB = styles.find((s) => s.id === b);
   let winsA = 0;
   let winsB = 0;
   let draws = 0;
@@ -67,7 +87,8 @@ function playPair(mod, a, b) {
 if (!isMainThread) {
   const require = createRequire(import.meta.url);
   const mod = require(workerData.bundle);
-  const out = workerData.pairs.map(([a, b]) => playPair(mod, a, b));
+  const styles = stylesOf(mod);
+  const out = workerData.pairs.map(([a, b]) => playPair(mod, styles, a, b));
   parentPort.postMessage(out);
 } else {
   const { build } = await import('esbuild');
@@ -80,6 +101,8 @@ if (!isMainThread) {
       "export { fillTeam } from '../src/sim/fill';",
       "export { Rng } from '../src/sim/rng';",
       "export { HOUSE_STYLES } from '../src/sim/content/bots/house';",
+      "export { validatePlaybook } from '../src/sim/playbook';",
+      "export { playbookPolicy } from '../src/sim/playbook/interpreter';",
       '',
     ].join('\n'),
   );
@@ -94,8 +117,9 @@ if (!isMainThread) {
   });
   const require = createRequire(import.meta.url);
   const mod = require(bundle);
-  const ids = mod.HOUSE_STYLES.map((s) => s.id);
-  const names = Object.fromEntries(mod.HOUSE_STYLES.map((s) => [s.id, s.name]));
+  const styles = stylesOf(mod);
+  const ids = styles.map((s) => s.id);
+  const names = Object.fromEntries(styles.map((s) => [s.id, s.name]));
   const allPairs = [];
   for (let i = 0; i < ids.length; i++) {
     for (let j = i + 1; j < ids.length; j++) allPairs.push([ids[i], ids[j]]);

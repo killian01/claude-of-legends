@@ -88,9 +88,12 @@ additive optional fields (ADR 0005), because a breaking change breaks every bot
 trained against it. Additive action kinds count too: `recall` and `sell`
 (`{"kind":"sell","slot":n}`, the human rule: at the fountain, seventy percent
 back) arrived after v0 shipped, and a policy that never sends them is unaffected.
-The latest additive fields are the lineup: `seats` (both teams' champions and roles,
+Then the lineup: `seats` (both teams' champions and roles,
 with the assigned lane for the own team), `items` on a visible champion row, and
 `laneOpponents` (per lane, the enemy seen there the most over the last three minutes).
+The latest: `stop` (`{"kind":"stop"}`, the human S: hold still, idle defense off until
+the next order), `hp`, `maxHp` and `level` on visible unit rows, and `attackDamage` and
+`holding` on the self block, what a wave freeze and a fight's odds read.
 
 The observation is built from team vision, never global sim state: the fog
 applies to a remote policy exactly as it does to a human. Acting is fogged too,
