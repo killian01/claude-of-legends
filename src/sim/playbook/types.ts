@@ -14,8 +14,9 @@
 // added the lineup triggers (a champion in the match, a role count, the
 // enemy's damage, an item seen, the lane opponent and partner) and the
 // lane preference. Version 4 added the fight's odds (the odds trigger and
-// the fight's commit), the minions trigger, the farm's last-hit mode and
-// the wave management (freeze, shove).
+// the fight's commit), the minions trigger, the farm's last-hit mode, the
+// wave management (freeze, shove), and the collapse on a threatened tower
+// (the towerThreatened trigger, the defendTower behavior).
 
 import type { CoachOrder } from '../coach';
 import type { ChampionRole } from '../content/champions';
@@ -73,6 +74,9 @@ export type Trigger =
   | { kind: 'odds'; within?: number; below?: number; atLeast?: number }
   // Minions of a side within a radius of the bot: the size of the wave here.
   | { kind: 'minions'; side: Side; within: number; atLeast?: number; atMost?: number }
+  // A live allied tower within the radius of the bot has an enemy champion
+  // in the team's sight near it (within 16): the map is being lost there.
+  | { kind: 'towerThreatened'; within?: number }
   // The lineup (plan-bots phase 12), public from champion select: a
   // champion is in the match on a side; a side fields so many of a role.
   | { kind: 'champion'; side: Side; is: string }
@@ -164,6 +168,11 @@ export type Behavior =
   // farm), or shove it at the enemy tower. A freeze always acts while a
   // live allied tower stands on the bot's lane; without one it passes.
   | { kind: 'manageWave'; intent: WaveIntent }
+  // Collapse on the allied tower enemy champions are at: the one with the
+  // most of them, the nearest on a tie, within the radius (default the
+  // whole map). Passes the turn there, and with no tower threatened, so
+  // the plays below (fight) take over on arrival.
+  | { kind: 'defendTower'; within?: number }
   // Attack a visible jungle camp in reach.
   | { kind: 'takeCamp' }
   // Attack a vulnerable structure in reach with a minion escort.

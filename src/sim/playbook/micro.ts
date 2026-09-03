@@ -216,6 +216,9 @@ export const ENGAGED_RANGE = 10;
 export const BESIDE_RANGE = 6;
 // An allied champion this close counts as company for a walk-in.
 export const ALONE_RANGE = 8;
+// An enemy champion this close to an allied tower threatens it (the tower's
+// danger band plus a step: a sieger stands at its edge).
+export const TOWER_THREAT_RANGE = 16;
 export const JOIN_RANGE = 40;
 export const FIGHT_TARGET_RADIUS = 25;
 // Own attack range when the observation predates the field.
@@ -259,6 +262,10 @@ export interface SlotContext {
   engagedAllies(within: number): ObsUnit[];
   // An allied champion stands within ALONE_RANGE.
   besideAlly(): boolean;
+  // Live allied towers within the radius with enemy champions in sight near
+  // them (TOWER_THREAT_RANGE), the most threatened first, the nearest on a
+  // tie, each with its count.
+  threatenedTowers(within: number): { tower: ObsUnit; count: number }[];
   jitter(): { jx: number; jz: number };
   // The kit in force this slot (ADR 0014), resolved once when first asked.
   kit(): ActiveKit;
@@ -317,6 +324,18 @@ export function buildSlotContext(obs: Observation, rng: Rng, kitDef?: KitDef): S
       obs.units.some(
         (u) => u.friendly && u.kind === 'champion' && dist(s.x, s.z, u) <= ALONE_RANGE,
       ),
+    threatenedTowers: (within: number) => {
+      const out: { tower: ObsUnit; count: number }[] = [];
+      for (const t of obs.units) {
+        if (!t.friendly || t.kind !== 'tower' || t.hpFrac <= 0) continue;
+        if (dist(s.x, s.z, t) > within) continue;
+        const count = enemyChampions.filter((e) => dist(t.x, t.z, e) <= TOWER_THREAT_RANGE).length;
+        if (count > 0) out.push({ tower: t, count });
+      }
+      return out.sort(
+        (a, b) => b.count - a.count || dist(s.x, s.z, a.tower) - dist(s.x, s.z, b.tower),
+      );
+    },
     engagedAllies: (within: number) =>
       obs.units
         .filter(

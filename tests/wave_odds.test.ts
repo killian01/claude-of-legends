@@ -264,3 +264,45 @@ describe('the validator', () => {
     expect(validatePlaybook(play({ kind: 'always' }, { kind: 'manageWave' })).ok).toBe(false);
   });
 });
+
+describe('the collapse', () => {
+  it('names the threatened tower and walks to it, passing beside it or with none', () => {
+    const { sim, me, ally, foe1, foe2 } = scene();
+    ally.pos = { x: 140, z: 140 };
+    foe2.pos = { x: 140, z: 140 };
+    // The mid outer tower of team 0 stands at 57, 57; an enemy beside it.
+    me.pos = { x: 68, z: 68 };
+    foe1.pos = { x: 60, z: 60 };
+    sim.tick();
+    const ctx = ctxOf(sim, me.id);
+    expect(holds({ kind: 'towerThreatened' }, ctx)).toBe(true);
+    expect(holds({ kind: 'towerThreatened', within: 12 }, ctx)).toBe(false);
+    const go = runBehavior({ kind: 'defendTower' }, ctx);
+    expect(go?.kind).toBe('move');
+    if (go?.kind === 'move') expect(Math.hypot(go.x - 57, go.z - 57)).toBeLessThan(2.5);
+    expect(runBehavior({ kind: 'defendTower', within: 12 }, ctx)).toBeNull();
+    // Beside the tower: the plays below take the slot.
+    me.pos = { x: 60, z: 62 };
+    sim.tick();
+    expect(runBehavior({ kind: 'defendTower' }, ctxOf(sim, me.id))).toBeNull();
+    // The enemy gone: nothing to defend.
+    foe1.pos = { x: 90, z: 90 };
+    sim.tick();
+    expect(holds({ kind: 'towerThreatened' }, ctxOf(sim, me.id))).toBe(false);
+  });
+
+  it('is accepted by the validator with its radius, and refused past the map', () => {
+    const ok = validatePlaybook({
+      version: 4,
+      plays: [
+        { id: 'd', when: { kind: 'towerThreatened', within: 60 }, do: { kind: 'defendTower' } },
+      ],
+    });
+    expect(ok.ok).toBe(true);
+    const far = validatePlaybook({
+      version: 4,
+      plays: [{ id: 'd', when: { kind: 'always' }, do: { kind: 'defendTower', within: 500 } }],
+    });
+    expect(far.ok).toBe(false);
+  });
+});

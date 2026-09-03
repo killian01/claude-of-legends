@@ -118,6 +118,7 @@ least one of the two):
  {"kind":"numbers","within":0..200,"atLeast"?:-10..10,"atMost"?:-10..10} allied champions within the radius (the bot itself counted) minus enemy champions in sight there: atLeast 0 is an even fight or better, atLeast 1 an advantage, atMost -1 outnumbered
  {"kind":"odds","within"?:0..200 (20),"below"?:0..1,"atLeast"?:0..1} the fight's odds: the strength of the allied champions within the radius (the bot itself counted, each weighed by health and level) over both sides' together; 0.5 is an even fight, above it an advantage, below it a losing one
  {"kind":"minions","side":"own"|"enemy","within":0..200,"atLeast"?:0..30,"atMost"?:0..30} minions of that side within the radius: the size of the wave here
+ {"kind":"towerThreatened","within"?:0..200 (200)} a live allied tower within the radius has an enemy champion in sight near it (within 16): the map is being lost there
  {"kind":"order","is"?:"goto"|"warden"|"focus"|"back"|"group"|"hold"} the owner gave the bot a live coach order (any kind, or that one); every new bot has the play "coach" (this trigger, behavior obeyOrder) right under retreat, and it is VALID: keep it unless the owner asks otherwise
  The lineup, public from champion select ("own" is the bot's team, itself included):
  {"kind":"champion","side":"own"|"enemy","is":championId} that champion is in the match on that side
@@ -149,6 +150,7 @@ Behavior is ONE of (every parameter optional, default in parentheses):
  {"kind":"followAlly","keep"?:0..50 (3)} walk to the nearest allied champion and stay within keep.
  {"kind":"joinAlly","within"?:0..200 (40)} walk to the nearest ally in a fight within the radius; passes the turn beside it or when nobody is fighting.
  {"kind":"fallBack"} walk back under the nearest live allied tower; passes the turn once under it, so the plays below go on there.
+ {"kind":"defendTower","within"?:0..200 (200)} collapse on the allied tower enemy champions are at (the most of them, the nearest on a tie) within the radius; passes the turn beside it or with no tower threatened, so a fight play below takes over on arrival. How a spread pusher is caught with the numbers.
  {"kind":"splitPush"} push the lane enemies were seen in the least over the last minute (the farthest from the enemies in sight on a tie): takes towers while the enemy groups elsewhere; pair it with a fallBack or a retreat when outnumbered.
  {"kind":"holdPosition","x":0..${GAME_MAP.size},"z":0..${GAME_MAP.size},"within"?:0..50 (2)} walk to a point and hold; always acts.
 Patch operations, ONE compact JSON object per line:

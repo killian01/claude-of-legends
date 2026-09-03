@@ -90,6 +90,8 @@ export function describeTrigger(t: Trigger): string {
       if (t.atMost !== undefined) parts.push(`at most ${t.atMost}`);
       return `${sideName(t.side)} has ${parts.join(' and ')} minions within ${t.within}`;
     }
+    case 'towerThreatened':
+      return `an allied tower within ${t.within ?? 200} is under threat`;
     case 'champion':
       return `${sideName(t.side)} has ${championName(t.is)}`;
     case 'roles':
@@ -185,6 +187,8 @@ export function describeBehavior(b: Behavior): string {
       return `join an ally fighting within ${b.within ?? 40}`;
     case 'fallBack':
       return 'fall back under the nearest tower';
+    case 'defendTower':
+      return `collapse on a threatened allied tower within ${b.within ?? 200}`;
     case 'splitPush':
       return 'split push the quietest lane';
     case 'holdPosition':
@@ -342,6 +346,10 @@ export const TRIGGER_FORMS: Readonly<Record<Trigger['kind'], KindForm>> = {
       { key: 'atLeast', label: 'at least', min: 0, max: 30, step: 1 },
       { key: 'atMost', label: 'at most', min: 0, max: 30, step: 1 },
     ],
+  },
+  towerThreatened: {
+    label: 'an allied tower is under threat',
+    nums: [{ key: 'within', label: 'within', min: 0, max: 200, step: 5 }],
   },
   champion: {
     label: 'a champion is in the match',
@@ -523,6 +531,10 @@ export const BEHAVIOR_FORMS: Readonly<Record<Behavior['kind'], KindForm>> = {
     nums: [{ key: 'within', label: 'within', min: 0, max: 200, step: 5 }],
   },
   fallBack: { label: 'fall back under the nearest tower' },
+  defendTower: {
+    label: 'collapse on a threatened tower',
+    nums: [{ key: 'within', label: 'within', min: 0, max: 200, step: 5 }],
+  },
   splitPush: { label: 'split push the quietest lane' },
   holdPosition: {
     label: 'hold a position',

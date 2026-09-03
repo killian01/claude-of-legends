@@ -205,6 +205,12 @@ function trigger(raw: unknown, at: string, depth: number, errors: Errors): Trigg
     }
     case 'allyFighting':
       return { kind: 'allyFighting', within: reqNumber(raw, 'within', 0, 200, at, errors) };
+    case 'towerThreatened': {
+      const within = optNumber(raw, 'within', 0, 200, at, errors);
+      return within === undefined
+        ? { kind: 'towerThreatened' }
+        : { kind: 'towerThreatened', within };
+    }
     case 'numbers': {
       const within = reqNumber(raw, 'within', 0, 200, at, errors);
       const atLeast = optNumber(raw, 'atLeast', -10, 10, at, errors, true);
@@ -429,6 +435,8 @@ function behavior(raw: unknown, at: string, errors: Errors): Behavior {
       return withOpt({ kind: 'joinAlly' }, 'within', opt('within', 0, 200));
     case 'fallBack':
       return { kind: 'fallBack' };
+    case 'defendTower':
+      return withOpt({ kind: 'defendTower' }, 'within', opt('within', 0, 200));
     case 'splitPush':
       return { kind: 'splitPush' };
     case 'holdPosition': {

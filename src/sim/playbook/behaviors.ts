@@ -76,6 +76,8 @@ export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
       return b.mode === 'lastHit' ? lastHit(ctx) : farm(ctx);
     case 'manageWave':
       return manageWave(ctx, b.intent);
+    case 'defendTower':
+      return defendTower(ctx, b.within ?? 200);
     case 'takeCamp':
       return takeCamp(ctx);
     case 'siege':
@@ -560,6 +562,18 @@ export function quietestLane(ctx: SlotContext): LaneId | 'assigned' {
     }
   }
   return best;
+}
+
+// The collapse (plan-bots phase 16): an allied tower with enemy champions
+// at it is where the map is being lost, and a spread enemy is caught there
+// with the numbers. Walk to the most threatened tower in range; beside it,
+// or with none threatened, the plays below take the slot.
+function defendTower(ctx: SlotContext, within: number): Action | null {
+  const { s } = ctx;
+  const target = ctx.threatenedTowers(within)[0];
+  if (!target || dist(s.x, s.z, target.tower) <= BESIDE_RANGE + 4) return null;
+  const { jx, jz } = ctx.jitter();
+  return { kind: 'move', x: target.tower.x + jx, z: target.tower.z + jz };
 }
 
 function fallBack(ctx: SlotContext): Action | null {

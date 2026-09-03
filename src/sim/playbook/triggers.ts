@@ -73,6 +73,8 @@ export function holds(t: Trigger, ctx: SlotContext): boolean {
       ).length;
       return countWithin(n, t.atLeast, t.atMost);
     }
+    case 'towerThreatened':
+      return ctx.threatenedTowers(t.within ?? 200).length > 0;
     case 'enemyVisible':
       return ctx.champ !== null;
     case 'atFountain':
