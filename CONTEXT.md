@@ -45,6 +45,13 @@ two bot; a champion sits in its home lane while a seat is open there, and every 
 a team holds a lane from the start, a human's seat counted like a bot's.
 _Avoid_: role lane, default lane, position, main lane
 
+**Bot lane**:
+The lane the marksman and the support call home, drawn along the bottom and the right of
+the screen for both teams, as the top lane is drawn along the left and the top. Always said
+in full, "bot lane" and "top lane", never "bot" alone: a bare "bot" is the owned
+participant. "Bottom" is the same word.
+_Avoid_: bot (alone), low lane, side lane
+
 **Policy**:
 A deterministic decision function (observation, rng) -> action, with the exact observation and action space the Gym environment exposes. The single abstraction behind every bot, scripted or trained.
 _Avoid_: agent, brain, controller
@@ -428,6 +435,20 @@ time and deaths per play, and the night coach's proposed playbook changes with w
 sparring said about them. Nothing is applied without the owner unless they opted in, and
 every applied change is a version they can undo.
 _Avoid_: night report, digest, summary
+
+**Record**:
+A bot's list of the matches it played, newest first: sparring and series in the Academy,
+Arena matches, and live matches where the account fielded it. Each entry carries its
+kind, its result, the bot's line (kills, deaths, assists, creep score, the build it ended
+on), the playbook version that played, its plays, and its replay. Capped per bot, the
+oldest leaving first. The tally of won and lost is the record in the sports sense.
+_Avoid_: history, match log, ledger, and "record" for a stored replay (that is a replay)
+
+**Match sheet**:
+The reading of one entry of a Record: both teams' scoreboard with their builds, time and
+deaths per play, the bot's deaths with their minute and the play that held, each a link
+into the replay a few seconds before, and the replay itself.
+_Avoid_: match detail, post-game screen, summary, report (that is the Briefing's material)
 
 **Rating**:
 An account's Elo on one ladder. An account holds one per way its seat was played: by hand,

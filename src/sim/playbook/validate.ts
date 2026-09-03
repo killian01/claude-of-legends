@@ -6,7 +6,7 @@
 // unexpected rides into the sim.
 
 import type { CoachOrder } from '../coach';
-import { type ChampionRole, CHAMPIONS, DEFAULT_CHAMPION_ID } from '../content/champions';
+import { CHAMPIONS, type ChampionRole, DEFAULT_CHAMPION_ID } from '../content/champions';
 import { ITEMS } from '../content/items';
 import { GAME_MAP } from '../content/map';
 import type { AbilityKey } from '../types';
@@ -419,7 +419,8 @@ function play(raw: unknown, index: number, seen: Set<string>, errors: Errors): P
   return out;
 }
 
-// A build: finished item ids from the shop, in order, no duplicates.
+// A build: item ids from the shop, in order. An item may be listed more
+// than once: each listing is one more copy to own (kit.ts, unsatisfied).
 function build(raw: unknown, at: string, errors: Errors): string[] | undefined {
   if (raw === undefined) return undefined;
   if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_BUILD) {
@@ -430,10 +431,6 @@ function build(raw: unknown, at: string, errors: Errors): string[] | undefined {
   for (const id of raw) {
     if (typeof id !== 'string' || ITEMS[id] === undefined) {
       errors.add(`${at}: unknown item "${String(id)}"`);
-      return undefined;
-    }
-    if (out.includes(id)) {
-      errors.add(`${at}: "${id}" is listed twice`);
       return undefined;
     }
     out.push(id);

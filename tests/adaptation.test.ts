@@ -202,7 +202,7 @@ describe('the lane preference', () => {
     const cleared = applyPatchOp(set.def, { op: 'lanes', lanes: null });
     expect(cleared.ok && cleared.def.lanes).toBeUndefined();
     expect(describeOp({ op: 'lanes', lanes: ['top', 'mid'] })).toBe(
-      'lane preference: top, then mid',
+      'lane preference: top lane, then mid lane',
     );
     expect(describeOp({ op: 'lanes', lanes: null })).toMatch(/home lane/);
   });

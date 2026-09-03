@@ -91,6 +91,27 @@ const run = async () => {
     throw e;
   }
 
+  // The kit: the catalog's cards write the build by sight, the same item
+  // twice included (the working playbook is what the sparring plays).
+  await page.waitForSelector('.ic-card[data-item="warbrand"]', { timeout: 10000 });
+  const roleSlots = await page.evaluate(() => document.querySelectorAll('.ic-slot').length);
+  await page.evaluate(() => document.querySelector('.ic-card[data-item="warbrand"]').click());
+  await sleep(200);
+  await page.evaluate(() => document.querySelector('.ic-card[data-item="warbrand"]').click());
+  await sleep(200);
+  const kit = await page.evaluate(() => ({
+    slots: document.querySelectorAll('.ic-slot').length,
+    warbrands: document.querySelectorAll('.ic-slot[data-item="warbrand"]').length,
+    badge: document.querySelector('.ic-card[data-item="warbrand"] .ic-count')?.textContent ?? '',
+    tools: document.querySelectorAll('.ic-slot-tools').length,
+  }));
+  if (kit.slots !== roleSlots + 2) throw new Error(`slots: ${roleSlots} then ${kit.slots}`);
+  if (kit.warbrands !== 2 || kit.badge !== 'x2')
+    throw new Error(`warbrands: ${JSON.stringify(kit)}`);
+  if (kit.tools !== kit.slots) throw new Error('the owner build has no tools');
+  console.log('kit:', kit);
+  await shot(page, 'academy-kit');
+
   // Sparring: the summary leads with the line.
   await clickButton(page, 'Spar vs house bots');
   await waitFor(
@@ -119,15 +140,21 @@ const run = async () => {
   // The coach: the log follows the answer to its end.
   await page.evaluate(() => {
     const input = document.querySelector('.ac-chatrow .ac-input');
-    input.value = 'Farm safely until level six, then look for fights beside an ally.';
+    // Long enough that the log overflows its box, so the scroll check bites.
+    input.value =
+      'Farm safely until level six and never fight alone before that. Then look for fights ' +
+      'beside an ally, join any fight within forty, and back off under the enemy tower ' +
+      'when outnumbered. Take the Warden whenever it is up and the team is healthy.';
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await clickButton(page, 'Send');
+  // Answered: the send button reads Send again (Asking... while it streams).
   await waitFor(
     page,
-    `document.querySelectorAll('.ac-bubble.ai').length >= 1 && ${findBtn('Send')}`,
+    `document.querySelectorAll('.ac-chatlog .ac-bubble.ai').length >= 1 &&
+      (document.querySelector('.ac-chatrow button')?.textContent ?? '') === 'Send'`,
     'the coach answered',
-    120000,
+    180000,
   );
   const scroll = await page.evaluate(() => {
     const log = document.querySelector('.ac-chatlog');
@@ -136,10 +163,18 @@ const run = async () => {
       client: log.clientHeight,
       height: log.scrollHeight,
       bubbles: document.querySelectorAll('.ac-bubble').length,
-      last: (document.querySelector('.ac-bubble.ai:last-of-type')?.textContent ?? '').slice(0, 80),
+      last: (
+        [...document.querySelectorAll('.ac-chatlog .ac-bubble.ai')].pop()?.textContent ?? ''
+      ).slice(0, 80),
     };
   });
   console.log('chat:', scroll);
+  if (scroll.bubbles < 2) {
+    const bad = await page.evaluate(
+      () => document.querySelector('.ac-status.bad')?.textContent ?? 'no error shown',
+    );
+    throw new Error(`the coach did not answer: ${bad}`);
+  }
   if (scroll.height > scroll.client && scroll.top + scroll.client < scroll.height - 12) {
     throw new Error(`the log did not follow the answer: ${JSON.stringify(scroll)}`);
   }

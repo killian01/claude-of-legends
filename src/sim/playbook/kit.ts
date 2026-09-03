@@ -112,10 +112,32 @@ function closure(id: string, into: Map<string, number> = new Map()): Map<string,
   return into;
 }
 
-// A target counts as owned when the bag holds it or an item built from it:
-// the Warbrand that became a Doombrand is still on the bot.
+// How many of `target` the bot owns: the copies in the bag plus the copies
+// consumed into a bigger item there (the Warbrand that became a Doombrand
+// is still on the bot; a Colossus Heart is two Heart Gems).
+export function ownedCount(bag: readonly string[], target: string): number {
+  let n = 0;
+  for (const b of bag) n += closure(b).get(target) ?? 0;
+  return n;
+}
+
 export function ownsTarget(bag: readonly string[], target: string): boolean {
-  return bag.some((b) => b === target || closure(b).has(target));
+  return ownedCount(bag, target) > 0;
+}
+
+// The targets the build still wants, in build order, one per copy: an item
+// listed twice is wanted twice, and its n-th listing is satisfied once the
+// bot owns n of it (playtest round 3: two of the same item is a build).
+export function unsatisfied(build: readonly string[], bag: readonly string[]): string[] {
+  const seen = new Map<string, number>();
+  const out: string[] = [];
+  for (const t of build) {
+    if (ITEMS[t] === undefined) continue;
+    const k = (seen.get(t) ?? 0) + 1;
+    seen.set(t, k);
+    if (ownedCount(bag, t) < k) out.push(t);
+  }
+  return out;
 }
 
 // The next thing to buy toward `target`: the target itself when every
@@ -169,8 +191,7 @@ export function unwantedSlots(build: readonly string[], bag: readonly string[]):
   // are not needed twice).
   const need = new Map<string, number>();
   const held: number[] = [];
-  for (const t of build) {
-    if (ownsTarget(bag, t)) continue;
+  for (const t of unsatisfied(build, bag)) {
     for (const c of ITEMS[t]?.buildsFrom ?? []) {
       const idx = bag.findIndex((b, i) => b === c && !held.includes(i));
       if (idx !== -1) {
@@ -180,12 +201,22 @@ export function unwantedSlots(build: readonly string[], bag: readonly string[]):
       for (const [id, n] of closure(c)) need.set(id, (need.get(id) ?? 0) + n);
     }
   }
+  // The copies of each target the build lists: a bag item that is one, or
+  // is built from one, is wanted up to that count and no further.
+  const want = new Map<string, number>();
+  for (const t of build) want.set(t, (want.get(t) ?? 0) + 1);
   const out: number[] = [];
   bag.forEach((b, i) => {
     // A component an unfinished target will consume is spoken for.
     if (held.includes(i)) return;
-    const bClosure = closure(b);
-    if (build.some((t) => bClosure.has(t))) return;
+    let wanted = false;
+    for (const [id, n] of closure(b)) {
+      const w = want.get(id) ?? 0;
+      if (w <= 0) continue;
+      want.set(id, w - Math.min(w, n));
+      wanted = true;
+    }
+    if (wanted) return;
     const n = need.get(b) ?? 0;
     if (n > 0) {
       need.set(b, n - 1);
@@ -219,7 +250,7 @@ export function nextKitStep(
   bag: readonly string[],
   gold: number,
 ): KitStep | null {
-  const unsat = build.filter((t) => ITEMS[t] !== undefined && !ownsTarget(bag, t));
+  const unsat = unsatisfied(build, bag);
   if (unsat.length === 0) return null;
   const free = BAG_SLOTS - bag.length;
   let target = unsat[0]!;

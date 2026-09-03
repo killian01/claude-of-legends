@@ -86,7 +86,7 @@ function catalog(): string {
 // The playbook grammar, told compactly. Kept by hand beside
 // src/sim/playbook/types.ts and validate.ts; the validator catches drift.
 const GRAMMAR = `
-A playbook is {"version":3,"plays":[Play...],"kit"?:Kit,"lanes"?:["top"|"mid"|"bot"...]}, at most ${MAX_PLAYS} plays. lanes: the lanes the bot asks for, in order, one to three, seated ahead of its champion's home lane (the first with a seat open). Each decision
+A playbook is {"version":3,"plays":[Play...],"kit"?:Kit,"lanes"?:["top"|"mid"|"bot"...]}, at most ${MAX_PLAYS} plays. lanes: the lanes the bot asks for, in order, one to three, seated ahead of its champion's home lane (the first with a seat open); "bottom" and "bot lane" both mean "bot", and in your comment always say "bot lane" or "top lane", never "bot" alone (a bare "bot" is the bot itself). Each decision
 slot (four per second) the bot walks the list top down; the first play whose trigger holds AND
 whose behavior can act this slot is the one that acts. A behavior that cannot act (nothing to
 farm, nothing affordable) passes to the next play. Reflexes run before the list and are not yours
@@ -95,8 +95,8 @@ recall channel. The micro (last hits, aim, which key is the escape, the steps of
 engine's too.
 The kit is what the bot works toward, as opposed to what it does now:
 Kit: {"build"?:[itemId...],"skills"?:["Q"|"W"|"E" x3],"variants"?:[{"when":Trigger,"build"?:[...],"skills"?:[...]}...]}
- build: FINISHED items in order, 1 to ${MAX_BUILD}, no duplicates; the engine buys the components in
- recipe order and an item consumed into a later one still counts as owned. Absent: the champion's
+ build: FINISHED items in order, 1 to ${MAX_BUILD}; an item listed twice is owned twice; the engine
+ buys the components in recipe order and an item consumed into a later one still counts as owned. Absent: the champion's
  role build. Past a full bag the next target replaces the cheapest item once the gold covers it, and
  a leftover the build no longer wants is sold first (the bot sells at the fountain for 70%).
  skills: the order of Q, W, E to max; R goes at levels 6, 11, 16. Absent: Q, W, E.

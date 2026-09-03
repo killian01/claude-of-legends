@@ -24,11 +24,13 @@ import {
   BAG_SLOTS,
   DAMAGE_BUILD,
   nextKitStep,
+  ownedCount,
   ownsTarget,
   remainingCost,
   roleBuild,
   SELL_REFUND,
   SHELL_BUILD,
+  unsatisfied,
   unwantedSlots,
 } from '../src/sim/playbook/kit';
 import { buildSlotContext, type SlotContext } from '../src/sim/playbook/micro';
@@ -180,6 +182,28 @@ describe('the walker', () => {
     // Every sale was a leftover, sold once.
     expect(new Set(end.sold).size).toBe(end.sold.length);
     for (const id of end.sold) expect(end.bought.filter((b) => b === id).length).toBeGreaterThan(1);
+  });
+
+  it('buys an item listed twice twice, counting copies through what they became', () => {
+    // The second Warbrand is wanted only once the first is owned, and a
+    // Warbrand that became a Doombrand still counts.
+    expect(unsatisfied(['warbrand', 'warbrand'], [])).toEqual(['warbrand', 'warbrand']);
+    expect(unsatisfied(['warbrand', 'warbrand'], ['warbrand'])).toEqual(['warbrand']);
+    expect(unsatisfied(['warbrand', 'warbrand'], ['doombrand', 'warbrand'])).toEqual([]);
+    const two = walk(['warbrand', 'warbrand'], [], 0, 400, 30);
+    expect(two.bag.filter((b) => b === 'warbrand')).toHaveLength(2);
+    expect(two.bought.filter((b) => b === 'iron_blade')).toHaveLength(4);
+    expect(two.sold).toEqual([]);
+    // Two Heart Gems then a Colossus Heart: the gems listed are the ones the
+    // heart consumes, so no third gem is bought.
+    const gems = walk(['heart_gem', 'heart_gem', 'colossus_heart'], [], 0, 400, 30);
+    expect(gems.bought).toEqual(['heart_gem', 'heart_gem', 'colossus_heart']);
+    expect(gems.bag).toEqual(['colossus_heart']);
+    expect(ownedCount(['colossus_heart'], 'heart_gem')).toBe(2);
+    expect(unsatisfied(['heart_gem', 'heart_gem'], ['colossus_heart'])).toEqual([]);
+    // A copy beyond the count the build lists is a leftover, sold first.
+    expect(unwantedSlots(['warbrand'], ['warbrand', 'warbrand'])).toEqual([1]);
+    expect(unwantedSlots(['warbrand', 'warbrand'], ['warbrand', 'warbrand'])).toEqual([]);
   });
 });
 
@@ -378,13 +402,12 @@ describe('the validator and the patch', () => {
     expect(empty.ok && empty.def.kit).toBeUndefined();
   });
 
-  it('refuses unknown items, duplicates, bad skill orders, empty variants, bad stances', () => {
+  it('refuses unknown items, bad skill orders, empty variants, bad stances; twice is fine', () => {
     expect(errorsOf({ version: 2, plays, kit: { build: ['excalibur'] } })[0]).toMatch(
       /unknown item/,
     );
-    expect(errorsOf({ version: 2, plays, kit: { build: ['warbrand', 'warbrand'] } })[0]).toMatch(
-      /twice/,
-    );
+    // An item listed twice is two copies to own (playtest round 3).
+    expect(errorsOf({ version: 2, plays, kit: { build: ['warbrand', 'warbrand'] } })).toEqual([]);
     expect(errorsOf({ version: 2, plays, kit: { skills: ['Q', 'Q', 'W'] } })[0]).toMatch(/skills/);
     expect(
       errorsOf({ version: 2, plays, kit: { variants: [{ when: { kind: 'always' } }] } })[0],

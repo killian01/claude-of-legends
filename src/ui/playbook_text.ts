@@ -67,7 +67,7 @@ export function describeTrigger(t: Trigger): string {
     case 'sigilReady':
       return `${t.id} is ready`;
     case 'lane':
-      return `assigned to ${t.is}`;
+      return `assigned to ${t.is} lane`;
     case 'order':
       return t.is === undefined ? 'the coach gave an order' : `the coach ordered ${t.is}`;
     case 'allyFighting':
@@ -148,7 +148,10 @@ export function describeBehavior(b: Behavior): string {
     case 'obeyOrder':
       return 'do what the coach ordered';
     case 'push': {
-      const lane = b.lane === undefined || b.lane === 'assigned' ? 'the assigned lane' : b.lane;
+      // A lane is always said in full: a bare "bot" is the owned bot
+      // (CONTEXT.md, Bot lane).
+      const lane =
+        b.lane === undefined || b.lane === 'assigned' ? 'the assigned lane' : `${b.lane} lane`;
       const regroup =
         b.regroupAt === null ? ', never regrouping' : `, regrouping mid at ${b.regroupAt ?? 720} s`;
       return `push ${lane}${regroup}`;
@@ -267,7 +270,14 @@ export const TRIGGER_FORMS: Readonly<Record<Trigger['kind'], KindForm>> = {
   },
   lane: {
     label: 'assigned lane',
-    choices: [{ key: 'is', label: 'is', options: ['top', 'mid', 'bot'] }],
+    choices: [
+      {
+        key: 'is',
+        label: 'is',
+        options: ['top', 'mid', 'bot'],
+        labels: ['top lane', 'mid lane', 'bot lane'],
+      },
+    ],
   },
   order: {
     label: 'the coach gave an order',
@@ -413,7 +423,14 @@ export const BEHAVIOR_FORMS: Readonly<Record<Behavior['kind'], KindForm>> = {
   obeyOrder: { label: 'do what the coach ordered' },
   push: {
     label: 'push a lane',
-    choices: [{ key: 'lane', label: 'lane', options: ['assigned', 'top', 'mid', 'bot'] }],
+    choices: [
+      {
+        key: 'lane',
+        label: 'lane',
+        options: ['assigned', 'top', 'mid', 'bot'],
+        labels: ['the assigned lane', 'top lane', 'mid lane', 'bot lane'],
+      },
+    ],
     nums: [{ key: 'regroupAt', label: 'regroup mid after (s)', min: 0, max: 7200, step: 30 }],
   },
   followAlly: {
@@ -531,7 +548,7 @@ export function describeOp(op: PatchOp): string {
     }
     case 'lanes':
       return op.lanes && op.lanes.length > 0
-        ? `lane preference: ${op.lanes.join(', then ')}`
+        ? `lane preference: ${op.lanes.map((l) => `${l} lane`).join(', then ')}`
         : 'lane preference: none, the home lane';
     case 'replace':
       return `replace the whole playbook (${op.playbook.plays.length} plays)`;

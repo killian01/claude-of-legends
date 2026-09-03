@@ -18,7 +18,7 @@ import {
 import { type CoachTurn, commentOf } from '../net/coach_chat';
 import type { ReplayRecord } from '../net/replay';
 import { CHAMPION_LIST, CHAMPIONS, homeLane } from '../sim/content/champions';
-import { ITEM_LIST, ITEMS } from '../sim/content/items';
+import { ITEMS } from '../sim/content/items';
 import { SIGIL_LIST } from '../sim/content/sigils';
 import {
   applyPatchOp,
@@ -35,6 +35,7 @@ import {
   type Trigger,
   validatePlaybook,
 } from '../sim/playbook';
+import { buildCounts, buildRow, itemCatalog } from './item_catalog';
 import { el } from './menu';
 import { startMenuBackdrop } from './menu_backdrop';
 import {
@@ -793,10 +794,6 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
   }
 
   // --- the kit: what the bot works toward (ADR 0014) ---
-  const itemLabel = (id: string): string => {
-    const it = ITEMS[id];
-    return it ? `${it.name} (${it.cost})` : id;
-  };
   const itemNames = (ids: readonly string[]): string =>
     ids.map((id) => ITEMS[id]?.name ?? id).join(', ');
 
@@ -815,49 +812,38 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     return { tools, mk };
   }
 
-  function buildEditor(items: readonly string[], onChange: (next: string[]) => void): HTMLElement {
+  // A build edited by sight (playtest round 3): the items as icon slots in
+  // buying order, and the shop's catalog under them, a click adding the
+  // card to the build; the same item twice is two copies. The main build
+  // keeps its catalog open; a variant's opens on demand.
+  const catalogOpen = new Set<string>();
+  function buildEditor(
+    items: readonly string[],
+    onChange: (next: string[]) => void,
+    key = 'main',
+  ): HTMLElement {
     const box = el('div', '');
-    const swapped = (a: number, b: number): string[] => {
-      const n = [...items];
-      const va = n[a]!;
-      n[a] = n[b]!;
-      n[b] = va;
-      return n;
-    };
-    items.forEach((id, i) => {
-      const row = el('div', 'ac-row');
-      row.append(el('span', 'ac-kit-item', `${i + 1}. ${itemLabel(id)}`));
-      const { tools, mk } = miniTools();
-      mk('up', 'Buy it earlier', () => onChange(swapped(i, i - 1)), i === 0);
-      mk('down', 'Buy it later', () => onChange(swapped(i, i + 1)), i === items.length - 1);
-      mk('x', 'Drop it from the build', () => onChange(items.filter((_, j) => j !== i)));
-      row.append(tools);
-      box.append(row);
-    });
-    if (items.length < MAX_BUILD) {
-      const addRow = el('div', 'ac-row');
-      const sel = el('select', 'ac-select') as HTMLSelectElement;
-      for (const tier of [3, 2, 1] as const) {
-        const group = document.createElement('optgroup');
-        group.label = tier === 1 ? 'Components' : `Tier ${tier}`;
-        for (const it of ITEM_LIST) {
-          if (it.tier !== tier || items.includes(it.id)) continue;
-          const o = document.createElement('option');
-          o.value = it.id;
-          o.textContent = itemLabel(it.id);
-          group.append(o);
-        }
-        if (group.children.length > 0) sel.append(group);
-      }
-      sel.disabled = coaching;
-      const add = el('button', 'ac-btn mini', '+ add');
-      add.disabled = coaching;
-      add.addEventListener('click', () => {
-        if (sel.value) onChange([...items, sel.value]);
+    box.append(buildRow(items, { onChange, disabled: coaching }));
+    const full = items.length >= MAX_BUILD;
+    const open = key === 'main' || catalogOpen.has(key);
+    if (!open) {
+      const show = el('button', 'ac-btn mini', '+ add from the catalog');
+      show.disabled = coaching || full;
+      show.addEventListener('click', () => {
+        catalogOpen.add(key);
+        renderMain();
       });
-      addRow.append(sel, add);
-      box.append(addRow);
+      box.append(show);
+      return box;
     }
+    if (full) box.append(el('div', 'ac-sub', `A build lists at most ${MAX_BUILD} items.`));
+    box.append(
+      itemCatalog({
+        onPick: (id) => onChange([...items, id]),
+        counts: buildCounts(items),
+        disabled: coaching || full,
+      }),
+    );
     return box;
   }
 
@@ -899,10 +885,11 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       el(
         'p',
         'ac-lead',
-        'What the bot works toward: its build, finished items in the order it buys them (the ' +
-          'engine buys the pieces, sells what the build no longer wants, and past a full bag ' +
-          'replaces the cheapest item), and which spell it maxes first. A variant swaps them ' +
-          'while its condition holds; the first that holds wins, checked at every purchase.',
+        'What the bot works toward: its build, items in the order it buys them (the engine ' +
+          'buys the pieces, sells what the build no longer wants, and past a full bag ' +
+          'replaces the cheapest item; an item listed twice is bought twice), and which ' +
+          'spell it maxes first. A variant swaps them while its condition holds; the first ' +
+          'that holds wins, checked at every purchase.',
       ),
     );
     const kit = def.kit ?? {};
@@ -912,11 +899,14 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     const laneRow = el('div', 'ac-row');
     laneRow.append(el('h4', '', 'Lane'));
     const laneSel = document.createElement('select');
+    // Lanes are always said in full: a bare "bot" is the owned bot
+    // (CONTEXT.md, Bot lane).
+    const home = homeLane(champ?.role);
     for (const [value, label] of [
-      ['home', `home lane (${homeLane(champ?.role) ?? 'any'})`],
-      ['top', 'top'],
-      ['mid', 'mid'],
-      ['bot', 'bot'],
+      ['home', home ? `home lane (${home} lane)` : 'home lane (any)'],
+      ['top', 'top lane'],
+      ['mid', 'mid lane'],
+      ['bot', 'bot lane'],
     ] as const) {
       const o = document.createElement('option');
       o.value = value;
@@ -952,9 +942,9 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         ),
       );
     } else {
-      buildHead.append(
-        el('span', 'ac-sub', `The ${champ?.role ?? 'role'} build: ${itemNames(role)}`),
-      );
+      // The role build, shown as it will be bought; picking a card starts
+      // the owner's build from it, as Write my own does.
+      buildHead.append(el('span', 'ac-sub', `The ${champ?.role ?? 'role'} build`));
       const own = el('button', 'ac-btn mini', 'Write my own');
       own.disabled = coaching;
       own.addEventListener('click', () =>
@@ -964,6 +954,17 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       );
       buildHead.append(own);
       panel.append(buildHead);
+      panel.append(buildRow(role));
+      panel.append(
+        itemCatalog({
+          onPick: (id) =>
+            editKit((k) => {
+              k.build = [...role, id];
+            }),
+          counts: buildCounts(role),
+          disabled: coaching,
+        }),
+      );
     }
     const skillRow = el('div', 'ac-row');
     skillRow.append(
@@ -1064,12 +1065,15 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     box.append(buildHead);
     if (v.build) {
       box.append(
-        buildEditor(v.build, (next) =>
-          editKit((k) => {
-            const vv = k.variants![i]!;
-            if (next.length === 0) delete vv.build;
-            else vv.build = next;
-          }),
+        buildEditor(
+          v.build,
+          (next) =>
+            editKit((k) => {
+              const vv = k.variants![i]!;
+              if (next.length === 0) delete vv.build;
+              else vv.build = next;
+            }),
+          `variant-${i}`,
         ),
       );
     }
