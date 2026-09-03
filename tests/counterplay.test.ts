@@ -118,12 +118,19 @@ describe('the numbers trigger and the split push', () => {
     expect(far.ok).toBe(false);
   });
 
-  it('is what the Brawler now carries: the fight with the numbers, the tower when outnumbered', () => {
-    // The Sieger tried the split push over two matrix rounds and lost more
-    // than before (plan-bots phase 15); it keeps its siege.
-    expect(BRAWLER_PLAYBOOK.plays.find((p) => p.id === 'fight')?.when.kind === 'all').toBe(true);
-    expect(BRAWLER_PLAYBOOK.plays.some((p) => p.id === 'outnumbered')).toBe(true);
+  it('is what the house styles carry: the Brawler on the odds, the Sieger pressing', () => {
+    // Phase 15's Brawler counted the numbers; phase 16's weighs the odds
+    // (the fight's commit, the tower when they turn badly). The Sieger
+    // tried the split push over three matrix rounds and lost more each
+    // time; what it keeps is the press: one minion of escort, no regroup.
+    const fight = BRAWLER_PLAYBOOK.plays.find((p) => p.id === 'fight')?.do;
+    expect(fight?.kind === 'fight' && fight.commitAt === 0.5).toBe(true);
+    expect(BRAWLER_PLAYBOOK.plays.find((p) => p.id === 'outnumbered')?.when.kind).toBe('odds');
     expect(SIEGER_PLAYBOOK.plays.some((p) => p.do.kind === 'splitPush')).toBe(false);
+    const siege = SIEGER_PLAYBOOK.plays.find((p) => p.id === 'siege')?.do;
+    expect(siege?.kind === 'siege' && siege.escortMin === 1).toBe(true);
+    const push = SIEGER_PLAYBOOK.plays.find((p) => p.id === 'push')?.do;
+    expect(push?.kind === 'push' && push.regroupAt === null).toBe(true);
     expect(validatePlaybook(SIEGER_PLAYBOOK).ok).toBe(true);
     expect(validatePlaybook(BRAWLER_PLAYBOOK).ok).toBe(true);
   });

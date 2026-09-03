@@ -195,7 +195,7 @@ describe('the house styles', () => {
     expect(at(LANER_PLAYBOOK, 'siege')).toBeGreaterThan(at(LANER_PLAYBOOK, 'farm'));
     expect(SIEGER_PLAYBOOK.plays[at(SIEGER_PLAYBOOK, 'siege')]!.do).toEqual({
       kind: 'siege',
-      escortMin: 2,
+      escortMin: 1,
     });
   });
 });

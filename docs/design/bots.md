@@ -223,11 +223,13 @@ its series against house bots alone. Five seeds is a reading, not a proof: ten s
 move a rate by fifteen points, so a change that looks like a coin flip is one.
 
 House bots do not all play the same brain. Each seat the fill hands out draws a house
-style from the match seed: the Laner; the Brawler (the fight first: front stance on any
-champion, engaging with nobody beside it, joining a fight from across the map, retreating
-late, no camps, the group push at eight minutes); the Sieger (the wave and the towers: a
-structure in reach with any escort before the wave, a fight that holds alone, the Warden
-only when healthy and close to its spawn, the group push at ten); the Objective player
+style from the match seed: the Laner; the Brawler (the fight first: a walk-in only with
+the odds, the lowest enemy first, ground given under the tower when the odds turn badly,
+joining a fight from across the map, retreating late, no camps, the group push at eight
+minutes); the Sieger (the wave and the towers: a structure in reach with a single minion
+of escort before the wave, a deeper dive under towers, a fight that holds alone, the
+Warden only when healthy and close to its spawn, no regroup bell: three lanes of pressure
+all match); the Objective player
 (the Warden and the camps: at the pit forty-five seconds early, ground given under the
 tower when outnumbered alone, the camps before the wave). Each is one playbook file under
 `src/sim/content/playbooks/`, readable and copyable by any owner, and the draw runs on
@@ -338,11 +340,23 @@ ladder with depth, a dominant style is a ladder one playbook solves. Ten seeds o
 player 60%, the order transitive Laner, Objective player, Sieger, Brawler, and most pairs
 split (the seed's lineups decide more than the brain). The default bot is the dominant
 style: the ladder is flat by construction until a lever creates counterplay. Two levers went
-into the language on the strength of it (the numbers trigger, the split push) and one
-style improved (the Brawler fights with the numbers); the cycle did not appear: a team of
-five identical brains punishes every extreme, and the shared engine keeps the styles
-close. The matrix stays the instrument, and the next lever is the engine's (plan-bots
-phase 15). What follows makes the ladder live meanwhile.
+into the language on the strength of it (the numbers trigger, the split push) and the
+cycle did not appear (plan-bots phase 15). Phase 16 then put the levers the matrix asked
+for into the engine itself: the fight's odds and its commit, the wave management (freeze,
+shove, the last hit), the collapse on a threatened tower, and one game rule, the Boon's
+waves (a team holding the Warden's Boon sends a siege minion with every wave). Seven
+rounds later the reading is different and still not a cycle: three lanes of pressure with
+an early siege is the engine's strongest play (the pressing Sieger beats the Laner 60%,
+the Brawler 70% and the Objective player 55%); the Boon's waves gave the Objective player
+a real lever against a grouped style (70% against the Brawler, towers 6.6 to 3.8 a game)
+and narrowed the Sieger's edge (from 75/90/75 to 60/70/55); a freezing team loses (the
+freezing Laner 1-7 at the gate, the freezing Objective player 45/40/45), because the
+freezer's own tower takes the wave and the enemy farms it under escort; and a grouped
+style cannot catch a spread pusher (the collapsing Brawler 50/25/20): under the
+dive-punish rule and the waves, the defender arrives after the tower. The default Laner
+stays: a pressing Laner reached 55% at the gate, under the 70% bar. The matrix stays the
+instrument, and the levers stay in the language for owners to write with. What follows
+makes the ladder live meanwhile.
 
 **Ranked** is the owner's one switch: a ranked bot plays the Arena's rounds and play now,
 and takes an empty seat of a live match before a house bot (the fill, above), rated on the

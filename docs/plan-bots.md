@@ -275,6 +275,40 @@ Briefing, and the before/after screenshots under `docs/screenshots`.
    that wins with the numbers and loses without them, a wave a pusher can freeze), and
    the split push stays a play an owner can write against a grouped enemy.
 
+16. **The engine's levers, and the Boon's waves** (2026-09-03). The matrix's
+   `--override` seats a candidate playbook (JSON, validated) in a house style's place for
+   one run, so a variant is measured without touching the tree, and every pair prints
+   kills, towers and length a game beside its rate. The cheap lever first: a Sieger whose
+   mid seat split pushes lost more than the original (45/40/35 against Laner, Brawler,
+   Objective player). Then the language gained, additively (format version 4): the odds
+   trigger and the fight's `commitAt` (src/sim/playbook/odds.ts), the `manageWave`
+   behavior with its freeze and shove and the farm's `lastHit` mode
+   (src/sim/playbook/wave.ts, on `hp`, `maxHp`, `level`, `attackDamage` and `holding`
+   added to the observation and the `stop` action added to the Policy contract, the human
+   S), the `minions` trigger, and the collapse (`towerThreatened`, `defendTower`); tests in
+   tests/wave_odds.test.ts; the editor, the coach's grammar and the glossary (Odds, Freeze,
+   Shove) learned all of it. Round A (the Brawler on the odds, the Objective player
+   freezing until twelve minutes): Brawler 30/40/40, Objective player 50/60/50, the Laner
+   no longer beating every style; the freezing Laner 1-7 at the gate, dropped. Round B
+   (the Brawler collapsing on threatened towers): 40/35/50, the Sieger still ahead of it.
+   Round C (a pressing Sieger: siege with one minion of escort, a deeper dive, no regroup
+   bell): Sieger 75/90/75, every style beaten, the engine's truth in one row. Then the
+   game rule, the Boon's waves (src/sim/waves.ts, tests/boon_waves.test.ts): a team holding
+   the Warden's Boon sends a siege minion with every wave, so the pit converts into lane
+   pressure. Rounds D to G under it: the pressing Sieger 60/75/55 then 60/70/55; the
+   Objective player 45/70/45, towers 6.6 to 3.8 a game against the Brawler; the freezing
+   Objective player 45/40/45 (dropped); three Brawlers within noise of each other (the
+   numbers 30/20/45, the collapse 50/25/20, the odds 40/30/30); the pressing Laner 55% at
+   the gate (FAIL at 70%, the Laner stays). Kept: the pressing Sieger and the Brawler on
+   the odds (src/sim/content/playbooks/). Reading: no cycle; the engine rewards three
+   lanes of pressure; the Boon's waves give objective control a real conversion; a freeze
+   with nothing to deny loses (the freezer's own tower takes the wave, the enemy farms it
+   under escort); a grouped style cannot catch a spread pusher, because under the
+   dive-punish rule and the waves the defender arrives after the tower. The levers stay in
+   the language for owners; the next lever, if one is wanted, is the tower itself (one that
+   holds longer against a lone sieger, or plating that pays the defender), measured the
+   same way. DONE.
+
 Follow-ups, in order of value: house bots obeying their team's pings (phase 5's
 mechanism), bot sharing and a playbook gallery, bots on forged champions once the Forge
 ships author-declared hints, style presets measured from hand-play replays, seasons.

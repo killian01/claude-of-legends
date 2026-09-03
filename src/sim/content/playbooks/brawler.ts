@@ -1,14 +1,20 @@
 // The Brawler, a house style (CONTEXT.md: House style): the fight first.
-// The Laner's survival core, then a walk-in on every enemy in sight, front
-// stance whatever the champion, engaging with nobody beside it, joining a
-// fight from across the map, hunting and answering a vanish while hurt,
+// The Laner's survival core, then a fight on every enemy in sight that
+// walks in only with the odds (even or better within twenty, the lowest
+// enemy first), the ground given under the tower when the odds turn badly,
+// a join from across the map, hunting and answering a vanish while hurt,
 // retreating late, no camps, and the group push bell at eight minutes.
 // Sparring against it reads as a scrap; against the Sieger as a race.
+// Plan-bots phase 16 measured three Brawlers against the matrix under the
+// Boon's waves: the numbers trigger (30/20/45 against Laner, Sieger,
+// Objective player), the collapse on threatened towers (50/25/20), and
+// this one on the odds (40/30/30), the evenest of the three; the fight
+// with the odds is what the style is, so it carries it.
 
 import type { PlaybookDef } from '../../playbook/types';
 
 export const BRAWLER_PLAYBOOK: PlaybookDef = {
-  version: 2,
+  version: 4,
   plays: [
     { id: 'retreat', when: { kind: 'hp', below: 0.25 }, do: { kind: 'retreat' } },
     {
@@ -35,19 +41,16 @@ export const BRAWLER_PLAYBOOK: PlaybookDef = {
       do: { kind: 'avoidTower', escortMin: 2, hpBelow: 0.5 },
     },
     { id: 'finish', when: { kind: 'always' }, do: { kind: 'finishSanctum' } },
-    // The fight first, but with the numbers: even or better within 20.
+    // The fight first, walking in only with the odds, the lowest enemy first.
     {
       id: 'fight',
-      when: {
-        kind: 'all',
-        of: [{ kind: 'enemyVisible' }, { kind: 'numbers', within: 20, atLeast: 0 }],
-      },
-      do: { kind: 'fight', stance: 'auto', alone: 'engage' },
+      when: { kind: 'enemyVisible' },
+      do: { kind: 'fight', stance: 'auto', alone: 'engage', target: 'lowest', commitAt: 0.5 },
     },
-    // Outnumbered: under the tower, where the numbers turn.
+    // The odds turned badly: under the tower, where they turn back.
     {
       id: 'outnumbered',
-      when: { kind: 'numbers', within: 20, atMost: -1 },
+      when: { kind: 'odds', below: 0.4 },
       do: { kind: 'fallBack' },
     },
     {

@@ -53,6 +53,9 @@ function stylesOf(mod) {
 // draws, the pairs (both, split, none) from A's side, and what the games
 // were made of: kills and towers taken per game for each side, the average
 // length. The numbers behind a rate, so a round reads as a story.
+// The towers one side starts with (src/sim/content/map.ts).
+const TOWERS_A_SIDE = 8;
+
 function playPair(mod, styles, a, b) {
   const styleA = styles.find((s) => s.id === a);
   const styleB = styles.find((s) => s.id === b);
@@ -74,17 +77,19 @@ function playPair(mod, styles, a, b) {
         }
       }
       while (sim.winner === null && sim.tickCount < maxTicks) sim.tick();
+      // Towers taken: the eight a team starts with, less the ones standing.
+      const standing = [0, 0];
       for (const u of sim.units.values()) {
         const isA = u.team === teamA;
         if (u.kind === 'champion') {
           if (isA) made.killsA += u.kills;
           else made.killsB += u.kills;
-        } else if (u.kind === 'tower' && u.dead) {
-          // A dead tower of B's is a tower A took.
-          if (isA) made.towersB += 1;
-          else made.towersA += 1;
+        } else if (u.kind === 'tower' && !u.dead) {
+          standing[isA ? 0 : 1] += 1;
         }
       }
+      made.towersA += TOWERS_A_SIDE - standing[1];
+      made.towersB += TOWERS_A_SIDE - standing[0];
       made.seconds += sim.time;
       made.games += 1;
       if (sim.winner === null) draws++;
