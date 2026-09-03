@@ -322,9 +322,12 @@ ladder with depth, a dominant style is a ladder one playbook solves. Ten seeds o
 2026-09-03: no cycle; the Laner beats the Brawler 70%, the Sieger 55% and the Objective
 player 60%, the order transitive Laner, Objective player, Sieger, Brawler, and most pairs
 split (the seed's lineups decide more than the brain). The default bot is the dominant
-style: the ladder is flat by construction until a lever creates counterplay. That lever
-is the next round's work, guided by this matrix; what follows makes the ladder live
-meanwhile.
+style: the ladder is flat by construction until a lever creates counterplay. Two levers went
+into the language on the strength of it (the numbers trigger, the split push) and one
+style improved (the Brawler fights with the numbers); the cycle did not appear: a team of
+five identical brains punishes every extreme, and the shared engine keeps the styles
+close. The matrix stays the instrument, and the next lever is the engine's (plan-bots
+phase 15). What follows makes the ladder live meanwhile.
 
 **Ranked** is the owner's one switch: a ranked bot plays the Arena's rounds and play now,
 and takes an empty seat of a live match before a house bot (the fill, above), rated on the

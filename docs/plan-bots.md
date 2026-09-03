@@ -252,6 +252,29 @@ Briefing, and the before/after screenshots under `docs/screenshots`.
    siege's timing), measured mirrored until the matrix shows a cycle; then the seasonal
    reset.
 
+15. **Counterplay, guided by the matrix** (2026-09-03). The language gained the
+   `numbers` trigger (allies with me minus enemies in sight within a radius), the
+   `splitPush` behavior (the quietest lane over the last minute, on the new additive
+   `laneActivity` observation field) and the tests behind them
+   (tests/counterplay.test.ts). Then the house styles were tried against the matrix,
+   ten seeds mirrored, the same seeds as phase 14's reading (Laner beats Brawler 70%,
+   Sieger 55%, Objective player 60%; Sieger beats Brawler 60%; Objective beats Brawler
+   70%, Sieger 60%). Round 1, a Sieger split pushing unconditionally and a Brawler
+   fighting with the numbers and following an ally when none was near: the lone pusher
+   fed (Sieger 40% against the Laner, 15% against the Objective player) and five
+   followers made one blob that lost its towers (Brawler 15% against the Laner). Round
+   2, the split push only after six minutes, healthy, with nobody fighting, and the
+   Brawler without the follow, kiting on a ranged champion: the Sieger fell further (20%
+   against the Laner, 30% against the Objective player) while the Brawler rose (65%
+   against the Sieger, 45% against the Objective player, 25% against the Laner). Kept:
+   the round 2 Brawler and the original Sieger. Round 3, the final set: Laner beats Brawler 75%, Sieger 55%, Objective player 60%; Sieger beats Brawler 60%; Objective player beats Brawler 55%, Sieger 60%; the Brawler even-ish with the Objective player (45%) where it lost 30% before; no cycle.
+   Conclusion, the same as phase 10's: parameters on top of a shared fight, farm and
+   push engine do not make the styles counter each other; the Laner's balance beats
+   every extreme, and a team of five identical brains punishes any grouping cascade.
+   The matrix is the instrument; the next lever is in the engine (an engagement rule
+   that wins with the numbers and loses without them, a wave a pusher can freeze), and
+   the split push stays a play an owner can write against a grouped enemy.
+
 Follow-ups, in order of value: house bots obeying their team's pings (phase 5's
 mechanism), bot sharing and a playbook gallery, bots on forged champions once the Forge
 ships author-declared hints, style presets measured from hand-play replays, seasons.
