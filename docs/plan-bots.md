@@ -11,7 +11,7 @@ rating pair, the agent quota, and the streaming conversation live there, not on 
 built in its own worktree beside the Forge session. It never touches a Forge file: bots
 get their own store module and their own conversation module.
 
-State of play (2026-09-02): phases 0 to 8 done on `feature/bots`, unmerged, plus the
+State of play (2026-09-03): phases 0 to 13 done on `feature/bots`, unmerged, plus the
 first playtest round (bots on their own select tab, the coach bar under the KDA box
 reading the standing order back, the replay player, the way back to the Academy, the
 conversation kept with the bot). The second playtest round redrew the boundary (ADR
@@ -210,6 +210,30 @@ Briefing, and the before/after screenshots under `docs/screenshots`.
    words, the forms and a Lane select in the Kit panel. The roster holds two magic
    roles, so the exit reads "against mostly magic damage, build Spirit Ward second":
    pinned by tests/adaptation.test.ts against a mage-heavy enemy lineup.
+
+13. **The third playtest round: the build by sight, the Record, the replay** (grill of
+   2026-09-03, twenty-six questions, every recommendation accepted). The camera looked
+   toward -z, so the lane named top was drawn along the bottom for everyone: fixed as a
+   mirror of the scene on its own branch (`fix/camera-orientation`, PR #17 against
+   main, merged into this branch), team 0 bottom-left like the genre; every label says
+   "top lane" and "bot lane", the coach accepts "bottom" (term: Bot lane). The coach
+   log follows the answer unless the reader scrolled up. The sparring summary leads
+   with the line: result, K/D/A, creep score, the build as icons. The Kit panel shows
+   the shop's cards (src/ui/item_catalog.ts) and the build as icon slots; an item
+   listed twice is bought twice (the walker counts copies, consumed ones included).
+   The Record and the Match sheet (terms), on the server (server/bot_records.ts,
+   src/net/record.ts, src/ui/record_view.ts): sparring, series, Arena and live entries,
+   fifty per bot, replays held by their entries, the live loop feeding a play ledger
+   for bot seats, deaths dated in the report, the Briefing's match list moved there,
+   no Dismiss. The replay: the world checkpoint (src/sim/snapshot.ts, restore at k then
+   step to n equals a straight run), a worker playing the match once ahead with a
+   checkpoint every ten seconds (src/game/replay_worker.ts, src/game/replay_cursor.ts),
+   reverse playback on a denser ring, the bar with five-second steps, J K L, the
+   arrows, comma and period, and the marks strip under the slider. Verified by
+   `scripts/e2e_academy.mjs` in headless Chrome: a seek of five seconds in about a
+   quarter of a second, a far jump in a tenth. DONE. Measured: a checkpoint weighs 160
+   to 190 KB as JSON, a tick 0.4 to 0.6 ms; the worker's pass over a twenty-minute
+   match takes tens of seconds in headless Chrome under software GL, less with a GPU.
 
 Follow-ups, in order of value: house bots obeying their team's pings (phase 5's
 mechanism), bot sharing and a playbook gallery, bots on forged champions once the Forge

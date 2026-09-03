@@ -193,8 +193,9 @@ changed play appears in under two seconds. Four rules make that true:
    reference, never from memory.
 
 Sparring in the Academy runs a whole match against house bots at full speed in the
-browser, then opens the replay with the active-play overlay; leaving the replay lands
-back in the Academy on the same bot. The test drive into offline practice (the Forge's
+browser, then lands on the bot's Record (below): the newest entry at the head of the
+Sparring panel, its line and its build first, the play table in its sheet; leaving a
+replay lands back in the Academy on the same bot. The test drive into offline practice (the Forge's
 pattern) stays available for watching at real speed.
 
 The series is the same sparring five seeds at a time, with the previous version of the
@@ -219,11 +220,24 @@ every host, so the server's backfill, the Arena, sparring, the series, offline p
 and the environment vary the same way: two sparrings on different seeds meet different
 lineups played differently. The scoreboard says the style ("House sieger").
 
-A replay is for analysis, so it is a player, not a tape: pause, one to ten times speed,
-thirty seconds back or forward, a scrub slider over the whole match and a time to type.
-Seeking rides determinism: forward steps the sim silently to the tick; backward rebuilds
-it from the record and steps from the start, chunked over frames so the page stays
-responsive (a few seconds for a late minute, shown as seeking on the clock).
+A replay is for analysis, so it is a player, not a tape: pause, playback at one to ten
+times, playback backward at one to four times, five seconds back or forward (thirty with
+shift), one tick either way while paused, a scrub slider over the whole match and a time
+to type; J, K and L, the arrows, comma, period and space do the same from the keyboard.
+Seeking rides determinism and the world checkpoint: the sim can hand its whole state out
+as plain data and take it back in place, so a worker plays the match once ahead of the
+viewer and ships a checkpoint every ten seconds of match time. Any tick is then the
+nearest checkpoint restored plus at most ten seconds stepped, forward or back, about a
+tenth of a second; reverse playback walks a denser ring of snapshots built on demand
+around the current window. Until the worker has covered a tick, a backward seek falls
+back to rebuilding from the start. The first playtest of the viewer had every backward
+seek rebuild from tick zero with the slider crawling back up: the checkpoint is what
+turned "find the fight, stop, move a few seconds" into a gesture.
+
+Under the slider, the marks (the same pass finds them): a density strip of the kills per
+ten seconds tinted by the side that scored, ticks for the structures and the Warden, the
+followed seat's own deaths in red, each slice listing its moments on hover and seeking
+on click. What lets a reader find the action without sweeping.
 
 ## The fill and the home lanes
 
@@ -299,6 +313,30 @@ The sim records the active play per bot as a deterministic sim event whenever it
 Spectate and replay show it as an overlay on the bot; the post-match report counts time
 in each play, deaths by play, and results per opponent. This is the mechanism that turns
 watching into learning: without it nobody can fix a rule, so nobody iterates.
+
+## The Record and the Match sheet
+
+A bot has a Record (CONTEXT.md): every match it played, newest first, sparring and series
+from the Academy, Arena matches, and live matches where the account fielded it, fifty per
+bot, the oldest leaving first. Each entry carries its kind, its result, the ten seats'
+lines and builds, the plays, the deaths dated with the play that held and the killer, the
+playbook version that played, and its replay. Unrated does not mean unrecorded: the
+Academy posts a sparring's result to the server (bounded, the playbooks through the
+validator, only a bot-only replay record accepted, never re-simulated) and the server
+writes Arena and live entries itself at match end, so the Record survives a reload and a
+change of machine and feeds the Briefing and the night coach. Replays live in the one
+replay store: a bot's replay weighs a few kilobytes (the seed and the picks; the bots
+decide the rest), and one a living entry references is held out of the global prune and
+leaves with its entry; live replays with humans stay under the global window, and a
+sheet whose replay has gone says so.
+
+In the Academy the Record's head sits in the Sparring panel (the newest entry: kind,
+result, duration, the line, the build as icons, Sheet and Watch; a series adds its
+summed line) and the tally beside each bot in the rail. The Record itself opens over
+the center and side columns: the list filtered by kind on the left (kind, result,
+K/D/A, build, version, when), the Match sheet of the selected entry on the right: both
+teams' scoreboard with their builds, time and deaths per play, and the deaths, each a
+link that opens the replay five seconds before. Nothing is dismissed: an entry stays.
 
 ## Ladders and rating
 
