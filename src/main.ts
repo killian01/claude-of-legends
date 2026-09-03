@@ -18,7 +18,13 @@ import { getSettings } from './game/settings';
 import { type SpectatorView, startSpectator } from './game/spectate';
 import { ClientWorld } from './net/client_world';
 import type { ForgedMatchAssets, ServerMsg } from './net/protocol';
-import { applyReplayEvent, buildMatchSim, type ReplayEvent, type ReplayRecord } from './net/replay';
+import {
+  applyReplayEvent,
+  buildMatchSim,
+  REPLAY_VERSION,
+  type ReplayEvent,
+  type ReplayRecord,
+} from './net/replay';
 import { attachBot } from './sim/content/bots';
 import { houseSeats } from './sim/content/bots/house';
 import type { ForgedChampionDef } from './sim/forge/forged_def';
@@ -193,11 +199,13 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
   } catch {
     // handled below
   }
-  if (!record || record.version !== 1 || !Array.isArray(record.picks)) {
+  if (!record || record.version !== REPLAY_VERSION || !Array.isArray(record.picks)) {
     await showNotice(
       container,
       'Replay unavailable',
-      'This replay is gone: the server keeps only the most recent matches.',
+      record && typeof record.version === 'number' && record.version !== REPLAY_VERSION
+        ? 'This replay was recorded under an older version of the game and would no longer play out as it happened.'
+        : 'This replay is gone: the server keeps only the most recent matches.',
     );
     return 'menu';
   }

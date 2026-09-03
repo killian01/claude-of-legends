@@ -216,7 +216,14 @@ export function buildFlora(map: GameMap, paint: MapPaint): Flora {
 
   // Trees: shared trunks, then cone canopies for conifers and icosahedron
   // puff clouds for broadleaves, all per-instance tinted.
-  const trees = planTrees(map, rnd);
+  // No tree reaches over open water: a bank blob's ring can root on the
+  // rock with its canopy hanging over the river band, and the water is
+  // walkable by construction, so a solid crown there reads as terrain you
+  // can walk through (tests/river.test.ts). The margin covers the widest
+  // canopy offset; the banks' river side stays bare rock.
+  const trees = planTrees(map, rnd).filter(
+    (t) => paint.riverDist(t.x, t.z) > map.river.width / 2 + 2.5,
+  );
   const conifers = trees.filter((t) => !t.puff);
   const puffTrees = trees.filter((t) => t.puff);
 

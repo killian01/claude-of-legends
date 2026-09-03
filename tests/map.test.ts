@@ -58,6 +58,26 @@ describe('the launch map', () => {
     }
   });
 
+  it('gives both teams the same walk inside every lane', () => {
+    // Point symmetry alone makes team 0's top the equal of team 1's bot,
+    // not of team 1's top: within one lane the two halves must also be
+    // reflections across the river (x, z) -> (SIZE - z, SIZE - x), or one
+    // team's waves reach every clash a few units ahead in that lane. The
+    // measured mirror-vesk series (2026-09-03): team 1 took the bot lane
+    // duel on every seed off a 5.4 unit shorter walk.
+    const reflect = (x: number, z: number) => ({ x: GAME_MAP.size - z, z: GAME_MAP.size - x });
+    for (const [name, lane] of Object.entries(GAME_MAP.lanes)) {
+      for (let i = 0; i < lane.length; i++) {
+        const m = reflect(lane[i]!.x, lane[i]!.z);
+        const twin = lane[lane.length - 1 - i]!;
+        expect(
+          close(twin.x, m.x) && close(twin.z, m.z),
+          `${name} lane is river-reflected at vertex ${i}`,
+        ).toBe(true);
+      }
+    }
+  });
+
   // Brush, camps and pits belong on this list as much as the towers do: the
   // river pass moved a wall blob onto a brush patch and nothing complained,
   // because only the structures and lane vertices were being checked.

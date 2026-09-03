@@ -13,7 +13,7 @@ import {
   sparringPicks,
   summarizeSeries,
 } from '../src/game/sparring_core';
-import { buildMatchSim } from '../src/net/replay';
+import { buildMatchSim, REPLAY_VERSION } from '../src/net/replay';
 import { HOUSE_STYLE_IDS } from '../src/sim/content/bots/house';
 import { LANER_PLAYBOOK } from '../src/sim/content/playbooks/laner';
 
@@ -50,7 +50,12 @@ describe('sparring', () => {
     const picks = sparringPicks(BOT);
     const result = sparMatch({ seed: 77, picks, maxTicks: 1500 });
     expect(result.ticks).toBe(1500);
-    expect(result.record).toMatchObject({ version: 1, seed: 77, ticks: 1500, events: [] });
+    expect(result.record).toMatchObject({
+      version: REPLAY_VERSION,
+      seed: 77,
+      ticks: 1500,
+      events: [],
+    });
     expect(result.record.picks[0]!.playbook).toEqual(BOT.playbook);
     const mine = result.report.units.find((u) => u.unitId === result.botUnitId);
     expect(mine).toBeDefined();

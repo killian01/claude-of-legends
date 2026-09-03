@@ -13,7 +13,10 @@ import { Sim } from '../sim/sim';
 import type { TeamId } from '../sim/types';
 import { type ClientMsg, isFiniteVec } from './protocol';
 
-export const REPLAY_VERSION = 1;
+// Bumped whenever sim behavior changes (a replay is a re-simulation, so
+// an older record would silently play out a different match): 2 with the
+// river-reflected lane polylines.
+export const REPLAY_VERSION = 2;
 // A griefer spamming the rate limit for a whole match could balloon the
 // log; past this the match simply has no replay.
 export const REPLAY_EVENT_CAP = 200_000;

@@ -17,6 +17,7 @@ import {
   parseClientMsg,
   type ServerMsg,
 } from '../src/net/protocol';
+import { REPLAY_VERSION } from '../src/net/replay';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { validateForged } from '../src/sim/forge/validate';
 import { PlayLedger } from '../src/sim/playbook/report';
@@ -2299,7 +2300,7 @@ setInterval(() => {
           if (entry.match.replayComplete) {
             try {
               saveJsonAtomic(path.join(REPLAYS_DIR, `${matchId}.json`), {
-                version: 1,
+                version: REPLAY_VERSION,
                 seed: entry.match.seed,
                 picks: entry.match.replayPicks,
                 events: entry.match.replayEvents,

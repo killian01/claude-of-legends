@@ -225,13 +225,18 @@ const NW_BRUSH: readonly WallShape[] = [
 // stacked inside its base (a standing minion shield) while team 0's spawned
 // split and short of its own. Team 1 won 6 of 12 seeds, team 0 zero.
 // Symmetry is now by construction and pinned in tests/map.test.ts.
+// Also self-reflected across the river ((x, z) -> (SIZE - z, SIZE - x)):
+// point symmetry alone left the polyline 5.4 units shorter on team 1's
+// half, and the wave-clash sat that far into team 0's side of both side
+// lanes, so the mirror-vesk series lost the bot lane for team 0 on every
+// seed (playtest, 2026-09-03). tests/map.test.ts pins both symmetries.
 const TOP_LANE: readonly Vec2[] = [
   { x: 17, z: 23 },
-  { x: 13, z: 50 },
+  { x: 13, z: 27 },
   { x: 13, z: 128 },
   { x: 22, z: 137 },
-  { x: 127, z: 137 },
-  { x: 131, z: 133 },
+  { x: 123, z: 137 },
+  { x: 127, z: 133 },
 ];
 
 export const GAME_MAP: GameMap = {
