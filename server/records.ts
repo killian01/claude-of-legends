@@ -66,7 +66,13 @@ export function buildMatchRecord(
     ...(replayId !== undefined ? { replayId } : {}),
     players: rows.map((r) => {
       const accountId = accountIdByUnit.get(r.unitId) ?? null;
-      const delta = accountId !== null ? rating?.deltas.get(accountId) : undefined;
+      // Only a rated match carries a movement. rateMatch answers for every
+      // owned seat whether or not it rated the match, so an unrated one
+      // hands back a zero here; writing that zero down made every reader
+      // of this field count the match as rated play (the ladder's wins,
+      // losses and form, and the career's history). The bot Record entries
+      // have always guarded on `rated`; this is the same guard.
+      const delta = rating?.rated && accountId !== null ? rating.deltas.get(accountId) : undefined;
       return {
         accountId,
         // The person, when there is one; the champion otherwise.
