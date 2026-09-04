@@ -7,7 +7,7 @@
 // four ways. Screenshots land in SHOT_DIR when set.
 import { mkdirSync } from 'node:fs';
 import puppeteer from 'puppeteer-core';
-import { apiFromPage, e2eName, signIn } from './e2e_signin.mjs';
+import { apiFromPage, clickBar, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const URL = process.env.E2E_URL ?? 'http://localhost:5173';
@@ -35,9 +35,6 @@ async function waitFor(page, fnBody, label, timeout = 30000) {
   throw new Error(`timeout waiting for: ${label}`);
 }
 
-const findBtn = (t) =>
-  `[...document.querySelectorAll('button')].some((e) => e.offsetParent !== null && (e.textContent || '').trim().startsWith('${t}'))`;
-
 async function shot(page, name) {
   if (!SHOT_DIR) return;
   mkdirSync(SHOT_DIR, { recursive: true });
@@ -63,8 +60,9 @@ const run = async () => {
   await page.goto(URL, { waitUntil: 'domcontentloaded' });
   await signIn(page, e2eName('ladder', Date.now().toString(36).slice(-6)));
 
-  // The home card: your place by hand, unplaced on a fresh account.
-  await waitFor(page, findBtn('Open the ladder'), 'the ladder card');
+  // The account drawer: your place by hand, unplaced on a fresh account.
+  await waitFor(page, HOME_UP, 'home');
+  await clickBar(page, 'account');
   await waitFor(page, `document.querySelector('.lc-rank') !== null`, 'the place on the card');
   const card = await page.evaluate(() => ({
     tier: document.querySelector('.lc-tier')?.textContent ?? '',
@@ -136,7 +134,7 @@ const run = async () => {
 
   await clickButton(page, 'Back');
   await waitFor(page, `document.querySelector('.lp') === null`, 'the page closed');
-  await waitFor(page, findBtn('Open the ladder'), 'home again');
+  await waitFor(page, HOME_UP, 'home again');
   check(errors.length === 0, `no page errors (${errors.slice(0, 2).join(' | ')})`);
   console.log('PASS');
   await browser.close();

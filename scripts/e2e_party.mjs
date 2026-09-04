@@ -2,7 +2,7 @@
 // both screens swap to the queue, one member opts into the bot fill, and
 // the match seats the duo on the same side.
 import puppeteer from 'puppeteer-core';
-import { e2eName, signIn } from './e2e_signin.mjs';
+import { clickTile, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
@@ -53,8 +53,8 @@ const run = async () => {
   const host = await newIsolatedPage(browser, 'chief');
   host.on('pageerror', (e) => errors.push(`host: ${e}`));
   await host.reload({ waitUntil: 'load' });
-  await waitFor(host, findBtn('Play online'), 'host home');
-  await clickButton(host, 'Create private lobby');
+  await waitFor(host, HOME_UP, 'host home');
+  await clickTile(host, 'create');
   await waitFor(
     host,
     `document.querySelector('.menu-code') && document.querySelector('.menu-code').textContent.length === 5`,

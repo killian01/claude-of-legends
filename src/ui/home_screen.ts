@@ -1,7 +1,9 @@
-// The screen you land on once signed in. Same chrome as the landing page
-// (ui/page.ts) on purpose: it is the same kind of screen, a page you read
-// and choose from, and the two used to look like two different products
-// separated by one form submit.
+// The home (CONTEXT.md: Home): the page a signed-in account lands on. A
+// bar to every section, the play tiles, the join line, and the live
+// counts at the foot; everything else opens from here, as a page or a
+// drawer, and comes back. Same chrome as the landing page (ui/page.ts) on
+// purpose: the two used to look like two different products separated by
+// one form submit.
 //
 // It only decides; the entry point owns the flow. Everything here resolves
 // the promise with a HomeChoice and takes the page down.
@@ -9,27 +11,33 @@
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { TeamId } from '../sim/types';
 import { openAcademy } from './academy';
-import { type AuthedAccount, signOut } from './auth';
+import { openAccountDrawer, openLiveDrawer } from './account_drawer';
+import type { AuthedAccount } from './auth';
 import { buildEmailNotice, type ConfirmResult } from './email_status';
 import { openForgeEditor } from './forge_editor';
 import { openGallery } from './gallery';
 import { startBackdrop } from './home_backdrop';
-import { buildLadderCard } from './ladder_card';
+import { type HomeSection, mountHomeBar } from './home_bar';
+import { nextVisit, playTiles } from './home_tiles';
 import { openLadderPage } from './ladder_page';
-import { buildLivePanel } from './live_panel';
 import { el, ensureMenuCss } from './menu';
-import { buildPage, ensurePageCss, mountLiveStats, navLink, REPO } from './page';
-import { buildProfilePanel } from './profile_panel';
+import { buildPage, ensurePageCss, fetchStats, renderStats } from './page';
+import { buildJoinLine, buildPlayTiles } from './play_tiles';
 import { openRosterBrowser } from './roster_browser';
-import { buildSettingsPanel } from './settings_panel';
+import type { Drawer } from './side_drawer';
 
-// Only what this page adds to the shared chrome. A panel that opens inside
-// a card is given the card's full width back, since the card pads it once
-// already, and a little air above the control that opened it.
+// Only what this page adds to the shared chrome: the tiles centered in
+// whatever height the bar and the foot leave, so the page fills a screen
+// from 1280x720 up without scrolling, and scrolls on anything smaller.
 const CSS = `
-.pg.home .pg-card .menu-btn:first-of-type { margin-top: 0; }
-.pg.home .pg-panel { margin-top: 10px; }
-.pg.home .pg-note { font-size: 11.5px; color: #6d829f; margin: 12px 0 0; }
+.pg.home .pg-inner { padding-bottom: 16px; }
+.pg.home .home-main { flex: 1; display: flex; flex-direction: column; justify-content: center;
+  padding: 18px 0 14px; }
+.home-kicker { font-family: Cinzel, Georgia, serif; font-size: 13px; font-weight: 800;
+  letter-spacing: 3.5px; text-transform: uppercase; color: #9fb4d2; margin: 0 0 12px; }
+.home-foot { display: flex; align-items: baseline; gap: 26px; flex-wrap: wrap; }
+.home-foot .pg-stats { margin: 0; }
+.home-foot .pg-stat b { font-size: 15px; }
 `;
 
 let cssInstalled = false;
@@ -67,27 +75,12 @@ export interface HomeChoice {
   forged?: ForgedChampionDef;
 }
 
-// A button that shows or hides a panel, rebuilt fresh on every open so it
-// can never show a stale rating or a finished match.
-function collapsible(into: HTMLElement, label: string, build: () => HTMLElement): void {
-  const btn = el('button', 'menu-btn', label);
-  const box = el('div', 'pg-panel');
-  box.style.display = 'none';
-  btn.addEventListener('click', () => {
-    const open = box.style.display === 'none';
-    box.style.display = open ? 'block' : 'none';
-    if (open) {
-      box.textContent = '';
-      box.appendChild(build());
-    }
-  });
-  into.append(btn, box);
-}
-
-function card(kind: string, title: string, blurb: string): HTMLElement {
-  const section = el('section', `pg-card ${kind}`);
-  section.append(el('h2', '', title), el('p', '', blurb));
-  return section;
+function storage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }
 
 export function showHome(
@@ -103,44 +96,24 @@ export function showHome(
   ensureCss();
   const accountName = account.name;
   return new Promise((resolve) => {
-    const { root, inner, nav, hero } = buildPage('home');
+    const { root, inner, bar } = buildPage('home', false);
     const stopBackdrop = startBackdrop(root);
     container.appendChild(root);
 
-    // --- nav: who you are, and the only way back out ---
-    const out = el('button', '', 'Sign out');
-    out.addEventListener('click', () => {
-      // A reload rather than a route back to the landing page: signing out
-      // has to drop every bit of state this session built, and the entry
-      // point already shows the landing page when no session answers.
-      void signOut().then(() => location.reload());
-    });
-    nav.append(el('span', 'pg-who', accountName), out, navLink('Source', REPO));
-
-    // --- hero ---
-    hero.append(
-      el('h1', 'pg-title', 'Claude of Legends'),
-      el(
-        'p',
-        'pg-tag',
-        'Queue for a ranked match, bring friends into a private lobby, or take a practice ' +
-          'match against bots. Your rating and history follow the account, not this browser.',
-      ),
-    );
-    const stats = el('div', 'pg-stats');
-    hero.appendChild(stats);
-    mountLiveStats(stats);
-
-    // Between the hero and the cards: read on the way past, never in the
-    // way of the button somebody came here to press.
-    const notice = buildEmailNotice(account, justConfirmed);
-    if (notice) inner.appendChild(notice);
+    // A drawer open when the page leaves would keep its Escape listener.
+    const drawers = new Set<Drawer>();
+    const openDrawer = (open: () => Drawer): void => {
+      for (const d of drawers) d.close();
+      drawers.clear();
+      drawers.add(open());
+    };
 
     // --- teardown, shared by every way off this page ---
     const leave = (): void => {
       window.removeEventListener('loc:replay', onWatchReplay);
       window.removeEventListener('loc:spectate', onSpectate);
       window.removeEventListener('loc:forge-test', onForgeTest);
+      for (const d of drawers) d.close();
       stopBackdrop();
       root.remove();
     };
@@ -198,121 +171,57 @@ export function showHome(
     window.addEventListener('loc:spectate', onSpectate);
     window.addEventListener('loc:forge-test', onForgeTest);
 
-    const cards = el('div', 'pg-cards');
+    // --- the bar: the pages, Live, and the account's own drawer ---
+    const openLadder = (): void =>
+      openLadderPage(container, {
+        onPlay: (mode) => done(mode),
+        onWatch: (id, follow) =>
+          window.dispatchEvent(
+            new CustomEvent('loc:replay', {
+              detail: { id, ...(follow !== undefined ? { follow } : {}) },
+            }),
+          ),
+        openAcademy: () => openAcademy(container),
+      });
+    const sections: HomeSection[] = [
+      { label: 'Ladder', open: openLadder },
+      { label: 'Academy', open: () => openAcademy(container) },
+      { label: 'Forge', open: () => openForgeEditor(container) },
+      { label: 'Gallery', open: () => openGallery(container) },
+      { label: 'Champions', open: () => openRosterBrowser(container) },
+    ];
+    const homeBar = mountHomeBar(bar, {
+      name: accountName,
+      sections,
+      onLive: () => openDrawer(() => openLiveDrawer(root)),
+      onAccount: () => openDrawer(() => openAccountDrawer(root, { name: accountName, openLadder })),
+    });
+
+    // Between the bar and the tiles: read on the way past, never in the
+    // way of the tile somebody came here to press.
+    const notice = buildEmailNotice(account, justConfirmed);
+    if (notice) inner.appendChild(notice);
 
     // --- play ---
-    const play = card(
-      'gold',
-      'Play',
-      'The public queue, filled with bots for any seat nobody takes. Only queued matches ' +
-        'with a human on each side move your rating.',
+    const main = el('section', 'home-main');
+    main.append(
+      el('h2', 'home-kicker', 'Play'),
+      buildPlayTiles(playTiles(nextVisit(storage())), (mode) => done(mode)),
+      buildJoinLine(prefillCode, (code) => done('join', code)),
     );
-    const playBtn = el('button', 'menu-btn primary', 'Play online');
-    playBtn.addEventListener('click', () => done('queue'));
-    const practice = el('button', 'menu-btn', 'Practice vs dummies (offline)');
-    practice.addEventListener('click', () => done('practice'));
-    play.append(playBtn, practice);
+    inner.appendChild(main);
 
-    // --- friends ---
-    const friends = card(
-      'plain',
-      'Play with friends',
-      'Open a private lobby and share its code, or join one you were given. A private ' +
-        'match is never rated, so nothing you do in one touches the ladder.',
-    );
-    const create = el('button', 'menu-btn', 'Create private lobby');
-    create.addEventListener('click', () => done('create'));
-    const row = el('div', 'menu-row');
-    const code = el('input', 'menu-input');
-    code.placeholder = 'CODE';
-    code.maxLength = 5;
-    const join = el('button', 'menu-btn', 'Join lobby');
-    if (prefillCode) {
-      code.value = prefillCode;
-      join.classList.add('primary');
-      join.focus();
-    }
-    join.addEventListener('click', () => {
-      if (code.value.trim().length === 5) done('join', code.value.trim().toUpperCase());
+    // --- the foot: the counts, and Live in the bar told the same number ---
+    const foot = el('footer', 'home-foot');
+    const stats = el('div', 'pg-stats');
+    foot.appendChild(stats);
+    inner.appendChild(foot);
+    void fetchStats().then((s) => {
+      if (!s || !stats.isConnected) return;
+      renderStats(stats, s);
+      homeBar.setLiveCount(s.matches);
     });
-    row.append(code, join);
-    friends.append(create, row);
 
-    // --- bots ---
-    const botsCard = card(
-      'plain',
-      'Bots',
-      'Field a bot instead of playing by hand. Write its playbook in the Academy, by ' +
-        'talking to the coach or editing the plays, spar it against house bots in seconds, ' +
-        'and watch the replay with what it was thinking on its plate.',
-    );
-    const academyBtn = el('button', 'menu-btn', 'Open the Academy');
-    academyBtn.addEventListener('click', () => openAcademy(container));
-    botsCard.append(academyBtn);
-
-    // --- the Forge ---
-    const forge = card(
-      'plain',
-      'The Forge',
-      'Create your own champion: kit, stats, and passive, composed from the same ' +
-        'primitives the roster runs on, all under one power budget. Drafts are free and ' +
-        'unlimited; test drive any valid kit against bots. The Forge queue is where ' +
-        'finalized creations play, on its own rating.',
-    );
-    const forgeBtn = el('button', 'menu-btn', 'Open the Forge');
-    forgeBtn.addEventListener('click', () => openForgeEditor(container));
-    const forgeQueueBtn = el('button', 'menu-btn', 'Forge queue');
-    forgeQueueBtn.addEventListener('click', () => done('forge-queue'));
-    const galleryBtn = el('button', 'menu-btn', 'Browse the gallery');
-    galleryBtn.addEventListener('click', () => openGallery(container));
-    forge.append(forgeBtn, forgeQueueBtn, galleryBtn);
-
-    // --- career ---
-    const career = card(
-      'plain',
-      'Career',
-      'Every match you have played by hand, your champions, and anything running on the ' +
-        'server right now.',
-    );
-    collapsible(career, 'Profile and history', buildProfilePanel);
-    collapsible(career, 'Watch a live match', buildLivePanel);
-
-    // --- the ladder (docs/design/ladder.md): your place, and the page ---
-    const ladder = card(
-      'gold',
-      'The Ladder',
-      'Four ladders, one per way you play: by hand, your bot live, your bot in the Arena, ' +
-        'the Forge queue. Three rated matches place you; five tiers from Recruit to Legend.',
-    );
-    ladder.appendChild(
-      buildLadderCard(() =>
-        openLadderPage(container, {
-          onPlay: (mode) => done(mode),
-          onWatch: (id, follow) =>
-            window.dispatchEvent(
-              new CustomEvent('loc:replay', {
-                detail: { id, ...(follow !== undefined ? { follow } : {}) },
-              }),
-            ),
-          openAcademy: () => openAcademy(container),
-        }),
-      ),
-    );
-
-    // --- champions and options ---
-    const learn = card(
-      'plain',
-      'Champions and settings',
-      'Every champion with their role, passive and full kit, readable before you ever ' +
-        'queue. Audio and display options live here too.',
-    );
-    const roster = el('button', 'menu-btn', 'Browse the champions');
-    roster.addEventListener('click', () => openRosterBrowser(container));
-    learn.appendChild(roster);
-    collapsible(learn, 'Settings', buildSettingsPanel);
-
-    cards.append(play, ladder, friends, botsCard, forge, career, learn);
-    inner.appendChild(cards);
     if (reopen) openAcademy(container, { botId: reopen.botId });
   });
 }

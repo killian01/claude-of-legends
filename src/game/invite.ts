@@ -16,3 +16,11 @@ export function parseJoinCode(search: string): string | null {
 export function inviteUrl(origin: string, code: string): string {
   return `${origin}/?join=${code}`;
 }
+
+// The code as typed on the home's join line: trimmed and uppercased, or
+// null when it is not the shape of a code at all.
+export function normalizeJoinCode(raw: string): string | null {
+  const typed = raw.trim();
+  if (!CODE_SHAPE.test(typed)) return null;
+  return typed.toUpperCase();
+}

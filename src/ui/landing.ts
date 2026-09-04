@@ -50,7 +50,7 @@ export function showLanding(
 ): Promise<LandingResult> {
   ensureCss();
   return new Promise((resolve) => {
-    const { root, inner, nav, hero } = buildPage('land');
+    const { root, inner, bar, hero } = buildPage('land', true);
     const stopBackdrop = startBackdrop(root);
     container.appendChild(root);
 
@@ -60,12 +60,14 @@ export function showLanding(
       resolve(result);
     };
 
-    // --- nav ---
+    // --- the bar: the same one the home wears, with the little it needs ---
     const toPlay = el('button', '', 'Play');
+    toPlay.type = 'button';
     toPlay.addEventListener('click', () => {
       root.querySelector('.pg-cards')?.scrollIntoView({ behavior: 'smooth' });
     });
-    nav.append(toPlay, navLink('Source', REPO));
+    bar.links.appendChild(toPlay);
+    bar.right.appendChild(navLink('Source', REPO));
 
     // --- hero ---
     hero.append(

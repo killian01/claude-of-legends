@@ -12,7 +12,7 @@
 // (it must have a built model); E2E_SHOT names a file for a picture of
 // the frozen workshop.
 import puppeteer from 'puppeteer-core';
-import { e2eName, signIn } from './e2e_signin.mjs';
+import { clickBar, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
 const CHROME = process.env.CHROME ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = process.env.E2E_URL ?? 'http://localhost:5173';
@@ -70,10 +70,10 @@ const run = async () => {
     page,
     process.env.E2E_ACCOUNT ?? e2eName('shop', String(Date.now()).slice(-9)),
   );
-  await waitFor(page, findBtn('Open the Forge'), 'home');
+  await waitFor(page, HOME_UP, 'home');
   console.log('signed in as', name);
 
-  await clickButton(page, 'Open the Forge');
+  await clickBar(page, 'Forge');
   await waitFor(page, `document.querySelector('.fe-tabs') !== null`, 'forge editor');
   await waitFor(
     page,

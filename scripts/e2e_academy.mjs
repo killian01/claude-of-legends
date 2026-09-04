@@ -7,7 +7,7 @@
 // set.
 import { mkdirSync } from 'node:fs';
 import puppeteer from 'puppeteer-core';
-import { e2eName, signIn } from './e2e_signin.mjs';
+import { clickBar, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
@@ -71,8 +71,8 @@ const run = async () => {
   });
   await page.goto(URL, { waitUntil: 'load' });
   await signIn(page, e2eName('acad', String(Date.now() % 1000000)));
-  await waitFor(page, findBtn('Open the Academy'), 'home');
-  await clickButton(page, 'Open the Academy');
+  await waitFor(page, HOME_UP, 'home');
+  await clickBar(page, 'Academy');
   await page.waitForSelector('.ac input[placeholder="Name"]', { timeout: 20000 });
   await page.evaluate(() => {
     const input = document.querySelector('.ac input[placeholder="Name"]');

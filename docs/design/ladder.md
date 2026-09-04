@@ -16,8 +16,9 @@ seat and an Arena seat alike (`server/way_stats.ts`).
 
 ## The page
 
-Reached from the home screen's ladder card, a full page like the Academy,
-one tab per way, by hand first.
+Reached from the home's bar (Ladder) and from the ladder card in the
+account drawer, a full page like the Academy, one tab per way, by hand
+first.
 
 - **The reader's place** at the top: the tier's emblem, the tier, the
   rating, the rank of the placed or the placement's count, the climb to the
@@ -39,13 +40,15 @@ one tab per way, by hand first.
   young server's ladder shows who is coming.
 - **The pool** on the Arena tab, unchanged: every ranked bot, a page each.
 
-## The home card
+## The home
 
-The ladder card shows the reader's place by hand in large (emblem, tier,
-rating, the climb, rank or placement), one line per other way where the
-account has rated play, and the button to the page. The career card keeps
-the profile, which counts the seats the account played by hand: its bots'
-matches belong to each bot's Record and page, and to the bot ladders.
+The bar of the home shows the reader's place by hand beside their name:
+the emblem, the tier and the rating. That block opens the account drawer,
+whose ladder card shows the same place in large (emblem, tier, rating, the
+climb, rank or placement), one line per other way where the account has
+rated play, and the button to the page. The career below it in the drawer
+counts the seats the account played by hand: its bots' matches belong to
+each bot's Record and page, and to the bot ladders.
 
 ## The emblems
 

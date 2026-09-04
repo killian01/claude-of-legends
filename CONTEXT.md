@@ -150,6 +150,11 @@ whole public identity, so nothing is appended to it to tell two people apart, an
 never part of it: only the account itself ever sees its own.
 _Avoid_: profile (that is the screen that shows an account), user, login, player (ambiguous, see Participant)
 
+**Home**:
+The page a signed-in account lands on: the bar to every section, the play tiles, and the
+account's own place. Everything else opens from it and comes back to it.
+_Avoid_: menu, main menu, lobby (that is the private one), dashboard, launcher
+
 **Confirmed address**:
 An email address whose owner has followed the link sent to it. Only a confirmed address can
 receive a password reset, and only a confirmed address is held forever. An address nobody has
@@ -202,9 +207,25 @@ is data composed from the same spell primitives as the roster and must fit the p
 Playable only in the Forge queue.
 _Avoid_: custom champion, user-generated champion
 
+**Ranked queue**:
+The public matchmaking queue, roster champions only, filled with house bots for any seat
+nobody takes. A match from it is rated when a human sits on each side. Ranked here is the
+same adjective as a ranked bot: in rated play.
+_Avoid_: public queue, standard queue, solo queue, normal queue
+
+**Private lobby**:
+A room one account opens and others join with its code or invite link, played on the
+roster and never rated. Its host may send the whole room into the Ranked queue as one party.
+_Avoid_: custom game, room, custom lobby
+
+**Practice**:
+The offline match against dummies, run entirely in the browser tab with nothing saved and
+no account needed. The same simulation the rated match runs.
+_Avoid_: offline mode, sandbox, training, tutorial
+
 **Forge queue**:
 The matchmaking queue where forged champions are allowed, alongside roster champions. Every
-other queue is roster-only. Ranked on its own rating, separate from the standard queue's.
+other queue is roster-only. Rated on its own rating, separate from the Ranked queue's.
 _Avoid_: atelier mode, custom game (that is a private lobby)
 
 **Draft**:

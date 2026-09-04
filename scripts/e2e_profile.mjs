@@ -3,7 +3,7 @@
 // then shows the account name. The /api surface is also probed, from
 // inside the page so the session cookie rides the request.
 import puppeteer from 'puppeteer-core';
-import { apiFromPage, e2eName, signIn } from './e2e_signin.mjs';
+import { apiFromPage, clickBar, clickTile, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
@@ -58,26 +58,28 @@ const run = async () => {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(URL, { waitUntil: 'load' });
-  await waitFor(page, findBtn('Play online'), 'home');
+  // The account wall (ADR 0006): the career lives behind it.
+  await signIn(page, e2eName('prof', Date.now().toString(36).slice(-6)));
+  await waitFor(page, HOME_UP, 'home');
 
-  // Fresh browser: no token yet, the panel says so.
-  await clickButton(page, 'Profile and history');
+  // A fresh account: the drawer's career greets it with an empty record.
+  await clickBar(page, 'account');
   await waitFor(
     page,
-    `document.querySelector('.prof-panel')?.textContent.includes('Play an online match')`,
+    `document.querySelector('.prof-panel')?.textContent.includes('No online matches')`,
     'empty career message',
   );
-  console.log('fresh browser shows no career');
+  console.log('fresh account shows an empty career');
 
   // Touch the online flow, then leave: the career is empty until a match
   // is recorded against the account, not merely because nobody signed in.
-  await clickButton(page, 'Play online');
+  await clickTile(page, 'queue');
   await waitFor(page, findBtn('Start now with bots'), 'queue');
   await clickButton(page, 'Cancel');
-  await waitFor(page, findBtn('Play online'), 'home back');
+  await waitFor(page, HOME_UP, 'home back');
 
   // The panel now greets the signed-in account.
-  await clickButton(page, 'Profile and history');
+  await clickBar(page, 'account');
   await waitFor(
     page,
     `!!document.querySelector('.prof-name')?.textContent`,

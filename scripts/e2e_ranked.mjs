@@ -2,7 +2,7 @@
 // (rated-eligible, one per side), one walks out mid-match, and the
 // walk-out costs rating and locks the leaver's queue for a while.
 import puppeteer from 'puppeteer-core';
-import { apiFromPage, e2eName, signIn } from './e2e_signin.mjs';
+import { apiFromPage, clickTile, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
@@ -54,9 +54,9 @@ const run = async () => {
   const alice = await newIsolatedPage(browser, 'alice');
   const bob = await newIsolatedPage(browser, 'bob');
   for (const p of [alice, bob]) p.on('pageerror', (e) => errors.push(String(e)));
-  await clickButton(alice, 'Play online');
+  await clickTile(alice, 'queue');
   await waitFor(alice, findBtn('Start now with bots'), 'alice queued');
-  await clickButton(bob, 'Play online');
+  await clickTile(bob, 'queue');
   await waitFor(bob, findBtn('Start now with bots'), 'bob queued');
   await clickButton(alice, 'Start now with bots');
   await clickButton(bob, 'Start now with bots');
@@ -78,7 +78,7 @@ const run = async () => {
   await bob.keyboard.press('Escape');
   await sleep(300);
   await clickButton(bob, 'Leave match');
-  await waitFor(bob, findBtn('Play online'), 'bob home after walk-out');
+  await waitFor(bob, HOME_UP, 'bob home after walk-out');
   await sleep(500);
   const after = (await apiFromPage(bob, '/api/me')).body;
   if (after.rating !== before.rating - 15) {
@@ -90,7 +90,7 @@ const run = async () => {
   console.log(`penalty applied: ${before.rating} -> ${after.rating}, rated games unchanged`);
 
   // The queue refuses him for a while, with a reason.
-  await clickButton(bob, 'Play online');
+  await clickTile(bob, 'queue');
   await waitFor(
     bob,
     `document.body.textContent.includes('The queue unlocks in')`,
