@@ -289,8 +289,18 @@ export function openBotPage(
       box.append(table);
     }
 
+    // The page reads the same to everyone, the owner included: closed is
+    // closed. The owner edits and reads it in the Academy.
     box.append(el('h4', '', 'Playbook'));
     if (r.playbook) box.append(playbookView(r.playbook));
-    else box.append(el('div', 'bp-empty', 'The owner keeps this playbook closed.'));
+    else if (b.mine) {
+      box.append(
+        el(
+          'div',
+          'bp-empty',
+          'Closed: readers see nothing here. Open playbook, in the Academy, shows it.',
+        ),
+      );
+    } else box.append(el('div', 'bp-empty', 'The owner keeps this playbook closed.'));
   });
 }

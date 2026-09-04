@@ -39,6 +39,7 @@ import { type ArenaDeps, challenge, playNow, roundDue, runArenaRound } from './a
 import { chooseArt, deleteArtFor, generateArt, iconsOf, listArt, splashOf } from './art';
 import { appendExchange, botChat, clearBotChat, windowTurns } from './bot_chats';
 import { fillWithBots, type PoolSeat, TEAM_SIZE } from './bot_fill';
+import { type BotPageDeps, describeBotPage } from './bot_page';
 import {
   addEntry,
   getEntry,
@@ -315,6 +316,11 @@ const botDeps: BotDeps = {
   store: botStore,
   botCap: envNumber('BOT_CAP', 100),
   depositCap: envNumber('BOT_DEPOSIT_CAP', 3),
+};
+// The Bot page (server/bot_page.ts): the store and the owner's name.
+const botPageDeps: BotPageDeps = {
+  store: botStore,
+  ownerName: (accountId) => registry.findById(accountId)?.name ?? null,
 };
 // The coach behind the Academy: the same key as the kit conversation,
 // one model, depth as effort.
@@ -1196,48 +1202,11 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 200, setOpenPlaybook(botDeps, me.id, body?.id, body?.on));
         return;
       }
-      // A bot's page (CONTEXT.md): what anyone signed in may read of a
-      // bot: its identity, its rated play, its playbook when opened.
+      // A bot's page (server/bot_page.ts): what anyone signed in may read
+      // of a bot, its playbook only when the owner opened it.
       if (url === '/api/bots/page' && req.method === 'POST') {
         const body = await readJsonBody(req);
-        const bot = typeof body?.id === 'string' ? botStore.getBot(body.id) : null;
-        if (!bot) {
-          sendJson(res, 200, { ok: false, error: 'no such bot' });
-          return;
-        }
-        const rated = listEntries(botStore, bot.id).filter(
-          (r) => r.kind === 'arena' || r.kind === 'live',
-        );
-        let wins = 0;
-        let losses = 0;
-        for (const r of rated) {
-          if (r.winner === null) continue;
-          if (r.winner === r.team) wins++;
-          else losses++;
-        }
-        sendJson(res, 200, {
-          ok: true,
-          bot: {
-            id: bot.id,
-            name: bot.name,
-            championId: bot.championId,
-            skin: bot.skin,
-            sigils: bot.sigils,
-            version: bot.version,
-            ranked: bot.deposited,
-            openPlaybook: bot.openPlaybook,
-            owner: registry.findById(bot.accountId)?.name ?? null,
-            accountId: bot.accountId,
-            mine: bot.accountId === me.id,
-          },
-          tally: { wins, losses },
-          ratings: {
-            live: botStore.botRating(bot.accountId, 'live'),
-            arena: botStore.botRating(bot.accountId, 'arena'),
-          },
-          rows: rated.slice(0, 10),
-          ...(bot.openPlaybook || bot.accountId === me.id ? { playbook: bot.playbook } : {}),
-        });
+        sendJson(res, 200, describeBotPage(botPageDeps, me.id, body?.id));
         return;
       }
       // The pool (CONTEXT.md: Ranked): every ranked bot on the server, for
