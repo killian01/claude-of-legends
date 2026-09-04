@@ -8,17 +8,19 @@ import type { PlayTile } from './home_tiles';
 import { tileArtUrl } from './home_tiles';
 import { el } from './menu';
 
-// The bento: the Ranked scene tall on the left, the Bots banner across the
-// top right, the three others square beneath it. Six columns rather than
-// five so the banner and the squares divide the same right-hand half.
+// The bento: the Ranked scene tall on the left, the two banners stacked in
+// the middle, the two smaller modes in a column on the right. Ten columns
+// so four, four and two divide the row cleanly; Bots and the Forge queue
+// get the same billing because they are the two modes nothing else in the
+// genre has, and a mode you have to be shown is a mode worth the space.
 const CSS = `
-.tiles { display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: 1fr 1fr;
+.tiles { display: grid; grid-template-columns: repeat(10, 1fr); grid-template-rows: 1fr 1fr;
   gap: 12px; height: clamp(320px, 50vh, 460px); max-width: 1180px; }
-.tile.t-ranked { grid-area: 1 / 1 / 3 / 4; }
-.tile.t-bots { grid-area: 1 / 4 / 2 / 7; }
-.tile.t-forge { grid-area: 2 / 4 / 3 / 5; }
-.tile.t-lobby { grid-area: 2 / 5 / 3 / 6; }
-.tile.t-practice { grid-area: 2 / 6 / 3 / 7; }
+.tile.t-ranked { grid-area: 1 / 1 / 3 / 5; }
+.tile.t-bots { grid-area: 1 / 5 / 2 / 9; }
+.tile.t-forge { grid-area: 2 / 5 / 3 / 9; }
+.tile.t-lobby { grid-area: 1 / 9 / 2 / 11; }
+.tile.t-practice { grid-area: 2 / 9 / 3 / 11; }
 .tile {
   position: relative; overflow: hidden; border-radius: 14px; border: 1px solid #2b3f60;
   padding: 0; text-align: left; cursor: pointer; color: inherit; font: inherit;
@@ -49,21 +51,25 @@ const CSS = `
 .tile.hero .tile-body { padding: 90px 24px 22px; }
 .tile.hero h3 { font-size: clamp(26px, 2.6vw, 36px); letter-spacing: 3px; }
 .tile.hero p { font-size: 13.5px; }
-/* The banner reads across, not up: its words sit in a column against a
-   scrim that fades to the right, where the construct stands. The painting
-   is mirrored to put it there, away from the text; the scene is a room,
-   so nothing in it has a handedness to lose. */
+/* A banner reads across, not up: its words sit in a column against a scrim
+   that fades to the right, where the painting is left clear. */
+.tile.banner .tile-body {
+  top: 0; display: flex; flex-direction: column; justify-content: center;
+  padding: 14px 20px;
+  background: linear-gradient(90deg, rgba(4, 7, 16, 0.96) 0%, rgba(4, 7, 16, 0.88) 38%,
+    rgba(4, 7, 16, 0.1) 78%);
+}
+.tile.banner h3 { font-size: 19px; letter-spacing: 2.2px; }
+.tile.banner p { font-size: 12px; max-width: 34ch; }
+.tile.banner .tile-cta { align-self: flex-start; margin-top: 9px; padding: 6px 15px;
+  font-size: 12px; }
+/* The Bots painting is mirrored so its construct stands on the right, away
+   from the words; the scene is a room, so it has no handedness to lose.
+   The Forge painting is already lit dead center, which is where its scrim
+   thins out, so it needs nothing. */
 .tile.t-bots .tile-art img { transform: scaleX(-1); }
 .tile.t-bots:hover .tile-art img { transform: scaleX(-1) scale(1.05); }
-.tile.t-bots .tile-body {
-  top: 0; display: flex; flex-direction: column; justify-content: center;
-  padding: 16px 22px;
-  background: linear-gradient(90deg, rgba(4, 7, 16, 0.96) 0%, rgba(4, 7, 16, 0.88) 42%,
-    rgba(4, 7, 16, 0.12) 82%);
-}
-.tile.t-bots h3 { font-size: 21px; letter-spacing: 2.2px; }
-.tile.t-bots p { font-size: 12.5px; max-width: 40ch; }
-.tile.t-bots .tile-cta { align-self: flex-start; }
+.tile.t-forge .tile-art img { object-position: 50% 26%; }
 .tile-cta {
   display: inline-block; margin-top: 12px; padding: 7px 18px; border-radius: 6px;
   border: 1px solid #6b7f9e; color: #dceaff; font-weight: 700; font-size: 12.5px;
@@ -89,20 +95,21 @@ const CSS = `
 /* Narrow: the bento unstacks into the hero, the banner, and a row of
    three, which is the same reading order one column at a time. */
 @media (max-width: 900px) {
-  .tiles { grid-template-columns: repeat(3, 1fr); grid-template-rows: auto; height: auto; gap: 10px; }
-  .tile.t-ranked { grid-area: auto / 1 / auto / 4; aspect-ratio: 16 / 9; }
-  /* Two to one, not three: the banner has to hold its title, its line and
+  .tiles { grid-template-columns: repeat(2, 1fr); grid-template-rows: auto; height: auto; gap: 10px; }
+  .tile.t-ranked { grid-area: auto / 1 / auto / 3; aspect-ratio: 16 / 9; }
+  /* Two to one, not three: a banner has to hold its title, its line and
      its button at a phone's width without clipping any of them. */
-  .tile.t-bots { grid-area: auto / 1 / auto / 4; aspect-ratio: 2 / 1; }
-  .tile.t-forge, .tile.t-lobby, .tile.t-practice { grid-area: auto; aspect-ratio: 3 / 4; }
+  .tile.t-bots, .tile.t-forge { grid-area: auto / 1 / auto / 3; aspect-ratio: 2 / 1; }
+  .tile.t-lobby, .tile.t-practice { grid-area: auto; aspect-ratio: 4 / 3; }
   .tile.hero .tile-body { padding: 60px 18px 16px; }
   .tile-body { padding: 40px 12px 10px; }
   .tile h3 { font-size: 14px; letter-spacing: 1.2px; }
   .tile p { font-size: 11px; margin-top: 4px; }
+  .tile.banner p { max-width: 46ch; }
 }
 @media (max-width: 480px) {
-  .tile.t-forge p, .tile.t-lobby p, .tile.t-practice p { display: none; }
-  .tile.t-bots p { font-size: 11px; }
+  .tile.t-lobby p, .tile.t-practice p { display: none; }
+  .tile.banner p { font-size: 11px; }
   .tile.hero h3 { font-size: 24px; }
   .tile.hero p { font-size: 12px; }
 }
@@ -124,7 +131,7 @@ export function buildPlayTiles(
   ensureCss();
   const row = el('div', 'tiles');
   for (const t of tiles) {
-    const tile = el('button', `tile t-${t.id}${t.hero ? ' hero' : ''}`);
+    const tile = el('button', `tile t-${t.id}${t.hero ? ' hero' : ''}${t.banner ? ' banner' : ''}`);
     tile.type = 'button';
     tile.dataset.tile = t.id;
     const art = el('div', 'tile-art');

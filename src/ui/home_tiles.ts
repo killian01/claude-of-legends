@@ -21,8 +21,12 @@ export interface PlayTile {
   line: string;
   goes: TileGoes;
   // The words on the tile's pill, or none: the tile itself is the button
-  // either way, and the pill only says so louder on the two big ones.
+  // either way, and the pill only says so louder on the big ones.
   cta: string | null;
+  // A banner reads across rather than up: its words sit in a column
+  // against a scrim, with the painting clear beside them. The two modes
+  // nothing else in the genre has, Bots and the Forge, are the banners.
+  banner: boolean;
   // Painted behind the tile: /art/tiles/<art>.webp.
   art: string;
   // The wash under the art, and what shows when the file is missing.
@@ -39,6 +43,7 @@ export const PLAY_TILES: readonly PlayTile[] = [
     cta: 'Play online',
     art: 'ranked',
     accent: '#c9a84a',
+    banner: false,
     hero: true,
   },
   {
@@ -49,16 +54,18 @@ export const PLAY_TILES: readonly PlayTile[] = [
     cta: 'Open the Academy',
     art: 'bots',
     accent: '#5b9dd9',
+    banner: true,
     hero: false,
   },
   {
     id: 'forge',
     title: 'Forge queue',
-    line: 'Forged champions welcome, on a ladder of its own.',
+    line: 'The queue for champions built in the Forge, kit and all, on a ladder of its own. Bring yours, or come and meet other people\u2019s.',
     goes: { to: 'mode', mode: 'forge-queue' },
-    cta: null,
+    cta: 'Play the Forge queue',
     art: 'forge',
     accent: '#d98a5c',
+    banner: true,
     hero: false,
   },
   {
@@ -69,6 +76,7 @@ export const PLAY_TILES: readonly PlayTile[] = [
     cta: null,
     art: 'lobby',
     accent: '#8f7ad9',
+    banner: false,
     hero: false,
   },
   {
@@ -79,6 +87,7 @@ export const PLAY_TILES: readonly PlayTile[] = [
     cta: null,
     art: 'practice',
     accent: '#6fb08a',
+    banner: false,
     hero: false,
   },
 ];

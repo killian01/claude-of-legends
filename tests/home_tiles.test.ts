@@ -25,9 +25,16 @@ describe('the play tiles', () => {
     expect(bots?.goes).toEqual({ to: 'section', key: 'academy' });
   });
 
-  it('carries a call to action on the two big tiles only', () => {
+  it('gives the two modes nothing else has the banner billing', () => {
+    expect(PLAY_TILES.filter((t) => t.banner).map((t) => t.id)).toEqual(['bots', 'forge']);
+    // Hero and banner are the big shapes and never the same tile.
+    expect(PLAY_TILES.every((t) => !(t.hero && t.banner))).toBe(true);
+  });
+
+  it('carries a call to action on the three big tiles only', () => {
     const withCta = PLAY_TILES.filter((t) => t.cta !== null).map((t) => t.id);
-    expect(withCta).toEqual(['ranked', 'bots']);
+    expect(withCta).toEqual(['ranked', 'bots', 'forge']);
+    expect(PLAY_TILES.every((t) => (t.cta !== null) === (t.hero || t.banner))).toBe(true);
     expect(PLAY_TILES.find((t) => t.id === 'ranked')?.cta).toBe('Play online');
   });
 
