@@ -33,6 +33,17 @@ falls back to the in-engine cinematic render when a file is missing
 | `korrath.webp` | Generated with Google Gemini from the Korrath prompt in docs/design/portrait-prompts.md | Google Gemini output terms |
 | `dain.webp`, `sylra.webp`, `fenn.webp`, `elowen.webp`, `ashvyn.webp`, `maera.webp`, `torv.webp`, `rhoka.webp` | Generated with Google Gemini from the prompts in docs/design/portrait-prompts.md | Google Gemini output terms |
 
+## Tier emblems (`public/icons/tiers/`)
+
+The five tier emblems of the ladder (docs/design/ladder.md), one per tier,
+generated from the prompts in docs/design/tier-emblem-prompts.md; the
+sources stay in `art_src/tiers/`, the black background keyed out at
+conversion.
+
+| Files | Source | License |
+|---|---|---|
+| `recruit.webp`, `regular.webp`, `veteran.webp`, `elite.webp`, `legend.webp` | Generated with Google Gemini from the prompts in docs/design/tier-emblem-prompts.md | Google Gemini output terms |
+
 ## Vendor runtime files (`public/vendor/`)
 
 | Files | What it is | License |

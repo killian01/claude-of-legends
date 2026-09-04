@@ -561,3 +561,29 @@ An account's Elo on one ladder. An account holds one per way its seat was played
 by its bot in a live match, by its bot in the Arena, plus the Forge queue's own. A match
 moves only the rating of the way each owned seat was played; house bots move none.
 _Avoid_: MMR, Elo (the algorithm, not the number), score
+
+**Ladder**:
+The accounts ranked by one rating; one ladder per way. A position on it is a rank. An
+account takes its place after three rated matches on that way, and the page shows the
+same emblem, rating and rank wherever the account appears.
+_Avoid_: leaderboard, ranking, board, standings
+
+**Placement**:
+An account's first three rated matches on one way, before it takes its place on that
+ladder. An account in placement shows how many it has played of the three.
+_Avoid_: calibration, provisional, unranked (that is a match nobody rated)
+
+**Form**:
+An account's latest rated results on one way, newest first, read as a row of wins and
+losses.
+_Avoid_: streak, run, momentum
+
+**Emblem**:
+The image of a tier, one per tier, the same everywhere the tier shows: the ladder, an
+account's place, and later the lobby and the scoreboard.
+_Avoid_: badge, medal, rank icon, crest
+
+**Way**:
+How an owned seat was played: by hand, by the account's bot in a live match, by that bot
+in the Arena, or by hand in the Forge queue. One rating and one ladder per way.
+_Avoid_: mode, queue (where the match came from, not how the seat was played), category

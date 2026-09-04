@@ -14,7 +14,8 @@ import { buildEmailNotice, type ConfirmResult } from './email_status';
 import { openForgeEditor } from './forge_editor';
 import { openGallery } from './gallery';
 import { startBackdrop } from './home_backdrop';
-import { buildLadderPanel } from './ladder_panel';
+import { buildLadderCard } from './ladder_card';
+import { openLadderPage } from './ladder_page';
 import { buildLivePanel } from './live_panel';
 import { el, ensureMenuCss } from './menu';
 import { buildPage, ensurePageCss, mountLiveStats, navLink, REPO } from './page';
@@ -269,13 +270,34 @@ export function showHome(
     // --- career ---
     const career = card(
       'plain',
-      'Career and ladder',
-      'Your rating and every match you have played, the top of the ladder, and anything ' +
-        'running on the server right now.',
+      'Career',
+      'Every match you have played by hand, your champions, and anything running on the ' +
+        'server right now.',
     );
     collapsible(career, 'Profile and history', buildProfilePanel);
-    collapsible(career, 'Ladder', buildLadderPanel);
     collapsible(career, 'Watch a live match', buildLivePanel);
+
+    // --- the ladder (docs/design/ladder.md): your place, and the page ---
+    const ladder = card(
+      'gold',
+      'The Ladder',
+      'Four ladders, one per way you play: by hand, your bot live, your bot in the Arena, ' +
+        'the Forge queue. Three rated matches place you; five tiers from Recruit to Legend.',
+    );
+    ladder.appendChild(
+      buildLadderCard(() =>
+        openLadderPage(container, {
+          onPlay: (mode) => done(mode),
+          onWatch: (id, follow) =>
+            window.dispatchEvent(
+              new CustomEvent('loc:replay', {
+                detail: { id, ...(follow !== undefined ? { follow } : {}) },
+              }),
+            ),
+          openAcademy: () => openAcademy(container),
+        }),
+      ),
+    );
 
     // --- champions and options ---
     const learn = card(
@@ -289,7 +311,7 @@ export function showHome(
     learn.appendChild(roster);
     collapsible(learn, 'Settings', buildSettingsPanel);
 
-    cards.append(play, friends, botsCard, forge, career, learn);
+    cards.append(play, ladder, friends, botsCard, forge, career, learn);
     inner.appendChild(cards);
     if (reopen) openAcademy(container, { botId: reopen.botId });
   });
