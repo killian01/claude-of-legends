@@ -14,7 +14,7 @@ in, refresh, done.
 - Square, 1:1, 1024x1024 (set the ratio in the tool as well: a prompt alone
   is often ignored), transparent or flat pure black background. The
   emblem is drawn at 18 px beside a name and at 96 px on the page, so the
-  silhouette must survive both: one bold banner shape, one motif, no fine
+  silhouette must survive both: one bold shield shape, one motif, no fine
   detail that only reads large.
 - No text, no numerals, no logos, no watermark, no border inside the image.
 - The names are original (ADR 0004): nothing borrowed from other games'
@@ -31,15 +31,16 @@ format and the background come last, where generators weigh them most.
 
 > Context: a rank tier emblem for the ranked ladder of a browser 5v5
 > fantasy MOBA with a dark painterly look, a gold on night blue interface.
-> (The game is not named: a generator may balk at a name.) Five tiers form one set on the same banner silhouette,
+> (The game is not named: a generator may balk at a name.) Five tiers form one set on the same shield silhouette,
 > from lowest to highest: Recruit, Regular, Veteran, Elite, Legend. The
 > emblem is shown beside a player name at 18 pixels and on the ladder page
 > at 96 pixels, so it must read as one bold shape.
 >
-> Subject: a single hanging heraldic banner with a pointed lower edge,
-> front view, stylized painted fantasy game emblem, strong readable
-> silhouette, painterly brushwork with clean edges, subtle metallic
-> highlights.
+> Subject: a single rigid heraldic shield, flat top and pointed lower
+> edge, front view, stylized painted fantasy game emblem, strong readable
+> silhouette, painterly brushwork with crisp intact edges, subtle metallic
+> highlights. No cloth, no fabric, no banner, no fraying, no tears, no
+> rope, no pole.
 >
 > Format: square game icon, 1:1 aspect ratio, 1024x1024, one single object
 > centered with even margins, filling about eighty percent of the frame
@@ -51,22 +52,21 @@ The pure black is keyed out at conversion (ffmpeg colorkey) so the emblem
 sits on the page with no square behind it; a true transparent PNG is
 better still when the tool can make one.
 
-The banner is the same in all five; what changes is what it carries and
+The shield is the same in all five; what changes is what it carries and
 what it is made of. Progression must be legible at a glance from left to
 right.
 
 ## The five tiers
 
-- **Recruit** (below the base rating): a bare banner of rough undyed
-  cloth, dull brown, frayed lower edge, no device, a plain wooden crossbar.
-- **Regular** (1000): the banner in iron grey, stitched with a single
-  vertical lane mark, a straight pale line from top to point, a plain iron
-  crossbar.
-- **Veteran** (1100): the banner in deep bronze red carrying two crossed
-  blades, short broad swords crossing at the center, a bronze crossbar with
-  rounded finials.
-- **Elite** (1200): the banner in gold cloth carrying a tower crown, a
-  crenellated ring seen from the front, a gold crossbar with pointed finials.
-- **Legend** (1300): the banner in radiant white gold carrying the Warden's
+- **Recruit** (below the base rating): a bare shield of rough dark wood,
+  dull brown, plain iron rim, no device.
+- **Regular** (1000): the shield in iron grey, a single vertical lane
+  mark, a straight pale line from top to point, a plain iron rim.
+- **Veteran** (1100): the shield in deep bronze red carrying two crossed
+  blades, short broad swords crossing at the center, a bronze rim with
+  rounded studs.
+- **Elite** (1200): the shield in polished gold carrying a tower crown, a
+  crenellated ring seen from the front, a gold rim with pointed studs.
+- **Legend** (1300): the shield in radiant white gold carrying the Warden's
   horns, a pair of great curved horns rising from the center, a soft golden
-  halo behind the banner, a gold crossbar crowned with a small flame.
+  halo tight around the shield, a gold rim crowned with a small flame.
