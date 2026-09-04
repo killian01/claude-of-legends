@@ -12,7 +12,7 @@ in, refresh, done.
   `node scripts/convert_art.mjs` re-encodes everything under `public/icons`
   to WebP (the PNG sources stay in `art_src/`, like the spell icons).
 - Square, 1:1, 1024x1024 (set the ratio in the tool as well: a prompt alone
-  is often ignored), transparent or plain dark background. The
+  is often ignored), transparent or flat pure black background. The
   emblem is drawn at 18 px beside a name and at 96 px on the page, so the
   silhouette must survive both: one bold banner shape, one motif, no fine
   detail that only reads large.
@@ -26,15 +26,30 @@ in, refresh, done.
 ## Shared style block
 
 Append the tier line to this base prompt so the five emblems read as one
-set:
+set. The context comes first so the tool knows what the image is for; the
+format and the background come last, where generators weigh them most.
 
-> Square game icon, 1:1 aspect ratio, 1024x1024, one single object
+> Context: a rank tier emblem for the ranked ladder of Claude of Legends,
+> a browser 5v5 fantasy MOBA with a dark painterly look, a gold on night
+> blue interface. Five tiers form one set on the same banner silhouette,
+> from lowest to highest: Recruit, Regular, Veteran, Elite, Legend. The
+> emblem is shown beside a player name at 18 pixels and on the ladder page
+> at 96 pixels, so it must read as one bold shape.
+>
+> Subject: a single hanging heraldic banner with a pointed lower edge,
+> front view, stylized painted fantasy game emblem, strong readable
+> silhouette, painterly brushwork with clean edges, subtle metallic
+> highlights.
+>
+> Format: square game icon, 1:1 aspect ratio, 1024x1024, one single object
 > centered with even margins, filling about eighty percent of the frame
-> height. Stylized painted fantasy game emblem, a single hanging heraldic
-> banner with a pointed lower edge, front view, flat dark background,
-> strong readable silhouette at small size, painterly brushwork with clean
-> edges, subtle metallic highlights, no text, no numbers, no watermark, no
-> border, no scene, no landscape.
+> height. Background: flat, solid, pure black, nothing else in the frame,
+> no scene, no landscape, no floor, no shadow on the ground. No text, no
+> numbers, no watermark, no border.
+
+The pure black is keyed out at conversion (ffmpeg colorkey) so the emblem
+sits on the page with no square behind it; a true transparent PNG is
+better still when the tool can make one.
 
 The banner is the same in all five; what changes is what it carries and
 what it is made of. Progression must be legible at a glance from left to
