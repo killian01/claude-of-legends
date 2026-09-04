@@ -121,6 +121,15 @@ const run = async () => {
     check(you.tier === 'Regular' && you.rating === '1000', `${tab}: the place reads Regular 1000`);
     check(you.place.startsWith('Unplaced'), `${tab}: unplaced (${you.place})`);
     check(you.bar && you.emblem, `${tab}: the climb bar and the emblem`);
+    // The emblem's art (public/icons/tiers): the swap happens once the file
+    // has loaded, so give it a moment before reading the class.
+    await waitFor(
+      page,
+      `document.querySelector('.lp-you .te.has-art') !== null`,
+      `${tab}: the emblem art`,
+      8000,
+    );
+    check(true, `${tab}: the emblem art loaded`);
     if (tab === 'Arena') check(you.pool, 'the Arena tab shows the pool');
     await shot(page, `ladder_${tab.replace(/[^a-z]/gi, '').toLowerCase()}`);
   }
