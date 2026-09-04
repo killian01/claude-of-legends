@@ -533,7 +533,8 @@ _Avoid_: death recap, kill cam
 What anyone signed in may read of a bot before playing it: its owner and champion, its
 rated tally and its ratings by tier, its rated matches with their lines, builds and
 replays, and its playbook when the owner opened it (the owner's switch, off by default).
-Reached from the ladder and the pool.
+The page reads the same to everyone, the owner included: closed is closed, and the owner
+reads their own playbook in the Academy. Reached from the ladder and the pool.
 _Avoid_: scouting report (the plan's measuring script), profile (that is an account's)
 
 **Challenge**:

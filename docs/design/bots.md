@@ -367,7 +367,8 @@ stay as the heartbeat that converges the ratings when nobody is around.
 
 The pool is public: the ladder's Arena tab opens on every ranked bot, placed or not, each
 with its **Bot page**: owner, champion, rated tally, ratings by **Tier**, rated matches
-with lines, builds and replays, and the playbook when the owner opened it. From the page,
+with lines, builds and replays, and the playbook when the owner opened it (closed, the page
+reads the same to the owner, who has the Academy for that). From the page,
 a **Challenge**: the reader's bot against this one, now, unrated, from the same daily
 allowance, on both Records. Reading an opponent before playing it, and adapting through
 the lineup triggers and the variants, is where two good players separate.
