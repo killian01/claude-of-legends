@@ -29,9 +29,9 @@ Append the tier line to this base prompt so the five emblems read as one
 set. The context comes first so the tool knows what the image is for; the
 format and the background come last, where generators weigh them most.
 
-> Context: a rank tier emblem for the ranked ladder of Claude of Legends,
-> a browser 5v5 fantasy MOBA with a dark painterly look, a gold on night
-> blue interface. Five tiers form one set on the same banner silhouette,
+> Context: a rank tier emblem for the ranked ladder of a browser 5v5
+> fantasy MOBA with a dark painterly look, a gold on night blue interface.
+> (The game is not named: a generator may balk at a name.) Five tiers form one set on the same banner silhouette,
 > from lowest to highest: Recruit, Regular, Veteran, Elite, Legend. The
 > emblem is shown beside a player name at 18 pixels and on the ladder page
 > at 96 pixels, so it must read as one bold shape.
