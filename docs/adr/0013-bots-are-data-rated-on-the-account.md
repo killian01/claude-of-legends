@@ -1,5 +1,11 @@
 # Bots are player-authored data, run in the sim, rated on the account
 
+> **Amended by ADR 0016.** On the two bot ways the rated subject is now the bot, not the
+> account: rating the owner averaged every attempt they had running, which punished the
+> iteration this mode exists to encourage. Everything else here stands, including that a
+> bot is data interpreted by one deterministic Policy, that a match needs an owned seat on
+> each side, and that an automatic playbook change is gated by unrated sparring.
+
 An account can field a bot in its seat instead of playing by hand (`docs/design/bots.md`),
 and that seat is rated. We decided that a bot is data: a playbook of ordered plays
 interpreted by one deterministic Policy inside `src/sim/`, authored in the Academy by hand

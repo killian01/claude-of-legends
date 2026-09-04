@@ -584,24 +584,32 @@ into the replay a few seconds before, and the replay itself.
 _Avoid_: match detail, post-game screen, summary, report (that is the Briefing's material)
 
 **Rating**:
-An account's Elo on one ladder. An account holds one per way its seat was played: by hand,
-by its bot in a live match, by its bot in the Arena, plus the Forge queue's own. A match
-moves only the rating of the way each owned seat was played; house bots move none.
+The Elo of one rated subject on one ladder, one per way. An account holds the two ways a
+person sits for, by hand and the Forge queue; a bot holds the two it plays, live and the
+Arena. A match moves only the rating of the way each owned seat was played; house bots
+move none.
 _Avoid_: MMR, Elo (the algorithm, not the number), score
 
+**Rated subject**:
+What a seat's rating belongs to: the account for a seat played by hand or in the Forge
+queue, the bot for a seat its owner's bot played live or in the Arena (ADR 0016). The
+owner is named beside a bot everywhere it appears, but the number is the bot's.
+_Avoid_: owner, holder, player (ambiguous, see Participant)
+
 **Ladder**:
-The accounts ranked by one rating; one ladder per way. A position on it is a rank. An
-account takes its place after three rated matches on that way, and the page shows the
-same emblem, rating and rank wherever the account appears.
+The rated subjects of one way ranked by their rating; one ladder per way. The two ways a
+person sits for rank accounts, the two a bot plays rank bots with their owner named
+beside each. A position on it is a rank. A subject takes its place after three rated
+matches on that way, and the same emblem, rating and rank show wherever it appears.
 _Avoid_: leaderboard, ranking, board, standings
 
 **Placement**:
-An account's first three rated matches on one way, before it takes its place on that
-ladder. An account in placement shows how many it has played of the three.
+A rated subject's first three rated matches on one way, before it takes its place on that
+ladder. A subject in placement shows how many it has played of the three.
 _Avoid_: calibration, provisional, unranked (that is a match nobody rated)
 
 **Form**:
-An account's latest rated results on one way, newest first, read as a row of wins and
+A rated subject's latest rated results on one way, newest first, read as a row of wins and
 losses.
 _Avoid_: streak, run, momentum
 
@@ -612,5 +620,6 @@ _Avoid_: badge, medal, rank icon, crest
 
 **Way**:
 How an owned seat was played: by hand, by the account's bot in a live match, by that bot
-in the Arena, or by hand in the Forge queue. One rating and one ladder per way.
+in the Arena, or by hand in the Forge queue. One rating and one ladder per way, held by
+the way's rated subject.
 _Avoid_: mode, queue (where the match came from, not how the seat was played), category

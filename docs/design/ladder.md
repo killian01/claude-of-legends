@@ -6,13 +6,21 @@ screen with a top fifty and nothing of the reader on it; it is now a page.
 
 ## The four ladders
 
-One rating per way, one ladder per rating (ADR 0013 and the Forge queue's
-own pair): by hand, the account's bot in a live match, that bot in the
+One rating per way, one ladder per rating (ADR 0013, amended by ADR 0016,
+and the Forge queue's own pair): by hand, the account's bot in a live match, that bot in the
 Arena, and by hand in the Forge queue. Three rated matches on a way place
-the account there; until then it is in placement, and the page says how
-many of the three it has played. A seat is rated on its way when its rating
-moved, which is the one reading that holds for a hand seat, a live bot
-seat and an Arena seat alike (`server/way_stats.ts`).
+the way's rated subject there; until then it is in placement, and the page
+says how many of the three it has played.
+
+The subject is not the same on all four (ADR 0016). The two ways a person
+sits for, by hand and the Forge queue, rank accounts, and a seat counts on
+them when its rating moved, read off the match log (`server/way_stats.ts`).
+The two a bot plays, live and the Arena, rank **bots**, with the owner
+named beside each: rating a whole account averaged every attempt an owner
+had running, so a weak bot dragged down what a strong one earned and the
+cheapest way to protect a rating was to stop iterating. A bot's rated
+tally, wins, losses and form come from its own Record, which already holds
+one entry per match with its rating movement.
 
 ## The page
 

@@ -16,5 +16,5 @@ The consolidated result of the design grill (rounds 1 to 3). The ADRs in `docs/a
 - **Controls**: right-click move, A attack-move, QWER abilities, mouse-aimed skillshots. Desktop browser only.
 - **Fairness**: identical decision budget for humans and bots (ADR 0003).
 - **Rendering**: Three.js top-down camera, flat fixed map, simple stylized geometry at launch.
-- **Bots**: scripted Policies under `src/sim/content/bots/` (ADR 0002); community-trained RL bots later via the headless env, joining as normal clients. Accounts field their own bots as playbooks, coached live or played in the Arena, on their own ratings (`docs/design/bots.md`, ADR 0013).
+- **Bots**: scripted Policies under `src/sim/content/bots/` (ADR 0002); community-trained RL bots later via the headless env, joining as normal clients. Accounts field their own bots as playbooks, coached live or played in the Arena, each bot on its own rating (`docs/design/bots.md`, ADR 0013 and ADR 0016).
 - **Deployment**: single Docker image, one process one port, on the maintainer's Hetzner machine. Repo private until launch, MIT, public at launch.
