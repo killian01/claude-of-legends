@@ -1,9 +1,13 @@
 // Career stats derived from the match log at request time: at our scale
 // a linear pass beats any precomputed aggregate that could drift. Pure,
-// so the numbers the profile screen shows are pinned by tests.
+// so the numbers the profile screen shows are pinned by tests. The career
+// is the account's own play, the seats it held by hand (server/ways.ts):
+// its bots' matches, live or in the Arena, belong to each bot's Record
+// and page, and to the bot ladders.
 
 import { masteryRank, masteryTitle } from './mastery';
 import type { MatchRecord } from './records';
+import { playedByHand, seatWay } from './ways';
 
 export interface ChampionLine {
   championId: string;
@@ -59,7 +63,7 @@ export function buildProfile(records: readonly MatchRecord[], accountId: number)
   const perChamp = new Map<string, ChampionLine>();
   for (const rec of records) {
     const me = rec.players.find((p) => p.accountId === accountId);
-    if (!me) continue;
+    if (!me || !playedByHand(seatWay(rec, me))) continue;
     const win = me.team === rec.winner;
     out.games++;
     if (win) out.wins++;
