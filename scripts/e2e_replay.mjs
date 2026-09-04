@@ -3,7 +3,7 @@
 // match with the control bar, speed changes stick, and Exit goes home on
 // the same page.
 import puppeteer from 'puppeteer-core';
-import { signInSeeded } from './e2e_signin.mjs';
+import { clickBar, HOME_UP, signInSeeded } from './e2e_signin.mjs';
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
@@ -30,9 +30,6 @@ async function waitFor(page, fnBody, label, timeout = 40000) {
   throw new Error(`timeout waiting for: ${label}`);
 }
 
-const findBtn = (t) =>
-  `[...document.querySelectorAll('button')].some((e) => (e.textContent || '').trim().startsWith('${t}'))`;
-
 const run = async () => {
   const browser = await puppeteer.launch({
     executablePath: CHROME,
@@ -55,10 +52,10 @@ const run = async () => {
   await page.evaluate(() => {
     window.__lifeMarker = 'alive';
   });
-  await waitFor(page, findBtn('Play online'), 'home');
+  await waitFor(page, HOME_UP, 'home');
 
   // The career panel offers the recorded match.
-  await clickButton(page, 'Profile and history');
+  await clickBar(page, 'account');
   await waitFor(
     page,
     `!!document.querySelector('.prof-watch')`,
@@ -89,7 +86,7 @@ const run = async () => {
 
   // Exit lands home on the SAME page, replay artifacts gone.
   await clickButton(page, 'Exit replay');
-  await waitFor(page, findBtn('Play online'), 'home after exit');
+  await waitFor(page, HOME_UP, 'home after exit');
   const state = await page.evaluate(() => ({
     marker: window.__lifeMarker,
     bar: !!document.querySelector('.replay-bar'),

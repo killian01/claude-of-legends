@@ -1,7 +1,9 @@
 // The shared chrome of the two full-page screens: the landing page and the
 // signed-in home. Both are the same kind of thing, a full-bleed page over
-// the art with a nav, a hero and a grid of cards, so the language lives
-// here once rather than being described twice and drifting.
+// the art with a bar across the top, so the language lives here once
+// rather than being described twice and drifting. The landing keeps a hero
+// and a grid of cards under the bar; the home puts its play tiles there
+// (ui/home_screen.ts).
 //
 // The pre-game screens that follow (queue, lobby, champion select) are
 // still menu.ts cards: they are transient and they interrupt, which is a
@@ -20,16 +22,33 @@ export const CSS = `
 .pg-inner { position: relative; z-index: 2; min-height: 100%; display: flex;
   flex-direction: column; padding: 0 clamp(16px, 5vw, 56px) 40px; }
 
-/* Nothing pushes the links over: the wordmark used to sit here and the
-   hero says the same thing one line lower, so the nav is right-aligned. */
-.pg-nav { display: flex; align-items: baseline; justify-content: flex-end; gap: 18px;
-  padding: 20px 0 0; flex-wrap: wrap; }
-.pg-nav a, .pg-nav button {
-  background: none; border: 0; padding: 0; font: inherit; font-size: 12px; cursor: pointer;
-  color: #8ba1c0; text-decoration: none; letter-spacing: 0.5px;
+/* The bar: the brand, the sections, and at the right whatever belongs to
+   the person reading. The sections scroll sideways on a phone rather than
+   folding into a second component. */
+.pg-bar { display: flex; align-items: center; gap: 28px; padding: 16px 0 0; min-height: 60px; }
+.pg-brand {
+  font-family: Cinzel, Georgia, 'Times New Roman', serif; font-size: 15px; font-weight: 800;
+  letter-spacing: 2.6px; text-transform: uppercase; white-space: nowrap; margin: 0;
+  background: linear-gradient(180deg, #f9ecc0 0%, #dcb85e 52%, #9d7429 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
 }
-.pg-nav a:hover, .pg-nav button:hover { color: #dceaff; }
+.pg-bar-links { display: flex; align-items: center; gap: 24px; flex: 1; min-width: 0;
+  overflow-x: auto; scrollbar-width: none; padding: 6px 0; }
+.pg-bar-links::-webkit-scrollbar { display: none; }
+.pg-bar-right { display: flex; align-items: center; gap: 16px; margin-left: auto; flex: none; }
+.pg-bar a, .pg-bar button {
+  background: none; border: 0; padding: 0; font: inherit; font-size: 12px; font-weight: 700;
+  letter-spacing: 1.3px; text-transform: uppercase; cursor: pointer; color: #8ba1c0;
+  text-decoration: none; white-space: nowrap; transition: color 0.15s ease;
+}
+.pg-bar a:hover, .pg-bar button:hover { color: #dceaff; }
 .pg-who { font-size: 12px; letter-spacing: 0.5px; color: #e6d7a8; font-weight: 700; }
+/* A phone: the brand and the person on the first row, the sections on a
+   second row that scrolls sideways, so nothing is squeezed out. */
+@media (max-width: 720px) {
+  .pg-bar { flex-wrap: wrap; gap: 6px 16px; padding-top: 12px; }
+  .pg-bar-links { order: 3; flex-basis: 100%; gap: 18px; }
+}
 
 .pg-hero { padding: clamp(28px, 7vh, 72px) 0 0; max-width: 720px; }
 .pg-title {
@@ -52,7 +71,7 @@ export const CSS = `
 }
 
 /* 300px floors two columns at about the width the old single card had, so
-   the career and ladder panels that open inside one keep their room. */
+   a panel that opens inside one keeps its room. */
 .pg-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 18px; margin: clamp(26px, 5vh, 52px) 0 0; max-width: 900px; align-items: start; }
 .pg-card {
@@ -94,42 +113,59 @@ export async function fetchStats(): Promise<PublicStats | null> {
   }
 }
 
-// Fills `into` once the server answers, with the true count either way: an
+// The three counts as a row of cells, with the true count either way: an
 // empty server says zero rather than hiding the line, because a counter
 // that comes and goes is harder to read than one that is simply honest.
 // Nothing is padded here; /api/public/stats is the whole truth.
+export function renderStats(into: HTMLElement, s: PublicStats): void {
+  const cell = (value: number, label: string, live = false): void => {
+    const box = el('div', live ? 'pg-stat pg-live' : 'pg-stat');
+    box.append(el('b', '', String(value)), el('span', '', label));
+    into.appendChild(box);
+  };
+  cell(s.online, s.online === 1 ? 'player online' : 'players online', true);
+  cell(s.matches, s.matches === 1 ? 'match running' : 'matches running');
+  cell(s.accounts, s.accounts === 1 ? 'account' : 'accounts');
+}
+
+// Fills `into` once the server answers.
 export function mountLiveStats(into: HTMLElement): void {
   void fetchStats().then((s) => {
     if (!s || !into.isConnected) return;
-    const cell = (value: number, label: string, live = false): void => {
-      const box = el('div', live ? 'pg-stat pg-live' : 'pg-stat');
-      box.append(el('b', '', String(value)), el('span', '', label));
-      into.appendChild(box);
-    };
-    cell(s.online, s.online === 1 ? 'player online' : 'players online', true);
-    cell(s.matches, s.matches === 1 ? 'match running' : 'matches running');
-    cell(s.accounts, s.accounts === 1 ? 'account' : 'accounts');
+    renderStats(into, s);
   });
+}
+
+export interface Bar {
+  root: HTMLElement;
+  // The sections, left of center, and the person's own things at the right.
+  links: HTMLElement;
+  right: HTMLElement;
 }
 
 export interface Page {
   root: HTMLElement;
   inner: HTMLElement;
-  nav: HTMLElement;
+  bar: Bar;
+  // Only the landing page shows one; the home goes straight to its tiles.
   hero: HTMLElement;
 }
 
 // A full-page screen over the art: `variant` distinguishes them in the DOM
 // (.pg.land, .pg.home), which is what the e2e scripts key on.
-export function buildPage(variant: string): Page {
+export function buildPage(variant: string, withHero: boolean): Page {
   ensurePageCss();
   const root = el('div', `pg ${variant}`);
   const inner = el('div', 'pg-inner');
-  const nav = el('nav', 'pg-nav');
+  const bar = el('nav', 'pg-bar');
+  const links = el('div', 'pg-bar-links');
+  const right = el('div', 'pg-bar-right');
+  bar.append(el('div', 'pg-brand', 'Claude of Legends'), links, right);
   const hero = el('section', 'pg-hero');
-  inner.append(nav, hero);
+  inner.appendChild(bar);
+  if (withHero) inner.appendChild(hero);
   root.appendChild(inner);
-  return { root, inner, nav, hero };
+  return { root, inner, bar: { root: bar, links, right }, hero };
 }
 
 // A nav entry that goes somewhere else entirely; opened in a new tab, so

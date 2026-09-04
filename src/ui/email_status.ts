@@ -13,16 +13,23 @@ import { ensurePageCss } from './page';
 
 const CSS = `
 .mail-note {
-  border: 1px solid #6b5a2e; border-radius: 12px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  border: 1px solid #6b5a2e; border-radius: 8px; padding: 8px 14px;
   background: rgba(30, 24, 8, 0.62); backdrop-filter: blur(7px);
-  margin: 18px 0 0; max-width: 900px; font-size: 12.5px; line-height: 1.55; color: #d8c9a0;
+  margin: 10px 0 0; font-size: 12px; line-height: 1.4; color: #d8c9a0;
 }
 .mail-note.good { border-color: #35603c; background: rgba(12, 30, 16, 0.62); color: #b6d9bd; }
 .mail-note b { color: #f0deae; }
-.mail-note .mail-row { display: flex; gap: 8px; margin: 10px 0 0; flex-wrap: wrap; }
-.mail-note .menu-btn { width: auto; margin: 0; padding: 7px 14px; font-size: 12.5px; }
-.mail-note .menu-input { width: 260px; max-width: 100%; margin: 0; }
-.mail-note .mail-said { margin: 8px 0 0; font-size: 12px; color: #9db0c9; }
+.mail-note .mail-act {
+  background: none; border: 0; padding: 0; font: inherit; font-size: 12px; font-weight: 700;
+  color: #e6d7a8; cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
+}
+.mail-note .mail-act:hover { color: #fff2c8; }
+.mail-note .mail-act:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
+.mail-note .mail-row { display: flex; gap: 8px; align-items: center; }
+.mail-note .menu-btn { width: auto; margin: 0; padding: 5px 12px; font-size: 12px; }
+.mail-note .menu-input { width: 220px; max-width: 100%; margin: 0; padding: 5px 10px; font-size: 12.5px; }
+.mail-note .mail-said { margin: 0; font-size: 12px; color: #9db0c9; }
 `;
 
 let cssInstalled = false;
@@ -64,9 +71,10 @@ async function post(path: string, body?: unknown): Promise<string | null> {
   }
 }
 
-// The strip, or null when there is nothing to say: a confirmed address
+// The line, or null when there is nothing to say: a confirmed address
 // needs no notice, and a page that always carries one trains people to
-// stop reading it.
+// stop reading it. One line, not a box: it sits between the bar and the
+// tiles and must never push them off the screen.
 export function buildEmailNotice(
   account: AuthedAccount,
   justConfirmed: ConfirmResult | null,
@@ -78,21 +86,20 @@ export function buildEmailNotice(
     done.append(el('span', '', 'Email confirmed. A forgotten password can be reset from now on.'));
     return done;
   }
-  // A Discord account with no address gets no strip at all (ADR 0009):
+  // A Discord account with no address gets no line at all (ADR 0009):
   // it has no password to recover, its way back in is the Discord button,
   // and a notice about either would only be noise.
   if (account.email === null && account.discord !== null) return null;
   ensureCss();
   const note = el('div', 'mail-note');
-  const said = el('p', 'mail-said');
+  const said = el('span', 'mail-said');
 
   if (justConfirmed === 'failed') {
     note.append(
       el(
         'span',
         '',
-        'That confirmation link did not work. It may have been used already, or it may ' +
-          'have expired. Send yourself a fresh one:',
+        'That confirmation link did not work: used already, or expired. Send yourself a fresh one.',
       ),
     );
   } else if (account.email === null) {
@@ -100,8 +107,7 @@ export function buildEmailNotice(
       el(
         'span',
         '',
-        'This account has no email address. Adding one is the only way to recover a ' +
-          'forgotten password; nothing else changes, and nobody else can see it.',
+        'No email address on this account. Add one to be able to reset a forgotten password.',
       ),
     );
   } else {
@@ -110,14 +116,12 @@ export function buildEmailNotice(
       document.createTextNode('Confirm '),
       el('b', '', account.email),
       document.createTextNode(
-        '. Until you do, a forgotten password cannot be reset, and the address is only ' +
-          'held for you for a week.',
+        ' to be able to reset a forgotten password; it is held for you for a week.',
       ),
     );
     note.appendChild(line);
   }
 
-  const row = el('div', 'mail-row');
   const busy = (button: HTMLButtonElement, label: string, work: Promise<string | null>): void => {
     const original = button.textContent ?? label;
     button.disabled = true;
@@ -130,19 +134,24 @@ export function buildEmailNotice(
   };
 
   if (account.email !== null) {
-    const resend = el('button', 'menu-btn', 'Send the link again');
+    const resend = el('button', 'mail-act', 'Send the link again');
+    resend.type = 'button';
     resend.addEventListener('click', () => {
       busy(resend, 'Sending...', post('/api/email/resend'));
     });
-    row.appendChild(resend);
+    note.appendChild(resend);
   }
 
+  // The field: shown at once when there is no address to keep, folded
+  // behind a link when there is one and changing it is the rarer move.
+  const row = el('div', 'mail-row');
   const field = el('input', 'menu-input');
   field.type = 'email';
   field.maxLength = 254;
   field.autocomplete = 'email';
   field.placeholder = account.email === null ? 'Email address' : 'A different address';
   const save = el('button', 'menu-btn', account.email === null ? 'Add it' : 'Change it');
+  save.type = 'button';
   save.addEventListener('click', () => {
     const typed = field.value.trim();
     if (typed.length === 0) {
@@ -155,7 +164,18 @@ export function buildEmailNotice(
     if ((e as KeyboardEvent).key === 'Enter') save.click();
   });
   row.append(field, save);
+  if (account.email === null) {
+    note.appendChild(row);
+  } else {
+    const change = el('button', 'mail-act', 'Use a different address');
+    change.type = 'button';
+    change.addEventListener('click', () => {
+      change.replaceWith(row);
+      field.focus();
+    });
+    note.appendChild(change);
+  }
 
-  note.append(row, said);
+  note.appendChild(said);
   return note;
 }

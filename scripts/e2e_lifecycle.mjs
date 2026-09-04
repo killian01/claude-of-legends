@@ -4,7 +4,7 @@
 // B. online bot match -> Leave match -> Play online again lands in the QUEUE,
 //    not back inside the abandoned match (deliberate leave holds no seat).
 import puppeteer from 'puppeteer-core';
-import { e2eName, signIn } from './e2e_signin.mjs';
+import { clickTile, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
@@ -35,7 +35,7 @@ const findBtn = (t) =>
   `[...document.querySelectorAll('button')].some((e) => (e.textContent || '').trim().startsWith('${t}'))`;
 
 async function enterMatchOffline(page) {
-  await clickButton(page, 'Practice vs dummies');
+  await clickTile(page, 'practice');
   await waitFor(page, findBtn('Lock in'), 'champion select');
   await page.evaluate(() => document.querySelector('button.menu-champ').click());
   await clickButton(page, 'Lock in');
@@ -61,13 +61,16 @@ const run = async () => {
 
   // --- Scenario A: offline lifecycle, same page ---
   await page.goto(URL, { waitUntil: 'load' });
-  await waitFor(page, findBtn('Play online'), 'home menu');
+  // The account wall (ADR 0006): even the offline scenario starts from the
+  // signed-in home, since that is where the Practice tile lives.
+  await signIn(page, e2eName('life', Date.now().toString(36).slice(-6)));
+  await waitFor(page, HOME_UP, 'home menu');
   await page.evaluate(() => {
     window.__lifeMarker = 'alive';
   });
   await enterMatchOffline(page);
   await leaveViaEscape(page);
-  await waitFor(page, findBtn('Play online'), 'home menu back after leave');
+  await waitFor(page, HOME_UP, 'home menu back after leave');
   const a = await page.evaluate(() => ({
     marker: window.__lifeMarker,
     hud: !!document.querySelector('.hud'),
@@ -86,10 +89,10 @@ const run = async () => {
   if (again.marker !== 'alive' || !again.hud) throw new Error('A2: re-enter failed');
   console.log('A2: practice re-entered on same page OK');
   await leaveViaEscape(page);
-  await waitFor(page, findBtn('Play online'), 'home again');
+  await waitFor(page, HOME_UP, 'home again');
 
   // --- Scenario B: online deliberate leave holds no seat ---
-  await clickButton(page, 'Play online');
+  await clickTile(page, 'queue');
   await waitFor(page, findBtn('Start now with bots'), 'queue screen');
   await clickButton(page, 'Start now with bots');
   await waitFor(page, findBtn('Lock in'), 'online champion select');
@@ -97,11 +100,11 @@ const run = async () => {
   await clickButton(page, 'Lock in');
   await waitFor(page, `!!document.querySelector('.hud')`, 'HUD up (online match running)');
   await leaveViaEscape(page);
-  await waitFor(page, findBtn('Play online'), 'home back after online leave');
+  await waitFor(page, HOME_UP, 'home back after online leave');
 
   // Queue again at once: a reserved seat would yank us straight into the
   // abandoned match (HUD, no queue screen). We must see the queue.
-  await clickButton(page, 'Play online');
+  await clickTile(page, 'queue');
   await waitFor(page, findBtn('Start now with bots'), 'queue screen after leave (no ghost seat)');
   await sleep(2500);
   const b = await page.evaluate(() => ({

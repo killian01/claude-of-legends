@@ -67,7 +67,7 @@ async function postReset(token: string, password: string): Promise<string | null
 export function showPasswordReset(container: HTMLElement, token: string): Promise<void> {
   ensureCss();
   return new Promise((resolve) => {
-    const { root, inner, nav, hero } = buildPage('reset');
+    const { root, inner, bar, hero } = buildPage('reset', true);
     const stopBackdrop = startBackdrop(root);
     container.appendChild(root);
 
@@ -80,7 +80,7 @@ export function showPasswordReset(container: HTMLElement, token: string): Promis
 
     const skip = el('button', '', 'Back to the game');
     skip.addEventListener('click', finish);
-    nav.append(skip);
+    bar.right.appendChild(skip);
 
     hero.append(
       el('h1', 'pg-title', 'New password'),

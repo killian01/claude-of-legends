@@ -4,7 +4,7 @@
 //   node scripts/e2e_online.mjs [url] [screenshot.png]
 
 import puppeteer from 'puppeteer-core';
-import { e2eName, signIn } from './e2e_signin.mjs';
+import { clickTile, e2eName, signIn } from './e2e_signin.mjs';
 
 const url = process.argv[2] ?? 'http://localhost:8787/';
 const shot = process.argv[3] ?? 'e2e.png';
@@ -25,7 +25,7 @@ async function clickByText(selector, text) {
   const clicked = await page.evaluate(
     (sel, t) => {
       const els = [...document.querySelectorAll(sel)];
-      const el = els.find((e) => e.textContent && e.textContent.includes(t));
+      const el = els.find((e) => e.textContent?.includes(t));
       if (el) {
         el.click();
         return true;
@@ -40,7 +40,7 @@ async function clickByText(selector, text) {
 
 await page.goto(url, { waitUntil: 'networkidle0', timeout: 20000 });
 await signIn(page, e2eName('e2ebot'));
-await clickByText('button', 'Play online');
+await clickTile(page, 'queue');
 await page.waitForFunction(() => document.body.textContent?.includes('in queue'), {
   timeout: 10000,
 });

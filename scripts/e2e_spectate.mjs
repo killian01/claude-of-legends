@@ -2,7 +2,7 @@
 // browser finds it on the home screen's live list, watches team 1's fog,
 // follows champions, and stops watching back to home on the same page.
 import puppeteer from 'puppeteer-core';
-import { e2eName, signIn } from './e2e_signin.mjs';
+import { clickBar, clickTile, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
@@ -53,7 +53,7 @@ const run = async () => {
   // A player starts a bot-filled match.
   const player = await newIsolatedPage(browser, 'streamer');
   player.on('pageerror', (e) => errors.push(`player: ${e}`));
-  await clickButton(player, 'Play online');
+  await clickTile(player, 'queue');
   await waitFor(player, findBtn('Start now with bots'), 'queued');
   await clickButton(player, 'Start now with bots');
   await waitFor(player, findBtn('Lock in'), 'select');
@@ -74,7 +74,7 @@ const run = async () => {
   await spec.evaluate(() => {
     window.__lifeMarker = 'alive';
   });
-  await clickButton(spec, 'Watch a live match');
+  await clickBar(spec, 'Live');
   await waitFor(spec, `!!document.querySelector('.live-watch')`, 'live row shown');
   await clickButton(spec, 'Watch team 1');
   await waitFor(spec, `!!document.querySelector('.spec-bar')`, 'spectator bar');
@@ -98,7 +98,7 @@ const run = async () => {
   const live2 = await (await fetch('http://localhost:8787/api/live')).json();
   if (live2[0]?.spectators !== 1) throw new Error('spectator not counted');
   await clickButton(spec, 'Stop watching');
-  await waitFor(spec, findBtn('Play online'), 'home after stop');
+  await waitFor(spec, HOME_UP, 'home after stop');
   const state = await spec.evaluate(() => ({
     marker: window.__lifeMarker,
     bar: !!document.querySelector('.spec-bar'),

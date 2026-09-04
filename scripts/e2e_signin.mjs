@@ -112,3 +112,35 @@ export async function apiFromPage(page, apiPath) {
     return { status: res.status, body: await res.json().catch(() => null) };
   }, apiPath);
 }
+
+// The home's play tiles: the tile is the button and its text starts with
+// the mode's title, so a script picks one by its mode, never by a label.
+export const HOME_UP = `document.querySelector('.pg.home .tile') !== null`;
+
+export async function clickTile(page, mode) {
+  const ok = await page.evaluate((m) => {
+    const tile = document.querySelector(`.pg.home .tile[data-mode="${m}"]`);
+    if (!tile) return false;
+    tile.click();
+    return true;
+  }, mode);
+  if (!ok) throw new Error(`no play tile for ${mode}`);
+}
+
+// A section of the home's bar by its label, or 'account' for the block at
+// the right that opens the account drawer (the career, the place, the
+// settings).
+export async function clickBar(page, label) {
+  const ok = await page.evaluate((l) => {
+    const btn =
+      l === 'account'
+        ? document.querySelector('.pg.home .pg-account')
+        : [...document.querySelectorAll('.pg.home .pg-bar-links button')].find((b) =>
+            (b.textContent || '').trim().startsWith(l),
+          );
+    if (!btn) return false;
+    btn.click();
+    return true;
+  }, label);
+  if (!ok) throw new Error(`no bar entry ${label}`);
+}

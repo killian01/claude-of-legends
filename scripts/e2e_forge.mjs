@@ -7,7 +7,7 @@
 // Runs against the Vite client (E2E_URL, default :5173) over a game server;
 // point E2E_URL at a server's own port to test a built dist/ instead.
 import puppeteer from 'puppeteer-core';
-import { e2eName, signIn } from './e2e_signin.mjs';
+import { clickBar, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
 const CHROME = process.env.CHROME ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = process.env.E2E_URL ?? 'http://localhost:5173';
@@ -34,8 +34,6 @@ async function waitFor(page, fnBody, label, timeout = 30000) {
   throw new Error(`timeout waiting for: ${label}`);
 }
 
-const findBtn = (t) =>
-  `[...document.querySelectorAll('button')].some((e) => (e.textContent || '').trim().startsWith('${t}'))`;
 const findH3 = (t) =>
   `[...document.querySelectorAll('h3')].some((e) => (e.textContent || '').trim() === '${t}')`;
 
@@ -72,10 +70,10 @@ const run = async () => {
     page,
     process.env.E2E_ACCOUNT ?? e2eName('forge', String(Date.now()).slice(-9)),
   );
-  await waitFor(page, findBtn('Open the Forge'), 'home');
+  await waitFor(page, HOME_UP, 'home');
   console.log('signed in as', name);
 
-  await clickButton(page, 'Open the Forge');
+  await clickBar(page, 'Forge');
   await waitFor(page, `document.querySelector('.fe-tabs') !== null`, 'forge editor');
   // E2E_DRAFT names a saved draft to open from the rail instead of the
   // fresh one: the tab is then walked with real art and history behind it.

@@ -72,7 +72,7 @@ Then "Play online" to queue (empty seats fill with bots on request), or
 - Push a lane, take towers, and destroy the enemy Sanctum to win. The
   Warden in the river grants a team buff to whoever takes it down.
 - Or field a bot instead of playing by hand (`docs/design/bots.md`). In
-  the Academy (home screen, Bots) write its playbook by talking to the
+  the Academy (in the home's bar) write its playbook by talking to the
   coach or editing the plays, spar it against house bots in seconds, then
   queue with it and coach it live: right-click sends it somewhere,
   right-click on an enemy focuses it, the coach bar carries Warden, back,

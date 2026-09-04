@@ -3,7 +3,7 @@
 // isolated browser contexts), switches to the host's side, and the match
 // starts with both players on team 1 (blue).
 import puppeteer from 'puppeteer-core';
-import { e2eName, signIn } from './e2e_signin.mjs';
+import { clickTile, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
 const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
@@ -55,8 +55,8 @@ const run = async () => {
   const host = await newIsolatedPage(browser, 'hostess');
   host.on('pageerror', (e) => errors.push(`host: ${e}`));
   await host.reload({ waitUntil: 'load' });
-  await waitFor(host, findBtn('Play online'), 'host home');
-  await clickButton(host, 'Create private lobby');
+  await waitFor(host, HOME_UP, 'host home');
+  await clickTile(host, 'create');
   await waitFor(
     host,
     `document.querySelector('.menu-code') && document.querySelector('.menu-code').textContent.length === 5`,
