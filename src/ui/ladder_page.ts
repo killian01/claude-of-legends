@@ -8,6 +8,7 @@
 
 import { nextTier, TIERS, tierOf } from '../net/tiers';
 import { CHAMPIONS } from '../sim/content/champions';
+import { openBotPage } from './bot_page';
 import { setPortrait } from './champion_art';
 import { type BotChip, botChips, buildPool, type WatchReplay } from './ladder_bots';
 import { MIN_RATED_GAMES, placeLine, WAY_LABELS } from './ladder_card';
@@ -27,7 +28,12 @@ interface Favorite {
 
 interface Row {
   rank: number;
-  id: number;
+  // The subject: an account id by hand and in the Forge, a bot id on the
+  // two bot ways (ADR 0016).
+  id: string | number;
+  accountId: number;
+  // The owner's name, on the bot ways.
+  owner?: string | null;
   name: string;
   rating: number;
   ratedGames: number;
@@ -39,7 +45,9 @@ interface Row {
 }
 
 interface PlacingRow {
-  id: number;
+  id: string | number;
+  accountId: number;
+  owner?: string | null;
   name: string;
   ratedGames: number;
 }
@@ -117,6 +125,7 @@ const CSS = `
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .lp-sub { font-size: 13px; color: #8ba1c0; }
+.lp-owner { margin-left: 8px; font-size: 11.5px; color: #8ba1c0; }
 .lp-back {
   margin-left: auto; padding: 9px 20px; border-radius: 6px; border: 1px solid #6b5a2e;
   background: #1a1708; color: #e6d7a8; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
@@ -482,6 +491,9 @@ export function openLadderPage(
     const line = el('div', 'lp-name-line');
     line.append(emblem(tier, 20), document.createTextNode(r.name), el('span', 'tier', tier.name));
     name.append(line);
+    // A bot row names whose bot it is; by hand the name is the account's
+    // own and there is nothing to add.
+    if (r.owner) name.append(el('span', 'lp-owner', r.owner));
     if (r.bots && r.bots.length > 0) name.append(botChips(r.bots, opts.onWatch));
     tr.append(name);
     tr.append(
@@ -497,7 +509,7 @@ export function openLadderPage(
     const out: HTMLElement[] = [tr];
     // By hand, a row opens on the account's career; on the bot ways the
     // bots themselves are the detail, a page each.
-    if (way === 'hand') {
+    if (way === 'hand' || way === 'forge') {
       const detail = el('tr', 'lp-detail');
       const cell = el('td', '');
       cell.colSpan = 7;
@@ -509,10 +521,17 @@ export function openLadderPage(
         detail.style.display = open ? '' : 'none';
         if (open && !built) {
           built = true;
-          cell.append(buildPublicProfilePanel(r.id));
+          cell.append(buildPublicProfilePanel(r.accountId));
         }
       });
       out.push(detail);
+    } else if (typeof r.id === 'string') {
+      // The row is the bot itself now, so it opens the bot's page.
+      const botId = r.id;
+      tr.style.cursor = 'pointer';
+      tr.addEventListener('click', () =>
+        openBotPage(document.body, botId, { onWatch: opts.onWatch }),
+      );
     }
     return out;
   };
@@ -565,9 +584,12 @@ export function openLadderPage(
     } else {
       const table = el('table', 'lp-table');
       const hr = el('tr', '');
+      // The column names its subject: a person by hand and in the Forge,
+      // a bot on the two bot ways (ADR 0016).
+      const subject = page.way === 'bot' || page.way === 'arena' ? 'Bot' : 'Player';
       for (const [h, cls] of [
         ['#', ''],
-        ['Player', ''],
+        [subject, ''],
         ['Rating', 'num'],
         ['Rated', 'num'],
         ['Wins', 'num'],

@@ -63,7 +63,7 @@ export interface ArenaMatchSummary {
 
 function poolOf(deps: ArenaDeps) {
   return {
-    ratingOf: (accountId: number) => deps.store.botRating(accountId, 'arena').rating,
+    ratingOf: (botId: string) => deps.store.botRating(botId, 'arena').rating,
     nameOf: deps.nameOf,
   };
 }
@@ -92,7 +92,7 @@ export async function runArenaMatch(
       botId: s.bot.id,
       team: s.team,
       delta: 0,
-      rating: deps.store.botRating(s.bot.accountId, 'arena').rating,
+      rating: deps.store.botRating(s.bot.id, 'arena').rating,
     })),
   };
   if (result.winner === null) {
@@ -100,27 +100,37 @@ export async function runArenaMatch(
     return summary;
   }
   const winner = result.winner;
-  // The rating: every bot seat is an owned seat of its account's bot,
-  // rated on the Arena way. House bots move nothing.
+  // The rating: every bot seat is an owned seat, and on the Arena way the
+  // subject is the bot itself (ADR 0016). House bots move nothing.
   const owned: OwnedSeat[] = plan.seats.map((s) => ({
     accountId: s.bot.accountId,
     team: s.team,
     way: 'bot',
+    botId: s.bot.id,
   }));
   const book: RatingBook = {
-    read: (pid) => deps.store.botRating(pid, 'arena').rating,
-    apply: (pid, _way, delta) => deps.store.applyBotRating(pid, 'arena', delta),
+    read: (seat) => deps.store.botRating(seat.botId ?? '', 'arena').rating,
+    apply: (seat, delta) =>
+      deps.store.applyBotRating(seat.botId ?? '', seat.accountId, 'arena', delta),
   };
   const outcome = rateMatch(owned, winner, opts.rated !== false, book);
   summary.rated = outcome.rated;
-  const deltas = new Map<number, number>();
-  for (const r of outcome.results) deltas.set(r.accountId, r.delta);
+  // Keyed by bot, since two bots of one account could in principle sit in
+  // one match even though the seating rule stops it today.
+  const deltas = new Map<string, number>();
+  // The match record still names accounts, so it needs the movement keyed
+  // that way too (server/records.ts).
+  const deltasByAccount = new Map<number, number>();
+  for (const r of outcome.results) {
+    if (r.botId !== undefined) deltas.set(r.botId, r.delta);
+    deltasByAccount.set(r.accountId, r.delta);
+  }
   summary.seats = plan.seats.map((s) => ({
     accountId: s.bot.accountId,
     botId: s.bot.id,
     team: s.team,
-    delta: deltas.get(s.bot.accountId) ?? 0,
-    rating: deps.store.botRating(s.bot.accountId, 'arena').rating,
+    delta: deltas.get(s.bot.id) ?? 0,
+    rating: deps.store.botRating(s.bot.id, 'arena').rating,
   }));
   // The replay first, so the record can point at it.
   let replayId: number | undefined;
@@ -159,7 +169,7 @@ export async function runArenaMatch(
       report: result.report,
       at: now,
     });
-    const delta = deltas.get(s.bot.accountId);
+    const delta = deltas.get(s.bot.id);
     addEntry(deps.store, s.bot.id, s.bot.accountId, {
       kind: 'arena',
       at: now,
@@ -183,7 +193,7 @@ export async function runArenaMatch(
       winner,
       result.time,
       now,
-      { rated: outcome.rated, deltas, ways, queue: 'arena' },
+      { rated: outcome.rated, deltas: deltasByAccount, ways, queue: 'arena' },
       replayId,
     ),
   );

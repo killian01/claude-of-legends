@@ -1,7 +1,7 @@
 // The Arena (docs/design/bots.md, ADR 0013): the server-run competition of
 // deposited bots. Hourly rounds and on-demand "play now" matches, played
-// at full speed with no one present, never coached, rated on the
-// account's Arena rating. This module is the pure half: which bots meet
+// at full speed with no one present, never coached, rated on the bot's own
+// Arena rating (ADR 0016). This module is the pure half: which bots meet
 // in which match, on which side, when a round is due, and how many
 // on-demand matches an account still has today. The running, rating and
 // recording are the server's (server/main.ts through server/arena_runner).
@@ -31,7 +31,9 @@ export interface ArenaMatchPlan {
 }
 
 export interface ArenaPool {
-  ratingOf: (accountId: number) => number;
+  // A bot's Arena rating: the subject is the bot (ADR 0016), so pairing
+  // reads the bot and not whatever its owner's other bots have done.
+  ratingOf: (botId: string) => number;
   nameOf: (accountId: number) => string | null;
 }
 
@@ -92,8 +94,7 @@ export function planRound(bots: readonly BotRow[], pool: ArenaPool): ArenaMatchP
     .filter((e): e is { bot: BotRow; owner: string } => e.owner !== null)
     .sort(
       (a, b) =>
-        pool.ratingOf(b.bot.accountId) - pool.ratingOf(a.bot.accountId) ||
-        a.bot.id.localeCompare(b.bot.id),
+        pool.ratingOf(b.bot.id) - pool.ratingOf(a.bot.id) || a.bot.id.localeCompare(b.bot.id),
     );
   const plans: ArenaMatchPlan[] = [];
   while (sorted.length > 0) {
@@ -114,15 +115,15 @@ export function planPlayNow(
 ): ArenaMatchPlan | null {
   const owner = ratings.nameOf(bot.accountId);
   if (owner === null) return null;
-  const mine = ratings.ratingOf(bot.accountId);
+  const mine = ratings.ratingOf(bot.id);
   const others = pool
     .filter((b) => b.accountId !== bot.accountId)
     .map((b) => ({ bot: b, owner: ratings.nameOf(b.accountId) }))
     .filter((e): e is { bot: BotRow; owner: string } => e.owner !== null)
     .sort(
       (a, b) =>
-        Math.abs(ratings.ratingOf(a.bot.accountId) - mine) -
-          Math.abs(ratings.ratingOf(b.bot.accountId) - mine) || a.bot.id.localeCompare(b.bot.id),
+        Math.abs(ratings.ratingOf(a.bot.id) - mine) - Math.abs(ratings.ratingOf(b.bot.id) - mine) ||
+        a.bot.id.localeCompare(b.bot.id),
     );
   const { plan } = seatMatch([{ bot, owner }, ...others]);
   // The asking bot took the first seat, which the snake puts on team 0.

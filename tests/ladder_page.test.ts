@@ -14,6 +14,8 @@ const seed = (
   games: number,
   name: string | null = `p${accountId}`,
 ): LadderSeed => ({
+  // On the hand way the subject is the account, so the two ids are one.
+  id: accountId,
   accountId,
   name,
   rating,
@@ -21,8 +23,8 @@ const seed = (
   createdAt: accountId,
 });
 
-function stats(entries: [number, Partial<WayStats>][]): Map<number, WayStats> {
-  const out = new Map<number, WayStats>();
+function stats(entries: [number, Partial<WayStats>][]): Map<string | number, WayStats> {
+  const out = new Map<string | number, WayStats>();
   for (const [id, over] of entries) {
     out.set(id, {
       games: 0,
@@ -110,7 +112,9 @@ describe('the ladder page', () => {
     const page = buildLadderPage('hand', seeds, stats([[1, { wins: 1, losses: 1, form }]]), 1);
     expect(page.me).toMatchObject({ rank: null, placed: false, rating: 1004, ratedGames: 2 });
     expect(page.me.form).toHaveLength(FORM_CAP);
-    expect(page.placing).toEqual([{ id: 1, name: 'p1', ratedGames: 2, lastAt: 0 }]);
+    // A placing row names its subject and its owner; on the hand way they
+    // are the same account (ADR 0016).
+    expect(page.placing).toEqual([{ id: 1, accountId: 1, name: 'p1', ratedGames: 2, lastAt: 0 }]);
     const stranger = buildLadderPage('hand', seeds, stats([]), 99);
     expect(stranger.me).toEqual({
       rank: null,

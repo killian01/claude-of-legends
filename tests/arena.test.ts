@@ -60,8 +60,14 @@ function bot(n: number, accountId = n, championId = CHAMPS[n % CHAMPS.length]!):
   };
 }
 
+// Ratings are keyed by bot id now (ADR 0016); the tests still index them
+// by the bot's number, so the helper maps one to the other.
+const botId = (n: number): string => `bot_${n.toString(16).padStart(16, '0')}`;
 const pool = (ratings: Record<number, number> = {}) => ({
-  ratingOf: (id: number) => ratings[id] ?? BASE_RATING,
+  ratingOf: (id: string) => {
+    const n = Object.keys(ratings).find((k) => botId(Number(k)) === id);
+    return n === undefined ? BASE_RATING : (ratings[Number(n)] ?? BASE_RATING);
+  },
   nameOf: (id: number) => (id === 99 ? null : `acc${id}`),
 });
 
@@ -192,9 +198,9 @@ describe('running the Arena', () => {
     const round = await runArenaRound(deps);
     expect(round.matches).toBe(1);
     expect(runner.requests[0]!.picks).toHaveLength(10);
-    expect(store.botRating(1, 'arena').rating).toBeLessThan(BASE_RATING);
-    expect(store.botRating(2, 'arena').rating).toBeGreaterThan(BASE_RATING);
-    expect(store.botRating(1, 'live')).toEqual({ rating: BASE_RATING, games: 0 });
+    expect(store.botRating(botId(1), 'arena').rating).toBeLessThan(BASE_RATING);
+    expect(store.botRating(botId(2), 'arena').rating).toBeGreaterThan(BASE_RATING);
+    expect(store.botRating(botId(1), 'live')).toEqual({ rating: BASE_RATING, games: 0 });
     expect(replays).toEqual([500]);
     expect(records).toHaveLength(1);
     const rec = records[0]!;
@@ -216,7 +222,10 @@ describe('running the Arena', () => {
     };
     const { deps, store, records } = rig(draw);
     store.insertBot(bot(1, 1, 'vesk'));
-    const plan = planPlayNow(bot(1, 1, 'vesk'), [], { ratingOf: () => 1000, nameOf: () => 'a' })!;
+    const plan = planPlayNow(bot(1, 1, 'vesk'), [], {
+      ratingOf: () => 1000,
+      nameOf: () => 'a',
+    })!;
     const out = await runArenaMatch(deps, plan);
     expect(out.rated).toBe(false);
     expect(records).toHaveLength(0);
@@ -226,7 +235,7 @@ describe('running the Arena', () => {
     const solo = await runArenaMatch(lone.deps, plan);
     // One owned side only: a match nobody else owned a seat in is not rated.
     expect(solo.rated).toBe(false);
-    expect(lone.store.botRating(1, 'arena').rating).toBe(BASE_RATING);
+    expect(lone.store.botRating(botId(1), 'arena').rating).toBe(BASE_RATING);
   });
 
   it('play now spends the daily allocation and answers with the seat outcome', async () => {
@@ -283,8 +292,8 @@ describe('a challenge', () => {
     if (!out.ok) return;
     expect(out).toMatchObject({ winner: 0, rated: false, myTeam: 0 });
     expect(out.seats.map((s) => s.delta)).toEqual([0, 0]);
-    expect(store.botRating(1, 'arena')).toEqual({ rating: BASE_RATING, games: 0 });
-    expect(store.botRating(2, 'arena')).toEqual({ rating: BASE_RATING, games: 0 });
+    expect(store.botRating(botId(1), 'arena')).toEqual({ rating: BASE_RATING, games: 0 });
+    expect(store.botRating(botId(2), 'arena')).toEqual({ rating: BASE_RATING, games: 0 });
     expect(replays).toHaveLength(1);
     // The picks: mine on team 0, theirs on team 1, house bots around.
     const picks = runner.requests[0]!.picks;

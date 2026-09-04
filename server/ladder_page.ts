@@ -13,14 +13,24 @@ export const PLACING_CAP = 20;
 // The form a row shows; the reader's own place shows the whole FORM_CAP.
 export const ROW_FORM = 5;
 
-// One account's rating on the way, however the way stores it.
+// One rated subject's rating on the way, however the way stores it. The
+// subject is the account on the hand and Forge ways and the bot on the two
+// bot ways (ADR 0016), so `id` is whichever of the two the row belongs to
+// and `accountId` is always the owner: it is how the reader finds their
+// own rows, and what a row links to.
 export interface LadderSeed {
+  id: string | number;
   accountId: number;
-  // Null when the account is gone: it does not place.
+  // Null when the subject has no public name (the account is gone): it
+  // does not place.
   name: string | null;
   rating: number;
   games: number;
   createdAt?: number;
+  // On a bot way: the owner's name beside the bot's, and the champion it
+  // plays, which is its favorite by construction.
+  owner?: string | null;
+  championId?: string;
 }
 
 export interface BotSummary {
@@ -40,7 +50,11 @@ export interface Favorite {
 
 export interface LadderPageRow {
   rank: number;
-  id: number;
+  // The subject's id: an account id, or a bot id on the bot ways.
+  id: string | number;
+  // The owner, so a bot row can name whose it is.
+  accountId: number;
+  owner?: string | null;
   name: string;
   rating: number;
   ratedGames: number;
@@ -53,7 +67,9 @@ export interface LadderPageRow {
 }
 
 export interface PlacingRow {
-  id: number;
+  id: string | number;
+  accountId: number;
+  owner?: string | null;
   name: string;
   ratedGames: number;
   lastAt: number | null;
@@ -98,7 +114,7 @@ function byPlace(a: Placed, b: Placed): number {
     b.rating - a.rating ||
     b.games - a.games ||
     (a.createdAt ?? 0) - (b.createdAt ?? 0) ||
-    a.accountId - b.accountId
+    String(a.id).localeCompare(String(b.id))
   );
 }
 
@@ -113,10 +129,10 @@ function placedOf(seeds: readonly LadderSeed[]): Placed[] {
 function rowOf(
   rank: number,
   s: Placed,
-  stats: ReadonlyMap<number, WayStats>,
+  stats: ReadonlyMap<string | number, WayStats>,
   opts: LadderPageOpts,
 ): LadderPageRow {
-  const st = stats.get(s.accountId);
+  const st = stats.get(s.id);
   const fav = favoriteOf(st);
   let favorite: Favorite | null = null;
   if (fav) {
@@ -126,7 +142,9 @@ function rowOf(
   const bots = opts.bots?.(s.accountId);
   return {
     rank,
-    id: s.accountId,
+    id: s.id,
+    accountId: s.accountId,
+    ...(s.owner !== undefined ? { owner: s.owner } : {}),
     name: s.name,
     rating: s.rating,
     ratedGames: s.games,
@@ -141,7 +159,7 @@ function rowOf(
 export function buildLadderPage(
   way: Way,
   seeds: readonly LadderSeed[],
-  stats: ReadonlyMap<number, WayStats>,
+  stats: ReadonlyMap<string | number, WayStats>,
   readerId: number,
   opts: LadderPageOpts = {},
 ): LadderPage {
@@ -149,9 +167,17 @@ export function buildLadderPage(
   const placed = placedOf(seeds);
   const rows = placed.slice(0, cap).map((s, i) => rowOf(i + 1, s, stats, opts));
 
-  const mine = seeds.find((s) => s.accountId === readerId);
-  const myStats = stats.get(readerId);
+  // The reader may hold several subjects on a bot way, one per bot: their
+  // place is their best-placed one, and the one with the most rating
+  // behind it when none has placed.
   const myIndex = placed.findIndex((s) => s.accountId === readerId);
+  const mine =
+    myIndex === -1
+      ? seeds
+          .filter((s) => s.accountId === readerId)
+          .sort((a, b) => b.games - a.games || b.rating - a.rating)[0]
+      : placed[myIndex];
+  const myStats = mine ? stats.get(mine.id) : undefined;
   const me: MePlace = {
     rank: myIndex === -1 ? null : myIndex + 1,
     rating: mine?.rating ?? BASE_RATING,
@@ -167,10 +193,12 @@ export function buildLadderPage(
   for (const s of seeds) {
     if (s.name === null || s.games <= 0 || s.games >= MIN_RATED_GAMES) continue;
     placing.push({
-      id: s.accountId,
+      id: s.id,
+      accountId: s.accountId,
+      ...(s.owner !== undefined ? { owner: s.owner } : {}),
       name: s.name,
       ratedGames: s.games,
-      lastAt: stats.get(s.accountId)?.lastAt ?? null,
+      lastAt: stats.get(s.id)?.lastAt ?? null,
     });
   }
   placing.sort((a, b) => b.ratedGames - a.ratedGames || (b.lastAt ?? 0) - (a.lastAt ?? 0));
@@ -194,10 +222,18 @@ export interface Place {
   total: number;
 }
 
+// An account's place on one way. On a bot way it holds one subject per bot
+// (ADR 0016), so the account's place is its best-placed bot, and the bot
+// with the most rated play behind it when none has placed.
 export function placeOf(seeds: readonly LadderSeed[], readerId: number): Place {
   const placed = placedOf(seeds);
   const i = placed.findIndex((s) => s.accountId === readerId);
-  const mine = seeds.find((s) => s.accountId === readerId);
+  const mine =
+    i === -1
+      ? seeds
+          .filter((s) => s.accountId === readerId)
+          .sort((a, b) => b.games - a.games || b.rating - a.rating)[0]
+      : placed[i];
   return {
     rank: i === -1 ? null : i + 1,
     rating: mine?.rating ?? BASE_RATING,

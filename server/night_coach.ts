@@ -263,7 +263,7 @@ export function buildBriefing(deps: NightCoachDeps, bot: BotRow): Briefing {
     wins,
     losses: matches.length - wins,
     ratingDelta: matches.reduce((n, m) => n + m.delta, 0),
-    rating: deps.store.botRating(bot.accountId, 'arena').rating,
+    rating: deps.store.botRating(bot.id, 'arena').rating,
     plays: sumPlays(reports),
     proposal: deps.store.pendingProposal(bot.id),
     autoApply: bot.autoApply,

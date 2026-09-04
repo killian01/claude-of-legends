@@ -72,8 +72,8 @@ export function describeBotPage(
     },
     tally,
     ratings: {
-      live: deps.store.botRating(bot.accountId, 'live'),
-      arena: deps.store.botRating(bot.accountId, 'arena'),
+      live: deps.store.botRating(bot.id, 'live'),
+      arena: deps.store.botRating(bot.id, 'arena'),
     },
     rows: rated.slice(0, BOT_PAGE_ROWS),
     ...(bot.openPlaybook ? { playbook: bot.playbook } : {}),
