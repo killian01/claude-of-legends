@@ -92,7 +92,7 @@ const run = async () => {
   await waitFor(page, HOME_UP, 'home again');
 
   // --- Scenario B: online deliberate leave holds no seat ---
-  await clickTile(page, 'queue');
+  await clickTile(page, 'ranked');
   await waitFor(page, findBtn('Start now with bots'), 'queue screen');
   await clickButton(page, 'Start now with bots');
   await waitFor(page, findBtn('Lock in'), 'online champion select');
@@ -104,7 +104,7 @@ const run = async () => {
 
   // Queue again at once: a reserved seat would yank us straight into the
   // abandoned match (HUD, no queue screen). We must see the queue.
-  await clickTile(page, 'queue');
+  await clickTile(page, 'ranked');
   await waitFor(page, findBtn('Start now with bots'), 'queue screen after leave (no ghost seat)');
   await sleep(2500);
   const b = await page.evaluate(() => ({

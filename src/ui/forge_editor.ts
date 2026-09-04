@@ -490,7 +490,7 @@ export function newDraft(): ForgedChampionDef {
 type EditorTab = 'design' | 'spells' | 'tuning';
 type SpellSlot = 'P' | AbilityKey;
 
-export function openForgeEditor(container: HTMLElement): void {
+export function openForgeEditor(container: HTMLElement): () => void {
   ensureCss();
   // The sound palette's Play buttons play recordings: decode them now.
   preloadSfx();
@@ -2998,4 +2998,5 @@ export function openForgeEditor(container: HTMLElement): void {
       refresh();
     }),
   );
+  return close;
 }

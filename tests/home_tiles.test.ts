@@ -1,84 +1,48 @@
-// The home's play tiles (ui/home_tiles.ts): the four ways into a match in
-// their order, the Ranked tile the only hero, and the champion it wears
-// moving on every visit without ever doubling a small tile's face.
+// The home's play tiles (ui/home_tiles.ts): the five ways to get into a
+// match in their order, what each one does, and the painting each wears.
 
 import { describe, expect, it } from 'vitest';
-import { nextVisit, playTiles, RANKED_ART, rankedArt } from '../src/ui/home_tiles';
+import { PLAY_TILES, type PlayMode, tileArtUrl } from '../src/ui/home_tiles';
 
 describe('the play tiles', () => {
-  it('stand in order, Ranked the one hero with its call to action', () => {
-    const tiles = playTiles(0);
-    expect(tiles.map((t) => t.mode)).toEqual(['queue', 'forge-queue', 'create', 'practice']);
-    expect(tiles.map((t) => t.title)).toEqual([
+  it('stand in order, Ranked the one hero', () => {
+    expect(PLAY_TILES.map((t) => t.id)).toEqual(['ranked', 'bots', 'forge', 'lobby', 'practice']);
+    expect(PLAY_TILES.map((t) => t.title)).toEqual([
       'Ranked',
+      'Bots',
       'Forge queue',
       'Private lobby',
       'Practice',
     ]);
-    expect(tiles.filter((t) => t.hero).map((t) => t.mode)).toEqual(['queue']);
-    expect(tiles[0]?.cta).toBe('Play online');
-    expect(tiles.slice(1).every((t) => t.cta === null)).toBe(true);
-    for (const t of tiles) expect(t.art.length).toBeGreaterThan(0);
+    expect(PLAY_TILES.filter((t) => t.hero).map((t) => t.id)).toEqual(['ranked']);
   });
 
-  it('cycles the Ranked face through the roster, one per visit, and wraps', () => {
-    const n = RANKED_ART.length;
-    for (let visit = 0; visit < n; visit++) {
-      expect(rankedArt(visit)).toBe(RANKED_ART[visit]);
-      expect(playTiles(visit)[0]?.art).toEqual([RANKED_ART[visit]]);
+  it('covers every play mode once, and sends Bots to the Academy', () => {
+    const modes = PLAY_TILES.flatMap((t) => (t.goes.to === 'mode' ? [t.goes.mode] : []));
+    const expected: PlayMode[] = ['queue', 'forge-queue', 'create', 'practice'];
+    expect(modes.sort()).toEqual([...expected].sort());
+    const bots = PLAY_TILES.find((t) => t.id === 'bots');
+    expect(bots?.goes).toEqual({ to: 'section', key: 'academy' });
+  });
+
+  it('carries a call to action on the two big tiles only', () => {
+    const withCta = PLAY_TILES.filter((t) => t.cta !== null).map((t) => t.id);
+    expect(withCta).toEqual(['ranked', 'bots']);
+    expect(PLAY_TILES.find((t) => t.id === 'ranked')?.cta).toBe('Play online');
+  });
+
+  it('wears one painting and one accent each, none shared', () => {
+    const art = PLAY_TILES.map((t) => t.art);
+    expect(new Set(art).size).toBe(art.length);
+    expect(new Set(PLAY_TILES.map((t) => t.accent)).size).toBe(PLAY_TILES.length);
+    for (const t of PLAY_TILES) {
+      expect(t.accent).toMatch(/^#[0-9a-f]{6}$/);
+      expect(t.line.length).toBeGreaterThan(0);
     }
-    expect(rankedArt(n)).toBe(RANKED_ART[0]);
-    expect(rankedArt(2 * n + 3)).toBe(RANKED_ART[3]);
-    expect(rankedArt(-1)).toBe(RANKED_ART[n - 1]);
-    expect(rankedArt(Number.NaN)).toBe(RANKED_ART[0]);
-    expect(rankedArt(1.9)).toBe(RANKED_ART[1]);
   });
 
-  it('never shows one champion twice in the row', () => {
-    for (let visit = 0; visit < RANKED_ART.length; visit++) {
-      const faces = playTiles(visit).flatMap((t) => t.art);
-      expect(new Set(faces).size).toBe(faces.length);
-    }
-  });
-});
-
-describe('the visit counter', () => {
-  function fakeStorage(initial: Record<string, string> = {}) {
-    const store = new Map(Object.entries(initial));
-    return {
-      store,
-      getItem: (k: string) => store.get(k) ?? null,
-      setItem: (k: string, v: string) => {
-        store.set(k, v);
-      },
-    };
-  }
-
-  it('counts from zero and moves on each call', () => {
-    const s = fakeStorage();
-    expect(nextVisit(s)).toBe(0);
-    expect(nextVisit(s)).toBe(1);
-    expect(nextVisit(s)).toBe(2);
-  });
-
-  it('treats junk, a refusal, or no storage at all as the first visit', () => {
-    expect(nextVisit(fakeStorage({ 'loc:home-visits': 'many' }))).toBe(0);
-    expect(nextVisit(fakeStorage({ 'loc:home-visits': '-4' }))).toBe(0);
-    expect(nextVisit(null)).toBe(0);
-    const refused = {
-      getItem: () => {
-        throw new Error('blocked');
-      },
-      setItem: () => {
-        throw new Error('blocked');
-      },
-    };
-    expect(nextVisit(refused)).toBe(0);
-  });
-
-  it('rounds a fractional count down and still moves on', () => {
-    const s = fakeStorage({ 'loc:home-visits': '2.7' });
-    expect(nextVisit(s)).toBe(2);
-    expect(s.store.get('loc:home-visits')).toBe('3');
+  it('resolves the painting to the tile art folder', () => {
+    expect(tileArtUrl('ranked')).toBe('/art/tiles/ranked.webp');
+    for (const t of PLAY_TILES) expect(tileArtUrl(t.art)).toBe(`/art/tiles/${t.art}.webp`);
   });
 });

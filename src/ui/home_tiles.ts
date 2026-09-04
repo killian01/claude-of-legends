@@ -1,95 +1,88 @@
-// What the play tiles on the home are (CONTEXT.md: Home): one per way into
-// a match, in the order they stand, with the champion whose illustration
-// stands behind each. Pure data, no DOM, so a test reads the row without a
-// browser; ui/play_tiles.ts draws it.
+// What the play tiles on the home are (CONTEXT.md: Home): one per way to
+// get into a match, in the order they stand. Pure data, no DOM, so a test
+// reads the row without a browser; ui/play_tiles.ts draws it.
 //
-// The Ranked tile is the large one and wears a different champion on
-// every visit, drawn from the roster minus the faces the three small
-// tiles keep, so the row never shows one champion twice.
+// Each tile wears a painted scene of its own (docs/design/tile-art-prompts.md),
+// not a champion's portrait: a tile says what the mode IS, and a champion
+// standing in it only says which champion. The file is loaded when it is
+// there and the tile falls back to its accent wash otherwise, the same way
+// the tier emblem falls back to its CSS banner.
 
+// What pressing a tile does. A mode resolves the home's promise and takes
+// the page down; a section opens under the bar and the home stays.
 export type PlayMode = 'queue' | 'forge-queue' | 'create' | 'practice';
+export type TileId = 'ranked' | 'bots' | 'forge' | 'lobby' | 'practice';
+
+export type TileGoes = { to: 'mode'; mode: PlayMode } | { to: 'section'; key: string };
 
 export interface PlayTile {
-  mode: PlayMode;
+  id: TileId;
   title: string;
   line: string;
-  // The words on the hero's gold pill; the small tiles have none, the
-  // tile itself is the button.
+  goes: TileGoes;
+  // The words on the tile's pill, or none: the tile itself is the button
+  // either way, and the pill only says so louder on the two big ones.
   cta: string | null;
-  // Champion ids whose illustrations stand behind the tile, side by side.
-  art: readonly string[];
+  // Painted behind the tile: /art/tiles/<art>.webp.
+  art: string;
+  // The wash under the art, and what shows when the file is missing.
+  accent: string;
   hero: boolean;
 }
 
-export const RANKED_ART: readonly string[] = [
-  'korrath',
-  'dain',
-  'elowen',
-  'maera',
-  'rhoka',
-  'ashvyn',
+export const PLAY_TILES: readonly PlayTile[] = [
+  {
+    id: 'ranked',
+    title: 'Ranked',
+    line: 'The public queue. House bots fill any seat nobody takes; only a human on each side moves your rating.',
+    goes: { to: 'mode', mode: 'queue' },
+    cta: 'Play online',
+    art: 'ranked',
+    accent: '#c9a84a',
+    hero: true,
+  },
+  {
+    id: 'bots',
+    title: 'Bots',
+    line: 'Field a bot instead of playing by hand. Write its playbook by talking to the coach, spar it in seconds, then seat it and coach it live.',
+    goes: { to: 'section', key: 'academy' },
+    cta: 'Open the Academy',
+    art: 'bots',
+    accent: '#5b9dd9',
+    hero: false,
+  },
+  {
+    id: 'forge',
+    title: 'Forge queue',
+    line: 'Forged champions welcome, on a ladder of its own.',
+    goes: { to: 'mode', mode: 'forge-queue' },
+    cta: null,
+    art: 'forge',
+    accent: '#d98a5c',
+    hero: false,
+  },
+  {
+    id: 'lobby',
+    title: 'Private lobby',
+    line: 'Friends, one shared code, never rated.',
+    goes: { to: 'mode', mode: 'create' },
+    cta: null,
+    art: 'lobby',
+    accent: '#8f7ad9',
+    hero: false,
+  },
+  {
+    id: 'practice',
+    title: 'Practice',
+    line: 'A full 5v5 against house bots, offline in this tab.',
+    goes: { to: 'mode', mode: 'practice' },
+    cta: null,
+    art: 'practice',
+    accent: '#6fb08a',
+    hero: false,
+  },
 ];
 
-export function rankedArt(visit: number): string {
-  const n = RANKED_ART.length;
-  const i = Number.isFinite(visit) ? Math.floor(visit) : 0;
-  return RANKED_ART[((i % n) + n) % n] as string;
-}
-
-export function playTiles(visit: number): PlayTile[] {
-  return [
-    {
-      mode: 'queue',
-      title: 'Ranked',
-      line: 'The public queue. Bots fill the empty seats; only a human on each side moves your rating.',
-      cta: 'Play online',
-      art: [rankedArt(visit)],
-      hero: true,
-    },
-    {
-      mode: 'forge-queue',
-      title: 'Forge queue',
-      line: 'Forged champions welcome, on a ladder of its own.',
-      cta: null,
-      art: ['vesk'],
-      hero: false,
-    },
-    {
-      mode: 'create',
-      title: 'Private lobby',
-      line: 'Friends, one shared code, never rated.',
-      cta: null,
-      art: ['fenn', 'sylra'],
-      hero: false,
-    },
-    {
-      mode: 'practice',
-      title: 'Practice',
-      line: 'Offline against dummies, in this tab. Nothing saved.',
-      cta: null,
-      art: ['torv'],
-      hero: false,
-    },
-  ];
-}
-
-// Which visit this is, counted in the browser so the Ranked tile moves on
-// between two loads. Storage can be missing, refused or full of junk; then
-// every visit is the first, which costs one champion seen twice.
-const VISIT_KEY = 'loc:home-visits';
-
-export function nextVisit(storage: Pick<Storage, 'getItem' | 'setItem'> | null): number {
-  try {
-    if (!storage) return 0;
-    const seen = Number(storage.getItem(VISIT_KEY) ?? '0');
-    const visit = Number.isFinite(seen) && seen >= 0 ? Math.floor(seen) : 0;
-    storage.setItem(VISIT_KEY, String(visit + 1));
-    return visit;
-  } catch {
-    return 0;
-  }
-}
-
-export function portraitUrl(championId: string): string {
-  return `/portraits/${championId}.webp`;
+export function tileArtUrl(art: string): string {
+  return `/art/tiles/${art}.webp`;
 }

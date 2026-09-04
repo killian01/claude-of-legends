@@ -280,7 +280,7 @@ function fmtSeconds(ticks: number): string {
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
 }
 
-export function openAcademy(container: HTMLElement, opts: { botId?: string } = {}): void {
+export function openAcademy(container: HTMLElement, opts: { botId?: string } = {}): () => void {
   ensureCss();
   const root = el('div', 'ac');
   const stopBackdrop = startMenuBackdrop(root);
@@ -2066,4 +2066,5 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
 
   renderAll();
   void load(opts.botId ?? null);
+  return close;
 }

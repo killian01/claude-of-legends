@@ -73,7 +73,7 @@ const run = async () => {
 
   // Touch the online flow, then leave: the career is empty until a match
   // is recorded against the account, not merely because nobody signed in.
-  await clickTile(page, 'queue');
+  await clickTile(page, 'ranked');
   await waitFor(page, findBtn('Start now with bots'), 'queue');
   await clickButton(page, 'Cancel');
   await waitFor(page, HOME_UP, 'home back');

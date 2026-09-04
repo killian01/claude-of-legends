@@ -113,18 +113,18 @@ export async function apiFromPage(page, apiPath) {
   }, apiPath);
 }
 
-// The home's play tiles: the tile is the button and its text starts with
-// the mode's title, so a script picks one by its mode, never by a label.
+// The home's play tiles: the tile is the button, so a script picks one by
+// its id (ui/home_tiles.ts), never by a label.
 export const HOME_UP = `document.querySelector('.pg.home .tile') !== null`;
 
-export async function clickTile(page, mode) {
-  const ok = await page.evaluate((m) => {
-    const tile = document.querySelector(`.pg.home .tile[data-mode="${m}"]`);
+export async function clickTile(page, id) {
+  const ok = await page.evaluate((t) => {
+    const tile = document.querySelector(`.pg.home .tile[data-tile="${t}"]`);
     if (!tile) return false;
     tile.click();
     return true;
-  }, mode);
-  if (!ok) throw new Error(`no play tile for ${mode}`);
+  }, id);
+  if (!ok) throw new Error(`no play tile ${id}`);
 }
 
 // A section of the home's bar by its label, or 'account' for the block at

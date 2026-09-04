@@ -15,6 +15,8 @@ const CSS = `
   display: inline-block; transition: background 0.2s ease; }
 .pg-bar-live.on i { background: #6ad07a; box-shadow: 0 0 8px #6ad07a; }
 .pg-bar-live b { color: #c9d9ee; font-variant-numeric: tabular-nums; }
+.pg-brand-home { cursor: pointer; transition: filter 0.15s ease; }
+.pg-brand-home:hover { filter: brightness(1.25); }
 .pg-bar .pg-account {
   display: inline-flex; align-items: center; gap: 10px; text-transform: none; letter-spacing: 0;
   padding: 4px 8px 4px 4px; border-radius: 8px; border: 1px solid transparent;
@@ -37,6 +39,8 @@ function ensureCss(): void {
 }
 
 export interface HomeSection {
+  // The key ui/section_host.ts tracks, so the bar can light the one open.
+  key: string;
   label: string;
   open: () => void;
 }
@@ -46,20 +50,29 @@ export interface HomeBarOptions {
   sections: readonly HomeSection[];
   onLive: () => void;
   onAccount: () => void;
+  // The wordmark: closes whatever section is open, back to the tiles.
+  onHome: () => void;
 }
 
 export interface HomeBar {
   setLiveCount(n: number): void;
+  // Lights the open section, or none of them back on the tiles.
+  setActive(key: string | null): void;
 }
 
 export function mountHomeBar(bar: Bar, o: HomeBarOptions): HomeBar {
   ensureCss();
+  const entries = new Map<string, HTMLButtonElement>();
   for (const s of o.sections) {
     const b = el('button', '', s.label);
     b.type = 'button';
     b.addEventListener('click', s.open);
     bar.links.appendChild(b);
+    entries.set(s.key, b);
   }
+  // The wordmark is the way back to the tiles from any section.
+  bar.brand.classList.add('pg-brand-home');
+  bar.brand.addEventListener('click', o.onHome);
   const live = el('button', 'pg-bar-live');
   live.type = 'button';
   const count = el('b', '');
@@ -90,6 +103,9 @@ export function mountHomeBar(bar: Bar, o: HomeBarOptions): HomeBar {
     setLiveCount(n: number): void {
       count.textContent = n > 0 ? String(n) : '';
       live.classList.toggle('on', n > 0);
+    },
+    setActive(key: string | null): void {
+      for (const [k, b] of entries) b.classList.toggle('on', k === key);
     },
   };
 }

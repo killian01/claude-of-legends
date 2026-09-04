@@ -280,7 +280,7 @@ export function openLadderPage(
   container: HTMLElement,
   opts: LadderPageOptions,
   startWay: Way = 'hand',
-): void {
+): () => void {
   ensureCss();
   const root = el('div', 'lp');
   const stopBackdrop = startMenuBackdrop(root);
@@ -635,4 +635,5 @@ export function openLadderPage(
   root.append(head, tabs, body);
   container.appendChild(root);
   void load(startWay);
+  return close;
 }
