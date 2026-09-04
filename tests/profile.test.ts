@@ -132,3 +132,21 @@ describe('career profile', () => {
     expect(q.recent).toEqual([]);
   });
 });
+
+describe('the career counts the seats played by hand', () => {
+  it('skips the account bot seats, live and Arena, and keeps the Forge queue', () => {
+    const hand = rec(100, 0, { kills: 4 });
+    const live = rec(200, 0, { way: 'bot', kills: 9 });
+    const arena: MatchRecord = { ...rec(300, 0, { way: 'bot', kills: 9 }), queue: 'arena' };
+    const forge: MatchRecord = {
+      ...rec(400, 1, { championId: 'forged_1', kills: 2 }),
+      queue: 'forge',
+    };
+    const p = buildProfile([hand, live, arena, forge], 7);
+    expect(p.games).toBe(2);
+    expect(p.wins).toBe(1);
+    expect(p.kills).toBe(6);
+    expect(p.recent.map((r) => r.at)).toEqual([400, 100]);
+    expect(p.perChampion.map((c) => c.championId)).toEqual(['fenn', 'forged_1']);
+  });
+});

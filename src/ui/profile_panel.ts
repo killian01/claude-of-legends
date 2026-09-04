@@ -5,6 +5,7 @@
 
 import { tierOf } from '../net/tiers';
 import { CHAMPIONS } from '../sim/content/champions';
+import { kdaPerMatch } from './kda_text';
 
 const CSS = `
 .prof-panel { margin: 8px 0; font-size: 12px; color: #c9d8ae; text-align: left; }
@@ -105,7 +106,7 @@ export function renderProfile(box: HTMLElement, data: ApiProfile): void {
       'div',
       'prof-sub',
       `${p.games} match${p.games > 1 ? 'es' : ''}, ${winPct}% wins, ` +
-        `${p.kills} / ${p.deaths} / ${p.assists} K/D/A overall`,
+        `${kdaPerMatch(p.kills, p.deaths, p.assists, p.games)} K/D/A per match`,
     ),
   );
   box.append(el('div', 'prof-section', 'Champions'));
@@ -122,7 +123,7 @@ export function renderProfile(box: HTMLElement, data: ApiProfile): void {
       el(
         'span',
         '',
-        `${Math.round((100 * c.wins) / c.games)}% wins, ${c.kills}/${c.deaths}/${c.assists}`,
+        `${Math.round((100 * c.wins) / c.games)}% wins, ${kdaPerMatch(c.kills, c.deaths, c.assists, c.games)}`,
       ),
     );
     box.appendChild(line);
