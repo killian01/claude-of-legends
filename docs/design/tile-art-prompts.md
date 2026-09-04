@@ -16,9 +16,10 @@ refresh, done.
   for, and the tiles are cropped with `object-fit: cover` at three
   different shapes, so every scene must survive a crop: keep the subject
   centered, leave headroom, and put nothing that matters in a corner.
-  Ranked is landscape (about 4:3), Bots is a wide banner (about 3:1), and
-  the other three are near square. The ratio in each prompt is a
-  composition hint to the model, not a promise about the file.
+  Ranked is landscape (about 4:3), Bots and the Forge queue stand at the
+  same height beside it and crop portrait (about 3:4), and the last two
+  are near square. The ratio in each prompt is a composition hint to the
+  model, not a promise about the file.
 - The bottom third of every tile is dimmed by the title scrim, so it
   carries atmosphere, never the subject.
 - No text, no numerals, no logos, no watermark, no border inside the
