@@ -5,9 +5,10 @@
 // blob. Auto attacks carry no tag and keep the small team bolt.
 
 import * as THREE from 'three';
-import type { CastSpec } from '../sim/combat/casting';
+import type { AbilityDef, CastSpec } from '../sim/combat/casting';
 import { SIGILS } from '../sim/content/sigils';
 import type { Projectile } from '../sim/projectiles';
+import type { SpellLook } from '../sim/spell_look';
 import type { Zone } from '../sim/zones';
 import type { IWorld } from '../world_api';
 
@@ -26,9 +27,10 @@ const SCHOOLS: Readonly<Record<string, School>> = {
 };
 
 // The school color for a cast spec, for one-shot cast flashes (instant
-// abilities have no projectile or zone to carry their identity).
-export function schoolColorOf(spec: CastSpec): { main: number; glow: number } {
-  return schoolOf(spec);
+// abilities have no projectile or zone to carry their identity). A look
+// that named its own palette outranks the derivation: the creator chose.
+export function schoolColorOf(spec: CastSpec, look?: SpellLook | null): School {
+  return look?.palette ?? schoolOf(spec);
 }
 
 // The school tag for a cast spec; also keys the per-school cast sounds.
@@ -48,15 +50,29 @@ function schoolOf(spec: CastSpec): School {
   return SCHOOLS[schoolTagOf(spec)] ?? SCHOOLS.arcane!;
 }
 
-// 'championId_KEY' or 'sigil_id' back to the cast spec it came from.
-export function resolveSpec(vfx: string | null, world: IWorld): CastSpec | null {
-  if (!vfx) return null;
-  if (vfx.startsWith('sigil_')) return SIGILS[vfx.slice(6)]?.spec ?? null;
+// 'championId_KEY' back to the ability it came from; null for sigil tags,
+// auto-attack tracers, and anything malformed.
+function resolveAbility(vfx: string | null, world: IWorld): AbilityDef | null {
+  if (!vfx || vfx.startsWith('sigil_')) return null;
   const sep = vfx.lastIndexOf('_');
   if (sep <= 0) return null;
   const key = vfx.slice(sep + 1);
   if (key !== 'Q' && key !== 'W' && key !== 'E' && key !== 'R') return null;
-  return world.championDef(vfx.slice(0, sep))?.abilities[key].spec ?? null;
+  return world.championDef(vfx.slice(0, sep))?.abilities[key] ?? null;
+}
+
+// 'championId_KEY' or 'sigil_id' back to the cast spec it came from.
+export function resolveSpec(vfx: string | null, world: IWorld): CastSpec | null {
+  if (!vfx) return null;
+  if (vfx.startsWith('sigil_')) return SIGILS[vfx.slice(6)]?.spec ?? null;
+  return resolveAbility(vfx, world)?.spec ?? null;
+}
+
+// The spell look riding on the tagged ability, if it declared one. This
+// is the whole reach of a forged champion's own art: its id cannot appear
+// in the authored catalog, but its abilities travel with their looks.
+export function resolveLook(vfx: string | null, world: IWorld): SpellLook | null {
+  return resolveAbility(vfx, world)?.look ?? null;
 }
 
 // The display palette for a tagged projectile or zone: the school color
@@ -69,7 +85,7 @@ export function spellColorsOf(
 ): { main: number; glow: number } {
   const spec = resolveSpec(vfx, world);
   if (!spec) return { main: teamTint, glow: teamTint };
-  const school = schoolOf(spec);
+  const school = resolveLook(vfx, world)?.palette ?? schoolOf(spec);
   return {
     main: new THREE.Color(school.main).lerp(new THREE.Color(teamTint), 0.35).getHex(),
     glow: school.glow,

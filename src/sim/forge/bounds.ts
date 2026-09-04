@@ -11,6 +11,7 @@ import type { AbilityDef, CastSpec } from '../combat/casting';
 import type { EffectSpec } from '../combat/effects';
 import type { ChampionBaseStats, ChampionGrowth } from '../content/champions';
 import { CAST_SOUNDS, isCastSound } from '../content/sounds';
+import { spellLookErrors } from '../spell_look';
 import type { ForgedChampionDef } from './forged_def';
 
 export interface Bound {
@@ -437,6 +438,7 @@ function checkAbility(errors: string[], key: string, def: unknown): void {
   if (a.sound !== undefined && !isCastSound(a.sound)) {
     errors.push(`${path}.sound: must be one of ${CAST_SOUNDS.map((s) => s.id).join(', ')}`);
   }
+  if (a.look !== undefined) errors.push(...spellLookErrors(a.look, `${path}.look`));
   checkNum(errors, `${path}.manaCost`, a.manaCost, ABILITY_BOUNDS.manaCost);
   checkNum(errors, `${path}.castRange`, a.castRange, ABILITY_BOUNDS.castRange);
   checkOptNum(errors, `${path}.windup`, a.windup, ABILITY_BOUNDS.windup);

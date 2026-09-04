@@ -266,6 +266,26 @@ catalogs in that spell's editor block. A spell without one plays the champion's 
 cast clip. Baked and re-baked freely like any clip, seal or no seal.
 _Avoid_: ability clip, per-spell override
 
+**Spell look**:
+One ability's visual effects as data on the ability itself: the body of the bolt and what
+it trails, the shape of the cast, the impact and the detonation, the floor of a zone and
+what moves in it, an optional palette. Every word comes from a closed vocabulary the
+renderer draws out of its own primitives, so a look can ask for nothing the shipped
+catalog could not, and every number sits on a hard rail. A look travels with the champion
+definition, which is what lets a champion invented after the client shipped have spells of
+its own: the authored catalog is code keyed by champion id, and a forged id was never in
+it. Any part a look leaves out keeps the game's default for that part. Cosmetic
+throughout: the sim never reads a look, and the power budget never prices one.
+_Avoid_: VFX config, particle preset, spell skin
+
+**Look suggestion**:
+A proposed spell look per key, written by a model from the champion's chosen splash and
+its kit, in the same conversation form the kit and stat suggestions take. Every proposal
+is checked word by word against the look vocabulary and then through the full validation
+gate before it reaches the editor, and nothing touches the form until the creator applies
+it. It generates no asset and downloads nothing, so it costs a model call and no creation.
+_Avoid_: VFX generation, effect art job
+
 **Kit suggestion**:
 A proposed passive and four spells, written by a model from the champion's own chosen
 splash art. Suggestions arrive in a conversation the creator iterates in ("more mobility

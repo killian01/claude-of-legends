@@ -4,7 +4,10 @@
 // look at it. Presentation only; never imported by the game.
 
 import { Renderer } from '../render/renderer';
+import type { ChampionDef } from '../sim/content/champions';
+import { CHAMPIONS } from '../sim/content/champions';
 import { Sim } from '../sim/sim';
+import type { SpellLook } from '../sim/spell_look';
 import type { AbilityKey, Vec2 } from '../sim/types';
 import { DT } from '../sim/types';
 import type { Unit } from '../sim/unit';
@@ -15,6 +18,51 @@ if (!app) throw new Error('missing #app root element');
 
 const CENTER: Vec2 = { x: 75, z: 75 };
 const sim = new Sim(42);
+
+// A forged champion carrying spell looks (src/sim/spell_look.ts), which is
+// the whole point of the look: its id cannot appear in the authored VFX
+// catalog, so without one every spell here would draw the same
+// school-derived generic. Sylra's kit and stats verbatim (they already are
+// forged-shaped data and they clear the power budget), its passive as the
+// matching template, and one look per key. Dev-only, like this file.
+const SYLRA = CHAMPIONS.sylra;
+if (!SYLRA) throw new Error('the roster lost sylra');
+const DEMO_LOOKS: Readonly<Record<AbilityKey, SpellLook>> = {
+  Q: {
+    palette: { main: 0x2f6fe0, glow: 0xbfe4ff },
+    projectile: { body: 'shard', trail: 'embers', spin: 2.5 },
+    impact: { shape: 'shatter', density: 0.8, mark: 'frost' },
+  },
+  W: { zone: { floor: 'pool', edge: 'soft', motion: 'rain' } },
+  E: { cast: { shape: 'bloom', scale: 1.4 }, palette: { main: 0x7ad05a, glow: 0xc8ff9a } },
+  R: {
+    palette: { main: 0xc84fe0, glow: 0xf0c2ff },
+    zone: { floor: 'runes', edge: 'hard', motion: 'swirl' },
+    detonate: { shape: 'pillar', scale: 1.8, density: 0.9, smoke: true, shake: 0.25 },
+  },
+};
+const LOOK_DEMO_ID = 'forged_lookdemo';
+// ?plain=1 registers the same champion with NO looks: the side-by-side
+// that says what a look is worth, since without one every forged spell
+// falls back to the same school-derived generic.
+const PLAIN = new URLSearchParams(window.location.search).has('plain');
+sim.addForgedChampion({
+  id: LOOK_DEMO_ID,
+  name: 'Look Demo',
+  title: '',
+  tagline: 'Every spell wearing its own look.',
+  role: SYLRA.role,
+  creator: 'dev#0000',
+  passive: { template: 'kit_inscribed', params: {}, name: 'Barbed Marks' },
+  base: SYLRA.base,
+  growth: SYLRA.growth,
+  abilities: Object.fromEntries(
+    (['Q', 'W', 'E', 'R'] as const).map((k) => [
+      k,
+      PLAIN ? SYLRA.abilities[k] : { ...SYLRA.abilities[k], look: DEMO_LOOKS[k] },
+    ]),
+  ) as ChampionDef['abilities'],
+});
 
 // Team 0 dummies around the center soak the hits and grant the viewer
 // sight of the arena.
@@ -44,11 +92,17 @@ const SHOTS: Readonly<Record<string, Shot>> = {
   maera: { from: { x: 84, z: 75 }, aim: { x: 66, z: 75 }, key: 'R' },
   torv: { from: { x: 84, z: 80 }, aim: { x: 68, z: 71 }, key: 'R' },
   rhoka: { from: { x: 73, z: 71 }, aim: { x: 73, z: 71 }, key: 'R' },
+  // The look demo, one shot per key: the same champion drawn four ways.
+  look_q: { from: { x: 68, z: 84 }, aim: { x: 76.5, z: 79 }, key: 'Q' },
+  look_w: { from: { x: 66, z: 75 }, aim: CENTER, key: 'W' },
+  look_e: { from: { x: 73.5, z: 73 }, aim: { x: 73.5, z: 73 }, key: 'E' },
+  look_r: { from: { x: 66, z: 75 }, aim: CENTER, key: 'R' },
 };
 
 const casters = new Map<string, Unit>();
 for (const [id, shot] of Object.entries(SHOTS)) {
-  casters.set(id, sim.addChampion(1, { x: shot.from.x, z: shot.from.z }, id));
+  const championId = id.startsWith('look_') ? LOOK_DEMO_ID : id;
+  casters.set(id, sim.addChampion(1, { x: shot.from.x, z: shot.from.z }, championId));
 }
 
 // Everyone stays alive, ranked, and mana-flush so any spell fires any time.

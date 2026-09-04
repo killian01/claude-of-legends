@@ -126,6 +126,7 @@ import {
   saveJsonAtomic,
 } from './store';
 import { suggestKit } from './suggest';
+import { suggestLook } from './suggest_look';
 import { suggestStats } from './suggest_stats';
 import { type WayStats, wayStatsOf } from './way_stats';
 import type { Way } from './ways';
@@ -367,7 +368,7 @@ const suggestDeps = {
 };
 console.log(
   suggestDeps.apiKey
-    ? 'suggestions: on (ANTHROPIC_API_KEY set), the kit and stat conversations are live'
+    ? 'suggestions: on (ANTHROPIC_API_KEY set), the kit, stat and look conversations are live'
     : 'suggestions: off (no ANTHROPIC_API_KEY set)',
 );
 // The 2D art surface (plan-forge phase 4): splash and icon candidates on
@@ -1637,9 +1638,13 @@ const server = http.createServer(async (req, res) => {
       // agent quota, one unit per player message, spent only when a
       // proposal lands. The body carries the whole thread plus the
       // unsaved form state, hence the wide cap.
-      // The stat conversation (Tuning tab) rides the same wire and meter.
+      // The stat conversation (Tuning tab) rides the same wire and meter,
+      // and so does the look conversation (the spell looks on the Spells
+      // tab).
       if (
-        (url === '/api/forge/suggest' || url === '/api/forge/suggest-stats') &&
+        (url === '/api/forge/suggest' ||
+          url === '/api/forge/suggest-stats' ||
+          url === '/api/forge/suggest-look') &&
         req.method === 'POST'
       ) {
         const body = await readJsonBody(req, DRAFT_JSON_MAX + 160_000);
@@ -1662,7 +1667,12 @@ const server = http.createServer(async (req, res) => {
           'cache-control': 'no-store',
           'x-accel-buffering': 'no',
         });
-        const ask = url === '/api/forge/suggest' ? suggestKit : suggestStats;
+        const ask =
+          url === '/api/forge/suggest'
+            ? suggestKit
+            : url === '/api/forge/suggest-stats'
+              ? suggestStats
+              : suggestLook;
         const outcome = await ask(suggestDeps, me.id, {
           id,
           messages: body.messages as { role: 'user' | 'assistant'; text: string }[],

@@ -1,5 +1,5 @@
-// The Forge's conversation panel, shared by the kit conversation (Spells
-// tab) and the stat conversation (Tuning tab): a session-lived thread the
+// The Forge's conversation panel, shared by the kit and look
+// conversations (Spells tab) and the stat conversation (Tuning tab): a session-lived thread the
 // client keeps and replays whole each turn, an answer that streams as
 // NDJSON (the model's words as they come, the server's stages between
 // calls) into a bubble that counts the wait out loud, and one input row
@@ -38,7 +38,7 @@ export interface SavedChat {
   turns: ChatTurnView[];
   proposal: unknown;
 }
-export type SavedChats = Partial<Record<'kit' | 'stats', SavedChat>>;
+export type SavedChats = Partial<Record<'kit' | 'stats' | 'looks', SavedChat>>;
 
 export function newChatState(): ChatState {
   return {

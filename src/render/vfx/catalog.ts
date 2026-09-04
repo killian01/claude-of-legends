@@ -1,10 +1,17 @@
 // The per-spell VFX catalog: authored visuals keyed by the cosmetic vfx tag
-// ('championId_KEY'). Anything not listed falls back to the school-derived
+// ('championId_KEY'). Anything not listed falls back to the ability's own
+// spell look if it declared one (looks.ts) and then to the school-derived
 // generics, so coverage never breaks while identity lands incrementally
 // (the woc declining-claim pattern). Data-as-code: this table is the art.
+// A champion this client never heard of, which is every forged one, can
+// only be served by the look; the table is for the champions we ship.
 
 import * as THREE from 'three';
 import type { SfxName } from '../../game/sfx';
+import type { IWorld } from '../../world_api';
+import { resolveLook } from '../ability_vfx';
+import { lookVisual } from './looks';
+import { basicMat, flatDisc, flatRing, growSweep, pulseRim, telegraphZone } from './shapes';
 import { SPRITE } from './sprites';
 import type { VfxSystem } from './system';
 
@@ -128,72 +135,6 @@ export function genericWindupTick(
     });
   }
   fx.glowFlash(x, 1.5, z, 0.8 + progress * 1.6, colors.glow, 0.09);
-}
-
-// ------------------------------------------------------------- mesh helpers
-
-function basicMat(color: number, opacity: number, additive = false): THREE.MeshBasicMaterial {
-  const mat = new THREE.MeshBasicMaterial({
-    color,
-    transparent: opacity < 1,
-    opacity,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
-  });
-  mat.toneMapped = false;
-  return mat;
-}
-
-function flatRing(
-  rIn: number,
-  rOut: number,
-  color: number,
-  opacity: number,
-  y: number,
-): THREE.Mesh {
-  const mesh = new THREE.Mesh(new THREE.RingGeometry(rIn, rOut, 48), basicMat(color, opacity));
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.position.y = y;
-  return mesh;
-}
-
-function flatDisc(r: number, color: number, opacity: number, y: number): THREE.Mesh {
-  const mesh = new THREE.Mesh(new THREE.CircleGeometry(r, 40), basicMat(color, opacity));
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.position.y = y;
-  return mesh;
-}
-
-// A warning telegraph for delayed zones: a dark contrast band under a hard
-// colored rim (readable even on the glowing river), a faint fill, and a
-// sweep disc the zoneTick grows with the fuse (the area must be readable
-// the instant it appears; the sweep says how long is left).
-function telegraphZone(radius: number, rimColor: number, sweepColor: number): THREE.Group {
-  const holder = new THREE.Group();
-  holder.add(flatRing(radius - 0.52, radius + 0.14, 0x0a0a0a, 0.55, 0.09));
-  const rim = flatRing(radius - 0.34, radius, rimColor, 0.95, 0.1);
-  holder.add(rim);
-  holder.add(flatDisc(radius, rimColor, 0.14, 0.08));
-  const sweep = flatDisc(radius, sweepColor, 0.34, 0.11);
-  sweep.scale.setScalar(0.01);
-  holder.add(sweep);
-  holder.userData.rim = rim;
-  holder.userData.sweep = sweep;
-  return holder;
-}
-
-function pulseRim(holder: THREE.Object3D, ageMs: number, urgency: number): void {
-  const rim = holder.userData.rim as THREE.Mesh | undefined;
-  if (!rim) return;
-  const mat = rim.material as THREE.MeshBasicMaterial;
-  // Never dip low: the pulse is a heartbeat, not a fade (readability rule).
-  mat.opacity = 0.82 + 0.18 * Math.sin(ageMs * (0.008 + urgency * 0.02));
-}
-
-function growSweep(holder: THREE.Object3D, progress: number): void {
-  const sweep = holder.userData.sweep as THREE.Mesh | undefined;
-  sweep?.scale.setScalar(Math.max(0.01, Math.min(1, progress)));
 }
 
 // ------------------------------------------------------------- the catalog
@@ -851,7 +792,16 @@ export const SPELL_VFX: Readonly<Record<string, SpellVisual>> = {
   },
 };
 
-export function spellVisualOf(tag: string | null): SpellVisual | null {
+// The resolution order for one spell's visuals: the authored entry above
+// if this client shipped one, then the ability's own look read as data
+// (looks.ts), then nothing, which leaves the renderer its school-derived
+// generics. A forged champion only ever reaches the second step, and a
+// roster spell can now be given a look in content without code here.
+export function spellVisualOf(tag: string | null, world?: IWorld): SpellVisual | null {
   if (!tag) return null;
-  return SPELL_VFX[tag] ?? null;
+  const authored = SPELL_VFX[tag];
+  if (authored) return authored;
+  if (!world) return null;
+  const look = resolveLook(tag, world);
+  return look ? lookVisual(look) : null;
 }

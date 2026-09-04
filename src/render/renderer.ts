@@ -945,9 +945,9 @@ export class Renderer {
       if (cast.key && caster.championId) {
         const def = this.world.championDef(caster.championId)?.abilities[cast.key];
         if (def) {
-          color = schoolColorOf(def.spec).main;
+          color = schoolColorOf(def.spec, def.look).main;
           if (others) playCastSfx(castSoundOf(def), gain);
-          const vis = spellVisualOf(`${caster.championId}_${cast.key}`);
+          const vis = spellVisualOf(`${caster.championId}_${cast.key}`, this.world);
           const instant = !(def.windup && def.windup > 0);
           if (vis?.castFx && instant) {
             const yaw = t?.yaw ?? 0;
@@ -1763,7 +1763,7 @@ export class Renderer {
       if (!t) {
         const teamLight = TEAM_LIGHT[p.team] ?? 0xffffff;
         const colors = spellColorsOf(p.vfx, this.world, teamLight);
-        const vis = spellVisualOf(p.vfx);
+        const vis = spellVisualOf(p.vfx, this.world);
         const mesh = vis?.projectile
           ? vis.projectile(p.radius, colors)
           : buildProjectileMesh(p, this.world, teamLight);
@@ -1816,7 +1816,7 @@ export class Renderer {
     for (const [id, z] of this.world.zones) {
       if (!this.trackedZones.has(id)) {
         const colors = spellColorsOf(z.vfx, this.world, TEAM_COLORS[z.team] ?? 0xffffff);
-        const vis = spellVisualOf(z.vfx);
+        const vis = spellVisualOf(z.vfx, this.world);
         const hostile = z.team !== this.viewerTeam;
         const mesh = vis?.zone
           ? vis.zone(z.radius, colors, hostile)
@@ -2096,7 +2096,7 @@ export class Renderer {
       startMs: performance.now() - (durMs - remainingMs),
       durMs,
       colors: school,
-      vis: spellVisualOf(`${u.championId}_${key}`),
+      vis: spellVisualOf(`${u.championId}_${key}`, this.world),
       specKind: spec.kind,
       followCaster,
     });

@@ -6,6 +6,7 @@
 import type { CastSoundId } from '../content/sounds';
 import { passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
+import type { SpellLook } from '../spell_look';
 import { isSpellTarget } from '../spell_targets';
 import { effectiveRank, RANK_BASE_SCALE, RANK_CD_SCALE } from '../stats';
 import type { AbilityKey, Vec2 } from '../types';
@@ -116,6 +117,11 @@ export interface AbilityDef {
   // The cast sound, one of the palette (content/sounds.ts); a forged
   // creator's pick. Absent, the spell sounds like its school.
   sound?: CastSoundId;
+  // The spell look (spell_look.ts): this ability's visual as data, drawn
+  // by the renderer out of a bounded vocabulary. Presentation the sim
+  // ignores, validated like the sound so the wire stays bounded. Absent,
+  // the spell keeps the school-derived generics.
+  look?: SpellLook;
   manaCost: number;
   cooldown: number;
   castRange: number;

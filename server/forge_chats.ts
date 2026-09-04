@@ -10,8 +10,8 @@ import type { ForgeOutcome } from './forge';
 import type { ForgeStore } from './forge_store';
 import { CHAT_RAW_TEXT_MAX, CHAT_TURNS_MAX, CHAT_USER_TEXT_MAX } from './suggest';
 
-export type ChatKind = 'kit' | 'stats';
-export const CHAT_KINDS: readonly ChatKind[] = ['kit', 'stats'];
+export type ChatKind = 'kit' | 'stats' | 'looks';
+export const CHAT_KINDS: readonly ChatKind[] = ['kit', 'stats', 'looks'];
 // The short text a turn shows as its bubble (the model's comment).
 export const CHAT_BUBBLE_MAX = 400;
 // The proposal ridden along, as JSON text: a fitted kit is small, and the

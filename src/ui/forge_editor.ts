@@ -30,9 +30,11 @@ import { freshDraftDef } from '../sim/forge/fresh_draft';
 import { PASSIVE_TEMPLATE_LIST, PASSIVE_TEMPLATES } from '../sim/forge/passive_templates';
 import { grantSpellPower, POWER_DIAL_MAX, POWER_DIAL_MIN } from '../sim/forge/spell_power';
 import { FORGED_ROLES, validateForged } from '../sim/forge/validate';
+import type { SpellLook } from '../sim/spell_look';
 import type { AbilityKey } from '../sim/types';
 import { type AnimPreview, createAnimPreview } from './anim_preview';
 import { describeAbility } from './describe';
+import { describeLook } from './describe_look';
 import {
   BUDGET_VIEW_CSS,
   dialStopHint,
@@ -578,10 +580,11 @@ export function openForgeEditor(container: HTMLElement): () => void {
   let animating = false;
   // True while a weapon-only build runs (the claim).
   let weaponForging = false;
-  // The two conversations, session-lived (forge_chat.ts): the kit's on
-  // the Spells tab, the stats' on the Tuning tab.
+  // The three conversations, session-lived (forge_chat.ts): the kit's and
+  // the looks' on the Spells tab, the stats' on the Tuning tab.
   const kitChat = newChatState();
   const statChat = newChatState();
+  const lookChat = newChatState();
   // The latest validated kit proposal, awaiting the creator's Apply.
   let proposal: {
     passive: ForgedChampionDef['passive'];
@@ -600,6 +603,10 @@ export function openForgeEditor(container: HTMLElement): () => void {
     budget: { stats: { spend: number; cap: number }; growth: { spend: number; cap: number } };
     fit: { stats: number; growth: number };
   } | null = null;
+  // The latest validated set of spell looks, awaiting Apply: pure
+  // presentation, so unlike the kit and the stats a seal does not close
+  // it (a finalized champion may still be repainted).
+  let lookProposal: Record<string, SpellLook | null> | null = null;
   let currentStage = '';
   let stageRows: Map<string, HTMLElement> | null = null;
   // The account's creation stock, from the drafts route; -1 = unknown.
@@ -784,9 +791,9 @@ export function openForgeEditor(container: HTMLElement): () => void {
   // The conversations travel with the draft (server/forge_chats.ts):
   // each accepted answer and each start-over lands the thread and its
   // latest proposal beside the def; opening a draft brings them back.
-  const persistChat = (kind: 'kit' | 'stats'): void => {
-    const state = kind === 'kit' ? kitChat : statChat;
-    const prop = kind === 'kit' ? proposal : statProposal;
+  const persistChat = (kind: 'kit' | 'stats' | 'looks'): void => {
+    const state = kind === 'kit' ? kitChat : kind === 'stats' ? statChat : lookChat;
+    const prop = kind === 'kit' ? proposal : kind === 'stats' ? statProposal : lookProposal;
     void ensureSaved().then((ok) => {
       if (!ok) return;
       return api<{ ok: boolean; error?: string }>('/api/forge/chat', {
@@ -830,6 +837,11 @@ export function openForgeEditor(container: HTMLElement): () => void {
             fit: sp.fit ?? { stats: 1, growth: 1 },
           }
         : null;
+    const lk = row?.chats?.looks;
+    lookChat.turns = lk ? [...lk.turns] : [];
+    lookChat.draft = '';
+    const lp = lk?.proposal as Record<string, SpellLook | null> | null | undefined;
+    lookProposal = lp && typeof lp === 'object' ? lp : null;
   };
 
   // Save what is on screen (art hangs off a stored draft), generate, then
@@ -2133,6 +2145,89 @@ export function openForgeEditor(container: HTMLElement): () => void {
             }
           }
           status.textContent = 'The proposed kit is on the form: review, tweak, then save.';
+          renderMain();
+          refresh();
+        });
+        prop.append(apply);
+      }
+      main.append(prop);
+    }
+
+    // The look conversation, the kit's sibling: the spells' EFFECTS as
+    // data (src/sim/spell_look.ts). The authored VFX catalog is code keyed
+    // by champion id, so a forged champion can never appear in it and its
+    // spells would otherwise all wear the same school-derived default;
+    // a look is the art it can own. Nothing is generated and nothing is
+    // downloaded, so this costs no creation: apply, then see it in a test
+    // drive.
+    main.append(
+      chatPanel<{
+        ok: boolean;
+        comment?: string;
+        looks?: Record<string, SpellLook | null>;
+        raw?: string;
+        error?: string;
+      }>(lookChat, {
+        title: 'Spell looks (AI)',
+        lead:
+          'Reads your splash and your kit, and gives each spell its own effects: the shape ' +
+          'of the bolt, what it trails, how it lands, the color. Say what you want ("frost, ' +
+          'not fire", "make the R shake the screen", "keep the Q quiet"). Nothing touches ' +
+          'your spells until you apply it, and it costs no creation.',
+        placeholder: 'What should these spells look like?',
+        locked: sealed
+          ? 'This champion is sealed: its spells are locked. Unseal it (Design tab, ' +
+            'animations block) to repaint them.'
+          : null,
+        parts: ['Q', 'W', 'E', 'R'],
+        request: (messages, onLine) =>
+          ensureSaved().then((ok) =>
+            ok
+              ? chatStream(
+                  '/api/forge/suggest-look',
+                  { id: current.id, def: current, messages },
+                  onLine,
+                )
+              : { ok: false, error: lastSaveError ?? 'the draft could not be saved' },
+          ),
+        accept: (r) => {
+          if (!r?.ok || !r.looks || typeof r.raw !== 'string') {
+            return { error: r?.error ?? 'the suggestion failed' };
+          }
+          lookProposal = r.looks;
+          return { raw: r.raw, bubble: r.comment ? r.comment : 'Here are the spell looks.' };
+        },
+        report: (message) => {
+          status.textContent = message;
+        },
+        rerender: renderMain,
+        changed: () => persistChat('looks'),
+      }),
+    );
+
+    // The latest looks, one readable line per spell, one Apply for all
+    // four: the same shape the kit proposal takes above.
+    if (lookProposal !== null) {
+      const looks = lookProposal;
+      const prop = el('div', 'fe-panel');
+      prop.append(el('h3', '', 'Proposed spell looks'));
+      for (const key of ['Q', 'W', 'E', 'R'] as const) {
+        const block = el('div', 'fe-prop-spell');
+        block.append(el('strong', '', `${key}: ${current.abilities[key].name}`));
+        block.append(el('p', 'fe-desc', describeLook(looks[key])));
+        prop.append(block);
+      }
+      if (!sealed) {
+        const apply = el('button', 'fe-gen small', 'Apply these looks (free)') as HTMLButtonElement;
+        apply.title = 'Puts these effects on your spells; nothing is saved until you save';
+        apply.addEventListener('click', () => {
+          for (const key of ['Q', 'W', 'E', 'R'] as const) {
+            const look = looks[key];
+            if (look) current.abilities[key].look = structuredClone(look);
+            else delete current.abilities[key].look;
+          }
+          status.textContent =
+            'The spell looks are on the form: save, then test drive to see them.';
           renderMain();
           refresh();
         });
