@@ -6,7 +6,7 @@
 // against this one, now, on the server, unrated. A modal over whatever is
 // open; pure DOM, the data from /api/bots/page and /api/bots/challenge.
 
-import type { RecordRow } from '../net/record';
+import type { RecordRow, RecordTallies } from '../net/record';
 import { tierOf } from '../net/tiers';
 import { CHAMPIONS } from '../sim/content/champions';
 import type { PlaybookDef } from '../sim/playbook/types';
@@ -14,6 +14,7 @@ import { el } from './menu';
 import { describeBehavior, describeTrigger } from './playbook_text';
 import { fmtClock, fmtWhen, kindLabel, resultOf } from './record_view';
 import { buildIcons } from './scoreboard_table';
+import { buildTallyView } from './tally_view';
 
 const CSS = `
 .bp-back { position: fixed; inset: 0; z-index: 40; background: rgba(3, 6, 8, 0.78); display: flex; align-items: center; justify-content: center; }
@@ -73,7 +74,7 @@ export interface BotPageData {
     accountId: number;
     mine: boolean;
   };
-  tally: { wins: number; losses: number };
+  tally: RecordTallies;
   ratings: { live: { rating: number; games: number }; arena: { rating: number; games: number } };
   rows: RecordRow[];
   playbook?: PlaybookDef;
@@ -191,13 +192,11 @@ export function openBotPage(
     );
     box.append(head);
     const line = el('div', 'bp-line');
-    const tally = el('span', '');
-    tally.append(
-      document.createTextNode('Rated play: '),
-      el('b', '', `${r.tally.wins} won, ${r.tally.losses} lost`),
-    );
-    line.append(tally, ratingLine('Live', r.ratings.live), ratingLine('Arena', r.ratings.arena));
+    line.append(ratingLine('Live', r.ratings.live), ratingLine('Arena', r.ratings.arena));
     box.append(line);
+    // The Record per kind (src/ui/tally_view.ts): the rated play a reader
+    // came for, and the sparring behind it kept where it belongs.
+    box.append(buildTallyView(r.tally));
 
     // The challenge: the reader's bot against this one.
     if (!b.mine && opts.myBots && opts.myBots.length > 0 && b.ranked) {

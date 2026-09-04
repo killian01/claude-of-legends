@@ -79,7 +79,7 @@ describe('the Bot page', () => {
     expect(describeBotPage(page, READER, 42).ok).toBe(false);
   });
 
-  it('tallies the rated matches only, newest first, and says whether the bot is ranked', () => {
+  it('tallies every kind apart, lists the rated newest first, and says whether the bot is ranked', () => {
     const { deps, page, botId } = rig();
     setDeposited(deps, OWNER, botId, true);
     addEntry(deps.store, botId, OWNER, rated('sparring', true, 1000));
@@ -88,7 +88,13 @@ describe('the Bot page', () => {
     addEntry(deps.store, botId, OWNER, rated('series', true, 4000));
     const out = describeBotPage(page, READER, botId);
     expect(out.ok && out.bot.ranked).toBe(true);
-    expect(out.ok && out.tally).toEqual({ wins: 1, losses: 1 });
+    // Read per kind now (server/record_tally.ts): the rated line is the
+    // Arena and the live seats, and the sparring behind them stays apart.
+    expect(out.ok && out.tally.rated).toMatchObject({ games: 2, wins: 1, losses: 1 });
+    expect(out.ok && out.tally.arena).toMatchObject({ games: 1, wins: 1, losses: 0 });
+    expect(out.ok && out.tally.live).toMatchObject({ games: 1, wins: 0, losses: 1 });
+    expect(out.ok && out.tally.sparring).toMatchObject({ games: 1, wins: 1, losses: 0 });
+    expect(out.ok && out.tally.series).toMatchObject({ games: 1, wins: 1, losses: 0 });
     expect(out.ok && out.rows.map((r) => [r.kind, r.at])).toEqual([
       ['live', 3000],
       ['arena', 2000],

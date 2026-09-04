@@ -111,6 +111,7 @@ import { type CoachDeps, coachPlaybook } from './playbook_suggest';
 import { buildProfile } from './profile';
 import { checkQuota, DAY_MS, spendQuota } from './quotas';
 import { BASE_RATING, LEAVER_LOCKOUT_MS, leaverPenalty } from './rating';
+import { talliesOf } from './record_tally';
 import { buildMatchRecord, type MatchRecord } from './records';
 import { setForgedAttackRange } from './reforge';
 import { RejoinRegistry } from './rejoin';
@@ -462,7 +463,7 @@ function rankedBotsOf(accountId: number): BotSummary[] {
       id: b.id,
       name: b.name,
       championId: b.championId,
-      tally: botStore.tally(b.id),
+      tally: botStore.ratedTally(b.id),
     }));
 }
 
@@ -1159,7 +1160,7 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 200, {
           ok: true,
           row: entry ? rowOf(entry) : null,
-          tally: botStore.tally(found.bot.id),
+          tally: talliesOf(listEntries(botStore, found.bot.id)),
         });
         return;
       }
@@ -1173,7 +1174,7 @@ const server = http.createServer(async (req, res) => {
             ? {
                 ok: true,
                 rows: listEntries(botStore, found.bot.id),
-                tally: botStore.tally(found.bot.id),
+                tally: talliesOf(listEntries(botStore, found.bot.id)),
               }
             : found,
         );
@@ -1259,7 +1260,7 @@ const server = http.createServer(async (req, res) => {
             championId: b.championId,
             owner: registry.findById(b.accountId)?.name ?? null,
             mine: b.accountId === me.id,
-            tally: botStore.tally(b.id),
+            tally: botStore.ratedTally(b.id),
             arena: botStore.botRating(b.accountId, 'arena').rating,
           })),
         });

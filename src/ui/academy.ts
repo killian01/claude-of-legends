@@ -9,7 +9,7 @@
 import { runSeries, runSparring } from '../game/sparring';
 import { SERIES_SEEDS, type SparResult } from '../game/sparring_core';
 import { type CoachTurn, commentOf } from '../net/coach_chat';
-import type { RecordEntry, RecordRow, RecordTally } from '../net/record';
+import type { RecordEntry, RecordRow, RecordTallies } from '../net/record';
 import { CHAMPION_LIST, CHAMPIONS, homeLane } from '../sim/content/champions';
 import { ITEMS } from '../sim/content/items';
 import { SIGIL_LIST } from '../sim/content/sigils';
@@ -46,6 +46,7 @@ import {
 } from './playbook_text';
 import { fmtClock, kindLabel, renderRecordView, resultOf } from './record_view';
 import { buildIcons } from './scoreboard_table';
+import { buildTallyView, emptyTallies } from './tally_view';
 
 const CSS = `
 .ac, .ac * { box-sizing: border-box; }
@@ -169,8 +170,8 @@ interface BotView {
   deposited: boolean;
   autoApply?: boolean;
   openPlaybook?: boolean;
-  // Won and lost over its Record (server/bots.ts listBots).
-  tally?: RecordTally;
+  // Won and lost over the rated part of its Record (server/bots.ts).
+  tally?: { wins: number; losses: number };
 }
 
 // The Briefing as the API returns it (server/night_coach.ts Briefing).
@@ -348,7 +349,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
   // The bot's Record (CONTEXT.md), newest first, read from the server on
   // every select and after every sparring; and the view over it when open.
   let record: RecordRow[] | null = null;
-  let recordTally: RecordTally = { wins: 0, losses: 0 };
+  let recordTally: RecordTallies = emptyTallies();
   let recordOpen = false;
   let recordOpenId: number | null = null;
   let arenaRunning = false;
@@ -377,7 +378,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     coachText = '';
     coachRefused = [];
     record = null;
-    recordTally = { wins: 0, losses: 0 };
+    recordTally = emptyTallies();
     recordOpen = false;
     recordOpenId = null;
     if (bot) {
@@ -425,15 +426,17 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
   }
 
   async function loadRecord(botId: string): Promise<void> {
-    const r = await api<{ rows: RecordRow[]; tally: RecordTally }>('/api/bots/record/list', {
+    const r = await api<{ rows: RecordRow[]; tally: RecordTallies }>('/api/bots/record/list', {
       id: botId,
     });
     if (current?.id !== botId) return;
     if (r.ok) {
       record = r.rows;
       recordTally = r.tally;
+      // The rail's chip is the rated part, the same number the server
+      // sends with the list of bots.
       const b = bots.find((x) => x.id === botId);
-      if (b) b.tally = r.tally;
+      if (b) b.tally = { wins: r.tally.rated.wins, losses: r.tally.rated.losses };
     } else {
       record = [];
       say(r.error, true);
@@ -1888,11 +1891,15 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       }
       sparBox.append(tools);
     }
+    // The Record read per kind rather than as one blended count: the
+    // sparring a bot did against house bots said nothing about how it
+    // plays, and it used to be summed with the rated matches that do.
+    if (record && record.length > 0) sparBox.append(buildTallyView(recordTally));
     const recordBtn = el(
       'button',
       'ac-btn',
       record && record.length > 0
-        ? `The Record (${recordTally.wins} won, ${recordTally.losses} lost)`
+        ? `The Record (${record.length} match${record.length === 1 ? '' : 'es'})`
         : 'The Record',
     ) as HTMLButtonElement;
     recordBtn.disabled = !record || record.length === 0;
