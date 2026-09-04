@@ -1,20 +1,28 @@
 // The play tiles drawn (ui/home_tiles.ts says what they are): the tile is
-// the button, an illustration fills it, and the title and its one line
+// the button, a painted scene fills it, and the title with its one line
 // sit on a scrim at the foot. Under the row, the join line: a code typed
 // or carried in by an invite link, and Join.
 
 import { normalizeJoinCode } from '../game/invite';
-import type { PlayMode, PlayTile } from './home_tiles';
-import { portraitUrl } from './home_tiles';
+import type { PlayTile } from './home_tiles';
+import { tileArtUrl } from './home_tiles';
 import { el } from './menu';
 
+// The bento: the Ranked scene tall on the left, the Bots banner across the
+// top right, the three others square beneath it. Six columns rather than
+// five so the banner and the squares divide the same right-hand half.
 const CSS = `
-.tiles { display: grid; grid-template-columns: 1.55fr 1fr 1fr 1fr; gap: 14px;
-  height: clamp(300px, 48vh, 440px); max-width: 1180px; }
+.tiles { display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: 1fr 1fr;
+  gap: 12px; height: clamp(320px, 50vh, 460px); max-width: 1180px; }
+.tile.t-ranked { grid-area: 1 / 1 / 3 / 4; }
+.tile.t-bots { grid-area: 1 / 4 / 2 / 7; }
+.tile.t-forge { grid-area: 2 / 4 / 3 / 5; }
+.tile.t-lobby { grid-area: 2 / 5 / 3 / 6; }
+.tile.t-practice { grid-area: 2 / 6 / 3 / 7; }
 .tile {
   position: relative; overflow: hidden; border-radius: 14px; border: 1px solid #2b3f60;
-  background: #0a1120; padding: 0; text-align: left; cursor: pointer; color: inherit;
-  font: inherit; display: block; min-width: 0;
+  padding: 0; text-align: left; cursor: pointer; color: inherit; font: inherit;
+  display: block; min-width: 0; background: #0a1120;
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
@@ -24,29 +32,49 @@ const CSS = `
     0 0 28px rgba(216, 180, 90, 0.18);
 }
 .tile.hero { border-color: #8a7433; }
-.tile-art { position: absolute; inset: 0; display: grid; grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  background: radial-gradient(circle at 50% 38%, #1d3a63 0%, #0a1120 90%); }
-.tile-art img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 18%;
+/* The wash is the tile's own color, and the whole tile when the painting
+   is missing. */
+.tile-art { position: absolute; inset: 0; }
+.tile-art img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 32%;
   display: block; transition: transform 0.7s ease; }
 .tile:hover .tile-art img { transform: scale(1.05); }
 .tile-body {
-  position: absolute; left: 0; right: 0; bottom: 0; padding: 70px 18px 16px;
-  background: linear-gradient(180deg, rgba(4, 7, 16, 0) 0%, rgba(4, 7, 16, 0.82) 48%,
-    rgba(4, 7, 16, 0.97) 100%);
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 60px 18px 16px;
+  background: linear-gradient(180deg, rgba(4, 7, 16, 0) 0%, rgba(4, 7, 16, 0.8) 46%,
+    rgba(4, 7, 16, 0.96) 100%);
 }
-.tile h3 { font-family: Cinzel, Georgia, serif; font-size: 20px; letter-spacing: 1.8px;
+.tile h3 { font-family: Cinzel, Georgia, serif; font-size: 17px; letter-spacing: 1.6px;
   text-transform: uppercase; margin: 0; color: #e6d7a8; line-height: 1.1; }
-.tile p { font-size: 12.5px; line-height: 1.45; color: #b9cbe4; margin: 6px 0 0; max-width: 42ch; }
+.tile p { font-size: 12px; line-height: 1.45; color: #b9cbe4; margin: 5px 0 0; max-width: 46ch; }
 .tile.hero .tile-body { padding: 90px 24px 22px; }
 .tile.hero h3 { font-size: clamp(26px, 2.6vw, 36px); letter-spacing: 3px; }
 .tile.hero p { font-size: 13.5px; }
+/* The banner reads across, not up: its words sit in a column against a
+   scrim that fades to the right, where the construct stands. The painting
+   is mirrored to put it there, away from the text; the scene is a room,
+   so nothing in it has a handedness to lose. */
+.tile.t-bots .tile-art img { transform: scaleX(-1); }
+.tile.t-bots:hover .tile-art img { transform: scaleX(-1) scale(1.05); }
+.tile.t-bots .tile-body {
+  top: 0; display: flex; flex-direction: column; justify-content: center;
+  padding: 16px 22px;
+  background: linear-gradient(90deg, rgba(4, 7, 16, 0.96) 0%, rgba(4, 7, 16, 0.88) 42%,
+    rgba(4, 7, 16, 0.12) 82%);
+}
+.tile.t-bots h3 { font-size: 21px; letter-spacing: 2.2px; }
+.tile.t-bots p { font-size: 12.5px; max-width: 40ch; }
+.tile.t-bots .tile-cta { align-self: flex-start; }
 .tile-cta {
-  display: inline-block; margin-top: 14px; padding: 9px 22px; border-radius: 6px;
+  display: inline-block; margin-top: 12px; padding: 7px 18px; border-radius: 6px;
+  border: 1px solid #6b7f9e; color: #dceaff; font-weight: 700; font-size: 12.5px;
+  letter-spacing: 0.5px; background: rgba(10, 17, 32, 0.6);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.tile:hover .tile-cta { border-color: #9fb8dc; }
+.tile.hero .tile-cta {
+  margin-top: 14px; padding: 9px 22px; font-size: 14px; font-weight: 800;
   background: linear-gradient(180deg, #e8cc74 0%, #c9a84a 55%, #a07830 100%);
-  border: 1px solid #f0deae; color: #241a08; font-weight: 800; font-size: 14px;
-  letter-spacing: 0.5px; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
-  transition: box-shadow 0.15s ease;
+  border-color: #f0deae; color: #241a08; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 .tile.hero:hover .tile-cta { box-shadow: 0 0 18px rgba(216, 180, 90, 0.45); }
 
@@ -58,22 +86,23 @@ const CSS = `
 .home-join.lit { color: #e6d7a8; }
 .home-join.lit .menu-input { border-color: #d8b45a; box-shadow: 0 0 12px rgba(216, 180, 90, 0.3); }
 
-/* Narrow: the hero across the top, the three small tiles in one row
-   under it, each a portrait; below a phone's width the small tiles keep
-   their title and drop the line. */
+/* Narrow: the bento unstacks into the hero, the banner, and a row of
+   three, which is the same reading order one column at a time. */
 @media (max-width: 900px) {
-  .tiles { grid-template-columns: repeat(3, 1fr); height: auto; gap: 10px; }
-  .tile { aspect-ratio: 3 / 4; }
-  .tile.hero { grid-column: 1 / -1; aspect-ratio: 16 / 9; }
+  .tiles { grid-template-columns: repeat(3, 1fr); grid-template-rows: auto; height: auto; gap: 10px; }
+  .tile.t-ranked { grid-area: auto / 1 / auto / 4; aspect-ratio: 16 / 9; }
+  /* Two to one, not three: the banner has to hold its title, its line and
+     its button at a phone's width without clipping any of them. */
+  .tile.t-bots { grid-area: auto / 1 / auto / 4; aspect-ratio: 2 / 1; }
+  .tile.t-forge, .tile.t-lobby, .tile.t-practice { grid-area: auto; aspect-ratio: 3 / 4; }
   .tile.hero .tile-body { padding: 60px 18px 16px; }
   .tile-body { padding: 40px 12px 10px; }
-  .tile h3 { font-size: 15px; letter-spacing: 1.2px; }
+  .tile h3 { font-size: 14px; letter-spacing: 1.2px; }
   .tile p { font-size: 11px; margin-top: 4px; }
-  .tile-art img { object-position: 50% 12%; }
 }
 @media (max-width: 480px) {
-  .tile:not(.hero) p { display: none; }
-  .tile:not(.hero) h3 { font-size: 13px; }
+  .tile.t-forge p, .tile.t-lobby p, .tile.t-practice p { display: none; }
+  .tile.t-bots p { font-size: 11px; }
   .tile.hero h3 { font-size: 24px; }
   .tile.hero p { font-size: 12px; }
 }
@@ -90,30 +119,29 @@ function ensureCss(): void {
 
 export function buildPlayTiles(
   tiles: readonly PlayTile[],
-  onPick: (mode: PlayMode) => void,
+  onPick: (tile: PlayTile) => void,
 ): HTMLElement {
   ensureCss();
   const row = el('div', 'tiles');
   for (const t of tiles) {
-    const tile = el('button', t.hero ? 'tile hero' : 'tile');
+    const tile = el('button', `tile t-${t.id}${t.hero ? ' hero' : ''}`);
     tile.type = 'button';
-    tile.dataset.mode = t.mode;
+    tile.dataset.tile = t.id;
     const art = el('div', 'tile-art');
-    for (const id of t.art) {
-      const img = document.createElement('img');
-      img.alt = '';
-      img.draggable = false;
-      img.decoding = 'async';
-      // A face that fails to load leaves the gradient, never a broken icon.
-      img.addEventListener('error', () => img.remove());
-      img.src = portraitUrl(id);
-      art.appendChild(img);
-    }
+    art.style.background = `radial-gradient(ellipse at 50% 34%, ${t.accent}55 0%, #0a1120 78%)`;
+    const img = document.createElement('img');
+    img.alt = '';
+    img.draggable = false;
+    img.decoding = 'async';
+    // A painting that is not there yet leaves the wash, never a broken icon.
+    img.addEventListener('error', () => img.remove());
+    img.src = tileArtUrl(t.art);
+    art.appendChild(img);
     const body = el('div', 'tile-body');
     body.append(el('h3', '', t.title), el('p', '', t.line));
     if (t.cta) body.appendChild(el('span', 'tile-cta', t.cta));
     tile.append(art, body);
-    tile.addEventListener('click', () => onPick(t.mode));
+    tile.addEventListener('click', () => onPick(t));
     row.appendChild(tile);
   }
   return row;

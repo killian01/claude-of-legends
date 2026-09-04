@@ -42,7 +42,23 @@ export const CSS = `
   text-decoration: none; white-space: nowrap; transition: color 0.15s ease;
 }
 .pg-bar a:hover, .pg-bar button:hover { color: #dceaff; }
+.pg-bar .on { color: #e6d7a8; }
 .pg-who { font-size: 12px; letter-spacing: 0.5px; color: #e6d7a8; font-weight: 700; }
+
+/* A section open under the bar (ui/section_host.ts): the section starts
+   at the bar's foot and paints over the rest of the page, so the bar
+   needs nothing but a scrim and everything below it gets out of the way.
+   Deliberately no raised z-index here: a full-screen overlay a section
+   opens (the Forge's workshop) then covers the bar too, which is what a
+   full-screen overlay should do. */
+.pg.home.with-section .pg-inner > *:not(.pg-bar) { display: none; }
+.pg.home.with-section .pg-bar {
+  padding-bottom: 12px;
+  margin: 0 calc(-1 * clamp(16px, 5vw, 56px));
+  padding-left: clamp(16px, 5vw, 56px); padding-right: clamp(16px, 5vw, 56px);
+  background: rgba(6, 10, 18, 0.93); border-bottom: 1px solid #1f2f4a;
+  backdrop-filter: blur(8px);
+}
 /* A phone: the brand and the person on the first row, the sections on a
    second row that scrolls sideways, so nothing is squeezed out. */
 @media (max-width: 720px) {
@@ -138,6 +154,8 @@ export function mountLiveStats(into: HTMLElement): void {
 
 export interface Bar {
   root: HTMLElement;
+  // The wordmark, which the home turns into the way back to its tiles.
+  brand: HTMLElement;
   // The sections, left of center, and the person's own things at the right.
   links: HTMLElement;
   right: HTMLElement;
@@ -158,14 +176,15 @@ export function buildPage(variant: string, withHero: boolean): Page {
   const root = el('div', `pg ${variant}`);
   const inner = el('div', 'pg-inner');
   const bar = el('nav', 'pg-bar');
+  const brand = el('div', 'pg-brand', 'Claude of Legends');
   const links = el('div', 'pg-bar-links');
   const right = el('div', 'pg-bar-right');
-  bar.append(el('div', 'pg-brand', 'Claude of Legends'), links, right);
+  bar.append(brand, links, right);
   const hero = el('section', 'pg-hero');
   inner.appendChild(bar);
   if (withHero) inner.appendChild(hero);
   root.appendChild(inner);
-  return { root, inner, bar: { root: bar, links, right }, hero };
+  return { root, inner, bar: { root: bar, brand, links, right }, hero };
 }
 
 // A nav entry that goes somewhere else entirely; opened in a new tab, so

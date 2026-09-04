@@ -109,7 +109,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 const ABILITY_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
 
-export function openRosterBrowser(container: HTMLElement): void {
+export function openRosterBrowser(container: HTMLElement): () => void {
   ensureCss();
   const root = el('div', 'rb');
   const stopBackdrop = startMenuBackdrop(root);
@@ -190,4 +190,5 @@ export function openRosterBrowser(container: HTMLElement): void {
   layout.append(grid, detail);
   root.append(head, layout);
   container.appendChild(root);
+  return close;
 }

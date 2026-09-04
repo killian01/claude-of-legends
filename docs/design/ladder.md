@@ -17,8 +17,8 @@ seat and an Arena seat alike (`server/way_stats.ts`).
 ## The page
 
 Reached from the home's bar (Ladder) and from the ladder card in the
-account drawer, a full page like the Academy, one tab per way, by hand
-first.
+account drawer, a full page like the Academy, opened under the bar so the
+next section is one click away, one tab per way, by hand first.
 
 - **The reader's place** at the top: the tier's emblem, the tier, the
   rating, the rank of the placed or the placement's count, the climb to the

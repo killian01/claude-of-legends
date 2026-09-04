@@ -152,8 +152,14 @@ _Avoid_: profile (that is the screen that shows an account), user, login, player
 
 **Home**:
 The page a signed-in account lands on: the bar to every section, the play tiles, and the
-account's own place. Everything else opens from it and comes back to it.
+account's own place. A section opens under the bar rather than over it, so the bar stays
+and one click goes from any section to the next.
 _Avoid_: menu, main menu, lobby (that is the private one), dashboard, launcher
+
+**Play tile**:
+One of the five ways into a match on the Home, each a painted scene of its own: the Ranked
+queue, Bots, the Forge queue, a Private lobby, Practice. The tile is the button.
+_Avoid_: card (that is the pre-game menu's), button, mode select, panel
 
 **Confirmed address**:
 An email address whose owner has followed the link sent to it. Only a confirmed address can

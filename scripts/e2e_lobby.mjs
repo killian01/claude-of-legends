@@ -56,7 +56,7 @@ const run = async () => {
   host.on('pageerror', (e) => errors.push(`host: ${e}`));
   await host.reload({ waitUntil: 'load' });
   await waitFor(host, HOME_UP, 'host home');
-  await clickTile(host, 'create');
+  await clickTile(host, 'lobby');
   await waitFor(
     host,
     `document.querySelector('.menu-code') && document.querySelector('.menu-code').textContent.length === 5`,

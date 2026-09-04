@@ -40,7 +40,7 @@ async function clickByText(selector, text) {
 
 await page.goto(url, { waitUntil: 'networkidle0', timeout: 20000 });
 await signIn(page, e2eName('e2ebot'));
-await clickTile(page, 'queue');
+await clickTile(page, 'ranked');
 await page.waitForFunction(() => document.body.textContent?.includes('in queue'), {
   timeout: 10000,
 });

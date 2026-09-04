@@ -8,10 +8,12 @@ import { el } from './menu';
 const CSS = `
 @keyframes dr-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes dr-in { from { transform: translateX(28px); opacity: 0; } to { transform: none; opacity: 1; } }
-.dr-scrim { position: fixed; inset: 0; z-index: 20; background: rgba(4, 7, 16, 0.55);
+/* Above the section host (ui/section_host.ts, z-index 30): the account's
+   drawer opens over whatever section is open, not behind it. */
+.dr-scrim { position: fixed; inset: 0; z-index: 50; background: rgba(4, 7, 16, 0.55);
   backdrop-filter: blur(2px); animation: dr-fade 0.2s ease-out; }
 .dr {
-  position: fixed; top: 0; right: 0; bottom: 0; z-index: 21; width: min(460px, 94vw);
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 51; width: min(460px, 94vw);
   background: rgba(8, 12, 22, 0.97); border-left: 1px solid #2b3f60;
   box-shadow: -24px 0 60px rgba(0, 0, 0, 0.55); display: flex; flex-direction: column;
   font-family: system-ui, sans-serif; color: #c9d9ee; animation: dr-in 0.25s ease-out;

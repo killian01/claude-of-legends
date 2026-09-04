@@ -53,7 +53,7 @@ const run = async () => {
   // A player starts a bot-filled match.
   const player = await newIsolatedPage(browser, 'streamer');
   player.on('pageerror', (e) => errors.push(`player: ${e}`));
-  await clickTile(player, 'queue');
+  await clickTile(player, 'ranked');
   await waitFor(player, findBtn('Start now with bots'), 'queued');
   await clickButton(player, 'Start now with bots');
   await waitFor(player, findBtn('Lock in'), 'select');

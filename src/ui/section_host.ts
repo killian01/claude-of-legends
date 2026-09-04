@@ -1,0 +1,109 @@
+// One section of the home open at a time, under the home's bar.
+//
+// The sections (the Ladder, the Academy, the Forge, the Gallery, the
+// champions) are full pages that used to cover the bar, so the only way
+// from one to the next was Back and then a second click. They now open
+// into a host that starts under the bar, which stays live above them: one
+// click switches sections.
+//
+// Nothing about the pages themselves changes. Each opener appends its own
+// root and hands back its close, which is all this needs to swap one for
+// another. A page that closes itself (its own Back, or Escape) leaves the
+// host empty, and the observer reports that as the section being gone.
+
+// What a bar entry does: mount the section into `host` and hand back the
+// close, exactly the shape every ui/*.ts open function has.
+export type OpenSection = (host: HTMLElement) => () => void;
+
+export interface SectionHost {
+  // Opens `key`, closing whatever was open. Opening the section already
+  // open closes it instead, so a bar entry toggles back to the tiles.
+  open(key: string, open: OpenSection): void;
+  close(): void;
+  current(): string | null;
+  // Takes the host and its listeners down with the page that owns it.
+  destroy(): void;
+}
+
+const CSS = `
+.home-section { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; }
+`;
+
+let cssInstalled = false;
+function ensureCss(): void {
+  if (cssInstalled) return;
+  cssInstalled = true;
+  const style = document.createElement('style');
+  style.textContent = CSS;
+  document.head.appendChild(style);
+}
+
+export function createSectionHost(
+  // The home page, whose bar sets where the host starts and which wears
+  // the class that gets everything but the bar out of the way.
+  page: HTMLElement,
+  bar: HTMLElement,
+  onChange: (key: string | null) => void,
+): SectionHost {
+  ensureCss();
+  const host = document.createElement('div');
+  host.className = 'home-section';
+  let key: string | null = null;
+  let closeCurrent: (() => void) | null = null;
+
+  // The host starts at the bar's foot, measured rather than assumed: the
+  // bar is one row on a desktop and two on a phone.
+  const place = (): void => {
+    host.style.top = `${Math.round(bar.getBoundingClientRect().bottom)}px`;
+  };
+  window.addEventListener('resize', place);
+
+  const settle = (next: string | null): void => {
+    key = next;
+    page.classList.toggle('with-section', next !== null);
+    if (next === null) host.remove();
+    onChange(next);
+  };
+
+  // A page that closed itself leaves the host empty; that is the signal,
+  // and it needs no cooperation from the five pages.
+  const watch = new MutationObserver(() => {
+    if (key !== null && host.childElementCount === 0) {
+      closeCurrent = null;
+      settle(null);
+    }
+  });
+  watch.observe(host, { childList: true });
+
+  const close = (): void => {
+    if (key === null) return;
+    const stop = closeCurrent;
+    closeCurrent = null;
+    // Emptying the host is the page's own job; this only asks for it.
+    if (stop) stop();
+    host.textContent = '';
+    settle(null);
+  };
+
+  return {
+    open(next: string, open: OpenSection): void {
+      if (next === key) {
+        close();
+        return;
+      }
+      close();
+      (page.parentElement ?? document.body).appendChild(host);
+      place();
+      closeCurrent = open(host);
+      settle(next);
+    },
+    close,
+    current: () => key,
+    destroy(): void {
+      close();
+      watch.disconnect();
+      window.removeEventListener('resize', place);
+      host.remove();
+    },
+  };
+}

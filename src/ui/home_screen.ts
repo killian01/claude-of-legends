@@ -18,12 +18,13 @@ import { openForgeEditor } from './forge_editor';
 import { openGallery } from './gallery';
 import { startBackdrop } from './home_backdrop';
 import { type HomeSection, mountHomeBar } from './home_bar';
-import { nextVisit, playTiles } from './home_tiles';
+import { PLAY_TILES, type PlayTile } from './home_tiles';
 import { openLadderPage } from './ladder_page';
 import { el, ensureMenuCss } from './menu';
 import { buildPage, ensurePageCss, fetchStats, renderStats } from './page';
 import { buildJoinLine, buildPlayTiles } from './play_tiles';
 import { openRosterBrowser } from './roster_browser';
+import { createSectionHost } from './section_host';
 import type { Drawer } from './side_drawer';
 
 // Only what this page adds to the shared chrome: the tiles centered in
@@ -38,6 +39,8 @@ const CSS = `
 .home-foot { display: flex; align-items: baseline; gap: 26px; flex-wrap: wrap; }
 .home-foot .pg-stats { margin: 0; }
 .home-foot .pg-stat b { font-size: 15px; }
+/* The notice lines up with the tiles rather than running the whole width. */
+.pg.home .mail-note { max-width: 1180px; }
 `;
 
 let cssInstalled = false;
@@ -75,14 +78,6 @@ export interface HomeChoice {
   forged?: ForgedChampionDef;
 }
 
-function storage(): Storage | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
 export function showHome(
   container: HTMLElement,
   account: AuthedAccount,
@@ -108,12 +103,17 @@ export function showHome(
       drawers.add(open());
     };
 
+    // The sections open under the bar, which stays live above them, so one
+    // click goes from any section to the next (ui/section_host.ts).
+    const sections = createSectionHost(root, bar.root, (key) => homeBar.setActive(key));
+
     // --- teardown, shared by every way off this page ---
     const leave = (): void => {
       window.removeEventListener('loc:replay', onWatchReplay);
       window.removeEventListener('loc:spectate', onSpectate);
       window.removeEventListener('loc:forge-test', onForgeTest);
       for (const d of drawers) d.close();
+      sections.destroy();
       stopBackdrop();
       root.remove();
     };
@@ -171,30 +171,48 @@ export function showHome(
     window.addEventListener('loc:spectate', onSpectate);
     window.addEventListener('loc:forge-test', onForgeTest);
 
-    // --- the bar: the pages, Live, and the account's own drawer ---
-    const openLadder = (): void =>
-      openLadderPage(container, {
-        onPlay: (mode) => done(mode),
-        onWatch: (id, follow) =>
-          window.dispatchEvent(
-            new CustomEvent('loc:replay', {
-              detail: { id, ...(follow !== undefined ? { follow } : {}) },
-            }),
-          ),
-        openAcademy: () => openAcademy(container),
-      });
-    const sections: HomeSection[] = [
-      { label: 'Ladder', open: openLadder },
-      { label: 'Academy', open: () => openAcademy(container) },
-      { label: 'Forge', open: () => openForgeEditor(container) },
-      { label: 'Gallery', open: () => openGallery(container) },
-      { label: 'Champions', open: () => openRosterBrowser(container) },
+    // --- the bar: the sections, Live, and the account's own drawer ---
+    const showAcademy = (botId?: string): void =>
+      sections.open('academy', (host) => openAcademy(host, botId ? { botId } : {}));
+    const showLadder = (): void =>
+      sections.open('ladder', (host) =>
+        openLadderPage(host, {
+          onPlay: (mode) => done(mode),
+          onWatch: (id, follow) =>
+            window.dispatchEvent(
+              new CustomEvent('loc:replay', {
+                detail: { id, ...(follow !== undefined ? { follow } : {}) },
+              }),
+            ),
+          openAcademy: () => showAcademy(),
+        }),
+      );
+    const barSections: HomeSection[] = [
+      { key: 'ladder', label: 'Ladder', open: showLadder },
+      { key: 'academy', label: 'Academy', open: () => showAcademy() },
+      { key: 'forge', label: 'Forge', open: () => sections.open('forge', openForgeEditor) },
+      { key: 'gallery', label: 'Gallery', open: () => sections.open('gallery', openGallery) },
+      {
+        key: 'champions',
+        label: 'Champions',
+        open: () => sections.open('champions', openRosterBrowser),
+      },
     ];
     const homeBar = mountHomeBar(bar, {
       name: accountName,
-      sections,
-      onLive: () => openDrawer(() => openLiveDrawer(root)),
-      onAccount: () => openDrawer(() => openAccountDrawer(root, { name: accountName, openLadder })),
+      sections: barSections,
+      onLive: () => openDrawer(() => openLiveDrawer(container)),
+      onAccount: () =>
+        openDrawer(() =>
+          openAccountDrawer(container, {
+            name: accountName,
+            openLadder: () => {
+              sections.close();
+              showLadder();
+            },
+          }),
+        ),
+      onHome: () => sections.close(),
     });
 
     // Between the bar and the tiles: read on the way past, never in the
@@ -203,10 +221,14 @@ export function showHome(
     if (notice) inner.appendChild(notice);
 
     // --- play ---
+    const onTile = (tile: PlayTile): void => {
+      if (tile.goes.to === 'mode') done(tile.goes.mode);
+      else if (tile.goes.key === 'academy') showAcademy();
+    };
     const main = el('section', 'home-main');
     main.append(
       el('h2', 'home-kicker', 'Play'),
-      buildPlayTiles(playTiles(nextVisit(storage())), (mode) => done(mode)),
+      buildPlayTiles(PLAY_TILES, onTile),
       buildJoinLine(prefillCode, (code) => done('join', code)),
     );
     inner.appendChild(main);
@@ -222,6 +244,6 @@ export function showHome(
       homeBar.setLiveCount(s.matches);
     });
 
-    if (reopen) openAcademy(container, { botId: reopen.botId });
+    if (reopen) showAcademy(reopen.botId);
   });
 }

@@ -44,6 +44,17 @@ conversion.
 |---|---|---|
 | `recruit.webp`, `regular.webp`, `veteran.webp`, `elite.webp`, `legend.webp` | Generated with Google Gemini from the prompts in docs/design/tier-emblem-prompts.md | Google Gemini output terms |
 
+### Play tile art (`public/art/tiles/`)
+
+The five painted scenes behind the home's play tiles (CONTEXT.md: Home),
+one per tile, generated from the prompts in `scripts/tile_art.mjs` and
+described in docs/design/tile-art-prompts.md; the sources stay in
+`art_src/tiles/`.
+
+| Files | Source | License |
+|---|---|---|
+| `ranked.webp`, `bots.webp`, `forge.webp`, `lobby.webp`, `practice.webp` | Generated with the Tripo advanced image task (model `gpt_image_2`) from the prompts in `scripts/tile_art.mjs` | Tripo output terms |
+
 ## Vendor runtime files (`public/vendor/`)
 
 | Files | What it is | License |

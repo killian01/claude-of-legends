@@ -176,7 +176,7 @@ async function api(path: string, body?: unknown): Promise<Record<string, unknown
   }
 }
 
-export function openGallery(container: HTMLElement): void {
+export function openGallery(container: HTMLElement): () => void {
   ensureCss();
   const root = el('div', 'gal');
   const stopBackdrop = startMenuBackdrop(root);
@@ -415,4 +415,5 @@ export function openGallery(container: HTMLElement): void {
   root.append(head, layout);
   container.appendChild(root);
   refresh();
+  return close;
 }
