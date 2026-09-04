@@ -2,7 +2,8 @@
 
 Status: design accepted (grill rounds 1 to 4, 2026-09-02), phases 0 to 8 built, then
 redrawn after the second playtest round (grill rounds 5 to 7, the same day): the kit,
-selling, the fight stance, and the reasoning bar. The why is ADR 0013 and ADR 0014; the
+selling, the fight stance, and the reasoning bar. The why is ADR 0013 (amended by ADR
+0016) and ADR 0014; the
 build order is `docs/plan-bots.md`; the terms are in `CONTEXT.md`: Bot, House bot,
 Play, Playbook, Kit, Build, Variant, Stance, Lane opponent, Coach order, Academy,
 Arena, Sparring, Briefing, Rating.
@@ -408,17 +409,26 @@ Three rules replace the current "rated only with a human on each side":
 
 1. **A match counts** when each team holds at least one seat that belongs to an account,
    played by hand or by its bot. A house bot never counts, for itself or for anyone.
-2. **An account holds three ratings**, and a match moves only the one for the way that
-   account played it: by hand, its bot live, its bot in the Arena. You play by hand
-   against three other accounts' bots: your hand rating moves, their live bot ratings
-   move, the six house bots move nothing.
+2. **Each way has its own rating, held by that way's rated subject** (ADR 0016): the
+   account for a seat it played by hand, the bot itself for a seat its owner's bot played
+   live or in the Arena. A match moves only the rating of the way each owned seat was
+   played. You play by hand against three other accounts' bots: your hand rating moves,
+   those three bots' live ratings move, the six house bots move nothing. Rating the whole
+   account on the bot ways averaged every attempt an owner had running, so a weak bot
+   dragged down what a strong one earned; the number belongs to the playbook that earned
+   it.
 3. **The more owned seats, the more the match weighs**: the existing K scaling from humans
    extends to owned seats. Elo expectation takes the team average over each seat's own
    rating. Leaving costs only a seat played by hand; a coach closing the tab is not a
    leaver.
 
 Three ladders follow, one per rating, each with the existing minimum of rated games. The
+hand ladder ranks accounts; the two bot ladders rank bots, each naming its owner. The
 Forge queue keeps its own rating pair and is untouched.
+
+Because a bot carries its own rating, the Arena's rule of at most one bot per account in
+a match stops being a convenience and becomes the guard against an owner feeding one of
+their bots to another.
 
 ## The Arena
 
