@@ -11,7 +11,8 @@ in, refresh, done.
   `veteran`, `elite`, `legend`. PNG from the generator, then
   `node scripts/convert_art.mjs` re-encodes everything under `public/icons`
   to WebP (the PNG sources stay in `art_src/`, like the spell icons).
-- Square, at least 512x512, transparent or plain dark background. The
+- Square, 1:1, 1024x1024 (set the ratio in the tool as well: a prompt alone
+  is often ignored), transparent or plain dark background. The
   emblem is drawn at 18 px beside a name and at 96 px on the page, so the
   silhouette must survive both: one bold banner shape, one motif, no fine
   detail that only reads large.
@@ -27,10 +28,13 @@ in, refresh, done.
 Append the tier line to this base prompt so the five emblems read as one
 set:
 
-> Stylized painted fantasy game emblem, a single hanging heraldic banner
-> with a pointed lower edge, centered, front view, flat dark background,
+> Square game icon, 1:1 aspect ratio, 1024x1024, one single object
+> centered with even margins, filling about eighty percent of the frame
+> height. Stylized painted fantasy game emblem, a single hanging heraldic
+> banner with a pointed lower edge, front view, flat dark background,
 > strong readable silhouette at small size, painterly brushwork with clean
-> edges, subtle metallic highlights, no text, no numbers, no watermark.
+> edges, subtle metallic highlights, no text, no numbers, no watermark, no
+> border, no scene, no landscape.
 
 The banner is the same in all five; what changes is what it carries and
 what it is made of. Progression must be legible at a glance from left to
