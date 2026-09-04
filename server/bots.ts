@@ -108,14 +108,18 @@ function owned(deps: BotDeps, accountId: number, id: unknown): BotOutcome<{ bot:
   return { ok: true, bot };
 }
 
-// Each bot with its tally, won and lost over its Record (the sports sense
-// of the word), for the Academy's rail.
+// Each bot with its tally, won and lost over the rated part of its Record,
+// for the Academy's rail. Rated and not the whole Record: a rail that
+// counted the sparring a bot did against house bots would rank an owner's
+// bots by how much they were tested rather than by how they played.
 export type BotWithTally = BotRow & { tally: { wins: number; losses: number } };
 
 export function listBots(deps: BotDeps, accountId: number): BotOutcome<{ bots: BotWithTally[] }> {
   return {
     ok: true,
-    bots: deps.store.listByAccount(accountId).map((b) => ({ ...b, tally: deps.store.tally(b.id) })),
+    bots: deps.store
+      .listByAccount(accountId)
+      .map((b) => ({ ...b, tally: deps.store.ratedTally(b.id) })),
   };
 }
 

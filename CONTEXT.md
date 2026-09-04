@@ -546,7 +546,8 @@ A bot's list of the matches it played, newest first: sparring and series in the 
 Arena matches, and live matches where the account fielded it. Each entry carries its
 kind, its result, the bot's line (kills, deaths, assists, creep score, the build it ended
 on), the playbook version that played, its plays, and its replay. Capped per bot, the
-oldest leaving first. The tally of won and lost is the record in the sports sense.
+oldest leaving first. The tally of won and lost is the record in the sports sense, read
+one kind at a time so rated play is never blended with the sparring behind it.
 _Avoid_: history, match log, ledger, and "record" for a stored replay (that is a replay)
 
 **Death card**:

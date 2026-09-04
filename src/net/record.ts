@@ -63,7 +63,28 @@ export interface RecordRow {
   ratingDelta?: number;
 }
 
-export interface RecordTally {
+// What a run of a bot's Record adds up to. Kills, deaths and assists are
+// totals; the client divides by `games` to read a K/D/A per match, which
+// is the only honest way to show it (src/ui/kda_text.ts). A match that
+// ended with no winner counts as a game and as neither result, so wins
+// and losses do not always sum to games.
+export interface Tally {
+  games: number;
   wins: number;
   losses: number;
+  kills: number;
+  deaths: number;
+  assists: number;
+}
+
+// The Record read one kind at a time (CONTEXT.md: Record, Sparring), so a
+// bot's rated play is never blended with the sparring it did to get there.
+// `rated` is the Arena and the live seats together: the number a reader
+// of a bot actually wants.
+export interface RecordTallies {
+  rated: Tally;
+  arena: Tally;
+  live: Tally;
+  sparring: Tally;
+  series: Tally;
 }

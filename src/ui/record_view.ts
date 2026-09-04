@@ -6,7 +6,7 @@
 // one bot, drawn into the space the Academy hands it; the data comes from
 // the server (server/bot_records.ts) through the callbacks.
 
-import type { RecordEntry, RecordKind, RecordRow } from '../net/record';
+import type { RecordEntry, RecordKind, RecordRow, RecordTallies } from '../net/record';
 import { CHAMPIONS } from '../sim/content/champions';
 import { type DeathScene, SCENE_RADIUS } from '../sim/playbook/death_context';
 import type { ScoreRow, TeamId } from '../sim/types';
@@ -130,7 +130,7 @@ function kda(line: ScoreRow | null): string {
 export interface RecordViewOptions {
   bot: { id: string; name: string };
   rows: readonly RecordRow[];
-  tally: { wins: number; losses: number };
+  tally: RecordTallies;
   // The entry to open first; the newest otherwise.
   openId?: number | null;
   fetchEntry: (id: number) => Promise<RecordEntry | null>;
@@ -343,11 +343,19 @@ export function renderRecordView(into: HTMLElement, opts: RecordViewOptions): vo
     opts.openId ?? (opts.rows.length > 0 ? (opts.rows[0]?.id ?? null) : null);
   const cache = new Map<number, RecordEntry | null>();
 
+  // The head counts what the filter is showing, so switching to Sparring
+  // never leaves the rated number standing over a list of sparring.
+  const tallyText = el('span', 'rv-tally', '');
+  const drawTally = (): void => {
+    const t = filter === 'all' ? opts.tally.rated : opts.tally[filter];
+    const label = filter === 'all' ? 'rated' : KIND_LABEL[filter].toLowerCase();
+    tallyText.textContent =
+      t.games === 0 ? `no ${label} match yet` : `${t.wins} won, ${t.losses} lost, ${label}`;
+  };
+  drawTally();
+
   const head = el('div', 'rv-head');
-  head.append(
-    el('h2', '', `The Record of ${opts.bot.name}`),
-    el('span', 'rv-tally', `${opts.tally.wins} won, ${opts.tally.losses} lost`),
-  );
+  head.append(el('h2', '', `The Record of ${opts.bot.name}`), tallyText);
   const filters = el('div', 'rv-filters');
   const back = el('button', 'rv-back', 'Back to the playbook');
   back.addEventListener('click', opts.onBack);
@@ -365,6 +373,7 @@ export function renderRecordView(into: HTMLElement, opts: RecordViewOptions): vo
       const b = el('button', kind === filter ? 'on' : '', label);
       b.addEventListener('click', () => {
         filter = kind;
+        drawTally();
         drawFilters();
         drawList();
       });

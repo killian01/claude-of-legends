@@ -563,6 +563,21 @@ export class BotStore {
     return { wins: Number(r.wins ?? 0), losses: Number(r.losses ?? 0) };
   }
 
+  // Won and lost over the rated part of the Record: the Arena and the live
+  // seats, never the sparring behind them. What a chip beside a bot's name
+  // has to mean, on the ladder and in the Academy's rail alike; the full
+  // reading per kind is server/record_tally.ts.
+  ratedTally(botId: string): { wins: number; losses: number } {
+    const r = this.db
+      .prepare(
+        `select sum(case when won = 1 then 1 else 0 end) as wins,
+                sum(case when won = 0 then 1 else 0 end) as losses
+           from bot_records where bot_id = ? and kind in ('arena', 'live')`,
+      )
+      .get(botId) as unknown as { wins: number | null; losses: number | null };
+    return { wins: Number(r.wins ?? 0), losses: Number(r.losses ?? 0) };
+  }
+
   // The coach conversation kept with the bot (server/bot_chats.ts).
   getChat(botId: string): CoachTurn[] {
     const r = this.db.prepare('select turns from bot_chats where bot_id = ?').get(botId) as

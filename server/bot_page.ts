@@ -4,11 +4,12 @@
 // owner included: the switch's effect is visible to the one who holds it,
 // and the owner reads their own playbook in the Academy, not here.
 
-import type { RecordRow } from '../src/net/record';
+import type { RecordRow, RecordTallies } from '../src/net/record';
 import type { PlaybookDef } from '../src/sim/playbook/types';
 import { listEntries } from './bot_records';
 import type { BotStore } from './bot_store';
 import type { BotOutcome } from './bots';
+import { talliesOf } from './record_tally';
 
 export interface BotPageDeps {
   store: BotStore;
@@ -30,7 +31,9 @@ export interface BotPage {
     accountId: number;
     mine: boolean;
   };
-  tally: { wins: number; losses: number };
+  // Read per kind (server/record_tally.ts): a reader wants the rated play
+  // first, and never wants it blended with the sparring behind it.
+  tally: RecordTallies;
   ratings: {
     live: { rating: number; games: number };
     arena: { rating: number; games: number };
@@ -49,16 +52,9 @@ export function describeBotPage(
 ): BotOutcome<BotPage> {
   const bot = typeof botId === 'string' ? deps.store.getBot(botId) : null;
   if (!bot) return { ok: false, error: 'no such bot' };
-  const rated = listEntries(deps.store, bot.id).filter(
-    (r) => r.kind === 'arena' || r.kind === 'live',
-  );
-  let wins = 0;
-  let losses = 0;
-  for (const r of rated) {
-    if (r.winner === null) continue;
-    if (r.winner === r.team) wins++;
-    else losses++;
-  }
+  const entries = listEntries(deps.store, bot.id);
+  const tally = talliesOf(entries);
+  const rated = entries.filter((r) => r.kind === 'arena' || r.kind === 'live');
   return {
     ok: true,
     bot: {
@@ -74,7 +70,7 @@ export function describeBotPage(
       accountId: bot.accountId,
       mine: bot.accountId === readerId,
     },
-    tally: { wins, losses },
+    tally,
     ratings: {
       live: deps.store.botRating(bot.accountId, 'live'),
       arena: deps.store.botRating(bot.accountId, 'arena'),
