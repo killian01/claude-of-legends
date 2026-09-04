@@ -6,7 +6,12 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <link rel="icon" href="data:," />
+    <!-- The 32 is a tight crop on the medallion's center: the whole mark is
+         a smudge at tab size (scripts/site_icon.mjs cuts both). -->
+    <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#0a1120" />
     <title>Claude of Legends</title>
     <!-- Display face for menu titles; falls back to Georgia offline. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />

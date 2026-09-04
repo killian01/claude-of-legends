@@ -67,6 +67,14 @@ export const CSS = `
 }
 
 .pg-hero { padding: clamp(28px, 7vh, 72px) 0 0; max-width: 720px; }
+/* The site mark, above the title on the landing. It sits on the painted
+   backdrop, so it carries its own shadow to hold the gold's edge against
+   whatever the art is doing behind it. */
+.pg-mark {
+  display: block; width: clamp(76px, 10vw, 124px); height: auto;
+  margin: 0 0 clamp(10px, 2vh, 18px);
+  filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.62));
+}
 .pg-title {
   font-family: Cinzel, Georgia, 'Times New Roman', serif;
   font-size: clamp(38px, 7vw, 78px); line-height: 1.02; letter-spacing: 3px;

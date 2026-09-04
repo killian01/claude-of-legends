@@ -70,7 +70,14 @@ export function showLanding(
     bar.right.appendChild(navLink('Source', REPO));
 
     // --- hero ---
+    const mark = el('img', 'pg-mark');
+    mark.src = '/icon-192.png';
+    mark.alt = '';
+    mark.width = 192;
+    mark.height = 192;
+    mark.decoding = 'async';
     hero.append(
+      mark,
       el('h1', 'pg-title', 'Claude of Legends'),
       el(
         'p',

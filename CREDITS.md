@@ -55,6 +55,21 @@ described in docs/design/tile-art-prompts.md; the sources stay in
 |---|---|---|
 | `ranked.webp`, `bots.webp`, `forge.webp`, `lobby.webp`, `practice.webp` | Generated with the Tripo advanced image task (model `gpt_image_2`) from the prompts in `scripts/tile_art.mjs` | Tripo output terms |
 
+## Site icon (`public/icon-*.png`, `public/apple-touch-icon.png`)
+
+The medallion in the browser tab, on the landing hero and on a phone's home
+screen: a round gold crest carrying the letter C over a starfield. The
+generator returns it with a checkerboard painted into the pixels where it
+believes the transparency is; `node scripts/site_icon.mjs` floods that
+background out from the frame, writes the disc with a real alpha edge, and
+cuts the sizes. The 32 is a tight crop on the center, because the whole
+medallion is a smudge at tab size. The source stays in `art_src/icon/`
+(ignored, like the other raw art).
+
+| Files | Source | License |
+|---|---|---|
+| `icon-32.png`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png` | Generated with Google Gemini, cut out by `scripts/site_icon.mjs` | Google Gemini output terms |
+
 ## Vendor runtime files (`public/vendor/`)
 
 | Files | What it is | License |
