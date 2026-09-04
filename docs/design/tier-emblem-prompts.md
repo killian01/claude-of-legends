@@ -8,9 +8,10 @@ banner in the tier's color otherwise (`src/ui/tier_emblem.ts`). Drop a file
 in, refresh, done.
 
 - One file per tier, named after it in lower case: `recruit`, `regular`,
-  `veteran`, `elite`, `legend`. PNG from the generator, then
-  `node scripts/convert_art.mjs` re-encodes everything under `public/icons`
-  to WebP (the PNG sources stay in `art_src/`, like the spell icons).
+  `veteran`, `elite`, `legend`, dropped in `art_src/tiers/` (ignored, like
+  the other raw art). Then `node scripts/convert_tiers.mjs` keys the black
+  out, crops the set to one square and writes the WebP with alpha to
+  `public/icons/tiers/`; commit those.
 - Square, 1:1, 1024x1024 (set the ratio in the tool as well: a prompt alone
   is often ignored), transparent or flat pure black background. The
   emblem is drawn at 18 px beside a name and at 96 px on the page, so the
@@ -48,9 +49,10 @@ format and the background come last, where generators weigh them most.
 > no scene, no landscape, no floor, no shadow on the ground. No text, no
 > numbers, no watermark, no border.
 
-The pure black is keyed out at conversion (ffmpeg colorkey) so the emblem
-sits on the page with no square behind it; a true transparent PNG is
-better still when the tool can make one.
+The pure black is keyed out by `scripts/convert_tiers.mjs` (alpha from the
+brightest channel, a ramp at the edge) so the emblem sits on the page with
+no square behind it and the halo fades; a true transparent PNG is better
+still when the tool can make one.
 
 The shield is the same in all five; what changes is what it carries and
 what it is made of. Progression must be legible at a glance from left to
