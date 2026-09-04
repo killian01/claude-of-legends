@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { AccountRegistry, publicAccount, selfAccount } from '../server/accounts';
 import { buildLadder } from '../server/ladder';
+import { buildLadderPage, placeOf } from '../server/ladder_page';
 import { hashPassword } from '../server/password';
 import { buildProfile } from '../server/profile';
 import { SessionStore } from '../server/sessions';
@@ -76,6 +77,22 @@ describe('account secrets', () => {
     },
     { what: '/api/ladder', body: buildLadder([account]) },
     { what: '/api/ladder (placed)', body: buildLadder([{ ...account, ratedGames: 10 }]) },
+    {
+      what: '/api/ladder/page',
+      body: buildLadderPage(
+        'hand',
+        [{ accountId: account.id, name: account.name, rating: 1000, games: 10 }],
+        new Map(),
+        account.id,
+      ),
+    },
+    {
+      what: '/api/ladder/mine',
+      body: placeOf(
+        [{ accountId: account.id, name: account.name, rating: 1000, games: 1 }],
+        account.id,
+      ),
+    },
   ];
 
   const secrets: { what: string; value: string }[] = [

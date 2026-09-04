@@ -603,6 +603,14 @@ export class ForgeStore {
     return r ?? { rating: BASE_RATING, games: 0 };
   }
 
+  // Every account with a Forge-queue rating, for that way's ladder.
+  listForgeRatings(): { accountId: number; rating: number; games: number }[] {
+    const rows = this.db
+      .prepare('select account_id, rating, games from forge_ratings')
+      .all() as unknown as { account_id: number; rating: number; games: number }[];
+    return rows.map((r) => ({ accountId: r.account_id, rating: r.rating, games: r.games }));
+  }
+
   // One rated Forge-queue match landed; the delta is already signed.
   applyForgeRating(accountId: number, delta: number): void {
     const cur = this.forgeRating(accountId);

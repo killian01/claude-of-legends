@@ -91,6 +91,7 @@ import { placeholderFor } from './generation/placeholder';
 import { type GenerationProvider, WEAPON_FAMILIES } from './generation/provider';
 import { TripoProvider } from './generation/tripo';
 import { buildBotLadder, buildLadder } from './ladder';
+import { type BotSummary, buildLadderPage, type LadderSeed, placeOf } from './ladder_page';
 import { accountKey, addressKey, LoginThrottle } from './login_throttle';
 import { confirmMail, confirmUrl, publicOrigin, resetMail, resetUrl } from './mail_messages';
 import { mailerFromEnv } from './mailer';
@@ -123,6 +124,8 @@ import {
 } from './store';
 import { suggestKit } from './suggest';
 import { suggestStats } from './suggest_stats';
+import { wayStatsOf } from './way_stats';
+import type { Way } from './ways';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DIST = path.resolve(process.cwd(), 'dist');
@@ -443,22 +446,57 @@ const REGISTER_ERRORS: Record<RegisterError, string> = {
 // The public shape of an account: publicAccount() drops the credential by
 // construction rather than by deletion, and tests/architecture.test.ts
 // holds that line for every route that ever serialises one.
+// The account's ranked bots, for the ladder's detail and the bot ladders'
+// rows: a page and a challenge each (CONTEXT.md: Bot page, Challenge).
+function rankedBotsOf(accountId: number): BotSummary[] {
+  return botStore
+    .listByAccount(accountId)
+    .filter((b) => b.deposited)
+    .map((b) => ({
+      id: b.id,
+      name: b.name,
+      championId: b.championId,
+      tally: botStore.tally(b.id),
+    }));
+}
+
 function describeAccount(a: Account): unknown {
   return {
     ...publicAccount(a),
     profile: buildProfile(matchLog, a.id),
-    // The account's ranked bots, for the ladder's detail: a page and a
-    // challenge each (CONTEXT.md: Bot page, Challenge).
-    bots: botStore
-      .listByAccount(a.id)
-      .filter((b) => b.deposited)
-      .map((b) => ({
-        id: b.id,
-        name: b.name,
-        championId: b.championId,
-        tally: botStore.tally(b.id),
-      })),
+    bots: rankedBotsOf(a.id),
   };
+}
+
+// The ratings of one way (CONTEXT.md: Way), wherever that way keeps them:
+// the registry by hand, the bot store live and in the Arena, the Forge
+// store for its queue. What the ladder page and the account's place rank.
+function ladderSeeds(way: Way): LadderSeed[] {
+  if (way === 'hand') {
+    return registry.all().map((a) => ({
+      accountId: a.id,
+      name: a.name,
+      rating: a.rating,
+      games: a.ratedGames,
+      createdAt: a.createdAt,
+    }));
+  }
+  const rows =
+    way === 'forge'
+      ? forgeStore.listForgeRatings()
+      : botStore.listBotRatings(way === 'bot' ? 'live' : 'arena');
+  return rows.map((r) => ({
+    accountId: r.accountId,
+    name: registry.findById(r.accountId)?.name ?? null,
+    rating: r.rating,
+    games: r.games,
+  }));
+}
+
+const WAYS: readonly Way[] = ['hand', 'bot', 'arena', 'forge'];
+function wayParam(rawUrl: string | undefined): Way | null {
+  const way = new URLSearchParams((rawUrl ?? '').split('?')[1] ?? '').get('way') ?? 'hand';
+  return (WAYS as readonly string[]).includes(way) ? (way as Way) : null;
 }
 
 // The same, for the owner asking about themselves: it adds the address
@@ -1773,6 +1811,35 @@ const server = http.createServer(async (req, res) => {
         resets.recordFailure(key, now);
         sendJson(res, 200, { ok: true });
         void sendConfirmation(me);
+        return;
+      }
+      // The ladder page (server/ladder_page.ts): one way, the placed accounts
+      // with their rated play, the reader's own place, the accounts placing.
+      if (url === '/api/ladder/page') {
+        const way = wayParam(req.url);
+        if (way === null) {
+          sendJson(res, 400, { error: 'unknown way' });
+          return;
+        }
+        const page = buildLadderPage(way, ladderSeeds(way), wayStatsOf(matchLog, way), me.id, {
+          ...(way === 'bot' || way === 'arena' ? { bots: rankedBotsOf } : {}),
+          ...(way === 'forge'
+            ? {
+                forged: (championId: string) => {
+                  const row = forgeStore.getForged(championId);
+                  return row ? { name: row.def.name, splash: splashOf(forgeStore, row) } : null;
+                },
+              }
+            : {}),
+        });
+        sendJson(res, 200, page);
+        return;
+      }
+      // The account's place on every way, for the home card.
+      if (url === '/api/ladder/mine') {
+        const out: Record<string, unknown> = {};
+        for (const way of WAYS) out[way] = placeOf(ladderSeeds(way), me.id);
+        sendJson(res, 200, out);
         return;
       }
       if (url === '/api/ladder') {
