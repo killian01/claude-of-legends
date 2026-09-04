@@ -81,7 +81,7 @@ describe('account secrets', () => {
       what: '/api/ladder/page',
       body: buildLadderPage(
         'hand',
-        [{ accountId: account.id, name: account.name, rating: 1000, games: 10 }],
+        [{ id: account.id, accountId: account.id, name: account.name, rating: 1000, games: 10 }],
         new Map(),
         account.id,
       ),
@@ -89,7 +89,7 @@ describe('account secrets', () => {
     {
       what: '/api/ladder/mine',
       body: placeOf(
-        [{ accountId: account.id, name: account.name, rating: 1000, games: 1 }],
+        [{ id: account.id, accountId: account.id, name: account.name, rating: 1000, games: 1 }],
         account.id,
       ),
     },

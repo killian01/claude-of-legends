@@ -40,11 +40,12 @@ create table if not exists bot_versions (
   primary key (bot_id, version)
 );
 create table if not exists bot_ratings (
+  bot_id text not null,
   account_id integer not null,
   way text not null,
   rating integer not null,
   games integer not null,
-  primary key (account_id, way)
+  primary key (bot_id, way)
 );
 create table if not exists arena_meta (
   key text primary key,
@@ -183,6 +184,27 @@ export class BotStore {
     this.ensureColumn('bots', 'last_coached_at', 'last_coached_at integer');
     // The bot's page shows its playbook when the owner opened it.
     this.ensureColumn('bots', 'open_playbook', 'open_playbook integer not null default 0');
+    this.migrateRatingsToBots();
+  }
+
+  // A rating used to belong to the account and now belongs to the bot
+  // (ADR 0016). An account's rows cannot be split across the bots it owns
+  // after the fact, so the old table goes and every bot places again in
+  // three; the ADR says so out loud because it is a real cost.
+  private migrateRatingsToBots(): void {
+    const cols = this.db.prepare('pragma table_info(bot_ratings)').all() as unknown as {
+      name: string;
+    }[];
+    if (cols.length === 0 || cols.some((c) => c.name === 'bot_id')) return;
+    this.db.exec('drop table bot_ratings');
+    this.db.exec(`create table bot_ratings (
+      bot_id text not null,
+      account_id integer not null,
+      way text not null,
+      rating integer not null,
+      games integer not null,
+      primary key (bot_id, way)
+    )`);
   }
 
   private ensureColumn(table: string, name: string, ddl: string): void {
@@ -349,29 +371,44 @@ export class BotStore {
 
   // -- ratings ------------------------------------------------------------
 
-  botRating(accountId: number, way: BotWay): { rating: number; games: number } {
+  // The rating belongs to the bot, not to its owner (ADR 0016); the owner
+  // rides along so a ladder row can name it without a second lookup.
+  botRating(botId: string, way: BotWay): { rating: number; games: number } {
     const r = this.db
-      .prepare('select rating, games from bot_ratings where account_id = ? and way = ?')
-      .get(accountId, way) as { rating: number; games: number } | undefined;
+      .prepare('select rating, games from bot_ratings where bot_id = ? and way = ?')
+      .get(botId, way) as { rating: number; games: number } | undefined;
     return r ?? { rating: BASE_RATING, games: 0 };
   }
 
-  applyBotRating(accountId: number, way: BotWay, delta: number): void {
-    const cur = this.botRating(accountId, way);
+  applyBotRating(botId: string, accountId: number, way: BotWay, delta: number): void {
+    const cur = this.botRating(botId, way);
     this.db
       .prepare(
-        `insert into bot_ratings (account_id, way, rating, games) values (?, ?, ?, ?)
-         on conflict (account_id, way) do update set
+        `insert into bot_ratings (bot_id, account_id, way, rating, games) values (?, ?, ?, ?, ?)
+         on conflict (bot_id, way) do update set
+           account_id = excluded.account_id,
            rating = excluded.rating, games = excluded.games`,
       )
-      .run(accountId, way, cur.rating + delta, cur.games + 1);
+      .run(botId, accountId, way, cur.rating + delta, cur.games + 1);
   }
 
-  listBotRatings(way: BotWay): { accountId: number; rating: number; games: number }[] {
+  listBotRatings(
+    way: BotWay,
+  ): { botId: string; accountId: number; rating: number; games: number }[] {
     const rows = this.db
-      .prepare('select account_id, rating, games from bot_ratings where way = ?')
-      .all(way) as unknown as { account_id: number; rating: number; games: number }[];
-    return rows.map((r) => ({ accountId: r.account_id, rating: r.rating, games: r.games }));
+      .prepare('select bot_id, account_id, rating, games from bot_ratings where way = ?')
+      .all(way) as unknown as {
+      bot_id: string;
+      account_id: number;
+      rating: number;
+      games: number;
+    }[];
+    return rows.map((r) => ({
+      botId: r.bot_id,
+      accountId: r.account_id,
+      rating: r.rating,
+      games: r.games,
+    }));
   }
 
   // -- the Arena ----------------------------------------------------------

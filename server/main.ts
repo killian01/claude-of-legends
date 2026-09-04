@@ -49,6 +49,7 @@ import {
   rowOf,
 } from './bot_records';
 import { BotStore } from './bot_store';
+import { botWayStats } from './bot_way_stats';
 import {
   type BotDeps,
   createBot,
@@ -126,7 +127,7 @@ import {
 } from './store';
 import { suggestKit } from './suggest';
 import { suggestStats } from './suggest_stats';
-import { wayStatsOf } from './way_stats';
+import { type WayStats, wayStatsOf } from './way_stats';
 import type { Way } from './ways';
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -478,9 +479,12 @@ function describeAccount(a: Account): unknown {
 // The ratings of one way (CONTEXT.md: Way), wherever that way keeps them:
 // the registry by hand, the bot store live and in the Arena, the Forge
 // store for its queue. What the ladder page and the account's place rank.
+// The seeds of one ladder, one per rated subject (ADR 0016): accounts on
+// the hand and Forge ways, bots on the two bot ways.
 function ladderSeeds(way: Way): LadderSeed[] {
   if (way === 'hand') {
     return registry.all().map((a) => ({
+      id: a.id,
       accountId: a.id,
       name: a.name,
       rating: a.rating,
@@ -488,16 +492,44 @@ function ladderSeeds(way: Way): LadderSeed[] {
       createdAt: a.createdAt,
     }));
   }
-  const rows =
-    way === 'forge'
-      ? forgeStore.listForgeRatings()
-      : botStore.listBotRatings(way === 'bot' ? 'live' : 'arena');
-  return rows.map((r) => ({
-    accountId: r.accountId,
-    name: registry.findById(r.accountId)?.name ?? null,
-    rating: r.rating,
-    games: r.games,
-  }));
+  if (way === 'forge') {
+    return forgeStore.listForgeRatings().map((r) => ({
+      id: r.accountId,
+      accountId: r.accountId,
+      name: registry.findById(r.accountId)?.name ?? null,
+      rating: r.rating,
+      games: r.games,
+    }));
+  }
+  return botStore.listBotRatings(way === 'bot' ? 'live' : 'arena').map((r) => {
+    const bot = botStore.getBot(r.botId);
+    const owner = registry.findById(r.accountId)?.name ?? null;
+    return {
+      id: r.botId,
+      accountId: r.accountId,
+      // A bot whose row outlived it, or whose owner is gone, does not place.
+      name: bot && owner !== null ? bot.name : null,
+      owner,
+      ...(bot ? { championId: bot.championId } : {}),
+      rating: r.rating,
+      games: r.games,
+      ...(bot ? { createdAt: bot.createdAt } : {}),
+    };
+  });
+}
+
+// What the match log or the bots' Records say of every subject on a way.
+function wayStatsFor(way: Way): Map<string | number, WayStats> {
+  if (way === 'bot' || way === 'arena') {
+    const out = new Map<string | number, WayStats>();
+    for (const r of botStore.listBotRatings(way === 'bot' ? 'live' : 'arena')) {
+      const bot = botStore.getBot(r.botId);
+      if (!bot) continue;
+      out.set(r.botId, botWayStats(listEntries(botStore, r.botId), way, bot.championId));
+    }
+    return out;
+  }
+  return new Map<string | number, WayStats>(wayStatsOf(matchLog, way));
 }
 
 const WAYS: readonly Way[] = ['hand', 'bot', 'arena', 'forge'];
@@ -1261,7 +1293,7 @@ const server = http.createServer(async (req, res) => {
             owner: registry.findById(b.accountId)?.name ?? null,
             mine: b.accountId === me.id,
             tally: botStore.ratedTally(b.id),
-            arena: botStore.botRating(b.accountId, 'arena').rating,
+            arena: botStore.botRating(b.id, 'arena').rating,
           })),
         });
         return;
@@ -1791,8 +1823,8 @@ const server = http.createServer(async (req, res) => {
           sendJson(res, 400, { error: 'unknown way' });
           return;
         }
-        const page = buildLadderPage(way, ladderSeeds(way), wayStatsOf(matchLog, way), me.id, {
-          ...(way === 'bot' || way === 'arena' ? { bots: rankedBotsOf } : {}),
+        const page = buildLadderPage(way, ladderSeeds(way), wayStatsFor(way), me.id, {
+          // No bot chips on a bot way any more: the row is the bot (ADR 0016).
           ...(way === 'forge'
             ? {
                 forged: (championId: string) => {
@@ -1822,7 +1854,9 @@ const server = http.createServer(async (req, res) => {
             200,
             buildBotLadder(
               botStore.listBotRatings(way === 'bot' ? 'live' : 'arena'),
-              (aid) => registry.findById(aid)?.name ?? null,
+              // The row is the bot; it needs a living bot and a living owner.
+              (botId, aid) =>
+                registry.findById(aid) ? (botStore.getBot(botId)?.name ?? null) : null,
             ),
           );
           return;
@@ -2297,18 +2331,21 @@ setInterval(() => {
             if (!u || !registry.findById(seat.accountId)) continue;
             accountIdByUnit.set(unitId, seat.accountId);
             ways.set(unitId, 'bot');
-            owned.push({ accountId: seat.accountId, team: u.team, way: 'bot' });
+            owned.push({ accountId: seat.accountId, team: u.team, way: 'bot', botId: seat.botId });
           }
+          // The seat's rated subject (ADR 0016): the bot on a bot seat, the
+          // account on a hand seat, the Forge's own rating in its queue.
           const book: RatingBook = {
-            read: (pid, way) => {
-              if (way === 'bot') return botStore.botRating(pid, 'live').rating;
-              if (entry.forge) return forgeStore.forgeRating(pid).rating;
-              return registry.findById(pid)?.rating ?? BASE_RATING;
+            read: (seat) => {
+              if (seat.way === 'bot') return botStore.botRating(seat.botId ?? '', 'live').rating;
+              if (entry.forge) return forgeStore.forgeRating(seat.accountId).rating;
+              return registry.findById(seat.accountId)?.rating ?? BASE_RATING;
             },
-            apply: (pid, way, delta) => {
-              if (way === 'bot') botStore.applyBotRating(pid, 'live', delta);
-              else if (entry.forge) forgeStore.applyForgeRating(pid, delta);
-              else registry.applyRating(pid, delta);
+            apply: (seat, delta) => {
+              if (seat.way === 'bot') {
+                botStore.applyBotRating(seat.botId ?? '', seat.accountId, 'live', delta);
+              } else if (entry.forge) forgeStore.applyForgeRating(seat.accountId, delta);
+              else registry.applyRating(seat.accountId, delta);
             },
           };
           const outcome = rateMatch(owned, entry.match.sim.winner, entry.ratedEligible, book);
