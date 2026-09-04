@@ -101,8 +101,13 @@ describe('waves push', () => {
 });
 
 describe('a full bot match progresses to an end', () => {
+  // 120 s, not 30: this run steps a whole match and takes about 24 s on a
+  // developer machine, so a 30 s bound left no headroom and a shared CI
+  // runner failed it for being slow rather than wrong (twice on 2026-09-04,
+  // on main and on a branch that touched no sim code). The bound is here to
+  // catch a hang, the same reason vite.config.ts sets the global one.
   it('ENDS, destroys towers, reaches ultimates, completes items, stays bounded', {
-    timeout: 30000,
+    timeout: 120000,
   }, () => {
     const sim = botMatch(55);
     let winnerAt: number | null = null;
