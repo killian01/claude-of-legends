@@ -92,8 +92,14 @@ const CSS = `
 }
 .fe-title { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 1px; color: #e8cc74; }
 .fe-sub { color: #97854f; font-size: 12px; }
+.fe-embers {
+  margin-left: auto; padding: 5px 12px; border-radius: 999px;
+  border: 1px solid #6b5a2e; background: #241c10;
+  color: #e8cc74; font-size: 13px; font-weight: 800; letter-spacing: 0.5px;
+}
+.fe-embers:empty { display: none; }
 .fe-back {
-  margin-left: auto; padding: 6px 16px; border-radius: 6px; border: 1px solid #6b5a2e;
+  padding: 6px 16px; border-radius: 6px; border: 1px solid #6b5a2e;
   background: #241c10; color: #d8cdb0; font-size: 13px; font-weight: 700; cursor: pointer;
 }
 .fe-back:hover { border-color: #d8b45a; }
@@ -512,9 +518,22 @@ export function openForgeEditor(container: HTMLElement): () => void {
   const head = el('div', 'fe-head');
   const back = el('button', 'fe-back', 'Back');
   back.addEventListener('click', close);
+  // The balance sits in the header, not in the panel that happens to
+  // spend it (ADR 0017): every act on every tab costs embers, so the
+  // number is on screen the whole time rather than at step four of one of
+  // them, which is how a creator came to read a daily meter as a stock.
+  const emberTag = el('span', 'fe-embers', '');
+  const paintEmbers = (): void => {
+    emberTag.textContent = embers >= 0 ? `${embers} embers` : '';
+    emberTag.title =
+      embers >= 0
+        ? 'What this account holds. The grant refills weekly and unspent embers roll over.'
+        : '';
+  };
   head.append(
     el('h1', 'fe-title', 'The Forge'),
     el('span', 'fe-sub', 'Design the art, shape the kit, tune the numbers'),
+    emberTag,
     back,
   );
 
@@ -731,6 +750,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
     artCandidates = r.candidates ?? [];
     if (typeof r.embers === 'number') embers = r.embers;
     if (typeof r.price === 'number') prices.image = r.price;
+    paintEmbers();
   };
 
   const currentRow = (): DraftRow | undefined => drafts.find((d) => d.id === current.id);
@@ -1433,6 +1453,9 @@ export function openForgeEditor(container: HTMLElement): () => void {
     drafts = r.drafts ?? [];
     if (typeof r.embers === 'number') embers = r.embers;
     if (r.prices) prices = { ...prices, ...r.prices };
+    // The header number moves the moment the ledger does: watching it go
+    // down is half of what a single currency is for.
+    paintEmbers();
     // Finalized champions announce their models to the render registry, so
     // a test drive straight from here plays the generated model.
     for (const d of drafts) registerForgedAssets(d.id, d);
@@ -3107,6 +3130,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
   }
 
   function renderMain(): void {
+    paintEmbers();
     main.textContent = '';
     stageRows = null;
     if (tab === 'design') renderDesign();
