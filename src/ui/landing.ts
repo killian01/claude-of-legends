@@ -18,38 +18,56 @@ import { DISCORD, REPO } from './links';
 import { el, ensureMenuCss } from './menu';
 import { buildPage, ensurePageCss, mountLiveStats, navLink } from './page';
 
-// Only what the landing page adds to the shared chrome: two cards side by
-// side whose calls to action line up however long the copy above them is.
+// Only what the landing page adds to the shared chrome: the bento, which
+// is the home's row of tiles as a visitor can have it.
 const CSS = `
-.pg.land .pg-cards { max-width: 860px; }
+/* The row reads the way the home's tiles do (ui/play_tiles.ts): the way
+   in widest on the left, then Bots and the Forge standing beside it, then
+   the smaller way in at the far right. Thirteen columns so 4, 3, 3 and 3
+   divide the row with the gaps; the sign-in form is what sets the widest
+   track, since it is the one thing here somebody has to type into. */
+.pg.land .pg-cards { display: grid; max-width: 1180px; gap: 16px; align-items: stretch;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 3fr) minmax(0, 3fr) minmax(0, 3fr); }
 .pg.land .pg-card .menu-btn { margin-top: auto; }
 
-/* Under the two ways in, the two modes behind them. Not buttons: both are
-   account features (ADR 0006), so out here they are things to look at and
-   the card above is still the only thing to press. The strip shares the
-   cards' width so it lines up with them. */
-.pg-behind { max-width: 860px; margin: clamp(20px, 3.5vh, 34px) 0 0; }
-.pg-behind > h2 {
-  font-family: Cinzel, Georgia, serif; font-size: 12px; letter-spacing: 2.4px;
-  text-transform: uppercase; color: #8ba1c0; font-weight: 700; margin: 0 0 12px;
+/* Bots and the Forge, standing between the two ways in the way they stand
+   on the home. Not buttons: both are account features (ADR 0006), so they
+   carry no call to action and neither lifts under the pointer; the cards
+   on either side are the only things to press. */
+.pg-mode { position: relative; overflow: hidden; border-radius: 14px; border: 1px solid #2b3f60;
+  background: #0a1120; box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+  display: flex; align-items: flex-end; min-height: 300px; }
+/* Both paintings are composed upright, which is why they can fill a tall
+   column edge to edge. The subject sits high in each, so the crop favours
+   the top and leaves the foot scrim room to sit on sky rather than on a
+   face. */
+.pg-mode img { position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: 50% 26%; }
+.pg-mode-body { position: relative; width: 100%; padding: 74px 16px 16px;
+  background: linear-gradient(180deg, rgba(4, 7, 16, 0) 0%, rgba(4, 7, 16, 0.82) 46%,
+    rgba(4, 7, 16, 0.96) 100%); }
+.pg-mode h3 { font-family: Cinzel, Georgia, serif; font-size: 17px; letter-spacing: 2.2px;
+  text-transform: uppercase; margin: 0; color: #e6d7a8; line-height: 1.1; }
+.pg-mode p { font-size: 12px; line-height: 1.45; color: #b9cbe4; margin: 6px 0 0; }
+
+/* Four across needs about 1120: below that the sign-in form is squeezed
+   and the paintings turn into slivers. So the row folds instead of
+   shrinking. Both cards take the full width and the two paintings share
+   the row between them, at the 3/4 a phone gives them on the home; a card
+   is only ever as wide as its form wants to be, which is what the narrower
+   ceiling is for. */
+@media (max-width: 1120px) {
+  .pg.land .pg-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 620px; }
+  .pg.land .pg-card { grid-column: 1 / -1; }
+  .pg-mode { min-height: 0; aspect-ratio: 3 / 4; }
 }
-.pg-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 18px; }
-.pg-mode { display: flex; overflow: hidden; border-radius: 14px; border: 1px solid #2b3f60;
-  background: rgba(8, 12, 22, 0.86); backdrop-filter: blur(7px); min-height: 168px;
-  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.5); }
-/* Both paintings are composed upright: the home stands these two tiles at
-   the full height of its row and a phone gives them 3/4, so a wide crop
-   takes the subject off at the knees. The panel hangs the painting as a
-   portrait plate and sets the words beside it rather than over it. 126 by
-   the 168 floor above is that same 3/4; longer copy grows the plate taller
-   still, never wider, so it cannot fall back to a landscape crop. */
-.pg-mode img { flex: none; width: 126px; align-self: stretch; object-fit: cover; display: block; }
-.pg-mode-body { min-width: 0; padding: 16px 18px; display: flex; flex-direction: column;
-  justify-content: center; }
-.pg-mode h3 { font-family: Cinzel, Georgia, serif; font-size: 16px; letter-spacing: 1.8px;
-  text-transform: uppercase; margin: 0; color: #e6d7a8; }
-.pg-mode p { font-size: 12.5px; line-height: 1.5; color: #b9cbe4; margin: 6px 0 0; }
+/* One column, and the panel goes square: the paintings are square to
+   begin with, so at 1/1 the tile is the whole painting and nothing is
+   cropped at all. */
+@media (max-width: 620px) {
+  .pg.land .pg-cards { grid-template-columns: minmax(0, 1fr); }
+  .pg-mode { aspect-ratio: 1 / 1; }
+}
 `;
 
 let cssInstalled = false;
@@ -157,13 +175,9 @@ export function showLanding(
       offlineBtn,
     );
 
-    ways.append(online, offline);
-    inner.appendChild(ways);
-
-    // --- and what the door opens onto ---
-    const behind = el('section', 'pg-behind');
-    behind.appendChild(el('h2', '', 'Also inside'));
-    const modes = el('div', 'pg-modes');
+    // Between the two ways in, the two modes behind them, standing where
+    // the home stands their tiles.
+    ways.appendChild(online);
     for (const mode of LANDING_MODES) {
       const art = el('img', '');
       art.src = mode.art;
@@ -175,9 +189,9 @@ export function showLanding(
       body.append(el('h3', '', mode.title), el('p', '', mode.line));
       const item = el('article', 'pg-mode');
       item.append(art, body);
-      modes.appendChild(item);
+      ways.appendChild(item);
     }
-    behind.appendChild(modes);
-    inner.appendChild(behind);
+    ways.appendChild(offline);
+    inner.appendChild(ways);
   });
 }
