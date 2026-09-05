@@ -8,9 +8,10 @@
 
 import { signOut } from './auth';
 import { buildLadderCard } from './ladder_card';
+import { DISCORD, REPO } from './links';
 import { buildLivePanel } from './live_panel';
 import { el } from './menu';
-import { navLink, REPO } from './page';
+import { navLink } from './page';
 import { buildProfilePanel } from './profile_panel';
 import { buildSettingsPanel } from './settings_panel';
 import { type Drawer, drawerSection, openDrawer } from './side_drawer';
@@ -42,7 +43,7 @@ export function openAccountDrawer(host: HTMLElement, opts: AccountDrawerOptions)
     // point already shows the landing page when no session answers.
     void signOut().then(() => location.reload());
   });
-  d.foot.append(navLink('Source', REPO), out);
+  d.foot.append(navLink('Discord', DISCORD), navLink('Source', REPO), out);
   return d;
 }
 

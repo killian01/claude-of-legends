@@ -11,8 +11,6 @@
 
 import { el } from './menu';
 
-export const REPO = 'https://github.com/killian01/claude-of-legends';
-
 export const CSS = `
 /* menu.ts scopes its reset to .menu, and a bare .menu-input without one
    draws its padding outside its 100% width and hangs off the card. */

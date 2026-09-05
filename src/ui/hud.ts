@@ -32,6 +32,7 @@ import {
   statLabel,
 } from './describe';
 import { iconDataUrl, itemIconUrl } from './icons';
+import { DISCORD } from './links';
 import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
 import { TeamScore } from './team_score';
@@ -528,6 +529,11 @@ const CSS = `
   scrollbar-width: thin; scrollbar-color: #6e5a24 #10160c;
 }
 .hud-end-btns { display: flex; gap: 12px; }
+/* The moment right after a match is the one moment a player is most likely
+   to want the next one, so this is where the server is offered. Muted, so
+   it never competes with Play again. */
+.hud-end-join { pointer-events: auto; margin-top: 12px; font-size: 13px; color: #9fb089; }
+.hud-end-join a { color: #cbd9b4; }
 .hud-end-rating { font-size: 15px; font-weight: 700; margin-top: 4px; min-height: 18px; }
 /* Compact mode (touchscreens): the desktop sizes swallow a phone screen, so
    the whole bottom block scales down, the chat goes (there is no way to type
@@ -1034,7 +1040,21 @@ export class Hud {
     endReturn.addEventListener('click', () => onExit('menu'));
     const endBtns = el('div', 'hud-end-btns');
     endBtns.append(endAgain, endReturn);
-    this.endOverlay.append(this.endTitle, this.endSub, this.endRating, this.endStats, endBtns);
+    const endJoin = el('div', 'hud-end-join');
+    const joinLink = document.createElement('a');
+    joinLink.href = DISCORD;
+    joinLink.target = '_blank';
+    joinLink.rel = 'noreferrer';
+    joinLink.textContent = 'the Discord';
+    endJoin.append('Looking for a team, or something to report? Join ', joinLink, '.');
+    this.endOverlay.append(
+      this.endTitle,
+      this.endSub,
+      this.endRating,
+      this.endStats,
+      endBtns,
+      endJoin,
+    );
 
     this.escapeOverlay = el('div', 'hud-overlay');
     const resume = el('button', 'hud-menu-btn', 'Resume (Esc)');

@@ -13,8 +13,9 @@
 import { type AuthedAccount, buildAuthForm } from './auth';
 import type { DiscordResult } from './discord_entry';
 import { startBackdrop } from './home_backdrop';
+import { DISCORD, REPO } from './links';
 import { el, ensureMenuCss } from './menu';
-import { buildPage, ensurePageCss, mountLiveStats, navLink, REPO } from './page';
+import { buildPage, ensurePageCss, mountLiveStats, navLink } from './page';
 
 // Only what the landing page adds to the shared chrome: two cards side by
 // side whose calls to action line up however long the copy above them is.
@@ -67,6 +68,7 @@ export function showLanding(
       root.querySelector('.pg-cards')?.scrollIntoView({ behavior: 'smooth' });
     });
     bar.links.appendChild(toPlay);
+    bar.right.appendChild(navLink('Discord', DISCORD));
     bar.right.appendChild(navLink('Source', REPO));
 
     // The site mark, centered on the bar. It belongs to the landing only:

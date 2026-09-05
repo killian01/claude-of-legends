@@ -14,8 +14,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.1.0-blue)](package.json)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/uURYY5qYJE)
 
-[Play now](https://claudeoflegends.com/) · [Quick start](#quick-start) · [How to play](#how-to-play) · [Train a bot](#every-bot-is-a-policy-train-one) · [Contributing](CONTRIBUTING.md)
+[Play now](https://claudeoflegends.com/) · [Discord](https://discord.gg/uURYY5qYJE) · [Quick start](#quick-start) · [How to play](#how-to-play) · [Train a bot](#every-bot-is-a-policy-train-one) · [Contributing](CONTRIBUTING.md)
 
 **Want to build something here?** The eleventh champion is one new file and
 three table entries: [docs/adding-a-champion.md](docs/adding-a-champion.md).
@@ -178,6 +179,10 @@ is also served from somewhere else; `*` turns the check off.
   `docs/roadmap.md` and `docs/review/`.
 - Dev-only pages: `/dev_champions.html` (champion visual gallery, with
   `?portraits` and `?focus=<id>` modes) and `/vfx.html` (spell VFX).
+
+Come say hello on [Discord](https://discord.gg/uURYY5qYJE): that is where
+players find each other for a game, and where a kit or a bot gets talked
+through before it becomes a pull request.
 
 Contributions are welcome: [CONTRIBUTING.md](CONTRIBUTING.md) has the
 setup and the pull request checklist. Issues labeled
