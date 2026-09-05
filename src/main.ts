@@ -844,7 +844,15 @@ async function boot(): Promise<void> {
     }
     if (joinCode !== null) next = { name: account.name, mode: 'join', code: joinCode };
     const choice: HomeChoice =
-      next ?? (await showHome(container, account, joinCode ?? undefined, confirmed, reopenAcademy));
+      next ??
+      (await showHome(
+        container,
+        account,
+        joinCode ?? undefined,
+        confirmed,
+        discordResult,
+        reopenAcademy,
+      ));
     reopenAcademy = null;
     confirmed = null;
     discordResult = null;
