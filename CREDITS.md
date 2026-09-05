@@ -55,20 +55,25 @@ described in docs/design/tile-art-prompts.md; the sources stay in
 |---|---|---|
 | `ranked.webp`, `bots.webp`, `forge.webp`, `lobby.webp`, `practice.webp` | Generated with the Tripo advanced image task (model `gpt_image_2`) from the prompts in `scripts/tile_art.mjs` | Tripo output terms |
 
-## Site icon (`public/icon-*.png`, `public/apple-touch-icon.png`)
+## Logo (`public/icon-*.png`, `public/apple-touch-icon.png`, `public/logo.webp`)
 
-The medallion in the browser tab, on the landing hero and on a phone's home
-screen: a round gold crest carrying the letter C over a starfield. The
-generator returns it with a checkerboard painted into the pixels where it
-believes the transparency is; `node scripts/site_icon.mjs` floods that
-background out from the frame, writes the disc with a real alpha edge, and
-cuts the sizes. The 32 is a tight crop on the center, because the whole
-medallion is a smudge at tab size. The source stays in `art_src/icon/`
-(ignored, like the other raw art).
+The mark is a broken gold C closing around a watchtower under a starfield,
+with a four point star in the gap. It comes in two pieces: the crest alone,
+which is what the browser tab, the landing bar and a phone's home screen
+want, and the full lockup, the same crest over the CLAUDE OF LEGENDS
+wordmark, which is the signature the README wears.
+
+Both arrive cut out, so `node scripts/site_icon.mjs` only trims each to its
+art, squares the crest and writes the sizes. It repairs two things on the
+way: the generator's opaque is alpha 250 to 254 rather than 255, which
+leaves the art faintly see through, and the lockup ships inside a wide soft
+black glow that reads as a drop shadow here but as a smudge on a light
+README, so its alpha ramp is remapped away. The sources stay in
+`art_src/logo/` (ignored, like the other raw art).
 
 | Files | Source | License |
 |---|---|---|
-| `icon-32.png`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png` | Generated with Google Gemini, cut out by `scripts/site_icon.mjs` | Google Gemini output terms |
+| `icon-32.png`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`, `logo.webp` | Generated with ChatGPT (OpenAI image generation), cut by `scripts/site_icon.mjs` | OpenAI output terms |
 
 ## Painted ability, item and sigil icons (`public/icons/`)
 
