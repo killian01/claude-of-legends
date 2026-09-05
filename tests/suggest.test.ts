@@ -251,9 +251,13 @@ describe('suggestKit', () => {
     store.close();
   });
 
-  it('replays the thread: image and preamble first, form state last', async () => {
+  // The prompt is laid out for the cache: what never moves in the system
+  // block, the splash and the opening line next, and everything a creator
+  // can edit between two turns last, after both breakpoints.
+  it('replays the thread: rules cached, image next, form state last', async () => {
     const store = seeded();
-    const bodies: { messages: { role: string; content: unknown }[] }[] = [];
+    type Block = { type: string; text?: string; cache_control?: { type: string } };
+    const bodies: { system: Block[]; messages: { role: string; content: unknown }[] }[] = [];
     const fetchFn = ((_url: string, init?: RequestInit) => {
       bodies.push(JSON.parse(String(init?.body)) as (typeof bodies)[number]);
       return Promise.resolve(answer(JSON.stringify({ comment: 'ok', ...GOOD_KIT })));
@@ -265,16 +269,41 @@ describe('suggestKit', () => {
     ];
     const out = await suggestKit(deps(store, fetchFn), 1, { id: 'forged_d', messages: thread });
     expect(out.ok).toBe(true);
+    const system = bodies[0]?.system ?? [];
+    expect(system[0]?.text).toContain('power budget');
+    expect(system[0]?.cache_control).toEqual({ type: 'ephemeral' });
+    // Nothing a creator can edit rides the cached block.
+    expect(system[0]?.text).not.toContain('The kit on the form right now');
+    expect(system[0]?.text).not.toContain('The champion on the form right now');
     const sent = bodies[0]?.messages ?? [];
     expect(sent).toHaveLength(3);
-    const first = sent[0]?.content as { type: string; text?: string }[];
+    const first = sent[0]?.content as Block[];
     expect(first[0]?.type).toBe('image');
-    expect(first[1]?.text).toContain('power budget');
     expect(first[1]?.text).toContain('The creator says: a poison theme');
     expect(first[1]?.text).not.toContain('The kit on the form right now');
+    expect(first[1]?.cache_control).toEqual({ type: 'ephemeral' });
     expect(sent[1]).toEqual({ role: 'assistant', content: 'RAW PRIOR ANSWER' });
     expect(sent[2]?.content).toContain('more mobility on E');
     expect(sent[2]?.content).toContain('The kit on the form right now');
+    // Identity and stats are form state too: they move when the creator
+    // edits them, so they are restated last and never cached.
+    expect(sent[2]?.content).toContain('The champion on the form right now');
+    store.close();
+  });
+
+  // A thread of one turn has its form state inside the first block, so a
+  // breakpoint there would pay to write a prefix nothing can ever read.
+  it('does not pay for a cache write on an opening turn', async () => {
+    const store = seeded();
+    const bodies: { messages: { role: string; content: unknown }[] }[] = [];
+    const fetchFn = ((_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)) as (typeof bodies)[number]);
+      return Promise.resolve(answer(JSON.stringify({ comment: 'ok', ...GOOD_KIT })));
+    }) as unknown as typeof fetch;
+    const out = await suggestKit(deps(store, fetchFn), 1, { id: 'forged_d', messages: ASK });
+    expect(out.ok).toBe(true);
+    const first = bodies[0]?.messages[0]?.content as { cache_control?: unknown }[];
+    expect(first[1]?.cache_control).toBeUndefined();
     store.close();
   });
 

@@ -111,7 +111,7 @@ import { COACH_IDLE_DAYS } from './night_eligibility';
 import { passwordErrorMessage, validatePassword } from './password';
 import { type CoachDeps, coachPlaybook } from './playbook_suggest';
 import { buildProfile } from './profile';
-import { checkQuota, DAY_MS, spendQuota } from './quotas';
+import { CEILING_DEFAULTS, checkQuota, DAY_MS, spendQuota } from './quotas';
 import { BASE_RATING, LEAVER_LOCKOUT_MS, leaverPenalty } from './rating';
 import { talliesOf } from './record_tally';
 import { buildMatchRecord, type MatchRecord } from './records';
@@ -348,8 +348,10 @@ const galleryDeps = {
   store: forgeStore,
   reportThreshold: envNumber('REPORT_TAKEDOWN_THRESHOLD', 3),
 };
-// Daily quotas (plan-forge phase 8): generation chains per account per
-// rolling day, plus the reserved 2D and agent meters. Zero disables one.
+// Daily quotas (plan-forge phase 8): per account per rolling day, and the
+// same actions again for the whole server, because a per-account limit
+// times an unbounded number of accounts is an unbounded bill. Zero
+// disables one, at either level.
 const quotaDeps = {
   store: forgeStore,
   limits: {
@@ -357,6 +359,12 @@ const quotaDeps = {
     animate: envNumber('ANIMATIONS_PER_DAY', 20),
     gen2d: envNumber('QUOTA_2D_PER_DAY', 40),
     agent: envNumber('QUOTA_AGENT_PER_DAY', 20),
+  },
+  ceilings: {
+    generation: envNumber('SERVER_GENERATIONS_PER_DAY', CEILING_DEFAULTS.generation),
+    animate: envNumber('SERVER_ANIMATIONS_PER_DAY', CEILING_DEFAULTS.animate),
+    gen2d: envNumber('SERVER_2D_PER_DAY', CEILING_DEFAULTS.gen2d),
+    agent: envNumber('SERVER_AGENT_PER_DAY', CEILING_DEFAULTS.agent),
   },
 };
 // Kit suggestions from the splash art (the agent surface): behind an

@@ -54,6 +54,47 @@ describe('daily quotas', () => {
     }
   });
 
+  // A limit per account bounds one player; nothing bounds the sum of
+  // them. The ceiling is the wall a bad day meets instead of a card.
+  it('stops the whole server at its own daily ceiling, whoever is asking', () => {
+    const store = new ForgeStore(':memory:');
+    try {
+      let clock = 1_000_000;
+      const deps: QuotaDeps = {
+        store,
+        limits: { gen2d: 10 },
+        ceilings: { gen2d: 3 },
+        now: () => clock,
+      };
+      spendQuota(deps, 1, 'gen2d');
+      spendQuota(deps, 2, 'gen2d');
+      spendQuota(deps, 3, 'gen2d');
+      // Nobody is near their own limit, and the server is still out.
+      const refused = checkQuota(deps, 4, 'gen2d');
+      expect(refused.ok).toBe(false);
+      expect(!refused.ok && refused.error).toMatch(/the server has spent its day/);
+      // Another action is untouched: the ceilings are per action, because
+      // the actions do not cost the same.
+      expect(checkQuota(deps, 4, 'generation').ok).toBe(true);
+      // And the ceiling ages out on the same rolling day.
+      clock += DAY_MS + 1;
+      expect(checkQuota(deps, 4, 'gen2d').ok).toBe(true);
+    } finally {
+      store.close();
+    }
+  });
+
+  it('a zero ceiling switches the server wall off', () => {
+    const store = new ForgeStore(':memory:');
+    try {
+      const deps: QuotaDeps = { store, limits: { agent: 5 }, ceilings: { agent: 0 }, now: () => 1 };
+      for (let i = 0; i < 20; i += 1) spendQuota(deps, i, 'agent');
+      expect(checkQuota(deps, 99, 'agent').ok).toBe(true);
+    } finally {
+      store.close();
+    }
+  });
+
   it('a zero limit disables the meter', () => {
     const store = new ForgeStore(':memory:');
     try {

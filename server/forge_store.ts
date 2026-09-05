@@ -584,6 +584,15 @@ export class ForgeStore {
     return r.n;
   }
 
+  // The same count over every account: what the server as a whole spent on
+  // an action this window, for the ceiling no per-account limit can give.
+  quotaCountAllSince(action: string, since: number): number {
+    const r = this.db
+      .prepare('select count(*) as n from quota_events where action = ? and at > ?')
+      .get(action, since) as { n: number };
+    return r.n;
+  }
+
   // Housekeeping: events older than the widest window will never be
   // counted again; dropping them keeps the table bounded.
   pruneQuotaEvents(before: number): number {

@@ -161,12 +161,20 @@ function billLine(bill: BudgetBreakdown): string {
   );
 }
 
-function preamble(def: ForgedChampionDef): string {
+// Everything the model needs that does NOT move: the same bytes for every
+// creator, every champion and every turn. It rides the system block behind
+// one cache breakpoint rather than the first turn of every conversation,
+// so a thread pays for the grammar, the template catalog and the cost
+// schedule once instead of on each turn. Nothing that a creator can edit
+// mid-conversation belongs here: that is what formState() is for.
+function rules(): string {
   const intro =
     'You design a champion kit for a small deterministic MOBA, in conversation ' +
     "with the champion's creator. The image is their chosen splash art: read its " +
     'theme (weapon, element, silhouette, mood) and propose kits that match it, ' +
-    'then rework your latest proposal as the creator asks.';
+    'then rework your latest proposal as the creator asks. The champion on the ' +
+    'form, with its name, role and stats, is restated at the end of every turn: ' +
+    'those stay as they are and you rework the passive and the abilities.';
   const task =
     'Every answer is ONLY a JSON object, no prose around it: { "comment": string, ' +
     '"passive": { "template": id, "params": {..}, "name": string, "flavor": string }, "abilities": ' +
@@ -177,33 +185,35 @@ function preamble(def: ForgedChampionDef): string {
     'their own language inside "comment", but every name (the passive and the four ' +
     'spells) is plain English, like every other champion in the game.';
   const bounds = `Numeric bounds per ability field: ${JSON.stringify(ABILITY_BOUNDS)} (cooldown uses basicCooldown for Q W E and ultCooldown for R).`;
-  const current = `The champion (name, role, stats stay as they are; you rework passive and abilities): ${JSON.stringify(
-    {
-      name: def.name,
-      title: def.title,
-      role: def.role,
-      base: def.base,
-    },
-  )}`;
   return [
     intro,
     GRAMMAR,
     `Passive templates (pick ONE):\n${templateCatalog()}`,
     bounds,
     costSchedule(),
-    current,
     task,
   ].join('\n\n');
 }
 
+// Built once: the catalogs it reads are data tables, not state.
+export const SUGGEST_RULES = rules();
+
 // The form as it stands right now, appended to the creator's latest
-// message: the player may have applied a proposal or hand-edited since
-// the conversation started, and the available budget moves with the
-// stats, so both are restated every turn.
+// message: the player may have applied a proposal or hand-edited since the
+// conversation started, so identity, stats, kit and the budget they leave
+// all move with it, and all of it is restated every turn. It sits LAST on
+// purpose, after every cache breakpoint, because it is the one part of the
+// prompt that changes between two turns of the same conversation.
 function formState(def: ForgedChampionDef): string {
   const bill = budgetOf(def);
   const kit = kitBudgetOf(bill);
   return [
+    `The champion on the form right now: ${JSON.stringify({
+      name: def.name,
+      title: def.title,
+      role: def.role,
+      base: def.base,
+    })}.`,
     `The kit on the form right now: ${JSON.stringify({ passive: def.passive, abilities: def.abilities })}.`,
     `Base stats and growth cost ${Math.round(bill.stats + bill.growth)}, leaving the passive plus abilities ${Math.round(kit.cap)} to spend;`,
     `the form's kit spends ${Math.round(kit.spend)} of that (${billLine(bill)}).`,
@@ -263,16 +273,21 @@ export interface ApiMessage {
 // ride the FIRST turn only, the live form state rides the LAST.
 function toApiMessages(
   turns: readonly ChatTurn[],
-  intro: string,
   state: string,
   image: Buffer,
   mediaType: string,
 ): ApiMessage[] {
   return turns.map((t, i) => {
     if (t.role === 'assistant') return { role: 'assistant', content: t.text };
-    let text = i === 0 ? `${intro}\n\nThe creator says: ${t.text}` : t.text;
+    let text = i === 0 ? `The creator says: ${t.text}` : t.text;
     if (i === turns.length - 1) text = `${text}\n\n${state}`;
     if (i > 0) return { role: 'user', content: text } as ApiMessage;
+    // The splash and the opening line are the same bytes for the whole
+    // conversation, so a second breakpoint sits here and a later turn
+    // reads the image back instead of re-sending it. Not on a thread of
+    // one turn: there the form state is still in this block, so nothing
+    // would ever read what the write paid for.
+    const cache = turns.length > 1 ? { cache_control: { type: 'ephemeral' } } : {};
     return {
       role: 'user',
       content: [
@@ -280,7 +295,7 @@ function toApiMessages(
           type: 'image',
           source: { type: 'base64', media_type: mediaType, data: image.toString('base64') },
         },
-        { type: 'text', text },
+        { type: 'text', text, ...cache },
       ],
     };
   });
@@ -348,6 +363,9 @@ export async function askModel(
     body: JSON.stringify({
       model: deps.model ?? SUGGEST_MODEL_DEFAULT,
       max_tokens: 4000,
+      // The rules never change between turns, creators or champions:
+      // cached as a prefix, like the coach's own preamble.
+      system: [{ type: 'text', text: SUGGEST_RULES, cache_control: { type: 'ephemeral' } }],
       // No hidden reasoning: a kit is a design, not a proof, and the fit
       // owns the arithmetic. Measured 2026-09-01 on the default (adaptive
       // thinking, implicit on this model): 42 s per call, 34 of them
@@ -468,13 +486,7 @@ export async function suggestKit(
   }
   const mediaType = imageMediaType(image);
 
-  const apiMessages = toApiMessages(
-    req.messages,
-    preamble(base),
-    formState(base),
-    image,
-    mediaType,
-  );
+  const apiMessages = toApiMessages(req.messages, formState(base), image, mediaType);
   const floor = deps.budgetFloor ?? BUDGET_FLOOR_DEFAULT;
   let fallback: ForgeOutcome<KitProposal> | null = null;
   let lastErrors: readonly string[] = [];
