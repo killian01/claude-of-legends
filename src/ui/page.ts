@@ -102,10 +102,6 @@ export const CSS = `
 .pg-stats { display: flex; gap: 26px; margin: 22px 0 0; flex-wrap: wrap; }
 .pg-stat { display: flex; align-items: baseline; gap: 7px; font-size: 12px; color: #8ba1c0; }
 .pg-stat b { font-size: 19px; font-weight: 800; color: #e6d7a8; font-variant-numeric: tabular-nums; }
-.pg-live::before {
-  content: ''; width: 7px; height: 7px; border-radius: 50%; background: #6ad07a;
-  display: inline-block; margin-right: 7px; box-shadow: 0 0 8px #6ad07a;
-}
 
 /* 300px floors two columns at about the width the old single card had, so
    a panel that opens inside one keeps its room. */
@@ -150,19 +146,21 @@ export async function fetchStats(): Promise<PublicStats | null> {
   }
 }
 
-// The three counts as a row of cells, with the true count either way: an
-// empty server says zero rather than hiding the line, because a counter
-// that comes and goes is harder to read than one that is simply honest.
-// Nothing is padded here; /api/public/stats is the whole truth.
+// The count, as one cell. Players online and matches running used to
+// stand beside it and they were the wrong two numbers to show at this
+// stage: a young server is empty most of the hour, so both read zero and
+// the honest live counter announced a dead game to the one visitor who
+// might have filled it. Accounts only ever grows, and it is the count
+// that says what this is: people came and stayed. Nothing is padded;
+// /api/public/stats is still the whole truth, and the bar's Live pill
+// still reads the running matches straight off it.
 export function renderStats(into: HTMLElement, s: PublicStats): void {
-  const cell = (value: number, label: string, live = false): void => {
-    const box = el('div', live ? 'pg-stat pg-live' : 'pg-stat');
-    box.append(el('b', '', String(value)), el('span', '', label));
-    into.appendChild(box);
-  };
-  cell(s.online, s.online === 1 ? 'player online' : 'players online', true);
-  cell(s.matches, s.matches === 1 ? 'match running' : 'matches running');
-  cell(s.accounts, s.accounts === 1 ? 'account' : 'accounts');
+  const box = el('div', 'pg-stat');
+  box.append(
+    el('b', '', String(s.accounts)),
+    el('span', '', s.accounts === 1 ? 'account' : 'accounts'),
+  );
+  into.appendChild(box);
 }
 
 // Fills `into` once the server answers.
