@@ -6,7 +6,7 @@
 // working, which is how CREATIONS_PER_WEEK and GENERATIONS_PER_DAY
 // outlived the rename to the ember ledger (ADR 0017).
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -53,7 +53,8 @@ function code(text: string): string {
 // The three shapes a name is read in: process.env.NAME, process.env['NAME'],
 // envNumber('NAME', ...), and env.NAME on the injected environment record
 // that edge.ts, mailer.ts and discord_oauth.ts take.
-const READ = /(?:\benv\.([A-Z][A-Z0-9_]{2,})\b)|(?:\benv\[['"]([A-Z][A-Z0-9_]{2,})['"]\])|(?:\benvNumber\(['"]([A-Z][A-Z0-9_]{2,})['"])/g;
+const READ =
+  /(?:\benv\.([A-Z][A-Z0-9_]{2,})\b)|(?:\benv\[['"]([A-Z][A-Z0-9_]{2,})['"]\])|(?:\benvNumber\(['"]([A-Z][A-Z0-9_]{2,})['"])/g;
 
 function namesRead(): Set<string> {
   const found = new Set<string>();

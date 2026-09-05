@@ -102,7 +102,7 @@ export function dealDamage(
     const executor = ctx.units.get(sourceId);
     if (
       target.kind === 'champion' &&
-      (!executor || executor.kind !== 'champion' || executor.team === target.team)
+      (executor?.kind !== 'champion' || executor.team === target.team)
     ) {
       const contributor = ctx.units.get(target.lastHitByChampion);
       if (

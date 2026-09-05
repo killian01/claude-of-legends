@@ -9,7 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { BotStore } from '../server/bot_store';
 import { buildBotLadder } from '../server/ladder';
-import { type OwnedSeat, type RatingBook, rateMatch, type SeatWay } from '../server/match_rating';
+import { type OwnedSeat, type RatingBook, rateMatch } from '../server/match_rating';
 import { BASE_RATING } from '../server/rating';
 
 // The book is keyed by the seat's rated subject (ADR 0016): the bot when

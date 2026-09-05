@@ -261,7 +261,7 @@ export class Sim {
 
   attachPolicy(unitId: number, policy: Policy): void {
     const u = this.units.get(unitId);
-    if (!u || u.kind !== 'champion') return;
+    if (u?.kind !== 'champion') return;
     this.policies.set(unitId, policy);
   }
 
@@ -292,7 +292,7 @@ export class Sim {
   // never learns what produced the action (ADR 0002 phase 2).
   addRemoteSeat(unitId: number): boolean {
     const u = this.units.get(unitId);
-    if (!u || u.kind !== 'champion') return false;
+    if (u?.kind !== 'champion') return false;
     if (this.remoteSeats.has(unitId)) return true;
     this.remoteSeats.set(unitId, createRemoteSeat(unitId));
     return true;
@@ -316,7 +316,7 @@ export class Sim {
   // nothing new. Draining is what makes the next one arrive.
   takeRemoteObservation(unitId: number): Observation | null {
     const seat = this.remoteSeats.get(unitId);
-    if (!seat || !seat.observation) return null;
+    if (!seat?.observation) return null;
     const obs = seat.observation;
     seat.observation = null;
     return obs;
@@ -472,7 +472,7 @@ export class Sim {
   orderStop(unitId: number): void {
     if (this.winner !== null) return;
     const u = this.units.get(unitId);
-    if (!u || u.kind !== 'champion' || u.dead || this.dead.has(unitId)) return;
+    if (u?.kind !== 'champion' || u.dead || this.dead.has(unitId)) return;
     u.holding = true;
     u.path = [];
     u.attackTargetId = null;
@@ -484,7 +484,7 @@ export class Sim {
   setCoachOrder(unitId: number, order: CoachOrder | null): void {
     if (this.winner !== null) return;
     const u = this.units.get(unitId);
-    if (!u || u.kind !== 'champion') return;
+    if (u?.kind !== 'champion') return;
     u.coachOrder = order;
     u.coachOrderSeenAt = this.time;
   }
@@ -513,7 +513,7 @@ export class Sim {
   orderAttackMove(unitId: number, x: number, z: number): void {
     if (this.winner !== null) return;
     const u = this.units.get(unitId);
-    if (!u || u.kind !== 'champion' || u.dead || this.dead.has(unitId)) return;
+    if (u?.kind !== 'champion' || u.dead || this.dead.has(unitId)) return;
     cancelRecall(u);
     u.holding = false;
     u.attackTargetId = null;
@@ -524,7 +524,7 @@ export class Sim {
   startRecall(unitId: number): void {
     if (this.winner !== null) return;
     const u = this.units.get(unitId);
-    if (!u || u.kind !== 'champion' || u.dead || this.dead.has(unitId)) return;
+    if (u?.kind !== 'champion' || u.dead || this.dead.has(unitId)) return;
     if (isStunned(u, this.time)) return;
     startRecall(u, this.time);
   }
@@ -559,7 +559,7 @@ export class Sim {
   levelAbility(unitId: number, key: AbilityKey): boolean {
     if (this.winner !== null) return false;
     const u = this.units.get(unitId);
-    if (!u || u.kind !== 'champion' || u.championId === null) return false;
+    if (u?.kind !== 'champion' || u.championId === null) return false;
     if (u.skillPoints <= 0) return false;
     const rank = effectiveRank(u, key);
     if (key === 'R') {
@@ -576,7 +576,7 @@ export class Sim {
   castSigil(unitId: number, slot: number, aim: Vec2): boolean {
     if (this.winner !== null) return false;
     const u = this.units.get(unitId);
-    if (!u || u.kind !== 'champion' || u.dead || this.dead.has(unitId)) return false;
+    if (u?.kind !== 'champion' || u.dead || this.dead.has(unitId)) return false;
     if (isStunned(u, this.time)) return false;
     const sigilId = u.sigils[slot];
     const def = sigilId ? SIGILS[sigilId] : undefined;
@@ -642,7 +642,7 @@ export class Sim {
   sellItem(unitId: number, slot: number): boolean {
     if (this.winner !== null) return false;
     const u = this.units.get(unitId);
-    if (!u || u.kind !== 'champion' || u.dead || this.dead.has(unitId)) return false;
+    if (u?.kind !== 'champion' || u.dead || this.dead.has(unitId)) return false;
     const fountain = this.map.fountains.find((f) => f.team === u.team);
     if (!fountain) return false;
     if (Math.hypot(u.pos.x - fountain.x, u.pos.z - fountain.z) > fountain.r + SHOP_RANGE_PAD) {

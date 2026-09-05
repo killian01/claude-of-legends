@@ -69,7 +69,9 @@ describe('deterministic replay', () => {
     // What the browser does: rebuild and refeed.
     const { sim, unitIds } = buildMatchSim(record.seed, record.picks);
     const unitTeams = new Map<number, TeamId>();
-    record.picks.forEach((p, i) => unitTeams.set(unitIds[i]!, p.team));
+    record.picks.forEach((p, i) => {
+      unitTeams.set(unitIds[i]!, p.team);
+    });
     let next = 0;
     for (let k = 0; k < record.ticks; k++) {
       while (next < record.events.length && record.events[next]!.k <= k) {

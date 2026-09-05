@@ -371,7 +371,7 @@ export function applyEffects(
       }
       case 'cooldownRefund': {
         const source = ctx.units.get(sourceId);
-        if (!source || source.kind !== 'champion') break;
+        if (source?.kind !== 'champion') break;
         const remaining = (source.cooldowns[spec.key] ?? 0) - ctx.time;
         if (remaining > 0) {
           source.cooldowns[spec.key] = ctx.time + remaining * (1 - spec.pctOfRemaining);
