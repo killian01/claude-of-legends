@@ -21,6 +21,7 @@ import {
   discordConfigFromEnv,
   readIdentity,
   SCOPE,
+  scopeFor,
 } from '../server/discord_oauth';
 import { DiscordFlows, FLOW_TTL_MS } from '../server/discord_state';
 
@@ -47,11 +48,18 @@ const CFG: DiscordConfig = {
   redirectUri: 'https://example.test/api/discord/callback',
 };
 
+// The same application, with the auto-join turned on.
+const CFG_GUILD: DiscordConfig = {
+  ...CFG,
+  guild: { id: '9090', botToken: 'bot-secret' },
+};
+
 interface Answers {
   token?: unknown;
   tokenStatus?: number;
   me?: unknown;
   meStatus?: number;
+  joinStatus?: number;
 }
 
 // A fetch that answers the token call and then the identity call,
@@ -69,6 +77,10 @@ function fakeFetch(answers: Answers = {}) {
         status,
         json: async () => answers.token ?? { access_token: 'at' },
       } as Response;
+    }
+    if (at.includes('/guilds/')) {
+      const joined = answers.joinStatus ?? 201;
+      return { ok: joined < 400, status: joined, json: async () => ({}) } as Response;
     }
     const status = answers.meStatus ?? 200;
     return {
@@ -110,11 +122,29 @@ describe('the Discord configuration', () => {
     expect(cfg?.redirectUri).toBe('https://other.test/cb');
   });
 
+  it('takes the guild only when the token and the id are both there', () => {
+    const base = { DISCORD_CLIENT_ID: 'a', DISCORD_CLIENT_SECRET: 'b' };
+    expect(discordConfigFromEnv(base, 'https://example.test')?.guild).toBeUndefined();
+    expect(
+      discordConfigFromEnv({ ...base, DISCORD_BOT_TOKEN: 't' }, 'https://example.test')?.guild,
+    ).toBeUndefined();
+    expect(
+      discordConfigFromEnv({ ...base, DISCORD_GUILD_ID: '9' }, 'https://example.test')?.guild,
+    ).toBeUndefined();
+    expect(
+      discordConfigFromEnv(
+        { ...base, DISCORD_BOT_TOKEN: 't', DISCORD_GUILD_ID: '9' },
+        'https://example.test',
+      )?.guild,
+    ).toEqual({ id: '9', botToken: 't' });
+  });
+
   it('asks for the identify scope and nothing else', () => {
     const url = new URL(authorizeUrl(CFG, 'st4te'));
     expect(url.origin + url.pathname).toBe('https://discord.com/oauth2/authorize');
     expect(url.searchParams.get('scope')).toBe(SCOPE);
     expect(SCOPE).toBe('identify');
+    expect(scopeFor(CFG)).toBe('identify');
     expect(url.searchParams.get('client_id')).toBe('112233');
     expect(url.searchParams.get('response_type')).toBe('code');
     expect(url.searchParams.get('state')).toBe('st4te');
@@ -122,6 +152,14 @@ describe('the Discord configuration', () => {
     // The secret is the one thing that must never be in a URL a browser
     // is sent to.
     expect(url.search).not.toContain('shh');
+  });
+
+  it('widens the scope only for a deployment that configured a guild', () => {
+    expect(scopeFor(CFG_GUILD)).toBe('identify guilds.join');
+    const url = new URL(authorizeUrl(CFG_GUILD, 'st4te'));
+    expect(url.searchParams.get('scope')).toBe('identify guilds.join');
+    // The bot's own credential has no business in a browser redirect.
+    expect(url.search).not.toContain('bot-secret');
   });
 });
 
@@ -154,8 +192,10 @@ describe('reading who Discord says this is', () => {
 describe('the exchange with Discord', () => {
   it('posts the code as a form and reads the identity with the token', async () => {
     const { impl, calls } = fakeFetch();
-    const identity = await new DiscordOauth(CFG, impl).exchange('the-code');
-    expect(identity).toEqual({ id: '42', username: 'bo' });
+    const arrival = await new DiscordOauth(CFG, impl).exchange('the-code');
+    expect(arrival?.identity).toEqual({ id: '42', username: 'bo' });
+    // Nobody was added to anything: this config has no guild.
+    expect(arrival?.joinedGuild).toBe(false);
     expect(calls).toHaveLength(2);
 
     const token = calls[0]!;
@@ -188,6 +228,61 @@ describe('the exchange with Discord', () => {
       throw new Error('socket hang up');
     }) as unknown as typeof fetch;
     expect(await new DiscordOauth(CFG, broken).exchange('c')).toBeNull();
+  });
+});
+
+describe('the auto-join into the server', () => {
+  it('puts the player in with the bot, carrying their own token in the body', async () => {
+    const { impl, calls } = fakeFetch();
+    const arrival = await new DiscordOauth(CFG_GUILD, impl).exchange('the-code');
+    expect(arrival?.joinedGuild).toBe(true);
+    expect(calls).toHaveLength(3);
+
+    const join = calls[2]!;
+    expect(join.url).toBe('https://discord.com/api/v10/guilds/9090/members/42');
+    expect(join.init.method).toBe('PUT');
+    const headers = join.init.headers as Record<string, string>;
+    // Bot-authed, with the player's access token in the body: that pair is
+    // what Discord requires, and it is why the token never leaves here.
+    expect(headers.authorization).toBe('Bot bot-secret');
+    expect(JSON.parse(String(join.init.body))).toEqual({ access_token: 'at' });
+  });
+
+  it('counts an existing member as a yes', async () => {
+    // 204 is "already in", which is the same outcome as 201 for anyone
+    // who has to decide what the home screen says next.
+    const { impl } = fakeFetch({ joinStatus: 204 });
+    expect((await new DiscordOauth(CFG_GUILD, impl).exchange('c'))?.joinedGuild).toBe(true);
+  });
+
+  it('never lets a refused join cost somebody their account', async () => {
+    for (const joinStatus of [403, 404, 429, 500]) {
+      const { impl } = fakeFetch({ joinStatus });
+      const arrival = await new DiscordOauth(CFG_GUILD, impl).exchange('c');
+      expect(arrival?.identity, String(joinStatus)).toEqual({ id: '42', username: 'bo' });
+      expect(arrival?.joinedGuild, String(joinStatus)).toBe(false);
+    }
+  });
+
+  it('survives a guild call that never answers', async () => {
+    const calls: string[] = [];
+    const impl = (async (url: unknown, init: unknown) => {
+      const at = String(url);
+      calls.push(at);
+      if (at.includes('/guilds/')) throw new Error('socket hang up');
+      if (at.includes('/oauth2/token')) {
+        return { ok: true, status: 200, json: async () => ({ access_token: 'at' }) } as Response;
+      }
+      void init;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ id: '42', username: 'bo' }),
+      } as Response;
+    }) as unknown as typeof fetch;
+    const arrival = await new DiscordOauth(CFG_GUILD, impl).exchange('c');
+    expect(arrival?.identity).toEqual({ id: '42', username: 'bo' });
+    expect(arrival?.joinedGuild).toBe(false);
   });
 });
 

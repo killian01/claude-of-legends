@@ -44,6 +44,11 @@ services:
       # unless DISCORD_REDIRECT_URI overrides it.
       DISCORD_CLIENT_ID: "${DISCORD_CLIENT_ID:-}"
       DISCORD_CLIENT_SECRET: "${DISCORD_CLIENT_SECRET:-}"
+      # Optional auto-join (ADR 0009): both set and a new account is put
+      # into the server on the way in, which widens the consent screen.
+      # DISCORD_BOT_TOKEN is a credential; the guild id is not.
+      DISCORD_BOT_TOKEN: "${DISCORD_BOT_TOKEN:-}"
+      DISCORD_GUILD_ID: "${DISCORD_GUILD_ID:-}"
       # The Forge's generation provider (ADR 0010), from the same .env
       # file: TRIPO_API_KEY is a credential and must never be committed.
       # Without it, finalize answers "not configured" and everything else

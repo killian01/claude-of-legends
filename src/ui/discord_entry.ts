@@ -33,11 +33,13 @@ function ensureCss(): void {
 }
 
 // What the round trip came back with, if this page load came from one.
-// 'created' and 'signedin' arrive with a session already open, so the
-// page that reads them is already past the entry screen.
-export type DiscordResult = 'created' | 'signedin' | 'failed' | 'off';
+// 'created', 'joined' and 'signedin' arrive with a session already open,
+// so the page that reads them is already past the entry screen. 'joined'
+// is 'created' plus the auto-join having put the player in the server
+// (ADR 0009), which the home says differently.
+export type DiscordResult = 'created' | 'joined' | 'signedin' | 'failed' | 'off';
 
-const RESULTS = new Set<string>(['created', 'signedin', 'failed', 'off']);
+const RESULTS = new Set<string>(['created', 'joined', 'signedin', 'failed', 'off']);
 
 // Read once and stripped from the address bar, so a reload does not
 // repeat the message. Only this one parameter is removed: an invite code

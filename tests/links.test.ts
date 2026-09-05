@@ -4,7 +4,7 @@
 // nothing in the client can tell that it is dead.
 
 import { describe, expect, it } from 'vitest';
-import { welcomesToDiscord } from '../src/ui/discord_welcome';
+import { welcomesToDiscord, welcomeWords } from '../src/ui/discord_welcome';
 import { DISCORD, REPO } from '../src/ui/links';
 
 describe('the outward links', () => {
@@ -17,10 +17,18 @@ describe('the outward links', () => {
 describe('the Discord welcome', () => {
   it('greets the account that was just created, and nobody else', () => {
     expect(welcomesToDiscord('created')).toBe(true);
+    expect(welcomesToDiscord('joined')).toBe(true);
     // A player coming back for their tenth match has already decided.
     expect(welcomesToDiscord('signedin')).toBe(false);
     expect(welcomesToDiscord('failed')).toBe(false);
     expect(welcomesToDiscord('off')).toBe(false);
     expect(welcomesToDiscord(null)).toBe(false);
+  });
+
+  it('stops inviting somebody the auto-join already let in', () => {
+    // Being asked to join a server you are standing in reads as a bug.
+    expect(welcomeWords('created').link).toBe('Join the Discord');
+    expect(welcomeWords('joined').link).toBe('Open the server');
+    expect(welcomeWords('joined').lead).toContain('you are in the Discord');
   });
 });

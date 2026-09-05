@@ -100,13 +100,37 @@ for one call and then dropped: the account stores the Discord id, the name
 that came back, and when. `DISCORD_REDIRECT_URI` overrides the callback for a
 deployment whose public origin is not `PUBLIC_URL`; it is not normally set.
 
+Optionally, a new account can be put into your Discord server on the way in,
+with no invite to click (ADR 0009). Two more variables turn it on:
+
+```
+DISCORD_BOT_TOKEN=...
+DISCORD_GUILD_ID=1545843596320575559
+```
+
+The token comes from the Bot tab of the same application, and that bot has to
+already be a member of the server with the Create Invite permission and
+nothing else it does not need: add it through OAuth2 > URL Generator with the
+`bot` scope, open the URL it builds, pick the server. The guild id is not a
+secret: turn on Developer Mode in Discord, right click the server, Copy Server
+ID.
+
+Weigh it before turning it on. The consent screen then reads "Join servers for
+you" alongside the username, at the moment somebody is deciding whether to
+sign up at all. Unset, the flow is exactly the identify-only one above and the
+client offers a plain invite link instead. Either way a join that fails never
+costs anybody their account, and an existing member is a no-op.
+
 **With neither variable set the routes answer "not configured", the client
 never offers the button, and the boot line says so:**
 
 ```
 docker compose logs game | grep '^discord:'
-discord: sign-in on, redirect https://claudeoflegends.com/api/discord/callback
+discord: sign-in on, redirect https://claudeoflegends.com/api/discord/callback, auto-join into guild 1545843596320575559
 ```
+
+The tail of that line is the auto-join: the guild it will add new accounts to,
+or `no auto-join` when the two variables are not both set.
 
 If that line says `off`, Discord sign-in is not configured. Nothing else is
 affected: accounts are created, rated and played exactly as before.

@@ -44,26 +44,40 @@ function ensureCss(): void {
 // it. Kept apart from the DOM so the rule can be read and tested on its
 // own.
 export function welcomesToDiscord(result: DiscordResult | null): boolean {
-  return result === 'created';
+  return result === 'created' || result === 'joined';
+}
+
+// The same strip says two different things. 'joined' means the auto-join
+// already put this person in the server, so inviting them again would be
+// nonsense: the link becomes a door rather than an invitation.
+export function welcomeWords(result: 'created' | 'joined'): {
+  lead: string;
+  said: string;
+  link: string;
+} {
+  return result === 'joined'
+    ? {
+        lead: 'Your account is ready, and you are in the Discord.',
+        said: 'That is where players find each other for a game, and where the next build gets argued about.',
+        link: 'Open the server',
+      }
+    : {
+        lead: 'Your account is ready.',
+        said: 'You came in through Discord, so the server is one click away: it is where players find each other for a game.',
+        link: 'Join the Discord',
+      };
 }
 
 export function buildDiscordWelcome(result: DiscordResult | null): HTMLElement | null {
   if (!welcomesToDiscord(result)) return null;
   ensureCss();
+  const words = welcomeWords(result as 'created' | 'joined');
   const note = el('div', 'dsw-note');
   const link = document.createElement('a');
   link.href = DISCORD;
   link.target = '_blank';
   link.rel = 'noreferrer';
-  link.textContent = 'Join the Discord';
-  note.append(
-    el('b', '', 'Your account is ready.'),
-    el(
-      'span',
-      '',
-      'You came in through Discord, so the server is one click away: it is where players find each other for a game.',
-    ),
-    link,
-  );
+  link.textContent = words.link;
+  note.append(el('b', '', words.lead), el('span', '', words.said), link);
   return note;
 }

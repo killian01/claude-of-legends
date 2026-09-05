@@ -1020,11 +1020,12 @@ const server = http.createServer(async (req, res) => {
         land('failed');
         return;
       }
-      const identity = await discord.exchange(code);
-      if (!identity) {
+      const arrival = await discord.exchange(code);
+      if (!arrival) {
         land('failed');
         return;
       }
+      const { identity, joinedGuild } = arrival;
       // This Discord already has its account here, so this is a sign-in.
       // Relinking refreshes the name Discord showed, and the session that
       // opens is the same one a password would have opened.
@@ -1047,7 +1048,9 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       openSession(res, req, created.value);
-      land('created');
+      // 'joined' says the account was made AND the player is now in the
+      // server, so the home offers the door rather than the invitation.
+      land(joinedGuild ? 'joined' : 'created');
       return;
     }
 
@@ -2607,7 +2610,11 @@ server.listen(PORT, () => {
   );
   console.log(
     DISCORD
-      ? `discord: sign-in on, redirect ${DISCORD.redirectUri}`
+      ? `discord: sign-in on, redirect ${DISCORD.redirectUri}${
+          DISCORD.guild
+            ? `, auto-join into guild ${DISCORD.guild.id}`
+            : ', no auto-join (no DISCORD_BOT_TOKEN and DISCORD_GUILD_ID set)'
+        }`
       : 'discord: off (no DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET set)',
   );
   console.log(
