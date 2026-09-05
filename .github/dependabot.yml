@@ -1,0 +1,20 @@
+# Dependency updates, on a schedule slow enough to read. The dependency set
+# is deliberately tiny (three.js and ws at runtime), so a weekly pass is a
+# handful of pull requests a month, each one a CI run away from an answer.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      # Conventional Commits with a scope, like every other commit here.
+      prefix: 'chore(deps)'
+      prefix-development: 'chore(deps-dev)'
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: 'chore(ci)'
