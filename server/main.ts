@@ -107,6 +107,7 @@ import {
   nightDue,
   runNight,
 } from './night_coach';
+import { COACH_IDLE_DAYS } from './night_eligibility';
 import { passwordErrorMessage, validatePassword } from './password';
 import { type CoachDeps, coachPlaybook } from './playbook_suggest';
 import { buildProfile } from './profile';
@@ -353,6 +354,7 @@ const quotaDeps = {
   store: forgeStore,
   limits: {
     generation: envNumber('GENERATIONS_PER_DAY', 5),
+    animate: envNumber('ANIMATIONS_PER_DAY', 20),
     gen2d: envNumber('QUOTA_2D_PER_DAY', 40),
     agent: envNumber('QUOTA_AGENT_PER_DAY', 20),
   },
@@ -437,6 +439,10 @@ const nightCoachDeps: NightCoachDeps = {
         })
     : null,
   records: () => matchLog,
+  // The night's model call is the only paid step; it is spent on bots
+  // whose owner is still around (server/night_eligibility.ts).
+  ownerSeenAt: (accountId) => registry.findById(accountId)?.seenAt ?? null,
+  idleDays: envNumber('COACH_IDLE_DAYS', COACH_IDLE_DAYS),
   sparringPerSide: envNumber('SPARRING_PER_SIDE', 3),
   log: (line) => console.log(line),
 };
@@ -1490,9 +1496,10 @@ const server = http.createServer(async (req, res) => {
           sendJson(res, 400, { ok: false, error: 'malformed request' });
           return;
         }
-        // Rides the same daily generation meter as the build (it is a 3D
-        // chain too), spent only when it actually starts.
-        const quota = checkQuota(quotaDeps, me.id, 'generation');
+        // Its own daily meter, not the build's: a bake retargets a rig
+        // the Creation already paid for, and a kit with per-spell clips
+        // needs more bakes than a day's builds. Spent only when it starts.
+        const quota = checkQuota(quotaDeps, me.id, 'animate');
         if (!quota.ok) {
           sendJson(res, 200, quota);
           return;
@@ -1501,7 +1508,7 @@ const server = http.createServer(async (req, res) => {
         // against the provider catalog in animateChampion).
         const family = typeof body?.family === 'string' ? body.family : undefined;
         const outcome = animateChampion(forgeDeps, me.id, id, family, body?.clips);
-        if (outcome.ok) spendQuota(quotaDeps, me.id, 'generation');
+        if (outcome.ok) spendQuota(quotaDeps, me.id, 'animate');
         sendJson(res, 200, outcome.ok ? { ok: true, jobId: outcome.jobId } : outcome);
         return;
       }

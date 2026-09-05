@@ -32,7 +32,17 @@ export interface CoachDeps {
   fetchFn?: typeof fetch;
 }
 
-export const COACH_MODEL_DEFAULT = 'claude-opus-5';
+export const COACH_MODEL_DEFAULT = 'claude-sonnet-5';
+
+// The server-side refusal fallback is an Opus and Fable feature: sending
+// it to any other model is a 400 (measured 2026-09-05 on claude-sonnet-5,
+// "does not support the `fallbacks` parameter"). The coach runs on Sonnet
+// by default, so the parameter rides only when the configured model takes
+// it; without it a policy decline surfaces as the refusal the stream
+// reader already reports.
+export function supportsFallbacks(model: string): boolean {
+  return model.startsWith('claude-opus-') || model.startsWith('claude-fable-');
+}
 export const COACH_CALL_TIMEOUT_MS = 120_000;
 export const COACH_MAX_TOKENS = 8000;
 
@@ -267,6 +277,8 @@ async function askModel(
   onText: (delta: string) => void,
 ): Promise<string> {
   const doFetch = deps.fetchFn ?? fetch;
+  const model = deps.model ?? COACH_MODEL_DEFAULT;
+  const fallbacks = supportsFallbacks(model);
   const res = await doFetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -274,11 +286,11 @@ async function askModel(
       'anthropic-version': '2023-06-01',
       // The refusal fallback: a policy decline re-runs on a fallback
       // model inside the same call instead of ending the conversation.
-      'anthropic-beta': 'server-side-fallback-2026-07-01',
+      ...(fallbacks ? { 'anthropic-beta': 'server-side-fallback-2026-07-01' } : {}),
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      model: deps.model ?? COACH_MODEL_DEFAULT,
+      model,
       max_tokens: COACH_MAX_TOKENS,
       stream: true,
       // The grammar never changes between turns: cached as a prefix.
@@ -286,7 +298,7 @@ async function askModel(
       // Depth is effort, not a model swap: a patch is a small answer at
       // low effort, a rework earns the full think.
       output_config: { effort: depth === 'deep' ? 'high' : 'low' },
-      fallbacks: 'default',
+      ...(fallbacks ? { fallbacks: 'default' } : {}),
       messages,
     }),
     signal: AbortSignal.timeout(COACH_CALL_TIMEOUT_MS),

@@ -12,10 +12,15 @@ import { BEHAVIOR_KINDS, TRIGGER_KINDS } from '../src/ui/playbook_text';
 
 // A Messages API stub answering with server-sent events, the text cut
 // into pieces the way a real stream arrives, and recording the request.
-function sseFetch(answer: string, pieces = 7): { fetchFn: typeof fetch; requests: unknown[] } {
+function sseFetch(
+  answer: string,
+  pieces = 7,
+): { fetchFn: typeof fetch; requests: unknown[]; headers: Record<string, string>[] } {
   const requests: unknown[] = [];
+  const headers: Record<string, string>[] = [];
   const fetchFn: typeof fetch = async (_url, init) => {
     requests.push(JSON.parse(String(init?.body)));
+    headers.push({ ...((init?.headers ?? {}) as Record<string, string>) });
     const encoder = new TextEncoder();
     const size = Math.max(1, Math.ceil(answer.length / pieces));
     const stream = new ReadableStream<Uint8Array>({
@@ -39,16 +44,21 @@ function sseFetch(answer: string, pieces = 7): { fetchFn: typeof fetch; requests
     });
     return new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
   };
-  return { fetchFn, requests };
+  return { fetchFn, requests, headers };
 }
 
-function rig(answer: string): { deps: CoachDeps; botId: string; requests: unknown[] } {
+function rig(answer: string): {
+  deps: CoachDeps;
+  botId: string;
+  requests: unknown[];
+  headers: Record<string, string>[];
+} {
   const store = new BotStore(':memory:');
   const botDeps: BotDeps = { store, newId: () => 'bot_00000000000000aa', now: () => 1 };
   const made = createBot(botDeps, 1, { name: 'Nightfall', championId: 'vesk' });
   if (!made.ok) throw new Error(made.error);
-  const { fetchFn, requests } = sseFetch(answer);
-  return { deps: { store, apiKey: 'test-key', fetchFn }, botId: made.bot.id, requests };
+  const { fetchFn, requests, headers } = sseFetch(answer);
+  return { deps: { store, apiKey: 'test-key', fetchFn }, botId: made.bot.id, requests, headers };
 }
 
 const ANSWER = [
@@ -144,13 +154,32 @@ describe('the coach', () => {
       output_config: { effort: string };
       messages: { role: string; content: string }[];
     }[];
-    expect(quick!.model).toBe('claude-opus-5');
+    expect(quick!.model).toBe('claude-sonnet-5');
     expect(quick!.stream).toBe(true);
     expect(quick!.output_config.effort).toBe('low');
     expect(deep!.output_config.effort).toBe('high');
     expect(deep!.messages).toHaveLength(3);
     expect(deep!.messages[2]!.content).toMatch(/"id":"push"/);
     expect(deep!.messages[0]!.content).not.toMatch(/playbook on the form/);
+  });
+
+  // The coach runs on Sonnet (the night is not worth Opus money), and the
+  // server-side refusal fallback is an Opus and Fable feature: sending it
+  // to Sonnet is a 400, so it rides only when the configured model takes it.
+  it('sends the refusal fallback only to a model that takes it', async () => {
+    const { deps, botId, requests, headers } = rig('# ok\n');
+    await coachPlaybook(deps, 1, { id: botId, messages: [{ role: 'user', text: 'hi' }] });
+    await coachPlaybook({ ...deps, model: 'claude-opus-5' }, 1, {
+      id: botId,
+      messages: [{ role: 'user', text: 'hi' }],
+    });
+    const [sonnet, opus] = requests as { model: string; fallbacks?: string }[];
+    expect(sonnet!.model).toBe('claude-sonnet-5');
+    expect(sonnet!.fallbacks).toBeUndefined();
+    expect(headers[0]!['anthropic-beta']).toBeUndefined();
+    expect(opus!.model).toBe('claude-opus-5');
+    expect(opus!.fallbacks).toBe('default');
+    expect(headers[1]!['anthropic-beta']).toBe('server-side-fallback-2026-07-01');
   });
 
   it('answers honestly without a key, off the account, or with a broken form', async () => {

@@ -36,7 +36,7 @@ const BOT: BotRow = {
   version: 1,
   deposited: true,
   autoApply: false,
-    openPlaybook: false,
+  openPlaybook: false,
   createdAt: 0,
   updatedAt: 0,
 };
@@ -129,7 +129,13 @@ const OPS: PatchOp[] = [
 ];
 
 function rig(
-  opts: { coachOps?: PatchOp[] | null; autoApply?: boolean; records?: MatchRecord[] } = {},
+  opts: {
+    coachOps?: PatchOp[] | null;
+    autoApply?: boolean;
+    records?: MatchRecord[];
+    ownerSeenAt?: (accountId: number) => number | null;
+    idleDays?: number;
+  } = {},
 ) {
   const store = new BotStore(':memory:');
   store.insertBot({ ...BOT, autoApply: opts.autoApply ?? false });
@@ -156,6 +162,8 @@ function rig(
           },
     records: () => records,
     now: () => (clock += 100),
+    ...(opts.ownerSeenAt ? { ownerSeenAt: opts.ownerSeenAt } : {}),
+    ...(opts.idleDays === undefined ? {} : { idleDays: opts.idleDays }),
     sparringPerSide: 2,
     maxTicks: 20,
   };
@@ -274,6 +282,33 @@ describe('a bot’s night', () => {
       /no coach configured/,
     );
     expect(buildBriefing(quiet.deps, quiet.store.getBot(BOT.id)!).rating).toBe(BASE_RATING);
+  });
+
+  // The night's only paid step waits for an owner who is still around: an
+  // Arena that plays deposited bots forever must not bill a model call
+  // forever for someone who never came back.
+  it('reports without calling the coach when the owner has been away', async () => {
+    // The rig's clock starts near zero, so an owner last seen more than a
+    // week before it carries a stamp before the epoch.
+    const away = rig({ ownerSeenAt: () => -8 * 24 * 60 * 60 * 1000, idleDays: 7 });
+    away.reportFor(41, 5_000);
+    const before = away.store.botLastCoachedAt(BOT.id);
+    const line = await coachBotOvernight(away.deps, away.store.getBot(BOT.id)!);
+    expect(line).toMatch(/the owner has been away, report only/);
+    expect(away.coachCalls).toHaveLength(0);
+    expect(away.store.pendingProposal(BOT.id)).toBeNull();
+    // The window still moved, so the owner's return is coached on one
+    // night's matches and not on a month of backlog.
+    expect(away.store.botLastCoachedAt(BOT.id)).not.toBe(before);
+  });
+
+  it('coaches a bot whose owner looked in this week', async () => {
+    const here = rig({ ownerSeenAt: () => 9_000, idleDays: 7 });
+
+    here.reportFor(41, 5_000);
+    const line = await coachBotOvernight(here.deps, here.store.getBot(BOT.id)!);
+    expect(here.coachCalls).toHaveLength(1);
+    expect(line).toMatch(/sparring/);
   });
 
   it('lets the owner dismiss, and refuses a stranger’s proposal id', () => {

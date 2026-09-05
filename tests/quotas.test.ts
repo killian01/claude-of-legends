@@ -33,6 +33,27 @@ describe('daily quotas', () => {
     }
   });
 
+  // A bake is not a build: it retargets a rig the Creation already paid
+  // for, and a kit with per-spell clips needs more bakes in a day than a
+  // day's builds. Sharing one meter made a full kit unfinishable.
+  it('meters animation apart from building, each on its own allowance', () => {
+    const store = new ForgeStore(':memory:');
+    try {
+      const deps: QuotaDeps = { store, limits: { generation: 1, animate: 3 }, now: () => 1 };
+      spendQuota(deps, 1, 'generation');
+      expect(checkQuota(deps, 1, 'generation').ok).toBe(false);
+      // The build's meter is full; the bakes still run.
+      expect(checkQuota(deps, 1, 'animate')).toMatchObject({ ok: true, used: 0, limit: 3 });
+      spendQuota(deps, 1, 'animate');
+      spendQuota(deps, 1, 'animate');
+      expect(checkQuota(deps, 1, 'animate')).toMatchObject({ ok: true, used: 2 });
+      spendQuota(deps, 1, 'animate');
+      expect(checkQuota(deps, 1, 'animate').ok).toBe(false);
+    } finally {
+      store.close();
+    }
+  });
+
   it('a zero limit disables the meter', () => {
     const store = new ForgeStore(':memory:');
     try {
