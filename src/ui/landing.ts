@@ -71,19 +71,23 @@ export function showLanding(
     bar.right.appendChild(navLink('Discord', DISCORD));
     bar.right.appendChild(navLink('Source', REPO));
 
-    // The site mark, centered on the bar. It belongs to the landing only:
-    // the home's bar carries a row of sections through that middle.
-    const mark = el('img', 'pg-mark');
-    mark.src = '/icon-192.png';
-    mark.alt = '';
-    mark.width = 192;
-    mark.height = 192;
-    mark.decoding = 'async';
-    bar.root.appendChild(mark);
+    // --- hero: the lockup, and the copy beside it ---
+    // The name is art here rather than text: the lockup carries the crest
+    // over the wordmark, so the bar needs no crest of its own. Still an h1,
+    // because the page's heading is the game's name either way.
+    const logo = el('img', '');
+    logo.src = '/logo.webp';
+    logo.alt = 'Claude of Legends';
+    logo.width = 960;
+    logo.height = 1181;
+    logo.decoding = 'async';
+    // The one image above the fold, and the largest thing on the page.
+    logo.fetchPriority = 'high';
+    const title = el('h1', 'pg-lockup');
+    title.appendChild(logo);
 
-    // --- hero ---
-    hero.append(
-      el('h1', 'pg-title', 'Claude of Legends'),
+    const copy = el('div', 'pg-hero-copy');
+    copy.appendChild(
       el(
         'p',
         'pg-tag',
@@ -93,8 +97,9 @@ export function showLanding(
       ),
     );
     const stats = el('div', 'pg-stats');
-    hero.appendChild(stats);
+    copy.appendChild(stats);
     mountLiveStats(stats);
+    hero.append(title, copy);
 
     // --- the two ways in ---
     const ways = el('div', 'pg-cards');

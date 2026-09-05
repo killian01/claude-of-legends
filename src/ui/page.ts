@@ -66,27 +66,27 @@ export const CSS = `
 }
 
 .pg-hero { padding: clamp(28px, 7vh, 72px) 0 0; max-width: 720px; }
-/* The site mark, centered on the bar and hanging below it, the way a crest
-   sits over a gate. Absolute so it never fights the bar's flex row for
-   width, and inert to the pointer so it cannot eat a click meant for a
-   link behind it. It sits on the painted backdrop, so it carries its own
-   shadow to hold the gold's edge against whatever the art does behind. */
-.pg-mark {
-  position: absolute; left: 50%; top: 2px; transform: translateX(-50%);
-  width: 78px; height: 78px; pointer-events: none;
-  filter: drop-shadow(0 10px 26px rgba(0, 0, 0, 0.62));
-}
-/* Kept next to the rule it narrows: the phone block further up the sheet
-   would lose to it on source order at equal specificity. The wordmark
-   spans the whole first row on a phone, so a crest centered over the bar
-   would sit on the letters; it takes its own row above them instead. */
+/* The landing sets its name in art: the lockup, crest over wordmark. It is
+   a tall block, so the hero puts it beside the copy rather than above it.
+   Stacked they measure about 700px together, which pushes the two ways in
+   off the fold on a laptop; side by side the hero is only as tall as the
+   lockup, which is what the two lines of Cinzel used to cost. It sits on
+   the painted backdrop, so it carries its own shadow to hold the gold's
+   edge against whatever the art does behind. */
+.pg.land .pg-hero { display: flex; align-items: center; max-width: 880px;
+  gap: clamp(20px, 3.2vw, 44px); }
+.pg-lockup { flex: none; margin: 0; width: clamp(190px, 26vw, 300px); }
+.pg-lockup img { display: block; width: 100%; height: auto;
+  filter: drop-shadow(0 16px 38px rgba(0, 0, 0, 0.62)); }
+.pg-hero-copy { min-width: 0; }
+/* First in its column now, so the gap it used to keep from the title is
+   the hero's flex gap instead. */
+.pg-hero-copy .pg-tag { margin-top: 0; }
+/* A phone has no width for two columns, and at 300px the lockup would own
+   the screen, so it stacks and shrinks. */
 @media (max-width: 720px) {
-  .pg-mark {
-    /* flex-basis wins over width here, so the row is full width and the
-       image is centered inside it by object-fit rather than by margins. */
-    position: static; order: -1; flex-basis: 100%; transform: none;
-    width: auto; height: 54px; object-fit: contain; margin: 0 0 2px;
-  }
+  .pg.land .pg-hero { flex-direction: column; align-items: flex-start; gap: 20px; }
+  .pg-lockup { width: 176px; }
 }
 .pg-title {
   font-family: Cinzel, Georgia, 'Times New Roman', serif;
