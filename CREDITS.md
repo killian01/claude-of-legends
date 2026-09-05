@@ -1,9 +1,10 @@
 # Asset credits and asset licenses
 
-The repository's `LICENSE` covers the project's source code. Media assets are
-governed by the licenses recorded here; every asset under `public/` must have
-a row in this file before it ships (ADR 0004: original naming, no third-party
-IP; CC0 packs are original art and satisfy it).
+The repository's `LICENSE` covers the project's own source code. Everything
+this repository ships without having written it is recorded here instead:
+media assets, and the one directory of vendored files at the end. Every asset
+under `public/` must have a row in this file before it ships (ADR 0004:
+original naming, no third-party IP; CC0 packs are original art and satisfy it).
 
 ## Champion models (`public/models/champions/`)
 
@@ -129,3 +130,12 @@ attribution; the list is kept out of respect for the recordists.
 | Files | What it is | License |
 |---|---|---|
 | `basis/basis_transcoder.js`, `basis/basis_transcoder.wasm` | Basis Universal transcoder shipped with three.js (`three/examples/jsm/libs/basis/`), needed to decode the KTX2 textures inside the champion GLBs | Apache 2.0 (Binomial LLC / Google) |
+
+## Vendored agent skills (`.claude/skills/`)
+
+Not assets, but the same rule: files this repository ships without having
+written them.
+
+| Files | What it is | License |
+|---|---|---|
+| `domain-modeling/`, `grill-with-docs/`, `grilling/`, `prototype/`, `research/`, `setup-matt-pocock-skills/`, `wayfinder/` | Unmodified copies of Matt Pocock's skills from [`mattpocock/skills`](https://github.com/mattpocock/skills), checked in so a fresh clone gets the same agent setup; the provenance table is `.claude/skills/README.md` | MIT (Matt Pocock), notice at `.claude/skills/LICENSE` |
