@@ -1,7 +1,14 @@
-// Film a saved replay for the README gameplay gif. Signs into the local
+// Film a saved replay for the README gameplay clip. Signs into the local
 // dev stack, opens the replay viewer on REPLAY_ID, fast-forwards to
 // REPLAY_AT (seconds of sim time), then records CDP screencast frames at
 // 1x for REPLAY_FOR seconds into SHOT_DIR.
+//
+// The frames become the animated WebP the README shows:
+//   ffmpeg -framerate 8.33 -i docs/screenshots/frame-%04d.jpg \
+//     -vf scale=720:-2 -vcodec libwebp_anim -q:v 72 -loop 0 \
+//     -preset picture docs/screenshots/gameplay.webp
+// WebP rather than GIF: the same 121 frames are 2.8 MB instead of 8, and
+// without the palette dither that GIF puts on the water and the grass.
 import { writeFile } from 'node:fs/promises';
 import puppeteer from 'puppeteer-core';
 import { e2eName, signIn } from './e2e_signin.mjs';
