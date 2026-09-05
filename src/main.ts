@@ -826,14 +826,21 @@ async function boot(): Promise<void> {
   let account: AuthedAccount | null = await currentAccount();
 
   for (;;) {
-    // The way in (ADR 0006): the server refuses everything without an
-    // account, so the sign-in screen stands in front of the home screen
-    // rather than beside it, and it is the only way past. An invite code
-    // survives the detour and lands in the join field on the other side.
-    // The offline practice match is still here, as the home's Practice
-    // tile; it is no longer a second door out on the landing.
+    // The way in (ADR 0006): everything but the offline practice match
+    // needs an account, so the sign-in screen stands in front of the home
+    // screen rather than beside it. An invite code survives the detour and
+    // lands in the join field on the other side.
     if (account === null) {
-      account = (await showLanding(container, discordResult)).account;
+      const entry = await showLanding(container, discordResult);
+      if (entry.kind === 'account') {
+        account = entry.account;
+      } else {
+        // Offline: one match against bots, then back to the way in.
+        const pick: OfflinePick = lastPick ?? (await pickForPractice());
+        lastPick = pick;
+        await runOffline(pick);
+        continue;
+      }
     }
     if (joinCode !== null) next = { name: account.name, mode: 'join', code: joinCode };
     const choice: HomeChoice =

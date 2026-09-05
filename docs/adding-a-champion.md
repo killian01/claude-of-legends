@@ -131,8 +131,8 @@ pnpm test         # the whole suite, including the gates above
 pnpm lint         # Biome, on the files you touched
 ```
 
-Then play it: `pnpm server` and `pnpm dev`, sign in, take the Practice
-tile, pick it, and use all four abilities on something. A kit that passes every test and feels
+Then play it: `pnpm dev`, "Play offline now", pick it, and use
+all four abilities on something. A kit that passes every test and feels
 dead is still a kit that needs another pass.
 
 For the record, this guide was written by doing it: an eleventh champion
