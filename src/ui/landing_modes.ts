@@ -28,7 +28,7 @@ export const LANDING_MODES: readonly LandingMode[] = [
   {
     id: 'bots',
     title: 'Bots',
-    line: "Write a bot's playbook by talking to a coach in the Academy, then seat it in a rated match.",
+    line: "Write a bot's playbook in the Academy, spar it in seconds, then send it up the ladder.",
     art: tileArtUrl('bots'),
   },
   {
