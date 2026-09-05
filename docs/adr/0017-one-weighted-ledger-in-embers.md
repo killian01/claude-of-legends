@@ -59,9 +59,13 @@ and both are one line of plumbing away: the provider balance already has an endp
 (`server/generation/tripo.ts`, reading 940 on 2026-09-05), so recording it either side of
 each task kind prices the 3D and 2D acts exactly; and every Messages API response already
 carries `usage`, so logging it prices every model turn. What both have measured so far is
-kept in `docs/design/generation-costs.md`. The ember table lands with that data, and the
-size of the weekly grant lands after it, from what a normal week actually costs. Until then
-this ADR has decided a mechanism and named no price.
+kept in `docs/design/generation-costs.md`, which is where the table lives rather than here,
+so it can be re-read as prices move. That measurement has since settled the unit itself:
+**one ember is one cent of what the server spends**, which makes every weight read straight
+off the measured column and survives a provider changing its prices or being swapped
+(ADR 0010). The size of the weekly grant is the one number still open, and it is a choice
+about how much a free player may make rather than a measurement: the same document works it
+in champions per month, which is the only form the question has a right answer in.
 
 Considered and rejected: keeping a counter per action and adding one whenever two costs
 diverge (what we have, it is why the animation wall existed, and no number of counters ever

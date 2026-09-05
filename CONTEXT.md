@@ -341,8 +341,9 @@ it actually costs us, so a 3D build is dear, a clip bake is a fraction of it, a 
 fraction again, and a turn with the coach or the kit conversation cheaper still. Every
 account receives a weekly grant that rolls over, held on the same append-only ledger as
 before, with the balance derived and never stored; any failure refunds exactly what it
-debited. The creator arbitrates their own week, trading rerolls against animations. The
-weights and the size of the grant come from measured cost, not from this glossary.
+debited. The creator arbitrates their own week, trading rerolls against animations. One
+ember is one cent of what the server spends, so the weights are read off measurement and
+never argued about: `docs/design/generation-costs.md` holds them.
 _Avoid_: credit, token, generation token, point
 
 **Creation**:

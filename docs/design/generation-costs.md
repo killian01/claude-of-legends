@@ -29,11 +29,15 @@ weapon at 30, one rig at 25, and two bakes at 30 and 10, so **195 credits**, of 
 more than a third, went on 2D. The image is the cheapest single act and the most repeated
 one, which is exactly the trade the old per-action counters could not express.
 
-The account balance read 940 credits on 2026-09-05 (`server/generation/tripo.ts` has the
-endpoint). **What one credit cost in money is the one number not measurable from here**: it
-is on no public endpoint, the pricing page refuses an automated read, and it is whatever
-the maintainer paid for the pack. The report takes it as an argument for that reason, and
-every Tripo row stays exact in credits and blank in dollars until it is given.
+A credit costs **one US cent**: 10 dollars for 1000, the pack the maintainer bought
+(2026-09-05). It is on no public endpoint and the pricing page refuses an automated read,
+so the report takes it as an argument rather than carrying it as a constant. The account
+balance read 940 credits the same day (`server/generation/tripo.ts` has the endpoint), which
+is 9 dollars and 40 cents of runway.
+
+In money, then: an image costs 10 cents, a model or a weapon 30, the rig 25, a five-clip
+bake 30 and a one-clip bake 10. **The first forged champion cost 1 dollar 95**, of which 70
+cents went on 2D.
 
 ## The model calls, exact, per response
 
@@ -58,17 +62,77 @@ read   input 14  cache_write 0     cache_read 3037
 ```
 
 So the fixed prefix of a kit turn fell from about 4400 tokens at 2 dollars per million to
-the same 4400 at 0.20, which is 0.9 cents a turn down to 0.09. What a turn costs on top of
-that is its output, and that is what the log is now collecting.
+the same 4400 at 0.20, which is 0.9 cents a turn down to 0.09.
 
-## What is still missing, and how to finish it
+One real kit turn, measured against the API on 2026-09-05 with the true rules block, a real
+1.5 MB splash and a creator's opening line, answering with a complete kit:
 
-1. The dollar price of a Tripo credit. One number, from whoever bought them.
-2. Output tokens per turn, for the kit conversation and for the coach, from real use. The
-   log fills this in on its own now.
-3. A three-clip bake, to confirm or kill the 5 + 5n retarget rule.
-4. A night's worth of coach calls, to price the night against an Academy turn. These are
-   already told apart in the log (`night` against `coach`).
+```
+input 1590   cache_write 3037   cache_read 0   output 983
+```
 
-With those, `scripts/spend_report.mjs` prints the relative table the ember weights come
-from, and the size of the weekly grant follows from what a normal week costs.
+At the sonnet-5 list that is 0.32 cents of input, 0.76 of cache write and **0.98 of output**,
+so **2.1 cents for the opening turn** and about 1.5 for a later one, once the rules and the
+splash are read back from cache instead of written to it. Output is half the bill and rising
+as a share, which is the shape to remember: caching has taken the input side about as far as
+it goes, and what is left is what the model writes.
+
+A player's message can cost up to three of those. `SUGGEST_ATTEMPTS` is 3: a kit that fails
+validation or comes in under the budget floor is sent back, so a bad message is a 6 cent
+message.
+
+The coach has not been measured yet. Same shape, its preamble cached the same way, a bigger
+`max_tokens` (8000) but a much smaller real answer, a comment line and a few patch
+operations, so it should land under a kit turn. The log tells `coach` from `night` and will
+settle it.
+
+## What an act costs, all together
+
+Measured unless marked. One ember is one cent of what the server spends, which makes the
+weights read straight off this column.
+
+| Act | Cost | Embers |
+|---|---|---|
+| A model turn, coach (estimated) | under 1 cent | 1 |
+| A kit conversation turn | 1.5 to 2.1 cents | 2 |
+| One 2D image | 10 cents | 10 |
+| A one-clip bake | 10 cents | 10 |
+| The rig, once per champion | 25 cents | 25 |
+| A five-clip bake | 30 cents | 30 |
+| The 3D model | 30 cents | 30 |
+| The weapon | 30 cents | 30 |
+| **A whole champion, as the first one was made** | **1.95 dollars** | **195** |
+
+The ember is defined as a cent of cost and not as a Tripo credit, even though the two happen
+to coincide today: the coincidence is Tripo's price, and the definition has to survive the
+day that changes or the day a provider is swapped (ADR 0010).
+
+## What a week costs, which is the question that started this
+
+The old weekly grant was 3 creations. A creation covered a model, its weapon and its bakes,
+so about 115 cents of 3D, and the 2D rode a separate daily meter of 40 images: 4 dollars a
+day, 28 a week, per account, on top. Three creations plus a week of that allowance is
+roughly **31 dollars per account per week**, or 6200 a month at fifty players. Nobody ever
+spent near it, which is exactly why it went unnoticed: a ceiling nobody touches still sets
+what a bad week can cost.
+
+Priced instead in what a player can actually make:
+
+| A free week of | Embers | Per account per month | Fifty players |
+|---|---|---|---|
+| One champion a month | 50 | 2 dollars | 100 dollars |
+| One champion a fortnight | 100 | 4 dollars | 200 dollars |
+| One champion a week | 200 | 8 dollars | 400 dollars |
+
+That is the decision the grant size is, and it is now a decision rather than a guess.
+
+## What is still missing
+
+1. The coach, and the night, against a real answer rather than a shape. The log tells the
+   two apart already.
+2. A three-clip bake, to confirm or kill the 5 + 5n retarget rule.
+3. Output tokens across many real turns rather than one, to know the spread and not just
+   the middle.
+
+All three fill in on their own as the game is played; `scripts/spend_report.mjs` reads them
+back. None of them moves the order of magnitude of the table above.
