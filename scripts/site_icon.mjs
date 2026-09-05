@@ -7,6 +7,13 @@
 // is the brand signature: one wide WebP for the README and anywhere else
 // the name is set in art rather than in text.
 //
+// favicon.ico is not redundant with the PNG links in index.html. A browser
+// asks for /favicon.ico on its own whether or not the page names one, and
+// so do the places that show a site without loading its markup: bookmarks,
+// history, a link unfurled elsewhere. Without the file the SPA fallback
+// answered that request with index.html at 200, which is an HTML document
+// wearing an image content type as far as the browser is concerned.
+//
 // Both arrive cut out already, so there is no background to flood away;
 // what they need is a trim to the art, a square frame and the sizes. Two
 // things still have to be repaired:
@@ -123,6 +130,25 @@ const files = await page.evaluate(
         side,
         side,
       );
+    // The 16 in the .ico is the one size the whole crest cannot survive:
+    // the gold ring goes thin, the starfield inside it goes to mush and
+    // the four point star is a single grey pixel. So down there the frame
+    // closes on the C alone, which drops the star and the margin around
+    // it and buys the ring the two pixels it needs to read as a ring. 0.44
+    // across the box rather than the middle because the C sits left of it
+    // once the star is gone. A favicon is allowed to differ per size.
+    const tight = (size) => {
+      const s = side * 0.88;
+      return draw(
+        mark.canvas,
+        size,
+        size,
+        mark.box.x + mark.box.w * 0.44 - s / 2,
+        mark.box.y + (mark.box.h - s) / 2,
+        s,
+        s,
+      );
+    };
     // iOS gets a full bleed opaque plate; it applies its own rounding.
     const plated = (size, art) => {
       const o = document.createElement('canvas');
@@ -154,9 +180,12 @@ const files = await page.evaluate(
     return {
       'public/icon-512.png': png(crest(512)),
       'public/icon-192.png': png(crest(192)),
-      'public/icon-32.png': png(crest(32)),
       'public/apple-touch-icon.png': png(plated(180, crest(360))),
       'public/logo.webp': signature.toDataURL('image/webp', 0.9).split(',')[1],
+      // Packed into the .ico below, not written as they are. Three sizes so
+      // the browser picks rather than downsamples: 16 for the tab, 32 for a
+      // dense screen's tab, 48 for the bookmark bar and the history list.
+      ico: [png(tight(16)), png(crest(32)), png(crest(48))],
     };
   },
   dataUrl(MARK),
@@ -164,9 +193,44 @@ const files = await page.evaluate(
   PLATE,
 );
 
-for (const [file, b64] of Object.entries(files)) {
+// An .ico is a directory of images in one file. Every browser still in use
+// reads a PNG payload inside one (it has been the normal way to carry the
+// larger sizes since Vista), so the entries are the PNGs above rather than
+// the bitmaps the format was written for.
+function ico(pngs) {
+  const images = pngs.map((b64) => Buffer.from(b64, 'base64'));
+  const header = Buffer.alloc(6 + 16 * images.length);
+  header.writeUInt16LE(0, 0); // reserved
+  header.writeUInt16LE(1, 2); // 1 = icon, 2 would be a cursor
+  header.writeUInt16LE(images.length, 4);
+  let offset = header.length;
+  images.forEach((img, i) => {
+    // The size is read back out of the PNG's own header, so the entry can
+    // never disagree with the image it points at. 256 is written as 0.
+    const side = img.readUInt32BE(16);
+    const at = 6 + 16 * i;
+    header.writeUInt8(side >= 256 ? 0 : side, at);
+    header.writeUInt8(side >= 256 ? 0 : side, at + 1);
+    header.writeUInt8(0, at + 2); // palette size, 0 for a truecolour image
+    header.writeUInt8(0, at + 3); // reserved
+    header.writeUInt16LE(1, at + 4); // colour planes
+    header.writeUInt16LE(32, at + 6); // bits per pixel
+    header.writeUInt32LE(img.length, at + 8);
+    header.writeUInt32LE(offset, at + 12);
+    offset += img.length;
+  });
+  return Buffer.concat([header, ...images]);
+}
+
+const { ico: icoPngs, ...plain } = files;
+for (const [file, b64] of Object.entries(plain)) {
   const bytes = Buffer.from(b64, 'base64');
   writeFileSync(file, bytes);
   console.log(`${file} ${(bytes.length / 1024).toFixed(1)} kB`);
 }
+const icoBytes = ico(icoPngs);
+writeFileSync('public/favicon.ico', icoBytes);
+console.log(
+  `public/favicon.ico ${(icoBytes.length / 1024).toFixed(1)} kB, ${icoPngs.length} sizes`,
+);
 await browser.close();

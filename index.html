@@ -6,10 +6,13 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
-    <!-- One crest at every size: the C is a bold enough shape to survive a
-         tab, so unlike the medallion it replaced it needs no tighter crop
-         down there (scripts/site_icon.mjs cuts the set). -->
-    <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32" />
+    <!-- favicon.ico carries the tab sizes, 16, 32 and 48, so the browser
+         picks one rather than downsampling to it; the 16 inside it is a
+         tighter crop, because the whole crest is a smudge that small
+         (scripts/site_icon.mjs cuts the set). Naming it here is belt and
+         braces: a browser asks for /favicon.ico on its own anyway, and so
+         do bookmarks and history, which never read this markup. -->
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
     <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#0a1120" />
