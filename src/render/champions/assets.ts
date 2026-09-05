@@ -285,6 +285,22 @@ export function setPropsArmed(anchors: readonly PropAnchor[], armed: boolean): v
 const ANCHOR_POS = new THREE.Vector3();
 const ROOT_QUAT_INV = new THREE.Quaternion();
 const BONE_QUAT = new THREE.Quaternion();
+// The rest orientation every authored grip is relative to, taken from ONE
+// named frame of the idle rather than from whatever frame happened to be
+// on screen. Sampling on a wall clock ("300 ms in") could not be right
+// twice: dt varies, so the idle sat at a different frame at every capture,
+// and a weapon fitted in the workshop was read against a different rest
+// the next time it opened. The caller pins the clip to the reference frame
+// and calls this; nothing about it depends on time.
+export function captureRestPose(root: THREE.Object3D, anchors: readonly PropAnchor[]): void {
+  root.updateMatrixWorld(true);
+  root.getWorldQuaternion(ROOT_QUAT_INV).invert();
+  for (const a of anchors) {
+    a.hand.bone.getWorldQuaternion(BONE_QUAT).premultiply(ROOT_QUAT_INV);
+    a.restInv = BONE_QUAT.clone().invert();
+  }
+}
+
 export function syncPropAnchors(
   root: THREE.Object3D,
   anchors: readonly PropAnchor[],

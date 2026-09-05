@@ -17,7 +17,13 @@ import {
   runTimeScale,
   WEAPON_STOW_DELAY_MS,
 } from './anim';
-import { type ChampionTemplate, type PropAnchor, setPropsArmed, syncPropAnchors } from './assets';
+import {
+  type ChampionTemplate,
+  captureRestPose,
+  type PropAnchor,
+  setPropsArmed,
+  syncPropAnchors,
+} from './assets';
 
 type ShotKey = 'attack' | 'cast' | 'hit' | 'death';
 
@@ -192,14 +198,37 @@ export class ChampionVisual {
     this.ageMs += dtMs;
     // Sync prop anchors to their bones in root space at unit scale, so
     // props keep their authored size no matter what scale the bone chain
-    // carries. The rest orientation is captured only once the idle pose has
-    // fully faded in AND no one-shot holds the rig: a swing playing during
-    // the capture window (slow asset load into a live fight, or the home
-    // stage's random attacks) would bake a mid-swing hand as "rest" and
-    // leave the weapon permanently twisted.
-    const settled = this.ageMs > 300 && this.shot === null && this.base === 'idle';
+    // carries. The rest the authored grip is relative to is ONE named
+    // frame, the idle at time zero, read once by posing the rig there and
+    // putting it back. It used to be sampled off a wall clock, which could
+    // not land on the same frame twice: a weapon fitted in the workshop
+    // was then read against a different rest in match, and again against
+    // another one the next time the workshop opened. The old worry that a
+    // swing could be captured as "rest" goes with it, since the frame is
+    // named rather than caught in passing.
+    if (this.anchors.length > 0 && this.anchors[0]?.restInv === null) this.captureRest();
     setPropsArmed(this.anchors, armed);
-    syncPropAnchors(this.root, this.anchors, settled);
+    syncPropAnchors(this.root, this.anchors, false);
+  }
+
+  // Poses the rig on the reference frame, reads the rest orientation
+  // there, and restores playback. Never visible: the mixer is stepped by
+  // zero on either side.
+  private captureRest(): void {
+    const idle = this.baseActions.idle;
+    if (!idle) return;
+    const wasTime = idle.time;
+    const wasWeight = idle.getEffectiveWeight();
+    const wasEnabled = idle.enabled;
+    idle.enabled = true;
+    idle.time = 0;
+    idle.setEffectiveWeight(1);
+    this.mixer.update(0);
+    captureRestPose(this.root, this.anchors);
+    idle.time = wasTime;
+    idle.setEffectiveWeight(wasWeight);
+    idle.enabled = wasEnabled;
+    this.mixer.update(0);
   }
 
   // Releases the mixer bindings and the per-clone skeletons. Geometry is the
