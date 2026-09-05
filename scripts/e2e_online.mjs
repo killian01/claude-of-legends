@@ -8,7 +8,7 @@ import { clickTile, e2eName, signIn } from './e2e_signin.mjs';
 
 const url = process.argv[2] ?? 'http://localhost:8787/';
 const shot = process.argv[3] ?? 'e2e.png';
-const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const CHROME = process.env.CHROME ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
 const browser = await puppeteer.launch({
   executablePath: CHROME,

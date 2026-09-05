@@ -8,7 +8,7 @@ import puppeteer from 'puppeteer-core';
 
 const url = process.argv[2];
 const outBase = process.argv[3] ?? 'burst';
-const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const CHROME = process.env.CHROME ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
 const browser = await puppeteer.launch({
   executablePath: CHROME,

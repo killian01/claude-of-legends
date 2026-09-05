@@ -15,7 +15,9 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import puppeteer from 'puppeteer-core';
 
 const CHROME =
-  process.env.SHOT_CHROME ?? '/root/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome';
+  process.env.SHOT_CHROME ??
+  process.env.CHROME ??
+  '/root/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome';
 const SRC = 'art_src/icon/mark.jpg';
 const PLATE = '#0a1120';
 

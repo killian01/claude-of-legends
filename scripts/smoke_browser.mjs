@@ -7,7 +7,7 @@ import puppeteer from 'puppeteer-core';
 
 const url = process.argv[2] ?? 'http://localhost:4173/';
 const shot = process.argv[3] ?? 'smoke.png';
-const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const CHROME = process.env.CHROME ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 
 const browser = await puppeteer.launch({
   executablePath: CHROME,
