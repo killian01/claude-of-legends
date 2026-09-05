@@ -25,7 +25,8 @@ export const CSS = `
 /* The bar: the brand, the sections, and at the right whatever belongs to
    the person reading. The sections scroll sideways on a phone rather than
    folding into a second component. */
-.pg-bar { display: flex; align-items: center; gap: 28px; padding: 16px 0 0; min-height: 60px; }
+.pg-bar { position: relative; display: flex; align-items: center; gap: 28px;
+  padding: 16px 0 0; min-height: 60px; }
 .pg-brand {
   font-family: Cinzel, Georgia, 'Times New Roman', serif; font-size: 15px; font-weight: 800;
   letter-spacing: 2.6px; text-transform: uppercase; white-space: nowrap; margin: 0;
@@ -67,13 +68,27 @@ export const CSS = `
 }
 
 .pg-hero { padding: clamp(28px, 7vh, 72px) 0 0; max-width: 720px; }
-/* The site mark, above the title on the landing. It sits on the painted
-   backdrop, so it carries its own shadow to hold the gold's edge against
-   whatever the art is doing behind it. */
+/* The site mark, centered on the bar and hanging below it, the way a crest
+   sits over a gate. Absolute so it never fights the bar's flex row for
+   width, and inert to the pointer so it cannot eat a click meant for a
+   link behind it. It sits on the painted backdrop, so it carries its own
+   shadow to hold the gold's edge against whatever the art does behind. */
 .pg-mark {
-  display: block; width: clamp(76px, 10vw, 124px); height: auto;
-  margin: 0 0 clamp(10px, 2vh, 18px);
-  filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.62));
+  position: absolute; left: 50%; top: 2px; transform: translateX(-50%);
+  width: 78px; height: 78px; pointer-events: none;
+  filter: drop-shadow(0 10px 26px rgba(0, 0, 0, 0.62));
+}
+/* Kept next to the rule it narrows: the phone block further up the sheet
+   would lose to it on source order at equal specificity. The wordmark
+   spans the whole first row on a phone, so a crest centered over the bar
+   would sit on the letters; it takes its own row above them instead. */
+@media (max-width: 720px) {
+  .pg-mark {
+    /* flex-basis wins over width here, so the row is full width and the
+       image is centered inside it by object-fit rather than by margins. */
+    position: static; order: -1; flex-basis: 100%; transform: none;
+    width: auto; height: 54px; object-fit: contain; margin: 0 0 2px;
+  }
 }
 .pg-title {
   font-family: Cinzel, Georgia, 'Times New Roman', serif;
