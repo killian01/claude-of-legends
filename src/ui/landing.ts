@@ -91,9 +91,8 @@ export function showLanding(
       el(
         'p',
         'pg-tag',
-        'A 5v5 MOBA that runs in a browser tab. Three lanes, ten champions with full kits, ' +
-          'jungle camps, a neutral objective and fog of war, over one deterministic simulation ' +
-          'and an authoritative server. Nothing to install.',
+        'A 5v5 MOBA that runs in a browser tab. Three lanes, ten champions, ' +
+          'jungle camps and fog of war. Nothing to install.',
       ),
     );
     const stats = el('div', 'pg-stats');
@@ -110,8 +109,8 @@ export function showLanding(
       el(
         'p',
         '',
-        'An account keeps your rating, your match history and your place on the ladder, ' +
-          'on any machine you sign in from.',
+        'Your rating, your match history and your place on the ladder, kept on any ' +
+          'machine you sign in from.',
       ),
       buildAuthForm((account) => finish({ kind: 'account', account }), discordResult),
     );
@@ -124,8 +123,8 @@ export function showLanding(
       el(
         'p',
         '',
-        'One match against bots, running entirely in this tab. No account, no server, ' +
-          'nothing saved. It is the same simulation the ranked game runs.',
+        'One match against bots, entirely in this tab. No account, nothing saved, ' +
+          'same simulation as ranked.',
       ),
       offlineBtn,
     );
