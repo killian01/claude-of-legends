@@ -33,6 +33,22 @@ ceilings stay, because they do a job no per-account number can, and so do the bl
 rate limit and the per-champion running-job rail, which bound rate and concurrency rather
 than money.
 
+The balance is shown, and every price with it, because a currency nobody can see is worth
+no more than the counters it replaces. The ember count lives on the account, in the drawer
+that already holds the profile and the standing, and is repeated at the head of the Forge
+editor: on the account rather than in a panel, because the Academy spends the same unit and
+a balance living inside the Forge would be in the wrong place the day it ships. Every act
+that costs names its price on the control that starts it, before it is pressed. The balance
+moves where the creator can watch it move. And a refusal names the number it met, never a
+bare limit the creator is learning about for the first time by being stopped.
+
+Playtest, 2026-09-04, is what settled that. The stock line sits in one place today, inside
+the build panel at step four of a draft, and only one of the five meters (the daily 2D one)
+appears anywhere on screen at all. A creator who ran out of daily bakes while animating a
+kit read it as running out of creations, because the only number in the interface was the
+creations one and it was not the one that had stopped them. Two numbers were wrong at once:
+the invisible one that refused, and the visible one that had nothing to do with it.
+
 The weights are not in this decision, on purpose. We know their shape, not their sizes: a
 3D build reconstructs geometry and rigs it and is far and away the dearest; a bake retargets
 an existing rig and is a fraction of it; a 2D image is a fraction again; a model turn is
@@ -62,8 +78,9 @@ refused the word for the creation).
 - The ledger's reasons (`weekly_grant`, `finalize`, `refund`) survive unchanged; only the
   magnitude of a delta moves, from one to the act's weight. Balances standing when this
   ships migrate by multiplying by the ember weight of a build.
-- The Forge shows a price on a button before it is pressed, not a refusal after: today a
-  creator learns the cost of an act by being stopped by it.
+- The account drawer and the Forge header gain the balance, every costing control gains its
+  price, and the Academy gains both: it is a spending surface under this decision and shows
+  nothing today.
 - `quota_events` outlives the per-account meters: the server-wide ceilings still count on
   it, and it stays the only record of how often each act is asked for.
 - Nothing ships until the calibration pass has run. An ember table guessed rather than
