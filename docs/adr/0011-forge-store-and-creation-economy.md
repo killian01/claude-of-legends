@@ -1,5 +1,9 @@
 # The Forge store and the creation economy
 
+> **The economy half is superseded by ADR 0017.** The creation is no longer the unit: every
+> paid act is priced in embers on this same ledger. The store decision below, and everything
+> the ledger is (append-only, balances derived, failures refunded), stand unchanged.
+
 The Forge (ADR 0010) brings the first data that is both creative work and paid
 generation credit: forged champions, the ledger that meters their 3D generation, and
 the jobs that produce their assets. Accounts already exist and are mandatory (ADR

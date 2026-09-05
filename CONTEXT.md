@@ -237,10 +237,10 @@ _Avoid_: atelier mode, custom game (that is a private lobby)
 **Draft**:
 A forged champion still being authored in the Forge: kit, stats, name, and splash art are
 edited freely and previewed on the engine's stylized figure. Drafts are unlimited and free.
-The 3D happens in two player-approved steps, both on the draft: the BUILD spends a creation
+The 3D happens in two player-approved steps, both on the draft: the BUILD spends its embers
 and produces the static model, which the creator inspects in the workshop (and may rebuild,
-spending another); ANIMATE, always last and always its own click, rigs the validated model
-once and bakes the clips the creator picked from the provider catalog. Animating never
+spending again); ANIMATE, always last and always its own click, rigs the validated model
+once and bakes the clips the creator picked from the provider catalog, at its own price. Animating never
 seals: the Seal (its own entry) is the creator's own separate click.
 _Avoid_: WIP champion, unfinished champion
 
@@ -283,7 +283,8 @@ A proposed spell look per key, written by a model from the champion's chosen spl
 its kit, in the same conversation form the kit and stat suggestions take. Every proposal
 is checked word by word against the look vocabulary and then through the full validation
 gate before it reaches the editor, and nothing touches the form until the creator applies
-it. It generates no asset and downloads nothing, so it costs a model call and no creation.
+it. It generates no asset and downloads nothing, so it is priced as a model turn and not as a
+build.
 _Avoid_: VFX generation, effect art job
 
 **Kit suggestion**:
@@ -330,17 +331,26 @@ _Avoid_: animation pack, clip bundle
 The neutral gray biped every catalog animation can be previewed on, instantly and at no
 cost, before it is baked onto a champion. An app asset generated once (body, rig, and the
 whole preset catalog as clip files) and shipped with the client, not a champion and not
-anyone's creation.
+anyone's own work.
 _Avoid_: preview dummy, test character
 
+**Ember**:
+The one unit the Forge and the Academy both burn: what an account spends whenever the
+server pays a provider on its behalf (ADR 0017). Every paid act is priced in embers by what
+it actually costs us, so a 3D build is dear, a clip bake is a fraction of it, a 2D image a
+fraction again, and a turn with the coach or the kit conversation cheaper still. Every
+account receives a weekly grant that rolls over, held on the same append-only ledger as
+before, with the balance derived and never stored; any failure refunds exactly what it
+debited. The creator arbitrates their own week, trading rerolls against animations. The
+weights and the size of the grant come from measured cost, not from this glossary.
+_Avoid_: credit, token, generation token, point
+
 **Creation**:
-The consumable unit of the Forge economy: building a draft's 3D model spends one, covering
-everything that champion is owed: the static model, the later animate step that seals it,
-and the weapon when one is generated (at build time or claimed afterwards). The splash art
-belongs to the free drafting stage. A technical failure of the build refunds the creation;
-a failed animate or weapon claim costs nothing and simply runs again. Every account
-receives a weekly allocation (ADR 0011); buying more arrives with payments.
-_Avoid_: credit, generation token
+A champion someone forged, in the ordinary sense of the word. It is no longer a unit of
+anything: what the acts of making one cost is counted in embers (ADR 0017). Building a
+draft's 3D model, baking its animations and forging its weapon are each their own priced
+act, and a technical failure of any of them refunds what it took.
+_Avoid_: forge credit, creation credit
 
 **Model reference**:
 The technical 2D image the 3D generation accepts as its input: exactly ONE character,
