@@ -564,7 +564,6 @@ export function openForgeEditor(container: HTMLElement): () => void {
   // --- 2D art state (plan-forge phase 4): candidates and the gen2d meter --
 
   let artCandidates: ArtCandidate[] = [];
-  let artQuota = { used: 0, limit: 0 };
   // The champion line typed per art kind, kept across rerenders.
   const artLines: Record<string, string> = {};
   // The art kind whose generation is in flight (skeleton card, disabled
@@ -609,8 +608,23 @@ export function openForgeEditor(container: HTMLElement): () => void {
   let lookProposal: Record<string, SpellLook | null> | null = null;
   let currentStage = '';
   let stageRows: Map<string, HTMLElement> | null = null;
-  // The account's creation stock, from the drafts route; -1 = unknown.
-  let creations = -1;
+  // The account's embers and what each act costs, from the routes that
+  // spend them; -1 is "not asked yet" and shows no number rather than a
+  // wrong one (ADR 0017).
+  let embers = -1;
+  let prices: Record<string, number> = {};
+  const priceOf = (act: string): number => prices[act] ?? 0;
+  // A control that costs says so on its face, before it is pressed
+  // (ADR 0017): the creator should never learn a price by being refused.
+  const priced = (label: string, act: string): string => {
+    const n = priceOf(act);
+    return n > 0 ? `${label} (${n} embers)` : label;
+  };
+  // The balance, wherever embers are about to be spent. It is the number
+  // the creator watches move, so it is repeated beside the acts that move
+  // it rather than kept in one corner of one panel.
+  const emberNote = (): HTMLElement =>
+    el('span', 'fe-quota', embers >= 0 ? `${embers} embers left` : '');
 
   // The chains' stages in order, worded for the player; the keys are the
   // job stages the server records (generation/pipeline.ts). The build is
@@ -708,13 +722,15 @@ export function openForgeEditor(container: HTMLElement): () => void {
     const r = await api<{
       ok: boolean;
       candidates?: ArtCandidate[];
-      quota?: { used: number; limit: number };
+      price?: number;
+      embers?: number;
     }>(`/api/forge/art?id=${encodeURIComponent(current.id)}`);
     // A failed call is not an empty gallery: what is shown stays shown,
     // and the banner says why nothing fresh came.
     if (!r?.ok) return;
     artCandidates = r.candidates ?? [];
-    artQuota = r.quota ?? { used: 0, limit: 0 };
+    if (typeof r.embers === 'number') embers = r.embers;
+    if (typeof r.price === 'number') prices.image = r.price;
   };
 
   const currentRow = (): DraftRow | undefined => drafts.find((d) => d.id === current.id);
@@ -1043,11 +1059,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
   const verdict = el('div', 'fe-errors');
   const testBtn = el('button', 'fe-btn', 'Test drive (practice)') as HTMLButtonElement;
   const saveBtn = el('button', 'fe-btn primary', 'Save now') as HTMLButtonElement;
-  const finalizeBtn = el(
-    'button',
-    'fe-btn',
-    'Build the 3D (spends a creation)',
-  ) as HTMLButtonElement;
+  const finalizeBtn = el('button', 'fe-btn', 'Build the 3D') as HTMLButtonElement;
   const deleteBtn = el('button', 'fe-btn danger', 'Delete draft') as HTMLButtonElement;
 
   // Everything the 3D build needs, mirrored client-side so the buttons
@@ -1146,7 +1158,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
   // The model build, the FIRST half only: save what is on screen, then
   // start the chain and follow it. It runs on the CHOSEN model reference,
   // the exact image approved in the Design tab (ADR 0006); a failure of
-  // any kind refunds the creation. Success opens the workshop on the
+  // any kind refunds every ember. Success opens the workshop on the
   // fresh static model, for the player to validate BEFORE animating.
   const runForge = (): void => {
     const blocker = forgeBlocker();
@@ -1182,7 +1194,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
             `/api/forge/job?id=${started.jobId}`,
           ).then((job) => {
             if (!job?.ok) {
-              settle('the job vanished; check your creations');
+              settle('the job vanished; check your embers');
               return;
             }
             if (job.status === 'success') {
@@ -1198,7 +1210,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
               return;
             }
             if (job.status === 'failed') {
-              settle(`The build failed (${job.error ?? 'unknown'}); the creation was refunded.`);
+              settle(`The build failed (${job.error ?? 'unknown'}); your embers came back.`);
               return;
             }
             currentStage = job.stage ?? '';
@@ -1218,7 +1230,8 @@ export function openForgeEditor(container: HTMLElement): () => void {
 
   // The animate step, always LAST and always the player's own click: rig
   // the validated model once, bake the picked clips, seal the champion.
-  // Included in the creation already spent; a failure can simply retry.
+  // Priced by how many clips it bakes; a failure refunds them and the
+  // bake can simply run again.
   // `picks` names only the roles this click bakes: a per-row button sends
   // its one role, the full-set button sends all five; the server keeps
   // whatever is already baked for the rest.
@@ -1279,7 +1292,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
   };
 
   // The weapon-only build on a sealed champion that has none: the
-  // creation covered it, so this spends nothing; a failure spends
+  // priced on its own now; a failure refunds it, and a failure spends
   // nothing either.
   const forgeWeaponNow = (): void => {
     if (weaponForging) return;
@@ -1409,13 +1422,17 @@ export function openForgeEditor(container: HTMLElement): () => void {
   };
 
   const loadDrafts = async (): Promise<void> => {
-    const r = await api<{ ok: boolean; drafts?: DraftRow[]; credits?: number }>(
-      `/api/forge/drafts`,
-    );
+    const r = await api<{
+      ok: boolean;
+      drafts?: DraftRow[];
+      embers?: number;
+      prices?: Record<string, number>;
+    }>(`/api/forge/drafts`);
     // A failed call is not an empty rail: the rows already shown stay.
     if (!r?.ok) return;
     drafts = r.drafts ?? [];
-    if (typeof r.credits === 'number') creations = r.credits;
+    if (typeof r.embers === 'number') embers = r.embers;
+    if (r.prices) prices = { ...prices, ...r.prices };
     // Finalized champions announce their models to the render registry, so
     // a test drive straight from here plays the generated model.
     for (const d of drafts) registerForgedAssets(d.id, d);
@@ -1496,7 +1513,11 @@ export function openForgeEditor(container: HTMLElement): () => void {
       line.addEventListener('input', () => {
         artLines.splash = line.value;
       });
-      const genBtn = el('button', 'fe-gen', 'Generate splash art') as HTMLButtonElement;
+      const genBtn = el(
+        'button',
+        'fe-gen',
+        priced('Generate splash art', 'image'),
+      ) as HTMLButtonElement;
       genBtn.disabled = busy;
       genBtn.addEventListener('click', () => generateArtKind('splash', line.value));
       hero.append(line, genBtn);
@@ -1507,12 +1528,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
         line.value = current.tagline.trim() === '' ? identity : `${identity}: ${current.tagline}`;
         artLines.splash = line.value;
       });
-      const quota = el(
-        'span',
-        'fe-quota',
-        artQuota.limit > 0 ? `${artQuota.used}/${artQuota.limit} images today` : '',
-      );
-      mess.append(prefill, quota);
+      mess.append(prefill, emberNote());
       splash.append(hero, mess);
       const badge = refineBadge('splash');
       if (badge) splash.append(badge);
@@ -1589,7 +1605,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
     const weaponPanel = el('div', 'fe-panel');
     weaponPanel.append(el('h3', '', 'Step 3: weapon (optional)'));
     // A champion sealed WITHOUT a weapon keeps this zone open: the
-    // creation covered the weapon, so it can still be claimed here.
+    // weapon can still be claimed here, at its own price.
     if (sealed && row?.weapon) {
       weaponPanel.append(el('div', 'fe-lead', 'Sealed with the champion.'));
     } else if (!chosenOf('splash')) {
@@ -1607,7 +1623,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
           'p',
           'fe-lead',
           sealed
-            ? 'Your champion sealed without a weapon, but the creation covered one: generate ' +
+            ? 'Your champion sealed without a weapon: you can still generate ' +
                 'the weapon image below, pick it, then forge it in Step 4. It attaches in the ' +
                 'workshop.'
             : 'Your weapon, alone on a plain background, extracted from the splash. Iterate ' +
@@ -1668,7 +1684,9 @@ export function openForgeEditor(container: HTMLElement): () => void {
           'fe-lead',
           sealed
             ? 'Your model is built and sealed: turn it around, attach and adjust the weapon, then save the tuning. Matches use exactly what you save.'
-            : 'Your model is built: inspect it in the workshop. Happy with it? Give it its animations in Step 5. Not happy? Iterate the reference in Step 2 and rebuild (spends another creation).',
+            : 'Your model is built: inspect it in the workshop. Happy with it? Give it its ' +
+                'animations in Step 5. Not happy? Iterate the reference in Step 2 and rebuild, ' +
+                'which costs its embers again.',
         ),
       );
       const open = el('button', 'fe-gen', 'Open the 3D workshop');
@@ -1679,7 +1697,8 @@ export function openForgeEditor(container: HTMLElement): () => void {
         const blocker = forgeBlocker();
         rebuild.disabled = blocker !== null;
         rebuild.title =
-          blocker ?? 'Replaces the model from your chosen reference; spends a creation';
+          blocker ??
+          `Replaces the model from your chosen reference; costs ${priceOf('model')} embers`;
         rebuild.addEventListener('click', runForge);
         right.append(rebuild);
       }
@@ -1692,7 +1711,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
           el(
             'div',
             'fe-lead',
-            'Your creation still covers a weapon: pick its image in Step 3, then forge it here.',
+            'Your champion can still have a weapon: pick its image in Step 3, then forge it here.',
           ),
         );
         if (weaponForging) {
@@ -1701,11 +1720,11 @@ export function openForgeEditor(container: HTMLElement): () => void {
           const claim = el(
             'button',
             'fe-gen',
-            'Forge the 3D weapon (included in your creation)',
+            priced('Forge the 3D weapon', 'weapon'),
           ) as HTMLButtonElement;
           claim.disabled = busy || finalizing || animating || !chosenOf('weapon');
           claim.title = chosenOf('weapon')
-            ? 'Builds the 3D weapon from your chosen image; your creation already covered it'
+            ? `Builds the 3D weapon from your chosen image; costs ${priceOf('weapon')} embers`
             : 'Generate and pick a weapon image first (Step 3)';
           claim.addEventListener('click', forgeWeaponNow);
           buildPanel.append(claim);
@@ -1718,26 +1737,30 @@ export function openForgeEditor(container: HTMLElement): () => void {
           'fe-lead',
           'Builds the static 3D model from your chosen reference image (the exact one you ' +
             'picked), and forges your weapon if you made one. You inspect the result in the ' +
-            'workshop; the animations come AFTER, in Step 5. Spends a creation; a failure ' +
-            'refunds it.',
+            'workshop; the animations come AFTER, in Step 5. Any failure refunds every ember ' +
+            'it took.',
         ),
       );
-      const build = el('button', 'fe-gen', 'Build the 3D model') as HTMLButtonElement;
+      const build = el(
+        'button',
+        'fe-gen',
+        priced('Build the 3D model', 'model'),
+      ) as HTMLButtonElement;
       const blocker = forgeBlocker();
       build.disabled = blocker !== null;
-      build.title = blocker ?? 'Runs on your chosen reference and spends a creation';
+      build.title = blocker ?? 'Runs on your chosen reference; a failure refunds every ember';
       build.addEventListener('click', runForge);
       buildPanel.append(build);
-      // Creations are a limited stock, and the player should know before
-      // pressing, not after.
+      // The balance stands beside the dearest act on the page, because a
+      // creator should read what they hold before pressing, never after
+      // being stopped (ADR 0017).
       buildPanel.append(
         el(
           'div',
           'fe-stock',
-          creations >= 0
-            ? `${creations} creation${creations === 1 ? '' : 's'} left. Each build spends one; ` +
-                `the stock refills weekly and unspent ones roll over.`
-            : 'Creations are a limited weekly stock: each build spends one.',
+          embers >= 0
+            ? `${embers} embers left. The grant refills weekly and unspent embers roll over.`
+            : 'Embers are a weekly grant; unspent ones roll over.',
         ),
       );
       if (blocker) buildPanel.append(el('div', 'fe-desc', blocker));
@@ -1779,11 +1802,13 @@ export function openForgeEditor(container: HTMLElement): () => void {
           'fe-lead',
           sealed
             ? 'The seal locks the kit, the art and the model, NEVER the animations: change ' +
-                'any animation below and apply JUST that one, free, as often as you like.'
+                'any animation below and apply JUST that one, paying only for the clips that ' +
+                'actually change.'
             : 'Once the model is built and you are happy with it, pick each of the five ' +
                 'animations from the catalog (every death for death, every strike for attack). ' +
-                'Each pick plays on the gray mannequin the moment you choose it. Animating ' +
-                'seals the champion, included in the creation the build spent.',
+                'Each pick plays on the gray mannequin the moment you choose it. A bake ' +
+                `costs ${priceOf('bakeBase')} embers plus ${priceOf('bakePerClip')} a clip, so ` +
+                'changing one animation later is cheap.',
         ),
       );
       // The preview stage: any preset plays on the neutral mannequin the
@@ -1873,9 +1898,8 @@ export function openForgeEditor(container: HTMLElement): () => void {
         const bake = el(
           'button',
           'fe-gen',
-          sealed
-            ? 'Animate the champion (free)'
-            : 'Animate the champion (included in your creation)',
+          `Animate the champion (${priceOf('bakeBase')} embers plus ` +
+            `${priceOf('bakePerClip')} a clip)`,
         ) as HTMLButtonElement;
         bake.disabled = !row?.model || busy || finalizing || weaponForging;
         bake.title = !row?.model
@@ -2158,7 +2182,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
     // by champion id, so a forged champion can never appear in it and its
     // spells would otherwise all wear the same school-derived default;
     // a look is the art it can own. Nothing is generated and nothing is
-    // downloaded, so this costs no creation: apply, then see it in a test
+    // downloaded, so this costs no embers: apply, then see it in a test
     // drive.
     main.append(
       chatPanel<{
@@ -2173,7 +2197,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
           'Reads your splash and your kit, and gives each spell its own effects: the shape ' +
           'of the bolt, what it trails, how it lands, the color. Say what you want ("frost, ' +
           'not fire", "make the R shake the screen", "keep the Q quiet"). Nothing touches ' +
-          'your spells until you apply it, and it costs no creation.',
+          'your spells until you apply it, and it costs nothing.',
         placeholder: 'What should these spells look like?',
         locked: sealed
           ? 'This champion is sealed: its spells are locked. Unseal it (Design tab, ' +
@@ -2321,7 +2345,14 @@ export function openForgeEditor(container: HTMLElement): () => void {
     slotsPanel.append(atkRow);
     if (!sealed) {
       const all = el('div', 'fe-artrow');
-      const genAll = el('button', 'fe-gen small', 'Generate all four icons') as HTMLButtonElement;
+      const genAll = el(
+        'button',
+        'fe-gen small',
+        priced('Generate all four icons', 'image').replace(
+          `${priceOf('image')} embers`,
+          `${priceOf('image') * 4} embers`,
+        ),
+      ) as HTMLButtonElement;
       genAll.disabled = generating !== null;
       genAll.title = 'One icon per spell, in order, each drawn from what that spell does';
       genAll.addEventListener('click', () =>
@@ -2330,9 +2361,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
         ),
       );
       all.append(genAll);
-      if (artQuota.limit > 0) {
-        all.append(el('span', 'fe-quota', `${artQuota.used}/${artQuota.limit} images today`));
-      }
+      all.append(emberNote());
       slotsPanel.append(all);
     }
     // The selected spell's icon candidates: view large, pick, iterate.

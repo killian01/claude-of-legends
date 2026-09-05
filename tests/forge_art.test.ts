@@ -45,9 +45,18 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-function rig(opts: { limit?: number; cap?: number } = {}) {
+function rig(opts: { limit?: number; cap?: number; embers?: number } = {}) {
   const store = new ForgeStore(':memory:');
   open.push(store);
+  // Embers to spend (ADR 0017): seeded in embers already, so the crossing
+  // from creations is marked done and cannot multiply this balance.
+  store.addCreditEntry({
+    accountId: ACCOUNT,
+    delta: opts.embers ?? 500,
+    reason: 'weekly_grant',
+    at: 1,
+  });
+  store.addCreditEntry({ accountId: ACCOUNT, delta: 0, reason: 'ember_migration', at: 1 });
   const assetsDir = mkdtempSync(path.join(tmpdir(), 'loc-art-'));
   dirs.push(assetsDir);
   const provider = new MockProvider(() => 500);
@@ -64,7 +73,7 @@ function rig(opts: { limit?: number; cap?: number } = {}) {
   let clock = 1000;
   const quota: QuotaDeps = {
     store,
-    limits: { generation: 5, gen2d: opts.limit ?? 10, agent: 5 },
+    ceilings: { gen2d: opts.limit ?? 0 },
     now: () => clock,
   };
   const deps: ArtDeps = {
@@ -89,7 +98,7 @@ function rig(opts: { limit?: number; cap?: number } = {}) {
 }
 
 describe('generateArt', () => {
-  it('stores a candidate, spends one gen2d unit, and picks the first of a kind', async () => {
+  it('stores a candidate, spends its embers, and picks the first of a kind', async () => {
     const r = rig();
     const out = await generateArt(r.deps, ACCOUNT, {
       id: r.def.id,
@@ -100,7 +109,10 @@ describe('generateArt', () => {
     if (!out.ok) return;
     expect(out.candidate.kind).toBe('splash');
     expect(out.candidate.chosen).toBe(true);
-    expect(out.quota).toEqual({ used: 1, limit: 10 });
+    // An image costs ten embers and the answer carries the balance the
+    // creator now has, so the number they watch is the number they read.
+    expect(out.price).toBe(10);
+    expect(out.embers).toBe(r.store.creditBalance(ACCOUNT));
     // The file landed for real, under the champion's art directory.
     const generation = r.deps.generation;
     expect(generation).not.toBeNull();
@@ -264,7 +276,9 @@ describe('generateArt', () => {
     expect(row?.prompt).toContain(iconPhrase(r.def.abilities.Q));
   });
 
-  it('refuses past the daily limit, and a provider failure burns nothing', async () => {
+  it('stops at the server ceiling and at an empty balance, and burns nothing on failure', async () => {
+    // The server's own day: nobody's balance is near empty and the server
+    // is still out (ADR 0017).
     const r = rig({ limit: 2 });
     for (let i = 0; i < 2; i++) {
       r.tick();
@@ -272,7 +286,19 @@ describe('generateArt', () => {
       expect(ok.ok).toBe(true);
     }
     const refused = await generateArt(r.deps, ACCOUNT, { id: r.def.id, kind: 'splash', line: 'x' });
-    expect(refused).toMatchObject({ ok: false, error: expect.stringContaining('daily limit') });
+    expect(refused).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('the server has spent its day'),
+    });
+
+    // And a balance that cannot pay: the refusal names both numbers.
+    const poor = rig({ embers: 4 });
+    expect(
+      await generateArt(poor.deps, ACCOUNT, { id: poor.def.id, kind: 'splash', line: 'x' }),
+    ).toEqual({
+      ok: false,
+      error: 'this costs 10 embers and you have 4; the grant refills weekly',
+    });
 
     const r2 = rig({ limit: 2 });
     r2.provider.failOn.add('generate2D');
@@ -283,7 +309,9 @@ describe('generateArt', () => {
     });
     expect(failed.ok).toBe(false);
     r2.provider.failOn.delete('generate2D');
-    // Both units are still there: the failure was not metered.
+    // Nothing was metered and nothing was debited: the ledger only moves
+    // once an image is actually on disk.
+    expect(r2.store.creditBalance(ACCOUNT)).toBe(500);
     for (let i = 0; i < 2; i++) {
       r2.tick();
       const ok = await generateArt(r2.deps, ACCOUNT, { id: r2.def.id, kind: 'splash', line: 'x' });

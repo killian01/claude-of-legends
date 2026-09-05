@@ -1,20 +1,15 @@
-// Per-account daily quotas (plan-forge phase 8): a rolling 24 hour window
-// counted over the store's append-only quota_events table, so a restart
-// forgets nothing and a grant needs no timer. Four metered actions:
-// 'generation' is a whole build chain, model or weapon (a spend backstop
-// under the weekly creation ledger, bounding one day's provider bill);
-// 'animate' is the clip bake; 'gen2d' and 'agent' meter the 2D art and
-// the agent surfaces. Each one is metered twice: per account, and for the
-// whole server (CEILING_DEFAULTS below).
+// The server's own day (ADR 0017). What one account may spend is the
+// ember ledger's business now, in the unit that costs money; these
+// counters bound what EVERY account together may ask for in a rolling
+// day, which no per-account number can do. A ceiling is a backstop
+// against a bad day, never a price.
 //
-// Animation has its OWN meter because it is not the same spend and not
-// the same act. A build reconstructs geometry from an image; a bake
-// retargets an existing rig and downloads an animation-only file, and the
-// Creation the player already spent covers it (CONTEXT.md). Sharing the
-// build's meter made a kit with per-spell clips impossible to finish in a
-// day: five roles plus four spell slots need more bakes than a day's
-// builds, and the backstop became a wall on an act that was already paid
-// for.
+// The per-account half of this file is gone with the ADR. It bounded one
+// player in a unit that meant nothing, it could not let a player trade
+// one act for another, and it stopped people with a wall that never said
+// its number. The events it counted are still written, because the
+// ceiling counts them and because they are the record of how often each
+// act is asked for.
 
 import type { ForgeOutcome } from './forge';
 import type { ForgeStore } from './forge_store';
@@ -22,17 +17,6 @@ import type { ForgeStore } from './forge_store';
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type QuotaAction = 'generation' | 'animate' | 'gen2d' | 'agent';
-
-// Defaults; every one is server-configurable (see main.ts). A limit of
-// zero or less switches that meter off entirely (unlimited).
-export const QUOTA_DEFAULTS: Readonly<Record<QuotaAction, number>> = {
-  generation: 5,
-  // Nine bakeable slots (five roles, four spell slots), room to hear each
-  // one twice, and still a ceiling on a script.
-  animate: 20,
-  gen2d: 40,
-  agent: 20,
-};
 
 // The ceiling the per-account limits cannot give. A limit per account
 // bounds one player; nothing bounds the sum of them, so a per-account
@@ -50,15 +34,9 @@ export const CEILING_DEFAULTS: Readonly<Record<QuotaAction, number>> = {
 
 export interface QuotaDeps {
   store: ForgeStore;
-  limits?: Partial<Record<QuotaAction, number>>;
-  // Server-wide daily totals; like the per-account limits, zero or less
-  // switches one off.
+  // Server-wide daily totals; zero or less switches one off.
   ceilings?: Partial<Record<QuotaAction, number>>;
   now?: () => number;
-}
-
-export function quotaLimit(deps: QuotaDeps, action: QuotaAction): number {
-  return deps.limits?.[action] ?? QUOTA_DEFAULTS[action];
 }
 
 export function quotaCeiling(deps: QuotaDeps, action: QuotaAction): number {
@@ -68,32 +46,22 @@ export function quotaCeiling(deps: QuotaDeps, action: QuotaAction): number {
 // Whether the account still has room today; no side effect. The caller
 // spends only after the metered work actually starts, so a refused
 // finalize never burns quota.
-export function checkQuota(
-  deps: QuotaDeps,
-  accountId: number,
-  action: QuotaAction,
-): ForgeOutcome<{ used: number; limit: number }> {
-  const at = (deps.now ?? Date.now)();
-  // The server's own day, checked first: when the whole server is out,
-  // saying so is truer than telling one player they are over a personal
-  // limit they have not reached.
+// Whether the server still has room for this act today; no side effect.
+// The account is not consulted: what an account may spend is its ember
+// balance, and that is checked where the act is priced.
+export function checkQuota(deps: QuotaDeps, action: QuotaAction): ForgeOutcome {
   const ceiling = quotaCeiling(deps, action);
-  if (ceiling > 0 && deps.store.quotaCountAllSince(action, at - DAY_MS) >= ceiling) {
-    return {
-      ok: false,
-      error: 'the server has spent its day on this; it opens again tomorrow',
-    };
+  if (ceiling <= 0) return { ok: true };
+  const at = (deps.now ?? Date.now)();
+  if (deps.store.quotaCountAllSince(action, at - DAY_MS) >= ceiling) {
+    return { ok: false, error: 'the server has spent its day on this; it opens again tomorrow' };
   }
-  const limit = quotaLimit(deps, action);
-  if (limit <= 0) return { ok: true, used: 0, limit };
-  const used = deps.store.quotaCountSince(accountId, action, at - DAY_MS);
-  if (used >= limit) {
-    return { ok: false, error: `daily limit reached (${limit} per day); try again tomorrow` };
-  }
-  return { ok: true, used, limit };
+  return { ok: true };
 }
 
+// Recorded whatever the ceilings are set to: the count is what the next
+// check reads, and what the report reads to say how often an act is asked
+// for at all.
 export function spendQuota(deps: QuotaDeps, accountId: number, action: QuotaAction): void {
-  if (quotaLimit(deps, action) <= 0) return;
   deps.store.addQuotaEvent(accountId, action, (deps.now ?? Date.now)());
 }

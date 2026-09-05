@@ -319,6 +319,16 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
 
   // --- state ---
   let bots: BotView[] = [];
+  // The account's embers and what a coach turn costs (ADR 0017): the
+  // Academy is a spending surface, so it shows both. -1 is "not asked".
+  let embers = -1;
+  let coachPrice = 1;
+  const loadEmbers = async (): Promise<void> => {
+    const r = await api<{ embers: number; prices: Record<string, number> }>('/api/forge/drafts');
+    if (!r.ok) return;
+    embers = r.embers;
+    if (typeof r.prices?.coachTurn === 'number') coachPrice = r.prices.coachTurn;
+  };
   let current: BotView | null = null;
   // The editable copy of the current bot's playbook; saved on demand.
   let working: PlaybookDef | null = null;
@@ -495,6 +505,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
   }
 
   async function load(keepId: string | null): Promise<void> {
+    void loadEmbers();
     const r = await api<{ bots: BotView[] }>('/api/bots');
     if (!r.ok) {
       say(r.error, true);
@@ -1538,6 +1549,12 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       coaching ? 'Asking...' : 'Send',
     ) as HTMLButtonElement;
     send.disabled = coaching;
+    // The Academy spends the same embers as the Forge (ADR 0017), so it
+    // says the price and the balance where the spending happens.
+    send.title =
+      embers >= 0
+        ? `A turn with the coach costs ${coachPrice} embers; you have ${embers}`
+        : `A turn with the coach costs ${coachPrice} embers`;
     const submit = (): void => {
       const text = input.value.trim();
       if (text === '' || send.disabled) return;

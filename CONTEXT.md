@@ -339,11 +339,13 @@ The one unit the Forge and the Academy both burn: what an account spends wheneve
 server pays a provider on its behalf (ADR 0017). Every paid act is priced in embers by what
 it actually costs us, so a 3D build is dear, a clip bake is a fraction of it, a 2D image a
 fraction again, and a turn with the coach or the kit conversation cheaper still. Every
-account receives a weekly grant that rolls over, held on the same append-only ledger as
-before, with the balance derived and never stored; any failure refunds exactly what it
-debited. The creator arbitrates their own week, trading rerolls against animations. One
-ember is one cent of what the server spends, so the weights are read off measurement and
-never argued about: `docs/design/generation-costs.md` holds them.
+account receives a weekly grant of 100, which is a forged champion a fortnight, and it
+rolls over; the ledger is the same append-only one as before, with the balance derived and
+never stored, and any failure refunds exactly what it debited. The creator arbitrates their
+own week, trading rerolls against animations. One ember is one cent of what the server
+spends, so the weights are read off measurement and never argued about:
+`docs/design/generation-costs.md` holds them and `server/embers.ts` is the table.
+A whole champion costs 115 plus its art.
 _Avoid_: credit, token, generation token, point
 
 **Creation**:

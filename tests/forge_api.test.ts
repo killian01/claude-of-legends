@@ -1,8 +1,10 @@
 // The Forge's server side on the account model (ADR 0006 accounts, ADR
-// 0011 store): draft CRUD gated on shape and ownership, the creator
-// signature stamped server-side, the weekly creation grant on the ledger.
+// 0011 store, ADR 0017 embers): draft CRUD gated on shape and ownership,
+// the creator signature stamped server-side, the weekly ember grant on
+// the ledger.
 
 import { describe, expect, it } from 'vitest';
+import { EMBERS_PER_WEEK } from '../server/embers';
 import {
   deleteDraft,
   type ForgeDeps,
@@ -20,7 +22,7 @@ function draft(id = 'forged_test_draft'): ForgedChampionDef {
 }
 
 function rig(): ForgeDeps & { store: ForgeStore } {
-  return { store: new ForgeStore(':memory:'), creationsGrant: 3, now: () => 1_000_000 };
+  return { store: new ForgeStore(':memory:'), emberGrant: 100, now: () => 1_000_000 };
 }
 
 describe('forge drafts', () => {
@@ -29,8 +31,9 @@ describe('forge drafts', () => {
     expect(saveDraft(deps, 1, 'bob', draft())).toEqual({ ok: true });
     const listed = listDrafts(deps, 1);
     expect(listed.ok && listed.drafts.map((d) => d.id)).toEqual(['forged_test_draft']);
-    // Listing surfaces the ledger too, granted on first contact.
-    expect(listed.ok && listed.credits).toBe(3);
+    // Listing surfaces the ledger too, granted on first contact: a week
+    // of embers, which is a forged champion a fortnight (ADR 0017).
+    expect(listed.ok && listed.embers).toBe(EMBERS_PER_WEEK);
 
     const renamed = { ...draft(), name: 'Bramble Twin' };
     expect(saveDraft(deps, 1, 'bob', renamed)).toEqual({ ok: true });
@@ -95,19 +98,20 @@ describe('forge drafts', () => {
   it('grants the weekly allocation once per rolling week, rolling over', () => {
     const store = new ForgeStore(':memory:');
     let clock = 0;
-    const deps: ForgeDeps = { store, creationsGrant: 3, now: () => clock };
+    const deps: ForgeDeps = { store, emberGrant: 100, now: () => clock };
     refreshWeeklyGrant(deps, 7);
-    expect(store.creditBalance(7)).toBe(3);
+    expect(store.creditBalance(7)).toBe(100);
     // Six days on: nothing new, however often the account surfaces.
     clock = 6 * 24 * 60 * 60 * 1000;
     refreshWeeklyGrant(deps, 7);
     refreshWeeklyGrant(deps, 7);
-    expect(store.creditBalance(7)).toBe(3);
-    // Day eight: the week rolled, one grant, and only one.
+    expect(store.creditBalance(7)).toBe(100);
+    // Day eight: the week rolled, one grant, and only one. Unspent embers
+    // roll over, so two quiet weeks forge a champion in the third.
     clock = 8 * 24 * 60 * 60 * 1000;
     listDrafts(deps, 7);
     listDrafts(deps, 7);
-    expect(store.creditBalance(7)).toBe(6);
+    expect(store.creditBalance(7)).toBe(200);
     store.close();
   });
 });

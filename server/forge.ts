@@ -9,6 +9,13 @@
 
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { FORGED_ID_PATTERN, validateForged } from '../src/sim/forge/validate';
+import {
+  BAKE_BASE,
+  BAKE_PER_CLIP,
+  CREATION_IN_EMBERS,
+  EMBER_PRICES,
+  EMBERS_PER_WEEK,
+} from './embers';
 import type { ForgedRow, ForgeStore } from './forge_store';
 import { catalogRoles } from './generation/house_clips';
 import {
@@ -33,8 +40,6 @@ export const DRAFT_CAP = 50;
 // Bounds the stored JSON; a def inside the validator's structural limits
 // sits far under this.
 export const DRAFT_JSON_MAX = 32_000;
-// The weekly creation allocation (ADR 0011): server-configurable.
-export const CREATIONS_PER_WEEK = 3;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface ForgeDeps {
@@ -42,7 +47,8 @@ export interface ForgeDeps {
   // The generation pipeline, when a provider is configured; null keeps
   // the finalize surface answering honestly instead of pretending.
   generation?: PipelineDeps | null;
-  creationsGrant?: number;
+  // The weekly ember grant; EMBERS_PER_WEEK when absent.
+  emberGrant?: number;
   // The per-account draft ceiling; DRAFT_CAP when absent (phase 8: every
   // number in the plan is server-configurable).
   draftCap?: number;
@@ -53,28 +59,95 @@ export type ForgeOutcome<T = unknown> = ({ ok: true } & T) | { ok: false; error:
 
 // The weekly allocation refresh: one grant per rolling week since the
 // last, applied lazily wherever the Forge surfaces, so no timer has to
-// survive restarts. Unspent creations roll over: the ledger only appends.
+// survive restarts. Unspent embers roll over: the ledger only appends.
 export function refreshWeeklyGrant(deps: ForgeDeps, accountId: number): void {
   const at = (deps.now ?? Date.now)();
+  migrateCreations(deps, accountId, at);
   const last = deps.store.lastCreditEntryAt(accountId, 'weekly_grant');
   if (last !== null && at - last < WEEK_MS) return;
   deps.store.addCreditEntry({
     accountId,
-    delta: deps.creationsGrant ?? CREATIONS_PER_WEEK,
+    delta: deps.emberGrant ?? EMBERS_PER_WEEK,
     reason: 'weekly_grant',
     at,
+  });
+}
+
+// Standing balances cross over once, on the account's next visit to any
+// Forge surface (ADR 0017). The ledger is append-only, so nothing already
+// written is touched: one entry lifts the balance from creations to what
+// those creations were worth, and its own presence is the record that it
+// has happened. An account whose ledger is empty has nothing to carry and
+// is marked all the same, so the check stays one row either way.
+export function migrateCreations(deps: ForgeDeps, accountId: number, at: number): void {
+  if (deps.store.lastCreditEntryAt(accountId, 'ember_migration') !== null) return;
+  const held = deps.store.creditBalance(accountId);
+  deps.store.addCreditEntry({
+    accountId,
+    delta: held * CREATION_IN_EMBERS - held,
+    reason: 'ember_migration',
+    at,
+  });
+}
+
+// One paid act, debited before the work starts and refunded whole by
+// whoever started it if the work fails (ADR 0011 kept that rule, ADR 0017
+// only changed the size of the number). Refuses rather than overdraws:
+// the balance is the only bound on spend now.
+export function spendEmbers(
+  deps: ForgeDeps,
+  accountId: number,
+  embers: number,
+  ref: string,
+): ForgeOutcome<{ spent: number; left: number }> {
+  const at = (deps.now ?? Date.now)();
+  migrateCreations(deps, accountId, at);
+  if (embers <= 0) return { ok: true, spent: 0, left: deps.store.creditBalance(accountId) };
+  const held = deps.store.creditBalance(accountId);
+  if (held < embers) {
+    return {
+      ok: false,
+      error: `this costs ${embers} embers and you have ${held}; the grant refills weekly`,
+    };
+  }
+  deps.store.addCreditEntry({ accountId, delta: -embers, reason: 'spend', ref, at });
+  return { ok: true, spent: embers, left: held - embers };
+}
+
+export function refundEmbers(
+  deps: ForgeDeps,
+  accountId: number,
+  embers: number,
+  ref: string,
+): void {
+  if (embers <= 0) return;
+  deps.store.addCreditEntry({
+    accountId,
+    delta: embers,
+    reason: 'refund',
+    ref,
+    at: (deps.now ?? Date.now)(),
   });
 }
 
 export function listDrafts(
   deps: ForgeDeps,
   accountId: number,
-): ForgeOutcome<{ drafts: ForgedRow[]; credits: number }> {
+): ForgeOutcome<{
+  drafts: ForgedRow[];
+  embers: number;
+  prices: typeof EMBER_PRICES & { bakeBase: number; bakePerClip: number };
+}> {
   refreshWeeklyGrant(deps, accountId);
   return {
     ok: true,
     drafts: deps.store.listForgedByAccount(accountId),
-    credits: deps.store.creditBalance(accountId),
+    embers: deps.store.creditBalance(accountId),
+    // The price list rides with the balance so every surface can put a
+    // number on a button rather than behind a refusal (ADR 0017). A bake
+    // is priced by its clip count, so it travels as its two numbers and
+    // the surface states the rule.
+    prices: { ...EMBER_PRICES, bakeBase: BAKE_BASE, bakePerClip: BAKE_PER_CLIP },
   };
 }
 

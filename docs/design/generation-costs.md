@@ -124,7 +124,10 @@ Priced instead in what a player can actually make:
 | One champion a fortnight | 100 | 4 dollars | 200 dollars |
 | One champion a week | 200 | 8 dollars | 400 dollars |
 
-That is the decision the grant size is, and it is now a decision rather than a guess.
+That is the decision the grant size is, and it was made on these numbers rather than on a
+guess: **100 embers a week**, a forged champion a fortnight, about 4 dollars per account per
+month at the ceiling and 200 at fifty players. It rolls over, so two quiet weeks forge a
+champion in the third.
 
 ## What is still missing
 

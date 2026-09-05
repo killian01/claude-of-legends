@@ -10,6 +10,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { bakePrice, EMBER_PRICES } from '../server/embers';
 import {
   animateChampion,
   buildModel,
@@ -51,6 +52,16 @@ const ACCOUNT = 7;
 // The mock provider's default pick per role (its clip ids ARE the roles).
 const MOCK_CLIPS = { idle: 'idle', run: 'run', attack: 'attack', cast: 'cast', death: 'death' };
 
+// The ledger in embers (ADR 0017). Every balance below is written as the
+// seed minus the acts that ran, from the one price table, so a price that
+// moves moves these with it and no magic number can drift out of step.
+const SEED = 500;
+const MODEL = EMBER_PRICES.model;
+const WEAPON = EMBER_PRICES.weapon;
+const RIG = EMBER_PRICES.rig;
+const BAKE5 = bakePrice(5);
+const BAKE1 = bakePrice(1);
+
 interface Rig {
   store: ForgeStore;
   provider: MockProvider;
@@ -65,7 +76,11 @@ function rig(classify?: (url: string) => Promise<boolean>): Rig {
   const store = new ForgeStore(':memory:');
   open.push(store);
   // The signup-equivalent grant: three creations on the ledger.
-  store.addCreditEntry({ accountId: ACCOUNT, delta: 3, reason: 'weekly_grant', at: 1 });
+  store.addCreditEntry({ accountId: ACCOUNT, delta: SEED, reason: 'weekly_grant', at: 1 });
+  // Seeded in embers already, so the crossing is marked done (ADR 0017):
+  // the migration multiplies a balance counted in creations and must
+  // never be let near one counted in embers.
+  store.addCreditEntry({ accountId: ACCOUNT, delta: 0, reason: 'ember_migration', at: 1 });
   const provider = new MockProvider(() => 777);
   const downloads: { url: string; dest: string }[] = [];
   const dir = assetsDir();
@@ -138,8 +153,8 @@ describe('the mock pipeline end to end', () => {
     // The static model is the only download; no rig, no animation pass.
     expect(r.downloads.map((d) => d.url)).toEqual([expect.stringContaining('mock://model/')]);
     expect(r.provider.seen.some((s) => s.op === 'rig' || s.op === 'animate')).toBe(false);
-    // Ledger: 3 granted, 1 spent, nothing refunded.
-    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+    // Ledger: the model's price and nothing else, no refund.
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL);
   });
 
   it('animates as its own SECOND step; the seal is a separate click', async () => {
@@ -212,8 +227,8 @@ describe('the mock pipeline end to end', () => {
       expect.stringContaining('mock://rigged/'),
       expect.stringContaining('mock://animated/'),
     ]);
-    // The creation was spent at the build; animate moved nothing.
-    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+    // The build, then the rig and a five-clip bake, each at its price.
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - RIG - BAKE5);
   });
 
   it('re-bakes ONLY the changed role, on the stored rig, and spends nothing', async () => {
@@ -259,7 +274,9 @@ describe('the mock pipeline end to end', () => {
     // first bake.
     expect(assets.clipFiles.attack).toBe(`forged/${r.def.id}/clips_${rebake.jobId}.glb`);
     expect(assets.clipFiles.idle).toBe(firstFiles.idle);
-    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+    // A one-clip re-bake costs a one-clip bake, not a five-clip one: the
+    // trade the old flat counters could not express.
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - RIG - BAKE5 - BAKE1);
 
     // A seal survives re-bakes: the seal locks the kit, never the clips.
     expect(sealChampion({ store: r.store }, ACCOUNT, r.def.id).ok).toBe(true);
@@ -364,7 +381,7 @@ describe('the mock pipeline end to end', () => {
     const built = buildModel(deps, ACCOUNT, r.def.id);
     expect(built.ok).toBe(true);
     if (built.ok) await built.done;
-    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL);
     // No chosen weapon image yet: the chain refuses before any job.
     expect(forgeWeapon(deps, ACCOUNT, r.def.id)).toMatchObject({
       ok: false,
@@ -393,8 +410,9 @@ describe('the mock pipeline end to end', () => {
     const assets = r.store.forgedAssets(r.def.id) as { weapon?: string; provenance: unknown[] };
     expect(assets.weapon).toBe(`forged/${r.def.id}/weapon.glb`);
     expect(assets.provenance).toHaveLength(before + 1);
-    // The creation covered the weapon: the ledger never moved.
-    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+    // Claimed later, so it pays for itself: there is no creation to have
+    // covered it any more.
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - WEAPON);
     // And only once: with the weapon in place, the claim is closed.
     expect(forgeWeapon(deps, ACCOUNT, r.def.id)).toMatchObject({
       ok: false,
@@ -405,7 +423,8 @@ describe('the mock pipeline end to end', () => {
     const rebuilt = buildModel(deps, ACCOUNT, r.def.id);
     expect(rebuilt.ok).toBe(true);
     if (rebuilt.ok) await rebuilt.done;
-    expect(r.store.creditBalance(ACCOUNT)).toBe(1);
+    // The rebuild pays for a model and not for the weapon it kept.
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - WEAPON - MODEL);
     const after = r.store.forgedAssets(r.def.id) as { weapon?: string };
     expect(after.weapon).toBe(`forged/${r.def.id}/weapon.glb`);
     // Three image-to-3D calls total: model, weapon, rebuilt model.
@@ -513,7 +532,11 @@ describe('the mock pipeline end to end', () => {
     expect((r.store.forgedAssets(r.def.id) as { clips: Record<string, string> }).clips.attack).toBe(
       'house:sns_attack_02',
     );
-    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+    // A house clip is a file copy that never touches the provider, so it
+    // is free twice over: the first bake paid for its FOUR provider roles
+    // and not five, and the later swap to another house clip cost nothing
+    // at all. The ledger stands exactly where the first bake left it.
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - RIG - bakePrice(4));
   });
 
   it('bakes a per-spell slot, keeps it across re-bakes, refuses strangers', async () => {
@@ -575,7 +598,7 @@ describe('the mock pipeline end to end', () => {
     expect(job?.status).toBe('failed');
     expect(job?.error).toContain('budget');
     expect(r.store.getForged(r.def.id)?.status).toBe('draft');
-    expect(r.store.creditBalance(ACCOUNT)).toBe(3);
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED);
   });
 
   it('refunds a build failure and leaves the draft a draft', async () => {
@@ -589,7 +612,7 @@ describe('the mock pipeline end to end', () => {
     expect(job?.status).toBe('failed');
     expect(job?.stage).toBe('model');
     expect(r.store.getForged(r.def.id)?.status).toBe('draft');
-    expect(r.store.creditBalance(ACCOUNT)).toBe(3);
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED);
   });
 
   it('spends nothing on an animate failure, and the retry succeeds', async () => {
@@ -611,10 +634,10 @@ describe('the mock pipeline end to end', () => {
     const job = r.store.getGenerationJob(failed.jobId);
     expect(job?.status).toBe('failed');
     expect(job?.stage).toBe('rig');
-    // Still an inspectable draft, and NOTHING moved on the ledger: the
-    // build's debit stands, no refund, no second debit.
+    // Still an inspectable draft, and the failed bake gave its embers
+    // back whole: only the build's debit stands.
     expect(r.store.getForged(r.def.id)?.status).toBe('draft');
-    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL);
     // The retry is free and seals.
     r.provider.failOn.delete('rig');
     const retry = startAnimate(r.pipeline, {
@@ -630,7 +653,7 @@ describe('the mock pipeline end to end', () => {
     expect(r.store.getForged(r.def.id)?.status).toBe('draft');
     expect(sealChampion({ store: r.store }, ACCOUNT, r.def.id).ok).toBe(true);
     expect(r.store.getForged(r.def.id)?.status).toBe('finalized');
-    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - RIG - BAKE5);
   });
 
   it('blocks and refunds on failed classification', async () => {
@@ -642,42 +665,58 @@ describe('the mock pipeline end to end', () => {
     const job = r.store.getGenerationJob(start.jobId);
     expect(job?.status).toBe('failed');
     expect(job?.error).toContain('blocked:');
-    expect(r.store.creditBalance(ACCOUNT)).toBe(3);
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED);
   });
 
-  it('refuses to start with no creations left', () => {
+  it('refuses a build the balance cannot pay for, and says both numbers', () => {
     const r = rig();
-    for (let i = 0; i < 3; i++) {
-      r.store.addCreditEntry({
-        accountId: ACCOUNT,
-        delta: -1,
-        reason: 'finalize',
-        ref: 'x',
-        at: 1,
-      });
-    }
-    const start = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
-    expect(start).toMatchObject({ ok: false, error: expect.stringContaining('no creations') });
-  });
-
-  it('sweeps stale jobs, refunding builds and never the free chains', () => {
-    const r = rig();
+    // Down to a handful: enough for an image, nowhere near a model.
     r.store.addCreditEntry({
       accountId: ACCOUNT,
-      delta: -1,
-      reason: 'finalize',
+      delta: -(SEED - 12),
+      reason: 'spend',
+      ref: 'x',
+      at: 1,
+    });
+    const start = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
+    // The refusal names the price and what is held: a wall that does not
+    // say its number is the wall ADR 0017 exists to remove.
+    expect(start).toMatchObject({
+      ok: false,
+      error: `this costs ${MODEL} embers and you have 12; the grant refills weekly`,
+    });
+    // And it refused before touching the ledger or the provider.
+    expect(r.store.creditBalance(ACCOUNT)).toBe(12);
+    expect(r.provider.seen).toHaveLength(0);
+  });
+
+  it('sweeps stale jobs, giving each back exactly what it took', () => {
+    const r = rig();
+    // Three jobs died with the process, and every kind can debit now
+    // (ADR 0017), so every kind is owed its own number back.
+    const spent = MODEL + bakePrice(3) + WEAPON;
+    r.store.addCreditEntry({
+      accountId: ACCOUNT,
+      delta: -spent,
+      reason: 'spend',
       ref: r.def.id,
       at: 1,
     });
-    // A build (the default kind, what a pre-split row also reads as), an
-    // animate, and a weapon claim all died with the process.
-    r.store.createGenerationJob(r.def.id, ACCOUNT, 1);
-    r.store.createGenerationJob(r.def.id, ACCOUNT, 1, 'animate');
-    r.store.createGenerationJob(r.def.id, ACCOUNT, 1, 'weapon');
+    r.store.createGenerationJob(r.def.id, ACCOUNT, 1, 'build', MODEL);
+    r.store.createGenerationJob(r.def.id, ACCOUNT, 1, 'animate', bakePrice(3));
+    r.store.createGenerationJob(r.def.id, ACCOUNT, 1, 'weapon', WEAPON);
     expect(recoverStaleJobs(r.store, () => 2)).toBe(3);
-    // Exactly ONE refund: the build's. The free chains never debited.
-    expect(r.store.creditBalance(ACCOUNT)).toBe(3);
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED);
     expect(r.store.staleRunningJobs()).toHaveLength(0);
+  });
+
+  it('sweeps a job that took nothing without inventing a refund', () => {
+    const r = rig();
+    // A bake with nothing to bake debits nothing, so its ghost is worth
+    // nothing either: a sweep that refunded a flat amount would mint.
+    r.store.createGenerationJob(r.def.id, ACCOUNT, 1, 'animate', 0);
+    expect(recoverStaleJobs(r.store, () => 2)).toBe(1);
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED);
   });
 });
 
@@ -772,7 +811,7 @@ describe('the build and animate gates (server/forge.ts)', () => {
     expect(r.provider.seen.filter((s) => s.op === 'animate').at(-1)?.req).toMatchObject({
       animations: ['attack_alt'],
     });
-    expect(r.store.creditBalance(ACCOUNT)).toBe(2);
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - RIG - BAKE5 - BAKE1);
   });
 
   it('re-animates a legacy champion through its provenance model task', async () => {
@@ -811,8 +850,9 @@ describe('the build and animate gates (server/forge.ts)', () => {
     expect((r.store.forgedAssets(r.def.id) as { clips: Record<string, string> }).clips).toEqual(
       MOCK_CLIPS,
     );
-    // Nothing moved on the ledger.
-    expect(r.store.creditBalance(ACCOUNT)).toBe(3);
+    // No build here: the champion was seeded already built, so the rig
+    // and the bake are all this pays for.
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - RIG - BAKE5);
   });
 });
 

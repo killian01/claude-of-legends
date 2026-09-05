@@ -20,6 +20,7 @@ import type { PlaybookDef } from '../src/sim/playbook/types';
 import { MAX_PLAYS, MAX_VARIANTS, validatePlaybook } from '../src/sim/playbook/validate';
 import type { BotStore } from './bot_store';
 import type { BotOutcome } from './bots';
+import { EMBER_PRICES } from './embers';
 import { type ModelUsage, type SpendSample, usageSample } from './spend';
 import { CHAT_RAW_TEXT_MAX, type ChatTurn, threadError } from './suggest';
 
@@ -38,6 +39,13 @@ export interface CoachDeps {
   // Which act the samples belong to: an owner watching the Academy, or
   // the night writing to nobody.
   spendDetail?: 'coach' | 'night';
+  // The ledger debit for a turn, injected for the same reason the sample
+  // sink is: the ledger lives in the Forge store, not this one.
+  charge?: (accountId: number, embers: number, ref: string) => void;
+  // What the account holds, so a turn can be refused before it is asked
+  // for rather than after it has been paid for. Absent means unmetered,
+  // which is what a test wants.
+  balance?: (accountId: number) => number;
   now?: () => number;
 }
 
@@ -450,6 +458,11 @@ export async function coachPlaybook(
     if (!v.ok) return { ok: false, error: `the playbook on the form is not valid: ${v.errors[0]}` };
     playbook = v.def;
   }
+  const price = EMBER_PRICES.coachTurn;
+  const held = deps.balance?.(accountId);
+  if (held !== undefined && held < price) {
+    return { ok: false, error: `this costs ${price} embers a turn and you have ${held}` };
+  }
   const progress = req.onProgress ?? (() => {});
   const reader = new AnswerReader(playbook, progress);
   progress({ kind: 'stage', text: 'Reading the playbook' });
@@ -460,16 +473,13 @@ export async function coachPlaybook(
       toApiMessages(req.messages, formState(bot.championId, playbook)),
       req.depth ?? 'quick',
       (delta) => reader.feed(delta),
-      (usage) =>
-        deps.spend?.(
-          usageSample(
-            'agent',
-            deps.spendDetail ?? 'coach',
-            accountId,
-            (deps.now ?? Date.now)(),
-            usage,
-          ),
-        ),
+      (usage) => {
+        const at = (deps.now ?? Date.now)();
+        deps.spend?.(usageSample('agent', deps.spendDetail ?? 'coach', accountId, at, usage));
+        // The Academy spends the same embers as the Forge (ADR 0017), and
+        // so does the night on the owner's behalf. Debited on the answer.
+        deps.charge?.(accountId, EMBER_PRICES.coachTurn, bot.id);
+      },
     );
   } catch (err) {
     const e = err as Error;

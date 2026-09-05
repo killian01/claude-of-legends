@@ -9,9 +9,11 @@
 
 import { readFileSync, statSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
+import { EMBER_PRICES } from './embers';
 import type { ForgeOutcome } from './forge';
 import type { ForgedRow, ForgeStore } from './forge_store';
 import type { PipelineDeps } from './generation/pipeline';
+import { shortfall } from './generation/pipeline';
 import { GenerationError, type ProviderAsset } from './generation/provider';
 import { iconPhrase } from './icon_phrase';
 import { checkQuota, type QuotaDeps, spendQuota } from './quotas';
@@ -173,19 +175,23 @@ export function listArt(
   id: string,
 ): ForgeOutcome<{
   candidates: { cid: number; kind: string; path: string; chosen: boolean; at: number }[];
-  quota: { used: number; limit: number };
+  // What an image costs and what the account holds: the price rides with
+  // the surface that spends it, so a creator reads it before pressing
+  // rather than by being stopped (ADR 0017).
+  price: number;
+  embers: number;
 }> {
   const row = deps.store.getForged(id);
   if (!row || row.accountId !== accountId) {
     return { ok: false, error: 'no such champion on this account' };
   }
-  const q = checkQuota(deps.quota, accountId, 'gen2d');
   return {
     ok: true,
     candidates: deps.store
       .listArtCandidates(id)
       .map((c) => ({ cid: c.id, kind: c.kind, path: c.path, chosen: c.chosen, at: c.at })),
-    quota: q.ok ? { used: q.used, limit: q.limit } : { used: -1, limit: -1 },
+    price: EMBER_PRICES.image,
+    embers: deps.store.creditBalance(accountId),
   };
 }
 
@@ -206,7 +212,8 @@ export async function generateArt(
 ): Promise<
   ForgeOutcome<{
     candidate: { cid: number; kind: string; path: string; chosen: boolean; at: number };
-    quota: { used: number; limit: number };
+    price: number;
+    embers: number;
   }>
 > {
   if (!deps.generation) {
@@ -259,9 +266,14 @@ export async function generateArt(
   if (sourcePath !== null && !deps.generation.provider.uploadImage) {
     return { ok: false, error: 'this provider cannot start from an image' };
   }
-  const quota = checkQuota(deps.quota, accountId, 'gen2d');
+  const quota = checkQuota(deps.quota, 'gen2d');
   if (!quota.ok) return quota;
 
+  // Priced before the provider is touched, refunded by never debiting on
+  // a path that fails: the debit lands only once the image is on disk.
+  const price = EMBER_PRICES.image;
+  const held = deps.store.creditBalance(accountId);
+  if (held < price) return { ok: false, error: shortfall(price, held) };
   let asset: ProviderAsset;
   try {
     let image: string | undefined;
@@ -323,6 +335,13 @@ export async function generateArt(
     deps.store.chooseArtCandidate(row.id, req.kind, cid);
   }
   spendQuota(deps.quota, accountId, 'gen2d');
+  deps.store.addCreditEntry({
+    accountId,
+    delta: -price,
+    reason: 'spend',
+    ref: row.id,
+    at,
+  });
   // The calibration sample (server/spend.ts, ADR 0017), beside the meter
   // it belongs to: what this one image actually charged.
   if (typeof asset.cost === 'number') {
@@ -340,12 +359,13 @@ export async function generateArt(
   for (const stale of deps.store.pruneArtCandidates(row.id, req.kind, cap)) {
     unlink(path.join(deps.generation.assetsDir, stale));
   }
-  const after = checkQuota(deps.quota, accountId, 'gen2d');
   const chosen = deps.store.getArtCandidate(cid);
   return {
     ok: true,
     candidate: { cid, kind: req.kind, path: rel, chosen: chosen?.chosen ?? false, at },
-    quota: after.ok ? { used: after.used, limit: after.limit } : { used: -1, limit: -1 },
+    price: EMBER_PRICES.image,
+    // The balance after the debit: the number the creator watches move.
+    embers: deps.store.creditBalance(accountId),
   };
 }
 

@@ -34,6 +34,7 @@ import { PASSIVE_TEMPLATE_LIST } from '../src/sim/forge/passive_templates';
 import { fitKitPower, POWER_DIAL_MAX, POWER_DIAL_MIN } from '../src/sim/forge/spell_power';
 import { validateForged } from '../src/sim/forge/validate';
 import type { AbilityKey } from '../src/sim/types';
+import { EMBER_PRICES } from './embers';
 import type { ForgeOutcome } from './forge';
 import type { ForgeStore } from './forge_store';
 import { type ModelUsage, usageSample } from './spend';
@@ -515,6 +516,14 @@ export async function suggestKit(
   const mediaType = imageMediaType(image);
 
   const apiMessages = toApiMessages(req.messages, formState(base), image, mediaType);
+  // A turn is priced per model call, and one player message can cost up
+  // to SUGGEST_ATTEMPTS of them when a proposal fails the gate, so the
+  // balance is checked for the whole message before any of it runs.
+  const price = EMBER_PRICES.kitTurn;
+  const held = deps.store.creditBalance(accountId);
+  if (held < price) {
+    return { ok: false, error: `this costs ${price} embers a turn and you have ${held}` };
+  }
   const floor = deps.budgetFloor ?? BUDGET_FLOOR_DEFAULT;
   let fallback: ForgeOutcome<KitProposal> | null = null;
   let lastErrors: readonly string[] = [];
@@ -530,10 +539,19 @@ export async function suggestKit(
         (delta) => progress({ kind: 'text', text: delta }),
         // Every attempt is its own call and its own bill, so every
         // attempt writes its own calibration sample (ADR 0017).
-        (usage) =>
-          deps.store.addSpendSample(
-            usageSample('agent', 'kit', accountId, (deps.now ?? Date.now)(), usage),
-          ),
+        (usage) => {
+          const at = (deps.now ?? Date.now)();
+          deps.store.addSpendSample(usageSample('agent', 'kit', accountId, at, usage));
+          // Debited on the answer rather than the ask: a call that never
+          // reached the model is a call the creator never made.
+          deps.store.addCreditEntry({
+            accountId,
+            delta: -price,
+            reason: 'spend',
+            ref: req.id,
+            at,
+          });
+        },
       );
     } catch (err) {
       const e = err as Error;

@@ -77,6 +77,10 @@ const ASK: ChatTurn[] = [{ role: 'user', text: 'a kit please' }];
 
 function seeded(): ForgeStore {
   const store = new ForgeStore(':memory:');
+  // Embers to spend (ADR 0017): seeded already in embers, so the crossing
+  // from creations is marked done and cannot multiply this balance.
+  store.addCreditEntry({ accountId: 1, delta: 500, reason: 'weekly_grant', at: 1 });
+  store.addCreditEntry({ accountId: 1, delta: 0, reason: 'ember_migration', at: 1 });
   store.saveForged({
     id: 'forged_d',
     accountId: 1,

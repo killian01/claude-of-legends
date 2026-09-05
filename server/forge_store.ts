@@ -158,6 +158,8 @@ export interface GenerationJobRow {
   stage: string;
   error: string | null;
   kind: JobKind | null;
+  // What this job took off the ledger; null on a row older than embers.
+  embers: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -212,6 +214,7 @@ interface JobRawRow {
   stage: string;
   error: string | null;
   kind: JobKind | null;
+  embers: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -244,13 +247,15 @@ function toJob(r: JobRawRow): GenerationJobRow {
     stage: r.stage,
     error: r.error,
     kind: r.kind ?? null,
+    embers: r.embers ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
 }
 
 // Every column a GenerationJobRow is built from, shared by each job select.
-const JOB_COLS = 'id, forged_id, account_id, status, stage, error, kind, created_at, updated_at';
+const JOB_COLS =
+  'id, forged_id, account_id, status, stage, error, kind, embers, created_at, updated_at';
 
 export class ForgeStore {
   private readonly db: DatabaseSync;
@@ -271,6 +276,10 @@ export class ForgeStore {
     // The two-phase build gave jobs a kind (what the boot sweep may
     // refund); pre-split rows keep null and count as builds.
     this.ensureColumn('generation_jobs', 'kind', 'kind text');
+    // What the job debited (ADR 0017): a refund gives back exactly this,
+    // and a weighted price cannot be re-derived after the fact. Rows from
+    // before the ember ledger keep null and are refunded by the old rule.
+    this.ensureColumn('generation_jobs', 'embers', 'embers integer');
   }
 
   private ensureColumn(table: string, name: string, ddl: string): void {
@@ -705,13 +714,14 @@ export class ForgeStore {
     accountId: number,
     now: number,
     kind: JobKind = 'build',
+    embers = 0,
   ): number {
     const res = this.db
       .prepare(
-        `insert into generation_jobs (forged_id, account_id, status, stage, kind, created_at, updated_at)
-         values (?, ?, 'running', 'queued', ?, ?, ?)`,
+        `insert into generation_jobs (forged_id, account_id, status, stage, kind, embers, created_at, updated_at)
+         values (?, ?, 'running', 'queued', ?, ?, ?, ?)`,
       )
-      .run(forgedId, accountId, kind, now, now);
+      .run(forgedId, accountId, kind, embers, now, now);
     return Number(res.lastInsertRowid);
   }
 

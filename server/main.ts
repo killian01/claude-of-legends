@@ -73,6 +73,7 @@ import { displayOf, forgedMatchAssets, modelPointers, setForgedDisplay } from '.
 import { clientAddress, edgeConfig, originAllowed } from './edge';
 import { emailErrorMessage } from './email_address';
 import { CLAIM_TTL_MS } from './email_claim';
+import { EMBERS_PER_WEEK } from './embers';
 import {
   animateChampion,
   buildModel,
@@ -81,6 +82,7 @@ import {
   finalizeStatus,
   forgeWeapon,
   listDrafts,
+  refreshWeeklyGrant,
   saveDraft,
 } from './forge';
 import { CHAT_JSON_MAX, chatsOf, saveChat } from './forge_chats';
@@ -335,14 +337,23 @@ const coachDeps: CoachDeps = {
   store: botStore,
   apiKey: process.env.ANTHROPIC_API_KEY?.trim() || null,
   ...(process.env.BOT_COACH_MODEL?.trim() ? { model: process.env.BOT_COACH_MODEL.trim() } : {}),
-  // The calibration log lives beside the ledger, in the Forge store, for
+  // The calibration log and the ledger both live in the Forge store, for
   // every paid act in the game and not only the Forge's own (ADR 0017).
   spend: (sample) => forgeStore.addSpendSample(sample),
+  charge: (accountId, embers, ref) =>
+    forgeStore.addCreditEntry({
+      accountId,
+      delta: -embers,
+      reason: 'spend',
+      ref,
+      at: Date.now(),
+    }),
+  balance: (accountId) => forgeStore.creditBalance(accountId),
 };
 const forgeDeps = {
   store: forgeStore,
   generation,
-  creationsGrant: envNumber('CREATIONS_PER_WEEK', 3),
+  emberGrant: envNumber('EMBERS_PER_WEEK', EMBERS_PER_WEEK),
   draftCap: envNumber('FORGE_DRAFT_CAP', 50),
 };
 // The gallery (plan-forge phase 7) shares the store; the takedown
@@ -351,18 +362,11 @@ const galleryDeps = {
   store: forgeStore,
   reportThreshold: envNumber('REPORT_TAKEDOWN_THRESHOLD', 3),
 };
-// Daily quotas (plan-forge phase 8): per account per rolling day, and the
-// same actions again for the whole server, because a per-account limit
-// times an unbounded number of accounts is an unbounded bill. Zero
-// disables one, at either level.
+// The server's daily ceilings (ADR 0017). What one account may spend is
+// its ember balance; these bound what every account together may ask for
+// in a rolling day, which no per-account number can. Zero disables one.
 const quotaDeps = {
   store: forgeStore,
-  limits: {
-    generation: envNumber('GENERATIONS_PER_DAY', 5),
-    animate: envNumber('ANIMATIONS_PER_DAY', 20),
-    gen2d: envNumber('QUOTA_2D_PER_DAY', 40),
-    agent: envNumber('QUOTA_AGENT_PER_DAY', 20),
-  },
   ceilings: {
     generation: envNumber('SERVER_GENERATIONS_PER_DAY', CEILING_DEFAULTS.generation),
     animate: envNumber('SERVER_ANIMATIONS_PER_DAY', CEILING_DEFAULTS.animate),
@@ -562,7 +566,17 @@ function wayParam(rawUrl: string | undefined): Way | null {
 // they registered with and whether it is confirmed, which nobody else may
 // see. /api/account/:id stays on describeAccount for exactly that reason.
 function describeSelf(a: Account): unknown {
-  return { ...selfAccount(a), profile: buildProfile(matchLog, a.id) };
+  // The ember balance rides the account's own sheet (ADR 0017): it is
+  // spent in the Forge and in the Academy both, so it belongs to neither
+  // of them and to the account instead. Asking refreshes the weekly
+  // grant, like every other Forge surface does.
+  refreshWeeklyGrant(forgeDeps, a.id);
+  return {
+    ...selfAccount(a),
+    profile: buildProfile(matchLog, a.id),
+    embers: forgeStore.creditBalance(a.id),
+    embersPerWeek: envNumber('EMBERS_PER_WEEK', EMBERS_PER_WEEK),
+  };
 }
 
 // Issues a fresh confirmation link and mails it. Deliberately not awaited
@@ -1358,7 +1372,7 @@ const server = http.createServer(async (req, res) => {
           return;
         }
         const stored = text !== null ? botStore.getChat(id) : [];
-        const quota = checkQuota(quotaDeps, me.id, 'agent');
+        const quota = checkQuota(quotaDeps, 'agent');
         if (!quota.ok) {
           sendJson(res, 200, quota);
           return;
@@ -1491,7 +1505,7 @@ const server = http.createServer(async (req, res) => {
         // The daily generation quota (phase 8) is checked first and spent
         // only when the chain actually starts: a refused build (invalid
         // kit, no credits) never burns a day's allowance.
-        const quota = checkQuota(quotaDeps, me.id, 'generation');
+        const quota = checkQuota(quotaDeps, 'generation');
         if (!quota.ok) {
           sendJson(res, 200, quota);
           return;
@@ -1512,7 +1526,7 @@ const server = http.createServer(async (req, res) => {
         // Its own daily meter, not the build's: a bake retargets a rig
         // the Creation already paid for, and a kit with per-spell clips
         // needs more bakes than a day's builds. Spent only when it starts.
-        const quota = checkQuota(quotaDeps, me.id, 'animate');
+        const quota = checkQuota(quotaDeps, 'animate');
         if (!quota.ok) {
           sendJson(res, 200, quota);
           return;
@@ -1555,7 +1569,7 @@ const server = http.createServer(async (req, res) => {
         }
         // Rides the same daily generation meter as the build (it is a 3D
         // build), spent only when the chain actually starts.
-        const quota = checkQuota(quotaDeps, me.id, 'generation');
+        const quota = checkQuota(quotaDeps, 'generation');
         if (!quota.ok) {
           sendJson(res, 200, quota);
           return;
@@ -1673,7 +1687,7 @@ const server = http.createServer(async (req, res) => {
           sendJson(res, 400, { ok: false, error: 'malformed request' });
           return;
         }
-        const quota = checkQuota(quotaDeps, me.id, 'agent');
+        const quota = checkQuota(quotaDeps, 'agent');
         if (!quota.ok) {
           sendJson(res, 200, quota);
           return;
