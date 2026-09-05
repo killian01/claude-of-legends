@@ -9,38 +9,42 @@ import { ForgeStore } from '../server/forge_store';
 import { checkQuota, DAY_MS, type QuotaDeps, spendQuota } from '../server/quotas';
 import { FORGED_TWINS } from './forged_twins';
 
-describe('daily quotas', () => {
-  it('counts a rolling day, refuses at the limit, frees as events age out', () => {
+describe('the server’s daily ceilings', () => {
+  // What one account may spend is its ember balance now (ADR 0017). What
+  // every account together may ask for in a day is this, and nothing else
+  // can give it: a per-account number times an unbounded number of
+  // accounts is an unbounded bill.
+  it('stops the whole server at its ceiling, whoever is asking, and frees it a day later', () => {
     const store = new ForgeStore(':memory:');
     try {
       let clock = 1_000_000;
-      const deps: QuotaDeps = { store, limits: { generation: 2 }, now: () => clock };
-      expect(checkQuota(deps, 1, 'generation')).toMatchObject({ ok: true, used: 0, limit: 2 });
-      spendQuota(deps, 1, 'generation');
-      spendQuota(deps, 1, 'generation');
-      const full = checkQuota(deps, 1, 'generation');
-      expect(full.ok).toBe(false);
-      // Another account has its own meter.
-      expect(checkQuota(deps, 2, 'generation').ok).toBe(true);
-      // A day later the oldest events no longer count.
+      const deps: QuotaDeps = { store, ceilings: { gen2d: 3 }, now: () => clock };
+      spendQuota(deps, 1, 'gen2d');
+      spendQuota(deps, 2, 'gen2d');
+      expect(checkQuota(deps, 'gen2d').ok).toBe(true);
+      spendQuota(deps, 3, 'gen2d');
+      const refused = checkQuota(deps, 'gen2d');
+      expect(refused.ok).toBe(false);
+      expect(!refused.ok && refused.error).toMatch(/the server has spent its day/);
+      // Per action, because the actions do not cost the same.
+      expect(checkQuota(deps, 'generation').ok).toBe(true);
+      // And it ages out on the same rolling day.
       clock += DAY_MS + 1;
-      expect(checkQuota(deps, 1, 'generation')).toMatchObject({ ok: true, used: 0 });
-      // Pruned events change no answer: they were already out of window.
-      expect(store.pruneQuotaEvents(clock - DAY_MS)).toBe(2);
-      expect(checkQuota(deps, 1, 'generation')).toMatchObject({ ok: true, used: 0 });
+      expect(checkQuota(deps, 'gen2d').ok).toBe(true);
     } finally {
       store.close();
     }
   });
 
-  it('a zero limit disables the meter', () => {
+  it('a zero ceiling switches the wall off, and still records every event', () => {
     const store = new ForgeStore(':memory:');
     try {
-      const deps: QuotaDeps = { store, limits: { generation: 0 }, now: () => 1 };
-      expect(checkQuota(deps, 1, 'generation').ok).toBe(true);
-      spendQuota(deps, 1, 'generation');
-      // Nothing was even recorded: off means off.
-      expect(store.quotaCountSince(1, 'generation', 0)).toBe(0);
+      const deps: QuotaDeps = { store, ceilings: { agent: 0 }, now: () => 1 };
+      for (let i = 0; i < 20; i += 1) spendQuota(deps, i, 'agent');
+      expect(checkQuota(deps, 'agent').ok).toBe(true);
+      // The events are the record of how often an act is asked for, so
+      // they are written whatever the ceiling is set to.
+      expect(store.quotaCountAllSince('agent', 0)).toBe(20);
     } finally {
       store.close();
     }

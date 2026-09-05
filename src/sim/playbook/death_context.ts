@@ -43,7 +43,7 @@ function inTowerReach(tower: Unit, u: Unit): boolean {
 
 export function deathScene(sim: Sim, unitId: number, radius = SCENE_RADIUS): DeathScene | null {
   const u = sim.units.get(unitId);
-  if (!u || u.kind !== 'champion') return null;
+  if (u?.kind !== 'champion') return null;
   const around: SceneUnit[] = [];
   let allies = 0;
   let enemies = 0;

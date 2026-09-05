@@ -4,7 +4,7 @@
 import puppeteer from 'puppeteer-core';
 import { clickBar, clickTile, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
-const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const CHROME = process.env.CHROME ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

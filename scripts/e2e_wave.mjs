@@ -10,7 +10,7 @@ import { mkdirSync } from 'node:fs';
 import puppeteer from 'puppeteer-core';
 import { clickBar, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
-const CHROME = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const CHROME = process.env.CHROME ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const URL = 'http://localhost:5173';
 const SHOT_DIR = process.env.SHOT_DIR ?? '';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

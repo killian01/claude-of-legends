@@ -120,6 +120,11 @@ interface TripoTaskEnvelope {
     task_id?: string;
     status?: string;
     output?: Record<string, unknown>;
+    // What the settled task charged the account, in Tripo credits.
+    // Measured 2026-09-05 on a real champion's tasks: 10 for an image,
+    // 30 for an image_to_model, 25 for the one animate_rig, and 30 for a
+    // five-clip animate_retarget against 10 for a one-clip one.
+    consumed_credit?: number;
   };
 }
 
@@ -202,10 +207,12 @@ export class TripoProvider implements GenerationProvider {
           (v): v is string => typeof v === 'string' && v.startsWith('http'),
         );
         if (!url) throw new GenerationError(`tripo task ${taskId} succeeded with no file url`);
+        const spent = envelope.data?.consumed_credit;
         return {
           taskId,
           url,
           provenance: { provider: this.id, model, at: Date.now(), taskId },
+          ...(typeof spent === 'number' ? { cost: spent } : {}),
         };
       }
       if (status === 'failed' || status === 'cancelled' || status === 'banned') {

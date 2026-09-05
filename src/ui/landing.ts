@@ -69,15 +69,18 @@ export function showLanding(
     bar.links.appendChild(toPlay);
     bar.right.appendChild(navLink('Source', REPO));
 
-    // --- hero ---
+    // The site mark, centered on the bar. It belongs to the landing only:
+    // the home's bar carries a row of sections through that middle.
     const mark = el('img', 'pg-mark');
     mark.src = '/icon-192.png';
     mark.alt = '';
     mark.width = 192;
     mark.height = 192;
     mark.decoding = 'async';
+    bar.root.appendChild(mark);
+
+    // --- hero ---
     hero.append(
-      mark,
       el('h1', 'pg-title', 'Claude of Legends'),
       el(
         'p',

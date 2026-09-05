@@ -4,7 +4,6 @@
 // and a bot's chat leaves with the bot.
 
 import { describe, expect, it } from 'vitest';
-import { BotStore } from '../server/bot_store';
 import {
   appendExchange,
   botChat,
@@ -12,6 +11,7 @@ import {
   clearBotChat,
   windowTurns,
 } from '../server/bot_chats';
+import { BotStore } from '../server/bot_store';
 import { type BotDeps, createBot, deleteBot } from '../server/bots';
 import { CHAT_TURNS_MAX, threadError } from '../server/suggest';
 import { type CoachTurn, commentOf } from '../src/net/coach_chat';

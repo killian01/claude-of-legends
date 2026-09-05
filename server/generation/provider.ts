@@ -57,6 +57,12 @@ export interface ProviderAsset {
     at: number;
     taskId: string;
   };
+  // What the task actually cost, in the provider's own units, when the
+  // provider says so on the settled task (Tripo's consumed_credit). This
+  // is the calibration input ADR 0017 asks for: exact, per act, and never
+  // a balance difference that a concurrent job could poison. Absent when
+  // a provider does not report it.
+  cost?: number;
 }
 
 // A failed operation. Every generation failure refunds the creation

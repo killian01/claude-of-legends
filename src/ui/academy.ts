@@ -128,6 +128,7 @@ const CSS = `
 .ac-bubble.user { align-self: flex-end; background: #17303d; color: #e0ecf3; }
 .ac-bubble.ai { align-self: flex-start; background: #0e1a21; border: 1px solid #1f3644; color: #c8d6e0; }
 .ac-bubble small { display: block; color: #f09090; font-size: 10.5px; margin-top: 4px; }
+.ac-embers { color: #e8cc74; font-size: 11.5px; font-weight: 700; margin: 4px 0 6px; }
 .ac-chatrow { display: flex; gap: 6px; align-items: center; }
 .ac-chatrow .ac-input { flex: 1; }
 .ac-check { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #7f9cae; }
@@ -319,6 +320,19 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
 
   // --- state ---
   let bots: BotView[] = [];
+  // The account's embers and what a coach turn costs (ADR 0017): the
+  // Academy is a spending surface, so it shows both. -1 is "not asked".
+  let embers = -1;
+  let coachPrice = 1;
+  const loadEmbers = async (): Promise<void> => {
+    const r = await api<{ embers: number; prices: Record<string, number> }>('/api/forge/drafts');
+    if (!r.ok) return;
+    embers = r.embers;
+    if (typeof r.prices?.coachTurn === 'number') coachPrice = r.prices.coachTurn;
+    // The balance lands after the first paint, so the paint is redone:
+    // a price the creator only sees on their second visit is not shown.
+    renderAll();
+  };
   let current: BotView | null = null;
   // The editable copy of the current bot's playbook; saved on demand.
   let working: PlaybookDef | null = null;
@@ -495,6 +509,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
   }
 
   async function load(keepId: string | null): Promise<void> {
+    void loadEmbers();
     const r = await api<{ bots: BotView[] }>('/api/bots');
     if (!r.ok) {
       say(r.error, true);
@@ -1524,6 +1539,16 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       lastTop = log.scrollTop;
     });
     coach.append(log);
+    coach.append(
+      el(
+        'div',
+        'ac-embers',
+        embers >= 0
+          ? `A turn with the coach costs ${coachPrice} ember${coachPrice === 1 ? '' : 's'}. ` +
+              `You have ${embers}.`
+          : `A turn with the coach costs ${coachPrice} ember${coachPrice === 1 ? '' : 's'}.`,
+      ),
+    );
     const row = el('div', 'ac-chatrow');
     const input = el('input', 'ac-input') as HTMLInputElement;
     input.placeholder = 'How should this bot play?';
@@ -1538,6 +1563,10 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       coaching ? 'Asking...' : 'Send',
     ) as HTMLButtonElement;
     send.disabled = coaching;
+    // The Academy spends the same embers as the Forge (ADR 0017), so it
+    // says the price and the balance in plain sight, next to the control
+    // that spends them. A tooltip would be a number nobody reads.
+    send.title = 'The coach reads the playbook and proposes changes you apply or discard';
     const submit = (): void => {
       const text = input.value.trim();
       if (text === '' || send.disabled) return;

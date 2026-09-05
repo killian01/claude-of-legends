@@ -14,6 +14,7 @@ export class Minimap {
   private readonly viewerTeam: TeamId;
   private readonly selfId: number;
   private readonly canvas: HTMLCanvasElement;
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: read through `const { g } = this` in update(), which the rule does not follow.
   private readonly g: CanvasRenderingContext2D;
   private readonly scale: number;
   private readonly fog = document.createElement('canvas');

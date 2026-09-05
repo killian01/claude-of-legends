@@ -6,7 +6,10 @@
 // applies only if it wins more. Nothing is applied without the owner
 // unless they opted in, and every applied change is a version they can
 // undo. The Briefing is what the owner reads: the record, the plays, the
-// proposal and what sparring said.
+// proposal and what sparring said. The model call, the night's only paid
+// step, is gated on the owner still being around
+// (server/night_eligibility.ts); everything else runs for every deposited
+// bot as before.
 
 import type { FastMatchRequest, FastMatchResult } from '../src/fast_match';
 import type { ReplayPick } from '../src/net/replay';
@@ -15,7 +18,8 @@ import type { PlayReport, PlayStats } from '../src/sim/playbook/report';
 import type { PlaybookDef } from '../src/sim/playbook/types';
 import type { BotRow, BotStore } from './bot_store';
 import type { BotOutcome } from './bots';
-import type { CoachAnswer, CoachDeps } from './playbook_suggest';
+import { coachEligible } from './night_eligibility';
+import type { CoachAnswer } from './playbook_suggest';
 import type { MatchRecord } from './records';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -34,6 +38,11 @@ export interface NightCoachDeps {
     | null;
   // Every recorded match, newest last.
   records: () => readonly MatchRecord[];
+  // When the bot's owner was last seen, for the coach's own gate
+  // (server/night_eligibility.ts). Absent means the host cannot date its
+  // owners and the gate stays open.
+  ownerSeenAt?: (accountId: number) => number | null;
+  idleDays?: number;
   now?: () => number;
   sparringPerSide?: number;
   maxTicks?: number;
@@ -174,6 +183,11 @@ export async function coachBotOvernight(deps: NightCoachDeps, bot: BotRow): Prom
   const reports = deps.store.listBotReports(bot.id, since);
   const plays = sumPlays(reports);
   if (!deps.coach) return `${bot.name}: no coach configured, report only`;
+  // The only paid step of the night, and it waits for an owner who is
+  // still around to read what it writes.
+  if (deps.ownerSeenAt && !coachEligible(deps.ownerSeenAt(bot.accountId), now, deps.idleDays)) {
+    return `${bot.name}: the owner has been away, report only`;
+  }
   const answer = await deps.coach(bot.accountId, bot.id, briefingPrompt(bot, matches, plays));
   if (!answer.ok) return `${bot.name}: the coach did not answer (${answer.error})`;
   if (answer.ops.length === 0) return `${bot.name}: the coach proposed no change`;

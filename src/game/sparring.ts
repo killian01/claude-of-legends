@@ -5,8 +5,8 @@
 import type { PlaybookDef } from '../sim/playbook/types';
 import type { TeamId } from '../sim/types';
 import {
-  SPAR_MAX_TICKS,
   type SeriesMatch,
+  SPAR_MAX_TICKS,
   type SparBot,
   type SparRequest,
   type SparResult,

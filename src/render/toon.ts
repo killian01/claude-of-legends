@@ -14,7 +14,9 @@ function gradientRamp(): THREE.DataTexture {
   if (ramp) return ramp;
   const steps = [110, 185, 255];
   const data = new Uint8Array(steps.length * 4);
-  steps.forEach((v, i) => data.set([v, v, v, 255], i * 4));
+  steps.forEach((v, i) => {
+    data.set([v, v, v, 255], i * 4);
+  });
   ramp = new THREE.DataTexture(data, steps.length, 1, THREE.RGBAFormat);
   ramp.minFilter = THREE.NearestFilter;
   ramp.magFilter = THREE.NearestFilter;

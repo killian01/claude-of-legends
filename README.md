@@ -17,7 +17,7 @@
 
 [Play now](https://claudeoflegends.com/) · [Quick start](#quick-start) · [How to play](#how-to-play) · [Train a bot](#every-bot-is-a-policy-train-one) · [Contributing](CONTRIBUTING.md)
 
-![Gameplay](docs/screenshots/gameplay.gif)
+![Gameplay](docs/screenshots/gameplay.webp)
 
 </div>
 

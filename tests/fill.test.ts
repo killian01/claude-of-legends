@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { fillWithBots } from '../server/bot_fill';
 import { sparringPicks } from '../src/game/sparring_core';
 import { buildMatchSim } from '../src/net/replay';
-import { type ChampionRole, CHAMPIONS } from '../src/sim/content/champions';
+import { CHAMPIONS, type ChampionRole } from '../src/sim/content/champions';
 import { LANER_PLAYBOOK } from '../src/sim/content/playbooks/laner';
 import { fillTeam, TEAM_SIZE } from '../src/sim/fill';
 import { Rng } from '../src/sim/rng';

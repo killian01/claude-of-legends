@@ -23,9 +23,4 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
       - run: pnpm test
-      # The repo carries a backlog of fixable Biome nits (optional chains,
-      # unused imports) that predate this workflow, so lint reports without
-      # failing the run. Drop continue-on-error once "pnpm biome check
-      # --write ." has been through review.
       - run: pnpm lint
-        continue-on-error: true

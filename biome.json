@@ -14,7 +14,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "style": {
         "noNonNullAssertion": "off"
       }
@@ -29,7 +29,8 @@
       "!**/dist-gate*",
       "!**/dist-matrix",
       "!**/node_modules",
-      "!**/.pnpm-store"
+      "!**/.pnpm-store",
+      "!**/public/vendor"
     ]
   }
 }

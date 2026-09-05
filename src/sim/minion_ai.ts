@@ -82,7 +82,7 @@ function laneWaypoint(map: GameMap, u: Unit): Vec2 {
   return { x: enemySanctum.x, z: enemySanctum.z };
 }
 
-function advanceLane(ctx: CombatCtx, nav: NavGrid, map: GameMap, u: Unit): void {
+function advanceLane(nav: NavGrid, map: GameMap, u: Unit): void {
   let wp = laneWaypoint(map, u);
   if (Math.hypot(wp.x - u.pos.x, wp.z - u.pos.z) < WAYPOINT_REACHED) {
     u.laneProgress += 1;
@@ -100,6 +100,6 @@ export function stepMinionAi(ctx: CombatCtx, nav: NavGrid, map: GameMap, tickCou
     if (tickCount % ACQUIRE_PERIOD_TICKS === 0 || !currentTargetValid(ctx, u)) {
       acquire(ctx, u);
     }
-    if (u.attackTargetId === null) advanceLane(ctx, nav, map, u);
+    if (u.attackTargetId === null) advanceLane(nav, map, u);
   }
 }

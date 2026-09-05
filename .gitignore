@@ -10,6 +10,9 @@ data/
 !.env.example
 *.local
 coverage/
+# Screencast frames from scripts/shot_replay.mjs; what ships is the gif
+# assembled from them, not the thousand stills.
+docs/screenshots/frame-*.jpg
 # Local research notes that cite competitor games by name (kit redesign catalogue).
 # Useful locally, never committed; see the header of docs/design/kits-v2.md.
 docs/research/

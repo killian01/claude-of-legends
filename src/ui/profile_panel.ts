@@ -11,6 +11,7 @@ const CSS = `
 .prof-panel { margin: 8px 0; font-size: 12px; color: #c9d8ae; text-align: left; }
 .prof-name { font-size: 15px; font-weight: 800; color: #e8dfae; }
 .prof-sub { color: #93a87c; margin: 2px 0 8px; }
+.prof-embers { color: #e8cc74; font-weight: 700; margin: 2px 0 8px; }
 .prof-line { display: flex; justify-content: space-between; padding: 3px 0; gap: 10px; }
 .prof-line span:last-child { color: #93a87c; white-space: nowrap; }
 .prof-section { font-size: 11px; color: #93a87c; margin: 10px 0 3px; }
@@ -38,6 +39,10 @@ function ensureCss(): void {
 
 export interface ApiProfile {
   name: string;
+  // The account's own embers (ADR 0017); absent on another player's card,
+  // where a balance is nobody else's business.
+  embers?: number;
+  embersPerWeek?: number;
   createdAt: number;
   rating: number;
   ratedGames: number;
@@ -95,6 +100,19 @@ export function renderProfile(box: HTMLElement, data: ApiProfile): void {
       ? `${tierOf(data.rating).name}, rating ${data.rating} over ${data.ratedGames} rated match${data.ratedGames > 1 ? 'es' : ''}.`
       : 'Unrated: a match is rated with a human on each side.';
   box.append(el('div', 'prof-sub', rated));
+  // The balance lives here, on the account, because the Forge and the
+  // Academy both spend it and it belongs to neither (ADR 0017).
+  if (typeof data.embers === 'number') {
+    const weekly = data.embersPerWeek ?? 0;
+    box.append(
+      el(
+        'div',
+        'prof-embers',
+        `${data.embers} embers` +
+          (weekly > 0 ? `, ${weekly} more every week; unspent ones roll over.` : '.'),
+      ),
+    );
+  }
   const p = data.profile;
   if (p.games === 0) {
     box.append(el('div', 'prof-sub', 'No online matches recorded yet.'));

@@ -14,7 +14,9 @@
 import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { ForgedChampionDef } from '../../src/sim/forge/forged_def';
+import { bakePrice, CREATION_IN_EMBERS, EMBER_PRICES } from '../embers';
 import type { ForgeStore } from '../forge_store';
+import type { SpendDetail } from '../spend';
 import { houseClipFile, isHouseClip } from './house_clips';
 import {
   CLIP_ROLES,
@@ -83,6 +85,45 @@ export function familyOf(def: ForgedChampionDef): WeaponFamily {
   return 'slashing';
 }
 
+// One calibration sample per produced asset (server/spend.ts, ADR 0017):
+// what the provider says the task charged, filed under the meter that
+// covers it. A provider that reports no cost writes nothing rather than a
+// zero, so an unmeasured act never reads as a free one.
+function noteSpend(
+  deps: PipelineDeps,
+  accountId: number,
+  action: 'generation' | 'animate',
+  detail: SpendDetail,
+  asset: { cost?: number },
+  at: number,
+): void {
+  if (typeof asset.cost !== 'number') return;
+  deps.storage.addSpendSample({
+    accountId,
+    action,
+    detail,
+    provider: 'tripo',
+    credits: asset.cost,
+    at,
+  });
+}
+
+// What a build costs before it runs: the model, plus the weapon when one
+// will actually be forged alongside it. The same reading of the assets
+// the run itself makes, so the price and the work cannot disagree.
+export function buildEmbers(deps: PipelineDeps, forgedId: string): number {
+  const assets = (deps.storage.forgedAssets(forgedId) as Record<string, unknown> | null) ?? {};
+  const weaponComing = !assets.weapon && deps.storage.chosenArt(forgedId, 'weapon') !== null;
+  return EMBER_PRICES.model + (weaponComing ? EMBER_PRICES.weapon : 0);
+}
+
+// One refusal, worded the same wherever a balance runs short: it names
+// the price and what is held, because a wall that does not say its number
+// is the wall this whole economy exists to remove (ADR 0017).
+export function shortfall(price: number, held: number): string {
+  return `this costs ${price} embers and you have ${held}; the grant refills weekly`;
+}
+
 export type PipelineStart =
   | { ok: true; jobId: number; done: Promise<void> }
   | { ok: false; error: string };
@@ -98,18 +139,18 @@ export function startModelBuild(deps: PipelineDeps, req: BuildRequest): Pipeline
   if (deps.storage.runningJobFor(req.def.id)) {
     return { ok: false, error: 'this champion is already being built' };
   }
-  if (deps.storage.creditBalance(req.accountId) < 1) {
-    return { ok: false, error: 'no creations left; the allocation refreshes weekly' };
-  }
+  const price = buildEmbers(deps, req.def.id);
+  const held = deps.storage.creditBalance(req.accountId);
+  if (held < price) return { ok: false, error: shortfall(price, held) };
   const at = now();
   deps.storage.addCreditEntry({
     accountId: req.accountId,
-    delta: -1,
+    delta: -price,
     reason: 'finalize',
     ref: req.def.id,
     at,
   });
-  const jobId = deps.storage.createGenerationJob(req.def.id, req.accountId, at, 'build');
+  const jobId = deps.storage.createGenerationJob(req.def.id, req.accountId, at, 'build', price);
   const done = runModelBuild(deps, jobId, req).catch((err) => {
     // runModelBuild settles the job itself; this guards the guard.
     console.error('model build job crashed outside its own handling', err);
@@ -148,6 +189,7 @@ async function runModelBuild(deps: PipelineDeps, jobId: number, req: BuildReques
 
     stage('model');
     const model = await deps.provider.imageTo3D({ image: sheetRef });
+    noteSpend(deps, req.accountId, 'generation', 'model', model, now());
 
     // The champion's own weapon, when the player generated and picked a
     // weapon image and no weapon exists yet: a static prop from that
@@ -164,6 +206,7 @@ async function runModelBuild(deps: PipelineDeps, jobId: number, req: BuildReques
         name: path.basename(weaponArt.path),
       });
       weapon = await deps.provider.imageTo3D({ image: weaponRef });
+      noteSpend(deps, req.accountId, 'generation', 'weapon', weapon, now());
     }
 
     // Provider URLs expire (Tripo: 24 hours): download NOW, own forever.
@@ -215,8 +258,60 @@ async function runModelBuild(deps: PipelineDeps, jobId: number, req: BuildReques
       { status: 'failed', error: blocked ? `blocked: ${message}` : message },
       now(),
     );
-    refund(deps.storage, req.accountId, req.def.id, now());
+    refund(
+      deps.storage,
+      req.accountId,
+      req.def.id,
+      deps.storage.getGenerationJob(jobId)?.embers ?? null,
+      now(),
+    );
   }
+}
+
+// What a bake would actually do, worked out before it is started so it
+// can be priced before it is paid for (ADR 0017) and again inside the run
+// so the two can never disagree. A changed pick bakes, and so does a slot
+// with no clip file yet (the first bake, and a pre-split champion's
+// transition). House picks are a file copy that never touches the
+// provider and never costs: only the provider ones retarget.
+export function bakePlan(
+  assets: Record<string, unknown>,
+  clips: Readonly<Record<string, string | undefined>>,
+): {
+  delta: string[];
+  providerDelta: string[];
+  houseDelta: string[];
+  picks: Readonly<Record<string, string>>;
+} {
+  const prevClips = (assets.clips ?? {}) as Record<string, string>;
+  const prevFiles = (assets.clipFiles ?? {}) as Record<string, string>;
+  const slots: readonly string[] = [
+    ...CLIP_ROLES,
+    ...SPELL_CLIP_SLOTS.filter((slot) => typeof clips[slot] === 'string'),
+  ];
+  const picks = clips as Readonly<Record<string, string>>;
+  const delta = slots.filter(
+    (role) => picks[role] !== prevClips[role] || typeof prevFiles[role] !== 'string',
+  );
+  return {
+    delta,
+    providerDelta: delta.filter((role) => !isHouseClip(picks[role] ?? '')),
+    houseDelta: delta.filter((role) => isHouseClip(picks[role] ?? '')),
+    picks,
+  };
+}
+
+// What a bake costs before it runs: the retarget by its provider clip
+// count, plus the rig when this champion has never had one.
+export function bakeEmbers(
+  assets: Record<string, unknown>,
+  clips: Readonly<Record<string, string | undefined>>,
+): number {
+  const plan = bakePlan(assets, clips);
+  if (plan.delta.length === 0) return 0;
+  const rigged =
+    typeof assets.rigTask === 'string' && typeof assets.rigged === 'string' ? 0 : EMBER_PRICES.rig;
+  return rigged + bakePrice(plan.providerDelta.length);
 }
 
 // The second half, the player's own click AFTER validating the model:
@@ -248,7 +343,20 @@ export function startAnimate(deps: PipelineDeps, req: AnimateRequest): PipelineS
   if (!modelTask) {
     return { ok: false, error: 'this model kept no build task to rig; rebuild the model first' };
   }
-  const jobId = deps.storage.createGenerationJob(req.forgedId, req.accountId, now(), 'animate');
+  const price = bakeEmbers(assets, req.clips);
+  const held = deps.storage.creditBalance(req.accountId);
+  if (held < price) return { ok: false, error: shortfall(price, held) };
+  const at = now();
+  if (price > 0) {
+    deps.storage.addCreditEntry({
+      accountId: req.accountId,
+      delta: -price,
+      reason: 'spend',
+      ref: req.forgedId,
+      at,
+    });
+  }
+  const jobId = deps.storage.createGenerationJob(req.forgedId, req.accountId, at, 'animate', price);
   const done = runAnimate(deps, jobId, req, modelTask).catch((err) => {
     console.error('animate job crashed outside its own handling', err);
   });
@@ -275,23 +383,8 @@ async function runAnimate(
   try {
     const before =
       (deps.storage.forgedAssets(req.forgedId) as Record<string, unknown> | null) ?? {};
-    const prevClips = (before.clips ?? {}) as Record<string, string>;
+    const { delta, providerDelta, houseDelta, picks } = bakePlan(before, req.clips);
     const prevFiles = (before.clipFiles ?? {}) as Record<string, string>;
-    // What actually bakes: a changed pick, or a slot with no clip file
-    // yet (the first bake, and the pre-split champion's transition).
-    // Spell slots only exist when the request carries them.
-    const slots: readonly string[] = [
-      ...CLIP_ROLES,
-      ...SPELL_CLIP_SLOTS.filter((s) => typeof req.clips[s] === 'string'),
-    ];
-    const picks = req.clips as Readonly<Record<string, string>>;
-    const delta = slots.filter(
-      (role) => picks[role] !== prevClips[role] || typeof prevFiles[role] !== 'string',
-    );
-    // House picks never touch the provider: their shared file copies
-    // into the champion's assets. Only provider presets retarget.
-    const providerDelta = delta.filter((role) => !isHouseClip(picks[role] ?? ''));
-    const houseDelta = delta.filter((role) => isHouseClip(picks[role] ?? ''));
 
     // Rig once, keep forever: the stored rig task feeds every later bake
     // (house clips ride the rigged body too, so any first bake rigs).
@@ -301,6 +394,7 @@ async function runAnimate(
     if (delta.length > 0 && (rigTask === null || riggedPath === null)) {
       stage('rig');
       const rigged = await deps.provider.rig({ modelTaskId: modelTask, rigType: 'biped' });
+      noteSpend(deps, req.accountId, 'animate', 'rig', rigged, now());
       riggedPath = `forged/${req.forgedId}/rigged_${jobId}.glb`;
       await deps.download(rigged.url, path.join(deps.assetsDir, riggedPath));
       checkBudget(deps, riggedPath, deps.budgets?.modelKb);
@@ -320,6 +414,10 @@ async function runAnimate(
         animations,
         withGeometry: false,
       });
+      // A retarget is priced by how many clips it carries (measured
+      // 2026-09-05: 30 credits for five, 10 for one), so the sample is
+      // worth nothing without the count that produced it.
+      noteSpend(deps, req.accountId, 'animate', 'retarget', baked, now());
       stage('download');
       clipsPath = `forged/${req.forgedId}/clips_${jobId}.glb`;
       await deps.download(baked.url, path.join(deps.assetsDir, clipsPath));
@@ -393,8 +491,15 @@ async function runAnimate(
       { status: 'failed', error: blocked ? `blocked: ${message}` : message },
       now(),
     );
-    // Nothing to refund: the creation was spent at the build, and this
-    // half can run again for free.
+    // A bake pays for itself now (ADR 0017), so a failed one gives it
+    // back like every other failure, technical or content-blocked.
+    refund(
+      deps.storage,
+      req.accountId,
+      req.forgedId,
+      deps.storage.getGenerationJob(jobId)?.embers ?? 0,
+      now(),
+    );
   }
 }
 
@@ -417,8 +522,22 @@ export function startWeaponForge(
   if (!art) {
     return { ok: false, error: 'generate and pick a weapon image first' };
   }
-  const jobId = deps.storage.createGenerationJob(req.forgedId, req.accountId, now(), 'weapon');
-  const done = runWeaponForge(deps, jobId, req.forgedId, art.path).catch((err) => {
+  // Claimed later rather than built alongside the model, so it pays for
+  // itself here: under the old economy the creation had already covered
+  // it, and there is no creation any more.
+  const price = EMBER_PRICES.weapon;
+  const held = deps.storage.creditBalance(req.accountId);
+  if (held < price) return { ok: false, error: shortfall(price, held) };
+  const at = now();
+  deps.storage.addCreditEntry({
+    accountId: req.accountId,
+    delta: -price,
+    reason: 'spend',
+    ref: req.forgedId,
+    at,
+  });
+  const jobId = deps.storage.createGenerationJob(req.forgedId, req.accountId, at, 'weapon', price);
+  const done = runWeaponForge(deps, jobId, req.forgedId, req.accountId, art.path).catch((err) => {
     console.error('weapon forge job crashed outside its own handling', err);
   });
   return { ok: true, jobId, done };
@@ -428,6 +547,7 @@ async function runWeaponForge(
   deps: PipelineDeps,
   jobId: number,
   forgedId: string,
+  accountId: number,
   artPath: string,
 ): Promise<void> {
   const now = deps.now ?? Date.now;
@@ -445,6 +565,7 @@ async function runWeaponForge(
       name: path.basename(artPath),
     });
     const weapon = await deps.provider.imageTo3D({ image: token });
+    noteSpend(deps, accountId, 'generation', 'weapon', weapon, now());
     stage('download');
     const weaponPath = `forged/${forgedId}/weapon.glb`;
     await deps.download(weapon.url, path.join(deps.assetsDir, weaponPath));
@@ -465,7 +586,13 @@ async function runWeaponForge(
       { status: 'failed', error: blocked ? `blocked: ${message}` : message },
       now(),
     );
-    // Nothing to refund: this chain never debited anything.
+    refund(
+      deps.storage,
+      accountId,
+      forgedId,
+      deps.storage.getGenerationJob(jobId)?.embers ?? 0,
+      now(),
+    );
   }
 }
 
@@ -488,14 +615,27 @@ function statOrZero(absPath: string): number {
   }
 }
 
-function refund(storage: ForgeStore, accountId: number, forgedId: string, at: number): void {
-  storage.addCreditEntry({ accountId, delta: 1, reason: 'refund', ref: forgedId, at });
+// Exactly what the job took, never a fixed number: a weighted price
+// cannot be re-derived once the work has failed, so the job row carries
+// it (ADR 0017). A row from before the ember ledger carries null and gets
+// the one creation it was debited, in embers.
+function refund(
+  storage: ForgeStore,
+  accountId: number,
+  forgedId: string,
+  embers: number | null,
+  at: number,
+): void {
+  const back = embers ?? CREATION_IN_EMBERS;
+  if (back <= 0) return;
+  storage.addCreditEntry({ accountId, delta: back, reason: 'refund', ref: forgedId, at });
 }
 
 // The boot sweep: a job still marked running belonged to a process that
-// died mid-generation. Fail it, and give the creation back only when one
-// was taken: builds debit, animate and weapon claims never do (a null
-// kind is a pre-split job, which always debited).
+// died mid-generation. Fail it and give back exactly what it took, which
+// the row itself remembers. Every kind can debit now (ADR 0017), so the
+// old rule of refunding builds alone would strand a bake's embers; a null
+// on the row is a job from before the ember ledger and gets a creation.
 export function recoverStaleJobs(storage: ForgeStore, now: () => number = Date.now): number {
   const stale = storage.staleRunningJobs();
   for (const job of stale) {
@@ -504,8 +644,8 @@ export function recoverStaleJobs(storage: ForgeStore, now: () => number = Date.n
       { status: 'failed', error: 'the server restarted mid-generation' },
       now(),
     );
-    if (job.kind === 'build' || job.kind === null) {
-      refund(storage, job.accountId, job.forgedId, now());
+    if (job.embers !== null || job.kind === 'build' || job.kind === null) {
+      refund(storage, job.accountId, job.forgedId, job.embers, now());
     }
   }
   return stale.length;

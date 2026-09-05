@@ -23,7 +23,9 @@ export type ReplayWorkerOut =
 export function runReplayPass(rec: ReplayRecord, post: (msg: ReplayWorkerOut) => void): void {
   const { sim, unitIds } = buildMatchSim(rec.seed, rec.picks, rec.forged ?? []);
   const unitTeams = new Map<number, TeamId>();
-  rec.picks.forEach((p, i) => unitTeams.set(unitIds[i]!, p.team));
+  rec.picks.forEach((p, i) => {
+    unitTeams.set(unitIds[i]!, p.team);
+  });
   const marks = new MarkCollector();
   let next = 0;
   let pending: ReplayMark[] = [];

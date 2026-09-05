@@ -7,7 +7,9 @@ import puppeteer from 'puppeteer-core';
 
 const OUT = process.env.SHOT_DIR ?? 'docs/screenshots';
 const CHROME =
-  process.env.SHOT_CHROME ?? '/root/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome';
+  process.env.SHOT_CHROME ??
+  process.env.CHROME ??
+  '/root/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome';
 
 const VP = (process.env.SHOT_VP ?? '1720x960').split('x').map(Number);
 // SHOT_WS: attach to a chrome started by hand (needed for the GIF: the

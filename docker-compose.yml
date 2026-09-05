@@ -50,6 +50,9 @@ services:
       # works. See .env.example for the Tripo terms caveat before opening
       # the Forge to players.
       TRIPO_API_KEY: "${TRIPO_API_KEY:-}"
+      # The image model behind every 2D generation; optional, and the
+      # default is a quality choice rather than a deployment one.
+      TRIPO_IMAGE_MODEL: "${TRIPO_IMAGE_MODEL:-}"
       # The coach and the kit conversation (ADR 0013), from the same .env
       # file: ANTHROPIC_API_KEY is a credential and must never be
       # committed. Without it, suggestions are off and the server says so
@@ -57,19 +60,31 @@ services:
       # falls back to the default in .env.example.
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
       BOT_COACH_MODEL: "${BOT_COACH_MODEL:-}"
-      # Forge tuning (plan-forge phase 8): quotas, caps, and the meta-API
+      SUGGEST_MODEL: "${SUGGEST_MODEL:-}"
+      # The ledger, the caps, the server's daily ceilings and the meta-API
       # rate limit, all optional. Empty falls back to the defaults listed
-      # in .env.example; the server treats an empty string as unset.
-      CREATIONS_PER_WEEK: "${CREATIONS_PER_WEEK:-}"
+      # in .env.example; the server treats an empty string as unset. Every
+      # name here is read by server/main.ts, and tests/env_wiring.test.ts
+      # fails the build if one of them stops being.
+      EMBERS_PER_WEEK: "${EMBERS_PER_WEEK:-}"
       FORGE_DRAFT_CAP: "${FORGE_DRAFT_CAP:-}"
       REPORT_TAKEDOWN_THRESHOLD: "${REPORT_TAKEDOWN_THRESHOLD:-}"
-      GENERATIONS_PER_DAY: "${GENERATIONS_PER_DAY:-}"
-      QUOTA_2D_PER_DAY: "${QUOTA_2D_PER_DAY:-}"
-      QUOTA_AGENT_PER_DAY: "${QUOTA_AGENT_PER_DAY:-}"
+      SERVER_GENERATIONS_PER_DAY: "${SERVER_GENERATIONS_PER_DAY:-}"
+      SERVER_ANIMATIONS_PER_DAY: "${SERVER_ANIMATIONS_PER_DAY:-}"
+      SERVER_2D_PER_DAY: "${SERVER_2D_PER_DAY:-}"
+      SERVER_AGENT_PER_DAY: "${SERVER_AGENT_PER_DAY:-}"
       API_RATE_PER_MIN: "${API_RATE_PER_MIN:-}"
       ART_HISTORY_CAP: "${ART_HISTORY_CAP:-}"
       ASSET_MAX_IMAGE_KB: "${ASSET_MAX_IMAGE_KB:-}"
       ASSET_MAX_MODEL_KB: "${ASSET_MAX_MODEL_KB:-}"
+      # Bots on the account (ADR 0013): the two abuse rails, how long an
+      # absent owner still gets coached, and the Arena's cadence.
+      BOT_CAP: "${BOT_CAP:-}"
+      BOT_DEPOSIT_CAP: "${BOT_DEPOSIT_CAP:-}"
+      COACH_IDLE_DAYS: "${COACH_IDLE_DAYS:-}"
+      ARENA_ROUND_MINUTES: "${ARENA_ROUND_MINUTES:-}"
+      ARENA_PLAY_NOW_PER_DAY: "${ARENA_PLAY_NOW_PER_DAY:-}"
+      SPARRING_PER_SIDE: "${SPARRING_PER_SIDE:-}"
     volumes:
       # Player identities, the match log, and the Forge store. Careers and
       # forged champions reset without this.

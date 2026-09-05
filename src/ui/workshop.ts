@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {
+  captureRestPose,
   findBone,
   normalizeProp,
   type PropAnchor,
@@ -573,9 +574,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   let mixer: THREE.AnimationMixer | null = null;
   let clips: THREE.AnimationClip[] = [];
   let activeAction: THREE.AnimationAction | null = null;
-  let activeClipName = '';
   let idleClipName = '';
-  let ageMs = 0;
   const clipsPanel = el('div', 'ws-panel');
   clipsPanel.append(el('h3', '', 'Animations'));
   const clipButtons = new Map<string, HTMLButtonElement>();
@@ -638,6 +637,31 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   const freezeBox = el('div', '');
   freezeBox.append(freezeBtn, frameRow);
 
+  // Poses the rig on the reference frame (the idle at time zero), reads
+  // the rest orientation there, and puts playback back untouched.
+  const pinIdleAndCapture = (): void => {
+    if (!mixer || anchors.length === 0) return;
+    const clip = clips.find((c) => c.name === idleClipName) ?? clips[0];
+    if (!clip) return;
+    const idle = mixer.clipAction(clip);
+    const wasActive = activeAction;
+    const wasTime = idle.time;
+    const wasWeight = idle.getEffectiveWeight();
+    idle.reset().play();
+    idle.time = 0;
+    idle.setEffectiveWeight(1);
+    mixer.update(0);
+    captureRestPose(modelRoot, anchors);
+    // Back exactly as it was: this must never be visible.
+    idle.time = wasTime;
+    idle.setEffectiveWeight(wasWeight);
+    if (wasActive && wasActive !== idle) {
+      idle.stop();
+      wasActive.play();
+    }
+    mixer.update(0);
+  };
+
   const playClip = (name: string): void => {
     if (!mixer) return;
     const clip = clips.find((c) => c.name === name);
@@ -653,7 +677,6 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       action.reset().fadeIn(0.15).play();
     }
     activeAction = action;
-    activeClipName = name;
     for (const [n, b] of clipButtons) b.classList.toggle('picked', n === name);
     if (frozen) {
       mixer.update(0);
@@ -1205,15 +1228,21 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   const loop = (): void => {
     frame = requestAnimationFrame(loop);
     const dt = clock.getDelta();
-    ageMs += dt * 1000;
     if (autoSpin && !matchView) yaw += dt * 0.35;
     mixer?.update(dt);
     // The grip's rest orientation is captured once the idle pose has
     // settled, in-match style, so the weapon swings with the hand during
     // attack clips instead of staying frozen.
     if (anchors.length > 0) {
-      const settled = ageMs > 400 && activeClipName === idleClipName;
-      syncPropAnchors(modelRoot, anchors, settled);
+      // One fixed reference frame, taken once: the idle at time zero. The
+      // clip is pinned there, the pose read, and playback put back where
+      // it was, so the grip a creator fits is read against the same rest
+      // in every session instead of against whatever frame the wall clock
+      // happened to land on (which is why a saved weapon moved).
+      if (anchors[0]?.restInv === undefined || anchors[0]?.restInv === null) {
+        pinIdleAndCapture();
+      }
+      syncPropAnchors(modelRoot, anchors, false);
     }
     // The mount-bone marker follows its joint (bones scale strangely on
     // these rigs, so it tracks by world position, never parents).

@@ -70,6 +70,53 @@ medallion is a smudge at tab size. The source stays in `art_src/icon/`
 |---|---|---|
 | `icon-32.png`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png` | Generated with Google Gemini, cut out by `scripts/site_icon.mjs` | Google Gemini output terms |
 
+## Painted ability, item and sigil icons (`public/icons/`)
+
+The 67 paintings that beat the procedural icon painter: every ability
+except Maera's ultimate and Rhoka's four, all 28 items, all four sigils.
+They follow the art contract in docs/design/icon-art-style.md, whose
+subject lines come from our own kit and item records (ADR 0004). The
+generators hand back 512px PNG; what ships is the WebP conversion from
+`scripts/convert_art.mjs`, and the PNG sources stay in `art_src/`.
+
+| Files | Source | License |
+|---|---|---|
+| `abilities/*.webp`, `items/*.webp`, `sigils/*.webp` | Generated with Google Gemini or OpenAI's image model from the prompts built per docs/design/icon-art-style.md | Google Gemini or OpenAI output terms |
+
+## Home backdrop (`public/art/home_end.jpg`)
+
+The still the home screen holds on: the sharpened final frame of the
+generated cinematic that plays once per page load.
+
+| Files | Source | License |
+|---|---|---|
+| `home_end.jpg` | Generated with Google Gemini or OpenAI's image model, sharpened to 1080p | Google Gemini or OpenAI output terms |
+
+## The preview mannequin (`public/models/mannequin/`)
+
+One neutral gray biped with the Forge's whole animation catalog baked onto
+it as geometry-free clip files, so the editor can preview any preset
+instantly and for free. Generated, rigged and baked once by
+`scripts/forge_mannequin.mjs`, which is the only thing in the repo that
+ever pays Tripo for a preview.
+
+| Files | Source | License |
+|---|---|---|
+| `mannequin.glb`, `mannequin.json`, `reference.png`, `clips/*.glb` | Generated and rigged with Tripo (https://tripo3d.ai) by `scripts/forge_mannequin.mjs`, animation presets baked in place | Tripo output terms (paid tier) |
+
+## The recorded sound bank (`public/sfx/`)
+
+Rendered by `scripts/build_sfx.mjs` from recordings published under CC0:
+layered, trimmed, pitched, filtered and mixed into the game's own sounds,
+so what ships is a derivative and not a repackaged pack.
+`public/sfx/CREDITS.md` names every source pack and its recordist, and
+docs/design/sound.md says which game sound each one feeds. CC0 asks for no
+attribution; the list is kept out of respect for the recordists.
+
+| Files | Source | License |
+|---|---|---|
+| `*.ogg` | CC0 packs from Kenney, rubberduck, artisticdude and others, mixed by `scripts/build_sfx.mjs`; the full list is `public/sfx/CREDITS.md` | CC0 1.0 |
+
 ## Vendor runtime files (`public/vendor/`)
 
 | Files | What it is | License |

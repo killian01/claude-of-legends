@@ -11,6 +11,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { BASE_RATING } from './rating';
+import type { SpendSample } from './spend';
 
 const SCHEMA = `
 create table if not exists forged_champions (
@@ -73,6 +74,19 @@ create table if not exists quota_events (
   id integer primary key autoincrement,
   account_id integer not null,
   action text not null,
+  at integer not null
+);
+create table if not exists spend_samples (
+  id integer primary key autoincrement,
+  account_id integer not null,
+  action text not null,
+  detail text not null,
+  provider text not null,
+  credits real,
+  input_tokens integer,
+  output_tokens integer,
+  cache_read_tokens integer,
+  cache_write_tokens integer,
   at integer not null
 );
 create table if not exists art_candidates (
@@ -144,6 +158,8 @@ export interface GenerationJobRow {
   stage: string;
   error: string | null;
   kind: JobKind | null;
+  // What this job took off the ledger; null on a row older than embers.
+  embers: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -198,6 +214,7 @@ interface JobRawRow {
   stage: string;
   error: string | null;
   kind: JobKind | null;
+  embers: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -230,13 +247,15 @@ function toJob(r: JobRawRow): GenerationJobRow {
     stage: r.stage,
     error: r.error,
     kind: r.kind ?? null,
+    embers: r.embers ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
 }
 
 // Every column a GenerationJobRow is built from, shared by each job select.
-const JOB_COLS = 'id, forged_id, account_id, status, stage, error, kind, created_at, updated_at';
+const JOB_COLS =
+  'id, forged_id, account_id, status, stage, error, kind, embers, created_at, updated_at';
 
 export class ForgeStore {
   private readonly db: DatabaseSync;
@@ -257,6 +276,10 @@ export class ForgeStore {
     // The two-phase build gave jobs a kind (what the boot sweep may
     // refund); pre-split rows keep null and count as builds.
     this.ensureColumn('generation_jobs', 'kind', 'kind text');
+    // What the job debited (ADR 0017): a refund gives back exactly this,
+    // and a weighted price cannot be re-derived after the fact. Rows from
+    // before the ember ledger keep null and are refunded by the old rule.
+    this.ensureColumn('generation_jobs', 'embers', 'embers integer');
   }
 
   private ensureColumn(table: string, name: string, ddl: string): void {
@@ -584,6 +607,56 @@ export class ForgeStore {
     return r.n;
   }
 
+  // The calibration log (server/spend.ts, ADR 0017): append-only, read by
+  // nothing in the game, written by every act that costs money.
+  addSpendSample(s: SpendSample): void {
+    this.db
+      .prepare(
+        'insert into spend_samples (account_id, action, detail, provider, credits, ' +
+          'input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, at) ' +
+          'values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        s.accountId,
+        s.action,
+        s.detail,
+        s.provider,
+        s.credits ?? null,
+        s.inputTokens ?? null,
+        s.outputTokens ?? null,
+        s.cacheReadTokens ?? null,
+        s.cacheWriteTokens ?? null,
+        s.at,
+      );
+  }
+
+  listSpendSamples(since = 0): SpendSample[] {
+    const rows = this.db
+      .prepare('select * from spend_samples where at > ? order by at')
+      .all(since) as Record<string, number | string | null>[];
+    return rows.map((r) => ({
+      accountId: Number(r.account_id),
+      action: String(r.action) as SpendSample['action'],
+      detail: String(r.detail) as SpendSample['detail'],
+      provider: String(r.provider) as SpendSample['provider'],
+      at: Number(r.at),
+      ...(r.credits === null ? {} : { credits: Number(r.credits) }),
+      ...(r.input_tokens === null ? {} : { inputTokens: Number(r.input_tokens) }),
+      ...(r.output_tokens === null ? {} : { outputTokens: Number(r.output_tokens) }),
+      ...(r.cache_read_tokens === null ? {} : { cacheReadTokens: Number(r.cache_read_tokens) }),
+      ...(r.cache_write_tokens === null ? {} : { cacheWriteTokens: Number(r.cache_write_tokens) }),
+    }));
+  }
+
+  // The same count over every account: what the server as a whole spent on
+  // an action this window, for the ceiling no per-account limit can give.
+  quotaCountAllSince(action: string, since: number): number {
+    const r = this.db
+      .prepare('select count(*) as n from quota_events where action = ? and at > ?')
+      .get(action, since) as { n: number };
+    return r.n;
+  }
+
   // Housekeeping: events older than the widest window will never be
   // counted again; dropping them keeps the table bounded.
   pruneQuotaEvents(before: number): number {
@@ -641,13 +714,14 @@ export class ForgeStore {
     accountId: number,
     now: number,
     kind: JobKind = 'build',
+    embers = 0,
   ): number {
     const res = this.db
       .prepare(
-        `insert into generation_jobs (forged_id, account_id, status, stage, kind, created_at, updated_at)
-         values (?, ?, 'running', 'queued', ?, ?, ?)`,
+        `insert into generation_jobs (forged_id, account_id, status, stage, kind, embers, created_at, updated_at)
+         values (?, ?, 'running', 'queued', ?, ?, ?, ?)`,
       )
-      .run(forgedId, accountId, kind, now, now);
+      .run(forgedId, accountId, kind, embers, now, now);
     return Number(res.lastInsertRowid);
   }
 

@@ -55,7 +55,7 @@ function velocityOf(u: Unit, time: number): { vx: number; vz: number } {
 
 export function buildObservation(sim: Sim, unitId: number): Observation | null {
   const u = sim.units.get(unitId);
-  if (!u || u.kind !== 'champion' || u.championId === null) return null;
+  if (u?.kind !== 'champion' || u.championId === null) return null;
   const def = u.champion;
   if (!def) return null;
 
