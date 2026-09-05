@@ -17,6 +17,11 @@
 
 [Play now](https://claudeoflegends.com/) · [Quick start](#quick-start) · [How to play](#how-to-play) · [Train a bot](#every-bot-is-a-policy-train-one) · [Contributing](CONTRIBUTING.md)
 
+**Want to build something here?** The eleventh champion is one new file and
+three table entries: [docs/adding-a-champion.md](docs/adding-a-champion.md).
+A smarter bot is a playbook, no engine code at all. Small and self-contained:
+[`good first issue`](../../labels/good%20first%20issue).
+
 ![Gameplay](docs/screenshots/gameplay.webp)
 
 </div>
@@ -49,8 +54,8 @@ pnpm install
 pnpm dev
 ```
 
-Open http://localhost:5173 and pick "Practice vs dummies (offline)": a full
-5v5 against bots, no server needed.
+Open http://localhost:5173 and pick "Play offline now": a full 5v5 against
+bots, no server needed.
 
 For online play, run the server in a second terminal:
 
@@ -104,7 +109,9 @@ That makes the game a reinforcement learning environment as much as a MOBA:
   produces the identical world.
 
 Community bots, scripted or trained, are the flagship contribution this
-project is built around.
+project is built around. The other one is a champion, and it needs no art
+and no engine work to land: [docs/adding-a-champion.md](docs/adding-a-champion.md)
+walks the whole path.
 
 ## Production
 
