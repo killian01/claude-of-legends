@@ -31,8 +31,10 @@ By participating, you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Getting set up
 
-You need [Node.js](https://nodejs.org/) 20 or newer and **pnpm** (exact pin in
-`package.json` `packageManager`, currently `pnpm@10.34.5`).
+You need [Node.js](https://nodejs.org/) 22 or newer and **pnpm** (exact pin in
+`package.json` `packageManager`, currently `pnpm@10.34.5`). 22 is not a
+preference: the server's stores are built on `node:sqlite`, which arrived in
+22.5, and CI and the production image both run 22.
 
 ```bash
 # 1. Fork the repo on GitHub, then clone your fork
