@@ -11,6 +11,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { BASE_RATING } from './rating';
+import type { SpendSample } from './spend';
 
 const SCHEMA = `
 create table if not exists forged_champions (
@@ -73,6 +74,19 @@ create table if not exists quota_events (
   id integer primary key autoincrement,
   account_id integer not null,
   action text not null,
+  at integer not null
+);
+create table if not exists spend_samples (
+  id integer primary key autoincrement,
+  account_id integer not null,
+  action text not null,
+  detail text not null,
+  provider text not null,
+  credits real,
+  input_tokens integer,
+  output_tokens integer,
+  cache_read_tokens integer,
+  cache_write_tokens integer,
   at integer not null
 );
 create table if not exists art_candidates (
@@ -582,6 +596,47 @@ export class ForgeStore {
       )
       .get(accountId, action, since) as { n: number };
     return r.n;
+  }
+
+  // The calibration log (server/spend.ts, ADR 0017): append-only, read by
+  // nothing in the game, written by every act that costs money.
+  addSpendSample(s: SpendSample): void {
+    this.db
+      .prepare(
+        'insert into spend_samples (account_id, action, detail, provider, credits, ' +
+          'input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, at) ' +
+          'values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .run(
+        s.accountId,
+        s.action,
+        s.detail,
+        s.provider,
+        s.credits ?? null,
+        s.inputTokens ?? null,
+        s.outputTokens ?? null,
+        s.cacheReadTokens ?? null,
+        s.cacheWriteTokens ?? null,
+        s.at,
+      );
+  }
+
+  listSpendSamples(since = 0): SpendSample[] {
+    const rows = this.db
+      .prepare('select * from spend_samples where at > ? order by at')
+      .all(since) as Record<string, number | string | null>[];
+    return rows.map((r) => ({
+      accountId: Number(r.account_id),
+      action: String(r.action) as SpendSample['action'],
+      detail: String(r.detail) as SpendSample['detail'],
+      provider: String(r.provider) as SpendSample['provider'],
+      at: Number(r.at),
+      ...(r.credits === null ? {} : { credits: Number(r.credits) }),
+      ...(r.input_tokens === null ? {} : { inputTokens: Number(r.input_tokens) }),
+      ...(r.output_tokens === null ? {} : { outputTokens: Number(r.output_tokens) }),
+      ...(r.cache_read_tokens === null ? {} : { cacheReadTokens: Number(r.cache_read_tokens) }),
+      ...(r.cache_write_tokens === null ? {} : { cacheWriteTokens: Number(r.cache_write_tokens) }),
+    }));
   }
 
   // The same count over every account: what the server as a whole spent on

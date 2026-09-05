@@ -323,6 +323,18 @@ export async function generateArt(
     deps.store.chooseArtCandidate(row.id, req.kind, cid);
   }
   spendQuota(deps.quota, accountId, 'gen2d');
+  // The calibration sample (server/spend.ts, ADR 0017), beside the meter
+  // it belongs to: what this one image actually charged.
+  if (typeof asset.cost === 'number') {
+    deps.store.addSpendSample({
+      accountId,
+      action: 'gen2d',
+      detail: 'image',
+      provider: 'tripo',
+      credits: asset.cost,
+      at,
+    });
+  }
   const cap = deps.historyCap ?? ART_HISTORY_CAP;
   const unlink = deps.unlink ?? bestEffortUnlink;
   for (const stale of deps.store.pruneArtCandidates(row.id, req.kind, cap)) {

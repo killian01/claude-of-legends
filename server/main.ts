@@ -335,6 +335,9 @@ const coachDeps: CoachDeps = {
   store: botStore,
   apiKey: process.env.ANTHROPIC_API_KEY?.trim() || null,
   ...(process.env.BOT_COACH_MODEL?.trim() ? { model: process.env.BOT_COACH_MODEL.trim() } : {}),
+  // The calibration log lives beside the ledger, in the Forge store, for
+  // every paid act in the game and not only the Forge's own (ADR 0017).
+  spend: (sample) => forgeStore.addSpendSample(sample),
 };
 const forgeDeps = {
   store: forgeStore,
@@ -440,7 +443,9 @@ const nightCoachDeps: NightCoachDeps = {
   runner: arenaRunner,
   coach: coachDeps.apiKey
     ? (accountId, botId, message) =>
-        coachPlaybook(coachDeps, accountId, {
+        // Marked as the night's own spend: nobody is watching this one,
+        // which is exactly what makes it worth telling apart.
+        coachPlaybook({ ...coachDeps, spendDetail: 'night' }, accountId, {
           id: botId,
           messages: [{ role: 'user', text: message }],
           depth: 'quick',

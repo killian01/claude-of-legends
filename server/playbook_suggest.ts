@@ -20,6 +20,7 @@ import type { PlaybookDef } from '../src/sim/playbook/types';
 import { MAX_PLAYS, MAX_VARIANTS, validatePlaybook } from '../src/sim/playbook/validate';
 import type { BotStore } from './bot_store';
 import type { BotOutcome } from './bots';
+import { type ModelUsage, type SpendSample, usageSample } from './spend';
 import { CHAT_RAW_TEXT_MAX, type ChatTurn, threadError } from './suggest';
 
 export interface CoachDeps {
@@ -30,6 +31,14 @@ export interface CoachDeps {
   model?: string;
   // Injectable for tests; production uses global fetch.
   fetchFn?: typeof fetch;
+  // Where a calibration sample goes (server/spend.ts, ADR 0017). The
+  // coach's own store is the bots database and the ledger lives in the
+  // Forge one, so the sink is injected rather than reached for.
+  spend?: (sample: SpendSample) => void;
+  // Which act the samples belong to: an owner watching the Academy, or
+  // the night writing to nobody.
+  spendDetail?: 'coach' | 'night';
+  now?: () => number;
 }
 
 export const COACH_MODEL_DEFAULT = 'claude-sonnet-5';
@@ -226,10 +235,28 @@ function toApiMessages(turns: readonly ChatTurn[], state: string): ApiMessage[] 
 // The Messages API's server-sent events, text deltas only: the answer
 // grows as the model writes it and the caller hears every piece. A
 // refusal stop is an error the owner can read.
-async function readEventStream(res: Response, onText: (delta: string) => void): Promise<string> {
+async function readEventStream(
+  res: Response,
+  onText: (delta: string) => void,
+  // The input side rides message_start and the output side the closing
+  // message_delta; the two fold into one usage for the calibration log.
+  onUsage?: (usage: ModelUsage) => void,
+): Promise<string> {
   if (!res.body) return '';
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
+  const usage: ModelUsage = {};
+  const fold = (u: ModelUsage | undefined): void => {
+    if (!u) return;
+    for (const k of [
+      'input_tokens',
+      'output_tokens',
+      'cache_read_input_tokens',
+      'cache_creation_input_tokens',
+    ] as const) {
+      if (typeof u[k] === 'number') usage[k] = u[k];
+    }
+  };
   let pending = '';
   let text = '';
   const take = (frame: string): void => {
@@ -239,6 +266,8 @@ async function readEventStream(res: Response, onText: (delta: string) => void): 
         type?: string;
         delta?: { type?: string; text?: string; stop_reason?: string };
         error?: { message?: string };
+        message?: { usage?: ModelUsage };
+        usage?: ModelUsage;
       };
       try {
         event = JSON.parse(line.slice(5).trim());
@@ -246,6 +275,8 @@ async function readEventStream(res: Response, onText: (delta: string) => void): 
         continue;
       }
       if (event.type === 'error') throw new Error(event.error?.message ?? 'the stream broke');
+      if (event.type === 'message_start') fold(event.message?.usage);
+      if (event.type === 'message_delta') fold(event.usage);
       if (event.type === 'message_delta' && event.delta?.stop_reason === 'refusal') {
         throw new Error('the model declined to answer this one');
       }
@@ -267,6 +298,7 @@ async function readEventStream(res: Response, onText: (delta: string) => void): 
     }
   }
   if (pending.trim() !== '') take(pending);
+  onUsage?.(usage);
   return text;
 }
 
@@ -275,6 +307,7 @@ async function askModel(
   messages: readonly ApiMessage[],
   depth: CoachDepth,
   onText: (delta: string) => void,
+  onUsage?: (usage: ModelUsage) => void,
 ): Promise<string> {
   const doFetch = deps.fetchFn ?? fetch;
   const model = deps.model ?? COACH_MODEL_DEFAULT;
@@ -305,9 +338,13 @@ async function askModel(
   });
   if (!res.ok) throw new Error(`the coach service answered ${res.status}`);
   const type = res.headers.get('content-type') ?? '';
-  if (type.includes('text/event-stream')) return readEventStream(res, onText);
+  if (type.includes('text/event-stream')) return readEventStream(res, onText, onUsage);
   // A whole message at once: a stub, or a service that ignored the stream.
-  const body = (await res.json()) as { content?: { type: string; text?: string }[] };
+  const body = (await res.json()) as {
+    content?: { type: string; text?: string }[];
+    usage?: ModelUsage;
+  };
+  if (body.usage) onUsage?.(body.usage);
   const text = body.content?.find((c) => c.type === 'text')?.text ?? '';
   onText(text);
   return text;
@@ -423,6 +460,16 @@ export async function coachPlaybook(
       toApiMessages(req.messages, formState(bot.championId, playbook)),
       req.depth ?? 'quick',
       (delta) => reader.feed(delta),
+      (usage) =>
+        deps.spend?.(
+          usageSample(
+            'agent',
+            deps.spendDetail ?? 'coach',
+            accountId,
+            (deps.now ?? Date.now)(),
+            usage,
+          ),
+        ),
     );
   } catch (err) {
     const e = err as Error;

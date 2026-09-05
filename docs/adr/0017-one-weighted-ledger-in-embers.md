@@ -58,9 +58,10 @@ shape would be the same intuition we are trying to leave. Two measurements set t
 and both are one line of plumbing away: the provider balance already has an endpoint
 (`server/generation/tripo.ts`, reading 940 on 2026-09-05), so recording it either side of
 each task kind prices the 3D and 2D acts exactly; and every Messages API response already
-carries `usage`, so logging it prices every model turn. The ember table lands with that
-data, and the size of the weekly grant lands after it, from what a normal week actually
-costs. Until then this ADR has decided a mechanism and named no price.
+carries `usage`, so logging it prices every model turn. What both have measured so far is
+kept in `docs/design/generation-costs.md`. The ember table lands with that data, and the
+size of the weekly grant lands after it, from what a normal week actually costs. Until then
+this ADR has decided a mechanism and named no price.
 
 Considered and rejected: keeping a counter per action and adding one whenever two costs
 diverge (what we have, it is why the animation wall existed, and no number of counters ever

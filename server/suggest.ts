@@ -36,6 +36,7 @@ import { validateForged } from '../src/sim/forge/validate';
 import type { AbilityKey } from '../src/sim/types';
 import type { ForgeOutcome } from './forge';
 import type { ForgeStore } from './forge_store';
+import { type ModelUsage, usageSample } from './spend';
 
 export interface SuggestDeps {
   store: ForgeStore;
@@ -49,6 +50,7 @@ export interface SuggestDeps {
   // Injectable for tests; production uses global fetch.
   fetchFn?: typeof fetch;
   readImage?: (absPath: string) => Buffer;
+  now?: () => number;
 }
 
 export const SUGGEST_MODEL_DEFAULT = 'claude-sonnet-5';
@@ -306,12 +308,28 @@ function toApiMessages(
 async function readEventStream(
   res: Response,
   onText: ((delta: string) => void) | undefined,
+  // The usage the answer reports, for the calibration log: the input side
+  // arrives on message_start, the output side on the closing
+  // message_delta, so the two are folded together here.
+  onUsage?: (usage: ModelUsage) => void,
 ): Promise<string> {
   if (!res.body) return '';
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let pending = '';
   let text = '';
+  const usage: ModelUsage = {};
+  const fold = (u: ModelUsage | undefined): void => {
+    if (!u) return;
+    for (const k of [
+      'input_tokens',
+      'output_tokens',
+      'cache_read_input_tokens',
+      'cache_creation_input_tokens',
+    ] as const) {
+      if (typeof u[k] === 'number') usage[k] = u[k];
+    }
+  };
   const take = (frame: string): void => {
     for (const line of frame.split('\n')) {
       if (!line.startsWith('data:')) continue;
@@ -319,6 +337,8 @@ async function readEventStream(
         type?: string;
         delta?: { type?: string; text?: string };
         error?: { message?: string };
+        message?: { usage?: ModelUsage };
+        usage?: ModelUsage;
       };
       try {
         event = JSON.parse(line.slice(5).trim());
@@ -326,6 +346,8 @@ async function readEventStream(
         continue;
       }
       if (event.type === 'error') throw new Error(event.error?.message ?? 'the stream broke');
+      if (event.type === 'message_start') fold(event.message?.usage);
+      if (event.type === 'message_delta') fold(event.usage);
       if (event.type !== 'content_block_delta' || event.delta?.type !== 'text_delta') continue;
       if (typeof event.delta.text !== 'string') continue;
       text += event.delta.text;
@@ -344,6 +366,7 @@ async function readEventStream(
     }
   }
   if (pending.trim() !== '') take(pending);
+  onUsage?.(usage);
   return text;
 }
 
@@ -351,6 +374,7 @@ export async function askModel(
   deps: SuggestDeps,
   messages: readonly ApiMessage[],
   onText?: (delta: string) => void,
+  onUsage?: (usage: ModelUsage) => void,
 ): Promise<string> {
   const doFetch = deps.fetchFn ?? fetch;
   const res = await doFetch('https://api.anthropic.com/v1/messages', {
@@ -378,9 +402,13 @@ export async function askModel(
   });
   if (!res.ok) throw new Error(`suggestion service answered ${res.status}`);
   const type = res.headers.get('content-type') ?? '';
-  if (type.includes('text/event-stream')) return readEventStream(res, onText);
+  if (type.includes('text/event-stream')) return readEventStream(res, onText, onUsage);
   // A whole message at once: a stub, or a service that ignored the stream.
-  const body = (await res.json()) as { content?: { type: string; text?: string }[] };
+  const body = (await res.json()) as {
+    content?: { type: string; text?: string }[];
+    usage?: ModelUsage;
+  };
+  if (body.usage) onUsage?.(body.usage);
   const text = body.content?.find((c) => c.type === 'text')?.text ?? '';
   onText?.(text);
   return text;
@@ -496,7 +524,17 @@ export async function suggestKit(
     progress({ kind: 'stage', text: stage });
     let text: string;
     try {
-      text = await askModel(deps, apiMessages, (delta) => progress({ kind: 'text', text: delta }));
+      text = await askModel(
+        deps,
+        apiMessages,
+        (delta) => progress({ kind: 'text', text: delta }),
+        // Every attempt is its own call and its own bill, so every
+        // attempt writes its own calibration sample (ADR 0017).
+        (usage) =>
+          deps.store.addSpendSample(
+            usageSample('agent', 'kit', accountId, (deps.now ?? Date.now)(), usage),
+          ),
+      );
     } catch (err) {
       const e = err as Error;
       const why =

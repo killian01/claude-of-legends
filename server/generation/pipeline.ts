@@ -15,6 +15,7 @@ import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from '
 import path from 'node:path';
 import type { ForgedChampionDef } from '../../src/sim/forge/forged_def';
 import type { ForgeStore } from '../forge_store';
+import type { SpendDetail } from '../spend';
 import { houseClipFile, isHouseClip } from './house_clips';
 import {
   CLIP_ROLES,
@@ -83,6 +84,29 @@ export function familyOf(def: ForgedChampionDef): WeaponFamily {
   return 'slashing';
 }
 
+// One calibration sample per produced asset (server/spend.ts, ADR 0017):
+// what the provider says the task charged, filed under the meter that
+// covers it. A provider that reports no cost writes nothing rather than a
+// zero, so an unmeasured act never reads as a free one.
+function noteSpend(
+  deps: PipelineDeps,
+  accountId: number,
+  action: 'generation' | 'animate',
+  detail: SpendDetail,
+  asset: { cost?: number },
+  at: number,
+): void {
+  if (typeof asset.cost !== 'number') return;
+  deps.storage.addSpendSample({
+    accountId,
+    action,
+    detail,
+    provider: 'tripo',
+    credits: asset.cost,
+    at,
+  });
+}
+
 export type PipelineStart =
   | { ok: true; jobId: number; done: Promise<void> }
   | { ok: false; error: string };
@@ -148,6 +172,7 @@ async function runModelBuild(deps: PipelineDeps, jobId: number, req: BuildReques
 
     stage('model');
     const model = await deps.provider.imageTo3D({ image: sheetRef });
+    noteSpend(deps, req.accountId, 'generation', 'model', model, now());
 
     // The champion's own weapon, when the player generated and picked a
     // weapon image and no weapon exists yet: a static prop from that
@@ -164,6 +189,7 @@ async function runModelBuild(deps: PipelineDeps, jobId: number, req: BuildReques
         name: path.basename(weaponArt.path),
       });
       weapon = await deps.provider.imageTo3D({ image: weaponRef });
+      noteSpend(deps, req.accountId, 'generation', 'weapon', weapon, now());
     }
 
     // Provider URLs expire (Tripo: 24 hours): download NOW, own forever.
@@ -301,6 +327,7 @@ async function runAnimate(
     if (delta.length > 0 && (rigTask === null || riggedPath === null)) {
       stage('rig');
       const rigged = await deps.provider.rig({ modelTaskId: modelTask, rigType: 'biped' });
+      noteSpend(deps, req.accountId, 'animate', 'rig', rigged, now());
       riggedPath = `forged/${req.forgedId}/rigged_${jobId}.glb`;
       await deps.download(rigged.url, path.join(deps.assetsDir, riggedPath));
       checkBudget(deps, riggedPath, deps.budgets?.modelKb);
@@ -320,6 +347,10 @@ async function runAnimate(
         animations,
         withGeometry: false,
       });
+      // A retarget is priced by how many clips it carries (measured
+      // 2026-09-05: 30 credits for five, 10 for one), so the sample is
+      // worth nothing without the count that produced it.
+      noteSpend(deps, req.accountId, 'animate', 'retarget', baked, now());
       stage('download');
       clipsPath = `forged/${req.forgedId}/clips_${jobId}.glb`;
       await deps.download(baked.url, path.join(deps.assetsDir, clipsPath));
@@ -418,7 +449,7 @@ export function startWeaponForge(
     return { ok: false, error: 'generate and pick a weapon image first' };
   }
   const jobId = deps.storage.createGenerationJob(req.forgedId, req.accountId, now(), 'weapon');
-  const done = runWeaponForge(deps, jobId, req.forgedId, art.path).catch((err) => {
+  const done = runWeaponForge(deps, jobId, req.forgedId, req.accountId, art.path).catch((err) => {
     console.error('weapon forge job crashed outside its own handling', err);
   });
   return { ok: true, jobId, done };
@@ -428,6 +459,7 @@ async function runWeaponForge(
   deps: PipelineDeps,
   jobId: number,
   forgedId: string,
+  accountId: number,
   artPath: string,
 ): Promise<void> {
   const now = deps.now ?? Date.now;
@@ -445,6 +477,7 @@ async function runWeaponForge(
       name: path.basename(artPath),
     });
     const weapon = await deps.provider.imageTo3D({ image: token });
+    noteSpend(deps, accountId, 'generation', 'weapon', weapon, now());
     stage('download');
     const weaponPath = `forged/${forgedId}/weapon.glb`;
     await deps.download(weapon.url, path.join(deps.assetsDir, weaponPath));

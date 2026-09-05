@@ -18,7 +18,7 @@ import {
   saveDraft,
 } from '../server/forge';
 import { ForgeStore } from '../server/forge_store';
-import { MockProvider } from '../server/generation/mock';
+import { MOCK_COSTS, MockProvider } from '../server/generation/mock';
 import {
   familyOf,
   type PipelineDeps,
@@ -306,6 +306,17 @@ describe('the mock pipeline end to end', () => {
     // The 2D stages are the player's, iterated in the editor: the build
     // never generates an image behind their back.
     expect(r.provider.seen.some((s) => s.op === 'generate2D')).toBe(false);
+    // And the build filed what it charged (ADR 0017), under the meter
+    // that covers it, so the ember weights come from measurement.
+    const spent = r.store.listSpendSamples();
+    expect(spent).toHaveLength(1);
+    expect(spent[0]).toMatchObject({
+      accountId: ACCOUNT,
+      action: 'generation',
+      detail: 'model',
+      provider: 'tripo',
+      credits: MOCK_COSTS.imageTo3D,
+    });
   });
 
   it('forges the chosen weapon image into its own prop model', async () => {

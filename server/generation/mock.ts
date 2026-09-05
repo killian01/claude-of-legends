@@ -17,6 +17,17 @@ import {
 
 export type MockOp = 'generate2D' | 'imageTo3D' | 'rig' | 'animate';
 
+// What each op says it charged, in the same shape and the same order of
+// magnitude Tripo reports (measured 2026-09-05: 10 for an image, 30 for
+// an image_to_model, 25 for the rig, 10 to 30 for a retarget by clip
+// count). Tests assert relative sizes, never these exact numbers.
+export const MOCK_COSTS: Readonly<Record<MockOp, number>> = {
+  generate2D: 10,
+  imageTo3D: 30,
+  rig: 25,
+  animate: 30,
+};
+
 export class MockProvider implements GenerationProvider {
   readonly id = 'mock';
   // Mirrors production Tripo (instruction-edit models behind generate2D);
@@ -47,6 +58,9 @@ export class MockProvider implements GenerationProvider {
       taskId,
       url: `mock://${kind}/${taskId}`,
       provenance: { provider: this.id, model: 'mock-1', at: this.now(), taskId },
+      // A settled task reports what it charged, as Tripo does, so the
+      // calibration path (ADR 0017) is exercised without a real provider.
+      cost: MOCK_COSTS[op],
     });
   }
 
