@@ -69,9 +69,9 @@ way: the generator's opaque is alpha 250 to 254 rather than 255, which
 leaves the art faintly see through, and the lockup ships inside a wide soft
 black glow that reads as a drop shadow here but as a smudge on a light
 README, so its alpha ramp is remapped away. The tab sizes are packed into
-one `favicon.ico`, whose 16 is a tighter crop on the C alone because the
-whole crest is a smudge that small. The sources stay in `art_src/logo/`
-(ignored, like the other raw art).
+one `favicon.ico`, three of them, so a browser picks a size rather than
+downsampling to it. The sources stay in `art_src/logo/` (ignored, like the
+other raw art).
 
 | Files | Source | License |
 |---|---|---|

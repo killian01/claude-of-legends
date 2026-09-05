@@ -130,25 +130,6 @@ const files = await page.evaluate(
         side,
         side,
       );
-    // The 16 in the .ico is the one size the whole crest cannot survive:
-    // the gold ring goes thin, the starfield inside it goes to mush and
-    // the four point star is a single grey pixel. So down there the frame
-    // closes on the C alone, which drops the star and the margin around
-    // it and buys the ring the two pixels it needs to read as a ring. 0.44
-    // across the box rather than the middle because the C sits left of it
-    // once the star is gone. A favicon is allowed to differ per size.
-    const tight = (size) => {
-      const s = side * 0.88;
-      return draw(
-        mark.canvas,
-        size,
-        size,
-        mark.box.x + mark.box.w * 0.44 - s / 2,
-        mark.box.y + (mark.box.h - s) / 2,
-        s,
-        s,
-      );
-    };
     // iOS gets a full bleed opaque plate; it applies its own rounding.
     const plated = (size, art) => {
       const o = document.createElement('canvas');
@@ -185,7 +166,13 @@ const files = await page.evaluate(
       // Packed into the .ico below, not written as they are. Three sizes so
       // the browser picks rather than downsamples: 16 for the tab, 32 for a
       // dense screen's tab, 48 for the bookmark bar and the history list.
-      ico: [png(tight(16)), png(crest(32)), png(crest(48))],
+      // All three take the same frame. A tighter crop at 16 is the obvious
+      // idea and it does not work: measured, the C is 994 by 1030 inside a
+      // 1044 by 1030 box, so it already fills the frame's height and the
+      // only thing a smaller square can do is cut the top and bottom off
+      // the ring. The 16 is small because the art is detailed, not because
+      // the frame is loose.
+      ico: [png(crest(16)), png(crest(32)), png(crest(48))],
     };
   },
   dataUrl(MARK),
