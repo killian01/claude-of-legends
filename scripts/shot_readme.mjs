@@ -1,9 +1,12 @@
 // Capture script for the README screenshots. Drives the real client
-// headless: landing page, then an offline practice match walked to the
-// mid lane fight. Run with the dev stack up (vite on 5173); SHOT_URL
-// switches the landing shot to another host (the live server), and
-// SHOT_HOME_ONLY=1 stops after it.
+// headless: landing page, then a practice match walked to the mid lane
+// fight. Run with the dev stack up, vite on 5173 AND the server on 8787:
+// the practice match is a tile on the signed-in home now (ADR 0006), so
+// getting to it means signing in first. SHOT_URL switches the landing
+// shot to another host (the live server), and SHOT_HOME_ONLY=1 stops
+// after it, which is the one run that needs no server.
 import puppeteer from 'puppeteer-core';
+import { clickTile, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
 const OUT = process.env.SHOT_DIR ?? 'docs/screenshots';
 const CHROME =
@@ -51,7 +54,11 @@ if (process.env.SHOT_HOME_ONLY) {
   process.exit(0);
 }
 
-await clickButton('Play offline now');
+// Through the door, then the Practice tile: a fresh throwaway account, so
+// a rerun never trips over the last run's name.
+await signIn(page, e2eName('shot', Date.now().toString(36).slice(-6)));
+await page.waitForFunction(HOME_UP, { timeout: 20000 });
+await clickTile(page, 'practice');
 await page.waitForSelector('.menu-champ', { timeout: 20000 });
 await page.evaluate(() => {
   const card = [...document.querySelectorAll('.menu-champ')].find((c) =>

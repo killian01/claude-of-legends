@@ -119,7 +119,6 @@ export const CSS = `
 .pg-card.gold { border-color: #6b5a2e; }
 .pg-card h2 { font-family: Cinzel, Georgia, serif; font-size: 17px; letter-spacing: 1.6px;
   text-transform: uppercase; margin: 0 0 6px; color: #e6d7a8; }
-.pg-card.plain h2 { color: #9fb4d2; }
 .pg-card p { font-size: 12.5px; line-height: 1.55; color: #93a8c4; margin: 0 0 14px; }
 `;
 

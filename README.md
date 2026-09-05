@@ -52,21 +52,18 @@ driven by a single `Policy` abstraction.
 
 ```
 pnpm install
-pnpm dev
-```
-
-Open http://localhost:5173 and pick "Play offline now": a full 5v5 against
-bots, no server needed.
-
-For online play, run the server in a second terminal:
-
-```
 pnpm server        # authoritative server on :8787
 pnpm dev           # client; /ws is proxied to the server
 ```
 
-Then "Play online" to queue (empty seats fill with bots on request), or
-"Create private lobby" and share the 5-letter code with friends.
+Open http://localhost:5173 and create an account: it is a name and a
+password, instant and local to your server. Everything is on the other
+side of it (ADR 0006), the offline practice match included, because that
+is where the game is.
+
+Then, from the home: "Practice" for a full 5v5 against bots in the tab,
+"Ranked" to queue (empty seats fill with bots on request), or "Private
+lobby" to share a 5-letter code with friends.
 
 ## How to play
 

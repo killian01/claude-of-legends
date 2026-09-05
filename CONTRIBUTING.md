@@ -8,7 +8,7 @@ By participating, you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Ways to contribute
 
-- **Play and report.** Play a match (offline needs no account), then open an
+- **Play and report.** Play a match, then open an
   [issue](../../issues/new/choose) for anything that feels broken or off. A clear
   bug report is a real contribution.
 - **Code.** Fix a bug, improve a system, sharpen the renderer. Issues labeled
@@ -51,8 +51,10 @@ pnpm install
 pnpm dev          # open the URL it prints (usually http://localhost:5173)
 ```
 
-That is enough for the offline practice match and most work. For online play,
-run the authoritative server in a second terminal:
+The client alone is enough for the tests and the gates, but not to reach a
+match: the front door asks for an account and accounts live on the server
+(ADR 0006). So for anything you want to play, run it in a second terminal
+and sign up there:
 
 ```bash
 pnpm server       # server on :8787; the dev client proxies /ws to it
