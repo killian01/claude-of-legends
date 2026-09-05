@@ -26,8 +26,8 @@ const CSS = `
 
 /* Under the two ways in, the two modes behind them. Not buttons: both are
    account features (ADR 0006), so out here they are things to look at and
-   the card above is still the only thing to press. They share the tiles'
-   grid so the strip lines up with the cards over it. */
+   the card above is still the only thing to press. The strip shares the
+   cards' width so it lines up with them. */
 .pg-behind { max-width: 860px; margin: clamp(20px, 3.5vh, 34px) 0 0; }
 .pg-behind > h2 {
   font-family: Cinzel, Georgia, serif; font-size: 12px; letter-spacing: 2.4px;
@@ -35,19 +35,21 @@ const CSS = `
 }
 .pg-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 18px; }
-.pg-mode { position: relative; overflow: hidden; border-radius: 14px; border: 1px solid #2b3f60;
-  min-height: 132px; display: flex; align-items: flex-end;
+.pg-mode { display: flex; overflow: hidden; border-radius: 14px; border: 1px solid #2b3f60;
+  background: rgba(8, 12, 22, 0.86); backdrop-filter: blur(7px); min-height: 168px;
   box-shadow: 0 18px 46px rgba(0, 0, 0, 0.5); }
-/* The paintings carry their subject high, the same reason the tall tiles
-   crop theirs the way they do. */
-.pg-mode img { position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: cover; object-position: 50% 26%; }
-.pg-mode-body { position: relative; width: 100%; padding: 46px 18px 15px;
-  background: linear-gradient(180deg, rgba(4, 7, 16, 0) 0%, rgba(4, 7, 16, 0.82) 46%,
-    rgba(4, 7, 16, 0.96) 100%); }
+/* Both paintings are composed upright: the home stands these two tiles at
+   the full height of its row and a phone gives them 3/4, so a wide crop
+   takes the subject off at the knees. The panel hangs the painting as a
+   portrait plate and sets the words beside it rather than over it. 126 by
+   the 168 floor above is that same 3/4; longer copy grows the plate taller
+   still, never wider, so it cannot fall back to a landscape crop. */
+.pg-mode img { flex: none; width: 126px; align-self: stretch; object-fit: cover; display: block; }
+.pg-mode-body { min-width: 0; padding: 16px 18px; display: flex; flex-direction: column;
+  justify-content: center; }
 .pg-mode h3 { font-family: Cinzel, Georgia, serif; font-size: 16px; letter-spacing: 1.8px;
   text-transform: uppercase; margin: 0; color: #e6d7a8; }
-.pg-mode p { font-size: 12.5px; line-height: 1.5; color: #b9cbe4; margin: 5px 0 0; }
+.pg-mode p { font-size: 12.5px; line-height: 1.5; color: #b9cbe4; margin: 6px 0 0; }
 `;
 
 let cssInstalled = false;
@@ -160,7 +162,7 @@ export function showLanding(
 
     // --- and what the door opens onto ---
     const behind = el('section', 'pg-behind');
-    behind.appendChild(el('h2', '', 'Inside, past the door'));
+    behind.appendChild(el('h2', '', 'Also inside'));
     const modes = el('div', 'pg-modes');
     for (const mode of LANDING_MODES) {
       const art = el('img', '');
