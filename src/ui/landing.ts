@@ -67,11 +67,18 @@ const CSS = `
    face. */
 .pg-mode img { position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover; object-position: 50% 32%; }
-.pg-mode-body { position: relative; width: 100%; padding: 44px 13px 12px;
+.pg-mode-body { position: relative; width: 100%; padding: 54px 12px 12px;
   background: linear-gradient(180deg, rgba(4, 7, 16, 0) 0%, rgba(4, 7, 16, 0.82) 52%,
     rgba(4, 7, 16, 0.96) 100%); }
 .pg-mode h3 { font-family: Cinzel, Georgia, serif; font-size: 15px; letter-spacing: 2.2px;
   text-transform: uppercase; margin: 0; color: #e6d7a8; line-height: 1.1; }
+/* The verb under the name. A third of a band is a narrow column, so this
+   is three or four words that may wrap to two lines and never more, and
+   it holds both lines whether it needs them or not: one verb wrapping
+   pushed its own name up and left the three titles on three different
+   heights. */
+.pg-mode p { font-size: 11.5px; line-height: 1.35; color: #b9cbe4; margin: 4px 0 0;
+  min-height: 2.7em; }
 
 /* Four across needs about 1120: below that the sign-in form is squeezed
    and the paintings turn into slivers. So the row folds instead of
@@ -92,8 +99,9 @@ const CSS = `
   .pg-open-row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .pg-opens { order: -1; }
   .pg-mode { height: auto; aspect-ratio: 3 / 4; }
-  .pg-mode-body { padding: 30px 8px 8px; }
+  .pg-mode-body { padding: 34px 8px 8px; }
   .pg-mode h3 { font-size: 12px; letter-spacing: 1.2px; }
+  .pg-mode p { font-size: 10.5px; }
 }
 
 
@@ -247,7 +255,7 @@ export function showLanding(
       art.loading = 'lazy';
       art.decoding = 'async';
       const body = el('div', 'pg-mode-body');
-      body.append(el('h3', '', mode.title));
+      body.append(el('h3', '', mode.title), el('p', '', mode.call));
       const item = el('article', 'pg-mode');
       item.append(art, body);
       opens.appendChild(item);

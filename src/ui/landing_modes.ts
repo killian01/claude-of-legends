@@ -18,6 +18,12 @@ export interface LandingMode {
   id: TileId;
   title: string;
   line: string;
+  // What you would do there, in a verb and as few words as fit under a
+  // name on a painting a third of a band wide. The line above says what
+  // the mode IS, at a length only the home's tile has room for; this is
+  // what the landing draws, because a visitor deciding whether to sign up
+  // wants the verb and not the definition.
+  call: string;
   // Painted behind it: the same file the tile wears.
   art: string;
 }
@@ -25,18 +31,21 @@ export interface LandingMode {
 export const LANDING_MODES: readonly LandingMode[] = [
   {
     id: 'ranked',
+    call: 'Play in ranked',
     title: 'Ranked',
     line: 'The public queue, with a rating, a match history and a place on the ladder.',
     art: tileArtUrl('ranked'),
   },
   {
     id: 'bots',
+    call: 'Create your bot',
     title: 'Bots',
     line: "Write a bot's playbook in the Academy, spar it in seconds, then send it up the ladder.",
     art: tileArtUrl('bots'),
   },
   {
     id: 'forge',
+    call: 'Forge your champion',
     title: 'Forge',
     line: 'Build a champion from scratch, kit and all, then take it into the Forge queue.',
     art: tileArtUrl('forge'),

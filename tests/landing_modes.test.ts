@@ -25,9 +25,20 @@ describe('the landing modes', () => {
     }
   });
 
-  // The landing draws the title alone: the paintings say what a bot and a
-  // forge are better than a sentence under them does. The line stays in
-  // the data because it is what the mode IS, and the tile still reads it.
+  it('call the visitor to a verb, in a few words', () => {
+    // What the landing actually draws under each name. A third of a band
+    // is a narrow column: anything longer than a handful of words wraps
+    // past the two lines the foot scrim has room for.
+    for (const mode of LANDING_MODES) {
+      expect(mode.call.length).toBeGreaterThan(8);
+      expect(mode.call.length).toBeLessThan(24);
+      expect(mode.call.split(' ').length).toBeLessThanOrEqual(4);
+    }
+  });
+
+  // The line is what the mode IS, at a length only the home's tile has
+  // room for. The landing draws the call instead, but the line stays in
+  // the data: it is what pins each mode to the tile it stands for.
   it('say more than a name, and less than the tile does', () => {
     for (const mode of LANDING_MODES) {
       const tile = PLAY_TILES.find((t) => t.id === mode.id);
