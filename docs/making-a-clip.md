@@ -80,6 +80,23 @@ Surfaces filmed on a fresh data dir are empty ones. The gallery and the
 ladder need production data to say anything, so they are filmed and then
 usually cut.
 
+`scripts/tour_montage.mjs` cuts what was filmed into something postable: a
+title card off `public/social-card.jpg` so the clip and the link preview
+open on the same image, one labelled passage per surface, cross fades, and
+an end card. Drop your own recording of a fight at `tour/fight.mp4` and it
+takes the place of the one filmed here.
+
+```
+node scripts/tour_montage.mjs tour tour-montage.mp4
+```
+
+The lengths, the starts and the labels are the table at the top of that
+file, and the labels are English because the announcement is read where the
+developers are. Two ffmpeg details worth not rediscovering: inside
+`drawbox`, `h` is the box's own height and not the frame's (`ih` is the
+frame), and a label dropped straight onto a screen full of interface makes
+both unreadable, so a gradient goes under it.
+
 ## 3. Film it
 
 **On a machine with a real GPU.** The renderer falls back to software

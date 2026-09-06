@@ -208,6 +208,14 @@ const scenes = {
   },
 };
 
+// What was filmed, for scripts/tour_montage.mjs: the screencast hands back
+// whatever frames it managed, so the only way to play a passage at the
+// speed it happened is to record how many frames covered how long.
+const filmed = [];
+function writeManifest() {
+  writeFileSync(`${OUT}/scenes.json`, `${JSON.stringify({ scenes: filmed }, null, 2)}\n`);
+}
+
 const wanted = process.argv.slice(2).filter((a) => scenes[a]);
 const order = wanted.length > 0 ? wanted : Object.keys(scenes);
 
@@ -251,7 +259,10 @@ for (const name of order) {
   if (left > 0) await sleep(left);
   await cdp.send('Page.stopScreencast');
   await cdp.detach().catch(() => {});
-  console.log(`${name}: ${frame} frames over ${((Date.now() - started) / 1000).toFixed(1)}s`);
+  const secs = Number(((Date.now() - started) / 1000).toFixed(2));
+  filmed.push({ name, frames: frame, seconds: secs });
+  writeManifest();
+  console.log(`${name}: ${frame} frames over ${secs}s`);
 }
 
 await browser.close();
