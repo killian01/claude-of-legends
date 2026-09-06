@@ -39,6 +39,39 @@ In money, then: an image costs 10 cents, a model or a weapon 30, the rig 25, a f
 bake 30 and a one-clip bake 10. **The first forged champion cost 1 dollar 95**, of which 70
 cents went on 2D.
 
+## The 2D, bought where it is made (2026-09-06)
+
+Tripo's advanced image task runs `gpt_image_2`. OpenAI lists a model of that name, so the
+flat 10 credits is a resale of a model we can buy directly, and the same picture has two
+prices. Measured on the prompt the Forge really sends, the shared splash style plus one of
+its own example lines, at 1024x1536 and medium quality:
+
+| Model | Text in | Image out | Rate (text / image out, $ per 1M) | Cost |
+|---|---|---|---|---|
+| `gpt-image-2` direct | 98 | 1372 | 5 / 30 | **4.2 cents** |
+| `gpt-image-1-mini` direct | 98 | 1584 | 2 / 8 | 1.3 cents |
+| `gpt_image_2` resold by Tripo | - | - | flat | 10 cents |
+
+Rates read off developers.openai.com/api/docs/pricing the same day; the token counts are
+the API's own `usage` object, which is to image generation what `consumed_credit` is to
+Tripo. Both are transcribed in `server/generation/openai_images.ts`.
+
+The mini was measured and rejected. On the identical prompt it returned a half-body figure,
+missed the dominant accent colour the style block asks for, dropped the character's one
+memorable specific, and drew a hand that does not survive being looked at. An image that has
+to be rerolled twice is not a third of the price of one that does not.
+
+Note what changes with the vendor: Tripo charged 10 whatever the size, and OpenAI charges by
+output tokens, which follow the pixels. A 1024x1024 splash is about a third fewer.
+
+What that does to the first forged champion, whose 195 credits are the table above: its
+seven images fall from 70 to 28, so the same champion is **153 credits, 1 dollar 53**,
+against 1.95. The 3D is untouched, because nobody else makes any.
+
+The weekly grant is not moved by this. A whole champion is 143 embers of priced acts against
+a grant of 100 (`EMBERS_PER_WEEK`), so it still does not fit in one week; the image price was
+the most visible obstacle and not the only one.
+
 ## The model calls, exact, per response
 
 Every Messages API response reports `usage`, so the same is true on this side. The server

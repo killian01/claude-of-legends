@@ -27,6 +27,7 @@ import {
   splashLine,
   splashOf,
 } from '../server/art';
+import { EMBER_PRICES } from '../server/embers';
 import { saveDraft } from '../server/forge';
 import { ForgeStore } from '../server/forge_store';
 import { MockProvider } from '../server/generation/mock';
@@ -109,9 +110,11 @@ describe('generateArt', () => {
     if (!out.ok) return;
     expect(out.candidate.kind).toBe('splash');
     expect(out.candidate.chosen).toBe(true);
-    // An image costs ten embers and the answer carries the balance the
-    // creator now has, so the number they watch is the number they read.
-    expect(out.price).toBe(10);
+    // The answer carries the price it charged and the balance the creator
+    // now has, so the number they watch is the number they read. What the
+    // price IS belongs to the table, and to tests/embers.test.ts: pinning
+    // it again here only makes a price change break two files.
+    expect(out.price).toBe(EMBER_PRICES.image);
     expect(out.embers).toBe(r.store.creditBalance(ACCOUNT));
     // The file landed for real, under the champion's art directory.
     const generation = r.deps.generation;
@@ -291,13 +294,15 @@ describe('generateArt', () => {
       error: expect.stringContaining('the server has spent its day'),
     });
 
-    // And a balance that cannot pay: the refusal names both numbers.
-    const poor = rig({ embers: 4 });
+    // And a balance that cannot pay: the refusal names both numbers. The
+    // wording is the point and stays literal; the price comes from the
+    // table so a re-pricing does not break a test about words.
+    const poor = rig({ embers: 1 });
     expect(
       await generateArt(poor.deps, ACCOUNT, { id: poor.def.id, kind: 'splash', line: 'x' }),
     ).toEqual({
       ok: false,
-      error: 'this costs 10 embers and you have 4; the grant refills weekly',
+      error: `this costs ${EMBER_PRICES.image} embers and you have 1; the grant refills weekly`,
     });
 
     const r2 = rig({ limit: 2 });

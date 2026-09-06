@@ -4,7 +4,13 @@
 // numbers rather than stopping someone at a wall with no figure on it.
 
 import { describe, expect, it } from 'vitest';
-import { bakePrice, CREATION_IN_EMBERS, EMBER_PRICES, EMBERS_PER_WEEK } from '../server/embers';
+import {
+  bakePrice,
+  CREATION_IN_EMBERS,
+  EMBER_PRICES,
+  EMBERS_PER_WEEK,
+  IMAGE_PRICE_RESOLD,
+} from '../server/embers';
 import {
   type ForgeDeps,
   migrateCreations,
@@ -39,7 +45,13 @@ describe('the ember prices', () => {
     // The first forged champion: a model, its weapon, the rig, a full
     // five-clip bake. 1.95 dollars, measured off its own tasks.
     expect(CREATION_IN_EMBERS).toBe(115);
-    expect(EMBER_PRICES.image * 7 + CREATION_IN_EMBERS).toBe(185);
+    // Its seven images, at what they cost the day it was built: Tripo's
+    // flat 10 a piece, so 185 for the champion.
+    expect(IMAGE_PRICE_RESOLD * 7 + CREATION_IN_EMBERS).toBe(185);
+    // And at what they cost now that the 2D is bought where it is made
+    // (server/generation/openai_images.ts). The 3D is untouched, so the
+    // whole saving is the 2D, which was more than a third of the bill.
+    expect(EMBER_PRICES.image * 7 + CREATION_IN_EMBERS).toBe(143);
   });
 });
 

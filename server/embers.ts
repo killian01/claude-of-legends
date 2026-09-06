@@ -26,10 +26,20 @@ export const EMBER_PRICES: Readonly<Record<PaidAct, number>> = {
   model: 30,
   weapon: 30,
   rig: 25,
-  image: 10,
+  // Bought from OpenAI directly (server/generation/openai_images.ts):
+  // 98 text tokens in and 1372 image tokens out for the splash the Forge
+  // really asks for, at the published rates, is 4.2 cents. Tripo resells
+  // the same model at a flat 10, which is what IMAGE_PRICE_RESOLD is for:
+  // a deployment without an OpenAI key pays that and must charge it.
+  image: 4,
   kitTurn: 2,
   coachTurn: 1,
 };
+
+// What one image costs when Tripo's advanced image task makes it: a flat
+// 10 credits whatever the size, measured the same day as the rest of the
+// table. A server configured that way passes this as PipelineDeps.imagePrice.
+export const IMAGE_PRICE_RESOLD = 10;
 
 // A clip bake is priced by how many clips it carries: measured at 30 for
 // five and 10 for one, which is five to open plus five each. House clips

@@ -49,6 +49,12 @@ export interface PipelineDeps {
   // over its budget fails the job (and refunds the creation). Absent or
   // non-positive numbers disable a check.
   budgets?: { imageKb?: number; modelKb?: number };
+  // What one 2D image costs in embers on THIS deployment. The other
+  // prices are facts about an act, but two vendors now sell this one at
+  // different prices (4 cents direct from OpenAI, 10 resold by Tripo), so
+  // the number follows whichever is configured. Absent falls back to the
+  // table, which carries the recommended path's price.
+  imagePrice?: number;
   // Local file reads, copies, and sizes, injectable for tests.
   readFile?(absPath: string): Buffer;
   copyFile?(src: string, dest: string): void;

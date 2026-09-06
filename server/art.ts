@@ -271,7 +271,7 @@ export async function generateArt(
 
   // Priced before the provider is touched, refunded by never debiting on
   // a path that fails: the debit lands only once the image is on disk.
-  const price = EMBER_PRICES.image;
+  const price = deps.generation.imagePrice ?? EMBER_PRICES.image;
   const held = deps.store.creditBalance(accountId);
   if (held < price) return { ok: false, error: shortfall(price, held) };
   let asset: ProviderAsset;

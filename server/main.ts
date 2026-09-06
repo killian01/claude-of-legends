@@ -74,7 +74,7 @@ import { displayOf, forgedMatchAssets, modelPointers, setForgedDisplay } from '.
 import { clientAddress, edgeConfig, originAllowed } from './edge';
 import { emailErrorMessage } from './email_address';
 import { CLAIM_TTL_MS } from './email_claim';
-import { EMBERS_PER_WEEK } from './embers';
+import { EMBER_PRICES, EMBERS_PER_WEEK, IMAGE_PRICE_RESOLD } from './embers';
 import {
   animateChampion,
   buildModel,
@@ -91,9 +91,11 @@ import { ForgeStore } from './forge_store';
 import { canPlayForged, listGallery, reportForged, setVisibility, toggleLike } from './gallery';
 import { catalogRoles } from './generation/house_clips';
 import { MockProvider } from './generation/mock';
+import { DEFAULT_IMAGE_MODEL, OpenAIImages } from './generation/openai_images';
 import { downloadToFile, type PipelineDeps, recoverStaleJobs } from './generation/pipeline';
 import { placeholderFor } from './generation/placeholder';
 import { type GenerationProvider, WEAPON_FAMILIES } from './generation/provider';
+import { SplitProvider } from './generation/split';
 import { TripoProvider } from './generation/tripo';
 import { buildBotLadder, buildLadder } from './ladder';
 import { type BotSummary, buildLadderPage, type LadderSeed, placeOf } from './ladder_page';
@@ -282,11 +284,30 @@ const ASSETS_DIR = path.join(DATA_DIR, 'assets');
 // asked for keyless dev, otherwise absent and finalize says so.
 function generationFromEnv(): PipelineDeps | null {
   let provider: GenerationProvider | null = null;
+  // What one image costs here. It follows the provider that ends up
+  // making it, because the same act has two prices now (server/embers.ts).
+  let imagePrice = IMAGE_PRICE_RESOLD;
   if (process.env.TRIPO_API_KEY) {
     const tripo = new TripoProvider(process.env.TRIPO_API_KEY, {
       ...(process.env.TRIPO_IMAGE_MODEL ? { imageModel: process.env.TRIPO_IMAGE_MODEL } : {}),
     });
     provider = tripo;
+    // The 2D bought where it is made: OpenAI sells the model Tripo
+    // resells, at less than half (server/generation/openai_images.ts).
+    // The 3D stays with Tripo, which is the only one that makes any.
+    if (process.env.OPENAI_API_KEY) {
+      const art = new OpenAIImages(process.env.OPENAI_API_KEY, {
+        ...(process.env.OPENAI_IMAGE_MODEL ? { model: process.env.OPENAI_IMAGE_MODEL } : {}),
+        ...(process.env.OPENAI_IMAGE_SIZE ? { size: process.env.OPENAI_IMAGE_SIZE } : {}),
+        ...(process.env.OPENAI_IMAGE_QUALITY ? { quality: process.env.OPENAI_IMAGE_QUALITY } : {}),
+      });
+      provider = new SplitProvider(art, tripo, { stageDir: path.join(DATA_DIR, 'staged') });
+      imagePrice = EMBER_PRICES.image;
+      console.log(
+        `generation: 2D on OpenAI (${process.env.OPENAI_IMAGE_MODEL || DEFAULT_IMAGE_MODEL}), ` +
+          `3D on Tripo; an image costs ${imagePrice} embers instead of ${IMAGE_PRICE_RESOLD}`,
+      );
+    }
     // Fire and forget: the balance names the key live (or not) at boot
     // without holding the server's start on a third party.
     void tripo.balance().then((credits) => {
@@ -298,11 +319,13 @@ function generationFromEnv(): PipelineDeps | null {
   } else if (process.env.GENERATION_PROVIDER === 'mock') {
     console.log('generation: mock provider (GENERATION_PROVIDER=mock), placeholder assets');
     provider = new MockProvider();
+    imagePrice = EMBER_PRICES.image;
   }
   if (!provider) return null;
   return {
     storage: forgeStore,
     provider,
+    imagePrice,
     assetsDir: ASSETS_DIR,
     // The house clip library ships inside the served client build.
     publicDir: DIST,

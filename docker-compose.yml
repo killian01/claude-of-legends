@@ -61,6 +61,16 @@ services:
       # The image model behind every 2D generation; optional, and the
       # default is a quality choice rather than a deployment one.
       TRIPO_IMAGE_MODEL: "${TRIPO_IMAGE_MODEL:-}"
+      # The 2D bought direct from the vendor that makes it, at less than
+      # half what Tripo charges to resell the same model; the 3D stays
+      # with Tripo. Optional: without it the Forge works and an image
+      # costs 10 embers instead of 4. A credential, never committed.
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      # How the direct 2D is asked for; all optional, all quality or
+      # framing choices rather than deployment ones.
+      OPENAI_IMAGE_MODEL: "${OPENAI_IMAGE_MODEL:-}"
+      OPENAI_IMAGE_SIZE: "${OPENAI_IMAGE_SIZE:-}"
+      OPENAI_IMAGE_QUALITY: "${OPENAI_IMAGE_QUALITY:-}"
       # The coach and the kit conversation (ADR 0013), from the same .env
       # file: ANTHROPIC_API_KEY is a credential and must never be
       # committed. Without it, suggestions are off and the server says so
