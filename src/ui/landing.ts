@@ -22,13 +22,34 @@ import { buildPage, ensurePageCss, mountLiveStats, navLink } from './page';
 // Only what the landing page adds to the shared chrome: the bento, which
 // is the home's row of tiles as a visitor can have it.
 const CSS = `
-/* The row reads the way the home's tiles do (ui/play_tiles.ts): the way
-   in widest on the left, then Bots and the Forge standing beside it, then
-   the smaller way in at the far right. Thirteen columns so 4, 3, 3 and 3
-   divide the row with the gaps; the sign-in form is what sets the widest
-   track, since it is the one thing here somebody has to type into. */
-.pg.land .pg-cards { display: grid; max-width: 1180px; gap: 16px; align-items: stretch;
-  grid-template-columns: minmax(0, 4fr) minmax(0, 3fr) minmax(0, 3fr) minmax(0, 3fr); }
+/* Two doors, and the row has to say which is which. Four equal columns
+   said the opposite: the form sat under the word RANKED with Bots and the
+   Forge beside it, so an account read as the price of the ladder and the
+   other two read as something else entirely. They are not. One account
+   opens all three (ADR 0006), and the only thing here that needs no
+   account is the practice match at the end.
+   So the three that need one are grouped under one heading and the one
+   that does not stands apart. Ten to three, and the group divides its own
+   width 4, 3, 3: the sign-in form sets the widest track, since it is the
+   one thing on this row somebody has to type into. */
+.pg.land .pg-cards { display: grid; max-width: 1180px; gap: 18px; align-items: stretch;
+  grid-template-columns: minmax(0, 10fr) minmax(0, 3fr); }
+.pg-door { display: flex; flex-direction: column; min-width: 0; }
+/* The heading is the whole point of the regrouping, so it is a rule the
+   group hangs from rather than a caption floating above it. */
+/* These sit on the backdrop rather than on a card, and the backdrop has a
+   moon in it: without the shadow the right-hand heading disappears into
+   it exactly where it is most needed. The cards get their contrast from
+   their own dark fill (ui/page.ts); this is the same job done by hand. */
+.pg-door-label { font-family: Cinzel, Georgia, serif; font-size: 12px; letter-spacing: 1.8px;
+  text-transform: uppercase; color: #cddaee; margin: 0 0 10px; padding-bottom: 9px;
+  border-bottom: 1px solid rgba(140, 168, 208, 0.34);
+  text-shadow: 0 2px 10px rgba(4, 7, 16, 0.95), 0 0 26px rgba(4, 7, 16, 0.85); }
+.pg-door.paid .pg-door-label { color: #f0e2b6;
+  border-bottom-color: rgba(230, 215, 168, 0.42); }
+.pg-door-row { display: grid; gap: 16px; align-items: stretch; flex: 1; min-width: 0; }
+.pg-door.paid .pg-door-row {
+  grid-template-columns: minmax(0, 4fr) minmax(0, 3fr) minmax(0, 3fr); }
 .pg.land .pg-card .menu-btn { margin-top: auto; }
 
 /* Bots and the Forge, standing between the two ways in the way they stand
@@ -58,15 +79,19 @@ const CSS = `
    is only ever as wide as its form wants to be, which is what the narrower
    ceiling is for. */
 @media (max-width: 1120px) {
-  .pg.land .pg-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 620px; }
-  .pg.land .pg-card { grid-column: 1 / -1; }
+  /* Stacked, the two headings are the only thing separating the doors, so
+     the gap between the groups has to be wider than the gap inside one. */
+  .pg.land .pg-cards { grid-template-columns: minmax(0, 1fr); max-width: 620px; gap: 30px; }
+  .pg.land .pg-door.paid .pg-door-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pg.land .pg-door.paid .pg-card { grid-column: 1 / -1; }
   .pg-mode { min-height: 0; aspect-ratio: 3 / 4; }
 }
 /* One column, and the panel goes square: the paintings are square to
    begin with, so at 1/1 the tile is the whole painting and nothing is
-   cropped at all. */
+   cropped at all. The two headings matter most here, where the row is a
+   stack and nothing else says where one door ends and the other starts. */
 @media (max-width: 620px) {
-  .pg.land .pg-cards { grid-template-columns: minmax(0, 1fr); }
+  .pg.land .pg-door.paid .pg-door-row { grid-template-columns: minmax(0, 1fr); }
   .pg-mode { aspect-ratio: 1 / 1; }
 }
 
@@ -196,9 +221,13 @@ export function showLanding(
     // --- the two ways in ---
     const ways = el('div', 'pg-cards');
 
+    // Named for the mode, not for the act: under one heading that says an
+    // account opens all three, this column is the first of the three and
+    // happens to be the one carrying the form. Titled "Play ranked" it
+    // read as the only thing signing up bought you.
     const online = el('section', 'pg-card gold');
     online.append(
-      el('h2', '', 'Play ranked'),
+      el('h2', '', 'Ranked'),
       el(
         'p',
         '',
@@ -234,9 +263,14 @@ export function showLanding(
       offlineBtn,
     );
 
-    // Between the two ways in, the two modes behind them, standing where
+    // The three an account opens, under one heading, so that signing up
+    // reads as buying all of it rather than as the price of the ladder.
+    // Ranked carries the form; Bots and the Forge stand beside it where
     // the home stands their tiles.
-    ways.appendChild(online);
+    const paid = el('div', 'pg-door paid');
+    paid.appendChild(el('p', 'pg-door-label', 'One account opens all three'));
+    const paidRow = el('div', 'pg-door-row');
+    paidRow.appendChild(online);
     for (const mode of LANDING_MODES) {
       const art = el('img', '');
       art.src = mode.art;
@@ -248,9 +282,18 @@ export function showLanding(
       body.append(el('h3', '', mode.title), el('p', '', mode.line));
       const item = el('article', 'pg-mode');
       item.append(art, body);
-      ways.appendChild(item);
+      paidRow.appendChild(item);
     }
-    ways.appendChild(offline);
+    paid.appendChild(paidRow);
+
+    // And the one that opens by itself.
+    const free = el('div', 'pg-door free');
+    free.appendChild(el('p', 'pg-door-label', 'No account needed'));
+    const freeRow = el('div', 'pg-door-row');
+    freeRow.appendChild(offline);
+    free.appendChild(freeRow);
+
+    ways.append(paid, free);
     inner.appendChild(ways);
 
     // --- and the thing the genre does not offer ---
