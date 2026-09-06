@@ -9,6 +9,7 @@ import { nextStep, type PostMatchAction } from './game/flow';
 import { registerForgedAssets } from './game/forged_visuals';
 import { requestGameFullscreen } from './game/fullscreen';
 import { parseJoinCode } from './game/invite';
+import { reenterAsAccount } from './game/reentry';
 import { ReplayCursor } from './game/replay_cursor';
 import type { ReplayMark } from './game/replay_marks';
 import { followedSeat } from './game/replay_seat';
@@ -835,7 +836,9 @@ async function boot(): Promise<void> {
   let lastPick: OfflinePick | null = null;
   // Who is signed in, or null while only the offline match is reachable.
   // A live session cookie from a previous visit skips the sign-in screen.
-  let account: AuthedAccount | null = await currentAccount();
+  // Decided once per page load and never again: signing in reloads the
+  // page rather than changing this out from under everything.
+  const account: AuthedAccount | null = await currentAccount();
 
   for (;;) {
     // The way in (ADR 0006): everything but the offline practice match
@@ -845,14 +848,18 @@ async function boot(): Promise<void> {
     if (account === null) {
       const entry = await showLanding(container, discordResult);
       if (entry.kind === 'account') {
-        account = entry.account;
-      } else {
-        // Offline: one match against bots, then back to the way in.
-        const pick: OfflinePick = lastPick ?? (await pickForPractice());
-        lastPick = pick;
-        await runOffline(pick);
-        continue;
+        // Signing in starts the page over rather than swapping the home
+        // screen in over the landing (game/reentry.ts): the session
+        // cookie is set by now, so the boot on the other side comes back
+        // with the account and skips this screen. Nothing below runs.
+        reenterAsAccount({ joinCode, confirmed });
+        return;
       }
+      // Offline: one match against bots, then back to the way in.
+      const pick: OfflinePick = lastPick ?? (await pickForPractice());
+      lastPick = pick;
+      await runOffline(pick);
+      continue;
     }
     if (joinCode !== null) next = { name: account.name, mode: 'join', code: joinCode };
     const choice: HomeChoice =
