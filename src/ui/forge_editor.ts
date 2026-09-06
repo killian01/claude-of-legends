@@ -75,6 +75,13 @@ const GROWTH_LABELS: Record<string, string> = {
 };
 
 const CSS = `${BALANCE_CSS}
+/* The Forge's calls to action are filled gold, which is the one ground
+   the ember mark was not drawn for: its own orange on that gold is a
+   smudge. So it keeps being a flame and darkens to a deep ember instead,
+   with a brighter centre, which is the same fire read against a bright
+   ground rather than a dark one. */
+.fe-gen .bal-embers { color: #8a2f05; --bal-hot: #e07d10; }
+.fe-gen:disabled .bal-embers { color: #4a2b10; --bal-hot: #8a5a1c; }
 .fe, .fe * { box-sizing: border-box; }
 .fe {
   position: absolute; inset: 0; z-index: 30; overflow: hidden;

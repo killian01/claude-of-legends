@@ -49,6 +49,10 @@ export const BALANCE_COLOR: Readonly<Record<BalanceKind, string>> = {
   embers: '#ff9d4a',
 };
 
+// The ember's hotter centre on the dark page. A surface with another
+// ground restates it, and BALANCE_COLOR.embers with it, as one pair.
+export const BALANCE_HOT = '#ffe0a2';
+
 // One leaf of the wreath, as an ellipse laid on the arc and turned to sit
 // along it. Kept exported so a test can check the shape without a DOM.
 export interface WreathLeaf {
@@ -136,7 +140,6 @@ function laurelSvg(size: number): SVGSVGElement {
     fill: 'none',
     'aria-hidden': 'true',
   });
-  const color = 'currentColor';
   for (const side of [-1, 1] as const) {
     // The stem, from the same arc the leaves sit on and drawn first so
     // they sit on it. It runs a little past the leaves at both ends, the
@@ -146,8 +149,8 @@ function laurelSvg(size: number): SVGSVGElement {
     const sweep = side === -1 ? 1 : 0;
     svg.appendChild(
       svgEl('path', {
+        class: 'bal-stem',
         d: `M${a.x.toFixed(2)} ${a.y.toFixed(2)}A${WREATH_R} ${WREATH_R} 0 0 ${sweep} ${b.x.toFixed(2)} ${b.y.toFixed(2)}`,
-        stroke: color,
         'stroke-width': '1.4',
         'stroke-linecap': 'round',
         opacity: '0.8',
@@ -157,11 +160,11 @@ function laurelSvg(size: number): SVGSVGElement {
   for (const leaf of wreathLeaves()) {
     svg.appendChild(
       svgEl('ellipse', {
+        class: 'bal-body',
         cx: '0',
         cy: '0',
         rx: String(LEAF_RX),
         ry: String(LEAF_RY),
-        fill: color,
         transform: `translate(${leaf.x.toFixed(2)} ${leaf.y.toFixed(2)}) rotate(${leaf.angleDeg.toFixed(1)})`,
       }),
     );
@@ -182,18 +185,17 @@ function emberSvg(size: number): SVGSVGElement {
   // dozen times is a dozen collisions.
   svg.appendChild(
     svgEl('path', {
+      class: 'bal-body',
       d: 'M12 2.4c3.4 3.6 5.9 6.6 5.9 10.2a5.9 5.9 0 0 1-11.8 0c0-1.9.8-3.6 2-5 .3 1.4 1 2.3 2 2.7C9.6 8.5 10.3 5.4 12 2.4Z',
-      fill: 'currentColor',
     }),
   );
   svg.appendChild(
     svgEl('path', {
-      // The hotter centre, as white laid over whatever the flame is: a
-      // fixed pale tone reads as a hole once the mark sits on a gold
-      // button rather than on the dark page.
+      // The hotter centre. It has to be a colour and not white over the
+      // flame: laid over a dark flame it reads as a hole punched through
+      // it, which is what made the mark come out half drawn on gold.
+      class: 'bal-hot',
       d: 'M12 12.1c1.6 1.7 2.5 3 2.5 4.4a2.5 2.5 0 0 1-5 0c0-1.4.9-2.7 2.5-4.4Z',
-      fill: '#ffffff',
-      opacity: '0.62',
     }),
   );
   return svg;
@@ -240,16 +242,20 @@ export function format(n: number): string {
 }
 
 export const BALANCE_CSS = `
-/* Both marks draw in currentColor, so the class sets the hue once and
-   the mark and its number can never drift apart. */
-.bal { display: inline-flex; align-items: center; gap: 5px; line-height: 1; }
+/* The mark takes its hue from the text colour and its hot centre from a
+   variable, so a surface the mark was not designed against can restate
+   both in one rule without touching the shape (see the Forge's filled
+   gold buttons in ui/forge_editor.ts).
+   The centre is a second colour rather than white laid over the first:
+   over a dark flame, white reads as a hole punched through it, and the
+   mark comes out looking half drawn. */
+.bal { display: inline-flex; align-items: center; gap: 5px; line-height: 1;
+  --bal-hot: ${BALANCE_HOT}; }
 .bal svg { display: block; flex: none; }
+.bal .bal-body { fill: currentColor; }
+.bal .bal-stem { stroke: currentColor; fill: none; }
+.bal .bal-hot { fill: var(--bal-hot); }
 .bal b { font-variant-numeric: tabular-nums; font-weight: 700; color: inherit; }
 .bal-laurels { color: ${BALANCE_COLOR.laurels}; }
 .bal-embers { color: ${BALANCE_COLOR.embers}; }
-/* On a button the mark takes the button's own text colour, because the
-   Forge's calls to action are filled gold and an orange flame on gold is
-   a smudge. Inside a button the shape carries which unit it is, and the
-   sentence around it says so too. */
-button .bal { color: inherit; }
 `;
