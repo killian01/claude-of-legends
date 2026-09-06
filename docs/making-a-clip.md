@@ -50,6 +50,36 @@ window.dispatchEvent(new CustomEvent('loc:replay', { detail: 7 }));
 The replay viewer opens with a speed control. Skip forward at 4x, drop back
 to 1x a few seconds before the window, and close the shop panel.
 
+## The tour, not just the fight
+
+One fight says the game exists. It does not say what it is, and what it is
+is the reason a developer clicks: ten champions with full kits, a Forge
+that builds an eleventh, an Academy where a bot is written rather than
+coded. `scripts/tour_clips.mjs` films a short passage of each, in action.
+
+```
+GENERATION_PROVIDER=mock node dist-server/server.cjs
+pnpm dev --port 5199
+TOUR_URL=http://localhost:5199 TOUR_DIR=tour node scripts/tour_clips.mjs
+```
+
+The server takes no keys on purpose: `mock` walks the whole Forge pipeline
+with real placeholder assets and no vendor, and with no `ANTHROPIC_API_KEY`
+the coach and the kit conversations are off. A tour that costs money is a
+tour nobody films twice.
+
+Two things that are learned the hard way and are worth keeping in mind when
+adding a scene. Every scene has to MOVE while it records: the screencast
+emits a frame only when something repaints, so the first pass of the home
+screen produced one frame for seven seconds. And a panel's selectors have
+to be scoped to that panel, because the home screen stays in the DOM
+underneath every surface: the first Academy scene typed the bot's name into
+the home's join-code field and filmed a form that never filled.
+
+Surfaces filmed on a fresh data dir are empty ones. The gallery and the
+ladder need production data to say anything, so they are filmed and then
+usually cut.
+
 ## 3. Film it
 
 **On a machine with a real GPU.** The renderer falls back to software
