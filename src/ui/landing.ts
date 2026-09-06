@@ -22,55 +22,46 @@ import { buildPage, ensurePageCss, mountLiveStats, navLink } from './page';
 // Only what the landing page adds to the shared chrome: the bento, which
 // is the home's row of tiles as a visitor can have it.
 const CSS = `
-/* Two doors, and the row has to say which is which. Four equal columns
-   said the opposite: the form sat under the word RANKED with Bots and the
-   Forge beside it, so an account read as the price of the ladder and the
-   other two read as something else entirely. They are not. One account
-   opens all three (ADR 0006), and the only thing here that needs no
-   account is the practice match at the end.
-   So the three that need one are grouped under one heading and the one
-   that does not stands apart. Ten to three, and the group divides its own
-   width 4, 3, 3: the sign-in form sets the widest track, since it is the
-   one thing on this row somebody has to type into. */
-.pg.land .pg-cards { display: grid; max-width: 1180px; gap: 18px; align-items: stretch;
-  grid-template-columns: minmax(0, 10fr) minmax(0, 3fr); }
-.pg-door { display: flex; flex-direction: column; min-width: 0; }
-/* The heading is the whole point of the regrouping, so it is a rule the
-   group hangs from rather than a caption floating above it. */
-/* These sit on the backdrop rather than on a card, and the backdrop has a
-   moon in it: without the shadow the right-hand heading disappears into
-   it exactly where it is most needed. The cards get their contrast from
-   their own dark fill (ui/page.ts); this is the same job done by hand. */
-.pg-door-label { font-family: Cinzel, Georgia, serif; font-size: 12px; letter-spacing: 1.8px;
-  text-transform: uppercase; color: #cddaee; margin: 0 0 10px; padding-bottom: 9px;
-  border-bottom: 1px solid rgba(140, 168, 208, 0.34);
-  text-shadow: 0 2px 10px rgba(4, 7, 16, 0.95), 0 0 26px rgba(4, 7, 16, 0.85); }
-.pg-door.paid .pg-door-label { color: #f0e2b6;
-  border-bottom-color: rgba(230, 215, 168, 0.42); }
-.pg-door-row { display: grid; gap: 16px; align-items: stretch; flex: 1; min-width: 0; }
-.pg-door.paid .pg-door-row {
-  grid-template-columns: minmax(0, 4fr) minmax(0, 3fr) minmax(0, 3fr); }
-.pg.land .pg-card .menu-btn { margin-top: auto; }
+/* Two ways in, one card each. The row used to be a group of three under
+   a heading that had to say "all three", which is a heading explaining a
+   layout: the reader could not see what the group was until they had
+   counted it, and the account read as the price of the ladder rather
+   than the way in. One card carries the account and shows what it opens
+   inside itself, the other is the practice match, and neither needs a
+   caption over it. The account card is the wider of the two: it is the
+   one with a form to type into. */
+.pg.land .pg-cards { display: grid; max-width: 1180px; gap: 18px; align-items: start;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); }
+/* What the account opens, inside the card that opens it. Side by side and
+   square, the shape the home gives them, so the same painting reads the
+   same on both sides of the door. */
+.pg-opens { display: grid; gap: 12px; margin: 4px 0 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Wide and short on purpose. Square, these two paintings pushed the
+   sign-in form below the fold, and a form nobody sees is a card that does
+   not work. They are here to be recognised, not read. */
+/* Each card is its own height now, so there is no shared foot to pin the
+   button to: it sits under the line that sells it. */
+.pg.land .pg-card.plain .menu-btn { margin-top: 4px; }
 
 /* Bots and the Forge, standing between the two ways in the way they stand
    on the home. Not buttons: both are account features (ADR 0006), so they
    carry no call to action and neither lifts under the pointer; the cards
    on either side are the only things to press. */
-.pg-mode { position: relative; overflow: hidden; border-radius: 14px; border: 1px solid #2b3f60;
-  background: #0a1120; box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
-  display: flex; align-items: flex-end; min-height: 300px; }
+.pg-mode { position: relative; overflow: hidden; border-radius: 12px; border: 1px solid #2b3f60;
+  background: #0a1120; box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+  display: flex; align-items: flex-end; aspect-ratio: 2 / 1; }
 /* Both paintings are composed upright, which is why they can fill a tall
    column edge to edge. The subject sits high in each, so the crop favours
    the top and leaves the foot scrim room to sit on sky rather than on a
    face. */
 .pg-mode img { position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: cover; object-position: 50% 26%; }
-.pg-mode-body { position: relative; width: 100%; padding: 74px 16px 16px;
-  background: linear-gradient(180deg, rgba(4, 7, 16, 0) 0%, rgba(4, 7, 16, 0.82) 46%,
+  object-fit: cover; object-position: 50% 34%; }
+.pg-mode-body { position: relative; width: 100%; padding: 38px 13px 10px;
+  background: linear-gradient(180deg, rgba(4, 7, 16, 0) 0%, rgba(4, 7, 16, 0.82) 52%,
     rgba(4, 7, 16, 0.96) 100%); }
-.pg-mode h3 { font-family: Cinzel, Georgia, serif; font-size: 17px; letter-spacing: 2.2px;
+.pg-mode h3 { font-family: Cinzel, Georgia, serif; font-size: 15px; letter-spacing: 2.2px;
   text-transform: uppercase; margin: 0; color: #e6d7a8; line-height: 1.1; }
-.pg-mode p { font-size: 12px; line-height: 1.45; color: #b9cbe4; margin: 6px 0 0; }
 
 /* Four across needs about 1120: below that the sign-in form is squeezed
    and the paintings turn into slivers. So the row folds instead of
@@ -79,21 +70,11 @@ const CSS = `
    is only ever as wide as its form wants to be, which is what the narrower
    ceiling is for. */
 @media (max-width: 1120px) {
-  /* Stacked, the two headings are the only thing separating the doors, so
-     the gap between the groups has to be wider than the gap inside one. */
-  .pg.land .pg-cards { grid-template-columns: minmax(0, 1fr); max-width: 620px; gap: 30px; }
-  .pg.land .pg-door.paid .pg-door-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .pg.land .pg-door.paid .pg-card { grid-column: 1 / -1; }
-  .pg-mode { min-height: 0; aspect-ratio: 3 / 4; }
+  /* Two cards, stacked, the account one first: it is the one with the
+     form, and a form pushed below the fold is a form nobody fills. */
+  .pg.land .pg-cards { grid-template-columns: minmax(0, 1fr); max-width: 620px; gap: 22px; }
 }
-/* One column, and the panel goes square: the paintings are square to
-   begin with, so at 1/1 the tile is the whole painting and nothing is
-   cropped at all. The two headings matter most here, where the row is a
-   stack and nothing else says where one door ends and the other starts. */
-@media (max-width: 620px) {
-  .pg.land .pg-door.paid .pg-door-row { grid-template-columns: minmax(0, 1fr); }
-  .pg-mode { aspect-ratio: 1 / 1; }
-}
+
 
 /* The second line of a way-in card: the caveats, which have to be read
    before the button but must not compete with the offer above them. */
@@ -221,56 +202,23 @@ export function showLanding(
     // --- the two ways in ---
     const ways = el('div', 'pg-cards');
 
-    // Named for the mode, not for the act: under one heading that says an
-    // account opens all three, this column is the first of the three and
-    // happens to be the one carrying the form. Titled "Play ranked" it
-    // read as the only thing signing up bought you.
+    // One card, not a row of three under a heading counting them. The
+    // heading had to say "all three" because the reader could not see
+    // what the group was until they had counted it themselves, and an
+    // account read as the price of the ladder rather than the way in.
+    // So: the card is the account, the paintings inside it are what the
+    // account opens, and nothing explains what a bot or a forge is. The
+    // paintings do that, and the page is not a manual.
     const online = el('section', 'pg-card gold');
     online.append(
-      el('h2', '', 'Ranked'),
-      el(
-        'p',
-        '',
-        'Your rating, your match history and your place on the ladder, kept on any ' +
-          'machine you sign in from.',
-      ),
-      buildAuthForm((account) => finish({ kind: 'account', account }), discordResult),
+      el('h2', '', 'Create a free account'),
+      el('p', '', 'It keeps your rating and your record, and opens these.'),
     );
-
-    const offline = el('section', 'pg-card plain');
-    const offlineBtn = el('button', 'menu-btn', 'Play offline now');
-    offlineBtn.addEventListener('click', () => finish({ kind: 'offline' }));
-    // "One match against bots" undersold this badly, and the card had the
-    // empty half to prove it: next to a sign-in form, three short lines
-    // read as the lesser thing rather than the free one. It is a whole
-    // 5v5 on the same simulation, and with the collection wall in front
-    // of an account (ADR 0018) the practice match is now the only place
-    // the whole roster is open, which is worth saying out loud.
-    offline.append(
-      el('h2', '', 'Or try it first'),
-      el(
-        'p',
-        '',
-        'A full 5v5: you and four bot allies against five more. Take a lane, ' +
-          'buy from the same shop, and pick any champion in the roster, with ' +
-          'nothing to unlock first.',
-      ),
-      el(
-        'p',
-        'pg-card-fine',
-        'The ranked simulation exactly, running in this tab. No account, ' + 'nothing saved.',
-      ),
-      offlineBtn,
-    );
-
-    // The three an account opens, under one heading, so that signing up
-    // reads as buying all of it rather than as the price of the ladder.
-    // Ranked carries the form; Bots and the Forge stand beside it where
-    // the home stands their tiles.
-    const paid = el('div', 'pg-door paid');
-    paid.appendChild(el('p', 'pg-door-label', 'One account opens all three'));
-    const paidRow = el('div', 'pg-door-row');
-    paidRow.appendChild(online);
+    // Bots and the Forge, and deliberately not the ranked queue: these
+    // two do not exist offline at all, while ranked is the same match the
+    // practice card already offers. What an account adds to ranked is
+    // that it counts, which is the line above, not a painting.
+    const opens = el('div', 'pg-opens');
     for (const mode of LANDING_MODES) {
       const art = el('img', '');
       art.src = mode.art;
@@ -279,21 +227,30 @@ export function showLanding(
       art.loading = 'lazy';
       art.decoding = 'async';
       const body = el('div', 'pg-mode-body');
-      body.append(el('h3', '', mode.title), el('p', '', mode.line));
+      body.append(el('h3', '', mode.title));
       const item = el('article', 'pg-mode');
       item.append(art, body);
-      paidRow.appendChild(item);
+      opens.appendChild(item);
     }
-    paid.appendChild(paidRow);
+    online.append(
+      opens,
+      buildAuthForm((account) => finish({ kind: 'account', account }), discordResult),
+    );
 
-    // And the one that opens by itself.
-    const free = el('div', 'pg-door free');
-    free.appendChild(el('p', 'pg-door-label', 'No account needed'));
-    const freeRow = el('div', 'pg-door-row');
-    freeRow.appendChild(offline);
-    free.appendChild(freeRow);
+    // The other way in, and the only one that needs nothing. It says what
+    // it is in one line: a visitor who has read the title of the page
+    // knows what a 5v5 against bots is.
+    const offline = el('section', 'pg-card plain');
+    const offlineBtn = el('button', 'menu-btn', 'Play offline now');
+    offlineBtn.addEventListener('click', () => finish({ kind: 'offline' }));
+    offline.append(
+      el('h2', '', 'Or try it first'),
+      el('p', '', 'A full 5v5 against bots, in this tab, with the whole roster open.'),
+      el('p', 'pg-card-fine', 'No account, nothing saved.'),
+      offlineBtn,
+    );
 
-    ways.append(paid, free);
+    ways.append(online, offline);
     inner.appendChild(ways);
 
     // --- and the thing the genre does not offer ---
