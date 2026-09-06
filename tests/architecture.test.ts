@@ -227,3 +227,100 @@ describe('account secrets', () => {
     expect(hashPassword('x').hash).not.toBe('');
   });
 });
+
+// The lines of the `if (...) { ... }` a route dispatch opens: from its own
+// line to the one that closes it. Used by the method gate below, which has
+// to look inside one route's handler and never into the next one's.
+function blockAt(lines: readonly string[], start: number): string {
+  let depth = 0;
+  let opened = false;
+  const out: string[] = [];
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i] ?? '';
+    out.push(line);
+    for (const ch of line) {
+      if (ch === '{') {
+        depth++;
+        opened = true;
+      } else if (ch === '}') depth--;
+    }
+    if (opened && depth <= 0) break;
+  }
+  return out.join('\n');
+}
+
+// The third gate: a route that changes something answers POST alone.
+//
+// SameSite=Lax refuses the cross-site POST, which is what makes the cookie
+// safe to carry at all, but it deliberately still carries it on a
+// top-level GET navigation: a link in somebody else's page is a request
+// with the player's session on it. So the method check is not decoration,
+// it is the CSRF boundary, and it lives inline in one 2800-line dispatch
+// where it is easy to forget on the next route.
+//
+// A scan rather than a test per route, so a route added later is refused
+// by default: the allowlist below is the only way to be a GET, and adding
+// a name to it is a deliberate line in a diff rather than an omission.
+describe('api methods', () => {
+  const mainTs = readFileSync(fileURLToPath(new URL('../server/main.ts', import.meta.url)), 'utf8');
+
+  // Routes that read and change nothing, plus the two that must be a GET
+  // because a browser arrives at them by following a link rather than by
+  // sending a form. Both of those carry their own unguessable single-use
+  // credential in the URL (server/action_tokens.ts, server/discord_state.ts),
+  // which is what a method check would otherwise be standing in for.
+  const READ_ONLY = new Set([
+    '/api/me',
+    '/api/collection',
+    '/api/bots',
+    '/api/public/stats',
+    '/api/discord/status',
+    '/api/pulse',
+    '/api/bots/arena',
+    '/api/bots/pool',
+    '/api/forge/drafts',
+    '/api/forge/animations',
+    '/api/forge/job',
+    '/api/forge/art',
+    '/api/gallery',
+    '/api/ladder',
+    '/api/ladder/page',
+    '/api/ladder/mine',
+    '/api/live',
+    // Followed from a mailbox: the token in the link is the credential.
+    '/api/email/confirm',
+    // Followed from the sign-in page into Discord's consent screen; the
+    // state it mints is what the callback checks on the way back.
+    '/api/discord/start',
+  ]);
+
+  it('gates every state-changing /api route on the method', () => {
+    const lines = mainTs.split('\n');
+    // A route is gated if any of its dispatch sites checks the method:
+    // several are named twice, once in the condition and once in the
+    // branch that picks which handler runs.
+    const gated = new Set<string>();
+    const seen = new Set<string>();
+    lines.forEach((line, i) => {
+      const m = /url === '(\/api\/[^']*)'/.exec(line);
+      if (!m?.[1]) return;
+      seen.add(m[1]);
+      // The route's own block, brace-counted, so the check is found
+      // wherever in the handler it sits and a comment between the two
+      // cannot hide it. Bounded by the next route rather than by a line
+      // count, so nothing here is tuned to today's formatting.
+      if (/req\.method/.test(blockAt(lines, i))) gated.add(m[1]);
+    });
+
+    // If this is empty the scan stopped matching the dispatch and the gate
+    // below is passing for the wrong reason.
+    expect(seen.size).toBeGreaterThan(20);
+    const ungated = [...seen].filter((route) => !gated.has(route) && !READ_ONLY.has(route));
+    expect(ungated).toEqual([]);
+  });
+
+  it('keeps the allowlist honest: every name in it is still a route', () => {
+    const stale = [...READ_ONLY].filter((route) => !mainTs.includes(`'${route}'`));
+    expect(stale).toEqual([]);
+  });
+});

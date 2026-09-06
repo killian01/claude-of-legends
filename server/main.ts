@@ -1263,6 +1263,16 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (url === '/api/logout') {
+      // POST only, like every other route that changes something. A GET
+      // here is reachable by a cross-site top-level navigation, which
+      // SameSite=Lax deliberately still carries the cookie on: a link in
+      // someone else's page could sign a player out mid-queue. Nuisance
+      // rather than compromise, but the rest of the API already refuses
+      // it and this route was the one exception.
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'use POST' });
+        return;
+      }
       const id = parseCookies(req.headers.cookie).get(COOKIE_NAME);
       const everywhere =
         new URLSearchParams((req.url ?? '').split('?')[1] ?? '').get('all') === '1';
