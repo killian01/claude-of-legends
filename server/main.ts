@@ -114,6 +114,7 @@ import { passwordErrorMessage, validatePassword } from './password';
 import { type CoachDeps, coachPlaybook } from './playbook_suggest';
 import { buildProfile } from './profile';
 import { Pulse, tokenMatches } from './pulse';
+import { renderPulsePage } from './pulse_page';
 import { CEILING_DEFAULTS, checkQuota, DAY_MS, spendQuota } from './quotas';
 import { BASE_RATING, LEAVER_LOCKOUT_MS, leaverPenalty } from './rating';
 import { talliesOf } from './record_tally';
@@ -1181,6 +1182,25 @@ const server = http.createServer(async (req, res) => {
       if (!tokenMatches(bearer, secret) && !tokenMatches(query, secret)) {
         res.writeHead(404, { 'content-type': 'text/plain' });
         res.end('not found');
+        return;
+      }
+      // A browser gets the page, a script gets the numbers. Decided by
+      // what the caller asked for rather than by a flag, because the
+      // maintainer opening this on a phone should not have to remember
+      // one; ?format= overrides either way.
+      const format = new URL(req.url ?? '/', 'http://local').searchParams.get('format');
+      const wantsHtml =
+        format === 'html' ||
+        (format !== 'json' && (req.headers.accept ?? '').includes('text/html'));
+      if (wantsHtml) {
+        res.writeHead(200, {
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'no-store',
+          // Nothing here is for anyone but its reader, and a counter page
+          // in a search index is the one way these numbers become public.
+          'x-robots-tag': 'noindex, nofollow',
+        });
+        res.end(renderPulsePage(pulse.days(), pulse.cappedToday()));
         return;
       }
       sendJson(res, 200, { days: pulse.days(), cappedToday: pulse.cappedToday() });

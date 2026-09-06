@@ -147,12 +147,28 @@ The counting always runs. Reading it back is what `PULSE_TOKEN` gates:
 
 ```bash
 PULSE_TOKEN=$(openssl rand -hex 24)   # into .env, then redeploy
+```
+
+Then open `https://your.host/api/pulse?token=<the token>` in a browser and
+you get the report: visitors, sign-ups and finished matches for the week,
+then a row per day with the two rates that matter, how many arrivals made an
+account and how many started matches reached an end. It is one page, no
+JavaScript, and it reads on a phone, which is where it is usually read.
+
+A script gets the numbers instead, because the same URL answers to what the
+caller asked for:
+
+```bash
 curl -H "authorization: Bearer $PULSE_TOKEN" https://your.host/api/pulse
 ```
+
+Add `?format=json` or `?format=html` to override that either way.
 
 Unset, `/api/pulse` answers 404 to everyone, which is the default and the
 right setting for an instance nobody needs to report on. A wrong token also
 gets a 404 rather than a 401, so the endpoint never confirms it is there.
+The page is served `no-store` and `x-robots-tag: noindex`, since a counter
+page in a search index is the one way these numbers become public.
 
 ## The proxy contract
 
