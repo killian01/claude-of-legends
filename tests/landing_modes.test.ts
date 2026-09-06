@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { PLAY_TILES, tileArtUrl } from '../src/ui/home_tiles';
-import { LANDING_MODES } from '../src/ui/landing_modes';
+import { LANDING_MODES, PRACTICE_ART } from '../src/ui/landing_modes';
 
 describe('the landing modes', () => {
   it('are the three an account opens, and each is a play tile', () => {
@@ -16,6 +16,16 @@ describe('the landing modes', () => {
     for (const mode of LANDING_MODES) {
       expect(PLAY_TILES.some((t) => t.id === mode.id)).toBe(true);
     }
+  });
+
+  it('leave the practice match out, and give it its own painting', () => {
+    // The free door is not one of the three: nobody makes an account for
+    // the offline match. It wears a painting all the same, and the tile's
+    // own, or the landing reads as one offer and one footnote under it.
+    expect(LANDING_MODES.some((m) => m.id === 'practice')).toBe(false);
+    const tile = PLAY_TILES.find((t) => t.id === 'practice');
+    expect(tile).toBeDefined();
+    expect(PRACTICE_ART).toBe(tileArtUrl(tile?.art ?? ''));
   });
 
   it('wear the painting their tile wears', () => {

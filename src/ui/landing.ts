@@ -14,7 +14,7 @@ import { type AuthedAccount, buildAuthForm } from './auth';
 import type { DiscordResult } from './discord_entry';
 import { startBackdrop } from './home_backdrop';
 import { CONTRIBUTE_LEAD, CONTRIBUTE_TITLE, CONTRIBUTE_WAYS } from './landing_contribute';
-import { LANDING_MODES } from './landing_modes';
+import { LANDING_MODES, PRACTICE_ART } from './landing_modes';
 import { DISCORD, PRIVACY, REPO } from './links';
 import { el, ensureMenuCss } from './menu';
 import { buildPage, ensurePageCss, mountLiveStats, navLink } from './page';
@@ -30,7 +30,7 @@ const CSS = `
    inside itself, the other is the practice match, and neither needs a
    caption over it. The account card is the wider of the two: it is the
    one with a form to type into. */
-.pg.land .pg-cards { display: grid; max-width: 1180px; gap: 18px; align-items: start;
+.pg.land .pg-cards { display: grid; max-width: 1180px; gap: 18px; align-items: stretch;
   grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); }
 /* What the account opens, inside the card that opens it: the same three
    paintings the home stands at full height, in the same order, so the
@@ -50,8 +50,19 @@ const CSS = `
 .pg-opens-form { display: flex; flex-direction: column; justify-content: center;
   padding: 16px; border-radius: 12px; border: 1px solid rgba(140, 168, 208, 0.28);
   background: rgba(6, 10, 20, 0.72); }
-/* Each card is its own height now, so there is no shared foot to pin the
-   button to: it sits under the line that sells it. */
+/* The other way in, wearing the practice tile's painting. Without one it
+   was two lines and a button beside a card carrying a form and three
+   paintings: an offer and a footnote under it, when the two are meant to
+   read as a choice. The painting takes whatever height the account card
+   leaves over, which is what puts the two feet on one line without either
+   card being told what it measures. */
+.pg-try { position: relative; overflow: hidden; flex: 1 1 auto; min-height: 150px;
+  margin: 0 0 14px; border-radius: 12px; border: 1px solid #2b3f60; background: #0a1120; }
+/* Composed upright like the band's three, so the crop favours the top and
+   the eye lands on the fight rather than on the ground in front of it. */
+.pg-try img { position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: 50% 30%; }
+/* The button sits at the foot of its card, under the painting. */
 .pg.land .pg-card.plain .menu-btn { margin-top: 4px; }
 
 /* One painting of the band. Not a button: all three are account features
@@ -90,6 +101,12 @@ const CSS = `
   /* Two cards, stacked, the account one first: it is the one with the
      form, and a form pushed below the fold is a form nobody fills. */
   .pg.land .pg-cards { grid-template-columns: minmax(0, 1fr); max-width: 620px; gap: 22px; }
+  /* Stacked there is no card beside it to match, so the painting stops
+     stretching and takes a shape of its own. The ceiling is what keeps it
+     from becoming the tallest thing on the page as the column widens:
+     without it the free card outgrew the account card at 1000, which
+     says the wrong thing about which of the two is the offer. */
+  .pg-try { flex: none; aspect-ratio: 16 / 7; max-height: 190px; }
 }
 /* Narrow, the two stack and the band goes first: it is what the card is
    selling, and the form is what the reader scrolls to when they have
@@ -274,9 +291,19 @@ export function showLanding(
     const offline = el('section', 'pg-card plain');
     const offlineBtn = el('button', 'menu-btn', 'Play offline now');
     offlineBtn.addEventListener('click', () => finish({ kind: 'offline' }));
+    // The painting this card was missing. The heading above it says what
+    // it is, so the picture is decoration and carries no label of its own.
+    const tryArt = el('img', '');
+    tryArt.src = PRACTICE_ART;
+    tryArt.alt = '';
+    tryArt.loading = 'lazy';
+    tryArt.decoding = 'async';
+    const tryShot = el('div', 'pg-try');
+    tryShot.appendChild(tryArt);
     offline.append(
       el('h2', '', 'Or try it first'),
       el('p', '', 'A full 5v5 against bots, in this tab, with the whole roster open.'),
+      tryShot,
       el('p', 'pg-card-fine', 'No account, nothing saved.'),
       offlineBtn,
     );

@@ -28,6 +28,13 @@ export interface LandingMode {
   art: string;
 }
 
+// The painting the other way in wears. The practice match is not one of
+// the three above, because nobody signs up for it: it is the door that
+// needs no account. It gets its tile's painting all the same, so the two
+// cards on the landing are an offer and an offer, rather than an offer and
+// a footnote under it.
+export const PRACTICE_ART = tileArtUrl('practice');
+
 export const LANDING_MODES: readonly LandingMode[] = [
   {
     id: 'ranked',
