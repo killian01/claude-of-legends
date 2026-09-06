@@ -97,7 +97,13 @@ import { type GenerationProvider, WEAPON_FAMILIES } from './generation/provider'
 import { TripoProvider } from './generation/tripo';
 import { buildBotLadder, buildLadder } from './ladder';
 import { type BotSummary, buildLadderPage, type LadderSeed, placeOf } from './ladder_page';
-import { backfillLaurels, CHAMPION_PRICES, playableAt, rotationAt } from './laurels';
+import {
+  backfillLaurels,
+  CHAMPION_PRICES,
+  playableAt,
+  rotationAt,
+  STARTER_COLLECTION,
+} from './laurels';
 import { accountKey, addressKey, LoginThrottle } from './login_throttle';
 import { confirmMail, confirmUrl, publicOrigin, resetMail, resetUrl } from './mail_messages';
 import { mailerFromEnv } from './mailer';
@@ -1022,6 +1028,26 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // What may be picked, and what the rest costs (ADR 0018). In front of
+    // the wall because the offline practice match has to draw the same
+    // wall as the rest of the game and runs without an account: a visitor
+    // gets exactly what a fresh account gets, the starter collection and
+    // the week's rotation, so the practice match stops being the one place
+    // the whole roster is open. Signed in, it answers for the account.
+    // Nothing here is anybody's: champion ids, a table of prices, and a
+    // balance that is the caller's own or zero.
+    if (url === '/api/collection') {
+      const now = Date.now();
+      const me = accountForRequest(req, now);
+      sendJson(res, 200, {
+        laurels: me ? registry.laurels(me.id) : 0,
+        collection: me ? registry.collection(me.id) : [...STARTER_COLLECTION],
+        rotation: rotationAt(now),
+        prices: CHAMPION_PRICES,
+      });
+      return;
+    }
+
     // The landing page's counters, and the one hole in the wall. It is
     // deliberately three integers: no name, no id, nothing that could be
     // walked to learn who plays here. /healthz already published the same
@@ -1299,21 +1325,7 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 200, describeSelf(me));
         return;
       }
-      // --- the collection and the shop (ADR 0018) ---
-      // Every price the client may need in one answer, so the roster
-      // browser can put a number on every locked champion without asking
-      // again, and the week's rotation beside it: a champion is playable
-      // for two different reasons and the interface has to say which.
-      if (url === '/api/collection') {
-        const now = Date.now();
-        sendJson(res, 200, {
-          laurels: registry.laurels(me.id),
-          collection: registry.collection(me.id),
-          rotation: rotationAt(now),
-          prices: CHAMPION_PRICES,
-        });
-        return;
-      }
+      // --- the shop (ADR 0018); the collection itself is public, above ---
       if (url === '/api/collection/recruit' && req.method === 'POST') {
         const body = await readJsonBody(req);
         const championId = typeof body?.championId === 'string' ? body.championId : '';

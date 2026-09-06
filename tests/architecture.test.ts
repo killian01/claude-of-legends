@@ -117,11 +117,29 @@ describe('account secrets', () => {
     expect(leaks).toEqual([]);
   });
 
-  // The landing page needs live numbers, so /api/public/stats sits in
-  // front of the wall. It may carry counts and nothing else: the moment a
-  // name or an id joins them, the page has become a directory of who
-  // plays here, which is exactly what the wall exists to prevent.
-  it('keeps the one public route to counts only', () => {
+  // Two routes sit in front of the wall, and neither may become a
+  // directory of who plays here, which is exactly what the wall exists to
+  // prevent. The landing needs live numbers; the practice match needs to
+  // know what is open, because it runs with no account and still has to
+  // draw the collection wall (ADR 0018). Champion ids and a price table
+  // belong to nobody, so that one is safe for the same reason counts are.
+  it('keeps the public collection route to nobody in particular', () => {
+    const source = readFileSync(
+      fileURLToPath(new URL('../server/main.ts', import.meta.url)),
+      'utf8',
+    );
+    const route = source.slice(source.indexOf("url === '/api/collection'"));
+    const body = route.slice(0, route.indexOf('return;'));
+    // It may read the caller's own balance and nothing about anyone else.
+    for (const banned of ['registry.all', 'players.values', '.name', 'publicAccount']) {
+      expect(body).not.toContain(banned);
+    }
+    // And a caller with no session is answered rather than refused, or the
+    // practice match would have no wall to draw.
+    expect(body).toContain('STARTER_COLLECTION');
+  });
+
+  it('keeps the public counts route to counts only', () => {
     const payload = { online: 3, matches: 1, accounts: 42 };
     expect(Object.keys(payload).sort()).toEqual(['accounts', 'matches', 'online']);
     for (const value of Object.values(payload)) expect(typeof value).toBe('number');

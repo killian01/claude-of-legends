@@ -287,7 +287,10 @@ export function showLanding(
 
     // The other way in, and the only one that needs nothing. It says what
     // it is in one line: a visitor who has read the title of the page
-    // knows what a 5v5 against bots is.
+    // knows what a 5v5 against bots is. It no longer brags about the whole
+    // roster being open in it, because it is not: the practice match draws
+    // the same wall as the rest of the game and a visitor picks from what
+    // a fresh account holds (ADR 0018).
     const offline = el('section', 'pg-card plain');
     const offlineBtn = el('button', 'menu-btn', 'Play offline now');
     offlineBtn.addEventListener('click', () => finish({ kind: 'offline' }));
@@ -302,7 +305,7 @@ export function showLanding(
     tryShot.appendChild(tryArt);
     offline.append(
       el('h2', '', 'Or try it first'),
-      el('p', '', 'A full 5v5 against bots, in this tab, with the whole roster open.'),
+      el('p', '', 'A full 5v5 against bots, in this tab.'),
       tryShot,
       el('p', 'pg-card-fine', 'No account, nothing saved.'),
       offlineBtn,

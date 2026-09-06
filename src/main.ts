@@ -75,14 +75,31 @@ interface OfflinePick {
   forged?: ForgedChampionDef;
 }
 
-function pickForPractice(): Promise<OfflinePick> {
+// The practice match draws the same wall as the rest of the game (ADR
+// 0018). It runs offline and may run with no account at all, so it asks
+// the server what is open: signed in, the account's collection; signed
+// out, what a fresh account would hold. Practice was the one place the
+// whole roster stood open, which read as the wall being a punishment for
+// signing up rather than a thing to climb.
+async function pickForPractice(): Promise<OfflinePick> {
+  const collection = await loadCollection();
   return new Promise((resolve) => {
-    const picker = showSelect(container, null, 0, null, (championId, sigils, skin) => {
-      // Inside the lock-in click gesture, so the browser grants it.
-      requestGameFullscreen();
-      picker.remove();
-      resolve({ championId, sigils, skin });
-    });
+    const picker = showSelect(
+      container,
+      null,
+      0,
+      null,
+      (championId, sigils, skin) => {
+        // Inside the lock-in click gesture, so the browser grants it.
+        requestGameFullscreen();
+        picker.remove();
+        resolve({ championId, sigils, skin });
+      },
+      undefined,
+      undefined,
+      undefined,
+      collection,
+    );
   });
 }
 
