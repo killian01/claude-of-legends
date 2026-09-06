@@ -28,6 +28,7 @@ import {
   type Account,
   AccountRegistry,
   publicAccount,
+  type RecruitError,
   type RegisterError,
   selfAccount,
 } from './accounts';
@@ -96,6 +97,7 @@ import { type GenerationProvider, WEAPON_FAMILIES } from './generation/provider'
 import { TripoProvider } from './generation/tripo';
 import { buildBotLadder, buildLadder } from './ladder';
 import { type BotSummary, buildLadderPage, type LadderSeed, placeOf } from './ladder_page';
+import { backfillLaurels, CHAMPION_PRICES, playableAt, rotationAt } from './laurels';
 import { accountKey, addressKey, LoginThrottle } from './login_throttle';
 import { confirmMail, confirmUrl, publicOrigin, resetMail, resetUrl } from './mail_messages';
 import { mailerFromEnv } from './mailer';
@@ -134,7 +136,7 @@ import { suggestKit } from './suggest';
 import { suggestLook } from './suggest_look';
 import { suggestStats } from './suggest_stats';
 import { type WayStats, wayStatsOf } from './way_stats';
-import type { Way } from './ways';
+import { playedByHand, seatWay, type Way } from './ways';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DIST = path.resolve(process.cwd(), 'dist');
@@ -335,6 +337,10 @@ const botDeps: BotDeps = {
   store: botStore,
   botCap: envNumber('BOT_CAP', 100),
   depositCap: envNumber('BOT_DEPOSIT_CAP', 3),
+  // The collection alone, without the week's rotation: a bot outlives the
+  // week it was made in, and one written on a rotating champion would
+  // stop being fieldable on the Monday (ADR 0018).
+  collectionOf: (accountId) => registry.collection(accountId),
 };
 // The Bot page (server/bot_page.ts): the store and the owner's name.
 const botPageDeps: BotPageDeps = {
@@ -417,6 +423,42 @@ const REPLAY_KEEP = 40;
 // The whole log stays in memory for profile queries; one line per match,
 // appended as each ends (kilobytes each, guests-scale).
 const matchLog: MatchRecord[] = readJsonl<MatchRecord>(MATCHES_FILE);
+
+// One finished match pays its hand seats (ADR 0018). Called on every
+// recorded match, Arena included, because the way is what decides: an
+// Arena round or a seat the owner's bot played answers false here, so a
+// playbook running overnight earns its owner nothing.
+function payLaurels(rec: MatchRecord): void {
+  for (const seat of rec.players) {
+    if (seat.accountId === null) continue;
+    if (!playedByHand(seatWay(rec, seat))) continue;
+    registry.award(seat.accountId, seat.team === rec.winner, rec.at);
+  }
+}
+
+// A refusal names which of the three it is and what to do about it: a
+// shop that just says no teaches nothing (ADR 0017's rule about walls
+// that never state their number).
+const RECRUIT_REFUSALS: Readonly<Record<RecruitError, string>> = {
+  unknown_account: 'This needs an account.',
+  not_for_sale: 'That champion is not for sale.',
+  already_owned: 'That champion is already in your collection.',
+  not_enough_laurels: 'Not enough laurels for that champion yet.',
+};
+
+// The crossing into the laurel economy, once per account and never again
+// (ADR 0018): what its recorded matches would have earned. Absent laurels
+// is what marks an account as uncounted, so this is idempotent and runs
+// on every boot for the sake of accounts made while it was already past.
+function seedStandingAccounts(): void {
+  let seeded = 0;
+  for (const a of registry.all()) {
+    const { laurels, lastWinDay } = backfillLaurels(matchLog, a.id);
+    if (registry.seedLaurels(a.id, laurels, lastWinDay)) seeded++;
+  }
+  if (seeded > 0) console.log(`laurels: ${seeded} account(s) credited from the match log`);
+}
+seedStandingAccounts();
 // Match ids restart above everything already on disk: a replay file, a
 // replay a Record entry still holds, a match log line. Ids name replay
 // files, so an id handed out twice would overwrite a replay an older
@@ -444,6 +486,7 @@ const arenaDeps: ArenaDeps = {
   recordMatch: (rec) => {
     matchLog.push(rec);
     appendJsonl(MATCHES_FILE, rec);
+    payLaurels(rec);
   },
   roundMs: envNumber('ARENA_ROUND_MINUTES', 60) * 60_000,
   playNowPerDay: envNumber('ARENA_PLAY_NOW_PER_DAY', ARENA_PLAY_NOW_PER_DAY),
@@ -715,6 +758,14 @@ function onMatchReady(forge: boolean) {
 }
 
 const matchmaker = new Matchmaker(send, onMatchReady(false), undefined, {
+  // What this client may pick of the roster (ADR 0018): its collection
+  // plus the week's rotation. A client with no account picks nothing here
+  // anyway, so answering null for one leaves the wall to the account wall.
+  resolvePlayable: (clientId) => {
+    const c = clients.get(clientId);
+    if (!c) return null;
+    return playableAt(registry.collection(c.accountId), Date.now());
+  },
   // Bot seats (ADR 0013): the resolver is the account boundary, answering
   // with the seat when THIS client owns the bot, re-validated so a stored
   // playbook that predates a validator tightening never reaches a match.
@@ -744,6 +795,14 @@ const matchmaker = new Matchmaker(send, onMatchReady(false), undefined, {
 // throws on invalid input).
 const forgeMatchmaker = new Matchmaker(send, onMatchReady(true), undefined, {
   forge: true,
+  // What this client may pick of the roster (ADR 0018): its collection
+  // plus the week's rotation. A client with no account picks nothing here
+  // anyway, so answering null for one leaves the wall to the account wall.
+  resolvePlayable: (clientId) => {
+    const c = clients.get(clientId);
+    if (!c) return null;
+    return playableAt(registry.collection(c.accountId), Date.now());
+  },
   resolveForged: (clientId, championId) => {
     const c = clients.get(clientId);
     if (!c) return null;
@@ -1216,6 +1275,35 @@ const server = http.createServer(async (req, res) => {
       }
       if (url === '/api/me') {
         sendJson(res, 200, describeSelf(me));
+        return;
+      }
+      // --- the collection and the shop (ADR 0018) ---
+      // Every price the client may need in one answer, so the roster
+      // browser can put a number on every locked champion without asking
+      // again, and the week's rotation beside it: a champion is playable
+      // for two different reasons and the interface has to say which.
+      if (url === '/api/collection') {
+        const now = Date.now();
+        sendJson(res, 200, {
+          laurels: registry.laurels(me.id),
+          collection: registry.collection(me.id),
+          rotation: rotationAt(now),
+          prices: CHAMPION_PRICES,
+        });
+        return;
+      }
+      if (url === '/api/collection/recruit' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const championId = typeof body?.championId === 'string' ? body.championId : '';
+        const out = registry.recruit(me.id, championId);
+        if (!out.ok) {
+          sendJson(res, 400, { error: RECRUIT_REFUSALS[out.error] });
+          return;
+        }
+        sendJson(res, 200, {
+          laurels: out.value,
+          collection: registry.collection(me.id),
+        });
         return;
       }
       // --- bots on the account (ADR 0013): the Academy's store ---
@@ -2515,6 +2603,7 @@ setInterval(() => {
             } catch (err) {
               console.error('match log append failed', err);
             }
+            payLaurels(rec);
             console.log(`match ${matchId} recorded (${accountIdByUnit.size} human seat(s))`);
             // The bot seats' Records: the same rows and the ledger's report,
             // kind live, the rating movement when there was one.

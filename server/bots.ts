@@ -35,6 +35,10 @@ export interface BotDeps {
   now?: () => number;
   // Injectable for tests; production draws from node:crypto.
   newId?: () => string;
+  // The owner's collection (ADR 0018): a bot fields only what its owner
+  // holds, or the Academy would be the way around the shop. Absent means
+  // no wall, which is what the tests and the offline surfaces want.
+  collectionOf?: (accountId: number) => readonly string[];
 }
 
 export type BotOutcome<T = unknown> = ({ ok: true } & T) | { ok: false; error: string };
@@ -136,6 +140,10 @@ export function createBot(
   const championId = input.championId;
   if (typeof championId !== 'string' || !CHAMPIONS[championId]) {
     return { ok: false, error: 'a bot plays a roster champion' };
+  }
+  const collection = deps.collectionOf?.(accountId);
+  if (collection && !collection.includes(championId)) {
+    return { ok: false, error: 'a bot plays a champion in your collection' };
   }
   const sigils = checkSigils(input.sigils ?? ['riftstep', 'mend']);
   if (!sigils.ok) return sigils;

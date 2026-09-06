@@ -103,6 +103,12 @@ export interface MatchmakerOptions {
   forge?: boolean;
   resolveForged?: (clientId: number, championId: string) => ForgedChampionDef | null;
   resolveBot?: (clientId: number, botId: string) => BotSeat | null;
+  // What THIS client may pick of the roster: its collection plus the
+  // week's rotation (ADR 0018). The same account boundary the other two
+  // resolvers are, so the Matchmaker stays account-blind. Absent, or null
+  // for a client, means no wall: the practice match and the tests pick
+  // freely.
+  resolvePlayable?: (clientId: number) => readonly string[] | null;
 }
 
 // Crypto-random codes: a counter transform was reproducible offline, so any
@@ -388,13 +394,31 @@ export class Matchmaker {
         forged = def;
       }
     }
+    // What this client may pick of the roster (ADR 0018). A forged
+    // champion is outside the collection entirely: it is not a roster
+    // champion, and its own resolver already answered for it.
+    const playable = forged ? null : (this.opts.resolvePlayable?.(clientId) ?? null);
+    const mayPick = (id: string): boolean => playable === null || playable.includes(id);
+    // A locked champion outside it falls back like any other invalid pick.
+    // A bot seat that lost its champion this way loses the seat with it:
+    // the playbook was written for a champion this account no longer has.
+    if (!mayPick(champ)) {
+      champ = playable?.[0] ?? DEFAULT_CHAMPION_ID;
+      seat = null;
+    }
     // No duplicate champions within a team (game definition): a taken pick
-    // falls back to the first free champion in roster order.
+    // falls back to the first free champion in roster order. It must draw
+    // from what this client may pick, or the duplicate rule would hand out
+    // a champion the account does not hold. The floor that makes this
+    // always find something is server/laurels.ts: four starters plus three
+    // rotating is seven, and four teammates can take at most four.
     const teamTaken = session.entries
       .filter((e) => e.team === entry.team && e.clientId !== clientId && e.locked)
       .map((e) => e.locked?.championId);
     if (teamTaken.includes(champ)) {
-      champ = CHAMPION_LIST.find((c) => !teamTaken.includes(c.id))?.id ?? DEFAULT_CHAMPION_ID;
+      champ =
+        CHAMPION_LIST.find((c) => !teamTaken.includes(c.id) && mayPick(c.id))?.id ??
+        DEFAULT_CHAMPION_ID;
       forged = undefined;
       seat = null;
     }

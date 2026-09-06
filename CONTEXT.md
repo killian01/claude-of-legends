@@ -196,6 +196,22 @@ The ten champions shipped with the game (`docs/design/roster.md`), as opposed to
 champions. The roster browser is the screen that lists champions.
 _Avoid_: base champions, default cast
 
+**Collection**:
+The champions of the roster an account may pick: the four every account starts with, plus
+every one it has recruited with laurels. A bot fields only its owner's collection.
+_Avoid_: owned champions, roster (that is the ten the game ships), library, inventory
+
+**Rotation**:
+The three roster champions every account may play for one week whatever its collection, the
+same three for everyone, changing on a fixed weekly turn.
+_Avoid_: free week, trial champions, loan
+
+**Laurel**:
+What an account earns by playing a match by hand, and spends to recruit a champion into its
+collection. Never granted, never bought, and never spent on anything the server pays a
+provider for: that is the ember's job, and the two never convert either way.
+_Avoid_: coin, credit, point, ember (that is what the server spends), mark (that is Sylra's)
+
 **Tagline**:
 The one-line play-style intent under a champion's name at select and in the roster browser.
 On a forged champion it carries real weight: it is what tells four allies what an unknown

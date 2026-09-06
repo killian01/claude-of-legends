@@ -33,6 +33,7 @@ import { deriveName } from './discord_name';
 import type { DiscordIdentity } from './discord_oauth';
 import { foldEmail, validateEmail } from './email_address';
 import { claimHolds } from './email_claim';
+import { championPrice, dayIndex, matchLaurels, STARTER_COLLECTION } from './laurels';
 import { hashPassword, type PasswordHash, validatePassword, verifyPassword } from './password';
 import { BASE_RATING } from './rating';
 import { loadJson, saveJsonAtomic } from './store';
@@ -82,6 +83,19 @@ export interface Account {
   // Elo (server/rating.ts); only rated matches move it.
   rating: number;
   ratedGames: number;
+  // The play currency (ADR 0018). Absent on an account that has not been
+  // through the crossing yet: the boot backfill reads what its recorded
+  // matches would have earned and writes the number, so absent means
+  // "not yet counted" and zero means "counted, and it earned nothing".
+  laurels?: number;
+  // The champions this account bought, WITHOUT the starter collection:
+  // the starter is a rule and not a possession, so it may change without
+  // rewriting anyone's file. collectionOf() is what reads as the
+  // collection (CONTEXT.md).
+  recruited?: string[];
+  // The day (server/laurels.ts dayIndex) the first-win bonus was last
+  // paid, so the second win of a day pays the ordinary win.
+  lastWinDay?: number;
 }
 
 // Everything about an account that may leave the server TO ANOTHER
@@ -95,6 +109,15 @@ export interface PublicAccount {
   createdAt: number;
   rating: number;
   ratedGames: number;
+}
+
+// The champions an account may pick, whatever the week gives: the starter
+// collection every account holds by rule, plus what it recruited. Never
+// stored in this shape, so changing the starter changes every account.
+export function collectionOf(a: Account): string[] {
+  const out = [...STARTER_COLLECTION];
+  for (const id of a.recruited ?? []) if (!out.includes(id)) out.push(id);
+  return out;
 }
 
 export function publicAccount(a: Account): PublicAccount {
@@ -117,6 +140,11 @@ export interface SelfAccount extends PublicAccount {
   email: string | null;
   emailConfirmed: boolean;
   discord: string | null;
+  // The balance and the collection, for the shop and the champion select
+  // (ADR 0018). The owner's own business: what somebody else holds is not
+  // on the public shape.
+  laurels: number;
+  collection: string[];
 }
 
 export function selfAccount(a: Account): SelfAccount {
@@ -125,6 +153,8 @@ export function selfAccount(a: Account): SelfAccount {
     email: a.email?.address ?? null,
     emailConfirmed: a.email?.confirmed ?? false,
     discord: a.discord?.username ?? null,
+    laurels: a.laurels ?? 0,
+    collection: collectionOf(a),
   };
 }
 
@@ -137,6 +167,11 @@ export type RegisterError =
 export type RenameError = 'name_invalid' | 'name_taken';
 export type SetEmailError = 'email_invalid' | 'email_taken' | 'unknown_account';
 export type LinkDiscordError = 'discord_taken' | 'unknown_account';
+export type RecruitError =
+  | 'unknown_account'
+  | 'not_for_sale'
+  | 'already_owned'
+  | 'not_enough_laurels';
 
 export type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
 
@@ -459,6 +494,59 @@ export class AccountRegistry {
     if (!a) return;
     a.rating -= amount;
     this.persist();
+  }
+
+  // The collection (CONTEXT.md), empty for an id nobody holds.
+  collection(id: number): string[] {
+    const a = this.byId.get(id);
+    return a ? collectionOf(a) : [];
+  }
+
+  laurels(id: number): number {
+    return this.byId.get(id)?.laurels ?? 0;
+  }
+
+  // One finished match, played by hand, landed for this account (ADR
+  // 0018). Returns what it paid, which is what the client is told.
+  award(id: number, won: boolean, at: number): number {
+    const a = this.byId.get(id);
+    if (!a) return 0;
+    const day = dayIndex(at);
+    const first = won && a.lastWinDay !== day;
+    const amount = matchLaurels(won, first);
+    a.laurels = (a.laurels ?? 0) + amount;
+    if (first) a.lastWinDay = day;
+    this.persist();
+    return amount;
+  }
+
+  // What the crossing writes once per account: the laurels its recorded
+  // matches would have earned. Absent laurels is what marks an account as
+  // uncounted, so this is a no-op on one already carrying a balance and
+  // can run on every boot.
+  seedLaurels(id: number, laurels: number, lastWinDay: number | null): boolean {
+    const a = this.byId.get(id);
+    if (!a || a.laurels !== undefined) return false;
+    a.laurels = laurels;
+    if (lastWinDay !== null) a.lastWinDay = lastWinDay;
+    this.persist();
+    return true;
+  }
+
+  // Buying a champion into the collection. Every refusal names which of
+  // the three it is, because a shop that just says no teaches nothing.
+  recruit(id: number, championId: string): Result<number, RecruitError> {
+    const a = this.byId.get(id);
+    if (!a) return { ok: false, error: 'unknown_account' };
+    const price = championPrice(championId);
+    if (price === null) return { ok: false, error: 'not_for_sale' };
+    if (collectionOf(a).includes(championId)) return { ok: false, error: 'already_owned' };
+    const balance = a.laurels ?? 0;
+    if (balance < price) return { ok: false, error: 'not_enough_laurels' };
+    a.laurels = balance - price;
+    a.recruited = [...(a.recruited ?? []), championId];
+    this.persist();
+    return { ok: true, value: a.laurels };
   }
 
   all(): Account[] {

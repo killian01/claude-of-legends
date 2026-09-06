@@ -11,7 +11,7 @@ The consolidated result of the design grill (rounds 1 to 3). The ADRs in `docs/a
 - **Progression**: levels 1 to 18, one skill point per level, R at 6/11/16, XP shared by proximity.
 - **Pacing**: 20 to 25 minute target, respawn timers scale with game time, recall 8 s, full regen at fountain, no surrender in v1.
 - **Sigils**: pick 2 of 4 at lock: Riftstep (blink), Zephyr (move speed), Mend (burst heal), Sear (damage over time plus healing reduction).
-- **Champions**: 10 at launch (`docs/design/roster.md`), kits composed from shared effect primitives.
+- **Champions**: 10 at launch (`docs/design/roster.md`), kits composed from shared effect primitives. An account starts with four of them and recruits the rest with laurels earned by playing (ADR 0018); three more rotate free every week, the same three for everyone, and the offline practice match opens the whole roster.
 - **Champion select**: blind pick, about 60 s, no duplicates within a team (allowed across teams), random button, sigil choice at lock.
 - **Controls**: right-click move, A attack-move, QWER abilities, mouse-aimed skillshots. Desktop browser only.
 - **Fairness**: identical decision budget for humans and bots (ADR 0003).
