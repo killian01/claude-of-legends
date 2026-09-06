@@ -170,10 +170,48 @@ try {
   for (const cut of CUT) {
     const dir = path.join(TOUR, cut.scene);
     const shot = seconds.get(cut.scene);
-    if (!shot || !existsSync(dir)) {
+    if (!existsSync(path.join(TOUR, `${cut.scene}.mp4`)) && (!shot || !existsSync(dir))) {
       console.log(`skip ${cut.scene}: not filmed`);
       continue;
     }
+    // Your own recording of this passage, if you made one: a file named
+    // after the scene wins over the frames. Filming by hand on a machine
+    // with a GPU is the right way to get the 3D passages, and this is how
+    // one arrives without anything here being edited.
+    const own = path.join(TOUR, `${cut.scene}.mp4`);
+    if (existsSync(own)) {
+      const file = path.join(work, `b-${cut.scene}.mp4`);
+      console.log(`${cut.scene}: using ${own}`);
+      run(
+        [
+          '-i',
+          own,
+          // From the front, not from cut.start: those offsets skip the
+          // moment a surface spends arriving on screen here, and your
+          // recording starts where you started it. Trim the front of the
+          // file and the montage takes it as given.
+          '-ss',
+          '0',
+          '-t',
+          String(cut.seconds),
+          '-filter_complex',
+          `[0:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:-1:-1:color=0x0A1120,fps=${FPS},${label(cut.label, cut.sub)},format=yuv420p[v]`,
+          '-map',
+          '[v]',
+          '-c:v',
+          'libx264',
+          '-preset',
+          'slow',
+          '-crf',
+          '21',
+          file,
+        ],
+        cut.scene,
+      );
+      segments.push({ file, seconds: cut.seconds });
+      continue;
+    }
+
     const frames = readdirSync(dir).filter((f) => f.endsWith('.jpg')).length;
     // The screencast hands back whatever frames it managed, so the real
     // rate is what was captured over how long it ran. Assuming 30 would

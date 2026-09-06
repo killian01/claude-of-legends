@@ -80,6 +80,33 @@ Surfaces filmed on a fresh data dir are empty ones. The gallery and the
 ladder need production data to say anything, so they are filmed and then
 usually cut.
 
+## Filming it yourself
+
+The scripted tour exists so the passages can be refilmed without thinking
+about them, not to keep you out of it. Both routes end in the same place.
+
+**Record it by hand.** Size the browser window to 1280x720 so it matches
+everything else, record it however your desktop does (on Windows, Win+Alt+R
+records the focused window; OBS if you want the file where you can find
+it), and save the result as `tour/<scene>.mp4`: `home`, `champions`,
+`forge`, `academy`, `workshop`, `fight`. A file named after a scene beats
+the frames for that scene, so one hand-filmed passage drops into an
+otherwise scripted tour. The montage takes it from the front, so trim the
+lead-in off, and it only uses the first few seconds, the length in the CUT
+table at the top of `scripts/tour_montage.mjs`.
+
+**Or run the tour on a machine that has a graphics card.** Same commands as
+above, with `CHROME` pointing at your own Chrome (the scripts default to
+the Windows path). `TOUR_GL` is `auto` by default, which is to say Chrome
+picks the card and no flag gets in its way; `TOUR_HEADFUL=1` opens a real
+window, which is worth doing once to watch a scene walk itself.
+
+The workshop passage needs a draft carrying a built model, which a fresh
+data dir has none of. Copy a data dir that has one, point `DATA_DIR` at the
+copy, and set the row's `status` to `draft` there so it opens in the Forge.
+Never point the tour at a live data dir: it signs in, and the server
+writes.
+
 ## The 3D passages, on a server with no GPU
 
 The workshop and the match are the two passages that show three dimensions,

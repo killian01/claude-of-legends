@@ -35,6 +35,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // the difference between a slideshow and something worth looking at while
 // deciding what to film properly.
 const GL = {
+  // On a machine with a graphics card, say nothing and let Chrome use it.
+  // This is the default because the only reason to film the tour is to
+  // film it well, and that means filming it somewhere with a GPU.
+  auto: [],
+  // On a server: ANGLE's Vulkan backend reaches Mesa's llvmpipe, which is
+  // twice SwiftShader here and still not enough for the 3D passages.
   vulkan: [
     '--use-angle=vulkan',
     '--use-gl=angle',
@@ -43,13 +49,16 @@ const GL = {
   ],
   swiftshader: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 };
-const gl = GL[process.env.TOUR_GL ?? 'vulkan'] ?? GL.vulkan;
+const gl = GL[process.env.TOUR_GL ?? 'auto'] ?? GL.auto;
 const [sw, sh] = (process.env.TOUR_SIZE ?? '1280x720').split('x').map(Number);
 const size = { width: sw || 1280, height: sh || 720 };
 
 const browser = await puppeteer.launch({
   executablePath: CHROME,
-  headless: true,
+  // TOUR_HEADFUL=1 opens a real window. Worth it when a driver only
+  // gives its best to something on screen, and worth it once anyway to
+  // watch a new scene walk itself.
+  headless: process.env.TOUR_HEADFUL !== '1',
   args: ['--no-sandbox', ...gl],
   // TOUR_SIZE is for framing, not for speed. Measured on the workshop, the
   // heaviest scene: 1280x720 gave 25 frames in twenty seconds and 800x450
