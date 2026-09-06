@@ -13,6 +13,7 @@
 import { type AuthedAccount, buildAuthForm } from './auth';
 import type { DiscordResult } from './discord_entry';
 import { startBackdrop } from './home_backdrop';
+import { CONTRIBUTE_LEAD, CONTRIBUTE_TITLE, CONTRIBUTE_WAYS } from './landing_contribute';
 import { LANDING_MODES } from './landing_modes';
 import { DISCORD, PRIVACY, REPO } from './links';
 import { el, ensureMenuCss } from './menu';
@@ -68,6 +69,35 @@ const CSS = `
   .pg.land .pg-cards { grid-template-columns: minmax(0, 1fr); }
   .pg-mode { aspect-ratio: 1 / 1; }
 }
+
+/* The contribution band, under the two ways in. It is the one section
+   here that is not about playing, so it is set apart rather than made
+   into a fifth tile: a rule above it, no card, no painting, and the width
+   of the bento so the page keeps one edge. */
+.pg-give { max-width: 1180px; margin: 46px auto 0; padding-top: 34px;
+  border-top: 1px solid #22314e; }
+.pg-give h2 { font-family: Cinzel, Georgia, serif; font-size: 21px; letter-spacing: 2px;
+  text-transform: uppercase; color: #e6d7a8; margin: 0; line-height: 1.15; }
+.pg-give > p { font-size: 13.5px; line-height: 1.6; color: #b9cbe4;
+  margin: 10px 0 0; max-width: 66ch; }
+.pg-give-row { display: grid; gap: 16px; margin-top: 26px;
+  grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pg-give-way { display: flex; flex-direction: column; border-radius: 12px;
+  border: 1px solid #22314e; background: rgba(10, 17, 32, 0.72); padding: 16px 18px 18px; }
+.pg-give-way h3 { font-family: Cinzel, Georgia, serif; font-size: 15px; letter-spacing: 1.6px;
+  text-transform: uppercase; color: #dfe7f5; margin: 0; }
+.pg-give-way p { font-size: 12.5px; line-height: 1.5; color: #9db2cf; margin: 8px 0 16px; }
+/* The link sits at the foot of every card whatever the line above it
+   runs to, so the three read as one row rather than three heights. */
+.pg-give-way a { margin-top: auto; align-self: flex-start; color: #e6d7a8;
+  text-decoration: none; font-size: 12.5px; letter-spacing: 0.4px;
+  border-bottom: 1px solid rgba(230, 215, 168, 0.35); padding-bottom: 1px; }
+.pg-give-way a:hover { border-bottom-color: #e6d7a8; }
+.pg-give-way a::after { content: ' \\2192'; }
+@media (max-width: 900px) {
+  .pg-give-row { grid-template-columns: minmax(0, 1fr); }
+  .pg-give { max-width: 620px; }
+}
 `;
 
 let cssInstalled = false;
@@ -114,6 +144,16 @@ export function showLanding(
       root.querySelector('.pg-cards')?.scrollIntoView({ behavior: 'smooth' });
     });
     bar.links.appendChild(toPlay);
+    // The other verb. "Source" on the right names a place and asks
+    // nothing; this one scrolls to the section that actually makes the
+    // case, because being open is the thing this game has that the genre
+    // does not and a five letter nav link was hiding it.
+    const toGive = el('button', '', 'Contribute');
+    toGive.type = 'button';
+    toGive.addEventListener('click', () => {
+      root.querySelector('.pg-give')?.scrollIntoView({ behavior: 'smooth' });
+    });
+    bar.links.appendChild(toGive);
     bar.right.appendChild(navLink('Discord', DISCORD));
     bar.right.appendChild(navLink('Source', REPO));
     // Last, and quiet, but on the page a first-time visitor actually
@@ -196,5 +236,21 @@ export function showLanding(
     }
     ways.appendChild(offline);
     inner.appendChild(ways);
+
+    // --- and the thing the genre does not offer ---
+    const give = el('section', 'pg-give');
+    give.append(el('h2', '', CONTRIBUTE_TITLE), el('p', '', CONTRIBUTE_LEAD));
+    const giveRow = el('div', 'pg-give-row');
+    for (const way of CONTRIBUTE_WAYS) {
+      const card = el('article', 'pg-give-way');
+      const link = el('a', '', way.cta) as HTMLAnchorElement;
+      link.href = way.href;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      card.append(el('h3', '', way.title), el('p', '', way.line), link);
+      giveRow.appendChild(card);
+    }
+    give.appendChild(giveRow);
+    inner.appendChild(give);
   });
 }
