@@ -8,21 +8,18 @@ import type { PlayTile } from './home_tiles';
 import { tileArtUrl } from './home_tiles';
 import { el } from './menu';
 
-// The bento: three scenes at the full height of the row, Ranked widest on
-// the left and Bots and the Forge queue standing beside it a little
-// narrower, then the two smaller modes in a column on the right. Twelve
-// columns so four, three, three and two divide the row cleanly; Bots and
-// the Forge queue stand at Ranked's own height because they are the two
-// modes nothing else in the genre has, and a mode you have to be shown is
-// a mode worth the space.
+// The row: five scenes side by side, all at the full height of it, in the
+// order the tiles are declared. Ranked is the widest because it is the
+// hero; the other four share the rest evenly. The private lobby and the
+// practice match used to be two small squares stacked in a column on the
+// right, which made them read as leftovers rather than as two of the five
+// ways into a match: a mode is either offered or it is not, and a stacked
+// half-height square offers it half-heartedly. Upright is also the shape
+// these paintings are composed in, so the crop stops throwing most of
+// them away.
 const CSS = `
-.tiles { display: grid; grid-template-columns: repeat(12, 1fr); grid-template-rows: 1fr 1fr;
+.tiles { display: grid; grid-template-columns: 4fr repeat(4, 3fr); grid-template-rows: 1fr;
   gap: 12px; height: clamp(320px, 50vh, 460px); max-width: 1180px; }
-.tile.t-ranked { grid-area: 1 / 1 / 3 / 5; }
-.tile.t-bots { grid-area: 1 / 5 / 3 / 8; }
-.tile.t-forge { grid-area: 1 / 8 / 3 / 11; }
-.tile.t-lobby { grid-area: 1 / 11 / 2 / 13; }
-.tile.t-practice { grid-area: 2 / 11 / 3 / 13; }
 .tile {
   position: relative; overflow: hidden; border-radius: 14px; border: 1px solid #2b3f60;
   padding: 0; text-align: left; cursor: pointer; color: inherit; font: inherit;
@@ -85,17 +82,14 @@ const CSS = `
 .home-join.lit { color: #e6d7a8; }
 .home-join.lit .menu-input { border-color: #d8b45a; box-shadow: 0 0 12px rgba(216, 180, 90, 0.3); }
 
-/* Narrow: the bento unstacks into the hero, the two tall tiles side by
-   side, and the two small ones, which is the same reading order two at a
-   time. */
+/* Narrow: the row unstacks two at a time, the hero across the top and the
+   other four in pairs under it, which is the same reading order. They
+   keep their upright shape, taller than wide, so a title, a line and a
+   button all hold at a phone's width without clipping any of them. */
 @media (max-width: 900px) {
   .tiles { grid-template-columns: repeat(2, 1fr); grid-template-rows: auto; height: auto; gap: 10px; }
-  .tile.t-ranked { grid-area: auto / 1 / auto / 3; aspect-ratio: 16 / 9; }
-  /* The tall pair keeps standing side by side, half the row each, taller
-     than wide so a title, a line and a button all hold at a phone's
-     width without clipping any of them. */
-  .tile.t-bots, .tile.t-forge { grid-area: auto; aspect-ratio: 3 / 4; }
-  .tile.t-lobby, .tile.t-practice { grid-area: auto; aspect-ratio: 4 / 3; }
+  .tile.t-ranked { grid-column: 1 / 3; aspect-ratio: 16 / 9; }
+  .tile.tall { aspect-ratio: 3 / 4; }
   .tile.hero .tile-body { padding: 60px 18px 16px; }
   .tile-body { padding: 40px 12px 10px; }
   .tile h3 { font-size: 14px; letter-spacing: 1.2px; }
@@ -104,7 +98,6 @@ const CSS = `
   .tile.tall h3 { font-size: 15px; letter-spacing: 1.6px; }
 }
 @media (max-width: 480px) {
-  .tile.t-lobby p, .tile.t-practice p { display: none; }
   .tile.tall p { font-size: 10.5px; }
   .tile.tall .tile-cta { margin-top: 8px; padding: 6px 12px; font-size: 11px; }
   .tile.hero h3 { font-size: 24px; }

@@ -25,15 +25,28 @@ describe('the play tiles', () => {
     expect(bots?.goes).toEqual({ to: 'section', key: 'academy' });
   });
 
-  it("stands the two modes nothing else has at Ranked's own height", () => {
-    expect(PLAY_TILES.filter((t) => t.tall).map((t) => t.id)).toEqual(['bots', 'forge']);
+  it("stands every mode at Ranked's own height", () => {
+    // The private lobby and the practice match used to be two small
+    // squares stacked beside the others. A mode is either offered or it is
+    // not, so all four stand at the hero's height now and the row is five
+    // upright scenes.
+    expect(PLAY_TILES.filter((t) => t.tall).map((t) => t.id)).toEqual([
+      'bots',
+      'forge',
+      'lobby',
+      'practice',
+    ]);
     // Hero and tall are the big shapes and never the same tile.
     expect(PLAY_TILES.every((t) => !(t.hero && t.tall))).toBe(true);
   });
 
-  it('carries a call to action on the three big tiles only', () => {
+  it('carries a call to action on every tile, since every tile is big now', () => {
+    // The rule has not moved: a tile standing at full height carries a
+    // button. What moved is which tiles stand at full height, and a tall
+    // scene with no button beside four that have one reads as unfinished
+    // rather than as restrained.
     const withCta = PLAY_TILES.filter((t) => t.cta !== null).map((t) => t.id);
-    expect(withCta).toEqual(['ranked', 'bots', 'forge']);
+    expect(withCta).toEqual(['ranked', 'bots', 'forge', 'lobby', 'practice']);
     expect(PLAY_TILES.every((t) => (t.cta !== null) === (t.hero || t.tall))).toBe(true);
     expect(PLAY_TILES.find((t) => t.id === 'ranked')?.cta).toBe('Play online');
   });

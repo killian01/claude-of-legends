@@ -7,14 +7,15 @@ import { PLAY_TILES, tileArtUrl } from '../src/ui/home_tiles';
 import { LANDING_MODES } from '../src/ui/landing_modes';
 
 describe('the landing modes', () => {
-  it('are the three modes the home stands at full height', () => {
-    // The hero and the tall tiles (ui/home_tiles.ts): ranked, which a
-    // visitor already knows the shape of, and the two nothing else in the
-    // genre has. The home gives those three the whole height of its row,
-    // and the landing names exactly them.
-    expect(LANDING_MODES.map((m) => m.id)).toEqual(
-      PLAY_TILES.filter((t) => t.tall || t.hero).map((t) => t.id),
-    );
+  it('are the three an account opens, and each is a play tile', () => {
+    // Named rather than filtered off a layout flag: every tile stands at
+    // full height on the home now, so the shape of the row no longer says
+    // which modes the front door should name. These three do, because a
+    // private lobby and the practice match are not why anybody signs up.
+    expect(LANDING_MODES.map((m) => m.id)).toEqual(['ranked', 'bots', 'forge']);
+    for (const mode of LANDING_MODES) {
+      expect(PLAY_TILES.some((t) => t.id === mode.id)).toBe(true);
+    }
   });
 
   it('wear the painting their tile wears', () => {
