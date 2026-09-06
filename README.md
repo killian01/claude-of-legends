@@ -58,7 +58,7 @@ Code in a terminal.
 |---|---|
 | Commits | 380 |
 | TypeScript, tests excluded | 66,489 lines |
-| Tests | 1,191 cases in 168 files, 23,330 lines |
+| Tests | 1,229 cases in 167 files, 23,330 lines |
 | Decisions written down | 18 ADRs in `docs/adr/` |
 | Champions | 10, every one with a full kit |
 
