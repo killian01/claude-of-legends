@@ -155,6 +155,11 @@ then a row per day with the two rates that matter, how many arrivals made an
 account and how many started matches reached an end. It is one page, no
 JavaScript, and it reads on a phone, which is where it is usually read.
 
+![The pulse report](screenshots/pulse-report.png)
+
+(The numbers in that shot are made up: it is a picture of the layout, not of
+anybody's traffic.)
+
 A script gets the numbers instead, because the same URL answers to what the
 caller asked for:
 
