@@ -4,6 +4,8 @@
 // module because a champion is locked or not for two different reasons
 // and every screen has to say which.
 
+import { format } from './balances';
+
 export interface CollectionState {
   laurels: number;
   collection: string[];
@@ -47,8 +49,11 @@ export function standingLine(state: CollectionState | null, championId: string):
     case 'rotation':
       return 'Free this week';
     default: {
+      // The price without its noun: the caller wears the mark
+      // (ui/balances.ts), so the unit is drawn rather than spelled and
+      // this line stays a number the way a price tag is.
       const price = priceOf(state, championId);
-      return price === null ? 'Locked' : `${price} laurels`;
+      return price === null ? 'Locked' : format(price);
     }
   }
 }

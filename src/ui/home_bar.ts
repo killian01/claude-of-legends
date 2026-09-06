@@ -4,12 +4,25 @@
 // opens the account drawer. Pure DOM over /api/ladder/mine for the place.
 
 import { tierOf } from '../net/tiers';
+import { BALANCE_CSS, balanceTag, setBalanceTag } from './balances';
 import type { Places } from './ladder_card';
 import { el } from './menu';
 import type { Bar } from './page';
 import { emblem } from './tier_emblem';
 
-const CSS = `
+const CSS = `${BALANCE_CSS}
+/* The two balances, between the sections and the account: what the
+   account holds, beside who it is and where it stands. Marks and not
+   words (ui/balances.ts), because the bar has room for a number and the
+   noun was being printed three times a screen.
+   Empty until the account sheet answers, and empty forever for a reader
+   the server does not know: a balance of nothing and no balance at all
+   look the same, and only one of them is true. */
+.pg-purse { display: inline-flex; align-items: center; gap: 14px; margin-right: 4px; }
+.pg-purse:empty { display: none; }
+.pg-purse .bal { font-size: 12.5px; }
+/* The account block is the wider thing and wins the room first. */
+@media (max-width: 860px) { .pg-purse { display: none; } }
 .pg-bar-live { display: inline-flex; align-items: center; gap: 7px; }
 .pg-bar-live i { width: 7px; height: 7px; border-radius: 50%; background: #3b4d66;
   display: inline-block; transition: background 0.2s ease; }
@@ -55,6 +68,14 @@ export interface HomeBarOptions {
 }
 
 export interface HomeBar {
+  // Called by whatever spends: recruiting a champion and every act in the
+  // Forge already know the new balance, so the bar is told rather than
+  // made to ask again.
+  setBalances(laurels: number, embers: number): void;
+  // Asked again after a section that spends closes. The account sheet is
+  // the only thing that knows both numbers, and it is one small request
+  // against a page the player has just stopped interacting with.
+  refreshBalances(): void;
   setLiveCount(n: number): void;
   // Lights the open section, or none of them back on the tiles.
   setActive(key: string | null): void;
@@ -80,6 +101,28 @@ export function mountHomeBar(bar: Bar, o: HomeBarOptions): HomeBar {
   live.addEventListener('click', o.onLive);
   bar.links.appendChild(live);
 
+  // What the account holds, from its own sheet. The place below comes
+  // from the ladder for the same reason both are fetched here rather than
+  // passed in: the bar outlives every screen that could have known them.
+  const purse = el('span', 'pg-purse');
+  bar.right.appendChild(purse);
+  const tags = new Map<'laurels' | 'embers', HTMLElement>();
+  const showBalances = (laurels: number, embers: number): void => {
+    for (const [kind, n] of [
+      ['laurels', laurels],
+      ['embers', embers],
+    ] as const) {
+      const had = tags.get(kind);
+      if (had) {
+        setBalanceTag(had, kind, n);
+        continue;
+      }
+      const tag = balanceTag(kind, n);
+      tags.set(kind, tag);
+      purse.appendChild(tag);
+    }
+  };
+
   const account = el('button', 'pg-account');
   account.type = 'button';
   const place = el('span', 'pg-place');
@@ -99,7 +142,21 @@ export function mountHomeBar(bar: Bar, o: HomeBarOptions): HomeBar {
     })
     .catch(() => {});
 
+  const refreshBalances = (): void => {
+    fetch('/api/me', { credentials: 'same-origin' })
+      .then((r) => (r.ok ? (r.json() as Promise<Record<string, unknown>>) : null))
+      .then((me) => {
+        if (!me || !purse.isConnected) return;
+        if (typeof me.laurels !== 'number' || typeof me.embers !== 'number') return;
+        showBalances(me.laurels, me.embers);
+      })
+      .catch(() => {});
+  };
+  refreshBalances();
+
   return {
+    setBalances: showBalances,
+    refreshBalances,
     setLiveCount(n: number): void {
       count.textContent = n > 0 ? String(n) : '';
       live.classList.toggle('on', n > 0);

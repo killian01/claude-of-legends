@@ -42,7 +42,7 @@ describe('what the card says', () => {
   it('names the price instead of just refusing', () => {
     expect(standingLine(state, 'sylra')).toBe('Yours');
     expect(standingLine(state, 'korrath')).toBe('Free this week');
-    expect(standingLine(state, 'vesk')).toBe('800 laurels');
+    expect(standingLine(state, 'vesk')).toBe('800');
   });
 
   it('counts the shortfall in matches, not in laurels', () => {

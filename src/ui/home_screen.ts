@@ -192,15 +192,30 @@ export function showHome(
           openAcademy: () => showAcademy(),
         }),
       );
+    // The two sections that spend leave the bar's balances behind them, so
+    // the bar asks the account sheet again on the way out rather than
+    // being told from inside: a section that has just spent knows its own
+    // number, not both, and the bar carries both.
+    const spending = (open: (host: HTMLElement) => () => void) => (host: HTMLElement) => {
+      const close = open(host);
+      return (): void => {
+        close();
+        homeBar.refreshBalances();
+      };
+    };
     const barSections: HomeSection[] = [
       { key: 'ladder', label: 'Ladder', open: showLadder },
       { key: 'academy', label: 'Academy', open: () => showAcademy() },
-      { key: 'forge', label: 'Forge', open: () => sections.open('forge', openForgeEditor) },
+      {
+        key: 'forge',
+        label: 'Forge',
+        open: () => sections.open('forge', spending(openForgeEditor)),
+      },
       { key: 'gallery', label: 'Gallery', open: () => sections.open('gallery', openGallery) },
       {
         key: 'champions',
         label: 'Champions',
-        open: () => sections.open('champions', openRosterBrowser),
+        open: () => sections.open('champions', spending(openRosterBrowser)),
       },
     ];
     const homeBar = mountHomeBar(bar, {

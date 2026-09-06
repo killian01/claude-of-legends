@@ -33,6 +33,7 @@ import { FORGED_ROLES, validateForged } from '../sim/forge/validate';
 import type { SpellLook } from '../sim/spell_look';
 import type { AbilityKey } from '../sim/types';
 import { type AnimPreview, createAnimPreview } from './anim_preview';
+import { BALANCE_CSS, balanceTag, format } from './balances';
 import { describeAbility } from './describe';
 import { describeLook } from './describe_look';
 import {
@@ -73,7 +74,7 @@ const GROWTH_LABELS: Record<string, string> = {
   mr: 'MR',
 };
 
-const CSS = `
+const CSS = `${BALANCE_CSS}
 .fe, .fe * { box-sizing: border-box; }
 .fe {
   position: absolute; inset: 0; z-index: 30; overflow: hidden;
@@ -524,7 +525,10 @@ export function openForgeEditor(container: HTMLElement): () => void {
   // them, which is how a creator came to read a daily meter as a stock.
   const emberTag = el('span', 'fe-embers', '');
   const paintEmbers = (): void => {
-    emberTag.textContent = embers >= 0 ? `${embers} embers` : '';
+    // The mark, not the noun (ui/balances.ts): this pill is on screen for
+    // the whole session and said "embers" every second of it.
+    emberTag.replaceChildren();
+    if (embers >= 0) emberTag.appendChild(balanceTag('embers', embers, 13));
     emberTag.title =
       embers >= 0
         ? 'What this account holds. The grant refills weekly and unspent embers roll over.'
@@ -635,15 +639,25 @@ export function openForgeEditor(container: HTMLElement): () => void {
   const priceOf = (act: string): number => prices[act] ?? 0;
   // A control that costs says so on its face, before it is pressed
   // (ADR 0017): the creator should never learn a price by being refused.
-  const priced = (label: string, act: string): string => {
-    const n = priceOf(act);
-    return n > 0 ? `${label} (${n} embers)` : label;
+  const pricedBtn = (cls: string, label: string, act: string, times = 1): HTMLButtonElement => {
+    const btn = el('button', cls, label) as HTMLButtonElement;
+    const n = priceOf(act) * times;
+    if (n > 0) {
+      btn.appendChild(document.createTextNode(' '));
+      btn.appendChild(balanceTag('embers', n, 12));
+    }
+    return btn;
   };
   // The balance, wherever embers are about to be spent. It is the number
   // the creator watches move, so it is repeated beside the acts that move
   // it rather than kept in one corner of one panel.
-  const emberNote = (): HTMLElement =>
-    el('span', 'fe-quota', embers >= 0 ? `${embers} embers left` : '');
+  const emberNote = (): HTMLElement => {
+    const span = el('span', 'fe-quota', '');
+    if (embers < 0) return span;
+    span.appendChild(balanceTag('embers', embers, 12));
+    span.appendChild(document.createTextNode(' left'));
+    return span;
+  };
 
   // The chains' stages in order, worded for the player; the keys are the
   // job stages the server records (generation/pipeline.ts). The build is
@@ -1536,11 +1550,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
       line.addEventListener('input', () => {
         artLines.splash = line.value;
       });
-      const genBtn = el(
-        'button',
-        'fe-gen',
-        priced('Generate splash art', 'image'),
-      ) as HTMLButtonElement;
+      const genBtn = pricedBtn('fe-gen', 'Generate splash art', 'image');
       genBtn.disabled = busy;
       genBtn.addEventListener('click', () => generateArtKind('splash', line.value));
       hero.append(line, genBtn);
@@ -1740,14 +1750,10 @@ export function openForgeEditor(container: HTMLElement): () => void {
         if (weaponForging) {
           buildPanel.append(...stageChecklist(WEAPON_STAGES));
         } else {
-          const claim = el(
-            'button',
-            'fe-gen',
-            priced('Forge the 3D weapon', 'weapon'),
-          ) as HTMLButtonElement;
+          const claim = pricedBtn('fe-gen', 'Forge the 3D weapon', 'weapon');
           claim.disabled = busy || finalizing || animating || !chosenOf('weapon');
           claim.title = chosenOf('weapon')
-            ? `Builds the 3D weapon from your chosen image; costs ${priceOf('weapon')} embers`
+            ? `Builds the 3D weapon from your chosen image; costs ${format(priceOf('weapon'))} embers`
             : 'Generate and pick a weapon image first (Step 3)';
           claim.addEventListener('click', forgeWeaponNow);
           buildPanel.append(claim);
@@ -1764,11 +1770,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
             'it took.',
         ),
       );
-      const build = el(
-        'button',
-        'fe-gen',
-        priced('Build the 3D model', 'model'),
-      ) as HTMLButtonElement;
+      const build = pricedBtn('fe-gen', 'Build the 3D model', 'model');
       const blocker = forgeBlocker();
       build.disabled = blocker !== null;
       build.title = blocker ?? 'Runs on your chosen reference; a failure refunds every ember';
@@ -2368,14 +2370,10 @@ export function openForgeEditor(container: HTMLElement): () => void {
     slotsPanel.append(atkRow);
     if (!sealed) {
       const all = el('div', 'fe-artrow');
-      const genAll = el(
-        'button',
-        'fe-gen small',
-        priced('Generate all four icons', 'image').replace(
-          `${priceOf('image')} embers`,
-          `${priceOf('image') * 4} embers`,
-        ),
-      ) as HTMLButtonElement;
+      // Four icons at once, so four times the price: passed as a
+      // multiplier rather than patched into a finished label, which is
+      // what the string surgery here used to do.
+      const genAll = pricedBtn('fe-gen small', 'Generate all four icons', 'image', 4);
       genAll.disabled = generating !== null;
       genAll.title = 'One icon per spell, in order, each drawn from what that spell does';
       genAll.addEventListener('click', () =>

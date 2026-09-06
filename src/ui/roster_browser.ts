@@ -5,6 +5,7 @@
 
 import { CHAMPION_LIST, type ChampionDef } from '../sim/content/champions';
 import type { AbilityKey } from '../sim/types';
+import { BALANCE_CSS, balanceTag, format } from './balances';
 import { ROLE_COLORS, setPortrait } from './champion_art';
 import {
   affordable,
@@ -20,7 +21,7 @@ import { describeAbility } from './describe';
 import { startMenuBackdrop } from './menu_backdrop';
 import { setRichLine } from './rich_text';
 
-const CSS = `
+const CSS = `${BALANCE_CSS}
 .rb, .rb * { box-sizing: border-box; }
 .rb {
   position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column;
@@ -185,13 +186,22 @@ export function openRosterBrowser(container: HTMLElement): () => void {
   let shown: ChampionDef | null = null;
 
   const renderBalance = (): void => {
-    balance.textContent = state ? `${state.laurels} laurels` : '';
+    balance.replaceChildren();
+    if (state) balance.appendChild(balanceTag('laurels', state.laurels));
   };
 
   const renderStandings = (): void => {
     for (const [id, line] of standings) {
       const standing = standingOf(state, id);
-      line.textContent = state && standing === 'owned' ? '' : standingLine(state, id);
+      const text = state && standing === 'owned' ? '' : standingLine(state, id);
+      // A price wears the mark; "Yours", "Free this week" and "Locked"
+      // are words and stay words.
+      line.replaceChildren();
+      if (standing === 'locked' && priceOf(state, id) !== null) {
+        line.appendChild(balanceTag('laurels', priceOf(state, id) ?? 0, 12));
+      } else if (text) {
+        line.textContent = text;
+      }
       line.className = `rb-standing${standing === 'rotation' ? ' free' : ''}${
         standing === 'owned' ? ' owned' : ''
       }`;
@@ -242,12 +252,21 @@ export function openRosterBrowser(container: HTMLElement): () => void {
     if (standing === 'rotation') {
       box.appendChild(el('div', 'rb-note', 'Free this week for everyone. Recruit it to keep it.'));
     }
-    const btn = el('button', 'rb-buy', `Recruit for ${price} laurels`) as HTMLButtonElement;
+    // "Recruit for" and the mark: the noun is in the mark, and the button
+    // is the one place on this screen where the number is the decision.
+    const buyLabel = (): void => {
+      btn.replaceChildren(document.createTextNode('Recruit for '), balanceTag('laurels', price));
+    };
+    const btn = el('button', 'rb-buy', '') as HTMLButtonElement;
+    buyLabel();
     const note = el('div', 'rb-note', '');
     if (!affordable(state, c.id)) {
       btn.disabled = true;
       const away = matchesAway(state, c.id);
-      note.textContent = `${state.laurels} of ${price}: about ${away} more won match${
+      // Digits only here: the mark on the button above has already said
+      // which unit this is, and a sentence with two marks in it reads as
+      // a receipt.
+      note.textContent = `${format(state.laurels)} of ${format(price)}: about ${away} more won match${
         away > 1 ? 'es' : ''
       }.`;
     }
@@ -256,7 +275,7 @@ export function openRosterBrowser(container: HTMLElement): () => void {
       btn.textContent = 'Recruiting...';
       void recruit(c.id).then((out) => {
         if (!out.ok) {
-          btn.textContent = `Recruit for ${price} laurels`;
+          buyLabel();
           btn.disabled = false;
           note.className = 'rb-note bad';
           note.textContent = out.error;

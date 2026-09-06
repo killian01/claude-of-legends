@@ -29,6 +29,7 @@ import {
   validatePlaybook,
 } from '../sim/playbook';
 import type { TeamId } from '../sim/types';
+import { BALANCE_CSS, balanceTag } from './balances';
 import { loadCollection } from './collection';
 import { buildCounts, buildRow, itemCatalog } from './item_catalog';
 import { el } from './menu';
@@ -49,7 +50,7 @@ import { fmtClock, kindLabel, renderRecordView, resultOf } from './record_view';
 import { buildIcons } from './scoreboard_table';
 import { buildTallyView, emptyTallies } from './tally_view';
 
-const CSS = `
+const CSS = `${BALANCE_CSS}
 .ac, .ac * { box-sizing: border-box; }
 .ac {
   position: absolute; inset: 0; z-index: 30; overflow: hidden;
@@ -1560,16 +1561,18 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       lastTop = log.scrollTop;
     });
     coach.append(log);
-    coach.append(
-      el(
-        'div',
-        'ac-embers',
-        embers >= 0
-          ? `A turn with the coach costs ${coachPrice} ember${coachPrice === 1 ? '' : 's'}. ` +
-              `You have ${embers}.`
-          : `A turn with the coach costs ${coachPrice} ember${coachPrice === 1 ? '' : 's'}.`,
-      ),
-    );
+    // The price and the balance, both wearing the mark rather than the
+    // noun (ui/balances.ts). The sentence used to say "ember" twice and
+    // pluralise it by hand.
+    const cost = el('div', 'ac-embers', '');
+    cost.append(document.createTextNode('A turn with the coach costs '));
+    cost.appendChild(balanceTag('embers', coachPrice, 12));
+    if (embers >= 0) {
+      cost.append(document.createTextNode('. You have '));
+      cost.appendChild(balanceTag('embers', embers, 12));
+    }
+    cost.append(document.createTextNode('.'));
+    coach.append(cost);
     const row = el('div', 'ac-chatrow');
     const input = el('input', 'ac-input') as HTMLInputElement;
     input.placeholder = 'How should this bot play?';
