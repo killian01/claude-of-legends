@@ -15,7 +15,7 @@
 // With no names it walks every scene. TOUR_DIR takes the frames (default
 // tour/), one folder per scene plus a still of each. TOUR_PROBE=1 takes
 // only the still, which is how a new scene gets written in the first place.
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import puppeteer from 'puppeteer-core';
 import { clickBar, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
@@ -27,11 +27,36 @@ const CHROME =
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// How the 3D gets rasterised, since there is no GPU on a server. Measured
+// here on the workshop, which is the heaviest scene: SwiftShader manages
+// 0.6 frames a second on a rigged character, Mesa's llvmpipe through
+// ANGLE's Vulkan backend does several times better on the same machine.
+// Neither is a substitute for filming the 3D somewhere with a GPU; this is
+// the difference between a slideshow and something worth looking at while
+// deciding what to film properly.
+const GL = {
+  vulkan: [
+    '--use-angle=vulkan',
+    '--use-gl=angle',
+    '--ignore-gpu-blocklist',
+    '--enable-features=Vulkan',
+  ],
+  swiftshader: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+};
+const gl = GL[process.env.TOUR_GL ?? 'vulkan'] ?? GL.vulkan;
+const [sw, sh] = (process.env.TOUR_SIZE ?? '1280x720').split('x').map(Number);
+const size = { width: sw || 1280, height: sh || 720 };
+
 const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: true,
-  args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
-  defaultViewport: { width: 1280, height: 720 },
+  args: ['--no-sandbox', ...gl],
+  // TOUR_SIZE is for framing, not for speed. Measured on the workshop, the
+  // heaviest scene: 1280x720 gave 25 frames in twenty seconds and 800x450
+  // gave 26. A software rasteriser running a rigged character is spending
+  // its time on skinning and geometry, not on pixels, so there is nothing
+  // to buy back by shrinking the window.
+  defaultViewport: size,
 });
 const page = await browser.newPage();
 
@@ -183,6 +208,48 @@ const scenes = {
     },
   },
 
+  // A champion that was actually forged, standing in the workshop and
+  // running its clips. This is the passage that proves the Forge is not a
+  // form: there is a rigged model on the stage and it moves.
+  //
+  // It needs a draft that carries a built model, which a fresh data dir
+  // does not have. Point DATA_DIR at a copy of one that does; never at the
+  // live one, since this scene signs in and the server writes.
+  workshop: {
+    seconds: 20,
+    async open() {
+      await home();
+      await clickBar(page, 'Forge');
+      await sleep(2200);
+      // The first draft in the list, by the badge every draft carries
+      // rather than by a name only this data dir has.
+      const opened = await page.evaluate(() => {
+        const b = [...document.querySelectorAll('button')].find((e) =>
+          /draft$/i.test((e.textContent || '').trim()),
+        );
+        if (!b) return false;
+        b.click();
+        return true;
+      });
+      if (!opened) throw new Error('no draft in the Forge to open');
+      await sleep(2600);
+      await clickText('Workshop (3D view)');
+      // The model, its rig and its clips are megabytes over the wire and
+      // then have to be uploaded to the GPU. Nine seconds is what it takes
+      // here; a slower machine simply films a bit of the loading.
+      await sleep(9000);
+      await tidy();
+    },
+    async act() {
+      // Idle last, so the passage ends on the champion breathing rather
+      // than face down.
+      for (const clip of ['Run', 'Attack', 'Cast', 'Death', 'Idle']) {
+        await clickText(clip, '.ws button').catch(() => {});
+        await sleep(3400);
+      }
+    },
+  },
+
   // The forged champions other people made, which is what says this is a
   // place rather than a demo. Empty on a fresh data dir.
   gallery: {
@@ -211,9 +278,24 @@ const scenes = {
 // What was filmed, for scripts/tour_montage.mjs: the screencast hands back
 // whatever frames it managed, so the only way to play a passage at the
 // speed it happened is to record how many frames covered how long.
-const filmed = [];
+// Merged with whatever is already on disk rather than replacing it:
+// filming one scene on its own is the normal way to work, and the first
+// version of this threw away the record of every other passage when it
+// did, which the montage then skipped without knowing why.
+const filmed = new Map();
+if (existsSync(`${OUT}/scenes.json`)) {
+  try {
+    for (const s of JSON.parse(readFileSync(`${OUT}/scenes.json`, 'utf8')).scenes ?? []) {
+      filmed.set(s.name, s);
+    }
+  } catch {
+    // An unreadable manifest is one that gets rebuilt, not one that stops
+    // the filming.
+  }
+}
 function writeManifest() {
-  writeFileSync(`${OUT}/scenes.json`, `${JSON.stringify({ scenes: filmed }, null, 2)}\n`);
+  const scenes = [...filmed.values()];
+  writeFileSync(`${OUT}/scenes.json`, `${JSON.stringify({ scenes }, null, 2)}\n`);
 }
 
 const wanted = process.argv.slice(2).filter((a) => scenes[a]);
@@ -260,7 +342,7 @@ for (const name of order) {
   await cdp.send('Page.stopScreencast');
   await cdp.detach().catch(() => {});
   const secs = Number(((Date.now() - started) / 1000).toFixed(2));
-  filmed.push({ name, frames: frame, seconds: secs });
+  filmed.set(name, { name, frames: frame, seconds: secs });
   writeManifest();
   console.log(`${name}: ${frame} frames over ${secs}s`);
 }

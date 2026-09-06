@@ -62,7 +62,26 @@ const CUT = [
     label: 'THE ACADEMY',
     sub: 'a bot is written · not coded',
   },
+  {
+    scene: 'workshop',
+    start: 3.0,
+    seconds: 6.0,
+    label: 'THE WORKSHOP',
+    sub: 'a rigged champion · idle run attack cast',
+  },
 ];
+
+// What to do about a passage that was filmed too slowly. A server has no
+// GPU, and the 3D scenes come back at a rate no amount of encoding fixes.
+//
+// Above SMOOTH_ABOVE the frames are dense enough to play as they are.
+// Between the two, motion interpolation invents the frames in between and
+// the result reads as video rather than as stutter. Below STILL_BELOW
+// there is nothing to interpolate from, and a held frame with a slow push
+// in is honest and looks better than a slideshow: two frames a second do
+// not become a video, they become a fault the viewer blames on the game.
+const SMOOTH_ABOVE = 20;
+const STILL_BELOW = 8;
 
 function run(args, what) {
   const r = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', ...args], { stdio: 'inherit' });
@@ -132,7 +151,7 @@ try {
       '-i',
       CARD,
       '-filter_complex',
-      `[0:v]scale=${Math.round(W * 1.12)}:-2,crop=${W}:${H},zoompan=z='min(zoom+0.0012,1.09)':d=66:s=${W}x${H}:fps=${FPS},fade=t=in:st=0:d=0.5,format=yuv420p[v]`,
+      `[0:v]scale=${Math.round(W * 1.12)}:-2,crop=${W}:${H},zoompan=z='min(zoom+0.0012,1.09)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=66:s=${W}x${H}:fps=${FPS},fade=t=in:st=0:d=0.5,format=yuv420p[v]`,
       '-map',
       '[v]',
       '-c:v',
@@ -161,6 +180,43 @@ try {
     // play every passage at the wrong speed.
     const rate = frames / shot.seconds;
     const file = path.join(work, `b-${cut.scene}.mp4`);
+    const fit = `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:-1:-1:color=0x0A1120`;
+
+    if (rate < STILL_BELOW) {
+      // A held frame, pushed in on slowly, off the scene's own screenshot.
+      const still = path.join(TOUR, `${cut.scene}.png`);
+      console.log(`${cut.scene}: ${rate.toFixed(1)} fps, too slow to move: holding the still`);
+      run(
+        [
+          '-loop',
+          '1',
+          '-t',
+          String(cut.seconds),
+          '-i',
+          still,
+          '-filter_complex',
+          `[0:v]${fit},zoompan=z='min(zoom+0.0009,1.08)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${Math.round(cut.seconds * FPS)}:s=${W}x${H}:fps=${FPS},${label(cut.label, cut.sub)},format=yuv420p[v]`,
+          '-map',
+          '[v]',
+          '-c:v',
+          'libx264',
+          '-preset',
+          'slow',
+          '-crf',
+          '21',
+          file,
+        ],
+        cut.scene,
+      );
+      segments.push({ file, seconds: cut.seconds });
+      continue;
+    }
+
+    const smooth =
+      rate < SMOOTH_ABOVE
+        ? `minterpolate=fps=${FPS}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1`
+        : `fps=${FPS}`;
+    if (rate < SMOOTH_ABOVE) console.log(`${cut.scene}: ${rate.toFixed(1)} fps, interpolated`);
     run(
       [
         '-framerate',
@@ -172,7 +228,7 @@ try {
         '-t',
         String(cut.seconds),
         '-filter_complex',
-        `[0:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:-1:-1:color=0x0A1120,fps=${FPS},${label(cut.label, cut.sub)},format=yuv420p[v]`,
+        `[0:v]${fit},${smooth},${label(cut.label, cut.sub)},format=yuv420p[v]`,
         '-map',
         '[v]',
         '-c:v',
@@ -199,7 +255,7 @@ try {
         '-i',
         fight,
         '-filter_complex',
-        `[0:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:-1:-1:color=0x0A1120,fps=${FPS},${label('5v5 IN A BROWSER TAB', 'three lanes · no install')},format=yuv420p[v]`,
+        `[0:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:-1:-1:color=0x0A1120,minterpolate=fps=${FPS}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1,${label('5v5 IN A BROWSER TAB', 'three lanes · no install')},format=yuv420p[v]`,
         '-map',
         '[v]',
         '-c:v',

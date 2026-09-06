@@ -80,6 +80,34 @@ Surfaces filmed on a fresh data dir are empty ones. The gallery and the
 ladder need production data to say anything, so they are filmed and then
 usually cut.
 
+## The 3D passages, on a server with no GPU
+
+The workshop and the match are the two passages that show three dimensions,
+and they are the two a server cannot film. Measured here, on the workshop:
+
+| | frames in 20s |
+|---|---|
+| SwiftShader, 1280x720 | 13 |
+| ANGLE Vulkan (llvmpipe), 1280x720 | 25 |
+| ANGLE Vulkan, 800x450 | 26 |
+
+So `TOUR_GL` defaults to `vulkan`, which is free and doubles it, and
+`TOUR_SIZE` is for framing rather than for speed: a software rasteriser
+running a rigged character spends its time on skinning, not on pixels, and
+shrinking the window buys nothing.
+
+Even doubled it is 1.2 frames a second, which is why the montage decides
+per passage from the rate it measures: above 20 it plays the frames, from 8
+to 20 it interpolates the motion between them, and below 8 it holds the
+scene's screenshot and pushes in slowly. Two frames a second do not become
+a video; they become a fault the viewer blames on the game.
+
+Film those two somewhere with a GPU. Refilm the scene and the montage picks
+the frames up on its own, because the rule is on the measured rate and
+nothing has to be edited.
+
+## Assembling it
+
 `scripts/tour_montage.mjs` cuts what was filmed into something postable: a
 title card off `public/social-card.jpg` so the clip and the link preview
 open on the same image, one labelled passage per surface, cross fades, and
