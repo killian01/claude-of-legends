@@ -1,8 +1,10 @@
 // The counter behind PRIVACY.md. Two things are worth pinning here and the
 // rest is arithmetic: that a day rolls over on its own, since nothing
-// schedules it and a launch spans midnight, and that the visitor set is
-// thrown away with its salt when it does, since that promise is the only
-// reason the file is allowed to exist without a consent banner.
+// schedules it and a launch spans midnight, and that a reload is told from
+// an arrival, since telling those two apart is the whole reason the file
+// exists. Who a visitor is is no longer this file's business at all: the
+// browser says so (src/net/pulse_ping.ts) and server/visit_guard.ts bounds
+// how often one network may.
 
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -41,7 +43,8 @@ describe('the UTC day', () => {
 describe('the counters', () => {
   it('land on the day the thing happened', () => {
     const p = new Pulse(DAY_ONE);
-    p.load(DAY_ONE, '10.0.0.1');
+    p.load(DAY_ONE);
+    p.visit(DAY_ONE);
     p.account(DAY_ONE);
     p.matchStarted(DAY_ONE);
     p.matchFinished(DAY_ONE);
@@ -58,11 +61,15 @@ describe('the counters', () => {
     ]);
   });
 
-  it('separate a reload from a second visitor', () => {
+  it('separate a reload from an arrival', () => {
+    // Three loads and two browsers: the second one is the only thing that
+    // says anybody new turned up, and it says it once each.
     const p = new Pulse(DAY_ONE);
-    p.load(DAY_ONE, '10.0.0.1');
-    p.load(DAY_ONE, '10.0.0.1');
-    p.load(DAY_ONE, '10.0.0.2');
+    p.load(DAY_ONE);
+    p.visit(DAY_ONE);
+    p.load(DAY_ONE);
+    p.load(DAY_ONE);
+    p.visit(DAY_ONE);
     expect(day(p).loads).toBe(3);
     expect(day(p).visitors).toBe(2);
   });
@@ -72,27 +79,26 @@ describe('the counters', () => {
     // time, and a server left running for a week must not pile a week into
     // one row.
     const p = new Pulse(DAY_ONE);
-    p.load(DAY_ONE, '10.0.0.1');
-    p.load(T('2026-09-07T00:00:01Z'), '10.0.0.1');
+    p.load(DAY_ONE);
+    p.load(T('2026-09-07T00:00:01Z'));
     expect(p.days().map((d) => d.day)).toEqual(['2026-09-06', '2026-09-07']);
     expect(day(p, 0).loads).toBe(1);
     expect(day(p, 1).loads).toBe(1);
   });
 
-  it('forget who they saw when the day turns over', () => {
-    // The salt and the set die together at midnight, so yesterday's hashes
-    // cannot be reproduced even here. What is observable is the
-    // consequence: the same person tomorrow is a new visitor.
+  it('file the same person twice when they come back tomorrow', () => {
+    // A returning visitor is an arrival again on the new day: the browser
+    // stores the date it last pinged, so it pings once more at midnight.
     const p = new Pulse(DAY_ONE);
-    p.load(DAY_ONE, '10.0.0.1');
-    p.load(T('2026-09-07T09:00:00Z'), '10.0.0.1');
+    p.visit(DAY_ONE);
+    p.visit(T('2026-09-07T09:00:00Z'));
     expect(day(p, 0).visitors).toBe(1);
     expect(day(p, 1).visitors).toBe(1);
   });
 
   it('skip the days on which nothing happened', () => {
     const p = new Pulse(DAY_ONE);
-    p.load(T('2026-09-09T09:00:00Z'), '10.0.0.1');
+    p.load(T('2026-09-09T09:00:00Z'));
     expect(p.days().map((d) => d.day)).toEqual(['2026-09-06', '2026-09-09']);
   });
 
@@ -102,41 +108,18 @@ describe('the counters', () => {
     expect(p.days().map((d) => d.day)).toEqual(['2026-09-02', '2026-09-03', '2026-09-06']);
   });
 
-  it('count a restart, because it is what inflates that day', () => {
+  it('count a restart, because a deploy is under most odd afternoons', () => {
     const history = [{ ...emptyDay('2026-09-06'), loads: 4, visitors: 2, restarts: 1 }];
     const p = new Pulse(DAY_ONE, { history });
-    // The counts carry across the restart; the set of seen visitors does
-    // not, so the reader is told how often that happened.
     expect(day(p)).toMatchObject({ loads: 4, visitors: 2, restarts: 2 });
-    p.load(DAY_ONE, '10.0.0.1');
-    expect(day(p)).toMatchObject({ loads: 5, visitors: 3 });
-  });
-
-  it('stop counting distinct visitors at the cap, and say so', () => {
-    const p = new Pulse(DAY_ONE, { cap: 2 });
-    p.load(DAY_ONE, '10.0.0.1');
-    p.load(DAY_ONE, '10.0.0.2');
-    expect(p.cappedToday()).toBe(false);
-    p.load(DAY_ONE, '10.0.0.3');
-    expect(p.cappedToday()).toBe(true);
-    // Loads keep counting: only the set is bounded.
-    expect(day(p)).toMatchObject({ loads: 3, visitors: 2 });
-  });
-
-  it('lift the cap with the new day', () => {
-    const p = new Pulse(DAY_ONE, { cap: 1 });
-    p.load(DAY_ONE, '10.0.0.1');
-    p.load(DAY_ONE, '10.0.0.2');
-    expect(p.cappedToday()).toBe(true);
-    p.load(T('2026-09-07T09:00:00Z'), '10.0.0.3');
-    expect(p.cappedToday()).toBe(false);
   });
 });
 
 describe('the file on disk', () => {
   it('survives a round trip', () => {
     const p = new Pulse(DAY_ONE);
-    p.load(DAY_ONE, '10.0.0.1');
+    p.load(DAY_ONE);
+    p.visit(DAY_ONE);
     p.account(DAY_ONE);
     const written = JSON.parse(JSON.stringify(toFile(p.days())));
     expect(fromFile(written)).toEqual([...p.days()]);
@@ -187,8 +170,10 @@ describe('the counts across a restart', () => {
     const file = path.join(dir, 'pulse.json');
     try {
       const first = new Pulse(DAY_ONE, { file });
-      first.load(DAY_ONE, '10.0.0.1');
-      first.load(DAY_ONE, '10.0.0.2');
+      first.load(DAY_ONE);
+      first.load(DAY_ONE);
+      first.visit(DAY_ONE);
+      first.visit(DAY_ONE);
       first.account(DAY_ONE);
       first.matchStarted(DAY_ONE);
       first.matchFinished(DAY_ONE);
@@ -206,11 +191,11 @@ describe('the counts across a restart', () => {
           restarts: 2,
         },
       ]);
-      // The set of seen visitors did not survive, by design: the same
-      // address is a new visitor to the new process, and `restarts` is
-      // what warns the reader that it happened.
-      second.load(DAY_ONE, '10.0.0.1');
-      expect(day(second)).toMatchObject({ loads: 3, visitors: 3 });
+      // And a restart no longer costs anything: a browser that pinged
+      // this morning does not ping again this afternoon, so the deploy
+      // that made this second process cannot count anybody twice.
+      second.load(DAY_ONE);
+      expect(day(second)).toMatchObject({ loads: 3, visitors: 2 });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

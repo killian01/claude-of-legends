@@ -143,6 +143,12 @@ from a front page that loses people, and they are the entire measurement on
 this site: no analytics service, no pixel, nothing per person. `PRIVACY.md`
 describes them and `tests/privacy.test.ts` holds the claims to the code.
 
+Visitors are counted by the browser and not by the address it arrives from:
+the first load of a UTC day posts to `/api/pulse/hit` and the browser
+remembers the date so it posts once (`src/net/pulse_ping.ts`). That is why
+`loads` and `visitors` are so far apart on a real day: loads counts reloads
+and crawlers, visitors counts browsers that ran the game.
+
 The counting always runs. Reading it back is what `PULSE_TOKEN` gates:
 
 ```bash

@@ -19,6 +19,7 @@ import { getSettings } from './game/settings';
 import { type SpectatorView, startSpectator } from './game/spectate';
 import { ClientWorld } from './net/client_world';
 import type { ForgedMatchAssets, ServerMsg } from './net/protocol';
+import { markVisit } from './net/pulse_ping';
 import {
   applyReplayEvent,
   buildMatchSim,
@@ -807,6 +808,10 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
 async function boot(): Promise<void> {
   // Load and apply the stored player settings before any audio plays.
   getSettings();
+  // Say hello to the day's counter, once per browser per day and never
+  // again (src/net/pulse_ping.ts). Fire and forget: nothing below waits on
+  // it and nothing reads its answer.
+  markVisit();
   // An invite link (?join=CODE) deep-links into the friend's lobby: with a
   // stored name we go straight in; a first-time visitor gets the home
   // screen with the code prefilled. Consumed once, so reloads stay home.

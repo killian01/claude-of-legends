@@ -83,40 +83,44 @@ describe('the page', () => {
   ];
 
   it('leads with the day being lived', () => {
-    const html = renderPulsePage(days, false);
+    const html = renderPulsePage(days);
     expect(html.indexOf('2026-09-06')).toBeLessThan(html.indexOf('2026-09-05'));
   });
 
   it('shows the sign-up rate over the whole week, not the last day', () => {
     // 6 accounts from 24 visitors across both days.
-    expect(renderPulsePage(days, false)).toContain('<b>25%</b>');
+    expect(renderPulsePage(days)).toContain('<b>25%</b>');
   });
 
   it('renders with no days at all', () => {
     // The first boot after a deploy: the page must not throw and must not
     // claim a rate it cannot have.
-    const html = renderPulsePage([], false);
+    const html = renderPulsePage([]);
     expect(html).toContain('<b>-</b>');
     expect(html).toContain('Pulse');
   });
 
-  it('says so when the visitor count is a floor', () => {
-    expect(renderPulsePage(days, false)).not.toContain('cap');
-    expect(renderPulsePage(days, true)).toContain('floor, not a count');
+  it('says what the two columns are, since they never agree', () => {
+    // Loads is always the bigger number and the reader will ask why. The
+    // page has to answer it in place: a foot note is cheaper than a
+    // maintainer deciding the counter is broken.
+    const html = renderPulsePage(days);
+    expect(html).toContain('reload');
+    expect(html).toContain('once a day');
   });
 
   it('escapes what it prints', () => {
     // The days come off disk, and the read validates their shape today.
     // A page that trusts that forever is a page that breaks the day the
     // validation is relaxed.
-    const html = renderPulsePage([day('<script>x</script>', {})], false);
+    const html = renderPulsePage([day('<script>x</script>', {})]);
     expect(html).not.toContain('<script>x</script>');
     expect(html).toContain('&lt;script&gt;');
   });
 
   it('tells a reader nothing about any person', () => {
     // The whole promise, held at the last place the numbers pass through.
-    const html = renderPulsePage(days, false);
+    const html = renderPulsePage(days);
     expect(html).not.toMatch(/\b\d{1,3}(\.\d{1,3}){3}\b/);
     expect(html.toLowerCase()).not.toMatch(/\bip\b|\baddress\b|\bvisitor id\b/);
   });

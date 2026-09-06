@@ -19,6 +19,15 @@ which account is talking to it (`server/cookies.ts`, `server/sessions.ts`,
 ADR 0006). There is no tracking cookie, because there is nothing to track
 with it.
 
+## One line of storage
+
+`col.visit`, holding today's date and nothing else. The browser writes it on
+the first load of a day so it knows not to say hello to the counter twice
+(`src/net/pulse_ping.ts`). It is a date, not an identifier: it is the same
+ten characters in every browser in the world that opened the site today,
+it is overwritten tomorrow, and it never leaves your machine. Delete it and
+the only consequence is being counted once more.
+
 ## What an account holds
 
 Your name, a scrypt hash of your password, your rating and match counts,
@@ -41,25 +50,37 @@ apart from a front page that loses people (`server/pulse.ts`):
 | Counter | What it counts |
 |---|---|
 | `loads` | pages served, reloads included |
-| `visitors` | distinct arrivals that day |
+| `visitors` | browsers that opened the game that day, one each |
 | `accounts` | accounts created |
 | `matches` | matches started |
 | `finished` | matches that reached an end |
 
-Plus `restarts`, which says how many times the server restarted that day,
-because a restart makes `visitors` count returning people twice.
+Plus `restarts`, which says how many times the server restarted that day.
+It distorts nothing; it is there because a quiet afternoon usually has a
+deploy under it.
 
 That is the entire record: one row per day, six integers, no name, no
 account id, no page, no referrer, no country, no device. Nothing in it can
 be traced to a person, including by us, because nothing per person is ever
 written.
 
-Telling one arrival from another does need to recognise the same visitor
-twice within a day. The network address is hashed with a salt that is
-random per day, held only in memory, and written nowhere. At midnight UTC
-the salt is discarded along with the set, which makes that day's hashes
-unreproducible even to the server that made them: the counts survive, the
-ability to ask whether a given person was here does not.
+Telling one arrival from a reload does need to recognise a browser that
+has already been here today, and the browser is the only thing that knows.
+So it says so itself: on its first load of the day it posts to one open
+endpoint that carries no cookie, no body and no query, and remembers the
+date so it does not post again (`src/net/pulse_ping.ts`). The server learns
+that a browser arrived and nothing whatsoever about which one.
+
+The address was the obvious way to do this and it is the wrong one, which
+is worth saying plainly: it made a phone that renews its IPv6 address
+between reloads into a crowd, and it counted every crawler in the world as
+a person. What is left of it is a bound, so that a script cannot post that
+endpoint in a loop and write its own number onto the report
+(`server/visit_guard.ts`). That bound counts how many times a network has
+posted today, keyed by a hash of it under a salt that is random per day and
+held only in memory. At midnight UTC the salt is discarded along with the
+counts, which makes that day's hashes unreproducible even to the server
+that made them.
 
 ## What is not counted
 

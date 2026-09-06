@@ -8,31 +8,41 @@
 // cures, so guessing between them is the expensive mistake.
 //
 // What this deliberately is not: no third party, no cookie, no identifier
-// that outlives the day, no per-person row, no path or referrer. A visit
-// contributes one increment to one counter for one UTC day and leaves no
-// trace that it was this visitor rather than another. That is a design
-// choice and not an oversight, and it is why PRIVACY.md can describe the
-// whole of it in a paragraph and be checked against this file.
+// of any kind, no per-person row, no path or referrer. A visit contributes
+// one increment to one counter for one UTC day and leaves no trace that it
+// was this visitor rather than another. That is a design choice and not an
+// oversight, and it is why PRIVACY.md can describe the whole of it in a
+// paragraph and be checked against this file.
 //
-// Counting distinct arrivals still needs to recognise the same person
-// twice, so the address is hashed with a salt that is random per day, held
-// only in memory, and never written anywhere. When the day rolls over the
-// salt is thrown away with the set, which makes yesterday's hashes
-// unreproducible even to this process: the counts survive, the ability to
-// ask "was this visitor here before" does not.
+// Distinct visitors are counted by the browser, not by the address it
+// arrives from. The first load of a UTC day pings /api/pulse/hit and the
+// browser writes that date into its own storage, so it pings once and only
+// once that day (src/net/pulse_ping.ts). The address was the obvious key
+// and it is the wrong one: a phone renews its IPv6 address between
+// reloads, a relay or a carrier hands out a different exit per connection,
+// a deploy empties whatever the process remembered, and every crawler in
+// the world is its own arrival. All four inflate, none of them cancel, and
+// together they turned one person reloading into twenty visitors.
+//
+// So an address is no longer part of the count at all. It survives in
+// server/visit_guard.ts as the bound on how many times one network may add
+// to the day, because a number the client sends is a number the client can
+// forge, and nowhere else.
 
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { loadJson, saveJsonAtomic } from './store';
 
 // One UTC day. Five counters, in funnel order.
 export interface PulseDay {
   // YYYY-MM-DD, UTC.
   day: string;
-  // The app shell served. A reload is a load, so this is always the
-  // largest number and the least meaningful one.
+  // The app shell served. A reload is a load, and so is a crawler, so this
+  // is always the largest number and the least meaningful one.
   loads: number;
-  // Distinct arrivals, best effort: see the salt note above, and `restarts`
-  // for the one thing that inflates it.
+  // Distinct browsers that opened the game that day, one per browser per
+  // day. A visitor who blocks the ping or runs without JavaScript is not
+  // counted and neither is a crawler, so this is a floor rather than a
+  // count; it is a floor made of people, which the old one was not.
   visitors: number;
   // Accounts created (ADR 0006: an account is the door to everything).
   accounts: number;
@@ -40,9 +50,10 @@ export interface PulseDay {
   matches: number;
   // Matches that reached an end rather than being abandoned or reaped.
   finished: number;
-  // How many times the server started during the day. Each restart empties
-  // the in-memory set of seen visitors, so a returning visitor is counted
-  // again: this number is how much to distrust `visitors` for that day.
+  // How many times the server started during the day. It no longer distorts
+  // anything, now that the browser and not this process remembers who has
+  // been counted, but a dip in the afternoon usually has a deploy under it
+  // and this is where the reader sees that.
   restarts: number;
 }
 
@@ -52,16 +63,11 @@ export function emptyDay(day: string): PulseDay {
 
 // The UTC day an instant falls in. UTC and not local time so that the
 // boundary is the same wherever the server and the maintainer are, and so
-// that a day never happens twice.
+// that a day never happens twice. The client picks its day the same way
+// (src/net/pulse_ping.ts), which is what keeps one browser to one ping.
 export function dayKey(at: number): string {
   return new Date(at).toISOString().slice(0, 10);
 }
-
-// Beyond this many distinct addresses in one day, `visitors` stops rising
-// and the day is served with `capped: true`. It bounds the set's memory at
-// something like 20MB in the worst case, and a day that reaches it has
-// bigger news to report than its exact visitor count.
-export const VISITOR_CAP = 250_000;
 
 export interface PulseOptions {
   // Where the counts live between restarts. Absent means memory only,
@@ -71,21 +77,12 @@ export interface PulseOptions {
   history?: readonly PulseDay[];
   // How many days to keep. Older ones fall off the front.
   keep?: number;
-  // Injectable for the tests; production uses crypto-random.
-  salt?: () => string;
-  // Injectable for the tests; production uses VISITOR_CAP.
-  cap?: number;
 }
 
 export class Pulse {
   private readonly log: PulseDay[];
   private readonly keep: number;
-  private readonly newSalt: () => string;
-  private readonly cap: number;
   private readonly file: string | undefined;
-  private seen = new Set<string>();
-  private salt: string;
-  private capped = false;
   // Set by every counter, cleared by a write. A page load must not reach
   // the disk: server/store.ts rewrites whole files on the thread that
   // steps matches at 20 Hz, so the counters stay in memory and flush()
@@ -94,15 +91,10 @@ export class Pulse {
 
   constructor(now: number, opts: PulseOptions = {}) {
     this.keep = opts.keep ?? 400;
-    this.newSalt = opts.salt ?? (() => randomBytes(16).toString('hex'));
-    this.cap = opts.cap ?? VISITOR_CAP;
     this.file = opts.file;
-    this.salt = this.newSalt();
     const stored = opts.history ?? (this.file ? fromFile(loadJson(this.file, null)) : []);
     this.log = [...stored].slice(-this.keep);
     this.today(now).restarts += 1;
-    // A restart is worth the write on its own: it is the number that says
-    // how much to trust the day's visitor count.
     this.dirty = true;
     this.flush();
   }
@@ -122,29 +114,21 @@ export class Pulse {
     const fresh = emptyDay(day);
     this.log.push(fresh);
     while (this.log.length > this.keep) this.log.shift();
-    this.seen = new Set();
-    this.salt = this.newSalt();
-    this.capped = false;
     this.dirty = true;
     return fresh;
   }
 
-  // One page load. `address` is the caller's own idea of who asked, from
-  // the trusted forwarded chain; it is hashed here and never stored, so no
-  // caller can hand it somewhere else by accident.
-  load(at: number, address: string): void {
-    const day = this.today(at);
-    day.loads += 1;
+  // One app shell served, whoever asked and however often.
+  load(at: number): void {
+    this.today(at).loads += 1;
     this.dirty = true;
-    if (this.capped) return;
-    const key = createHash('sha256').update(`${this.salt}:${address}`).digest('base64');
-    if (this.seen.has(key)) return;
-    if (this.seen.size >= this.cap) {
-      this.capped = true;
-      return;
-    }
-    this.seen.add(key);
-    day.visitors += 1;
+  }
+
+  // One browser, opening the game for the first time today. Called for a
+  // ping that server/visit_guard.ts has already allowed.
+  visit(at: number): void {
+    this.today(at).visitors += 1;
+    this.dirty = true;
   }
 
   account(at: number): void {
@@ -179,12 +163,6 @@ export class Pulse {
   // Oldest first, which is the order a reader scans a launch in.
   days(): readonly PulseDay[] {
     return this.log;
-  }
-
-  // True once a day has hit VISITOR_CAP, so the report can say that its
-  // visitor count is a floor rather than a count.
-  cappedToday(): boolean {
-    return this.capped;
   }
 }
 

@@ -135,6 +135,7 @@ import {
 import { suggestKit } from './suggest';
 import { suggestLook } from './suggest_look';
 import { suggestStats } from './suggest_stats';
+import { VisitGuard } from './visit_guard';
 import { type WayStats, wayStatsOf } from './way_stats';
 import { playedByHand, seatWay, type Way } from './ways';
 
@@ -264,6 +265,10 @@ const botStore = new BotStore(path.join(DATA_DIR, 'bots.sqlite3'));
 // funnel did, which is the only part of it that was not already
 // recoverable from the account and match records.
 const pulse = new Pulse(Date.now(), { file: path.join(DATA_DIR, 'pulse.json') });
+// The bound on how many visits one network may add to the day. The count
+// comes from the browser (src/net/pulse_ping.ts), so this is what keeps a
+// script from writing its own number onto the report.
+const visits = new VisitGuard();
 // Where every generated file lives (splash candidates, model sheets,
 // models), served back to logged-in clients by the asset route below.
 const ASSETS_DIR = path.join(DATA_DIR, 'assets');
@@ -1225,6 +1230,23 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // One browser saying this is its first load today (src/net/pulse_ping.ts).
+    // Open, like the page that sends it, and ahead of the account gate
+    // because most arrivals have no account yet: that is the point of
+    // counting them. It answers the same 204 whether the visit counted or
+    // the guard refused it, so nothing here can be used to probe anything.
+    if (url === '/api/pulse/hit') {
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'use POST' });
+        return;
+      }
+      const now = Date.now();
+      const address = clientAddress(req.headers, req.socket.remoteAddress, EDGE);
+      if (visits.allow(now, address)) pulse.visit(now);
+      res.writeHead(204).end();
+      return;
+    }
+
     // The maintainer's own report (PRIVACY.md), which is not an account's
     // endpoint: it is read with PULSE_TOKEN and nothing else, so it sits
     // ahead of the account gate below. The API rate limiter above already
@@ -1259,10 +1281,10 @@ const server = http.createServer(async (req, res) => {
           // in a search index is the one way these numbers become public.
           'x-robots-tag': 'noindex, nofollow',
         });
-        res.end(renderPulsePage(pulse.days(), pulse.cappedToday()));
+        res.end(renderPulsePage(pulse.days()));
         return;
       }
-      sendJson(res, 200, { days: pulse.days(), cappedToday: pulse.cappedToday() });
+      sendJson(res, 200, { days: pulse.days() });
       return;
     }
 
@@ -2118,7 +2140,7 @@ const server = http.createServer(async (req, res) => {
     // back to index.html: the client routes in the browser, so a shared
     // deep link is a page load like any other. Assets are not arrivals.
     if (filePath === path.join(DIST, 'index.html')) {
-      pulse.load(Date.now(), clientAddress(req.headers, req.socket.remoteAddress, EDGE));
+      pulse.load(Date.now());
     }
     const body = await readFile(filePath);
     // The client shipped no caching headers at all, which leaves a browser

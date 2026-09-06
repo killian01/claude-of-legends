@@ -87,15 +87,12 @@ function row(d: PulseDay | (PulseTotals & { day: string }), klass = ''): string 
 </tr>`;
 }
 
-export function renderPulsePage(days: readonly PulseDay[], cappedToday: boolean): string {
+export function renderPulsePage(days: readonly PulseDay[]): string {
   // Newest first: the day being lived is the one being read.
   const recent = [...days].reverse();
   const week = total(recent.slice(0, 7));
   const all = total(recent);
   const rows = recent.map((d) => row(d)).join('\n');
-  const capped = cappedToday
-    ? '<p class="note">Today hit the distinct-visitor cap, so its visitor count is a floor, not a count.</p>'
-    : '';
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
@@ -124,7 +121,6 @@ export function renderPulsePage(days: readonly PulseDay[], cappedToday: boolean)
   td.dim { color: #5d6b85; }
   td.r { color: #e6d7a8; }
   tr.sum td { border-top: 2px solid #2a3a5c; border-bottom: none; font-weight: 700; }
-  .note { color: #d8a657; font-size: 12.5px; margin-top: 18px; }
   .foot { color: #5d6b85; font-size: 12px; margin-top: 26px; max-width: 60ch; }
   .foot code { white-space: nowrap; }
 </style>
@@ -149,10 +145,9 @@ ${row({ ...all, day: 'All' }, 'sum')}
 </tbody>
 </table>
 </div>
-${capped}
-<p class="foot">Loads counts reloads, visitors does not. A restart empties the
-day's set of seen visitors, so a day with restarts counts some people twice.
-Add <code>?format=json</code> for the raw numbers.</p>
+<p class="foot">Loads counts every reload and every crawler. Visitors counts a
+browser once a day, and only a browser that ran the game, so it is a floor made
+of people. Add <code>?format=json</code> for the raw numbers.</p>
 </body></html>
 `;
 }

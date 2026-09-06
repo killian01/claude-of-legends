@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { emptyDay } from '../server/pulse';
+import { VISIT_KEY } from '../src/net/pulse_ping';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), 'utf8');
@@ -44,6 +45,16 @@ describe('the promise that no third party sees a visitor', () => {
       const text = read(file);
       for (const host of hosts) expect(`${file}: ${text.includes(host)}`).toBe(`${file}: false`);
     }
+  });
+});
+
+describe('the one line the client stores', () => {
+  it('is named on the page under the key the client really writes', () => {
+    // The page promises a browser exactly one stored value and names it.
+    // Renaming the key without touching the page would leave a reader
+    // looking for something that is not there, which is the same as
+    // hiding it.
+    expect(read('PRIVACY.md')).toContain(`\`${VISIT_KEY}\``);
   });
 });
 
