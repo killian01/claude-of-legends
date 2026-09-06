@@ -78,7 +78,7 @@ const safe = (s) => s.replace(/['\\:]/g, '');
 // somebody else's sentence and neither reads. Six bands of increasing
 // darkness fake a gradient under it: cheap, and it keeps the frame legible
 // without a black bar across the picture.
-function scrim(on, alpha) {
+function scrim(on) {
   const bands = [
     [210, 30, 0.1],
     [180, 30, 0.24],
@@ -104,7 +104,7 @@ function label(text, sub, from = 0.4, hold = 2.6) {
   const alpha = `if(lt(t,${from + 0.35}),(t-${from})/0.35,if(lt(t,${from + hold - 0.45}),1,(${from + hold}-t)/0.45))`;
   const common = `fontfile=${FONT}:fontcolor=0xE6D7A8:alpha='${alpha}':enable='${on}'`;
   return [
-    scrim(on, alpha),
+    scrim(on),
     `drawtext=text='${safe(text)}':${common}:fontsize=40:x=64:y=h-152`,
     `drawtext=text='${safe(sub)}':fontfile=${FONT}:fontcolor=0xDFE7F5:alpha='${alpha}':enable='${on}':fontsize=23:x=64:y=h-100`,
   ].join(',');
