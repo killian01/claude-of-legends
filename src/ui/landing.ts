@@ -70,6 +70,10 @@ const CSS = `
   .pg-mode { aspect-ratio: 1 / 1; }
 }
 
+/* The second line of a way-in card: the caveats, which have to be read
+   before the button but must not compete with the offer above them. */
+.pg.land .pg-card .pg-card-fine { color: #8ea4c4; font-size: 12px; }
+
 /* The contribution band, under the two ways in. It is the one section
    here that is not about playing, so it is set apart rather than made
    into a fifth tile: a rule above it, no card, no painting, and the width
@@ -207,13 +211,25 @@ export function showLanding(
     const offline = el('section', 'pg-card plain');
     const offlineBtn = el('button', 'menu-btn', 'Play offline now');
     offlineBtn.addEventListener('click', () => finish({ kind: 'offline' }));
+    // "One match against bots" undersold this badly, and the card had the
+    // empty half to prove it: next to a sign-in form, three short lines
+    // read as the lesser thing rather than the free one. It is a whole
+    // 5v5 on the same simulation, and with the collection wall in front
+    // of an account (ADR 0018) the practice match is now the only place
+    // the whole roster is open, which is worth saying out loud.
     offline.append(
       el('h2', '', 'Or try it first'),
       el(
         'p',
         '',
-        'One match against bots, entirely in this tab. No account, nothing saved, ' +
-          'same simulation as ranked.',
+        'A full 5v5: you and four bot allies against five more. Take a lane, ' +
+          'buy from the same shop, and pick any champion in the roster, with ' +
+          'nothing to unlock first.',
+      ),
+      el(
+        'p',
+        'pg-card-fine',
+        'The ranked simulation exactly, running in this tab. No account, ' + 'nothing saved.',
       ),
       offlineBtn,
     );
