@@ -651,6 +651,21 @@ export function openForgeEditor(container: HTMLElement): () => void {
   // The balance, wherever embers are about to be spent. It is the number
   // the creator watches move, so it is repeated beside the acts that move
   // it rather than kept in one corner of one panel.
+  // The stock line under the meter: the balance wears the mark, the rule
+  // beside it stays a sentence, because a rule is not a price.
+  const stockLine = (): HTMLElement => {
+    const div = el('div', 'fe-stock', '');
+    if (embers < 0) {
+      div.textContent = 'The grant is weekly; unspent embers roll over.';
+      return div;
+    }
+    div.appendChild(balanceTag('embers', embers, 12));
+    div.append(
+      document.createTextNode(' left. The grant refills weekly and unspent ones roll over.'),
+    );
+    return div;
+  };
+
   const emberNote = (): HTMLElement => {
     const span = el('span', 'fe-quota', '');
     if (embers < 0) return span;
@@ -1779,15 +1794,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
       // The balance stands beside the dearest act on the page, because a
       // creator should read what they hold before pressing, never after
       // being stopped (ADR 0017).
-      buildPanel.append(
-        el(
-          'div',
-          'fe-stock',
-          embers >= 0
-            ? `${embers} embers left. The grant refills weekly and unspent embers roll over.`
-            : 'Embers are a weekly grant; unspent ones roll over.',
-        ),
-      );
+      buildPanel.append(stockLine());
       if (blocker) buildPanel.append(el('div', 'fe-desc', blocker));
     }
     main.append(buildPanel);
@@ -1831,9 +1838,9 @@ export function openForgeEditor(container: HTMLElement): () => void {
                 'actually change.'
             : 'Once the model is built and you are happy with it, pick each of the five ' +
                 'animations from the catalog (every death for death, every strike for attack). ' +
-                'Each pick plays on the gray mannequin the moment you choose it. A bake ' +
-                `costs ${priceOf('bakeBase')} embers plus ${priceOf('bakePerClip')} a clip, so ` +
-                'changing one animation later is cheap.',
+                'Each pick plays on the gray mannequin the moment you choose it. The bake ' +
+                'charges a base plus a rate for every clip, which the button below prices, ' +
+                'so changing one animation later is cheap.',
         ),
       );
       // The preview stage: any preset plays on the neutral mannequin the
@@ -1920,12 +1927,16 @@ export function openForgeEditor(container: HTMLElement): () => void {
       // its own button).
       const actions = el('div', 'fe-anim-actions');
       if (!sealed || bakedNow === null) {
-        const bake = el(
-          'button',
-          'fe-gen',
-          `Animate the champion (${priceOf('bakeBase')} embers plus ` +
-            `${priceOf('bakePerClip')} a clip)`,
-        ) as HTMLButtonElement;
+        // Two prices, not one, so this cannot go through pricedBtn: a base
+        // to rig the model and a rate per clip on top. Both wear the mark.
+        const bake = el('button', 'fe-gen', 'Animate the champion') as HTMLButtonElement;
+        bake.append(
+          document.createTextNode(' '),
+          balanceTag('embers', priceOf('bakeBase'), 12),
+          document.createTextNode(' plus '),
+          balanceTag('embers', priceOf('bakePerClip'), 12),
+          document.createTextNode(' a clip'),
+        );
         bake.disabled = !row?.model || busy || finalizing || weaponForging;
         bake.title = !row?.model
           ? 'Build the 3D model first (Step 4)'

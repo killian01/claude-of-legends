@@ -136,7 +136,7 @@ function laurelSvg(size: number): SVGSVGElement {
     fill: 'none',
     'aria-hidden': 'true',
   });
-  const color = BALANCE_COLOR.laurels;
+  const color = 'currentColor';
   for (const side of [-1, 1] as const) {
     // The stem, from the same arc the leaves sit on and drawn first so
     // they sit on it. It runs a little past the leaves at both ends, the
@@ -183,13 +183,17 @@ function emberSvg(size: number): SVGSVGElement {
   svg.appendChild(
     svgEl('path', {
       d: 'M12 2.4c3.4 3.6 5.9 6.6 5.9 10.2a5.9 5.9 0 0 1-11.8 0c0-1.9.8-3.6 2-5 .3 1.4 1 2.3 2 2.7C9.6 8.5 10.3 5.4 12 2.4Z',
-      fill: BALANCE_COLOR.embers,
+      fill: 'currentColor',
     }),
   );
   svg.appendChild(
     svgEl('path', {
+      // The hotter centre, as white laid over whatever the flame is: a
+      // fixed pale tone reads as a hole once the mark sits on a gold
+      // button rather than on the dark page.
       d: 'M12 12.1c1.6 1.7 2.5 3 2.5 4.4a2.5 2.5 0 0 1-5 0c0-1.4.9-2.7 2.5-4.4Z',
-      fill: '#ffe6b0',
+      fill: '#ffffff',
+      opacity: '0.62',
     }),
   );
   return svg;
@@ -236,9 +240,16 @@ export function format(n: number): string {
 }
 
 export const BALANCE_CSS = `
+/* Both marks draw in currentColor, so the class sets the hue once and
+   the mark and its number can never drift apart. */
 .bal { display: inline-flex; align-items: center; gap: 5px; line-height: 1; }
 .bal svg { display: block; flex: none; }
-.bal b { font-variant-numeric: tabular-nums; font-weight: 700; }
-.bal-laurels b { color: ${BALANCE_COLOR.laurels}; }
-.bal-embers b { color: #ffc487; }
+.bal b { font-variant-numeric: tabular-nums; font-weight: 700; color: inherit; }
+.bal-laurels { color: ${BALANCE_COLOR.laurels}; }
+.bal-embers { color: ${BALANCE_COLOR.embers}; }
+/* On a button the mark takes the button's own text colour, because the
+   Forge's calls to action are filled gold and an orange flame on gold is
+   a smudge. Inside a button the shape carries which unit it is, and the
+   sentence around it says so too. */
+button .bal { color: inherit; }
 `;

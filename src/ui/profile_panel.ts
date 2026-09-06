@@ -5,9 +5,10 @@
 
 import { tierOf } from '../net/tiers';
 import { CHAMPIONS } from '../sim/content/champions';
+import { BALANCE_CSS, balanceTag } from './balances';
 import { kdaPerMatch } from './kda_text';
 
-const CSS = `
+const CSS = `${BALANCE_CSS}
 .prof-panel { margin: 8px 0; font-size: 12px; color: #c9d8ae; text-align: left; }
 .prof-name { font-size: 15px; font-weight: 800; color: #e8dfae; }
 .prof-sub { color: #93a87c; margin: 2px 0 8px; }
@@ -109,28 +110,30 @@ export function renderProfile(box: HTMLElement, data: ApiProfile): void {
   // Academy both spend it and it belongs to neither (ADR 0017).
   if (typeof data.embers === 'number') {
     const weekly = data.embersPerWeek ?? 0;
-    box.append(
-      el(
-        'div',
-        'prof-embers',
-        `${data.embers} embers` +
-          (weekly > 0 ? `, ${weekly} more every week; unspent ones roll over.` : '.'),
-      ),
-    );
+    const line = el('div', 'prof-embers');
+    line.appendChild(balanceTag('embers', data.embers, 13));
+    if (weekly > 0) {
+      line.append(document.createTextNode(', '));
+      line.appendChild(balanceTag('embers', weekly, 13));
+      line.append(document.createTextNode(' more every week; unspent ones roll over.'));
+    } else {
+      line.append(document.createTextNode('.'));
+    }
+    box.append(line);
   }
   // The laurels sit beside the embers and never blend with them: one is
   // earned by playing and buys champions, the other is granted and pays a
   // provider (ADR 0018).
   if (typeof data.laurels === 'number') {
     const held = data.collection?.length ?? 0;
-    box.append(
-      el(
-        'div',
-        'prof-laurels',
-        `${data.laurels} laurels` +
-          (held > 0 ? `, ${held} champion${held > 1 ? 's' : ''} in your collection.` : '.'),
+    const line = el('div', 'prof-laurels');
+    line.appendChild(balanceTag('laurels', data.laurels, 13));
+    line.append(
+      document.createTextNode(
+        held > 0 ? `, ${held} champion${held > 1 ? 's' : ''} in your collection.` : '.',
       ),
     );
+    box.append(line);
   }
   const p = data.profile;
   if (p.games === 0) {
