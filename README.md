@@ -16,7 +16,7 @@
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/uURYY5qYJE)
 
-[Play now](https://claudeoflegends.com/) · [Discord](https://discord.gg/uURYY5qYJE) · [Quick start](#quick-start) · [How to play](#how-to-play) · [Train a bot](#every-bot-is-a-policy-train-one) · [Contributing](CONTRIBUTING.md)
+[Play now](https://claudeoflegends.com/) · [Discord](https://discord.gg/uURYY5qYJE) · [Quick start](#quick-start) · [How to play](#how-to-play) · [Train a bot](#every-bot-is-a-policy-train-one) · [Make a champion](#make-a-champion-in-the-game-or-in-the-repo) · [Contributing](CONTRIBUTING.md)
 
 **Want to build something here?** The eleventh champion is one new file and
 three table entries: [docs/adding-a-champion.md](docs/adding-a-champion.md).
@@ -31,7 +31,8 @@ A smarter bot is a playbook, no engine code at all. Small and self-contained:
 
 A complete mini MOBA you can play right now: three lanes, ten champions with
 full kits, jungle camps, a neutral objective, fog of war, items, skins, a
-ladder, and an authoritative server for online play. No install. Online play
+ladder, a Forge where you build a champion of your own, and an authoritative
+server for online play. No install. Online play
 needs a free account; the practice match against bots does not. An account is
 a name and a password, or one click on Continue with Discord: that button
 creates an account from a Discord identity and signs it back in (ADR 0009).
@@ -108,9 +109,46 @@ That makes the game a reinforcement learning environment as much as a MOBA:
   produces the identical world.
 
 Community bots, scripted or trained, are the flagship contribution this
-project is built around. The other one is a champion, and it needs no art
-and no engine work to land: [docs/adding-a-champion.md](docs/adding-a-champion.md)
-walks the whole path.
+project is built around. The other one is a champion.
+
+## Make a champion, in the game or in the repo
+
+Two ways, and they share nothing but the engine underneath.
+
+**In the game: the Forge.** Name it, paint its splash from a prompt, and
+write the kit: a passive and four abilities, composed from the same
+primitives the roster is built out of, inside a power budget a
+deterministic validator enforces. Nothing a player writes ever runs as
+code in the sim, because a forged champion is data on the same engine as
+the ten (ADR 0010). From the splash you approved, the Forge derives the
+model reference, builds the 3D body and its weapon, and then rigs and
+animates it on a second, deliberate click, so you see the model before
+paying for the motion. Yours plays in the Forge queue, mixed with roster
+champions, on that queue's own rating. Everything the server pays a
+provider for is priced in embers, from a weekly allowance that rolls
+over, and any job that fails refunds exactly what it took (ADR 0017).
+
+**In the repo: a pull request.** One new file,
+`src/sim/content/champions/<id>.ts`, three table entries and two tests to
+edit. No engine work, no server work, and no art at all, which is the
+part nobody believes:
+
+- The **body** is a model you point at, not one you make.
+  `public/models/champions/` ships two rigged CC0 characters no champion
+  uses yet, `knight.glb` and `goblin.glb`, and any champion's model is
+  fair game too.
+- The **ability icons** are optional. With none, the procedural painter
+  draws all four from the spec, which is what five of the forty icons in
+  the game are right now.
+- The **splash art** is optional. With none, champion select shows the
+  in-engine cinematic render of the model instead: the chain in
+  `src/ui/champion_art.ts` resolves the painted illustration first, then
+  that render, then the instant procedural figure under both.
+
+So a kit with no assets lands complete and sits on the screen looking
+like the rest of the roster. The art is a later pull request, yours or
+someone else's. [docs/adding-a-champion.md](docs/adding-a-champion.md)
+walks the whole path, and it was written by doing it.
 
 ## Production
 

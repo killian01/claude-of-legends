@@ -113,7 +113,13 @@ goes in `src/ui/icon_images.ts`. Both or neither:
 with no listed id, because each of those fails silently in the client.
 
 **Splash art.** Optional. Missing, champion select falls back to the
-in-engine render of the model.
+in-engine render of the model: `src/ui/champion_art.ts` resolves the
+painted illustration in `public/portraits/` first, then that render, then
+the instant procedural figure under both. All ten ship an illustration, so
+here is the screen with those ten blocked, which is what a champion with
+none looks like beside the rest of the roster:
+
+![Champion select with no painted splash](screenshots/select-no-splash.png)
 
 **Bots.** Nothing to do. The playbooks in `src/sim/content/playbooks/` name
 no champion; they reason about lanes, waves, health and threat. Your
