@@ -32,32 +32,43 @@ const CSS = `
    one with a form to type into. */
 .pg.land .pg-cards { display: grid; max-width: 1180px; gap: 18px; align-items: start;
   grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); }
-/* What the account opens, inside the card that opens it. Side by side and
-   square, the shape the home gives them, so the same painting reads the
-   same on both sides of the door. */
-.pg-opens { display: grid; gap: 12px; margin: 4px 0 18px;
-  grid-template-columns: repeat(2, minmax(0, 1fr)); }
-/* Wide and short on purpose. Square, these two paintings pushed the
-   sign-in form below the fold, and a form nobody sees is a card that does
-   not work. They are here to be recognised, not read. */
+/* What the account opens, inside the card that opens it: the same three
+   paintings the home stands at full height, in the same order, so the
+   door and the room behind it look alike. Upright and edge to edge, with
+   no gap between them: one band of art rather than three chips, and the
+   form sits on it rather than under it. */
+.pg-opens { position: relative; display: grid; gap: 0; margin: 4px 0 2px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-radius: 14px; overflow: hidden; border: 1px solid #2b3f60;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55); }
+/* The form, over the band. It floats in the middle so each painting keeps
+   its own foot, where its name is: a panel rather than a full scrim, or
+   the three names would be dimmed by the very thing standing on them. */
+.pg-opens-form { position: absolute; left: 50%; top: 50%; z-index: 1;
+  transform: translate(-50%, -50%); width: min(420px, calc(100% - 36px));
+  padding: 18px; border-radius: 12px; border: 1px solid rgba(140, 168, 208, 0.28);
+  background: rgba(6, 10, 20, 0.9);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(4, 7, 16, 0.6); }
 /* Each card is its own height now, so there is no shared foot to pin the
    button to: it sits under the line that sells it. */
 .pg.land .pg-card.plain .menu-btn { margin-top: 4px; }
 
-/* Bots and the Forge, standing between the two ways in the way they stand
-   on the home. Not buttons: both are account features (ADR 0006), so they
-   carry no call to action and neither lifts under the pointer; the cards
-   on either side are the only things to press. */
-.pg-mode { position: relative; overflow: hidden; border-radius: 12px; border: 1px solid #2b3f60;
-  background: #0a1120; box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
-  display: flex; align-items: flex-end; aspect-ratio: 2 / 1; }
+/* One painting of the band. Not a button: all three are account features
+   (ADR 0006), so they carry no call to action and none lifts under the
+   pointer; the form standing on them is the thing to press.
+   Upright, and taller than the 3/4 the paintings are cropped to
+   elsewhere: the panel in the middle is 270px of form, and at 3/4 it
+   covered all three names. The band has to be tall enough that each
+   painting keeps a foot below the panel to write its name on. */
+.pg-mode { position: relative; overflow: hidden; background: #0a1120;
+  display: flex; align-items: flex-end; aspect-ratio: 3 / 5; }
 /* Both paintings are composed upright, which is why they can fill a tall
    column edge to edge. The subject sits high in each, so the crop favours
    the top and leaves the foot scrim room to sit on sky rather than on a
    face. */
 .pg-mode img { position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: cover; object-position: 50% 34%; }
-.pg-mode-body { position: relative; width: 100%; padding: 38px 13px 10px;
+  object-fit: cover; object-position: 50% 32%; }
+.pg-mode-body { position: relative; width: 100%; padding: 44px 13px 12px;
   background: linear-gradient(180deg, rgba(4, 7, 16, 0) 0%, rgba(4, 7, 16, 0.82) 52%,
     rgba(4, 7, 16, 0.96) 100%); }
 .pg-mode h3 { font-family: Cinzel, Georgia, serif; font-size: 15px; letter-spacing: 2.2px;
@@ -73,6 +84,19 @@ const CSS = `
   /* Two cards, stacked, the account one first: it is the one with the
      form, and a form pushed below the fold is a form nobody fills. */
   .pg.land .pg-cards { grid-template-columns: minmax(0, 1fr); max-width: 620px; gap: 22px; }
+}
+/* Narrow, three upright paintings leave the panel no room to float in, so
+   it comes down and stands under the band. The art stays three across: it
+   is the row the home draws, and a stack of three would be a page of its
+   own. */
+@media (max-width: 560px) {
+  .pg-opens { border-radius: 12px 12px 0 0; }
+  /* Static, the panel is a grid item again, so it has to be told to
+     cross all three columns instead of standing in the first one. */
+  .pg-opens-form { position: static; transform: none; width: auto;
+    grid-column: 1 / -1; border-radius: 0 0 12px 12px; border-top: 0; }
+  .pg-mode-body { padding: 30px 8px 8px; }
+  .pg-mode h3 { font-size: 12px; letter-spacing: 1.2px; }
 }
 
 
@@ -214,10 +238,10 @@ export function showLanding(
       el('h2', '', 'Create a free account'),
       el('p', '', 'It keeps your rating and your record, and opens these.'),
     );
-    // Bots and the Forge, and deliberately not the ranked queue: these
-    // two do not exist offline at all, while ranked is the same match the
-    // practice card already offers. What an account adds to ranked is
-    // that it counts, which is the line above, not a painting.
+    // The three the home stands at full height, wearing the paintings the
+    // home gives them, and the form stands ON the band rather than under
+    // it: what an account opens is the backdrop of the thing that opens
+    // it.
     const opens = el('div', 'pg-opens');
     for (const mode of LANDING_MODES) {
       const art = el('img', '');
@@ -232,10 +256,12 @@ export function showLanding(
       item.append(art, body);
       opens.appendChild(item);
     }
-    online.append(
-      opens,
+    const formPanel = el('div', 'pg-opens-form');
+    formPanel.appendChild(
       buildAuthForm((account) => finish({ kind: 'account', account }), discordResult),
     );
+    opens.appendChild(formPanel);
+    online.appendChild(opens);
 
     // The other way in, and the only one that needs nothing. It says what
     // it is in one line: a visitor who has read the title of the page

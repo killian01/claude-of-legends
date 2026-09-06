@@ -1,11 +1,9 @@
-// What the landing says about the two modes waiting behind the door.
-//
-// The front door offers the two ways in, ranked and the offline practice
-// match, because that is the choice a visitor has to make. It said nothing
-// at all about the two modes that are the reason to want an account: the
-// Academy, where a bot is written, and the Forge, where a champion is. Both
-// are modes you have to be shown, so a name in a nav bar does not carry
-// them and the landing has to say what they are.
+// What an account opens, as the landing shows it: the same three modes
+// the home stands at full height, in the same order and wearing the same
+// paintings, so the page behind the door looks like the page in front of
+// it. Ranked is here because a visitor knows what it is; Bots and the
+// Forge are here because they do not exist offline at all, and a mode you
+// have to be shown is a mode worth the space.
 //
 // Pure data, no DOM, so a test reads the row without a browser;
 // ui/landing.ts draws it. The lines are the landing's own and shorter than
@@ -25,6 +23,12 @@ export interface LandingMode {
 }
 
 export const LANDING_MODES: readonly LandingMode[] = [
+  {
+    id: 'ranked',
+    title: 'Ranked',
+    line: 'The public queue, with a rating, a match history and a place on the ladder.',
+    art: tileArtUrl('ranked'),
+  },
   {
     id: 'bots',
     title: 'Bots',
