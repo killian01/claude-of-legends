@@ -87,6 +87,9 @@ from empty file to champion select.
 
 ## Quick start
 
+Node 22 or newer and pnpm. `nvm use` picks the right one from `.nvmrc`;
+22 is not a preference, the server's stores are built on `node:sqlite`.
+
 ```
 pnpm install
 pnpm dev
