@@ -14,6 +14,7 @@ import path from 'node:path';
 import { fillWithBots } from '../server/bot_fill';
 import { Match } from '../server/match';
 import { saveJsonAtomic } from '../server/store';
+import { REPLAY_VERSION } from '../src/net/replay';
 import { DT } from '../src/sim/types';
 import { bestWindow, type ClipTick, mixedCluster, type Spot, tickScore } from './clip_window';
 
@@ -134,7 +135,7 @@ for (const f of found.slice(0, 5)) {
 // times over.
 const { match } = play(best.seed);
 saveJsonAtomic(path.join(DATA_DIR, 'replays', `${REPLAY_ID}.json`), {
-  version: 1,
+  version: REPLAY_VERSION,
   seed: match.seed,
   picks: match.replayPicks,
   events: match.replayEvents,

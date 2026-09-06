@@ -10,6 +10,7 @@ import { fillWithBots } from '../server/bot_fill';
 import { Match } from '../server/match';
 import { buildMatchRecord } from '../server/records';
 import { appendJsonl, saveJsonAtomic } from '../server/store';
+import { REPLAY_VERSION } from '../src/net/replay';
 
 const DATA_DIR = process.env.DATA_DIR ?? path.resolve(process.cwd(), 'data');
 
@@ -34,7 +35,7 @@ for (let k = 0; k < TICKS; k++) {
 }
 
 saveJsonAtomic(path.join(DATA_DIR, 'replays', '1.json'), {
-  version: 1,
+  version: REPLAY_VERSION,
   seed: match.seed,
   picks: match.replayPicks,
   events: match.replayEvents,
