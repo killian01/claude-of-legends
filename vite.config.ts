@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv } from 'vite';
+import { offlineApiNotice, offlineApiReply } from './scripts/dev_api_fallback.ts';
 
 // Dev: the Vite client talks to the game server on PORT, the variable the
 // server itself listens on, read from the shell or from .env (default
@@ -17,7 +18,24 @@ export default defineConfig(({ mode }) => {
       },
       proxy: {
         '/ws': { target: `ws://127.0.0.1:${port}`, ws: true },
-        '/api': { target: `http://127.0.0.1:${port}` },
+        '/api': {
+          target: `http://127.0.0.1:${port}`,
+          // Without this the four calls the client makes on the way in
+          // come back 502 and a fresh clone looks broken in the console.
+          configure: (proxy) => {
+            let told = false;
+            proxy.on('error', (_err, req, res) => {
+              if (!told) {
+                told = true;
+                console.log(offlineApiNotice(port));
+              }
+              if (!('writeHead' in res) || res.headersSent) return;
+              const reply = offlineApiReply(req.method);
+              res.writeHead(reply.status, reply.type ? { 'content-type': reply.type } : {});
+              res.end(reply.body);
+            });
+          },
+        },
       },
     },
     test: {
