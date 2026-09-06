@@ -47,6 +47,44 @@ driven by a single `Policy` abstraction.
 
 ![Home screen](docs/screenshots/home.png)
 
+## How it was built
+
+The first commit is dated 26 August 2026. A playable 5v5 came out of the
+first 48 hours (`docs/plan-48h.md`); the table below is where eleven days in
+the open left it, written one commit at a time by one maintainer and Claude
+Code in a terminal.
+
+| | |
+|---|---|
+| Commits | 380 |
+| TypeScript, tests excluded | 66,489 lines |
+| Tests | 1,191 cases in 168 files, 23,330 lines |
+| Decisions written down | 18 ADRs in `docs/adr/` |
+| Champions | 10, every one with a full kit |
+
+*Counted on 6 September 2026; the repository is the current version.*
+
+The last two rows are the ones that matter. The test suite is larger than
+the simulation core it covers, 23,330 lines against 14,892, and every
+decision that could have gone another way has a page in `docs/adr/` saying
+what was chosen and what was given up for it. That is not a tax on the
+speed. A model writes code fast enough that the bottleneck moves to knowing
+whether the code is right, so the tests and the decision records are what
+the speed gets spent on.
+
+Three constraints did the rest of the work. The simulation is deterministic
+on a fixed 20 Hz tick with every random number drawn from a seeded `Rng`, so
+a bug is a seed and a replay instead of a story
+(`tests/determinism.test.ts`). That same core runs in the browser, on the
+server and headless, with no second implementation to drift out of step
+(ADR 0001). And every non-human participant, from a lane bot to a playbook
+someone trained in the Academy, is the one `Policy` interface, so the bots
+never became a subsystem nobody dared touch (ADR 0002).
+
+The commit history is the real build log and it has been kept intact. To see
+what adding to it looks like, `docs/adding-a-champion.md` walks a champion
+from empty file to champion select.
+
 ## Quick start
 
 ```
