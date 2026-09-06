@@ -16,6 +16,13 @@ import { resolveForgedChampion } from '../sim/forge/resolve';
 import type { PlaybookDef } from '../sim/playbook/types';
 import type { AbilityKey, TeamId } from '../sim/types';
 import { ROLE_COLORS, setPortrait } from './champion_art';
+import {
+  type CollectionState,
+  matchesAway,
+  playable,
+  standingLine,
+  standingOf,
+} from './collection';
 import { describeAbility, describeSigil } from './describe';
 import { startMenuBackdrop } from './menu_backdrop';
 import { attachTooltip, hideTooltip } from './tooltips';
@@ -135,6 +142,19 @@ const CSS = `
   font-size: 10px; color: #7e93b2; margin-top: 2px; line-height: 1.35;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
+/* The wall (ADR 0018): a locked champion stays readable, because it is
+   what the shop is selling. Dimmed and desaturated, never hidden. */
+.menu-champ.locked .menu-champ-portrait { filter: grayscale(0.85) brightness(0.55); }
+.menu-champ.locked { border-color: #23324a; cursor: not-allowed; }
+.menu-champ.locked:hover { transform: none; box-shadow: none; border-color: #23324a; }
+.menu-champ-standing {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.4px; margin-top: 3px; color: #e8cc74;
+}
+.menu-champ-standing.free { color: #8fd0a8; }
+.menu-wall-note {
+  font-size: 12px; color: #e8cc74; line-height: 1.4; margin: 4px 0 2px; min-height: 0;
+}
+.menu-wall-note:empty { display: none; }
 @media (max-width: 1100px) {
   /* Column direction turns align-items horizontal: without stretch the main
      column collapses to the grid's min-content and the champion cards
@@ -402,6 +422,9 @@ export function showSelect(
   community?: readonly CommunityPick[],
   // The account's own bots (classic queue): the bot plays, the person coaches.
   bots?: readonly BotPick[],
+  // What the account holds and what the week lends it (ADR 0018). Null is
+  // the absence of a wall, which is what the practice match is.
+  collection?: CollectionState | null,
 ): SelectController {
   const { root, card } = screen(container);
   card.classList.add('select');
@@ -479,8 +502,28 @@ export function showSelect(
       `Passive, ${c.passive.name}: ${c.passive.description}`,
       ...ABILITY_KEYS.map((k) => describeAbility(k, c.abilities[k]).slice(0, 3).join(' ')),
     ]);
+    // Locked and free-this-week both need saying, and a locked card names
+    // its price rather than just refusing (ADR 0018).
+    const standing = standingOf(collection ?? null, c.id);
+    if (standing !== 'owned') {
+      const line = el('div', `menu-champ-standing${standing === 'rotation' ? ' free' : ''}`);
+      line.textContent = standingLine(collection ?? null, c.id);
+      body.appendChild(line);
+    }
+    if (standing === 'locked') btn.classList.add('locked');
     btn.addEventListener('click', () => {
       if (takenSet.has(c.id)) return;
+      if (standing === 'locked') {
+        const away = matchesAway(collection ?? null, c.id);
+        wallNote.textContent =
+          `${c.name.split(',')[0]} is not in your collection: ` +
+          `${standingLine(collection ?? null, c.id)}` +
+          (away > 0
+            ? `, about ${away} more won match${away > 1 ? 'es' : ''} away. Recruit it under Champions.`
+            : '. You can recruit it now under Champions.');
+        return;
+      }
+      wallNote.textContent = '';
       championId = c.id;
       botId = null;
       skinIndex = 0;
@@ -515,6 +558,10 @@ export function showSelect(
   syncSigils();
 
   const status = el('div', 'menu-status', '');
+  // The wall speaks on its own line: the status is the countdown's and is
+  // rewritten twice a second, so a refusal written there is gone before it
+  // is read (ADR 0018).
+  const wallNote = el('div', 'menu-wall-note', '');
   const lock = el('button', 'menu-btn primary', 'Lock in') as HTMLButtonElement;
   lock.disabled = true;
   lock.addEventListener('click', () => {
@@ -655,7 +702,9 @@ export function showSelect(
 
   const randomBtn = el('button', 'menu-btn', 'Random champion');
   randomBtn.addEventListener('click', () => {
-    const free = CHAMPION_LIST.filter((c) => !takenSet.has(c.id));
+    const free = CHAMPION_LIST.filter(
+      (c) => !takenSet.has(c.id) && playable(collection ?? null, c.id),
+    );
     const pick = free[Math.floor(Math.random() * free.length)];
     if (pick) champButtons.get(pick.id)?.click();
   });
@@ -666,7 +715,11 @@ export function showSelect(
   const main = el('div', 'menu-select-main');
   const side = el('div', 'menu-select-side');
   const champPane = el('div', 'menu-pane');
-  champPane.append(el('div', 'menu-label', 'Pick your champion (hover for the kit)'), grid);
+  champPane.append(
+    el('div', 'menu-label', 'Pick your champion (hover for the kit)'),
+    wallNote,
+    grid,
+  );
   champPane.append(...forgedBlock, ...communityBlock, randomBtn);
   if (botsBlock.length > 0) {
     // Your bots on their own tab (ADR 0013); the pick machinery is shared,

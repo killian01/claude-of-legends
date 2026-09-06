@@ -11,7 +11,8 @@ const CSS = `
 .prof-panel { margin: 8px 0; font-size: 12px; color: #c9d8ae; text-align: left; }
 .prof-name { font-size: 15px; font-weight: 800; color: #e8dfae; }
 .prof-sub { color: #93a87c; margin: 2px 0 8px; }
-.prof-embers { color: #e8cc74; font-weight: 700; margin: 2px 0 8px; }
+.prof-embers { color: #e8cc74; font-weight: 700; margin: 2px 0 4px; }
+.prof-laurels { color: #8fd0a8; font-weight: 700; margin: 0 0 8px; }
 .prof-line { display: flex; justify-content: space-between; padding: 3px 0; gap: 10px; }
 .prof-line span:last-child { color: #93a87c; white-space: nowrap; }
 .prof-section { font-size: 11px; color: #93a87c; margin: 10px 0 3px; }
@@ -43,6 +44,10 @@ export interface ApiProfile {
   // where a balance is nobody else's business.
   embers?: number;
   embersPerWeek?: number;
+  // The play currency and the collection it buys (ADR 0018); like the
+  // embers, absent on another player's card.
+  laurels?: number;
+  collection?: string[];
   createdAt: number;
   rating: number;
   ratedGames: number;
@@ -110,6 +115,20 @@ export function renderProfile(box: HTMLElement, data: ApiProfile): void {
         'prof-embers',
         `${data.embers} embers` +
           (weekly > 0 ? `, ${weekly} more every week; unspent ones roll over.` : '.'),
+      ),
+    );
+  }
+  // The laurels sit beside the embers and never blend with them: one is
+  // earned by playing and buys champions, the other is granted and pays a
+  // provider (ADR 0018).
+  if (typeof data.laurels === 'number') {
+    const held = data.collection?.length ?? 0;
+    box.append(
+      el(
+        'div',
+        'prof-laurels',
+        `${data.laurels} laurels` +
+          (held > 0 ? `, ${held} champion${held > 1 ? 's' : ''} in your collection.` : '.'),
       ),
     );
   }

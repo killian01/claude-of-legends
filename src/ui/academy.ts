@@ -29,6 +29,7 @@ import {
   validatePlaybook,
 } from '../sim/playbook';
 import type { TeamId } from '../sim/types';
+import { loadCollection } from './collection';
 import { buildCounts, buildRow, itemCatalog } from './item_catalog';
 import { el } from './menu';
 import { startMenuBackdrop } from './menu_backdrop';
@@ -204,6 +205,11 @@ interface ChatBubble {
 }
 
 type Outcome<T> = ({ ok: true } & T) | { ok: false; error: string };
+
+// The owner's collection (ADR 0018), fetched once and kept for the tab's
+// lifetime: it only grows, and it grows in the roster browser rather than
+// here. Null means the account has not answered, which draws no wall.
+let botCollection: string[] | null = null;
 
 async function api<T>(path: string, body?: unknown): Promise<Outcome<T>> {
   try {
@@ -642,12 +648,27 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     name.placeholder = 'Name';
     name.maxLength = 24;
     const champ = el('select', 'ac-select wide') as HTMLSelectElement;
-    for (const c of CHAMPION_LIST) {
-      const o = document.createElement('option');
-      o.value = c.id;
-      o.textContent = `${c.name.split(',')[0]} (${c.role})`;
-      champ.append(o);
-    }
+    // A bot fields its owner's collection alone (ADR 0018), and the
+    // rotation is deliberately not offered: a bot outlives the week it was
+    // made in, and one written on a borrowed champion would stop being
+    // fieldable on the turn of the week. The list is unwalled until the
+    // account answers, and the server refuses either way.
+    const fill = (): void => {
+      champ.textContent = '';
+      for (const c of CHAMPION_LIST) {
+        if (botCollection && !botCollection.includes(c.id)) continue;
+        const o = document.createElement('option');
+        o.value = c.id;
+        o.textContent = `${c.name.split(',')[0]} (${c.role})`;
+        champ.append(o);
+      }
+    };
+    fill();
+    if (botCollection === null)
+      void loadCollection().then((state) => {
+        botCollection = state?.collection ?? null;
+        fill();
+      });
     const sigA = sigilSelect('riftstep');
     const sigB = sigilSelect('mend');
     const row = el('div', 'ac-row');

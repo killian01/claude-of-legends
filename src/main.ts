@@ -34,6 +34,7 @@ import { ULT_RANK_LEVELS } from './sim/stats';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
 import { type AuthedAccount, currentAccount } from './ui/auth';
 import { buildCoachBar, type CoachBar } from './ui/coach_bar';
+import { type CollectionState, loadCollection } from './ui/collection';
 import { takeDiscordResult } from './ui/discord_entry';
 import { takeConfirmResult } from './ui/email_status';
 import { preloadBackdrop } from './ui/home_backdrop';
@@ -522,6 +523,13 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
       resolve(action);
     };
 
+    // What this account may pick (ADR 0018), fetched the moment the
+    // session opens so the wall is drawn with the first paint of select
+    // rather than appearing under the cursor a moment later. A failure
+    // answers null, which draws no wall: the server refuses the pick
+    // anyway, and a locked card nobody can explain is worse than none.
+    const collectionState: Promise<CollectionState | null> = loadCollection();
+
     // The Forge queue's select offers the account's finalized creations
     // and the community's shared ones: both fetched the moment the session
     // opens so the lists are ready (or nearly) when select_start lands;
@@ -631,6 +639,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
             forgedList: readonly ForgedPick[],
             community: readonly CommunityPick[],
             botsList: readonly BotPick[] = [],
+            collection: CollectionState | null = null,
           ): void => {
             if (finished || selectUi) return;
             selectUi = showSelect(
@@ -654,17 +663,20 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
               forgedList,
               community,
               botsList,
+              collection,
             );
           };
           // A Forge select waits for the forged lists (already in flight
           // since the session opened); a classic select opens on the spot.
           if (msg.forge) {
-            void Promise.all([forgedRoster, communityList]).then(([own, community]) =>
-              openSelect(own, community),
+            void Promise.all([forgedRoster, communityList, collectionState]).then(
+              ([own, community, collection]) => openSelect(own, community, [], collection),
             );
           } else {
             // The classic select offers the account's bots (ADR 0013).
-            void fetchBots().then((bots) => openSelect([], [], bots));
+            void Promise.all([fetchBots(), collectionState]).then(([bots, collection]) =>
+              openSelect([], [], bots, collection),
+            );
           }
           break;
         }

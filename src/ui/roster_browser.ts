@@ -6,6 +6,16 @@
 import { CHAMPION_LIST, type ChampionDef } from '../sim/content/champions';
 import type { AbilityKey } from '../sim/types';
 import { ROLE_COLORS, setPortrait } from './champion_art';
+import {
+  affordable,
+  type CollectionState,
+  loadCollection,
+  matchesAway,
+  priceOf,
+  recruit,
+  standingLine,
+  standingOf,
+} from './collection';
 import { describeAbility } from './describe';
 import { startMenuBackdrop } from './menu_backdrop';
 import { setRichLine } from './rich_text';
@@ -41,7 +51,14 @@ const CSS = `
 .rb-card {
   padding: 0; border-radius: 10px; border: 1px solid #28405e; background: #0f1930;
   color: #c9d9ee; text-align: left; cursor: pointer;
-  position: relative; aspect-ratio: 3 / 4; overflow: hidden; display: block;
+  /* The card's height is its width and a third again, written as padding
+     rather than aspect-ratio: in an auto-sized grid row the ratio resolves
+     against the column's MINIMUM track (210px here) while the column
+     itself stretches to 1fr, so the row came out shorter than the cards
+     and every row overlapped the one above it. Padding has no such cycle:
+     it is a percentage of the real width. Every child is positioned
+     absolutely, so a zero content height costs nothing. */
+  position: relative; height: 0; padding-top: 133.33%; overflow: hidden; display: block;
   transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
 }
 .rb-card:hover {
@@ -62,6 +79,26 @@ const CSS = `
 }
 .rb-card-name { font-weight: 800; font-size: 16px; letter-spacing: 0.3px; }
 .rb-card-role { font-size: 11px; font-weight: 700; margin-top: 2px; }
+/* The shop (ADR 0018). A locked champion is dimmed and never hidden: it
+   is what the page is selling, and its price is on its face. */
+.rb-card.locked .rb-portrait { filter: grayscale(0.85) brightness(0.55); }
+.rb-card.locked { border-color: #23324a; }
+.rb-standing {
+  font-size: 11px; font-weight: 800; letter-spacing: 0.4px; margin-top: 3px; color: #e8cc74;
+}
+.rb-standing.free { color: #8fd0a8; }
+.rb-standing.owned { color: #6f86a6; }
+.rb-balance { font-size: 13px; font-weight: 700; color: #e8cc74; margin-left: 4px; }
+.rb-buy {
+  width: 100%; margin: 10px 0 2px; padding: 10px 16px; border-radius: 6px;
+  border: 1px solid #7a6428; background: #2c2513; color: #f0dfa0;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.rb-buy:hover:not(:disabled) { border-color: #e8cc74; background: #3a3018; }
+.rb-buy:disabled { opacity: 0.55; cursor: not-allowed; }
+.rb-note { font-size: 12px; color: #7e93b2; margin: 2px 0 6px; line-height: 1.4; }
+.rb-note.bad { color: #e8a0a0; }
 .rb-detail {
   width: 430px; flex: none; overflow-y: auto;
   background: rgba(9, 14, 26, 0.92); border: 1px solid #2e4468; border-radius: 12px;
@@ -127,17 +164,43 @@ export function openRosterBrowser(container: HTMLElement): () => void {
   const head = el('div', 'rb-head');
   const back = el('button', 'rb-back', 'Back');
   back.addEventListener('click', close);
+  // The balance belongs where the spending happens, and says nothing at
+  // all until the account has answered (ADR 0018).
+  const balance = el('span', 'rb-balance');
   head.append(
     el('h1', 'rb-title', 'The champions'),
     el('span', 'rb-sub', 'Pick a card to read the full kit'),
+    balance,
     back,
   );
 
   const grid = el('div', 'rb-grid');
   const detail = el('div', 'rb-detail');
   const cards = new Map<string, HTMLButtonElement>();
+  const standings = new Map<string, HTMLElement>();
+  // Null until the account answers, and null forever for a signed-out
+  // reader: no wall is drawn either way, because a lock nobody can lift
+  // or explain is worse than none.
+  let state: CollectionState | null = null;
+  let shown: ChampionDef | null = null;
+
+  const renderBalance = (): void => {
+    balance.textContent = state ? `${state.laurels} laurels` : '';
+  };
+
+  const renderStandings = (): void => {
+    for (const [id, line] of standings) {
+      const standing = standingOf(state, id);
+      line.textContent = state && standing === 'owned' ? '' : standingLine(state, id);
+      line.className = `rb-standing${standing === 'rotation' ? ' free' : ''}${
+        standing === 'owned' ? ' owned' : ''
+      }`;
+      cards.get(id)?.classList.toggle('locked', standing === 'locked');
+    }
+  };
 
   const renderDetail = (c: ChampionDef): void => {
+    shown = c;
     for (const [id, b] of cards) b.classList.toggle('picked', id === c.id);
     detail.textContent = '';
     const portrait = document.createElement('img');
@@ -163,6 +226,52 @@ export function openRosterBrowser(container: HTMLElement): () => void {
       box.append(el('b', '', lines[0] ?? ''), body);
       detail.appendChild(box);
     }
+    detail.appendChild(buyControl(c));
+  };
+
+  // What the rail offers under a champion's kit: nothing for one the
+  // account holds, the price for one it does not, and how far off it is
+  // when the laurels are short. A refusal that names its number is the
+  // whole point (ADR 0017's rule, kept).
+  const buyControl = (c: ChampionDef): HTMLElement => {
+    const box = el('div', '');
+    const standing = standingOf(state, c.id);
+    if (!state || standing === 'owned') return box;
+    const price = priceOf(state, c.id);
+    if (price === null) return box;
+    if (standing === 'rotation') {
+      box.appendChild(el('div', 'rb-note', 'Free this week for everyone. Recruit it to keep it.'));
+    }
+    const btn = el('button', 'rb-buy', `Recruit for ${price} laurels`) as HTMLButtonElement;
+    const note = el('div', 'rb-note', '');
+    if (!affordable(state, c.id)) {
+      btn.disabled = true;
+      const away = matchesAway(state, c.id);
+      note.textContent = `${state.laurels} of ${price}: about ${away} more won match${
+        away > 1 ? 'es' : ''
+      }.`;
+    }
+    btn.addEventListener('click', () => {
+      btn.disabled = true;
+      btn.textContent = 'Recruiting...';
+      void recruit(c.id).then((out) => {
+        if (!out.ok) {
+          btn.textContent = `Recruit for ${price} laurels`;
+          btn.disabled = false;
+          note.className = 'rb-note bad';
+          note.textContent = out.error;
+          return;
+        }
+        if (state) {
+          state = { ...state, laurels: out.laurels, collection: out.collection };
+        }
+        renderBalance();
+        renderStandings();
+        renderDetail(c);
+      });
+    });
+    box.append(btn, note);
+    return box;
   };
 
   for (const c of CHAMPION_LIST) {
@@ -177,6 +286,9 @@ export function openRosterBrowser(container: HTMLElement): () => void {
     const role = el('div', 'rb-card-role', c.role);
     role.style.color = ROLE_COLORS[c.role] ?? '#c9d8ae';
     body.appendChild(role);
+    const standing = el('div', 'rb-standing');
+    body.appendChild(standing);
+    standings.set(c.id, standing);
     card.appendChild(body);
     card.addEventListener('click', () => renderDetail(c));
     cards.set(c.id, card);
@@ -185,6 +297,16 @@ export function openRosterBrowser(container: HTMLElement): () => void {
 
   const first = CHAMPION_LIST[0];
   if (first) renderDetail(first);
+  renderStandings();
+
+  // The wall arrives a moment after the page, and redraws it in place
+  // rather than holding the roster back on a fetch.
+  void loadCollection().then((loaded) => {
+    state = loaded;
+    renderBalance();
+    renderStandings();
+    if (shown) renderDetail(shown);
+  });
 
   const layout = el('div', 'rb-layout');
   layout.append(grid, detail);
