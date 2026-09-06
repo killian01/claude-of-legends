@@ -6,12 +6,15 @@
 import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import { welcomesToDiscord, welcomeWords } from '../src/ui/discord_welcome';
-import { DISCORD, REPO } from '../src/ui/links';
+import { DISCORD, PRIVACY, REPO } from '../src/ui/links';
 
 describe('the outward links', () => {
   it('point at a real invite and a real repository', () => {
     expect(DISCORD).toMatch(/^https:\/\/discord\.gg\/[A-Za-z0-9]{6,}$/);
     expect(REPO).toBe('https://github.com/killian01/claude-of-legends');
+    // The page has to be reachable from the game, or the promise in it is
+    // only made to people who read the source.
+    expect(PRIVACY).toBe(`${REPO}/blob/main/PRIVACY.md`);
   });
 
   // The invite is written in four places the client cannot see: the README

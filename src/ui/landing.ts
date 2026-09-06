@@ -14,7 +14,7 @@ import { type AuthedAccount, buildAuthForm } from './auth';
 import type { DiscordResult } from './discord_entry';
 import { startBackdrop } from './home_backdrop';
 import { LANDING_MODES } from './landing_modes';
-import { DISCORD, REPO } from './links';
+import { DISCORD, PRIVACY, REPO } from './links';
 import { el, ensureMenuCss } from './menu';
 import { buildPage, ensurePageCss, mountLiveStats, navLink } from './page';
 
@@ -116,6 +116,9 @@ export function showLanding(
     bar.links.appendChild(toPlay);
     bar.right.appendChild(navLink('Discord', DISCORD));
     bar.right.appendChild(navLink('Source', REPO));
+    // Last, and quiet, but on the page a first-time visitor actually
+    // reads: a site that counts anything owes them somewhere to look.
+    bar.right.appendChild(navLink('Privacy', PRIVACY));
 
     // --- hero: the lockup, and the copy beside it ---
     // The name is art here rather than text: the lockup carries the crest

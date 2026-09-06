@@ -49,6 +49,9 @@ services:
       # DISCORD_BOT_TOKEN is a credential; the guild id is not.
       DISCORD_BOT_TOKEN: "${DISCORD_BOT_TOKEN:-}"
       DISCORD_GUILD_ID: "${DISCORD_GUILD_ID:-}"
+      # Reads back the daily counters (PRIVACY.md). Unset, and /api/pulse
+      # is a 404 for everyone; the counting runs either way.
+      PULSE_TOKEN: "${PULSE_TOKEN:-}"
       # The Forge's generation provider (ADR 0010), from the same .env
       # file: TRIPO_API_KEY is a credential and must never be committed.
       # Without it, finalize answers "not configured" and everything else

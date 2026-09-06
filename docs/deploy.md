@@ -135,6 +135,25 @@ or `no auto-join` when the two variables are not both set.
 If that line says `off`, Discord sign-in is not configured. Nothing else is
 affected: accounts are created, rated and played exactly as before.
 
+## The daily counters
+
+The server keeps five numbers a day for the whole site, plus a restart count,
+in `DATA_DIR/pulse.json`. They exist so that an announcement can be told apart
+from a front page that loses people, and they are the entire measurement on
+this site: no analytics service, no pixel, nothing per person. `PRIVACY.md`
+describes them and `tests/privacy.test.ts` holds the claims to the code.
+
+The counting always runs. Reading it back is what `PULSE_TOKEN` gates:
+
+```bash
+PULSE_TOKEN=$(openssl rand -hex 24)   # into .env, then redeploy
+curl -H "authorization: Bearer $PULSE_TOKEN" https://your.host/api/pulse
+```
+
+Unset, `/api/pulse` answers 404 to everyone, which is the default and the
+right setting for an instance nobody needs to report on. A wrong token also
+gets a 404 rather than a 401, so the endpoint never confirms it is there.
+
 ## The proxy contract
 
 Caddy overwrites both forwarding headers rather than appending to what the
@@ -225,9 +244,11 @@ volume: `accounts.json` (accounts, credentials, email addresses and ratings),
 `sessions.json` (open sign-ins), `tokens.json` (confirmation and reset links
 still outstanding), `matches.jsonl` (the match log that feeds profiles and the
 ladder), `replays/` (the last 40 matches, Arena matches included),
-`forge.sqlite3` (the Forge, ADR 0011) and `bots.sqlite3` (the accounts' bots,
+`forge.sqlite3` (the Forge, ADR 0011), `bots.sqlite3` (the accounts' bots,
 their playbook versions, their live and Arena ratings, the Arena reports and
-the night coach's proposals, ADR 0013).
+the night coach's proposals, ADR 0013) and `pulse.json` (the daily counters,
+PRIVACY.md: six integers a day and nothing per person, so it is the one file
+here you can delete without losing anything anybody owns).
 
 The Arena plays its matches in a worker thread bundled beside the server
 (`dist-server/arena_worker.cjs`, built by `pnpm build:server`); a server

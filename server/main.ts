@@ -113,6 +113,7 @@ import { COACH_IDLE_DAYS } from './night_eligibility';
 import { passwordErrorMessage, validatePassword } from './password';
 import { type CoachDeps, coachPlaybook } from './playbook_suggest';
 import { buildProfile } from './profile';
+import { Pulse, tokenMatches } from './pulse';
 import { CEILING_DEFAULTS, checkQuota, DAY_MS, spendQuota } from './quotas';
 import { BASE_RATING, LEAVER_LOCKOUT_MS, leaverPenalty } from './rating';
 import { talliesOf } from './record_tally';
@@ -256,6 +257,10 @@ const forgeStore = new ForgeStore(path.join(DATA_DIR, 'forge.sqlite3'));
 // Bots on the account (ADR 0013): their own SQLite beside the Forge's, so
 // the two land in parallel without sharing a file or a module.
 const botStore = new BotStore(path.join(DATA_DIR, 'bots.sqlite3'));
+// Five counters a day and nothing else (PRIVACY.md): what the top of the
+// funnel did, which is the only part of it that was not already
+// recoverable from the account and match records.
+const pulse = new Pulse(Date.now(), { file: path.join(DATA_DIR, 'pulse.json') });
 // Where every generated file lives (splash candidates, model sheets,
 // models), served back to logged-in clients by the asset route below.
 const ASSETS_DIR = path.join(DATA_DIR, 'assets');
@@ -678,6 +683,7 @@ function onMatchReady(forge: boolean) {
         });
       }
     }
+    pulse.matchStarted(Date.now());
     matches.set(id, {
       match,
       endedAt: null,
@@ -915,6 +921,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (url === '/api/register') {
         const created = registry.register(name, password, email, now);
+        if (created.ok) pulse.account(now);
         if (!created.ok) {
           // A taken name is not a failed credential guess, but it is still
           // an attempt: rate it, or the signup form becomes the oracle the
@@ -1045,6 +1052,7 @@ const server = http.createServer(async (req, res) => {
       // is derived from the Discord name; the account has no password and
       // no email until its owner adds them.
       const created = registry.registerWithDiscord(identity, now);
+      if (created.ok) pulse.account(now);
       if (!created.ok) {
         // Only a race can land here: the same Discord finished two round
         // trips at once and the other one won.
@@ -1154,6 +1162,28 @@ const server = http.createServer(async (req, res) => {
       }
       res.setHeader('set-cookie', clearCookie(COOKIE_NAME, { secure: cookieSecure(req) }));
       sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    // The maintainer's own report (PRIVACY.md), which is not an account's
+    // endpoint: it is read with PULSE_TOKEN and nothing else, so it sits
+    // ahead of the account gate below. The API rate limiter above already
+    // covers it, which is what makes guessing the token uninteresting.
+    if (url === '/api/pulse') {
+      // Off unless PULSE_TOKEN is set, and a wrong token is a 404 rather
+      // than a 401: an endpoint that admits it exists invites guessing.
+      // The token is taken from a header or the query, because the reader
+      // is as often a phone during a launch as it is a curl.
+      const secret = process.env.PULSE_TOKEN ?? '';
+      const auth = req.headers.authorization ?? '';
+      const bearer = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+      const query = new URL(req.url ?? '/', 'http://local').searchParams.get('token') ?? '';
+      if (!tokenMatches(bearer, secret) && !tokenMatches(query, secret)) {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('not found');
+        return;
+      }
+      sendJson(res, 200, { days: pulse.days(), cappedToday: pulse.cappedToday() });
       return;
     }
 
@@ -1975,6 +2005,13 @@ const server = http.createServer(async (req, res) => {
     } catch {
       filePath = path.join(DIST, 'index.html');
     }
+    // One arrival is one app shell served. Counted here rather than a hop
+    // earlier because this is where an unknown path has already fallen
+    // back to index.html: the client routes in the browser, so a shared
+    // deep link is a page load like any other. Assets are not arrivals.
+    if (filePath === path.join(DIST, 'index.html')) {
+      pulse.load(Date.now(), clientAddress(req.headers, req.socket.remoteAddress, EDGE));
+    }
     const body = await readFile(filePath);
     // The client shipped no caching headers at all, which leaves a browser
     // free to serve a stale index.html and with it the previous build's
@@ -2354,6 +2391,7 @@ setInterval(() => {
         }
         if (entry.match.sim.winner !== null && entry.endedAt === null) {
           entry.endedAt = now;
+          pulse.matchFinished(now);
           // Record the finished match once, the moment the winner lands:
           // seats still held by a connected human carry their player id.
           const accountIdByUnit = new Map<number, number>();
@@ -2545,12 +2583,18 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
     // Write the session expiry extensions that touch() only made in
     // memory, so a restart does not send everyone back to the login form.
     sessions.flush();
+    pulse.flush();
     for (const c of clients.values()) c.ws.close();
     wss.close();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 2000).unref();
   });
 }
+
+// The pulse counts in memory and reaches the disk here, once a minute and
+// only when something moved (PRIVACY.md). A page load must not write: this
+// is the thread that steps every live match at 20 Hz.
+setInterval(() => pulse.flush(), 60_000).unref();
 
 // Housekeeping, hourly. None of this is load bearing: an expired session
 // and a spent link are already refused on read, and a lapsed email claim
