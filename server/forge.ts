@@ -147,7 +147,17 @@ export function listDrafts(
     // number on a button rather than behind a refusal (ADR 0017). A bake
     // is priced by its clip count, so it travels as its two numbers and
     // the surface states the rule.
-    prices: { ...EMBER_PRICES, bakeBase: BAKE_BASE, bakePerClip: BAKE_PER_CLIP },
+    //
+    // The image price is the deployment's, not the table's: two vendors
+    // sell that act at different prices now, and sending the table would
+    // put 4 on the button of a server that charges 10, which is the
+    // refusal this list exists to prevent.
+    prices: {
+      ...EMBER_PRICES,
+      image: deps.generation?.imagePrice ?? EMBER_PRICES.image,
+      bakeBase: BAKE_BASE,
+      bakePerClip: BAKE_PER_CLIP,
+    },
   };
 }
 

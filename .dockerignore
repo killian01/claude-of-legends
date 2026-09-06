@@ -9,3 +9,7 @@ art_src
 *.log
 .env
 .env.*
+
+# Runtime state and local scratch: 69 MB the build never reads, and
+# player data that must never be baked into an image.
+data

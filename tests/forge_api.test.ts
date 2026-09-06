@@ -4,7 +4,7 @@
 // the ledger.
 
 import { describe, expect, it } from 'vitest';
-import { EMBERS_PER_WEEK } from '../server/embers';
+import { EMBER_PRICES, EMBERS_PER_WEEK, IMAGE_PRICE_RESOLD } from '../server/embers';
 import {
   deleteDraft,
   type ForgeDeps,
@@ -45,6 +45,24 @@ describe('forge drafts', () => {
     const empty = listDrafts(deps, 1);
     expect(empty.ok && empty.drafts).toHaveLength(0);
     deps.store.close();
+  });
+
+  it('quotes the image at what THIS deployment charges, not what the table says', () => {
+    // The price list exists so a creator never learns a price by being
+    // refused (ADR 0017). Two vendors sell the image now, so the table's
+    // number is only right where the cheaper one is configured: a server
+    // still buying it resold has to say 10 on the button it will charge
+    // 10 for.
+    const table = rig();
+    expect(listDrafts(table, 1)).toMatchObject({ prices: { image: EMBER_PRICES.image } });
+    table.store.close();
+
+    const resold = { ...rig(), generation: { imagePrice: IMAGE_PRICE_RESOLD } as never };
+    const quoted = listDrafts(resold, 1);
+    expect(quoted).toMatchObject({ prices: { image: IMAGE_PRICE_RESOLD } });
+    // And nothing else moved: only that one act has two sellers.
+    expect(quoted.ok && quoted.prices.model).toBe(EMBER_PRICES.model);
+    resold.store.close();
   });
 
   it('stores an over-budget draft but never a misshapen one', () => {
