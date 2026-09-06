@@ -56,27 +56,30 @@ described in docs/design/tile-art-prompts.md; the sources stay in
 |---|---|---|
 | `ranked.webp`, `bots.webp`, `forge.webp`, `lobby.webp`, `practice.webp` | Generated with the Tripo advanced image task (model `gpt_image_2`) from the prompts in `scripts/tile_art.mjs` | Tripo output terms |
 
-## Logo (`public/icon-*.png`, `public/apple-touch-icon.png`, `public/logo.webp`)
+## Logo (`public/icon-*.png`, `public/apple-touch-icon.png`, `public/logo.webp`, `docs/screenshots/logo-readme.webp`)
 
 The mark is a broken gold C closing around a watchtower under a starfield,
 with a four point star in the gap. It comes in two pieces: the crest alone,
 which is what the browser tab, the landing bar and a phone's home screen
 want, and the full lockup, the same crest over the CLAUDE OF LEGENDS
-wordmark, which is the signature the README wears.
+wordmark, which is the signature the landing page and the README wear.
 
 Both arrive cut out, so `node scripts/site_icon.mjs` only trims each to its
 art, squares the crest and writes the sizes. It repairs two things on the
 way: the generator's opaque is alpha 250 to 254 rather than 255, which
 leaves the art faintly see through, and the lockup ships inside a wide soft
 black glow that reads as a drop shadow here but as a smudge on a light
-README, so its alpha ramp is remapped away. The tab sizes are packed into
-one `favicon.ico`, three of them, so a browser picks a size rather than
-downsampling to it. The sources stay in `art_src/logo/` (ignored, like the
-other raw art).
+page, so its alpha ramp is remapped away. What the remap leaves is a few
+pixels of dark feather, which is right on the navy the site draws the logo
+on and dirty on a white page, so the README gets its own copy of the
+lockup on a navy plate rather than the cut out one: GitHub picks the theme
+of that page, we do not. The tab sizes are packed into one `favicon.ico`,
+three of them, so a browser picks a size rather than downsampling to it.
+The sources stay in `art_src/logo/` (ignored, like the other raw art).
 
 | Files | Source | License |
 |---|---|---|
-| `favicon.ico`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`, `logo.webp` | Generated with ChatGPT (OpenAI image generation), cut by `scripts/site_icon.mjs` | OpenAI output terms |
+| `favicon.ico`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`, `logo.webp`, `logo-readme.webp` | Generated with ChatGPT (OpenAI image generation), cut by `scripts/site_icon.mjs` | OpenAI output terms |
 
 ## Painted ability, item and sigil icons (`public/icons/`)
 

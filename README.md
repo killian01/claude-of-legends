@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="public/logo.webp" alt="Claude of Legends" width="420">
+<img src="docs/screenshots/logo-readme.webp" alt="Claude of Legends" width="420">
 
 **A 5v5 MOBA born in a 48 hour vibe coding sprint: three lanes, ten champions, free in your browser right now.**
 

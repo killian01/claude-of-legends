@@ -4,8 +4,8 @@
 //
 // The crest is what the platforms ask for as an icon, so it becomes the
 // tab icon, the home screen icon and the landing bar's crest. The lockup
-// is the brand signature: one wide WebP for the README and anywhere else
-// the name is set in art rather than in text.
+// is the brand signature: one wide WebP for the site, and the same art on
+// a plate of its own for the README.
 //
 // favicon.ico is not redundant with the PNG links in index.html. A browser
 // asks for /favicon.ico on its own whether or not the page names one, and
@@ -27,6 +27,13 @@
 //    gone and the art keeps a few pixels of feather. The pair is tuned by
 //    eye against a white plate: lower and a grey haze survives, higher and
 //    the thin strokes in OF LEGENDS start to erode.
+//
+// What survives the remap is the feather itself: a few pixels of dark
+// edge, which is right on the navy the site draws the logo on and reads
+// as a dirty cut on a white one. The site owns its background and the
+// README does not (GitHub gives the page whichever theme the reader
+// picked), so the README copy carries a background with it: the same
+// navy plate, gold-lit behind the crest, written to docs/screenshots.
 //
 // One-shot tool, not a build step. Needs the headless Chrome the other
 // shot scripts use: node scripts/site_icon.mjs
@@ -157,12 +164,59 @@ const files = await page.evaluate(
       lockup.box.h,
     );
 
+    // The README copy: the signature on the site's own plate, so the cut
+    // never has to survive a background we do not control. Rounded like
+    // the cards on the home screen, lit warm behind the crest, and one
+    // hairline of the site's border blue so the panel has an edge on a
+    // white page as well as on a dark one.
+    const onPlate = (art) => {
+      const pad = Math.round(art.width * 0.085);
+      const o = document.createElement('canvas');
+      o.width = art.width + 2 * pad;
+      o.height = art.height + 2 * pad;
+      const og = o.getContext('2d');
+      const r = Math.round(pad * 0.9);
+      og.beginPath();
+      og.roundRect(0, 0, o.width, o.height, r);
+      og.clip();
+      const sky = og.createLinearGradient(0, 0, 0, o.height);
+      sky.addColorStop(0, '#101a2e');
+      sky.addColorStop(1, '#070c18');
+      og.fillStyle = sky;
+      og.fillRect(0, 0, o.width, o.height);
+      // The crest sits in the top third of the lockup; the glow sits
+      // under it rather than in the middle of the panel, which would
+      // put the brightest point on the wordmark.
+      const glow = og.createRadialGradient(
+        o.width / 2,
+        o.height * 0.34,
+        0,
+        o.width / 2,
+        o.height * 0.34,
+        o.width * 0.52,
+      );
+      glow.addColorStop(0, 'rgba(230, 215, 168, 0.13)');
+      glow.addColorStop(1, 'rgba(230, 215, 168, 0)');
+      og.fillStyle = glow;
+      og.fillRect(0, 0, o.width, o.height);
+      og.drawImage(art, pad, pad);
+      og.lineWidth = 2;
+      og.strokeStyle = '#22314e';
+      og.beginPath();
+      og.roundRect(1, 1, o.width - 2, o.height - 2, r - 1);
+      og.stroke();
+      return o;
+    };
+
     const png = (c) => c.toDataURL('image/png').split(',')[1];
     return {
       'public/icon-512.png': png(crest(512)),
       'public/icon-192.png': png(crest(192)),
       'public/apple-touch-icon.png': png(plated(180, crest(360))),
       'public/logo.webp': signature.toDataURL('image/webp', 0.9).split(',')[1],
+      'docs/screenshots/logo-readme.webp': onPlate(signature)
+        .toDataURL('image/webp', 0.92)
+        .split(',')[1],
       // Packed into the .ico below, not written as they are. Three sizes so
       // the browser picks rather than downsamples: 16 for the tab, 32 for a
       // dense screen's tab, 48 for the bookmark bar and the history list.
