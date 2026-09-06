@@ -37,31 +37,30 @@ const CSS = `
    door and the room behind it look alike. Upright and edge to edge, with
    no gap between them: one band of art rather than three chips, and the
    form sits on it rather than under it. */
-.pg-opens { position: relative; display: grid; gap: 0; margin: 4px 0 2px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+/* The form and the band, side by side, the form first: it is the thing to
+   press, and the paintings are what pressing it opens. The band stretches
+   to whatever height the form takes rather than setting its own, so the
+   three paintings line up with the form's top and foot by construction
+   and no ratio has to be guessed at. */
+.pg-open-row { display: grid; gap: 16px; margin: 4px 0 2px; align-items: stretch;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
+.pg-opens { display: grid; gap: 0; grid-template-columns: repeat(3, minmax(0, 1fr));
   border-radius: 14px; overflow: hidden; border: 1px solid #2b3f60;
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55); }
-/* The form, over the band. It floats in the middle so each painting keeps
-   its own foot, where its name is: a panel rather than a full scrim, or
-   the three names would be dimmed by the very thing standing on them. */
-.pg-opens-form { position: absolute; left: 50%; top: 50%; z-index: 1;
-  transform: translate(-50%, -50%); width: min(420px, calc(100% - 36px));
-  padding: 18px; border-radius: 12px; border: 1px solid rgba(140, 168, 208, 0.28);
-  background: rgba(6, 10, 20, 0.9);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(4, 7, 16, 0.6); }
+.pg-opens-form { display: flex; flex-direction: column; justify-content: center;
+  padding: 16px; border-radius: 12px; border: 1px solid rgba(140, 168, 208, 0.28);
+  background: rgba(6, 10, 20, 0.72); }
 /* Each card is its own height now, so there is no shared foot to pin the
    button to: it sits under the line that sells it. */
 .pg.land .pg-card.plain .menu-btn { margin-top: 4px; }
 
 /* One painting of the band. Not a button: all three are account features
    (ADR 0006), so they carry no call to action and none lifts under the
-   pointer; the form standing on them is the thing to press.
-   Upright, and taller than the 3/4 the paintings are cropped to
-   elsewhere: the panel in the middle is 270px of form, and at 3/4 it
-   covered all three names. The band has to be tall enough that each
-   painting keeps a foot below the panel to write its name on. */
+   pointer; the form beside them is the thing to press. No ratio of its
+   own: a third of the band's width by the whole of the form's height,
+   which is upright at every width the row survives. */
 .pg-mode { position: relative; overflow: hidden; background: #0a1120;
-  display: flex; align-items: flex-end; aspect-ratio: 3 / 5; }
+  display: flex; align-items: flex-end; height: 100%; min-height: 0; }
 /* Both paintings are composed upright, which is why they can fill a tall
    column edge to edge. The subject sits high in each, so the crop favours
    the top and leaves the foot scrim room to sit on sky rather than on a
@@ -85,16 +84,14 @@ const CSS = `
      form, and a form pushed below the fold is a form nobody fills. */
   .pg.land .pg-cards { grid-template-columns: minmax(0, 1fr); max-width: 620px; gap: 22px; }
 }
-/* Narrow, three upright paintings leave the panel no room to float in, so
-   it comes down and stands under the band. The art stays three across: it
-   is the row the home draws, and a stack of three would be a page of its
-   own. */
+/* Narrow, the two stack and the band goes first: it is what the card is
+   selling, and the form is what the reader scrolls to when they have
+   decided. With no form beside it the band has no height to borrow, so it
+   takes one of its own, upright the way the home draws it. */
 @media (max-width: 560px) {
-  .pg-opens { border-radius: 12px 12px 0 0; }
-  /* Static, the panel is a grid item again, so it has to be told to
-     cross all three columns instead of standing in the first one. */
-  .pg-opens-form { position: static; transform: none; width: auto;
-    grid-column: 1 / -1; border-radius: 0 0 12px 12px; border-top: 0; }
+  .pg-open-row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .pg-opens { order: -1; }
+  .pg-mode { height: auto; aspect-ratio: 3 / 4; }
   .pg-mode-body { padding: 30px 8px 8px; }
   .pg-mode h3 { font-size: 12px; letter-spacing: 1.2px; }
 }
@@ -239,9 +236,8 @@ export function showLanding(
       el('p', '', 'It keeps your rating and your record, and opens these.'),
     );
     // The three the home stands at full height, wearing the paintings the
-    // home gives them, and the form stands ON the band rather than under
-    // it: what an account opens is the backdrop of the thing that opens
-    // it.
+    // home gives them, standing beside the form rather than under it:
+    // what an account opens, next to the thing that opens it.
     const opens = el('div', 'pg-opens');
     for (const mode of LANDING_MODES) {
       const art = el('img', '');
@@ -260,8 +256,9 @@ export function showLanding(
     formPanel.appendChild(
       buildAuthForm((account) => finish({ kind: 'account', account }), discordResult),
     );
-    opens.appendChild(formPanel);
-    online.appendChild(opens);
+    const openRow = el('div', 'pg-open-row');
+    openRow.append(formPanel, opens);
+    online.appendChild(openRow);
 
     // The other way in, and the only one that needs nothing. It says what
     // it is in one line: a visitor who has read the title of the page
