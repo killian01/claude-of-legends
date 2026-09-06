@@ -1,14 +1,20 @@
-// Film a saved replay for the README gameplay clip. Signs into the local
-// dev stack, opens the replay viewer on REPLAY_ID, fast-forwards to
-// REPLAY_AT (seconds of sim time), then records CDP screencast frames at
-// 1x for REPLAY_FOR seconds into SHOT_DIR.
+// Film a saved replay. Signs into the local dev stack, opens the replay
+// viewer on REPLAY_ID, fast-forwards to REPLAY_AT (seconds of sim time),
+// then records CDP screencast frames at 1x for REPLAY_FOR seconds into
+// SHOT_DIR.
 //
-// The frames become the animated WebP the README shows:
+// The frames become an animated WebP:
 //   ffmpeg -framerate 8.33 -i docs/screenshots/frame-%04d.jpg \
 //     -vf scale=720:-2 -vcodec libwebp_anim -q:v 72 -loop 0 \
-//     -preset picture docs/screenshots/gameplay.webp
-// WebP rather than GIF: the same 121 frames are 2.8 MB instead of 8, and
-// without the palette dither that GIF puts on the water and the grass.
+//     -preset picture docs/screenshots/clip.webp
+// WebP rather than GIF: 121 frames are 2.8 MB instead of 8, and without
+// the palette dither that GIF puts on the water and the grass.
+//
+// The README used to open on one of these and no longer does: at the
+// width a clip has to be encoded to before it is a reasonable download,
+// the game reads as a blur, and the page stutters while it loops. A still
+// of the same fight says more, so what the README shows is a screenshot
+// from scripts/shot_readme.mjs.
 import { writeFile } from 'node:fs/promises';
 import puppeteer from 'puppeteer-core';
 import { e2eName, signIn } from './e2e_signin.mjs';

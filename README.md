@@ -23,7 +23,7 @@ three table entries: [docs/adding-a-champion.md](docs/adding-a-champion.md).
 A smarter bot is a playbook, no engine code at all. Small and self-contained:
 [`good first issue`](../../labels/good%20first%20issue).
 
-![Gameplay](docs/screenshots/gameplay.webp)
+![A fight at the river, mid lane](docs/screenshots/match.png)
 
 </div>
 
@@ -45,8 +45,6 @@ browser, on the server, and headless, with every non-human participant
 driven by a single `Policy` abstraction.
 
 ![Home screen](docs/screenshots/home.png)
-
-![In a match](docs/screenshots/match.png)
 
 ## Quick start
 
