@@ -35,26 +35,41 @@ describe('the laurel price table', () => {
     );
   });
 
-  it('costs about thirty matches for the whole roster', () => {
-    // The pacing choice the ADR makes, pinned so a price edit that breaks
-    // it is a decision rather than an accident: soon enough that the first
-    // purchase lands in the first evening, slow enough that the last is a
-    // goal.
+  it('costs about forty matches for the whole roster, and five for the first', () => {
+    // The pacing choice the ADR makes, pinned so a rate edit that breaks
+    // it is a decision rather than an accident. The first rates put the
+    // cheapest champion two matches away, which is what sent these
+    // numbers back to the table.
     const total = Object.values(CHAMPION_PRICES).reduce((a, b) => a + b, 0);
     expect(total).toBe(3600);
     const perMatch = (MATCH_LAURELS + WIN_LAURELS) / 2;
-    expect(Math.round(total / perMatch)).toBeGreaterThanOrEqual(25);
-    expect(Math.round(total / perMatch)).toBeLessThanOrEqual(40);
+    expect(Math.round(total / perMatch)).toBeGreaterThanOrEqual(35);
+    expect(Math.round(total / perMatch)).toBeLessThanOrEqual(55);
+    // The cheapest champion, from nothing, in a evening rather than in a
+    // pair of matches.
+    const cheapest = Math.min(...Object.values(CHAMPION_PRICES));
+    expect(Math.round(cheapest / perMatch)).toBeGreaterThanOrEqual(5);
   });
 
   it('pays the win over the match, and the first win of the day over both', () => {
-    expect(matchLaurels(false, false)).toBe(MATCH_LAURELS);
-    expect(matchLaurels(true, false)).toBe(WIN_LAURELS);
-    expect(matchLaurels(true, true)).toBe(WIN_LAURELS + FIRST_WIN_BONUS);
+    expect(matchLaurels(false, false, true)).toBe(MATCH_LAURELS);
+    expect(matchLaurels(true, false, true)).toBe(WIN_LAURELS);
+    expect(matchLaurels(true, true, true)).toBe(WIN_LAURELS + FIRST_WIN_BONUS);
     // A loss is never the day's first win, whatever the caller passes.
-    expect(matchLaurels(false, true)).toBe(MATCH_LAURELS);
+    expect(matchLaurels(false, true, true)).toBe(MATCH_LAURELS);
     // The fixed part is the small one: it is what an idle player collects.
     expect(MATCH_LAURELS).toBeLessThan(WIN_LAURELS);
+  });
+
+  it('pays an unrated match the fixed part and nothing else', () => {
+    // No human on the other side is a stroll against house bots. It still
+    // pays, because at this population most matches are bot-filled, but a
+    // win in one is worth what a loss in one is.
+    expect(matchLaurels(true, true, false)).toBe(MATCH_LAURELS);
+    expect(matchLaurels(false, false, false)).toBe(MATCH_LAURELS);
+    // And a contested match is worth well over twice a stroll, which is
+    // the whole point of the split.
+    expect(matchLaurels(true, false, true)).toBeGreaterThan(2 * MATCH_LAURELS);
   });
 });
 

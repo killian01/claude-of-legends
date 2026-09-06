@@ -507,13 +507,15 @@ export class AccountRegistry {
   }
 
   // One finished match, played by hand, landed for this account (ADR
-  // 0018). Returns what it paid, which is what the client is told.
-  award(id: number, won: boolean, at: number): number {
+  // 0018). Returns what it paid, which is what the client is told. An
+  // unrated match pays the fixed part alone and leaves the day's bonus
+  // standing for a real one.
+  award(id: number, won: boolean, at: number, rated: boolean): number {
     const a = this.byId.get(id);
     if (!a) return 0;
     const day = dayIndex(at);
-    const first = won && a.lastWinDay !== day;
-    const amount = matchLaurels(won, first);
+    const first = won && rated && a.lastWinDay !== day;
+    const amount = matchLaurels(won, first, rated);
     a.laurels = (a.laurels ?? 0) + amount;
     if (first) a.lastWinDay = day;
     this.persist();

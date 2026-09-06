@@ -437,7 +437,7 @@ function payLaurels(rec: MatchRecord): void {
   for (const seat of rec.players) {
     if (seat.accountId === null) continue;
     if (!playedByHand(seatWay(rec, seat))) continue;
-    registry.award(seat.accountId, seat.team === rec.winner, rec.at);
+    registry.award(seat.accountId, seat.team === rec.winner, rec.at, rec.rated);
   }
 }
 

@@ -37,11 +37,21 @@ export const CHAMPION_PRICES: Readonly<Record<string, number>> = {
 // What a match pays. The fixed part is deliberately the small one: it is
 // the part an idle player collects. Only the hand and forge ways pay at
 // all (server/ways.ts), so a bot playing overnight earns nothing.
-export const MATCH_LAURELS = 60;
-export const WIN_LAURELS = 150;
-export const FIRST_WIN_BONUS = 200;
+export const MATCH_LAURELS = 40;
+export const WIN_LAURELS = 100;
+export const FIRST_WIN_BONUS = 100;
 
-export function matchLaurels(won: boolean, firstWinOfDay: boolean): number {
+// An unrated match pays the fixed part and nothing else: no win, no
+// bonus. A match with no human on the other side is a stroll against
+// house bots, and at the first rates it paid exactly what a contested one
+// did, which put the two cheapest champions two matches apart and the
+// whole roster inside a fortnight of playing alone. It still pays
+// something, because at this population most matches are bot-filled and
+// a wall nobody can climb without opponents is worse than one climbed
+// slowly. An unrated win never spends the day's bonus either: the bonus
+// is there to be claimed in a real match.
+export function matchLaurels(won: boolean, firstWinOfDay: boolean, rated: boolean): number {
+  if (!rated) return MATCH_LAURELS;
   return (won ? WIN_LAURELS : MATCH_LAURELS) + (won && firstWinOfDay ? FIRST_WIN_BONUS : 0);
 }
 
@@ -119,9 +129,9 @@ export function backfillLaurels(records: readonly MatchRecord[], accountId: numb
       if (!playedByHand(seatWay(rec, seat))) continue;
       const won = seat.team === rec.winner;
       const day = dayIndex(rec.at);
-      const first = won && day !== lastWinDay;
+      const first = won && rec.rated && day !== lastWinDay;
       if (first) lastWinDay = day;
-      laurels += matchLaurels(won, first);
+      laurels += matchLaurels(won, first, rec.rated);
     }
   }
   return { laurels, lastWinDay };

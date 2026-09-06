@@ -53,12 +53,25 @@ index with no stored state and no scheduler, exactly as the ember grant is taken
 0011), hold every account's pickable set at seven and make that case impossible.
 
 The numbers are a pacing choice and not a measurement, which is what separates this table from
-the ember one. Sixty laurels for a finished match, a hundred and fifty for a win, two hundred
-more on the first win of the day, on the hand and forge ways only (`server/ways.ts` already
-answers exactly that question). Six champions at 3600 in all is about thirty matches for the
-whole roster: soon enough that the first purchase lands in the first evening, slow enough that
-the last one is a goal. The fixed part is deliberately the small one, because it is the part
-an idle player collects.
+the ember one. Forty laurels for a finished match, a hundred for a win, a hundred more on the
+first win of the day, on the hand and forge ways only (`server/ways.ts` already answers exactly
+that question), and an unrated match pays the forty and nothing else. Six champions at 3600 in
+all is about forty matches for the whole roster and about five for the first: soon enough that
+the first purchase lands in an evening, slow enough that the last one is a goal. The fixed part
+is deliberately the small one, because it is the part an idle player collects.
+
+Both halves of that are a correction, made the day this shipped and kept here rather than in a
+second decision, because the shape of the rule never moved and only its numbers did. The rates
+started at sixty, a hundred and fifty and two hundred, and paid the same whoever was on the
+other side. The first win of a day against house bots therefore paid three hundred and fifty,
+which is two matches from the four cheapest champions and about a fortnight of playing alone
+from the whole roster, on a wall built to take a month of real ones. An unrated match is a
+stroll: nobody is contesting it, the fill plays both ends of the map, and a win in one is not
+worth what a win in a contested one is. It still pays something, because at this population
+most matches are bot-filled and a wall nobody can climb without opponents is worse than one
+climbed slowly, and an unrated win never spends the day's bonus, which is there to be claimed
+in a real match. Balances standing when the rates moved are left where they are: they are
+stored rather than derived precisely so that retuning never reaches into anybody's account.
 
 ## Consequences
 

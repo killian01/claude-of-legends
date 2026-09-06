@@ -129,11 +129,21 @@ describe('the laurel balance on an account', () => {
     const registry = new AccountRegistry(tmpFile());
     const id = account(registry, 'alice');
     const day = Date.UTC(2026, 8, 6, 12);
-    expect(registry.award(id, true, day)).toBe(WIN_LAURELS + FIRST_WIN_BONUS);
-    expect(registry.award(id, true, day + 3600_000)).toBe(WIN_LAURELS);
-    expect(registry.award(id, false, day + 7200_000)).toBe(MATCH_LAURELS);
-    expect(registry.award(id, true, day + 24 * 3600_000)).toBe(WIN_LAURELS + FIRST_WIN_BONUS);
+    expect(registry.award(id, true, day, true)).toBe(WIN_LAURELS + FIRST_WIN_BONUS);
+    expect(registry.award(id, true, day + 3600_000, true)).toBe(WIN_LAURELS);
+    expect(registry.award(id, false, day + 7200_000, true)).toBe(MATCH_LAURELS);
+    expect(registry.award(id, true, day + 24 * 3600_000, true)).toBe(WIN_LAURELS + FIRST_WIN_BONUS);
     expect(registry.laurels(id)).toBe(3 * WIN_LAURELS + 2 * FIRST_WIN_BONUS + MATCH_LAURELS);
+  });
+
+  it('leaves the day bonus standing when the only win was unrated', () => {
+    // A stroll against house bots pays the fixed part and must not spend
+    // the bonus a contested match is meant to claim.
+    const registry = new AccountRegistry(tmpFile());
+    const id = account(registry, 'alice');
+    const day = Date.UTC(2026, 8, 6, 12);
+    expect(registry.award(id, true, day, false)).toBe(MATCH_LAURELS);
+    expect(registry.award(id, true, day + 3600_000, true)).toBe(WIN_LAURELS + FIRST_WIN_BONUS);
   });
 
   it('recruits a champion, once, and only with the laurels for it', () => {
@@ -196,6 +206,13 @@ describe('the crossing', () => {
     // A first win of the day, then a loss.
     expect(out.laurels).toBe(WIN_LAURELS + FIRST_WIN_BONUS + MATCH_LAURELS);
     expect(out.lastWinDay).not.toBeNull();
+  });
+
+  it('credits an unrated win the fixed part, as it would today', () => {
+    const day = Date.UTC(2026, 8, 6, 12);
+    const out = backfillLaurels([{ ...rec(day, 0), rated: false }], 7);
+    expect(out.laurels).toBe(MATCH_LAURELS);
+    expect(out.lastWinDay).toBeNull();
   });
 
   it('pays nothing for the ways a bot played', () => {
