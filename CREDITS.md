@@ -131,6 +131,18 @@ attribution; the list is kept out of respect for the recordists.
 |---|---|---|
 | `basis/basis_transcoder.js`, `basis/basis_transcoder.wasm` | Basis Universal transcoder shipped with three.js (`three/examples/jsm/libs/basis/`), needed to decode the KTX2 textures inside the champion GLBs | Apache 2.0 (Binomial LLC / Google) |
 
+## Display face (`public/fonts/`)
+
+Cinzel, the face the menu titles and the lockup are set in. Self-hosted
+rather than linked from Google Fonts, because a font on someone else's CDN
+hands that company every visitor's address before a pixel is drawn
+(PRIVACY.md). One variable file per subset, taken from the Google Fonts
+release; the OFL permits redistribution and this is the notice it asks for.
+
+| Files | Source | License |
+|---|---|---|
+| `cinzel-latin.woff2`, `cinzel-latin-ext.woff2` | Cinzel by Natanael Gama (https://fonts.google.com/specimen/Cinzel), the latin and latin-ext subsets of the variable file | SIL Open Font License 1.1 |
+
 ## Vendored agent skills (`.claude/skills/`)
 
 Not assets, but the same rule: files this repository ships without having

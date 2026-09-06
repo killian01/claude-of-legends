@@ -169,6 +169,10 @@ const MIME: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.ico': 'image/x-icon',
+  // The display face, self-hosted (PRIVACY.md). A font sent as
+  // application/octet-stream is refused outright by a browser that trusts
+  // nosniff, and the page silently falls back to Georgia.
+  '.woff2': 'font/woff2',
   '.svg': 'image/svg+xml',
   '.glb': 'model/gltf-binary',
   '.wasm': 'application/wasm',
