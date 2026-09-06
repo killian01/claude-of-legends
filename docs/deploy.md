@@ -199,6 +199,21 @@ proxying CDN the chain names the player, and with DNS-only records that header
 is absent and `X-Real-IP` (the peer Caddy saw) is the right answer. Changing
 either `header_up` line means rereading `server/edge.ts` first.
 
+## The link preview
+
+`index.html` carries the OpenGraph and Twitter tags that decide what a link
+to the site looks like when it is posted: Discord, Slack, X, Reddit and every
+search result read those and nothing else. The picture they name is
+`public/social-card.jpg`, 1200 by 630.
+
+Those URLs are absolute, because a scraper has no page to resolve a relative
+one against. A self-hosted instance therefore changes the origin on the
+`og:url`, `og:image` and `twitter:image` lines and nowhere else;
+`tests/social_card.test.ts` fails if the two images stop agreeing, if either
+points somewhere the file is not, or if the declared size stops matching the
+file. Nothing in that block is fetched by a visitor's browser, so it costs
+the privacy promise nothing.
+
 ## First deploy
 
 ```

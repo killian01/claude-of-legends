@@ -16,6 +16,41 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#0a1120" />
     <title>Claude of Legends</title>
+    <!-- The card this page becomes when someone posts the link. Discord,
+         Slack, X, Reddit and every search result read these tags and
+         nothing else: without them a shared link is a grey box with one
+         word in it, which is the first thing most people ever see of the
+         game. The URLs are absolute because a scraper has no page to
+         resolve a relative one against; a self-hosted instance changes
+         the origin on these four lines and nowhere else (docs/deploy.md).
+         Nothing here is fetched by the browser, so the promise in
+         PRIVACY.md that no third party sees a visitor still holds. -->
+    <meta
+      name="description"
+      content="A 5v5 MOBA that runs in a browser tab. Three lanes, ten champions, jungle camps and fog of war. Nothing to install."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Claude of Legends" />
+    <meta property="og:title" content="Claude of Legends" />
+    <meta
+      property="og:description"
+      content="A 5v5 MOBA that runs in a browser tab. Three lanes, ten champions, jungle camps and fog of war. Nothing to install."
+    />
+    <meta property="og:url" content="https://claudeoflegends.com/" />
+    <meta property="og:image" content="https://claudeoflegends.com/social-card.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="The Claude of Legends crest over a night battlefield, with the three lanes named beside it."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Claude of Legends" />
+    <meta
+      name="twitter:description"
+      content="A 5v5 MOBA that runs in a browser tab. Three lanes, ten champions, jungle camps and fog of war. Nothing to install."
+    />
+    <meta name="twitter:image" content="https://claudeoflegends.com/social-card.jpg" />
     <style>
       /* Display face for menu titles; falls back to Georgia. Served from
          here rather than from Google Fonts: a font on someone else's CDN
