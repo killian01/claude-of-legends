@@ -223,7 +223,11 @@ docker compose logs -f game
 ```
 
 The image builds the client and bundles the server, so the box needs no Node,
-no pnpm and no toolchain of its own.
+no pnpm and no toolchain of its own. It does need git-lfs
+(https://git-lfs.com): the announcer's clips under `public/voice/` are LFS
+objects, and a clone made without it ships pointer files in their place (the
+announcer then reads through the browser's speech synthesis; everything else
+works).
 
 ## Verify
 
