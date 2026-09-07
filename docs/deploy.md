@@ -137,17 +137,37 @@ affected: accounts are created, rated and played exactly as before.
 
 ## The daily counters
 
-The server keeps five numbers a day for the whole site, plus a restart count,
-in `DATA_DIR/pulse.json`. They exist so that an announcement can be told apart
-from a front page that loses people, and they are the entire measurement on
-this site: no analytics service, no pixel, nothing per person. `PRIVACY.md`
-describes them and `tests/privacy.test.ts` holds the claims to the code.
+The server keeps one row a day for the whole site in `DATA_DIR/pulse.json`.
+They exist so that an announcement can be told apart from a front page that
+loses people, and they are the entire measurement on this site: no analytics
+service, no pixel, nothing per person. `PRIVACY.md` describes every counter
+and `tests/privacy.test.ts` holds the claims to the code.
 
 Visitors are counted by the browser and not by the address it arrives from:
 the first load of a UTC day posts to `/api/pulse/hit` and the browser
 remembers the date so it posts once (`src/net/pulse_ping.ts`). That is why
 `loads` and `visitors` are so far apart on a real day: loads counts reloads
 and crawlers, visitors counts browsers that ran the game.
+
+Four of the counters exist because that gap alone was unreadable:
+
+- `strays` splits the loads served for a path this site does not have
+  (`server/arrival.ts`) off the ones it does. On a quiet day almost every
+  load is a scanner walking `/wp-login.php`, and without the split the
+  ratio says nothing at all.
+- `newcomers` counts the visitors whose browser had never been counted
+  here. Three visitors who have all been here before is a habit; three who
+  have not is news.
+- `sources` counts where they came from, in nine buckets the browser picks
+  itself from its own referrer (`src/net/pulse_source.ts`). A word leaves
+  the browser, never a link.
+- `stayed` and `played` say how far they got: still here 30 seconds later,
+  and started a match in the browser. Once per browser per day each, so
+  both divide by `visitors`.
+
+Your own browser is a visitor like any other, which on a quiet day is most
+of the count. Open the site once with `?pulse=off` and it stops being
+counted, on that browser, for good; `?pulse=on` puts it back.
 
 The counting always runs. Reading it back is what `PULSE_TOKEN` gates:
 
@@ -156,10 +176,11 @@ PULSE_TOKEN=$(openssl rand -hex 24)   # into .env, then redeploy
 ```
 
 Then open `https://your.host/api/pulse?token=<the token>` in a browser and
-you get the report: visitors, sign-ups and finished matches for the week,
-then a row per day with the two rates that matter, how many arrivals made an
-account and how many started matches reached an end. It is one page, no
-JavaScript, and it reads on a phone, which is where it is usually read.
+you get the report: visitors, first-timers, sign-ups and finished matches
+for the week, where the week came from and how far it got, then a row per
+day with the rates that matter, how many arrivals made an account and how
+many started matches reached an end. It is one page, no JavaScript, and it
+reads on a phone, which is where it is usually read.
 
 ![The pulse report](screenshots/pulse-report.png)
 
@@ -180,6 +201,28 @@ right setting for an instance nobody needs to report on. A wrong token also
 gets a 404 rather than a 401, so the endpoint never confirms it is there.
 The page is served `no-store` and `x-robots-tag: noindex`, since a counter
 page in a search index is the one way these numbers become public.
+
+## Who came back
+
+The counters stop at the end of the day they count. Whether anybody
+returned is a different question, and the two files needed to answer it are
+already on disk: an account carries the day it was made and the day it was
+last seen, and every finished match is in the record log with the accounts
+that played it.
+
+```bash
+node scripts/retention.mjs /var/lib/docker/volumes/claude-of-legends_game_data/_data
+```
+
+One row per sign-up day: how many made an account, how many ever played a
+match, and how many played again on a later day. Read the last column
+against the one beside it: `Seen again` comes off the account's `seenAt`,
+which moves in memory on every connection and only reaches disk when
+something else persists, so it can read lower than the match log, which is
+append-only and cannot.
+
+Nothing is collected for this and nothing is written by it. It reads two
+files and prints a table.
 
 ## The proxy contract
 
