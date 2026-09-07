@@ -224,6 +224,27 @@ append-only and cannot.
 Nothing is collected for this and nothing is written by it. It reads two
 files and prints a table.
 
+## What was played
+
+The same log answers the other question the counters cannot: what the ten
+champions actually did on this deployment.
+
+```bash
+node scripts/meta.mjs /var/lib/docker/volumes/claude-of-legends_game_data/_data
+node scripts/meta.mjs <data dir> 30      the last 30 days only
+```
+
+One row per champion, seats and win rate, and beside them the seats a
+person actually played. Read the second pair and not the first: on a real
+deployment the log is mostly the Arena, so the first column is the house
+bots' meta and the second is the game's. `scripts/meta_matrix.mjs` answers
+the simulated version of the same question, style against style on fixed
+seeds; the two disagreeing is worth knowing.
+
+A match that was abandoned never reaches the log, so this reports what was
+played through. `matches` against `finished` on the pulse report is where
+the difference between the two lives.
+
 ## The proxy contract
 
 Caddy overwrites both forwarding headers rather than appending to what the
