@@ -14,10 +14,13 @@ import { type AuthedAccount, buildAuthForm } from './auth';
 import type { DiscordResult } from './discord_entry';
 import { startBackdrop } from './home_backdrop';
 import { CONTRIBUTE_LEAD, CONTRIBUTE_TITLE, CONTRIBUTE_WAYS } from './landing_contribute';
+import { mountEmbers } from './landing_embers';
 import { LANDING_MODES, PRACTICE_ART } from './landing_modes';
-import { DISCORD, PRIVACY, REPO } from './links';
+import { revealOnScroll } from './landing_reveal';
+import { DISCORD, PRIVACY } from './links';
 import { el, ensureMenuCss } from './menu';
 import { buildPage, ensurePageCss, mountLiveStats, navLink } from './page';
+import { buildRepoLink } from './repo_link';
 
 // Only what the landing page adds to the shared chrome: the bento, which
 // is the home's row of tiles as a visitor can have it.
@@ -31,6 +34,7 @@ const CSS = `
    caption over it. The account card is the wider of the two: it is the
    one with a form to type into. */
 .pg.land .pg-cards { display: grid; max-width: 1180px; gap: 18px; align-items: stretch;
+  margin-left: auto; margin-right: auto;
   grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); }
 /* What the account opens, inside the card that opens it: the same three
    paintings the home stands at full height, in the same order, so the
@@ -134,8 +138,13 @@ const CSS = `
   border-top: 1px solid #22314e; }
 .pg-give h2 { font-family: Cinzel, Georgia, serif; font-size: 21px; letter-spacing: 2px;
   text-transform: uppercase; color: #e6d7a8; margin: 0; line-height: 1.15; }
+.pg-give { text-align: center; }
 .pg-give > p { font-size: 13.5px; line-height: 1.6; color: #b9cbe4;
-  margin: 10px 0 0; max-width: 66ch; }
+  margin: 10px auto 0; max-width: 66ch; }
+/* The repository itself, under the lead: the three cards below it each
+   go somewhere inside it, and this is the whole of it. */
+.pg-give > .repo-link { margin-top: 22px; }
+.pg-give-way { text-align: left; }
 .pg-give-row { display: grid; gap: 16px; margin-top: 26px;
   grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .pg-give-way { display: flex; flex-direction: column; border-radius: 12px;
@@ -153,6 +162,104 @@ const CSS = `
 @media (max-width: 900px) {
   .pg-give-row { grid-template-columns: minmax(0, 1fr); }
   .pg-give { max-width: 620px; }
+}
+
+/* --- motion ---
+   The page moves, a little, in three ways: it arrives, it breathes, and
+   it answers the pointer. Arrival is a staggered rise, top to bottom, so
+   the eye is led from the crest to the two doors in the order the page
+   wants them read. Breathing is the art drifting behind the page, the
+   crest floating on its glow, and the embers (ui/landing_embers.ts).
+   The answer is a lift and a gold edge on whatever card the pointer is
+   over, and the painting inside it leaning in. Every keyframe here fills
+   backwards, never forwards: a forwards fill would pin the final
+   transform and swallow the hover lift underneath it. */
+@keyframes land-rise {
+  from { opacity: 0; transform: translateY(22px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes land-lockup-in {
+  from { opacity: 0; transform: scale(0.88) translateY(14px); filter: brightness(1.8); }
+  60% { filter: brightness(1.15); }
+  to { opacity: 1; transform: scale(1) translateY(0); filter: brightness(1); }
+}
+@keyframes land-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes land-glow {
+  0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 0.95; transform: translate(-50%, -50%) scale(1.12); }
+}
+@keyframes land-drift {
+  from { transform: scale(1.04) translate3d(0.6%, 0.4%, 0); }
+  to { transform: scale(1.12) translate3d(-0.8%, -0.9%, 0); }
+}
+/* The backdrop is shared with every pre-game screen (ui/home_backdrop.ts)
+   and its scrim favours the left, where the copy used to sit. The copy
+   is centered now, so the landing lays its own scrim: a vignette that
+   holds the edges and the foot, and a soft pool behind the hero. The
+   painting itself drifts, slowly enough to be felt and not seen. */
+.pg.land .menu-backdrop-art img { animation: land-drift 46s ease-in-out infinite alternate;
+  transform-origin: 50% 40%; }
+.pg.land .menu-backdrop-scrim { background:
+  radial-gradient(ellipse 46% 52% at 50% 36%, rgba(4, 7, 16, 0.58) 0%, rgba(4, 7, 16, 0) 100%),
+  linear-gradient(90deg, rgba(4, 7, 16, 0.55) 0%, rgba(4, 7, 16, 0) 28%,
+    rgba(4, 7, 16, 0) 72%, rgba(4, 7, 16, 0.55) 100%),
+  linear-gradient(180deg, rgba(4, 7, 16, 0.62) 0%, rgba(4, 7, 16, 0.2) 30%,
+    rgba(4, 7, 16, 0.94) 88%); }
+/* Arrival, top to bottom. */
+.pg.land .pg-bar { animation: land-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) 0s backwards; }
+.pg.land .pg-lockup { animation: land-lockup-in 1.1s cubic-bezier(0.2, 0.7, 0.2, 1) 0.1s backwards; }
+.pg.land .pg-tag { animation: land-rise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) 0.45s backwards; }
+.pg.land .pg-hero-cta { animation: land-rise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) 0.6s backwards; }
+.pg.land .pg-card:nth-child(1) { animation: land-rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.75s backwards; }
+.pg.land .pg-card:nth-child(2) { animation: land-rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.9s backwards; }
+/* Breathing: the crest floats on a pool of gold light. The float is on
+   the image and the arrival on its heading, so the two transforms never
+   fight over one element. */
+.pg.land .pg-lockup img { animation: land-float 6.5s ease-in-out 1.2s infinite; }
+.pg.land .pg-lockup::before { content: ''; position: absolute; left: 50%; top: 42%; z-index: -1;
+  width: 150%; aspect-ratio: 1; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, rgba(232, 196, 108, 0.32) 0%, rgba(232, 196, 108, 0.1) 38%,
+    rgba(232, 196, 108, 0) 68%);
+  animation: land-glow 5.5s ease-in-out infinite; }
+/* The answer: a card lifts under the pointer and its edge turns gold. */
+.pg.land .pg-card { transition: transform 0.35s ease, box-shadow 0.35s ease,
+  border-color 0.35s ease; }
+.pg.land .pg-card:hover { transform: translateY(-4px); border-color: #b8963f;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(232, 196, 108, 0.18),
+    0 0 46px rgba(220, 184, 94, 0.14); }
+.pg-mode img, .pg-try img { transition: transform 1.4s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.pg.land .pg-card:hover .pg-mode img, .pg.land .pg-card:hover .pg-try img { transform: scale(1.06); }
+.pg-mode { transition: filter 0.4s ease; }
+.pg-mode:hover { filter: brightness(1.12); }
+/* The bar's sections underline themselves from the middle out. */
+.pg.land .pg-bar-links button { position: relative; padding-bottom: 2px; }
+.pg.land .pg-bar-links button::after { content: ''; position: absolute; left: 50%; right: 50%;
+  bottom: -2px; height: 1px; background: #e6d7a8; transition: left 0.25s ease, right 0.25s ease; }
+.pg.land .pg-bar-links button:hover::after { left: 0; right: 0; }
+/* Below the fold: hidden until scrolled to (ui/landing_reveal.ts), then
+   the heading rises and the three cards follow it one at a time. */
+.land-reveal { opacity: 0; transform: translateY(26px);
+  transition: opacity 0.9s ease, transform 0.9s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.land-reveal.in { opacity: 1; transform: translateY(0); }
+.pg-give .pg-give-way { opacity: 0; }
+.pg-give.in .pg-give-way { animation: land-rise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  opacity: 1; }
+.pg-give.in .pg-give-way:nth-child(1) { animation-delay: 0.15s; }
+.pg-give.in .pg-give-way:nth-child(2) { animation-delay: 0.3s; }
+.pg-give.in .pg-give-way:nth-child(3) { animation-delay: 0.45s; }
+.pg-give-way { transition: transform 0.3s ease, border-color 0.3s ease, background 0.3s ease; }
+.pg-give-way:hover { transform: translateY(-3px); border-color: #6b5a2e;
+  background: rgba(14, 22, 40, 0.86); }
+/* Someone who asked for less motion gets the page at rest, with
+   everything visible: an entrance that never plays must not leave its
+   subject hidden. */
+@media (prefers-reduced-motion: reduce) {
+  .pg.land *, .pg.land *::before, .pg.land *::after {
+    animation: none !important; transition: none !important; }
+  .land-reveal, .pg-give .pg-give-way { opacity: 1; transform: none; }
 }
 `;
 
@@ -185,9 +292,13 @@ export function showLanding(
   return new Promise((resolve) => {
     const { root, inner, bar, hero } = buildPage('land', true);
     const stopBackdrop = startBackdrop(root);
+    const stopEmbers = mountEmbers(root);
+    let stopReveal = (): void => {};
     container.appendChild(root);
 
     const finish = (result: LandingResult): void => {
+      stopReveal();
+      stopEmbers();
       stopBackdrop();
       root.remove();
       resolve(result);
@@ -211,7 +322,8 @@ export function showLanding(
     });
     bar.links.appendChild(toGive);
     bar.right.appendChild(navLink('Discord', DISCORD));
-    bar.right.appendChild(navLink('Source', REPO));
+    // The repository, as the one gold thing in the bar (ui/repo_link.ts).
+    bar.right.appendChild(buildRepoLink('pill', 'GitHub'));
     // Last, and quiet, but on the page a first-time visitor actually
     // reads: a site that counts anything owes them somewhere to look.
     bar.right.appendChild(navLink('Privacy', PRIVACY));
@@ -240,8 +352,13 @@ export function showLanding(
           'jungle camps and fog of war. Nothing to install.',
       ),
     );
+    // Under the tagline: the repository, big, and the count beside it.
+    // The genre hands you a game; this one hands you the source, and the
+    // front door says so before it asks for anything.
+    const cta = el('div', 'pg-hero-cta');
     const stats = el('div', 'pg-stats');
-    copy.appendChild(stats);
+    cta.append(buildRepoLink('hero', 'Star on GitHub'), stats);
+    copy.appendChild(cta);
     mountLiveStats(stats);
     hero.append(title, copy);
 
@@ -316,7 +433,11 @@ export function showLanding(
 
     // --- and the thing the genre does not offer ---
     const give = el('section', 'pg-give');
-    give.append(el('h2', '', CONTRIBUTE_TITLE), el('p', '', CONTRIBUTE_LEAD));
+    give.append(
+      el('h2', '', CONTRIBUTE_TITLE),
+      el('p', '', CONTRIBUTE_LEAD),
+      buildRepoLink('wide', 'Open the repository'),
+    );
     const giveRow = el('div', 'pg-give-row');
     for (const way of CONTRIBUTE_WAYS) {
       const card = el('article', 'pg-give-way');
@@ -329,5 +450,7 @@ export function showLanding(
     }
     give.appendChild(giveRow);
     inner.appendChild(give);
+    // A screen down, so it arrives when scrolled to rather than unseen.
+    stopReveal = revealOnScroll(root, [give]);
   });
 }

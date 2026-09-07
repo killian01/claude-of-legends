@@ -66,27 +66,34 @@ export const CSS = `
 }
 
 .pg-hero { padding: clamp(28px, 7vh, 72px) 0 0; max-width: 720px; }
-/* The landing sets its name in art: the lockup, crest over wordmark. It is
-   a tall block, so the hero puts it beside the copy rather than above it.
-   Stacked they measure about 700px together, which pushes the two ways in
-   off the fold on a laptop; side by side the hero is only as tall as the
-   lockup, which is what the two lines of Cinzel used to cost. It sits on
-   the painted backdrop, so it carries its own shadow to hold the gold's
+/* The landing sets its name in art: the lockup, crest over wordmark. It
+   stands centered over the copy, the copy centered under it, and the
+   whole column centered on the page: the front door is symmetric, and
+   the two cards under it are centered to the same axis. Stacked, the
+   hero is taller than it was side by side, which is why the lockup is a
+   little smaller than it used to be: the top of both cards still shows
+   on a laptop, and the page cues the rest with motion. It sits on the
+   painted backdrop, so it carries its own shadow to hold the gold's
    edge against whatever the art does behind. */
-.pg.land .pg-hero { display: flex; align-items: center; max-width: 880px;
-  gap: clamp(20px, 3.2vw, 44px); }
-.pg-lockup { flex: none; margin: 0; width: clamp(190px, 26vw, 300px); }
+.pg.land .pg-hero { display: flex; flex-direction: column; align-items: center;
+  text-align: center; max-width: none; margin: 0 auto;
+  padding-top: clamp(16px, 4vh, 40px); gap: clamp(14px, 2.4vh, 24px); }
+.pg-lockup { position: relative; flex: none; margin: 0; width: clamp(170px, 20vw, 240px); }
 .pg-lockup img { display: block; width: 100%; height: auto;
   filter: drop-shadow(0 16px 38px rgba(0, 0, 0, 0.62)); }
-.pg-hero-copy { min-width: 0; }
+.pg-hero-copy { min-width: 0; display: flex; flex-direction: column; align-items: center; }
 /* First in its column now, so the gap it used to keep from the title is
    the hero's flex gap instead. */
 .pg-hero-copy .pg-tag { margin-top: 0; }
-/* A phone has no width for two columns, and at 300px the lockup would own
-   the screen, so it stacks and shrinks. */
+/* The row under the tagline: the repository button, and the count beside
+   it. One line on a laptop; on a phone the count drops under the button. */
+.pg-hero-cta { display: flex; align-items: center; justify-content: center; gap: 22px;
+  flex-wrap: wrap; margin-top: 22px; }
+.pg-hero-cta .pg-stats { margin: 0; }
+/* A phone has no width to spare, so the lockup shrinks. */
 @media (max-width: 720px) {
-  .pg.land .pg-hero { flex-direction: column; align-items: flex-start; gap: 20px; }
-  .pg-lockup { width: 176px; }
+  .pg.land .pg-hero { gap: 16px; }
+  .pg-lockup { width: 150px; }
 }
 .pg-title {
   font-family: Cinzel, Georgia, 'Times New Roman', serif;
@@ -97,7 +104,7 @@ export const CSS = `
   text-shadow: 0 6px 40px rgba(0, 0, 0, 0.55);
 }
 .pg-tag { font-size: clamp(14px, 1.6vw, 17px); line-height: 1.55; color: #b9cbe4;
-  margin: 16px 0 0; max-width: 56ch; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8); }
+  margin: 16px 0 0; max-width: 52ch; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8); }
 
 .pg-stats { display: flex; gap: 26px; margin: 22px 0 0; flex-wrap: wrap; }
 .pg-stat { display: flex; align-items: baseline; gap: 7px; font-size: 12px; color: #8ba1c0; }
