@@ -771,14 +771,17 @@ describe('the mock pipeline end to end', () => {
 });
 
 describe('the build and animate gates (server/forge.ts)', () => {
-  it('demands a configured provider, full validity, and ownership', async () => {
+  it('demands a configured provider, the art, and ownership, but not a finished kit', async () => {
     const r = rig();
     const deps: ForgeDeps = { store: r.store, generation: r.pipeline, now: () => 999 };
 
     const unconfigured = buildModel({ ...deps, generation: null }, ACCOUNT, r.def.id);
     expect(unconfigured).toMatchObject({ ok: false, error: expect.stringContaining('configured') });
 
-    // An over-budget draft saves fine but cannot finalize.
+    // An over-budget draft saves fine and BUILDS fine: the 3D comes from
+    // the reference image and owes the spells nothing. It is the seal
+    // that refuses it, which is what keeps an illegal champion out of
+    // the gallery and the queues.
     const greedy = { ...r.def, id: 'forged_gen_greedy' };
     greedy.base = {
       ...greedy.base,
@@ -795,9 +798,14 @@ describe('the build and animate gates (server/forge.ts)', () => {
     };
     greedy.growth = { hp: 130, mana: 60, ad: 7, armor: 4.5, mr: 3 };
     expect(saveDraft(deps, ACCOUNT, 'bob', greedy).ok).toBe(true);
-    expect(buildModel(deps, ACCOUNT, greedy.id)).toMatchObject({
+    expect(sealChampion({ store: r.store }, ACCOUNT, greedy.id)).toMatchObject({
       ok: false,
       error: expect.stringContaining('fully valid'),
+    });
+    // Its own art is what it lacks for a build, not its kit.
+    expect(buildModel(deps, ACCOUNT, greedy.id)).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('splash'),
     });
 
     // Another account cannot build what it does not own.

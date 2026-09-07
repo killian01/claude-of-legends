@@ -6,16 +6,24 @@
 // spends their time CHANGING it rather than authoring it from a blank
 // form.
 //
-// One model call carries identity, kit and body together, because they
-// are one design decision: a name, a role, a passive plus four spells,
-// base stats and growth, and the splash line the art step starts from.
+// One answer carries identity, kit and body together, because they are
+// one design decision: a name, a role, a passive plus four spells, base
+// stats and growth, and the splash line the art step starts from.
+//
+// It is a CONVERSATION, like the kit and the stats: the first line gets
+// a whole champion, and the creator then reworks it in their own words
+// ("make him a bruiser instead", "same idea but ice", "the ultimate
+// should be a leap"). Every answer is a whole champion again, read
+// against what is on the form, so iterating on the style is the normal
+// way to use it rather than rerolling from scratch.
+//
 // The numbers are not the model's job here either: the kit is fitted to
 // its envelope by the power dial's own scaling and the stats by the
 // sim's stat fit, exactly as the two conversations do, then the whole
 // thing goes through validateForged before it reaches the editor. What
 // comes back is a proposal: nothing touches the form until the creator
-// takes it. Priced as one turn, on the same 'agent' meter, however many
-// internal retries it takes.
+// takes it. Priced as one turn per message, on the same 'agent' meter,
+// however many internal retries it takes.
 
 import type { AbilityDef } from '../src/sim/combat/casting';
 import type { ChampionBaseStats, ChampionGrowth, ChampionRole } from '../src/sim/content/champions';
@@ -33,16 +41,14 @@ import {
   type ApiMessage,
   askModel,
   CHAT_RAW_TEXT_MAX,
+  type ChatTurn,
   SUGGEST_ATTEMPTS,
   type SuggestDeps,
   type SuggestProgress,
+  threadError,
 } from './suggest';
 import { STAT_RULES } from './suggest_stats';
 import { findBlockedWord } from './word_filter';
-
-// One line of intent, not an essay: past this the creator is writing the
-// champion instead of describing it, and the form is where that belongs.
-export const BRIEF_LINE_MAX = 600;
 
 // The identity limits the validator enforces, restated for the model so
 // a name that cannot be stored is never proposed.
@@ -53,8 +59,13 @@ const KIT_KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
 
 export interface BriefRequest {
   id: string;
-  // The creator's own sentence, in any language.
-  line: string;
+  // The thread as the client keeps it: the creator's own words, the
+  // model's raw answers replayed verbatim so it can rework its own
+  // champion.
+  messages: readonly ChatTurn[];
+  // The def as it stands on the form, unsaved edits included; absent
+  // falls back to the stored draft.
+  def?: unknown;
   onProgress?: (progress: SuggestProgress) => void;
 }
 
@@ -197,6 +208,38 @@ function foreignNames(s: BriefSuggestion): string[] {
   );
 }
 
+// The form as it stands, appended to the creator's LATEST message: a
+// champion the creator has taken and hand-edited is what the next
+// message reworks, so identity, kit and body all travel with it. On the
+// very first message it is the blank draft, and the rules above say to
+// invent rather than to rework.
+function formState(def: ForgedChampionDef): string {
+  return [
+    `The champion on the form right now: ${JSON.stringify({
+      name: def.name,
+      title: def.title,
+      tagline: def.tagline,
+      role: def.role,
+    })}.`,
+    `Its kit: ${JSON.stringify({ passive: def.passive, abilities: def.abilities })}.`,
+    `Its body: base ${JSON.stringify(def.base)}, growth ${JSON.stringify(def.growth)}.`,
+    'Rework THIS champion when the creator asks for a change; keep everything they did not ' +
+      'ask you to touch, and always answer with the whole champion.',
+  ].join(' ');
+}
+
+// The thread as the model sees it: the brief's rules ride the FIRST user
+// turn (the kit grammar itself is the cached system block), the live form
+// state the LAST, exactly like the kit and stat conversations.
+function toApiMessages(turns: readonly ChatTurn[], state: string): ApiMessage[] {
+  return turns.map((t, i) => {
+    if (t.role === 'assistant') return { role: 'assistant', content: t.text };
+    let text = i === 0 ? `${BRIEF_RULES}\n\nThe creator's line: ${t.text}` : t.text;
+    if (i === turns.length - 1) text = `${text}\n\n${state}`;
+    return { role: 'user', content: text };
+  });
+}
+
 export async function briefChampion(
   deps: SuggestDeps,
   accountId: number,
@@ -212,10 +255,20 @@ export async function briefChampion(
   if (row.status === 'finalized') {
     return { ok: false, error: 'this champion is sealed; unseal it to rework the whole thing' };
   }
-  const line = typeof req.line === 'string' ? req.line.trim() : '';
-  if (line === '') return { ok: false, error: 'say what the champion is, in one line' };
-  if (line.length > BRIEF_LINE_MAX) {
-    return { ok: false, error: `keep the brief under ${BRIEF_LINE_MAX} characters` };
+  const badThread = threadError(req.messages);
+  if (badThread !== null) return { ok: false, error: badThread };
+  const first = req.messages[0];
+  if (!first || first.text.trim() === '') {
+    return { ok: false, error: 'say what the champion is, in one line' };
+  }
+  // The working def: what is on the form beats what was last saved, but
+  // identity of the ROW (its id and creator) is never the client's.
+  let base = row.def;
+  if (req.def !== undefined) {
+    if (typeof req.def !== 'object' || req.def === null) {
+      return { ok: false, error: 'malformed form state' };
+    }
+    base = { ...(req.def as ForgedChampionDef), id: row.def.id, creator: row.def.creator };
   }
   // Priced per player message like the conversations, and checked before
   // any of it runs: the retries inside are the server's problem, not a
@@ -226,11 +279,12 @@ export async function briefChampion(
     return { ok: false, error: `this costs ${price} embers and you have ${held}` };
   }
 
-  const apiMessages: ApiMessage[] = [
-    { role: 'user', content: `${BRIEF_RULES}\n\nThe creator's line: ${line}` },
-  ];
+  const apiMessages = toApiMessages(req.messages, formState(base));
   const progress = req.onProgress ?? (() => {});
-  let stage = 'Reading your line and inventing the champion';
+  let stage =
+    req.messages.length > 1
+      ? 'Reworking the champion'
+      : 'Reading your line and inventing the champion';
   let lastErrors: readonly string[] = [];
   for (let attempt = 0; attempt < SUGGEST_ATTEMPTS; attempt += 1) {
     progress({ kind: 'stage', text: stage });
@@ -310,7 +364,7 @@ export async function briefChampion(
     // validator to describe.
     const statFit = fitStats(suggestion.base, suggestion.growth);
     const drafted: ForgedChampionDef = {
-      ...row.def,
+      ...base,
       name: suggestion.name,
       title: suggestion.title,
       tagline: suggestion.tagline,

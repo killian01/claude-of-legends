@@ -1,5 +1,5 @@
-// The Forge's saved conversations: the kit and stat threads travel with
-// the draft, so a reload, a rebuild, or another device finds the
+// The Forge's saved conversations: the brief, kit, stat and look threads
+// travel with the draft, so a reload, a rebuild, or another device finds the
 // conversation and its latest proposal where they were (a creator lost a
 // thread to a reload once). Stored beside the def, never inside it: a
 // conversation is editor state, not champion data, and nothing in it
@@ -10,8 +10,8 @@ import type { ForgeOutcome } from './forge';
 import type { ForgeStore } from './forge_store';
 import { CHAT_RAW_TEXT_MAX, CHAT_TURNS_MAX, CHAT_USER_TEXT_MAX } from './suggest';
 
-export type ChatKind = 'kit' | 'stats' | 'looks';
-export const CHAT_KINDS: readonly ChatKind[] = ['kit', 'stats', 'looks'];
+export type ChatKind = 'brief' | 'kit' | 'stats' | 'looks';
+export const CHAT_KINDS: readonly ChatKind[] = ['brief', 'kit', 'stats', 'looks'];
 // The short text a turn shows as its bubble (the model's comment).
 export const CHAT_BUBBLE_MAX = 400;
 // The proposal ridden along, as JSON text: a fitted kit is small, and the

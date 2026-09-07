@@ -48,7 +48,7 @@ import {
   kitOverview,
   type LiveView,
 } from './forge_budget_view';
-import { chatPanel, chatStream, commentSoFar, newChatState, type SavedChats } from './forge_chat';
+import { chatPanel, chatStream, newChatState, type SavedChats } from './forge_chat';
 import { buildCastEditor, type KitHooks, numField } from './forge_kit';
 import { startMenuBackdrop } from './menu_backdrop';
 import { setRichLine } from './rich_text';
@@ -474,10 +474,6 @@ const BRIEF_EXAMPLES = [
   'A tide priestess who heals allies by pulling water out of her own health',
 ] as const;
 
-// The brief's own line limit, mirrored from the server (forge_brief.ts)
-// so the input stops where the route would refuse.
-const BRIEF_LINE_MAX = 600;
-
 // The editor's ear for calls that fail as a whole: the server not
 // answering, or answering that the session is gone. The open editor sets
 // it; the message goes on a banner above everything, not on the small
@@ -629,29 +625,17 @@ export function openForgeEditor(container: HTMLElement): () => void {
   let animating = false;
   // True while a weapon-only build runs (the claim).
   let weaponForging = false;
-  // The three conversations, session-lived (forge_chat.ts): the kit's and
-  // the looks' on the Spells tab, the stats' on the Tuning tab.
+  // The four conversations (forge_chat.ts), each saved with the draft:
+  // the brief's at the head of the Design tab, the kit's and the looks'
+  // on the Spells tab, the stats' on the Tuning tab.
+  const briefChat = newChatState();
   const kitChat = newChatState();
   const statChat = newChatState();
   const lookChat = newChatState();
-  // The brief (Step 0): one line in, a whole champion out. The line the
-  // creator typed, whether a call is in flight, the stage and the
-  // model's comment as it streams, and the proposal awaiting Apply.
-  let briefLine = '';
-  let briefBusy = false;
-  let briefStage = '';
-  // The model's answer as it streams, and the comment read out of it
-  // while the JSON is still half written.
-  let briefRaw = '';
-  let briefComment = '';
-  // The live area of the brief panel, repainted without a rerender so
-  // the creator's line keeps its focus while the answer streams.
-  let briefStageEl: HTMLElement | null = null;
-  let briefCommentEl: HTMLElement | null = null;
-  const paintBrief = (): void => {
-    if (briefStageEl?.isConnected) briefStageEl.textContent = briefStage;
-    if (briefCommentEl?.isConnected) briefCommentEl.textContent = briefComment;
-  };
+  // The brief: the Forge's first conversation. One line gets a whole
+  // champion, and every message after it reworks that champion, so the
+  // style is iterated here rather than rerolled. The proposal awaiting
+  // the creator's Take lives beside the thread.
   let briefProposal: {
     comment: string;
     name: string;
@@ -931,9 +915,23 @@ export function openForgeEditor(container: HTMLElement): () => void {
   // The conversations travel with the draft (server/forge_chats.ts):
   // each accepted answer and each start-over lands the thread and its
   // latest proposal beside the def; opening a draft brings them back.
-  const persistChat = (kind: 'kit' | 'stats' | 'looks'): void => {
-    const state = kind === 'kit' ? kitChat : kind === 'stats' ? statChat : lookChat;
-    const prop = kind === 'kit' ? proposal : kind === 'stats' ? statProposal : lookProposal;
+  const persistChat = (kind: 'brief' | 'kit' | 'stats' | 'looks'): void => {
+    const state =
+      kind === 'brief'
+        ? briefChat
+        : kind === 'kit'
+          ? kitChat
+          : kind === 'stats'
+            ? statChat
+            : lookChat;
+    const prop =
+      kind === 'brief'
+        ? briefProposal
+        : kind === 'kit'
+          ? proposal
+          : kind === 'stats'
+            ? statProposal
+            : lookProposal;
     void ensureSaved().then((ok) => {
       if (!ok) return;
       return api<{ ok: boolean; error?: string }>('/api/forge/chat', {
@@ -947,6 +945,32 @@ export function openForgeEditor(container: HTMLElement): () => void {
     });
   };
   const restoreChats = (row: DraftRow | undefined): void => {
+    const brief = row?.chats?.brief;
+    briefChat.turns = brief ? [...brief.turns] : [];
+    briefChat.draft = '';
+    const bp = brief?.proposal as Partial<NonNullable<typeof briefProposal>> | null | undefined;
+    briefProposal =
+      bp?.passive && bp.abilities && bp.base && bp.growth
+        ? {
+            comment: bp.comment ?? '',
+            name: bp.name ?? '',
+            title: bp.title ?? '',
+            tagline: bp.tagline ?? '',
+            role: bp.role ?? current.role,
+            splash: bp.splash ?? '',
+            passive: bp.passive,
+            abilities: bp.abilities,
+            base: bp.base,
+            growth: bp.growth,
+            budget: bp.budget ?? {
+              kit: { spend: 0, cap: 0 },
+              stats: { spend: 0, cap: ENVELOPES.stats },
+              growth: { spend: 0, cap: ENVELOPES.growth },
+            },
+            fit: bp.fit ?? { kit: 1, stats: 1, growth: 1 },
+            held: bp.held ?? [],
+          }
+        : null;
     const kit = row?.chats?.kit;
     kitChat.turns = kit ? [...kit.turns] : [];
     kitChat.draft = '';
@@ -1197,7 +1221,11 @@ export function openForgeEditor(container: HTMLElement): () => void {
   // can say WHY they are disabled (the server gates stay authoritative).
   const forgeBlocker = (): string | null => {
     if (isSealed()) return 'already finalized';
-    if (!validateForged(current).ok) return 'the kit must fully validate first';
+    // The kit is NOT a gate here: the 3D builds from the reference image
+    // and owes the spells nothing. The full validation stands at the
+    // seal, where it decides whether a champion may be played by
+    // anyone (playtest: making a creator finish five spells before they
+    // may see their own model put the reward behind the chore).
     if (!chosenOf('splash')) return 'generate and pick a splash first';
     if (!chosenOf('sheet')) return 'generate and pick a model reference first';
     if (finalizing || animating || weaponForging) return 'another build is running';
@@ -1249,13 +1277,16 @@ export function openForgeEditor(container: HTMLElement): () => void {
     const sealed = isSealed();
     const busy = generating !== null || finalizing || animating || weaponForging;
     sealBtn.textContent = sealed ? 'Unseal (edit the kit again)' : 'Seal the champion';
+    const kit = validateForged(current);
     const missing = sealed
       ? null
       : !row?.model
         ? 'Build the 3D model first (Step 4)'
         : row.clips === null || row.clips === undefined
           ? 'Give it its animations first (Step 5)'
-          : null;
+          : kit.ok
+            ? null
+            : 'The kit must fully validate first: see the power budget above';
     sealBtn.disabled = busy || missing !== null;
     sealBtn.title = sealed
       ? 'Returns the champion to a draft; it leaves the gallery until resealed'
@@ -1521,93 +1552,6 @@ export function openForgeEditor(container: HTMLElement): () => void {
     });
   };
 
-  // The brief: the Forge's first door. One line goes up, a whole legal
-  // champion comes back (identity, kit, body, and the line the splash
-  // starts from), fitted to the envelopes and validated server-side.
-  // Nothing lands on the form until the creator takes it: what comes
-  // back is a proposal like the conversations', only wider.
-  const runBrief = (): void => {
-    if (briefBusy || isSealed()) return;
-    const line = briefLine.trim();
-    if (line === '') {
-      status.textContent = 'Say what the champion is, in one line.';
-      return;
-    }
-    briefBusy = true;
-    briefStage = 'Sending your line...';
-    briefRaw = '';
-    briefComment = '';
-    briefProposal = null;
-    renderMain();
-    void ensureSaved()
-      .then((saved) => {
-        if (!saved) throw new Error(lastSaveError ?? 'the draft could not be saved');
-        return chatStream<{
-          ok: boolean;
-          error?: string;
-          comment?: string;
-          name?: string;
-          title?: string;
-          tagline?: string;
-          role?: ChampionRole;
-          splash?: string;
-          passive?: ForgedChampionDef['passive'];
-          abilities?: ForgedChampionDef['abilities'];
-          base?: ChampionBaseStats;
-          growth?: ChampionGrowth;
-          budget?: NonNullable<typeof briefProposal>['budget'];
-          fit?: NonNullable<typeof briefProposal>['fit'];
-          held?: readonly string[];
-        }>('/api/forge/brief', { id: current.id, line }, (out) => {
-          // The stage between calls, and the comment as the model writes
-          // it: a minute of silence reads as a hang (playtest).
-          if (out.progress === 'stage') briefStage = out.text ?? '';
-          else if (out.progress === 'text') {
-            briefRaw += out.text ?? '';
-            briefComment = commentSoFar(briefRaw);
-          }
-          paintBrief();
-        });
-      })
-      .then((r) => {
-        briefBusy = false;
-        if (!r?.ok || !r.passive || !r.abilities || !r.base || !r.growth) {
-          status.textContent = r?.error ?? 'the brief did not come back; try again';
-          renderMain();
-          return;
-        }
-        briefProposal = {
-          comment: r.comment ?? '',
-          name: r.name ?? '',
-          title: r.title ?? '',
-          tagline: r.tagline ?? '',
-          role: r.role ?? current.role,
-          splash: r.splash ?? '',
-          passive: r.passive,
-          abilities: r.abilities,
-          base: r.base,
-          growth: r.growth,
-          budget: r.budget ?? {
-            kit: { spend: 0, cap: 0 },
-            stats: { spend: 0, cap: 0 },
-            growth: { spend: 0, cap: 0 },
-          },
-          fit: r.fit ?? { kit: 1, stats: 1, growth: 1 },
-          held: r.held ?? [],
-        };
-        status.textContent = 'Your champion is proposed: read it, then take it or ask again.';
-        void loadDrafts().then(() => {
-          renderMain();
-          refresh();
-        });
-      })
-      .catch((err: unknown) => {
-        briefBusy = false;
-        status.textContent = err instanceof Error ? err.message : 'the brief failed';
-        renderMain();
-      });
-  };
-
   // Everything the brief proposal writes onto the form in one go:
   // identity, role, kit and body, plus the splash line Step 1 starts
   // from. The art, the model and the sounds are never touched.
@@ -1780,6 +1724,62 @@ export function openForgeEditor(container: HTMLElement): () => void {
     return input;
   }
 
+  // The card's identity: who this champion is. It stands FIRST on the
+  // Design tab, above every generation step, because it is the one panel
+  // that is always true of the champion (a creator reading their own
+  // draft should meet its name before its pipeline), and because the
+  // brief right below writes exactly these fields.
+  function identityCard(): HTMLElement {
+    const card = el('div', 'fe-panel');
+    card.append(el('h3', '', 'Identity'));
+    card.append(
+      textInput(
+        'Name',
+        () => current.name,
+        (v) => {
+          current.name = v;
+        },
+        40,
+      ),
+    );
+    card.append(
+      textInput(
+        'Title (after the name)',
+        () => current.title,
+        (v) => {
+          current.title = v;
+        },
+        40,
+      ),
+    );
+    card.append(
+      textInput(
+        'Tagline: the one line that tells four allies what this kit does',
+        () => current.tagline,
+        (v) => {
+          current.tagline = v;
+        },
+        90,
+      ),
+    );
+    const roleSelect = el('select', 'fe-select') as HTMLSelectElement;
+    for (const r of FORGED_ROLES) {
+      const opt = document.createElement('option');
+      opt.value = r;
+      opt.textContent = r;
+      roleSelect.append(opt);
+    }
+    roleSelect.value = current.role;
+    roleSelect.addEventListener('change', () => {
+      current.role = roleSelect.value as ChampionRole;
+      refresh();
+    });
+    const roleField = el('label', 'fe-field');
+    roleField.append(el('span', 'fe-field-label', 'role'), roleSelect);
+    card.append(roleField);
+    return card;
+  }
+
   // Tab 1, Design: the step panels in creation order (splash art, model
   // reference, the weapon, the rigged 3D build, the animations), then the
   // card identity. Sealing is not among them: it is a champion action, in
@@ -1789,74 +1789,85 @@ export function openForgeEditor(container: HTMLElement): () => void {
     const row = currentRow();
     const busy = generating !== null;
 
+    main.append(identityCard());
+
     // Step 0, the door the Forge opens on: one line, and the whole
     // champion comes back written. A creator arriving with an idea
     // should spend their time CHANGING a champion, not authoring one
     // field at a time from a blank form; the steps below are then edits
     // on something that already exists and already plays.
     if (!sealed) {
-      const brief = el('div', 'fe-panel');
-      // "Started" means art or a model actually exists: a row carries
-      // null, not undefined, for a model it has not built.
-      const started = chosenOf('splash') !== undefined || Boolean(row?.model);
-      brief.append(el('h3', '', 'Start here: your champion in one line'));
-      brief.append(
-        el(
-          'p',
-          'fe-lead',
-          started
-            ? 'Say it again differently and the whole champion is rewritten: name, role, the ' +
-                'five spells, the stats, and the line the splash starts from. Your art and ' +
-                'your 3D are never touched, and nothing lands until you take it.'
-            : 'Say what your champion is, the way you would say it to a friend. You get a ' +
-                'complete, legal champion back: name, role, passive plus four spells, stats, ' +
-                'and the line the splash art starts from. Then change whatever you like in ' +
-                'the steps below. Nothing lands on the form until you take it.',
-        ),
+      main.append(
+        chatPanel<{
+          ok: boolean;
+          comment?: string;
+          name?: string;
+          title?: string;
+          tagline?: string;
+          role?: ChampionRole;
+          splash?: string;
+          passive?: ForgedChampionDef['passive'];
+          abilities?: ForgedChampionDef['abilities'];
+          base?: ChampionBaseStats;
+          growth?: ChampionGrowth;
+          raw?: string;
+          budget?: NonNullable<typeof briefProposal>['budget'];
+          fit?: NonNullable<typeof briefProposal>['fit'];
+          held?: string[];
+          error?: string;
+        }>(briefChat, {
+          title: 'Start here: your champion, in your own words',
+          lead:
+            'Say what your champion is, the way you would say it to a friend, and the whole ' +
+            'thing comes back written: name, role, passive plus four spells, stats, and the ' +
+            'line the splash art starts from. Then keep talking to shape it ("more of a ' +
+            'bruiser", "same idea but ice", "the ultimate should be a leap"): every answer is ' +
+            'the whole champion again, inside the rules. Nothing touches the form until you ' +
+            'take it, and your art and your 3D are never touched.',
+          placeholder: BRIEF_EXAMPLES[0] ?? 'What is your champion?',
+          locked: null,
+          parts: ['name', 'role', 'passive', 'Q', 'W', 'E', 'R', 'stats'],
+          request: (messages, onLine) =>
+            ensureSaved().then((ok) =>
+              ok
+                ? chatStream('/api/forge/brief', { id: current.id, def: current, messages }, onLine)
+                : { ok: false, error: lastSaveError ?? 'the draft could not be saved' },
+            ),
+          accept: (r) => {
+            if (!r?.ok || !r.passive || !r.abilities || !r.base || !r.growth) {
+              return { error: r?.error ?? 'the brief failed' };
+            }
+            briefProposal = {
+              comment: r.comment ?? '',
+              name: r.name ?? '',
+              title: r.title ?? '',
+              tagline: r.tagline ?? '',
+              role: r.role ?? current.role,
+              splash: r.splash ?? '',
+              passive: r.passive,
+              abilities: r.abilities,
+              base: r.base,
+              growth: r.growth,
+              budget: r.budget ?? {
+                kit: { spend: 0, cap: 0 },
+                stats: { spend: 0, cap: ENVELOPES.stats },
+                growth: { spend: 0, cap: ENVELOPES.growth },
+              },
+              fit: r.fit ?? { kit: 1, stats: 1, growth: 1 },
+              held: r.held ?? [],
+            };
+            return {
+              raw: typeof r.raw === 'string' ? r.raw : '',
+              bubble: r.comment ? r.comment : 'Here is a whole champion.',
+            };
+          },
+          report: (message) => {
+            status.textContent = message;
+          },
+          rerender: renderMain,
+          changed: () => persistChat('brief'),
+        }),
       );
-      const heroRow = el('div', 'fe-hero');
-      const input = el('input', 'fe-hero-input') as HTMLInputElement;
-      input.placeholder =
-        'A storm dancer who trades her own health for speed, and ends fights with a thunder leap...';
-      input.maxLength = BRIEF_LINE_MAX;
-      input.value = briefLine;
-      input.disabled = briefBusy;
-      input.addEventListener('input', () => {
-        briefLine = input.value;
-      });
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !briefBusy) runBrief();
-      });
-      const go = pricedBtn(
-        'fe-gen',
-        started ? 'Rewrite the champion' : 'Write my champion',
-        'kitTurn',
-      );
-      go.disabled = briefBusy;
-      go.title = 'One answer: identity, the five spells and the stats, all inside the rules';
-      go.addEventListener('click', runBrief);
-      heroRow.append(input, go);
-      brief.append(heroRow);
-      const chips = el('div', 'fe-chips');
-      chips.append(el('span', 'fe-field-label', 'Try one:'));
-      for (const ex of BRIEF_EXAMPLES) {
-        const chip = el('button', 'fe-chip', `${ex.slice(0, 44)}...`);
-        chip.title = ex;
-        chip.addEventListener('click', () => {
-          briefLine = ex;
-          input.value = ex;
-        });
-        chips.append(chip);
-      }
-      brief.append(chips);
-      if (briefBusy) {
-        const stageLine = el('div', 'fe-step-text', briefStage);
-        const commentLine = el('p', 'fe-desc', briefComment);
-        briefStageEl = stageLine;
-        briefCommentEl = commentLine;
-        brief.append(stageLine, commentLine);
-      }
-      main.append(brief);
 
       // The proposal, whole: what the creator is about to accept, in the
       // same derived words the roster shows, with every envelope's bill.
@@ -1907,13 +1918,19 @@ export function openForgeEditor(container: HTMLElement): () => void {
           'Fills the identity, the kit and the stats, and prefills the splash line; your art ' +
           'and your 3D stay as they are';
         take.addEventListener('click', takeBrief);
-        const again = el('button', 'fe-mini', 'Ask again') as HTMLButtonElement;
-        again.disabled = briefBusy;
-        again.title = 'Another champion from the same line, at the same price';
-        again.addEventListener('click', runBrief);
-        const row2 = el('div', 'fe-anim-actions');
-        row2.append(take, again);
-        prop.append(row2);
+        const actions = el('div', 'fe-anim-actions');
+        actions.append(take);
+        // Not taken yet is not lost: the conversation above reworks this
+        // very champion, so the way to change it is to say so.
+        actions.append(
+          el(
+            'div',
+            'fe-desc',
+            'Or keep talking above to change it: every answer proposes the whole champion ' +
+              'again, and only the one you take lands on the form.',
+          ),
+        );
+        prop.append(actions);
         main.append(prop);
       }
     }
@@ -2164,8 +2181,10 @@ export function openForgeEditor(container: HTMLElement): () => void {
           'fe-lead',
           'Builds the 3D model from your chosen reference image (the exact one you picked), ' +
             'rigs it so it has the bones a weapon hangs on, and forges your weapon if you ' +
-            'made one. You inspect the result in the workshop and place the weapon there; ' +
-            'the animations come AFTER, in Step 5. Any failure refunds every ember it took.',
+            'made one. Your kit does not have to be finished: the model comes from the ' +
+            'picture, and the spells can wait. You inspect the result in the workshop and ' +
+            'place the weapon there; the animations come AFTER, in Step 5. Any failure ' +
+            'refunds every ember it took.',
         ),
       );
       // One button, one price, and the price is the whole run: the model,
@@ -2383,55 +2402,6 @@ export function openForgeEditor(container: HTMLElement): () => void {
       if (actions.childElementCount > 0) animPanel.append(actions);
     }
     main.append(animPanel);
-
-    const card = el('div', 'fe-panel');
-    card.append(el('h3', '', 'Identity'));
-    card.append(
-      textInput(
-        'Name',
-        () => current.name,
-        (v) => {
-          current.name = v;
-        },
-        40,
-      ),
-    );
-    card.append(
-      textInput(
-        'Title (after the name)',
-        () => current.title,
-        (v) => {
-          current.title = v;
-        },
-        40,
-      ),
-    );
-    card.append(
-      textInput(
-        'Tagline: the one line that tells four allies what this kit does',
-        () => current.tagline,
-        (v) => {
-          current.tagline = v;
-        },
-        90,
-      ),
-    );
-    const roleSelect = el('select', 'fe-select') as HTMLSelectElement;
-    for (const r of FORGED_ROLES) {
-      const opt = document.createElement('option');
-      opt.value = r;
-      opt.textContent = r;
-      roleSelect.append(opt);
-    }
-    roleSelect.value = current.role;
-    roleSelect.addEventListener('change', () => {
-      current.role = roleSelect.value as ChampionRole;
-      refresh();
-    });
-    const roleField = el('label', 'fe-field');
-    roleField.append(el('span', 'fe-field-label', 'role'), roleSelect);
-    card.append(roleField);
-    main.append(card);
   }
 
   // Tab 2, Spells: the slot bar (passive plus Q W E R), the selected

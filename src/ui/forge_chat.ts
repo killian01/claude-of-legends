@@ -38,7 +38,7 @@ export interface SavedChat {
   turns: ChatTurnView[];
   proposal: unknown;
 }
-export type SavedChats = Partial<Record<'kit' | 'stats' | 'looks', SavedChat>>;
+export type SavedChats = Partial<Record<'brief' | 'kit' | 'stats' | 'looks', SavedChat>>;
 
 export function newChatState(): ChatState {
   return {

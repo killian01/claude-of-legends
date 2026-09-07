@@ -1924,49 +1924,17 @@ const server = http.createServer(async (req, res) => {
         );
         return;
       }
-      // The brief: one line in, a whole champion out (identity, kit and
-      // body together), owner-only and drafts only. Same wire, same
-      // meter and same price as one turn of a conversation; it is the
-      // Forge's first door, so a creator starts by changing a champion
-      // instead of authoring one from a blank form.
-      if (url === '/api/forge/brief' && req.method === 'POST') {
-        const body = await readJsonBody(req);
-        const id = typeof body?.id === 'string' ? body.id : null;
-        const line = typeof body?.line === 'string' ? body.line : null;
-        if (!id || line === null) {
-          sendJson(res, 400, { ok: false, error: 'malformed request' });
-          return;
-        }
-        const quota = checkQuota(quotaDeps, 'agent');
-        if (!quota.ok) {
-          sendJson(res, 200, quota);
-          return;
-        }
-        res.writeHead(200, {
-          'content-type': 'application/x-ndjson',
-          'cache-control': 'no-store',
-          'x-accel-buffering': 'no',
-        });
-        const outcome = await briefChampion(suggestDeps, me.id, {
-          id,
-          line,
-          onProgress: (p) => {
-            res.write(`${JSON.stringify({ progress: p.kind, text: p.text })}\n`);
-          },
-        });
-        if (outcome.ok) spendQuota(quotaDeps, me.id, 'agent');
-        res.end(`${JSON.stringify(outcome)}\n`);
-        return;
-      }
       // The kit conversation: owner-only, drafts only, metered on the
       // agent quota, one unit per player message, spent only when a
       // proposal lands. The body carries the whole thread plus the
       // unsaved form state, hence the wide cap.
       // The stat conversation (Tuning tab) rides the same wire and meter,
-      // and so does the look conversation (the spell looks on the Spells
-      // tab).
+      // the look conversation (the spell looks on the Spells tab) too,
+      // and so does the brief, the Design tab's first panel, whose
+      // answers are whole champions rather than one part of one.
       if (
-        (url === '/api/forge/suggest' ||
+        (url === '/api/forge/brief' ||
+          url === '/api/forge/suggest' ||
           url === '/api/forge/suggest-stats' ||
           url === '/api/forge/suggest-look') &&
         req.method === 'POST'
@@ -1992,11 +1960,13 @@ const server = http.createServer(async (req, res) => {
           'x-accel-buffering': 'no',
         });
         const ask =
-          url === '/api/forge/suggest'
-            ? suggestKit
-            : url === '/api/forge/suggest-stats'
-              ? suggestStats
-              : suggestLook;
+          url === '/api/forge/brief'
+            ? briefChampion
+            : url === '/api/forge/suggest'
+              ? suggestKit
+              : url === '/api/forge/suggest-stats'
+                ? suggestStats
+                : suggestLook;
         const outcome = await ask(suggestDeps, me.id, {
           id,
           messages: body.messages as { role: 'user' | 'assistant'; text: string }[],

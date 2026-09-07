@@ -1,6 +1,7 @@
-// The brief (server/forge_brief.ts): one line in, a whole champion out.
-// It answers honestly when unconfigured, works on the owner's drafts
-// only, and NOTHING it writes escapes the rules: the kit is fitted to
+// The brief (server/forge_brief.ts): one line in, a whole champion out,
+// and a conversation from there (the creator reworks the style in their
+// own words and every answer is the whole champion again). It answers
+// honestly when unconfigured, works on the owner's drafts only, and NOTHING it writes escapes the rules: the kit is fitted to
 // its envelope, the body to the Stat and Growth lines, the names must be
 // English and pass the card filter, the role must be one of ours, and
 // the whole champion must clear validateForged before the editor ever
@@ -9,9 +10,9 @@
 
 import { describe, expect, it } from 'vitest';
 import { EMBER_PRICES } from '../server/embers';
-import { BRIEF_LINE_MAX, briefChampion } from '../server/forge_brief';
+import { briefChampion } from '../server/forge_brief';
 import { ForgeStore } from '../server/forge_store';
-import { SUGGEST_ATTEMPTS, type SuggestDeps } from '../server/suggest';
+import { type ChatTurn, SUGGEST_ATTEMPTS, type SuggestDeps } from '../server/suggest';
 import { budgetOf } from '../src/sim/forge/budget';
 import { ENVELOPES, envelopeSpend, KIT_ENVELOPE } from '../src/sim/forge/envelopes';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
@@ -92,13 +93,14 @@ function deps(store: ForgeStore, fetchFn: typeof fetch): SuggestDeps {
 }
 
 const LINE = 'a stone warden who makes leaving the lane expensive';
+const ASK: ChatTurn[] = [{ role: 'user', text: LINE }];
 
 describe('briefChampion', () => {
   it('answers honestly when no key is configured', async () => {
     const store = seeded();
     const out = await briefChampion({ store, apiKey: null, assetsDir: 'A' }, 1, {
       id: 'forged_d',
-      line: LINE,
+      messages: ASK,
     });
     expect(out).toMatchObject({ ok: false, error: expect.stringContaining('not configured') });
     store.close();
@@ -107,18 +109,18 @@ describe('briefChampion', () => {
   it('refuses another account, a sealed champion, and an empty or huge line', async () => {
     const store = seeded();
     const d = deps(store, async () => answer(briefAnswer()));
-    expect((await briefChampion(d, 2, { id: 'forged_d', line: LINE })).ok).toBe(false);
-    expect(await briefChampion(d, 1, { id: 'forged_sealed', line: LINE })).toMatchObject({
+    expect((await briefChampion(d, 2, { id: 'forged_d', messages: ASK })).ok).toBe(false);
+    expect(await briefChampion(d, 1, { id: 'forged_sealed', messages: ASK })).toMatchObject({
       ok: false,
       error: expect.stringContaining('sealed'),
     });
-    expect(await briefChampion(d, 1, { id: 'forged_d', line: '   ' })).toMatchObject({
-      ok: false,
-      error: expect.stringContaining('one line'),
-    });
     expect(
-      await briefChampion(d, 1, { id: 'forged_d', line: 'x'.repeat(BRIEF_LINE_MAX + 1) }),
-    ).toMatchObject({ ok: false, error: expect.stringContaining(String(BRIEF_LINE_MAX)) });
+      await briefChampion(d, 1, { id: 'forged_d', messages: [{ role: 'user', text: '  ' }] }),
+    ).toMatchObject({ ok: false, error: expect.stringContaining('one line') });
+    expect(await briefChampion(d, 1, { id: 'forged_d', messages: [] })).toMatchObject({
+      ok: false,
+      error: expect.stringContaining('malformed'),
+    });
     // Every one of those refused before the ledger moved.
     expect(store.creditBalance(1)).toBe(SEED);
     store.close();
@@ -133,7 +135,7 @@ describe('briefChampion', () => {
         return answer(briefAnswer());
       }),
       1,
-      { id: 'forged_d', line: LINE },
+      { id: 'forged_d', messages: ASK },
     );
     expect(out.ok).toBe(true);
     if (!out.ok) return;
@@ -182,7 +184,7 @@ describe('briefChampion', () => {
         return answer(briefAnswer());
       }),
       1,
-      { id: 'forged_d', line: LINE },
+      { id: 'forged_d', messages: ASK },
     );
     expect(out).toMatchObject({ ok: false, error: expect.stringContaining('embers') });
     expect(calls).toBe(0);
@@ -199,7 +201,7 @@ describe('briefChampion', () => {
         asked.length === 1 ? briefAnswer({ role: 'Necromancer' }) : briefAnswer({ role: 'tank' }),
       );
     };
-    const out = await briefChampion(deps(store, fetchFn), 1, { id: 'forged_d', line: LINE });
+    const out = await briefChampion(deps(store, fetchFn), 1, { id: 'forged_d', messages: ASK });
     expect(out.ok).toBe(true);
     // The correction names the role that was wrong and the ones allowed.
     expect(asked[1]).toContain('Necromancer');
@@ -221,7 +223,7 @@ describe('briefChampion', () => {
           : briefAnswer(),
       );
     };
-    const out = await briefChampion(deps(store, fetchFn), 1, { id: 'forged_d', line: LINE });
+    const out = await briefChampion(deps(store, fetchFn), 1, { id: 'forged_d', messages: ASK });
     expect(out.ok).toBe(true);
     if (out.ok) expect(out.tagline).toBe('Holds the lane and makes leaving it expensive');
     expect(asked[1]).toContain('cannot appear on a champion card');
@@ -239,9 +241,48 @@ describe('briefChampion', () => {
       abilities.Q.cooldown = 9999;
       return answer(briefAnswer({ abilities }));
     };
-    const out = await briefChampion(deps(store, fetchFn), 1, { id: 'forged_d', line: LINE });
+    const out = await briefChampion(deps(store, fetchFn), 1, { id: 'forged_d', messages: ASK });
     expect(out).toMatchObject({ ok: false, error: expect.stringContaining('validation') });
     expect(calls).toBe(SUGGEST_ATTEMPTS);
+    store.close();
+  });
+
+  it('reworks the champion on the form when the creator asks for a change', async () => {
+    // The second message is an iteration, not a reroll: the thread rides
+    // up whole, the form state is appended to the LAST turn, and what
+    // comes back is the whole champion again.
+    const store = seeded();
+    const seen: { role: string; content: string }[][] = [];
+    const fetchFn: typeof fetch = async (_url, init) => {
+      const body = JSON.parse(String(init?.body)) as {
+        messages: { role: string; content: string }[];
+      };
+      seen.push(body.messages);
+      return answer(briefAnswer({ name: 'Bramwell', title: 'the Ice Gate' }));
+    };
+    const thread: ChatTurn[] = [
+      { role: 'user', text: LINE },
+      { role: 'assistant', text: briefAnswer() },
+      { role: 'user', text: 'same idea but ice, and make him meaner' },
+    ];
+    const taken: ForgedChampionDef = { ...twin(0, 'forged_d'), name: 'Bramwell', role: 'Tank' };
+    const out = await briefChampion(deps(store, fetchFn), 1, {
+      id: 'forged_d',
+      messages: thread,
+      def: taken,
+    });
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.title).toBe('the Ice Gate');
+    const sent = seen[0] ?? [];
+    // The whole thread, the rules on the first turn only, and the form
+    // the creator is actually looking at appended to the last.
+    expect(sent).toHaveLength(3);
+    expect(sent[0]?.content).toContain('You invent a whole champion');
+    expect(sent[0]?.content).toContain(LINE);
+    expect(sent[1]?.role).toBe('assistant');
+    expect(sent[2]?.content).toContain('same idea but ice');
+    expect(sent[2]?.content).toContain('The champion on the form right now');
+    expect(sent[2]?.content).toContain('Bramwell');
     store.close();
   });
 
@@ -253,7 +294,7 @@ describe('briefChampion', () => {
       1,
       {
         id: 'forged_d',
-        line: LINE,
+        messages: ASK,
         onProgress: (p) => seen.push(p.kind),
       },
     );

@@ -235,11 +235,17 @@ export function deleteDraft(deps: ForgeDeps, accountId: number, id: string): For
   return { ok: true };
 }
 
-// The model build (plan-forge phase 5, first half): the one gate where
-// EVERYTHING must hold, full validation included; the pipeline then
-// debits the embers and runs async. The row stays a draft: the player
-// inspects the rigged model in the workshop and hangs its weapon there,
-// and the animations (the second half, below) are their own later click. Running it again before the seal is a
+// The model build (plan-forge phase 5, first half): the pipeline debits
+// the embers and runs async. The row stays a draft: the player inspects
+// the rigged model in the workshop and hangs its weapon there, and the
+// animations (the second half, below) are their own later click.
+//
+// It does NOT demand a valid kit (playtest: a creator arrives with an
+// image in their head, and made to finish a chiffred design pass on five
+// spells before they may see anything in 3D). The 3D is built from the
+// chosen reference image and owes the kit nothing; the full validation
+// stands where it means something, at the seal (server/seal.ts), which
+// is what lets a champion into the gallery and the queues. Running it again before the seal is a
 // rebuild and spends another creation. The returned `done` promise is
 // for tests and shutdown; the HTTP route answers with the job id alone.
 export function buildModel(
@@ -256,13 +262,6 @@ export function buildModel(
   }
   if (row.status === 'finalized') {
     return { ok: false, error: 'this champion is sealed: unseal it to rebuild the model' };
-  }
-  const v = validateForged(row.def);
-  if (!v.ok) {
-    return {
-      ok: false,
-      error: `the build needs a fully valid champion: ${v.errors.slice(0, 5).join('; ')}`,
-    };
   }
   // The splash is the creative anchor (ADR 0010) and the model reference
   // is the image the 3D literally builds from; both are the player's own

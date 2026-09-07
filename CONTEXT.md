@@ -257,7 +257,11 @@ The 3D happens in two player-approved steps, both on the draft: the BUILD spends
 and produces the model, rigged (its skeleton comes with it) and with its weapon when one was
 made, which the creator inspects and dresses in the workshop (and may rebuild, spending
 again); ANIMATE, always last and always its own click, bakes onto that skeleton the clips
-the creator picked from the provider catalog, at its own price. Neither seals: the Seal (its
+the creator picked from the provider catalog, at its own price. Neither waits on a finished
+kit: the 3D is built from the chosen reference image and owes the spells nothing, so a
+creator who arrives with an image can see it stand up before they have written a spell.
+Full validation stands at the Seal, where it decides whether anyone else may meet the
+champion. Neither seals: the Seal (its
 own entry) is the creator's own separate click, in the editor's Actions rail.
 _Avoid_: WIP champion, unfinished champion
 
@@ -272,13 +276,15 @@ _Avoid_: skeleton pass, auto-rig step, bone setup
 
 **Seal**:
 The creator's explicit click that marks a champion finalized: the kit, the art and the
-model lock, and the champion may enter the gallery. It is an act on the whole champion, so
+model lock, and the champion may enter the gallery. It is the one gate where EVERYTHING
+must hold, the power budget included: a champion nobody else can meet is the right place
+to demand a legal one. It is an act on the whole champion, so
 it stands with the other champion actions in the editor's right rail rather than inside any
 one creation step (playtest: under the animations it read as a setting of the clips). Never
 a side effect of another step (playtest: a lock that arrives unasked reads as a bug). The
 seal spares the animations: a sealed champion re-bakes any clip freely. Unsealing is the
-same door in reverse, any time, owner-only: the champion returns to a draft and leaves the gallery until resealed. Reforge
-(its own entry) is the seal's one in-place kit exception.
+same door in reverse, any time, owner-only: the champion returns to a draft and leaves the
+gallery until resealed. Reforge (its own entry) is the seal's one in-place kit exception.
 _Avoid_: finalize button, lock, publish
 
 **Reforge**:
