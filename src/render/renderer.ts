@@ -31,6 +31,12 @@ import {
 import { FloatingText, makeTextSprite } from './floating_text';
 import { buildMapDressing, type MapDressing, SKIRT_COLOR } from './map_dressing';
 import { buildMinionMesh } from './minion_shapes';
+import {
+  estimatedMuzzleOffset,
+  muzzleSpawnOffset,
+  PROJECTILE_Y,
+  type SpawnOffset,
+} from './muzzle_spawn';
 import { buildSanctumMesh, buildTowerMesh } from './structure_shapes';
 import { toonifyMaterials } from './toon';
 import {
@@ -91,6 +97,11 @@ function disposeDeep(obj: THREE.Object3D): void {
 
 interface TrackedUnit {
   mesh: THREE.Object3D;
+  // Overhead UI (bars, labels, marks) in a group turned back against the
+  // body's yaw every frame: the bar sprites anchor at their left edge, and
+  // inside the yawing holder that edge swung around the unit as it turned,
+  // sliding the bar sideways and up into the nameplate.
+  overhead: THREE.Group;
   kind: string;
   hpFill: THREE.Sprite;
   hpBack: THREE.Sprite;
@@ -180,7 +191,7 @@ interface TrackedMobile {
   // Muzzle spawn offset, decaying over the first instants of flight so a
   // rifle bolt visibly leaves the barrel tip while the sim path stays the
   // truth for every hit test. Null once converged (or never authored).
-  spawnOfs: { x: number; y: number; z: number } | null;
+  spawnOfs: SpawnOffset | null;
   bornAt: number;
 }
 
@@ -257,7 +268,9 @@ export class Renderer {
   // looking down at a right-handed world with +x right can only show +z
   // running down. So the scene mirrors z about the map's middle and
   // everything in sim coordinates lives inside it untouched; only the camera,
-  // the ray casts, and the screen projection cross the mirror, through these.
+  // the ray casts, and the screen projection cross the mirror, through these,
+  // plus the one world-space query made of a rig (the muzzle tip, brought
+  // back over in muzzle_spawn.ts).
   private sceneZ(z: number): number {
     return this.world.map.size - z;
   }
@@ -1306,26 +1319,29 @@ export class Renderer {
   // weapon gives the exact tip; the manifest's forward/y estimate covers
   // the procedural figure while the asset loads. Returns the offset from
   // the sim position, or null when the shooter is unknown or muzzle-less.
-  private muzzleOffset(p: Readonly<Projectile>): { x: number; y: number; z: number } | null {
+  private muzzleOffset(p: Readonly<Projectile>): SpawnOffset | null {
     const src = p.sourceId ? this.world.units.get(p.sourceId) : undefined;
     if (src?.kind !== 'champion') return null;
     const muzzle = championVisualDef(src.championId)?.muzzle;
     if (!muzzle) return null;
     const cv = this.championVisuals.get(src.id);
-    if (cv?.muzzleWorld(MUZZLE_V3)) {
-      return { x: MUZZLE_V3.x - p.pos.x, y: MUZZLE_V3.y - 1.2, z: MUZZLE_V3.z - p.pos.z };
-    }
-    let dx = p.pos.x - src.pos.x;
-    let dz = p.pos.z - src.pos.z;
-    const d = Math.hypot(dx, dz);
-    if (d < 0.01) return null;
-    dx /= d;
-    dz /= d;
-    return {
-      x: src.pos.x + dx * muzzle.forward - p.pos.x,
-      y: muzzle.y - 1.2,
-      z: src.pos.z + dz * muzzle.forward - p.pos.z,
-    };
+    // The rig answers in world space, on the far side of the z mirror; the
+    // bolt lives in scene space, in sim coordinates. Measured naively the
+    // spawn landed about (size - 2z) away and the bullet flew in from nowhere.
+    if (cv?.muzzleWorld(MUZZLE_V3)) return muzzleSpawnOffset(this.scene, MUZZLE_V3, p.pos);
+    return estimatedMuzzleOffset(src.pos, p.pos, muzzle);
+  }
+
+  // The fire line of a projectile seen for the first time: from its shooter
+  // to where the sim already carried it (a bolt steps on the tick that
+  // spawns it). Null without a shooter in view or a line to read.
+  private spawnHeading(p: Readonly<Projectile>): Vec2 | null {
+    const src = p.sourceId ? this.world.units.get(p.sourceId) : undefined;
+    if (!src) return null;
+    const dx = p.pos.x - src.pos.x;
+    const dz = p.pos.z - src.pos.z;
+    if (Math.hypot(dx, dz) < 0.01) return null;
+    return { x: dx, z: dz };
   }
 
   // Called once after every sim tick: shifts interpolation history and syncs
@@ -1348,8 +1364,10 @@ export class Renderer {
               : u.kind === 'camp'
                 ? 1.5
                 : 3.2;
+        const overhead = new THREE.Group();
+        holder.add(overhead);
         const { fill, back, manaFill } = this.buildHpBar(
-          holder,
+          overhead,
           barY,
           barWidth,
           u.kind === 'champion',
@@ -1362,6 +1380,7 @@ export class Renderer {
         this.unitLayer.add(holder);
         t = {
           mesh: holder,
+          overhead,
           kind: u.kind,
           hpFill: fill,
           hpBack: back,
@@ -1484,7 +1503,7 @@ export class Renderer {
         const label = `${row?.name ?? u.championId ?? ''}  Lv${u.level}${play}`;
         if (t.nameKey !== label) {
           if (t.namePlate) {
-            t.mesh.remove(t.namePlate);
+            t.overhead.remove(t.namePlate);
             const mat = t.namePlate.material as THREE.SpriteMaterial;
             mat.map?.dispose();
             mat.dispose();
@@ -1498,7 +1517,7 @@ export class Renderer {
           );
           if (plate) {
             plate.position.set(0, t.barY + 1.0, 0);
-            t.mesh.add(plate);
+            t.overhead.add(plate);
             t.namePlate = plate;
           }
           t.nameKey = label;
@@ -1534,11 +1553,11 @@ export class Renderer {
         if (tickKey !== t.hpTickKey) {
           t.hpTickKey = tickKey;
           if (t.hpTicks) {
-            t.mesh.remove(t.hpTicks);
+            t.overhead.remove(t.hpTicks);
             disposeDeep(t.hpTicks);
           }
           t.hpTicks = this.buildHpTicks(t.barWidth, t.barY, u.maxHp);
-          t.mesh.add(t.hpTicks);
+          t.overhead.add(t.hpTicks);
         }
         if (t.hpTicks) t.hpTicks.visible = barVisible;
       }
@@ -1551,7 +1570,7 @@ export class Renderer {
         if (key !== t.hpLabelKey) {
           t.hpLabelKey = key;
           if (t.hpLabel) {
-            t.mesh.remove(t.hpLabel);
+            t.overhead.remove(t.hpLabel);
             const mat = t.hpLabel.material as THREE.SpriteMaterial;
             mat.map?.dispose();
             mat.dispose();
@@ -1561,7 +1580,7 @@ export class Renderer {
             const label = makeTextSprite(key, '#ffe9a8', 0.6, 160, 30);
             if (label) {
               label.position.set(0, t.barY + 0.7, 0);
-              t.mesh.add(label);
+              t.overhead.add(label);
               t.hpLabel = label;
             }
           }
@@ -1597,7 +1616,7 @@ export class Renderer {
             );
             sf.center.set(0, 0.5);
             sf.renderOrder = 1;
-            t.mesh.add(sf);
+            t.overhead.add(sf);
             t.shieldFill = sf;
           }
           t.shieldFill.scale.set(shieldW, 0.24, 1);
@@ -1616,7 +1635,7 @@ export class Renderer {
         const mark = makeTextSprite('!', '#ffd94a', 0.8);
         if (mark) {
           mark.position.set(0, t.barY + 1.65, 0);
-          t.mesh.add(mark);
+          t.overhead.add(mark);
           t.stunMark = mark;
         }
       }
@@ -1649,7 +1668,7 @@ export class Renderer {
       if (shownStacks !== t.markKey) {
         t.markKey = shownStacks;
         if (t.markPips) {
-          t.mesh.remove(t.markPips);
+          t.overhead.remove(t.markPips);
           disposeDeep(t.markPips);
           t.markPips = null;
         }
@@ -1669,7 +1688,7 @@ export class Renderer {
             sprite.position.set((i - (shownStacks - 1) / 2) * 0.46, t.barY + 0.52, 0);
             group.add(sprite);
           }
-          t.mesh.add(group);
+          t.overhead.add(group);
           t.markPips = group;
         }
       }
@@ -1770,9 +1789,14 @@ export class Renderer {
         const spawnOfs = this.muzzleOffset(p);
         mesh.position.set(
           p.pos.x + (spawnOfs?.x ?? 0),
-          1.2 + (spawnOfs?.y ?? 0),
+          PROJECTILE_Y + (spawnOfs?.y ?? 0),
           p.pos.z + (spawnOfs?.z ?? 0),
         );
+        // Headed the right way from its first frame: the per-frame turn
+        // reads the tick delta, which is zero until the second sync, and a
+        // meter-long tracer pointing down +x for a tick is a visible flinch.
+        const heading = this.spawnHeading(p);
+        if (heading) mesh.rotation.y = -Math.atan2(heading.z, heading.x);
         this.scene.add(mesh);
         this.trackedProjectiles.set(id, {
           mesh,
@@ -2249,6 +2273,8 @@ export class Renderer {
       const swingK = swinging ? Math.sin((1 - (t.swingUntil - now) / 200) * Math.PI) : 0;
       t.mesh.position.set(x + t.swingDir.x * swingK * 0.28, bobY, z + t.swingDir.z * swingK * 0.28);
       if (swinging) t.mesh.rotation.y = t.yaw;
+      // The overhead UI never turns with the body: its anchors stay put.
+      t.overhead.rotation.y = -t.mesh.rotation.y;
 
       const anim = t.mesh.userData.anim as AnimParts | undefined;
       if (cv) {
@@ -2351,7 +2377,7 @@ export class Renderer {
       const x = t.prev.x + (t.curr.x - t.prev.x) * alpha;
       const z = t.prev.z + (t.curr.z - t.prev.z) * alpha;
       let px = x;
-      let py = 1.2;
+      let py = PROJECTILE_Y;
       let pz = z;
       if (t.spawnOfs) {
         // Muzzle convergence: at the barrel tip at birth, on the sim path
