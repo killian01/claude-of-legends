@@ -133,12 +133,17 @@ ending, errors, and refusals such as a rate limit.
 
 The web server in front of it writes an access log, in the ordinary way
 that any web server does: one line per page or API request, holding the
-method, the path, the status, your address, and the browser and referrer
-headers your browser sent. Assets are not logged, so a page load is one
-line rather than four hundred. The session cookie is removed before the
-line is written, because a log that can resume a session is a store of
-credentials rather than a log. Lines roll off at 20 MiB and about a week,
-whichever comes first.
+method, the path, the status, your address, the browser and referrer
+headers your browser sent, and the routing headers the proxy in front adds
+to them. Assets are not logged, so a page load is one line rather than
+four hundred. Lines roll off at 20 MiB and about a week, whichever comes
+first.
+
+Two things are dropped before a line is written. The session cookie,
+because a log that can resume a session is a store of credentials rather
+than a log. And the country header the proxy attaches to every request:
+this log exists to tell a scanner sweep from an announcement landing, and
+where you live is not part of that question.
 
 It exists because the counters above cannot tell a page somebody asked
 for from a scanner walking a list of admin panels, and knowing which is
