@@ -1,4 +1,5 @@
-// What a launch day actually did, in five numbers a day and nothing else.
+// What a launch day actually did, in a handful of numbers a day and
+// nothing else.
 //
 // The bottom of the funnel was always recoverable: accounts carry a
 // createdAt and finished matches land in the record log. The top was not.
@@ -32,18 +33,31 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { loadJson, saveJsonAtomic } from './store';
 
-// One UTC day. Five counters, in funnel order.
+// One UTC day. The counters, in funnel order, each one a subset of the
+// line above it.
 export interface PulseDay {
   // YYYY-MM-DD, UTC.
   day: string;
   // The app shell served. A reload is a load, and so is a crawler, so this
   // is always the largest number and the least meaningful one.
   loads: number;
+  // Of those loads, the ones served for a path this site does not have
+  // (server/arrival.ts). Nobody browses to /wp-login.php by accident, so
+  // this is the scanner traffic, named rather than left inside loads where
+  // it drowned everything: loads minus strays is what a reader wanted from
+  // loads in the first place.
+  strays: number;
   // Distinct browsers that opened the game that day, one per browser per
   // day. A visitor who blocks the ping or runs without JavaScript is not
   // counted and neither is a crawler, so this is a floor rather than a
   // count; it is a floor made of people, which the old one was not.
   visitors: number;
+  // Of those visitors, the ones whose browser had never said hello before.
+  // The rest had been here on an earlier day, which is the difference
+  // between three strangers arriving and one contributor reloading all
+  // week. A browser that cleared its storage looks new again, so this
+  // leans towards over-counting newcomers and never the reverse.
+  newcomers: number;
   // Accounts created (ADR 0006: an account is the door to everything).
   accounts: number;
   // Matches that started, human and bot-filled alike.
@@ -58,7 +72,17 @@ export interface PulseDay {
 }
 
 export function emptyDay(day: string): PulseDay {
-  return { day, loads: 0, visitors: 0, accounts: 0, matches: 0, finished: 0, restarts: 0 };
+  return {
+    day,
+    loads: 0,
+    strays: 0,
+    visitors: 0,
+    newcomers: 0,
+    accounts: 0,
+    matches: 0,
+    finished: 0,
+    restarts: 0,
+  };
 }
 
 // The UTC day an instant falls in. UTC and not local time so that the
@@ -118,16 +142,25 @@ export class Pulse {
     return fresh;
   }
 
-  // One app shell served, whoever asked and however often.
-  load(at: number): void {
-    this.today(at).loads += 1;
+  // One app shell served, whoever asked and however often. A stray is one
+  // served for a path this site does not have (server/arrival.ts); it
+  // still counts as a load, because it was one, and is counted again on
+  // its own so the reader can take it back out.
+  load(at: number, stray = false): void {
+    const day = this.today(at);
+    day.loads += 1;
+    if (stray) day.strays += 1;
     this.dirty = true;
   }
 
   // One browser, opening the game for the first time today. Called for a
-  // ping that server/visit_guard.ts has already allowed.
-  visit(at: number): void {
-    this.today(at).visitors += 1;
+  // ping that server/visit_guard.ts has already allowed. A newcomer is a
+  // browser that had nothing stored at all, which is the only thing the
+  // ping ever says beyond the fact that it arrived.
+  visit(at: number, newcomer = false): void {
+    const day = this.today(at);
+    day.visitors += 1;
+    if (newcomer) day.newcomers += 1;
     this.dirty = true;
   }
 
@@ -167,8 +200,13 @@ export class Pulse {
 }
 
 // What the file on disk holds. Versioned because the counters are the kind
-// of thing that grows a sixth member, and a reader that meets a shape it
+// of thing that grows another member, and a reader that meets a shape it
 // does not know should start clean rather than guess.
+//
+// Growing one does not bump the version, and must not: an absent counter
+// reads back as zero, which is exactly true of a day that was counted
+// before it existed, while a version bump would throw the launch away to
+// gain nothing. The bump is for the day a counter changes meaning.
 export interface PulseFile {
   version: 1;
   days: PulseDay[];
@@ -192,7 +230,9 @@ export function fromFile(raw: unknown): PulseDay[] {
     days.push({
       day: d.day,
       loads: count(d.loads),
+      strays: count(d.strays),
       visitors: count(d.visitors),
+      newcomers: count(d.newcomers),
       accounts: count(d.accounts),
       matches: count(d.matches),
       finished: count(d.finished),

@@ -32,7 +32,9 @@ describe('the totals', () => {
     const days = [
       day('2026-09-06', {
         loads: 10,
+        strays: 4,
         visitors: 6,
+        newcomers: 5,
         accounts: 2,
         matches: 3,
         finished: 2,
@@ -40,7 +42,9 @@ describe('the totals', () => {
       }),
       day('2026-09-07', {
         loads: 4,
+        strays: 1,
         visitors: 3,
+        newcomers: 1,
         accounts: 1,
         matches: 1,
         finished: 0,
@@ -49,7 +53,9 @@ describe('the totals', () => {
     ];
     expect(total(days)).toEqual({
       loads: 14,
+      strays: 5,
       visitors: 9,
+      newcomers: 6,
       accounts: 3,
       matches: 4,
       finished: 2,
@@ -60,7 +66,9 @@ describe('the totals', () => {
   it('are zero for no days at all', () => {
     expect(total([])).toEqual({
       loads: 0,
+      strays: 0,
       visitors: 0,
+      newcomers: 0,
       accounts: 0,
       matches: 0,
       finished: 0,
@@ -71,10 +79,21 @@ describe('the totals', () => {
 
 describe('the page', () => {
   const days = [
-    day('2026-09-05', { loads: 8, visitors: 4, accounts: 1, matches: 1, finished: 1, restarts: 1 }),
+    day('2026-09-05', {
+      loads: 8,
+      strays: 3,
+      visitors: 4,
+      newcomers: 1,
+      accounts: 1,
+      matches: 1,
+      finished: 1,
+      restarts: 1,
+    }),
     day('2026-09-06', {
       loads: 30,
+      strays: 12,
       visitors: 20,
+      newcomers: 14,
       accounts: 5,
       matches: 6,
       finished: 4,
@@ -107,6 +126,14 @@ describe('the page', () => {
     const html = renderPulsePage(days);
     expect(html).toContain('reload');
     expect(html).toContain('once a day');
+  });
+
+  it('shows the scanners apart from the pages, since the sum is meaningless', () => {
+    // 30 loads of which 12 were paths this site does not have: the row
+    // must read 18, or the reader goes on believing 30 people came.
+    const html = renderPulsePage(days);
+    expect(html).toContain('>18<');
+    expect(html).toContain('>12<');
   });
 
   it('escapes what it prints', () => {

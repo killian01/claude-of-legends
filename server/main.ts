@@ -37,6 +37,7 @@ import { API_RATE_PER_MIN, ApiLimiter } from './api_limit';
 import { ARENA_PLAY_NOW_PER_DAY, ARENA_ROUND_MS } from './arena';
 import { ArenaRunner } from './arena_runner';
 import { type ArenaDeps, challenge, playNow, roundDue, runArenaRound } from './arena_service';
+import { isStray } from './arrival';
 import { chooseArt, deleteArtFor, generateArt, iconsOf, listArt, splashOf } from './art';
 import { appendExchange, botChat, clearBotChat, windowTurns } from './bot_chats';
 import { fillWithBots, type PoolSeat, TEAM_SIZE } from './bot_fill';
@@ -1301,7 +1302,12 @@ const server = http.createServer(async (req, res) => {
       }
       const now = Date.now();
       const address = clientAddress(req.headers, req.socket.remoteAddress, EDGE);
-      if (visits.allow(now, address)) pulse.visit(now);
+      // The one flag the ping carries: this browser had nothing stored, so
+      // it has never been counted here before. Anything other than the
+      // exact value reads as a returning browser, which is the direction
+      // that cannot inflate the interesting number.
+      const newcomer = new URL(req.url ?? '/', 'http://local').searchParams.get('new') === '1';
+      if (visits.allow(now, address)) pulse.visit(now, newcomer);
       res.writeHead(204).end();
       return;
     }
@@ -2184,8 +2190,11 @@ const server = http.createServer(async (req, res) => {
     // earlier because this is where an unknown path has already fallen
     // back to index.html: the client routes in the browser, so a shared
     // deep link is a page load like any other. Assets are not arrivals.
+    // A path the client does not route is counted again as a stray
+    // (server/arrival.ts), because a scanner walking a list of admin
+    // panels is otherwise indistinguishable from an announcement landing.
     if (filePath === path.join(DIST, 'index.html')) {
-      pulse.load(Date.now());
+      pulse.load(Date.now(), isStray(url));
     }
     const body = await readFile(filePath);
     // The client shipped no caching headers at all, which leaves a browser

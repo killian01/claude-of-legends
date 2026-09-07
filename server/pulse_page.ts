@@ -1,7 +1,7 @@
 // The counters, rendered for a person. The JSON is the honest format and
 // the one a script wants, but the reader here is usually the maintainer on
-// a phone an hour into an announcement, and six integers a day only answer
-// the question once something divides them.
+// a phone an hour into an announcement, and a row of integers a day only
+// answers the question once something divides them.
 //
 // So the page leads with the two ratios that decide what to do next. Of
 // the people who arrived, how many made an account: that is the front
@@ -46,7 +46,9 @@ export function rate(part: number, whole: number): string {
 
 export interface PulseTotals {
   loads: number;
+  strays: number;
   visitors: number;
+  newcomers: number;
   accounts: number;
   matches: number;
   finished: number;
@@ -56,7 +58,9 @@ export interface PulseTotals {
 export function total(days: readonly PulseDay[]): PulseTotals {
   const t: PulseTotals = {
     loads: 0,
+    strays: 0,
     visitors: 0,
+    newcomers: 0,
     accounts: 0,
     matches: 0,
     finished: 0,
@@ -64,7 +68,9 @@ export function total(days: readonly PulseDay[]): PulseTotals {
   };
   for (const d of days) {
     t.loads += d.loads;
+    t.strays += d.strays;
     t.visitors += d.visitors;
+    t.newcomers += d.newcomers;
     t.accounts += d.accounts;
     t.matches += d.matches;
     t.finished += d.finished;
@@ -77,7 +83,9 @@ function row(d: PulseDay | (PulseTotals & { day: string }), klass = ''): string 
   return `<tr${klass ? ` class="${klass}"` : ''}>
   <td class="d">${esc(d.day)}</td>
   <td>${d.visitors}</td>
-  <td class="dim">${d.loads}</td>
+  <td class="r">${d.newcomers}</td>
+  <td class="dim">${d.loads - d.strays}</td>
+  <td class="dim">${d.strays}</td>
   <td>${d.accounts}</td>
   <td class="r">${rate(d.accounts, d.visitors)}</td>
   <td>${d.matches}</td>
@@ -113,7 +121,7 @@ export function renderPulsePage(days: readonly PulseDay[]): string {
   .card span { color: #7f8ea8; font-size: 11.5px; letter-spacing: 0.6px;
     text-transform: uppercase; }
   .wrap { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; min-width: 560px; font-variant-numeric: tabular-nums; }
+  table { border-collapse: collapse; width: 100%; min-width: 660px; font-variant-numeric: tabular-nums; }
   th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid #182440; }
   th { color: #7f8ea8; font-size: 11px; letter-spacing: 0.8px; text-transform: uppercase;
     font-weight: 600; text-align: right; white-space: nowrap; }
@@ -129,6 +137,7 @@ export function renderPulsePage(days: readonly PulseDay[]): string {
 <p class="sub">One row per UTC day. Nothing here is per person; see PRIVACY.md.</p>
 <div class="cards">
   <div class="card"><b>${week.visitors}</b><span>visitors, 7d</span></div>
+  <div class="card"><b>${week.newcomers}</b><span>first time, 7d</span></div>
   <div class="card"><b>${week.accounts}</b><span>accounts, 7d</span></div>
   <div class="card"><b>${rate(week.accounts, week.visitors)}</b><span>sign-up rate</span></div>
   <div class="card"><b>${week.finished}</b><span>matches finished, 7d</span></div>
@@ -136,7 +145,8 @@ export function renderPulsePage(days: readonly PulseDay[]): string {
 <div class="wrap">
 <table>
 <thead><tr>
-  <th class="d">Day</th><th>Visitors</th><th>Loads</th><th>Accounts</th><th>Signed up</th>
+  <th class="d">Day</th><th>Visitors</th><th>New</th><th>Pages</th><th>Stray</th>
+  <th>Accounts</th><th>Signed up</th>
   <th>Matches</th><th>Finished</th><th>Completed</th><th>Restarts</th>
 </tr></thead>
 <tbody>
@@ -145,9 +155,13 @@ ${row({ ...all, day: 'All' }, 'sum')}
 </tbody>
 </table>
 </div>
-<p class="foot">Loads counts every reload and every crawler. Visitors counts a
-browser once a day, and only a browser that ran the game, so it is a floor made
-of people. Add <code>?format=json</code> for the raw numbers.</p>
+<p class="foot">Visitors counts a browser once a day, and only a browser that
+ran the game, so it is a floor made of people; New is the ones that had never
+been counted here before. Pages counts every shell served for a path this site
+has, reloads included, and Stray the ones served for a path it does not, which
+is where the scanners land; the two together are <code>loads</code> in the JSON.
+Add <code>?format=json</code> for the raw numbers, and open the site once with
+<code>?pulse=off</code> to keep your own browser out of the count.</p>
 </body></html>
 `;
 }

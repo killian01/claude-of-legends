@@ -26,7 +26,17 @@ the first load of a day so it knows not to say hello to the counter twice
 (`src/net/pulse_ping.ts`). It is a date, not an identifier: it is the same
 ten characters in every browser in the world that opened the site today,
 it is overwritten tomorrow, and it never leaves your machine. Delete it and
-the only consequence is being counted once more.
+the only consequence is being counted once more, as a browser that had
+never been here.
+
+That last part is the only other thing the line is read for: an empty key
+means this browser has not been counted before, which is what separates
+people arriving from one person coming back. Nothing is stored to answer
+it, and a browser that clears the line is simply new again.
+
+The one other value the key can hold is the word `off`, which is there if
+you opened the site with `?pulse=off`. Then nothing is counted for this
+browser at all, on any day. `?pulse=on` puts it back.
 
 ## What an account holds
 
@@ -44,13 +54,15 @@ and `tests/architecture.test.ts` fails if that ever stops being true.
 
 ## What is counted
 
-Five numbers a day, for the whole site, so that an announcement can be told
-apart from a front page that loses people (`server/pulse.ts`):
+A handful of numbers a day, for the whole site, so that an announcement can
+be told apart from a front page that loses people (`server/pulse.ts`):
 
 | Counter | What it counts |
 |---|---|
 | `loads` | pages served, reloads included |
+| `strays` | of those, the ones served for a path this site does not have |
 | `visitors` | browsers that opened the game that day, one each |
+| `newcomers` | of those, the ones that had never been counted before |
 | `accounts` | accounts created |
 | `matches` | matches started |
 | `finished` | matches that reached an end |
@@ -59,7 +71,7 @@ Plus `restarts`, which says how many times the server restarted that day.
 It distorts nothing; it is there because a quiet afternoon usually has a
 deploy under it.
 
-That is the entire record: one row per day, six integers, no name, no
+That is the entire record: one row per day, a few integers, no name, no
 account id, no page, no referrer, no country, no device. Nothing in it can
 be traced to a person, including by us, because nothing per person is ever
 written.
@@ -67,9 +79,11 @@ written.
 Telling one arrival from a reload does need to recognise a browser that
 has already been here today, and the browser is the only thing that knows.
 So it says so itself: on its first load of the day it posts to one open
-endpoint that carries no cookie, no body and no query, and remembers the
-date so it does not post again (`src/net/pulse_ping.ts`). The server learns
-that a browser arrived and nothing whatsoever about which one.
+endpoint that carries no cookie and no body, and remembers the date so it
+does not post again (`src/net/pulse_ping.ts`). The request says one thing
+beyond arriving, as `?new=1`: that this browser had nothing stored, so it
+had not been counted before. The server learns that a browser arrived, and
+whether it was the first time, and nothing whatsoever about which one.
 
 The address was the obvious way to do this and it is the wrong one, which
 is worth saying plainly: it made a phone that renews its IPv6 address
@@ -90,10 +104,21 @@ fingerprinting, no cross-site anything, no profile, no export to anyone.
 ## Logs
 
 The server prints operational lines to its log: matches starting and
-ending, errors, and refusals such as a rate limit. Web server access logs
-in front of it record request lines and addresses in the ordinary way, for
-as long as that server keeps them. Neither is joined to an account and
-neither feeds the counters above.
+ending, errors, and refusals such as a rate limit.
+
+The web server in front of it writes an access log, in the ordinary way
+that any web server does: one line per page or API request, holding the
+method, the path, the status, your address, and the browser and referrer
+headers your browser sent. Assets are not logged, so a page load is one
+line rather than four hundred. The session cookie is removed before the
+line is written, because a log that can resume a session is a store of
+credentials rather than a log. Lines roll off at 20 MiB and about a week,
+whichever comes first.
+
+It exists because the counters above cannot tell a page somebody asked
+for from a scanner walking a list of admin panels, and knowing which is
+the difference between fixing the front page and fixing nothing. Neither
+log is joined to an account, and neither feeds the counters.
 
 ## Getting your data out, or deleted
 

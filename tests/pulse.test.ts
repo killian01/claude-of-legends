@@ -52,7 +52,9 @@ describe('the counters', () => {
       {
         day: '2026-09-06',
         loads: 1,
+        strays: 0,
         visitors: 1,
+        newcomers: 0,
         accounts: 1,
         matches: 1,
         finished: 1,
@@ -72,6 +74,29 @@ describe('the counters', () => {
     p.visit(DAY_ONE);
     expect(day(p).loads).toBe(3);
     expect(day(p).visitors).toBe(2);
+  });
+
+  it('keep a door being tried apart from a page somebody asked for', () => {
+    // Both are shells served, so both are loads; only one of them is a
+    // person. Without the split, 350 scanned paths and 350 arrivals are
+    // the same row, which is how a launch day gets misread in the good
+    // direction and in the bad one alike.
+    const p = new Pulse(DAY_ONE);
+    p.load(DAY_ONE);
+    p.load(DAY_ONE, true);
+    p.load(DAY_ONE, true);
+    expect(day(p)).toMatchObject({ loads: 3, strays: 2 });
+  });
+
+  it('keep a first arrival apart from somebody coming back', () => {
+    // A newcomer is a visitor too: the counter is a subset and never a
+    // second column to add up. Three visitors of whom none is new is one
+    // contributor reloading; three of whom three are is a launch.
+    const p = new Pulse(DAY_ONE);
+    p.visit(DAY_ONE, true);
+    p.visit(DAY_ONE);
+    p.visit(DAY_ONE, true);
+    expect(day(p)).toMatchObject({ visitors: 3, newcomers: 2 });
   });
 
   it('file a new day the moment the clock passes midnight', () => {
@@ -146,7 +171,12 @@ describe('the file on disk', () => {
       {
         day: '2026-09-06',
         loads: 0,
+        // Counted before the counter existed, which is the same as zero
+        // and must not throw the day away (server/pulse.ts keeps the
+        // version at 1 for exactly this).
+        strays: 0,
         visitors: 2,
+        newcomers: 0,
         accounts: 0,
         matches: 0,
         finished: 0,
@@ -184,7 +214,9 @@ describe('the counts across a restart', () => {
         {
           day: '2026-09-06',
           loads: 2,
+          strays: 0,
           visitors: 2,
+          newcomers: 0,
           accounts: 1,
           matches: 1,
           finished: 1,
