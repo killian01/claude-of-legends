@@ -9,20 +9,20 @@
 // and is recorded once.
 
 export const VOICE_LINES = {
-  first_blood: 'First blood',
+  first_blood: 'First blood!',
   self_slain: 'You have been slain',
-  self_kill: 'You have slain an enemy',
-  double_kill: 'Double kill',
-  triple_kill: 'Triple kill',
-  rampage: 'Rampage',
+  self_kill: 'You have slain an enemy!',
+  double_kill: 'Double kill!',
+  triple_kill: 'Triple kill!',
+  rampage: 'Rampage!',
   enemy_slain: 'An enemy has been slain',
   ally_slain: 'An ally has been slain',
   minions_spawned: 'Minions have spawned',
   tower_fallen: 'A tower has fallen',
-  warden_awoken: 'The Warden has awoken',
-  boon_ours: 'Your team has claimed the Boon',
+  warden_awoken: 'The Warden has awoken!',
+  boon_ours: 'Your team has claimed the Boon!',
   boon_theirs: 'The enemy has claimed the Boon',
-  victory: 'Victory',
+  victory: 'Victory!',
   defeat: 'Defeat',
 } as const;
 
