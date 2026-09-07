@@ -423,7 +423,11 @@ _Avoid_: workshop, hub, marketplace
 **Prop**:
 A separate model hung on a named bone of a champion's rig, the hand-held weapon foremost,
 with its own grip offsets. A forged champion's weapon is always a prop, never fused into the
-body mesh; it comes from the house weapon library or from its own generation.
+body mesh; it comes from the house weapon library or from its own generation. A forged
+weapon places ITSELF the first time the workshop opens on it: the hand the rig names, and
+the grip its own shape implies (a handle is thinner than what it swings). That is a
+proposal like any other, shown and said out loud, and it becomes real only when the creator
+saves the tuning.
 _Avoid_: attachment, accessory
 
 **House clip**:

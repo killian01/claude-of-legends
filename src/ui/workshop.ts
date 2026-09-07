@@ -26,7 +26,12 @@ import {
 } from '../render/champions/forged';
 import { resolveForgedClips } from '../render/champions/forged_clips';
 import type { ChampionClipNames } from '../render/champions/manifest';
-import { gripAlignment, HAND_GRIP_AXIS, orientLongAxisY } from '../render/champions/orient';
+import {
+  gripAlignment,
+  guessGripPoint,
+  HAND_GRIP_AXIS,
+  orientLongAxisY,
+} from '../render/champions/orient';
 import {
   DISPLAY_BOUNDS,
   DISPLAY_PROP_KINDS,
@@ -314,6 +319,19 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   const prop: ForgedDisplayProp = saved.prop
     ? { ...saved.prop, rot: copyTriple(saved.prop.rot), pos: copyTriple(saved.prop.pos) }
     : { kind: 'none', bone: '', rot: [0, 0, 0], pos: [0, 0, 0] };
+  // A champion who forged a weapon and never placed it used to arrive
+  // holding nothing, with a bone select and a gizmo between them and the
+  // obvious (playtest: 'my weapon is not on my champion'). It is placed
+  // for them instead, on the hand the rig names and at the grip the
+  // shape implies, the moment the model loads. It is a proposal like any
+  // other: it shows, it says so, and it is theirs to adjust and save.
+  // Nothing is saved behind their back, and a champion with a saved
+  // prop never enters here.
+  let placeWeapon =
+    saved.prop === undefined && Boolean(subject.weaponUrl) && subject.editable === true;
+  // Set once the prop exists, cleared by the frame that fits it.
+  let pendingPlace = false;
+  let weaponWasPlaced = false;
 
   // Wrapping: modelRoot > yawGroup > model. The prop holder hangs off
   // modelRoot and follows its bone every frame, in-match style.
@@ -404,6 +422,14 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
           restInv,
         },
       ];
+      // The automatic placement waits one frame on purpose: the holder
+      // only lands on its bone when the loop syncs it, and a grip fitted
+      // against a holder that has not moved yet lands beside the hand
+      // instead of in it.
+      if (placeWeapon) {
+        placeWeapon = false;
+        pendingPlace = true;
+      }
       if (wasAttached) gizmo?.attach(built);
     });
   };
@@ -527,14 +553,14 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     status.textContent = on ? 'Click the weapon where the hand should hold it.' : '';
     setAimButton(on);
   };
-  const tryGripPick = (e: PointerEvent): void => {
+  // Put `gripLocal` (a point in prop space) in the fist, blade along the
+  // hand's grip axis. Shared by the click ('Hold it here') and by the
+  // automatic placement, so a placed weapon and an aimed one land
+  // through the same arithmetic. False when there is no prop to fit.
+  const fitGrip = (gripLocal: THREE.Vector3 | null): boolean => {
     const a = anchors[0];
-    if (!a || !propHolder) return;
-    pickRay.setFromCamera(ndcOf(e), camera);
-    const hit = pickRay.intersectObject(propHolder, true)[0];
-    if (!hit) return; // Missed the weapon: stay armed, the player retries.
+    if (!a || gripLocal === null) return false;
     const built = a.prop;
-    const gripLocal = built.worldToLocal(hit.point.clone());
     // The hand's grip axis: a bone-local constant of the shared rig,
     // taken through the bone's CURRENT orientation into the holder's
     // frame, so the alignment is right in any pose, mid-clip included.
@@ -555,6 +581,20 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     prop.pos[2] = Math.min(lim.max, Math.max(lim.min, fit.position.z));
     applyPropTuning();
     syncWeaponSliders();
+    return true;
+  };
+
+  const tryGripPick = (e: PointerEvent): void => {
+    const a = anchors[0];
+    if (!a || !propHolder) return;
+    pickRay.setFromCamera(ndcOf(e), camera);
+    const hit = pickRay.intersectObject(propHolder, true)[0];
+    if (!hit) return; // Missed the weapon: stay armed, the player retries.
+    const built = a.prop;
+    if (!fitGrip(built.worldToLocal(hit.point.clone()))) return;
+    // Aimed by hand: whatever the automatic placement had said is now
+    // the creator's own choice, and the panel stops explaining itself.
+    weaponWasPlaced = false;
     setAiming(false);
     gizmo.attach(built);
   };
@@ -756,6 +796,16 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       model.traverse((child) => {
         if ((child as THREE.Bone).isBone) boneNames.push(child.name);
       });
+      // The forged weapon goes in the hand the rig names, before the
+      // first build, so the model arrives already holding it.
+      if (placeWeapon) {
+        const hand = guessHandBone(boneNames);
+        if (hand === null) placeWeapon = false;
+        else {
+          prop.kind = 'generated';
+          prop.bone = hand;
+        }
+      }
       applyModelTuning();
       rebuildProp(false);
       buildWeaponControls();
@@ -965,6 +1015,20 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       rebuildProp(false);
     };
     weaponControls.append(kindSelect, boneSelect);
+    // Placed rather than chosen: said out loud, because a weapon the
+    // creator did not put there must not look like a bug, and because
+    // the placement is only real once they save it.
+    if (weaponWasPlaced) {
+      weaponControls.append(
+        el(
+          'div',
+          'ws-note',
+          'Your forged weapon is placed for you, on the hand the rig names and at the grip ' +
+            'its shape implies. Turn the model around, fix it if it looks wrong (Hold it ' +
+            'here, or the arrows and rings), then save the tuning: nothing is kept until you do.',
+        ),
+      );
+    }
 
     // 'Hold it here' is the fast path: arm it, click the weapon where
     // the hand should hold it, and the grip snaps into the fist with the
@@ -1260,6 +1324,14 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
         pinIdleAndCapture();
       }
       syncPropAnchors(modelRoot, anchors, false);
+      // The holder is on its bone now: the automatic grip can be fitted
+      // against a hand that is where it will be.
+      if (pendingPlace) {
+        pendingPlace = false;
+        const built = anchors[0]?.prop;
+        weaponWasPlaced = built ? fitGrip(guessGripPoint(built)) : false;
+        if (weaponWasPlaced) buildWeaponControls();
+      }
     }
     // The mount-bone marker follows its joint (bones scale strangely on
     // these rigs, so it tracks by world position, never parents).

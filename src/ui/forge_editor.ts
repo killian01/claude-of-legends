@@ -1531,8 +1531,14 @@ export function openForgeEditor(container: HTMLElement): () => void {
           }
           if (job.status === 'success') {
             weaponForging = false;
-            status.textContent = 'The weapon is forged: attach it in the workshop.';
-            void loadDrafts().then(() => renderMain());
+            status.textContent =
+              'The weapon is forged and placed in your hand: check it in the workshop and save the tuning.';
+            // Straight to where it is held: the placement is a proposal
+            // and it is only kept once the creator saves it.
+            void loadDrafts().then(() => {
+              renderMain();
+              openWorkshopHere();
+            });
             return;
           }
           if (job.status === 'failed') {
@@ -2068,12 +2074,13 @@ export function openForgeEditor(container: HTMLElement): () => void {
           'fe-lead',
           sealed
             ? 'Your champion sealed without a weapon: you can still generate ' +
-                'the weapon image below, pick it, then forge it in Step 4. It attaches to a ' +
-                'hand in the workshop.'
+                'the weapon image below, pick it, then forge it in Step 4. It goes into a ' +
+                'hand by itself, and the workshop is where you check and save that.'
             : 'Your weapon, alone on a plain background, extracted from the splash. Iterate ' +
                 'until it is right: the 3D weapon builds from this exact image during the ' +
-                'champion build, then attaches to a hand in the workshop. Skip it to fight ' +
-                'bare-handed or wear a weapon from the house armory.',
+                'champion build, and lands in your champion hand by itself, ready to check ' +
+                'and adjust in the workshop. Skip it to fight bare-handed or wear a weapon ' +
+                'from the house armory.',
         ),
       );
       const weaponRow = el('div', 'fe-hero');

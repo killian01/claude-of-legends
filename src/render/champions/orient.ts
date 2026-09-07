@@ -31,20 +31,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 // turns). A shape with no dominant axis (a shield) gets whatever the
 // iteration settles on: harmless, since every axis is as good.
 export function orientLongAxisY(root: THREE.Object3D): THREE.Object3D {
-  root.updateMatrixWorld(true);
-  const toRoot = new THREE.Matrix4().copy(root.matrixWorld).invert();
-  const points: THREE.Vector3[] = [];
-  root.traverse((child) => {
-    const mesh = child as THREE.Mesh;
-    if (!(mesh as { isMesh?: boolean }).isMesh) return;
-    const pos = mesh.geometry?.getAttribute('position');
-    if (!pos) return;
-    const local = new THREE.Matrix4().multiplyMatrices(toRoot, mesh.matrixWorld);
-    const step = Math.max(1, Math.floor(pos.count / 400));
-    for (let i = 0; i < pos.count; i += step) {
-      points.push(new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(local));
-    }
-  });
+  const points = samplePoints(root);
   if (points.length < 3) return root;
 
   const center = new THREE.Vector3();
@@ -88,6 +75,81 @@ export function orientLongAxisY(root: THREE.Object3D): THREE.Object3D {
   if (lead < 0) axis.negate();
   root.quaternion.premultiply(new THREE.Quaternion().setFromUnitVectors(axis, UP));
   return root;
+}
+
+// Where a hand would hold a weapon nobody has aimed yet: the point the
+// automatic placement uses, in the prop's own space, for a prop already
+// oriented long-axis-up (above). Which END is the handle is not knowable
+// from the geometry alone, but it is guessable, and the guess is the
+// same one an eye makes: a handle is THINNER than what it swings. So the
+// span is cut in thirds along Y, the mean distance from the axis is
+// measured in the bottom third and the top third, and the thinner end
+// wins; the grip sits a short way in from that end, where fingers
+// actually close. A shape with no thin end (a shield, a ball) reads as a
+// tie and takes the bottom, which is where a boss or a strap sits.
+//
+// It is a default, never a verdict: 'Hold it here' and the gizmo are one
+// click away, and the creator's saved grip always wins.
+export function guessGripPoint(root: THREE.Object3D): THREE.Vector3 | null {
+  const points = samplePoints(root);
+  if (points.length < 8) return null;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const p of points) {
+    minY = Math.min(minY, p.y);
+    maxY = Math.max(maxY, p.y);
+  }
+  const span = maxY - minY;
+  if (!(span > 1e-6)) return null;
+  // The axis to measure thickness against is the geometry's own centre
+  // line, not the origin: a prop centred on its bounding box still leans.
+  let cx = 0;
+  let cz = 0;
+  for (const p of points) {
+    cx += p.x;
+    cz += p.z;
+  }
+  cx /= points.length;
+  cz /= points.length;
+  const third = span / 3;
+  const radius = (from: number, to: number): number => {
+    let sum = 0;
+    let n = 0;
+    for (const p of points) {
+      if (p.y < from || p.y > to) continue;
+      sum += Math.hypot(p.x - cx, p.z - cz);
+      n += 1;
+    }
+    return n === 0 ? Number.POSITIVE_INFINITY : sum / n;
+  };
+  const bottom = radius(minY, minY + third);
+  const top = radius(maxY - third, maxY);
+  // A tenth of the span in from the end: past the very tip, still on the
+  // handle of anything with one.
+  const inset = span * 0.1;
+  const y = bottom <= top ? minY + inset : maxY - inset;
+  return new THREE.Vector3(cx, y, cz);
+}
+
+// The vertices of every mesh under `root`, in root space, thinned to a
+// few hundred: enough for a principal axis or a thickness comparison,
+// cheap enough to run on a click.
+function samplePoints(root: THREE.Object3D): THREE.Vector3[] {
+  root.updateMatrixWorld(true);
+  const toRoot = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const points: THREE.Vector3[] = [];
+  root.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!(mesh as { isMesh?: boolean }).isMesh) return;
+    const pos = mesh.geometry?.getAttribute('position');
+    if (!pos) return;
+    const local = new THREE.Matrix4().multiplyMatrices(toRoot, mesh.matrixWorld);
+    const step = Math.max(1, Math.floor(pos.count / 400));
+    for (let i = 0; i < pos.count; i += step) {
+      points.push(new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(local));
+    }
+  });
+  return points;
 }
 
 // The 'Hold it here' pose: the prop-local transform (for a prop whose
