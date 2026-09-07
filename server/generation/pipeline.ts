@@ -1,10 +1,9 @@
 // The generation pipeline (ADR 0006, plan-forge phase 5), split in two
 // player-approved halves, because animation is the LAST step and never a
-// side effect: the MODEL BUILD turns the chosen reference into a static
-// 3D model (classification, image to 3D, the weapon when one was made),
-// which the player then inspects in the workshop; ANIMATE, a separate
-// click, rigs that exact model, bakes the chosen clip family onto it and
-// seals the champion. The economy is ledger-first (ADR 0007): the build
+// side effect: the MODEL BUILD turns the chosen reference into a rigged
+// 3D model (classification, image to 3D, the rig, the weapon when one
+// was made), which the player then inspects and dresses in the workshop;
+// ANIMATE, a separate click, bakes the chosen clips onto that skeleton. The economy is ledger-first (ADR 0007): the build
 // debits one creation and refunds it on ANY failure, technical or
 // content-blocked; animate and the weapon claim ride the same creation
 // and move the ledger in neither direction. Jobs persist in SQLite so a
@@ -114,13 +113,17 @@ function noteSpend(
   });
 }
 
-// What a build costs before it runs: the model, plus the weapon when one
-// will actually be forged alongside it. The same reading of the assets
-// the run itself makes, so the price and the work cannot disagree.
+// What a build costs before it runs: the model and its rig, plus the
+// weapon when one will actually be forged alongside it. The same reading
+// of the assets the run itself makes, so the price and the work cannot
+// disagree. The rig is in there because the build runs it (playtest: a
+// creator who has just built a model wants to hang the weapon on a hand
+// that moment, and a hand is a bone), and a rebuild pays for it again
+// because it produces a new model to rig.
 export function buildEmbers(deps: PipelineDeps, forgedId: string): number {
   const assets = (deps.storage.forgedAssets(forgedId) as Record<string, unknown> | null) ?? {};
   const weaponComing = !assets.weapon && deps.storage.chosenArt(forgedId, 'weapon') !== null;
-  return EMBER_PRICES.model + (weaponComing ? EMBER_PRICES.weapon : 0);
+  return EMBER_PRICES.model + EMBER_PRICES.rig + (weaponComing ? EMBER_PRICES.weapon : 0);
 }
 
 // One refusal, worded the same wherever a balance runs short: it names
@@ -197,6 +200,14 @@ async function runModelBuild(deps: PipelineDeps, jobId: number, req: BuildReques
     const model = await deps.provider.imageTo3D({ image: sheetRef });
     noteSpend(deps, req.accountId, 'generation', 'model', model, now());
 
+    // The skeleton, in the same run: bones are what a weapon hangs on in
+    // the workshop and what every clip later moves, so a built model
+    // arrives ready to dress rather than waiting for a bake to give it
+    // hands. A rebuild rigs the new model, replacing the old skeleton.
+    stage('rig');
+    const rigged = await deps.provider.rig({ modelTaskId: model.taskId, rigType: 'biped' });
+    noteSpend(deps, req.accountId, 'animate', 'rig', rigged, now());
+
     // The champion's own weapon, when the player generated and picked a
     // weapon image and no weapon exists yet: a static prop from that
     // exact image, no rig and no clips (the creation covers it, ADR
@@ -227,19 +238,23 @@ async function runModelBuild(deps: PipelineDeps, jobId: number, req: BuildReques
     // inside the image budget when it landed as a candidate).
     const sheetPath = `forged/${req.def.id}/sheet.png`;
     const modelPath = `forged/${req.def.id}/model_${jobId}.glb`;
+    const riggedPath = `forged/${req.def.id}/rigged_${jobId}.glb`;
     const weaponPath = `forged/${req.def.id}/weapon.glb`;
     const copy = deps.copyFile ?? copyFileSync;
     copy(path.join(deps.assetsDir, sheet.path), path.join(deps.assetsDir, sheetPath));
     await deps.download(model.url, path.join(deps.assetsDir, modelPath));
+    await deps.download(rigged.url, path.join(deps.assetsDir, riggedPath));
     if (weapon) await deps.download(weapon.url, path.join(deps.assetsDir, weaponPath));
     // The per-champion asset budgets (ADR 0010): an oversized artifact is
     // a technical failure, refunded like any other.
     checkBudget(deps, modelPath, deps.budgets?.modelKb);
+    checkBudget(deps, riggedPath, deps.budgets?.modelKb);
     if (weapon) checkBudget(deps, weaponPath, deps.budgets?.modelKb);
 
     // The row stays a DRAFT: nothing seals until the player has seen the
-    // model and baked the animations. The model task id is what animate
-    // rigs later, so it is stored with the assets.
+    // model and baked the animations. The model task id is kept because a
+    // later re-rig reads it, and the rig task is what every bake
+    // retargets onto.
     const provenance = Array.isArray(existing.provenance) ? existing.provenance : [];
     deps.storage.updateForgedAssets(
       req.def.id,
@@ -248,10 +263,16 @@ async function runModelBuild(deps: PipelineDeps, jobId: number, req: BuildReques
         sheet: sheetPath,
         model: modelPath,
         modelTask: model.taskId,
+        rigged: riggedPath,
+        rigTask: rigged.taskId,
         ...(weapon ? { weapon: weaponPath } : {}),
-        provenance: [...provenance, sheet.provenance, model.provenance, weapon?.provenance].filter(
-          (p) => p !== null && p !== undefined,
-        ),
+        provenance: [
+          ...provenance,
+          sheet.provenance,
+          model.provenance,
+          rigged.provenance,
+          weapon?.provenance,
+        ].filter((p) => p !== null && p !== undefined),
       },
       now(),
     );
@@ -308,23 +329,24 @@ export function bakePlan(
 }
 
 // What a bake costs before it runs: the retarget by its provider clip
-// count, plus the rig when this champion has never had one.
+// count, plus the rig when this champion has never had one. The build
+// rigs now, so that second half only ever applies to a champion built
+// before it did, which bakes its own rig on its first bake.
 export function bakeEmbers(
   assets: Record<string, unknown>,
   clips: Readonly<Record<string, string | undefined>>,
 ): number {
   const plan = bakePlan(assets, clips);
   if (plan.delta.length === 0) return 0;
-  const rigged =
-    typeof assets.rigTask === 'string' && typeof assets.rigged === 'string' ? 0 : EMBER_PRICES.rig;
-  return rigged + bakePrice(plan.providerDelta.length);
+  return (isRigged(assets) ? 0 : EMBER_PRICES.rig) + bakePrice(plan.providerDelta.length);
 }
 
-// The second half, the player's own click AFTER validating the model:
-// rig the built model, bake the five picked clips, download the
-// animated file and seal the champion. No ledger movement in either
-// direction: the creation was spent at the build, and a failed animate
-// can simply run again.
+// Whether this champion's model already carries a skeleton: a build
+// leaves one behind, a champion from before that does not.
+export function isRigged(assets: Record<string, unknown>): boolean {
+  return typeof assets.rigTask === 'string' && typeof assets.rigged === 'string';
+}
+
 // The image-to-3D task a legacy champion's provenance kept: the one-shot
 // pipeline stored no modelTask, but its provenance rode in a fixed order
 // (reference, model, rig, animate, then the weapon when one was built),
@@ -335,6 +357,12 @@ function legacyModelTask(assets: Record<string, unknown>): string | null {
   return typeof entry?.taskId === 'string' ? entry.taskId : null;
 }
 
+// The second half, the player's own click AFTER validating the model:
+// bake the picked clips onto the skeleton the build left behind, and
+// download them. Priced by the clips it retargets, plus the rig itself
+// for a champion built before the build rigged; a failed bake refunds
+// every ember whole so it can simply run again.
+
 export function startAnimate(deps: PipelineDeps, req: AnimateRequest): PipelineStart {
   const now = deps.now ?? Date.now;
   if (deps.storage.runningJobFor(req.forgedId)) {
@@ -344,9 +372,13 @@ export function startAnimate(deps: PipelineDeps, req: AnimateRequest): PipelineS
   if (typeof assets.model !== 'string') {
     return { ok: false, error: 'build the 3D model first: the animations bake onto it' };
   }
+  // The build rigs, so the skeleton is normally already there. A model
+  // built before it did has none: the bake rigs it once, on the model
+  // task the build kept (or the one an old provenance holds), and prices
+  // that rig into itself rather than refusing.
   const modelTask =
     typeof assets.modelTask === 'string' ? assets.modelTask : legacyModelTask(assets);
-  if (!modelTask) {
+  if (!isRigged(assets) && !modelTask) {
     return { ok: false, error: 'this model kept no build task to rig; rebuild the model first' };
   }
   const price = bakeEmbers(assets, req.clips);
@@ -370,17 +402,18 @@ export function startAnimate(deps: PipelineDeps, req: AnimateRequest): PipelineS
 }
 
 // The per-clip bake (playtest round 9: validate each animation on its
-// own, never five at a time). The rig happens ONCE and its task id and
-// file are kept on the assets; every bake after that retargets only the
-// roles whose pick changed (or that never had a clip file), as an
-// animation-only GLB. The displayed model becomes the rigged body plus
-// the per-role clip files; champions baked before the split keep their
-// single embedded model until their first re-bake transitions them.
+// own, never five at a time). The rig normally happened at the build and
+// its task id and file live on the assets; a model built before that
+// rigs here, once. Either way a bake retargets only the roles whose pick
+// changed (or that never had a clip file), as an animation-only GLB
+// riding beside the rigged body. Champions baked before the per-clip
+// split keep their single embedded model until their first re-bake
+// transitions them.
 async function runAnimate(
   deps: PipelineDeps,
   jobId: number,
   req: AnimateRequest,
-  modelTask: string,
+  modelTask: string | null,
 ): Promise<void> {
   const now = deps.now ?? Date.now;
   const stage = (name: string): void => {
@@ -392,12 +425,13 @@ async function runAnimate(
     const { delta, providerDelta, houseDelta, picks } = bakePlan(before, req.clips);
     const prevFiles = (before.clipFiles ?? {}) as Record<string, string>;
 
-    // Rig once, keep forever: the stored rig task feeds every later bake
-    // (house clips ride the rigged body too, so any first bake rigs).
+    // The fallback rig, for a champion whose build predates the one the
+    // build itself runs: once, then kept forever like any other.
     let rigTask = typeof before.rigTask === 'string' ? before.rigTask : null;
     let riggedPath = typeof before.rigged === 'string' ? before.rigged : null;
     let rigProvenance: unknown = null;
     if (delta.length > 0 && (rigTask === null || riggedPath === null)) {
+      if (!modelTask) throw new GenerationError('this model kept no build task to rig');
       stage('rig');
       const rigged = await deps.provider.rig({ modelTaskId: modelTask, rigType: 'biped' });
       noteSpend(deps, req.accountId, 'animate', 'rig', rigged, now());

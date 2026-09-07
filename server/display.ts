@@ -47,10 +47,13 @@ export function displayOf(store: ForgeStore, id: string): ForgedDisplay | null {
   return sanitizeForgedDisplay(assets.display);
 }
 
-// The model a client should SHOW for an assets blob: with the per-clip
-// bake architecture that is the rigged body plus the animation-only clip
-// file per role; a champion baked before the split (or not yet baked)
-// keeps its single model and no clip files.
+// The model a client should SHOW for an assets blob: the rigged body from
+// the moment the rig step makes one, plus the animation-only clip file
+// per role once clips are baked onto it. Showing the skeleton's body as
+// soon as it exists is what lets the workshop hang a weapon on a hand
+// bone before any animation is chosen. A champion baked before the
+// per-clip split (or not yet rigged) keeps its single model and no clip
+// files.
 export function modelPointers(assets: Record<string, unknown> | null): {
   model: string | null;
   clips: Record<string, string> | null;
@@ -68,8 +71,13 @@ export function modelPointers(assets: Record<string, unknown> | null): {
     typeof a.clipFiles === 'object' && a.clipFiles !== null && Object.keys(a.clipFiles).length > 0
       ? (a.clipFiles as Record<string, string>)
       : null;
+  // The one exception to preferring the rigged body: a champion baked
+  // before the per-clip split carries its clips INSIDE its single model
+  // file, so swapping in a clipless rigged body would cost it its
+  // animations. It keeps that file until its first re-bake.
+  const embedded = clips !== null && clipFiles === null;
   const model =
-    clipFiles !== null && typeof a.rigged === 'string'
+    typeof a.rigged === 'string' && !embedded
       ? a.rigged
       : typeof a.model === 'string'
         ? a.model

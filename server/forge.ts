@@ -237,9 +237,9 @@ export function deleteDraft(deps: ForgeDeps, accountId: number, id: string): For
 
 // The model build (plan-forge phase 5, first half): the one gate where
 // EVERYTHING must hold, full validation included; the pipeline then
-// debits the creation and runs async. The row stays a draft: the player
-// inspects the static model in the workshop, and animating (the second
-// half, below) is what seals. Running it again before the seal is a
+// debits the embers and runs async. The row stays a draft: the player
+// inspects the rigged model in the workshop and hangs its weapon there,
+// and the animations (the second half, below) are their own later click. Running it again before the seal is a
 // rebuild and spends another creation. The returned `done` promise is
 // for tests and shutdown; the HTTP route answers with the job id alone.
 export function buildModel(
@@ -281,10 +281,10 @@ export function buildModel(
   return startModelBuild(deps.generation, { def: row.def, accountId });
 }
 
-// The second half, always LAST and always the player's own click: rig
-// the built model once, bake the picked clips. The creation was spent
-// at the build, so this moves the ledger in neither direction and can
-// simply run again after a failure. Each role's pick is the player's
+// The second half, always LAST and always the player's own click: bake
+// the picked clips onto the skeleton the build already made (a model
+// built before the build rigged gets its rig here instead, once, priced
+// into this bake). Each role's pick is the player's
 // own, validated against the provider's catalog (playtest: not a
 // bundle, every animation its own choice); roles the request leaves out
 // keep what is already baked, family defaults fill only never-baked

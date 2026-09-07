@@ -177,6 +177,51 @@ describe('setForgedDisplay', () => {
     store.close();
   });
 
+  it('shows the rigged body the moment the rig lands, before any clip bakes', () => {
+    // The rig is its own step now, and it is what the workshop needs to
+    // hang a weapon on a hand bone: a champion with a skeleton and no
+    // animations yet must already show the skeleton's body.
+    const store = seeded();
+    store.updateForgedAssets(
+      'forged_a',
+      {
+        model: 'forged/forged_a/model_1.glb',
+        rigged: 'forged/forged_a/rigged_2.glb',
+        rigTask: 'rig-t',
+      },
+      20,
+    );
+    const block = forgedMatchAssets(store, [twin(0, 'forged_a', 'alice')]);
+    expect(block.forged_a).toMatchObject({
+      model: 'forged/forged_a/rigged_2.glb',
+      clips: null,
+      clipFiles: null,
+    });
+    store.close();
+  });
+
+  it('leaves a pre-split champion on the model file its clips live inside', () => {
+    // Rigging one of those (its own step now) must not cost it the
+    // animations baked into its single model file: it keeps that file
+    // until its first re-bake produces clip files.
+    const store = seeded();
+    store.setForgedFinalized(
+      'forged_a',
+      {
+        model: 'forged/forged_a/model_1.glb',
+        rigged: 'forged/forged_a/rigged_2.glb',
+        rigTask: 'rig-t',
+        clips: { idle: 'idle', run: 'run', attack: 'attack', cast: 'cast', death: 'death' },
+      },
+      20,
+    );
+    expect(forgedMatchAssets(store, [twin(0, 'forged_a', 'alice')]).forged_a).toMatchObject({
+      model: 'forged/forged_a/model_1.glb',
+      clipFiles: null,
+    });
+    store.close();
+  });
+
   it('shows the rigged body plus clip files once a champion bakes per clip', () => {
     const store = seeded();
     store.setForgedFinalized(

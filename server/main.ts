@@ -1674,7 +1674,12 @@ const server = http.createServer(async (req, res) => {
                 drafts: out.drafts.map((d) => {
                   const assets = forgeStore.forgedAssets(d.id) as Record<string, unknown> | null;
                   const pointers = modelPointers(assets);
-                  const a = assets as { sheet?: string; family?: string; weapon?: string } | null;
+                  const a = assets as {
+                    sheet?: string;
+                    family?: string;
+                    weapon?: string;
+                    rigged?: string;
+                  } | null;
                   return {
                     ...d,
                     // A sealed champion from before a rule tightening may no
@@ -1682,6 +1687,10 @@ const server = http.createServer(async (req, res) => {
                     valid: validateForged(d.def).ok,
                     splash: splashOf(forgeStore, d),
                     model: pointers.model,
+                    // Whether the model carries a skeleton: every build
+                    // leaves one, a model built before the build rigged
+                    // does not, and its first bake will pay for the rig.
+                    rigged: typeof a?.rigged === 'string',
                     sheet: a?.sheet ?? null,
                     family: a?.family ?? null,
                     weapon: a?.weapon ?? null,

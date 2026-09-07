@@ -1,7 +1,8 @@
 // The generation pipeline (ADR 0010, keyless half): the neutral provider
 // interface driven end to end on the mock, in its TWO player-approved
-// halves (the model build spends the creation, then animate rigs, bakes
-// and seals as its own later click), the ledger-first debit and refund
+// halves (the model build, which comes back RIGGED so the workshop can
+// hang a weapon on a hand, then the bake as its own later click; the
+// seal is a third click of its own), the ledger-first debit and refund
 // on every failure shape, the boot sweep for jobs a crash orphaned, the
 // build and animate gates, and the Tripo provider pinned against
 // scripted responses.
@@ -10,6 +11,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { modelPointers } from '../server/display';
 import { bakePrice, EMBER_PRICES } from '../server/embers';
 import {
   animateChampion,
@@ -125,7 +127,7 @@ function rig(classify?: (url: string) => Promise<boolean>): Rig {
 }
 
 describe('the mock pipeline end to end', () => {
-  it('builds the STATIC model first: the row stays a draft, one creation spent', async () => {
+  it('builds a RIGGED model in one step: the row stays a draft, nothing animates', async () => {
     const r = rig();
     const start = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
     expect(start.ok).toBe(true);
@@ -141,20 +143,36 @@ describe('the mock pipeline end to end', () => {
       sheet: string;
       model: string;
       modelTask: string;
+      rigged: string;
+      rigTask: string;
+      clips?: unknown;
       family?: string;
       provenance: { provider: string; taskId: string }[];
     };
-    // The static model, named by its job so a rebuild is a fresh URL, and
-    // the task id the later animate step rigs.
+    // The model and its skeleton, both named by the job so a rebuild is a
+    // fresh URL, and the task ids every later act reads.
     expect(assets.model).toBe(`forged/${r.def.id}/model_${start.jobId}.glb`);
+    expect(assets.rigged).toBe(`forged/${r.def.id}/rigged_${start.jobId}.glb`);
     expect(typeof assets.modelTask).toBe('string');
+    expect(typeof assets.rigTask).toBe('string');
+    // The rig ran on the model this build just made, in the same run.
+    expect(r.provider.seen.find((s) => s.op === 'rig')?.req).toMatchObject({
+      modelTaskId: assets.modelTask,
+    });
     expect(assets.family).toBeUndefined();
-    expect(assets.provenance).toHaveLength(2);
-    // The static model is the only download; no rig, no animation pass.
-    expect(r.downloads.map((d) => d.url)).toEqual([expect.stringContaining('mock://model/')]);
-    expect(r.provider.seen.some((s) => s.op === 'rig' || s.op === 'animate')).toBe(false);
-    // Ledger: the model's price and nothing else, no refund.
-    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL);
+    expect(assets.provenance).toHaveLength(3);
+    // Both files come home; nothing animates, and no clip is chosen yet.
+    expect(r.downloads.map((d) => d.url)).toEqual([
+      expect.stringContaining('mock://model/'),
+      expect.stringContaining('mock://rigged/'),
+    ]);
+    expect(r.provider.seen.some((s) => s.op === 'animate')).toBe(false);
+    expect(assets.clips).toBeUndefined();
+    // And what a client shows is already the rigged body, which is what
+    // lets the workshop hang a weapon on a hand bone at this exact point.
+    expect(modelPointers(assets as unknown as Record<string, unknown>).model).toBe(assets.rigged);
+    // Ledger: the model and the rig, no refund.
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - RIG);
   });
 
   it('animates as its own SECOND step; the seal is a separate click', async () => {
@@ -163,10 +181,9 @@ describe('the mock pipeline end to end', () => {
     expect(built.ok).toBe(true);
     if (!built.ok) return;
     await built.done;
-    if (!built.ok) return;
-    const assets0 = r.store.forgedAssets(r.def.id) as { modelTask: string; model: string };
-    const modelTask = assets0.modelTask;
+    const assets0 = r.store.forgedAssets(r.def.id) as { model: string };
     const staticModel = assets0.model;
+    const rigJob = built.jobId;
 
     const start = startAnimate(r.pipeline, {
       forgedId: r.def.id,
@@ -200,7 +217,7 @@ describe('the mock pipeline end to end', () => {
     // the rigged body and the animation-only clip file land beside it,
     // and the exact pick per role seals with them.
     expect(assets.model).toBe(staticModel);
-    expect(assets.rigged).toBe(`forged/${r.def.id}/rigged_${start.jobId}.glb`);
+    expect(assets.rigged).toBe(`forged/${r.def.id}/rigged_${rigJob}.glb`);
     expect(typeof assets.rigTask).toBe('string');
     expect(assets.family).toBe('staff');
     expect(assets.clips).toEqual(MOCK_CLIPS);
@@ -212,11 +229,9 @@ describe('the mock pipeline end to end', () => {
     expect(assets.splash).toBe(r.splashRel);
     expect(assets.provenance).toHaveLength(4);
     expect(assets.provenance.every((p) => p.provider === 'mock')).toBe(true);
-    // The rig ran on the EXACT model the player validated, and the bake
-    // asked for an animation-only file of the five picks in role order.
-    expect(r.provider.seen.find((s) => s.op === 'rig')?.req).toMatchObject({
-      modelTaskId: modelTask,
-    });
+    // The bake asked for an animation-only file of the five picks in role
+    // order, retargeted onto the skeleton the BUILD stored: no second
+    // rig, because the build already did it.
     expect(r.provider.seen.find((s) => s.op === 'animate')?.req).toEqual({
       riggedTaskId: assets.rigTask,
       animations: CLIP_ROLES.map((role) => MOCK_CLIPS[role]),
@@ -227,7 +242,8 @@ describe('the mock pipeline end to end', () => {
       expect.stringContaining('mock://rigged/'),
       expect.stringContaining('mock://animated/'),
     ]);
-    // The build, then the rig and a five-clip bake, each at its price.
+    expect(r.provider.seen.filter((s) => s.op === 'rig')).toHaveLength(1);
+    // The build (model plus rig), then a five-clip bake at its own price.
     expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - RIG - BAKE5);
   });
 
@@ -310,6 +326,31 @@ describe('the mock pipeline end to end', () => {
     });
   });
 
+  it('refunds a failed rig with the rest of the build, and the retry succeeds', async () => {
+    // The rig rides inside the build now, so its failure is the build's
+    // failure: the model is not kept half-made and every ember comes back.
+    const r = rig();
+    r.provider.failOn.add('rig');
+    const failed = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
+    expect(failed.ok).toBe(true);
+    if (!failed.ok) return;
+    await failed.done;
+    const job = r.store.getGenerationJob(failed.jobId);
+    expect(job?.status).toBe('failed');
+    expect(job?.stage).toBe('rig');
+    expect(r.store.getForged(r.def.id)?.status).toBe('draft');
+    expect(r.store.forgedAssets(r.def.id)).toBe(null);
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED);
+
+    r.provider.failOn.delete('rig');
+    const retry = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
+    expect(retry.ok).toBe(true);
+    if (!retry.ok) return;
+    await retry.done;
+    expect(r.store.getGenerationJob(retry.jobId)?.status).toBe('success');
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - RIG);
+  });
+
   it('builds the 3D from the uploaded chosen reference, never a regeneration', async () => {
     const r = rig();
     const start = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
@@ -323,10 +364,10 @@ describe('the mock pipeline end to end', () => {
     // The 2D stages are the player's, iterated in the editor: the build
     // never generates an image behind their back.
     expect(r.provider.seen.some((s) => s.op === 'generate2D')).toBe(false);
-    // And the build filed what it charged (ADR 0017), under the meter
-    // that covers it, so the ember weights come from measurement.
+    // And the build filed what each half charged (ADR 0017), under the
+    // meter that covers it, so the ember weights come from measurement.
     const spent = r.store.listSpendSamples();
-    expect(spent).toHaveLength(1);
+    expect(spent).toHaveLength(2);
     expect(spent[0]).toMatchObject({
       accountId: ACCOUNT,
       action: 'generation',
@@ -334,6 +375,7 @@ describe('the mock pipeline end to end', () => {
       provider: 'tripo',
       credits: MOCK_COSTS.imageTo3D,
     });
+    expect(spent[1]).toMatchObject({ action: 'animate', detail: 'rig' });
   });
 
   it('forges the chosen weapon image into its own prop model', async () => {
@@ -357,15 +399,17 @@ describe('the mock pipeline end to end', () => {
     expect(r.store.getGenerationJob(start.jobId)?.status).toBe('success');
     const assets = r.store.forgedAssets(r.def.id) as { weapon?: string; provenance: unknown[] };
     expect(assets.weapon).toBe(`forged/${r.def.id}/weapon.glb`);
-    expect(assets.provenance).toHaveLength(3);
+    expect(assets.provenance).toHaveLength(4);
     // The chosen weapon image rode up and produced its own STATIC model:
-    // a second image-to-3D, and nothing rigs during the build half.
+    // a second image-to-3D, and the weapon is a prop, so only the body
+    // is rigged.
     const uploads = r.provider.seen.filter((s) => s.op === 'uploadImage');
     expect(uploads.at(-1)?.req).toMatchObject({ name: 'weapon_seed.png' });
     expect(r.provider.seen.filter((s) => s.op === 'imageTo3D')).toHaveLength(2);
-    expect(r.provider.seen.filter((s) => s.op === 'rig')).toHaveLength(0);
+    expect(r.provider.seen.filter((s) => s.op === 'rig')).toHaveLength(1);
     expect(r.downloads.map((d) => d.url)).toEqual([
       expect.stringContaining('mock://model/'),
+      expect.stringContaining('mock://rigged/'),
       expect.stringContaining('mock://model/'),
     ]);
   });
@@ -381,7 +425,7 @@ describe('the mock pipeline end to end', () => {
     const built = buildModel(deps, ACCOUNT, r.def.id);
     expect(built.ok).toBe(true);
     if (built.ok) await built.done;
-    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL);
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - RIG);
     // No chosen weapon image yet: the chain refuses before any job.
     expect(forgeWeapon(deps, ACCOUNT, r.def.id)).toMatchObject({
       ok: false,
@@ -412,7 +456,7 @@ describe('the mock pipeline end to end', () => {
     expect(assets.provenance).toHaveLength(before + 1);
     // Claimed later, so it pays for itself: there is no creation to have
     // covered it any more.
-    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - WEAPON);
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - RIG - WEAPON);
     // And only once: with the weapon in place, the claim is closed.
     expect(forgeWeapon(deps, ACCOUNT, r.def.id)).toMatchObject({
       ok: false,
@@ -423,12 +467,16 @@ describe('the mock pipeline end to end', () => {
     const rebuilt = buildModel(deps, ACCOUNT, r.def.id);
     expect(rebuilt.ok).toBe(true);
     if (rebuilt.ok) await rebuilt.done;
-    // The rebuild pays for a model and not for the weapon it kept.
-    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - WEAPON - MODEL);
-    const after = r.store.forgedAssets(r.def.id) as { weapon?: string };
+    // The rebuild pays for a model and its new rig, not for the weapon
+    // it kept.
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - RIG - WEAPON - MODEL - RIG);
+    const after = r.store.forgedAssets(r.def.id) as { weapon?: string; rigged: string };
     expect(after.weapon).toBe(`forged/${r.def.id}/weapon.glb`);
-    // Three image-to-3D calls total: model, weapon, rebuilt model.
+    // Three image-to-3D calls total: model, weapon, rebuilt model, and
+    // the rebuilt model wears a fresh skeleton of its own.
     expect(r.provider.seen.filter((s) => s.op === 'imageTo3D')).toHaveLength(3);
+    expect(r.provider.seen.filter((s) => s.op === 'rig')).toHaveLength(2);
+    expect(after.rigged).toBe(`forged/${r.def.id}/rigged_${rebuilt.ok ? rebuilt.jobId : 0}.glb`);
   });
 
   it('honors the player-picked animation family over the kit-implied one', async () => {
@@ -621,7 +669,7 @@ describe('the mock pipeline end to end', () => {
     expect(built.ok).toBe(true);
     if (!built.ok) return;
     await built.done;
-    r.provider.failOn.add('rig');
+    r.provider.failOn.add('animate');
     const failed = startAnimate(r.pipeline, {
       forgedId: r.def.id,
       accountId: ACCOUNT,
@@ -633,13 +681,13 @@ describe('the mock pipeline end to end', () => {
     await failed.done;
     const job = r.store.getGenerationJob(failed.jobId);
     expect(job?.status).toBe('failed');
-    expect(job?.stage).toBe('rig');
+    expect(job?.stage).toBe('animate');
     // Still an inspectable draft, and the failed bake gave its embers
-    // back whole: only the build's debit stands.
+    // back whole: only the build and the rig stand.
     expect(r.store.getForged(r.def.id)?.status).toBe('draft');
-    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL);
-    // The retry is free and seals.
-    r.provider.failOn.delete('rig');
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - RIG);
+    // The retry bakes on the skeleton that is already there.
+    r.provider.failOn.delete('animate');
     const retry = startAnimate(r.pipeline, {
       forgedId: r.def.id,
       accountId: ACCOUNT,
@@ -651,6 +699,7 @@ describe('the mock pipeline end to end', () => {
     await retry.done;
     // The retry bakes; sealing stays the player's own separate click.
     expect(r.store.getForged(r.def.id)?.status).toBe('draft');
+    expect(r.provider.seen.filter((s) => s.op === 'rig')).toHaveLength(1);
     expect(sealChampion({ store: r.store }, ACCOUNT, r.def.id).ok).toBe(true);
     expect(r.store.getForged(r.def.id)?.status).toBe('finalized');
     expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - RIG - BAKE5);
@@ -683,7 +732,7 @@ describe('the mock pipeline end to end', () => {
     // say its number is the wall ADR 0017 exists to remove.
     expect(start).toMatchObject({
       ok: false,
-      error: `this costs ${MODEL} embers and you have 12; the grant refills weekly`,
+      error: `this costs ${MODEL + RIG} embers and you have 12; the grant refills weekly`,
     });
     // And it refused before touching the ledger or the provider.
     expect(r.store.creditBalance(ACCOUNT)).toBe(12);
@@ -693,8 +742,9 @@ describe('the mock pipeline end to end', () => {
   it('sweeps stale jobs, giving each back exactly what it took', () => {
     const r = rig();
     // Three jobs died with the process, and every kind can debit now
-    // (ADR 0017), so every kind is owed its own number back.
-    const spent = MODEL + bakePrice(3) + WEAPON;
+    // (ADR 0017), so every kind is owed its own number back. The build
+    // took its model and its rig together, as one price.
+    const spent = MODEL + RIG + bakePrice(3) + WEAPON;
     r.store.addCreditEntry({
       accountId: ACCOUNT,
       delta: -spent,
@@ -702,7 +752,7 @@ describe('the mock pipeline end to end', () => {
       ref: r.def.id,
       at: 1,
     });
-    r.store.createGenerationJob(r.def.id, ACCOUNT, 1, 'build', MODEL);
+    r.store.createGenerationJob(r.def.id, ACCOUNT, 1, 'build', MODEL + RIG);
     r.store.createGenerationJob(r.def.id, ACCOUNT, 1, 'animate', bakePrice(3));
     r.store.createGenerationJob(r.def.id, ACCOUNT, 1, 'weapon', WEAPON);
     expect(recoverStaleJobs(r.store, () => 2)).toBe(3);
@@ -782,9 +832,9 @@ describe('the build and animate gates (server/forge.ts)', () => {
     const good = buildModel(deps, ACCOUNT, r.def.id);
     expect(good.ok).toBe(true);
     if (good.ok) await good.done;
-    // Built but unsealed: another account still cannot animate it, and
-    // the owner's animate with NO explicit family falls back to the
-    // kit-implied one (sylra reads as staff).
+    // Built (and so rigged) but unsealed: another account cannot animate
+    // it, and the owner's animate with NO explicit family falls back to
+    // the kit-implied one (sylra reads as staff).
     expect(animateChampion(deps, 99, r.def.id)).toMatchObject({ ok: false });
     const animated = animateChampion(deps, ACCOUNT, r.def.id);
     expect(animated.ok).toBe(true);
@@ -833,6 +883,9 @@ describe('the build and animate gates (server/forge.ts)', () => {
       },
       5,
     );
+    // A champion built before the build rigged carries no skeleton, so
+    // its bake rigs it once, on the model task the old provenance kept
+    // at index 1, and pays for that rig on top of the clips.
     const start = startAnimate(r.pipeline, {
       forgedId: r.def.id,
       accountId: ACCOUNT,
@@ -842,7 +895,6 @@ describe('the build and animate gates (server/forge.ts)', () => {
     expect(start.ok).toBe(true);
     if (!start.ok) return;
     await start.done;
-    // The rig ran on the task the old provenance kept at index 1.
     expect(r.provider.seen.find((s) => s.op === 'rig')?.req).toMatchObject({
       modelTaskId: 'model-task-9',
     });

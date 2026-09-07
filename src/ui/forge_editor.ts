@@ -3,7 +3,11 @@
 // order, and every generation step the player's own. Design leads with
 // the splash art hero, then the model reference (the single-view image
 // the 3D literally builds from) iterated the same way, then the visible
-// pipeline whose 3D step is a button, not a side effect. Candidates open
+// pipeline whose 3D step is a button, not a side effect: one build that
+// comes back rigged (so the weapon hangs on a hand in the workshop right
+// after it lands), then the animations. Sealing is not a step of the
+// pipeline at all: it lives with the champion's other actions in the
+// right rail. Candidates open
 // in a lightbox (view large, pick, iterate from that exact image), a
 // generation in flight shows as a live skeleton card, and the Spells tab
 // is a slot bar (passive plus Q W E R) with the selected spell's icon
@@ -421,6 +425,9 @@ interface DraftRow {
   // any row that has one, model, sheet, family and display once finalized.
   splash?: string | null;
   model?: string | null;
+  // Whether the model carries a skeleton yet (the rig step, Step 5): what
+  // the weapon hangs on in the workshop and what every clip plays.
+  rigged?: boolean;
   sheet?: string | null;
   family?: string | null;
   weapon?: string | null;
@@ -605,7 +612,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
   // True while the model build runs; Step 4 renders the stage checklist
   // and the poll advances it through these rows when they are on screen.
   let finalizing = false;
-  // True while the animate chain runs (Step 5, the seal).
+  // True while the animate chain runs (Step 5).
   let animating = false;
   // True while a weapon-only build runs (the claim).
   let weaponForging = false;
@@ -655,6 +662,16 @@ export function openForgeEditor(container: HTMLElement): () => void {
     }
     return btn;
   };
+  // What one build costs from here: the model and its rig always, plus
+  // the weapon when a chosen weapon image is still waiting for its 3D.
+  // The same reading the server's own price makes (buildEmbers), so the
+  // button and the ledger cannot disagree.
+  const buildPrice = (): number => {
+    const row = currentRow();
+    const weaponComing = !row?.weapon && chosenOf('weapon') !== undefined;
+    return priceOf('model') + priceOf('rig') + (weaponComing ? priceOf('weapon') : 0);
+  };
+
   // The balance, wherever embers are about to be spent. It is the number
   // the creator watches move, so it is repeated beside the acts that move
   // it rather than kept in one corner of one panel.
@@ -689,6 +706,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
     { key: 'reference', label: 'Sending your chosen reference' },
     { key: 'classify', label: 'Checking the image' },
     { key: 'model', label: 'Sculpting the 3D model' },
+    { key: 'rig', label: 'Rigging the skeleton' },
     { key: 'weapon', label: 'Forging the weapon' },
     { key: 'download', label: 'Bringing the model home' },
   ];
@@ -1116,6 +1134,13 @@ export function openForgeEditor(container: HTMLElement): () => void {
   const testBtn = el('button', 'fe-btn', 'Test drive (practice)') as HTMLButtonElement;
   const saveBtn = el('button', 'fe-btn primary', 'Save now') as HTMLButtonElement;
   const finalizeBtn = el('button', 'fe-btn', 'Build the 3D') as HTMLButtonElement;
+  // The seal is an act on the whole champion, not a corner of the
+  // animations panel it used to sit in (playtest: the lock of a champion
+  // read as a setting of its clips). It stands with the other champion
+  // actions, reachable from every tab, and says in plain words what it
+  // locks and what it still leaves open.
+  const sealBtn = el('button', 'fe-btn', 'Seal the champion') as HTMLButtonElement;
+  const sealNote = el('div', 'fe-desc', '');
   const deleteBtn = el('button', 'fe-btn danger', 'Delete draft') as HTMLButtonElement;
 
   // Everything the 3D build needs, mirrored client-side so the buttons
@@ -1163,6 +1188,32 @@ export function openForgeEditor(container: HTMLElement): () => void {
     // style.display, not the hidden attribute: .fe-btn sets display and
     // author CSS beats the attribute's user-agent rule.
     workshopBtn.style.display = currentRow()?.model ? '' : 'none';
+    paintSeal();
+  };
+
+  // The seal's face: what it does, or the step still missing before it
+  // can. Said on the panel and not only in a hover title, because a
+  // grayed button with no visible reason reads as broken (playtest).
+  const paintSeal = (): void => {
+    const row = currentRow();
+    const sealed = isSealed();
+    const busy = generating !== null || finalizing || animating || weaponForging;
+    sealBtn.textContent = sealed ? 'Unseal (edit the kit again)' : 'Seal the champion';
+    const missing = sealed
+      ? null
+      : !row?.model
+        ? 'Build the 3D model first (Step 4)'
+        : row.clips === null || row.clips === undefined
+          ? 'Give it its animations first (Step 5)'
+          : null;
+    sealBtn.disabled = busy || missing !== null;
+    sealBtn.title = sealed
+      ? 'Returns the champion to a draft; it leaves the gallery until resealed'
+      : (missing ?? 'Locks the kit, the art and the model; free, and reversible');
+    sealNote.textContent = sealed
+      ? 'Sealed: the kit, the art and the model are locked and the champion is in the gallery. Its animations stay yours to change.'
+      : (missing ??
+        'Sealing locks the kit, the art and the model (the animations stay editable) and lets the champion into the gallery. Free, and you can unseal any time.');
   };
 
   const hooks: KitHooks = {
@@ -1195,6 +1246,27 @@ export function openForgeEditor(container: HTMLElement): () => void {
         }
       },
     );
+  });
+  // Sealing and unsealing: the same door either way, free, and never a
+  // side effect of another act (playtest: animating used to seal, and a
+  // creator found their champion locked without ever choosing it).
+  sealBtn.addEventListener('click', () => {
+    const sealing = !isSealed();
+    const route = sealing ? '/api/forge/seal' : '/api/forge/unseal';
+    status.textContent = sealing ? 'Sealing...' : 'Unsealing...';
+    void api<{ ok: boolean; error?: string }>(route, { id: current.id }).then((r) => {
+      status.textContent = r?.ok
+        ? sealing
+          ? 'Sealed: the kit, art and model are locked; animations stay editable.'
+          : 'Unsealed: the kit is editable again; the champion leaves the gallery until resealed.'
+        : (r?.error ?? 'that did not work');
+      if (r?.ok) {
+        void loadDrafts().then(() => {
+          renderMain();
+          refresh();
+        });
+      }
+    });
   });
   testBtn.addEventListener('click', () => {
     const def = JSON.parse(JSON.stringify(current)) as ForgedChampionDef;
@@ -1256,7 +1328,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
             if (job.status === 'success') {
               finalizing = false;
               status.textContent =
-                'The model is built: check it in the workshop, then give it its animations (Step 5).';
+                'Built and rigged: check it in the workshop, hang its weapon, then give it its animations (Step 5).';
               // Once the fresh rows land, the workshop opens on the new
               // static model: validating it is exactly the point.
               void loadDrafts().then(() => {
@@ -1284,17 +1356,18 @@ export function openForgeEditor(container: HTMLElement): () => void {
   };
   finalizeBtn.addEventListener('click', runForge);
 
-  // The animate step, always LAST and always the player's own click: rig
-  // the validated model once, bake the picked clips, seal the champion.
-  // Priced by how many clips it bakes; a failure refunds them and the
-  // bake can simply run again.
+  // The animate step, always LAST and always the player's own click:
+  // bake the picked clips onto the skeleton the build already made.
+  // Priced by how many clips it bakes (plus the rig itself, for a model
+  // built before the build rigged); a failure refunds every ember and
+  // the bake can simply run again.
   // `picks` names only the roles this click bakes: a per-row button sends
   // its one role, the full-set button sends all five; the server keeps
   // whatever is already baked for the rest.
   const runAnimate = (picks: Record<string, string>): void => {
     if (animating || finalizing || weaponForging) return;
     animating = true;
-    currentStage = 'rig';
+    currentStage = 'animate';
     renderMain();
     status.textContent = 'Applying the animations...';
     const settle = (message: string): void => {
@@ -1405,8 +1478,8 @@ export function openForgeEditor(container: HTMLElement): () => void {
   const meterPanel = el('div', 'fe-panel');
   meterPanel.append(el('h3', '', 'Power budget'));
   meterPanel.append(strip.el, costBox, verdict);
-  // Creation order: save the work, build the model, inspect it, play it.
-  // Delete stays last, away from the flow.
+  // Creation order: save the work, build the model, inspect it, play it,
+  // then seal it. Delete stays last, away from the flow.
   const actions = el('div', 'fe-panel');
   actions.append(
     el('h3', '', 'Actions'),
@@ -1414,6 +1487,8 @@ export function openForgeEditor(container: HTMLElement): () => void {
     finalizeBtn,
     workshopBtn,
     testBtn,
+    sealBtn,
+    sealNote,
     deleteBtn,
     status,
     saveState,
@@ -1539,8 +1614,10 @@ export function openForgeEditor(container: HTMLElement): () => void {
     return input;
   }
 
-  // Tab 1, Design: four step panels in creation order (splash art, model
-  // reference, the 3D build, the animations), then the card identity.
+  // Tab 1, Design: the step panels in creation order (splash art, model
+  // reference, the weapon, the rigged 3D build, the animations), then the
+  // card identity. Sealing is not among them: it is a champion action, in
+  // the right rail.
   function renderDesign(): void {
     const sealed = isSealed();
     const row = currentRow();
@@ -1679,8 +1756,8 @@ export function openForgeEditor(container: HTMLElement): () => void {
           'fe-lead',
           sealed
             ? 'Your champion sealed without a weapon: you can still generate ' +
-                'the weapon image below, pick it, then forge it in Step 4. It attaches in the ' +
-                'workshop.'
+                'the weapon image below, pick it, then forge it in Step 4. It attaches to a ' +
+                'hand in the workshop.'
             : 'Your weapon, alone on a plain background, extracted from the splash. Iterate ' +
                 'until it is right: the 3D weapon builds from this exact image during the ' +
                 'champion build, then attaches to a hand in the workshop. Skip it to fight ' +
@@ -1708,10 +1785,11 @@ export function openForgeEditor(container: HTMLElement): () => void {
     weaponPanel.append(artStrip('weapon', true));
     main.append(weaponPanel);
 
-    // Step 4: the model build, the first half only. Animation is ALWAYS
-    // the last step and lives in Step 5, behind its own button. The
-    // weapon-only forge (the claim) lives here too, with the same staged
-    // checklist as the build itself.
+    // Step 4: the model build, which comes back RIGGED (playtest: a
+    // creator who has just built their 3D wants to place the weapon that
+    // moment, and a weapon hangs on a hand bone). Animation is still its
+    // own later click, in Step 5. The weapon-only forge (the claim) lives
+    // here too, with the same staged checklist as the build itself.
     const buildPanel = el('div', 'fe-panel');
     buildPanel.append(el('h3', '', 'Step 4: build the 3D model'));
     stageRows = null;
@@ -1739,9 +1817,10 @@ export function openForgeEditor(container: HTMLElement): () => void {
           'fe-lead',
           sealed
             ? 'Your model is built and sealed: turn it around, attach and adjust the weapon, then save the tuning. Matches use exactly what you save.'
-            : 'Your model is built: inspect it in the workshop. Happy with it? Give it its ' +
-                'animations in Step 5. Not happy? Iterate the reference in Step 2 and rebuild, ' +
-                'which costs its embers again.',
+            : 'Your model is built and rigged: inspect it in the workshop and hang its ' +
+                'weapon on a hand there. Happy with it? Give it its animations in Step 5. ' +
+                'Not happy? Iterate the reference in Step 2 and rebuild, which costs its ' +
+                'embers again.',
         ),
       );
       const open = el('button', 'fe-gen', 'Open the 3D workshop');
@@ -1753,7 +1832,9 @@ export function openForgeEditor(container: HTMLElement): () => void {
         rebuild.disabled = blocker !== null;
         rebuild.title =
           blocker ??
-          `Replaces the model from your chosen reference; costs ${priceOf('model')} embers`;
+          `Replaces the model from your chosen reference and rigs it again; costs ${format(
+            buildPrice(),
+          )} embers`;
         rebuild.addEventListener('click', runForge);
         right.append(rebuild);
       }
@@ -1786,16 +1867,21 @@ export function openForgeEditor(container: HTMLElement): () => void {
         el(
           'p',
           'fe-lead',
-          'Builds the static 3D model from your chosen reference image (the exact one you ' +
-            'picked), and forges your weapon if you made one. You inspect the result in the ' +
-            'workshop; the animations come AFTER, in Step 5. Any failure refunds every ember ' +
-            'it took.',
+          'Builds the 3D model from your chosen reference image (the exact one you picked), ' +
+            'rigs it so it has the bones a weapon hangs on, and forges your weapon if you ' +
+            'made one. You inspect the result in the workshop and place the weapon there; ' +
+            'the animations come AFTER, in Step 5. Any failure refunds every ember it took.',
         ),
       );
-      const build = pricedBtn('fe-gen', 'Build the 3D model', 'model');
+      // One button, one price, and the price is the whole run: the model,
+      // its rig, and the weapon when one is waiting to be forged with it
+      // (ADR 0017: a control that costs says so on its face).
+      const build = el('button', 'fe-gen', 'Build the 3D model') as HTMLButtonElement;
+      build.append(document.createTextNode(' '), balanceTag('embers', buildPrice(), 12));
       const blocker = forgeBlocker();
       build.disabled = blocker !== null;
-      build.title = blocker ?? 'Runs on your chosen reference; a failure refunds every ember';
+      build.title =
+        blocker ?? 'Runs on your chosen reference, rigs it; a failure refunds every ember';
       build.addEventListener('click', runForge);
       buildPanel.append(build);
       // The balance stands beside the dearest act on the page, because a
@@ -1806,8 +1892,11 @@ export function openForgeEditor(container: HTMLElement): () => void {
     }
     main.append(buildPanel);
 
-    // Step 5: the animations, ALWAYS the last step, the player's own
-    // click once the model is validated. Baking seals the champion.
+    // Step 5: the animations, ALWAYS the last step of the pipeline and
+    // the player's own click once the built model is validated. Sealing
+    // is not a step here at all: it is one of the champion's actions, in
+    // the right rail (playtest: the lock of a whole champion read as a
+    // setting of its clips when it sat in this panel).
     const animPanel = el('div', 'fe-panel');
     animPanel.append(el('h3', '', 'Step 5: animations'));
     if (animating) {
@@ -1815,7 +1904,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
         el(
           'p',
           'fe-lead',
-          'Rigging and animating. A few minutes; stay and watch, or come back: it keeps going.',
+          'Animating. A few minutes; stay and watch, or come back: it keeps going.',
         ),
       );
       animPanel.append(...stageChecklist(ANIM_STAGES));
@@ -1844,10 +1933,10 @@ export function openForgeEditor(container: HTMLElement): () => void {
                 'any animation below and apply JUST that one, paying only for the clips that ' +
                 'actually change.'
             : 'Once the model is built and you are happy with it, pick each of the five ' +
-                'animations from the catalog (every death for death, every strike for attack). ' +
-                'Each pick plays on the gray mannequin the moment you choose it. The bake ' +
-                'charges a base plus a rate for every clip, which the button below prices, ' +
-                'so changing one animation later is cheap.',
+                'animations from the catalog (every death for death, every strike for ' +
+                'attack). Each pick plays on the gray mannequin the moment you choose it. ' +
+                'The bake charges a base plus a rate for every clip, which the button below ' +
+                'prices, so changing one animation later is cheap.',
         ),
       );
       // The preview stage: any preset plays on the neutral mannequin the
@@ -1935,7 +2024,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
       const actions = el('div', 'fe-anim-actions');
       if (!sealed || bakedNow === null) {
         // Two prices, not one, so this cannot go through pricedBtn: a base
-        // to rig the model and a rate per clip on top. Both wear the mark.
+        // to open the bake and a rate per clip on top. Both wear the mark.
         const bake = el('button', 'fe-gen', 'Animate the champion') as HTMLButtonElement;
         bake.append(
           document.createTextNode(' '),
@@ -1947,7 +2036,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
         bake.disabled = !row?.model || busy || finalizing || weaponForging;
         bake.title = !row?.model
           ? 'Build the 3D model first (Step 4)'
-          : 'Rigs your validated model and applies your five picks';
+          : 'Applies your five picks to your rigged model';
         bake.addEventListener('click', () => runAnimate(animPicks));
         actions.append(bake);
         // Said in plain sight, not only in the hover title: a grayed
@@ -1959,6 +2048,17 @@ export function openForgeEditor(container: HTMLElement): () => void {
               'fe-desc',
               'Locked until the 3D model is built (Step 4). Until then this champion ' +
                 'plays as the plain placeholder figure in a match.',
+            ),
+          );
+        } else if (row.rigged === false) {
+          // A model built before the build rigged: this first bake rigs
+          // it, and says so rather than surprising the balance.
+          actions.append(
+            el(
+              'div',
+              'fe-desc',
+              'This model was built before builds rigged, so this first bake also rigs it: ' +
+                `${format(priceOf('rig'))} embers on top of the clips.`,
             ),
           );
         }
@@ -1984,41 +2084,6 @@ export function openForgeEditor(container: HTMLElement): () => void {
         const openAnim = el('button', 'fe-gen', 'See them move');
         openAnim.addEventListener('click', openWorkshopHere);
         actions.append(openAnim);
-      }
-      // The explicit seal (playtest: animating used to seal as a side
-      // effect, and a creator found their champion locked without ever
-      // choosing it). Sealing and unsealing are their own clicks, free,
-      // with what they do said in plain words.
-      const flipSeal = (route: string, doing: string): void => {
-        status.textContent = doing;
-        void api<{ ok: boolean; error?: string }>(route, { id: current.id }).then((r) => {
-          status.textContent = r?.ok
-            ? route.endsWith('/seal')
-              ? 'Sealed: the kit, art and model are locked; animations stay editable.'
-              : 'Unsealed: the kit is editable again; the champion leaves the gallery until resealed.'
-            : (r?.error ?? 'that did not work');
-          if (r?.ok) void loadDrafts().then(() => renderMain());
-        });
-      };
-      if (!sealed && bakedNow !== null && row?.model) {
-        const sealBtn = el('button', 'fe-gen', 'Seal the champion') as HTMLButtonElement;
-        sealBtn.disabled = busy || finalizing || weaponForging;
-        sealBtn.addEventListener('click', () => flipSeal('/api/forge/seal', 'Sealing...'));
-        actions.append(sealBtn);
-        actions.append(
-          el(
-            'div',
-            'fe-desc',
-            'Sealing locks the kit, the art and the model (animations stay editable) and ' +
-              'lets the champion into the gallery. Unseal any time from here.',
-          ),
-        );
-      }
-      if (sealed) {
-        const unBtn = el('button', 'fe-mini', 'Unseal (edit the kit again)') as HTMLButtonElement;
-        unBtn.disabled = busy || finalizing || weaponForging;
-        unBtn.addEventListener('click', () => flipSeal('/api/forge/unseal', 'Unsealing...'));
-        actions.append(unBtn);
       }
       if (actions.childElementCount > 0) animPanel.append(actions);
     }

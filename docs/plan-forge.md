@@ -108,8 +108,10 @@ and their written UGC authorization; details inline.
    becomes a multi-body model), finalize re-uploads the CHOSEN reference
    and builds from that exact image,
    runs the second-pass classification hook (block and refund), then image-to-3D,
-   auto-rigging (biped only in v1; the Creature beta waits for a provider with a
-   full six-clip story), the weapon-family clip set, download-before-expiry with
+   auto-rigging in the same build run (biped only in v1; the Creature beta waits for
+   a provider with a full six-clip story), so a built model already has the hand bone
+   its weapon hangs on in the workshop, the weapon-family clip set as its own later
+   click, download-before-expiry with
    the per-champion asset budgets enforced (over budget fails and refunds), asset
    provenance, the creation debit with refunds on failure. REMAINING, needs a paid
    Tripo key and their written UGC authorization: verify the live task envelope

@@ -879,6 +879,23 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       );
       return;
     }
+    // No bones, nowhere to hang anything: a model that has not been
+    // rigged yet gets the reason instead of an empty bone list. Only once
+    // it is actually loaded: an empty list before that is just a load in
+    // flight.
+    if (model !== null && boneNames.length === 0) {
+      weaponControls.append(
+        el(
+          'div',
+          'ws-note',
+          'This model has no skeleton, so there is no hand to hold a weapon. It was built ' +
+            'before builds rigged: bake its animations once in the Forge (Step 5), which ' +
+            'rigs it, then come back and place the weapon here.',
+        ),
+        freezeBox,
+      );
+      return;
+    }
     const kindSelect = el('select', 'ws-select') as HTMLSelectElement;
     // Real 3D weapon models only: the roster's generated ones, plus the
     // champion's own forged weapon once it exists.

@@ -254,17 +254,29 @@ _Avoid_: atelier mode, custom game (that is a private lobby)
 A forged champion still being authored in the Forge: kit, stats, name, and splash art are
 edited freely and previewed on the engine's stylized figure. Drafts are unlimited and free.
 The 3D happens in two player-approved steps, both on the draft: the BUILD spends its embers
-and produces the static model, which the creator inspects in the workshop (and may rebuild,
-spending again); ANIMATE, always last and always its own click, rigs the validated model
-once and bakes the clips the creator picked from the provider catalog, at its own price. Animating never
-seals: the Seal (its own entry) is the creator's own separate click.
+and produces the model, rigged (its skeleton comes with it) and with its weapon when one was
+made, which the creator inspects and dresses in the workshop (and may rebuild, spending
+again); ANIMATE, always last and always its own click, bakes onto that skeleton the clips
+the creator picked from the provider catalog, at its own price. Neither seals: the Seal (its
+own entry) is the creator's own separate click, in the editor's Actions rail.
 _Avoid_: WIP champion, unfinished champion
+
+**Rig**:
+The skeleton inside a forged champion's model, made by the build in the same run as the
+model itself and priced into it. It is not a step of its own: bones are what a Prop hangs on
+and what a Clip file moves, so a build returns a model whose weapon can be placed in the
+workshop immediately, without buying animations first to get a hand to hang it on. The
+rigged body, not the static one, is what every client shows. A champion built before the
+build rigged has none; its first bake rigs it once and pays the rig then.
+_Avoid_: skeleton pass, auto-rig step, bone setup
 
 **Seal**:
 The creator's explicit click that marks a champion finalized: the kit, the art and the
-model lock, and the champion may enter the gallery. Never a side effect of another step
-(playtest: a lock that arrives unasked reads as a bug). The seal spares the animations: a
-sealed champion re-bakes any clip freely. Unsealing is the same door in reverse, any time,
+model lock, and the champion may enter the gallery. It is an act on the whole champion, so
+it stands with the other champion actions in the editor's right rail rather than inside any
+one creation step (playtest: under the animations it read as a setting of the clips). Never
+a side effect of another step (playtest: a lock that arrives unasked reads as a bug). The
+seal spares the animations: a sealed champion re-bakes any clip freely. Unsealing is the same door in reverse, any time,
 owner-only: the champion returns to a draft and leaves the gallery until resealed. Reforge
 (its own entry) is the seal's one in-place kit exception.
 _Avoid_: finalize button, lock, publish
@@ -408,7 +420,9 @@ The 3D inspection and adjustment view of a forged champion's generated model, fr
 static build onwards (validating the model BEFORE animating is the point):
 turntable orbit and zoom, playback of the clip set under readable names, team color
 preview, a match-view camera at in-game scale, and the display tuning (below) edited
-live by the creator. A view of one champion, not a place; the place players create in
+live by the creator. Hanging the weapon needs bones, which a built model already has;
+a champion built before the build rigged is told so plainly instead of shown an empty
+bone list. A view of one champion, not a place; the place players create in
 is the Forge.
 
 **Display tuning**:
