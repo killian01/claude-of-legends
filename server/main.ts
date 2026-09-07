@@ -20,6 +20,7 @@ import {
 import { isVisitSource } from '../src/net/pulse_source';
 import { REPLAY_VERSION } from '../src/net/replay';
 import { isVisitStep, VISIT_STEPS } from '../src/net/visit_line';
+import { contentFingerprint } from '../src/sim/content/fingerprint';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { validateForged } from '../src/sim/forge/validate';
 import { PlayLedger } from '../src/sim/playbook/report';
@@ -2704,6 +2705,10 @@ setInterval(() => {
             try {
               saveJsonAtomic(path.join(REPLAYS_DIR, `${matchId}.json`), {
                 version: REPLAY_VERSION,
+                // What the match ran on: a replay is a re-simulation, so
+                // a record whose content has moved plays a different
+                // match and the viewer must refuse it.
+                content: contentFingerprint(),
                 seed: entry.match.seed,
                 picks: entry.match.replayPicks,
                 events: entry.match.replayEvents,

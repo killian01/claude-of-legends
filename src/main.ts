@@ -23,9 +23,9 @@ import { markStep, markVisit, STAYED_MS } from './net/pulse_ping';
 import {
   applyReplayEvent,
   buildMatchSim,
-  REPLAY_VERSION,
   type ReplayEvent,
   type ReplayRecord,
+  replayPlayable,
 } from './net/replay';
 import { attachBot } from './sim/content/bots';
 import { houseSeats } from './sim/content/bots/house';
@@ -224,12 +224,14 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
   } catch {
     // handled below
   }
-  if (!record || record.version !== REPLAY_VERSION || !Array.isArray(record.picks)) {
+  if (!record || !replayPlayable(record) || !Array.isArray(record.picks)) {
     await showNotice(
       container,
       'Replay unavailable',
-      record && typeof record.version === 'number' && record.version !== REPLAY_VERSION
-        ? 'This replay was recorded under an older version of the game and would no longer play out as it happened.'
+      record && typeof record.version === 'number'
+        ? 'This replay was recorded on an older version of the game (a champion, an item or ' +
+            'the map has changed since), so replaying it would show a different match from the ' +
+            'one that was played. The result on the Record stands: it is what happened.'
         : 'This replay is gone: the server keeps only the most recent matches.',
     );
     return 'menu';

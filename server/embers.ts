@@ -70,3 +70,19 @@ export const CREATION_IN_EMBERS =
 // What a whole champion costs at these prices, for the surfaces that want
 // to say so before a creator starts one.
 export const CHAMPION_IN_EMBERS = CREATION_IN_EMBERS;
+
+// What making one champion actually takes, art included: the two images
+// every champion needs (the splash and the model reference), the weapon's
+// own image, the model with its rig, the weapon, and a five-clip bake.
+// Spell icons are not in it: a champion plays without them.
+export const FIRST_CHAMPION_IN_EMBERS = CHAMPION_IN_EMBERS + 3 * EMBER_PRICES.image;
+
+// The minimum a new account is put in reach of: enough to finish ONE
+// champion, once. The weekly grant alone leaves a creator a fortnight
+// short of their first champion, which is the worst place in the Forge
+// to meet a wall: before they have made anything at all. This closes
+// exactly that gap and nothing more, and is read AFTER the week's grant
+// has landed, so what it adds is only ever the shortfall.
+export function welcomeTopUp(held: number): number {
+  return Math.max(0, FIRST_CHAMPION_IN_EMBERS - held);
+}

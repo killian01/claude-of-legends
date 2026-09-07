@@ -5,6 +5,7 @@
 // threads.
 
 import { buildMatchSim, REPLAY_VERSION, type ReplayPick, type ReplayRecord } from './net/replay';
+import { contentFingerprint } from './sim/content/fingerprint';
 import type { ForgedChampionDef } from './sim/forge/forged_def';
 import { PlayLedger, type PlayReport } from './sim/playbook/report';
 import type { ScoreRow, TeamId } from './sim/types';
@@ -41,6 +42,7 @@ export function runFastMatch(req: FastMatchRequest): FastMatchResult {
   }
   const record: ReplayRecord = {
     version: REPLAY_VERSION,
+    content: contentFingerprint(),
     seed: req.seed,
     picks: req.picks,
     events: [],

@@ -11,6 +11,7 @@ import { FAST_MATCH_MAX_TICKS } from '../src/fast_match';
 import type { NewRecordEntry, RecordEntry, RecordKind, RecordRow } from '../src/net/record';
 import { REPLAY_VERSION, type ReplayPick, type ReplayRecord } from '../src/net/replay';
 import { CHAMPIONS } from '../src/sim/content/champions';
+import { contentFingerprint } from '../src/sim/content/fingerprint';
 import { ITEMS } from '../src/sim/content/items';
 import { SIGILS } from '../src/sim/content/sigils';
 import { type DeathScene, SCENE_CAP, type SceneUnit } from '../src/sim/playbook/death_context';
@@ -276,7 +277,10 @@ function replay(raw: unknown, seed: number, ticks: number): ReplayRecord | null 
     if (!parsed) return null;
     picks.push(parsed);
   }
-  return { version: REPLAY_VERSION, seed, picks, events: [], ticks };
+  // Rebuilt here rather than trusted, the content fingerprint included:
+  // it is this server that will serve the record back, and it is this
+  // server's content the replay will be re-simulated against.
+  return { version: REPLAY_VERSION, content: contentFingerprint(), seed, picks, events: [], ticks };
 }
 
 export interface RecordUpload {

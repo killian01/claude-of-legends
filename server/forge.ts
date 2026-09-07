@@ -15,6 +15,7 @@ import {
   CREATION_IN_EMBERS,
   EMBER_PRICES,
   EMBERS_PER_WEEK,
+  welcomeTopUp,
 } from './embers';
 import type { ForgedRow, ForgeStore } from './forge_store';
 import { catalogRoles } from './generation/house_clips';
@@ -71,6 +72,22 @@ export function refreshWeeklyGrant(deps: ForgeDeps, accountId: number): void {
     reason: 'weekly_grant',
     at,
   });
+  grantFirstChampion(deps, accountId, at);
+}
+
+// The one-time welcome: a first champion has to be POSSIBLE. A week's
+// grant does not cover one on its own, so a creator who has just arrived
+// meets a wall before they have made anything, which is the worst place
+// in the whole Forge to meet one. This tops the account up to exactly
+// what one champion takes, art included, once and never again; the weekly
+// grant carries on unchanged, and an account that already holds enough
+// gets nothing, because the minimum is the point.
+export function grantFirstChampion(deps: ForgeDeps, accountId: number, at: number): void {
+  if (deps.store.lastCreditEntryAt(accountId, 'welcome_grant') !== null) return;
+  const top = welcomeTopUp(deps.store.creditBalance(accountId));
+  // The row is written even when it is worth nothing: its presence is
+  // the record that the welcome has happened, so it happens once.
+  deps.store.addCreditEntry({ accountId, delta: top, reason: 'welcome_grant', at });
 }
 
 // Standing balances cross over once, on the account's next visit to any

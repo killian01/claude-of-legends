@@ -7,16 +7,29 @@
 
 import { parseCoachOrder } from '../sim/coach';
 import { attachBot } from '../sim/content/bots';
+import { contentMatches } from '../sim/content/fingerprint';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { PlaybookDef } from '../sim/playbook/types';
 import { Sim } from '../sim/sim';
 import type { TeamId } from '../sim/types';
 import { type ClientMsg, isFiniteVec } from './protocol';
 
-// Bumped whenever sim behavior changes (a replay is a re-simulation, so
-// an older record would silently play out a different match): 2 with the
-// river-reflected lane polylines.
+// Bumped whenever the sim's own CODE changes behavior (a replay is a
+// re-simulation, so an older record would silently play out a different
+// match): 2 with the river-reflected lane polylines. What the sim reads
+// rather than does (champions, items, sigils, the map, the house bots)
+// is guarded by the content fingerprint instead, which moves on its own
+// (src/sim/content/fingerprint.ts): nobody has to remember it.
 export const REPLAY_VERSION = 2;
+
+// Whether a record still plays out the match it recorded: the version
+// this build speaks, and content that has not moved under it.
+export function replayPlayable(record: {
+  version?: unknown;
+  content?: string | undefined;
+}): boolean {
+  return record.version === REPLAY_VERSION && contentMatches(record.content);
+}
 // A griefer spamming the rate limit for a whole match could balloon the
 // log; past this the match simply has no replay.
 export const REPLAY_EVENT_CAP = 200_000;
@@ -49,6 +62,12 @@ export interface ReplayEvent {
 
 export interface ReplayRecord {
   version: number;
+  // The fingerprint of the content the match ran on (champions, items,
+  // sigils, the map, the house bots, the tick rate). A replay is a
+  // re-simulation, so a record whose content has moved since would play
+  // out a DIFFERENT match; the viewer refuses it instead. Absent on
+  // records written before the fingerprint existed.
+  content?: string;
   seed: number;
   picks: ReplayPick[];
   events: ReplayEvent[];

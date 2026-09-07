@@ -4,7 +4,7 @@
 // the ledger.
 
 import { describe, expect, it } from 'vitest';
-import { EMBER_PRICES, EMBERS_PER_WEEK, IMAGE_PRICE_RESOLD } from '../server/embers';
+import { EMBER_PRICES, FIRST_CHAMPION_IN_EMBERS, IMAGE_PRICE_RESOLD } from '../server/embers';
 import {
   deleteDraft,
   type ForgeDeps,
@@ -32,8 +32,9 @@ describe('forge drafts', () => {
     const listed = listDrafts(deps, 1);
     expect(listed.ok && listed.drafts.map((d) => d.id)).toEqual(['forged_test_draft']);
     // Listing surfaces the ledger too, granted on first contact: a week
-    // of embers, which is a forged champion a fortnight (ADR 0017).
-    expect(listed.ok && listed.embers).toBe(EMBERS_PER_WEEK);
+    // of embers, and the one-time welcome that puts a first champion in
+    // reach (ADR 0017).
+    expect(listed.ok && listed.embers).toBe(FIRST_CHAMPION_IN_EMBERS);
 
     const renamed = { ...draft(), name: 'Bramble Twin' };
     expect(saveDraft(deps, 1, 'bob', renamed)).toEqual({ ok: true });
@@ -118,18 +119,20 @@ describe('forge drafts', () => {
     let clock = 0;
     const deps: ForgeDeps = { store, emberGrant: 100, now: () => clock };
     refreshWeeklyGrant(deps, 7);
-    expect(store.creditBalance(7)).toBe(100);
+    // The first visit: the week's grant, topped up to what one champion
+    // takes, once (server/embers.ts, welcomeTopUp).
+    expect(store.creditBalance(7)).toBe(FIRST_CHAMPION_IN_EMBERS);
     // Six days on: nothing new, however often the account surfaces.
     clock = 6 * 24 * 60 * 60 * 1000;
     refreshWeeklyGrant(deps, 7);
     refreshWeeklyGrant(deps, 7);
-    expect(store.creditBalance(7)).toBe(100);
+    expect(store.creditBalance(7)).toBe(FIRST_CHAMPION_IN_EMBERS);
     // Day eight: the week rolled, one grant, and only one. Unspent embers
-    // roll over, so two quiet weeks forge a champion in the third.
+    // roll over, and the welcome never comes twice.
     clock = 8 * 24 * 60 * 60 * 1000;
     listDrafts(deps, 7);
     listDrafts(deps, 7);
-    expect(store.creditBalance(7)).toBe(200);
+    expect(store.creditBalance(7)).toBe(FIRST_CHAMPION_IN_EMBERS + 100);
     store.close();
   });
 });

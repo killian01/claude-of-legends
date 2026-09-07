@@ -388,10 +388,12 @@ server pays a provider on its behalf (ADR 0017). Every paid act is priced in emb
 it actually costs us, so a 3D build is dear, a clip bake is a fraction of it, a 2D image a
 fraction again, and a turn with the coach or the kit conversation cheaper still. Every
 account receives a weekly grant of 100, which is a forged champion a fortnight, and it
-rolls over; the ledger is the same append-only one as before, with the balance derived and
-never stored, and any failure refunds exactly what it debited. The creator arbitrates their
-own week, trading rerolls against animations. One ember is one cent of what the server
-spends, so the weights are read off measurement and never argued about:
+rolls over; a brand new account is topped up ONCE to what one whole champion takes, art
+included, because meeting a wall before having made anything at all is the worst place in
+the Forge to meet one. The ledger is the same append-only one as before, with the balance
+derived and never stored, and any failure refunds exactly what it debited. The creator
+arbitrates their own week, trading rerolls against animations. One ember is one cent of
+what the server spends, so the weights are read off measurement and never argued about:
 `docs/design/generation-costs.md` holds them and `server/embers.ts` is the table.
 A whole champion costs 115 plus its art.
 _Avoid_: credit, token, generation token, point
@@ -441,10 +443,11 @@ one to a champion is a file copy, no provider call, no credits. A champion that 
 nothing BORROWS a five-role house set from the moment it is rigged, chosen by its weapon
 family: a built model is seen playing (in the workshop and in a match) before its creator
 has picked a single animation, and its own bake replaces the borrowed set whole. Borrowed
-clips are named as borrowed wherever they show, and a champion cannot be sealed on them. Curated in weapon-family
-sets (sword and shield, great sword, magic); every house clip is baked facing the rig's
-rest forward and performs on the spot, because the game aligns a champion to its rest
-forward and owns all movement. `scripts/bake_house_clips.mjs` is the curation record.
+clips are named as borrowed wherever they show, and a champion cannot be sealed on them.
+Curated in weapon-family sets (sword and shield, great sword, magic); every house clip is
+baked facing the rig's rest forward and performs on the spot, because the game aligns a
+champion to its rest forward and owns all movement. `scripts/bake_house_clips.mjs` is the
+curation record.
 _Avoid_: stock animation, builtin animation
 
 **Workshop view**:
@@ -644,6 +647,17 @@ on), the playbook version that played, its plays, and its replay. Capped per bot
 oldest leaving first. The tally of won and lost is the record in the sports sense, read
 one kind at a time so rated play is never blended with the sparring behind it.
 _Avoid_: history, match log, ledger, and "record" for a stored replay (that is a replay)
+
+**Replay**:
+A match played again rather than filmed: the record keeps the seed, the picks (a bot's
+playbook embedded whole) and the commands, and the viewer rebuilds the sim and runs it. A
+match compresses to kilobytes that way, and the live path and the replay path cannot drift
+apart because both go through the same functions. What it costs is that a replay is only
+faithful while the sim and the content it reads are the ones that played: a champion, an
+item or the map moving would make yesterday's replay play out a match that never happened.
+Two guards say so instead: the replay version, bumped by hand when the sim's own code
+changes, and the content fingerprint, computed from the tables themselves so nobody has to
+remember. A record that fails either is not played, and says why.
 
 **Death card**:
 The scene of one death on a Match sheet: where the champion fell, the allies and enemies
