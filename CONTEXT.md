@@ -276,8 +276,8 @@ model lock, and the champion may enter the gallery. It is an act on the whole ch
 it stands with the other champion actions in the editor's right rail rather than inside any
 one creation step (playtest: under the animations it read as a setting of the clips). Never
 a side effect of another step (playtest: a lock that arrives unasked reads as a bug). The
-seal spares the animations: a sealed champion re-bakes any clip freely. Unsealing is the same door in reverse, any time,
-owner-only: the champion returns to a draft and leaves the gallery until resealed. Reforge
+seal spares the animations: a sealed champion re-bakes any clip freely. Unsealing is the
+same door in reverse, any time, owner-only: the champion returns to a draft and leaves the gallery until resealed. Reforge
 (its own entry) is the seal's one in-place kit exception.
 _Avoid_: finalize button, lock, publish
 
@@ -314,6 +314,20 @@ gate before it reaches the editor, and nothing touches the form until the creato
 it. It generates no asset and downloads nothing, so it is priced as a model turn and not as a
 build.
 _Avoid_: VFX generation, effect art job
+
+**Brief**:
+The Forge's first door: one line of intent from the creator ("a stone warden who makes
+leaving the lane expensive"), and a whole champion comes back written, in one answer.
+Identity, role, the passive and four spells, base stats and growth, and the sentence the
+splash art starts from, all fitted to the envelopes and cleared by the full validator
+before the creator sees it, so what is proposed is playable as it stands. It exists
+because assembling a champion field by field asks one person to be an art director, a
+game designer and a technical artist at once: the brief makes the first champion something
+to CHANGE rather than to author. Priced as one turn of a conversation, and like every
+proposal in the Forge nothing touches the form until the creator takes it. It never
+touches art, the 3D model or the sounds; asking again is another champion from the same
+line. Drafts only.
+_Avoid_: autogenerate, one-click champion, wizard
 
 **Kit suggestion**:
 A proposed passive and four spells, written by a model from the champion's own chosen

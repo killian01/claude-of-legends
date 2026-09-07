@@ -36,7 +36,10 @@ and their written UGC authorization; details inline.
    superseded by ADR 0006's stack). SQLite for forged champions, the creation
    ledger, and generation jobs; the weekly allocation refresh; the word filter on
    names and card texts.
-4. **The Forge editor**: kit half DONE (stats, four abilities composed from the
+4. **The Forge editor**: brief DONE (one line of intent in, a whole validated
+   champion out: identity, kit, stats and the splash line, as a proposal the creator
+   takes or asks again for; `server/forge_brief.ts`, the Design tab's first panel).
+   Kit half DONE (stats, four abilities composed from the
    primitives, passive template picker, the power budget meter, card texts, drafts
    saved to the account, the test drive into offline practice on the stylized
    figure). Art half DONE: splash art first (the shared style block held server

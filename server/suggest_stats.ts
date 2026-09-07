@@ -70,12 +70,13 @@ function kitSummary(def: ForgedChampionDef): string {
   return lines.join('; ');
 }
 
-function preamble(): string {
-  const intro =
-    'You tune the base stats and per-level growth of a champion for a small deterministic ' +
-    "MOBA, in conversation with the champion's creator. Read the champion's role and kit, " +
-    'then propose a stat line that fits the body they describe, and rework your latest ' +
-    'proposal as the creator asks.';
+// The stat half of the grammar: bounds, prices, envelopes and the roster
+// to read them against. Shared with the brief (server/forge_brief.ts),
+// which asks for a kit and a body in one answer, so the two surfaces
+// cannot drift apart on what a legal stat line is.
+export const STAT_RULES = statRules();
+
+function statRules(): string {
   const rules = [
     `Base stat bounds: ${JSON.stringify(BASE_STAT_BOUNDS)}. Growth bounds: ${JSON.stringify(GROWTH_BOUNDS)}.`,
     `Price per point above each floor: base ${JSON.stringify(BASE_STAT_PRICES)}, growth ${JSON.stringify(GROWTH_PRICES)}.`,
@@ -90,6 +91,15 @@ function preamble(): string {
       `${BASE_STAT_BOUNDS.attackRange.max}, priced like any stat. Keep the choice the kit implies ` +
       'unless the creator asks otherwise.',
   ].join(' ');
+  return [`The roster, for reference:\n${rosterLines()}`, rules].join('\n\n');
+}
+
+function preamble(): string {
+  const intro =
+    'You tune the base stats and per-level growth of a champion for a small deterministic ' +
+    "MOBA, in conversation with the champion's creator. Read the champion's role and kit, " +
+    'then propose a stat line that fits the body they describe, and rework your latest ' +
+    'proposal as the creator asks.';
   const task =
     'Every answer is ONLY a JSON object, no prose around it: { "comment": string, "base": ' +
     '{ "hp", "mana", "ad", "armor", "mr", "attackRange", "attackSpeed", "moveSpeed", ' +
@@ -97,7 +107,7 @@ function preamble(): string {
     'every value a number. "comment" is one or two plain sentences to the creator about ' +
     'the body you proposed or what you changed, in their own language. Compact JSON: no ' +
     'indentation, no line breaks.';
-  return [intro, `The roster, for reference:\n${rosterLines()}`, rules, task].join('\n\n');
+  return [intro, STAT_RULES, task].join('\n\n');
 }
 
 // The form as it stands, restated every turn: the kit may have changed

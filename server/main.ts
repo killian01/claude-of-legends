@@ -89,6 +89,7 @@ import {
   refreshWeeklyGrant,
   saveDraft,
 } from './forge';
+import { briefChampion } from './forge_brief';
 import { CHAT_JSON_MAX, chatsOf, saveChat } from './forge_chats';
 import { ForgeStore } from './forge_store';
 import { canPlayForged, listGallery, reportForged, setVisibility, toggleLike } from './gallery';
@@ -1921,6 +1922,40 @@ const server = http.createServer(async (req, res) => {
           200,
           id ? act({ store: forgeStore }, me.id, id) : { ok: false, error: 'malformed request' },
         );
+        return;
+      }
+      // The brief: one line in, a whole champion out (identity, kit and
+      // body together), owner-only and drafts only. Same wire, same
+      // meter and same price as one turn of a conversation; it is the
+      // Forge's first door, so a creator starts by changing a champion
+      // instead of authoring one from a blank form.
+      if (url === '/api/forge/brief' && req.method === 'POST') {
+        const body = await readJsonBody(req);
+        const id = typeof body?.id === 'string' ? body.id : null;
+        const line = typeof body?.line === 'string' ? body.line : null;
+        if (!id || line === null) {
+          sendJson(res, 400, { ok: false, error: 'malformed request' });
+          return;
+        }
+        const quota = checkQuota(quotaDeps, 'agent');
+        if (!quota.ok) {
+          sendJson(res, 200, quota);
+          return;
+        }
+        res.writeHead(200, {
+          'content-type': 'application/x-ndjson',
+          'cache-control': 'no-store',
+          'x-accel-buffering': 'no',
+        });
+        const outcome = await briefChampion(suggestDeps, me.id, {
+          id,
+          line,
+          onProgress: (p) => {
+            res.write(`${JSON.stringify({ progress: p.kind, text: p.text })}\n`);
+          },
+        });
+        if (outcome.ok) spendQuota(quotaDeps, me.id, 'agent');
+        res.end(`${JSON.stringify(outcome)}\n`);
         return;
       }
       // The kit conversation: owner-only, drafts only, metered on the
