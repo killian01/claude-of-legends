@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import {
   dayKey,
   emptyDay,
+  emptySources,
   fromFile,
   Pulse,
   type PulseDay,
@@ -55,6 +56,7 @@ describe('the counters', () => {
         strays: 0,
         visitors: 1,
         newcomers: 0,
+        sources: { ...emptySources(), direct: 1 },
         accounts: 1,
         matches: 1,
         finished: 1,
@@ -97,6 +99,22 @@ describe('the counters', () => {
     p.visit(DAY_ONE);
     p.visit(DAY_ONE, true);
     expect(day(p)).toMatchObject({ visitors: 3, newcomers: 2 });
+  });
+
+  it('file a visitor under where they came from', () => {
+    // The buckets add up to visitors: every arrival lands in exactly one,
+    // and a ping that named none is direct rather than uncounted.
+    const p = new Pulse(DAY_ONE);
+    p.visit(DAY_ONE, true, 'reddit');
+    p.visit(DAY_ONE, false, 'reddit');
+    p.visit(DAY_ONE, true, 'discord');
+    p.visit(DAY_ONE);
+    const d = day(p);
+    expect(d.visitors).toBe(4);
+    expect(d.sources.reddit).toBe(2);
+    expect(d.sources.discord).toBe(1);
+    expect(d.sources.direct).toBe(1);
+    expect(Object.values(d.sources).reduce((a, b) => a + b, 0)).toBe(d.visitors);
   });
 
   it('file a new day the moment the clock passes midnight', () => {
@@ -177,12 +195,31 @@ describe('the file on disk', () => {
         strays: 0,
         visitors: 2,
         newcomers: 0,
+        sources: emptySources(),
         accounts: 0,
         matches: 0,
         finished: 0,
         restarts: 0,
       },
     ]);
+  });
+
+  it('reads back only the buckets it knows, and never a key off the wire', () => {
+    // The file is written by this process, but a day that has been on disk
+    // across a rename or a hand edit must not be able to put a name into
+    // the report that nothing can render.
+    const written = {
+      version: 1,
+      days: [
+        {
+          ...emptyDay('2026-09-06'),
+          sources: { reddit: 3, mystery: 9, direct: -1 },
+        },
+      ],
+    };
+    const back = fromFile(written)[0];
+    expect(back?.sources).toEqual({ ...emptySources(), reddit: 3 });
+    expect(Object.keys(back?.sources ?? {})).not.toContain('mystery');
   });
 
   it('hands the days back oldest first whatever order they were written in', () => {
@@ -217,6 +254,7 @@ describe('the counts across a restart', () => {
           strays: 0,
           visitors: 2,
           newcomers: 0,
+          sources: { ...emptySources(), direct: 2 },
           accounts: 1,
           matches: 1,
           finished: 1,

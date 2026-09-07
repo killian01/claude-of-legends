@@ -9,11 +9,17 @@
 // cures, so guessing between them is the expensive mistake.
 //
 // What this deliberately is not: no third party, no cookie, no identifier
-// of any kind, no per-person row, no path or referrer. A visit contributes
-// one increment to one counter for one UTC day and leaves no trace that it
-// was this visitor rather than another. That is a design choice and not an
-// oversight, and it is why PRIVACY.md can describe the whole of it in a
-// paragraph and be checked against this file.
+// of any kind, no per-person row, no path, no URL. A visit contributes one
+// increment to each of a handful of counters for one UTC day and leaves no
+// trace that it was this visitor rather than another. That is a design
+// choice and not an oversight, and it is why PRIVACY.md can describe the
+// whole of it in a paragraph and be checked against this file.
+//
+// Where a visitor came from is the one thing here that started life as a
+// URL, and it never arrives as one: the browser reduces its own referrer
+// to a word off a fixed list before saying anything (src/net/pulse_source.ts),
+// so what is stored is "reddit" or "other" and never a link, a host or a
+// page. A bucket that nine visitors share is not a trail.
 //
 // Distinct visitors are counted by the browser, not by the address it
 // arrives from. The first load of a UTC day pings /api/pulse/hit and the
@@ -31,6 +37,7 @@
 // forge, and nowhere else.
 
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { VISIT_SOURCES, type VisitSource } from '../src/net/pulse_source';
 import { loadJson, saveJsonAtomic } from './store';
 
 // One UTC day. The counters, in funnel order, each one a subset of the
@@ -58,6 +65,13 @@ export interface PulseDay {
   // week. A browser that cleared its storage looks new again, so this
   // leans towards over-counting newcomers and never the reverse.
   newcomers: number;
+  // Where those visitors came from, one word off a fixed list
+  // (src/net/pulse_source.ts). The buckets add up to visitors, and the
+  // only one that is ever a URL is none of them: the browser picks the
+  // word and sends the word. This is the dimension that says whether an
+  // announcement reached anybody, which is the question the rest of the
+  // row cannot answer however long it is read.
+  sources: Record<VisitSource, number>;
   // Accounts created (ADR 0006: an account is the door to everything).
   accounts: number;
   // Matches that started, human and bot-filled alike.
@@ -71,6 +85,12 @@ export interface PulseDay {
   restarts: number;
 }
 
+export function emptySources(): Record<VisitSource, number> {
+  const sources = {} as Record<VisitSource, number>;
+  for (const source of VISIT_SOURCES) sources[source] = 0;
+  return sources;
+}
+
 export function emptyDay(day: string): PulseDay {
   return {
     day,
@@ -78,6 +98,7 @@ export function emptyDay(day: string): PulseDay {
     strays: 0,
     visitors: 0,
     newcomers: 0,
+    sources: emptySources(),
     accounts: 0,
     matches: 0,
     finished: 0,
@@ -155,12 +176,14 @@ export class Pulse {
 
   // One browser, opening the game for the first time today. Called for a
   // ping that server/visit_guard.ts has already allowed. A newcomer is a
-  // browser that had nothing stored at all, which is the only thing the
-  // ping ever says beyond the fact that it arrived.
-  visit(at: number, newcomer = false): void {
+  // browser that had nothing stored at all; the source is the bucket its
+  // referrer fell in, already checked against the list by the caller.
+  // Those two and the arrival itself are everything the ping ever says.
+  visit(at: number, newcomer = false, source: VisitSource = 'direct'): void {
     const day = this.today(at);
     day.visitors += 1;
     if (newcomer) day.newcomers += 1;
+    day.sources[source] += 1;
     this.dirty = true;
   }
 
@@ -233,6 +256,7 @@ export function fromFile(raw: unknown): PulseDay[] {
       strays: count(d.strays),
       visitors: count(d.visitors),
       newcomers: count(d.newcomers),
+      sources: sources(d.sources),
       accounts: count(d.accounts),
       matches: count(d.matches),
       finished: count(d.finished),
@@ -245,6 +269,18 @@ export function fromFile(raw: unknown): PulseDay[] {
 
 function count(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
+}
+
+// The buckets, read back one known key at a time. A bucket the list has
+// since dropped is left on the floor rather than carried as a name nothing
+// can render, and a day written before the buckets existed reads as zeros,
+// which is what it was.
+function sources(raw: unknown): Record<VisitSource, number> {
+  const out = emptySources();
+  if (typeof raw !== 'object' || raw === null) return out;
+  const given = raw as Record<string, unknown>;
+  for (const key of VISIT_SOURCES) out[key] = count(given[key]);
+  return out;
 }
 
 // Whether a presented token is the maintainer's. Both sides are hashed

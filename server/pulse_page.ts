@@ -14,7 +14,8 @@
 // one row a day, and the page has to work on a phone with nothing loaded
 // from anywhere else, which is what PRIVACY.md promises of every page here.
 
-import type { PulseDay } from './pulse';
+import { VISIT_SOURCES, type VisitSource } from '../src/net/pulse_source';
+import { emptySources, type PulseDay } from './pulse';
 
 // Nothing here is attacker-controlled today (the day strings are validated
 // on read and the rest are numbers), but the page is rendered from a file
@@ -49,6 +50,7 @@ export interface PulseTotals {
   strays: number;
   visitors: number;
   newcomers: number;
+  sources: Record<VisitSource, number>;
   accounts: number;
   matches: number;
   finished: number;
@@ -61,6 +63,7 @@ export function total(days: readonly PulseDay[]): PulseTotals {
     strays: 0,
     visitors: 0,
     newcomers: 0,
+    sources: emptySources(),
     accounts: 0,
     matches: 0,
     finished: 0,
@@ -71,12 +74,26 @@ export function total(days: readonly PulseDay[]): PulseTotals {
     t.strays += d.strays;
     t.visitors += d.visitors;
     t.newcomers += d.newcomers;
+    for (const source of VISIT_SOURCES) t.sources[source] += d.sources[source];
     t.accounts += d.accounts;
     t.matches += d.matches;
     t.finished += d.finished;
     t.restarts += d.restarts;
   }
   return t;
+}
+
+// Where the week's visitors came from, biggest first, and only the
+// buckets that happened: nine rows of which seven are zero is a shape that
+// hides the two that are not. A week with nobody in it says so in words,
+// because an empty strip reads as a broken page rather than a quiet week.
+export function sourceStrip(t: PulseTotals): string {
+  const seen = VISIT_SOURCES.filter((s) => t.sources[s] > 0).sort(
+    (a, b) => t.sources[b] - t.sources[a],
+  );
+  if (seen.length === 0) return '<p class="from">No visitor counted in the last 7 days.</p>';
+  const parts = seen.map((s) => `<span><b>${t.sources[s]}</b> ${esc(s)}</span>`);
+  return `<p class="from">Came from, 7d: ${parts.join(' ')}</p>`;
 }
 
 function row(d: PulseDay | (PulseTotals & { day: string }), klass = ''): string {
@@ -120,6 +137,9 @@ export function renderPulsePage(days: readonly PulseDay[]): string {
   .card b { display: block; font-size: 24px; font-weight: 700; color: #fff; }
   .card span { color: #7f8ea8; font-size: 11.5px; letter-spacing: 0.6px;
     text-transform: uppercase; }
+  .from { color: #7f8ea8; font-size: 12.5px; margin: -8px 0 22px; }
+  .from span { display: inline-block; margin-right: 14px; white-space: nowrap; }
+  .from b { color: #dfe7f5; font-weight: 700; }
   .wrap { overflow-x: auto; }
   table { border-collapse: collapse; width: 100%; min-width: 660px; font-variant-numeric: tabular-nums; }
   th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid #182440; }
@@ -142,6 +162,7 @@ export function renderPulsePage(days: readonly PulseDay[]): string {
   <div class="card"><b>${rate(week.accounts, week.visitors)}</b><span>sign-up rate</span></div>
   <div class="card"><b>${week.finished}</b><span>matches finished, 7d</span></div>
 </div>
+${sourceStrip(week)}
 <div class="wrap">
 <table>
 <thead><tr>
@@ -160,8 +181,10 @@ ran the game, so it is a floor made of people; New is the ones that had never
 been counted here before. Pages counts every shell served for a path this site
 has, reloads included, and Stray the ones served for a path it does not, which
 is where the scanners land; the two together are <code>loads</code> in the JSON.
-Add <code>?format=json</code> for the raw numbers, and open the site once with
-<code>?pulse=off</code> to keep your own browser out of the count.</p>
+Came from is the bucket each visitor's browser put its own referrer in,
+never a link. Add <code>?format=json</code> for the raw numbers, and open the
+site once with <code>?pulse=off</code> to keep your own browser out of the
+count.</p>
 </body></html>
 `;
 }

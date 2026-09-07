@@ -11,9 +11,11 @@ import {
   applyChoice,
   type DayStore,
   OPT_OUT,
+  pingUrl,
   pulseChoice,
   utcDay,
   VISIT_KEY,
+  VISIT_URL,
   visitToday,
 } from '../src/net/pulse_ping';
 
@@ -114,6 +116,23 @@ describe('the one bit the ping carries', () => {
     visitToday(store, '2026-09-06');
     expect(store.value).toBe('2026-09-06');
     expect(visitToday(store, '2026-09-07')).toEqual({ newcomer: false });
+  });
+});
+
+describe('the request itself', () => {
+  it('carries the two flags and nothing else', () => {
+    expect(pingUrl({ newcomer: true }, 'reddit')).toBe(`${VISIT_URL}?from=reddit&new=1`);
+    expect(pingUrl({ newcomer: false }, 'direct')).toBe(`${VISIT_URL}?from=direct`);
+  });
+
+  it('sends a word and never a link', () => {
+    // The referrer is read in the browser and reduced there
+    // (src/net/pulse_source.ts). What leaves the machine is the name of a
+    // bucket, which is what makes PRIVACY.md's paragraph true.
+    const url = pingUrl({ newcomer: true }, 'other');
+    expect(url).not.toContain('http%3A');
+    expect(url).not.toContain('https');
+    expect(url).toContain('from=other');
   });
 });
 

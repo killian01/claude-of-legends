@@ -3,8 +3,8 @@
 // a lie: a rate with nothing under it.
 
 import { describe, expect, it } from 'vitest';
-import { emptyDay } from '../server/pulse';
-import { rate, renderPulsePage, total } from '../server/pulse_page';
+import { emptyDay, emptySources } from '../server/pulse';
+import { rate, renderPulsePage, sourceStrip, total } from '../server/pulse_page';
 
 const day = (d: string, over: Partial<ReturnType<typeof emptyDay>>) => ({
   ...emptyDay(d),
@@ -35,6 +35,7 @@ describe('the totals', () => {
         strays: 4,
         visitors: 6,
         newcomers: 5,
+        sources: { ...emptySources(), reddit: 4, direct: 2 },
         accounts: 2,
         matches: 3,
         finished: 2,
@@ -45,6 +46,7 @@ describe('the totals', () => {
         strays: 1,
         visitors: 3,
         newcomers: 1,
+        sources: { ...emptySources(), reddit: 1, discord: 2 },
         accounts: 1,
         matches: 1,
         finished: 0,
@@ -56,6 +58,7 @@ describe('the totals', () => {
       strays: 5,
       visitors: 9,
       newcomers: 6,
+      sources: { ...emptySources(), reddit: 5, discord: 2, direct: 2 },
       accounts: 3,
       matches: 4,
       finished: 2,
@@ -69,6 +72,7 @@ describe('the totals', () => {
       strays: 0,
       visitors: 0,
       newcomers: 0,
+      sources: emptySources(),
       accounts: 0,
       matches: 0,
       finished: 0,
@@ -84,6 +88,7 @@ describe('the page', () => {
       strays: 3,
       visitors: 4,
       newcomers: 1,
+      sources: { ...emptySources(), direct: 4 },
       accounts: 1,
       matches: 1,
       finished: 1,
@@ -94,6 +99,7 @@ describe('the page', () => {
       strays: 12,
       visitors: 20,
       newcomers: 14,
+      sources: { ...emptySources(), discord: 12, reddit: 6, other: 2 },
       accounts: 5,
       matches: 6,
       finished: 4,
@@ -134,6 +140,29 @@ describe('the page', () => {
     const html = renderPulsePage(days);
     expect(html).toContain('>18<');
     expect(html).toContain('>12<');
+  });
+
+  it('says where the week came from, biggest first', () => {
+    // The one line that decides what to do next: 18 from Discord and 6
+    // from Reddit is an announcement that landed, and the same twenty-four
+    // visitors with nothing beside them is not readable at all.
+    const html = renderPulsePage(days);
+    const strip = html.slice(html.indexOf('Came from'), html.indexOf('<div class="wrap"'));
+    expect(strip).toContain('discord');
+    expect(strip.indexOf('discord')).toBeLessThan(strip.indexOf('reddit'));
+    expect(strip.indexOf('reddit')).toBeLessThan(strip.indexOf('direct'));
+  });
+
+  it('says so in words when nobody came, rather than showing an empty line', () => {
+    expect(sourceStrip(total([]))).toContain('No visitor counted');
+  });
+
+  it('leaves out the buckets that nothing landed in', () => {
+    // Nine names of which seven are zero is a shape that hides the two
+    // that are not.
+    const strip = sourceStrip(total(days));
+    expect(strip).not.toContain('youtube');
+    expect(strip).not.toContain('hn');
   });
 
   it('escapes what it prints', () => {

@@ -63,6 +63,7 @@ be told apart from a front page that loses people (`server/pulse.ts`):
 | `strays` | of those, the ones served for a path this site does not have |
 | `visitors` | browsers that opened the game that day, one each |
 | `newcomers` | of those, the ones that had never been counted before |
+| `sources` | of those, how many arrived from each of nine named places |
 | `accounts` | accounts created |
 | `matches` | matches started |
 | `finished` | matches that reached an end |
@@ -71,8 +72,17 @@ Plus `restarts`, which says how many times the server restarted that day.
 It distorts nothing; it is there because a quiet afternoon usually has a
 deploy under it.
 
-That is the entire record: one row per day, a few integers, no name, no
-account id, no page, no referrer, no country, no device. Nothing in it can
+`sources` is the one that needs saying in full. It counts, for the day,
+how many visitors arrived from each of nine buckets: `direct` (no referrer
+at all), `search`, `discord`, `reddit`, `hn`, `x`, `youtube`, `github`, and
+`other` for anywhere else. Your browser reads its own referrer, decides
+which bucket it falls in, and sends the name of the bucket
+(`src/net/pulse_source.ts`). The link itself, the page it was on, and the
+host it was on never leave your machine, and the server refuses any word
+that is not one of those nine.
+
+That is the entire record: one row per day, a few integers and nine more,
+no name, no account id, no page, no URL, no country, no device. Nothing in it can
 be traced to a person, including by us, because nothing per person is ever
 written.
 
@@ -80,10 +90,12 @@ Telling one arrival from a reload does need to recognise a browser that
 has already been here today, and the browser is the only thing that knows.
 So it says so itself: on its first load of the day it posts to one open
 endpoint that carries no cookie and no body, and remembers the date so it
-does not post again (`src/net/pulse_ping.ts`). The request says one thing
-beyond arriving, as `?new=1`: that this browser had nothing stored, so it
-had not been counted before. The server learns that a browser arrived, and
-whether it was the first time, and nothing whatsoever about which one.
+does not post again (`src/net/pulse_ping.ts`). The request says two things
+beyond arriving: `?new=1` when this browser had nothing stored, so it had
+not been counted before, and `?from=` with one of the nine bucket names
+above. The server learns that a browser arrived, whether it was the first
+time, and which sort of place it came from, and nothing whatsoever about
+which browser it was.
 
 The address was the obvious way to do this and it is the wrong one, which
 is worth saying plainly: it made a phone that renews its IPv6 address

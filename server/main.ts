@@ -17,6 +17,7 @@ import {
   parseClientMsg,
   type ServerMsg,
 } from '../src/net/protocol';
+import { isVisitSource } from '../src/net/pulse_source';
 import { REPLAY_VERSION } from '../src/net/replay';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { validateForged } from '../src/sim/forge/validate';
@@ -1302,12 +1303,16 @@ const server = http.createServer(async (req, res) => {
       }
       const now = Date.now();
       const address = clientAddress(req.headers, req.socket.remoteAddress, EDGE);
-      // The one flag the ping carries: this browser had nothing stored, so
-      // it has never been counted here before. Anything other than the
-      // exact value reads as a returning browser, which is the direction
-      // that cannot inflate the interesting number.
-      const newcomer = new URL(req.url ?? '/', 'http://local').searchParams.get('new') === '1';
-      if (visits.allow(now, address)) pulse.visit(now, newcomer);
+      // The two flags the ping carries. Anything other than the exact
+      // value reads as a returning browser, which is the direction that
+      // cannot inflate the interesting number, and a bucket that is not on
+      // the list is refused rather than trusted: a query is a thing a
+      // client can forge, and the list is the whole of what may be stored.
+      const query = new URL(req.url ?? '/', 'http://local').searchParams;
+      const newcomer = query.get('new') === '1';
+      const from = query.get('from') ?? '';
+      const source = isVisitSource(from) ? from : 'other';
+      if (visits.allow(now, address)) pulse.visit(now, newcomer, source);
       res.writeHead(204).end();
       return;
     }

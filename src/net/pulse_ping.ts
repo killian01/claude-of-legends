@@ -1,6 +1,7 @@
-// The two things this client ever says about itself: that this browser is
-// opening the game for the first time today, and whether it had ever been
-// here before.
+// The three things this client ever says about itself: that this browser
+// is opening the game for the first time today, whether it had ever been
+// here before, and which of nine buckets the link that brought it falls
+// in (src/net/pulse_source.ts).
 //
 // The server counts arrivals (server/pulse.ts) and used to tell them apart
 // by the address they came from, which does not work. A phone renews its
@@ -20,8 +21,12 @@
 // one line in this browser's own storage, holding today's date and nothing
 // else. It is not an identifier, it never leaves the machine, it is
 // overwritten tomorrow, and the ping it gates carries no cookie and no
-// body. What the server learns is that some browser arrived and that it was
-// or was not the first time, which is the whole of what is being asked.
+// body. What the server learns is that some browser arrived, whether it was
+// the first time, and the name of a bucket. Never a URL: the browser reads
+// its own referrer and sends the word, so "reddit" leaves the machine and
+// the link does not.
+
+import { sourceOf, type VisitSource } from './pulse_source';
 
 export const VISIT_KEY = 'col.visit';
 export const VISIT_URL = '/api/pulse/hit';
@@ -102,6 +107,15 @@ export function applyChoice(store: DayStore, choice: 'off' | 'on' | null, day: s
   return false;
 }
 
+// The whole request, built where it can be read in a test rather than
+// inside the call that fires it. Two flags and no body: this stays the
+// smallest thing a browser can send.
+export function pingUrl(visit: Visit, source: VisitSource): string {
+  const params = new URLSearchParams({ from: source });
+  if (visit.newcomer) params.set('new', '1');
+  return `${VISIT_URL}?${params.toString()}`;
+}
+
 function browserStore(): DayStore {
   return {
     read: () => window.localStorage.getItem(VISIT_KEY),
@@ -120,9 +134,13 @@ export function markVisit(now = Date.now(), search = window.location.search): vo
   if (!applyChoice(store, pulseChoice(search), day)) return;
   const visit = visitToday(store, day);
   if (visit === null) return;
-  // No credentials: the session cookie has no business on the one request
-  // that exists to be anonymous. The flag is a query rather than a body so
-  // that the request stays the smallest thing a browser can send.
-  const url = visit.newcomer ? `${VISIT_URL}?new=1` : VISIT_URL;
-  void fetch(url, { method: 'POST', credentials: 'omit', keepalive: true }).catch(() => {});
+  // The referrer is read here and reduced here; nothing downstream ever
+  // sees it. No credentials either: the session cookie has no business on
+  // the one request that exists to be anonymous.
+  const source = sourceOf(document.referrer, window.location.origin);
+  void fetch(pingUrl(visit, source), {
+    method: 'POST',
+    credentials: 'omit',
+    keepalive: true,
+  }).catch(() => {});
 }
