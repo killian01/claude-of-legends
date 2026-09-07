@@ -133,6 +133,7 @@ import { CEILING_DEFAULTS, checkQuota, DAY_MS, spendQuota } from './quotas';
 import { BASE_RATING, LEAVER_LOCKOUT_MS, leaverPenalty } from './rating';
 import { talliesOf } from './record_tally';
 import { buildMatchRecord, type MatchRecord } from './records';
+import { checkReference, refusalMessage } from './reference_check';
 import { setForgedAttackRange } from './reforge';
 import { RejoinRegistry } from './rejoin';
 import { sealChampion, unsealChampion } from './seal';
@@ -446,6 +447,17 @@ console.log(
     ? 'suggestions: on (ANTHROPIC_API_KEY set), the kit, stat and look conversations are live'
     : 'suggestions: off (no ANTHROPIC_API_KEY set)',
 );
+// The reference check rides the same key: one small look at the chosen
+// reference at the build's classify stage, where stopping is still free
+// (server/reference_check.ts). Without a key there is no check and
+// builds run exactly as they did.
+if (generation && suggestDeps.apiKey) {
+  generation.checkReference = (image) =>
+    checkReference(suggestDeps, image).then((v) =>
+      v === null || v.usable ? null : refusalMessage(v),
+    );
+  console.log('generation: the model reference is read before a build spends on it');
+}
 // The 2D art surface (plan-forge phase 4): splash and icon candidates on
 // the gen2d meter, sharing the pipeline's provider and assets dir.
 const artDeps = {
@@ -1766,7 +1778,9 @@ const server = http.createServer(async (req, res) => {
           sendJson(res, 200, quota);
           return;
         }
-        const outcome = buildModel(forgeDeps, me.id, id);
+        // `force` skips the reference check alone (the creator looked at
+        // their own picture and disagrees); every other gate stands.
+        const outcome = buildModel(forgeDeps, me.id, id, body?.force === true);
         if (outcome.ok) spendQuota(quotaDeps, me.id, 'generation');
         // `done` is the async job's settling; the wire answer is the id.
         sendJson(res, 200, outcome.ok ? { ok: true, jobId: outcome.jobId } : outcome);

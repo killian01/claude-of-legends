@@ -44,6 +44,11 @@ export interface PipelineDeps {
   // block. The default passes everything; the hook exists so a real
   // classifier lands without touching this flow.
   classifyImage?(url: string): Promise<boolean>;
+  // The technical read of the chosen reference before anything is built
+  // from it (server/reference_check.ts): resolves a refusal message to
+  // stop the run, or null to carry on. Absent, or answering null, builds
+  // exactly as before: the check is a courtesy, never a dependency.
+  checkReference?(image: Buffer): Promise<string | null>;
   // Per-champion asset budgets in kilobytes (ADR 0010): a downloaded file
   // over its budget fails the job (and refunds the creation). Absent or
   // non-positive numbers disable a check.
@@ -64,6 +69,9 @@ export interface PipelineDeps {
 export interface BuildRequest {
   def: ForgedChampionDef;
   accountId: number;
+  // The creator's last word on their own picture: build even if the
+  // reference check does not like the reference.
+  force?: boolean;
 }
 
 export interface AnimateRequest {
@@ -195,6 +203,14 @@ async function runModelBuild(deps: PipelineDeps, jobId: number, req: BuildReques
     stage('classify');
     const allowed = deps.classifyImage ? await deps.classifyImage(sheet.path) : true;
     if (!allowed) throw new GenerationError('the model reference failed classification', true);
+    // The technical read, at the one moment where stopping is free: the
+    // upload is done, nothing has been reconstructed, and a failure here
+    // refunds the whole build like any other. A creator who disagrees
+    // sends `force` and this is skipped.
+    if (!req.force && deps.checkReference) {
+      const refusal = await deps.checkReference(read(path.join(deps.assetsDir, sheet.path)));
+      if (refusal !== null) throw new GenerationError(refusal);
+    }
 
     stage('model');
     const model = await deps.provider.imageTo3D({ image: sheetRef });

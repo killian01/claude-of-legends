@@ -252,6 +252,7 @@ export function buildModel(
   deps: ForgeDeps,
   accountId: number,
   id: string,
+  force = false,
 ): ForgeOutcome<{ jobId: number; done: Promise<void> }> {
   if (!deps.generation) {
     return { ok: false, error: 'generation is not configured on this server yet' };
@@ -277,7 +278,9 @@ export function buildModel(
     };
   }
   refreshWeeklyGrant(deps, accountId);
-  return startModelBuild(deps.generation, { def: row.def, accountId });
+  // `force` is the creator's own override of the reference check, and
+  // nothing else: every other gate above still stands.
+  return startModelBuild(deps.generation, { def: row.def, accountId, force });
 }
 
 // The second half, always LAST and always the player's own click: bake

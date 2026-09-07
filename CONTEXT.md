@@ -405,7 +405,11 @@ _Avoid_: forge credit, creation credit
 
 **Model reference**:
 The technical 2D image the 3D generation accepts as its input: exactly ONE character,
-full body, front view, A-pose, empty hands, plain background. One figure only, because
+full body, front view, A-pose, empty hands, plain background. A machine reads it against
+those rules before a build spends on it, at the classify stage where stopping is still
+free, and refuses only the two faults that make a model nobody can use (more than one
+figure, a cropped body); it says what it saw, and the creator may build anyway, because it
+is an eye and not a gate with a key. One figure only, because
 the 3D builder reconstructs whatever the image shows: a multi-view sheet becomes a
 multi-body model. Derived from the draft's chosen splash art and iterated by the player
 like any other art kind (generate, view large, pick, iterate); the 3D build runs on the

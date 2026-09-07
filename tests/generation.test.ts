@@ -705,6 +705,39 @@ describe('the mock pipeline end to end', () => {
     expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - RIG - BAKE5);
   });
 
+  it('stops on the reference check before spending, and builds anyway when told', async () => {
+    // The check sits at the classify stage, where stopping is still
+    // free: the refusal is a whole refund, and the creator's override
+    // runs the same build with the check skipped.
+    const r = rig();
+    const looked: number[] = [];
+    r.pipeline.checkReference = (image) => {
+      looked.push(image.length);
+      return Promise.resolve('this reference will not build: it shows 2 figures.');
+    };
+    const stopped = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });
+    expect(stopped.ok).toBe(true);
+    if (!stopped.ok) return;
+    await stopped.done;
+    const job = r.store.getGenerationJob(stopped.jobId);
+    expect(job?.status).toBe('failed');
+    expect(job?.stage).toBe('classify');
+    expect(job?.error).toContain('2 figures');
+    // Nothing reconstructed, nothing spent, and it did read the file.
+    expect(looked).toHaveLength(1);
+    expect(r.provider.seen.some((s) => s.op === 'imageTo3D')).toBe(false);
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED);
+
+    const forced = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT, force: true });
+    expect(forced.ok).toBe(true);
+    if (!forced.ok) return;
+    await forced.done;
+    expect(r.store.getGenerationJob(forced.jobId)?.status).toBe('success');
+    // The check was not asked a second time, and the build ran whole.
+    expect(looked).toHaveLength(1);
+    expect(r.store.creditBalance(ACCOUNT)).toBe(SEED - MODEL - RIG);
+  });
+
   it('blocks and refunds on failed classification', async () => {
     const r = rig(() => Promise.resolve(false));
     const start = startModelBuild(r.pipeline, { def: r.def, accountId: ACCOUNT });

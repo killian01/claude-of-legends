@@ -50,6 +50,7 @@ import {
 } from './forge_budget_view';
 import { chatPanel, chatStream, newChatState, type SavedChats } from './forge_chat';
 import { buildCastEditor, type KitHooks, numField } from './forge_kit';
+import { championProgress } from './forge_progress';
 import { startMenuBackdrop } from './menu_backdrop';
 import { setRichLine } from './rich_text';
 import { grantStat, MELEE_REACH, RANGED_MIN } from './stat_budget';
@@ -338,6 +339,22 @@ const CSS = `${BALANCE_CSS}
   color: #241a08; border-color: #f0deae;
 }
 .fe-anim-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+/* The reference check speaking: an opinion, not an error, so it wears
+   the panel's own frame in a warmer border rather than the red of a
+   failure. */
+.fe-refusal { border-color: #8a6a2e; margin-top: 12px; }
+/* Where the champion is: one line per step, the done ones lit and the
+   rest waiting with their price. */
+.fe-prog {
+  display: flex; align-items: center; gap: 7px;
+  color: #97854f; font-size: 11.5px; padding: 2px 0;
+}
+.fe-prog .dot {
+  width: 13px; height: 13px; flex: none; border-radius: 50%;
+  border: 1px solid #4a3a1c; font-size: 9px; line-height: 11px; text-align: center;
+}
+.fe-prog.done { color: #d8cdb0; }
+.fe-prog.done .dot { border-color: #d8b45a; color: #e8cc74; }
 .fe-slotcol { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .fe-slot-gen { padding: 2px 10px; font-size: 10px; }
 .fe-slot-img .fe-spin { width: 22px; height: 22px; }
@@ -468,6 +485,11 @@ const EXAMPLE_LINES = [
 // What one line of intent sounds like: a fantasy and a way of playing,
 // not a spec. These are what the brief (Step 0) reads, so they say a
 // role and a trade rather than describing a picture.
+// The prefix a build's error wears when the reference check is what
+// stopped it (server/reference_check.ts holds the same string; the
+// client cannot import server code, and a wire marker is the seam).
+const REFERENCE_REFUSAL = 'this reference will not build:';
+
 const BRIEF_EXAMPLES = [
   'A siege engineer who plants turrets and never moves twice in the same fight',
   'A blind swordsman who reads footsteps: he hits harder the longer he stands still',
@@ -618,6 +640,10 @@ export function openForgeEditor(container: HTMLElement): () => void {
   const refineFrom: Record<string, ArtCandidate | undefined> = {};
   // The Spells tab's selected slot.
   let spellSlot: SpellSlot = 'Q';
+  // The reference check's refusal, when the last build stopped on it
+  // (server/reference_check.ts): what it saw, kept until the creator
+  // either iterates the reference or builds anyway.
+  let refusedReference: string | null = null;
   // True while the model build runs; Step 4 renders the stage checklist
   // and the poll advances it through these rows when they are on screen.
   let finalizing = false;
@@ -1267,6 +1293,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
     // author CSS beats the attribute's user-agent rule.
     workshopBtn.style.display = currentRow()?.model ? '' : 'none';
     paintSeal();
+    paintProgress();
   };
 
   // The seal's face: what it does, or the step still missing before it
@@ -1369,12 +1396,13 @@ export function openForgeEditor(container: HTMLElement): () => void {
   // the exact image approved in the Design tab (ADR 0006); a failure of
   // any kind refunds every ember. Success opens the workshop on the
   // fresh static model, for the player to validate BEFORE animating.
-  const runForge = (): void => {
+  const runForge = (force = false): void => {
     const blocker = forgeBlocker();
     if (blocker !== null) {
       status.textContent = blocker;
       return;
     }
+    if (!force) refusedReference = null;
     finalizing = true;
     currentStage = '';
     renderMain();
@@ -1391,6 +1419,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
         if (!saved?.ok) throw new Error(saved?.error ?? 'save failed');
         return api<{ ok: boolean; jobId?: number; error?: string }>('/api/forge/build', {
           id: current.id,
+          ...(force ? { force: true } : {}),
         });
       })
       .then((started) => {
@@ -1419,7 +1448,15 @@ export function openForgeEditor(container: HTMLElement): () => void {
               return;
             }
             if (job.status === 'failed') {
-              settle(`The build failed (${job.error ?? 'unknown'}); your embers came back.`);
+              const why = job.error ?? 'unknown';
+              // The reference check is not a failure, it is an opinion:
+              // it keeps its own place on the panel with a way past it.
+              if (why.startsWith(REFERENCE_REFUSAL)) {
+                refusedReference = why.slice(REFERENCE_REFUSAL.length).trim();
+                settle('Your reference was read before spending: nothing was spent.');
+                return;
+              }
+              settle(`The build failed (${why}); your embers came back.`);
               return;
             }
             currentStage = job.stage ?? '';
@@ -1435,7 +1472,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
         settle(err instanceof Error ? err.message : 'the build could not start');
       });
   };
-  finalizeBtn.addEventListener('click', runForge);
+  finalizeBtn.addEventListener('click', () => runForge());
 
   // The animate step, always LAST and always the player's own click:
   // bake the picked clips onto the skeleton the build already made.
@@ -1591,6 +1628,44 @@ export function openForgeEditor(container: HTMLElement): () => void {
   const workshopBtn = el('button', 'fe-btn', 'Workshop (3D view)') as HTMLButtonElement;
   workshopBtn.addEventListener('click', openWorkshopHere);
 
+  // Where this champion is, in one panel: every step in creation order,
+  // what is done, and what finishing costs. It sits above the actions
+  // because it is what a creator coming back the next day reads first.
+  const progressPanel = el('div', 'fe-panel');
+  const progressBox = el('div', '');
+  progressPanel.append(el('h3', '', 'This champion'), progressBox);
+  const paintProgress = (): void => {
+    const row = currentRow();
+    const p = championProgress({
+      chosen: (kind) => chosenOf(kind) !== undefined,
+      model: Boolean(row?.model),
+      weapon: Boolean(row?.weapon),
+      clips: row?.clips !== null && row?.clips !== undefined,
+      sealed: isSealed(),
+      kitValid: validateForged(current).ok,
+      price: priceOf,
+    });
+    progressBox.textContent = '';
+    for (const step of p.steps) {
+      const line = el('div', `fe-prog${step.done ? ' done' : ''}`);
+      line.append(el('span', 'dot', step.done ? '+' : ''), el('span', '', step.label));
+      if (!step.done && step.cost > 0) line.append(balanceTag('embers', step.cost, 11));
+      progressBox.append(line);
+    }
+    const tail = el('div', 'fe-desc', '');
+    if (p.next === null) {
+      tail.textContent = 'Sealed and playable: nothing left to do.';
+    } else {
+      tail.append(document.createTextNode(`${p.done} of ${p.total} done. Next: ${p.next}.`));
+      if (p.remaining > 0) {
+        tail.append(document.createTextNode(' Finishing costs '));
+        tail.append(balanceTag('embers', p.remaining, 11));
+        tail.append(document.createTextNode(' more.'));
+      }
+    }
+    progressBox.append(tail);
+  };
+
   const meterPanel = el('div', 'fe-panel');
   meterPanel.append(el('h3', '', 'Power budget'));
   meterPanel.append(strip.el, costBox, verdict);
@@ -1609,7 +1684,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
     status,
     saveState,
   );
-  side.append(meterPanel, actions);
+  side.append(progressPanel, meterPanel, actions);
 
   // --- left rail: drafts -------------------------------------------------
 
@@ -2154,7 +2229,7 @@ export function openForgeEditor(container: HTMLElement): () => void {
           `Replaces the model from your chosen reference and rigs it again; costs ${format(
             buildPrice(),
           )} embers`;
-        rebuild.addEventListener('click', runForge);
+        rebuild.addEventListener('click', () => runForge());
         right.append(rebuild);
       }
       cta.append(right);
@@ -2203,13 +2278,33 @@ export function openForgeEditor(container: HTMLElement): () => void {
       build.disabled = blocker !== null;
       build.title =
         blocker ?? 'Runs on your chosen reference, rigs it; a failure refunds every ember';
-      build.addEventListener('click', runForge);
+      build.addEventListener('click', () => runForge());
       buildPanel.append(build);
       // The balance stands beside the dearest act on the page, because a
       // creator should read what they hold before pressing, never after
       // being stopped (ADR 0017).
       buildPanel.append(stockLine());
       if (blocker) buildPanel.append(el('div', 'fe-desc', blocker));
+    }
+    // The reference check's opinion, and the two answers to it: fix
+    // the picture (Step 2, above) or overrule it. Nothing was spent.
+    if (refusedReference !== null) {
+      const said = el('div', 'fe-panel fe-refusal');
+      said.append(el('div', 'fe-lead', `Your reference was read first: ${refusedReference}`));
+      said.append(
+        el(
+          'div',
+          'fe-desc',
+          'Nothing was spent. The 3D builder makes exactly what the picture shows, so a ' +
+            'second figure becomes a second body and a cropped one loses what was cut. ' +
+            'Iterate the reference in Step 2, or build anyway if you know better than it.',
+        ),
+      );
+      const anyway = el('button', 'fe-mini', 'Build anyway') as HTMLButtonElement;
+      anyway.title = 'Runs the build on this exact reference, check skipped';
+      anyway.addEventListener('click', () => runForge(true));
+      said.append(anyway);
+      buildPanel.append(said);
     }
     main.append(buildPanel);
 
