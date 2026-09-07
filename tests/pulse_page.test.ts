@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { emptyDay, emptySources } from '../server/pulse';
-import { rate, renderPulsePage, sourceStrip, total } from '../server/pulse_page';
+import { funnelStrip, rate, renderPulsePage, sourceStrip, total } from '../server/pulse_page';
 
 const day = (d: string, over: Partial<ReturnType<typeof emptyDay>>) => ({
   ...emptyDay(d),
@@ -36,6 +36,8 @@ describe('the totals', () => {
         visitors: 6,
         newcomers: 5,
         sources: { ...emptySources(), reddit: 4, direct: 2 },
+        stayed: 4,
+        played: 2,
         accounts: 2,
         matches: 3,
         finished: 2,
@@ -47,6 +49,8 @@ describe('the totals', () => {
         visitors: 3,
         newcomers: 1,
         sources: { ...emptySources(), reddit: 1, discord: 2 },
+        stayed: 2,
+        played: 1,
         accounts: 1,
         matches: 1,
         finished: 0,
@@ -59,6 +63,8 @@ describe('the totals', () => {
       visitors: 9,
       newcomers: 6,
       sources: { ...emptySources(), reddit: 5, discord: 2, direct: 2 },
+      stayed: 6,
+      played: 3,
       accounts: 3,
       matches: 4,
       finished: 2,
@@ -73,6 +79,8 @@ describe('the totals', () => {
       visitors: 0,
       newcomers: 0,
       sources: emptySources(),
+      stayed: 0,
+      played: 0,
       accounts: 0,
       matches: 0,
       finished: 0,
@@ -89,6 +97,8 @@ describe('the page', () => {
       visitors: 4,
       newcomers: 1,
       sources: { ...emptySources(), direct: 4 },
+      stayed: 2,
+      played: 1,
       accounts: 1,
       matches: 1,
       finished: 1,
@@ -100,6 +110,8 @@ describe('the page', () => {
       visitors: 20,
       newcomers: 14,
       sources: { ...emptySources(), discord: 12, reddit: 6, other: 2 },
+      stayed: 10,
+      played: 5,
       accounts: 5,
       matches: 6,
       finished: 4,
@@ -163,6 +175,19 @@ describe('the page', () => {
     const strip = sourceStrip(total(days));
     expect(strip).not.toContain('youtube');
     expect(strip).not.toContain('hn');
+  });
+
+  it('says how far the visitors of the week got', () => {
+    // 12 of 24 stayed and 6 of 24 played: the shape of the drop, which is
+    // what the counters could not show while they were independent.
+    const html = renderPulsePage(days);
+    expect(html).toContain('<b>50%</b> stayed');
+    expect(html).toContain('<b>25%</b> played a match');
+  });
+
+  it('says nothing about a funnel with nobody in it', () => {
+    // The strip above already reports the empty week; twice is noise.
+    expect(funnelStrip(total([]))).toBe('');
   });
 
   it('escapes what it prints', () => {

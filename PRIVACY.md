@@ -21,13 +21,18 @@ with it.
 
 ## One line of storage
 
-`col.visit`, holding today's date and nothing else. The browser writes it on
-the first load of a day so it knows not to say hello to the counter twice
-(`src/net/pulse_ping.ts`). It is a date, not an identifier: it is the same
-ten characters in every browser in the world that opened the site today,
-it is overwritten tomorrow, and it never leaves your machine. Delete it and
-the only consequence is being counted once more, as a browser that had
-never been here.
+`col.visit`, holding today's date and, at most, two words: `stayed` and
+`played`. The browser writes the date on the first load of a day so it
+knows not to say hello to the counter twice, and a word when it has
+reported getting that far, so it reports it once rather than on every
+reload (`src/net/pulse_ping.ts`, `src/net/visit_line.ts`). The whole line
+is at most `2026-09-07 stayed played`.
+
+It is not an identifier: it is the same handful of characters in every
+browser in the world that did the same things today, it is overwritten
+tomorrow, and it never leaves your machine. Delete it and the only
+consequence is being counted once more, as a browser that had never been
+here.
 
 That last part is the only other thing the line is read for: an empty key
 means this browser has not been counted before, which is what separates
@@ -64,6 +69,8 @@ be told apart from a front page that loses people (`server/pulse.ts`):
 | `visitors` | browsers that opened the game that day, one each |
 | `newcomers` | of those, the ones that had never been counted before |
 | `sources` | of those, how many arrived from each of nine named places |
+| `stayed` | of those, the ones still here 30 seconds later |
+| `played` | of those, the ones who started a match in the browser |
 | `accounts` | accounts created |
 | `matches` | matches started |
 | `finished` | matches that reached an end |
@@ -81,8 +88,14 @@ which bucket it falls in, and sends the name of the bucket
 host it was on never leave your machine, and the server refuses any word
 that is not one of those nine.
 
-That is the entire record: one row per day, a few integers and nine more,
-no name, no account id, no page, no URL, no country, no device. Nothing in it can
+`stayed` and `played` are the same kind of thing: your browser knows it
+has already reported them today because of the line it stores, so each
+counts once. `played` covers a practice match, a Forge test drive and a
+live game alike, and never a replay, which is watching rather than
+playing.
+
+That is the entire record: one row per day, a dozen integers and nine
+more, no name, no account id, no page, no URL, no country, no device. Nothing in it can
 be traced to a person, including by us, because nothing per person is ever
 written.
 

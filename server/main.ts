@@ -19,6 +19,7 @@ import {
 } from '../src/net/protocol';
 import { isVisitSource } from '../src/net/pulse_source';
 import { REPLAY_VERSION } from '../src/net/replay';
+import { isVisitStep, VISIT_STEPS } from '../src/net/visit_line';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { validateForged } from '../src/sim/forge/validate';
 import { PlayLedger } from '../src/sim/playbook/report';
@@ -145,7 +146,7 @@ import {
 import { suggestKit } from './suggest';
 import { suggestLook } from './suggest_look';
 import { suggestStats } from './suggest_stats';
-import { VisitGuard } from './visit_guard';
+import { VISITS_PER_NETWORK, VisitGuard } from './visit_guard';
 import { type WayStats, wayStatsOf } from './way_stats';
 import { playedByHand, seatWay, type Way } from './ways';
 
@@ -279,6 +280,10 @@ const pulse = new Pulse(Date.now(), { file: path.join(DATA_DIR, 'pulse.json') })
 // comes from the browser (src/net/pulse_ping.ts), so this is what keeps a
 // script from writing its own number onto the report.
 const visits = new VisitGuard();
+// The same bound for the paces past arriving, with room for one of each
+// per visit: a household that may contribute twelve arrivals may also
+// report what those twelve did, and no more.
+const steps = new VisitGuard({ perNetwork: VISITS_PER_NETWORK * VISIT_STEPS.length });
 // Where every generated file lives (splash candidates, model sheets,
 // models), served back to logged-in clients by the asset route below.
 const ASSETS_DIR = path.join(DATA_DIR, 'assets');
@@ -1313,6 +1318,24 @@ const server = http.createServer(async (req, res) => {
       const from = query.get('from') ?? '';
       const source = isVisitSource(from) ? from : 'other';
       if (visits.allow(now, address)) pulse.visit(now, newcomer, source);
+      res.writeHead(204).end();
+      return;
+    }
+
+    // One pace past arriving (src/net/visit_line.ts), from a browser that
+    // has already counted itself a visitor today. Open and unauthenticated
+    // for the same reason as the ping above: most of the people whose
+    // progress is worth knowing have no account yet, which is the point.
+    // A name that is not on the list is dropped rather than stored.
+    if (url === '/api/pulse/step') {
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'use POST' });
+        return;
+      }
+      const now = Date.now();
+      const address = clientAddress(req.headers, req.socket.remoteAddress, EDGE);
+      const name = new URL(req.url ?? '/', 'http://local').searchParams.get('name') ?? '';
+      if (isVisitStep(name) && steps.allow(now, address)) pulse.step(now, name);
       res.writeHead(204).end();
       return;
     }

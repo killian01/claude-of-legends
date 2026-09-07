@@ -19,7 +19,7 @@ import { getSettings } from './game/settings';
 import { type SpectatorView, startSpectator } from './game/spectate';
 import { ClientWorld } from './net/client_world';
 import type { ForgedMatchAssets, ServerMsg } from './net/protocol';
-import { markVisit } from './net/pulse_ping';
+import { markStep, markVisit, STAYED_MS } from './net/pulse_ping';
 import {
   applyReplayEvent,
   buildMatchSim,
@@ -149,6 +149,11 @@ function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
     }
 
     let stopped = false;
+    // A match is on screen, which is as far down the funnel as a visitor
+    // with no account can get. Practice and the Forge test drive both land
+    // here; the replay viewer below deliberately does not, since watching
+    // is not playing.
+    markStep('played');
     const pres = startPresentation(container, world, self.id, self.team, (action) => {
       stopped = true;
       pres.dispose();
@@ -729,6 +734,9 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
         case 'snap': {
           const changed = world.applyServer(msg);
           if (!pres && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) {
+            // The live match, the other half of the pace the practice
+            // match reports above. Once per browser per day either way.
+            markStep('played');
             pres = startPresentation(container, world, world.selfUnitId, world.selfTeam, finish);
             // A coach seat (ADR 0013): the bar for the orders with no place to
             // click; right-click already goes and focuses through the mirror.
@@ -829,6 +837,13 @@ async function boot(): Promise<void> {
   // again (src/net/pulse_ping.ts). Fire and forget: nothing below waits on
   // it and nothing reads its answer.
   markVisit();
+  // And again half a minute later if this page is still in front of
+  // somebody, which is the line between a visitor who looked and a click
+  // that left before the art had drawn. A tab in the background does not
+  // count: nobody is looking at it.
+  window.setTimeout(() => {
+    if (!document.hidden) markStep('stayed');
+  }, STAYED_MS);
   // An invite link (?join=CODE) deep-links into the friend's lobby: with a
   // stored name we go straight in; a first-time visitor gets the home
   // screen with the code prefilled. Consumed once, so reloads stay home.

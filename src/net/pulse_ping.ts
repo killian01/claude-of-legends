@@ -1,7 +1,8 @@
-// The three things this client ever says about itself: that this browser
-// is opening the game for the first time today, whether it had ever been
-// here before, and which of nine buckets the link that brought it falls
-// in (src/net/pulse_source.ts).
+// What this client says about itself, and the whole of it: that this
+// browser is opening the game for the first time today, whether it had
+// ever been here before, which of nine buckets the link that brought it
+// falls in (src/net/pulse_source.ts), and later, at most twice, that it
+// got somewhere (src/net/visit_line.ts).
 //
 // The server counts arrivals (server/pulse.ts) and used to tell them apart
 // by the address they came from, which does not work. A phone renews its
@@ -27,13 +28,22 @@
 // the link does not.
 
 import { sourceOf, type VisitSource } from './pulse_source';
+import { formatLine, OPT_OUT, parseLine, type VisitStep, withStep } from './visit_line';
+
+export { OPT_OUT } from './visit_line';
 
 export const VISIT_KEY = 'col.visit';
 export const VISIT_URL = '/api/pulse/hit';
-// What the key holds instead of a date when this browser has asked to be
-// left out of the count. A word rather than a date, so that reading the
-// value is enough to know which of the two it is.
-export const OPT_OUT = 'off';
+// Where a pace past arriving is reported (src/net/visit_line.ts). A second
+// endpoint rather than a flag on the first, because the two happen at
+// different moments: one on the first load of the day, one when the
+// visitor gets somewhere.
+export const STEP_URL = '/api/pulse/step';
+// How long a visitor has to still be here to count as having stayed. Long
+// enough that a page which was closed on sight does not qualify, short
+// enough that it happens while the game is still loading its art on a slow
+// line, because leaving during the load is exactly what it is measuring.
+export const STAYED_MS = 30_000;
 // How that is asked for: open the site with ?pulse=off once. It exists
 // because the maintainer's own browser is otherwise indistinguishable from
 // a stranger's, and on a day with three visitors that is the difference
@@ -67,21 +77,45 @@ export interface Visit {
 // undercounts a visitor whose storage is denied, which is the direction to
 // be wrong in; counting them on every reload is how this started.
 export function visitToday(store: DayStore, day: string): Visit | null {
-  let seen: string | null;
+  let line: ReturnType<typeof parseLine>;
   try {
-    seen = store.read();
+    line = parseLine(store.read());
   } catch {
     return null;
   }
-  if (seen === OPT_OUT) return null;
-  if (seen === day) return null;
-  const newcomer = seen === null;
+  if (line === OPT_OUT) return null;
+  if (line !== null && line.day === day) return null;
+  const newcomer = line === null;
   try {
-    store.write(day);
+    // A new day starts with no paces reached: they are counted against the
+    // day's visitors, so they reset with the day.
+    store.write(formatLine({ day, steps: [] }));
   } catch {
     return null;
   }
   return { newcomer };
+}
+
+// Whether this pace is worth reporting, and claims it if so. Silent unless
+// this browser has already been counted as a visitor today: a pace with no
+// arrival under it would make the paces outnumber the people they are read
+// against, which is the one way this number could mislead.
+export function stepToday(store: DayStore, day: string, step: VisitStep): boolean {
+  let line: ReturnType<typeof parseLine>;
+  try {
+    line = parseLine(store.read());
+  } catch {
+    return false;
+  }
+  if (line === null || line === OPT_OUT || line.day !== day) return false;
+  const next = withStep(line, step);
+  if (next === null) return false;
+  try {
+    store.write(formatLine(next));
+  } catch {
+    return false;
+  }
+  return true;
 }
 
 // The opt-out asked for in the address bar, if any. Anything else in the
@@ -110,6 +144,7 @@ export function applyChoice(store: DayStore, choice: 'off' | 'on' | null, day: s
 // The whole request, built where it can be read in a test rather than
 // inside the call that fires it. Two flags and no body: this stays the
 // smallest thing a browser can send.
+
 export function pingUrl(visit: Visit, source: VisitSource): string {
   const params = new URLSearchParams({ from: source });
   if (visit.newcomer) params.set('new', '1');
@@ -123,6 +158,18 @@ function browserStore(): DayStore {
       window.localStorage.setItem(VISIT_KEY, day);
     },
   };
+}
+
+// One pace past arriving, reported once per browser per day. Fire and
+// forget like the visit itself; a counter must never be able to hold up
+// the thing it is counting.
+export function markStep(step: VisitStep, now = Date.now()): void {
+  if (!stepToday(browserStore(), utcDay(now), step)) return;
+  void fetch(`${STEP_URL}?name=${step}`, {
+    method: 'POST',
+    credentials: 'omit',
+    keepalive: true,
+  }).catch(() => {});
 }
 
 // Fire and forget, once a day, from the client entry. Nothing waits on it

@@ -57,6 +57,8 @@ describe('the counters', () => {
         visitors: 1,
         newcomers: 0,
         sources: { ...emptySources(), direct: 1 },
+        stayed: 0,
+        played: 0,
         accounts: 1,
         matches: 1,
         finished: 1,
@@ -115,6 +117,18 @@ describe('the counters', () => {
     expect(d.sources.discord).toBe(1);
     expect(d.sources.direct).toBe(1);
     expect(Object.values(d.sources).reduce((a, b) => a + b, 0)).toBe(d.visitors);
+  });
+
+  it('file how far a visitor got, once each', () => {
+    // The client is what keeps these to one per browser per day
+    // (src/net/visit_line.ts); this side only has to land them on the day
+    // and keep them apart.
+    const p = new Pulse(DAY_ONE);
+    p.visit(DAY_ONE, true, 'discord');
+    p.step(DAY_ONE, 'stayed');
+    p.step(DAY_ONE, 'played');
+    p.step(DAY_ONE, 'stayed');
+    expect(day(p)).toMatchObject({ visitors: 1, stayed: 2, played: 1 });
   });
 
   it('file a new day the moment the clock passes midnight', () => {
@@ -196,6 +210,8 @@ describe('the file on disk', () => {
         visitors: 2,
         newcomers: 0,
         sources: emptySources(),
+        stayed: 0,
+        played: 0,
         accounts: 0,
         matches: 0,
         finished: 0,
@@ -255,6 +271,8 @@ describe('the counts across a restart', () => {
           visitors: 2,
           newcomers: 0,
           sources: { ...emptySources(), direct: 2 },
+          stayed: 0,
+          played: 0,
           accounts: 1,
           matches: 1,
           finished: 1,

@@ -38,6 +38,7 @@
 
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { VISIT_SOURCES, type VisitSource } from '../src/net/pulse_source';
+import type { VisitStep } from '../src/net/visit_line';
 import { loadJson, saveJsonAtomic } from './store';
 
 // One UTC day. The counters, in funnel order, each one a subset of the
@@ -72,6 +73,15 @@ export interface PulseDay {
   // announcement reached anybody, which is the question the rest of the
   // row cannot answer however long it is read.
   sources: Record<VisitSource, number>;
+  // Of those visitors, the ones still here half a minute later. The line
+  // between somebody who looked and a click that left before the page had
+  // finished drawing, which the visitor count alone cannot draw.
+  stayed: number;
+  // Of those visitors, the ones who started a match in the browser:
+  // practice, test drive or live, and never a replay. This one is not a
+  // subset of accounts and must not be read as one, since the practice
+  // match is open to a visitor who has signed up for nothing.
+  played: number;
   // Accounts created (ADR 0006: an account is the door to everything).
   accounts: number;
   // Matches that started, human and bot-filled alike.
@@ -99,6 +109,8 @@ export function emptyDay(day: string): PulseDay {
     visitors: 0,
     newcomers: 0,
     sources: emptySources(),
+    stayed: 0,
+    played: 0,
     accounts: 0,
     matches: 0,
     finished: 0,
@@ -187,6 +199,16 @@ export class Pulse {
     this.dirty = true;
   }
 
+  // One pace past arriving, from a browser that has already been counted
+  // as a visitor today (src/net/visit_line.ts holds that rule, since the
+  // browser is the only party that knows). Once each per browser per day,
+  // so these divide by visitors and mean something.
+  step(at: number, step: VisitStep): void {
+    const day = this.today(at);
+    day[step] += 1;
+    this.dirty = true;
+  }
+
   account(at: number): void {
     this.today(at).accounts += 1;
     this.dirty = true;
@@ -257,6 +279,8 @@ export function fromFile(raw: unknown): PulseDay[] {
       visitors: count(d.visitors),
       newcomers: count(d.newcomers),
       sources: sources(d.sources),
+      stayed: count(d.stayed),
+      played: count(d.played),
       accounts: count(d.accounts),
       matches: count(d.matches),
       finished: count(d.finished),

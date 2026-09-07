@@ -13,6 +13,7 @@ import {
   OPT_OUT,
   pingUrl,
   pulseChoice,
+  stepToday,
   utcDay,
   VISIT_KEY,
   VISIT_URL,
@@ -133,6 +134,50 @@ describe('the request itself', () => {
     expect(url).not.toContain('http%3A');
     expect(url).not.toContain('https');
     expect(url).toContain('from=other');
+  });
+});
+
+describe('a pace past arriving', () => {
+  it('is reported once, by a browser already counted today', () => {
+    const store = memory();
+    visitToday(store, '2026-09-06');
+    expect(stepToday(store, '2026-09-06', 'stayed')).toBe(true);
+    expect(stepToday(store, '2026-09-06', 'stayed')).toBe(false);
+    expect(stepToday(store, '2026-09-06', 'played')).toBe(true);
+    expect(store.value).toBe('2026-09-06 stayed played');
+  });
+
+  it('is silent when this browser has not been counted today', () => {
+    // A pace with no arrival under it would make the paces outnumber the
+    // people they are read against, which is the one way these numbers
+    // could mislead.
+    expect(stepToday(memory(), '2026-09-06', 'stayed')).toBe(false);
+    expect(stepToday(memory('2026-09-05'), '2026-09-06', 'stayed')).toBe(false);
+  });
+
+  it('is silent for a browser that asked to be left out', () => {
+    expect(stepToday(memory(OPT_OUT), '2026-09-06', 'played')).toBe(false);
+  });
+
+  it('comes round again tomorrow, with the day', () => {
+    // The paces are counted against the day's visitors, so they reset when
+    // the visit does.
+    const store = memory();
+    visitToday(store, '2026-09-06');
+    stepToday(store, '2026-09-06', 'stayed');
+    visitToday(store, '2026-09-07');
+    expect(store.value).toBe('2026-09-07');
+    expect(stepToday(store, '2026-09-07', 'stayed')).toBe(true);
+  });
+
+  it('stays quiet when the browser will not let it remember', () => {
+    const readOnly: DayStore = {
+      read: () => '2026-09-06',
+      write() {
+        throw new Error('full');
+      },
+    };
+    expect(stepToday(readOnly, '2026-09-06', 'stayed')).toBe(false);
   });
 });
 
