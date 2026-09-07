@@ -22,6 +22,14 @@ import { type ClientMsg, isFiniteVec } from './protocol';
 // (src/sim/content/fingerprint.ts): nobody has to remember it.
 export const REPLAY_VERSION = 2;
 
+// The checksum a replay must show at `tick`, or null when the record
+// says nothing about that tick (an older record, or a tick that is not
+// on the check cadence).
+export function expectedCheck(record: ReplayRecord, tick: number): number | null {
+  if (!record.checks || tick <= 0 || tick % CHECK_TICKS !== 0) return null;
+  return record.checks[tick / CHECK_TICKS - 1] ?? null;
+}
+
 // Whether a record still plays out the match it recorded: the version
 // this build speaks, and content that has not moved under it.
 export function replayPlayable(record: {
@@ -60,6 +68,14 @@ export interface ReplayEvent {
   c?: ClientMsg;
 }
 
+// How often a match writes down where it stood. Every ten seconds of
+// play: a hundred and twenty numbers on a twenty-minute match, about a
+// kilobyte, against the five megabytes a recorded match would weigh
+// (measured 2026-09-07: the wire snapshot at 20 Hz, gzipped). It buys
+// the one thing re-simulation cannot give itself, which is knowing when
+// it has gone wrong.
+export const CHECK_TICKS = 200;
+
 export interface ReplayRecord {
   version: number;
   // The fingerprint of the content the match ran on (champions, items,
@@ -73,6 +89,12 @@ export interface ReplayRecord {
   events: ReplayEvent[];
   // Total ticks the live match ran to its winner.
   ticks: number;
+  // Where the match stood every CHECK_TICKS ticks, as the sim's own
+  // checksum. A replay compares as it plays: the first number that
+  // differs is the moment it stopped being the match it claims to be,
+  // and it stops there rather than showing a match nobody played.
+  // Absent on records written before this existed.
+  checks?: number[];
   // The match's forged champion definitions, embedded whole (ADR 0010): a
   // forged id means nothing outside its match, so the replay carries the
   // data, not the reference. Absent for roster-only matches.

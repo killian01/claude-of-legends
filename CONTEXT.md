@@ -655,9 +655,13 @@ match compresses to kilobytes that way, and the live path and the replay path ca
 apart because both go through the same functions. What it costs is that a replay is only
 faithful while the sim and the content it reads are the ones that played: a champion, an
 item or the map moving would make yesterday's replay play out a match that never happened.
-Two guards say so instead: the replay version, bumped by hand when the sim's own code
-changes, and the content fingerprint, computed from the tables themselves so nobody has to
-remember. A record that fails either is not played, and says why.
+Three guards say so instead: the replay version, bumped by hand when the sim's own code
+changes; the content fingerprint, computed from the tables themselves so nobody has to
+remember; and the check trail, where the match stood every ten seconds, which the viewer
+compares as it plays. A record that fails the first two is not played and says why; one
+that drifts mid-play stops at the first mark that differs. The trail is about a kilobyte a
+match, against the five megabytes a recorded one would weigh (measured), which is the
+whole reason a replay is re-simulated rather than filmed.
 
 **Death card**:
 The scene of one death on a Match sheet: where the champion fell, the allies and enemies

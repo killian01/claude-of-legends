@@ -9,7 +9,13 @@
 
 import { describe, expect, it } from 'vitest';
 import { runFastMatch } from '../src/fast_match';
-import { REPLAY_VERSION, replayPlayable } from '../src/net/replay';
+import {
+  buildMatchSim,
+  CHECK_TICKS,
+  expectedCheck,
+  REPLAY_VERSION,
+  replayPlayable,
+} from '../src/net/replay';
 import { CHAMPION_LIST } from '../src/sim/content/champions';
 import { contentFingerprint, contentMatches, fingerprintOf } from '../src/sim/content/fingerprint';
 
@@ -77,5 +83,62 @@ describe('the content fingerprint', () => {
     const r = runFastMatch({ seed: 7, picks, maxTicks: 50 });
     expect(r.record.content).toBe(contentFingerprint());
     expect(replayPlayable(r.record)).toBe(true);
+  });
+});
+
+describe('the check trail', () => {
+  const picks = [
+    {
+      name: 'a',
+      team: 0 as const,
+      championId: 'korrath',
+      sigils: ['riftstep', 'mend'] as [string, string],
+      bot: 'laner',
+    },
+    {
+      name: 'b',
+      team: 1 as const,
+      championId: 'sylra',
+      sigils: ['riftstep', 'mend'] as [string, string],
+      bot: 'brawler',
+    },
+  ];
+
+  it('is written every CHECK_TICKS and matches a faithful replay tick for tick', () => {
+    const r = runFastMatch({ seed: 3, picks, maxTicks: 1000 });
+    expect(r.record.checks?.length).toBe(Math.floor(r.ticks / CHECK_TICKS));
+    // The replay's own path: rebuild, tick, and compare at every mark.
+    const { sim } = buildMatchSim(r.record.seed, r.record.picks);
+    let compared = 0;
+    while (sim.tickCount < r.ticks) {
+      sim.tick();
+      const want = expectedCheck(r.record, sim.tickCount);
+      if (want === null) continue;
+      compared += 1;
+      expect(sim.checksum()).toBe(want);
+    }
+    expect(compared).toBeGreaterThan(0);
+  });
+
+  it('catches a replay that has drifted, which is the whole point', () => {
+    const r = runFastMatch({ seed: 3, picks, maxTicks: 600 });
+    const { sim } = buildMatchSim(r.record.seed, r.record.picks);
+    // A match that plays out differently: one champion nudged, the way a
+    // changed number would nudge it.
+    while (sim.tickCount < CHECK_TICKS) {
+      sim.tick();
+      if (sim.tickCount === 10) {
+        const unit = [...sim.units.values()].find((u) => u.kind === 'champion');
+        if (unit) unit.pos.x += 1;
+      }
+    }
+    expect(sim.checksum()).not.toBe(expectedCheck(r.record, CHECK_TICKS));
+  });
+
+  it('says nothing about a record that carries no trail, or a tick off the cadence', () => {
+    const r = runFastMatch({ seed: 3, picks, maxTicks: 400 });
+    expect(expectedCheck({ ...r.record, checks: undefined }, CHECK_TICKS)).toBe(null);
+    expect(expectedCheck(r.record, CHECK_TICKS - 1)).toBe(null);
+    expect(expectedCheck(r.record, 0)).toBe(null);
   });
 });

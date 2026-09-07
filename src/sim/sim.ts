@@ -336,6 +336,28 @@ export class Sim {
     return { tick: this.tickCount, state: deepCopy(this.gatherState()) };
   }
 
+  // A short number standing for where this match is, right now: the tick,
+  // the rng, and every unit's place and health. It is what a replay
+  // checks itself against as it plays (src/net/replay.ts): a replay is a
+  // re-simulation, so the one thing it cannot do on its own is notice
+  // that it has stopped matching the match it claims to be. Cheap by
+  // design (no copy, no allocation per unit) because it runs every
+  // couple of hundred ticks inside the sim loop.
+  checksum(): number {
+    let h = (0x811c9dc5 ^ this.tickCount) >>> 0;
+    const mix = (n: number): void => {
+      h = (Math.imul(h ^ (n | 0), 0x01000193) + 0x9e3779b9) >>> 0;
+    };
+    mix(this.rng.state);
+    for (const u of this.units.values()) {
+      mix(u.id);
+      mix(Math.round(u.pos.x * 64));
+      mix(Math.round(u.pos.z * 64));
+      mix(Math.round(u.hp));
+    }
+    return h >>> 0;
+  }
+
   // The checkpoint back into THIS sim, in place: the containers attached
   // policies close over are refilled, never replaced. The snapshot stays
   // intact and can be restored again.

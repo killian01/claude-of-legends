@@ -12,6 +12,7 @@ import {
   EMBERS_PER_WEEK,
   FIRST_CHAMPION_IN_EMBERS,
   IMAGE_PRICE_RESOLD,
+  WELCOME_FLOOR,
   welcomeTopUp,
 } from '../server/embers';
 import {
@@ -67,17 +68,17 @@ describe('the ledger', () => {
       refreshWeeklyGrant(deps, 1);
       // The first visit carries the week's grant AND the one-time welcome
       // that puts a first champion in reach.
-      expect(deps.store.creditBalance(1)).toBe(FIRST_CHAMPION_IN_EMBERS);
+      expect(deps.store.creditBalance(1)).toBe(WELCOME_FLOOR);
       clock = WEEK - 1;
       refreshWeeklyGrant(deps, 1);
-      expect(deps.store.creditBalance(1)).toBe(FIRST_CHAMPION_IN_EMBERS);
+      expect(deps.store.creditBalance(1)).toBe(WELCOME_FLOOR);
       // The weeks after are the weekly grant alone, rolling over: the
       // welcome never comes twice.
       clock = WEEK;
       refreshWeeklyGrant(deps, 1);
       clock = 2 * WEEK;
       refreshWeeklyGrant(deps, 1);
-      expect(deps.store.creditBalance(1)).toBe(FIRST_CHAMPION_IN_EMBERS + 2 * EMBERS_PER_WEEK);
+      expect(deps.store.creditBalance(1)).toBe(WELCOME_FLOOR + 2 * EMBERS_PER_WEEK);
       expect(deps.store.creditBalance(1)).toBeGreaterThan(CREATION_IN_EMBERS);
     } finally {
       deps.store.close();
@@ -88,7 +89,7 @@ describe('the ledger', () => {
     const deps = rig(() => 5);
     try {
       refreshWeeklyGrant(deps, 1);
-      const start = FIRST_CHAMPION_IN_EMBERS;
+      const start = WELCOME_FLOOR;
       const ok = spendEmbers(deps, 1, EMBER_PRICES.model, 'forged_x');
       expect(ok).toEqual({ ok: true, spent: 30, left: start - 30 });
       // Two whole champions is more than a first week holds.
@@ -132,10 +133,10 @@ describe('the ledger', () => {
       migrateCreations(deps, 9, 1);
       expect(deps.store.creditBalance(9)).toBe(0);
       refreshWeeklyGrant(deps, 9);
-      expect(deps.store.creditBalance(9)).toBe(FIRST_CHAMPION_IN_EMBERS);
+      expect(deps.store.creditBalance(9)).toBe(WELCOME_FLOOR);
       // The grant is in embers already and the crossing is behind it.
       migrateCreations(deps, 9, 2);
-      expect(deps.store.creditBalance(9)).toBe(FIRST_CHAMPION_IN_EMBERS);
+      expect(deps.store.creditBalance(9)).toBe(WELCOME_FLOOR);
     } finally {
       deps.store.close();
     }
@@ -150,12 +151,12 @@ describe('the welcome top-up', () => {
       // A fresh account: the week's grant lands, then the welcome closes
       // the gap to what one whole champion takes, art included.
       refreshWeeklyGrant(deps, 1);
-      expect(deps.store.creditBalance(1)).toBe(FIRST_CHAMPION_IN_EMBERS);
-      expect(FIRST_CHAMPION_IN_EMBERS).toBeGreaterThan(EMBERS_PER_WEEK);
+      expect(deps.store.creditBalance(1)).toBe(WELCOME_FLOOR);
+      expect(WELCOME_FLOOR).toBeGreaterThan(EMBERS_PER_WEEK);
       // And never again: a second visit in the same week changes nothing,
       // and neither does the next week's grant landing on top.
       refreshWeeklyGrant(deps, 1);
-      expect(deps.store.creditBalance(1)).toBe(FIRST_CHAMPION_IN_EMBERS);
+      expect(deps.store.creditBalance(1)).toBe(WELCOME_FLOOR);
     } finally {
       deps.store.close();
     }
@@ -176,10 +177,17 @@ describe('the welcome top-up', () => {
     }
   });
 
+  it('is never under what a champion really costs', () => {
+    // A round number the maintainer chose, held to the truth: if a price
+    // rises past it, this fails and the number moves rather than a new
+    // account quietly falling short of its first champion.
+    expect(WELCOME_FLOOR).toBeGreaterThanOrEqual(FIRST_CHAMPION_IN_EMBERS);
+  });
+
   it('is the shortfall and nothing else', () => {
-    expect(welcomeTopUp(0)).toBe(FIRST_CHAMPION_IN_EMBERS);
-    expect(welcomeTopUp(EMBERS_PER_WEEK)).toBe(FIRST_CHAMPION_IN_EMBERS - EMBERS_PER_WEEK);
-    expect(welcomeTopUp(FIRST_CHAMPION_IN_EMBERS)).toBe(0);
+    expect(welcomeTopUp(0)).toBe(WELCOME_FLOOR);
+    expect(welcomeTopUp(EMBERS_PER_WEEK)).toBe(WELCOME_FLOOR - EMBERS_PER_WEEK);
+    expect(welcomeTopUp(WELCOME_FLOOR)).toBe(0);
     expect(welcomeTopUp(9999)).toBe(0);
   });
 });

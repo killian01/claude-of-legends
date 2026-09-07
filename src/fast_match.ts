@@ -4,7 +4,13 @@
 // replay viewer rebuilds. DOM-free and network-free; the callers own the
 // threads.
 
-import { buildMatchSim, REPLAY_VERSION, type ReplayPick, type ReplayRecord } from './net/replay';
+import {
+  buildMatchSim,
+  CHECK_TICKS,
+  REPLAY_VERSION,
+  type ReplayPick,
+  type ReplayRecord,
+} from './net/replay';
 import { contentFingerprint } from './sim/content/fingerprint';
 import type { ForgedChampionDef } from './sim/forge/forged_def';
 import { PlayLedger, type PlayReport } from './sim/playbook/report';
@@ -37,12 +43,17 @@ export function runFastMatch(req: FastMatchRequest): FastMatchResult {
   const forged = req.forged ?? [];
   const { sim, unitIds } = buildMatchSim(req.seed, req.picks, forged);
   const ledger = new PlayLedger();
+  // Where the match stood, every CHECK_TICKS: what a replay of it will
+  // compare itself against as it plays.
+  const checks: number[] = [];
   while (sim.winner === null && sim.tickCount < req.maxTicks) {
     ledger.observe(sim.tickCount + 1, sim.tick(), sim);
+    if (sim.tickCount % CHECK_TICKS === 0) checks.push(sim.checksum());
   }
   const record: ReplayRecord = {
     version: REPLAY_VERSION,
     content: contentFingerprint(),
+    checks,
     seed: req.seed,
     picks: req.picks,
     events: [],

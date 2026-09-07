@@ -23,6 +23,7 @@ import { markStep, markVisit, STAYED_MS } from './net/pulse_ping';
 import {
   applyReplayEvent,
   buildMatchSim,
+  expectedCheck,
   type ReplayEvent,
   type ReplayRecord,
   replayPlayable,
@@ -284,6 +285,27 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
     // A seek in progress: the tick to reach, stepped silently.
     let target: number | null = null;
 
+    // The replay checking itself against the match it claims to be: every
+    // CHECK_TICKS the record says where the match stood, and a
+    // re-simulation that has drifted (a sim change nobody bumped the
+    // version for) is caught at the first number that differs. It stops
+    // there and says so: showing a match nobody played is the one thing
+    // a replay must never do.
+    let drifted = false;
+    const checkDrift = (): void => {
+      if (drifted) return;
+      const want = expectedCheck(rec, sim.tickCount);
+      if (want === null || want === sim.checksum()) return;
+      drifted = true;
+      void showNotice(
+        container,
+        'This replay stopped matching',
+        'The game has changed since this match was played, so replaying it no longer plays ' +
+          'out what happened. It stops here rather than showing you a different match; the ' +
+          'result on the Record is what took place.',
+      ).then(() => finish('menu'));
+    };
+
     // One recorded tick: the commands due, then the sim; the presentation
     // hears the events only while playing, never while seeking.
     const stepOnce = (silent: boolean): void => {
@@ -302,6 +324,7 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
         else if (ev.type === 'attack') attacks.push({ unitId: ev.unitId, targetId: ev.targetId });
       }
       if (!silent) pres.onWorldTick({ kills, golds: [], casts, hits: [], attacks });
+      checkDrift();
     };
 
     const cursor = new ReplayCursor({

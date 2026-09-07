@@ -77,6 +77,13 @@ export const CHAMPION_IN_EMBERS = CREATION_IN_EMBERS;
 // Spell icons are not in it: a champion plays without them.
 export const FIRST_CHAMPION_IN_EMBERS = CHAMPION_IN_EMBERS + 3 * EMBER_PRICES.image;
 
+// What a new account is put in reach of: one whole champion, on a round
+// number (the maintainer's call). It must never fall under what a
+// champion actually costs, which is what FIRST_CHAMPION_IN_EMBERS says
+// and what tests/embers.test.ts holds it to: if a price rises past this,
+// the test fails and the number moves.
+export const WELCOME_FLOOR = 130;
+
 // The minimum a new account is put in reach of: enough to finish ONE
 // champion, once. The weekly grant alone leaves a creator a fortnight
 // short of their first champion, which is the worst place in the Forge
@@ -84,5 +91,5 @@ export const FIRST_CHAMPION_IN_EMBERS = CHAMPION_IN_EMBERS + 3 * EMBER_PRICES.im
 // exactly that gap and nothing more, and is read AFTER the week's grant
 // has landed, so what it adds is only ever the shortfall.
 export function welcomeTopUp(held: number): number {
-  return Math.max(0, FIRST_CHAMPION_IN_EMBERS - held);
+  return Math.max(0, WELCOME_FLOOR - held);
 }
