@@ -437,7 +437,11 @@ _Avoid_: attachment, accessory
 **House clip**:
 An animation the repo ships itself: a Mixamo clip retargeted once onto the shared rig
 skeleton (every forged biped shares its bone names) and served as an app asset, so applying
-one to a champion is a file copy, no provider call, no credits. Curated in weapon-family
+one to a champion is a file copy, no provider call, no credits. A champion that has baked
+nothing BORROWS a five-role house set from the moment it is rigged, chosen by its weapon
+family: a built model is seen playing (in the workshop and in a match) before its creator
+has picked a single animation, and its own bake replaces the borrowed set whole. Borrowed
+clips are named as borrowed wherever they show, and a champion cannot be sealed on them. Curated in weapon-family
 sets (sword and shield, great sword, magic); every house clip is baked facing the rig's
 rest forward and performs on the spot, because the game aligns a champion to its rest
 forward and owns all movement. `scripts/bake_house_clips.mjs` is the curation record.

@@ -19,6 +19,7 @@ import {
   stripStanceLead,
   stripTravel,
 } from './forged_clips';
+import { houseDefaultClipFiles } from './house_set';
 import type { ChampionClipNames, ChampionVisualDef } from './manifest';
 import { orientLongAxisY } from './orient';
 
@@ -358,6 +359,15 @@ export async function forgedChampionTemplate(
     const clips = new Map(source.clips);
     if (entry.clipFiles) {
       for (const clip of await loadForgedClipFiles(entry.clipFiles, entry.clips)) {
+        clips.set(clip.name, clip);
+      }
+    }
+    // A rigged champion that has baked nothing borrows the house set
+    // (house_set.ts): it costs nothing, it ships with the client, and a
+    // model that is paid for should be seen playing before its creator
+    // has chosen five animations. Its own bake replaces this whole.
+    if (clips.size === 0) {
+      for (const clip of await loadForgedClipFiles(houseDefaultClipFiles(entry.family), null)) {
         clips.set(clip.name, clip);
       }
     }

@@ -25,6 +25,7 @@ import {
   prepareForgedRun,
 } from '../render/champions/forged';
 import { resolveForgedClips } from '../render/champions/forged_clips';
+import { houseDefaultClipFiles } from '../render/champions/house_set';
 import type { ChampionClipNames } from '../render/champions/manifest';
 import {
   gripAlignment,
@@ -613,6 +614,9 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
 
   let mixer: THREE.AnimationMixer | null = null;
   let clips: THREE.AnimationClip[] = [];
+  // True while the clips on screen are the house set standing in for a
+  // champion that has baked none of its own.
+  let borrowedClips = false;
   let activeAction: THREE.AnimationAction | null = null;
   let idleClipName = '';
   const clipsPanel = el('div', 'ws-panel');
@@ -774,6 +778,16 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     }
     if (clips.length === 0) {
       clipBox.append(el('div', 'ws-note', 'This model carries no animation clips.'));
+    } else if (borrowedClips) {
+      clipBox.append(
+        el(
+          'div',
+          'ws-note',
+          'Borrowed from the house set while this champion has none of its own: enough to ' +
+            'check the model moving, and to fit the weapon against a real swing. Its own ' +
+            'animations replace these in the Forge (Step 5).',
+        ),
+      );
     }
     idleClipName = roleName('idle') ?? clips[0]?.name ?? '';
     playClip(idleClipName);
@@ -814,9 +828,15 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
       const rig = model;
       // A per-clip-baked champion keeps its animations in files beside
       // the rigged body; merge them before the buttons build.
-      const extra =
-        subject.clipFiles && Object.keys(subject.clipFiles).length > 0
-          ? loadForgedClipFiles(subject.clipFiles, subject.clips ?? null)
+      // A champion that has baked nothing borrows the house set, exactly
+      // as a match does (house_set.ts), so a freshly built model can be
+      // seen moving before its creator has chosen a single animation.
+      const baked = subject.clipFiles && Object.keys(subject.clipFiles).length > 0;
+      borrowedClips = !baked && gltf.animations.length === 0;
+      const extra = baked
+        ? loadForgedClipFiles(subject.clipFiles ?? {}, subject.clips ?? null)
+        : borrowedClips
+          ? loadForgedClipFiles(houseDefaultClipFiles(subject.family ?? null), null)
           : Promise.resolve([]);
       void extra.then((loaded) => {
         mixer = new THREE.AnimationMixer(rig);
