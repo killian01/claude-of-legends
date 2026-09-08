@@ -81,7 +81,10 @@ const run = async () => {
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('response', (res) => {
     if (res.url().includes('/api/') && res.status() >= 400) {
-      void res.text().then((t) => refused.push(`${res.status()} ${res.url()}: ${t.slice(0, 200)}`));
+      void res
+        .text()
+        .then((t) => refused.push(`${res.status()} ${res.url()}: ${t.slice(0, 200)}`))
+        .catch(() => {});
     }
   });
   await page.goto(URL, { waitUntil: 'load' });

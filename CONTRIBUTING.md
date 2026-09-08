@@ -80,7 +80,9 @@ pnpm check        # strict tsc, fast; run it liberally
 pnpm lint         # Biome
 ```
 
-Those three are what CI runs, and all three have to pass. The scripts under
+Those three are what CI runs, and all three have to pass. `docs/dev-local.md` is
+the longer runbook: what each surface needs, accounts without mail, the `.env`
+knobs, and the stack script that runs server and client in the background. The scripts under
 `scripts/` that drive a real browser (`e2e_*.mjs`, the screenshot helpers) are
 not part of `pnpm test`; they need a Chrome or Chromium binary and take the
 path to it from `CHROME`, defaulting to the usual Windows install:

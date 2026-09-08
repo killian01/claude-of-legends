@@ -24,3 +24,5 @@ art_src/
 .pnpm-store/
 dist-gate*/
 dist-matrix*/
+# Local stack run directory (.claude/skills/dev-server/stack.sh): pids, logs, and a task-local DATA_DIR.
+.dev/

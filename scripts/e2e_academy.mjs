@@ -64,9 +64,12 @@ const run = async () => {
   // A refused API call is the usual reason a step silently does nothing.
   page.on('response', (res) => {
     if (res.url().includes('/api/') && res.status() >= 400) {
+      // A body Chrome will not hand over (the 401 before sign-in, on some
+      // versions) is a lost diagnostic, not a failed run.
       void res
         .text()
-        .then((t) => console.error(`api ${res.status()} ${res.url()}: ${t.slice(0, 200)}`));
+        .then((t) => console.error(`api ${res.status()} ${res.url()}: ${t.slice(0, 200)}`))
+        .catch(() => {});
     }
   });
   await page.goto(URL, { waitUntil: 'load' });
@@ -147,7 +150,9 @@ const run = async () => {
   if (line.icons + line.slots !== 6)
     throw new Error(`build row: ${line.icons} icons, ${line.slots} slots`);
   if (line.dismiss) throw new Error('a Dismiss button survived');
-  if (!/ \d+-\d+/.test(line.rail)) throw new Error(`the rail has no tally: ${line.rail}`);
+  // The rail's chip is the rated part only, and sparring is unrated: a
+  // bot fresh from its first spar wears no tally there.
+  if (/ \d+-\d+/.test(line.rail)) throw new Error(`the rail counts unrated sparring: ${line.rail}`);
   console.log(
     'summary:',
     line.verdict,
@@ -180,7 +185,10 @@ const run = async () => {
   }));
   console.log('record:', rec);
   if (rec.rows < 1) throw new Error('the Record lists nothing');
-  if (!/^\d+ won, \d+ lost$/.test(rec.tally)) throw new Error(`tally: ${rec.tally}`);
+  // The Record reads per kind, rated first: after one unrated spar the
+  // rated tally is empty and says so.
+  if (!/^(no rated match yet|\d+ won, \d+ lost, rated)$/.test(rec.tally))
+    throw new Error(`tally: ${rec.tally}`);
   if (!/^(Won|Lost|No winner) after /.test(rec.sheetRes)) throw new Error(`sheet: ${rec.sheetRes}`);
   if (rec.scoreRows !== 1) throw new Error(`the bot's row is not marked once: ${rec.scoreRows}`);
   if (rec.sections.join() !== 'Scoreboard,Plays,Deaths')

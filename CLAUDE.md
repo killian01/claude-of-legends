@@ -32,6 +32,8 @@ Vitest · Biome. No UI framework; tiny dependency set.
 | `server/` | Authoritative game server; `server/generation/` is the Forge's provider seam (ADR 0010); the bots' store, the Arena and the night coach live beside it (ADR 0013). |
 | `headless/` | The environment: a match stepped from outside the repo over NDJSON (ADR 0002 phase 2). |
 | `tests/` | Vitest suite, including the structural gates. |
+| `scripts/` | Build, art, seeding, and browser e2e tooling; not part of `pnpm test`. |
+| `.claude/` | The agent's project skills, hooks and settings (`.claude/skills/README.md`). |
 
 Directories that do not exist yet are created by their phase in `docs/plan-48h.md`;
 keep this table honest as they land.
@@ -43,6 +45,21 @@ keep this table honest as they land.
 - `pnpm env`: builds and runs the headless environment on stdio (`headless/README.md`).
 - `pnpm check`: strict `tsc`, fast; run liberally while working.
 - `pnpm lint`: Biome (2-space, lineWidth 100, single quotes). Format only the files you changed.
+- Node 22 is required (`.nvmrc`); a shell without nvm loaded gets it from
+  `. .claude/skills/dev-server/node_env.sh`.
+
+## Local development
+
+The runbook is `docs/dev-local.md`: what each surface needs, accounts without mail,
+the `.env` knobs, and how to read a red run. The project's own skills under
+`.claude/skills/` carry the procedures (the vendored ones are listed in its README):
+
+- `dev-server`: the server and client in the background, task-local state under `.dev/`,
+  via `.claude/skills/dev-server/stack.sh up|status|log|links|down`. Never write into
+  `data/` from a task unless asked.
+- `academy`: testing the bot builder (tests, the `/api/bots` routes, the browser).
+- `verify`: the three gates the way CI runs them, and which red runs are timeouts.
+- `browser-e2e`: the puppeteer scripts and PR screenshots.
 
 ## Architecture (the load-bearing ideas)
 
