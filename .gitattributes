@@ -2,3 +2,5 @@
 *.webp binary
 *.png binary
 *.glb binary
+# The announcer's rendered clips (scripts/build_voice.mjs): binary, stored with git-lfs.
+public/voice/*.mp3 filter=lfs diff=lfs merge=lfs -text

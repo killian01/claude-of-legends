@@ -9,6 +9,7 @@
 
 import { type AttackSoundId, attackFamilyOf, castFamilyOf } from '../sim/content/sounds';
 import { playSfxBank, preloadSfxBank } from './sfx_bank';
+import { preloadVoiceBank } from './voice_bank';
 
 export type SfxName =
   | 'cast'
@@ -94,6 +95,7 @@ export function audioBus(): AudioBus | null {
     // The recordings decode in the background from the first moment the
     // bus exists; the synthesis covers the seconds until they land.
     void preloadSfxBank(bus);
+    void preloadVoiceBank(bus);
   }
   return bus;
 }

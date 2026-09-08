@@ -1,85 +1,64 @@
-// The announcer voice, via the browser's speech synthesis: no assets, and
-// every event line the genre expects. Voice quality varies wildly per
-// browser: Chrome's remote Google voices sound far better than the local
-// SAPI ones but load LATE, so the pick is redone on voiceschanged. The
-// music ducks while a line plays. Presentation only.
+// The announcer voice: recorded lines (voice_bank.ts, rendered from the
+// table in voice_lines.ts by scripts/build_voice.mjs) played over the
+// shared audio bus, with the browser's speech synthesis reading the same
+// text while a clip has not decoded or could not (announcer_speech.ts).
+// announcer_policy.ts decides what gets said; the music ducks while a
+// line plays. Presentation only.
 
+import { type AnnouncerState, announcerVerdict } from './announcer_policy';
+import { cancelSpeech, speakLine, speechBusy } from './announcer_speech';
 import { duckMusic } from './music';
+import { audioBus } from './sfx';
+import { playVoiceClip, type VoicePlayback } from './voice_bank';
+import { VOICE_LINES, type VoiceLineId } from './voice_lines';
 
-// Preference order settled by playtest: the local female voices (Zira on
-// Windows) read as the better announcer; the remote Google ones follow.
-const PREFERRED: readonly RegExp[] = [
-  /\bzira\b/i,
-  /samantha/i,
-  /\baria\b/i,
-  /\bjenny\b/i,
-  /female/i,
-  /google us english/i,
-];
-
-let voice: SpeechSynthesisVoice | null = null;
-let voiceLoaded = false;
-let lastSpokeAt = 0;
-let lastLine = '';
-
-if (typeof speechSynthesis !== 'undefined') {
-  speechSynthesis.addEventListener?.('voiceschanged', () => {
-    voiceLoaded = false;
-  });
-}
-
-function pickVoice(): void {
-  if (voiceLoaded || typeof speechSynthesis === 'undefined') return;
-  const voices = speechSynthesis.getVoices();
-  if (voices.length === 0) return;
-  voiceLoaded = true;
-  const en = voices.filter((v) => v.lang.startsWith('en'));
-  voice = null;
-  for (const re of PREFERRED) {
-    const hit = en.find((v) => re.test(v.name));
-    if (hit) {
-      voice = hit;
-      break;
-    }
-  }
-  if (!voice) voice = en[0] ?? null;
-  console.info('[announcer] voice:', voice?.name ?? 'browser default');
-}
-
-// priority: true lines (kills, objectives) interrupt whatever is playing;
-// others are dropped while speech is busy.
 let announcerEnabled = true;
+const state: AnnouncerState = { lastId: null, lastAt: 0, busy: false };
+let playing: VoicePlayback | null = null;
+// When the playing clip runs out by the clock: a clip scheduled on a
+// context the browser has not resumed yet never fires onended, and must
+// not hold the voice busy forever.
+let playingUntil = 0;
+
+function silence(): void {
+  playing?.stop();
+  playing = null;
+  cancelSpeech();
+}
 
 // User setting; turning it off also silences a line mid-sentence.
 export function setAnnouncerEnabled(on: boolean): void {
   announcerEnabled = on;
-  if (!on && typeof speechSynthesis !== 'undefined') speechSynthesis.cancel();
+  if (!on) silence();
 }
 
 // `repeatable` marks a line whose wording repeats across genuinely distinct
 // events: since the kill calls stopped naming the champion, two enemies
-// dying in one fight produce the same sentence, and the stutter guard below
+// dying in one fight produce the same sentence, and the stutter guard
 // would eat the second call.
-export function announceVoice(line: string, priority = false, repeatable = false): void {
+export function announceVoice(id: VoiceLineId, priority = false, repeatable = false): void {
   if (!announcerEnabled) return;
-  if (typeof speechSynthesis === 'undefined') return;
-  pickVoice();
   const now = performance.now();
-  if (!repeatable && line === lastLine && now - lastSpokeAt < 4000) return;
-  if (speechSynthesis.speaking) {
-    if (!priority) return;
-    speechSynthesis.cancel();
-  } else if (now - lastSpokeAt < 900 && !priority) {
-    return;
+  state.busy = (playing !== null && now < playingUntil) || speechBusy();
+  const verdict = announcerVerdict(state, id, now, priority, repeatable);
+  if (verdict === 'drop') return;
+  if (verdict === 'interrupt') silence();
+
+  const b = audioBus();
+  const clip = b
+    ? playVoiceClip(b, id, () => {
+        if (playing === clip) playing = null;
+      })
+    : null;
+  if (clip) {
+    playing = clip;
+    playingUntil = now + clip.durationMs + 500;
+    duckMusic(clip.durationMs + 300);
+  } else {
+    const text = VOICE_LINES[id];
+    if (!speakLine(text)) return;
+    duckMusic(600 + text.length * 70);
   }
-  const u = new SpeechSynthesisUtterance(line);
-  if (voice) u.voice = voice;
-  // Calm and deliberate, near-natural pitch: an announcer, not a robot.
-  u.rate = 0.85;
-  u.pitch = 0.8;
-  u.volume = 1.0;
-  duckMusic(600 + line.length * 70);
-  speechSynthesis.speak(u);
-  lastSpokeAt = now;
-  lastLine = line;
+  state.lastAt = now;
+  state.lastId = id;
 }

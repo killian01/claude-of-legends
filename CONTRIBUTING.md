@@ -52,6 +52,11 @@ pnpm install
 pnpm dev          # open the URL it prints (usually http://localhost:5173)
 ```
 
+The announcer's clips under `public/voice/` are stored with git-lfs
+(https://git-lfs.com). With git-lfs installed, the clone above fetches them;
+without it that directory holds pointer files, the announcer falls back to
+the browser's speech synthesis, and everything else works.
+
 That is enough for the offline practice match and most work. For online play,
 run the authoritative server in a second terminal:
 

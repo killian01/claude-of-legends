@@ -19,6 +19,12 @@ sound id, its variant files, and `tests/sfx_bank.test.ts` keeps the
 manifest, the files on disk, the palette coverage and the size budget in
 step.
 
+**The announcer** (`src/game/announcer.ts`, `public/voice/`): the event
+lines (first blood, a tower falling, the Warden waking, victory) are
+recorded clips of one voice, rendered from the table in
+`src/game/voice_lines.ts`; the browser's speech synthesis reads the same
+text while a clip has not decoded. See "The announcer" below.
+
 ## Ids
 
 The palette is `src/sim/content/sounds.ts`, data-as-code, listed by group
@@ -99,3 +105,31 @@ real thunder clap and a low explosion.
 
 The bank ships as Ogg Vorbis; a browser that cannot decode it (Safari)
 plays the synthesis.
+
+## The announcer
+
+Every line the announcer says is fixed text in `src/game/voice_lines.ts`,
+keyed by the event that says it: the voice never names a champion or a
+player (playtest round 3: ten invented names read aloud is noise, and the
+line runs long enough to still be talking over the next fight), so the
+whole set is fifteen sentences, recorded once. `scripts/build_voice.mjs`
+renders them with ElevenLabs text-to-speech, voice Lucy, into
+`public/voice/<id>.mp3`:
+
+    ELEVENLABS_API_KEY=<key> node scripts/build_voice.mjs [--only id] [--model id]
+
+The key is read from the environment and from nowhere else; `--list`
+prints the table without one. The clips are stored with git-lfs (a clone
+made without it holds pointer files, which fail to decode and leave the
+speech fallback in place; CI checks out with LFS). `tests/voice_bank.test.ts`
+keeps the table, the files on disk, the script's view of the table, the
+LFS tracking and the size budget in step.
+
+At play time `src/game/voice_bank.ts` decodes the clips in the background
+from the moment the audio bus exists, like the bank, and plays them dry
+through the sound-effects gain (an announcer in a booth, not in the room).
+`src/game/announcer_policy.ts` decides what gets said: the same wording
+twice inside four seconds is a stutter and is dropped unless the caller
+marks the line repeatable, a priority line (kills, objectives) interrupts
+whatever is playing, an ordinary one waits for a breath. The music ducks
+for the length of the clip.

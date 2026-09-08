@@ -128,6 +128,18 @@ attribution; the list is kept out of respect for the recordists.
 |---|---|---|
 | `*.ogg` | CC0 packs from Kenney, rubberduck, artisticdude and others, mixed by `scripts/build_sfx.mjs`; the full list is `public/sfx/CREDITS.md` | CC0 1.0 |
 
+## The announcer voice (`public/voice/`)
+
+One clip per line of `src/game/voice_lines.ts`, rendered by
+`scripts/build_voice.mjs` with ElevenLabs text-to-speech in the voice Lucy
+from the ElevenLabs voice library. The words are the game's own; the clips
+are binary and stored with git-lfs. A re-render needs an ElevenLabs API key
+in the environment and nothing else.
+
+| Files | Source | License |
+|---|---|---|
+| `*.mp3` | Generated with ElevenLabs (https://elevenlabs.io), voice Lucy, by `scripts/build_voice.mjs` | ElevenLabs output terms; the rendering account's plan governs commercial use |
+
 ## Vendor runtime files (`public/vendor/`)
 
 | Files | What it is | License |

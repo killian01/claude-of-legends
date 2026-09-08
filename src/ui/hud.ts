@@ -1377,11 +1377,11 @@ export class Hud {
       if (!this.sawFirstBlood) {
         this.sawFirstBlood = true;
         this.announce('First blood');
-        announceVoice('First blood', true);
+        announceVoice('first_blood', true);
       }
       if (k.unitId === this.selfId) {
         playSfx('death');
-        announceVoice('You have been slain', true, true);
+        announceVoice('self_slain', true, true);
         // Death recap: who did it, and who helped inside the assist window
         // (recentDamagers is live offline; online it may be empty).
         const killerRow2 = rowOf(k.killerId);
@@ -1426,12 +1426,12 @@ export class Hud {
         // is all it calls; the kill feed and the center text carry the name.
         announceVoice(
           this.killChain >= 4
-            ? 'Rampage'
+            ? 'rampage'
             : this.killChain === 3
-              ? 'Triple kill'
+              ? 'triple_kill'
               : this.killChain === 2
-                ? 'Double kill'
-                : 'You have slain an enemy',
+                ? 'double_kill'
+                : 'self_kill',
           true,
           true,
         );
@@ -1439,9 +1439,9 @@ export class Hud {
         // An enemy vanishing off the screen is ambiguous: dead, or escaped
         // into the fog? The voice settles it even when the takedown was a
         // teammate's, which is the whole point of calling it.
-        announceVoice('An enemy has been slain', false, true);
+        announceVoice('enemy_slain', false, true);
       } else {
-        announceVoice('An ally has been slain', false, true);
+        announceVoice('ally_slain', false, true);
       }
       const killerRow = rowOf(k.killerId);
       let killerName = killerRow ? who(killerRow) : 'The lane';
@@ -1493,14 +1493,14 @@ export class Hud {
       } else {
         this.sawBattleBegin = true;
         this.announce('Battle begins');
-        announceVoice('Minions have spawned');
+        announceVoice('minions_spawned');
       }
     }
     const towerCount = [...this.world.units.values()].filter((x) => x.kind === 'tower').length;
     if (this.lastTowerCount !== null && towerCount < this.lastTowerCount) {
       this.announce('A tower has fallen');
       playSfx('tower');
-      announceVoice('A tower has fallen');
+      announceVoice('tower_fallen');
     }
     this.lastTowerCount = towerCount;
 
@@ -1524,18 +1524,18 @@ export class Hud {
       if (wardenUp) {
         this.announce('The Warden has awoken', '#d8a6f5');
         playSfx('tower');
-        announceVoice('The Warden has awoken', true);
+        announceVoice('warden_awoken', true);
       } else if (mineBoon && mineBoon.until > this.lastBoonMineUntil) {
         // Whoever's expiry jumped forward this frame made the kill; the old
         // heuristic (mine still long-lived) misread a refreshed own Boon as
         // OUR claim when the enemy took the pit.
         this.announce("Your team claims the Warden's Boon", '#ffd94a');
         playSfx('levelup');
-        announceVoice('Your team has claimed the Boon', true);
+        announceVoice('boon_ours', true);
       } else {
         this.announce("The enemy claims the Warden's Boon", '#f5a3a3');
         playSfx('deny');
-        announceVoice('The enemy has claimed the Boon', true);
+        announceVoice('boon_theirs', true);
       }
     }
     this.lastWardenUp = wardenUp;
@@ -1775,7 +1775,7 @@ export class Hud {
     if (winner !== null && !this.endPlayed) {
       this.endPlayed = true;
       playSfx(winner === this.selfTeam ? 'victory' : 'defeat');
-      announceVoice(winner === this.selfTeam ? 'Victory' : 'Defeat', true);
+      announceVoice(winner === this.selfTeam ? 'victory' : 'defeat', true);
       this.endTitle.textContent = winner === this.selfTeam ? 'VICTORY' : 'DEFEAT';
       this.endTitle.style.color = winner === this.selfTeam ? '#8fd06a' : '#d06a6a';
       const total = Math.max(0, Math.floor(this.world.time));
