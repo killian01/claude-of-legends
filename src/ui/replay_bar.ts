@@ -9,11 +9,22 @@
 // src/main.ts owns the clock, the seeking and the checkpoints
 // (src/game/replay_cursor.ts) and reports through setTime.
 //
-// It sits above the ability bar: the top center belongs to the team score,
-// the target frame and the announcements.
+// It sits just above the HUD's own bottom block, measured rather than
+// guessed (replay_bar_place.ts): a fixed height landed on the champion's
+// health and gold. The top center belongs to the team score, the target
+// frame and the announcements. Nobody's default fits every screen, so the
+// badge is a drag handle, H collapses the bar to that handle, and both
+// choices are remembered.
 
 import type { ReplayMark } from '../game/replay_marks';
 import { DT } from '../sim/types';
+import {
+  clampToView,
+  dockedBottom,
+  type Placement,
+  readPrefs,
+  writePrefs,
+} from './replay_bar_place';
 
 const CSS = `
 .replay-bar {
@@ -22,8 +33,20 @@ const CSS = `
   background: rgba(10, 15, 7, 0.88); border: 1px solid #6b5a2e; border-radius: 8px;
   padding: 6px 10px; pointer-events: auto; font-family: system-ui, sans-serif;
 }
+/* Moved by hand: pinned by its top left corner, and the centering
+   transform has to go with the centering. */
+.replay-bar.moved { left: auto; right: auto; bottom: auto; transform: none; }
+/* Collapsed: the handle, the clock and the way back, nothing else. A
+   replay you cannot see is not a replay. */
+.replay-bar.collapsed { width: auto; }
+.replay-bar.collapsed .replay-hideable { display: none; }
+.replay-bar.dragging { opacity: 0.85; }
 .replay-row { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
-.replay-badge { color: #c9a84a; font-weight: 800; font-size: 12px; letter-spacing: 2px; margin-right: 4px; }
+.replay-badge {
+  color: #c9a84a; font-weight: 800; font-size: 12px; letter-spacing: 2px; margin-right: 4px;
+  cursor: grab; touch-action: none; user-select: none;
+}
+.replay-bar.dragging .replay-badge { cursor: grabbing; }
 .replay-btn {
   padding: 5px 9px; border-radius: 6px; border: 1px solid #466030;
   background: #1d2a14; color: #d8e6c0; font-size: 12px; font-weight: 600; cursor: pointer;
@@ -69,6 +92,17 @@ const CSS = `
 .replay-tip .t { color: #c9a84a; font-weight: 700; }
 .replay-keys { color: #7f9a68; font-size: 10.5px; margin-left: 6px; }
 `;
+
+// Where the bar's own placement is remembered, per browser.
+const PREFS_KEY = 'loc.replayBar';
+
+function safeRead(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
 
 let cssInstalled = false;
 function ensureCss(): void {
@@ -145,13 +179,18 @@ export function buildReplayBar(opts: {
   const badge = document.createElement('span');
   badge.className = 'replay-badge';
   badge.textContent = 'REPLAY';
+  badge.title = 'Drag to move the bar; double-click to put it back. H hides it.';
   row.appendChild(badge);
 
   let current = 0;
   let speedNow = 1;
+  // Where the viewer last put the bar, and whether they folded it.
+  const prefs = readPrefs(safeRead(PREFS_KEY));
+  let moved: Placement | null = prefs.at ?? null;
+  let collapsed = prefs.collapsed ?? false;
   const btn = (label: string, title: string, onClick: () => void): HTMLButtonElement => {
     const b = document.createElement('button');
-    b.className = 'replay-btn';
+    b.className = 'replay-btn replay-hideable';
     b.textContent = label;
     b.title = title;
     b.addEventListener('click', onClick);
@@ -160,7 +199,7 @@ export function buildReplayBar(opts: {
   };
   const sep = (): void => {
     const s = document.createElement('span');
-    s.className = 'replay-sep';
+    s.className = 'replay-sep replay-hideable';
     row.appendChild(s);
   };
   const speedBtns = new Map<number, HTMLButtonElement>();
@@ -201,7 +240,7 @@ export function buildReplayBar(opts: {
   row.appendChild(time);
 
   const goto = document.createElement('input');
-  goto.className = 'replay-goto';
+  goto.className = 'replay-goto replay-hideable';
   goto.placeholder = 'm:ss';
   goto.title = 'Jump to a time (m:ss), Enter to go';
   goto.maxLength = 7;
@@ -218,19 +257,27 @@ export function buildReplayBar(opts: {
   });
   row.appendChild(goto);
   const keys = document.createElement('span');
-  keys.className = 'replay-keys';
-  keys.textContent = 'J K L, arrows, comma and period';
+  keys.className = 'replay-keys replay-hideable';
+  keys.textContent = 'J K L, arrows, comma and period, H hides';
   keys.title =
     'J plays backward, K pauses, L plays forward (again for faster); arrows step five ' +
-    'seconds (shift: thirty); comma and period step one tick while paused; space pauses';
+    'seconds (shift: thirty); comma and period step one tick while paused; space pauses; ' +
+    'H hides the bar down to its handle';
   row.appendChild(keys);
 
   const exit = btn('Exit replay', 'Leave the replay', opts.onExit);
   exit.classList.add('replay-exit');
+  // The way out stays whatever is folded away: nobody should have to
+  // unfold the bar to leave the replay.
+  exit.classList.remove('replay-hideable');
+  // The one control that stays whatever else is folded away: a hidden
+  // bar must be able to come back.
+  const fold = btn('', 'Hide the controls (H)', () => setCollapsed(!collapsed));
+  fold.classList.remove('replay-hideable');
   bar.appendChild(row);
 
   const slider = document.createElement('input');
-  slider.className = 'replay-slider';
+  slider.className = 'replay-slider replay-hideable';
   slider.type = 'range';
   slider.min = '0';
   slider.max = String(Math.max(1, opts.ticks));
@@ -254,7 +301,7 @@ export function buildReplayBar(opts: {
 
   // The marks strip: one slice per ten seconds of match.
   const track = document.createElement('div');
-  track.className = 'replay-track';
+  track.className = 'replay-track replay-hideable';
   const covered = document.createElement('div');
   covered.className = 'replay-covered';
   const slices = document.createElement('div');
@@ -336,6 +383,103 @@ export function buildReplayBar(opts: {
     });
   };
 
+  // --- where the bar sits (replay_bar_place.ts) -------------------------
+
+  // The default: measured against the HUD's own bottom block, so the bar
+  // never lands on the champion's health, mana or gold whatever the
+  // screen. Re-measured on resize, until the viewer moves it themselves.
+  const dock = (): void => {
+    if (moved) return;
+    const hud = document.querySelector('.hud-bottom');
+    const height = hud instanceof HTMLElement ? hud.getBoundingClientRect().height : 0;
+    bar.style.bottom = `${dockedBottom(height)}px`;
+  };
+
+  const store = (): void => {
+    try {
+      localStorage.setItem(
+        PREFS_KEY,
+        writePrefs({ ...(moved ? { at: moved } : {}), ...(collapsed ? { collapsed } : {}) }),
+      );
+    } catch {
+      // A browser that refuses storage still gets the bar, just not the
+      // memory of where it was put.
+    }
+  };
+
+  // Put the bar back where it was left, brought inside the window in case
+  // it has shrunk since.
+  const applyMoved = (): void => {
+    if (!moved) {
+      bar.classList.remove('moved');
+      dock();
+      return;
+    }
+    const view = bar.parentElement?.getBoundingClientRect();
+    const rect = bar.getBoundingClientRect();
+    const at = clampToView(
+      moved,
+      { w: rect.width, h: rect.height },
+      { w: view?.width ?? window.innerWidth, h: view?.height ?? window.innerHeight },
+    );
+    moved = at;
+    bar.classList.add('moved');
+    // The docked placement is an inline `bottom`, which would fight an
+    // inline `top` and stretch the bar between the two: it goes first.
+    bar.style.bottom = '';
+    bar.style.left = `${at.x}px`;
+    bar.style.top = `${at.y}px`;
+  };
+
+  const setCollapsed = (on: boolean): void => {
+    collapsed = on;
+    bar.classList.toggle('collapsed', on);
+    fold.textContent = on ? 'Show' : 'Hide';
+    fold.title = on ? 'Show the controls (H)' : 'Hide the controls (H)';
+    // Folding changes the bar's height, so a docked bar re-measures and a
+    // moved one is brought back inside the window.
+    applyMoved();
+    store();
+  };
+
+  // Dragged by its badge, pointer events so a touch screen can do it too.
+  badge.addEventListener('pointerdown', (e) => {
+    const rect = bar.getBoundingClientRect();
+    const view = bar.parentElement?.getBoundingClientRect();
+    const offX = e.clientX - rect.left;
+    const offY = e.clientY - rect.top;
+    const originX = view?.left ?? 0;
+    const originY = view?.top ?? 0;
+    badge.setPointerCapture(e.pointerId);
+    bar.classList.add('dragging');
+    const move = (m: PointerEvent): void => {
+      moved = { x: m.clientX - originX - offX, y: m.clientY - originY - offY };
+      applyMoved();
+    };
+    const up = (): void => {
+      bar.classList.remove('dragging');
+      badge.removeEventListener('pointermove', move);
+      badge.removeEventListener('pointerup', up);
+      store();
+    };
+    badge.addEventListener('pointermove', move);
+    badge.addEventListener('pointerup', up);
+    e.preventDefault();
+  });
+  // Lost it? Double-click the badge and it goes home.
+  badge.addEventListener('dblclick', () => {
+    moved = null;
+    bar.classList.remove('moved');
+    bar.style.left = '';
+    bar.style.top = '';
+    dock();
+    store();
+  });
+  const onResize = (): void => {
+    applyMoved();
+  };
+  window.addEventListener('resize', onResize);
+
   // The keys, ahead of the match's own input layer (space recenters the
   // camera there; in a replay it pauses). Typing anywhere is left alone.
   const onKey = (e: KeyboardEvent): void => {
@@ -363,6 +507,10 @@ export function buildReplayBar(opts: {
       case 'ArrowRight':
         opts.onSeek(current + long * TICKS_PER_S);
         break;
+      case 'h':
+      case 'H':
+        setCollapsed(!collapsed);
+        break;
       case ',':
         if (speedNow === 0) opts.onStep(-1);
         break;
@@ -389,6 +537,12 @@ export function buildReplayBar(opts: {
     time.title = seeking ? 'Stepping the match to that time' : '';
   };
   setTime(0, false);
+  // The bar is measured once it is in the document: the caller appends it
+  // right after this returns, so the first placement waits a frame.
+  requestAnimationFrame(() => {
+    setCollapsed(collapsed);
+    applyMoved();
+  });
   return {
     el: bar,
     setTime,
@@ -399,6 +553,7 @@ export function buildReplayBar(opts: {
     },
     dispose: () => {
       window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('resize', onResize);
       hideTip();
       bar.remove();
     },

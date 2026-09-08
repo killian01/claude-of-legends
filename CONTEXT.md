@@ -648,6 +648,15 @@ oldest leaving first. The tally of won and lost is the record in the sports sens
 one kind at a time so rated play is never blended with the sparring behind it.
 _Avoid_: history, match log, ledger, and "record" for a stored replay (that is a replay)
 
+**Replay bar**:
+The replay's own controls: the badge, the speeds, the clock, the scrub track and the marks.
+It rides just above the HUD's bottom block, measured rather than guessed, so it never lands
+on the champion's health, mana or gold; it is dragged by its badge to anywhere else, folded
+to its handle with H (the clock and the way out stay), and both choices are remembered per
+browser. Dragged out of reach or left behind by a smaller window, it comes back inside on
+the next open, and a double-click on the badge puts it home.
+_Avoid_: timeline, scrubber, seek bar
+
 **Replay**:
 A match played again rather than filmed: the record keeps the seed, the picks (a bot's
 playbook embedded whole) and the commands, and the viewer rebuilds the sim and runs it. A
