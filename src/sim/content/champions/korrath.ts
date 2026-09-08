@@ -48,14 +48,17 @@ export const KORRATH: ChampionDef = {
       name: 'Shield Slam',
       manaCost: 35,
       cooldown: 4.5,
-      castRange: 4,
+      castRange: 5,
       // Instant heavy cone: the slam telegraphs before it lands. Widened
       // and lengthened after the v2 playtest: the old sweep felt like a
-      // dagger on a champion this size.
+      // dagger on a champion this size. Lengthened again by the reach
+      // pass: his body is 0.75 across and a victim's 0.65, so a cone of 4
+      // covered barely two and a half units of open ground past contact.
+      // At 5 the slam takes a scrum instead of whoever is touching him.
       windup: 0.3,
       spec: {
         kind: 'cone',
-        range: 4,
+        range: 5,
         halfAngle: Math.PI / 3,
         onHit: [
           { kind: 'damage', base: 95, adRatio: 0.4, dtype: 'physical' },
@@ -69,7 +72,10 @@ export const KORRATH: ChampionDef = {
       name: 'Iron Wall',
       manaCost: 45,
       cooldown: 11,
-      castRange: 7,
+      // Placed as far as the grip reaches (8), because wall-then-grip is
+      // the combo: at 7 the stone landed short of the only spot that
+      // makes the grip stun, and the two halves of one kit disagreed.
+      castRange: 8,
       spec: { kind: 'wall', length: 4, duration: 6 },
     },
     E: {
@@ -102,13 +108,15 @@ export const KORRATH: ChampionDef = {
       name: 'Earthbreak',
       manaCost: 85,
       cooldown: 67.5,
-      castRange: 6.5,
+      castRange: 7,
       windup: 0.4,
       // A true leap with air time and a telegraphed landing: the epicenter
-      // sends enemies airborne, the rim only slows. Aim is the skill.
+      // sends enemies airborne, the rim only slows. Aim is the skill. The
+      // leap is the tank's whole engage, so it clears a ranged champion's
+      // attack range with the telegraph already spent.
       spec: {
         kind: 'dash',
-        range: 6.5,
+        range: 7,
         speed: 14,
         landRadius: 3,
         onLand: [

@@ -49,12 +49,16 @@ export const ASHVYN: ChampionDef = {
       name: 'Shadow Volley',
       manaCost: 40,
       cooldown: 5.5,
-      castRange: 5.5,
+      castRange: 7,
       // Instant scaling cone: the draw telegraphs before the volley flies.
+      // Reach pass: at 5.5 the volley landed SHORTER than his own bow
+      // (5.9), so there was never a moment to cast it that an attack did
+      // not already cover. At the engine's cone rail it is what it reads
+      // as, a point-blank shotgun that opens a trade.
       windup: 0.25,
       spec: {
         kind: 'cone',
-        range: 5.5,
+        range: 7,
         halfAngle: Math.PI / 6,
         onHit: [{ kind: 'damage', base: 62, adRatio: 1.33, dtype: 'physical' }],
       },
@@ -63,10 +67,14 @@ export const ASHVYN: ChampionDef = {
       name: "Hunter's Step",
       manaCost: 35,
       cooldown: 7,
-      castRange: 3.5,
+      // The step the blurb promises ("weaves in and out of range"): 3.5
+      // was under his own body plus a champion's, so it bought no time at
+      // all. Five costs a melee champion a second approach without undoing
+      // its engage outright, which would be the other mistake.
+      castRange: 5,
       spec: {
         kind: 'dash',
-        range: 3.5,
+        range: 5,
         speed: 16,
         selfEffects: [{ kind: 'buff', duration: 2.5, asPct: 0.4 }],
       },
@@ -75,19 +83,21 @@ export const ASHVYN: ChampionDef = {
       name: 'Pinning Arrow',
       manaCost: 45,
       cooldown: 8.5,
-      castRange: 9,
+      castRange: 10,
       // The roster promise, delivered: a long flight pins (root), a
       // point-blank shot only slows. Max-range picks, not melee spam.
       spec: {
         kind: 'skillshot',
         speed: 26,
         radius: 0.55,
-        range: 9,
+        range: 10,
         onHit: [
           { kind: 'damage', base: 53, adRatio: 0.95, dtype: 'physical' },
           {
             kind: 'conditional',
-            when: { kind: 'distanceAtLeast', distance: 5.4 },
+            // Six tenths of the flight, held there as the arrow got
+            // longer: the root stays the reward for the far shot.
+            when: { kind: 'distanceAtLeast', distance: 6 },
             effects: [{ kind: 'root', duration: 1.0 }],
             otherwise: [{ kind: 'slow', pct: 0.4, duration: 1 }],
           },
@@ -98,12 +108,14 @@ export const ASHVYN: ChampionDef = {
       name: 'Eclipse Rain',
       manaCost: 85,
       cooldown: 64,
-      castRange: 9,
+      castRange: 10,
       // Brush and stealth offer no cover under the eclipse: the zone
-      // reveals everything inside for its duration.
+      // reveals everything inside for its duration. It was the smallest
+      // ultimate zone on the roster and cast from the shortest distance,
+      // which is the wrong pair for the squishiest body that owns one.
       spec: {
         kind: 'zone',
-        radius: 4.5,
+        radius: 5.2,
         duration: 3,
         tickEvery: 0.5,
         reveal: true,

@@ -33,6 +33,7 @@
       "!**/dist-env",
       "!**/dist-gate*",
       "!**/dist-matrix",
+      "!**/dist-champions*",
       "!**/node_modules",
       "!**/.pnpm-store",
       "!**/public/vendor"

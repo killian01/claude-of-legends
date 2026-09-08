@@ -98,12 +98,15 @@ export const RHOKA: ChampionDef = {
       name: 'Pounce',
       manaCost: 40,
       cooldown: 5.5,
-      castRange: 5,
+      // Six, not five: a skirmisher who cannot re-enter after a step back
+      // is a melee champion with extra steps, and every ranged body on the
+      // roster attacks from 5.75 or more.
+      castRange: 6,
       // Seed wounds, then pounce again and again: landing on bleeding prey
       // refunds most of the cooldown.
       spec: {
         kind: 'dash',
-        range: 5,
+        range: 6,
         speed: 18,
         landRadius: 2,
         onLand: [
@@ -121,11 +124,13 @@ export const RHOKA: ChampionDef = {
       manaCost: 45,
       cooldown: 6,
       castRange: 0,
-      // Instant heavy burst: the sweep telegraphs before it lands.
+      // Instant heavy burst: the sweep telegraphs before it lands. The
+      // sweep is centered on him, so its radius IS its reach: at 2.4 it
+      // barely cleared his own body and one enemy's.
       windup: 0.3,
       spec: {
         kind: 'burst',
-        radius: 2.4,
+        radius: 3,
         effects: [{ kind: 'damage', base: 79, adRatio: 1.33, dtype: 'physical' }],
       },
     },
@@ -134,9 +139,11 @@ export const RHOKA: ChampionDef = {
       manaCost: 40,
       cooldown: 8.5,
       castRange: 0,
+      // The howl is how he keeps prey from walking away, so it has to
+      // reach past the step that leaves him.
       spec: {
         kind: 'burst',
-        radius: 3,
+        radius: 3.6,
         effects: [{ kind: 'slow', pct: 0.3, duration: 1.5 }],
         selfEffects: [{ kind: 'buff', duration: 3, asPct: 0.45 }],
       },

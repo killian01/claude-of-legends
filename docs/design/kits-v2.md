@@ -9,6 +9,19 @@ playtest passes: Korrath's Iron Wall cooldown is 11 s, not 14 (pacing gate), and
 lasts 6 s, not 2.5; Dain's Q reaches 7 and resets outright on a punch kill, and Emberfall is
 radius 6 with a 1.3 s fuse; Torv's Faultline no longer leaves a wall (principle 7 below): the
 fissure erupts a second time instead (the aftershock, seeded as delayed-detonation zones).
+The reach pass (2026-09-08) followed those playtest passes and is the last deviation: the v2
+passes had lengthened Dain's punch to 7 and doubled Emberfall across without touching the
+champions beside them, so the roster's reaches had stopped being a band. Measured against the
+Kit envelope (`scripts/champion_matrix.mjs` for the win rates, `src/sim/forge/budget.ts` for
+the bill), the fixes were Ashvyn's Shadow Volley 5.5 to 7 (it reached less far than his own
+bow), his step 3.5 to 5, his arrow 9 to 10 and Eclipse Rain to radius 5.2 at 10; Rhoka's
+Pounce 5 to 6 with Savage Sweep 2.4 to 3 and Primal Howl 3 to 3.6; Elowen's Veil 8 to 8.5 and
+Drifting Step 4 to 5; Korrath's Shield Slam 4 to 5, Iron Wall 7 to 8 (level with the grip it
+combos into) and Earthbreak 6.5 to 7; Fenn's Lunge 5 to 7 (level with Dain's punch) and
+Shadow Flurry 5.5 to 6.5; Torv's Horn Charge 5.5 to 6. Every one is paid out of that
+champion's own unspent Kit envelope, and none of them approaches Dain, who defines the
+ceiling at 812 points of 820. The floors are written down in `tests/champion_reach.test.ts`
+so the next pass cannot quietly leave a champion behind.
 The bots-v2 predictive aim, CC awareness, brush pursuit, and tower discipline are implemented
 via additive v0 observation fields (unit velocity, visible statuses, last-seen memory; see
 `src/sim/policy.ts`).

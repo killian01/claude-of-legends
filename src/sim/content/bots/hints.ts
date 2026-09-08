@@ -61,8 +61,12 @@ export const BOT_HINTS: Record<string, ChampionHints> = {
   },
   ashvyn: {
     keys: { Q: 'poke', W: 'steroid', E: 'poke' },
-    minRange: { E: 5.4 },
-    ult: { minEnemies: 2, radius: 5 },
+    // Six, which is where Pinning Arrow starts rooting instead of slowing.
+    // This number is the champion's own conditional, not a taste: the reach
+    // pass moved the arrow to 10 and the threshold with it, and a bot that
+    // fired at 5.4 would be spending the pin for a slow.
+    minRange: { E: 6 },
+    ult: { minEnemies: 2, radius: 5.2 },
   },
   maera: {
     keys: { Q: 'poke', W: 'heal', E: 'poke' },
