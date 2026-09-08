@@ -193,9 +193,10 @@ the truth everyone ends up touching. Every bot starts as the Laner on its champi
 
 Making a bot is a way through five steps, each a page of the same bot, in the order the
 questions come: the bot itself (a name, a champion from the collection as cards, two sigils
-that say what they do, a skin), its kit, its playbook with the coach beside it, sparring
-with its Record, then play (the Ranked switch, the Arena's play now, the live queue, the
-Briefing). A bar across the top names the five with one line each of what the bot has
+that say what they do, a skin), its kit, its playbook, sparring with its Record, then play
+(the Ranked switch, the Arena's play now, the live queue, the Briefing). The coach stands
+beside the kit, the playbook and the sparring: its operations reach the kit and the lane as
+well as the plays, and the sparring is what an answer is judged on. A bar across the top names the five with one line each of what the bot has
 there, so the whole bot reads at a glance; Back and Next at the foot walk them in order,
 and the bar jumps anywhere. A bot not made yet has one step open, the first, drawn in
 the main column with the room the rail never had; Create lands on the kit. The steps

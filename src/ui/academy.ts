@@ -814,10 +814,12 @@ export function openAcademy(container: HTMLElement, opts: AcademyOptions = {}): 
     syncSide();
   }
 
-  // The coach stands beside the playbook and the sparring, the two steps
-  // that read its answer; the other steps take the whole width.
+  // The coach stands beside the kit, the playbook and the sparring: its
+  // operations reach the kit and the lanes as well as the plays, and the
+  // sparring is what an answer is judged on. The bot and play steps take
+  // the whole width.
   const sideWanted = (): boolean =>
-    current !== null && !creating && (step === 'playbook' || step === 'spar');
+    current !== null && !creating && (step === 'kit' || step === 'playbook' || step === 'spar');
   function syncSide(): void {
     side.style.display = sideWanted() && !recordOpen ? '' : 'none';
   }
@@ -1933,9 +1935,9 @@ export function openAcademy(container: HTMLElement, opts: AcademyOptions = {}): 
         'p',
         'ac-lead',
         'Say how the bot should play ("safer under towers", "take every Warden", "farm ' +
-          'until level six, then fight"). Each answer edits the play list as it streams; ' +
-          'nothing is saved until you press Save. The conversation stays with the bot, ' +
-          'session after session.',
+          'until level six, then fight", "a tankier build, and max W first"). Each answer ' +
+          'edits the plays, the kit and the lane as it streams; nothing is saved until you ' +
+          'press Save. The conversation stays with the bot, session after session.',
       ),
     );
     const log = el('div', 'ac-chatlog');

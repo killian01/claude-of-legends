@@ -1,6 +1,6 @@
 // The Academy's steps (CONTEXT.md: Academy): making a bot in order, one
 // thing at a time, each step a page of the same bot. The bot itself, then
-// its kit, then its playbook with the coach beside it, then sparring, then
+// its kit and its playbook with the coach beside both, then sparring, then
 // sending it to play. Pure data and pure functions, no DOM, so what each
 // step says of a bot is pinned by tests; ui/academy.ts draws them.
 //
@@ -26,7 +26,7 @@ export const STEPS: readonly Step[] = [
   {
     id: 'kit',
     label: 'The kit',
-    lead: 'What it works toward: the build it buys, the spell it maxes first, the lane it asks for.',
+    lead: 'What it works toward: the build it buys, the spell it maxes first, the lane it asks for. The coach can change these too.',
   },
   {
     id: 'playbook',

@@ -623,8 +623,8 @@ _Avoid_: command, directive, ping (the order rides on one, it is not one)
 The in-game place where an account writes and tests a bot: the conversation that edits the
 playbook as patches, the play list beside it, and local sparring at full speed. An account
 feature. Making a bot there is a way through five steps, each a page of the same bot: the bot
-itself, its kit, its playbook with the coach beside it, sparring, then play; a bar across the
-top jumps between them and Back and Next at the foot walk them in order.
+itself, its kit and its playbook with the coach beside both, sparring, then play; a bar across
+the top jumps between them and Back and Next at the foot walk them in order.
 _Avoid_: bot editor, bot forge, workshop, trainer, wizard (for the steps), tab (for a step)
 
 **Ranked**:
