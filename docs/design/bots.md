@@ -248,7 +248,13 @@ viewer and ships a checkpoint every ten seconds of match time. Any tick is then 
 nearest checkpoint restored plus at most ten seconds stepped, forward or back, about a
 tenth of a second; reverse playback walks a denser ring of snapshots built on demand
 around the current window. Until the worker has covered a tick, a backward seek falls
-back to rebuilding from the start. The first playtest of the viewer had every backward
+back to rebuilding from the start. A checkpoint carries every container but the policies,
+which are functions; in a match whose seats changed hands (a disconnect handing a seat to
+a bot, a rejoin taking it back) each restore puts them back from the record, in the order
+they were attached live, so the right hands drive every seat on both sides of the seek
+(`restorePolicies` in `src/net/replay.ts`). The arithmetic under all of this is exact on
+every engine (ADR 0019), which is what lets a match recorded on the server play out the
+same in any browser. The first playtest of the viewer had every backward
 seek rebuild from tick zero with the slider crawling back up: the checkpoint is what
 turned "find the fight, stop, move a few seconds" into a gesture.
 

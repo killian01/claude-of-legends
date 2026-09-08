@@ -4,6 +4,7 @@
 // cast time so a projectile in flight stays deterministic even if the caster
 // dies before impact.
 
+import { hypot } from '../exact';
 import type { DamageVia } from '../passive_types';
 import { passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
@@ -11,6 +12,21 @@ import type { AbilityKey, DamageType, Vec2 } from '../types';
 import type { Unit } from '../unit';
 import { dealDamage } from './damage';
 import { addMarkStack, addStatus, clearMarks, healFactor, isRooted, slowPct } from './status';
+
+// The eight compass directions as unit vectors, every 45 degrees: the
+// constants are exact, where the engine's cosine of a multiple of PI/4
+// is not (src/sim/exact.ts).
+const D = Math.SQRT1_2;
+const TERRAIN_RING: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [D, D],
+  [0, 1],
+  [-D, D],
+  [-1, 0],
+  [-D, -D],
+  [0, -1],
+  [D, -D],
+];
 
 export interface Power {
   ad: number;
@@ -72,7 +88,7 @@ export function evaluatePredicate(
       for (const u of ctx.units.values()) {
         if (u.id === target.id || u.dead || ctx.dead.has(u.id)) continue;
         if (u.kind !== 'champion' || u.neutral || u.team !== target.team) continue;
-        if (Math.hypot(u.pos.x - target.pos.x, u.pos.z - target.pos.z) <= p.radius) return false;
+        if (hypot(u.pos.x - target.pos.x, u.pos.z - target.pos.z) <= p.radius) return false;
       }
       return true;
     }
@@ -81,10 +97,9 @@ export function evaluatePredicate(
     case 'targetNearTerrain': {
       // Eight-direction sample ring: cheap, deterministic, and honest about
       // both map terrain and ability walls (walls block NavGrid cells).
-      for (let i = 0; i < 8; i++) {
-        const a = (i * Math.PI) / 4;
-        const x = target.pos.x + Math.cos(a) * p.distance;
-        const z = target.pos.z + Math.sin(a) * p.distance;
+      for (const [ux, uz] of TERRAIN_RING) {
+        const x = target.pos.x + ux * p.distance;
+        const z = target.pos.z + uz * p.distance;
         if (!ctx.nav.isWalkableAt(x, z)) return true;
       }
       return false;
@@ -97,7 +112,7 @@ export function evaluatePredicate(
       );
     case 'withinCenter': {
       if (!fx.center) return false;
-      const d = Math.hypot(target.pos.x - fx.center.x, target.pos.z - fx.center.z);
+      const d = hypot(target.pos.x - fx.center.x, target.pos.z - fx.center.z);
       return d <= p.radius + target.radius;
     }
   }
@@ -176,7 +191,7 @@ export type EffectSpec =
 
 // Displaces a unit along dir by up to `distance`, clamped to walkable ground.
 function displace(ctx: CombatCtx, target: Unit, dx: number, dz: number, distance: number): void {
-  const len = Math.hypot(dx, dz);
+  const len = hypot(dx, dz);
   if (len === 0 || target.moveSpeed <= 0) return;
   const dest = {
     x: target.pos.x + (dx / len) * distance,
@@ -296,7 +311,7 @@ export function applyEffects(
         if (!source) break;
         const dx = source.pos.x - target.pos.x;
         const dz = source.pos.z - target.pos.z;
-        const gap = Math.hypot(dx, dz);
+        const gap = hypot(dx, dz);
         const travel = Math.min(spec.distance, Math.max(0, gap - 1));
         if (travel > 0) displace(ctx, target, dx, dz, travel);
         break;

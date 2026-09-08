@@ -3,6 +3,7 @@
 // community contribution. Today every registered bot is a house style
 // (house.ts); a bot that is not one is appended here, not there.
 
+import type { Policy } from '../../policy';
 import type { Sim } from '../../sim';
 import { HOUSE_STYLES } from './house';
 import { type BotDef, LANER } from './laner';
@@ -24,4 +25,13 @@ export function attachBot(sim: Sim, unitId: number, botId: string | undefined): 
   if (!def) return;
   if (def.playbook) sim.attachPlaybook(unitId, def.playbook);
   else sim.attachPolicy(unitId, def.policy);
+}
+
+// The bot's Policy alone, with the same fallback, and none of the seating
+// attachBot does: what a replay puts back on a seat after a checkpoint
+// restore (src/net/replay.ts, restorePolicies).
+export function botPolicy(sim: Sim, botId: string | undefined): Policy | null {
+  const def = (botId !== undefined ? BOTS[botId] : undefined) ?? BOTS[DEFAULT_BOT_ID];
+  if (!def) return null;
+  return def.playbook ? sim.policyForPlaybook(def.playbook) : def.policy;
 }

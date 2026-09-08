@@ -7,6 +7,7 @@
 import { GOTO_DONE_RADIUS } from '../coach';
 import { CHAMPIONS, type ChampionRole } from '../content/champions';
 import { GAME_MAP } from '../content/map';
+import { hypot } from '../exact';
 import type { Action, ObsUnit } from '../policy';
 import { nextKitStep } from './kit';
 import {
@@ -112,11 +113,9 @@ function retreat(ctx: SlotContext): Action {
   const { s, obs, hints, fountain } = ctx;
   const chaser =
     obs.units.some(
-      (u) => !u.friendly && u.kind === 'champion' && Math.hypot(u.x - s.x, u.z - s.z) <= 6,
+      (u) => !u.friendly && u.kind === 'champion' && hypot(u.x - s.x, u.z - s.z) <= 6,
     ) ||
-    (obs.lastSeen ?? []).some(
-      (ls) => obs.time - ls.at <= 2 && Math.hypot(ls.x - s.x, ls.z - s.z) <= 6,
-    );
+    (obs.lastSeen ?? []).some((ls) => obs.time - ls.at <= 2 && hypot(ls.x - s.x, ls.z - s.z) <= 6);
   if (chaser) {
     const escapeKey = (['Q', 'W', 'E'] as const).find(
       (k) => hints.keys[k] === 'escape' && s.abilityReady[k],
@@ -198,11 +197,11 @@ function avoidTower(ctx: SlotContext, escortMin: number, hpBelow: number): Actio
   // (playtest round 2: the fixed 8 toward home could stay under the gun in
   // the bent side lanes, or even walk closer).
   const dt = dist(s.x, s.z, dangerTower);
-  const la = Math.hypot(s.x - dangerTower.x, s.z - dangerTower.z) || 1;
-  const lh = Math.hypot(fountain.x - s.x, fountain.z - s.z) || 1;
+  const la = hypot(s.x - dangerTower.x, s.z - dangerTower.z) || 1;
+  const lh = hypot(fountain.x - s.x, fountain.z - s.z) || 1;
   const dirX = (s.x - dangerTower.x) / la + (fountain.x - s.x) / lh;
   const dirZ = (s.z - dangerTower.z) / la + (fountain.z - s.z) / lh;
-  const ld = Math.hypot(dirX, dirZ) || 1;
+  const ld = hypot(dirX, dirZ) || 1;
   const step = TOWER_DANGER_RANGE - dt + 2.5;
   return { kind: 'move', x: s.x + (dirX / ld) * step, z: s.z + (dirZ / ld) * step };
 }
@@ -364,7 +363,7 @@ function hunt(ctx: SlotContext, hpAbove: number): Action | null {
     (ls) =>
       ls.hpFrac < KILL_SECURE_HP_FRAC &&
       obs.time - ls.at <= 3 &&
-      Math.hypot(ls.x - s.x, ls.z - s.z) <= 12 &&
+      hypot(ls.x - s.x, ls.z - s.z) <= 12 &&
       !ctx.inTowerReach(ls.x, ls.z),
   );
   return prey ? { kind: 'move', x: prey.x, z: prey.z } : null;
@@ -378,7 +377,7 @@ function answerVanish(ctx: SlotContext, hpAtLeast: number): Action | null {
   const { s, obs } = ctx;
   if (ctx.champ) return null;
   const vanished = (obs.lastSeen ?? []).find(
-    (ls) => obs.time - ls.at <= 2.5 && Math.hypot(ls.x - s.x, ls.z - s.z) <= 9,
+    (ls) => obs.time - ls.at <= 2.5 && hypot(ls.x - s.x, ls.z - s.z) <= 9,
   );
   if (!vanished) return null;
   if (s.hpFrac >= hpAtLeast && !ctx.inTowerReach(vanished.x, vanished.z)) {
@@ -408,9 +407,9 @@ function contestWarden(ctx: SlotContext, hpAtLeast: number, prepSeconds: number)
     if (untilSpawn >= 0 && untilSpawn <= prepSeconds) {
       let pit = GAME_MAP.wardenPits[0]!;
       for (const p of GAME_MAP.wardenPits) {
-        if (Math.hypot(p.x - s.x, p.z - s.z) < Math.hypot(pit.x - s.x, pit.z - s.z)) pit = p;
+        if (hypot(p.x - s.x, p.z - s.z) < hypot(pit.x - s.x, pit.z - s.z)) pit = p;
       }
-      const dp = Math.hypot(pit.x - s.x, pit.z - s.z);
+      const dp = hypot(pit.x - s.x, pit.z - s.z);
       if (dp <= 6) return { kind: 'noop' };
       if (dp <= WARDEN_PREP_RANGE) return { kind: 'move', x: pit.x + jx, z: pit.z + jz };
     }
@@ -484,7 +483,7 @@ function push(ctx: SlotContext, lane: LaneId | 'assigned', regroupAt: number | n
   let bestD = Number.POSITIVE_INFINITY;
   for (const m of ctx.friendlyMinions) {
     if (myLane && laneDistance(myLane, m.x, m.z) > 7) continue;
-    const d = Math.hypot(m.x - enemySanctum.x, m.z - enemySanctum.z);
+    const d = hypot(m.x - enemySanctum.x, m.z - enemySanctum.z);
     if (d < bestD) {
       bestD = d;
       vanguard = m;
@@ -496,7 +495,7 @@ function push(ctx: SlotContext, lane: LaneId | 'assigned', regroupAt: number | n
     let idx = 0;
     let best = Number.POSITIVE_INFINITY;
     oriented.forEach((p, i) => {
-      const d = Math.hypot(p.x - s.x, p.z - s.z);
+      const d = hypot(p.x - s.x, p.z - s.z);
       if (d < best) {
         best = d;
         idx = i;
@@ -548,7 +547,7 @@ export function quietestLane(ctx: SlotContext): LaneId | 'assigned' {
     const path = GAME_MAP.lanes[lane];
     const mid = path[Math.floor(path.length / 2)]!;
     let sum = 0;
-    for (const f of foes) sum += Math.hypot(f.x - mid.x, f.z - mid.z);
+    for (const f of foes) sum += hypot(f.x - mid.x, f.z - mid.z);
     return sum / foes.length;
   };
   let best: LaneId = ctx.s.lane ?? 'mid';
@@ -614,7 +613,7 @@ function obeyOrder(ctx: SlotContext): Action | null {
       }
       let pit = GAME_MAP.wardenPits[0]!;
       for (const p of GAME_MAP.wardenPits) {
-        if (Math.hypot(p.x - s.x, p.z - s.z) < Math.hypot(pit.x - s.x, pit.z - s.z)) pit = p;
+        if (hypot(p.x - s.x, p.z - s.z) < hypot(pit.x - s.x, pit.z - s.z)) pit = p;
       }
       return holdPosition(ctx, pit.x, pit.z, 6);
     }
@@ -632,6 +631,6 @@ function obeyOrder(ctx: SlotContext): Action | null {
 
 function holdPosition(ctx: SlotContext, x: number, z: number, within: number): Action {
   const { s } = ctx;
-  if (Math.hypot(x - s.x, z - s.z) <= within) return { kind: 'noop' };
+  if (hypot(x - s.x, z - s.z) <= within) return { kind: 'noop' };
   return { kind: 'move', x, z };
 }

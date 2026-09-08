@@ -31,6 +31,14 @@ const FORBIDDEN: { re: RegExp; why: string }[] = [
   { re: /Math\.random/, why: 'sim randomness must go through Rng' },
   { re: /Date\.now/, why: 'sim time is tick-driven, never wall-clock' },
   { re: /performance\.now/, why: 'sim time is tick-driven, never wall-clock' },
+  // IEEE 754 pins the four operations, the remainder and the square root;
+  // every other Math function is the engine's own algorithm, and a replay
+  // re-simulates on whatever engine opens it (ADR 0019).
+  {
+    re: /Math\.(hypot|sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|asinh|acosh|atanh|exp|expm1|log|log2|log10|log1p|pow|cbrt)\b/,
+    why: 'rounds differently per engine; use src/sim/exact.ts',
+  },
+  { re: /(?<![/*])\*\*(?![/*])/, why: 'the exponent operator rounds differently per engine' },
   { re: /from\s+'three/, why: 'sim never imports the renderer stack' },
   { re: /from\s+'[^']*\/(render|ui|net)\//, why: 'sim never imports presentation or network code' },
   { re: /\b(document|window|navigator)\s*\./, why: 'sim runs outside the DOM' },

@@ -6,6 +6,7 @@
 
 import { dealDamage } from './combat/damage';
 import type { GameMap } from './content/map';
+import { hypot } from './exact';
 import type { CombatCtx } from './sim_context';
 import { DT } from './types';
 
@@ -19,7 +20,7 @@ export function applyFountainRegen(ctx: CombatCtx, map: GameMap): void {
   for (const u of ctx.units.values()) {
     if (u.dead || ctx.dead.has(u.id)) continue;
     for (const fountain of map.fountains) {
-      const d = Math.hypot(u.pos.x - fountain.x, u.pos.z - fountain.z);
+      const d = hypot(u.pos.x - fountain.x, u.pos.z - fountain.z);
       if (d > fountain.r + FOUNTAIN_PAD) continue;
       if (fountain.team === u.team) {
         if (u.kind !== 'champion') continue;

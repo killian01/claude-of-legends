@@ -78,7 +78,10 @@ const stepOf = (field: string): number => AMOUNT_STEPS[field] ?? STEP_RATIO;
 
 export function snapAmount(field: string, v: number): number {
   const step = stepOf(field);
-  const decimals = step >= 1 ? 0 : Math.ceil(-Math.log10(step));
+  // The decimals a step needs: the first power of ten that lifts it to
+  // one, counted rather than taken from a logarithm (ADR 0019).
+  let decimals = 0;
+  for (let s = step; s < 1; s *= 10) decimals++;
   return Number((Math.round(v / step + 1e-9) * step).toFixed(decimals));
 }
 

@@ -5,6 +5,7 @@
 
 import { effectiveMoveSpeed } from './combat/status';
 import { SIGILS } from './content/sigils';
+import { hypot } from './exact';
 import type {
   Observation,
   ObsLastSeen,
@@ -47,7 +48,7 @@ function velocityOf(u: Unit, time: number): { vx: number; vz: number } {
   if (!wp || u.pendingSpell) return { vx: 0, vz: 0 };
   const dx = wp.x - u.pos.x;
   const dz = wp.z - u.pos.z;
-  const d = Math.hypot(dx, dz);
+  const d = hypot(dx, dz);
   if (d < 1e-6) return { vx: 0, vz: 0 };
   const speed = effectiveMoveSpeed(u, time);
   return { vx: (dx / d) * speed, vz: (dz / d) * speed };

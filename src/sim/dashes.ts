@@ -6,6 +6,7 @@
 // fact. Dashes declared without a speed keep the legacy instant blink.
 
 import { applyEffects, type EffectSpec, type Power } from './combat/effects';
+import { hypot } from './exact';
 import type { CombatCtx } from './sim_context';
 import { isSpellTarget } from './spell_targets';
 import type { Vec2 } from './types';
@@ -41,7 +42,7 @@ function land(ctx: CombatCtx, u: Unit, dash: DashState): void {
     for (const other of ctx.units.values()) {
       if (!hostile(u, other) || other.dead || ctx.dead.has(other.id)) continue;
       if (!isSpellTarget(other)) continue;
-      const d = Math.hypot(other.pos.x - u.pos.x, other.pos.z - u.pos.z);
+      const d = hypot(other.pos.x - u.pos.x, other.pos.z - u.pos.z);
       if (d > dash.landRadius + other.radius) continue;
       applyEffects(ctx, u.id, dash.power, other, dash.onLand, 'ability', fx);
     }
@@ -108,5 +109,5 @@ function segmentDistance(p: Vec2, a: Vec2, b: Vec2): number {
   const len2 = abx * abx + abz * abz;
   let t = 0;
   if (len2 > 0) t = Math.max(0, Math.min(1, ((p.x - a.x) * abx + (p.z - a.z) * abz) / len2));
-  return Math.hypot(p.x - (a.x + abx * t), p.z - (a.z + abz * t));
+  return hypot(p.x - (a.x + abx * t), p.z - (a.z + abz * t));
 }

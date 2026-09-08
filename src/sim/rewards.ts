@@ -1,5 +1,6 @@
 // Economy: passive income, kill bounties, and xp sharing by proximity.
 
+import { hypot } from './exact';
 import type { CombatCtx } from './sim_context';
 import { gainXp } from './stats';
 import { DT } from './types';
@@ -61,7 +62,7 @@ export function grantKillRewards(ctx: CombatCtx, victim: Unit, killerId: number)
       for (const u of ctx.units.values()) {
         if (u.kind !== 'champion' || u.dead) continue;
         if (victim.neutral ? u.team !== xpTeam : u.team === victim.team) continue;
-        const d = Math.hypot(u.pos.x - victim.pos.x, u.pos.z - victim.pos.z);
+        const d = hypot(u.pos.x - victim.pos.x, u.pos.z - victim.pos.z);
         if (d <= XP_SHARE_RADIUS) nearby.push(u);
       }
       if (nearby.length > 0) {

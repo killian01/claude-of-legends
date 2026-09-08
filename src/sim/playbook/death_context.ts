@@ -5,6 +5,7 @@
 // replaying twenty minutes to find out. Pure over the sim; deterministic,
 // so a replayed match yields the same scenes.
 
+import { hypot } from '../exact';
 import type { Sim } from '../sim';
 import type { TeamId } from '../types';
 import { hostile, type Unit, type UnitKind } from '../unit';
@@ -37,7 +38,7 @@ export interface DeathScene {
 const round1 = (v: number): number => Math.round(v * 10) / 10;
 
 function inTowerReach(tower: Unit, u: Unit): boolean {
-  const d = Math.hypot(tower.pos.x - u.pos.x, tower.pos.z - u.pos.z);
+  const d = hypot(tower.pos.x - u.pos.x, tower.pos.z - u.pos.z);
   return d <= tower.stats.attackRange + tower.radius + u.radius;
 }
 
@@ -51,7 +52,7 @@ export function deathScene(sim: Sim, unitId: number, radius = SCENE_RADIUS): Dea
   for (const o of sim.units.values()) {
     if (o.id === u.id) continue;
     if (o.kind !== 'champion' && o.kind !== 'tower' && o.kind !== 'sanctum') continue;
-    const d = Math.hypot(o.pos.x - u.pos.x, o.pos.z - u.pos.z);
+    const d = hypot(o.pos.x - u.pos.x, o.pos.z - u.pos.z);
     if (d > radius) continue;
     const foe = hostile(u, o);
     if (o.kind === 'champion' && !o.dead) {

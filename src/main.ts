@@ -27,6 +27,7 @@ import {
   type ReplayEvent,
   type ReplayRecord,
   replayPlayable,
+  restorePolicies,
 } from './net/replay';
 import { attachBot } from './sim/content/bots';
 import { houseSeats } from './sim/content/bots/house';
@@ -334,6 +335,8 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
       step: () => stepOnce(true),
       restored: (tick) => {
         next = eventIndexAt(rec.events, tick);
+        // The seats that changed hands before this tick, driven again.
+        restorePolicies(sim, rec.picks, unitIds, rec.events, tick);
       },
     });
     worker.onmessage = (e: MessageEvent<ReplayWorkerOut>): void => {

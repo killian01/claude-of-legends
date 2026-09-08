@@ -7,6 +7,7 @@
 
 import { isStealthed, sightFactor } from './combat/status';
 import type { GameMap } from './content/map';
+import { hypot } from './exact';
 import type { TeamId, Vec2 } from './types';
 import type { Unit } from './unit';
 import type { Zone } from './zones';
@@ -14,7 +15,7 @@ import type { Zone } from './zones';
 export function brushIndexAt(map: GameMap, p: Vec2): number {
   for (let i = 0; i < map.brush.length; i++) {
     const b = map.brush[i]!;
-    if (Math.hypot(p.x - b.x, p.z - b.z) <= b.r) return i;
+    if (hypot(p.x - b.x, p.z - b.z) <= b.r) return i;
   }
   return -1;
 }
@@ -31,7 +32,7 @@ export function sightBlocked(map: GameMap, a: Vec2, b: Vec2): boolean {
       len2 > 0 ? Math.max(0, Math.min(1, ((w.x - a.x) * abx + (w.z - a.z) * abz) / len2)) : 0;
     const cx = a.x + abx * t;
     const cz = a.z + abz * t;
-    if (Math.hypot(w.x - cx, w.z - cz) <= w.r) return true;
+    if (hypot(w.x - cx, w.z - cz) <= w.r) return true;
   }
   return false;
 }
@@ -59,7 +60,7 @@ export function computeVisibility(
     for (const observer of observers) {
       for (const src of units.values()) {
         if (src.team !== observer || src.neutral || src.dead) continue;
-        const d = Math.hypot(src.pos.x - target.pos.x, src.pos.z - target.pos.z);
+        const d = hypot(src.pos.x - target.pos.x, src.pos.z - target.pos.z);
         if (d > src.sightRange * sightFactor(src, time)) continue;
         if (targetBrush !== -1 && brush.get(src.id) !== targetBrush) continue;
         if (sightBlocked(map, src.pos, target.pos)) continue;
@@ -74,7 +75,7 @@ export function computeVisibility(
       for (const target of units.values()) {
         if (target.dead) continue;
         if (!target.neutral && target.team === z.team) continue;
-        const d = Math.hypot(target.pos.x - z.pos.x, target.pos.z - z.pos.z);
+        const d = hypot(target.pos.x - z.pos.x, target.pos.z - z.pos.z);
         if (d <= z.radius + target.radius) sets[z.team].add(target.id);
       }
     }

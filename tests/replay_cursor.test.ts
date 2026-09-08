@@ -10,9 +10,15 @@ import { CHECKPOINT_TICKS, ReplayCursor, RING_TICKS } from '../src/game/replay_c
 import { MarkCollector } from '../src/game/replay_marks';
 import { type ReplayWorkerOut, runReplayPass } from '../src/game/replay_worker';
 import { sparMatch, sparringPicks } from '../src/game/sparring_core';
-import { buildMatchSim, type ReplayRecord } from '../src/net/replay';
+import {
+  applyReplayEvent,
+  buildMatchSim,
+  type ReplayRecord,
+  restorePolicies,
+} from '../src/net/replay';
 import { LANER_PLAYBOOK } from '../src/sim/content/playbooks/laner';
 import type { Sim } from '../src/sim/sim';
+import type { TeamId } from '../src/sim/types';
 
 function fingerprint(sim: Sim): string {
   return JSON.stringify({
@@ -69,6 +75,89 @@ describe('the replay pass', () => {
       while (sim.tickCount < TICKS) sim.tick();
       expect(fingerprint(sim)).toBe(straight(TICKS));
     }
+  });
+});
+
+// A match whose seats change hands: one seat with nobody behind it, handed
+// to a bot on a disconnect, taken back on a rejoin, handed over again. A
+// checkpoint carries no policies, so a restore across those events has to
+// put them back from the record (restorePolicies) or the seat is driven
+// by the wrong hands: forward, a bot never attached in the viewer's sim;
+// backward, a bot still attached from later in the match.
+describe('checkpoints across a disconnect and a rejoin', () => {
+  const seed = 47;
+  const picks = sparringPicks(bot, seed).map((p, i) => {
+    if (i !== 1) return p;
+    const { bot: _house, ...human } = p;
+    return human;
+  });
+  const first = buildMatchSim(seed, picks);
+  const unitIds = first.unitIds;
+  const human = unitIds[1]!;
+  const teams = new Map<number, TeamId>();
+  for (const [i, p] of picks.entries()) teams.set(unitIds[i]!, p.team);
+  const rec: ReplayRecord = {
+    version: 0,
+    seed,
+    picks,
+    events: [
+      { k: 300, u: human, e: 'bot_on' },
+      { k: 650, u: human, e: 'bot_off' },
+      { k: 700, u: human, e: 'bot_on' },
+    ],
+    ticks: TICKS,
+  };
+  const runTo = (sim: Sim, from: number, to: number): number => {
+    let next = from;
+    while (sim.tickCount < to) {
+      while (next < rec.events.length && rec.events[next]!.k <= sim.tickCount) {
+        applyReplayEvent(sim, teams, rec.events[next]!);
+        next++;
+      }
+      sim.tick();
+    }
+    return next;
+  };
+  const eventsAt = (tick: number): number => rec.events.filter((e) => e.k < tick).length;
+  const out: ReplayWorkerOut[] = [];
+  runReplayPass(rec, (m) => out.push(m));
+  const checkpoints = out.flatMap((m) => (m.kind === 'checkpoint' ? [m.snapshot] : []));
+  runTo(first.sim, 0, TICKS);
+  const truth = fingerprint(first.sim);
+
+  it('the pass itself lands where the straight run does', () => {
+    const { sim } = buildMatchSim(seed, picks);
+    sim.restore(checkpoints.at(-1)!);
+    expect(fingerprint(sim)).toBe(truth);
+  });
+
+  it('forward: a fresh sim restored past the handovers drives the seat', () => {
+    for (const snap of checkpoints) {
+      if (snap.tick === 0) continue;
+      const { sim } = buildMatchSim(seed, picks);
+      sim.restore(snap);
+      restorePolicies(sim, picks, unitIds, rec.events, snap.tick);
+      runTo(sim, eventsAt(snap.tick), TICKS);
+      expect(fingerprint(sim)).toBe(truth);
+    }
+  });
+
+  it('backward: restoring before a handover takes the bot off again', () => {
+    const sim = first.sim;
+    const before = checkpoints.find((s) => s.tick === 200)!;
+    sim.restore(before);
+    restorePolicies(sim, picks, unitIds, rec.events, before.tick);
+    expect(sim.policies.has(human)).toBe(false);
+    runTo(sim, eventsAt(before.tick), TICKS);
+    expect(fingerprint(sim)).toBe(truth);
+  });
+
+  it('without the policies put back, the seat is driven by the wrong hands', () => {
+    const { sim } = buildMatchSim(seed, picks);
+    const snap = checkpoints.find((s) => s.tick === 400)!;
+    sim.restore(snap);
+    runTo(sim, eventsAt(snap.tick), TICKS);
+    expect(fingerprint(sim)).not.toBe(truth);
   });
 });
 

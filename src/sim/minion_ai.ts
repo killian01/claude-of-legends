@@ -5,6 +5,7 @@
 
 import { isStealthed } from './combat/status';
 import type { GameMap, LaneId } from './content/map';
+import { hypot } from './exact';
 import type { NavGrid } from './navgrid';
 import { findPath } from './pathfind';
 import type { CombatCtx } from './sim_context';
@@ -36,7 +37,7 @@ function aggressorIds(ctx: CombatCtx, u: Unit): Set<number> {
   for (const ally of ctx.units.values()) {
     if (ally.team !== u.team || ally.kind !== 'champion' || ally.dead) continue;
     if (ctx.time - ally.lastHitAt > AGGRO_MEMORY_S) continue;
-    if (Math.hypot(ally.pos.x - u.pos.x, ally.pos.z - u.pos.z) > ALLY_PROTECT_RADIUS) continue;
+    if (hypot(ally.pos.x - u.pos.x, ally.pos.z - u.pos.z) > ALLY_PROTECT_RADIUS) continue;
     out.add(ally.lastHitByChampion);
   }
   return out;
@@ -51,7 +52,7 @@ function acquire(ctx: CombatCtx, u: Unit): void {
     // Minions never fight the neutral Warden; only champions do.
     if (o.team === u.team || o.neutral || o.dead || ctx.dead.has(o.id)) continue;
     if (isStealthed(o, ctx.time)) continue;
-    const d = Math.hypot(o.pos.x - u.pos.x, o.pos.z - u.pos.z);
+    const d = hypot(o.pos.x - u.pos.x, o.pos.z - u.pos.z);
     if (d > AGGRO_RADIUS) continue;
     if ((o.kind === 'tower' || o.kind === 'sanctum') && isInvulnerable(ctx.units, o)) continue;
     const rank = aggressors.has(o.id) ? -1 : targetRank(o);
@@ -69,7 +70,7 @@ function currentTargetValid(ctx: CombatCtx, u: Unit): boolean {
   const t = ctx.units.get(u.attackTargetId);
   if (!t || t.dead || ctx.dead.has(t.id) || t.team === u.team || t.neutral) return false;
   if (isStealthed(t, ctx.time)) return false;
-  return Math.hypot(t.pos.x - u.pos.x, t.pos.z - u.pos.z) <= LEASH_RADIUS;
+  return hypot(t.pos.x - u.pos.x, t.pos.z - u.pos.z) <= LEASH_RADIUS;
 }
 
 function laneWaypoint(map: GameMap, u: Unit): Vec2 {
@@ -84,12 +85,12 @@ function laneWaypoint(map: GameMap, u: Unit): Vec2 {
 
 function advanceLane(nav: NavGrid, map: GameMap, u: Unit): void {
   let wp = laneWaypoint(map, u);
-  if (Math.hypot(wp.x - u.pos.x, wp.z - u.pos.z) < WAYPOINT_REACHED) {
+  if (hypot(wp.x - u.pos.x, wp.z - u.pos.z) < WAYPOINT_REACHED) {
     u.laneProgress += 1;
     wp = laneWaypoint(map, u);
   }
   const end = u.path[u.path.length - 1];
-  if (!end || Math.hypot(end.x - wp.x, end.z - wp.z) > 3) {
+  if (!end || hypot(end.x - wp.x, end.z - wp.z) > 3) {
     u.path = nav.lineOfWalk(u.pos, wp) ? [{ x: wp.x, z: wp.z }] : findPath(nav, u.pos, wp);
   }
 }

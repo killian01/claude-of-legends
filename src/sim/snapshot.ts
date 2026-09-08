@@ -10,7 +10,9 @@
 //   unit keeps its championId and is re-linked through the registry;
 // - policies are not state and are not touched: they close over the
 //   sim's own containers (attachPlaybook's trace), so restoring mutates
-//   those containers in place rather than replacing them;
+//   those containers in place rather than replacing them. A replay whose
+//   seats changed hands (bot_on, bot_off) puts them back from its record
+//   after each restore (src/net/replay.ts, restorePolicies);
 // - everything else is data, Maps, Sets and typed arrays included, which
 //   structuredClone copies whole.
 

@@ -8,10 +8,14 @@
 //
 // Three ways in, and they are ordered by how far a newcomer has to walk.
 // Adding a champion is first because it is the one that sounds impossible
-// and is not: the roster is data, so the work is a file and three table
-// entries. Training a bot is second because it is the strangest thing here
-// and the reason some people will stay. An open issue is last because it
-// is the ordinary answer, and the one that needs no imagination.
+// and is not. Training a bot is second because it is the strangest thing
+// here and the reason some people will stay. An open issue is last because
+// it is the ordinary answer, and the one that needs no imagination.
+//
+// Each line says what the visitor would get to do, and nothing about how
+// it is built: file counts, data formats and determinism belong to the
+// guide behind the link, not to a front door read by someone deciding
+// whether to click it.
 //
 // Pure data, no DOM, so a test reads the row without a browser;
 // ui/landing.ts draws it. Every href goes to something that exists in the
@@ -31,24 +35,24 @@ export const CONTRIBUTE_WAYS: readonly ContributeWay[] = [
   {
     title: 'Add a champion',
     line:
-      'The roster is data, not code. A new champion is one file and three table ' +
-      'entries, and the guide walks every one of them.',
+      'Design a champion of your own, give it a kit, and see it in the roster. ' +
+      'The guide takes you through it step by step.',
     cta: 'Read the guide',
     href: `${REPO}/blob/main/docs/adding-a-champion.md`,
   },
   {
     title: 'Train a bot',
     line:
-      'Every bot is a deterministic policy behind one versioned contract, and the ' +
-      'match runs headless over NDJSON. Bring your own trainer.',
-    cta: 'See the contract',
+      'Build a bot that plays the game, then send it up the ladder against ' +
+      "everyone else's. How you make it smart is up to you.",
+    cta: 'See how',
     href: `${REPO}/blob/main/headless/README.md`,
   },
   {
     title: 'Take an issue',
     line:
-      'Balance, rendering, netcode, docs. The ones marked good first issue are ' +
-      'scoped so that the first pull request is a small one.',
+      'There is always something to fix or improve. The ones marked good first ' +
+      'issue are meant for a first pull request.',
     cta: 'Browse the issues',
     href: `${REPO}/labels/good%20first%20issue`,
   },

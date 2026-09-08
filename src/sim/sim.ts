@@ -30,6 +30,7 @@ import { SIGILS } from './content/sigils';
 import { clampSkin } from './content/skins';
 import { stepDashes } from './dashes';
 import { hasDecisionToken, spendDecisionToken } from './decision_budget';
+import { hypot } from './exact';
 import type { ForgedChampionDef } from './forge/forged_def';
 import { applyFountainRegen } from './fountain';
 import { stepIdleDefense } from './idle_defense';
@@ -278,13 +279,20 @@ export class Sim {
       seat.lanePrefer = def.lanes ? [...def.lanes] : null;
       this.assignLanes(seat.team);
     }
-    const policy = playbookPolicy(def, (playId, id) => {
+    this.attachPolicy(unitId, this.policyForPlaybook(def));
+  }
+
+  // The playbook's Policy alone, traced, without the seating attachPlaybook
+  // does around it: what a replay re-attaches after a checkpoint restore
+  // (src/net/replay.ts, restorePolicies), when the lanes are already where
+  // the snapshot put them and dealing them again would move the world.
+  policyForPlaybook(def: PlaybookDef): Policy {
+    return playbookPolicy(def, (playId, id) => {
       const u = this.units.get(id);
       if (!u || u.play === playId) return;
       u.play = playId;
       this.events.push({ type: 'play', unitId: id, playId });
     });
-    this.attachPolicy(unitId, policy);
   }
 
   // Hand a seat to a Policy running outside the process. The sim ships that
@@ -360,7 +368,9 @@ export class Sim {
 
   // The checkpoint back into THIS sim, in place: the containers attached
   // policies close over are refilled, never replaced. The snapshot stays
-  // intact and can be restored again.
+  // intact and can be restored again. The policies themselves are not
+  // touched: a match whose seats change hands (a disconnect, a rejoin)
+  // puts them back from its record (src/net/replay.ts, restorePolicies).
   restore(snap: SimSnapshot): void {
     const s = deepCopy(snap.state) as ReturnType<Sim['gatherState']>;
     this.time = s.time;
@@ -444,7 +454,7 @@ export class Sim {
   isPointVisible(team: TeamId, x: number, z: number): boolean {
     for (const u of this.units.values()) {
       if (u.team !== team || u.neutral || u.dead) continue;
-      if (Math.hypot(u.pos.x - x, u.pos.z - z) > u.sightRange * sightFactor(u, this.time)) {
+      if (hypot(u.pos.x - x, u.pos.z - z) > u.sightRange * sightFactor(u, this.time)) {
         continue;
       }
       if (sightBlocked(this.map, u.pos, { x, z })) continue;
@@ -635,7 +645,7 @@ export class Sim {
     // fountain, so the range check is waived while it waits. Selling still
     // wants a live champion standing there.
     const dead = u.dead || this.dead.has(unitId);
-    const d = Math.hypot(u.pos.x - fountain.x, u.pos.z - fountain.z);
+    const d = hypot(u.pos.x - fountain.x, u.pos.z - fountain.z);
     if (!dead && d > fountain.r + SHOP_RANGE_PAD) return false;
 
     // Consume owned components (one instance each) and discount their cost.
@@ -667,7 +677,7 @@ export class Sim {
     if (u?.kind !== 'champion' || u.dead || this.dead.has(unitId)) return false;
     const fountain = this.map.fountains.find((f) => f.team === u.team);
     if (!fountain) return false;
-    if (Math.hypot(u.pos.x - fountain.x, u.pos.z - fountain.z) > fountain.r + SHOP_RANGE_PAD) {
+    if (hypot(u.pos.x - fountain.x, u.pos.z - fountain.z) > fountain.r + SHOP_RANGE_PAD) {
       return false;
     }
     const itemId = u.items[slot];

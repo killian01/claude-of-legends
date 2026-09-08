@@ -3,11 +3,12 @@
 // shared auto-attack system.
 
 import { isStealthed } from './combat/status';
+import { hypot } from './exact';
 import type { CombatCtx } from './sim_context';
 import type { Unit } from './unit';
 
 function inRange(tower: Unit, o: Unit): boolean {
-  const edge = Math.hypot(o.pos.x - tower.pos.x, o.pos.z - tower.pos.z) - tower.radius - o.radius;
+  const edge = hypot(o.pos.x - tower.pos.x, o.pos.z - tower.pos.z) - tower.radius - o.radius;
   return edge <= tower.stats.attackRange;
 }
 
@@ -20,7 +21,7 @@ function nearest(ctx: CombatCtx, tower: Unit, kinds: readonly string[]): Unit | 
     if (isStealthed(o, ctx.time)) continue;
     if (!kinds.includes(o.kind)) continue;
     if (!inRange(tower, o)) continue;
-    const d = Math.hypot(o.pos.x - tower.pos.x, o.pos.z - tower.pos.z);
+    const d = hypot(o.pos.x - tower.pos.x, o.pos.z - tower.pos.z);
     if (d < bestD) {
       bestD = d;
       best = o;

@@ -11,6 +11,7 @@ import type { AbilityDef } from '../combat/casting';
 import { type ChampionHints, hintsFor } from '../content/bots/hints';
 import { CHAMPIONS } from '../content/champions';
 import { GAME_MAP } from '../content/map';
+import { hypot } from '../exact';
 import type { Action, Observation, ObsSelf, ObsUnit } from '../policy';
 import type { Rng } from '../rng';
 import { type ActiveKit, resolveKit } from './kit';
@@ -76,7 +77,7 @@ export const REGROUP_AT_S = 12 * 60;
 const JITTER = 1.5;
 
 export function dist(ax: number, az: number, b: ObsUnit): number {
-  return Math.hypot(b.x - ax, b.z - az);
+  return hypot(b.x - ax, b.z - az);
 }
 
 export function nearest(list: ObsUnit[], x: number, z: number): ObsUnit | null {
@@ -111,11 +112,11 @@ function aimAt(
 ): { x: number; z: number } {
   const spec = def.spec;
   if (spec.kind !== 'skillshot' || hardCCd(target, time)) return { x: target.x, z: target.z };
-  const d = Math.hypot(target.x - s.x, target.z - s.z);
+  const d = hypot(target.x - s.x, target.z - s.z);
   const eta = d / spec.speed;
   const px = target.x + (target.vx ?? 0) * eta;
   const pz = target.z + (target.vz ?? 0) * eta;
-  const pd = Math.hypot(px - s.x, pz - s.z);
+  const pd = hypot(px - s.x, pz - s.z);
   if (pd > spec.range) {
     const k = spec.range / pd;
     return { x: s.x + (px - s.x) * k, z: s.z + (pz - s.z) * k };
@@ -147,7 +148,7 @@ function abilityRange(def: AbilityDef): number {
 export function pickCast(ctx: SlotContext, champ: ObsUnit, engage = true): Action | null {
   const { s, obs, def, hints, enemyChampions } = ctx;
   if (!def) return null;
-  const dc = Math.hypot(champ.x - s.x, champ.z - s.z);
+  const dc = hypot(champ.x - s.x, champ.z - s.z);
 
   // The ultimate first, behind its gates: a held R is a threat, a wasted
   // one is a minute of nothing.
@@ -156,7 +157,7 @@ export function pickCast(ctx: SlotContext, champ: ObsUnit, engage = true): Actio
     const range = abilityRange(r);
     const minR = hints.minRange?.R ?? 0;
     const cluster = enemyChampions.filter(
-      (e) => Math.hypot(e.x - champ.x, e.z - champ.z) <= (hints.ult.radius ?? 5),
+      (e) => hypot(e.x - champ.x, e.z - champ.z) <= (hints.ult.radius ?? 5),
     ).length;
     const gate =
       (hints.ult.minEnemies !== undefined && cluster >= hints.ult.minEnemies) ||
@@ -181,7 +182,7 @@ export function pickCast(ctx: SlotContext, champ: ObsUnit, engage = true): Actio
       const hurt = obs.units
         .filter((u) => u.friendly && u.kind === 'champion' && u.hpFrac < 0.65)
         .sort((a, b) => a.hpFrac - b.hpFrac)[0];
-      if (hurt && Math.hypot(hurt.x - s.x, hurt.z - s.z) <= def.abilities[key].castRange) {
+      if (hurt && hypot(hurt.x - s.x, hurt.z - s.z) <= def.abilities[key].castRange) {
         return { kind: 'cast', key, x: hurt.x, z: hurt.z };
       }
       continue;
@@ -277,27 +278,26 @@ export function buildSlotContext(obs: Observation, rng: Rng, kitDef?: KitDef): S
   const enemySanctum = GAME_MAP.sanctums.find((c) => c.team !== s.team)!;
   const enemyTowers = obs.units.filter((u) => !u.friendly && u.kind === 'tower');
   const inTowerReach = (x: number, z: number): boolean =>
-    enemyTowers.some((t) => Math.hypot(t.x - x, t.z - z) <= TOWER_DANGER_RANGE);
+    enemyTowers.some((t) => hypot(t.x - x, t.z - z) <= TOWER_DANGER_RANGE);
   const enemies = obs.units.filter((u) => !u.friendly);
   const friendlyMinions = obs.units.filter((u) => u.friendly && u.kind === 'minion');
   const escortAt = (x: number, z: number): number =>
-    friendlyMinions.filter((m) => Math.hypot(m.x - x, m.z - z) <= ESCORT_RADIUS).length;
+    friendlyMinions.filter((m) => hypot(m.x - x, m.z - z) <= ESCORT_RADIUS).length;
   const enemyChampions = enemies.filter((u) => u.kind === 'champion');
   const ccdTarget = enemyChampions
     .filter((u) => hardCCd(u, obs.time) && dist(s.x, s.z, u) <= CHAMPION_ATTACK_RANGE)
     .sort((a, b) => dist(s.x, s.z, a) - dist(s.x, s.z, b))[0];
   const champ = ccdTarget ?? nearest(enemyChampions, s.x, s.z);
-  const atFountain = Math.hypot(s.x - fountain.x, s.z - fountain.z) <= fountain.r + 2;
+  const atFountain = hypot(s.x - fountain.x, s.z - fountain.z) <= fountain.r + 2;
   const recallClear = (): boolean =>
     !obs.units.some(
       (u) =>
         !u.friendly &&
-        ((u.kind === 'champion' && Math.hypot(u.x - s.x, u.z - s.z) <= RECALL_CLEAR_CHAMP_RANGE) ||
-          (u.kind === 'minion' && Math.hypot(u.x - s.x, u.z - s.z) <= RECALL_CLEAR_MINION_RANGE)),
+        ((u.kind === 'champion' && hypot(u.x - s.x, u.z - s.z) <= RECALL_CLEAR_CHAMP_RANGE) ||
+          (u.kind === 'minion' && hypot(u.x - s.x, u.z - s.z) <= RECALL_CLEAR_MINION_RANGE)),
     ) &&
     !(obs.lastSeen ?? []).some(
-      (ls) =>
-        obs.time - ls.at <= 3 && Math.hypot(ls.x - s.x, ls.z - s.z) <= RECALL_CLEAR_MEMORY_RANGE,
+      (ls) => obs.time - ls.at <= 3 && hypot(ls.x - s.x, ls.z - s.z) <= RECALL_CLEAR_MEMORY_RANGE,
     ) &&
     !inTowerReach(s.x, s.z);
   let drawn: { jx: number; jz: number } | null = null;
@@ -319,7 +319,7 @@ export function buildSlotContext(obs: Observation, rng: Rng, kitDef?: KitDef): S
     inTowerReach,
     escortAt,
     recallClear,
-    distHome: () => Math.hypot(s.x - fountain.x, s.z - fountain.z),
+    distHome: () => hypot(s.x - fountain.x, s.z - fountain.z),
     besideAlly: () =>
       obs.units.some(
         (u) => u.friendly && u.kind === 'champion' && dist(s.x, s.z, u) <= ALONE_RANGE,
@@ -363,7 +363,7 @@ export function buildSlotContext(obs: Observation, rng: Rng, kitDef?: KitDef): S
 // The point `len` units from the bot toward home.
 export function homewardPoint(ctx: SlotContext, len: number): { x: number; z: number } {
   const { s, fountain } = ctx;
-  const dh = Math.hypot(fountain.x - s.x, fountain.z - s.z) || 1;
+  const dh = hypot(fountain.x - s.x, fountain.z - s.z) || 1;
   return {
     x: s.x + ((fountain.x - s.x) / dh) * len,
     z: s.z + ((fountain.z - s.z) / dh) * len,
@@ -405,7 +405,7 @@ export function dodge(ctx: SlotContext): Action | null {
   }
   for (const zn of obs.zones ?? []) {
     if (zn.friendly) continue;
-    const d = Math.hypot(s.x - zn.x, s.z - zn.z);
+    const d = hypot(s.x - zn.x, s.z - zn.z);
     if (d > zn.radius + SELF_RADIUS) continue;
     const ux = d > 0.05 ? (s.x - zn.x) / d : 1;
     const uz = d > 0.05 ? (s.z - zn.z) / d : 0;
@@ -420,7 +420,7 @@ export function dodge(ctx: SlotContext): Action | null {
   }
   for (const e of obs.units) {
     if (e.friendly || e.kind !== 'champion' || !e.windup) continue;
-    const d = Math.hypot(s.x - e.windup.x, s.z - e.windup.z);
+    const d = hypot(s.x - e.windup.x, s.z - e.windup.z);
     if (d > WINDUP_DANGER_RADIUS) continue;
     const ux = d > 0.05 ? (s.x - e.windup.x) / d : 1;
     const uz = d > 0.05 ? (s.z - e.windup.z) / d : 0;
@@ -472,12 +472,10 @@ export function holdRecall(ctx: SlotContext): Action | null {
   const breaker =
     obs.units.some(
       (u) =>
-        !u.friendly &&
-        u.kind === 'champion' &&
-        Math.hypot(u.x - s.x, u.z - s.z) <= RECALL_BREAK_RANGE,
+        !u.friendly && u.kind === 'champion' && hypot(u.x - s.x, u.z - s.z) <= RECALL_BREAK_RANGE,
     ) ||
     (obs.lastSeen ?? []).some(
-      (ls) => obs.time - ls.at <= 2 && Math.hypot(ls.x - s.x, ls.z - s.z) <= RECALL_BREAK_RANGE,
+      (ls) => obs.time - ls.at <= 2 && hypot(ls.x - s.x, ls.z - s.z) <= RECALL_BREAK_RANGE,
     );
   return breaker ? null : { kind: 'noop' };
 }

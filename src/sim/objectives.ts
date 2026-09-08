@@ -5,6 +5,7 @@
 // Called from the fixed tick order in sim.ts right after waves.
 
 import type { GameMap } from './content/map';
+import { hypot } from './exact';
 import type { CombatCtx } from './sim_context';
 import type { Vec2 } from './types';
 import { createWarden, hostile, type Unit } from './unit';
@@ -48,7 +49,7 @@ function nearestHostileChampion(ctx: CombatCtx, w: Unit, range: number): Unit | 
   for (const u of ctx.units.values()) {
     if (u.kind !== 'champion' || u.dead || ctx.dead.has(u.id)) continue;
     if (!hostile(w, u)) continue;
-    const d = Math.hypot(u.pos.x - w.pos.x, u.pos.z - w.pos.z);
+    const d = hypot(u.pos.x - w.pos.x, u.pos.z - w.pos.z);
     if (d <= range && d < bestD) {
       bestD = d;
       best = u;
@@ -73,7 +74,7 @@ export function stepObjectives(ctx: CombatCtx, map: GameMap, state: ObjectiveSta
   if (!w || w.dead || ctx.dead.has(w.id)) return;
 
   const pit = pitOf(map, state);
-  const fromPit = Math.hypot(w.pos.x - pit.x, w.pos.z - pit.z);
+  const fromPit = hypot(w.pos.x - pit.x, w.pos.z - pit.z);
   const angry = ctx.time - w.lastDamagedAt <= WARDEN_CALM_S;
 
   // Leash: pulled too far, or left alone while hurt or displaced, it
@@ -94,7 +95,7 @@ export function stepObjectives(ctx: CombatCtx, map: GameMap, state: ObjectiveSta
       target &&
       !target.dead &&
       !ctx.dead.has(target.id) &&
-      Math.hypot(target.pos.x - pit.x, target.pos.z - pit.z) <= WARDEN_LEASH_RANGE;
+      hypot(target.pos.x - pit.x, target.pos.z - pit.z) <= WARDEN_LEASH_RANGE;
     if (!targetOk) {
       const next = nearestHostileChampion(ctx, w, WARDEN_LEASH_RANGE);
       w.attackTargetId = next ? next.id : null;

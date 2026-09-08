@@ -6,6 +6,7 @@
 // footprints unblock correctly.
 
 import type { WallShape } from './content/map';
+import { hypot } from './exact';
 import type { Vec2 } from './types';
 
 export class NavGrid {
@@ -125,7 +126,7 @@ export class NavGrid {
   lineOfWalk(a: Vec2, b: Vec2): boolean {
     const dx = b.x - a.x;
     const dz = b.z - a.z;
-    const dist = Math.hypot(dx, dz);
+    const dist = hypot(dx, dz);
     const steps = Math.max(1, Math.ceil(dist / 0.4));
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;

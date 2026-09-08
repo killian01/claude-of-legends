@@ -8,6 +8,7 @@
 // meanwhile have traded something real.
 
 import type { GameMap, LaneId } from './content/map';
+import { hypot } from './exact';
 import type { CombatCtx } from './sim_context';
 import { laneFullyOpen } from './structure_rules';
 import type { Vec2 } from './types';
@@ -52,7 +53,7 @@ export function spawnWave(ctx: CombatCtx, map: GameMap, waveIndex: number): void
       const pts = map.lanes[lane];
       const a = team === 0 ? pts[0]! : pts[pts.length - 1]!;
       const b = team === 0 ? pts[1]! : pts[pts.length - 2]!;
-      const len = Math.hypot(b.x - a.x, b.z - a.z);
+      const len = hypot(b.x - a.x, b.z - a.z);
       const dir: Vec2 = { x: (b.x - a.x) / len, z: (b.z - a.z) / len };
       const perp: Vec2 = { x: -dir.z, z: dir.x };
       let slot = 0;
