@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { mitigationMultiplier } from '../src/sim/combat/damage';
+import { CHAMPIONS } from '../src/sim/content/champions';
 import { Sim } from '../src/sim/sim';
 import { recalcChampion } from '../src/sim/stats';
 import { createMinion, type Unit } from '../src/sim/unit';
@@ -97,10 +98,14 @@ describe('auto-attacks', () => {
     const sim = new Sim(11);
     const a = sim.addChampion(0, { x: 75, z: 75 }, 'elowen');
     a.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };
-    // Elowen's Veil has cast range 8; aiming 20 away lands at 8.
+    // Aimed 20 away, the veil lands at Elowen's own cast range. Read from
+    // the champion rather than written down: what is under test is the
+    // clamp, and a balance pass moving the number must not read as a bug
+    // in it (the reach pass moved this one from 8 to 8.5).
+    const veil = CHAMPIONS.elowen!.abilities.W.castRange;
     expect(sim.castAbility(a.id, 'W', { x: 95, z: 75 })).toBe(true);
     const zone = [...sim.zones.values()].at(-1)!;
-    expect(zone.pos.x).toBeCloseTo(83, 5);
+    expect(zone.pos.x).toBeCloseTo(75 + veil, 5);
     expect(zone.pos.z).toBeCloseTo(75, 5);
   });
 

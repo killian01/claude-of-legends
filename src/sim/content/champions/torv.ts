@@ -50,13 +50,16 @@ export const TORV: ChampionDef = {
       name: 'Horn Charge',
       manaCost: 45,
       cooldown: 7.5,
-      castRange: 5.5,
+      // Six, the roster's melee engage floor: the charge is Torv's only
+      // way onto a ranged champion, and at 5.5 it stopped inside the
+      // range he was being shot from.
+      castRange: 6,
       windup: 0.25,
       // A real charge: interceptable, wall-blocked, plowing bystanders
       // aside; only whoever stands at the impact point goes airborne.
       spec: {
         kind: 'dash',
-        range: 5.5,
+        range: 6,
         speed: 13,
         passThrough: [
           { kind: 'damage', base: 60, adRatio: 0.3, dtype: 'physical' },

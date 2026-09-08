@@ -241,6 +241,20 @@ bots' meta and the second is the game's. `scripts/meta_matrix.mjs` answers
 the simulated version of the same question, style against style on fixed
 seeds; the two disagreeing is worth knowing.
 
+Champion against champion is `scripts/champion_matrix.mjs`: both teams take
+the seed's own lineup and the same house style seat for seat, one seat
+differs, and the win rate left over is that champion's. Add `--mode field`
+for five of each instead, which reads a kit's self-sufficiency rather than
+its balance (a team of five tanks has nothing to kill with). Beside it,
+`scripts/champion_bill.mjs` prints what each kit spends of the Kit envelope,
+the same scale the Forge prices a forged champion on: a champion far under
+the line has power owed to it.
+
+```bash
+node scripts/champion_matrix.mjs --seeds 6      one seat differs, mirrored
+node scripts/champion_bill.mjs                  where the headroom is
+```
+
 A match that was abandoned never reaches the log, so this reports what was
 played through. `matches` against `finished` on the pulse report is where
 the difference between the two lives.

@@ -24,3 +24,4 @@ art_src/
 .pnpm-store/
 dist-gate*/
 dist-matrix*/
+dist-champions*/

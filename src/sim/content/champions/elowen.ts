@@ -72,7 +72,10 @@ export const ELOWEN: ChampionDef = {
       name: 'Veil',
       manaCost: 60,
       cooldown: 10.5,
-      castRange: 8,
+      // Cast from where a battlemage stands, which is a step behind her
+      // own lance: the veil was landing inside the range she was already
+      // being shot from.
+      castRange: 8.5,
       spec: {
         kind: 'zone',
         radius: 3.5,
@@ -98,8 +101,12 @@ export const ELOWEN: ChampionDef = {
       name: 'Drifting Step',
       manaCost: 45,
       cooldown: 8.5,
-      castRange: 4,
-      spec: { kind: 'dash', range: 4 },
+      // Four was the shortest step on the roster, shorter than the veil
+      // she casts and inside the landing spread of every leap that hunts
+      // her. Five buys the beat a second cast needs, which is the whole
+      // point of a battlemage's step.
+      castRange: 5,
+      spec: { kind: 'dash', range: 5 },
     },
     R: {
       name: 'Whiteout',

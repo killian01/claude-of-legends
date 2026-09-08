@@ -109,6 +109,16 @@ _Avoid_: soul, objective buff, monster buff
 The commitment beat before a hit lands. For an ability: costs are paid at press, the spell resolves after the delay, and a stun during it cancels the cast. For an auto-attack: the strike resolves a beat after the swing starts; moving, a stun, or a dash cancels it and refunds the attack timer (the orb-walk rule), and a target that blinks out of reach makes the committed strike whiff. The counterplay window big hits owe their victims.
 _Avoid_: cast bar, channel (a channel would persist after resolving; no ability has one yet)
 
+**Reach**:
+How far a button actually threatens, in world units: a skillshot's or a cone's own length,
+a leap's landing distance, a zone's or a burst's cast range plus its rim. Distinct from
+cast range, which is only where the cast is aimed, and from attack range, which is the body's
+own. The roster's reach floors (no spell shorter than its caster's attack, a melee engage of
+at least 6, one button past the attack on every champion) are gated by
+`tests/champion_reach.test.ts`; a wider reach is paid for out of the Kit envelope like any
+other power.
+_Avoid_: spell range, ability range
+
 **Telegraph**:
 The visible warning a dangerous spell shows before it lands: the windup's aimed shape, or a delayed zone's marked ground. Fairness rule: whoever can see the caster sees the telegraph, both teams alike. Presentation reads it from the sim; it never changes gameplay.
 _Avoid_: indicator (that is the caster's own aim preview)

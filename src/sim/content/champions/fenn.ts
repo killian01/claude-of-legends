@@ -49,12 +49,16 @@ export const FENN: ChampionDef = {
       name: 'Lunge',
       manaCost: 35,
       cooldown: 5.5,
-      castRange: 5,
+      // Seven, level with the fighter's punch (Blazing Jab): the
+      // assassin's opener was two units shorter than it, which read as the
+      // wrong way round on the champion whose whole case is arriving
+      // first. The melee engage is a band, not a ladder.
+      castRange: 7,
       // A real flight now: visible, interceptable, and reset by takedowns
       // (the passive), the assassin's snowball lever.
       spec: {
         kind: 'dash',
-        range: 5,
+        range: 7,
         speed: 18,
         landRadius: 1.8,
         onLand: [{ kind: 'damage', base: 79, adRatio: 1.52, dtype: 'physical' }],
@@ -101,7 +105,9 @@ export const FENN: ChampionDef = {
       name: 'Shadow Flurry',
       manaCost: 85,
       cooldown: 56.5,
-      castRange: 5.5,
+      // The blur has to cross a screen's worth of teamfight to reach the
+      // back line it is aimed at; at 5.5 it landed him in the front one.
+      castRange: 6.5,
       // The crouch telegraphs, then Fenn blurs down a short line, striking
       // every champion passed, untouchable only while he travels. Pressing
       // R again inside the window blinks him back to where he committed:
@@ -109,7 +115,7 @@ export const FENN: ChampionDef = {
       windup: 0.35,
       spec: {
         kind: 'dash',
-        range: 5.5,
+        range: 6.5,
         speed: 14,
         untargetableDuringTravel: true,
         passThrough: [
