@@ -7,6 +7,7 @@
 
 import { requestGameFullscreen } from '../game/fullscreen';
 import { inviteUrl } from '../game/invite';
+import { appNav } from '../game/nav';
 import type { LobbyPlayer, SelectPlayer } from '../net/protocol';
 import { CHAMPION_LIST } from '../sim/content/champions';
 import { SIGIL_LIST } from '../sim/content/sigils';
@@ -425,6 +426,10 @@ export function showSelect(
   // What the account holds and what the week lends it (ADR 0018). Null is
   // the absence of a wall, which is what the practice match is.
   collection?: CollectionState | null,
+  // The way out without a pick, where there is one: the practice select
+  // answers to nobody, so it can be left; an online select is a team's
+  // clock and cannot.
+  onBack?: () => void,
 ): SelectController {
   const { root, card } = screen(container);
   card.classList.add('select');
@@ -756,6 +761,11 @@ export function showSelect(
     lock,
     status,
   );
+  if (onBack) {
+    const back = el('button', 'menu-btn', 'Back');
+    back.addEventListener('click', onBack);
+    side.appendChild(back);
+  }
   layout.append(main, side);
   card.appendChild(layout);
 
@@ -796,15 +806,19 @@ export function showSelect(
 
 // Resolves when the player dismisses the notice; the caller decides what
 // "back to menu" means (no reload: the app routes on the same page now).
+// The browser's Back dismisses it too: it is a layer (src/game/nav.ts).
 export function showNotice(container: HTMLElement, title: string, body: string): Promise<void> {
   return new Promise((resolve) => {
     const { root, card } = screen(container);
     card.append(el('h1', 'menu-title', title), el('p', 'menu-sub', body));
-    const back = el('button', 'menu-btn primary', 'Back to menu');
-    back.addEventListener('click', () => {
+    const dismiss = (): void => {
       root.remove();
+      frame.closed();
       resolve();
-    });
+    };
+    const back = el('button', 'menu-btn primary', 'Back to menu');
+    back.addEventListener('click', dismiss);
     card.appendChild(back);
+    const frame = appNav().push('notice', dismiss);
   });
 }

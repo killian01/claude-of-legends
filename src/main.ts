@@ -3,12 +3,18 @@
 // server snapshots). Both paths run the exact same presentation over IWorld,
 // and both come BACK: every exit routes through src/game/flow on the same
 // page. No reload between matches; the menu and a rematch are one click.
+//
+// Every screen that opens over another is a layer of the navigation
+// (src/game/nav.ts, ADR 0020): the browser's Back closes it rather than
+// leaving the site, and a match is guarded, so Back opens the pause menu
+// and closing the tab asks first.
 
 import { type Presentation, startPresentation } from './game/boot';
 import { nextStep, type PostMatchAction } from './game/flow';
 import { registerForgedAssets } from './game/forged_visuals';
 import { requestGameFullscreen } from './game/fullscreen';
 import { parseJoinCode } from './game/invite';
+import { appNav, installNav, sectionFromHash } from './game/nav';
 import { reenterAsAccount } from './game/reentry';
 import { ReplayCursor } from './game/replay_cursor';
 import type { ReplayMark } from './game/replay_marks';
@@ -42,7 +48,7 @@ import { type CollectionState, loadCollection } from './ui/collection';
 import { takeDiscordResult } from './ui/discord_entry';
 import { takeConfirmResult } from './ui/email_status';
 import { preloadBackdrop } from './ui/home_backdrop';
-import { type HomeChoice, showHome } from './ui/home_screen';
+import { HOME_SECTION_KEYS, type HomeChoice, showHome } from './ui/home_screen';
 import { showLanding } from './ui/landing';
 import {
   type BotPick,
@@ -83,9 +89,16 @@ interface OfflinePick {
 // out, what a fresh account would hold. Practice was the one place the
 // whole roster stood open, which read as the wall being a punishment for
 // signing up rather than a thing to climb.
-async function pickForPractice(): Promise<OfflinePick> {
+// Resolves null when the select is left without a pick: its Back, or the
+// browser's.
+async function pickForPractice(): Promise<OfflinePick | null> {
   const collection = await loadCollection();
   return new Promise((resolve) => {
+    const leave = (): void => {
+      picker.remove();
+      frame.closed();
+      resolve(null);
+    };
     const picker = showSelect(
       container,
       null,
@@ -95,13 +108,17 @@ async function pickForPractice(): Promise<OfflinePick> {
         // Inside the lock-in click gesture, so the browser grants it.
         requestGameFullscreen();
         picker.remove();
+        frame.closed();
         resolve({ championId, sigils, skin });
       },
       undefined,
       undefined,
       undefined,
       collection,
+      leave,
     );
+    // A layer over the page it opened from; Back leaves it with no pick.
+    const frame = appNav().push('select', leave);
   });
 }
 
@@ -151,21 +168,35 @@ function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
     }
 
     let stopped = false;
+    const exit = (action: PostMatchAction): void => {
+      if (stopped) return;
+      stopped = true;
+      pres.dispose();
+      layer.closed();
+      resolve(action);
+    };
+    // The match is a guarded layer (src/game/nav.ts): Back opens the pause
+    // menu instead of leaving, and closing the tab asks first. Once the
+    // match has a winner nothing is at stake, and Back returns to the menu
+    // like the end screen's button.
+    const layer = appNav().push('match', () => exit('menu'));
+    layer.guard(() => pres.toggleEscapeMenu());
+    let guarded = true;
     // A match is on screen, which is as far down the funnel as a visitor
     // with no account can get. Practice and the Forge test drive both land
     // here; the replay viewer below deliberately does not, since watching
     // is not playing.
     markStep('played');
-    const pres = startPresentation(container, world, self.id, self.team, (action) => {
-      stopped = true;
-      pres.dispose();
-      resolve(action);
-    });
+    const pres = startPresentation(container, world, self.id, self.team, exit);
     const TICK_MS = DT * 1000;
     let last = performance.now();
     let acc = 0;
     function frame(now: number): void {
       if (stopped) return;
+      if (guarded && world.winner !== null) {
+        guarded = false;
+        layer.unguard();
+      }
       acc += Math.min(now - last, 250);
       last = now;
       while (acc >= TICK_MS) {
@@ -272,8 +303,12 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
       worker.terminate();
       bar?.dispose();
       pres.dispose();
+      layer.closed();
       resolve(action);
     };
+    // Watching is a layer like any other: Back leaves the replay for the
+    // page it was opened from. Nothing is at stake, so it is not guarded.
+    const layer = appNav().push('replay', () => finish('menu'));
     const pres = startPresentation(
       container,
       world,
@@ -466,8 +501,11 @@ function runSpectate(matchId: number, team: TeamId): Promise<PostMatchAction> {
         ws.send(JSON.stringify({ t: 'leave' }));
         ws.close();
       }
+      layer.closed();
       resolve(action);
     };
+    // Watching a live match is a layer, unguarded: Back leaves it.
+    const layer = appNav().push('spectate', () => finish('menu'));
     ws.addEventListener('open', () => {
       // No token on purpose: watching needs no identity, and presenting
       // one could pull a reserved seat back instead of spectating.
@@ -572,8 +610,16 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
         ws.send(JSON.stringify({ t: 'leave' }));
         ws.close();
       }
+      layer.closed();
       resolve(action);
     };
+    // The whole session is one layer (src/game/nav.ts). In the queue or
+    // the lobby, Back is the Cancel or Leave button. From champion select
+    // on it is guarded: the team's clock is running and a seat is held, so
+    // Back does nothing in select, opens the pause menu in the match, and
+    // closing the tab asks first. The end screen lifts the guard: Back is
+    // then Return to menu.
+    const layer = appNav().push('session', () => finish('menu'));
 
     // What this account may pick (ADR 0018), fetched the moment the
     // session opens so the wall is drawn with the first paint of select
@@ -687,6 +733,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           break;
         case 'select_start': {
           clearMenus();
+          layer.guard(() => undefined);
           const openSelect = (
             forgedList: readonly ForgedPick[],
             community: readonly CommunityPick[],
@@ -766,6 +813,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
             // match reports above. Once per browser per day either way.
             markStep('played');
             pres = startPresentation(container, world, world.selfUnitId, world.selfTeam, finish);
+            layer.guard(() => pres?.toggleEscapeMenu());
             // A coach seat (ADR 0013): the bar for the orders with no place to
             // click; right-click already goes and focuses through the mirror.
             if (world.coach) {
@@ -809,6 +857,7 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           // The end overlay (stats, Play again, Return to menu) owns the way
           // out; without a presentation there is nothing to look at, go home.
           matchEnded = true;
+          layer.unguard();
           if (!pres) finish('menu');
           break;
         case 'error': {
@@ -872,11 +921,17 @@ async function boot(): Promise<void> {
   window.setTimeout(() => {
     if (!document.hidden) markStep('stayed');
   }, STAYED_MS);
+  // The section the address names (#ladder), read before the navigation
+  // takes the address over: a reload in a section lands back in it.
+  let startSection = sectionFromHash(window.location.hash, HOME_SECTION_KEYS);
   // An invite link (?join=CODE) deep-links into the friend's lobby: with a
   // stored name we go straight in; a first-time visitor gets the home
   // screen with the code prefilled. Consumed once, so reloads stay home.
   let joinCode = parseJoinCode(window.location.search);
   if (joinCode !== null) window.history.replaceState(null, '', window.location.pathname);
+  // From here on the browser's history mirrors the screens (ADR 0020):
+  // this page is the root, and everything that opens over it is a layer.
+  installNav();
   // The landing art is the first thing on screen; ask for it before the
   // session check so the two requests fly together.
   preloadBackdrop();
@@ -920,8 +975,10 @@ async function boot(): Promise<void> {
         reenterAsAccount({ joinCode, confirmed });
         return;
       }
-      // Offline: one match against bots, then back to the way in.
-      const pick: OfflinePick = lastPick ?? (await pickForPractice());
+      // Offline: one match against bots, then back to the way in. A select
+      // left without a pick is back to the way in too.
+      const pick: OfflinePick | null = lastPick ?? (await pickForPractice());
+      if (!pick) continue;
       lastPick = pick;
       await runOffline(pick);
       continue;
@@ -936,8 +993,10 @@ async function boot(): Promise<void> {
         confirmed,
         discordResult,
         reopenAcademy,
+        startSection,
       ));
     reopenAcademy = null;
+    startSection = null;
     confirmed = null;
     discordResult = null;
     joinCode = null;
@@ -946,7 +1005,7 @@ async function boot(): Promise<void> {
     if (choice.mode === 'practice') {
       // A Forge test drive arrives with its draft; a plain practice run
       // goes through champion select as always.
-      const pick: OfflinePick = choice.forged
+      const pick: OfflinePick | null = choice.forged
         ? {
             championId: choice.forged.id,
             sigils: ['riftstep', 'mend'],
@@ -954,6 +1013,8 @@ async function boot(): Promise<void> {
             forged: choice.forged,
           }
         : (lastPick ?? (await pickForPractice()));
+      // Left the select without a pick: back to the home.
+      if (!pick) continue;
       lastPick = pick;
       action = await runOffline(pick);
     } else if (choice.mode === 'replay' && choice.replayId !== undefined) {

@@ -10,6 +10,13 @@
 // root and hands back its close, which is all this needs to swap one for
 // another. A page that closes itself (its own Back, or Escape) leaves the
 // host empty, and the observer reports that as the section being gone.
+//
+// The open section is a layer of the navigation (src/game/nav.ts, ADR
+// 0020) with the section's key for an address: the browser's Back closes
+// it back to the tiles, a reload on #ladder reopens the ladder, and
+// switching sections swaps the one entry rather than piling up two.
+
+import { appNav, type Frame } from '../game/nav';
 
 // What a bar entry does: mount the section into `host` and hand back the
 // close, exactly the shape every ui/*.ts open function has.
@@ -50,6 +57,7 @@ export function createSectionHost(
   host.className = 'home-section';
   let key: string | null = null;
   let closeCurrent: (() => void) | null = null;
+  let frame: Frame | null = null;
 
   // The host starts at the bar's foot, measured rather than assumed: the
   // bar is one row on a desktop and two on a phone.
@@ -65,24 +73,38 @@ export function createSectionHost(
     onChange(next);
   };
 
+  // The page down and the host emptied, the nav left alone: this is what
+  // the nav calls when Back closes the section, and what a swap runs on
+  // the section it swaps out.
+  const tearDown = (): void => {
+    const stop = closeCurrent;
+    closeCurrent = null;
+    frame = null;
+    // Emptying the host is the page's own job; this only asks for it.
+    if (stop) stop();
+    host.textContent = '';
+    settle(null);
+  };
+
   // A page that closed itself leaves the host empty; that is the signal,
-  // and it needs no cooperation from the five pages.
+  // and it needs no cooperation from the five pages. The nav is told, so
+  // the history steps back with it.
   const watch = new MutationObserver(() => {
     if (key !== null && host.childElementCount === 0) {
+      const gone = frame;
       closeCurrent = null;
+      frame = null;
       settle(null);
+      gone?.closed();
     }
   });
   watch.observe(host, { childList: true });
 
   const close = (): void => {
     if (key === null) return;
-    const stop = closeCurrent;
-    closeCurrent = null;
-    // Emptying the host is the page's own job; this only asks for it.
-    if (stop) stop();
-    host.textContent = '';
-    settle(null);
+    const gone = frame;
+    tearDown();
+    gone?.closed();
   };
 
   return {
@@ -91,7 +113,12 @@ export function createSectionHost(
         close();
         return;
       }
-      close();
+      // One entry for the section that is open, whichever it is: a swap
+      // replaces the layer (and tears the old page down through it)
+      // rather than closing one and pushing the next.
+      const nav = appNav();
+      const was = frame;
+      frame = was ? nav.replace(was, next, tearDown, next) : nav.push(next, tearDown, next);
       (page.parentElement ?? document.body).appendChild(host);
       place();
       closeCurrent = open(host);

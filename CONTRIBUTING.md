@@ -87,6 +87,8 @@ path to it from `CHROME`, defaulting to the usual Windows install:
 
 ```bash
 CHROME=/usr/bin/chromium node scripts/e2e_online.mjs
+# The browser's Back through the app, and the match's guard against leaving:
+CHROME=/usr/bin/chromium node scripts/e2e_nav.mjs
 ```
 
 ## Making a change

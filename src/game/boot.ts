@@ -57,6 +57,9 @@ export interface Presentation {
   // The server's rating verdict for this player, shown on the end screen;
   // queue 'forge' labels the number as the Forge queue's own ladder.
   setMatchResult(rated: boolean, delta: number, rating: number, queue?: 'forge', way?: 'bot'): void;
+  // The pause menu, where Leave match lives: what the browser's Back does
+  // mid-match instead of leaving (src/game/nav.ts). Back again resumes.
+  toggleEscapeMenu(): void;
   // Same-page teardown: render loop, input, HUD, minimap, GL, music. The
   // menu returns on the same document; nothing may keep running behind it.
   dispose(): void;
@@ -407,6 +410,7 @@ export function startPresentation(
     },
     setMatchResult: (rated, delta, rating, queue, way) =>
       hud.setMatchResult(rated, delta, rating, queue, way),
+    toggleEscapeMenu: () => hud.toggleEscapeMenu(),
     dispose: () => {
       if (disposed) return;
       disposed = true;

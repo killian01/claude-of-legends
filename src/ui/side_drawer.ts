@@ -1,8 +1,10 @@
 // A sheet that slides in from the right over a page and holds a panel not
 // worth a page of its own: the account's own things, the live matches.
-// The scrim, Escape and the close button all take it down; the page that
+// The scrim, Escape, the close button and the browser's Back all take it
+// down (it is a layer of the navigation, src/game/nav.ts); the page that
 // opened it closes it too when it leaves, so no listener outlives it.
 
+import { appNav } from '../game/nav';
 import { el } from './menu';
 
 const CSS = `
@@ -79,6 +81,7 @@ export function openDrawer(host: HTMLElement, title: string): Drawer {
     window.removeEventListener('keydown', onKey);
     scrim.remove();
     sheet.remove();
+    frame.closed();
   };
   function onKey(e: KeyboardEvent): void {
     if (e.key === 'Escape') close();
@@ -87,5 +90,6 @@ export function openDrawer(host: HTMLElement, title: string): Drawer {
   scrim.addEventListener('click', close);
   closeBtn.addEventListener('click', close);
   host.append(scrim, sheet);
+  const frame = appNav().push('drawer', close);
   return { body, foot, close };
 }

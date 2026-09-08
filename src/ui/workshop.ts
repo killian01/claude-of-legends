@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { appNav } from '../game/nav';
 import {
   captureRestPose,
   findBone,
@@ -1371,6 +1372,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
     gizmo.dispose();
     renderer.dispose();
     root.remove();
+    layer.closed();
   };
   const onKey = (e: KeyboardEvent): void => {
     // Escape unwinds one layer at a time: the grip aim first, then the
@@ -1387,4 +1389,7 @@ export function openWorkshop(container: HTMLElement, subject: WorkshopSubject): 
   };
   window.addEventListener('keydown', onKey);
   back.addEventListener('click', close);
+  // A layer over the Forge: the browser's Back closes the workshop and
+  // leaves the editor open under it.
+  const layer = appNav().push('workshop', close);
 }
