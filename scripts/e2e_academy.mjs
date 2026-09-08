@@ -163,7 +163,9 @@ const run = async () => {
   if (line.icons + line.slots !== 6)
     throw new Error(`build row: ${line.icons} icons, ${line.slots} slots`);
   if (line.dismiss) throw new Error('a Dismiss button survived');
-  if (!/ \d+-\d+/.test(line.rail)) throw new Error(`the rail has no tally: ${line.rail}`);
+  // The rail's chip counts rated play alone (server/bots.ts, listBots): a
+  // sparring is unrated and leaves it naming the champion and the version.
+  if (!/^\S+ · v\d+/.test(line.rail)) throw new Error(`the rail chip drifted: ${line.rail}`);
   console.log(
     'summary:',
     line.verdict,
@@ -196,7 +198,10 @@ const run = async () => {
   }));
   console.log('record:', rec);
   if (rec.rows < 1) throw new Error('the Record lists nothing');
-  if (!/^\d+ won, \d+ lost$/.test(rec.tally)) throw new Error(`tally: ${rec.tally}`);
+  // The head counts rated play per kind (ui/record_view.ts): a fresh bot's
+  // one sparring leaves it saying so.
+  if (!/^(no rated match yet|\d+ won, \d+ lost, rated)$/.test(rec.tally))
+    throw new Error(`tally: ${rec.tally}`);
   if (!/^(Won|Lost|No winner) after /.test(rec.sheetRes)) throw new Error(`sheet: ${rec.sheetRes}`);
   if (rec.scoreRows !== 1) throw new Error(`the bot's row is not marked once: ${rec.scoreRows}`);
   if (rec.sections.join() !== 'Scoreboard,Plays,Deaths')
