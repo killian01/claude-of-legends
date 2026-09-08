@@ -127,6 +127,16 @@ export function stepStatus(id: StepId, f: StepFacts): string {
   }
 }
 
+// A bot carries exactly two sigils, so the grid never asks for a third:
+// picking another one puts down the older of the two, and picking one
+// already held only makes it the newer, so the next pick spares it.
+export function pickSigil(held: readonly [string, string], picked: string): [string, string] {
+  const [older, newer] = held;
+  if (picked === newer) return [older, newer];
+  if (picked === older) return [newer, older];
+  return [newer, picked];
+}
+
 // What each sigil does, in a line, for the step where they are picked
 // (src/sim/content/sigils.ts holds the numbers).
 export const SIGIL_BLURBS: Readonly<Record<string, string>> = {

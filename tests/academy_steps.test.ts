@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { SIGIL_LIST } from '../src/sim/content/sigils';
 import {
   openSteps,
+  pickSigil,
   SIGIL_BLURBS,
   STEPS,
   type StepFacts,
@@ -103,6 +104,21 @@ describe('the Academy steps', () => {
     expect(stepStatus('play', ranked)).toBe('Ranked');
     ranked.bot = { ...ranked.bot, tally: { wins: 7, losses: 3 } };
     expect(stepStatus('play', ranked)).toBe('Ranked, 7-3 rated');
+  });
+
+  it('keeps exactly two sigils, the older one giving way', () => {
+    expect(pickSigil(['riftstep', 'mend'], 'sear')).toEqual(['mend', 'sear']);
+    expect(pickSigil(['mend', 'sear'], 'zephyr')).toEqual(['sear', 'zephyr']);
+    // Picking one already held only makes it the newer of the two.
+    expect(pickSigil(['riftstep', 'mend'], 'mend')).toEqual(['riftstep', 'mend']);
+    expect(pickSigil(['riftstep', 'mend'], 'riftstep')).toEqual(['mend', 'riftstep']);
+    // Never the same sigil twice, whatever the sequence.
+    let held: [string, string] = ['riftstep', 'mend'];
+    for (const id of ['sear', 'sear', 'riftstep', 'zephyr', 'zephyr', 'mend']) {
+      held = pickSigil(held, id);
+      expect(new Set(held).size).toBe(2);
+    }
+    expect(held).toEqual(['zephyr', 'mend']);
   });
 
   it('describes every sigil in the pool, and no other', () => {

@@ -34,6 +34,7 @@ import {
 import type { TeamId } from '../sim/types';
 import {
   openSteps,
+  pickSigil,
   SIGIL_BLURBS,
   STEPS,
   type StepFacts,
@@ -46,6 +47,7 @@ import {
 import { BALANCE_CSS, balanceTag } from './balances';
 import { setPortrait } from './champion_art';
 import { loadCollection } from './collection';
+import { sigilImageUrl } from './icon_images';
 import { buildCounts, buildRow, itemCatalog } from './item_catalog';
 import { el } from './menu';
 import { startMenuBackdrop } from './menu_backdrop';
@@ -217,11 +219,29 @@ const CSS = `${BALANCE_CSS}
 .ac-champ-t b { font-size: 12.5px; color: #e0ecf3; }
 .ac-champ-t small { font-size: 10.5px; color: #7f9cae; }
 .ac-champ-blurb { color: #8fa6b6; font-size: 12px; line-height: 1.45; margin: 0 0 10px; }
-.ac-sigils { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 4px 0 10px; }
-.ac-sigil { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: 8px;
-  border: 1px solid #1f3644; background: #0b141a; }
-.ac-sigil .ac-select { width: 100%; }
-.ac-sigil small { color: #7f9cae; font-size: 11px; line-height: 1.35; }
+/* The sigils as a grid of all four, two of them lit and numbered in the
+   order they were picked; a click on another swaps the older one out. */
+.ac-sigils { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px;
+  margin: 4px 0 10px; }
+.ac-sigil {
+  position: relative; display: flex; align-items: flex-start; gap: 10px; padding: 9px 10px;
+  min-width: 0; text-align: left; border-radius: 8px; border: 1px solid #1f3644;
+  background: #0b141a; color: #c8d6e0; font: inherit; cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.ac-sigil:hover { border-color: #3d7a94; }
+.ac-sigil.on { border-color: #8ed6f0; background: #122431; }
+.ac-sigil img { width: 40px; height: 40px; border-radius: 6px; border: 1px solid #2c4d60;
+  background: #070d12; flex: none; display: block; object-fit: cover; }
+.ac-sigil-t { min-width: 0; display: flex; flex-direction: column; gap: 3px; line-height: 1.25; }
+.ac-sigil-t b { font-size: 12.5px; color: #e0ecf3; }
+.ac-sigil-t small { color: #7f9cae; font-size: 11px; line-height: 1.35; }
+.ac-sigil.on .ac-sigil-t small { color: #a9c2d2; }
+.ac-sigil-n {
+  position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800;
+  background: #8ed6f0; color: #06141c; border: 1px solid #b8e8f8;
+}
 .ac-fieldlabel { font-size: 10.5px; color: #6cc3e0; text-transform: uppercase; letter-spacing: 0.5px; margin: 8px 0 4px; }
 .ac-name { font-size: 15px; padding: 8px 10px; }
 /* The play step: one switch, said in full. */
@@ -759,18 +779,6 @@ export function openAcademy(container: HTMLElement, opts: AcademyOptions = {}): 
     renderAll();
   };
 
-  function sigilSelect(value: string): HTMLSelectElement {
-    const s = el('select', 'ac-select') as HTMLSelectElement;
-    for (const sig of SIGIL_LIST) {
-      const o = document.createElement('option');
-      o.value = sig.id;
-      o.textContent = sig.name;
-      s.append(o);
-    }
-    s.value = value;
-    return s;
-  }
-
   // --- the main: the step bar, then the step of the bot ---
   function renderMain(): void {
     main.textContent = '';
@@ -978,34 +986,40 @@ export function openAcademy(container: HTMLElement, opts: AcademyOptions = {}): 
     return card;
   }
 
-  // Two sigils, each saying what it does.
-  function sigilPicks(
-    value: [string, string],
+  // The sigils as a grid, all four with what each does, two of them lit
+  // and numbered in the order they were picked (ui/academy_steps.ts,
+  // pickSigil): a bot always holds exactly two.
+  function sigilGrid(
+    held: readonly [string, string],
     onChange: (next: [string, string]) => void,
   ): HTMLElement {
-    const box = el('div', 'ac-sigils');
-    const picks = [sigilSelect(value[0]), sigilSelect(value[1])] as const;
-    const blurbs = [el('small', ''), el('small', '')] as const;
-    const refresh = (): void => {
-      for (const [i, sel] of picks.entries()) {
-        const b = blurbs[i];
-        if (b) b.textContent = SIGIL_BLURBS[sel.value] ?? '';
+    const grid = el('div', 'ac-sigils');
+    for (const sig of SIGIL_LIST) {
+      const at = held.indexOf(sig.id);
+      const card = el('button', `ac-sigil${at >= 0 ? ' on' : ''}`);
+      card.type = 'button';
+      card.dataset.sigil = sig.id;
+      card.setAttribute('aria-pressed', at >= 0 ? 'true' : 'false');
+      const url = sigilImageUrl(sig.id);
+      if (url) {
+        const img = document.createElement('img');
+        img.alt = '';
+        img.src = url;
+        img.addEventListener('error', () => img.remove(), { once: true });
+        card.append(img);
       }
-    };
-    for (const [i, sel] of picks.entries()) {
-      const cell = el('div', 'ac-sigil');
-      cell.append(el('span', 'ac-fieldlabel', i === 0 ? 'First sigil' : 'Second sigil'));
-      cell.append(sel);
-      const b = blurbs[i];
-      if (b) cell.append(b);
-      sel.addEventListener('change', () => {
-        refresh();
-        onChange([picks[0].value, picks[1].value]);
-      });
-      box.append(cell);
+      const text = el('span', 'ac-sigil-t');
+      text.append(el('b', '', sig.name), el('small', '', SIGIL_BLURBS[sig.id] ?? ''));
+      card.append(text);
+      if (at >= 0) card.append(el('span', 'ac-sigil-n', String(at + 1)));
+      card.title =
+        at >= 0
+          ? 'Held; picking another swaps the older one out'
+          : 'Pick it, in place of the older one';
+      card.addEventListener('click', () => onChange(pickSigil(held, sig.id)));
+      grid.append(card);
     }
-    refresh();
-    return box;
+    return grid;
   }
 
   // The first step of a bot not made yet: the form, with the room the
@@ -1070,10 +1084,11 @@ export function openAcademy(container: HTMLElement, opts: AcademyOptions = {}): 
       ),
     );
 
-    panel.append(el('div', 'ac-fieldlabel', 'Sigils'));
+    panel.append(el('div', 'ac-fieldlabel', 'Sigils, pick two'));
     panel.append(
-      sigilPicks(draft.sigils, (next) => {
+      sigilGrid(draft.sigils, (next) => {
         draft.sigils = next;
+        renderMain();
       }),
     );
 
@@ -1136,9 +1151,9 @@ export function openAcademy(container: HTMLElement, opts: AcademyOptions = {}): 
           'A bot keeps its champion; make another bot for another one.',
       ),
     );
-    who.append(el('div', 'ac-fieldlabel', 'Sigils'));
+    who.append(el('div', 'ac-fieldlabel', 'Sigils, two of the four'));
     who.append(
-      sigilPicks(bot.sigils, (next) => {
+      sigilGrid(bot.sigils, (next) => {
         bot.sigils = next;
         dirty = true;
         renderMain();
