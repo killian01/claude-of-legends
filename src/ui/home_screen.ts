@@ -185,8 +185,16 @@ export function showHome(
     window.addEventListener('loc:forge-test', onForgeTest);
 
     // --- the bar: the sections, Live, and the account's own drawer ---
-    const showAcademy = (botId?: string): void =>
-      sections.open('academy', (host) => openAcademy(host, botId ? { botId } : {}));
+    // The Academy, on a bot and a step when the caller has one (the way
+    // back from a replay lands on Sparring); its Play step queues.
+    const showAcademy = (botId?: string, step?: 'spar'): void =>
+      sections.open('academy', (host) =>
+        openAcademy(host, {
+          ...(botId ? { botId } : {}),
+          ...(step ? { step } : {}),
+          onPlay: () => done('queue'),
+        }),
+      );
     const onWatch = (id: number, follow?: number): void => {
       window.dispatchEvent(
         new CustomEvent('loc:replay', {
@@ -297,6 +305,6 @@ export function showHome(
       homeBar.setLiveCount(s.matches);
     });
 
-    if (reopen) showAcademy(reopen.botId);
+    if (reopen) showAcademy(reopen.botId, 'spar');
   });
 }

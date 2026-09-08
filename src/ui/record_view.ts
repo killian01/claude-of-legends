@@ -357,7 +357,8 @@ export function renderRecordView(into: HTMLElement, opts: RecordViewOptions): vo
   const head = el('div', 'rv-head');
   head.append(el('h2', '', `The Record of ${opts.bot.name}`), tallyText);
   const filters = el('div', 'rv-filters');
-  const back = el('button', 'rv-back', 'Back to the playbook');
+  // The Record opens from the sparring step, and closes back onto it.
+  const back = el('button', 'rv-back', 'Back to sparring');
   back.addEventListener('click', opts.onBack);
   head.append(filters, back);
   const body = el('div', 'rv-body');

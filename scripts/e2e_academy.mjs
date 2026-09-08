@@ -80,8 +80,15 @@ const run = async () => {
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await clickButton(page, 'Create');
+  // Created, the Academy lands on the kit step (ui/academy_steps.ts): the
+  // step bar lights "The kit" and the catalog is up. The sparring step is
+  // two steps on and reached by its entry in the bar.
   try {
-    await waitFor(page, findBtn('Spar vs house bots'), 'the bot is open');
+    await waitFor(
+      page,
+      `document.querySelector('.ac-step.on')?.dataset.step === 'kit'`,
+      'the bot is open on its kit',
+    );
   } catch (e) {
     const dump = await page.evaluate(() => ({
       status: [...document.querySelectorAll('.ac-status')].map((s) => s.textContent),
@@ -116,6 +123,14 @@ const run = async () => {
   console.log('kit:', kit);
   await shot(page, 'academy-kit');
 
+  // On to the sparring step by the bar; the coach stands beside it.
+  await page.evaluate(() => document.querySelector('.ac-step[data-step="spar"]')?.click());
+  await waitFor(page, findBtn('Spar vs house bots'), 'the sparring step');
+  const coachBeside = await page.evaluate(
+    () => document.querySelector('.ac-chatrow .ac-input') !== null,
+  );
+  if (!coachBeside) throw new Error('the coach is not beside the sparring step');
+
   // Sparring: the summary leads with the line.
   await clickButton(page, 'Spar vs house bots');
   await waitFor(
@@ -134,8 +149,9 @@ const run = async () => {
       [...document.querySelectorAll('.ac-line .dim')]
         .map((e) => e.textContent)
         .find((t) => /cs$/.test(t ?? '')) ?? '',
-    icons: document.querySelectorAll('.ac-side .hud-score-build img').length,
-    slots: document.querySelectorAll('.ac-side .hud-score-build .slot').length,
+    // The sparring panel stands in the main column now, on its own step.
+    icons: document.querySelectorAll('.ac-spar .hud-score-build img').length,
+    slots: document.querySelectorAll('.ac-spar .hud-score-build .slot').length,
     dismiss: [...document.querySelectorAll('.ac button')].some((b) => b.textContent === 'Dismiss'),
     rail: document.querySelector('.ac-bot.picked small')?.textContent ?? '',
   }));
@@ -287,6 +303,7 @@ const run = async () => {
   await page.mouse.move(750, 380);
   await shot(page, 'academy-replay');
   await clickButton(page, 'Exit replay');
+  // Back in the Academy on the same bot, on the sparring step it left from.
   await waitFor(page, findBtn('Spar vs house bots'), 'back in the Academy', 30000);
 
   // The coach: the log follows the answer to its end.
