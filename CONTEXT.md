@@ -161,10 +161,13 @@ never part of it: only the account itself ever sees its own.
 _Avoid_: profile (that is the screen that shows an account), user, login, player (ambiguous, see Participant)
 
 **Home**:
-The page a signed-in account lands on: the bar to every section, the play tiles, and the
-account's own place. A section opens under the bar rather than over it, so the bar stays
-and one click goes from any section to the next.
-_Avoid_: menu, main menu, lobby (that is the private one), dashboard, launcher
+The page a signed-in account lands on: the bar to every section, the play tiles, and under
+them the home's panels: the account's own place and numbers, the top of the ladder by hand,
+the top bots, and the latest champions out of the Forge, each a way into the section that
+holds the rest. Everything under the bar stands in one column, centered on a wide window.
+A section opens under the bar rather than over it, so the bar stays and one click goes from
+any section to the next.
+_Avoid_: menu, main menu, lobby (that is the private one), dashboard, launcher, feed, widget
 
 **Play tile**:
 One of the five ways into a match on the Home, each a painted scene of its own: the Ranked
