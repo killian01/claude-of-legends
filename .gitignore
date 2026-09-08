@@ -25,3 +25,5 @@ art_src/
 dist-gate*/
 dist-matrix*/
 dist-champions*/
+# Local stack run directory (.claude/skills/dev-server/stack.sh): pids, logs, and a task-local DATA_DIR.
+.dev/
