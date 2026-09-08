@@ -122,6 +122,23 @@ puppeteer-core against the stack on the default ports. They are not part of `pnp
 `CHROME` names the binary (the default is the Windows install path); `SHOT_DIR` collects
 screenshots where a script supports it.
 
+Two things a Linux machine with a recent Chrome will meet:
+
+- **No WebGL under `--use-gl=swiftshader`.** The scripts pass that flag; newer builds refuse
+  it and every Three.js surface then throws `Error creating WebGL context` (the champion
+  portraits, the replay player, the workshop), which reads like a client bug. Launch with
+  `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist`
+  instead and software WebGL comes back.
+- **The replay checks in `e2e_academy.mjs` read the clock right after a seek**, before a
+  frame has painted. Under software GL a frame can take longer than that, so "the seek
+  landed at N" fails on a seek that landed. Give the clock a few hundred milliseconds before
+  reading it when reproducing; the seek itself is fine.
+
+Stills for a PR are taken on a seeded state directory (above), at 1500 pixels wide and
+again at 2200 for anything that centers, then converted to WebP under `docs/screenshots`.
+The `.pg` page scrolls inside its own element, so a full-page screenshot captures the
+viewport alone: use a tall viewport rather than `fullPage`.
+
 ## Reading a red test run
 
 The suite gives each test 60 seconds because the heaviest ones step whole matches; on a

@@ -27,7 +27,7 @@ Vitest · Biome. No UI framework; tiny dependency set.
 | `src/sim/playbook/` | The playbook interpreter: a bot's decisions as data (ADR 0013), the validator, the patch operations, the play report. |
 | `src/render/` | Three.js top-down renderer. Reads the world; never mutates it. |
 | `src/game/` | Local input and client glue. |
-| `src/ui/` | HUD (DOM + CSS). |
+| `src/ui/` | The HUD and every screen, DOM + CSS with no framework: the landing and the home (`page.ts`, `home_*.ts`), the Academy (`academy.ts` over `academy_steps.ts`), the ladder, the gallery, the Forge editor. |
 | `src/net/` | Online client: wire protocol + WebSocket mirror world. |
 | `server/` | Authoritative game server; `server/generation/` is the Forge's provider seam (ADR 0010); the bots' store, the Arena and the night coach live beside it (ADR 0013). |
 | `headless/` | The environment: a match stepped from outside the repo over NDJSON (ADR 0002 phase 2). |
@@ -81,11 +81,18 @@ keep this table honest as they land.
   tables are correctly big.
 - **Content is data.** Champions, items, sigils, and map records live under
   `src/sim/content/`, merged by one data module; never content tables inline in sim logic.
+- **A screen reads one request.** What a screen shows is built by a pure
+  `server/<screen>_page.ts` with its own test (`ladder_page.ts`, `home_page.ts`,
+  `bot_page.ts`) and served by one route; the client module mirrors the wire shape locally
+  and never imports from `server/`. What a screen decides without the DOM (the play tiles,
+  the Academy's steps, a pick rule) is a pure `src/ui/*.ts` module beside it, tested.
 - **Commits:** Conventional Commits with a scope (`feat(sim): ...`, `fix(net): ...`) and a
   short body saying what changed and why. Branches: `feature/<slug>`, `fix/<slug>`.
 - **Pull requests:** based on `main`, small and focused, following
   `.github/PULL_REQUEST_TEMPLATE.md`. If the change is visual, add before/after screenshots
-  to the PR, committed under `docs/screenshots` and referenced from the PR body.
+  to the PR, committed under `docs/screenshots` as WebP and referenced from the PR body;
+  take them on a state directory with people on it (`node scripts/seed_home.mjs`,
+  `docs/dev-local.md`), never on an empty server.
   The contributor-facing walkthrough is `CONTRIBUTING.md`; keep the two consistent.
 - **Releases:** `main` is the development branch; releases are `vX.Y.Z` tags cut from `main`
   by the maintainer, with `package.json` `version` bumped in the tagged commit.
