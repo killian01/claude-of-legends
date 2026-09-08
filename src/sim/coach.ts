@@ -5,6 +5,7 @@
 // One order is active at a time, persistent until released or done: a
 // goto clears itself on arrival, a focus when its target is gone.
 
+import { hypot } from './exact';
 import type { Sim } from './sim';
 import type { Unit } from './unit';
 
@@ -73,7 +74,7 @@ export function stepCoachOrder(sim: Sim, u: Unit): void {
   const order = u.coachOrder;
   if (!order) return;
   if (order.kind === 'goto') {
-    if (Math.hypot(u.pos.x - order.x, u.pos.z - order.z) <= GOTO_DONE_RADIUS) u.coachOrder = null;
+    if (hypot(u.pos.x - order.x, u.pos.z - order.z) <= GOTO_DONE_RADIUS) u.coachOrder = null;
     return;
   }
   if (order.kind === 'focus') {

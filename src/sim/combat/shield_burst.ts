@@ -4,6 +4,7 @@
 // list. Runs each tick BEFORE generic status expiry so an expiring burst is
 // never silently pruned.
 
+import { hypot } from '../exact';
 import type { CombatCtx } from '../sim_context';
 import { isSpellTarget } from '../spell_targets';
 import { hostile } from '../unit';
@@ -23,7 +24,7 @@ export function stepShieldBursts(ctx: CombatCtx): void {
         for (const other of ctx.units.values()) {
           if (!hostile(u, other) || other.dead || ctx.dead.has(other.id)) continue;
           if (!isSpellTarget(other)) continue;
-          const d = Math.hypot(other.pos.x - u.pos.x, other.pos.z - u.pos.z);
+          const d = hypot(other.pos.x - u.pos.x, other.pos.z - u.pos.z);
           if (d > s.burst.radius + other.radius) continue;
           applyEffects(ctx, s.burst.sourceId, s.burst.power, other, effects, 'ability', {
             center: u.pos,

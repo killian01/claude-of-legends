@@ -4,6 +4,7 @@
 // reuse executeCast with their own bookkeeping.
 
 import type { CastSoundId } from '../content/sounds';
+import { cos, hypot } from '../exact';
 import { passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
 import type { SpellLook } from '../spell_look';
@@ -154,7 +155,7 @@ export function specForRank(def: AbilityDef, rank: number): CastSpec {
 function clampToRange(from: Vec2, aim: Vec2, range: number): Vec2 {
   const dx = aim.x - from.x;
   const dz = aim.z - from.z;
-  const d = Math.hypot(dx, dz);
+  const d = hypot(dx, dz);
   if (d <= range || d === 0) return { x: aim.x, z: aim.z };
   return { x: from.x + (dx / d) * range, z: from.z + (dz / d) * range };
 }
@@ -174,9 +175,9 @@ function findEnemyTarget(
     if (!isSpellTarget(u)) continue;
     if (isStealthed(u, ctx.time) || isUntargetable(u, ctx.time)) continue;
     const toCaster =
-      Math.hypot(u.pos.x - caster.pos.x, u.pos.z - caster.pos.z) - caster.radius - u.radius;
+      hypot(u.pos.x - caster.pos.x, u.pos.z - caster.pos.z) - caster.radius - u.radius;
     if (toCaster > castRange) continue;
-    const d = Math.hypot(u.pos.x - aim.x, u.pos.z - aim.z) - u.radius;
+    const d = hypot(u.pos.x - aim.x, u.pos.z - aim.z) - u.radius;
     if (d > searchRadius) continue;
     if (d < bestD) {
       bestD = d;
@@ -190,7 +191,7 @@ function enemiesWithin(ctx: CombatCtx, caster: Unit, center: Vec2, radius: numbe
   const out: Unit[] = [];
   for (const u of ctx.units.values()) {
     if (!hostile(caster, u) || u.dead || ctx.dead.has(u.id) || !isSpellTarget(u)) continue;
-    if (Math.hypot(u.pos.x - center.x, u.pos.z - center.z) <= radius + u.radius) out.push(u);
+    if (hypot(u.pos.x - center.x, u.pos.z - center.z) <= radius + u.radius) out.push(u);
   }
   return out;
 }
@@ -210,7 +211,7 @@ export function executeCast(
     case 'skillshot': {
       const dx = aim.x - caster.pos.x;
       const dz = aim.z - caster.pos.z;
-      const d = Math.hypot(dx, dz);
+      const d = hypot(dx, dz);
       const dir = d > 0 ? { x: dx / d, z: dz / d } : { x: 1, z: 0 };
       const id = ctx.allocId();
       ctx.projectiles.set(id, {
@@ -274,11 +275,11 @@ export function executeCast(
       // ally instead). An ally only steals the cast by being strictly
       // closer to the aim point.
       let target = caster;
-      let bestD = Math.min(spec.searchRadius, Math.hypot(caster.pos.x - at.x, caster.pos.z - at.z));
+      let bestD = Math.min(spec.searchRadius, hypot(caster.pos.x - at.x, caster.pos.z - at.z));
       for (const u of ctx.units.values()) {
         if (u.team !== caster.team || u.kind !== 'champion' || u.id === caster.id) continue;
         if (u.dead || ctx.dead.has(u.id)) continue;
-        const d = Math.hypot(u.pos.x - at.x, u.pos.z - at.z);
+        const d = hypot(u.pos.x - at.x, u.pos.z - at.z);
         if (d < bestD) {
           bestD = d;
           target = u;
@@ -296,15 +297,27 @@ export function executeCast(
       return true;
     }
     case 'cone': {
-      const dx = aim.x - caster.pos.x;
-      const dz = aim.z - caster.pos.z;
-      const aimAngle = Math.atan2(dz, dx);
+      // Inside the cone when the angle between the aim and the unit is at
+      // most the half angle, tested on cosines with exact arithmetic
+      // (src/sim/exact.ts): cos falls on [0, PI], so the angle is within
+      // the half angle exactly when its cosine is at least the half
+      // angle's. A cast on the caster's own spot aims east; a unit on the
+      // caster's own spot is inside every cone.
+      let dx = aim.x - caster.pos.x;
+      let dz = aim.z - caster.pos.z;
+      if (dx === 0 && dz === 0) {
+        dx = 1;
+        dz = 0;
+      }
+      const aimLen = hypot(dx, dz);
+      const cosHalf = cos(spec.halfAngle);
       for (const u of enemiesWithin(ctx, caster, caster.pos, spec.range)) {
-        const angle = Math.atan2(u.pos.z - caster.pos.z, u.pos.x - caster.pos.x);
-        let diff = angle - aimAngle;
-        while (diff > Math.PI) diff -= 2 * Math.PI;
-        while (diff < -Math.PI) diff += 2 * Math.PI;
-        if (Math.abs(diff) <= spec.halfAngle) applyEffects(ctx, caster.id, power, u, spec.onHit);
+        const ux = u.pos.x - caster.pos.x;
+        const uz = u.pos.z - caster.pos.z;
+        const dot = dx * ux + dz * uz;
+        if (dot >= cosHalf * aimLen * hypot(ux, uz)) {
+          applyEffects(ctx, caster.id, power, u, spec.onHit);
+        }
       }
       return true;
     }
@@ -330,7 +343,7 @@ export function executeCast(
         // the landing payload resolves wherever the flight actually ends.
         const dx = at.x - caster.pos.x;
         const dz = at.z - caster.pos.z;
-        const dist = Math.hypot(dx, dz);
+        const dist = hypot(dx, dz);
         const dir = dist > 0 ? { x: dx / dist, z: dz / dist } : { x: 1, z: 0 };
         caster.path = [];
         caster.activeDash = {
@@ -362,7 +375,7 @@ export function executeCast(
       }
       const fx = {
         center: { x: caster.pos.x, z: caster.pos.z },
-        distance: Math.hypot(caster.pos.x - aim.x, caster.pos.z - aim.z),
+        distance: hypot(caster.pos.x - aim.x, caster.pos.z - aim.z),
       };
       if (spec.onLand && spec.landRadius) {
         for (const u of enemiesWithin(ctx, caster, caster.pos, spec.landRadius)) {

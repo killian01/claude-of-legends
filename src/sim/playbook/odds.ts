@@ -6,6 +6,7 @@
 // fight, 1 nobody to fight. Pure over the slot context, like every trigger.
 // The odds trigger reads it, and the fight's commit walks in only above it.
 
+import { hypot } from '../exact';
 import type { SlotContext } from './micro';
 
 // The radius the odds are read in when a play states none: the fight's
@@ -26,7 +27,7 @@ export function fightOdds(ctx: SlotContext, within = ODDS_RADIUS): number {
   let enemy = 0;
   for (const u of obs.units) {
     if (u.kind !== 'champion') continue;
-    if (Math.hypot(u.x - s.x, u.z - s.z) > within) continue;
+    if (hypot(u.x - s.x, u.z - s.z) > within) continue;
     if (u.friendly) own += strengthOf(u.hpFrac, u.level);
     else enemy += strengthOf(u.hpFrac, u.level);
   }

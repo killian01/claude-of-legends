@@ -3,6 +3,7 @@
 // cannot see.
 
 import { ROLE_DAMAGE } from '../content/champions';
+import { hypot } from '../exact';
 import type { ObsSeat } from '../policy';
 import type { SlotContext } from './micro';
 import { fightOdds, ODDS_RADIUS } from './odds';
@@ -43,23 +44,21 @@ export function holds(t: Trigger, ctx: SlotContext): boolean {
     case 'time':
       return within(obs.time, t.below, t.atLeast);
     case 'enemies': {
-      const n = ctx.enemyChampions.filter(
-        (u) => Math.hypot(u.x - s.x, u.z - s.z) <= t.within,
-      ).length;
+      const n = ctx.enemyChampions.filter((u) => hypot(u.x - s.x, u.z - s.z) <= t.within).length;
       return countWithin(n, t.atLeast, t.atMost);
     }
     case 'allies': {
       const n = obs.units.filter(
-        (u) => u.friendly && u.kind === 'champion' && Math.hypot(u.x - s.x, u.z - s.z) <= t.within,
+        (u) => u.friendly && u.kind === 'champion' && hypot(u.x - s.x, u.z - s.z) <= t.within,
       ).length;
       return countWithin(n, t.atLeast, t.atMost);
     }
     case 'numbers': {
       const allies = obs.units.filter(
-        (u) => u.friendly && u.kind === 'champion' && Math.hypot(u.x - s.x, u.z - s.z) <= t.within,
+        (u) => u.friendly && u.kind === 'champion' && hypot(u.x - s.x, u.z - s.z) <= t.within,
       ).length;
       const enemies = ctx.enemyChampions.filter(
-        (u) => Math.hypot(u.x - s.x, u.z - s.z) <= t.within,
+        (u) => hypot(u.x - s.x, u.z - s.z) <= t.within,
       ).length;
       return countWithin(allies + 1 - enemies, t.atLeast, t.atMost);
     }
@@ -68,8 +67,7 @@ export function holds(t: Trigger, ctx: SlotContext): boolean {
     case 'minions': {
       const own = t.side === 'own';
       const n = obs.units.filter(
-        (u) =>
-          u.kind === 'minion' && u.friendly === own && Math.hypot(u.x - s.x, u.z - s.z) <= t.within,
+        (u) => u.kind === 'minion' && u.friendly === own && hypot(u.x - s.x, u.z - s.z) <= t.within,
       ).length;
       return countWithin(n, t.atLeast, t.atMost);
     }

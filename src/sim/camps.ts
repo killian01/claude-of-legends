@@ -8,6 +8,7 @@
 
 import { addStatus } from './combat/status';
 import type { CampSpot, GameMap } from './content/map';
+import { hypot } from './exact';
 import type { CombatCtx } from './sim_context';
 import { createCamp, hostile, type Unit } from './unit';
 
@@ -34,7 +35,7 @@ function nearestHostileChampion(ctx: CombatCtx, from: Unit, range: number): Unit
   for (const u of ctx.units.values()) {
     if (u.kind !== 'champion' || u.dead || ctx.dead.has(u.id)) continue;
     if (!hostile(from, u)) continue;
-    const d = Math.hypot(u.pos.x - from.pos.x, u.pos.z - from.pos.z);
+    const d = hypot(u.pos.x - from.pos.x, u.pos.z - from.pos.z);
     if (d <= range && d < bestD) {
       bestD = d;
       best = u;
@@ -56,7 +57,7 @@ export function stepCamps(ctx: CombatCtx, states: CampState[]): void {
     const c = ctx.units.get(state.unitId);
     if (!c || c.dead || ctx.dead.has(c.id)) continue;
 
-    const fromSpot = Math.hypot(c.pos.x - state.spot.x, c.pos.z - state.spot.z);
+    const fromSpot = hypot(c.pos.x - state.spot.x, c.pos.z - state.spot.z);
     const angry = ctx.time - c.lastDamagedAt <= CAMP_CALM_S;
 
     if (fromSpot > CAMP_LEASH_RANGE || (!angry && (c.hp < c.maxHp || fromSpot > 1))) {
@@ -74,7 +75,7 @@ export function stepCamps(ctx: CombatCtx, states: CampState[]): void {
         target &&
         !target.dead &&
         !ctx.dead.has(target.id) &&
-        Math.hypot(target.pos.x - state.spot.x, target.pos.z - state.spot.z) <= CAMP_LEASH_RANGE;
+        hypot(target.pos.x - state.spot.x, target.pos.z - state.spot.z) <= CAMP_LEASH_RANGE;
       if (!targetOk) {
         const next = nearestHostileChampion(ctx, c, CAMP_LEASH_RANGE);
         c.attackTargetId = next ? next.id : null;

@@ -5,6 +5,7 @@
 
 import { applyEffects, type EffectSpec, type Power } from './combat/effects';
 import { isStealthed, isUntargetable } from './combat/status';
+import { hypot } from './exact';
 import type { DamageVia } from './passive_types';
 import { passiveOf, runItemAttackHits } from './passives';
 import type { CombatCtx } from './sim_context';
@@ -57,7 +58,7 @@ function applySplash(ctx: CombatCtx, p: Projectile, around: Unit): void {
   for (const u of ctx.units.values()) {
     if ((!u.neutral && u.team === p.team) || u.dead || ctx.dead.has(u.id)) continue;
     if (u.id === around.id || !isSpellTarget(u)) continue;
-    if (Math.hypot(u.pos.x - around.pos.x, u.pos.z - around.pos.z) > p.splashOnHit.radius) continue;
+    if (hypot(u.pos.x - around.pos.x, u.pos.z - around.pos.z) > p.splashOnHit.radius) continue;
     applyEffects(ctx, p.sourceId, p.power, u, p.splashOnHit.effects);
   }
 }
@@ -70,7 +71,7 @@ function segmentDistance(p: Vec2, a: Vec2, b: Vec2): number {
   if (len2 > 0) t = Math.max(0, Math.min(1, ((p.x - a.x) * abx + (p.z - a.z) * abz) / len2));
   const cx = a.x + abx * t;
   const cz = a.z + abz * t;
-  return Math.hypot(p.x - cx, p.z - cz);
+  return hypot(p.x - cx, p.z - cz);
 }
 
 export function stepProjectiles(ctx: CombatCtx, dt: number): void {
@@ -85,7 +86,7 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
       }
       const dx = target.pos.x - p.pos.x;
       const dz = target.pos.z - p.pos.z;
-      const d = Math.hypot(dx, dz);
+      const d = hypot(dx, dz);
       const step = p.speed * dt;
       if (d <= step + p.radius + target.radius) {
         const via = p.via ?? 'ability';
@@ -122,7 +123,7 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
       if (spellBolt && !isSpellTarget(u)) continue;
       if (p.hitIds.has(u.id) || u.id === p.sourceId) continue;
       if (segmentDistance(u.pos, from, p.pos) > p.radius + u.radius) continue;
-      crossed.push({ u, d: Math.hypot(u.pos.x - from.x, u.pos.z - from.z) });
+      crossed.push({ u, d: hypot(u.pos.x - from.x, u.pos.z - from.z) });
     }
     crossed.sort((a, b) => a.d - b.d || a.u.id - b.u.id);
 
@@ -134,7 +135,7 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
     for (const { u } of crossed) {
       p.hitIds.add(u.id);
       applyEffects(ctx, p.sourceId, p.power, u, p.onHit, p.via ?? 'ability', {
-        distance: Math.hypot(u.pos.x - origin.x, u.pos.z - origin.z),
+        distance: hypot(u.pos.x - origin.x, u.pos.z - origin.z),
         lineFrom: origin,
         lineDir: p.dir,
       });
@@ -149,7 +150,7 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
             if (spellBolt && !isSpellTarget(c)) continue;
             if (p.hitIds.has(c.id) || c.id === p.sourceId) continue;
             if (isStealthed(c, ctx.time) || isUntargetable(c, ctx.time)) continue;
-            const cd = Math.hypot(c.pos.x - u.pos.x, c.pos.z - u.pos.z);
+            const cd = hypot(c.pos.x - u.pos.x, c.pos.z - u.pos.z);
             if (cd > p.chain.radius || cd >= bestD) continue;
             bestD = cd;
             next = c;

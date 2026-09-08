@@ -9,6 +9,7 @@
 // in the same order give the same lanes on every host.
 
 import { GAME_MAP, type LaneId } from './content/map';
+import { hypot } from './exact';
 
 export const LANE_SEATS: Readonly<Record<LaneId, number>> = { top: 2, mid: 1, bot: 2 };
 
@@ -63,7 +64,7 @@ export function laneDistance(
     const abz = b.z - a.z;
     const len2 = abx * abx + abz * abz || 1;
     const t = Math.max(0, Math.min(1, ((x - a.x) * abx + (z - a.z) * abz) / len2));
-    best = Math.min(best, Math.hypot(x - (a.x + abx * t), z - (a.z + abz * t)));
+    best = Math.min(best, hypot(x - (a.x + abx * t), z - (a.z + abz * t)));
   }
   return best;
 }

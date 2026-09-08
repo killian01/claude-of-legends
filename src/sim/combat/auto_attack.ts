@@ -8,6 +8,7 @@
 // units strike directly. Taunts force the attack order; firing breaks
 // stealth at the start of the windup.
 
+import { hypot } from '../exact';
 import type { NavGrid } from '../navgrid';
 import { passiveOf, runItemAttackHits } from '../passives';
 import { findPath } from '../pathfind';
@@ -138,7 +139,7 @@ function strike(ctx: CombatCtx, u: Unit, target: Unit): void {
         for (const other of ctx.units.values()) {
           if (!hostile(u, other) || other.dead || ctx.dead.has(other.id)) continue;
           if (other.id === target.id) continue;
-          const d = Math.hypot(other.pos.x - target.pos.x, other.pos.z - target.pos.z);
+          const d = hypot(other.pos.x - target.pos.x, other.pos.z - target.pos.z);
           if (d > empower.splashRadius + other.radius) continue;
           applyEffects(ctx, u.id, power, other, empower.splash);
         }
@@ -162,8 +163,7 @@ function stepPendingAttack(ctx: CombatCtx, u: Unit): void {
   // ever displace through separation drift, which must not eat their swings
   // in a packed wave.
   const displaced =
-    u.kind === 'champion' &&
-    Math.hypot(u.pos.x - pa.startX, u.pos.z - pa.startZ) > DISPLACEMENT_CANCEL;
+    u.kind === 'champion' && hypot(u.pos.x - pa.startX, u.pos.z - pa.startZ) > DISPLACEMENT_CANCEL;
   const canceled =
     isStunned(u, ctx.time) ||
     u.path.length > 0 ||
@@ -180,8 +180,7 @@ function stepPendingAttack(ctx: CombatCtx, u: Unit): void {
   }
   if (ctx.time >= pa.resolveAt) {
     u.pendingAttack = null;
-    const edge =
-      Math.hypot(target.pos.x - u.pos.x, target.pos.z - u.pos.z) - u.radius - target.radius;
+    const edge = hypot(target.pos.x - u.pos.x, target.pos.z - u.pos.z) - u.radius - target.radius;
     if (edge <= u.stats.attackRange + STRIKE_GRACE) strike(ctx, u, target);
   }
 }
@@ -217,11 +216,11 @@ export function stepAutoAttacks(ctx: CombatCtx, nav: NavGrid): void {
       continue;
     }
     const edgeDist =
-      Math.hypot(target.pos.x - u.pos.x, target.pos.z - u.pos.z) - u.radius - target.radius;
+      hypot(target.pos.x - u.pos.x, target.pos.z - u.pos.z) - u.radius - target.radius;
     if (edgeDist > u.stats.attackRange) {
       if (u.moveSpeed <= 0) continue;
       const end = u.path[u.path.length - 1];
-      if (!end || Math.hypot(end.x - target.pos.x, end.z - target.pos.z) > REPATH_DISTANCE) {
+      if (!end || hypot(end.x - target.pos.x, end.z - target.pos.z) > REPATH_DISTANCE) {
         u.path = findPath(nav, u.pos, target.pos);
       }
     } else {

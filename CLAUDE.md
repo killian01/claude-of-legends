@@ -61,6 +61,10 @@ keep this table honest as they land.
   goes through `Rng` (`src/sim/rng.ts`): **never `Math.random`**, `Date.now`, or
   `performance.now` in sim logic. Same seed gives the same world. Guarded by
   `tests/architecture.test.ts` and `tests/determinism.test.ts`.
+- **The sim rounds alike on every engine (ADR 0019).** Lengths and angles go through
+  `src/sim/exact.ts`: never `Math.hypot`, the trigonometric functions, `Math.pow`, or `**`
+  in `src/sim/`. A replay re-simulates on whatever engine opens it. Guarded by
+  `tests/architecture.test.ts`.
 - **The decision budget (ADR 0003) applies identically to humans and bots.** Server and
   headless env share its implementation, pinned by a parity test.
 - **Original naming, in English, everywhere (ADR 0004).** No borrowed IP (names, icons, assets).

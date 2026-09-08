@@ -9,6 +9,7 @@
 // (additive fields, plan-bots phase 16).
 
 import { GAME_MAP, type LaneId } from '../content/map';
+import { hypot } from '../exact';
 import type { Action, ObsUnit } from '../policy';
 import { dist, FARM_RANGE, laneDistance, nearest, type SlotContext } from './micro';
 import type { WaveIntent } from './types';
@@ -74,8 +75,8 @@ export function laneTower(ctx: SlotContext): ObsUnit | null {
     // shelter.
     if (!t.friendly || t.kind !== 'tower' || t.hpFrac <= 0) continue;
     if (laneDistance(path, t.x, t.z) > LANE_TOWER_RANGE) continue;
-    if (Math.hypot(t.x - home.x, t.z - home.z) <= SANCTUM_TOWER_RANGE) continue;
-    const d = Math.hypot(t.x - ctx.enemySanctum.x, t.z - ctx.enemySanctum.z);
+    if (hypot(t.x - home.x, t.z - home.z) <= SANCTUM_TOWER_RANGE) continue;
+    const d = hypot(t.x - ctx.enemySanctum.x, t.z - ctx.enemySanctum.z);
     if (d < bestD) {
       bestD = d;
       best = t;
@@ -93,7 +94,7 @@ export function freezeSpot(ctx: SlotContext, tower: ObsUnit): { x: number; z: nu
   let idx = 0;
   let best = Number.POSITIVE_INFINITY;
   oriented.forEach((p, i) => {
-    const d = Math.hypot(p.x - tower.x, p.z - tower.z);
+    const d = hypot(p.x - tower.x, p.z - tower.z);
     if (d < best) {
       best = d;
       idx = i;
@@ -102,11 +103,11 @@ export function freezeSpot(ctx: SlotContext, tower: ObsUnit): { x: number; z: nu
   const next = oriented[Math.min(idx + 1, oriented.length - 1)]!;
   let dx = next.x - tower.x;
   let dz = next.z - tower.z;
-  if (Math.hypot(dx, dz) < 0.5) {
+  if (hypot(dx, dz) < 0.5) {
     dx = ctx.enemySanctum.x - tower.x;
     dz = ctx.enemySanctum.z - tower.z;
   }
-  const len = Math.hypot(dx, dz) || 1;
+  const len = hypot(dx, dz) || 1;
   return { x: tower.x + (dx / len) * FREEZE_AHEAD, z: tower.z + (dz / len) * FREEZE_AHEAD };
 }
 
@@ -119,7 +120,7 @@ export function freeze(ctx: SlotContext): Action | null {
   if (hit) return hit;
   const { s } = ctx;
   const spot = freezeSpot(ctx, tower);
-  if (Math.hypot(spot.x - s.x, spot.z - s.z) <= AT_SPOT) {
+  if (hypot(spot.x - s.x, spot.z - s.z) <= AT_SPOT) {
     return s.holding === true ? { kind: 'noop' } : { kind: 'stop' };
   }
   const { jx, jz } = ctx.jitter();

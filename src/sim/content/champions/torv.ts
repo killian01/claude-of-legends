@@ -4,6 +4,7 @@
 // fissure stays behind as impassable broken ground, splitting the fight.
 
 import { refreshBuff } from '../../combat/status';
+import { hypot } from '../../exact';
 import type { ChampionDef } from './index';
 
 const BULWARK_RANGE = 6;
@@ -24,7 +25,7 @@ export const TORV: ChampionDef = {
         if (u.kind !== 'champion' || u.team !== self.team || u.dead || ctx.dead.has(u.id)) {
           continue;
         }
-        if (Math.hypot(u.pos.x - self.pos.x, u.pos.z - self.pos.z) > BULWARK_RANGE) continue;
+        if (hypot(u.pos.x - self.pos.x, u.pos.z - self.pos.z) > BULWARK_RANGE) continue;
         refreshBuff(u, ctx.time, BULWARK_DURATION_S, { armor: BULWARK_ARMOR });
       }
     },

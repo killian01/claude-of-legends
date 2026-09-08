@@ -4,6 +4,7 @@
 // lateral to the wave, while shielding the allies it passes.
 
 import { healFactor } from '../../combat/status';
+import { hypot } from '../../exact';
 import type { ChampionDef } from './index';
 
 const SPRING_TIDE_RATIO = 0.35;
@@ -23,7 +24,7 @@ export const MAERA: ChampionDef = {
       for (const u of ctx.units.values()) {
         if (u.kind !== 'champion' || u.team !== self.team) continue;
         if (u.id === target.id || u.id === self.id || u.dead || ctx.dead.has(u.id)) continue;
-        const d = Math.hypot(u.pos.x - target.pos.x, u.pos.z - target.pos.z);
+        const d = hypot(u.pos.x - target.pos.x, u.pos.z - target.pos.z);
         if (d < bestD) {
           bestD = d;
           best = u;

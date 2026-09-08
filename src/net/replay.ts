@@ -6,7 +6,7 @@
 // path and the replay path cannot drift apart.
 
 import { parseCoachOrder } from '../sim/coach';
-import { attachBot } from '../sim/content/bots';
+import { attachBot, botPolicy } from '../sim/content/bots';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { PlaybookDef } from '../sim/playbook/types';
 import { Sim } from '../sim/sim';
@@ -15,8 +15,9 @@ import { type ClientMsg, isFiniteVec } from './protocol';
 
 // Bumped whenever sim behavior changes (a replay is a re-simulation, so
 // an older record would silently play out a different match): 2 with the
-// river-reflected lane polylines.
-export const REPLAY_VERSION = 2;
+// river-reflected lane polylines, 3 with exactly rounded lengths and
+// angles (ADR 0019).
+export const REPLAY_VERSION = 3;
 // A griefer spamming the rate limit for a whole match could balloon the
 // log; past this the match simply has no replay.
 export const REPLAY_EVENT_CAP = 200_000;
@@ -158,4 +159,45 @@ export function applyReplayEvent(
     return;
   }
   sim.detachPolicy(ev.u);
+}
+
+// The policies a replaying sim holds at a tick, put back after a checkpoint
+// restore. A checkpoint carries every container but this one
+// (src/sim/snapshot.ts): policies are functions, and in a match nobody
+// leaves they never change. A live match's seats do change hands (bot_on,
+// bot_off), so a restore across one of those events would leave the wrong
+// seats driven: a bot never attached in this sim, or a bot still attached
+// from a later tick, fighting the recorded commands for the seat. The map
+// is rebuilt with the same operations in the same order live attachment
+// made them (the seats in pick order, then every event before the tick),
+// so the seats decide in the same order too and draw from the rng alike.
+// A checkpoint at `tick` was taken with the events before it applied and
+// the ones at it still pending, which is where the event cursor lands too.
+export function restorePolicies(
+  sim: Sim,
+  picks: readonly ReplayPick[],
+  unitIds: readonly number[],
+  events: readonly ReplayEvent[],
+  tick: number,
+): void {
+  sim.policies.clear();
+  picks.forEach((p, i) => {
+    const unitId = unitIds[i];
+    if (unitId === undefined) return;
+    const policy = p.playbook
+      ? sim.policyForPlaybook(p.playbook)
+      : p.bot !== undefined
+        ? botPolicy(sim, p.bot)
+        : null;
+    if (policy) sim.attachPolicy(unitId, policy);
+  });
+  for (const ev of events) {
+    if (ev.k >= tick) break;
+    if (ev.e === 'bot_on') {
+      const policy = botPolicy(sim, undefined);
+      if (policy) sim.attachPolicy(ev.u, policy);
+    } else if (ev.e === 'bot_off') {
+      sim.policies.delete(ev.u);
+    }
+  }
 }

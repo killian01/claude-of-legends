@@ -3,6 +3,7 @@
 // zone owner's enemies; allyOnTick targets its allies.
 
 import { applyEffects, type EffectSpec, type Power } from './combat/effects';
+import { hypot } from './exact';
 import type { CombatCtx } from './sim_context';
 import { isSpellTarget } from './spell_targets';
 import type { TeamId, Vec2 } from './types';
@@ -49,7 +50,7 @@ function unitsInside(ctx: CombatCtx, z: Zone, enemies: boolean): Unit[] {
     if (u.dead || ctx.dead.has(u.id) || !isSpellTarget(u)) continue;
     // Neutral units count as enemies for zones and never as allies.
     if (enemies ? !u.neutral && u.team === z.team : u.neutral || u.team !== z.team) continue;
-    if (Math.hypot(u.pos.x - z.pos.x, u.pos.z - z.pos.z) <= z.radius + u.radius) out.push(u);
+    if (hypot(u.pos.x - z.pos.x, u.pos.z - z.pos.z) <= z.radius + u.radius) out.push(u);
   }
   return out;
 }
@@ -81,7 +82,7 @@ export function stepZones(ctx: CombatCtx): void {
         if (insideNow.has(id)) continue;
         const u = ctx.units.get(id);
         if (!u || u.dead || ctx.dead.has(id) || u.activeDash) continue;
-        const d = Math.hypot(u.pos.x - z.pos.x, u.pos.z - z.pos.z);
+        const d = hypot(u.pos.x - z.pos.x, u.pos.z - z.pos.z);
         if (d - u.radius > z.radius + BOUNDARY_SHELL) continue;
         if ((z.boundaryNextAt.get(id) ?? 0) > ctx.time) continue;
         z.boundaryNextAt.set(id, ctx.time + z.boundary.perUnitEvery);

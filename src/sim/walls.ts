@@ -4,6 +4,7 @@
 // the same NavGrid cells terrain does; projectiles and sight pass over it.
 // Every blocked sample is remembered so expiry unblocks the exact cells.
 
+import { hypot } from './exact';
 import type { NavGrid } from './navgrid';
 import type { CombatCtx } from './sim_context';
 import type { TeamId, Vec2 } from './types';
@@ -35,7 +36,7 @@ export function raiseWall(
   length: number,
   duration: number,
 ): Wall {
-  const len = Math.hypot(castDir.x, castDir.z);
+  const len = hypot(castDir.x, castDir.z);
   const dir = len > 0 ? { x: castDir.x / len, z: castDir.z / len } : { x: 1, z: 0 };
   const perp = { x: -dir.z, z: dir.x };
   const half = length / 2;
@@ -54,7 +55,7 @@ export function createWallSegment(
   b: Vec2,
   duration: number,
 ): Wall {
-  const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / SAMPLE_SPACING));
+  const steps = Math.max(1, Math.ceil(hypot(b.x - a.x, b.z - a.z) / SAMPLE_SPACING));
   const samples: Vec2[] = [];
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
@@ -100,7 +101,7 @@ export function stepWalls(ctx: CombatCtx): void {
 export function clampThroughWalls(nav: NavGrid, from: Vec2, u: { pos: Vec2; path: Vec2[] }): void {
   const dx = u.pos.x - from.x;
   const dz = u.pos.z - from.z;
-  const dist = Math.hypot(dx, dz);
+  const dist = hypot(dx, dz);
   if (dist < 1e-9) return;
   const steps = Math.max(1, Math.ceil(dist / 0.3));
   for (let i = 1; i <= steps; i++) {
