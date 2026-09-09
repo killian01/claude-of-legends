@@ -52,23 +52,40 @@ export interface VoicePlayback {
   stop(): void;
 }
 
-// Plays the clip for `id` dry through the sound-effects gain: the
-// announcer sits in a booth, not in the room, so no reverb send. Null
-// when the clip has not decoded; `onEnded` fires when it plays out (not
-// when it is stopped).
+// How a line is played, above the ordinary announcement. The multikill
+// ladder is the only caller that asks for more (src/ui/multikill.ts): a
+// quadrakill leans on the gain, a pentakill also opens the booth onto a
+// room, which is the difference between louder and bigger.
+export interface VoiceShape {
+  // Multiplies the announcer's own level.
+  gain?: number;
+  // Send into the shared reverb, 0 for the dry booth every other line uses.
+  verb?: number;
+}
+
+// Plays the clip for `id` through the sound-effects gain, dry by default:
+// the announcer sits in a booth, not in the room. Null when the clip has
+// not decoded; `onEnded` fires when it plays out (not when it is stopped).
 export function playVoiceClip(
   b: AudioBus,
   id: VoiceLineId,
   onEnded: () => void,
+  shape: VoiceShape = {},
 ): VoicePlayback | null {
   const buffer = decoded.get(id);
   if (!buffer) return null;
   const src = b.ctx.createBufferSource();
   src.buffer = buffer;
   const out = b.ctx.createGain();
-  out.gain.value = VOICE_GAIN;
+  out.gain.value = VOICE_GAIN * (shape.gain ?? 1);
   src.connect(out);
   out.connect(b.sfx);
+  if (shape.verb) {
+    const send = b.ctx.createGain();
+    send.gain.value = shape.verb;
+    out.connect(send);
+    send.connect(b.verb);
+  }
   src.onended = onEnded;
   src.start();
   return {

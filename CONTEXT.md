@@ -139,6 +139,17 @@ _Avoid_: echo, replay, second wall
 A purely cosmetic per-champion rank derived from a player's recorded online matches on that champion (server/mastery.ts thresholds). Shown on the career profile with a title per rank; never affects gameplay, matchmaking, or rating.
 _Avoid_: champion points, grind level
 
+**Multikill**:
+A run of kills by one champion, each landing inside the leash the one before it opened:
+two is a double kill, five a pentakill, and there is nothing above five (the chain
+restarts, so the next fight can climb again). The leash is not one number, it widens as
+the chain climbs, and it is counted in sim seconds so every client reads the same fight
+the same way (`src/ui/multikill.ts`). Dying ends your own chain. The lower rungs are
+called to the killer alone; from the quadrakill up the whole lobby is told. Purely
+cosmetic: it pays nothing, changes no rating, and appears in no record.
+_Avoid_: killing spree, streak (that is `killStreak`, the unbroken run since your last
+death, which sets the shutdown bounty), combo
+
 **Tower heat**:
 The count of consecutive shots a tower has fired at the same champion. It resets on every
 target change and drives both halves of the shot: the attack damage ramps, and so does the

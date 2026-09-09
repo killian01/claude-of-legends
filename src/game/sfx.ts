@@ -14,6 +14,7 @@ import { preloadVoiceBank } from './voice_bank';
 export type SfxName =
   | 'cast'
   | 'kill'
+  | 'multikill'
   | 'death'
   | 'gold'
   | 'ping'
@@ -417,6 +418,13 @@ export function playSfx(name: SfxName, gain = 1): void {
       noise(b, { dur: 0.12, freq: 1800, type: 'highpass', vol: 0.35 });
       tone(b, { freq: 740, dur: 0.22, type: 'triangle', delay: 0.08, vol: 0.32, verb: 0.6 });
       tone(b, { freq: 1108, dur: 0.3, type: 'triangle', delay: 0.18, vol: 0.32, verb: 0.6 });
+      break;
+    case 'multikill':
+      // The weight under a quadrakill and a pentakill: a sub that lands
+      // beneath the voice and a slow bright rise behind it. No chime, the
+      // kill confirmation already rang one and two would be a jingle.
+      tone(b, { freq: 110, slideTo: 34, dur: 0.9, type: 'sine', vol: 1.0 });
+      noise(b, { dur: 0.7, freq: 300, slideTo: 2600, q: 1.2, vol: 0.28, verb: 0.7 });
       break;
     case 'death':
       // A long dark fall with a heavy reverb tail.

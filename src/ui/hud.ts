@@ -33,6 +33,7 @@ import {
 } from './describe';
 import { iconDataUrl, itemIconUrl } from './icons';
 import { DISCORD } from './links';
+import { MultikillLadder, type MultikillLook, multikillLook } from './multikill';
 import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
 import { TeamScore } from './team_score';
@@ -393,6 +394,17 @@ const CSS = `
   font-size: 26px; font-weight: 800; letter-spacing: 1px; color: #f2ffd9;
   text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity 0.3s;
 }
+/* The multikill spotlight: bigger than an announcement because it is the
+   rarest thing the game says. Scales in from just under full size, and the
+   pentakill takes the room the quadrakill does not. */
+.hud-spot {
+  position: absolute; top: 148px; left: 50%; transform: translateX(-50%) scale(0.82);
+  font-size: 54px; font-weight: 900; letter-spacing: 4px; white-space: nowrap;
+  text-shadow: 0 3px 18px #000, 0 0 32px currentColor;
+  opacity: 0; transition: opacity 0.22s ease-out, transform 0.22s ease-out;
+}
+.hud-spot.on { opacity: 1; transform: translateX(-50%) scale(1); }
+.hud-spot.top { font-size: 74px; letter-spacing: 7px; }
 .hud-toast {
   position: absolute; bottom: 150px; left: 50%; transform: translateX(-50%);
   background: rgba(61, 23, 16, 0.95); border: 1px solid #a05040; border-radius: 6px;
@@ -547,6 +559,8 @@ const CSS = `
 .hud.compact .hud-slot-up { width: 26px; height: 24px; top: -26px; font-size: 17px; line-height: 22px; }
 .hud.compact .hud-chat { display: none; }
 .hud.compact .hud-announce { font-size: 20px; top: 62px; }
+.hud.compact .hud-spot { font-size: 32px; top: 96px; letter-spacing: 2px; }
+.hud.compact .hud-spot.top { font-size: 44px; letter-spacing: 3px; }
 .hud.compact .hud-feed { font-size: 11px; }
 .hud.compact .hud-hints {
   font-size: 9px; max-width: 170px; line-height: 1.45;
@@ -592,8 +606,9 @@ export class Hud {
   private shopSelected: string | null = null;
   private lastDetailSig = '';
   private lastLevel = -1;
-  private lastKillAt = 0;
-  private killChain = 0;
+  // Every champion's run of kills, counted in sim seconds off the deaths
+  // this client already receives (src/ui/multikill.ts).
+  private readonly multikill = new MultikillLadder();
   private lastWardenUp: boolean | null = null;
   // Latest Boon expiries seen per side: a grant is "until moved forward",
   // which is how the claim announcement knows WHOSE it was.
@@ -612,6 +627,7 @@ export class Hud {
   private readonly chatLog: HTMLElement;
   private readonly chatInput: HTMLInputElement;
   private readonly announceEl: HTMLElement;
+  private readonly spotEl: HTMLElement;
   private readonly toastEl: HTMLElement;
   private readonly score: HTMLElement;
   private readonly scoreTeams: [HTMLElement, HTMLElement];
@@ -629,6 +645,7 @@ export class Hud {
   // the cast through these callbacks (wired by boot to game/touch.ts).
   private castTaps: { ability(key: AbilityKey): void; sigil(slot: number): void } | null = null;
   private announceUntil = 0;
+  private spotUntil = 0;
   private sawBattleBegin = false;
   private sawFirstBlood = false;
   // The opening buy is the easiest thing in the genre to forget, so the
@@ -1004,6 +1021,7 @@ export class Hud {
     chat.append(this.chatLog, this.chatInput);
 
     this.announceEl = el('div', 'hud-announce');
+    this.spotEl = el('div', 'hud-spot');
     this.toastEl = el('div', 'hud-toast');
 
     this.score = el('div', 'hud-score');
@@ -1081,6 +1099,7 @@ export class Hud {
       this.feed,
       chat,
       this.announceEl,
+      this.spotEl,
       this.toastEl,
       this.score,
       this.deathOverlay,
@@ -1198,6 +1217,22 @@ export class Hud {
     this.announceEl.style.color = color;
     this.announceEl.style.opacity = '1';
     this.announceUntil = performance.now() + 2600;
+  }
+
+  // The two top rungs of the multikill ladder get a moment of their own
+  // instead of the one-line announcement every event shares: it grows into
+  // place, holds longer, and the pentakill is larger than the quadrakill,
+  // so the eye climbs with the voice. Re-entrant: a second call restarts
+  // the entrance rather than leaving a rung frozen on screen.
+  private spotlight(look: MultikillLook): void {
+    this.spotEl.textContent = look.text;
+    this.spotEl.style.color = look.color;
+    this.spotEl.classList.toggle('top', look.intensity >= 2);
+    this.spotEl.classList.remove('on');
+    // Reading the layout flushes the removal, so the transition replays.
+    void this.spotEl.offsetWidth;
+    this.spotEl.classList.add('on');
+    this.spotUntil = performance.now() + look.holdMs;
   }
 
   toast(text: string): void {
@@ -1379,9 +1414,24 @@ export class Hud {
         this.announce('First blood');
         announceVoice('first_blood', true);
       }
+      // Every champion death feeds the ladder, not only your own kills:
+      // champion deaths reach both teams (server/snapshot.ts), so an
+      // enemy's quadrakill is counted and called on your screen too. A
+      // killer with no scoreboard row is a tower or a wave, which holds no
+      // chain of its own.
+      const call = this.multikill.record(
+        k.unitId,
+        rowOf(k.killerId) ? k.killerId : null,
+        this.world.time,
+      );
+      const look = call ? multikillLook(call.tier) : null;
+      // A rung you can hear: your own at any height, or one loud enough
+      // that the whole lobby is told.
+      const shout = look && (call?.killerId === this.selfId || look.everyone) ? look : null;
+
       if (k.unitId === this.selfId) {
         playSfx('death');
-        announceVoice('self_slain', true, true);
+        if (!shout) announceVoice('self_slain', true, true);
         // Death recap: who did it, and who helped inside the assist window
         // (recentDamagers is live offline; online it may be empty).
         const killerRow2 = rowOf(k.killerId);
@@ -1407,41 +1457,32 @@ export class Hud {
         this.deathRecap = recap;
       } else if (k.killerId === this.selfId) {
         playSfx('kill');
-        // Kill confirmation, center screen in gold; chained kills escalate.
-        const now = performance.now();
-        this.killChain = now - this.lastKillAt < 10000 ? this.killChain + 1 : 1;
-        this.lastKillAt = now;
-        const chainText =
-          this.killChain === 2
-            ? 'DOUBLE KILL'
-            : this.killChain === 3
-              ? 'TRIPLE KILL'
-              : this.killChain >= 4
-                ? 'RAMPAGE'
-                : `You killed ${victimRow.name}`;
-        this.announce(chainText, '#ffd94a');
-        // The voice never names the champion (playtest round 3: a roster of
-        // ten invented names read aloud is noise, and the line runs long
-        // enough to still be talking over the next fight). Side and outcome
-        // is all it calls; the kill feed and the center text carry the name.
-        announceVoice(
-          this.killChain >= 4
-            ? 'rampage'
-            : this.killChain === 3
-              ? 'triple_kill'
-              : this.killChain === 2
-                ? 'double_kill'
-                : 'self_kill',
-          true,
-          true,
-        );
-      } else if (victimRow.team !== this.selfTeam) {
-        // An enemy vanishing off the screen is ambiguous: dead, or escaped
-        // into the fog? The voice settles it even when the takedown was a
-        // teammate's, which is the whole point of calling it.
-        announceVoice('enemy_slain', false, true);
-      } else {
-        announceVoice('ally_slain', false, true);
+        if (!shout) {
+          // Kill confirmation, center screen in gold. The voice never names
+          // the champion (playtest round 3: a roster of ten invented names
+          // read aloud is noise, and the line runs long enough to still be
+          // talking over the next fight). Side and outcome is all it calls;
+          // the kill feed and the center text carry the name.
+          this.announce(`You killed ${victimRow.name}`, '#ffd94a');
+          announceVoice('self_kill', true, true);
+        }
+      } else if (!shout) {
+        if (victimRow.team !== this.selfTeam) {
+          // An enemy vanishing off the screen is ambiguous: dead, or escaped
+          // into the fog? The voice settles it even when the takedown was a
+          // teammate's, which is the whole point of calling it.
+          announceVoice('enemy_slain', false, true);
+        } else {
+          announceVoice('ally_slain', false, true);
+        }
+      }
+      // The ladder speaks last and alone: a rung REPLACES the ordinary call
+      // rather than talking over it, so nobody hears half of "You have been
+      // slain" cut short by a quadrakill.
+      if (shout) {
+        if (shout.spotlight) this.spotlight(shout);
+        else this.announce(shout.text, shout.color);
+        announceVoice(shout.voice, true, true, shout.intensity);
       }
       const killerRow = rowOf(k.killerId);
       let killerName = killerRow ? who(killerRow) : 'The lane';
@@ -1480,6 +1521,10 @@ export class Hud {
       if (this.world.time < 5 && this.world.winner === null) this.shop.classList.add('open');
     }
 
+    if (this.spotUntil !== 0 && performance.now() > this.spotUntil) {
+      this.spotUntil = 0;
+      this.spotEl.classList.remove('on');
+    }
     if (this.announceUntil !== 0 && performance.now() > this.announceUntil) {
       this.announceEl.style.opacity = '0';
       this.announceUntil = 0;

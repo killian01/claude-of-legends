@@ -29,6 +29,20 @@ const VOICE_SETTINGS = {
   use_speaker_boost: true,
 };
 
+// The multikill ladder climbs (src/ui/multikill.ts), so its two top lines
+// are performed rather than read: stability down lets the delivery vary
+// instead of holding one even tone, style up exaggerates it, and the
+// pentakill goes further than the quadrakill. Play time adds gain, reverb
+// and a hole in the music on top; this is the half that has to be in the
+// recording, because louder is not the same as more intense.
+//
+// An id here that the line table does not carry yet is simply unused: the
+// two below are rendered with the commit that adds their lines.
+const LINE_SETTINGS = {
+  quadra_kill: { stability: 0.35, style: 0.55 },
+  penta_kill: { stability: 0.22, style: 0.8 },
+};
+
 const OUT = path.join(process.cwd(), 'public', 'voice');
 
 function parseArgs(argv) {
@@ -61,7 +75,7 @@ async function loadLines() {
   return mod.VOICE_LINES;
 }
 
-async function render(key, text, model) {
+async function render(key, id, text, model) {
   const url = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}?output_format=${OUTPUT_FORMAT}`;
   const res = await fetch(url, {
     method: 'POST',
@@ -70,7 +84,11 @@ async function render(key, text, model) {
       'content-type': 'application/json',
       accept: 'audio/mpeg',
     },
-    body: JSON.stringify({ text, model_id: model, voice_settings: VOICE_SETTINGS }),
+    body: JSON.stringify({
+      text,
+      model_id: model,
+      voice_settings: { ...VOICE_SETTINGS, ...(LINE_SETTINGS[id] ?? {}) },
+    }),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
@@ -104,13 +122,14 @@ let bytes = 0;
 for (const id of ids) {
   const text = lines[id];
   const started = Date.now();
-  const audio = await render(key, text, opts.model);
+  const audio = await render(key, id, text, opts.model);
   const file = path.join(OUT, `${id}.mp3`);
   writeFileSync(file, audio);
   chars += text.length;
   bytes += audio.length;
   console.log(
-    `${id.padEnd(16)} ${String(audio.length).padStart(7)} B  ${Date.now() - started} ms  "${text}"`,
+    `${id.padEnd(16)} ${String(audio.length).padStart(7)} B  ${Date.now() - started} ms  "${text}"` +
+      (LINE_SETTINGS[id] ? '  (performed)' : ''),
   );
 }
 console.log(`${ids.length} clips, ${chars} characters, ${(bytes / 1024).toFixed(0)} KB -> ${OUT}`);

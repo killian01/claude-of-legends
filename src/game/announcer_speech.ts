@@ -54,15 +54,25 @@ export function cancelSpeech(): void {
   if (speechAvailable()) speechSynthesis.cancel();
 }
 
+// Calm and deliberate, near-natural pitch: an announcer, not a robot. The
+// rungs above it are the multikill ladder climbing (src/ui/multikill.ts):
+// synthesis caps volume at 1, so intensity has to come out of the delivery,
+// and a line read faster and higher is the one lever that reads as excited.
+const DELIVERY: readonly { rate: number; pitch: number }[] = [
+  { rate: 0.85, pitch: 0.8 },
+  { rate: 0.95, pitch: 0.95 },
+  { rate: 1.05, pitch: 1.1 },
+];
+
 // Reads `text` aloud; false when the browser has no speech synthesis.
-export function speakLine(text: string): boolean {
+export function speakLine(text: string, intensity = 0): boolean {
   if (!speechAvailable()) return false;
   pickVoice();
   const u = new SpeechSynthesisUtterance(text);
   if (voice) u.voice = voice;
-  // Calm and deliberate, near-natural pitch: an announcer, not a robot.
-  u.rate = 0.85;
-  u.pitch = 0.8;
+  const how = DELIVERY[Math.max(0, Math.min(DELIVERY.length - 1, intensity))] ?? DELIVERY[0];
+  u.rate = how?.rate ?? 0.85;
+  u.pitch = how?.pitch ?? 0.8;
   u.volume = 1.0;
   speechSynthesis.speak(u);
   return true;

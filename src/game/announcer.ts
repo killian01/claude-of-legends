@@ -8,7 +8,7 @@
 import { type AnnouncerState, announcerVerdict } from './announcer_policy';
 import { cancelSpeech, speakLine, speechBusy } from './announcer_speech';
 import { duckMusic } from './music';
-import { audioBus } from './sfx';
+import { audioBus, playSfx } from './sfx';
 import { playVoiceClip, type VoicePlayback } from './voice_bank';
 import { VOICE_LINES, type VoiceLineId } from './voice_lines';
 
@@ -32,11 +32,34 @@ export function setAnnouncerEnabled(on: boolean): void {
   if (!on) silence();
 }
 
+// How much room a line is given, by rung. Only the multikill ladder asks
+// for more than the first (src/ui/multikill.ts): a quadrakill leans on the
+// gain and pulls the music further down, a pentakill also opens the booth
+// onto a room and drops an impact under the first syllable. Louder alone
+// does not read as bigger; the reverb and the hole in the music do.
+const SHAPES: readonly {
+  gain: number;
+  verb: number;
+  duckMs: number;
+  duckDepth: number;
+  impact: number;
+}[] = [
+  { gain: 1, verb: 0, duckMs: 300, duckDepth: 0.3, impact: 0 },
+  { gain: 1.22, verb: 0.12, duckMs: 700, duckDepth: 0.18, impact: 0.8 },
+  { gain: 1.45, verb: 0.32, duckMs: 1100, duckDepth: 0.08, impact: 1 },
+];
+
 // `repeatable` marks a line whose wording repeats across genuinely distinct
 // events: since the kill calls stopped naming the champion, two enemies
 // dying in one fight produce the same sentence, and the stutter guard
-// would eat the second call.
-export function announceVoice(id: VoiceLineId, priority = false, repeatable = false): void {
+// would eat the second call. `intensity` is the multikill rung, 0 for every
+// other line.
+export function announceVoice(
+  id: VoiceLineId,
+  priority = false,
+  repeatable = false,
+  intensity = 0,
+): void {
   if (!announcerEnabled) return;
   const now = performance.now();
   state.busy = (playing !== null && now < playingUntil) || speechBusy();
@@ -44,20 +67,30 @@ export function announceVoice(id: VoiceLineId, priority = false, repeatable = fa
   if (verdict === 'drop') return;
   if (verdict === 'interrupt') silence();
 
+  const rung = Math.max(0, Math.min(SHAPES.length - 1, intensity));
+  const shape = SHAPES[rung] ?? SHAPES[0];
+  if (!shape) return;
+  if (shape.impact > 0) playSfx('multikill', shape.impact);
+
   const b = audioBus();
   const clip = b
-    ? playVoiceClip(b, id, () => {
-        if (playing === clip) playing = null;
-      })
+    ? playVoiceClip(
+        b,
+        id,
+        () => {
+          if (playing === clip) playing = null;
+        },
+        { gain: shape.gain, verb: shape.verb },
+      )
     : null;
   if (clip) {
     playing = clip;
     playingUntil = now + clip.durationMs + 500;
-    duckMusic(clip.durationMs + 300);
+    duckMusic(clip.durationMs + shape.duckMs, shape.duckDepth);
   } else {
     const text = VOICE_LINES[id];
-    if (!speakLine(text)) return;
-    duckMusic(600 + text.length * 70);
+    if (!speakLine(text, rung)) return;
+    duckMusic(600 + text.length * 70 + shape.duckMs, shape.duckDepth);
   }
   state.lastAt = now;
   state.lastId = id;

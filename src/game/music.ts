@@ -328,15 +328,15 @@ export function startMusic(): void {
 }
 
 // Briefly lowers the score under the announcer's voice, then swells back.
-export function duckMusic(durationMs = 1200): void {
+export function duckMusic(durationMs = 1200, depth = 0.3): void {
   const b = audioBus();
   if (!b || !state) return;
   const g = state.out.gain;
   const t = b.ctx.currentTime;
   g.cancelScheduledValues(t);
   g.setValueAtTime(g.value, t);
-  g.linearRampToValueAtTime(musicVol() * 0.3, t + 0.15);
-  g.setValueAtTime(musicVol() * 0.3, t + durationMs / 1000);
+  g.linearRampToValueAtTime(musicVol() * depth, t + 0.15);
+  g.setValueAtTime(musicVol() * depth, t + durationMs / 1000);
   g.linearRampToValueAtTime(musicVol(), t + durationMs / 1000 + 0.7);
 }
 

@@ -133,3 +133,38 @@ twice inside four seconds is a stutter and is dropped unless the caller
 marks the line repeatable, a priority line (kills, objectives) interrupts
 whatever is playing, an ordinary one waits for a breath. The music ducks
 for the length of the clip.
+
+## The multikill ladder
+
+`src/ui/multikill.ts` counts every champion's run of kills and decides what
+the game says about it. The numbers were measured over 240 bot matches
+(15191 champion kills) rather than guessed, and the measurement is what
+shaped them. The flat ten second window this replaces called a double kill
+7.3 times a match, which is wallpaper and not an event; but no window short
+enough to fix that leaves a pentakill reachable, because five enemies do not
+die inside six seconds. So the leash widens as the chain climbs, 7 / 10 / 10
+/ 30 seconds, which cuts doubles by a fifth while doubling the rate of the
+rung nobody had ever heard. It is counted in sim seconds: the wall clock it
+replaced miscounted whenever the tab throttled.
+
+The ladder stops at five and restarts, because there is no word above it.
+Dying ends your own chain. Double and triple are called to the killer alone
+(seven a match shouted at ten people is unbearable); from the quadrakill up
+the call reaches every client, which is the whole point of the rarest thing
+the game says, and costs no extra recording because the lines never name a
+side.
+
+The voice climbs with the rung on both halves. In the recording:
+`LINE_SETTINGS` in `scripts/build_voice.mjs` drops stability and raises
+style for the two top lines, so they are performed rather than read. At play
+time: the clip's gain rises, the pentakill opens the dry booth onto the
+shared reverb, the music ducks deeper and longer, and a low impact
+(`multikill` in `src/game/sfx.ts`) lands under the first syllable. Louder
+alone reads as louder; the reverb and the hole in the music are what read as
+bigger. The speech-synthesis fallback climbs too, through rate and pitch,
+since synthesis caps volume at one.
+
+Until their own recordings land, the quadrakill and the pentakill speak
+through the `rampage` clip: the line table may not carry a line without a
+file on disk (`tests/voice_bank.test.ts`), and the files are rendered from
+that same table. The screen already says the right word.
