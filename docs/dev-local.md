@@ -122,17 +122,24 @@ puppeteer-core against the stack on the default ports. They are not part of `pnp
 `CHROME` names the binary (the default is the Windows install path); `SHOT_DIR` collects
 screenshots where a script supports it.
 
-Two things a Linux machine with a recent Chrome will meet:
+Three things a Linux machine with a recent Chrome will meet:
 
-- **No WebGL under `--use-gl=swiftshader`.** The scripts pass that flag; newer builds refuse
-  it and every Three.js surface then throws `Error creating WebGL context` (the champion
-  portraits, the replay player, the workshop), which reads like a client bug. Launch with
+- **No WebGL under `--use-gl=swiftshader`.** Newer builds refuse that flag and every
+  Three.js surface then throws `Error creating WebGL context` (the champion portraits, the
+  replay player, the workshop), which reads like a client bug. Launch with
   `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist`
-  instead and software WebGL comes back.
-- **The replay checks in `e2e_academy.mjs` read the clock right after a seek**, before a
-  frame has painted. Under software GL a frame can take longer than that, so "the seek
-  landed at N" fails on a seek that landed. Give the clock a few hundred milliseconds before
-  reading it when reproducing; the seek itself is fine.
+  instead and software WebGL comes back. `e2e_academy.mjs` and `e2e_nav.mjs` do; the older
+  one-off scripts still pass the flag that fails.
+- **Chrome as root wants `--no-sandbox`.** The one-off scripts pass it, the `e2e_*` ones do
+  not (they were written against a desktop Chrome). Point `CHROME` at a two-line wrapper
+  that adds it rather than editing each script.
+- **A port already answering.** `e2e_academy.mjs` and `e2e_nav.mjs` read `URL` from the
+  environment for exactly this; `stack.sh up` takes `PORT` and `CLIENT_PORT`.
+
+What is NOT a quirk of this machine: a seek check that reports a clock which did not move.
+Those checks used to wait on the absence of the `.replay-time.seeking` class, which the seek
+itself adds and removes, so they answered before the seek began and read the old time. They
+wait for the clock to change now. A failure there is the player, not the harness.
 
 Stills for a PR are taken on a seeded state directory (above), at 1500 pixels wide and
 again at 2200 for anything that centers, then converted to WebP under `docs/screenshots`.
