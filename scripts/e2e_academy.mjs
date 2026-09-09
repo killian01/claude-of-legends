@@ -10,7 +10,9 @@ import puppeteer from 'puppeteer-core';
 import { clickBar, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
 const CHROME = process.env.CHROME ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const URL = 'http://localhost:5173';
+// Overridable like scripts/e2e_nav.mjs: a second checkout, or a stray dev
+// server, will be holding the default port.
+const URL = process.env.URL ?? 'http://localhost:5173';
 const SHOT_DIR = process.env.SHOT_DIR ?? '';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -50,7 +52,18 @@ const run = async () => {
   const browser = await puppeteer.launch({
     executablePath: CHROME,
     headless: 'new',
-    args: ['--use-gl=swiftshader', '--window-size=1500,760', '--mute-audio'],
+    // Software WebGL the way recent Chrome wants it asked for: plain
+    // --use-gl=swiftshader is refused by newer builds and every Three.js
+    // surface then throws "Error creating WebGL context", which reads like
+    // a client bug (docs/dev-local.md says so; the script had not followed).
+    args: [
+      '--use-gl=angle',
+      '--use-angle=swiftshader',
+      '--enable-unsafe-swiftshader',
+      '--ignore-gpu-blocklist',
+      '--window-size=1500,760',
+      '--mute-audio',
+    ],
     defaultViewport: { width: 1500, height: 760 },
   });
   const ctx = await browser.createBrowserContext();
@@ -276,10 +289,21 @@ const run = async () => {
   // Pause, then five seconds back: instant, from a checkpoint.
   await page.keyboard.press('k');
   await sleep(300);
-  const before = secondsOf(await clockOf());
+  const beforeText = await clockOf();
+  const before = secondsOf(beforeText);
   const t0 = Date.now();
   await page.keyboard.press('ArrowLeft');
-  await waitFor(page, `!document.querySelector('.replay-time.seeking')`, 'the seek', 5000);
+  // Wait for the CLOCK to move, not for the seeking class to go: that class
+  // is added and removed by the seek itself, so polling for its absence
+  // answers true before the seek has begun and then reads the old time. It
+  // reported "127 -> 127 in 7 ms" here, a seek that had not happened yet,
+  // which docs/dev-local.md had written down as a software-GL quirk.
+  await waitFor(
+    page,
+    `document.querySelector('.replay-time')?.textContent !== ${JSON.stringify(beforeText)}`,
+    'the seek to move the clock',
+    5000,
+  );
   const after = secondsOf(await clockOf());
   const seekMs = Date.now() - t0;
   console.log('seek back 5s:', before, '->', after, `in ${seekMs} ms`);
@@ -287,13 +311,20 @@ const run = async () => {
   if (seekMs > 1500) throw new Error(`the seek took ${seekMs} ms`);
 
   // A far jump on the slider lands where asked, quickly.
+  const farFrom = await clockOf();
   const t1 = Date.now();
   await page.evaluate(() => {
     const s = document.querySelector('.replay-slider');
     s.value = String(Math.floor(Number(s.max) * 0.75));
     s.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  await waitFor(page, `!document.querySelector('.replay-time.seeking')`, 'the far seek', 5000);
+  // The clock again, for the reason the seek above gives.
+  await waitFor(
+    page,
+    `document.querySelector('.replay-time')?.textContent !== ${JSON.stringify(farFrom)}`,
+    'the far seek to move the clock',
+    5000,
+  );
   const far = secondsOf(await clockOf());
   console.log('far seek:', far, `in ${Date.now() - t1} ms`);
   if (far < before) throw new Error(`the far seek landed at ${far}`);
