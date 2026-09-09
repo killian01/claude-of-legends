@@ -63,6 +63,24 @@ _Avoid_: agent, brain, controller
 The team's core structure. Destroying the enemy Sanctum wins the match.
 _Avoid_: base core, citadel, and the names other MOBAs give this structure
 
+**Launch map**:
+The map every match is played on: the point-symmetric three-lane square in
+`src/sim/content/map.ts`. Ranked, lobbies, bots, replays and the environment
+all run on it.
+_Avoid_: default map, classic map, the old map
+
+**Star Orchard**:
+The authored map built in Blender (docs/star-orchard.md): two platforms, three
+lanes, two forests with their camps and a central plaza, exported with its
+collisions and gameplay points. Still being built, so it plays only in the test
+mode, the offline practice match on it; it is not the launch map.
+_Avoid_: Verger astral (its working title in French), the new map, the Blender map
+
+**Test mode**:
+The offline practice match played on the Star Orchard, from its own tile on the
+home. Same champion select, same house bots, same HUD; never rated, never online.
+_Avoid_: playtest page, map explorer, beta map
+
 **Sigil**:
 One of the utility spells a participant picks two of at champion select. Launch pool: Riftstep, Zephyr, Mend, Sear.
 _Avoid_: utility spell, and the names other MOBAs give this pick

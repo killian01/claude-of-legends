@@ -31,7 +31,7 @@ export interface SanctumSpot {
 export interface TowerSpot {
   team: TeamId;
   lane: LaneId | 'sanctum';
-  tier: 1 | 2;
+  tier: 1 | 2 | 3;
   x: number;
   z: number;
 }
@@ -45,12 +45,21 @@ export interface RiverBand {
   width: number;
 }
 
+export interface SpawnSpot {
+  team: TeamId;
+  x: number;
+  z: number;
+}
+
 export interface GameMap {
   size: number;
   borderMargin: number;
   laneWidth: number;
   river: RiverBand;
   fountains: readonly FountainSpot[];
+  // Authored champion spawn points, in seating order per team; absent, the
+  // champions stand in a fixed pattern around the fountain.
+  spawns?: readonly SpawnSpot[];
   sanctums: readonly SanctumSpot[];
   towers: readonly TowerSpot[];
   // Each lane is a polyline from team 0's base toward team 1's.

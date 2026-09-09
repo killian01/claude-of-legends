@@ -42,7 +42,12 @@ export function waveScale(time: number): number {
 
 const LANES: readonly LaneId[] = ['top', 'mid', 'bot'];
 
-export function spawnWave(ctx: CombatCtx, map: GameMap, waveIndex: number): void {
+export function spawnWave(
+  ctx: CombatCtx,
+  map: GameMap,
+  waveIndex: number,
+  snapToTerrain = false,
+): void {
   const scale = waveScale(ctx.time);
   const siegeWave =
     waveIndex % SIEGE_WAVE_EVERY === SIEGE_WAVE_EVERY - 1 || ctx.time >= LATE_GAME_S;
@@ -64,7 +69,8 @@ export function spawnWave(ctx: CombatCtx, map: GameMap, waveIndex: number): void
           z: a.z + dir.z * along + perp.z * side,
         };
         const id = ctx.allocId();
-        ctx.units.set(id, createMinion(id, team, variant, lane, pos, scale));
+        const spawn = snapToTerrain ? ctx.nav.nearestWalkable(pos.x, pos.z) : pos;
+        if (spawn) ctx.units.set(id, createMinion(id, team, variant, lane, spawn, scale));
         slot += 1;
       };
       for (let i = 0; i < CASTERS_PER_WAVE; i++) spawnAt('caster');

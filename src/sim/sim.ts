@@ -115,9 +115,19 @@ const SPAWN_SLOTS: readonly { x: number; z: number }[] = [
   { x: 0, z: -1.6 },
 ];
 
+// A match on another map than the launch one (the Star Orchard test mode,
+// docs/star-orchard.md): the map record, its walkability grid, and strict
+// navigation, which keeps every step, spawn and respawn on a walkable cell
+// of a grid finer than a unit's stride. Absent, the launch map as always.
+export interface SimOptions {
+  map?: GameMap;
+  nav?: NavGrid;
+  strictNavigation?: boolean;
+}
+
 export class Sim {
   readonly rng: Rng;
-  readonly map: GameMap = GAME_MAP;
+  readonly map: GameMap;
   readonly nav: NavGrid;
   // Match-scoped champion resolution: the roster plus this match's forged
   // definitions (plan-forge phase 2). Register forged champions BEFORE
@@ -157,11 +167,16 @@ export class Sim {
   // Public like teamBuffs: tests rewind the spawn clock instead of ticking
   // ten sim-minutes to meet the first Warden.
   readonly objectives = initialObjectiveState();
-  private readonly campStates = initialCampStates(GAME_MAP);
+  private readonly campStates: ReturnType<typeof initialCampStates>;
 
-  constructor(seed: number) {
+  constructor(
+    seed: number,
+    private readonly options: SimOptions = {},
+  ) {
     this.rng = new Rng(seed);
-    this.nav = new NavGrid(this.map.size, this.map.walls, this.map.borderMargin);
+    this.map = options.map ?? GAME_MAP;
+    this.campStates = initialCampStates(this.map);
+    this.nav = options.nav ?? new NavGrid(this.map.size, this.map.walls, this.map.borderMargin);
     for (const u of createMapUnits(this.map, () => this.nextId++)) {
       this.units.set(u.id, u);
       this.nav.blockCircle(u.pos.x, u.pos.z, staticFootprint(u));
@@ -203,7 +218,11 @@ export class Sim {
       if (u.kind === 'champion' && u.team === team) count++;
     }
     const slot = SPAWN_SLOTS[count % SPAWN_SLOTS.length]!;
-    const pos = at ?? { x: fountain.x + slot.x, z: fountain.z + slot.z };
+    const authored = this.map.spawns?.filter((s) => s.team === team) ?? [];
+    const spawn = authored[count % Math.max(1, authored.length)];
+    const pos =
+      at ??
+      (spawn ? { x: spawn.x, z: spawn.z } : { x: fountain.x + slot.x, z: fountain.z + slot.z });
     const champ = createChampion(this.nextId++, team, pos, def);
     champ.skin = clampSkin(championId, skin);
     this.units.set(champ.id, champ);
@@ -278,12 +297,16 @@ export class Sim {
       seat.lanePrefer = def.lanes ? [...def.lanes] : null;
       this.assignLanes(seat.team);
     }
-    const policy = playbookPolicy(def, (playId, id) => {
-      const u = this.units.get(id);
-      if (!u || u.play === playId) return;
-      u.play = playId;
-      this.events.push({ type: 'play', unitId: id, playId });
-    });
+    const policy = playbookPolicy(
+      def,
+      (playId, id) => {
+        const u = this.units.get(id);
+        if (!u || u.play === playId) return;
+        u.play = playId;
+        this.events.push({ type: 'play', unitId: id, playId });
+      },
+      this.map,
+    );
     this.attachPolicy(unitId, policy);
   }
 
@@ -684,7 +707,7 @@ export class Sim {
     runRemoteDecisions(this, this.remoteSeats);
 
     if (this.winner === null && this.time >= this.nextWaveAt) {
-      spawnWave(ctx, this.map, this.waveCount++);
+      spawnWave(ctx, this.map, this.waveCount++, this.options.strictNavigation);
       this.nextWaveAt += WAVE_EVERY;
     }
     if (this.winner === null) {
@@ -708,10 +731,14 @@ export class Sim {
       if (speed > 0) {
         // Stale paths can cross a wall raised after they were computed;
         // clamp the step at the wall face instead of walking through.
-        if (this.walls.size > 0) {
+        if (this.walls.size > 0 || this.options.strictNavigation) {
           const from = { x: u.pos.x, z: u.pos.z };
           stepMovement(u, DT, speed);
           clampThroughWalls(this.nav, from, u);
+          if (this.options.strictNavigation && !this.nav.lineOfWalk(from, u.pos)) {
+            u.pos = from;
+            u.path = [];
+          }
         } else {
           stepMovement(u, DT, speed);
         }
@@ -809,6 +836,8 @@ export class Sim {
       const slot = SPAWN_SLOTS[teammateIndex % SPAWN_SLOTS.length]!;
       u.dead = false;
       u.pos = { x: fountain.x + slot.x, z: fountain.z + slot.z };
+      if (this.options.strictNavigation)
+        u.pos = this.nav.nearestWalkable(u.pos.x, u.pos.z) ?? { x: fountain.x, z: fountain.z };
       u.hp = u.maxHp;
       u.mana = u.maxMana;
       u.statuses = [];
@@ -832,7 +861,7 @@ export class Sim {
           at: this.time,
           hpFrac: u.maxHp > 0 ? u.hp / u.maxHp : 0,
         });
-        const lane = laneOf(u.pos.x, u.pos.z);
+        const lane = laneOf(u.pos.x, u.pos.z, this.map);
         if (lane) this.laneSightings.record(observer, lane, u.id, this.time, DT);
       }
     }
