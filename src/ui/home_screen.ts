@@ -56,6 +56,11 @@ function ensureCss(): void {
   document.head.appendChild(style);
 }
 
+// The sections of the bar, which are also their addresses (#ladder): the
+// entry point reads the one a reload or a shared link names.
+export const HOME_SECTION_KEYS = ['ladder', 'academy', 'forge', 'gallery', 'champions'] as const;
+export type HomeSectionKey = (typeof HOME_SECTION_KEYS)[number];
+
 export interface HomeChoice {
   name: string;
   // 'forge-queue' is the Forge's own public queue (plan-forge phase 6):
@@ -92,6 +97,8 @@ export function showHome(
   // Open the Academy on this bot at once: the way back from a replay it
   // handed over.
   reopen: { botId: string } | null = null,
+  // Open this section at once: the one the page's address named at boot.
+  startSection: HomeSectionKey | null = null,
 ): Promise<HomeChoice> {
   ensureCss();
   const accountName = account.name;
@@ -267,5 +274,6 @@ export function showHome(
     });
 
     if (reopen) showAcademy(reopen.botId);
+    else if (startSection) barSections.find((s) => s.key === startSection)?.open();
   });
 }

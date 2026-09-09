@@ -6,6 +6,7 @@
 // playbook on screen is always one the engine can run: every edit and
 // every coach operation goes through the validator before it lands.
 
+import { appNav, type Frame } from '../game/nav';
 import { runSeries, runSparring } from '../game/sparring';
 import { SERIES_SEEDS, type SparResult } from '../game/sparring_core';
 import { type CoachTurn, commentOf } from '../net/coach_chat';
@@ -300,10 +301,8 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
   };
   const onKey = (e: KeyboardEvent): void => {
     if (e.key !== 'Escape') return;
-    if (recordOpen) {
-      recordOpen = false;
-      renderRecord();
-    } else close();
+    if (recordOpen) closeRecord();
+    else close();
   };
   window.addEventListener('keydown', onKey);
 
@@ -373,6 +372,9 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
   let recordTally: RecordTallies = emptyTallies();
   let recordOpen = false;
   let recordOpenId: number | null = null;
+  // The record over the bot's page is a layer of its own (src/game/nav.ts):
+  // Back closes the record first and the Academy after, like Escape does.
+  let recordFrame: Frame | null = null;
   let arenaRunning = false;
   // The Arena as it stands: matches left today, the pool, the next round.
   let arena: { left: number | null; cap: number; pool: number; nextRoundInMs: number } | null =
@@ -402,6 +404,9 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     recordTally = emptyTallies();
     recordOpen = false;
     recordOpenId = null;
+    const openFrame = recordFrame;
+    recordFrame = null;
+    openFrame?.closed();
     if (bot) {
       void loadRecord(bot.id);
       void loadArena();
@@ -496,7 +501,19 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
   function openRecord(entryId: number | null): void {
     recordOpen = true;
     recordOpenId = entryId;
+    recordFrame ??= appNav().push('record', () => {
+      recordFrame = null;
+      closeRecord();
+    });
     renderRecord();
+  }
+
+  function closeRecord(): void {
+    recordOpen = false;
+    const openFrame = recordFrame;
+    recordFrame = null;
+    renderRecord();
+    openFrame?.closed();
   }
 
   // The replay viewer, then back here on the same bot; at a tick when the
@@ -2110,10 +2127,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
           (r) => (r.ok ? r.entry : null),
         ),
       onWatch: (replayId, tick, follow) => watchReplay(bot.id, replayId, tick, follow),
-      onBack: () => {
-        recordOpen = false;
-        renderRecord();
-      },
+      onBack: closeRecord,
     });
   }
 

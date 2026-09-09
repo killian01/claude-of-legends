@@ -6,6 +6,7 @@
 // against this one, now, on the server, unrated. A modal over whatever is
 // open; pure DOM, the data from /api/bots/page and /api/bots/challenge.
 
+import { appNav } from '../game/nav';
 import type { RecordRow, RecordTallies } from '../net/record';
 import { tierOf } from '../net/tiers';
 import { CHAMPIONS } from '../sim/content/champions';
@@ -154,6 +155,7 @@ export function openBotPage(
   const close = (): void => {
     window.removeEventListener('keydown', onKey);
     back.remove();
+    frame.closed();
   };
   const onKey = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') {
@@ -167,6 +169,9 @@ export function openBotPage(
   });
   box.append(el('div', 'bp-empty', 'Reading the bot...'));
   container.append(back);
+  // A layer over the page that opened it: the browser's Back closes the
+  // sheet and leaves the ladder or the Academy where it was.
+  const frame = appNav().push('bot', close);
 
   void post<BotPageData>('/api/bots/page', { id: botId }).then((r) => {
     box.textContent = '';

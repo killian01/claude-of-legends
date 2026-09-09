@@ -69,6 +69,11 @@ the `.env` knobs, and how to read a red run. The project's own skills under
 - **Every bot is a `Policy`** (`src/sim/policy.ts`): deterministic (observation, rng) -> action,
   zero I/O. The observation is team vision, never global sim state. The obs/action space and
   the decision budget are a public, versioned contract (ADR 0002, ADR 0003).
+- **One page, and the browser history mirrors it (ADR 0020).** The client never reloads
+  between screens; `src/game/nav.ts` gives every screen that opens over another (a section,
+  a drawer, a card, a match) one history entry, so Back closes it instead of leaving the site.
+  A match is a guarded layer: Back opens the pause menu, a reload or a closed tab asks first.
+  Only the home's sections carry an address (`#ladder`).
 
 ## Invariants, YOU MUST keep these
 
@@ -98,6 +103,10 @@ the `.env` knobs, and how to read a red run. The project's own skills under
   tables are correctly big.
 - **Content is data.** Champions, items, sigils, and map records live under
   `src/sim/content/`, merged by one data module; never content tables inline in sim logic.
+- **A screen that opens over another is a nav layer** (`src/game/nav.ts`): push a frame when
+  it opens, call `closed()` on its own way out (its Back, Escape, scrim), guard it while
+  leaving would cost something. Sections, drawers and notices get this from their shared
+  host; a new kind of overlay wires it itself. `scripts/e2e_nav.mjs` presses the real Back.
 - **Commits:** Conventional Commits with a scope (`feat(sim): ...`, `fix(net): ...`) and a
   short body saying what changed and why. Branches: `feature/<slug>`, `fix/<slug>`.
 - **Pull requests:** based on `main`, small and focused, following

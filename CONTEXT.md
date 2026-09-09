@@ -171,6 +171,14 @@ One of the five ways into a match on the Home, each a painted scene of its own: 
 queue, Bots, the Forge queue, a Private lobby, Practice. The tile is the button.
 _Avoid_: card (that is the pre-game menu's), button, mode select, panel
 
+**Layer**:
+A screen that opens over what was there and closes back to it: a section of the Home, a
+drawer, a pre-game card, the match, a replay. Each open layer is one entry in the browser's
+history (ADR 0020), so Back closes the top one rather than leaving the site. A guarded layer
+refuses Back and says so instead: the match opens its pause menu.
+_Avoid_: page (the landing and the Home are pages; what opens over them is a layer), route,
+modal, view, screen (too broad to say what Back does to it)
+
 **Confirmed address**:
 An email address whose owner has followed the link sent to it. Only a confirmed address can
 receive a password reset, and only a confirmed address is held forever. An address nobody has
