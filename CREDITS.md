@@ -47,7 +47,7 @@ conversion.
 
 ### Play tile art (`public/art/tiles/`)
 
-The five painted scenes behind the home's play tiles (CONTEXT.md: Home),
+The painted scenes behind the home's play tiles (CONTEXT.md: Home),
 one per tile, generated from the prompts in `scripts/tile_art.mjs` and
 described in docs/design/tile-art-prompts.md; the sources stay in
 `art_src/tiles/`.
@@ -55,6 +55,20 @@ described in docs/design/tile-art-prompts.md; the sources stay in
 | Files | Source | License |
 |---|---|---|
 | `ranked.webp`, `bots.webp`, `forge.webp`, `lobby.webp`, `practice.webp` | Generated with the Tripo advanced image task (model `gpt_image_2`) from the prompts in `scripts/tile_art.mjs` | Tripo output terms |
+| `orchard.webp` | The Star Orchard sanctum concept, generated with OpenAI's image model in ChatGPT from the prompt kept beside it in `art_src/map_exports/concepts/`, cropped square | OpenAI output terms |
+
+## The Star Orchard (`public/map/star-orchard/`)
+
+The authored map of the test mode (docs/star-orchard.md): a Blender scene
+built by the maintainer with ChatGPT, exported with its walkability grid and
+gameplay points, and rewritten for the browser by `scripts/import_map.mjs`.
+The model's textures are baked from the scene's own materials; the painted
+tower facade is a generated image. The Blender sources and the raw exports
+stay in `art_src/`.
+
+| Files | Source | License |
+|---|---|---|
+| `map.glb`, `manifest.json`, `navigation.bin`, `gameplay.json` | Original Blender scene by killian01 with ChatGPT; baked textures; the tower facade painting generated with OpenAI's image model | Project license for the scene and exports; OpenAI output terms for the facade painting |
 
 ## Logo (`public/icon-*.png`, `public/apple-touch-icon.png`, `public/logo.webp`, `docs/screenshots/logo-readme.webp`)
 
