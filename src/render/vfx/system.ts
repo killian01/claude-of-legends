@@ -4,6 +4,7 @@
 // camera-shake budget hook. Presentation only; the renderer feeds it time.
 
 import * as THREE from 'three';
+import type { GroundHeight } from '../terrain';
 import { LightningBolts } from './bolts';
 import { DebrisField } from './debris';
 import { GroundDecals } from './decals';
@@ -35,13 +36,16 @@ export class VfxSystem {
   private readonly beats: { at: number; fn: () => void }[] = [];
   private readonly lights: LightSlot[] = [];
 
-  constructor(scene: THREE.Scene) {
-    this.particles = new ParticleCloud(scene);
-    this.rings = new ShockRings(scene);
-    this.pillars = new LightPillars(scene);
-    this.bolts = new LightningBolts(scene);
-    this.decals = new GroundDecals(scene);
-    this.debris = new DebrisField(scene);
+  constructor(
+    scene: THREE.Scene,
+    private readonly groundHeight?: GroundHeight,
+  ) {
+    this.particles = new ParticleCloud(scene, groundHeight);
+    this.rings = new ShockRings(scene, groundHeight);
+    this.pillars = new LightPillars(scene, groundHeight);
+    this.bolts = new LightningBolts(scene, groundHeight);
+    this.decals = new GroundDecals(scene, groundHeight);
+    this.debris = new DebrisField(scene, groundHeight);
     // The light pool is created eagerly and stays visible at intensity 0:
     // Three bakes the light COUNT into every lit material's program, so a
     // light appearing mid-fight would relink all of them (the woc lesson).
@@ -67,7 +71,7 @@ export class VfxSystem {
     slot.duration = durationMs;
     slot.peak = intensity;
     slot.light.color.set(color);
-    slot.light.position.set(x, 3, z);
+    slot.light.position.set(x, 3 + (this.groundHeight?.(x, z) ?? 0), z);
   }
 
   // A radial burst of hot sparks; the workhorse impact garnish.

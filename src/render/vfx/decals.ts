@@ -3,6 +3,7 @@
 // a scorch can actually darken the ground. Fade in fast, hold, burn away.
 
 import * as THREE from 'three';
+import type { GroundHeight } from '../terrain';
 
 const POOL = 12;
 const TEX = 128;
@@ -119,7 +120,10 @@ export class GroundDecals {
   private readonly slots: DecalSlot[] = [];
   private readonly geometry = new THREE.CircleGeometry(1, 24);
 
-  constructor(scene: THREE.Scene) {
+  constructor(
+    scene: THREE.Scene,
+    private readonly groundHeight?: GroundHeight,
+  ) {
     for (let i = 0; i < POOL; i++) {
       const mat = new THREE.MeshBasicMaterial({
         map: decalTexture('scorch'),
@@ -157,6 +161,7 @@ export class GroundDecals {
     slot.mesh.visible = true;
     slot.mesh.position.x = x;
     slot.mesh.position.z = z;
+    if (this.groundHeight) slot.mesh.position.y = 0.04 + this.groundHeight(x, z);
     slot.mesh.rotation.z = Math.random() * Math.PI * 2;
     slot.mesh.scale.setScalar(Math.max(0.1, radius));
     slot.mat.map = decalTexture(kind);

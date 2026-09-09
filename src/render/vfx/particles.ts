@@ -4,6 +4,7 @@
 // the live prefix, and uploads only that range (the woc house idiom).
 
 import * as THREE from 'three';
+import type { GroundHeight } from '../terrain';
 import { SPRITE, spriteAtlas } from './sprites';
 
 const CAP = 2048;
@@ -113,7 +114,10 @@ export class ParticleCloud {
   private readonly geometry = new THREE.BufferGeometry();
   private readonly material: THREE.ShaderMaterial;
 
-  constructor(scene: THREE.Scene) {
+  constructor(
+    scene: THREE.Scene,
+    private readonly groundHeight?: GroundHeight,
+  ) {
     for (let i = 0; i < CAP; i++) {
       this.slots.push({
         x: 0,
@@ -176,7 +180,7 @@ export class ParticleCloud {
     if (this.count >= CAP) return;
     const s = this.slots[this.count++]!;
     s.x = p.x;
-    s.y = p.y;
+    s.y = p.y + (this.groundHeight?.(p.x, p.z) ?? 0);
     s.z = p.z;
     s.vx = p.vx ?? 0;
     s.vy = p.vy ?? 0;

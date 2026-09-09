@@ -1,5 +1,41 @@
-import { defineConfig, loadEnv } from 'vite';
+import { createReadStream, existsSync, statSync } from 'node:fs';
+import path from 'node:path';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import { offlineApiNotice, offlineApiReply } from './scripts/dev_api_fallback.ts';
+
+// The raw Blender exports of the Star Orchard (docs/star-orchard.md) live
+// in art_src/map_exports/, gitignored and outside public/ so a build never
+// copies a gigabyte of revisions; the dev pages that compare revisions
+// read them under /map-exports/ on the dev server only.
+const MAP_EXPORTS = path.resolve('art_src/map_exports');
+const MAP_EXPORT_TYPES: Record<string, string> = {
+  '.glb': 'model/gltf-binary',
+  '.json': 'application/json',
+  '.bin': 'application/octet-stream',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
+};
+function serveMapExports(): Plugin {
+  return {
+    name: 'loc-map-exports',
+    configureServer(server) {
+      server.middlewares.use('/map-exports', (req, res, next) => {
+        const file = path.join(MAP_EXPORTS, decodeURIComponent((req.url ?? '/').split('?')[0]!));
+        if (!file.startsWith(MAP_EXPORTS) || !existsSync(file) || !statSync(file).isFile()) {
+          next();
+          return;
+        }
+        res.setHeader(
+          'content-type',
+          MAP_EXPORT_TYPES[path.extname(file)] ?? 'application/octet-stream',
+        );
+        res.setHeader('content-length', String(statSync(file).size));
+        createReadStream(file).pipe(res);
+      });
+    },
+  };
+}
 
 // Dev: the Vite client talks to the game server on PORT, the variable the
 // server itself listens on, read from the shell or from .env (default
@@ -9,6 +45,7 @@ import { offlineApiNotice, offlineApiReply } from './scripts/dev_api_fallback.ts
 export default defineConfig(({ mode }) => {
   const port = Number(loadEnv(mode, process.cwd(), '').PORT || 8787);
   return {
+    plugins: [serveMapExports()],
     server: {
       watch: {
         // art_src/ holds the raw 2048px icon sources: nothing imports them, and

@@ -3,6 +3,7 @@
 // impact or a champion's ultimate moment.
 
 import * as THREE from 'three';
+import type { GroundHeight } from '../terrain';
 
 const POOL = 8;
 
@@ -21,7 +22,10 @@ export class LightPillars {
   private readonly slots: PillarSlot[] = [];
   private readonly geometry: THREE.CylinderGeometry;
 
-  constructor(scene: THREE.Scene) {
+  constructor(
+    scene: THREE.Scene,
+    private readonly groundHeight?: GroundHeight,
+  ) {
     this.geometry = new THREE.CylinderGeometry(0.55, 1, 1, 10, 1, true);
     this.geometry.translate(0, 0.5, 0);
     for (let i = 0; i < POOL; i++) {
@@ -70,7 +74,7 @@ export class LightPillars {
     slot.height = height;
     slot.peak = peakOpacity;
     slot.mesh.visible = true;
-    slot.mesh.position.set(x, 0, z);
+    slot.mesh.position.set(x, this.groundHeight?.(x, z) ?? 0, z);
     slot.mat.color.set(color);
   }
 

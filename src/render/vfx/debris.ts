@@ -3,6 +3,7 @@
 // for rock bursts, thorn eruptions, and meteor shrapnel (tinted per spawn).
 
 import * as THREE from 'three';
+import type { GroundHeight } from '../terrain';
 
 const CAP = 64;
 const GRAVITY = 26;
@@ -36,7 +37,10 @@ export class DebrisField {
   private readonly chunks: Chunk[] = [];
   private count = 0;
 
-  constructor(scene: THREE.Scene) {
+  constructor(
+    scene: THREE.Scene,
+    private readonly groundHeight?: GroundHeight,
+  ) {
     const geo = new THREE.IcosahedronGeometry(1, 0);
     const mat = new THREE.MeshLambertMaterial({ flatShading: true });
     this.mesh = new THREE.InstancedMesh(geo, mat, CAP);
@@ -149,7 +153,7 @@ export class DebrisField {
       const shrink = t > 0.75 ? 1 - (t - 0.75) / 0.25 : 1;
       euler.set(c.rotX, c.rotY, 0);
       quat.setFromEuler(euler);
-      pos.set(c.x, c.y, c.z);
+      pos.set(c.x, c.y + (this.groundHeight?.(c.x, c.z) ?? 0), c.z);
       scl.setScalar(Math.max(0.001, c.size * shrink));
       mtx.compose(pos, quat, scl);
       this.mesh.setMatrixAt(idx, mtx);

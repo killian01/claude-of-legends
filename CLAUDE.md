@@ -31,6 +31,7 @@ Vitest · Biome. No UI framework; tiny dependency set.
 | `src/net/` | Online client: wire protocol + WebSocket mirror world. |
 | `server/` | Authoritative game server; `server/generation/` is the Forge's provider seam (ADR 0010); the bots' store, the Arena and the night coach live beside it (ADR 0013). |
 | `headless/` | The environment: a match stepped from outside the repo over NDJSON (ADR 0002 phase 2). |
+| `public/map/star-orchard/` | The shipped Star Orchard export (`docs/star-orchard.md`), one revision; raw Blender exports stay in `art_src/map_exports/`, gitignored. |
 | `tests/` | Vitest suite, including the structural gates. |
 
 Directories that do not exist yet are created by their phase in `docs/plan-48h.md`;

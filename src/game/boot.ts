@@ -8,6 +8,7 @@
 
 import { schoolColorOf } from '../render/ability_vfx';
 import { Renderer } from '../render/renderer';
+import type { RenderTerrain } from '../render/terrain';
 import { effectiveRank, ULT_RANK_LEVELS } from '../sim/stats';
 import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
 import { DT } from '../sim/types';
@@ -71,8 +72,14 @@ export function startPresentation(
   selfId: number,
   selfTeam: TeamId,
   onExit: (action: PostMatchAction) => void,
+  options: {
+    terrain?: RenderTerrain;
+    onRenderer?: (renderer: Renderer) => void;
+    fullscreen?: boolean;
+  } = {},
 ): Presentation {
-  const renderer = new Renderer(container, world);
+  const renderer = new Renderer(container, world, options.terrain);
+  options.onRenderer?.(renderer);
   // The recorded bank decodes while the match loads, so the first swing
   // plays a recording rather than the synthesis.
   preloadSfx();
@@ -90,6 +97,7 @@ export function startPresentation(
       renderer.flashMarker(p.x, p.z);
     },
     (p) => renderer.lookAtPoint(p.x, p.z),
+    options.terrain?.minimap,
   );
   // No edge panning while a modal is up or the cursor sits on the minimap
   // (its corner position would otherwise drag the camera while clicking it).
@@ -99,7 +107,9 @@ export function startPresentation(
   // took the screen already, but a match reached without one (auto-lock,
   // rejoin) grabs it on the first click inside, the earliest gesture a
   // browser accepts a fullscreen request from.
-  const onFirstPointerDown = (): void => requestGameFullscreen();
+  const onFirstPointerDown = (): void => {
+    if (options.fullscreen !== false) requestGameFullscreen();
+  };
   container.addEventListener('pointerdown', onFirstPointerDown, { once: true });
 
   let hooks: NetHooks = {};

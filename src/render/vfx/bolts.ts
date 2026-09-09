@@ -4,6 +4,7 @@
 // rewritten in place.
 
 import * as THREE from 'three';
+import type { GroundHeight } from '../terrain';
 
 const POOL = 6;
 // Midpoint passes: 3 passes on a 2-point seed gives 9 points.
@@ -36,7 +37,10 @@ for (let i = 0; i < MAX_POINTS; i++) pts.push(new THREE.Vector3());
 export class LightningBolts {
   private readonly slots: BoltSlot[] = [];
 
-  constructor(scene: THREE.Scene) {
+  constructor(
+    scene: THREE.Scene,
+    private readonly groundHeight?: GroundHeight,
+  ) {
     for (let i = 0; i < POOL; i++) {
       const geo = new THREE.BufferGeometry();
       const pos = new THREE.BufferAttribute(new Float32Array(MAX_POINTS * 2 * 3), 3);
@@ -93,6 +97,8 @@ export class LightningBolts {
     slot.active = true;
     slot.from.copy(from);
     slot.to.copy(to);
+    slot.from.y += this.groundHeight?.(from.x, from.z) ?? 0;
+    slot.to.y += this.groundHeight?.(to.x, to.z) ?? 0;
     slot.width = width;
     slot.jag = jag;
     slot.bornAt = performance.now();
