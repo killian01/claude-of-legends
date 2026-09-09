@@ -88,6 +88,10 @@ export class NavGrid {
     return { cx: Math.floor(x), cz: Math.floor(z) };
   }
 
+  cellToWorld(cx: number, cz: number): Vec2 {
+    return { x: cx + 0.5, z: cz + 0.5 };
+  }
+
   isWalkableAt(x: number, z: number): boolean {
     const c = this.worldToCell(x, z);
     return this.isWalkableCell(c.cx, c.cz);
@@ -107,8 +111,7 @@ export class NavGrid {
           const cx = c.cx + dx;
           const cz = c.cz + dz;
           if (!this.isWalkableCell(cx, cz)) continue;
-          const px = cx + 0.5;
-          const pz = cz + 0.5;
+          const { x: px, z: pz } = this.cellToWorld(cx, cz);
           const d = (px - x) * (px - x) + (pz - z) * (pz - z);
           if (d < bestD) {
             bestD = d;

@@ -8,7 +8,7 @@
 // the minion's health and the bot's attack damage off the observation
 // (additive fields, plan-bots phase 16).
 
-import { GAME_MAP, type LaneId } from '../content/map';
+import type { LaneId } from '../content/map';
 import { hypot } from '../exact';
 import type { Action, ObsUnit } from '../policy';
 import { dist, FARM_RANGE, laneDistance, nearest, type SlotContext } from './micro';
@@ -66,8 +66,8 @@ export function shove(ctx: SlotContext): Action | null {
 export function laneTower(ctx: SlotContext): ObsUnit | null {
   const lane = ctx.s.lane;
   if (lane === null) return null;
-  const path = GAME_MAP.lanes[lane];
-  const home = GAME_MAP.sanctums.find((c) => c.team === ctx.s.team)!;
+  const path = ctx.map.lanes[lane];
+  const home = ctx.map.sanctums.find((c) => c.team === ctx.s.team)!;
   let best: ObsUnit | null = null;
   let bestD = Number.POSITIVE_INFINITY;
   for (const t of ctx.obs.units) {
@@ -89,7 +89,7 @@ export function laneTower(ctx: SlotContext): ObsUnit | null {
 // toward the enemy end.
 export function freezeSpot(ctx: SlotContext, tower: ObsUnit): { x: number; z: number } {
   const lane = ctx.s.lane as LaneId;
-  const path = GAME_MAP.lanes[lane];
+  const path = ctx.map.lanes[lane];
   const oriented = ctx.s.team === 0 ? path : [...path].reverse();
   let idx = 0;
   let best = Number.POSITIVE_INFINITY;

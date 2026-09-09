@@ -5,6 +5,7 @@
 // reads louder than a fading tail.
 
 import * as THREE from 'three';
+import type { GroundHeight } from '../terrain';
 
 const POOL = 14;
 
@@ -55,7 +56,10 @@ export class ShockRings {
   private readonly slots: RingSlot[] = [];
   private readonly geometry = new THREE.PlaneGeometry(2, 2);
 
-  constructor(scene: THREE.Scene) {
+  constructor(
+    scene: THREE.Scene,
+    private readonly groundHeight?: GroundHeight,
+  ) {
     const proto = new THREE.ShaderMaterial({
       uniforms: {
         uColor: { value: new THREE.Color(0xffffff) },
@@ -103,6 +107,7 @@ export class ShockRings {
     slot.mesh.visible = true;
     slot.mesh.position.x = x;
     slot.mesh.position.z = z;
+    if (this.groundHeight) slot.mesh.position.y = 0.06 + this.groundHeight(x, z);
     slot.mesh.scale.setScalar(Math.max(0.1, radius));
     (slot.mat.uniforms.uColor!.value as THREE.Color).set(color);
     slot.mat.uniforms.uWidth!.value = opts?.width ?? 0.26;

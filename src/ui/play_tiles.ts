@@ -8,9 +8,9 @@ import type { PlayTile } from './home_tiles';
 import { tileArtUrl } from './home_tiles';
 import { el } from './menu';
 
-// The row: five scenes side by side, all at the full height of it, in the
+// The row: six scenes side by side, all at the full height of it, in the
 // order the tiles are declared. Ranked is the widest because it is the
-// hero; the other four share the rest evenly. The private lobby and the
+// hero; the other five share the rest evenly. The private lobby and the
 // practice match used to be two small squares stacked in a column on the
 // right, which made them read as leftovers rather than as two of the five
 // ways into a match: a mode is either offered or it is not, and a stacked
@@ -18,7 +18,7 @@ import { el } from './menu';
 // these paintings are composed in, so the crop stops throwing most of
 // them away.
 const CSS = `
-.tiles { display: grid; grid-template-columns: 4fr repeat(4, 3fr); grid-template-rows: 1fr;
+.tiles { display: grid; grid-template-columns: 4fr repeat(5, 3fr); grid-template-rows: 1fr;
   gap: 12px; height: clamp(320px, 50vh, 460px); max-width: 1180px; }
 .tile {
   position: relative; overflow: hidden; border-radius: 14px; border: 1px solid #2b3f60;
@@ -83,7 +83,7 @@ const CSS = `
 .home-join.lit .menu-input { border-color: #d8b45a; box-shadow: 0 0 12px rgba(216, 180, 90, 0.3); }
 
 /* Narrow: the row unstacks two at a time, the hero across the top and the
-   other four in pairs under it, which is the same reading order. They
+   other five in pairs under it, which is the same reading order. They
    keep their upright shape, taller than wide, so a title, a line and a
    button all hold at a phone's width without clipping any of them. */
 @media (max-width: 900px) {

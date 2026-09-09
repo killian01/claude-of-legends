@@ -38,6 +38,7 @@ import {
   type SpawnOffset,
 } from './muzzle_spawn';
 import { buildSanctumMesh, buildTowerMesh } from './structure_shapes';
+import type { RenderTerrain } from './terrain';
 import { toonifyMaterials } from './toon';
 import {
   genericDetonate,
@@ -338,10 +339,16 @@ export class Renderer {
   // dispose(): matches end on the same page now, without a reload sweep.
   private readonly cleanups: (() => void)[] = [];
 
-  constructor(container: HTMLElement, world: IWorld) {
+  constructor(
+    container: HTMLElement,
+    world: IWorld,
+    private readonly terrain?: RenderTerrain,
+  ) {
     this.world = world;
     this.gl = new THREE.WebGLRenderer({ antialias: true });
-    this.gl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.gl.setPixelRatio(
+      terrain?.highDetail ? window.devicePixelRatio : Math.min(window.devicePixelRatio, 2),
+    );
     this.gl.setSize(container.clientWidth, container.clientHeight);
     this.gl.shadowMap.enabled = true;
     // Plain PCF, not PCFSoft: it is the kernel that honors shadow.radius.
@@ -373,7 +380,7 @@ export class Renderer {
     this.scene.scale.z = -1;
     this.scene.position.z = world.map.size;
 
-    this.vfx = new VfxSystem(this.scene);
+    this.vfx = new VfxSystem(this.scene, terrain?.heightAt);
     this.vfx.onShake = (k) => this.addShake(k);
     this.vfx.particles.setViewport(
       Math.max(1, container.clientHeight),
@@ -459,10 +466,10 @@ export class Renderer {
     fogMesh.rotation.x = -Math.PI / 2;
     // High enough that grass blades and boulders sit under the fog sheet
     // instead of poking through it fully lit.
-    fogMesh.position.set(world.map.size / 2, 2.6, world.map.size / 2);
+    fogMesh.position.set(world.map.size / 2, terrain ? 4.1 : 2.6, world.map.size / 2);
     this.scene.add(fogMesh);
 
-    this.fct = new FloatingText(this.scene);
+    this.fct = new FloatingText(this.scene, terrain?.heightAt);
     this.selfRing = new THREE.Mesh(
       new THREE.RingGeometry(0.85, 1.05, 28),
       new THREE.MeshBasicMaterial({ color: 0x86e06d, transparent: true, opacity: 0.8 }),
@@ -518,7 +525,7 @@ export class Renderer {
     this.buildLights();
     this.buildMap();
     // The stylized pass: stepped toon lighting over everything the map built.
-    toonifyMaterials(this.scene);
+    if (!terrain) toonifyMaterials(this.scene);
     this.onSimTick();
     // First sync has no history: snap prev onto curr so nothing lerps from 0,0.
     for (const t of this.tracked.values()) t.prev = { ...t.curr };
@@ -526,6 +533,10 @@ export class Renderer {
 
   get domElement(): HTMLCanvasElement {
     return this.gl.domElement;
+  }
+
+  private groundHeight(worldX: number, worldZ: number): number {
+    return this.terrain?.heightAt(worldX, worldZ) ?? 0;
   }
 
   followUnit(id: number): void {
@@ -691,6 +702,7 @@ export class Renderer {
       mesh.position.set(aim.x, 0.14, aim.z);
     }
     this.scene.add(mesh);
+    mesh.position.y += this.groundHeight(mesh.position.x, mesh.position.z);
     this.markers.push({ mesh, material: mat, bornAt: performance.now(), grow: true });
     // Dashes leave a short trail of fading glow dots along the path.
     if (p.kind === 'dash') {
@@ -708,6 +720,7 @@ export class Renderer {
         const dot = new THREE.Mesh(new THREE.CircleGeometry(0.35, 12), dotMat);
         dot.rotation.x = -Math.PI / 2;
         dot.position.set(from.x + (dx / d) * k, 0.13, from.z + (dz / d) * k);
+        dot.position.y += this.groundHeight(dot.position.x, dot.position.z);
         this.scene.add(dot);
         this.markers.push({ mesh: dot, material: dotMat, bornAt: performance.now(), grow: true });
       }
@@ -779,6 +792,7 @@ export class Renderer {
       if (m === this.aimSpot) continue;
       m.position.x = sx;
       m.position.z = sz;
+      m.position.y = this.groundHeight(sx, sz) + 0.12;
     }
     const cursor = this.pointerX >= 0 ? this.groundPointAt(this.pointerX, this.pointerY) : null;
     if (!cursor) return;
@@ -793,6 +807,10 @@ export class Renderer {
       const max = this.aimPreview.castRange;
       const k = d > max && d > 0 ? max / d : 1;
       this.aimSpot.position.set(sx + dx * k, 0.12, sz + dz * k);
+      this.aimSpot.position.y += this.groundHeight(
+        this.aimSpot.position.x,
+        this.aimSpot.position.z,
+      );
       // The wall bar stays perpendicular to the cast direction, exactly the
       // orientation the sim will give the rampart.
       if (this.aimPreview.kind === 'wall' && d > 0.05) {
@@ -832,7 +850,9 @@ export class Renderer {
   // Projects a world point to client pixels; null when behind the camera.
   // Used by screen-space picking so clicks land on visible bodies.
   projectToScreen(x: number, y: number, z: number): { x: number; y: number } | null {
-    const v = new THREE.Vector3(x, y, this.sceneZ(z)).project(this.camera);
+    const v = new THREE.Vector3(x, y + this.groundHeight(x, z), this.sceneZ(z)).project(
+      this.camera,
+    );
     if (v.z > 1) return null;
     const rect = this.gl.domElement.getBoundingClientRect();
     return {
@@ -851,7 +871,7 @@ export class Renderer {
     });
     const mesh = new THREE.Mesh(this.markerGeometry, material);
     mesh.rotation.x = -Math.PI / 2;
-    mesh.position.set(x, 0.15, z);
+    mesh.position.set(x, this.groundHeight(x, z) + 0.15, z);
     this.scene.add(mesh);
     this.markers.push({ mesh, material, bornAt: performance.now() });
   }
@@ -1031,7 +1051,8 @@ export class Renderer {
     sun.position.set(half + 70, 120, half + 45);
     sun.target.position.set(half, 0, half);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    const shadowSize = this.terrain?.highDetail ? 4096 : 2048;
+    sun.shadow.mapSize.set(shadowSize, shadowSize);
     sun.shadow.camera.near = 30;
     sun.shadow.camera.far = 330;
     const s = 115;
@@ -1045,11 +1066,35 @@ export class Renderer {
     this.scene.add(sun, sun.target);
   }
 
+  renderStats(): {
+    calls: number;
+    triangles: number;
+    width: number;
+    height: number;
+    pixelRatio: number;
+  } {
+    return {
+      calls: this.gl.info.render.calls,
+      triangles: this.gl.info.render.triangles,
+      width: this.gl.domElement.width,
+      height: this.gl.domElement.height,
+      pixelRatio: this.gl.getPixelRatio(),
+    };
+  }
+
   private buildMap(): void {
-    this.dressing = buildMapDressing(this.scene, this.world.map, TEAM_COLORS, TEAM_LIGHT);
+    if (this.terrain) {
+      this.scene.add(this.terrain.root);
+      this.scene.background = new THREE.Color(0x102034);
+      this.scene.fog = new THREE.Fog(0x102034, 120, 300);
+    } else {
+      this.dressing = buildMapDressing(this.scene, this.world.map, TEAM_COLORS, TEAM_LIGHT);
+    }
   }
 
   private buildUnitMesh(u: Readonly<Unit>): { holder: THREE.Group; barY: number } {
+    const authored = this.terrain?.structure(u);
+    if (authored) return authored;
     const kind = u.kind;
     const color = TEAM_COLORS[u.team] ?? 0xffffff;
     const holder = new THREE.Group();
@@ -1352,7 +1397,7 @@ export class Renderer {
       let t = this.tracked.get(id);
       if (!t) {
         const { holder, barY } = this.buildUnitMesh(u);
-        toonifyMaterials(holder);
+        if (!holder.userData.authoredTerrain) toonifyMaterials(holder);
         // Minion bars widen with their max hp so a beefy siege minion never
         // reads as "almost dead" while it still soaks several hits.
         const structure = u.kind === 'tower' || u.kind === 'sanctum' || u.kind === 'warden';
@@ -1374,7 +1419,7 @@ export class Renderer {
           structure,
           structure ? Math.round(u.maxHp / 300) : 0,
         );
-        holder.position.set(u.pos.x, 0, u.pos.z);
+        holder.position.set(u.pos.x, this.groundHeight(u.pos.x, u.pos.z), u.pos.z);
         holder.userData.unitId = id;
         holder.userData.team = u.team;
         this.unitLayer.add(holder);
@@ -1789,7 +1834,7 @@ export class Renderer {
         const spawnOfs = this.muzzleOffset(p);
         mesh.position.set(
           p.pos.x + (spawnOfs?.x ?? 0),
-          PROJECTILE_Y + (spawnOfs?.y ?? 0),
+          PROJECTILE_Y + this.groundHeight(p.pos.x, p.pos.z) + (spawnOfs?.y ?? 0),
           p.pos.z + (spawnOfs?.z ?? 0),
         );
         // Headed the right way from its first frame: the per-frame turn
@@ -1845,7 +1890,7 @@ export class Renderer {
         const mesh = vis?.zone
           ? vis.zone(z.radius, colors, hostile)
           : buildZoneMesh(z, this.world, TEAM_COLORS[z.team] ?? 0xffffff);
-        mesh.position.set(z.pos.x, 0.1, z.pos.z);
+        mesh.position.set(z.pos.x, this.groundHeight(z.pos.x, z.pos.z) + 0.1, z.pos.z);
         // Telegraphs must never lose the draw-order lottery against the
         // river's translucent layers: lift catalog meshes above them.
         if (vis?.zone) {
@@ -1923,6 +1968,7 @@ export class Renderer {
         }
       }
       holder.position.set((w.a.x + w.b.x) / 2, -1.3, (w.a.z + w.b.z) / 2);
+      holder.position.y += this.groundHeight(holder.position.x, holder.position.z);
       holder.rotation.y = -Math.atan2(dz, dx);
       this.scene.add(holder);
       this.trackedWalls.set(id, { holder, bornMs: performance.now() });
@@ -1949,7 +1995,8 @@ export class Renderer {
       }
       // The rise: the stones shove up out of the ground over the first beat.
       const p = Math.min(1, (performance.now() - t.bornMs) / 240);
-      t.holder.position.y = -1.3 * (1 - p) * (1 - p);
+      t.holder.position.y =
+        this.groundHeight(t.holder.position.x, t.holder.position.z) - 1.3 * (1 - p) * (1 - p);
     }
 
     // Traveling dashes read as motion: a short-lived streak dot under any
@@ -2076,7 +2123,7 @@ export class Renderer {
         group.userData.landRing = land;
         group.add(land);
       }
-      group.position.set(u.pos.x, 0, u.pos.z);
+      group.position.set(u.pos.x, this.groundHeight(u.pos.x, u.pos.z), u.pos.z);
     } else if (spec.kind === 'zone') {
       shownAim = clampAim(def.castRange);
       group.add(
@@ -2089,7 +2136,7 @@ export class Renderer {
       fill.scale.setScalar(0.01);
       group.add(fill);
       fillMode = 'radial';
-      group.position.set(shownAim.x, 0, shownAim.z);
+      group.position.set(shownAim.x, this.groundHeight(shownAim.x, shownAim.z), shownAim.z);
     } else {
       // Burst, cone, targeted: a charging circle around the caster.
       followCaster = true;
@@ -2104,7 +2151,7 @@ export class Renderer {
       fill.scale.setScalar(0.01);
       group.add(fill);
       fillMode = 'radial';
-      group.position.set(u.pos.x, 0, u.pos.z);
+      group.position.set(u.pos.x, this.groundHeight(u.pos.x, u.pos.z), u.pos.z);
     }
     this.scene.add(group);
     const durMs = def.windup * 1000;
@@ -2271,7 +2318,11 @@ export class Renderer {
       // Auto-attack lunge: a short hop toward the victim.
       const swinging = t.swingUntil > now;
       const swingK = swinging ? Math.sin((1 - (t.swingUntil - now) / 200) * Math.PI) : 0;
-      t.mesh.position.set(x + t.swingDir.x * swingK * 0.28, bobY, z + t.swingDir.z * swingK * 0.28);
+      t.mesh.position.set(
+        x + t.swingDir.x * swingK * 0.28,
+        this.groundHeight(x, z) + bobY,
+        z + t.swingDir.z * swingK * 0.28,
+      );
       if (swinging) t.mesh.rotation.y = t.yaw;
       // The overhead UI never turns with the body: its anchors stay put.
       t.overhead.rotation.y = -t.mesh.rotation.y;
@@ -2340,7 +2391,7 @@ export class Renderer {
         if (t.deadUntil > now) {
           const age = 1 - (t.deadUntil - now) / 600;
           t.mesh.rotation.x = age * 1.2;
-          t.mesh.position.y = -age * 0.6;
+          t.mesh.position.y = this.groundHeight(x, z) - age * 0.6;
         } else {
           t.mesh.rotation.x = 0;
         }
@@ -2368,7 +2419,7 @@ export class Renderer {
 
       const spinners = t.mesh.userData.spinners as THREE.Object3D[] | undefined;
       if (spinners) for (const sp of spinners) sp.rotation.y = now * 0.0006;
-      if (id === this.followId) followPos = new THREE.Vector3(x, 0, z);
+      if (id === this.followId) followPos = new THREE.Vector3(x, this.groundHeight(x, z), z);
     }
 
     this.placeIndicators(now, alpha);
@@ -2377,7 +2428,7 @@ export class Renderer {
       const x = t.prev.x + (t.curr.x - t.prev.x) * alpha;
       const z = t.prev.z + (t.curr.z - t.prev.z) * alpha;
       let px = x;
-      let py = PROJECTILE_Y;
+      let py = PROJECTILE_Y + this.groundHeight(x, z);
       let pz = z;
       if (t.spawnOfs) {
         // Muzzle convergence: at the barrel tip at birth, on the sim path
@@ -2491,6 +2542,7 @@ export class Renderer {
     if (followPos) {
       this.selfRing.position.x = followPos.x;
       this.selfRing.position.z = followPos.z;
+      this.selfRing.position.y = this.groundHeight(followPos.x, followPos.z) + 0.07;
     }
     const selfUnit = this.followId !== null ? this.world.units.get(this.followId) : undefined;
     this.selfRing.visible = selfUnit !== undefined && !selfUnit.dead;
@@ -2543,6 +2595,7 @@ export class Renderer {
       const z = t.prev.z + (t.curr.z - t.prev.z) * alpha;
       mesh.position.x = x;
       mesh.position.z = z;
+      mesh.position.y = this.groundHeight(x, z) + 0.12;
       const s = u.radius + 0.3;
       mesh.scale.set(s, s, 1);
       return true;
@@ -2563,6 +2616,13 @@ export class Renderer {
     this.setRayFrom(clientX, clientY);
     const hit = new THREE.Vector3();
     if (this.raycaster.ray.intersectPlane(this.groundPlane, hit)) {
+      if (this.terrain) {
+        for (let iteration = 0; iteration < 5; iteration++) {
+          const height = this.groundHeight(hit.x, this.sceneZ(hit.z));
+          const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -height);
+          if (!this.raycaster.ray.intersectPlane(plane, hit)) return null;
+        }
+      }
       return { x: hit.x, z: this.sceneZ(hit.z) };
     }
     return null;
@@ -2591,5 +2651,6 @@ export class Renderer {
     this.vignette.remove();
     this.gl.domElement.remove();
     this.gl.dispose();
+    this.terrain?.dispose();
   }
 }

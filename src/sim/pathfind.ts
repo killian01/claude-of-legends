@@ -127,7 +127,7 @@ export function findPath(grid: NavGrid, from: Vec2, to: Vec2): Vec2[] {
   const cellsPath: number[] = [];
   for (let c = gIdx; c !== -1; c = came[c]!) cellsPath.push(c);
   cellsPath.reverse();
-  const pts: Vec2[] = cellsPath.map((i) => ({ x: (i % n) + 0.5, z: ((i / n) | 0) + 0.5 }));
+  const pts: Vec2[] = cellsPath.map((index) => grid.cellToWorld(index % n, (index / n) | 0));
   pts[pts.length - 1] = { x: goal.x, z: goal.z };
   return smooth(grid, start, pts);
 }

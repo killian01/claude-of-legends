@@ -10,7 +10,7 @@
 import type { AbilityDef } from '../combat/casting';
 import { type ChampionHints, hintsFor } from '../content/bots/hints';
 import { CHAMPIONS } from '../content/champions';
-import { GAME_MAP } from '../content/map';
+import { GAME_MAP, type GameMap } from '../content/map';
 import { hypot } from '../exact';
 import type { Action, Observation, ObsSelf, ObsUnit } from '../policy';
 import type { Rng } from '../rng';
@@ -225,8 +225,8 @@ export const FIGHT_TARGET_RADIUS = 25;
 // Own attack range when the observation predates the field.
 const ATTACK_RANGE_FALLBACK = 6;
 
-type Fountain = (typeof GAME_MAP.fountains)[number];
-type Sanctum = (typeof GAME_MAP.sanctums)[number];
+type Fountain = GameMap['fountains'][number];
+type Sanctum = GameMap['sanctums'][number];
 
 // Everything a slot's triggers and behaviors read, computed once from the
 // observation. Pure except `jitter`, which draws from the sim's Rng the
@@ -234,6 +234,8 @@ type Sanctum = (typeof GAME_MAP.sanctums)[number];
 export interface SlotContext {
   readonly obs: Observation;
   readonly s: ObsSelf;
+  // The map the match is played on: lanes, pits and bases a play walks to.
+  readonly map: GameMap;
   readonly def: ChampionDef | undefined;
   readonly hints: ChampionHints;
   readonly fountain: Fountain;
@@ -272,10 +274,15 @@ export interface SlotContext {
   kit(): ActiveKit;
 }
 
-export function buildSlotContext(obs: Observation, rng: Rng, kitDef?: KitDef): SlotContext {
+export function buildSlotContext(
+  obs: Observation,
+  rng: Rng,
+  kitDef?: KitDef,
+  map: GameMap = GAME_MAP,
+): SlotContext {
   const s = obs.self;
-  const fountain = GAME_MAP.fountains.find((f) => f.team === s.team)!;
-  const enemySanctum = GAME_MAP.sanctums.find((c) => c.team !== s.team)!;
+  const fountain = map.fountains.find((f) => f.team === s.team)!;
+  const enemySanctum = map.sanctums.find((c) => c.team !== s.team)!;
   const enemyTowers = obs.units.filter((u) => !u.friendly && u.kind === 'tower');
   const inTowerReach = (x: number, z: number): boolean =>
     enemyTowers.some((t) => hypot(t.x - x, t.z - z) <= TOWER_DANGER_RANGE);
@@ -305,6 +312,7 @@ export function buildSlotContext(obs: Observation, rng: Rng, kitDef?: KitDef): S
   const ctx: SlotContext = {
     obs,
     s,
+    map,
     def: s.championId ? CHAMPIONS[s.championId] : undefined,
     attackRange: s.attackRange ?? ATTACK_RANGE_FALLBACK,
     hints: hintsFor(s.championId),

@@ -8,7 +8,7 @@
 // bigger team cycles the same way. Pure and deterministic: the same seats
 // in the same order give the same lanes on every host.
 
-import { GAME_MAP, type LaneId } from './content/map';
+import { GAME_MAP, type GameMap, type LaneId } from './content/map';
 import { hypot } from './exact';
 
 export const LANE_SEATS: Readonly<Record<LaneId, number>> = { top: 2, mid: 1, bot: 2 };
@@ -74,11 +74,11 @@ export const LANE_HALF_WIDTH = 7;
 
 // The lane whose corridor holds the point, the nearest when several do
 // (the three meet at each base), null off every lane.
-export function laneOf(x: number, z: number): LaneId | null {
+export function laneOf(x: number, z: number, map: GameMap = GAME_MAP): LaneId | null {
   let best: LaneId | null = null;
   let bestD = LANE_HALF_WIDTH;
   for (const lane of ['top', 'mid', 'bot'] as const) {
-    const d = laneDistance(GAME_MAP.lanes[lane], x, z);
+    const d = laneDistance(map.lanes[lane], x, z);
     if (d <= bestD) {
       best = lane;
       bestD = d;

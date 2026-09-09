@@ -2,6 +2,7 @@
 // popups) rendered from small canvas textures. Pure presentation.
 
 import * as THREE from 'three';
+import type { GroundHeight } from './terrain';
 
 interface Entry {
   sprite: THREE.Sprite;
@@ -50,11 +51,15 @@ export class FloatingText {
   private readonly scene: THREE.Scene;
   private readonly entries: Entry[] = [];
 
-  constructor(scene: THREE.Scene) {
+  constructor(
+    scene: THREE.Scene,
+    private readonly groundHeight?: GroundHeight,
+  ) {
     this.scene = scene;
   }
 
   spawn(text: string, color: string, x: number, y: number, z: number, scale = 1): void {
+    y += this.groundHeight?.(x, z) ?? 0;
     if (this.entries.length >= MAX_ACTIVE) return;
     const sprite = makeTextSprite(text, color, scale);
     if (!sprite) return;

@@ -1,0 +1,3050 @@
+{
+  "version": 1,
+  "revision": 113,
+  "model": "map.glb",
+  "navigation": "navigation.bin",
+  "cells": 400,
+  "cellSize": 0.4,
+  "origin": {
+    "x": -4,
+    "z": -156
+  },
+  "heightScale": 0.001,
+  "blockedValue": -32768,
+  "clearanceRadius": 0.32,
+  "landmarks": [
+    {
+      "id": "base-0-spawn-1",
+      "kind": "spawn",
+      "team": 0,
+      "slot": 1,
+      "x": 4.6,
+      "z": -25,
+      "height": 3.82
+    },
+    {
+      "id": "base-0-spawn-2",
+      "kind": "spawn",
+      "team": 0,
+      "slot": 2,
+      "x": 3.8,
+      "z": -19.4,
+      "height": 3.82
+    },
+    {
+      "id": "base-0-spawn-3",
+      "kind": "spawn",
+      "team": 0,
+      "slot": 3,
+      "x": 6.2,
+      "z": -14.2,
+      "height": 3.82
+    },
+    {
+      "id": "base-0-spawn-4",
+      "kind": "spawn",
+      "team": 0,
+      "slot": 4,
+      "x": 11,
+      "z": -11.4,
+      "height": 3.82
+    },
+    {
+      "id": "base-0-spawn-5",
+      "kind": "spawn",
+      "team": 0,
+      "slot": 5,
+      "x": 16.6,
+      "z": -11.4,
+      "height": 3.82
+    },
+    {
+      "id": "base-1-spawn-1",
+      "kind": "spawn",
+      "team": 1,
+      "slot": 1,
+      "x": 145,
+      "z": -128.6,
+      "height": 3.82
+    },
+    {
+      "id": "base-1-spawn-2",
+      "kind": "spawn",
+      "team": 1,
+      "slot": 2,
+      "x": 145.8,
+      "z": -134.2,
+      "height": 3.82
+    },
+    {
+      "id": "base-1-spawn-3",
+      "kind": "spawn",
+      "team": 1,
+      "slot": 3,
+      "x": 143.4,
+      "z": -139.4,
+      "height": 3.82
+    },
+    {
+      "id": "base-1-spawn-4",
+      "kind": "spawn",
+      "team": 1,
+      "slot": 4,
+      "x": 138.6,
+      "z": -142.2,
+      "height": 3.82
+    },
+    {
+      "id": "base-1-spawn-5",
+      "kind": "spawn",
+      "team": 1,
+      "slot": 5,
+      "x": 133,
+      "z": -142.2,
+      "height": 3.82
+    },
+    {
+      "id": "camp_ouest_1",
+      "kind": "camp",
+      "x": 36.6,
+      "z": -104.6,
+      "height": 0.08
+    },
+    {
+      "id": "camp_ouest_2",
+      "kind": "camp",
+      "x": 30.2,
+      "z": -55.8,
+      "height": 0.08
+    },
+    {
+      "id": "camp_ouest_3",
+      "kind": "camp",
+      "x": 35.4,
+      "z": -28.2,
+      "height": 0.08
+    },
+    {
+      "id": "camp_est_1",
+      "kind": "camp",
+      "x": 120.2,
+      "z": -93.8,
+      "height": 0.08
+    },
+    {
+      "id": "camp_est_2",
+      "kind": "camp",
+      "x": 115.4,
+      "z": -69,
+      "height": 0.08
+    },
+    {
+      "id": "camp_est_3",
+      "kind": "camp",
+      "x": 111.4,
+      "z": -45,
+      "height": 0.08
+    },
+    {
+      "id": "center",
+      "kind": "center",
+      "x": 75.4,
+      "z": -77.4,
+      "height": 1.695
+    }
+  ],
+  "navigationReport": {
+    "walkable_cells": 59434,
+    "connected_cells": 59220,
+    "disconnected_landmarks": []
+  },
+  "sourceSha256": "b3e1e960c8801e3b581b75d153330ce6e379813d147217b546acd3d56ccb1633",
+  "coordinates": "glTF Y-up; Blender (x,y,z) maps to (x,z,-y)",
+  "visualReport": {
+    "objects": 259,
+    "texturedFloors": 53,
+    "texturedObjects": 259,
+    "vertexOnlyObjects": 0,
+    "glbBytes": 40796388,
+    "quality": "light",
+    "materialBakeVersion": 5,
+    "sourceUvBindings": [
+      {
+        "object": "09 | SOL | plateaux traces et faille verticale",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "389223e1d5c83ad66c9bced0e09ebd673d25ae03390b3f27f8d04e6517e8f1df"
+      },
+      {
+        "object": "09 | VOIE | TOP - trace reference",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "d224b6301c753e5bfb174532408388206ab33f3ad64587bc156b09dab13a775a"
+      },
+      {
+        "object": "09 | VOIE | MID - trace reference",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "4319f073cef54e9026eac76d85c978a5ea725d8fcce2b47e9de522833def36f9"
+      },
+      {
+        "object": "09 | VOIE | BOT - trace reference",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "cac59cd5e503e54ac3c2b6dd6e883afea2aeeb95de2fd9894fe8f619591a3731"
+      },
+      {
+        "object": "09 | PONT | Branche nord-ouest",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "29a6bc365e958061d75e8e0f178d168a3208fefada2a0909b51582a81fe448ab"
+      },
+      {
+        "object": "09 | PONT | Branche sud-est",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "b969f5b6fa06ff24143c192329e78fb4c63c8345ee82fdbbe54afb9aed2b34cb"
+      },
+      {
+        "object": "09 | PONT | Pont nord horizontal",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "71d002550338c8dfad466d443e6edc83ffa7248603be7d53551afdc916b2512a"
+      },
+      {
+        "object": "09 | PONT | Pont sud horizontal",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "bf217313d9e1fa8f06ec567da83444d3760eab1f30f558f3df8cd13b84429564"
+      },
+      {
+        "object": "09 | EAU | axe nord-sud - aucune diagonale",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "ac72fe38f5cc7fa235aaca60fa0bb1791edd5a8eec4ee376a1ba417b51236a4b"
+      },
+      {
+        "object": "09 | FAILLE | aiguilles de schiste et contreforts",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "667210eb5a12ff40c1ee953a5900c8fc2f974f0e57a3a264efc9d826a36a9ead"
+      },
+      {
+        "object": "FAILLE | eperons de schiste aux treize aiguilles",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "8311d499822213bf690ec00782d93f394107266acdd03c875d5a460d6e103a48"
+      },
+      {
+        "object": "REMPART NORD | assise et consoles vers le schiste",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "76a97030c2dfd08ea9f24644abee8b532a65692647c4c6152d29271ff77f6427"
+      },
+      {
+        "object": "09 | CHEMINS | petits cailloux des sentiers",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "79ba9a024e2e76833b17eca274cdb569b416d7c205fe73d5a420d1c4ffcfd2cf"
+      },
+      {
+        "object": "VERGER | troncs courbes et racines ancrees",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "e6e3aa05da239dc4c02ca54a095b168219f2500a08afb314e6058ba700580f13"
+      },
+      {
+        "object": "RUINES | pans fractures sous les arches ouvertes",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "338093bab578d640df4e6baa2788b08aea1ee821d70077ab0b8aefda9260a87c"
+      },
+      {
+        "object": "09 | SANCTUM | croissant 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "287879ac23f370d19f27d7efc2bf0654b92dceb6d8bfd381a23933058eb2589c"
+      },
+      {
+        "object": "09 | SANCTUM | fleche centrale 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | SANCTUM | croissant 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "6c769dc906d084265d50ebe7678de6864828fbec07086d582c6c9ab5ccd3a6da"
+      },
+      {
+        "object": "09 | SANCTUM | fleche centrale 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "SANCTUAIRES | grandes roses et armilles jumelles",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "d5f6cbc55364e819fb6cdfa6a2b8cbe55cf56e6ff5ab223e35c2e1237d1e7cd9"
+      },
+      {
+        "object": "CROISSANT | ciselure fine 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "bf7d12e0c4111f7dc0daed598d6adf1aebec4dfdcee32480575b0bb019f34fe2"
+      },
+      {
+        "object": "CROISSANT | ciselure fine 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "bf7d12e0c4111f7dc0daed598d6adf1aebec4dfdcee32480575b0bb019f34fe2"
+      },
+      {
+        "object": "ETOILE | sceau sommital du sanctuaire 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "b324c8f42ba8a2a488404f5b96260d3b88b336476248a7374c20b0c4b59df5fa"
+      },
+      {
+        "object": "ETOILE | sceau sommital du sanctuaire 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "b324c8f42ba8a2a488404f5b96260d3b88b336476248a7374c20b0c4b59df5fa"
+      },
+      {
+        "object": "CROISSANT | corps biseaute 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "63e051c3dcf5fa044dadfbbfca0a7ea63e29e3a6b2b990ba63846d4232e724ff"
+      },
+      {
+        "object": "CROISSANT | corps biseaute 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "63e051c3dcf5fa044dadfbbfca0a7ea63e29e3a6b2b990ba63846d4232e724ff"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | top 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | top 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | top 3",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | top 4",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | mid 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | mid 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | mid 3",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | mid 4",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | bot 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | bot 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | bot 3",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | bot 4",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | Base 1 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | Base 1 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | Base 2 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | Base 2 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | top 5",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | top 6",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | mid 5",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | mid 6",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | bot 5",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | bot 6",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "acb191cc63b5ace3bf3e66e0d190eeda3c7ee3de236ba0f530fcab3088f31bf7"
+      },
+      {
+        "object": "09 | CENTRE | plateforme circulaire et rose des etoiles",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "a2795e30e436fc61d6a6b68ff9f90d0433063868912b952b60660c7b330a3028"
+      },
+      {
+        "object": "ORBE | constellation gravee 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "827435a57a08b6d47a5f7ef8a78e716ba97403eac46639166aa7ff37d0a09e0a"
+      },
+      {
+        "object": "ORBE | constellation gravee 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "827435a57a08b6d47a5f7ef8a78e716ba97403eac46639166aa7ff37d0a09e0a"
+      },
+      {
+        "object": "ROSE | balustrades courbes et arches ajourees",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "185e0b4e5ec1db71df98b44134ddb5d421c4a5098d5838a5205f32544b8912b4"
+      },
+      {
+        "object": "09 | CHAUSSEES | soutenements de pierre bleue",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "d041cd316b39e92481ab78a83f03f67237aee883d81a737592ab24f0d3300136"
+      },
+      {
+        "object": "09 | PONTS | arcs porteurs et piles dans la faille",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "7df41afedf7d94e22f6448e023c91c94dac0f837179606ccc41565a182392277"
+      },
+      {
+        "object": "09 | JUNGLE | contreforts tailles et couronnements",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "cb6161f5fc064df5e3da908afc5a71217976bd7ec0642c7a544d0a2434fd2e4f"
+      },
+      {
+        "object": "RIVES | schiste taille et blocs affleurants",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "0efcb50ac550945cb5488cc7f6d0b64b31240d907236ecda227b7f2b8ff4dcd6"
+      },
+      {
+        "object": "RIVES | liseres discontinus et ecume",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "b69b066b93be27a77a6ec446b06c53d7505ef29e8fc79bba69c28d79648bc395"
+      },
+      {
+        "object": "BERGE | raccord ferme sous prairie 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "f2c00ed5472b4ce2544fd0ba85bf3b70ff93ebbf677758ee4aa797986242b6d2"
+      },
+      {
+        "object": "BERGE | raccord ferme sous prairie 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "b51ac3f12a0fc35c7547353da4c88e0d55437f4d9a85bc961bc068a52455c269"
+      },
+      {
+        "object": "SOL | sentiers et ilots sans superposition 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "089cf25e9ed229e47b256bae306085e87ead584bbba5b425680fd9f39dc070b1"
+      },
+      {
+        "object": "SOL | sentiers et ilots sans superposition 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "9ccfae03126867e05a612aa87a987f702183dfd8376a22c61faecc8cc077ea1e"
+      },
+      {
+        "object": "PLACE CENTRALE | gravures et lanternes",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "2363436f56260d9ee1e02124a7885ce4b6fc8f8889274ba52d72141b334bf3f1"
+      },
+      {
+        "object": "LOD | 09 | JUNGLE | cypres dans les ilots entre chemins",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "cfe8ddffc5906fb27140eb8cfc4c7031e428ace06432a8b581d905e520fda912"
+      },
+      {
+        "object": "VERGER | fruits etoiles suspendus",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "41d18b3c02d4a571cb5c91d941c896c6c8ee6315539f1f576f44d499005c1ec2"
+      },
+      {
+        "object": "FALAISES | strates de schiste suspendues",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "dc84626239968535831aafdee00c472e756a4ea2bdb7654a531bd36e2c07a179"
+      },
+      {
+        "object": "FALAISES | contreforts et blasons suspendus",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "a01d1280dbf1b83a5cb1fbcf01ea08e6b879f957fe5b0861ffb1abe1635ce2e1"
+      },
+      {
+        "object": "CASCADES | nappes courbes et effilees",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "ec1f70c35e0bc2e875516345b2c058310852921d3c5a48b760fcda4397716bfa"
+      },
+      {
+        "object": "FALAISES | fins liseres sur les chapiteaux",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "b89b9e432cc5be0c8e6db8d388a47c22afe9c4b12dd1ad0af94ba83b16a8adf2"
+      },
+      {
+        "object": "ROSE CELESTE | quatre pointes et armille gravee",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "f0e2adfcffb029d5b922ea81b1399bd3b71e008653ccf9ed260cdda46756bf19"
+      },
+      {
+        "object": "PONT CISELE | Branche nord-ouest",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "9943c8fe4de66eb3875825246a7d1a8f8ff3e46e4da23198c91fd15bc3467030"
+      },
+      {
+        "object": "PONT CISELE | Branche sud-est",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "5b6d6905bb417524d09cb79a4b312c5381291cec4bfac8ff4f06b7859665d683"
+      },
+      {
+        "object": "PONT CISELE | Pont nord horizontal",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "bc5a0fff39c26ec7a0b588486fd318bbfe669d3ed9baed9b89b93bbe8a924539"
+      },
+      {
+        "object": "PONT CISELE | Pont sud horizontal",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "1c9790ea67e7ebaed73fc1dcdbaff19c5009a08014f3190d528cb4895c5e3eeb"
+      },
+      {
+        "object": "VERGER | ramures peintes et feuilles en volume",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "41b682031f8feb77ca860209944cb77362127192606f60a6d5484f53ee1bd1ca"
+      },
+      {
+        "object": "LOD | RUINES | lancettes et sceaux de constellation",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "df0312929326ab599e6fae9acdea02b82b4605c64e9f4de71af29e336307edb3"
+      },
+      {
+        "object": "LOD | BANNIERES | tissu plisse et etoiles brodees",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "529130e5fa92748f7d6e518daa7260fd73b98fb948b45ecb3136ebcb05bde139"
+      },
+      {
+        "object": "LOD | 09 | JUNGLE | massifs bleus et pierres de lisiere",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "2934833afe911f0412a92969c63e5ff06e7fe536006fdccaa82b426145c1ebf2"
+      },
+      {
+        "object": "LOD | 09 | REMPARTS | enceinte bleu ardoise et or ancien",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "0b4066478f3cefdb4ae02bd18fe4181a5aa0c5810fe87102ab7c180b81606d79"
+      },
+      {
+        "object": "LOD | 09 | JUNGLE | ruines lineaires placees comme la reference",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "6ae3cdace3136e9a5ecc907cb8e6972744fddef96446258fc47f27dfca7367af"
+      },
+      {
+        "object": "LOD | 09 | VOIES | balustrades ajourees et cippes",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "e4417e8813dbfee4b307c55d8107df8c63c86357db0d57d623d0ec31dc8837d4"
+      },
+      {
+        "object": "LOD | SANCTUAIRE | gradins et galerie 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "907617dd7d65efa34b90a74482fbf219ff4726470b4c6db4249f1f953b8d6f48"
+      },
+      {
+        "object": "LOD | SANCTUAIRE | gradins et galerie 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "fffac332603e06f6b2e30b5ca8d0b906b0e7ddabc04dc8f676ddc4da6f986a6b"
+      },
+      {
+        "object": "CAMP | cercle de combat camp_ouest_1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "3a809ba150afa33157333573a2a01f538ad0cacc97ae32e62d5ee52b4e27fa78"
+      },
+      {
+        "object": "CAMP | cercle de combat camp_ouest_2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "e3178685ceae6cd19d8504b586bb0f2aeab67ff5913528e41a0717fa72df53af"
+      },
+      {
+        "object": "CAMP | cercle de combat camp_ouest_3",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "af3e49c119b0939b33d1288a87cc7f56ba8ba067088e29039fd7bdb64de286de"
+      },
+      {
+        "object": "CAMP | cercle de combat camp_est_1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "2394ba21977be586848ef54207663a8bf1ade5bb2a634242738bbca0c54a6399"
+      },
+      {
+        "object": "CAMP | cercle de combat camp_est_2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "bf3652a64165a49f2b8182cc3870b614ee0fc6ba2d60fb55ae87b15ca817e5de"
+      },
+      {
+        "object": "CAMP | cercle de combat camp_est_3",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "1238545fb75e118aaaf40d5624e9486164c4fb22606731c78114ae7cdf501ff8"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 001",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "3170a2aca41b8f5dfc3f6097cd3511228b30f9f9096e6fe3134a1ea7b6e0d7be"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 002",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "b703b15b3c6e17232b8225b0151eec9c488aa87cf762cb3d5b3e9e864ac5fc0e"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 003",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "82a96435e64f9bd3e8c74bcc799884f7fbb548a565c1e78cc94a1b059311f38a"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 004",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "e0fba1bdc97eaf4fc468c075737808c0f883193a0564290bf20d53f276615815"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 005",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "3a5767e4585ba18e342bb5ab7984b3dd05ea7c66b4e26f26b027b6b634add54b"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 006",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "74a09e8564d130a0073b3152897ff44cede20aac8bacc9238635ff1daa0f08e4"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 007",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "3df02811cb05add70d86bda5cc881436cca52d50cf94adc8d357813a1e2e956d"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 008",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "824f5b9ff112d8cc524efe5ebf0116c51cd63fbeb4781eeb4f3595012bad683a"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 009",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "0dbcb81a1a67e82464bcb9c40653e142006baf98bea38bedbbb5972dd2e26f13"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 010",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "dffa5405d19bb188d5927173237144856e6f156e95bbbfc1a6d8905c7212883a"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 011",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "04930ee77a9e0bf9e51c04b65144e74438585f9c9333f80fbae26ee832f63cb5"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 012",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "c78581fec3ff90015a7eb2fa6066ea2482dfe8f162e35feff224b7cf2274f914"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 013",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "9a511572b041e945a744da4384d0b68c3178f7ad5dfe06f95778295aa8ff73f0"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 014",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "886722d05c5751c69c04b6d2d09d9d10de0818ba3e66370c5abe06d687552e86"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 015",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "e0f2fb8777031e55b33d43caebabe71ce598cd7209605e9f7ce8b8dc525937ac"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 016",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "318fe9aa07544a4bdbdeb2519bf524025c3f431abbe344a0c5a2f97a1717f318"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 017",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "13c165be070748df657a7363649ad3d806c9dd5f882107c185a3ccd2a5e82846"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 018",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "c10de1cf80c7ec45075540d79c9497898f26bfb675872e262b1ff33e75919c5f"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 020",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "f6a68d0de7be4442a81e344a38227a87c725bd1631df568d3fb04e868edc1f0b"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 022",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "ebd61cda28cc456de9419c8a69183cb4260d0b6578c36376e20ff906612bce88"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 023",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "daaff9506da5616b239df7359888b381905773a61033f898ffb6c986bb01f74f"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 024",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "e286b79675390867350c35acd2d5abc135e0a4c78d0d41c6069794ee8b882488"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 026",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "1db02b6d59f9f537513dd1ed3070450a4b9f8e4f70a24e338c73095f12391956"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 027",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "c3233cf036c125aea9402777cb9ddf08bceaf560260aecee7b7259d98773ba8d"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 028",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "2d4058ebcb38fd49097042ff4fa19929931df7c349f7b330f28b643b84770c02"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 029",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "f9d35832de5fd34e33b53c8d0ebbc79e4587c26bd1561016f493db9237ccd0fd"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 030",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "cb21c1c6e6da7752f3890f30e0a6104a1bfd761f66f34b654b86ff736abf4e59"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 031",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "5ee1d7d0f62b10c2625291f46ecb3e5286fa67c2635d06f6e15f06175bcf2bf7"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 032",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "5004641c1a0d1db16116afb59903a45010d95d7b679e64904b4ffdfb5b3a7b77"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 033",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "6afc5b1301dc85dec80a19dc6e24bdcedecb9fa824e8eb1528a0b7ef74a99c0c"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 034",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "83fcd37d4232576c0f2d04dfb37b1c1702f2b0e9d1199988c613092ba23ff1f9"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 035",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "dc7752efcef91e7014ccb293640d9fffb044e84cb34b3356b02ede156d34c081"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 036",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "5ec66edf9e63de0cf7a2a3c354ea9a3e31b4c3fdcbc77aaef6cbab98ce6e615c"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 037",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "96590230eb323258c67e6e2e8046d66a0297a4d6f6138129f14a1460d4b52e0f"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 038",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "73fcd49f2a14ee59a15356ba6789a5c17e10e2a2b8d28128c71814d09eac32bf"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 039",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "38f06697622cf9b1431d31965d8e76586dcc89aef5918009d5551798604a83eb"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 040",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "12449d31de980eaa278b0cab040e4e606480cb79fe122217452173b692cd1d87"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 041",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "43e2d08cb2c0c9c64e4225d74159dd786b5233711ef94c5b9a1da70cf8115954"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 042",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "7e783aea7a211adaa36debc96728bc9ebfcf43c6575a072b79abc9c1b814fc3f"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 043",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "1205b3e487d164a884a4e4c2187ff7481fcd6453146f01100b9a1177898b6bf8"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 044",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "4d24fdbbdcb5075b46b5a21438f5526b0e983940886676f85c6b86fe6e7bf41f"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 045",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "aec0f0c23ab5068de90e55d2d12c14baf7d7509c7350d9db9335602ec92b81ad"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 046",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "548b0453b438cfbffaa0bb0107d1755f9edeffcbd87f3e55ebaca75d6fd8a6d9"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 047",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "0c0348d17270ab8f5d564e522589271c2b509de2e5655da051fe952fdd31d325"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 048",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "0f2808c196ed8daf8330a8be3231ff4fe75e0a4b0450b102bbcd8af446a3d886"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 049",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "ad6c54a5229df9bfa99420e42d81e6b81871e2d1f07f557bece97ac5b805c4dc"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 050",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "e62d4c6747232d60c9d6ac0cb15aad32d7b60fa3085ba829bc9f7fd69c222ed6"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 051",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "3493a88f2bd4790c4cc3d83abd5f85e2d8197198baaacb184ed884ea30767b49"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 052",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "d6c9033ecf62ad5edcc0e7b68d984bbe2cb4563bdd34119a29be0df929e8531b"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 053",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "a86b35b7a98aa6fe47b17abf6c835ea7bf3ce6b6356dd3ceb5b28711f837b09f"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 055",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "cf9d790c5f9ecaea2457ad781555053bc7ec7049a7a7afda1d332d60ca077792"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 056",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "0e2c61b0142b58b1af7782f46cb645e042ea3af4705afde66e45705a6a27c7da"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 057",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "53ed6183653f31bc2d2cbc33a677f1129e5d87b338470877eab64ea10022e52c"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 058",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "956ffc1ecd13318a5e42f185c11776486f5eb29bb6898c8779f8023b18ed224c"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 059",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "e0d992fb0768b24f2f67f60891d900ab71acc32f1bd784d07440e34f01be82e2"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 060",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "2064a23c8edd7d9e1537e89edfef332717515f145840131d178686019442a4a3"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 061",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "521048a3f3864c9f3b24572a50596c8a7a6563f811a553bbee736a19dd17f84e"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 062",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "d7883c0134b0b622991006648d122c8056ab351dc58f70c389bff4ec0c21e66a"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 063",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "98f14806d58bfd64c3e95879c9eb3ea377d68f955f86b17950be80df32aa5e19"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 064",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "1ee479290aa34973032417ebec1b7d77c44fb4bd7af528eff700f1269ba0abd4"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 066",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "bf7b5d90bdbc5d6ee6e12e7abf662c28bcdadc79747110910ec384762d5d6cd5"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 067",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "19f8ee5b248b2701edf0c753cae0f20f4c491dedce466f55fbb8821fb2d3cd91"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 069",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "2b4f2f06461c5e8cd9fb93e78426e3c657bbb7f06c0fd4265b39a56317fe33dc"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 070",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "10a518e95530856da55653040a0dc5a2c2dd7cff8f72a19bb80c6554ab6dfe21"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 071",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "043a774e21ad1e75b4bc5b2a9d589d05eea958c5fc82a66a8f0a89ecb0aab9ab"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 072",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "afe07286d0ac0b195599ffcd34b51df5d1a67a057b8017a2d79999ad05c6730e"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 073",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "d99329c4cbfb313245b41ddfe67c70e413e18a386b3a93935156c7eb476023a1"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 074",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "ef04bf3b5463782c5f61748272f197ca81a46518eecfa9f5efc5cdde2532149c"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 075",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "077a90d04ee29c3488cbc7521878f42d711d34239ba32b2dedbf3949a8f0ccc2"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 076",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "2a60d75db5f9cf3c9e737c99ca6211aad3cbd7753171ff2461e035bc9648f3db"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 077",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "b31ea8ffb24dbd6bf28772eb41025e020e326cff5843c229e13c7522f9faa4b3"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 078",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "68ce799c6901dff0b1f857035c4cc2017f0cd9eab9cff5434e262cda22ead284"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 079",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "05d8475d1f057308d107caeb76a205f021e82f36ba20cfc3d96d97de47d1a04a"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 080",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "c46d5385a9df692f286ac2a701fb6d12116987185b56ce380fc957d8f5150f5b"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 081",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "911336e2129b60cea16039c67d5056cbd63a36e23b84da2d569f3a411240da82"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 082",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "9091a73b2edfb2cce1f1293c9c1aec4f0b8b58e71dd8febad320b6594b3fc99b"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 084",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "4f005e49e21a37480071cbe5e4f5a4bbc0858d4645c06e702e210ac204d85a8a"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 085",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "1b8f790cc21d5befae3504d5c426454758bc3a80e66a8c71ac872aa9737d5ff0"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 086",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "6a89bd1f929dcd610ac2f230039c3f2f50c290433b131caf4937c0d1f222db24"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 087",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "ee5032db101bbb34326ed05d022baea4d77f9ade6debe93a7042f45e11b9935b"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 088",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "cfc53440b5878aa43e8788e5438bfad920ac31a5ed81708ecdf6a2ff8c253655"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 089",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "cc023a03c9192397910e4a23d49c3521afb97b36ebd83aa9ffbb409004c33905"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 090",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "90e8ad88416c07def46348c65c2db62dc9e9f66279973f3a3db802e9a3defa3f"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 091",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "d0330d5fa4503e81fb08c7f35a7e9b2345affb9c3359a6ca4b69f79139a85e1e"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 092",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "aed8ed47e099dd8729e2f0199533d9e684ed3f5558e6783a3dbb339c740d18a9"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 094",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "95283daeaa51e5c8d7d246db1308a4a36ed7ef5115f6e3e60963831a909bd5da"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 095",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "20ee369e487a32c3ef1908a26a8ddba1128ae5142aef6e8eb507bbfa1c4b1062"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 096",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "0a3de49cbd294f58e4dc4b96ca7eabaa60d93859c61e93dcd7703d09ce61747a"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 097",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "03433db9bf52079a652fab1795d8a3ca6a7d772315082c767833a55b9795db57"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 098",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "aadafc05235c22d66d47bdd65f983a03e01d0ac869e5f6b99aa0bdc3f011845e"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 099",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "8cb6898bffeea14ae1e26cd15bdb0a056069d44f9167a538514acbc40bc334a2"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 100",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "880e4e5a4763870cde27dd8ae51178caf95c0023e118cc94f85a735287bf269c"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 101",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "d4c8f72842c405c49dbfef95f47dbbba04d29c80ea0eb9090200a00b0b037297"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 102",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "e323aad384f6a546b3f237620d722d1e8f2288eefc17f809d4e3b8f65a15f94e"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 103",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "280adc65a48fc909f1b4c5fb692e6176d8c73c018fd0c7d4aed4395607b2a599"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 104",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "00d533b77ef26a4a1a7ced903484ca270318bb514d70bfd4d1fde080fb5db685"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 105",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "c73f8cc6c68845c2e784909aa074dd2a1922fb0eb07a46aba6d2d0684a761c8a"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 106",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "a29f1fee2ecdc422fc36d61467443fa16a071be925be7027208e0537c42ec95b"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 107",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "37ea30d270a079f131e83f9c97846f5ac41efec8f802681745517eafe267ddf2"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 108",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "c73804c52539e0992655b0c569d7418328ecbfaaed25cdbf0b3a7d5e58ea1ac9"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 109",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "0e255433e56c67a28d37156017172d0d55317c685eba49cd24b08b15b5e58998"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 110",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "c26c21335c0ac457f1fbfba153270a27a0485f823b7df7e7c9bccee34f95e2f2"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 111",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "86c75593f232e503557cc927521f1886d7be7ace9e0d8ed6e3441d23311b81dc"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 112",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "e8739d34d3209ef438f0a2c84ed450350149b59f8eec53a3db7a369982bbeddb"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 113",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "ea9a86c5843230755eea744bfa6ec34e208c2583b787212bc35156ec2ce720b0"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 114",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "24d00e90c9e0fccef3b9200e684e3655d77d862dc52fd1f5bce49ed3b0572e52"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 115",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "d0feb7e0865133d4f4ddbda1db619bf008d353dab39bfa76c9864be2f638458e"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 116",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "d2bc5c6e72d94cce1cc7143a9cdb4714f66aa7a39349184cc5d61369aa15be0d"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 117",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "db03ec5622a06c04c75381e055d72e81ece49815b077aec8bbc80bd54cc01bea"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 118",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "70fc6aa2931f536d8286a845f33a1a58db53ea730b3b8551570cd5b1b913dbf4"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 119",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "799b83329b209996e6170b4056856fa838a6987130de626c9421ba95d98e9acd"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 120",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "52fc12fb9bc1fb508f62c02b99e7bd9f037dd02dad945ce03ba51a8d6ee292ca"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 123",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "dbac87c72c599b43228e691ab5f3d02ad477fddf54430ef82332af1dc9f793b1"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 124",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "5dcb24466f2538dad0d6faa922682b217882eb4174c05f181fb67f1400bee0af"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 125",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "5c1c15ac8a7f4bb7d0e535847d8bcd9511bf6e8382c7e3ac9ed9b318bf468a0c"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 126",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "1a402dbe421a7fd7caae9a2efd2666d12bef7dcfadd73809fae5283001dcf544"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 127",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "5162c570757679110897d41c90df5a9df324826b3643185c5fe4f24fc1dc9e81"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 128",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "d5eb16e1a022f3982d2a7dae93e129b1ef7b86dc7312b1400c2f6555a5778403"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 129",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "8a818834141c8c147147c3148655490b746f666e3ab1d3723fa5d5bf604ae08b"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 130",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "6880ead7a29c95cbcd7e6f08761b03a81b506b38cc553735f43921c9bd35c5ac"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 131",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "8a51645bf8f248a279d36eb1d759f53358f98f510aa6d86d0e977e9a0abfa6b9"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 132",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "55a1d706d63aea9e86c3f80c153f5328c8105ca3f1eb96c9ab0ce6e154f60947"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 133",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "f810c675bfeaee56df76619bc5d4d596a7cb4bb399d6e61a2bd632ea60d560e4"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 134",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "41b4ff4620b1892ae6be9643381119129f1bedcf170bcdcbd5709afc593e66bb"
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 135",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "2cd297aa2297a6a90f1fa83604608d65ffffaba0f61a76c1ff31dcc9266b80e3"
+      },
+      {
+        "object": "SANCTUM ASTRAL | Base 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "1761eb2e74ee9e286f2fd4eb02c51c63532eb4de26872d27e1552dd81181e915"
+      },
+      {
+        "object": "SANCTUM ASTRAL | Base 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "1761eb2e74ee9e286f2fd4eb02c51c63532eb4de26872d27e1552dd81181e915"
+      },
+      {
+        "object": "APPARITION | terrasse en arc 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "3cb6670a9d8d117fee5edd2005c71c59f0877a8bd4b54e95b7aa809158305096"
+      },
+      {
+        "object": "APPARITION | parapets et ciselures 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "9e0dee0f94977485920791fcffdaa93b35f38f372137064e90cf68d8a41051fd"
+      },
+      {
+        "object": "APPARITION | deux escaliers lateraux 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "51950f7ce74f836487a906769e357bf7b1e466d757b771f9a840a031fa9de6f6"
+      },
+      {
+        "object": "APPARITION | rampes des escaliers 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "b35a3ffe8f723e9424dfd7ea8b35e72bee28e681e88bb049af19b5984535b7d5"
+      },
+      {
+        "object": "APPARITION | promontoire de la grande tour 1",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "29bcfbd8883e520dc80db7c8136168e20f98acf1a9f0ea7edaa8faa9e6190585"
+      },
+      {
+        "object": "APPARITION | terrasse en arc 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "3cb6670a9d8d117fee5edd2005c71c59f0877a8bd4b54e95b7aa809158305096"
+      },
+      {
+        "object": "APPARITION | parapets et ciselures 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "9e0dee0f94977485920791fcffdaa93b35f38f372137064e90cf68d8a41051fd"
+      },
+      {
+        "object": "APPARITION | deux escaliers lateraux 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "51950f7ce74f836487a906769e357bf7b1e466d757b771f9a840a031fa9de6f6"
+      },
+      {
+        "object": "APPARITION | rampes des escaliers 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "b35a3ffe8f723e9424dfd7ea8b35e72bee28e681e88bb049af19b5984535b7d5"
+      },
+      {
+        "object": "APPARITION | promontoire de la grande tour 2",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "29bcfbd8883e520dc80db7c8136168e20f98acf1a9f0ea7edaa8faa9e6190585"
+      },
+      {
+        "object": "RACCORD | 02 | NO entree nord et pont",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "45856d72749a63925300eca8392e2c51910898b05be50f83999d66020d7bd4c3"
+      },
+      {
+        "object": "RACCORD | 05 | NO traverse ouest vers centre",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "952e15bbe41420a3f8aa44fba8acd79594b34354f5d68ee3ca4e41df61a22db6"
+      },
+      {
+        "object": "RACCORD | 08 | NE nord vers pont",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "b859be06a8af84df7f1980008cd789466895f44cdb2698a14ad836e3e245de9c"
+      },
+      {
+        "object": "RACCORD | 20 | SO mid vers pont sud",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "1e944c8ce6474c794bb534d90eb8ae3c8231b726f770c17bcb39c03498a1e682"
+      },
+      {
+        "object": "RACCORD | 24 | SE traverse est centre",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "0e503f58a4ca669496bb8069c3cb3cac7c6482330ae3c7c7a0bee76e1ee431d7"
+      },
+      {
+        "object": "RACCORD | 27 | SE sud vers pont",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "85a647d39148ba5af6b09b2942ad9322a4cfffcc62038c57c6fa38483d672340"
+      },
+      {
+        "object": "RACCORD | 01 | NO entree nord et pont",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "19947ac148f375f4d4ade1fd042729bbcb8f27e61180b5fc0851ecae1470d9a0"
+      },
+      {
+        "object": "RACCORD | 03 | NO branche du camp",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "c3517a81b66b0efb3aeb05b92018650b86c41cd119a9c002cbcb45e19c2d7517"
+      },
+      {
+        "object": "RACCORD | 04 | NO traverse ouest vers centre",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "1be442647cbb061a34f9619faf3d975e4300f807f814aad43488de831737ef01"
+      },
+      {
+        "object": "RACCORD | 06 | NO embranchement ouest bas",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "ac40487177b0fe5d7d100bd8bc962c007d0876e80ce368c47c933d52c9d57e4a"
+      },
+      {
+        "object": "RACCORD | 07 | NE nord vers pont",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "608b507767041084421d9c3435773acaa18576948e7ea5359a02f6206d88c4a1"
+      },
+      {
+        "object": "RACCORD | 09 | NE sentier long",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "b03d070ece4f8a9269087cb7ea49f0f1ccbb892547d9e1812f7436791fb7eb93"
+      },
+      {
+        "object": "RACCORD | 10 | NE raccord base",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "b6365c15b615b465fe2618d5b76e6fb9479d2d7992973f542fa86f2e04a3c78b"
+      },
+      {
+        "object": "RACCORD | 11 | E dorsale haute",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "1840ee3b906ba4faad4757131a380fa42f4c9b828c407fefde39973ee1d8221a"
+      },
+      {
+        "object": "RACCORD | 12 | E traverse vers balcon",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "f81bc8f8ff7395c621399c92caca314270fe82004e316d4078a5e31817370db3"
+      },
+      {
+        "object": "RACCORD | 13 | E rive vers traverse",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "f54189eeae994ed5e22d76044dbdf5c9cd416df62bea3a84e4a9ce7eefd9b069"
+      },
+      {
+        "object": "RACCORD | 14 | E entree basse",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "8de5eb832be8b5b02c30381a101f46814d6f720024e2af647a78207e948e93f0"
+      },
+      {
+        "object": "RACCORD | 15 | SO traverse balcon",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "2e43c0bd4fde415248cafacb6b5227edbea28e1b4856c9b2c11f2125fef34604"
+      },
+      {
+        "object": "RACCORD | 16 | SO mid vers boucle",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "1fda9af72ca838318c14a49e67b98d71280645362779475dc335545fa03d3fb5"
+      },
+      {
+        "object": "RACCORD | 17 | SO entree ouest",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "48cb88a1c206e9dc826c755c447cd306f9e4824e10d580957d8fbab82bdeeea3"
+      },
+      {
+        "object": "RACCORD | 18 | SO rive vers balcon",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "94d25e8d5f39892a215891a68ad0a273ab105c39cf5c09569bd4375d4bf06feb"
+      },
+      {
+        "object": "RACCORD | 19 | SO mid vers pont sud",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "6fb596cf8e6083f075878170f8dbc4155dc7fdc8a48eb50a44690626596f4e60"
+      },
+      {
+        "object": "RACCORD | 21 | SO sentier sud",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "e6d977664a4aa05afd8bfa1fc669eeccd5484adbecffeb22d26b57adabead975"
+      },
+      {
+        "object": "RACCORD | 22 | SO sentier sud",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "c83a79b1ae726c4c049118acb260fb7573e99af5661f544210d4c9f6d53a4592"
+      },
+      {
+        "object": "RACCORD | 23 | SE traverse est centre",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "656c4d5383ece3f14cf27fe3e290f0673091e27d8ecf779b065733476de1546e"
+      },
+      {
+        "object": "RACCORD | 25 | SE entree est haute",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "a02ba30ff43f423f0e9d47056f96cd1e1c275879a2859bbbc13d144ea9e20231"
+      },
+      {
+        "object": "RACCORD | 26 | SE sud vers pont",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "d388300e6b2b7f7553352a1849170650e92bb263c2be48a661ef04a30f95f867"
+      },
+      {
+        "object": "RACCORD | 28 | SE embranchement sud",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "990683dd2d4f82f62762a939dd1e801680574735f6ef69b1dab2ea6d8c8abf6a"
+      },
+      {
+        "object": "RACCORD | 29 | SE acces camp",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "01cc03948e8e8cc10e4fd2c4fd0cc7ce3b1ec057de6dbdcfcd3ce4100244ad75"
+      },
+      {
+        "object": "RACCORD | 30 | SO porte jungle haute",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "8fe08ba5d4fa7523dce9118dd60a0cb6697d4b470bc32acbe65c9eee87e6960d"
+      },
+      {
+        "object": "RACCORD | 31 | SO porte jungle basse",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "1db40abbeb867e3dcf768cc0bb3455e12e6d1c543bcaa5a06407e48b1c4beb88"
+      },
+      {
+        "object": "RACCORD | 32 | NE porte jungle basse",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "61b80248b0ca16c038ea90c4ab5161215df841ef2b1e00c0b11b23d64ca83d0c"
+      },
+      {
+        "object": "PONT CISELE | Traveree centrale sud-ouest",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "69b0b1b66e6ffe3ecbbffebf214e21a494c5ed0e2ea9a2fdc34aa5486ec2d492"
+      },
+      {
+        "object": "PONT CISELE | Traveree centrale nord-est",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "53447adbae59d314ca842ee0523fccd50adab8fd8acbe7e53db95dcaac49fcb0"
+      }
+    ],
+    "textures": [
+      {
+        "object": "09 | SOL | plateaux traces et faille verticale",
+        "role": "decoration",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "09 | VOIE | TOP - trace reference",
+        "role": "decoration",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "09 | VOIE | MID - trace reference",
+        "role": "decoration",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "09 | VOIE | BOT - trace reference",
+        "role": "decoration",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "09 | PONT | Branche nord-ouest",
+        "role": "decoration",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "09 | PONT | Branche sud-est",
+        "role": "decoration",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "09 | PONT | Pont nord horizontal",
+        "role": "decoration",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "09 | PONT | Pont sud horizontal",
+        "role": "decoration",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "09 | EAU | axe nord-sud - aucune diagonale",
+        "role": "decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | FAILLE | aiguilles de schiste et contreforts",
+        "role": "decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "FAILLE | eperons de schiste aux treize aiguilles",
+        "role": "gorge_spire_rock_shoulders",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "REMPART NORD | assise et consoles vers le schiste",
+        "role": "north_rampart_foundation",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "09 | CHEMINS | petits cailloux des sentiers",
+        "role": "terrain_embedded_path_chips",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "VERGER | troncs courbes et racines ancrees",
+        "role": "sculpted_stellar_tree_wood",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RUINES | pans fractures sous les arches ouvertes",
+        "role": "broken_ruin_wall_fragments",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "09 | SANCTUM | croissant 1",
+        "role": "decoration",
+        "colorSize": 8192,
+        "normalSize": null
+      },
+      {
+        "object": "09 | SANCTUM | fleche centrale 1",
+        "role": "sanctum",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | SANCTUM | croissant 2",
+        "role": "decoration",
+        "colorSize": 8192,
+        "normalSize": null
+      },
+      {
+        "object": "09 | SANCTUM | fleche centrale 2",
+        "role": "sanctum",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "SANCTUAIRES | grandes roses et armilles jumelles",
+        "role": "sanctum_constellation_inlay",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "CROISSANT | ciselure fine 1",
+        "role": "sanctum_crescent_inlay",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "CROISSANT | ciselure fine 2",
+        "role": "sanctum_crescent_inlay",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "ETOILE | sceau sommital du sanctuaire 1",
+        "role": "four_point_sanctum_crest",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "ETOILE | sceau sommital du sanctuaire 2",
+        "role": "four_point_sanctum_crest",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "CROISSANT | corps biseaute 1",
+        "role": "beveled_sanctum_crescent",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "CROISSANT | corps biseaute 2",
+        "role": "beveled_sanctum_crescent",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | top 1",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | top 2",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | top 3",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | top 4",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | mid 1",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | mid 2",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | mid 3",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | mid 4",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | bot 1",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | bot 2",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | bot 3",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | bot 4",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | Base 1 1",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | Base 1 2",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | Base 2 1",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | Base 2 2",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | top 5",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | top 6",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | mid 5",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | mid 6",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | bot 5",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | TOUR DEFENSIVE | bot 6",
+        "role": "defensive_tower",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | CENTRE | plateforme circulaire et rose des etoiles",
+        "role": "decoration",
+        "colorSize": 8192,
+        "normalSize": null
+      },
+      {
+        "object": "ORBE | constellation gravee 1",
+        "role": "astral_orb_constellation",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "ORBE | constellation gravee 2",
+        "role": "astral_orb_constellation",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "ROSE | balustrades courbes et arches ajourees",
+        "role": "central_plaza_balustrades",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | CHAUSSEES | soutenements de pierre bleue",
+        "role": "decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "09 | PONTS | arcs porteurs et piles dans la faille",
+        "role": "decoration",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "09 | JUNGLE | contreforts tailles et couronnements",
+        "role": "decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RIVES | schiste taille et blocs affleurants",
+        "role": "decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RIVES | liseres discontinus et ecume",
+        "role": "decoration",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "BERGE | raccord ferme sous prairie 1",
+        "role": "sealed_raised_meadow_edge",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "BERGE | raccord ferme sous prairie 2",
+        "role": "sealed_raised_meadow_edge",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "SOL | sentiers et ilots sans superposition 1",
+        "role": "continuous_jungle_surface",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "SOL | sentiers et ilots sans superposition 2",
+        "role": "continuous_jungle_surface",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "PLACE CENTRALE | gravures et lanternes",
+        "role": "decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "LOD | 09 | JUNGLE | cypres dans les ilots entre chemins",
+        "role": "viewport_lod",
+        "colorSize": 4096,
+        "normalSize": null
+      },
+      {
+        "object": "VERGER | fruits etoiles suspendus",
+        "role": "decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "FALAISES | strates de schiste suspendues",
+        "role": "decoration",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "FALAISES | contreforts et blasons suspendus",
+        "role": "decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "CASCADES | nappes courbes et effilees",
+        "role": "decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "FALAISES | fins liseres sur les chapiteaux",
+        "role": "decoration",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "ROSE CELESTE | quatre pointes et armille gravee",
+        "role": "decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "PONT CISELE | Branche nord-ouest",
+        "role": "bridge_edge_decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "PONT CISELE | Branche sud-est",
+        "role": "bridge_edge_decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "PONT CISELE | Pont nord horizontal",
+        "role": "bridge_edge_decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "PONT CISELE | Pont sud horizontal",
+        "role": "bridge_edge_decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "VERGER | ramures peintes et feuilles en volume",
+        "role": "stellar_tree_canopies",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "LOD | RUINES | lancettes et sceaux de constellation",
+        "role": "viewport_lod",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "LOD | BANNIERES | tissu plisse et etoiles brodees",
+        "role": "viewport_lod",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "LOD | 09 | JUNGLE | massifs bleus et pierres de lisiere",
+        "role": "viewport_lod",
+        "colorSize": 4096,
+        "normalSize": null
+      },
+      {
+        "object": "LOD | 09 | REMPARTS | enceinte bleu ardoise et or ancien",
+        "role": "viewport_lod",
+        "colorSize": 4096,
+        "normalSize": null
+      },
+      {
+        "object": "LOD | 09 | JUNGLE | ruines lineaires placees comme la reference",
+        "role": "viewport_lod",
+        "colorSize": 4096,
+        "normalSize": null
+      },
+      {
+        "object": "LOD | 09 | VOIES | balustrades ajourees et cippes",
+        "role": "viewport_lod",
+        "colorSize": 4096,
+        "normalSize": null
+      },
+      {
+        "object": "LOD | SANCTUAIRE | gradins et galerie 1",
+        "role": "viewport_lod",
+        "colorSize": 4096,
+        "normalSize": null
+      },
+      {
+        "object": "LOD | SANCTUAIRE | gradins et galerie 2",
+        "role": "viewport_lod",
+        "colorSize": 4096,
+        "normalSize": null
+      },
+      {
+        "object": "CAMP | cercle de combat camp_ouest_1",
+        "role": "creature_camp_clearing",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "CAMP | cercle de combat camp_ouest_2",
+        "role": "creature_camp_clearing",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "CAMP | cercle de combat camp_ouest_3",
+        "role": "creature_camp_clearing",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "CAMP | cercle de combat camp_est_1",
+        "role": "creature_camp_clearing",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "CAMP | cercle de combat camp_est_2",
+        "role": "creature_camp_clearing",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "CAMP | cercle de combat camp_est_3",
+        "role": "creature_camp_clearing",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 001",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 002",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 003",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 004",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 005",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 006",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 007",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 008",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 009",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 010",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 011",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 012",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 013",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 014",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 015",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 016",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 017",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 018",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 020",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 022",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 023",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 024",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 026",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 027",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 028",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 029",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 030",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 031",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 032",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 033",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 034",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 035",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 036",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 037",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 038",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 039",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 040",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 041",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 042",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 043",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 044",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 045",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 046",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 047",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 048",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 049",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 050",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 051",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 052",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 053",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 055",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 056",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 057",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 058",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 059",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 060",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 061",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 062",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 063",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 064",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 066",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 067",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 069",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 070",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 071",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 072",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 073",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 074",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 075",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 076",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 077",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 078",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 079",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 080",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 081",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 082",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 084",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 085",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 086",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 087",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 088",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 089",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 090",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 091",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 092",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 094",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 095",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 096",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 097",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 098",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 099",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 100",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 101",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 102",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 103",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 104",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 105",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 106",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 107",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 108",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 109",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 110",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 111",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 112",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 113",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 114",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 115",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 116",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 117",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 118",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 119",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 120",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 123",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 124",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 125",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 126",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 127",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 128",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 129",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 130",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 131",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 132",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 133",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 134",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "MASSIF | schiste entre sentiers 135",
+        "role": "visual_jungle_barrier",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "SANCTUM ASTRAL | Base 1",
+        "role": "astral_sanctum",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "SANCTUM ASTRAL | Base 2",
+        "role": "astral_sanctum",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "APPARITION | terrasse en arc 1",
+        "role": "champion_spawn_platform",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "APPARITION | parapets et ciselures 1",
+        "role": "champion_spawn_ornaments",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "APPARITION | deux escaliers lateraux 1",
+        "role": "champion_spawn_stairs",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "APPARITION | rampes des escaliers 1",
+        "role": "champion_spawn_stair_rails",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "APPARITION | promontoire de la grande tour 1",
+        "role": "rear_spire_foundation",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "APPARITION | terrasse en arc 2",
+        "role": "champion_spawn_platform",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "APPARITION | parapets et ciselures 2",
+        "role": "champion_spawn_ornaments",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "APPARITION | deux escaliers lateraux 2",
+        "role": "champion_spawn_stairs",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "APPARITION | rampes des escaliers 2",
+        "role": "champion_spawn_stair_rails",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "APPARITION | promontoire de la grande tour 2",
+        "role": "rear_spire_foundation",
+        "colorSize": 512,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 02 | NO entree nord et pont",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 05 | NO traverse ouest vers centre",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 08 | NE nord vers pont",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 20 | SO mid vers pont sud",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 24 | SE traverse est centre",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 27 | SE sud vers pont",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 01 | NO entree nord et pont",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 03 | NO branche du camp",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 04 | NO traverse ouest vers centre",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 06 | NO embranchement ouest bas",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 07 | NE nord vers pont",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 09 | NE sentier long",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 10 | NE raccord base",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 11 | E dorsale haute",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 12 | E traverse vers balcon",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 13 | E rive vers traverse",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 14 | E entree basse",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 15 | SO traverse balcon",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 16 | SO mid vers boucle",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 17 | SO entree ouest",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 18 | SO rive vers balcon",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 19 | SO mid vers pont sud",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 21 | SO sentier sud",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 22 | SO sentier sud",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 23 | SE traverse est centre",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 25 | SE entree est haute",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 26 | SE sud vers pont",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 28 | SE embranchement sud",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 29 | SE acces camp",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 30 | SO porte jungle haute",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 31 | SO porte jungle basse",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "RACCORD | 32 | NE porte jungle basse",
+        "role": "stone_forest_connection",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "PONT CISELE | Traveree centrale sud-ouest",
+        "role": "bridge_edge_decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "PONT CISELE | Traveree centrale nord-est",
+        "role": "bridge_edge_decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      }
+    ],
+    "visualMode": "all visible meshes use baked Blender color textures, including trees, rocks, ruins and perimeter decoration; original tower facades; light geometry and lower-resolution atlases; no Blender compositor or volumetric fog",
+    "reusedTextureRevision": 112,
+    "sourceGlbBytes": 177577100,
+    "shipped": {
+      "textureSize": 2048,
+      "webpQuality": 75,
+      "compression": "meshopt"
+    }
+  },
+  "editReport": {
+    "previousRevision": 112,
+    "previousSourceSha256": "ca753e4cb8717cc9e1eb32489612325f9671c65a0482bb455faa3984bbd55e38",
+    "removedObjects": [
+      "09 | FONTAINE | orbe celeste 1",
+      "09 | FONTAINE | orbe celeste 2",
+      "09 | VERGER | vegetaux de lisiere et remparts",
+      "ARMILLES | anneaux metalliques 1",
+      "ARMILLES | anneaux metalliques 2",
+      "BASTION | ailes du belvedere 1",
+      "BASTION | ailes du belvedere 2",
+      "MASSIF | schiste entre sentiers 121",
+      "OBSERVATOIRES | orbes et armilles croisees",
+      "OBSERVATOIRES | quatre cristaux bleus non surexposes"
+    ],
+    "unchangedGeometryAndMaterials": true
+  }
+}

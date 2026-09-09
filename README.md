@@ -108,6 +108,10 @@ pnpm dev           # client; /ws is proxied to the server
 Then "Play online" to queue (empty seats fill with bots on request), or
 "Create private lobby" and share the 5-letter code with friends.
 
+The **Star Orchard** tile on the home runs the practice match on the
+authored Blender map, still being built: offline, the same bots, the normal
+map untouched everywhere else. See [the test mode](docs/star-orchard.md).
+
 ## How to play
 
 - Right-click: move or attack. A: attack-move. S: stop and hold. B: recall.

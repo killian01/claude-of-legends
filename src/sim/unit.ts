@@ -31,7 +31,7 @@ export interface UnitStats {
 
 export interface StructureMeta {
   lane: LaneId | 'sanctum';
-  tier: 1 | 2;
+  tier: 1 | 2 | 3;
 }
 
 export interface Unit {

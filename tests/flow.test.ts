@@ -5,6 +5,7 @@ import { type GameMode, nextStep } from '../src/game/flow';
 
 const ALL_MODES: readonly GameMode[] = [
   'practice',
+  'orchard',
   'queue',
   'create',
   'join',
@@ -19,6 +20,8 @@ describe('post-match flow', () => {
 
   it('play again replays the same offline pick after practice', () => {
     expect(nextStep('again', 'practice')).toBe('replay');
+    // The Star Orchard test mode is a practice match on another map.
+    expect(nextStep('again', 'orchard')).toBe('replay');
   });
 
   it('play again restarts the same replay after watching one', () => {

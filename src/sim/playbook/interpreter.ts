@@ -6,6 +6,7 @@
 // for the active-play overlay and the report, and never influences a
 // decision.
 
+import { GAME_MAP } from '../content/map';
 import type { Action, Policy } from '../policy';
 import { runBehavior } from './behaviors';
 import {
@@ -37,10 +38,13 @@ const REFLEXES: readonly { id: string; run: (ctx: SlotContext) => Action | null 
 
 export type PlayTrace = (playId: string, unitId: number) => void;
 
-export function playbookPolicy(def: PlaybookDef, trace?: PlayTrace): Policy {
+// The map is the match's (Sim.attachPlaybook hands its own): a playbook
+// walks the lanes of the map it is seated on, never the launch map's by
+// habit, which is what lets the same house bots play the Star Orchard.
+export function playbookPolicy(def: PlaybookDef, trace?: PlayTrace, map = GAME_MAP): Policy {
   return (obs, rng) => {
     if (obs.self.dead) return { kind: 'noop' };
-    const ctx = buildSlotContext(obs, rng, def.kit);
+    const ctx = buildSlotContext(obs, rng, def.kit, map);
     for (const reflex of REFLEXES) {
       const action = reflex.run(ctx);
       if (action) {

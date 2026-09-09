@@ -27,5 +27,4 @@ dist-matrix*/
 # Local stack run directory (.claude/skills/dev-server/stack.sh): pids, logs, and a task-local DATA_DIR.
 .dev/
 dist-champions*/
-# Local stack run directory (.claude/skills/dev-server/stack.sh): pids, logs, and a task-local DATA_DIR.
-.dev/
+__pycache__/

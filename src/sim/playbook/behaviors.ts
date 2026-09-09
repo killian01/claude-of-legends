@@ -6,7 +6,6 @@
 
 import { GOTO_DONE_RADIUS } from '../coach';
 import { CHAMPIONS, type ChampionRole } from '../content/champions';
-import { GAME_MAP } from '../content/map';
 import { hypot } from '../exact';
 import type { Action, ObsUnit } from '../policy';
 import { nextKitStep } from './kit';
@@ -405,8 +404,8 @@ function contestWarden(ctx: SlotContext, hpAtLeast: number, prepSeconds: number)
   if (obs.objectiveSpawnAt != null && s.hpFrac >= hpAtLeast) {
     const untilSpawn = obs.objectiveSpawnAt - obs.time;
     if (untilSpawn >= 0 && untilSpawn <= prepSeconds) {
-      let pit = GAME_MAP.wardenPits[0]!;
-      for (const p of GAME_MAP.wardenPits) {
+      let pit = ctx.map.wardenPits[0]!;
+      for (const p of ctx.map.wardenPits) {
         if (hypot(p.x - s.x, p.z - s.z) < hypot(pit.x - s.x, pit.z - s.z)) pit = p;
       }
       const dp = hypot(pit.x - s.x, pit.z - s.z);
@@ -478,7 +477,7 @@ function push(ctx: SlotContext, lane: LaneId | 'assigned', regroupAt: number | n
         ? 'mid'
         : s.lane
       : lane;
-  const myLane = laneId ? GAME_MAP.lanes[laneId] : null;
+  const myLane = laneId ? ctx.map.lanes[laneId] : null;
   let vanguard: ObsUnit | null = null;
   let bestD = Number.POSITIVE_INFINITY;
   for (const m of ctx.friendlyMinions) {
@@ -544,7 +543,7 @@ export function quietestLane(ctx: SlotContext): LaneId | 'assigned' {
   const foes = ctx.enemyChampions;
   const farness = (lane: LaneId): number => {
     if (foes.length === 0) return 0;
-    const path = GAME_MAP.lanes[lane];
+    const path = ctx.map.lanes[lane];
     const mid = path[Math.floor(path.length / 2)]!;
     let sum = 0;
     for (const f of foes) sum += hypot(f.x - mid.x, f.z - mid.z);
@@ -611,8 +610,8 @@ function obeyOrder(ctx: SlotContext): Action | null {
         if (dist(s.x, s.z, warden) <= FARM_RANGE) return { kind: 'attack', targetId: warden.id };
         return { kind: 'move', x: warden.x, z: warden.z };
       }
-      let pit = GAME_MAP.wardenPits[0]!;
-      for (const p of GAME_MAP.wardenPits) {
+      let pit = ctx.map.wardenPits[0]!;
+      for (const p of ctx.map.wardenPits) {
         if (hypot(p.x - s.x, p.z - s.z) < hypot(pit.x - s.x, pit.z - s.z)) pit = p;
       }
       return holdPosition(ctx, pit.x, pit.z, 6);

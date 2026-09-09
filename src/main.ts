@@ -23,6 +23,11 @@ import type { ReplayWorkerIn, ReplayWorkerOut } from './game/replay_worker';
 import { ReplayWorld } from './game/replay_world';
 import { getSettings } from './game/settings';
 import { type SpectatorView, startSpectator } from './game/spectate';
+import {
+  buildStarOrchardMatch,
+  loadStarOrchardAssets,
+  type StarOrchardMatch,
+} from './game/star_orchard';
 import { ClientWorld } from './net/client_world';
 import type { ForgedMatchAssets, ServerMsg } from './net/protocol';
 import { markStep, markVisit, STAYED_MS } from './net/pulse_ping';
@@ -53,10 +58,12 @@ import { showLanding } from './ui/landing';
 import {
   type BotPick,
   type CommunityPick,
+  el,
   type ForgedPick,
   type LobbyController,
   type QueueController,
   type SelectController,
+  screen,
   showLobby,
   showNotice,
   showQueue,
@@ -81,6 +88,34 @@ interface OfflinePick {
   // A Forge test drive: the draft to register in the offline sim before
   // picking it (the stylized figure carries the render).
   forged?: ForgedChampionDef;
+  // The Star Orchard test mode (docs/star-orchard.md): the practice match
+  // on the authored map instead of the launch one.
+  orchard?: boolean;
+}
+
+// The Star Orchard's export, downloaded behind a card that says how far the
+// model is; null when it could not be had, after the notice that says why.
+async function loadOrchard(): Promise<StarOrchardMatch | null> {
+  const { root, card } = screen(container);
+  const line = el('p', 'menu-sub', 'Loading the terrain');
+  card.append(el('h1', 'menu-title', 'Star Orchard'), line);
+  try {
+    const assets = await loadStarOrchardAssets((fraction) => {
+      line.textContent = `Loading the terrain: ${Math.round(fraction * 100)}%`;
+    });
+    line.textContent = 'Preparing the scenery';
+    return await buildStarOrchardMatch(assets);
+  } catch (err) {
+    root.remove();
+    await showNotice(
+      container,
+      'Star Orchard unavailable',
+      `The test map could not be loaded: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return null;
+  } finally {
+    root.remove();
+  }
 }
 
 // The practice match draws the same wall as the rest of the game (ADR
@@ -136,9 +171,15 @@ async function fetchBots(): Promise<BotPick[]> {
 }
 
 // One offline practice match; resolves with the exit the player chose.
-function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
+// On the Star Orchard the same match runs on the authored map: its record,
+// its walkability grid and its terrain in the renderer.
+async function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
+  const orchard = pick.orchard ? await loadOrchard() : null;
+  if (pick.orchard && !orchard) return 'menu';
   return new Promise((resolve) => {
-    const sim = new Sim(42);
+    const sim = orchard
+      ? new Sim(42, { map: orchard.map, nav: orchard.nav, strictNavigation: true })
+      : new Sim(42);
     if (pick.forged) sim.addForgedChampion(pick.forged);
     const world: IWorld = sim;
     const self = sim.addChampion(0, undefined, pick.championId, pick.skin);
@@ -187,7 +228,14 @@ function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
     // here; the replay viewer below deliberately does not, since watching
     // is not playing.
     markStep('played');
-    const pres = startPresentation(container, world, self.id, self.team, exit);
+    const pres = startPresentation(
+      container,
+      world,
+      self.id,
+      self.team,
+      exit,
+      orchard ? { terrain: orchard.terrain } : {},
+    );
     const TICK_MS = DT * 1000;
     let last = performance.now();
     let acc = 0;
@@ -1002,19 +1050,29 @@ async function boot(): Promise<void> {
     joinCode = null;
     next = null;
     let action: PostMatchAction;
-    if (choice.mode === 'practice') {
+    if (choice.mode === 'practice' || choice.mode === 'orchard') {
       // A Forge test drive arrives with its draft; a plain practice run
-      // goes through champion select as always.
-      const pick: OfflinePick | null = choice.forged
-        ? {
-            championId: choice.forged.id,
-            sigils: ['riftstep', 'mend'],
-            skin: 0,
-            forged: choice.forged,
-          }
-        : (lastPick ?? (await pickForPractice()));
-      // Left the select without a pick: back to the home.
-      if (!pick) continue;
+      // goes through champion select as always. The Star Orchard is the
+      // same run on the authored map, so a pick made for one map is never
+      // reused on the other.
+      const orchard = choice.mode === 'orchard';
+      let pick: OfflinePick;
+      if (choice.forged) {
+        pick = {
+          championId: choice.forged.id,
+          sigils: ['riftstep', 'mend'],
+          skin: 0,
+          forged: choice.forged,
+          orchard,
+        };
+      } else if (lastPick?.orchard === orchard) {
+        pick = lastPick;
+      } else {
+        const chosen = await pickForPractice();
+        // Left the select without a pick: back to the home.
+        if (!chosen) continue;
+        pick = { ...chosen, orchard };
+      }
       lastPick = pick;
       action = await runOffline(pick);
     } else if (choice.mode === 'replay' && choice.replayId !== undefined) {

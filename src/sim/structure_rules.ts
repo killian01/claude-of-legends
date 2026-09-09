@@ -34,11 +34,11 @@ export function isInvulnerable(units: ReadonlyMap<number, Unit>, u: Unit): boole
   if (u.kind === 'tower' && u.structure) {
     const s = u.structure;
     if (s.lane !== 'sanctum') {
-      if (s.tier === 2) {
+      if (s.tier > 1) {
         return hasAliveTower(
           units,
           u.team,
-          (o) => o.structure!.lane === s.lane && o.structure!.tier === 1,
+          (o) => o.structure!.lane === s.lane && o.structure!.tier < s.tier,
         );
       }
       return false;
