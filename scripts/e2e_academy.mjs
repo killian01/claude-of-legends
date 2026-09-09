@@ -64,9 +64,12 @@ const run = async () => {
   // A refused API call is the usual reason a step silently does nothing.
   page.on('response', (res) => {
     if (res.url().includes('/api/') && res.status() >= 400) {
+      // A body Chrome will not hand over (the 401 before sign-in, on some
+      // versions) is a lost diagnostic, not a failed run.
       void res
         .text()
-        .then((t) => console.error(`api ${res.status()} ${res.url()}: ${t.slice(0, 200)}`));
+        .then((t) => console.error(`api ${res.status()} ${res.url()}: ${t.slice(0, 200)}`))
+        .catch(() => {});
     }
   });
   await page.goto(URL, { waitUntil: 'load' });
@@ -164,8 +167,11 @@ const run = async () => {
     throw new Error(`build row: ${line.icons} icons, ${line.slots} slots`);
   if (line.dismiss) throw new Error('a Dismiss button survived');
   // The rail's chip counts rated play alone (server/bots.ts, listBots): a
-  // sparring is unrated and leaves it naming the champion and the version.
+  // sparring is unrated, so a bot fresh from its first spar wears a chip
+  // that names its champion and version and carries no tally at all. Both
+  // halves are checked: the shape it should have, and the one it must not.
   if (!/^\S+ · v\d+/.test(line.rail)) throw new Error(`the rail chip drifted: ${line.rail}`);
+  if (/ \d+-\d+/.test(line.rail)) throw new Error(`the rail counts unrated sparring: ${line.rail}`);
   console.log(
     'summary:',
     line.verdict,
@@ -198,8 +204,9 @@ const run = async () => {
   }));
   console.log('record:', rec);
   if (rec.rows < 1) throw new Error('the Record lists nothing');
-  // The head counts rated play per kind (ui/record_view.ts): a fresh bot's
-  // one sparring leaves it saying so.
+  // The head counts rated play per kind (ui/record_view.ts), rated first:
+  // after a fresh bot's one unrated spar the rated tally is empty and says
+  // so rather than showing a zero.
   if (!/^(no rated match yet|\d+ won, \d+ lost, rated)$/.test(rec.tally))
     throw new Error(`tally: ${rec.tally}`);
   if (!/^(Won|Lost|No winner) after /.test(rec.sheetRes)) throw new Error(`sheet: ${rec.sheetRes}`);
