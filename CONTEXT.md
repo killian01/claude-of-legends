@@ -161,10 +161,13 @@ never part of it: only the account itself ever sees its own.
 _Avoid_: profile (that is the screen that shows an account), user, login, player (ambiguous, see Participant)
 
 **Home**:
-The page a signed-in account lands on: the bar to every section, the play tiles, and the
-account's own place. A section opens under the bar rather than over it, so the bar stays
-and one click goes from any section to the next.
-_Avoid_: menu, main menu, lobby (that is the private one), dashboard, launcher
+The page a signed-in account lands on: the bar to every section, the play tiles, and under
+them the home's panels: the account's own place and numbers, the top of the ladder by hand,
+the top bots, and the latest champions out of the Forge, each a way into the section that
+holds the rest. Everything under the bar stands in one column, centered on a wide window.
+A section opens under the bar rather than over it, so the bar stays and one click goes from
+any section to the next.
+_Avoid_: menu, main menu, lobby (that is the private one), dashboard, launcher, feed, widget
 
 **Play tile**:
 One of the five ways into a match on the Home, each a painted scene of its own: the Ranked
@@ -627,8 +630,10 @@ _Avoid_: command, directive, ping (the order rides on one, it is not one)
 **Academy**:
 The in-game place where an account writes and tests a bot: the conversation that edits the
 playbook as patches, the play list beside it, and local sparring at full speed. An account
-feature.
-_Avoid_: bot editor, bot forge, workshop, trainer
+feature. Making a bot there is a way through five steps, each a page of the same bot: the bot
+itself, its kit and its playbook with the coach beside both, sparring, then play; a bar across
+the top jumps between them and Back and Next at the foot walk them in order.
+_Avoid_: bot editor, bot forge, workshop, trainer, wizard (for the steps), tab (for a step)
 
 **Ranked**:
 A bot its owner marked available for rated play: the Arena's rounds and play now, and the

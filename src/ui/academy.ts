@@ -1,10 +1,13 @@
 // The Academy (docs/design/bots.md, plan-bots phase 4): where an account
-// writes and tests a bot. Conversation first, the play list always visible
-// and editable beside it; every bot starts as the Laner on its champion;
-// local sparring plays a whole match against house bots at full speed in a
-// worker and opens the replay with the active play on every plate. The
-// playbook on screen is always one the engine can run: every edit and
-// every coach operation goes through the validator before it lands.
+// writes and tests a bot. Making one is a way through five steps
+// (ui/academy_steps.ts): the bot itself, its kit, its playbook with the
+// coach beside it, sparring, then play; each a page of the same bot, a
+// bar across the top to jump between them and Back and Next at the foot.
+// Every bot starts as the Laner on its champion; local sparring plays a
+// whole match against house bots at full speed in a worker and opens the
+// replay with the active play on every plate. The playbook on screen is
+// always one the engine can run: every edit and every coach operation goes
+// through the validator before it lands.
 
 import { appNav, type Frame } from '../game/nav';
 import { runSeries, runSparring } from '../game/sparring';
@@ -13,7 +16,7 @@ import { type CoachTurn, commentOf } from '../net/coach_chat';
 import type { RecordEntry, RecordRow, RecordTallies } from '../net/record';
 import { CHAMPION_LIST, CHAMPIONS, homeLane } from '../sim/content/champions';
 import { ITEMS } from '../sim/content/items';
-import { SIGIL_LIST } from '../sim/content/sigils';
+import { SIGIL_LIST, SIGILS } from '../sim/content/sigils';
 import {
   applyPatchOp,
   type Behavior,
@@ -30,8 +33,22 @@ import {
   validatePlaybook,
 } from '../sim/playbook';
 import type { TeamId } from '../sim/types';
+import {
+  openSteps,
+  pickSigil,
+  SIGIL_BLURBS,
+  STEPS,
+  type StepFacts,
+  type StepId,
+  stepAfter,
+  stepBefore,
+  stepOf,
+  stepStatus,
+} from './academy_steps';
 import { BALANCE_CSS, balanceTag } from './balances';
+import { setPortrait } from './champion_art';
 import { loadCollection } from './collection';
+import { sigilImageUrl } from './icon_images';
 import { buildCounts, buildRow, itemCatalog } from './item_catalog';
 import { el } from './menu';
 import { startMenuBackdrop } from './menu_backdrop';
@@ -151,6 +168,90 @@ const CSS = `${BALANCE_CSS}
 .ac .hud-score-build { display: flex; gap: 3px; margin: 2px 0 6px; }
 .ac .hud-score-build img { border-radius: 4px; border: 1px solid #2c4d60; background: #070d12; display: block; }
 .ac .hud-score-build .slot { display: block; border-radius: 4px; border: 1px dashed #1f3644; background: #070d12; }
+
+/* The steps (ui/academy_steps.ts): one bar across the top of the bot, a
+   number, a name and a line each; the open one lit, the ones behind it
+   ticked, the ones a bot not made yet cannot have, dimmed. */
+.ac-steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
+.ac-step {
+  display: flex; align-items: flex-start; gap: 9px; min-width: 0; text-align: left;
+  padding: 8px 10px; border-radius: 8px; border: 1px solid #1f3644;
+  background: rgba(6, 12, 16, 0.86); color: #c8d6e0; font: inherit; cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.ac-step:hover:not(:disabled) { border-color: #3d7a94; }
+.ac-step.on { border-color: #8ed6f0; background: #122431; }
+.ac-step:disabled { opacity: 0.45; cursor: default; }
+.ac-step-n {
+  flex: none; width: 22px; height: 22px; border-radius: 50%; border: 1px solid #2c4d60;
+  display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800;
+  color: #8ed6f0; background: #070d12;
+}
+.ac-step.on .ac-step-n { background: #8ed6f0; color: #06141c; border-color: #b8e8f8; }
+.ac-step.done .ac-step-n { border-color: #4fa8c8; }
+.ac-step-t { min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.ac-step-t b { font-size: 12px; color: #e0ecf3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-step-t small { font-size: 10.5px; color: #7f9cae; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-step.on .ac-step-t small { color: #a9c2d2; }
+/* Under the bar: the step's own title and line, and the save at the right,
+   in view on every step so an edit is never far from Save. */
+.ac-stephead { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; flex-wrap: wrap; }
+.ac-stephead h2 { margin: 0; font-size: 16px; font-weight: 800; color: #8ed6f0; letter-spacing: 0.4px; }
+.ac-stephead .ac-lead { margin: 0; flex: 1; min-width: 200px; }
+.ac-stephead .ac-btn { margin: 0; }
+.ac-stephead .ac-status { margin: 0; flex-basis: 100%; }
+/* The foot: the way back and the way on, under whatever the step showed. */
+.ac-stepnav { display: flex; justify-content: space-between; gap: 10px; margin: 4px 0 14px; }
+.ac-stepnav .ac-btn { margin: 0; }
+/* The bot step: the champion as cards with their portraits, one lit; the
+   sigils as two picks that say what they do. */
+.ac-champs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 4px 0 10px; }
+.ac-champ {
+  display: flex; align-items: center; gap: 9px; padding: 7px 9px; min-width: 0; text-align: left;
+  border-radius: 8px; border: 1px solid #1f3644; background: #0b141a; color: #c8d6e0; font: inherit;
+  cursor: pointer; transition: border-color 0.15s ease, background 0.15s ease;
+}
+.ac-champ:hover:not(:disabled) { border-color: #3d7a94; }
+.ac-champ.on { border-color: #8ed6f0; background: #122431; }
+.ac-champ:disabled { cursor: default; }
+.ac-champ img { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; object-position: top;
+  border: 1px solid #2c4d60; background: #070d12; flex: none; display: block; }
+.ac-champ-t { min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.ac-champ-t b { font-size: 12.5px; color: #e0ecf3; }
+.ac-champ-t small { font-size: 10.5px; color: #7f9cae; }
+.ac-champ-blurb { color: #8fa6b6; font-size: 12px; line-height: 1.45; margin: 0 0 10px; }
+/* The sigils as a grid of all four, two of them lit and numbered in the
+   order they were picked; a click on another swaps the older one out. */
+.ac-sigils { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px;
+  margin: 4px 0 10px; }
+.ac-sigil {
+  position: relative; display: flex; align-items: flex-start; gap: 10px; padding: 9px 10px;
+  min-width: 0; text-align: left; border-radius: 8px; border: 1px solid #1f3644;
+  background: #0b141a; color: #c8d6e0; font: inherit; cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.ac-sigil:hover { border-color: #3d7a94; }
+.ac-sigil.on { border-color: #8ed6f0; background: #122431; }
+.ac-sigil img { width: 40px; height: 40px; border-radius: 6px; border: 1px solid #2c4d60;
+  background: #070d12; flex: none; display: block; object-fit: cover; }
+.ac-sigil-t { min-width: 0; display: flex; flex-direction: column; gap: 3px; line-height: 1.25; }
+.ac-sigil-t b { font-size: 12.5px; color: #e0ecf3; }
+.ac-sigil-t small { color: #7f9cae; font-size: 11px; line-height: 1.35; }
+.ac-sigil.on .ac-sigil-t small { color: #a9c2d2; }
+.ac-sigil-n {
+  position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800;
+  background: #8ed6f0; color: #06141c; border: 1px solid #b8e8f8;
+}
+.ac-fieldlabel { font-size: 10.5px; color: #6cc3e0; text-transform: uppercase; letter-spacing: 0.5px; margin: 8px 0 4px; }
+.ac-name { font-size: 15px; padding: 8px 10px; }
+/* The play step: one switch, said in full. */
+.ac-switch { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid #1f3644; background: #0b141a; margin-bottom: 8px; cursor: pointer; }
+.ac-switch input { margin-top: 3px; }
+.ac-switch b { color: #e0ecf3; font-size: 13px; display: block; }
+.ac-switch span { color: #8fa6b6; font-size: 12px; line-height: 1.45; }
+.ac-rail .ac-btn.wide { display: block; width: 100%; margin: 0 0 6px; text-align: center; }
 `;
 
 let cssInstalled = false;
@@ -290,7 +391,17 @@ function fmtSeconds(ticks: number): string {
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
 }
 
-export function openAcademy(container: HTMLElement, opts: { botId?: string } = {}): () => void {
+export interface AcademyOptions {
+  // The bot to open on, and the step to open it at (the way back from a
+  // replay lands on Sparring, where the Record is).
+  botId?: string;
+  step?: StepId;
+  // The live queue, from the Play step: the Academy closes and the home
+  // queues; the bot is picked at champion select.
+  onPlay?: () => void;
+}
+
+export function openAcademy(container: HTMLElement, opts: AcademyOptions = {}): () => void {
   ensureCss();
   const root = el('div', 'ac');
   const stopBackdrop = startMenuBackdrop(root);
@@ -340,6 +451,11 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     renderAll();
   };
   let current: BotView | null = null;
+  // The step open on the current bot (ui/academy_steps.ts); kept across
+  // bots, so two kits can be compared with two clicks on the rail.
+  let step: StepId = opts.step ?? 'bot';
+  // The new-bot form is open in the main column, no bot picked.
+  let creating = false;
   // The editable copy of the current bot's playbook; saved on demand.
   let working: PlaybookDef | null = null;
   let dirty = false;
@@ -391,6 +507,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
 
   const select = (bot: BotView | null): void => {
     current = bot;
+    creating = false;
     working = bot ? structuredClone(bot.playbook) : null;
     dirty = false;
     editingId = null;
@@ -447,7 +564,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     );
     if (r.ok) {
       arena = { left: r.left, cap: r.cap, pool: r.pool, nextRoundInMs: r.nextRoundInMs };
-      renderSide();
+      renderMain();
     }
   }
 
@@ -468,7 +585,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       say(r.error, true);
     }
     renderRail();
-    renderSide();
+    renderMain();
     if (recordOpen) renderRecord();
   }
 
@@ -623,14 +740,14 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     }
   };
 
-  // --- the rail: your bots, and a new one ---
+  // --- the rail: your bots, and the way to a new one ---
   function renderRail(): void {
     rail.textContent = '';
     const list = el('div', 'ac-panel');
     list.append(el('h3', '', 'Your bots'));
-    if (bots.length === 0) list.append(el('p', 'ac-lead', 'No bots yet. Make one below.'));
+    if (bots.length === 0) list.append(el('p', 'ac-lead', 'No bots yet. Make your first one.'));
     for (const b of bots) {
-      const btn = el('button', `ac-bot${current?.id === b.id ? ' picked' : ''}`);
+      const btn = el('button', `ac-bot${!creating && current?.id === b.id ? ' picked' : ''}`);
       const champ = CHAMPIONS[b.championId];
       btn.append(
         document.createTextNode(b.name),
@@ -650,145 +767,159 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       });
       list.append(btn);
     }
-    rail.append(list);
-
-    const form = el('div', 'ac-panel');
-    form.append(el('h3', '', 'New bot'));
-    form.append(
-      el(
-        'p',
-        'ac-lead',
-        'A name, a champion, two sigils. It starts as the Laner, the default playbook, and ' +
-          'becomes yours from the first edit.',
-      ),
-    );
-    const name = el('input', 'ac-input wide') as HTMLInputElement;
-    name.placeholder = 'Name';
-    name.maxLength = 24;
-    const champ = el('select', 'ac-select wide') as HTMLSelectElement;
-    // A bot fields its owner's collection alone (ADR 0018), and the
-    // rotation is deliberately not offered: a bot outlives the week it was
-    // made in, and one written on a borrowed champion would stop being
-    // fieldable on the turn of the week. The list is unwalled until the
-    // account answers, and the server refuses either way.
-    const fill = (): void => {
-      champ.textContent = '';
-      for (const c of CHAMPION_LIST) {
-        if (botCollection && !botCollection.includes(c.id)) continue;
-        const o = document.createElement('option');
-        o.value = c.id;
-        o.textContent = `${c.name.split(',')[0]} (${c.role})`;
-        champ.append(o);
-      }
-    };
-    fill();
-    if (botCollection === null)
-      void loadCollection().then((state) => {
-        botCollection = state?.collection ?? null;
-        fill();
-      });
-    const sigA = sigilSelect('riftstep');
-    const sigB = sigilSelect('mend');
-    const row = el('div', 'ac-row');
-    row.append(sigA, sigB);
-    const create = el('button', 'ac-btn primary', 'Create') as HTMLButtonElement;
-    create.addEventListener('click', () => {
-      create.disabled = true;
-      void api<{ bot: BotView }>('/api/bots/create', {
-        name: name.value,
-        championId: champ.value,
-        sigils: [sigA.value, sigB.value],
-        skin: 0,
-      }).then((r) => {
-        create.disabled = false;
-        if (!r.ok) {
-          say(r.error, true);
-          return;
-        }
-        void load(r.bot.id);
-      });
+    // The form itself stands in the main column, where it has the room
+    // for the champions as cards; the rail only opens it.
+    const make = el('button', `ac-btn wide${creating || bots.length === 0 ? ' primary' : ''}`);
+    make.textContent = 'New bot';
+    make.addEventListener('click', () => {
+      if (dirty && !window.confirm('Discard the unsaved changes on this bot?')) return;
+      startNew();
     });
-    form.append(name, champ, row, create);
-    rail.append(form);
+    list.append(make);
+    rail.append(list);
   }
 
-  function sigilSelect(value: string): HTMLSelectElement {
-    const s = el('select', 'ac-select') as HTMLSelectElement;
-    for (const sig of SIGIL_LIST) {
-      const o = document.createElement('option');
-      o.value = sig.id;
-      o.textContent = sig.name;
-      s.append(o);
-    }
-    s.value = value;
-    return s;
-  }
+  // The draft of a bot being made, kept across redraws (the collection
+  // lands after the first paint and the form is drawn again).
+  const draft: { name: string; championId: string | null; sigils: [string, string] } = {
+    name: '',
+    championId: null,
+    sigils: ['riftstep', 'mend'],
+  };
+  const startNew = (): void => {
+    current = null;
+    working = null;
+    dirty = false;
+    creating = true;
+    step = 'bot';
+    status = '';
+    renderAll();
+  };
 
-  // --- the main: the bot, its plays ---
+  // --- the main: the step bar, then the step of the bot ---
   function renderMain(): void {
     main.textContent = '';
+    const making = creating || (!current && bots.length === 0);
+    if (making) {
+      main.append(stepBar(null, null), newBotForm());
+      syncSide();
+      return;
+    }
     if (!current || !working) {
       const p = el('div', 'ac-panel');
       p.append(
         el('h3', '', 'A bot'),
-        el(
-          'p',
-          'ac-lead',
-          'A bot plays a seat instead of you: in the live queue while you coach it, or in the ' +
-            'Arena while you are away. Its whole brain is the play list you see here: each ' +
-            'decision, the first play from the top whose condition holds and that can act is ' +
-            'the one that acts. Make a bot on the left to begin.',
-        ),
+        el('p', 'ac-lead', 'Pick one of your bots on the left, or make a new one.'),
       );
       main.append(p);
+      syncSide();
       return;
     }
     const bot = current;
     const def = working;
-
-    // Identity and the save row.
-    const top = el('div', 'ac-panel');
-    const idRow = el('div', 'ac-row');
-    const name = el('input', 'ac-input') as HTMLInputElement;
-    name.value = bot.name;
-    name.maxLength = 24;
-    name.addEventListener('input', () => {
-      bot.name = name.value;
-      dirty = true;
-    });
-    const champ = CHAMPIONS[bot.championId];
-    const sigA = sigilSelect(bot.sigils[0]);
-    const sigB = sigilSelect(bot.sigils[1]);
-    const onSig = (): void => {
-      bot.sigils = [sigA.value, sigB.value];
-      dirty = true;
-    };
-    sigA.addEventListener('change', onSig);
-    sigB.addEventListener('change', onSig);
-    const skin = el('select', 'ac-select') as HTMLSelectElement;
-    for (let i = 0; i < 3; i++) {
-      const o = document.createElement('option');
-      o.value = String(i);
-      o.textContent = `Skin ${i + 1}`;
-      skin.append(o);
+    main.append(stepBar(bot, def), stepHead(bot, def));
+    switch (step) {
+      case 'bot':
+        main.append(botStep(bot));
+        break;
+      case 'kit':
+        main.append(kitPanel(bot, def));
+        break;
+      case 'playbook':
+        main.append(playbookPanel(def));
+        break;
+      case 'spar':
+        main.append(sparPanel(bot, def));
+        break;
+      case 'play':
+        main.append(playPanel(bot), arenaPanel(bot), briefPanel(bot));
+        break;
     }
-    skin.value = String(bot.skin);
-    skin.addEventListener('change', () => {
-      bot.skin = Number(skin.value);
-      dirty = true;
+    main.append(stepNav());
+    syncSide();
+  }
+
+  // The coach stands beside the kit, the playbook and the sparring: its
+  // operations reach the kit and the lanes as well as the plays, and the
+  // sparring is what an answer is judged on. The bot and play steps take
+  // the whole width.
+  const sideWanted = (): boolean =>
+    current !== null && !creating && (step === 'kit' || step === 'playbook' || step === 'spar');
+  function syncSide(): void {
+    side.style.display = sideWanted() && !recordOpen ? '' : 'none';
+  }
+
+  const go = (next: StepId): void => {
+    step = next;
+    status = '';
+    renderMain();
+    main.scrollTop = 0;
+  };
+
+  function stepFacts(bot: BotView | null, def: PlaybookDef | null): StepFacts {
+    const champ = bot ? CHAMPIONS[bot.championId] : undefined;
+    const kit = def?.kit ?? {};
+    const build = kit.build ?? (bot ? roleBuild(bot.championId) : []);
+    const sparred = recordTally.sparring.games + recordTally.series.games;
+    return {
+      bot: bot
+        ? {
+            championName: champ?.name.split(',')[0] ?? bot.championId,
+            sigilNames: bot.sigils.map((id) => SIGILS[id]?.name ?? id),
+            version: bot.version,
+            deposited: bot.deposited,
+            ...(bot.tally ? { tally: bot.tally } : {}),
+          }
+        : null,
+      kit: { items: build.length, roleBuild: !kit.build, variants: kit.variants?.length ?? 0 },
+      plays: {
+        total: def?.plays.length ?? 0,
+        off: def?.plays.filter((p) => p.enabled === false).length ?? 0,
+      },
+      record:
+        record === null
+          ? null
+          : { games: sparred, wins: recordTally.sparring.wins + recordTally.series.wins },
+      dirty,
+    };
+  }
+
+  // The bar: every step, the open one lit, the ones with something behind
+  // them ticked, the ones a bot not made yet cannot have, dimmed.
+  function stepBar(bot: BotView | null, def: PlaybookDef | null): HTMLElement {
+    const bar = el('div', 'ac-steps');
+    const facts = stepFacts(bot, def);
+    const open = new Set(openSteps(bot !== null));
+    const done: Record<StepId, boolean> = {
+      bot: bot !== null,
+      kit: bot !== null,
+      playbook: bot !== null,
+      spar: (facts.record?.games ?? 0) > 0,
+      play: bot?.deposited === true,
+    };
+    STEPS.forEach((st, i) => {
+      const b = el('button', `ac-step${st.id === step ? ' on' : ''}${done[st.id] ? ' done' : ''}`);
+      b.type = 'button';
+      b.dataset.step = st.id;
+      b.disabled = !open.has(st.id);
+      if (b.disabled) b.title = 'After the bot is made';
+      const text = el('span', 'ac-step-t');
+      text.append(el('b', '', st.label), el('small', '', stepStatus(st.id, facts)));
+      b.append(el('span', 'ac-step-n', String(i + 1)), text);
+      b.addEventListener('click', () => go(st.id));
+      bar.append(b);
     });
-    idRow.append(
-      name,
-      el('span', '', `${champ?.name ?? bot.championId}`),
-      sigA,
-      sigB,
-      skin,
-      el('span', 'ac-sub', `v${bot.version}`),
-    );
-    top.append(idRow);
-    const actions = el('div', 'ac-row');
+    return bar;
+  }
+
+  // Under the bar: the step's name and line, Save, and the status line.
+  function stepHead(bot: BotView, def: PlaybookDef): HTMLElement {
+    const head = el('div', 'ac-stephead');
+    const st = stepOf(step);
+    head.append(el('h2', '', st.label), el('p', 'ac-lead', st.lead));
     const save = el('button', 'ac-btn primary', dirty ? 'Save' : 'Saved') as HTMLButtonElement;
     save.disabled = !dirty || coaching;
+    save.title = dirty ? 'Save this bot as its next version' : 'Nothing to save';
     save.addEventListener('click', () => {
       void api<{ bot: BotView }>('/api/bots/save', {
         id: bot.id,
@@ -810,29 +941,289 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         renderRail();
       });
     });
-    const deposit = el('label', 'ac-check');
-    const depositBox = el('input', '') as HTMLInputElement;
-    depositBox.type = 'checkbox';
-    depositBox.checked = bot.deposited;
-    depositBox.addEventListener('change', () => {
-      void api<{ bot: BotView }>('/api/bots/deposit', { id: bot.id, on: depositBox.checked }).then(
+    head.append(save);
+    if (status !== '') head.append(el('div', `ac-status${statusBad ? ' bad' : ''}`, status));
+    return head;
+  }
+
+  // The foot: the way back and the way on.
+  function stepNav(): HTMLElement {
+    const nav = el('div', 'ac-stepnav');
+    const prev = stepBefore(step);
+    const next = stepAfter(step);
+    const lower = (label: string): string => label.charAt(0).toLowerCase() + label.slice(1);
+    const left = el('span', '');
+    if (prev) {
+      const b = el('button', 'ac-btn', `Back: ${lower(prev.label)}`);
+      b.addEventListener('click', () => go(prev.id));
+      left.append(b);
+    }
+    const right = el('span', '');
+    if (next) {
+      const b = el('button', 'ac-btn primary', `Next: ${lower(next.label)}`);
+      b.addEventListener('click', () => go(next.id));
+      right.append(b);
+    } else {
+      const b = el('button', 'ac-btn', 'Make another bot');
+      b.addEventListener('click', () => {
+        if (dirty && !window.confirm('Discard the unsaved changes on this bot?')) return;
+        startNew();
+      });
+      right.append(b);
+    }
+    nav.append(left, right);
+    return nav;
+  }
+
+  // A champion as a card: its portrait, its name, its role.
+  function champCard(id: string, on: boolean, onPick: (() => void) | null): HTMLElement {
+    const c = CHAMPIONS[id];
+    const card = el('button', `ac-champ${on ? ' on' : ''}`) as HTMLButtonElement;
+    card.type = 'button';
+    card.dataset.champion = id;
+    card.disabled = onPick === null;
+    const img = document.createElement('img');
+    img.alt = '';
+    img.addEventListener(
+      'error',
+      () => {
+        try {
+          setPortrait(img, id, 0x8ed6f0);
+        } catch {
+          img.remove();
+        }
+      },
+      { once: true },
+    );
+    img.src = `/portraits/${id}.webp`;
+    const text = el('span', 'ac-champ-t');
+    text.append(el('b', '', c?.name.split(',')[0] ?? id), el('small', '', c?.role ?? ''));
+    card.append(img, text);
+    if (onPick) card.addEventListener('click', onPick);
+    return card;
+  }
+
+  // The sigils as a grid, all four with what each does, two of them lit
+  // and numbered in the order they were picked (ui/academy_steps.ts,
+  // pickSigil): a bot always holds exactly two.
+  function sigilGrid(
+    held: readonly [string, string],
+    onChange: (next: [string, string]) => void,
+  ): HTMLElement {
+    const grid = el('div', 'ac-sigils');
+    for (const sig of SIGIL_LIST) {
+      const at = held.indexOf(sig.id);
+      const card = el('button', `ac-sigil${at >= 0 ? ' on' : ''}`);
+      card.type = 'button';
+      card.dataset.sigil = sig.id;
+      card.setAttribute('aria-pressed', at >= 0 ? 'true' : 'false');
+      const url = sigilImageUrl(sig.id);
+      if (url) {
+        const img = document.createElement('img');
+        img.alt = '';
+        img.src = url;
+        img.addEventListener('error', () => img.remove(), { once: true });
+        card.append(img);
+      }
+      const text = el('span', 'ac-sigil-t');
+      text.append(el('b', '', sig.name), el('small', '', SIGIL_BLURBS[sig.id] ?? ''));
+      card.append(text);
+      if (at >= 0) card.append(el('span', 'ac-sigil-n', String(at + 1)));
+      card.title =
+        at >= 0
+          ? 'Held; picking another swaps the older one out'
+          : 'Pick it, in place of the older one';
+      card.addEventListener('click', () => onChange(pickSigil(held, sig.id)));
+      grid.append(card);
+    }
+    return grid;
+  }
+
+  // The first step of a bot not made yet: the form, with the room the
+  // rail never had, and the way a bot works said once above it.
+  function newBotForm(): HTMLElement {
+    const panel = el('div', 'ac-panel');
+    panel.append(el('h3', '', 'A new bot'));
+    panel.append(
+      el(
+        'p',
+        'ac-lead',
+        'A bot plays a seat instead of you: in the live queue while you coach it, or in the ' +
+          'Arena while you are away. Its whole brain is a play list, and it starts as the ' +
+          'Laner, the default playbook, on the champion you pick here; it becomes yours from ' +
+          'the first edit. Name it, pick its champion and its two sigils, and the next steps ' +
+          'open.',
+      ),
+    );
+    if (botCollection === null) {
+      void loadCollection().then((state) => {
+        botCollection = state?.collection ?? null;
+        if (creating || (!current && bots.length === 0)) renderMain();
+      });
+    }
+    panel.append(el('div', 'ac-fieldlabel', 'Name'));
+    const name = el('input', 'ac-input ac-name wide') as HTMLInputElement;
+    name.placeholder = 'Name';
+    name.maxLength = 24;
+    name.value = draft.name;
+    name.addEventListener('input', () => {
+      draft.name = name.value;
+    });
+    panel.append(name);
+
+    // A bot fields its owner's collection alone (ADR 0018), and the
+    // rotation is deliberately not offered: a bot outlives the week it was
+    // made in, and one written on a borrowed champion would stop being
+    // fieldable on the turn of the week. The list is unwalled until the
+    // account answers, and the server refuses either way.
+    panel.append(el('div', 'ac-fieldlabel', 'Champion'));
+    const owned = CHAMPION_LIST.filter((c) => !botCollection || botCollection.includes(c.id));
+    if (draft.championId === null || !owned.some((c) => c.id === draft.championId)) {
+      draft.championId = owned[0]?.id ?? null;
+    }
+    const grid = el('div', 'ac-champs');
+    for (const c of owned) {
+      grid.append(
+        champCard(c.id, c.id === draft.championId, () => {
+          draft.championId = c.id;
+          renderMain();
+        }),
+      );
+    }
+    panel.append(grid);
+    const picked = draft.championId ? CHAMPIONS[draft.championId] : undefined;
+    panel.append(
+      el(
+        'p',
+        'ac-champ-blurb',
+        (picked ? `${picked.name}: ${picked.blurb} ` : '') +
+          'A bot plays a champion from your collection; the Champions section holds the rest.',
+      ),
+    );
+
+    panel.append(el('div', 'ac-fieldlabel', 'Sigils, pick two'));
+    panel.append(
+      sigilGrid(draft.sigils, (next) => {
+        draft.sigils = next;
+        renderMain();
+      }),
+    );
+
+    const create = el('button', 'ac-btn primary', 'Create') as HTMLButtonElement;
+    create.addEventListener('click', () => {
+      const championId = draft.championId;
+      if (!championId) return;
+      create.disabled = true;
+      void api<{ bot: BotView }>('/api/bots/create', {
+        name: draft.name,
+        championId,
+        sigils: draft.sigils,
+        skin: 0,
+      }).then((r) => {
+        create.disabled = false;
+        if (!r.ok) {
+          say(r.error, true);
+          return;
+        }
+        const made = r.bot;
+        draft.name = '';
+        step = 'kit';
+        void load(made.id).then(() => {
+          say(
+            `${made.name} is made: it starts as the Laner on ` +
+              `${CHAMPIONS[made.championId]?.name.split(',')[0] ?? made.championId}. Now its kit.`,
+          );
+        });
+      });
+    });
+    if (status !== '') panel.append(el('div', `ac-status${statusBad ? ' bad' : ''}`, status));
+    panel.append(create);
+    return panel;
+  }
+
+  // The first step of a bot that exists: what it is, and its own settings.
+  function botStep(bot: BotView): HTMLElement {
+    const box = el('div', '');
+    const who = el('div', 'ac-panel');
+    who.append(el('h3', '', 'Who it is'));
+    who.append(el('div', 'ac-fieldlabel', 'Name'));
+    const name = el('input', 'ac-input ac-name wide') as HTMLInputElement;
+    name.value = bot.name;
+    name.maxLength = 24;
+    name.addEventListener('input', () => {
+      bot.name = name.value;
+      dirty = true;
+    });
+    who.append(name);
+    who.append(el('div', 'ac-fieldlabel', 'Champion'));
+    const champ = CHAMPIONS[bot.championId];
+    const one = el('div', 'ac-champs');
+    one.append(champCard(bot.championId, true, null));
+    who.append(one);
+    who.append(
+      el(
+        'p',
+        'ac-champ-blurb',
+        (champ ? `${champ.name}: ${champ.blurb} ` : '') +
+          'A bot keeps its champion; make another bot for another one.',
+      ),
+    );
+    who.append(el('div', 'ac-fieldlabel', 'Sigils, two of the four'));
+    who.append(
+      sigilGrid(bot.sigils, (next) => {
+        bot.sigils = next;
+        dirty = true;
+        renderMain();
+      }),
+    );
+    who.append(el('div', 'ac-fieldlabel', 'Skin'));
+    const skin = el('select', 'ac-select') as HTMLSelectElement;
+    for (let i = 0; i < 3; i++) {
+      const o = document.createElement('option');
+      o.value = String(i);
+      o.textContent = `Skin ${i + 1}`;
+      skin.append(o);
+    }
+    skin.value = String(bot.skin);
+    skin.addEventListener('change', () => {
+      bot.skin = Number(skin.value);
+      dirty = true;
+    });
+    who.append(skin);
+    box.append(who);
+
+    const own = el('div', 'ac-panel');
+    own.append(el('h3', '', 'Its own settings'));
+    // The playbook readable by anyone on the bot's page (CONTEXT.md).
+    const open = el('label', 'ac-switch');
+    const openBox = el('input', '') as HTMLInputElement;
+    openBox.type = 'checkbox';
+    openBox.checked = bot.openPlaybook === true;
+    openBox.addEventListener('change', () => {
+      void api<{ bot: BotView }>('/api/bots/open', { id: bot.id, on: openBox.checked }).then(
         (r) => {
           if (!r.ok) {
-            depositBox.checked = bot.deposited;
+            openBox.checked = bot.openPlaybook === true;
             say(r.error, true);
             return;
           }
-          bot.deposited = r.bot.deposited;
-          bots = bots.map((b) => (b.id === bot.id ? { ...b, deposited: bot.deposited } : b));
-          renderRail();
+          bots = bots.map((b) =>
+            b.id === r.bot.id ? { ...b, openPlaybook: r.bot.openPlaybook } : b,
+          );
+          if (current?.id === r.bot.id) current = { ...current, openPlaybook: r.bot.openPlaybook };
         },
       );
     });
-    deposit.append(depositBox, document.createTextNode('Ranked'));
-    deposit.title =
-      'Available for rated play: the Arena plays it on the hour and whenever someone presses ' +
-      'Play now, and the live queue seats it in place of a house bot';
+    const openText = el('span', '');
+    openText.append(
+      el('b', '', 'Open playbook'),
+      document.createTextNode("Anyone may read this playbook on the bot's page, from the ladder."),
+    );
+    open.append(openBox, openText);
+    own.append(open);
+    const row = el('div', 'ac-row');
     const history = el('button', 'ac-btn', versions ? 'Hide history' : 'History');
+    history.title = 'Every saved version, and the way back to one';
     history.addEventListener('click', () => {
       if (versions) {
         versions = null;
@@ -866,32 +1257,8 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         void load(null);
       });
     });
-    // The playbook readable by anyone on the bot's page (CONTEXT.md).
-    const open = el('label', 'ac-check');
-    const openBox = el('input', '') as HTMLInputElement;
-    openBox.type = 'checkbox';
-    openBox.checked = bot.openPlaybook === true;
-    openBox.addEventListener('change', () => {
-      void api<{ bot: BotView }>('/api/bots/open', { id: bot.id, on: openBox.checked }).then(
-        (r) => {
-          if (!r.ok) {
-            openBox.checked = bot.openPlaybook === true;
-            say(r.error, true);
-            return;
-          }
-          bots = bots.map((b) =>
-            b.id === r.bot.id ? { ...b, openPlaybook: r.bot.openPlaybook } : b,
-          );
-          if (current?.id === r.bot.id) current = { ...current, openPlaybook: r.bot.openPlaybook };
-        },
-      );
-    });
-    open.append(openBox, document.createTextNode('Open playbook'));
-    open.title = "Anyone may read this playbook on the bot's page, from the ladder";
-    actions.append(save, deposit, open, history, del);
-    top.append(actions);
-    const st = el('div', `ac-status${statusBad ? ' bad' : ''}`, status);
-    top.append(st);
+    row.append(history, del);
+    own.append(row);
     if (versions) {
       const table = el('table', 'ac-table');
       const hr = el('tr', '');
@@ -927,11 +1294,14 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         tr.append(cell);
         table.append(tr);
       }
-      top.append(table);
+      own.append(table);
     }
-    main.append(top);
-    main.append(kitPanel(bot, def));
+    box.append(own);
+    return box;
+  }
 
+  // The playbook step: the play list, the coach beside it.
+  function playbookPanel(def: PlaybookDef): HTMLElement {
     // The play list.
     const list = el('div', 'ac-panel');
     list.append(el('h3', '', 'The playbook'));
@@ -959,7 +1329,64 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       renderMain();
     });
     list.append(add);
-    main.append(list);
+    return list;
+  }
+
+  // The play step: the one switch that sends a bot to rated play, and the
+  // live queue beside the Arena it feeds.
+  function playPanel(bot: BotView): HTMLElement {
+    const panel = el('div', 'ac-panel');
+    panel.append(el('h3', '', 'Ranked'));
+    const sw = el('label', 'ac-switch');
+    const box = el('input', '') as HTMLInputElement;
+    box.type = 'checkbox';
+    box.checked = bot.deposited;
+    box.addEventListener('change', () => {
+      void api<{ bot: BotView }>('/api/bots/deposit', { id: bot.id, on: box.checked }).then((r) => {
+        if (!r.ok) {
+          box.checked = bot.deposited;
+          say(r.error, true);
+          return;
+        }
+        bot.deposited = r.bot.deposited;
+        bots = bots.map((b) => (b.id === bot.id ? { ...b, deposited: bot.deposited } : b));
+        say(bot.deposited ? `${bot.name} is ranked.` : `${bot.name} only spars now.`);
+        renderRail();
+        void loadArena();
+      });
+    });
+    const text = el('span', '');
+    text.append(
+      el('b', '', bot.deposited ? 'Ranked: available for rated play' : 'Not ranked: it only spars'),
+      document.createTextNode(
+        'Ranked, the Arena plays it on the hour and whenever someone presses Play now, and ' +
+          'the live queue seats it in place of a house bot. Its rating on both ladders moves ' +
+          'from there. Off, it spars and nothing else.',
+      ),
+    );
+    sw.append(box, text);
+    panel.append(sw);
+    const live = el('div', 'ac-row');
+    if (opts.onPlay) {
+      const queue = el('button', 'ac-btn', 'Queue with this bot');
+      queue.title = 'The live queue: pick this bot at champion select, then coach it from the bar';
+      queue.addEventListener('click', () => {
+        if (dirty && !window.confirm('Discard the unsaved changes on this bot?')) return;
+        close();
+        opts.onPlay?.();
+      });
+      live.append(queue);
+    }
+    live.append(
+      el(
+        'span',
+        'ac-sub',
+        'In the live queue you pick the bot at champion select; it plays the seat and you ' +
+          'coach it from the bar.',
+      ),
+    );
+    panel.append(live);
+    return panel;
   }
 
   // --- the kit: what the bot works toward (ADR 0014) ---
@@ -1540,9 +1967,9 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         'p',
         'ac-lead',
         'Say how the bot should play ("safer under towers", "take every Warden", "farm ' +
-          'until level six, then fight"). Each answer edits the play list as it streams; ' +
-          'nothing is saved until you press Save. The conversation stays with the bot, ' +
-          'session after session.',
+          'until level six, then fight", "a tankier build, and max W first"). Each answer ' +
+          'edits the plays, the kit and the lane as it streams; nothing is saved until you ' +
+          'press Save. The conversation stays with the bot, session after session.',
       ),
     );
     const log = el('div', 'ac-chatlog');
@@ -1709,14 +2136,25 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     coach.append(opts);
     side.append(coach);
 
-    const sparBox = el('div', 'ac-panel');
+    side.scrollTop = keepScroll;
+    // Last, once every panel below has taken its share and the log has its
+    // final height: stuck earlier it would have been tall enough to hold
+    // everything and never scrolled.
+    stickLog(log);
+  }
+
+  // The sparring step (CONTEXT.md: Sparring, Record): a match against
+  // house bots here, the series, the newest entry's line, the Record.
+  function sparPanel(bot: BotView, def: PlaybookDef): HTMLElement {
+    const sparBox = el('div', 'ac-panel ac-spar');
     sparBox.append(el('h3', '', 'Sparring'));
     sparBox.append(
       el(
         'p',
         'ac-lead',
-        'A ranked match against the pool, now, played by the server in seconds; or a whole ' +
-          'match against house bots, played here, unrated. Every match lands on the Record.',
+        'A whole match against house bots, played here at full speed and unrated; or five ' +
+          "seeds at once against the bot's previous version. Every match lands on the Record, " +
+          'with its sheet and its replay.',
       ),
     );
     const sparBtn = el(
@@ -1728,7 +2166,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     sparBtn.addEventListener('click', () => {
       sparRunning = true;
       sparError = null;
-      renderSide();
+      renderMain();
       const seed = Math.floor(Math.random() * 1_000_000_000);
       runSparring(
         {
@@ -1747,7 +2185,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         })
         .finally(() => {
           sparRunning = false;
-          renderSide();
+          renderMain();
         });
     });
     sparBox.append(sparBtn);
@@ -1775,7 +2213,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       seriesRunning = true;
       seriesDone = 0;
       seriesError = null;
-      renderSide();
+      renderMain();
       const sparBot = {
         name: bot.name,
         championId: bot.championId,
@@ -1804,7 +2242,7 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         .then(({ playbook, versus }) =>
           runSeries(sparBot, playbook, seeds, (done) => {
             seriesDone = done;
-            renderSide();
+            renderMain();
           }).then((matches) => {
             // Five entries sharing one series id, posted in seed order.
             const seriesId = `s${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
@@ -1830,70 +2268,10 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
         })
         .finally(() => {
           seriesRunning = false;
-          renderSide();
+          renderMain();
         });
     });
     sparBox.append(seriesBtn);
-    // The Arena, now (docs/design/bots.md): one rated match on demand, played
-    // by the server in seconds against the deposited bots nearest in rating.
-    const arenaBtn = el(
-      'button',
-      'ac-btn primary',
-      arenaRunning
-        ? 'Playing in the Arena...'
-        : `Play now, ranked${arena && arena.left !== null ? ` (${arena.left} left today)` : ''}`,
-    ) as HTMLButtonElement;
-    arenaBtn.disabled = arenaRunning || coaching || dirty || (arena !== null && arena.left === 0);
-    arenaBtn.title = dirty
-      ? 'Save first: the Arena plays the saved playbook'
-      : arena
-        ? `${arena.pool} ranked bot(s) in the pool; next round in ${Math.ceil(arena.nextRoundInMs / 60000)} min`
-        : '';
-    arenaBtn.addEventListener('click', () => {
-      arenaRunning = true;
-      arenaResult = null;
-      renderSide();
-      void api<{
-        winner: 0 | 1 | null;
-        ticks: number;
-        rated: boolean;
-        replayId?: number;
-        seats: { accountId: number; botId: string; team: 0 | 1; delta: number; rating: number }[];
-      }>('/api/bots/playnow', { id: bot.id }).then((r) => {
-        arenaRunning = false;
-        if (!r.ok) {
-          say(r.error, true);
-          renderSide();
-          return;
-        }
-        const mine = r.seats.find((s) => s.botId === bot.id);
-        arenaResult = {
-          text:
-            (r.winner === 0 ? 'Won' : r.winner === 1 ? 'Lost' : 'No winner') +
-            ` after ${fmtSeconds(r.ticks)}` +
-            (r.rated && mine
-              ? `, ${mine.delta >= 0 ? '+' : ''}${mine.delta} Arena rating (now ${mine.rating})`
-              : ', unrated'),
-          replayId: r.replayId ?? null,
-        };
-        renderSide();
-        void loadRecord(bot.id);
-        void loadArena();
-      });
-    });
-    sparBox.append(arenaBtn);
-    if (arenaResult) {
-      sparBox.append(el('div', 'ac-status', arenaResult.text));
-      if (arenaResult.replayId !== null) {
-        const id = arenaResult.replayId;
-        const watch = el('button', 'ac-btn', 'Watch the Arena replay');
-        watch.addEventListener('click', () => {
-          close();
-          window.dispatchEvent(new CustomEvent('loc:replay', { detail: id }));
-        });
-        sparBox.append(watch);
-      }
-    }
     if (seriesError) sparBox.append(el('div', 'ac-status bad', seriesError));
     if (sparError) sparBox.append(el('div', 'ac-status bad', sparError));
     // The Record's head (CONTEXT.md): the newest entry, its line and its
@@ -1975,11 +2353,101 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
     recordBtn.disabled = !record || record.length === 0;
     recordBtn.addEventListener('click', () => openRecord(null));
     sparBox.append(recordBtn);
-    side.append(sparBox);
+    return sparBox;
+  }
 
-    // The Briefing (docs/design/bots.md): what the Arena did to this bot
-    // since yesterday, play by play, and the night coach's proposal with
-    // what sparring said about it.
+  // The Arena, now: one rated match on demand for a ranked bot.
+  function arenaPanel(bot: BotView): HTMLElement {
+    const box = el('div', 'ac-panel');
+    box.append(el('h3', '', 'The Arena'));
+    box.append(
+      el(
+        'p',
+        'ac-lead',
+        'Ranked bots against each other, played by the server in seconds: a round on the ' +
+          'hour, and one now from the daily allowance. Every match moves the Arena rating ' +
+          'and lands on the Record.',
+      ),
+    );
+    if (arena) {
+      box.append(
+        el(
+          'div',
+          'ac-sub',
+          `${arena.pool} ranked bot${arena.pool === 1 ? '' : 's'} in the pool; the next round ` +
+            `in ${Math.ceil(arena.nextRoundInMs / 60000)} min.`,
+        ),
+      );
+    }
+    const arenaBtn = el(
+      'button',
+      'ac-btn primary',
+      arenaRunning
+        ? 'Playing in the Arena...'
+        : `Play now, ranked${arena && arena.left !== null ? ` (${arena.left} left today)` : ''}`,
+    ) as HTMLButtonElement;
+    arenaBtn.disabled =
+      arenaRunning || coaching || dirty || !bot.deposited || (arena !== null && arena.left === 0);
+    arenaBtn.title = dirty
+      ? 'Save first: the Arena plays the saved playbook'
+      : arena
+        ? `${arena.pool} ranked bot(s) in the pool; next round in ${Math.ceil(arena.nextRoundInMs / 60000)} min`
+        : '';
+    arenaBtn.addEventListener('click', () => {
+      arenaRunning = true;
+      arenaResult = null;
+      renderMain();
+      void api<{
+        winner: 0 | 1 | null;
+        ticks: number;
+        rated: boolean;
+        replayId?: number;
+        seats: { accountId: number; botId: string; team: 0 | 1; delta: number; rating: number }[];
+      }>('/api/bots/playnow', { id: bot.id }).then((r) => {
+        arenaRunning = false;
+        if (!r.ok) {
+          say(r.error, true);
+          renderMain();
+          return;
+        }
+        const mine = r.seats.find((s) => s.botId === bot.id);
+        arenaResult = {
+          text:
+            (r.winner === 0 ? 'Won' : r.winner === 1 ? 'Lost' : 'No winner') +
+            ` after ${fmtSeconds(r.ticks)}` +
+            (r.rated && mine
+              ? `, ${mine.delta >= 0 ? '+' : ''}${mine.delta} Arena rating (now ${mine.rating})`
+              : ', unrated'),
+          replayId: r.replayId ?? null,
+        };
+        renderMain();
+        void loadRecord(bot.id);
+        void loadArena();
+      });
+    });
+    box.append(arenaBtn);
+    if (arenaResult) {
+      box.append(el('div', 'ac-status', arenaResult.text));
+      if (arenaResult.replayId !== null) {
+        const id = arenaResult.replayId;
+        const watch = el('button', 'ac-btn', 'Watch the Arena replay');
+        watch.addEventListener('click', () => {
+          close();
+          window.dispatchEvent(new CustomEvent('loc:replay', { detail: id }));
+        });
+        box.append(watch);
+      }
+    }
+    if (!bot.deposited) {
+      box.append(el('div', 'ac-sub', 'Rank the bot above to enter it.'));
+    }
+    return box;
+  }
+
+  // The Briefing (docs/design/bots.md): what the Arena did to this bot
+  // since yesterday, play by play, and the night coach's proposal with
+  // what sparring said about it.
+  function briefPanel(bot: BotView): HTMLElement {
     const brief = el('div', 'ac-panel');
     brief.append(el('h3', '', 'The Briefing'));
     if (!briefing) {
@@ -1991,16 +2459,16 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       load.disabled = briefingLoading;
       load.addEventListener('click', () => {
         briefingLoading = true;
-        renderSide();
+        renderMain();
         void api<BriefingView>('/api/bots/briefing', { id: bot.id }).then((r) => {
           briefingLoading = false;
           if (!r.ok) {
             say(r.error, true);
-            renderSide();
+            renderMain();
             return;
           }
           briefing = r;
-          renderSide();
+          renderMain();
         });
       });
       brief.append(
@@ -2098,22 +2566,17 @@ export function openAcademy(container: HTMLElement, opts: { botId?: string } = {
       const refresh = el('button', 'ac-btn mini', 'Refresh');
       refresh.addEventListener('click', () => {
         briefing = null;
-        renderSide();
+        renderMain();
       });
       brief.append(auto, refresh);
     }
-    side.append(brief);
-    side.scrollTop = keepScroll;
-    // Last, once every panel below has taken its share and the log has its
-    // final height: stuck earlier it would have been tall enough to hold
-    // everything and never scrolled.
-    stickLog(log);
+    return brief;
   }
 
   function renderRecord(): void {
     const open = recordOpen && current !== null;
     main.style.display = open ? 'none' : '';
-    side.style.display = open ? 'none' : '';
+    side.style.display = open || !sideWanted() ? 'none' : '';
     recordBox.style.display = open ? 'flex' : 'none';
     if (!open || !current) return;
     const bot = current;

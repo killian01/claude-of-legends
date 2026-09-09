@@ -10,7 +10,9 @@ import puppeteer from 'puppeteer-core';
 import { clickBar, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
 const CHROME = process.env.CHROME ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const URL = 'http://localhost:5173';
+// Overridable like scripts/e2e_nav.mjs: a second checkout, or a stray dev
+// server, will be holding the default port.
+const URL = process.env.URL ?? 'http://localhost:5173';
 const SHOT_DIR = process.env.SHOT_DIR ?? '';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -50,7 +52,18 @@ const run = async () => {
   const browser = await puppeteer.launch({
     executablePath: CHROME,
     headless: 'new',
-    args: ['--use-gl=swiftshader', '--window-size=1500,760', '--mute-audio'],
+    // Software WebGL the way recent Chrome wants it asked for: plain
+    // --use-gl=swiftshader is refused by newer builds and every Three.js
+    // surface then throws "Error creating WebGL context", which reads like
+    // a client bug (docs/dev-local.md says so; the script had not followed).
+    args: [
+      '--use-gl=angle',
+      '--use-angle=swiftshader',
+      '--enable-unsafe-swiftshader',
+      '--ignore-gpu-blocklist',
+      '--window-size=1500,760',
+      '--mute-audio',
+    ],
     defaultViewport: { width: 1500, height: 760 },
   });
   const ctx = await browser.createBrowserContext();
@@ -83,8 +96,15 @@ const run = async () => {
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await clickButton(page, 'Create');
+  // Created, the Academy lands on the kit step (ui/academy_steps.ts): the
+  // step bar lights "The kit" and the catalog is up. The sparring step is
+  // two steps on and reached by its entry in the bar.
   try {
-    await waitFor(page, findBtn('Spar vs house bots'), 'the bot is open');
+    await waitFor(
+      page,
+      `document.querySelector('.ac-step.on')?.dataset.step === 'kit'`,
+      'the bot is open on its kit',
+    );
   } catch (e) {
     const dump = await page.evaluate(() => ({
       status: [...document.querySelectorAll('.ac-status')].map((s) => s.textContent),
@@ -119,6 +139,14 @@ const run = async () => {
   console.log('kit:', kit);
   await shot(page, 'academy-kit');
 
+  // On to the sparring step by the bar; the coach stands beside it.
+  await page.evaluate(() => document.querySelector('.ac-step[data-step="spar"]')?.click());
+  await waitFor(page, findBtn('Spar vs house bots'), 'the sparring step');
+  const coachBeside = await page.evaluate(
+    () => document.querySelector('.ac-chatrow .ac-input') !== null,
+  );
+  if (!coachBeside) throw new Error('the coach is not beside the sparring step');
+
   // Sparring: the summary leads with the line.
   await clickButton(page, 'Spar vs house bots');
   await waitFor(
@@ -137,8 +165,9 @@ const run = async () => {
       [...document.querySelectorAll('.ac-line .dim')]
         .map((e) => e.textContent)
         .find((t) => /cs$/.test(t ?? '')) ?? '',
-    icons: document.querySelectorAll('.ac-side .hud-score-build img').length,
-    slots: document.querySelectorAll('.ac-side .hud-score-build .slot').length,
+    // The sparring panel stands in the main column now, on its own step.
+    icons: document.querySelectorAll('.ac-spar .hud-score-build img').length,
+    slots: document.querySelectorAll('.ac-spar .hud-score-build .slot').length,
     dismiss: [...document.querySelectorAll('.ac button')].some((b) => b.textContent === 'Dismiss'),
     rail: document.querySelector('.ac-bot.picked small')?.textContent ?? '',
   }));
@@ -150,8 +179,11 @@ const run = async () => {
   if (line.icons + line.slots !== 6)
     throw new Error(`build row: ${line.icons} icons, ${line.slots} slots`);
   if (line.dismiss) throw new Error('a Dismiss button survived');
-  // The rail's chip is the rated part only, and sparring is unrated: a
-  // bot fresh from its first spar wears no tally there.
+  // The rail's chip counts rated play alone (server/bots.ts, listBots): a
+  // sparring is unrated, so a bot fresh from its first spar wears a chip
+  // that names its champion and version and carries no tally at all. Both
+  // halves are checked: the shape it should have, and the one it must not.
+  if (!/^\S+ · v\d+/.test(line.rail)) throw new Error(`the rail chip drifted: ${line.rail}`);
   if (/ \d+-\d+/.test(line.rail)) throw new Error(`the rail counts unrated sparring: ${line.rail}`);
   console.log(
     'summary:',
@@ -185,8 +217,9 @@ const run = async () => {
   }));
   console.log('record:', rec);
   if (rec.rows < 1) throw new Error('the Record lists nothing');
-  // The Record reads per kind, rated first: after one unrated spar the
-  // rated tally is empty and says so.
+  // The head counts rated play per kind (ui/record_view.ts), rated first:
+  // after a fresh bot's one unrated spar the rated tally is empty and says
+  // so rather than showing a zero.
   if (!/^(no rated match yet|\d+ won, \d+ lost, rated)$/.test(rec.tally))
     throw new Error(`tally: ${rec.tally}`);
   if (!/^(Won|Lost|No winner) after /.test(rec.sheetRes)) throw new Error(`sheet: ${rec.sheetRes}`);
@@ -256,10 +289,21 @@ const run = async () => {
   // Pause, then five seconds back: instant, from a checkpoint.
   await page.keyboard.press('k');
   await sleep(300);
-  const before = secondsOf(await clockOf());
+  const beforeText = await clockOf();
+  const before = secondsOf(beforeText);
   const t0 = Date.now();
   await page.keyboard.press('ArrowLeft');
-  await waitFor(page, `!document.querySelector('.replay-time.seeking')`, 'the seek', 5000);
+  // Wait for the CLOCK to move, not for the seeking class to go: that class
+  // is added and removed by the seek itself, so polling for its absence
+  // answers true before the seek has begun and then reads the old time. It
+  // reported "127 -> 127 in 7 ms" here, a seek that had not happened yet,
+  // which docs/dev-local.md had written down as a software-GL quirk.
+  await waitFor(
+    page,
+    `document.querySelector('.replay-time')?.textContent !== ${JSON.stringify(beforeText)}`,
+    'the seek to move the clock',
+    5000,
+  );
   const after = secondsOf(await clockOf());
   const seekMs = Date.now() - t0;
   console.log('seek back 5s:', before, '->', after, `in ${seekMs} ms`);
@@ -267,13 +311,20 @@ const run = async () => {
   if (seekMs > 1500) throw new Error(`the seek took ${seekMs} ms`);
 
   // A far jump on the slider lands where asked, quickly.
+  const farFrom = await clockOf();
   const t1 = Date.now();
   await page.evaluate(() => {
     const s = document.querySelector('.replay-slider');
     s.value = String(Math.floor(Number(s.max) * 0.75));
     s.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  await waitFor(page, `!document.querySelector('.replay-time.seeking')`, 'the far seek', 5000);
+  // The clock again, for the reason the seek above gives.
+  await waitFor(
+    page,
+    `document.querySelector('.replay-time')?.textContent !== ${JSON.stringify(farFrom)}`,
+    'the far seek to move the clock',
+    5000,
+  );
   const far = secondsOf(await clockOf());
   console.log('far seek:', far, `in ${Date.now() - t1} ms`);
   if (far < before) throw new Error(`the far seek landed at ${far}`);
@@ -295,6 +346,7 @@ const run = async () => {
   await page.mouse.move(750, 380);
   await shot(page, 'academy-replay');
   await clickButton(page, 'Exit replay');
+  // Back in the Academy on the same bot, on the sparring step it left from.
   await waitFor(page, findBtn('Spar vs house bots'), 'back in the Academy', 30000);
 
   // The coach: the log follows the answer to its end.

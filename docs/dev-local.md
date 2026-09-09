@@ -56,6 +56,36 @@ curl -s -c $J -H 'content-type: application/json' \
 curl -s -b $J $B/api/bots
 ```
 
+## A server with people on it
+
+A fresh state directory holds your one account and nothing else, so the home's panels,
+the ladder page, the Arena pool and the gallery all show their empty states, which is the
+wrong thing to look at while working on any of them. `scripts/seed_home.mjs` fills a
+state directory with what a small server looks like after a few weeks: eight accounts
+placed by hand with a match log behind them, six ranked bots with Arena play in their
+Records, seven sealed forged champions with likes. Nothing goes through generation: the
+champions are the roster's twins under new names with placeholder splashes, and every
+row is written straight into the stores through their own classes. Run it with the server
+down (the registry loads `accounts.json` at boot), against the directory the stack will
+use; it defaults to the stack's `.dev/data` and never touches `data/` unless told to:
+
+```bash
+node scripts/seed_home.mjs                # into .dev/data
+.claude/skills/dev-server/stack.sh up
+```
+
+Sign in with any seeded name and the password `seed-home-shots`:
+
+| Account | What it shows |
+|---|---|
+| `Marrow` | Rank 1 by hand, the top Arena bot, one forged champion |
+| `Halloway` | Still placing (2 of 3 rated matches), no bot, one forged champion |
+| `Quillon`, `Ashvale`, `Tessaly`, `Bramble`, `Orrin`, `Vexley` | Placed lower, a bot or a champion each |
+
+An account you register yourself shows the fresh career beside a full ladder. The seed
+refuses to run twice into the same directory; delete it to start over. Once the server is
+up the Arena runner plays the seeded bots on its own, so their numbers move.
+
 ## What each surface needs
 
 | Surface | Without any `.env` | To turn on |
@@ -91,6 +121,30 @@ From cheapest to most complete:
 puppeteer-core against the stack on the default ports. They are not part of `pnpm test`.
 `CHROME` names the binary (the default is the Windows install path); `SHOT_DIR` collects
 screenshots where a script supports it.
+
+Three things a Linux machine with a recent Chrome will meet:
+
+- **No WebGL under `--use-gl=swiftshader`.** Newer builds refuse that flag and every
+  Three.js surface then throws `Error creating WebGL context` (the champion portraits, the
+  replay player, the workshop), which reads like a client bug. Launch with
+  `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist`
+  instead and software WebGL comes back. `e2e_academy.mjs` and `e2e_nav.mjs` do; the older
+  one-off scripts still pass the flag that fails.
+- **Chrome as root wants `--no-sandbox`.** The one-off scripts pass it, the `e2e_*` ones do
+  not (they were written against a desktop Chrome). Point `CHROME` at a two-line wrapper
+  that adds it rather than editing each script.
+- **A port already answering.** `e2e_academy.mjs` and `e2e_nav.mjs` read `URL` from the
+  environment for exactly this; `stack.sh up` takes `PORT` and `CLIENT_PORT`.
+
+What is NOT a quirk of this machine: a seek check that reports a clock which did not move.
+Those checks used to wait on the absence of the `.replay-time.seeking` class, which the seek
+itself adds and removes, so they answered before the seek began and read the old time. They
+wait for the clock to change now. A failure there is the player, not the harness.
+
+Stills for a PR are taken on a seeded state directory (above), at 1500 pixels wide and
+again at 2200 for anything that centers, then converted to WebP under `docs/screenshots`.
+The `.pg` page scrolls inside its own element, so a full-page screenshot captures the
+viewport alone: use a tall viewport rather than `fullPage`.
 
 ## Reading a red test run
 

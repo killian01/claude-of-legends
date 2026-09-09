@@ -176,7 +176,13 @@ async function api(path: string, body?: unknown): Promise<Record<string, unknown
   }
 }
 
-export function openGallery(container: HTMLElement): () => void {
+export interface GalleryOptions {
+  // The champion to open on, when the reader came here for one (a card
+  // on the home); the newest otherwise.
+  pick?: string;
+}
+
+export function openGallery(container: HTMLElement, opts: GalleryOptions = {}): () => void {
   ensureCss();
   const root = el('div', 'gal');
   const stopBackdrop = startMenuBackdrop(root);
@@ -193,7 +199,7 @@ export function openGallery(container: HTMLElement): () => void {
 
   let sort: 'recent' | 'popular' = 'recent';
   let entries: GalleryEntry[] = [];
-  let pickedId: string | null = null;
+  let pickedId: string | null = opts.pick ?? null;
 
   const head = el('div', 'gal-head');
   const search = el('input', 'gal-search') as HTMLInputElement;

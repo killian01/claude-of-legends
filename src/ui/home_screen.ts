@@ -20,8 +20,9 @@ import { openForgeEditor } from './forge_editor';
 import { openGallery } from './gallery';
 import { startBackdrop } from './home_backdrop';
 import { type HomeSection, mountHomeBar } from './home_bar';
+import { buildHomePanels } from './home_panels';
 import { PLAY_TILES, type PlayTile } from './home_tiles';
-import { openLadderPage } from './ladder_page';
+import { openLadderPage, type Way } from './ladder_page';
 import { el, ensureMenuCss } from './menu';
 import { buildPage, ensurePageCss, fetchStats, renderStats } from './page';
 import { buildJoinLine, buildPlayTiles } from './play_tiles';
@@ -29,20 +30,22 @@ import { openRosterBrowser } from './roster_browser';
 import { createSectionHost } from './section_host';
 import type { Drawer } from './side_drawer';
 
-// Only what this page adds to the shared chrome: the tiles centered in
-// whatever height the bar and the foot leave, so the page fills a screen
-// from 1280x720 up without scrolling, and scrolls on anything smaller.
+// Only what this page adds to the shared chrome: one column under the
+// bar, the tiles' width and centered on anything wider, so a wide window
+// does not leave everything hugging its left edge. The tiles stand first,
+// the panels under them, the foot at the bottom of whatever is left; the
+// page scrolls once the panels need it to.
 const CSS = `
 .pg.home .pg-inner { padding-bottom: 16px; }
-.pg.home .home-main { flex: 1; display: flex; flex-direction: column; justify-content: center;
-  padding: 18px 0 14px; }
+.home-col { flex: 1; display: flex; flex-direction: column; width: 100%; max-width: 1180px;
+  margin: 0 auto; }
+.pg.home .home-main { display: flex; flex-direction: column; padding: 18px 0 0; }
 .home-kicker { font-family: Cinzel, Georgia, serif; font-size: 13px; font-weight: 800;
   letter-spacing: 3.5px; text-transform: uppercase; color: #9fb4d2; margin: 0 0 12px; }
-.home-foot { display: flex; align-items: baseline; gap: 26px; flex-wrap: wrap; }
+.home-foot { display: flex; align-items: baseline; gap: 26px; flex-wrap: wrap;
+  margin-top: auto; padding-top: 26px; }
 .home-foot .pg-stats { margin: 0; }
 .home-foot .pg-stat b { font-size: 15px; }
-/* The notice lines up with the tiles rather than running the whole width. */
-.pg.home .mail-note { max-width: 1180px; }
 `;
 
 let cssInstalled = false;
@@ -117,7 +120,12 @@ export function showHome(
 
     // The sections open under the bar, which stays live above them, so one
     // click goes from any section to the next (ui/section_host.ts).
-    const sections = createSectionHost(root, bar.root, (key) => homeBar.setActive(key));
+    const sections = createSectionHost(root, bar.root, (key) => {
+      homeBar.setActive(key);
+      // Back on the tiles: the section may have moved a number the
+      // panels show (a champion sealed, an Arena match played).
+      if (key === null) panels.refresh();
+    });
 
     // --- teardown, shared by every way off this page ---
     const leave = (): void => {
@@ -184,21 +192,37 @@ export function showHome(
     window.addEventListener('loc:forge-test', onForgeTest);
 
     // --- the bar: the sections, Live, and the account's own drawer ---
-    const showAcademy = (botId?: string): void =>
-      sections.open('academy', (host) => openAcademy(host, botId ? { botId } : {}));
-    const showLadder = (): void =>
-      sections.open('ladder', (host) =>
-        openLadderPage(host, {
-          onPlay: (mode) => done(mode),
-          onWatch: (id, follow) =>
-            window.dispatchEvent(
-              new CustomEvent('loc:replay', {
-                detail: { id, ...(follow !== undefined ? { follow } : {}) },
-              }),
-            ),
-          openAcademy: () => showAcademy(),
+    // The Academy, on a bot and a step when the caller has one (the way
+    // back from a replay lands on Sparring); its Play step queues.
+    const showAcademy = (botId?: string, step?: 'spar'): void =>
+      sections.open('academy', (host) =>
+        openAcademy(host, {
+          ...(botId ? { botId } : {}),
+          ...(step ? { step } : {}),
+          onPlay: () => done('queue'),
         }),
       );
+    const onWatch = (id: number, follow?: number): void => {
+      window.dispatchEvent(
+        new CustomEvent('loc:replay', {
+          detail: { id, ...(follow !== undefined ? { follow } : {}) },
+        }),
+      );
+    };
+    const showLadder = (way: Way = 'hand'): void =>
+      sections.open('ladder', (host) =>
+        openLadderPage(
+          host,
+          {
+            onPlay: (mode) => done(mode),
+            onWatch,
+            openAcademy: () => showAcademy(),
+          },
+          way,
+        ),
+      );
+    const showGallery = (pick?: string): void =>
+      sections.open('gallery', (host) => openGallery(host, pick ? { pick } : {}));
     // The two sections that spend leave the bar's balances behind them, so
     // the bar asks the account sheet again on the way out rather than
     // being told from inside: a section that has just spent knows its own
@@ -210,44 +234,47 @@ export function showHome(
         homeBar.refreshBalances();
       };
     };
+    const showForge = (): void => sections.open('forge', spending(openForgeEditor));
     const barSections: HomeSection[] = [
-      { key: 'ladder', label: 'Ladder', open: showLadder },
+      { key: 'ladder', label: 'Ladder', open: () => showLadder() },
       { key: 'academy', label: 'Academy', open: () => showAcademy() },
-      {
-        key: 'forge',
-        label: 'Forge',
-        open: () => sections.open('forge', spending(openForgeEditor)),
-      },
-      { key: 'gallery', label: 'Gallery', open: () => sections.open('gallery', openGallery) },
+      { key: 'forge', label: 'Forge', open: showForge },
+      { key: 'gallery', label: 'Gallery', open: () => showGallery() },
       {
         key: 'champions',
         label: 'Champions',
         open: () => sections.open('champions', spending(openRosterBrowser)),
       },
     ];
+    const showAccount = (): void =>
+      openDrawer(() =>
+        openAccountDrawer(container, {
+          name: accountName,
+          openLadder: () => {
+            sections.close();
+            showLadder();
+          },
+        }),
+      );
     const homeBar = mountHomeBar(bar, {
       name: accountName,
       sections: barSections,
       onLive: () => openDrawer(() => openLiveDrawer(container)),
-      onAccount: () =>
-        openDrawer(() =>
-          openAccountDrawer(container, {
-            name: accountName,
-            openLadder: () => {
-              sections.close();
-              showLadder();
-            },
-          }),
-        ),
+      onAccount: showAccount,
       onHome: () => sections.close(),
     });
+
+    // Everything under the bar stands in one column (the CSS above), so
+    // hiding the column is hiding the page while a section is open.
+    const col = el('div', 'home-col');
+    inner.appendChild(col);
 
     // Between the bar and the tiles: read on the way past, never in the
     // way of the tile somebody came here to press.
     const notice = buildEmailNotice(account, justConfirmed);
-    if (notice) inner.appendChild(notice);
+    if (notice) col.appendChild(notice);
     const welcome = buildDiscordWelcome(discordResult);
-    if (welcome) inner.appendChild(welcome);
+    if (welcome) col.appendChild(welcome);
 
     // --- play ---
     const onTile = (tile: PlayTile): void => {
@@ -260,20 +287,34 @@ export function showHome(
       buildPlayTiles(PLAY_TILES, onTile),
       buildJoinLine(prefillCode, (code) => done('join', code)),
     );
-    inner.appendChild(main);
+    col.appendChild(main);
+
+    // --- the panels: the reader, the ladder, the bots, the Forge ---
+    const panels = buildHomePanels({
+      name: accountName,
+      openLadder: showLadder,
+      openAcademy: () => showAcademy(),
+      openForge: showForge,
+      openGallery: showGallery,
+      openCareer: showAccount,
+      onWatch,
+    });
+    col.appendChild(panels.root);
 
     // --- the foot: the counts, and Live in the bar told the same number ---
     const foot = el('footer', 'home-foot');
     const stats = el('div', 'pg-stats');
     foot.appendChild(stats);
-    inner.appendChild(foot);
+    col.appendChild(foot);
     void fetchStats().then((s) => {
       if (!s || !stats.isConnected) return;
       renderStats(stats, s);
       homeBar.setLiveCount(s.matches);
     });
 
-    if (reopen) showAcademy(reopen.botId);
+    // The way back from a replay reopens the Academy on Sparring; failing
+    // that, an address in the URL (#ladder) opens its section on load.
+    if (reopen) showAcademy(reopen.botId, 'spar');
     else if (startSection) barSections.find((s) => s.key === startSection)?.open();
   });
 }

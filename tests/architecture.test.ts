@@ -294,6 +294,7 @@ describe('api methods', () => {
     '/api/ladder',
     '/api/ladder/page',
     '/api/ladder/mine',
+    '/api/home',
     '/api/live',
     // Followed from a mailbox: the token in the link is the credential.
     '/api/email/confirm',

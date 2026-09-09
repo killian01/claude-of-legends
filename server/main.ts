@@ -102,6 +102,7 @@ import { placeholderFor } from './generation/placeholder';
 import { type GenerationProvider, WEAPON_FAMILIES } from './generation/provider';
 import { SplitProvider } from './generation/split';
 import { TripoProvider } from './generation/tripo';
+import { buildHomePage } from './home_page';
 import { buildBotLadder, buildLadder } from './ladder';
 import { type BotSummary, buildLadderPage, type LadderSeed, placeOf } from './ladder_page';
 import {
@@ -2161,6 +2162,26 @@ const server = http.createServer(async (req, res) => {
         const out: Record<string, unknown> = {};
         for (const way of WAYS) out[way] = placeOf(ladderSeeds(way), me.id);
         sendJson(res, 200, out);
+        return;
+      }
+      // The home's panels (server/home_page.ts): the top of the ladder,
+      // the top bots, the latest forged champions, the reader's own numbers.
+      if (url === '/api/home') {
+        sendJson(
+          res,
+          200,
+          buildHomePage(
+            {
+              seeds: ladderSeeds,
+              stats: wayStatsFor,
+              forged: forgeStore.listFinalized(),
+              career: buildProfile(matchLog, me.id),
+              myBots: botStore.listByAccount(me.id),
+            },
+            me.id,
+            { splash: (row) => splashOf(forgeStore, row) },
+          ),
+        );
         return;
       }
       if (url === '/api/ladder') {

@@ -190,6 +190,20 @@ The place where an account writes and tests a bot. Conversation first, the play 
 always visible and editable beside it (reorder, edit parameters, enable and disable):
 the conversation is the door for people who would rather describe a style; the list is
 the truth everyone ends up touching. Every bot starts as the Laner on its champion.
+
+Making a bot is a way through five steps, each a page of the same bot, in the order the
+questions come: the bot itself (a name, a champion from the collection as cards, two sigils
+that say what they do, a skin), its kit, its playbook, sparring with its Record, then play
+(the Ranked switch, the Arena's play now, the live queue, the Briefing). The coach stands
+beside the kit, the playbook and the sparring: its operations reach the kit and the lane as
+well as the plays, and the sparring is what an answer is judged on. A bar across the top names the five with one line each of what the bot has
+there, so the whole bot reads at a glance; Back and Next at the foot walk them in order,
+and the bar jumps anywhere. A bot not made yet has one step open, the first, drawn in
+the main column with the room the rail never had; Create lands on the kit. The steps
+are a way through, not a wall: nothing is gated on finishing a step, and Save stands in
+view on every one. The first playtest of the Academy put all of this on one page with
+the form squeezed into the rail, and a newcomer met the whole bot at once
+(`ui/academy_steps.ts`).
 The conversation is kept with the bot on the server, session after session, so the
 coach remembers what was done: the model reads the newest turns (the thread cap), the
 store keeps a hundred exchanges, and Start over forgets the thread, never the plays.
