@@ -14,23 +14,21 @@ import { STAR_ORCHARD_TOWERS } from '../sim/content/star_orchard';
 import type { TerrainNavGrid } from '../sim/terrain_nav';
 import type { TeamId } from '../sim/types';
 import type { Unit } from '../sim/unit';
-import { buildSanctumCrystal } from './structure_shapes';
-import { TEAM_COLORS, TEAM_RING } from './team_colors';
 import type { RenderTerrain } from './terrain';
 
 // The export marks the attackable towers with this role in the node extras.
 const TOWER_ROLE = 'defensive_tower';
 
-// The export's astral Sanctum is a dais with a cup at its heart, a spike
-// rising from the cup to 3.3 m, and four spikes leaning in over it, their
-// tips 1.1 m off the axis at 5.3 m. The renderer's own Sanctum, a plinth
-// under a 2.1 m crystal, used to be drawn through it, and the crystal
-// overflowed the cup on every side. Here the dais is the plinth, and the
-// team's crystal rests on the central spike's tip inside the crown, at the
-// size the crown leaves it.
-const SANCTUM_CRYSTAL_RADIUS = 0.8;
-const SANCTUM_CRYSTAL_Y = 4.45;
+const TEAM_RING_COLORS = [0x59bdff, 0xff7970];
+
+// The export's astral Sanctum is modeled whole: a dais with a cup at its
+// heart, a spike rising from the cup and four spikes leaning in over it,
+// their tips 5.3 m above the ground. The renderer's own Sanctum, a plinth
+// under a crystal, used to be drawn through it as a second object inside
+// the first; a Sanctum unit now wears only the team ring around the dais,
+// and its bar above the crown.
 const SANCTUM_RING = { inner: 3.4, outer: 3.6 };
+const SANCTUM_BAR_Y = 6;
 const TOWER_RING = { inner: 2.15, outer: 2.35 };
 
 // The bright ring under a team's structure, on the authored ground.
@@ -38,7 +36,7 @@ function teamRing(team: TeamId, size: { inner: number; outer: number }): THREE.M
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(size.inner, size.outer, 48),
     new THREE.MeshBasicMaterial({
-      color: TEAM_RING[team] ?? 0xffffff,
+      color: TEAM_RING_COLORS[team] ?? 0xffffff,
       transparent: true,
       opacity: 0.8,
       side: THREE.DoubleSide,
@@ -52,14 +50,8 @@ function teamRing(team: TeamId, size: { inner: number; outer: number }): THREE.M
 function sanctumFigure(team: TeamId): { holder: THREE.Group; barY: number } {
   const holder = new THREE.Group();
   holder.userData.authoredTerrain = true;
-  const crystal = buildSanctumCrystal(
-    TEAM_COLORS[team] ?? 0xffffff,
-    SANCTUM_CRYSTAL_RADIUS,
-    SANCTUM_CRYSTAL_Y,
-  );
-  crystal.castShadow = true;
-  holder.add(crystal, teamRing(team, SANCTUM_RING));
-  return { holder, barY: SANCTUM_CRYSTAL_Y + SANCTUM_CRYSTAL_RADIUS * 1.4 + 0.65 };
+  holder.add(teamRing(team, SANCTUM_RING));
+  return { holder, barY: SANCTUM_BAR_Y };
 }
 
 type Attribute = THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
@@ -220,8 +212,8 @@ export async function loadTerrain(
       for (const bitmap of bitmaps) bitmap.close();
     },
     // A tower unit wears the painted tower standing at its spot, a Sanctum
-    // the crystal its authored dais was built around; any other unit keeps
-    // the renderer's own figure.
+    // is its authored dais already standing there; any other unit keeps the
+    // renderer's own figure.
     structure: (unit: Readonly<Unit>) => {
       if (unit.kind === 'sanctum') return sanctumFigure(unit.team);
       if (unit.kind !== 'tower') return null;

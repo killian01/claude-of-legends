@@ -36,13 +36,15 @@ export function buildTowerMesh(teamColor: number): THREE.Group {
   return holder;
 }
 
-// The team's crystal: an emissive octahedron, taller than wide, that turns
-// in the render loop (userData.spin). The launch map's Sanctum wears it on
-// a plinth; the Star Orchard's authored Sanctum holds a smaller one inside
-// its crown (terrain_loader.ts).
-export function buildSanctumCrystal(teamColor: number, radius: number, y: number): THREE.Mesh {
+export function buildSanctumMesh(teamColor: number): THREE.Group {
+  const holder = new THREE.Group();
+  const plinth = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.7, 3.3, 1.1, 10),
+    new THREE.MeshLambertMaterial({ color: STONE_DARK, flatShading: true }),
+  );
+  plinth.position.y = 0.55;
   const crystal = new THREE.Mesh(
-    new THREE.OctahedronGeometry(radius),
+    new THREE.OctahedronGeometry(2.1),
     new THREE.MeshLambertMaterial({
       color: teamColor,
       emissive: teamColor,
@@ -51,19 +53,8 @@ export function buildSanctumCrystal(teamColor: number, radius: number, y: number
     }),
   );
   crystal.scale.y = 1.4;
-  crystal.position.y = y;
+  crystal.position.y = 4.2;
   crystal.userData.spin = true;
-  return crystal;
-}
-
-export function buildSanctumMesh(teamColor: number): THREE.Group {
-  const holder = new THREE.Group();
-  const plinth = new THREE.Mesh(
-    new THREE.CylinderGeometry(2.7, 3.3, 1.1, 10),
-    new THREE.MeshLambertMaterial({ color: STONE_DARK, flatShading: true }),
-  );
-  plinth.position.y = 0.55;
-  const crystal = buildSanctumCrystal(teamColor, 2.1, 4.2);
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(3.6, 4.4, 32),
     new THREE.MeshBasicMaterial({
