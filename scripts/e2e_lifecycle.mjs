@@ -7,7 +7,7 @@ import puppeteer from 'puppeteer-core';
 import { clickTile, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
 const CHROME = process.env.CHROME ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const URL = 'http://localhost:5173';
+const URL = process.env.URL ?? 'http://localhost:5173';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function clickButton(page, text) {
@@ -52,7 +52,14 @@ const run = async () => {
   const browser = await puppeteer.launch({
     executablePath: CHROME,
     headless: 'new',
-    args: ['--use-gl=swiftshader', '--window-size=1500,900', '--mute-audio'],
+    args: [
+      '--use-gl=angle',
+      '--use-angle=swiftshader',
+      '--enable-unsafe-swiftshader',
+      '--ignore-gpu-blocklist',
+      '--window-size=1500,900',
+      '--mute-audio',
+    ],
     defaultViewport: { width: 1500, height: 900 },
   });
   const page = await browser.newPage();
