@@ -16,8 +16,8 @@ lobbies, bots, replays and the environment stay on the launch map.
 |---|---|
 | `manifest.json` | The export's landmarks (spawns, camps, center), the navigation grid parameters and the visual report. |
 | `gameplay.json` | The lanes, bases and 22 towers traced on the same Blender source (three a lane per team, two guardians a base). |
-| `navigation.bin` | The walkability grid: 400 x 400 cells of 40 cm, a ground height per cell in millimeters, blocked cells for cliffs, water and forest off the paths. |
-| `map.glb` | The model, rewritten for the browser by `scripts/import_map.mjs` (about 40 MB). |
+| `navigation.bin` | The walkability grid: 480 x 480 cells of 40 cm, a ground height per cell in millimeters, blocked cells for cliffs, water and forest off the paths. |
+| `map.glb` | The model, rewritten for the browser by `scripts/import_map.mjs` (about 44 MB). |
 
 The raw Blender exports, one folder per revision plus the HD variants,
 live in `art_src/map_exports/`, gitignored: 180 to 600 MB each, nothing a
@@ -58,7 +58,7 @@ with its `gameplay.json`:
 
 ```
 node scripts/import_map.mjs            # the highest light revision
-node scripts/import_map.mjs 114        # or one by number
+node scripts/import_map.mjs 115        # or one by number
 pnpm exec vitest run tests/star_orchard.test.ts tests/terrain_nav.test.ts
 ```
 

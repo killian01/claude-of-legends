@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "revision": 113,
+  "revision": 115,
   "model": "map.glb",
   "navigation": "navigation.bin",
-  "cells": 400,
+  "cells": 480,
   "cellSize": 0.4,
   "origin": {
-    "x": -4,
-    "z": -156
+    "x": -20,
+    "z": -172
   },
   "heightScale": 0.001,
   "blockedValue": -32768,
@@ -146,6 +146,20 @@
       "height": 0.08
     },
     {
+      "id": "objective-northwest",
+      "kind": "objective",
+      "x": 0.2,
+      "z": -146.6,
+      "height": 3.314
+    },
+    {
+      "id": "objective-southeast",
+      "kind": "objective",
+      "x": 149.4,
+      "z": -7,
+      "height": 3.314
+    },
+    {
       "id": "center",
       "kind": "center",
       "x": 75.4,
@@ -154,21 +168,26 @@
     }
   ],
   "navigationReport": {
-    "walkable_cells": 59434,
-    "connected_cells": 59220,
+    "walkable_cells": 73291,
+    "connected_cells": 73086,
     "disconnected_landmarks": []
   },
-  "sourceSha256": "b3e1e960c8801e3b581b75d153330ce6e379813d147217b546acd3d56ccb1633",
+  "sourceSha256": "7a1650f352fc43c04b95c1fd551efbb32d4ab4d390405bbef277686c4417768a",
   "coordinates": "glTF Y-up; Blender (x,y,z) maps to (x,z,-y)",
   "visualReport": {
-    "objects": 259,
-    "texturedFloors": 53,
-    "texturedObjects": 259,
+    "objects": 264,
+    "texturedFloors": 59,
+    "texturedObjects": 264,
     "vertexOnlyObjects": 0,
-    "glbBytes": 40796388,
+    "glbBytes": 43495548,
     "quality": "light",
     "materialBakeVersion": 5,
     "sourceUvBindings": [
+      {
+        "object": "ANCRAGE | petits socles de schiste sous les plantes de rive",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "1419e492b0135e53d015e76cad160052f929a9047b64839261739bb62fcad268"
+      },
       {
         "object": "09 | SOL | plateaux traces et faille verticale",
         "sourceUv": "Painted atlas - tiled quadrants",
@@ -415,11 +434,6 @@
         "coordinateSha256": "a2795e30e436fc61d6a6b68ff9f90d0433063868912b952b60660c7b330a3028"
       },
       {
-        "object": "ORBE | constellation gravee 1",
-        "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "827435a57a08b6d47a5f7ef8a78e716ba97403eac46639166aa7ff37d0a09e0a"
-      },
-      {
         "object": "ORBE | constellation gravee 2",
         "sourceUv": "Painted atlas - tiled quadrants",
         "coordinateSha256": "827435a57a08b6d47a5f7ef8a78e716ba97403eac46639166aa7ff37d0a09e0a"
@@ -482,7 +496,7 @@
       {
         "object": "LOD | 09 | JUNGLE | cypres dans les ilots entre chemins",
         "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "cfe8ddffc5906fb27140eb8cfc4c7031e428ace06432a8b581d905e520fda912"
+        "coordinateSha256": "43215054d11264e1d9544456109c22be9b256b17144dfbc75a461b14151bd198"
       },
       {
         "object": "VERGER | fruits etoiles suspendus",
@@ -492,7 +506,7 @@
       {
         "object": "FALAISES | strates de schiste suspendues",
         "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "dc84626239968535831aafdee00c472e756a4ea2bdb7654a531bd36e2c07a179"
+        "coordinateSha256": "eeee7a3ac41889da8eac4d349234eca01949b9d25db09864b92a411ae888fd52"
       },
       {
         "object": "FALAISES | contreforts et blasons suspendus",
@@ -552,12 +566,12 @@
       {
         "object": "LOD | 09 | JUNGLE | massifs bleus et pierres de lisiere",
         "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "2934833afe911f0412a92969c63e5ff06e7fe536006fdccaa82b426145c1ebf2"
+        "coordinateSha256": "4e7c2917e466dfb7a885776cb737fd7d10045d6e6336df5b0863177483dfa8c2"
       },
       {
         "object": "LOD | 09 | REMPARTS | enceinte bleu ardoise et or ancien",
         "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "0b4066478f3cefdb4ae02bd18fe4181a5aa0c5810fe87102ab7c180b81606d79"
+        "coordinateSha256": "d39ea070ca214ecf2cd9368799144453c75c1bd5fc89c2976129d8cc5d5c44dc"
       },
       {
         "object": "LOD | 09 | JUNGLE | ruines lineaires placees comme la reference",
@@ -567,7 +581,7 @@
       {
         "object": "LOD | 09 | VOIES | balustrades ajourees et cippes",
         "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "e4417e8813dbfee4b307c55d8107df8c63c86357db0d57d623d0ec31dc8837d4"
+        "coordinateSha256": "e437994f384d5a47d09087ca10f0e4e02ba17510b2e5fb384a7d7a824d075fe6"
       },
       {
         "object": "LOD | SANCTUAIRE | gradins et galerie 1",
@@ -845,11 +859,6 @@
         "coordinateSha256": "e62d4c6747232d60c9d6ac0cb15aad32d7b60fa3085ba829bc9f7fd69c222ed6"
       },
       {
-        "object": "MASSIF | schiste entre sentiers 051",
-        "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "3493a88f2bd4790c4cc3d83abd5f85e2d8197198baaacb184ed884ea30767b49"
-      },
-      {
         "object": "MASSIF | schiste entre sentiers 052",
         "sourceUv": "Painted atlas - tiled quadrants",
         "coordinateSha256": "d6c9033ecf62ad5edcc0e7b68d984bbe2cb4563bdd34119a29be0df929e8531b"
@@ -858,11 +867,6 @@
         "object": "MASSIF | schiste entre sentiers 053",
         "sourceUv": "Painted atlas - tiled quadrants",
         "coordinateSha256": "a86b35b7a98aa6fe47b17abf6c835ea7bf3ce6b6356dd3ceb5b28711f837b09f"
-      },
-      {
-        "object": "MASSIF | schiste entre sentiers 055",
-        "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "cf9d790c5f9ecaea2457ad781555053bc7ec7049a7a7afda1d332d60ca077792"
       },
       {
         "object": "MASSIF | schiste entre sentiers 056",
@@ -913,11 +917,6 @@
         "object": "MASSIF | schiste entre sentiers 066",
         "sourceUv": "Painted atlas - tiled quadrants",
         "coordinateSha256": "bf7b5d90bdbc5d6ee6e12e7abf662c28bcdadc79747110910ec384762d5d6cd5"
-      },
-      {
-        "object": "MASSIF | schiste entre sentiers 067",
-        "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "19f8ee5b248b2701edf0c753cae0f20f4c491dedce466f55fbb8821fb2d3cd91"
       },
       {
         "object": "MASSIF | schiste entre sentiers 069",
@@ -1392,7 +1391,7 @@
       {
         "object": "RACCORD | 17 | SO entree ouest",
         "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "48cb88a1c206e9dc826c755c447cd306f9e4824e10d580957d8fbab82bdeeea3"
+        "coordinateSha256": "cfb0f0ecc1020b45196e67f65724ea0afd72714a0f039bffc3907442f11f5e44"
       },
       {
         "object": "RACCORD | 18 | SO rive vers balcon",
@@ -1463,9 +1462,55 @@
         "object": "PONT CISELE | Traveree centrale nord-est",
         "sourceUv": "Painted atlas - tiled quadrants",
         "coordinateSha256": "53447adbae59d314ca842ee0523fccd50adab8fd8acbe7e53db95dcaac49fcb0"
+      },
+      {
+        "object": "ARENE | Nord-ouest | plateforme circulaire",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "2b885450e407c502b1dc9f93fffebb26527b0455c3347832a04ae77cc4e1874b"
+      },
+      {
+        "object": "ARENE | Nord-ouest | escalier depuis TOP",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "04751399f8fb5b8f8bd38e50ac31483bf3c811f5965db35f768dfd60a545ce17"
+      },
+      {
+        "object": "ARENE | Nord-ouest | remparts et contreforts",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "bb4c18cbd66d7fcb9b3089ca3afaf303a83dcd504b44575d03eeca71d8df855a"
+      },
+      {
+        "object": "ARENE | Sud-est | plateforme circulaire",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "e94e1dbd3d3ab94087cbe56f1553fc785d994bfc4d2b3aa922ea81dab56c8366"
+      },
+      {
+        "object": "ARENE | Sud-est | escalier depuis BOT",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "cb41c9c78e21cdace65dc4f7112bbb6cb48765d9a17bdd510cbfb900d7fed614"
+      },
+      {
+        "object": "ARENE | Sud-est | remparts et contreforts",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "18c8043a048b984e113d0cb7f55bd4d07c867a41cfff3a39710751c12d1c420d"
+      },
+      {
+        "object": "ARENE | Nord-ouest | palier courbe au bord de lane",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "1614a124da74542a95f15cc7ae69d2a1628edeff1b334d10285e821563bacd4d"
+      },
+      {
+        "object": "ARENE | Sud-est | palier courbe au bord de lane",
+        "sourceUv": "Painted atlas - tiled quadrants",
+        "coordinateSha256": "0f291f6eca7512ae7a51cae0bfe7ea4e55063e46cac98a5490ec2d35a178d9b6"
       }
     ],
     "textures": [
+      {
+        "object": "ANCRAGE | petits socles de schiste sous les plantes de rive",
+        "role": "sealed_riverbank_decor_footing",
+        "colorSize": 512,
+        "normalSize": null
+      },
       {
         "object": "09 | SOL | plateaux traces et faille verticale",
         "role": "decoration",
@@ -1758,12 +1803,6 @@
         "object": "09 | CENTRE | plateforme circulaire et rose des etoiles",
         "role": "decoration",
         "colorSize": 8192,
-        "normalSize": null
-      },
-      {
-        "object": "ORBE | constellation gravee 1",
-        "role": "astral_orb_constellation",
-        "colorSize": 512,
         "normalSize": null
       },
       {
@@ -2277,12 +2316,6 @@
         "normalSize": null
       },
       {
-        "object": "MASSIF | schiste entre sentiers 051",
-        "role": "visual_jungle_barrier",
-        "colorSize": 512,
-        "normalSize": null
-      },
-      {
         "object": "MASSIF | schiste entre sentiers 052",
         "role": "visual_jungle_barrier",
         "colorSize": 512,
@@ -2290,12 +2323,6 @@
       },
       {
         "object": "MASSIF | schiste entre sentiers 053",
-        "role": "visual_jungle_barrier",
-        "colorSize": 512,
-        "normalSize": null
-      },
-      {
-        "object": "MASSIF | schiste entre sentiers 055",
         "role": "visual_jungle_barrier",
         "colorSize": 512,
         "normalSize": null
@@ -2356,12 +2383,6 @@
       },
       {
         "object": "MASSIF | schiste entre sentiers 066",
-        "role": "visual_jungle_barrier",
-        "colorSize": 512,
-        "normalSize": null
-      },
-      {
-        "object": "MASSIF | schiste entre sentiers 067",
         "role": "visual_jungle_barrier",
         "colorSize": 512,
         "normalSize": null
@@ -3019,32 +3040,62 @@
         "role": "bridge_edge_decoration",
         "colorSize": 1024,
         "normalSize": null
+      },
+      {
+        "object": "ARENE | Nord-ouest | plateforme circulaire",
+        "role": "objective_platform",
+        "colorSize": 8192,
+        "normalSize": null
+      },
+      {
+        "object": "ARENE | Nord-ouest | escalier depuis TOP",
+        "role": "objective_stairs",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "ARENE | Nord-ouest | remparts et contreforts",
+        "role": "objective_perimeter_decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "ARENE | Sud-est | plateforme circulaire",
+        "role": "objective_platform",
+        "colorSize": 8192,
+        "normalSize": null
+      },
+      {
+        "object": "ARENE | Sud-est | escalier depuis BOT",
+        "role": "objective_stairs",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "ARENE | Sud-est | remparts et contreforts",
+        "role": "objective_perimeter_decoration",
+        "colorSize": 1024,
+        "normalSize": null
+      },
+      {
+        "object": "ARENE | Nord-ouest | palier courbe au bord de lane",
+        "role": "objective_stairs",
+        "colorSize": 2048,
+        "normalSize": null
+      },
+      {
+        "object": "ARENE | Sud-est | palier courbe au bord de lane",
+        "role": "objective_stairs",
+        "colorSize": 2048,
+        "normalSize": null
       }
     ],
     "visualMode": "all visible meshes use baked Blender color textures, including trees, rocks, ruins and perimeter decoration; original tower facades; light geometry and lower-resolution atlases; no Blender compositor or volumetric fog",
-    "reusedTextureRevision": 112,
-    "sourceGlbBytes": 177577100,
+    "sourceGlbBytes": 208956144,
     "shipped": {
       "textureSize": 2048,
       "webpQuality": 75,
       "compression": "meshopt"
     }
-  },
-  "editReport": {
-    "previousRevision": 112,
-    "previousSourceSha256": "ca753e4cb8717cc9e1eb32489612325f9671c65a0482bb455faa3984bbd55e38",
-    "removedObjects": [
-      "09 | FONTAINE | orbe celeste 1",
-      "09 | FONTAINE | orbe celeste 2",
-      "09 | VERGER | vegetaux de lisiere et remparts",
-      "ARMILLES | anneaux metalliques 1",
-      "ARMILLES | anneaux metalliques 2",
-      "BASTION | ailes du belvedere 1",
-      "BASTION | ailes du belvedere 2",
-      "MASSIF | schiste entre sentiers 121",
-      "OBSERVATOIRES | orbes et armilles croisees",
-      "OBSERVATOIRES | quatre cristaux bleus non surexposes"
-    ],
-    "unchangedGeometryAndMaterials": true
   }
 }
