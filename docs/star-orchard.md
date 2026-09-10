@@ -42,8 +42,10 @@ under `/map-exports/` for the exploration pages that compare revisions.
   bots walk the Star Orchard's lanes (`SlotContext.map`).
 - `src/render/terrain_loader.ts` turns the model into the renderer's
   optional terrain: scenery batched by material, the painted towers kept
-  as the attackable units, the minimap painted from the grid, and a ground
-  height every unit and effect is lifted by.
+  as the attackable units, the team's crystal sized to sit inside the
+  authored Sanctum's crown (the renderer's own plinth and crystal overflowed
+  it), the minimap painted from the grid, and a ground height every unit
+  and effect is lifted by.
 - `src/game/star_orchard.ts` downloads the export once per page and builds
   a match's map, grid and terrain; `src/main.ts` runs the practice match on
   them when the home resolves the `orchard` mode.

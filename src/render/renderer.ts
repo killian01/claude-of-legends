@@ -38,6 +38,7 @@ import {
   type SpawnOffset,
 } from './muzzle_spawn';
 import { buildSanctumMesh, buildTowerMesh } from './structure_shapes';
+import { TEAM_COLORS, TEAM_LIGHT } from './team_colors';
 import type { RenderTerrain } from './terrain';
 import { toonifyMaterials } from './toon';
 import {
@@ -49,9 +50,6 @@ import {
   spellVisualOf,
 } from './vfx/catalog';
 import { VfxSystem } from './vfx/system';
-
-const TEAM_COLORS: readonly number[] = [0x4a7dd6, 0xd65c5c];
-const TEAM_LIGHT: readonly number[] = [0x9dbcf5, 0xf5a3a3];
 
 // Background and fog share the forest-skirt tone so the world edge melts
 // into haze instead of ending on a void.
@@ -1094,7 +1092,10 @@ export class Renderer {
 
   private buildUnitMesh(u: Readonly<Unit>): { holder: THREE.Group; barY: number } {
     const authored = this.terrain?.structure(u);
-    if (authored) return authored;
+    if (authored) {
+      collectSpinners(authored.holder);
+      return authored;
+    }
     const kind = u.kind;
     const color = TEAM_COLORS[u.team] ?? 0xffffff;
     const holder = new THREE.Group();
