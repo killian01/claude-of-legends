@@ -12,6 +12,7 @@ import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
 import { effectiveItemCost, ITEM_LIST, ITEMS } from '../sim/content/items';
 import { SIGILS } from '../sim/content/sigils';
+import { atShop } from '../sim/shop';
 import {
   BASIC_MAX_RANK,
   effectiveRank,
@@ -874,7 +875,7 @@ export class Hud {
         const u = this.world.units.get(this.selfId);
         const itemId = u?.items[i];
         if (!u || itemId === undefined) return;
-        if (!this.atFountain()) {
+        if (!this.canShop()) {
           playSfx('deny');
           this.toast('You can only sell at your fountain.');
           return;
@@ -1243,22 +1244,21 @@ export class Hud {
     }, 1800);
   }
 
-  // Where the shop is usable: standing at your own fountain, or dead and
-  // waiting for it (the sim waives the range check for a corpse, so death
-  // is shopping time instead of dead time).
-  private atFountain(): boolean {
+  // Where the shop is usable: where the sim says it answers (your fountain,
+  // and on the Star Orchard the whole spawn terrace; src/sim/shop.ts), or
+  // dead and waiting for it (the sim waives the range check for a corpse,
+  // so death is shopping time instead of dead time).
+  private canShop(): boolean {
     const u = this.world.units.get(this.selfId);
     if (!u) return false;
     if (u.dead) return true;
-    const fountain = this.world.map.fountains.find((f) => f.team === u.team);
-    if (!fountain) return false;
-    return Math.hypot(u.pos.x - fountain.x, u.pos.z - fountain.z) <= fountain.r + 2;
+    return atShop(this.world.map, u.team, u.pos);
   }
 
   private tryBuy(itemId: string): void {
     const u = this.world.units.get(this.selfId);
     if (!u) return;
-    if (!this.atFountain()) {
+    if (!this.canShop()) {
       playSfx('deny');
       this.toast('You must be at your fountain to buy.');
       return;
@@ -1385,7 +1385,7 @@ export class Hud {
     }
     d.appendChild(costBox);
 
-    const shopOk = this.atFountain();
+    const shopOk = this.canShop();
     const buy = document.createElement('button');
     buy.type = 'button';
     buy.className = 'hud-buy';
@@ -1715,7 +1715,7 @@ export class Hud {
     }
 
     if (this.shop.classList.contains('open')) {
-      const shopOk = this.atFountain();
+      const shopOk = this.canShop();
       this.shopStatus.textContent = u.dead
         ? 'Dead, so spend the wait: buying works from here.'
         : shopOk

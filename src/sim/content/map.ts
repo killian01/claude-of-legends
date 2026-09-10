@@ -16,11 +16,23 @@ export interface WallShape {
   r: number;
 }
 
+// A round patch of ground.
+export interface Disc {
+  x: number;
+  z: number;
+  r: number;
+}
+
 export interface FountainSpot {
   team: TeamId;
   x: number;
   z: number;
   r: number;
+  // Where the shop also answers, beyond the pad itself (src/sim/shop.ts).
+  // Absent, the shop is the pad. The Star Orchard's spawn terrace is a band
+  // around the Sanctum four times the pad's width, and a champion seated
+  // at either end of it could not buy at the start of a match.
+  shop?: readonly Disc[];
 }
 
 export interface SanctumSpot {

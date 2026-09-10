@@ -54,6 +54,7 @@ import { respawnDelay } from './respawn';
 import { ASSIST_GOLD_FRAC, championBounty, grantKillRewards, grantPassiveGold } from './rewards';
 import { Rng } from './rng';
 import { stepSeparation } from './separation';
+import { atShop } from './shop';
 import type { CombatCtx } from './sim_context';
 import {
   deepCopy,
@@ -102,7 +103,6 @@ export type SimEvent =
 
 // How long a champion's damage on a victim keeps earning an assist.
 const ASSIST_WINDOW_S = 10;
-const SHOP_RANGE_PAD = 2;
 // Exported: the HUD draws exactly this many build slots, so a full bag and
 // an empty one read as the same shape.
 export const INVENTORY_SLOTS = 6;
@@ -664,14 +664,11 @@ export class Sim {
     const u = this.units.get(unitId);
     const def = ITEMS[itemId];
     if (!u || !def || u.kind !== 'champion') return false;
-    const fountain = this.map.fountains.find((f) => f.team === u.team);
-    if (!fountain) return false;
     // Death is shopping time, like the genre: a corpse respawns at its own
     // fountain, so the range check is waived while it waits. Selling still
     // wants a live champion standing there.
     const dead = u.dead || this.dead.has(unitId);
-    const d = hypot(u.pos.x - fountain.x, u.pos.z - fountain.z);
-    if (!dead && d > fountain.r + SHOP_RANGE_PAD) return false;
+    if (!dead && !atShop(this.map, u.team, u.pos)) return false;
 
     // Consume owned components (one instance each) and discount their cost.
     const consumedIndices: number[] = [];
@@ -700,11 +697,7 @@ export class Sim {
     if (this.winner !== null) return false;
     const u = this.units.get(unitId);
     if (u?.kind !== 'champion' || u.dead || this.dead.has(unitId)) return false;
-    const fountain = this.map.fountains.find((f) => f.team === u.team);
-    if (!fountain) return false;
-    if (hypot(u.pos.x - fountain.x, u.pos.z - fountain.z) > fountain.r + SHOP_RANGE_PAD) {
-      return false;
-    }
+    if (!atShop(this.map, u.team, u.pos)) return false;
     const itemId = u.items[slot];
     if (itemId === undefined) return false;
     const def = ITEMS[itemId];

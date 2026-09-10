@@ -78,7 +78,18 @@ export function starOrchardMap(layout: StarOrchardLayout, manifest: StarOrchardM
     borderMargin: 0,
     laneWidth: layout.laneWidth ?? STAR_ORCHARD_LANE_WIDTH,
     river: { a: { x: center.x, z: 18 }, b: { x: center.x, z: STAR_ORCHARD_SIZE - 18 }, width: 9 },
-    fountains: fountains.map((p) => ({ team: teamOf(p), x: p.x, z: -p.z, r: FOUNTAIN_RADIUS })),
+    fountains: fountains.map((p) => ({
+      team: teamOf(p),
+      x: p.x,
+      z: -p.z,
+      r: FOUNTAIN_RADIUS,
+      // The shop answers around every seat of the platform, not only the
+      // middle one: the terrace is a band around the Sanctum, and the seats
+      // at its ends stand eleven meters from the fountain.
+      shop: spawns
+        .filter((s) => teamOf(s) === teamOf(p))
+        .map((s) => ({ x: s.x, z: -s.z, r: FOUNTAIN_RADIUS })),
+    })),
     spawns: spawns
       .slice()
       .sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0))

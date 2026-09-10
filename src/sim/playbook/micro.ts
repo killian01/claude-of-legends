@@ -14,6 +14,7 @@ import { GAME_MAP, type GameMap } from '../content/map';
 import { hypot } from '../exact';
 import type { Action, Observation, ObsSelf, ObsUnit } from '../policy';
 import type { Rng } from '../rng';
+import { atShop } from '../shop';
 import { type ActiveKit, resolveKit } from './kit';
 import type { KitDef } from './types';
 
@@ -250,6 +251,10 @@ export interface SlotContext {
   // Own attack range in units: what a kite holds.
   readonly attackRange: number;
   readonly atFountain: boolean;
+  // Where the sim sells (src/sim/shop.ts): the fountain, and on the Star
+  // Orchard the whole spawn terrace. The buy and sell behaviors ask this,
+  // not atFountain, which is the pad that heals.
+  readonly atShop: boolean;
   // Enemy towers are always visible; every voluntary step must know whether
   // it lands inside one's reach (playtest round 2: bots strolled under
   // towers via dodges, pursuit, and wave-following).
@@ -296,6 +301,7 @@ export function buildSlotContext(
     .sort((a, b) => dist(s.x, s.z, a) - dist(s.x, s.z, b))[0];
   const champ = ccdTarget ?? nearest(enemyChampions, s.x, s.z);
   const atFountain = hypot(s.x - fountain.x, s.z - fountain.z) <= fountain.r + 2;
+  const shopHere = atShop(map, s.team, { x: s.x, z: s.z });
   const recallClear = (): boolean =>
     !obs.units.some(
       (u) =>
@@ -324,6 +330,7 @@ export function buildSlotContext(
     friendlyMinions,
     champ,
     atFountain,
+    atShop: shopHere,
     inTowerReach,
     escortAt,
     recallClear,
