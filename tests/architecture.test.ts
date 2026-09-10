@@ -16,6 +16,7 @@ import { buildProfile } from '../server/profile';
 import { SessionStore } from '../server/sessions';
 
 const simDir = fileURLToPath(new URL('../src/sim', import.meta.url));
+const srcDir = fileURLToPath(new URL('../src', import.meta.url));
 
 function simFiles(dir: string): string[] {
   const out: string[] = [];
@@ -55,6 +56,17 @@ describe('sim architecture', () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it('builds every match sim in one place, on the Star Orchard', () => {
+    // ADR 0021: the map every host plays is the export it has read, handed
+    // to src/net/replay.ts. A `new Sim(` anywhere else in src/ is a host
+    // that could play the tests' fixture map by mistake.
+    const offenders = simFiles(srcDir)
+      .filter((file) => !file.startsWith(simDir))
+      .filter((file) => /\bnew Sim\(/.test(readFileSync(file, 'utf8')))
+      .map((file) => path.relative(srcDir, file));
+    expect(offenders).toEqual([path.join('net', 'replay.ts')]);
   });
 });
 

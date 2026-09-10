@@ -5,5 +5,6 @@
 
 import { parentPort, workerData } from 'node:worker_threads';
 import { type FastMatchRequest, runFastMatch } from '../src/fast_match';
+import { starOrchard } from './star_orchard';
 
-parentPort?.postMessage(runFastMatch(workerData as FastMatchRequest));
+parentPort?.postMessage(runFastMatch(starOrchard(), workerData as FastMatchRequest));

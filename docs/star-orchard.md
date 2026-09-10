@@ -1,12 +1,11 @@
-# Star Orchard: the authored map, as a test mode
+# Star Orchard: the map
 
-The Star Orchard is the first authored map: a Blender scene of two
+The Star Orchard is the game's map (ADR 0021): a Blender scene of two
 platforms, three lanes, two forests with their camps and a central plaza,
-exported with its collisions and gameplay points. It is still being built,
-so it does not replace the launch map. It plays in a **test mode**: the
-"Star Orchard" tile on the home runs the offline practice match on it (the
-same champion select, the same house bots, the same HUD), while ranked,
-lobbies, bots, replays and the environment stay on the launch map.
+exported with its collisions and gameplay points. Every match is played on
+it, practice and ranked, lobbies and the bots' Arena, replays and the
+headless environment. It shipped first as a test mode beside the launch
+map; the launch map is the tests' fixture now, and nothing draws it.
 
 ## What ships
 
@@ -42,14 +41,21 @@ under `/map-exports/` for the exploration pages that compare revisions.
 - The playbooks read the match's map, not the launch map, so the house
   bots walk the Star Orchard's lanes (`SlotContext.map`).
 - `src/render/terrain_loader.ts` turns the model into the renderer's
-  optional terrain: scenery batched by material, the painted towers kept
+  terrain: scenery batched by material, the painted towers kept
   as the attackable units, the authored Sanctum left standing on its own
   (the renderer's plinth and crystal used to be drawn through it), the
   minimap painted from the grid, and a ground height every unit and effect
   is lifted by.
-- `src/game/star_orchard.ts` downloads the export once per page and builds
-  a match's map, grid and terrain; `src/main.ts` runs the practice match on
-  them when the home resolves the `orchard` mode.
+- Every host hands the assembled export (`StarOrchard`: the map record, the
+  decoded grid, the revision) to `buildMatchSim` in `src/net/replay.ts`,
+  the one place a match's `Sim` is built. The server and the environment
+  read the three records from disk once per process
+  (`server/star_orchard.ts`); the browser fetches them once per page
+  (`src/game/star_orchard_records.ts`), in the replay and sparring workers
+  too, and downloads the model once (`src/game/star_orchard.ts`), parsed
+  into a terrain per match behind the loading card. The content
+  fingerprint hashes the map record and the grid, so a new revision refuses
+  the replays recorded on the old one.
 
 ## Shipping a new revision
 
@@ -72,7 +78,6 @@ ground.
 
 ## Known limits
 
-- Test mode only: no online play, rating, replay or environment on it.
 - Fog of war by sight range only; the scenery does not occlude, and there
   is no brush yet.
 - Tower foundations are baked into the grid and stay blocked after a tower

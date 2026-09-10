@@ -18,6 +18,7 @@ import {
   wonBy,
 } from '../server/bot_records';
 import { BotStore } from '../server/bot_store';
+import { starOrchard } from '../server/star_orchard';
 import { pruneNumberedJson } from '../server/store';
 import { sparMatch, sparringPicks } from '../src/game/sparring_core';
 import { LANER_PLAYBOOK } from '../src/sim/content/playbooks/laner';
@@ -124,7 +125,7 @@ describe('the upload from the Academy', () => {
     playbook: LANER_PLAYBOOK,
   };
   const picks = sparringPicks(bot, 5);
-  const result = sparMatch({ seed: 5, picks, maxTicks: 400 });
+  const result = sparMatch(starOrchard(), { seed: 5, picks, maxTicks: 400 });
   const upload = () => ({
     id: 'bot_x',
     kind: 'sparring',

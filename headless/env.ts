@@ -8,6 +8,7 @@
 // free on purpose: headless/main.ts wraps this in a line stream, and the
 // server will wrap the same sim seams in WebSocket frames.
 
+import { starOrchard } from '../server/star_orchard';
 import { buildMatchSim, type ReplayPick } from '../src/net/replay';
 import { POLICY_PERIOD_TICKS } from '../src/sim/bot_driver';
 import { DEFAULT_BOT_ID } from '../src/sim/content/bots';
@@ -107,7 +108,7 @@ export class Env {
       sigils: s.sigils ?? ['riftstep', 'mend'],
       ...(s.remote ? {} : { bot: s.bot ?? DEFAULT_BOT_ID }),
     }));
-    const { sim, unitIds } = buildMatchSim(this.seed, picks, this.forged);
+    const { sim, unitIds } = buildMatchSim(starOrchard(), this.seed, picks, this.forged);
     this.sim = sim;
     this.unitIds = unitIds;
     const remote: number[] = [];

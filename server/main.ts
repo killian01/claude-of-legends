@@ -140,6 +140,7 @@ import { setForgedAttackRange } from './reforge';
 import { RejoinRegistry } from './rejoin';
 import { sealChampion, unsealChampion } from './seal';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
+import { starOrchard } from './star_orchard';
 import {
   appendJsonl,
   maxNumberedJson,
@@ -2729,7 +2730,7 @@ setInterval(() => {
                 // What the match ran on: a replay is a re-simulation, so
                 // a record whose content has moved plays a different
                 // match and the viewer must refuse it.
-                content: contentFingerprint(),
+                content: contentFingerprint(starOrchard()),
                 seed: entry.match.seed,
                 picks: entry.match.replayPicks,
                 events: entry.match.replayEvents,

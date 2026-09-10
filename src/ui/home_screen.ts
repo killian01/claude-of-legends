@@ -68,15 +68,7 @@ export interface HomeChoice {
   name: string;
   // 'forge-queue' is the Forge's own public queue (plan-forge phase 6):
   // same flow as 'queue', a separate ladder, forged champions in select.
-  mode:
-    | 'practice'
-    | 'orchard'
-    | 'queue'
-    | 'forge-queue'
-    | 'create'
-    | 'join'
-    | 'replay'
-    | 'spectate';
+  mode: 'practice' | 'queue' | 'forge-queue' | 'create' | 'join' | 'replay' | 'spectate';
   code?: string;
   // For mode 'replay': the saved replay to watch, and the tick to open it
   // at when a Match sheet asked for one (a death, a few seconds before).

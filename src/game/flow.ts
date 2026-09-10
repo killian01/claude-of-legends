@@ -6,9 +6,6 @@
 export type PostMatchAction = 'menu' | 'again';
 export type GameMode =
   | 'practice'
-  // The Star Orchard test mode (docs/star-orchard.md): an offline practice
-  // match on the authored map.
-  | 'orchard'
   | 'queue'
   | 'forge-queue'
   | 'create'
@@ -24,7 +21,6 @@ export type NextStep = 'home' | 'replay' | 'requeue';
 // destroyed with its match and its code has nothing left to join.
 export function nextStep(action: PostMatchAction, mode: GameMode): NextStep {
   if (action === 'menu') return 'home';
-  if (mode === 'practice' || mode === 'orchard' || mode === 'replay' || mode === 'spectate')
-    return 'replay';
+  if (mode === 'practice' || mode === 'replay' || mode === 'spectate') return 'replay';
   return 'requeue';
 }

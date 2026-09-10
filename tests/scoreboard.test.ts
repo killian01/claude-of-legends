@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { fillWithBots } from '../server/bot_fill';
 import { Match } from '../server/match';
+import { starOrchard } from '../server/star_orchard';
 import { ClientWorld } from '../src/net/client_world';
 import { Sim } from '../src/sim/sim';
 
@@ -48,7 +49,7 @@ describe('scoreboard', () => {
     expect(mine!.name).toBe('Sylra');
     expect(score.rows.filter((r) => (r.player ?? '').startsWith('House '))).toHaveLength(9);
 
-    const client = new ClientWorld(() => undefined);
+    const client = new ClientWorld(() => undefined, starOrchard().map);
     client.applyServer(score);
     expect(client.scoreboard()).toHaveLength(10);
   });

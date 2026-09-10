@@ -4,6 +4,7 @@
 // presentational.
 
 import { Renderer } from '../render/renderer';
+import type { RenderTerrain } from '../render/terrain';
 import type { TeamId } from '../sim/types';
 import { DT } from '../sim/types';
 import { Minimap } from '../ui/minimap';
@@ -47,9 +48,10 @@ export function startSpectator(
   world: IWorld,
   team: TeamId,
   onExit: () => void,
+  terrain: RenderTerrain,
 ): SpectatorView {
   ensureCss();
-  const renderer = new Renderer(container, world);
+  const renderer = new Renderer(container, world, terrain);
   renderer.setViewerTeam(team);
   const minimap = new Minimap(
     container,
@@ -58,6 +60,7 @@ export function startSpectator(
     0,
     (p) => renderer.lookAtPoint(p.x, p.z),
     (p) => renderer.lookAtPoint(p.x, p.z),
+    terrain.minimap,
   );
   renderer.setEdgePanGate(() => !minimap.hovered);
   renderer.lookAtPoint(world.map.size / 2, world.map.size / 2);

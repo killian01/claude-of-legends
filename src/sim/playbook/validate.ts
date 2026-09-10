@@ -8,7 +8,7 @@
 import type { CoachOrder } from '../coach';
 import { CHAMPIONS, type ChampionRole, DEFAULT_CHAMPION_ID } from '../content/champions';
 import { ITEMS } from '../content/items';
-import { GAME_MAP } from '../content/map';
+import { STAR_ORCHARD_SIZE } from '../content/star_orchard';
 import type { AbilityKey } from '../types';
 import { MAX_BUILD } from './kit';
 import {
@@ -442,8 +442,8 @@ function behavior(raw: unknown, at: string, errors: Errors): Behavior {
     case 'holdPosition': {
       const b: Behavior = {
         kind: 'holdPosition',
-        x: reqNumber(raw, 'x', 0, GAME_MAP.size, at, errors),
-        z: reqNumber(raw, 'z', 0, GAME_MAP.size, at, errors),
+        x: reqNumber(raw, 'x', 0, STAR_ORCHARD_SIZE, at, errors),
+        z: reqNumber(raw, 'z', 0, STAR_ORCHARD_SIZE, at, errors),
       };
       return withOpt(b, 'within', opt('within', 0, 50));
     }

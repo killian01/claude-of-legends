@@ -4,6 +4,7 @@
 // worlds fails here. Update this list in the same change as the facet.
 
 import { describe, expect, it } from 'vitest';
+import { starOrchard } from '../server/star_orchard';
 import { ClientWorld } from '../src/net/client_world';
 import { Sim } from '../src/sim/sim';
 import type { IWorld } from '../src/world_api';
@@ -31,7 +32,7 @@ const IWORLD_MEMBERS: readonly { name: string; kind: 'value' | 'function' }[] = 
 describe('IWorld parity', () => {
   // Structural assignability is checked at compile time by these two lines.
   const sim: IWorld = new Sim(1);
-  const client: IWorld = new ClientWorld(() => undefined);
+  const client: IWorld = new ClientWorld(() => undefined, starOrchard().map);
 
   it('both worlds implement every pinned member', () => {
     for (const member of IWORLD_MEMBERS) {

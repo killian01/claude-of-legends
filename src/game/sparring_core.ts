@@ -8,6 +8,7 @@
 import { FAST_MATCH_MAX_TICKS, type FastMatchRequest, runFastMatch } from '../fast_match';
 import type { ReplayPick, ReplayRecord } from '../net/replay';
 import { houseName, houseSeats } from '../sim/content/bots/house';
+import type { StarOrchard } from '../sim/content/star_orchard';
 import type { PlayReport, PlayStats } from '../sim/playbook/report';
 import type { PlaybookDef } from '../sim/playbook/types';
 import { Rng } from '../sim/rng';
@@ -89,8 +90,8 @@ export function sparringPicks(bot: SparBot, seed = 1): ReplayPick[] {
   return picks;
 }
 
-export function sparMatch(req: SparRequest): SparResult {
-  const r = runFastMatch(req);
+export function sparMatch(orchard: StarOrchard, req: SparRequest): SparResult {
+  const r = runFastMatch(orchard, req);
   // The seats named from the picks (unit ids come in pick order), as the
   // Arena and the replay viewer name them: the bot, "House sieger".
   const score = r.score.map((row) => {

@@ -3,10 +3,11 @@
 // so a headless browser, or a curious human, can fire each ultimate and
 // look at it. Presentation only; never imported by the game.
 
+import { loadStarOrchardMatch } from '../game/star_orchard';
+import { orchardSim } from '../net/replay';
 import { Renderer } from '../render/renderer';
 import type { ChampionDef } from '../sim/content/champions';
 import { CHAMPIONS } from '../sim/content/champions';
-import { Sim } from '../sim/sim';
 import type { SpellLook } from '../sim/spell_look';
 import type { AbilityKey, Vec2 } from '../sim/types';
 import { DT } from '../sim/types';
@@ -17,7 +18,10 @@ const label = document.querySelector<HTMLElement>('#label');
 if (!app) throw new Error('missing #app root element');
 
 const CENTER: Vec2 = { x: 75, z: 75 };
-const sim = new Sim(42);
+// The map the game plays on (ADR 0021), records and model, then a bare sim
+// on it: the casters stand on the central plaza.
+const { orchard, terrain } = await loadStarOrchardMatch(() => {});
+const sim = orchardSim(orchard, 42);
 
 // A forged champion carrying spell looks (src/sim/spell_look.ts), which is
 // the whole point of the look: its id cannot appear in the authored VFX
@@ -118,7 +122,7 @@ function topUp(): void {
 }
 topUp();
 
-const renderer = new Renderer(app, sim);
+const renderer = new Renderer(app, sim, terrain);
 renderer.setViewerTeam(0);
 renderer.lookAtPoint(CENTER.x, CENTER.z);
 

@@ -7,10 +7,12 @@
 // leaves.
 
 import { applyReplayEvent, buildMatchSim, type ReplayRecord } from '../net/replay';
+import type { StarOrchard } from '../sim/content/star_orchard';
 import type { SimSnapshot } from '../sim/snapshot';
 import type { TeamId } from '../sim/types';
 import { CHECKPOINT_TICKS } from './replay_cursor';
 import { MarkCollector, type ReplayMark } from './replay_marks';
+import { loadStarOrchard } from './star_orchard_records';
 
 export type ReplayWorkerIn = { record: ReplayRecord };
 
@@ -20,8 +22,12 @@ export type ReplayWorkerOut =
   | { kind: 'error'; message: string };
 
 // Checkpoints are posted in order with the marks found since the last one.
-export function runReplayPass(rec: ReplayRecord, post: (msg: ReplayWorkerOut) => void): void {
-  const { sim, unitIds } = buildMatchSim(rec.seed, rec.picks, rec.forged ?? []);
+export function runReplayPass(
+  orchard: StarOrchard,
+  rec: ReplayRecord,
+  post: (msg: ReplayWorkerOut) => void,
+): void {
+  const { sim, unitIds } = buildMatchSim(orchard, rec.seed, rec.picks, rec.forged ?? []);
   const unitTeams = new Map<number, TeamId>();
   rec.picks.forEach((p, i) => {
     unitTeams.set(unitIds[i]!, p.team);
@@ -55,13 +61,15 @@ if (
   typeof (self as unknown as { document?: unknown }).document === 'undefined'
 ) {
   self.onmessage = (e: MessageEvent<ReplayWorkerIn>): void => {
-    try {
-      runReplayPass(e.data.record, (msg) => self.postMessage(msg));
-    } catch (err) {
-      self.postMessage({
-        kind: 'error',
-        message: (err as Error).message,
-      } satisfies ReplayWorkerOut);
-    }
+    // The map's records, fetched by the worker itself (the page's copy
+    // does not cross the thread; the browser cache makes it one request).
+    loadStarOrchard()
+      .then((orchard) => runReplayPass(orchard, e.data.record, (msg) => self.postMessage(msg)))
+      .catch((err: unknown) => {
+        self.postMessage({
+          kind: 'error',
+          message: (err as Error).message,
+        } satisfies ReplayWorkerOut);
+      });
   };
 }

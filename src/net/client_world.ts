@@ -7,7 +7,7 @@
 import { ChampionRegistry } from '../sim/champion_registry';
 import type { Status } from '../sim/combat/status';
 import type { ChampionDef } from '../sim/content/champions';
-import { GAME_MAP, type GameMap } from '../sim/content/map';
+import type { GameMap } from '../sim/content/map';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { Projectile } from '../sim/projectiles';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from '../sim/types';
@@ -144,7 +144,6 @@ function materializeUnit(s: SnapUnit): Unit {
 }
 
 export class ClientWorld implements IWorld {
-  readonly map: GameMap = GAME_MAP;
   readonly units = new Map<number, Unit>();
   readonly projectiles = new Map<number, Projectile>();
   readonly zones = new Map<number, Zone>();
@@ -166,7 +165,12 @@ export class ClientWorld implements IWorld {
   // registerForged() loads them before the first snapshot arrives.
   readonly champions = new ChampionRegistry();
 
-  constructor(private readonly send: (msg: ClientMsg) => void) {}
+  // The map the match is played on (ADR 0021): the mirror renders and
+  // reasons on the record the server's sim runs, handed in by the host.
+  constructor(
+    private readonly send: (msg: ClientMsg) => void,
+    readonly map: GameMap,
+  ) {}
 
   championDef(championId: string): ChampionDef | null {
     return this.champions.get(championId);

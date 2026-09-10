@@ -3,11 +3,11 @@
 // one result out, then the Academy terminates the worker.
 
 import { type SparRequest, sparMatch } from './sparring_core';
+import { loadStarOrchard } from './star_orchard_records';
 
 self.onmessage = (e: MessageEvent<SparRequest>): void => {
-  try {
-    self.postMessage(sparMatch(e.data));
-  } catch (err) {
-    self.postMessage({ error: (err as Error).message });
-  }
+  // The map's records, fetched by the worker itself (ADR 0021).
+  loadStarOrchard()
+    .then((orchard) => self.postMessage(sparMatch(orchard, e.data)))
+    .catch((err: unknown) => self.postMessage({ error: (err as Error).message }));
 };

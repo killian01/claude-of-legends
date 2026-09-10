@@ -6,6 +6,7 @@
 // with the side that scored.
 
 import { describe, expect, it } from 'vitest';
+import { starOrchard } from '../server/star_orchard';
 import { CHECKPOINT_TICKS, ReplayCursor, RING_TICKS } from '../src/game/replay_cursor';
 import { MarkCollector } from '../src/game/replay_marks';
 import { type ReplayWorkerOut, runReplayPass } from '../src/game/replay_worker';
@@ -44,21 +45,21 @@ const bot = {
   skin: 1,
   playbook: LANER_PLAYBOOK,
 };
-const record: ReplayRecord = sparMatch({
+const record: ReplayRecord = sparMatch(starOrchard(), {
   seed: 31,
   picks: sparringPicks(bot, 31),
   maxTicks: TICKS,
 }).record;
 
 function straight(tick: number): string {
-  const { sim } = buildMatchSim(record.seed, record.picks);
+  const { sim } = buildMatchSim(starOrchard(), record.seed, record.picks);
   while (sim.tickCount < tick) sim.tick();
   return fingerprint(sim);
 }
 
 describe('the replay pass', () => {
   const out: ReplayWorkerOut[] = [];
-  runReplayPass(record, (m) => out.push(m));
+  runReplayPass(starOrchard(), record, (m) => out.push(m));
 
   it('posts a checkpoint at tick zero and every CHECKPOINT_TICKS, then done', () => {
     const ticks = out.flatMap((m) => (m.kind === 'checkpoint' ? [m.snapshot.tick] : []));
@@ -68,7 +69,7 @@ describe('the replay pass', () => {
   });
 
   it('checkpoints restore into the straight run', () => {
-    const { sim } = buildMatchSim(record.seed, record.picks);
+    const { sim } = buildMatchSim(starOrchard(), record.seed, record.picks);
     for (const m of out) {
       if (m.kind !== 'checkpoint' || m.snapshot.tick === 0) continue;
       sim.restore(m.snapshot);
@@ -91,7 +92,7 @@ describe('checkpoints across a disconnect and a rejoin', () => {
     const { bot: _house, ...human } = p;
     return human;
   });
-  const first = buildMatchSim(seed, picks);
+  const first = buildMatchSim(starOrchard(), seed, picks);
   const unitIds = first.unitIds;
   const human = unitIds[1]!;
   const teams = new Map<number, TeamId>();
@@ -120,13 +121,13 @@ describe('checkpoints across a disconnect and a rejoin', () => {
   };
   const eventsAt = (tick: number): number => rec.events.filter((e) => e.k < tick).length;
   const out: ReplayWorkerOut[] = [];
-  runReplayPass(rec, (m) => out.push(m));
+  runReplayPass(starOrchard(), rec, (m) => out.push(m));
   const checkpoints = out.flatMap((m) => (m.kind === 'checkpoint' ? [m.snapshot] : []));
   runTo(first.sim, 0, TICKS);
   const truth = fingerprint(first.sim);
 
   it('the pass itself lands where the straight run does', () => {
-    const { sim } = buildMatchSim(seed, picks);
+    const { sim } = buildMatchSim(starOrchard(), seed, picks);
     sim.restore(checkpoints.at(-1)!);
     expect(fingerprint(sim)).toBe(truth);
   });
@@ -134,7 +135,7 @@ describe('checkpoints across a disconnect and a rejoin', () => {
   it('forward: a fresh sim restored past the handovers drives the seat', () => {
     for (const snap of checkpoints) {
       if (snap.tick === 0) continue;
-      const { sim } = buildMatchSim(seed, picks);
+      const { sim } = buildMatchSim(starOrchard(), seed, picks);
       sim.restore(snap);
       restorePolicies(sim, picks, unitIds, rec.events, snap.tick);
       runTo(sim, eventsAt(snap.tick), TICKS);
@@ -153,7 +154,7 @@ describe('checkpoints across a disconnect and a rejoin', () => {
   });
 
   it('without the policies put back, the seat is driven by the wrong hands', () => {
-    const { sim } = buildMatchSim(seed, picks);
+    const { sim } = buildMatchSim(starOrchard(), seed, picks);
     const snap = checkpoints.find((s) => s.tick === 400)!;
     sim.restore(snap);
     runTo(sim, eventsAt(snap.tick), TICKS);
@@ -163,7 +164,7 @@ describe('checkpoints across a disconnect and a rejoin', () => {
 
 describe('the cursor', () => {
   function host() {
-    const built = buildMatchSim(record.seed, record.picks);
+    const built = buildMatchSim(starOrchard(), record.seed, record.picks);
     const h = {
       sim: built.sim,
       step: () => {
@@ -172,7 +173,7 @@ describe('the cursor', () => {
       restored: (_tick: number) => {},
     };
     const cursor = new ReplayCursor(h);
-    runReplayPass(record, (m) => {
+    runReplayPass(starOrchard(), record, (m) => {
       if (m.kind === 'checkpoint') cursor.addCheckpoint(m.snapshot);
     });
     return { sim: built.sim, cursor };
@@ -205,7 +206,7 @@ describe('the cursor', () => {
   });
 
   it('says no when a tick behind has no checkpoint yet', () => {
-    const built = buildMatchSim(record.seed, record.picks);
+    const built = buildMatchSim(starOrchard(), record.seed, record.picks);
     const cursor = new ReplayCursor({
       sim: built.sim,
       step: () => {
@@ -239,7 +240,7 @@ describe('the cursor', () => {
 
 describe('the marks', () => {
   it('date champion kills with the killer’s side, and nothing for minions', () => {
-    const { sim } = buildMatchSim(record.seed, record.picks);
+    const { sim } = buildMatchSim(starOrchard(), record.seed, record.picks);
     const marks = new MarkCollector();
     while (sim.tickCount < 4000) {
       marks.note(sim.units);

@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { fillWithBots } from '../server/bot_fill';
+import { starOrchard } from '../server/star_orchard';
 import { sparringPicks } from '../src/game/sparring_core';
 import { buildMatchSim } from '../src/net/replay';
 import { CHAMPIONS, type ChampionRole } from '../src/sim/content/champions';
@@ -147,7 +148,7 @@ describe('the fill on every host', () => {
       },
       9,
     );
-    const { sim, unitIds } = buildMatchSim(9, picks);
+    const { sim, unitIds } = buildMatchSim(starOrchard(), 9, picks);
     const team = unitIds.slice(0, 5).map((id) => sim.units.get(id)!);
     expect(team[0]!.lane).toBe('bot');
     const support = team.find((u) => CHAMPIONS[u.championId!]!.role === 'Support')!;

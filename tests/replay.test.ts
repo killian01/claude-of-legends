@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { fillWithBots } from '../server/bot_fill';
 import { Match } from '../server/match';
+import { starOrchard } from '../server/star_orchard';
 import { applyReplayEvent, buildMatchSim, type ReplayRecord } from '../src/net/replay';
 import type { Sim } from '../src/sim/sim';
 import type { TeamId } from '../src/sim/types';
@@ -67,7 +68,7 @@ describe('deterministic replay', () => {
       ticks: TICKS,
     };
     // What the browser does: rebuild and refeed.
-    const { sim, unitIds } = buildMatchSim(record.seed, record.picks);
+    const { sim, unitIds } = buildMatchSim(starOrchard(), record.seed, record.picks);
     const unitTeams = new Map<number, TeamId>();
     record.picks.forEach((p, i) => {
       unitTeams.set(unitIds[i]!, p.team);

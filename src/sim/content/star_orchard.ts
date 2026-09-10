@@ -5,6 +5,7 @@
 // HUD read one shape. Data only: no I/O, the host hands the exported records
 // in.
 
+import { decodeTerrainNav, type TerrainNavData } from '../terrain_nav';
 import type { TeamId, Vec2 } from '../types';
 import type { GameMap, LaneId, TowerSpot } from './map';
 
@@ -49,6 +50,40 @@ export interface StarOrchardManifest {
   blockedValue: number;
   landmarks: StarOrchardLandmark[];
   visualReport?: { glbBytes?: number; quality?: string; materialBakeVersion?: number };
+}
+
+// The shipped map as a host holds it once it has read the export: the map
+// record, the decoded grid, and what the records came from. Every match on
+// every host is built on it (src/net/replay.ts buildMatchSim, ADR 0021):
+// the server and the environment read the files from disk
+// (server/star_orchard.ts), the browser fetches them
+// (src/game/star_orchard_records.ts). A match builds its own walkability
+// grid over the shared data, since the sim blocks its towers into it; the
+// model for the renderer is the browser's business alone.
+export interface StarOrchard {
+  map: GameMap;
+  navigation: TerrainNavData;
+  revision: number;
+  sourceSha256: string;
+  // The model beside the records, by name and size, for the one host that
+  // downloads it (the browser).
+  model: string;
+  modelBytes: number;
+}
+
+export function assembleStarOrchard(
+  layout: StarOrchardLayout,
+  manifest: StarOrchardManifest,
+  navigation: ArrayBuffer,
+): StarOrchard {
+  return {
+    map: starOrchardMap(layout, manifest),
+    navigation: decodeTerrainNav(manifest, navigation),
+    revision: manifest.revision,
+    sourceSha256: manifest.sourceSha256 ?? '',
+    model: manifest.model,
+    modelBytes: manifest.visualReport?.glbBytes ?? 0,
+  };
 }
 
 // The spawn slot whose landmark stands for the fountain: the middle of the

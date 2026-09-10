@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { Match } from '../server/match';
+import { starOrchard } from '../server/star_orchard';
 import { ClientWorld } from '../src/net/client_world';
 import { Sim } from '../src/sim/sim';
 
@@ -40,7 +41,7 @@ describe('ability vfx tags on the wire', () => {
       { clientId: 1, name: 'alice', team: 0, championId: 'sylra', sigils: ['riftstep', 'mend'] },
       { clientId: 2, name: 'bob', team: 1, championId: 'fenn', sigils: ['zephyr', 'sear'] },
     ]);
-    const a = new ClientWorld((msg) => match.handleCommand(1, msg));
+    const a = new ClientWorld((msg) => match.handleCommand(1, msg), starOrchard().map);
     a.applyServer({ t: 'match_start', selfUnitId: match.players.get(1)!.unitId, team: 0 });
     const aliceId = match.players.get(1)!.unitId;
     match.sim.units.get(aliceId)!.abilityRanks = { Q: 1, W: 1, E: 1, R: 0 };

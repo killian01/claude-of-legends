@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { parseUpload } from '../server/bot_records';
+import { starOrchard } from '../server/star_orchard';
 import { sparMatch, sparringPicks } from '../src/game/sparring_core';
 import { LANER_PLAYBOOK } from '../src/sim/content/playbooks/laner';
 import { deathScene, SCENE_CAP, SCENE_RADIUS } from '../src/sim/playbook/death_context';
@@ -47,7 +48,7 @@ describe('the scene of a death', () => {
       playbook: LANER_PLAYBOOK,
     };
     const picks = sparringPicks(bot, 17);
-    const result = sparMatch({ seed: 17, picks, maxTicks: 6000 });
+    const result = sparMatch(starOrchard(), { seed: 17, picks, maxTicks: 6000 });
     const withDeaths = result.report.units.filter((u) => (u.deathsAt?.length ?? 0) > 0);
     expect(withDeaths.length).toBeGreaterThan(0);
     for (const u of withDeaths) {

@@ -22,8 +22,8 @@ import { DT } from '../types';
 import { BOTS } from './bots';
 import { CHAMPION_LIST } from './champions';
 import { ITEM_LIST } from './items';
-import { GAME_MAP } from './map';
 import { SIGIL_LIST } from './sigils';
+import type { StarOrchard } from './star_orchard';
 
 // FNV-1a over the canonical text: short, stable, and dependency-free. It
 // is a change detector, never a signature: nothing here defends against
@@ -32,6 +32,17 @@ function hash(text: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i += 1) {
     h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+// The walkability grid is a quarter million cells: hashed as numbers, not
+// spelled out as text.
+function hashInt16(values: Int16Array): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < values.length; i += 1) {
+    h ^= values[i]! & 0xffff;
     h = Math.imul(h, 0x01000193) >>> 0;
   }
   return h.toString(16).padStart(8, '0');
@@ -68,24 +79,40 @@ export function fingerprintOf(content: unknown): string {
   return hash(canonical(content));
 }
 
-let cached: string | null = null;
+const cached = new WeakMap<StarOrchard, string>();
 
-export function contentFingerprint(): string {
-  if (cached === null) {
-    cached = fingerprintOf({
+// The map is the Star Orchard the host has read (ADR 0021): its record and
+// its grid, since a cell that opens or closes moves the match as surely as
+// a champion's damage does. A new export revision moves the fingerprint.
+export function contentFingerprint(orchard: StarOrchard): string {
+  let value = cached.get(orchard);
+  if (value === undefined) {
+    const grid = orchard.navigation;
+    value = fingerprintOf({
       dt: DT,
       champions: CHAMPION_LIST.map(championShape),
       items: ITEM_LIST,
       sigils: SIGIL_LIST,
-      map: GAME_MAP,
+      map: orchard.map,
+      terrain: {
+        revision: orchard.revision,
+        source: orchard.sourceSha256,
+        cells: grid.cells,
+        cellSize: grid.cellSize,
+        origin: grid.origin,
+        heightScale: grid.heightScale,
+        blockedValue: grid.blockedValue,
+        heights: hashInt16(grid.heights),
+      },
       // The house bots by what they DO: a policy is code, so the ids
       // and their playbooks are the most a table can say about them.
       bots: Object.entries(BOTS)
         .map(([id, b]) => [id, (b as { playbook?: unknown }).playbook ?? null])
         .sort(),
     });
+    cached.set(orchard, value);
   }
-  return cached;
+  return value;
 }
 
 // A record plays out as it was recorded only if BOTH guards agree: the
@@ -93,6 +120,6 @@ export function contentFingerprint(): string {
 // fingerprint (a change in the tables it reads). A record from before the
 // fingerprint existed carries none: it is played, because refusing every
 // replay already on disk would be a worse lie than the one this prevents.
-export function contentMatches(recorded: string | undefined): boolean {
-  return recorded === undefined || recorded === contentFingerprint();
+export function contentMatches(recorded: string | undefined, orchard: StarOrchard): boolean {
+  return recorded === undefined || recorded === contentFingerprint(orchard);
 }

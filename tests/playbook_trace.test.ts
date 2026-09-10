@@ -6,13 +6,15 @@
 import { describe, expect, it } from 'vitest';
 import { fillWithBots } from '../server/bot_fill';
 import { buildSnapshot } from '../server/snapshot';
+import { starOrchard } from '../server/star_orchard';
 import { ClientWorld } from '../src/net/client_world';
 import type { ServerMsg } from '../src/net/protocol';
-import { buildMatchSim } from '../src/net/replay';
+import { buildMatchSim, orchardSim } from '../src/net/replay';
 import { BOTS } from '../src/sim/content/bots';
 import { LANER } from '../src/sim/content/bots/laner';
 import { LANER_PLAYBOOK } from '../src/sim/content/playbooks/laner';
 import { PlayLedger } from '../src/sim/playbook';
+import { playbookPolicy } from '../src/sim/playbook/interpreter';
 import { Sim, type SimEvent } from '../src/sim/sim';
 
 function digest(sim: Sim): string {
@@ -41,7 +43,7 @@ function playEvents(sim: Sim, ticks: number): PlayEvent[] {
 
 describe('the active play', () => {
   it('is written on the unit and emitted when it changes', () => {
-    const { sim } = buildMatchSim(11, fillWithBots([]));
+    const { sim } = buildMatchSim(starOrchard(), 11, fillWithBots([]));
     const events = playEvents(sim, 400);
     expect(events.length).toBeGreaterThan(0);
     for (const u of sim.units.values()) {
@@ -58,19 +60,22 @@ describe('the active play', () => {
   });
 
   it('regenerates identically in a replay', () => {
-    const a = playEvents(buildMatchSim(12, fillWithBots([])).sim, 600);
-    const b = playEvents(buildMatchSim(12, fillWithBots([])).sim, 600);
+    const a = playEvents(buildMatchSim(starOrchard(), 12, fillWithBots([])).sim, 600);
+    const b = playEvents(buildMatchSim(starOrchard(), 12, fillWithBots([])).sim, 600);
     expect(a).toEqual(b);
   });
 
   it('changes nothing about the decisions', () => {
-    const traced = buildMatchSim(13, fillWithBots([])).sim;
-    const bare = new Sim(13);
+    const traced = buildMatchSim(starOrchard(), 13, fillWithBots([])).sim;
+    const bare = orchardSim(starOrchard(), 13);
     for (const p of fillWithBots([])) {
       const unit = bare.addChampion(p.team, undefined, p.championId, p.skin ?? 0);
       unit.sigils = [...p.sigils];
-      // The same house style on each seat, attached bare instead of traced.
-      bare.attachPolicy(unit.id, BOTS[p.bot ?? LANER.id]!.policy);
+      // The same house style on each seat, attached bare instead of traced,
+      // on the map the match is played on (a bot's ready-made policy reads
+      // the tests' fixture map).
+      const playbook = BOTS[p.bot ?? LANER.id]!.playbook ?? LANER_PLAYBOOK;
+      bare.attachPolicy(unit.id, playbookPolicy(playbook, undefined, bare.map));
     }
     for (let i = 0; i < 2000; i++) {
       traced.tick();
@@ -91,7 +96,7 @@ describe('the active play', () => {
   });
 
   it('reaches allied clients only, and the mirror world applies it', () => {
-    const { sim } = buildMatchSim(14, fillWithBots([]));
+    const { sim } = buildMatchSim(starOrchard(), 14, fillWithBots([]));
     for (let i = 0; i < 100; i++) sim.tick();
     const champions = [...sim.units.values()].filter((u) => u.kind === 'champion');
     const mine = champions.find((u) => u.team === 0)!;
@@ -110,7 +115,7 @@ describe('the active play', () => {
       if (u.id === mine.id) expect(row.co).toEqual({ kind: 'warden' });
       if (u.id === theirs.id) expect(row.co).toBeUndefined();
     }
-    const world = new ClientWorld(() => undefined);
+    const world = new ClientWorld(() => undefined, starOrchard().map);
     world.applyServer(snap as ServerMsg);
     for (const row of snap.units) {
       expect(world.units.get(row.i)?.play ?? null).toBe(row.p ?? null);
@@ -152,7 +157,7 @@ describe('the play report', () => {
   });
 
   it('follows a real match', () => {
-    const { sim } = buildMatchSim(15, fillWithBots([]));
+    const { sim } = buildMatchSim(starOrchard(), 15, fillWithBots([]));
     const ledger = new PlayLedger();
     for (let i = 0; i < 2000; i++) ledger.observe(sim.tickCount + 1, sim.tick());
     const report = ledger.report();

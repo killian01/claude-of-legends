@@ -25,6 +25,7 @@ import {
 import { type BotRow, BotStore } from '../server/bot_store';
 import { BASE_RATING } from '../server/rating';
 import type { MatchRecord } from '../server/records';
+import { starOrchard } from '../server/star_orchard';
 import { type FastMatchRequest, runFastMatch } from '../src/fast_match';
 import { HOUSE_STYLE_IDS } from '../src/sim/content/bots/house';
 import { NEW_BOT_PLAYBOOK } from '../src/sim/content/playbooks/new_bot';
@@ -160,7 +161,7 @@ function cannedRunner(winner: 0 | 1) {
     requests: [] as FastMatchRequest[],
     async run(req: FastMatchRequest) {
       this.requests.push(req);
-      const r = runFastMatch({ ...req, maxTicks: 40 });
+      const r = runFastMatch(starOrchard(), { ...req, maxTicks: 40 });
       return { ...r, winner };
     },
   };
@@ -216,7 +217,7 @@ describe('running the Arena', () => {
   it('records nothing for a draw, and a lone bot plays house bots unrated', async () => {
     const draw = {
       run: async (req: FastMatchRequest) => ({
-        ...runFastMatch({ ...req, maxTicks: 40 }),
+        ...runFastMatch(starOrchard(), { ...req, maxTicks: 40 }),
         winner: null,
       }),
     };

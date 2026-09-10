@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { buildSnapshot } from '../server/snapshot';
+import { starOrchard } from '../server/star_orchard';
 import { ClientWorld } from '../src/net/client_world';
 import { CHAMPION_LIST } from '../src/sim/content/champions';
 import { clampSkin, SKINS } from '../src/sim/content/skins';
@@ -55,7 +56,7 @@ describe('skins in the sim and on the wire', () => {
   });
 
   it('the client mirror applies the skin', () => {
-    const world = new ClientWorld(() => undefined);
+    const world = new ClientWorld(() => undefined, starOrchard().map);
     world.applyServer({
       t: 'snap',
       time: 1,

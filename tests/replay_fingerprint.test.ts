@@ -8,6 +8,7 @@
 // code; this covers changes to its tables, without anybody remembering.
 
 import { describe, expect, it } from 'vitest';
+import { starOrchard } from '../server/star_orchard';
 import { runFastMatch } from '../src/fast_match';
 import {
   buildMatchSim,
@@ -21,8 +22,8 @@ import { contentFingerprint, contentMatches, fingerprintOf } from '../src/sim/co
 
 describe('the content fingerprint', () => {
   it('is stable across calls', () => {
-    expect(contentFingerprint()).toBe(contentFingerprint());
-    expect(contentFingerprint()).toMatch(/^[0-9a-f]{8}$/);
+    expect(contentFingerprint(starOrchard())).toBe(contentFingerprint(starOrchard()));
+    expect(contentFingerprint(starOrchard())).toMatch(/^[0-9a-f]{8}$/);
   });
 
   it('moves when a number in the tables moves, which is the whole point', () => {
@@ -47,17 +48,21 @@ describe('the content fingerprint', () => {
     // Records written before this existed carry none: refusing every
     // replay already on disk would be a worse lie than the one this
     // prevents.
-    expect(contentMatches(undefined)).toBe(true);
-    expect(contentMatches(contentFingerprint())).toBe(true);
-    expect(contentMatches('deadbeef')).toBe(false);
+    expect(contentMatches(undefined, starOrchard())).toBe(true);
+    expect(contentMatches(contentFingerprint(starOrchard()), starOrchard())).toBe(true);
+    expect(contentMatches('deadbeef', starOrchard())).toBe(false);
   });
 
   it('gates a replay on the version AND the content', () => {
-    const content = contentFingerprint();
-    expect(replayPlayable({ version: REPLAY_VERSION, content })).toBe(true);
-    expect(replayPlayable({ version: REPLAY_VERSION, content: undefined })).toBe(true);
-    expect(replayPlayable({ version: REPLAY_VERSION, content: 'deadbeef' })).toBe(false);
-    expect(replayPlayable({ version: REPLAY_VERSION - 1, content })).toBe(false);
+    const content = contentFingerprint(starOrchard());
+    expect(replayPlayable({ version: REPLAY_VERSION, content }, starOrchard())).toBe(true);
+    expect(replayPlayable({ version: REPLAY_VERSION, content: undefined }, starOrchard())).toBe(
+      true,
+    );
+    expect(replayPlayable({ version: REPLAY_VERSION, content: 'deadbeef' }, starOrchard())).toBe(
+      false,
+    );
+    expect(replayPlayable({ version: REPLAY_VERSION - 1, content }, starOrchard())).toBe(false);
   });
 
   it('is stamped on every record a match writes', () => {
@@ -80,9 +85,9 @@ describe('the content fingerprint', () => {
         bot: 'laner',
       },
     ];
-    const r = runFastMatch({ seed: 7, picks, maxTicks: 50 });
-    expect(r.record.content).toBe(contentFingerprint());
-    expect(replayPlayable(r.record)).toBe(true);
+    const r = runFastMatch(starOrchard(), { seed: 7, picks, maxTicks: 50 });
+    expect(r.record.content).toBe(contentFingerprint(starOrchard()));
+    expect(replayPlayable(r.record, starOrchard())).toBe(true);
   });
 });
 
@@ -105,10 +110,10 @@ describe('the check trail', () => {
   ];
 
   it('is written every CHECK_TICKS and matches a faithful replay tick for tick', () => {
-    const r = runFastMatch({ seed: 3, picks, maxTicks: 1000 });
+    const r = runFastMatch(starOrchard(), { seed: 3, picks, maxTicks: 1000 });
     expect(r.record.checks?.length).toBe(Math.floor(r.ticks / CHECK_TICKS));
     // The replay's own path: rebuild, tick, and compare at every mark.
-    const { sim } = buildMatchSim(r.record.seed, r.record.picks);
+    const { sim } = buildMatchSim(starOrchard(), r.record.seed, r.record.picks);
     let compared = 0;
     while (sim.tickCount < r.ticks) {
       sim.tick();
@@ -121,8 +126,8 @@ describe('the check trail', () => {
   });
 
   it('catches a replay that has drifted, which is the whole point', () => {
-    const r = runFastMatch({ seed: 3, picks, maxTicks: 600 });
-    const { sim } = buildMatchSim(r.record.seed, r.record.picks);
+    const r = runFastMatch(starOrchard(), { seed: 3, picks, maxTicks: 600 });
+    const { sim } = buildMatchSim(starOrchard(), r.record.seed, r.record.picks);
     // A match that plays out differently: one champion nudged, the way a
     // changed number would nudge it.
     while (sim.tickCount < CHECK_TICKS) {
@@ -136,7 +141,7 @@ describe('the check trail', () => {
   });
 
   it('says nothing about a record that carries no trail, or a tick off the cadence', () => {
-    const r = runFastMatch({ seed: 3, picks, maxTicks: 400 });
+    const r = runFastMatch(starOrchard(), { seed: 3, picks, maxTicks: 400 });
     expect(expectedCheck({ ...r.record, checks: undefined }, CHECK_TICKS)).toBe(null);
     expect(expectedCheck(r.record, CHECK_TICKS - 1)).toBe(null);
     expect(expectedCheck(r.record, 0)).toBe(null);

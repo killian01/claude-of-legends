@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultSeats } from '../headless/env';
 import { fillWithBots } from '../server/bot_fill';
+import { starOrchard } from '../server/star_orchard';
 import { ReplayWorld } from '../src/game/replay_world';
 import { type SparBot, seriesPicks, sparringPicks } from '../src/game/sparring_core';
 import { buildMatchSim } from '../src/net/replay';
@@ -174,7 +175,7 @@ describe('the house styles', () => {
 
   it('are said on the replay scoreboard, the bot by its name, the seats by their style', () => {
     const picks = sparringPicks(BOT, 2);
-    const { sim, unitIds } = buildMatchSim(2, picks);
+    const { sim, unitIds } = buildMatchSim(starOrchard(), 2, picks);
     const seats = new Map(unitIds.map((id, i) => [id, picks[i]!.name]));
     sim.tick();
     expect(sim.scoreboard().every((r) => r.player === null)).toBe(true);
@@ -184,7 +185,7 @@ describe('the house styles', () => {
     expect(rows.find((r) => r.unitId === unitIds[0])?.player).toBe(BOT.name);
     for (const r of rows.slice(1))
       expect(r.player).toMatch(/^House (laner|brawler|sieger|objective player)$/);
-    const rebuilt = buildMatchSim(2, picks).sim;
+    const rebuilt = buildMatchSim(starOrchard(), 2, picks).sim;
     world.rebind(rebuilt);
     expect(world.scoreboard().map((r) => r.player)).toEqual(rows.map((r) => r.player));
   });

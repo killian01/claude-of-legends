@@ -6,6 +6,7 @@
 
 import { Worker } from 'node:worker_threads';
 import { type FastMatchRequest, type FastMatchResult, runFastMatch } from '../src/fast_match';
+import { starOrchard } from './star_orchard';
 
 export const ARENA_QUEUE_MAX = 20;
 
@@ -44,7 +45,7 @@ export class ArenaRunner {
   }
 
   private runOne(req: FastMatchRequest): Promise<FastMatchResult> {
-    if (this.workerFile === null) return Promise.resolve(runFastMatch(req));
+    if (this.workerFile === null) return Promise.resolve(runFastMatch(starOrchard(), req));
     const file = this.workerFile;
     return new Promise((resolve, reject) => {
       const worker = new Worker(file, { workerData: req });

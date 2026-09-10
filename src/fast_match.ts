@@ -12,6 +12,7 @@ import {
   type ReplayRecord,
 } from './net/replay';
 import { contentFingerprint } from './sim/content/fingerprint';
+import type { StarOrchard } from './sim/content/star_orchard';
 import type { ForgedChampionDef } from './sim/forge/forged_def';
 import { PlayLedger, type PlayReport } from './sim/playbook/report';
 import type { ScoreRow, TeamId } from './sim/types';
@@ -39,9 +40,9 @@ export interface FastMatchResult {
 // draw rather than running forever.
 export const FAST_MATCH_MAX_TICKS = 20 * 60 * 40;
 
-export function runFastMatch(req: FastMatchRequest): FastMatchResult {
+export function runFastMatch(orchard: StarOrchard, req: FastMatchRequest): FastMatchResult {
   const forged = req.forged ?? [];
-  const { sim, unitIds } = buildMatchSim(req.seed, req.picks, forged);
+  const { sim, unitIds } = buildMatchSim(orchard, req.seed, req.picks, forged);
   const ledger = new PlayLedger();
   // Where the match stood, every CHECK_TICKS: what a replay of it will
   // compare itself against as it plays.
@@ -52,7 +53,7 @@ export function runFastMatch(req: FastMatchRequest): FastMatchResult {
   }
   const record: ReplayRecord = {
     version: REPLAY_VERSION,
-    content: contentFingerprint(),
+    content: contentFingerprint(orchard),
     checks,
     seed: req.seed,
     picks: req.picks,

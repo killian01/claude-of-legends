@@ -10,8 +10,8 @@
 
 // What pressing a tile does. A mode resolves the home's promise and takes
 // the page down; a section opens under the bar and the home stays.
-export type PlayMode = 'queue' | 'forge-queue' | 'create' | 'practice' | 'orchard';
-export type TileId = 'ranked' | 'bots' | 'forge' | 'lobby' | 'practice' | 'orchard';
+export type PlayMode = 'queue' | 'forge-queue' | 'create' | 'practice';
+export type TileId = 'ranked' | 'bots' | 'forge' | 'lobby' | 'practice';
 
 export type TileGoes = { to: 'mode'; mode: PlayMode } | { to: 'section'; key: string };
 
@@ -88,20 +88,6 @@ export const PLAY_TILES: readonly PlayTile[] = [
     cta: 'Play offline',
     art: 'practice',
     accent: '#6fb08a',
-    tall: true,
-    hero: false,
-  },
-  // The Star Orchard test mode (docs/star-orchard.md): the practice match
-  // on the authored map while it is being built. Said to be a test on the
-  // tile itself, so nobody reads an unfinished map as the game's.
-  {
-    id: 'orchard',
-    title: 'Star Orchard',
-    line: 'Test the new authored map: a practice 5v5 on the Star Orchard, offline, still being built.',
-    goes: { to: 'mode', mode: 'orchard' },
-    cta: 'Play the test map',
-    art: 'orchard',
-    accent: '#7f8fd9',
     tall: true,
     hero: false,
   },

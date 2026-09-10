@@ -6,28 +6,20 @@ import { PLAY_TILES, type PlayMode, tileArtUrl } from '../src/ui/home_tiles';
 
 describe('the play tiles', () => {
   it('stand in order, Ranked the one hero', () => {
-    expect(PLAY_TILES.map((t) => t.id)).toEqual([
-      'ranked',
-      'bots',
-      'forge',
-      'lobby',
-      'practice',
-      'orchard',
-    ]);
+    expect(PLAY_TILES.map((t) => t.id)).toEqual(['ranked', 'bots', 'forge', 'lobby', 'practice']);
     expect(PLAY_TILES.map((t) => t.title)).toEqual([
       'Ranked',
       'Bots',
       'Forge queue',
       'Private lobby',
       'Practice',
-      'Star Orchard',
     ]);
     expect(PLAY_TILES.filter((t) => t.hero).map((t) => t.id)).toEqual(['ranked']);
   });
 
   it('covers every play mode once, and sends Bots to the Academy', () => {
     const modes = PLAY_TILES.flatMap((t) => (t.goes.to === 'mode' ? [t.goes.mode] : []));
-    const expected: PlayMode[] = ['queue', 'forge-queue', 'create', 'practice', 'orchard'];
+    const expected: PlayMode[] = ['queue', 'forge-queue', 'create', 'practice'];
     expect(modes.sort()).toEqual([...expected].sort());
     const bots = PLAY_TILES.find((t) => t.id === 'bots');
     expect(bots?.goes).toEqual({ to: 'section', key: 'academy' });
@@ -43,7 +35,6 @@ describe('the play tiles', () => {
       'forge',
       'lobby',
       'practice',
-      'orchard',
     ]);
     // Hero and tall are the big shapes and never the same tile.
     expect(PLAY_TILES.every((t) => !(t.hero && t.tall))).toBe(true);
@@ -55,7 +46,7 @@ describe('the play tiles', () => {
     // scene with no button beside four that have one reads as unfinished
     // rather than as restrained.
     const withCta = PLAY_TILES.filter((t) => t.cta !== null).map((t) => t.id);
-    expect(withCta).toEqual(['ranked', 'bots', 'forge', 'lobby', 'practice', 'orchard']);
+    expect(withCta).toEqual(['ranked', 'bots', 'forge', 'lobby', 'practice']);
     expect(PLAY_TILES.every((t) => (t.cta !== null) === (t.hero || t.tall))).toBe(true);
     expect(PLAY_TILES.find((t) => t.id === 'ranked')?.cta).toBe('Play online');
   });
@@ -70,11 +61,9 @@ describe('the play tiles', () => {
     }
   });
 
-  it('says on the tile itself that the Star Orchard is a test', () => {
-    const orchard = PLAY_TILES.find((t) => t.id === 'orchard')!;
-    expect(orchard.goes).toEqual({ to: 'mode', mode: 'orchard' });
-    expect(orchard.line.toLowerCase()).toContain('test');
-    expect(orchard.line.toLowerCase()).toContain('offline');
+  it('offers no test map: the Star Orchard is the map every tile plays (ADR 0021)', () => {
+    expect(PLAY_TILES.some((t) => t.title.toLowerCase().includes('test'))).toBe(false);
+    expect(PLAY_TILES.some((t) => t.line.toLowerCase().includes('test map'))).toBe(false);
   });
 
   it('resolves the painting to the tile art folder', () => {

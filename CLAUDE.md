@@ -31,7 +31,7 @@ Vitest · Biome. No UI framework; tiny dependency set.
 | `src/net/` | Online client: wire protocol + WebSocket mirror world. |
 | `server/` | Authoritative game server; `server/generation/` is the Forge's provider seam (ADR 0010); the bots' store, the Arena and the night coach live beside it (ADR 0013). |
 | `headless/` | The environment: a match stepped from outside the repo over NDJSON (ADR 0002 phase 2). |
-| `public/map/star-orchard/` | The shipped Star Orchard export (`docs/star-orchard.md`), one revision; raw Blender exports stay in `art_src/map_exports/`, gitignored. |
+| `public/map/star-orchard/` | The shipped Star Orchard export (`docs/star-orchard.md`), the map every match is played on, one revision; raw Blender exports stay in `art_src/map_exports/`, gitignored. |
 | `tests/` | Vitest suite, including the structural gates. |
 | `scripts/` | Build, art, seeding, and browser e2e tooling; not part of `pnpm test`. |
 | `.claude/` | The agent's project skills, hooks and settings (`.claude/skills/README.md`). |
@@ -67,6 +67,10 @@ the `.env` knobs, and how to read a red run. The project's own skills under
 - **One sim, every host.** The exact same `src/sim/` code runs offline in the browser,
   on the authoritative server, and headless. Behavior must be identical everywhere.
 - **The server is authoritative.** The client renders and never decides outcomes.
+- **Every match is played on the Star Orchard (ADR 0021).** `buildMatchSim` in
+  `src/net/replay.ts` is the one place a match's `Sim` is built; every host hands it the
+  export it has read (disk on the server and the environment, fetch in the browser). The
+  launch map in `src/sim/content/map.ts` is the tests' fixture and no host reaches it.
 - **Every bot is a `Policy`** (`src/sim/policy.ts`): deterministic (observation, rng) -> action,
   zero I/O. The observation is team vision, never global sim state. The obs/action space and
   the decision budget are a public, versioned contract (ADR 0002, ADR 0003).

@@ -8,20 +8,25 @@
 import { parseCoachOrder } from '../sim/coach';
 import { attachBot, botPolicy } from '../sim/content/bots';
 import { contentMatches } from '../sim/content/fingerprint';
+import type { StarOrchard } from '../sim/content/star_orchard';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { PlaybookDef } from '../sim/playbook/types';
 import { Sim } from '../sim/sim';
+import { TerrainNavGrid } from '../sim/terrain_nav';
 import type { TeamId } from '../sim/types';
 import { type ClientMsg, isFiniteVec } from './protocol';
 
 // Bumped whenever the sim's own CODE changes behavior (a replay is a
 // re-simulation, so an older record would silently play out a different
 // match): 2 with the river-reflected lane polylines, 3 with exactly
-// rounded lengths and angles (ADR 0019). What the sim READS rather than
-// what it does (champions, items, sigils, the map, the house bots) is
-// guarded by the content fingerprint instead, which moves on its own
-// (src/sim/content/fingerprint.ts): nobody has to remember that one.
-export const REPLAY_VERSION = 3;
+// rounded lengths and angles (ADR 0019), 4 with the Star Orchard as the
+// map (ADR 0021: every earlier record is the launch map's, and the ones
+// from before the fingerprint existed carry none to be refused by). What
+// the sim READS rather than what it does (champions, items, sigils, the
+// map, the house bots) is guarded by the content fingerprint instead,
+// which moves on its own (src/sim/content/fingerprint.ts): nobody has to
+// remember that one.
+export const REPLAY_VERSION = 4;
 
 // The checksum a replay must show at `tick`, or null when the record
 // says nothing about that tick (an older record, or a tick that is not
@@ -32,12 +37,13 @@ export function expectedCheck(record: ReplayRecord, tick: number): number | null
 }
 
 // Whether a record still plays out the match it recorded: the version
-// this build speaks, and content that has not moved under it.
-export function replayPlayable(record: {
-  version?: unknown;
-  content?: string | undefined;
-}): boolean {
-  return record.version === REPLAY_VERSION && contentMatches(record.content);
+// this build speaks, and content (the map included) that has not moved
+// under it.
+export function replayPlayable(
+  record: { version?: unknown; content?: string | undefined },
+  orchard: StarOrchard,
+): boolean {
+  return record.version === REPLAY_VERSION && contentMatches(record.content, orchard);
 }
 // A griefer spamming the rate limit for a whole match could balloon the
 // log; past this the match simply has no replay.
@@ -102,15 +108,30 @@ export interface ReplayRecord {
   forged?: ForgedChampionDef[];
 }
 
-// The one sim construction for a match, live and replayed alike: same
-// seed, same forged definitions in the same order, same picks in the same
-// order, same policy attachments.
+// A bare Sim on the Star Orchard: a fresh walkability grid over the shared
+// export, strict navigation. buildMatchSim seats a match on it; the
+// practice match (src/main.ts) and the dev showcase seat their own.
+export function orchardSim(orchard: StarOrchard, seed: number): Sim {
+  return new Sim(seed, {
+    map: orchard.map,
+    nav: new TerrainNavGrid(orchard.navigation),
+    strictNavigation: true,
+  });
+}
+
+// The one sim construction for a match, live and replayed alike, on the
+// Star Orchard the host has read (ADR 0021): a fresh walkability grid over
+// the shared export, strict navigation, then the same seed, the same forged
+// definitions in the same order, the same picks in the same order, the same
+// policy attachments. Nothing else in the game constructs a match's Sim
+// (tests/architecture.test.ts).
 export function buildMatchSim(
+  orchard: StarOrchard,
   seed: number,
   picks: readonly ReplayPick[],
   forged: readonly ForgedChampionDef[] = [],
 ): { sim: Sim; unitIds: number[] } {
-  const sim = new Sim(seed);
+  const sim = orchardSim(orchard, seed);
   for (const def of forged) sim.addForgedChampion(def);
   const unitIds: number[] = [];
   for (const p of picks) {

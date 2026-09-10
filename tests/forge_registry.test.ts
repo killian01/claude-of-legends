@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { Env } from '../headless/env';
 import { handleRequest, parseForged, parseSeats } from '../headless/requests';
+import { starOrchard } from '../server/star_orchard';
 import { ClientWorld } from '../src/net/client_world';
 import {
   applySimCommand,
@@ -80,7 +81,7 @@ describe('the champion registry', () => {
 describe('determinism with forged champions', () => {
   it('two sims with the same seed and forged defs stay identical', () => {
     const run = () => {
-      const { sim } = buildMatchSim(4242, forgedPicks(), [FORGED]);
+      const { sim } = buildMatchSim(starOrchard(), 4242, forgedPicks(), [FORGED]);
       const trace: number[] = [];
       for (let i = 0; i < 300; i++) {
         sim.tick();
@@ -92,7 +93,7 @@ describe('determinism with forged champions', () => {
   });
 
   it('runs a forged champion as a real participant', () => {
-    const { sim, unitIds } = buildMatchSim(7, forgedPicks(), [FORGED]);
+    const { sim, unitIds } = buildMatchSim(starOrchard(), 7, forgedPicks(), [FORGED]);
     const u = sim.units.get(unitIds[0]!);
     expect(u?.championId).toBe(FORGED.id);
     expect(u?.champion?.passive.name).toBe('Barbed Marks');
@@ -105,7 +106,7 @@ describe('determinism with forged champions', () => {
 describe('replays embed forged definitions', () => {
   it('rebuilds the exact live state from a record carrying the defs', () => {
     const picks = forgedPicks();
-    const live = buildMatchSim(1357, picks, [FORGED]);
+    const live = buildMatchSim(starOrchard(), 1357, picks, [FORGED]);
     const TICKS = 400;
     for (let k = 0; k < TICKS; k++) {
       if (k === 20) applySimCommand(live.sim, 0, live.unitIds[0]!, { t: 'move', x: 40, z: 40 });
@@ -126,7 +127,12 @@ describe('replays embed forged definitions', () => {
     };
     // The record's forged list is the wire-safe embedding, not a reference.
     const rebuiltDefs = JSON.parse(JSON.stringify(record)) as ReplayRecord;
-    const replay = buildMatchSim(rebuiltDefs.seed, rebuiltDefs.picks, rebuiltDefs.forged ?? []);
+    const replay = buildMatchSim(
+      starOrchard(),
+      rebuiltDefs.seed,
+      rebuiltDefs.picks,
+      rebuiltDefs.forged ?? [],
+    );
     for (let k = 0; k < TICKS; k++) {
       if (k === 20) applySimCommand(replay.sim, 0, replay.unitIds[0]!, { t: 'move', x: 40, z: 40 });
       if (k === 60) applySimCommand(replay.sim, 0, replay.unitIds[0]!, { t: 'skill', key: 'Q' });
@@ -141,8 +147,8 @@ describe('replays embed forged definitions', () => {
 
 describe('world API parity', () => {
   it('Sim and ClientWorld resolve the same forged champion through championDef', () => {
-    const { sim } = buildMatchSim(1, forgedPicks(), [FORGED]);
-    const client = new ClientWorld(() => {});
+    const { sim } = buildMatchSim(starOrchard(), 1, forgedPicks(), [FORGED]);
+    const client = new ClientWorld(() => {}, starOrchard().map);
     client.registerForged(sim.champions.forgedDefs());
     const fromSim = sim.championDef(FORGED.id);
     const fromClient = client.championDef(FORGED.id);

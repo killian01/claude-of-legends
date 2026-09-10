@@ -5,6 +5,7 @@
 // owner build that ends on that build with nothing rotting in the bag.
 
 import { describe, expect, it } from 'vitest';
+import { starOrchard } from '../server/star_orchard';
 import { sparringPicks } from '../src/game/sparring_core';
 import { buildMatchSim } from '../src/net/replay';
 import { dispatchAction } from '../src/sim/action_dispatch';
@@ -468,7 +469,7 @@ describe('a sparring on an owner build', () => {
       skin: 0,
       playbook: { ...LANER_PLAYBOOK, kit: { build } },
     });
-    const { sim, unitIds } = buildMatchSim(11, picks, []);
+    const { sim, unitIds } = buildMatchSim(starOrchard(), 11, picks, []);
     const me = sim.units.get(unitIds[0]!)!;
     while (sim.winner === null && sim.tickCount < 20 * 60 * 25) sim.tick();
     for (const id of me.items) {

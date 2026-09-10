@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { fillWithBots } from '../server/bot_fill';
+import { starOrchard } from '../server/star_orchard';
 import { buildMatchSim } from '../src/net/replay';
 import { BRAWLER_PLAYBOOK } from '../src/sim/content/playbooks/brawler';
 import { SIEGER_PLAYBOOK } from '../src/sim/content/playbooks/sieger';
@@ -33,7 +34,7 @@ describe('lane activity', () => {
 
   it('reaches the observation as laneActivity, every lane a number', () => {
     const seed = 4;
-    const { sim } = buildMatchSim(seed, fillWithBots([], seed));
+    const { sim } = buildMatchSim(starOrchard(), seed, fillWithBots([], seed));
     for (let i = 0; i < 2400; i++) sim.tick();
     const champ = [...sim.units.values()].find((u) => u.kind === 'champion')!;
     const obs = buildObservation(sim, champ.id)!;

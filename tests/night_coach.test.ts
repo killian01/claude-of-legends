@@ -19,6 +19,7 @@ import {
 import type { CoachAnswer } from '../server/playbook_suggest';
 import { BASE_RATING } from '../server/rating';
 import type { MatchRecord } from '../server/records';
+import { starOrchard } from '../server/star_orchard';
 import { type FastMatchRequest, runFastMatch } from '../src/fast_match';
 import type { ReplayPick } from '../src/net/replay';
 import { NEW_BOT_PLAYBOOK } from '../src/sim/content/playbooks/new_bot';
@@ -105,7 +106,7 @@ function markedRunner(marker: string) {
     calls: 0,
     async run(req: FastMatchRequest) {
       this.calls += 1;
-      const r = runFastMatch({ ...req, maxTicks: 20 });
+      const r = runFastMatch(starOrchard(), { ...req, maxTicks: 20 });
       const seat = req.picks.find((p) => p.playbook);
       const wins = seat?.playbook?.plays.some((p) => p.id === marker) ?? false;
       return { ...r, winner: (wins ? 0 : 1) as 0 | 1 };
@@ -168,7 +169,7 @@ function rig(
     maxTicks: 20,
   };
   const reportFor = (matchId: number, at: number) => {
-    const r = runFastMatch({ seed: matchId, picks: PICKS, maxTicks: 20 });
+    const r = runFastMatch(starOrchard(), { seed: matchId, picks: PICKS, maxTicks: 20 });
     store.addBotReport({
       matchId,
       botId: BOT.id,
@@ -191,7 +192,7 @@ describe('the report the coach reads', () => {
       [70, true, 4, undefined],
     ]);
     expect(botMatchesSince(records, 2, 0)).toEqual([]);
-    const r = runFastMatch({ seed: 1, picks: PICKS, maxTicks: 40 });
+    const r = runFastMatch(starOrchard(), { seed: 1, picks: PICKS, maxTicks: 40 });
     const unitId = r.unitIds[0]!;
     const plays = sumPlays([
       { report: r.report, unitId },

@@ -17,6 +17,7 @@ import type { PlaybookDef } from '../src/sim/playbook/types';
 import type { Sim, SimEvent } from '../src/sim/sim';
 import type { TeamId } from '../src/sim/types';
 import { buildSnapshot } from './snapshot';
+import { starOrchard } from './star_orchard';
 
 export interface MatchPick {
   clientId: number;
@@ -96,7 +97,7 @@ export class Match {
     this.forgedDefs = [...forged.values()];
     // The shared builder IS the live construction: a replayed sim starts
     // from the same seed, picks, and policy attachments by definition.
-    const { sim, unitIds } = buildMatchSim(seed, this.replayPicks, this.forgedDefs);
+    const { sim, unitIds } = buildMatchSim(starOrchard(), seed, this.replayPicks, this.forgedDefs);
     this.sim = sim;
     this.pickUnitIds = unitIds;
     picks.forEach((p, i) => {

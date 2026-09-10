@@ -24,10 +24,11 @@ import { ReplayWorld } from './game/replay_world';
 import { getSettings } from './game/settings';
 import { type SpectatorView, startSpectator } from './game/spectate';
 import {
-  buildStarOrchardMatch,
-  loadStarOrchardAssets,
-  type StarOrchardMatch,
+  type LoadedOrchard,
+  loadStarOrchardModel,
+  loadStarOrchardTerrain,
 } from './game/star_orchard';
+import { loadStarOrchard } from './game/star_orchard_records';
 import { ClientWorld } from './net/client_world';
 import type { ForgedMatchAssets, ServerMsg } from './net/protocol';
 import { markStep, markVisit, STAYED_MS } from './net/pulse_ping';
@@ -35,6 +36,7 @@ import {
   applyReplayEvent,
   buildMatchSim,
   expectedCheck,
+  orchardSim,
   type ReplayEvent,
   type ReplayRecord,
   replayPlayable,
@@ -42,9 +44,10 @@ import {
 } from './net/replay';
 import { attachBot } from './sim/content/bots';
 import { houseSeats } from './sim/content/bots/house';
+import type { StarOrchard } from './sim/content/star_orchard';
 import type { ForgedChampionDef } from './sim/forge/forged_def';
 import { Rng } from './sim/rng';
-import { Sim } from './sim/sim';
+import type { Sim } from './sim/sim';
 import { ULT_RANK_LEVELS } from './sim/stats';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
 import { type AuthedAccount, currentAccount } from './ui/auth';
@@ -88,33 +91,55 @@ interface OfflinePick {
   // A Forge test drive: the draft to register in the offline sim before
   // picking it (the stylized figure carries the render).
   forged?: ForgedChampionDef;
-  // The Star Orchard test mode (docs/star-orchard.md): the practice match
-  // on the authored map instead of the launch one.
-  orchard?: boolean;
 }
 
-// The Star Orchard's export, downloaded behind a card that says how far the
-// model is; null when it could not be had, after the notice that says why.
-async function loadOrchard(): Promise<StarOrchardMatch | null> {
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+// The map, records and terrain (ADR 0021), behind a card that says how far
+// the model is; null when it could not be had, after the notice that says
+// why. The records are cached for the page and the model is downloaded
+// once, so the card is brief on every match but the first.
+async function loadOrchard(): Promise<LoadedOrchard | null> {
   const { root, card } = screen(container);
   const line = el('p', 'menu-sub', 'Loading the terrain');
   card.append(el('h1', 'menu-title', 'Star Orchard'), line);
   try {
-    const assets = await loadStarOrchardAssets((fraction) => {
-      line.textContent = `Loading the terrain: ${Math.round(fraction * 100)}%`;
+    const orchard = await loadStarOrchard();
+    const terrain = await loadStarOrchardTerrain(orchard, (fraction) => {
+      line.textContent =
+        fraction >= 1
+          ? 'Preparing the scenery'
+          : `Loading the terrain: ${Math.round(fraction * 100)}%`;
     });
-    line.textContent = 'Preparing the scenery';
-    return await buildStarOrchardMatch(assets);
+    return { orchard, terrain };
   } catch (err) {
     root.remove();
     await showNotice(
       container,
       'Star Orchard unavailable',
-      `The test map could not be loaded: ${err instanceof Error ? err.message : String(err)}`,
+      `The map could not be loaded: ${errorText(err)}`,
     );
     return null;
   } finally {
     root.remove();
+  }
+}
+
+// The map's records alone, for a host that needs them before it can show a
+// card (the online session, whose queue screen is up); null after the
+// notice.
+async function loadOrchardRecords(): Promise<StarOrchard | null> {
+  try {
+    return await loadStarOrchard();
+  } catch (err) {
+    await showNotice(
+      container,
+      'Star Orchard unavailable',
+      `The map could not be loaded: ${errorText(err)}`,
+    );
+    return null;
   }
 }
 
@@ -170,16 +195,13 @@ async function fetchBots(): Promise<BotPick[]> {
   }
 }
 
-// One offline practice match; resolves with the exit the player chose.
-// On the Star Orchard the same match runs on the authored map: its record,
-// its walkability grid and its terrain in the renderer.
+// One offline practice match on the Star Orchard; resolves with the exit
+// the player chose.
 async function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
-  const orchard = pick.orchard ? await loadOrchard() : null;
-  if (pick.orchard && !orchard) return 'menu';
+  const loaded = await loadOrchard();
+  if (!loaded) return 'menu';
   return new Promise((resolve) => {
-    const sim = orchard
-      ? new Sim(42, { map: orchard.map, nav: orchard.nav, strictNavigation: true })
-      : new Sim(42);
+    const sim = orchardSim(loaded.orchard, 42);
     if (pick.forged) sim.addForgedChampion(pick.forged);
     const world: IWorld = sim;
     const self = sim.addChampion(0, undefined, pick.championId, pick.skin);
@@ -228,14 +250,9 @@ async function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
     // here; the replay viewer below deliberately does not, since watching
     // is not playing.
     markStep('played');
-    const pres = startPresentation(
-      container,
-      world,
-      self.id,
-      self.team,
-      exit,
-      orchard ? { terrain: orchard.terrain } : {},
-    );
+    const pres = startPresentation(container, world, self.id, self.team, exit, {
+      terrain: loaded.terrain,
+    });
     const TICK_MS = DT * 1000;
     let last = performance.now();
     let acc = 0;
@@ -245,7 +262,11 @@ async function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
         guarded = false;
         layer.unguard();
       }
-      acc += Math.min(now - last, 250);
+      // The first frame's timestamp predates the presentation's own setup
+      // (shader compiles, texture uploads: seconds on a slow GPU), which
+      // would leave the clock in debt and the match standing still for as
+      // long; a frame never counts for less than nothing.
+      acc += Math.max(0, Math.min(now - last, 250));
       last = now;
       while (acc >= TICK_MS) {
         const kills: { unitId: number; killerId: number }[] = [];
@@ -305,7 +326,9 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
   } catch {
     // handled below
   }
-  if (!record || !replayPlayable(record) || !Array.isArray(record.picks)) {
+  const orchard = await loadOrchardRecords();
+  if (!orchard) return 'menu';
+  if (!record || !replayPlayable(record, orchard) || !Array.isArray(record.picks)) {
     await showNotice(
       container,
       'Replay unavailable',
@@ -318,11 +341,13 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
     return 'menu';
   }
   const rec = record;
+  const loaded = await loadOrchard();
+  if (!loaded) return 'menu';
   return new Promise((resolve) => {
-    const build = (): Sim => buildMatchSim(rec.seed, rec.picks, rec.forged ?? []).sim;
+    const build = (): Sim => buildMatchSim(orchard, rec.seed, rec.picks, rec.forged ?? []).sim;
     // Unit ids are deterministic too: the first build names the seats and
     // every rebuild lands the same ids.
-    const { sim: first, unitIds } = buildMatchSim(rec.seed, rec.picks, rec.forged ?? []);
+    const { sim: first, unitIds } = buildMatchSim(orchard, rec.seed, rec.picks, rec.forged ?? []);
     let sim = first;
     const unitTeams = new Map<number, TeamId>();
     const seatNames = new Map<number, string>();
@@ -363,6 +388,7 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
       unitIds[viewerIdx]!,
       rec.picks[viewerIdx]!.team,
       finish,
+      { terrain: loaded.terrain },
     );
     let speed = 1;
     let next = 0;
@@ -532,12 +558,14 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
 
 // Watch a live match: a seatless mirror world on one team's fog, driven
 // by the server's spectator snapshot stream.
-function runSpectate(matchId: number, team: TeamId): Promise<PostMatchAction> {
+async function runSpectate(matchId: number, team: TeamId): Promise<PostMatchAction> {
+  const loaded = await loadOrchard();
+  if (!loaded) return 'menu';
   return new Promise((resolve) => {
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${window.location.host}/ws`);
     // Spectators send no orders; the world's sender goes nowhere.
-    const world = new ClientWorld(() => undefined);
+    const world = new ClientWorld(() => undefined, loaded.orchard.map);
     let view: SpectatorView | null = null;
     let finished = false;
     const finish = (action: PostMatchAction): void => {
@@ -579,7 +607,7 @@ function runSpectate(matchId: number, team: TeamId): Promise<PostMatchAction> {
         case 'snap': {
           const changed = world.applyServer(msg);
           if (!view && world.units.size > 0) {
-            view = startSpectator(container, world, team, () => finish('menu'));
+            view = startSpectator(container, world, team, () => finish('menu'), loaded.terrain);
           }
           if (changed && view) {
             const kills: { unitId: number; killerId: number }[] = [];
@@ -615,13 +643,19 @@ function runSpectate(matchId: number, team: TeamId): Promise<PostMatchAction> {
 
 // One online session (queue or lobby, select, match); resolves with the
 // exit the player chose, or 'menu' when the connection story ends it.
-function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
+async function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
+  const orchard = await loadOrchardRecords();
+  if (!orchard) return 'menu';
+  // The model downloads while the queue and the select run, so that by the
+  // first snapshot it is usually on hand; the card at the match's door
+  // says how far it is when it is not, and reports a failure there.
+  loadStarOrchardModel(orchard, () => {}).catch(() => undefined);
   return new Promise((resolve) => {
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${window.location.host}/ws`);
     const world = new ClientWorld((msg) => {
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
-    });
+    }, orchard.map);
 
     let queueUi: QueueController | null = null;
     let lobbyUi: LobbyController | null = null;
@@ -668,6 +702,37 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
     // closing the tab asks first. The end screen lifts the guard: Back is
     // then Return to menu.
     const layer = appNav().push('session', () => finish('menu'));
+
+    // The presentation opens once the terrain is parsed: at once when the
+    // model is on hand, behind the loading card while it is still coming.
+    let opening = false;
+    const openPresentation = async (): Promise<void> => {
+      const loaded = await loadOrchard();
+      if (finished) return;
+      if (!loaded) {
+        finish('menu');
+        return;
+      }
+      // The live match, the other half of the pace the practice match
+      // reports above. Once per browser per day either way.
+      markStep('played');
+      const opened = startPresentation(container, world, world.selfUnitId, world.selfTeam, finish, {
+        terrain: loaded.terrain,
+      });
+      pres = opened;
+      layer.guard(() => pres?.toggleEscapeMenu());
+      // A coach seat (ADR 0013): the bar for the orders with no place to
+      // click; right-click already goes and focuses through the mirror.
+      if (world.coach) {
+        coachBar = buildCoachBar(container, (kind) =>
+          ws.send(JSON.stringify({ t: 'order', kind })),
+        );
+      }
+      opened.setNetHooks({
+        sendChat: (text) => ws.send(JSON.stringify({ t: 'chat', text })),
+        sendPing: (x, z) => ws.send(JSON.stringify({ t: 'ping', x, z })),
+      });
+    };
 
     // What this account may pick (ADR 0018), fetched the moment the
     // session opens so the wall is drawn with the first paint of select
@@ -856,23 +921,9 @@ function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           break;
         case 'snap': {
           const changed = world.applyServer(msg);
-          if (!pres && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) {
-            // The live match, the other half of the pace the practice
-            // match reports above. Once per browser per day either way.
-            markStep('played');
-            pres = startPresentation(container, world, world.selfUnitId, world.selfTeam, finish);
-            layer.guard(() => pres?.toggleEscapeMenu());
-            // A coach seat (ADR 0013): the bar for the orders with no place to
-            // click; right-click already goes and focuses through the mirror.
-            if (world.coach) {
-              coachBar = buildCoachBar(container, (kind) =>
-                ws.send(JSON.stringify({ t: 'order', kind })),
-              );
-            }
-            pres.setNetHooks({
-              sendChat: (text) => ws.send(JSON.stringify({ t: 'chat', text })),
-              sendPing: (x, z) => ws.send(JSON.stringify({ t: 'ping', x, z })),
-            });
+          if (!pres && !opening && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) {
+            opening = true;
+            void openPresentation();
           }
           if (changed) {
             // The coached bot answers through its snapshot: the order it holds
@@ -1050,12 +1101,9 @@ async function boot(): Promise<void> {
     joinCode = null;
     next = null;
     let action: PostMatchAction;
-    if (choice.mode === 'practice' || choice.mode === 'orchard') {
+    if (choice.mode === 'practice') {
       // A Forge test drive arrives with its draft; a plain practice run
-      // goes through champion select as always. The Star Orchard is the
-      // same run on the authored map, so a pick made for one map is never
-      // reused on the other.
-      const orchard = choice.mode === 'orchard';
+      // goes through champion select as always.
       let pick: OfflinePick;
       if (choice.forged) {
         pick = {
@@ -1063,15 +1111,14 @@ async function boot(): Promise<void> {
           sigils: ['riftstep', 'mend'],
           skin: 0,
           forged: choice.forged,
-          orchard,
         };
-      } else if (lastPick?.orchard === orchard) {
+      } else if (lastPick) {
         pick = lastPick;
       } else {
         const chosen = await pickForPractice();
         // Left the select without a pick: back to the home.
         if (!chosen) continue;
-        pick = { ...chosen, orchard };
+        pick = chosen;
       }
       lastPick = pick;
       action = await runOffline(pick);

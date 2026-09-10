@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { Match } from '../server/match';
+import { starOrchard } from '../server/star_orchard';
 import { ClientWorld } from '../src/net/client_world';
 
 function veskMatch(): { match: Match; veskId: number } {
@@ -39,7 +40,7 @@ describe('spell wire', () => {
     const chip = rec?.st?.find((c) => c.k === 'mark');
     expect(chip?.v).toBe(3);
 
-    const client = new ClientWorld(() => undefined);
+    const client = new ClientWorld(() => undefined, starOrchard().map);
     client.applyServer({ t: 'match_start', selfUnitId: veskId, team: 0 });
     client.applyServer(snap);
     const mirrored = client.units.get(enemyId);
@@ -66,7 +67,7 @@ describe('spell wire', () => {
     const chip = rec?.st?.find((c) => c.k === 'shield');
     expect(chip?.v).toBe(120);
 
-    const client = new ClientWorld(() => undefined);
+    const client = new ClientWorld(() => undefined, starOrchard().map);
     client.applyServer({ t: 'match_start', selfUnitId: veskId, team: 0 });
     client.applyServer(snap);
     const mirrored = client.units.get(enemyId);
@@ -105,7 +106,7 @@ describe('spell wire', () => {
     expect(rec?.w?.u).toBeGreaterThan(snap.time);
 
     // The client mirror materializes the pending spell for the renderer.
-    const client = new ClientWorld(() => undefined);
+    const client = new ClientWorld(() => undefined, starOrchard().map);
     client.applyServer({ t: 'match_start', selfUnitId: veskId, team: 0 });
     client.applyServer(snap);
     const mirrored = client.units.get(veskId);
@@ -133,7 +134,7 @@ describe('spell wire', () => {
     expect(bolt).toBeDefined();
     expect(bolt?.s).toBe(veskId);
 
-    const client = new ClientWorld(() => undefined);
+    const client = new ClientWorld(() => undefined, starOrchard().map);
     client.applyServer({ t: 'match_start', selfUnitId: veskId, team: 0 });
     client.applyServer(snap);
     expect(client.projectiles.get(bolt?.i ?? -1)?.sourceId).toBe(veskId);

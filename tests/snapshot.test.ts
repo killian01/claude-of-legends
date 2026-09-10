@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { fillWithBots } from '../server/bot_fill';
+import { starOrchard } from '../server/star_orchard';
 import { buildMatchSim } from '../src/net/replay';
 import type { Sim } from '../src/sim/sim';
 
@@ -38,7 +39,7 @@ function stepTo(sim: Sim, tick: number): void {
 describe('the world checkpoint', () => {
   it('restores at k and reaches the same world at n as a straight run', () => {
     const seed = 21;
-    const { sim } = buildMatchSim(seed, fillWithBots([], seed));
+    const { sim } = buildMatchSim(starOrchard(), seed, fillWithBots([], seed));
     stepTo(sim, 600);
     const atSix = sim.snapshot();
     expect(atSix.tick).toBe(600);
@@ -64,7 +65,7 @@ describe('the world checkpoint', () => {
 
   it('keeps the attached policies driving after a restore', () => {
     const seed = 8;
-    const { sim } = buildMatchSim(seed, fillWithBots([], seed));
+    const { sim } = buildMatchSim(starOrchard(), seed, fillWithBots([], seed));
     stepTo(sim, 400);
     const snap = sim.snapshot();
     stepTo(sim, 900);
@@ -82,7 +83,7 @@ describe('the world checkpoint', () => {
 
   it('crosses a structured clone, as a worker ships it', () => {
     const seed = 5;
-    const { sim } = buildMatchSim(seed, fillWithBots([], seed));
+    const { sim } = buildMatchSim(starOrchard(), seed, fillWithBots([], seed));
     stepTo(sim, 300);
     const snap = structuredClone(sim.snapshot());
     stepTo(sim, 700);

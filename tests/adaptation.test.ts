@@ -6,6 +6,7 @@
 // a mage-heavy enemy lineup.
 
 import { describe, expect, it } from 'vitest';
+import { starOrchard } from '../server/star_orchard';
 import { sparringPicks } from '../src/game/sparring_core';
 import { buildMatchSim } from '../src/net/replay';
 import { CHAMPIONS } from '../src/sim/content/champions';
@@ -54,7 +55,7 @@ describe('the lineup in the observation', () => {
       },
       3,
     );
-    const { sim, unitIds } = buildMatchSim(3, picks);
+    const { sim, unitIds } = buildMatchSim(starOrchard(), 3, picks);
     sim.tick();
     const obs = buildObservation(sim, unitIds[0]!)!;
     expect(obs.seats).toHaveLength(10);

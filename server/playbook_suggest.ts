@@ -12,7 +12,7 @@
 import { hintsFor } from '../src/sim/content/bots/hints';
 import { CHAMPION_LIST, CHAMPIONS } from '../src/sim/content/champions';
 import { ITEM_LIST } from '../src/sim/content/items';
-import { GAME_MAP } from '../src/sim/content/map';
+import { STAR_ORCHARD_SIZE } from '../src/sim/content/star_orchard';
 import { MAX_BUILD, roleBuild } from '../src/sim/playbook/kit';
 import { RANGED_MIN_RANGE } from '../src/sim/playbook/micro';
 import { applyPatchOp, isPatchOp, type PatchOp } from '../src/sim/playbook/patch';
@@ -179,7 +179,7 @@ Behavior is ONE of (every parameter optional, default in parentheses):
  {"kind":"fallBack"} walk back under the nearest live allied tower; passes the turn once under it, so the plays below go on there.
  {"kind":"defendTower","within"?:0..200 (200)} collapse on the allied tower enemy champions are at (the most of them, the nearest on a tie) within the radius; passes the turn beside it or with no tower threatened, so a fight play below takes over on arrival. How a spread pusher is caught with the numbers.
  {"kind":"splitPush"} push the lane enemies were seen in the least over the last minute (the farthest from the enemies in sight on a tie): takes towers while the enemy groups elsewhere; pair it with a fallBack or a retreat when outnumbered.
- {"kind":"holdPosition","x":0..${GAME_MAP.size},"z":0..${GAME_MAP.size},"within"?:0..50 (2)} walk to a point and hold; always acts.
+ {"kind":"holdPosition","x":0..${STAR_ORCHARD_SIZE},"z":0..${STAR_ORCHARD_SIZE},"within"?:0..50 (2)} walk to a point and hold; always acts.
 Patch operations, ONE compact JSON object per line:
  {"op":"add","play":Play,"before"?:id|null} insert before the named play, append when absent
  {"op":"remove","id":id}

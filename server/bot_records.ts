@@ -20,6 +20,7 @@ import { validatePlaybook } from '../src/sim/playbook/validate';
 import { INVENTORY_SLOTS } from '../src/sim/sim';
 import type { ScoreRow, TeamId } from '../src/sim/types';
 import type { BotStore } from './bot_store';
+import { starOrchard } from './star_orchard';
 
 // Entries per bot; past it the oldest leave with the replays only they held.
 export const RECORD_CAP = 50;
@@ -280,7 +281,14 @@ function replay(raw: unknown, seed: number, ticks: number): ReplayRecord | null 
   // Rebuilt here rather than trusted, the content fingerprint included:
   // it is this server that will serve the record back, and it is this
   // server's content the replay will be re-simulated against.
-  return { version: REPLAY_VERSION, content: contentFingerprint(), seed, picks, events: [], ticks };
+  return {
+    version: REPLAY_VERSION,
+    content: contentFingerprint(starOrchard()),
+    seed,
+    picks,
+    events: [],
+    ticks,
+  };
 }
 
 export interface RecordUpload {

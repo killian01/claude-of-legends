@@ -4,15 +4,17 @@
 
 import { describe, expect, it } from 'vitest';
 import { Match } from '../server/match';
+import { starOrchard } from '../server/star_orchard';
 import { ClientWorld } from '../src/net/client_world';
+import { STAR_ORCHARD_TOWERS } from '../src/sim/content/star_orchard';
 
 function wire(): { match: Match; a: ClientWorld; b: ClientWorld; step: (n: number) => void } {
   const match = new Match(7, [
     { clientId: 1, name: 'alice', team: 0, championId: 'sylra', sigils: ['riftstep', 'mend'] },
     { clientId: 2, name: 'bob', team: 1, championId: 'fenn', sigils: ['zephyr', 'sear'] },
   ]);
-  const a = new ClientWorld((msg) => match.handleCommand(1, msg));
-  const b = new ClientWorld((msg) => match.handleCommand(2, msg));
+  const a = new ClientWorld((msg) => match.handleCommand(1, msg), starOrchard().map);
+  const b = new ClientWorld((msg) => match.handleCommand(2, msg), starOrchard().map);
   const pa = match.players.get(1)!;
   const pb = match.players.get(2)!;
   a.applyServer({ t: 'match_start', selfUnitId: pa.unitId, team: 0 });
@@ -57,7 +59,7 @@ describe('online match flow', () => {
     expect(a.units.has(pb.unitId)).toBe(false);
     // Structures are always on the wire.
     const towers = [...a.units.values()].filter((u) => u.kind === 'tower');
-    expect(towers).toHaveLength(16);
+    expect(towers).toHaveLength(STAR_ORCHARD_TOWERS);
 
     // Teleport the enemy next to alice: it must appear with full identity.
     const enemyUnit = match.sim.units.get(pb.unitId)!;

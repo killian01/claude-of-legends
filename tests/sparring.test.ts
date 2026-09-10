@@ -3,6 +3,7 @@
 // and the record replays to the identical world.
 
 import { describe, expect, it } from 'vitest';
+import { starOrchard } from '../server/star_orchard';
 import {
   botRow,
   SERIES_SEEDS,
@@ -48,7 +49,7 @@ describe('sparring', () => {
 
   it('plays the bot’s own playbook, reports on it, and hands back a replayable record', () => {
     const picks = sparringPicks(BOT);
-    const result = sparMatch({ seed: 77, picks, maxTicks: 1500 });
+    const result = sparMatch(starOrchard(), { seed: 77, picks, maxTicks: 1500 });
     expect(result.ticks).toBe(1500);
     expect(result.record).toMatchObject({
       version: REPLAY_VERSION,
@@ -78,9 +79,9 @@ describe('sparring', () => {
       ).toBe(true);
 
     // The record rebuilds the same world.
-    const { sim } = buildMatchSim(result.record.seed, result.record.picks);
+    const { sim } = buildMatchSim(starOrchard(), result.record.seed, result.record.picks);
     for (let i = 0; i < 1500; i++) sim.tick();
-    const again = sparMatch({ seed: 77, picks, maxTicks: 1500 });
+    const again = sparMatch(starOrchard(), { seed: 77, picks, maxTicks: 1500 });
     expect(again.report).toEqual(result.report);
     expect(sim.tickCount).toBe(1500);
   });
@@ -112,7 +113,7 @@ describe('the series', () => {
 
   it('plays the bot from either seat and sums the series from its side', () => {
     const { picks, botIndex } = seriesPicks(BOT, null, 9, 1);
-    const result = sparMatch({ seed: 9, picks, maxTicks: 300, botIndex });
+    const result = sparMatch(starOrchard(), { seed: 9, picks, maxTicks: 300, botIndex });
     const mine = result.report.units.find((u) => u.unitId === result.botUnitId);
     expect(mine).toBeDefined();
     const known = new Set(Object.keys(mine!.plays));
