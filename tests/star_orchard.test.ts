@@ -241,24 +241,42 @@ describe('a match on the Star Orchard', () => {
   });
 
   it.each([0, 1] as const)(
-    'sells from every seat of platform %i, and not at its Sanctum',
+    'heals and sells on every seat of platform %i, and not at its Sanctum',
     (team) => {
       const { sim, map } = match(team);
       sim.policies.clear();
+      for (const u of [...sim.units.values()]) if (u.kind === 'tower') sim.units.delete(u.id);
       const seats = map.spawns?.filter((s) => s.team === team) ?? [];
       const champions = [...sim.units.values()].filter(
         (u) => u.kind === 'champion' && u.team === team,
       );
       expect(champions.map((u) => u.pos)).toEqual(seats.map((s) => ({ x: s.x, z: s.z })));
-      // The terrace is a band around the Sanctum: the seats at its ends stand
-      // well past the fountain's own reach, and the shop answers there anyway.
+      // The terrace is a band around the Sanctum: the seats at its ends
+      // stand well past the middle pad's reach, and the fountain is there
+      // anyway, for the shop and for the healing alike.
       const home = map.fountains.find((f) => f.team === team)!;
       const ends = [seats[0]!, seats[seats.length - 1]!];
-      for (const seat of ends)
+      for (const seat of ends) {
         expect(Math.hypot(seat.x - home.x, seat.z - home.z)).toBeGreaterThan(10);
+      }
       for (const unit of champions) {
         expect(sim.buyItem(unit.id, 'iron_blade'), `seat ${unit.pos.x},${unit.pos.z}`).toBe(true);
+        unit.hp = unit.maxHp / 2;
       }
+      sim.tick();
+      for (const unit of champions) {
+        expect(unit.hp, `seat ${unit.pos.x},${unit.pos.z}`).toBeGreaterThan(unit.maxHp * 0.504);
+      }
+      // An enemy on the terrace is not burned: the burn is the middle pad's.
+      const foe = [...sim.units.values()].find((u) => u.kind === 'champion' && u.team !== team)!;
+      foe.pos = { x: seats[0]!.x, z: seats[0]!.z };
+      const onSeat = foe.hp;
+      sim.tick();
+      expect(foe.hp).toBeGreaterThanOrEqual(onSeat);
+      foe.pos = { x: home.x, z: home.z };
+      const onPad = foe.hp;
+      sim.tick();
+      expect(foe.hp).toBeLessThan(onPad);
       // Not on the base ground in front of the Sanctum, where a defender fights.
       const sanctum = map.sanctums.find((s) => s.team === team)!;
       const self = champions[0]!;
@@ -269,6 +287,17 @@ describe('a match on the Star Orchard', () => {
       expect(sim.sellItem(self.id, 0)).toBe(false);
     },
   );
+
+  it('sends no bot out of its seat empty-handed', () => {
+    // The default playbooks shop when the bot stands at its fountain: on the
+    // launch map every seat is, and on the terrace every seat now is too.
+    const { sim } = match();
+    for (let tick = 0; tick < 100; tick++) sim.tick();
+    for (const unit of sim.units.values()) {
+      if (unit.kind !== 'champion' || !sim.policies.has(unit.id)) continue;
+      expect(unit.items.length, `bot ${unit.id} on team ${unit.team}`).toBeGreaterThan(0);
+    }
+  });
 
   it('ends when the enemy Sanctum falls', () => {
     const { sim, nav, self } = match();

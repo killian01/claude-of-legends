@@ -83,10 +83,10 @@ export function starOrchardMap(layout: StarOrchardLayout, manifest: StarOrchardM
       x: p.x,
       z: -p.z,
       r: FOUNTAIN_RADIUS,
-      // The shop answers around every seat of the platform, not only the
-      // middle one: the terrace is a band around the Sanctum, and the seats
-      // at its ends stand eleven meters from the fountain.
-      shop: spawns
+      // The fountain heals and sells around every seat of the platform, not
+      // only the middle one: the terrace is a band around the Sanctum, and
+      // the seats at its ends stand eleven meters from the middle.
+      pads: spawns
         .filter((s) => teamOf(s) === teamOf(p))
         .map((s) => ({ x: s.x, z: -s.z, r: FOUNTAIN_RADIUS })),
     })),

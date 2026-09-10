@@ -12,7 +12,7 @@ import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
 import { effectiveItemCost, ITEM_LIST, ITEMS } from '../sim/content/items';
 import { SIGILS } from '../sim/content/sigils';
-import { atShop } from '../sim/shop';
+import { withinFountain } from '../sim/fountain';
 import {
   BASIC_MAX_RANK,
   effectiveRank,
@@ -1244,15 +1244,15 @@ export class Hud {
     }, 1800);
   }
 
-  // Where the shop is usable: where the sim says it answers (your fountain,
-  // and on the Star Orchard the whole spawn terrace; src/sim/shop.ts), or
-  // dead and waiting for it (the sim waives the range check for a corpse,
-  // so death is shopping time instead of dead time).
+  // Where the shop is usable: on your fountain as the sim sees it (on the
+  // Star Orchard the whole spawn terrace; src/sim/fountain.ts), or dead and
+  // waiting for it (the sim waives the range check for a corpse, so death
+  // is shopping time instead of dead time).
   private canShop(): boolean {
     const u = this.world.units.get(this.selfId);
     if (!u) return false;
     if (u.dead) return true;
-    return atShop(this.world.map, u.team, u.pos);
+    return withinFountain(this.world.map, u.team, u.pos);
   }
 
   private tryBuy(itemId: string): void {

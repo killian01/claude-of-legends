@@ -148,18 +148,18 @@ function retreat(ctx: SlotContext): Action {
 }
 
 // The kit's next step (ADR 0014): the next purchase toward the build in
-// force, or the sale that makes room for it. Both need the shop; the sim
-// refuses either elsewhere (src/sim/shop.ts), and a sale is never worth a
-// wasted slot.
+// force, or the sale that makes room for it. Both need the fountain; the
+// sim refuses either elsewhere (src/sim/fountain.ts), and a sale is never
+// worth a wasted slot.
 function shop(ctx: SlotContext): Action | null {
   const step = nextKitStep(ctx.kit().build, ctx.s.items, ctx.s.gold);
-  if (!step || !ctx.atShop) return null;
+  if (!step || !ctx.atFountain) return null;
   return step;
 }
 
 // Sell one named item, the owner's own rule.
 function sellNamed(ctx: SlotContext, item: string): Action | null {
-  if (!ctx.atShop) return null;
+  if (!ctx.atFountain) return null;
   const slot = ctx.s.items.indexOf(item);
   return slot === -1 ? null : { kind: 'sell', slot };
 }

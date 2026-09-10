@@ -30,9 +30,10 @@ under `/map-exports/` for the exploration pages that compare revisions.
   the same `GameMap` shape the launch map is, and refuses a gameplay record
   traced on another Blender source than the model. The spawn terrace is a
   band around the Sanctum, and the seats at its ends stand eleven meters
-  from the fountain: the map lists a shop disc around every seat
-  (`FountainSpot.shop`, read by `src/sim/shop.ts`), so a champion buys from
-  wherever it appears. The fountain's healing and its burn stay on the pad.
+  from the middle: the map lists a fountain pad around every seat
+  (`FountainSpot.pads`, read by `src/sim/fountain.ts`), so the whole terrace
+  heals and sells, to a champion and a bot alike, from the first second.
+  The burn on enemies stays on the fountain's own pad.
 - `src/sim/terrain_nav.ts` is the walkability grid: the exported cells in
   sim orientation, exact cell traversal for movement, the ground height for
   the presentation. `Sim` takes it with the map (`SimOptions`) and, with

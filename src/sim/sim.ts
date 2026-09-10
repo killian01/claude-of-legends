@@ -32,7 +32,7 @@ import { stepDashes } from './dashes';
 import { hasDecisionToken, spendDecisionToken } from './decision_budget';
 import { hypot } from './exact';
 import type { ForgedChampionDef } from './forge/forged_def';
-import { applyFountainRegen } from './fountain';
+import { applyFountainRegen, withinFountain } from './fountain';
 import { stepIdleDefense } from './idle_defense';
 import { LANE_ACTIVITY_WINDOW_S, LaneSightings } from './lane_sightings';
 import { assignLanes, laneOf } from './lanes';
@@ -54,7 +54,6 @@ import { respawnDelay } from './respawn';
 import { ASSIST_GOLD_FRAC, championBounty, grantKillRewards, grantPassiveGold } from './rewards';
 import { Rng } from './rng';
 import { stepSeparation } from './separation';
-import { atShop } from './shop';
 import type { CombatCtx } from './sim_context';
 import {
   deepCopy,
@@ -668,7 +667,7 @@ export class Sim {
     // fountain, so the range check is waived while it waits. Selling still
     // wants a live champion standing there.
     const dead = u.dead || this.dead.has(unitId);
-    if (!dead && !atShop(this.map, u.team, u.pos)) return false;
+    if (!dead && !withinFountain(this.map, u.team, u.pos)) return false;
 
     // Consume owned components (one instance each) and discount their cost.
     const consumedIndices: number[] = [];
@@ -697,7 +696,7 @@ export class Sim {
     if (this.winner !== null) return false;
     const u = this.units.get(unitId);
     if (u?.kind !== 'champion' || u.dead || this.dead.has(unitId)) return false;
-    if (!atShop(this.map, u.team, u.pos)) return false;
+    if (!withinFountain(this.map, u.team, u.pos)) return false;
     const itemId = u.items[slot];
     if (itemId === undefined) return false;
     const def = ITEMS[itemId];

@@ -28,11 +28,12 @@ export interface FountainSpot {
   x: number;
   z: number;
   r: number;
-  // Where the shop also answers, beyond the pad itself (src/sim/shop.ts).
-  // Absent, the shop is the pad. The Star Orchard's spawn terrace is a band
-  // around the Sanctum four times the pad's width, and a champion seated
-  // at either end of it could not buy at the start of a match.
-  shop?: readonly Disc[];
+  // Further ground the fountain covers, for healing and the shop alike
+  // (src/sim/fountain.ts); the burn on enemies stays on the pad itself.
+  // The Star Orchard's spawn terrace is a band around the Sanctum four
+  // times the pad's width, and a champion seated at either end of it could
+  // neither buy nor heal at the start of a match.
+  pads?: readonly Disc[];
 }
 
 export interface SanctumSpot {
