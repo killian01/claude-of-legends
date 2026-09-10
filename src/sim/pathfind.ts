@@ -1,6 +1,8 @@
 // A* over the NavGrid (8 directions, no corner cutting), followed by greedy
 // line-of-walk smoothing. Deterministic: fixed neighbor order, no randomness.
 // A blocked target is redirected to its nearest walkable point first.
+// tests/pathfind_scratch.test.ts pins that the shared scratch state below
+// changes nothing about the paths.
 
 import type { NavGrid } from './navgrid';
 import type { Vec2 } from './types';
@@ -29,6 +31,45 @@ function snap(grid: NavGrid, p: Vec2): Vec2 | null {
   return grid.isWalkableAt(p.x, p.z) ? p : grid.nearestWalkable(p.x, p.z);
 }
 
+// Scratch state shared by every search on a grid of one size. The arrays
+// are the grid's size (a quarter million cells on the Star Orchard), and
+// allocating and filling three of them per search was most of a search's
+// cost once the map grew ten times. A generation number marks the cells a
+// search touched, so nothing is cleared between searches; the heap is two
+// typed arrays swapped by hand rather than by destructuring. Same
+// expansions in the same order, same path to the last cell.
+let scratchCells = -1;
+let generation = 0;
+let seen = new Uint32Array(0);
+let gScore = new Float64Array(0);
+let came = new Int32Array(0);
+let closedAt = new Uint32Array(0);
+let heapF = new Float64Array(0);
+let heapI = new Int32Array(0);
+
+function scratchFor(cells: number): void {
+  // Also on generation wrap: a stale mark from four billion searches ago
+  // must not read as this search's.
+  if (scratchCells === cells && generation < 0xfffffffe) return;
+  scratchCells = cells;
+  generation = 0;
+  seen = new Uint32Array(cells);
+  gScore = new Float64Array(cells);
+  came = new Int32Array(cells);
+  closedAt = new Uint32Array(cells);
+  heapF = new Float64Array(Math.max(1024, cells));
+  heapI = new Int32Array(Math.max(1024, cells));
+}
+
+function growHeap(): void {
+  const f = new Float64Array(heapF.length * 2);
+  const i = new Int32Array(heapI.length * 2);
+  f.set(heapF);
+  i.set(heapI);
+  heapF = f;
+  heapI = i;
+}
+
 export function findPath(grid: NavGrid, from: Vec2, to: Vec2): Vec2[] {
   const start = snap(grid, from);
   const goal = snap(grid, to);
@@ -41,64 +82,79 @@ export function findPath(grid: NavGrid, from: Vec2, to: Vec2): Vec2[] {
   const sIdx = sc.cz * n + sc.cx;
   const gIdx = gc.cz * n + gc.cx;
 
-  const g = new Float64Array(n * n).fill(Number.POSITIVE_INFINITY);
-  const came = new Int32Array(n * n).fill(-1);
-  const closed = new Uint8Array(n * n);
+  scratchFor(n * n);
+  const gen = ++generation;
+  let size = 0;
 
   // Binary min-heap keyed by f score.
-  const hf: number[] = [];
-  const hi: number[] = [];
   const push = (idx: number, f: number): void => {
-    hf.push(f);
-    hi.push(idx);
-    let i = hf.length - 1;
+    if (size === heapF.length) growHeap();
+    heapF[size] = f;
+    heapI[size] = idx;
+    let i = size++;
     while (i > 0) {
       const p = (i - 1) >> 1;
-      if (hf[p]! <= hf[i]!) break;
-      [hf[p], hf[i]] = [hf[i]!, hf[p]!];
-      [hi[p], hi[i]] = [hi[i]!, hi[p]!];
+      const pf = heapF[p]!;
+      if (pf <= f) break;
+      heapF[i] = pf;
+      heapI[i] = heapI[p]!;
+      heapF[p] = f;
+      heapI[p] = idx;
       i = p;
     }
   };
   const pop = (): number => {
-    const top = hi[0]!;
-    const lf = hf.pop()!;
-    const li = hi.pop()!;
-    if (hf.length > 0) {
-      hf[0] = lf;
-      hi[0] = li;
+    const top = heapI[0]!;
+    size--;
+    if (size > 0) {
+      const lf = heapF[size]!;
+      const li = heapI[size]!;
+      heapF[0] = lf;
+      heapI[0] = li;
       let i = 0;
       for (;;) {
         const l = 2 * i + 1;
         const r = l + 1;
         let m = i;
-        if (l < hf.length && hf[l]! < hf[m]!) m = l;
-        if (r < hf.length && hf[r]! < hf[m]!) m = r;
+        let mf = lf;
+        if (l < size && heapF[l]! < mf) {
+          m = l;
+          mf = heapF[l]!;
+        }
+        if (r < size && heapF[r]! < mf) {
+          m = r;
+          mf = heapF[r]!;
+        }
         if (m === i) break;
-        [hf[m], hf[i]] = [hf[i]!, hf[m]!];
-        [hi[m], hi[i]] = [hi[i]!, hi[m]!];
+        heapF[i] = mf;
+        heapI[i] = heapI[m]!;
+        heapF[m] = lf;
+        heapI[m] = li;
         i = m;
       }
     }
     return top;
   };
 
-  g[sIdx] = 0;
+  seen[sIdx] = gen;
+  gScore[sIdx] = 0;
+  came[sIdx] = -1;
   push(sIdx, octile(sc.cx, sc.cz, gc.cx, gc.cz));
   let found = false;
   let visited = 0;
 
-  while (hf.length > 0) {
+  while (size > 0) {
     const cur = pop();
     if (cur === gIdx) {
       found = true;
       break;
     }
-    if (closed[cur]) continue;
-    closed[cur] = 1;
+    if (closedAt[cur] === gen) continue;
+    closedAt[cur] = gen;
     if (++visited > NODE_CAP) break;
     const cx = cur % n;
     const cz = (cur / n) | 0;
+    const gCur = gScore[cur]!;
     for (const [dx, dz] of DIRS) {
       const nx = cx + dx;
       const nz = cz + dz;
@@ -111,11 +167,12 @@ export function findPath(grid: NavGrid, from: Vec2, to: Vec2): Vec2[] {
         continue;
       }
       const ni = nz * n + nx;
-      if (closed[ni]) continue;
+      if (closedAt[ni] === gen) continue;
       const cost = dx === 0 || dz === 0 ? 1 : SQRT2;
-      const ng = g[cur]! + cost;
-      if (ng < g[ni]!) {
-        g[ni] = ng;
+      const ng = gCur + cost;
+      if (seen[ni] !== gen || ng < gScore[ni]!) {
+        seen[ni] = gen;
+        gScore[ni] = ng;
         came[ni] = cur;
         push(ni, ng + octile(nx, nz, gc.cx, gc.cz));
       }
