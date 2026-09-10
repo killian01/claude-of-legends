@@ -76,10 +76,10 @@ export function startPresentation(
   selfTeam: TeamId,
   onExit: (action: PostMatchAction) => void,
   options: {
-    terrain?: RenderTerrain;
+    terrain: RenderTerrain;
     onRenderer?: (renderer: Renderer) => void;
     fullscreen?: boolean;
-  } = {},
+  },
 ): Presentation {
   const renderer = new Renderer(container, world, options.terrain);
   options.onRenderer?.(renderer);
@@ -100,7 +100,7 @@ export function startPresentation(
       renderer.flashMarker(p.x, p.z);
     },
     (p) => renderer.lookAtPoint(p.x, p.z),
-    options.terrain?.minimap,
+    options.terrain.minimap,
   );
   // No edge panning while a modal is up or the cursor sits on the minimap
   // (its corner position would otherwise drag the camera while clicking it).

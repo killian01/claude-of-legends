@@ -29,7 +29,6 @@ import {
   preloadChampionAssets,
 } from './champions';
 import { FloatingText, makeTextSprite } from './floating_text';
-import { buildMapDressing, type MapDressing, SKIRT_COLOR } from './map_dressing';
 import { buildMinionMesh } from './minion_shapes';
 import {
   estimatedMuzzleOffset,
@@ -37,7 +36,6 @@ import {
   PROJECTILE_Y,
   type SpawnOffset,
 } from './muzzle_spawn';
-import { buildSanctumMesh, buildTowerMesh } from './structure_shapes';
 import type { RenderTerrain } from './terrain';
 import { toonifyMaterials } from './toon';
 import {
@@ -55,7 +53,8 @@ const TEAM_LIGHT: readonly number[] = [0x9dbcf5, 0xf5a3a3];
 
 // Background and fog share the forest-skirt tone so the world edge melts
 // into haze instead of ending on a void.
-const COLOR_BACKGROUND = SKIRT_COLOR;
+// The void beyond the terrain's edge, and the fog it fades into.
+const COLOR_BACKGROUND = 0x102034;
 const COLOR_BAR_BACK = 0x1a1a1a;
 
 function enableShadows(obj: THREE.Object3D): void {
@@ -306,7 +305,6 @@ export class Renderer {
   private zoom = 0.85;
   private followId: number | null = null;
   private viewerTeam = 0;
-  private dressing: MapDressing | null = null;
   private attackTargetId: number | null = null;
   private hoverTargetId: number | null = null;
   private lastFrameAt = performance.now();
@@ -342,12 +340,12 @@ export class Renderer {
   constructor(
     container: HTMLElement,
     world: IWorld,
-    private readonly terrain?: RenderTerrain,
+    private readonly terrain: RenderTerrain,
   ) {
     this.world = world;
     this.gl = new THREE.WebGLRenderer({ antialias: true });
     this.gl.setPixelRatio(
-      terrain?.highDetail ? window.devicePixelRatio : Math.min(window.devicePixelRatio, 2),
+      terrain.highDetail ? window.devicePixelRatio : Math.min(window.devicePixelRatio, 2),
     );
     this.gl.setSize(container.clientWidth, container.clientHeight);
     this.gl.shadowMap.enabled = true;
@@ -380,7 +378,7 @@ export class Renderer {
     this.scene.scale.z = -1;
     this.scene.position.z = world.map.size;
 
-    this.vfx = new VfxSystem(this.scene, terrain?.heightAt);
+    this.vfx = new VfxSystem(this.scene, terrain.heightAt);
     this.vfx.onShake = (k) => this.addShake(k);
     this.vfx.particles.setViewport(
       Math.max(1, container.clientHeight),
@@ -466,10 +464,10 @@ export class Renderer {
     fogMesh.rotation.x = -Math.PI / 2;
     // High enough that grass blades and boulders sit under the fog sheet
     // instead of poking through it fully lit.
-    fogMesh.position.set(world.map.size / 2, terrain ? 4.1 : 2.6, world.map.size / 2);
+    fogMesh.position.set(world.map.size / 2, 4.1, world.map.size / 2);
     this.scene.add(fogMesh);
 
-    this.fct = new FloatingText(this.scene, terrain?.heightAt);
+    this.fct = new FloatingText(this.scene, terrain.heightAt);
     this.selfRing = new THREE.Mesh(
       new THREE.RingGeometry(0.85, 1.05, 28),
       new THREE.MeshBasicMaterial({ color: 0x86e06d, transparent: true, opacity: 0.8 }),
@@ -524,8 +522,6 @@ export class Renderer {
 
     this.buildLights();
     this.buildMap();
-    // The stylized pass: stepped toon lighting over everything the map built.
-    if (!terrain) toonifyMaterials(this.scene);
     this.onSimTick();
     // First sync has no history: snap prev onto curr so nothing lerps from 0,0.
     for (const t of this.tracked.values()) t.prev = { ...t.curr };
@@ -536,7 +532,7 @@ export class Renderer {
   }
 
   private groundHeight(worldX: number, worldZ: number): number {
-    return this.terrain?.heightAt(worldX, worldZ) ?? 0;
+    return this.terrain.heightAt(worldX, worldZ);
   }
 
   followUnit(id: number): void {
@@ -1051,7 +1047,7 @@ export class Renderer {
     sun.position.set(half + 70, 120, half + 45);
     sun.target.position.set(half, 0, half);
     sun.castShadow = true;
-    const shadowSize = this.terrain?.highDetail ? 4096 : 2048;
+    const shadowSize = this.terrain.highDetail ? 4096 : 2048;
     sun.shadow.mapSize.set(shadowSize, shadowSize);
     sun.shadow.camera.near = 30;
     sun.shadow.camera.far = 330;
@@ -1082,18 +1078,14 @@ export class Renderer {
     };
   }
 
+  // The authored terrain is the map (ADR 0021): scenery, ground and the
+  // painted structures come parsed from the export.
   private buildMap(): void {
-    if (this.terrain) {
-      this.scene.add(this.terrain.root);
-      this.scene.background = new THREE.Color(0x102034);
-      this.scene.fog = new THREE.Fog(0x102034, 120, 300);
-    } else {
-      this.dressing = buildMapDressing(this.scene, this.world.map, TEAM_COLORS, TEAM_LIGHT);
-    }
+    this.scene.add(this.terrain.root);
   }
 
   private buildUnitMesh(u: Readonly<Unit>): { holder: THREE.Group; barY: number } {
-    const authored = this.terrain?.structure(u);
+    const authored = this.terrain.structure(u);
     if (authored) return authored;
     const kind = u.kind;
     const color = TEAM_COLORS[u.team] ?? 0xffffff;
@@ -1104,36 +1096,6 @@ export class Renderer {
       holder.userData.body = built.body;
       enableShadows(holder);
       return { holder, barY: built.barY };
-    }
-    if (kind === 'tower') {
-      holder.add(buildTowerMesh(color));
-      enableShadows(holder);
-      collectSpinners(holder);
-      // Enemy towers telegraph their reach with a faint red ground ring
-      // (added after the shadow pass so the ring casts none).
-      if (u.team !== this.viewerTeam) {
-        const reach = u.stats.attackRange + u.radius;
-        const ring = new THREE.Mesh(
-          new THREE.RingGeometry(reach - 0.22, reach, 48),
-          new THREE.MeshBasicMaterial({
-            color: 0xff5a3a,
-            transparent: true,
-            opacity: 0.14,
-            side: THREE.DoubleSide,
-            depthWrite: false,
-          }),
-        );
-        ring.rotation.x = -Math.PI / 2;
-        ring.position.y = 0.1;
-        holder.add(ring);
-      }
-      return { holder, barY: 8.6 };
-    }
-    if (kind === 'sanctum') {
-      holder.add(buildSanctumMesh(color));
-      enableShadows(holder);
-      collectSpinners(holder);
-      return { holder, barY: 7.2 };
     }
     if (kind === 'camp') {
       // A jungle beast: a squat amber-jade critter with a spine of thorns.
@@ -2265,7 +2227,6 @@ export class Renderer {
     const now = performance.now();
     const dtMs = Math.min(100, now - this.lastFrameAt);
     this.lastFrameAt = now;
-    this.dressing?.animate(now);
 
     // Flush the deferred damage numbers: combat notes have run by now, so
     // any victim the viewer hit this tick is skipped (its gold number is
@@ -2616,12 +2577,10 @@ export class Renderer {
     this.setRayFrom(clientX, clientY);
     const hit = new THREE.Vector3();
     if (this.raycaster.ray.intersectPlane(this.groundPlane, hit)) {
-      if (this.terrain) {
-        for (let iteration = 0; iteration < 5; iteration++) {
-          const height = this.groundHeight(hit.x, this.sceneZ(hit.z));
-          const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -height);
-          if (!this.raycaster.ray.intersectPlane(plane, hit)) return null;
-        }
+      for (let iteration = 0; iteration < 5; iteration++) {
+        const height = this.groundHeight(hit.x, this.sceneZ(hit.z));
+        const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -height);
+        if (!this.raycaster.ray.intersectPlane(plane, hit)) return null;
       }
       return { x: hit.x, z: this.sceneZ(hit.z) };
     }
@@ -2651,6 +2610,6 @@ export class Renderer {
     this.vignette.remove();
     this.gl.domElement.remove();
     this.gl.dispose();
-    this.terrain?.dispose();
+    this.terrain.dispose();
   }
 }

@@ -5,10 +5,7 @@
 // this pins the two halves of that claim: nothing stands in the band, and
 // all three lanes open onto the same connected stretch of it.
 
-import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { buildFlora } from '../src/render/flora';
-import { buildMapPaint } from '../src/render/map_paint';
 import { GAME_MAP } from '../src/sim/content/map';
 import { NavGrid } from '../src/sim/navgrid';
 import type { Vec2 } from '../src/sim/types';
@@ -129,45 +126,6 @@ describe('the river', () => {
       const k = Math.floor(at.x) * n + Math.floor(at.z);
       expect(reachable.has(k), `${lane} lane's crossing is cut off from mid`).toBe(true);
     }
-  });
-
-  // The complaint this answers: a rock still standing in the water that you
-  // walk straight through. Every cell of the river is walkable by
-  // construction, so nothing SOLID the renderer puts there may read as
-  // terrain. A champion's own radius is 0.6; a prop at least that wide looks
-  // like something you could hide behind. Brush is deliberately exempt: it is
-  // walk-through on purpose and hiding in it is the point, which is why the
-  // gate names the solid geometries rather than everything in the group.
-  const SOLID = new Set([
-    'DodecahedronGeometry',
-    'IcosahedronGeometry',
-    'CylinderGeometry',
-    'ConeGeometry',
-  ]);
-
-  it('decorates the water with pebbles, never with anything champion-sized', () => {
-    const flora = buildFlora(map, buildMapPaint(map));
-    const mat = new THREE.Matrix4();
-    const pos = new THREE.Vector3();
-    const scale = new THREE.Vector3();
-    const spin = new THREE.Quaternion();
-    const offenders: string[] = [];
-    flora.group.traverse((o) => {
-      const im = o as THREE.InstancedMesh;
-      if (!im.isInstancedMesh || !SOLID.has(im.geometry.type)) return;
-      for (let i = 0; i < im.count; i++) {
-        im.getMatrixAt(i, mat);
-        mat.decompose(pos, spin, scale);
-        const r = Math.max(scale.x, scale.z);
-        if (r < 0.6) continue;
-        if (riverDist(pos.x, pos.z) > half) continue;
-        if (!grid.isWalkableAt(pos.x, pos.z)) continue;
-        offenders.push(
-          `${im.geometry.type} r=${r.toFixed(2)} at ${pos.x.toFixed(1)},${pos.z.toFixed(1)}`,
-        );
-      }
-    });
-    expect(offenders).toEqual([]);
   });
 
   it('holds both Warden pits', () => {
