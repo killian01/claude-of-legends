@@ -10,12 +10,15 @@ import type { CombatCtx } from './sim_context';
 import type { Vec2 } from './types';
 import { createWarden, hostile, type Unit } from './unit';
 
-// 600 s: the Warden is the MID GAME's pivot, not an early skirmish prize
-// (playtest round 3: at 3:30 it dropped into the laning phase and the map
-// never got a laning phase back). The shorter respawn keeps 3 to 4 Wardens
-// inside a 20 minute match and, with BOON_DURATION_S above it, makes the
-// second Boon stack actually reachable by winning consecutive pits.
-export const WARDEN_FIRST_SPAWN_S = 600;
+// 720 s: the Warden is the last creature to rise (docs/plan-rings.md), the
+// match's prize after the rings' Pyrefang (4:00) and Voidmaul (6:30); it
+// was the mid game's pivot at 600 before the rings, and never an early
+// skirmish prize (playtest round 3: at 3:30 it dropped into the laning
+// phase and the map never got a laning phase back). The respawn keeps two
+// to three Wardens inside a median match and, with BOON_DURATION_S above
+// it, makes the second Boon stack actually reachable by winning
+// consecutive pits.
+export const WARDEN_FIRST_SPAWN_S = 720;
 export const WARDEN_RESPAWN_S = 150;
 // The Warden grows with the game clock, like waves do: spawning later must
 // not mean spawning trivial against six-item champions.

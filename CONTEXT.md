@@ -118,6 +118,41 @@ limited number of times. While it lasts, every wave the team sends carries a sie
 holding the river turns into pressure on the lanes.
 _Avoid_: soul, objective buff, monster buff
 
+**Ring**:
+One of the two raised stone circles at the elbow of each side lane of the Star Orchard,
+neutral ground between the two outer towers (the bot ring in the southeast corner, the top
+ring in the northwest), reached by its fan of stairs. Each holds a creature that rises on an
+announced clock and is leashed to the circle.
+_Avoid_: pit (the Warden's), arena (the bots' ladder), platform (the spawn terrace), objective site
+
+**Pyrefang**:
+The bot ring's creature: a lean, incandescent predator with a spine of embers and a trail
+of fire. Rises first, at 4:00, and again four minutes after each death, carrying Might, Tide
+and Tempo in that order, looping. Neutral like the Warden: fights champions only, visible to
+both teams, resets when pulled out of its ring or left alone. Sized for a duo.
+_Avoid_: drake, dragon, monster names from other games
+
+**Voidmaul**:
+The top ring's creature: a massive, low colossus black as the void and veined with light,
+swinging a great maul. Rises at 6:30 and again four minutes after each death, carrying
+Bulwark, Swiftness and Resolve in that order, looping. The same rules as the Pyrefang.
+_Avoid_: herald, golem, boss
+
+**Favor**:
+What a ring creature's death hands the killing team: its aspect, permanent for the rest of
+the match, team-wide, surviving death, stacked per aspect up to four. Every kill also pays
+gold to each member of the team, dead or alive. Six aspects, in percent per stack: Might
+(attack damage and ability power), Tide (missing health back every five seconds), Tempo
+(attack speed), Bulwark (armor and magic resistance), Swiftness (move speed out of combat,
+slow resistance), Resolve (tenacity, heal and shield power). The Warden's Boon is not one:
+bigger, temporary, the match's prize.
+_Avoid_: soul, drake buff, permanent buff, stack (alone; say "a stack of Might")
+
+**Aspect**:
+Which of the six favors a creature carries this rise, shown beside its clock, so both teams
+know what they will fight for. The order is fixed per ring and the same in every match.
+_Avoid_: element, type, flavor
+
 **Windup**:
 The commitment beat before a hit lands. For an ability: costs are paid at press, the spell resolves after the delay, and a stun during it cancels the cast. For an auto-attack: the strike resolves a beat after the swing starts; moving, a stun, or a dash cancels it and refunds the attack timer (the orb-walk rule), and a target that blinks out of reach makes the committed strike whiff. The counterplay window big hits owe their victims.
 _Avoid_: cast bar, channel (a channel would persist after resolving; no ability has one yet)

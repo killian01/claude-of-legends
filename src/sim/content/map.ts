@@ -7,6 +7,7 @@
 
 import { hypot } from '../exact';
 import type { TeamId, Vec2 } from '../types';
+import type { RingId } from './rings';
 
 export type LaneId = 'top' | 'mid' | 'bot';
 
@@ -86,12 +87,26 @@ export interface GameMap {
   wardenPits: readonly Vec2[];
   // Jungle camp spots, mirrored pairs; one per half grants a personal buff.
   camps: readonly CampSpot[];
+  // The rings, absent on a map that has none (the launch map).
+  rings?: readonly RingSite[];
 }
 
 export interface CampSpot {
   x: number;
   z: number;
   buff: boolean;
+}
+
+// A ring (CONTEXT.md): the raised stone circle at the elbow of a side
+// lane, neutral ground between the two outer towers, where a creature
+// rises on a clock (src/sim/rings.ts). The disc is its leash. The launch
+// map has none; the Star Orchard export traces two.
+export interface RingSite {
+  id: RingId;
+  lane: LaneId;
+  x: number;
+  z: number;
+  r: number;
 }
 
 const SIZE = 150;

@@ -110,6 +110,8 @@ describe('the Star Orchard export', () => {
     }
     expect(map.camps).toHaveLength(6);
     expect(map.camps.filter((c) => c.buff)).toHaveLength(2);
+    // The two rings, one per side lane (tests/rings.test.ts plays them).
+    expect(map.rings?.map((r) => r.id).sort()).toEqual(['bot', 'top']);
     expect(map.laneWidth).toBe(11.5);
     for (const lane of Object.values(map.lanes)) expect(lane.length).toBeGreaterThan(1);
   });

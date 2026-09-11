@@ -2,6 +2,7 @@
 // driven by sim time, never wall-clock. Everything here is generic; champion
 // passives compose these helpers through the hooks in passive_types.ts.
 
+import { favorBonus, outOfCombat } from '../favors';
 import type { DamageType } from '../types';
 import type { Unit } from '../unit';
 import type { EffectSpec, Power } from './effects';
@@ -128,12 +129,13 @@ export function tauntSourceId(u: Unit, time: number): number | null {
   return null;
 }
 
+// The strongest live slow, cut by the team's Swiftness (slow resistance).
 export function slowPct(u: Unit, time: number): number {
   let strongest = 0;
   for (const s of u.statuses) {
     if (s.kind === 'slow' && s.until > time && s.pct > strongest) strongest = s.pct;
   }
-  return strongest;
+  return strongest * (1 - favorBonus(u.favors, 'swiftness'));
 }
 
 function buffSum(
@@ -166,7 +168,9 @@ export function mrBonus(u: Unit, time: number): number {
 
 export function effectiveMoveSpeed(u: Unit, time: number): number {
   if (isRooted(u, time)) return 0;
-  return u.moveSpeed * (1 - slowPct(u, time)) * (1 + moveSpeedBonusPct(u, time));
+  // Swiftness: the team's favor speeds a champion up between fights only.
+  const swift = outOfCombat(u, time) ? favorBonus(u.favors, 'swiftness') : 0;
+  return u.moveSpeed * (1 - slowPct(u, time)) * (1 + moveSpeedBonusPct(u, time) + swift);
 }
 
 // Sight multiplier from blinds: the strongest (smallest factor) wins.

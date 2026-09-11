@@ -3,6 +3,7 @@
 // increases carry over to current values (buying hp heals by the delta).
 
 import { ITEMS, type ItemStats } from './content/items';
+import { favorBonus } from './favors';
 import type { Unit } from './unit';
 
 function sumItemStats(items: readonly string[]): Required<ItemStats> {
@@ -57,11 +58,16 @@ export function recalcChampion(u: Unit): void {
   u.maxMana = newMaxMana;
   u.mana = Math.min(u.maxMana, Math.max(0, u.mana + Math.max(0, manaDelta)));
 
-  u.stats.ad = def.base.ad + def.growth.ad * lvl + items.ad;
-  u.stats.ap = items.ap;
-  u.stats.armor = def.base.armor + def.growth.armor * lvl + items.armor;
-  u.stats.mr = def.base.mr + def.growth.mr * lvl + items.mr;
-  u.stats.attackSpeed = def.base.attackSpeed * (1 + items.attackSpeedPct);
+  // The team's favors (CONTEXT.md: Favor) multiply the totals: Might the
+  // damage stats, Bulwark the resistances, Tempo the attack speed.
+  const might = 1 + favorBonus(u.favors, 'might');
+  const bulwark = 1 + favorBonus(u.favors, 'bulwark');
+  u.stats.ad = (def.base.ad + def.growth.ad * lvl + items.ad) * might;
+  u.stats.ap = items.ap * might;
+  u.stats.armor = (def.base.armor + def.growth.armor * lvl + items.armor) * bulwark;
+  u.stats.mr = (def.base.mr + def.growth.mr * lvl + items.mr) * bulwark;
+  u.stats.attackSpeed =
+    def.base.attackSpeed * (1 + items.attackSpeedPct + favorBonus(u.favors, 'tempo'));
   u.stats.armorPen = items.armorPen;
   u.stats.mrPen = items.mrPen;
   u.stats.armorPenPct = Math.min(0.7, items.armorPenPct);

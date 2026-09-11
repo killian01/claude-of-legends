@@ -26,11 +26,13 @@ import {
 import { type ChampionDef, DEFAULT_CHAMPION_ID, homeLane } from './content/champions';
 import { ITEMS } from './content/items';
 import { GAME_MAP, type GameMap, type LaneId } from './content/map';
+import { type AspectId, type CreatureId, RING_GOLD_EACH, TIDE_PERIOD_S } from './content/rings';
 import { SIGILS } from './content/sigils';
 import { clampSkin } from './content/skins';
 import { stepDashes } from './dashes';
 import { hasDecisionToken, spendDecisionToken } from './decision_budget';
 import { hypot } from './exact';
+import { Favors, favorBonus } from './favors';
 import type { ForgedChampionDef } from './forge/forged_def';
 import { applyFountainRegen, withinFountain } from './fountain';
 import { stepIdleDefense } from './idle_defense';
@@ -52,6 +54,7 @@ import { startRecall, stepRecalls } from './recall';
 import { createRemoteSeat, type RemoteSeat, runRemoteDecisions } from './remote_policy';
 import { respawnDelay } from './respawn';
 import { ASSIST_GOLD_FRAC, championBounty, grantKillRewards, grantPassiveGold } from './rewards';
+import { initialRingStates, onCreatureSlain, type RingClock, ringClocks, stepRings } from './rings';
 import { Rng } from './rng';
 import { stepSeparation } from './separation';
 import type { CombatCtx } from './sim_context';
@@ -79,6 +82,7 @@ import {
   DT,
   type ScoreRow,
   type TeamId,
+  TICK_RATE,
   type Vec2,
 } from './types';
 import { createChampion, hostile, staticFootprint, type Unit } from './unit';
@@ -98,7 +102,9 @@ export type SimEvent =
   // A bot's active play changed (ADR 0013): the trace behind the overlay
   // and the report. Emitted from inside the decision slot.
   | { type: 'play'; unitId: number; playId: string }
-  | { type: 'victory'; team: TeamId };
+  | { type: 'victory'; team: TeamId }
+  // A ring's creature fell and its aspect became the team's favor.
+  | { type: 'favor'; team: TeamId; aspect: AspectId; creature: CreatureId | null };
 
 // How long a champion's damage on a victim keeps earning an assist.
 const ASSIST_WINDOW_S = 10;
@@ -168,6 +174,12 @@ export class Sim {
   // ten sim-minutes to meet the first Warden.
   readonly objectives = initialObjectiveState();
   private readonly campStates: ReturnType<typeof initialCampStates>;
+  // The rings' creatures and clocks (CONTEXT.md: Ring), empty on a map
+  // without rings; public like objectives, so tests rewind a clock.
+  readonly ringStates: ReturnType<typeof initialRingStates>;
+  // The favors each team holds (CONTEXT.md: Favor), the truth the units'
+  // mirrors are refreshed from (grantFavor).
+  readonly favors = new Favors();
 
   constructor(
     seed: number,
@@ -176,6 +188,7 @@ export class Sim {
     this.rng = new Rng(seed);
     this.map = options.map ?? GAME_MAP;
     this.campStates = initialCampStates(this.map);
+    this.ringStates = initialRingStates(this.map);
     this.nav = options.nav ?? new NavGrid(this.map.size, this.map.walls, this.map.borderMargin);
     for (const u of createMapUnits(this.map, () => this.nextId++)) {
       this.units.set(u.id, u);
@@ -417,6 +430,8 @@ export class Sim {
     this.teamBuffs.restore(s.teamBuffs);
     Object.assign(this.objectives, s.objectives);
     this.campStates.splice(0, this.campStates.length, ...s.campStates);
+    this.ringStates.splice(0, this.ringStates.length, ...s.ringStates);
+    this.favors.restore(s.favors);
     this.laneSightings.restore(s.laneSightings);
     this.events = [];
   }
@@ -444,6 +459,8 @@ export class Sim {
       teamBuffs: this.teamBuffs.snapshot(),
       objectives: { ...this.objectives },
       campStates: this.campStates.map((c) => ({ ...c })),
+      ringStates: this.ringStates.map((r) => ({ ...r })),
+      favors: this.favors.snapshot(),
       laneSightings: this.laneSightings.snapshot(),
     };
   }
@@ -498,7 +515,10 @@ export class Sim {
     if (u.dead) return false;
     // Structures are always revealed, like the genre; so is the Warden
     // (both teams watch its health bar, that IS the drama).
-    if (u.kind === 'tower' || u.kind === 'sanctum' || u.kind === 'warden') return true;
+    // (both teams watch its health bar, that IS the drama), and so are the
+    // rings' creatures, whose clocks both teams read.
+    if (u.kind === 'tower' || u.kind === 'sanctum' || u.kind === 'warden' || u.kind === 'creature')
+      return true;
     return this.visibility[team].has(unitId);
   }
 
@@ -510,6 +530,31 @@ export class Sim {
   // When the next Warden rises; null while one is alive (IWorld).
   objectiveSpawnAt(): number | null {
     return this.objectives.wardenId === null ? this.objectives.nextSpawnAt : null;
+  }
+
+  // The rings' clocks (IWorld): the live creature or the next rise, and
+  // the aspect in play, per ring. Empty on a map without rings.
+  ringClocks(): readonly RingClock[] {
+    return ringClocks(this.ringStates);
+  }
+
+  // The favors a team holds (IWorld), a frozen copy.
+  teamFavors(team: TeamId) {
+    return this.favors.stacks(team);
+  }
+
+  // One more stack of an aspect for a team (CONTEXT.md: Favor): the team
+  // record moves, every champion of the team mirrors it and has its stats
+  // recomputed, dead ones included since the favor outlives a death. The
+  // door the death handling uses, and tests.
+  grantFavor(team: TeamId, aspect: AspectId): void {
+    this.favors.grant(team, aspect);
+    const stacks = this.favors.stacks(team);
+    for (const u of this.units.values()) {
+      if (u.kind !== 'champion' || u.team !== team) continue;
+      u.favors = stacks;
+      recalcChampion(u);
+    }
   }
 
   orderMove(unitId: number, x: number, z: number): void {
@@ -718,10 +763,16 @@ export class Sim {
 
     stepDots(ctx);
     if (this.winner === null) grantPassiveGold(ctx);
+    const tideTick = this.tickCount % (TIDE_PERIOD_S * TICK_RATE) === 0;
     for (const u of this.units.values()) {
       if (u.dead) continue;
       if (u.stats.hpRegen > 0) u.hp = Math.min(u.maxHp, u.hp + u.stats.hpRegen * DT);
       if (u.stats.manaRegen > 0) u.mana = Math.min(u.maxMana, u.mana + u.stats.manaRegen * DT);
+      // The Tide (CONTEXT.md: Favor): a share of the missing health back
+      // every five seconds, for the team that holds it.
+      if (tideTick && u.kind === 'champion' && u.favors.tide > 0) {
+        u.hp = Math.min(u.maxHp, u.hp + (u.maxHp - u.hp) * favorBonus(u.favors, 'tide'));
+      }
     }
     applyFountainRegen(ctx, this.map);
     stepPassives(ctx, this.tickCount);
@@ -738,6 +789,7 @@ export class Sim {
     }
     if (this.winner === null) {
       stepObjectives(ctx, this.map, this.objectives);
+      stepRings(ctx, this.ringStates);
       stepCamps(ctx, this.campStates);
     }
 
@@ -836,6 +888,22 @@ export class Sim {
         }
         if (u.kind === 'camp') {
           onCampSlain(this.campStates, id, this.units.get(killerId), this.time);
+        }
+        // A ring's creature falls: its aspect becomes the killing team's
+        // favor, every member of that team is paid, and the ring's clock
+        // restarts. A creature nobody's champion killed pays nobody.
+        if (u.kind === 'creature') {
+          const aspect = onCreatureSlain(this.ringStates, id, this.time);
+          const killer = this.units.get(killerId);
+          if (aspect !== null && killer && killer.kind === 'champion') {
+            this.grantFavor(killer.team, aspect);
+            for (const member of this.units.values()) {
+              if (member.kind !== 'champion' || member.team !== killer.team) continue;
+              member.gold += RING_GOLD_EACH;
+              this.events.push({ type: 'gold', unitId: member.id, amount: RING_GOLD_EACH });
+            }
+            this.events.push({ type: 'favor', team: killer.team, aspect, creature: u.creatureId });
+          }
         }
         if (u.moveSpeed <= 0) this.nav.unblockCircle(u.pos.x, u.pos.z, staticFootprint(u));
         this.units.delete(id);

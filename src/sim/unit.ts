@@ -6,10 +6,12 @@ import type { CoachOrder } from './coach';
 import type { Status } from './combat/status';
 import type { ChampionDef } from './content/champions';
 import type { LaneId } from './content/map';
+import type { AspectId, CreatureDef, CreatureId } from './content/rings';
 import type { DashState } from './dashes';
+import { type FavorStacks, NO_FAVORS } from './favors';
 import type { AbilityKey, TeamId, Vec2 } from './types';
 
-export type UnitKind = 'champion' | 'minion' | 'tower' | 'sanctum' | 'warden' | 'camp';
+export type UnitKind = 'champion' | 'minion' | 'tower' | 'sanctum' | 'warden' | 'camp' | 'creature';
 
 export type MinionVariant = 'melee' | 'caster' | 'siege' | 'vanguard';
 
@@ -69,6 +71,18 @@ export interface Unit {
   passiveStacks: number;
   // Last time ANY damage landed (Shieldskin-style passives).
   lastDamagedAt: number;
+  // Last time this unit's damage landed on anyone; with lastDamagedAt,
+  // what "out of combat" means (favors.ts outOfCombat).
+  lastDealtDamageAt: number;
+  // The favors the unit's team holds (CONTEXT.md: Favor), mirrored from
+  // the sim's Favors record whenever one is granted, so the stat
+  // recalculation and the effect seam read the unit alone. Champions
+  // only; everything else carries none.
+  favors: FavorStacks;
+  // A ring creature's identity and the aspect it carries (content/rings.ts);
+  // null on every other unit.
+  creatureId: CreatureId | null;
+  aspect: AspectId | null;
   // The playbook play acting for this seat right now (bots, ADR 0013),
   // null for seats played by hand. Presentation and reports read it; no
   // sim rule ever does.
@@ -194,6 +208,10 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     skin: 0,
     passiveStacks: 0,
     lastDamagedAt: -999,
+    lastDealtDamageAt: -999,
+    favors: NO_FAVORS,
+    creatureId: null,
+    aspect: null,
     play: null,
     coachOrder: null,
     coachOrderSeenAt: 0,
@@ -346,6 +364,36 @@ export function createWarden(id: number, pos: Vec2, scale = 1): Unit {
   u.sightRange = 8;
   u.goldBounty = 150;
   u.xpBounty = 200;
+  return u;
+}
+
+// A ring creature (CONTEXT.md: Pyrefang, Voidmaul): neutral like the
+// Warden, hostile to everyone, sized for a duo, grown by `scale` with the
+// game clock (rings.ts). It carries the aspect its death hands over.
+export function createCreature(
+  id: number,
+  def: CreatureDef,
+  pos: Vec2,
+  aspect: AspectId,
+  scale = 1,
+): Unit {
+  const u = baseUnit(id, 0, 'creature', pos);
+  u.neutral = true;
+  u.creatureId = def.id;
+  u.aspect = aspect;
+  u.radius = def.radius;
+  u.moveSpeed = def.moveSpeed;
+  u.hp = Math.round(def.hp * scale);
+  u.maxHp = u.hp;
+  u.stats.ad = Math.round(def.ad * scale);
+  u.stats.armor = def.armor;
+  u.stats.mr = def.mr;
+  u.stats.attackRange = def.attackRange;
+  u.stats.attackSpeed = def.attackSpeed;
+  u.sightRange = 8;
+  // No last-hit bounty: the favor and the team's gold are the prize.
+  u.goldBounty = 0;
+  u.xpBounty = def.xpBounty;
   return u;
 }
 

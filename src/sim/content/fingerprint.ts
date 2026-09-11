@@ -22,6 +22,7 @@ import { DT } from '../types';
 import { BOTS } from './bots';
 import { CHAMPION_LIST } from './champions';
 import { ITEM_LIST } from './items';
+import { RINGS_CONTENT } from './rings';
 import { SIGIL_LIST } from './sigils';
 import type { StarOrchard } from './star_orchard';
 
@@ -93,6 +94,8 @@ export function contentFingerprint(orchard: StarOrchard): string {
       champions: CHAMPION_LIST.map(championShape),
       items: ITEM_LIST,
       sigils: SIGIL_LIST,
+      // The rings' creatures, clocks and favors (content/rings.ts).
+      rings: RINGS_CONTENT,
       map: orchard.map,
       terrain: {
         revision: orchard.revision,

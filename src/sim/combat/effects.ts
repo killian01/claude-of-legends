@@ -5,6 +5,7 @@
 // dies before impact.
 
 import { hypot } from '../exact';
+import { favorBonus } from '../favors';
 import type { DamageVia } from '../passive_types';
 import { passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
@@ -204,6 +205,18 @@ function displace(ctx: CombatCtx, target: Unit, dx: number, dz: number, distance
   target.path = [];
 }
 
+// Resolve (CONTEXT.md: Favor): the target's tenacity shortens a stun, a
+// root, a taunt or a slow it suffers, never a knockup; the source's heal
+// and shield power grows what it heals and shields.
+function held(target: Unit, duration: number): number {
+  return duration * (1 - favorBonus(target.favors, 'resolve'));
+}
+
+function healPower(ctx: CombatCtx, sourceId: number): number {
+  const source = ctx.units.get(sourceId);
+  return source ? 1 + favorBonus(source.favors, 'resolve') : 1;
+}
+
 export function applyEffects(
   ctx: CombatCtx,
   sourceId: number,
@@ -252,23 +265,32 @@ export function applyEffects(
           (spec.base * scale +
             (spec.apRatio ?? 0) * power.ap +
             (spec.maxHpPct ?? 0) * target.maxHp) *
-          healFactor(target, ctx.time);
+          healFactor(target, ctx.time) *
+          healPower(ctx, sourceId);
         target.hp = Math.min(target.maxHp, target.hp + amount);
         const source = ctx.units.get(sourceId);
         if (source && amount > 0) passiveOf(source)?.onHealGiven?.(ctx, source, target, amount);
         break;
       }
       case 'slow':
-        addStatus(target, { kind: 'slow', until: ctx.time + spec.duration, pct: spec.pct });
+        addStatus(target, {
+          kind: 'slow',
+          until: ctx.time + held(target, spec.duration),
+          pct: spec.pct,
+        });
         break;
       case 'root':
-        addStatus(target, { kind: 'root', until: ctx.time + spec.duration });
+        addStatus(target, { kind: 'root', until: ctx.time + held(target, spec.duration) });
         break;
       case 'stun':
-        addStatus(target, { kind: 'stun', until: ctx.time + spec.duration });
+        addStatus(target, { kind: 'stun', until: ctx.time + held(target, spec.duration) });
         break;
       case 'taunt':
-        addStatus(target, { kind: 'taunt', until: ctx.time + spec.duration, sourceId });
+        addStatus(target, {
+          kind: 'taunt',
+          until: ctx.time + held(target, spec.duration),
+          sourceId,
+        });
         break;
       case 'stealth':
         addStatus(target, { kind: 'stealth', until: ctx.time + spec.duration });
@@ -327,7 +349,9 @@ export function applyEffects(
       case 'shield': {
         // Grievous wounds cut shields like heals (review F.2).
         const value =
-          (spec.base * scale + (spec.apRatio ?? 0) * power.ap) * healFactor(target, ctx.time);
+          (spec.base * scale + (spec.apRatio ?? 0) * power.ap) *
+          healFactor(target, ctx.time) *
+          healPower(ctx, sourceId);
         addStatus(target, {
           kind: 'shield',
           until: ctx.time + spec.duration,

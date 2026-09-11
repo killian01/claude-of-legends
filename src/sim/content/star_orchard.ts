@@ -7,7 +7,7 @@
 
 import { decodeTerrainNav, type TerrainNavData } from '../terrain_nav';
 import type { TeamId, Vec2 } from '../types';
-import type { GameMap, LaneId, TowerSpot } from './map';
+import type { GameMap, LaneId, RingSite, TowerSpot } from './map';
 
 // The playable square the export is placed in, in meters. The navigation
 // grid covers a little more than the square on every side.
@@ -24,6 +24,9 @@ export interface StarOrchardLayout {
   bases: Vec2[];
   lanes: Record<LaneId, Vec2[]>;
   junglePaths?: Vec2[][];
+  // The two rings (CONTEXT.md), one at the elbow of each side lane, in
+  // the layout's own frame like the towers.
+  objectiveSites?: { id: string; center: Vec2; radius: number; lane: LaneId }[];
   towers: (TowerSpot & { name: string; height: number })[];
 }
 
@@ -152,5 +155,24 @@ export function starOrchardMap(layout: StarOrchardLayout, manifest: StarOrchardM
     camps: manifest.landmarks
       .filter((p) => p.kind === 'camp')
       .map((p, index, all) => ({ x: p.x, z: -p.z, buff: index === 0 || index === all.length - 1 })),
+    rings: starOrchardRings(layout),
   };
+}
+
+// The rings the layout traces, keyed by the side lane they sit on. A
+// layout from before the rings were traced yields none, and the match
+// plays without creatures rather than refusing to start.
+function starOrchardRings(layout: StarOrchardLayout): RingSite[] {
+  const rings: RingSite[] = [];
+  for (const site of layout.objectiveSites ?? []) {
+    if (site.lane !== 'top' && site.lane !== 'bot') continue;
+    rings.push({
+      id: site.lane,
+      lane: site.lane,
+      x: site.center.x,
+      z: site.center.z,
+      r: site.radius,
+    });
+  }
+  return rings;
 }

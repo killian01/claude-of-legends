@@ -91,6 +91,7 @@ export function dealDamage(
     }
   }
   target.hp -= after;
+  if (source) source.lastDealtDamageAt = ctx.time;
   ctx.events.push({ type: 'damage', sourceId, targetId: target.id, amount: after, dtype });
   if (target.hp <= 0) {
     target.hp = 0;

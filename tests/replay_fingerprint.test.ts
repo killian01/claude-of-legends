@@ -19,6 +19,7 @@ import {
 } from '../src/net/replay';
 import { CHAMPION_LIST } from '../src/sim/content/champions';
 import { contentFingerprint, contentMatches, fingerprintOf } from '../src/sim/content/fingerprint';
+import { RINGS_CONTENT } from '../src/sim/content/rings';
 
 describe('the content fingerprint', () => {
   it('is stable across calls', () => {
@@ -42,6 +43,23 @@ describe('the content fingerprint', () => {
     );
     // The same content in another key order is the same content.
     expect(fingerprintOf({ a: 1, b: [2, 3] })).toBe(fingerprintOf({ b: [2, 3], a: 1 }));
+  });
+
+  it('covers the rings: a creature clock or a favor number moves it', () => {
+    // The rings' table is content (docs/plan-rings.md): a later first rise
+    // or a fatter aspect plays another match, so the fingerprint says so.
+    const shape = (firstRiseS: number, perStack: number): unknown => ({
+      rings: {
+        ...RINGS_CONTENT,
+        creatures: {
+          ...RINGS_CONTENT.creatures,
+          pyrefang: { ...RINGS_CONTENT.creatures.pyrefang, firstRiseS },
+        },
+        aspects: { ...RINGS_CONTENT.aspects, might: { ...RINGS_CONTENT.aspects.might, perStack } },
+      },
+    });
+    expect(fingerprintOf(shape(240, 0.03))).not.toBe(fingerprintOf(shape(300, 0.03)));
+    expect(fingerprintOf(shape(240, 0.03))).not.toBe(fingerprintOf(shape(240, 0.04)));
   });
 
   it('accepts a record with no fingerprint, and refuses one that has moved', () => {

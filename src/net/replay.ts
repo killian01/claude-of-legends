@@ -26,7 +26,9 @@ import { type ClientMsg, isFiniteVec } from './protocol';
 // map, the house bots) is guarded by the content fingerprint instead,
 // which moves on its own (src/sim/content/fingerprint.ts): nobody has to
 // remember that one.
-export const REPLAY_VERSION = 4;
+// 5: the rings' creatures and the favors (docs/plan-rings.md), and the
+// Warden at 12:00; a record from before them plays a match nobody played.
+export const REPLAY_VERSION = 5;
 
 // The checksum a replay must show at `tick`, or null when the record
 // says nothing about that tick (an older record, or a tick that is not

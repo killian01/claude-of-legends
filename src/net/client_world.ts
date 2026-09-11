@@ -8,6 +8,7 @@ import { ChampionRegistry } from '../sim/champion_registry';
 import type { Status } from '../sim/combat/status';
 import type { ChampionDef } from '../sim/content/champions';
 import type { GameMap } from '../sim/content/map';
+import { NO_FAVORS } from '../sim/favors';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { Projectile } from '../sim/projectiles';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from '../sim/types';
@@ -102,6 +103,10 @@ function materializeUnit(s: SnapUnit): Unit {
     skin: s.sk ?? 0,
     passiveStacks: 0,
     lastDamagedAt: -999,
+    lastDealtDamageAt: -999,
+    favors: NO_FAVORS,
+    creatureId: null,
+    aspect: null,
     play: null,
     coachOrder: null,
     coachOrderSeenAt: 0,

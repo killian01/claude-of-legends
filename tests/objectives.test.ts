@@ -41,11 +41,12 @@ describe('the warden', () => {
     }
   });
 
-  it('rises at ten minutes as a mid game objective, on a stackable cadence', () => {
-    // 600 s: the Warden must not drop into the laning phase (playtest
-    // round 3), and the Boon must outlive the respawn clock by a real kill
-    // window so winning consecutive pits can reach the second stack.
-    expect(WARDEN_FIRST_SPAWN_S).toBe(600);
+  it('rises at twelve minutes as the last creature, on a stackable cadence', () => {
+    // 720 s: the Warden rises after the rings' creatures (tests/rings.test.ts)
+    // and never in the laning phase (playtest round 3), and the Boon must
+    // outlive the respawn clock by a real kill window so winning
+    // consecutive pits can reach the second stack.
+    expect(WARDEN_FIRST_SPAWN_S).toBe(720);
     expect(BOON_DURATION_S).toBeGreaterThanOrEqual(WARDEN_RESPAWN_S + 20);
     const sim = new Sim(11);
     sim.teamBuffs.grantBoon(1, 100);
