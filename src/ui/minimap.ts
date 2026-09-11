@@ -123,15 +123,6 @@ export class Minimap {
       g.drawImage(this.fog, 0, 0);
     }
 
-    // The Warden's pit, where it stands or where the next rises: both
-    // teams read the clock and the pit alike (ADR 0023).
-    const pit = this.world.wardenPit();
-    g.strokeStyle = 'rgba(192, 106, 232, 0.85)';
-    g.lineWidth = 1.5;
-    g.beginPath();
-    g.arc(this.px(pit.x), this.pz(pit.z), 5.5, 0, Math.PI * 2);
-    g.stroke();
-
     for (const u of this.world.units.values()) {
       if (u.dead) continue;
       if (!this.world.isVisible(this.viewerTeam, u.id)) continue;

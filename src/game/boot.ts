@@ -19,6 +19,7 @@ import { Minimap } from '../ui/minimap';
 import { buildTouchBar } from '../ui/touch_bar';
 import type { IWorld } from '../world_api';
 import { castSoundOf } from './champion_sounds';
+import { installCursorLock } from './cursor_lock';
 import type { PostMatchAction } from './flow';
 import { requestGameFullscreen } from './fullscreen';
 import { type InputHandlers, setupInput } from './input';
@@ -346,6 +347,9 @@ export function startPresentation(
     isTyping: () => hud.isChatOpen(),
   };
   const teardownInput = setupInput(renderer, inputHandlers);
+  // In fullscreen the mouse stays on the game (cursor_lock.ts): a second
+  // monitor beside it must not take a click mid-fight.
+  const teardownCursorLock = coarsePointer ? () => undefined : installCursorLock(container);
 
   // Touch: the same handlers behind finger gestures (tap to move or attack,
   // two-step casts armed by tapping HUD slots). The gesture listeners are
@@ -439,6 +443,7 @@ export function startPresentation(
       container.removeEventListener('pointerdown', onFirstPointerDown);
       window.removeEventListener('blur', onWindowBlur);
       teardownInput();
+      teardownCursorLock();
       touch.dispose();
       teardownTouchBar?.();
       hud.dispose();

@@ -31,6 +31,20 @@ import type { AbilityKey, TeamId } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { abilityIconUrl, passiveIconUrl, sigilIconUrl } from './ability_icons';
 import {
+  boonChipFace,
+  type ChipFace,
+  favorChipFace,
+  statusChipFace,
+  wrathChipFace,
+} from './chip_text';
+
+interface ChipLook {
+  border: string;
+  color: string;
+  background: string;
+}
+
+import {
   describeAbility,
   describeItem,
   describeSigil,
@@ -116,11 +130,21 @@ const CSS = `
   position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
   display: flex; flex-direction: column; gap: 6px; align-items: center;
 }
-.hud-statuses { display: flex; gap: 4px; min-height: 18px; justify-content: center; flex-wrap: wrap; }
+.hud-statuses { display: flex; gap: 4px; min-height: 24px; justify-content: center; flex-wrap: wrap; }
 .hud-chip {
-  background: #3d3312; border: 1px solid #8a6d2c; border-radius: 4px;
-  color: #f0dfae; font-size: 10px; font-weight: 700; padding: 2px 6px;
+  position: relative; width: 26px; height: 24px; border-radius: 5px; flex: none;
+  background: #3d3312; border: 1px solid #8a6d2c; color: #f0dfae;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800; line-height: 1; pointer-events: auto; cursor: default;
 }
+.hud-chip-sub { font-size: 7px; font-weight: 700; opacity: 0.9; margin-top: 1px; }
+.hud-chip-tip {
+  display: none; position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+  white-space: nowrap; background: #14190d; border: 1px solid #6e5a24; color: #e8dfb4;
+  font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 4px;
+  pointer-events: none; z-index: 20;
+}
+.hud-chip:hover .hud-chip-tip, .hud-chip.vhover .hud-chip-tip { display: block; }
 .hud-meta { font-size: 12px; text-shadow: 0 1px 2px #000; }
 .hud-main { display: flex; align-items: center; gap: 10px; }
 .hud-level {
@@ -1599,6 +1623,48 @@ export class Hud {
   }
 
   // Called once per world tick.
+  // The status row's chips, one element a key, kept across frames: a new
+  // key gets an element, a kept one has its number and its tip refreshed,
+  // a gone one leaves. Rebuilding the row every frame destroyed the chip
+  // under the mouse before its tooltip could show.
+  private reconcileChips(wanted: { key: string; face: ChipFace; look: ChipLook | null }[]): void {
+    const alive = new Set(wanted.map((w) => w.key));
+    for (const child of [...this.statusRow.children]) {
+      if (!alive.has((child as HTMLElement).dataset.key ?? '')) child.remove();
+    }
+    let cursor = 0;
+    for (const w of wanted) {
+      let box = [...this.statusRow.children].find(
+        (c) => (c as HTMLElement).dataset.key === w.key,
+      ) as HTMLElement | undefined;
+      if (!box) {
+        box = document.createElement('span');
+        box.className = 'hud-chip';
+        box.dataset.key = w.key;
+        const glyph = document.createElement('span');
+        glyph.className = 'hud-chip-glyph';
+        const sub = document.createElement('span');
+        sub.className = 'hud-chip-sub';
+        const tip = document.createElement('span');
+        tip.className = 'hud-chip-tip';
+        box.append(glyph, sub, tip);
+      }
+      if (w.look) {
+        box.style.borderColor = w.look.border;
+        box.style.color = w.look.color;
+        box.style.background = w.look.background;
+      }
+      const [glyph, sub, tip] = box.children as unknown as [HTMLElement, HTMLElement, HTMLElement];
+      if (glyph.textContent !== w.face.glyph) glyph.textContent = w.face.glyph;
+      if (sub.textContent !== w.face.sub) sub.textContent = w.face.sub;
+      sub.style.display = w.face.sub ? '' : 'none';
+      if (tip.textContent !== w.face.tip) tip.textContent = w.face.tip;
+      const at = this.statusRow.children[cursor];
+      if (at !== box) this.statusRow.insertBefore(box, at ?? null);
+      cursor += 1;
+    }
+  }
+
   update(): void {
     const u = this.world.units.get(this.selfId);
     if (!u) return;
@@ -1647,13 +1713,16 @@ export class Hud {
     const objAt = this.world.objectiveSpawnAt();
     const wardenUp = objAt === null;
     const rings = this.world.ringClocks();
-    const pit = this.world.wardenPit();
+    const pit = this.world.wardenPit() ?? undefined;
     this.metaText.textContent = `${clock} · ${objectiveLine(rings, objAt, this.world.time, pit)}`;
     const mineBoon = this.world.teamBuff(this.selfTeam);
     const enemyBoon = this.world.teamBuff((1 - this.selfTeam) as TeamId);
     if (this.lastWardenUp !== null && wardenUp !== this.lastWardenUp) {
       if (wardenUp) {
-        this.announce(`The Warden has awoken at the ${pit.name}`, '#d8a6f5');
+        this.announce(
+          pit ? `The Warden has awoken at the ${pit.name}` : 'The Warden has awoken',
+          '#d8a6f5',
+        );
         playSfx('tower');
         announceVoice('warden_awoken', true);
       } else if (mineBoon && mineBoon.until > this.lastBoonMineUntil) {
@@ -1706,70 +1775,70 @@ export class Hud {
     this.xpText.textContent =
       u.level >= MAX_LEVEL ? 'max level' : `XP ${Math.floor(u.xp)} / ${xpForNext(u.level)}`;
 
-    this.statusRow.textContent = '';
+    // Every chip is an icon (chip_text.ts): a glyph, a small number, and
+    // the whole fact in a tooltip on hover; the row of full sentences took
+    // too much of the screen (the maintainer, after the forest round). The
+    // chips are gathered here and reconciled by key below, so an element
+    // survives from frame to frame and the hover holds on it.
+    const wanted: { key: string; face: ChipFace; look: ChipLook | null }[] = [];
+    const chip = (key: string, face: ChipFace, look: ChipLook | null): void => {
+      wanted.push({ key, face, look });
+    };
+    const enemyLook = { border: '#e86a7a', color: '#ffc8ce', background: '#3d1a20' };
     // The Warden's Boon is a team buff, not a Status: its chips are built
     // here, and they SAY what the buff does. The enemy's shows too: a team
     // hitting 8 or 16 percent harder is a fact a player must see to respect.
     if (mineBoon) {
-      const chip = document.createElement('span');
-      chip.className = 'hud-chip';
-      chip.style.borderColor = '#a06ae8';
-      chip.style.color = '#e6c8ff';
-      chip.style.background = '#2c1a3d';
       const pct = Math.round(BOON_DAMAGE_PER_STACK * mineBoon.stacks * 100);
-      chip.textContent = `BOON +${pct}% DMG ${Math.ceil(mineBoon.until - this.world.time)}s`;
-      this.statusRow.appendChild(chip);
+      chip('boon', boonChipFace(pct, mineBoon.until - this.world.time, false), {
+        border: '#a06ae8',
+        color: '#e6c8ff',
+        background: '#2c1a3d',
+      });
     }
     if (enemyBoon) {
-      const chip = document.createElement('span');
-      chip.className = 'hud-chip';
-      chip.style.borderColor = '#e86a7a';
-      chip.style.color = '#ffc8ce';
-      chip.style.background = '#3d1a20';
       const pct = Math.round(BOON_DAMAGE_PER_STACK * enemyBoon.stacks * 100);
-      chip.textContent = `ENEMY BOON +${pct}% DMG ${Math.ceil(enemyBoon.until - this.world.time)}s`;
-      this.statusRow.appendChild(chip);
+      chip('boon-enemy', boonChipFace(pct, enemyBoon.until - this.world.time, true), enemyLook);
     }
     // The Wrath (CONTEXT.md) is a team fact like the Boon: a chip that says
     // what it does, the enemy's too, since an execute line is a fact a
     // player must see to respect.
-    for (const [side, until] of [
-      ['', this.world.teamWrath(this.selfTeam)],
-      ['ENEMY ', this.world.teamWrath((1 - this.selfTeam) as TeamId)],
+    for (const [enemy, until] of [
+      [false, this.world.teamWrath(this.selfTeam)],
+      [true, this.world.teamWrath((1 - this.selfTeam) as TeamId)],
     ] as const) {
       if (until === null) continue;
-      const chip = document.createElement('span');
-      chip.className = 'hud-chip';
-      chip.style.borderColor = side ? '#e86a7a' : WRATH_COLOR.css;
-      chip.style.color = side ? '#ffc8ce' : WRATH_COLOR.css;
-      chip.style.background = side ? '#3d1a20' : WRATH_COLOR.dark;
-      chip.textContent = `${side}${wrathChipText(until, this.world.time)}`;
-      this.statusRow.appendChild(chip);
+      chip(
+        enemy ? 'wrath-enemy' : 'wrath',
+        wrathChipFace(wrathChipText(until, this.world.time), until - this.world.time, enemy),
+        enemy
+          ? enemyLook
+          : { border: WRATH_COLOR.css, color: WRATH_COLOR.css, background: WRATH_COLOR.dark },
+      );
     }
     // The favors (CONTEXT.md: Favor) are team facts like the Boon: a chip
     // each, saying what it does, the enemy's too.
-    for (const [side, stacks] of [
-      ['', mineFavors],
-      ['ENEMY ', enemyFavors],
+    for (const [enemy, stacks] of [
+      [false, mineFavors],
+      [true, enemyFavors],
     ] as const) {
       for (const favor of favorChips(stacks)) {
-        const chip = document.createElement('span');
-        chip.className = 'hud-chip';
         const look = aspectColor(favor.aspect);
-        chip.style.borderColor = side ? '#e86a7a' : look.css;
-        chip.style.color = side ? '#ffc8ce' : look.css;
-        chip.style.background = side ? '#3d1a20' : look.dark;
-        chip.textContent = `${side}${favor.text}`;
-        this.statusRow.appendChild(chip);
+        chip(
+          `favor-${enemy ? 'enemy-' : ''}${favor.aspect}`,
+          favorChipFace(favor.aspect, favor.stacks, favor.text, enemy),
+          enemy ? enemyLook : { border: look.css, color: look.css, background: look.dark },
+        );
       }
     }
+    const seen = new Map<string, number>();
     for (const s of u.statuses) {
       if (s.until <= this.world.time) continue;
-      const chip = document.createElement('span');
-      chip.className = 'hud-chip';
-      chip.textContent = statusLabel(s, this.world.time);
-      this.statusRow.appendChild(chip);
+      const n = (seen.get(s.kind) ?? 0) + 1;
+      seen.set(s.kind, n);
+      chip(`status-${s.kind}-${n}`, statusChipFace(statusLabel(s, this.world.time)), null);
     }
+    this.reconcileChips(wanted);
 
     const def = u.championId ? this.world.championDef(u.championId) : null;
     for (const key of KEYS) {

@@ -31,8 +31,9 @@ export function creatureName(creature: CreatureId, ascendant: boolean): string {
 // `Pyrefang 1:12 Might · Voidmaul LIVE · Warden 6:00 at the plaza`: the
 // bot ring first because it rises first, the Warden last because it does.
 // A live creature says LIVE and the aspect it carries; a clock says when
-// and what comes; an Ascendant says its name and nothing after; the
-// Warden says its pit, since the pit is drawn per rise (ADR 0023).
+// and what comes; an Ascendant says its name and nothing after; a live
+// Warden says its pit, and a clock says nothing of the next one, drawn
+// at the death and told at the rise (ADR 0023).
 export function objectiveLine(
   rings: readonly RingClock[],
   wardenAt: number | null,
