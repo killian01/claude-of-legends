@@ -20,6 +20,7 @@ import {
   schoolColorOf,
   spellColorsOf,
 } from './ability_vfx';
+import { aspectColor } from './aspect_colors';
 import { buildChampionMesh } from './champion_shapes';
 import {
   type ChampionVisual,
@@ -28,6 +29,7 @@ import {
   forgedBarY,
   preloadChampionAssets,
 } from './champions';
+import { buildCreatureMesh } from './creature_shapes';
 import { FloatingText, makeTextSprite } from './floating_text';
 import { buildMinionMesh } from './minion_shapes';
 import {
@@ -1114,6 +1116,14 @@ export class Renderer {
       enableShadows(holder);
       return { holder, barY: 1.9 };
     }
+    if (kind === 'creature') {
+      // A ring's creature (creature_shapes.ts): its own silhouette, the
+      // accent and the beacon in its aspect's color.
+      const built = buildCreatureMesh(u, holder);
+      enableShadows(holder);
+      collectSpinners(holder);
+      return built;
+    }
     if (kind === 'warden') {
       // The neutral river beast: dark jade bulk with glowing violet crystals.
       const bodyMat = new THREE.MeshLambertMaterial({ color: 0x3f6a55, flatShading: true });
@@ -1362,7 +1372,11 @@ export class Renderer {
         if (!holder.userData.authoredTerrain) toonifyMaterials(holder);
         // Minion bars widen with their max hp so a beefy siege minion never
         // reads as "almost dead" while it still soaks several hits.
-        const structure = u.kind === 'tower' || u.kind === 'sanctum' || u.kind === 'warden';
+        const structure =
+          u.kind === 'tower' ||
+          u.kind === 'sanctum' ||
+          u.kind === 'warden' ||
+          u.kind === 'creature';
         const barWidth =
           u.kind === 'champion'
             ? 1.8
@@ -1435,8 +1449,9 @@ export class Renderer {
           this.flashMarker(u.pos.x, u.pos.z, 0xff5a3a);
           // A champion death is a moment, not a despawn: a burst of light
           // and sparks, a shockwave, smoke, and a kick if it happens close.
-          if (u.kind === 'champion' || u.kind === 'warden') {
-            const c = TEAM_LIGHT[u.team] ?? 0xd8b0f0;
+          if (u.kind === 'champion' || u.kind === 'warden' || u.kind === 'creature') {
+            const c =
+              u.kind === 'creature' ? aspectColor(u.aspect).hex : (TEAM_LIGHT[u.team] ?? 0xd8b0f0);
             const near = this.sfxGain(u.pos.x, u.pos.z);
             this.vfx.glowFlash(u.pos.x, 1.2, u.pos.z, 3.4, c, 0.35);
             this.vfx.sparkBurst(u.pos.x, 1.0, u.pos.z, c, 26, 9, { life: 0.6, size: 0.5 });
@@ -1477,7 +1492,7 @@ export class Renderer {
           this.fct.spawn(`-${Math.round(dhp)}`, '#ff6a5e', u.pos.x, t.barY + 1.4, u.pos.z);
           playSfx('hit');
           if (dhp >= u.maxHp * 0.05) this.addShake(0.28);
-        } else if (u.kind === 'champion' || u.kind === 'warden') {
+        } else if (u.kind === 'champion' || u.kind === 'warden' || u.kind === 'creature') {
           this.pendingDamage.push({ unitId: id, amount: dhp });
           playSfx('hit', 0.5 * this.sfxGain(u.pos.x, u.pos.z));
         }
@@ -1535,8 +1550,10 @@ export class Renderer {
       // A living unit always keeps a visible sliver of bar.
       t.hpFill.scale.x = Math.max(0.07, t.barWidth * frac);
       let fillColor = this.barColor(id, u.team);
-      // Neutral bars: violet Warden, amber jungle camps, for everyone.
+      // Neutral bars: violet Warden, amber jungle camps, a ring creature in
+      // its aspect's color, for everyone.
       if (u.kind === 'warden') fillColor = 0xc06ae8;
+      else if (u.kind === 'creature') fillColor = aspectColor(u.aspect).hex;
       else if (u.kind === 'camp') fillColor = 0xd8a24f;
       // Last-hit aid: an enemy minion that one of the player's autos would
       // finish turns its bar gold, like the genre's execute indicators.
@@ -1571,7 +1588,12 @@ export class Renderer {
 
       // Damaged structures print their remaining hp: thousands of points
       // do not fit in a bar's pixels alone.
-      if (u.kind === 'tower' || u.kind === 'sanctum' || u.kind === 'warden') {
+      if (
+        u.kind === 'tower' ||
+        u.kind === 'sanctum' ||
+        u.kind === 'warden' ||
+        u.kind === 'creature'
+      ) {
         const showLabel = barVisible && u.hp < u.maxHp - 1;
         const key = showLabel ? String(Math.ceil(u.hp / 10) * 10) : '';
         if (key !== t.hpLabelKey) {

@@ -7,6 +7,7 @@
 // authoritative answer.
 
 import { schoolColorOf } from '../render/ability_vfx';
+import { aspectColor } from '../render/aspect_colors';
 import { Renderer } from '../render/renderer';
 import type { RenderTerrain } from '../render/terrain';
 import { effectiveRank, ULT_RANK_LEVELS } from '../sim/stats';
@@ -370,6 +371,7 @@ export function startPresentation(
 
   let lastTick = performance.now();
   let wardenWasUp = false;
+  const ringWasUp = new Map<string, boolean>();
   const onWorldTick = (notes?: WorldNotes): void => {
     lastTick = performance.now();
     stepPendingCast();
@@ -384,6 +386,15 @@ export function startPresentation(
       }
     }
     wardenWasUp = wardenUp;
+    // A ring creature rises: the same ping and flash, in its aspect's color.
+    for (const clock of world.ringClocks()) {
+      const up = clock.unitId !== null;
+      if (up && ringWasUp.get(clock.ring) === false) {
+        minimap.addPing(clock.x, clock.z);
+        renderer.flashMarker(clock.x, clock.z, aspectColor(clock.aspect).hex);
+      }
+      ringWasUp.set(clock.ring, up);
+    }
     renderer.onSimTick();
     hud.update();
     minimap.update();

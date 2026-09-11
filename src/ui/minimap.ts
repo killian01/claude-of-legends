@@ -3,6 +3,7 @@
 // it issues a move order at the corresponding world point; left-click points
 // the camera there (Space snaps it back to the champion).
 
+import { aspectColor } from '../render/aspect_colors';
 import type { TeamId, Vec2 } from '../sim/types';
 import type { IWorld } from '../world_api';
 
@@ -144,6 +145,15 @@ export class Minimap {
         g.beginPath();
         g.arc(x, z, 2.5, 0, Math.PI * 2);
         g.fill();
+      } else if (u.kind === 'creature') {
+        // A ring creature: a blotch in its aspect's color, for both teams.
+        g.fillStyle = aspectColor(u.aspect).css;
+        g.beginPath();
+        g.arc(x, z, 4.5, 0, Math.PI * 2);
+        g.fill();
+        g.strokeStyle = '#fff3e0';
+        g.lineWidth = 1.5;
+        g.stroke();
       } else if (u.kind === 'warden') {
         // The Warden: a violet blotch both teams can track.
         g.fillStyle = '#c06ae8';

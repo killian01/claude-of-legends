@@ -7,10 +7,12 @@
 // that decodes to nothing) and the size budget.
 
 import { spawnSync } from 'node:child_process';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  PENDING_VOICE_LINES,
+  RECORDED_VOICE_LINE_IDS,
   VOICE_LINE_IDS,
   VOICE_LINES,
   type VoiceLineId,
@@ -32,16 +34,29 @@ function isLfsPointer(head: Buffer): boolean {
 }
 
 describe('the announcer clips', () => {
-  it('has exactly one clip on disk per line', () => {
-    const expected = VOICE_LINE_IDS.map((id) => `${id}.mp3`).sort();
+  it('has exactly one clip on disk per recorded line', () => {
+    const expected = RECORDED_VOICE_LINE_IDS.map((id) => `${id}.mp3`).sort();
     const onDisk = readdirSync(DIR)
       .filter((f) => f.endsWith('.mp3'))
       .sort();
     expect(onDisk).toEqual(expected);
   });
 
+  it('lists a line as pending only while its clip is missing, and few of them', () => {
+    // The speech synthesis reads a pending line; a clip that has landed
+    // must leave the list the same commit, so nobody ships a recording the
+    // bank never plays.
+    for (const id of PENDING_VOICE_LINES) {
+      expect(VOICE_LINE_IDS, id).toContain(id);
+      expect(existsSync(join(DIR, `${id}.mp3`)), `${id}.mp3 exists: drop it from pending`).toBe(
+        false,
+      );
+    }
+    expect(PENDING_VOICE_LINES.length).toBeLessThanOrEqual(6);
+  });
+
   it('holds real audio, not git-lfs pointers', () => {
-    for (const id of VOICE_LINE_IDS) {
+    for (const id of RECORDED_VOICE_LINE_IDS) {
       const head = readFileSync(join(DIR, `${id}.mp3`)).subarray(0, 64);
       expect(isLfsPointer(head), `${id}.mp3 is a git-lfs pointer: run git lfs pull`).toBe(false);
       expect(looksLikeMp3(head), `${id}.mp3 does not open like an mp3`).toBe(true);
@@ -50,7 +65,7 @@ describe('the announcer clips', () => {
 
   it('stays inside the size budget', () => {
     let total = 0;
-    for (const id of VOICE_LINE_IDS) {
+    for (const id of RECORDED_VOICE_LINE_IDS) {
       const size = statSync(join(DIR, `${id}.mp3`)).size;
       expect(size, id).toBeLessThan(FILE_MAX_KB * 1024);
       total += size;

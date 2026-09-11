@@ -22,6 +22,10 @@ export const VOICE_LINES = {
   warden_awoken: 'The Warden has awoken!',
   boon_ours: 'Your team has claimed the Boon!',
   boon_theirs: 'The enemy has claimed the Boon',
+  pyrefang_risen: 'The Pyrefang has risen!',
+  voidmaul_risen: 'The Voidmaul has risen!',
+  favor_ours: 'Your team has claimed a favor!',
+  favor_theirs: 'The enemy has claimed a favor',
   victory: 'Victory!',
   defeat: 'Defeat',
 } as const;
@@ -29,6 +33,22 @@ export const VOICE_LINES = {
 export type VoiceLineId = keyof typeof VOICE_LINES;
 
 export const VOICE_LINE_IDS = Object.keys(VOICE_LINES) as readonly VoiceLineId[];
+
+// Lines written before their clips (docs/plan-rings.md): the browser's
+// speech synthesis reads them until scripts/build_voice.mjs renders them
+// with the maintainer's key. tests/voice_bank.test.ts tolerates a missing
+// clip for these only, and refuses a clip that has landed while its line
+// still sits here, so the list is meant to empty.
+export const PENDING_VOICE_LINES: readonly VoiceLineId[] = [
+  'pyrefang_risen',
+  'voidmaul_risen',
+  'favor_ours',
+  'favor_theirs',
+];
+
+export const RECORDED_VOICE_LINE_IDS: readonly VoiceLineId[] = VOICE_LINE_IDS.filter(
+  (id) => !PENDING_VOICE_LINES.includes(id),
+);
 
 // Where a rendered clip is served from (public/voice/, tracked with git-lfs).
 export function voiceClipUrl(id: VoiceLineId): string {

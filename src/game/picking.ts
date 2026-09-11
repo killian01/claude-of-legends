@@ -24,7 +24,7 @@ export type ScreenProjector = (x: number, y: number, z: number) => { x: number; 
 
 function pickable(world: IWorld, u: Readonly<Unit>, selfTeam: TeamId): boolean {
   if (u.dead) return false;
-  // Neutral units (the Warden) are attackable by both teams.
+  // Neutral units (the Warden, the rings' creatures) are attackable by both teams.
   if (!u.neutral && u.team === selfTeam) return false;
   if (!world.isVisible(selfTeam, u.id)) return false;
   if ((u.kind === 'tower' || u.kind === 'sanctum') && isInvulnerable(world.units, u)) return false;
@@ -33,7 +33,8 @@ function pickable(world: IWorld, u: Readonly<Unit>, selfTeam: TeamId): boolean {
 
 function kindPriority(u: Readonly<Unit>): number {
   if (u.kind === 'champion') return 0;
-  if (u.kind === 'minion' || u.kind === 'warden' || u.kind === 'camp') return 1;
+  if (u.kind === 'minion' || u.kind === 'warden' || u.kind === 'camp' || u.kind === 'creature')
+    return 1;
   return 2;
 }
 
@@ -42,7 +43,7 @@ function kindPriority(u: Readonly<Unit>): number {
 function bodyHeight(u: Readonly<Unit>): number {
   if (u.kind === 'champion') return 1.2;
   if (u.kind === 'minion') return 0.6;
-  if (u.kind === 'warden') return 1.4;
+  if (u.kind === 'warden' || u.kind === 'creature') return 1.4;
   if (u.kind === 'camp') return 0.8;
   return 3.0;
 }

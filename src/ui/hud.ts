@@ -8,11 +8,15 @@ import { announceVoice } from '../game/announcer';
 import type { PostMatchAction } from '../game/flow';
 import { requestGameFullscreen, toggleGameFullscreen } from '../game/fullscreen';
 import { playSfx } from '../game/sfx';
+import { aspectColor } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
 import { effectiveItemCost, ITEM_LIST, ITEMS } from '../sim/content/items';
+import { ASPECT_IDS, ASPECTS, type AspectId, CREATURES } from '../sim/content/rings';
 import { SIGILS } from '../sim/content/sigils';
+import type { FavorStacks } from '../sim/favors';
 import { withinFountain } from '../sim/fountain';
+import type { RingClock } from '../sim/rings';
 import {
   BASIC_MAX_RANK,
   effectiveRank,
@@ -35,6 +39,7 @@ import {
 import { iconDataUrl, itemIconUrl } from './icons';
 import { DISCORD } from './links';
 import { MultikillLadder, type MultikillLook, multikillLook } from './multikill';
+import { favorChips, favorClaimText, objectiveLine } from './objective_line';
 import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
 import { TeamScore } from './team_score';
@@ -615,6 +620,12 @@ export class Hud {
   // which is how the claim announcement knows WHOSE it was.
   private lastBoonMineUntil = 0;
   private lastBoonEnemyUntil = 0;
+  // The rings as last seen: whether each creature stood, and the aspect
+  // it carried, so a rise and a claim are announced on the edge.
+  private readonly lastRingUp = new Map<string, boolean>();
+  private readonly lastRingAspect = new Map<string, AspectId>();
+  // Stacks held per side at the last frame: a claim is "mine grew".
+  private lastFavorSum: [number, number] = [0, 0];
   private deathRecap = '';
   private readonly deathOverlay: HTMLElement;
   private readonly deathSub: HTMLElement;
@@ -1213,6 +1224,48 @@ export class Hud {
     window.setTimeout(() => line.remove(), 12000);
   }
 
+  // The rings' edges: a creature rose, or fell to a team. Whose favor it
+  // became is read off the stacks, the way the Boon's claim is read off
+  // its expiry: the side whose total grew this frame made the kill; a
+  // creature that fell to nobody's champion is nobody's claim.
+  private announceRings(rings: readonly RingClock[], mine: FavorStacks, enemy: FavorStacks): void {
+    const sum = (f: FavorStacks): number => ASPECT_IDS.reduce((n, a) => n + f[a], 0);
+    const mineSum = sum(mine);
+    const enemySum = sum(enemy);
+    for (const clock of rings) {
+      const up = clock.unitId !== null;
+      const was = this.lastRingUp.get(clock.ring);
+      const name = CREATURES[clock.creature].name;
+      if (was !== undefined && up !== was) {
+        if (up) {
+          this.announce(`The ${name} has risen`, aspectColor(clock.aspect).css);
+          playSfx('tower');
+          announceVoice(`${clock.creature}_risen`, true);
+        } else {
+          const aspect = this.lastRingAspect.get(clock.ring) ?? clock.aspect;
+          if (mineSum > this.lastFavorSum[0]) {
+            this.announce(
+              `Your team claims the ${favorClaimText(clock.creature, aspect)}`,
+              '#ffd94a',
+            );
+            playSfx('levelup');
+            announceVoice('favor_ours', true);
+          } else if (enemySum > this.lastFavorSum[1]) {
+            this.announce(
+              `The enemy claims the ${favorClaimText(clock.creature, aspect)}`,
+              '#f5a3a3',
+            );
+            playSfx('deny');
+            announceVoice('favor_theirs', true);
+          }
+        }
+      }
+      this.lastRingUp.set(clock.ring, up);
+      if (up) this.lastRingAspect.set(clock.ring, clock.aspect);
+    }
+    this.lastFavorSum = [mineSum, enemySum];
+  }
+
   announce(text: string, color = '#f2ffd9'): void {
     this.announceEl.textContent = text;
     this.announceEl.style.color = color;
@@ -1442,7 +1495,9 @@ export class Hud {
             ? 'Killed by a tower'
             : killerUnit2?.kind === 'warden'
               ? 'Killed by the Warden'
-              : 'Killed by minions';
+              : killerUnit2?.kind === 'creature' && killerUnit2.creatureId
+                ? `Killed by the ${CREATURES[killerUnit2.creatureId].name}`
+                : 'Killed by minions';
         const me = this.world.units.get(this.selfId);
         if (me) {
           const helpers = me.recentDamagers
@@ -1557,12 +1612,8 @@ export class Hud {
     // (works identically offline and online, no extra wire events).
     const objAt = this.world.objectiveSpawnAt();
     const wardenUp = objAt === null;
-    if (wardenUp) {
-      this.metaText.textContent = `${clock} · Warden LIVE`;
-    } else {
-      const left = Math.max(0, Math.ceil(objAt - this.world.time));
-      this.metaText.textContent = `${clock} · Warden ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
-    }
+    const rings = this.world.ringClocks();
+    this.metaText.textContent = `${clock} · ${objectiveLine(rings, objAt, this.world.time)}`;
     const mineBoon = this.world.teamBuff(this.selfTeam);
     const enemyBoon = this.world.teamBuff((1 - this.selfTeam) as TeamId);
     if (this.lastWardenUp !== null && wardenUp !== this.lastWardenUp) {
@@ -1586,6 +1637,9 @@ export class Hud {
     this.lastWardenUp = wardenUp;
     if (mineBoon) this.lastBoonMineUntil = Math.max(this.lastBoonMineUntil, mineBoon.until);
     if (enemyBoon) this.lastBoonEnemyUntil = Math.max(this.lastBoonEnemyUntil, enemyBoon.until);
+    const mineFavors = this.world.teamFavors(this.selfTeam);
+    const enemyFavors = this.world.teamFavors((1 - this.selfTeam) as TeamId);
+    this.announceRings(rings, mineFavors, enemyFavors);
     this.levelBadge.textContent = String(u.level);
     this.goldText.textContent = `${Math.floor(u.gold)}g`;
     if (this.lastLevel !== -1 && u.level > this.lastLevel) {
@@ -1640,6 +1694,23 @@ export class Hud {
       const pct = Math.round(BOON_DAMAGE_PER_STACK * enemyBoon.stacks * 100);
       chip.textContent = `ENEMY BOON +${pct}% DMG ${Math.ceil(enemyBoon.until - this.world.time)}s`;
       this.statusRow.appendChild(chip);
+    }
+    // The favors (CONTEXT.md: Favor) are team facts like the Boon: a chip
+    // each, saying what it does, the enemy's too.
+    for (const [side, stacks] of [
+      ['', mineFavors],
+      ['ENEMY ', enemyFavors],
+    ] as const) {
+      for (const favor of favorChips(stacks)) {
+        const chip = document.createElement('span');
+        chip.className = 'hud-chip';
+        const look = aspectColor(favor.aspect);
+        chip.style.borderColor = side ? '#e86a7a' : look.css;
+        chip.style.color = side ? '#ffc8ce' : look.css;
+        chip.style.background = side ? '#3d1a20' : look.dark;
+        chip.textContent = `${side}${favor.text}`;
+        this.statusRow.appendChild(chip);
+      }
     }
     for (const s of u.statuses) {
       if (s.until <= this.world.time) continue;
@@ -1774,17 +1845,29 @@ export class Hud {
                 ? 'Sanctum'
                 : target.kind === 'warden'
                   ? 'Warden'
-                  : target.kind === 'camp'
-                    ? 'Jungle Beast'
-                    : 'Minion';
+                  : target.kind === 'creature' && target.creatureId
+                    ? CREATURES[target.creatureId].name
+                    : target.kind === 'camp'
+                      ? 'Jungle Beast'
+                      : 'Minion';
+          const look = aspectColor(target.aspect);
           this.targetPortrait.src =
             target.kind === 'warden'
               ? iconDataUrl('W', '#3d2a5a', '#a06ae8')
-              : iconDataUrl(label[0] ?? '?', '#5a1f1f', '#a04040');
-          this.targetName.textContent = label;
+              : target.kind === 'creature'
+                ? iconDataUrl(label[0] ?? '?', look.dark, look.css)
+                : iconDataUrl(label[0] ?? '?', '#5a1f1f', '#a04040');
+          this.targetName.textContent =
+            target.kind === 'creature' && target.aspect
+              ? `${label} (${ASPECTS[target.aspect].name})`
+              : label;
         }
         this.targetName.style.color =
-          target.kind === 'warden' ? '#d8a6f5' : (TEAM_TEXT_COLORS[target.team] ?? '#f5a3a3');
+          target.kind === 'warden'
+            ? '#d8a6f5'
+            : target.kind === 'creature'
+              ? aspectColor(target.aspect).css
+              : (TEAM_TEXT_COLORS[target.team] ?? '#f5a3a3');
       }
       this.targetHpFill.style.transform = `scaleX(${Math.max(0, target.hp / target.maxHp)})`;
       this.targetHpText.textContent = `${Math.ceil(target.hp)} / ${Math.round(target.maxHp)}`;
