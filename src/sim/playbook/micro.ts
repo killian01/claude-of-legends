@@ -77,7 +77,7 @@ export const REGROUP_AT_S = 12 * 60;
 // The movement jitter's half-width, in units.
 const JITTER = 1.5;
 
-export function dist(ax: number, az: number, b: ObsUnit): number {
+export function dist(ax: number, az: number, b: { x: number; z: number }): number {
   return hypot(b.x - ax, b.z - az);
 }
 

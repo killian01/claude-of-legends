@@ -113,7 +113,7 @@ function catalog(): string {
 // The playbook grammar, told compactly. Kept by hand beside
 // src/sim/playbook/types.ts and validate.ts; the validator catches drift.
 const GRAMMAR = `
-A playbook is {"version":3,"plays":[Play...],"kit"?:Kit,"lanes"?:["top"|"mid"|"bot"...]}, at most ${MAX_PLAYS} plays. lanes: the lanes the bot asks for, in order, one to three, seated ahead of its champion's home lane (the first with a seat open); "bottom" and "bot lane" both mean "bot", and in your comment always say "bot lane" or "top lane", never "bot" alone (a bare "bot" is the bot itself). Each decision
+A playbook is {"version":3,"plays":[Play...],"kit"?:Kit,"lanes"?:["top"|"mid"|"bot"|"jungle"...]}, at most ${MAX_PLAYS} plays. lanes: the lanes the bot asks for, in order, one to three, seated ahead of its champion's home lane (the first with a seat open); "jungle" first means the forest: the bot holds no lane and should carry a jungle play (the camps) instead of a lane's; "bottom" and "bot lane" both mean "bot", and in your comment always say "bot lane" or "top lane", never "bot" alone (a bare "bot" is the bot itself). Each decision
 slot (four per second) the bot walks the list top down; the first play whose trigger holds AND
 whose behavior can act this slot is the one that acts. A behavior that cannot act (nothing to
 farm, nothing affordable) passes to the next play. Reflexes run before the list and are not yours
@@ -141,7 +141,7 @@ least one of the two):
  {"kind":"enemyVisible"} {"kind":"atFountain"} {"kind":"underTower"}
  {"kind":"warden","state":"up"|"spawning"|"down","within"?:seconds,"hpAtMost"?:0..1,"near"?:units} (spawning: due within the seconds, default 20; up narrows to a live Warden at or under hpAtMost of its health and within near units of the bot, what a finish play reads: every new bot has "finish-warden" and "finish-creature" right above "fight", the last strikes on a body in reach whatever is in sight, and they are VALID)
  {"kind":"creature","which"?:"pyrefang"|"voidmaul"|"ascendant"|"any","state":"up"|"spawning"|"down","within"?:seconds,"hpAtMost"?:0..1,"near"?:units} a ring creature (the Pyrefang on the bot ring, the Voidmaul on the top ring, ascendant for either ring's Ascendant, the fourth rise and every later one, a team's fight; any by default): up while one is alive, spawning when due within the seconds (default 20), down when none is
- {"kind":"abilityReady","key":"Q"|"W"|"E"|"R"} {"kind":"sigilReady","id":"riftstep"|"zephyr"|"mend"|"sear"} {"kind":"lane","is":"top"|"mid"|"bot"}
+ {"kind":"abilityReady","key":"Q"|"W"|"E"|"R"} {"kind":"sigilReady","id":"riftstep"|"zephyr"|"mend"|"sear"} {"kind":"lane","is":"top"|"mid"|"bot"|"jungle"} (jungle: the seat holds no lane, the forest's)
  {"kind":"allyFighting","within":0..200} an allied champion within the radius has an enemy champion within 10 of it
  {"kind":"numbers","within":0..200,"atLeast"?:-10..10,"atMost"?:-10..10} allied champions within the radius (the bot itself counted) minus enemy champions in sight there: atLeast 0 is an even fight or better, atLeast 1 an advantage, atMost -1 outnumbered
  {"kind":"odds","within"?:0..200 (20),"below"?:0..1,"atLeast"?:0..1} the fight's odds: the strength of the allied champions within the radius (the bot itself counted, each weighed by health and level) over both sides' together; 0.5 is an even fight, above it an advantage, below it a losing one
@@ -174,6 +174,7 @@ Behavior is ONE of (every parameter optional, default in parentheses):
  {"kind":"farm","mode"?:"shove"|"lastHit" ("shove")} attack the nearest enemy minion in reach; lastHit strikes only a minion the next attack kills, so the wave is not pushed.
  {"kind":"manageWave","intent":"freeze"|"shove"} freeze: hold the enemy wave in front of the bot's own lane tower, last hits only, standing just ahead of the tower and holding still between them, so the wave dies to the tower and the enemy laner must come deep for its farm; always acts while a live allied tower stands on the bot's lane, passes without one. shove: hit the wave to send it at the enemy tower.
  {"kind":"takeCamp"} attack a visible jungle camp in reach, with no enemy champion in sight.
+ {"kind":"jungle","side"?:"own"|"any" ("own")} the forest route: clear the camp in reach with the kit's abilities before the strikes, else walk to the camp the team believes up and can reach first (never looked at, seen standing, or seen empty for its kind's respawn clock: the Spinecrest and the Brackenlings 90 s, the Barkmaw 120 s); the own forest by default, any spot with "any"; passes the turn with every camp believed down. What a jungler (lanes ["jungle"]) plays instead of farming a lane.
  {"kind":"siege","escortMin"?:int 0..10 (3)} attack a vulnerable structure in reach with a minion escort.
  {"kind":"push","lane"?:"assigned"|"top"|"mid"|"bot" ("assigned"),"regroupAt"?:seconds|null (720)} follow the wave down the lane, else walk it, else walk at the enemy Sanctum; always acts. Past regroupAt every assigned bot pushes mid as one group; null disables the bell.
  {"kind":"followAlly","keep"?:0..50 (3)} walk to the nearest allied champion and stay within keep.
@@ -188,7 +189,7 @@ Patch operations, ONE compact JSON object per line:
  {"op":"move","id":id,"before":id|null} (null: to the end)
  {"op":"set","id":id,"play":{"when"?:Trigger,"do"?:Behavior,"enabled"?:bool}} change parts of a play in place
  {"op":"kit","kit":{"build"?:[...]|null,"skills"?:[...]|null,"variants"?:[...]|null}} change parts of the kit; a part given replaces it, null clears it back to the default, absent leaves it
- {"op":"lanes","lanes":["top"|"mid"|"bot"...]|null} set the lane preference, null for none
+ {"op":"lanes","lanes":["top"|"mid"|"bot"|"jungle"...]|null} set the lane preference, null for none
  {"op":"replace","playbook":Playbook} a whole rewrite, ONLY when the owner asks for one
 `;
 

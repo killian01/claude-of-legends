@@ -52,8 +52,8 @@ function acted(sim: Sim, unitId: number, def: PlaybookDef, ticks: number): Set<s
 }
 
 describe('the house styles', () => {
-  it('are four valid playbooks in the registry, the Laner still the default', () => {
-    expect(HOUSE_STYLE_IDS).toEqual(['laner', 'brawler', 'sieger', 'objective']);
+  it('are five valid playbooks in the registry, the Laner still the default', () => {
+    expect(HOUSE_STYLE_IDS).toEqual(['laner', 'brawler', 'sieger', 'objective', 'jungler']);
     for (const def of HOUSE_STYLES) {
       expect(BOTS[def.id]).toBe(def);
       expect(def.playbook, def.id).toBeDefined();
@@ -63,6 +63,7 @@ describe('the house styles', () => {
     expect(BOTS[DEFAULT_BOT_ID]).toBe(LANER);
     expect(houseName('sieger')).toBe('House sieger');
     expect(houseName('objective')).toBe('House objective player');
+    expect(houseName('jungler')).toBe('House jungler');
     expect(houseName('nobody')).toBe('House laner');
   });
 
@@ -184,7 +185,7 @@ describe('the house styles', () => {
     expect(rows).toHaveLength(10);
     expect(rows.find((r) => r.unitId === unitIds[0])?.player).toBe(BOT.name);
     for (const r of rows.slice(1))
-      expect(r.player).toMatch(/^House (laner|brawler|sieger|objective player)$/);
+      expect(r.player).toMatch(/^House (laner|brawler|sieger|objective player|jungler)$/);
     const rebuilt = buildMatchSim(starOrchard(), 2, picks).sim;
     world.rebind(rebuilt);
     expect(world.scoreboard().map((r) => r.player)).toEqual(rows.map((r) => r.player));

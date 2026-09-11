@@ -7,7 +7,7 @@
 // client (local validation, no round trip) and the server (the same
 // arithmetic before it forwards an operation).
 
-import type { KitDef, LaneId, PlaybookDef, PlayDef } from './types';
+import type { KitDef, LanePreference, PlaybookDef, PlayDef } from './types';
 import { type PlaybookValidation, validatePlaybook } from './validate';
 
 export type PatchOp =
@@ -22,7 +22,7 @@ export type PatchOp =
   // null clears it back to the engine's default, absent leaves it.
   | { op: 'kit'; kit: { [K in keyof KitDef]?: KitDef[K] | null } }
   // The lane preference (phase 12): the lanes in order, null for none.
-  | { op: 'lanes'; lanes: LaneId[] | null }
+  | { op: 'lanes'; lanes: LanePreference[] | null }
   // A whole new playbook, the "rewrite everything" answer.
   | { op: 'replace'; playbook: PlaybookDef };
 

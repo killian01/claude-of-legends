@@ -75,6 +75,9 @@ describe('the active play', () => {
       // on the map the match is played on (a bot's ready-made policy reads
       // the tests' fixture map).
       const playbook = BOTS[p.bot ?? LANER.id]!.playbook ?? LANER_PLAYBOOK;
+      // Seated the same way (the Jungler asks for the forest, ADR 0023);
+      // only the trace differs.
+      bare.seatLanes(unit.id, playbook.lanes ?? null);
       bare.attachPolicy(unit.id, playbookPolicy(playbook, undefined, bare.map));
     }
     for (let i = 0; i < 2000; i++) {

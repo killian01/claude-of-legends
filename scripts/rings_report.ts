@@ -1,8 +1,9 @@
 // What the rings do in house bot matches (docs/plan-rings.md, phase 5):
 // runs full matches on the shipped export, the fill on both sides, and
 // prints per match how long it ran, which creatures fell to whom and
-// when, the favors each side held at the end, the Wardens, the Ascendants
-// (when the first rose, who took the Wrath), the winner; then the totals. The measurement behind the timings, rerun after a
+// when, the favors each side held at the end, the Wardens and their pits,
+// the Ascendants (when the first rose, who took the Wrath), the camps each
+// side cleared and how many its jungler did, the winner; then the totals. The measurement behind the timings, rerun after a
 // tuning. Bundled and run by scripts/rings_report.mjs:
 //   node scripts/rings_report.mjs [--seeds 6] [--from 1] [--max-min 25]
 
@@ -50,22 +51,38 @@ function play(seed: number) {
     }
   }
   const falls: Fall[] = [];
-  const wardens: { at: number; team: number }[] = [];
+  const wardens: { at: number; team: number; pit: string }[] = [];
   const wraths: { at: number; creature: string; team: number }[] = [];
+  // Camp bodies cleared per team, and by the team's jungler (a body
+  // leaves the units the tick it dies, so kinds are noted before).
+  const camps: [number, number] = [0, 0];
+  const junglerCamps: [number, number] = [0, 0];
+  const junglers = new Set<number>();
+  for (const u of sim.units.values())
+    if (u.kind === 'champion' && u.lane === null) junglers.add(u.id);
+  const kinds = new Map<number, 'camp' | 'warden'>();
   let ascendantAt: number | null = null;
   const started = Date.now();
   let ticks = 0;
   for (; ticks < maxTicks && sim.winner === null; ticks++) {
+    for (const u of sim.units.values()) {
+      if (u.kind === 'camp' || u.kind === 'warden') kinds.set(u.id, u.kind);
+    }
+    const pit = sim.wardenPit().name;
     for (const e of sim.tick()) {
       if (e.type === 'favor') {
         falls.push({ at: sim.time, creature: e.creature ?? '?', aspect: e.aspect, team: e.team });
       } else if (e.type === 'wrath') {
         wraths.push({ at: sim.time, creature: e.creature, team: e.team });
       } else if (e.type === 'death') {
-        const victim = sim.units.get(e.unitId);
         const killer = sim.units.get(e.killerId);
-        if (victim?.kind === 'warden' && killer?.kind === 'champion') {
-          wardens.push({ at: sim.time, team: killer.team });
+        const kind = kinds.get(e.unitId);
+        if (kind === 'warden' && killer?.kind === 'champion') {
+          wardens.push({ at: sim.time, team: killer.team, pit });
+        }
+        if (kind === 'camp' && killer?.kind === 'champion') {
+          camps[killer.team] += 1;
+          if (junglers.has(killer.id)) junglerCamps[killer.team] += 1;
         }
       }
     }
@@ -81,6 +98,8 @@ function play(seed: number) {
     wardens,
     wraths,
     ascendantAt,
+    camps,
+    junglerCamps,
     favors: [sim.teamFavors(0), sim.teamFavors(1)],
     wallMs: Date.now() - started,
   };
@@ -96,7 +115,7 @@ for (let seed = firstSeed; seed < firstSeed + seeds; seed++) {
         `${clock(f.at)} ${CREATURES[f.creature as keyof typeof CREATURES]?.name ?? f.creature}(${f.aspect}) t${f.team}`,
     )
     .join(', ');
-  const wardensText = r.wardens.map((w) => `${clock(w.at)} t${w.team}`).join(', ');
+  const wardensText = r.wardens.map((w) => `${clock(w.at)} t${w.team} ${w.pit}`).join(', ');
   const wrathsText = r.wraths
     .map(
       (w) =>
@@ -108,7 +127,9 @@ for (let seed = firstSeed; seed < firstSeed + seeds; seed++) {
   console.log(
     `seed ${seed}: ${r.minutes.toFixed(1)} min, winner ${r.winner ?? 'none'}, ` +
       `${r.falls.length} creatures [${fallsText}], ${r.wardens.length} wardens [${wardensText}], ` +
-      `${ascendantText}, ${r.wraths.length} wraths [${wrathsText}], ${(r.wallMs / 1000).toFixed(0)} s`,
+      `${ascendantText}, ${r.wraths.length} wraths [${wrathsText}], ` +
+      `camps ${r.camps[0]}/${r.camps[1]} (junglers ${r.junglerCamps[0]}/${r.junglerCamps[1]}), ` +
+      `${(r.wallMs / 1000).toFixed(0)} s`,
   );
 }
 

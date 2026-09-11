@@ -5,9 +5,10 @@
 // that set them); the playbook overrides them per play.
 
 import { GOTO_DONE_RADIUS } from '../coach';
+import { CAMP_FIRST_SPAWN_S, CAMPS } from '../content/camps';
 import { CHAMPIONS, type ChampionRole } from '../content/champions';
 import { hypot } from '../exact';
-import type { Action, ObsCreature, Observation, ObsUnit } from '../policy';
+import type { Action, ObsCamp, ObsCreature, Observation, ObsUnit } from '../policy';
 import { nextKitStep } from './kit';
 import {
   BESIDE_RANGE,
@@ -91,6 +92,8 @@ export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
       return defendTower(ctx, b.within ?? 200);
     case 'takeCamp':
       return takeCamp(ctx);
+    case 'jungle':
+      return jungle(ctx, b.side ?? 'own');
     case 'siege':
       return siege(ctx, b.escortMin ?? ESCORT_MIN);
     case 'push':
@@ -440,7 +443,7 @@ function strikeBody(ctx: SlotContext, body: ObsUnit): Action | null {
 // the body and waits beside it, out of its reach, for the rest.
 function gather(
   ctx: SlotContext,
-  body: ObsUnit,
+  body: { x: number; z: number },
   party: number,
   partyAtLeast: number,
   hpAtLeast: number,
@@ -468,11 +471,24 @@ function partyAt(ctx: SlotContext, x: number, z: number, within: number): number
   return 1 + Math.max(atBody, beside);
 }
 
+// The Warden's pit: where it stands or where the next rises, as the
+// observation says (the pit is drawn per rise, ADR 0023); an observation
+// from before the draw falls back to the nearest of the map's pits.
+function wardenPitOf(ctx: SlotContext): { x: number; z: number } {
+  const { s, obs } = ctx;
+  if (obs.wardenPit) return obs.wardenPit;
+  let pit = ctx.map.wardenPits[0]!;
+  for (const p of ctx.map.wardenPits) {
+    if (hypot(p.x - s.x, p.z - s.z) < hypot(pit.x - s.x, pit.z - s.z)) pit = p;
+  }
+  return pit;
+}
+
 // Contest the Warden: a live one is the team's one rendezvous. Walk to it
 // healthy and in a party, fight it in reach. Shortly before the spawn
-// clock strikes, healthy bots pre-position at the nearest pit; both teams
-// read the same clock, so the pit becomes the mid game's fight
-// (obs.objectiveSpawnAt).
+// clock strikes, healthy bots pre-position at the pit it rises in; both
+// teams read the same clock and the same pit, so the pit becomes the mid
+// game's fight (obs.objectiveSpawnAt, obs.wardenPit).
 function contestWarden(
   ctx: SlotContext,
   hpAtLeast: number,
@@ -506,10 +522,7 @@ function contestWarden(
   if (obs.objectiveSpawnAt != null && s.hpFrac >= hpAtLeast) {
     const untilSpawn = obs.objectiveSpawnAt - obs.time;
     if (untilSpawn >= 0 && untilSpawn <= prepSeconds) {
-      let pit = ctx.map.wardenPits[0]!;
-      for (const p of ctx.map.wardenPits) {
-        if (hypot(p.x - s.x, p.z - s.z) < hypot(pit.x - s.x, pit.z - s.z)) pit = p;
-      }
+      const pit = wardenPitOf(ctx);
       const dp = hypot(pit.x - s.x, pit.z - s.z);
       if (dp <= 6) return { kind: 'noop' };
       if (dp <= WARDEN_PREP_RANGE) return { kind: 'move', x: pit.x + jx, z: pit.z + jz };
@@ -519,9 +532,22 @@ function contestWarden(
 }
 
 // The rings' clocks a play means, and the live creatures among them as
-// the team sees them (always, since a creature is public like the Warden).
+// the team sees them: the clock is public, the body sits in the fog like
+// a camp (ADR 0023), so a live creature may be up and out of sight.
 function ringClocksOf(ctx: SlotContext, which: CreatureName): readonly ObsCreature[] {
   return (ctx.obs.creatures ?? []).filter((c) => clockMeans(c, which));
+}
+
+// The nearest clock among those with a live creature, seen or not: where
+// a bot walks when the clock says up and nobody has sight on the ring.
+function nearestLiveClock(ctx: SlotContext, clocks: readonly ObsCreature[]): ObsCreature | null {
+  const { s } = ctx;
+  let best: ObsCreature | null = null;
+  for (const c of clocks) {
+    if (c.unitId === null) continue;
+    if (!best || hypot(c.x - s.x, c.z - s.z) < hypot(best.x - s.x, best.z - s.z)) best = c;
+  }
+  return best;
 }
 
 function liveCreatures(ctx: SlotContext, clocks: readonly ObsCreature[]): ObsUnit[] {
@@ -555,17 +581,24 @@ function contestCreature(
   if (clocks.length === 0) return null;
   const { jx, jz } = ctx.jitter();
   const live = nearest(liveCreatures(ctx, clocks), s.x, s.z);
-  if (live) {
-    const party = partyAt(ctx, live.x, live.z, within);
+  // A live creature nobody sees is walked to at its ring: the clock says
+  // it stands there, and the fog lifts on arrival.
+  const body = live ?? nearestLiveClock(ctx, clocks);
+  if (body) {
+    const party = partyAt(ctx, body.x, body.z, within);
     if (party < partyAtLeast) {
-      const roseAt = clocks.find((c) => c.unitId === live.id)?.roseAt;
-      return gather(ctx, live, party, partyAtLeast, hpAtLeast, within, roseAt);
+      const roseAt = live
+        ? clocks.find((c) => c.unitId === live.id)?.roseAt
+        : (body as ObsCreature).roseAt;
+      return gather(ctx, body, party, partyAtLeast, hpAtLeast, within, roseAt);
     }
-    const hit = strikeBody(ctx, live);
-    if (hit) return hit;
-    const d = dist(s.x, s.z, live);
+    if (live) {
+      const hit = strikeBody(ctx, live);
+      if (hit) return hit;
+    }
+    const d = dist(s.x, s.z, body);
     if (d <= within && s.hpFrac >= hpAtLeast) {
-      return { kind: 'move', x: live.x + jx, z: live.z + jz };
+      return { kind: 'move', x: body.x + jx, z: body.z + jz };
     }
     return null;
   }
@@ -609,6 +642,75 @@ function takeCamp(ctx: SlotContext): Action | null {
   );
   if (camp && dist(s.x, s.z, camp) <= FARM_RANGE) return { kind: 'attack', targetId: camp.id };
   return null;
+}
+
+// The forest route (CONTEXT.md: Jungler; ADR 0023). A camp body in reach
+// is cleared with the kit's abilities before the strikes; otherwise the
+// bot walks to the camp it believes up and can reach first, on what the
+// team has seen (obs.camps): a spot never looked at is up from the
+// opening clock, a spot seen standing is up, a spot seen empty is up
+// again once its kind's respawn clock has run since the team first saw
+// it empty. A spot whose clock outruns the walk by more than a short
+// wait is left for later, so the bot never stands at an empty spot; the
+// own forest by default (the spots nearer the own fountain than the
+// enemy's). With every camp believed down the turn passes, so the plays
+// below (a gank, a creature, a lane) take over. A spot in sight and
+// empty flips the memory on arrival, so a camp the enemy took quietly
+// costs one walk, the way it costs a human one.
+export const JUNGLE_CLEAR_RANGE = 10;
+const JUNGLE_WAIT_S = 12;
+const JUNGLE_WALK_SPEED = 3.4;
+
+function campUpAt(camp: ObsCamp): number {
+  if (camp.up === null) return CAMP_FIRST_SPAWN_S;
+  if (camp.up) return camp.seenAt ?? 0;
+  return (camp.downSince ?? camp.seenAt ?? 0) + CAMPS[camp.kind].respawnS;
+}
+
+function jungle(ctx: SlotContext, side: 'own' | 'any'): Action | null {
+  const { s, obs, fountain } = ctx;
+  const body = nearest(
+    ctx.enemies.filter((u) => u.kind === 'camp'),
+    s.x,
+    s.z,
+  );
+  if (body && dist(s.x, s.z, body) <= JUNGLE_CLEAR_RANGE) {
+    return strikeBody(ctx, body) ?? { kind: 'attack', targetId: body.id };
+  }
+  const enemyFountain = ctx.map.fountains.find((f) => f.team !== s.team);
+  let best: ObsCamp | null = null;
+  let bestAt = Number.POSITIVE_INFINITY;
+  let bestD = Number.POSITIVE_INFINITY;
+  for (const camp of obs.camps ?? []) {
+    if (
+      side === 'own' &&
+      enemyFountain &&
+      hypot(camp.x - fountain.x, camp.z - fountain.z) >
+        hypot(camp.x - enemyFountain.x, camp.z - enemyFountain.z)
+    ) {
+      continue;
+    }
+    if (ctx.inTowerReach(camp.x, camp.z)) continue;
+    const arrival = obs.time + hypot(camp.x - s.x, camp.z - s.z) / JUNGLE_WALK_SPEED;
+    const upAt = campUpAt(camp);
+    // Before the opening clock every spot is due at once: walk to the
+    // nearest and wait there; after it, a spot whose clock outruns the
+    // walk by more than a short wait is left for later.
+    if (obs.time >= CAMP_FIRST_SPAWN_S && upAt > arrival + JUNGLE_WAIT_S) continue;
+    const at = Math.max(arrival, upAt);
+    const d = hypot(camp.x - s.x, camp.z - s.z);
+    // The soonest clear; the nearest when several are due together (the
+    // opening, when the whole forest rises at once).
+    if (at < bestAt - 1e-9 || (Math.abs(at - bestAt) <= 1e-9 && d < bestD)) {
+      bestAt = at;
+      bestD = d;
+      best = camp;
+    }
+  }
+  if (!best) return null;
+  if (hypot(best.x - s.x, best.z - s.z) <= 3) return { kind: 'noop' };
+  const { jx, jz } = ctx.jitter();
+  return { kind: 'move', x: best.x + jx * 0.3, z: best.z + jz * 0.3 };
 }
 
 function siege(ctx: SlotContext, escortMin: number): Action | null {
@@ -775,18 +877,17 @@ function obeyOrder(ctx: SlotContext): Action | null {
     case 'warden': {
       const warden = ctx.enemies.find((u) => u.kind === 'warden');
       if (warden) return strikeBody(ctx, warden) ?? { kind: 'move', x: warden.x, z: warden.z };
-      let pit = ctx.map.wardenPits[0]!;
-      for (const p of ctx.map.wardenPits) {
-        if (hypot(p.x - s.x, p.z - s.z) < hypot(pit.x - s.x, pit.z - s.z)) pit = p;
-      }
+      const pit = wardenPitOf(ctx);
       return holdPosition(ctx, pit.x, pit.z, 6);
     }
     case 'creature': {
-      // The live creature, the nearest; else the ring whose rise is
-      // soonest, held until it does.
+      // The live creature, the nearest; a live one out of sight at its
+      // ring; else the ring whose rise is soonest, held until it does.
       const clocks = ringClocksOf(ctx, 'any');
       const live = nearest(liveCreatures(ctx, clocks), s.x, s.z);
       if (live) return strikeBody(ctx, live) ?? { kind: 'move', x: live.x, z: live.z };
+      const up = nearestLiveClock(ctx, clocks);
+      if (up) return holdPosition(ctx, up.x, up.z, 6);
       let next: ObsCreature | null = null;
       for (const c of clocks) {
         if (c.riseAt !== null && (!next || c.riseAt < (next.riseAt ?? 0))) next = c;

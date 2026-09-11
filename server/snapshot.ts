@@ -114,6 +114,7 @@ export function buildSnapshot(
         if (u.aspect) snap.a = u.aspect;
         if (u.ascendant) snap.asc = 1;
       }
+      if (u.kind === 'camp' && u.campKind) snap.ck = u.campKind;
     }
     units.push(snap);
   }
@@ -259,6 +260,7 @@ export function buildSnapshot(
     events: snapEvents,
     winner: sim.winner,
     objAt: sim.objectiveSpawnAt(),
+    objPit: sim.objectives.pit,
     rings: sim.ringClocks().map((c) => ({
       r: c.ring,
       u: c.unitId,

@@ -7,7 +7,7 @@
 import { ChampionRegistry } from '../sim/champion_registry';
 import type { Status } from '../sim/combat/status';
 import type { ChampionDef } from '../sim/content/champions';
-import type { GameMap } from '../sim/content/map';
+import type { GameMap, WardenPit } from '../sim/content/map';
 import { creatureOfRing } from '../sim/content/rings';
 import { type FavorStacks, NO_FAVORS } from '../sim/favors';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
@@ -110,6 +110,7 @@ function materializeUnit(s: SnapUnit): Unit {
     creatureId: s.cr ?? null,
     aspect: s.a ?? null,
     ascendant: s.asc === 1,
+    campKind: s.ck ?? null,
     bitePct: 0,
     play: null,
     coachOrder: null,
@@ -167,6 +168,7 @@ export class ClientWorld implements IWorld {
   private scoreRows: readonly ScoreRow[] = [];
   private objAt: number | null = null;
   private rings: RingClock[] = [];
+  private objPit = 0;
   private favors: FavorStacks = NO_FAVORS;
   private enemyFavors: FavorStacks = NO_FAVORS;
   private boon: { until: number; stacks: number } | null = null;
@@ -213,6 +215,12 @@ export class ClientWorld implements IWorld {
   teamWrath(team: TeamId): number | null {
     const until = team === this.selfTeam ? this.wrathUntil : this.enemyWrathUntil;
     return until !== null && until > this.time ? until : null;
+  }
+
+  // The Warden's pit as the last snapshot named it, on the map's list
+  // (IWorld); the first pit until a snapshot says otherwise.
+  wardenPit(): Readonly<WardenPit> {
+    return this.map.wardenPits[this.objPit] ?? this.map.wardenPits[0]!;
   }
 
   objectiveSpawnAt(): number | null {
@@ -332,6 +340,7 @@ export class ClientWorld implements IWorld {
     }
 
     this.objAt = msg.objAt ?? null;
+    this.objPit = msg.objPit ?? 0;
     this.rings = (msg.rings ?? []).flatMap((r) => {
       const site = this.map.rings?.find((ring) => ring.id === r.r);
       if (!site) return [];

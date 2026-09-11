@@ -7,6 +7,7 @@
 
 import { hypot } from '../exact';
 import type { TeamId, Vec2 } from '../types';
+import type { CampKind } from './camps';
 import type { RingId } from './rings';
 
 export type LaneId = 'top' | 'mid' | 'bot';
@@ -83,18 +84,29 @@ export interface GameMap {
   walls: readonly WallShape[];
   // Circular brush patches; walkable, will hide occupants when vision lands.
   brush: readonly WallShape[];
-  // The two mirrored river pits the Warden alternates between.
-  wardenPits: readonly Vec2[];
-  // Jungle camp spots, mirrored pairs; one per half grants a personal buff.
+  // Where the Warden may rise (CONTEXT.md: Warden): the first listed is
+  // the first Warden's pit; every later rise draws another at random
+  // (src/sim/objectives.ts). The launch map's two mirrored river pits, the
+  // Star Orchard's plaza and forest rooms.
+  wardenPits: readonly WardenPit[];
+  // Jungle camp spots, mirrored pairs, each of a kind (content/camps.ts);
+  // one Barkmaw per half grants a personal buff.
   camps: readonly CampSpot[];
   // The rings, absent on a map that has none (the launch map).
   rings?: readonly RingSite[];
 }
 
+// A Warden pit, named so the objective line can say where the next one
+// is due ("Warden 2:10 at the west glade").
+export interface WardenPit extends Vec2 {
+  name: string;
+}
+
+// A camp spot and the kind of body it holds (content/camps.ts).
 export interface CampSpot {
   x: number;
   z: number;
-  buff: boolean;
+  kind: CampKind;
 }
 
 // A ring (CONTEXT.md): the raised stone circle at the elbow of a side
@@ -240,16 +252,17 @@ function bankOffRiver(w: WallShape): readonly WallShape[] {
 const NW_BANKED_WALLS: readonly WallShape[] = NW_WALLS.flatMap(bankOffRiver);
 
 // Jungle camps of the northwest half; the southeast half is their rotation.
-// Each sits in a wall gap off the lanes; the first is the buff camp.
+// Each sits in a wall gap off the lanes; the first is the buff camp, the
+// Barkmaw (content/camps.ts).
 const NW_CAMPS: readonly CampSpot[] = [
   // Moved out of the mid corridor in round 3: the buff camp sat exactly
   // where the pocket wall had to go. It now sits deeper in the pocket, a
   // cul-de-sac off the top lane rather than a stop on a through-road.
-  { x: 38, z: 76, buff: true },
-  { x: 40, z: 100, buff: false },
+  { x: 38, z: 76, kind: 'barkmaw' },
+  { x: 40, z: 100, kind: 'spinecrest' },
   // Was at 58,108: that is where the river's own bank wall has to stand once
   // the water is a road, so the camp sits one bay deeper in the pocket.
-  { x: 52, z: 112, buff: false },
+  { x: 52, z: 112, kind: 'brackenlings' },
 ];
 
 const NW_BRUSH: readonly WallShape[] = [
@@ -329,6 +342,9 @@ export const GAME_MAP: GameMap = {
   brush: [...NW_BRUSH, ...NW_BRUSH.map((b) => ({ ...mirrorPoint(b.x, b.z), r: b.r }))],
   // On the river diagonal (x + z = SIZE), clear of the jungle walls, and
   // point-symmetric so neither team owns the pit.
-  wardenPits: [{ x: 58, z: 92 }, mirrorPoint(58, 92)],
-  camps: [...NW_CAMPS, ...NW_CAMPS.map((c) => ({ ...mirrorPoint(c.x, c.z), buff: c.buff }))],
+  wardenPits: [
+    { x: 58, z: 92, name: 'west pit' },
+    { ...mirrorPoint(58, 92), name: 'east pit' },
+  ],
+  camps: [...NW_CAMPS, ...NW_CAMPS.map((c) => ({ ...mirrorPoint(c.x, c.z), kind: c.kind }))],
 };

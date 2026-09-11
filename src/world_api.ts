@@ -4,7 +4,7 @@
 // implement it in phase 6, pinned by a parity test.
 
 import type { ChampionDef } from './sim/content/champions';
-import type { GameMap } from './sim/content/map';
+import type { GameMap, WardenPit } from './sim/content/map';
 import type { FavorStacks } from './sim/favors';
 import type { Projectile } from './sim/projectiles';
 import type { RingClock } from './sim/rings';
@@ -29,6 +29,8 @@ export interface IWorld {
   teamBuff(team: TeamId): { until: number; stacks: number } | null;
   // When the next Warden rises; null while one is alive.
   objectiveSpawnAt(): number | null;
+  // The pit of the live Warden, or of the next to rise (ADR 0023).
+  wardenPit(): Readonly<WardenPit>;
   // The rings' clocks (ADR 0022): the live creature or the next rise and
   // the aspect in play, per ring; empty on a map without rings.
   ringClocks(): readonly RingClock[];

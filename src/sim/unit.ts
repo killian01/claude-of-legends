@@ -4,6 +4,7 @@
 
 import type { CoachOrder } from './coach';
 import type { Status } from './combat/status';
+import type { CampDef, CampKind } from './content/camps';
 import type { ChampionDef } from './content/champions';
 import type { LaneId } from './content/map';
 import {
@@ -17,6 +18,7 @@ import {
 import { WARDEN_BODY, WARDEN_GOLD_BOUNTY } from './content/warden';
 import type { DashState } from './dashes';
 import { type FavorStacks, NO_FAVORS } from './favors';
+import type { LanePreference } from './playbook/types';
 import type { AbilityKey, TeamId, Vec2 } from './types';
 
 export type UnitKind = 'champion' | 'minion' | 'tower' | 'sanctum' | 'warden' | 'camp' | 'creature';
@@ -93,6 +95,8 @@ export interface Unit {
   creatureId: CreatureId | null;
   aspect: AspectId | null;
   ascendant: boolean;
+  // The kind of camp body this is (content/camps.ts), null on everything else.
+  campKind: CampKind | null;
   // The share of the target's max health a strike bites off on top of the
   // attack damage, true damage (content/rings.ts, CreatureBody): the
   // neutral bodies' rule; zero for everyone else.
@@ -164,8 +168,9 @@ export interface Unit {
   // Lane minion state.
   lane: LaneId | null;
   // A bot's lane preferences (plan-bots phase 12), ahead of the home lane
-  // at seating; null for a seat that states none.
-  lanePrefer: LaneId[] | null;
+  // at seating, the forest among them (ADR 0023); null for a seat that
+  // states none.
+  lanePrefer: LanePreference[] | null;
   laneProgress: number;
 }
 
@@ -227,6 +232,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     creatureId: null,
     aspect: null,
     ascendant: false,
+    campKind: null,
     bitePct: 0,
     play: null,
     coachOrder: null,
@@ -416,23 +422,18 @@ export function createCreature(
   return u;
 }
 
-// A jungle camp monster (systems review): neutral map treasure that fights
-// back inside a short leash and pays gold, xp, and sometimes a buff.
-export function createCamp(id: number, pos: Vec2): Unit {
+// A camp body (content/camps.ts: the Spinecrest, a Brackenling, the
+// Barkmaw): neutral map treasure that fights back inside a short leash
+// and pays gold, xp, and for the Barkmaw a buff. Grown with the clock
+// like every neutral body, so a camp cleared at twelve minutes is not a
+// free round.
+export function createCamp(id: number, def: CampDef, pos: Vec2, time = 0): Unit {
   const u = baseUnit(id, 0, 'camp', pos);
   u.neutral = true;
-  u.radius = 0.7;
-  u.moveSpeed = 2.8;
-  u.hp = 550;
-  u.maxHp = 550;
-  u.stats.ad = 40;
-  u.stats.armor = 15;
-  u.stats.mr = 15;
-  u.stats.attackRange = 1.5;
-  u.stats.attackSpeed = 0.6;
+  u.campKind = def.id;
+  growBody(u, def.body, time);
   u.sightRange = 6;
-  u.goldBounty = 80;
-  u.xpBounty = 100;
+  u.goldBounty = def.goldBounty;
   return u;
 }
 

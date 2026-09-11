@@ -1,7 +1,7 @@
 // The rings gate (docs/plan-rings.md): the Star Orchard's two corner
 // circles hold the Pyrefang (bot, 4:00) and the Voidmaul (top, 6:30), each
 // rising on its clock with the next aspect of a fixed order, neutral and
-// visible to both teams, fighting champions only inside its ring, resetting
+// in the fog until a team has sight on its ring, fighting champions only inside it, resetting
 // when pulled out or left alone, and paying the killing team its aspect as
 // a permanent favor plus gold to every member. Once its three aspects are
 // spent a ring's creature returns as its Ascendant, whose death hands the
@@ -138,7 +138,7 @@ describe('the rings', () => {
     expect(sim.ringClocks().find((c) => c.ring === 'bot')?.riseAt).toBeNull();
   });
 
-  it('stands on its ring, neutral, visible to both teams, grown with the clock', () => {
+  it('stands on its ring, neutral, in the fog until a team has sight, grown with the clock', () => {
     const sim = orchardSim();
     sim.time = CREATURES.pyrefang.firstRiseS;
     const p = rise(sim, 'pyrefang');
@@ -146,8 +146,15 @@ describe('the rings', () => {
     expect(Math.hypot(p.pos.x - ring.x, p.pos.z - ring.z)).toBeLessThan(1);
     expect(p.neutral).toBe(true);
     expect(p.aspect).toBe('might');
-    expect(sim.isVisible(0, p.id)).toBe(true);
+    // The body sits in the fog like a camp (ADR 0023); its clock stays
+    // public to both teams.
+    expect(sim.isVisible(0, p.id)).toBe(false);
+    expect(sim.isVisible(1, p.id)).toBe(false);
+    expect(sim.ringClocks().find((c) => c.ring === 'bot')?.unitId).toBe(p.id);
+    sim.addChampion(1, { x: p.pos.x + 5, z: p.pos.z });
+    sim.tick();
     expect(sim.isVisible(1, p.id)).toBe(true);
+    expect(sim.isVisible(0, p.id)).toBe(false);
     // Grown at the tick it rose (a few ticks past the clock, so within a
     // fraction of a percent of the clock's own growth).
     const expected = CREATURES.pyrefang.body.hp * bodyGrowth(CREATURES.pyrefang.firstRiseS);

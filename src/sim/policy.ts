@@ -8,6 +8,7 @@
 // contract; policies may read it directly.
 
 import type { CoachOrder } from './coach';
+import type { CampKind } from './content/camps';
 import type { ChampionRole } from './content/champions';
 import type { AspectId } from './content/rings';
 import type { Rng } from './rng';
@@ -205,6 +206,22 @@ export interface ObsCreature {
   ascendant: boolean;
 }
 
+// A camp spot as the team knows it (additive v0 block, ADR 0023): where
+// it is and what kind of bodies it holds (content/camps.ts), and the
+// team's own memory of it: when the spot was last in the team's sight,
+// whether bodies stood there then, and since when the team has seen it
+// empty; null before the first look. A jungler walks to the spot it
+// believes up: never looked at, seen up, or seen empty for the kind's
+// respawn clock. Fog-honest: what the team saw, never the sim's truth.
+export interface ObsCamp {
+  x: number;
+  z: number;
+  kind: CampKind;
+  seenAt: number | null;
+  up: boolean | null;
+  downSince: number | null;
+}
+
 export interface Observation {
   tick: number;
   time: number;
@@ -217,9 +234,15 @@ export interface Observation {
   objectiveSpawnAt?: number | null;
   // When the live Warden rose, null between spawns (additive v0 field).
   wardenRoseAt?: number | null;
+  // Where the live Warden stands, or where the next rises (additive v0
+  // field, ADR 0023): the pit is drawn per rise and both teams read it.
+  wardenPit?: { x: number; z: number };
   // The rings' clocks (additive v0 field, ADR 0022), empty on a map
   // without rings.
   creatures?: readonly ObsCreature[];
+  // The forests' camps as the team knows them (additive v0 field, ADR
+  // 0023; see ObsCamp).
+  camps?: readonly ObsCamp[];
   // Threats in flight and on the ground, filtered by team vision (additive
   // v0 fields; a policy that ignores them keeps its old behavior).
   projectiles?: readonly ObsProjectile[];

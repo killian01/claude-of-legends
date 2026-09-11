@@ -92,6 +92,9 @@ export function holds(t: Trigger, ctx: SlotContext): boolean {
       const clocks = (obs.creatures ?? []).filter((c) => clockMeans(c, t.which));
       const up = clocks.some((c) => c.unitId !== null);
       if (t.state === 'up') {
+        // The clock is public; a narrowing reads the body, which sits in
+        // the fog until the team has sight on the ring (ADR 0023).
+        if (t.hpAtMost === undefined && t.near === undefined) return up;
         return clocks.some((c) => {
           const live = c.unitId === null ? undefined : ctx.enemies.find((u) => u.id === c.unitId);
           return live !== undefined && bodyMeans(ctx, live, t.hpAtMost, t.near);
@@ -108,7 +111,8 @@ export function holds(t: Trigger, ctx: SlotContext): boolean {
     case 'sigilReady':
       return s.sigils.some((id, i) => id === t.id && s.sigilReady[i] === true);
     case 'lane':
-      return s.lane === t.is;
+      // The forest is the seat with no lane (ADR 0023).
+      return t.is === 'jungle' ? s.lane === null : s.lane === t.is;
     case 'allyFighting':
       return ctx.engagedAllies(t.within).length > 0;
     case 'order': {

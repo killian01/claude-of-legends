@@ -18,7 +18,9 @@
 // wave management (freeze, shove), and the collapse on a threatened tower
 // (the towerThreatened trigger, the defendTower behavior). The rings (ADR
 // 0022) added the creature trigger, the contestCreature behavior and the
-// creature coach order, additively, still version 4.
+// creature coach order, additively, still version 4; the forest round
+// (ADR 0023) added the jungle behavior and the forest as a lane
+// preference and a lane trigger value, additively, still version 4.
 
 import type { CoachOrder } from '../coach';
 import type { ChampionRole } from '../content/champions';
@@ -27,6 +29,11 @@ import type { AbilityKey } from '../types';
 export const PLAYBOOK_FORMAT_VERSION = 4;
 
 export type LaneId = 'top' | 'mid' | 'bot';
+
+// What a bot asks for at seating: a lane, or the forest (CONTEXT.md:
+// Jungler; ADR 0023). A bot whose first ask is the forest holds no lane
+// and reads `lane` as null; its plays walk the camps instead.
+export type LanePreference = LaneId | 'jungle';
 
 // Which team a lineup trigger reads.
 export type Side = 'own' | 'enemy';
@@ -84,8 +91,9 @@ export type Trigger =
     }
   | { kind: 'abilityReady'; key: AbilityKey }
   | { kind: 'sigilReady'; id: string }
-  // The lane this seat was assigned.
-  | { kind: 'lane'; is: LaneId }
+  // The lane this seat was assigned; `jungle` holds for a seat that
+  // holds no lane, the forest's (ADR 0023).
+  | { kind: 'lane'; is: LanePreference }
   // The owner's coach order is active (ADR 0013), optionally of one kind.
   | { kind: 'order'; is?: CoachOrder['kind'] }
   // An allied champion within the radius is in a fight: an enemy champion
@@ -219,6 +227,13 @@ export type Behavior =
   | { kind: 'defendTower'; within?: number }
   // Attack a visible jungle camp in reach.
   | { kind: 'takeCamp' }
+  // The forest route (ADR 0023): clear the camp in reach with the kit's
+  // abilities before the strikes, else walk to the camp the team believes
+  // up and can reach first, on what it has seen (never looked at, seen
+  // standing, or seen empty for its kind's respawn clock); the own forest
+  // by default, any spot with `side: 'any'`. Passes the turn with every
+  // camp believed down.
+  | { kind: 'jungle'; side?: 'own' | 'any' }
   // Attack a vulnerable structure in reach with a minion escort.
   | { kind: 'siege'; escortMin?: number }
   // Do what the coach ordered: go there, take the Warden, focus the target,
@@ -279,6 +294,7 @@ export interface PlaybookDef {
   plays: PlayDef[];
   kit?: KitDef;
   // The lanes the bot asks for, in order (plan-bots phase 12): seated
-  // ahead of its champion's home lane, the first with a seat open.
-  lanes?: LaneId[];
+  // ahead of its champion's home lane, the first with a seat open; the
+  // forest first (`jungle`) seats it in no lane at all (ADR 0023).
+  lanes?: LanePreference[];
 }

@@ -8,7 +8,8 @@
 import { hypot } from '../exact';
 import { decodeTerrainNav, type TerrainNavData } from '../terrain_nav';
 import type { TeamId, Vec2 } from '../types';
-import type { GameMap, LaneId, RingSite, TowerSpot } from './map';
+import { CAMP_ROUND, type CampKind } from './camps';
+import type { CampSpot, GameMap, LaneId, RingSite, TowerSpot, WardenPit } from './map';
 
 // The playable square the export is placed in, in meters. The navigation
 // grid covers a little more than the square on every side.
@@ -97,6 +98,22 @@ export function assembleStarOrchard(
   };
 }
 
+// The Warden's pits beside the plaza (ADR 0023): four rooms in the
+// forests, the widest ground the corridors open into away from the camps,
+// measured on the grid (seven to fourteen meters across; the forests hold
+// nothing wider). Each has its point mirror on the other side, so a match
+// draws them fairly on average; a pit in one team's forest is that team's
+// shorter walk, and the clock says where the next Warden rises two and a
+// half minutes ahead. The first Warden rises at the plaza.
+// tests/warden_pits.test.ts pins that each room is open ground away from
+// the camps and the lanes.
+const STAR_ORCHARD_FOREST_PITS: readonly WardenPit[] = [
+  { name: 'west glade', x: 23.4, z: 49 },
+  { name: 'west hollow', x: 28.2, z: 101 },
+  { name: 'east glade', x: 125, z: 104.6 },
+  { name: 'east hollow', x: 123.8, z: 48.6 },
+];
+
 // The spawn slot whose landmark stands for the fountain: the middle of the
 // five on each platform.
 const FOUNTAIN_SLOT = 3;
@@ -159,12 +176,54 @@ export function starOrchardMap(layout: StarOrchardLayout, manifest: StarOrchardM
     },
     walls: [],
     brush: [],
-    wardenPits: [{ x: center.x, z: -center.z }],
-    camps: manifest.landmarks
-      .filter((p) => p.kind === 'camp')
-      .map((p, index, all) => ({ x: p.x, z: -p.z, buff: index === 0 || index === all.length - 1 })),
+    wardenPits: [{ name: 'plaza', x: center.x, z: -center.z }, ...STAR_ORCHARD_FOREST_PITS],
+    camps: starOrchardCamps(
+      manifest.landmarks.filter((p) => p.kind === 'camp').map((p) => ({ x: p.x, z: -p.z })),
+      fountains.map((p) => ({ team: teamOf(p), x: p.x, z: -p.z })),
+    ),
     rings: starOrchardRings(layout),
   };
+}
+
+// The forests' camps by kind (content/camps.ts, CAMP_ROUND): each spot
+// belongs to the team whose fountain is nearer, and a team's spots, from
+// the nearest its door to the farthest, are the Spinecrest, the
+// Brackenlings and the Barkmaw, so both junglers walk the same round and
+// the buff camp is the far, contested end of each forest. The export's
+// six spots (three a forest) fill one round each.
+export function starOrchardCamps(
+  spots: readonly Vec2[],
+  fountains: readonly { team: TeamId; x: number; z: number }[],
+): CampSpot[] {
+  const home = (p: Vec2): TeamId => {
+    let best: TeamId = 0;
+    let bestD = Number.POSITIVE_INFINITY;
+    for (const f of fountains) {
+      const d = hypot(f.x - p.x, f.z - p.z);
+      if (d < bestD) {
+        bestD = d;
+        best = f.team;
+      }
+    }
+    return best;
+  };
+  const out: CampSpot[] = [];
+  for (const team of [0, 1] as const) {
+    const fountain = fountains.find((f) => f.team === team);
+    const mine = spots
+      .filter((p) => home(p) === team)
+      .sort(
+        (a, b) =>
+          (fountain ? hypot(a.x - fountain.x, a.z - fountain.z) : 0) -
+          (fountain ? hypot(b.x - fountain.x, b.z - fountain.z) : 0),
+      );
+    mine.forEach((p, i) => {
+      const kind: CampKind = CAMP_ROUND[i % CAMP_ROUND.length]!;
+      out.push({ x: p.x, z: p.z, kind });
+    });
+  }
+  // In the export's order, so a spot's index means the same everywhere.
+  return spots.map((p) => out.find((c) => c.x === p.x && c.z === p.z)!);
 }
 
 // The rings the layout traces, keyed by the side lane they sit on. A

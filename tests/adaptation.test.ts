@@ -64,7 +64,9 @@ describe('the lineup in the observation', () => {
     expect(own).toHaveLength(5);
     expect(enemy).toHaveLength(5);
     expect(own.some((s) => s.id === unitIds[0])).toBe(true);
-    for (const s of own) expect(['top', 'mid', 'bot']).toContain(s.lane);
+    // Every own seat names its lane; the house jungler's is null (ADR 0023).
+    for (const s of own) expect(['top', 'mid', 'bot', null]).toContain(s.lane);
+    expect(own.filter((s) => s.lane === null)).toHaveLength(1);
     for (const s of enemy) expect(s.lane).toBeUndefined();
     for (const s of obs.seats!) {
       expect(s.role).toBe(CHAMPIONS[s.championId]!.role);

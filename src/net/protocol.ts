@@ -5,6 +5,7 @@
 // records, the world-of-claudecraft pattern).
 
 import type { CoachOrder, CoachOrderKind } from '../sim/coach';
+import type { CampKind } from '../sim/content/camps';
 import type { AspectId, CreatureId, RingId } from '../sim/content/rings';
 import type { FavorStacks } from '../sim/favors';
 import type { ForgedDisplay } from '../sim/forge/display';
@@ -118,6 +119,8 @@ export interface SnapUnit {
   a?: AspectId;
   // 1 on an Ascendant (CONTEXT.md): the bigger body, the Wrath on its death.
   asc?: 1;
+  // A camp body's kind (content/camps.ts), in the identity block.
+  ck?: CampKind;
 }
 
 // A ring's clock on the wire (ADR 0022): the ring, the live creature's id
@@ -270,6 +273,9 @@ export type ServerMsg =
       winner: TeamId | null;
       // When the next Warden rises; null while one is alive.
       objAt?: number | null;
+      // The pit of the live Warden, or of the next to rise: an index into
+      // the map's pits (ADR 0023); absent on records from before the draw.
+      objPit?: number;
       // The rings' clocks (ADR 0022); absent on a map without rings.
       rings?: SnapRing[];
     }

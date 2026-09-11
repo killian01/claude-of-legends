@@ -18,6 +18,7 @@ import {
   type FarmMode,
   type KitDef,
   type KitVariant,
+  type LanePreference,
   PLAYBOOK_FORMAT_VERSION,
   type PlaybookDef,
   type PlayDef,
@@ -292,8 +293,8 @@ function trigger(raw: unknown, at: string, depth: number, errors: Errors): Trigg
     }
     case 'lane': {
       const is = raw.is;
-      if (is !== 'top' && is !== 'mid' && is !== 'bot') {
-        errors.add(`${at}: lane must be top, mid or bot`);
+      if (is !== 'top' && is !== 'mid' && is !== 'bot' && is !== 'jungle') {
+        errors.add(`${at}: lane must be top, mid, bot or jungle`);
         return { kind: 'lane', is: 'mid' };
       }
       return { kind: 'lane', is };
@@ -394,6 +395,14 @@ function behavior(raw: unknown, at: string, errors: Errors): Behavior {
     case 'takeCamp':
     case 'obeyOrder':
       return { kind: raw.kind };
+    case 'jungle': {
+      const side = raw.side;
+      if (side !== undefined && side !== 'own' && side !== 'any') {
+        errors.add(`${at}: side must be own or any`);
+        return { kind: 'jungle' };
+      }
+      return { kind: 'jungle', ...(side !== undefined ? { side } : {}) };
+    }
     case 'farm': {
       if (raw.mode === undefined) return { kind: 'farm' };
       if (!(FARM_MODES as readonly unknown[]).includes(raw.mode)) {
@@ -635,18 +644,21 @@ export function validatePlaybook(raw: unknown): PlaybookValidation {
   };
 }
 
-// The lane preference: one to three distinct lanes, in order; absent when
-// the playbook states none.
-function lanePreference(raw: unknown, errors: Errors): ('top' | 'mid' | 'bot')[] | undefined {
+// The lane preference: one to three distinct lanes, in order, the forest
+// (`jungle`) among them; absent when the playbook states none.
+function lanePreference(raw: unknown, errors: Errors): LanePreference[] | undefined {
   if (raw === undefined) return undefined;
   if (!Array.isArray(raw) || raw.length === 0 || raw.length > 3) {
     errors.add('lanes must list one to three lanes');
     return undefined;
   }
-  const out: ('top' | 'mid' | 'bot')[] = [];
+  const out: LanePreference[] = [];
   for (const lane of raw) {
-    if ((lane !== 'top' && lane !== 'mid' && lane !== 'bot') || out.includes(lane)) {
-      errors.add('lanes must be distinct among top, mid and bot');
+    if (
+      (lane !== 'top' && lane !== 'mid' && lane !== 'bot' && lane !== 'jungle') ||
+      out.includes(lane)
+    ) {
+      errors.add('lanes must be distinct among top, mid, bot and jungle');
       return undefined;
     }
     out.push(lane);

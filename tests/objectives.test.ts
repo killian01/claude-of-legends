@@ -1,4 +1,5 @@
-// The Warden gate: spawns on its clock in a mirrored, walkable river pit,
+// The Warden gate: spawns on its clock in a mirrored, walkable river pit
+// (the launch map's two; the drawn pits are tests/warden_pits.test.ts),
 // is always visible to both teams, ignores and is ignored by minions and
 // towers, pays the killing team the Boon (a death-surviving damage buff),
 // starts its respawn clock, and leash-resets when left alone.

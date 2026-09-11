@@ -31,7 +31,10 @@ import { type ClientMsg, isFiniteVec } from './protocol';
 // 6: the bodies grown for a team, the Ascendant and the Wrath (the rings'
 // round two): the execute in the damage pipeline and the bite on every
 // neutral strike are sim rules, not content.
-export const REPLAY_VERSION = 6;
+// 7: the forest round (ADR 0023): the rings' creatures in the fog, the
+// Warden's pit drawn from the rng, camps of three kinds with their memory
+// in the observation, the Jungler on every house team's fifth seat.
+export const REPLAY_VERSION = 7;
 
 // The checksum a replay must show at `tick`, or null when the record
 // says nothing about that tick (an older record, or a tick that is not

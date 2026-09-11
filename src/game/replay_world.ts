@@ -9,7 +9,7 @@
 // so the names survive every rebuild.
 
 import type { ChampionDef } from '../sim/content/champions';
-import type { GameMap } from '../sim/content/map';
+import type { GameMap, WardenPit } from '../sim/content/map';
 import type { FavorStacks } from '../sim/favors';
 import type { Projectile } from '../sim/projectiles';
 import type { RingClock } from '../sim/rings';
@@ -70,6 +70,9 @@ export class ReplayWorld implements IWorld {
   }
   objectiveSpawnAt(): number | null {
     return this.sim.objectiveSpawnAt();
+  }
+  wardenPit(): Readonly<WardenPit> {
+    return this.sim.wardenPit();
   }
   ringClocks(): readonly RingClock[] {
     return this.sim.ringClocks();

@@ -21,6 +21,7 @@ const IWORLD_MEMBERS: readonly { name: string; kind: 'value' | 'function' }[] = 
   { name: 'isVisible', kind: 'function' },
   { name: 'teamBuff', kind: 'function' },
   { name: 'objectiveSpawnAt', kind: 'function' },
+  { name: 'wardenPit', kind: 'function' },
   { name: 'ringClocks', kind: 'function' },
   { name: 'teamFavors', kind: 'function' },
   { name: 'teamWrath', kind: 'function' },

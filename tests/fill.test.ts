@@ -10,7 +10,7 @@ import { sparringPicks } from '../src/game/sparring_core';
 import { buildMatchSim } from '../src/net/replay';
 import { CHAMPIONS, type ChampionRole } from '../src/sim/content/champions';
 import { LANER_PLAYBOOK } from '../src/sim/content/playbooks/laner';
-import { fillTeam, TEAM_SIZE } from '../src/sim/fill';
+import { fillSeats, fillTeam, TEAM_SIZE } from '../src/sim/fill';
 import { Rng } from '../src/sim/rng';
 
 const roles = (ids: readonly string[]): ChampionRole[] => ids.map((id) => CHAMPIONS[id]!.role);
@@ -20,7 +20,7 @@ const TOP: ChampionRole[] = ['Tank', 'Fighter'];
 const MID: ChampionRole[] = ['Mage', 'Assassin', 'Battlemage'];
 
 describe('the fill', () => {
-  it('completes an empty team by the roster lanes: two top, one mid, a marksman and a support', () => {
+  it('completes an empty team by the roster lanes: one top, one mid, a marksman, a support and the forest', () => {
     for (let seed = 1; seed <= 30; seed++) {
       const team = fillTeam([], new Rng(seed));
       expect(team).toHaveLength(TEAM_SIZE);
@@ -30,9 +30,17 @@ describe('the fill', () => {
       const top = roles(team).filter((r) => TOP.includes(r)).length;
       const mid = roles(team).filter((r) => MID.includes(r)).length;
       const flex = count(team, 'Skirmisher');
+      // The forest's seat (ADR 0023) takes a fighter, a tank, a
+      // skirmisher or an assassin beside the top and the mid.
       expect(top).toBeLessThanOrEqual(2);
-      expect(mid).toBeLessThanOrEqual(1);
+      expect(mid).toBeLessThanOrEqual(2);
       expect(top + mid + flex).toBe(3);
+      const seats = fillSeats([], new Rng(seed));
+      expect(seats.map((s) => s.kind)).toEqual(['mid', 'top', 'carry', 'support', 'jungle']);
+      expect(seats.map((s) => s.championId)).toEqual(team);
+      expect(['Fighter', 'Tank', 'Skirmisher', 'Assassin']).toContain(
+        CHAMPIONS[seats[4]!.championId]!.role,
+      );
     }
   });
 
@@ -153,9 +161,11 @@ describe('the fill on every host', () => {
     expect(team[0]!.lane).toBe('bot');
     const support = team.find((u) => CHAMPIONS[u.championId!]!.role === 'Support')!;
     expect(support.lane).toBe('bot');
+    // One top beside the forest's seat, which holds no lane (ADR 0023).
     const lanes = team.map((u) => u.lane);
-    expect(lanes.filter((l) => l === 'top')).toHaveLength(2);
+    expect(lanes.filter((l) => l === 'top')).toHaveLength(1);
     expect(lanes.filter((l) => l === 'mid')).toHaveLength(1);
     expect(lanes.filter((l) => l === 'bot')).toHaveLength(2);
+    expect(lanes.filter((l) => l === null)).toHaveLength(1);
   });
 });

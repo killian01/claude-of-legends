@@ -20,6 +20,7 @@
 
 import { DT } from '../types';
 import { BOTS } from './bots';
+import { CAMPS_CONTENT } from './camps';
 import { CHAMPION_LIST } from './champions';
 import { ITEM_LIST } from './items';
 import { RINGS_CONTENT } from './rings';
@@ -98,6 +99,8 @@ export function contentFingerprint(orchard: StarOrchard): string {
       // The rings' creatures, clocks and favors (content/rings.ts).
       rings: RINGS_CONTENT,
       warden: WARDEN_CONTENT,
+      // The forests' camps (content/camps.ts).
+      camps: CAMPS_CONTENT,
       map: orchard.map,
       terrain: {
         revision: orchard.revision,

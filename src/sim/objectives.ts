@@ -1,12 +1,15 @@
-// The Warden (CONTEXT.md): the neutral river objective. Spawns in one of
-// two mirrored pits on an announced clock, alternating pits per spawn,
-// fights back against champions that damage it, leashes hard to its pit,
-// and on death hands the killing team the Warden's Boon (team_buffs.ts).
-// Called from the fixed tick order in sim.ts right after waves.
+// The Warden (CONTEXT.md): the neutral objective. Spawns in one of the
+// map's pits on an announced clock (the first pit first, then one drawn
+// from the match's rng among the others, never the same twice running:
+// the plaza and the forest rooms on the Star Orchard, ADR 0023), fights
+// back against champions that damage it, leashes hard to its pit, and on
+// death hands the killing team the Warden's Boon (team_buffs.ts). Called
+// from the fixed tick order in sim.ts right after waves.
 
-import type { GameMap } from './content/map';
+import type { GameMap, WardenPit } from './content/map';
 import { CREATURE_CALM_REGEN_PER_S } from './content/rings';
 import { hypot } from './exact';
+import type { Rng } from './rng';
 import type { CombatCtx } from './sim_context';
 import { DT, type Vec2 } from './types';
 import { createWarden, hostile, type Unit } from './unit';
@@ -35,14 +38,35 @@ export interface ObjectiveState {
   spawnIndex: number;
   // When the live Warden rose, null between spawns (a rally reads it).
   roseAt: number | null;
+  // The pit of the live Warden, or of the next to rise: an index into the
+  // map's pits, public to both teams like the clock.
+  pit: number;
 }
 
 export function initialObjectiveState(): ObjectiveState {
-  return { wardenId: null, nextSpawnAt: WARDEN_FIRST_SPAWN_S, spawnIndex: 0, roseAt: null };
+  return {
+    wardenId: null,
+    nextSpawnAt: WARDEN_FIRST_SPAWN_S,
+    spawnIndex: 0,
+    roseAt: null,
+    pit: 0,
+  };
+}
+
+// The next pit: one of the others, drawn from the match's rng. With two
+// pits (the launch map) the draw alternates; with one it stays.
+export function drawPit(rng: Rng, count: number, last: number): number {
+  if (count <= 1) return 0;
+  return (last + 1 + rng.int(count - 1)) % count;
+}
+
+// The pit the state names, on the map the match is played on.
+export function wardenPitOf(map: GameMap, state: ObjectiveState): WardenPit {
+  return map.wardenPits[state.pit % map.wardenPits.length] ?? map.wardenPits[0]!;
 }
 
 function pitOf(map: GameMap, state: ObjectiveState): Vec2 {
-  return map.wardenPits[(state.spawnIndex - 1 + map.wardenPits.length) % map.wardenPits.length]!;
+  return wardenPitOf(map, state);
 }
 
 function nearestHostileChampion(ctx: CombatCtx, w: Unit, range: number): Unit | null {
@@ -63,7 +87,7 @@ function nearestHostileChampion(ctx: CombatCtx, w: Unit, range: number): Unit | 
 export function stepObjectives(ctx: CombatCtx, map: GameMap, state: ObjectiveState): void {
   if (state.wardenId === null) {
     if (ctx.time >= state.nextSpawnAt) {
-      const pit = map.wardenPits[state.spawnIndex % map.wardenPits.length]!;
+      const pit = wardenPitOf(map, state);
       const id = ctx.allocId();
       ctx.units.set(id, createWarden(id, pit, ctx.time));
       state.wardenId = id;
@@ -118,9 +142,16 @@ export function stepObjectives(ctx: CombatCtx, map: GameMap, state: ObjectiveSta
 }
 
 // Called by the sim's death processing when the Warden dies: the respawn
-// clock starts (the Boon grant itself lives with the sim's TeamBuffs).
-export function onWardenSlain(state: ObjectiveState, time: number): void {
+// clock starts and the next pit is drawn (the Boon grant itself lives
+// with the sim's TeamBuffs).
+export function onWardenSlain(
+  state: ObjectiveState,
+  time: number,
+  rng: Rng,
+  pitCount: number,
+): void {
   state.wardenId = null;
   state.roseAt = null;
   state.nextSpawnAt = time + WARDEN_RESPAWN_S;
+  state.pit = drawPit(rng, pitCount, state.pit);
 }

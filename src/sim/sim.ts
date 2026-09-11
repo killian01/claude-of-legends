@@ -7,7 +7,7 @@
 
 import { stepAttackMove } from './attack_move';
 import { runBotDecisions } from './bot_driver';
-import { initialCampStates, onCampSlain, stepCamps } from './camps';
+import { initialCampStates, noteCampSightings, onCampSlain, stepCamps } from './camps';
 import { ChampionRegistry } from './champion_registry';
 import { type CoachOrder, stepCoachOrder } from './coach';
 import { stepAutoAttacks } from './combat/auto_attack';
@@ -25,7 +25,7 @@ import {
 } from './combat/status';
 import { type ChampionDef, DEFAULT_CHAMPION_ID, homeLane } from './content/champions';
 import { ITEMS } from './content/items';
-import { GAME_MAP, type GameMap, type LaneId } from './content/map';
+import { GAME_MAP, type GameMap, type LaneId, type WardenPit } from './content/map';
 import { type AspectId, type CreatureId, RING_GOLD_EACH, TIDE_PERIOD_S } from './content/rings';
 import { SIGILS } from './content/sigils';
 import { clampSkin } from './content/skins';
@@ -42,12 +42,12 @@ import { createMapUnits } from './map_units';
 import { stepMinionAi } from './minion_ai';
 import { stepMovement } from './movement';
 import { NavGrid } from './navgrid';
-import { initialObjectiveState, onWardenSlain, stepObjectives } from './objectives';
+import { initialObjectiveState, onWardenSlain, stepObjectives, wardenPitOf } from './objectives';
 import { passiveOf, stepPassives } from './passives';
 import { findPath } from './pathfind';
 import { playbookPolicy } from './playbook/interpreter';
-import type { PlaybookDef } from './playbook/types';
-import type { Action, Observation, Policy } from './policy';
+import type { LanePreference, PlaybookDef } from './playbook/types';
+import type { Action, ObsCamp, Observation, Policy } from './policy';
 import type { Projectile } from './projectiles';
 import { stepProjectiles } from './projectiles';
 import { startRecall, stepRecalls } from './recall';
@@ -307,14 +307,19 @@ export class Sim {
   // influences a decision, so a traced playbook and a bare one drive the
   // seat identically (tests/playbook.test.ts).
   attachPlaybook(unitId: number, def: PlaybookDef): void {
-    // The playbook's lane preference is seated ahead of the home lane
-    // (phase 12): the team's lanes are dealt again with it in.
-    const seat = this.units.get(unitId);
-    if (seat && seat.kind === 'champion') {
-      seat.lanePrefer = def.lanes ? [...def.lanes] : null;
-      this.assignLanes(seat.team);
-    }
+    this.seatLanes(unitId, def.lanes ?? null);
     this.attachPolicy(unitId, this.policyForPlaybook(def));
+  }
+
+  // A seat's lane preference, seated ahead of the home lane (phase 12;
+  // the forest first means no lane, ADR 0023): the team's lanes are dealt
+  // again with it in. What attachPlaybook does before it attaches; on its
+  // own for a policy attached bare that still asks for its seat.
+  seatLanes(unitId: number, lanes: readonly LanePreference[] | null): void {
+    const seat = this.units.get(unitId);
+    if (seat?.kind !== 'champion') return;
+    seat.lanePrefer = lanes ? [...lanes] : null;
+    this.assignLanes(seat.team);
   }
 
   // The playbook's Policy alone, traced, without the seating attachPlaybook
@@ -518,11 +523,10 @@ export class Sim {
     if (!u.neutral && u.team === team) return true;
     if (u.dead) return false;
     // Structures are always revealed, like the genre; so is the Warden
-    // (both teams watch its health bar, that IS the drama).
-    // (both teams watch its health bar, that IS the drama), and so are the
-    // rings' creatures, whose clocks both teams read.
-    if (u.kind === 'tower' || u.kind === 'sanctum' || u.kind === 'warden' || u.kind === 'creature')
-      return true;
+    // (both teams watch its health bar, that IS the drama). A ring's
+    // creature sits in the fog like a camp (the forest round, ADR 0023):
+    // its clock is public, its body is seen only with sight on the ring.
+    if (u.kind === 'tower' || u.kind === 'sanctum' || u.kind === 'warden') return true;
     return this.visibility[team].has(unitId);
   }
 
@@ -545,6 +549,27 @@ export class Sim {
   // When the next Warden rises; null while one is alive (IWorld).
   objectiveSpawnAt(): number | null {
     return this.objectives.wardenId === null ? this.objectives.nextSpawnAt : null;
+  }
+
+  // The pit of the live Warden, or of the next to rise (IWorld).
+  wardenPit(): WardenPit {
+    return wardenPitOf(this.map, this.objectives);
+  }
+
+  // The camps as a team knows them (the observation, ADR 0023): every
+  // spot, its kind, and the team's own memory of it.
+  campsFor(team: TeamId): ObsCamp[] {
+    return this.campStates.map((state) => {
+      const seen = state.seen[team];
+      return {
+        x: state.spot.x,
+        z: state.spot.z,
+        kind: state.spot.kind,
+        seenAt: seen ? seen.at : null,
+        up: seen ? seen.up : null,
+        downSince: seen ? seen.downSince : null,
+      };
+    });
   }
 
   // The rings' clocks (IWorld): the live creature or the next rise, and
@@ -899,7 +924,7 @@ export class Sim {
           if (killer && killer.kind === 'champion') {
             this.teamBuffs.grantBoon(killer.team, this.time);
           }
-          onWardenSlain(this.objectives, this.time);
+          onWardenSlain(this.objectives, this.time, this.rng, this.map.wardenPits.length);
         }
         if (u.kind === 'camp') {
           onCampSlain(this.campStates, id, this.units.get(killerId), this.time);
@@ -964,6 +989,7 @@ export class Sim {
     }
 
     this.visibility = computeVisibility(this.map, this.units, this.time, this.zones);
+    noteCampSightings(this.campStates, this.time, (team, x, z) => this.isPointVisible(team, x, z));
 
     // Refresh each team's memory of the enemy champions it can see right
     // now; a dead champion is forgotten (its corpse spot means nothing).

@@ -1,15 +1,18 @@
 // Which lane a seat plays (CONTEXT.md: Home lane; docs/design/roster.md).
-// A five-seat team holds one mid, two top, two bot. The champions of a
-// team are seated in creation order, in two passes: first each takes its
-// preferred lane (a bot's lane preference, else its role's home lane) while
-// that lane has a seat open; then the rest (the flex skirmisher, a role
-// past its lane's seats) take the lane with the most seats open, ties to
-// top, then bot, then mid. Once every seat is taken the lanes reopen, so a
-// bigger team cycles the same way. Pure and deterministic: the same seats
-// in the same order give the same lanes on every host.
+// A five-seat team holds one mid, two top, two bot; a seat that asks for
+// the forest first (CONTEXT.md: Jungler; ADR 0023) holds no lane, so a
+// team with a jungler fields one top. The champions of a team are seated
+// in creation order, in two passes: first each takes its preferred lane
+// (a bot's lane preference, else its role's home lane) while that lane
+// has a seat open; then the rest (the flex skirmisher, a role past its
+// lane's seats) take the lane with the most seats open, ties to top, then
+// bot, then mid. Once every seat is taken the lanes reopen, so a bigger
+// team cycles the same way. Pure and deterministic: the same seats in the
+// same order give the same lanes on every host.
 
 import { GAME_MAP, type GameMap, type LaneId } from './content/map';
 import { hypot } from './exact';
+import type { LanePreference } from './playbook/types';
 
 export const LANE_SEATS: Readonly<Record<LaneId, number>> = { top: 2, mid: 1, bot: 2 };
 
@@ -19,13 +22,16 @@ const LANES: readonly LaneId[] = ['top', 'bot', 'mid'];
 export interface LaneSeat {
   home: LaneId | null;
   // A bot's own lane preferences in order, ahead of the home lane: the
-  // first with a seat open wins (plan-bots phase 12).
-  prefer?: readonly LaneId[] | null;
+  // first with a seat open wins (plan-bots phase 12); the forest first
+  // means no lane at all.
+  prefer?: readonly LanePreference[] | null;
 }
 
-export function assignLanes(seats: readonly LaneSeat[]): LaneId[] {
+// A seat's lane, null for the forest.
+export function assignLanes(seats: readonly LaneSeat[]): (LaneId | null)[] {
   const open: Record<LaneId, number> = { ...LANE_SEATS };
   const out: (LaneId | null)[] = seats.map(() => null);
+  const forest = seats.map((seat) => seat.prefer?.[0] === 'jungle');
   const reopen = (): void => {
     if (LANES.every((lane) => open[lane] <= 0)) {
       for (const lane of LANES) open[lane] += LANE_SEATS[lane];
@@ -36,18 +42,21 @@ export function assignLanes(seats: readonly LaneSeat[]): LaneId[] {
     open[lane] -= 1;
   };
   for (const [i, seat] of seats.entries()) {
+    if (forest[i]) continue;
     reopen();
-    const want = (seat.prefer ?? []).find((lane) => open[lane] > 0) ?? seat.home;
+    const want =
+      (seat.prefer ?? []).find((lane): lane is LaneId => lane !== 'jungle' && open[lane] > 0) ??
+      seat.home;
     if (want !== null && open[want] > 0) take(i, want);
   }
   for (const [i] of seats.entries()) {
-    if (out[i] !== null) continue;
+    if (out[i] !== null || forest[i]) continue;
     reopen();
     let best = LANES[0]!;
     for (const lane of LANES) if (open[lane] > open[best]) best = lane;
     take(i, best);
   }
-  return out as LaneId[];
+  return out;
 }
 
 // The closest point of a lane's polyline to (x, z).

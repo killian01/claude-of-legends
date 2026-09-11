@@ -108,8 +108,27 @@ describe('the Star Orchard export', () => {
       expect(map.fountains.filter((f) => f.team === team)).toHaveLength(1);
       expect(map.sanctums.filter((s) => s.team === team)).toHaveLength(1);
     }
+    // Six camps, a round of three kinds a forest from each team's door:
+    // the Spinecrest nearest, then the Brackenlings, the Barkmaw farthest.
     expect(map.camps).toHaveLength(6);
-    expect(map.camps.filter((c) => c.buff)).toHaveLength(2);
+    expect(map.camps.filter((c) => c.kind === 'barkmaw')).toHaveLength(2);
+    expect(map.camps.filter((c) => c.kind === 'brackenlings')).toHaveLength(2);
+    for (const team of [0, 1] as const) {
+      const fountain = map.fountains.find((f) => f.team === team)!;
+      const enemy = map.fountains.find((f) => f.team !== team)!;
+      const mine = map.camps
+        .filter(
+          (c) =>
+            Math.hypot(c.x - fountain.x, c.z - fountain.z) <
+            Math.hypot(c.x - enemy.x, c.z - enemy.z),
+        )
+        .sort(
+          (a, b) =>
+            Math.hypot(a.x - fountain.x, a.z - fountain.z) -
+            Math.hypot(b.x - fountain.x, b.z - fountain.z),
+        );
+      expect(mine.map((c) => c.kind)).toEqual(['spinecrest', 'brackenlings', 'barkmaw']);
+    }
     // The two rings, one per side lane (tests/rings.test.ts plays them).
     expect(map.rings?.map((r) => r.id).sort()).toEqual(['bot', 'top']);
     // The leash reaches the foot of the fan stairs the export traces.
@@ -189,7 +208,9 @@ describe('a match on the Star Orchard', () => {
     const damage = new Set<string>();
     const advancing = new Set<string>();
     const botsOut = new Set<number>();
+    const campBodies = new Set<number>();
     for (let tick = 0; tick < 1800; tick++) {
+      for (const u of sim.units.values()) if (u.kind === 'camp') campBodies.add(u.id);
       for (const event of sim.tick()) {
         if (event.type === 'damage') {
           const source = sim.units.get(event.sourceId);
@@ -210,7 +231,9 @@ describe('a match on the Star Orchard', () => {
           botsOut.add(unit.id);
       }
     }
-    expect([...sim.units.values()].filter((u) => u.kind === 'camp')).toHaveLength(6);
+    // Six spots: four lone bodies and two packs of three rose (the two
+    // junglers may have cleared their rounds by now).
+    expect(campBodies.size).toBeGreaterThanOrEqual(10);
     expect(advancing.size, JSON.stringify([...advancing])).toBe(6);
     // The house bots walk THIS map's lanes: on the launch map's lane
     // coordinates they would stand in cliffs and never leave the platform.
