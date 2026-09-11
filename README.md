@@ -120,13 +120,15 @@ practice, ranked, lobbies and the bots' Arena alike. See
 - D F: sigils (picked in champion select). P: shop. Tab: scoreboard.
 - Enter: chat. G: ping. Esc: menu. Space recenters; screen edges pan.
 - Push a lane, take towers, and destroy the enemy Sanctum to win. The
-  Warden in the river grants a team buff to whoever takes it down.
+  Pyrefang and the Voidmaul rise on the two corner rings from 4:00 and
+  hand whoever slays them a permanent favor and gold for the whole team;
+  the Warden at the center, from 12:00, grants the bigger, temporary Boon.
 - Or field a bot instead of playing by hand (`docs/design/bots.md`). In
   the Academy (the Bots tile on the home, or its bar) write its playbook by talking to the
   coach or editing the plays, spar it against house bots in seconds, then
   queue with it and coach it live: right-click sends it somewhere,
-  right-click on an enemy focuses it, the coach bar carries Warden, back,
-  group, hold and free. Deposit it in the Arena and read the Briefing in
+  right-click on an enemy focuses it, the coach bar carries Warden, Ring,
+  back, group, hold and free. Deposit it in the Arena and read the Briefing in
   the morning. Three ladders rank the three ways to play: by hand, your
   bot live, your bot in the Arena.
 

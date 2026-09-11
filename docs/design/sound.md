@@ -168,3 +168,18 @@ Until their own recordings land, the quadrakill and the pentakill speak
 through the `rampage` clip: the line table may not carry a line without a
 file on disk (`tests/voice_bank.test.ts`), and the files are rendered from
 that same table. The screen already says the right word.
+
+## Lines pending their clips
+
+The rings (ADR 0022) added four lines, "The Pyrefang has risen!", "The
+Voidmaul has risen!", "Your team has claimed a favor!" and "The enemy has
+claimed a favor", written before their clips: `PENDING_VOICE_LINES` in
+`src/game/voice_lines.ts` names them, the speech synthesis reads them at
+play time exactly as it reads any line whose clip has not decoded, and
+`tests/voice_bank.test.ts` tolerates a missing clip for a pending line
+only, while refusing a clip that has landed for a line still listed, so
+the list empties as the clips are rendered:
+
+    ELEVENLABS_API_KEY=<key> node scripts/build_voice.mjs --only pyrefang_risen
+
+then the three others, then the ids come off the list in the same commit.

@@ -93,29 +93,33 @@ minimap blotch. A Blender model can replace either body later without touching t
   (`applyEffects`), the few direct status calls audited; the Tide tick in the regen step.
 - **The map record.** `GameMap.rings?: readonly RingSite[]` (`id`, `lane`, center,
   radius), assembled from `objectiveSites`; the sim's ring state mirrors the Warden's
-  (`src/sim/rings.ts`: `initialRingStates`, `stepRings`, `onRingCreatureSlain`), called
-  in the fixed tick order after the Warden step.
+  (`src/sim/rings.ts`: `initialRingStates`, `stepRings`, `onCreatureSlain`), called in
+  the fixed tick order after the Warden step.
 - **One unit kind, two creatures.** `UnitKind` gains `'creature'`; the unit carries
   `creatureId` (`pyrefang` or `voidmaul`) and the aspect it holds, so every surface
   that keys on the kind (visibility, picking, the renderer, the minimap, the HUD's
   target card, the replay marks, the death cause) handles one new branch.
-- **The contract.** `Observation.creatures?: readonly ObsCreature[]` (id, position,
-  `spawnAt` or null while one is alive, `unitId` while alive, the aspect coming); the
-  playbook trigger `creature` (`which`: `pyrefang`, `voidmaul` or `any`; `state`: `up`,
-  `spawning`, `down`; `within`), the behavior `contestCreature` (`which`, `hpAtLeast`,
-  `prepSeconds`), the coach order `creature` (the live one, else the next to rise, the
-  nearest on a tie). `PLAYBOOK_FORMAT_VERSION` stays 4: additive kinds, an older
-  playbook keeps validating.
-- **The wire.** The snapshot's self block gains the creature clocks and aspects and both
-  teams' favors (optional fields, absent when empty); `ClientWorld` mirrors them;
-  `IWorld` gains `creatures()` and `favors(team)`.
+- **The contract.** `Observation.creatures?: readonly ObsCreature[]` (the ring, the
+  creature, its place, `unitId` while alive, `riseAt` or null while one is alive, the
+  aspect in play); the playbook trigger `creature` (`which`: `pyrefang`, `voidmaul` or
+  `any`; `state`: `up`, `spawning`, `down`; `within`), the behavior `contestCreature`
+  (`which`, `hpAtLeast`, `prepSeconds`, `within`), the coach order `creature` (the live
+  one, the nearest, else the ring next to rise). `PLAYBOOK_FORMAT_VERSION` stays 4:
+  additive kinds, an older playbook keeps validating.
+- **The wire.** The snapshot carries the rings' clocks (`rings`), a creature's identity
+  and aspect in its identity block, and both teams' favors in the self block (optional
+  fields, absent when empty); `ClientWorld` mirrors them; `IWorld` gains `ringClocks()`
+  and `teamFavors(team)`, pinned by the parity test.
 - **The HUD.** The meta line becomes an objective line built by a pure module
   (`src/ui/objective_line.ts`, tested): `Pyrefang 1:12 Might · Voidmaul LIVE · Warden 6:00`.
-  A chip per favor held, for both teams, saying what it does (`MIGHT +3% AD/AP`). The
+  A chip per favor held, for both teams, saying what it does (`MIGHT +3% AD and AP`). The
   rise and the claim are announced on screen and by voice, the ring is pinged on the
   minimap and flashed on the ground like the Warden's pit.
 - **The fixture stays bare.** The launch map has no rings; the ring tests play the
   export the way `tests/star_orchard.test.ts` does. The Warden's tests move to 12:00.
+
+State of play (2026-09-11): phases 0 to 5 done and on `main`; the four voice clips are
+the maintainer's to render (`docs/design/sound.md`, "Lines pending their clips").
 
 ## Phases
 

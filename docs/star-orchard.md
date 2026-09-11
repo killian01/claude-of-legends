@@ -38,8 +38,14 @@ under `/map-exports/` for the exploration pages that compare revisions.
   the presentation. `Sim` takes it with the map (`SimOptions`) and, with
   strict navigation on, keeps every step, spawn and respawn on a walkable
   cell.
+- The two rings the export traces (`objectiveSites`, one at the elbow of
+  each side lane, 35 m from both teams' outer towers) become
+  `GameMap.rings`; `src/sim/rings.ts` rises the Pyrefang and the Voidmaul on
+  them (ADR 0022, `docs/plan-rings.md`) and the disc is each creature's
+  leash. The launch map fixture has none.
 - The playbooks read the match's map, not the launch map, so the house
-  bots walk the Star Orchard's lanes (`SlotContext.map`).
+  bots walk the Star Orchard's lanes (`SlotContext.map`) and contest its
+  rings.
 - `src/render/terrain_loader.ts` turns the model into the renderer's
   terrain: scenery batched by material, the painted towers kept
   as the attackable units, the authored Sanctum left standing on its own
