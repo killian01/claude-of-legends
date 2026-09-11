@@ -12,6 +12,8 @@ import type { Unit } from './unit';
 export type CoachOrder =
   | { kind: 'goto'; x: number; z: number }
   | { kind: 'warden' }
+  // Take the rings' creature: the live one, else the next to rise.
+  | { kind: 'creature' }
   | { kind: 'focus'; targetId: number }
   | { kind: 'back' }
   | { kind: 'group' }
@@ -22,6 +24,7 @@ export type CoachOrderKind = CoachOrder['kind'] | 'free';
 export const COACH_ORDER_KINDS: readonly CoachOrderKind[] = [
   'goto',
   'warden',
+  'creature',
   'focus',
   'back',
   'group',
@@ -52,6 +55,7 @@ export function parseCoachOrder(
     case 'goto':
       return finite(raw.x) && finite(raw.z) ? { kind: 'goto', x: raw.x, z: raw.z } : undefined;
     case 'warden':
+    case 'creature':
     case 'back':
     case 'group':
       return { kind: raw.kind };

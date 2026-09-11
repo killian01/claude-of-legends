@@ -1,7 +1,7 @@
 // The coach bar (docs/design/bots.md): the orders a bot's owner can give
 // it live. Right-click on the map already means "go there" and on an enemy
 // "focus it" for a coach seat (the mirror world translates); this bar
-// carries the orders that have no place to click: Warden, back, group,
+// carries the orders that have no place to click: Warden, ring, back, group,
 // hold, free. One order is active at a time. The bar also answers: which
 // order stands (from the snapshot, never assumed from the click) and
 // whether the bot is on it or a higher play (survival, say) comes first.
@@ -41,6 +41,7 @@ function ensureCss(): void {
 
 const ORDERS: readonly { kind: CoachOrderKind; label: string; title: string }[] = [
   { kind: 'warden', label: 'Warden', title: 'Go take the Warden, now' },
+  { kind: 'creature', label: 'Ring', title: "Go take the ring's creature, now" },
   { kind: 'back', label: 'Back', title: 'Run home' },
   { kind: 'group', label: 'Group', title: 'Stick to the nearest ally' },
   { kind: 'hold', label: 'Hold', title: 'Hold where it stands' },
@@ -50,6 +51,7 @@ const ORDERS: readonly { kind: CoachOrderKind; label: string; title: string }[] 
 const ORDER_NAMES: Record<CoachOrder['kind'], string> = {
   goto: 'Go there',
   warden: 'Warden',
+  creature: 'Ring',
   focus: 'Focus',
   back: 'Back',
   group: 'Group',

@@ -239,6 +239,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     },
     units,
     objectiveSpawnAt: sim.objectiveSpawnAt(),
+    creatures: sim.ringClocks(),
     projectiles,
     zones,
     walls,

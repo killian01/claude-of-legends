@@ -1,5 +1,5 @@
 // The Objective player, a house style (CONTEXT.md: House style): the
-// Warden and the camps. The Laner's survival core, then the Warden ahead
+// Warden, the rings and the camps. The Laner's survival core, then the Warden ahead
 // of any fight while no enemy stands close (at the pit forty-five seconds
 // before it rises, the Laner twenty), ground given under the nearest tower
 // when outnumbered with no ally near, a fight that holds with nobody
@@ -35,6 +35,11 @@ export const OBJECTIVE_PLAYBOOK: PlaybookDef = {
       id: 'warden',
       when: { kind: 'enemies', within: 12, atMost: 0 },
       do: { kind: 'contestWarden', hpAtLeast: 0.6, prepSeconds: 45 },
+    },
+    {
+      id: 'creature',
+      when: { kind: 'enemies', within: 12, atMost: 0 },
+      do: { kind: 'contestCreature', hpAtLeast: 0.6, prepSeconds: 45, within: 70 },
     },
     {
       id: 'outnumbered',

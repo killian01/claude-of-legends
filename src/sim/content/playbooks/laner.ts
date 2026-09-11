@@ -56,6 +56,7 @@ export const LANER_PLAYBOOK: PlaybookDef = {
       do: { kind: 'answerVanish' },
     },
     { id: 'warden', when: { kind: 'always' }, do: { kind: 'contestWarden' } },
+    { id: 'creature', when: { kind: 'always' }, do: { kind: 'contestCreature' } },
     { id: 'farm', when: { kind: 'always' }, do: { kind: 'farm' } },
     { id: 'camp', when: { kind: 'not', of: { kind: 'enemyVisible' } }, do: { kind: 'takeCamp' } },
     { id: 'siege', when: { kind: 'always' }, do: { kind: 'siege' } },

@@ -16,7 +16,9 @@
 // lane preference. Version 4 added the fight's odds (the odds trigger and
 // the fight's commit), the minions trigger, the farm's last-hit mode, the
 // wave management (freeze, shove), and the collapse on a threatened tower
-// (the towerThreatened trigger, the defendTower behavior).
+// (the towerThreatened trigger, the defendTower behavior). The rings (ADR
+// 0022) added the creature trigger, the contestCreature behavior and the
+// creature coach order, additively, still version 4.
 
 import type { CoachOrder } from '../coach';
 import type { ChampionRole } from '../content/champions';
@@ -28,6 +30,10 @@ export type LaneId = 'top' | 'mid' | 'bot';
 
 // Which team a lineup trigger reads.
 export type Side = 'own' | 'enemy';
+
+// Which ring creature a trigger or a behavior means: the Pyrefang (the bot
+// ring), the Voidmaul (the top ring), or whichever (the nearest).
+export type CreatureName = 'pyrefang' | 'voidmaul' | 'any';
 
 // A predicate over the bot's own observation and the static map. Numeric
 // triggers compare with `below` (strictly less) and `atLeast` (greater or
@@ -54,6 +60,10 @@ export type Trigger =
   // The Warden: `up` while one is alive, `spawning` while the next one is
   // due within `within` seconds (default 20), `down` when none is alive.
   | { kind: 'warden'; state: 'up' | 'spawning' | 'down'; within?: number }
+  // A ring's creature (CONTEXT.md: Ring): `up` while one is alive,
+  // `spawning` while the next is due within `within` seconds (default 20),
+  // `down` when none is; `which` names the creature, any by default.
+  | { kind: 'creature'; which?: CreatureName; state: 'up' | 'spawning' | 'down'; within?: number }
   | { kind: 'abilityReady'; key: AbilityKey }
   | { kind: 'sigilReady'; id: string }
   // The lane this seat was assigned.
@@ -159,6 +169,17 @@ export type Behavior =
   // Attack a live Warden in reach, walk to it when healthy, pre-position at
   // the nearest pit shortly before it spawns.
   | { kind: 'contestWarden'; hpAtLeast?: number; prepSeconds?: number }
+  // Attack a live ring creature in reach, walk to it when healthy and
+  // within `within` units (default 40), pre-position at its ring shortly
+  // before it rises; `which` names the creature, any (the nearest) by
+  // default.
+  | {
+      kind: 'contestCreature';
+      which?: CreatureName;
+      hpAtLeast?: number;
+      prepSeconds?: number;
+      within?: number;
+    }
   // Attack the nearest enemy minion in reach; in lastHit mode, only one
   // the next strike kills.
   | { kind: 'farm'; mode?: FarmMode }

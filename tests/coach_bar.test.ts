@@ -18,6 +18,10 @@ describe('the coach bar state line', () => {
       text: 'Warden: on it.',
       on: true,
     });
+    expect(describeCoachState({ kind: 'creature' }, 'coach')).toEqual({
+      text: 'Ring: on it.',
+      on: true,
+    });
     expect(describeCoachState({ kind: 'goto', x: 1, z: 2 }, 'retreat')).toEqual({
       text: 'Go there: waiting, retreat comes first.',
       on: false,

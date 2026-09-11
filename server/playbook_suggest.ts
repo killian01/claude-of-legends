@@ -140,13 +140,14 @@ least one of the two):
  {"kind":"enemies","within":0..200,"atLeast"?:0..10,"atMost"?:0..10} enemy champions in sight within the radius; {"kind":"allies",...} same for allies
  {"kind":"enemyVisible"} {"kind":"atFountain"} {"kind":"underTower"}
  {"kind":"warden","state":"up"|"spawning"|"down","within"?:seconds} (spawning: due within the seconds, default 20)
+ {"kind":"creature","which"?:"pyrefang"|"voidmaul"|"any","state":"up"|"spawning"|"down","within"?:seconds} a ring creature (the Pyrefang on the bot ring, the Voidmaul on the top ring; any by default): up while one is alive, spawning when due within the seconds (default 20), down when none is
  {"kind":"abilityReady","key":"Q"|"W"|"E"|"R"} {"kind":"sigilReady","id":"riftstep"|"zephyr"|"mend"|"sear"} {"kind":"lane","is":"top"|"mid"|"bot"}
  {"kind":"allyFighting","within":0..200} an allied champion within the radius has an enemy champion within 10 of it
  {"kind":"numbers","within":0..200,"atLeast"?:-10..10,"atMost"?:-10..10} allied champions within the radius (the bot itself counted) minus enemy champions in sight there: atLeast 0 is an even fight or better, atLeast 1 an advantage, atMost -1 outnumbered
  {"kind":"odds","within"?:0..200 (20),"below"?:0..1,"atLeast"?:0..1} the fight's odds: the strength of the allied champions within the radius (the bot itself counted, each weighed by health and level) over both sides' together; 0.5 is an even fight, above it an advantage, below it a losing one
  {"kind":"minions","side":"own"|"enemy","within":0..200,"atLeast"?:0..30,"atMost"?:0..30} minions of that side within the radius: the size of the wave here
  {"kind":"towerThreatened","within"?:0..200 (200)} a live allied tower within the radius has an enemy champion in sight near it (within 16): the map is being lost there
- {"kind":"order","is"?:"goto"|"warden"|"focus"|"back"|"group"|"hold"} the owner gave the bot a live coach order (any kind, or that one); every new bot has the play "coach" (this trigger, behavior obeyOrder) right under retreat, and it is VALID: keep it unless the owner asks otherwise
+ {"kind":"order","is"?:"goto"|"warden"|"creature"|"focus"|"back"|"group"|"hold"} the owner gave the bot a live coach order (any kind, or that one); every new bot has the play "coach" (this trigger, behavior obeyOrder) right under retreat, and it is VALID: keep it unless the owner asks otherwise
  The lineup, public from champion select ("own" is the bot's team, itself included):
  {"kind":"champion","side":"own"|"enemy","is":championId} that champion is in the match on that side
  {"kind":"roles","side":"own"|"enemy","role":Role,"atLeast"?:0..5,"atMost"?:0..5} how many of a role that side fields
@@ -159,7 +160,7 @@ least one of the two):
 Behavior is ONE of (every parameter optional, default in parentheses):
  {"kind":"retreat"} run home by the fastest means; always acts.
  {"kind":"hold"} do nothing this slot; always acts.
- {"kind":"obeyOrder"} do what the owner's live coach order says (go somewhere, take the Warden, focus, back off, group, hold); passes the turn with no order standing.
+ {"kind":"obeyOrder"} do what the owner's live coach order says (go somewhere, take the Warden, take the ring's creature, focus, back off, group, hold); passes the turn with no order standing.
  {"kind":"shop"} the kit's next step at the fountain: buy the next item or component, sell what the build no longer wants, replace the cheapest past a full bag.
  {"kind":"goShop"} go home to spend when the next step is affordable and the spot is clear.
  {"kind":"sell","item":itemId} sell the named item at the fountain when the bag holds it.
@@ -169,6 +170,7 @@ Behavior is ONE of (every parameter optional, default in parentheses):
  {"kind":"hunt","hpAbove"?:0..1 (0.5)} walk to where a nearly dead enemy was last seen.
  {"kind":"answerVanish","hpAtLeast"?:0..1 (0.55)} an enemy just vanished nearby: walk its spot when healthy, give ground when hurt.
  {"kind":"contestWarden","hpAtLeast"?:0..1 (0.5),"prepSeconds"?:0..300 (20)} attack a live Warden in reach, walk to it healthy, pre-position at the pit before it spawns.
+ {"kind":"contestCreature","which"?:"pyrefang"|"voidmaul"|"any" ("any"),"hpAtLeast"?:0..1 (0.5),"prepSeconds"?:0..300 (20),"within"?:0..200 (40)} attack a live ring creature in reach, walk to it healthy and within the range, pre-position at its ring before it rises; its death gives the whole team a permanent favor and gold.
  {"kind":"farm","mode"?:"shove"|"lastHit" ("shove")} attack the nearest enemy minion in reach; lastHit strikes only a minion the next attack kills, so the wave is not pushed.
  {"kind":"manageWave","intent":"freeze"|"shove"} freeze: hold the enemy wave in front of the bot's own lane tower, last hits only, standing just ahead of the tower and holding still between them, so the wave dies to the tower and the enemy laner must come deep for its farm; always acts while a live allied tower stands on the bot's lane, passes without one. shove: hit the wave to send it at the enemy tower.
  {"kind":"takeCamp"} attack a visible jungle camp in reach, with no enemy champion in sight.

@@ -59,6 +59,11 @@ export const SIEGER_PLAYBOOK: PlaybookDef = {
       when: { kind: 'hp', atLeast: 0.7 },
       do: { kind: 'contestWarden', hpAtLeast: 0.7, prepSeconds: 10 },
     },
+    {
+      id: 'creature',
+      when: { kind: 'hp', atLeast: 0.7 },
+      do: { kind: 'contestCreature', hpAtLeast: 0.7, prepSeconds: 10 },
+    },
     { id: 'farm', when: { kind: 'always' }, do: { kind: 'farm' } },
     { id: 'push', when: { kind: 'always' }, do: { kind: 'push', regroupAt: null } },
   ],

@@ -42,6 +42,7 @@ describe('coach orders', () => {
     expect(parseCoachOrder({ kind: 'focus', targetId: 1.5 }, at)).toBeUndefined();
     expect(parseCoachOrder({ kind: 'hold' }, at)).toEqual({ kind: 'hold', x: 1, z: 2 });
     expect(parseCoachOrder({ kind: 'warden' }, at)).toEqual({ kind: 'warden' });
+    expect(parseCoachOrder({ kind: 'creature' }, at)).toEqual({ kind: 'creature' });
     expect(parseCoachOrder({ kind: 'nope' }, at)).toBeUndefined();
   });
 

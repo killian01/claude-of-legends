@@ -69,6 +69,7 @@ export const BRAWLER_PLAYBOOK: PlaybookDef = {
       do: { kind: 'answerVanish', hpAtLeast: 0.4 },
     },
     { id: 'warden', when: { kind: 'always' }, do: { kind: 'contestWarden' } },
+    { id: 'creature', when: { kind: 'always' }, do: { kind: 'contestCreature' } },
     { id: 'farm', when: { kind: 'always' }, do: { kind: 'farm' } },
     { id: 'siege', when: { kind: 'always' }, do: { kind: 'siege' } },
     { id: 'push', when: { kind: 'always' }, do: { kind: 'push', regroupAt: 8 * 60 } },

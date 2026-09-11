@@ -87,6 +87,18 @@ export function holds(t: Trigger, ctx: SlotContext): boolean {
       const until = obs.objectiveSpawnAt - obs.time;
       return until >= 0 && until <= (t.within ?? 20);
     }
+    case 'creature': {
+      const clocks = (obs.creatures ?? []).filter(
+        (c) => t.which === undefined || t.which === 'any' || c.creature === t.which,
+      );
+      const up = clocks.some((c) => c.unitId !== null);
+      if (t.state === 'up') return up;
+      if (t.state === 'down') return !up;
+      return clocks.some(
+        (c) =>
+          c.riseAt !== null && c.riseAt - obs.time >= 0 && c.riseAt - obs.time <= (t.within ?? 20),
+      );
+    }
     case 'abilityReady':
       return s.abilityReady[t.key] === true;
     case 'sigilReady':

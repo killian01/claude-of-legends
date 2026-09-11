@@ -14,6 +14,7 @@ import { MAX_BUILD } from './kit';
 import {
   type Alone,
   type Behavior,
+  type CreatureName,
   type FarmMode,
   type KitDef,
   type KitVariant,
@@ -54,9 +55,11 @@ const ROLES: readonly ChampionRole[] = [
   'Support',
   'Skirmisher',
 ];
+const CREATURE_NAMES: readonly CreatureName[] = ['pyrefang', 'voidmaul', 'any'];
 const ORDER_KINDS: readonly CoachOrder['kind'][] = [
   'goto',
   'warden',
+  'creature',
   'focus',
   'back',
   'group',
@@ -151,6 +154,21 @@ function count(
   return out;
 }
 
+// The optional `which` of a creature trigger or behavior.
+function creatureName(
+  raw: Record<string, unknown>,
+  at: string,
+  errors: Errors,
+): CreatureName | undefined {
+  const which = raw.which;
+  if (which === undefined) return undefined;
+  if (typeof which !== 'string' || !(CREATURE_NAMES as readonly string[]).includes(which)) {
+    errors.add(`${at}: which must be pyrefang, voidmaul or any`);
+    return undefined;
+  }
+  return which as CreatureName;
+}
+
 function trigger(raw: unknown, at: string, depth: number, errors: Errors): Trigger {
   if (!isRecord(raw) || typeof raw.kind !== 'string') {
     errors.add(`${at}: a trigger needs a kind`);
@@ -186,6 +204,19 @@ function trigger(raw: unknown, at: string, depth: number, errors: Errors): Trigg
       }
       const within = optNumber(raw, 'within', 0, 600, at, errors);
       return within === undefined ? { kind: 'warden', state } : { kind: 'warden', state, within };
+    }
+    case 'creature': {
+      const state = raw.state;
+      if (state !== 'up' && state !== 'spawning' && state !== 'down') {
+        errors.add(`${at}: creature state must be up, spawning or down`);
+        return { kind: 'creature', state: 'up' };
+      }
+      const t: Trigger = { kind: 'creature', state };
+      const which = creatureName(raw, at, errors);
+      if (which !== undefined) t.which = which;
+      const within = optNumber(raw, 'within', 0, 600, at, errors);
+      if (within !== undefined) t.within = within;
+      return t;
     }
     case 'abilityReady': {
       const key = raw.key;
@@ -409,6 +440,14 @@ function behavior(raw: unknown, at: string, errors: Errors): Behavior {
       let b: Behavior = { kind: 'contestWarden' };
       b = withOpt(b, 'hpAtLeast', opt('hpAtLeast', 0, 1));
       return withOpt(b, 'prepSeconds', opt('prepSeconds', 0, 300));
+    }
+    case 'contestCreature': {
+      let b: Behavior = { kind: 'contestCreature' };
+      const which = creatureName(raw, at, errors);
+      if (which !== undefined) b.which = which;
+      b = withOpt(b, 'hpAtLeast', opt('hpAtLeast', 0, 1));
+      b = withOpt(b, 'prepSeconds', opt('prepSeconds', 0, 300));
+      return withOpt(b, 'within', opt('within', 0, 200));
     }
     case 'siege':
       return withOpt({ kind: 'siege' }, 'escortMin', opt('escortMin', 0, 10, true));

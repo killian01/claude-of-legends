@@ -5,12 +5,15 @@
 
 import { CHAMPION_LIST, CHAMPIONS } from '../sim/content/champions';
 import { ITEM_LIST, ITEMS } from '../sim/content/items';
+import { CREATURES } from '../sim/content/rings';
 import type { PatchOp } from '../sim/playbook/patch';
 import type { Behavior, KitDef, LaneId, SkillKey, Trigger } from '../sim/playbook/types';
 
 export const itemName = (id: string): string => ITEMS[id]?.name ?? id;
 export const championName = (id: string): string => CHAMPIONS[id]?.name.split(',')[0] ?? id;
 const sideName = (side: 'own' | 'enemy'): string => (side === 'own' ? 'my team' : 'the enemy');
+const creatureName = (which: 'pyrefang' | 'voidmaul' | 'any' | undefined): string =>
+  which === undefined || which === 'any' ? 'a ring creature' : `the ${CREATURES[which].name}`;
 const roleCount = (t: { atLeast?: number; atMost?: number }): string => {
   const parts: string[] = [];
   if (t.atLeast !== undefined) parts.push(`at least ${t.atLeast}`);
@@ -62,6 +65,13 @@ export function describeTrigger(t: Trigger): string {
       if (t.state === 'up') return 'the Warden is up';
       if (t.state === 'down') return 'no Warden is up';
       return `the Warden spawns within ${t.within ?? 20} s`;
+    case 'creature': {
+      const name = creatureName(t.which);
+      if (t.state === 'up') return `${name} is up`;
+      if (t.state === 'down')
+        return `${name === 'a ring creature' ? 'no ring creature' : `no ${name.slice(4)}`} is up`;
+      return `${name} rises within ${t.within ?? 20} s`;
+    }
     case 'abilityReady':
       return `${t.key} is ready`;
     case 'sigilReady':
@@ -160,6 +170,10 @@ export function describeBehavior(b: Behavior): string {
       return `contest the Warden (health at least ${pct(b.hpAtLeast ?? 0.5)}, prepare ${
         b.prepSeconds ?? 20
       } s early)`;
+    case 'contestCreature':
+      return `contest ${creatureName(b.which)} (health at least ${pct(b.hpAtLeast ?? 0.5)}, prepare ${
+        b.prepSeconds ?? 20
+      } s early, within ${b.within ?? 40})`;
     case 'farm':
       return b.mode === 'lastHit' ? 'last hit the wave' : 'farm the nearest minion';
     case 'manageWave':
@@ -289,6 +303,19 @@ export const TRIGGER_FORMS: Readonly<Record<Trigger['kind'], KindForm>> = {
     choices: [{ key: 'state', label: 'is', options: ['up', 'spawning', 'down'] }],
     nums: [{ key: 'within', label: 'spawning within (s)', min: 0, max: 600, step: 5 }],
   },
+  creature: {
+    label: 'a ring creature',
+    choices: [
+      {
+        key: 'which',
+        label: 'which',
+        options: ['any', 'pyrefang', 'voidmaul'],
+        labels: ['any', 'the Pyrefang (bot ring)', 'the Voidmaul (top ring)'],
+      },
+      { key: 'state', label: 'is', options: ['up', 'spawning', 'down'] },
+    ],
+    nums: [{ key: 'within', label: 'rising within (s)', min: 0, max: 600, step: 5 }],
+  },
   abilityReady: {
     label: 'an ability is ready',
     choices: [{ key: 'key', label: 'key', options: ['Q', 'W', 'E', 'R'] }],
@@ -314,7 +341,7 @@ export const TRIGGER_FORMS: Readonly<Record<Trigger['kind'], KindForm>> = {
       {
         key: 'is',
         label: 'of kind',
-        options: ['goto', 'warden', 'focus', 'back', 'group', 'hold'],
+        options: ['goto', 'warden', 'creature', 'focus', 'back', 'group', 'hold'],
       },
     ],
   },
@@ -482,6 +509,22 @@ export const BEHAVIOR_FORMS: Readonly<Record<Behavior['kind'], KindForm>> = {
       { key: 'prepSeconds', label: 'prepare (s) before spawn', min: 0, max: 300, step: 5 },
     ],
   },
+  contestCreature: {
+    label: 'contest a ring creature',
+    choices: [
+      {
+        key: 'which',
+        label: 'which',
+        options: ['any', 'pyrefang', 'voidmaul'],
+        labels: ['any', 'the Pyrefang (bot ring)', 'the Voidmaul (top ring)'],
+      },
+    ],
+    nums: [
+      { key: 'hpAtLeast', label: 'when health at least', min: 0, max: 1, step: 0.05, pct: true },
+      { key: 'prepSeconds', label: 'prepare (s) before it rises', min: 0, max: 300, step: 5 },
+      { key: 'within', label: 'walk to it within', min: 0, max: 200, step: 5 },
+    ],
+  },
   farm: {
     label: 'farm the wave',
     choices: [
@@ -563,6 +606,7 @@ export function freshTrigger(kind: Trigger['kind']): Trigger {
     case 'allies':
       return { kind, within: 15, atLeast: 1 };
     case 'warden':
+    case 'creature':
       return { kind, state: 'up' };
     case 'abilityReady':
       return { kind, key: 'R' };

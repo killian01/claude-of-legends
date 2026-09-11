@@ -150,12 +150,13 @@ version 4.
 with and/or/not: own health, mana, level, gold, and time thresholds; enemy or ally
 champions within a radius (count); an enemy champion missing (from the last-seen memory);
 the lane wave ahead, behind, or under a tower; an enemy tower in reach; the Warden up,
-spawning within N seconds, or down; an ability or sigil ready; a coach order active; own
-lane assignment.
+spawning within N seconds, or down; a ring creature (the Pyrefang, the Voidmaul, or any)
+up, rising within N seconds, or down (ADR 0022); an ability or sigil ready; a coach order
+active; own lane assignment.
 
 **Behaviors** (v1), each with its parameters: farm the lane, poke, engage, retreat, recall,
-siege, rotate to a lane, contest the Warden, follow an ally, hold a position, obey the
-coach order. A behavior is a macro intent the engine turns into movement, attacks, and
+siege, rotate to a lane, contest the Warden, contest a ring creature (the named one or
+the nearest, within a range), follow an ally, hold a position, obey the coach order. A behavior is a macro intent the engine turns into movement, attacks, and
 casts through the shared micro.
 
 **The Laner is the default playbook.** The scripted Laner is already structured as
@@ -172,7 +173,8 @@ the language grows.
 ## Coach orders
 
 During a live match the owner can give the bot one order: go to a lane or a point, take
-the Warden, focus a target, back off, group on an ally, hold, free. One order is active at
+the Warden, take the ring's creature, focus a target, back off, group on an ally, hold,
+free. One order is active at
 a time, persistent until released or accomplished, free like a movement intention (ADR
 0003), sent as a typed ping over the existing ping channel. A bot obeys only its owner.
 Whether the order wins over the rest of the playbook is the owner's choice: "obey the

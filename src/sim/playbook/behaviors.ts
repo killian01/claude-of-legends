@@ -7,7 +7,7 @@
 import { GOTO_DONE_RADIUS } from '../coach';
 import { CHAMPIONS, type ChampionRole } from '../content/champions';
 import { hypot } from '../exact';
-import type { Action, ObsUnit } from '../policy';
+import type { Action, ObsCreature, ObsUnit } from '../policy';
 import { nextKitStep } from './kit';
 import {
   BESIDE_RANGE,
@@ -41,7 +41,7 @@ import {
   WARDEN_PREP_S,
 } from './micro';
 import { fightOdds } from './odds';
-import type { Alone, Behavior, LaneId, Stance, TargetRule } from './types';
+import type { Alone, Behavior, CreatureName, LaneId, Stance, TargetRule } from './types';
 import { lastHit, manageWave } from './wave';
 
 export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
@@ -71,6 +71,14 @@ export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
         ctx,
         b.hpAtLeast ?? WARDEN_FIGHT_HP_FRAC,
         b.prepSeconds ?? WARDEN_PREP_S,
+      );
+    case 'contestCreature':
+      return contestCreature(
+        ctx,
+        b.which ?? 'any',
+        b.hpAtLeast ?? WARDEN_FIGHT_HP_FRAC,
+        b.prepSeconds ?? WARDEN_PREP_S,
+        b.within ?? WARDEN_APPROACH_RANGE,
       );
     case 'farm':
       return b.mode === 'lastHit' ? lastHit(ctx) : farm(ctx);
@@ -417,6 +425,63 @@ function contestWarden(ctx: SlotContext, hpAtLeast: number, prepSeconds: number)
   return null;
 }
 
+// The rings' clocks a play means, and the live creatures among them as
+// the team sees them (always, since a creature is public like the Warden).
+function ringClocksOf(ctx: SlotContext, which: CreatureName): readonly ObsCreature[] {
+  return (ctx.obs.creatures ?? []).filter((c) => which === 'any' || c.creature === which);
+}
+
+function liveCreatures(ctx: SlotContext, clocks: readonly ObsCreature[]): ObsUnit[] {
+  const out: ObsUnit[] = [];
+  for (const c of clocks) {
+    if (c.unitId === null) continue;
+    const u = ctx.enemies.find((e) => e.id === c.unitId);
+    if (u) out.push(u);
+  }
+  return out;
+}
+
+// Contest a ring creature (CONTEXT.md: Ring): the same shape as the
+// Warden's contest. A live one in reach is attacked; a live one within the
+// range is walked to when healthy; shortly before a rise, a healthy bot
+// pre-positions at the ring whose clock is soonest, if it stands close
+// enough to make it. The rings sit at the lanes' elbows, so with the
+// default range this is the side laners' business, as it should be.
+function contestCreature(
+  ctx: SlotContext,
+  which: CreatureName,
+  hpAtLeast: number,
+  prepSeconds: number,
+  within: number,
+): Action | null {
+  const { s, obs } = ctx;
+  const clocks = ringClocksOf(ctx, which);
+  if (clocks.length === 0) return null;
+  const { jx, jz } = ctx.jitter();
+  const live = nearest(liveCreatures(ctx, clocks), s.x, s.z);
+  if (live) {
+    const d = dist(s.x, s.z, live);
+    if (d <= FARM_RANGE) return { kind: 'attack', targetId: live.id };
+    if (d <= within && s.hpFrac >= hpAtLeast) {
+      return { kind: 'move', x: live.x + jx, z: live.z + jz };
+    }
+    return null;
+  }
+  if (s.hpFrac < hpAtLeast) return null;
+  let ring: ObsCreature | null = null;
+  for (const c of clocks) {
+    if (c.riseAt === null) continue;
+    const until = c.riseAt - obs.time;
+    if (until < 0 || until > prepSeconds) continue;
+    if (!ring || hypot(c.x - s.x, c.z - s.z) < hypot(ring.x - s.x, ring.z - s.z)) ring = c;
+  }
+  if (!ring) return null;
+  const dp = hypot(ring.x - s.x, ring.z - s.z);
+  if (dp <= 6) return { kind: 'noop' };
+  if (dp <= WARDEN_PREP_RANGE) return { kind: 'move', x: ring.x + jx, z: ring.z + jz };
+  return null;
+}
+
 function farm(ctx: SlotContext): Action | null {
   const { s } = ctx;
   const minion = nearest(
@@ -590,7 +655,7 @@ function fallBack(ctx: SlotContext): Action | null {
 // The coach's order, done the playbook's way: the bot's own hands, the
 // owner's intent. A goto walks there (the sim clears it on arrival), a
 // hold stays, a back runs home, a group sticks to the nearest ally, a
-// warden goes for it whatever the health, a focus fights the named target
+// warden or a creature goes for it whatever the health, a focus fights the named target
 // while it is in sight and passes the turn otherwise.
 function obeyOrder(ctx: SlotContext): Action | null {
   const { s } = ctx;
@@ -616,6 +681,22 @@ function obeyOrder(ctx: SlotContext): Action | null {
         if (hypot(p.x - s.x, p.z - s.z) < hypot(pit.x - s.x, pit.z - s.z)) pit = p;
       }
       return holdPosition(ctx, pit.x, pit.z, 6);
+    }
+    case 'creature': {
+      // The live creature, the nearest; else the ring whose rise is
+      // soonest, held until it does.
+      const clocks = ringClocksOf(ctx, 'any');
+      const live = nearest(liveCreatures(ctx, clocks), s.x, s.z);
+      if (live) {
+        if (dist(s.x, s.z, live) <= FARM_RANGE) return { kind: 'attack', targetId: live.id };
+        return { kind: 'move', x: live.x, z: live.z };
+      }
+      let next: ObsCreature | null = null;
+      for (const c of clocks) {
+        if (c.riseAt !== null && (!next || c.riseAt < (next.riseAt ?? 0))) next = c;
+      }
+      if (!next) return null;
+      return holdPosition(ctx, next.x, next.z, 6);
     }
     case 'focus': {
       const target = ctx.enemies.find((u) => u.id === order.targetId);

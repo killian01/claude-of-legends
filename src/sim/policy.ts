@@ -9,6 +9,7 @@
 
 import type { CoachOrder } from './coach';
 import type { ChampionRole } from './content/champions';
+import type { AspectId } from './content/rings';
 import type { Rng } from './rng';
 import type { AbilityKey, TeamId } from './types';
 import type { UnitKind } from './unit';
@@ -182,6 +183,22 @@ export interface ObsSelf {
   coachOrder?: CoachOrder | null;
 }
 
+// A ring's clock as the team reads it (additive v0 block, ADR 0022): the
+// creature alive on it, or when the next rises, and the aspect in play.
+// Public to both teams like the Warden's clock and the creature itself.
+export interface ObsCreature {
+  ring: 'bot' | 'top';
+  creature: 'pyrefang' | 'voidmaul';
+  x: number;
+  z: number;
+  // The live creature's unit id, null between rises.
+  unitId: number | null;
+  // When the next rises, null while one is alive.
+  riseAt: number | null;
+  // The aspect the live creature carries, or the next one will.
+  aspect: AspectId;
+}
+
 export interface Observation {
   tick: number;
   time: number;
@@ -192,6 +209,9 @@ export interface Observation {
   // When the next Warden rises, null while one is alive. Additive v0 field:
   // the spawn clock is the one objective fact unit rows cannot carry.
   objectiveSpawnAt?: number | null;
+  // The rings' clocks (additive v0 field, ADR 0022), empty on a map
+  // without rings.
+  creatures?: readonly ObsCreature[];
   // Threats in flight and on the ground, filtered by team vision (additive
   // v0 fields; a policy that ignores them keeps its old behavior).
   projectiles?: readonly ObsProjectile[];
