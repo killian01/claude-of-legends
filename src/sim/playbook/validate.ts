@@ -55,7 +55,7 @@ const ROLES: readonly ChampionRole[] = [
   'Support',
   'Skirmisher',
 ];
-const CREATURE_NAMES: readonly CreatureName[] = ['pyrefang', 'voidmaul', 'any'];
+const CREATURE_NAMES: readonly CreatureName[] = ['pyrefang', 'voidmaul', 'ascendant', 'any'];
 const ORDER_KINDS: readonly CoachOrder['kind'][] = [
   'goto',
   'warden',
@@ -163,7 +163,7 @@ function creatureName(
   const which = raw.which;
   if (which === undefined) return undefined;
   if (typeof which !== 'string' || !(CREATURE_NAMES as readonly string[]).includes(which)) {
-    errors.add(`${at}: which must be pyrefang, voidmaul or any`);
+    errors.add(`${at}: which must be pyrefang, voidmaul, ascendant or any`);
     return undefined;
   }
   return which as CreatureName;
@@ -439,7 +439,8 @@ function behavior(raw: unknown, at: string, errors: Errors): Behavior {
     case 'contestWarden': {
       let b: Behavior = { kind: 'contestWarden' };
       b = withOpt(b, 'hpAtLeast', opt('hpAtLeast', 0, 1));
-      return withOpt(b, 'prepSeconds', opt('prepSeconds', 0, 300));
+      b = withOpt(b, 'prepSeconds', opt('prepSeconds', 0, 300));
+      return withOpt(b, 'partyAtLeast', opt('partyAtLeast', 1, 5, true));
     }
     case 'contestCreature': {
       let b: Behavior = { kind: 'contestCreature' };
@@ -447,7 +448,8 @@ function behavior(raw: unknown, at: string, errors: Errors): Behavior {
       if (which !== undefined) b.which = which;
       b = withOpt(b, 'hpAtLeast', opt('hpAtLeast', 0, 1));
       b = withOpt(b, 'prepSeconds', opt('prepSeconds', 0, 300));
-      return withOpt(b, 'within', opt('within', 0, 200));
+      b = withOpt(b, 'within', opt('within', 0, 200));
+      return withOpt(b, 'partyAtLeast', opt('partyAtLeast', 1, 5, true));
     }
     case 'siege':
       return withOpt({ kind: 'siege' }, 'escortMin', opt('escortMin', 0, 10, true));

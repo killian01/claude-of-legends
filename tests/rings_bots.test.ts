@@ -13,7 +13,7 @@ import { BRAWLER_PLAYBOOK } from '../src/sim/content/playbooks/brawler';
 import { LANER_PLAYBOOK } from '../src/sim/content/playbooks/laner';
 import { OBJECTIVE_PLAYBOOK } from '../src/sim/content/playbooks/objective';
 import { SIEGER_PLAYBOOK } from '../src/sim/content/playbooks/sieger';
-import { CREATURES } from '../src/sim/content/rings';
+import type { AspectId } from '../src/sim/content/rings';
 import {
   type StarOrchardLayout,
   type StarOrchardManifest,
@@ -125,6 +125,37 @@ describe('the creature vocabulary', () => {
     ).toMatch(/which must be/);
     // An older playbook that never heard of the rings still validates.
     expect(validatePlaybook(LANER_PLAYBOOK).ok).toBe(true);
+    // The Ascendant is a name too (CONTEXT.md): either ring's.
+    const asc = ok({
+      version: 1,
+      plays: [
+        {
+          id: 'asc',
+          when: { kind: 'creature', which: 'ascendant', state: 'up' },
+          do: { kind: 'contestCreature', which: 'ascendant' },
+        },
+      ],
+    });
+    expect(asc.plays[0]!.when).toMatchObject({ which: 'ascendant' });
+    expect(asc.plays[0]!.do).toMatchObject({ which: 'ascendant' });
+    // The party a contest waits for: one to five, whole.
+    const party = ok({
+      version: 1,
+      plays: [
+        { id: 'a', when: { kind: 'always' }, do: { kind: 'contestCreature', partyAtLeast: 3 } },
+        { id: 'b', when: { kind: 'always' }, do: { kind: 'contestWarden', partyAtLeast: 4 } },
+      ],
+    });
+    expect(party.plays[0]!.do).toMatchObject({ partyAtLeast: 3 });
+    expect(party.plays[1]!.do).toMatchObject({ partyAtLeast: 4 });
+    expect(
+      errorsOf({
+        version: 1,
+        plays: [
+          { id: 'x', when: { kind: 'always' }, do: { kind: 'contestCreature', partyAtLeast: 0 } },
+        ],
+      })[0],
+    ).toMatch(/partyAtLeast/);
   });
 
   it('reads the rings off the observation, and names one creature or any', () => {
@@ -150,6 +181,31 @@ describe('the creature vocabulary', () => {
     expect(holds({ kind: 'creature', which: 'pyrefang', state: 'up' }, later)).toBe(true);
     expect(holds({ kind: 'creature', which: 'voidmaul', state: 'up' }, later)).toBe(false);
     expect(holds({ kind: 'creature', which: 'voidmaul', state: 'down' }, later)).toBe(true);
+    // A creature carrying an aspect is no Ascendant; the fourth rise is,
+    // and the observation says so (aspect null, ascendant true).
+    expect(holds({ kind: 'creature', which: 'ascendant', state: 'up' }, later)).toBe(false);
+    expect(later.obs.creatures?.find((c) => c.ring === 'bot')).toMatchObject({
+      aspect: 'might',
+      ascendant: false,
+    });
+    const bot = sim.ringStates.find((s) => s.ring === 'bot')!;
+    sim.units.delete(bot.unitId!);
+    bot.unitId = null;
+    bot.riseIndex = 3;
+    rise(sim, 'pyrefang');
+    const ascended = buildSlotContext(
+      buildObservation(sim, me.id)!,
+      new Rng(1),
+      undefined,
+      sim.map,
+    );
+    expect(ascended.obs.creatures?.find((c) => c.ring === 'bot')).toMatchObject({
+      aspect: null,
+      ascendant: true,
+    });
+    expect(holds({ kind: 'creature', which: 'ascendant', state: 'up' }, ascended)).toBe(true);
+    expect(holds({ kind: 'creature', which: 'pyrefang', state: 'up' }, ascended)).toBe(true);
+    expect(holds({ kind: 'creature', which: 'any', state: 'up' }, ascended)).toBe(true);
     // The launch map has no rings: nothing is ever up or due.
     const bare = new Sim(3);
     const lone = bare.addChampion(0);
@@ -159,7 +215,7 @@ describe('the creature vocabulary', () => {
     expect(holds({ kind: 'creature', state: 'spawning', within: 9999 }, bareCtx)).toBe(false);
   });
 
-  it('walks a healthy bot to a live creature in range and fights it in reach', () => {
+  it('walks a healthy bot to a live creature in range and fights it in reach, with a party', () => {
     const sim = orchardSim();
     const p = rise(sim, 'pyrefang');
     const me = sim.addChampion(0, { x: p.pos.x - 25, z: p.pos.z + 5 }, 'vesk');
@@ -168,6 +224,13 @@ describe('the creature vocabulary', () => {
       plays: [{ id: 'ring', when: { kind: 'always' }, do: { kind: 'contestCreature' } }],
     };
     sim.attachPolicy(me.id, playbookPolicy(def, undefined, sim.map));
+    // Alone, the bot stays: a creature is a duo's fight (the body is sized
+    // so that a lone champion pokes it for a minute and a half).
+    const alone = { ...me.pos };
+    for (let i = 0; i < 3 * TICKS_PER_S; i++) sim.tick();
+    expect(Math.hypot(me.pos.x - alone.x, me.pos.z - alone.z)).toBeLessThan(1);
+    // An ally beside the ring makes the party.
+    sim.addChampion(0, { x: p.pos.x + 6, z: p.pos.z }, 'torv');
     const d0 = Math.hypot(me.pos.x - p.pos.x, me.pos.z - p.pos.z);
     let struck = false;
     for (let i = 0; i < 15 * TICKS_PER_S && !struck; i++) {
@@ -183,6 +246,55 @@ describe('the creature vocabulary', () => {
     const at = { ...far.pos };
     for (let i = 0; i < 2 * TICKS_PER_S; i++) sim.tick();
     expect(Math.hypot(far.pos.x - at.x, far.pos.z - at.z)).toBeLessThan(1);
+  });
+
+  it('walks a bot that names the Ascendant to a live one, and past a plain creature', () => {
+    const sim = orchardSim();
+    const bot = sim.ringStates.find((s) => s.ring === 'bot')!;
+    bot.riseIndex = 3;
+    const a = rise(sim, 'pyrefang');
+    expect(a.ascendant).toBe(true);
+    const me = sim.addChampion(0, { x: a.pos.x - 25, z: a.pos.z + 5 }, 'vesk');
+    const def: PlaybookDef = {
+      version: 1,
+      plays: [
+        {
+          id: 'asc',
+          when: { kind: 'always' },
+          do: { kind: 'contestCreature', which: 'ascendant' },
+        },
+      ],
+    };
+    sim.attachPolicy(me.id, playbookPolicy(def, undefined, sim.map));
+    // A team's fight: with one ally there the bot still waits, with two it goes.
+    sim.addChampion(0, { x: a.pos.x + 6, z: a.pos.z }, 'torv');
+    const waiting = { ...me.pos };
+    for (let i = 0; i < 3 * TICKS_PER_S; i++) sim.tick();
+    expect(Math.hypot(me.pos.x - waiting.x, me.pos.z - waiting.z)).toBeLessThan(1);
+    sim.addChampion(0, { x: a.pos.x + 6, z: a.pos.z + 4 }, 'dain');
+    const d0 = Math.hypot(me.pos.x - a.pos.x, me.pos.z - a.pos.z);
+    for (let i = 0; i < 10 * TICKS_PER_S; i++) sim.tick();
+    expect(Math.hypot(me.pos.x - a.pos.x, me.pos.z - a.pos.z)).toBeLessThan(d0 - 5);
+    // The same play beside a plain Voidmaul stays put: it is not what it means.
+    const v = rise(sim, 'voidmaul');
+    const other = sim.addChampion(0, { x: v.pos.x - 25, z: v.pos.z + 5 }, 'vesk');
+    sim.attachPolicy(other.id, playbookPolicy(def, undefined, sim.map));
+    const at = { ...other.pos };
+    for (let i = 0; i < 3 * TICKS_PER_S; i++) sim.tick();
+    expect(Math.hypot(other.pos.x - at.x, other.pos.z - at.z)).toBeLessThan(1);
+  });
+
+  it('never opens a recall beside a live creature: the bite breaks the channel', () => {
+    const sim = orchardSim();
+    const p = rise(sim, 'pyrefang');
+    const me = sim.addChampion(0, { x: p.pos.x + 4, z: p.pos.z }, 'vesk');
+    sim.tick();
+    const near = buildSlotContext(buildObservation(sim, me.id)!, new Rng(1), undefined, sim.map);
+    expect(near.recallClear()).toBe(false);
+    me.pos = { x: p.pos.x + 30, z: p.pos.z };
+    sim.tick();
+    const far = buildSlotContext(buildObservation(sim, me.id)!, new Rng(1), undefined, sim.map);
+    expect(far.recallClear()).toBe(true);
   });
 
   it('pre-positions at the ring shortly before a rise, when close enough', () => {
@@ -221,11 +333,18 @@ describe('the creature vocabulary', () => {
     expect(Math.hypot(me.pos.x - ring.x, me.pos.z - ring.z)).toBeLessThan(d0 - 5);
   });
 
-  it("is a play of every house style, in the Warden play's stance", () => {
+  it("is a play of every house style, in the Warden play's stance, the Ascendant too", () => {
     for (const def of [LANER_PLAYBOOK, BRAWLER_PLAYBOOK, SIEGER_PLAYBOOK, OBJECTIVE_PLAYBOOK]) {
       const ids = def.plays.map((p) => p.id);
       expect(ids, ids.join(',')).toContain('creature');
-      expect(ids.indexOf('creature')).toBe(ids.indexOf('warden') + 1);
+      // Right after the Warden: the Ascendant (the team's fight), then the
+      // creature (the duo's), each in the stance of the Warden play.
+      expect(ids.indexOf('ascendant')).toBe(ids.indexOf('warden') + 1);
+      expect(ids.indexOf('creature')).toBe(ids.indexOf('ascendant') + 1);
+      const warden = def.plays.find((p) => p.id === 'warden')!;
+      const ascendant = def.plays.find((p) => p.id === 'ascendant')!;
+      expect(ascendant.when).toEqual(warden.when);
+      expect(ascendant.do).toMatchObject({ kind: 'contestCreature', which: 'ascendant' });
       const play = def.plays.find((p) => p.id === 'creature')!;
       expect(play.do.kind).toBe('contestCreature');
       expect(validatePlaybook(def).ok).toBe(true);
@@ -235,7 +354,11 @@ describe('the creature vocabulary', () => {
     expect(objective).toMatchObject({ prepSeconds: 45, within: 70 });
   });
 
-  it('kills the Pyrefang in a house bot match on the export before the Voidmaul rises', () => {
+  it('takes a ring creature in a house bot match on the export inside twelve minutes', () => {
+    // The bodies want a duo and thirty seconds now (docs/plan-rings.md,
+    // round two), and the rings are contested ground: on this seed the
+    // bots' first favor is the Voidmaul's at about 10:10, after two
+    // attempts on the Pyrefang were broken up by the enemy laners.
     const sim = orchardSim(42);
     const rng = new Rng(42);
     for (const seat of houseSeats([], rng)) {
@@ -244,19 +367,18 @@ describe('the creature vocabulary', () => {
     for (const seat of houseSeats([], rng)) {
       attachBot(sim, sim.addChampion(1, undefined, seat.championId).id, seat.bot);
     }
-    let favor: { team: number; creature: string | null } | null = null;
-    const until = CREATURES.voidmaul.firstRiseS + 60;
-    for (let tick = 0; tick < until * TICKS_PER_S && !favor; tick++) {
+    let favor: { team: number; creature: string | null; aspect: AspectId } | null = null;
+    for (let tick = 0; tick < 12 * 60 * TICKS_PER_S && !favor; tick++) {
       for (const e of sim.tick()) {
-        if (e.type === 'favor') favor = { team: e.team, creature: e.creature };
+        if (e.type === 'favor') favor = { team: e.team, creature: e.creature, aspect: e.aspect };
       }
     }
     expect(favor).not.toBeNull();
-    expect(favor!.creature).toBe('pyrefang');
-    expect(sim.teamFavors(favor!.team as 0 | 1).might).toBe(1);
+    expect(['pyrefang', 'voidmaul']).toContain(favor!.creature);
+    expect(sim.teamFavors(favor!.team as 0 | 1)[favor!.aspect]).toBe(1);
     // Every member of the team was paid.
     for (const u of sim.units.values()) {
-      if (u.kind === 'champion' && u.team === favor!.team) expect(u.favors.might).toBe(1);
+      if (u.kind === 'champion' && u.team === favor!.team) expect(u.favors[favor!.aspect]).toBe(1);
     }
-  }, 60000);
+  }, 120000);
 });

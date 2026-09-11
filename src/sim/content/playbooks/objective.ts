@@ -37,6 +37,17 @@ export const OBJECTIVE_PLAYBOOK: PlaybookDef = {
       do: { kind: 'contestWarden', hpAtLeast: 0.6, prepSeconds: 45 },
     },
     {
+      id: 'ascendant',
+      when: { kind: 'enemies', within: 12, atMost: 0 },
+      do: {
+        kind: 'contestCreature',
+        which: 'ascendant',
+        hpAtLeast: 0.6,
+        prepSeconds: 45,
+        within: 70,
+      },
+    },
+    {
       id: 'creature',
       when: { kind: 'enemies', within: 12, atMost: 0 },
       do: { kind: 'contestCreature', hpAtLeast: 0.6, prepSeconds: 45, within: 70 },

@@ -111,8 +111,14 @@ describe('a full bot match progresses to an end', () => {
   }, () => {
     const sim = botMatch(55);
     let winnerAt: number | null = null;
-    // Cap at 25 sim-minutes: the match must conclude on its own inside it.
-    for (let i = 0; i < 30000 && winnerAt === null; i++) {
+    // Cap at 30 sim-minutes: the match must conclude on its own inside it.
+    // It was 25 until the neutral bodies were sized for a team (docs/plan-
+    // rings.md, round two): the scripted Laners used to take the Warden
+    // alone and ride its Boon to the Sanctum around 17:00; now nobody
+    // solos it, and this seed ends on the waves' late escalation at about
+    // 25:45 instead. A rally that converts a team objective is the bots'
+    // next plan; the gate here is that the game ENDS, and it does.
+    for (let i = 0; i < 36000 && winnerAt === null; i++) {
       sim.tick();
       if (sim.winner !== null) winnerAt = i;
     }

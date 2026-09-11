@@ -300,12 +300,17 @@ export function buildSlotContext(
     .sort((a, b) => dist(s.x, s.z, a) - dist(s.x, s.z, b))[0];
   const champ = ccdTarget ?? nearest(enemyChampions, s.x, s.z);
   const atFountain = onFountain(fountain, { x: s.x, z: s.z });
+  // A neutral body in reach counts like a minion: a bot that opened a
+  // recall beside the creature it had been hitting was bitten out of the
+  // channel, tried again, and stood there until the body reset (the rings'
+  // round two, measured on the house bots).
   const recallClear = (): boolean =>
     !obs.units.some(
       (u) =>
         !u.friendly &&
         ((u.kind === 'champion' && hypot(u.x - s.x, u.z - s.z) <= RECALL_CLEAR_CHAMP_RANGE) ||
-          (u.kind === 'minion' && hypot(u.x - s.x, u.z - s.z) <= RECALL_CLEAR_MINION_RANGE)),
+          ((u.kind === 'minion' || u.kind === 'warden' || u.kind === 'creature') &&
+            hypot(u.x - s.x, u.z - s.z) <= RECALL_CLEAR_MINION_RANGE)),
     ) &&
     !(obs.lastSeen ?? []).some(
       (ls) => obs.time - ls.at <= 3 && hypot(ls.x - s.x, ls.z - s.z) <= RECALL_CLEAR_MEMORY_RANGE,

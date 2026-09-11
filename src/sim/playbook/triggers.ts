@@ -4,10 +4,10 @@
 
 import { ROLE_DAMAGE } from '../content/champions';
 import { hypot } from '../exact';
-import type { ObsSeat } from '../policy';
+import type { ObsCreature, ObsSeat } from '../policy';
 import type { SlotContext } from './micro';
 import { fightOdds, ODDS_RADIUS } from './odds';
-import type { Side, Trigger } from './types';
+import type { CreatureName, Side, Trigger } from './types';
 
 function within(value: number, below: number | undefined, atLeast: number | undefined): boolean {
   return (below === undefined || value < below) && (atLeast === undefined || value >= atLeast);
@@ -88,9 +88,7 @@ export function holds(t: Trigger, ctx: SlotContext): boolean {
       return until >= 0 && until <= (t.within ?? 20);
     }
     case 'creature': {
-      const clocks = (obs.creatures ?? []).filter(
-        (c) => t.which === undefined || t.which === 'any' || c.creature === t.which,
-      );
+      const clocks = (obs.creatures ?? []).filter((c) => clockMeans(c, t.which));
       const up = clocks.some((c) => c.unitId !== null);
       if (t.state === 'up') return up;
       if (t.state === 'down') return !up;
@@ -149,4 +147,12 @@ export function holds(t: Trigger, ctx: SlotContext): boolean {
     case 'any':
       return t.of.some((sub) => holds(sub, ctx));
   }
+}
+
+// Whether a ring's clock is what a play means by `which`: a creature by
+// name, either ring's Ascendant, or any (an Ascendant included).
+export function clockMeans(c: ObsCreature, which: CreatureName | undefined): boolean {
+  if (which === undefined || which === 'any') return true;
+  if (which === 'ascendant') return c.ascendant;
+  return c.creature === which;
 }

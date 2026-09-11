@@ -41,6 +41,7 @@ import {
   WARDEN_PREP_S,
 } from './micro';
 import { fightOdds } from './odds';
+import { clockMeans } from './triggers';
 import type { Alone, Behavior, CreatureName, LaneId, Stance, TargetRule } from './types';
 import { lastHit, manageWave } from './wave';
 
@@ -71,6 +72,7 @@ export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
         ctx,
         b.hpAtLeast ?? WARDEN_FIGHT_HP_FRAC,
         b.prepSeconds ?? WARDEN_PREP_S,
+        b.partyAtLeast ?? WARDEN_PARTY,
       );
     case 'contestCreature':
       return contestCreature(
@@ -79,6 +81,7 @@ export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
         b.hpAtLeast ?? WARDEN_FIGHT_HP_FRAC,
         b.prepSeconds ?? WARDEN_PREP_S,
         b.within ?? WARDEN_APPROACH_RANGE,
+        b.partyAtLeast ?? (b.which === 'ascendant' ? WARDEN_PARTY : CREATURE_PARTY),
       );
     case 'farm':
       return b.mode === 'lastHit' ? lastHit(ctx) : farm(ctx);
@@ -394,15 +397,47 @@ function answerVanish(ctx: SlotContext, hpAtLeast: number): Action | null {
   return towardHome(ctx, 6);
 }
 
+// The party a neutral body is fought with: self, plus the allied champions
+// already within `within` of the body or walking beside the bot
+// (GROUP_RANGE), whichever is more. The bodies (docs/plan-rings.md, round
+// two) are sized so that a lone champion pokes a ring creature for a
+// minute and a half and the Warden for nothing; a bot that counted itself
+// a party of one stood at a ring chipping until an enemy came (measured on
+// the house bots), so a contest waits for company. The company counted
+// beside the bot is what keeps two bots from each waiting for the other
+// to reach the body first: a pair walks in as a pair.
+export const CREATURE_PARTY = 2;
+export const WARDEN_PARTY = 3;
+const GROUP_RANGE = 15;
+
+function partyAt(ctx: SlotContext, x: number, z: number, within: number): number {
+  const { s, obs } = ctx;
+  let atBody = 0;
+  let beside = 0;
+  for (const u of obs.units) {
+    if (!u.friendly || u.kind !== 'champion' || u.hpFrac <= 0) continue;
+    if (dist(x, z, u) <= within) atBody += 1;
+    if (dist(s.x, s.z, u) <= GROUP_RANGE) beside += 1;
+  }
+  return 1 + Math.max(atBody, beside);
+}
+
 // Contest the Warden: a live one is the team's one rendezvous. Walk to it
-// healthy, fight it in reach. Shortly before the spawn clock strikes,
-// healthy bots pre-position at the nearest pit; both teams read the same
-// clock, so the pit becomes the mid game's fight (obs.objectiveSpawnAt).
-function contestWarden(ctx: SlotContext, hpAtLeast: number, prepSeconds: number): Action | null {
+// healthy and in a party, fight it in reach. Shortly before the spawn
+// clock strikes, healthy bots pre-position at the nearest pit; both teams
+// read the same clock, so the pit becomes the mid game's fight
+// (obs.objectiveSpawnAt).
+function contestWarden(
+  ctx: SlotContext,
+  hpAtLeast: number,
+  prepSeconds: number,
+  partyAtLeast: number,
+): Action | null {
   const { s, obs } = ctx;
   const { jx, jz } = ctx.jitter();
   const warden = ctx.enemies.find((u) => u.kind === 'warden');
   if (warden) {
+    if (partyAt(ctx, warden.x, warden.z, WARDEN_APPROACH_RANGE) < partyAtLeast) return null;
     const dw = dist(s.x, s.z, warden);
     if (dw <= FARM_RANGE) return { kind: 'attack', targetId: warden.id };
     if (dw <= WARDEN_APPROACH_RANGE && s.hpFrac >= hpAtLeast) {
@@ -428,7 +463,7 @@ function contestWarden(ctx: SlotContext, hpAtLeast: number, prepSeconds: number)
 // The rings' clocks a play means, and the live creatures among them as
 // the team sees them (always, since a creature is public like the Warden).
 function ringClocksOf(ctx: SlotContext, which: CreatureName): readonly ObsCreature[] {
-  return (ctx.obs.creatures ?? []).filter((c) => which === 'any' || c.creature === which);
+  return (ctx.obs.creatures ?? []).filter((c) => clockMeans(c, which));
 }
 
 function liveCreatures(ctx: SlotContext, clocks: readonly ObsCreature[]): ObsUnit[] {
@@ -446,13 +481,16 @@ function liveCreatures(ctx: SlotContext, clocks: readonly ObsCreature[]): ObsUni
 // range is walked to when healthy; shortly before a rise, a healthy bot
 // pre-positions at the ring whose clock is soonest, if it stands close
 // enough to make it. The rings sit at the lanes' elbows, so with the
-// default range this is the side laners' business, as it should be.
+// default range this is the side laners' business, as it should be. An
+// Ascendant is contested the same way: every house style names it in a
+// play of its own, in the stance of its Warden play.
 function contestCreature(
   ctx: SlotContext,
   which: CreatureName,
   hpAtLeast: number,
   prepSeconds: number,
   within: number,
+  partyAtLeast: number,
 ): Action | null {
   const { s, obs } = ctx;
   const clocks = ringClocksOf(ctx, which);
@@ -460,6 +498,7 @@ function contestCreature(
   const { jx, jz } = ctx.jitter();
   const live = nearest(liveCreatures(ctx, clocks), s.x, s.z);
   if (live) {
+    if (partyAt(ctx, live.x, live.z, within) < partyAtLeast) return null;
     const d = dist(s.x, s.z, live);
     if (d <= FARM_RANGE) return { kind: 'attack', targetId: live.id };
     if (d <= within && s.hpFrac >= hpAtLeast) {

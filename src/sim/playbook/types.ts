@@ -33,7 +33,9 @@ export type Side = 'own' | 'enemy';
 
 // Which ring creature a trigger or a behavior means: the Pyrefang (the bot
 // ring), the Voidmaul (the top ring), or whichever (the nearest).
-export type CreatureName = 'pyrefang' | 'voidmaul' | 'any';
+// ring), the Voidmaul (the top ring), `ascendant` for either ring's
+// Ascendant (CONTEXT.md: the fourth rise and every later one), or any.
+export type CreatureName = 'pyrefang' | 'voidmaul' | 'ascendant' | 'any';
 
 // A predicate over the bot's own observation and the static map. Numeric
 // triggers compare with `below` (strictly less) and `atLeast` (greater or
@@ -167,18 +169,23 @@ export type Behavior =
   // when hurt.
   | { kind: 'answerVanish'; hpAtLeast?: number }
   // Attack a live Warden in reach, walk to it when healthy, pre-position at
-  // the nearest pit shortly before it spawns.
-  | { kind: 'contestWarden'; hpAtLeast?: number; prepSeconds?: number }
+  // the nearest pit shortly before it spawns. A live Warden is fought only
+  // with a party: at least `partyAtLeast` allied champions (self included,
+  // default 3) near it.
+  | { kind: 'contestWarden'; hpAtLeast?: number; prepSeconds?: number; partyAtLeast?: number }
   // Attack a live ring creature in reach, walk to it when healthy and
   // within `within` units (default 40), pre-position at its ring shortly
   // before it rises; `which` names the creature, any (the nearest) by
-  // default.
+  // default. A live one is fought only with a party: at least
+  // `partyAtLeast` allied champions near it, self included (default 2 for
+  // a creature, 3 for an Ascendant).
   | {
       kind: 'contestCreature';
       which?: CreatureName;
       hpAtLeast?: number;
       prepSeconds?: number;
       within?: number;
+      partyAtLeast?: number;
     }
   // Attack the nearest enemy minion in reach; in lastHit mode, only one
   // the next strike kills.

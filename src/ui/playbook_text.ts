@@ -7,13 +7,24 @@ import { CHAMPION_LIST, CHAMPIONS } from '../sim/content/champions';
 import { ITEM_LIST, ITEMS } from '../sim/content/items';
 import { CREATURES } from '../sim/content/rings';
 import type { PatchOp } from '../sim/playbook/patch';
-import type { Behavior, KitDef, LaneId, SkillKey, Trigger } from '../sim/playbook/types';
+import type {
+  Behavior,
+  CreatureName,
+  KitDef,
+  LaneId,
+  SkillKey,
+  Trigger,
+} from '../sim/playbook/types';
 
 export const itemName = (id: string): string => ITEMS[id]?.name ?? id;
 export const championName = (id: string): string => CHAMPIONS[id]?.name.split(',')[0] ?? id;
 const sideName = (side: 'own' | 'enemy'): string => (side === 'own' ? 'my team' : 'the enemy');
-const creatureName = (which: 'pyrefang' | 'voidmaul' | 'any' | undefined): string =>
-  which === undefined || which === 'any' ? 'a ring creature' : `the ${CREATURES[which].name}`;
+const creatureName = (which: CreatureName | undefined): string =>
+  which === undefined || which === 'any'
+    ? 'a ring creature'
+    : which === 'ascendant'
+      ? 'the Ascendant'
+      : `the ${CREATURES[which].name}`;
 const roleCount = (t: { atLeast?: number; atMost?: number }): string => {
   const parts: string[] = [];
   if (t.atLeast !== undefined) parts.push(`at least ${t.atLeast}`);
@@ -169,11 +180,13 @@ export function describeBehavior(b: Behavior): string {
     case 'contestWarden':
       return `contest the Warden (health at least ${pct(b.hpAtLeast ?? 0.5)}, prepare ${
         b.prepSeconds ?? 20
-      } s early)`;
+      } s early, with ${b.partyAtLeast ?? 3} or more)`;
     case 'contestCreature':
       return `contest ${creatureName(b.which)} (health at least ${pct(b.hpAtLeast ?? 0.5)}, prepare ${
         b.prepSeconds ?? 20
-      } s early, within ${b.within ?? 40})`;
+      } s early, within ${b.within ?? 40}, with ${
+        b.partyAtLeast ?? (b.which === 'ascendant' ? 3 : 2)
+      } or more)`;
     case 'farm':
       return b.mode === 'lastHit' ? 'last hit the wave' : 'farm the nearest minion';
     case 'manageWave':
@@ -309,8 +322,13 @@ export const TRIGGER_FORMS: Readonly<Record<Trigger['kind'], KindForm>> = {
       {
         key: 'which',
         label: 'which',
-        options: ['any', 'pyrefang', 'voidmaul'],
-        labels: ['any', 'the Pyrefang (bot ring)', 'the Voidmaul (top ring)'],
+        options: ['any', 'pyrefang', 'voidmaul', 'ascendant'],
+        labels: [
+          'any',
+          'the Pyrefang (bot ring)',
+          'the Voidmaul (top ring)',
+          'the Ascendant (either ring)',
+        ],
       },
       { key: 'state', label: 'is', options: ['up', 'spawning', 'down'] },
     ],
@@ -507,6 +525,13 @@ export const BEHAVIOR_FORMS: Readonly<Record<Behavior['kind'], KindForm>> = {
     nums: [
       { key: 'hpAtLeast', label: 'when health at least', min: 0, max: 1, step: 0.05, pct: true },
       { key: 'prepSeconds', label: 'prepare (s) before spawn', min: 0, max: 300, step: 5 },
+      {
+        key: 'partyAtLeast',
+        label: 'fight it with at least (allies, you included)',
+        min: 1,
+        max: 5,
+        step: 1,
+      },
     ],
   },
   contestCreature: {
@@ -515,14 +540,26 @@ export const BEHAVIOR_FORMS: Readonly<Record<Behavior['kind'], KindForm>> = {
       {
         key: 'which',
         label: 'which',
-        options: ['any', 'pyrefang', 'voidmaul'],
-        labels: ['any', 'the Pyrefang (bot ring)', 'the Voidmaul (top ring)'],
+        options: ['any', 'pyrefang', 'voidmaul', 'ascendant'],
+        labels: [
+          'any',
+          'the Pyrefang (bot ring)',
+          'the Voidmaul (top ring)',
+          'the Ascendant (either ring)',
+        ],
       },
     ],
     nums: [
       { key: 'hpAtLeast', label: 'when health at least', min: 0, max: 1, step: 0.05, pct: true },
       { key: 'prepSeconds', label: 'prepare (s) before it rises', min: 0, max: 300, step: 5 },
       { key: 'within', label: 'walk to it within', min: 0, max: 200, step: 5 },
+      {
+        key: 'partyAtLeast',
+        label: 'fight it with at least (allies, you included)',
+        min: 1,
+        max: 5,
+        step: 1,
+      },
     ],
   },
   farm: {

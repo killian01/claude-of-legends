@@ -150,13 +150,17 @@ version 4.
 with and/or/not: own health, mana, level, gold, and time thresholds; enemy or ally
 champions within a radius (count); an enemy champion missing (from the last-seen memory);
 the lane wave ahead, behind, or under a tower; an enemy tower in reach; the Warden up,
-spawning within N seconds, or down; a ring creature (the Pyrefang, the Voidmaul, or any)
-up, rising within N seconds, or down (ADR 0022); an ability or sigil ready; a coach order
-active; own lane assignment.
+spawning within N seconds, or down; a ring creature (the Pyrefang, the Voidmaul, an
+Ascendant, or any) up, rising within N seconds, or down (ADR 0022); an ability or sigil
+ready; a coach order active; own lane assignment.
 
 **Behaviors** (v1), each with its parameters: farm the lane, poke, engage, retreat, recall,
-siege, rotate to a lane, contest the Warden, contest a ring creature (the named one or
-the nearest, within a range), follow an ally, hold a position, obey the coach order. A behavior is a macro intent the engine turns into movement, attacks, and
+siege, rotate to a lane, contest the Warden, contest a ring creature (the named one, an
+Ascendant, or the nearest, within a range; `which: 'ascendant'` names either ring's
+Ascendant, a body a team fights the way it fights the Warden; both contests wait for a
+party, `partyAtLeast` allied champions near the body, self included: two for a creature,
+three for an Ascendant or the Warden, since a lone bot pokes a body sized for a team for
+nothing), follow an ally, hold a position, obey the coach order. A behavior is a macro intent the engine turns into movement, attacks, and
 casts through the shared micro.
 
 **The Laner is the default playbook.** The scripted Laner is already structured as
@@ -248,7 +252,10 @@ of escort before the wave, a deeper dive under towers, a fight that holds alone,
 Warden only when healthy and close to its spawn, no regroup bell: three lanes of pressure
 all match); the Objective player
 (the Warden and the camps: at the pit forty-five seconds early, ground given under the
-tower when outnumbered alone, the camps before the wave). Each is one playbook file under
+tower when outnumbered alone, the camps before the wave). Every style rallies to an
+Ascendant (ADR 0022, round two) the way it rallies to the Warden: the same stance, the
+same health gate, the team and not a pair, and none of them starts on a creature, an
+Ascendant or the Warden without the party the body wants. Each is one playbook file under
 `src/sim/content/playbooks/`, readable and copyable by any owner, and the draw runs on
 every host, so the server's backfill, the Arena, sparring, the series, offline practice
 and the environment vary the same way: two sparrings on different seeds meet different

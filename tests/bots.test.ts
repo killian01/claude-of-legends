@@ -109,7 +109,10 @@ describe('the laner bot', () => {
     expect(bot.gold).toBeLessThan(3000);
   });
 
-  it('walks to a live Warden without waiting for an ally to go first', () => {
+  it('walks to a live Warden with the party beside it, and holds alone', () => {
+    // The Warden's body wants a team (docs/plan-rings.md, round two): a
+    // lone bot no longer walks in to poke it, but a group walking together
+    // is its own party and never waits for one of its own to go first.
     const sim = new Sim(41);
     sim.objectives.nextSpawnAt = 1;
     for (let i = 0; i < 60 && ![...sim.units.values()].some((u) => u.kind === 'warden'); i++) {
@@ -123,6 +126,10 @@ describe('the laner bot', () => {
     const bot = sim.addChampion(0, toward);
     sim.attachPolicy(bot.id, laner);
     const d0 = Math.hypot(bot.pos.x - warden.pos.x, bot.pos.z - warden.pos.z);
+    for (let i = 0; i < 60; i++) sim.tick();
+    expect(Math.hypot(bot.pos.x - warden.pos.x, bot.pos.z - warden.pos.z)).toBeGreaterThan(d0 - 3);
+    sim.addChampion(0, { x: toward.x + 3, z: toward.z });
+    sim.addChampion(0, { x: toward.x, z: toward.z + 3 });
     for (let i = 0; i < 120; i++) sim.tick();
     const d1 = Math.hypot(bot.pos.x - warden.pos.x, bot.pos.z - warden.pos.z);
     expect(d1).toBeLessThan(d0 - 5);
