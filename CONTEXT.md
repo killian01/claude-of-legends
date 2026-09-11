@@ -25,18 +25,20 @@ house style on the roster champion the fill hands it. Never rated, named by its 
 _Avoid_: bot fill, backfill bot, default bot
 
 **House style**:
-One of the brains a house bot plays: the Laner, the Brawler, the Sieger or the Objective
-player, each a playbook anyone can read. Drawn from the match seed for every seat the fill
-hands out, on every host, so two matches on different seeds are not played the same way.
+One of the brains a house bot plays: the Laner, the Brawler, the Sieger, the Objective
+player or the Jungler, each a playbook anyone can read. A lane seat draws one of the first
+four from the match seed, on every host, so two matches on different seeds are not played
+the same way; the forest's seat plays the Jungler.
 _Avoid_: personality, difficulty, AI level, preset, house playbook
 
 **Fill**:
 How a team's empty seats are completed. Ranked bots first: the pool's bots seated from the
 match seed, one per account, no champion twice inside a team, each an owned seat rated on
 its account's live way. Then house bots on the roster's lanes around what the team holds, a
-tank or a fighter for each top seat, a mage, an assassin or a battlemage for mid, a marksman
-and a support for bot, the skirmisher wherever a seat is open, drawn from the match seed
-among the champions the team does not hold. The same rule on every host: the live queue,
+tank or a fighter for the top seat, a mage, an assassin or a battlemage for mid, a marksman
+and a support for bot, a fighter, a tank, a skirmisher or an assassin for the forest (the
+Jungler's seat, on every five-seat team), the skirmisher wherever a seat is open, drawn from
+the match seed among the champions the team does not hold. The same rule on every host: the live queue,
 the Arena (house bots only there), sparring, offline practice, the environment.
 _Avoid_: draft (the Forge's term), autofill, backfill, composition
 
@@ -44,8 +46,9 @@ _Avoid_: draft (the Forge's term), autofill, backfill, composition
 The lane a champion's role plays by default: top for the tank and the fighter, mid for the
 mage, the assassin and the battlemage, bot for the marksman and the support. The skirmisher
 has none and takes the lane with a seat open. A five-seat team holds one mid, two top and
-two bot; a champion sits in its home lane while a seat is open there, and every champion of
-a team holds a lane from the start, a human's seat counted like a bot's.
+two bot, and a seat that asks for the forest first (the Jungler) holds no lane, so a house
+team fields one top; a champion sits in its home lane while a seat is open there, and every
+other champion of a team holds a lane from the start, a human's seat counted like a bot's.
 _Avoid_: role lane, default lane, position, main lane
 
 **Bot lane**:
@@ -109,8 +112,13 @@ The open diagonal corridor between the two halves, running from the point where 
 _Avoid_: stream, channel, mid river (it is one river, end to end)
 
 **Warden**:
-The neutral river monster. It spawns in one of two mirrored river pits on an announced clock, is always visible to both teams, fights only champions, and the team that lands the killing blow claims the Warden's Boon.
-_Avoid_: dragon, boss, monster names from other games
+The neutral objective. It rises on an announced clock in one of the map's pits: the first
+Warden at the first pit (the Star Orchard's plaza), every later one at a pit drawn among the
+others and named beside the clock ("Warden 2:10 at the west glade": the plaza, and the
+glade and the hollow of each forest, the widest rooms the forests hold). Always visible to
+both teams, fights only champions, and the team that lands the killing blow claims the
+Warden's Boon.
+_Avoid_: dragon, boss, monster names from other games, nest, lair
 
 **Warden's Boon**:
 The team-wide, death-surviving damage buff granted when a team slays the Warden. Stacks a
@@ -129,8 +137,8 @@ _Avoid_: pit (the Warden's), arena (the bots' ladder), platform (the spawn terra
 The bot ring's creature: a lean, incandescent predator with a spine of embers and a trail
 of fire. Rises first, at 4:00, and again three minutes after each death, carrying Might, Tide
 and Tempo in that order, once each; its fourth rise and every later one is its Ascendant.
-Neutral like the Warden: fights champions only, visible to both teams, keeps its target
-anywhere on the platform (the disc and its fan stairs, the ring's leash), resets to full
+Neutral like the Warden: fights champions only, in the fog until a team has sight on its
+ring (its clock is public, its body is not), keeps its target anywhere on the platform (the disc and its fan stairs, the ring's leash), resets to full
 when pulled past the foot of the stairs, and left alone walks home and heals fast (3
 percent of its health a second) rather than snapping. Sized for a duo: a lone champion
 takes a minute or more and leaves bleeding.
@@ -182,6 +190,38 @@ every two minutes while it stands, a healthy bot in range and one short of the b
 party walks to it and waits beside it, out of its reach, for the rest; once the party is
 there, they all strike. A player rallies with a ping or the coach's order instead.
 _Avoid_: call, team fight (a rally is the gathering, not the fight), objective timer
+
+**Camp**:
+One of the six spots in the forests where a neutral body stands from 0:30 and comes back
+on its clock once its last body has fallen: a round of three kinds a forest, from each
+team's door, the Spinecrest, the Brackenlings and the Barkmaw. In the fog for both teams,
+paid to whoever lands the blow, its xp shared among the killers' team beside it, the
+Barkmaw's killer taking a personal attack speed buff. Each team remembers what it last saw
+at a spot, and that memory is what a bot routes on.
+_Avoid_: jungle monster, creep, buff camp (say the Barkmaw), neutral (alone)
+
+**Spinecrest**:
+The plain camp: a squat amber-jade prowler with a ridge of thorns, one body, the first a
+jungler clears, nearest its team's door in each forest.
+_Avoid_: jungle beast, wolf, gromp
+
+**Brackenlings**:
+The pack camp: three small fern-crested skitterers, quick and frail, paid per body, the
+second camp of each forest's round.
+_Avoid_: raptors, wolves, minions (they are not a wave)
+
+**Barkmaw**:
+The forest's brute: bark-hided with a wide maw, one body, slower to come back, at the far
+and contested end of each forest; its killer carries an attack speed buff for a while.
+_Avoid_: buff camp, red buff, blue buff, krug
+
+**Jungler**:
+The forest's post. A seat that asks for the forest instead of a lane (the lane preference
+"jungle") holds no lane and walks its forest's round, clearing each camp with its abilities
+on what its team has seen, ganks a lane where an ally fights, and is its team's first body
+at every neutral objective. Every five-seat house team fields one, the fifth house style;
+a bot asks for the post with the forest as its lane preference.
+_Avoid_: jungle (alone, as a role), roamer, forester, ganker
 
 **Windup**:
 The commitment beat before a hit lands. For an ability: costs are paid at press, the spell resolves after the delay, and a stun during it cancels the cast. For an auto-attack: the strike resolves a beat after the swing starts; moving, a stun, or a dash cancels it and refunds the attack timer (the orb-walk rule), and a target that blinks out of reach makes the committed strike whiff. The counterplay window big hits owe their victims.

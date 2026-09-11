@@ -45,7 +45,18 @@ under `/map-exports/` for the exploration pages that compare revisions.
   are spent, its Ascendant, the body a team fights for the Wrath. The whole
   platform is each creature's leash, the disc and its fan stairs down to their
   foot (`RingSite.leash`, read off the export's `stairCrossings`): a champion on
-  the steps is still in the fight. The launch map fixture has none.
+  the steps is still in the fight. A creature sits in the fog until a team has
+  sight on its ring (ADR 0023). The launch map fixture has none.
+- The Warden's pits (`GameMap.wardenPits`, ADR 0023): the plaza from the
+  export's center landmark, where the first Warden rises, and four forest rooms
+  authored in `src/sim/content/star_orchard.ts`, the widest ground the forest
+  corridors open into away from the camps, measured on the grid; every later
+  Warden rises at a pit drawn among them. A Blender revision with two authored
+  clearings would let those fights breathe.
+- The six camp landmarks become `GameMap.camps`, each of a kind
+  (`src/sim/content/camps.ts`): from each team's fountain outward, the
+  Spinecrest, the Brackenlings, the Barkmaw, so both junglers walk the same
+  round and the buff camp is the far end of each forest.
 - The playbooks read the match's map, not the launch map, so the house
   bots walk the Star Orchard's lanes (`SlotContext.map`) and contest its
   rings.
@@ -88,7 +99,8 @@ ground.
 ## Known limits
 
 - Fog of war by sight range only; the scenery does not occlude, and there
-  is no brush yet.
+  is no brush yet. The fog sheet follows the terrain (`src/render/fog_sheet.ts`),
+  so the ring discs and the terraces sit under it.
 - Tower foundations are baked into the grid and stay blocked after a tower
   falls.
 - The export names its objects in French inside the model file; nothing

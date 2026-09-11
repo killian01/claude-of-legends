@@ -167,8 +167,13 @@ body before its strikes), follow an ally, hold a position, obey the coach order.
 `warden` and `creature` triggers narrow `up` with `hpAtMost` and `near`, which is what
 the `finish-warden` and `finish-creature` plays every house style carries right above
 `fight` read: the last strikes on a body under a fifth in reach land whatever is in
-sight. A behavior is a macro intent the engine turns into movement, attacks, and
-casts through the shared micro.
+sight. The forest round (ADR 0023) added the `jungle` behavior (the camp in reach
+cleared with the kit's abilities before the strikes, else the walk to the camp the team
+believes up and can reach first, on the team's memory of its spots the observation
+carries; the own forest by default) and the forest as a value of the lane preference and
+the `lane` trigger: a bot that asks for `jungle` first holds no lane. A behavior is a
+macro intent the engine turns into movement, attacks, and casts through the shared
+micro.
 
 **The Laner is the default playbook.** The scripted Laner is already structured as
 priorities (survive, avoid dives, fight, farm, push with the wave, prepare the Warden,
@@ -250,8 +255,11 @@ summed over the five matches and a replay per seed; a bot with no previous versi
 its series against house bots alone. Five seeds is a reading, not a proof: ten seeds
 move a rate by fifteen points, so a change that looks like a coin flip is one.
 
-House bots do not all play the same brain. Each seat the fill hands out draws a house
-style from the match seed: the Laner; the Brawler (the fight first: a walk-in only with
+House bots do not all play the same brain. Each lane seat the fill hands out draws a house
+style from the match seed, and the forest's seat plays the Jungler (ADR 0023: the forest's
+round on what the team has seen, the Objective player's stance on every neutral body from
+across the map, a gank once it has the levels and the health, one on every five-seat house
+team by post rather than by draw): the Laner; the Brawler (the fight first: a walk-in only with
 the odds, the lowest enemy first, ground given under the tower when the odds turn badly,
 joining a fight from across the map, retreating late, no camps, the group push at eight
 minutes); the Sieger (the wave and the towers: a structure in reach with a single minion
