@@ -1,7 +1,7 @@
-// Cut the tour into something postable: title card, one labelled passage
-// per surface, cross fades, end card. Reads what scripts/tour_clips.mjs
-// filmed (tour/scenes.json plus a folder of frames per scene) and writes
-// one mp4.
+// Cut the tour into something postable: title card, the match passages
+// (scripts/tour_match.mjs), one labelled passage per surface
+// (scripts/tour_clips.mjs), cross fades, end card. Reads tour/scenes.json
+// plus a folder of frames per scene and writes one mp4.
 //
 //   node scripts/tour_montage.mjs [tourDir] [out.mp4]
 //
@@ -34,6 +34,52 @@ const FADE = 0.35;
 // The starts skip the moment a surface spends arriving; the lengths are
 // what the passage says, not what it recorded.
 const CUT = [
+  // The match first (scripts/tour_match.mjs films these off a replay,
+  // frame by frame, so they play as filmed): the map, the forest's post,
+  // the rings, a fight, the Ascendant, the Warden drawn to a forest room.
+  {
+    scene: 'orchard',
+    start: 0,
+    seconds: 9.0,
+    label: 'THE STAR ORCHARD',
+    sub: 'three lanes · two forests · a plaza · two rings',
+  },
+  {
+    scene: 'jungler',
+    start: 0,
+    seconds: 9.0,
+    label: 'THE JUNGLER',
+    sub: 'a fifth post · three kinds of camp',
+  },
+  {
+    scene: 'pyrefang',
+    start: 0,
+    seconds: 11.0,
+    label: 'THE PYREFANG',
+    sub: 'slay it, and the whole team keeps a favor',
+  },
+  {
+    scene: 'fight',
+    start: 0,
+    seconds: 11.0,
+    label: '5v5 IN A BROWSER TAB',
+    sub: 'no install · one deterministic sim',
+  },
+  {
+    scene: 'ascendant',
+    start: 0,
+    seconds: 7.0,
+    label: 'THE ASCENDANT',
+    sub: 'the fourth rise · a body for a full team · the Wrath',
+  },
+  {
+    scene: 'warden',
+    start: 0,
+    seconds: 11.0,
+    label: 'THE WARDEN',
+    sub: 'drawn to a forest room · never twice the same pit',
+  },
+  // Then what the game is beside a match.
   {
     scene: 'home',
     start: 1.0,
@@ -44,21 +90,21 @@ const CUT = [
   {
     scene: 'champions',
     start: 1.4,
-    seconds: 6.0,
+    seconds: 5.5,
     label: 'TEN CHAMPIONS',
     sub: 'every one with a full kit',
   },
   {
     scene: 'forge',
     start: 2.0,
-    seconds: 7.0,
+    seconds: 6.5,
     label: 'THE FORGE',
     sub: 'build an eleventh · kit and all',
   },
   {
     scene: 'academy',
     start: 2.6,
-    seconds: 7.5,
+    seconds: 6.5,
     label: 'THE ACADEMY',
     sub: 'a bot is written · not coded',
   },

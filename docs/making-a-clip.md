@@ -133,12 +133,44 @@ Film those two somewhere with a GPU. Refilm the scene and the montage picks
 the frames up on its own, because the rule is on the measured rate and
 nothing has to be edited.
 
+## The match passages, frame by frame
+
+The screencast is the wrong tool for the 3D passages on a server: it
+hands back the frames the rasteriser managed, one a second, and a second
+is not a video. `scripts/tour_match.mjs` films the match another way. It
+opens a saved replay in the real viewer, seeks to the second a passage
+starts at, and then takes over the page's clock: `performance.now`, the
+animation frames and the timers run on a virtual clock the script advances
+by one frame's worth between two screenshots. The renderer takes as long as
+it takes on each frame, the sim never notices, and the passage comes out
+at twenty-four frames a second at one times speed, HUD and all.
+
+```
+DATA_DIR=.dev/data node scripts/clip_seed.mjs --seeds 1 --from 2 --minutes 30 --replay-id 902
+TOUR_URL=http://localhost:5174 REPLAY_ID=902 node scripts/tour_match.mjs
+```
+
+The camera is the viewer's own: a click on the minimap looks at a point
+(a fixed shot; a pan is a click a frame along a line), and Space recenters
+on the seat the replay follows (a tracking shot on a champion, the jungler
+on its round). Every passage names the seat it follows by unit id, the
+second it starts at, its length and its camera, in the table at the top of
+the script; they are written against one replay, and a new replay means a
+scout of its events with positions and a new table. Three seconds of lead
+run through unfilmed so the seek's announcement is off the screen when the
+passage opens. A frame costs about a second here at 1280x720, so a minute
+of passages is half an hour of filming; `TOUR_MAX_SECONDS=2` probes a new
+scene before the whole thing is spent on it. The montage plays these as
+filmed: `scenes.json` says how many frames covered how long, and the rate
+is above its smooth line.
+
 ## Assembling it
 
 `scripts/tour_montage.mjs` cuts what was filmed into something postable: a
 title card off `public/social-card.jpg` so the clip and the link preview
-open on the same image, one labelled passage per surface, cross fades, and
-an end card. Drop your own recording of a fight at `tour/fight.mp4` and it
+open on the same image, the match passages first (the map, the jungler, the
+Pyrefang, a fight, the Ascendant, the Warden in a forest room), then one
+labelled passage per surface, cross fades, and an end card. Drop your own recording of a fight at `tour/fight.mp4` and it
 takes the place of the one filmed here.
 
 ```

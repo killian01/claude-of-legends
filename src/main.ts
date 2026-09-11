@@ -366,6 +366,11 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
     const viewerIdx = followedSeat(rec.picks, unitIds, follow);
     const ownUnitId = unitIds[viewerIdx] ?? null;
     const world = new ReplayWorld(sim, seatNames);
+    // A probe for the tour's camera (scripts/tour_match.mjs reads a unit's
+    // position off it to track a champion), on the dev server only.
+    if (import.meta.env.DEV) {
+      (window as unknown as { __replay?: unknown }).__replay = { world, unitIds };
+    }
     let stopped = false;
     let bar: ReplayBar | null = null;
     // The second pass: the match played once ahead in a worker, a

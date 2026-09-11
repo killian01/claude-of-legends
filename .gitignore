@@ -28,3 +28,5 @@ dist-matrix*/
 .dev/
 dist-champions*/
 __pycache__/
+# The tour films (scripts/tour_clips.mjs, scripts/tour_match.mjs): frames and the montage, never versioned.
+tour/
