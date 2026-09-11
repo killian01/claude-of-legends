@@ -7,7 +7,7 @@
 import { GOTO_DONE_RADIUS } from '../coach';
 import { CHAMPIONS, type ChampionRole } from '../content/champions';
 import { hypot } from '../exact';
-import type { Action, ObsCreature, ObsUnit } from '../policy';
+import type { Action, ObsCreature, Observation, ObsUnit } from '../policy';
 import { nextKitStep } from './kit';
 import {
   BESIDE_RANGE,
@@ -409,6 +409,52 @@ function answerVanish(ctx: SlotContext, hpAtLeast: number): Action | null {
 export const CREATURE_PARTY = 2;
 export const WARDEN_PARTY = 3;
 const GROUP_RANGE = 15;
+// A rally: the seconds after a body rises, and again every RALLY_EVERY_S
+// while it stands, during which a bot short of its party by one walks to
+// the body and waits beside it for the rest. The clock is the call every
+// bot reads alike, so a team gathers without a word; the windows bound
+// the waiting, so a lone laner does not stand at a ring all match.
+export const RALLY_EVERY_S = 120;
+export const RALLY_WINDOW_S = 40;
+// How close a gathering bot stands to the body: outside its reach, since
+// a neutral body only fights what hits it.
+const GATHER_STAND_OFF = 6;
+
+function rallying(obs: Observation, roseAt: number | null | undefined): boolean {
+  if (roseAt === null || roseAt === undefined) return false;
+  const since = obs.time - roseAt;
+  return since >= 0 && since % RALLY_EVERY_S <= RALLY_WINDOW_S;
+}
+
+// The strike on a live body in reach: the kit's abilities first, the way
+// a fight spends them on a champion (the maintainer's ask: bots hit a
+// creature with their spells too), then the plain attack.
+function strikeBody(ctx: SlotContext, body: ObsUnit): Action | null {
+  const cast = pickCast(ctx, body);
+  if (cast) return cast;
+  if (dist(ctx.s.x, ctx.s.z, body) <= FARM_RANGE) return { kind: 'attack', targetId: body.id };
+  return null;
+}
+
+// Short of the party: during a rally, a healthy bot within range walks to
+// the body and waits beside it, out of its reach, for the rest.
+function gather(
+  ctx: SlotContext,
+  body: ObsUnit,
+  party: number,
+  partyAtLeast: number,
+  hpAtLeast: number,
+  within: number,
+  roseAt: number | null | undefined,
+): Action | null {
+  const { s, obs } = ctx;
+  if (party < partyAtLeast - 1 || s.hpFrac < hpAtLeast) return null;
+  const d = dist(s.x, s.z, body);
+  if (d > within || !rallying(obs, roseAt)) return null;
+  if (d <= GATHER_STAND_OFF + 2) return { kind: 'noop' };
+  const { jx, jz } = ctx.jitter();
+  return { kind: 'move', x: body.x + jx, z: body.z + jz };
+}
 
 function partyAt(ctx: SlotContext, x: number, z: number, within: number): number {
   const { s, obs } = ctx;
@@ -437,9 +483,21 @@ function contestWarden(
   const { jx, jz } = ctx.jitter();
   const warden = ctx.enemies.find((u) => u.kind === 'warden');
   if (warden) {
-    if (partyAt(ctx, warden.x, warden.z, WARDEN_APPROACH_RANGE) < partyAtLeast) return null;
+    const party = partyAt(ctx, warden.x, warden.z, WARDEN_APPROACH_RANGE);
+    if (party < partyAtLeast) {
+      return gather(
+        ctx,
+        warden,
+        party,
+        partyAtLeast,
+        hpAtLeast,
+        WARDEN_APPROACH_RANGE,
+        obs.wardenRoseAt,
+      );
+    }
+    const hit = strikeBody(ctx, warden);
+    if (hit) return hit;
     const dw = dist(s.x, s.z, warden);
-    if (dw <= FARM_RANGE) return { kind: 'attack', targetId: warden.id };
     if (dw <= WARDEN_APPROACH_RANGE && s.hpFrac >= hpAtLeast) {
       return { kind: 'move', x: warden.x + jx, z: warden.z + jz };
     }
@@ -498,9 +556,14 @@ function contestCreature(
   const { jx, jz } = ctx.jitter();
   const live = nearest(liveCreatures(ctx, clocks), s.x, s.z);
   if (live) {
-    if (partyAt(ctx, live.x, live.z, within) < partyAtLeast) return null;
+    const party = partyAt(ctx, live.x, live.z, within);
+    if (party < partyAtLeast) {
+      const roseAt = clocks.find((c) => c.unitId === live.id)?.roseAt;
+      return gather(ctx, live, party, partyAtLeast, hpAtLeast, within, roseAt);
+    }
+    const hit = strikeBody(ctx, live);
+    if (hit) return hit;
     const d = dist(s.x, s.z, live);
-    if (d <= FARM_RANGE) return { kind: 'attack', targetId: live.id };
     if (d <= within && s.hpFrac >= hpAtLeast) {
       return { kind: 'move', x: live.x + jx, z: live.z + jz };
     }
@@ -711,10 +774,7 @@ function obeyOrder(ctx: SlotContext): Action | null {
       return followAlly(ctx, 4);
     case 'warden': {
       const warden = ctx.enemies.find((u) => u.kind === 'warden');
-      if (warden) {
-        if (dist(s.x, s.z, warden) <= FARM_RANGE) return { kind: 'attack', targetId: warden.id };
-        return { kind: 'move', x: warden.x, z: warden.z };
-      }
+      if (warden) return strikeBody(ctx, warden) ?? { kind: 'move', x: warden.x, z: warden.z };
       let pit = ctx.map.wardenPits[0]!;
       for (const p of ctx.map.wardenPits) {
         if (hypot(p.x - s.x, p.z - s.z) < hypot(pit.x - s.x, pit.z - s.z)) pit = p;
@@ -726,10 +786,7 @@ function obeyOrder(ctx: SlotContext): Action | null {
       // soonest, held until it does.
       const clocks = ringClocksOf(ctx, 'any');
       const live = nearest(liveCreatures(ctx, clocks), s.x, s.z);
-      if (live) {
-        if (dist(s.x, s.z, live) <= FARM_RANGE) return { kind: 'attack', targetId: live.id };
-        return { kind: 'move', x: live.x, z: live.z };
-      }
+      if (live) return strikeBody(ctx, live) ?? { kind: 'move', x: live.x, z: live.z };
       let next: ObsCreature | null = null;
       for (const c of clocks) {
         if (c.riseAt !== null && (!next || c.riseAt < (next.riseAt ?? 0))) next = c;

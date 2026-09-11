@@ -61,11 +61,27 @@ export type Trigger =
   | { kind: 'underTower' }
   // The Warden: `up` while one is alive, `spawning` while the next one is
   // due within `within` seconds (default 20), `down` when none is alive.
-  | { kind: 'warden'; state: 'up' | 'spawning' | 'down'; within?: number }
+  // `up` narrows to a live one at or under `hpAtMost` of its health and
+  // within `near` units of the bot (a finish play reads both).
+  | {
+      kind: 'warden';
+      state: 'up' | 'spawning' | 'down';
+      within?: number;
+      hpAtMost?: number;
+      near?: number;
+    }
   // A ring's creature (CONTEXT.md: Ring): `up` while one is alive,
   // `spawning` while the next is due within `within` seconds (default 20),
-  // `down` when none is; `which` names the creature, any by default.
-  | { kind: 'creature'; which?: CreatureName; state: 'up' | 'spawning' | 'down'; within?: number }
+  // `down` when none is; `which` names the creature, any by default; `up`
+  // narrows like the Warden's with `hpAtMost` and `near`.
+  | {
+      kind: 'creature';
+      which?: CreatureName;
+      state: 'up' | 'spawning' | 'down';
+      within?: number;
+      hpAtMost?: number;
+      near?: number;
+    }
   | { kind: 'abilityReady'; key: AbilityKey }
   | { kind: 'sigilReady'; id: string }
   // The lane this seat was assigned.

@@ -314,7 +314,11 @@ export const TRIGGER_FORMS: Readonly<Record<Trigger['kind'], KindForm>> = {
   warden: {
     label: 'the Warden',
     choices: [{ key: 'state', label: 'is', options: ['up', 'spawning', 'down'] }],
-    nums: [{ key: 'within', label: 'spawning within (s)', min: 0, max: 600, step: 5 }],
+    nums: [
+      { key: 'within', label: 'spawning within (s)', min: 0, max: 600, step: 5 },
+      { key: 'hpAtMost', label: 'up with health at most', min: 0, max: 1, step: 0.05, pct: true },
+      { key: 'near', label: 'up within (units of me)', min: 0, max: 200, step: 5 },
+    ],
   },
   creature: {
     label: 'a ring creature',
@@ -332,7 +336,11 @@ export const TRIGGER_FORMS: Readonly<Record<Trigger['kind'], KindForm>> = {
       },
       { key: 'state', label: 'is', options: ['up', 'spawning', 'down'] },
     ],
-    nums: [{ key: 'within', label: 'rising within (s)', min: 0, max: 600, step: 5 }],
+    nums: [
+      { key: 'within', label: 'rising within (s)', min: 0, max: 600, step: 5 },
+      { key: 'hpAtMost', label: 'up with health at most', min: 0, max: 1, step: 0.05, pct: true },
+      { key: 'near', label: 'up within (units of me)', min: 0, max: 200, step: 5 },
+    ],
   },
   abilityReady: {
     label: 'an ability is ready',

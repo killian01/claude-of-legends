@@ -4,7 +4,7 @@
 
 import { ROLE_DAMAGE } from '../content/champions';
 import { hypot } from '../exact';
-import type { ObsCreature, ObsSeat } from '../policy';
+import type { ObsCreature, ObsSeat, ObsUnit } from '../policy';
 import type { SlotContext } from './micro';
 import { fightOdds, ODDS_RADIUS } from './odds';
 import type { CreatureName, Side, Trigger } from './types';
@@ -80,8 +80,9 @@ export function holds(t: Trigger, ctx: SlotContext): boolean {
     case 'underTower':
       return ctx.inTowerReach(s.x, s.z);
     case 'warden': {
-      const up = ctx.enemies.some((u) => u.kind === 'warden');
-      if (t.state === 'up') return up;
+      const live = ctx.enemies.find((u) => u.kind === 'warden');
+      if (t.state === 'up') return live !== undefined && bodyMeans(ctx, live, t.hpAtMost, t.near);
+      const up = live !== undefined;
       if (t.state === 'down') return !up;
       if (up || obs.objectiveSpawnAt == null) return false;
       const until = obs.objectiveSpawnAt - obs.time;
@@ -90,7 +91,12 @@ export function holds(t: Trigger, ctx: SlotContext): boolean {
     case 'creature': {
       const clocks = (obs.creatures ?? []).filter((c) => clockMeans(c, t.which));
       const up = clocks.some((c) => c.unitId !== null);
-      if (t.state === 'up') return up;
+      if (t.state === 'up') {
+        return clocks.some((c) => {
+          const live = c.unitId === null ? undefined : ctx.enemies.find((u) => u.id === c.unitId);
+          return live !== undefined && bodyMeans(ctx, live, t.hpAtMost, t.near);
+        });
+      }
       if (t.state === 'down') return !up;
       return clocks.some(
         (c) =>
@@ -147,6 +153,14 @@ export function holds(t: Trigger, ctx: SlotContext): boolean {
     case 'any':
       return t.of.some((sub) => holds(sub, ctx));
   }
+}
+
+// Whether a live body is the one an `up` trigger means: at or under the
+// health fraction and within the distance, when the play names them.
+function bodyMeans(ctx: SlotContext, body: ObsUnit, hpAtMost?: number, near?: number): boolean {
+  if (hpAtMost !== undefined && body.hpFrac > hpAtMost) return false;
+  if (near !== undefined && hypot(body.x - ctx.s.x, body.z - ctx.s.z) > near) return false;
+  return true;
 }
 
 // Whether a ring's clock is what a play means by `which`: a creature by

@@ -224,8 +224,10 @@ describe('the creature vocabulary', () => {
       plays: [{ id: 'ring', when: { kind: 'always' }, do: { kind: 'contestCreature' } }],
     };
     sim.attachPolicy(me.id, playbookPolicy(def, undefined, sim.map));
-    // Alone, the bot stays: a creature is a duo's fight (the body is sized
-    // so that a lone champion pokes it for a minute and a half).
+    // Alone and between rally windows, the bot stays: a creature is a
+    // duo's fight (the body is sized so that a lone champion pokes it for
+    // a minute and a half).
+    sim.time = sim.ringClocks().find((c) => c.ring === 'bot')!.roseAt! + 60;
     const alone = { ...me.pos };
     for (let i = 0; i < 3 * TICKS_PER_S; i++) sim.tick();
     expect(Math.hypot(me.pos.x - alone.x, me.pos.z - alone.z)).toBeLessThan(1);
@@ -266,7 +268,9 @@ describe('the creature vocabulary', () => {
       ],
     };
     sim.attachPolicy(me.id, playbookPolicy(def, undefined, sim.map));
-    // A team's fight: with one ally there the bot still waits, with two it goes.
+    // A team's fight: with one ally there the bot still waits (between
+    // rally windows), with two it goes.
+    sim.time = sim.ringClocks().find((c) => c.ring === 'bot')!.roseAt! + 60;
     sim.addChampion(0, { x: a.pos.x + 6, z: a.pos.z }, 'torv');
     const waiting = { ...me.pos };
     for (let i = 0; i < 3 * TICKS_PER_S; i++) sim.tick();
@@ -295,6 +299,97 @@ describe('the creature vocabulary', () => {
     sim.tick();
     const far = buildSlotContext(buildObservation(sim, me.id)!, new Rng(1), undefined, sim.map);
     expect(far.recallClear()).toBe(true);
+  });
+
+  it('spends its abilities on a creature in reach, not only its strikes', () => {
+    const sim = orchardSim();
+    const p = rise(sim, 'pyrefang');
+    const me = sim.addChampion(0, { x: p.pos.x + 3, z: p.pos.z }, 'sylra');
+    sim.setLevel(me.id, 6);
+    for (const key of ['Q', 'W', 'E', 'R'] as const) sim.levelAbility(me.id, key);
+    sim.addChampion(0, { x: p.pos.x - 3, z: p.pos.z }, 'torv');
+    const def: PlaybookDef = {
+      version: 1,
+      plays: [{ id: 'ring', when: { kind: 'always' }, do: { kind: 'contestCreature' } }],
+    };
+    sim.attachPolicy(me.id, playbookPolicy(def, undefined, sim.map));
+    let casts = 0;
+    let strikes = 0;
+    for (let i = 0; i < 10 * TICKS_PER_S; i++) {
+      for (const e of sim.tick()) {
+        if (e.type === 'cast' && e.unitId === me.id) casts++;
+        if (e.type === 'attack' && e.unitId === me.id && e.targetId === p.id) strikes++;
+      }
+    }
+    expect(casts).toBeGreaterThan(0);
+    expect(strikes).toBeGreaterThan(0);
+  });
+
+  it('finishes a body under a fifth in reach whatever is in sight: the house styles say so', () => {
+    for (const def of [LANER_PLAYBOOK, BRAWLER_PLAYBOOK, SIEGER_PLAYBOOK, OBJECTIVE_PLAYBOOK]) {
+      const ids = def.plays.map((p) => p.id);
+      expect(ids.indexOf('finish-creature')).toBeLessThan(ids.indexOf('fight'));
+      expect(ids.indexOf('finish-warden')).toBeLessThan(ids.indexOf('fight'));
+      const finish = def.plays.find((p) => p.id === 'finish-creature')!;
+      expect(finish.when).toMatchObject({ kind: 'creature', state: 'up', hpAtMost: 0.2, near: 10 });
+      expect(finish.do).toMatchObject({ kind: 'contestCreature', partyAtLeast: 1 });
+    }
+    // The trigger reads the live body's health and distance.
+    const sim = orchardSim();
+    const p = rise(sim, 'pyrefang');
+    const me = sim.addChampion(0, { x: p.pos.x + 4, z: p.pos.z }, 'vesk');
+    sim.tick();
+    const full = buildSlotContext(buildObservation(sim, me.id)!, new Rng(1), undefined, sim.map);
+    expect(holds({ kind: 'creature', state: 'up', hpAtMost: 0.2, near: 10 }, full)).toBe(false);
+    expect(holds({ kind: 'creature', state: 'up', near: 10 }, full)).toBe(true);
+    p.hp = Math.round(p.maxHp * 0.1);
+    p.lastDamagedAt = sim.time;
+    sim.tick();
+    const low = buildSlotContext(buildObservation(sim, me.id)!, new Rng(1), undefined, sim.map);
+    expect(holds({ kind: 'creature', state: 'up', hpAtMost: 0.2, near: 10 }, low)).toBe(true);
+    expect(holds({ kind: 'creature', state: 'up', hpAtMost: 0.2, near: 2 }, low)).toBe(false);
+    // And a Laner beside that low creature keeps hitting it with an enemy
+    // champion in sight instead of turning to fight.
+    sim.addChampion(1, { x: p.pos.x + 14, z: p.pos.z + 6 }, 'rhoka');
+    sim.attachPolicy(me.id, playbookPolicy(LANER_PLAYBOOK, undefined, sim.map));
+    let struck = false;
+    for (let i = 0; i < 3 * TICKS_PER_S && !struck; i++) {
+      p.lastDamagedAt = sim.time;
+      for (const e of sim.tick()) {
+        if (e.type === 'damage' && e.sourceId === me.id && e.targetId === p.id) struck = true;
+      }
+    }
+    expect(struck).toBe(true);
+  });
+
+  it('rallies to a live body during its windows: short of the party by one, a bot waits beside it', () => {
+    const sim = orchardSim();
+    const p = rise(sim, 'pyrefang');
+    const clock = sim.ringClocks().find((c) => c.ring === 'bot')!;
+    expect(clock.roseAt).toBeCloseTo(sim.time, 0);
+    // The observation says when it rose, the Warden's too.
+    const me = sim.addChampion(0, { x: p.pos.x - 25, z: p.pos.z + 5 }, 'vesk');
+    sim.tick();
+    const obs = buildObservation(sim, me.id)!;
+    expect(obs.creatures?.find((c) => c.ring === 'bot')?.roseAt).toBe(clock.roseAt);
+    expect(obs.wardenRoseAt).toBeNull();
+    // A lone bot (one short of a duo) walks in and stands beside the
+    // creature without hitting it, inside the first window after the rise.
+    const def: PlaybookDef = {
+      version: 1,
+      plays: [{ id: 'ring', when: { kind: 'always' }, do: { kind: 'contestCreature' } }],
+    };
+    sim.attachPolicy(me.id, playbookPolicy(def, undefined, sim.map));
+    for (let i = 0; i < 12 * TICKS_PER_S; i++) sim.tick();
+    expect(Math.hypot(me.pos.x - p.pos.x, me.pos.z - p.pos.z)).toBeLessThan(10);
+    expect(p.hp).toBe(p.maxHp);
+    // Between windows it goes about its business: the same bot placed far
+    // again, past the window, stays.
+    sim.time = clock.roseAt! + 60;
+    me.pos = { x: p.pos.x - 25, z: p.pos.z + 5 };
+    const at = { ...me.pos };
+    for (let i = 0; i < 3 * TICKS_PER_S; i++) sim.tick();
+    expect(Math.hypot(me.pos.x - at.x, me.pos.z - at.z)).toBeLessThan(1);
   });
 
   it('pre-positions at the ring shortly before a rise, when close enough', () => {

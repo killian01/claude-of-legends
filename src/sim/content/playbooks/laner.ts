@@ -40,6 +40,20 @@ export const LANER_PLAYBOOK: PlaybookDef = {
     },
     { id: 'avoid-tower', when: { kind: 'underTower' }, do: { kind: 'avoidTower' } },
     { id: 'finish', when: { kind: 'always' }, do: { kind: 'finishSanctum' } },
+    // A body nearly down beats a fight: the last strikes on a creature or
+    // the Warden in reach land whatever is in sight (docs/plan-rings.md,
+    // round two: bots dropped an 8 percent Warden for an arriving enemy
+    // and it reset to full).
+    {
+      id: 'finish-warden',
+      when: { kind: 'warden', state: 'up', hpAtMost: 0.2, near: 10 },
+      do: { kind: 'contestWarden', partyAtLeast: 1 },
+    },
+    {
+      id: 'finish-creature',
+      when: { kind: 'creature', state: 'up', hpAtMost: 0.2, near: 10 },
+      do: { kind: 'contestCreature', partyAtLeast: 1 },
+    },
     { id: 'fight', when: { kind: 'enemyVisible' }, do: { kind: 'fight' } },
     // A fight the team is already in beats anything below: scouting round 1
     // found a third of the deaths outnumbered and fights taken one bot at a

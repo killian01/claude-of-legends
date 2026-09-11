@@ -202,8 +202,14 @@ function trigger(raw: unknown, at: string, depth: number, errors: Errors): Trigg
         errors.add(`${at}: warden state must be up, spawning or down`);
         return { kind: 'warden', state: 'up' };
       }
+      const t: Trigger = { kind: 'warden', state };
       const within = optNumber(raw, 'within', 0, 600, at, errors);
-      return within === undefined ? { kind: 'warden', state } : { kind: 'warden', state, within };
+      if (within !== undefined) t.within = within;
+      const hpAtMost = optNumber(raw, 'hpAtMost', 0, 1, at, errors);
+      if (hpAtMost !== undefined) t.hpAtMost = hpAtMost;
+      const near = optNumber(raw, 'near', 0, 200, at, errors);
+      if (near !== undefined) t.near = near;
+      return t;
     }
     case 'creature': {
       const state = raw.state;
@@ -216,6 +222,10 @@ function trigger(raw: unknown, at: string, depth: number, errors: Errors): Trigg
       if (which !== undefined) t.which = which;
       const within = optNumber(raw, 'within', 0, 600, at, errors);
       if (within !== undefined) t.within = within;
+      const hpAtMost = optNumber(raw, 'hpAtMost', 0, 1, at, errors);
+      if (hpAtMost !== undefined) t.hpAtMost = hpAtMost;
+      const near = optNumber(raw, 'near', 0, 200, at, errors);
+      if (near !== undefined) t.near = near;
       return t;
     }
     case 'abilityReady': {

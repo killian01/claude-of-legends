@@ -123,11 +123,14 @@ reads OK at every clock (`node scripts/creature_report.mjs`: the Pyrefang at 4:0
 34 s, five in 12, seven of ten lone champions in a median 68 s leaving at 32 percent; at
 12:00 a duo in 38 s and three of ten alone; the Warden at 12:00 five in 23 s and the
 strongest duo in 70 s; the Ascendant at 16:00 five in 43 s and no duo). The house bots on
-the export (`node scripts/rings_report.mjs --seeds 4 --max-min 30`): median 29:35, one
-creature a match, no Warden, no Ascendant risen inside 30 minutes; before the round it
-read 23:21 and 3.3 creatures a match, and no Warden either. The scripted bots do not
-rally to a team objective, so a body sized for a team is one they poke in pairs between
-lane fights: a rally is the bots' next plan. The eight voice clips are the maintainer's to
+the export (`node scripts/rings_report.mjs --seeds 4 --max-min 30`), after the rally
+round below: 2.3 creatures a match (the first at 9:16 on average), an Ascendant risen in
+one match of four (at 19:33), two matches of four decided inside 30 minutes, the side
+holding more favors winning both, and still no Warden: the two teams collide at the pit
+and the fight around it, not the body, decides the mid game. Right after the bodies grew
+and before the rally it read one creature a match and none of four decided; before the
+round, with bodies anyone soloed, 23:21 and 3.3 creatures a match, and no Warden either.
+A team that takes the Warden as a team is what the bots still lack. The eight voice clips are the maintainer's to
 render (`docs/design/sound.md`, "Lines pending their clips").
 
 ## Phases
@@ -262,6 +265,29 @@ color. `REPLAY_VERSION` moves to 6.
   default; short of it, the play passes and the bot farms or pushes, and the
   pre-positioning before a rise still draws the laners to the ring. The coach's
   `creature` order bypasses it: an order is an order.
+
+**The bots' rally (the same evening).** The first measurement after the bodies grew
+read one creature a match and no Warden: the house bots hit a body with their strikes
+only (the calibration had spent every ability), dropped an 8 percent Warden for an
+arriving enemy and watched it reset, and never gathered on a body that stayed up. Three
+things landed, all in the playbook language so a custom bot has them too: a contest
+spends the kit's abilities on the body before its strikes (`strikeBody`, the coach's
+orders too); `finish-warden` and `finish-creature` plays right above `fight` in every
+house style (the `warden` and `creature` triggers narrow `up` with `hpAtMost` and
+`near`); and the rally: the forty seconds after a body rises and again every two minutes
+while it stands, a healthy bot in range and one short of the party walks to it and waits
+beside it, out of its reach, for the rest (`RALLY_EVERY_S`, `RALLY_WINDOW_S`,
+`ObsCreature.roseAt`, `Observation.wardenRoseAt`, both additive). Beside it, the
+maintainer's own complaint from play: a creature dropped its target at the disc's edge.
+The ring's leash is now the whole platform, the disc and its fan stairs to their foot
+(`RingSite.leash`, read off the export's `stairCrossings`), for holding a target and for
+resetting alike. And the calm reset is no longer a snap: the probe on seed 2 showed both
+teams at the pit at 12:30, the Warden at 43 percent, and a full Warden ten seconds after
+the fight around it ended; left alone and hurt, a body now heals 3 percent of its health
+a second (`CREATURE_CALM_REGEN_PER_S`, the Warden too), full in about half a minute, so
+the side that wins the fight around it comes back to a body partly recovered. Pulled off
+its platform it still snaps. The maintainer did not ask for this one; it is the rule a
+contested body needs and it is his to reverse.
 
 ### Phases, round two
 

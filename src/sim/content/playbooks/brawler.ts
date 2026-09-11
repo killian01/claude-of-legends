@@ -42,6 +42,20 @@ export const BRAWLER_PLAYBOOK: PlaybookDef = {
     },
     { id: 'finish', when: { kind: 'always' }, do: { kind: 'finishSanctum' } },
     // The fight first, walking in only with the odds, the lowest enemy first.
+    // A body nearly down beats a fight: the last strikes on a creature or
+    // the Warden in reach land whatever is in sight (docs/plan-rings.md,
+    // round two: bots dropped an 8 percent Warden for an arriving enemy
+    // and it reset to full).
+    {
+      id: 'finish-warden',
+      when: { kind: 'warden', state: 'up', hpAtMost: 0.2, near: 10 },
+      do: { kind: 'contestWarden', partyAtLeast: 1 },
+    },
+    {
+      id: 'finish-creature',
+      when: { kind: 'creature', state: 'up', hpAtMost: 0.2, near: 10 },
+      do: { kind: 'contestCreature', partyAtLeast: 1 },
+    },
     {
       id: 'fight',
       when: { kind: 'enemyVisible' },

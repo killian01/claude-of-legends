@@ -160,7 +160,14 @@ Ascendant, or the nearest, within a range; `which: 'ascendant'` names either rin
 Ascendant, a body a team fights the way it fights the Warden; both contests wait for a
 party, `partyAtLeast` allied champions near the body, self included: two for a creature,
 three for an Ascendant or the Warden, since a lone bot pokes a body sized for a team for
-nothing), follow an ally, hold a position, obey the coach order. A behavior is a macro intent the engine turns into movement, attacks, and
+nothing; short of the party by one, a bot rallies during the body's windows, the forty
+seconds after it rose and again every two minutes while it stands, walking to it and
+waiting beside it for the rest; in reach, a contest spends the kit's abilities on the
+body before its strikes), follow an ally, hold a position, obey the coach order. The
+`warden` and `creature` triggers narrow `up` with `hpAtMost` and `near`, which is what
+the `finish-warden` and `finish-creature` plays every house style carries right above
+`fight` read: the last strikes on a body under a fifth in reach land whatever is in
+sight. A behavior is a macro intent the engine turns into movement, attacks, and
 casts through the shared micro.
 
 **The Laner is the default playbook.** The scripted Laner is already structured as
