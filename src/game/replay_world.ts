@@ -71,7 +71,7 @@ export class ReplayWorld implements IWorld {
   objectiveSpawnAt(): number | null {
     return this.sim.objectiveSpawnAt();
   }
-  wardenPit(): Readonly<WardenPit> {
+  wardenPit(): Readonly<WardenPit> | null {
     return this.sim.wardenPit();
   }
   ringClocks(): readonly RingClock[] {

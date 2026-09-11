@@ -103,8 +103,8 @@ export function assembleStarOrchard(
 // measured on the grid (seven to fourteen meters across; the forests hold
 // nothing wider). Each has its point mirror on the other side, so a match
 // draws them fairly on average; a pit in one team's forest is that team's
-// shorter walk, and the clock says where the next Warden rises two and a
-// half minutes ahead. The first Warden rises at the plaza.
+// shorter walk, and nobody knows which was drawn until the Warden stands
+// there. The first Warden rises at the plaza.
 // tests/warden_pits.test.ts pins that each room is open ground away from
 // the camps and the lanes.
 const STAR_ORCHARD_FOREST_PITS: readonly WardenPit[] = [

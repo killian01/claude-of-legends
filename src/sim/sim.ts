@@ -551,9 +551,11 @@ export class Sim {
     return this.objectives.wardenId === null ? this.objectives.nextSpawnAt : null;
   }
 
-  // The pit of the live Warden, or of the next to rise (IWorld).
-  wardenPit(): WardenPit {
-    return wardenPitOf(this.map, this.objectives);
+  // The live Warden's pit (IWorld); null while none stands. The next pit
+  // is drawn at the death and told to nobody until the rise: where the
+  // Warden appears is not on the map before it does (ADR 0023).
+  wardenPit(): WardenPit | null {
+    return this.objectives.wardenId === null ? null : wardenPitOf(this.map, this.objectives);
   }
 
   // The camps as a team knows them (the observation, ADR 0023): every

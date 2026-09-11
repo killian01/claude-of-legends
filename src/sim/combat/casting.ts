@@ -448,6 +448,18 @@ export function castAbility(
     const at = clampToRange(caster.pos, aim, def.castRange);
     if (!allyDashAim(ctx, caster, at, spec.range, spec.toAlly.searchRadius)) return false;
   }
+  // A flight whose line is blocked is refused before anything is paid:
+  // Fenn against a cliff pressed Lunge, paid its cooldown and its mana,
+  // and went nowhere (the maintainer, after the forest round). A wall
+  // raised mid-air still stops the flight at its face (dashes.ts); a
+  // blink hops over terrain and keeps its landing rule.
+  if (spec.kind === 'dash' && spec.speed !== undefined && spec.speed > 0) {
+    const goal = spec.toAlly
+      ? (allyDashAim(ctx, caster, aim, spec.range, spec.toAlly.searchRadius) ?? aim)
+      : aim;
+    const at = clampToRange(caster.pos, goal, spec.range);
+    if (!ctx.nav.lineOfWalk(caster.pos, at)) return false;
+  }
 
   caster.cooldowns[key] = ctx.time + def.cooldown * (1 - RANK_CD_SCALE * (rank - 1));
   caster.mana -= def.manaCost;

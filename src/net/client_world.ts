@@ -168,7 +168,7 @@ export class ClientWorld implements IWorld {
   private scoreRows: readonly ScoreRow[] = [];
   private objAt: number | null = null;
   private rings: RingClock[] = [];
-  private objPit = 0;
+  private objPit: number | null = null;
   private favors: FavorStacks = NO_FAVORS;
   private enemyFavors: FavorStacks = NO_FAVORS;
   private boon: { until: number; stacks: number } | null = null;
@@ -217,10 +217,10 @@ export class ClientWorld implements IWorld {
     return until !== null && until > this.time ? until : null;
   }
 
-  // The Warden's pit as the last snapshot named it, on the map's list
-  // (IWorld); the first pit until a snapshot says otherwise.
-  wardenPit(): Readonly<WardenPit> {
-    return this.map.wardenPits[this.objPit] ?? this.map.wardenPits[0]!;
+  // The live Warden's pit as the last snapshot named it, on the map's
+  // list (IWorld); null while none stands.
+  wardenPit(): Readonly<WardenPit> | null {
+    return this.objPit === null ? null : (this.map.wardenPits[this.objPit] ?? null);
   }
 
   objectiveSpawnAt(): number | null {
@@ -340,7 +340,7 @@ export class ClientWorld implements IWorld {
     }
 
     this.objAt = msg.objAt ?? null;
-    this.objPit = msg.objPit ?? 0;
+    this.objPit = msg.objPit ?? null;
     this.rings = (msg.rings ?? []).flatMap((r) => {
       const site = this.map.rings?.find((ring) => ring.id === r.r);
       if (!site) return [];

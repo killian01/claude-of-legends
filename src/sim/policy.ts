@@ -234,8 +234,9 @@ export interface Observation {
   objectiveSpawnAt?: number | null;
   // When the live Warden rose, null between spawns (additive v0 field).
   wardenRoseAt?: number | null;
-  // Where the live Warden stands, or where the next rises (additive v0
-  // field, ADR 0023): the pit is drawn per rise and both teams read it.
+  // Where the live Warden stands (additive v0 field, ADR 0023); absent
+  // while none does: the next pit is drawn at the death and told to
+  // nobody until the rise, a bot guesses like a human.
   wardenPit?: { x: number; z: number };
   // The rings' clocks (additive v0 field, ADR 0022), empty on a map
   // without rings.

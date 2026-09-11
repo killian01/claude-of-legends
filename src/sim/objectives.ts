@@ -39,7 +39,8 @@ export interface ObjectiveState {
   // When the live Warden rose, null between spawns (a rally reads it).
   roseAt: number | null;
   // The pit of the live Warden, or of the next to rise: an index into the
-  // map's pits, public to both teams like the clock.
+  // map's pits. Public once the Warden stands there, told to nobody
+  // before (the observation and the wire carry it only while it lives).
   pit: number;
 }
 

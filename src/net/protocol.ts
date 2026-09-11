@@ -273,8 +273,8 @@ export type ServerMsg =
       winner: TeamId | null;
       // When the next Warden rises; null while one is alive.
       objAt?: number | null;
-      // The pit of the live Warden, or of the next to rise: an index into
-      // the map's pits (ADR 0023); absent on records from before the draw.
+      // The live Warden's pit, an index into the map's pits (ADR 0023);
+      // absent while none stands, since the next pit is told at the rise.
       objPit?: number;
       // The rings' clocks (ADR 0022); absent on a map without rings.
       rings?: SnapRing[];

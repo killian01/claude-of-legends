@@ -260,7 +260,8 @@ export function buildSnapshot(
     events: snapEvents,
     winner: sim.winner,
     objAt: sim.objectiveSpawnAt(),
-    objPit: sim.objectives.pit,
+    // The live Warden's pit; nothing before the rise (ADR 0023).
+    ...(sim.objectives.wardenId !== null ? { objPit: sim.objectives.pit } : {}),
     rings: sim.ringClocks().map((c) => ({
       r: c.ring,
       u: c.unitId,

@@ -2,8 +2,8 @@
 // pit, every later one at a pit drawn from the match's rng among the
 // others, never the same twice running; on the Star Orchard the plaza and
 // four forest rooms, each open ground away from the camps and the lanes.
-// The observation, the wire and the objective line say where; the bots
-// pre-position at the drawn pit, not the nearest.
+// The observation, the wire and the objective line say where once it
+// stands and nothing before; a bot guesses the nearest pit like a human.
 
 import { describe, expect, it } from 'vitest';
 import { buildSnapshot } from '../server/snapshot';
@@ -106,41 +106,49 @@ describe("the Warden's pits", () => {
     }
   });
 
-  it('rises at the plaza first, then at the drawn pit, and says so to every reader', () => {
+  it('rises at the plaza first, then at the drawn pit, told to every reader at the rise only', () => {
     const sim = orchardSim();
     const me = sim.addChampion(0);
+    expect(sim.wardenPit()).toBeNull();
     const first = riseNow(sim);
     const plaza = sim.map.wardenPits[0]!;
     expect(Math.hypot(first.pos.x - plaza.x, first.pos.z - plaza.z)).toBeLessThan(2);
-    expect(sim.wardenPit().name).toBe('plaza');
-    // Slain: the clock restarts and another pit is drawn.
+    expect(sim.wardenPit()?.name).toBe('plaza');
+    // Slain: the clock restarts and another pit is drawn, told to nobody.
     const slayer = sim.addChampion(1, { x: first.pos.x + 2, z: first.pos.z });
     first.hp = 1;
     first.lastDamagedAt = sim.time;
     sim.orderAttack(slayer.id, first.id);
     for (let i = 0; i < 100 && findWarden(sim); i++) sim.tick();
     expect(findWarden(sim)).toBeUndefined();
-    const next = sim.wardenPit();
-    expect(next.name).not.toBe('plaza');
+    expect(sim.objectives.pit).not.toBe(0);
+    expect(sim.wardenPit()).toBeNull();
     expect(sim.objectiveSpawnAt()! - sim.time).toBeGreaterThan(WARDEN_RESPAWN_S - 6);
-    // The observation and the wire carry the pit before it rises.
     sim.tick();
-    const obs = buildObservation(sim, me.id)!;
-    expect(obs.wardenPit).toEqual({ x: next.x, z: next.z });
+    expect(buildObservation(sim, me.id)!.wardenPit).toBeUndefined();
+    const before = buildSnapshot(sim, 0, me.id, new Set(), []);
+    if (before.t !== 'snap') throw new Error('not a snap');
+    expect(before.objPit).toBeUndefined();
+    const client = new ClientWorld(() => undefined, starOrchard().map);
+    client.applyServer({ t: 'match_start', selfUnitId: me.id, team: 0 });
+    client.applyServer(before);
+    expect(client.wardenPit()).toBeNull();
+    expect(
+      objectiveLine([], sim.objectiveSpawnAt(), sim.time, client.wardenPit() ?? undefined),
+    ).toMatch(/^Warden \d:\d\d$/);
+    // It rises at the drawn pit, and now everyone reads it.
+    const second = riseNow(sim);
+    const next = sim.wardenPit()!;
+    expect(next.name).not.toBe('plaza');
+    expect(Math.hypot(second.pos.x - next.x, second.pos.z - next.z)).toBeLessThan(2);
+    sim.tick();
+    expect(buildObservation(sim, me.id)!.wardenPit).toEqual({ x: next.x, z: next.z });
     const snap = buildSnapshot(sim, 0, me.id, new Set(), []);
     if (snap.t !== 'snap') throw new Error('not a snap');
     expect(snap.objPit).toBe(sim.objectives.pit);
-    const client = new ClientWorld(() => undefined, starOrchard().map);
-    client.applyServer({ t: 'match_start', selfUnitId: me.id, team: 0 });
     client.applyServer(snap);
     expect(client.wardenPit()).toEqual(next);
-    expect(objectiveLine([], sim.objectiveSpawnAt(), sim.time, client.wardenPit())).toMatch(
-      new RegExp(`Warden \\d:\\d\\d at the ${next.name}$`),
-    );
-    // And it rises there.
-    const second = riseNow(sim);
-    expect(Math.hypot(second.pos.x - next.x, second.pos.z - next.z)).toBeLessThan(2);
-    expect(objectiveLine([], null, sim.time, sim.wardenPit())).toBe(
+    expect(objectiveLine([], null, sim.time, sim.wardenPit() ?? undefined)).toBe(
       `Warden LIVE at the ${next.name}`,
     );
     // Deterministic: the same seed draws the same pits.
@@ -152,22 +160,24 @@ describe("the Warden's pits", () => {
     w.lastDamagedAt = again.time;
     again.orderAttack(s2.id, w.id);
     for (let i = 0; i < 100 && findWarden(again); i++) again.tick();
-    expect(again.wardenPit().name).toBe(next.name);
+    expect(again.objectives.pit).toBe(sim.objectives.pit);
   });
 
-  it('a bot pre-positions at the drawn pit, not the nearest one', () => {
+  it('a bot cannot know the drawn pit before the rise: it pre-positions at the nearest', () => {
     const sim = orchardSim();
     const hollow = sim.map.wardenPits.findIndex((p) => p.name === 'west hollow');
     sim.objectives.pit = hollow;
     sim.objectives.nextSpawnAt = sim.time + 30;
-    const pit = sim.map.wardenPits[hollow]!;
-    const nearest = sim.map.wardenPits.find((p) => p.name === 'west glade')!;
+    const drawn = sim.map.wardenPits[hollow]!;
+    const pit = sim.map.wardenPits.find((p) => p.name === 'west glade')!;
     // On the top lane by its own towers, beside the west glade, the
     // hollow forty-five meters up the forest.
     const me = sim.addChampion(0, { x: 10, z: 60 }, 'vesk');
-    expect(Math.hypot(me.pos.x - nearest.x, me.pos.z - nearest.z)).toBeLessThan(
-      Math.hypot(me.pos.x - pit.x, me.pos.z - pit.z),
+    expect(Math.hypot(me.pos.x - pit.x, me.pos.z - pit.z)).toBeLessThan(
+      Math.hypot(me.pos.x - drawn.x, me.pos.z - drawn.z),
     );
+    sim.tick();
+    expect(buildObservation(sim, me.id)!.wardenPit).toBeUndefined();
     const def: PlaybookDef = {
       version: 1,
       plays: [
@@ -176,9 +186,9 @@ describe("the Warden's pits", () => {
     };
     sim.attachPolicy(me.id, playbookPolicy(def, undefined, sim.map));
     const d0 = Math.hypot(me.pos.x - pit.x, me.pos.z - pit.z);
-    const n0 = Math.hypot(me.pos.x - nearest.x, me.pos.z - nearest.z);
-    for (let i = 0; i < 8 * TICKS_PER_S; i++) sim.tick();
-    expect(Math.hypot(me.pos.x - pit.x, me.pos.z - pit.z)).toBeLessThan(d0 - 8);
-    expect(Math.hypot(me.pos.x - nearest.x, me.pos.z - nearest.z)).toBeGreaterThan(n0 - 2);
+    const h0 = Math.hypot(me.pos.x - drawn.x, me.pos.z - drawn.z);
+    for (let i = 0; i < 6 * TICKS_PER_S; i++) sim.tick();
+    expect(Math.hypot(me.pos.x - pit.x, me.pos.z - pit.z)).toBeLessThan(d0 - 5);
+    expect(Math.hypot(me.pos.x - drawn.x, me.pos.z - drawn.z)).toBeGreaterThan(h0 - 3);
   });
 });

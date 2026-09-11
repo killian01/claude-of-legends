@@ -471,9 +471,9 @@ function partyAt(ctx: SlotContext, x: number, z: number, within: number): number
   return 1 + Math.max(atBody, beside);
 }
 
-// The Warden's pit: where it stands or where the next rises, as the
-// observation says (the pit is drawn per rise, ADR 0023); an observation
-// from before the draw falls back to the nearest of the map's pits.
+// The Warden's pit: where it stands, as the observation says; before a
+// rise nobody knows which pit was drawn (ADR 0023), so a bot guesses the
+// nearest of the map's pits, the way a human walks to the closest one.
 function wardenPitOf(ctx: SlotContext): { x: number; z: number } {
   const { s, obs } = ctx;
   if (obs.wardenPit) return obs.wardenPit;
@@ -486,9 +486,9 @@ function wardenPitOf(ctx: SlotContext): { x: number; z: number } {
 
 // Contest the Warden: a live one is the team's one rendezvous. Walk to it
 // healthy and in a party, fight it in reach. Shortly before the spawn
-// clock strikes, healthy bots pre-position at the pit it rises in; both
-// teams read the same clock and the same pit, so the pit becomes the mid
-// game's fight (obs.objectiveSpawnAt, obs.wardenPit).
+// clock strikes, healthy bots pre-position at the nearest pit; both
+// teams read the same clock, so the pits become the mid game's fight
+// (obs.objectiveSpawnAt, obs.wardenPit once it stands).
 function contestWarden(
   ctx: SlotContext,
   hpAtLeast: number,

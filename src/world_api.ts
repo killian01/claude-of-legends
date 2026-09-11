@@ -29,8 +29,9 @@ export interface IWorld {
   teamBuff(team: TeamId): { until: number; stacks: number } | null;
   // When the next Warden rises; null while one is alive.
   objectiveSpawnAt(): number | null;
-  // The pit of the live Warden, or of the next to rise (ADR 0023).
-  wardenPit(): Readonly<WardenPit>;
+  // The live Warden's pit, null while none stands: the next pit is drawn
+  // at the death and told to nobody until the rise (ADR 0023).
+  wardenPit(): Readonly<WardenPit> | null;
   // The rings' clocks (ADR 0022): the live creature or the next rise and
   // the aspect in play, per ring; empty on a map without rings.
   ringClocks(): readonly RingClock[];

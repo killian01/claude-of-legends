@@ -202,6 +202,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     });
   }
 
+  const pit = sim.wardenPit();
   return {
     tick: sim.tickCount,
     time: sim.time,
@@ -240,7 +241,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     units,
     objectiveSpawnAt: sim.objectiveSpawnAt(),
     wardenRoseAt: sim.objectives.roseAt,
-    wardenPit: { x: sim.wardenPit().x, z: sim.wardenPit().z },
+    ...(pit ? { wardenPit: { x: pit.x, z: pit.z } } : {}),
     creatures: sim.ringClocks(),
     camps: sim.campsFor(u.team),
     projectiles,
