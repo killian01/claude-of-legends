@@ -3,6 +3,7 @@
 // held. Pure over the world's clocks, so the wording is tested without a
 // DOM and reads the same offline, online and in a replay.
 
+import type { WardenPit } from '../sim/content/map';
 import {
   ASPECTS,
   type AspectId,
@@ -27,14 +28,16 @@ export function creatureName(creature: CreatureId, ascendant: boolean): string {
   return ascendant ? def.ascendant.name : def.name;
 }
 
-// `Pyrefang 1:12 Might · Voidmaul LIVE · Warden 6:00`: the bot ring
-// first because it rises first, the Warden last because it does. A live
-// creature says LIVE and the aspect it carries; a clock says when and
-// what comes; an Ascendant says its name and nothing after.
+// `Pyrefang 1:12 Might · Voidmaul LIVE · Warden 6:00 at the plaza`: the
+// bot ring first because it rises first, the Warden last because it does.
+// A live creature says LIVE and the aspect it carries; a clock says when
+// and what comes; an Ascendant says its name and nothing after; the
+// Warden says its pit, since the pit is drawn per rise (ADR 0023).
 export function objectiveLine(
   rings: readonly RingClock[],
   wardenAt: number | null,
   time: number,
+  pit?: Readonly<WardenPit>,
 ): string {
   const parts: string[] = [];
   for (const ring of ['bot', 'top'] as const) {
@@ -48,7 +51,10 @@ export function objectiveLine(
         : `${name} ${clockText(clock.riseAt - time)}${aspect}`,
     );
   }
-  parts.push(wardenAt === null ? 'Warden LIVE' : `Warden ${clockText(wardenAt - time)}`);
+  const where = pit ? ` at the ${pit.name}` : '';
+  parts.push(
+    wardenAt === null ? `Warden LIVE${where}` : `Warden ${clockText(wardenAt - time)}${where}`,
+  );
   return parts.join(' · ');
 }
 

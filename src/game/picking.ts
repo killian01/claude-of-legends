@@ -44,7 +44,9 @@ function bodyHeight(u: Readonly<Unit>): number {
   if (u.kind === 'champion') return 1.2;
   if (u.kind === 'minion') return 0.6;
   if (u.kind === 'warden' || u.kind === 'creature') return 1.4;
-  if (u.kind === 'camp') return 0.8;
+  if (u.kind === 'camp') {
+    return u.campKind === 'barkmaw' ? 1.3 : u.campKind === 'brackenlings' ? 0.5 : 0.8;
+  }
   return 3.0;
 }
 

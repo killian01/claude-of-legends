@@ -107,7 +107,8 @@ export class Minimap {
       f.fillRect(0, 0, SIZE_PX, SIZE_PX);
       f.globalCompositeOperation = 'destination-out';
       for (const u of this.world.units.values()) {
-        if (u.team !== this.viewerTeam || u.dead) continue;
+        // A neutral body carries a nominal team and gives nobody sight.
+        if (u.team !== this.viewerTeam || u.dead || u.neutral) continue;
         const r = Math.max(4, u.sightRange) * this.scale;
         const x = this.px(u.pos.x);
         const z = this.pz(u.pos.z);
@@ -121,6 +122,15 @@ export class Minimap {
       }
       g.drawImage(this.fog, 0, 0);
     }
+
+    // The Warden's pit, where it stands or where the next rises: both
+    // teams read the clock and the pit alike (ADR 0023).
+    const pit = this.world.wardenPit();
+    g.strokeStyle = 'rgba(192, 106, 232, 0.85)';
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.arc(this.px(pit.x), this.pz(pit.z), 5.5, 0, Math.PI * 2);
+    g.stroke();
 
     for (const u of this.world.units.values()) {
       if (u.dead) continue;
@@ -141,9 +151,16 @@ export class Minimap {
         g.closePath();
         g.fill();
       } else if (u.kind === 'camp') {
+        // A camp body by its size: a Brackenling small, the Barkmaw big.
         g.fillStyle = '#d8a24f';
         g.beginPath();
-        g.arc(x, z, 2.5, 0, Math.PI * 2);
+        g.arc(
+          x,
+          z,
+          u.campKind === 'barkmaw' ? 3.2 : u.campKind === 'brackenlings' ? 1.8 : 2.5,
+          0,
+          Math.PI * 2,
+        );
         g.fill();
       } else if (u.kind === 'creature') {
         // A ring creature: a blotch in its aspect's color, for both teams;

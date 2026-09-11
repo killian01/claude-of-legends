@@ -712,7 +712,7 @@ export function openAcademy(container: HTMLElement, opts: AcademyOptions = {}): 
 
   // The lane preference (phase 12): the lanes asked for, in order; none
   // means the champion's home lane. Lifts the format to 3.
-  const editLanes = (lanes: ('top' | 'mid' | 'bot')[] | null): void => {
+  const editLanes = (lanes: ('top' | 'mid' | 'bot' | 'jungle')[] | null): void => {
     if (!working) return;
     const v = validatePlaybook({
       version: Math.max(working.version, 3),
@@ -1503,6 +1503,7 @@ export function openAcademy(container: HTMLElement, opts: AcademyOptions = {}): 
       ['top', 'top lane'],
       ['mid', 'mid lane'],
       ['bot', 'bot lane'],
+      ['jungle', 'the forest'],
     ] as const) {
       const o = document.createElement('option');
       o.value = value;
@@ -1513,7 +1514,7 @@ export function openAcademy(container: HTMLElement, opts: AcademyOptions = {}): 
     laneSel.disabled = coaching;
     laneSel.addEventListener('change', () => {
       const v = laneSel.value;
-      editLanes(v === 'top' || v === 'mid' || v === 'bot' ? [v] : null);
+      editLanes(v === 'top' || v === 'mid' || v === 'bot' || v === 'jungle' ? [v] : null);
     });
     laneRow.append(laneSel);
     panel.append(laneRow);

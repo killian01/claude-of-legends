@@ -22,6 +22,7 @@ import {
   spellColorsOf,
 } from './ability_vfx';
 import { aspectColor, WRATH_COLOR } from './aspect_colors';
+import { buildCampMesh, campBarWidth } from './camp_shapes';
 import { buildChampionMesh } from './champion_shapes';
 import {
   type ChampionVisual,
@@ -32,6 +33,7 @@ import {
 } from './champions';
 import { buildCreatureMesh } from './creature_shapes';
 import { FloatingText, makeTextSprite } from './floating_text';
+import { fogSheetGeometry } from './fog_sheet';
 import { buildMinionMesh } from './minion_shapes';
 import {
   estimatedMuzzleOffset,
@@ -453,12 +455,14 @@ export class Renderer {
     window.addEventListener('blur', onWindowBlur);
     this.cleanups.push(() => window.removeEventListener('blur', onWindowBlur));
 
-    // Fog-of-war ground overlay: dark where the viewer's team has no sight.
+    // Fog-of-war ground overlay: dark where the viewer's team has no sight,
+    // a sheet draped over the terrain (fog_sheet.ts) so a ring's disc and
+    // its creature sit under it like the ground does.
     this.fogCanvas.width = 128;
     this.fogCanvas.height = 128;
     this.fogTexture = new THREE.CanvasTexture(this.fogCanvas);
     const fogMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(world.map.size, world.map.size),
+      fogSheetGeometry(world.map.size, terrain.heightAt),
       new THREE.MeshBasicMaterial({
         map: this.fogTexture,
         transparent: true,
@@ -467,10 +471,6 @@ export class Renderer {
         fog: false,
       }),
     );
-    fogMesh.rotation.x = -Math.PI / 2;
-    // High enough that grass blades and boulders sit under the fog sheet
-    // instead of poking through it fully lit.
-    fogMesh.position.set(world.map.size / 2, 4.1, world.map.size / 2);
     this.scene.add(fogMesh);
 
     this.fct = new FloatingText(this.scene, terrain.heightAt);
@@ -1104,21 +1104,11 @@ export class Renderer {
       return { holder, barY: built.barY };
     }
     if (kind === 'camp') {
-      // A jungle beast: a squat amber-jade critter with a spine of thorns.
-      const mat = new THREE.MeshLambertMaterial({ color: 0x8a6a3f, flatShading: true });
-      const thorns = new THREE.MeshLambertMaterial({ color: 0x4a6a45, flatShading: true });
-      const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.65, 0), mat);
-      body.position.y = 0.65;
-      body.scale.set(1.1, 0.85, 1.25);
-      holder.add(body);
-      for (let i = 0; i < 3; i++) {
-        const thorn = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.5, 4), thorns);
-        thorn.position.set(0, 1.1, -0.35 + i * 0.35);
-        thorn.rotation.x = -0.3;
-        holder.add(thorn);
-      }
+      // A camp body by its kind (camp_shapes.ts): the Spinecrest, a
+      // Brackenling, the Barkmaw.
+      const built = buildCampMesh(u, holder);
       enableShadows(holder);
-      return { holder, barY: 1.9 };
+      return built;
     }
     if (kind === 'creature') {
       // A ring's creature (creature_shapes.ts): its own silhouette, the
@@ -1387,7 +1377,7 @@ export class Renderer {
             : u.kind === 'minion'
               ? Math.min(2.2, 1.2 + u.maxHp / 900)
               : u.kind === 'camp'
-                ? 1.5
+                ? campBarWidth(u)
                 : 3.2;
         const overhead = new THREE.Group();
         holder.add(overhead);
@@ -1477,9 +1467,13 @@ export class Renderer {
       }
       t.wasDead = u.dead;
 
+      // A neutral body carries a nominal team (0): it is drawn only when
+      // the viewer's team actually sees it, like an enemy (ADR 0023: the
+      // rings' creatures and the camps sit in the fog).
       const visible =
         (!u.dead || t.deadUntil > nowMs) &&
-        (u.team === this.viewerTeam || this.world.isVisible(this.viewerTeam as 0 | 1, id));
+        ((u.team === this.viewerTeam && !u.neutral) ||
+          this.world.isVisible(this.viewerTeam as 0 | 1, id));
       t.mesh.visible = visible;
 
       // Damage numbers: your own taken damage in red, your dealt damage via
@@ -1539,7 +1533,7 @@ export class Renderer {
           }
           const plate = makeTextSprite(
             label,
-            u.team === this.viewerTeam ? '#d8ecff' : '#ffd8d2',
+            u.team === this.viewerTeam && !u.neutral ? '#d8ecff' : '#ffd8d2',
             0.55,
             play ? 384 : 256,
             24,
@@ -2270,7 +2264,10 @@ export class Renderer {
     g.fillRect(0, 0, 128, 128);
     g.globalCompositeOperation = 'destination-out';
     for (const u of this.world.units.values()) {
-      if (u.team !== this.viewerTeam || u.dead) continue;
+      // A neutral body's nominal team gives nobody sight: without this a
+      // ring's creature punched a hole in team 0's fog around its own
+      // platform (the maintainer's complaint, ADR 0023).
+      if (u.team !== this.viewerTeam || u.dead || u.neutral) continue;
       const r = Math.max(4, u.sightRange) * scale;
       const x = u.pos.x * scale;
       const y = u.pos.z * scale;

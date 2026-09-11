@@ -88,7 +88,7 @@ export function describeTrigger(t: Trigger): string {
     case 'sigilReady':
       return `${t.id} is ready`;
     case 'lane':
-      return `assigned to ${t.is} lane`;
+      return t.is === 'jungle' ? 'assigned to the forest' : `assigned to ${t.is} lane`;
     case 'order':
       return t.is === undefined ? 'the coach gave an order' : `the coach ordered ${t.is}`;
     case 'allyFighting':
@@ -195,6 +195,8 @@ export function describeBehavior(b: Behavior): string {
         : 'shove the wave at the enemy tower';
     case 'takeCamp':
       return 'take a jungle camp';
+    case 'jungle':
+      return b.side === 'any' ? 'clear the camps, either forest' : 'clear the camps of my forest';
     case 'siege':
       return `siege a structure with ${b.escortMin ?? 3} minions`;
     case 'obeyOrder':
@@ -356,8 +358,8 @@ export const TRIGGER_FORMS: Readonly<Record<Trigger['kind'], KindForm>> = {
       {
         key: 'is',
         label: 'is',
-        options: ['top', 'mid', 'bot'],
-        labels: ['top lane', 'mid lane', 'bot lane'],
+        options: ['top', 'mid', 'bot', 'jungle'],
+        labels: ['top lane', 'mid lane', 'bot lane', 'the forest'],
       },
     ],
   },
@@ -593,6 +595,17 @@ export const BEHAVIOR_FORMS: Readonly<Record<Behavior['kind'], KindForm>> = {
     ],
   },
   takeCamp: { label: 'take a jungle camp' },
+  jungle: {
+    label: 'clear the camps',
+    choices: [
+      {
+        key: 'side',
+        label: 'forest',
+        options: ['own', 'any'],
+        labels: ['my forest', 'either forest'],
+      },
+    ],
+  },
   siege: {
     label: 'siege a structure',
     nums: [{ key: 'escortMin', label: 'with minions', min: 0, max: 10, step: 1 }],
@@ -739,7 +752,7 @@ export function describeOp(op: PatchOp): string {
     }
     case 'lanes':
       return op.lanes && op.lanes.length > 0
-        ? `lane preference: ${op.lanes.map((l) => `${l} lane`).join(', then ')}`
+        ? `lane preference: ${op.lanes.map((l) => (l === 'jungle' ? 'the forest' : `${l} lane`)).join(', then ')}`
         : 'lane preference: none, the home lane';
     case 'replace':
       return `replace the whole playbook (${op.playbook.plays.length} plays)`;

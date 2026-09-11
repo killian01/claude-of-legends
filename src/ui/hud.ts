@@ -11,6 +11,7 @@ import { playSfx } from '../game/sfx';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
+import { CAMPS } from '../sim/content/camps';
 import { effectiveItemCost, ITEM_LIST, ITEMS } from '../sim/content/items';
 import { ASPECT_IDS, ASPECTS, type AspectId, CREATURES } from '../sim/content/rings';
 import { SIGILS } from '../sim/content/sigils';
@@ -1528,7 +1529,9 @@ export class Hud {
               ? 'Killed by the Warden'
               : killerUnit2?.kind === 'creature' && killerUnit2.creatureId
                 ? `Killed by the ${CREATURES[killerUnit2.creatureId].name}`
-                : 'Killed by minions';
+                : killerUnit2?.kind === 'camp' && killerUnit2.campKind
+                  ? `Killed by the ${CAMPS[killerUnit2.campKind].name}`
+                  : 'Killed by minions';
         const me = this.world.units.get(this.selfId);
         if (me) {
           const helpers = me.recentDamagers
@@ -1644,12 +1647,13 @@ export class Hud {
     const objAt = this.world.objectiveSpawnAt();
     const wardenUp = objAt === null;
     const rings = this.world.ringClocks();
-    this.metaText.textContent = `${clock} · ${objectiveLine(rings, objAt, this.world.time)}`;
+    const pit = this.world.wardenPit();
+    this.metaText.textContent = `${clock} · ${objectiveLine(rings, objAt, this.world.time, pit)}`;
     const mineBoon = this.world.teamBuff(this.selfTeam);
     const enemyBoon = this.world.teamBuff((1 - this.selfTeam) as TeamId);
     if (this.lastWardenUp !== null && wardenUp !== this.lastWardenUp) {
       if (wardenUp) {
-        this.announce('The Warden has awoken', '#d8a6f5');
+        this.announce(`The Warden has awoken at the ${pit.name}`, '#d8a6f5');
         playSfx('tower');
         announceVoice('warden_awoken', true);
       } else if (mineBoon && mineBoon.until > this.lastBoonMineUntil) {
@@ -1895,7 +1899,7 @@ export class Hud {
                   : target.kind === 'creature' && target.creatureId
                     ? CREATURES[target.creatureId].name
                     : target.kind === 'camp'
-                      ? 'Jungle Beast'
+                      ? CAMPS[target.campKind ?? 'spinecrest'].name
                       : 'Minion';
           const look = aspectColor(target.aspect);
           this.targetPortrait.src =
