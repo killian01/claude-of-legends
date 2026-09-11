@@ -248,7 +248,7 @@ describe('the marks', () => {
     }
     expect(marks.marks.length).toBeGreaterThan(0);
     for (const m of marks.marks) {
-      expect(['kill', 'tower', 'sanctum', 'warden']).toContain(m.kind);
+      expect(['kill', 'tower', 'sanctum', 'warden', 'creature']).toContain(m.kind);
       expect(m.tick).toBeGreaterThan(0);
       if (m.kind === 'kill') expect([0, 1]).toContain(m.team);
     }

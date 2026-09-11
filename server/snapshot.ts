@@ -11,6 +11,7 @@ import type {
   SnapUnit,
   SnapWall,
 } from '../src/net/protocol';
+import { hasAnyFavor } from '../src/sim/favors';
 import type { Sim, SimEvent } from '../src/sim/sim';
 import { effectiveRank } from '../src/sim/stats';
 import type { TeamId } from '../src/sim/types';
@@ -108,6 +109,10 @@ export function buildSnapshot(
       snap.r = u.radius;
       snap.rg = u.stats.attackRange;
       if (u.structure) snap.s = u.structure;
+      if (u.kind === 'creature' && u.creatureId && u.aspect) {
+        snap.cr = u.creatureId;
+        snap.a = u.aspect;
+      }
     }
     units.push(snap);
   }
@@ -203,6 +208,10 @@ export function buildSnapshot(
       self.enemyBoonUntil = round2(enemyBoon.until);
       self.enemyBoonStacks = enemyBoon.stacks;
     }
+    const favors = sim.teamFavors(team);
+    if (hasAnyFavor(favors)) self.favors = favors;
+    const enemyFavors = sim.teamFavors((1 - team) as TeamId);
+    if (hasAnyFavor(enemyFavors)) self.enemyFavors = enemyFavors;
   }
 
   const snapEvents: SnapEvent[] = [];
@@ -245,5 +254,6 @@ export function buildSnapshot(
     events: snapEvents,
     winner: sim.winner,
     objAt: sim.objectiveSpawnAt(),
+    rings: sim.ringClocks().map((c) => ({ r: c.ring, u: c.unitId, at: c.riseAt, a: c.aspect })),
   };
 }

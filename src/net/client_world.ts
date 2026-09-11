@@ -8,9 +8,11 @@ import { ChampionRegistry } from '../sim/champion_registry';
 import type { Status } from '../sim/combat/status';
 import type { ChampionDef } from '../sim/content/champions';
 import type { GameMap } from '../sim/content/map';
-import { NO_FAVORS } from '../sim/favors';
+import { creatureOfRing } from '../sim/content/rings';
+import { type FavorStacks, NO_FAVORS } from '../sim/favors';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { Projectile } from '../sim/projectiles';
+import type { RingClock } from '../sim/rings';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { Wall } from '../sim/walls';
@@ -70,7 +72,7 @@ function materializeUnit(s: SnapUnit): Unit {
   return {
     id: s.i,
     team: s.t ?? 0,
-    neutral: s.k === 'warden' || s.k === 'camp',
+    neutral: s.k === 'warden' || s.k === 'camp' || s.k === 'creature',
     kind: s.k ?? 'champion',
     championId: s.c ?? null,
     // Resolved against the match registry by the caller (applyServer).
@@ -105,8 +107,8 @@ function materializeUnit(s: SnapUnit): Unit {
     lastDamagedAt: -999,
     lastDealtDamageAt: -999,
     favors: NO_FAVORS,
-    creatureId: null,
-    aspect: null,
+    creatureId: s.cr ?? null,
+    aspect: s.a ?? null,
     play: null,
     coachOrder: null,
     coachOrderSeenAt: 0,
@@ -162,6 +164,9 @@ export class ClientWorld implements IWorld {
   coach = false;
   private scoreRows: readonly ScoreRow[] = [];
   private objAt: number | null = null;
+  private rings: RingClock[] = [];
+  private favors: FavorStacks = NO_FAVORS;
+  private enemyFavors: FavorStacks = NO_FAVORS;
   private boon: { until: number; stacks: number } | null = null;
   private enemyBoon: { until: number; stacks: number } | null = null;
 
@@ -202,6 +207,17 @@ export class ClientWorld implements IWorld {
 
   objectiveSpawnAt(): number | null {
     return this.objAt;
+  }
+
+  // The rings' clocks as the last snapshot carried them, placed by the
+  // map's rings (IWorld).
+  ringClocks(): readonly RingClock[] {
+    return this.rings;
+  }
+
+  // Both teams' favors ride the wire, like the Boons (IWorld).
+  teamFavors(team: TeamId): FavorStacks {
+    return team === this.selfTeam ? this.favors : this.enemyFavors;
   }
 
   // The server already scoped the snapshot to this team's vision.
@@ -306,7 +322,24 @@ export class ClientWorld implements IWorld {
     }
 
     this.objAt = msg.objAt ?? null;
+    this.rings = (msg.rings ?? []).flatMap((r) => {
+      const site = this.map.rings?.find((ring) => ring.id === r.r);
+      if (!site) return [];
+      return [
+        {
+          ring: r.r,
+          creature: creatureOfRing(r.r).id,
+          x: site.x,
+          z: site.z,
+          unitId: r.u,
+          riseAt: r.at,
+          aspect: r.a,
+        },
+      ];
+    });
     if (msg.self) {
+      this.favors = msg.self.favors ?? NO_FAVORS;
+      this.enemyFavors = msg.self.enemyFavors ?? NO_FAVORS;
       this.boon =
         msg.self.boonUntil !== undefined
           ? { until: msg.self.boonUntil, stacks: msg.self.boonStacks ?? 1 }

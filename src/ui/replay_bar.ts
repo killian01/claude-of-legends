@@ -17,6 +17,7 @@
 // choices are remembered.
 
 import type { ReplayMark } from '../game/replay_marks';
+import { CREATURES } from '../sim/content/rings';
 import { DT } from '../sim/types';
 import {
   clampToView,
@@ -83,6 +84,7 @@ const CSS = `
 .replay-tick.tower { background: #e8dfae; }
 .replay-tick.sanctum { background: #ffd94a; height: 14px; }
 .replay-tick.warden { background: #b06ae8; height: 12px; }
+.replay-tick.creature { background: #e8944a; height: 11px; }
 .replay-tick.own { background: #ff3b3b; height: 16px; width: 3px; }
 .replay-tip {
   position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 12;
@@ -327,6 +329,8 @@ export function buildReplayBar(opts: {
         return `the Sanctum fell to ${by}`;
       case 'warden':
         return `${by} slew the Warden`;
+      case 'creature':
+        return `${by} slew the ${m.creature ? CREATURES[m.creature].name : 'ring creature'}`;
     }
   };
   const drawMarks = (marks: readonly ReplayMark[], ownUnitId: number | null): void => {

@@ -5,7 +5,9 @@
 
 import type { ChampionDef } from './sim/content/champions';
 import type { GameMap } from './sim/content/map';
+import type { FavorStacks } from './sim/favors';
 import type { Projectile } from './sim/projectiles';
+import type { RingClock } from './sim/rings';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from './sim/types';
 import type { Unit } from './sim/unit';
 import type { Wall } from './sim/walls';
@@ -27,6 +29,11 @@ export interface IWorld {
   teamBuff(team: TeamId): { until: number; stacks: number } | null;
   // When the next Warden rises; null while one is alive.
   objectiveSpawnAt(): number | null;
+  // The rings' clocks (ADR 0022): the live creature or the next rise and
+  // the aspect in play, per ring; empty on a map without rings.
+  ringClocks(): readonly RingClock[];
+  // The favors a team holds (ADR 0022), every aspect at zero for none.
+  teamFavors(team: TeamId): FavorStacks;
   orderMove(unitId: number, x: number, z: number): void;
   orderAttack(unitId: number, targetId: number): void;
   orderAttackMove(unitId: number, x: number, z: number): void;

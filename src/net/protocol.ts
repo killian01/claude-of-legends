@@ -5,6 +5,8 @@
 // records, the world-of-claudecraft pattern).
 
 import type { CoachOrder, CoachOrderKind } from '../sim/coach';
+import type { AspectId, CreatureId, RingId } from '../sim/content/rings';
+import type { FavorStacks } from '../sim/favors';
 import type { ForgedDisplay } from '../sim/forge/display';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { AbilityKey, ScoreRow, TeamId } from '../sim/types';
@@ -110,6 +112,20 @@ export interface SnapUnit {
   // bar to answer with what the sim holds rather than what was clicked.
   // Team-scoped like the play.
   co?: CoachOrder;
+  // A ring creature's identity and the aspect it carries (ADR 0022),
+  // identity block only: both are fixed for the creature's life.
+  cr?: CreatureId;
+  a?: AspectId;
+}
+
+// A ring's clock on the wire (ADR 0022): the ring, the live creature's id
+// or null, when the next rises or null, and the aspect in play. The
+// creature and the ring's place are the map's (ClientWorld.map.rings).
+export interface SnapRing {
+  r: RingId;
+  u: number | null;
+  at: number | null;
+  a: AspectId;
 }
 
 export interface SnapMobile {
@@ -165,6 +181,11 @@ export interface SelfSnap {
   // vision question applies, the claim is announced to both teams anyway.
   enemyBoonUntil?: number;
   enemyBoonStacks?: number;
+  // The favors each team holds (ADR 0022), absent while a team holds
+  // none. The enemy's too, like the Boon: a permanent +5 percent armor is
+  // a fact a player must see to respect.
+  favors?: FavorStacks;
+  enemyFavors?: FavorStacks;
 }
 
 export type SnapEvent =
@@ -239,6 +260,8 @@ export type ServerMsg =
       winner: TeamId | null;
       // When the next Warden rises; null while one is alive.
       objAt?: number | null;
+      // The rings' clocks (ADR 0022); absent on a map without rings.
+      rings?: SnapRing[];
     }
   | { t: 'score'; rows: ScoreRow[] }
   | { t: 'chat'; from: string; team: TeamId; text: string }

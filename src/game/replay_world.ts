@@ -10,7 +10,9 @@
 
 import type { ChampionDef } from '../sim/content/champions';
 import type { GameMap } from '../sim/content/map';
+import type { FavorStacks } from '../sim/favors';
 import type { Projectile } from '../sim/projectiles';
+import type { RingClock } from '../sim/rings';
 import type { Sim } from '../sim/sim';
 import type { ScoreRow, TeamId } from '../sim/types';
 import type { Unit } from '../sim/unit';
@@ -68,6 +70,12 @@ export class ReplayWorld implements IWorld {
   }
   objectiveSpawnAt(): number | null {
     return this.sim.objectiveSpawnAt();
+  }
+  ringClocks(): readonly RingClock[] {
+    return this.sim.ringClocks();
+  }
+  teamFavors(team: TeamId): FavorStacks {
+    return this.sim.teamFavors(team);
   }
 
   orderMove(): void {}
