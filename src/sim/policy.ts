@@ -195,8 +195,11 @@ export interface ObsCreature {
   unitId: number | null;
   // When the next rises, null while one is alive.
   riseAt: number | null;
-  // The aspect the live creature carries, or the next one will.
-  aspect: AspectId;
+  // The aspect the live creature carries, or the next one will; null
+  // when that rise is the Ascendant's (CONTEXT.md).
+  aspect: AspectId | null;
+  // Whether the live creature, or the next to rise, is the Ascendant.
+  ascendant: boolean;
 }
 
 export interface Observation {

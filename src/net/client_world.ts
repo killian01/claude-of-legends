@@ -109,6 +109,8 @@ function materializeUnit(s: SnapUnit): Unit {
     favors: NO_FAVORS,
     creatureId: s.cr ?? null,
     aspect: s.a ?? null,
+    ascendant: s.asc === 1,
+    bitePct: 0,
     play: null,
     coachOrder: null,
     coachOrderSeenAt: 0,
@@ -169,6 +171,8 @@ export class ClientWorld implements IWorld {
   private enemyFavors: FavorStacks = NO_FAVORS;
   private boon: { until: number; stacks: number } | null = null;
   private enemyBoon: { until: number; stacks: number } | null = null;
+  private wrathUntil: number | null = null;
+  private enemyWrathUntil: number | null = null;
 
   // Match-scoped champion resolution, mirroring the server sim's registry:
   // the Forge queue delivers the match's forged definitions at setup and
@@ -203,6 +207,12 @@ export class ClientWorld implements IWorld {
   teamBuff(team: TeamId): { until: number; stacks: number } | null {
     const b = team === this.selfTeam ? this.boon : this.enemyBoon;
     return b && b.until > this.time ? b : null;
+  }
+
+  // Both teams' Wraths ride the wire, like the Boons (IWorld).
+  teamWrath(team: TeamId): number | null {
+    const until = team === this.selfTeam ? this.wrathUntil : this.enemyWrathUntil;
+    return until !== null && until > this.time ? until : null;
   }
 
   objectiveSpawnAt(): number | null {
@@ -334,6 +344,7 @@ export class ClientWorld implements IWorld {
           unitId: r.u,
           riseAt: r.at,
           aspect: r.a,
+          ascendant: r.asc === 1,
         },
       ];
     });
@@ -348,6 +359,8 @@ export class ClientWorld implements IWorld {
         msg.self.enemyBoonUntil !== undefined
           ? { until: msg.self.enemyBoonUntil, stacks: msg.self.enemyBoonStacks ?? 1 }
           : null;
+      this.wrathUntil = msg.self.wrathUntil ?? null;
+      this.enemyWrathUntil = msg.self.enemyWrathUntil ?? null;
       const self = this.units.get(this.selfUnitId);
       if (self) {
         self.mana = msg.self.mana;

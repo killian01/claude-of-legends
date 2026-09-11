@@ -9,8 +9,9 @@ import { playCastSfx, playSfx } from '../game/sfx';
 import { attackWindupSeconds, RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import type { CastSpec } from '../sim/combat/casting';
 import { isRooted, isStunned } from '../sim/combat/status';
+import { WRATH_EXECUTE_FRAC } from '../sim/content/rings';
 import type { Projectile } from '../sim/projectiles';
-import { type AbilityKey, DT, type Vec2 } from '../sim/types';
+import { type AbilityKey, DT, type TeamId, type Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import {
@@ -20,7 +21,7 @@ import {
   schoolColorOf,
   spellColorsOf,
 } from './ability_vfx';
-import { aspectColor } from './aspect_colors';
+import { aspectColor, WRATH_COLOR } from './aspect_colors';
 import { buildChampionMesh } from './champion_shapes';
 import {
   type ChampionVisual,
@@ -119,6 +120,9 @@ interface TrackedUnit {
   lastHp: number;
   stunMark: THREE.Sprite | null;
   rootMark: THREE.Mesh | null;
+  // The Wrath's mark (CONTEXT.md): a champion under the execute line while
+  // the enemy holds the Wrath, created lazily the first time it is doomed.
+  wrathMark: THREE.Sprite | null;
   // Mark pips (Sylra thorns, Elowen mist): rebuilt when the count changes.
   markPips: THREE.Group | null;
   markKey: number;
@@ -1414,6 +1418,7 @@ export class Renderer {
           lastHp: u.hp,
           stunMark: null,
           rootMark: null,
+          wrathMark: null,
           markPips: null,
           markKey: 0,
           namePlate: null,
@@ -1451,7 +1456,9 @@ export class Renderer {
           // and sparks, a shockwave, smoke, and a kick if it happens close.
           if (u.kind === 'champion' || u.kind === 'warden' || u.kind === 'creature') {
             const c =
-              u.kind === 'creature' ? aspectColor(u.aspect).hex : (TEAM_LIGHT[u.team] ?? 0xd8b0f0);
+              u.kind === 'creature'
+                ? aspectColor(u.aspect, u.ascendant).hex
+                : (TEAM_LIGHT[u.team] ?? 0xd8b0f0);
             const near = this.sfxGain(u.pos.x, u.pos.z);
             this.vfx.glowFlash(u.pos.x, 1.2, u.pos.z, 3.4, c, 0.35);
             this.vfx.sparkBurst(u.pos.x, 1.0, u.pos.z, c, 26, 9, { life: 0.6, size: 0.5 });
@@ -1553,7 +1560,7 @@ export class Renderer {
       // Neutral bars: violet Warden, amber jungle camps, a ring creature in
       // its aspect's color, for everyone.
       if (u.kind === 'warden') fillColor = 0xc06ae8;
-      else if (u.kind === 'creature') fillColor = aspectColor(u.aspect).hex;
+      else if (u.kind === 'creature') fillColor = aspectColor(u.aspect, u.ascendant).hex;
       else if (u.kind === 'camp') fillColor = 0xd8a24f;
       // Last-hit aid: an enemy minion that one of the player's autos would
       // finish turns its bar gold, like the genre's execute indicators.
@@ -1606,7 +1613,11 @@ export class Renderer {
             t.hpLabel = null;
           }
           if (key !== '') {
-            const label = makeTextSprite(key, '#ffe9a8', 0.6, 160, 30);
+            // A creature's count in its own color, so the number and the
+            // bar say the same body.
+            const labelColor =
+              u.kind === 'creature' ? aspectColor(u.aspect, u.ascendant).css : '#ffe9a8';
+            const label = makeTextSprite(key, labelColor, 0.6, 160, 30);
             if (label) {
               label.position.set(0, t.barY + 0.7, 0);
               t.overhead.add(label);
@@ -1682,6 +1693,36 @@ export class Renderer {
         t.rootMark = ring;
       }
       if (t.rootMark) t.rootMark.visible = rooted;
+
+      // The Wrath's mark (CONTEXT.md): while the enemy team holds the
+      // Wrath, a champion at or under the execute line wears a pulsing
+      // diamond in the Wrath's color above everything else on its head,
+      // for both sides (the hunted see they are doomed, the hunters who to
+      // finish). A team fact read off the world, not a status.
+      const doomed =
+        visible &&
+        u.kind === 'champion' &&
+        !u.dead &&
+        u.hp <= WRATH_EXECUTE_FRAC * u.maxHp &&
+        this.world.teamWrath((1 - u.team) as TeamId) !== null;
+      if (doomed && !t.wrathMark) {
+        const mark = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: this.diamondTexture(),
+            color: WRATH_COLOR.hex,
+            transparent: true,
+            depthTest: false,
+          }),
+        );
+        mark.userData.sharedMap = true;
+        mark.position.set(0, t.barY + 2.2, 0);
+        t.overhead.add(mark);
+        t.wrathMark = mark;
+      }
+      if (t.wrathMark) {
+        t.wrathMark.visible = doomed;
+        if (doomed) t.wrathMark.scale.setScalar(1.0 + 0.25 * Math.sin(nowMs / 110));
+      }
 
       // Mark pips: a row of small violet diamonds above the bar, one per
       // stack (Sylra thorns, Elowen mist). The victim sees the trigger

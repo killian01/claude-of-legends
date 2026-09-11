@@ -5,7 +5,9 @@
 
 import { describe, expect, it } from 'vitest';
 import { GAME_MAP } from '../src/sim/content/map';
-import { WARDEN_FIRST_SPAWN_S, WARDEN_RESPAWN_S, wardenScale } from '../src/sim/objectives';
+import { bodyGrowth } from '../src/sim/content/rings';
+import { WARDEN_BODY } from '../src/sim/content/warden';
+import { WARDEN_FIRST_SPAWN_S, WARDEN_RESPAWN_S } from '../src/sim/objectives';
 import { Sim } from '../src/sim/sim';
 import { BOON_DAMAGE_PER_STACK, BOON_DURATION_S } from '../src/sim/team_buffs';
 import type { Unit } from '../src/sim/unit';
@@ -61,7 +63,7 @@ describe('the warden', () => {
     late.time = WARDEN_FIRST_SPAWN_S; // the real first spawn moment
     for (let i = 0; i < 3 && !findWarden(late); i++) late.tick();
     const w = findWarden(late)!;
-    expect(w.maxHp).toBe(Math.round(2500 * wardenScale(WARDEN_FIRST_SPAWN_S)));
+    expect(w.maxHp).toBe(Math.round(WARDEN_BODY.hp * bodyGrowth(WARDEN_FIRST_SPAWN_S)));
     expect(w.maxHp).toBeGreaterThan(early.maxHp + 500);
   });
 

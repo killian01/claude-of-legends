@@ -23,6 +23,7 @@ const IWORLD_MEMBERS: readonly { name: string; kind: 'value' | 'function' }[] = 
   { name: 'objectiveSpawnAt', kind: 'function' },
   { name: 'ringClocks', kind: 'function' },
   { name: 'teamFavors', kind: 'function' },
+  { name: 'teamWrath', kind: 'function' },
   { name: 'orderMove', kind: 'function' },
   { name: 'orderAttack', kind: 'function' },
   { name: 'orderAttackMove', kind: 'function' },

@@ -8,7 +8,7 @@ import { announceVoice } from '../game/announcer';
 import type { PostMatchAction } from '../game/flow';
 import { requestGameFullscreen, toggleGameFullscreen } from '../game/fullscreen';
 import { playSfx } from '../game/sfx';
-import { aspectColor } from '../render/aspect_colors';
+import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
 import { effectiveItemCost, ITEM_LIST, ITEMS } from '../sim/content/items';
@@ -39,7 +39,13 @@ import {
 import { iconDataUrl, itemIconUrl } from './icons';
 import { DISCORD } from './links';
 import { MultikillLadder, type MultikillLook, multikillLook } from './multikill';
-import { favorChips, favorClaimText, objectiveLine } from './objective_line';
+import {
+  creatureName,
+  favorChips,
+  favorClaimText,
+  objectiveLine,
+  wrathChipText,
+} from './objective_line';
 import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
 import { TeamScore } from './team_score';
@@ -624,6 +630,10 @@ export class Hud {
   // it carried, so a rise and a claim are announced on the edge.
   private readonly lastRingUp = new Map<string, boolean>();
   private readonly lastRingAspect = new Map<string, AspectId>();
+  private readonly lastRingAscendant = new Map<string, boolean>();
+  // Latest Wrath expiries seen per side, read like the Boon's.
+  private lastWrathMineUntil = 0;
+  private lastWrathEnemyUntil = 0;
   // Stacks held per side at the last frame: a claim is "mine grew".
   private lastFavorSum: [number, number] = [0, 0];
   private deathRecap = '';
@@ -1232,17 +1242,33 @@ export class Hud {
     const sum = (f: FavorStacks): number => ASPECT_IDS.reduce((n, a) => n + f[a], 0);
     const mineSum = sum(mine);
     const enemySum = sum(enemy);
+    const mineWrath = this.world.teamWrath(this.selfTeam) ?? 0;
+    const enemyWrath = this.world.teamWrath((1 - this.selfTeam) as TeamId) ?? 0;
     for (const clock of rings) {
       const up = clock.unitId !== null;
       const was = this.lastRingUp.get(clock.ring);
-      const name = CREATURES[clock.creature].name;
+      const name = creatureName(clock.creature, clock.ascendant);
       if (was !== undefined && up !== was) {
         if (up) {
-          this.announce(`The ${name} has risen`, aspectColor(clock.aspect).css);
+          this.announce(`The ${name} has risen`, aspectColor(clock.aspect, clock.ascendant).css);
           playSfx('tower');
-          announceVoice(`${clock.creature}_risen`, true);
+          announceVoice(
+            clock.ascendant ? `${clock.creature}_ascendant_risen` : `${clock.creature}_risen`,
+            true,
+          );
+        } else if (this.lastRingAscendant.get(clock.ring)) {
+          // An Ascendant fell: whose Wrath moved forward this frame holds it.
+          if (mineWrath > this.lastWrathMineUntil) {
+            this.announce('Your team holds the Wrath', WRATH_COLOR.css);
+            playSfx('levelup');
+            announceVoice('wrath_ours', true);
+          } else if (enemyWrath > this.lastWrathEnemyUntil) {
+            this.announce('The enemy holds the Wrath', '#f5a3a3');
+            playSfx('deny');
+            announceVoice('wrath_theirs', true);
+          }
         } else {
-          const aspect = this.lastRingAspect.get(clock.ring) ?? clock.aspect;
+          const aspect = this.lastRingAspect.get(clock.ring) ?? clock.aspect ?? 'might';
           if (mineSum > this.lastFavorSum[0]) {
             this.announce(
               `Your team claims the ${favorClaimText(clock.creature, aspect)}`,
@@ -1261,9 +1287,14 @@ export class Hud {
         }
       }
       this.lastRingUp.set(clock.ring, up);
-      if (up) this.lastRingAspect.set(clock.ring, clock.aspect);
+      if (up) {
+        this.lastRingAscendant.set(clock.ring, clock.ascendant);
+        if (clock.aspect) this.lastRingAspect.set(clock.ring, clock.aspect);
+      }
     }
     this.lastFavorSum = [mineSum, enemySum];
+    this.lastWrathMineUntil = Math.max(this.lastWrathMineUntil, mineWrath);
+    this.lastWrathEnemyUntil = Math.max(this.lastWrathEnemyUntil, enemyWrath);
   }
 
   announce(text: string, color = '#f2ffd9'): void {
@@ -1693,6 +1724,22 @@ export class Hud {
       chip.style.background = '#3d1a20';
       const pct = Math.round(BOON_DAMAGE_PER_STACK * enemyBoon.stacks * 100);
       chip.textContent = `ENEMY BOON +${pct}% DMG ${Math.ceil(enemyBoon.until - this.world.time)}s`;
+      this.statusRow.appendChild(chip);
+    }
+    // The Wrath (CONTEXT.md) is a team fact like the Boon: a chip that says
+    // what it does, the enemy's too, since an execute line is a fact a
+    // player must see to respect.
+    for (const [side, until] of [
+      ['', this.world.teamWrath(this.selfTeam)],
+      ['ENEMY ', this.world.teamWrath((1 - this.selfTeam) as TeamId)],
+    ] as const) {
+      if (until === null) continue;
+      const chip = document.createElement('span');
+      chip.className = 'hud-chip';
+      chip.style.borderColor = side ? '#e86a7a' : WRATH_COLOR.css;
+      chip.style.color = side ? '#ffc8ce' : WRATH_COLOR.css;
+      chip.style.background = side ? '#3d1a20' : WRATH_COLOR.dark;
+      chip.textContent = `${side}${wrathChipText(until, this.world.time)}`;
       this.statusRow.appendChild(chip);
     }
     // The favors (CONTEXT.md: Favor) are team facts like the Boon: a chip

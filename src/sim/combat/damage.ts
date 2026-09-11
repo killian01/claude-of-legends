@@ -5,6 +5,7 @@
 // How long a champion's damage keeps kill credit over an executing minion.
 export const KILL_CREDIT_WINDOW_S = 10;
 
+import { WRATH_BURN_PCT, WRATH_BURN_S, WRATH_EXECUTE_FRAC } from '../content/rings';
 import type { DamageVia } from '../passive_types';
 import { applyItemDamageModifiers, passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
@@ -93,6 +94,40 @@ export function dealDamage(
   target.hp -= after;
   if (source) source.lastDealtDamageAt = ctx.time;
   ctx.events.push({ type: 'damage', sourceId, targetId: target.id, amount: after, dtype });
+  // The Wrath (content/rings.ts): a champion of a team that holds it burns
+  // the enemy champion it hits (one burn per victim, refreshed by an
+  // attack or an ability, never by its own ticks) and finishes one it
+  // brings under the execute line, whatever the source of that last hit.
+  if (
+    target.kind === 'champion' &&
+    source?.kind === 'champion' &&
+    !source.neutral &&
+    source.team !== target.team &&
+    ctx.teamBuffs.wrathUntil(source.team, ctx.time) !== null
+  ) {
+    if (via !== 'other') {
+      const burn = target.statuses.find((st) => st.kind === 'dot' && st.tag === 'wrath');
+      const perSecond = (WRATH_BURN_PCT * target.maxHp) / WRATH_BURN_S;
+      if (burn && burn.kind === 'dot') {
+        burn.until = ctx.time + WRATH_BURN_S;
+        burn.perSecond = perSecond;
+        burn.sourceId = sourceId;
+      } else {
+        target.statuses.push({
+          kind: 'dot',
+          until: ctx.time + WRATH_BURN_S,
+          perSecond,
+          sourceId,
+          dtype: 'true',
+          tag: 'wrath',
+        });
+      }
+    }
+    if (target.hp > 0 && target.hp <= WRATH_EXECUTE_FRAC * target.maxHp) {
+      target.hp = 0;
+      ctx.events.push({ type: 'execute', unitId: target.id, killerId: sourceId });
+    }
+  }
   if (target.hp <= 0) {
     target.hp = 0;
     ctx.dead.add(target.id);

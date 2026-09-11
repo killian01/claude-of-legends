@@ -58,7 +58,7 @@ describe('the rings on the wire', () => {
     state.nextRiseAt = sim.time;
     for (let i = 0; i < 2 * TICKS_PER_S; i++) sim.tick();
     sim.grantFavor(0, 'might');
-    sim.grantFavor(0, 'might');
+    sim.grantFavor(0, 'tide');
     sim.grantFavor(1, 'bulwark');
     sim.tick();
     const creature = [...sim.units.values()].find((u) => u.kind === 'creature')!;
@@ -67,7 +67,7 @@ describe('the rings on the wire', () => {
     const mine = mirror(sim, 0, me.id);
     expect(mine.ringClocks()).toEqual(sim.ringClocks());
     expect(mine.ringClocks().find((c) => c.ring === 'bot')?.unitId).toBe(creature.id);
-    expect(mine.teamFavors(0)).toEqual({ ...NO_FAVORS, might: 2 });
+    expect(mine.teamFavors(0)).toEqual({ ...NO_FAVORS, might: 1, tide: 1 });
     expect(mine.teamFavors(1)).toEqual({ ...NO_FAVORS, bulwark: 1 });
     const seen = mine.units.get(creature.id)!;
     expect(seen).toBeDefined();
@@ -81,7 +81,7 @@ describe('the rings on the wire', () => {
     // the enemy's.
     const theirs = mirror(sim, 1, foe.id);
     expect(theirs.teamFavors(1)).toEqual({ ...NO_FAVORS, bulwark: 1 });
-    expect(theirs.teamFavors(0)).toEqual({ ...NO_FAVORS, might: 2 });
+    expect(theirs.teamFavors(0)).toEqual({ ...NO_FAVORS, might: 1, tide: 1 });
     expect(theirs.units.get(creature.id)?.aspect).toBe('might');
   });
 });

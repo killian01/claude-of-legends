@@ -5,11 +5,36 @@
 import { describe, expect, it } from 'vitest';
 import { NO_FAVORS } from '../src/sim/favors';
 import type { RingClock } from '../src/sim/rings';
-import { clockText, favorChips, favorClaimText, objectiveLine } from '../src/ui/objective_line';
+import {
+  clockText,
+  creatureName,
+  favorChips,
+  favorClaimText,
+  objectiveLine,
+  wrathChipText,
+} from '../src/ui/objective_line';
 
 const rings: RingClock[] = [
-  { ring: 'top', creature: 'voidmaul', x: 0, z: 146, unitId: null, riseAt: 390, aspect: 'bulwark' },
-  { ring: 'bot', creature: 'pyrefang', x: 149, z: 7, unitId: 12, riseAt: null, aspect: 'might' },
+  {
+    ring: 'top',
+    creature: 'voidmaul',
+    x: 0,
+    z: 146,
+    unitId: null,
+    riseAt: 390,
+    aspect: 'bulwark',
+    ascendant: false,
+  },
+  {
+    ring: 'bot',
+    creature: 'pyrefang',
+    x: 149,
+    z: 7,
+    unitId: 12,
+    riseAt: null,
+    aspect: 'might',
+    ascendant: false,
+  },
 ];
 
 describe('the objective line', () => {
@@ -18,6 +43,36 @@ describe('the objective line', () => {
       'Pyrefang LIVE Might · Voidmaul 1:12 Bulwark · Warden 6:42',
     );
     expect(objectiveLine(rings, null, 318)).toMatch(/Warden LIVE$/);
+  });
+
+  it('names the Ascendant on its rise, with no aspect after it', () => {
+    const late: RingClock[] = [
+      {
+        ring: 'top',
+        creature: 'voidmaul',
+        x: 0,
+        z: 146,
+        unitId: 30,
+        riseAt: null,
+        aspect: null,
+        ascendant: true,
+      },
+      {
+        ring: 'bot',
+        creature: 'pyrefang',
+        x: 149,
+        z: 7,
+        unitId: null,
+        riseAt: 1090,
+        aspect: null,
+        ascendant: true,
+      },
+    ];
+    expect(objectiveLine(late, 1000, 960)).toBe(
+      'Pyrefang Ascendant 2:10 · Voidmaul Ascendant LIVE · Warden 0:40',
+    );
+    expect(creatureName('pyrefang', false)).toBe('Pyrefang');
+    expect(creatureName('voidmaul', true)).toBe('Voidmaul Ascendant');
   });
 
   it('says only the Warden on a map without rings', () => {
@@ -43,5 +98,9 @@ describe('the favor chips', () => {
 
   it('names the creature and the aspect in a claim', () => {
     expect(favorClaimText('pyrefang', 'tide')).toBe("Pyrefang's favor: Tide");
+  });
+
+  it('says what the Wrath does and how long it lasts', () => {
+    expect(wrathChipText(1150, 1000)).toBe('WRATH execute under 20%, hits burn 3% 2:30');
   });
 });

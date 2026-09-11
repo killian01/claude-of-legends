@@ -3,7 +3,15 @@
 // held. Pure over the world's clocks, so the wording is tested without a
 // DOM and reads the same offline, online and in a replay.
 
-import { ASPECTS, type AspectId, CREATURES, creatureOfRing } from '../sim/content/rings';
+import {
+  ASPECTS,
+  type AspectId,
+  CREATURES,
+  type CreatureId,
+  creatureOfRing,
+  WRATH_BURN_PCT,
+  WRATH_EXECUTE_FRAC,
+} from '../sim/content/rings';
 import { type FavorStacks, favorBonus } from '../sim/favors';
 import type { RingClock } from '../sim/rings';
 
@@ -12,10 +20,17 @@ export function clockText(seconds: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+// What a ring's clock names: the creature, or its Ascendant once the
+// aspects are spent.
+export function creatureName(creature: CreatureId, ascendant: boolean): string {
+  const def = CREATURES[creature];
+  return ascendant ? def.ascendant.name : def.name;
+}
+
 // `Pyrefang 1:12 Might · Voidmaul LIVE · Warden 6:00`: the bot ring
 // first because it rises first, the Warden last because it does. A live
 // creature says LIVE and the aspect it carries; a clock says when and
-// what comes.
+// what comes; an Ascendant says its name and nothing after.
 export function objectiveLine(
   rings: readonly RingClock[],
   wardenAt: number | null,
@@ -25,12 +40,12 @@ export function objectiveLine(
   for (const ring of ['bot', 'top'] as const) {
     const clock = rings.find((c) => c.ring === ring);
     if (!clock) continue;
-    const name = creatureOfRing(ring).name;
-    const aspect = ASPECTS[clock.aspect].name;
+    const name = creatureName(creatureOfRing(ring).id, clock.ascendant);
+    const aspect = clock.aspect ? ` ${ASPECTS[clock.aspect].name}` : '';
     parts.push(
       clock.riseAt === null
-        ? `${name} LIVE ${aspect}`
-        : `${name} ${clockText(clock.riseAt - time)} ${aspect}`,
+        ? `${name} LIVE${aspect}`
+        : `${name} ${clockText(clock.riseAt - time)}${aspect}`,
     );
   }
   parts.push(wardenAt === null ? 'Warden LIVE' : `Warden ${clockText(wardenAt - time)}`);
@@ -65,4 +80,12 @@ export function favorChips(stacks: FavorStacks): FavorChip[] {
 // What the announcement says when a favor is claimed.
 export function favorClaimText(creature: 'pyrefang' | 'voidmaul', aspect: AspectId): string {
   return `${CREATURES[creature].name}'s favor: ${ASPECTS[aspect].name}`;
+}
+
+// What the Wrath's chip says while a team holds it: what it does and how
+// long it lasts.
+export function wrathChipText(until: number, time: number): string {
+  const line = Math.round(WRATH_EXECUTE_FRAC * 100);
+  const burn = Math.round(WRATH_BURN_PCT * 100);
+  return `WRATH execute under ${line}%, hits burn ${burn}% ${clockText(until - time)}`;
 }

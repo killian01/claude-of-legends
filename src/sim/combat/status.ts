@@ -46,7 +46,15 @@ export type Status =
   // Marks are keyed per SOURCE: two casters stacking marks on one target
   // build separate pools, so their trigger thresholds never cross.
   | { kind: 'mark'; until: number; stacks: number; sourceId: number }
-  | { kind: 'dot'; until: number; perSecond: number; sourceId: number; dtype: DamageType }
+  | {
+      kind: 'dot';
+      until: number;
+      perSecond: number;
+      sourceId: number;
+      dtype: DamageType;
+      // The Wrath's burn (combat/damage.ts): one per target, refreshed.
+      tag?: 'wrath';
+    }
   | { kind: 'grievous'; until: number; factor: number }
   | {
       kind: 'buff';

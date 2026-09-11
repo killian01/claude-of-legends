@@ -1,8 +1,8 @@
 // What the rings do in house bot matches (docs/plan-rings.md, phase 5):
 // runs full matches on the shipped export, the fill on both sides, and
 // prints per match how long it ran, which creatures fell to whom and
-// when, the favors each side held at the end, the Wardens, the winner;
-// then the totals. The measurement behind the timings, rerun after a
+// when, the favors each side held at the end, the Wardens, the Ascendants
+// (when the first rose, who took the Wrath), the winner; then the totals. The measurement behind the timings, rerun after a
 // tuning. Bundled and run by scripts/rings_report.mjs:
 //   node scripts/rings_report.mjs [--seeds 6] [--from 1] [--max-min 25]
 
@@ -51,12 +51,16 @@ function play(seed: number) {
   }
   const falls: Fall[] = [];
   const wardens: { at: number; team: number }[] = [];
+  const wraths: { at: number; creature: string; team: number }[] = [];
+  let ascendantAt: number | null = null;
   const started = Date.now();
   let ticks = 0;
   for (; ticks < maxTicks && sim.winner === null; ticks++) {
     for (const e of sim.tick()) {
       if (e.type === 'favor') {
         falls.push({ at: sim.time, creature: e.creature ?? '?', aspect: e.aspect, team: e.team });
+      } else if (e.type === 'wrath') {
+        wraths.push({ at: sim.time, creature: e.creature, team: e.team });
       } else if (e.type === 'death') {
         const victim = sim.units.get(e.unitId);
         const killer = sim.units.get(e.killerId);
@@ -65,6 +69,9 @@ function play(seed: number) {
         }
       }
     }
+    if (ascendantAt === null && sim.ringClocks().some((c) => c.ascendant && c.unitId !== null)) {
+      ascendantAt = sim.time;
+    }
   }
   return {
     seed,
@@ -72,6 +79,8 @@ function play(seed: number) {
     winner: sim.winner,
     falls,
     wardens,
+    wraths,
+    ascendantAt,
     favors: [sim.teamFavors(0), sim.teamFavors(1)],
     wallMs: Date.now() - started,
   };
@@ -88,10 +97,18 @@ for (let seed = firstSeed; seed < firstSeed + seeds; seed++) {
     )
     .join(', ');
   const wardensText = r.wardens.map((w) => `${clock(w.at)} t${w.team}`).join(', ');
+  const wrathsText = r.wraths
+    .map(
+      (w) =>
+        `${clock(w.at)} ${CREATURES[w.creature as keyof typeof CREATURES]?.ascendant.name ?? w.creature} t${w.team}`,
+    )
+    .join(', ');
+  const ascendantText =
+    r.ascendantAt === null ? 'no Ascendant' : `first Ascendant at ${clock(r.ascendantAt)}`;
   console.log(
     `seed ${seed}: ${r.minutes.toFixed(1)} min, winner ${r.winner ?? 'none'}, ` +
       `${r.falls.length} creatures [${fallsText}], ${r.wardens.length} wardens [${wardensText}], ` +
-      `${(r.wallMs / 1000).toFixed(0)} s`,
+      `${ascendantText}, ${r.wraths.length} wraths [${wrathsText}], ${(r.wallMs / 1000).toFixed(0)} s`,
   );
 }
 
@@ -117,7 +134,9 @@ console.log(
     [...runs].map((r) => r.minutes * 60).sort((a, b) => a - b)[Math.floor(runs.length / 2)] ?? 0,
   )}: ${(total / runs.length).toFixed(1)} creatures a match, first at ${
     first.length > 0 ? clock(first.reduce((a, b) => a + b, 0) / first.length) : 'never'
-  } on average, ${(runs.reduce((n, r) => n + r.wardens.length, 0) / runs.length).toFixed(1)} Wardens a match`,
+  } on average, ${(runs.reduce((n, r) => n + r.wardens.length, 0) / runs.length).toFixed(1)} Wardens a match, ` +
+    `an Ascendant rose in ${runs.filter((r) => r.ascendantAt !== null).length}, ` +
+    `${runs.reduce((n, r) => n + r.wraths.length, 0)} Wraths claimed`,
 );
 console.log(
   `aspects taken: ${ASPECT_IDS.map((a) => `${a} ${byAspect[a]}`).join(', ')}; ` +

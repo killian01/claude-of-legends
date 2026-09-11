@@ -118,8 +118,17 @@ minimap blotch. A Blender model can replace either body later without touching t
 - **The fixture stays bare.** The launch map has no rings; the ring tests play the
   export the way `tests/star_orchard.test.ts` does. The Warden's tests move to 12:00.
 
-State of play (2026-09-11): phases 0 to 5 done and on `main`; the four voice clips are
-the maintainer's to render (`docs/design/sound.md`, "Lines pending their clips").
+State of play (2026-09-11, evening): both rounds done and on `main`. The calibration
+reads OK at every clock (`node scripts/creature_report.mjs`: the Pyrefang at 4:00 a duo in
+34 s, five in 12, seven of ten lone champions in a median 68 s leaving at 32 percent; at
+12:00 a duo in 38 s and three of ten alone; the Warden at 12:00 five in 23 s and the
+strongest duo in 70 s; the Ascendant at 16:00 five in 43 s and no duo). The house bots on
+the export (`node scripts/rings_report.mjs --seeds 4 --max-min 30`): median 29:35, one
+creature a match, no Warden, no Ascendant risen inside 30 minutes; before the round it
+read 23:21 and 3.3 creatures a match, and no Warden either. The scripted bots do not
+rally to a team objective, so a body sized for a team is one they poke in pairs between
+lane fights: a rally is the bots' next plan. The eight voice clips are the maintainer's to
+render (`docs/design/sound.md`, "Lines pending their clips").
 
 ## Phases
 
@@ -150,8 +159,130 @@ the maintainer's to render (`docs/design/sound.md`, "Lines pending their clips")
    appears; the meta matrix before and after (no style breaks, creatures actually die
    in bot matches); deploy.
 
+## Round two (2026-09-11): the bodies, the Ascendant and the Wrath
+
+The first round played, the maintainer came back with two things: the creatures were
+still too easy to kill (a lone champion took one without thinking), and the match wanted
+a late creature with a big buff, the way the genre ends on one. The grill of that
+afternoon, and its measurement, decided the following; the why is in ADR 0022, "Round
+two".
+
+**The measurement first.** `scripts/creature_report.ts` (`node scripts/creature_report.mjs
+[--clocks 240,390,720,1200] [--which pyrefang,warden,ascendant]`) plays each of the ten
+champions alone against a body, then three duos and a full team, at the level and with
+the items a laner holds at that clock, every ability used, and prints a verdict per body
+and clock against the standard below. Before the change it read: every champion soloed a
+ring creature at 4:00 in 9 to 32 seconds, a duo in 6 to 8, and six of ten soloed the
+Warden at 12:00. The cause: the bodies grew 4 percent a minute while a laner's damage
+output multiplied by about five between 4:00 and 12:00.
+
+**The standard.** Sizes are a target the script checks, not a number to remember; the
+numbers live in `src/sim/content/rings.ts` and `src/sim/content/warden.ts`, and a tuning
+reruns the script.
+
+| Body | A lone champion | A duo | Five |
+|---|---|---|---|
+| Pyrefang, Voidmaul | 60 to 90 s, leaves under 30 percent of its health | 25 to 35 s | 10 to 15 s |
+| Warden (12:00, back 2:30, unchanged) | dies first | about a minute, bleeding | 20 to 30 s |
+| Ascendant | dies first | dies first | about 40 s |
+
+**The lever.** Health several times higher, resistances a little; a bite on every
+strike, a share of the target's max health as true damage on top of the flat damage, so
+a tank does not shrug a creature off and a fight twice as long costs twice as much; and
+a growth that is the champions' own: every neutral body is written at the 4:00 mark and
+carried to its rise by two piecewise-linear curves (`BODY_GROWTH` for health, following
+a laner's measured sustained damage, about twice by 12:00 and three and a half times by
+25:00; `BITE_GROWTH` for the flat strike, following a laner's health). The resistances
+stay as written: the first calibration grew them with the health and found five
+champions slower at 12:00 than at 4:00; and the first curve, sized to a laner's burst
+(five times by 12:00), made a body nobody could take, since a fight that lasts a minute
+is paid in mana and cooldowns, not in one rotation. The Warden's body moves into content
+and follows the same curves. No new mechanic beyond that; the alternatives (a rage on
+one target, signature attacks) are in the ADR.
+
+**The Ascendant.** After its three aspects, a ring's creature returns as its Ascendant,
+and every later rise is one: the Pyrefang Ascendant, the Voidmaul Ascendant. The
+creatures return 3:00 after their death (was 4:00), the Ascendant 5:00 after its own, so
+in a match where the creatures fall on time the first Ascendant lands around 16:00 on
+the bot ring and 18:30 on the top one. The aspect order no longer loops: each favor
+once a match. An Ascendant carries no aspect; its death hands the Wrath and the same
+150 gold to every member of the killing team.
+
+**The Wrath.** 150 s, team-wide, surviving death, refreshed by a second Ascendant and
+never stacked. Any enemy champion a champion of the team brings under a fifth of its max
+health dies on the spot, the killing blow credited to that champion; every attack or
+ability hit burns 3 percent of the target's max health over 3 s, true damage. Towers and
+minions execute nobody; nothing but a champion is executed. A chip says what it does,
+for both teams; an enemy under the line wears a mark; the objective line counts down to
+the Ascendant by name.
+
+**The names.** Ascendant for the form and Wrath for its gift (both in `CONTEXT.md`),
+searched first (ADR 0004): "Pyrefang Ascendant" and "Voidmaul Ascendant" are free.
+Excluded: Verdict (an execute spell named in another work), Dread (near a named ability
+elsewhere), Ascendancy (a named system of another game); Elder is free but is the word
+another game uses for this exact role.
+
+**Bots, wire, voice, look: as in the first round.** Every house style rallies to an
+Ascendant the way it does to the Warden (`which: 'ascendant'` on the `creature` trigger
+and the `contestCreature` behavior, `ObsCreature.ascendant` beside a nullable aspect,
+the coach order unchanged); the snapshot says `asc: 1` on an Ascendant, the ring clocks
+carry `ascendant`, the self block carries `wrathUntil` and `enemyWrathUntil`,
+`IWorld.teamWrath(team)`; four more lines pending their clips ("The Pyrefang Ascendant
+has risen!", "The Voidmaul Ascendant has risen!", "Your team holds the Wrath!", "The
+enemy holds the Wrath"); the Ascendant is its creature's figure, bigger, in the Wrath's
+color. `REPLAY_VERSION` moves to 6.
+
+### Decisions taken in the codebase, round two
+
+- **A body is content.** `CreatureBody` (`hp`, `ad`, `bitePct`, resistances, range,
+  speeds, radius, xp) in `src/sim/content/rings.ts`, one per creature and one per
+  Ascendant (`CreatureDef.ascendant: { name, returnS, body }`), the Warden's in
+  `src/sim/content/warden.ts`; both enter the content fingerprint. `Unit.bitePct` and
+  `Unit.ascendant` carry them on the unit; `growBody` in `src/sim/unit.ts` applies the
+  curves; the auto-attack strike adds the bite to a champion target the way it adds a
+  tower's heated share.
+- **The ring state knows the form.** `isAscendantRise(state, index)` reads the rise
+  index against the aspect order; `ringAspect` returns null past it; `onCreatureSlain`
+  returns a `CreatureFall` (the creature, the aspect or null, `ascendant`) and restarts
+  the clock on the right return; `RingClock.ascendant` says which form is live or next.
+- **The Wrath beside the Boon.** `TeamBuffs` holds each team's Wrath expiry
+  (`grantWrath`, `wrathUntil`), snapshotted with the Boons; `Sim.teamWrath(team)` and
+  `Sim.grantWrath(team)` (a test, a drill); the death handling grants it for an
+  Ascendant and a favor otherwise, with a `wrath` event beside `favor`. The execute and
+  the burn live in `dealDamage` after the health moves: a `dot` status tagged `wrath`,
+  one per victim, refreshed by an attack or an ability and never by its own ticks; an
+  `execute` event when the line is crossed.
+- **Each favor once.** `FAVOR_MAX_STACKS` is 1; the stack shape stays on the wire and in
+  the chips.
+- **A contest waits for a party.** With bodies sized for a duo and a team, a house bot
+  that counted itself a party of one stood at a ring chipping a creature until an enemy
+  came (the bots probe on seed 42: fourteen minutes, nothing killed). `contestCreature`
+  and `contestWarden` gain `partyAtLeast` (validated 1 to 5): allied champions near the
+  body, self included, two for a creature, three for an Ascendant or the Warden by
+  default; short of it, the play passes and the bot farms or pushes, and the
+  pre-positioning before a rise still draws the laners to the ring. The coach's
+  `creature` order bypasses it: an order is an order.
+
+### Phases, round two
+
+1. **Sim and calibration**: the bodies, the curves, the bite, the Ascendant, the Wrath,
+   the tests (`tests/rings.test.ts` for the fourth rise, the Wrath grant, the returns;
+   `tests/wrath.test.ts` for the execute and the burn; `tests/objectives.test.ts` for
+   the Warden's body; `tests/creature_sizing.test.ts` as the gate on the standard), then
+   the script run at the four clocks until every verdict reads OK. DONE.
+2. **The bots**: `which: 'ascendant'`, the observation, the four house styles, the
+   validator, `playbook_text`, the coach vocabulary doc; the party a contest waits for;
+   no recall beside a body. DONE.
+3. **The wire and the world**: `asc`, the nullable aspect, the Wrath fields, `teamWrath`,
+   `REPLAY_VERSION` 6, the replay marks. DONE.
+4. **Presentation**: the Ascendant's figure, the Wrath's color, the mark on an enemy under
+   the line, the chip, the objective line, the announcements and the pending lines. DONE.
+5. **Docs and measurement**: this plan, the ADR, the glossary, the design docs; the
+   rings report rerun (Ascendants and Wraths per match); deploy. DONE.
+
 ## Out of scope
 
-Authored models for the creatures; a fourth-stack climax beyond the Warden; rings on
-the launch map fixture; cooldown reduction as a stat (the sim has none, so Tempo is
-attack speed only).
+Authored models for the creatures; signature attacks per creature (a telegraphed cone, a
+slam: the next plan if the bodies alone do not make the fight fun); a Wrath that stacks
+or grows; a soul-like reward for holding every favor; rings on the launch map fixture;
+cooldown reduction as a stat (the sim has none, so Tempo is attack speed only).

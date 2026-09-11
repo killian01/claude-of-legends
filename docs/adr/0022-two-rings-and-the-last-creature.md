@@ -65,3 +65,98 @@ Three creatures, in order, on a clock every player can read.
   fixed order on the export; `tests/favors.test.ts` measures every aspect on a champion
   and pins that a death keeps every stack; `tests/objectives.test.ts` moves the Warden to
   twelve minutes; `tests/replay_fingerprint.test.ts` pins that the table moves it.
+
+## Round two (2026-09-11): the bodies, the Ascendant and the Wrath
+
+The first round shipped and the maintainer played it: the creatures were too easy to
+kill, a lone champion took one without thinking, and the match still had no big late
+creature the way the genre has one. The measurement (`scripts/creature_report.ts`, each
+champion alone against a body at the level and with the items a laner holds at that
+clock) said how far off it was: every one of the ten champions soloed a ring creature at
+4:00, in 9 to 32 seconds; a duo took it in 6 to 8; six of the ten soloed the Warden at
+12:00. The cause was the growth: the bodies grew 4 percent a minute while a laner's
+damage output against a body multiplied by about five between 4:00 and 12:00.
+
+### Decision
+
+- **A standard, not a number.** A ring creature is sized so that a lone champion takes
+  a minute or more and leaves under 30 percent of its health (a tank or a support does
+  not take it at all), a duo about thirty seconds, five about twelve; the Warden so that
+  a lone champion dies first, a strong duo takes about a minute and leaves bleeding,
+  five 20 to 30 seconds; the Ascendant so that a duo dies first and five take about
+  forty seconds. `scripts/creature_report.ts` measures the
+  three bodies at 4:00, 6:30, 12:00 and 20:00 against that standard and prints a
+  verdict per clock; the numbers in `src/sim/content/rings.ts` and
+  `src/sim/content/warden.ts` are whatever the measurement settled on, and a tuning
+  reruns it.
+- **The lever is the body.** Health several times higher, resistances a little, and a bite:
+  every strike takes a share of the target's max health on top of its flat damage, true
+  damage (`CreatureBody.bitePct`, `Unit.bitePct`, read by the auto-attack strike the way
+  a tower's heated shot is), so a tank does not shrug a creature off and a fight twice as
+  long costs twice as much. No new mechanic beyond that.
+- **The growth is the champions' own, the sustained one.** Every neutral body is written
+  at the 4:00 mark and carried to its rise by two piecewise-linear curves (`BODY_GROWTH`
+  for health, following a laner's measured sustained damage against a body, about twice
+  by 12:00; `BITE_GROWTH` for the flat strike, following a laner's health), flat past
+  their last anchor, plain arithmetic so every engine reads the same body (ADR 0019).
+  The resistances stay as written. Two things the calibration taught: a body sized to a
+  laner's burst (five times by 12:00, the number the measurement above quotes) was one
+  nobody could take, because a fight that lasts a minute is paid in mana and cooldowns
+  and not in one rotation; and resistances grown with the health double-count, five
+  champions were slower at 12:00 than at 4:00. The Warden's body moves from the unit
+  factory into content and follows the same curves.
+- **The fourth rise of a ring is its Ascendant** (`isAscendantRise`), and so is every
+  later one: the Pyrefang Ascendant, the Voidmaul Ascendant, the same silhouette grown
+  into a body a team fights, no aspect, back five minutes after each death. The
+  creatures return three minutes after theirs (was four), so the first Ascendant lands
+  around 16:00 on the bot ring and 18:30 on the top one in a match where the creatures
+  fall on time. The aspect order no longer loops: each favor comes once a match
+  (`FAVOR_MAX_STACKS` is 1).
+- **The Wrath.** An Ascendant's death hands the killing team the Wrath for 150 s beside
+  the Boon (`TeamBuffs.grantWrath`, `wrathUntil`): team-wide, surviving death,
+  refreshed by a second Ascendant and never stacked. In the one damage pipeline, a
+  champion of the team that holds it finishes any enemy champion it brings under a
+  fifth of its max health (the kill credited to that champion, an `execute` event for
+  the presentation), and every attack or ability hit burns 3 percent of the target's max
+  health over 3 s as true damage, one burn per victim, refreshed by a hit and never by its
+  own ticks (`tag: 'wrath'` on the dot). Towers and minions execute nobody; nothing but a
+  champion is executed. Its death pays the same 150 gold to every member.
+- **The wire and the world.** A creature's identity block says `asc: 1` for an Ascendant,
+  the ring clocks carry `ascendant` and a null aspect for its rise, the self block carries
+  `wrathUntil` and `enemyWrathUntil`, `IWorld.teamWrath(team)` is pinned by the parity
+  test, and `REPLAY_VERSION` moves to 6.
+
+### Alternatives rejected
+
+- A rage that ramps on the one target the creature keeps hitting, reset when it switches:
+  it punishes the solo squarely, but it asks the bots to swap aggro, and a fix for the
+  human lands for the bots in the same change or not at all.
+- A signature attack per creature (a telegraphed cone for the Pyrefang, a slam for the
+  Voidmaul): more fun, and a plan of its own (creature abilities, telegraphs, effects,
+  bots that dodge). Out of scope here, not refused.
+- The genre's soul gate (the Ascendant once a team holds four favors, the rings going
+  quiet): it rewards dominating the rings, but in a 17-minute median match a team must
+  take nearly every creature to see it, so most matches never would.
+- A fixed clock (both rings turning Ascendant at 15:00): the simplest, but it cuts the
+  aspect table short (Tempo and Resolve would never come) and rewards nothing.
+- For the Wrath's name, Verdict (an execute spell named in another work), Dread (near a
+  named ability elsewhere) and Ascendancy (a named system of another game) were searched
+  and excluded; for the form, Elder is free but is the word another game uses for the
+  same role.
+
+### Consequences
+
+- The aspects no longer loop: a team holds each favor at most once; the favor chips and
+  the wire keep their stack shape with a cap of one.
+- The return clocks move to 3:00 (creature) and 5:00 (Ascendant); the Warden keeps
+  12:00 and 2:30, its Boon unchanged.
+- The bots contest an Ascendant the way they contest the Warden, in the same change:
+  `which: 'ascendant'` on the `creature` trigger and the `contestCreature` behavior,
+  `ObsCreature.ascendant` and a nullable aspect, every house style rallying to it.
+- The HUD's objective line names the Ascendant and counts down to it, a chip says what
+  the Wrath does for both teams, an enemy under the line wears a mark, the announcer
+  gets four more lines pending their clips (`docs/design/sound.md`), and the Ascendant
+  wears the Wrath's color over its creature's figure.
+- The replays recorded under version 5 refuse to play, as ADR 0021 said a rule change
+  would; `tests/rings.test.ts`, `tests/wrath.test.ts`, `tests/objectives.test.ts` and the
+  fingerprint test pin the new rules.

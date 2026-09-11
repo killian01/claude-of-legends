@@ -116,6 +116,8 @@ export interface SnapUnit {
   // identity block only: both are fixed for the creature's life.
   cr?: CreatureId;
   a?: AspectId;
+  // 1 on an Ascendant (CONTEXT.md): the bigger body, the Wrath on its death.
+  asc?: 1;
 }
 
 // A ring's clock on the wire (ADR 0022): the ring, the live creature's id
@@ -125,7 +127,10 @@ export interface SnapRing {
   r: RingId;
   u: number | null;
   at: number | null;
-  a: AspectId;
+  // The aspect in play, null when the rise is the Ascendant's.
+  a: AspectId | null;
+  // 1 when the live creature, or the next to rise, is the Ascendant.
+  asc?: 1;
 }
 
 export interface SnapMobile {
@@ -181,6 +186,9 @@ export interface SelfSnap {
   // vision question applies, the claim is announced to both teams anyway.
   enemyBoonUntil?: number;
   enemyBoonStacks?: number;
+  // Both teams' Wraths (CONTEXT.md), when each ends; absent when none.
+  wrathUntil?: number;
+  enemyWrathUntil?: number;
   // The favors each team holds (ADR 0022), absent while a team holds
   // none. The enemy's too, like the Boon: a permanent +5 percent armor is
   // a fact a player must see to respect.

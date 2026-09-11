@@ -3,8 +3,12 @@
 // the aspect's color, and a beacon of that color above, so the creature and
 // what it carries read from anywhere nearby. Two silhouettes: the Pyrefang
 // lean and forward, a spine of embers and a trail behind; the Voidmaul low
-// and massive, black veined with light, a great maul at its side. A
-// Blender model can replace either body later without touching the sim.
+// and massive, black veined with light, a great maul at its side. The
+// Ascendant (CONTEXT.md) is the same silhouette a third bigger, its
+// accent in the Wrath's white-violet, a spinning halo of shards above its
+// back, so the fourth rise reads as another creature from across the
+// ring. A Blender model can replace either body later without touching
+// the sim.
 
 import * as THREE from 'three';
 import type { Unit } from '../sim/unit';
@@ -85,11 +89,14 @@ function pyrefang(holder: THREE.Group, accent: number): CreatureFigure {
 // The Voidmaul: a slab of a body close to the ground, four pillar legs, a
 // blunt head sunk into the shoulders, veins of light across the hide, and
 // the maul held low at its right side, its head glowing at the seams.
-function voidmaul(holder: THREE.Group, accent: number): CreatureFigure {
+function voidmaul(holder: THREE.Group, accent: number, ascendant = false): CreatureFigure {
+  // The hide glows faintly with the accent; the Wrath's near-white would
+  // wash the whole slab pale, so the Ascendant keeps its void black and
+  // lets the veins carry the color.
   const hide = new THREE.MeshLambertMaterial({
     color: 0x16122a,
     emissive: accent,
-    emissiveIntensity: 0.18,
+    emissiveIntensity: ascendant ? 0.05 : 0.18,
     flatShading: true,
   });
   const vein = glowOf(accent, 0.8);
@@ -132,9 +139,39 @@ function voidmaul(holder: THREE.Group, accent: number): CreatureFigure {
   return { holder, barY: 4.2 };
 }
 
+// How much bigger an Ascendant stands than its creature.
+const ASCENDANT_SCALE = 1.35;
+
+// The halo: a ring of light tilted over the body with six shards set
+// around it, spinning with the beacon (userData.spin), in the Wrath's
+// color. Placed at the creature's bar height before the scale-up, so it
+// sits just over the back on either silhouette.
+function ascend(holder: THREE.Group, figure: CreatureFigure, accent: number): CreatureFigure {
+  const light = glowOf(accent, 1.0);
+  const halo = new THREE.Group();
+  halo.position.y = figure.barY - 0.9;
+  halo.userData.spin = true;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.09, 6, 24), light);
+  ring.rotation.x = Math.PI / 2;
+  halo.add(ring);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const shard = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.7, 4), light);
+    shard.position.set(Math.cos(a) * 1.5, 0.35, Math.sin(a) * 1.5);
+    shard.rotation.z = Math.cos(a) * 0.35;
+    shard.rotation.x = -Math.sin(a) * 0.35;
+    halo.add(shard);
+  }
+  holder.add(halo);
+  holder.scale.multiplyScalar(ASCENDANT_SCALE);
+  return { holder, barY: figure.barY * ASCENDANT_SCALE + 0.4 };
+}
+
 // Builds the creature's figure into `holder`. The caller enables shadows
 // and collects the beacon as a spinner, like it does for the Warden.
 export function buildCreatureMesh(u: Readonly<Unit>, holder: THREE.Group): CreatureFigure {
-  const accent = aspectColor(u.aspect).hex;
-  return u.creatureId === 'voidmaul' ? voidmaul(holder, accent) : pyrefang(holder, accent);
+  const accent = aspectColor(u.aspect, u.ascendant).hex;
+  const figure =
+    u.creatureId === 'voidmaul' ? voidmaul(holder, accent, u.ascendant) : pyrefang(holder, accent);
+  return u.ascendant ? ascend(holder, figure, accent) : figure;
 }

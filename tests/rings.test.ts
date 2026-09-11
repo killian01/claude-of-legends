@@ -3,8 +3,10 @@
 // rising on its clock with the next aspect of a fixed order, neutral and
 // visible to both teams, fighting champions only inside its ring, resetting
 // when pulled out or left alone, and paying the killing team its aspect as
-// a permanent favor plus gold to every member. The Warden rises last, at
-// 12:00. Played on the export, since the launch map fixture has no rings.
+// a permanent favor plus gold to every member. Once its three aspects are
+// spent a ring's creature returns as its Ascendant, whose death hands the
+// Wrath instead. The Warden rises last, at 12:00. Played on the export,
+// since the launch map fixture has no rings.
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -12,11 +14,12 @@ import { dealDamage } from '../src/sim/combat/damage';
 import { GAME_MAP } from '../src/sim/content/map';
 import {
   ASPECTS,
+  bodyGrowth,
   CREATURE_LIST,
   CREATURES,
-  creatureScale,
   FAVOR_MAX_STACKS,
   RING_GOLD_EACH,
+  WRATH_DURATION_S,
 } from '../src/sim/content/rings';
 import {
   type StarOrchardLayout,
@@ -111,12 +114,15 @@ describe('the rings', () => {
     expect(WARDEN_FIRST_SPAWN_S).toBe(720);
     expect(CREATURES.pyrefang.firstRiseS).toBeLessThan(CREATURES.voidmaul.firstRiseS);
     expect(CREATURES.voidmaul.firstRiseS).toBeLessThan(WARDEN_FIRST_SPAWN_S);
-    for (const def of CREATURE_LIST) expect(def.returnS).toBe(240);
+    for (const def of CREATURE_LIST) {
+      expect(def.returnS).toBe(180);
+      expect(def.ascendant.returnS).toBe(300);
+    }
     const sim = orchardSim();
     const clocks = sim.ringClocks();
-    expect(clocks.map((c) => [c.ring, c.creature, c.riseAt, c.aspect])).toEqual([
-      ['top', 'voidmaul', 390, 'bulwark'],
-      ['bot', 'pyrefang', 240, 'might'],
+    expect(clocks.map((c) => [c.ring, c.creature, c.riseAt, c.aspect, c.ascendant])).toEqual([
+      ['top', 'voidmaul', 390, 'bulwark', false],
+      ['bot', 'pyrefang', 240, 'might', false],
     ]);
     // Nothing stands on a ring before its clock strikes, and the
     // Pyrefang stands there the tick it does.
@@ -142,11 +148,22 @@ describe('the rings', () => {
     expect(p.aspect).toBe('might');
     expect(sim.isVisible(0, p.id)).toBe(true);
     expect(sim.isVisible(1, p.id)).toBe(true);
-    expect(p.maxHp).toBe(Math.round(CREATURES.pyrefang.hp * creatureScale(sim.time)));
-    // Sized for a duo: more than a camp, less than the Warden.
-    expect(p.maxHp).toBeGreaterThan(1500);
-    expect(p.maxHp).toBeLessThan(2500);
+    // Grown at the tick it rose (a few ticks past the clock, so within a
+    // fraction of a percent of the clock's own growth).
+    const expected = CREATURES.pyrefang.body.hp * bodyGrowth(CREATURES.pyrefang.firstRiseS);
+    expect(Math.abs(p.maxHp - expected) / expected).toBeLessThan(0.005);
+    expect(p.bitePct).toBe(CREATURES.pyrefang.body.bitePct);
+    expect(p.ascendant).toBe(false);
     expect(p.goldBounty).toBe(0);
+    // Grown with the clock: the same body at 12:00 is about twice the one
+    // at 4:00, the way a laner's sustained damage is (content/rings.ts,
+    // BODY_GROWTH); the resistances stay as written.
+    const late = orchardSim();
+    late.time = 720;
+    const p12 = rise(late, 'pyrefang');
+    expect(p12.maxHp).toBeGreaterThan(p.maxHp * 1.7);
+    expect(p12.stats.armor).toBe(p.stats.armor);
+    expect(p12.stats.ad).toBeGreaterThan(p.stats.ad);
   });
 
   it('retaliates against a champion that hits it, and resets when left alone', () => {
@@ -218,18 +235,45 @@ describe('the rings', () => {
     expect(near.xp + (near.level - 1) * 1000).toBeGreaterThan(xpBefore);
   });
 
-  it('carries its aspects in a fixed order that loops, and the favor stacks with the loop', () => {
+  it('carries its aspects in a fixed order, once each, then rises as its Ascendant', () => {
     const sim = orchardSim();
-    const seen: string[] = [];
+    const seen: (string | null)[] = [];
     const slayer = sim.addChampion(1, { x: 120, z: 30 });
-    for (let i = 0; i < 4; i++) {
+    const far = sim.addChampion(1, { x: 30, z: 120 });
+    let ascendant: Unit | null = null;
+    for (let i = 0; i < 5; i++) {
       const p = rise(sim, 'pyrefang');
-      seen.push(p.aspect!);
+      seen.push(p.aspect);
+      if (i === 3) {
+        ascendant = p;
+        expect(p.ascendant).toBe(true);
+        expect(sim.ringClocks().find((c) => c.ring === 'bot')).toMatchObject({
+          aspect: null,
+          ascendant: true,
+          unitId: p.id,
+        });
+        // The bigger body: a team's fight, not a duo's.
+        expect(p.maxHp).toBeGreaterThan(CREATURES.pyrefang.body.hp * bodyGrowth(sim.time) * 1.5);
+        expect(p.radius).toBeGreaterThan(CREATURES.pyrefang.body.radius);
+        const gold = far.gold;
+        slayer.pos = { x: p.pos.x + 2, z: p.pos.z };
+        slay(sim, p, 1, slayer);
+        // Its death hands the Wrath and the gold, and no favor.
+        expect(sim.teamWrath(1)).toBeCloseTo(sim.time + WRATH_DURATION_S, 0);
+        expect(sim.teamWrath(0)).toBeNull();
+        expect(far.gold - gold).toBe(RING_GOLD_EACH);
+        // And the ring's clock restarts on the Ascendant's longer return.
+        const clock = sim.ringClocks().find((c) => c.ring === 'bot')!;
+        expect(clock.ascendant).toBe(true);
+        expect(clock.riseAt! - sim.time).toBeGreaterThan(CREATURES.pyrefang.ascendant.returnS - 6);
+        continue;
+      }
       slayer.pos = { x: p.pos.x + 2, z: p.pos.z };
       slay(sim, p, 1, slayer);
     }
-    expect(seen).toEqual(['might', 'tide', 'tempo', 'might']);
-    expect(sim.teamFavors(1)).toMatchObject({ might: 2, tide: 1, tempo: 1 });
+    expect(ascendant).not.toBeNull();
+    expect(seen).toEqual(['might', 'tide', 'tempo', null, null]);
+    expect(sim.teamFavors(1)).toMatchObject({ might: 1, tide: 1, tempo: 1 });
     // The Voidmaul's order is its own.
     expect(CREATURES.voidmaul.aspects).toEqual(['bulwark', 'swiftness', 'resolve']);
     expect(CREATURES.pyrefang.aspects).toEqual(['might', 'tide', 'tempo']);
@@ -244,10 +288,11 @@ describe('the rings', () => {
     ]);
   });
 
-  it('caps a favor at four stacks', () => {
+  it('holds each aspect once: a second grant of the same favor changes nothing', () => {
     const sim = orchardSim();
     for (let i = 0; i < FAVOR_MAX_STACKS + 2; i++) sim.grantFavor(0, 'might');
-    expect(sim.teamFavors(0).might).toBe(FAVOR_MAX_STACKS);
+    expect(FAVOR_MAX_STACKS).toBe(1);
+    expect(sim.teamFavors(0).might).toBe(1);
   });
 
   it('pays nobody when no champion made the kill, and the clock restarts anyway', () => {
@@ -265,18 +310,23 @@ describe('the rings', () => {
     expect(sim.ringClocks().find((c) => c.ring === 'bot')?.riseAt).not.toBeNull();
   });
 
-  it('survives a world checkpoint: the clocks and the favors restore', () => {
+  it('survives a world checkpoint: the clocks, the favors and the Wrath restore', () => {
     const sim = orchardSim();
     const p = rise(sim, 'pyrefang');
     slay(sim, p, 1);
+    sim.ringStates.find((s) => s.ring === 'bot')!.riseIndex = 3;
+    slay(sim, rise(sim, 'pyrefang'), 0);
     const snap = sim.snapshot();
     const clocks = sim.ringClocks();
     const favors = sim.teamFavors(1);
+    const wrath = sim.teamWrath(0);
+    expect(wrath).not.toBeNull();
     for (let i = 0; i < 40; i++) sim.tick();
     sim.grantFavor(0, 'bulwark');
     sim.restore(snap);
     expect(sim.ringClocks()).toEqual(clocks);
     expect(sim.teamFavors(1)).toEqual(favors);
     expect(sim.teamFavors(0).bulwark).toBe(0);
+    expect(sim.teamWrath(0)).toBe(wrath);
   });
 });

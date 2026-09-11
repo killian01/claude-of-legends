@@ -34,6 +34,8 @@ export interface IWorld {
   ringClocks(): readonly RingClock[];
   // The favors a team holds (ADR 0022), every aspect at zero for none.
   teamFavors(team: TeamId): FavorStacks;
+  // When a team's Wrath ends (ADR 0022, round two), null when it holds none.
+  teamWrath(team: TeamId): number | null;
   orderMove(unitId: number, x: number, z: number): void;
   orderAttack(unitId: number, targetId: number): void;
   orderAttackMove(unitId: number, x: number, z: number): void;

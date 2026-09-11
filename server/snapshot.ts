@@ -109,9 +109,10 @@ export function buildSnapshot(
       snap.r = u.radius;
       snap.rg = u.stats.attackRange;
       if (u.structure) snap.s = u.structure;
-      if (u.kind === 'creature' && u.creatureId && u.aspect) {
+      if (u.kind === 'creature' && u.creatureId) {
         snap.cr = u.creatureId;
-        snap.a = u.aspect;
+        if (u.aspect) snap.a = u.aspect;
+        if (u.ascendant) snap.asc = 1;
       }
     }
     units.push(snap);
@@ -208,6 +209,10 @@ export function buildSnapshot(
       self.enemyBoonUntil = round2(enemyBoon.until);
       self.enemyBoonStacks = enemyBoon.stacks;
     }
+    const wrath = sim.teamWrath(team);
+    if (wrath !== null) self.wrathUntil = round2(wrath);
+    const enemyWrath = sim.teamWrath((1 - team) as TeamId);
+    if (enemyWrath !== null) self.enemyWrathUntil = round2(enemyWrath);
     const favors = sim.teamFavors(team);
     if (hasAnyFavor(favors)) self.favors = favors;
     const enemyFavors = sim.teamFavors((1 - team) as TeamId);
@@ -254,6 +259,12 @@ export function buildSnapshot(
     events: snapEvents,
     winner: sim.winner,
     objAt: sim.objectiveSpawnAt(),
-    rings: sim.ringClocks().map((c) => ({ r: c.ring, u: c.unitId, at: c.riseAt, a: c.aspect })),
+    rings: sim.ringClocks().map((c) => ({
+      r: c.ring,
+      u: c.unitId,
+      at: c.riseAt,
+      a: c.aspect,
+      ...(c.ascendant ? { asc: 1 as const } : {}),
+    })),
   };
 }

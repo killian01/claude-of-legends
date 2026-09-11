@@ -52,7 +52,7 @@ describe('the announcer clips', () => {
         false,
       );
     }
-    expect(PENDING_VOICE_LINES.length).toBeLessThanOrEqual(6);
+    expect(PENDING_VOICE_LINES.length).toBeLessThanOrEqual(8);
   });
 
   it('holds real audio, not git-lfs pointers', () => {

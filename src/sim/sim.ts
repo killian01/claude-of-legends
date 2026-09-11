@@ -104,7 +104,11 @@ export type SimEvent =
   | { type: 'play'; unitId: number; playId: string }
   | { type: 'victory'; team: TeamId }
   // A ring's creature fell and its aspect became the team's favor.
-  | { type: 'favor'; team: TeamId; aspect: AspectId; creature: CreatureId | null };
+  | { type: 'favor'; team: TeamId; aspect: AspectId; creature: CreatureId | null }
+  // An Ascendant fell and the team holds the Wrath.
+  | { type: 'wrath'; team: TeamId; creature: CreatureId }
+  // The Wrath finished a champion brought under its line.
+  | { type: 'execute'; unitId: number; killerId: number };
 
 // How long a champion's damage on a victim keeps earning an assist.
 const ASSIST_WINDOW_S = 10;
@@ -523,6 +527,17 @@ export class Sim {
   }
 
   // The Warden's Boon state for a team, null when inactive (IWorld).
+  // When the team's Wrath ends (CONTEXT.md), null when it holds none.
+  teamWrath(team: TeamId): number | null {
+    return this.teamBuffs.wrathUntil(team, this.time);
+  }
+
+  // Hands a team the Wrath by hand (a test, a practice drill); a match
+  // grants it through an Ascendant's death.
+  grantWrath(team: TeamId): void {
+    this.teamBuffs.grantWrath(team, this.time);
+  }
+
   teamBuff(team: TeamId): { until: number; stacks: number } | null {
     return this.teamBuffs.boon(team, this.time);
   }
@@ -890,19 +905,30 @@ export class Sim {
           onCampSlain(this.campStates, id, this.units.get(killerId), this.time);
         }
         // A ring's creature falls: its aspect becomes the killing team's
-        // favor, every member of that team is paid, and the ring's clock
-        // restarts. A creature nobody's champion killed pays nobody.
+        // favor (the Wrath when it was the Ascendant), every member of
+        // that team is paid, and the ring's clock restarts. A creature
+        // nobody's champion killed pays nobody.
         if (u.kind === 'creature') {
-          const aspect = onCreatureSlain(this.ringStates, id, this.time);
+          const fall = onCreatureSlain(this.ringStates, id, this.time);
           const killer = this.units.get(killerId);
-          if (aspect !== null && killer && killer.kind === 'champion') {
-            this.grantFavor(killer.team, aspect);
+          if (fall !== null && killer && killer.kind === 'champion') {
+            if (fall.aspect !== null) this.grantFavor(killer.team, fall.aspect);
+            else this.teamBuffs.grantWrath(killer.team, this.time);
             for (const member of this.units.values()) {
               if (member.kind !== 'champion' || member.team !== killer.team) continue;
               member.gold += RING_GOLD_EACH;
               this.events.push({ type: 'gold', unitId: member.id, amount: RING_GOLD_EACH });
             }
-            this.events.push({ type: 'favor', team: killer.team, aspect, creature: u.creatureId });
+            if (fall.aspect !== null) {
+              this.events.push({
+                type: 'favor',
+                team: killer.team,
+                aspect: fall.aspect,
+                creature: fall.creature,
+              });
+            } else {
+              this.events.push({ type: 'wrath', team: killer.team, creature: fall.creature });
+            }
           }
         }
         if (u.moveSpeed <= 0) this.nav.unblockCircle(u.pos.x, u.pos.z, staticFootprint(u));

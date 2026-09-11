@@ -22,6 +22,13 @@ export const ASPECT_COLORS: Readonly<Record<AspectId, AspectColor>> = {
   resolve: { hex: 0xff9ad5, css: '#ff9ad5', dark: '#3d1a30' },
 };
 
-export function aspectColor(aspect: AspectId | null | undefined): AspectColor {
+// The Wrath's color (CONTEXT.md): what an Ascendant wears and what its
+// chip, its beacon and the mark on a doomed enemy say.
+export const WRATH_COLOR: AspectColor = { hex: 0xf3ecff, css: '#f3ecff', dark: '#2b2340' };
+
+// A creature's color: its aspect's, the Wrath's for an Ascendant (no
+// aspect), a plain ember for anything unnamed.
+export function aspectColor(aspect: AspectId | null | undefined, ascendant = false): AspectColor {
+  if (ascendant) return WRATH_COLOR;
   return aspect ? ASPECT_COLORS[aspect] : { hex: 0xe8944a, css: '#e8944a', dark: '#3d2410' };
 }

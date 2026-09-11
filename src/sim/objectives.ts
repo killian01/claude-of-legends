@@ -20,13 +20,9 @@ import { createWarden, hostile, type Unit } from './unit';
 // consecutive pits.
 export const WARDEN_FIRST_SPAWN_S = 720;
 export const WARDEN_RESPAWN_S = 150;
-// The Warden grows with the game clock, like waves do: spawning later must
-// not mean spawning trivial against six-item champions.
-export const WARDEN_SCALING_PER_MIN = 0.04;
-
-export function wardenScale(time: number): number {
-  return 1 + WARDEN_SCALING_PER_MIN * (time / 60);
-}
+// The Warden's body (content/warden.ts) grows with the game clock by the
+// same curve as the rings' creatures (content/rings.ts, bodyGrowth):
+// spawning later must not mean spawning trivial against six-item champions.
 // Beyond this range from its pit the Warden resets: full heal, walk home.
 export const WARDEN_LEASH_RANGE = 13;
 // How long after the last hit it keeps fighting before resetting.
@@ -66,7 +62,7 @@ export function stepObjectives(ctx: CombatCtx, map: GameMap, state: ObjectiveSta
     if (ctx.time >= state.nextSpawnAt) {
       const pit = map.wardenPits[state.spawnIndex % map.wardenPits.length]!;
       const id = ctx.allocId();
-      ctx.units.set(id, createWarden(id, pit, wardenScale(ctx.time)));
+      ctx.units.set(id, createWarden(id, pit, ctx.time));
       state.wardenId = id;
       state.spawnIndex += 1;
     }

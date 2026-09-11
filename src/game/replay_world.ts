@@ -77,6 +77,9 @@ export class ReplayWorld implements IWorld {
   teamFavors(team: TeamId): FavorStacks {
     return this.sim.teamFavors(team);
   }
+  teamWrath(team: TeamId): number | null {
+    return this.sim.teamWrath(team);
+  }
 
   orderMove(): void {}
   orderAttack(): void {}

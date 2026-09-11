@@ -26,6 +26,10 @@ export const VOICE_LINES = {
   voidmaul_risen: 'The Voidmaul has risen!',
   favor_ours: 'Your team has claimed a favor!',
   favor_theirs: 'The enemy has claimed a favor',
+  pyrefang_ascendant_risen: 'The Pyrefang Ascendant has risen!',
+  voidmaul_ascendant_risen: 'The Voidmaul Ascendant has risen!',
+  wrath_ours: 'Your team holds the Wrath!',
+  wrath_theirs: 'The enemy holds the Wrath',
   victory: 'Victory!',
   defeat: 'Defeat',
 } as const;
@@ -44,6 +48,10 @@ export const PENDING_VOICE_LINES: readonly VoiceLineId[] = [
   'voidmaul_risen',
   'favor_ours',
   'favor_theirs',
+  'pyrefang_ascendant_risen',
+  'voidmaul_ascendant_risen',
+  'wrath_ours',
+  'wrath_theirs',
 ];
 
 export const RECORDED_VOICE_LINE_IDS: readonly VoiceLineId[] = VOICE_LINE_IDS.filter(

@@ -127,20 +127,23 @@ _Avoid_: pit (the Warden's), arena (the bots' ladder), platform (the spawn terra
 
 **Pyrefang**:
 The bot ring's creature: a lean, incandescent predator with a spine of embers and a trail
-of fire. Rises first, at 4:00, and again four minutes after each death, carrying Might, Tide
-and Tempo in that order, looping. Neutral like the Warden: fights champions only, visible to
-both teams, resets when pulled out of its ring or left alone. Sized for a duo.
+of fire. Rises first, at 4:00, and again three minutes after each death, carrying Might, Tide
+and Tempo in that order, once each; its fourth rise and every later one is its Ascendant.
+Neutral like the Warden: fights champions only, visible to both teams, resets when pulled
+out of its ring or left alone. Sized for a duo: a lone champion takes a minute or more and
+leaves bleeding.
 _Avoid_: drake, dragon, monster names from other games
 
 **Voidmaul**:
 The top ring's creature: a massive, low colossus black as the void and veined with light,
-swinging a great maul. Rises at 6:30 and again four minutes after each death, carrying
-Bulwark, Swiftness and Resolve in that order, looping. The same rules as the Pyrefang.
+swinging a great maul. Rises at 6:30 and again three minutes after each death, carrying
+Bulwark, Swiftness and Resolve in that order, once each, then its Ascendant. The same rules
+as the Pyrefang.
 _Avoid_: herald, golem, boss
 
 **Favor**:
 What a ring creature's death hands the killing team: its aspect, permanent for the rest of
-the match, team-wide, surviving death, stacked per aspect up to four. Every kill also pays
+the match, team-wide, surviving death, each aspect once a match. Every kill also pays
 gold to each member of the team, dead or alive. Six aspects, in percent per stack: Might
 (attack damage and ability power), Tide (missing health back every five seconds), Tempo
 (attack speed), Bulwark (armor and magic resistance), Swiftness (move speed out of combat,
@@ -152,6 +155,23 @@ _Avoid_: soul, drake buff, permanent buff, stack (alone; say "a stack of Might")
 Which of the six favors a creature carries this rise, shown beside its clock, so both teams
 know what they will fight for. The order is fixed per ring and the same in every match.
 _Avoid_: element, type, flavor
+
+**Ascendant**:
+What a ring's creature becomes once its three aspects are spent: its fourth rise and every
+later one (the Pyrefang Ascendant, the Voidmaul Ascendant), the same silhouette grown into
+a body that wants a full team and about forty seconds, back five minutes after each of its
+deaths. It carries no aspect: its death hands the Wrath and the same gold to every member
+of the killing team. Neutral like its creature, leashed to the same ring.
+_Avoid_: elder (the word another game uses for this role), boss, ancient, primal
+
+**Wrath**:
+What an Ascendant's death hands the killing team for 150 s: team-wide, surviving death,
+refreshed by a second Ascendant and never stacked. While a team holds it, any enemy champion
+one of its champions brings under a fifth of its max health dies on the spot (the killing
+blow credited to that champion), and every attack or ability hit burns 3 percent of the
+target's max health over 3 s, true damage. Towers and minions execute nobody; nothing but a
+champion is executed. Shown as a chip for both teams and as a mark on an enemy under the line.
+_Avoid_: execute buff, verdict, dread, aspect of anything
 
 **Windup**:
 The commitment beat before a hit lands. For an ability: costs are paid at press, the spell resolves after the delay, and a stun during it cancels the cast. For an auto-attack: the strike resolves a beat after the swing starts; moving, a stun, or a dash cancels it and refunds the attack timer (the orb-walk rule), and a target that blinks out of reach makes the committed strike whiff. The counterplay window big hits owe their victims.

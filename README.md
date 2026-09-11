@@ -122,7 +122,9 @@ practice, ranked, lobbies and the bots' Arena alike. See
 - Push a lane, take towers, and destroy the enemy Sanctum to win. The
   Pyrefang and the Voidmaul rise on the two corner rings from 4:00 and
   hand whoever slays them a permanent favor and gold for the whole team;
-  the Warden at the center, from 12:00, grants the bigger, temporary Boon.
+  the Warden at the center, from 12:00, grants the bigger, temporary Boon;
+  late in the match each ring's creature returns as its Ascendant, a body
+  for a full team whose death hands the Wrath.
 - Or field a bot instead of playing by hand (`docs/design/bots.md`). In
   the Academy (the Bots tile on the home, or its bar) write its playbook by talking to the
   coach or editing the plays, spar it against house bots in seconds, then

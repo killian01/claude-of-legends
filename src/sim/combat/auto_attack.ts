@@ -89,6 +89,9 @@ function strike(ctx: CombatCtx, u: Unit, target: Unit): void {
     hpPct = towerShotHpPct(u.passiveStacks);
     u.passiveStacks += 1;
   }
+  // A neutral body's bite (content/rings.ts): a share of a champion's max
+  // health on top of the strike, so a tank does not shrug it off.
+  if (u.bitePct > 0 && target.kind === 'champion') hpPct += u.bitePct;
   // An empowered attack (kits-v2) spends its riders on this strike: bonus
   // effects on the victim, optional splash around it. Consumed here so the
   // same rule serves melee strikes and ranged bolts.

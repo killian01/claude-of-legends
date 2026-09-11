@@ -391,7 +391,7 @@ export function startPresentation(
       const up = clock.unitId !== null;
       if (up && ringWasUp.get(clock.ring) === false) {
         minimap.addPing(clock.x, clock.z);
-        renderer.flashMarker(clock.x, clock.z, aspectColor(clock.aspect).hex);
+        renderer.flashMarker(clock.x, clock.z, aspectColor(clock.aspect, clock.ascendant).hex);
       }
       ringWasUp.set(clock.ring, up);
     }

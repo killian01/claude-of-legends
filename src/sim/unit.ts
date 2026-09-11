@@ -6,7 +6,15 @@ import type { CoachOrder } from './coach';
 import type { Status } from './combat/status';
 import type { ChampionDef } from './content/champions';
 import type { LaneId } from './content/map';
-import type { AspectId, CreatureDef, CreatureId } from './content/rings';
+import {
+  type AspectId,
+  biteGrowth,
+  bodyGrowth,
+  type CreatureBody,
+  type CreatureDef,
+  type CreatureId,
+} from './content/rings';
+import { WARDEN_BODY, WARDEN_GOLD_BOUNTY } from './content/warden';
 import type { DashState } from './dashes';
 import { type FavorStacks, NO_FAVORS } from './favors';
 import type { AbilityKey, TeamId, Vec2 } from './types';
@@ -80,9 +88,15 @@ export interface Unit {
   // only; everything else carries none.
   favors: FavorStacks;
   // A ring creature's identity and the aspect it carries (content/rings.ts);
-  // null on every other unit.
+  // null on every other unit. An Ascendant carries no aspect: its death
+  // hands the Wrath.
   creatureId: CreatureId | null;
   aspect: AspectId | null;
+  ascendant: boolean;
+  // The share of the target's max health a strike bites off on top of the
+  // attack damage, true damage (content/rings.ts, CreatureBody): the
+  // neutral bodies' rule; zero for everyone else.
+  bitePct: number;
   // The playbook play acting for this seat right now (bots, ADR 0013),
   // null for seats played by hand. Presentation and reports read it; no
   // sim rule ever does.
@@ -212,6 +226,8 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     favors: NO_FAVORS,
     creatureId: null,
     aspect: null,
+    ascendant: false,
+    bitePct: 0,
     play: null,
     coachOrder: null,
     coachOrderSeenAt: 0,
@@ -346,54 +362,57 @@ export function createMinion(
   return u;
 }
 
+// A neutral body (content/rings.ts, CreatureBody) written at the 4:00
+// mark and carried to `time` by the champions' measured growth: health by
+// bodyGrowth, the flat strike by biteGrowth, the bite (a share of the
+// target's health) by nothing, it scales itself. The resistances stay as
+// written: grown with the health they double-counted (the first
+// calibration at 12:00 found five champions slower than at 4:00).
+function growBody(u: Unit, body: CreatureBody, time: number): void {
+  u.radius = body.radius;
+  u.moveSpeed = body.moveSpeed;
+  u.hp = Math.round(body.hp * bodyGrowth(time));
+  u.maxHp = u.hp;
+  u.stats.ad = Math.round(body.ad * biteGrowth(time));
+  u.bitePct = body.bitePct;
+  u.stats.armor = body.armor;
+  u.stats.mr = body.mr;
+  u.stats.attackRange = body.attackRange;
+  u.stats.attackSpeed = body.attackSpeed;
+  u.sightRange = 8;
+  u.xpBounty = body.xpBounty;
+}
+
 // The Warden (CONTEXT.md): the neutral river monster. Nominal team 0, but
-// neutral: true makes it hostile to everyone via hostile(). `scale` grows it
-// with the game clock (objectives.ts), the way waves grow.
-export function createWarden(id: number, pos: Vec2, scale = 1): Unit {
+// neutral: true makes it hostile to everyone via hostile(). Its body
+// (content/warden.ts) grows with the game clock, the way waves grow.
+export function createWarden(id: number, pos: Vec2, time = 0): Unit {
   const u = baseUnit(id, 0, 'warden', pos);
   u.neutral = true;
-  u.radius = 1.1;
-  u.moveSpeed = 3.0;
-  u.hp = Math.round(2500 * scale);
-  u.maxHp = u.hp;
-  u.stats.ad = Math.round(80 * scale);
-  u.stats.armor = 40;
-  u.stats.mr = 40;
-  u.stats.attackRange = 2;
-  u.stats.attackSpeed = 0.55;
-  u.sightRange = 8;
-  u.goldBounty = 150;
-  u.xpBounty = 200;
+  growBody(u, WARDEN_BODY, time);
+  u.goldBounty = WARDEN_GOLD_BOUNTY;
   return u;
 }
 
 // A ring creature (CONTEXT.md: Pyrefang, Voidmaul): neutral like the
-// Warden, hostile to everyone, sized for a duo, grown by `scale` with the
-// game clock (rings.ts). It carries the aspect its death hands over.
+// Warden, hostile to everyone, sized for a duo, grown with the game clock
+// (rings.ts). It carries the aspect its death hands over; the Ascendant
+// (aspect null) is the bigger body and hands the Wrath instead.
 export function createCreature(
   id: number,
   def: CreatureDef,
   pos: Vec2,
-  aspect: AspectId,
-  scale = 1,
+  aspect: AspectId | null,
+  time = 0,
 ): Unit {
   const u = baseUnit(id, 0, 'creature', pos);
   u.neutral = true;
   u.creatureId = def.id;
   u.aspect = aspect;
-  u.radius = def.radius;
-  u.moveSpeed = def.moveSpeed;
-  u.hp = Math.round(def.hp * scale);
-  u.maxHp = u.hp;
-  u.stats.ad = Math.round(def.ad * scale);
-  u.stats.armor = def.armor;
-  u.stats.mr = def.mr;
-  u.stats.attackRange = def.attackRange;
-  u.stats.attackSpeed = def.attackSpeed;
-  u.sightRange = 8;
+  u.ascendant = aspect === null;
+  growBody(u, u.ascendant ? def.ascendant.body : def.body, time);
   // No last-hit bounty: the favor and the team's gold are the prize.
   u.goldBounty = 0;
-  u.xpBounty = def.xpBounty;
   return u;
 }
 

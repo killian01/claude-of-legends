@@ -25,6 +25,7 @@ import { ITEM_LIST } from './items';
 import { RINGS_CONTENT } from './rings';
 import { SIGIL_LIST } from './sigils';
 import type { StarOrchard } from './star_orchard';
+import { WARDEN_CONTENT } from './warden';
 
 // FNV-1a over the canonical text: short, stable, and dependency-free. It
 // is a change detector, never a signature: nothing here defends against
@@ -96,6 +97,7 @@ export function contentFingerprint(orchard: StarOrchard): string {
       sigils: SIGIL_LIST,
       // The rings' creatures, clocks and favors (content/rings.ts).
       rings: RINGS_CONTENT,
+      warden: WARDEN_CONTENT,
       map: orchard.map,
       terrain: {
         revision: orchard.revision,

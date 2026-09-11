@@ -173,7 +173,10 @@ that same table. The screen already says the right word.
 
 The rings (ADR 0022) added four lines, "The Pyrefang has risen!", "The
 Voidmaul has risen!", "Your team has claimed a favor!" and "The enemy has
-claimed a favor", written before their clips: `PENDING_VOICE_LINES` in
+claimed a favor", and their second round four more, "The Pyrefang
+Ascendant has risen!", "The Voidmaul Ascendant has risen!", "Your team
+holds the Wrath!" and "The enemy holds the Wrath", written before their
+clips: `PENDING_VOICE_LINES` in
 `src/game/voice_lines.ts` names them, the speech synthesis reads them at
 play time exactly as it reads any line whose clip has not decoded, and
 `tests/voice_bank.test.ts` tolerates a missing clip for a pending line
@@ -182,4 +185,4 @@ the list empties as the clips are rendered:
 
     ELEVENLABS_API_KEY=<key> node scripts/build_voice.mjs --only pyrefang_risen
 
-then the three others, then the ids come off the list in the same commit.
+then the seven others, then the ids come off the list in the same commit.

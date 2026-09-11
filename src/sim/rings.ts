@@ -4,9 +4,12 @@
 // carrying the next aspect of its fixed order, fights back against the
 // champions that hit it inside its ring, resets when pulled out or left
 // alone, and on death hands the killing team the aspect as a favor
-// (favors.ts) and gold to every member (sim.ts, the death handling).
-// Called from the fixed tick order right after the Warden step. A map
-// without rings (the launch map) has no state here and nothing rises.
+// (favors.ts) and gold to every member (sim.ts, the death handling). Once
+// its aspects are spent, every later rise is its Ascendant (CONTEXT.md):
+// the bigger body, no aspect, the Wrath on its death (team_buffs.ts), a
+// longer return. Called from the fixed tick order right after the Warden
+// step. A map without rings (the launch map) has no state here and
+// nothing rises.
 
 import type { GameMap, RingSite } from './content/map';
 import {
@@ -15,7 +18,6 @@ import {
   type CreatureDef,
   type CreatureId,
   creatureOfRing,
-  creatureScale,
   type RingId,
 } from './content/rings';
 import { hypot } from './exact';
@@ -30,7 +32,8 @@ export interface RingState {
   unitId: number | null;
   // When the next one rises; meaningful while unitId is null.
   nextRiseAt: number;
-  // How many have risen so far: the next carries aspects[riseIndex % n].
+  // How many have risen so far: the next carries aspects[riseIndex], and
+  // past the end of the order it is the Ascendant.
   riseIndex: number;
 }
 
@@ -52,10 +55,14 @@ export function creatureDefOf(state: RingState): CreatureDef {
   return creatureOfRing(state.ring);
 }
 
-// The aspect the next creature of this ring carries (or the live one does).
-export function ringAspect(state: RingState, index = state.riseIndex): AspectId {
-  const aspects = creatureDefOf(state).aspects;
-  return aspects[index % aspects.length]!;
+// The aspect the next creature of this ring carries (or the live one
+// does); null once the order is spent, when the rise is the Ascendant's.
+export function ringAspect(state: RingState, index = state.riseIndex): AspectId | null {
+  return creatureDefOf(state).aspects[index] ?? null;
+}
+
+export function isAscendantRise(state: RingState, index = state.riseIndex): boolean {
+  return index >= creatureDefOf(state).aspects.length;
 }
 
 function nearestHostileChampion(ctx: CombatCtx, from: Unit, range: number): Unit | null {
@@ -85,7 +92,7 @@ export function stepRings(ctx: CombatCtx, states: RingState[]): void {
           : (ctx.nav.nearestWalkable(center.x, center.z) ?? center);
         ctx.units.set(
           id,
-          createCreature(id, creatureDefOf(state), at, ringAspect(state), creatureScale(ctx.time)),
+          createCreature(id, creatureDefOf(state), at, ringAspect(state), ctx.time),
         );
         state.unitId = id;
         state.riseIndex += 1;
@@ -128,21 +135,30 @@ export function stepRings(ctx: CombatCtx, states: RingState[]): void {
   }
 }
 
+export interface CreatureFall {
+  creature: CreatureId;
+  // The aspect the creature carried, null when it was the Ascendant.
+  aspect: AspectId | null;
+  ascendant: boolean;
+}
+
 // Called by the sim's death handling when a creature dies: the ring's
-// clock restarts, and the aspect the creature carried is returned so the
-// sim grants it (the favor and the gold live with the sim's Favors and
-// units). Null when the unit was no ring's creature.
+// clock restarts (the Ascendant's longer return when it was one), and
+// what the creature carried is returned so the sim grants it (the favor,
+// the Wrath and the gold live with the sim). Null when the unit was no
+// ring's creature.
 export function onCreatureSlain(
   states: RingState[],
   unitId: number,
   time: number,
-): AspectId | null {
+): CreatureFall | null {
   const state = states.find((s) => s.unitId === unitId);
   if (!state) return null;
-  const aspect = ringAspect(state, state.riseIndex - 1);
+  const def = creatureDefOf(state);
+  const ascendant = isAscendantRise(state, state.riseIndex - 1);
   state.unitId = null;
-  state.nextRiseAt = time + creatureDefOf(state).returnS;
-  return aspect;
+  state.nextRiseAt = time + (ascendant ? def.ascendant.returnS : def.returnS);
+  return { creature: state.creature, aspect: ringAspect(state, state.riseIndex - 1), ascendant };
 }
 
 // A ring's clock as a world reads it: the live creature or when the next
@@ -156,18 +172,25 @@ export interface RingClock {
   unitId: number | null;
   // When the next rises, null while one is alive.
   riseAt: number | null;
-  // The aspect the live creature carries, or the next one will.
-  aspect: AspectId;
+  // The aspect the live creature carries, or the next one will; null
+  // when that rise is the Ascendant's.
+  aspect: AspectId | null;
+  // Whether the live creature, or the next to rise, is the Ascendant.
+  ascendant: boolean;
 }
 
 export function ringClocks(states: readonly RingState[]): RingClock[] {
-  return states.map((s) => ({
-    ring: s.ring,
-    creature: s.creature,
-    x: s.site.x,
-    z: s.site.z,
-    unitId: s.unitId,
-    riseAt: s.unitId === null ? s.nextRiseAt : null,
-    aspect: s.unitId === null ? ringAspect(s) : ringAspect(s, s.riseIndex - 1),
-  }));
+  return states.map((s) => {
+    const index = s.unitId === null ? s.riseIndex : s.riseIndex - 1;
+    return {
+      ring: s.ring,
+      creature: s.creature,
+      x: s.site.x,
+      z: s.site.z,
+      unitId: s.unitId,
+      riseAt: s.unitId === null ? s.nextRiseAt : null,
+      aspect: ringAspect(s, index),
+      ascendant: isAscendantRise(s, index),
+    };
+  });
 }

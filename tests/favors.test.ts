@@ -48,8 +48,10 @@ describe('the favors', () => {
     sim.grantFavor(0, 'might');
     expect(a.stats.ad).toBeCloseTo(ad * (1 + ASPECTS.might.perStack), 6);
     if (ap > 0) expect(a.stats.ap).toBeCloseTo(ap * (1 + ASPECTS.might.perStack), 6);
+    // Each aspect once a match (the order no longer loops): a second grant
+    // changes nothing.
     sim.grantFavor(0, 'might');
-    expect(a.stats.ad).toBeCloseTo(ad * (1 + 2 * ASPECTS.might.perStack), 6);
+    expect(a.stats.ad).toBeCloseTo(ad * (1 + ASPECTS.might.perStack), 6);
   });
 
   it('Bulwark and Tempo: resistances and attack speed grow by the stack', () => {

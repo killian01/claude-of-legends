@@ -28,7 +28,10 @@ import { type ClientMsg, isFiniteVec } from './protocol';
 // remember that one.
 // 5: the rings' creatures and the favors (docs/plan-rings.md), and the
 // Warden at 12:00; a record from before them plays a match nobody played.
-export const REPLAY_VERSION = 5;
+// 6: the bodies grown for a team, the Ascendant and the Wrath (the rings'
+// round two): the execute in the damage pipeline and the bite on every
+// neutral strike are sim rules, not content.
+export const REPLAY_VERSION = 6;
 
 // The checksum a replay must show at `tick`, or null when the record
 // says nothing about that tick (an older record, or a tick that is not
