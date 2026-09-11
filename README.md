@@ -23,16 +23,16 @@ three table entries: [docs/adding-a-champion.md](docs/adding-a-champion.md).
 A smarter bot is a playbook, no engine code at all. Small and self-contained:
 [`good first issue`](../../labels/good%20first%20issue).
 
-![A fight at the river, mid lane](docs/screenshots/match.png)
+![A fight on the plaza of the Star Orchard, where the mid lane crosses](docs/screenshots/match.webp)
 
 </div>
 
 ## What this is
 
 A complete mini MOBA you can play right now: three lanes, ten champions with
-full kits, jungle camps, a neutral objective, fog of war, items, skins, a
-ladder, a Forge where you build a champion of your own, and an authoritative
-server for online play. No install. Online play
+full kits, jungle camps, three neutral creatures to fight over, fog of war,
+items, skins, a ladder, a Forge where you build a champion of your own, and an
+authoritative server for online play. No install. Online play
 needs a free account; the practice match against bots does not. An account is
 a name and a password, or one click on Continue with Discord: that button
 creates an account from a Discord identity and signs it back in (ADR 0009).

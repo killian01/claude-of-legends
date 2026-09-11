@@ -23,7 +23,9 @@
 // its camera. TOUR_DIR takes the frames (default tour/), one folder per
 // scene plus a still, and scenes.json gets the passage's length so
 // scripts/tour_montage.mjs plays it at the rate it was filmed. TOUR_FPS
-// and TOUR_GL as in tour_clips.mjs.
+// and TOUR_GL as in tour_clips.mjs; TOUR_ZOOM turns the wheel that much
+// before a scene is filmed, negative bringing the camera closer (-300 is
+// as close as it goes, the README's shot is taken there).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import puppeteer from 'puppeteer-core';
 import { e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
@@ -55,6 +57,7 @@ const GL = {
 const gl = GL[process.env.TOUR_GL ?? 'swiftshader'] ?? GL.swiftshader;
 const [sw, sh] = (process.env.TOUR_SIZE ?? '1280x720').split('x').map(Number);
 const size = { width: sw || 1280, height: sh || 720 };
+const ZOOM = Number(process.env.TOUR_ZOOM ?? 0) || 0;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s) % 60).padStart(2, '0')}`;
@@ -364,6 +367,17 @@ for (const name of order) {
   if (scene.camera.kind === 'fixed') await lookAt(rect, scene.camera.at);
   if (scene.camera.kind === 'pan') await lookAt(rect, scene.camera.path[0]);
   if (scene.camera.kind === 'follow') await track();
+  // The viewer's own wheel zoom, sent to the renderer's canvas itself (the
+  // largest one): a wheel turned over the middle of the screen lands on the
+  // HUD and never reaches it.
+  if (ZOOM !== 0) {
+    await page.evaluate((dy) => {
+      const c = [...document.querySelectorAll('canvas')].sort(
+        (p, q) => q.width * q.height - p.width * p.height,
+      )[0];
+      c?.dispatchEvent(new WheelEvent('wheel', { deltaY: dy, bubbles: true, cancelable: true }));
+    }, ZOOM);
+  }
   await sleep(600);
   await tidy();
   await takeTheClock();

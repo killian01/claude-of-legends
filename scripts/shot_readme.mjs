@@ -3,6 +3,10 @@
 // mid lane fight. Run with the dev stack up (vite on 5173); SHOT_URL
 // switches the landing shot to another host (the live server), and
 // SHOT_HOME_ONLY=1 stops after it.
+//
+// The README's match shot is no longer one of these: it is a frame of a
+// saved replay's fight, taken by scripts/tour_match.mjs with TOUR_ZOOM
+// (docs/making-a-clip.md), where a real ten-champion match is at hand.
 import puppeteer from 'puppeteer-core';
 
 const OUT = process.env.SHOT_DIR ?? 'docs/screenshots';

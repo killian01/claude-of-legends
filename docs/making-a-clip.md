@@ -164,6 +164,15 @@ scene before the whole thing is spent on it. The montage plays these as
 filmed: `scenes.json` says how many frames covered how long, and the rate
 is above its smooth line.
 
+`TOUR_ZOOM` turns the viewer's wheel before a passage, negative to bring
+the camera closer (-300 is as close as it goes). The README's match shot
+is one frame of the fight passage taken that way, at the README's size and
+two frames a second so there is a moment to choose from:
+
+```
+TOUR_SIZE=1720x960 TOUR_FPS=2 TOUR_ZOOM=-300 TOUR_DIR=/tmp/readme node scripts/tour_match.mjs fight
+```
+
 ## Assembling it
 
 `scripts/tour_montage.mjs` cuts what was filmed into something postable: a
