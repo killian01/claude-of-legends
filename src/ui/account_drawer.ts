@@ -1,5 +1,5 @@
-// The two drawers the home's bar opens (ui/side_drawer.ts): the account's
-// own sheet behind its name, and the live matches behind Live.
+// The drawer the home's bar opens (ui/side_drawer.ts): the account's own
+// sheet behind its name.
 //
 // The account sheet is everything the old Ladder, Career and Settings
 // cards held, in one place: the place on every ladder with the way to the
@@ -9,7 +9,6 @@
 import { signOut } from './auth';
 import { buildLadderCard } from './ladder_card';
 import { DISCORD, REPO } from './links';
-import { buildLivePanel } from './live_panel';
 import { el } from './menu';
 import { navLink } from './page';
 import { buildProfilePanel } from './profile_panel';
@@ -44,11 +43,5 @@ export function openAccountDrawer(host: HTMLElement, opts: AccountDrawerOptions)
     void signOut().then(() => location.reload());
   });
   d.foot.append(navLink('Discord', DISCORD), navLink('Source', REPO), out);
-  return d;
-}
-
-export function openLiveDrawer(host: HTMLElement): Drawer {
-  const d = openDrawer(host, 'Live matches');
-  d.body.appendChild(buildLivePanel());
   return d;
 }

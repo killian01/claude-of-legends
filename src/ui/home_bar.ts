@@ -1,7 +1,7 @@
 // The home's bar (CONTEXT.md: Home) filled in: the sections that are
-// pages of their own, Live with the count of matches running, and at the
-// right the account's own block, its place by hand beside its name, which
-// opens the account drawer. Pure DOM over /api/ladder/mine for the place.
+// pages of their own, and at the right the account's own block, its place
+// by hand beside its name, which opens the account drawer. Pure DOM over
+// /api/ladder/mine for the place.
 
 import { tierOf } from '../net/tiers';
 import { BALANCE_CSS, balanceTag, setBalanceTag } from './balances';
@@ -23,11 +23,6 @@ const CSS = `${BALANCE_CSS}
 .pg-purse .bal { font-size: 12.5px; }
 /* The account block is the wider thing and wins the room first. */
 @media (max-width: 860px) { .pg-purse { display: none; } }
-.pg-bar-live { display: inline-flex; align-items: center; gap: 7px; }
-.pg-bar-live i { width: 7px; height: 7px; border-radius: 50%; background: #3b4d66;
-  display: inline-block; transition: background 0.2s ease; }
-.pg-bar-live.on i { background: #6ad07a; box-shadow: 0 0 8px #6ad07a; }
-.pg-bar-live b { color: #c9d9ee; font-variant-numeric: tabular-nums; }
 .pg-brand-home { cursor: pointer; transition: filter 0.15s ease; }
 .pg-brand-home:hover { filter: brightness(1.25); }
 .pg-bar .pg-account {
@@ -61,7 +56,6 @@ export interface HomeSection {
 export interface HomeBarOptions {
   name: string;
   sections: readonly HomeSection[];
-  onLive: () => void;
   onAccount: () => void;
   // The wordmark: closes whatever section is open, back to the tiles.
   onHome: () => void;
@@ -76,7 +70,6 @@ export interface HomeBar {
   // the only thing that knows both numbers, and it is one small request
   // against a page the player has just stopped interacting with.
   refreshBalances(): void;
-  setLiveCount(n: number): void;
   // Lights the open section, or none of them back on the tiles.
   setActive(key: string | null): void;
 }
@@ -94,12 +87,6 @@ export function mountHomeBar(bar: Bar, o: HomeBarOptions): HomeBar {
   // The wordmark is the way back to the tiles from any section.
   bar.brand.classList.add('pg-brand-home');
   bar.brand.addEventListener('click', o.onHome);
-  const live = el('button', 'pg-bar-live');
-  live.type = 'button';
-  const count = el('b', '');
-  live.append(el('i', ''), document.createTextNode('Live'), count);
-  live.addEventListener('click', o.onLive);
-  bar.links.appendChild(live);
 
   // What the account holds, from its own sheet. The place below comes
   // from the ladder for the same reason both are fetched here rather than
@@ -157,10 +144,6 @@ export function mountHomeBar(bar: Bar, o: HomeBarOptions): HomeBar {
   return {
     setBalances: showBalances,
     refreshBalances,
-    setLiveCount(n: number): void {
-      count.textContent = n > 0 ? String(n) : '';
-      live.classList.toggle('on', n > 0);
-    },
     setActive(key: string | null): void {
       for (const [k, b] of entries) b.classList.toggle('on', k === key);
     },

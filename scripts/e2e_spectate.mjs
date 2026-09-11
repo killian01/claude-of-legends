@@ -2,10 +2,12 @@
 // browser finds it on the home screen's live list, watches team 1's fog,
 // follows champions, and stops watching back to home on the same page.
 import puppeteer from 'puppeteer-core';
-import { clickBar, clickTile, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
+import { clickTile, e2eName, HOME_UP, signIn } from './e2e_signin.mjs';
 
 const CHROME = process.env.CHROME ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const URL = 'http://localhost:5173';
+// The client's address; the API is reached through its proxy, from the
+// signed-in pages, since every route wants a session (ADR 0006).
+const URL = process.env.URL ?? 'http://localhost:5173';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function clickButton(page, text) {
@@ -26,7 +28,12 @@ async function waitFor(page, fnBody, label, timeout = 40000) {
     if (await page.evaluate(fnBody)) return;
     await sleep(300);
   }
-  throw new Error(`timeout waiting for: ${label}`);
+  // What the page shows instead, so a failed run says which screen it
+  // was on rather than only which one it never reached.
+  const seen = await page.evaluate(() =>
+    (document.body.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+  );
+  throw new Error(`timeout waiting for: ${label} (page shows: ${seen})`);
 }
 
 const findBtn = (t) =>
@@ -37,21 +44,37 @@ async function newIsolatedPage(browser, name) {
   const page = await ctx.newPage();
   await page.setViewport({ width: 1500, height: 900 });
   await page.goto(URL, { waitUntil: 'load' });
-  await signIn(page, e2eName(name));
+  await signIn(page, name);
   return page;
 }
+
+// Names of this run's own: an account left mid-match by an earlier run is
+// offered its rejoin on the next sign-in, and the ranked tile then leads
+// back into that match instead of the queue.
+const RUN = Date.now().toString(36).slice(-5);
 
 const run = async () => {
   const browser = await puppeteer.launch({
     executablePath: CHROME,
     headless: 'new',
-    args: ['--use-gl=swiftshader', '--window-size=1500,900', '--mute-audio'],
+    // ANGLE over SwiftShader: the bare --use-gl=swiftshader leaves WebGL
+    // dead on a headless box, and champion select then draws its title and
+    // nothing under it.
+    args: [
+      '--use-gl=angle',
+      '--use-angle=swiftshader',
+      '--enable-unsafe-swiftshader',
+      '--ignore-gpu-blocklist',
+      '--window-size=1500,900',
+      '--mute-audio',
+    ],
     defaultViewport: { width: 1500, height: 900 },
   });
   const errors = [];
 
   // A player starts a bot-filled match.
-  const player = await newIsolatedPage(browser, 'streamer');
+  const streamer = e2eName('streamer', RUN);
+  const player = await newIsolatedPage(browser, streamer);
   player.on('pageerror', (e) => errors.push(`player: ${e}`));
   await clickTile(player, 'ranked');
   await waitFor(player, findBtn('Start now with bots'), 'queued');
@@ -63,20 +86,25 @@ const run = async () => {
   console.log('live match running');
 
   // The live API lists it.
-  const live = await (await fetch('http://localhost:8787/api/live')).json();
-  if (live.length !== 1 || live[0].players[0]?.name !== 'streamer') {
+  const live = await player.evaluate(() =>
+    fetch('/api/live', { credentials: 'same-origin' }).then((r) => r.json()),
+  );
+  if (live.length !== 1 || live[0].players[0]?.name !== streamer) {
     throw new Error(`bad live list: ${JSON.stringify(live)}`);
   }
 
-  // A spectator finds it on the home screen and watches.
-  const spec = await newIsolatedPage(browser, 'couch');
+  // A spectator watches it from the home screen. The page has no door to
+  // spectating since the Live entry left the bar; the home screen still
+  // answers the event a Live section would fire, with the match the API
+  // just listed.
+  const spec = await newIsolatedPage(browser, e2eName('couch', RUN));
   spec.on('pageerror', (e) => errors.push(`spec: ${e}`));
   await spec.evaluate(() => {
     window.__lifeMarker = 'alive';
   });
-  await clickBar(spec, 'Live');
-  await waitFor(spec, `!!document.querySelector('.live-watch')`, 'live row shown');
-  await clickButton(spec, 'Watch team 1');
+  await spec.evaluate((matchId) => {
+    window.dispatchEvent(new CustomEvent('loc:spectate', { detail: { matchId, team: 1 } }));
+  }, live[0].id);
   await waitFor(spec, `!!document.querySelector('.spec-bar')`, 'spectator bar');
   await waitFor(
     spec,
@@ -95,7 +123,9 @@ const run = async () => {
   console.log('spectator watching, view alive, follow works');
 
   // Spectator count reaches the API; stopping goes home on the same page.
-  const live2 = await (await fetch('http://localhost:8787/api/live')).json();
+  const live2 = await spec.evaluate(() =>
+    fetch('/api/live', { credentials: 'same-origin' }).then((r) => r.json()),
+  );
   if (live2[0]?.spectators !== 1) throw new Error('spectator not counted');
   await clickButton(spec, 'Stop watching');
   await waitFor(spec, HOME_UP, 'home after stop');

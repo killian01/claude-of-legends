@@ -11,7 +11,7 @@
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { TeamId } from '../sim/types';
 import { openAcademy } from './academy';
-import { openAccountDrawer, openLiveDrawer } from './account_drawer';
+import { openAccountDrawer } from './account_drawer';
 import type { AuthedAccount } from './auth';
 import type { DiscordResult } from './discord_entry';
 import { buildDiscordWelcome } from './discord_welcome';
@@ -168,6 +168,9 @@ export function showHome(
           : {}),
       });
     }
+    // Nothing on the page fires this since Live left the bar: it is the
+    // seam scripts/e2e_spectate.mjs drives, and the door a Live section
+    // would use if it came back.
     function onSpectate(e: Event): void {
       const detail = (e as CustomEvent<{ matchId: number; team: TeamId }>).detail;
       if (typeof detail?.matchId !== 'number') return;
@@ -191,7 +194,7 @@ export function showHome(
     window.addEventListener('loc:spectate', onSpectate);
     window.addEventListener('loc:forge-test', onForgeTest);
 
-    // --- the bar: the sections, Live, and the account's own drawer ---
+    // --- the bar: the sections and the account's own drawer ---
     // The Academy, on a bot and a step when the caller has one (the way
     // back from a replay lands on Sparring); its Play step queues.
     const showAcademy = (botId?: string, step?: 'spar'): void =>
@@ -259,7 +262,6 @@ export function showHome(
     const homeBar = mountHomeBar(bar, {
       name: accountName,
       sections: barSections,
-      onLive: () => openDrawer(() => openLiveDrawer(container)),
       onAccount: showAccount,
       onHome: () => sections.close(),
     });
@@ -301,7 +303,7 @@ export function showHome(
     });
     col.appendChild(panels.root);
 
-    // --- the foot: the counts, and Live in the bar told the same number ---
+    // --- the foot: the counts ---
     const foot = el('footer', 'home-foot');
     const stats = el('div', 'pg-stats');
     foot.appendChild(stats);
@@ -309,7 +311,6 @@ export function showHome(
     void fetchStats().then((s) => {
       if (!s || !stats.isConnected) return;
       renderStats(stats, s);
-      homeBar.setLiveCount(s.matches);
     });
 
     // The way back from a replay reopens the Academy on Sparring; failing
