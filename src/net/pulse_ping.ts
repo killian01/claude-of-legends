@@ -183,8 +183,10 @@ export function markVisit(now = Date.now(), search = window.location.search): vo
   if (visit === null) return;
   // The referrer is read here and reduced here; nothing downstream ever
   // sees it. No credentials either: the session cookie has no business on
-  // the one request that exists to be anonymous.
-  const source = sourceOf(document.referrer, window.location.origin);
+  // the one request that exists to be anonymous. The link's own word, if
+  // the announcement carried one, wins over a referrer the app may have
+  // stripped (src/net/pulse_source.ts).
+  const source = sourceOf(document.referrer, window.location.origin, search);
   void fetch(pingUrl(visit, source), {
     method: 'POST',
     credentials: 'omit',

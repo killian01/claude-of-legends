@@ -4,7 +4,14 @@
 
 import { describe, expect, it } from 'vitest';
 import { emptyDay, emptySources } from '../server/pulse';
-import { funnelStrip, rate, renderPulsePage, sourceStrip, total } from '../server/pulse_page';
+import {
+  funnelStrip,
+  rate,
+  renderPulsePage,
+  sourceCell,
+  sourceStrip,
+  total,
+} from '../server/pulse_page';
 
 const day = (d: string, over: Partial<ReturnType<typeof emptyDay>>) => ({
   ...emptyDay(d),
@@ -175,6 +182,21 @@ describe('the page', () => {
     const strip = sourceStrip(total(days));
     expect(strip).not.toContain('youtube');
     expect(strip).not.toContain('hn');
+  });
+
+  it('says where each day came from, on its own row', () => {
+    // The week's strip says the announcement landed; the row says which
+    // day it landed on, which is the one a maintainer reads the morning
+    // after posting.
+    const html = renderPulsePage(days);
+    expect(html).toContain('>12 discord, 6 reddit, 2 other<');
+    expect(html).toContain('>4 direct<');
+    // The sum row adds the days the same way, biggest first.
+    expect(html).toContain('>12 discord, 6 reddit, 4 direct, 2 other<');
+  });
+
+  it('shows a dash for a day nobody was counted on', () => {
+    expect(sourceCell(emptySources())).toBe('-');
   });
 
   it('says how far the visitors of the week got', () => {

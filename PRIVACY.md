@@ -84,9 +84,12 @@ how many visitors arrived from each of nine buckets: `direct` (no referrer
 at all), `search`, `discord`, `reddit`, `hn`, `x`, `youtube`, `github`, and
 `other` for anywhere else. Your browser reads its own referrer, decides
 which bucket it falls in, and sends the name of the bucket
-(`src/net/pulse_source.ts`). The link itself, the page it was on, and the
-host it was on never leave your machine, and the server refuses any word
-that is not one of those nine.
+(`src/net/pulse_source.ts`). If the link that brought you carried `?from=`
+with one of those nine names, which is how an announcement is posted so
+that an app sending no referrer still counts as where it was posted, that
+name is the bucket, and any other value there is ignored. The link itself,
+the page it was on, and the host it was on never leave your machine, and
+the server refuses any word that is not one of those nine.
 
 `stayed` and `played` are the same kind of thing: your browser knows it
 has already reported them today because of the line it stores, so each

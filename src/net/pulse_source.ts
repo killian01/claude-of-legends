@@ -74,10 +74,28 @@ export function isVisitSource(value: string): value is VisitSource {
   return (VISIT_SOURCES as readonly string[]).includes(value);
 }
 
-// The bucket a referrer falls in, given the page's own origin. A referrer
-// from this site is the same as none: a visitor arriving on their first
-// load of the day from another page here is still not news from outside.
-export function sourceOf(referrer: string, origin: string): VisitSource {
+// The word carried by the link itself: an announcement posted as
+// `https://claudeoflegends.com/?from=reddit`. Most of the apps a link is
+// opened from send no referrer at all (the chat clients, the Reddit app's
+// own browser), and a day that reached a hundred people through one of
+// them reads as a hundred "direct", which is the one shape the counter
+// exists to tell apart. The word the maintainer put in the link survives
+// that. It is still a word off the list and nothing else: any other value
+// on the parameter is ignored and the referrer decides.
+export const FROM_PARAM = 'from';
+
+export function sourceOfLink(search: string): VisitSource | null {
+  const value = new URLSearchParams(search).get(FROM_PARAM);
+  return value !== null && isVisitSource(value) ? value : null;
+}
+
+// The bucket a visitor falls in: the link's own word when it carries one,
+// else its referrer, given the page's own origin. A referrer from this site
+// is the same as none: a visitor arriving on their first load of the day
+// from another page here is still not news from outside.
+export function sourceOf(referrer: string, origin: string, search = ''): VisitSource {
+  const tagged = sourceOfLink(search);
+  if (tagged !== null) return tagged;
   if (referrer === '') return 'direct';
   let host: string;
   try {

@@ -160,7 +160,10 @@ Four of the counters exist because that gap alone was unreadable:
   have not is news.
 - `sources` counts where they came from, in nine buckets the browser picks
   itself from its own referrer (`src/net/pulse_source.ts`). A word leaves
-  the browser, never a link.
+  the browser, never a link. Post an announcement with the word on the link,
+  `https://your.host/?from=reddit` (any of the nine): most apps a link is
+  opened from send no referrer, and without it the day reads as `direct`.
+  The page shows the buckets for the week and on each day's row.
 - `stayed` and `played` say how far they got: still here 30 seconds later,
   and started a match in the browser. Once per browser per day each, so
   both divide by `visitors`.

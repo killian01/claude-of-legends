@@ -4,7 +4,7 @@
 // anything that could be read back as a link.
 
 import { describe, expect, it } from 'vitest';
-import { isVisitSource, sourceOf, VISIT_SOURCES } from '../src/net/pulse_source';
+import { isVisitSource, sourceOf, sourceOfLink, VISIT_SOURCES } from '../src/net/pulse_source';
 
 const SELF = 'https://claudeoflegends.com';
 
@@ -57,6 +57,27 @@ describe('the bucket a visitor arrives in', () => {
     // returned that the list does not contain.
     const referrers = ['', SELF, 'https://x.com/', 'https://nowhere.example/', 'rubbish'];
     for (const r of referrers) expect(isVisitSource(sourceOf(r, SELF))).toBe(true);
+  });
+});
+
+describe('the word the link itself carries', () => {
+  it('wins over the referrer, and over having none', () => {
+    // An announcement posted as ?from=reddit is opened from the Reddit
+    // app's own browser, which sends no referrer: without the word, the
+    // whole day would read as direct.
+    expect(sourceOf('', SELF, '?from=reddit')).toBe('reddit');
+    expect(sourceOf('https://www.google.com/', SELF, '?from=discord')).toBe('discord');
+    expect(sourceOfLink('?from=hn&pulse=on')).toBe('hn');
+  });
+
+  it('is ignored unless it is a word off the list, and the referrer decides', () => {
+    // A link can carry anything; only the nine names are counted, and a
+    // URL on the parameter is never read as a bucket.
+    expect(sourceOf('https://www.reddit.com/r/x/', SELF, '?from=newsletter')).toBe('reddit');
+    expect(sourceOf('', SELF, '?from=https%3A%2F%2Freddit.com')).toBe('direct');
+    expect(sourceOf('', SELF, '?from=Reddit')).toBe('direct');
+    expect(sourceOfLink('')).toBeNull();
+    expect(sourceOfLink('?pulse=off')).toBeNull();
   });
 });
 

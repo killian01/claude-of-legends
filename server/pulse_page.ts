@@ -102,6 +102,16 @@ export function sourceStrip(t: PulseTotals): string {
   return `<p class="from">Came from, 7d: ${parts.join(' ')}</p>`;
 }
 
+// Where one day's visitors came from, the buckets that happened, biggest
+// first: the same words as the strip, one row at a time, because an
+// announcement is a day and the week's total hides which one. A dash for
+// a day nobody was counted on, like the rates.
+export function sourceCell(sources: Record<VisitSource, number>): string {
+  const seen = VISIT_SOURCES.filter((s) => sources[s] > 0).sort((a, b) => sources[b] - sources[a]);
+  if (seen.length === 0) return '-';
+  return seen.map((s) => `${sources[s]} ${esc(s)}`).join(', ');
+}
+
 // How far the week's visitors actually got. Two rates rather than two
 // more integers, because the integers are already in the table and what a
 // reader wants here is the shape of the drop: arriving, staying, playing.
@@ -117,6 +127,7 @@ function row(d: PulseDay | (PulseTotals & { day: string }), klass = ''): string 
   <td class="d">${esc(d.day)}</td>
   <td>${d.visitors}</td>
   <td class="r">${d.newcomers}</td>
+  <td class="from">${sourceCell(d.sources)}</td>
   <td>${d.stayed}</td>
   <td>${d.played}</td>
   <td class="dim">${d.loads - d.strays}</td>
@@ -159,11 +170,13 @@ export function renderPulsePage(days: readonly PulseDay[]): string {
   .from span { display: inline-block; margin-right: 14px; white-space: nowrap; }
   .from b { color: #dfe7f5; font-weight: 700; }
   .wrap { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; min-width: 780px; font-variant-numeric: tabular-nums; }
+  table { border-collapse: collapse; width: 100%; min-width: 900px; font-variant-numeric: tabular-nums; }
   th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid #182440; }
   th { color: #7f8ea8; font-size: 11px; letter-spacing: 0.8px; text-transform: uppercase;
     font-weight: 600; text-align: right; white-space: nowrap; }
   td.d, th.d { text-align: left; color: #c8d4ea; white-space: nowrap; }
+  td.from, th.from { text-align: left; white-space: nowrap; }
+  td.from { color: #c8d4ea; font-size: 12.5px; }
   td.dim { color: #5d6b85; }
   td.r { color: #e6d7a8; }
   tr.sum td { border-top: 2px solid #2a3a5c; border-bottom: none; font-weight: 700; }
@@ -185,7 +198,7 @@ ${funnelStrip(week)}
 <div class="wrap">
 <table>
 <thead><tr>
-  <th class="d">Day</th><th>Visitors</th><th>New</th><th>Stayed</th><th>Played</th>
+  <th class="d">Day</th><th>Visitors</th><th>New</th><th class="from">From</th><th>Stayed</th><th>Played</th>
   <th>Pages</th><th>Stray</th>
   <th>Accounts</th><th>Signed up</th>
   <th>Matches</th><th>Finished</th><th>Completed</th><th>Restarts</th>
@@ -201,7 +214,8 @@ ran the game, so it is a floor made of people; New is the ones that had never
 been counted here before. Pages counts every shell served for a path this site
 has, reloads included, and Stray the ones served for a path it does not, which
 is where the scanners land; the two together are <code>loads</code> in the JSON.
-Came from is the bucket each visitor's browser put its own referrer in,
+Came from, and From on each row, is the bucket each visitor's browser put
+its own referrer in, or the word the link carried as <code>?from=</code>,
 never a link. Stayed is a visitor still here 30 seconds later, and Played
 one who started a match in the browser, practice or live; each is counted
 once per browser per day, so both divide by Visitors. Add <code>?format=json</code> for the raw numbers, and open the
