@@ -44,6 +44,7 @@ import {
 } from './net/replay';
 import { attachBot } from './sim/content/bots';
 import { houseSeats } from './sim/content/bots/house';
+import { contentFingerprint } from './sim/content/fingerprint';
 import type { StarOrchard } from './sim/content/star_orchard';
 import type { ForgedChampionDef } from './sim/forge/forged_def';
 import { Rng } from './sim/rng';
@@ -74,6 +75,7 @@ import {
 } from './ui/menu';
 import { pendingResetToken, showPasswordReset } from './ui/password_reset';
 import { buildReplayBar, type ReplayBar } from './ui/replay_bar';
+import { replayRefusal } from './ui/replay_notice';
 import type { IWorld } from './world_api';
 
 const app = document.querySelector<HTMLElement>('#app');
@@ -329,15 +331,17 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
   const orchard = await loadOrchardRecords();
   if (!orchard) return 'menu';
   if (!record || !replayPlayable(record, orchard) || !Array.isArray(record.picks)) {
-    await showNotice(
-      container,
-      'Replay unavailable',
-      record && typeof record.version === 'number'
-        ? 'This replay was recorded on an older version of the game (a champion, an item or ' +
-            'the map has changed since), so replaying it would show a different match from the ' +
-            'one that was played. The result on the Record stands: it is what happened.'
-        : 'This replay is gone: the server keeps only the most recent matches.',
-    );
+    // Before blaming the record, ask the server what it runs: a page
+    // opened before a deploy is the one out of date (src/ui/replay_notice.ts).
+    let server: { version: number; content: string } | null = null;
+    try {
+      const res = await fetch('/api/public/build');
+      if (res.ok) server = (await res.json()) as { version: number; content: string };
+    } catch {
+      // no server, no verdict on the page
+    }
+    const refusal = replayRefusal(record, server, contentFingerprint(orchard));
+    await showNotice(container, refusal.title, refusal.text);
     return 'menu';
   }
   const rec = record;

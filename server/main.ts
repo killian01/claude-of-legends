@@ -70,6 +70,7 @@ import {
   setDeposited,
   setOpenPlaybook,
 } from './bots';
+import { buildInfo } from './build_info';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, parseCookies, serializeCookie } from './cookies';
 import { authorizeUrl, CALLBACK_PATH, DiscordOauth, discordConfigFromEnv } from './discord_oauth';
@@ -1105,6 +1106,15 @@ const server = http.createServer(async (req, res) => {
         matches: [...matches.values()].filter((e) => e.endedAt === null).length,
         accounts: registry.count,
       });
+      return;
+    }
+
+    // The build this server runs, as a replay reads it: a page opened
+    // before a deploy compares itself to it before blaming a record
+    // (server/build_info.ts). Two numbers about the software, nothing
+    // about anyone.
+    if (url === '/api/public/build') {
+      sendJson(res, 200, buildInfo(starOrchard()));
       return;
     }
 
