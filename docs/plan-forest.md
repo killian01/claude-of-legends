@@ -33,10 +33,13 @@ mirror on the other side. Those are the pits beside the plaza:
 | east glade | the east forest, north junction | 8 m |
 | east hollow | the east forest, south room | 10 m |
 
-A pit in one team's forest is that team's shorter walk; the draw is fair on average and the
-clock names the pit two and a half minutes ahead ("Warden 2:10 at the west glade"), so the
-other team can rotate. A Blender revision with two authored clearings, one a forest, would
-let the forest fights breathe; the rooms are what the export has.
+A pit in one team's forest is that team's shorter walk; the draw is fair on average. The
+draw is told to nobody until the Warden stands there (the maintainer's note after the first
+deploy: where the Boon appears must not be on the minimap before it pops): the objective
+line says "Warden 2:10" until the rise, then "Warden LIVE at the west glade", and the
+announcement names the room; a bot guesses the nearest pit before, as a human would. A
+Blender revision with two authored clearings, one a forest, would let the forest fights
+breathe; the rooms are what the export has.
 
 **The camps.** Three kinds, data-as-code (`src/sim/content/camps.ts`), every body written
 at the 4:00 mark and grown with the clock like the rings' creatures and the Warden:

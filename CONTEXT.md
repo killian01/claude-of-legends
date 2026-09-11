@@ -114,10 +114,10 @@ _Avoid_: stream, channel, mid river (it is one river, end to end)
 **Warden**:
 The neutral objective. It rises on an announced clock in one of the map's pits: the first
 Warden at the first pit (the Star Orchard's plaza), every later one at a pit drawn among the
-others and named beside the clock ("Warden 2:10 at the west glade": the plaza, and the
-glade and the hollow of each forest, the widest rooms the forests hold). Always visible to
-both teams, fights only champions, and the team that lands the killing blow claims the
-Warden's Boon.
+others (the plaza, and the glade and the hollow of each forest, the widest rooms the forests
+hold), told to nobody until it stands there ("Warden LIVE at the west glade"). Always
+visible to both teams once it stands, fights only champions, and the team that lands the
+killing blow claims the Warden's Boon.
 _Avoid_: dragon, boss, monster names from other games, nest, lair
 
 **Warden's Boon**:

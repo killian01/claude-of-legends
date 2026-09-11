@@ -28,9 +28,11 @@ camps. Three changes to the same ground, decided together (`docs/plan-forest.md`
   into away from the camps (seven to fourteen meters across, measured on the grid; the
   forests hold nothing wider), each with its point mirror on the other side, so a match
   draws them fairly on average while a pit in one team's forest is that team's shorter walk.
-  The pit is public with the clock: the observation (`wardenPit`), the wire (`objPit`, an
-  index into the map's pits), `IWorld.wardenPit`, the objective line ("Warden 2:10 at the
-  west glade"), the minimap, the announcement. The bots pre-position at the drawn pit.
+  The draw is told to nobody until the Warden stands there (the maintainer: where the Boon
+  appears must not be on the minimap before it pops): the observation (`wardenPit`), the
+  wire (`objPit`, an index into the map's pits), `IWorld.wardenPit`, the objective line
+  ("Warden LIVE at the west glade") and the announcement carry the pit only while a Warden
+  lives. Before a rise a bot guesses the nearest pit, the way a human walks to the closest.
 - **Camps are content of three kinds** (`src/sim/content/camps.ts`): the Spinecrest (one
   body, the plain camp), the Brackenlings (three small bodies, paid per body, back together
   once the last falls), the Barkmaw (one big body, the attack speed buff, slower to come
