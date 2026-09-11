@@ -265,6 +265,7 @@ export function buildSnapshot(
       at: c.riseAt,
       a: c.aspect,
       ...(c.ascendant ? { asc: 1 as const } : {}),
+      ...(c.roseAt !== null ? { ro: round2(c.roseAt) } : {}),
     })),
   };
 }

@@ -187,13 +187,49 @@ describe('the rings', () => {
     expect(v.attackTargetId).toBeNull();
   });
 
-  it('resets to full when pulled out of its ring', () => {
+  it('left alone while hurt, heals fast rather than snapping to full', () => {
+    const sim = orchardSim();
+    const p = rise(sim, 'pyrefang');
+    p.hp = Math.round(p.maxHp * 0.2);
+    p.lastDamagedAt = sim.time;
+    // Five seconds of calm, then the regeneration: not full yet after two
+    // more seconds, full within a minute of it.
+    for (let i = 0; i < 7 * TICKS_PER_S; i++) sim.tick();
+    expect(p.hp).toBeGreaterThan(p.maxHp * 0.24);
+    expect(p.hp).toBeLessThan(p.maxHp * 0.5);
+    for (let i = 0; i < 40 * TICKS_PER_S; i++) sim.tick();
+    expect(p.hp).toBe(p.maxHp);
+    // Hit again while calm and hurt, it fights on from where it stands.
+    p.hp = Math.round(p.maxHp * 0.5);
+    p.lastDamagedAt = sim.time;
+    for (let i = 0; i < 2 * TICKS_PER_S; i++) {
+      p.lastDamagedAt = sim.time;
+      sim.tick();
+    }
+    expect(p.hp).toBe(Math.round(p.maxHp * 0.5));
+  });
+
+  it('holds its target anywhere on the platform, stairs included, and resets past it', () => {
     const sim = orchardSim();
     const p = rise(sim, 'pyrefang');
     const ring = sim.map.rings!.find((r) => r.id === 'bot')!;
+    // The leash reaches the foot of the fan stairs, well past the disc.
+    expect(ring.leash).toBeGreaterThan(ring.r + 4);
+    expect(ring.leash).toBeLessThan(ring.r + 10);
+    // A champion on the steps (past the disc's edge) keeps the creature's
+    // attention and the creature follows without resetting.
+    const stairs = sim.addChampion(0, { x: ring.x - ring.r - 2, z: ring.z });
     p.hp = p.maxHp - 400;
     p.lastDamagedAt = sim.time;
-    p.pos = { x: ring.x - ring.r - 2, z: ring.z };
+    p.attackTargetId = stairs.id;
+    for (let i = 0; i < 2 * TICKS_PER_S; i++) {
+      p.lastDamagedAt = sim.time;
+      sim.tick();
+    }
+    expect(p.attackTargetId).toBe(stairs.id);
+    expect(p.hp).toBeLessThan(p.maxHp);
+    // Pulled past the foot of the stairs, it resets to full at the center.
+    p.pos = { x: ring.x - ring.leash - 2, z: ring.z };
     sim.tick();
     expect(p.hp).toBe(p.maxHp);
     expect(Math.hypot(p.pos.x - ring.x, p.pos.z - ring.z)).toBeLessThan(1);

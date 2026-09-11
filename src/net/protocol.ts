@@ -131,6 +131,8 @@ export interface SnapRing {
   a: AspectId | null;
   // 1 when the live creature, or the next to rise, is the Ascendant.
   asc?: 1;
+  // When the live creature rose; absent between rises.
+  ro?: number;
 }
 
 export interface SnapMobile {

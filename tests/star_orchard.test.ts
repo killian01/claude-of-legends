@@ -112,6 +112,8 @@ describe('the Star Orchard export', () => {
     expect(map.camps.filter((c) => c.buff)).toHaveLength(2);
     // The two rings, one per side lane (tests/rings.test.ts plays them).
     expect(map.rings?.map((r) => r.id).sort()).toEqual(['bot', 'top']);
+    // The leash reaches the foot of the fan stairs the export traces.
+    for (const ring of map.rings ?? []) expect(ring.leash).toBeGreaterThan(ring.r + 4);
     expect(map.laneWidth).toBe(11.5);
     for (const lane of Object.values(map.lanes)) expect(lane.length).toBeGreaterThan(1);
   });

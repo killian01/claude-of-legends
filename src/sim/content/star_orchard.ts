@@ -5,6 +5,7 @@
 // HUD read one shape. Data only: no I/O, the host hands the exported records
 // in.
 
+import { hypot } from '../exact';
 import { decodeTerrainNav, type TerrainNavData } from '../terrain_nav';
 import type { TeamId, Vec2 } from '../types';
 import type { GameMap, LaneId, RingSite, TowerSpot } from './map';
@@ -26,7 +27,14 @@ export interface StarOrchardLayout {
   junglePaths?: Vec2[][];
   // The two rings (CONTEXT.md), one at the elbow of each side lane, in
   // the layout's own frame like the towers.
-  objectiveSites?: { id: string; center: Vec2; radius: number; lane: LaneId }[];
+  objectiveSites?: {
+    id: string;
+    center: Vec2;
+    radius: number;
+    lane: LaneId;
+    // The fan stairs, each from its foot on the ground to the disc's edge.
+    stairCrossings?: { from: Vec2; to: Vec2 }[];
+  }[];
   towers: (TowerSpot & { name: string; height: number })[];
 }
 
@@ -162,16 +170,26 @@ export function starOrchardMap(layout: StarOrchardLayout, manifest: StarOrchardM
 // The rings the layout traces, keyed by the side lane they sit on. A
 // layout from before the rings were traced yields none, and the match
 // plays without creatures rather than refusing to start.
+const RING_LEASH_MARGIN = 6;
+
 function starOrchardRings(layout: StarOrchardLayout): RingSite[] {
   const rings: RingSite[] = [];
   for (const site of layout.objectiveSites ?? []) {
     if (site.lane !== 'top' && site.lane !== 'bot') continue;
+    // The leash reaches the foot of the farthest stair; an export without
+    // stairs gets a margin past the disc.
+    let leash = site.radius + RING_LEASH_MARGIN;
+    for (const stair of site.stairCrossings ?? []) {
+      const d = hypot(stair.from.x - site.center.x, stair.from.z - site.center.z);
+      if (d > leash) leash = d;
+    }
     rings.push({
       id: site.lane,
       lane: site.lane,
       x: site.center.x,
       z: site.center.z,
       r: site.radius,
+      leash,
     });
   }
   return rings;

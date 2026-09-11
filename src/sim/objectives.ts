@@ -5,9 +5,10 @@
 // Called from the fixed tick order in sim.ts right after waves.
 
 import type { GameMap } from './content/map';
+import { CREATURE_CALM_REGEN_PER_S } from './content/rings';
 import { hypot } from './exact';
 import type { CombatCtx } from './sim_context';
-import type { Vec2 } from './types';
+import { DT, type Vec2 } from './types';
 import { createWarden, hostile, type Unit } from './unit';
 
 // 720 s: the Warden is the last creature to rise (docs/plan-rings.md), the
@@ -32,10 +33,12 @@ export interface ObjectiveState {
   wardenId: number | null;
   nextSpawnAt: number;
   spawnIndex: number;
+  // When the live Warden rose, null between spawns (a rally reads it).
+  roseAt: number | null;
 }
 
 export function initialObjectiveState(): ObjectiveState {
-  return { wardenId: null, nextSpawnAt: WARDEN_FIRST_SPAWN_S, spawnIndex: 0 };
+  return { wardenId: null, nextSpawnAt: WARDEN_FIRST_SPAWN_S, spawnIndex: 0, roseAt: null };
 }
 
 function pitOf(map: GameMap, state: ObjectiveState): Vec2 {
@@ -64,6 +67,7 @@ export function stepObjectives(ctx: CombatCtx, map: GameMap, state: ObjectiveSta
       const id = ctx.allocId();
       ctx.units.set(id, createWarden(id, pit, ctx.time));
       state.wardenId = id;
+      state.roseAt = ctx.time;
       state.spawnIndex += 1;
     }
     return;
@@ -76,10 +80,19 @@ export function stepObjectives(ctx: CombatCtx, map: GameMap, state: ObjectiveSta
   const fromPit = hypot(w.pos.x - pit.x, w.pos.z - pit.z);
   const angry = ctx.time - w.lastDamagedAt <= WARDEN_CALM_S;
 
-  // Leash: pulled too far, or left alone while hurt or displaced, it
-  // resets to full at its pit.
-  if (fromPit > WARDEN_LEASH_RANGE || (!angry && (w.hp < w.maxHp || fromPit > 1))) {
+  // Leash: pulled too far it resets to full at its pit; left alone it
+  // walks home and, hurt, heals fast rather than snapping, the rings'
+  // rule (content/rings.ts, CREATURE_CALM_REGEN_PER_S).
+  if (fromPit > WARDEN_LEASH_RANGE) {
     w.hp = w.maxHp;
+    w.pos = { x: pit.x, z: pit.z };
+    w.path = [];
+    w.attackTargetId = null;
+    w.statuses = [];
+    return;
+  }
+  if (!angry && (w.hp < w.maxHp || fromPit > 1)) {
+    w.hp = Math.min(w.maxHp, w.hp + w.maxHp * CREATURE_CALM_REGEN_PER_S * DT);
     w.pos = { x: pit.x, z: pit.z };
     w.path = [];
     w.attackTargetId = null;
@@ -108,5 +121,6 @@ export function stepObjectives(ctx: CombatCtx, map: GameMap, state: ObjectiveSta
 // clock starts (the Boon grant itself lives with the sim's TeamBuffs).
 export function onWardenSlain(state: ObjectiveState, time: number): void {
   state.wardenId = null;
+  state.roseAt = null;
   state.nextSpawnAt = time + WARDEN_RESPAWN_S;
 }

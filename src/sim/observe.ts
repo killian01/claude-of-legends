@@ -239,6 +239,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     },
     units,
     objectiveSpawnAt: sim.objectiveSpawnAt(),
+    wardenRoseAt: sim.objectives.roseAt,
     creatures: sim.ringClocks(),
     projectiles,
     zones,

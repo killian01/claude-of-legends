@@ -106,7 +106,14 @@ export interface RingSite {
   lane: LaneId;
   x: number;
   z: number;
+  // The disc's radius: where the creature rises and a bot pre-positions.
   r: number;
+  // How far from the center the creature holds its target and stays
+  // itself: the whole platform, stairs included (the foot of the fan
+  // stairs on the export), so a champion at the disc's edge or on the
+  // steps is still in the fight and the creature never resets for
+  // following it there.
+  leash: number;
 }
 
 const SIZE = 150;

@@ -343,6 +343,7 @@ export class ClientWorld implements IWorld {
           z: site.z,
           unitId: r.u,
           riseAt: r.at,
+          roseAt: r.ro ?? null,
           aspect: r.a,
           ascendant: r.asc === 1,
         },

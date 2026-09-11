@@ -176,8 +176,15 @@ export function creatureOfRing(ring: RingId): CreatureDef {
 // alive: twice a camp, half a kill. There is no last-hit bounty on top.
 // The Ascendant pays the same and hands the Wrath instead of a favor.
 export const RING_GOLD_EACH = 150;
-// How long after the last hit a creature keeps fighting before it resets.
+// How long after the last hit a creature keeps fighting before it calms.
 export const CREATURE_CALM_S = 5;
+// Calm and hurt, a neutral body heals this share of its max health a
+// second (full in about half a minute) instead of snapping to full: the
+// two teams' fight around a body is the body's ordinary life, and the
+// side that wins it comes back to a body partly recovered, not reborn.
+// Pulled off its platform it still snaps. The Warden follows the same
+// rule (src/sim/objectives.ts).
+export const CREATURE_CALM_REGEN_PER_S = 0.03;
 
 // The growth every neutral body follows, as the champions' own measured
 // growth over a fight that lasts (scripts/creature_report.ts is the
@@ -243,6 +250,7 @@ export const RINGS_CONTENT = {
   bodyGrowth: BODY_GROWTH,
   biteGrowth: BITE_GROWTH,
   calm: CREATURE_CALM_S,
+  calmRegen: CREATURE_CALM_REGEN_PER_S,
   wrath: {
     duration: WRATH_DURATION_S,
     execute: WRATH_EXECUTE_FRAC,

@@ -42,8 +42,10 @@ under `/map-exports/` for the exploration pages that compare revisions.
   each side lane, 35 m from both teams' outer towers) become
   `GameMap.rings`; `src/sim/rings.ts` rises the Pyrefang and the Voidmaul on
   them (ADR 0022, `docs/plan-rings.md`), and once a creature's three aspects
-  are spent, its Ascendant, the body a team fights for the Wrath. The disc is
-  each creature's leash. The launch map fixture has none.
+  are spent, its Ascendant, the body a team fights for the Wrath. The whole
+  platform is each creature's leash, the disc and its fan stairs down to their
+  foot (`RingSite.leash`, read off the export's `stairCrossings`): a champion on
+  the steps is still in the fight. The launch map fixture has none.
 - The playbooks read the match's map, not the launch map, so the house
   bots walk the Star Orchard's lanes (`SlotContext.map`) and contest its
   rings.

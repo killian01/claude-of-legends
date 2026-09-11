@@ -195,6 +195,9 @@ export interface ObsCreature {
   unitId: number | null;
   // When the next rises, null while one is alive.
   riseAt: number | null;
+  // When the live one rose, null between rises (additive v0 field): what
+  // a rally counts its windows from.
+  roseAt: number | null;
   // The aspect the live creature carries, or the next one will; null
   // when that rise is the Ascendant's (CONTEXT.md).
   aspect: AspectId | null;
@@ -212,6 +215,8 @@ export interface Observation {
   // When the next Warden rises, null while one is alive. Additive v0 field:
   // the spawn clock is the one objective fact unit rows cannot carry.
   objectiveSpawnAt?: number | null;
+  // When the live Warden rose, null between spawns (additive v0 field).
+  wardenRoseAt?: number | null;
   // The rings' clocks (additive v0 field, ADR 0022), empty on a map
   // without rings.
   creatures?: readonly ObsCreature[];

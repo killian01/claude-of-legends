@@ -129,9 +129,11 @@ _Avoid_: pit (the Warden's), arena (the bots' ladder), platform (the spawn terra
 The bot ring's creature: a lean, incandescent predator with a spine of embers and a trail
 of fire. Rises first, at 4:00, and again three minutes after each death, carrying Might, Tide
 and Tempo in that order, once each; its fourth rise and every later one is its Ascendant.
-Neutral like the Warden: fights champions only, visible to both teams, resets when pulled
-out of its ring or left alone. Sized for a duo: a lone champion takes a minute or more and
-leaves bleeding.
+Neutral like the Warden: fights champions only, visible to both teams, keeps its target
+anywhere on the platform (the disc and its fan stairs, the ring's leash), resets to full
+when pulled past the foot of the stairs, and left alone walks home and heals fast (3
+percent of its health a second) rather than snapping. Sized for a duo: a lone champion
+takes a minute or more and leaves bleeding.
 _Avoid_: drake, dragon, monster names from other games
 
 **Voidmaul**:
@@ -172,6 +174,14 @@ blow credited to that champion), and every attack or ability hit burns 3 percent
 target's max health over 3 s, true damage. Towers and minions execute nobody; nothing but a
 champion is executed. Shown as a chip for both teams and as a mark on an enemy under the line.
 _Avoid_: execute buff, verdict, dread, aspect of anything
+
+**Rally**:
+How a house bot's team gathers on a body sized for more than one without a word: the
+clock. The forty seconds after a creature, an Ascendant or the Warden rises, and again
+every two minutes while it stands, a healthy bot in range and one short of the body's
+party walks to it and waits beside it, out of its reach, for the rest; once the party is
+there, they all strike. A player rallies with a ping or the coach's order instead.
+_Avoid_: call, team fight (a rally is the gathering, not the fight), objective timer
 
 **Windup**:
 The commitment beat before a hit lands. For an ability: costs are paid at press, the spell resolves after the delay, and a stun during it cancels the cast. For an auto-attack: the strike resolves a beat after the swing starts; moving, a stun, or a dash cancels it and refunds the attack timer (the orb-walk rule), and a target that blinks out of reach makes the committed strike whiff. The counterplay window big hits owe their victims.

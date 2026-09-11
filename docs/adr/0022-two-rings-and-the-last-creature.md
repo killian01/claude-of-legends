@@ -23,7 +23,8 @@ Three creatures, in order, on a clock every player can read.
 - **A creature is sized for a duo** (1600 hp, 55 damage, 30 resistances at 4:00, plus
   4 percent a minute like the Warden), fights champions only, ignores and is ignored by
   minions and towers, is always visible, and resets to full when pulled out of its ring
-  or left alone five seconds. It pays no last-hit bounty: its xp is shared among the
+  or left alone five seconds (since round two: pulled off its platform, stairs included;
+  left alone it heals 3 percent a second instead of snapping, the Warden too). It pays no last-hit bounty: its xp is shared among the
   killing team present, and its death pays 150 gold to every member of that team, dead
   or alive.
 - **Its aspect becomes the killing team's favor**, permanent, team-wide, surviving death,

@@ -14,6 +14,7 @@
 import type { GameMap, RingSite } from './content/map';
 import {
   type AspectId,
+  CREATURE_CALM_REGEN_PER_S,
   CREATURE_CALM_S,
   type CreatureDef,
   type CreatureId,
@@ -22,6 +23,7 @@ import {
 } from './content/rings';
 import { hypot } from './exact';
 import type { CombatCtx } from './sim_context';
+import { DT } from './types';
 import { createCreature, hostile, type Unit } from './unit';
 
 export interface RingState {
@@ -35,6 +37,8 @@ export interface RingState {
   // How many have risen so far: the next carries aspects[riseIndex], and
   // past the end of the order it is the Ascendant.
   riseIndex: number;
+  // When the live one rose, null between rises (a rally reads it).
+  roseAt: number | null;
 }
 
 export function initialRingStates(map: GameMap): RingState[] {
@@ -47,6 +51,7 @@ export function initialRingStates(map: GameMap): RingState[] {
       unitId: null,
       nextRiseAt: def.firstRiseS,
       riseIndex: 0,
+      roseAt: null,
     };
   });
 }
@@ -96,6 +101,7 @@ export function stepRings(ctx: CombatCtx, states: RingState[]): void {
         );
         state.unitId = id;
         state.riseIndex += 1;
+        state.roseAt = ctx.time;
       }
       continue;
     }
@@ -105,9 +111,10 @@ export function stepRings(ctx: CombatCtx, states: RingState[]): void {
     const fromCenter = hypot(c.pos.x - site.x, c.pos.z - site.z);
     const angry = ctx.time - c.lastDamagedAt <= CREATURE_CALM_S;
 
-    // Leash: pulled out of the ring, or left alone while hurt or displaced,
-    // it resets to full at the center.
-    if (fromCenter > site.r || (!angry && (c.hp < c.maxHp || fromCenter > 1))) {
+    // Leash: pulled off the platform (the disc and its stairs) it resets
+    // to full at the center; left alone it walks home and, hurt, heals
+    // fast rather than snapping (CREATURE_CALM_REGEN_PER_S).
+    if (fromCenter > site.leash) {
       c.hp = c.maxHp;
       c.pos = { x: site.x, z: site.z };
       c.path = [];
@@ -115,18 +122,26 @@ export function stepRings(ctx: CombatCtx, states: RingState[]): void {
       c.statuses = [];
       continue;
     }
+    if (!angry && (c.hp < c.maxHp || fromCenter > 1)) {
+      c.hp = Math.min(c.maxHp, c.hp + c.maxHp * CREATURE_CALM_REGEN_PER_S * DT);
+      c.pos = { x: site.x, z: site.z };
+      c.path = [];
+      c.attackTargetId = null;
+      c.statuses = [];
+      continue;
+    }
 
-    // Retaliate: while angry, keep a hostile champion inside the ring
-    // targeted.
+    // Retaliate: while angry, keep a hostile champion on the platform
+    // targeted; one at the disc's edge or on the steps is still there.
     if (angry) {
       const target = c.attackTargetId !== null ? ctx.units.get(c.attackTargetId) : undefined;
       const targetOk =
         target &&
         !target.dead &&
         !ctx.dead.has(target.id) &&
-        hypot(target.pos.x - site.x, target.pos.z - site.z) <= site.r;
+        hypot(target.pos.x - site.x, target.pos.z - site.z) <= site.leash;
       if (!targetOk) {
-        const next = nearestHostileChampion(ctx, c, site.r);
+        const next = nearestHostileChampion(ctx, c, site.leash);
         c.attackTargetId = next ? next.id : null;
       }
     } else {
@@ -157,6 +172,7 @@ export function onCreatureSlain(
   const def = creatureDefOf(state);
   const ascendant = isAscendantRise(state, state.riseIndex - 1);
   state.unitId = null;
+  state.roseAt = null;
   state.nextRiseAt = time + (ascendant ? def.ascendant.returnS : def.returnS);
   return { creature: state.creature, aspect: ringAspect(state, state.riseIndex - 1), ascendant };
 }
@@ -172,6 +188,8 @@ export interface RingClock {
   unitId: number | null;
   // When the next rises, null while one is alive.
   riseAt: number | null;
+  // When the live one rose, null between rises.
+  roseAt: number | null;
   // The aspect the live creature carries, or the next one will; null
   // when that rise is the Ascendant's.
   aspect: AspectId | null;
@@ -189,6 +207,7 @@ export function ringClocks(states: readonly RingState[]): RingClock[] {
       z: s.site.z,
       unitId: s.unitId,
       riseAt: s.unitId === null ? s.nextRiseAt : null,
+      roseAt: s.roseAt,
       aspect: ringAspect(s, index),
       ascendant: isAscendantRise(s, index),
     };
