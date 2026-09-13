@@ -24,6 +24,8 @@ import { buildHomePanels } from './home_panels';
 import { PLAY_TILES, type PlayTile } from './home_tiles';
 import { openLadderPage, type Way } from './ladder_page';
 import { el, ensureMenuCss } from './menu';
+import { allNews, isFresh } from './news';
+import { openNews } from './news_section';
 import { buildPage, ensurePageCss, fetchStats, renderStats } from './page';
 import { buildJoinLine, buildPlayTiles } from './play_tiles';
 import { openRosterBrowser } from './roster_browser';
@@ -61,7 +63,14 @@ function ensureCss(): void {
 
 // The sections of the bar, which are also their addresses (#ladder): the
 // entry point reads the one a reload or a shared link names.
-export const HOME_SECTION_KEYS = ['ladder', 'academy', 'forge', 'gallery', 'champions'] as const;
+export const HOME_SECTION_KEYS = [
+  'news',
+  'ladder',
+  'academy',
+  'forge',
+  'gallery',
+  'champions',
+] as const;
 export type HomeSectionKey = (typeof HOME_SECTION_KEYS)[number];
 
 export interface HomeChoice {
@@ -238,7 +247,24 @@ export function showHome(
       };
     };
     const showForge = (): void => sections.open('forge', spending(openForgeEditor));
+    // The news (CONTEXT.md: News): first in the bar, with a dot while the
+    // newest entry is under a week old. A link in an entry goes where the
+    // entry talks about, on this page.
+    const showNews = (): void =>
+      sections.open('news', (host) =>
+        openNews(host, {
+          onLink: (to) => {
+            if (to === 'play') sections.close();
+            else if (to === 'forge') showForge();
+            else if (to === 'academy') showAcademy();
+            else if (to === 'ladder') showLadder();
+            else if (to === 'gallery') showGallery();
+            else sections.open('champions', spending(openRosterBrowser));
+          },
+        }),
+      );
     const barSections: HomeSection[] = [
+      { key: 'news', label: 'News', mark: isFresh(allNews(), Date.now()), open: showNews },
       { key: 'ladder', label: 'Ladder', open: () => showLadder() },
       { key: 'academy', label: 'Academy', open: () => showAcademy() },
       { key: 'forge', label: 'Forge', open: showForge },

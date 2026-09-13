@@ -23,6 +23,8 @@ const CSS = `${BALANCE_CSS}
 .pg-purse .bal { font-size: 12.5px; }
 /* The account block is the wider thing and wins the room first. */
 @media (max-width: 860px) { .pg-purse { display: none; } }
+.pg-bar .pg-bar-dot { display: inline-block; width: 7px; height: 7px; margin-left: 7px;
+  border-radius: 50%; background: #6ad07a; box-shadow: 0 0 8px #6ad07a; vertical-align: middle; }
 .pg-brand-home { cursor: pointer; transition: filter 0.15s ease; }
 .pg-brand-home:hover { filter: brightness(1.25); }
 .pg-bar .pg-account {
@@ -50,6 +52,9 @@ export interface HomeSection {
   // The key ui/section_host.ts tracks, so the bar can light the one open.
   key: string;
   label: string;
+  // A dot beside the label: something new behind it (the news of the
+  // week, src/ui/news.ts). Decided once, when the bar is built.
+  mark?: boolean;
   open: () => void;
 }
 
@@ -80,6 +85,7 @@ export function mountHomeBar(bar: Bar, o: HomeBarOptions): HomeBar {
   for (const s of o.sections) {
     const b = el('button', '', s.label);
     b.type = 'button';
+    if (s.mark) b.appendChild(el('i', 'pg-bar-dot'));
     b.addEventListener('click', s.open);
     bar.links.appendChild(b);
     entries.set(s.key, b);

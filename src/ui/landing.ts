@@ -10,6 +10,7 @@
 // else, and offline needs none because it opens no connection at all.
 // The chrome it shares with the signed-in home lives in ui/page.ts.
 
+import { appNav } from '../game/nav';
 import { type AuthedAccount, buildAuthForm } from './auth';
 import type { DiscordResult } from './discord_entry';
 import { startBackdrop } from './home_backdrop';
@@ -19,6 +20,8 @@ import { LANDING_MODES, PRACTICE_ART } from './landing_modes';
 import { revealOnScroll } from './landing_reveal';
 import { DISCORD, PRIVACY } from './links';
 import { el, ensureMenuCss } from './menu';
+import { allNews, countdownText, dayText, isPinned, newestOf } from './news';
+import { openNews } from './news_section';
 import { buildPage, ensurePageCss, mountLiveStats, navLink } from './page';
 import { buildRepoLink } from './repo_link';
 
@@ -129,6 +132,19 @@ const CSS = `
 /* The second line of a way-in card: the caveats, which have to be read
    before the button but must not compete with the offer above them. */
 .pg.land .pg-card .pg-card-fine { color: #8ea4c4; font-size: 12px; }
+/* The newest news, one line under the practice card (ui/news_section.ts). */
+.pg.land .pg-news {
+  display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 14px;
+  padding: 8px; border-radius: 8px; border: 1px solid #2e4468; background: #0f1730;
+  color: #c9d9ee; text-align: left; cursor: pointer; font: inherit;
+  transition: border-color 0.15s ease;
+}
+.pg.land .pg-news:hover { border-color: #5b84c9; }
+.pg.land .pg-news img { width: 84px; height: 48px; object-fit: cover; border-radius: 4px; flex: none; }
+.pg-news-words { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.pg-news-words small { font-size: 11px; color: #8ea4c4; text-transform: uppercase; letter-spacing: 0.6px; }
+.pg-news-words b { font-size: 13.5px; color: #fff; }
+.pg-news-host { position: fixed; inset: 0; z-index: 40; }
 
 /* The contribution band, under the two ways in. It is the one section
    here that is not about playing, so it is set apart rather than made
@@ -427,6 +443,52 @@ export function showLanding(
       el('p', 'pg-card-fine', 'No account, nothing saved.'),
       offlineBtn,
     );
+    // The newest news in one line (CONTEXT.md: News): a site whose last
+    // word is from yesterday reads inhabited before anything is clicked.
+    // It opens the section over the landing, with the nav told, so Back
+    // closes it the way it closes a drawer.
+    const now = Date.now();
+    const latest = newestOf(allNews(), now);
+    if (latest) {
+      const line = el('button', 'pg-news');
+      line.type = 'button';
+      if (latest.image) {
+        const thumb = el('img', '');
+        thumb.src = `/news/${latest.image}`;
+        thumb.alt = '';
+        thumb.loading = 'lazy';
+        thumb.decoding = 'async';
+        line.appendChild(thumb);
+      }
+      const words = el('span', 'pg-news-words');
+      const when =
+        latest.at !== undefined && isPinned(latest, now)
+          ? countdownText(latest.at, now)
+          : dayText(latest.day);
+      words.append(el('small', '', when), el('b', '', latest.title));
+      line.appendChild(words);
+      line.addEventListener('click', () => {
+        const host = el('div', 'pg-news-host');
+        root.appendChild(host);
+        const stop = openNews(host, {
+          onLink: () => {
+            remove();
+            frame.closed();
+            root.querySelector('.pg-cards')?.scrollIntoView({ behavior: 'smooth' });
+          },
+          onClosed: () => {
+            host.remove();
+            frame.closed();
+          },
+        });
+        const remove = (): void => {
+          stop();
+          host.remove();
+        };
+        const frame = appNav().push('news', remove);
+      });
+      offline.appendChild(line);
+    }
 
     ways.append(online, offline);
     inner.appendChild(ways);

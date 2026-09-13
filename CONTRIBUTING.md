@@ -120,7 +120,9 @@ CHROME=/usr/bin/chromium node scripts/e2e_nav.mjs
 
 - Base your PR on `main` and keep it focused; small PRs land faster.
 - Fill in the PR template. If the change is visible in game (HUD, renderer,
-  menus), add before/after screenshots.
+  menus), add before/after screenshots, and add a news entry
+  (`src/ui/news_entries.ts`) saying what a player will see: the News section
+  is how the server tells the players what changed.
 - CI must be green: tests, typecheck, lint.
 - Reviewers may ask for changes; that is a normal, friendly part of the
   process.

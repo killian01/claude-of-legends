@@ -298,6 +298,14 @@ A section opens under the bar rather than over it, so the bar stays and one clic
 any section to the next.
 _Avoid_: menu, main menu, lobby (that is the private one), dashboard, launcher, feed, widget
 
+**News**:
+The section of the home that says what changed on the server: an update, an event, a
+decision, written by hand in the repository (`src/ui/news_entries.ts`), newest first, with
+an event pinned at the top until its time. Nothing in it is generated from the players.
+First in the bar, with a dot while the newest entry is under a week old; the landing shows
+the newest one in a line for a visitor with no account. An item of it is an entry.
+_Avoid_: changelog, patch notes, release notes, feed, announcements, blog
+
 **Play tile**:
 One of the five ways into a match on the Home, each a painted scene of its own: the Ranked
 queue, Bots, the Forge queue, a Private lobby, Practice. The tile is the button.

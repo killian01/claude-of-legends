@@ -87,13 +87,16 @@ which moves for a change to the interface.
 
 ## The section
 
-- `src/ui/news_entries.ts`: the table. `src/ui/news.ts`: the pure decisions, tested:
-  the order (pinned events first, then by day descending), whether the dot shows, an
-  event's countdown text, the landing's line. `tests/news_entries.test.ts`: the structural
-  gate, dates valid and unique per title, no dash or emoji or URL in the text, every named
-  image present under `public/news/`, every link a known destination.
-- `server/news_page.ts`: the wire shape, from the table and the clock, tested; served by
-  `/api/public/news`, public like the build. The client mirrors the shape and reads that
-  one request (`src/ui/news_section.ts` for the section, the landing's line beside it).
-- The bar entry, in `home_screen.ts` with the other sections; the landing's line in
-  `landing.ts`.
+- `src/ui/news_entries.ts`: the table. `src/ui/news.ts`: the pure decisions, tested in
+  `tests/news.test.ts`: the order (pinned events first, then by day descending), whether
+  the dot shows, an event's countdown, the day's words; and the structural gate over the
+  table, dates valid and descending, titles unique, no dash or emoji or URL in the text,
+  every named image present under `public/news/`, every link a known destination.
+- `src/ui/news_section.ts`: the section, mounted under the home's bar by the section host
+  and over the landing in a fixed host with a nav frame of its own. It reads no request:
+  the table ships with the build, and the build reloads every open tab, so a server route
+  would only hand the client its own bundle back. The day the server has something of its
+  own to add (a news written without a deployment), `server/news_page.ts` and
+  `/api/public/news` are where it goes, and the client reads that one request instead.
+- The bar entry, first, in `home_screen.ts` with the other sections; the landing's line
+  in `landing.ts` under the practice card.
