@@ -29,6 +29,7 @@ import {
   loadStarOrchardTerrain,
 } from './game/star_orchard';
 import { loadStarOrchard } from './game/star_orchard_records';
+import { buildIdIn, startBuildWatch } from './net/build_watch';
 import { ClientWorld } from './net/client_world';
 import type { ForgedMatchAssets, ServerMsg } from './net/protocol';
 import { markStep, markVisit, STAYED_MS } from './net/pulse_ping';
@@ -74,6 +75,7 @@ import {
   showSelect,
 } from './ui/menu';
 import { pendingResetToken, showPasswordReset } from './ui/password_reset';
+import { showReloadNotice } from './ui/reload_notice';
 import { buildReplayBar, type ReplayBar } from './ui/replay_bar';
 import { replayRefusal } from './ui/replay_notice';
 import type { IWorld } from './world_api';
@@ -81,6 +83,24 @@ import type { IWorld } from './world_api';
 const app = document.querySelector<HTMLElement>('#app');
 if (!app) throw new Error('missing #app root element');
 const container = app;
+
+// The page reloads itself on a new build (src/net/build_watch.ts). Its
+// own bundle is this module's URL, which is the entry chunk in a build and
+// the source file under Vite, where the id is null and nothing reloads.
+const buildWatch = startBuildWatch({
+  own: buildIdIn(import.meta.url),
+  fetchBuild: () =>
+    fetch('/api/public/build')
+      .then((r) => (r.ok ? (r.json() as Promise<{ build?: unknown }>) : null))
+      .then((info) => (typeof info?.build === 'string' ? info.build : null))
+      .catch(() => null),
+  onNew: () => showReloadNotice(container),
+  everyMs: 60_000,
+});
+window.addEventListener('focus', () => buildWatch.poke());
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') buildWatch.poke();
+});
 
 function registerForgedFromMatch(assets: Record<string, ForgedMatchAssets> | undefined): void {
   for (const [id, a] of Object.entries(assets ?? {})) registerForgedAssets(id, a);
@@ -642,6 +662,9 @@ async function runSpectate(matchId: number, team: TeamId): Promise<PostMatchActi
       }
     });
     ws.addEventListener('close', () => {
+      // A server that restarted may be a new build: asked first, and the
+      // reload notice takes the screen if so.
+      buildWatch.poke();
       if (finished) return;
       void showNotice(container, 'Disconnected', 'Lost the connection to the match.').then(() =>
         finish('menu'),
@@ -992,6 +1015,9 @@ async function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
     });
 
     ws.addEventListener('close', () => {
+      // A server that restarted may be a new build: asked first, and the
+      // reload notice takes the screen if so.
+      buildWatch.poke();
       // A close after the match ended is the server reaping the room, not a
       // failure; the end screen is already up. A close after finish() is
       // this client hanging up on purpose.

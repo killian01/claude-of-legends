@@ -12,11 +12,13 @@ import { replayRefusal } from '../src/ui/replay_notice';
 describe('the replay refusal', () => {
   const orchard = starOrchard();
   const here = contentFingerprint(orchard);
-  const server = buildInfo(orchard);
+  const server = buildInfo(orchard, 'index-abc');
 
   it('tells the build the server runs, as a replay reads it', () => {
-    expect(server).toEqual({ version: REPLAY_VERSION, content: here });
-    expect(Object.keys(server).sort()).toEqual(['content', 'version']);
+    expect(server).toEqual({ version: REPLAY_VERSION, content: here, build: 'index-abc' });
+    // Three things about the software and nothing about anyone: the
+    // rules, the content, and the bundle the clients reload against.
+    expect(Object.keys(server).sort()).toEqual(['build', 'content', 'version']);
   });
 
   it('says a record is gone when there is none', () => {

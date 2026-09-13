@@ -348,6 +348,14 @@ and no rolling restart: deploy when nobody is playing, or accept that players
 are dropped back to the home screen. The data volume survives, so accounts,
 sessions, the match log and the ladder do not reset.
 
+Every open tab reloads onto the new build within a minute, a practice match
+against bots included: the server names the bundle it serves on
+`/api/public/build`, and a client whose own bundle differs shows a three second
+notice and reloads (`src/net/build_watch.ts`). It checks when its socket
+closes, when the tab regains focus, and once a minute otherwise. So a
+deployment reaches everybody, and it interrupts everybody: the access log says
+when the quiet hours are.
+
 ### Deploying the accounts change, once
 
 ADR 0006 replaced the token-keyed identity with real accounts and does not

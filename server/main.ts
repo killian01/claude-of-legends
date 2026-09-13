@@ -70,7 +70,7 @@ import {
   setDeposited,
   setOpenPlaybook,
 } from './bots';
-import { buildInfo } from './build_info';
+import { buildInfo, readBuildId } from './build_info';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, parseCookies, serializeCookie } from './cookies';
 import { authorizeUrl, CALLBACK_PATH, DiscordOauth, discordConfigFromEnv } from './discord_oauth';
@@ -158,6 +158,10 @@ import { playedByHand, seatWay, type Way } from './ways';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DIST = path.resolve(process.cwd(), 'dist');
+// The bundle this process serves, for the clients to compare against
+// their own (server/build_info.ts); null in development, where Vite
+// serves the page.
+const BUILD_ID = readBuildId(DIST);
 // Runtime state on disk: account identities and the match log. DATA_DIR is
 // the volume to mount in production; nothing else persists.
 const DATA_DIR = process.env.DATA_DIR ?? path.resolve(process.cwd(), 'data');
@@ -1114,7 +1118,7 @@ const server = http.createServer(async (req, res) => {
     // (server/build_info.ts). Two numbers about the software, nothing
     // about anyone.
     if (url === '/api/public/build') {
-      sendJson(res, 200, buildInfo(starOrchard()));
+      sendJson(res, 200, buildInfo(starOrchard(), BUILD_ID));
       return;
     }
 

@@ -234,6 +234,16 @@ export function installNav(win: Window = window): Nav {
   return nav;
 }
 
+// A reload the app itself decided on (src/net/build_watch.ts, a new build
+// is up). The unload prompt exists for a person leaving by accident, not
+// for the page replacing itself with the new version, so it is lifted
+// first; the guarded layer's own Back handling is moot on a page that is
+// about to be gone.
+export function reloadWithoutAsking(win: Window = window): void {
+  win.removeEventListener('beforeunload', askBeforeUnload);
+  win.location.reload();
+}
+
 // The one Nav; installNav must have run (boot does, before anything opens).
 export function appNav(): Nav {
   if (!installed) throw new Error('nav not installed: call installNav() first');
