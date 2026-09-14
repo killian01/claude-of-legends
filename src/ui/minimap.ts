@@ -3,6 +3,8 @@
 // it issues a move order at the corresponding world point; left-click points
 // the camera there (Space snaps it back to the champion).
 
+import { getSettings } from '../game/settings';
+import { followUiScale } from '../game/ui_scale';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import type { TeamId, Vec2 } from '../sim/types';
 import type { IWorld } from '../world_api';
@@ -20,6 +22,8 @@ export class Minimap {
   private readonly scale: number;
   private readonly fog = document.createElement('canvas');
   private readonly pings: { x: number; z: number; until: number }[] = [];
+  // The interface size (src/game/ui_scale.ts), followed while on screen.
+  private readonly stopScale: () => void;
   // True while the cursor is over the minimap; the edge-pan gate reads it.
   hovered = false;
 
@@ -52,6 +56,7 @@ export class Minimap {
       'position:absolute;right:12px;bottom:12px;border:1px solid #466030;' +
       'border-radius:6px;pointer-events:auto;z-index:5;opacity:0.88;';
     container.appendChild(this.canvas);
+    this.stopScale = followUiScale(this.canvas, () => getSettings().uiScale);
 
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     this.canvas.addEventListener('pointerenter', () => {
@@ -80,6 +85,7 @@ export class Minimap {
 
   // Same-page teardown; the listeners die with the canvas.
   dispose(): void {
+    this.stopScale();
     this.canvas.remove();
   }
 

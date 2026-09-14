@@ -17,11 +17,19 @@ describe('player settings', () => {
       sfx: 1,
       music: 0,
       announcer: false,
+      uiScale: 'auto',
     });
     expect(clampSettings({ sfx: 0.35, music: 0.8, announcer: true })).toEqual({
       sfx: 0.35,
       music: 0.8,
       announcer: true,
+      uiScale: 'auto',
     });
+  });
+
+  it('keeps an interface size in range and falls back to auto', () => {
+    expect(clampSettings({ uiScale: 1.5 }).uiScale).toBe(1.5);
+    expect(clampSettings({ uiScale: 9 }).uiScale).toBe(2);
+    expect(clampSettings({ uiScale: 'huge' }).uiScale).toBe('auto');
   });
 });

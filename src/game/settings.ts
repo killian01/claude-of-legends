@@ -5,15 +5,23 @@
 import { setAnnouncerEnabled } from './announcer';
 import { setMusicVolume } from './music';
 import { setSfxVolume } from './sfx';
+import { clampUiScale, SETTINGS_EVENT, type UiScaleSetting } from './ui_scale';
 
 export interface GameSettings {
   // 0..1 multipliers over the authored levels.
   sfx: number;
   music: number;
   announcer: boolean;
+  // How big the interface is drawn (ui_scale.ts): the rule, or a multiplier.
+  uiScale: UiScaleSetting;
 }
 
-export const DEFAULT_SETTINGS: GameSettings = { sfx: 1, music: 1, announcer: true };
+export const DEFAULT_SETTINGS: GameSettings = {
+  sfx: 1,
+  music: 1,
+  announcer: true,
+  uiScale: 'auto',
+};
 
 const STORAGE_KEY = 'loc-settings';
 
@@ -27,6 +35,7 @@ export function clampSettings(raw: unknown): GameSettings {
     sfx: clamp01(r.sfx, DEFAULT_SETTINGS.sfx),
     music: clamp01(r.music, DEFAULT_SETTINGS.music),
     announcer: typeof r.announcer === 'boolean' ? r.announcer : DEFAULT_SETTINGS.announcer,
+    uiScale: clampUiScale(r.uiScale),
   };
 }
 
@@ -36,6 +45,9 @@ function apply(s: GameSettings): void {
   setSfxVolume(s.sfx);
   setMusicVolume(s.music);
   setAnnouncerEnabled(s.announcer);
+  // The interface size is read by whatever is on screen (the HUD, a menu):
+  // they hear the change here rather than being told one by one.
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(SETTINGS_EVENT));
 }
 
 export function getSettings(): GameSettings {

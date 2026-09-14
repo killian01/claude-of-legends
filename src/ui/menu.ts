@@ -8,6 +8,8 @@
 import { requestGameFullscreen } from '../game/fullscreen';
 import { inviteUrl } from '../game/invite';
 import { appNav } from '../game/nav';
+import { getSettings } from '../game/settings';
+import { applyUiScale, effectiveUiScale } from '../game/ui_scale';
 import type { LobbyPlayer, SelectPlayer } from '../net/protocol';
 import { CHAMPION_LIST } from '../sim/content/champions';
 import { SIGIL_LIST } from '../sim/content/sigils';
@@ -222,6 +224,8 @@ export function screen(
   ensureMenuCss();
   const root = document.createElement('div');
   root.className = 'menu';
+  // The interface size the player set, or the screen's (src/game/ui_scale.ts).
+  applyUiScale(root, effectiveUiScale(getSettings().uiScale, window.innerHeight));
   if (backdrop) startMenuBackdrop(root);
   const card = document.createElement('div');
   card.className = 'menu-card';

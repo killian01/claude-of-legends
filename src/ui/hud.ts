@@ -7,7 +7,9 @@
 import { announceVoice } from '../game/announcer';
 import type { PostMatchAction } from '../game/flow';
 import { requestGameFullscreen, toggleGameFullscreen } from '../game/fullscreen';
+import { getSettings } from '../game/settings';
 import { playSfx } from '../game/sfx';
+import { followUiScale } from '../game/ui_scale';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
@@ -701,6 +703,7 @@ export class Hud {
   private endPlayed = false;
   private lastTowerCount: number | null = null;
   private readonly rootEl: HTMLElement;
+  private readonly stopScale: () => void;
   private readonly styleEl: HTMLStyleElement;
 
   constructor(
@@ -728,6 +731,9 @@ export class Hud {
       typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
     root.className = coarsePointer ? 'hud compact' : 'hud';
     this.rootEl = root;
+    // The interface size (src/game/ui_scale.ts): the screen's, or the
+    // player's choice, followed live while the match is on.
+    this.stopScale = followUiScale(root, () => getSettings().uiScale);
     const el = <K extends keyof HTMLElementTagNameMap>(
       tag: K,
       cls: string,
@@ -1186,6 +1192,7 @@ export class Hud {
   // tooltip attached to a removed element must not be left hanging.
   dispose(): void {
     hideTooltip();
+    this.stopScale();
     this.rootEl.remove();
     this.styleEl.remove();
   }
