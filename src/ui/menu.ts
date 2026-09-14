@@ -164,6 +164,18 @@ const CSS = `
   .menu-select-side { width: 100%; }
   .menu-grid { grid-template-columns: repeat(3, 1fr); }
 }
+@media (max-width: 600px) {
+  /* A phone held upright: three columns leave a card 90px wide, and the
+     desktop caption (name, role, blurb, price) covers the whole portrait;
+     the player saw big names and no champions. Two columns, a smaller
+     caption, and no blurb: the portrait is what the card is. */
+  .menu-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .menu-champ-body { padding: 22px 7px 6px; }
+  .menu-champ-name { font-size: 12px; letter-spacing: 0.2px; }
+  .menu-champ-role { font-size: 9px; }
+  .menu-champ-blurb { display: none; }
+  .menu-champ-standing { font-size: 9px; margin-top: 2px; }
+}
 .menu-sigils { display: flex; gap: 6px; margin: 6px 0; }
 .menu-sigil {
   flex: 1; padding: 7px 4px; border-radius: 6px; border: 1px solid #55482a; background: #16141f;

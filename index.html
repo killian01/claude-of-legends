@@ -99,6 +99,24 @@
            page from them. Menus and the landing page keep default touch
            behavior so they still scroll. */
         touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+      }
+      /* A finger held on the screen is an order, never a text selection: on
+         a touch device a long press otherwise selects the HUD, the menus,
+         and with them the whole screen. Fields stay editable. */
+      @media (pointer: coarse) {
+        #app {
+          user-select: none;
+          -webkit-user-select: none;
+          -webkit-touch-callout: none;
+        }
+        #app input,
+        #app textarea {
+          user-select: text;
+          -webkit-user-select: text;
+        }
       }
       html,
       body {
