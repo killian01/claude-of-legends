@@ -29,7 +29,7 @@
     "@types/three": "^0.185.4",
     "@types/ws": "^8.18.1",
     "esbuild": "^0.28.2",
-    "puppeteer-core": "^25.9.0",
+    "puppeteer-core": "^25.10.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^4.1.11"
