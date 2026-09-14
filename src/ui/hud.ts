@@ -606,6 +606,14 @@ const CSS = `
   animation: hud-hints-fade 1s 25s forwards;
 }
 @keyframes hud-hints-fade { to { opacity: 0; visibility: hidden; } }
+/* A phone held upright: the stick and the bar need the width, so the
+   match waits behind one line until the phone turns. */
+.hud-turn {
+  display: none; position: absolute; inset: 0; z-index: 40; pointer-events: auto;
+  align-items: center; justify-content: center; text-align: center; padding: 24px;
+  background: rgba(4, 8, 16, 0.92); font-size: 18px; font-weight: 700; letter-spacing: 0.3px;
+}
+@media (orientation: portrait) { .hud.compact .hud-turn { display: flex; } }
 `;
 
 export interface NetHooks {
@@ -947,9 +955,13 @@ export class Hud {
 
     const hints = el('div', 'hud-hints');
     hints.textContent = coarsePointer
-      ? 'Tap: move / attack. Tap a spell, then tap the ground to cast it (tap the spell ' +
-        'again to cancel). Drag pans the camera, pinch zooms, Center snaps back to your ' +
-        'champion. Level up: tap the +.'
+      ? getSettings().touchScheme === 'thumbs'
+        ? 'Left thumb on the left half: the stick walks. Tap: attack / walk there. Tap a ' +
+          'spell, then tap the ground to cast it (tap the spell again to cancel). Pinch ' +
+          'zooms, Center snaps back to your champion. Level up: tap the +.'
+        : 'Tap: move / attack. Tap a spell, then tap the ground to cast it (tap the spell ' +
+          'again to cancel). Drag pans the camera, pinch zooms, Center snaps back to your ' +
+          'champion. Level up: tap the +.'
       : 'Right-click: move / attack. A: attack-move. S: stop and hold. B: recall. ' +
         'Q W E R: hold to aim, release to cast (right-click cancels). D F: sigils. P: shop. ' +
         'Tab: scoreboard. Enter: chat. G: ping. Esc: menu. Screen edges pan the camera; ' +
@@ -1143,6 +1155,7 @@ export class Hud {
     );
 
     root.append(
+      el('div', 'hud-turn', 'Turn your phone sideways to play'),
       bottom,
       hints,
       kda,

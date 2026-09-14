@@ -306,6 +306,14 @@ First in the bar, with a dot while the newest entry is under a week old; the lan
 the newest one in a line for a visitor with no account. An item of it is an entry.
 _Avoid_: changelog, patch notes, release notes, feed, announcements, blog
 
+**Thumb stick**:
+How a phone walks (`src/game/thumb_stick.ts`): a touch in the left part of the screen
+raises a stick under the finger, the finger's offset from it is the direction, and the
+champion walks that way while the thumb steers; lifting it halts. The camera stays on the
+champion. A tap on the rest of the screen still walks or attacks; the setting "Touch
+controls" turns the stick off for the older tap to walk.
+_Avoid_: joystick, virtual pad, d-pad, analog stick
+
 **Play tile**:
 One of the five ways into a match on the Home, each a painted scene of its own: the Ranked
 queue, Bots, the Forge queue, a Private lobby, Practice. The tile is the button.

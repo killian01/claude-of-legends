@@ -10,7 +10,9 @@
 
 import type { Renderer } from '../render/renderer';
 import type { AbilityKey } from '../sim/types';
+import type { ThumbStickView } from '../ui/thumb_stick_view';
 import type { InputHandlers } from './input';
+import { ThumbStick, type Viewport } from './thumb_stick';
 
 export const TAP_SLOP_PX = 14;
 
@@ -108,8 +110,18 @@ export interface TouchControls {
   dispose(): void;
 }
 
+// How a phone plays (settings, CONTEXT.md: Thumb stick): with the left
+// thumb on a stick and the camera on the champion, or the older way, a tap
+// to walk and a drag to pan.
+export type TouchScheme = 'thumbs' | 'tap';
+
 export interface TouchControlsOptions {
   onArmedChange?(label: ArmedLabel | null): void;
+  // Read on every touch, so a change in the settings takes hold at once.
+  scheme?: () => TouchScheme;
+  // Where the stick is drawn; without it the stick still steers, unseen.
+  stick?: ThumbStickView;
+  viewport?: () => Viewport;
 }
 
 // Wires TouchGestures to the canvas. The listeners are inert without a
@@ -121,8 +133,45 @@ export function setupTouchControls(
 ): TouchControls {
   const el = renderer.domElement;
   const gestures = new TouchGestures();
+  const scheme = opts.scheme ?? ((): TouchScheme => 'tap');
+  const viewport = opts.viewport ?? ((): Viewport => ({ width: innerWidth, height: innerHeight }));
   let armedAbility: AbilityKey | null = null;
   let armedSigil: number | null = null;
+
+  // The left thumb's stick (thumb_stick.ts). Its pointer never reaches the
+  // gestures above, so a second finger on the right is a tap or an aim and
+  // not a pinch. Read every frame while held: the thumb's screen direction
+  // is turned into a world direction through two ground points, which
+  // holds under any zoom or camera angle, and handed to the handler.
+  const stick = new ThumbStick();
+  let stickFrame = 0;
+  const readStick = (): void => {
+    stickFrame = 0;
+    if (!stick.active) return;
+    const v = stick.vector();
+    const k = stick.knob;
+    opts.stick?.knob(k.x, k.z);
+    if (v === null) {
+      handlers.onThumbMove(null);
+    } else {
+      const { width, height } = viewport();
+      const a = renderer.groundPointAt(width / 2, height / 2);
+      const b = renderer.groundPointAt(width / 2 + v.x * 50, height / 2 + v.y * 50);
+      if (a && b) {
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        const d = Math.hypot(dx, dz);
+        if (d > 0) handlers.onThumbMove({ x: dx / d, z: dz / d });
+      }
+    }
+    stickFrame = requestAnimationFrame(readStick);
+  };
+  const releaseStick = (): void => {
+    if (stickFrame) cancelAnimationFrame(stickFrame);
+    stickFrame = 0;
+    opts.stick?.hide();
+    handlers.onThumbMove(null);
+  };
 
   const clearArmed = (): void => {
     armedAbility = null;
@@ -158,6 +207,9 @@ export function setupTouchControls(
     if (action.kind === 'tap') {
       onTap(action.x, action.y);
     } else if (action.kind === 'pan') {
+      // With the stick, the camera stays on the champion: a drag on the
+      // right is nothing unless a cast is armed, and then it aims.
+      if (scheme() === 'thumbs') return;
       // Ground-anchored pan: the world point under the finger stays under
       // the finger, whatever the zoom or camera angle.
       const from = renderer.groundPointAt(action.fromX, action.fromY);
@@ -174,18 +226,32 @@ export function setupTouchControls(
     if (e.pointerType !== 'touch') return;
     e.preventDefault();
     el.setPointerCapture(e.pointerId);
+    if (scheme() === 'thumbs' && stick.down(e.pointerId, e.clientX, e.clientY, viewport())) {
+      opts.stick?.show(e.clientX, e.clientY);
+      if (!stickFrame) stickFrame = requestAnimationFrame(readStick);
+      return;
+    }
     dispatch(gestures.down(e.pointerId, e.clientX, e.clientY));
   };
   const onPointerMove = (e: PointerEvent): void => {
     if (e.pointerType !== 'touch') return;
+    if (stick.move(e.pointerId, e.clientX, e.clientY)) return;
     dispatch(gestures.move(e.pointerId, e.clientX, e.clientY));
   };
   const onPointerUp = (e: PointerEvent): void => {
     if (e.pointerType !== 'touch') return;
+    if (stick.up(e.pointerId)) {
+      releaseStick();
+      return;
+    }
     dispatch(gestures.up(e.pointerId, e.clientX, e.clientY));
   };
   const onPointerCancel = (e: PointerEvent): void => {
     if (e.pointerType !== 'touch') return;
+    if (stick.up(e.pointerId)) {
+      releaseStick();
+      return;
+    }
     gestures.cancel(e.pointerId);
   };
   el.addEventListener('pointerdown', onPointerDown);
@@ -220,6 +286,8 @@ export function setupTouchControls(
     },
     dispose: (): void => {
       cancelAim();
+      if (stickFrame) cancelAnimationFrame(stickFrame);
+      stickFrame = 0;
       el.removeEventListener('pointerdown', onPointerDown);
       el.removeEventListener('pointermove', onPointerMove);
       el.removeEventListener('pointerup', onPointerUp);

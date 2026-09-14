@@ -5,6 +5,7 @@
 import { setAnnouncerEnabled } from './announcer';
 import { setMusicVolume } from './music';
 import { setSfxVolume } from './sfx';
+import type { TouchScheme } from './touch';
 import { clampUiScale, SETTINGS_EVENT, type UiScaleSetting } from './ui_scale';
 
 export interface GameSettings {
@@ -14,6 +15,8 @@ export interface GameSettings {
   announcer: boolean;
   // How big the interface is drawn (ui_scale.ts): the rule, or a multiplier.
   uiScale: UiScaleSetting;
+  // How a phone plays (touch.ts): the thumb stick, or a tap to walk.
+  touchScheme: TouchScheme;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -21,6 +24,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   music: 1,
   announcer: true,
   uiScale: 'auto',
+  touchScheme: 'thumbs',
 };
 
 const STORAGE_KEY = 'loc-settings';
@@ -36,6 +40,7 @@ export function clampSettings(raw: unknown): GameSettings {
     music: clamp01(r.music, DEFAULT_SETTINGS.music),
     announcer: typeof r.announcer === 'boolean' ? r.announcer : DEFAULT_SETTINGS.announcer,
     uiScale: clampUiScale(r.uiScale),
+    touchScheme: r.touchScheme === 'tap' ? 'tap' : 'thumbs',
   };
 }
 

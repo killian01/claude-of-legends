@@ -16,6 +16,7 @@ import { DT } from '../sim/types';
 import { attackCursor, defaultCursor } from '../ui/cursors';
 import { Hud, type NetHooks } from '../ui/hud';
 import { Minimap } from '../ui/minimap';
+import { buildThumbStickView } from '../ui/thumb_stick_view';
 import { buildTouchBar } from '../ui/touch_bar';
 import type { IWorld } from '../world_api';
 import { castSoundOf } from './champion_sounds';
@@ -25,7 +26,9 @@ import { requestGameFullscreen } from './fullscreen';
 import { type InputHandlers, setupInput } from './input';
 import { startMusic, stopMusic } from './music';
 import { pickEnemyAt, pickEnemyOnScreen, pickUnitOnScreen } from './picking';
+import { getSettings } from './settings';
 import { playCastSfx, playSfx, preloadSfx } from './sfx';
+import { leadPoint, STICK_LEAD_M, type StickOrder, shouldResend } from './thumb_stick';
 import { setupTouchControls } from './touch';
 
 export interface KillNote {
@@ -126,6 +129,9 @@ export function startPresentation(
   };
 
   const project = (x: number, y: number, z: number) => renderer.projectToScreen(x, y, z);
+  // A dev probe like the replay viewer's (src/main.ts __replay): the
+  // browser e2e scripts read the champion's position off it.
+  (window as unknown as { __match?: unknown }).__match = { world, selfId };
 
   // A ground-placed cast aimed beyond range walks into range first, then
   // fires at the EXACT aimed point, like the genre without quickcast. Any
@@ -234,6 +240,9 @@ export function startPresentation(
     typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
   // One handlers object for every input source: mouse and keyboard
   // (setupInput), fingers (setupTouchControls), and the touch bar.
+  // The last order the left thumb's stick gave (thumb_stick.ts), for the
+  // resend rule; null while the thumb rests.
+  let stickOrder: StickOrder | null = null;
   const inputHandlers: InputHandlers = {
     onRightClick: (p: Vec2, sx, sy) => {
       pendingCast = null;
@@ -259,6 +268,31 @@ export function startPresentation(
         renderer.flashMarker(p.x, p.z);
         if (coarsePointer) hud.setTarget(null);
       }
+    },
+    // The left thumb's stick (thumb_stick.ts): a direction while it
+    // steers, null when it rests or lifts. A direction becomes a move
+    // order a few meters ahead, resent as the thumb turns and on a
+    // keep-alive, so the champion never arrives and stops between two. A
+    // rest orders a move to where the champion stands, which halts it
+    // without a stop order's hold, so idle defense keeps answering. The
+    // stick drops the attack reticle, like a walk order does, and brings
+    // the camera back onto the champion after a look at the minimap.
+    onThumbMove: (dir) => {
+      const self = world.units.get(selfId);
+      if (!self) return;
+      if (dir === null) {
+        if (stickOrder === null) return;
+        stickOrder = null;
+        world.orderMove(selfId, self.pos.x, self.pos.z);
+        return;
+      }
+      const now = performance.now();
+      if (!shouldResend(stickOrder, dir, now)) return;
+      stickOrder = { x: dir.x, z: dir.z, at: now };
+      const p = leadPoint(self.pos, dir, STICK_LEAD_M, world.map.size);
+      world.orderMove(selfId, p.x, p.z);
+      renderer.setAttackTarget(null);
+      renderer.recenterCamera();
     },
     onLeftClick: (sx, sy) => {
       // MOBA-style selection: any visible unit shows its frame with exact
@@ -355,8 +389,12 @@ export function startPresentation(
   // two-step casts armed by tapping HUD slots). The gesture listeners are
   // inert without a touchscreen; the button bar for key-only orders builds
   // on coarse-pointer devices only.
+  // A phone's stick is drawn only where there is a thumb to hold it.
+  const stickView = coarsePointer ? buildThumbStickView(container) : null;
   const touch = setupTouchControls(renderer, inputHandlers, {
     onArmedChange: (label) => hud.setArmedSlot(label),
+    scheme: () => getSettings().touchScheme,
+    ...(stickView ? { stick: stickView } : {}),
   });
   hud.setCastTaps({
     ability: (key) => touch.armAbility(key),
@@ -445,6 +483,7 @@ export function startPresentation(
       teardownInput();
       teardownCursorLock();
       touch.dispose();
+      stickView?.dispose();
       teardownTouchBar?.();
       hud.dispose();
       minimap.dispose();

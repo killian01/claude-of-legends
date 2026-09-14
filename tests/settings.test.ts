@@ -18,13 +18,20 @@ describe('player settings', () => {
       music: 0,
       announcer: false,
       uiScale: 'auto',
+      touchScheme: 'thumbs',
     });
     expect(clampSettings({ sfx: 0.35, music: 0.8, announcer: true })).toEqual({
       sfx: 0.35,
       music: 0.8,
       announcer: true,
       uiScale: 'auto',
+      touchScheme: 'thumbs',
     });
+  });
+
+  it('knows the two ways a phone plays and defaults to the stick', () => {
+    expect(clampSettings({ touchScheme: 'tap' }).touchScheme).toBe('tap');
+    expect(clampSettings({ touchScheme: 'wheel' }).touchScheme).toBe('thumbs');
   });
 
   it('keeps an interface size in range and falls back to auto', () => {

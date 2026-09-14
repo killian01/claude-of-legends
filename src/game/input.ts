@@ -29,6 +29,10 @@ export interface InputHandlers {
   onToggleMenu(): void;
   onOpenChat(): void;
   onPing(aim: Vec2): void;
+  // The left thumb's stick (thumb_stick.ts): a world direction, unit
+  // length, every frame while the thumb steers; null when it rests or
+  // lifts. The handler turns it into the sim's move orders.
+  onThumbMove(dir: Vec2 | null): void;
   isTyping(): boolean;
 }
 

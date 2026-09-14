@@ -67,7 +67,34 @@ export function buildSettingsPanel(): HTMLElement {
   row.append(lab, box);
   panel.appendChild(row);
   panel.appendChild(scaleRow(s.uiScale));
+  // Only a touchscreen has a way to play by thumb; a mouse never sees the row.
+  if (typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches) {
+    panel.appendChild(touchRow(s.touchScheme));
+  }
   return panel;
+}
+
+function touchRow(value: 'thumbs' | 'tap'): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'set-row';
+  const lab = document.createElement('label');
+  lab.textContent = 'Touch controls';
+  const select = document.createElement('select');
+  for (const [v, text] of [
+    ['thumbs', 'Thumb stick'],
+    ['tap', 'Tap to walk'],
+  ] as const) {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = text;
+    select.appendChild(opt);
+  }
+  select.value = value;
+  select.addEventListener('change', () => {
+    updateSettings({ touchScheme: select.value === 'tap' ? 'tap' : 'thumbs' });
+  });
+  row.append(lab, select);
+  return row;
 }
 
 // The interface size: the rule, or one of a few multipliers. A select
