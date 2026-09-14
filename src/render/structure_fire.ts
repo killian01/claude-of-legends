@@ -5,7 +5,7 @@
 // waist. These are the rules that keep a structure a structure, pure so
 // tests/structure_fire.test.ts can pin them; renderer.ts reads them.
 
-import type { SpawnOffset } from './muzzle_spawn';
+import type { Vec2 } from '../sim/types';
 
 // The kinds that never turn and never move: the towers and the Sanctum.
 export const STILL_KINDS: readonly string[] = ['tower', 'sanctum'];
@@ -22,20 +22,24 @@ export function crownHeight(topY: number): number {
   return topY * CROWN;
 }
 
-// The offset from the sim's spawn (the structure's center, at flight
-// height) to the crown: straight up, never below the flight line.
-export function crownSpawnOffset(topY: number, flightY: number): SpawnOffset {
-  return { x: 0, y: Math.max(0, crownHeight(topY) - flightY), z: 0 };
+// How far along its flight a bolt is, by distance and not by time: from
+// the structure it left to the edge of the body it will strike, which is
+// where the sim ends a homing bolt. Measured on the positions the mesh is
+// drawn at, so the line from the crown to the victim is straight on
+// screen whatever the frame rate, the sim's catch-up, or the victim's
+// own movement; a descent timed against an estimated flight reached the
+// ground early and flew the last stretch flat.
+export function flightProgress(from: Vec2, at: Vec2, target: Vec2, reach: number): number {
+  const traveled = Math.hypot(at.x - from.x, at.z - from.z);
+  const remaining = Math.max(0, Math.hypot(target.x - at.x, target.z - at.z) - reach);
+  const total = traveled + remaining;
+  if (total <= 0) return 1;
+  return Math.min(1, traveled / total);
 }
 
-// A bolt that never comes down looks like a miss, one that drops in a beat
-// looks like it fell: the descent from the crown takes the whole flight,
-// so the shot reads as a line from the crown onto its victim. Never
-// shorter than the beat a champion's muzzle gets, never longer than a
-// bolt could plausibly be in the air.
-export const MAX_DESCENT_MS = 1500;
-
-export function descentMs(distance: number, speed: number, floorMs: number): number {
-  if (!(speed > 0) || !(distance > 0)) return floorMs;
-  return Math.min(MAX_DESCENT_MS, Math.max(floorMs, (distance / speed) * 1000));
+// The bolt's height above the flight line at that progress: the crown at
+// birth, the line itself at the strike, never below it.
+export function crownLift(topY: number, flightY: number, progress: number): number {
+  const k = Math.min(1, Math.max(0, progress));
+  return Math.max(0, crownHeight(topY) - flightY) * (1 - k);
 }

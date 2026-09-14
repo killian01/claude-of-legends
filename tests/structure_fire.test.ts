@@ -4,10 +4,9 @@ import { describe, expect, it } from 'vitest';
 import {
   CROWN,
   crownHeight,
-  crownSpawnOffset,
-  descentMs,
+  crownLift,
+  flightProgress,
   isStill,
-  MAX_DESCENT_MS,
   STILL_KINDS,
 } from '../src/render/structure_fire';
 
@@ -22,33 +21,42 @@ describe('what stands still', () => {
   });
 });
 
-describe('where the bolt is born', () => {
-  it('is at the crown, straight above the sim spawn', () => {
-    expect(crownHeight(10)).toBeCloseTo(10 * CROWN);
-    expect(crownSpawnOffset(10, 1.2)).toEqual({ x: 0, y: 10 * CROWN - 1.2, z: 0 });
+const from = { x: 0, z: 0 };
+const target = { x: 8, z: 0 };
+
+describe('how far along its flight a bolt is', () => {
+  it('is nothing at the structure and everything at the victim', () => {
+    expect(flightProgress(from, from, target, 0.8)).toBe(0);
+    // The sim ends a homing bolt at the body's edge, not at its center.
+    expect(flightProgress(from, { x: 7.2, z: 0 }, target, 0.8)).toBe(1);
+    expect(flightProgress(from, target, target, 0.8)).toBe(1);
   });
 
-  it('never sits below the flight line', () => {
-    // A structure shorter than a bolt's flight height fires from the line
-    // itself rather than from underground.
-    expect(crownSpawnOffset(1, 1.2)).toEqual({ x: 0, y: 0, z: 0 });
+  it('is measured by distance, from the structure to the edge of the body', () => {
+    expect(flightProgress(from, { x: 3.6, z: 0 }, target, 0.8)).toBeCloseTo(0.5);
+    // A victim that walked closer shortens what is left, not what was flown.
+    expect(flightProgress(from, { x: 3.6, z: 0 }, { x: 6, z: 0 }, 0.8)).toBeCloseTo(
+      3.6 / (3.6 + 1.6),
+    );
+  });
+
+  it('is everything when there is nowhere left to go', () => {
+    expect(flightProgress(from, from, from, 0.8)).toBe(1);
   });
 });
 
-describe('how long the bolt takes to come down', () => {
-  it('is the whole flight', () => {
-    // 8 units at 20 per second: 400 ms in the air.
-    expect(descentMs(8, 20, 130)).toBeCloseTo(400);
+describe('how high the bolt flies', () => {
+  it('is born at the crown and strikes on the flight line', () => {
+    expect(crownHeight(10)).toBeCloseTo(10 * CROWN);
+    expect(crownLift(10, 1.2, 0)).toBeCloseTo(10 * CROWN - 1.2);
+    expect(crownLift(10, 1.2, 0.5)).toBeCloseTo((10 * CROWN - 1.2) / 2);
+    expect(crownLift(10, 1.2, 1)).toBe(0);
   });
 
-  it("is never shorter than a champion's muzzle beat", () => {
-    expect(descentMs(1, 20, 130)).toBe(130);
-    expect(descentMs(0, 20, 130)).toBe(130);
-    expect(descentMs(8, 0, 130)).toBe(130);
-    expect(descentMs(8, Number.NaN, 130)).toBe(130);
-  });
-
-  it('is never longer than a bolt could be in the air', () => {
-    expect(descentMs(100, 1, 130)).toBe(MAX_DESCENT_MS);
+  it('never dips below the line, whatever the progress or the height', () => {
+    expect(crownLift(10, 1.2, 1.5)).toBe(0);
+    expect(crownLift(10, 1.2, -1)).toBeCloseTo(10 * CROWN - 1.2);
+    // A structure shorter than the flight line fires from the line.
+    expect(crownLift(1, 1.2, 0)).toBe(0);
   });
 });

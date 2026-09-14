@@ -41,7 +41,7 @@ import {
   PROJECTILE_Y,
   type SpawnOffset,
 } from './muzzle_spawn';
-import { crownHeight, crownSpawnOffset, descentMs, isStill } from './structure_fire';
+import { crownHeight, crownLift, flightProgress, isStill } from './structure_fire';
 import type { RenderTerrain } from './terrain';
 import { toonifyMaterials } from './toon';
 import {
@@ -202,9 +202,10 @@ interface TrackedMobile {
   // truth for every hit test. Null once converged (or never authored).
   spawnOfs: SpawnOffset | null;
   bornAt: number;
-  // How long that offset takes to blend away: a beat for a champion's
-  // muzzle, the whole flight for a bolt born at a structure's crown.
-  blendMs: number;
+  // A bolt born at a structure's crown: it comes down onto the flight
+  // line by distance flown, from the structure to the edge of its victim
+  // (src/render/structure_fire.ts). Null for every other bolt.
+  crown: { from: Vec2; targetId: number; reach: number; topY: number } | null;
 }
 
 // How long a projectile takes to converge from its muzzle spawn onto the
@@ -1353,12 +1354,6 @@ export class Renderer {
   // the sim position, or null when the shooter is unknown or muzzle-less.
   private muzzleOffset(p: Readonly<Projectile>): SpawnOffset | null {
     const src = p.sourceId ? this.world.units.get(p.sourceId) : undefined;
-    if (src && isStill(src.kind)) {
-      // A structure's bolt is born at its crown, straight above the sim
-      // spawn (src/render/structure_fire.ts).
-      const topY = this.tracked.get(src.id)?.mesh.userData.topY;
-      return typeof topY === 'number' ? crownSpawnOffset(topY, PROJECTILE_Y) : null;
-    }
     if (src?.kind !== 'champion') return null;
     const muzzle = championVisualDef(src.championId)?.muzzle;
     if (!muzzle) return null;
@@ -1370,18 +1365,29 @@ export class Renderer {
     return estimatedMuzzleOffset(src.pos, p.pos, muzzle);
   }
 
-  // How long the rendered bolt takes to converge onto the sim path: a
-  // beat for a champion's muzzle, the whole flight for a structure's
-  // crown, so the shot reads as a line down onto its victim
-  // (src/render/structure_fire.ts).
-  private blendMs(p: Readonly<Projectile>): number {
+  // A bolt fired by a structure: born at its crown, down onto its victim
+  // in a straight line (src/render/structure_fire.ts). Null for every
+  // other bolt, and for a structure whose figure has no measured height.
+  private crownFlight(p: Readonly<Projectile>): TrackedMobile['crown'] {
     const src = p.sourceId ? this.world.units.get(p.sourceId) : undefined;
-    if (!src || !isStill(src.kind)) return MUZZLE_BLEND_MS;
-    const target = p.homingTargetId !== null ? this.world.units.get(p.homingTargetId) : undefined;
-    const distance = target
-      ? Math.hypot(target.pos.x - p.pos.x, target.pos.z - p.pos.z)
-      : p.maxRange - p.traveled;
-    return descentMs(distance, p.speed, MUZZLE_BLEND_MS);
+    if (!src || !isStill(src.kind) || p.homingTargetId === null) return null;
+    const topY = this.tracked.get(src.id)?.mesh.userData.topY;
+    const target = this.world.units.get(p.homingTargetId);
+    if (typeof topY !== 'number' || !target) return null;
+    return {
+      from: { x: src.pos.x, z: src.pos.z },
+      targetId: target.id,
+      reach: p.radius + target.radius,
+      topY,
+    };
+  }
+
+  // Where a crown-born bolt sits above the flight line right now, off the
+  // positions it is drawn at.
+  private crownLiftAt(crown: NonNullable<TrackedMobile['crown']>, x: number, z: number): number {
+    const target = this.world.units.get(crown.targetId);
+    const progress = target ? flightProgress(crown.from, { x, z }, target.pos, crown.reach) : 1;
+    return crownLift(crown.topY, PROJECTILE_Y, progress);
   }
 
   // The fire line of a projectile seen for the first time: from its shooter
@@ -1892,9 +1898,13 @@ export class Renderer {
           ? vis.projectile(p.radius, colors)
           : buildProjectileMesh(p, this.world, teamLight);
         const spawnOfs = this.muzzleOffset(p);
+        const crown = this.crownFlight(p);
         mesh.position.set(
           p.pos.x + (spawnOfs?.x ?? 0),
-          PROJECTILE_Y + this.groundHeight(p.pos.x, p.pos.z) + (spawnOfs?.y ?? 0),
+          PROJECTILE_Y +
+            this.groundHeight(p.pos.x, p.pos.z) +
+            (spawnOfs?.y ?? 0) +
+            (crown ? this.crownLiftAt(crown, p.pos.x, p.pos.z) : 0),
           p.pos.z + (spawnOfs?.z ?? 0),
         );
         // Headed the right way from its first frame: the per-frame turn
@@ -1913,7 +1923,7 @@ export class Renderer {
           vis,
           spawnOfs,
           bornAt: performance.now(),
-          blendMs: this.blendMs(p),
+          crown,
         });
       } else {
         t.prev = t.curr;
@@ -2496,7 +2506,7 @@ export class Renderer {
       if (t.spawnOfs) {
         // Muzzle convergence: at the barrel tip at birth, on the sim path
         // a beat later.
-        const k = 1 - (now - t.bornAt) / t.blendMs;
+        const k = 1 - (now - t.bornAt) / MUZZLE_BLEND_MS;
         if (k <= 0) t.spawnOfs = null;
         else {
           px += t.spawnOfs.x * k;
@@ -2504,6 +2514,7 @@ export class Renderer {
           pz += t.spawnOfs.z * k;
         }
       }
+      if (t.crown) py += this.crownLiftAt(t.crown, x, z);
       t.mesh.position.set(px, py, pz);
       const ddx = t.curr.x - t.prev.x;
       const ddz = t.curr.z - t.prev.z;
