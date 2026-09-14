@@ -291,6 +291,8 @@ socket cap:
 reverse_proxy claude_of_legends:8787 {
     header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}
     header_up X-Real-IP {remote_host}
+    lb_try_duration 30s
+    lb_try_interval 500ms
 }
 ```
 
@@ -298,6 +300,14 @@ reverse_proxy claude_of_legends:8787 {
 proxying CDN the chain names the player, and with DNS-only records that header
 is absent and `X-Real-IP` (the peer Caddy saw) is the right answer. Changing
 either `header_up` line means rereading `server/edge.ts` first.
+
+The two `lb_` lines are what a visitor sees during a deployment. Recreating the
+container leaves nothing to dial for ten to twenty seconds, and without them
+every request in that window is a 502, which Cloudflare shows as its own "Bad
+gateway" page; that is what the first Reddit visitors met. With them Caddy
+holds the request and keeps trying for up to 30 seconds, so the visitor sees a
+pause and then the page. Cloudflare waits 100 seconds on an origin, so the
+hold is well inside it.
 
 ## The link preview
 
@@ -372,7 +382,9 @@ against bots included: the server names the bundle it serves on
 `/api/public/build`, and a client whose own bundle differs shows a three second
 notice and reloads (`src/net/build_watch.ts`). It checks when its socket
 closes, when the tab regains focus, and once a minute otherwise. So a
-deployment reaches everybody, and it interrupts everybody: the access log says
+deployment reaches everybody, and it interrupts everybody (a visitor arriving
+while the container comes back waits rather than failing, "The proxy
+contract"): the access log says
 when the quiet hours are.
 
 ### Deploying the accounts change, once
