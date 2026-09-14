@@ -60,30 +60,60 @@ describe('the Star Orchard export', () => {
     expect(layout.towers).toHaveLength(STAR_ORCHARD_TOWERS);
   });
 
-  it('ships a model a match can download: compressed, capped, with its towers', () => {
-    const file = new URL('map.glb', folder);
-    const bytes = statSync(file).size;
-    expect(bytes).toBe(manifest.visualReport?.glbBytes);
-    expect(bytes).toBeLessThan(60e6);
+  // The JSON chunk of a GLB, which is all these checks read.
+  interface GltfHead {
+    extensionsUsed?: string[];
+    nodes: { name?: string; extras?: { role?: string } }[];
+    meshes?: unknown[];
+    images?: { mimeType?: string }[];
+  }
+  function gltfHead(file: URL): GltfHead {
     const fd = openSync(file, 'r');
     try {
       const header = Buffer.alloc(20);
       readSync(fd, header, 0, 20, 0);
       const json = Buffer.alloc(header.readUInt32LE(12));
       readSync(fd, json, 0, json.length, 20);
-      const gltf = JSON.parse(json.toString('utf8')) as {
-        extensionsUsed?: string[];
-        nodes: { extras?: { role?: string } }[];
-        images?: { mimeType?: string }[];
-      };
-      expect(gltf.extensionsUsed).toContain('EXT_meshopt_compression');
-      expect(gltf.nodes.filter((n) => n.extras?.role === 'defensive_tower')).toHaveLength(
-        STAR_ORCHARD_TOWERS,
-      );
-      for (const image of gltf.images ?? []) expect(image.mimeType).toBe('image/webp');
+      return JSON.parse(json.toString('utf8')) as GltfHead;
     } finally {
       closeSync(fd);
     }
+  }
+
+  it('ships a model a match can download: compressed, capped, with its towers', () => {
+    const file = new URL('map.glb', folder);
+    const bytes = statSync(file).size;
+    expect(bytes).toBe(manifest.visualReport?.glbBytes);
+    expect(bytes).toBeLessThan(60e6);
+    const gltf = gltfHead(file);
+    expect(gltf.extensionsUsed).toContain('EXT_meshopt_compression');
+    expect(gltf.nodes.filter((n) => n.extras?.role === 'defensive_tower')).toHaveLength(
+      STAR_ORCHARD_TOWERS,
+    );
+    for (const image of gltf.images ?? []) expect(image.mimeType).toBe('image/webp');
+  });
+
+  it('ships the light model beside it: the same scene, fewer pixels, a third the size', () => {
+    // What a phone downloads (src/game/map_quality.ts, scripts/light_map.mjs):
+    // the manifest names it and sizes it, and it carries every object of
+    // the full one, the towers included, so the loader dresses a match the
+    // same way off either.
+    expect(manifest.modelLight).toBe('map-light.glb');
+    const file = new URL(manifest.modelLight ?? '', folder);
+    const bytes = statSync(file).size;
+    expect(bytes).toBe(manifest.visualReport?.light?.glbBytes);
+    expect(bytes).toBeLessThan(20e6);
+    expect(bytes * 2).toBeLessThan(statSync(new URL('map.glb', folder)).size);
+    const full = gltfHead(new URL('map.glb', folder));
+    const light = gltfHead(file);
+    expect(light.nodes.map((n) => n.name)).toEqual(full.nodes.map((n) => n.name));
+    expect(light.meshes?.length).toBe(full.meshes?.length);
+    expect(light.images?.length).toBe(full.images?.length);
+    expect(light.extensionsUsed).toContain('EXT_meshopt_compression');
+    expect(light.nodes.filter((n) => n.extras?.role === 'defensive_tower')).toHaveLength(
+      STAR_ORCHARD_TOWERS,
+    );
+    expect(manifest.visualReport?.light?.textureSize).toBeLessThanOrEqual(512);
   });
 
   it('refuses a gameplay record traced on another Blender source', () => {

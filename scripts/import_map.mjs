@@ -105,6 +105,10 @@ manifest.visualReport = {
   },
 };
 writeFileSync(`${SHIPPED}/manifest.json`, `${JSON.stringify(manifest, null, 2)}\n`);
+// The light variant for phones, derived from what was just shipped
+// (scripts/light_map.mjs); it adds its own lines to the manifest.
+const light = spawnSync(process.execPath, ['scripts/light_map.mjs'], { stdio: 'inherit' });
+if (light.status !== 0) throw new Error('light_map.mjs failed');
 console.log(
   `Shipped Star Orchard revision ${revision}: map.glb ${(shippedBytes / 1e6).toFixed(1)} MB` +
     ` (from ${((manifest.visualReport.sourceGlbBytes ?? 0) / 1e6).toFixed(1)} MB)`,

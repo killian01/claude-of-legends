@@ -17,6 +17,7 @@ map; the launch map is the tests' fixture now, and nothing draws it.
 | `gameplay.json` | The lanes, bases and 22 towers traced on the same Blender source (three a lane per team, two guardians a base). |
 | `navigation.bin` | The walkability grid: 480 x 480 cells of 40 cm, a ground height per cell in millimeters, blocked cells for cliffs, water and forest off the paths. |
 | `map.glb` | The model, rewritten for the browser by `scripts/import_map.mjs` (about 44 MB). |
+| `map-light.glb` | The same scene with every texture capped at 384 pixels, by `scripts/light_map.mjs` (about 14 MB): what a phone or a tablet downloads (`src/game/map_quality.ts`). |
 
 The raw Blender exports, one folder per revision plus the HD variants,
 live in `art_src/map_exports/`, gitignored: 180 to 600 MB each, nothing a
@@ -105,6 +106,12 @@ ground.
   falls.
 - The export names its objects in French inside the model file; nothing
   reads them, and they will turn English with the Blender source.
-- Video memory: the textures decode to about 1 GB on the GPU (one atlas per
-  floor). GPU-compressed textures (KTX2) are the next step if that proves
-  too much on laptops.
+- Video memory: the full model's textures decode to about 1.5 GB on the GPU
+  (one atlas per floor). A laptop holds that; a phone does not, and iOS and
+  Android kill the tab the moment the terrain arrives, which the player saw
+  as the loading card reaching 100% and the landing coming back. So a
+  browser with a coarse primary pointer downloads `map-light.glb` instead,
+  about 200 MB decoded; `?map=light` shows it on a laptop, `?map=full`
+  forces the full one on a phone. GPU-compressed textures (KTX2) remain the
+  next step if the full model proves too much on laptops, and a middle size
+  for tablets the one after.

@@ -3096,6 +3096,12 @@
       "textureSize": 2048,
       "webpQuality": 75,
       "compression": "meshopt"
+    },
+    "light": {
+      "glbBytes": 14446888,
+      "textureSize": 384,
+      "webpQuality": 75
     }
-  }
+  },
+  "modelLight": "map-light.glb"
 }

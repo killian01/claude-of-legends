@@ -9,6 +9,7 @@ import type { RenderTerrain } from '../render/terrain';
 import { loadTerrain } from '../render/terrain_loader';
 import type { StarOrchard } from '../sim/content/star_orchard';
 import { TerrainNavGrid } from '../sim/terrain_nav';
+import { chooseModel, mapQualityFor, qualityOverride, readDeviceHints } from './map_quality';
 import { fetchOrchardFile, loadStarOrchard } from './star_orchard_records';
 
 // Download progress, 0 to 1.
@@ -65,7 +66,13 @@ export function loadStarOrchardModel(
   if (downloaded) onProgress(1);
   else if (fraction > 0) onProgress(fraction);
   if (!model) {
-    model = fetchBytes(orchard.model, orchard.modelBytes)
+    // Which model: the light one on a phone or a tablet, unless the
+    // address says otherwise (map_quality.ts).
+    const choice = chooseModel(
+      orchard,
+      qualityOverride(window.location.search) ?? mapQualityFor(readDeviceHints(window)),
+    );
+    model = fetchBytes(choice.file, choice.bytes)
       .then((bytes) => {
         downloaded = true;
         report(1);

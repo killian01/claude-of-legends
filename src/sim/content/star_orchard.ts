@@ -61,7 +61,15 @@ export interface StarOrchardManifest {
   heightScale: number;
   blockedValue: number;
   landmarks: StarOrchardLandmark[];
-  visualReport?: { glbBytes?: number; quality?: string; materialBakeVersion?: number };
+  // The same scene with its textures capped for phones
+  // (scripts/light_map.mjs); absent on an export that has not made one.
+  modelLight?: string;
+  visualReport?: {
+    glbBytes?: number;
+    quality?: string;
+    materialBakeVersion?: number;
+    light?: { glbBytes?: number; textureSize?: number };
+  };
 }
 
 // The shipped map as a host holds it once it has read the export: the map
@@ -81,6 +89,10 @@ export interface StarOrchard {
   // downloads it (the browser).
   model: string;
   modelBytes: number;
+  // The light model beside it, for the devices that cannot hold the full
+  // one (src/game/map_quality.ts); null when the export ships none.
+  modelLight: string | null;
+  modelLightBytes: number;
 }
 
 export function assembleStarOrchard(
@@ -95,6 +107,8 @@ export function assembleStarOrchard(
     sourceSha256: manifest.sourceSha256 ?? '',
     model: manifest.model,
     modelBytes: manifest.visualReport?.glbBytes ?? 0,
+    modelLight: manifest.modelLight ?? null,
+    modelLightBytes: manifest.visualReport?.light?.glbBytes ?? 0,
   };
 }
 
