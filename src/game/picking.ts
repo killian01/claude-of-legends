@@ -109,6 +109,30 @@ export function pickEnemyOnScreen(
   return best;
 }
 
+// The enemy a thumb means without pointing at one (thumb_cast.ts): the
+// nearest pickable body within reach of the caster, champions before
+// everything else, measured to the body's edge like a click.
+export function nearestEnemy(
+  world: IWorld,
+  selfTeam: TeamId,
+  from: Vec2,
+  reach: number,
+): Readonly<Unit> | null {
+  let best: Readonly<Unit> | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const u of world.units.values()) {
+    if (!pickable(world, u, selfTeam)) continue;
+    const d = Math.hypot(u.pos.x - from.x, u.pos.z - from.z) - u.radius;
+    if (d > reach) continue;
+    const score = kindPriority(u) * 1000 + d;
+    if (score < bestScore) {
+      bestScore = score;
+      best = u;
+    }
+  }
+  return best;
+}
+
 export function pickEnemyAt(world: IWorld, p: Vec2, selfTeam: TeamId): Readonly<Unit> | null {
   let best: Readonly<Unit> | null = null;
   let bestScore = Number.POSITIVE_INFINITY;

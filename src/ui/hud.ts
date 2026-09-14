@@ -9,6 +9,7 @@ import type { PostMatchAction } from '../game/flow';
 import { requestGameFullscreen, toggleGameFullscreen } from '../game/fullscreen';
 import { getSettings } from '../game/settings';
 import { playSfx } from '../game/sfx';
+import type { CastTouch } from '../game/touch';
 import { followUiScale } from '../game/ui_scale';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
@@ -606,6 +607,35 @@ const CSS = `
   animation: hud-hints-fade 1s 25s forwards;
 }
 @keyframes hud-hints-fade { to { opacity: 0; visibility: hidden; } }
+/* The thumb controls' cluster (CONTEXT.md: Thumb stick): the attack
+   button at the corner, Q W E in an arc round it, R further out, the two
+   sigils at the arc's foot; round, finger-sized, each placed by its key.
+   The arc leaves the corner clear of the minimap, which moves to the top. */
+.hud.thumbs .hud-slots {
+  position: absolute; right: 0; bottom: 0; width: 240px; height: 200px; display: block;
+}
+.hud.thumbs .hud-slot {
+  position: absolute; width: 54px; height: 54px; border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  /* A slide on a slot is an aim; without this the browser takes the
+     moving finger for a scroll and cancels the pointer under it. */
+  touch-action: none;
+}
+.hud.thumbs .hud-slot[data-key='Q'] { right: 118px; bottom: 16px; }
+.hud.thumbs .hud-slot[data-key='W'] { right: 96px; bottom: 82px; }
+.hud.thumbs .hud-slot[data-key='E'] { right: 36px; bottom: 110px; }
+.hud.thumbs .hud-slot[data-key='R'] { right: 150px; bottom: 132px; width: 58px; height: 58px; }
+.hud.thumbs .hud-slot[data-key='D'] { right: 178px; bottom: 16px; width: 44px; height: 44px; }
+.hud.thumbs .hud-slot[data-key='F'] { right: 160px; bottom: 70px; width: 44px; height: 44px; }
+.hud.thumbs .hud-slot-up { top: -20px; left: 50%; transform: translateX(-50%); }
+.hud.thumbs .hud-attack {
+  position: absolute; right: 14px; bottom: 14px; width: 84px; height: 84px; border-radius: 50%;
+  border: 2px solid #c9a84a; background: rgba(60, 40, 12, 0.85); color: #f0d890;
+  display: flex; align-items: center; justify-content: center; letter-spacing: 1px;
+  font-size: 15px; font-weight: 800; pointer-events: auto; touch-action: none;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+}
+.hud.thumbs .hud-attack:active { background: rgba(120, 80, 20, 0.95); }
 /* A phone held upright: the stick and the bar need the width, so the
    match waits behind one line until the phone turns. */
 .hud-turn {
@@ -701,6 +731,8 @@ export class Hud {
   // Touch two-step casting: a finger tap on an ability or sigil slot arms
   // the cast through these callbacks (wired by boot to game/touch.ts).
   private castTaps: { ability(key: AbilityKey): void; sigil(slot: number): void } | null = null;
+  // The thumb controls' slots (game/touch.ts): pointer events forwarded raw.
+  private castTouch: CastTouch | null = null;
   private announceUntil = 0;
   private spotUntil = 0;
   private sawBattleBegin = false;
@@ -737,7 +769,11 @@ export class Hud {
     // for the game, so the fixed desktop sizes shrink (see the .compact CSS).
     const coarsePointer =
       typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
-    root.className = coarsePointer ? 'hud compact' : 'hud';
+    // The thumb controls (CONTEXT.md: Thumb stick): the casting slots leave
+    // the bottom bar for a cluster under the right thumb, with the attack
+    // button at the corner, and a press on a slot aims by sliding.
+    const thumbs = coarsePointer && getSettings().touchScheme === 'thumbs';
+    root.className = coarsePointer ? (thumbs ? 'hud compact thumbs' : 'hud compact') : 'hud';
     this.rootEl = root;
     // The interface size (src/game/ui_scale.ts): the screen's, or the
     // player's choice, followed live while the match is on.
@@ -818,8 +854,9 @@ export class Hud {
 
     const slots = el('div', 'hud-slots');
     // The passive, visible in-game at last: a small round emblem ahead of
-    // Q whose tooltip carries the passive's name and what it does.
-    if (def) {
+    // Q whose tooltip carries the passive's name and what it does. The
+    // thumb cluster has no room for a button that casts nothing.
+    if (def && !thumbs) {
       const passive = el('div', 'hud-slot passive');
       passive.style.backgroundImage = `url(${passiveIconUrl(def.id)})`;
       passive.style.backgroundSize = 'cover';
@@ -856,25 +893,45 @@ export class Hud {
         this.world.levelAbility(this.selfId, key);
       });
       slot.appendChild(up);
+      slot.dataset.key = key;
       // Names live in the tooltip only; labels under the bar collided with
-      // the inventory row below.
-      if (def) attachTooltip(slot, () => describeAbility(key, def.abilities[key]));
+      // the inventory row below. Under the thumb a held slot is an aim,
+      // not a read: no tooltip there.
+      if (def && !thumbs) attachTooltip(slot, () => describeAbility(key, def.abilities[key]));
       // Touch has no keyboard: a QUICK tap on the slot arms the two-step
       // cast (game/touch.ts). A press held past LONG_PRESS_MS is a read,
       // the tooltip shows while the finger rests (tooltips.ts), and must
-      // not arm on release. Mouse pointers keep the hover-only slot.
+      // not arm on release. Mouse pointers keep the hover-only slot. With
+      // the thumb controls every pointer event goes raw to the cast touch,
+      // captured so a slide off the slot still ends on it.
       let downAt = 0;
       slot.addEventListener('pointerdown', (e) => {
         if (e.pointerType !== 'touch') return;
         if (e.target === up) return;
         e.preventDefault();
         downAt = performance.now();
+        if (thumbs) {
+          slot.setPointerCapture(e.pointerId);
+          this.castTouch?.abilityDown(key, e.clientX, e.clientY);
+        }
+      });
+      slot.addEventListener('pointermove', (e) => {
+        if (thumbs && e.pointerType === 'touch') {
+          this.castTouch?.abilityMove(key, e.clientX, e.clientY);
+        }
       });
       slot.addEventListener('pointerup', (e) => {
         if (e.pointerType !== 'touch') return;
         if (e.target === up) return;
+        if (thumbs) {
+          this.castTouch?.abilityUp(key, e.clientX, e.clientY);
+          return;
+        }
         if (performance.now() - downAt >= LONG_PRESS_MS) return;
         this.castTaps?.ability(key);
+      });
+      slot.addEventListener('pointercancel', (e) => {
+        if (thumbs && e.pointerType === 'touch') this.castTouch?.abilityCancel(key);
       });
       slots.appendChild(slot);
       this.slots.set(key, { root: slot, cd, pips, up });
@@ -895,21 +952,38 @@ export class Hud {
       const cd = el('div', 'hud-slot-cd');
       cd.style.display = 'none';
       slot.appendChild(cd);
-      attachTooltip(slot, () => {
-        const u = this.world.units.get(this.selfId);
-        const sigil = u?.sigils[i] ? SIGILS[u.sigils[i]!] : undefined;
-        return sigil ? describeSigil(sigil) : [];
-      });
+      slot.dataset.key = keyLabel;
+      if (!thumbs) {
+        attachTooltip(slot, () => {
+          const u = this.world.units.get(this.selfId);
+          const sigil = u?.sigils[i] ? SIGILS[u.sigils[i]!] : undefined;
+          return sigil ? describeSigil(sigil) : [];
+        });
+      }
       let sigilDownAt = 0;
       slot.addEventListener('pointerdown', (e) => {
         if (e.pointerType !== 'touch') return;
         e.preventDefault();
         sigilDownAt = performance.now();
+        if (thumbs) {
+          slot.setPointerCapture(e.pointerId);
+          this.castTouch?.sigilDown(i, e.clientX, e.clientY);
+        }
+      });
+      slot.addEventListener('pointermove', (e) => {
+        if (thumbs && e.pointerType === 'touch') this.castTouch?.sigilMove(i, e.clientX, e.clientY);
       });
       slot.addEventListener('pointerup', (e) => {
         if (e.pointerType !== 'touch') return;
+        if (thumbs) {
+          this.castTouch?.sigilUp(i, e.clientX, e.clientY);
+          return;
+        }
         if (performance.now() - sigilDownAt >= LONG_PRESS_MS) return;
         this.castTaps?.sigil(i);
+      });
+      slot.addEventListener('pointercancel', (e) => {
+        if (thumbs && e.pointerType === 'touch') this.castTouch?.sigilCancel(i);
       });
       slots.appendChild(slot);
       this.sigilSlots.push({ root: slot, cd });
@@ -951,14 +1025,30 @@ export class Hud {
       this.invSlots.push(slot);
     }
 
-    bottom.append(this.statusRow, this.metaText, mainRow, slots, inv);
+    if (thumbs) {
+      // The cluster: the slots around the attack button, under the right
+      // thumb, placed by the .hud.thumbs rules; the bar keeps the rest.
+      const attack = el('div', 'hud-attack', 'ATK');
+      attack.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'touch') e.preventDefault();
+      });
+      attack.addEventListener('pointerup', (e) => {
+        if (e.pointerType === 'touch') this.castTouch?.attack();
+      });
+      slots.appendChild(attack);
+      root.appendChild(slots);
+      bottom.append(this.statusRow, this.metaText, mainRow, inv);
+    } else {
+      bottom.append(this.statusRow, this.metaText, mainRow, slots, inv);
+    }
 
     const hints = el('div', 'hud-hints');
     hints.textContent = coarsePointer
       ? getSettings().touchScheme === 'thumbs'
-        ? 'Left thumb on the left half: the stick walks. Tap: attack / walk there. Tap a ' +
-          'spell, then tap the ground to cast it (tap the spell again to cancel). Pinch ' +
-          'zooms, Center snaps back to your champion. Level up: tap the +.'
+        ? 'Left thumb on the left half: the stick walks. Right thumb: tap a spell to cast ' +
+          'it at the nearest enemy, or slide it to aim and release; slide back to cancel. ' +
+          'ATK attacks the nearest enemy. Tap the ground: attack / walk there. Pinch zooms, ' +
+          'Center snaps back to your champion. Level up: tap the +.'
         : 'Tap: move / attack. Tap a spell, then tap the ground to cast it (tap the spell ' +
           'again to cancel). Drag pans the camera, pinch zooms, Center snaps back to your ' +
           'champion. Level up: tap the +.'
@@ -1231,6 +1321,10 @@ export class Hud {
   // Wires the touch two-step cast: slot taps call these (boot provides them).
   setCastTaps(taps: { ability(key: AbilityKey): void; sigil(slot: number): void }): void {
     this.castTaps = taps;
+  }
+
+  setCastTouch(touch: CastTouch): void {
+    this.castTouch = touch;
   }
 
   // Highlights the slot whose cast is armed; null clears every highlight.

@@ -4,13 +4,25 @@
 // direct body hit beat a nearby unit's slop.
 
 import { describe, expect, it } from 'vitest';
-import { pickEnemyAt, pickEnemyOnScreen } from '../src/game/picking';
+import { nearestEnemy, pickEnemyAt, pickEnemyOnScreen } from '../src/game/picking';
 import { Sim } from '../src/sim/sim';
 
 // A fixed top-down orthographic projector for tests: 10 px per world unit.
 const project = (x: number, _y: number, z: number): { x: number; y: number } => ({
   x: x * 10,
   y: z * 10,
+});
+
+describe('nearestEnemy', () => {
+  it('finds the nearest visible enemy in reach, a champion before a minion', () => {
+    const sim = new Sim(3);
+    const near = sim.addChampion(1, { x: 78, z: 75 });
+    sim.addChampion(1, { x: 82, z: 75 });
+    sim.addChampion(0, { x: 75, z: 75 });
+    sim.tick();
+    expect(nearestEnemy(sim, 0, { x: 75, z: 75 }, 8)?.id).toBe(near.id);
+    expect(nearestEnemy(sim, 0, { x: 75, z: 75 }, 1)).toBeNull();
+  });
 });
 
 describe('pickEnemyAt', () => {

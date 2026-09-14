@@ -25,9 +25,10 @@ import type { PostMatchAction } from './flow';
 import { requestGameFullscreen } from './fullscreen';
 import { type InputHandlers, setupInput } from './input';
 import { startMusic, stopMusic } from './music';
-import { pickEnemyAt, pickEnemyOnScreen, pickUnitOnScreen } from './picking';
+import { nearestEnemy, pickEnemyAt, pickEnemyOnScreen, pickUnitOnScreen } from './picking';
 import { getSettings } from './settings';
 import { playCastSfx, playSfx, preloadSfx } from './sfx';
+import { aimedPoint, quickPoint } from './thumb_cast';
 import { leadPoint, STICK_LEAD_M, type StickOrder, shouldResend } from './thumb_stick';
 import { setupTouchControls } from './touch';
 
@@ -95,6 +96,13 @@ export function startPresentation(
   renderer.setViewerTeam(selfTeam);
   renderer.domElement.style.cursor = defaultCursor();
   const hud = new Hud(container, world, selfId, selfTeam, onExit);
+  // The thumb controls (CONTEXT.md: Thumb stick): a touchscreen playing
+  // by the stick, which moves the minimap and the touch bar out of the
+  // thumbs' way and hands the HUD's slots to the cast touch.
+  const thumbControls =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(pointer: coarse)').matches &&
+    getSettings().touchScheme === 'thumbs';
   const minimap = new Minimap(
     container,
     world,
@@ -106,6 +114,7 @@ export function startPresentation(
     },
     (p) => renderer.lookAtPoint(p.x, p.z),
     options.terrain.minimap,
+    { corner: thumbControls ? 'top-right' : 'bottom-right' },
   );
   // No edge panning while a modal is up or the cursor sits on the minimap
   // (its corner position would otherwise drag the camera while clicking it).
@@ -243,6 +252,14 @@ export function startPresentation(
   // The last order the left thumb's stick gave (thumb_stick.ts), for the
   // resend rule; null while the thumb rests.
   let stickOrder: StickOrder | null = null;
+  // Where the stick points, for a quick cast with no target in range.
+  const stickFacing = (): Vec2 | null => (stickOrder ? { x: stickOrder.x, z: stickOrder.z } : null);
+  // Where the right thumb's aim stands while a slot is held (thumb_cast.ts).
+  let thumbAim: Vec2 | null = null;
+  // How far a sigil reaches (Riftstep's dash), and how far the attack
+  // button looks for somebody to hit.
+  const SIGIL_REACH = 5.5;
+  const ATTACK_REACH = 14;
   const inputHandlers: InputHandlers = {
     onRightClick: (p: Vec2, sx, sy) => {
       pendingCast = null;
@@ -293,6 +310,64 @@ export function startPresentation(
       world.orderMove(selfId, p.x, p.z);
       renderer.setAttackTarget(null);
       renderer.recenterCamera();
+    },
+    // The right thumb on a slot (thumb_cast.ts). A slide aims: the preview
+    // comes up as for a held key and follows a point along the slide's
+    // direction, as far along the range as the slide is long. The press
+    // then ends as a quick tap (the nearest enemy in range, else ahead
+    // along the stick, else the feet), an aimed cast, or a cancel.
+    onThumbAim: (key, dir, k) => {
+      const u = world.units.get(selfId);
+      const def = u?.championId ? world.championDef(u.championId) : null;
+      const ab = def?.abilities[key];
+      if (!u || !ab) return;
+      if (aimingKey !== key) inputHandlers.onCast(key, { x: 0, z: 0 });
+      thumbAim = dir ? aimedPoint(u.pos, dir, k, ab.castRange) : { x: u.pos.x, z: u.pos.z };
+      renderer.setAimWorld(thumbAim);
+    },
+    onThumbCast: (key, press) => {
+      const u = world.units.get(selfId);
+      const def = u?.championId ? world.championDef(u.championId) : null;
+      const ab = def?.abilities[key];
+      if (!u || !ab) return;
+      if (press === 'tap') {
+        if (aimingKey === key) inputHandlers.onAimEnd(key, null);
+        const target = nearestEnemy(world, selfTeam, u.pos, ab.castRange);
+        tryCast(key, quickPoint(u.pos, target?.pos ?? null, stickFacing(), ab.castRange));
+        return;
+      }
+      const aim = press === 'aimed' ? thumbAim : null;
+      thumbAim = null;
+      if (aimingKey === key) inputHandlers.onAimEnd(key, aim);
+      else if (aim) tryCast(key, aim);
+    },
+    onThumbSigil: (slot, press, dir, k) => {
+      const u = world.units.get(selfId);
+      if (!u || press === 'cancel') return;
+      const target = press === 'tap' ? nearestEnemy(world, selfTeam, u.pos, SIGIL_REACH) : null;
+      const aim =
+        press === 'aimed' && dir
+          ? aimedPoint(u.pos, dir, k, SIGIL_REACH)
+          : quickPoint(u.pos, target?.pos ?? null, stickFacing(), SIGIL_REACH);
+      inputHandlers.onCastSigil(slot, aim);
+    },
+    // The attack button: the nearest enemy in reach, champions first, or
+    // an attack-move a step ahead when nobody is.
+    onThumbAttack: () => {
+      const u = world.units.get(selfId);
+      if (!u) return;
+      const target = nearestEnemy(world, selfTeam, u.pos, ATTACK_REACH);
+      if (target) {
+        pendingCast = null;
+        world.orderAttack(selfId, target.id);
+        renderer.setAttackTarget(target.id);
+        hud.setTarget(target.id);
+        return;
+      }
+      const f = stickFacing();
+      inputHandlers.onAttackMove(
+        f ? { x: u.pos.x + f.x * 3, z: u.pos.z + f.z * 3 } : { x: u.pos.x, z: u.pos.z },
+      );
     },
     onLeftClick: (sx, sy) => {
       // MOBA-style selection: any visible unit shows its frame with exact
@@ -400,13 +475,18 @@ export function startPresentation(
     ability: (key) => touch.armAbility(key),
     sigil: (slot) => touch.armSigil(slot),
   });
+  if (thumbControls) hud.setCastTouch(touch.castTouch);
   const teardownTouchBar = coarsePointer
-    ? buildTouchBar(container, {
-        onRecall: () => inputHandlers.onRecall(),
-        onToggleShop: () => inputHandlers.onToggleShop(),
-        onToggleMenu: () => inputHandlers.onToggleMenu(),
-        onRecenterCamera: () => inputHandlers.onRecenterCamera(),
-      })
+    ? buildTouchBar(
+        container,
+        {
+          onRecall: () => inputHandlers.onRecall(),
+          onToggleShop: () => inputHandlers.onToggleShop(),
+          onToggleMenu: () => inputHandlers.onToggleMenu(),
+          onRecenterCamera: () => inputHandlers.onRecenterCamera(),
+        },
+        { side: thumbControls ? 'left' : 'right' },
+      )
     : null;
 
   startMusic();

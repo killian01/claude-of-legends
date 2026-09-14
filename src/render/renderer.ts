@@ -326,6 +326,9 @@ export class Renderer {
   private freeCam: THREE.Vector3 | null = null;
   private pointerX = -1;
   private pointerY = -1;
+  // A thumb aims in world space (game/touch.ts): while set, the aim
+  // preview follows this point instead of the pointer.
+  private aimWorld: Vec2 | null = null;
   private edgePanGate: () => boolean = () => true;
   // Camera trauma: squared on apply so small hits barely register and big
   // impacts kick; decays every frame, capped so fights cannot stack it.
@@ -603,6 +606,10 @@ export class Renderer {
     this.pointerY = y;
   }
 
+  setAimWorld(p: Vec2 | null): void {
+    this.aimWorld = p ? { x: p.x, z: p.z } : null;
+  }
+
   // Forget the hint once the cast fires or cancels, or a finger left near a
   // screen edge would edge-pan the camera forever.
   clearPointerHint(): void {
@@ -777,6 +784,7 @@ export class Renderer {
   }
 
   hideAimPreview(): void {
+    this.aimWorld = null;
     for (const m of this.aimMeshes) {
       this.scene.remove(m);
       m.geometry.dispose();
@@ -801,7 +809,9 @@ export class Renderer {
       m.position.z = sz;
       m.position.y = this.groundHeight(sx, sz) + 0.12;
     }
-    const cursor = this.pointerX >= 0 ? this.groundPointAt(this.pointerX, this.pointerY) : null;
+    const cursor =
+      this.aimWorld ??
+      (this.pointerX >= 0 ? this.groundPointAt(this.pointerX, this.pointerY) : null);
     if (!cursor) return;
     const dx = cursor.x - sx;
     const dz = cursor.z - sz;

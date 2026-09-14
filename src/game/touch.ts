@@ -9,9 +9,10 @@
 // machine with no DOM, so tests can drive it event by event.
 
 import type { Renderer } from '../render/renderer';
-import type { AbilityKey } from '../sim/types';
+import type { AbilityKey, Vec2 } from '../sim/types';
 import type { ThumbStickView } from '../ui/thumb_stick_view';
 import type { InputHandlers } from './input';
+import { ThumbAim } from './thumb_cast';
 import { ThumbStick, type Viewport } from './thumb_stick';
 
 export const TAP_SLOP_PX = 14;
@@ -104,9 +105,25 @@ export class TouchGestures {
   }
 }
 
+// The right thumb on the HUD's slots (thumb_cast.ts): the HUD forwards
+// each slot's pointer events here, in screen pixels, and this turns them
+// into aims and casts. A cancel event ends the press as a cancel.
+export interface CastTouch {
+  abilityDown(key: AbilityKey, x: number, y: number): void;
+  abilityMove(key: AbilityKey, x: number, y: number): void;
+  abilityUp(key: AbilityKey, x: number, y: number): void;
+  abilityCancel(key: AbilityKey): void;
+  sigilDown(slot: number, x: number, y: number): void;
+  sigilMove(slot: number, x: number, y: number): void;
+  sigilUp(slot: number, x: number, y: number): void;
+  sigilCancel(slot: number): void;
+  attack(): void;
+}
+
 export interface TouchControls {
   armAbility(key: AbilityKey): void;
   armSigil(slot: number): void;
+  castTouch: CastTouch;
   dispose(): void;
 }
 
@@ -145,6 +162,19 @@ export function setupTouchControls(
   // holds under any zoom or camera angle, and handed to the handler.
   const stick = new ThumbStick();
   let stickFrame = 0;
+  // A screen direction as a world direction, unit length, through two
+  // ground points at the middle of the screen: right under any zoom or
+  // camera angle, null when the middle has no ground.
+  const worldDir = (vx: number, vy: number): Vec2 | null => {
+    const { width, height } = viewport();
+    const a = renderer.groundPointAt(width / 2, height / 2);
+    const b = renderer.groundPointAt(width / 2 + vx * 50, height / 2 + vy * 50);
+    if (!a || !b) return null;
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const d = Math.hypot(dx, dz);
+    return d > 0 ? { x: dx / d, z: dz / d } : null;
+  };
   const readStick = (): void => {
     stickFrame = 0;
     if (!stick.active) return;
@@ -154,17 +184,66 @@ export function setupTouchControls(
     if (v === null) {
       handlers.onThumbMove(null);
     } else {
-      const { width, height } = viewport();
-      const a = renderer.groundPointAt(width / 2, height / 2);
-      const b = renderer.groundPointAt(width / 2 + v.x * 50, height / 2 + v.y * 50);
-      if (a && b) {
-        const dx = b.x - a.x;
-        const dz = b.z - a.z;
-        const d = Math.hypot(dx, dz);
-        if (d > 0) handlers.onThumbMove({ x: dx / d, z: dz / d });
-      }
+      const dir = worldDir(v.x, v.y);
+      if (dir) handlers.onThumbMove(dir);
     }
     stickFrame = requestAnimationFrame(readStick);
+  };
+
+  // The right thumb's slots (thumb_cast.ts): one aim per slot in flight,
+  // the sigils carrying their last slide since they cast on release.
+  const aims = new Map<string, ThumbAim>();
+  const sigilSlides = new Map<number, { dir: Vec2 | null; k: number }>();
+  const aimOf = (id: string): ThumbAim => {
+    let a = aims.get(id);
+    if (!a) {
+      a = new ThumbAim();
+      aims.set(id, a);
+    }
+    return a;
+  };
+  const castTouch: CastTouch = {
+    abilityDown: (key, x, y) => {
+      aimOf(key).start(x, y);
+    },
+    abilityMove: (key, x, y) => {
+      const a = aimOf(key);
+      const s = a.move(x, y);
+      if (s) {
+        const dir = worldDir(s.x, s.y);
+        if (dir) handlers.onThumbAim(key, dir, s.k);
+      } else if (a.hasAimed) {
+        handlers.onThumbAim(key, null, 0);
+      }
+    },
+    abilityUp: (key, x, y) => {
+      const a = aimOf(key);
+      a.move(x, y);
+      handlers.onThumbCast(key, a.release());
+    },
+    abilityCancel: (key) => {
+      handlers.onThumbCast(key, 'cancel');
+    },
+    sigilDown: (slot, x, y) => {
+      aimOf(`sigil${slot}`).start(x, y);
+      sigilSlides.set(slot, { dir: null, k: 0 });
+    },
+    sigilMove: (slot, x, y) => {
+      const s = aimOf(`sigil${slot}`).move(x, y);
+      sigilSlides.set(slot, s ? { dir: worldDir(s.x, s.y), k: s.k } : { dir: null, k: 0 });
+    },
+    sigilUp: (slot, x, y) => {
+      const a = aimOf(`sigil${slot}`);
+      a.move(x, y);
+      const slide = sigilSlides.get(slot) ?? { dir: null, k: 0 };
+      handlers.onThumbSigil(slot, a.release(), slide.dir, slide.k);
+    },
+    sigilCancel: (slot) => {
+      handlers.onThumbSigil(slot, 'cancel', null, 0);
+    },
+    attack: () => {
+      handlers.onThumbAttack();
+    },
   };
   const releaseStick = (): void => {
     if (stickFrame) cancelAnimationFrame(stickFrame);
@@ -260,6 +339,7 @@ export function setupTouchControls(
   el.addEventListener('pointercancel', onPointerCancel);
 
   return {
+    castTouch,
     armAbility: (key: AbilityKey): void => {
       if (armedAbility === key) {
         cancelAim();

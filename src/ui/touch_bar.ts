@@ -24,15 +24,21 @@ const CSS = `
   -webkit-tap-highlight-color: transparent; touch-action: manipulation;
 }
 .touchbar-btn:active { background: rgba(70, 96, 48, 0.9); }
+/* With the thumb controls the right edge belongs to the casting thumb. */
+.touchbar.left { right: auto; left: 8px; }
 `;
 
 // Returns a teardown removing the bar and its stylesheet, like the HUD's.
-export function buildTouchBar(container: HTMLElement, actions: TouchBarActions): () => void {
+export function buildTouchBar(
+  container: HTMLElement,
+  actions: TouchBarActions,
+  opts: { side?: 'left' | 'right' } = {},
+): () => void {
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
   const root = document.createElement('div');
-  root.className = 'touchbar';
+  root.className = opts.side === 'left' ? 'touchbar left' : 'touchbar';
   const add = (label: string, onTap: () => void): void => {
     const btn = document.createElement('button');
     btn.className = 'touchbar-btn';

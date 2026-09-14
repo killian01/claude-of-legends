@@ -5,6 +5,7 @@
 
 import type { Renderer } from '../render/renderer';
 import type { AbilityKey, Vec2 } from '../sim/types';
+import type { SlotPress } from './thumb_cast';
 
 export interface InputHandlers {
   onRightClick(p: Vec2, screenX: number, screenY: number): void;
@@ -33,6 +34,16 @@ export interface InputHandlers {
   // length, every frame while the thumb steers; null when it rests or
   // lifts. The handler turns it into the sim's move orders.
   onThumbMove(dir: Vec2 | null): void;
+  // The right thumb on a slot (thumb_cast.ts). While it slides, the aim:
+  // a world direction and how far along the range, 0..1, or null once
+  // back in the dead zone. Then the press ends as a quick tap, an aimed
+  // cast, or a cancel. A sigil carries its slide with the press, since it
+  // has no preview to follow it. The attack button asks for the nearest
+  // enemy.
+  onThumbAim(key: AbilityKey, dir: Vec2 | null, k: number): void;
+  onThumbCast(key: AbilityKey, press: SlotPress): void;
+  onThumbSigil(slot: number, press: SlotPress, dir: Vec2 | null, k: number): void;
+  onThumbAttack(): void;
   isTyping(): boolean;
 }
 

@@ -36,6 +36,9 @@ export class Minimap {
     onLook: (p: Vec2) => void,
     // The terrain's own picture of the map (src/render/terrain_loader.ts).
     private readonly background: HTMLCanvasElement,
+    // Which corner: the bottom right, or the top right when the right thumb
+    // owns the bottom (the thumb controls' cluster).
+    opts: { corner?: 'bottom-right' | 'top-right' } = {},
   ) {
     this.world = world;
     this.viewerTeam = viewerTeam;
@@ -53,8 +56,8 @@ export class Minimap {
     const displayPx = coarse ? 112 : SIZE_PX;
     this.canvas.style.cssText =
       `width:${displayPx}px;height:${displayPx}px;` +
-      'position:absolute;right:12px;bottom:12px;border:1px solid #466030;' +
-      'border-radius:6px;pointer-events:auto;z-index:5;opacity:0.88;';
+      `position:absolute;right:12px;${opts.corner === 'top-right' ? 'top:58px' : 'bottom:12px'};` +
+      'border:1px solid #466030;border-radius:6px;pointer-events:auto;z-index:5;opacity:0.88;';
     container.appendChild(this.canvas);
     this.stopScale = followUiScale(this.canvas, () => getSettings().uiScale);
 
