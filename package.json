@@ -20,7 +20,7 @@
     "env": "node scripts/build_env.mjs && node dist-env/env.cjs"
   },
   "dependencies": {
-    "three": "^0.185.1",
+    "three": "^0.186.0",
     "ws": "^8.21.3"
   },
   "devDependencies": {
