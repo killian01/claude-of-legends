@@ -41,6 +41,7 @@ import {
   PROJECTILE_Y,
   type SpawnOffset,
 } from './muzzle_spawn';
+import { crownHeight, crownSpawnOffset, descentMs, isStill } from './structure_fire';
 import type { RenderTerrain } from './terrain';
 import { toonifyMaterials } from './toon';
 import {
@@ -201,6 +202,9 @@ interface TrackedMobile {
   // truth for every hit test. Null once converged (or never authored).
   spawnOfs: SpawnOffset | null;
   bornAt: number;
+  // How long that offset takes to blend away: a beat for a champion's
+  // muzzle, the whole flight for a bolt born at a structure's crown.
+  blendMs: number;
 }
 
 // How long a projectile takes to converge from its muzzle spawn onto the
@@ -893,14 +897,31 @@ export class Renderer {
       const attacker = this.world.units.get(atk.unitId);
       const target = this.world.units.get(atk.targetId);
       if (!t?.mesh.visible) continue;
-      t.swingUntil = performance.now() + 200;
-      this.championVisuals.get(atk.unitId)?.playAttack();
-      if (target) {
-        const dx = target.pos.x - t.curr.x;
-        const dz = target.pos.z - t.curr.z;
-        const d = Math.hypot(dx, dz) || 1;
-        t.swingDir = { x: dx / d, z: dz / d };
-        t.yaw = Math.atan2(dx, dz);
+      if (isStill(t.kind)) {
+        // A building neither turns toward what it shoots nor hops at it
+        // (src/render/structure_fire.ts): the cue that it fired is a
+        // flash at its crown, where its bolt is born.
+        const topY = t.mesh.userData.topY;
+        if (typeof topY === 'number') {
+          this.vfx.glowFlash(
+            t.curr.x,
+            this.groundHeight(t.curr.x, t.curr.z) + crownHeight(topY),
+            t.curr.z,
+            1.2,
+            (attacker && TEAM_LIGHT[attacker.team]) ?? 0xffffff,
+            0.14,
+          );
+        }
+      } else {
+        t.swingUntil = performance.now() + 200;
+        this.championVisuals.get(atk.unitId)?.playAttack();
+        if (target) {
+          const dx = target.pos.x - t.curr.x;
+          const dz = target.pos.z - t.curr.z;
+          const d = Math.hypot(dx, dz) || 1;
+          t.swingDir = { x: dx / d, z: dz / d };
+          t.yaw = Math.atan2(dx, dz);
+        }
       }
       // Every visible swing is audible; other units fade with distance so
       // a nearby fight has a soundtrack without the whole map whipping air.
@@ -1332,6 +1353,12 @@ export class Renderer {
   // the sim position, or null when the shooter is unknown or muzzle-less.
   private muzzleOffset(p: Readonly<Projectile>): SpawnOffset | null {
     const src = p.sourceId ? this.world.units.get(p.sourceId) : undefined;
+    if (src && isStill(src.kind)) {
+      // A structure's bolt is born at its crown, straight above the sim
+      // spawn (src/render/structure_fire.ts).
+      const topY = this.tracked.get(src.id)?.mesh.userData.topY;
+      return typeof topY === 'number' ? crownSpawnOffset(topY, PROJECTILE_Y) : null;
+    }
     if (src?.kind !== 'champion') return null;
     const muzzle = championVisualDef(src.championId)?.muzzle;
     if (!muzzle) return null;
@@ -1341,6 +1368,20 @@ export class Renderer {
     // spawn landed about (size - 2z) away and the bullet flew in from nowhere.
     if (cv?.muzzleWorld(MUZZLE_V3)) return muzzleSpawnOffset(this.scene, MUZZLE_V3, p.pos);
     return estimatedMuzzleOffset(src.pos, p.pos, muzzle);
+  }
+
+  // How long the rendered bolt takes to converge onto the sim path: a
+  // beat for a champion's muzzle, the whole flight for a structure's
+  // crown, so the shot reads as a line down onto its victim
+  // (src/render/structure_fire.ts).
+  private blendMs(p: Readonly<Projectile>): number {
+    const src = p.sourceId ? this.world.units.get(p.sourceId) : undefined;
+    if (!src || !isStill(src.kind)) return MUZZLE_BLEND_MS;
+    const target = p.homingTargetId !== null ? this.world.units.get(p.homingTargetId) : undefined;
+    const distance = target
+      ? Math.hypot(target.pos.x - p.pos.x, target.pos.z - p.pos.z)
+      : p.maxRange - p.traveled;
+    return descentMs(distance, p.speed, MUZZLE_BLEND_MS);
   }
 
   // The fire line of a projectile seen for the first time: from its shooter
@@ -1872,6 +1913,7 @@ export class Renderer {
           vis,
           spawnOfs,
           bornAt: performance.now(),
+          blendMs: this.blendMs(p),
         });
       } else {
         t.prev = t.curr;
@@ -2454,7 +2496,7 @@ export class Renderer {
       if (t.spawnOfs) {
         // Muzzle convergence: at the barrel tip at birth, on the sim path
         // a beat later.
-        const k = 1 - (now - t.bornAt) / MUZZLE_BLEND_MS;
+        const k = 1 - (now - t.bornAt) / t.blendMs;
         if (k <= 0) t.spawnOfs = null;
         else {
           px += t.spawnOfs.x * k;

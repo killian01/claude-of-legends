@@ -229,6 +229,9 @@ export async function loadTerrain(
       reflected.add(tower);
       holder.add(reflected, teamRing(unit.team, TOWER_RING));
       const bounds = new THREE.Box3().setFromObject(holder);
+      // The tower's height above its ground: where its bolt is born and
+      // its firing flash lands (src/render/structure_fire.ts).
+      holder.userData.topY = bounds.max.y;
       return { holder, barY: bounds.max.y + 0.65 };
     },
   };
