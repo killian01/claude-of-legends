@@ -120,9 +120,15 @@ export function createSectionHost(
       const was = frame;
       frame = was ? nav.replace(was, next, tearDown, next) : nav.push(next, tearDown, next);
       (page.parentElement ?? document.body).appendChild(host);
+      // The page goes into its section state and back to its top before
+      // the host is measured against the bar. A card clicked at the foot
+      // of the home has the bar scrolled off above it; measured then, the
+      // host would start where the bar was, above the viewport, and the
+      // section would open with its head cut off.
+      settle(next);
+      page.scrollTop = 0;
       place();
       closeCurrent = open(host);
-      settle(next);
     },
     close,
     current: () => key,
