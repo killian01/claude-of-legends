@@ -32,7 +32,6 @@ import { loadStarOrchard } from './game/star_orchard_records';
 import { buildIdIn, startBuildWatch } from './net/build_watch';
 import { ClientWorld } from './net/client_world';
 import type { ForgedMatchAssets, ServerMsg } from './net/protocol';
-import { markStep, markVisit, STAYED_MS } from './net/pulse_ping';
 import {
   applyReplayEvent,
   buildMatchSim,
@@ -43,6 +42,7 @@ import {
   replayPlayable,
   restorePolicies,
 } from './net/replay';
+import { installStats, STAYED_MS, trackStep } from './net/stats';
 import { attachBot } from './sim/content/bots';
 import { houseSeats } from './sim/content/bots/house';
 import { contentFingerprint } from './sim/content/fingerprint';
@@ -271,7 +271,7 @@ async function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
     // with no account can get. Practice and the Forge test drive both land
     // here; the replay viewer below deliberately does not, since watching
     // is not playing.
-    markStep('played');
+    trackStep('played');
     const pres = startPresentation(container, world, self.id, self.team, exit, {
       terrain: loaded.terrain,
     });
@@ -746,8 +746,8 @@ async function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
         return;
       }
       // The live match, the other half of the pace the practice match
-      // reports above. Once per browser per day either way.
-      markStep('played');
+      // reports above.
+      trackStep('played');
       const opened = startPresentation(container, world, world.selfUnitId, world.selfTeam, finish, {
         terrain: loaded.terrain,
       });
@@ -1044,16 +1044,17 @@ async function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
 async function boot(): Promise<void> {
   // Load and apply the stored player settings before any audio plays.
   getSettings();
-  // Say hello to the day's counter, once per browser per day and never
-  // again (src/net/pulse_ping.ts). Fire and forget: nothing below waits on
-  // it and nothing reads its answer.
-  markVisit();
-  // And again half a minute later if this page is still in front of
-  // somebody, which is the line between a visitor who looked and a click
-  // that left before the art had drawn. A tab in the background does not
-  // count: nobody is looking at it.
+  // The audience counter (src/net/stats.ts): the opt-out asked for in the
+  // address bar, and the hook that strips an address before the tracker
+  // sends it. Before anything else, so it is in place when the tracker's
+  // deferred tag runs after this module.
+  installStats();
+  // Half a minute later, if this page is still in front of somebody: the
+  // line between a visitor who looked and a click that left before the
+  // art had drawn. A tab in the background does not count: nobody is
+  // looking at it.
   window.setTimeout(() => {
-    if (!document.hidden) markStep('stayed');
+    if (!document.hidden) trackStep('stayed');
   }, STAYED_MS);
   // The section the address names (#ladder), read before the navigation
   // takes the address over: a reload in a section lands back in it.
@@ -1081,6 +1082,9 @@ async function boot(): Promise<void> {
   // A successful one arrives with a session already open, so only the
   // failures ever have a screen to land on: the entry page shows them.
   let discordResult = takeDiscordResult();
+  // An account made through Discord arrives as a flag on the address;
+  // the form's own signup reports itself (src/ui/auth.ts).
+  if (discordResult === 'created' || discordResult === 'joined') trackStep('account');
   let confirmed = takeConfirmResult();
   // The app loop: home, one match, back, forever on the same page. 'again'
   // replays the same offline pick or re-enters the public queue (flow.ts).

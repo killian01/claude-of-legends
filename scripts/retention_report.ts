@@ -1,6 +1,6 @@
 // Whether anybody came back, read off what the server already keeps.
 //
-// The pulse counts a launch day from the top (server/pulse.ts): who
+// The audience counter sees a launch day from the top (PRIVACY.md): who
 // arrived, how far they got, how many signed up. It says nothing about the
 // day after, and the day after is the whole question: a hundred sign-ups
 // that never return is a worse result than ten that do, and the two look
@@ -22,7 +22,11 @@
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { dayKey } from '../server/pulse';
+
+// The UTC day an instant falls on, which is the unit every column counts in.
+function dayKey(at: number): string {
+  return new Date(at).toISOString().slice(0, 10);
+}
 
 export interface AccountRow {
   id: number;
@@ -41,7 +45,7 @@ export interface MatchRow {
 export interface Cohort {
   day: string;
   size: number;
-  // Played at least one match, ever. The pulse's own funnel stops at the
+  // Played at least one match, ever. The counter's own funnel stops at the
   // browser, so this is the first number that says an account did the
   // thing the account exists for.
   played: number;

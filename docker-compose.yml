@@ -49,9 +49,11 @@ services:
       # DISCORD_BOT_TOKEN is a credential; the guild id is not.
       DISCORD_BOT_TOKEN: "${DISCORD_BOT_TOKEN:-}"
       DISCORD_GUILD_ID: "${DISCORD_GUILD_ID:-}"
-      # Reads back the daily counters (PRIVACY.md). Unset, and /api/pulse
-      # is a 404 for everyone; the counting runs either way.
-      PULSE_TOKEN: "${PULSE_TOKEN:-}"
+      # The audience counter's site (PRIVACY.md): the id Umami gave it,
+      # which puts the tag on the page (server/stats_tag.ts). Empty, and
+      # the page goes out without one. The counter itself is the `stats`
+      # service below.
+      STATS_WEBSITE_ID: "${STATS_WEBSITE_ID:-}"
       # The Forge's generation provider (ADR 0010), from the same .env
       # file: TRIPO_API_KEY is a credential and must never be committed.
       # Without it, finalize answers "not configured" and everything else
@@ -125,10 +127,88 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # The audience counter (PRIVACY.md, docs/deploy.md): Umami and a database
+  # of its own, on this box and nowhere else. Both sit behind the `stats`
+  # profile, so a deployment that has not asked for them (COMPOSE_PROFILES
+  # unset in .env) runs the game exactly as before. The counter joins the
+  # edge network so the proxy can hand it the two paths the browser uses;
+  # its database joins only the private one and publishes nothing.
+  stats:
+    # Umami 3.3.1, pinned by digest: the project tags only `latest`.
+    image: ghcr.io/umami-software/umami:postgresql-latest@sha256:fa32d116cf20cad52cbc3fad9a63b46e7fa02299d8f967168eb453d49c476b4a
+    container_name: claude_of_legends_stats
+    restart: unless-stopped
+    profiles: ["stats"]
+    depends_on:
+      stats_db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://umami:${STATS_DB_PASSWORD:-}@stats_db:5432/umami"
+      # Signs the dashboard's sessions. From .env, never committed.
+      APP_SECRET: "${STATS_APP_SECRET:-}"
+      # The two paths the proxy hands to this container from the game's
+      # own origin, so the browser never talks to another host and a
+      # blocker's list of tracker names finds nothing to match:
+      # server/stats_tag.ts names the first, the tracker posts to the
+      # second.
+      TRACKER_SCRIPT_NAME: "visit.js"
+      COLLECT_API_ENDPOINT: "/api/visit"
+      # Nothing leaves this box: no usage report to the project's own
+      # servers, no check for a newer version.
+      DISABLE_TELEMETRY: "1"
+      DISABLE_UPDATES: "1"
+    networks:
+      - edge
+      - stats
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/heartbeat').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  stats_db:
+    image: postgres:16-alpine
+    container_name: claude_of_legends_stats_db
+    restart: unless-stopped
+    profiles: ["stats"]
+    environment:
+      POSTGRES_DB: umami
+      POSTGRES_USER: umami
+      POSTGRES_PASSWORD: "${STATS_DB_PASSWORD:-}"
+    volumes:
+      # The counter's whole record. scripts/backup_game_data.sh dumps it
+      # beside the game's data.
+      - stats_db:/var/lib/postgresql/data
+    networks:
+      - stats
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U umami -d umami"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   game_data:
+  stats_db:
 
 networks:
   edge:
     name: km01_edge
     external: true
+  stats:
+    internal: true

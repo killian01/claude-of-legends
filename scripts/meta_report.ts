@@ -15,8 +15,8 @@
 //   node scripts/meta.mjs data 30        the last 30 days only
 //
 // A match that was abandoned rather than finished never reaches the log,
-// so this reports what was played through. The pulse's matches against
-// finished is where the difference between the two lives.
+// so this reports what was played through; the server's own log says when
+// a match started and did not finish.
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';

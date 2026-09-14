@@ -6,6 +6,7 @@
 // The panel only; the page it sits on is ui/landing.ts. Nothing here
 // decides layout, so the same form could sit anywhere.
 
+import { trackStep } from '../net/stats';
 import { buildDiscordEntry, type DiscordResult } from './discord_entry';
 import { el, ensureMenuCss } from './menu';
 
@@ -269,8 +270,10 @@ export function buildAuthForm(
     void submit(mode, typedName, typedPassword, typedEmail).then((result) => {
       busy = false;
       go.textContent = LABELS[mode].go;
-      if (result.ok) onSignedIn(result.account);
-      else error.textContent = result.error;
+      if (result.ok) {
+        if (mode === 'register') trackStep('account');
+        onSignedIn(result.account);
+      } else error.textContent = result.error;
     });
   };
 

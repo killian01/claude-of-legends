@@ -17,9 +17,7 @@ import {
   parseClientMsg,
   type ServerMsg,
 } from '../src/net/protocol';
-import { isVisitSource } from '../src/net/pulse_source';
 import { REPLAY_VERSION } from '../src/net/replay';
-import { isVisitStep, VISIT_STEPS } from '../src/net/visit_line';
 import { contentFingerprint } from '../src/sim/content/fingerprint';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { validateForged } from '../src/sim/forge/validate';
@@ -40,7 +38,6 @@ import { API_RATE_PER_MIN, ApiLimiter } from './api_limit';
 import { ARENA_PLAY_NOW_PER_DAY, ARENA_ROUND_MS } from './arena';
 import { ArenaRunner } from './arena_runner';
 import { type ArenaDeps, challenge, playNow, roundDue, runArenaRound } from './arena_service';
-import { isStray } from './arrival';
 import { chooseArt, deleteArtFor, generateArt, iconsOf, listArt, splashOf } from './art';
 import { appendExchange, botChat, clearBotChat, windowTurns } from './bot_chats';
 import { fillWithBots, type PoolSeat, TEAM_SIZE } from './bot_fill';
@@ -130,8 +127,6 @@ import { COACH_IDLE_DAYS } from './night_eligibility';
 import { passwordErrorMessage, validatePassword } from './password';
 import { type CoachDeps, coachPlaybook } from './playbook_suggest';
 import { buildProfile } from './profile';
-import { Pulse, tokenMatches } from './pulse';
-import { renderPulsePage } from './pulse_page';
 import { CEILING_DEFAULTS, checkQuota, DAY_MS, spendQuota } from './quotas';
 import { BASE_RATING, LEAVER_LOCKOUT_MS, leaverPenalty } from './rating';
 import { talliesOf } from './record_tally';
@@ -142,6 +137,7 @@ import { RejoinRegistry } from './rejoin';
 import { sealChampion, unsealChampion } from './seal';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
 import { starOrchard } from './star_orchard';
+import { isWebsiteId, STATS_SCRIPT, withStatsTag } from './stats_tag';
 import {
   appendJsonl,
   maxNumberedJson,
@@ -152,7 +148,6 @@ import {
 import { suggestKit } from './suggest';
 import { suggestLook } from './suggest_look';
 import { suggestStats } from './suggest_stats';
-import { VISITS_PER_NETWORK, VisitGuard } from './visit_guard';
 import { type WayStats, wayStatsOf } from './way_stats';
 import { playedByHand, seatWay, type Way } from './ways';
 
@@ -282,18 +277,12 @@ const forgeStore = new ForgeStore(path.join(DATA_DIR, 'forge.sqlite3'));
 // Bots on the account (ADR 0013): their own SQLite beside the Forge's, so
 // the two land in parallel without sharing a file or a module.
 const botStore = new BotStore(path.join(DATA_DIR, 'bots.sqlite3'));
-// Five counters a day and nothing else (PRIVACY.md): what the top of the
-// funnel did, which is the only part of it that was not already
-// recoverable from the account and match records.
-const pulse = new Pulse(Date.now(), { file: path.join(DATA_DIR, 'pulse.json') });
-// The bound on how many visits one network may add to the day. The count
-// comes from the browser (src/net/pulse_ping.ts), so this is what keeps a
-// script from writing its own number onto the report.
-const visits = new VisitGuard();
-// The same bound for the paces past arriving, with room for one of each
-// per visit: a household that may contribute twelve arrivals may also
-// report what those twelve did, and no more.
-const steps = new VisitGuard({ perNetwork: VISITS_PER_NETWORK * VISIT_STEPS.length });
+// The audience counter's site (PRIVACY.md, docs/deploy.md): the id Umami
+// gave this deployment, and the one value from the environment that
+// reaches the page. Empty, or not an id, and the page goes out without
+// the tag; the boot line says which.
+const STATS_WEBSITE_ID = (process.env.STATS_WEBSITE_ID ?? '').trim();
+const STATS_ON = isWebsiteId(STATS_WEBSITE_ID);
 // Where every generated file lives (splash candidates, model sheets,
 // models), served back to logged-in clients by the asset route below.
 const ASSETS_DIR = path.join(DATA_DIR, 'assets');
@@ -789,7 +778,6 @@ function onMatchReady(forge: boolean) {
         });
       }
     }
-    pulse.matchStarted(Date.now());
     matches.set(id, {
       match,
       endedAt: null,
@@ -1043,7 +1031,6 @@ const server = http.createServer(async (req, res) => {
       }
       if (url === '/api/register') {
         const created = registry.register(name, password, email, now);
-        if (created.ok) pulse.account(now);
         if (!created.ok) {
           // A taken name is not a failed credential guess, but it is still
           // an attempt: rate it, or the signup form becomes the oracle the
@@ -1203,7 +1190,6 @@ const server = http.createServer(async (req, res) => {
       // is derived from the Discord name; the account has no password and
       // no email until its owner adds them.
       const created = registry.registerWithDiscord(identity, now);
-      if (created.ok) pulse.account(now);
       if (!created.ok) {
         // Only a race can land here: the same Discord finished two round
         // trips at once and the other one won.
@@ -1323,91 +1309,6 @@ const server = http.createServer(async (req, res) => {
       }
       res.setHeader('set-cookie', clearCookie(COOKIE_NAME, { secure: cookieSecure(req) }));
       sendJson(res, 200, { ok: true });
-      return;
-    }
-
-    // One browser saying this is its first load today (src/net/pulse_ping.ts).
-    // Open, like the page that sends it, and ahead of the account gate
-    // because most arrivals have no account yet: that is the point of
-    // counting them. It answers the same 204 whether the visit counted or
-    // the guard refused it, so nothing here can be used to probe anything.
-    if (url === '/api/pulse/hit') {
-      if (req.method !== 'POST') {
-        sendJson(res, 405, { error: 'use POST' });
-        return;
-      }
-      const now = Date.now();
-      const address = clientAddress(req.headers, req.socket.remoteAddress, EDGE);
-      // The two flags the ping carries. Anything other than the exact
-      // value reads as a returning browser, which is the direction that
-      // cannot inflate the interesting number, and a bucket that is not on
-      // the list is refused rather than trusted: a query is a thing a
-      // client can forge, and the list is the whole of what may be stored.
-      const query = new URL(req.url ?? '/', 'http://local').searchParams;
-      const newcomer = query.get('new') === '1';
-      const from = query.get('from') ?? '';
-      const source = isVisitSource(from) ? from : 'other';
-      if (visits.allow(now, address)) pulse.visit(now, newcomer, source);
-      res.writeHead(204).end();
-      return;
-    }
-
-    // One pace past arriving (src/net/visit_line.ts), from a browser that
-    // has already counted itself a visitor today. Open and unauthenticated
-    // for the same reason as the ping above: most of the people whose
-    // progress is worth knowing have no account yet, which is the point.
-    // A name that is not on the list is dropped rather than stored.
-    if (url === '/api/pulse/step') {
-      if (req.method !== 'POST') {
-        sendJson(res, 405, { error: 'use POST' });
-        return;
-      }
-      const now = Date.now();
-      const address = clientAddress(req.headers, req.socket.remoteAddress, EDGE);
-      const name = new URL(req.url ?? '/', 'http://local').searchParams.get('name') ?? '';
-      if (isVisitStep(name) && steps.allow(now, address)) pulse.step(now, name);
-      res.writeHead(204).end();
-      return;
-    }
-
-    // The maintainer's own report (PRIVACY.md), which is not an account's
-    // endpoint: it is read with PULSE_TOKEN and nothing else, so it sits
-    // ahead of the account gate below. The API rate limiter above already
-    // covers it, which is what makes guessing the token uninteresting.
-    if (url === '/api/pulse') {
-      // Off unless PULSE_TOKEN is set, and a wrong token is a 404 rather
-      // than a 401: an endpoint that admits it exists invites guessing.
-      // The token is taken from a header or the query, because the reader
-      // is as often a phone during a launch as it is a curl.
-      const secret = process.env.PULSE_TOKEN ?? '';
-      const auth = req.headers.authorization ?? '';
-      const bearer = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-      const query = new URL(req.url ?? '/', 'http://local').searchParams.get('token') ?? '';
-      if (!tokenMatches(bearer, secret) && !tokenMatches(query, secret)) {
-        res.writeHead(404, { 'content-type': 'text/plain' });
-        res.end('not found');
-        return;
-      }
-      // A browser gets the page, a script gets the numbers. Decided by
-      // what the caller asked for rather than by a flag, because the
-      // maintainer opening this on a phone should not have to remember
-      // one; ?format= overrides either way.
-      const format = new URL(req.url ?? '/', 'http://local').searchParams.get('format');
-      const wantsHtml =
-        format === 'html' ||
-        (format !== 'json' && (req.headers.accept ?? '').includes('text/html'));
-      if (wantsHtml) {
-        res.writeHead(200, {
-          'content-type': 'text/html; charset=utf-8',
-          'cache-control': 'no-store',
-          // Nothing here is for anyone but its reader, and a counter page
-          // in a search index is the one way these numbers become public.
-          'x-robots-tag': 'noindex, nofollow',
-        });
-        res.end(renderPulsePage(pulse.days()));
-        return;
-      }
-      sendJson(res, 200, { days: pulse.days() });
       return;
     }
 
@@ -2279,17 +2180,14 @@ const server = http.createServer(async (req, res) => {
     } catch {
       filePath = path.join(DIST, 'index.html');
     }
-    // One arrival is one app shell served. Counted here rather than a hop
-    // earlier because this is where an unknown path has already fallen
-    // back to index.html: the client routes in the browser, so a shared
-    // deep link is a page load like any other. Assets are not arrivals.
-    // A path the client does not route is counted again as a stray
-    // (server/arrival.ts), because a scanner walking a list of admin
-    // panels is otherwise indistinguishable from an announcement landing.
-    if (filePath === path.join(DIST, 'index.html')) {
-      pulse.load(Date.now(), isStray(url));
-    }
-    const body = await readFile(filePath);
+    // The entry document goes out with the audience counter's tag on it
+    // when this deployment has a site to report to (server/stats_tag.ts);
+    // every other file goes out as built.
+    const isEntry = filePath === path.join(DIST, 'index.html');
+    const body =
+      isEntry && STATS_ON
+        ? withStatsTag(await readFile(filePath, 'utf8'), STATS_WEBSITE_ID)
+        : await readFile(filePath);
     // The client shipped no caching headers at all, which leaves a browser
     // free to serve a stale index.html and with it the previous build's
     // hashed bundle: you reload after a change and see yesterday's game.
@@ -2668,7 +2566,6 @@ setInterval(() => {
         }
         if (entry.match.sim.winner !== null && entry.endedAt === null) {
           entry.endedAt = now;
-          pulse.matchFinished(now);
           // Record the finished match once, the moment the winner lands:
           // seats still held by a connected human carry their player id.
           const accountIdByUnit = new Map<number, number>();
@@ -2865,18 +2762,12 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
     // Write the session expiry extensions that touch() only made in
     // memory, so a restart does not send everyone back to the login form.
     sessions.flush();
-    pulse.flush();
     for (const c of clients.values()) c.ws.close();
     wss.close();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 2000).unref();
   });
 }
-
-// The pulse counts in memory and reaches the disk here, once a minute and
-// only when something moved (PRIVACY.md). A page load must not write: this
-// is the thread that steps every live match at 20 Hz.
-setInterval(() => pulse.flush(), 60_000).unref();
 
 // Housekeeping, hourly. None of this is load bearing: an expired session
 // and a spent link are already refused on read, and a lapsed email claim
@@ -2951,6 +2842,13 @@ server.listen(PORT, () => {
     `edge: ${EDGE.hops} trusted proxy hop(s), origins ${
       EDGE.origins.length > 0 ? EDGE.origins.join(' ') : 'same-host only'
     }`,
+  );
+  console.log(
+    STATS_ON
+      ? `stats: on, ${STATS_SCRIPT} tagged for site ${STATS_WEBSITE_ID}`
+      : STATS_WEBSITE_ID === ''
+        ? 'stats: off (no STATS_WEBSITE_ID set)'
+        : 'stats: off (STATS_WEBSITE_ID is not a site id)',
   );
   // In dev the vite server owns the client and this warning is expected
   // noise only when dist was never built; in production it means the image

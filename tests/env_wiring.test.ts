@@ -28,6 +28,12 @@ const DEPLOYMENT_SET = new Set([
   'GENERATION_PROVIDER',
 ]);
 
+// Names .env carries for the containers beside the game rather than for
+// the game: the audience counter and its database (docs/deploy.md), which
+// compose reads straight off the file. The server never sees them, and
+// they never need to reach its container.
+const BESIDE_THE_GAME = new Set(['COMPOSE_PROFILES', 'STATS_DB_PASSWORD', 'STATS_APP_SECRET']);
+
 function serverFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -106,7 +112,17 @@ describe('deployment env wiring', () => {
 
   it('lets every documented knob reach the container', () => {
     const passed = new Set(composeKeys());
-    const stranded = exampleKeys().filter((k) => !passed.has(k));
+    const stranded = exampleKeys().filter((k) => !passed.has(k) && !BESIDE_THE_GAME.has(k));
     expect(stranded).toEqual([]);
+  });
+
+  it('carries the knobs for the containers beside the game', () => {
+    // A name in that set nobody passes anywhere is a stale entry.
+    const compose = readFileSync(join(root, 'docker-compose.yml'), 'utf8');
+    for (const name of BESIDE_THE_GAME) {
+      expect(`${name}: ${compose.includes(`\${${name}`) || exampleKeys().includes(name)}`).toBe(
+        `${name}: true`,
+      );
+    }
   });
 });

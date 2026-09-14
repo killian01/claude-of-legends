@@ -6,10 +6,14 @@ that is merely reassuring is worth nothing.
 
 ## No third party sees you
 
-The site loads no analytics service, no advertising pixel, no tag manager,
-no font or script from anyone else's server. Nothing about your visit is
-sent anywhere but to the machine serving the game. There is nothing to opt
-out of because there is nobody else in the room.
+The site loads no script, font or pixel from anyone else's server, and no
+advertising or tag manager of any kind. It does count its audience, with
+Umami, an open source counter that runs on the same machine as the game
+and is reached through the game's own address: `server/stats_tag.ts` puts
+its tag on the page, `docker-compose.yml` runs it beside the game. Nothing
+about your visit is sent anywhere but to that machine, and nothing it
+records is sent on to anyone; the counter's own usage report is switched
+off. There is nobody else in the room.
 
 ## One cookie
 
@@ -19,29 +23,21 @@ which account is talking to it (`server/cookies.ts`, `server/sessions.ts`,
 ADR 0006). There is no tracking cookie, because there is nothing to track
 with it.
 
-## One line of storage
+## Nothing stored, unless you ask out
 
-`col.visit`, holding today's date and, at most, two words: `stayed` and
-`played`. The browser writes the date on the first load of a day so it
-knows not to say hello to the counter twice, and a word when it has
-reported getting that far, so it reports it once rather than on every
-reload (`src/net/pulse_ping.ts`, `src/net/visit_line.ts`). The whole line
-is at most `2026-09-07 stayed played`.
+The counter sets no cookie and writes nothing to your browser: it tells one
+visitor from another by a hash it computes on the server (below), never by
+anything it leaves on your machine.
 
-It is not an identifier: it is the same handful of characters in every
-browser in the world that did the same things today, it is overwritten
-tomorrow, and it never leaves your machine. Delete it and the only
-consequence is being counted once more, as a browser that had never been
-here.
+The one key it reads is `umami.disabled`, which is there if you opened the
+site with `?stats=off`. Then nothing is counted for this browser at all, on
+any day: the tracker checks that key before it sends anything, so the
+choice holds without a line of this site's code running
+(`src/net/stats.ts`). `?stats=on` removes it.
 
-That last part is the only other thing the line is read for: an empty key
-means this browser has not been counted before, which is what separates
-people arriving from one person coming back. Nothing is stored to answer
-it, and a browser that clears the line is simply new again.
-
-The one other value the key can hold is the word `off`, which is there if
-you opened the site with `?pulse=off`. Then nothing is counted for this
-browser at all, on any day. `?pulse=on` puts it back.
+Earlier builds kept one line under `col.visit`, a date and at most two
+words. This one deletes it on sight, and a browser that had asked out under
+the old name is put on the new one.
 
 ## What an account holds
 
@@ -59,75 +55,41 @@ and `tests/architecture.test.ts` fails if that ever stops being true.
 
 ## What is counted
 
-A handful of numbers a day, for the whole site, so that an announcement can
-be told apart from a front page that loses people (`server/pulse.ts`):
+What the counter keeps. `src/net/stats.ts` is everything this site adds to
+it, and everything it takes away before a record leaves your browser.
 
-| Counter | What it counts |
-|---|---|
-| `loads` | pages served, reloads included |
-| `strays` | of those, the ones served for a path this site does not have |
-| `visitors` | browsers that opened the game that day, one each |
-| `newcomers` | of those, the ones that had never been counted before |
-| `sources` | of those, how many arrived from each of nine named places |
-| `stayed` | of those, the ones still here 30 seconds later |
-| `played` | of those, the ones who started a match in the browser |
-| `accounts` | accounts created |
-| `matches` | matches started |
-| `finished` | matches that reached an end |
+- A page view: the path and the section you are looking at (`/`,
+  `/#ladder`), and when. Never the query of the address, except the `utm_`
+  words an announcement's link carries: an invite code, a confirmation
+  flag, anything else in the address is stripped before the view leaves
+  (`scrubUrl`), so a link somebody sent you is not in the record.
+- The page that linked you here, as your browser reports it in the
+  referrer header, which is how a Reddit thread can be told from a search
+  result. Its query is stripped the same way.
+- Three events, each at most once per page: `stayed` (still here 30
+  seconds later), `played` (a match started in this browser: practice, test
+  drive or live game, never a replay, which is watching rather than
+  playing) and `account` (an account created here).
+- What every counter of this kind reads off the request: the browser and
+  operating system, the kind of device, the screen size, the language, and
+  the country, region and city your address resolves to. Not the address.
 
-Plus `restarts`, which says how many times the server restarted that day.
-It distorts nothing; it is there because a quiet afternoon usually has a
-deploy under it.
+What ties one view to the next is a visitor id that Umami computes from
+your address and your browser's identification string under a salt that
+changes with the month. The id is what is stored; the address is not, the
+id cannot be turned back into it, and next month the same browser is a new
+visitor. No name and no account id go anywhere near it: the counter does
+not know the game has accounts.
 
-`sources` is the one that needs saying in full. It counts, for the day,
-how many visitors arrived from each of nine buckets: `direct` (no referrer
-at all), `search`, `discord`, `reddit`, `hn`, `x`, `youtube`, `github`, and
-`other` for anywhere else. Your browser reads its own referrer, decides
-which bucket it falls in, and sends the name of the bucket
-(`src/net/pulse_source.ts`). If the link that brought you carried `?from=`
-with one of those nine names, which is how an announcement is posted so
-that an app sending no referrer still counts as where it was posted, that
-name is the bucket, and any other value there is ignored. The link itself,
-the page it was on, and the host it was on never leave your machine, and
-the server refuses any word that is not one of those nine.
-
-`stayed` and `played` are the same kind of thing: your browser knows it
-has already reported them today because of the line it stores, so each
-counts once. `played` covers a practice match, a Forge test drive and a
-live game alike, and never a replay, which is watching rather than
-playing.
-
-That is the entire record: one row per day, a dozen integers and nine
-more, no name, no account id, no page, no URL, no country, no device. Nothing in it can
-be traced to a person, including by us, because nothing per person is ever
-written.
-
-Telling one arrival from a reload does need to recognise a browser that
-has already been here today, and the browser is the only thing that knows.
-So it says so itself: on its first load of the day it posts to one open
-endpoint that carries no cookie and no body, and remembers the date so it
-does not post again (`src/net/pulse_ping.ts`). The request says two things
-beyond arriving: `?new=1` when this browser had nothing stored, so it had
-not been counted before, and `?from=` with one of the nine bucket names
-above. The server learns that a browser arrived, whether it was the first
-time, and which sort of place it came from, and nothing whatsoever about
-which browser it was.
-
-The address was the obvious way to do this and it is the wrong one, which
-is worth saying plainly: it made a phone that renews its IPv6 address
-between reloads into a crowd, and it counted every crawler in the world as
-a person. What is left of it is a bound, so that a script cannot post that
-endpoint in a loop and write its own number onto the report
-(`server/visit_guard.ts`). That bound counts how many times a network has
-posted today, keyed by a hash of it under a salt that is random per day and
-held only in memory. At midnight UTC the salt is discarded along with the
-counts, which makes that day's hashes unreproducible even to the server
-that made them.
+The record is a database on this machine, read by the maintainer and by
+nobody else, and it exists so that an announcement can be told apart from a
+front page that loses people.
 
 ## What is not counted
 
-No page views, no clicks, no session recordings, no heat maps, no
-fingerprinting, no cross-site anything, no profile, no export to anyone.
+No clicks beyond the three events above, no session recordings, no heat
+maps, no fingerprinting, no cross-site anything, no profile, no export to
+anyone, and nothing that follows a browser from one month into the next.
 
 ## Logs
 
@@ -148,10 +110,11 @@ than a log. And the country header the proxy attaches to every request:
 this log exists to tell a scanner sweep from an announcement landing, and
 where you live is not part of that question.
 
-It exists because the counters above cannot tell a page somebody asked
-for from a scanner walking a list of admin panels, and knowing which is
-the difference between fixing the front page and fixing nothing. Neither
-log is joined to an account, and neither feeds the counters.
+It exists because a scanner walking a list of admin panels never runs the
+page, so the counter above never sees it, and knowing whether a quiet day
+was quiet or swept is the difference between fixing the front page and
+fixing nothing. Neither log is joined to an account, and neither feeds the
+counter.
 
 ## Getting your data out, or deleted
 
@@ -163,6 +126,7 @@ record is the whole of what is held about you. Open an issue, say hello on
 ## Self-hosting
 
 If you run your own instance, all of the above describes your server and
-your players, not this one. `PULSE_TOKEN` gates the report; leave it unset
-and the endpoint answers 404 to everyone. The counters run either way and
-land in `DATA_DIR/pulse.json`, which you can simply delete.
+your players, not this one. The counter is optional: with
+`STATS_WEBSITE_ID` unset the page goes out without its tag and nothing is
+counted, and with the `stats` profile off in `.env` the counter is not even
+running (`docs/deploy.md`, "The audience counter").

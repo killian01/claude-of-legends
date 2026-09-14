@@ -135,75 +135,94 @@ or `no auto-join` when the two variables are not both set.
 If that line says `off`, Discord sign-in is not configured. Nothing else is
 affected: accounts are created, rated and played exactly as before.
 
-## The daily counters
+## The audience counter
 
-The server keeps one row a day for the whole site in `DATA_DIR/pulse.json`.
-They exist so that an announcement can be told apart from a front page that
-loses people, and they are the entire measurement on this site: no analytics
-service, no pixel, nothing per person. `PRIVACY.md` describes every counter
-and `tests/privacy.test.ts` holds the claims to the code.
+The site counts its audience with [Umami](https://umami.is), an open source
+counter run beside the game by the same compose file, on the same machine, and
+reached by the browser through the game's own origin. No cookie, nothing per
+person that outlives a month, and nothing leaves the box: `PRIVACY.md` says
+exactly what is kept and `tests/privacy.test.ts` holds the page to the code.
+The dashboard is the ordinary one: visitors and views by day, the pages and
+sections they looked at, where they came from, country, browser and screen,
+who is on the site right now, and the three events the client sends.
 
-Visitors are counted by the browser and not by the address it arrives from:
-the first load of a UTC day posts to `/api/pulse/hit` and the browser
-remembers the date so it posts once (`src/net/pulse_ping.ts`). That is why
-`loads` and `visitors` are so far apart on a real day: loads counts reloads
-and crawlers, visitors counts browsers that ran the game.
+It is optional. With the four `STATS_` lines of `.env` empty, `docker compose
+up` starts the game alone and the page goes out without a tag, which is the
+default and the right setting for an instance nobody needs to report on.
 
-Four of the counters exist because that gap alone was unreadable:
+To turn it on:
 
-- `strays` splits the loads served for a path this site does not have
-  (`server/arrival.ts`) off the ones it does. On a quiet day almost every
-  load is a scanner walking `/wp-login.php`, and without the split the
-  ratio says nothing at all.
-- `newcomers` counts the visitors whose browser had never been counted
-  here. Three visitors who have all been here before is a habit; three who
-  have not is news.
-- `sources` counts where they came from, in nine buckets the browser picks
-  itself from its own referrer (`src/net/pulse_source.ts`). A word leaves
-  the browser, never a link. Post an announcement with the word on the link,
-  `https://your.host/?from=reddit` (any of the nine): most apps a link is
-  opened from send no referrer, and without it the day reads as `direct`.
-  The page shows the buckets for the week and on each day's row.
-- `stayed` and `played` say how far they got: still here 30 seconds later,
-  and started a match in the browser. Once per browser per day each, so
-  both divide by `visitors`.
+1. In `.env`: `COMPOSE_PROFILES=stats`, and two long random strings for
+   `STATS_DB_PASSWORD` and `STATS_APP_SECRET` (`openssl rand -hex 32` each).
+   Then `docker compose up -d`: the `stats` service (Umami, pinned by digest)
+   and `stats_db` (Postgres, a volume of its own) come up beside the game.
+2. Route the two paths the browser uses, and give the dashboard a name: the
+   proxy block below. Point `stats.your.host` at this machine in DNS, open
+   it, sign in as `admin` with the password `umami`, and change that password
+   before anything else.
+3. In the dashboard, add a website: name it, give it the game's host. Umami
+   shows a website id (a UUID); put it in `.env` as `STATS_WEBSITE_ID` and
+   redeploy the game. The boot line says `stats: on, /visit.js tagged for
+   site ...`, and from then on the entry document carries the tag
+   (`server/stats_tag.ts`).
 
-Your own browser is a visitor like any other, which on a quiet day is most
-of the count. Open the site once with `?pulse=off` and it stops being
-counted, on that browser, for good; `?pulse=on` puts it back.
+What the browser loads is two paths on the game's own origin, which the proxy
+hands to the counter's container: `/visit.js`, the tracker script (Umami's
+`TRACKER_SCRIPT_NAME`), and `/api/visit`, where it posts
+(`COLLECT_API_ENDPOINT`). Both are set in `docker-compose.yml`, and a blocker's
+list of tracker names has nothing to match on either. In Caddy, ahead of the
+game's own `reverse_proxy` and with the same forwarding headers, so a visit is
+keyed on the real client and not on the proxy:
 
-The counting always runs. Reading it back is what `PULSE_TOKEN` gates:
+```caddyfile
+claudeoflegends.com {
+    # ...
+    handle /visit.js {
+        reverse_proxy claude_of_legends_stats:3000
+    }
+    handle /api/visit {
+        reverse_proxy claude_of_legends_stats:3000 {
+            header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+    handle {
+        reverse_proxy claude_of_legends:8787 {
+            # the game's own block, unchanged
+        }
+    }
+}
 
-```bash
-PULSE_TOKEN=$(openssl rand -hex 24)   # into .env, then redeploy
+stats.claudeoflegends.com {
+    encode zstd gzip
+    reverse_proxy claude_of_legends_stats:3000
+}
 ```
 
-Then open `https://your.host/api/pulse?token=<the token>` in a browser and
-you get the report: visitors, first-timers, sign-ups and finished matches
-for the week, where the week came from and how far it got, then a row per
-day with the rates that matter, how many arrivals made an account and how
-many started matches reached an end. It is one page, no JavaScript, and it
-reads on a phone, which is where it is usually read.
+Add `/visit.js /api/visit` to the access log's skip list too, so a page load
+stays one line. Then `caddy reload`.
 
-![The pulse report](screenshots/pulse-report.png)
+The page's address is reduced before it leaves the browser
+(`src/net/stats.ts`): the path and the section (`/#ladder`) stay, the query is
+dropped except the `utm_` words, so an invite code or a confirmation flag is
+never in the record. Post an announcement with the words on the link,
+`https://your.host/?utm_source=reddit&utm_medium=post`: most apps a link is
+opened from send no referrer, and without them the day reads as direct.
 
-(The numbers in that shot are made up: it is a picture of the layout, not of
-anybody's traffic.)
+Three events are sent beside the page views, once per page each: `stayed`
+(still here 30 seconds later), `played` (a match started in this browser,
+practice, test drive or live, never a replay) and `account` (an account
+created, by form or by Discord). The dashboard's events panel shows them
+against the day's visitors.
 
-A script gets the numbers instead, because the same URL answers to what the
-caller asked for:
+Your own browser is a visitor like any other, which on a quiet day is most of
+the count. Open the site once with `?stats=off` and it stops being counted, on
+that browser, for good; `?stats=on` puts it back.
 
-```bash
-curl -H "authorization: Bearer $PULSE_TOKEN" https://your.host/api/pulse
-```
-
-Add `?format=json` or `?format=html` to override that either way.
-
-Unset, `/api/pulse` answers 404 to everyone, which is the default and the
-right setting for an instance nobody needs to report on. A wrong token also
-gets a 404 rather than a 401, so the endpoint never confirms it is there.
-The page is served `no-store` and `x-robots-tag: noindex`, since a counter
-page in a search index is the one way these numbers become public.
+The counter's database is dumped into every backup archive as `stats.sql.gz`
+(`scripts/backup_game_data.sh`) when its container is up. Umami's own usage
+report and update check are switched off in the compose file: the counter
+talks to nobody either.
 
 ## Who came back
 
@@ -259,8 +278,8 @@ node scripts/champion_bill.mjs                  where the headroom is
 ```
 
 A match that was abandoned never reaches the log, so this reports what was
-played through. `matches` against `finished` on the pulse report is where
-the difference between the two lives.
+played through; the server's own log says when a match started and did not
+finish.
 
 ## The proxy contract
 
@@ -381,9 +400,9 @@ still outstanding), `matches.jsonl` (the match log that feeds profiles and the
 ladder), `replays/` (the last 40 matches, Arena matches included),
 `forge.sqlite3` (the Forge, ADR 0011), `bots.sqlite3` (the accounts' bots,
 their playbook versions, their live and Arena ratings, the Arena reports and
-the night coach's proposals, ADR 0013) and `pulse.json` (the daily counters,
-PRIVACY.md: six integers a day and nothing per person, so it is the one file
-here you can delete without losing anything anybody owns).
+the night coach's proposals, ADR 0013). The audience counter's record is a
+volume of its own, `stats_db`, dumped into the same archive as `stats.sql.gz`
+when the counter is up.
 
 The Arena plays its matches in a worker thread bundled beside the server
 (`dist-server/arena_worker.cjs`, built by `pnpm build:server`); a server

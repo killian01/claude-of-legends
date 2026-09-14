@@ -7,8 +7,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { emptyDay } from '../server/pulse';
-import { VISIT_KEY } from '../src/net/pulse_ping';
+import { STATS_SCRIPT, statsTag } from '../server/stats_tag';
+import { CHOICE_PARAM, DISABLED_KEY, OLD_VISIT_KEY, STATS_STEPS } from '../src/net/stats';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), 'utf8');
@@ -26,6 +26,15 @@ describe('the promise that no third party sees a visitor', () => {
     expect(external).toEqual([]);
   });
 
+  it('is kept by the tag the server adds to it', () => {
+    // The one thing the deployment can put on the page names a path on
+    // this origin, never a host: the counter is reached through the game's
+    // own address (server/stats_tag.ts).
+    const tag = statsTag('2b4f0a7e-3c1d-4e5f-8a9b-0c1d2e3f4a5b');
+    expect(tag).not.toMatch(/https?:\/\//);
+    expect(tag).toContain(`src="${STATS_SCRIPT}"`);
+  });
+
   it('is kept by the client, which loads no tracker and no CDN', () => {
     // A denylist rather than an allowlist, because the client legitimately
     // names plenty of URLs in prose. These are the ones whose presence
@@ -39,8 +48,9 @@ describe('the promise that no third party sees a visitor', () => {
       'cdn.jsdelivr.net',
       'unpkg.com',
       'cdnjs.cloudflare.com',
+      'cloud.umami.is',
     ];
-    const files = ['index.html', 'src/main.ts', 'src/ui/page.ts'];
+    const files = ['index.html', 'src/main.ts', 'src/ui/page.ts', 'src/net/stats.ts'];
     for (const file of files) {
       const text = read(file);
       for (const host of hosts) expect(`${file}: ${text.includes(host)}`).toBe(`${file}: false`);
@@ -48,24 +58,27 @@ describe('the promise that no third party sees a visitor', () => {
   });
 });
 
-describe('the one line the client stores', () => {
-  it('is named on the page under the key the client really writes', () => {
-    // The page promises a browser exactly one stored value and names it.
-    // Renaming the key without touching the page would leave a reader
-    // looking for something that is not there, which is the same as
+describe('the opt-out', () => {
+  it('is named on the page the way the client reads it', () => {
+    // The page tells a reader how to be left out and which key that
+    // writes. Renaming either without touching the page would leave the
+    // reader doing something that no longer works, which is the same as
     // hiding it.
-    expect(read('PRIVACY.md')).toContain(`\`${VISIT_KEY}\``);
+    const page = read('PRIVACY.md');
+    expect(page).toContain(`\`?${CHOICE_PARAM}=off\``);
+    expect(page).toContain(`\`${DISABLED_KEY}\``);
+    expect(page).toContain(`\`${OLD_VISIT_KEY}\``);
   });
 });
 
-describe('the table of what is counted', () => {
-  it('lists every counter the server actually keeps', () => {
-    // The counters are the part a reader most needs to trust, so a sixth
-    // one must not be able to appear in the code and stay out of the page.
+describe('the events the client sends', () => {
+  it('are every one named on the page', () => {
+    // The events are the part of the record this repository adds to what
+    // the counter does on its own, so a fourth one must not be able to
+    // appear in the code and stay off the page.
     const page = read('PRIVACY.md');
-    for (const key of Object.keys(emptyDay('2026-09-06'))) {
-      if (key === 'day') continue;
-      expect(`${key}: ${page.includes(`\`${key}\``)}`).toBe(`${key}: true`);
+    for (const step of STATS_STEPS) {
+      expect(`${step}: ${page.includes(`\`${step}\``)}`).toBe(`${step}: true`);
     }
   });
 });

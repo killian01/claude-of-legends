@@ -46,6 +46,15 @@ tar -C "$VOLUME_DIR" -cf - \
   --exclude='*.sqlite3' --exclude='*.sqlite3-wal' --exclude='*.sqlite3-shm' \
   . | tar -C "$STAGE" -xf -
 
+# The audience counter's database (docs/deploy.md), when its container is
+# up: a plain SQL dump, which restores into any Postgres of the same major.
+# Absent on an instance without stats, and that is not a failure.
+STATS_DB="${STATS_DB:-claude_of_legends_stats_db}"
+if docker ps --format '{{.Names}}' | grep -qx "$STATS_DB"; then
+  docker exec "$STATS_DB" pg_dump -U umami --no-owner umami | gzip > "$STAGE/stats.sql.gz"
+  echo "$LOG: stats dump ($(du -h "$STAGE/stats.sql.gz" | cut -f1))"
+fi
+
 tar -C "$STAGE" -czf "$ARCHIVE" .
 # Player identities and password hashes: readable by root and nobody else.
 chmod 600 "$ARCHIVE"

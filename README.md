@@ -277,11 +277,11 @@ setup and the pull request checklist. Issues labeled
 points. Security issues go through [SECURITY.md](SECURITY.md), privately,
 never a public issue.
 
-The site loads no analytics service and no advertising pixel, sets one
-cookie (your session), and keeps five aggregate numbers a day so that a
-quiet launch can be told apart from a front page that loses people.
-[PRIVACY.md](PRIVACY.md) is the whole of it, and it points at the file
-behind each claim so you can check rather than believe.
+The site loads nothing from anyone else's server, sets one cookie (your
+session), and counts its audience with an open source counter running on
+its own machine, so that a quiet launch can be told apart from a front page
+that loses people. [PRIVACY.md](PRIVACY.md) is the whole of it, and it
+points at the file behind each claim so you can check rather than believe.
 
 All project content, in the game and in the docs, is in English, with
 original fantasy naming only (no borrowed IP, see
