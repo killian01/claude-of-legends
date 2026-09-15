@@ -10,7 +10,7 @@ import { requestGameFullscreen, toggleGameFullscreen } from '../game/fullscreen'
 import { getSettings } from '../game/settings';
 import { playSfx } from '../game/sfx';
 import type { CastTouch } from '../game/touch';
-import { followUiScale } from '../game/ui_scale';
+import { followThumbScale, followUiScale } from '../game/ui_scale';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
@@ -608,28 +608,32 @@ const CSS = `
 }
 @keyframes hud-hints-fade { to { opacity: 0; visibility: hidden; } }
 /* The thumb controls' cluster (CONTEXT.md: Thumb stick): the attack
-   button at the corner, Q W E in an arc round it, R further out, the two
-   sigils at the arc's foot; round, finger-sized, each placed by its key.
-   The arc leaves the corner clear of the minimap, which moves to the top. */
+   button at the corner with Q and R in the row beside it, W and E on a
+   short arc above, the two sigils up the left; round, finger-sized, each
+   placed by its key, and nothing higher than a third of a phone's screen
+   so the middle stays the game's. The whole cluster scales with the
+   phone's height (--thumb-scale, ui_scale.ts) from its bottom right
+   corner, which the minimap leaves for it by moving to the top. */
 .hud.thumbs .hud-slots {
-  position: absolute; right: 0; bottom: 0; width: 240px; height: 200px; display: block;
+  position: absolute; right: 0; bottom: 0; width: 220px; height: 160px; display: block;
+  transform: scale(var(--thumb-scale, 1)); transform-origin: 100% 100%;
 }
 .hud.thumbs .hud-slot {
-  position: absolute; width: 54px; height: 54px; border-radius: 50%;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  position: absolute; width: 46px; height: 46px; border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55); font-size: 16px;
   /* A slide on a slot is an aim; without this the browser takes the
      moving finger for a scroll and cancels the pointer under it. */
   touch-action: none;
 }
-.hud.thumbs .hud-slot[data-key='Q'] { right: 118px; bottom: 16px; }
-.hud.thumbs .hud-slot[data-key='W'] { right: 96px; bottom: 82px; }
-.hud.thumbs .hud-slot[data-key='E'] { right: 36px; bottom: 110px; }
-.hud.thumbs .hud-slot[data-key='R'] { right: 150px; bottom: 132px; width: 58px; height: 58px; }
-.hud.thumbs .hud-slot[data-key='D'] { right: 178px; bottom: 16px; width: 44px; height: 44px; }
-.hud.thumbs .hud-slot[data-key='F'] { right: 160px; bottom: 70px; width: 44px; height: 44px; }
+.hud.thumbs .hud-slot[data-key='Q'] { right: 107px; bottom: 23px; }
+.hud.thumbs .hud-slot[data-key='W'] { right: 87px; bottom: 77px; }
+.hud.thumbs .hud-slot[data-key='E'] { right: 38px; bottom: 106px; }
+.hud.thumbs .hud-slot[data-key='R'] { right: 161px; bottom: 21px; width: 50px; height: 50px; }
+.hud.thumbs .hud-slot[data-key='D'] { right: 165px; bottom: 81px; width: 42px; height: 42px; }
+.hud.thumbs .hud-slot[data-key='F'] { right: 129px; bottom: 109px; width: 42px; height: 42px; }
 .hud.thumbs .hud-slot-up { top: -20px; left: 50%; transform: translateX(-50%); }
 .hud.thumbs .hud-attack {
-  position: absolute; right: 14px; bottom: 14px; width: 84px; height: 84px; border-radius: 50%;
+  position: absolute; right: 12px; bottom: 12px; width: 68px; height: 68px; border-radius: 50%;
   border: 2px solid #c9a84a; background: rgba(60, 40, 12, 0.85); color: #f0d890;
   display: flex; align-items: center; justify-content: center; letter-spacing: 1px;
   font-size: 15px; font-weight: 800; pointer-events: auto; touch-action: none;
@@ -744,6 +748,7 @@ export class Hud {
   private lastTowerCount: number | null = null;
   private readonly rootEl: HTMLElement;
   private readonly stopScale: () => void;
+  private readonly stopThumbScale: () => void;
   private readonly styleEl: HTMLStyleElement;
 
   constructor(
@@ -778,6 +783,8 @@ export class Hud {
     // The interface size (src/game/ui_scale.ts): the screen's, or the
     // player's choice, followed live while the match is on.
     this.stopScale = followUiScale(root, () => getSettings().uiScale);
+    // The thumb controls' size, from the height of the phone (ui_scale.ts).
+    this.stopThumbScale = thumbs ? followThumbScale(root) : (): void => undefined;
     const el = <K extends keyof HTMLElementTagNameMap>(
       tag: K,
       cls: string,
@@ -1296,6 +1303,7 @@ export class Hud {
   dispose(): void {
     hideTooltip();
     this.stopScale();
+    this.stopThumbScale();
     this.rootEl.remove();
     this.styleEl.remove();
   }

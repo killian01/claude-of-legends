@@ -6,8 +6,11 @@ import {
   autoUiScale,
   clampUiScale,
   effectiveUiScale,
+  MAX_THUMB_SCALE,
   MAX_UI_SCALE,
+  MIN_THUMB_SCALE,
   MIN_UI_SCALE,
+  thumbScale,
   UI_SCALE_CHOICES,
 } from '../src/game/ui_scale';
 
@@ -28,6 +31,21 @@ describe('the automatic scale', () => {
   it('is 1 when the viewport is unknown', () => {
     expect(autoUiScale(0)).toBe(MIN_UI_SCALE);
     expect(autoUiScale(Number.NaN)).toBe(MIN_UI_SCALE);
+  });
+});
+
+describe("the thumb controls' size", () => {
+  it('follows the height of the phone, a little smaller on a short one', () => {
+    expect(thumbScale(420)).toBe(1);
+    expect(thumbScale(390)).toBe(0.93);
+    expect(thumbScale(360)).toBe(0.86);
+    expect(thumbScale(300)).toBe(MIN_THUMB_SCALE);
+  });
+
+  it('grows on a tablet and stops before the cluster eats the map', () => {
+    expect(thumbScale(600)).toBe(1.43);
+    expect(thumbScale(1024)).toBe(MAX_THUMB_SCALE);
+    expect(thumbScale(0)).toBe(1);
   });
 });
 

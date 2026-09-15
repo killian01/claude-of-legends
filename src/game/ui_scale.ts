@@ -45,6 +45,36 @@ export function applyUiScale(el: HTMLElement, scale: number): void {
   else el.style.setProperty('zoom', String(scale));
 }
 
+// The thumb controls' size (CONTEXT.md: Thumb stick). The cluster is
+// drawn for a phone about 420 CSS pixels tall in landscape and grows and
+// shrinks with the viewport's height from there, so a tablet gets buttons
+// a thumb can find and a short phone keeps the lower part of its screen:
+// a little smaller than drawn on the shortest phones, never past the
+// point where the cluster would eat a tablet's map.
+export const THUMB_DESIGN_HEIGHT = 420;
+export const MIN_THUMB_SCALE = 0.85;
+export const MAX_THUMB_SCALE = 1.6;
+
+export function thumbScale(viewportHeight: number): number {
+  if (!(viewportHeight > 0)) return 1;
+  const raw = viewportHeight / THUMB_DESIGN_HEIGHT;
+  return Number(Math.min(MAX_THUMB_SCALE, Math.max(MIN_THUMB_SCALE, raw)).toFixed(2));
+}
+
+// Keeps the thumb controls' size on an element as a CSS variable
+// (--thumb-scale) while it is on screen; the stylesheet scales the
+// cluster from it. Returns the stop.
+export function followThumbScale(el: HTMLElement): () => void {
+  const apply = (): void => {
+    el.style.setProperty('--thumb-scale', String(thumbScale(window.innerHeight)));
+  };
+  apply();
+  window.addEventListener('resize', apply);
+  return (): void => {
+    window.removeEventListener('resize', apply);
+  };
+}
+
 // Fired on window by src/game/settings.ts whenever a setting changes, so a
 // HUD on screen follows the slider without being told by hand.
 export const SETTINGS_EVENT = 'loc:settings';
