@@ -25,7 +25,7 @@ const CSS = `
 }
 .touchbar-btn:active { background: rgba(70, 96, 48, 0.9); }
 /* With the thumb controls the right edge belongs to the casting thumb. */
-.touchbar.left { right: auto; left: 8px; }
+.touchbar.left { right: auto; left: 8px; top: 38%; }
 `;
 
 // Returns a teardown removing the bar and its stylesheet, like the HUD's.

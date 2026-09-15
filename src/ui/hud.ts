@@ -607,39 +607,57 @@ const CSS = `
   animation: hud-hints-fade 1s 25s forwards;
 }
 @keyframes hud-hints-fade { to { opacity: 0; visibility: hidden; } }
-/* The thumb controls' cluster (CONTEXT.md: Thumb stick): the attack
-   button at the corner with Q and R in the row beside it, W and E on a
-   short arc above, the two sigils up the left; round, finger-sized, each
-   placed by its key, and nothing higher than a third of a phone's screen
-   so the middle stays the game's. The whole cluster scales with the
-   phone's height (--thumb-scale, ui_scale.ts) from its bottom right
-   corner, which the minimap leaves for it by moving to the top. */
+/* The thumb controls (CONTEXT.md: Thumb stick), the whole bottom of a
+   phone's screen. The cluster: the attack button at the corner, Q W E R
+   on one arc round it from the left to straight above (an ellipse, wider
+   than tall, so the ultimate at the top stays in the lower half of the
+   screen), the two sigils further left at the arc's foot; round,
+   finger-sized, each placed by its key, nothing else in the corner. The
+   level-up mark sits on the slot's shoulder rather than floating over
+   it. The whole cluster scales with the phone's height (--thumb-scale,
+   ui_scale.ts) from its bottom right corner; the minimap moves to the
+   top for it. The bar with the bars and the items slides left of the
+   middle so the two never meet on a narrow phone. */
 .hud.thumbs .hud-slots {
-  position: absolute; right: 0; bottom: 0; width: 220px; height: 160px; display: block;
+  position: absolute; right: 0; bottom: 0; width: 236px; height: 172px; display: block;
   transform: scale(var(--thumb-scale, 1)); transform-origin: 100% 100%;
 }
 .hud.thumbs .hud-slot {
   position: absolute; width: 46px; height: 46px; border-radius: 50%;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55); font-size: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55); font-size: 15px;
   /* A slide on a slot is an aim; without this the browser takes the
      moving finger for a scroll and cancels the pointer under it. */
   touch-action: none;
 }
-.hud.thumbs .hud-slot[data-key='Q'] { right: 107px; bottom: 23px; }
-.hud.thumbs .hud-slot[data-key='W'] { right: 87px; bottom: 77px; }
-.hud.thumbs .hud-slot[data-key='E'] { right: 38px; bottom: 106px; }
-.hud.thumbs .hud-slot[data-key='R'] { right: 161px; bottom: 21px; width: 50px; height: 50px; }
-.hud.thumbs .hud-slot[data-key='D'] { right: 165px; bottom: 81px; width: 42px; height: 42px; }
-.hud.thumbs .hud-slot[data-key='F'] { right: 129px; bottom: 109px; width: 42px; height: 42px; }
-.hud.thumbs .hud-slot-up { top: -20px; left: 50%; transform: translateX(-50%); }
+.hud.thumbs .hud-slot[data-key='Q'] { right: 133px; bottom: 23px; }
+.hud.thumbs .hud-slot[data-key='W'] { right: 116px; bottom: 72px; }
+.hud.thumbs .hud-slot[data-key='E'] { right: 75px; bottom: 104px; }
+.hud.thumbs .hud-slot[data-key='R'] { right: 21px; bottom: 113px; width: 50px; height: 50px; }
+.hud.thumbs .hud-slot[data-key='D'] { right: 188px; bottom: 26px; width: 40px; height: 40px; }
+.hud.thumbs .hud-slot[data-key='F'] { right: 176px; bottom: 81px; width: 40px; height: 40px; }
+.hud.thumbs .hud-slot-key { font-size: 9px; }
+.hud.thumbs .hud-slot-up {
+  top: -5px; right: -5px; left: auto; transform: none;
+  width: 22px; height: 22px; font-size: 15px; line-height: 20px; border-radius: 50%;
+}
 .hud.thumbs .hud-attack {
-  position: absolute; right: 12px; bottom: 12px; width: 68px; height: 68px; border-radius: 50%;
+  position: absolute; right: 12px; bottom: 12px; width: 64px; height: 64px; border-radius: 50%;
   border: 2px solid #c9a84a; background: rgba(60, 40, 12, 0.85); color: #f0d890;
   display: flex; align-items: center; justify-content: center; letter-spacing: 1px;
-  font-size: 15px; font-weight: 800; pointer-events: auto; touch-action: none;
+  font-size: 14px; font-weight: 800; pointer-events: auto; touch-action: none;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
 }
 .hud.thumbs .hud-attack:active { background: rgba(120, 80, 20, 0.95); }
+.hud.thumbs .hud-bottom {
+  left: 40%; bottom: 2px; transform: translateX(-50%) scale(0.62);
+}
+.hud.thumbs .hud-meta {
+  max-width: 420px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hud.thumbs .hud-hints {
+  max-width: 150px; left: 84px; bottom: auto; top: 44px; font-size: 10px;
+  animation: hud-hints-fade 1s 12s forwards;
+}
 /* A phone held upright: the stick and the bar need the width, so the
    match waits behind one line until the phone turns. */
 .hud-turn {
@@ -1052,10 +1070,8 @@ export class Hud {
     const hints = el('div', 'hud-hints');
     hints.textContent = coarsePointer
       ? getSettings().touchScheme === 'thumbs'
-        ? 'Left thumb on the left half: the stick walks. Right thumb: tap a spell to cast ' +
-          'it at the nearest enemy, or slide it to aim and release; slide back to cancel. ' +
-          'ATK attacks the nearest enemy. Tap the ground: attack / walk there. Pinch zooms, ' +
-          'Center snaps back to your champion. Level up: tap the +.'
+        ? 'Left thumb: the stick walks. Right thumb: tap a spell to cast it, slide it to ' +
+          'aim. ATK attacks. Tap the + to level up.'
         : 'Tap: move / attack. Tap a spell, then tap the ground to cast it (tap the spell ' +
           'again to cancel). Drag pans the camera, pinch zooms, Center snaps back to your ' +
           'champion. Level up: tap the +.'
