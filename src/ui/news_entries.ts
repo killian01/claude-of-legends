@@ -25,7 +25,7 @@ export interface NewsEntry {
   title: string;
   // Plain text paragraphs. No markdown: the client has no engine for it.
   body: readonly string[];
-  // A file under public/news/, 1280 wide.
+  // A file under src/ui/news_art/, 1280 wide (news_images.ts ships it).
   image?: string;
   link?: { label: string; to: NewsDestination };
   // An event's time, an ISO instant. While it is ahead, the entry is

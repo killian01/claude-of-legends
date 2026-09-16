@@ -28,7 +28,7 @@ day it is wanted it stacks on top of the table.
   day: '2026-09-11',              // published, UTC
   title: 'The forest round',
   body: ['One paragraph.', 'Another.'],   // plain text, no markdown
-  image: 'forest-round.webp',    // optional, under public/news/, 1280 wide
+  image: 'forest-round.webp',    // optional, under src/ui/news_art/, 1280 wide
   link: { label: 'Play', to: 'play' },    // optional, inside the site only
   at: '2026-09-20T20:00:00Z',    // optional: an event's time
 }
@@ -91,7 +91,8 @@ which moves for a change to the interface.
   `tests/news.test.ts`: the order (pinned events first, then by day descending), whether
   the dot shows, an event's countdown, the day's words; and the structural gate over the
   table, dates valid and descending, titles unique, no dash or emoji or URL in the text,
-  every named image present under `public/news/`, every link a known destination.
+  every named image present under `src/ui/news_art/` and shipped by the build as a hashed
+  asset (`src/ui/news_images.ts`), every link a known destination.
 - `src/ui/news_section.ts`: the section, mounted under the home's bar by the section host
   and over the landing in a fixed host with a nav frame of its own. It reads no request:
   the table ships with the build, and the build reloads every open tab, so a server route
