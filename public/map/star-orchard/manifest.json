@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "revision": 115,
+  "revision": 123,
   "model": "map.glb",
   "navigation": "navigation.bin",
   "cells": 480,
@@ -168,18 +168,18 @@
     }
   ],
   "navigationReport": {
-    "walkable_cells": 73291,
-    "connected_cells": 73086,
+    "walkable_cells": 73298,
+    "connected_cells": 73093,
     "disconnected_landmarks": []
   },
-  "sourceSha256": "7a1650f352fc43c04b95c1fd551efbb32d4ab4d390405bbef277686c4417768a",
+  "sourceSha256": "0ebf10e3b9139c9be93860381f865b1068050f13cc7b77f4e269b91771e525f5",
   "coordinates": "glTF Y-up; Blender (x,y,z) maps to (x,z,-y)",
   "visualReport": {
-    "objects": 264,
+    "objects": 260,
     "texturedFloors": 59,
-    "texturedObjects": 264,
+    "texturedObjects": 260,
     "vertexOnlyObjects": 0,
-    "glbBytes": 43495548,
+    "glbBytes": 42849216,
     "quality": "light",
     "materialBakeVersion": 5,
     "sourceUvBindings": [
@@ -196,17 +196,17 @@
       {
         "object": "09 | VOIE | TOP - trace reference",
         "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "d224b6301c753e5bfb174532408388206ab33f3ad64587bc156b09dab13a775a"
+        "coordinateSha256": "5243425d84284923eea49029d26cca520df326b74ef3c497d91c838e8a1b0c38"
       },
       {
         "object": "09 | VOIE | MID - trace reference",
         "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "4319f073cef54e9026eac76d85c978a5ea725d8fcce2b47e9de522833def36f9"
+        "coordinateSha256": "ae4b2e4c942f158b39f91b6e33f76f35eab0a9e91e8b2cba4b17d0cc743c669e"
       },
       {
         "object": "09 | VOIE | BOT - trace reference",
         "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "cac59cd5e503e54ac3c2b6dd6e883afea2aeeb95de2fd9894fe8f619591a3731"
+        "coordinateSha256": "459327ecb6242e165cb4414ea42074c0277649f85e4d7b1ede6a87ec635e5e5e"
       },
       {
         "object": "09 | PONT | Branche nord-ouest",
@@ -231,17 +231,7 @@
       {
         "object": "09 | EAU | axe nord-sud - aucune diagonale",
         "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "ac72fe38f5cc7fa235aaca60fa0bb1791edd5a8eec4ee376a1ba417b51236a4b"
-      },
-      {
-        "object": "09 | FAILLE | aiguilles de schiste et contreforts",
-        "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "667210eb5a12ff40c1ee953a5900c8fc2f974f0e57a3a264efc9d826a36a9ead"
-      },
-      {
-        "object": "FAILLE | eperons de schiste aux treize aiguilles",
-        "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "8311d499822213bf690ec00782d93f394107266acdd03c875d5a460d6e103a48"
+        "coordinateSha256": "5a693d8d67fb19bf94ac0950912dcd44efdb7800da0a61b1f3fca89c9b401b65"
       },
       {
         "object": "REMPART NORD | assise et consoles vers le schiste",
@@ -431,7 +421,7 @@
       {
         "object": "09 | CENTRE | plateforme circulaire et rose des etoiles",
         "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "a2795e30e436fc61d6a6b68ff9f90d0433063868912b952b60660c7b330a3028"
+        "coordinateSha256": "c09d9e86d5824905ba205971f65c89fed7806d62e64fae6b1c4d93ebc4524b5f"
       },
       {
         "object": "ORBE | constellation gravee 2",
@@ -451,7 +441,7 @@
       {
         "object": "09 | PONTS | arcs porteurs et piles dans la faille",
         "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "7df41afedf7d94e22f6448e023c91c94dac0f837179606ccc41565a182392277"
+        "coordinateSha256": "db65089e3f1b6941698eeea43a0069504dfadc861cd6fd025dec005d206f3e33"
       },
       {
         "object": "09 | JUNGLE | contreforts tailles et couronnements",
@@ -462,11 +452,6 @@
         "object": "RIVES | schiste taille et blocs affleurants",
         "sourceUv": "Painted atlas - tiled quadrants",
         "coordinateSha256": "0efcb50ac550945cb5488cc7f6d0b64b31240d907236ecda227b7f2b8ff4dcd6"
-      },
-      {
-        "object": "RIVES | liseres discontinus et ecume",
-        "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "b69b066b93be27a77a6ec446b06c53d7505ef29e8fc79bba69c28d79648bc395"
       },
       {
         "object": "BERGE | raccord ferme sous prairie 1",
@@ -512,11 +497,6 @@
         "object": "FALAISES | contreforts et blasons suspendus",
         "sourceUv": "Painted atlas - tiled quadrants",
         "coordinateSha256": "a01d1280dbf1b83a5cb1fbcf01ea08e6b879f957fe5b0861ffb1abe1635ce2e1"
-      },
-      {
-        "object": "CASCADES | nappes courbes et effilees",
-        "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "ec1f70c35e0bc2e875516345b2c058310852921d3c5a48b760fcda4397716bfa"
       },
       {
         "object": "FALAISES | fins liseres sur les chapiteaux",
@@ -581,7 +561,7 @@
       {
         "object": "LOD | 09 | VOIES | balustrades ajourees et cippes",
         "sourceUv": "Painted atlas - tiled quadrants",
-        "coordinateSha256": "e437994f384d5a47d09087ca10f0e4e02ba17510b2e5fb384a7d7a824d075fe6"
+        "coordinateSha256": "0989fc054f25429b5a9eaa59a954853854ff1ab2fd7338f87101b396d0e9f152"
       },
       {
         "object": "LOD | SANCTUAIRE | gradins et galerie 1",
@@ -1566,18 +1546,6 @@
         "normalSize": null
       },
       {
-        "object": "09 | FAILLE | aiguilles de schiste et contreforts",
-        "role": "decoration",
-        "colorSize": 1024,
-        "normalSize": null
-      },
-      {
-        "object": "FAILLE | eperons de schiste aux treize aiguilles",
-        "role": "gorge_spire_rock_shoulders",
-        "colorSize": 1024,
-        "normalSize": null
-      },
-      {
         "object": "REMPART NORD | assise et consoles vers le schiste",
         "role": "north_rampart_foundation",
         "colorSize": 512,
@@ -1842,12 +1810,6 @@
         "normalSize": null
       },
       {
-        "object": "RIVES | liseres discontinus et ecume",
-        "role": "decoration",
-        "colorSize": 2048,
-        "normalSize": null
-      },
-      {
         "object": "BERGE | raccord ferme sous prairie 1",
         "role": "sealed_raised_meadow_edge",
         "colorSize": 512,
@@ -1897,12 +1859,6 @@
       },
       {
         "object": "FALAISES | contreforts et blasons suspendus",
-        "role": "decoration",
-        "colorSize": 1024,
-        "normalSize": null
-      },
-      {
-        "object": "CASCADES | nappes courbes et effilees",
         "role": "decoration",
         "colorSize": 1024,
         "normalSize": null
@@ -3091,14 +3047,14 @@
       }
     ],
     "visualMode": "all visible meshes use baked Blender color textures, including trees, rocks, ruins and perimeter decoration; original tower facades; light geometry and lower-resolution atlases; no Blender compositor or volumetric fog",
-    "sourceGlbBytes": 208956144,
+    "sourceGlbBytes": 206329504,
     "shipped": {
       "textureSize": 2048,
       "webpQuality": 75,
       "compression": "meshopt"
     },
     "light": {
-      "glbBytes": 14446888,
+      "glbBytes": 14102380,
       "textureSize": 384,
       "webpQuality": 75
     }
