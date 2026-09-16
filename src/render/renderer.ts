@@ -45,6 +45,7 @@ import { pickShieldHolder, type ShieldCandidate } from './shield_holder';
 import { crownHeight, crownLift, flightProgress, isStill } from './structure_fire';
 import type { RenderTerrain } from './terrain';
 import { toonifyMaterials } from './toon';
+import { CHARGE_S, nextChargeDelayS } from './tower_shot';
 import {
   genericDetonate,
   genericImpact,
@@ -55,6 +56,7 @@ import {
 } from './vfx/catalog';
 import { VfxSystem } from './vfx/system';
 import { disposeEffect } from './vfx/timed';
+import { TowerShotFx } from './vfx/tower_shot_fx';
 
 const TEAM_COLORS: readonly number[] = [0x4a7dd6, 0xd65c5c];
 const TEAM_LIGHT: readonly number[] = [0x9dbcf5, 0xf5a3a3];
@@ -275,6 +277,9 @@ export class Renderer {
   private readonly trackedWalls = new Map<number, { holder: THREE.Object3D; bornMs: number }>();
   // The pooled spell VFX engine and the live windup telegraphs.
   private readonly vfx: VfxSystem;
+  // The towers' shots: the gather, the departure, the missile and the
+  // impact of the authored animation (src/render/tower_shot.ts).
+  private readonly towerShots: TowerShotFx;
   private readonly windups = new Map<number, WindupFx>();
   private readonly camDir = new THREE.Vector3(0, -1, 0);
   // The camera direction inside the scene, whose z axis is mirrored (see
@@ -400,6 +405,7 @@ export class Renderer {
     this.scene.position.z = world.map.size;
 
     this.vfx = new VfxSystem(this.scene, terrain.heightAt);
+    this.towerShots = new TowerShotFx(this.scene, terrain.heightAt);
     this.vfx.onShake = (k) => this.addShake(k);
     this.vfx.particles.setViewport(
       Math.max(1, container.clientHeight),
@@ -915,18 +921,30 @@ export class Renderer {
       if (!t?.mesh.visible) continue;
       if (isStill(t.kind)) {
         // A building neither turns toward what it shoots nor hops at it
-        // (src/render/structure_fire.ts): the cue that it fired is a
-        // flash at its crown, where its bolt is born.
+        // (src/render/structure_fire.ts): the cue that it fired is the
+        // gather at its crown, where its bolt is born, peaking on the
+        // windup's beat. The next gather is started ahead of the next
+        // shot so it fills at the authored pace; a tower that stops
+        // shooting lets it die down.
         const topY = t.mesh.userData.topY;
-        if (typeof topY === 'number') {
-          this.vfx.glowFlash(
-            t.curr.x,
-            this.groundHeight(t.curr.x, t.curr.z) + crownHeight(topY),
-            t.curr.z,
-            1.2,
-            (attacker && TEAM_LIGHT[attacker.team]) ?? 0xffffff,
-            0.14,
-          );
+        if (typeof topY === 'number' && attacker) {
+          const now = performance.now();
+          const windupS = attackWindupSeconds(attacker.stats.attackSpeed, false);
+          const crownY = this.groundHeight(t.curr.x, t.curr.z) + crownHeight(topY);
+          this.towerShots.confirm(atk.unitId, t.curr.x, crownY, t.curr.z, windupS, now);
+          const towerId = atk.unitId;
+          this.vfx.schedule(nextChargeDelayS(attacker.stats.attackSpeed) * 1000, () => {
+            const tt = this.tracked.get(towerId);
+            if (!tt?.mesh.visible || !this.world.units.has(towerId)) return;
+            this.towerShots.charge(
+              towerId,
+              tt.curr.x,
+              crownY,
+              tt.curr.z,
+              CHARGE_S,
+              performance.now(),
+            );
+          });
         }
       } else {
         t.swingUntil = performance.now() + 200;
@@ -1447,6 +1465,51 @@ export class Renderer {
     return crownLift(crown.topY, PROJECTILE_Y, progress);
   }
 
+  // How far past the sim's bolt the drawn missile sits, toward its victim:
+  // nothing at birth, the whole edge-to-center gap at the strike.
+  private crownReachAt(crown: NonNullable<TrackedMobile['crown']>, x: number, z: number): Vec2 {
+    const victim = this.tracked.get(crown.targetId);
+    if (!victim) return { x: 0, z: 0 };
+    const dx = victim.mesh.position.x - x;
+    const dz = victim.mesh.position.z - z;
+    const d = Math.hypot(dx, dz);
+    if (d < 1e-3) return { x: 0, z: 0 };
+    const target = this.world.units.get(crown.targetId);
+    const progress = target ? flightProgress(crown.from, { x, z }, target.pos, crown.reach) : 1;
+    const along = Math.min(d, crown.reach * progress);
+    return { x: (dx / d) * along, z: (dz / d) * along };
+  }
+
+  // A structure's bolt leaving its crown: the gather collapses and the
+  // departure flashes across the flight line, which descends from the
+  // crown to the flight height over the distance to the victim.
+  private launchTowerShot(
+    towerId: number,
+    crown: NonNullable<TrackedMobile['crown']>,
+    at: THREE.Vector3,
+    heading: Vec2 | null,
+  ): void {
+    const target = this.world.units.get(crown.targetId);
+    const dx = heading?.x ?? (target ? target.pos.x - crown.from.x : 1);
+    const dz = heading?.z ?? (target ? target.pos.z - crown.from.z : 0);
+    const flat = Math.hypot(dx, dz) || 1;
+    const run = target
+      ? Math.hypot(target.pos.x - crown.from.x, target.pos.z - crown.from.z)
+      : flat;
+    const drop = Math.max(0, crownHeight(crown.topY) - PROJECTILE_Y);
+    this.towerShots.launch(
+      towerId,
+      at.x,
+      at.y,
+      at.z,
+      dx / flat,
+      -drop / Math.max(1, run),
+      dz / flat,
+      performance.now(),
+      this.vfx,
+    );
+  }
+
   // The fire line of a projectile seen for the first time: from its shooter
   // to where the sim already carried it (a bolt steps on the tick that
   // spawns it). Null without a shooter in view or a line to read.
@@ -1952,12 +2015,16 @@ export class Renderer {
       if (!t) {
         const teamLight = TEAM_LIGHT[p.team] ?? 0xffffff;
         const colors = spellColorsOf(p.vfx, this.world, teamLight);
-        const vis = spellVisualOf(p.vfx, this.world);
-        const mesh = vis?.projectile
-          ? vis.projectile(p.radius, colors)
-          : buildProjectileMesh(p, this.world, teamLight);
-        const spawnOfs = this.muzzleOffset(p);
         const crown = this.crownFlight(p);
+        // A structure's bolt is the authored missile (vfx/tower_shot_fx.ts),
+        // whatever art the bolt would otherwise get.
+        const vis = crown ? null : spellVisualOf(p.vfx, this.world);
+        const mesh = crown
+          ? this.towerShots.projectile(performance.now())
+          : vis?.projectile
+            ? vis.projectile(p.radius, colors)
+            : buildProjectileMesh(p, this.world, teamLight);
+        const spawnOfs = this.muzzleOffset(p);
         mesh.position.set(
           p.pos.x + (spawnOfs?.x ?? 0),
           PROJECTILE_Y +
@@ -1971,6 +2038,7 @@ export class Renderer {
         // meter-long tracer pointing down +x for a tick is a visible flinch.
         const heading = this.spawnHeading(p);
         if (heading) mesh.rotation.y = -Math.atan2(heading.z, heading.x);
+        if (crown && p.sourceId) this.launchTowerShot(p.sourceId, crown, mesh.position, heading);
         this.scene.add(mesh);
         this.trackedProjectiles.set(id, {
           mesh,
@@ -1995,7 +2063,22 @@ export class Renderer {
         // their own school; auto-attack bolts without authored art (the
         // '_A' tags and the untagged minion bolts) land a real contact
         // spark at body height instead of a flat ground ring.
-        if (t.vis?.impact) t.vis.impact(this.vfx, t.curr.x, t.curr.z, t.colors);
+        if (t.crown) {
+          // The sim ends a homing bolt at the edge of its victim's body;
+          // the strike lands on the victim itself, at its drawn position.
+          const victim = this.tracked.get(t.crown.targetId);
+          const hit = victim?.mesh.visible ? victim.mesh.position : t.mesh.position;
+          this.towerShots.impact(
+            hit.x,
+            victim?.mesh.visible ? hit.y + PROJECTILE_Y : hit.y,
+            hit.z,
+            hit.x - t.prev.x,
+            0,
+            hit.z - t.prev.z,
+            performance.now(),
+            this.vfx,
+          );
+        } else if (t.vis?.impact) t.vis.impact(this.vfx, t.curr.x, t.curr.z, t.colors);
         else if (t.tag && !t.tag.endsWith('_A'))
           genericImpact(this.vfx, t.curr.x, t.curr.z, t.colors);
         else {
@@ -2573,7 +2656,15 @@ export class Renderer {
           pz += t.spawnOfs.z * k;
         }
       }
-      if (t.crown) py += this.crownLiftAt(t.crown, x, z);
+      if (t.crown) {
+        py += this.crownLiftAt(t.crown, x, z);
+        // The sim's bolt ends at the edge of its victim's body; the drawn
+        // missile carries on into the body as it closes, so it strikes
+        // the victim and not the air in front of it.
+        const reach = this.crownReachAt(t.crown, x, z);
+        px += reach.x;
+        pz += reach.z;
+      }
       t.mesh.position.set(px, py, pz);
       const ddx = t.curr.x - t.prev.x;
       const ddz = t.curr.z - t.prev.z;
@@ -2582,7 +2673,8 @@ export class Renderer {
         // Catalog meshes author their own proportions.
         if (t.mesh.userData.stretch !== false) t.mesh.scale.set(1.7, 0.85, 0.85);
       }
-      t.vis?.projectileTick?.(this.vfx, x, z, dtMs, t.colors, now, t.mesh);
+      if (t.crown) this.towerShots.tickProjectile(t.mesh, dtMs, now, this.vfx);
+      else t.vis?.projectileTick?.(this.vfx, x, z, dtMs, t.colors, now, t.mesh);
     }
     // An authored shield body lives exactly as long as the status it
     // dresses: ticked every frame with the time left, ended (with its
@@ -2618,6 +2710,7 @@ export class Renderer {
     }
     this.updateWindups(now, alpha);
     this.vfx.update(now, dtMs, this.camDirScene);
+    this.towerShots.update(now);
     for (let i = this.dying.length - 1; i >= 0; i--) {
       const d = this.dying[i]!;
       const age = (now - d.start) / 380;
@@ -2656,6 +2749,8 @@ export class Renderer {
       this.lastTrailDropAt = now;
       for (const t of this.trackedProjectiles.values()) {
         if (this.trails.length >= 90) break;
+        // The tower's missile streams its own sparks (vfx/tower_shot_fx.ts).
+        if (t.crown) continue;
         const sprite = new THREE.Sprite(
           new THREE.SpriteMaterial({
             map: this.glowTexture(),
@@ -2796,6 +2891,7 @@ export class Renderer {
     this.vignette.remove();
     this.gl.domElement.remove();
     this.gl.dispose();
+    this.towerShots.dispose();
     this.terrain.dispose();
   }
 }
