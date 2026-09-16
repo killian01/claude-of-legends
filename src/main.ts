@@ -29,7 +29,7 @@ import {
   loadStarOrchardTerrain,
 } from './game/star_orchard';
 import { loadStarOrchard } from './game/star_orchard_records';
-import { buildIdIn, startBuildWatch } from './net/build_watch';
+import { buildIdFromMeta, startBuildWatch } from './net/build_watch';
 import { ClientWorld } from './net/client_world';
 import type { ForgedMatchAssets, ServerMsg } from './net/protocol';
 import {
@@ -43,6 +43,7 @@ import {
   restorePolicies,
 } from './net/replay';
 import { installStats, STAYED_MS, trackStep } from './net/stats';
+import { installVersionedLoading } from './render/versioned_loading';
 import { attachBot } from './sim/content/bots';
 import { houseSeats } from './sim/content/bots/house';
 import { contentFingerprint } from './sim/content/fingerprint';
@@ -88,7 +89,7 @@ const container = app;
 // own bundle is this module's URL, which is the entry chunk in a build and
 // the source file under Vite, where the id is null and nothing reloads.
 const buildWatch = startBuildWatch({
-  own: buildIdIn(import.meta.url),
+  own: buildIdFromMeta(document),
   fetchBuild: () =>
     fetch('/api/public/build')
       .then((r) => (r.ok ? (r.json() as Promise<{ build?: unknown }>) : null))
@@ -1042,6 +1043,9 @@ async function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
 }
 
 async function boot(): Promise<void> {
+  // Every address the renderer's loaders fetch carries the build's stamp
+  // (src/game/asset_version.ts), before the first model is asked for.
+  installVersionedLoading();
   // Load and apply the stored player settings before any audio plays.
   getSettings();
   // The audience counter (src/net/stats.ts): the opt-out asked for in the

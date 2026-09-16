@@ -6,6 +6,7 @@
 // contract in docs/design/icon-art-style.md. A forged champion's generated
 // icons (forged_icons.ts) come first: they are the creator's own art.
 
+import { versioned } from '../game/asset_version';
 import { forgedIconUrl } from './forged_icons';
 
 // Ability paintings shipped at public/icons/abilities/<championId>_<KEY>.webp.
@@ -92,13 +93,13 @@ export function abilityImageUrl(championId: string | null | undefined, key: stri
   const forged = forgedIconUrl(championId, key);
   if (forged) return forged;
   const id = `${championId}_${key}`;
-  return ABILITY_ICON_IMAGES.has(id) ? `/icons/abilities/${id}.webp` : null;
+  return ABILITY_ICON_IMAGES.has(id) ? versioned(`/icons/abilities/${id}.webp`) : null;
 }
 
 export function itemImageUrl(itemId: string): string | null {
-  return ITEM_ICON_IMAGES.has(itemId) ? `/icons/items/${itemId}.webp` : null;
+  return ITEM_ICON_IMAGES.has(itemId) ? versioned(`/icons/items/${itemId}.webp`) : null;
 }
 
 export function sigilImageUrl(sigilId: string): string | null {
-  return SIGIL_ICON_IMAGES.has(sigilId) ? `/icons/sigils/${sigilId}.webp` : null;
+  return SIGIL_ICON_IMAGES.has(sigilId) ? versioned(`/icons/sigils/${sigilId}.webp`) : null;
 }

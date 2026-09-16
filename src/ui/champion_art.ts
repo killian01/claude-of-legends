@@ -2,6 +2,7 @@
 // table and the portrait resolution chain, used by the menu screens and the
 // full-page roster browser.
 
+import { versioned } from '../game/asset_version';
 import { cinematicPortraitUrl } from '../render/champions';
 import { championPortraitUrl } from '../render/portraits';
 import type { ChampionRole } from '../sim/content/champions';
@@ -23,7 +24,7 @@ export const ROLE_COLORS: Readonly<Record<ChampionRole, string>> = {
 // cinematic 3D render, and the instant procedural figure while both load.
 export function setPortrait(img: HTMLImageElement, championId: string, teamColor: number): void {
   img.src = championPortraitUrl(championId, 0, teamColor);
-  const illustration = `/portraits/${championId}.webp`;
+  const illustration = versioned(`/portraits/${championId}.webp`);
   const probe = new Image();
   probe.onload = () => {
     img.src = illustration;

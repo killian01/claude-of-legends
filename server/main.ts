@@ -67,7 +67,8 @@ import {
   setDeposited,
   setOpenPlaybook,
 } from './bots';
-import { buildInfo, readBuildId } from './build_info';
+import { buildId, buildInfo, deployStamp, readBuildId } from './build_info';
+import { withBuildTag } from './build_tag';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, parseCookies, serializeCookie } from './cookies';
 import { authorizeUrl, CALLBACK_PATH, DiscordOauth, discordConfigFromEnv } from './discord_oauth';
@@ -156,7 +157,9 @@ const DIST = path.resolve(process.cwd(), 'dist');
 // The bundle this process serves, for the clients to compare against
 // their own (server/build_info.ts); null in development, where Vite
 // serves the page.
-const BUILD_ID = readBuildId(DIST);
+// The bundle this server serves and the stamp of this deployment, as one
+// id the page carries and /api/public/build repeats (server/build_tag.ts).
+const BUILD_ID = buildId(readBuildId(DIST), deployStamp());
 // Runtime state on disk: account identities and the match log. DATA_DIR is
 // the volume to mount in production; nothing else persists.
 const DATA_DIR = process.env.DATA_DIR ?? path.resolve(process.cwd(), 'data');
@@ -2184,10 +2187,12 @@ const server = http.createServer(async (req, res) => {
     // when this deployment has a site to report to (server/stats_tag.ts);
     // every other file goes out as built.
     const isEntry = filePath === path.join(DIST, 'index.html');
-    const body =
-      isEntry && STATS_ON
-        ? withStatsTag(await readFile(filePath, 'utf8'), STATS_WEBSITE_ID)
-        : await readFile(filePath);
+    const body = isEntry
+      ? withStatsTag(
+          withBuildTag(await readFile(filePath, 'utf8'), BUILD_ID),
+          STATS_ON ? STATS_WEBSITE_ID : '',
+        )
+      : await readFile(filePath);
     // The client shipped no caching headers at all, which leaves a browser
     // free to serve a stale index.html and with it the previous build's
     // hashed bundle: you reload after a change and see yesterday's game.

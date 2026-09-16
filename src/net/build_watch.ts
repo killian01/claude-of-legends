@@ -30,6 +30,16 @@ export function buildIdIn(text: string): string | null {
   return m ? (m[1] ?? null) : null;
 }
 
+// The build the page was served under, off the meta element the server
+// writes into it (server/build_tag.ts): the bundle's name and the
+// deployment's stamp. Null under the dev server, which writes none.
+export function buildIdFromMeta(doc: {
+  querySelector(selector: string): { getAttribute(name: string): string | null } | null;
+}): string | null {
+  const content = doc.querySelector('meta[name="build"]')?.getAttribute('content') ?? '';
+  return /^[A-Za-z0-9_.-]{1,80}$/.test(content) ? content : null;
+}
+
 // Both sides known and different. An unknown on either side is not a new
 // build: a development server, a failed request, a server without dist.
 export function isNewBuild(own: string | null, served: string | null | undefined): boolean {

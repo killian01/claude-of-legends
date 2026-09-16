@@ -10,6 +10,8 @@
 
 // What pressing a tile does. A mode resolves the home's promise and takes
 // the page down; a section opens under the bar and the home stays.
+import { versioned } from '../game/asset_version';
+
 export type PlayMode = 'queue' | 'forge-queue' | 'create' | 'practice';
 export type TileId = 'ranked' | 'bots' | 'forge' | 'lobby' | 'practice';
 
@@ -94,5 +96,5 @@ export const PLAY_TILES: readonly PlayTile[] = [
 ];
 
 export function tileArtUrl(art: string): string {
-  return `/art/tiles/${art}.webp`;
+  return versioned(`/art/tiles/${art}.webp`);
 }

@@ -11,11 +11,12 @@ import {
   type StarOrchardLayout,
   type StarOrchardManifest,
 } from '../sim/content/star_orchard';
+import { versioned } from './asset_version';
 
 export const STAR_ORCHARD_ROOT = '/map/star-orchard/';
 
 export async function fetchOrchardFile(path: string): Promise<Response> {
-  const res = await fetch(`${STAR_ORCHARD_ROOT}${path}`);
+  const res = await fetch(versioned(`${STAR_ORCHARD_ROOT}${path}`));
   if (!res.ok) throw new Error(`could not load ${path} (${res.status})`);
   return res;
 }

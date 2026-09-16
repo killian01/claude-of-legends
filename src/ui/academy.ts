@@ -9,6 +9,7 @@
 // always one the engine can run: every edit and every coach operation goes
 // through the validator before it lands.
 
+import { versioned } from '../game/asset_version';
 import { appNav, type Frame } from '../game/nav';
 import { runSeries, runSparring } from '../game/sparring';
 import { SERIES_SEEDS, type SparResult } from '../game/sparring_core';
@@ -995,7 +996,7 @@ export function openAcademy(container: HTMLElement, opts: AcademyOptions = {}): 
       },
       { once: true },
     );
-    img.src = `/portraits/${id}.webp`;
+    img.src = versioned(`/portraits/${id}.webp`);
     const text = el('span', 'ac-champ-t');
     text.append(el('b', '', c?.name.split(',')[0] ?? id), el('small', '', c?.role ?? ''));
     card.append(img, text);
