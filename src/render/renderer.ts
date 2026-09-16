@@ -41,6 +41,7 @@ import {
   PROJECTILE_Y,
   type SpawnOffset,
 } from './muzzle_spawn';
+import { pickShieldHolder, type ShieldCandidate } from './shield_holder';
 import { crownHeight, crownLift, flightProgress, isStill } from './structure_fire';
 import type { RenderTerrain } from './terrain';
 import { toonifyMaterials } from './toon';
@@ -54,6 +55,7 @@ import {
   spellVisualOf,
 } from './vfx/catalog';
 import { VfxSystem } from './vfx/system';
+import { disposeEffect } from './vfx/timed';
 import { TowerShotFx } from './vfx/tower_shot_fx';
 
 const TEAM_COLORS: readonly number[] = [0x4a7dd6, 0xd65c5c];
@@ -117,6 +119,9 @@ interface TrackedUnit {
   // Shield overlay: a pale extension of the health fill, created lazily
   // the first time the unit carries a live shield status.
   shieldFill: THREE.Sprite | null;
+  // An authored shield body riding the unit (the catalog's shield hooks),
+  // attached when its cast lands and ended when the status leaves.
+  shieldFx: { holder: THREE.Object3D; vis: SpellVisual; bornAt: number } | null;
   // Champion graduation ticks, rebuilt when maxHp crosses a 100-hp band.
   hpTicks: THREE.Group | null;
   hpTickKey: number;
@@ -943,7 +948,15 @@ export class Renderer {
         }
       } else {
         t.swingUntil = performance.now() + 200;
-        this.championVisuals.get(atk.unitId)?.playAttack();
+        this.championVisuals
+          .get(atk.unitId)
+          ?.playAttack(
+            attacker?.pendingAttack
+              ? Math.max(0.01, attacker.pendingAttack.resolveAt - this.world.time)
+              : attacker
+                ? attackWindupSeconds(attacker.stats.attackSpeed, true)
+                : undefined,
+          );
         if (target) {
           const dx = target.pos.x - t.curr.x;
           const dz = target.pos.z - t.curr.z;
@@ -954,11 +967,11 @@ export class Renderer {
       }
       // Every visible swing is audible; other units fade with distance so
       // a nearby fight has a soundtrack without the whole map whipping air.
-      // A muzzle-armed champion's autos crack like a rifle, not a whip;
-      // a forged champion's creator may have picked its sound outright.
+      // A champion whose model carries a gun cracks like a rifle, not a
+      // whip (a muzzle alone is any projectile's origin, Sylra's staff tip
+      // included); a forged champion's creator may have picked its sound.
       const firearm =
-        attacker?.kind === 'champion' &&
-        championVisualDef(attacker.championId)?.muzzle !== undefined;
+        attacker?.kind === 'champion' && championVisualDef(attacker.championId)?.firearm === true;
       const attackerDef =
         attacker?.kind === 'champion' && attacker.championId
           ? this.world.championDef(attacker.championId)
@@ -1067,6 +1080,11 @@ export class Renderer {
               { x: caster.pos.x + Math.sin(yaw), z: caster.pos.z + Math.cos(yaw) },
             );
           }
+          // The sim shields the ally nearest the aim point, which sits up
+          // to the cast range away, within the search radius of it.
+          if (vis?.shield && def.spec.kind === 'self_or_ally') {
+            this.attachShieldFx(caster, def.castRange + def.spec.searchRadius, vis);
+          }
           if (t) t.castUntil = performance.now() + 420;
           this.championVisuals.get(cast.unitId)?.playCast(cast.key);
         }
@@ -1078,6 +1096,35 @@ export class Renderer {
       // A quick body pulse on the caster sells the cast without a rig.
       if (t) t.pulseUntil = performance.now() + 280;
     }
+  }
+
+  // Hangs a catalog shield body on whoever the sim gave the shield to
+  // (shield_holder.ts), dropping any earlier one the holder still wore.
+  private attachShieldFx(caster: ShieldCandidate, searchRadius: number, vis: SpellVisual): void {
+    if (!vis.shield) return;
+    const holder = pickShieldHolder(
+      caster,
+      this.world.units.values() as Iterable<ShieldCandidate>,
+      searchRadius,
+      this.world.time,
+    );
+    const t = this.tracked.get(holder.id);
+    if (!t) return;
+    this.endShieldFx(t, false);
+    const body = vis.shield();
+    t.mesh.add(body);
+    t.shieldFx = { holder: body, vis, bornAt: performance.now() };
+  }
+
+  // Takes a shield body off its unit; with `burst`, the catalog's end
+  // effect plays where the unit stands (the shell breaking or expiring).
+  private endShieldFx(t: TrackedUnit, burst: boolean): void {
+    const fx = t.shieldFx;
+    if (!fx) return;
+    t.shieldFx = null;
+    t.mesh.remove(fx.holder);
+    disposeEffect(fx.holder);
+    if (burst) fx.vis.shieldEnd?.(this.vfx, t.mesh.position.x, t.mesh.position.z);
   }
 
   // Adds trauma to the camera shake. Applied squared, decayed per frame.
@@ -1521,6 +1568,7 @@ export class Renderer {
           hpBack: back,
           manaFill,
           shieldFill: null,
+          shieldFx: null,
           hpTicks: null,
           hpTickKey: -1,
           barWidth,
@@ -1949,6 +1997,7 @@ export class Renderer {
         }
         // Fade out instead of popping, then dispose for real (units churn
         // by the hundreds per match).
+        this.endShieldFx(t, false);
         this.dying.push({ mesh: t.mesh, start: performance.now() });
         this.tracked.delete(id);
         const cv = this.championVisuals.get(id);
@@ -2626,6 +2675,20 @@ export class Renderer {
       }
       if (t.crown) this.towerShots.tickProjectile(t.mesh, dtMs, now, this.vfx);
       else t.vis?.projectileTick?.(this.vfx, x, z, dtMs, t.colors, now, t.mesh);
+    }
+    // An authored shield body lives exactly as long as the status it
+    // dresses: ticked every frame with the time left, ended (with its
+    // burst) the frame the status is gone, dropped silently on death.
+    for (const [id, t] of this.tracked) {
+      const fx = t.shieldFx;
+      if (!fx) continue;
+      const u = this.world.units.get(id);
+      let until = -Infinity;
+      for (const s of u?.statuses ?? []) {
+        if (s.kind === 'shield' && s.until > this.world.time && s.until > until) until = s.until;
+      }
+      if (!u || u.dead || until === -Infinity) this.endShieldFx(t, !!u && !u.dead);
+      else fx.vis.shieldTick?.(fx.holder, now - fx.bornAt, (until - this.world.time) * 1000);
     }
     for (const [id, tz] of this.trackedZones) {
       if (!tz.custom) {

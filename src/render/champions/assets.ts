@@ -10,6 +10,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 import { clone as cloneRig } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { skinOf } from '../../sim/content/skins';
+import { preloadSylraEffects } from '../vfx/sylra_fx';
 import { CHAMPION_VISUALS, type ChampionVisualDef } from './manifest';
 import { buildChampionProp } from './props';
 import { pinTrackToFirstKey } from './tracks';
@@ -154,6 +155,7 @@ export function normalizeProp(scene: THREE.Group, size: number, anchor?: 'origin
 // renderer calls this once from its constructor and every champion GLB
 // starts loading immediately.
 export function preloadChampionAssets(renderer: THREE.WebGLRenderer): void {
+  void preloadSylraEffects();
   if (pending.size > 0) return;
   const ktx2 = new KTX2Loader().setTranscoderPath('/vendor/basis/').detectSupport(renderer);
   const loader = new GLTFLoader().setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder);

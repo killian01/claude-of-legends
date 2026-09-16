@@ -58,7 +58,11 @@ describe('champion visual manifest', () => {
       const meta = readGlbMeta(def.url);
 
       it('names only clips the GLB ships', () => {
-        for (const clip of [...Object.values(def.clips), ...(def.inPlaceClips ?? [])]) {
+        for (const clip of [
+          ...Object.values(def.clips),
+          ...Object.values(def.spellClips ?? {}),
+          ...(def.inPlaceClips ?? []),
+        ]) {
           expect(meta.animations, `clip ${clip}`).toContain(clip);
         }
       });
@@ -100,6 +104,19 @@ describe('champion visual manifest', () => {
       });
     });
   }
+});
+
+describe('the rifle report', () => {
+  it('belongs to the model with a gun, not to every champion with a muzzle', () => {
+    // The renderer reads `firearm` for the auto's sound: a muzzle is only
+    // where a projectile leaves (Sylra's staff tip has one, and she whips
+    // air like the rest of the casters).
+    expect(CHAMPION_VISUALS.vesk?.firearm).toBe(true);
+    for (const [id, def] of Object.entries(CHAMPION_VISUALS)) {
+      if (id !== 'vesk') expect(def.firearm, `${id} carries no gun`).toBeUndefined();
+    }
+    expect(CHAMPION_VISUALS.sylra?.muzzle).toBeDefined();
+  });
 });
 
 describe('pinTrackToFirstKey', () => {
