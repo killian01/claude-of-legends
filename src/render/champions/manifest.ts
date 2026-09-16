@@ -87,10 +87,18 @@ export interface ChampionVisualDef {
   // unit center along the fire direction, and height above the feet. The
   // renderer converges the bolt onto the sim-true path right after spawn.
   muzzle?: { forward: number; y: number };
+  // The autos crack like a rifle instead of whipping air: a gun in the
+  // model, not any champion whose projectiles leave a muzzle.
+  firearm?: boolean;
   clips: ChampionClipNames;
   // Per-ability cast overrides (forged champions only so far): the key's
   // own clip instead of the shared cast.
   spellClips?: SpellClipNames;
+  // Native clips keep their authored timing. Attack release is the source
+  // beat to align to the simulation's windup, including attack-speed buffs.
+  authoredTiming?: { attackRelease: number };
+  // A weapon included in the character GLB, in its own local coordinates.
+  embeddedMuzzle?: { node: string; position: readonly [number, number, number] };
   // Node names removed from the clone (baked accessories we replace or drop).
   hide?: readonly string[];
   // Mesh names tinted with the skin body color (team color on default skins):
@@ -199,18 +207,45 @@ export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
     accentGlowMeshes: ['Barbarian_ArmLeft', 'Barbarian_ArmRight'],
     portrait: { clip: 'attack', time: 0.5, yaw: 0.5 },
   },
-  // Sylra, Thornweaver: a moss-cast witch, thorn staff in hand.
+  // Sylra, Thornweaver: a forest witch leaning on her thorn staff. Her own
+  // model (docs/sylra-model.md): a Tripo generation regrouped, rigged and
+  // animated in Blender, exported by scripts/export_sylra.py. The staff is
+  // baked into every clip as a free node of the file, so no prop rides a
+  // bone here and the death can drop it beside her.
   sylra: {
-    url: '/models/champions/mage.glb',
-    height: 2.3,
-    barY: 3.0,
-    clips: { ...KAYKIT_CLIPS, attack: 'Spellcast_Shoot' },
-    teamMeshes: ['Mage_Cape'],
-    tint: 0xa8c890,
-    portrait: { clip: 'attack', time: 0.6, yaw: 0.6 },
-    // Offset keeps the vertical staff out of her face in portraits; from
-    // the top-down camera the shift is imperceptible.
-    props: [{ kind: 'staff', bone: 'handslot.r', pos: [0.32, 0, 0.12] }],
+    url: '/models/champions/sylra.glb',
+    // The bounds include the staff, a head above her hat (the file stands
+    // 1.095 for a 0.974 body): this height puts her hat near 3.9, well
+    // over the roster's chunky casters, because her slender true-scale
+    // proportions read far smaller than a stylized figure of the same
+    // height (tuned by eye in the playtest). sylra_fx.ts derives the
+    // effects' scale from it.
+    height: 4.35,
+    barY: 5.4,
+    // Thorn bolts leave the staff's tip, raised forward on the Q release
+    // (measured by the export script, scaled with the height).
+    muzzle: { forward: 2.0, y: 3.45 },
+    clips: {
+      idle: 'Idle',
+      run: 'Walk',
+      attack: 'Attack',
+      cast: 'Cast_Q',
+      // Her kit has no windup; the idle stands in.
+      windup: 'Idle',
+      death: 'Death',
+    },
+    // Every spell has its own cast: the staff plants for the bramble
+    // field, the free hand raises the shell, the overgrowth is a long
+    // two-handed call.
+    spellClips: { Q: 'Cast_Q', W: 'Cast_W', E: 'Cast_E', R: 'Cast_R' },
+    authoredTiming: { attackRelease: 0.35 },
+    embeddedMuzzle: { node: 'Sylra_Staff', position: [0, 0.96, 0] },
+    // The cane walk ships with a lengthened stride at 1.6x its authored
+    // pace (export_sylra.py) and plants at 4.0 world units a second at this
+    // height (the export's 1.01 source units a second), so at her move
+    // speed the feet plant and a cycle takes 0.93 s.
+    runSpeed: 4.0,
+    portrait: { clip: 'cast', time: 0.3, yaw: 0.6 },
   },
   // Fenn, the Quickblade: a slight hooded silhouette, a dagger in each hand.
   fenn: {
@@ -254,6 +289,7 @@ export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
     barY: 3.6,
     // Bolts leave at the rifle's front, shoulder high.
     muzzle: { forward: 2.3, y: 1.4 },
+    firearm: true,
     // The export has no standing shot; Run_and_Shoot (0.67s) is the only
     // clip that actually fires, and the one-shot window compresses it to
     // attack tempo. The aim scan loops while a cast charges.

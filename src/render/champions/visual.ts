@@ -31,6 +31,8 @@ export class ChampionVisual {
   readonly root: THREE.Group;
   private readonly anchors: readonly PropAnchor[];
   private readonly runSpeed: number;
+  private readonly authoredRelease?: number;
+  private readonly embeddedMuzzle?: { node: THREE.Object3D; position: THREE.Vector3 };
   private readonly mixer: THREE.AnimationMixer;
   private readonly baseActions: Partial<Record<ChampionBaseState, THREE.AnimationAction>> = {};
   private readonly shotActions: Partial<Record<ShotKey, THREE.AnimationAction>> = {};
@@ -63,6 +65,12 @@ export class ChampionVisual {
     this.anchors = anchors;
     this.combatIdles = template.def.props?.some((p) => p.stowed !== undefined) ?? false;
     this.runSpeed = template.def.runSpeed ?? DEFAULT_RUN_SPEED;
+    this.authoredRelease = template.def.authoredTiming?.attackRelease;
+    const muzzle = template.def.embeddedMuzzle;
+    const muzzleNode = muzzle ? rig.getObjectByName(muzzle.node) : undefined;
+    if (muzzle && muzzleNode) {
+      this.embeddedMuzzle = { node: muzzleNode, position: new THREE.Vector3(...muzzle.position) };
+    }
     this.mixer = new THREE.AnimationMixer(rig);
     const clips = template.def.clips;
     const action = (name: string | undefined): THREE.AnimationAction | undefined => {
@@ -133,6 +141,12 @@ export class ChampionVisual {
   // pose math assumes the identity holder orientation). False when the rig
   // carries no such weapon.
   muzzleWorld(out: THREE.Vector3): boolean {
+    if (this.embeddedMuzzle) {
+      const { node, position } = this.embeddedMuzzle;
+      node.updateWorldMatrix(true, false);
+      out.copy(position).applyMatrix4(node.matrixWorld);
+      return true;
+    }
     for (const a of this.anchors) {
       if (!a.tip || !a.fixedPose) continue;
       setPropsArmed([a], true);
@@ -146,14 +160,24 @@ export class ChampionVisual {
     return false;
   }
 
-  playAttack(): void {
-    this.playShot('attack', ONESHOT_SECONDS.attack);
+  playAttack(windupSeconds?: number): void {
+    const clip = this.shotActions.attack?.getClip();
+    const seconds =
+      this.authoredRelease && clip
+        ? clip.duration * ((windupSeconds ?? this.authoredRelease) / this.authoredRelease)
+        : ONESHOT_SECONDS.attack;
+    this.playShot('attack', seconds);
   }
 
   // With an ability key, that spell's own picked clip plays when the
   // creator gave it one; the shared cast otherwise.
   playCast(key?: 'Q' | 'W' | 'E' | 'R'): void {
-    this.playShot('cast', ONESHOT_SECONDS.cast, key ? this.spellActions[key] : undefined);
+    const action = (key ? this.spellActions[key] : undefined) ?? this.shotActions.cast;
+    this.playShot(
+      'cast',
+      this.authoredRelease && action ? action.getClip().duration : ONESHOT_SECONDS.cast,
+      action,
+    );
   }
 
   playHit(): void {
@@ -188,6 +212,20 @@ export class ChampionVisual {
       } else {
         this.beginBase(desired, false);
       }
+    }
+    // Authored recovery can last over a second. A movement order blends
+    // back to the gait instead of sliding a stationary casting pose.
+    if (
+      this.authoredRelease &&
+      input.moving &&
+      this.combatShot &&
+      this.shot &&
+      this.shot.time >= this.authoredRelease
+    ) {
+      this.shot.fadeOut(FADE_BASE);
+      this.shot = null;
+      this.combatShot = false;
+      this.beginBase(desired, true);
     }
     // Feet stay planted: the run clip's time scale tracks the champion's
     // actual ground speed (slows, Zephyr) against the def's reference.

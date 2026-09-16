@@ -12,6 +12,7 @@ import { ParticleCloud } from './particles';
 import { LightPillars } from './pillars';
 import { ShockRings } from './rings';
 import { SPRITE } from './sprites';
+import { TimedEffects } from './timed';
 
 const LIGHT_POOL = 3;
 const MAX_BEATS = 48;
@@ -31,6 +32,8 @@ export class VfxSystem {
   readonly bolts: LightningBolts;
   readonly decals: GroundDecals;
   readonly debris: DebrisField;
+  // Authored effect objects living for a fixed time (timed.ts).
+  readonly timed: TimedEffects;
   // Injected by the renderer: adds trauma to the camera shake budget.
   onShake: (strength: number) => void = () => undefined;
   private readonly beats: { at: number; fn: () => void }[] = [];
@@ -40,6 +43,7 @@ export class VfxSystem {
     scene: THREE.Scene,
     private readonly groundHeight?: GroundHeight,
   ) {
+    this.timed = new TimedEffects(scene);
     this.particles = new ParticleCloud(scene, groundHeight);
     this.rings = new ShockRings(scene, groundHeight);
     this.pillars = new LightPillars(scene, groundHeight);
@@ -60,6 +64,11 @@ export class VfxSystem {
   schedule(delayMs: number, fn: () => void): void {
     if (this.beats.length >= MAX_BEATS) return;
     this.beats.push({ at: performance.now() + delayMs, fn });
+  }
+
+  // The ground under a point, for effects placed by absolute height.
+  groundAt(x: number, z: number): number {
+    return this.groundHeight?.(x, z) ?? 0;
   }
 
   lightPulse(x: number, z: number, color: number, intensity: number, durationMs: number): void {
@@ -158,6 +167,7 @@ export class VfxSystem {
       }
     }
     const dtS = Math.min(0.1, dtMs / 1000);
+    this.timed.update(now);
     this.particles.update(dtS);
     this.rings.update(now);
     this.pillars.update(now);
