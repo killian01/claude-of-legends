@@ -261,24 +261,42 @@ export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
       { kind: 'daggers', bone: 'handslot.l', rot: [Math.PI, 0, 0] },
     ],
   },
-  // Elowen, Mistward: a translucent mist spirit that never touches the ground.
+  // Elowen, Mistward: a translucent mist spirit that never touches the
+  // ground. Her own model (docs/elowen-model.md): a Tripo generation
+  // segmented into seven meshes so the skirt, sleeves and hair float on
+  // their own bone chains, every clip generated in Blender, exported by
+  // scripts/export_elowen.py. The hover is baked into the clips (her root
+  // rides 10 cm above the file's floor), so no yOffset here.
   elowen: {
-    url: '/models/champions/ghost.glb',
-    height: 2.3,
-    yOffset: 0.25,
-    barY: 3.0,
+    url: '/models/champions/elowen.glb',
+    // The file stands 1.055 source metres to the halo; at Sylra's scale
+    // (3.98 world units a metre) that puts the halo near 4.2 and her feet
+    // about 0.4 above the ground while she levitates.
+    height: 4.2,
+    barY: 5.1,
+    // The mist leaves her open right hand: the auto and the lance spawn on
+    // the hand bone itself, wherever the gesture holds it (the palm is a
+    // few centimetres down the bone). The plain muzzle is the estimate
+    // when the rig is not up yet (the release hand, measured by the
+    // export script and scaled with the height).
+    embeddedMuzzle: { node: 'R_Hand', position: [0, 0.06, 0] },
+    muzzle: { forward: 1.2, y: 2.75 },
     clips: {
-      idle: 'Flying_Idle',
-      run: 'Fast_Flying',
-      attack: 'Punch',
-      cast: 'Punch',
-      windup: 'Punch',
+      idle: 'Levitate',
+      run: 'Glide',
+      attack: 'Attack',
+      cast: 'Cast_Q',
+      // Her kit has no windup; the idle stands in.
+      windup: 'Levitate',
       death: 'Death',
-      hit: 'HitReact',
     },
-    recolor: { Ghost_Main: 0xbfe4f0 },
-    opacity: 0.72,
-    portrait: { clip: 'idle', time: 0.3, yaw: 0.45 },
+    // Every spell has its own gesture: the lance leaves the right palm,
+    // the veil is laid with both hands, the step folds her into herself,
+    // the whiteout opens her and her cloth to the sky.
+    spellClips: { Q: 'Cast_Q', W: 'Cast_W', E: 'Cast_E', R: 'Cast_R' },
+    authoredTiming: { attackRelease: 0.55 },
+    opacity: 0.8,
+    portrait: { clip: 'cast', time: 0.6, yaw: 0.45 },
   },
   // Vesk, the Longshot: a goblin artillerist lugging a rifle taller than he is.
   // Meshy-generated model with the rifle baked into the mesh (CREDITS.md).

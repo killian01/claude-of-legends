@@ -22,18 +22,21 @@ of CC0 source art.
 | `vesk.glb`, `vesk_rifle.glb` | Generated with Meshy AI (https://meshy.ai) from original Vesk concept art, rigged and animated in the Meshy workspace | killian01 via Meshy AI | Per the Meshy plan's asset terms (CC BY 4.0 on the free plan) |
 | `korrath.glb`, `korrath_shield.glb`, `korrath_maul.glb` | Generated with Meshy AI (https://meshy.ai) from original Korrath concept art (docs/design/portrait-prompts.md), rigged and animated in the Meshy workspace; combat clips re-baked in place (horizontal hip travel removed) and the weapon GLBs re-authored in Blender with the grip at the origin | killian01 via Meshy AI | Per the Meshy plan's asset terms (CC BY 4.0 on the free plan) |
 | `sylra.glb` | Generated with Tripo AI (https://www.tripo3d.ai) from original Sylra concept art, the staff a second Tripo generation; regrouped into eight meshes, rigged with Rigify, the staff fitted to her hand and the eight clips authored in Blender, exported by `scripts/export_sylra.py` (docs/sylra-model.md) | killian01 via Tripo AI | Per the Tripo plan's asset terms |
+| `elowen.glb` | Generated with Tripo AI (https://www.tripo3d.ai) from original Elowen concept art as a quad smart mesh with Tripo's rig; segmented into seven meshes in Blender so the skirt, sleeves and hair float on their own bone chains, every clip generated procedurally there, exported by `scripts/export_elowen.py` (docs/elowen-model.md) | killian01 via Tripo AI | Per the Tripo plan's asset terms |
 
 ## Spell effects (`public/models/effects/`)
 
 Sylra's authored spell art, exported from the same Blender source as her
 model by `scripts/export_sylra_effects.py` (docs/sylra-model.md): the
 basic-attack seed, the W bramble field, the Q thorn bolt and its burst,
-the E verdant shell and the R overgrowth. Original geometry built in
-Blender from the reference renders; no third-party asset.
+the E verdant shell and the R overgrowth. Elowen's mist, built in Blender
+by script in her own source file and exported the same way. Original
+geometry; no third-party asset.
 
 | Files | Source | Author | License |
 |---|---|---|---|
 | `sylra_attack_seed.glb`, `sylra_bramble.glb`, `sylra_thorn_bolt.glb`, `sylra_verdant_shell.glb`, `sylra_overgrowth.glb` | Modelled and animated in Blender for this project | killian01 | The repository's `LICENSE` |
+| `elowen_attack_wisp.glb`, `elowen_mist_lance.glb`, `elowen_veil.glb`, `elowen_step.glb`, `elowen_whiteout.glb` | Modelled in Blender for this project by `scripts/build_elowen_effects.py` (layered mist geometry with generated alpha textures), exported by `scripts/export_elowen_effects.py` (docs/elowen-model.md) | killian01 | The repository's `LICENSE` |
 
 ## Champion splash art (`public/portraits/`)
 
