@@ -28,6 +28,7 @@ import {
   type ChampionVisual,
   championVisualDef,
   createChampionVisual,
+  createChampionVisualNow,
   forgedBarY,
   preloadChampionAssets,
 } from './champions';
@@ -1266,20 +1267,31 @@ export class Renderer {
       holder.scale.setScalar(1.15);
       return { holder, barY: 4.6 };
     }
+    // Roster champions resolve through the static manifest; forged ones
+    // through the runtime registry their generated model was announced to.
+    const def = championVisualDef(u.championId);
+    const forgedBar = forgedBarY(u.championId);
+    const barY = def?.barY ?? forgedBar ?? 3.0;
+    // The match waited for the models before it was shown (readiness.ts),
+    // so the rig is normally on hand and mounts in one go: the procedural
+    // figure is never seen, not even for the frame an upgrade would take.
+    const ready = createChampionVisualNow(u.championId, color, u.skin);
+    if (ready) {
+      holder.add(ready.root);
+      enableShadows(holder);
+      this.championVisuals.set(u.id, ready);
+      return { holder, barY };
+    }
     const figure = buildChampionMesh(u.championId, color, u.skin);
     holder.add(figure);
     // Surface the figure's limb pivots on the holder the render loop sees;
     // without this hoist the walk cycle never runs.
     holder.userData.anim = figure.userData.anim;
     enableShadows(holder);
-    // Roster champions resolve through the static manifest; forged ones
-    // through the runtime registry their generated model was announced to.
-    const def = championVisualDef(u.championId);
-    const forgedBar = forgedBarY(u.championId);
     if (def || forgedBar !== null) {
       this.upgradeChampionView(holder, figure, u.id, u.championId, color, u.skin);
     }
-    return { holder, barY: def?.barY ?? forgedBar ?? 3.0 };
+    return { holder, barY };
   }
 
   // Swaps a champion's procedural figure for its rigged GLB once the asset

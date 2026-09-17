@@ -151,13 +151,25 @@ export function normalizeProp(scene: THREE.Group, size: number, anchor?: 'origin
   return holder;
 }
 
-// Loader init needs the live WebGLRenderer (KTX2 support detection), so the
-// renderer calls this once from its constructor and every champion GLB
-// starts loading immediately.
-export function preloadChampionAssets(renderer: THREE.WebGLRenderer): void {
+// Starts every champion GLB loading, once per page; every later call is a
+// no-op. KTX2 support is read off a live WebGL context: the renderer hands
+// its own, and a host with none yet (the select screen, the loading card)
+// lets a throwaway context answer and go.
+export function preloadChampionAssets(renderer?: THREE.WebGLRenderer): void {
   void preloadSylraEffects();
   if (pending.size > 0) return;
-  const ktx2 = new KTX2Loader().setTranscoderPath('/vendor/basis/').detectSupport(renderer);
+  const ktx2 = new KTX2Loader().setTranscoderPath('/vendor/basis/');
+  if (renderer) ktx2.detectSupport(renderer);
+  else {
+    try {
+      const probe = new THREE.WebGLRenderer();
+      ktx2.detectSupport(probe);
+      probe.dispose();
+      probe.forceContextLoss();
+    } catch (err) {
+      console.warn('champion assets: no WebGL context to probe, loading without KTX2:', err);
+    }
+  }
   const loader = new GLTFLoader().setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder);
   for (const [championId, def] of Object.entries(CHAMPION_VISUALS)) {
     // GLB props load alongside the champion; one failing never blocks the
@@ -209,6 +221,12 @@ export function preloadChampionAssets(renderer: THREE.WebGLRenderer): void {
       });
     pending.set(championId, promise);
   }
+}
+
+// The template when it is already loaded, else null: for a host that has
+// waited for the models (readiness.ts) and builds its view in one go.
+export function championTemplateNow(championId: string | null): ChampionTemplate | null {
+  return championId ? (templates.get(championId) ?? null) : null;
 }
 
 // Resolves once the champion's template is loaded; null when there is no def

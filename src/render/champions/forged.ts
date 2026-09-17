@@ -342,6 +342,13 @@ export function forgedBarY(championId: string | null): number | null {
   return (entry.display.height ?? FORGED_DEFAULT_HEIGHT) + 0.7;
 }
 
+// The template when it has already been built, else null (readiness.ts
+// waited on it; a host then instantiates without a round trip).
+export function forgedChampionTemplateNow(championId: string | null): ChampionTemplate | null {
+  if (!championId) return null;
+  return entries.get(championId)?.template ?? null;
+}
+
 // Resolves the champion's template once its model is loaded; templates are
 // rebuilt lazily after a display change. Null when unregistered or failed.
 export async function forgedChampionTemplate(

@@ -43,6 +43,7 @@ import {
   restorePolicies,
 } from './net/replay';
 import { installStats, STAYED_MS, trackMatchEnd, trackStep } from './net/stats';
+import { whenChampionModelsReady } from './render/champions';
 import { installVersionedLoading } from './render/versioned_loading';
 import { attachBot } from './sim/content/bots';
 import { houseSeats } from './sim/content/bots/house';
@@ -54,6 +55,7 @@ import type { Sim } from './sim/sim';
 import { ULT_RANK_LEVELS } from './sim/stats';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
 import { type AuthedAccount, currentAccount } from './ui/auth';
+import { warmChampionArt } from './ui/champion_art';
 import { buildCoachBar, type CoachBar } from './ui/coach_bar';
 import { type CollectionState, loadCollection } from './ui/collection';
 import { takeDiscordResult } from './ui/discord_entry';
@@ -120,11 +122,15 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-// The map, records and terrain (ADR 0021), behind a card that says how far
-// the model is; null when it could not be had, after the notice that says
-// why. The records are cached for the page and the model is downloaded
-// once, so the card is brief on every match but the first.
-async function loadOrchard(): Promise<LoadedOrchard | null> {
+// The map, records and terrain (ADR 0021), then the champion models, behind
+// a card that says how far along they are; null when the map could not be
+// had, after the notice that says why. The records are cached for the
+// page, the model is downloaded once and the champions are usually in by
+// the end of select, so the card is brief on every match but the first.
+// A match is shown only once everything is loaded: nobody plays a
+// procedural figure while a model downloads. forgedIds: the forged
+// champions this match brought, waited on beside the roster's.
+async function loadOrchard(forgedIds: readonly string[] = []): Promise<LoadedOrchard | null> {
   const { root, card } = screen(container);
   const line = el('p', 'menu-sub', 'Loading the terrain');
   card.append(el('h1', 'menu-title', 'Star Orchard'), line);
@@ -135,6 +141,9 @@ async function loadOrchard(): Promise<LoadedOrchard | null> {
         fraction >= 1
           ? 'Preparing the scenery'
           : `Loading the terrain: ${Math.round(fraction * 100)}%`;
+    });
+    await whenChampionModelsReady(forgedIds, (loaded, total) => {
+      line.textContent = `Loading the champions: ${loaded} / ${total}`;
     });
     return { orchard, terrain };
   } catch (err) {
@@ -221,7 +230,7 @@ async function fetchBots(): Promise<BotPick[]> {
 // One offline practice match on the Star Orchard; resolves with the exit
 // the player chose.
 async function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
-  const loaded = await loadOrchard();
+  const loaded = await loadOrchard(pick.forged ? [pick.forged.id] : []);
   if (!loaded) return 'menu';
   return new Promise((resolve) => {
     const sim = orchardSim(loaded.orchard, 42);
@@ -742,11 +751,14 @@ async function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
     // then Return to menu.
     const layer = appNav().push('session', () => finish('menu'));
 
-    // The presentation opens once the terrain is parsed: at once when the
-    // model is on hand, behind the loading card while it is still coming.
+    // The presentation opens once the terrain is parsed and the champion
+    // models are in: at once when they are on hand, behind the loading
+    // card while they are still coming. The forged champions of the
+    // match are named by match_start, before the first snapshot.
     let opening = false;
+    let forgedIds: string[] = [];
     const openPresentation = async (): Promise<void> => {
-      const loaded = await loadOrchard();
+      const loaded = await loadOrchard(forgedIds);
       if (finished) return;
       if (!loaded) {
         finish('menu');
@@ -952,6 +964,7 @@ async function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
           break;
         case 'match_start':
           registerForgedFromMatch(msg.forgedAssets);
+          forgedIds = Object.keys(msg.forgedAssets ?? {});
           world.applyServer(msg);
           // A rejoin can arrive while the queue or lobby screen is still up.
           clearMenus();
@@ -1107,6 +1120,9 @@ async function boot(): Promise<void> {
   // Decided once per page load and never again: signing in reloads the
   // page rather than changing this out from under everything.
   const account: AuthedAccount | null = await currentAccount();
+  // The roster's illustrations, so the select screen opens with its cards
+  // whole rather than filling in one by one.
+  warmChampionArt();
 
   for (;;) {
     // The way in (ADR 0006): everything but the offline practice match
