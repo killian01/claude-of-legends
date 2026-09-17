@@ -19,6 +19,29 @@
 export const STATS_STEPS = ['stayed', 'played', 'account'] as const;
 export type StatsStep = (typeof STATS_STEPS)[number];
 
+// How a match ended for this browser, sent once when it leaves the match
+// screen: 'finished' when the match had a winner, 'left' when the player
+// walked out before one, with how many minutes it had run and whether it
+// was practice or online. Read against 'played', it is the one number
+// that says whether a match that started was worth staying in.
+export const MATCH_ENDS = ['finished', 'left'] as const;
+export type MatchEnd = (typeof MATCH_ENDS)[number];
+export type MatchMode = 'practice' | 'online';
+
+export interface MatchEndEvent {
+  name: MatchEnd;
+  data: { minutes: number; mode: MatchMode };
+}
+
+export function matchEndEvent(
+  winner: number | null,
+  seconds: number,
+  mode: MatchMode,
+): MatchEndEvent {
+  const minutes = Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds / 60) : 0;
+  return { name: winner === null ? 'left' : 'finished', data: { minutes, mode } };
+}
+
 // How long a visitor has to still be here to count as having stayed. Long
 // enough that a page closed on sight does not qualify, short enough that
 // it happens while the game is still loading its art on a slow line,
@@ -138,6 +161,20 @@ export interface StatsWindow {
 export function trackStep(step: StatsStep, win: StatsWindow = window as StatsWindow): void {
   try {
     win.umami?.track(step);
+  } catch {
+    // The tracker's problem, not the page's.
+  }
+}
+
+export function trackMatchEnd(
+  winner: number | null,
+  seconds: number,
+  mode: MatchMode,
+  win: StatsWindow = window as StatsWindow,
+): void {
+  const e = matchEndEvent(winner, seconds, mode);
+  try {
+    win.umami?.track(e.name, e.data);
   } catch {
     // The tracker's problem, not the page's.
   }

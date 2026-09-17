@@ -42,7 +42,7 @@ import {
   replayPlayable,
   restorePolicies,
 } from './net/replay';
-import { installStats, STAYED_MS, trackStep } from './net/stats';
+import { installStats, STAYED_MS, trackMatchEnd, trackStep } from './net/stats';
 import { installVersionedLoading } from './render/versioned_loading';
 import { attachBot } from './sim/content/bots';
 import { houseSeats } from './sim/content/bots/house';
@@ -257,6 +257,9 @@ async function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
     const exit = (action: PostMatchAction): void => {
       if (stopped) return;
       stopped = true;
+      // How it ended, for the counter (src/net/stats.ts): with a winner
+      // or walked out of, and how long it ran.
+      trackMatchEnd(world.winner, world.time, 'practice');
       pres.dispose();
       layer.closed();
       resolve(action);
@@ -714,6 +717,9 @@ async function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
     const finish = (action: PostMatchAction): void => {
       if (finished) return;
       finished = true;
+      // A match that was on screen says how it ended (src/net/stats.ts);
+      // a queue or a lobby left before one is not a match.
+      if (pres) trackMatchEnd(world.winner, world.time, 'online');
       clearMenus();
       selectUi?.remove();
       selectUi = null;
