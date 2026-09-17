@@ -149,10 +149,14 @@ export async function requestReset(email: string): Promise<string | null> {
 //
 // `discordResult` is what a round trip through Discord came back with, if
 // this page load came from one (ADR 0009). The form only ever shows it;
-// what was linked, if anything, is the server's business.
+// what was linked, if anything, is the server's business. `initialMode`
+// is the tab the form opens on: register when the visitor arrives having
+// taken the account offer at the end of a practice match, sign in
+// otherwise.
 export function buildAuthForm(
   onSignedIn: (account: AuthedAccount) => void,
   discordResult: DiscordResult | null = null,
+  initialMode: 'login' | 'register' = 'login',
 ): HTMLElement {
   ensureCss();
   const root = el('div', 'auth-form');
@@ -290,7 +294,7 @@ export function buildAuthForm(
     });
   }
 
-  setMode('login');
+  setMode(initialMode);
   return root;
 }
 

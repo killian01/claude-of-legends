@@ -209,10 +209,13 @@ never in the record. Post an announcement with the words on the link,
 `https://your.host/?utm_source=reddit&utm_medium=post`: most apps a link is
 opened from send no referrer, and without them the day reads as direct.
 
-Three events are sent beside the page views, once per page each: `stayed`
+Four events are sent beside the page views, once per page each: `stayed`
 (still here 30 seconds later), `played` (a match started in this browser,
-practice, test drive or live, never a replay) and `account` (an account
-created, by form or by Discord). The dashboard's events panel shows them
+practice, test drive or live, never a replay), `offer` (the account offer at
+the end of a practice match, taken) and `account` (an account created, by
+form or by Discord). Read `offer` against `played` to know whether the end
+screen's offer is taken, and `account` against `offer` to know whether the
+form then loses them. The dashboard's events panel shows them
 against the day's visitors.
 
 Your own browser is a visitor like any other, which on a quiet day is most of

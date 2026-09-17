@@ -284,8 +284,9 @@ _Avoid_: building, objective (the Warden is an objective and is not a structure)
 **Account**:
 The persistent identity a person plays under: one name, unique across the server and owned by
 whoever registered it, one email address, plus the rating and match history earned with it.
-Reaching the server at all requires one; the offline practice match does not. The name is the
-whole public identity, so nothing is appended to it to tell two people apart, and the address is
+Reaching the server at all requires one; the offline practice match does not, and its end
+screen makes a visitor the account offer: their score, and what an account would have kept of
+it. The name is the whole public identity, so nothing is appended to it to tell two people apart, and the address is
 never part of it: only the account itself ever sees its own.
 _Avoid_: profile (that is the screen that shows an account), user, login, player (ambiguous, see Participant)
 

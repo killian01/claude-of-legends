@@ -11,6 +11,7 @@ import { getSettings } from '../game/settings';
 import { playSfx } from '../game/sfx';
 import type { CastTouch } from '../game/touch';
 import { followThumbScale, followUiScale } from '../game/ui_scale';
+import { trackStep } from '../net/stats';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
@@ -33,6 +34,7 @@ import { BOON_DAMAGE_PER_STACK } from '../sim/team_buffs';
 import type { AbilityKey, TeamId } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { abilityIconUrl, passiveIconUrl, sigilIconUrl } from './ability_icons';
+import { accountOffer, OFFER_CALL } from './account_offer';
 import {
   boonChipFace,
   type ChipFace,
@@ -587,6 +589,23 @@ const CSS = `
 .hud-end-join { pointer-events: auto; margin-top: 12px; font-size: 13px; color: #9fb089; }
 .hud-end-join a { color: #cbd9b4; }
 .hud-end-rating { font-size: 15px; font-weight: 700; margin-top: 4px; min-height: 18px; }
+/* The account offer (ui/account_offer.ts), above the table and in gold:
+   the one thing on this screen that asks for a decision, made in the
+   visitor's own numbers. Absent for an account. */
+.hud-end-offer {
+  pointer-events: auto; margin-top: 12px; padding: 10px 16px; border-radius: 8px;
+  border: 1px solid #8a7430; background: rgba(30, 26, 12, 0.92); text-shadow: none;
+  display: none; align-items: center; gap: 16px; width: min(1020px, 96vw);
+  box-sizing: border-box; color: #e6dcb8;
+}
+.hud-end-offer.open { display: flex; }
+.hud-end-offer-words { flex: 1; min-width: 0; }
+.hud-end-offer b { display: block; font-size: 15px; color: #f2e6c0; }
+.hud-end-offer span { display: block; margin-top: 2px; font-size: 12.5px; line-height: 1.35; color: #c9bd93; }
+.hud-end-offer .hud-menu-btn {
+  margin: 0; border-color: #8a7430; background: #3a3014; color: #f2e6c0; white-space: nowrap;
+}
+.hud-end-offer .hud-menu-btn:hover { border-color: #c9a84a; }
 /* Compact mode (touchscreens): the desktop sizes swallow a phone screen, so
    the whole bottom block scales down, the chat goes (there is no way to type
    in a match on a phone anyway; pings still flash on the map), and the hints
@@ -763,6 +782,11 @@ export class Hud {
   // shop is already open when the match starts. Once, and only at the top.
   private openedOpeningShop = false;
   private endPlayed = false;
+  // No account behind this match (ui/account_offer.ts).
+  private readonly guest: boolean;
+  private readonly endOffer: HTMLElement;
+  private readonly endOfferLine: HTMLElement;
+  private readonly endOfferReason: HTMLElement;
   private lastTowerCount: number | null = null;
   private readonly rootEl: HTMLElement;
   private readonly stopScale: () => void;
@@ -777,10 +801,12 @@ export class Hud {
     // Where the end screen and the escape menu exits go: main.ts decides
     // what 'menu' and 'again' mean for the mode this match ran in.
     onExit: (action: PostMatchAction) => void,
+    guest = false,
   ) {
     this.world = world;
     this.selfId = selfId;
     this.selfTeam = selfTeam;
+    this.guest = guest;
 
     const style = document.createElement('style');
     style.textContent = CSS;
@@ -1225,6 +1251,20 @@ export class Hud {
     this.endSub = el('div', 'hud-overlay-sub');
     this.endRating = el('div', 'hud-end-rating');
     this.endStats = el('div', 'hud-end-card');
+    // The account offer (ui/account_offer.ts): filled at the end of a
+    // visitor's practice match, never opened for an account.
+    this.endOffer = el('div', 'hud-end-offer');
+    const offerWords = el('div', 'hud-end-offer-words');
+    this.endOfferLine = el('b', '');
+    this.endOfferReason = el('span', '');
+    offerWords.append(this.endOfferLine, this.endOfferReason);
+    const offerBtn = el('button', 'hud-menu-btn', OFFER_CALL);
+    offerBtn.addEventListener('click', () => {
+      // The pace between playing and the form (net/stats.ts).
+      trackStep('offer');
+      onExit('account');
+    });
+    this.endOffer.append(offerWords, offerBtn);
     const endAgain = el('button', 'hud-menu-btn', 'Play again');
     endAgain.addEventListener('click', () => {
       // The rematch may reuse the last pick and skip the lock-in click, so
@@ -1247,6 +1287,7 @@ export class Hud {
       this.endTitle,
       this.endSub,
       this.endRating,
+      this.endOffer,
       this.endStats,
       endBtns,
       endJoin,
@@ -2171,6 +2212,21 @@ export class Hud {
       // rather than a thinner second one.
       this.endStats.textContent = '';
       const rows = this.world.scoreboard();
+      const own = rows.find((r) => r.unitId === this.selfId);
+      const def = u.championId ? this.world.championDef(u.championId) : null;
+      const offer = accountOffer({
+        guest: this.guest,
+        won: winner === this.selfTeam,
+        kills: own?.kills ?? 0,
+        deaths: own?.deaths ?? 0,
+        assists: own?.assists ?? 0,
+        champion: def?.name ?? null,
+      });
+      if (offer) {
+        this.endOfferLine.textContent = offer.line;
+        this.endOfferReason.textContent = offer.reason;
+        this.endOffer.classList.add('open');
+      }
       for (const t of [0, 1] as const) {
         const box = document.createElement('div');
         box.className = `hud-score-team ${t === 0 ? 'blue' : 'red'}`;
