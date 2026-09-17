@@ -16,6 +16,7 @@ import type { DiscordResult } from './discord_entry';
 import { startBackdrop } from './home_backdrop';
 import { CONTRIBUTE_LEAD, CONTRIBUTE_TITLE, CONTRIBUTE_WAYS } from './landing_contribute';
 import { mountEmbers } from './landing_embers';
+import { mountLandingLadder } from './landing_ladder';
 import { LANDING_MODES, PRACTICE_ART } from './landing_modes';
 import { revealOnScroll } from './landing_reveal';
 import { DISCORD, PRIVACY } from './links';
@@ -510,6 +511,15 @@ export function showLanding(
 
     ways.append(online, offline);
     inner.appendChild(ways);
+
+    // The ladder, to a visitor (ui/landing_ladder.ts): the names already
+    // standing there, under the two doors and before the page asks for
+    // theirs. Its button is the way to the form.
+    const ladder = el('section', 'pg-ladder');
+    inner.appendChild(ladder);
+    mountLandingLadder(ladder, () => {
+      root.querySelector('.pg-cards')?.scrollIntoView({ behavior: 'smooth' });
+    });
 
     // --- and the thing the genre does not offer ---
     const give = el('section', 'pg-give');

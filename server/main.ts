@@ -103,6 +103,7 @@ import { TripoProvider } from './generation/tripo';
 import { buildHomePage } from './home_page';
 import { buildBotLadder, buildLadder } from './ladder';
 import { type BotSummary, buildLadderPage, type LadderSeed, placeOf } from './ladder_page';
+import { buildLandingPage } from './landing_page';
 import {
   backfillLaurels,
   CHAMPION_PRICES,
@@ -1097,6 +1098,19 @@ const server = http.createServer(async (req, res) => {
         matches: [...matches.values()].filter((e) => e.endedAt === null).length,
         accounts: registry.count,
       });
+      return;
+    }
+
+    // The landing's ladder (server/landing_page.ts): the top of the ladder
+    // by hand and the top bots, names and numbers any account already
+    // reads on the ladder page, so a visitor sees whose names stand there
+    // before being asked for their own. No ids, no reader.
+    if (url === '/api/public/landing') {
+      sendJson(
+        res,
+        200,
+        buildLandingPage({ seeds: ladderSeeds, stats: wayStatsFor, accounts: registry.count }),
+      );
       return;
     }
 
