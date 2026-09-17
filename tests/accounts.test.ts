@@ -25,9 +25,9 @@ function reg(file = tmpFile()): AccountRegistry {
   return new AccountRegistry(file);
 }
 
-// Registration needs an address now (ADR 0007). A test that is not about
-// the address takes a distinct one, so it never trips the uniqueness rule
-// it was not written to exercise.
+// Registration may carry an address (ADR 0007, optional since its
+// amendment). A test that is not about the address takes a distinct one,
+// so it never trips the uniqueness rule it was not written to exercise.
 let emailSeq = 0;
 function anEmail(): string {
   emailSeq += 1;
@@ -46,6 +46,24 @@ describe('registration', () => {
     expect(a.name).toBe('Torvald');
     expect(a.rating).toBe(BASE_RATING);
     expect(a.ratedGames).toBe(0);
+  });
+
+  it('needs no address at the door; one can be claimed later (ADR 0007, amended)', () => {
+    const r = reg();
+    const a = unwrap(r.register('Solo', 'a good password', '', 0));
+    expect(a.email).toBeUndefined();
+    expect(selfAccount(a).email).toBeNull();
+    expect(selfAccount(a).emailConfirmed).toBe(false);
+    // Two accounts without an address never collide on the empty one.
+    unwrap(r.register('Duo', 'a good password', '   ', 1));
+    const later = unwrap(r.setEmail(a.id, 'solo@example.com', 2));
+    expect(later.email?.address).toBe('solo@example.com');
+    expect(later.email?.confirmed).toBe(false);
+    // And the claim holds against the next registration, as at the door.
+    expect(r.register('Trio', 'a good password', 'solo@example.com', 3)).toEqual({
+      ok: false,
+      error: 'email_taken',
+    });
   });
 
   it('refuses a name that breaks the rules, and a password that is too short', () => {
@@ -223,7 +241,9 @@ describe('the public shape', () => {
 describe('email claims', () => {
   it('refuses an address that is not one', () => {
     const r = reg();
-    for (const bad of ['', 'nope', 'a@b', 'two @spaces.com', `${'x'.repeat(250)}@example.com`]) {
+    // An empty one is no address at all rather than a bad one: see
+    // registration above.
+    for (const bad of ['nope', 'a@b', 'two @spaces.com', `${'x'.repeat(250)}@example.com`]) {
       expect(r.register('bobby', 'a good password', bad, 0)).toEqual({
         ok: false,
         error: 'email_invalid',

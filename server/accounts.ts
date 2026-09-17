@@ -270,26 +270,34 @@ export class AccountRegistry {
     if (nameErr) return { ok: false, error: 'name_invalid' };
     const passErr = validatePassword(password);
     if (passErr) return { ok: false, error: 'password_invalid' };
-    const emailErr = validateEmail(email);
-    if (emailErr) return { ok: false, error: 'email_invalid' };
+    // The address is optional at the door (ADR 0007, amended): none given
+    // is an account without a claim, which setEmail() gives one later. One
+    // given is checked and claimed exactly as before.
+    const wantsEmail = email.trim().length > 0;
+    if (wantsEmail) {
+      const emailErr = validateEmail(email);
+      if (emailErr) return { ok: false, error: 'email_invalid' };
+    }
     const fold = foldName(name);
     if (!this.nameFree(fold)) return { ok: false, error: 'name_taken' };
-    const eFold = foldEmail(email);
-    if (!this.emailFree(eFold, now)) return { ok: false, error: 'email_taken' };
+    const eFold = wantsEmail ? foldEmail(email) : null;
+    if (eFold !== null && !this.emailFree(eFold, now)) return { ok: false, error: 'email_taken' };
     const account: Account = {
       id: this.nextId++,
       name,
       fold,
       password: hashPassword(password),
-      email: { address: email.trim(), fold: eFold, claimedAt: now, confirmed: false },
       createdAt: now,
       seenAt: now,
       rating: BASE_RATING,
       ratedGames: 0,
     };
+    if (eFold !== null) {
+      account.email = { address: email.trim(), fold: eFold, claimedAt: now, confirmed: false };
+      this.emailOwner.set(eFold, account.id);
+    }
     this.byId.set(account.id, account);
     this.nameOwner.set(fold, account.id);
-    this.emailOwner.set(eFold, account.id);
     this.persist();
     return { ok: true, value: account };
   }

@@ -2201,6 +2201,8 @@ export class Hud {
     this.endOverlay.classList.toggle('open', winner !== null);
     if (winner !== null && !this.endPlayed) {
       this.endPlayed = true;
+      // Played through, whoever won (net/stats.ts).
+      trackStep('finished');
       playSfx(winner === this.selfTeam ? 'victory' : 'defeat');
       announceVoice(winner === this.selfTeam ? 'victory' : 'defeat', true);
       this.endTitle.textContent = winner === this.selfTeam ? 'VICTORY' : 'DEFEAT';

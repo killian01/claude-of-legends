@@ -66,11 +66,12 @@ it, and everything it takes away before a record leaves your browser.
 - The page that linked you here, as your browser reports it in the
   referrer header, which is how a Reddit thread can be told from a search
   result. Its query is stripped the same way.
-- Four events, each at most once per page: `stayed` (still here 30
+- Six events, each at most once per page: `stayed` (still here 30
   seconds later), `played` (a match started in this browser: practice, test
   drive or live game, never a replay, which is watching rather than
-  playing), `offer` (the account offer at the end of a practice match,
-  taken) and `account` (an account created here).
+  playing), `finished` (a match ended with you still in front of it),
+  `offer` (the account offer at the end of a practice match, taken), `form`
+  (the register tab opened) and `account` (an account created here).
 - What every counter of this kind reads off the request: the browser and
   operating system, the kind of device, the screen size, the language, and
   the country, region and city your address resolves to. Not the address.

@@ -39,8 +39,8 @@ What `up` gives you, and why it is shaped that way:
 
 ## Poking the API from the shell
 
-Sessions are cookies (ADR 0006), so keep a cookie jar. Registration needs a name, a
-password, and an email address; the address is never mailed locally.
+Sessions are cookies (ADR 0006), so keep a cookie jar. Registration needs a name and a
+password; an email address is optional and never mailed locally.
 
 ```bash
 J=.dev/cj; B=http://127.0.0.1:${CLIENT_PORT:-5173}
