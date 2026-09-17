@@ -40,6 +40,7 @@ import {
   statusChipFace,
   wrathChipFace,
 } from './chip_text';
+import { thumbClusterCss } from './thumb_cluster';
 
 interface ChipLook {
   border: string;
@@ -207,7 +208,7 @@ const CSS = `
   font-size: 11px; font-weight: 800; color: #f2f6e4; text-shadow: 0 1px 3px #000;
 }
 .hud-slot-cd {
-  position: absolute; inset: 0; border-radius: 6px; background: rgba(0,0,0,0.72);
+  position: absolute; inset: 0; border-radius: inherit; background: rgba(0,0,0,0.72);
   color: #fff; display: flex; align-items: center; justify-content: center;
   font-size: 15px; font-weight: 600;
 }
@@ -617,37 +618,31 @@ const CSS = `
    it. The whole cluster scales with the phone's height (--thumb-scale,
    ui_scale.ts) from its bottom right corner; the minimap moves to the
    top for it. The bar with the bars and the items slides left of the
-   middle so the two never meet on a narrow phone. */
+   middle so the two never meet on a narrow phone. The sizes and places
+   are numbers in src/ui/thumb_cluster.ts, where a test keeps every
+   circle clear of every other; only the look is written here. */
 .hud.thumbs .hud-slots {
-  position: absolute; right: 0; bottom: 0; width: 236px; height: 172px; display: block;
+  position: absolute; right: 0; bottom: 0; display: block;
   transform: scale(var(--thumb-scale, 1)); transform-origin: 100% 100%;
 }
 .hud.thumbs .hud-slot {
-  position: absolute; width: 46px; height: 46px; border-radius: 50%;
+  position: absolute; border-radius: 50%;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55); font-size: 15px;
   /* A slide on a slot is an aim; without this the browser takes the
      moving finger for a scroll and cancels the pointer under it. */
   touch-action: none;
 }
-.hud.thumbs .hud-slot[data-key='Q'] { right: 133px; bottom: 23px; }
-.hud.thumbs .hud-slot[data-key='W'] { right: 116px; bottom: 72px; }
-.hud.thumbs .hud-slot[data-key='E'] { right: 75px; bottom: 104px; }
-.hud.thumbs .hud-slot[data-key='R'] { right: 21px; bottom: 113px; width: 50px; height: 50px; }
-.hud.thumbs .hud-slot[data-key='D'] { right: 188px; bottom: 26px; width: 40px; height: 40px; }
-.hud.thumbs .hud-slot[data-key='F'] { right: 176px; bottom: 81px; width: 40px; height: 40px; }
 .hud.thumbs .hud-slot-key { font-size: 9px; }
-.hud.thumbs .hud-slot-up {
-  top: -5px; right: -5px; left: auto; transform: none;
-  width: 22px; height: 22px; font-size: 15px; line-height: 20px; border-radius: 50%;
-}
+.hud.thumbs .hud-slot-up { font-size: 15px; line-height: 20px; border-radius: 50%; }
 .hud.thumbs .hud-attack {
-  position: absolute; right: 12px; bottom: 12px; width: 64px; height: 64px; border-radius: 50%;
+  position: absolute; border-radius: 50%;
   border: 2px solid #c9a84a; background: rgba(60, 40, 12, 0.85); color: #f0d890;
   display: flex; align-items: center; justify-content: center; letter-spacing: 1px;
   font-size: 14px; font-weight: 800; pointer-events: auto; touch-action: none;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
 }
 .hud.thumbs .hud-attack:active { background: rgba(120, 80, 20, 0.95); }
+${thumbClusterCss()}
 .hud.thumbs .hud-bottom {
   left: 40%; bottom: 2px; transform: translateX(-50%) scale(0.62);
 }
