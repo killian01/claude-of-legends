@@ -209,17 +209,20 @@ never in the record. Post an announcement with the words on the link,
 `https://your.host/?utm_source=reddit&utm_medium=post`: most apps a link is
 opened from send no referrer, and without them the day reads as direct.
 
-Six events are sent beside the page views, once per page each: `stayed`
+Five events are sent beside the page views, once per page each: `stayed`
 (still here 30 seconds later), `played` (a match started in this browser,
-practice, test drive or live, never a replay), `finished` (a match ended with
-the player still there), `offer` (the account offer at the end of a practice
-match, taken), `form` (the register tab opened, by hand or by the offer) and
-`account` (an account created, by form or by Discord). Read each against the
-one before it: `finished` over `played` says whether a first match is played
-through, `offer` over `finished` whether the end screen's offer is taken,
-`form` over `offer` whether the landing lands them on the form, and `account`
-over `form` whether the form then loses them. The dashboard's events panel shows them
-against the day's visitors.
+practice, test drive or live, never a replay), `offer` (the account offer at
+the end of a practice match, taken), `form` (the register tab opened, by hand
+or by the offer) and `account` (an account created, by form or by Discord);
+and one when a match ends for the browser, `finished` (it had a winner) or
+`left` (walked out before one), carrying the minutes it ran and whether it
+was practice or online. Read each against the one before it: `finished` over
+`played` says whether a first match is played through, `offer` over
+`finished` whether the end screen's offer is taken, `form` over `offer`
+whether the landing lands them on the form, and `account` over `form`
+whether the form then loses them. The dashboard's events panel shows them
+against the day's visitors; an event's properties show the minutes, so they
+say how long a match held people.
 
 Your own browser is a visitor like any other, which on a quiet day is most of
 the count. Open the site once with `?stats=off` and it stops being counted, on

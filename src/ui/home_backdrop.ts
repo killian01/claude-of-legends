@@ -7,7 +7,9 @@
 // mourning: every path through the old module already ended on this exact
 // composition, and the page is 8 MB lighter for it.
 
-const ART = '/art/home_end.jpg';
+import { versioned } from '../game/asset_version';
+
+const ART = versioned('/art/home_end.jpg');
 
 // The module owns its own styles rather than borrowing menu.ts's sheet:
 // the landing page never opens a menu card, so anything living over there

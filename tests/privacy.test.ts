@@ -8,7 +8,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { STATS_SCRIPT, statsTag } from '../server/stats_tag';
-import { CHOICE_PARAM, DISABLED_KEY, OLD_VISIT_KEY, STATS_STEPS } from '../src/net/stats';
+import {
+  CHOICE_PARAM,
+  DISABLED_KEY,
+  MATCH_ENDS,
+  OLD_VISIT_KEY,
+  STATS_STEPS,
+} from '../src/net/stats';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), 'utf8');
@@ -77,7 +83,7 @@ describe('the events the client sends', () => {
     // the counter does on its own, so a fourth one must not be able to
     // appear in the code and stay off the page.
     const page = read('PRIVACY.md');
-    for (const step of STATS_STEPS) {
+    for (const step of [...STATS_STEPS, ...MATCH_ENDS]) {
       expect(`${step}: ${page.includes(`\`${step}\``)}`).toBe(`${step}: true`);
     }
   });

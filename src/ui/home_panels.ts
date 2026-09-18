@@ -5,6 +5,7 @@
 // four; each panel says what it has, and a panel with nothing to show says
 // so rather than standing empty.
 
+import { versioned } from '../game/asset_version';
 import { nextTier, tierOf } from '../net/tiers';
 import { CHAMPIONS, type ChampionRole } from '../sim/content/champions';
 import { openBotPage } from './bot_page';
@@ -238,7 +239,7 @@ function portrait(img: HTMLImageElement, championId: string): void {
     },
     { once: true },
   );
-  img.src = `/portraits/${championId}.webp`;
+  img.src = versioned(`/portraits/${championId}.webp`);
 }
 
 function winPct(wins: number, losses: number): string | null {

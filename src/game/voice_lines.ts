@@ -8,6 +8,8 @@
 // enough to still be talking over the next fight), so every line is fixed
 // and is recorded once.
 
+import { versioned } from './asset_version';
+
 export const VOICE_LINES = {
   first_blood: 'First blood!',
   self_slain: 'You have been slain',
@@ -60,5 +62,5 @@ export const RECORDED_VOICE_LINE_IDS: readonly VoiceLineId[] = VOICE_LINE_IDS.fi
 
 // Where a rendered clip is served from (public/voice/, tracked with git-lfs).
 export function voiceClipUrl(id: VoiceLineId): string {
-  return `/voice/${id}.mp3`;
+  return versioned(`/voice/${id}.mp3`);
 }

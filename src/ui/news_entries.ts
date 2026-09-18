@@ -25,7 +25,7 @@ export interface NewsEntry {
   title: string;
   // Plain text paragraphs. No markdown: the client has no engine for it.
   body: readonly string[];
-  // A file under public/news/, 1280 wide.
+  // A file under src/ui/news_art/, 1280 wide (news_images.ts ships it).
   image?: string;
   link?: { label: string; to: NewsDestination };
   // An event's time, an ISO instant. While it is ahead, the entry is
@@ -34,6 +34,26 @@ export interface NewsEntry {
 }
 
 export const NEWS: readonly NewsEntry[] = [
+  {
+    day: '2026-09-16',
+    title: 'Sylra, in her own body',
+    body: [
+      'Sylra, Thornweaver, has a body of her own, after Korrath and Vesk. The hooded mage ' +
+        'she borrowed from a shared pack is retired; in her place stands the witch of the ' +
+        'splash art, thorn-wrapped, with her staff in hand and eight movements authored for ' +
+        'her: the idle, the cane walk, the swing of a basic attack, one gesture per spell, ' +
+        'and the fall, which drops the staff.',
+      'Her spells wear effects drawn beside the model. The thorn bolt leaves the tip of the ' +
+        'staff and bursts on what it hits, the bramble field grows out of the ground where ' +
+        'she plants it, the verdant shell rides whoever she gives it to and bursts when it ' +
+        'goes, and the overgrowth erupts into roots where she calls it.',
+      'Nothing in the numbers moved: her ranges, damage and durations are the ones you ' +
+        'played last week. Seven champions still wear the shared bodies; they will get ' +
+        'theirs one at a time.',
+    ],
+    image: 'sylra.webp',
+    link: { label: 'See the champions', to: 'champions' },
+  },
   {
     day: '2026-09-11',
     title: 'The forest round',

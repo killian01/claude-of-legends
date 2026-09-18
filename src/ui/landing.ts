@@ -22,6 +22,7 @@ import { revealOnScroll } from './landing_reveal';
 import { DISCORD, PRIVACY } from './links';
 import { el, ensureMenuCss } from './menu';
 import { allNews, countdownText, dayText, isPinned, newestOf } from './news';
+import { newsImageUrl } from './news_images';
 import { openNews } from './news_section';
 import { buildPage, ensurePageCss, mountLiveStats, navLink } from './page';
 import { buildRepoLink } from './repo_link';
@@ -473,7 +474,7 @@ export function showLanding(
       line.type = 'button';
       if (latest.image) {
         const thumb = el('img', '');
-        thumb.src = `/news/${latest.image}`;
+        thumb.src = newsImageUrl(latest.image) ?? '';
         thumb.alt = '';
         thumb.loading = 'lazy';
         thumb.decoding = 'async';

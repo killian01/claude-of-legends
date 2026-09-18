@@ -18,6 +18,7 @@ import {
   orderNews,
 } from '../src/ui/news';
 import { NEWS, NEWS_DESTINATIONS, type NewsEntry } from '../src/ui/news_entries';
+import { newsImageUrl } from '../src/ui/news_images';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -57,12 +58,16 @@ describe('the table', () => {
     }
   });
 
-  it('has every image it names under public/news', () => {
+  it('has every image it names in the build, hashed like an asset', () => {
+    // The pictures are assets of the bundle (src/ui/news_images.ts), so a
+    // replaced one reaches every browser at once; a name the build does
+    // not carry would be a broken picture on the page.
     for (const e of NEWS) {
       if (e.image === undefined) continue;
       expect(e.image).toMatch(/^[a-z0-9-]+\.webp$/);
-      const file = path.join(ROOT, 'public', 'news', e.image);
+      const file = path.join(ROOT, 'src', 'ui', 'news_art', e.image);
       expect(`${e.image}: ${existsSync(file)}`).toBe(`${e.image}: true`);
+      expect(`${e.image}: ${newsImageUrl(e.image) !== null}`).toBe(`${e.image}: true`);
     }
   });
 

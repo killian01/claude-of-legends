@@ -11,6 +11,7 @@ import { appNav } from '../game/nav';
 import { getSettings } from '../game/settings';
 import { applyUiScale, effectiveUiScale } from '../game/ui_scale';
 import type { LobbyPlayer, SelectPlayer } from '../net/protocol';
+import { preloadChampionAssets } from '../render/champions';
 import { CHAMPION_LIST } from '../sim/content/champions';
 import { SIGIL_LIST } from '../sim/content/sigils';
 import { SKINS } from '../sim/content/skins';
@@ -447,6 +448,10 @@ export function showSelect(
   // clock and cannot.
   onBack?: () => void,
 ): SelectController {
+  // The champion models start downloading while the player picks: the
+  // match waits for them before it is shown, and a pick takes long enough
+  // for most of them to land in the meantime.
+  preloadChampionAssets();
   const { root, card } = screen(container);
   card.classList.add('select');
   card.append(el('h1', 'menu-title', 'Champion select'));

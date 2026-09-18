@@ -13,6 +13,22 @@ import { resolveLook } from '../ability_vfx';
 import { lookVisual } from './looks';
 import { basicMat, flatDisc, flatRing, growSweep, pulseRim, telegraphZone } from './shapes';
 import { SPRITE } from './sprites';
+import {
+  attackSeedImpact,
+  bramblePulse,
+  buildAttackSeed,
+  buildBrambleField,
+  buildOvergrowthTelegraph,
+  buildThornBolt,
+  buildVerdantShell,
+  overgrowthDetonate,
+  thornBoltImpact,
+  tickBrambleField,
+  tickOvergrowthTelegraph,
+  tickVerdantShell,
+  verdantShellBurst,
+  verdantShellCast,
+} from './sylra_fx';
 import type { VfxSystem } from './system';
 
 export interface SchoolColors {
@@ -83,6 +99,13 @@ export interface SpellVisual {
   // Sound played by the renderer when the windup resolves, distance
   // attenuated like combat sfx (a rifle shot banging at release).
   releaseSfx?: SfxName;
+  // A shield's body riding its holder for the shield's life: built when
+  // the cast lands (the renderer reads who took it, shield_holder.ts),
+  // ticked with its age and the time left, ended when the status leaves
+  // by break or expiry, at the holder's last position.
+  shield?: () => THREE.Object3D;
+  shieldTick?: (holder: THREE.Object3D, ageMs: number, remainingMs: number) => void;
+  shieldEnd?: (fx: VfxSystem, x: number, z: number) => void;
 }
 
 // ---------------------------------------------------------------- generics
@@ -144,8 +167,10 @@ const EARTH = { main: 0xc89a58, glow: 0xe8d0a0 };
 const WATER = { main: 0x4aa8e8, glow: 0xbfe8ff };
 const FROST = { main: 0x9fd8ff, glow: 0xe8f6ff };
 const SHADOW = { main: 0x9a5df0, glow: 0xd0b2ff };
-const VERDANT = { main: 0x7ad05a, glow: 0xc8ff9a };
 const GOLD = { main: 0xffd94a, glow: 0xfff0b0 };
+// Sylra's palette, taken from her reference renders: the emerald sap of
+// her casts and the golden pollen they shed.
+const BRAMBLE = { sap: 0x2fbf4a, pollen: 0x8ce629 };
 
 // A rifle bullet: a slim bright tracer with a thin additive sheath,
 // authored along X (the flight axis) with its own proportions. Used for
@@ -571,45 +596,79 @@ export const SPELL_VFX: Readonly<Record<string, SpellVisual>> = {
     },
   },
 
-  // Sylra R: the overgrowth telegraphs, spores drift up, then the ground
-  // erupts in thorns that root everything still inside.
+  // Sylra R: the reference's overgrowth. The warning ring, the sap
+  // converging on the primal seed over the fuse, then sixteen giant roots
+  // erupt in three beats with the torn roots and the glowing cracks, the
+  // pollen bursts and the spores fall, and the roots sink back.
   sylra_R: {
-    zone: (radius, _colors, hostile) => {
-      const holder = telegraphZone(radius, hostile ? 0xff7a4a : 0x7ad05a, 0x9aff7a);
-      return holder;
+    zone: (radius, _colors, hostile) => buildOvergrowthTelegraph(radius, hostile),
+    zoneTick: (fx, holder, x, z, radius, ageMs) =>
+      tickOvergrowthTelegraph(fx, holder, x, z, radius, ageMs),
+    detonate: overgrowthDetonate,
+  },
+
+  // Sylra Q: the reference's thorn shot off the staff's tip, shedding
+  // pollen; the hit is its burst expanding at chest height. The chain hop
+  // is the sim's second projectile and wears the same thorn.
+  sylra_Q: {
+    projectile: () => buildThornBolt(),
+    projectileTick: (fx, x, z) => {
+      if (Math.random() < 0.6) return;
+      fx.particles.spawn({
+        x: x + (Math.random() - 0.5) * 0.3,
+        y: 1.4 + (Math.random() - 0.5) * 0.3,
+        z: z + (Math.random() - 0.5) * 0.3,
+        vy: 0.8,
+        life: 0.3,
+        size0: 0.22,
+        size1: 0.05,
+        color0: BRAMBLE.pollen,
+        alpha0: 0.8,
+        sprite: SPRITE.fleck,
+        drag: 2,
+      });
     },
+    impact: thornBoltImpact,
+  },
+
+  // The basic attack uses the seed authored in Blender, separate from Q.
+  sylra_A: {
+    projectile: () => buildAttackSeed(),
+    projectileTick: (fx, x, z, dtMs) => {
+      fx.particles.spawn({
+        x,
+        y: 1.4,
+        z,
+        vy: 0.3,
+        life: 0.18,
+        size0: 0.085,
+        size1: 0.015,
+        color0: BRAMBLE.sap,
+        alpha0: Math.min(0.7, dtMs / 24),
+        sprite: SPRITE.glow,
+        drag: 1,
+      });
+    },
+    impact: attackSeedImpact,
+  },
+
+  // The reference's 24 branching brambles, leaves, roots, seeds and pollen.
+  sylra_W: {
+    zone: (radius, _colors, hostile) => buildBrambleField(radius, hostile),
     zoneTick: (fx, holder, x, z, radius, ageMs) => {
-      const p = Math.min(1, ageMs / 1250);
-      pulseRim(holder, ageMs, p);
-      growSweep(holder, p);
-      for (let i = 0; i < 2; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const r = Math.sqrt(Math.random()) * radius;
-        fx.particles.spawn({
-          x: x + Math.cos(a) * r,
-          y: 0.2,
-          z: z + Math.sin(a) * r,
-          vy: 1.8 + Math.random(),
-          life: 0.5,
-          size0: 0.28,
-          size1: 0.1,
-          color0: 0xc8ff9a,
-          alpha0: 0.8,
-          sprite: SPRITE.fleck,
-        });
-      }
+      tickBrambleField(holder, radius, ageMs);
+      bramblePulse(fx, holder, x, z, radius, ageMs);
     },
-    detonate: (fx, x, z, radius) => {
-      fx.glowFlash(x, 1, z, 6, VERDANT.glow, 0.28);
-      fx.sparkBurst(x, 0.6, z, VERDANT.main, 20, 9, { life: 0.6, up: 11 });
-      fx.debris.burst(x, z, 0x2e5a28, 11, { speed: 6, up: 10, size: 0.2 });
-      fx.rings.spawn(x, z, radius * 1.1, VERDANT.main, 560);
-      fx.schedule(130, () => fx.rings.spawn(x, z, radius * 1.3, VERDANT.glow, 500, { alpha: 0.5 }));
-      fx.pillars.spawn(x, z, radius * 0.5, 6, 0x9aff7a, 520, 0.28);
-      fx.decals.spawn(x, z, radius, 'cracks', 6000, { alpha: 0.7 });
-      fx.lightPulse(x, z, 0x7ad05a, 20, 440);
-      fx.onShake(0.3);
-    },
+  },
+
+  // Sylra E: the reference's verdant shell closes round whoever took it
+  // (membrane, veins, leaves) and rides them for the shield's life; when it
+  // breaks or expires its shards burst and fourteen thorns fly out.
+  sylra_E: {
+    castFx: (fx, x, z) => verdantShellCast(fx, x, z),
+    shield: buildVerdantShell,
+    shieldTick: tickVerdantShell,
+    shieldEnd: verdantShellBurst,
   },
 
   // Torv R: the faultline tears the ground open along its whole path:

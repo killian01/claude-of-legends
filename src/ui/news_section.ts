@@ -7,6 +7,7 @@
 import { el } from './menu';
 import { allNews, countdownText, dayText, isPinned, orderNews } from './news';
 import type { NewsDestination, NewsEntry } from './news_entries';
+import { newsImageUrl } from './news_images';
 
 const CSS = `
 .nw, .nw * { box-sizing: border-box; }
@@ -75,9 +76,10 @@ function eventTime(at: string): string {
 function buildEntry(e: NewsEntry, now: number, o: NewsOptions): HTMLElement {
   const pinned = isPinned(e, now);
   const card = el('article', `nw-entry${pinned ? ' pinned' : ''}`);
-  if (e.image) {
+  const src = e.image ? newsImageUrl(e.image) : null;
+  if (src) {
     const img = el('img', '');
-    img.src = `/news/${e.image}`;
+    img.src = src;
     img.alt = '';
     img.loading = 'lazy';
     img.decoding = 'async';

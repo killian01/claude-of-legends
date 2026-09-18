@@ -9,6 +9,8 @@ import {
   DISABLED_KEY,
   forgetOldLine,
   installStats,
+  MATCH_ENDS,
+  matchEndEvent,
   OLD_VISIT_KEY,
   STATS_STEPS,
   type StatsStore,
@@ -136,7 +138,7 @@ describe('what an address is reduced to', () => {
 
 describe('the events', () => {
   it('name what the privacy page names', () => {
-    expect([...STATS_STEPS]).toEqual(['stayed', 'played', 'finished', 'offer', 'form', 'account']);
+    expect([...STATS_STEPS]).toEqual(['stayed', 'played', 'offer', 'form', 'account']);
   });
 
   it('reach the tracker when there is one, and nobody otherwise', () => {
@@ -153,6 +155,22 @@ describe('the events', () => {
         },
       }),
     ).not.toThrow();
+  });
+});
+
+describe('how a match ended', () => {
+  it('is finished with a winner and left without one, in minutes, by mode', () => {
+    expect(matchEndEvent(1, 25 * 60 + 20, 'practice')).toEqual({
+      name: 'finished',
+      data: { minutes: 25, mode: 'practice' },
+    });
+    expect(matchEndEvent(null, 95, 'online')).toEqual({
+      name: 'left',
+      data: { minutes: 2, mode: 'online' },
+    });
+    expect(matchEndEvent(null, 0, 'practice').data.minutes).toBe(0);
+    expect(matchEndEvent(null, Number.NaN, 'practice').data.minutes).toBe(0);
+    expect([...MATCH_ENDS]).toEqual(['finished', 'left']);
   });
 });
 

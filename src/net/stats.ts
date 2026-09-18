@@ -14,14 +14,38 @@
 // 'stayed' is the line between a visitor and a click that bounced before
 // the art had drawn; 'played' a match started in this browser, practice,
 // test drive or live game alike and never a replay, which is watching
-// rather than playing; 'finished' a match that ended with the player still
-// in front of it, the line between trying and playing through; 'offer' the
-// account offer at the end of a visitor's practice match taken
-// (ui/account_offer.ts); 'form' the register tab opened, by hand or by the
-// offer; 'account' an account created here, by form or by Discord. Read
-// each against the one before it and the funnel says where people leave.
-export const STATS_STEPS = ['stayed', 'played', 'finished', 'offer', 'form', 'account'] as const;
+// rather than playing; 'offer' the account offer at the end of a visitor's
+// practice match taken (ui/account_offer.ts); 'form' the register tab
+// opened, by hand or by the offer; 'account' an account created here, by
+// form or by Discord. Between 'played' and 'offer' stands the match's own
+// end, below: 'finished' is the line between trying and playing through.
+// Read each against the one before it and the funnel says where people
+// leave.
+export const STATS_STEPS = ['stayed', 'played', 'offer', 'form', 'account'] as const;
 export type StatsStep = (typeof STATS_STEPS)[number];
+
+// How a match ended for this browser, sent once when it leaves the match
+// screen: 'finished' when the match had a winner, 'left' when the player
+// walked out before one, with how many minutes it had run and whether it
+// was practice or online. Read against 'played', it is the one number
+// that says whether a match that started was worth staying in.
+export const MATCH_ENDS = ['finished', 'left'] as const;
+export type MatchEnd = (typeof MATCH_ENDS)[number];
+export type MatchMode = 'practice' | 'online';
+
+export interface MatchEndEvent {
+  name: MatchEnd;
+  data: { minutes: number; mode: MatchMode };
+}
+
+export function matchEndEvent(
+  winner: number | null,
+  seconds: number,
+  mode: MatchMode,
+): MatchEndEvent {
+  const minutes = Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds / 60) : 0;
+  return { name: winner === null ? 'left' : 'finished', data: { minutes, mode } };
+}
 
 // How long a visitor has to still be here to count as having stayed. Long
 // enough that a page closed on sight does not qualify, short enough that
@@ -142,6 +166,20 @@ export interface StatsWindow {
 export function trackStep(step: StatsStep, win: StatsWindow = window as StatsWindow): void {
   try {
     win.umami?.track(step);
+  } catch {
+    // The tracker's problem, not the page's.
+  }
+}
+
+export function trackMatchEnd(
+  winner: number | null,
+  seconds: number,
+  mode: MatchMode,
+  win: StatsWindow = window as StatsWindow,
+): void {
+  const e = matchEndEvent(winner, seconds, mode);
+  try {
+    win.umami?.track(e.name, e.data);
   } catch {
     // The tracker's problem, not the page's.
   }

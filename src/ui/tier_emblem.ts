@@ -4,6 +4,7 @@
 // drawn in CSS with the tier's color and one pip per tier climbed, so the
 // page reads the same with or without the art.
 
+import { versioned } from '../game/asset_version';
 import { TIERS, type Tier } from '../net/tiers';
 
 export interface TierStyle {
@@ -35,7 +36,7 @@ export function tierStyle(name: string): TierStyle {
 }
 
 export function emblemArtUrl(name: string): string {
-  return `/icons/tiers/${name.toLowerCase()}.webp`;
+  return versioned(`/icons/tiers/${name.toLowerCase()}.webp`);
 }
 
 const CSS = `

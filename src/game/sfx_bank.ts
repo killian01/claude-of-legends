@@ -8,6 +8,7 @@
 // that cannot decode the files. Nothing here touches the sim; Math.random
 // picks variants and jitters pitch, presentation only.
 
+import { versioned } from './asset_version';
 import type { AudioBus } from './sfx';
 
 // Sound id to variant files under /sfx/, <id>_<n>.ogg. Attack ids are
@@ -100,7 +101,7 @@ export const SFX_BANK: Readonly<Record<string, readonly string[]>> = {
 };
 
 export function sfxBankUrl(file: string): string {
-  return `/sfx/${file}`;
+  return versioned(`/sfx/${file}`);
 }
 
 const decoded = new Map<string, AudioBuffer[]>();
