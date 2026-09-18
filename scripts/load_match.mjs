@@ -1,12 +1,17 @@
 // Ten clients and no browser: a load test for the game server. Each client
 // is an account on a WebSocket speaking the wire protocol
-// (src/net/protocol.ts): it registers, sits in one lobby, picks, and plays
-// a plain hand for the length of the run (walks at the enemy base, fights
-// what it sees, casts, levels, buys), while measuring what it receives:
-// snapshots per second, their size, the longest gap between two, and the
-// round trip of a map ping through the server. The server's own numbers
-// come from /healthz (the tick meter, server/tick_meter.ts). One line every
-// five seconds, a verdict at the end; exit 1 when the server strained.
+// (src/net/protocol.ts): it registers, makes itself a bot (a new bot is
+// the house Laner with a coach play, src/sim/content/playbooks/new_bot.ts),
+// sits in one lobby and locks the bot into its seat (ADR 0013), so the
+// server plays a real house bot on a real connection while the client
+// receives everything a player would. It measures what it receives:
+// snapshots per second, their size, the longest gap between two, and
+// (PING_MS on) the round trip of a map ping through the server. The
+// server's own numbers come from /healthz (the tick meter,
+// server/tick_meter.ts). One line every five seconds, a verdict at the
+// end; exit 1 when the server strained. HAND=1 plays a plain hand from the
+// client instead of a bot (walks at the enemy base, fights what it sees,
+// casts, levels, buys), which exercises the order path too.
 //
 // Against the local stack (the server itself, or the Vite proxy):
 //   URL=http://localhost:8787 node scripts/load_match.mjs
@@ -17,8 +22,10 @@
 //   URL=https://... N=9 CODE=ABCDE node scripts/load_match.mjs
 // Knobs: N clients (10), TOTAL players the host waits for before it starts
 // (N), CODE, DURATION seconds of play (180), WAIT seconds for the lobby to
-// fill (600), ORDER_MS between a client's orders (250). Every run makes
-// its own accounts (load-<run>-<n>) on the server it points at.
+// fill (600), HAND=1 for hands instead of bots, ORDER_MS between a hand's
+// orders (250), PING_MS between a client's map pings for the round trip
+// (0: none; a ping is seen by the whole team). Every run makes its own
+// accounts (load-<run>-<n>), each with one bot, on the server it points at.
 
 import { readFileSync } from 'node:fs';
 import WebSocket from 'ws';
@@ -30,6 +37,8 @@ const CODE = process.env.CODE ? process.env.CODE.toUpperCase() : null;
 const DURATION = Number(process.env.DURATION ?? 180);
 const WAIT = Number(process.env.WAIT ?? 600);
 const ORDER_MS = Number(process.env.ORDER_MS ?? 250);
+const PING_MS = Number(process.env.PING_MS ?? 0);
+const HAND = process.env.HAND === '1';
 const REPORT_MS = 5000;
 const PASSWORD = 'load-test-password-01';
 const STARTERS = ['torv', 'fenn', 'ashvyn', 'sylra'];
@@ -59,11 +68,34 @@ async function register(name) {
   return cookie.split(';')[0];
 }
 
+// The account's bot: a new one is the house Laner (new_bot.ts) on a
+// starter champion, which the select then locks into the seat. Made at
+// select, once the seat knows its team: a bot plays only a champion the
+// account owns, the four starters, and a team never fields the same
+// champion twice, so the champion is dealt by the seat's rank among its
+// team's load clients, and a fifth such seat on a team plays a hand.
+async function createBot(cookie, championId) {
+  const res = await fetch(`${ORIGIN}/api/bots/create`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie },
+    body: JSON.stringify({ name: `Load ${championId}`, championId }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.ok) {
+    throw new Error(`bot on ${championId}: ${res.status} ${body.error ?? ''}`);
+  }
+  return body.bot.id;
+}
+
 class LoadClient {
   constructor(index, name, cookie) {
     this.index = index;
     this.name = name;
     this.cookie = cookie;
+    this.botId = null;
+    this.coach = false;
+    this.spawn = null;
+    this.moved = 0;
     this.ws = null;
     this.lobby = null;
     this.selfUnitId = 0;
@@ -115,16 +147,12 @@ class LoadClient {
         this.lobby = msg;
         break;
       case 'select_start':
-        this.send({
-          t: 'pick',
-          championId: STARTERS[this.index % STARTERS.length],
-          sigils: SIGILS,
-          skin: 0,
-        });
+        void this.lockIn(msg);
         break;
       case 'match_start':
         this.selfUnitId = msg.selfUnitId;
         this.team = msg.team;
+        this.coach = msg.coach === true;
         this.inMatch = true;
         break;
       case 'snap': {
@@ -143,6 +171,13 @@ class LoadClient {
         for (const id of msg.gone) this.units.delete(id);
         this.self = msg.self;
         this.winner = msg.winner;
+        // How far the seat's champion has been from where it spawned: the
+        // proof that whoever plays it, bot or hand, actually walks.
+        const me = this.units.get(this.selfUnitId);
+        if (me && me.x !== undefined) {
+          if (!this.spawn) this.spawn = { x: me.x, z: me.z };
+          this.moved = Math.max(this.moved, dist(me, this.spawn));
+        }
         break;
       }
       case 'ping':
@@ -166,9 +201,37 @@ class LoadClient {
     }
   }
 
-  // The hand it plays: a plain one, enough to move, fight and cast.
+  // The pick: the starter this seat's rank among its team's load clients
+  // points at, locked in as the account's bot when the rank has one (see
+  // createBot), as a hand otherwise.
+  async lockIn(select) {
+    const mates = select.players
+      .filter((p) => p.team === select.team && p.name.startsWith(`load-${run}-`))
+      .map((p) => p.name)
+      .sort();
+    const rank = Math.max(0, mates.indexOf(this.name));
+    const championId = STARTERS[rank % STARTERS.length];
+    if (!HAND && rank < STARTERS.length) {
+      try {
+        this.botId = await createBot(this.cookie, championId);
+      } catch (err) {
+        log(`${this.name}: ${err.message}; playing a hand`);
+      }
+    }
+    this.send({
+      t: 'pick',
+      championId,
+      sigils: SIGILS,
+      skin: 0,
+      ...(this.botId ? { bot: this.botId } : {}),
+    });
+  }
+
+  // The hand it plays (HAND=1, or a seat with no bot): a plain one, enough
+  // to move, fight and cast. A coach seat sends nothing; the server plays
+  // its bot.
   act() {
-    if (!this.inMatch || !this.self || this.self.dead || this.winner !== null) return;
+    if (this.coach || !this.inMatch || !this.self || this.self.dead || this.winner !== null) return;
     const me = this.units.get(this.selfUnitId);
     if (!me) return;
     const enemies = [...this.units.values()].filter(
@@ -193,11 +256,16 @@ class LoadClient {
       }
       this.send({ t: 'attack_move', x: target.x, z: target.z });
     } else {
+      // Toward the enemy base, short of it: the sanctum's own cell is
+      // blocked, and a path to a blocked cell is no path at all.
       const base = BASES[1 - this.team];
+      const own = BASES[this.team];
+      const len = dist(base, own);
+      const short = 10 / len;
       this.send({
         t: 'attack_move',
-        x: base.x + (Math.random() - 0.5) * 12,
-        z: base.z + (Math.random() - 0.5) * 12,
+        x: base.x + (own.x - base.x) * short + (Math.random() - 0.5) * 8,
+        z: base.z + (own.z - base.z) * short + (Math.random() - 0.5) * 8,
       });
     }
     if ((this.self.skillPoints ?? 0) > 0) {
@@ -249,7 +317,10 @@ async function main() {
     const name = `load-${run}-${String(i + 1).padStart(2, '0')}`;
     clients.push(new LoadClient(i, name, await register(name)));
   }
-  log(`${N} accounts registered (load-${run}-01..${String(N).padStart(2, '0')})`);
+  log(
+    `${N} accounts registered (load-${run}-01..${String(N).padStart(2, '0')}), ` +
+      (HAND ? 'hands on the seats' : 'a house bot on each seat that can hold one'),
+  );
   await Promise.all(clients.map((c) => c.connect()));
   log('all connected');
 
@@ -283,14 +354,20 @@ async function main() {
     host.send({ t: 'start_lobby' });
   }
   while (!clients.every((c) => c.inMatch) && !clients.some((c) => c.done)) await sleep(100);
-  log(`match on: ${clients.filter((c) => c.inMatch).length} clients seated`);
+  log(
+    `match on: ${clients.filter((c) => c.inMatch).length} clients seated, ` +
+      `${clients.filter((c) => c.coach).length} of them coaching their bot`,
+  );
   const started = Date.now();
   const orders = setInterval(() => {
     for (const c of clients) c.act();
   }, ORDER_MS);
-  const pings = setInterval(() => {
-    for (const c of clients) c.ping();
-  }, 2000);
+  const pings =
+    PING_MS > 0
+      ? setInterval(() => {
+          for (const c of clients) c.ping();
+        }, PING_MS)
+      : null;
 
   const strains = [];
   while (Date.now() - started < DURATION * 1000) {
@@ -307,8 +384,11 @@ async function main() {
     const tick = await serverTick();
     const line =
       `snaps ${perClient.toFixed(1)}/s per client, ${Math.round(bytes / Math.max(1, snaps))} B each, ` +
-      `gap p99 ${percentile(gaps, 0.99)} ms max ${maxGap} ms, ping p50 ${percentile(rtts, 0.5)} ms ` +
-      `p99 ${percentile(rtts, 0.99)} ms | server ${
+      `gap p99 ${percentile(gaps, 0.99)} ms max ${maxGap} ms, ` +
+      (PING_MS > 0
+        ? `ping p50 ${percentile(rtts, 0.5)} ms p99 ${percentile(rtts, 0.99)} ms, `
+        : '') +
+      `walked ${Math.round(Math.max(...clients.map((c) => c.moved)))} m | server ${
         tick
           ? `${tick.ticksPerSecond} ticks/s, avg ${tick.avgMs} ms, max ${tick.maxMs} ms, late ${tick.late}, out ${Math.round(tick.bytesPerSecond / 1000)} kB/s`
           : 'no tick report'
@@ -320,11 +400,13 @@ async function main() {
     }
     if (perClient < 19) strains.push(`snapshots fell to ${perClient.toFixed(1)}/s`);
     if (maxGap > 6 * TICK_MS) strains.push(`a ${maxGap} ms gap between snapshots`);
-    if (percentile(rtts, 0.99) > 150) strains.push(`ping p99 ${percentile(rtts, 0.99)} ms`);
+    if (PING_MS > 0 && percentile(rtts, 0.99) > 150) {
+      strains.push(`ping p99 ${percentile(rtts, 0.99)} ms`);
+    }
     if (tick && tick.maxMs > TICK_MS) strains.push(`a ${tick.maxMs} ms tick on the server`);
   }
   clearInterval(orders);
-  clearInterval(pings);
+  if (pings) clearInterval(pings);
   for (const c of clients) c.leave();
   await sleep(600);
 
@@ -335,7 +417,10 @@ async function main() {
   const played = (Date.now() - started) / 1000;
   log(
     `over ${played.toFixed(0)} s: ${totalSnaps} snapshots (${(totalSnaps / clients.length / played).toFixed(1)}/s per client), ` +
-      `${(totalBytes / 1e6).toFixed(1)} MB in all, longest gap ${maxGap} ms, ping p50 ${percentile(allRtts, 0.5)} ms p99 ${percentile(allRtts, 0.99)} ms`,
+      `${(totalBytes / 1e6).toFixed(1)} MB in all, longest gap ${maxGap} ms` +
+      (PING_MS > 0
+        ? `, ping p50 ${percentile(allRtts, 0.5)} ms p99 ${percentile(allRtts, 0.99)} ms`
+        : ''),
   );
   const errors = clients.flatMap((c) => c.errors);
   if (errors.length > 0)

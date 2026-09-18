@@ -150,13 +150,17 @@ viewport alone: use a tall viewport rather than `fullPage`.
 
 `scripts/load_match.mjs` is the server under a full match of connected
 players without a single browser: each client is an account on a WebSocket
-speaking the wire protocol, sitting in one lobby, picking, and playing a plain
-hand (walking at the enemy base, fighting what it sees, casting, levelling,
-buying). It measures what a client receives, snapshots per second, their size,
-the longest gap between two, the round trip of a map ping through the server,
-and reads the server's own numbers off `/healthz` (the tick meter,
-`server/tick_meter.ts`, which also logs a line every five seconds while a match
-is on). One line every five seconds, a verdict at the end.
+speaking the wire protocol, with a bot of its own (a new bot is the house
+Laner), sitting in one lobby and locking the bot into its seat, so the server
+plays a real house bot on every connection. It measures what a client
+receives, snapshots per second, their size, the longest gap between two, how
+far its champion walked, and reads the server's own numbers off `/healthz`
+(the tick meter, `server/tick_meter.ts`, which also logs a line every five
+seconds while a match is on). One line every five seconds, a verdict at the
+end. `HAND=1` plays a plain hand from the client instead (walks at the enemy
+base, fights what it sees, casts, levels, buys), which exercises the order
+path too; `PING_MS=2000` adds the round trip of a map ping, seen by the whole
+team, so off by default.
 
 ```bash
 . .claude/skills/dev-server/node_env.sh
@@ -168,14 +172,14 @@ URL=http://localhost:8787 N=9 TOTAL=10 node scripts/load_match.mjs   # nine, a s
 With a seat for a person the script prints the lobby code and starts the match
 when the tenth player is in; join it from the home screen (or `/?join=CODE`).
 `CODE=ABCDE` joins a lobby a person already opened instead, and they press
-Start. Every run registers its own accounts (`load-<run>-<n>`) on the server it
-points at, so pointing it at a public server leaves those behind. `DURATION`
-(seconds of play, 180), `WAIT` (seconds for the lobby to fill, 600) and
-`ORDER_MS` (between a client's orders, 250) are the knobs.
+Start. Every run registers its own accounts (`load-<run>-<n>`), each with one
+bot, on the server it points at, so pointing it at a public server leaves those
+behind. `DURATION` (seconds of play, 180), `WAIT` (seconds for the lobby to
+fill, 600) and `ORDER_MS` (between a hand's orders, 250) are the knobs.
 
 "Held" means every client kept its twenty snapshots a second with no gap over
-300 ms, pings answered under 150 ms at the 99th percentile, and no server tick
-over the 50 ms it has. Anything else is named in the verdict.
+300 ms, pings (when on) answered under 150 ms at the 99th percentile, and no
+server tick over the 50 ms it has. Anything else is named in the verdict.
 
 ## Reading a red test run
 
