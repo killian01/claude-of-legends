@@ -35,6 +35,28 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-09-18',
+    title: 'Elowen, in a body of her own',
+    body: [
+      'Elowen, Mistward, has a body of her own, the fourth of the roster after Korrath, Vesk ' +
+        'and Sylra. The ghost she borrowed from a shared pack is retired; in her place hovers ' +
+        'the spirit of the splash art, halo above her head, her sleeves, skirt and hair on ' +
+        'chains of their own that swing with every gesture. Eight movements were made for her: ' +
+        'the levitation she idles in, the glide she moves by, the open hand of a basic attack, ' +
+        'one gesture per spell, and the death, in which she folds and dissipates upward.',
+      'Her mist is modelled beside her rather than drawn on the fly. The auto leaves her ' +
+        'hand as a wisp and bursts where it lands, the Mist Lance flies from her palm and ' +
+        'unfurls on what it hits, the Veil is laid down as a curtain over the ground, the ' +
+        'Drifting Step flashes at both ends of the blink with a streak between them, and the ' +
+        'Whiteout comes down as a storm that fills her circle.',
+      'Nothing in the numbers moved: her ranges, damage and durations are the ones you ' +
+        'played last week. Six champions still wear the shared bodies; they will get theirs ' +
+        'one at a time.',
+    ],
+    image: 'elowen.webp',
+    link: { label: 'See the champions', to: 'champions' },
+  },
+  {
     day: '2026-09-16',
     title: 'Sylra, in her own body',
     body: [
