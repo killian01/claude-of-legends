@@ -40,7 +40,7 @@ discord: off (no DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET set)
 
 ## Accounts without mail
 
-Registration takes a name, a password and an email address, and opens a session at once;
+Registration takes a name and a password (an email address is optional), and opens a session at once;
 the confirmation link only claims the address. Without `MAIL_API_KEY` every mail is
 printed in the server log under `[mail:log-only]`, so a developer follows the link from
 there (`stack.sh links` extracts them). A new account holds the four starter champions

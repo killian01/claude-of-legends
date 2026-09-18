@@ -14,9 +14,14 @@
 // 'stayed' is the line between a visitor and a click that bounced before
 // the art had drawn; 'played' a match started in this browser, practice,
 // test drive or live game alike and never a replay, which is watching
-// rather than playing; 'account' an account created here, by form or by
-// Discord.
-export const STATS_STEPS = ['stayed', 'played', 'account'] as const;
+// rather than playing; 'offer' the account offer at the end of a visitor's
+// practice match taken (ui/account_offer.ts); 'form' the register tab
+// opened, by hand or by the offer; 'account' an account created here, by
+// form or by Discord. Between 'played' and 'offer' stands the match's own
+// end, below: 'finished' is the line between trying and playing through.
+// Read each against the one before it and the funnel says where people
+// leave.
+export const STATS_STEPS = ['stayed', 'played', 'offer', 'form', 'account'] as const;
 export type StatsStep = (typeof STATS_STEPS)[number];
 
 // How a match ended for this browser, sent once when it leaves the match

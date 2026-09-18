@@ -85,6 +85,9 @@ export function startPresentation(
     terrain: RenderTerrain;
     onRenderer?: (renderer: Renderer) => void;
     fullscreen?: boolean;
+    // No account behind this match: the end screen makes the account offer
+    // (ui/account_offer.ts).
+    guest?: boolean;
   },
 ): Presentation {
   const renderer = new Renderer(container, world, options.terrain);
@@ -95,7 +98,7 @@ export function startPresentation(
   renderer.followUnit(selfId);
   renderer.setViewerTeam(selfTeam);
   renderer.domElement.style.cursor = defaultCursor();
-  const hud = new Hud(container, world, selfId, selfTeam, onExit);
+  const hud = new Hud(container, world, selfId, selfTeam, onExit, options.guest === true);
   // The thumb controls (CONTEXT.md: Thumb stick): a touchscreen playing
   // by the stick, which moves the minimap and the touch bar out of the
   // thumbs' way and hands the HUD's slots to the cast touch.

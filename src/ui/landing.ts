@@ -16,6 +16,7 @@ import type { DiscordResult } from './discord_entry';
 import { startBackdrop } from './home_backdrop';
 import { CONTRIBUTE_LEAD, CONTRIBUTE_TITLE, CONTRIBUTE_WAYS } from './landing_contribute';
 import { mountEmbers } from './landing_embers';
+import { mountLandingLadder } from './landing_ladder';
 import { LANDING_MODES, PRACTICE_ART } from './landing_modes';
 import { revealOnScroll } from './landing_reveal';
 import { DISCORD, PRIVACY } from './links';
@@ -298,12 +299,19 @@ export type LandingResult =
   // Chose the offline practice match, which needs no account.
   | { kind: 'offline' };
 
+// Why the landing is being shown again, when it is: 'register' after a
+// visitor took the account offer at the end of a practice match
+// (ui/account_offer.ts), so the page opens on the form, on its register
+// tab, rather than on the hero they have already read.
+export type LandingIntent = 'register';
+
 // `discordResult` is what a round trip through Discord came back with, if
 // this load came from one; the credential panel is the only thing on this
 // page that has anything to say about it (ADR 0009).
 export function showLanding(
   container: HTMLElement,
   discordResult: DiscordResult | null = null,
+  intent: LandingIntent | null = null,
 ): Promise<LandingResult> {
   ensureCss();
   return new Promise((resolve) => {
@@ -312,6 +320,13 @@ export function showLanding(
     const stopEmbers = mountEmbers(root);
     let stopReveal = (): void => {};
     container.appendChild(root);
+    // Arriving to sign up: straight to the form. The cards are built
+    // below, and exist by the time the frame is painted.
+    if (intent === 'register') {
+      requestAnimationFrame(() => {
+        root.querySelector('.pg-cards')?.scrollIntoView({ block: 'start' });
+      });
+    }
 
     const finish = (result: LandingResult): void => {
       stopReveal();
@@ -413,7 +428,11 @@ export function showLanding(
     }
     const formPanel = el('div', 'pg-opens-form');
     formPanel.appendChild(
-      buildAuthForm((account) => finish({ kind: 'account', account }), discordResult),
+      buildAuthForm(
+        (account) => finish({ kind: 'account', account }),
+        discordResult,
+        intent === 'register' ? 'register' : 'login',
+      ),
     );
     const openRow = el('div', 'pg-open-row');
     openRow.append(formPanel, opens);
@@ -493,6 +512,15 @@ export function showLanding(
 
     ways.append(online, offline);
     inner.appendChild(ways);
+
+    // The ladder, to a visitor (ui/landing_ladder.ts): the names already
+    // standing there, under the two doors and before the page asks for
+    // theirs. Its button is the way to the form.
+    const ladder = el('section', 'pg-ladder');
+    inner.appendChild(ladder);
+    mountLandingLadder(ladder, () => {
+      root.querySelector('.pg-cards')?.scrollIntoView({ behavior: 'smooth' });
+    });
 
     // --- and the thing the genre does not offer ---
     const give = el('section', 'pg-give');

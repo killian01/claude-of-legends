@@ -149,15 +149,21 @@ export async function requestReset(email: string): Promise<string | null> {
 //
 // `discordResult` is what a round trip through Discord came back with, if
 // this page load came from one (ADR 0009). The form only ever shows it;
-// what was linked, if anything, is the server's business.
+// what was linked, if anything, is the server's business. `initialMode`
+// is the tab the form opens on: register when the visitor arrives having
+// taken the account offer at the end of a practice match, sign in
+// otherwise.
 export function buildAuthForm(
   onSignedIn: (account: AuthedAccount) => void,
   discordResult: DiscordResult | null = null,
+  initialMode: 'login' | 'register' = 'login',
 ): HTMLElement {
   ensureCss();
   const root = el('div', 'auth-form');
   let mode: Mode = 'login';
   let busy = false;
+  // The register tab opened, counted once per form (net/stats.ts).
+  let formCounted = false;
 
   const tabs = el('div', 'auth-tabs');
   const loginTab = el('button', 'auth-tab on', 'Sign in');
@@ -205,9 +211,14 @@ export function buildAuthForm(
     loginTab.classList.toggle('on', next === 'login');
     registerTab.classList.toggle('on', next === 'register');
     // Each mode asks for exactly what it needs and hides the rest, rather
-    // than showing a field the request will not carry.
+    // than showing a field the request will not carry. Registering asks
+    // for no address (ADR 0007, amended): the home offers to add one.
     name.hidden = next === 'forgot';
-    email.hidden = next === 'login';
+    email.hidden = next !== 'forgot';
+    if (next === 'register' && !formCounted) {
+      formCounted = true;
+      trackStep('form');
+    }
     password.hidden = next === 'forgot';
     discordBox.hidden = next === 'forgot';
     go.textContent = LABELS[next].go;
@@ -216,8 +227,8 @@ export function buildAuthForm(
     alt.textContent = next === 'forgot' ? 'Back to signing in' : 'Forgot your password?';
     note.textContent =
       next === 'register'
-        ? 'Letters, digits, _ and - , 3 to 16 characters. Your address is only ever used to ' +
-          'confirm the account and to reset a forgotten password; nobody else can see it.'
+        ? 'Letters, digits, _ and - , 3 to 16 characters. No email needed: you can add one ' +
+          'later, from your account, to be able to reset a forgotten password.'
         : next === 'forgot'
           ? 'A link goes to the address on the account, if there is one and it has been ' +
             'confirmed. An unconfirmed address cannot receive one, because it might not be yours.'
@@ -260,10 +271,6 @@ export function buildAuthForm(
       error.textContent = 'Both fields, please.';
       return;
     }
-    if (mode === 'register' && typedEmail.length === 0) {
-      error.textContent = 'An email address, please.';
-      return;
-    }
     busy = true;
     go.textContent = LABELS[mode].busy;
     error.textContent = '';
@@ -290,7 +297,7 @@ export function buildAuthForm(
     });
   }
 
-  setMode('login');
+  setMode(initialMode);
   return root;
 }
 

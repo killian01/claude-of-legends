@@ -62,7 +62,7 @@ import { takeDiscordResult } from './ui/discord_entry';
 import { takeConfirmResult } from './ui/email_status';
 import { preloadBackdrop } from './ui/home_backdrop';
 import { HOME_SECTION_KEYS, type HomeChoice, showHome } from './ui/home_screen';
-import { showLanding } from './ui/landing';
+import { type LandingIntent, showLanding } from './ui/landing';
 import {
   type BotPick,
   type CommunityPick,
@@ -229,7 +229,9 @@ async function fetchBots(): Promise<BotPick[]> {
 
 // One offline practice match on the Star Orchard; resolves with the exit
 // the player chose.
-async function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
+// `guest` when no account is behind it: the end screen then makes the
+// account offer (ui/account_offer.ts).
+async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAction> {
   const loaded = await loadOrchard(pick.forged ? [pick.forged.id] : []);
   if (!loaded) return 'menu';
   return new Promise((resolve) => {
@@ -285,8 +287,14 @@ async function runOffline(pick: OfflinePick): Promise<PostMatchAction> {
     // here; the replay viewer below deliberately does not, since watching
     // is not playing.
     trackStep('played');
+    // A probe for the browser checks (an e2e script ends the match to look
+    // at the end screen), on the dev server only, like the replay's.
+    if (import.meta.env.DEV) {
+      (window as unknown as { __practice?: unknown }).__practice = { sim };
+    }
     const pres = startPresentation(container, world, self.id, self.team, exit, {
       terrain: loaded.terrain,
+      guest,
     });
     const TICK_MS = DT * 1000;
     let last = performance.now();
@@ -1123,6 +1131,9 @@ async function boot(): Promise<void> {
   // The roster's illustrations, so the select screen opens with its cards
   // whole rather than filling in one by one.
   warmChampionArt();
+  // Why the landing comes back, when it does: the account offer taken at
+  // the end of a practice match opens it on the register tab.
+  let landingIntent: LandingIntent | null = null;
 
   for (;;) {
     // The way in (ADR 0006): everything but the offline practice match
@@ -1130,7 +1141,8 @@ async function boot(): Promise<void> {
     // screen rather than beside it. An invite code survives the detour and
     // lands in the join field on the other side.
     if (account === null) {
-      const entry = await showLanding(container, discordResult);
+      const entry = await showLanding(container, discordResult, landingIntent);
+      landingIntent = null;
       if (entry.kind === 'account') {
         // Signing in starts the page over rather than swapping the home
         // screen in over the landing (game/reentry.ts): the session
@@ -1144,7 +1156,8 @@ async function boot(): Promise<void> {
       const pick: OfflinePick | null = lastPick ?? (await pickForPractice());
       if (!pick) continue;
       lastPick = pick;
-      await runOffline(pick);
+      const action = await runOffline(pick, true);
+      if (action === 'account') landingIntent = 'register';
       continue;
     }
     if (joinCode !== null) next = { name: account.name, mode: 'join', code: joinCode };

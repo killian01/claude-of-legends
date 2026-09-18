@@ -17,6 +17,10 @@ describe('post-match flow', () => {
     for (const mode of ALL_MODES) expect(nextStep('menu', mode)).toBe('home');
   });
 
+  it('the account offer taken goes home too, whatever the mode', () => {
+    for (const mode of ALL_MODES) expect(nextStep('account', mode)).toBe('home');
+  });
+
   it('play again replays the same offline pick after practice', () => {
     expect(nextStep('again', 'practice')).toBe('replay');
   });
