@@ -221,12 +221,27 @@ export function matchEndReporter(
   current: () => MatchState,
   win: ReporterWindow = window as ReporterWindow,
 ): MatchEndReporter {
+  return matchEndOnce(
+    current,
+    (state) => trackMatchEnd(state.winner, state.seconds, mode, win),
+    win,
+  );
+}
+
+// The mechanism under the reporter, for anything else a match says once
+// at its end (the practice report, src/net/practice_report.ts): `send` is
+// called with the state as it stands at the first of the three moments,
+// and never again.
+export function matchEndOnce(
+  current: () => MatchState,
+  send: (state: MatchState) => void,
+  win: ReporterWindow = window as ReporterWindow,
+): MatchEndReporter {
   let sent = false;
   const report = (): void => {
     if (sent) return;
     sent = true;
-    const state = current();
-    trackMatchEnd(state.winner, state.seconds, mode, win);
+    send(current());
   };
   win.addEventListener?.('pagehide', report);
   return {

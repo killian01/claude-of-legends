@@ -88,3 +88,18 @@ describe('the events the client sends', () => {
     }
   });
 });
+
+describe('what a practice match sends', () => {
+  it('is named on the page, route and file alike, and takes no session', () => {
+    const page = read('PRIVACY.md');
+    expect(page).toContain('`/api/practice/report`');
+    expect(page).toContain('`practice.jsonl`');
+    const main = read('server/main.ts');
+    const route = main.slice(main.indexOf("url === '/api/practice/report'"));
+    const body = route.slice(0, route.indexOf("url === '/api/public/stats'"));
+    // Parsed, never trusted, and nothing about who sent it is kept.
+    expect(body).toContain('parsePracticeReport');
+    expect(body).not.toContain('accountForRequest');
+    expect(body).not.toContain('address');
+  });
+});

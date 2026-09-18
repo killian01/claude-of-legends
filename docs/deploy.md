@@ -255,6 +255,27 @@ append-only and cannot.
 Nothing is collected for this and nothing is written by it. It reads two
 files and prints a table.
 
+## What the practice matches say
+
+A practice match runs in the browser and the match log never hears of it.
+Its end sends the server a practice report (PRIVACY.md, one line each in
+`practice.jsonl`): the scoreboard, the result, the minutes, by touch or by
+mouse, visitor or account. The script reads the file and answers the
+question those matches raise: are the house bots the right strength for the
+people who meet them first.
+
+```bash
+node scripts/practice.mjs /var/lib/docker/volumes/claude-of-legends_game_data/_data
+node scripts/practice.mjs <data dir> 30      the last 30 days only
+```
+
+Results and minutes over all, by device and by account; each champion
+played with its win rate, how often it was left, kills, deaths, assists,
+minions a minute, level and minutes; the person's kills and deaths per ten
+minutes beside the ally bots' and the enemy bots'; at what minute people
+leave and how many deaths they had by then; and which enemy bots take the
+most kills. No name is in the file and none is printed.
+
 ## What was played
 
 The same log answers the other question the counters cannot: what the ten

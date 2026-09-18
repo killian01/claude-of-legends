@@ -31,6 +31,7 @@ import {
 import { loadStarOrchard } from './game/star_orchard_records';
 import { buildIdFromMeta, startBuildWatch } from './net/build_watch';
 import { ClientWorld } from './net/client_world';
+import { buildPracticeReport, sendPracticeReport } from './net/practice_report';
 import type { ForgedMatchAssets, ServerMsg } from './net/protocol';
 import {
   applyReplayEvent,
@@ -45,6 +46,7 @@ import {
 import {
   installStats,
   type MatchEndReporter,
+  matchEndOnce,
   matchEndReporter,
   STAYED_MS,
   trackStep,
@@ -277,11 +279,35 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
       winner: world.winner,
       seconds: world.time,
     }));
+    // And the practice report (src/net/practice_report.ts): the scoreboard
+    // at that same moment, the one thing the server learns of a match it
+    // never saw run, so the bots' strength can be read off what people
+    // meet. No name rides with it.
+    const practice = matchEndOnce(
+      () => ({ winner: world.winner, seconds: world.time }),
+      (state) =>
+        sendPracticeReport(
+          buildPracticeReport({
+            rows: world.scoreboard(),
+            selfId: self.id,
+            selfTeam: self.team,
+            winner: state.winner,
+            seconds: state.seconds,
+            forged: pick.forged !== undefined,
+            touch:
+              typeof window.matchMedia === 'function' &&
+              window.matchMedia('(pointer: coarse)').matches,
+            signedIn: !guest,
+          }),
+        ),
+    );
     const exit = (action: PostMatchAction): void => {
       if (stopped) return;
       stopped = true;
       ends.report();
       ends.dispose();
+      practice.report();
+      practice.dispose();
       pres.dispose();
       layer.closed();
       resolve(action);
@@ -317,6 +343,7 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
         layer.unguard();
         // Played through, whatever happens to the tab from here.
         ends.report();
+        practice.report();
       }
       // The first frame's timestamp predates the presentation's own setup
       // (shader compiles, texture uploads: seconds on a slow GPU), which

@@ -129,6 +129,7 @@ import {
 import { COACH_IDLE_DAYS } from './night_eligibility';
 import { passwordErrorMessage, validatePassword } from './password';
 import { type CoachDeps, coachPlaybook } from './playbook_suggest';
+import { PracticeReportStore, parsePracticeReport } from './practice_reports';
 import { buildProfile } from './profile';
 import { CEILING_DEFAULTS, checkQuota, DAY_MS, spendQuota } from './quotas';
 import { BASE_RATING, LEAVER_LOCKOUT_MS, leaverPenalty } from './rating';
@@ -252,6 +253,9 @@ let nextClientId = 1;
 let nextMatchId = 1;
 
 const registry = new AccountRegistry(path.join(DATA_DIR, 'accounts.json'));
+// What practice matches send at their end (server/practice_reports.ts):
+// one line each, read by scripts/practice.mjs and nothing else.
+const practiceReports = new PracticeReportStore(path.join(DATA_DIR, 'practice.jsonl'));
 const sessions = new SessionStore(path.join(DATA_DIR, 'sessions.json'));
 // What a wrong password costs the next attempt (server/login_throttle.ts).
 const logins = new LoginThrottle();
@@ -1091,6 +1095,23 @@ const server = http.createServer(async (req, res) => {
         rotation: rotationAt(now),
         prices: CHAMPION_PRICES,
       });
+      return;
+    }
+
+    // A practice match's end, from the browser that ran it
+    // (src/net/practice_report.ts, PRIVACY.md): the scoreboard of a match
+    // against house bots, nothing that names anyone. No session, since
+    // most practice matches are a visitor's. The parse is strict and a
+    // report that is not one is dropped; the client never waits on the
+    // answer either way.
+    if (url === '/api/practice/report') {
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'use POST' });
+        return;
+      }
+      const report = parsePracticeReport(await readJsonBody(req, 8192));
+      if (report) practiceReports.append(report, Date.now());
+      sendJson(res, report ? 200 : 400, { ok: report !== null });
       return;
     }
 

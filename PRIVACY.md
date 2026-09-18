@@ -91,9 +91,23 @@ The record is a database on this machine, read by the maintainer and by
 nobody else, and it exists so that an announcement can be told apart from a
 front page that loses people.
 
+## What a practice match sends
+
+A practice match runs in your browser against the house bots; the server
+never sees it played. When it ends, or when you leave it, your browser sends
+the server one thing (`/api/practice/report`, `src/net/practice_report.ts`):
+the scoreboard. The ten champions, their team, level, kills, deaths,
+assists, minions and items, which seat was yours, whether you won, lost or
+left, how many minutes it ran, whether it was played by touch, and whether
+an account was signed in. No name, no account id, no address: the line
+lands in a file on this machine (`practice.jsonl`) with the time it arrived
+and nothing else, read by the maintainer with `scripts/practice.mjs`, and it
+exists so the bots can be tuned to the strength of the people who meet them
+first.
+
 ## What is not counted
 
-No clicks beyond the three events above, no session recordings, no heat
+No clicks beyond the five events above, no session recordings, no heat
 maps, no fingerprinting, no cross-site anything, no profile, no export to
 anyone, and nothing that follows a browser from one month into the next.
 

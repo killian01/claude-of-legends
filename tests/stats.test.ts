@@ -12,6 +12,7 @@ import {
   MATCH_ENDS,
   type MatchState,
   matchEndEvent,
+  matchEndOnce,
   matchEndReporter,
   OLD_VISIT_KEY,
   type ReporterWindow,
@@ -228,6 +229,20 @@ describe('how a match ended', () => {
     win.fire();
     expect(win.track).toHaveBeenCalledTimes(1);
     expect(win.track).toHaveBeenCalledWith('left', { minutes: 2, mode: 'practice' });
+  });
+
+  it('hands anything else a match says once the same state, once', () => {
+    const win = fakeWindow();
+    const state: MatchState = { winner: null, seconds: 30 };
+    const send = vi.fn();
+    const once = matchEndOnce(() => state, send, win);
+    state.winner = 1;
+    state.seconds = 600;
+    win.fire();
+    once.report();
+    once.dispose();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith({ winner: 1, seconds: 600 });
   });
 
   it('asks nothing of a window with no tracker and no events', () => {

@@ -414,7 +414,9 @@ _Avoid_: custom game, room, custom lobby
 
 **Practice**:
 The offline match against dummies, run entirely in the browser tab with nothing saved and
-no account needed. The same simulation the rated match runs.
+no account needed. The same simulation the rated match runs. Its end sends the server the
+practice report (PRIVACY.md): the scoreboard, the result and the minutes, nothing that names
+anyone, the one thing the server learns of a match it never saw run.
 _Avoid_: offline mode, sandbox, training, tutorial
 
 **Forge queue**:
