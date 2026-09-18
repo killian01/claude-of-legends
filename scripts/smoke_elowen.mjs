@@ -135,7 +135,10 @@ try {
   report.auto = auto;
   assert.ok(auto, 'the auto never left her hand');
   assert.equal(auto.name, 'Elowen_AttackWisp', JSON.stringify(auto));
-  assert.ok(auto.handGap < 2 && auto.handFromBody > 0.8, `the auto left her body, not her hand: ${JSON.stringify(auto)}`);
+  assert.ok(
+    auto.handGap < 2 && auto.handFromBody > 0.8,
+    `the auto left her body, not her hand: ${JSON.stringify(auto)}`,
+  );
   await page.screenshot({ path: `${output}/attack-bolt.webp` });
 
   // A cast helper: stops, refills mana, casts the key at an offset from
@@ -183,7 +186,10 @@ try {
   report.lance = { ...lance, ...(await spellClip('Q')) };
   assert.ok(lance, 'no lance in flight');
   assert.ok(lance.authored, JSON.stringify(lance));
-  assert.ok(lance.handGap < 2 && lance.handFromBody > 0.8, `the lance left her body, not her hand: ${JSON.stringify(lance)}`);
+  assert.ok(
+    lance.handGap < 2 && lance.handFromBody > 0.8,
+    `the lance left her body, not her hand: ${JSON.stringify(lance)}`,
+  );
   assert.equal(report.lance.clip, 'Cast_Q');
   assert.ok(report.lance.running, JSON.stringify(report.lance));
   // A few ticks of flight so the lance clears her body before the shot.
