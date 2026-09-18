@@ -10,6 +10,18 @@ import * as THREE from 'three';
 import type { SfxName } from '../../game/sfx';
 import type { IWorld } from '../../world_api';
 import { resolveLook } from '../ability_vfx';
+import {
+  buildAttackWisp,
+  buildMistLance,
+  buildVeil,
+  buildWhiteout,
+  driftingStep,
+  lanceImpact,
+  missileTick,
+  veilTick,
+  whiteoutTick,
+  wispImpact,
+} from './elowen_fx';
 import { lookVisual } from './looks';
 import { basicMat, flatDisc, flatRing, growSweep, pulseRim, telegraphZone } from './shapes';
 import { SPRITE } from './sprites';
@@ -55,6 +67,8 @@ export interface SpellVisual {
   // Fired where the projectile despawned.
   impact?: (fx: VfxSystem, x: number, z: number, colors: SchoolColors) => void;
   // Fired at the caster on a visible instant cast; dir points at the aim.
+  // (x, z) is where the caster stands once the cast resolved, `from`
+  // where the renderer last drew them: the two differ after a blink.
   castFx?: (
     fx: VfxSystem,
     x: number,
@@ -62,6 +76,8 @@ export interface SpellVisual {
     dirX: number,
     dirZ: number,
     colors: SchoolColors,
+    fromX?: number,
+    fromZ?: number,
   ) => void;
   // Replace the default zone mesh; hostile tells the viewer's foes apart.
   zone?: (radius: number, colors: SchoolColors, hostile: boolean) => THREE.Object3D;
@@ -165,7 +181,6 @@ export function genericWindupTick(
 const FIRE = { main: 0xff7a2a, glow: 0xffc07a };
 const EARTH = { main: 0xc89a58, glow: 0xe8d0a0 };
 const WATER = { main: 0x4aa8e8, glow: 0xbfe8ff };
-const FROST = { main: 0x9fd8ff, glow: 0xe8f6ff };
 const SHADOW = { main: 0x9a5df0, glow: 0xd0b2ff };
 const GOLD = { main: 0xffd94a, glow: 0xfff0b0 };
 // Sylra's palette, taken from her reference renders: the emerald sap of
@@ -447,92 +462,36 @@ export const SPELL_VFX: Readonly<Record<string, SpellVisual>> = {
     },
   },
 
-  // Elowen R: a whiteout. Snow orbits the eye of the storm, wind streaks
-  // tear along the rim, and the ground frosts over while it holds.
+  // Elowen's kit is her own module (elowen_fx.ts): the authored files of
+  // her mist, cold and slow, never thunder. The auto is the wisp of the
+  // file (its mist spinning about the flight axis) and its small burst.
+  elowen_A: {
+    projectile: () => buildAttackWisp(),
+    projectileTick: (_fx, _x, _z, dtMs, _colors, _nowMs, holder) => missileTick(holder, dtMs),
+    impact: (fx, x, z) => wispImpact(fx, x, z),
+  },
+
+  // Elowen Q: the lance of the file, its mist spinning about the flight
+  // axis, and its unfurling impact.
+  elowen_Q: {
+    projectile: () => buildMistLance(),
+    projectileTick: (_fx, _x, _z, dtMs, _colors, _nowMs, holder) => missileTick(holder, dtMs),
+    impact: (fx, x, z) => lanceImpact(fx, x, z),
+  },
+
+  // Elowen W: the veil. The file's domes, wisps, ground mist and flecks
+  // grow from the cast, turn slowly and fade over the veil's last beats.
+  elowen_W: {
+    zone: (radius, _colors, hostile) => buildVeil(radius, hostile),
+    zoneTick: (fx, holder, x, z, radius, ageMs) => veilTick(fx, holder, x, z, radius, ageMs),
+  },
+
+  // Elowen R: the whiteout. The file's wall of wind, ribbons, eye, vortex,
+  // ground mist and snow grow from the cast, turn at their own speeds and
+  // fade over the storm's last beats; one gentle shake as it lands.
   elowen_R: {
-    zone: (radius) => {
-      const holder = new THREE.Group();
-      holder.add(flatDisc(radius, 0x9fd8ff, 0.16, 0.09));
-      holder.add(flatRing(radius - 0.5, radius + 0.12, 0x0a1420, 0.5, 0.1));
-      const rim = flatRing(radius - 0.34, radius, 0xbfe8ff, 0.7, 0.11);
-      holder.add(rim);
-      holder.userData.rim = rim;
-      return holder;
-    },
-    zoneTick: (fx, holder, x, z, radius, ageMs, _colors, _dtMs) => {
-      pulseRim(holder, ageMs, 0.2);
-      if (!holder.userData.frosted) {
-        holder.userData.frosted = true;
-        fx.decals.spawn(x, z, radius * 0.95, 'frost', 4600, { alpha: 0.55 });
-      }
-      // The tempest's teeth: a lightning strike inside the storm every
-      // beat, with its own flash, ground ring, and thunder kick.
-      const lastBolt = (holder.userData.lastBolt as number | undefined) ?? -9999;
-      if (ageMs - lastBolt > 850) {
-        holder.userData.lastBolt = ageMs;
-        const a = Math.random() * Math.PI * 2;
-        const r = Math.random() * radius * 0.7;
-        const sx = x + Math.cos(a) * r;
-        const sz = z + Math.sin(a) * r;
-        fx.bolts.spawn(
-          new THREE.Vector3(sx + (Math.random() - 0.5) * 3, 15, sz + (Math.random() - 0.5) * 3),
-          new THREE.Vector3(sx, 0.2, sz),
-          0xdff2ff,
-          340,
-          0.18,
-          0.16,
-        );
-        fx.glowFlash(sx, 1.2, sz, 5, 0xdff2ff, 0.22);
-        fx.rings.spawn(sx, sz, 1.8, 0xbfe8ff, 450, { alpha: 0.8 });
-        fx.sparkBurst(sx, 0.6, sz, 0xdff2ff, 8, 8, { life: 0.35 });
-        fx.lightPulse(sx, sz, 0xbfe8ff, 26, 300);
-        fx.onShake(0.14);
-      }
-      // Orbiting snow: tangential velocity around the eye.
-      for (let i = 0; i < 3; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const r = radius * (0.25 + Math.random() * 0.7);
-        const sp = 5 + Math.random() * 4;
-        fx.particles.spawn({
-          x: x + Math.cos(a) * r,
-          y: 0.3 + Math.random() * 2.4,
-          z: z + Math.sin(a) * r,
-          vx: -Math.sin(a) * sp - Math.cos(a) * 1.2,
-          vy: 0.7,
-          vz: Math.cos(a) * sp - Math.sin(a) * 1.2,
-          life: 0.7,
-          size0: 0.3,
-          size1: 0.12,
-          color0: 0xffffff,
-          color1: 0x9fd8ff,
-          alpha0: 0.85,
-          sprite: SPRITE.fleck,
-        });
-      }
-      // Wind shear: a fast streak along the rim now and then.
-      if (Math.random() < 0.25) {
-        const a = Math.random() * Math.PI * 2;
-        fx.particles.spawn({
-          x: x + Math.cos(a) * radius * 0.85,
-          y: 1 + Math.random() * 1.2,
-          z: z + Math.sin(a) * radius * 0.85,
-          vx: -Math.sin(a) * 11,
-          vz: Math.cos(a) * 11,
-          life: 0.3,
-          size0: 1.5,
-          size1: 0.4,
-          color0: 0xe8f6ff,
-          alpha0: 0.5,
-          sprite: SPRITE.spark,
-          rot: -a,
-        });
-      }
-      const pulseAt = (holder.userData.lastPulse as number | undefined) ?? 0;
-      if (ageMs - pulseAt > 750) {
-        holder.userData.lastPulse = ageMs;
-        fx.rings.spawn(x, z, radius, FROST.main, 700, { alpha: 0.3, width: 0.22 });
-      }
-    },
+    zone: (radius, _colors, hostile) => buildWhiteout(radius, hostile),
+    zoneTick: (fx, holder, x, z, radius, ageMs) => whiteoutTick(fx, holder, x, z, radius, ageMs),
   },
 
   // Ashvyn R: an eclipse overhead and a storm of arrows under it, each
@@ -836,18 +795,11 @@ export const SPELL_VFX: Readonly<Record<string, SpellVisual>> = {
     },
   },
 
-  // Elowen E: a blink; mist bursts at both ends of the step.
+  // Elowen E: the blink. The file's flash where she left, its streak to
+  // where she landed, the same flash there one beat later.
   elowen_E: {
-    castFx: (fx, x, z, dirX, dirZ) => {
-      fx.smokePuffs(x, z, 0xbfe8ff, 4, 0.9);
-      fx.glowFlash(x, 1.2, z, 2, FROST.glow, 0.18);
-      fx.schedule(90, () => {
-        const tx = x + dirX * 4;
-        const tz = z + dirZ * 4;
-        fx.smokePuffs(tx, tz, 0xbfe8ff, 4, 0.9);
-        fx.glowFlash(tx, 1.2, tz, 2, FROST.glow, 0.18);
-      });
-    },
+    castFx: (fx, x, z, dirX, dirZ, _colors, fromX, fromZ) =>
+      driftingStep(fx, x, z, dirX, dirZ, fromX, fromZ),
   },
 };
 

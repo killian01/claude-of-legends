@@ -1050,6 +1050,8 @@ export class Renderer {
           const instant = !(def.windup && def.windup > 0);
           if (vis?.castFx && instant) {
             const yaw = t?.yaw ?? 0;
+            // The sim already moved a blink's caster: `prev` is where the
+            // viewer last saw them, the cast's true origin.
             vis.castFx(
               this.vfx,
               caster.pos.x,
@@ -1057,6 +1059,8 @@ export class Renderer {
               Math.sin(yaw),
               Math.cos(yaw),
               schoolColorOf(def.spec),
+              t?.prev.x,
+              t?.prev.z,
             );
           } else if (
             others &&
