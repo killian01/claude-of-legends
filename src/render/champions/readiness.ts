@@ -6,6 +6,7 @@
 // the match plays), so this resolves on every answer, loaded or not: it
 // only ever waits, never blocks.
 
+import { preloadElowenEffects } from '../vfx/elowen_fx';
 import { preloadSylraEffects } from '../vfx/sylra_fx';
 import { preloadChampionAssets, whenChampionTemplateReady } from './assets';
 import { forgedChampionTemplate } from './forged';
@@ -42,5 +43,9 @@ export async function whenChampionModelsReady(
     loaded++;
     onProgress?.(loaded, ids.length);
   };
-  await Promise.all([...ids.map(one), preloadSylraEffects().catch(() => undefined)]);
+  await Promise.all([
+    ...ids.map(one),
+    preloadSylraEffects().catch(() => undefined),
+    preloadElowenEffects().catch(() => undefined),
+  ]);
 }

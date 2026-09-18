@@ -143,7 +143,7 @@ export function startPresentation(
   const project = (x: number, y: number, z: number) => renderer.projectToScreen(x, y, z);
   // A dev probe like the replay viewer's (src/main.ts __replay): the
   // browser e2e scripts read the champion's position off it.
-  (window as unknown as { __match?: unknown }).__match = { world, selfId };
+  (window as unknown as { __match?: unknown }).__match = { world, selfId, renderer };
 
   // A ground-placed cast aimed beyond range walks into range first, then
   // fires at the EXACT aimed point, like the genre without quickcast. Any

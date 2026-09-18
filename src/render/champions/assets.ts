@@ -10,6 +10,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 import { clone as cloneRig } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { skinOf } from '../../sim/content/skins';
+import { preloadElowenEffects } from '../vfx/elowen_fx';
 import { preloadSylraEffects } from '../vfx/sylra_fx';
 import { CHAMPION_VISUALS, type ChampionVisualDef } from './manifest';
 import { buildChampionProp } from './props';
@@ -156,7 +157,11 @@ export function normalizeProp(scene: THREE.Group, size: number, anchor?: 'origin
 // its own, and a host with none yet (the select screen, the loading card)
 // lets a throwaway context answer and go.
 export function preloadChampionAssets(renderer?: THREE.WebGLRenderer): void {
+  // The authored spell effects load beside the models: every champion
+  // with a module of her own under src/render/vfx/ is named here, and
+  // tests/champion_readiness.test.ts holds this list to that folder.
   void preloadSylraEffects();
+  void preloadElowenEffects();
   if (pending.size > 0) return;
   const ktx2 = new KTX2Loader().setTranscoderPath('/vendor/basis/');
   if (renderer) ktx2.detectSupport(renderer);
