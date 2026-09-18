@@ -146,6 +146,37 @@ again at 2200 for anything that centers, then converted to WebP under `docs/scre
 The `.pg` page scrolls inside its own element, so a full-page screenshot captures the
 viewport alone: use a tall viewport rather than `fullPage`.
 
+## Load: ten clients, no browser
+
+`scripts/load_match.mjs` is the server under a full match of connected
+players without a single browser: each client is an account on a WebSocket
+speaking the wire protocol, sitting in one lobby, picking, and playing a plain
+hand (walking at the enemy base, fighting what it sees, casting, levelling,
+buying). It measures what a client receives, snapshots per second, their size,
+the longest gap between two, the round trip of a map ping through the server,
+and reads the server's own numbers off `/healthz` (the tick meter,
+`server/tick_meter.ts`, which also logs a line every five seconds while a match
+is on). One line every five seconds, a verdict at the end.
+
+```bash
+. .claude/skills/dev-server/node_env.sh
+.claude/skills/dev-server/stack.sh up
+URL=http://localhost:8787 node scripts/load_match.mjs          # ten clients, three minutes
+URL=http://localhost:8787 N=9 TOTAL=10 node scripts/load_match.mjs   # nine, a seat for you
+```
+
+With a seat for a person the script prints the lobby code and starts the match
+when the tenth player is in; join it from the home screen (or `/?join=CODE`).
+`CODE=ABCDE` joins a lobby a person already opened instead, and they press
+Start. Every run registers its own accounts (`load-<run>-<n>`) on the server it
+points at, so pointing it at a public server leaves those behind. `DURATION`
+(seconds of play, 180), `WAIT` (seconds for the lobby to fill, 600) and
+`ORDER_MS` (between a client's orders, 250) are the knobs.
+
+"Held" means every client kept its twenty snapshots a second with no gap over
+300 ms, pings answered under 150 ms at the 99th percentile, and no server tick
+over the 50 ms it has. Anything else is named in the verdict.
+
 ## Reading a red test run
 
 The suite gives each test 60 seconds because the heaviest ones step whole matches; on a

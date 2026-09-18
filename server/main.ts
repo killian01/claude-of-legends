@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { type WebSocket, WebSocketServer } from 'ws';
 import {
   type ForgedMatchAssets,
@@ -150,6 +151,7 @@ import {
 import { suggestKit } from './suggest';
 import { suggestLook } from './suggest_look';
 import { suggestStats } from './suggest_stats';
+import { formatTickReport, TickMeter } from './tick_meter';
 import { type WayStats, wayStatsOf } from './way_stats';
 import { playedByHand, seatWay, type Way } from './ways';
 
@@ -709,7 +711,9 @@ async function sendConfirmation(account: Account): Promise<void> {
 function send(clientId: number, msg: ServerMsg): void {
   const c = clients.get(clientId);
   if (!c || c.ws.readyState !== c.ws.OPEN) return;
-  c.ws.send(JSON.stringify(msg));
+  const text = JSON.stringify(msg);
+  meter.sent(text.length);
+  c.ws.send(text);
 }
 
 // The match_start block carrying the forged definitions, when the match
@@ -2182,6 +2186,8 @@ const server = http.createServer(async (req, res) => {
           clients: clients.size,
           matches: matches.size,
           uptimeS: Math.round(process.uptime()),
+          // How the world loop kept up over its last window (server/tick_meter.ts).
+          tick: meter.last(),
         }),
       );
       return;
@@ -2528,6 +2534,10 @@ wss.on('connection', (ws, req) => {
 
 // --- The world loop: fixed-step accumulator, guarded per match ---
 
+// The loop's own numbers (server/tick_meter.ts): a line every five seconds
+// while a match is on, and the last window on /healthz.
+const meter = new TickMeter(Date.now());
+
 let last = Date.now();
 let acc = 0;
 setInterval(() => {
@@ -2535,6 +2545,7 @@ setInterval(() => {
   acc += Math.min(now - last, 500);
   last = now;
   for (const mm of matchmakers) mm.tickClock(now);
+  let ran = 0;
 
   // Reap abandoned matches whose rejoin grace ran out.
   for (const [matchId, entry] of matches) {
@@ -2547,6 +2558,7 @@ setInterval(() => {
 
   while (acc >= TICK_MS) {
     acc -= TICK_MS;
+    const tickStart = performance.now();
     for (const [matchId, entry] of matches) {
       try {
         entry.match.tick();
@@ -2760,7 +2772,15 @@ setInterval(() => {
         }
       }
     }
+    if (matches.size > 0) meter.tick(performance.now() - tickStart, ran > 0);
+    ran++;
   }
+  const report = meter.report(
+    now,
+    [...matches.values()].filter((e) => e.endedAt === null).length,
+    clients.size,
+  );
+  if (report && report.ticks > 0) console.log(formatTickReport(report));
 }, 25);
 
 // Last-resort guards: a throw outside the per-match try/catch must never
