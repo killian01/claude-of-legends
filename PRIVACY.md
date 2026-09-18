@@ -72,8 +72,9 @@ it, and everything it takes away before a record leaves your browser.
   playing), `offer` (the account offer at the end of a practice match,
   taken), `form` (the register tab opened) and `account` (an account
   created here). And one when a match ends for this browser: `finished`
-  (the match had a winner) or `left` (you walked out before one), carrying
-  how many minutes it had run and whether it was practice or online.
+  (the match had a winner) or `left` (you walked out, or closed the page,
+  before one), carrying how many minutes it had run and whether it was
+  practice or online.
   Nothing about who won or what you played.
 - What every counter of this kind reads off the request: the browser and
   operating system, the kind of device, the screen size, the language, and

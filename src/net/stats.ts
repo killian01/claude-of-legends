@@ -185,6 +185,56 @@ export function trackMatchEnd(
   }
 }
 
+// What a match's end is read off, at the moment of asking: the world's
+// winner and its clock.
+export interface MatchState {
+  winner: number | null;
+  seconds: number;
+}
+
+export interface MatchEndReporter {
+  // Says how the match ended, once; every later call is silent.
+  report(): void;
+  // Stops listening for the page going away; report first when the match
+  // is over or being left.
+  dispose(): void;
+}
+
+// The window as the reporter needs it: the tracker, and the page's own
+// lifecycle events.
+export interface ReporterWindow extends StatsWindow {
+  addEventListener?(type: string, listener: () => void): void;
+  removeEventListener?(type: string, listener: () => void): void;
+}
+
+// One end event per match, at the first of three moments: the winner
+// showing (the match was played through, whatever happens to the tab
+// after), the player walking out, or the page going away mid-match. The
+// third is why this exists: the event used to go on the game's own exits
+// only, and seven matches in eight sent nothing because the tab was closed
+// on the end screen or before it. pagehide rather than unload: it is the
+// one that fires on a phone, where a tab is put away rather than closed,
+// and the tracker sends with keepalive, so a report from it leaves with
+// the page.
+export function matchEndReporter(
+  mode: MatchMode,
+  current: () => MatchState,
+  win: ReporterWindow = window as ReporterWindow,
+): MatchEndReporter {
+  let sent = false;
+  const report = (): void => {
+    if (sent) return;
+    sent = true;
+    const state = current();
+    trackMatchEnd(state.winner, state.seconds, mode, win);
+  };
+  win.addEventListener?.('pagehide', report);
+  return {
+    report,
+    dispose: () => win.removeEventListener?.('pagehide', report),
+  };
+}
+
 function browserStore(): StatsStore {
   return {
     read: (key) => window.localStorage.getItem(key),

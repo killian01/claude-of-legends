@@ -214,9 +214,9 @@ Five events are sent beside the page views, once per page each: `stayed`
 practice, test drive or live, never a replay), `offer` (the account offer at
 the end of a practice match, taken), `form` (the register tab opened, by hand
 or by the offer) and `account` (an account created, by form or by Discord);
-and one when a match ends for the browser, `finished` (it had a winner) or
-`left` (walked out before one), carrying the minutes it ran and whether it
-was practice or online. Read each against the one before it: `finished` over
+and one when a match ends for the browser, `finished` (it had a winner, sent
+the moment it does) or `left` (walked out, or the page closed, before one),
+carrying the minutes it ran and whether it was practice or online. Read each against the one before it: `finished` over
 `played` says whether a first match is played through, `offer` over
 `finished` whether the end screen's offer is taken, `form` over `offer`
 whether the landing lands them on the form, and `account` over `form`

@@ -42,7 +42,13 @@ import {
   replayPlayable,
   restorePolicies,
 } from './net/replay';
-import { installStats, STAYED_MS, trackMatchEnd, trackStep } from './net/stats';
+import {
+  installStats,
+  type MatchEndReporter,
+  matchEndReporter,
+  STAYED_MS,
+  trackStep,
+} from './net/stats';
 import { whenChampionModelsReady } from './render/champions';
 import { installVersionedLoading } from './render/versioned_loading';
 import { attachBot } from './sim/content/bots';
@@ -265,12 +271,17 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
     }
 
     let stopped = false;
+    // How it ended, for the counter (src/net/stats.ts): once, at the first
+    // of the winner showing, the walk-out or the tab going away.
+    const ends = matchEndReporter('practice', () => ({
+      winner: world.winner,
+      seconds: world.time,
+    }));
     const exit = (action: PostMatchAction): void => {
       if (stopped) return;
       stopped = true;
-      // How it ended, for the counter (src/net/stats.ts): with a winner
-      // or walked out of, and how long it ran.
-      trackMatchEnd(world.winner, world.time, 'practice');
+      ends.report();
+      ends.dispose();
       pres.dispose();
       layer.closed();
       resolve(action);
@@ -304,6 +315,8 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
       if (guarded && world.winner !== null) {
         guarded = false;
         layer.unguard();
+        // Played through, whatever happens to the tab from here.
+        ends.report();
       }
       // The first frame's timestamp predates the presentation's own setup
       // (shader compiles, texture uploads: seconds on a slow GPU), which
@@ -714,6 +727,9 @@ async function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
     let lobbyUi: LobbyController | null = null;
     let selectUi: SelectController | null = null;
     let pres: Presentation | null = null;
+    // How the match ended, for the counter (src/net/stats.ts), while one is
+    // on screen; a queue or a lobby left before one is not a match.
+    let ends: MatchEndReporter | null = null;
     let coachBar: CoachBar | null = null;
     let opened = false;
     let matchEnded = false;
@@ -734,9 +750,9 @@ async function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
     const finish = (action: PostMatchAction): void => {
       if (finished) return;
       finished = true;
-      // A match that was on screen says how it ended (src/net/stats.ts);
-      // a queue or a lobby left before one is not a match.
-      if (pres) trackMatchEnd(world.winner, world.time, 'online');
+      ends?.report();
+      ends?.dispose();
+      ends = null;
       clearMenus();
       selectUi?.remove();
       selectUi = null;
@@ -779,6 +795,7 @@ async function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
         terrain: loaded.terrain,
       });
       pres = opened;
+      ends = matchEndReporter('online', () => ({ winner: world.winner, seconds: world.time }));
       layer.guard(() => pres?.toggleEscapeMenu());
       // A coach seat (ADR 0013): the bar for the orders with no place to
       // click; right-click already goes and focuses through the mirror.
@@ -985,6 +1002,9 @@ async function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
             opening = true;
             void openPresentation();
           }
+          // The snapshot carries the winner: played through, whatever
+          // happens to the tab from here.
+          if (world.winner !== null) ends?.report();
           if (changed) {
             // The coached bot answers through its snapshot: the order it holds
             // and the play it is running.

@@ -10,8 +10,11 @@ import {
   forgetOldLine,
   installStats,
   MATCH_ENDS,
+  type MatchState,
   matchEndEvent,
+  matchEndReporter,
   OLD_VISIT_KEY,
+  type ReporterWindow,
   STATS_STEPS,
   type StatsStore,
   type StatsWindow,
@@ -171,6 +174,69 @@ describe('how a match ended', () => {
     expect(matchEndEvent(null, 0, 'practice').data.minutes).toBe(0);
     expect(matchEndEvent(null, Number.NaN, 'practice').data.minutes).toBe(0);
     expect([...MATCH_ENDS]).toEqual(['finished', 'left']);
+  });
+
+  // A window with a tracker and the page's lifecycle events, both fakes.
+  function fakeWindow(): ReporterWindow & { track: ReturnType<typeof vi.fn>; fire(): void } {
+    const track = vi.fn();
+    const listeners = new Map<string, () => void>();
+    return {
+      umami: { track },
+      track,
+      addEventListener: (type, listener) => {
+        listeners.set(type, listener);
+      },
+      removeEventListener: (type) => {
+        listeners.delete(type);
+      },
+      fire: () => listeners.get('pagehide')?.(),
+    };
+  }
+
+  it('is said once, when the winner shows, and never again on the way out', () => {
+    const win = fakeWindow();
+    const state: MatchState = { winner: null, seconds: 0 };
+    const ends = matchEndReporter('practice', () => state, win);
+    state.winner = 1;
+    state.seconds = 20 * 60;
+    ends.report();
+    // The exit, minutes later: the same match, already told.
+    state.seconds = 23 * 60;
+    ends.report();
+    ends.dispose();
+    win.fire();
+    expect(win.track).toHaveBeenCalledTimes(1);
+    expect(win.track).toHaveBeenCalledWith('finished', { minutes: 20, mode: 'practice' });
+  });
+
+  it('is left when the page goes away mid-match, with the clock as it stood', () => {
+    const win = fakeWindow();
+    const state: MatchState = { winner: null, seconds: 4 * 60 + 40 };
+    matchEndReporter('online', () => state, win);
+    win.fire();
+    win.fire();
+    expect(win.track).toHaveBeenCalledTimes(1);
+    expect(win.track).toHaveBeenCalledWith('left', { minutes: 5, mode: 'online' });
+  });
+
+  it('stops listening once disposed, and still reports on the way out', () => {
+    const win = fakeWindow();
+    const state: MatchState = { winner: null, seconds: 90 };
+    const ends = matchEndReporter('practice', () => state, win);
+    ends.report();
+    ends.dispose();
+    win.fire();
+    expect(win.track).toHaveBeenCalledTimes(1);
+    expect(win.track).toHaveBeenCalledWith('left', { minutes: 2, mode: 'practice' });
+  });
+
+  it('asks nothing of a window with no tracker and no events', () => {
+    const state: MatchState = { winner: 0, seconds: 600 };
+    const ends = matchEndReporter('practice', () => state, {});
+    expect(() => {
+      ends.report();
+      ends.dispose();
+    }).not.toThrow();
   });
 });
 
