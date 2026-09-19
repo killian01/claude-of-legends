@@ -107,9 +107,15 @@ const CSS = `
    is only ever as wide as its form wants to be, which is what the narrower
    ceiling is for. */
 @media (max-width: 1120px) {
-  /* Two cards, stacked, the account one first: it is the one with the
-     form, and a form pushed below the fold is a form nobody fills. */
+  /* Two cards, stacked, and the free one first. The account card went
+     first until a phone was measured: with the form above it, the button
+     that needs no account sat 1402 px down an 844 px screen, one and
+     seven tenths of a screen of scrolling, and the two visitors who came
+     on phones one evening both left without finding it. The end screen
+     makes the account offer once a match has been played
+     (ui/account_offer.ts), which is the better moment to ask anyway. */
   .pg.land .pg-cards { grid-template-columns: minmax(0, 1fr); max-width: 620px; gap: 22px; }
+  .pg.land .pg-cards .pg-card.plain { order: -1; }
   /* Stacked there is no card beside it to match, so the painting stops
      stretching and takes a shape of its own. The ceiling is what keeps it
      from becoming the tallest thing on the page as the column widens:
@@ -124,6 +130,17 @@ const CSS = `
 @media (max-width: 560px) {
   .pg-open-row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .pg-opens { order: -1; }
+  /* And on the free card the button climbs over the picture. A phone is
+     tall and narrow: heading, line, picture, fine print, button put the
+     one thing to press at the foot of a card that had already used the
+     screen. Heading, line, button, then the picture as what it is,
+     decoration under the offer. */
+  .pg.land .pg-card.plain > h2 { order: 1; }
+  .pg.land .pg-card.plain > p { order: 2; }
+  .pg.land .pg-card.plain > .menu-btn { order: 3; margin-top: 2px; }
+  .pg.land .pg-card.plain > .pg-card-fine { order: 4; margin: 8px 0 0; }
+  .pg.land .pg-card.plain > .pg-try { order: 5; margin-top: 12px; }
+  .pg.land .pg-card.plain > .pg-news { order: 6; }
   .pg-mode { height: auto; aspect-ratio: 3 / 4; }
   .pg-mode-body { padding: 34px 8px 8px; }
   .pg-mode h3 { font-size: 12px; letter-spacing: 1.2px; }
@@ -457,7 +474,9 @@ export function showLanding(
     const tryShot = el('div', 'pg-try');
     tryShot.appendChild(tryArt);
     offline.append(
-      el('h2', '', 'Or try it first'),
+      // "Or try it first" while it stood second; stacked it stands first
+      // now, and a heading that begins with "Or" has nothing to follow.
+      el('h2', '', 'Play now'),
       el('p', '', 'A full 5v5 against bots, in this tab.'),
       tryShot,
       el('p', 'pg-card-fine', 'No account, nothing saved.'),
