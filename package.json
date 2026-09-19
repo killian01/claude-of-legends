@@ -32,6 +32,6 @@
     "puppeteer-core": "^25.10.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.1"
   }
 }
