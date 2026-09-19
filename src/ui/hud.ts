@@ -680,6 +680,52 @@ ${thumbClusterCss()}
   align-items: center; justify-content: center; text-align: center; padding: 24px;
   background: rgba(4, 8, 16, 0.92); font-size: 18px; font-weight: 700; letter-spacing: 0.3px;
 }
+/* The shop on a touchscreen: the same chest, sized for the screen it is
+   on. It stood 700 px wide (its desktop minimum) on an 844 px phone, with
+   a 95 by 28 close button, covering three quarters of the screen the
+   moment a match opened: the first thing a visitor on a phone met, and
+   the last thing several of them saw. It now fills the phone with a
+   margin, its cards and its detail column shrink with it, and the close
+   button is the one part that grows to a thumb. Narrower than 560 the
+   detail column lies under the grid instead of beside it. */
+.hud.compact .hud-shop {
+  left: 6px; right: 6px; top: 6px; bottom: 6px;
+  width: auto; min-width: 0; max-height: none; transform: none; border-radius: 10px;
+}
+.hud.compact .hud-shop-head { padding: 7px 10px; gap: 8px; }
+.hud.compact .hud-shop-head h3 { font-size: 14px; letter-spacing: 1.5px; }
+.hud.compact .hud-shop-head .hud-gold { font-size: 15px; }
+/* The one line of prose in the head; the cards say the same thing. It
+   was the head's spacer as well, so the close button takes over pushing
+   itself to the corner where a thumb goes looking for it. */
+.hud.compact .hud-shop-status { display: none; }
+.hud.compact .hud-shop-close {
+  margin-left: auto; font-size: 13px; padding: 10px 16px; min-height: 40px;
+}
+.hud.compact .hud-shop-grid { padding: 8px 10px 12px; }
+.hud.compact .hud-shop-grid h4 { top: -8px; font-size: 11px; }
+.hud.compact .hud-cards { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 7px; }
+.hud.compact .hud-card { padding: 7px 4px 6px; font-size: 11px; gap: 3px; }
+.hud.compact .hud-card img { width: 40px; height: 40px; }
+.hud.compact .hud-card-recipe { min-height: 0; }
+.hud.compact .hud-card-recipe img { width: 14px; height: 14px; }
+.hud.compact .hud-card-cost { font-size: 11.5px; }
+.hud.compact .hud-shop-detail { width: 176px; padding: 10px; font-size: 11px; }
+.hud.compact .hud-detail-name { font-size: 13px; }
+.hud.compact .hud-detail-head { gap: 8px; margin-bottom: 8px; padding-bottom: 8px; }
+.hud.compact .hud-detail-head img { width: 38px; height: 38px; }
+.hud.compact .hud-build-icon, .hud.compact .hud-build-icon img { width: 34px; height: 34px; }
+/* The touch bar (ui/touch_bar.ts) rides the screen edge above the HUD's
+   own layer, so it floated over the first column of items. It stands
+   down while the shop is up; its Shop button is what opened it, and the
+   shop's own Close is what ends it. */
+.hud.shop-open ~ .touchbar { display: none; }
+@media (max-width: 560px) {
+  .hud.compact .hud-shop-body { flex-direction: column; }
+  .hud.compact .hud-shop-detail {
+    width: auto; max-height: 40%; border-left: none; border-top: 2px solid #3a4f28;
+  }
+}
 /* Only where the browser would not turn the screen itself
    (game/orientation.ts): with the lock granted there is nothing to ask. */
 @media (orientation: portrait) { .hud.compact.turn-needed .hud-turn { display: flex; } }
@@ -1377,8 +1423,15 @@ export class Hud {
     this.rootEl.classList.toggle('turn-needed', needsTurnPrompt(this.coarsePointer, locked));
   }
 
+  // The one place the shop opens or closes: the HUD's root says so too,
+  // so what lives outside the HUD (the touch bar) can stand down.
+  private setShopOpen(open: boolean): void {
+    this.shop.classList.toggle('open', open);
+    this.rootEl.classList.toggle('shop-open', open);
+  }
+
   toggleShop(): void {
-    this.shop.classList.toggle('open');
+    this.setShopOpen(!this.shop.classList.contains('open'));
     this.update();
   }
 
@@ -1864,7 +1917,7 @@ export class Hud {
       this.openedOpeningShop = true;
       // Only at the top of a live match: a rejoin or a replay opens to the
       // game, not to a shop nobody asked for.
-      if (this.world.time < 5 && this.world.winner === null) this.shop.classList.add('open');
+      if (this.world.time < 5 && this.world.winner === null) this.setShopOpen(true);
     }
 
     if (this.spotUntil !== 0 && performance.now() > this.spotUntil) {
