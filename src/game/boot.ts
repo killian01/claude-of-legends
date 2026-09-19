@@ -25,6 +25,7 @@ import type { PostMatchAction } from './flow';
 import { requestGameFullscreen } from './fullscreen';
 import { type InputHandlers, setupInput } from './input';
 import { startMusic, stopMusic } from './music';
+import { lockLandscape, unlockOrientation } from './orientation';
 import { nearestEnemy, pickEnemyAt, pickEnemyOnScreen, pickUnitOnScreen } from './picking';
 import { getSettings } from './settings';
 import { playCastSfx, playSfx, preloadSfx } from './sfx';
@@ -123,12 +124,21 @@ export function startPresentation(
   // (its corner position would otherwise drag the camera while clicking it).
   renderer.setEdgePanGate(() => !hud.blocksCamera() && !minimap.hovered);
 
+  // The phone turns itself for the match (game/orientation.ts): the lock
+  // is granted to a fullscreen document, so it is asked for right after
+  // the screen is taken, and again on the backstop below. A browser that
+  // refuses (iOS has no lock) leaves the HUD's line asking for a turn.
+  const askLandscape = (): void => {
+    void lockLandscape().then((locked) => hud.setLandscapeLocked(locked));
+  };
+  askLandscape();
+
   // Fullscreen backstop: the entry clicks (lock-in, start buttons) usually
   // took the screen already, but a match reached without one (auto-lock,
   // rejoin) grabs it on the first click inside, the earliest gesture a
   // browser accepts a fullscreen request from.
   const onFirstPointerDown = (): void => {
-    if (options.fullscreen !== false) requestGameFullscreen();
+    if (options.fullscreen !== false) void requestGameFullscreen().then(askLandscape);
   };
   container.addEventListener('pointerdown', onFirstPointerDown, { once: true });
 
@@ -572,6 +582,8 @@ export function startPresentation(
       minimap.dispose();
       renderer.dispose();
       stopMusic();
+      // The screen turns with the phone again once the match is over.
+      unlockOrientation();
     },
   };
 }

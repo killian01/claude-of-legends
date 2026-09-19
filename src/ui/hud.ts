@@ -7,6 +7,7 @@
 import { announceVoice } from '../game/announcer';
 import type { PostMatchAction } from '../game/flow';
 import { requestGameFullscreen, toggleGameFullscreen } from '../game/fullscreen';
+import { needsTurnPrompt } from '../game/orientation';
 import { getSettings } from '../game/settings';
 import { playSfx } from '../game/sfx';
 import type { CastTouch } from '../game/touch';
@@ -679,7 +680,9 @@ ${thumbClusterCss()}
   align-items: center; justify-content: center; text-align: center; padding: 24px;
   background: rgba(4, 8, 16, 0.92); font-size: 18px; font-weight: 700; letter-spacing: 0.3px;
 }
-@media (orientation: portrait) { .hud.compact .hud-turn { display: flex; } }
+/* Only where the browser would not turn the screen itself
+   (game/orientation.ts): with the lock granted there is nothing to ask. */
+@media (orientation: portrait) { .hud.compact.turn-needed .hud-turn { display: flex; } }
 `;
 
 export interface NetHooks {
@@ -784,6 +787,9 @@ export class Hud {
   private readonly endOfferReason: HTMLElement;
   private lastTowerCount: number | null = null;
   private readonly rootEl: HTMLElement;
+  // A touchscreen: the compact layout, and the one that may need the
+  // phone turned (game/orientation.ts).
+  private readonly coarsePointer: boolean;
   private readonly stopScale: () => void;
   private readonly stopThumbScale: () => void;
   private readonly styleEl: HTMLStyleElement;
@@ -817,7 +823,11 @@ export class Hud {
     // the bottom bar for a cluster under the right thumb, with the attack
     // button at the corner, and a press on a slot aims by sliding.
     const thumbs = coarsePointer && getSettings().touchScheme === 'thumbs';
-    root.className = coarsePointer ? (thumbs ? 'hud compact thumbs' : 'hud compact') : 'hud';
+    // turn-needed until the browser says it has taken the screen in
+    // landscape (setLandscapeLocked): a phone that refuses keeps the line
+    // asking for a turn, which is what it had before.
+    this.coarsePointer = coarsePointer;
+    root.className = coarsePointer ? `hud compact${thumbs ? ' thumbs' : ''} turn-needed` : 'hud';
     this.rootEl = root;
     // The interface size (src/game/ui_scale.ts): the screen's, or the
     // player's choice, followed live while the match is on.
@@ -1358,6 +1368,13 @@ export class Hud {
     this.stopThumbScale();
     this.rootEl.remove();
     this.styleEl.remove();
+  }
+
+  // The browser has taken the screen in landscape for this match
+  // (game/orientation.ts), so the line asking for a turn has nothing left
+  // to ask. Called again whenever the request is retried.
+  setLandscapeLocked(locked: boolean): void {
+    this.rootEl.classList.toggle('turn-needed', needsTurnPrompt(this.coarsePointer, locked));
   }
 
   toggleShop(): void {
