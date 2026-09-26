@@ -25,13 +25,13 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.13",
-    "@types/node": "^26.5.1",
+    "@types/node": "^26.6.3",
     "@types/three": "^0.186.0",
     "@types/ws": "^8.18.1",
     "esbuild": "^0.28.2",
     "puppeteer-core": "^25.10.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.2"
   }
 }
