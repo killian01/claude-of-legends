@@ -285,11 +285,19 @@ _Avoid_: building, objective (the Warden is an objective and is not a structure)
 The persistent identity a person plays under: one name, unique across the server and owned by
 whoever registered it, an email address if its owner adds one, plus the rating and match history
 earned with it.
-Reaching the server at all requires one; the offline practice match does not, and its end
-screen makes a visitor the account offer: their score, and what an account would have kept of
-it. The name is the whole public identity, so nothing is appended to it to tell two people apart, and the address is
+Everything on the server but the public queue requires one (ADR 0024: a Guest plays that
+queue without one); the offline practice match does not either, and the end screen of a match
+played without one makes the visitor the account offer: their score, and what an account would
+have kept of it. The name is the whole public identity, so nothing is appended to it to tell two people apart, and the address is
 never part of it: only the account itself ever sees its own.
 _Avoid_: profile (that is the screen that shows an account), user, login, player (ambiguous, see Participant)
+
+**Guest**:
+A visitor playing the public queue without an account (ADR 0024): a name the server hands out
+(`Wanderer 4821`, a space no account name may hold), kept for a day in the server's memory and
+nowhere else. A match with a Guest in it is never rated, and a Guest holds no rating, record,
+collection beyond the starter one, lobby, bot or Forge champion.
+_Avoid_: anonymous player, visitor account
 
 **Home**:
 The page a signed-in account lands on: the bar to every section, the play tiles, and under

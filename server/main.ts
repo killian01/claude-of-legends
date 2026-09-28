@@ -1,9 +1,9 @@
 // The authoritative game server: one process, one port. Serves the built
 // client from dist/, upgrades /ws to WebSocket, runs every live match's Sim
 // on a fixed-step 20 Hz accumulator, and streams team-scoped snapshots.
-// Every connection belongs to an account (ADR 0006): the upgrade itself is
-// refused without a live session, so nothing below this line has to wonder
-// who it is talking to. No database still: accounts, sessions and the
+// Every connection belongs to an account (ADR 0006) or to a Guest (ADR
+// 0024): the upgrade itself is refused without one or the other, so
+// nothing below this line has to wonder who it is talking to. No database still: accounts, sessions and the
 // match log are JSON files under DATA_DIR.
 
 import { randomBytes } from 'node:crypto';
@@ -104,6 +104,7 @@ import { placeholderFor } from './generation/placeholder';
 import { type GenerationProvider, WEAPON_FAMILIES } from './generation/provider';
 import { SplitProvider } from './generation/split';
 import { TripoProvider } from './generation/tripo';
+import { GUEST_COOKIE, GUEST_TTL_MS, GuestStore, guestRefused, ratedWithGuests } from './guests';
 import { buildHomePage } from './home_page';
 import { buildBotLadder, buildLadder } from './ladder';
 import { type BotSummary, buildLadderPage, type LadderSeed, placeOf } from './ladder_page';
@@ -222,9 +223,14 @@ interface Client {
   id: number;
   ws: WebSocket;
   // Both settled on the upgrade, from the session cookie: there is no
-  // anonymous window in which a client exists without an account.
+  // anonymous window in which a client exists without an account. A
+  // Guest's id is negative (server/guests.ts) and no account lookup made
+  // with it finds anything.
   accountId: number;
   name: string;
+  // A Guest (ADR 0024): the public queue and the match it lands in, and
+  // nothing else.
+  guest: boolean;
   // The session this socket came in on, so closing it can be traced back
   // to a logout elsewhere.
   sessionId: string;
@@ -270,6 +276,8 @@ const practiceReports = new PracticeReportStore(path.join(DATA_DIR, 'practice.js
 // each, read with scripts/feedback.mjs and by nothing else.
 const feedback = new FeedbackStore(path.join(DATA_DIR, 'feedback.jsonl'));
 const sessions = new SessionStore(path.join(DATA_DIR, 'sessions.json'));
+// Guests (ADR 0024), in memory only: a restart forgets them.
+const guests = new GuestStore();
 // What a wrong password costs the next attempt (server/login_throttle.ts).
 const logins = new LoginThrottle();
 // One-time links for confirming an address and for resetting a password
@@ -808,7 +816,14 @@ function onMatchReady(forge: boolean) {
       endedAt: null,
       failures: 0,
       abandonedAt: null,
-      ratedEligible: source === 'queue',
+      // A Guest seated by hand makes it unrated for everyone (ADR 0024).
+      ratedEligible: ratedWithGuests(
+        source === 'queue',
+        picks.flatMap((p) => {
+          const c = clients.get(p.clientId);
+          return c ? [c.accountId] : [];
+        }),
+      ),
       forge,
       botSeats,
       ledger: new PlayLedger(),
@@ -832,6 +847,11 @@ function onMatchReady(forge: boolean) {
   };
 }
 
+// A Guest picks from what a fresh account holds (ADR 0024).
+function collectionOfClient(c: Client): string[] {
+  return c.guest ? [...STARTER_COLLECTION] : registry.collection(c.accountId);
+}
+
 const matchmaker = new Matchmaker(send, onMatchReady(false), undefined, {
   // What this client may pick of the roster (ADR 0018): its collection
   // plus the week's rotation. A client with no account picks nothing here
@@ -839,7 +859,7 @@ const matchmaker = new Matchmaker(send, onMatchReady(false), undefined, {
   resolvePlayable: (clientId) => {
     const c = clients.get(clientId);
     if (!c) return null;
-    return playableAt(registry.collection(c.accountId), Date.now());
+    return playableAt(collectionOfClient(c), Date.now());
   },
   // Bot seats (ADR 0013): the resolver is the account boundary, answering
   // with the seat when THIS client owns the bot, re-validated so a stored
@@ -876,7 +896,7 @@ const forgeMatchmaker = new Matchmaker(send, onMatchReady(true), undefined, {
   resolvePlayable: (clientId) => {
     const c = clients.get(clientId);
     if (!c) return null;
-    return playableAt(registry.collection(c.accountId), Date.now());
+    return playableAt(collectionOfClient(c), Date.now());
   },
   resolveForged: (clientId, championId) => {
     const c = clients.get(clientId);
@@ -1099,6 +1119,32 @@ const server = http.createServer(async (req, res) => {
     // the whole roster is open. Signed in, it answers for the account.
     // Nothing here is anybody's: champion ids, a table of prices, and a
     // balance that is the caller's own or zero.
+    // A Guest for the public queue (ADR 0024): the name and a cookie of
+    // its own, reused while it lives so a reload keeps the same Guest.
+    if (url === '/api/guest') {
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'use POST' });
+        return;
+      }
+      const now = Date.now();
+      const held = parseCookies(req.headers.cookie).get(GUEST_COOKIE);
+      const known = held ? guests.resolve(held, now) : undefined;
+      if (known) {
+        sendJson(res, 200, { name: known.name });
+        return;
+      }
+      const { token, guest } = guests.issue(now);
+      addCookie(
+        res,
+        serializeCookie(GUEST_COOKIE, token, {
+          maxAgeS: Math.floor(GUEST_TTL_MS / 1000),
+          secure: cookieSecure(req),
+        }),
+      );
+      sendJson(res, 200, { name: guest.name });
+      return;
+    }
+
     if (url === '/api/collection') {
       const now = Date.now();
       const me = accountForRequest(req, now);
@@ -2324,9 +2370,12 @@ const wss = new WebSocketServer({
       done(false, 403, 'forbidden origin');
       return;
     }
-    const cookieId = parseCookies(req.headers.cookie).get(COOKIE_NAME);
+    const cookies = parseCookies(req.headers.cookie);
+    const cookieId = cookies.get(COOKIE_NAME);
     const session = cookieId ? sessions.resolve(cookieId, Date.now()) : undefined;
-    if (!session || !registry.findById(session.accountId)) {
+    const guestToken = cookies.get(GUEST_COOKIE);
+    const guest = guestToken ? guests.resolve(guestToken, Date.now()) : undefined;
+    if ((!session || !registry.findById(session.accountId)) && !guest) {
       done(false, 401, 'this needs an account');
       return;
     }
@@ -2347,16 +2396,27 @@ wss.on('connection', (ws, req) => {
   // can only fail if the session died in the microseconds since. Treat it
   // as a refusal rather than trusting a half-identified socket.
   const now = Date.now();
-  const cookieId = parseCookies(req.headers.cookie).get(COOKIE_NAME) ?? '';
+  const cookies = parseCookies(req.headers.cookie);
+  const cookieId = cookies.get(COOKIE_NAME) ?? '';
   const session = sessions.resolve(cookieId, now);
   const account = session ? registry.findById(session.accountId) : undefined;
-  if (!session || !account) {
+  // The account wins when a browser holds both cookies: a Guest who made
+  // an account plays as the account from then on.
+  const guest = account ? undefined : guests.resolve(cookies.get(GUEST_COOKIE) ?? '', now);
+  const who = account
+    ? { accountId: account.id, name: account.name, sessionId: session?.id ?? '', guest: false }
+    : guest
+      ? { accountId: guest.id, name: guest.name, sessionId: '', guest: true }
+      : null;
+  if (!who) {
     connections.release(ip);
     ws.close(4401, 'this needs an account');
     return;
   }
-  sessions.touch(cookieId, now);
-  registry.touch(account.id, now);
+  if (account) {
+    sessions.touch(cookieId, now);
+    registry.touch(account.id, now);
+  }
 
   // One game socket per account: a second connection takes the seat and
   // the first is closed. Two sockets on one account could otherwise queue
@@ -2364,7 +2424,7 @@ wss.on('connection', (ws, req) => {
   // self-referential. The upside is the reason to prefer it to a refusal:
   // when a laptop dies mid-match, the phone takes the seat back.
   for (const other of clients.values()) {
-    if (other.accountId === account.id) {
+    if (other.accountId === who.accountId) {
       other.ws.close(4409, 'this account connected somewhere else');
     }
   }
@@ -2373,15 +2433,16 @@ wss.on('connection', (ws, req) => {
   const client: Client = {
     id,
     ws,
-    accountId: account.id,
-    name: account.name,
-    sessionId: session.id,
+    accountId: who.accountId,
+    name: who.name,
+    guest: who.guest,
+    sessionId: who.sessionId,
     matchId: null,
     msgWindowStart: now,
     msgCount: 0,
   };
   clients.set(id, client);
-  send(id, { t: 'welcome', clientId: id, name: account.name });
+  send(id, { t: 'welcome', clientId: id, name: who.name });
 
   ws.on('message', (data) => {
     const raw = data.toString();
@@ -2434,6 +2495,12 @@ wss.on('connection', (ws, req) => {
     const atCapacity = matches.size >= MAX_MATCHES;
     const refuseCapacity = (): void =>
       send(id, { t: 'error', message: 'The server is at capacity, try again in a bit.' });
+    // A Guest has the public queue and the match it lands in (ADR 0024);
+    // every other door on the socket still needs an account.
+    if (client.guest && guestRefused(msg)) {
+      send(id, { t: 'error', message: 'This needs an account.' });
+      return;
+    }
     switch (msg.t) {
       case 'queue': {
         if (inMatch) break;
@@ -2677,9 +2744,10 @@ setInterval(() => {
           // Record the finished match once, the moment the winner lands:
           // seats still held by a connected human carry their player id.
           const accountIdByUnit = new Map<number, number>();
+          // A Guest's seat is recorded like a house bot's (ADR 0024).
           for (const p of entry.match.players.values()) {
             const c = clients.get(p.clientId);
-            if (c) accountIdByUnit.set(p.unitId, c.accountId);
+            if (c && !c.guest) accountIdByUnit.set(p.unitId, c.accountId);
           }
           // Rating policy (server/rating.ts, server/match_rating.ts): only
           // public-queue matches with an OWNED seat on each side are rated,

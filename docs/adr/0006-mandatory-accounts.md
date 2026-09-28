@@ -1,5 +1,7 @@
 # Accounts are mandatory to reach the server
 
+> Amended by ADR 0024: a Guest plays the public queue, unranked, without an account.
+
 Identity used to be the browser's session token: the first hello created a player record, and the
 display name was free text refreshed on every hello (`server/players.ts`). That kept the "no
 account, no install" promise, and it cost a ladder nobody could trust. One human produced a new

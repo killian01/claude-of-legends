@@ -31,6 +31,7 @@ import {
 import { loadStarOrchard } from './game/star_orchard_records';
 import { buildIdFromMeta, startBuildWatch } from './net/build_watch';
 import { ClientWorld } from './net/client_world';
+import { openGuest } from './net/guest';
 import { buildPracticeReport, sendPracticeReport } from './net/practice_report';
 import type { ForgedMatchAssets, ServerMsg } from './net/protocol';
 import {
@@ -736,7 +737,9 @@ async function runSpectate(matchId: number, team: TeamId): Promise<PostMatchActi
 
 // One online session (queue or lobby, select, match); resolves with the
 // exit the player chose, or 'menu' when the connection story ends it.
-async function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
+// `guest` when a Guest plays it (ADR 0024): the end screen then makes the
+// account offer, as it does after a practice match.
+async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAction> {
   const orchard = await loadOrchardRecords();
   if (!orchard) return 'menu';
   // The model downloads while the queue and the select run, so that by the
@@ -821,6 +824,7 @@ async function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
       const opened = startPresentation(container, world, world.selfUnitId, world.selfTeam, finish, {
         terrain: loaded.terrain,
         mode: 'online',
+        guest,
       });
       pres = opened;
       ends = matchEndReporter('online', () => ({ winner: world.winner, seconds: world.time }));
@@ -1198,6 +1202,20 @@ async function boot(): Promise<void> {
         // with the account and skips this screen. Nothing below runs.
         reenterAsAccount({ joinCode, confirmed });
         return;
+      }
+      // The public queue as a Guest (ADR 0024): Play again queues again,
+      // anything else is back to the way in. No server to hand out a Guest
+      // falls through to the offline match below, which needs none.
+      if (entry.kind === 'guest') {
+        const guestName = await openGuest();
+        if (guestName !== null) {
+          let action: PostMatchAction = 'again';
+          while (action === 'again') {
+            action = await runOnline({ name: guestName, mode: 'queue' }, true);
+          }
+          if (action === 'account') landingIntent = 'register';
+          continue;
+        }
       }
       // Offline: one match against bots, then back to the way in. A select
       // left without a pick is back to the way in too.

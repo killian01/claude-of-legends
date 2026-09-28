@@ -15,12 +15,20 @@ about your visit is sent anywhere but to that machine, and nothing it
 records is sent on to anyone; the counter's own usage report is switched
 off. There is nobody else in the room.
 
-## Two cookies
+## Three cookies
 
 `loc_session`, set when you sign in and cleared when you sign out. It holds
 a random session id and nothing else, and it exists so the server knows
 which account is talking to it (`server/cookies.ts`, `server/sessions.ts`,
 ADR 0006).
+
+`loc_guest`, set when you press Play on the landing without an account. It
+holds a random id and nothing else, and it exists so the server knows which
+Guest is talking to it, and can give you your seat back if the page reloads
+mid-match. The server keeps what it points at, a handed-out name like
+`Wanderer 4821`, in memory only, for a day after you last used it; nothing
+about a Guest is ever written to disk, and a restart forgets every one
+(`server/guests.ts`, ADR 0024).
 
 `col_visit`, set on your first page here. It holds one random number, 32
 characters, minted on the server and meaning nothing anywhere else. Its
@@ -155,7 +163,7 @@ to them. Assets are not logged, so a page load is one line rather than
 four hundred. Lines roll off at 20 MiB and about a week, whichever comes
 first.
 
-Two things are dropped before a line is written. The session cookie,
+Two things are dropped before a line is written. The cookies, all of them,
 because a log that can resume a session is a store of credentials rather
 than a log. And the country header the proxy attaches to every request:
 this log exists to tell a scanner sweep from an announcement landing, and

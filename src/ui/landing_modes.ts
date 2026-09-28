@@ -36,8 +36,15 @@ export interface LandingMode {
 export const PRACTICE_ART = tileArtUrl('practice');
 // Its button. It used to say "Play offline", which reads as a lesser game
 // to someone who came to play; what it offers is a match right here, with
-// nothing to install and no account.
+// nothing to install and no account: the public queue as a Guest (ADR
+// 0024), people when they are on and bots in every empty seat.
 export const PLAY_NOW_CALL = 'Play in the browser now';
+export const PLAY_NOW_LINE =
+  'A real 5v5 online: players when they are on, bots in every empty seat.';
+export const PLAY_NOW_FINE = 'No account, nothing to install. Unranked.';
+// The offline match stays, one quiet line under the button: it is what
+// works when the server does not.
+export const PRACTICE_ALONE_CALL = 'Or practice alone against bots, offline';
 
 export const LANDING_MODES: readonly LandingMode[] = [
   {

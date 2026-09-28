@@ -17,7 +17,14 @@ import { startBackdrop } from './home_backdrop';
 import { CONTRIBUTE_LEAD, CONTRIBUTE_TITLE, CONTRIBUTE_WAYS } from './landing_contribute';
 import { mountEmbers } from './landing_embers';
 import { mountLandingLadder } from './landing_ladder';
-import { LANDING_MODES, PLAY_NOW_CALL, PRACTICE_ART } from './landing_modes';
+import {
+  LANDING_MODES,
+  PLAY_NOW_CALL,
+  PLAY_NOW_FINE,
+  PLAY_NOW_LINE,
+  PRACTICE_ALONE_CALL,
+  PRACTICE_ART,
+} from './landing_modes';
 import { revealOnScroll } from './landing_reveal';
 import { DISCORD, PRIVACY } from './links';
 import { el, ensureMenuCss } from './menu';
@@ -107,6 +114,12 @@ const CSS = `
     rgba(255, 255, 255, 0) 100%);
   animation: land-try-shine 3.2s ease-in-out 1s infinite; }
 @keyframes land-try-shine { 0% { left: -60%; } 45%, 100% { left: 130%; } }
+/* The offline match, under the gold button: a line to read, not a second
+   button competing with it. */
+.pg.land .pg-alone { align-self: center; margin-top: 10px; padding: 4px 6px; border: 0;
+  background: none; font: inherit; font-size: 12px; color: #8ea4c4; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px; }
+.pg.land .pg-alone:hover { color: #dceaff; }
 /* A phone's card is about 300 wide: one line, at a size that fits it. */
 @media (max-width: 560px) {
   .pg.land .pg-card .menu-btn.pg-play { font-size: 13.5px; letter-spacing: 0.6px;
@@ -181,6 +194,7 @@ const CSS = `
   .pg.land .pg-card.plain > h2 { order: 1; }
   .pg.land .pg-card.plain > p { order: 2; }
   .pg.land .pg-card.plain > .menu-btn { order: 3; margin-top: 2px; }
+  .pg.land .pg-card.plain > .pg-alone { order: 4; }
   .pg.land .pg-card.plain > .pg-card-fine { order: 4; margin: 8px 0 0; }
   .pg.land .pg-card.plain > .pg-try { order: 5; margin-top: 12px; }
   .pg.land .pg-card.plain > .pg-news { order: 6; }
@@ -356,6 +370,8 @@ function ensureCss(): void {
 export type LandingResult =
   // Signed in: everything the server allows is now reachable.
   | { kind: 'account'; account: AuthedAccount }
+  // Chose the public queue as a Guest (ADR 0024).
+  | { kind: 'guest' }
   // Chose the offline practice match, which needs no account.
   | { kind: 'offline' };
 
@@ -498,15 +514,19 @@ export function showLanding(
     openRow.append(formPanel, opens);
     online.appendChild(openRow);
 
-    // The other way in, and the only one that needs nothing. It says what
-    // it is in one line: a visitor who has read the title of the page
-    // knows what a 5v5 against bots is. It no longer brags about the whole
+    // The other way in, and the only one that needs nothing: the public
+    // queue as a Guest (ADR 0024), with the offline match one quiet line
+    // under it. It says what it is in one line: a visitor who has read the
+    // title of the page knows what a 5v5 is. It no longer brags about the whole
     // roster being open in it, because it is not: the practice match draws
     // the same wall as the rest of the game and a visitor picks from what
     // a fresh account holds (ADR 0018).
     const offline = el('section', 'pg-card plain glow');
-    const offlineBtn = el('button', 'menu-btn pg-play', PLAY_NOW_CALL);
-    offlineBtn.addEventListener('click', () => finish({ kind: 'offline' }));
+    const playBtn = el('button', 'menu-btn pg-play', PLAY_NOW_CALL);
+    playBtn.addEventListener('click', () => finish({ kind: 'guest' }));
+    const aloneBtn = el('button', 'pg-alone', PRACTICE_ALONE_CALL);
+    aloneBtn.type = 'button';
+    aloneBtn.addEventListener('click', () => finish({ kind: 'offline' }));
     // The painting this card was missing. The heading above it says what
     // it is, so the picture is decoration and carries no label of its own.
     const tryArt = el('img', '');
@@ -520,10 +540,11 @@ export function showLanding(
       // "Or try it first" while it stood second; stacked it stands first
       // now, and a heading that begins with "Or" has nothing to follow.
       el('h2', '', 'Play now'),
-      el('p', '', 'A full 5v5 against bots, in this tab.'),
+      el('p', '', PLAY_NOW_LINE),
       tryShot,
-      el('p', 'pg-card-fine', 'No account, nothing saved.'),
-      offlineBtn,
+      el('p', 'pg-card-fine', PLAY_NOW_FINE),
+      playBtn,
+      aloneBtn,
     );
     // The newest news in one line (CONTEXT.md: News): a site whose last
     // word is from yesterday reads inhabited before anything is clicked.
