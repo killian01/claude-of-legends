@@ -21,7 +21,13 @@ import {
   FEEDBACK_MAX,
   FEEDBACK_ROUTE,
   type FeedbackContext,
+  NUDGE_FROM,
+  NUDGE_HOLD,
+  NUDGE_START,
+  nudgeCall,
+  nudgeVisible,
   sendFeedback,
+  stepNudge,
 } from '../src/ui/feedback_box';
 
 const context: FeedbackContext = {
@@ -153,5 +159,37 @@ describe('the server side', () => {
     expect(line).toContain('2026-09-28 10:30');
     expect(line).toContain('visitor, practice, 12 min, left, from the end screen');
     expect(line).toContain('    the shop covers my screen');
+  });
+});
+
+// The line at the start of a match that says the box exists: most matches
+// end with the tab closed, so the end screen alone asks almost nobody.
+describe('the feedback nudge', () => {
+  it('waits for the opening shop, then stays its moment and goes', () => {
+    let s = NUDGE_START;
+    s = stepNudge(s, NUDGE_FROM + 1, true);
+    expect(nudgeVisible(s, true)).toBe(false);
+    expect(s.shownAt).toBeNull();
+    s = stepNudge(s, NUDGE_FROM + 5, false);
+    expect(nudgeVisible(s, false)).toBe(true);
+    s = stepNudge(s, NUDGE_FROM + 5 + NUDGE_HOLD - 1, false);
+    expect(nudgeVisible(s, false)).toBe(true);
+    s = stepNudge(s, NUDGE_FROM + 5 + NUDGE_HOLD, false);
+    expect(nudgeVisible(s, false)).toBe(false);
+    expect(stepNudge(s, 999, false)).toBe(s);
+  });
+
+  it('does not show before the match has begun, and hides under a menu', () => {
+    let s = stepNudge(NUDGE_START, NUDGE_FROM - 1, false);
+    expect(s.shownAt).toBeNull();
+    s = stepNudge(s, NUDGE_FROM, false);
+    expect(nudgeVisible(s, true)).toBe(false);
+    expect(nudgeVisible(s, false)).toBe(true);
+  });
+
+  it('names the way to the menu for the device in hand', () => {
+    expect(nudgeCall(false)).toContain('Esc');
+    expect(nudgeCall(true)).toContain('Menu');
+    expect(nudgeCall(true)).not.toContain('Esc');
   });
 });

@@ -43,7 +43,17 @@ import {
   statusChipFace,
   wrathChipFace,
 } from './chip_text';
-import { buildFeedbackBox, type FeedbackBox, type FeedbackWhere } from './feedback_box';
+import {
+  buildFeedbackBox,
+  FEEDBACK_ASK,
+  type FeedbackBox,
+  type FeedbackWhere,
+  NUDGE_START,
+  type NudgeState,
+  nudgeCall,
+  nudgeVisible,
+  stepNudge,
+} from './feedback_box';
 import { thumbClusterCss } from './thumb_cluster';
 
 interface ChipLook {
@@ -439,6 +449,30 @@ const CSS = `
   font-size: 26px; font-weight: 800; letter-spacing: 1px; color: #f2ffd9;
   text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity 0.3s;
 }
+/* The line at the start of a match that says the feedback box exists
+   (ui/feedback_box.ts): under the announcements, quiet, and a door, so the
+   whole of it opens the menu where the box is. */
+.hud-nudge {
+  position: absolute; top: 150px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; pointer-events: auto; cursor: pointer;
+  max-width: min(520px, 90vw); padding: 8px 10px 8px 14px; border-radius: 10px;
+  border: 1px solid #8a7430; background: rgba(30, 26, 12, 0.9); color: #e6dcb8;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55); text-shadow: none;
+  opacity: 0; visibility: hidden; transition: opacity 0.4s, visibility 0.4s;
+}
+.hud-nudge.on { opacity: 1; visibility: visible; }
+.hud-nudge:hover { border-color: #c9a84a; }
+.hud-nudge-words b { display: block; font-size: 13px; color: #f2e6c0; }
+.hud-nudge-words span { display: block; margin-top: 1px; font-size: 12px; color: #c9bd93; }
+.hud-nudge-close {
+  flex: none; width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+  border: 1px solid #6e5a24; background: transparent; color: #c9bd93;
+  font-size: 15px; line-height: 1; padding: 0;
+}
+.hud-nudge-close:hover { color: #fff3cf; border-color: #c9a84a; }
+.hud.compact .hud-nudge { top: 96px; padding: 6px 8px 6px 12px; }
+.hud.compact .hud-nudge-words b { font-size: 12px; }
+.hud.compact .hud-nudge-words span { font-size: 11px; }
 /* The multikill spotlight: bigger than an announcement because it is the
    rarest thing the game says. Scales in from just under full size, and the
    pentakill takes the room the quadrakill does not. */
@@ -897,6 +931,9 @@ export class Hud {
   private readonly endFeedback: FeedbackBox;
   private readonly pauseFeedback: FeedbackBox;
   private feedbackSent = false;
+  // The line at the start of a match that points at the box.
+  private readonly nudgeEl: HTMLElement;
+  private nudge: NudgeState = NUDGE_START;
   // Which mode this match runs in, for the line's context. The HUD is
   // handed it because only the host knows (game/boot.ts).
   private readonly mode: 'practice' | 'online';
@@ -1353,6 +1390,22 @@ export class Hud {
     this.spotEl = el('div', 'hud-spot');
     this.toastEl = el('div', 'hud-toast');
 
+    this.nudgeEl = el('div', 'hud-nudge');
+    const nudgeWords = el('div', 'hud-nudge-words');
+    nudgeWords.append(el('b', '', FEEDBACK_ASK), el('span', '', nudgeCall(coarsePointer)));
+    const nudgeClose = el('button', 'hud-nudge-close', '\u00d7');
+    nudgeClose.setAttribute('aria-label', 'Close');
+    nudgeClose.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.endNudge();
+    });
+    this.nudgeEl.append(nudgeWords, nudgeClose);
+    this.nudgeEl.addEventListener('click', () => {
+      this.endNudge();
+      if (!this.escapeOverlay.classList.contains('open')) this.toggleEscapeMenu();
+      this.pauseFeedback.reveal(!coarsePointer);
+    });
+
     this.score = el('div', 'hud-score');
     this.score.append(el('h3', '', 'Scoreboard (Tab)'));
     const teamsWrap = el('div', 'hud-score-teams');
@@ -1453,6 +1506,7 @@ export class Hud {
       this.feed,
       chat,
       this.announceEl,
+      this.nudgeEl,
       this.spotEl,
       this.toastEl,
       this.score,
@@ -1559,6 +1613,26 @@ export class Hud {
       'overlay-open',
       this.escapeOverlay.classList.contains('open') || this.endOverlay.classList.contains('open'),
     );
+  }
+
+  private nudgeBlocked(): boolean {
+    return (
+      this.shop.classList.contains('open') ||
+      this.escapeOverlay.classList.contains('open') ||
+      this.endOverlay.classList.contains('open')
+    );
+  }
+
+  private stepNudge(): void {
+    if (this.nudge.done && !this.nudgeEl.classList.contains('on')) return;
+    const blocked = this.nudgeBlocked();
+    this.nudge = stepNudge(this.nudge, this.world.time, blocked);
+    this.nudgeEl.classList.toggle('on', nudgeVisible(this.nudge, blocked));
+  }
+
+  private endNudge(): void {
+    this.nudge = { ...this.nudge, done: true };
+    this.nudgeEl.classList.remove('on');
   }
 
   toggleEscapeMenu(): void {
@@ -2040,7 +2114,10 @@ export class Hud {
       // Only at the top of a live match: a rejoin or a replay opens to the
       // game, not to a shop nobody asked for.
       if (this.world.time < 5 && this.world.winner === null) this.setShopOpen(true);
+      // The feedback line likewise: the start of a match only.
+      else this.nudge = { ...this.nudge, done: true };
     }
+    this.stepNudge();
 
     if (this.spotUntil !== 0 && performance.now() > this.spotUntil) {
       this.spotUntil = 0;

@@ -21,6 +21,44 @@ export const FEEDBACK_PLACEHOLDER = 'What felt wrong, what is missing, what you 
 export const FEEDBACK_SEND = 'Send';
 export const FEEDBACK_THANKS = 'Thank you. I read every one of these.';
 
+// The line at the start of a match that says the box exists. Most matches
+// end with the tab closed, never on the end screen or through the pause
+// menu, so a player who is only asked there is never asked at all. It
+// comes up once the opening shop is out of the way, stays a moment, and a
+// click on it opens the menu where the box is.
+export const NUDGE_CALL_MOUSE = 'Tell me what to improve: click here, or press Esc at any time.';
+export const NUDGE_CALL_TOUCH = 'Tell me what to improve: tap here, or Menu at any time.';
+// Seconds of match time: when it may first show, and how long it stays.
+export const NUDGE_FROM = 3;
+export const NUDGE_HOLD = 16;
+
+export interface NudgeState {
+  // Match time it first showed at, null while it has not.
+  shownAt: number | null;
+  done: boolean;
+}
+
+export const NUDGE_START: NudgeState = { shownAt: null, done: false };
+
+// One step of the line's life. `blocked` is anything covering the middle
+// of the screen (the shop, a menu): the line waits for it rather than
+// spending its moment under it, and hides while it is up.
+export function stepNudge(state: NudgeState, time: number, blocked: boolean): NudgeState {
+  if (state.done) return state;
+  if (state.shownAt === null) {
+    return !blocked && time >= NUDGE_FROM ? { shownAt: time, done: false } : state;
+  }
+  return time - state.shownAt >= NUDGE_HOLD ? { ...state, done: true } : state;
+}
+
+export function nudgeVisible(state: NudgeState, blocked: boolean): boolean {
+  return state.shownAt !== null && !state.done && !blocked;
+}
+
+export function nudgeCall(touch: boolean): string {
+  return touch ? NUDGE_CALL_TOUCH : NUDGE_CALL_MOUSE;
+}
+
 // Where the box stood when it was written.
 export type FeedbackWhere = 'end' | 'pause';
 
@@ -102,6 +140,8 @@ export interface FeedbackBox {
   // The other box on screen says thank you too: one line per match is what
   // is asked for, not one per place it was asked.
   markSent(): void;
+  // Brings the box into view, and on a keyboard puts the cursor in it.
+  reveal(focus: boolean): void;
 }
 
 export interface FeedbackBoxOptions {
@@ -157,5 +197,9 @@ export function buildFeedbackBox(
   for (const type of ['keydown', 'keyup', 'keypress']) {
     field.addEventListener(type, (e) => e.stopPropagation());
   }
-  return { root, markSent };
+  const reveal = (focus: boolean): void => {
+    root.scrollIntoView({ block: 'center' });
+    if (focus && !row.hidden) field.focus();
+  };
+  return { root, markSent, reveal };
 }
