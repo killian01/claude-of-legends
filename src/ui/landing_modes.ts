@@ -34,6 +34,10 @@ export interface LandingMode {
 // cards on the landing are an offer and an offer, rather than an offer and
 // a footnote under it.
 export const PRACTICE_ART = tileArtUrl('practice');
+// Its button. It used to say "Play offline", which reads as a lesser game
+// to someone who came to play; what it offers is a match right here, with
+// nothing to install and no account.
+export const PLAY_NOW_CALL = 'Play in the browser now';
 
 export const LANDING_MODES: readonly LandingMode[] = [
   {

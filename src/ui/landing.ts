@@ -17,7 +17,7 @@ import { startBackdrop } from './home_backdrop';
 import { CONTRIBUTE_LEAD, CONTRIBUTE_TITLE, CONTRIBUTE_WAYS } from './landing_contribute';
 import { mountEmbers } from './landing_embers';
 import { mountLandingLadder } from './landing_ladder';
-import { LANDING_MODES, PRACTICE_ART } from './landing_modes';
+import { LANDING_MODES, PLAY_NOW_CALL, PRACTICE_ART } from './landing_modes';
 import { revealOnScroll } from './landing_reveal';
 import { DISCORD, PRIVACY } from './links';
 import { el, ensureMenuCss } from './menu';
@@ -73,6 +73,49 @@ const CSS = `
   object-fit: cover; object-position: 50% 30%; }
 /* The button sits at the foot of its card, under the painting. */
 .pg.land .pg-card.plain .menu-btn { margin-top: 4px; }
+/* The one door that needs nothing, so it is the one that glows: the card
+   breathes a gold halo and the button wears the GitHub star's gold with a
+   shine crossing it every few seconds. A visitor who reads nothing still
+   sees where to press. */
+/* It keeps the rise every card enters with, then breathes: one list, since
+   the rise is set per child and would otherwise take the property. */
+.pg.land .pg-cards .pg-card.glow { border-color: #b8963f;
+  animation: land-rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.9s backwards,
+    land-try-halo 3.2s ease-in-out 1.8s infinite; }
+@keyframes land-try-halo {
+  0%, 100% { border-color: #b8963f;
+    box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(232, 196, 108, 0.35),
+    0 0 34px rgba(232, 196, 108, 0.3); }
+  50% { border-color: #f3d98e;
+    box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55), 0 0 0 2px rgba(243, 217, 142, 0.75),
+    0 0 80px rgba(240, 200, 110, 0.6); }
+}
+.pg.land .pg-card.glow h2 { color: #f0dca0; }
+.pg.land .pg-card .menu-btn.pg-play { position: relative; overflow: hidden;
+  padding: 14px 18px; font-size: 15px; font-weight: 800; letter-spacing: 1.2px;
+  text-transform: uppercase; color: #2a1d06; border: 1px solid #f3dc9a;
+  background: linear-gradient(180deg, #f6e3a6 0%, #e2bf64 55%, #c99a3c 100%);
+  box-shadow: 0 0 0 1px rgba(120, 86, 20, 0.6), 0 6px 22px rgba(232, 196, 108, 0.45),
+    inset 0 1px 0 rgba(255, 250, 225, 0.8);
+  transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease; }
+.pg.land .pg-card .menu-btn.pg-play:hover { transform: translateY(-1px); filter: brightness(1.08);
+  box-shadow: 0 0 0 1px rgba(120, 86, 20, 0.6), 0 8px 34px rgba(240, 206, 120, 0.75),
+    inset 0 1px 0 rgba(255, 250, 225, 0.9); }
+.pg.land .pg-card .menu-btn.pg-play::after { content: ''; position: absolute; top: 0; bottom: 0;
+  left: -60%; width: 45%; pointer-events: none; transform: skewX(-20deg);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.65) 50%,
+    rgba(255, 255, 255, 0) 100%);
+  animation: land-try-shine 3.2s ease-in-out 1s infinite; }
+@keyframes land-try-shine { 0% { left: -60%; } 45%, 100% { left: 130%; } }
+/* A phone's card is about 300 wide: one line, at a size that fits it. */
+@media (max-width: 560px) {
+  .pg.land .pg-card .menu-btn.pg-play { font-size: 13.5px; letter-spacing: 0.6px;
+    padding: 14px 10px; white-space: nowrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pg.land .pg-cards .pg-card.glow { animation: none; }
+  .pg.land .pg-card .menu-btn.pg-play::after { animation: none; display: none; }
+}
 
 /* One painting of the band. Not a button: all three are account features
    (ADR 0006), so they carry no call to action and none lifts under the
@@ -461,8 +504,8 @@ export function showLanding(
     // roster being open in it, because it is not: the practice match draws
     // the same wall as the rest of the game and a visitor picks from what
     // a fresh account holds (ADR 0018).
-    const offline = el('section', 'pg-card plain');
-    const offlineBtn = el('button', 'menu-btn', 'Play offline now');
+    const offline = el('section', 'pg-card plain glow');
+    const offlineBtn = el('button', 'menu-btn pg-play', PLAY_NOW_CALL);
     offlineBtn.addEventListener('click', () => finish({ kind: 'offline' }));
     // The painting this card was missing. The heading above it says what
     // it is, so the picture is decoration and carries no label of its own.

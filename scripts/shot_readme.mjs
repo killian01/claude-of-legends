@@ -55,7 +55,7 @@ if (process.env.SHOT_HOME_ONLY) {
   process.exit(0);
 }
 
-await clickButton('Play offline now');
+await clickButton('Play in the browser now');
 await page.waitForSelector('.menu-champ', { timeout: 20000 });
 await page.evaluate(() => {
   const card = [...document.querySelectorAll('.menu-champ')].find((c) =>

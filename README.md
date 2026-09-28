@@ -95,7 +95,7 @@ pnpm install
 pnpm dev
 ```
 
-Open http://localhost:5173 and pick "Play offline now": a full 5v5 against
+Open http://localhost:5173 and pick "Play in the browser now": a full 5v5 against
 bots, no server needed.
 
 For online play, run the server in a second terminal:

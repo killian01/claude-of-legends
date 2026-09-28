@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { PLAY_TILES, tileArtUrl } from '../src/ui/home_tiles';
-import { LANDING_MODES, PRACTICE_ART } from '../src/ui/landing_modes';
+import { LANDING_MODES, PLAY_NOW_CALL, PRACTICE_ART } from '../src/ui/landing_modes';
 
 describe('the landing modes', () => {
   it('are the three an account opens, and each is a play tile', () => {
@@ -57,5 +57,12 @@ describe('the landing modes', () => {
       expect(mode.line.length).toBeGreaterThan(40);
       expect(mode.line.length).toBeLessThan(tile?.line.length ?? 0);
     }
+  });
+
+  // The door that needs nothing says where the match is, not what it
+  // lacks: "offline" read as a lesser game to a visitor who came to play.
+  it('call the free match a match in the browser, never offline', () => {
+    expect(PLAY_NOW_CALL).toMatch(/browser/i);
+    expect(PLAY_NOW_CALL).not.toMatch(/offline/i);
   });
 });
