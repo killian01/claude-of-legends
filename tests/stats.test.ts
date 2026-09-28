@@ -15,6 +15,7 @@ import {
   matchEndOnce,
   matchEndReporter,
   OLD_VISIT_KEY,
+  openVisit,
   optedOut,
   type ReporterWindow,
   STATS_STEPS,
@@ -23,6 +24,7 @@ import {
   scrubUrl,
   statsChoice,
   trackStep,
+  WAIT_TRIES,
 } from '../src/net/stats';
 
 function memory(seed: Record<string, string> = {}): StatsStore & { data: Map<string, string> } {
@@ -305,21 +307,34 @@ describe('opening a visit', () => {
     expect(optedOut(memory({ [DISABLED_KEY]: '1' }))).toBe(true);
   });
 
-  it('waits for the document when it is still parsing', () => {
+  it('waits for the tracker, which is deferred and has not run yet', () => {
+    // Both scripts are deferred, so the document is parsed and the
+    // tracker is still absent: waiting on the document sends nothing.
     const calls: string[] = [];
     const waiting: (() => void)[] = [];
-    const doc = {
-      readyState: 'loading',
-      querySelector: () => null,
-      addEventListener: (_t: string, fn: () => void) => {
-        waiting.push(fn);
-      },
-    } as unknown as Document;
-    const win: StatsWindow = { umami: { track: () => calls.push('track') } };
-    installStats(win, '', memory(), doc);
+    const win: StatsWindow = {};
+    openVisit(win, 'c'.repeat(32), (fn) => waiting.push(fn));
     expect(calls).toEqual([]);
-    for (const fn of waiting) fn();
-    expect(calls).toEqual(['track']);
+    expect(waiting).toHaveLength(1);
+    // The tracker's script runs.
+    win.umami = {
+      track: () => calls.push('track'),
+      identify: (id: string) => calls.push(`identify ${id}`),
+    };
+    waiting.shift()?.();
+    expect(calls).toEqual([`identify ${'c'.repeat(32)}`, 'track']);
+  });
+
+  it('stops asking for a tracker that never comes', () => {
+    let scheduled = 0;
+    const run: (() => void)[] = [];
+    openVisit({}, null, (fn) => {
+      scheduled++;
+      run.push(fn);
+    });
+    // Every retry it was handed, run to the end.
+    while (run.length > 0) run.shift()?.();
+    expect(scheduled).toBe(WAIT_TRIES);
   });
 
   it('minds a page with no tracker on it', () => {

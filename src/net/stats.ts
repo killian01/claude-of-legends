@@ -297,7 +297,7 @@ export function installStats(
   // A browser that asked out is not named and sends no view. The tracker
   // checks the same key before every record of its own, so this is the
   // second of two locks, not the only one.
-  if (doc && !optedOut(store)) openVisit(win, visitIdFrom(doc), doc);
+  if (doc && !optedOut(store)) openVisit(win, visitIdFrom(doc));
 }
 
 export function optedOut(store: StatsStore): boolean {
@@ -310,23 +310,42 @@ export function optedOut(store: StatsStore): boolean {
   }
 }
 
-// The tracker's script is deferred, so it has not run yet when this does:
-// the work waits for the document to be ready, by which time it has. Then
-// the browser is named and the page view goes out, in that order, because
-// the session is written from the first record the server receives
-// (server/stats_tag.ts turns the tracker's own view off for this).
-export function openVisit(win: StatsWindow, id: string | null, doc: Document): void {
+// The browser is named, then the page view goes out, in that order,
+// because the session is written from the first record the server
+// receives (server/stats_tag.ts turns the tracker's own view off so this
+// one is first).
+//
+// The waiting is on the tracker itself, not on the document. Both scripts
+// are deferred and both run with the document already parsed, so a page
+// that is "ready" says nothing about whether the tracker has run: the
+// first version of this waited for the document, found no tracker there,
+// and sent nothing at all. So it looks for the tracker and comes back
+// every WAIT_MS until it appears, for at most WAIT_TRIES: a page that
+// never loads it (the dev server, a blocker, a self-hosted instance with
+// no counter) simply stops asking.
+export const WAIT_MS = 50;
+export const WAIT_TRIES = 100;
+
+export function openVisit(
+  win: StatsWindow,
+  id: string | null,
+  wait: (fn: () => void, ms: number) => void = (fn, ms) => {
+    setTimeout(fn, ms);
+  },
+): void {
+  let tries = 0;
   const go = (): void => {
+    const tracker = win.umami;
+    if (!tracker) {
+      if (tries++ < WAIT_TRIES) wait(go, WAIT_MS);
+      return;
+    }
     try {
-      if (id !== null) win.umami?.identify?.(id);
-      win.umami?.track();
+      if (id !== null) tracker.identify?.(id);
+      tracker.track();
     } catch {
       // The tracker's problem, not the page's.
     }
   };
-  if (doc.readyState === 'loading') {
-    doc.addEventListener('DOMContentLoaded', go, { once: true });
-  } else {
-    go();
-  }
+  go();
 }
