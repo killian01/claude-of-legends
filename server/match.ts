@@ -16,6 +16,7 @@ import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import type { PlaybookDef } from '../src/sim/playbook/types';
 import type { Sim, SimEvent } from '../src/sim/sim';
 import type { TeamId } from '../src/sim/types';
+import { dropInTeam } from './drop_in';
 import { buildSnapshot } from './snapshot';
 import { starOrchard } from './star_orchard';
 
@@ -77,6 +78,10 @@ export class Match {
   readonly forgedDefs: readonly ForgedChampionDef[];
   private readonly unitNames = new Map<number, string>();
   private readonly pickUnitIds: readonly number[];
+  // Seats a bot holds from the start that a newcomer may take (ADR 0025):
+  // house bots, and ranked bots the fill seated from the pool. A seat a
+  // dropped player left to a stand-in is not here: it is held for them.
+  private readonly botSeats = new Map<number, { team: TeamId; pool: boolean }>();
   private eventsThisTick: SimEvent[] = [];
 
   constructor(seed: number, picks: readonly MatchPick[]) {
@@ -104,7 +109,10 @@ export class Match {
       const unitId = unitIds[i]!;
       this.unitNames.set(unitId, p.name);
       // House bots and pool bots have nobody behind them: no player row.
-      if (p.bot || p.ownerId !== undefined) return;
+      if (p.bot || p.ownerId !== undefined) {
+        this.botSeats.set(unitId, { team: p.team, pool: p.ownerId !== undefined });
+        return;
+      }
       this.players.set(p.clientId, {
         clientId: p.clientId,
         name: p.name,
@@ -192,6 +200,36 @@ export class Match {
       lastCommandAt: this.sim.tickCount,
       coach: seat.coach === true,
     });
+  }
+
+  // How many bot seats a newcomer could still take.
+  get openBotSeats(): number {
+    return this.botSeats.size;
+  }
+
+  // A newcomer takes a bot's seat (ADR 0025): the side with fewer people
+  // on it (server/drop_in.ts), a house bot before a ranked one, the lowest
+  // unit id first so the choice never depends on anything but the match.
+  // The champion comes as the bot left it: its level, its gold, its items.
+  // Returns the seat, or null when no bot seat is left.
+  takeBotSeat(
+    clientId: number,
+    name: string,
+  ): { unitId: number; team: TeamId; pool: boolean } | null {
+    const humans: [number, number] = [0, 0];
+    for (const p of this.players.values()) humans[p.team] += 1;
+    const seats: [number, number] = [0, 0];
+    for (const s of this.botSeats.values()) seats[s.team] += 1;
+    const team = dropInTeam(humans, seats);
+    if (team === null) return null;
+    const chosen = [...this.botSeats]
+      .filter(([, s]) => s.team === team)
+      .sort(([ua, a], [ub, b]) => Number(a.pool) - Number(b.pool) || ua - ub)[0]?.[0];
+    if (chosen === undefined) return null;
+    const pool = this.botSeats.get(chosen)?.pool === true;
+    this.botSeats.delete(chosen);
+    this.restorePlayer(clientId, { name, team, unitId: chosen });
+    return { unitId: chosen, team, pool };
   }
 
   // Scoreboard rows carrying the seat's real player or bot name alongside

@@ -256,6 +256,8 @@ export type ServerMsg =
       // This seat is the account's own bot: the client coaches it and the
       // hands-on verbs are refused (ADR 0013).
       coach?: true;
+      // A bot's seat taken in a match already under way (ADR 0025).
+      dropIn?: true;
       forged?: ForgedChampionDef[];
       forgedAssets?: Record<string, ForgedMatchAssets>;
     }
@@ -286,6 +288,8 @@ export type ServerMsg =
   | { t: 'player_left'; name: string; team: TeamId }
   // A dropped teammate reconnected and took their champion back.
   | { t: 'player_back'; name: string; team: TeamId }
+  // Someone took a bot's seat mid-match (ADR 0025); sent to everyone.
+  | { t: 'player_joined'; name: string; team: TeamId }
   // Sent once to each human player when the finished match is recorded:
   // this player's rating movement (zero and rated:false when unrated).
   // queue 'forge' means the numbers are the Forge queue's own rating

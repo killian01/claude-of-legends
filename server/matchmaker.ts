@@ -19,7 +19,6 @@ export const TEAM_CAP = MATCH_SIZE / 2;
 export const SELECT_SECONDS = 45;
 const DEFAULT_SIGILS: [string, string] = ['riftstep', 'mend'];
 
-export const BOT_START_COUNTDOWN_MS = 10_000;
 // An unstarted lobby expires after this long; abandoned codes must not pin
 // memory or stay joinable forever.
 export const LOBBY_TTL_MS = 30 * 60_000;
@@ -124,9 +123,6 @@ export class Matchmaker {
   private readonly queue: QueueGroup[] = [];
   private readonly lobbies = new Map<string, Lobby>();
   private readonly selects: SelectSession[] = [];
-  // Deadline of the opt-in bot-filled start, null when nobody opted in.
-  private botStartAt: number | null = null;
-  private lastCountdownSecond = -1;
 
   constructor(
     private readonly send: Send,
@@ -136,15 +132,21 @@ export class Matchmaker {
     private readonly opts: MatchmakerOptions = {},
   ) {}
 
+  // People waiting in the queue right now (the drop-in rule and the
+  // landing's presence line read it, ADR 0025).
+  get queuedCount(): number {
+    return this.queuedSeats();
+  }
+
   private queuedSeats(): number {
     let seats = 0;
     for (const g of this.queue) seats += g.members.length;
     return seats;
   }
 
-  private broadcastQueue(now: number): void {
-    const startsIn =
-      this.botStartAt !== null ? Math.max(0, Math.ceil((this.botStartAt - now) / 1000)) : null;
+  private broadcastQueue(): void {
+    // No countdown any more: Start takes the whole queue at once.
+    const startsIn = null;
     const count = this.queuedSeats();
     for (const g of this.queue) {
       for (const p of g.members) {
@@ -170,7 +172,7 @@ export class Matchmaker {
     this.removeEverywhere(clientId, now);
     this.queue.push({ members: [{ clientId, name }], botReady: false });
     this.tryFormFullMatch(now);
-    this.broadcastQueue(now);
+    this.broadcastQueue();
   }
 
   // A whole lobby enters the public queue as one group on one side. Only
@@ -192,7 +194,7 @@ export class Matchmaker {
         botReady: false,
       });
       this.tryFormFullMatch(now);
-      this.broadcastQueue(now);
+      this.broadcastQueue();
       return;
     }
   }
@@ -213,7 +215,6 @@ export class Matchmaker {
       for (const m of this.queue[s.index]!.members) players.push({ ...m, team: s.team });
     }
     for (const s of [...seated].sort((a, b) => b.index - a.index)) this.queue.splice(s.index, 1);
-    if (!this.queue.some((g) => g.botReady)) this.botStartAt = null;
     this.startSelect(players, now, 'queue');
   }
 
@@ -240,22 +241,17 @@ export class Matchmaker {
     }
   }
 
-  // Opt-in bot fill: marks THIS player's group ready to start with bots.
-  // Starts immediately when everyone queued agrees; otherwise announces a
-  // countdown the others may join. Nobody is dragged into a bot game they
-  // did not ask for: non-volunteers stay queued for a human match.
+  // The bot fill: whoever presses Start takes EVERYONE queued along, at
+  // once, into as few bot-filled matches as the groups pack into. It used
+  // to take only volunteers and leave the rest queued behind a ten-second
+  // countdown for a human match, which on a server where two people are
+  // rarely queued at the same moment meant the second one missed the
+  // first (ADR 0025). Nobody queues here to wait for ten humans.
   startNow(clientId: number, now: number): void {
-    const entry = this.queue.find((g) => g.members.some((m) => m.clientId === clientId));
-    if (!entry) return;
-    entry.botReady = true;
-    if (this.queue.every((g) => g.botReady)) {
-      this.botStartAt = null;
-      this.startReadyGroups(now);
-      this.broadcastQueue(now);
-      return;
-    }
-    if (this.botStartAt === null) this.botStartAt = now + BOT_START_COUNTDOWN_MS;
-    this.broadcastQueue(now);
+    if (!this.queue.some((g) => g.members.some((m) => m.clientId === clientId))) return;
+    for (const g of this.queue) g.botReady = true;
+    this.startReadyGroups(now);
+    this.broadcastQueue();
   }
 
   createLobby(clientId: number, name: string, now: number = Date.now()): void {
@@ -470,19 +466,6 @@ export class Matchmaker {
     for (const session of this.selects) {
       if (!session.started && now >= session.deadline) this.finishSelect(session);
     }
-    if (this.botStartAt === null) return;
-    if (now >= this.botStartAt) {
-      this.botStartAt = null;
-      this.lastCountdownSecond = -1;
-      this.startReadyGroups(now);
-      this.broadcastQueue(now);
-      return;
-    }
-    const secs = Math.ceil((this.botStartAt - now) / 1000);
-    if (secs !== this.lastCountdownSecond) {
-      this.lastCountdownSecond = secs;
-      this.broadcastQueue(now);
-    }
   }
 
   private finishSelect(session: SelectSession): void {
@@ -505,7 +488,9 @@ export class Matchmaker {
     this.onMatchReady(picks, session.source);
   }
 
-  removeEverywhere(clientId: number, now: number = Date.now()): void {
+  // The clock is no longer read here (the queue has no countdown left to
+  // cancel, ADR 0025); callers still pass it, so the signature stays.
+  removeEverywhere(clientId: number, _now: number = Date.now()): void {
     const qg = this.queue.find((g) => g.members.some((m) => m.clientId === clientId));
     if (qg) {
       qg.members.splice(
@@ -513,14 +498,7 @@ export class Matchmaker {
         1,
       );
       if (qg.members.length === 0) this.queue.splice(this.queue.indexOf(qg), 1);
-      if (this.queue.length > 0 && this.queue.every((g) => g.botReady)) {
-        // Everyone still queued already agreed: start them now.
-        this.botStartAt = null;
-        this.startReadyGroups(now);
-      } else if (!this.queue.some((g) => g.botReady)) {
-        this.botStartAt = null;
-      }
-      this.broadcastQueue(now);
+      this.broadcastQueue();
     }
     for (const lobby of [...this.lobbies.values()]) {
       const li = lobby.players.findIndex((p) => p.clientId === clientId);

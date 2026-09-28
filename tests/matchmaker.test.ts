@@ -1,14 +1,9 @@
-// Matchmaker gate: queue, the opt-in bot-fill countdown, private lobbies,
+// Matchmaker gate: queue, the bot fill that takes the whole queue, private lobbies,
 // champion select locking, timeout defaults, and disconnect handling.
 
 import { describe, expect, it } from 'vitest';
 import type { MatchPick } from '../server/match';
-import {
-  BOT_START_COUNTDOWN_MS,
-  LOBBY_TTL_MS,
-  Matchmaker,
-  type MatchSource,
-} from '../server/matchmaker';
+import { LOBBY_TTL_MS, Matchmaker, type MatchSource } from '../server/matchmaker';
 import type { ServerMsg } from '../src/net/protocol';
 
 function harness(): {
@@ -45,16 +40,14 @@ describe('matchmaker', () => {
     expect(last(sent.get(1), 'select_start')).toBeDefined();
   });
 
-  it('starts instantly once everyone queued has opted in', () => {
+  // ADR 0025: two people are rarely queued at the same moment here, so
+  // the one who presses Start takes the other along instead of leaving
+  // them behind a countdown they had to answer.
+  it('Start takes everyone queued along, at once, on opposite sides', () => {
     const { mm, sent, matches, sources } = harness();
     mm.addToQueue(1, 'alice', 0);
     mm.addToQueue(2, 'bob', 0);
     mm.startNow(1, 1000);
-    // Bob has not opted in: nobody starts yet, a countdown is announced.
-    expect(last(sent.get(1), 'select_start')).toBeUndefined();
-    const status = last(sent.get(2), 'queue_status');
-    expect(status?.t === 'queue_status' && status.startsIn !== null).toBe(true);
-    mm.startNow(2, 2000);
     expect(last(sent.get(1), 'select_start')).toMatchObject({ team: 0 });
     expect(last(sent.get(2), 'select_start')).toMatchObject({ team: 1 });
 
@@ -67,23 +60,6 @@ describe('matchmaker', () => {
     ]);
     // Queue matches are flagged as such: they alone can ever be rated.
     expect(sources).toEqual(['queue']);
-  });
-
-  it('the countdown takes only volunteers and leaves the rest queued', () => {
-    const { mm, sent, matches } = harness();
-    mm.addToQueue(1, 'alice', 0);
-    mm.addToQueue(2, 'bob', 0);
-    mm.startNow(1, 0);
-    expect(matches).toHaveLength(0);
-    mm.tickClock(BOT_START_COUNTDOWN_MS + 1);
-    // Alice goes to select alone; Bob is still queued for a human match.
-    expect(last(sent.get(1), 'select_start')).toBeDefined();
-    expect(last(sent.get(2), 'select_start')).toBeUndefined();
-    const bobStatus = last(sent.get(2), 'queue_status');
-    expect(bobStatus?.t === 'queue_status' && bobStatus.count).toBe(1);
-    mm.pick(1, 'vesk', ['riftstep', 'mend']);
-    expect(matches).toHaveLength(1);
-    expect(matches[0]).toHaveLength(1);
   });
 
   it('falls back to defaults on invalid picks and on select timeout', () => {
@@ -259,15 +235,13 @@ describe('matchmaker', () => {
     expect(matches[0]![1]).toMatchObject({ clientId: 2, championId: 'sylra' });
   });
 
-  it('cancels the countdown when the only volunteer leaves', () => {
+  it('does not carry a player who left the queue before Start', () => {
     const { mm, sent } = harness();
     mm.addToQueue(1, 'alice', 0);
     mm.addToQueue(2, 'bob', 0);
+    mm.removeEverywhere(2, 0);
     mm.startNow(1, 0);
-    mm.removeEverywhere(1, 0);
-    const bobStatus = last(sent.get(2), 'queue_status');
-    expect(bobStatus?.t === 'queue_status' && bobStatus.startsIn).toBeNull();
-    mm.tickClock(BOT_START_COUNTDOWN_MS + 1);
+    expect(last(sent.get(1), 'select_start')).toBeDefined();
     expect(last(sent.get(2), 'select_start')).toBeUndefined();
   });
 

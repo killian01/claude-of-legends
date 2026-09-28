@@ -811,6 +811,7 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
     // match are named by match_start, before the first snapshot.
     let opening = false;
     let forgedIds: string[] = [];
+    let droppedIn = false;
     const openPresentation = async (): Promise<void> => {
       const loaded = await loadOrchard(forgedIds);
       if (finished) return;
@@ -840,6 +841,15 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
         sendChat: (text) => ws.send(JSON.stringify({ t: 'chat', text })),
         sendPing: (x, z) => ws.send(JSON.stringify({ t: 'ping', x, z })),
       });
+      // A bot's seat in a match under way (ADR 0025): say so, since the
+      // champion was not picked and the clock is not at zero.
+      if (droppedIn) {
+        opened.pushChat(
+          'System',
+          world.selfTeam,
+          'You joined a match in progress, in place of a bot. Good luck.',
+        );
+      }
     };
 
     // What this account may pick (ADR 0018), fetched the moment the
@@ -1012,6 +1022,9 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
         case 'player_back':
           pres?.pushChat('System', msg.team, `${msg.name} reconnected.`);
           break;
+        case 'player_joined':
+          pres?.pushChat('System', msg.team, `${msg.name} joined the match.`);
+          break;
         case 'ping':
           pres?.showPing(msg.x, msg.z, msg.from, msg.team);
           break;
@@ -1022,6 +1035,7 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
         case 'match_start':
           registerForgedFromMatch(msg.forgedAssets);
           forgedIds = Object.keys(msg.forgedAssets ?? {});
+          droppedIn = msg.dropIn === true;
           world.applyServer(msg);
           // A rejoin can arrive while the queue or lobby screen is still up.
           clearMenus();

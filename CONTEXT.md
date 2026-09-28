@@ -299,6 +299,12 @@ nowhere else. A match with a Guest in it is never rated, and a Guest holds no ra
 collection beyond the starter one, lobby, bot or Forge champion.
 _Avoid_: anonymous player, visitor account
 
+**Drop in**:
+To take a bot's seat in a public match already under way (ADR 0025), which is what entering
+the public queue does when nobody is waiting in it and such a match has people in it, early
+enough. The champion comes as the bot left it, and the seat is never rated or recorded.
+_Avoid_: late join, hot join, backfill
+
 **Home**:
 The page a signed-in account lands on: the bar to every section, the play tiles, and under
 them the home's panels: the account's own place and numbers, the top of the ladder by hand,

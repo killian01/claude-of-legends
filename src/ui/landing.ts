@@ -25,6 +25,7 @@ import {
   PRACTICE_ALONE_CALL,
   PRACTICE_ART,
 } from './landing_modes';
+import { mountPresence } from './landing_presence';
 import { revealOnScroll } from './landing_reveal';
 import { DISCORD, PRIVACY } from './links';
 import { el, ensureMenuCss } from './menu';
@@ -114,6 +115,17 @@ const CSS = `
     rgba(255, 255, 255, 0) 100%);
   animation: land-try-shine 3.2s ease-in-out 1s infinite; }
 @keyframes land-try-shine { 0% { left: -60%; } 45%, 100% { left: 130%; } }
+/* Someone is on right now: a green light that breathes, and one line. */
+.pg.land .pg-presence { display: flex; align-items: center; gap: 9px; margin: 0 0 10px;
+  padding: 7px 11px; border-radius: 8px; border: 1px solid rgba(110, 214, 138, 0.35);
+  background: rgba(20, 60, 34, 0.45); color: #c8f0d2; font-size: 12.5px; line-height: 1.35; }
+.pg.land .pg-presence i { flex: none; width: 9px; height: 9px; border-radius: 50%;
+  background: #5fe08a; box-shadow: 0 0 0 0 rgba(95, 224, 138, 0.6);
+  animation: land-presence 1.8s ease-out infinite; }
+@keyframes land-presence {
+  0% { box-shadow: 0 0 0 0 rgba(95, 224, 138, 0.6); }
+  100% { box-shadow: 0 0 0 9px rgba(95, 224, 138, 0); }
+}
 /* The offline match, under the gold button: a line to read, not a second
    button competing with it. */
 .pg.land .pg-alone { align-self: center; margin-top: 10px; padding: 4px 6px; border: 0;
@@ -128,6 +140,7 @@ const CSS = `
 @media (prefers-reduced-motion: reduce) {
   .pg.land .pg-cards .pg-card.glow { animation: none; }
   .pg.land .pg-card .menu-btn.pg-play::after { animation: none; display: none; }
+  .pg.land .pg-presence i { animation: none; }
 }
 
 /* One painting of the band. Not a button: all three are account features
@@ -193,6 +206,7 @@ const CSS = `
      decoration under the offer. */
   .pg.land .pg-card.plain > h2 { order: 1; }
   .pg.land .pg-card.plain > p { order: 2; }
+  .pg.land .pg-card.plain > .pg-presence { order: 3; margin-top: 2px; }
   .pg.land .pg-card.plain > .menu-btn { order: 3; margin-top: 2px; }
   .pg.land .pg-card.plain > .pg-alone { order: 4; }
   .pg.land .pg-card.plain > .pg-card-fine { order: 4; margin: 8px 0 0; }
@@ -524,6 +538,10 @@ export function showLanding(
     const offline = el('section', 'pg-card plain glow');
     const playBtn = el('button', 'menu-btn pg-play', PLAY_NOW_CALL);
     playBtn.addEventListener('click', () => finish({ kind: 'guest' }));
+    // Someone playing right now, over the button (ui/landing_presence.ts).
+    const presence = el('div', 'pg-presence');
+    presence.append(el('i', ''), el('span', ''));
+    mountPresence(presence);
     const aloneBtn = el('button', 'pg-alone', PRACTICE_ALONE_CALL);
     aloneBtn.type = 'button';
     aloneBtn.addEventListener('click', () => finish({ kind: 'offline' }));
@@ -543,6 +561,7 @@ export function showLanding(
       el('p', '', PLAY_NOW_LINE),
       tryShot,
       el('p', 'pg-card-fine', PLAY_NOW_FINE),
+      presence,
       playBtn,
       aloneBtn,
     );

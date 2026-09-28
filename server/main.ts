@@ -76,6 +76,7 @@ import { clearCookie, parseCookies, serializeCookie } from './cookies';
 import { authorizeUrl, CALLBACK_PATH, DiscordOauth, discordConfigFromEnv } from './discord_oauth';
 import { DiscordFlows } from './discord_state';
 import { displayOf, forgedMatchAssets, modelPointers, setForgedDisplay } from './display';
+import { chooseDropIn, type DropInCandidate, presenceOf } from './drop_in';
 import { clientAddress, edgeConfig, originAllowed } from './edge';
 import { emailErrorMessage } from './email_address';
 import { CLAIM_TTL_MS } from './email_claim';
@@ -254,6 +255,12 @@ interface MatchEntry {
   // kept here because a coach may close the tab and still be rated; the
   // bot and its version, for the Record written at the end.
   botSeats: Map<number, { accountId: number; name: string; botId?: string; version?: number }>;
+  // A public classic-queue match, the only kind a newcomer drops into
+  // (ADR 0025).
+  publicQueue: boolean;
+  // Who took a bot's seat after the start (ADR 0025): never rated for it,
+  // never recorded under it, never a leaver.
+  dropIns: Set<number>;
   // Time and deaths per play for the bot seats' Records (src/sim/playbook/report.ts).
   ledger: PlayLedger;
   // A Forge-queue match: its deltas land on the Forge queue's own rating
@@ -826,6 +833,8 @@ function onMatchReady(forge: boolean) {
       ),
       forge,
       botSeats,
+      publicQueue: source === 'queue' && !forge,
+      dropIns: new Set(),
       ledger: new PlayLedger(),
     });
     for (const p of picks) {
@@ -920,7 +929,9 @@ function walkOutOfMatch(client: Client, entry: MatchEntry, matchId: number): voi
   // A coach walking out leaves nothing behind: the bot keeps playing, so
   // there is no leaver to punish.
   const coach = entry.match.players.get(client.id)?.coach === true;
-  if (entry.ratedEligible && entry.match.sim.winner === null && !coach) {
+  // A seat taken mid-match was never rated, so leaving it costs nothing.
+  const droppedIn = entry.dropIns.has(client.accountId);
+  if (entry.ratedEligible && entry.match.sim.winner === null && !coach && !droppedIn) {
     const humansByTeam: [number, number] = [0, 0];
     for (const p of entry.match.players.values()) {
       if (clients.has(p.clientId)) humansByTeam[p.team] += 1;
@@ -950,6 +961,56 @@ function walkOutOfMatch(client: Client, entry: MatchEntry, matchId: number): voi
     entry.abandonedAt = Date.now();
     console.log(`match ${matchId} abandoned: holding for rejoin grace`);
   }
+}
+
+// What the drop-in rule and the landing's presence line read of the live
+// matches (server/drop_in.ts).
+function dropInCandidates(): DropInCandidate[] {
+  const out: DropInCandidate[] = [];
+  for (const [matchId, entry] of matches) {
+    let humans = 0;
+    for (const p of entry.match.players.values()) if (clients.has(p.clientId)) humans += 1;
+    out.push({
+      matchId,
+      time: entry.match.sim.time,
+      humans,
+      openSeats: entry.match.openBotSeats,
+      joinable: entry.publicQueue && entry.endedAt === null && entry.abandonedAt === null,
+    });
+  }
+  return out;
+}
+
+// A newcomer takes a bot's seat in the liveliest joinable match (ADR
+// 0025). False when there is none, and the caller queues them instead.
+function dropInto(client: Client): boolean {
+  const matchId = chooseDropIn(dropInCandidates());
+  if (matchId === null) return false;
+  const entry = matches.get(matchId);
+  if (!entry) return false;
+  for (const mm of matchmakers) mm.removeEverywhere(client.id);
+  const seat = entry.match.takeBotSeat(client.id, client.name);
+  if (!seat) return false;
+  client.matchId = matchId;
+  entry.dropIns.add(client.accountId);
+  // A Guest seated by hand makes the match unrated for everyone (ADR
+  // 0024), whenever it sits down.
+  if (client.guest) entry.ratedEligible = false;
+  // A ranked bot handing its seat over plays no more of this match: no
+  // rating and no Record for a game a person finished for it.
+  if (seat.pool) entry.botSeats.delete(seat.unitId);
+  send(client.id, {
+    t: 'match_start',
+    selfUnitId: seat.unitId,
+    team: seat.team,
+    dropIn: true,
+    ...forgedPayload(entry.match),
+  });
+  for (const cid of entry.match.players.keys()) {
+    if (cid !== client.id) send(cid, { t: 'player_joined', name: client.name, team: seat.team });
+  }
+  console.log(`match ${matchId}: ${client.name} dropped in on team ${seat.team}`);
+  return true;
 }
 
 // --- HTTP: auth, the meta API, the static client ---
@@ -1142,6 +1203,13 @@ const server = http.createServer(async (req, res) => {
         }),
       );
       sendJson(res, 200, { name: guest.name });
+      return;
+    }
+
+    // Who is playing right now, for the landing's line over its button
+    // (ADR 0025): counts only, no names.
+    if (url === '/api/public/presence') {
+      sendJson(res, 200, presenceOf(dropInCandidates(), matchmaker.queuedCount));
       return;
     }
 
@@ -2513,6 +2581,10 @@ wss.on('connection', (ws, req) => {
           });
           break;
         }
+        // Nobody waiting and a public match under way with people in it:
+        // take a bot's seat there instead of a queue of one (ADR 0025).
+        // It opens no new match, so capacity does not stand in the way.
+        if (msg.forge !== true && matchmaker.queuedCount === 0 && dropInto(client)) break;
         if (atCapacity) refuseCapacity();
         else {
           // One seat across both queues: entering one leaves the other.
@@ -2744,10 +2816,13 @@ setInterval(() => {
           // Record the finished match once, the moment the winner lands:
           // seats still held by a connected human carry their player id.
           const accountIdByUnit = new Map<number, number>();
-          // A Guest's seat is recorded like a house bot's (ADR 0024).
+          // A Guest's seat is recorded like a house bot's (ADR 0024), and
+          // so is a seat taken mid-match (ADR 0025).
           for (const p of entry.match.players.values()) {
             const c = clients.get(p.clientId);
-            if (c && !c.guest) accountIdByUnit.set(p.unitId, c.accountId);
+            if (c && !c.guest && !entry.dropIns.has(c.accountId)) {
+              accountIdByUnit.set(p.unitId, c.accountId);
+            }
           }
           // Rating policy (server/rating.ts, server/match_rating.ts): only
           // public-queue matches with an OWNED seat on each side are rated,

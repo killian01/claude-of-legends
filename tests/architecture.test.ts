@@ -296,6 +296,7 @@ describe('api methods', () => {
     '/api/public/stats',
     '/api/public/build',
     '/api/public/landing',
+    '/api/public/presence',
     '/api/discord/status',
     '/api/bots/arena',
     '/api/bots/pool',
