@@ -590,6 +590,33 @@ const CSS = `
    to want the next one, so this is where the server is offered. Muted, so
    it never competes with Play again. */
 .hud-end-join { pointer-events: auto; margin-top: 12px; font-size: 13px; color: #9fb089; }
+/* A phone is 390 tall in the landscape the game puts it in, and the end
+   screen carries a title, a result, the account offer, the whole
+   scoreboard, two buttons and the feedback box. It never fitted; adding
+   the box made it obvious, with the field and its button hanging off the
+   bottom edge where no finger could reach them. So on a touchscreen the
+   two modal overlays start at the top and scroll, everything in them
+   comes down a size, and the touch bar on the edge stands down while one
+   is up, the way it does for the shop. */
+.hud.compact .hud-overlay.modal {
+  justify-content: flex-start; overflow-y: auto; pointer-events: auto;
+  padding: 8px 10px 14px; gap: 2px;
+}
+/* A scrolling column must not squeeze what it holds: without this the
+   scoreboard, which is a flex child that may shrink, was crushed to its
+   first heading while the overlay reported nothing to scroll. */
+.hud.compact .hud-overlay.modal > * { flex: none; }
+.hud.compact .hud-end-card { max-height: none; margin-top: 8px; padding: 8px 10px; gap: 8px; }
+.hud.compact .hud-overlay-title { font-size: 26px; letter-spacing: 1px; }
+.hud.compact .hud-overlay-sub { font-size: 12.5px; margin-top: 2px; }
+.hud.compact .hud-end-rating { font-size: 13px; margin-top: 2px; min-height: 0; }
+.hud.compact .hud-end-join { margin-top: 8px; font-size: 11.5px; }
+.hud.compact .hud-menu-btn { margin-top: 6px; padding: 8px 18px; font-size: 13px; }
+.hud.compact .hud-end-offer { padding: 8px 10px; gap: 8px; }
+.hud.compact .hud-end-offer b { font-size: 13px; }
+.hud.compact .hud-end-offer span { font-size: 11.5px; }
+.hud.overlay-open ~ .touchbar { display: none; }
+
 /* The feedback box (ui/feedback_box.ts), on the end screen and in the
    pause menu: the two moments a player is about to stop. It reads as a
    person asking, not as a form, so it is one line of words, one field and
@@ -617,6 +644,15 @@ const CSS = `
 .hud-feedback-field::placeholder { color: #6f8456; }
 .hud-feedback-row .hud-menu-btn { margin: 0; flex: none; align-self: stretch; }
 .hud-feedback-thanks { font-size: 13px; color: #b6cc92; }
+/* On a phone it is the last thing on a screen that is already full, so it
+   takes as little of it as it can and still be typed into. */
+.hud.compact .hud-feedback { margin-top: 8px; padding: 8px 10px; width: min(520px, 94vw); }
+.hud.compact .hud-feedback-words b { font-size: 12.5px; }
+.hud.compact .hud-feedback-words span { font-size: 11.5px; }
+.hud.compact .hud-feedback-row { margin-top: 6px; gap: 6px; }
+.hud.compact .hud-feedback-field { font-size: 12px; padding: 6px 8px; line-height: 1.35; }
+.hud.compact .hud-feedback-row .hud-menu-btn { margin-top: 0; padding: 8px 14px; font-size: 12.5px; }
+.hud.compact .hud-feedback-thanks { font-size: 12px; }
 .hud-end-join a { color: #cbd9b4; }
 .hud-end-rating { font-size: 15px; font-weight: 700; margin-top: 4px; min-height: 18px; }
 /* The account offer (ui/account_offer.ts), above the table and in gold:
@@ -1335,7 +1371,7 @@ export class Hud {
     this.deathSub = el('div', 'hud-overlay-sub');
     this.deathOverlay.append(el('div', 'hud-overlay-title', 'SLAIN'), this.deathSub);
 
-    this.endOverlay = el('div', 'hud-overlay');
+    this.endOverlay = el('div', 'hud-overlay modal');
     this.endTitle = el('div', 'hud-overlay-title');
     this.endSub = el('div', 'hud-overlay-sub');
     this.endRating = el('div', 'hud-end-rating');
@@ -1387,7 +1423,7 @@ export class Hud {
       endJoin,
     );
 
-    this.escapeOverlay = el('div', 'hud-overlay');
+    this.escapeOverlay = el('div', 'hud-overlay modal');
     const resume = el('button', 'hud-menu-btn', 'Resume (Esc)');
     resume.addEventListener('click', () => this.toggleEscapeMenu());
     const fullscreenBtn = el('button', 'hud-menu-btn', 'Toggle fullscreen');
@@ -1516,8 +1552,18 @@ export class Hud {
     this.update();
   }
 
+  // A modal overlay is up (the pause menu or the end screen): what lives
+  // outside the HUD stands down, like it does for the shop.
+  private syncOverlay(): void {
+    this.rootEl.classList.toggle(
+      'overlay-open',
+      this.escapeOverlay.classList.contains('open') || this.endOverlay.classList.contains('open'),
+    );
+  }
+
   toggleEscapeMenu(): void {
     this.escapeOverlay.classList.toggle('open');
+    this.syncOverlay();
   }
 
   isChatOpen(): boolean {
@@ -2340,6 +2386,7 @@ export class Hud {
 
     const winner = this.world.winner;
     this.endOverlay.classList.toggle('open', winner !== null);
+    this.syncOverlay();
     if (winner !== null && !this.endPlayed) {
       this.endPlayed = true;
       playSfx(winner === this.selfTeam ? 'victory' : 'defeat');
