@@ -412,6 +412,13 @@ A room one account opens and others join with its code or invite link, played on
 roster and never rated. Its host may send the whole room into the Ranked queue as one party.
 _Avoid_: custom game, room, custom lobby
 
+**Feedback box**:
+The box at the end of a match and in the pause menu that asks what to improve, saying that
+one person makes the game. Optional, one line per match, kept in `feedback.jsonl` and read
+with `scripts/feedback.mjs` (PRIVACY.md). It carries the words and the shape of the match,
+never a name.
+_Avoid_: survey, form, support ticket
+
 **Practice**:
 The offline match against dummies, run entirely in the browser tab with nothing saved and
 no account needed. The same simulation the rated match runs. Its end sends the server the

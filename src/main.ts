@@ -820,6 +820,7 @@ async function runOnline(choice: HomeChoice): Promise<PostMatchAction> {
       trackStep('played');
       const opened = startPresentation(container, world, world.selfUnitId, world.selfTeam, finish, {
         terrain: loaded.terrain,
+        mode: 'online',
       });
       pres = opened;
       ends = matchEndReporter('online', () => ({ winner: world.winner, seconds: world.time }));

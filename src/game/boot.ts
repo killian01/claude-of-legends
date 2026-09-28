@@ -89,6 +89,9 @@ export function startPresentation(
     // No account behind this match: the end screen makes the account offer
     // (ui/account_offer.ts).
     guest?: boolean;
+    // Which mode this match runs in, for the feedback box's context
+    // (ui/feedback_box.ts). Practice unless the host says otherwise.
+    mode?: 'practice' | 'online';
   },
 ): Presentation {
   const renderer = new Renderer(container, world, options.terrain);
@@ -99,7 +102,15 @@ export function startPresentation(
   renderer.followUnit(selfId);
   renderer.setViewerTeam(selfTeam);
   renderer.domElement.style.cursor = defaultCursor();
-  const hud = new Hud(container, world, selfId, selfTeam, onExit, options.guest === true);
+  const hud = new Hud(
+    container,
+    world,
+    selfId,
+    selfTeam,
+    onExit,
+    options.guest === true,
+    options.mode ?? 'practice',
+  );
   // The thumb controls (CONTEXT.md: Thumb stick): a touchscreen playing
   // by the stick, which moves the minimap and the touch bar out of the
   // thumbs' way and hands the HUD's slots to the cast touch.

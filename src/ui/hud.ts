@@ -43,6 +43,7 @@ import {
   statusChipFace,
   wrathChipFace,
 } from './chip_text';
+import { buildFeedbackBox, type FeedbackBox, type FeedbackWhere } from './feedback_box';
 import { thumbClusterCss } from './thumb_cluster';
 
 interface ChipLook {
@@ -589,6 +590,33 @@ const CSS = `
    to want the next one, so this is where the server is offered. Muted, so
    it never competes with Play again. */
 .hud-end-join { pointer-events: auto; margin-top: 12px; font-size: 13px; color: #9fb089; }
+/* The feedback box (ui/feedback_box.ts), on the end screen and in the
+   pause menu: the two moments a player is about to stop. It reads as a
+   person asking, not as a form, so it is one line of words, one field and
+   one button, and leaving it alone costs nothing. */
+.hud-feedback {
+  pointer-events: auto; margin-top: 14px; width: min(520px, 86vw);
+  border: 1px solid #4a5c34; border-radius: 10px; padding: 12px 14px;
+  background: rgba(20, 30, 12, 0.72); text-align: left;
+}
+.hud-feedback-words b { display: block; font-size: 14px; color: #e8f0d4; }
+.hud-feedback-words span { display: block; margin-top: 2px; font-size: 13px; color: #a8bd88; }
+.hud-feedback-row { display: flex; gap: 8px; align-items: stretch; margin-top: 10px; }
+/* An author rule for display beats the browser's own [hidden], so the row
+   says it again: without this the field stayed on screen under the thank
+   you once the line had been sent. */
+.hud-feedback-row[hidden], .hud-feedback-words[hidden], .hud-feedback-thanks[hidden] {
+  display: none;
+}
+.hud-feedback-field {
+  flex: 1; min-width: 0; resize: none; border-radius: 7px;
+  border: 1px solid #466030; background: #10160c; color: #e4f0cc;
+  font: inherit; font-size: 13px; line-height: 1.4; padding: 8px 10px;
+}
+.hud-feedback-field:focus { outline: none; border-color: #7ca050; }
+.hud-feedback-field::placeholder { color: #6f8456; }
+.hud-feedback-row .hud-menu-btn { margin: 0; flex: none; align-self: stretch; }
+.hud-feedback-thanks { font-size: 13px; color: #b6cc92; }
 .hud-end-join a { color: #cbd9b4; }
 .hud-end-rating { font-size: 15px; font-weight: 700; margin-top: 4px; min-height: 18px; }
 /* The account offer (ui/account_offer.ts), above the table and in gold:
@@ -828,6 +856,14 @@ export class Hud {
   private endPlayed = false;
   // No account behind this match (ui/account_offer.ts).
   private readonly guest: boolean;
+  // The two feedback boxes (ui/feedback_box.ts) and whether this match has
+  // already had its line: one is asked for, not one per place it is asked.
+  private readonly endFeedback: FeedbackBox;
+  private readonly pauseFeedback: FeedbackBox;
+  private feedbackSent = false;
+  // Which mode this match runs in, for the line's context. The HUD is
+  // handed it because only the host knows (game/boot.ts).
+  private readonly mode: 'practice' | 'online';
   private readonly endOffer: HTMLElement;
   private readonly endOfferLine: HTMLElement;
   private readonly endOfferReason: HTMLElement;
@@ -849,11 +885,13 @@ export class Hud {
     // what 'menu' and 'again' mean for the mode this match ran in.
     onExit: (action: PostMatchAction) => void,
     guest = false,
+    mode: 'practice' | 'online' = 'practice',
   ) {
     this.world = world;
     this.selfId = selfId;
     this.selfTeam = selfTeam;
     this.guest = guest;
+    this.mode = mode;
 
     const style = document.createElement('style');
     style.textContent = CSS;
@@ -1334,6 +1372,10 @@ export class Hud {
     joinLink.rel = 'noreferrer';
     joinLink.textContent = 'the Discord';
     endJoin.append('Looking for a team, or something to report? Join ', joinLink, '.');
+    // The box that asks what to improve (ui/feedback_box.ts). Here first,
+    // since the end screen is where a match is over and there is nothing
+    // left to interrupt.
+    this.endFeedback = this.buildFeedback('end');
     this.endOverlay.append(
       this.endTitle,
       this.endSub,
@@ -1341,6 +1383,7 @@ export class Hud {
       this.endOffer,
       this.endStats,
       endBtns,
+      this.endFeedback.root,
       endJoin,
     );
 
@@ -1351,11 +1394,15 @@ export class Hud {
     fullscreenBtn.addEventListener('click', () => toggleGameFullscreen());
     const quit = el('button', 'hud-menu-btn', 'Leave match');
     quit.addEventListener('click', () => onExit('menu'));
+    // And in the pause menu, which is the other door out: whoever is
+    // about to press Leave match is the one with something to say.
+    this.pauseFeedback = this.buildFeedback('pause');
     this.escapeOverlay.append(
       el('div', 'hud-overlay-title', 'Paused view'),
       resume,
       buildSettingsPanel(),
       fullscreenBtn,
+      this.pauseFeedback.root,
       quit,
     );
 
@@ -1421,6 +1468,35 @@ export class Hud {
   // to ask. Called again whenever the request is retried.
   setLandscapeLocked(locked: boolean): void {
     this.rootEl.classList.toggle('turn-needed', needsTurnPrompt(this.coarsePointer, locked));
+  }
+
+  // One feedback box, wired to this match: what it sends is read when
+  // Send is pressed, and a line sent in one place thanks the player in
+  // both (ui/feedback_box.ts).
+  private buildFeedback(where: FeedbackWhere): FeedbackBox {
+    return buildFeedbackBox(
+      <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string) => {
+        const e = document.createElement(tag);
+        e.className = cls;
+        if (text !== undefined) e.textContent = text;
+        return e;
+      },
+      {
+        where,
+        context: () => ({
+          mode: this.mode,
+          minutes: this.world.time / 60,
+          finished: this.world.winner !== null,
+          signedIn: !this.guest,
+        }),
+        onSent: () => {
+          if (this.feedbackSent) return;
+          this.feedbackSent = true;
+          this.endFeedback?.markSent();
+          this.pauseFeedback?.markSent();
+        },
+      },
+    );
   }
 
   // The one place the shop opens or closes: the HUD's root says so too,
