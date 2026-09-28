@@ -6,6 +6,7 @@
 // who it is talking to. No database still: accounts, sessions and the
 // match log are JSON files under DATA_DIR.
 
+import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import http from 'node:http';
@@ -79,6 +80,7 @@ import { clientAddress, edgeConfig, originAllowed } from './edge';
 import { emailErrorMessage } from './email_address';
 import { CLAIM_TTL_MS } from './email_claim';
 import { EMBER_PRICES, EMBERS_PER_WEEK, IMAGE_PRICE_RESOLD } from './embers';
+import { FeedbackStore, parseFeedback } from './feedback';
 import {
   animateChampion,
   buildModel,
@@ -153,6 +155,14 @@ import { suggestKit } from './suggest';
 import { suggestLook } from './suggest_look';
 import { suggestStats } from './suggest_stats';
 import { formatTickReport, TickMeter } from './tick_meter';
+import {
+  nextVisit,
+  VISIT_COOKIE,
+  VISIT_MAX_AGE_S,
+  visitChoice,
+  visitIdOf,
+  withVisitTag,
+} from './visit_cookie';
 import { type WayStats, wayStatsOf } from './way_stats';
 import { playedByHand, seatWay, type Way } from './ways';
 
@@ -256,6 +266,9 @@ const registry = new AccountRegistry(path.join(DATA_DIR, 'accounts.json'));
 // What practice matches send at their end (server/practice_reports.ts):
 // one line each, read by scripts/practice.mjs and nothing else.
 const practiceReports = new PracticeReportStore(path.join(DATA_DIR, 'practice.jsonl'));
+// What players write in the feedback box (server/feedback.ts): one line
+// each, read with scripts/feedback.mjs and by nothing else.
+const feedback = new FeedbackStore(path.join(DATA_DIR, 'feedback.jsonl'));
 const sessions = new SessionStore(path.join(DATA_DIR, 'sessions.json'));
 // What a wrong password costs the next attempt (server/login_throttle.ts).
 const logins = new LoginThrottle();
@@ -1112,6 +1125,26 @@ const server = http.createServer(async (req, res) => {
       const report = parsePracticeReport(await readJsonBody(req, 8192));
       if (report) practiceReports.append(report, Date.now());
       sendJson(res, report ? 200 : 400, { ok: report !== null });
+      return;
+    }
+
+    // What a player wrote in the feedback box (src/ui/feedback_box.ts,
+    // PRIVACY.md): their words and the shape of the match they wrote them
+    // in, nothing that names anybody. No session, because the players
+    // worth hearing from are the ones who never made an account. The
+    // parse is strict and the body capped; the client never waits on the
+    // answer.
+    if (url === '/api/feedback') {
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'use POST' });
+        return;
+      }
+      const written = parseFeedback(await readJsonBody(req, 8192));
+      if (written) {
+        feedback.append(written, Date.now());
+        console.log(`feedback: ${written.text.length} characters from the ${written.where}`);
+      }
+      sendJson(res, written ? 200 : 400, { ok: written !== null });
       return;
     }
 
@@ -2225,13 +2258,36 @@ const server = http.createServer(async (req, res) => {
       filePath = path.join(DIST, 'index.html');
     }
     // The entry document goes out with the audience counter's tag on it
-    // when this deployment has a site to report to (server/stats_tag.ts);
-    // every other file goes out as built.
+    // when this deployment has a site to report to (server/stats_tag.ts),
+    // and with this browser's visit id (server/visit_cookie.ts), which is
+    // what tells a browser coming back from one arriving for the first
+    // time. Every other file goes out as built.
     const isEntry = filePath === path.join(DIST, 'index.html');
+    let visitId: string | null = null;
+    if (isEntry && STATS_ON) {
+      const visit = nextVisit(
+        parseCookies(req.headers.cookie).get(VISIT_COOKIE),
+        visitChoice(`?${(req.url ?? '').split('?')[1] ?? ''}`),
+        () => randomBytes(16).toString('hex'),
+      );
+      visitId = visitIdOf(visit);
+      if (visit.kind === 'set') {
+        addCookie(
+          res,
+          serializeCookie(VISIT_COOKIE, visit.value, {
+            maxAgeS: VISIT_MAX_AGE_S,
+            secure: cookieSecure(req),
+          }),
+        );
+      }
+    }
     const body = isEntry
-      ? withStatsTag(
-          withBuildTag(await readFile(filePath, 'utf8'), BUILD_ID),
-          STATS_ON ? STATS_WEBSITE_ID : '',
+      ? withVisitTag(
+          withStatsTag(
+            withBuildTag(await readFile(filePath, 'utf8'), BUILD_ID),
+            STATS_ON ? STATS_WEBSITE_ID : '',
+          ),
+          visitId,
         )
       : await readFile(filePath);
     // The client shipped no caching headers at all, which leaves a browser

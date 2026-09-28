@@ -15,6 +15,7 @@ import {
   matchEndOnce,
   matchEndReporter,
   OLD_VISIT_KEY,
+  optedOut,
   type ReporterWindow,
   STATS_STEPS,
   type StatsStore,
@@ -263,5 +264,65 @@ describe('the install', () => {
     expect(store.read(OLD_VISIT_KEY)).toBeNull();
     expect(store.read(DISABLED_KEY)).toBe('1');
     expect(win[BEFORE_SEND_NAME]).toBe(beforeSend);
+  });
+});
+
+describe('opening a visit', () => {
+  function fakeDoc(id: string | null): Document {
+    return {
+      readyState: 'complete',
+      querySelector: () => (id === null ? null : { getAttribute: () => id }),
+      addEventListener: () => undefined,
+    } as unknown as Document;
+  }
+
+  it('names the browser before the page view, in that order', () => {
+    const calls: string[] = [];
+    const win: StatsWindow = {
+      umami: {
+        track: () => calls.push('track'),
+        identify: (id: string) => calls.push(`identify ${id}`),
+      },
+    };
+    installStats(win, '', memory(), fakeDoc('f'.repeat(32)));
+    expect(calls).toEqual([`identify ${'f'.repeat(32)}`, 'track']);
+  });
+
+  it('still sends the view when the page carries no id', () => {
+    const calls: string[] = [];
+    const win: StatsWindow = { umami: { track: () => calls.push('track') } };
+    installStats(win, '', memory(), fakeDoc(null));
+    expect(calls).toEqual(['track']);
+  });
+
+  it('says nothing at all for a browser that asked out', () => {
+    const calls: string[] = [];
+    const win: StatsWindow = {
+      umami: { track: () => calls.push('track'), identify: () => calls.push('identify') },
+    };
+    installStats(win, '?stats=off', memory(), fakeDoc('f'.repeat(32)));
+    expect(calls).toEqual([]);
+    expect(optedOut(memory({ [DISABLED_KEY]: '1' }))).toBe(true);
+  });
+
+  it('waits for the document when it is still parsing', () => {
+    const calls: string[] = [];
+    const waiting: (() => void)[] = [];
+    const doc = {
+      readyState: 'loading',
+      querySelector: () => null,
+      addEventListener: (_t: string, fn: () => void) => {
+        waiting.push(fn);
+      },
+    } as unknown as Document;
+    const win: StatsWindow = { umami: { track: () => calls.push('track') } };
+    installStats(win, '', memory(), doc);
+    expect(calls).toEqual([]);
+    for (const fn of waiting) fn();
+    expect(calls).toEqual(['track']);
+  });
+
+  it('minds a page with no tracker on it', () => {
+    expect(() => installStats({}, '', memory(), fakeDoc('a'.repeat(32)))).not.toThrow();
   });
 });

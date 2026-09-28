@@ -60,6 +60,11 @@ export const STAYED_MS = 30_000;
 // exists because the maintainer's browser is otherwise indistinguishable
 // from a stranger's, and on a quiet day that is most of the count.
 export const CHOICE_PARAM = 'stats';
+// The meta element the server writes the browser's visit id into
+// (server/visit_cookie.ts). It is the one thing that survives the
+// tracker's own monthly reset, so a browser coming back in November is
+// still the browser that came in September.
+export const VISIT_META = 'visit';
 export const DISABLED_KEY = 'umami.disabled';
 // The key the previous counter kept its line under: a date and at most two
 // words, or 'off'. Removed on sight, and a browser that had asked out
@@ -153,7 +158,19 @@ export function beforeSend<T extends StatsPayload>(_type: string, payload: T): T
 }
 
 export interface Tracker {
-  track(name: string, data?: Record<string, unknown>): unknown;
+  track(name?: string, data?: Record<string, unknown>): unknown;
+  // Tells the tracker which browser this is, before anything else is
+  // sent: the id rides every record from then on, and the session it
+  // writes carries it.
+  identify?(id: string): unknown;
+}
+
+// The id the server put on the page, or null (a page served without it,
+// the dev server, a browser that asked out).
+export function visitIdFrom(doc: Document): string | null {
+  const meta = doc.querySelector(`meta[name="${VISIT_META}"]`);
+  const value = meta?.getAttribute('content') ?? '';
+  return /^[0-9a-f]{32}$/.test(value) ? value : null;
 }
 
 export interface StatsWindow {
@@ -270,8 +287,46 @@ export function installStats(
   win: StatsWindow = window as StatsWindow,
   search: string = window.location.search,
   store: StatsStore = browserStore(),
+  // Read at call time rather than defaulted, so a test without a DOM can
+  // install the hook and the opt-out without one.
+  doc: Document | null = typeof document === 'undefined' ? null : document,
 ): void {
   forgetOldLine(store);
   applyChoice(store, statsChoice(search));
   win[BEFORE_SEND_NAME] = beforeSend;
+  // A browser that asked out is not named and sends no view. The tracker
+  // checks the same key before every record of its own, so this is the
+  // second of two locks, not the only one.
+  if (doc && !optedOut(store)) openVisit(win, visitIdFrom(doc), doc);
+}
+
+export function optedOut(store: StatsStore): boolean {
+  try {
+    return store.read(DISABLED_KEY) !== null;
+  } catch {
+    // Storage denied: the tracker cannot read the key either, so it is
+    // going to send. Nothing here can hold a choice it cannot read.
+    return false;
+  }
+}
+
+// The tracker's script is deferred, so it has not run yet when this does:
+// the work waits for the document to be ready, by which time it has. Then
+// the browser is named and the page view goes out, in that order, because
+// the session is written from the first record the server receives
+// (server/stats_tag.ts turns the tracker's own view off for this).
+export function openVisit(win: StatsWindow, id: string | null, doc: Document): void {
+  const go = (): void => {
+    try {
+      if (id !== null) win.umami?.identify?.(id);
+      win.umami?.track();
+    } catch {
+      // The tracker's problem, not the page's.
+    }
+  };
+  if (doc.readyState === 'loading') {
+    doc.addEventListener('DOMContentLoaded', go, { once: true });
+  } else {
+    go();
+  }
 }

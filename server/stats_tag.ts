@@ -22,8 +22,15 @@ export function isWebsiteId(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
 
+// auto-pageview off: the client sends the view itself, once it has told
+// the tracker which browser this is (src/net/stats.ts, server/visit_cookie.ts).
+// The tracker's own view would go out first, before the id, and the
+// session row is written from the first record it receives.
 export function statsTag(websiteId: string): string {
-  return `<script defer src="${STATS_SCRIPT}" data-website-id="${websiteId}" data-before-send="${BEFORE_SEND_NAME}"></script>`;
+  return (
+    `<script defer src="${STATS_SCRIPT}" data-website-id="${websiteId}"` +
+    ` data-auto-pageview="false" data-before-send="${BEFORE_SEND_NAME}"></script>`
+  );
 }
 
 // The document with the tag at the end of its head, or the document as it

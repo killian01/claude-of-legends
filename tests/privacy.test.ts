@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { STATS_SCRIPT, statsTag } from '../server/stats_tag';
+import { VISIT_COOKIE } from '../server/visit_cookie';
 import {
   CHOICE_PARAM,
   DISABLED_KEY,
@@ -101,5 +102,47 @@ describe('what a practice match sends', () => {
     expect(body).toContain('parsePracticeReport');
     expect(body).not.toContain('accountForRequest');
     expect(body).not.toContain('address');
+  });
+});
+
+describe('what the feedback box sends', () => {
+  it('is named on the page, route and file alike, and takes no session', () => {
+    const page = read('PRIVACY.md');
+    expect(page).toContain('`/api/feedback`');
+    expect(page).toContain('`feedback.jsonl`');
+    const main = read('server/main.ts');
+    const route = main.slice(main.indexOf("url === '/api/feedback'"));
+    const body = route.slice(0, route.indexOf("url === '/api/public/stats'"));
+    // Parsed, never trusted, and nothing about who sent it is kept.
+    expect(body).toContain('parseFeedback');
+    expect(body).not.toContain('accountForRequest');
+    expect(body).not.toContain('address');
+  });
+});
+
+describe('the visit cookie', () => {
+  it('is named on the page with its life and its way out', () => {
+    const page = read('PRIVACY.md');
+    expect(page).toContain(`\`${VISIT_COOKIE}\``);
+    expect(page).toContain('thirteen months');
+    expect(page).toContain(`\`?${CHOICE_PARAM}=off\``);
+    // A month is what it exists to outlast; the page has to say why.
+    expect(page).toContain('every month');
+  });
+
+  it('carries a number and nothing about anybody', () => {
+    // The module decides the cookie's next value out of the cookie it was
+    // sent and the address, and nothing else: it imports nothing, so
+    // there is no account, no session and no address within its reach.
+    const source = read('server/visit_cookie.ts');
+    expect(source).not.toMatch(/^import /m);
+    for (const banned of ['accountId', 'email', 'registry', 'sessions']) {
+      expect(`${banned}: ${source.includes(banned)}`).toBe(`${banned}: false`);
+    }
+    const main = read('server/main.ts');
+    const at = main.indexOf('nextVisit(');
+    const block = main.slice(at, at + 600);
+    expect(block).toContain('randomBytes');
+    expect(block).not.toContain('accountForRequest');
   });
 });

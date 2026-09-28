@@ -15,25 +15,38 @@ about your visit is sent anywhere but to that machine, and nothing it
 records is sent on to anyone; the counter's own usage report is switched
 off. There is nobody else in the room.
 
-## One cookie
+## Two cookies
 
 `loc_session`, set when you sign in and cleared when you sign out. It holds
 a random session id and nothing else, and it exists so the server knows
 which account is talking to it (`server/cookies.ts`, `server/sessions.ts`,
-ADR 0006). There is no tracking cookie, because there is nothing to track
-with it.
+ADR 0006).
 
-## Nothing stored, unless you ask out
+`col_visit`, set on your first page here. It holds one random number, 32
+characters, minted on the server and meaning nothing anywhere else. Its
+whole purpose is to tell a browser coming back from one arriving for the
+first time, because the counter's own way of recognising a browser is a
+hash that is thrown away and remade every month (below), which leaves the
+one question worth asking, does anybody come back, with no answer past four
+weeks. It lasts thirteen months, it is never read by anything but the
+audience counter, it is never sent anywhere off this machine, and it is not
+attached to your account even when you have one
+(`server/visit_cookie.ts`).
 
-The counter sets no cookie and writes nothing to your browser: it tells one
-visitor from another by a hash it computes on the server (below), never by
-anything it leaves on your machine.
+That is the whole bargain this site takes: first party, this site only,
+audience measurement and nothing else, nothing shared with anybody, an
+opt-out that works, and a life capped at thirteen months. No consent banner
+is asked for on that basis.
 
-The one key it reads is `umami.disabled`, which is there if you opened the
-site with `?stats=off`. Then nothing is counted for this browser at all, on
-any day: the tracker checks that key before it sends anything, so the
-choice holds without a line of this site's code running
-(`src/net/stats.ts`). `?stats=on` removes it.
+## Nothing else stored, and the way out
+
+`?stats=off` opens the site once and this browser is out for good: nothing
+is counted for it on any day. The choice is kept in two places so that
+neither can quietly lose it, the `col_visit` cookie, which then holds the
+word `off` instead of a number and no longer identifies anything, and the
+`umami.disabled` key in your browser's storage, which the tracker checks
+before it sends anything (`src/net/stats.ts`). `?stats=on` undoes both, and
+mints a new number, since the old one was given up.
 
 Earlier builds kept one line under `col.visit`, a date and at most two
 words. This one deletes it on sight, and a browser that had asked out under
@@ -104,6 +117,24 @@ lands in a file on this machine (`practice.jsonl`) with the time it arrived
 and nothing else, read by the maintainer with `scripts/practice.mjs`, and it
 exists so the bots can be tuned to the strength of the people who meet them
 first.
+
+## What you write in the feedback box
+
+At the end of a match, and in the pause menu, there is a box that asks what
+to improve. It is the only place on this site where you write something
+that is kept, and it is entirely optional: leaving it alone sends nothing.
+
+What is sent when you press Send (`/api/feedback`,
+`src/ui/feedback_box.ts`): the words you typed, at most a thousand
+characters, and the shape of the match you wrote them in, which is practice
+or online, how many minutes it had run, whether it had a winner, and
+whether an account was signed in. No name, no account id, no address. The
+line lands in a file on this machine (`feedback.jsonl`) with the time it
+arrived, and it is read by the maintainer with `scripts/feedback.mjs`.
+
+So do not put anything in it you would not hand to a stranger: it is a
+message to one person, not a private channel, and there is no way to take
+it back afterwards. If you want an answer, the Discord is the place.
 
 ## What is not counted
 

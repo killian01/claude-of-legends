@@ -224,6 +224,33 @@ whether the form then loses them. The dashboard's events panel shows them
 against the day's visitors; an event's properties show the minutes, so they
 say how long a match held people.
 
+New against returning is the one thing the counter cannot answer on its own:
+its visitor id is a hash remade every month. The `col_visit` cookie
+(PRIVACY.md, `server/visit_cookie.ts`) is what outlasts that, and it arrives
+as the session's `distinct_id`. One query, run against the counter's
+database:
+
+```bash
+docker exec claude_of_legends_stats_db psql -U umami -d umami -c "
+with first as (
+  select s.distinct_id, min(e.created_at)::date as d0
+  from website_event e join session s using (session_id)
+  where s.distinct_id is not null group by 1
+)
+select e.created_at::date as day,
+  count(distinct s.distinct_id) as browsers,
+  count(distinct s.distinct_id) filter (where f.d0 = e.created_at::date) as new,
+  count(distinct s.distinct_id) filter (where f.d0 < e.created_at::date) as returning
+from website_event e join session s using (session_id) join first f using (distinct_id)
+group by 1 order by 1"
+```
+
+Where they came from is the dashboard's own Referrers panel: a search engine
+sends its domain, so Google, Bing and DuckDuckGo appear by name, and an
+empty referrer is a direct visit, a bookmark, or a link opened inside an app
+like Discord, which sends none. Tag what you post (`?utm_source=reddit`) and
+the Reports, then UTM panel separates them for good.
+
 Your own browser is a visitor like any other, which on a quiet day is most of
 the count. Open the site once with `?stats=off` and it stops being counted, on
 that browser, for good; `?stats=on` puts it back.
@@ -254,6 +281,21 @@ append-only and cannot.
 
 Nothing is collected for this and nothing is written by it. It reads two
 files and prints a table.
+
+## What players ask for
+
+The end screen and the pause menu carry a box asking what to improve, which
+says a single person makes the game (CONTEXT.md: Feedback box). What is
+written lands one line at a time in `feedback.jsonl`, with the match it was
+written in and nothing that names anybody (PRIVACY.md).
+
+```bash
+node scripts/feedback.mjs /var/lib/docker/volumes/claude-of-legends_game_data/_data
+node scripts/feedback.mjs <data dir> 7      the last 7 days only
+```
+
+One block per message, newest last, each headed by the day, whether it came
+from a visitor or an account, and the match behind it.
 
 ## What the practice matches say
 
