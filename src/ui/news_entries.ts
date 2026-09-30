@@ -35,7 +35,25 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
-    day: '2026-10-01',
+    day: '2026-09-30',
+    title: 'The Pyrefang rises out of its fire',
+    body: [
+      'The Pyrefang, the creature of the bot ring, has a body of its own. The stand-in shape ' +
+        'is retired; in its place prowls a rigged beast with lava in the cracks of its hide, ' +
+        'flames flickering along its back and embers rising off it. It walks like a big cat, ' +
+        'watches while it waits, and turns to face whoever comes for it.',
+      'It no longer simply appears. A column of fire bursts from the ring, crowned where the ' +
+        'platform ends, and the Pyrefang uncurls inside it, gets to its feet and roars. Its ' +
+        'bite is timed so the jaws close when the hit lands, and when it falls it plays its ' +
+        'death before the body fades. The Ascendant rises through the same fire.',
+      'Nothing in the numbers moved: its size on the ground, its reach, its health and its ' +
+        'rewards are the ones you fought yesterday.',
+    ],
+    image: 'pyrefang.webp',
+    link: { label: 'Play now', to: 'play' },
+  },
+  {
+    day: '2026-09-30',
     title: 'Pick your lane before the match',
     body: [
       'Champion select now asks where you are going: top lane, mid lane, bot lane or the ' +
