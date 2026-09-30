@@ -32,7 +32,7 @@ import {
   xpForNext,
 } from '../sim/stats';
 import { BOON_DAMAGE_PER_STACK } from '../sim/team_buffs';
-import type { AbilityKey, TeamId } from '../sim/types';
+import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { abilityIconUrl, passiveIconUrl, sigilIconUrl } from './ability_icons';
 import { accountOffer, OFFER_CALL } from './account_offer';
@@ -54,6 +54,18 @@ import {
   nudgeVisible,
   stepNudge,
 } from './feedback_box';
+import {
+  closeLaneCard,
+  type GuideMode,
+  LANE_CARD_START,
+  type LaneCardState,
+  type LaneGuide,
+  laneCall,
+  laneCardAhead,
+  laneCardVisible,
+  stepGuide,
+  stepLaneCard,
+} from './lane_guide';
 import { thumbClusterCss } from './thumb_cluster';
 
 interface ChipLook {
@@ -452,7 +464,9 @@ const CSS = `
 /* The line at the start of a match that says the feedback box exists
    (ui/feedback_box.ts): under the announcements, quiet, and a door, so the
    whole of it opens the menu where the box is. */
-.hud-nudge {
+/* The lane card (ui/lane_guide.ts; ADR 0026) shares the slot and the look,
+   and comes first: the seat's lane in gold, and a tap that walks there. */
+.hud-nudge, .hud-lane-card {
   position: absolute; top: 150px; left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 10px; pointer-events: auto; cursor: pointer;
   max-width: min(520px, 90vw); padding: 8px 10px 8px 14px; border-radius: 10px;
@@ -460,19 +474,23 @@ const CSS = `
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55); text-shadow: none;
   opacity: 0; visibility: hidden; transition: opacity 0.4s, visibility 0.4s;
 }
-.hud-nudge.on { opacity: 1; visibility: visible; }
-.hud-nudge:hover { border-color: #c9a84a; }
-.hud-nudge-words b { display: block; font-size: 13px; color: #f2e6c0; }
-.hud-nudge-words span { display: block; margin-top: 1px; font-size: 12px; color: #c9bd93; }
-.hud-nudge-close {
+.hud-nudge.on, .hud-lane-card.on { opacity: 1; visibility: visible; }
+.hud-nudge:hover, .hud-lane-card:hover { border-color: #c9a84a; }
+.hud-nudge-words b, .hud-lane-words b { display: block; font-size: 13px; color: #f2e6c0; }
+.hud-nudge-words span, .hud-lane-words span {
+  display: block; margin-top: 1px; font-size: 12px; color: #c9bd93;
+}
+.hud-lane-words b { color: #ffd94a; letter-spacing: 0.6px; text-transform: uppercase; }
+.hud-lane-card.still { cursor: default; }
+.hud-nudge-close, .hud-lane-close {
   flex: none; width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
   border: 1px solid #6e5a24; background: transparent; color: #c9bd93;
   font-size: 15px; line-height: 1; padding: 0;
 }
-.hud-nudge-close:hover { color: #fff3cf; border-color: #c9a84a; }
-.hud.compact .hud-nudge { top: 96px; padding: 6px 8px 6px 12px; }
-.hud.compact .hud-nudge-words b { font-size: 12px; }
-.hud.compact .hud-nudge-words span { font-size: 11px; }
+.hud-nudge-close:hover, .hud-lane-close:hover { color: #fff3cf; border-color: #c9a84a; }
+.hud.compact .hud-nudge, .hud.compact .hud-lane-card { top: 96px; padding: 6px 8px 6px 12px; }
+.hud.compact .hud-nudge-words b, .hud.compact .hud-lane-words b { font-size: 12px; }
+.hud.compact .hud-nudge-words span, .hud.compact .hud-lane-words span { font-size: 11px; }
 /* The multikill spotlight: bigger than an announcement because it is the
    rarest thing the game says. Scales in from just under full size, and the
    pentakill takes the room the quadrakill does not. */
@@ -937,6 +955,18 @@ export class Hud {
   // Which mode this match runs in, for the line's context. The HUD is
   // handed it because only the host knows (game/boot.ts).
   private readonly mode: 'practice' | 'online';
+  // The lane guidance (ui/lane_guide.ts; ADR 0026): who is in front of
+  // the screen, the seat's lane and whether the player got there, and the
+  // card that tells it, in the nudge's slot and ahead of it.
+  private readonly guideMode: GuideMode;
+  private guide: LaneGuide | null = null;
+  private laneCard: LaneCardState = LANE_CARD_START;
+  private readonly laneCardEl: HTMLElement;
+  private readonly laneTitleEl: HTMLElement;
+  private readonly laneLineEl: HTMLElement;
+  // The card's walk: one ordinary move order, handed in by the host so it
+  // goes the way a right-click's does (game/boot.ts).
+  private laneWalk: ((p: Vec2) => void) | null = null;
   private readonly endOffer: HTMLElement;
   private readonly endOfferLine: HTMLElement;
   private readonly endOfferReason: HTMLElement;
@@ -959,12 +989,16 @@ export class Hud {
     onExit: (action: PostMatchAction) => void,
     guest = false,
     mode: 'practice' | 'online' = 'practice',
+    // Who is in front of the screen, for the lane guidance: a person on
+    // the seat, a coach whose bot plays it, or a replay viewer.
+    guide: GuideMode = 'play',
   ) {
     this.world = world;
     this.selfId = selfId;
     this.selfTeam = selfTeam;
     this.guest = guest;
     this.mode = mode;
+    this.guideMode = guide;
 
     const style = document.createElement('style');
     style.textContent = CSS;
@@ -1406,6 +1440,29 @@ export class Hud {
       this.pauseFeedback.reveal(!coarsePointer);
     });
 
+    // The lane card: the seat's lane, and a tap that walks the champion
+    // there while it has not arrived; the close button only closes.
+    this.laneCardEl = el('div', 'hud-lane-card');
+    const laneWords = el('div', 'hud-lane-words');
+    this.laneTitleEl = el('b', '');
+    this.laneLineEl = el('span', '');
+    laneWords.append(this.laneTitleEl, this.laneLineEl);
+    const laneClose = el('button', 'hud-lane-close', '\u00d7');
+    laneClose.setAttribute('aria-label', 'Close');
+    laneClose.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.endLaneCard();
+    });
+    this.laneCardEl.append(laneWords, laneClose);
+    this.laneCardEl.addEventListener('click', () => {
+      const target = this.guide?.target;
+      if (this.laneCardWalks() && target) {
+        if (this.laneWalk) this.laneWalk(target);
+        else this.world.orderMove(this.selfId, target.x, target.z);
+      }
+      this.endLaneCard();
+    });
+
     this.score = el('div', 'hud-score');
     this.score.append(el('h3', '', 'Scoreboard (Tab)'));
     const teamsWrap = el('div', 'hud-score-teams');
@@ -1506,6 +1563,7 @@ export class Hud {
       this.feed,
       chat,
       this.announceEl,
+      this.laneCardEl,
       this.nudgeEl,
       this.spotEl,
       this.toastEl,
@@ -1625,9 +1683,77 @@ export class Hud {
 
   private stepNudge(): void {
     if (this.nudge.done && !this.nudgeEl.classList.contains('on')) return;
-    const blocked = this.nudgeBlocked();
+    // After the lane card, never beside it: one card in the slot at a time.
+    const blocked =
+      this.nudgeBlocked() || laneCardAhead(this.laneCard, this.guideMode, this.world.time);
     this.nudge = stepNudge(this.nudge, this.world.time, blocked);
     this.nudgeEl.classList.toggle('on', nudgeVisible(this.nudge, blocked));
+  }
+
+  // The seat's lane read again (a re-deal or a seat changing hands moves
+  // it: the guide starts over and the card comes back), whether the
+  // player got there, and the card's words and life. Nothing in a replay.
+  private stepLaneGuide(self: { lane: LaneGuide['lane']; pos: Vec2; dead: boolean }): void {
+    if (this.guideMode === 'watch') return;
+    const prev = this.guide;
+    this.guide = stepGuide(
+      prev,
+      this.world.map,
+      this.selfTeam,
+      self.lane,
+      self.dead ? null : self.pos,
+      this.world.units.values(),
+    );
+    if (prev !== null && prev.lane !== self.lane) this.laneCard = LANE_CARD_START;
+    const blocked = this.nudgeBlocked();
+    this.laneCard = stepLaneCard(this.laneCard, this.world.time, blocked, this.guide.arrived);
+    const visible = laneCardVisible(this.laneCard, blocked);
+    if (visible) {
+      const call = laneCall(this.guide.lane, this.guideMode, {
+        touch: this.coarsePointer,
+        time: this.world.time,
+        arrived: this.guide.arrived,
+      });
+      if (this.laneTitleEl.textContent !== call.title) this.laneTitleEl.textContent = call.title;
+      if (this.laneLineEl.textContent !== call.line) this.laneLineEl.textContent = call.line;
+      this.laneCardEl.classList.toggle('still', !this.laneCardWalks());
+    }
+    this.laneCardEl.classList.toggle('on', visible);
+  }
+
+  // Whether a tap on the card walks: a person's seat, not there yet, with
+  // somewhere to go.
+  private laneCardWalks(): boolean {
+    return (
+      this.guideMode === 'play' &&
+      this.guide !== null &&
+      !this.guide.arrived &&
+      this.guide.target !== null
+    );
+  }
+
+  private endLaneCard(): void {
+    this.laneCard = closeLaneCard(this.laneCard, this.world.time);
+    this.laneCardEl.classList.remove('on');
+  }
+
+  // The guidance as it stands, for the minimap's stroke and the arrow
+  // (game/boot.ts); null in a replay, and before the first update.
+  laneGuide(): LaneGuide | null {
+    return this.guideMode === 'watch' ? null : this.guide;
+  }
+
+  // Where the lane card stands while it is up, for the arrow to keep
+  // clear of; null while it is not.
+  laneCardRect(): DOMRect | null {
+    return this.laneCardEl.classList.contains('on')
+      ? this.laneCardEl.getBoundingClientRect()
+      : null;
+  }
+
+  // The card's walk, as the host orders a move (game/boot.ts).
+  setLaneWalk(walk: (p: Vec2) => void): void {
+    this.laneWalk = walk;
   }
 
   private endNudge(): void {
@@ -2117,6 +2243,9 @@ export class Hud {
       // The feedback line likewise: the start of a match only.
       else this.nudge = { ...this.nudge, done: true };
     }
+    // The lane card is not held to the top of the match: a slow load, a
+    // rejoin and a newcomer dropped into a seat are all told their lane.
+    this.stepLaneGuide(u);
     this.stepNudge();
 
     if (this.spotUntil !== 0 && performance.now() > this.spotUntil) {

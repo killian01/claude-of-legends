@@ -3,10 +3,17 @@
 
 import { describe, expect, it } from 'vitest';
 import type { MatchPick } from '../server/match';
-import { LOBBY_TTL_MS, Matchmaker, type MatchSource } from '../server/matchmaker';
-import type { ServerMsg } from '../src/net/protocol';
+import {
+  type BotSeat,
+  LOBBY_TTL_MS,
+  Matchmaker,
+  type MatchmakerOptions,
+  type MatchSource,
+} from '../server/matchmaker';
+import type { SelectClaim, ServerMsg } from '../src/net/protocol';
+import { NEW_BOT_PLAYBOOK } from '../src/sim/content/playbooks/new_bot';
 
-function harness(): {
+function harness(opts: MatchmakerOptions = {}): {
   mm: Matchmaker;
   sent: Map<number, ServerMsg[]>;
   matches: MatchPick[][];
@@ -25,6 +32,8 @@ function harness(): {
       matches.push(picks);
       sources.push(source);
     },
+    undefined,
+    opts,
   );
   return { mm, sent, matches, sources };
 }
@@ -283,5 +292,212 @@ describe('matchmaker', () => {
     mm.joinLobby(3, 'carol', 'BBBBB');
     const refusal = last(sent.get(3), 'error');
     expect(refusal?.t === 'error' && refusal.message).toBe('Lobby not found or full.');
+  });
+});
+
+// Lane preferences at champion select (ADR 0026): claimed live before Lock
+// in, first come, first served inside the team, told to the own team only,
+// kept through the timeout and a disconnect, and settled so every seat
+// enters the match with one concrete lane.
+describe('lane claims at select', () => {
+  const SIGILS: [string, string] = ['riftstep', 'mend'];
+
+  // A lobby of four: 1 and 3 on team 0 (seats 0 and 2), 2 and 4 on team 1
+  // (seats 1 and 3), in that seat order.
+  function lobbyOfFour(opts: MatchmakerOptions = {}) {
+    const h = harness(opts);
+    h.mm.createLobby(1, 'p1');
+    const lobby = last(h.sent.get(1), 'lobby');
+    const code = lobby?.t === 'lobby' ? lobby.code : '';
+    for (let id = 2; id <= 4; id++) h.mm.joinLobby(id, `p${id}`, code);
+    h.mm.startLobby(1, 0);
+    return h;
+  }
+
+  const claimsOf = (msgs: ServerMsg[] | undefined): SelectClaim[] | undefined => {
+    const m = last(msgs, 'select_update');
+    return m?.t === 'select_update' ? m.claims : undefined;
+  };
+  const count = (msgs: ServerMsg[] | undefined): number =>
+    msgs?.filter((m) => m.t === 'select_update').length ?? 0;
+  const lanesOf = (picks: MatchPick[] | undefined, clientId: number) =>
+    picks?.find((p) => p.clientId === clientId)?.lanes;
+
+  it('tells each seat its own index among the players, names being no identity', () => {
+    const { sent } = lobbyOfFour();
+    for (let id = 1; id <= 4; id++) {
+      const m = last(sent.get(id), 'select_start');
+      expect(m?.t).toBe('select_start');
+      if (m?.t !== 'select_start') continue;
+      expect(m.self).toBe(id - 1);
+      expect(m.players[m.self]).toEqual({ name: `p${id}`, team: m.team });
+    }
+  });
+
+  it('first come, first served: a teammate on a full lane is refused and told alone', () => {
+    const { mm, sent, matches } = lobbyOfFour();
+    mm.setLane(1, 'mid');
+    expect(claimsOf(sent.get(3))).toEqual([
+      { seat: 0, lane: 'mid', locked: false },
+      { seat: 2, lane: null, locked: false },
+    ]);
+    const before1 = count(sent.get(1));
+    mm.setLane(3, 'mid');
+    // Refused: the claimer alone hears back, with its own seat unclaimed.
+    expect(count(sent.get(1))).toBe(before1);
+    expect(claimsOf(sent.get(3))).toEqual([
+      { seat: 0, lane: 'mid', locked: false },
+      { seat: 2, lane: null, locked: false },
+    ]);
+    // The other side has its own mid.
+    mm.setLane(2, 'mid');
+    expect(claimsOf(sent.get(4))?.find((c) => c.seat === 1)?.lane).toBe('mid');
+    mm.pick(1, 'fenn', SIGILS);
+    mm.pick(2, 'elowen', SIGILS);
+    mm.pick(3, 'sylra', SIGILS);
+    mm.pick(4, 'dain', SIGILS);
+    expect(lanesOf(matches[0], 1)).toEqual(['mid']);
+    expect(lanesOf(matches[0], 2)).toEqual(['mid']);
+    // A mage whose home lane is taken settles where there is most room.
+    expect(lanesOf(matches[0], 3)).toEqual(['top']);
+  });
+
+  it("never shows a team the other side's claims", () => {
+    const { mm, sent } = lobbyOfFour();
+    const enemyBefore = count(sent.get(2)) + count(sent.get(4));
+    mm.setLane(1, 'jungle');
+    mm.setLane(3, 'bot');
+    // A claim goes to its own team only, not even as a bare update.
+    expect(count(sent.get(2)) + count(sent.get(4))).toBe(enemyBefore);
+    mm.pick(1, 'korrath', SIGILS);
+    mm.setLane(2, 'top');
+    mm.pick(2, 'vesk', SIGILS);
+    for (const [id, seats] of [
+      [1, [0, 2]],
+      [3, [0, 2]],
+      [2, [1, 3]],
+      [4, [1, 3]],
+    ] as const) {
+      for (const m of sent.get(id) ?? []) {
+        if (m.t !== 'select_update') continue;
+        expect(m.claims.map((c) => c.seat)).toEqual(seats);
+      }
+    }
+    expect(claimsOf(sent.get(4))).toEqual([
+      { seat: 1, lane: 'top', locked: true },
+      { seat: 3, lane: null, locked: false },
+    ]);
+  });
+
+  it('carries a claim on the lock, and a full lane there keeps the earlier claim', () => {
+    const { mm, matches } = lobbyOfFour();
+    mm.setLane(1, 'bot');
+    mm.pick(3, 'korrath', SIGILS, 0, undefined, 'jungle');
+    // The forest holds one: fenn keeps bot lane.
+    mm.pick(1, 'fenn', SIGILS, 0, undefined, 'jungle');
+    mm.pick(2, 'vesk', SIGILS, 0, undefined, 'river');
+    mm.pick(4, 'maera', SIGILS);
+    expect(lanesOf(matches[0], 1)).toEqual(['bot']);
+    expect(lanesOf(matches[0], 3)).toEqual(['jungle']);
+    // No ask at all is the home lane.
+    expect(lanesOf(matches[0], 2)).toEqual(['bot']);
+    expect(lanesOf(matches[0], 4)).toEqual(['bot']);
+  });
+
+  it('keeps a claim through a disconnect and the timeout', () => {
+    const { mm, matches } = lobbyOfFour();
+    mm.setLane(1, 'jungle');
+    mm.setLane(2, 'top');
+    mm.removeEverywhere(2);
+    expect(matches).toHaveLength(0);
+    mm.tickClock(10 * 60 * 1000);
+    expect(matches).toHaveLength(1);
+    expect(lanesOf(matches[0], 1)).toEqual(['jungle']);
+    expect(lanesOf(matches[0], 2)).toEqual(['top']);
+    // The seats that never claimed nor locked settle on their default.
+    expect(lanesOf(matches[0], 3)).toEqual(['mid']);
+  });
+
+  it("settles every seat of a full select on one concrete lane, within the team's room", () => {
+    const { mm, matches } = harness();
+    for (let i = 1; i <= 10; i++) mm.addToQueue(i, `p${i}`, 0);
+    for (let i = 1; i <= 10; i++) mm.pick(i, 'sylra', SIGILS);
+    expect(matches).toHaveLength(1);
+    for (const team of [0, 1] as const) {
+      const lanes = matches[0]!.filter((p) => p.team === team).map((p) => p.lanes);
+      expect(lanes.every((l) => l?.length === 1)).toBe(true);
+      const tally = (lane: string) => lanes.filter((l) => l?.[0] === lane).length;
+      // Nobody is sent to the forest unasked: two top, one mid, two bot.
+      expect([tally('top'), tally('mid'), tally('bot'), tally('jungle')]).toEqual([2, 1, 2, 0]);
+    }
+  });
+
+  it('ignores anything but the four lanes, and a claim outside a select', () => {
+    const { mm, sent } = lobbyOfFour();
+    const before = count(sent.get(1));
+    mm.setLane(1, 'river');
+    mm.setLane(1, null);
+    expect(count(sent.get(1))).toBe(before);
+    const lone = harness();
+    lone.mm.setLane(9, 'mid');
+    expect(lone.sent.size).toBe(0);
+  });
+
+  it('a coach seat claims its playbook lane, the bot seated ahead of any choice', () => {
+    const seat: BotSeat = {
+      name: 'Nightfall',
+      championId: 'sylra',
+      sigils: ['zephyr', 'sear'],
+      skin: 0,
+      playbook: { ...NEW_BOT_PLAYBOOK, lanes: ['bot', 'mid'] },
+      botId: 'bot_0123456789abcdef',
+      version: 1,
+    };
+    const { mm, sent, matches } = lobbyOfFour({
+      resolveBot: (clientId, botId) => (clientId === 1 && botId === 'bot_1' ? seat : null),
+    });
+    mm.setLane(3, 'bot');
+    mm.pick(3, 'vesk', SIGILS);
+    // Room for two in bot lane: the bot joins without moving anyone.
+    mm.pick(1, 'korrath', SIGILS, 0, 'bot_1');
+    expect(claimsOf(sent.get(3))).toEqual([
+      { seat: 0, lane: 'bot', locked: true },
+      { seat: 2, lane: 'bot', locked: true },
+    ]);
+    // Its lane is the playbook's, so a claim from the coach is refused.
+    mm.setLane(1, 'top');
+    expect(claimsOf(sent.get(1))?.[0]).toEqual({ seat: 0, lane: 'bot', locked: true });
+    mm.pick(2, 'fenn', SIGILS);
+    mm.pick(4, 'dain', SIGILS);
+    expect(matches[0]![0]).toMatchObject({ clientId: 1, lanes: ['bot'], championId: 'sylra' });
+    expect(lanesOf(matches[0], 3)).toEqual(['bot']);
+  });
+
+  it("a coach seat's fixed lane releases the latest person in its way, who hears it", () => {
+    const seat: BotSeat = {
+      name: 'Nightfall',
+      championId: 'korrath',
+      sigils: ['zephyr', 'sear'],
+      skin: 0,
+      playbook: { ...NEW_BOT_PLAYBOOK, lanes: ['mid'] },
+      botId: 'bot_0123456789abcdef',
+      version: 1,
+    };
+    const { mm, sent, matches } = lobbyOfFour({
+      resolveBot: (clientId, botId) => (clientId === 1 && botId === 'bot_1' ? seat : null),
+    });
+    mm.setLane(3, 'mid');
+    mm.pick(1, 'korrath', SIGILS, 0, 'bot_1');
+    expect(claimsOf(sent.get(3))).toEqual([
+      { seat: 0, lane: 'mid', locked: true },
+      { seat: 2, lane: null, locked: false },
+    ]);
+    mm.setLane(3, 'mid');
+    expect(claimsOf(sent.get(3))?.[1]?.lane).toBeNull();
+    mm.pick(3, 'sylra', SIGILS);
+    mm.pick(2, 'fenn', SIGILS);
+    mm.pick(4, 'dain', SIGILS);
+    expect(lanesOf(matches[0], 1)).toEqual(['mid']);
+    expect(lanesOf(matches[0], 3)).toEqual(['top']);
   });
 });

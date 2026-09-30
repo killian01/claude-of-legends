@@ -10,14 +10,14 @@ import { inviteUrl } from '../game/invite';
 import { appNav } from '../game/nav';
 import { getSettings } from '../game/settings';
 import { applyUiScale, effectiveUiScale } from '../game/ui_scale';
-import type { LobbyPlayer, SelectPlayer } from '../net/protocol';
+import type { LobbyPlayer, SelectClaim, SelectPlayer } from '../net/protocol';
 import { preloadChampionAssets } from '../render/champions';
-import { CHAMPION_LIST } from '../sim/content/champions';
+import { CHAMPION_LIST, CHAMPIONS, type ChampionRole } from '../sim/content/champions';
 import { SIGIL_LIST } from '../sim/content/sigils';
 import { SKINS } from '../sim/content/skins';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import { resolveForgedChampion } from '../sim/forge/resolve';
-import type { PlaybookDef } from '../sim/playbook/types';
+import type { LanePreference, PlaybookDef } from '../sim/playbook/types';
 import type { AbilityKey, TeamId } from '../sim/types';
 import { ROLE_COLORS, setPortrait } from './champion_art';
 import {
@@ -28,6 +28,22 @@ import {
   standingOf,
 } from './collection';
 import { describeAbility, describeSigil } from './describe';
+import {
+  botLane,
+  chooseLane,
+  claimsBeside,
+  forestWarning,
+  LANE_CHOICES,
+  type LaneChoice,
+  laneBoard,
+  laneFull,
+  laneTitle,
+  laneWords,
+  onChampion,
+  preselect,
+  reconcile,
+  stillChoosing,
+} from './lane_select';
 import { startMenuBackdrop } from './menu_backdrop';
 import { attachTooltip, hideTooltip } from './tooltips';
 
@@ -201,6 +217,72 @@ const CSS = `
 .menu-team h4 { margin: 0 0 3px; font-size: 12px; }
 .menu-team.blue h4 { color: #9dbcf5; }
 .menu-team.red h4 { color: #f5a3a3; }
+/* The lane row (ADR 0026): four choices, the one on screen lit, a lane the
+   team has no room left in greyed. Never .menu-champ: every e2e script
+   picks a champion by that class. */
+.menu-lanes { display: flex; gap: 6px; margin: 6px 0; }
+.menu-lane {
+  flex: 1; padding: 7px 2px; border-radius: 6px; border: 1px solid #28405e; background: #0f1930;
+  color: #c9d9ee; font-size: 11px; text-align: center; cursor: pointer; white-space: nowrap;
+}
+.menu-lane.picked { border-color: #6aa8e8; background: #1d3a63; color: #e6eefc; }
+.menu-lane:disabled { cursor: default; }
+.menu-lane.full { opacity: 0.35; }
+.menu-lanes.held .menu-lane:not(.picked) { opacity: 0.45; }
+.menu-lane-note { font-size: 11px; color: #e8cc74; line-height: 1.35; margin: 2px 0 4px; }
+.menu-lane-note:empty { display: none; }
+/* The own team's lane board: who claimed which lane, you on yours. */
+.menu-team.board { flex: 1.6; }
+.menu-board-row { display: flex; gap: 6px; line-height: 1.5; color: #aac2dd; }
+.menu-board-row b {
+  flex: none; width: 72px; color: #7e93b2; font-weight: 700; white-space: nowrap;
+}
+.menu-board-row.own { color: #e6eefc; }
+.menu-board-row.own b { color: #9dbcf5; }
+.menu-board-note { color: #7e93b2; font-size: 11px; line-height: 1.35; margin-top: 2px; }
+@media (orientation: landscape) and (max-height: 500px) {
+  /* A phone held sideways (844x390): stacked, the rail sat about 1400px
+     down a 374px scroller, and nobody reached the lanes or Lock in. The
+     cards scroll small on the left; the rail stands beside them with the
+     lane row on top and Lock in pinned to its foot. */
+  .menu-card.select {
+    height: 96vh; max-height: 96vh; padding: 8px 12px; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .menu-card.select .menu-title { font-size: 16px; margin: 0 0 2px; }
+  .menu-select-layout {
+    flex-direction: row; align-items: stretch; gap: 12px; flex: 1; min-height: 0;
+  }
+  .menu-select-main { overflow-y: auto; min-height: 0; }
+  .menu-select-side {
+    width: 252px; overflow-y: auto; min-height: 0; display: flex; flex-direction: column;
+  }
+  .menu-grid { grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .menu-champ-body { padding: 16px 5px 4px; }
+  .menu-champ-name { font-size: 11px; letter-spacing: 0.1px; }
+  .menu-champ-role { font-size: 9px; }
+  .menu-champ-blurb { display: none; }
+  .menu-champ-standing { font-size: 8px; margin-top: 1px; }
+  .menu-label { margin: 4px 0 2px; }
+  .menu-lane-block { order: -1; }
+  .menu-lanes { margin: 2px 0 4px; }
+  .menu-teams { gap: 10px; font-size: 11px; margin: 2px 0; }
+  .menu-team h4 { font-size: 11px; margin: 0 0 1px; }
+  .menu-board-row { line-height: 1.3; }
+  .menu-board-row b { width: 64px; }
+  .menu-board-note { font-size: 10px; margin-top: 1px; }
+  .menu-sigils, .menu-skins { margin: 2px 0 4px; }
+  .menu-sigil { padding: 5px 2px; font-size: 10px; }
+  .menu-skin { padding: 4px 8px 4px 24px; }
+  .menu-select-actions {
+    position: sticky; bottom: 0; margin-top: auto; padding-top: 2px;
+    background: rgb(9, 14, 26); display: flex; flex-wrap: wrap; gap: 0 6px;
+  }
+  .menu-select-actions .menu-btn { flex: 1 1 0; margin-top: 4px; padding: 8px 6px; }
+  .menu-select-actions .menu-status {
+    flex-basis: 100%; order: 1; margin-top: 2px; font-size: 11px; min-height: 0;
+  }
+}
 `;
 
 let cssInstalled = false;
@@ -385,6 +467,10 @@ export function showLobby(
 
 export interface SelectController {
   setLocked(locked: number, total: number, taken?: readonly string[]): void;
+  // The own team's lane claims (select_update, ADR 0026): the board, the
+  // greyed lanes, and the player's own lane when a teammate claimed it
+  // first.
+  setClaims(claims: readonly SelectClaim[]): void;
   remove(): void;
 }
 
@@ -427,27 +513,46 @@ export interface BotPick {
   playbook?: PlaybookDef;
 }
 
-export function showSelect(
-  container: HTMLElement,
-  roster: SelectPlayer[] | null,
-  team: TeamId,
-  deadline: number | null,
-  onLock: (championId: string, sigils: [string, string], skin: number, botId?: string) => void,
+// What Lock in hands the flow: the champion (or the bot's), the sigils,
+// the skin, the bot seated, and the lane the seat asks for (ADR 0026).
+export interface SelectLock {
+  championId: string;
+  sigils: [string, string];
+  skin: number;
+  botId?: string;
+  lane: LanePreference;
+}
+
+export interface SelectOptions {
+  // Everyone in the select, online; null for the practice select.
+  roster: SelectPlayer[] | null;
+  // The player's own index in roster (select_start.self); null offline.
+  self: number | null;
+  team: TeamId;
+  deadline: number | null;
+  onLock: (lock: SelectLock) => void;
+  // A lane clicked before Lock in: online, the claim goes to the server,
+  // which shows it to the team.
+  onLane?: (lane: LanePreference) => void;
   // Forge queue: the account's finalized forged champions, offered in
   // their own section under the roster grid.
-  forged?: readonly ForgedPick[],
+  forged?: readonly ForgedPick[];
   // Forge queue: the community tab, every shared champion popular first.
-  community?: readonly CommunityPick[],
+  community?: readonly CommunityPick[];
   // The account's own bots (classic queue): the bot plays, the person coaches.
-  bots?: readonly BotPick[],
+  bots?: readonly BotPick[];
   // What the account holds and what the week lends it (ADR 0018). Null is
   // the absence of a wall, which is what the practice match is.
-  collection?: CollectionState | null,
+  collection?: CollectionState | null;
   // The way out without a pick, where there is one: the practice select
   // answers to nobody, so it can be left; an online select is a team's
   // clock and cannot.
-  onBack?: () => void,
-): SelectController {
+  onBack?: () => void;
+}
+
+export function showSelect(container: HTMLElement, opts: SelectOptions): SelectController {
+  const { roster, self, team, deadline, onLock, forged, community, bots, collection, onBack } =
+    opts;
   // The champion models start downloading while the player picks: the
   // match waits for them before it is shown, and a pick takes long enough
   // for most of them to land in the meantime.
@@ -456,22 +561,32 @@ export function showSelect(
   card.classList.add('select');
   card.append(el('h1', 'menu-title', 'Champion select'));
 
+  // Online, the own team's box is its lane board (filled by renderLanes);
+  // the other team's shows names only: lanes stay inside a team, as the
+  // taken champions do.
   let teamsBox: HTMLElement | null = null;
+  let board: HTMLElement | null = null;
   if (roster) {
     const teams = el('div', 'menu-teams');
     for (const t of [0, 1] as const) {
       const box = el('div', `menu-team ${t === 0 ? 'blue' : 'red'}`);
       box.appendChild(el('h4', '', t === team ? `Team ${t + 1} (you)` : `Team ${t + 1}`));
-      box.appendChild(
-        el(
-          'div',
-          '',
-          roster
-            .filter((p) => p.team === t)
-            .map((p) => p.name)
-            .join(', ') || '-',
-        ),
-      );
+      if (t === team) {
+        box.classList.add('board');
+        board = el('div', 'menu-board');
+        box.appendChild(board);
+      } else {
+        box.appendChild(
+          el(
+            'div',
+            '',
+            roster
+              .filter((p) => p.team === t)
+              .map((p) => p.name)
+              .join(', ') || '-',
+          ),
+        );
+      }
       teams.appendChild(box);
     }
     teamsBox = teams;
@@ -482,6 +597,84 @@ export function showSelect(
   let skinIndex = 0;
   let takenSet = new Set<string>();
   const sigils: string[] = ['riftstep', 'mend'];
+
+  // The lane row (ADR 0026, src/ui/lane_select.ts): the lane on screen
+  // follows the champion until the player clicks one; a bot card shows the
+  // bot's own lane and holds the row; Lock in holds it for good.
+  let claims: readonly SelectClaim[] = [];
+  let role: ChampionRole | null = null;
+  let champName: string | null = null;
+  let heldLane: LanePreference | null = null;
+  // The bot card picked, when one is: its playbook's lanes decide.
+  let heldBot: { lanes?: readonly LanePreference[] } | null = null;
+  let lockedIn = false;
+  const beside = (): LanePreference[] => claimsBeside(claims, self);
+  let choice: LaneChoice = preselect(null, beside());
+  const laneRow = el('div', 'menu-lanes');
+  const laneNote = el('div', 'menu-lane-note', '');
+  const laneButtons = new Map<LanePreference, HTMLButtonElement>();
+  const renderLanes = (): void => {
+    const taken = beside();
+    const shown = heldLane ?? choice.lane;
+    laneRow.classList.toggle('held', heldLane !== null || lockedIn);
+    for (const [lane, b] of laneButtons) {
+      const full = heldLane === null && lane !== shown && laneFull(taken, lane);
+      b.classList.toggle('picked', lane === shown);
+      b.classList.toggle('full', full);
+      b.disabled = heldLane !== null || lockedIn || full;
+    }
+    laneNote.textContent =
+      heldLane !== null
+        ? `Your bot holds ${laneWords(heldLane)}: its lane is set in the Academy.`
+        : (forestWarning(choice.lane, champName, role) ?? '');
+    if (board && roster) {
+      board.textContent = '';
+      for (const row of laneBoard(claims, roster, self, shown)) {
+        const line = el('div', `menu-board-row${row.own ? ' own' : ''}`);
+        line.append(el('b', '', row.label), el('span', '', row.who.join(', ') || '-'));
+        board.appendChild(line);
+      }
+      const waiting = stillChoosing(claims, roster, self, team);
+      board.appendChild(
+        el(
+          'div',
+          'menu-board-note',
+          waiting.length > 0
+            ? `Still choosing: ${waiting.join(', ')}. Bots fill the rest.`
+            : 'Bots fill the rest.',
+        ),
+      );
+    }
+  };
+  for (const lane of LANE_CHOICES) {
+    const btn = el('button', 'menu-lane', laneTitle(lane)) as HTMLButtonElement;
+    btn.addEventListener('click', () => {
+      if (heldLane !== null || lockedIn) return;
+      const already = choice.chosen && choice.lane === lane;
+      const next = chooseLane(choice, lane, beside());
+      if (next === choice) return;
+      choice = next;
+      renderLanes();
+      if (!already) opts.onLane?.(lane);
+    });
+    laneButtons.set(lane, btn);
+    laneRow.appendChild(btn);
+  }
+  // A card picked: the lane follows a champion's home lane (unless chosen),
+  // or shows the bot's and holds the row.
+  const laneFor = (
+    nextRole: ChampionRole | null,
+    name: string | null,
+    bot: { lanes?: readonly LanePreference[] } | null = null,
+  ): void => {
+    role = nextRole;
+    champName = name;
+    heldBot = bot;
+    heldLane = bot ? botLane(bot.lanes, role, beside()) : null;
+    choice = onChampion(choice, role, beside());
+    renderLanes();
+  };
+  renderLanes();
 
   // Skin picker: cosmetic variants of the picked champion (CONTEXT.md).
   const teamCss = team === 0 ? '#4a7dd6' : '#d65c5c';
@@ -555,6 +748,7 @@ export function showSelect(
       skinIndex = 0;
       renderSkins();
       for (const [id, b] of champButtons) b.classList.toggle('picked', id === c.id);
+      laneFor(c.role, c.name.split(',')[0] ?? c.name);
       lock.disabled = false;
     });
     champButtons.set(c.id, btn);
@@ -594,7 +788,15 @@ export function showSelect(
     if (!championId || sigils.length !== 2) return;
     lock.disabled = true;
     lock.textContent = 'Locked';
-    onLock(championId, [sigils[0]!, sigils[1]!], skinIndex, botId ?? undefined);
+    lockedIn = true;
+    renderLanes();
+    onLock({
+      championId,
+      sigils: [sigils[0]!, sigils[1]!],
+      skin: skinIndex,
+      ...(botId !== null ? { botId } : {}),
+      lane: heldLane ?? choice.lane,
+    });
   });
 
   // Your bots (ADR 0013): a card per bot, its champion's face; picking one
@@ -632,6 +834,9 @@ export function showSelect(
         renderSkins();
         for (const [id, other] of champButtons)
           other.classList.toggle('picked', id === `bot:${b.id}`);
+        laneFor(CHAMPIONS[b.championId]?.role ?? null, champ?.name.split(',')[0] ?? null, {
+          lanes: b.playbook?.lanes,
+        });
         lock.disabled = false;
       });
       champButtons.set(`bot:${b.id}`, btn);
@@ -678,6 +883,7 @@ export function showSelect(
       skinIndex = 0;
       renderSkins();
       for (const [id, b] of champButtons) b.classList.toggle('picked', id === def.id);
+      laneFor(def.role, def.name);
       lock.disabled = false;
     });
     champButtons.set(def.id, btn);
@@ -773,20 +979,26 @@ export function showSelect(
   } else {
     main.append(champPane);
   }
+  // The rail in blocks, so a phone held sideways can lift the lanes to its
+  // top and pin the actions to its foot (the landscape rule above).
   if (teamsBox) side.appendChild(teamsBox);
-  side.append(
+  const laneBlock = el('div', 'menu-lane-block');
+  laneBlock.append(el('div', 'menu-label', 'Your lane'), laneRow, laneNote);
+  const looks = el('div', 'menu-select-looks');
+  looks.append(
     el('div', 'menu-label', 'Skin (cosmetic only)'),
     skinRow,
     el('div', 'menu-label', 'Pick two sigils (first goes on D, second on F)'),
     sigilRow,
-    lock,
-    status,
   );
+  const actions = el('div', 'menu-select-actions');
+  actions.append(lock, status);
   if (onBack) {
     const back = el('button', 'menu-btn', 'Back');
     back.addEventListener('click', onBack);
-    side.appendChild(back);
+    actions.appendChild(back);
   }
+  side.append(laneBlock, looks, actions);
   layout.append(main, side);
   card.appendChild(layout);
 
@@ -816,6 +1028,19 @@ export function showSelect(
           b.style.pointerEvents = isTaken ? 'none' : '';
         }
       }
+    },
+    setClaims(next) {
+      claims = next;
+      const own = claims.find((c) => c.seat === self)?.lane ?? null;
+      if (lockedIn) {
+        // Past Lock in the server's word is the seat's lane.
+        if (own !== null) choice = { lane: own, chosen: true };
+        if (heldLane !== null && own !== null) heldLane = own;
+      } else {
+        choice = reconcile(choice, role, beside(), own);
+        if (heldBot) heldLane = botLane(heldBot.lanes, role, beside());
+      }
+      renderLanes();
     },
     remove() {
       if (timer !== null) window.clearInterval(timer);

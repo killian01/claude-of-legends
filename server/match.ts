@@ -3,7 +3,7 @@
 // a sim method (ADR 0001). Transport-agnostic and fully testable without a
 // socket.
 
-import type { ClientMsg, ServerMsg } from '../src/net/protocol';
+import { type ClientMsg, isSelectMsg, type ServerMsg } from '../src/net/protocol';
 import {
   applySimCommand,
   buildMatchSim,
@@ -13,7 +13,7 @@ import {
 } from '../src/net/replay';
 import { attachBot } from '../src/sim/content/bots';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
-import type { PlaybookDef } from '../src/sim/playbook/types';
+import type { LanePreference, PlaybookDef } from '../src/sim/playbook/types';
 import type { Sim, SimEvent } from '../src/sim/sim';
 import type { TeamId } from '../src/sim/types';
 import { dropInTeam } from './drop_in';
@@ -42,6 +42,10 @@ export interface MatchPick {
   // A ranked bot the fill seated from the pool (docs/design/bots.md): the
   // owning account, with nobody connected behind the seat.
   ownerId?: number;
+  // The seat's own lane preference (ADR 0026): a person's settled choice
+  // at champion select, a house seat's fill lane. Recorded on the replay
+  // pick, which seats it (src/net/replay.ts, buildMatchSim).
+  lanes?: LanePreference[];
 }
 
 interface MatchPlayer {
@@ -94,6 +98,7 @@ export class Match {
       ...(p.skin !== undefined ? { skin: p.skin } : {}),
       ...(p.bot !== undefined ? { bot: p.bot } : {}),
       ...(p.playbook !== undefined ? { playbook: p.playbook } : {}),
+      ...(p.lanes !== undefined ? { lanes: [...p.lanes] } : {}),
     }));
     const forged = new Map<string, ForgedChampionDef>();
     for (const p of picks) {
@@ -160,9 +165,11 @@ export class Match {
   }
 
   // A dropped player's champion keeps fighting: the seat is handed to the
-  // default bot policy instead of standing inert for the rest of the match,
-  // and the scoreboard row says so. Returns the seat, for the team notice
-  // and the rejoin reservation.
+  // seat's default bot (the Jungler on a seat that asked for the forest,
+  // else the Laner) instead of standing inert for the rest of the match,
+  // and the scoreboard row says so. The seat's lane preference stands, so
+  // the stand-in holds the lane and no teammate moves. Returns the seat,
+  // for the team notice and the rejoin reservation.
   handleDisconnect(
     clientId: number,
   ): { name: string; team: TeamId; unitId: number; coach?: true } | null {
@@ -254,6 +261,9 @@ export class Match {
   handleCommand(clientId: number, msg: ClientMsg): void {
     const p = this.players.get(clientId);
     if (!p) return;
+    // The select's messages are over once the match runs (ADR 0026): a
+    // late lane claim is neither recorded nor counted as play.
+    if (isSelectMsg(msg)) return;
     // A coach only orders; every hands-on verb belongs to the bot. And an
     // order from a hand seat is nobody's to obey.
     if (p.coach !== (msg.t === 'order')) return;

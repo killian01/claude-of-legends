@@ -144,6 +144,18 @@ describe('play now', () => {
     }
   });
 
+  // Each house bot is seated with its fill seat's lane (ADR 0026), and
+  // the Arena's picks carry it into the match and its replay.
+  it("seats every house bot with its fill seat's lane", () => {
+    const plan = planPlayNow(bot(1, 1, 'vesk'), [bot(3, 3, 'dain')], pool())!;
+    const picks = arenaPicks(plan, 4);
+    for (const p of picks.slice(2)) {
+      expect(p.lanes).toHaveLength(1);
+      expect(p.lanes?.[0] === 'jungle').toBe(p.bot === 'jungler');
+    }
+    expect(picks[0]!.lanes).toBeUndefined();
+  });
+
   it('counts the daily allocation', () => {
     expect(playNowAllowed(0, 2)).toBe(true);
     expect(playNowAllowed(2, 2)).toBe(false);

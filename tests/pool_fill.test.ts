@@ -114,3 +114,65 @@ describe('the ranked pool in the fill', () => {
     expect(picks.some((p) => p.ownerId !== undefined)).toBe(false);
   });
 });
+
+// The fill composes around the lanes the seats ask for (ADR 0026): a
+// person's settled choice, a ranked bot's playbook's first lane (bots held
+// to the same standard), and every house bot is seated with the lane of
+// the fill seat it was drawn for.
+describe('lanes in the live fill', () => {
+  const dealt = (match: Match, team: 0 | 1): (string | null)[] =>
+    [...match.sim.units.values()]
+      .filter((u) => u.kind === 'champion' && u.team === team)
+      .map((u) => u.lane);
+  const shape = (lanes: (string | null)[]): string =>
+    lanes
+      .map((l) => l ?? 'forest')
+      .sort()
+      .join(',');
+
+  it('a person asking for the forest means no house Jungler on that team', () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const picks = fillWithBots([{ ...HUMAN, championId: 'sylra', lanes: ['jungle'] }], seed, 5);
+      const junglers = (team: 0 | 1) =>
+        picks.filter((p) => p.team === team && p.bot === 'jungler').length;
+      expect(junglers(0)).toBe(0);
+      expect(junglers(1)).toBe(1);
+      const match = new Match(seed, picks);
+      // The mage walks the camps; the house holds the three lanes around her.
+      expect(match.sim.units.get(match.players.get(1)!.unitId)?.lane).toBeNull();
+      expect(shape(dealt(match, 0))).toBe('bot,bot,forest,mid,top');
+      expect(shape(dealt(match, 1))).toBe('bot,bot,forest,mid,top');
+    }
+  });
+
+  it('seats every house bot with the lane of its fill seat', () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const picks = fillWithBots([], seed, 5);
+      for (const p of picks) {
+        expect(p.lanes).toHaveLength(1);
+        expect(p.lanes?.[0] === 'jungle').toBe(p.bot === 'jungler');
+      }
+      const match = new Match(seed, picks);
+      expect(match.replayPicks.map((p) => p.lanes)).toEqual(picks.map((p) => p.lanes));
+      // One top, one mid, two bot and the forest, whatever the draw.
+      expect(shape(dealt(match, 0))).toBe('bot,bot,forest,mid,top');
+      expect(shape(dealt(match, 1))).toBe('bot,bot,forest,mid,top');
+    }
+  });
+
+  it("honors a ranked bot's playbook lanes as the fill's ask", () => {
+    const forester: BotRow = {
+      ...bot('bot_f', 20, 'korrath'),
+      playbook: { ...LANER_PLAYBOOK, lanes: ['jungle'] },
+    };
+    for (let seed = 1; seed <= 8; seed++) {
+      const picks = fillWithBots([HUMAN], seed, 5, [{ bot: forester, owner: 'fay' }]);
+      const pooled = picks.find((p) => p.ownerId === 20);
+      expect(pooled).toBeDefined();
+      if (!pooled) continue;
+      expect(picks.filter((p) => p.team === pooled.team && p.bot === 'jungler')).toHaveLength(0);
+      const other = (1 - pooled.team) as 0 | 1;
+      expect(picks.filter((p) => p.team === other && p.bot === 'jungler')).toHaveLength(1);
+    }
+  });
+});

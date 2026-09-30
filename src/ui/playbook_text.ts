@@ -15,6 +15,7 @@ import type {
   SkillKey,
   Trigger,
 } from '../sim/playbook/types';
+import { laneWords } from './lane_select';
 
 export const itemName = (id: string): string => ITEMS[id]?.name ?? id;
 export const championName = (id: string): string => CHAMPIONS[id]?.name.split(',')[0] ?? id;
@@ -88,7 +89,7 @@ export function describeTrigger(t: Trigger): string {
     case 'sigilReady':
       return `${t.id} is ready`;
     case 'lane':
-      return t.is === 'jungle' ? 'assigned to the forest' : `assigned to ${t.is} lane`;
+      return `assigned to ${laneWords(t.is)}`;
     case 'order':
       return t.is === undefined ? 'the coach gave an order' : `the coach ordered ${t.is}`;
     case 'allyFighting':
@@ -752,7 +753,7 @@ export function describeOp(op: PatchOp): string {
     }
     case 'lanes':
       return op.lanes && op.lanes.length > 0
-        ? `lane preference: ${op.lanes.map((l) => (l === 'jungle' ? 'the forest' : `${l} lane`)).join(', then ')}`
+        ? `lane preference: ${op.lanes.map(laneWords).join(', then ')}`
         : 'lane preference: none, the home lane';
     case 'replace':
       return `replace the whole playbook (${op.playbook.plays.length} plays)`;

@@ -35,6 +35,25 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-10-01',
+    title: 'Pick your lane before the match',
+    body: [
+      'Champion select now asks where you are going: top lane, mid lane, bot lane or the ' +
+        "forest. Your champion's own lane is picked for you until you pick another, and your " +
+        'teammates see your choice as you make it. A lane that is full is greyed out for the ' +
+        'rest of your team: first come, first served. Any champion may take the forest; one ' +
+        'that is not built for it is told the camps will be slow.',
+      'The bots now line up around what the people on their team chose. Take the forest and ' +
+        'there is no house Jungler beside you; take mid and the house brings a top laner ' +
+        'instead. Bot teams also stopped leaving mid empty now and then.',
+      'Once the match starts, a card names your lane and a tap on it walks you there, the lane ' +
+        'is drawn on the minimap, and an arrow beside your champion points the way until you ' +
+        "arrive. Joining a match in progress in place of a bot tells you that bot's lane the " +
+        'same way.',
+    ],
+    link: { label: 'Play now', to: 'play' },
+  },
+  {
     day: '2026-09-18',
     title: 'Elowen, in a body of her own',
     body: [

@@ -45,23 +45,35 @@ decision slot during the step. A dead seat gets none, exactly like a bot.
 ## Seats
 
 By default the environment runs a full 5v5 where seat 0 is remote and the other
-nine run a house style (`laner`, `brawler`, `sieger` or `objective`) drawn from
-the seed. Champions come from the fill: the roster's lanes completed by role, no
-duplicate inside a team, drawn from the seed, the same deterministic rule the
-server uses, so a default environment match and a default server match line up.
+nine run a house style drawn from the seed (`laner`, `brawler`, `sieger` or
+`objective`, and the `jungler` on each team's forest seat). Champions come from
+the fill: the roster's lanes completed by role, no duplicate inside a team, drawn
+from the seed, each seat asking for the lane of the fill seat it was drawn for,
+the same deterministic rule the server uses, so a default environment match and
+a default server match line up.
 
 To choose your own, pass a seat table to `reset`:
 
 ```json
 {"t":"reset","seed":42,"seats":[
-  {"team":0,"championId":"korrath","remote":true},
-  {"team":0,"championId":"maera"},
+  {"team":0,"championId":"korrath","remote":true,"lanes":["jungle"]},
+  {"team":0,"championId":"maera","lanes":["bot"]},
   {"team":1,"championId":"vesk","bot":"laner"}
 ]}
 ```
 
 `remote` seats are stepped by you. Everything else runs the named house style
-in-sim (`laner`, `brawler`, `sieger` or `objective`; default: the Laner).
+in-sim (`laner`, `brawler`, `sieger`, `objective` or `jungler`; default: the
+Laner, or the Jungler on a seat that asks for the forest first).
+
+`lanes` is the seat's lane preference (ADR 0026), the lane a person picks at
+champion select: one to three distinct among `top`, `mid`, `bot` and `jungle`
+(the forest), in order, seated ahead of the champion's home lane while the lane
+has room (two top, one mid, two bot). A seat whose first ask is the forest holds
+no lane. A house style whose playbook states its own lanes (the Jungler) keeps
+those. Leave it out and the seat takes its home lane, as before. A malformed
+list makes the whole seat table malformed. The lane a seat was dealt reaches its
+policy as `self.lane` in the observation, `null` in the forest.
 
 ## One step is one decision slot
 

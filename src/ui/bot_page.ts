@@ -11,6 +11,7 @@ import type { RecordRow, RecordTallies } from '../net/record';
 import { tierOf } from '../net/tiers';
 import { CHAMPIONS } from '../sim/content/champions';
 import type { PlaybookDef } from '../sim/playbook/types';
+import { laneWords } from './lane_select';
 import { el } from './menu';
 import { describeBehavior, describeTrigger } from './playbook_text';
 import { fmtClock, fmtWhen, kindLabel, resultOf } from './record_view';
@@ -128,9 +129,7 @@ function playbookView(def: PlaybookDef): HTMLElement {
     box.append(kit);
   }
   if (def.lanes && def.lanes.length > 0) {
-    box.append(
-      el('div', 'bp-sub', `Lane preference: ${def.lanes.map((l) => `${l} lane`).join(', then ')}`),
-    );
+    box.append(el('div', 'bp-sub', `Lane preference: ${def.lanes.map(laneWords).join(', then ')}`));
   }
   return box;
 }

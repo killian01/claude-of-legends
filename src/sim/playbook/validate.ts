@@ -9,6 +9,7 @@ import type { CoachOrder } from '../coach';
 import { CHAMPIONS, type ChampionRole, DEFAULT_CHAMPION_ID } from '../content/champions';
 import { ITEMS } from '../content/items';
 import { STAR_ORCHARD_SIZE } from '../content/star_orchard';
+import { isLanePreference } from '../lane_picks';
 import type { AbilityKey } from '../types';
 import { MAX_BUILD } from './kit';
 import {
@@ -652,15 +653,20 @@ function lanePreference(raw: unknown, errors: Errors): LanePreference[] | undefi
     errors.add('lanes must list one to three lanes');
     return undefined;
   }
+  const out = lanePreferences(raw);
+  if (!out) errors.add('lanes must be distinct among top, mid, bot and jungle');
+  return out ?? undefined;
+}
+
+// A lane preference list as a playbook states one (one to three distinct
+// among top, mid, bot and jungle), or null when it is not: the check a
+// seat's lanes from a stranger's JSON clear too (ADR 0026: a sparring
+// record's picks, the environment's seat table).
+export function lanePreferences(raw: unknown): LanePreference[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 3) return null;
   const out: LanePreference[] = [];
   for (const lane of raw) {
-    if (
-      (lane !== 'top' && lane !== 'mid' && lane !== 'bot' && lane !== 'jungle') ||
-      out.includes(lane)
-    ) {
-      errors.add('lanes must be distinct among top, mid, bot and jungle');
-      return undefined;
-    }
+    if (!isLanePreference(lane) || out.includes(lane)) return null;
     out.push(lane);
   }
   return out;

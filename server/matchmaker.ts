@@ -4,12 +4,19 @@
 // is handed to the injected callback as a list of picks.
 
 import { randomInt } from 'node:crypto';
-import type { ServerMsg } from '../src/net/protocol';
-import { CHAMPION_LIST, CHAMPIONS, DEFAULT_CHAMPION_ID } from '../src/sim/content/champions';
+import type { SelectClaim, ServerMsg } from '../src/net/protocol';
+import {
+  CHAMPION_LIST,
+  CHAMPIONS,
+  type ChampionRole,
+  DEFAULT_CHAMPION_ID,
+  homeLane,
+} from '../src/sim/content/champions';
 import { SIGILS } from '../src/sim/content/sigils';
 import { clampSkin } from '../src/sim/content/skins';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
-import type { PlaybookDef } from '../src/sim/playbook/types';
+import { isLanePreference, laneOpen, settleLanes } from '../src/sim/lane_picks';
+import type { LanePreference, PlaybookDef } from '../src/sim/playbook/types';
 import type { TeamId } from '../src/sim/types';
 import type { MatchPick } from './match';
 import { packGroups } from './party';
@@ -51,6 +58,14 @@ interface SelectEntry extends Pending {
     botId?: string;
     botVersion?: number;
   } | null;
+  // The lane the seat claimed (CONTEXT.md: Lane preference; ADR 0026),
+  // null while it claims none: live before Lock in, first come, first
+  // served inside the team, kept through an auto-lock. A bot seat's claim
+  // is its own (claimFor).
+  lane: LanePreference | null;
+  // When the claim was made, in the session's claim order: the earlier
+  // claim settles first.
+  claimedAt: number;
 }
 
 // Where a match came from: only public-queue matches are ever rated
@@ -62,6 +77,53 @@ interface SelectSession {
   deadline: number;
   started: boolean;
   source: MatchSource;
+  // Claims made so far, the clock claimedAt reads.
+  claims: number;
+}
+
+// The lanes of the seats beside this one on its team that claim one.
+function claimsBeside(session: SelectSession, entry: SelectEntry): LanePreference[] {
+  const out: LanePreference[] = [];
+  for (const e of session.entries) {
+    if (e !== entry && e.team === entry.team && e.lane !== null) out.push(e.lane);
+  }
+  return out;
+}
+
+// A bot seat whose playbook states its lanes (ADR 0013): the sim seats the
+// playbook's ahead of anything chosen at select, so its claim is fixed.
+function fixedLane(entry: SelectEntry): LanePreference | null {
+  return entry.locked?.playbook?.lanes?.[0] ?? null;
+}
+
+// Whether a claim on one lane takes room from another: the same lane, or
+// top and the forest, which share two seats (src/sim/lane_picks.ts).
+function crowds(a: LanePreference, b: LanePreference): boolean {
+  const shared = (l: LanePreference): boolean => l === 'top' || l === 'jungle';
+  return a === b || (shared(a) && shared(b));
+}
+
+function roleOfEntry(entry: SelectEntry): ChampionRole | null {
+  const id = entry.locked?.championId ?? DEFAULT_CHAMPION_ID;
+  return CHAMPIONS[id]?.role ?? entry.locked?.forged?.role ?? null;
+}
+
+// One lane for every seat of the select, each team settled on its own
+// (src/sim/lane_picks.ts): the bot seats' fixed lanes first, then every
+// claim in the order it came, then the seats that claim none, in seat
+// order, each on its default over what is taken. What the match seats
+// each person with, so nobody's home lane steals a lane claimed first.
+function settleSelect(session: SelectSession): Map<SelectEntry, LanePreference> {
+  const out = new Map<SelectEntry, LanePreference>();
+  const rank = (e: SelectEntry): number => (fixedLane(e) ? 0 : e.lane !== null ? 1 : 2);
+  for (const team of [0, 1] as const) {
+    const order = session.entries
+      .filter((e) => e.team === team)
+      .sort((a, b) => rank(a) - rank(b) || (rank(a) < 2 ? a.claimedAt - b.claimedAt : 0));
+    const lanes = settleLanes(order.map((e) => ({ role: roleOfEntry(e), lane: e.lane })));
+    for (const [i, e] of order.entries()) out.set(e, lanes[i]!);
+  }
+  return out;
 }
 
 // Lobby seats carry a chosen side, so friends can play TOGETHER against
@@ -337,22 +399,110 @@ export class Matchmaker {
         name: p.name,
         team: p.team ?? ((i % 2) as TeamId),
         locked: null,
+        lane: null,
+        claimedAt: 0,
       })),
       deadline: now + SELECT_SECONDS * 1000,
       started: false,
       source,
+      claims: 0,
     };
     this.selects.push(session);
     const roster = session.entries.map((e) => ({ name: e.name, team: e.team }));
-    for (const e of session.entries) {
+    for (const [self, e] of session.entries.entries()) {
       this.send(e.clientId, {
         t: 'select_start',
         team: e.team,
         players: roster,
+        self,
         deadline: session.deadline,
         ...(this.opts.forge ? { forge: true } : {}),
       });
     }
+  }
+
+  // The select's state for one seat: the session's lock count, and its
+  // own team's locked champions and lane claims, never the other side's.
+  private selectUpdate(session: SelectSession, team: TeamId): ServerMsg {
+    const claims: SelectClaim[] = [];
+    for (const [seat, o] of session.entries.entries()) {
+      if (o.team === team) claims.push({ seat, lane: o.lane, locked: o.locked !== null });
+    }
+    return {
+      t: 'select_update',
+      locked: session.entries.filter((e) => e.locked).length,
+      total: session.entries.length,
+      taken: session.entries
+        .filter((o) => o.team === team && o.locked)
+        .map((o) => o.locked?.championId ?? ''),
+      claims,
+    };
+  }
+
+  private broadcastSelect(session: SelectSession, team?: TeamId): void {
+    for (const e of session.entries) {
+      if (team === undefined || e.team === team) {
+        this.send(e.clientId, this.selectUpdate(session, e.team));
+      }
+    }
+  }
+
+  // Claim a lane for a seat when its team has room for it beside the other
+  // seats' claims (first come, first served). False when it is full, and
+  // the seat keeps whatever it claimed before.
+  private claim(session: SelectSession, entry: SelectEntry, lane: LanePreference): boolean {
+    if (entry.lane === lane) return true;
+    if (!laneOpen(claimsBeside(session, entry), lane)) return false;
+    entry.lane = lane;
+    entry.claimedAt = ++session.claims;
+    return true;
+  }
+
+  // A bot seat's claim (ADR 0013): its playbook's first lane, which the sim
+  // seats whatever was chosen, so it is taken even from a person who
+  // claimed it first, the latest claims in its way released; else its
+  // champion's home lane, an ordinary claim that a full lane refuses.
+  private claimFor(session: SelectSession, entry: SelectEntry): void {
+    const fixed = fixedLane(entry);
+    if (fixed === null) {
+      const home = homeLane(roleOfEntry(entry));
+      if (home === null || !this.claim(session, entry, home)) entry.lane = null;
+      return;
+    }
+    const rivals = session.entries
+      .filter(
+        (e) =>
+          e !== entry &&
+          e.team === entry.team &&
+          e.lane !== null &&
+          fixedLane(e) === null &&
+          crowds(e.lane, fixed),
+      )
+      .sort((a, b) => b.claimedAt - a.claimedAt);
+    for (const rival of rivals) {
+      if (laneOpen(claimsBeside(session, entry), fixed)) break;
+      rival.lane = null;
+    }
+    if (entry.lane !== fixed) {
+      entry.lane = fixed;
+      entry.claimedAt = ++session.claims;
+    }
+  }
+
+  // A lane claim before Lock in (ADR 0026). Anything but one of the four
+  // lanes is ignored. A full lane, or a bot seat (its lane is its
+  // playbook's), is refused, and the seat is answered alone so its select
+  // reverts; a claim that stands goes to the whole team.
+  setLane(clientId: number, lane: unknown): void {
+    if (!isLanePreference(lane)) return;
+    const session = this.inSelect(clientId);
+    const entry = session?.entries.find((e) => e.clientId === clientId);
+    if (!session || !entry) return;
+    if (entry.locked?.playbook || !this.claim(session, entry, lane)) {
+      this.send(clientId, this.selectUpdate(session, entry.team));
+      return;
+    }
+    this.broadcastSelect(session, entry.team);
   }
 
   pick(
@@ -361,6 +511,7 @@ export class Matchmaker {
     sigils: [string, string],
     skin?: number,
     botId?: string,
+    lane?: unknown,
   ): void {
     const session = this.inSelect(clientId);
     if (!session) return;
@@ -437,19 +588,12 @@ export class Matchmaker {
           }
         : {}),
     };
-    const locked = session.entries.filter((e) => e.locked).length;
-    for (const e of session.entries) {
-      const taken = session.entries
-        .filter((o) => o.team === e.team && o.locked)
-        .map((o) => o.locked?.championId ?? '');
-      this.send(e.clientId, {
-        t: 'select_update',
-        locked,
-        total: session.entries.length,
-        taken,
-      });
-    }
-    if (locked === session.entries.length) this.finishSelect(session);
+    // The lane rides the lock when it was not claimed before (a full one
+    // keeps the earlier claim); a bot seat claims its own.
+    if (seat) this.claimFor(session, entry);
+    else if (isLanePreference(lane)) this.claim(session, entry, lane);
+    this.broadcastSelect(session);
+    if (session.entries.every((e) => e.locked)) this.finishSelect(session);
   }
 
   // Expires select deadlines, stale lobbies, and the bot-fill countdown;
@@ -473,6 +617,7 @@ export class Matchmaker {
     session.started = true;
     const idx = this.selects.indexOf(session);
     if (idx !== -1) this.selects.splice(idx, 1);
+    const lanes = settleSelect(session);
     const picks: MatchPick[] = session.entries.map((e) => ({
       clientId: e.clientId,
       name: e.locked?.botName ? `${e.name} (${e.locked.botName})` : e.name,
@@ -484,6 +629,7 @@ export class Matchmaker {
       ...(e.locked?.playbook ? { playbook: e.locked.playbook } : {}),
       ...(e.locked?.botId !== undefined ? { botId: e.locked.botId } : {}),
       ...(e.locked?.botVersion !== undefined ? { botVersion: e.locked.botVersion } : {}),
+      lanes: [lanes.get(e)!],
     }));
     this.onMatchReady(picks, session.source);
   }
@@ -514,7 +660,7 @@ export class Matchmaker {
       }
     }
     // A player vanishing mid-select is auto-locked with defaults so the
-    // others still get their match.
+    // others still get their match; a lane it claimed stays claimed.
     const session = this.inSelect(clientId);
     if (session) {
       const entry = session.entries.find((e) => e.clientId === clientId);

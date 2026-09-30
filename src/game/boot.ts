@@ -15,6 +15,16 @@ import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
 import { DT } from '../sim/types';
 import { attackCursor, defaultCursor } from '../ui/cursors';
 import { Hud, type NetHooks } from '../ui/hud';
+import { LaneArrow, laneArrowHalf } from '../ui/lane_arrow';
+import {
+  ARROW_HEAD_M,
+  arrowPlace,
+  arrowWanted,
+  clearOfCard,
+  type GuideMode,
+  leadToward,
+  onScreen,
+} from '../ui/lane_guide';
 import { Minimap } from '../ui/minimap';
 import { buildThumbStickView } from '../ui/thumb_stick_view';
 import { buildTouchBar } from '../ui/touch_bar';
@@ -92,8 +102,14 @@ export function startPresentation(
     // Which mode this match runs in, for the feedback box's context
     // (ui/feedback_box.ts). Practice unless the host says otherwise.
     mode?: 'practice' | 'online';
+    // Who is in front of the screen, for the lane guidance (ui/lane_guide.ts;
+    // ADR 0026): a person on the seat (the card, the minimap's lane, the
+    // arrow), a coach whose bot plays it (the card and the lane, no walk,
+    // no arrow), or a replay viewer (none of it).
+    guide?: GuideMode;
   },
 ): Presentation {
+  const guide = options.guide ?? 'play';
   const renderer = new Renderer(container, world, options.terrain);
   options.onRenderer?.(renderer);
   // The recorded bank decodes while the match loads, so the first swing
@@ -110,6 +126,7 @@ export function startPresentation(
     onExit,
     options.guest === true,
     options.mode ?? 'practice',
+    guide,
   );
   // The thumb controls (CONTEXT.md: Thumb stick): a touchscreen playing
   // by the stick, which moves the minimap and the touch bar out of the
@@ -499,6 +516,17 @@ export function startPresentation(
     ability: (key) => touch.armAbility(key),
     sigil: (slot) => touch.armSigil(slot),
   });
+  // The lane card's walk: one move order, the way a right-click on the
+  // ground gives it, recorded and budgeted like any other.
+  hud.setLaneWalk((p) => {
+    pendingCast = null;
+    world.orderMove(selfId, p.x, p.z);
+    renderer.setAttackTarget(null);
+    renderer.flashMarker(p.x, p.z);
+  });
+  // The arrow toward the lane, for a person on the seat only.
+  const laneArrow = guide === 'play' ? new LaneArrow(container) : null;
+  const arrowHalf = laneArrowHalf();
   if (thumbControls) hud.setCastTouch(touch.castTouch);
   const teardownTouchBar = coarsePointer
     ? buildTouchBar(
@@ -518,8 +546,15 @@ export function startPresentation(
   let lastTick = performance.now();
   let wardenWasUp = false;
   const ringWasUp = new Map<string, boolean>();
+  // The champion's last two positions, for the arrow to ride between ticks
+  // as the renderer's model does.
+  let selfPrev: Vec2 | null = null;
+  let selfCurr: Vec2 | null = null;
   const onWorldTick = (notes?: WorldNotes): void => {
     lastTick = performance.now();
+    const me = world.units.get(selfId);
+    selfPrev = selfCurr;
+    selfCurr = me ? { x: me.pos.x, z: me.pos.z } : null;
     stepPendingCast();
     // Warden spawn: ping its pit on the minimap and flash the ground so
     // nobody misses it (the HUD adds the announcement and the voice).
@@ -543,6 +578,7 @@ export function startPresentation(
     }
     renderer.onSimTick();
     hud.update();
+    minimap.setLaneGuide(hud.laneGuide());
     minimap.update();
     if (notes) {
       if (notes.kills.length > 0) hud.pushKills(notes.kills);
@@ -557,12 +593,54 @@ export function startPresentation(
     if (world.winner !== null) stopMusic();
   };
 
+  // The arrow each frame: from the champion (between its last two ticks)
+  // toward the lane's target, hidden once the player is there, while the
+  // target stands in view close by, and under a modal.
+  const ARROW_LIFT = 0.3;
+  const placeArrow = (alpha: number): void => {
+    if (!laneArrow) return;
+    const lane = hud.laneGuide();
+    const me = world.units.get(selfId);
+    const from = selfPrev ?? selfCurr;
+    const self =
+      me && !me.dead && from && selfCurr
+        ? {
+            x: from.x + (selfCurr.x - from.x) * alpha,
+            z: from.z + (selfCurr.z - from.z) * alpha,
+          }
+        : null;
+    const target = lane?.target ?? null;
+    // Nothing projected once it has nothing to show (the common case).
+    if (
+      !self ||
+      !target ||
+      world.winner !== null ||
+      hud.blocksCamera() ||
+      !arrowWanted(guide, lane, self, false)
+    ) {
+      laneArrow.place(null);
+      return;
+    }
+    const shown = renderer.projectToScreen(target.x, ARROW_LIFT, target.z);
+    const view = { width: window.innerWidth, height: window.innerHeight };
+    const lead = arrowWanted(guide, lane, self, onScreen(shown, view))
+      ? leadToward(self, target)
+      : null;
+    const feet = lead ? renderer.projectToScreen(self.x, ARROW_LIFT, self.z) : null;
+    const top = renderer.overheadTop(selfId) ?? ARROW_HEAD_M;
+    const head = feet ? renderer.projectToScreen(self.x, top, self.z) : null;
+    const ahead = lead && head ? renderer.projectToScreen(lead.x, ARROW_LIFT, lead.z) : null;
+    const at = feet && head && ahead ? arrowPlace(feet, head, ahead) : null;
+    laneArrow.place(at ? clearOfCard(at, hud.laneCardRect(), arrowHalf) : null);
+  };
+
   let disposed = false;
   let rafId = 0;
   function frame(now: number): void {
     if (disposed) return;
     const alpha = Math.max(0, Math.min(1, (now - lastTick) / TICK_MS));
     renderer.render(alpha);
+    placeArrow(alpha);
     rafId = requestAnimationFrame(frame);
   }
   rafId = requestAnimationFrame(frame);
@@ -590,6 +668,7 @@ export function startPresentation(
       stickView?.dispose();
       teardownTouchBar?.();
       hud.dispose();
+      laneArrow?.dispose();
       minimap.dispose();
       renderer.dispose();
       stopMusic();

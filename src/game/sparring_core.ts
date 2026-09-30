@@ -9,6 +9,7 @@ import { FAST_MATCH_MAX_TICKS, type FastMatchRequest, runFastMatch } from '../fa
 import type { ReplayPick, ReplayRecord } from '../net/replay';
 import { houseName, houseSeats } from '../sim/content/bots/house';
 import type { StarOrchard } from '../sim/content/star_orchard';
+import type { HeldSeat } from '../sim/fill';
 import type { PlayReport, PlayStats } from '../sim/playbook/report';
 import type { PlaybookDef } from '../sim/playbook/types';
 import { Rng } from '../sim/rng';
@@ -52,12 +53,20 @@ export const SPAR_MAX_TICKS = FAST_MATCH_MAX_TICKS;
 // its effect, and one match cannot).
 export const SERIES_SEEDS = 5;
 
+// A seat the account's bot holds, as the fill reads it: its champion, and
+// its playbook's first lane when it states one (ADR 0026), so the house
+// composes around the lane the bot will play, as the live fill does.
+function heldBy(championId: string, playbook: PlaybookDef): HeldSeat {
+  return { championId, lane: playbook.lanes?.[0] ?? null };
+}
+
 // The sparring bot on team 0, seat 0, then house bots on every other seat
 // from the fill (src/sim/fill.ts) drawn from the seed, each on a house
-// style drawn from it too (src/sim/content/bots/house.ts): its own team
-// completed around its champion, the other team drawn whole, so two
-// sparrings on different seeds meet different lineups played differently.
-// The same shape the offline practice match builds.
+// style drawn from it too (src/sim/content/bots/house.ts) and seated with
+// its fill seat's lane: its own team completed around its champion and
+// lane, the other team drawn whole, so two sparrings on different seeds
+// meet different lineups played differently. The same shape the offline
+// practice match and the live fill build.
 export function sparringPicks(bot: SparBot, seed = 1): ReplayPick[] {
   const rng = new Rng(seed);
   const picks: ReplayPick[] = [
@@ -70,11 +79,8 @@ export function sparringPicks(bot: SparBot, seed = 1): ReplayPick[] {
       playbook: bot.playbook,
     },
   ];
-  const house = (team: 0 | 1, held: string[]): void => {
-    for (const [i, seat] of houseSeats(
-      held.map((id) => ({ championId: id })),
-      rng,
-    ).entries()) {
+  const house = (team: 0 | 1, held: HeldSeat[]): void => {
+    for (const [i, seat] of houseSeats(held, rng).entries()) {
       picks.push({
         name: houseName(seat.bot),
         team,
@@ -82,10 +88,11 @@ export function sparringPicks(bot: SparBot, seed = 1): ReplayPick[] {
         sigils: ['riftstep', 'mend'],
         skin: i % 3,
         bot: seat.bot,
+        lanes: [seat.lane],
       });
     }
   };
-  house(0, [bot.championId]);
+  house(0, [heldBy(bot.championId, bot.playbook)]);
   house(1, []);
   return picks;
 }
@@ -125,7 +132,7 @@ export function seriesPicks(
   const picks: ReplayPick[] = [];
   let botIndex = 0;
   for (const t of [0, 1] as const) {
-    const held: { championId: string }[] = [];
+    const held: HeldSeat[] = [];
     if (t === team) {
       botIndex = picks.length;
       picks.push({
@@ -136,7 +143,7 @@ export function seriesPicks(
         skin: bot.skin,
         playbook: bot.playbook,
       });
-      held.push({ championId: bot.championId });
+      held.push(heldBy(bot.championId, bot.playbook));
     } else if (previous) {
       picks.push({
         name: `${bot.name} (previous)`,
@@ -146,7 +153,7 @@ export function seriesPicks(
         skin: bot.skin,
         playbook: previous,
       });
-      held.push({ championId: bot.championId });
+      held.push(heldBy(bot.championId, previous));
     }
     for (const [i, seat] of houseSeats(held, rng).entries()) {
       picks.push({
@@ -156,6 +163,7 @@ export function seriesPicks(
         sigils: ['riftstep', 'mend'],
         skin: i % 3,
         bot: seat.bot,
+        lanes: [seat.lane],
       });
     }
   }

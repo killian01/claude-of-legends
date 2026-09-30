@@ -1,7 +1,7 @@
 // Wire protocol gate: parsing is safe on garbage and strict on shape.
 
 import { describe, expect, it } from 'vitest';
-import { isFiniteVec, parseClientMsg } from '../src/net/protocol';
+import { isFiniteVec, isSelectMsg, parseClientMsg } from '../src/net/protocol';
 
 describe('protocol', () => {
   it('parses well-formed client messages', () => {
@@ -14,6 +14,17 @@ describe('protocol', () => {
     expect(parseClientMsg('42')).toBeNull();
     expect(parseClientMsg('{"x":1}')).toBeNull();
     expect(parseClientMsg('null')).toBeNull();
+  });
+
+  // The lane claim (ADR 0026) parses like any message; its handler checks
+  // the lane. It and the pick are the select's, never a match command.
+  it('reads a lane claim, and tells the select messages from match commands', () => {
+    const lane = parseClientMsg('{"t":"lane","lane":"jungle"}');
+    expect(lane).toEqual({ t: 'lane', lane: 'jungle' });
+    expect(lane && isSelectMsg(lane)).toBe(true);
+    expect(isSelectMsg({ t: 'pick' })).toBe(true);
+    for (const t of ['move', 'stop', 'order', 'chat', 'queue'])
+      expect(isSelectMsg({ t })).toBe(false);
   });
 
   it('validates finite vectors', () => {

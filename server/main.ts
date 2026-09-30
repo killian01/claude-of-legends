@@ -2674,7 +2674,16 @@ wss.on('connection', (ws, req) => {
         if (!inMatch) matchmaker.startLobby(id, now);
         break;
       case 'pick':
-        for (const mm of matchmakers) mm.pick(id, msg.championId, msg.sigils, msg.skin, msg.bot);
+        for (const mm of matchmakers) {
+          mm.pick(id, msg.championId, msg.sigils, msg.skin, msg.bot, msg.lane);
+        }
+        break;
+      // A lane claim at champion select (ADR 0026). Its own case, never the
+      // default below: a late one (a click racing match_start) must not be
+      // recorded on the replay or reset the AFK clock. Outside a select the
+      // matchmakers ignore it.
+      case 'lane':
+        for (const mm of matchmakers) mm.setLane(id, msg.lane);
         break;
       case 'chat':
       case 'ping': {

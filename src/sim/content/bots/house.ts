@@ -9,7 +9,8 @@
 // the fill's stream right after the team's champions, so the lineup a
 // seed gives stays the fill's.
 
-import { fillSeats, type HeldSeat, TEAM_SIZE } from '../../fill';
+import { fillSeats, type HeldSeat, seatLane, TEAM_SIZE } from '../../fill';
+import type { LanePreference } from '../../playbook/types';
 import type { Rng } from '../../rng';
 import { BRAWLER } from './brawler';
 import { JUNGLER } from './jungler';
@@ -40,14 +41,20 @@ export function houseName(botId: string): string {
 export interface HouseSeat {
   championId: string;
   bot: string;
+  // The lane of the fill seat it was drawn for (CONTEXT.md: Lane
+  // preference; ADR 0026): what every host seats it with, `[lane]` as the
+  // pick's lanes, so the team plays the shape the fill composed.
+  lane: LanePreference;
 }
 
 // The seats house bots take on one team: the fill's champions around what
 // the team holds, then a style per seat, in that order on the one stream:
-// the Jungler on the forest's seat, a draw on every lane seat.
+// the Jungler on the forest's seat, a draw on every lane seat. The lane
+// comes from the seat and draws nothing.
 export function houseSeats(held: readonly HeldSeat[], rng: Rng, size = TEAM_SIZE): HouseSeat[] {
   return fillSeats(held, rng, size).map((seat) => ({
     championId: seat.championId,
     bot: seat.kind === 'jungle' ? JUNGLER.id : drawHouseStyle(rng),
+    lane: seatLane(seat.kind),
   }));
 }

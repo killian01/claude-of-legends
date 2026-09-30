@@ -173,8 +173,9 @@ export interface ObsSelf {
   // (ADR 0005; additive v0 field). While armed, that key reads ready and
   // the press resolves the follow-up instead of a fresh cast.
   recastArmed?: AbilityKey | null;
-  // The lane this participant was assigned, null for unassigned (humans).
-  // Additive v0 field; bots use it to hold a lane instead of flocking.
+  // The lane this participant was assigned (CONTEXT.md: Assigned lane),
+  // null for a seat in the forest. Additive v0 field; bots use it to hold
+  // a lane instead of flocking.
   lane: 'top' | 'mid' | 'bot' | null;
   // True while the recall channel runs (additive v0 field). A policy that
   // keeps issuing orders would reset its own channel forever without it.

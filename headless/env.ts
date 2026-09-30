@@ -11,10 +11,11 @@
 import { starOrchard } from '../server/star_orchard';
 import { buildMatchSim, type ReplayPick } from '../src/net/replay';
 import { POLICY_PERIOD_TICKS } from '../src/sim/bot_driver';
-import { DEFAULT_BOT_ID } from '../src/sim/content/bots';
+import { defaultBotFor } from '../src/sim/content/bots';
 import { houseSeats } from '../src/sim/content/bots/house';
 import { TEAM_SIZE } from '../src/sim/fill';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
+import type { LanePreference } from '../src/sim/playbook/types';
 import type { Action, Observation } from '../src/sim/policy';
 import { POLICY_CONTRACT_VERSION } from '../src/sim/policy';
 import { Rng } from '../src/sim/rng';
@@ -31,10 +32,16 @@ export interface EnvSeatSpec {
   championId: string;
   sigils?: [string, string];
   // A remote seat is stepped by the caller. Anything else runs the named
-  // scripted bot in-sim (default: the Laner), which is what makes the nine
-  // other seats of a 5v5 exist at all.
+  // scripted bot in-sim (default: the Laner, the Jungler on a seat whose
+  // first lane is the forest), which is what makes the nine other seats of
+  // a 5v5 exist at all.
   remote?: boolean;
   bot?: string;
+  // The seat's own lane preference, in order (CONTEXT.md: Lane preference;
+  // ADR 0026), as a person picks one at champion select and a house seat
+  // carries its fill lane: ahead of the champion's home lane, behind a
+  // bot's playbook's own. Absent asks nothing.
+  lanes?: LanePreference[];
 }
 
 export interface EnvConfig {
@@ -66,10 +73,10 @@ export interface EnvInfo {
 }
 
 // The default table: a full 5v5 where seat 0 is remote and the other nine
-// run a house style. Champions and styles come from the fill
-// (src/sim/fill.ts, src/sim/content/bots/house.ts) drawn from the seed,
-// the rule server/bot_fill.ts uses, so a default environment match and a
-// default server match line up.
+// run a house style. Champions, styles and each seat's lane come from the
+// fill (src/sim/fill.ts, src/sim/content/bots/house.ts) drawn from the
+// seed, the rule server/bot_fill.ts uses, so a default environment match
+// and a default server match line up.
 export function defaultSeats(remoteSeats = 1, seed = 1): EnvSeatSpec[] {
   const rng = new Rng(seed);
   const out: EnvSeatSpec[] = [];
@@ -80,6 +87,7 @@ export function defaultSeats(remoteSeats = 1, seed = 1): EnvSeatSpec[] {
         championId: seat.championId,
         bot: seat.bot,
         remote: team === 0 && out.length < remoteSeats,
+        lanes: [seat.lane],
       });
     }
   }
@@ -106,7 +114,8 @@ export class Env {
       team: s.team,
       championId: s.championId,
       sigils: s.sigils ?? ['riftstep', 'mend'],
-      ...(s.remote ? {} : { bot: s.bot ?? DEFAULT_BOT_ID }),
+      ...(s.remote ? {} : { bot: s.bot ?? defaultBotFor(s.lanes) }),
+      ...(s.lanes ? { lanes: [...s.lanes] } : {}),
     }));
     const { sim, unitIds } = buildMatchSim(starOrchard(), this.seed, picks, this.forged);
     this.sim = sim;

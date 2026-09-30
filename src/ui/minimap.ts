@@ -1,13 +1,15 @@
 // The minimap: a 2D canvas projection of the world, fog-respecting (it only
 // draws what IWorld exposes as visible to the viewer's team). Right-click on
 // it issues a move order at the corresponding world point; left-click points
-// the camera there (Space snaps it back to the champion).
+// the camera there (Space snaps it back to the champion). The player's own
+// assigned lane is stroked in gold (ui/lane_guide.ts; ADR 0026).
 
 import { getSettings } from '../game/settings';
 import { followUiScale } from '../game/ui_scale';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import type { TeamId, Vec2 } from '../sim/types';
 import type { IWorld } from '../world_api';
+import { type LaneGuide, ownCamps } from './lane_guide';
 
 const SIZE_PX = 168;
 const TEAM_COLORS = ['#4a7dd6', '#d65c5c'];
@@ -21,6 +23,9 @@ export class Minimap {
   private readonly scale: number;
   private readonly fog = document.createElement('canvas');
   private readonly pings: { x: number; z: number; until: number }[] = [];
+  // The seat's assigned lane, stroked under the units (ui/lane_guide.ts;
+  // ADR 0026); null draws nothing (a replay, a spectator).
+  private laneGuide: Pick<LaneGuide, 'lane' | 'arrived'> | null = null;
   // The interface size (src/game/ui_scale.ts), followed while on screen.
   private readonly stopScale: () => void;
   // True while the cursor is over the minimap; the edge-pan gate reads it.
@@ -81,6 +86,10 @@ export class Minimap {
     this.g = g;
   }
 
+  setLaneGuide(guide: Pick<LaneGuide, 'lane' | 'arrived'> | null): void {
+    this.laneGuide = guide;
+  }
+
   addPing(x: number, z: number): void {
     this.pings.push({ x, z, until: performance.now() + 2500 });
   }
@@ -130,6 +139,8 @@ export class Minimap {
       }
       g.drawImage(this.fog, 0, 0);
     }
+
+    this.drawLaneGuide();
 
     for (const u of this.world.units.values()) {
       if (u.dead) continue;
@@ -215,5 +226,42 @@ export class Minimap {
       g.arc(this.px(p.x), this.pz(p.z), 4 + age * 10, 0, Math.PI * 2);
       g.stroke();
     }
+  }
+
+  // The player's lane in gold: the lane's line, or for the forest a ring
+  // round each of the team's own camps. Dashed and marching out of the own
+  // base until the player arrives, faint after: a reminder, not a call.
+  private drawLaneGuide(): void {
+    const guide = this.laneGuide;
+    if (!guide) return;
+    const { g } = this;
+    g.save();
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.lineWidth = 3;
+    if (guide.arrived) {
+      g.strokeStyle = 'rgba(255, 217, 74, 0.42)';
+      g.setLineDash([]);
+    } else {
+      g.strokeStyle = 'rgba(255, 217, 74, 0.95)';
+      g.setLineDash([6, 4]);
+      // Each lane runs from team 0's base: the dashes walk away from home.
+      const march = (performance.now() / 90) % 10;
+      g.lineDashOffset = this.viewerTeam === 0 ? -march : march;
+    }
+    g.beginPath();
+    if (guide.lane !== null) {
+      for (const [i, p] of this.world.map.lanes[guide.lane].entries()) {
+        if (i === 0) g.moveTo(this.px(p.x), this.pz(p.z));
+        else g.lineTo(this.px(p.x), this.pz(p.z));
+      }
+    } else {
+      for (const c of ownCamps(this.world.map, this.viewerTeam)) {
+        g.moveTo(this.px(c.x) + 7, this.pz(c.z));
+        g.arc(this.px(c.x), this.pz(c.z), 7, 0, Math.PI * 2);
+      }
+    }
+    g.stroke();
+    g.restore();
   }
 }

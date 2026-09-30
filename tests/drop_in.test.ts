@@ -155,3 +155,30 @@ describe('taking a bot seat in a live match', () => {
     }
   });
 });
+
+// A newcomer inherits the seat's assigned lane (ADR 0026) and is told it
+// by the self block of every snapshot, the forest's seat included.
+describe('the lane a newcomer drops into', () => {
+  it("reads the house seat's lane, and null on the Jungler's seat", () => {
+    const picks = fillWithBots([HUMAN], 7, 5);
+    const match = new Match(7, picks);
+    for (let i = 0; i < 20; i++) match.tick();
+    const seen: (string | null)[] = [];
+    for (let id = 2; ; id++) {
+      const seat = match.takeBotSeat(id, `p${id}`);
+      if (!seat) break;
+      match.tick();
+      const snap = match.buildSnapshotFor(id);
+      if (snap?.t !== 'snap') throw new Error('no snapshot');
+      const unit = match.sim.units.get(seat.unitId);
+      expect(snap.self?.lane).toBe(unit?.lane);
+      // The house Jungler's seat is the forest's: no lane to hold.
+      const pick = picks.find((_, i) => match.unitIdOfPick(i) === seat.unitId);
+      if (pick?.bot === 'jungler') expect(snap.self?.lane).toBeNull();
+      else expect(snap.self?.lane).toBe(pick?.lanes?.[0]);
+      seen.push(snap.self?.lane ?? null);
+    }
+    expect(seen).toHaveLength(9);
+    expect(seen.filter((l) => l === null)).toHaveLength(2);
+  });
+});

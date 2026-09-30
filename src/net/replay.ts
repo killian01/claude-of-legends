@@ -10,7 +10,7 @@ import { attachBot, botPolicy } from '../sim/content/bots';
 import { contentMatches } from '../sim/content/fingerprint';
 import type { StarOrchard } from '../sim/content/star_orchard';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
-import type { PlaybookDef } from '../sim/playbook/types';
+import type { LanePreference, PlaybookDef } from '../sim/playbook/types';
 import { Sim } from '../sim/sim';
 import { TerrainNavGrid } from '../sim/terrain_nav';
 import type { TeamId } from '../sim/types';
@@ -34,6 +34,8 @@ import { type ClientMsg, isFiniteVec } from './protocol';
 // 7: the forest round (ADR 0023): the rings' creatures in the fog, the
 // Warden's pit drawn from the rng, camps of three kinds with their memory
 // in the observation, the Jungler on every house team's fifth seat.
+// Not bumped for a seat's lane preference (ADR 0026): ReplayPick.lanes is
+// additive, and a record without it seats and stands in exactly as before.
 export const REPLAY_VERSION = 7;
 
 // The checksum a replay must show at `tick`, or null when the record
@@ -68,6 +70,11 @@ export interface ReplayPick {
   // An account's own bot (ADR 0013): the playbook that played, embedded
   // whole like a forged definition, so the replay runs what ran.
   playbook?: PlaybookDef;
+  // The seat's own lane preference (ADR 0026; Sim.pickLanes): a person's
+  // choice at champion select, the lane of the fill seat a house bot was
+  // drawn for. Additive: absent on older records and on a seat that asked
+  // nothing, which then seats exactly as it did before the field existed.
+  lanes?: LanePreference[];
 }
 
 export interface ReplayEvent {
@@ -146,6 +153,9 @@ export function buildMatchSim(
     const unit = sim.addChampion(p.team, undefined, p.championId, p.skin ?? 0);
     unit.sigils = [...p.sigils];
     unitIds.push(unit.id);
+    // The seat's ask before its brain: a playbook's own lanes still go
+    // ahead of it, and the forest ask names the seat's default stand-in.
+    if (p.lanes) sim.pickLanes(unit.id, p.lanes);
     if (p.playbook) sim.attachPlaybook(unit.id, p.playbook);
     else if (p.bot) attachBot(sim, unit.id, p.bot);
   }
@@ -224,6 +234,8 @@ export function applyReplayEvent(
     if (team !== undefined && ev.c) applySimCommand(sim, team, ev.u, ev.c);
     return;
   }
+  // The seat's default bot, as the live stand-in (server/match.ts): the
+  // Jungler on a seat that asked for the forest, the Laner elsewhere.
   if (ev.e === 'bot_on') {
     attachBot(sim, ev.u, undefined);
     return;
@@ -257,14 +269,14 @@ export function restorePolicies(
     const policy = p.playbook
       ? sim.policyForPlaybook(p.playbook)
       : p.bot !== undefined
-        ? botPolicy(sim, p.bot)
+        ? botPolicy(sim, p.bot, unitId)
         : null;
     if (policy) sim.attachPolicy(unitId, policy);
   });
   for (const ev of events) {
     if (ev.k >= tick) break;
     if (ev.e === 'bot_on') {
-      const policy = botPolicy(sim, undefined);
+      const policy = botPolicy(sim, undefined, ev.u);
       if (policy) sim.attachPolicy(ev.u, policy);
     } else if (ev.e === 'bot_off') {
       sim.policies.delete(ev.u);

@@ -51,6 +51,7 @@ import { setPortrait } from './champion_art';
 import { loadCollection } from './collection';
 import { sigilImageUrl } from './icon_images';
 import { buildCounts, buildRow, itemCatalog } from './item_catalog';
+import { LANE_CHOICES, laneWords } from './lane_select';
 import { el } from './menu';
 import { startMenuBackdrop } from './menu_backdrop';
 import {
@@ -1500,11 +1501,8 @@ export function openAcademy(container: HTMLElement, opts: AcademyOptions = {}): 
     // (CONTEXT.md, Bot lane).
     const home = homeLane(champ?.role);
     for (const [value, label] of [
-      ['home', home ? `home lane (${home} lane)` : 'home lane (any)'],
-      ['top', 'top lane'],
-      ['mid', 'mid lane'],
-      ['bot', 'bot lane'],
-      ['jungle', 'the forest'],
+      ['home', home ? `home lane (${laneWords(home)})` : 'home lane (any)'],
+      ...LANE_CHOICES.map((lane) => [lane, laneWords(lane)] as const),
     ] as const) {
       const o = document.createElement('option');
       o.value = value;

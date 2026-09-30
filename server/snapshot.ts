@@ -199,6 +199,9 @@ export function buildSnapshot(
       statuses: selfUnit.statuses
         .filter((s) => s.until > sim.time)
         .map((s) => ({ k: s.kind, until: round2(s.until), v: statusValue(s) })),
+      // What the HUD tells the player (ADR 0026): the self block only, so
+      // the other team never learns where this seat plays.
+      lane: selfUnit.lane,
     };
     const boon = sim.teamBuff(team);
     if (boon) {

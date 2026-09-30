@@ -16,7 +16,7 @@ import { ITEMS } from '../src/sim/content/items';
 import { SIGILS } from '../src/sim/content/sigils';
 import { type DeathScene, SCENE_CAP, type SceneUnit } from '../src/sim/playbook/death_context';
 import type { DeathNote, PlayReport, UnitPlayReport } from '../src/sim/playbook/report';
-import { validatePlaybook } from '../src/sim/playbook/validate';
+import { lanePreferences, validatePlaybook } from '../src/sim/playbook/validate';
 import { INVENTORY_SLOTS } from '../src/sim/sim';
 import type { ScoreRow, TeamId } from '../src/sim/types';
 import type { BotStore } from './bot_store';
@@ -260,6 +260,14 @@ function pick(raw: unknown): ReplayPick | null {
     const v = validatePlaybook(raw.playbook);
     if (!v.ok) return null;
     out.playbook = v.def;
+  }
+  // The seat's own lane preference (ADR 0026): a house seat's fill lane,
+  // the sparring bot's playbook lane. Dropping it would re-simulate a
+  // different match from the one the browser ran.
+  if (raw.lanes !== undefined) {
+    const lanes = lanePreferences(raw.lanes);
+    if (!lanes) return null;
+    out.lanes = lanes;
   }
   return out;
 }

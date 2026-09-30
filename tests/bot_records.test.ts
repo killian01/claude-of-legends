@@ -196,4 +196,31 @@ describe('the upload from the Academy', () => {
     );
     expect(bad({ report: { ticks: 1, units: 'x' } })).toMatch(/report/);
   });
+
+  // The house seats' lanes (ADR 0026) are what the browser seated them
+  // with: kept through the door, or the stored record re-simulates another
+  // match; and a stranger's lanes clear the playbook's own check.
+  it("keeps each seat's lanes, and refuses lanes that are not a lane preference", () => {
+    const parsed = parseUpload(upload(), 1);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(picks.slice(1).every((p) => p.lanes?.length === 1)).toBe(true);
+    expect(parsed.value.record.picks.map((p) => p.lanes)).toEqual(picks.map((p) => p.lanes));
+    const withLanes = (lanes: unknown) =>
+      parseUpload(
+        {
+          ...upload(),
+          record: {
+            ...result.record,
+            picks: [picks[0], { ...picks[1], lanes }, ...picks.slice(2)],
+          },
+        },
+        1,
+      );
+    for (const lanes of [['river'], [], ['top', 'top'], 'mid', ['top', 'mid', 'bot', 'jungle']]) {
+      const p = withLanes(lanes);
+      expect(p.ok ? 'accepted' : p.error).toMatch(/sparring replay/);
+    }
+    expect(withLanes(['jungle', 'top']).ok).toBe(true);
+  });
 });

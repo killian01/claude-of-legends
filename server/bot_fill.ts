@@ -4,10 +4,12 @@
 // a team and one bot per account in the match, each an owned seat rated
 // on its account's live way and written to its Record at the end. Then
 // house bots on the fill (src/sim/fill.ts): each team's roster lanes
-// completed by role around the seats it holds, drawn from the same seed,
-// each on a house style drawn from it too (src/sim/content/bots/house.ts),
-// named by their style. Bots get negative client ids; Match never
-// registers them as players.
+// completed around the seats it holds, the lanes they ask for first (a
+// person's settled choice at select, a ranked bot's playbook's first
+// lane; ADR 0026), then their roles, drawn from the same seed, each on a
+// house style drawn from it too (src/sim/content/bots/house.ts), named by
+// their style and seated with its fill seat's lane. Bots get negative
+// client ids; Match never registers them as players.
 
 import { houseName, houseSeats } from '../src/sim/content/bots/house';
 import { CHAMPIONS } from '../src/sim/content/champions';
@@ -79,7 +81,11 @@ export function fillWithBots(
   for (const team of [0, 1] as const satisfies readonly TeamId[]) {
     const held = out
       .filter((p) => p.team === team)
-      .map((p) => ({ championId: p.championId, role: p.forged?.role ?? null }));
+      .map((p) => ({
+        championId: p.championId,
+        role: p.forged?.role ?? null,
+        lane: p.lanes?.[0] ?? p.playbook?.lanes?.[0] ?? null,
+      }));
     let count = held.length;
     for (const seat of houseSeats(held, rng, teamSize)) {
       const c = CHAMPIONS[seat.championId];
@@ -93,6 +99,7 @@ export function fillWithBots(
         // Deterministic cosmetic variety; the sim clamps out-of-range picks.
         skin: (count + team) % 3,
         bot: seat.bot,
+        lanes: [seat.lane],
       });
       count++;
     }

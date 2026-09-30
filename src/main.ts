@@ -33,7 +33,7 @@ import { buildIdFromMeta, startBuildWatch } from './net/build_watch';
 import { ClientWorld } from './net/client_world';
 import { openGuest } from './net/guest';
 import { buildPracticeReport, sendPracticeReport } from './net/practice_report';
-import type { ForgedMatchAssets, ServerMsg } from './net/protocol';
+import type { ClientMsg, ForgedMatchAssets, ServerMsg } from './net/protocol';
 import {
   applyReplayEvent,
   buildMatchSim,
@@ -55,10 +55,11 @@ import {
 import { whenChampionModelsReady } from './render/champions';
 import { installVersionedLoading } from './render/versioned_loading';
 import { attachBot } from './sim/content/bots';
-import { houseSeats } from './sim/content/bots/house';
+import { type HouseSeat, houseSeats } from './sim/content/bots/house';
 import { contentFingerprint } from './sim/content/fingerprint';
 import type { StarOrchard } from './sim/content/star_orchard';
 import type { ForgedChampionDef } from './sim/forge/forged_def';
+import type { LanePreference } from './sim/playbook/types';
 import { Rng } from './sim/rng';
 import type { Sim } from './sim/sim';
 import { ULT_RANK_LEVELS } from './sim/stats';
@@ -118,10 +119,15 @@ function registerForgedFromMatch(assets: Record<string, ForgedMatchAssets> | und
   for (const [id, a] of Object.entries(assets ?? {})) registerForgedAssets(id, a);
 }
 
+type SelectUpdate = Extract<ServerMsg, { t: 'select_update' }>;
+
 interface OfflinePick {
   championId: string;
   sigils: [string, string];
   skin: number;
+  // The lane chosen at select (ADR 0026); absent for a Forge test drive,
+  // which goes through no select: the home lane, as the sim deals it.
+  lane?: LanePreference;
   // A Forge test drive: the draft to register in the offline sim before
   // picking it (the stylized figure carries the render).
   forged?: ForgedChampionDef;
@@ -200,24 +206,21 @@ async function pickForPractice(): Promise<OfflinePick | null> {
       frame.closed();
       resolve(null);
     };
-    const picker = showSelect(
-      container,
-      null,
-      0,
-      null,
-      (championId, sigils, skin) => {
+    const picker = showSelect(container, {
+      roster: null,
+      self: null,
+      team: 0,
+      deadline: null,
+      onLock: ({ championId, sigils, skin, lane }) => {
         // Inside the lock-in click gesture, so the browser grants it.
         requestGameFullscreen();
         picker.remove();
         frame.closed();
-        resolve({ championId, sigils, skin });
+        resolve({ championId, sigils, skin, lane });
       },
-      undefined,
-      undefined,
-      undefined,
       collection,
-      leave,
-    );
+      onBack: leave,
+    });
     // A layer over the page it opened from; Back leaves it with no pick.
     const frame = appNav().push('select', leave);
   });
@@ -249,23 +252,25 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
     const world: IWorld = sim;
     const self = sim.addChampion(0, undefined, pick.championId, pick.skin);
     self.sigils = [...pick.sigils];
+    // The lane chosen at select, the seat's own ask (ADR 0026), as the
+    // server seats a person's.
+    if (pick.lane) sim.pickLanes(self.id, [pick.lane]);
     // A full 5v5: your four allies and all five opponents are house bots
     // on the fill (src/sim/fill.ts), the roster's lanes completed around
-    // your pick, each on a house style drawn from the seed, with
-    // deterministic skin variety (the sim clamps out-of-range picks).
+    // your pick and your lane, each on a house style drawn from the seed
+    // and seated with its fill seat's lane, with deterministic skin
+    // variety (the sim clamps out-of-range picks).
     const champions = [self];
     const rng = new Rng(42);
-    const allies = houseSeats([{ championId: pick.championId, role: pick.forged?.role }], rng);
-    for (const [i, seat] of allies.entries()) {
-      const ally = sim.addChampion(0, undefined, seat.championId, i % 3);
-      attachBot(sim, ally.id, seat.bot);
-      champions.push(ally);
-    }
-    for (const [i, seat] of houseSeats([], rng).entries()) {
-      const enemy = sim.addChampion(1, undefined, seat.championId, i % 3);
-      attachBot(sim, enemy.id, seat.bot);
-      champions.push(enemy);
-    }
+    const held = [{ championId: pick.championId, role: pick.forged?.role, lane: pick.lane }];
+    const seat = (team: TeamId, i: number, house: HouseSeat): void => {
+      const unit = sim.addChampion(team, undefined, house.championId, i % 3);
+      sim.pickLanes(unit.id, [house.lane]);
+      attachBot(sim, unit.id, house.bot);
+      champions.push(unit);
+    };
+    for (const [i, house] of houseSeats(held, rng).entries()) seat(0, i, house);
+    for (const [i, house] of houseSeats([], rng).entries()) seat(1, i, house);
     // A Forge test drive opens at the level the ultimate unlocks, everyone
     // alike: the creator came to try R too, and the bots meet it on equal
     // footing (playtest).
@@ -333,6 +338,8 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
     const pres = startPresentation(container, world, self.id, self.team, exit, {
       terrain: loaded.terrain,
       guest,
+      // The lane chosen at select, told and walked to (ADR 0026).
+      guide: 'play',
     });
     const TICK_MS = DT * 1000;
     let last = performance.now();
@@ -479,7 +486,9 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
       unitIds[viewerIdx]!,
       rec.picks[viewerIdx]!.team,
       finish,
-      { terrain: loaded.terrain },
+      // A replay tells nobody where to walk: the seat is not the viewer's,
+      // and the tour's frames stay clean (ADR 0026).
+      { terrain: loaded.terrain, guide: 'watch' },
     );
     let speed = 1;
     let next = 0;
@@ -756,6 +765,12 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
     let queueUi: QueueController | null = null;
     let lobbyUi: LobbyController | null = null;
     let selectUi: SelectController | null = null;
+    // The latest select_update, for a select that opens after it arrived.
+    let lastSelectUpdate: SelectUpdate | null = null;
+    const applySelectUpdate = (msg: SelectUpdate): void => {
+      selectUi?.setLocked(msg.locked, msg.total, msg.taken);
+      selectUi?.setClaims(msg.claims);
+    };
     let pres: Presentation | null = null;
     // How the match ended, for the counter (src/net/stats.ts), while one is
     // on screen; a queue or a lobby left before one is not a match.
@@ -826,6 +841,10 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
         terrain: loaded.terrain,
         mode: 'online',
         guest,
+        // The seat's assigned lane rides every snapshot (SelfSnap.lane), so
+        // a drop-in and a rejoin are told it too; a coach seat hears where
+        // its bot plays, with no walk (ADR 0026).
+        guide: world.coach ? 'coach' : 'play',
       });
       pres = opened;
       ends = matchEndReporter('online', () => ({ winner: world.winner, seconds: world.time }));
@@ -965,6 +984,7 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
         case 'select_start': {
           clearMenus();
           layer.guard(() => undefined);
+          lastSelectUpdate = null;
           const openSelect = (
             forgedList: readonly ForgedPick[],
             community: readonly CommunityPick[],
@@ -972,29 +992,40 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
             collection: CollectionState | null = null,
           ): void => {
             if (finished || selectUi) return;
-            selectUi = showSelect(
-              container,
-              msg.players,
-              msg.team,
-              msg.deadline,
-              (champ, sigils, skin, botId) => {
+            selectUi = showSelect(container, {
+              roster: msg.players,
+              self: msg.self,
+              team: msg.team,
+              deadline: msg.deadline,
+              onLock: ({ championId, sigils, skin, botId, lane }) => {
                 // Inside the lock-in click gesture, so the browser grants it.
                 requestGameFullscreen();
-                ws.send(
-                  JSON.stringify({
-                    t: 'pick',
-                    championId: champ,
-                    sigils,
-                    skin,
-                    ...(botId ? { bot: botId } : {}),
-                  }),
-                );
+                const pick: ClientMsg = {
+                  t: 'pick',
+                  championId,
+                  sigils,
+                  skin,
+                  ...(botId ? { bot: botId } : {}),
+                  lane,
+                };
+                ws.send(JSON.stringify(pick));
               },
-              forgedList,
+              // A lane claim before Lock in: the team sees it at once
+              // (first come, first served), and a refused one comes back
+              // as a select_update that reverts it.
+              onLane: (lane) => {
+                const claim: ClientMsg = { t: 'lane', lane };
+                ws.send(JSON.stringify(claim));
+              },
+              forged: forgedList,
               community,
-              botsList,
+              bots: botsList,
               collection,
-            );
+            });
+            // What the team did while the select was still loading (the
+            // bots, the collection, the forged lists): claims and locks
+            // made in the meantime are not lost.
+            if (lastSelectUpdate) applySelectUpdate(lastSelectUpdate);
           };
           // A Forge select waits for the forged lists (already in flight
           // since the session opened); a classic select opens on the spot.
@@ -1011,7 +1042,9 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
           break;
         }
         case 'select_update':
-          selectUi?.setLocked(msg.locked, msg.total, msg.taken);
+          // Kept until the select exists: it opens asynchronously.
+          lastSelectUpdate = msg;
+          applySelectUpdate(msg);
           break;
         case 'chat':
           pres?.pushChat(msg.from, msg.team, msg.text);
@@ -1231,12 +1264,14 @@ async function boot(): Promise<void> {
           continue;
         }
       }
-      // Offline: one match against bots, then back to the way in. A select
+      // Offline: one match against bots, Play again replaying the same
+      // pick, then back to the way in, where the next practice goes through
+      // select again so the champion and the lane can change. A select
       // left without a pick is back to the way in too.
-      const pick: OfflinePick | null = lastPick ?? (await pickForPractice());
+      const pick: OfflinePick | null = await pickForPractice();
       if (!pick) continue;
-      lastPick = pick;
-      const action = await runOffline(pick, true);
+      let action: PostMatchAction = 'again';
+      while (action === 'again') action = await runOffline(pick, true);
       if (action === 'account') landingIntent = 'register';
       continue;
     }

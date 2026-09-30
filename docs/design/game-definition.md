@@ -13,7 +13,7 @@ The consolidated result of the design grill (rounds 1 to 3). The ADRs in `docs/a
 - **Pacing**: 20 to 25 minute target, respawn timers scale with game time, recall 8 s, full regen at fountain, no surrender in v1.
 - **Sigils**: pick 2 of 4 at lock: Riftstep (blink), Zephyr (move speed), Mend (burst heal), Sear (damage over time plus healing reduction).
 - **Champions**: 10 at launch (`docs/design/roster.md`), kits composed from shared effect primitives. An account starts with four of them and recruits the rest with laurels earned by playing (ADR 0018); three more rotate free every week, the same three for everyone, and the offline practice match opens the whole roster.
-- **Champion select**: blind pick, about 60 s, no duplicates within a team (allowed across teams), random button, sigil choice at lock.
+- **Champion select**: blind pick, 45 s, no duplicates within a team (allowed across teams), random button, sigil choice at lock, and a lane preference (top lane, mid lane, bot lane or the forest; the champion's home lane preselected; the own team sees each claim live and a full lane is taken first come, first served; ADR 0026).
 - **Controls**: right-click move, A attack-move, QWER abilities, mouse-aimed skillshots. Desktop browser only.
 - **Fairness**: identical decision budget for humans and bots (ADR 0003).
 - **Rendering**: Three.js top-down camera, flat fixed map, simple stylized geometry at launch.

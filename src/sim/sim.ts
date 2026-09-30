@@ -248,14 +248,18 @@ export class Sim {
   }
 
   // Every champion of a team holds a lane from creation (CONTEXT.md: Home
-  // lane; src/sim/lanes.ts): its role's home lane while the lane has a seat
-  // open, else the lane with the most seats open. A human's seat counts
-  // like a bot's, so the fill's support lands beside a human marksman and a
+  // lane, Assigned lane; src/sim/lanes.ts): its lane preference while that
+  // lane has a seat open, else its role's home lane while that one has,
+  // else the lane with the most seats open. A person's seat counts like a
+  // bot's, so the fill's support lands beside a person's marksman and a
   // stand-in bot on a dropped seat inherits the lane (playtest review: all
   // ten participants once funneled into whichever lane was furthest
-  // pushed). Recomputed over the team in creation order whenever a
-  // champion joins it, which happens at setup only. A playbook's lane
-  // preference will go in ahead of the home lane (plan-bots phase 12).
+  // pushed). The preference is the brain's (a playbook's lanes) when it
+  // states one, else the seat's own (pickLanes: a person's choice at
+  // select, a house seat's fill lane), so a stand-in's playbook that
+  // states none leaves the seat's choice standing. Recomputed over the
+  // team in creation order whenever a champion joins it or a preference
+  // is seated, which happens at setup, and when a seat changes hands.
   private assignLanes(team: TeamId): void {
     const seats: Unit[] = [];
     for (const u of this.units.values()) {
@@ -264,7 +268,7 @@ export class Sim {
     const lanes = assignLanes(
       seats.map((u) => ({
         home: homeLane(u.championId === null ? null : this.champions.get(u.championId)?.role),
-        prefer: u.lanePrefer,
+        prefer: u.lanePrefer ?? u.pickedLanes,
       })),
     );
     for (const [i, u] of seats.entries()) u.lane = lanes[i]!;
@@ -319,6 +323,18 @@ export class Sim {
     const seat = this.units.get(unitId);
     if (seat?.kind !== 'champion') return;
     seat.lanePrefer = lanes ? [...lanes] : null;
+    this.assignLanes(seat.team);
+  }
+
+  // The seat's own lane preference (CONTEXT.md: Lane preference; ADR
+  // 0026): a person's choice at champion select, a house seat's fill lane,
+  // null for none. Kept apart from the brain's (seatLanes), which goes
+  // ahead of it when set; the team's lanes are dealt again with it in, as
+  // seatLanes does. Draws nothing from the rng.
+  pickLanes(unitId: number, lanes: readonly LanePreference[] | null): void {
+    const seat = this.units.get(unitId);
+    if (seat?.kind !== 'champion') return;
+    seat.pickedLanes = lanes ? [...lanes] : null;
     this.assignLanes(seat.team);
   }
 

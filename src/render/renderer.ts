@@ -890,6 +890,15 @@ export class Renderer {
     };
   }
 
+  // How high a unit's overhead reaches above its feet, bars and nameplate
+  // (barY + 1.0 is the plate's middle), in meters: what the screen
+  // furniture drawn beside it keeps clear of (the lane arrow, ADR 0026).
+  // Null for a unit not drawn yet.
+  overheadTop(id: number): number | null {
+    const t = this.tracked.get(id);
+    return t ? t.barY + 1.3 : null;
+  }
+
   // A brief ground ring: move orders (green) and cast flashes (team tint).
   flashMarker(x: number, z: number, color = 0x9be86a): void {
     const material = new THREE.MeshBasicMaterial({

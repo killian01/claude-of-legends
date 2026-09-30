@@ -38,18 +38,37 @@ its account's live way. Then house bots on the roster's lanes around what the te
 tank or a fighter for the top seat, a mage, an assassin or a battlemage for mid, a marksman
 and a support for bot, a fighter, a tank, a skirmisher or an assassin for the forest (the
 Jungler's seat, on every five-seat team), the skirmisher wherever a seat is open, drawn from
-the match seed among the champions the team does not hold. The same rule on every host: the live queue,
-the Arena (house bots only there), sparring, offline practice, the environment.
+the match seed among the champions the team does not hold. It composes around the lanes the
+team's seats ask for before their roles: a seat asking for the forest, or a second seat
+asking for top, takes the Jungler's seat, so the house fields no Jungler beside it. Each
+house bot carries the lane of the seat it was drawn for as its lane preference. The same
+rule on every host: the live queue, the Arena (house bots only there), sparring, offline
+practice, the environment.
 _Avoid_: draft (the Forge's term), autofill, backfill, composition
 
 **Home lane**:
 The lane a champion's role plays by default: top for the tank and the fighter, mid for the
 mage, the assassin and the battlemage, bot for the marksman and the support. The skirmisher
 has none and takes the lane with a seat open. A five-seat team holds one mid, two top and
-two bot, and a seat that asks for the forest first (the Jungler) holds no lane, so a house
-team fields one top; a champion sits in its home lane while a seat is open there, and every
-other champion of a team holds a lane from the start, a human's seat counted like a bot's.
+two bot, and a seat that asks for the forest first (the Jungler) holds no lane, so a team
+with one fields one top. A seat's lane preference goes in ahead of its home lane; a seat
+that asks nothing sits in its home lane while a seat is open there, and every other
+champion of a team holds a lane from the start, a person's seat counted like a bot's.
 _Avoid_: role lane, default lane, position, main lane
+
+**Lane preference**:
+The lane a seat asks for, seated ahead of its champion's home lane: top lane, mid lane, bot
+lane or the forest. A person picks one at champion select, first come first served inside
+the team, the champion's home lane preselected; a bot's playbook states its own, in order;
+a house bot carries the lane of the fill seat it was drawn for. "The forest" on screen,
+`jungle` in code.
+_Avoid_: position, role, lane pick, role call, autofill
+
+**Assigned lane**:
+The lane the match deals a seat, from the team's lane preferences and home lanes in seating
+order; none for a seat in the forest. What the HUD tells the player and what a bot holds,
+dealt at setup; a stand-in on a dropped seat and a newcomer who drops in keep the seat's.
+_Avoid_: position, role, current lane
 
 **Bot lane**:
 The lane the marksman and the support call home, drawn along the bottom and the right of
@@ -219,8 +238,10 @@ _Avoid_: buff camp, red buff, blue buff, krug
 The forest's post. A seat that asks for the forest instead of a lane (the lane preference
 "jungle") holds no lane and walks its forest's round, clearing each camp with its abilities
 on what its team has seen, ganks a lane where an ally fights, and is its team's first body
-at every neutral objective. Every five-seat house team fields one, the fifth house style;
-a bot asks for the post with the forest as its lane preference.
+at every neutral objective. The fill posts one, the fifth house style, on every five-seat
+team none of whose seats asked for the forest itself; a bot asks for the post with the
+forest as its lane preference, and a person may ask for it at champion select, whatever the
+champion (one the fill would not post there is warned its camps will be slow).
 _Avoid_: jungle (alone, as a role), roamer, forester, ganker
 
 **Windup**:
@@ -302,7 +323,8 @@ _Avoid_: anonymous player, visitor account
 **Drop in**:
 To take a bot's seat in a public match already under way (ADR 0025), which is what entering
 the public queue does when nobody is waiting in it and such a match has people in it, early
-enough. The champion comes as the bot left it, and the seat is never rated or recorded.
+enough. The champion comes as the bot left it, in the seat's assigned lane, which the
+newcomer is told on arrival; the seat is never rated or recorded.
 _Avoid_: late join, hot join, backfill
 
 **Home**:
@@ -434,8 +456,9 @@ never a name.
 _Avoid_: survey, form, support ticket
 
 **Practice**:
-The offline match against dummies, run entirely in the browser tab with nothing saved and
-no account needed. The same simulation the rated match runs. Its end sends the server the
+The offline match against house bots, the fill completing both teams around the person's
+champion and lane preference, run entirely in the browser tab with nothing saved and no
+account needed. The same simulation the rated match runs. Its end sends the server the
 practice report (PRIVACY.md): the scoreboard, the result and the minutes, nothing that names
 anyone, the one thing the server learns of a match it never saw run.
 _Avoid_: offline mode, sandbox, training, tutorial
@@ -784,14 +807,14 @@ does. The other intent of the wave management behavior; the Laner's default farm
 _Avoid_: push (that is walking the lane with the wave), clear, fast push
 
 **Lane opponent**:
-The enemy champion the team has seen the most inside the bot's assigned lane over the last
+The enemy champion the team has seen the most inside a seat's assigned lane over the last
 three minutes; none when nobody was seen there. What "adapt to the opponent" adapts to
 before a fight starts.
 _Avoid_: laner, matchup, counterpart, vis-a-vis
 
 **Lane partner**:
-The allied champion assigned to the same lane as the bot (two top, two bot, one mid): who
-a bot lanes beside, known from the start of the match.
+The allied champion with the same assigned lane as a seat (two top, two bot, one mid): who
+a seat lanes beside, known from the start of the match.
 _Avoid_: duo, lane mate, buddy
 
 **Coach order**:

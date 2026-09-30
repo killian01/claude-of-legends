@@ -87,6 +87,30 @@ describe('sparring', () => {
   });
 });
 
+// The house composes around the lane the bot's playbook asks for, and
+// each house bot is seated with its fill seat's lane (ADR 0026), as the
+// live fill does.
+describe('lanes in sparring', () => {
+  it("seats every house bot on its seat's lane, and yields the forest to a bot that asks", () => {
+    const picks = sparringPicks(BOT, 3);
+    for (const p of picks.slice(1)) {
+      expect(p.lanes).toHaveLength(1);
+      expect(p.lanes?.[0] === 'jungle').toBe(p.bot === 'jungler');
+    }
+    const forester: SparBot = {
+      ...BOT,
+      championId: 'korrath',
+      playbook: { ...BOT.playbook, lanes: ['jungle'] },
+    };
+    for (let seed = 1; seed <= 6; seed++) {
+      const own = sparringPicks(forester, seed).filter((p) => p.team === 0);
+      expect(own.filter((p) => p.bot === 'jungler')).toHaveLength(0);
+      const { picks: series } = seriesPicks(forester, forester.playbook, seed, 1);
+      expect(series.filter((p) => p.bot === 'jungler')).toHaveLength(0);
+    }
+  });
+});
+
 describe('the series', () => {
   it('seats the bot on the asked side, its previous version across, house bots around', () => {
     const previous = { ...BOT.playbook, plays: BOT.playbook.plays.slice(1) };

@@ -6,10 +6,12 @@
 
 import type { CoachOrder, CoachOrderKind } from '../sim/coach';
 import type { CampKind } from '../sim/content/camps';
+import type { LaneId } from '../sim/content/map';
 import type { AspectId, CreatureId, RingId } from '../sim/content/rings';
 import type { FavorStacks } from '../sim/favors';
 import type { ForgedDisplay } from '../sim/forge/display';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
+import type { LanePreference } from '../sim/playbook/types';
 import type { AbilityKey, ScoreRow, TeamId } from '../sim/types';
 import type { StructureMeta, UnitKind } from '../sim/unit';
 
@@ -63,8 +65,21 @@ export type ClientMsg =
   | { t: 'spectate'; matchId: number; team: TeamId }
   // bot: lock the account's own bot into this seat (ADR 0013); the bot's
   // champion, sigils and skin replace the three fields, which still ride
-  // for the fallback when the resolver says no.
-  | { t: 'pick'; championId: string; sigils: [string, string]; skin?: number; bot?: string }
+  // for the fallback when the resolver says no. lane: the seat's lane
+  // preference (ADR 0026), claimed with the lock when it was not before;
+  // a full lane keeps the seat's earlier claim.
+  | {
+      t: 'pick';
+      championId: string;
+      sigils: [string, string];
+      skin?: number;
+      bot?: string;
+      lane?: LanePreference;
+    }
+  // A lane claim at champion select, before Lock in (ADR 0026): first come,
+  // first served inside the team, answered with a select_update either
+  // way, so a refused claim reverts. Meaningless once the match runs.
+  | { t: 'lane'; lane: LanePreference }
   // A coach order for the account's own bot seat (ADR 0013): one at a
   // time, free releases it. Refused on any other seat.
   | { t: 'order'; kind: CoachOrderKind; x?: number; z?: number; targetId?: number }
@@ -183,6 +198,11 @@ export interface SelfSnap {
   sigils: string[];
   // The client's own full status list, for the HUD chips.
   statuses: { k: string; until: number; v?: number }[];
+  // The seat's assigned lane (CONTEXT.md; ADR 0026), null for a seat in
+  // the forest. Every snapshot, so setup, a rejoin, a drop-in and a seat
+  // changing hands all tell it with no message of their own. Never on
+  // anything the other team receives.
+  lane: LaneId | null;
   // The viewer team's Warden's Boon, absent when inactive.
   boonUntil?: number;
   boonStacks?: number;
@@ -219,6 +239,15 @@ export interface SelectPlayer {
   team: TeamId;
 }
 
+// One seat of the recipient's own team at champion select (ADR 0026): its
+// index in select_start's players (names are not unique: two Guests can
+// share one), the lane it claimed, and whether it locked in.
+export interface SelectClaim {
+  seat: number;
+  lane: LanePreference | null;
+  locked: boolean;
+}
+
 export interface LobbyPlayer {
   name: string;
   team: TeamId;
@@ -240,9 +269,19 @@ export type ServerMsg =
   // team is the recipient's own side; players carry everyone's.
   | { t: 'lobby'; code: string; host: boolean; team: TeamId; players: LobbyPlayer[] }
   // forge marks a Forge-queue select, so the client also offers the
-  // account's own finalized forged champions.
-  | { t: 'select_start'; team: TeamId; players: SelectPlayer[]; deadline: number; forge?: boolean }
-  | { t: 'select_update'; locked: number; total: number; taken: string[] }
+  // account's own finalized forged champions. self is the recipient's own
+  // index in players.
+  | {
+      t: 'select_start';
+      team: TeamId;
+      players: SelectPlayer[];
+      self: number;
+      deadline: number;
+      forge?: boolean;
+    }
+  // taken and claims are the recipient's own team only, never the other
+  // side's: its locked champions, and every seat's lane claim (ADR 0026).
+  | { t: 'select_update'; locked: number; total: number; taken: string[]; claims: SelectClaim[] }
   // forged: the match's forged champion definitions, embedded whole
   // (ADR 0010), so every client and spectator can resolve them before the
   // first snapshot names one. Absent for roster-only matches. forgedAssets
@@ -317,6 +356,13 @@ export function parseClientMsg(raw: string): ClientMsg | null {
     // fall through
   }
   return null;
+}
+
+// The select's own messages: they mean something before the match only,
+// so one that arrives late (a click racing match_start) is never a match
+// command, neither recorded on the replay nor counted as play.
+export function isSelectMsg(msg: { t: string }): boolean {
+  return msg.t === 'pick' || msg.t === 'lane';
 }
 
 export function isFiniteVec(x: unknown, z: unknown): boolean {

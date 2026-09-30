@@ -10,6 +10,7 @@ import { parseAction } from '../src/net/policy_wire';
 import { CHAMPIONS } from '../src/sim/content/champions';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { validateForged } from '../src/sim/forge/validate';
+import { lanePreferences } from '../src/sim/playbook/validate';
 import type { Action } from '../src/sim/policy';
 import type { TeamId } from '../src/sim/types';
 import { Env, type EnvSeatSpec } from './env';
@@ -50,12 +51,17 @@ export function parseSeats(
     if (!CHAMPIONS[s.championId] && !forgedIds.has(s.championId)) return null;
     const team: TeamId = s.team === 1 ? 1 : 0;
     const sigils = Array.isArray(s.sigils) && s.sigils.length === 2 ? s.sigils : null;
+    // A lane preference clears the playbook's own check: one to three
+    // distinct lanes, or the table is malformed (ADR 0026).
+    const lanes = s.lanes === undefined ? undefined : lanePreferences(s.lanes);
+    if (lanes === null) return null;
     out.push({
       team,
       championId: s.championId,
       remote: s.remote === true,
       ...(typeof s.bot === 'string' ? { bot: s.bot } : {}),
       ...(sigils ? { sigils: [String(sigils[0]), String(sigils[1])] as [string, string] } : {}),
+      ...(lanes ? { lanes } : {}),
     });
   }
   return out;

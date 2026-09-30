@@ -107,4 +107,48 @@ describe('the environment request protocol', () => {
       0: { kind: 'noop' },
     });
   });
+
+  // A seat's lane preference (ADR 0026), as a person picks one at select:
+  // a stranger's list clears the playbook's own check, and the seat holds
+  // what it asked for.
+  it("reads a seat table's lanes, and seats each seat on the lane it asked for", () => {
+    const id = CHAMPION_LIST[0]!.id;
+    expect(
+      parseSeats([{ team: 0, championId: id, remote: true, lanes: ['jungle', 'top'] }]),
+    ).toEqual([{ team: 0, championId: id, remote: true, lanes: ['jungle', 'top'] }]);
+    for (const lanes of [['river'], [], ['mid', 'mid'], 'mid', null]) {
+      expect(parseSeats([{ team: 0, championId: id, lanes }])).toBeNull();
+    }
+    const reset = handleRequest(new Env({ seed: 2 }), {
+      t: 'reset',
+      seed: 2,
+      seats: [
+        { team: 0, championId: 'sylra', remote: true, lanes: ['bot'] },
+        { team: 0, championId: 'korrath', lanes: ['jungle'] },
+        { team: 1, championId: 'vesk' },
+      ],
+    });
+    const env = reset.env;
+    const lane = (i: number) => env.sim.units.get(env.unitIds[i]!)?.lane;
+    expect(lane(0)).toBe('bot');
+    expect(lane(1)).toBeNull();
+    expect(lane(2)).toBe('bot');
+    // A forest seat that names no bot runs the Jungler, not a Laner in the camps.
+    expect(env.sim.units.get(env.unitIds[1]!)?.lanePrefer).toEqual(['jungle']);
+  });
+
+  it("carries the fill seat's lane on every default seat", () => {
+    const seats = defaultSeats(1, 4);
+    expect(seats.every((s) => s.lanes?.length === 1)).toBe(true);
+    for (const s of seats) expect(s.lanes?.[0] === 'jungle').toBe(s.bot === 'jungler');
+    const env = new Env({ seed: 4 });
+    for (const team of [0, 1] as const) {
+      const lanes = env.seats
+        .map((s, i) => ({ s, lane: env.sim.units.get(env.unitIds[i]!)?.lane }))
+        .filter(({ s }) => s.team === team)
+        .map(({ lane }) => lane ?? 'forest')
+        .sort();
+      expect(lanes).toEqual(['bot', 'bot', 'forest', 'mid', 'top']);
+    }
+  });
 });

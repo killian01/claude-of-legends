@@ -3,6 +3,7 @@
 // of war holds on the wire, and the mirror world tracks the sim.
 
 import { describe, expect, it } from 'vitest';
+import { fillWithBots } from '../server/bot_fill';
 import { Match } from '../server/match';
 import { starOrchard } from '../server/star_orchard';
 import { ClientWorld } from '../src/net/client_world';
@@ -232,5 +233,70 @@ describe('online match flow', () => {
     expect(match.buildSpectatorSnapshotFor(99)).toBeNull();
     for (let i = 0; i < 10; i++) expect(match.addSpectator(200 + i, 1)).toBe(true);
     expect(match.addSpectator(300, 1)).toBe(false);
+  });
+});
+
+// The seat's assigned lane on the wire (ADR 0026): the self block of every
+// snapshot says it, the mirror puts it on its own unit, and the select's
+// messages are over once the match runs.
+describe('the assigned lane on the wire', () => {
+  it('tells each seat its dealt lane every snapshot, the forest as null, and mirrors it', () => {
+    const match = new Match(
+      7,
+      fillWithBots(
+        [
+          {
+            clientId: 1,
+            name: 'alice',
+            team: 0,
+            championId: 'sylra',
+            sigils: ['riftstep', 'mend'],
+            lanes: ['top'],
+          },
+          {
+            clientId: 2,
+            name: 'bob',
+            team: 1,
+            championId: 'korrath',
+            sigils: ['zephyr', 'sear'],
+            lanes: ['jungle'],
+          },
+        ],
+        7,
+      ),
+    );
+    const pa = match.players.get(1)!;
+    const a = new ClientWorld(() => undefined, starOrchard().map);
+    a.applyServer({ t: 'match_start', selfUnitId: pa.unitId, team: 0 });
+    for (let i = 0; i < 3; i++) {
+      match.tick();
+      const sa = match.buildSnapshotFor(1);
+      const sb = match.buildSnapshotFor(2);
+      if (sa?.t !== 'snap' || sb?.t !== 'snap') throw new Error('no snapshot');
+      // The mage asked for top and holds it; the forest is no lane at all.
+      expect(sa.self?.lane).toBe('top');
+      expect(sa.self?.lane).toBe(match.sim.units.get(pa.unitId)?.lane);
+      expect(sb.self?.lane).toBeNull();
+      a.applyServer(sa);
+    }
+    expect(a.units.get(pa.unitId)?.lane).toBe('top');
+  });
+
+  it('ignores a lane claim once the match runs: never a replay command, never play', () => {
+    const { match, step } = wire();
+    step(10);
+    match.handleCommand(1, { t: 'lane', lane: 'mid' });
+    match.handleCommand(1, {
+      t: 'pick',
+      championId: 'fenn',
+      sigils: ['riftstep', 'mend'],
+      lane: 'bot',
+    });
+    expect(match.replayEvents).toEqual([]);
+    // The AFK clock did not move for it either.
+    expect(match.idleClientIds(5).sort()).toEqual([1, 2]);
+    // A real command still records, for contrast.
+    match.handleCommand(1, { t: 'stop' });
+    expect(match.replayEvents.map((e) => e.e)).toEqual(['cmd']);
   });
 });

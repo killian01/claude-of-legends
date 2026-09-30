@@ -169,8 +169,14 @@ export interface Unit {
   lane: LaneId | null;
   // A bot's lane preferences (plan-bots phase 12), ahead of the home lane
   // at seating, the forest among them (ADR 0023); null for a seat that
-  // states none.
+  // states none. The brain's: attaching a playbook sets it.
   lanePrefer: LanePreference[] | null;
+  // The seat's own lane preference (CONTEXT.md: Lane preference; ADR
+  // 0026): a person's choice at champion select, the lane of the fill seat
+  // a house bot was drawn for. Kept apart from lanePrefer so a stand-in's
+  // playbook never wipes it; the brain's wins when both are set. Null when
+  // the seat asked nothing.
+  pickedLanes: LanePreference[] | null;
   laneProgress: number;
 }
 
@@ -238,6 +244,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     coachOrder: null,
     coachOrderSeenAt: 0,
     lanePrefer: null,
+    pickedLanes: null,
     attackTargetId: null,
     attackReadyAt: 0,
     attackMoveTarget: null,

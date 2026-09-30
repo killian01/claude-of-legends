@@ -116,6 +116,7 @@ function materializeUnit(s: SnapUnit): Unit {
     coachOrder: null,
     coachOrderSeenAt: 0,
     lanePrefer: null,
+    pickedLanes: null,
     attackTargetId: null,
     attackReadyAt: 0,
     attackMoveTarget: null,
@@ -387,6 +388,9 @@ export class ClientWorld implements IWorld {
         self.sigilCooldowns = msg.self.sigilCooldowns;
         self.items = msg.self.items;
         self.sigils = msg.self.sigils;
+        // The seat's assigned lane (ADR 0026): the mirror holds no other
+        // unit's lane, but its own is the in-match guidance's to read.
+        self.lane = msg.self.lane;
         self.statuses = [];
         for (const entry of msg.self.statuses) {
           const status = toStatus(entry.k, entry.until, entry.v);

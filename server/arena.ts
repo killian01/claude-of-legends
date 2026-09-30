@@ -151,6 +151,7 @@ export function arenaPicks(plan: ArenaMatchPlan, seed = 1): ReplayPick[] {
     ...(p.skin !== undefined ? { skin: p.skin } : {}),
     ...(p.bot !== undefined ? { bot: p.bot } : {}),
     ...(p.playbook !== undefined ? { playbook: p.playbook } : {}),
+    ...(p.lanes !== undefined ? { lanes: [...p.lanes] } : {}),
   }));
 }
 
