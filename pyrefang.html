@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex" />
+    <title>Pyrefang lab</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+      #app {
+        height: 100%;
+      }
+      #tools {
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        z-index: 10;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font: 600 15px system-ui, sans-serif;
+        color: #fff;
+        text-shadow: 0 1px 4px #000;
+      }
+      #tools button {
+        font: inherit;
+        padding: 6px 12px;
+        border-radius: 6px;
+        border: 1px solid #ffb070;
+        background: #2a1208cc;
+        color: #ffd9b0;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="tools">
+      <button id="rise" type="button">1 Rise</button>
+      <button id="fight" type="button">2 Fight</button>
+      <button id="finish" type="button">3 Finish</button>
+      <button id="ascendant" type="button">4 Ascendant</button>
+      <span id="label"></span>
+    </div>
+    <script type="module" src="/src/dev/pyrefang_lab.ts"></script>
+  </body>
+</html>

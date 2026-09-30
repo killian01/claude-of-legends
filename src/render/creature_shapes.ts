@@ -7,8 +7,9 @@
 // Ascendant (CONTEXT.md) is the same silhouette a third bigger, its
 // accent in the Wrath's white-violet, a spinning halo of shards above its
 // back, so the fourth rise reads as another creature from across the
-// ring. A Blender model can replace either body later without touching
-// the sim.
+// ring. The Pyrefang's figure is the stand-in until its rigged model
+// loads (creatures/pyrefang_visual.ts), which replaces the body and keeps
+// the beacon and the halo.
 
 import * as THREE from 'three';
 import type { Unit } from '../sim/unit';
@@ -17,6 +18,9 @@ import { aspectColor } from './aspect_colors';
 export interface CreatureFigure {
   holder: THREE.Group;
   barY: number;
+  // The body alone, without the beacon or the halo: what a rigged model
+  // replaces (creatures/pyrefang_visual.ts).
+  body?: THREE.Group;
 }
 
 function beaconOf(color: number): THREE.Mesh {
@@ -49,41 +53,43 @@ function glowOf(color: number, intensity: number): THREE.MeshLambertMaterial {
 // trail of embers tapering behind it.
 function pyrefang(holder: THREE.Group, accent: number): CreatureFigure {
   const hide = new THREE.MeshLambertMaterial({ color: 0x3a1c14, flatShading: true });
+  const figure = new THREE.Group();
+  holder.add(figure);
   const ember = glowOf(accent, 0.75);
   const body = new THREE.Mesh(new THREE.IcosahedronGeometry(1.0, 0), hide);
   body.position.y = 1.1;
   body.scale.set(0.85, 0.8, 1.7);
-  holder.add(body);
+  figure.add(body);
   const head = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.3, 5), hide);
   head.position.set(0, 1.25, 1.9);
   head.rotation.x = Math.PI / 2;
-  holder.add(head);
+  figure.add(head);
   for (const side of [-1, 1]) {
     const fang = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.45, 4), ember);
     fang.position.set(side * 0.22, 1.0, 2.35);
     fang.rotation.x = Math.PI;
-    holder.add(fang);
+    figure.add(fang);
     for (const front of [-1, 1]) {
       const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 1.0, 5), hide);
       leg.position.set(side * 0.7, 0.5, front * 0.9);
       leg.rotation.z = -side * 0.25;
-      holder.add(leg);
+      figure.add(leg);
     }
   }
   for (let i = 0; i < 5; i++) {
     const spike = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.9 - i * 0.12, 4), ember);
     spike.position.set(0, 1.85 - i * 0.08, 1.0 - i * 0.55);
     spike.rotation.x = -0.45;
-    holder.add(spike);
+    figure.add(spike);
   }
   for (let i = 0; i < 4; i++) {
     const trail = new THREE.Mesh(new THREE.IcosahedronGeometry(0.28 - i * 0.05, 0), ember);
     trail.position.set(0, 1.0 - i * 0.12, -1.9 - i * 0.55);
-    holder.add(trail);
+    figure.add(trail);
   }
   holder.add(beaconOf(accent));
   holder.scale.setScalar(1.05);
-  return { holder, barY: 3.6 };
+  return { holder, barY: 9, body: figure };
 }
 
 // The Voidmaul: a slab of a body close to the ground, four pillar legs, a
@@ -164,7 +170,7 @@ function ascend(holder: THREE.Group, figure: CreatureFigure, accent: number): Cr
   }
   holder.add(halo);
   holder.scale.multiplyScalar(ASCENDANT_SCALE);
-  return { holder, barY: figure.barY * ASCENDANT_SCALE + 0.4 };
+  return { holder, barY: figure.barY * ASCENDANT_SCALE + 0.4, body: figure.body };
 }
 
 // Builds the creature's figure into `holder`. The caller enables shadows

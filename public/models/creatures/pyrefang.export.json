@@ -1,0 +1,83 @@
+{
+  "glb": "pyrefang.glb",
+  "fps": 24,
+  "clips": {
+    "Idle": 10.0,
+    "Walk": 1.3333,
+    "Attack": 1.4,
+    "Roar": 1.5,
+    "Rise": 2.5,
+    "Death": 3.0,
+    "Emerge": 3.0
+  },
+  "attack_release_s": 0.55,
+  "rest_bounds_m": {
+    "min": [
+      -0.1235,
+      -0.49,
+      0.001
+    ],
+    "max": [
+      0.1235,
+      0.584,
+      0.5354
+    ]
+  },
+  "rise_centre_m": [
+    -0.1521,
+    -0.0487
+  ],
+  "bones": [
+    "Root",
+    "Hips",
+    "Spine",
+    "Chest",
+    "L_UpperArm",
+    "L_Forearm",
+    "L_Hand",
+    "R_UpperArm",
+    "R_Forearm",
+    "R_Hand",
+    "Neck01",
+    "Neck02",
+    "Head",
+    "Jaw",
+    "L_Thigh",
+    "L_Shin",
+    "L_Foot",
+    "R_Thigh",
+    "R_Shin",
+    "R_Foot",
+    "Tail01",
+    "Tail02",
+    "Tail03",
+    "Tail04",
+    "Tail05",
+    "Tail06",
+    "Tail07",
+    "Tail08"
+  ],
+  "meshes": [
+    "Pyrefang_Head",
+    "Pyrefang_Jaw",
+    "Pyrefang_Neck",
+    "Pyrefang_Body",
+    "Pyrefang_Tail",
+    "Pyrefang_L_UpperArm",
+    "Pyrefang_L_Forearm",
+    "Pyrefang_L_Hand",
+    "Pyrefang_L_Thigh",
+    "Pyrefang_L_Shin",
+    "Pyrefang_L_Foot",
+    "Pyrefang_R_UpperArm",
+    "Pyrefang_R_Forearm",
+    "Pyrefang_R_Hand",
+    "Pyrefang_R_Thigh",
+    "Pyrefang_R_Shin",
+    "Pyrefang_R_Foot",
+    "Pyrefang_FX_Crest",
+    "Pyrefang_FX_Spine",
+    "Pyrefang_FX_Tail"
+  ],
+  "size_bytes": 2026268
+}
