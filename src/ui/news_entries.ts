@@ -36,6 +36,23 @@ export interface NewsEntry {
 export const NEWS: readonly NewsEntry[] = [
   {
     day: '2026-09-30',
+    title: 'Every match puts you on the ladder',
+    body: [
+      'The ladder now counts everyone who plays, accounts and Guests on one list. Every public ' +
+        'match scores points for what you do in it: a last hit, a kill, an assist, a tower your ' +
+        'team takes, a creature, the win. Points are banked the moment they land, so a match you ' +
+        'leave early keeps what it gave you.',
+      'None of it needs an account. Press Play on the front page, and your first last hit puts ' +
+        'your name on the ladder. At the end of the match, or in the pause menu, pick the name you ' +
+        'want beside your points.',
+      'Points count double when a person plays against you, and half again when one plays beside ' +
+        'you. An account keeps your points on every device, and making one in the same browser ' +
+        'brings them along.',
+    ],
+    link: { label: 'See the ladder', to: 'ladder' },
+  },
+  {
+    day: '2026-09-30',
     title: 'The Pyrefang rises out of its fire',
     body: [
       'The Pyrefang, the creature of the bot ring, has a body of its own. The stand-in shape ' +

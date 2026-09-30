@@ -23,12 +23,18 @@ which account is talking to it (`server/cookies.ts`, `server/sessions.ts`,
 ADR 0006).
 
 `loc_guest`, set when you press Play on the landing without an account. It
-holds a random id and nothing else, and it exists so the server knows which
-Guest is talking to it, and can give you your seat back if the page reloads
-mid-match. The server keeps what it points at, a handed-out name like
-`Wanderer 4821`, in memory only, for a day after you last used it; nothing
-about a Guest is ever written to disk, and a restart forgets every one
-(`server/guests.ts`, ADR 0024).
+holds a random token and nothing else, and it exists so the server knows
+which Guest is talking to it: it gives you your seat back if the page
+reloads mid-match, and your line of the ladder when you come back. It lasts
+a year, and is set again each time you press Play. Until you score a point
+or choose a name for the ladder, the server keeps what it points at, a
+handed-out name like `Wanderer 4821`, in memory only, for a day after you
+last used it, and a restart forgets it. Once you do, the server keeps, on
+disk in `guests.json`: the name, your points, a SHA-256 hash of the token
+(never the token itself, so the file cannot be used to play as you), and
+when it was made and last seen. Nothing else, and for a year after you were
+last seen. Making an account in the same browser moves the points onto it
+and deletes that record (`server/guests.ts`, ADR 0024, ADR 0027).
 
 `col_visit`, set on your first page here. It holds one random number, 32
 characters, minted on the server and meaning nothing anywhere else. Its
@@ -63,7 +69,8 @@ the old name is put on the new one.
 ## What an account holds
 
 Your name, a scrypt hash of your password, your rating and match counts,
-and when you signed up and were last seen (`server/accounts.ts`).
+your points on the ladder, and when you signed up and were last seen
+(`server/accounts.ts`).
 
 Optionally, if you gave them: an email address, kept so a forgotten
 password can be recovered, and the id of the Discord account that signs you
@@ -72,7 +79,10 @@ in (ADR 0009). Neither is required to play.
 What leaves the server to another player is a strict subset: id, name,
 signup date, rating, rated games. The password hash, the email and the
 Discord link are absent from it by construction rather than by deletion,
-and `tests/architecture.test.ts` fails if that ever stops being true.
+and `tests/architecture.test.ts` fails if that ever stops being true. The
+ladder of every human, which anyone can read on the landing, shows a name,
+its points and whether it is a Guest's or an account's, and no id
+(`server/points_ladder.ts`).
 
 ## What is counted
 
@@ -178,7 +188,8 @@ counter.
 ## Getting your data out, or deleted
 
 Ask. There is one maintainer and a small number of files; the account
-record is the whole of what is held about you. Open an issue, say hello on
+record, or a Guest's line in `guests.json`, is the whole of what is held
+about you. Open an issue, say hello on
 [Discord](https://discord.gg/uURYY5qYJE), or write to the address in
 `SECURITY.md` if it is sensitive.
 

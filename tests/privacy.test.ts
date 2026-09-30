@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { GUEST_COOKIE, GUEST_COOKIE_MAX_AGE_S, GUEST_KEPT_TTL_MS } from '../server/guests';
 import { STATS_SCRIPT, statsTag } from '../server/stats_tag';
 import { VISIT_COOKIE } from '../server/visit_cookie';
 import {
@@ -117,6 +118,21 @@ describe('what the feedback box sends', () => {
     expect(body).toContain('parseFeedback');
     expect(body).not.toContain('accountForRequest');
     expect(body).not.toContain('address');
+  });
+});
+
+describe('the Guest cookie', () => {
+  it('is named on the page with its life, and with what the server keeps of a Guest', () => {
+    const page = read('PRIVACY.md');
+    expect(page).toContain(`\`${GUEST_COOKIE}\``);
+    expect(page).toContain('lasts\na year');
+    expect(page).toContain('`guests.json`');
+    expect(page).toContain('SHA-256');
+    // The page's year is the code's, for the cookie and for the record.
+    expect(GUEST_COOKIE_MAX_AGE_S).toBe(365 * 24 * 60 * 60);
+    expect(GUEST_KEPT_TTL_MS).toBe(365 * 24 * 60 * 60_000);
+    // And the file is the one the page names.
+    expect(read('server/main.ts')).toContain("path.join(DATA_DIR, 'guests.json')");
   });
 });
 

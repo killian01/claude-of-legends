@@ -312,16 +312,19 @@ whoever registered it, an email address if its owner adds one, plus the rating a
 earned with it.
 Everything on the server but the public queue requires one (ADR 0024: a Guest plays that
 queue without one); the offline practice match does not either, and the end screen of a match
-played without one makes the visitor the account offer: their score, and what an account would
-have kept of it. The name is the whole public identity, so nothing is appended to it to tell two people apart, and the address is
+played without one makes the visitor the account offer: their score, and what an account adds
+to it, their points on every device (ADR 0027). The name is the whole public identity, so nothing is appended to it to tell two people apart, and the address is
 never part of it: only the account itself ever sees its own.
 _Avoid_: profile (that is the screen that shows an account), user, login, player (ambiguous, see Participant)
 
 **Guest**:
 A visitor playing the public queue without an account (ADR 0024): a name the server hands out
-(`Wanderer 4821`, a space no account name may hold), kept for a day in the server's memory and
-nowhere else. A match with a Guest in it is never rated, and a Guest holds no rating, record,
-collection beyond the starter one, lobby, bot or Forge champion.
+(`Wanderer 4821`, a space no account name may hold), or one it chose for its line of the ladder
+under the account name rules, under a cookie that lasts a year. Held in the server's memory for
+a day, and kept on disk once it has points or a chosen name, for a year after it was last seen
+(ADR 0027). A match with a Guest in it is never rated, and a Guest holds no rating, record,
+collection beyond the starter one, lobby, bot or Forge champion. An account made in its browser
+takes its points and its chosen name, and the Guest is retired.
 _Avoid_: anonymous player, visitor account
 
 **Drop in**:
@@ -435,7 +438,8 @@ _Avoid_: free week, trial champions, loan
 What an account earns by playing a match by hand, and spends to recruit a champion into its
 collection. Never granted, never bought, and never spent on anything the server pays a
 provider for: that is the ember's job, and the two never convert either way.
-_Avoid_: coin, credit, point, ember (that is what the server spends), mark (that is Sylra's)
+_Avoid_: coin, credit, point (that is the ladder's), ember (that is what the server spends),
+mark (that is Sylra's)
 
 **Tagline**:
 The one-line play-style intent under a champion's name at select and in the roster browser.
@@ -961,10 +965,24 @@ queue, the bot for a seat its owner's bot played live or in the Arena (ADR 0016)
 owner is named beside a bot everywhere it appears, but the number is the bot's.
 _Avoid_: owner, holder, player (ambiguous, see Participant)
 
+**Points**:
+What a human seat earns in a public queue match for its actions there, times the match's weight
+at that moment, banked on the player's line of the ladder as they come and kept whether or not
+the match is finished (ADR 0027). A minion or camp last hit is 1, a champion kill 10, an assist
+5, a tower the team takes 15, a ring creature or the Warden 15, an Ascendant 25, the win 50 and
+a loss played through 15, the last two only to a seat still playing at the end. The weight is
+two with a human on the other team, one and a half with another only on the seat's own, one
+alone. Deaths cost nothing, and a seat left to a bot earns nothing more for its player. Never
+spent, and distinct from the rating, which only rated matches move, and from laurels and embers.
+_Avoid_: score (the scoreboard's word), XP (the champion's), rating
+
 **Ladder**:
-The rated subjects of one way ranked by their rating; one ladder per way. The two ways a
-person sits for rank accounts, the two a bot plays rank bots with their owner named
-beside each. A position on it is a rank. A subject takes its place after three rated
+The ladder of every human, the one the landing shows and the home's shows first: the accounts
+and the Guests together, ranked by their points, a line taking its place with its first points
+(ADR 0027). Beside it stand the rating ladders, the rated subjects of one way ranked by their
+rating, one per way: the two ways a person sits for rank accounts, the two a bot plays rank bots
+with their owner named beside each, shown inside the home, the Academy and profiles as before. A
+position on any ladder is a rank. On a rating ladder a subject takes its place after three rated
 matches on that way, and the same emblem, rating and rank show wherever it appears.
 _Avoid_: leaderboard, ranking, board, standings
 

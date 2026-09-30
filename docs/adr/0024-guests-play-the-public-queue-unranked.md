@@ -1,5 +1,8 @@
 # Guests play the public queue, unranked
 
+> Amended by ADR 0027: a Guest scores points on the ladder of every human, and is kept on disk,
+> under a hashed token, once it scores or names itself. Its matches are still rated for nobody.
+
 ADR 0006 made an account the price of reaching the server, and named the middle it rejected:
 "Guests keep playing, unranked". Its cost was stated as real and paid by the invited player.
 Two weeks of the audience counter (2026-09-14 to 2026-09-28) put a number on it: 112 matches
