@@ -5,9 +5,11 @@
 // because the job is the same: a browser game whose landing page IS the
 // application, so the page has to say what this is, prove it is alive,
 // and offer the two ways in, all above the fold and all in one screen.
-// The two ways in are the load-bearing part, and they are not a design
-// flourish: online needs an account because the server refuses anything
-// else, and offline needs none because it opens no connection at all.
+// The two ways in are the load-bearing part: the public queue as a Guest,
+// which needs nothing and scores on the ladder from the first match (ADR
+// 0024, ADR 0027), and the account, which keeps those points on every
+// device and opens the rest. The ladder of every human stands between
+// them, where a visitor reads whose names are there before pressing Play.
 // The chrome it shares with the signed-in home lives in ui/page.ts.
 
 import { appNav } from '../game/nav';
@@ -18,13 +20,14 @@ import { CONTRIBUTE_LEAD, CONTRIBUTE_TITLE, CONTRIBUTE_WAYS } from './landing_co
 import { mountEmbers } from './landing_embers';
 import { mountLandingLadder } from './landing_ladder';
 import {
+  ACCOUNT_LINE,
+  HERO_RANKED_LINE,
   HERO_STAR_CALL,
   LANDING_MODES,
   type LandingDoor,
   PLAY_NOW,
   PLAY_NOW_FINE,
   PLAY_NOW_LINE,
-  PRACTICE_ALONE,
   PRACTICE_ART,
 } from './landing_modes';
 import { mountPresence } from './landing_presence';
@@ -45,7 +48,7 @@ const CSS = `
    layout: the reader could not see what the group was until they had
    counted it, and the account read as the price of the ladder rather
    than the way in. One card carries the account and shows what it opens
-   inside itself, the other is the practice match, and neither needs a
+   inside itself, the other is the match as a Guest, and neither needs a
    caption over it. The account card is the wider of the two: it is the
    one with a form to type into. */
 .pg.land .pg-cards { display: grid; max-width: 1180px; gap: 18px; align-items: stretch;
@@ -133,12 +136,15 @@ const CSS = `
    it again: without this an empty green box stood over the button whenever
    nobody was on. */
 .pg.land .pg-presence[hidden] { display: none; }
-/* The offline match, under the gold button: a line to read, not a second
-   button competing with it. */
-.pg.land .pg-alone { align-self: center; margin-top: 10px; padding: 4px 6px; border: 0;
-  background: none; font: inherit; font-size: 12px; color: #8ea4c4; cursor: pointer;
-  text-decoration: underline; text-underline-offset: 3px; }
-.pg.land .pg-alone:hover { color: #dceaff; }
+/* The hero's second line: the game is ranked from the first match, in the
+   browser, with no account (ADR 0027). Gold, since it is the news. */
+.pg.land .pg-ranked { margin: 10px 0 0; font-size: clamp(14px, 1.5vw, 16.5px); font-weight: 700;
+  letter-spacing: 0.3px; color: #f0dca0; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.85); }
+/* The ladder of every human (ui/landing_ladder.ts) stands in the grid of
+   the two ways in: across both cards under them on a wide screen, and
+   between the Play now card and the account card once they stack, so a
+   phone reaches it on the second screen rather than after the form. */
+.pg.land .pg-cards > .pg-ladder { grid-column: 1 / -1; margin: 0; width: auto; }
 /* A phone's card is about 300 wide: one line, at a size that fits it. */
 @media (max-width: 560px) {
   .pg.land .menu-btn.pg-play { font-size: 13.5px; letter-spacing: 0.6px;
@@ -200,6 +206,7 @@ const CSS = `
      (ui/account_offer.ts), which is the better moment to ask anyway. */
   .pg.land .pg-cards { grid-template-columns: minmax(0, 1fr); max-width: 620px; gap: 22px; }
   .pg.land .pg-cards .pg-card.plain { order: -1; }
+  .pg.land .pg-cards > .pg-ladder { order: -1; }
   /* Stacked there is no card beside it to match, so the painting stops
      stretching and takes a shape of its own. The ceiling is what keeps it
      from becoming the tallest thing on the page as the column widens:
@@ -223,7 +230,6 @@ const CSS = `
   .pg.land .pg-card.plain > p { order: 2; }
   .pg.land .pg-card.plain > .pg-presence { order: 3; margin-top: 2px; }
   .pg.land .pg-card.plain > .menu-btn { order: 3; margin-top: 2px; }
-  .pg.land .pg-card.plain > .pg-alone { order: 4; }
   .pg.land .pg-card.plain > .pg-card-fine { order: 4; margin: 8px 0 0; }
   .pg.land .pg-card.plain > .pg-try { order: 5; margin-top: 12px; }
   .pg.land .pg-card.plain > .pg-news { order: 6; }
@@ -237,7 +243,7 @@ const CSS = `
 /* The second line of a way-in card: the caveats, which have to be read
    before the button but must not compete with the offer above them. */
 .pg.land .pg-card .pg-card-fine { color: #8ea4c4; font-size: 12px; }
-/* The newest news, one line under the practice card (ui/news_section.ts). */
+/* The newest news, one line under the Play now card (ui/news_section.ts). */
 .pg.land .pg-news {
   display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 14px;
   padding: 8px; border-radius: 8px; border: 1px solid #2e4468; background: #0f1730;
@@ -399,13 +405,12 @@ function ensureCss(): void {
 export type LandingResult =
   // Signed in: everything the server allows is now reachable.
   | { kind: 'account'; account: AuthedAccount }
-  // Chose the public queue as a Guest (ADR 0024).
-  | { kind: 'guest' }
-  // Chose the offline practice match, which needs no account.
-  | { kind: 'offline' };
+  // Chose the public queue as a Guest (ADR 0024), on the ladder from its
+  // first points (ADR 0027).
+  | { kind: 'guest' };
 
 // Why the landing is being shown again, when it is: 'register' after a
-// visitor took the account offer at the end of a practice match
+// visitor took the account offer at the end of a match
 // (ui/account_offer.ts), so the page opens on the form, on its register
 // tab, rather than on the hero they have already read.
 export type LandingIntent = 'register';
@@ -425,11 +430,12 @@ export function showLanding(
     const stopEmbers = mountEmbers(root);
     let stopReveal = (): void => {};
     container.appendChild(root);
-    // Arriving to sign up: straight to the form. The cards are built
-    // below, and exist by the time the frame is painted.
+    // Arriving to sign up: straight to the form, which on a phone stands
+    // under the Play now card and the ladder. The cards are built below,
+    // and exist by the time the frame is painted.
     if (intent === 'register') {
       requestAnimationFrame(() => {
-        root.querySelector('.pg-cards')?.scrollIntoView({ block: 'start' });
+        root.querySelector('.pg-card.gold')?.scrollIntoView({ block: 'start' });
       });
     }
 
@@ -440,8 +446,8 @@ export function showLanding(
       root.remove();
       resolve(result);
     };
-    // The card's two ways in, each built from its door (ui/landing_modes.ts),
-    // so a button's words and what it does cannot drift apart.
+    // The card's way in, built from its door (ui/landing_modes.ts), so the
+    // button's words and what it does cannot drift apart.
     const doorButton = (door: LandingDoor, cls: string): HTMLButtonElement => {
       const b = el('button', cls, door.call);
       b.type = 'button';
@@ -489,13 +495,16 @@ export function showLanding(
     title.appendChild(logo);
 
     const copy = el('div', 'pg-hero-copy');
-    copy.appendChild(
+    // What the game is, then the news under it in gold: every match is on
+    // the ladder, from the first one, with no account (ADR 0027).
+    copy.append(
       el(
         'p',
         'pg-tag',
         'A 5v5 MOBA that runs in a browser tab. Three lanes, ten champions, ' +
           'jungle camps and fog of war. Nothing to install.',
       ),
+      el('p', 'pg-ranked', HERO_RANKED_LINE),
     );
     // Under the tagline: the repository, outlined, and the count beside it.
     // The genre hands you a game and this one hands you the source too, but
@@ -519,10 +528,7 @@ export function showLanding(
     // account opens, and nothing explains what a bot or a forge is. The
     // paintings do that, and the page is not a manual.
     const online = el('section', 'pg-card gold');
-    online.append(
-      el('h2', '', 'Create a free account'),
-      el('p', '', 'It keeps your rating and your record, and opens these.'),
-    );
+    online.append(el('h2', '', 'Create a free account'), el('p', '', ACCOUNT_LINE));
     // The three the home stands at full height, wearing the paintings the
     // home gives them, standing beside the form rather than under it:
     // what an account opens, next to the thing that opens it.
@@ -552,20 +558,21 @@ export function showLanding(
     openRow.append(formPanel, opens);
     online.appendChild(openRow);
 
-    // The other way in, and the only one that needs nothing: the public
-    // queue as a Guest (ADR 0024), with the offline match one quiet line
-    // under it. It says what it is in one line: a visitor who has read the
-    // title of the page knows what a 5v5 is. It no longer brags about the whole
-    // roster being open in it, because it is not: the practice match draws
-    // the same wall as the rest of the game and a visitor picks from what
-    // a fresh account holds (ADR 0018).
-    const offline = el('section', 'pg-card plain glow');
+    // The other way in, and the one that needs nothing: the public queue
+    // as a Guest (ADR 0024), scored on the ladder from the first match
+    // (ADR 0027). The offline match that stood one quiet line under it
+    // left the landing: visitors play online now, and the page falls back
+    // to practice by itself when no Guest can be opened (src/main.ts). It
+    // says what it is in one line: a visitor who has read the title of the
+    // page knows what a 5v5 is. It no longer brags about the whole roster
+    // being open in it, because it is not: a visitor picks from what a
+    // fresh account holds (ADR 0018).
+    const playCard = el('section', 'pg-card plain glow');
     const playBtn = doorButton(PLAY_NOW, 'menu-btn pg-play');
     // Someone playing right now, over the button (ui/landing_presence.ts).
     const presence = el('div', 'pg-presence');
     presence.append(el('i', ''), el('span', ''));
     mountPresence(presence);
-    const aloneBtn = doorButton(PRACTICE_ALONE, 'pg-alone');
     // The painting this card was missing. The heading above it says what
     // it is, so the picture is decoration and carries no label of its own.
     const tryArt = el('img', '');
@@ -575,7 +582,7 @@ export function showLanding(
     tryArt.decoding = 'async';
     const tryShot = el('div', 'pg-try');
     tryShot.appendChild(tryArt);
-    offline.append(
+    playCard.append(
       // "Or try it first" while it stood second; stacked it stands first
       // now, and a heading that begins with "Or" has nothing to follow.
       el('h2', '', 'Play now'),
@@ -584,7 +591,6 @@ export function showLanding(
       el('p', 'pg-card-fine', PLAY_NOW_FINE),
       presence,
       playBtn,
-      aloneBtn,
     );
     // The newest news in one line (CONTEXT.md: News): a site whose last
     // word is from yesterday reads inhabited before anything is clicked.
@@ -630,19 +636,18 @@ export function showLanding(
         };
         const frame = appNav().push('news', remove);
       });
-      offline.appendChild(line);
+      playCard.appendChild(line);
     }
 
-    ways.append(online, offline);
-    inner.appendChild(ways);
-
-    // The ladder, to a visitor (ui/landing_ladder.ts): the names already
-    // standing there, under the two doors and before the page asks for
-    // theirs. Its button is the way to the form.
+    // The ladder of every human, to a visitor (ui/landing_ladder.ts): the
+    // names already standing there and the promise that one match puts
+    // theirs beside them. In the doors' own grid, so a phone reads it right
+    // under the Play now card; its button goes back to that card's gold.
     const ladder = el('section', 'pg-ladder');
-    inner.appendChild(ladder);
+    ways.append(online, playCard, ladder);
+    inner.appendChild(ways);
     mountLandingLadder(ladder, () => {
-      root.querySelector('.pg-cards')?.scrollIntoView({ behavior: 'smooth' });
+      playCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
 
     // --- and the thing the genre does not offer ---

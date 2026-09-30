@@ -41,27 +41,40 @@ export const PRACTICE_ART = tileArtUrl('practice');
 export const PLAY_NOW_CALL = 'Play in the browser now';
 export const PLAY_NOW_LINE =
   'A real 5v5 online: players when they are on, bots in every empty seat.';
-export const PLAY_NOW_FINE = 'No account, nothing to install. Unranked.';
-// The offline match stays, one quiet line under the button: it is what
-// works when the server does not.
-export const PRACTICE_ALONE_CALL = 'Or practice alone against bots, offline';
+// The caveats line used to end on "Unranked.". Every match in the public
+// queue now scores on the ladder of every human (ADR 0027), so what it
+// says is the opposite, and that is the news.
+export const PLAY_NOW_FINE = 'No account, nothing to install. Every match scores on the ladder.';
 
-// A way in that needs nothing: what its button says, and what the landing
-// resolves with when it is pressed (ui/landing.ts). The Play now card's two
-// buttons are built from these, so what a button says and what it does
-// cannot come apart.
+// The line under the hero's tagline, the first thing read after what the
+// game is: a game with a ladder, from the first match, with no account.
+// The tagline above it is the link preview's sentence too
+// (tests/social_card.test.ts), so the news goes under it.
+export const HERO_RANKED_LINE =
+  'Ranked from your first match: every match scores on the ladder. No account needed.';
+
+// What the account card says an account adds: the points on every device,
+// and the three modes painted beside the form.
+export const ACCOUNT_LINE =
+  'It keeps your points on every device, and opens ranked, bots and the Forge.';
+
+// The way in that needs nothing: what its button says, and what the
+// landing resolves with when it is pressed (ui/landing.ts). The Play now
+// card's button is built from it, so what the button says and what it
+// does cannot come apart. The offline practice link that stood under it
+// left the landing (ADR 0027): visitors play online now, and the page
+// falls back to practice by itself when no Guest can be opened.
 export interface LandingDoor {
   call: string;
-  kind: 'guest' | 'offline';
+  kind: 'guest';
 }
 export const PLAY_NOW: LandingDoor = { call: PLAY_NOW_CALL, kind: 'guest' };
-export const PRACTICE_ALONE: LandingDoor = { call: PRACTICE_ALONE_CALL, kind: 'offline' };
 
 // The hero's row: the repository's star, outlined, and the count. For a
-// day the hero also carried a copy of the card's gold Play button and its
-// offline line; with the card right under the hero that read as the same
-// button twice, so the way to play is the card's alone, and the star up
-// here stays outlined so the card's gold is still the one thing to press.
+// day the hero also carried a copy of the card's gold Play button; with
+// the card right under the hero that read as the same button twice, so
+// the way to play is the card's alone, and the star up here stays
+// outlined so the card's gold is still the one thing to press.
 export const HERO_STAR_CALL = 'Star on GitHub';
 
 export const LANDING_MODES: readonly LandingMode[] = [
@@ -69,7 +82,7 @@ export const LANDING_MODES: readonly LandingMode[] = [
     id: 'ranked',
     call: 'Play in ranked',
     title: 'Ranked',
-    line: 'The public queue, with a rating, a match history and a place on the ladder.',
+    line: 'The public queue, with a rating, a match history and a place on the rating ladder.',
     art: tileArtUrl('ranked'),
   },
   {
