@@ -33,6 +33,11 @@ import {
   preloadChampionAssets,
 } from './champions';
 import { buildCreatureMesh } from './creature_shapes';
+import {
+  createPyrefangVisual,
+  type PyrefangVisual,
+  preloadPyrefang,
+} from './creatures/pyrefang_visual';
 import { FloatingText, makeTextSprite } from './floating_text';
 import { fogSheetGeometry } from './fog_sheet';
 import { buildMinionMesh } from './minion_shapes';
@@ -55,6 +60,7 @@ import {
   type SpellVisual,
   spellVisualOf,
 } from './vfx/catalog';
+import { SPRITE } from './vfx/sprites';
 import { VfxSystem } from './vfx/system';
 import { disposeEffect } from './vfx/timed';
 import { TowerShotFx } from './vfx/tower_shot_fx';
@@ -220,6 +226,9 @@ interface TrackedMobile {
 // sim-true path, milliseconds.
 const MUZZLE_BLEND_MS = 130;
 
+// How long a rigged creature's fall plays before its body fades.
+const CREATURE_FALL_MS = 3200;
+
 // Zoom bounds shared by the mouse wheel and the touch pinch.
 const ZOOM_MIN = 0.65;
 const ZOOM_MAX = 1.45;
@@ -271,6 +280,8 @@ export class Renderer {
   // Rigged GLB visuals for champions whose asset has arrived; champions
   // absent here still animate through the procedural AnimParts path.
   private readonly championVisuals = new Map<number, ChampionVisual>();
+  // Ring creatures with a rigged model (the Pyrefang), by unit id.
+  private readonly creatureVisuals = new Map<number, PyrefangVisual>();
   private readonly trackedProjectiles = new Map<number, TrackedMobile>();
   private readonly trackedZones = new Map<number, TrackedZone>();
   // Ability walls (kits-v2): one jagged stone rampart per wall id, risen
@@ -321,7 +332,14 @@ export class Renderer {
   private readonly selfRing: THREE.Mesh;
   private readonly fogCanvas = document.createElement('canvas');
   private readonly fogTexture: THREE.CanvasTexture;
-  private readonly dying: { mesh: THREE.Object3D; start: number }[] = [];
+  // Bodies fading out after their removal. A rigged creature first plays
+  // its fall for holdMs, its mixer stepped by `step`, then fades.
+  private readonly dying: {
+    mesh: THREE.Object3D;
+    start: number;
+    holdMs?: number;
+    step?: (dtMs: number) => void;
+  }[] = [];
   private readonly targetReticle: THREE.Group;
   private readonly targetSpinner: THREE.Mesh;
   private readonly hoverRing: THREE.Mesh;
@@ -382,6 +400,7 @@ export class Renderer {
     // Champion GLBs start loading immediately; views upgrade from the
     // procedural figures as each asset lands.
     preloadChampionAssets(this.gl);
+    void preloadPyrefang();
     this.gl.toneMappingExposure = 1.18;
     container.appendChild(this.gl.domElement);
     this.scene.background = new THREE.Color(COLOR_BACKGROUND);
@@ -958,6 +977,15 @@ export class Renderer {
         }
       } else {
         t.swingUntil = performance.now() + 200;
+        this.creatureVisuals
+          .get(atk.unitId)
+          ?.playAttack(
+            attacker?.pendingAttack
+              ? Math.max(0.01, attacker.pendingAttack.resolveAt - this.world.time)
+              : attacker
+                ? attackWindupSeconds(attacker.stats.attackSpeed, true)
+                : 0.5,
+          );
         this.championVisuals
           .get(atk.unitId)
           ?.playAttack(
@@ -1227,6 +1255,9 @@ export class Renderer {
       const built = buildCreatureMesh(u, holder);
       enableShadows(holder);
       collectSpinners(holder);
+      if (u.creatureId === 'pyrefang' && built.body) {
+        this.upgradeCreatureView(holder, built.body, u.id);
+      }
       return built;
     }
     if (kind === 'warden') {
@@ -1305,6 +1336,29 @@ export class Renderer {
       this.upgradeChampionView(holder, figure, u.id, u.championId, color, u.skin);
     }
     return { holder, barY };
+  }
+
+  // Swaps the Pyrefang's figure for its rigged model once the file is in.
+  // A creature that rose moments ago plays its opening from where it is:
+  // the Emerge in the fire column, then the Roar.
+  private upgradeCreatureView(holder: THREE.Group, figure: THREE.Group, unitId: number): void {
+    void preloadPyrefang().then(() => {
+      const t = this.tracked.get(unitId);
+      const clock = this.world.ringClocks().find((c) => c.unitId === unitId);
+      if (!t || t.mesh !== holder) return;
+      const age = clock?.roseAt != null ? this.world.time - clock.roseAt : null;
+      const site = this.world.map.rings?.find((r) => r.id === clock?.ring);
+      const visual = createPyrefangVisual(age, holder.scale.x, site?.r ?? null);
+      if (!visual) return;
+      holder.remove(figure);
+      disposeDeep(figure);
+      holder.add(visual.root);
+      this.creatureVisuals.set(unitId, visual);
+      const u = this.world.units.get(unitId);
+      if (u && age !== null && age < 0.5) {
+        this.vfx.lightPulse(u.pos.x, u.pos.z, 0xff7a2a, 4, 2200);
+      }
+    });
   }
 
   // Swaps a champion's procedural figure for its rigged GLB once the asset
@@ -2023,7 +2077,26 @@ export class Renderer {
         // Fade out instead of popping, then dispose for real (units churn
         // by the hundreds per match).
         this.endShieldFx(t, false);
-        this.dying.push({ mesh: t.mesh, start: performance.now() });
+        const creature = this.creatureVisuals.get(id);
+        if (creature) {
+          // The Pyrefang falls on its side before it fades; its bars go.
+          this.creatureVisuals.delete(id);
+          creature.playDeath();
+          t.overhead.visible = false;
+          this.dying.push({
+            mesh: t.mesh,
+            start: performance.now(),
+            holdMs: CREATURE_FALL_MS,
+            step: (dtMs) => creature.update(dtMs, { moving: false, speed: 0 }),
+          });
+          const dispose = t.mesh.userData.dispose as (() => void) | undefined;
+          t.mesh.userData.dispose = () => {
+            dispose?.();
+            creature.dispose();
+          };
+        } else {
+          this.dying.push({ mesh: t.mesh, start: performance.now() });
+        }
         this.tracked.delete(id);
         const cv = this.championVisuals.get(id);
         if (cv) {
@@ -2527,7 +2600,9 @@ export class Renderer {
       const z = t.prev.z + (t.curr.z - t.prev.z) * alpha;
       const dx = t.curr.x - t.prev.x;
       const dz = t.curr.z - t.prev.z;
-      const living = t.kind === 'champion' || t.kind === 'minion';
+      const creature = this.creatureVisuals.get(id);
+      // A rigged creature turns and walks like the living do.
+      const living = t.kind === 'champion' || t.kind === 'minion' || creature !== undefined;
       const moving = living && Math.abs(dx) + Math.abs(dz) > 0.02;
 
       if (living) {
@@ -2547,7 +2622,7 @@ export class Renderer {
       const phase = now * 0.013 + id * 1.7;
       const cv = this.championVisuals.get(id);
       // Rigged champions bob inside their clips; only figures fake it.
-      let bobY = cv ? 0 : Math.abs(Math.sin(phase)) * 0.1 * t.walkAmp;
+      let bobY = cv || creature ? 0 : Math.abs(Math.sin(phase)) * 0.1 * t.walkAmp;
       // Airborne (knockups): the whole body lifts and hangs.
       if (living) {
         const unit = this.world.units.get(id);
@@ -2568,6 +2643,26 @@ export class Renderer {
       t.overhead.rotation.y = -t.mesh.rotation.y;
 
       const anim = t.mesh.userData.anim as AnimParts | undefined;
+      creature?.update(dtMs, { moving, speed: Math.hypot(dx, dz) / DT }, (at) =>
+        this.vfx.particles.spawn({
+          x: at.x + (Math.random() - 0.5) * 0.4,
+          y: at.y,
+          z: at.z + (Math.random() - 0.5) * 0.4,
+          vx: (Math.random() - 0.5) * 0.6,
+          vy: 1.4 + Math.random() * 1.4,
+          vz: (Math.random() - 0.5) * 0.6,
+          life: 0.7 + Math.random() * 0.6,
+          size0: 0.22 + Math.random() * 0.14,
+          size1: 0.05,
+          color0: 0xffd070,
+          color1: 0xff3a08,
+          alpha0: 0.95,
+          alpha1: 0,
+          sprite: SPRITE.fleck,
+          gravity: -0.6,
+          drag: 0.8,
+        }),
+      );
       if (cv) {
         // The rigged path: the mixer owns the pose; one-shots (attack, cast,
         // hit, death) are fired from combat notes and sync edges. Speed is
@@ -2738,8 +2833,11 @@ export class Renderer {
     this.towerShots.update(now);
     for (let i = this.dying.length - 1; i >= 0; i--) {
       const d = this.dying[i]!;
-      const age = (now - d.start) / 380;
+      d.step?.(dtMs);
+      const age = (now - d.start - (d.holdMs ?? 0)) / 380;
+      if (age < 0) continue;
       if (age >= 1) {
+        (d.mesh.userData.dispose as (() => void) | undefined)?.();
         this.unitLayer.remove(d.mesh);
         this.scene.remove(d.mesh);
         disposeDeep(d.mesh);
@@ -2911,6 +3009,8 @@ export class Renderer {
     for (const off of this.cleanups) off();
     this.cleanups.length = 0;
     for (const cv of this.championVisuals.values()) cv.dispose();
+    for (const pv of this.creatureVisuals.values()) pv.dispose();
+    this.creatureVisuals.clear();
     this.championVisuals.clear();
     this.fogTexture.dispose();
     this.vignette.remove();
