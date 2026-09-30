@@ -1,8 +1,13 @@
 // The landing's presence line (src/ui/landing_presence.ts, ADR 0025): what
 // it says when people are on, and that it says nothing when nobody is.
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { fetchPresence, PRESENCE_ROUTE, presenceLine } from '../src/ui/landing_presence';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 describe('the presence line', () => {
   it('says so when a match someone can join has people in it', () => {
@@ -33,5 +38,12 @@ describe('the presence line', () => {
       throw new Error('down');
     }) as typeof fetch;
     expect(await fetchPresence(gone)).toBeNull();
+  });
+
+  it('is really gone when nobody is on, not an empty box', () => {
+    // The landing styles the line with display: flex, which beats the
+    // browser's own [hidden]; the page must hide it again explicitly.
+    const landing = readFileSync(path.join(ROOT, 'src/ui/landing.ts'), 'utf8');
+    expect(landing).toContain('.pg.land .pg-presence[hidden] { display: none; }');
   });
 });

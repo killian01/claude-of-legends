@@ -18,8 +18,6 @@ import { CONTRIBUTE_LEAD, CONTRIBUTE_TITLE, CONTRIBUTE_WAYS } from './landing_co
 import { mountEmbers } from './landing_embers';
 import { mountLandingLadder } from './landing_ladder';
 import {
-  HERO_PLAY,
-  HERO_QUIET,
   HERO_STAR_CALL,
   LANDING_MODES,
   type LandingDoor,
@@ -103,7 +101,7 @@ const CSS = `
     0 0 80px rgba(240, 200, 110, 0.6); }
 }
 .pg.land .pg-card.glow h2 { color: #f0dca0; }
-/* The gold button, wherever it stands: in the hero and in this card. */
+/* The gold button: the card's one call to play. */
 .pg.land .menu-btn.pg-play { position: relative; overflow: hidden;
   padding: 14px 18px; font-size: 15px; font-weight: 800; letter-spacing: 1.2px;
   text-transform: uppercase; color: #2a1d06; border: 1px solid #f3dc9a;
@@ -131,39 +129,24 @@ const CSS = `
   0% { box-shadow: 0 0 0 0 rgba(95, 224, 138, 0.6); }
   100% { box-shadow: 0 0 0 9px rgba(95, 224, 138, 0); }
 }
+/* An author display rule beats the browser's own [hidden], so the line says
+   it again: without this an empty green box stood over the button whenever
+   nobody was on. */
+.pg.land .pg-presence[hidden] { display: none; }
 /* The offline match, under the gold button: a line to read, not a second
    button competing with it. */
 .pg.land .pg-alone { align-self: center; margin-top: 10px; padding: 4px 6px; border: 0;
   background: none; font: inherit; font-size: 12px; color: #8ea4c4; cursor: pointer;
   text-decoration: underline; text-underline-offset: 3px; }
 .pg.land .pg-alone:hover { color: #dceaff; }
-/* The hero's row: the gold button with the offline line under it, and the
-   repository outlined beside it with the count. A grid rather than the
-   shared flex row, so the quiet line sits under the button it belongs to
-   while the star and the count center on the button, not on the pair. */
-.pg.land .pg-hero-cta { display: grid; justify-content: center; align-items: center;
-  grid-template-columns: auto auto auto; gap: 4px 18px;
-  grid-template-areas: 'play star stats' 'quiet . .'; }
-.pg.land .pg-hero-cta > .pg-play { grid-area: play; }
-.pg.land .pg-hero-cta > .repo-link { grid-area: star; }
-.pg.land .pg-hero-cta > .pg-stats { grid-area: stats; }
-.pg.land .pg-hero-cta > .pg-alone { grid-area: quiet; justify-self: center; margin-top: 2px; }
-.pg.land .pg-hero-cta .menu-btn.pg-play { width: auto; margin: 0; border-radius: 999px;
-  padding: 15px 34px; font-size: 16px; white-space: nowrap; }
 /* A phone's card is about 300 wide: one line, at a size that fits it. */
 @media (max-width: 560px) {
   .pg.land .menu-btn.pg-play { font-size: 13.5px; letter-spacing: 0.6px;
     padding: 14px 10px; white-space: nowrap; }
-  /* Upright, the button takes the row, the line stays under it, and the
-     star and the count move to a row of their own below. */
-  .pg.land .pg-hero-cta { grid-template-columns: auto auto; gap: 4px 16px;
-    grid-template-areas: 'play play' 'quiet quiet' 'star stats'; }
-  .pg.land .pg-hero-cta .menu-btn.pg-play { padding: 15px 26px; font-size: 14.5px; }
-  .pg.land .pg-hero-cta > .repo-link { margin-top: 10px; }
-  .pg.land .pg-hero-cta > .pg-stats { margin-top: 10px; }
 }
 /* A screen with little height, a phone held sideways above all: the crest
-   and the gaps shrink so the gold button still shows without a scroll. */
+   and the gaps shrink so the Play now card rises as near the first screen
+   as it can. */
 @media (max-height: 560px) {
   .pg.land .pg-hero { padding-top: 6px; gap: 10px; }
   .pg.land .pg-lockup { width: 104px; }
@@ -457,8 +440,8 @@ export function showLanding(
       root.remove();
       resolve(result);
     };
-    // Every button that plays, from one door (ui/landing_modes.ts): the
-    // hero's gold button and the card's do the same thing by construction.
+    // The card's two ways in, each built from its door (ui/landing_modes.ts),
+    // so a button's words and what it does cannot drift apart.
     const doorButton = (door: LandingDoor, cls: string): HTMLButtonElement => {
       const b = el('button', cls, door.call);
       b.type = 'button';
@@ -514,19 +497,13 @@ export function showLanding(
           'jungle camps and fog of war. Nothing to install.',
       ),
     );
-    // Under the tagline: the way to play, on the first screen of every
-    // device, with the offline match one quiet line under it. The
-    // repository stands beside it, outlined, with the count: the genre
-    // hands you a game and this one hands you the source too, but a
-    // visitor came to play and the one gold thing here is that.
+    // Under the tagline: the repository, outlined, and the count beside it.
+    // The genre hands you a game and this one hands you the source too, but
+    // the one gold call on the page is the Play now card's, right under the
+    // hero: a second copy of it up here read as the same button twice.
     const cta = el('div', 'pg-hero-cta');
     const stats = el('div', 'pg-stats');
-    cta.append(
-      doorButton(HERO_PLAY, 'menu-btn pg-play'),
-      buildRepoLink('hero', HERO_STAR_CALL, 'outline'),
-      stats,
-      doorButton(HERO_QUIET, 'pg-alone'),
-    );
+    cta.append(buildRepoLink('hero', HERO_STAR_CALL, 'outline'), stats);
     copy.appendChild(cta);
     mountLiveStats(stats);
     hero.append(title, copy);

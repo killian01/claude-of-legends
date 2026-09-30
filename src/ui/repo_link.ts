@@ -4,8 +4,9 @@
 // So the link to it is gold, carries a mark, and shows up in the three
 // places a visitor looks: the bar, under the tagline, and at the head of
 // the contribution band. One builder, three sizes, so they cannot drift.
-// Beside the landing's Play button it is outlined instead: two gold
-// buttons side by side ask the eye to choose, and playing comes first.
+// Under the landing's tagline it is outlined instead: the Play now card's
+// gold button right below is the page's one call to play, and a second
+// gold button above it would ask the eye to choose.
 //
 // The mark is a plain star drawn here, not a third party's logo (ADR
 // 0004): it says "star this" without borrowing anyone's emblem.

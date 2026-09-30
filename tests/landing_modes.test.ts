@@ -8,8 +8,6 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { PLAY_TILES, tileArtUrl } from '../src/ui/home_tiles';
 import {
-  HERO_PLAY,
-  HERO_QUIET,
   HERO_STAR_CALL,
   LANDING_MODES,
   PLAY_NOW,
@@ -82,33 +80,26 @@ describe('the landing modes', () => {
   });
 });
 
-describe("the landing hero's row", () => {
-  // The first screen on every device carries the way to play: the card's
-  // gold button sat under the fold on a laptop and a phone held sideways,
-  // and the only gold thing above it was the repository's star.
-  it('makes its gold button the Play now card button, to the Guest queue', () => {
-    expect(HERO_PLAY).toBe(PLAY_NOW);
+describe("the landing's ways to play", () => {
+  it('sends the gold button to the Guest queue and the quiet line offline', () => {
     expect(PLAY_NOW).toEqual({ call: PLAY_NOW_CALL, kind: 'guest' });
-  });
-
-  it('keeps the offline match one quiet line under it', () => {
-    expect(HERO_QUIET).toBe(PRACTICE_ALONE);
     expect(PRACTICE_ALONE).toEqual({ call: PRACTICE_ALONE_CALL, kind: 'offline' });
     expect(PRACTICE_ALONE.call).toMatch(/offline/i);
   });
 
-  it('asks for the star without naming it the way to play', () => {
+  it('asks for the star in the hero without naming it the way to play', () => {
     expect(HERO_STAR_CALL).toMatch(/github/i);
     expect(HERO_STAR_CALL).not.toMatch(/play/i);
   });
 
-  it('builds both gold buttons from the one door, outlining the star', () => {
-    // Read off the page module rather than a browser: the hero's button and
-    // the card's are the same door, so neither can come to do something the
-    // other does not, and the repository beside the hero is not gold.
+  it('shows each way to play once, in the Play now card, the star outlined above', () => {
+    // Read off the page module rather than a browser. A copy of the card's
+    // gold button and offline line in the hero, right above the card, read
+    // as the same button twice (2026-09-30): each door is built once.
     const landing = readFileSync(path.join(ROOT, 'src/ui/landing.ts'), 'utf8');
-    expect(landing).toContain("doorButton(HERO_PLAY, 'menu-btn pg-play')");
-    expect(landing).toContain("doorButton(PLAY_NOW, 'menu-btn pg-play')");
+    const count = (needle: string): number => landing.split(needle).length - 1;
+    expect(count('doorButton(PLAY_NOW,')).toBe(1);
+    expect(count('doorButton(PRACTICE_ALONE,')).toBe(1);
     expect(landing).toContain("buildRepoLink('hero', HERO_STAR_CALL, 'outline')");
     expect(landing).not.toMatch(/finish\(\{ kind: '(guest|offline)' \}\)/);
   });
