@@ -22,7 +22,7 @@ import { startBackdrop } from './home_backdrop';
 import { type HomeSection, mountHomeBar } from './home_bar';
 import { buildHomePanels } from './home_panels';
 import { PLAY_TILES, type PlayTile } from './home_tiles';
-import { openLadderPage, type Way } from './ladder_page';
+import { type LadderTab, openLadderPage } from './ladder_page';
 import { el, ensureMenuCss } from './menu';
 import { allNews, isFresh } from './news';
 import { openNews } from './news_section';
@@ -221,7 +221,8 @@ export function showHome(
         }),
       );
     };
-    const showLadder = (way: Way = 'hand'): void =>
+    // The points ladder of every human first (ADR 0027); a panel asks for a way.
+    const showLadder = (way: LadderTab = 'points'): void =>
       sections.open('ladder', (host) =>
         openLadderPage(
           host,

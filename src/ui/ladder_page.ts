@@ -1,10 +1,13 @@
-// The ladder page (CONTEXT.md: Ladder): a full page from the home screen,
-// one tab per way. At the top the reader's own place (emblem, tier,
-// rating, rank or placement, the climb to the next tier, the form) and
-// the button to the match that moves this ladder; then the podium, the
-// table of the placed with their rated play, the reader pinned under it
-// when beyond the top, and the accounts still placing. Pure DOM over
-// /api/ladder/page; the Arena tab adds the pool.
+// The ladder page (CONTEXT.md: Ladder): a full page from the home screen.
+// First the ladder of every human (ADR 0027), the accounts and the Guests
+// ranked by their points, with the reader's own place; then one tab per
+// way, the rating ladders as they were. On a way: at the top the reader's
+// own place (emblem, tier, rating, rank or placement, the climb to the
+// next tier, the form) and the button to the match that moves this
+// ladder; then the podium, the table of the placed with their rated play,
+// the reader pinned under it when beyond the top, and the accounts still
+// placing. Pure DOM over /api/public/ladder and /api/ladder/page; the
+// Arena tab adds the pool.
 
 import { nextTier, TIERS, tierOf } from '../net/tiers';
 import { CHAMPIONS } from '../sim/content/champions';
@@ -14,10 +17,32 @@ import { type BotChip, botChips, buildPool, type WatchReplay } from './ladder_bo
 import { MIN_RATED_GAMES, placeLine, WAY_LABELS } from './ladder_card';
 import { el } from './menu';
 import { startMenuBackdrop } from './menu_backdrop';
+import { type LadderPlace, placeText, pointsCount, UNPLACED_LINE } from './points_text';
 import { buildPublicProfilePanel } from './profile_panel';
 import { emblem } from './tier_emblem';
 
 export type Way = 'hand' | 'bot' | 'arena' | 'forge';
+// What a tab of the page shows: the points ladder, or one way's ratings.
+export type LadderTab = 'points' | Way;
+
+// The ladder of every human, as /api/public/ladder answers it
+// (server/points_ladder.ts).
+interface PointsRow {
+  rank: number;
+  name: string;
+  points: number;
+  guest: boolean;
+}
+interface PointsPage {
+  total: number;
+  rows: PointsRow[];
+  me: LadderPlace | null;
+}
+
+export const POINTS_TAB_LABEL = 'Points';
+export const POINTS_LEAD =
+  'Every human on one ladder, accounts and Guests: the points public queue matches earned, ' +
+  'a last hit, a kill, a tower at a time, weighed by the people in the match.';
 type Result = 'W' | 'L';
 
 interface Favorite {
@@ -203,6 +228,12 @@ const CSS = `
 .lp-placing { display: flex; flex-wrap: wrap; gap: 8px; }
 .lp-placing span { padding: 4px 10px; border-radius: 6px; border: 1px dashed #3d3520; color: #8ba1c0; font-size: 12px; }
 .lp-empty { color: #8ba1c0; font-size: 13px; padding: 8px 0; }
+.lp-guest { margin-left: 8px; font-size: 11px; font-weight: 400; color: #8ba1c0; }
+.lp-points-you { display: flex; align-items: center; justify-content: space-between; gap: 18px;
+  flex-wrap: wrap; padding: 16px 22px; border: 1px solid #6b5a2e; border-radius: 12px;
+  background: rgba(8, 12, 22, 0.86); margin-bottom: 18px; }
+.lp-points-you b { font-size: 17px; color: #f3e6bd; }
+.lp-points-you .lp-cta { min-width: 200px; }
 @media (max-width: 900px) {
   .lp-you { grid-template-columns: 1fr; }
   .lp-podium { grid-template-columns: 1fr; }
@@ -288,7 +319,7 @@ function climb(rating: number): { pct: number; text: string } {
 export function openLadderPage(
   container: HTMLElement,
   opts: LadderPageOptions,
-  startWay: Way = 'hand',
+  startWay: LadderTab = 'points',
 ): () => void {
   ensureCss();
   const root = el('div', 'lp');
@@ -311,15 +342,16 @@ export function openLadderPage(
     el(
       'span',
       'lp-sub',
-      'Four ways to place: by hand, your bot live, your bot in the Arena, the Forge queue.',
+      'Points for every human first; then four ways to place by rating: by hand, your bot ' +
+        'live, your bot in the Arena, the Forge queue.',
     ),
     back,
   );
 
   const tabs = el('div', 'lp-tabs');
   const body = el('div', 'lp-body');
-  const tabButtons = new Map<Way, HTMLButtonElement>();
-  let current: Way = startWay;
+  const tabButtons = new Map<LadderTab, HTMLButtonElement>();
+  let current: LadderTab = startWay;
   let mine: MyBot[] | null = null;
 
   const myBotsOnce = async (): Promise<MyBot[]> => {
@@ -627,9 +659,69 @@ export function openLadderPage(
     }
   };
 
-  const load = async (way: Way, keep?: HTMLElement): Promise<void> => {
+  // The ladder of every human (ADR 0027): the reader's place and the
+  // button to the match that moves it, then the lines by points.
+  const renderPoints = (page: PointsPage): void => {
+    body.textContent = '';
+    body.append(el('p', 'lp-lead', POINTS_LEAD));
+    const you = el('div', 'lp-points-you');
+    const cta = el('div', 'lp-cta');
+    const play = el('button', 'lp-btn primary', 'Play online');
+    play.addEventListener('click', () => leaveFor(() => opts.onPlay('queue')));
+    cta.append(
+      play,
+      el('div', 'lp-hint', 'Public queue matches score; lobbies and the Forge queue do not.'),
+    );
+    you.append(el('b', '', page.me ? placeText(page.me) : UNPLACED_LINE), cta);
+    body.append(you);
+    if (page.rows.length === 0) {
+      body.append(el('div', 'lp-empty', 'Nobody has scored yet. One public match puts you first.'));
+      return;
+    }
+    const table = el('table', 'lp-table');
+    const hr = el('tr', '');
+    for (const [h, cls] of [
+      ['#', ''],
+      ['Player', ''],
+      ['Points', 'num'],
+    ] as const) {
+      hr.append(el('th', cls, h));
+    }
+    table.append(hr);
+    for (const r of page.rows) {
+      const tr = el('tr', r.rank === page.me?.rank ? 'me' : '');
+      const name = el('td', 'lp-name', r.name);
+      if (r.guest) name.append(el('span', 'lp-guest', 'Guest'));
+      tr.append(el('td', 'lp-rank', String(r.rank)), name, el('td', 'num', pointsCount(r.points)));
+      table.append(tr);
+    }
+    body.append(el('div', 'lp-section', `The ladder, ${page.total} on it`), table);
+  };
+
+  const loadPoints = async (): Promise<void> => {
+    body.textContent = 'Loading the ladder...';
+    let page: PointsPage | null = null;
+    try {
+      const res = await fetch('/api/public/ladder', { credentials: 'same-origin' });
+      if (res.ok) page = (await res.json()) as PointsPage;
+    } catch {
+      page = null;
+    }
+    if (current !== 'points') return;
+    if (!page) {
+      body.textContent = 'Ladder unavailable: the game server is not reachable.';
+      return;
+    }
+    renderPoints(page);
+  };
+
+  const load = async (way: LadderTab, keep?: HTMLElement): Promise<void> => {
     current = way;
     for (const [w, b] of tabButtons) b.classList.toggle('on', w === way);
+    if (way === 'points') {
+      await loadPoints();
+      return;
+    }
     if (!keep) body.textContent = 'Loading the ladder...';
     let page: Page | null = null;
     try {
@@ -648,6 +740,11 @@ export function openLadderPage(
     render(page, cta, keep);
   };
 
+  // The ladder of every human first, then the ways as they were.
+  const pointsTab = el('button', 'lp-tab', POINTS_TAB_LABEL);
+  pointsTab.addEventListener('click', () => void load('points'));
+  tabButtons.set('points', pointsTab);
+  tabs.append(pointsTab);
   for (const w of WAYS) {
     const b = el('button', 'lp-tab', WAY_LABELS[w.way]);
     b.addEventListener('click', () => void load(w.way));
