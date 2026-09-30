@@ -1723,8 +1723,8 @@ export class Renderer {
       t.wasDead = u.dead;
 
       // A neutral body carries a nominal team (0): it is drawn only when
-      // the viewer's team actually sees it, like an enemy (ADR 0023: the
-      // rings' creatures and the camps sit in the fog).
+      // the viewer's team actually sees it, like an enemy (the camps sit in
+      // the fog; the rings' creatures, like the Warden, are always seen).
       const visible =
         (!u.dead || t.deadUntil > nowMs) &&
         ((u.team === this.viewerTeam && !u.neutral) ||

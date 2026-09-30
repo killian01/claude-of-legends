@@ -64,11 +64,11 @@ describe('the rings on the wire', () => {
     const creature = [...sim.units.values()].find((u) => u.kind === 'creature')!;
     expect(creature).toBeDefined();
 
-    // In the fog until a team has sight on the ring (ADR 0023): the clock
-    // reaches the mirror, the body does not.
-    const blind = mirror(sim, 0, me.id);
-    expect(blind.ringClocks().find((c) => c.ring === 'bot')?.unitId).toBe(creature.id);
-    expect(blind.units.get(creature.id)).toBeUndefined();
+    // Revealed like the Warden (ADR 0023, amended): with nobody near the
+    // ring, the clock and the body both reach the mirror.
+    const far = mirror(sim, 0, me.id);
+    expect(far.ringClocks().find((c) => c.ring === 'bot')?.unitId).toBe(creature.id);
+    expect(far.units.get(creature.id)?.creatureId).toBe('pyrefang');
     me.pos = { x: creature.pos.x + 5, z: creature.pos.z };
     foe.pos = { x: creature.pos.x - 5, z: creature.pos.z };
     sim.tick();

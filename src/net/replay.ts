@@ -36,7 +36,9 @@ import { type ClientMsg, isFiniteVec } from './protocol';
 // in the observation, the Jungler on every house team's fifth seat.
 // Not bumped for a seat's lane preference (ADR 0026): ReplayPick.lanes is
 // additive, and a record without it seats and stands in exactly as before.
-export const REPLAY_VERSION = 7;
+// 8: the rings' creatures revealed to both teams again, like the Warden
+// (ADR 0023, amended): what the bots see of a ring changes their play.
+export const REPLAY_VERSION = 8;
 
 // The checksum a replay must show at `tick`, or null when the record
 // says nothing about that tick (an older record, or a tick that is not

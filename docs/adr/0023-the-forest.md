@@ -1,5 +1,10 @@
 # The forest: a jungler, three camps, a Warden that moves
 
+> Amended on 2026-09-30: the rings' creatures are revealed to both teams again, like the
+> Warden. With the Pyrefang's own model and its rise out of a fire column (#61), the
+> maintainer found the rise hidden in the fog ("on voit rien"), and asked for no fog on it.
+> The camps stay in the fog, and the fog sheet over the ring discs stays as it is.
+
 The rings' second round (ADR 0022) left the maintainer three things to say from play, on
 2026-09-11: the fog of war did not cover the two ring creatures, the ring platforms showed
 through it; the Warden always rose at the plaza and should sometimes rise somewhere in the

@@ -538,11 +538,19 @@ export class Sim {
     // team and never qualify: camps sit in the fog for everyone.
     if (!u.neutral && u.team === team) return true;
     if (u.dead) return false;
-    // Structures are always revealed, like the genre; so is the Warden
-    // (both teams watch its health bar, that IS the drama). A ring's
-    // creature sits in the fog like a camp (the forest round, ADR 0023):
-    // its clock is public, its body is seen only with sight on the ring.
-    if (u.kind === 'tower' || u.kind === 'sanctum' || u.kind === 'warden') return true;
+    // Structures are always revealed, like the genre; so are the Warden
+    // and a ring's creature (both teams watch them rise and fall, that IS
+    // the drama). The creatures sat in the fog like camps for a while (the
+    // forest round, ADR 0023); the Pyrefang's rise was then a show nobody
+    // could see, so they stand revealed again. Camps stay in the fog.
+    if (
+      u.kind === 'tower' ||
+      u.kind === 'sanctum' ||
+      u.kind === 'warden' ||
+      u.kind === 'creature'
+    ) {
+      return true;
+    }
     return this.visibility[team].has(unitId);
   }
 

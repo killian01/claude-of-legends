@@ -159,8 +159,8 @@ _Avoid_: pit (the Warden's), arena (the bots' ladder), platform (the spawn terra
 The bot ring's creature: a lean, incandescent predator with a spine of embers and a trail
 of fire. Rises first, at 4:00, and again three minutes after each death, carrying Might, Tide
 and Tempo in that order, once each; its fourth rise and every later one is its Ascendant.
-Neutral like the Warden: fights champions only, in the fog until a team has sight on its
-ring (its clock is public, its body is not), keeps its target anywhere on the platform (the disc and its fan stairs, the ring's leash), resets to full
+Neutral like the Warden: fights champions only, revealed to both teams like the Warden
+from the moment it rises (its rise out of the fire is for everybody to watch), keeps its target anywhere on the platform (the disc and its fan stairs, the ring's leash), resets to full
 when pulled past the foot of the stairs, and left alone walks home and heals fast (3
 percent of its health a second) rather than snapping. Sized for a duo: a lone champion
 takes a minute or more and leaves bleeding.
