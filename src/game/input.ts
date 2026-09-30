@@ -5,6 +5,7 @@
 
 import type { Renderer } from '../render/renderer';
 import type { AbilityKey, Vec2 } from '../sim/types';
+import { pointOnStage } from './match_stage';
 import type { SlotPress } from './thumb_cast';
 
 export interface InputHandlers {
@@ -65,12 +66,15 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): () => v
   let mouseY = 0;
 
   // Touch pointers are not this module's: game/touch.ts gives them their
-  // own tap and drag semantics, and a finger has no hover.
+  // own tap and drag semantics, and a finger has no hover. The screen
+  // points handed on are the match stage's (game/match_stage.ts), the
+  // page's own unless the stage is turned for a phone held upright.
   const onPointerMove = (e: PointerEvent): void => {
     if (e.pointerType === 'touch') return;
-    mouseX = e.clientX;
-    mouseY = e.clientY;
-    handlers.onHover(e.clientX, e.clientY);
+    const p = pointOnStage(el, e.clientX, e.clientY);
+    mouseX = p.x;
+    mouseY = p.y;
+    handlers.onHover(p.x, p.y);
   };
   el.addEventListener('pointermove', onPointerMove);
 
@@ -79,15 +83,16 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): () => v
 
   const onPointerDown = (e: PointerEvent): void => {
     if (e.pointerType === 'touch') return;
-    mouseX = e.clientX;
-    mouseY = e.clientY;
+    const at = pointOnStage(el, e.clientX, e.clientY);
+    mouseX = at.x;
+    mouseY = at.y;
     if (e.button === 0) {
-      handlers.onLeftClick(e.clientX, e.clientY);
+      handlers.onLeftClick(at.x, at.y);
       return;
     }
     if (e.button !== 2) return;
-    const p = renderer.groundPointAt(e.clientX, e.clientY);
-    if (p) handlers.onRightClick(p, e.clientX, e.clientY);
+    const p = renderer.groundPointAt(at.x, at.y);
+    if (p) handlers.onRightClick(p, at.x, at.y);
   };
   el.addEventListener('pointerdown', onPointerDown);
 

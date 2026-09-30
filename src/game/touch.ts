@@ -12,6 +12,7 @@ import type { Renderer } from '../render/renderer';
 import type { AbilityKey, Vec2 } from '../sim/types';
 import type { ThumbStickView } from '../ui/thumb_stick_view';
 import type { InputHandlers } from './input';
+import { pointOnStage, stageSizeOf } from './match_stage';
 import { ThumbAim } from './thumb_cast';
 import { ThumbStick, type Viewport } from './thumb_stick';
 
@@ -106,8 +107,9 @@ export class TouchGestures {
 }
 
 // The right thumb on the HUD's slots (thumb_cast.ts): the HUD forwards
-// each slot's pointer events here, in screen pixels, and this turns them
-// into aims and casts. A cancel event ends the press as a cancel.
+// each slot's pointer events here, in the match stage's pixels
+// (game/match_stage.ts), and this turns them into aims and casts. A
+// cancel event ends the press as a cancel.
 export interface CastTouch {
   abilityDown(key: AbilityKey, x: number, y: number): void;
   abilityMove(key: AbilityKey, x: number, y: number): void;
@@ -138,11 +140,15 @@ export interface TouchControlsOptions {
   scheme?: () => TouchScheme;
   // Where the stick is drawn; without it the stick still steers, unseen.
   stick?: ThumbStickView;
+  // The screen the stick's zone is a part of: the match stage's by default.
   viewport?: () => Viewport;
 }
 
 // Wires TouchGestures to the canvas. The listeners are inert without a
 // touchscreen: every handler returns immediately for mouse and pen pointers.
+// Every point is taken in the match stage's pixels (game/match_stage.ts):
+// on a stage turned for a phone held upright, a finger moving up the
+// match is a finger moving up the stage, whatever the page thinks.
 export function setupTouchControls(
   renderer: Renderer,
   handlers: InputHandlers,
@@ -151,7 +157,7 @@ export function setupTouchControls(
   const el = renderer.domElement;
   const gestures = new TouchGestures();
   const scheme = opts.scheme ?? ((): TouchScheme => 'tap');
-  const viewport = opts.viewport ?? ((): Viewport => ({ width: innerWidth, height: innerHeight }));
+  const viewport = opts.viewport ?? ((): Viewport => stageSizeOf(el));
   let armedAbility: AbilityKey | null = null;
   let armedSigil: number | null = null;
 
@@ -305,17 +311,19 @@ export function setupTouchControls(
     if (e.pointerType !== 'touch') return;
     e.preventDefault();
     el.setPointerCapture(e.pointerId);
-    if (scheme() === 'thumbs' && stick.down(e.pointerId, e.clientX, e.clientY, viewport())) {
-      opts.stick?.show(e.clientX, e.clientY);
+    const p = pointOnStage(el, e.clientX, e.clientY);
+    if (scheme() === 'thumbs' && stick.down(e.pointerId, p.x, p.y, viewport())) {
+      opts.stick?.show(p.x, p.y);
       if (!stickFrame) stickFrame = requestAnimationFrame(readStick);
       return;
     }
-    dispatch(gestures.down(e.pointerId, e.clientX, e.clientY));
+    dispatch(gestures.down(e.pointerId, p.x, p.y));
   };
   const onPointerMove = (e: PointerEvent): void => {
     if (e.pointerType !== 'touch') return;
-    if (stick.move(e.pointerId, e.clientX, e.clientY)) return;
-    dispatch(gestures.move(e.pointerId, e.clientX, e.clientY));
+    const p = pointOnStage(el, e.clientX, e.clientY);
+    if (stick.move(e.pointerId, p.x, p.y)) return;
+    dispatch(gestures.move(e.pointerId, p.x, p.y));
   };
   const onPointerUp = (e: PointerEvent): void => {
     if (e.pointerType !== 'touch') return;
@@ -323,7 +331,8 @@ export function setupTouchControls(
       releaseStick();
       return;
     }
-    dispatch(gestures.up(e.pointerId, e.clientX, e.clientY));
+    const p = pointOnStage(el, e.clientX, e.clientY);
+    dispatch(gestures.up(e.pointerId, p.x, p.y));
   };
   const onPointerCancel = (e: PointerEvent): void => {
     if (e.pointerType !== 'touch') return;

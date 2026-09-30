@@ -1,5 +1,6 @@
 // The shared settings panel: two volume sliders, the announcer toggle and
-// the interface size, wired straight to src/game/settings. Mounted by the
+// the interface size, and on a touchscreen the way it plays and what an
+// upright phone gets, wired straight to src/game/settings. Mounted by the
 // home screen and by the in-match escape menu; both get live-applying
 // controls.
 
@@ -67,11 +68,39 @@ export function buildSettingsPanel(): HTMLElement {
   row.append(lab, box);
   panel.appendChild(row);
   panel.appendChild(scaleRow(s.uiScale));
-  // Only a touchscreen has a way to play by thumb; a mouse never sees the row.
+  // Only a touchscreen has a way to play by thumb, or a phone to hold
+  // upright; a mouse never sees the rows.
   if (typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches) {
     panel.appendChild(touchRow(s.touchScheme));
+    panel.appendChild(uprightRow(s.rotatedView));
   }
   return panel;
+}
+
+// A phone held upright that the browser will not turn (game/rotated_view.ts):
+// the match turned a quarter so it plays sideways, or the wall asking for
+// the phone to be turned. Applied at once, the match on screen included.
+function uprightRow(rotated: boolean): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'set-row';
+  const lab = document.createElement('label');
+  lab.textContent = 'Held upright';
+  const select = document.createElement('select');
+  for (const [v, text] of [
+    ['turn', 'Turn the match'],
+    ['ask', 'Ask me to turn'],
+  ] as const) {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = text;
+    select.appendChild(opt);
+  }
+  select.value = rotated ? 'turn' : 'ask';
+  select.addEventListener('change', () => {
+    updateSettings({ rotatedView: select.value !== 'ask' });
+  });
+  row.append(lab, select);
+  return row;
 }
 
 function touchRow(value: 'thumbs' | 'tap'): HTMLElement {

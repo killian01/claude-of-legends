@@ -7,8 +7,10 @@
 //
 // The lock is granted to a fullscreen document, which is why the match's
 // entry points take the screen in the same click (game/fullscreen.ts).
-// Safari on iOS has no orientation lock at all and always refuses; the
-// wall is what it falls back to.
+// Safari on iOS has no orientation lock at all and always refuses; what it
+// falls back to is the rotated view (game/rotated_view.ts), the match
+// turned a quarter inside the page, and the wall only when the player has
+// turned that off.
 
 // The narrow slice of the Screen Orientation API this needs, typed here
 // because lock() is absent from the DOM library's ScreenOrientation.
@@ -52,17 +54,4 @@ export function unlockOrientation(win: Window = window): void {
 // a touchscreen, only while the browser has not taken the screen itself.
 export function needsTurnPrompt(coarsePointer: boolean, landscapeLocked: boolean): boolean {
   return coarsePointer && !landscapeLocked;
-}
-
-// Whether the wall stands right now: the prompt is needed and the phone is
-// held upright. The HUD's stylesheet shows it on the same two conditions
-// (ui/hud.ts, .turn-needed under a portrait media query); this is the same
-// answer for what has to know without looking at the page (the practice
-// clock, the hint's clock).
-export function turnWallUp(
-  coarsePointer: boolean,
-  landscapeLocked: boolean,
-  portrait: boolean,
-): boolean {
-  return portrait && needsTurnPrompt(coarsePointer, landscapeLocked);
 }

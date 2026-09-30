@@ -67,12 +67,17 @@ export function thumbScale(viewportHeight: number): number {
   return Number(Math.min(MAX_THUMB_SCALE, Math.max(MIN_THUMB_SCALE, raw)).toFixed(2));
 }
 
+// The height the two scales follow: the page's, unless the element lives
+// on a turned match stage, whose height is the page's width
+// (game/match_stage.ts hands its own).
+const pageHeight = (): number => window.innerHeight;
+
 // Keeps the thumb controls' size on an element as a CSS variable
 // (--thumb-scale) while it is on screen; the stylesheet scales the
 // cluster from it. Returns the stop.
-export function followThumbScale(el: HTMLElement): () => void {
+export function followThumbScale(el: HTMLElement, height: () => number = pageHeight): () => void {
   const apply = (): void => {
-    el.style.setProperty('--thumb-scale', String(thumbScale(window.innerHeight)));
+    el.style.setProperty('--thumb-scale', String(thumbScale(height())));
   };
   apply();
   window.addEventListener('resize', apply);
@@ -89,9 +94,13 @@ export const SETTINGS_EVENT = 'loc:settings';
 // every resize, and whenever the setting changes. The setting comes
 // through a getter rather than an import, since settings.ts reads this
 // module. Returns the stop, for the element's own teardown.
-export function followUiScale(el: HTMLElement, setting: () => UiScaleSetting): () => void {
+export function followUiScale(
+  el: HTMLElement,
+  setting: () => UiScaleSetting,
+  height: () => number = pageHeight,
+): () => void {
   const apply = (): void => {
-    applyUiScale(el, effectiveUiScale(setting(), window.innerHeight));
+    applyUiScale(el, effectiveUiScale(setting(), height()));
   };
   apply();
   window.addEventListener('resize', apply);

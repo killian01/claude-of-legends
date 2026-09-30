@@ -4,6 +4,7 @@
 // the camera there (Space snaps it back to the champion). The player's own
 // assigned lane is stroked in gold (ui/lane_guide.ts; ADR 0026).
 
+import { pointOnStage, rectOnStage, stageSizeOf } from '../game/match_stage';
 import { getSettings } from '../game/settings';
 import { followUiScale } from '../game/ui_scale';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
@@ -59,17 +60,22 @@ export class Minimap {
       typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
     const displayPx = coarse ? 112 : SIZE_PX;
     // Stepped in from a phone's notch and rounded corners (the safe area;
-    // zero on a screen without them).
+    // zero on a screen without them), the match stage's edges' own
+    // (game/match_stage.ts: they trade places on a turned stage).
     const edge =
       opts.corner === 'top-right'
-        ? 'top:calc(58px + env(safe-area-inset-top, 0px))'
-        : 'bottom:calc(12px + env(safe-area-inset-bottom, 0px))';
+        ? 'top:calc(58px + var(--safe-top, env(safe-area-inset-top, 0px)))'
+        : 'bottom:calc(12px + var(--safe-bottom, env(safe-area-inset-bottom, 0px)))';
     this.canvas.style.cssText =
-      `width:${displayPx}px;height:${displayPx}px;` +
-      `position:absolute;right:calc(12px + env(safe-area-inset-right, 0px));${edge};` +
+      `width:${displayPx}px;height:${displayPx}px;position:absolute;` +
+      `right:calc(12px + var(--safe-right, env(safe-area-inset-right, 0px)));${edge};` +
       'border:1px solid #466030;border-radius:6px;pointer-events:auto;z-index:5;opacity:0.88;';
     container.appendChild(this.canvas);
-    this.stopScale = followUiScale(this.canvas, () => getSettings().uiScale);
+    this.stopScale = followUiScale(
+      this.canvas,
+      () => getSettings().uiScale,
+      () => stageSizeOf(container).height,
+    );
 
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     this.canvas.addEventListener('pointerenter', () => {
@@ -78,11 +84,14 @@ export class Minimap {
     this.canvas.addEventListener('pointerleave', () => {
       this.hovered = false;
     });
+    // The press and the map's rect both in the stage's pixels, which on a
+    // stage turned for a phone held upright are not the page's.
     this.canvas.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 && e.button !== 2) return;
-      const rect = this.canvas.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * world.map.size;
-      const z = (1 - (e.clientY - rect.top) / rect.height) * world.map.size;
+      const rect = rectOnStage(this.canvas, this.canvas.getBoundingClientRect());
+      const at = pointOnStage(this.canvas, e.clientX, e.clientY);
+      const x = ((at.x - rect.left) / rect.width) * world.map.size;
+      const z = (1 - (at.y - rect.top) / rect.height) * world.map.size;
       if (e.button === 2) onMoveOrder({ x, z });
       else onLook({ x, z });
     });

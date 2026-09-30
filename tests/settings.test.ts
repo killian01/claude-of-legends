@@ -21,6 +21,7 @@ describe('player settings', () => {
       touchScheme: 'thumbs',
       practiceBots: 'gentle',
       moveRingMatches: 0,
+      rotatedView: true,
     });
     expect(clampSettings({ sfx: 0.35, music: 0.8, announcer: true })).toEqual({
       sfx: 0.35,
@@ -30,6 +31,7 @@ describe('player settings', () => {
       touchScheme: 'thumbs',
       practiceBots: 'gentle',
       moveRingMatches: 0,
+      rotatedView: true,
     });
   });
 
@@ -68,6 +70,12 @@ describe('player settings', () => {
       vi.unstubAllGlobals();
       vi.resetModules();
     }
+  });
+
+  it('turns the match for an upright phone unless the wall was chosen', () => {
+    expect(DEFAULT_SETTINGS.rotatedView).toBe(true);
+    expect(clampSettings({ rotatedView: false }).rotatedView).toBe(false);
+    expect(clampSettings({ rotatedView: 'no' }).rotatedView).toBe(true);
   });
 
   it('keeps an interface size in range and falls back to auto', () => {

@@ -628,7 +628,9 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
       onExit: () => finish('menu'),
       nameOf: (id) => seatNames.get(id) ?? sim.units.get(id)?.kind ?? `unit ${id}`,
     });
-    container.appendChild(bar.el);
+    // On the match's stage, so it turns with the match on a phone held
+    // upright (src/game/match_stage.ts).
+    pres.stage.appendChild(bar.el);
     bar.setMarks(marks, ownUnitId);
     if (at !== undefined && at > 0) seekTo(at);
 
@@ -884,7 +886,7 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
       // A coach seat (ADR 0013): the bar for the orders with no place to
       // click; right-click already goes and focuses through the mirror.
       if (world.coach) {
-        coachBar = buildCoachBar(container, (kind) =>
+        coachBar = buildCoachBar(opened.stage, (kind) =>
           ws.send(JSON.stringify({ t: 'order', kind })),
         );
       }

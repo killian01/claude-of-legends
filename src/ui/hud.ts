@@ -7,12 +7,13 @@
 import { announceVoice } from '../game/announcer';
 import type { PostMatchAction } from '../game/flow';
 import { requestGameFullscreen, toggleGameFullscreen } from '../game/fullscreen';
-import { needsTurnPrompt, turnWallUp } from '../game/orientation';
+import { pointOnStage, rectOnStage, stageSizeOf } from '../game/match_stage';
 import type { MatchCover } from '../game/practice_clock';
+import { type LockAnswer, type ScreenRect, turnWallUp, wallFallback } from '../game/rotated_view';
 import { getSettings } from '../game/settings';
 import { playSfx } from '../game/sfx';
 import type { CastTouch } from '../game/touch';
-import { followThumbScale, followUiScale } from '../game/ui_scale';
+import { followThumbScale, followUiScale, SETTINGS_EVENT } from '../game/ui_scale';
 import { trackStep } from '../net/stats';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
@@ -275,8 +276,9 @@ const CSS = `
    carried by the card frame itself so a glance sorts components from
    legendaries without reading a word. */
 .hud-shop {
-  position: absolute; left: 50%; top: 4vh; transform: translateX(-50%);
-  width: min(1180px, calc(100vw - 220px)); min-width: 700px; max-height: 88vh;
+  position: absolute; left: 50%; top: calc(4 * var(--vh, 1vh)); transform: translateX(-50%);
+  width: min(1180px, calc(100 * var(--vw, 1vw) - 220px)); min-width: 700px;
+  max-height: calc(88 * var(--vh, 1vh));
   background:
     linear-gradient(180deg, rgba(34, 47, 22, 0.98) 0%, rgba(14, 20, 9, 0.985) 130px),
     radial-gradient(120% 80% at 50% 0%, rgba(110, 143, 74, 0.16), transparent 60%),
@@ -478,8 +480,8 @@ const CSS = `
   left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 10px; pointer-events: auto; cursor: pointer;
   max-width: min(
-    520px, 90vw,
-    calc(100vw - 16px - 2 * max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)))
+    520px, calc(90 * var(--vw, 1vw)),
+    calc(100 * var(--vw, 1vw) - 16px - 2 * max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)))
   );
   padding: 8px 10px 8px 14px; border-radius: 10px;
   border: 1px solid #8a7430; background: rgba(30, 26, 12, 0.9); color: #e6dcb8;
@@ -526,7 +528,8 @@ const CSS = `
    stack so every row is one full-width table line with room for the build. */
 .hud-score {
   position: absolute; top: 36px; left: 50%; transform: translateX(-50%);
-  width: min(1020px, 96vw); max-height: 86vh; overflow-y: auto;
+  width: min(1020px, calc(96 * var(--vw, 1vw))); max-height: calc(86 * var(--vh, 1vh));
+  overflow-y: auto;
   background:
     linear-gradient(180deg, rgba(34, 47, 22, 0.98) 0%, rgba(14, 20, 9, 0.985) 110px),
     rgba(11, 16, 7, 0.985);
@@ -586,7 +589,7 @@ const CSS = `
    announcements. The score is the only one of the three that is always up,
    so it takes the very top and the other two moved down to clear it. */
 .hud-teamscore {
-  position: absolute; top: calc(8px + env(safe-area-inset-top, 0px));
+  position: absolute; top: calc(8px + var(--safe-top, env(safe-area-inset-top, 0px)));
   left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 12px;
   background: rgba(14, 20, 9, 0.85); border: 1px solid #3a4f28; border-radius: 6px;
@@ -620,8 +623,8 @@ const CSS = `
 }
 .hud-target-bar .hud-bar-text { line-height: 10px; }
 .hud-kda {
-  position: absolute; top: calc(12px + env(safe-area-inset-top, 0px));
-  right: calc(12px + env(safe-area-inset-right, 0px)); text-align: right;
+  position: absolute; top: calc(12px + var(--safe-top, env(safe-area-inset-top, 0px)));
+  right: calc(12px + var(--safe-right, env(safe-area-inset-right, 0px))); text-align: right;
   background: rgba(14, 20, 9, 0.85); border: 1px solid #3a4f28; border-radius: 6px;
   padding: 5px 12px; font-size: 15px; font-weight: 800; color: #e8f5c8;
   text-shadow: 0 1px 2px #000; pointer-events: auto;
@@ -652,7 +655,8 @@ const CSS = `
 .hud-end-card {
   margin-top: 14px; padding: 14px 20px; border-radius: 10px;
   background: rgba(14, 20, 9, 0.92); border: 1px solid #466030;
-  width: min(1020px, 96vw); max-height: 58vh; overflow-y: auto;
+  width: min(1020px, calc(96 * var(--vw, 1vw))); max-height: calc(58 * var(--vh, 1vh));
+  overflow-y: auto;
   display: flex; flex-direction: column; gap: 14px; pointer-events: auto;
   text-shadow: none;
   scrollbar-width: thin; scrollbar-color: #6e5a24 #10160c;
@@ -694,7 +698,7 @@ const CSS = `
    person asking, not as a form, so it is one line of words, one field and
    one button, and leaving it alone costs nothing. */
 .hud-feedback {
-  pointer-events: auto; margin-top: 14px; width: min(520px, 86vw);
+  pointer-events: auto; margin-top: 14px; width: min(520px, calc(86 * var(--vw, 1vw)));
   border: 1px solid #4a5c34; border-radius: 10px; padding: 12px 14px;
   background: rgba(20, 30, 12, 0.72); text-align: left;
 }
@@ -718,7 +722,9 @@ const CSS = `
 .hud-feedback-thanks { font-size: 13px; color: #b6cc92; }
 /* On a phone it is the last thing on a screen that is already full, so it
    takes as little of it as it can and still be typed into. */
-.hud.compact .hud-feedback { margin-top: 8px; padding: 8px 10px; width: min(520px, 94vw); }
+.hud.compact .hud-feedback {
+  margin-top: 8px; padding: 8px 10px; width: min(520px, calc(94 * var(--vw, 1vw)));
+}
 .hud.compact .hud-feedback-words b { font-size: 12.5px; }
 .hud.compact .hud-feedback-words span { font-size: 11.5px; }
 .hud.compact .hud-feedback-row { margin-top: 6px; gap: 6px; }
@@ -733,7 +739,8 @@ const CSS = `
 .hud-end-offer {
   pointer-events: auto; margin-top: 12px; padding: 10px 16px; border-radius: 8px;
   border: 1px solid #8a7430; background: rgba(30, 26, 12, 0.92); text-shadow: none;
-  display: none; align-items: center; gap: 16px; width: min(1020px, 96vw);
+  display: none; align-items: center; gap: 16px;
+  width: min(1020px, calc(96 * var(--vw, 1vw)));
   box-sizing: border-box; color: #e6dcb8;
 }
 .hud-end-offer.open { display: flex; }
@@ -789,7 +796,8 @@ ${compactTapsCss()}
    rounded corners and the home bar; zero on a screen without them). */
 .hud.thumbs .hud-slots {
   position: absolute; display: block;
-  right: env(safe-area-inset-right, 0px); bottom: env(safe-area-inset-bottom, 0px);
+  right: var(--safe-right, env(safe-area-inset-right, 0px));
+  bottom: var(--safe-bottom, env(safe-area-inset-bottom, 0px));
   transform: scale(var(--thumb-scale, 1)); transform-origin: 100% 100%;
 }
 .hud.thumbs .hud-slot {
@@ -818,14 +826,17 @@ ${thumbClusterCss()}
   max-width: 420px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .hud.thumbs .hud-hints {
-  max-width: 150px; left: calc(84px + env(safe-area-inset-left, 0px)); bottom: auto;
+  max-width: 150px; left: calc(84px + var(--safe-left, env(safe-area-inset-left, 0px)));
+  bottom: auto;
   top: 44px; font-size: 10px;
 }
-/* A phone held upright: the stick and the bar need the width, so the
-   match waits behind the wall until the phone turns (a practice match
-   holds its clock meanwhile, game/practice_clock.ts). An iPhone never
-   turns the screen for the page, and with its rotation lock on it never
-   turns at all: the wall says where the lock is, and has a way out. */
+/* A phone held upright: the stick and the bar need the width. The match
+   turns inside the page for it (the rotated view, game/rotated_view.ts);
+   with that turned off, it waits behind the wall until the phone turns (a
+   practice match holds its clock meanwhile, game/practice_clock.ts). An
+   iPhone never turns the screen for the page, and with its rotation lock
+   on it never turns at all: the wall says where the lock is, and has a
+   way out. */
 .hud-turn {
   display: none; position: absolute; inset: 0; z-index: 40; pointer-events: auto;
   flex-direction: column; gap: 12px;
@@ -880,20 +891,31 @@ ${thumbClusterCss()}
    down while the shop is up; its Shop button is what opened it, and the
    shop's own Close is what ends it. */
 .hud.shop-open ~ .touchbar { display: none; }
+/* Narrow is the match stage's width, not the page's: a phone held upright
+   and turned (game/match_stage.ts) is as wide as the phone is tall, and
+   there the stage answers container queries. */
 @media (max-width: 560px) {
+  .match-stage:not(.turned) .hud.compact .hud-shop-body { flex-direction: column; }
+  .match-stage:not(.turned) .hud.compact .hud-shop-detail {
+    width: auto; max-height: 40%; border-left: none; border-top: 2px solid #3a4f28;
+  }
+}
+@container (max-width: 560px) {
   .hud.compact .hud-shop-body { flex-direction: column; }
   .hud.compact .hud-shop-detail {
     width: auto; max-height: 40%; border-left: none; border-top: 2px solid #3a4f28;
   }
 }
 /* Only where the browser would not turn the screen itself
-   (game/orientation.ts): with the lock granted there is nothing to ask. */
+   (game/orientation.ts) and the player turned the rotated view off
+   (game/rotated_view.ts): with the lock granted there is nothing to ask,
+   and a turned stage is landscape already. */
 @media (orientation: portrait) {
-  .hud.compact.turn-needed .hud-turn { display: flex; }
+  .match-stage:not(.turned) .hud.compact.turn-needed .hud-turn { display: flex; }
   /* The touch bar rides above the HUD's layer; behind the wall its
      buttons would float over it with nothing to act on. The wall's own
      button is the way out, Back the way to the pause menu. */
-  .hud.compact.turn-needed ~ .touchbar { display: none; }
+  .match-stage:not(.turned) .hud.compact.turn-needed ~ .touchbar { display: none; }
 }
 `;
 
@@ -1003,10 +1025,12 @@ export class Hud {
   private readonly hintsEl: HTMLElement;
   private hintsClock: HintsClock = HINTS_START;
   private readonly hintsHold: number | null;
-  // Whether the browser holds the screen in landscape (setLandscapeLocked),
-  // and whether the phone is upright: the two halves of the turn wall.
-  private landscapeLocked = false;
+  // What the browser answered the landscape ask (setLandscapeLocked), and
+  // whether the phone is upright: with the setting for the rotated view
+  // (game/rotated_view.ts), what decides whether the turn wall stands.
+  private landscapeLock: LockAnswer = 'asking';
   private readonly portrait: MediaQueryList | null;
+  private readonly onSettings: () => void;
   private endPlayed = false;
   // No account behind this match (ui/account_offer.ts).
   private readonly guest: boolean;
@@ -1080,9 +1104,9 @@ export class Hud {
     // the bottom bar for a cluster under the right thumb, with the attack
     // button at the corner, and a press on a slot aims by sliding.
     const thumbs = coarsePointer && getSettings().touchScheme === 'thumbs';
-    // turn-needed until the browser says it has taken the screen in
-    // landscape (setLandscapeLocked): a phone that refuses keeps the line
-    // asking for a turn, which is what it had before.
+    // turn-needed until the browser answers (setLandscapeLocked): a phone
+    // that refuses gets the rotated view instead, and keeps the line
+    // asking for a turn only when the player turned that off.
     this.coarsePointer = coarsePointer;
     this.portrait =
       typeof window.matchMedia === 'function' ? window.matchMedia('(orientation: portrait)') : null;
@@ -1090,10 +1114,17 @@ export class Hud {
     root.className = coarsePointer ? `hud compact${thumbs ? ' thumbs' : ''} turn-needed` : 'hud';
     this.rootEl = root;
     // The interface size (src/game/ui_scale.ts): the screen's, or the
-    // player's choice, followed live while the match is on.
-    this.stopScale = followUiScale(root, () => getSettings().uiScale);
+    // player's choice, followed live while the match is on. The screen is
+    // the match stage's (game/match_stage.ts), whose height on a phone
+    // held upright and turned is the phone's width.
+    const stageHeight = (): number => stageSizeOf(container).height;
+    this.stopScale = followUiScale(root, () => getSettings().uiScale, stageHeight);
     // The thumb controls' size, from the height of the phone (ui_scale.ts).
-    this.stopThumbScale = thumbs ? followThumbScale(root) : (): void => undefined;
+    this.stopThumbScale = thumbs ? followThumbScale(root, stageHeight) : (): void => undefined;
+    // The setting for the rotated view changes from the pause menu: the
+    // wall follows it at once, as the stage does.
+    this.onSettings = (): void => this.syncTurnNeeded();
+    window.addEventListener(SETTINGS_EVENT, this.onSettings);
     const el = <K extends keyof HTMLElementTagNameMap>(
       tag: K,
       cls: string,
@@ -1234,12 +1265,14 @@ export class Hud {
         downAt = performance.now();
         if (thumbs) {
           slot.setPointerCapture(e.pointerId);
-          this.castTouch?.abilityDown(key, e.clientX, e.clientY);
+          const p = pointOnStage(slot, e.clientX, e.clientY);
+          this.castTouch?.abilityDown(key, p.x, p.y);
         }
       });
       slot.addEventListener('pointermove', (e) => {
         if (thumbs && e.pointerType === 'touch') {
-          this.castTouch?.abilityMove(key, e.clientX, e.clientY);
+          const p = pointOnStage(slot, e.clientX, e.clientY);
+          this.castTouch?.abilityMove(key, p.x, p.y);
         }
       });
       slot.addEventListener('pointerup', (e) => {
@@ -1250,7 +1283,8 @@ export class Hud {
         }
         if (e.target === up) return;
         if (thumbs) {
-          this.castTouch?.abilityUp(key, e.clientX, e.clientY);
+          const p = pointOnStage(slot, e.clientX, e.clientY);
+          this.castTouch?.abilityUp(key, p.x, p.y);
           return;
         }
         if (performance.now() - downAt >= LONG_PRESS_MS) return;
@@ -1293,16 +1327,21 @@ export class Hud {
         sigilDownAt = performance.now();
         if (thumbs) {
           slot.setPointerCapture(e.pointerId);
-          this.castTouch?.sigilDown(i, e.clientX, e.clientY);
+          const p = pointOnStage(slot, e.clientX, e.clientY);
+          this.castTouch?.sigilDown(i, p.x, p.y);
         }
       });
       slot.addEventListener('pointermove', (e) => {
-        if (thumbs && e.pointerType === 'touch') this.castTouch?.sigilMove(i, e.clientX, e.clientY);
+        if (thumbs && e.pointerType === 'touch') {
+          const p = pointOnStage(slot, e.clientX, e.clientY);
+          this.castTouch?.sigilMove(i, p.x, p.y);
+        }
       });
       slot.addEventListener('pointerup', (e) => {
         if (e.pointerType !== 'touch') return;
         if (thumbs) {
-          this.castTouch?.sigilUp(i, e.clientX, e.clientY);
+          const p = pointOnStage(slot, e.clientX, e.clientY);
+          this.castTouch?.sigilUp(i, p.x, p.y);
           return;
         }
         if (performance.now() - sigilDownAt >= LONG_PRESS_MS) return;
@@ -1699,21 +1738,36 @@ export class Hud {
     hideTooltip();
     this.stopScale();
     this.stopThumbScale();
+    window.removeEventListener(SETTINGS_EVENT, this.onSettings);
     this.rootEl.remove();
     this.styleEl.remove();
   }
 
-  // The browser has taken the screen in landscape for this match
-  // (game/orientation.ts), so the line asking for a turn has nothing left
-  // to ask. Called again whenever the request is retried.
+  // The browser's answer to the landscape ask for this match
+  // (game/orientation.ts): with the lock there is nothing left to ask, and
+  // a refusal is the rotated view's to answer (game/rotated_view.ts)
+  // unless the player turned it off. Called again whenever the request is
+  // retried.
   setLandscapeLocked(locked: boolean): void {
-    this.landscapeLocked = locked;
-    this.rootEl.classList.toggle('turn-needed', needsTurnPrompt(this.coarsePointer, locked));
+    this.landscapeLock = locked ? 'granted' : 'refused';
+    this.syncTurnNeeded();
   }
 
-  // The turn wall stands right now (the stylesheet's own two conditions).
+  private syncTurnNeeded(): void {
+    this.rootEl.classList.toggle(
+      'turn-needed',
+      wallFallback(this.coarsePointer, this.landscapeLock, getSettings().rotatedView),
+    );
+  }
+
+  // The turn wall stands right now (the stylesheet's own conditions).
   private turnWallUp(): boolean {
-    return turnWallUp(this.coarsePointer, this.landscapeLocked, this.portrait?.matches ?? false);
+    return turnWallUp(
+      this.coarsePointer,
+      this.landscapeLock,
+      getSettings().rotatedView,
+      this.portrait?.matches ?? false,
+    );
   }
 
   // What stands over the match right now, for the practice clock
@@ -1868,10 +1922,11 @@ export class Hud {
   }
 
   // Where the lane card stands while it is up, for the arrow to keep
-  // clear of; null while it is not.
-  laneCardRect(): DOMRect | null {
+  // clear of, in the match stage's pixels like the arrow; null while it
+  // is not.
+  laneCardRect(): ScreenRect | null {
     return this.laneCardEl.classList.contains('on')
-      ? this.laneCardEl.getBoundingClientRect()
+      ? rectOnStage(this.laneCardEl, this.laneCardEl.getBoundingClientRect())
       : null;
   }
 

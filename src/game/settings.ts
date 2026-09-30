@@ -25,6 +25,9 @@ export interface GameSettings {
   // The matches this device has shown the Move ring in (move_ring.ts),
   // which stops after the first few. Not a choice the panel offers.
   moveRingMatches: number;
+  // A phone held upright that the browser will not turn (rotated_view.ts):
+  // the match turned a quarter for it, or the wall asking for a turn.
+  rotatedView: boolean;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -35,6 +38,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   touchScheme: 'thumbs',
   practiceBots: DEFAULT_PRACTICE_BOTS,
   moveRingMatches: 0,
+  rotatedView: true,
 };
 
 const STORAGE_KEY = 'loc-settings';
@@ -58,6 +62,7 @@ export function clampSettings(raw: unknown): GameSettings {
     touchScheme: r.touchScheme === 'tap' ? 'tap' : 'thumbs',
     practiceBots: clampPracticeBots(r.practiceBots),
     moveRingMatches: count(r.moveRingMatches),
+    rotatedView: typeof r.rotatedView === 'boolean' ? r.rotatedView : DEFAULT_SETTINGS.rotatedView,
   };
 }
 

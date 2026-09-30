@@ -8,6 +8,7 @@
 // over the game; there the tip shows only while a finger stays pressed on
 // the anchor (a long press), and hides the moment it lifts.
 
+import { rectOnStage, stageOf } from '../game/match_stage';
 import { setRichLine } from './rich_text';
 
 // How long a finger must rest on an anchor before the tip shows. Shared
@@ -52,11 +53,22 @@ function showTooltip(el: HTMLElement, lines: () => readonly string[]): void {
     t.appendChild(row);
   });
   if (content.length === 0) return;
+  // On a match stage turned for a phone held upright (game/match_stage.ts)
+  // the tip lives on the stage and turns with it, placed in the stage's
+  // pixels (a fixed box inside a turned one is placed from its corner);
+  // everywhere else it stays on the page.
+  const stage = stageOf(el);
+  const turned = stage?.frame().turned === true;
+  const host = turned && stage ? stage.el : document.body;
+  if (t.parentElement !== host) host.appendChild(t);
   t.style.display = 'block';
-  const rect = el.getBoundingClientRect();
-  const tipRect = t.getBoundingClientRect();
+  const rect = turned ? rectOnStage(el, el.getBoundingClientRect()) : el.getBoundingClientRect();
+  const tipRect = turned
+    ? { width: t.offsetWidth, height: t.offsetHeight }
+    : t.getBoundingClientRect();
+  const viewWidth = turned && stage ? stage.el.clientWidth : window.innerWidth;
   let x = rect.left + rect.width / 2 - tipRect.width / 2;
-  x = Math.max(8, Math.min(window.innerWidth - tipRect.width - 8, x));
+  x = Math.max(8, Math.min(viewWidth - tipRect.width - 8, x));
   let y = rect.top - tipRect.height - 8;
   if (y < 8) y = rect.bottom + 8;
   t.style.left = `${x}px`;

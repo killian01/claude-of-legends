@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { attackSoundOf, castSoundOf } from '../game/champion_sounds';
+import { pointOnStage, rectOnStage, stageSizeOf } from '../game/match_stage';
 import { playCastSfx, playSfx } from '../game/sfx';
 import { attackWindupSeconds, RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import type { CastSpec } from '../sim/combat/casting';
@@ -466,11 +467,14 @@ export class Renderer {
     // so the exit position is recorded instead of cleared. Touch pointers
     // are skipped: a tap near a screen edge would otherwise leave the
     // camera drifting forever (touch camera control is drag panning,
-    // game/touch.ts).
+    // game/touch.ts). Every screen point here is in the pixels of the
+    // match's stage (game/match_stage.ts), the page's own unless the stage
+    // is turned for a phone held upright.
     const onPointerMove = (e: PointerEvent): void => {
       if (e.pointerType === 'touch') return;
-      this.pointerX = e.clientX;
-      this.pointerY = e.clientY;
+      const p = pointOnStage(this.gl.domElement, e.clientX, e.clientY);
+      this.pointerX = p.x;
+      this.pointerY = p.y;
     };
     window.addEventListener('pointermove', onPointerMove);
     this.cleanups.push(() => window.removeEventListener('pointermove', onPointerMove));
@@ -479,12 +483,12 @@ export class Renderer {
     // in the direction the cursor left.
     const onMouseOut = (e: MouseEvent): void => {
       if (e.relatedTarget !== null) return;
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      const dists = [e.clientX, w - e.clientX, e.clientY, h - e.clientY];
+      const { width: w, height: h } = stageSizeOf(this.gl.domElement);
+      const at = pointOnStage(this.gl.domElement, e.clientX, e.clientY);
+      const dists = [at.x, w - at.x, at.y, h - at.y];
       const closest = dists.indexOf(Math.min(...dists));
-      this.pointerX = e.clientX;
-      this.pointerY = e.clientY;
+      this.pointerX = at.x;
+      this.pointerY = at.y;
       if (closest === 0) this.pointerX = 0;
       else if (closest === 1) this.pointerX = w;
       else if (closest === 2) this.pointerY = 0;
@@ -636,8 +640,9 @@ export class Renderer {
     this.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, this.zoom / factor));
   }
 
-  // Touch has no hover: an armed cast feeds the finger position here so the
-  // aim preview tracks it (the window pointermove tracker skips touch).
+  // Touch has no hover: an armed cast feeds the finger position here, in
+  // the stage's pixels, so the aim preview tracks it (the window
+  // pointermove tracker skips touch).
   setPointerHint(x: number, y: number): void {
     this.pointerX = x;
     this.pointerY = y;
@@ -878,7 +883,7 @@ export class Renderer {
   private updateFreeCam(dtMs: number, followPos: THREE.Vector3 | null): void {
     const EDGE_PX = 28;
     if (this.pointerX < 0 || !this.edgePanGate()) return;
-    const rect = this.gl.domElement.getBoundingClientRect();
+    const rect = this.canvasRect();
     // Clamp instead of rejecting: a pointer past the window edge counts as
     // sitting ON that edge, so panning continues outside the window.
     const x = Math.max(0, Math.min(rect.width, this.pointerX - rect.left));
@@ -901,14 +906,23 @@ export class Renderer {
     this.freeCam.z = Math.max(0, Math.min(size, this.freeCam.z + dz * speed * dtMs));
   }
 
-  // Projects a world point to client pixels; null when behind the camera.
-  // Used by screen-space picking so clicks land on visible bodies.
+  // Where the canvas stands in the stage's pixels (game/match_stage.ts):
+  // its client rect on a page standing straight, the stage's whole box on
+  // a turned one.
+  private canvasRect(): { left: number; top: number; width: number; height: number } {
+    return rectOnStage(this.gl.domElement, this.gl.domElement.getBoundingClientRect());
+  }
+
+  // Projects a world point to screen pixels, the stage's (the page's while
+  // it stands straight); null when behind the camera. Used by screen-space
+  // picking so clicks land on visible bodies, and to place what is drawn
+  // over the canvas.
   projectToScreen(x: number, y: number, z: number): { x: number; y: number } | null {
     const v = new THREE.Vector3(x, y + this.groundHeight(x, z), this.sceneZ(z)).project(
       this.camera,
     );
     if (v.z > 1) return null;
-    const rect = this.gl.domElement.getBoundingClientRect();
+    const rect = this.canvasRect();
     return {
       x: rect.left + ((v.x + 1) / 2) * rect.width,
       y: rect.top + ((1 - v.y) / 2) * rect.height,
@@ -3010,9 +3024,10 @@ export class Renderer {
       this.hoverTargetId !== this.attackTargetId && place(this.hoverRing, this.hoverTargetId);
   }
 
-  // Unprojects a client-space pointer position onto the ground plane.
-  groundPointAt(clientX: number, clientY: number): Vec2 | null {
-    this.setRayFrom(clientX, clientY);
+  // Unprojects a screen point, in the stage's pixels (a pointer mapped by
+  // game/match_stage.ts), onto the ground plane.
+  groundPointAt(screenX: number, screenY: number): Vec2 | null {
+    this.setRayFrom(screenX, screenY);
     const hit = new THREE.Vector3();
     if (this.raycaster.ray.intersectPlane(this.groundPlane, hit)) {
       for (let iteration = 0; iteration < 5; iteration++) {
@@ -3025,11 +3040,11 @@ export class Renderer {
     return null;
   }
 
-  private setRayFrom(clientX: number, clientY: number): void {
-    const rect = this.gl.domElement.getBoundingClientRect();
+  private setRayFrom(screenX: number, screenY: number): void {
+    const rect = this.canvasRect();
     const ndc = new THREE.Vector2(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      -((clientY - rect.top) / rect.height) * 2 + 1,
+      ((screenX - rect.left) / rect.width) * 2 - 1,
+      -((screenY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.camera);
   }

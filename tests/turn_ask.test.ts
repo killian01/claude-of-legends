@@ -3,8 +3,8 @@
 // match opened at that moment.
 
 import { describe, expect, it } from 'vitest';
-import { turnWallUp } from '../src/game/orientation';
-import { loadingAsksTurn, TURN_ASK, TURN_LOCK_LINE } from '../src/ui/turn_ask';
+import { turnWallUp } from '../src/game/rotated_view';
+import { loadingAsksTurn, loadingTellsLock, TURN_ASK, TURN_LOCK_LINE } from '../src/ui/turn_ask';
 
 describe('the loading card asking for a turn', () => {
   it('asks a touchscreen held upright', () => {
@@ -20,12 +20,19 @@ describe('the loading card asking for a turn', () => {
     expect(loadingAsksTurn(false, false)).toBe(false);
   });
 
-  it('asks exactly when the wall would stand at the opening, before any lock', () => {
+  it('asks exactly when the wall would stand at the opening with no rotated view', () => {
     for (const coarse of [false, true]) {
       for (const portrait of [false, true]) {
-        expect(loadingAsksTurn(coarse, portrait)).toBe(turnWallUp(coarse, false, portrait));
+        expect(loadingAsksTurn(coarse, portrait)).toBe(
+          turnWallUp(coarse, 'refused', false, portrait),
+        );
       }
     }
+  });
+
+  it('tells about the iPhone rotation lock only when the rotated view is off', () => {
+    expect(loadingTellsLock(true)).toBe(false);
+    expect(loadingTellsLock(false)).toBe(true);
   });
 
   it('says it in the words the wall uses', () => {

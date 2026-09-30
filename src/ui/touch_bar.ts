@@ -5,7 +5,8 @@
 // finger's size (MIN_TAP_PX; they were 38 px tall), and it keeps clear of
 // a phone's notch and rounded corners (the safe area: index.html asks for
 // the whole screen with viewport-fit=cover, so the page has to step in
-// from the edges itself).
+// from the edges itself). The insets are the match stage's
+// (game/match_stage.ts), which trade edges when the stage is turned.
 
 import { MIN_TAP_PX } from '../game/ui_scale';
 
@@ -19,7 +20,8 @@ export interface TouchBarActions {
 export const TOUCH_BAR_CSS = `
 .touchbar {
   /* Above the vertical middle: the minimap owns the bottom-right corner. */
-  position: absolute; right: calc(8px + env(safe-area-inset-right, 0px)); top: 40%;
+  position: absolute; right: calc(8px + var(--safe-right, env(safe-area-inset-right, 0px)));
+  top: 40%;
   transform: translateY(-50%);
   display: flex; flex-direction: column; gap: 8px; z-index: 30;
 }
@@ -32,7 +34,9 @@ export const TOUCH_BAR_CSS = `
 }
 .touchbar-btn:active { background: rgba(70, 96, 48, 0.9); }
 /* With the thumb controls the right edge belongs to the casting thumb. */
-.touchbar.left { right: auto; left: calc(8px + env(safe-area-inset-left, 0px)); top: 38%; }
+.touchbar.left {
+  right: auto; left: calc(8px + var(--safe-left, env(safe-area-inset-left, 0px))); top: 38%;
+}
 `;
 
 // Returns a teardown removing the bar and its stylesheet, like the HUD's.

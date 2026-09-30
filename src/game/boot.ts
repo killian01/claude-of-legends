@@ -37,6 +37,7 @@ import { installCursorLock } from './cursor_lock';
 import type { PostMatchAction } from './flow';
 import { requestGameFullscreen } from './fullscreen';
 import { type InputHandlers, setupInput } from './input';
+import { buildMatchStage, stageSizeOf } from './match_stage';
 import { moveRingWanted } from './move_ring';
 import { startMusic, stopMusic } from './music';
 import { lockLandscape, unlockOrientation } from './orientation';
@@ -87,6 +88,10 @@ export interface Presentation {
   // the opening shop), for the practice clock (game/practice_clock.ts). A
   // match against the server never asks.
   covers(): MatchCover;
+  // The box the match is built in (game/match_stage.ts), turned with it on
+  // a phone held upright: a host's own bar over the match (the replay's,
+  // the coach's) goes in here so it turns too.
+  readonly stage: HTMLElement;
   // Same-page teardown: render loop, input, HUD, minimap, GL, music. The
   // menu returns on the same document; nothing may keep running behind it.
   dispose(): void;
@@ -119,7 +124,16 @@ export function startPresentation(
   },
 ): Presentation {
   const guide = options.guide ?? 'play';
-  const renderer = new Renderer(container, world, options.terrain);
+  // Set by dispose(): an answer from the browser that comes after it is
+  // for a match that is gone.
+  let disposed = false;
+  const coarsePointer =
+    typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+  // The match's stage (game/match_stage.ts): everything below is built in
+  // it rather than in the page, so a phone held upright that the browser
+  // will not turn gets all of it turned a quarter (game/rotated_view.ts).
+  const stage = buildMatchStage(container, { coarsePointer });
+  const renderer = new Renderer(stage.el, world, options.terrain);
   options.onRenderer?.(renderer);
   // The recorded bank decodes while the match loads, so the first swing
   // plays a recording rather than the synthesis.
@@ -128,7 +142,7 @@ export function startPresentation(
   renderer.setViewerTeam(selfTeam);
   renderer.domElement.style.cursor = defaultCursor();
   const hud = new Hud(
-    container,
+    stage.el,
     world,
     selfId,
     selfTeam,
@@ -140,12 +154,9 @@ export function startPresentation(
   // The thumb controls (CONTEXT.md: Thumb stick): a touchscreen playing
   // by the stick, which moves the minimap and the touch bar out of the
   // thumbs' way and hands the HUD's slots to the cast touch.
-  const thumbControls =
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(pointer: coarse)').matches &&
-    getSettings().touchScheme === 'thumbs';
+  const thumbControls = coarsePointer && getSettings().touchScheme === 'thumbs';
   const minimap = new Minimap(
-    container,
+    stage.el,
     world,
     selfTeam,
     selfId,
@@ -164,9 +175,14 @@ export function startPresentation(
   // The phone turns itself for the match (game/orientation.ts): the lock
   // is granted to a fullscreen document, so it is asked for right after
   // the screen is taken, and again on the backstop below. A browser that
-  // refuses (iOS has no lock) leaves the HUD's line asking for a turn.
+  // refuses (iOS has no lock) gets the stage turned inside the page
+  // instead, or the HUD's line asking for a turn when the player chose it.
   const askLandscape = (): void => {
-    void lockLandscape().then((locked) => hud.setLandscapeLocked(locked));
+    void lockLandscape().then((locked) => {
+      if (disposed) return;
+      stage.setLandscapeLocked(locked);
+      hud.setLandscapeLocked(locked);
+    });
   };
   askLandscape();
 
@@ -189,8 +205,9 @@ export function startPresentation(
 
   const project = (x: number, y: number, z: number) => renderer.projectToScreen(x, y, z);
   // A dev probe like the replay viewer's (src/main.ts __replay): the
-  // browser e2e scripts read the champion's position off it.
-  (window as unknown as { __match?: unknown }).__match = { world, selfId, renderer };
+  // browser e2e scripts read the champion's position off it, and whether
+  // the stage is turned.
+  (window as unknown as { __match?: unknown }).__match = { world, selfId, renderer, stage };
 
   // A ground-placed cast aimed beyond range walks into range first, then
   // fires at the EXACT aimed point, like the genre without quickcast. Any
@@ -319,8 +336,6 @@ export function startPresentation(
   };
 
   let lastHoverAt = 0;
-  const coarsePointer =
-    typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
   // One handlers object for every input source: mouse and keyboard
   // (setupInput), fingers (setupTouchControls), and the touch bar.
   // The last order the left thumb's stick gave (thumb_stick.ts), for the
@@ -539,13 +554,14 @@ export function startPresentation(
   // two-step casts armed by tapping HUD slots). The gesture listeners are
   // inert without a touchscreen; the button bar for key-only orders builds
   // on coarse-pointer devices only.
-  // A phone's stick is drawn only where there is a thumb to hold it. A
+  // A phone's stick is drawn only where there is a thumb to hold it, on
+  // the match's stage (turned for an upright iPhone, match_stage.ts). A
   // newcomer's first matches with it show the Move ring too, counted on
   // this device (game/move_ring.ts).
   const shownIn = getSettings().moveRingMatches;
   const moveRing = moveRingWanted(thumbControls, guide === 'play', shownIn);
   if (moveRing) updateSettings({ moveRingMatches: shownIn + 1 });
-  const stickView = coarsePointer ? buildThumbStickView(container, { moveRing }) : null;
+  const stickView = coarsePointer ? buildThumbStickView(stage.el, { moveRing }) : null;
   const touch = setupTouchControls(renderer, inputHandlers, {
     onArmedChange: (label) => hud.setArmedSlot(label),
     scheme: () => getSettings().touchScheme,
@@ -573,12 +589,12 @@ export function startPresentation(
     renderer.flashMarker(p.x, p.z);
   });
   // The arrow toward the lane, for a person on the seat only.
-  const laneArrow = guide === 'play' ? new LaneArrow(container) : null;
+  const laneArrow = guide === 'play' ? new LaneArrow(stage.el) : null;
   const arrowHalf = laneArrowHalf();
   if (thumbControls) hud.setCastTouch(touch.castTouch);
   const teardownTouchBar = coarsePointer
     ? buildTouchBar(
-        container,
+        stage.el,
         {
           onRecall: () => inputHandlers.onRecall(),
           onToggleShop: () => inputHandlers.onToggleShop(),
@@ -670,7 +686,7 @@ export function startPresentation(
       return;
     }
     const shown = renderer.projectToScreen(target.x, ARROW_LIFT, target.z);
-    const view = { width: window.innerWidth, height: window.innerHeight };
+    const view = stageSizeOf(stage.el);
     const lead = arrowWanted(guide, lane, self, onScreen(shown, view))
       ? leadToward(self, target)
       : null;
@@ -682,7 +698,6 @@ export function startPresentation(
     laneArrow.place(at ? clearOfCard(at, hud.laneCardRect(), arrowHalf) : null);
   };
 
-  let disposed = false;
   let rafId = 0;
   function frame(now: number): void {
     if (disposed) return;
@@ -705,6 +720,7 @@ export function startPresentation(
       hud.setMatchResult(rated, delta, rating, queue, way),
     toggleEscapeMenu: () => hud.toggleEscapeMenu(),
     covers: () => hud.covers(),
+    stage: stage.el,
     dispose: () => {
       if (disposed) return;
       disposed = true;
@@ -720,6 +736,7 @@ export function startPresentation(
       laneArrow?.dispose();
       minimap.dispose();
       renderer.dispose();
+      stage.dispose();
       stopMusic();
       // The screen turns with the phone again once the match is over.
       unlockOrientation();

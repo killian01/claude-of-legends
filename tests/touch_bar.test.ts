@@ -14,7 +14,12 @@ describe('the touch bar', () => {
   });
 
   it('keeps clear of the safe area on the right and on the left', () => {
-    expect(TOUCH_BAR_CSS).toContain('right: calc(8px + env(safe-area-inset-right, 0px))');
-    expect(TOUCH_BAR_CSS).toContain('left: calc(8px + env(safe-area-inset-left, 0px))');
+    // The stage's insets (src/game/match_stage.ts), the page's by default.
+    expect(TOUCH_BAR_CSS).toContain(
+      'right: calc(8px + var(--safe-right, env(safe-area-inset-right, 0px)))',
+    );
+    expect(TOUCH_BAR_CSS).toContain(
+      'left: calc(8px + var(--safe-left, env(safe-area-inset-left, 0px)))',
+    );
   });
 });

@@ -363,6 +363,16 @@ scheme. A tap on the rest of the screen still walks or attacks; the setting "Tou
 controls" turns all of it off for the older tap to walk.
 _Avoid_: joystick, virtual pad, d-pad, analog stick, quick cast (that is a slot's tap)
 
+**Rotated view**:
+How a phone held upright plays a match when its browser will not turn the screen for the page
+(every iPhone: Safari grants neither fullscreen nor the landscape lock). The match's stage,
+everything the match draws and every button it has, is laid out as the landscape box the
+phone would have if it turned and rotated a quarter inside the page (`src/game/rotated_view.ts`,
+`src/game/match_stage.ts`), so the phone is held sideways, its top to the left, whatever its
+rotation lock says. Turned to landscape for real, the page is landscape and the stage stands
+straight again. The setting "Held upright" turns it off for the wall asking for a turn.
+_Avoid_: fake landscape, rotation hack, landscape mode
+
 **Play tile**:
 One of the five ways into a match on the Home, each a painted scene of its own: the Ranked
 queue, Bots, the Forge queue, a Private lobby, Practice. The tile is the button.

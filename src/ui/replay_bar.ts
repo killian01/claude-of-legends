@@ -14,8 +14,11 @@
 // health and gold. The top center belongs to the team score, the target
 // frame and the announcements. Nobody's default fits every screen, so the
 // badge is a drag handle, H collapses the bar to that handle, and both
-// choices are remembered.
+// choices are remembered. It rides the match's stage (game/match_stage.ts),
+// so every point and rect it measures is taken in the stage's pixels: on a
+// phone held upright the stage is turned, and the page's are not those.
 
+import { pointOnStage, rectOnStage } from '../game/match_stage';
 import type { ReplayMark } from '../game/replay_marks';
 import { DT } from '../sim/types';
 import { creatureName } from './objective_line';
@@ -30,7 +33,8 @@ import {
 const CSS = `
 .replay-bar {
   position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); z-index: 11;
-  width: min(760px, 94vw); display: flex; flex-direction: column; gap: 6px;
+  width: min(760px, calc(94 * var(--vw, 1vw)));
+  display: flex; flex-direction: column; gap: 6px;
   background: rgba(10, 15, 7, 0.88); border: 1px solid #6b5a2e; border-radius: 8px;
   padding: 6px 10px; pointer-events: auto; font-family: system-ui, sans-serif;
 }
@@ -398,7 +402,8 @@ export function buildReplayBar(opts: {
   const dock = (): void => {
     if (moved) return;
     const hud = document.querySelector('.hud-bottom');
-    const height = hud instanceof HTMLElement ? hud.getBoundingClientRect().height : 0;
+    const height =
+      hud instanceof HTMLElement ? rectOnStage(hud, hud.getBoundingClientRect()).height : 0;
     bar.style.bottom = `${dockedBottom(height)}px`;
   };
 
@@ -422,8 +427,9 @@ export function buildReplayBar(opts: {
       dock();
       return;
     }
-    const view = bar.parentElement?.getBoundingClientRect();
-    const rect = bar.getBoundingClientRect();
+    const parent = bar.parentElement;
+    const view = parent ? rectOnStage(parent, parent.getBoundingClientRect()) : null;
+    const rect = rectOnStage(bar, bar.getBoundingClientRect());
     const at = clampToView(
       moved,
       { w: rect.width, h: rect.height },
@@ -451,16 +457,19 @@ export function buildReplayBar(opts: {
 
   // Dragged by its badge, pointer events so a touch screen can do it too.
   badge.addEventListener('pointerdown', (e) => {
-    const rect = bar.getBoundingClientRect();
-    const view = bar.parentElement?.getBoundingClientRect();
-    const offX = e.clientX - rect.left;
-    const offY = e.clientY - rect.top;
+    const rect = rectOnStage(bar, bar.getBoundingClientRect());
+    const parent = bar.parentElement;
+    const view = parent ? rectOnStage(parent, parent.getBoundingClientRect()) : null;
+    const down = pointOnStage(bar, e.clientX, e.clientY);
+    const offX = down.x - rect.left;
+    const offY = down.y - rect.top;
     const originX = view?.left ?? 0;
     const originY = view?.top ?? 0;
     badge.setPointerCapture(e.pointerId);
     bar.classList.add('dragging');
     const move = (m: PointerEvent): void => {
-      moved = { x: m.clientX - originX - offX, y: m.clientY - originY - offY };
+      const p = pointOnStage(bar, m.clientX, m.clientY);
+      moved = { x: p.x - originX - offX, y: p.y - originY - offY };
       applyMoved();
     };
     const up = (): void => {

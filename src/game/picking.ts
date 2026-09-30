@@ -18,8 +18,9 @@ import type { IWorld } from '../world_api';
 const CLICK_SLOP = 1.6;
 const CLICK_SLOP_PX = 24;
 
-// Projects a world point (x, y up, z) to client pixels; null when behind the
-// camera. The renderer provides this.
+// Projects a world point (x, y up, z) to screen pixels, the match stage's
+// like the pointer it is compared with (game/match_stage.ts); null when
+// behind the camera. The renderer provides this.
 export type ScreenProjector = (x: number, y: number, z: number) => { x: number; y: number } | null;
 
 function pickable(world: IWorld, u: Readonly<Unit>, selfTeam: TeamId): boolean {
@@ -56,8 +57,8 @@ function bodyHeight(u: Readonly<Unit>): number {
 export function pickUnitOnScreen(
   world: IWorld,
   selfTeam: TeamId,
-  clientX: number,
-  clientY: number,
+  screenX: number,
+  screenY: number,
   project: ScreenProjector,
 ): Readonly<Unit> | null {
   let best: Readonly<Unit> | null = null;
@@ -70,7 +71,7 @@ export function pickUnitOnScreen(
     if (!c) continue;
     const edge = project(u.pos.x + u.radius, h, u.pos.z);
     const radiusPx = edge ? Math.hypot(edge.x - c.x, edge.y - c.y) : 0;
-    const d = Math.hypot(c.x - clientX, c.y - clientY) - radiusPx;
+    const d = Math.hypot(c.x - screenX, c.y - screenY) - radiusPx;
     if (d > CLICK_SLOP_PX) continue;
     const score = (d <= 0 ? 0 : 100000) + kindPriority(u) * 1000 + d;
     if (score < bestScore) {
@@ -84,8 +85,8 @@ export function pickUnitOnScreen(
 export function pickEnemyOnScreen(
   world: IWorld,
   selfTeam: TeamId,
-  clientX: number,
-  clientY: number,
+  screenX: number,
+  screenY: number,
   project: ScreenProjector,
 ): Readonly<Unit> | null {
   let best: Readonly<Unit> | null = null;
@@ -97,7 +98,7 @@ export function pickEnemyOnScreen(
     if (!c) continue;
     const edge = project(u.pos.x + u.radius, h, u.pos.z);
     const radiusPx = edge ? Math.hypot(edge.x - c.x, edge.y - c.y) : 0;
-    const d = Math.hypot(c.x - clientX, c.y - clientY) - radiusPx;
+    const d = Math.hypot(c.x - screenX, c.y - screenY) - radiusPx;
     if (d > CLICK_SLOP_PX) continue;
     const structure = u.kind === 'tower' || u.kind === 'sanctum' ? 1 : 0;
     const score = structure * 1e6 + (d <= 0 ? 0 : 100000) + kindPriority(u) * 1000 + d;

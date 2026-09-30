@@ -1,14 +1,10 @@
 // The phone turning itself for a match (src/game/orientation.ts): what
 // the browser is asked, what happens when it refuses, and when the line
-// asking for a turn is still needed.
+// asking for a turn is still needed. When the wall stands, now that the
+// rotated view comes first, is tests/rotated_view.test.ts.
 
 import { describe, expect, it, vi } from 'vitest';
-import {
-  lockLandscape,
-  needsTurnPrompt,
-  turnWallUp,
-  unlockOrientation,
-} from '../src/game/orientation';
+import { lockLandscape, needsTurnPrompt, unlockOrientation } from '../src/game/orientation';
 
 function fakeWindow(orientation?: unknown): Window {
   return { screen: { orientation } } as unknown as Window;
@@ -61,20 +57,5 @@ describe('the line asking for a turn', () => {
   it('never shows on a mouse', () => {
     expect(needsTurnPrompt(false, false)).toBe(false);
     expect(needsTurnPrompt(false, true)).toBe(false);
-  });
-});
-
-describe('the wall standing', () => {
-  it('stands while a phone the browser would not turn is held upright', () => {
-    expect(turnWallUp(true, false, true)).toBe(true);
-  });
-
-  it('is down once the phone is sideways, or the browser holds landscape', () => {
-    expect(turnWallUp(true, false, false)).toBe(false);
-    expect(turnWallUp(true, true, true)).toBe(false);
-  });
-
-  it('never stands on a mouse, even on a tall window', () => {
-    expect(turnWallUp(false, false, true)).toBe(false);
   });
 });
