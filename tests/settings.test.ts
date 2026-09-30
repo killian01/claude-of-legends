@@ -22,6 +22,7 @@ describe('player settings', () => {
       practiceBots: 'gentle',
       moveRingMatches: 0,
       rotatedView: true,
+      ladderTold: false,
     });
     expect(clampSettings({ sfx: 0.35, music: 0.8, announcer: true })).toEqual({
       sfx: 0.35,
@@ -32,6 +33,7 @@ describe('player settings', () => {
       practiceBots: 'gentle',
       moveRingMatches: 0,
       rotatedView: true,
+      ladderTold: false,
     });
   });
 
@@ -76,6 +78,12 @@ describe('player settings', () => {
     expect(DEFAULT_SETTINGS.rotatedView).toBe(true);
     expect(clampSettings({ rotatedView: false }).rotatedView).toBe(false);
     expect(clampSettings({ rotatedView: 'no' }).rotatedView).toBe(true);
+  });
+
+  it('remembers only a real yes for the ladder line, told once per viewer', () => {
+    expect(clampSettings({ ladderTold: true }).ladderTold).toBe(true);
+    expect(clampSettings({ ladderTold: 'yes' }).ladderTold).toBe(false);
+    expect(DEFAULT_SETTINGS.ladderTold).toBe(false);
   });
 
   it('keeps an interface size in range and falls back to auto', () => {

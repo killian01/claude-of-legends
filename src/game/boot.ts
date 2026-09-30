@@ -6,6 +6,7 @@
 // toasts fire here from mirrored state, before (or instead of) the
 // authoritative answer.
 
+import type { PointsReason } from '../net/protocol';
 import { schoolColorOf } from '../render/ability_vfx';
 import { aspectColor } from '../render/aspect_colors';
 import { Renderer } from '../render/renderer';
@@ -81,6 +82,9 @@ export interface Presentation {
   // The server's rating verdict for this player, shown on the end screen;
   // queue 'forge' labels the number as the Forge queue's own ladder.
   setMatchResult(rated: boolean, delta: number, rating: number, queue?: 'forge', way?: 'bot'): void;
+  // Points this player's seat banked on the ladder (ADR 0027): the total
+  // beside the K/D/A and a pop with the reason.
+  showPoints(delta: number, total: number, reason: PointsReason): void;
   // The pause menu, where Leave match lives: what the browser's Back does
   // mid-match instead of leaving (src/game/nav.ts). Back again resumes.
   toggleEscapeMenu(): void;
@@ -718,6 +722,7 @@ export function startPresentation(
     },
     setMatchResult: (rated, delta, rating, queue, way) =>
       hud.setMatchResult(rated, delta, rating, queue, way),
+    showPoints: (delta, total, reason) => hud.showPoints(delta, total, reason),
     toggleEscapeMenu: () => hud.toggleEscapeMenu(),
     covers: () => hud.covers(),
     stage: stage.el,

@@ -28,6 +28,10 @@ export interface GameSettings {
   // A phone held upright that the browser will not turn (rotated_view.ts):
   // the match turned a quarter for it, or the wall asking for a turn.
   rotatedView: boolean;
+  // This browser was told, once, that its matches are on the ladder: a
+  // Guest's first points say so plainly (ui/hud.ts, ADR 0027). Not a
+  // choice, so the settings panel never shows it.
+  ladderTold: boolean;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -39,6 +43,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   practiceBots: DEFAULT_PRACTICE_BOTS,
   moveRingMatches: 0,
   rotatedView: true,
+  ladderTold: false,
 };
 
 const STORAGE_KEY = 'loc-settings';
@@ -63,6 +68,7 @@ export function clampSettings(raw: unknown): GameSettings {
     practiceBots: clampPracticeBots(r.practiceBots),
     moveRingMatches: count(r.moveRingMatches),
     rotatedView: typeof r.rotatedView === 'boolean' ? r.rotatedView : DEFAULT_SETTINGS.rotatedView,
+    ladderTold: r.ladderTold === true,
   };
 }
 

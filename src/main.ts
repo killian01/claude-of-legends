@@ -861,6 +861,9 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
     let opening = false;
     let forgedIds: string[] = [];
     let droppedIn = false;
+    // The latest points message (ADR 0027), for a presentation that opens
+    // after it arrived: a drop-in can score while the map still loads.
+    let pendingPoints: Extract<ServerMsg, { t: 'points' }> | null = null;
     const openPresentation = async (): Promise<void> => {
       const loaded = await loadOrchard(forgedIds);
       if (finished) return;
@@ -894,6 +897,10 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
         sendChat: (text) => ws.send(JSON.stringify({ t: 'chat', text })),
         sendPing: (x, z) => ws.send(JSON.stringify({ t: 'ping', x, z })),
       });
+      if (pendingPoints) {
+        opened.showPoints(pendingPoints.delta, pendingPoints.total, pendingPoints.reason);
+        pendingPoints = null;
+      }
       // A bot's seat in a match under way (ADR 0025): say so, since the
       // champion was not picked and the clock is not at zero.
       if (droppedIn) {
@@ -1145,6 +1152,12 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
         case 'match_result':
           pres?.setMatchResult(msg.rated, msg.delta, msg.rating, msg.queue, msg.way);
           break;
+        case 'points':
+          // Points this seat banked on the ladder (ADR 0027), told to this
+          // player alone.
+          if (pres) pres.showPoints(msg.delta, msg.total, msg.reason);
+          else pendingPoints = msg;
+          break;
         case 'match_end':
           // The end overlay (stats, Play again, Return to menu) owns the way
           // out; without a presentation there is nothing to look at, go home.
@@ -1284,9 +1297,10 @@ async function boot(): Promise<void> {
         reenterAsAccount({ joinCode, confirmed });
         return;
       }
-      // The public queue as a Guest (ADR 0024): Play again queues again,
-      // anything else is back to the way in. No server to hand out a Guest
-      // falls through to the offline match below, which needs none.
+      // The public queue as a Guest (ADR 0024), on the ladder from the
+      // first points (ADR 0027): Play again queues again, anything else is
+      // back to the way in. No server to hand out a Guest falls through to
+      // the offline match below, which needs none.
       if (entry.kind === 'guest') {
         const guestName = await openGuest();
         if (guestName !== null) {
@@ -1298,10 +1312,11 @@ async function boot(): Promise<void> {
           continue;
         }
       }
-      // Offline: one match against bots, Play again replaying the same
-      // pick, then back to the way in, where the next practice goes through
-      // select again so the champion and the lane can change. A select
-      // left without a pick is back to the way in too.
+      // The fallback, and the landing's only way offline since its link
+      // left (ADR 0027): one match against bots, Play again replaying the
+      // same pick, then back to the way in, where the next practice goes
+      // through select again so the champion and the lane can change. A
+      // select left without a pick is back to the way in too.
       const pick: OfflinePick | null = await pickForPractice();
       if (!pick) continue;
       let action: PostMatchAction = 'again';

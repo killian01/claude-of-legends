@@ -10,10 +10,11 @@ import { requestGameFullscreen, toggleGameFullscreen } from '../game/fullscreen'
 import { pointOnStage, rectOnStage, stageSizeOf } from '../game/match_stage';
 import type { MatchCover } from '../game/practice_clock';
 import { type LockAnswer, type ScreenRect, turnWallUp, wallFallback } from '../game/rotated_view';
-import { getSettings } from '../game/settings';
+import { getSettings, updateSettings } from '../game/settings';
 import { playSfx } from '../game/sfx';
 import type { CastTouch } from '../game/touch';
 import { followThumbScale, followUiScale, SETTINGS_EVENT } from '../game/ui_scale';
+import type { PointsReason } from '../net/protocol';
 import { trackStep } from '../net/stats';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
@@ -58,6 +59,7 @@ import {
   stepNudge,
 } from './feedback_box';
 import { HINTS_START, type HintsClock, hintsHold, stepHints } from './hints_fade';
+import { buildLadderBox, type LadderBox } from './ladder_box';
 import {
   closeLaneCard,
   type GuideMode,
@@ -95,6 +97,7 @@ import {
   objectiveLine,
   wrathChipText,
 } from './objective_line';
+import { firstPointsText, popText } from './points_text';
 import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
 import { rankable } from './slot_tap';
@@ -630,6 +633,33 @@ const CSS = `
   text-shadow: 0 1px 2px #000; pointer-events: auto;
 }
 .hud-kda .cs { display: block; font-size: 11px; font-weight: 600; color: #93a87c; }
+/* The player's points on the ladder of every human (ADR 0027): inside the
+   K/D/A box and hung off its left edge, so the two share the corner
+   whatever the K/D/A reads. The total banked, and under it a pop as points
+   land. Only in a match that scores, from its first points. It takes no
+   pointer, so the corner's tooltip stays the K/D/A's. */
+.hud-points {
+  position: absolute; top: -1px; right: calc(100% + 8px); display: none;
+  padding: 5px 12px; border-radius: 6px; border: 1px solid #8a7430;
+  background: rgba(30, 26, 12, 0.88); color: #ffe08a; white-space: nowrap;
+  pointer-events: none; font-variant-numeric: tabular-nums;
+}
+.hud-points.on { display: block; }
+.hud-points .label { display: block; font-size: 11px; font-weight: 600; color: #c9ad62; }
+.hud-points-pop {
+  position: absolute; top: calc(100% + 5px); right: 0; font-size: 14px; font-weight: 800;
+  color: #ffd94a; text-shadow: 0 1px 3px #000, 0 0 10px rgba(255, 200, 80, 0.45);
+  opacity: 0; white-space: nowrap;
+}
+.hud-points-pop.on { animation: hud-points-pop 1.6s ease-out forwards; }
+@keyframes hud-points-pop {
+  0% { opacity: 0; transform: translateY(6px); }
+  12% { opacity: 1; transform: translateY(0); }
+  70% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-4px); }
+}
+.hud.compact .hud-points { padding: 4px 9px; }
+.hud.compact .hud-points-pop { font-size: 12.5px; }
 /* Informational wash: it must never swallow clicks meant for the shop,
    which stays usable while dead. Its own buttons opt back in. */
 .hud-overlay {
@@ -733,6 +763,37 @@ const CSS = `
 .hud.compact .hud-feedback-thanks { font-size: 12px; }
 .hud-end-join a { color: #cbd9b4; }
 .hud-end-rating { font-size: 15px; font-weight: 700; margin-top: 4px; min-height: 18px; }
+/* The ladder box (ui/ladder_box.ts), on the end screen and in the pause
+   menu of a match that scores: where the player stands on the ladder of
+   every human, in gold like the account offer, and a Guest's name. */
+.hud-ladder {
+  pointer-events: auto; margin-top: 12px; width: min(520px, 90vw); box-sizing: border-box;
+  padding: 10px 14px; border-radius: 10px; border: 1px solid #8a7430;
+  background: rgba(30, 26, 12, 0.92); text-align: left; text-shadow: none; color: #e6dcb8;
+}
+.hud-ladder[hidden], .hud-ladder-row[hidden] { display: none; }
+.hud-ladder-line { display: block; font-size: 15px; color: #ffe08a; }
+.hud-ladder-hint { display: block; margin-top: 2px; font-size: 12.5px; color: #c9bd93; }
+.hud-ladder-row { display: flex; gap: 8px; margin-top: 8px; align-items: stretch; }
+.hud-ladder-field {
+  flex: 1; min-width: 0; border-radius: 7px; border: 1px solid #8a7430; background: #16120a;
+  color: #f2e6c0; font: inherit; font-size: 13px; padding: 7px 10px;
+}
+.hud-ladder-field:focus { outline: none; border-color: #c9a84a; }
+.hud-ladder-row .hud-menu-btn {
+  margin: 0; flex: none; border-color: #8a7430; background: #3a3014; color: #f2e6c0;
+}
+.hud-ladder-row .hud-menu-btn:hover { border-color: #c9a84a; }
+.hud-ladder-status { font-size: 12.5px; }
+.hud-ladder-status.ok, .hud-ladder-status.bad { margin-top: 6px; }
+.hud-ladder-status.ok { color: #8fd06a; }
+.hud-ladder-status.bad { color: #f0a090; }
+.hud.compact .hud-ladder { margin-top: 8px; padding: 8px 10px; width: min(520px, 94vw); }
+.hud.compact .hud-ladder-line { font-size: 13px; }
+.hud.compact .hud-ladder-hint { font-size: 11.5px; }
+.hud.compact .hud-ladder-row { margin-top: 6px; gap: 6px; }
+.hud.compact .hud-ladder-field { font-size: 12px; padding: 6px 8px; }
+.hud.compact .hud-ladder-row .hud-menu-btn { padding: 7px 14px; font-size: 12.5px; }
 /* The account offer (ui/account_offer.ts), above the table and in gold:
    the one thing on this screen that asks for a decision, made in the
    visitor's own numbers. Absent for an account. */
@@ -993,6 +1054,14 @@ export class Hud {
   private readonly scoreTeams: [HTMLElement, HTMLElement];
   private readonly kdaText: HTMLElement;
   private readonly kdaCs: HTMLElement;
+  // The points on the ladder beside it (ADR 0027), and whether this match
+  // has banked any: only one that scores shows the box and the ladder box.
+  private readonly pointsBox: HTMLElement;
+  private readonly pointsTotal: HTMLElement;
+  private readonly pointsPop: HTMLElement;
+  private pointsSeen = false;
+  private readonly endLadder: LadderBox;
+  private readonly pauseLadder: LadderBox;
   private readonly targetFrame: HTMLElement;
   private readonly targetPortrait: HTMLImageElement;
   private readonly targetName: HTMLElement;
@@ -1426,7 +1495,13 @@ export class Hud {
     const kda = el('div', 'hud-kda');
     this.kdaText = el('div', '', '0 / 0 / 0');
     this.kdaCs = el('span', 'cs', 'CS 0');
-    kda.append(this.kdaText, this.kdaCs);
+    // The points on the ladder (ADR 0027), hung off the box's left edge
+    // and shown from the first points of a match that scores.
+    this.pointsBox = el('div', 'hud-points');
+    this.pointsTotal = el('div', '', '0');
+    this.pointsPop = el('div', 'hud-points-pop');
+    this.pointsBox.append(this.pointsTotal, el('span', 'label', 'points'), this.pointsPop);
+    kda.append(this.kdaText, this.kdaCs, this.pointsBox);
     attachTooltip(kda, () => ['Kills / Deaths / Assists', 'CS: minions last-hit.']);
 
     // The attacked target's frame: portrait, name, and health at
@@ -1641,10 +1716,16 @@ export class Hud {
     // since the end screen is where a match is over and there is nothing
     // left to interrupt.
     this.endFeedback = this.buildFeedback('end');
+    // Where the player stands on the ladder of every human, and a Guest's
+    // name beside the points (ui/ladder_box.ts, ADR 0027): right under the
+    // result, since it is the result that stays.
+    this.endLadder = buildLadderBox(el);
+    this.pauseLadder = buildLadderBox(el);
     this.endOverlay.append(
       this.endTitle,
       this.endSub,
       this.endRating,
+      this.endLadder.root,
       this.endOffer,
       this.endStats,
       endBtns,
@@ -1665,6 +1746,7 @@ export class Hud {
     this.escapeOverlay.append(
       el('div', 'hud-overlay-title', 'Paused view'),
       resume,
+      this.pauseLadder.root,
       buildSettingsPanel(),
       fullscreenBtn,
       this.pauseFeedback.root,
@@ -1730,6 +1812,24 @@ export class Hud {
     const label = way === 'bot' ? 'bot rating' : queue === 'forge' ? 'Forge rating' : 'rating';
     this.endRating.textContent = `${delta >= 0 ? '+' : ''}${delta} ${label} (now ${rating})`;
     this.endRating.style.color = delta >= 0 ? '#8fd06a' : '#d06a6a';
+  }
+
+  // Points banked on this player's line of the ladder (ADR 0027): the
+  // total beside the K/D/A and a pop with the reason. A Guest's first
+  // points say plainly, once per browser, that the match is on a ladder.
+  showPoints(delta: number, total: number, reason: PointsReason): void {
+    this.pointsSeen = true;
+    this.pointsBox.classList.add('on');
+    this.pointsTotal.textContent = total.toLocaleString('en-US');
+    this.pointsPop.textContent = popText(delta, reason);
+    this.pointsPop.classList.remove('on');
+    // Reading the layout flushes the removal, so the pop plays again.
+    void this.pointsPop.offsetWidth;
+    this.pointsPop.classList.add('on');
+    if (this.guest && !getSettings().ladderTold) {
+      updateSettings({ ladderTold: true });
+      this.announce(firstPointsText(delta), '#ffd94a', 4200);
+    }
   }
 
   // Same-page teardown: the HUD tree and its stylesheet go; a floating
@@ -1943,6 +2043,10 @@ export class Hud {
   toggleEscapeMenu(): void {
     this.escapeOverlay.classList.toggle('open');
     this.syncOverlay();
+    // Opened in a match that scores: the place as it stands now.
+    if (this.pointsSeen && this.escapeOverlay.classList.contains('open')) {
+      this.pauseLadder.refresh();
+    }
   }
 
   isChatOpen(): boolean {
@@ -2071,11 +2175,11 @@ export class Hud {
     this.lastWrathEnemyUntil = Math.max(this.lastWrathEnemyUntil, enemyWrath);
   }
 
-  announce(text: string, color = '#f2ffd9'): void {
+  announce(text: string, color = '#f2ffd9', holdMs = 2600): void {
     this.announceEl.textContent = text;
     this.announceEl.style.color = color;
     this.announceEl.style.opacity = '1';
-    this.announceUntil = performance.now() + 2600;
+    this.announceUntil = performance.now() + holdMs;
   }
 
   // The two top rungs of the multikill ladder get a moment of their own
@@ -2792,8 +2896,11 @@ export class Hud {
       const rows = this.world.scoreboard();
       const own = rows.find((r) => r.unitId === this.selfId);
       const def = u.championId ? this.world.championDef(u.championId) : null;
+      // The place the match left the player on the ladder, when it scored.
+      if (this.pointsSeen) this.endLadder.refresh();
       const offer = accountOffer({
         guest: this.guest,
+        scored: this.pointsSeen,
         won: winner === this.selfTeam,
         kills: own?.kills ?? 0,
         deaths: own?.deaths ?? 0,
