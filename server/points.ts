@@ -1,8 +1,9 @@
 // Points (CONTEXT.md, ADR 0027): what a human seat earns in a classic
 // public queue match for what it does there, times the match's weight at
-// that moment, banked on the player's line of the ladder as it comes. A
-// player who leaves keeps every point already banked, and the bot that
-// stands in for them earns nothing more on their behalf.
+// that moment (the people in it, and the bots it faces), banked on the
+// player's line of the ladder as it comes. A player who leaves keeps every
+// point already banked, and the bot that stands in for them earns nothing
+// more on their behalf.
 //
 // Pure over what the sim already counts. The tracker keeps what the last
 // tick left behind (each human seat's kills, assists and last hits, the
@@ -36,13 +37,32 @@ export const POINTS: Readonly<Record<PointsReason, number>> = {
 // nothing. The actions pay only when there are actions anyway.
 export const ACTIVE_END_TICKS = Math.round((3 * 60) / DT);
 
-// The weight of an award, from the humans connected in the match at that
-// moment, the scoring seat included: another human on the other team
-// doubles it, another only on the seat's own team makes it one and a half.
-export function pointsWeight(team: TeamId, humansByTeam: readonly [number, number]): number {
+// The weight the people put on an award, from the humans connected in the
+// match at that moment, the scoring seat included: another human on the
+// other team doubles it, another only on the seat's own team makes it one
+// and a half.
+export function humansWeight(team: TeamId, humansByTeam: readonly [number, number]): number {
   if (humansByTeam[team === 0 ? 1 : 0] > 0) return 2;
   if (humansByTeam[team] > 1) return 1.5;
   return 1;
+}
+
+// The weight the bots put on it: a seat whose opposing lane seats play the
+// Gentle player (server/guests.ts gentleTeams, decided at the match's
+// start) earns half; against the drawn house styles, the whole.
+export const GENTLE_WEIGHT = 0.5;
+export function botsWeight(team: TeamId, gentle: readonly TeamId[]): number {
+  return gentle.includes(team === 0 ? 1 : 0) ? GENTLE_WEIGHT : 1;
+}
+
+// The weight of an award: the people's, times the bots'. `gentle` names
+// the teams whose house lane seats play the Gentle player.
+export function pointsWeight(
+  team: TeamId,
+  humansByTeam: readonly [number, number],
+  gentle: readonly TeamId[] = [],
+): number {
+  return humansWeight(team, humansByTeam) * botsWeight(team, gentle);
 }
 
 // Points are integers; the weighted amount rounds, one action at a time.
@@ -154,7 +174,13 @@ export class MatchPoints {
   // The match is over: the end bonus is paid once and nothing after it.
   private ended = false;
 
-  constructor(world: PointsWorld) {
+  // `gentle`: the teams whose house lane seats play the Gentle player, as
+  // the match's start decided them (server/guests.ts gentleTeams), for the
+  // bots' weight. Fixed for the match, like the styles it seated.
+  constructor(
+    world: PointsWorld,
+    private readonly gentle: readonly TeamId[] = [],
+  ) {
     for (const [id, u] of world.units) if (u.kind === 'tower') this.towers.set(id, u.team);
     this.note(world);
   }
@@ -173,7 +199,8 @@ export class MatchPoints {
     const earned = new Map<string, PointsAward>();
     const give = (seat: PointsSeat, reason: PointsReason, count = 1): void => {
       if (count <= 0) return;
-      const delta = count * weighted(POINTS[reason], pointsWeight(seat.team, humans));
+      const weight = pointsWeight(seat.team, humans, this.gentle);
+      const delta = count * weighted(POINTS[reason], weight);
       if (delta <= 0) return;
       const key = `${seat.clientId}:${reason}`;
       const had = earned.get(key);

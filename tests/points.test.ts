@@ -4,11 +4,16 @@
 // held it. Read off a small world first, then off a real match.
 
 import { describe, expect, it } from 'vitest';
+import { fillWithBots, TEAM_SIZE } from '../server/bot_fill';
+import { gentleTeams } from '../server/guests';
 import { Match, type MatchPick } from '../server/match';
 import {
   ACTIVE_END_TICKS,
   bankAwards,
+  botsWeight,
+  GENTLE_WEIGHT,
   humanSeats,
+  humansWeight,
   MatchPoints,
   POINTS,
   type PointsSeat,
@@ -91,6 +96,22 @@ describe('the weight', () => {
     expect(pointsWeight(1, [1, 1])).toBe(2);
   });
 
+  it('halves for a seat facing the Gentle player, and multiplies with the people', () => {
+    // `gentle` names the teams whose house lane seats play the Gentle
+    // player: team 1 here, the lone Guest's enemies.
+    expect(pointsWeight(0, [1, 0], [1])).toBe(0.5);
+    expect(pointsWeight(0, [2, 0], [1])).toBe(0.75);
+    expect(pointsWeight(0, [1, 1], [])).toBe(2);
+    expect(pointsWeight(0, [1, 0], [])).toBe(1);
+    // A newcomer dropping in on the Gentle side faces the drawn styles, and
+    // the first Guest, facing Gentle bots, now has a human opponent.
+    expect(pointsWeight(1, [1, 1], [1])).toBe(2);
+    expect(pointsWeight(0, [1, 1], [1])).toBe(1);
+    expect(humansWeight(0, [2, 0])).toBe(1.5);
+    expect(botsWeight(0, [1])).toBe(GENTLE_WEIGHT);
+    expect(botsWeight(1, [1])).toBe(1);
+  });
+
   it('rounds each weighted action to an integer', () => {
     expect(weighted(POINTS.last_hit, 1.5)).toBe(2);
     expect(weighted(POINTS.assist, 1.5)).toBe(8);
@@ -146,6 +167,20 @@ describe('the actions', () => {
     points.observe(w, [], apart);
     unit(w, 1).kills = 1;
     expect(tally(points.observe(w, [], apart))).toEqual(['7:kill:20']);
+  });
+
+  it('pays a lone Guest facing the Gentle player half, rounded', () => {
+    const w = world();
+    const points = new MatchPoints(w, [1]);
+    const seats = [seat(7, 1, 0, -7)];
+    points.observe(w, [], seats);
+    unit(w, 1).cs = 1;
+    unit(w, 1).kills = 1;
+    unit(w, 1).assists = 1;
+    // A last hit still pays its point: a half rounds up.
+    expect(tally(points.observe(w, [], seats))).toEqual(['7:assist:3', '7:kill:5', '7:last_hit:1']);
+    w.units.delete(12);
+    expect(tally(points.observe(w, [death(12, 1)], seats))).toEqual(['7:tower:8']);
   });
 
   it('pays a camp body to the seat that last-hit it, and nobody else', () => {
@@ -298,6 +333,24 @@ describe('over a real match', () => {
     championId: 'vesk',
     sigils: ['riftstep', 'mend'],
   };
+
+  it('weighs a lone Guest by the Gentle player its match start seated', () => {
+    // What onMatchReady does: the Gentle teams off the picks, the fill,
+    // and the tracker holding the same decision for the whole match.
+    const guest: MatchPick = { ...alice, accountId: -5 };
+    const gentle = gentleTeams(true, [guest]);
+    expect(gentle).toEqual([1]);
+    const match = new Match(7, fillWithBots([guest], 7, TEAM_SIZE, [], gentle));
+    const points = new MatchPoints(match.sim, gentle);
+    const seats = humanSeats(match.players.values(), () => -5);
+    points.observe(match.sim, [], seats);
+    const redTower = [...match.sim.units.values()].find((u) => u.kind === 'tower' && u.team === 1);
+    expect(tally(points.observe(match.sim, [death(redTower?.id ?? -1, 999)], seats))).toEqual([
+      '1:tower:8',
+    ]);
+    // With an account in the match nobody plays Gentle, and the whole pays.
+    expect(gentleTeams(true, [{ ...alice, accountId: 12 }])).toEqual([]);
+  });
 
   it('knows the towers from the start and pays one that falls to the other team', () => {
     const match = new Match(7, [alice]);

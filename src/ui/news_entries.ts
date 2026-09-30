@@ -46,8 +46,8 @@ export const NEWS: readonly NewsEntry[] = [
         'your name on the ladder. At the end of the match, or in the pause menu, pick the name you ' +
         'want beside your points.',
       'Points count double when a person plays against you, and half again when one plays beside ' +
-        'you. An account keeps your points on every device, and making one in the same browser ' +
-        'brings them along.',
+        'you; against the gentle bots a first match meets, they count half. An account keeps your ' +
+        'points on every device, and making one in the same browser brings them along.',
     ],
     link: { label: 'See the ladder', to: 'ladder' },
   },

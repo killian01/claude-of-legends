@@ -26,8 +26,15 @@ accounts and the Guests together (CONTEXT.md: Points, Ladder).
   or drops into a bot's seat, earns from the moment they sit down.
 - **Weighed by the people in the match.** At the moment of each award, from the humans connected:
   two when a human sits on the other team, one and a half when another human sits only on the
-  seat's own team, one alone. Rounded to an integer, one action at a time. A match against people
-  is worth more than one against bots, and a match beside a friend sits between the two.
+  seat's own team, one alone. A match against people is worth more than one against bots, and a
+  match beside a friend sits between the two.
+- **And by the bots it faces.** A seat whose opposing lane seats play the Gentle player earns
+  half; against the drawn house styles, the whole. The difficulty stays automatic, as the public
+  queue has it (`gentleTeams` in `server/guests.ts`): Gentle when every human in the match is a
+  Guest, the drawn styles as soon as an account is in it. The match's start decides it, and the
+  match keeps that decision for its points. The two weights multiply: a lone Guest facing Gentle
+  bots earns half, beside another Guest three quarters, and a human opponent still doubles it.
+  Rounded to an integer, one action at a time, so a last hit is always worth at least its point.
 - **The end pays only a seat still playing.** The win and the loss played through go to a seat
   that issued a command in the last three minutes of match time. A tab left open while the allied
   bots win pays nothing; the actions pay only when there are actions anyway.

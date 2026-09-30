@@ -42,7 +42,7 @@ interface PointsPage {
 export const POINTS_TAB_LABEL = 'Points';
 export const POINTS_LEAD =
   'Every human on one ladder, accounts and Guests: the points public queue matches earned, ' +
-  'a last hit, a kill, a tower at a time, weighed by the people in the match.';
+  'a last hit, a kill, a tower at a time, weighed by the people and the bots in the match.';
 type Result = 'W' | 'L';
 
 interface Favorite {

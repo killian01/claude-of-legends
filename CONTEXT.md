@@ -971,9 +971,11 @@ at that moment, banked on the player's line of the ladder as they come and kept 
 the match is finished (ADR 0027). A minion or camp last hit is 1, a champion kill 10, an assist
 5, a tower the team takes 15, a ring creature or the Warden 15, an Ascendant 25, the win 50 and
 a loss played through 15, the last two only to a seat still playing at the end. The weight is
-two with a human on the other team, one and a half with another only on the seat's own, one
-alone. Deaths cost nothing, and a seat left to a bot earns nothing more for its player. Never
-spent, and distinct from the rating, which only rated matches move, and from laurels and embers.
+the people's times the bots': two with a human on the other team, one and a half with another
+only on the seat's own, one alone; and half for a seat whose opposing lane seats play the Gentle
+player, which the match's start decides. Deaths cost nothing, and a seat left to a bot earns
+nothing more for its player. Never spent, and distinct from the rating, which only rated matches
+move, and from laurels and embers.
 _Avoid_: score (the scoreboard's word), XP (the champion's), rating
 
 **Ladder**:

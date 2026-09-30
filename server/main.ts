@@ -287,7 +287,9 @@ interface MatchEntry {
   // (ADR 0011), never the classic ladder.
   forge: boolean;
   // What the human seats earn on the ladder of points (ADR 0027): a
-  // classic public queue match only, never a lobby or the Forge queue.
+  // classic public queue match only, never a lobby or the Forge queue. It
+  // holds the teams the match's start seated the Gentle player on, which
+  // weigh the points of the seats facing them.
   points: MatchPoints | null;
 }
 const matches = new Map<number, MatchEntry>();
@@ -868,8 +870,9 @@ function onMatchReady(forge: boolean) {
       dropIns: new Set(),
       ledger: new PlayLedger(),
       // Only the classic public queue scores (ADR 0027): a private lobby
-      // would be a points machine.
-      points: source === 'queue' && !forge ? new MatchPoints(match.sim) : null,
+      // would be a points machine. The Gentle teams decided above stay with
+      // it: a seat facing the Gentle player earns half.
+      points: source === 'queue' && !forge ? new MatchPoints(match.sim, gentle) : null,
     });
     for (const p of picks) {
       const c = clients.get(p.clientId);
