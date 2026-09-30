@@ -97,7 +97,7 @@ import {
   objectiveLine,
   wrathChipText,
 } from './objective_line';
-import { firstPointsText, popText } from './points_text';
+import { firstPointsText, pointsWord, popText } from './points_text';
 import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
 import { rankable } from './slot_tap';
@@ -659,7 +659,9 @@ const CSS = `
   100% { opacity: 0; transform: translateY(-4px); }
 }
 .hud.compact .hud-points { padding: 4px 9px; }
-.hud.compact .hud-points-pop { font-size: 12.5px; }
+/* A phone's minimap stands right under the corner (the thumb controls'
+   layout), so there the pop comes out to the left of the box. */
+.hud.compact .hud-points-pop { top: 11px; right: calc(100% + 6px); font-size: 12.5px; }
 /* Informational wash: it must never swallow clicks meant for the shop,
    which stays usable while dead. Its own buttons opt back in. */
 .hud-overlay {
@@ -767,7 +769,7 @@ const CSS = `
    menu of a match that scores: where the player stands on the ladder of
    every human, in gold like the account offer, and a Guest's name. */
 .hud-ladder {
-  pointer-events: auto; margin-top: 12px; width: min(520px, 90vw); box-sizing: border-box;
+  pointer-events: auto; margin: 12px 0 8px; width: min(520px, 90vw); box-sizing: border-box;
   padding: 10px 14px; border-radius: 10px; border: 1px solid #8a7430;
   background: rgba(30, 26, 12, 0.92); text-align: left; text-shadow: none; color: #e6dcb8;
 }
@@ -1059,6 +1061,7 @@ export class Hud {
   private readonly pointsBox: HTMLElement;
   private readonly pointsTotal: HTMLElement;
   private readonly pointsPop: HTMLElement;
+  private readonly pointsLabel: HTMLElement;
   private pointsSeen = false;
   private readonly endLadder: LadderBox;
   private readonly pauseLadder: LadderBox;
@@ -1079,6 +1082,9 @@ export class Hud {
   // spell not learned yet (ui/slot_tap.ts).
   private slotClick: ((key: AbilityKey) => void) | null = null;
   private announceUntil = 0;
+  // A line that holds its slot (announce's `keep`), and what waits for it.
+  private announceKept = false;
+  private readonly announceNext: { text: string; color: string; holdMs: number }[] = [];
   private spotUntil = 0;
   private sawBattleBegin = false;
   private sawFirstBlood = false;
@@ -1500,7 +1506,8 @@ export class Hud {
     this.pointsBox = el('div', 'hud-points');
     this.pointsTotal = el('div', '', '0');
     this.pointsPop = el('div', 'hud-points-pop');
-    this.pointsBox.append(this.pointsTotal, el('span', 'label', 'points'), this.pointsPop);
+    this.pointsLabel = el('span', 'label', 'points');
+    this.pointsBox.append(this.pointsTotal, this.pointsLabel, this.pointsPop);
     kda.append(this.kdaText, this.kdaCs, this.pointsBox);
     attachTooltip(kda, () => ['Kills / Deaths / Assists', 'CS: minions last-hit.']);
 
@@ -1821,6 +1828,7 @@ export class Hud {
     this.pointsSeen = true;
     this.pointsBox.classList.add('on');
     this.pointsTotal.textContent = total.toLocaleString('en-US');
+    this.pointsLabel.textContent = pointsWord(total);
     this.pointsPop.textContent = popText(delta, reason);
     this.pointsPop.classList.remove('on');
     // Reading the layout flushes the removal, so the pop plays again.
@@ -1828,7 +1836,7 @@ export class Hud {
     this.pointsPop.classList.add('on');
     if (this.guest && !getSettings().ladderTold) {
       updateSettings({ ladderTold: true });
-      this.announce(firstPointsText(delta), '#ffd94a', 4200);
+      this.announce(firstPointsText(delta), '#ffd94a', 4200, true);
     }
   }
 
@@ -2175,7 +2183,16 @@ export class Hud {
     this.lastWrathEnemyUntil = Math.max(this.lastWrathEnemyUntil, enemyWrath);
   }
 
-  announce(text: string, color = '#f2ffd9', holdMs = 2600): void {
+  // `keep`: the line holds its slot for its whole moment, and what is
+  // announced meanwhile waits its turn. A Guest's first points say they are
+  // on the ladder this way (showPoints), since they land with the very
+  // things that announce themselves: a tower, a creature taken.
+  announce(text: string, color = '#f2ffd9', holdMs = 2600, keep = false): void {
+    if (this.announceKept && !keep && performance.now() < this.announceUntil) {
+      if (this.announceNext.length < 3) this.announceNext.push({ text, color, holdMs });
+      return;
+    }
+    this.announceKept = keep;
     this.announceEl.textContent = text;
     this.announceEl.style.color = color;
     this.announceEl.style.opacity = '1';
@@ -2545,8 +2562,14 @@ export class Hud {
       this.spotEl.classList.remove('on');
     }
     if (this.announceUntil !== 0 && performance.now() > this.announceUntil) {
-      this.announceEl.style.opacity = '0';
-      this.announceUntil = 0;
+      this.announceKept = false;
+      const next = this.announceNext.shift();
+      if (next) {
+        this.announce(next.text, next.color, next.holdMs);
+      } else {
+        this.announceEl.style.opacity = '0';
+        this.announceUntil = 0;
+      }
     }
 
     // Opening countdown and match milestones.
