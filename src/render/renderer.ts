@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { attackSoundOf, castSoundOf } from '../game/champion_sounds';
+import { type RenderQuality, readDeviceHints, renderQualityFor } from '../game/map_quality';
 import { pointOnStage, rectOnStage, stageSizeOf } from '../game/match_stage';
 import { playCastSfx, playSfx } from '../game/sfx';
 import { attackWindupSeconds, RANGED_THRESHOLD } from '../sim/combat/auto_attack';
@@ -14,6 +15,7 @@ import { WRATH_EXECUTE_FRAC } from '../sim/content/rings';
 import type { Projectile } from '../sim/projectiles';
 import { type AbilityKey, DT, type TeamId, type Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
+import { buildPictureNotice } from '../ui/picture_notice';
 import type { IWorld } from '../world_api';
 import {
   buildProjectileMesh,
@@ -48,6 +50,7 @@ import {
   PROJECTILE_Y,
   type SpawnOffset,
 } from './muzzle_spawn';
+import { type PictureWatch, watchPicture } from './picture_watch';
 import { RING_FOG_EDGE, ringFogOpening } from './ring_fog';
 import { pickShieldHolder, type ShieldCandidate } from './shield_holder';
 import { crownHeight, crownLift, flightProgress, isStill } from './structure_fire';
@@ -387,6 +390,12 @@ export class Renderer {
   // Window-level listeners registered by the constructor, detached by
   // dispose(): matches end on the same page now, without a reload sweep.
   private readonly cleanups: (() => void)[] = [];
+  // How finely this device draws: a phone's canvas and shadow map are
+  // capped (src/game/map_quality.ts).
+  private readonly quality: RenderQuality;
+  // The WebGL context's comings and goings (picture_watch.ts): nothing is
+  // drawn while it is gone, or back with the terrain still being redrawn.
+  private readonly picture: PictureWatch;
 
   constructor(
     container: HTMLElement,
@@ -394,10 +403,13 @@ export class Renderer {
     private readonly terrain: RenderTerrain,
   ) {
     this.world = world;
-    this.gl = new THREE.WebGLRenderer({ antialias: true });
-    this.gl.setPixelRatio(
-      terrain.highDetail ? window.devicePixelRatio : Math.min(window.devicePixelRatio, 2),
+    this.quality = renderQualityFor(
+      readDeviceHints(window),
+      window.devicePixelRatio,
+      terrain.highDetail === true,
     );
+    this.gl = new THREE.WebGLRenderer({ antialias: true });
+    this.gl.setPixelRatio(this.quality.pixelRatio);
     this.gl.setSize(container.clientWidth, container.clientHeight);
     this.gl.shadowMap.enabled = true;
     // Plain PCF, not PCFSoft: it is the kernel that honors shadow.radius.
@@ -577,6 +589,31 @@ export class Renderer {
 
     this.buildLights();
     this.buildMap();
+    // Every terrain picture goes up to the GPU now, before the first frame
+    // (the loading card is still what the screen shows), rather than as
+    // the camera first meets it on the walk to lane, and its decoded copy
+    // is closed behind it: the GPU holds its own (terrain_images.ts).
+    const upload = (texture: THREE.Texture): void => this.gl.initTexture(texture);
+    this.terrain.releaseImages?.(upload);
+    // A lost context turns the canvas black: say so over it, and draw
+    // again once the context is back and the terrain's pictures with it.
+    const notice = buildPictureNotice(container);
+    this.picture = watchPicture(this.gl.domElement, {
+      restore: async () => {
+        await this.terrain.restoreImages?.();
+        this.terrain.releaseImages?.(upload);
+      },
+      show: (n) => notice.show(n),
+      now: () => performance.now(),
+      later: (run, ms) => {
+        const id = window.setTimeout(run, ms);
+        return () => window.clearTimeout(id);
+      },
+    });
+    this.cleanups.push(() => {
+      this.picture.dispose();
+      notice.dispose();
+    });
     this.onSimTick();
     // First sync has no history: snap prev onto curr so nothing lerps from 0,0.
     for (const t of this.tracked.values()) t.prev = { ...t.curr };
@@ -1215,7 +1252,7 @@ export class Renderer {
     sun.position.set(half + 70, 120, half + 45);
     sun.target.position.set(half, 0, half);
     sun.castShadow = true;
-    const shadowSize = this.terrain.highDetail ? 4096 : 2048;
+    const shadowSize = this.quality.shadowMapSize;
     sun.shadow.mapSize.set(shadowSize, shadowSize);
     sun.shadow.camera.near = 30;
     sun.shadow.camera.far = 330;
@@ -2623,6 +2660,9 @@ export class Renderer {
 
   // alpha in [0, 1): progress through the current tick, for interpolation.
   render(alpha: number): void {
+    // No context, or a restored one still waiting on the terrain's
+    // pictures: a draw now would upload the closed ones.
+    if (this.picture.blocked()) return;
     const now = performance.now();
     const dtMs = Math.min(100, now - this.lastFrameAt);
     this.lastFrameAt = now;

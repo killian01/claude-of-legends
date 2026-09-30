@@ -1,8 +1,9 @@
 // How the server answers for a built file (server/static_files.ts): the
 // cache rule that keeps every deployment reaching every tab while a
-// returning visitor keeps the map, the validator for what must be
-// revalidated, and the gzip twin the build wrote (scripts/precompress.ts)
-// sent in place of the file when the browser takes it.
+// returning visitor keeps the map (across deployments too, by the file's
+// own content stamp), the validator for what must be revalidated, and the
+// gzip twin the build wrote (scripts/precompress.ts) sent in place of the
+// file when the browser takes it.
 
 import { mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -11,12 +12,14 @@ import { afterAll, describe, expect, it } from 'vitest';
 import {
   acceptsGzip,
   cacheControlFor,
+  carriesFileStamp,
   carriesStamp,
   etagFor,
   etagMatches,
   IMMUTABLE,
   planStatic,
   REVALIDATE,
+  readFileStamps,
   type StaticFile,
   type StaticRequest,
   statStaticFile,
@@ -69,6 +72,72 @@ describe('the cache rule', () => {
     expect(
       cacheControlFor(ask({ pathname: '/assets/index-abc.js', search: '' }), false, null),
     ).toBe(IMMUTABLE);
+  });
+});
+
+describe("the cache rule on a file's own stamp", () => {
+  // The build's table (scripts/public_stamps.ts), as this server read it.
+  const FILES = {
+    '/map/star-orchard/map-light.glb': 'c93138c36c',
+    '/models/champions/vesk.glb': '0a1b2c3d4e',
+  };
+  const light = (search: string) => ask({ search });
+
+  it('keeps an address stamped with its content for good, whatever the build', () => {
+    expect(carriesFileStamp('/map/star-orchard/map-light.glb', '?v=c93138c36c', FILES)).toBe(true);
+    expect(cacheControlFor(light('?v=c93138c36c'), false, BUILD, FILES)).toBe(IMMUTABLE);
+    // Another deployment, the same map: still the same address, still kept.
+    expect(cacheControlFor(light('?v=c93138c36c'), false, 'index-def456.t2m0a1', FILES)).toBe(
+      IMMUTABLE,
+    );
+    expect(planStatic(light('?v=c93138c36c'), map(), 'index-def456.t2m0a1', GLB, FILES)).toEqual(
+      expect.objectContaining({ headers: expect.objectContaining({ 'cache-control': IMMUTABLE }) }),
+    );
+  });
+
+  it('revalidates a stamp that is not the content on disk', () => {
+    // A tab from before the map changed asks with the old stamp.
+    expect(carriesFileStamp('/map/star-orchard/map-light.glb', '?v=0000000000', FILES)).toBe(false);
+    expect(cacheControlFor(light('?v=0000000000'), false, BUILD, FILES)).toBe(REVALIDATE);
+    // Another file's stamp names another content.
+    expect(cacheControlFor(light('?v=0a1b2c3d4e'), false, BUILD, FILES)).toBe(REVALIDATE);
+    // A file the table does not name has no stamp of its own to match.
+    expect(carriesFileStamp('/models/gone.glb', '?v=c93138c36c', FILES)).toBe(false);
+    expect(carriesFileStamp('/map/star-orchard/map-light.glb', '', FILES)).toBe(false);
+  });
+
+  it('still keeps the build id for what the table does not name', () => {
+    const other = ask({ pathname: '/models/champions/new.glb', search: `?v=${BUILD}` });
+    expect(cacheControlFor(other, false, BUILD, FILES)).toBe(IMMUTABLE);
+  });
+
+  it('never keeps the entry document, whatever it carries', () => {
+    expect(cacheControlFor(light('?v=c93138c36c'), true, BUILD, FILES)).toBe(REVALIDATE);
+  });
+});
+
+describe("the build's table off the disk", () => {
+  const dirs: string[] = [];
+  afterAll(() => {
+    for (const d of dirs) rmSync(d, { recursive: true, force: true });
+  });
+  const dist = (stamps: string | null): string => {
+    const d = mkdtempSync(path.join(tmpdir(), 'loc-stamps-dist-'));
+    dirs.push(d);
+    if (stamps !== null) writeFileSync(path.join(d, 'stamps.json'), stamps);
+    return d;
+  };
+
+  it('is the copy the build wrote beside the client', () => {
+    const table = { '/logo.webp': '095f521343' };
+    expect(readFileStamps(dist(JSON.stringify(table)))).toEqual(table);
+  });
+
+  it('is empty without a copy, or with one that is not a table', () => {
+    expect(readFileStamps(dist(null))).toEqual({});
+    expect(readFileStamps(dist('{"/logo.webp":'))).toEqual({});
+    expect(readFileStamps(dist('{"/logo.webp":"not a stamp"}'))).toEqual({});
+    expect(readFileStamps(dist('["/logo.webp"]'))).toEqual({});
   });
 });
 

@@ -153,7 +153,7 @@ import { RejoinRegistry } from './rejoin';
 import { sealChampion, unsealChampion } from './seal';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
 import { starOrchard } from './star_orchard';
-import { planStatic, type StaticRequest, statStaticFile } from './static_files';
+import { planStatic, readFileStamps, type StaticRequest, statStaticFile } from './static_files';
 import { isWebsiteId, STATS_SCRIPT, withStatsTag } from './stats_tag';
 import {
   appendJsonl,
@@ -185,6 +185,11 @@ const DIST = path.resolve(process.cwd(), 'dist');
 // The bundle this server serves and the stamp of this deployment, as one
 // id the page carries and /api/public/build repeats (server/build_tag.ts).
 const BUILD_ID = buildId(readBuildId(DIST), deployStamp());
+// The content stamp of every file under public/, as the build wrote them
+// beside the client (scripts/public_stamps.ts): the addresses a page
+// stamps with them are kept for good across deployments, for as long as
+// the file stays the same (server/static_files.ts).
+const FILE_STAMPS = readFileStamps(DIST);
 // Runtime state on disk: account identities and the match log. DATA_DIR is
 // the volume to mount in production; nothing else persists.
 const DATA_DIR = process.env.DATA_DIR ?? path.resolve(process.cwd(), 'data');
@@ -2419,9 +2424,9 @@ const server = http.createServer(async (req, res) => {
     }
     // The cache rule, the validator and the gzip twin are chosen by
     // server/static_files.ts: the entry document is always revalidated,
-    // Vite's fingerprinted /assets/ and any address stamped with this
-    // build are kept for good, and a big model goes out precompressed to
-    // a browser that takes gzip.
+    // Vite's fingerprinted /assets/ and any address stamped with its
+    // file's content stamp or this build are kept for good, and a big
+    // model goes out precompressed to a browser that takes gzip.
     const request: StaticRequest = {
       pathname: url,
       search: (req.url ?? '').slice(url.length),
@@ -2445,7 +2450,13 @@ const server = http.createServer(async (req, res) => {
       res.end(body);
       return;
     }
-    const plan = planStatic(request, await statStaticFile(filePath), BUILD_ID, contentType);
+    const plan = planStatic(
+      request,
+      await statStaticFile(filePath),
+      BUILD_ID,
+      contentType,
+      FILE_STAMPS,
+    );
     res.writeHead(plan.status, plan.headers);
     if (plan.status === 304) {
       res.end();

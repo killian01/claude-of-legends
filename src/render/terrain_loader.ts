@@ -15,6 +15,7 @@ import type { TerrainNavGrid } from '../sim/terrain_nav';
 import type { TeamId } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { RenderTerrain } from './terrain';
+import { bitmapDecoder, sourceSpans, TerrainImages } from './terrain_images';
 
 // The export marks the attackable towers with this role in the node extras.
 const TOWER_ROLE = 'defensive_tower';
@@ -156,9 +157,10 @@ function paintMinimap(nav: TerrainNavGrid, map: GameMap): HTMLCanvasElement {
 }
 
 // Parses a downloaded model into the terrain of one match. The caller owns
-// the bytes (they are cached across matches); the parsed scene, its
-// geometries and textures belong to the returned terrain and go with its
-// dispose().
+// the bytes (they are cached across matches, and the pictures are decoded
+// from them again after a lost context, terrain_images.ts); the parsed
+// scene, its geometries and textures belong to the returned terrain and go
+// with its dispose().
 export async function loadTerrain(
   model: ArrayBuffer,
   nav: TerrainNavGrid,
@@ -185,7 +187,11 @@ export async function loadTerrain(
   const geometries = new Set<THREE.BufferGeometry>();
   const materials = new Set<THREE.Material>();
   const textures = new Set<THREE.Texture>();
-  for (const source of [asset.scene, root, ...towers]) {
+  // What is drawn: the batches and the towers. The parsed scene is not
+  // kept past this point, since nothing of it reaches the GPU: its
+  // geometries were copied into the batches, and its textures are the
+  // batches' own or share their pictures with them.
+  for (const source of [root, ...towers]) {
     source.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
       geometries.add(object.geometry);
@@ -197,11 +203,22 @@ export async function loadTerrain(
       }
     });
   }
+  // The pictures, closed once the renderer has them on the GPU and decoded
+  // again from these bytes after a lost context.
+  const images = new TerrainImages(
+    model,
+    [...textures],
+    sourceSpans(asset.parser, model),
+    bitmapDecoder(asset.parser.textureLoader),
+  );
   return {
     root,
     minimap: paintMinimap(nav, map),
     heightAt: (x, z) => nav.heightAt(x, z),
+    releaseImages: (upload) => images.release(upload),
+    restoreImages: () => images.restore(),
     dispose: () => {
+      images.dispose();
       for (const geometry of geometries) geometry.dispose();
       for (const material of materials) material.dispose();
       const bitmaps = new Set<ImageBitmap>();

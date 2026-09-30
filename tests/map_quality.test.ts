@@ -4,8 +4,11 @@ import { describe, expect, it } from 'vitest';
 import {
   chooseModel,
   mapQualityFor,
+  PHONE_PIXEL_RATIO,
+  PHONE_SHADOW_MAP,
   qualityOverride,
   readDeviceHints,
+  renderQualityFor,
 } from '../src/game/map_quality';
 
 const orchard = {
@@ -33,6 +36,36 @@ describe('the rule', () => {
       },
     };
     expect(readDeviceHints(broken as unknown as Window)).toEqual({ coarsePointer: false });
+  });
+});
+
+describe('what the renderer draws into', () => {
+  const phone = { coarsePointer: true };
+  const laptop = { coarsePointer: false };
+
+  it('caps a phone at 1.5 pixels per pixel and a 1024 shadow map', () => {
+    expect(PHONE_PIXEL_RATIO).toBe(1.5);
+    expect(PHONE_SHADOW_MAP).toBe(1024);
+    expect(renderQualityFor(phone, 3)).toEqual({ pixelRatio: 1.5, shadowMapSize: 1024 });
+    expect(renderQualityFor(phone, 2)).toEqual({ pixelRatio: 1.5, shadowMapSize: 1024 });
+    // A screen below the cap keeps its own ratio.
+    expect(renderQualityFor(phone, 1)).toEqual({ pixelRatio: 1, shadowMapSize: 1024 });
+    // Whatever the terrain asks for.
+    expect(renderQualityFor(phone, 3, true)).toEqual({ pixelRatio: 1.5, shadowMapSize: 1024 });
+  });
+
+  it('leaves a laptop as it was: its ratio up to 2, a 2048 shadow map', () => {
+    expect(renderQualityFor(laptop, 1)).toEqual({ pixelRatio: 1, shadowMapSize: 2048 });
+    expect(renderQualityFor(laptop, 1.25)).toEqual({ pixelRatio: 1.25, shadowMapSize: 2048 });
+    expect(renderQualityFor(laptop, 3)).toEqual({ pixelRatio: 2, shadowMapSize: 2048 });
+    expect(renderQualityFor(laptop, 3, true)).toEqual({ pixelRatio: 3, shadowMapSize: 4096 });
+  });
+
+  it('draws one pixel per pixel when the browser reports no ratio', () => {
+    for (const dpr of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(renderQualityFor(laptop, dpr).pixelRatio).toBe(1);
+      expect(renderQualityFor(phone, dpr).pixelRatio).toBe(1);
+    }
   });
 });
 

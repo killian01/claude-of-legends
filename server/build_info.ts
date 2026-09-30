@@ -30,7 +30,9 @@ export interface BuildInfo {
 // The deployment's stamp: the moment this server started, in seconds,
 // base 36. A deployment restarts the server, so it is a new stamp; so is
 // a restart on its own, which costs every open tab one reload and gives
-// it a server it is sure to match.
+// it a server it is sure to match. The reload is cheap: the files under
+// public/ are stamped with their own content (src/game/asset_version.ts),
+// not with this, so the browser still holds every one that did not change.
 export function deployStamp(now = Date.now()): string {
   return Math.floor(now / 1000).toString(36);
 }

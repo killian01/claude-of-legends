@@ -115,3 +115,12 @@ ground.
   forces the full one on a phone. GPU-compressed textures (KTX2) remain the
   next step if the full model proves too much on laptops, and a middle size
   for tablets the one after.
+- Memory beside the textures: the renderer uploads every terrain texture
+  before the first frame and then closes its decoded bitmap, since the GPU
+  keeps its own copy (`src/render/terrain_images.ts`; about 154 MB less on
+  the light model, 1.2 GB on the full one). A lost WebGL context takes the
+  GPU's copies with it, so the pictures are decoded again from the model's
+  bytes, which the page keeps anyway, before anything is drawn, with a
+  notice over the match meanwhile (`src/render/picture_watch.ts`). A coarse
+  pointer also draws at 1.5 pixels per CSS pixel at most, into a 1024
+  shadow map (`renderQualityFor` in `src/game/map_quality.ts`).

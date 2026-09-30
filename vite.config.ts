@@ -3,6 +3,7 @@ import path from 'node:path';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import { offlineApiNotice, offlineApiReply } from './scripts/dev_api_fallback.ts';
 import { precompressDir } from './scripts/precompress.ts';
+import { STAMPS_FILE, stampTable } from './scripts/public_stamps.ts';
 
 // The raw Blender exports of the Star Orchard (docs/star-orchard.md) live
 // in art_src/map_exports/, gitignored and outside public/ so a build never
@@ -38,6 +39,32 @@ function serveMapExports(): Plugin {
   };
 }
 
+// The content stamps of public/ (scripts/public_stamps.ts), hashed once
+// per build: the client's code gets the table as a constant, which the
+// workers' bundles inherit, so every address it stamps names its file's
+// bytes (src/game/asset_version.ts); the copy written beside the built
+// client is what the server keeps stamped addresses for good by
+// (server/static_files.ts). Nothing under the dev server, which serves
+// public/ as it stands.
+function publicStamps(): Plugin {
+  let table: Record<string, string> = {};
+  return {
+    name: 'loc-public-stamps',
+    apply: 'build',
+    async config(config) {
+      const dir =
+        config.publicDir === false
+          ? null
+          : path.resolve(config.root ?? process.cwd(), config.publicDir ?? 'public');
+      table = dir !== null && existsSync(dir) ? await stampTable(dir) : {};
+      return { define: { 'globalThis.__LOC_FILE_STAMPS__': JSON.stringify(table) } };
+    },
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: STAMPS_FILE, source: JSON.stringify(table) });
+    },
+  };
+}
+
 // The gzip twins beside the built client's big compressible files
 // (scripts/precompress.ts), written once the whole build, public/ copied
 // in, is on disk; the server sends them (server/static_files.ts).
@@ -65,7 +92,7 @@ function precompressBuild(): Plugin {
 export default defineConfig(({ mode }) => {
   const port = Number(loadEnv(mode, process.cwd(), '').PORT || 8787);
   return {
-    plugins: [serveMapExports(), precompressBuild()],
+    plugins: [serveMapExports(), publicStamps(), precompressBuild()],
     server: {
       watch: {
         // art_src/ holds the raw 2048px icon sources: nothing imports them, and
