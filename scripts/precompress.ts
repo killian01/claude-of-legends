@@ -31,7 +31,11 @@ export const PRECOMPRESSED_TYPES: ReadonlySet<string> = new Set([
 // Too small to be worth a second file.
 export const PRECOMPRESS_MIN_BYTES = 1024;
 // A twin has to save at least this share of the file, or it is not kept.
-export const PRECOMPRESS_MIN_SAVING = 0.05;
+// 15 percent: the full map (map.glb, 43 MB) only drops 10 percent and its
+// twin would put 38 MB on a disk that has little to spare, for about 4 MB
+// less on the wire; the light map (34 percent), the models and the
+// navigation records (97 percent) clear it easily.
+export const PRECOMPRESS_MIN_SAVING = 0.15;
 
 export function worthCompressing(file: string, size: number): boolean {
   return size >= PRECOMPRESS_MIN_BYTES && PRECOMPRESSED_TYPES.has(path.extname(file).toLowerCase());
