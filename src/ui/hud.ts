@@ -2052,9 +2052,16 @@ export class Hud {
     this.escapeOverlay.classList.toggle('open');
     this.syncOverlay();
     // Opened in a match that scores: the place as it stands now.
-    if (this.pointsSeen && this.escapeOverlay.classList.contains('open')) {
+    if (this.scores() && this.escapeOverlay.classList.contains('open')) {
       this.pauseLadder.refresh();
     }
+  }
+
+  // Whether this match scores on the ladder (ADR 0027), as far as the HUD
+  // can tell: it has banked points, or a Guest plays it online, since the
+  // public queue is the only match a Guest can be in.
+  private scores(): boolean {
+    return this.pointsSeen || (this.guest && this.mode === 'online');
   }
 
   isChatOpen(): boolean {
@@ -2920,10 +2927,10 @@ export class Hud {
       const own = rows.find((r) => r.unitId === this.selfId);
       const def = u.championId ? this.world.championDef(u.championId) : null;
       // The place the match left the player on the ladder, when it scored.
-      if (this.pointsSeen) this.endLadder.refresh();
+      if (this.scores()) this.endLadder.refresh();
       const offer = accountOffer({
         guest: this.guest,
-        scored: this.pointsSeen,
+        scored: this.scores(),
         won: winner === this.selfTeam,
         kills: own?.kills ?? 0,
         deaths: own?.deaths ?? 0,
