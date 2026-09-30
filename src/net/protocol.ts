@@ -165,6 +165,10 @@ export interface SnapMobile {
   // Shooter's unit id (projectiles only), so renderers can spawn the bolt
   // at the weapon's muzzle. Cosmetic: hit tests stay on the sim positions.
   s?: number;
+  // The unit a homing bolt flies at (projectiles only), when that unit is in
+  // the recipient's sight: what lets the renderer tell a tower's shot and
+  // draw its authored missile rather than a plain bolt. Cosmetic.
+  h?: number;
 }
 
 // An ability wall (kits-v2): terrain both teams always see, so it never

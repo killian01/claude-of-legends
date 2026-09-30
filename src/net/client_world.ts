@@ -406,6 +406,8 @@ export class ClientWorld implements IWorld {
       if (existing) {
         existing.pos.x = p.x;
         existing.pos.z = p.z;
+        // A bolt born in the fog can come into sight with its victim later.
+        if (existing.homingTargetId === null && p.h !== undefined) existing.homingTargetId = p.h;
       } else {
         this.projectiles.set(p.i, {
           id: p.i,
@@ -417,7 +419,10 @@ export class ClientWorld implements IWorld {
           radius: p.r,
           maxRange: 0,
           traveled: 0,
-          homingTargetId: null,
+          // What the renderer needs to draw a tower's shot as the authored
+          // missile (renderer.ts crownFlight); the sim's own flight is
+          // server-side and nothing here steers.
+          homingTargetId: p.h ?? null,
           pierce: false,
           hitIds: new Set(),
           power: { ad: 0, ap: 0 },

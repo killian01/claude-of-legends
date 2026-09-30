@@ -142,6 +142,11 @@ export function buildSnapshot(
     };
     if (p.vfx) rec.v = p.vfx;
     if (p.sourceId) rec.s = p.sourceId;
+    // The bolt's victim, only when this team sees it: a homing target in the
+    // fog would name a unit the team has no sight of.
+    if (p.homingTargetId !== null && sim.isVisible(team, p.homingTargetId)) {
+      rec.h = p.homingTargetId;
+    }
     projectiles.push(rec);
   }
   const zones: SnapMobile[] = [];
