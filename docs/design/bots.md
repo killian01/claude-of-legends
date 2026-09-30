@@ -269,8 +269,9 @@ Warden only when healthy and close to its spawn, no regroup bell: three lanes of
 all match); the Objective player
 (the Warden and the camps: at the pit forty-five seconds early, ground given under the
 tower when outnumbered alone, the camps before the wave). A sixth style, the Gentle player,
-is posted and never drawn: the opponents' lane seats of offline practice and of a public
-match whose people are all Guests play it (the farm and the lane, a trade back when struck,
+is posted and never drawn: the opponents' lane seats of offline practice (unless the person
+picks Normal for the enemy bots at its select) and of a public match whose people are all
+Guests play it (the farm and the lane, a trade back when struck,
 no dive under an enemy tower with an enemy champion near, and no fight of its own before
 two minutes and level three), so a newcomer's first fight is fair. Every style rallies to an
 Ascendant (ADR 0022, round two) the way it rallies to the Warden: the same stance, the

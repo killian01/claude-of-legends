@@ -795,14 +795,10 @@ function onMatchReady(forge: boolean) {
       if (owner) pool.push({ bot, owner });
     }
     // A public match of Guests alone meets the Gentle player on the enemy
-    // lane seats (server/guests.ts): a newcomer's fair first fight.
-    const gentle = gentleTeams(
-      source === 'queue' && !forge,
-      picks.flatMap((p) => {
-        const c = clients.get(p.clientId);
-        return c ? [{ team: p.team, id: c.accountId }] : [];
-      }),
-    );
+    // lane seats (server/guests.ts): a newcomer's fair first fight. Read
+    // off the picks, which say whose each seat is, so an account whose
+    // socket closed during the select still counts.
+    const gentle = gentleTeams(source === 'queue' && !forge, picks);
     const seated = fillWithBots(picks, seed, TEAM_SIZE, pool, gentle);
     const match = new Match(seed, seated);
     const botSeats = new Map<
@@ -879,7 +875,14 @@ function collectionOfClient(c: Client): string[] {
   return c.guest ? [...STARTER_COLLECTION] : registry.collection(c.accountId);
 }
 
+// Whose seat a client is, for both queues' picks (the matchmaker asks as a
+// select starts): the account's id, negative for a Guest.
+function accountOfClient(clientId: number): number | null {
+  return clients.get(clientId)?.accountId ?? null;
+}
+
 const matchmaker = new Matchmaker(send, onMatchReady(false), undefined, {
+  resolveAccount: accountOfClient,
   // What this client may pick of the roster (ADR 0018): its collection
   // plus the week's rotation. A client with no account picks nothing here
   // anyway, so answering null for one leaves the wall to the account wall.
@@ -917,6 +920,7 @@ const matchmaker = new Matchmaker(send, onMatchReady(false), undefined, {
 // throws on invalid input).
 const forgeMatchmaker = new Matchmaker(send, onMatchReady(true), undefined, {
   forge: true,
+  resolveAccount: accountOfClient,
   // What this client may pick of the roster (ADR 0018): its collection
   // plus the week's rotation. A client with no account picks nothing here
   // anyway, so answering null for one leaves the wall to the account wall.

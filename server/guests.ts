@@ -7,6 +7,7 @@
 
 import { randomBytes } from 'node:crypto';
 import type { TeamId } from '../src/sim/types';
+import type { MatchPick } from './match';
 
 export interface Guest {
   // Negative, so it can never be an account's id (those count up from 1)
@@ -42,13 +43,21 @@ export function ratedWithGuests(fromQueue: boolean, humanIds: readonly number[])
 // House style): in a public queue match whose people are all Guests, the
 // teams no Guest sits on, which is to say the newcomers' enemies. A match
 // with an account in it keeps the drawn styles, and so does one with a
-// Guest on each team, where every house seat is someone's ally.
+// Guest on each team, where every house seat is someone's ally. Read off
+// the picks, which say whose each seat is from the select's start
+// (server/matchmaker.ts), never off the sockets still open: an account
+// whose socket closed during the select still holds its seat. A person's
+// pick that does not say whose it is counts as an account's.
 export function gentleTeams(
   publicQueue: boolean,
-  humans: readonly { team: TeamId; id: number }[],
+  picks: readonly Pick<MatchPick, 'team' | 'accountId' | 'bot' | 'ownerId'>[],
 ): TeamId[] {
-  if (!publicQueue || humans.length === 0 || !humans.every((h) => isGuestId(h.id))) return [];
-  return ([0, 1] as const).filter((team) => !humans.some((h) => h.team === team));
+  // A house bot or a ranked bot the fill seated has nobody behind it.
+  const people = picks.filter((p) => p.bot === undefined && p.ownerId === undefined);
+  const guest = (p: (typeof people)[number]): boolean =>
+    p.accountId !== undefined && isGuestId(p.accountId);
+  if (!publicQueue || people.length === 0 || !people.every(guest)) return [];
+  return ([0, 1] as const).filter((team) => !people.some((p) => p.team === team));
 }
 
 // What a Guest may not ask for on the socket: lobbies, the Forge queue,

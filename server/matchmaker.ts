@@ -44,6 +44,9 @@ interface QueueGroup {
 
 interface SelectEntry extends Pending {
   team: TeamId;
+  // Whose seat it is (MatchmakerOptions.resolveAccount), read as the
+  // select started; null when nobody could say.
+  accountId: number | null;
   // forged rides along when the locked champion is a forged definition the
   // resolver approved for this client; match setup embeds it in the picks.
   locked: {
@@ -170,6 +173,12 @@ export interface MatchmakerOptions {
   // for a client, means no wall: the practice match and the tests pick
   // freely.
   resolvePlayable?: (clientId: number) => readonly string[] | null;
+  // Whose seat a client is: the account's id, negative for a Guest
+  // (server/guests.ts). Asked once per seat as its select starts, when
+  // every seat's socket is still open, and carried on the pick, so a seat
+  // whose socket closes during the select still says whose it is. Absent,
+  // or null for a client, and the pick says nothing.
+  resolveAccount?: (clientId: number) => number | null;
 }
 
 // Crypto-random codes: a counter transform was reproducible offline, so any
@@ -398,6 +407,7 @@ export class Matchmaker {
         clientId: p.clientId,
         name: p.name,
         team: p.team ?? ((i % 2) as TeamId),
+        accountId: this.opts.resolveAccount?.(p.clientId) ?? null,
         locked: null,
         lane: null,
         claimedAt: 0,
@@ -622,6 +632,7 @@ export class Matchmaker {
       clientId: e.clientId,
       name: e.locked?.botName ? `${e.name} (${e.locked.botName})` : e.name,
       team: e.team,
+      ...(e.accountId !== null ? { accountId: e.accountId } : {}),
       championId: e.locked?.championId ?? DEFAULT_CHAMPION_ID,
       sigils: e.locked?.sigils ?? DEFAULT_SIGILS,
       skin: e.locked?.skin ?? 0,

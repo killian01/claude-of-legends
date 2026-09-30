@@ -171,39 +171,43 @@ describe('the struck trigger', () => {
 });
 
 describe('who meets the Gentle player', () => {
-  const human = (clientId: number, team: 0 | 1): MatchPick => ({
+  // A person's pick, saying whose seat it is when accountId is given
+  // (negative for a Guest), as the matchmaker hands it over.
+  const human = (clientId: number, team: 0 | 1, accountId?: number): MatchPick => ({
     clientId,
     name: `p${clientId}`,
     team,
     championId: 'vesk',
     sigils: ['riftstep', 'mend'],
+    ...(accountId !== undefined ? { accountId } : {}),
   });
 
   it('the enemies of a public match of Guests alone, and no one else', () => {
-    expect(gentleTeams(true, [{ team: 0, id: -3 }])).toEqual([1]);
-    expect(
-      gentleTeams(true, [
-        { team: 1, id: -3 },
-        { team: 1, id: -4 },
-      ]),
-    ).toEqual([0]);
+    expect(gentleTeams(true, [human(1, 0, -3)])).toEqual([1]);
+    expect(gentleTeams(true, [human(1, 1, -3), human(2, 1, -4)])).toEqual([0]);
     // A Guest on each team: every house seat is someone's ally.
-    expect(
-      gentleTeams(true, [
-        { team: 0, id: -3 },
-        { team: 1, id: -4 },
-      ]),
-    ).toEqual([]);
+    expect(gentleTeams(true, [human(1, 0, -3), human(2, 1, -4)])).toEqual([]);
     // An account in the match, a lobby or the Forge queue, nobody at all.
-    expect(
-      gentleTeams(true, [
-        { team: 0, id: -3 },
-        { team: 0, id: 12 },
-      ]),
-    ).toEqual([]);
-    expect(gentleTeams(true, [{ team: 0, id: 12 }])).toEqual([]);
-    expect(gentleTeams(false, [{ team: 0, id: -3 }])).toEqual([]);
+    expect(gentleTeams(true, [human(1, 0, -3), human(2, 0, 12)])).toEqual([]);
+    expect(gentleTeams(true, [human(1, 0, 12)])).toEqual([]);
+    expect(gentleTeams(false, [human(1, 0, -3)])).toEqual([]);
     expect(gentleTeams(true, [])).toEqual([]);
+  });
+
+  // The review's case: an account and a Guest on one team, the account's
+  // socket closed during the select. Its pick still says whose seat it
+  // is, so the match is not the Guests' alone and nobody meets Gentle.
+  it('decides from every pick, not from the sockets still open', () => {
+    expect(gentleTeams(true, [human(1, 0, -3), human(2, 0, 12)])).toEqual([]);
+    // A person's pick that does not say whose it is counts as an account's:
+    // only a pick that says Guest is one.
+    expect(gentleTeams(true, [human(1, 0, -3), human(2, 0)])).toEqual([]);
+    expect(gentleTeams(true, [human(1, 0)])).toEqual([]);
+    // Seats nobody holds are nobody's: a house bot, a ranked bot the fill
+    // seated from the pool.
+    const house: MatchPick = { ...human(-1, 1), bot: 'laner' };
+    const pooled: MatchPick = { ...human(-2, 1), ownerId: 12 };
+    expect(gentleTeams(true, [human(1, 0, -3), house, pooled])).toEqual([1]);
   });
 
   it('the fill posts it on the named team only, the lineup the seed gives', () => {

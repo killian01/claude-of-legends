@@ -1,9 +1,11 @@
 // Player settings: audio volumes and the announcer toggle, persisted in
-// localStorage and applied live through the audio modules' setters. The
-// parsing/clamping core is pure so the test suite can pin it.
+// localStorage and applied live through the audio modules' setters, and the
+// choices a screen remembers for the viewer (the practice select's enemy
+// bots). The parsing/clamping core is pure so the test suite can pin it.
 
 import { setAnnouncerEnabled } from './announcer';
 import { setMusicVolume } from './music';
+import { clampPracticeBots, DEFAULT_PRACTICE_BOTS, type PracticeBots } from './practice_bots';
 import { setSfxVolume } from './sfx';
 import type { TouchScheme } from './touch';
 import { clampUiScale, SETTINGS_EVENT, type UiScaleSetting } from './ui_scale';
@@ -17,6 +19,9 @@ export interface GameSettings {
   uiScale: UiScaleSetting;
   // How a phone plays (touch.ts): the thumb stick, or a tap to walk.
   touchScheme: TouchScheme;
+  // Who the opponents' lane seats play in Practice (practice_bots.ts): the
+  // choice last locked in at its select.
+  practiceBots: PracticeBots;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -25,6 +30,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   announcer: true,
   uiScale: 'auto',
   touchScheme: 'thumbs',
+  practiceBots: DEFAULT_PRACTICE_BOTS,
 };
 
 const STORAGE_KEY = 'loc-settings';
@@ -41,6 +47,7 @@ export function clampSettings(raw: unknown): GameSettings {
     announcer: typeof r.announcer === 'boolean' ? r.announcer : DEFAULT_SETTINGS.announcer,
     uiScale: clampUiScale(r.uiScale),
     touchScheme: r.touchScheme === 'tap' ? 'tap' : 'thumbs',
+    practiceBots: clampPracticeBots(r.practiceBots),
   };
 }
 

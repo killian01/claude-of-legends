@@ -29,9 +29,10 @@ One of the brains a house bot plays: the Laner, the Brawler, the Sieger, the Obj
 player, the Jungler or the Gentle player, each a playbook anyone can read. A lane seat draws
 one of the first four from the match seed, on every host, so two matches on different seeds
 are not played the same way; the forest's seat plays the Jungler. The Gentle player is never
-drawn: it takes the opponents' lane seats of Practice and of a public match whose people are
-all Guests, a newcomer's fair first fight (it trades back when hit, never dives a tower, and
-starts nothing of its own before two minutes and level three).
+drawn: it takes the opponents' lane seats of Practice (unless the person picks Normal there)
+and of a public match whose people are all Guests, a newcomer's fair first fight (it trades
+back when hit, never dives a tower, and starts nothing of its own before two minutes and
+level three).
 _Avoid_: personality, difficulty, AI level, preset, house playbook
 
 **Fill**:
@@ -461,7 +462,9 @@ _Avoid_: survey, form, support ticket
 **Practice**:
 The offline match against house bots, the fill completing both teams around the person's
 champion and lane preference on a new seed every match, the opponents' lane seats on the
-Gentle player, run entirely in the browser tab with nothing saved and no account needed. The
+Gentle player, or on the drawn house styles when the person picks Normal for the enemy bots at
+its select (Gentle until they do, the choice kept with the browser's settings), run entirely
+in the browser tab with nothing saved and no account needed. The
 same simulation the rated match runs. Its clock holds while the player cannot play (a phone
 waiting to be turned, the pause menu, the shop that opens by itself at the start) and picks up
 where it stopped; a match against the server never holds. Its end sends the server the

@@ -24,6 +24,10 @@ export interface MatchPick {
   clientId: number;
   name: string;
   team: TeamId;
+  // Whose seat a person's pick is: the account's id, negative for a Guest
+  // (server/guests.ts), read as the select started, so it outlives a
+  // socket that closed during the select. Absent on a seat nobody holds.
+  accountId?: number;
   championId: string;
   sigils: [string, string];
   // Cosmetic skin index; clamped by the sim.

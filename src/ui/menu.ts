@@ -8,6 +8,13 @@
 import { requestGameFullscreen } from '../game/fullscreen';
 import { inviteUrl } from '../game/invite';
 import { appNav } from '../game/nav';
+import {
+  PRACTICE_BOTS,
+  PRACTICE_BOTS_LABEL,
+  type PracticeBots,
+  practiceBotsHint,
+  practiceBotsTitle,
+} from '../game/practice_bots';
 import { getSettings } from '../game/settings';
 import { applyUiScale, effectiveUiScale } from '../game/ui_scale';
 import type { LobbyPlayer, SelectClaim, SelectPlayer } from '../net/protocol';
@@ -219,16 +226,21 @@ const CSS = `
 .menu-team.red h4 { color: #f5a3a3; }
 /* The lane row (ADR 0026): four choices, the one on screen lit, a lane the
    team has no room left in greyed. Never .menu-champ: every e2e script
-   picks a champion by that class. */
-.menu-lanes { display: flex; gap: 6px; margin: 6px 0; }
-.menu-lane {
+   picks a champion by that class. The practice select's enemy bots row
+   (.menu-choices) wears the same buttons under its own class, so nothing
+   that looks for a lane finds it. */
+.menu-lanes, .menu-choices { display: flex; gap: 6px; margin: 6px 0; }
+.menu-lane, .menu-choice {
   flex: 1; padding: 7px 2px; border-radius: 6px; border: 1px solid #28405e; background: #0f1930;
   color: #c9d9ee; font-size: 11px; text-align: center; cursor: pointer; white-space: nowrap;
 }
-.menu-lane.picked { border-color: #6aa8e8; background: #1d3a63; color: #e6eefc; }
-.menu-lane:disabled { cursor: default; }
+.menu-lane.picked, .menu-choice.picked {
+  border-color: #6aa8e8; background: #1d3a63; color: #e6eefc;
+}
+.menu-lane:disabled, .menu-choice:disabled { cursor: default; }
 .menu-lane.full { opacity: 0.35; }
-.menu-lanes.held .menu-lane:not(.picked) { opacity: 0.45; }
+.menu-lanes.held .menu-lane:not(.picked),
+.menu-choices.held .menu-choice:not(.picked) { opacity: 0.45; }
 .menu-lane-note { font-size: 11px; color: #e8cc74; line-height: 1.35; margin: 2px 0 4px; }
 .menu-lane-note:empty { display: none; }
 /* The own team's lane board: who claimed which lane, you on yours. */
@@ -265,7 +277,7 @@ const CSS = `
   .menu-champ-standing { font-size: 8px; margin-top: 1px; }
   .menu-label { margin: 4px 0 2px; }
   .menu-lane-block { order: -1; }
-  .menu-lanes { margin: 2px 0 4px; }
+  .menu-lanes, .menu-choices { margin: 2px 0 4px; }
   .menu-teams { gap: 10px; font-size: 11px; margin: 2px 0; }
   .menu-team h4 { font-size: 11px; margin: 0 0 1px; }
   .menu-board-row { line-height: 1.3; }
@@ -521,6 +533,8 @@ export interface SelectLock {
   skin: number;
   botId?: string;
   lane: LanePreference;
+  // The practice select's enemy bots row, when it has one.
+  practiceBots?: PracticeBots;
 }
 
 export interface SelectOptions {
@@ -548,6 +562,10 @@ export interface SelectOptions {
   // answers to nobody, so it can be left; an online select is a team's
   // clock and cannot.
   onBack?: () => void;
+  // The practice select only: who the opponents' lane seats play
+  // (src/game/practice_bots.ts), lit as the viewer last chose; Lock in
+  // hands the choice back. Absent, as online, the row is not there.
+  practiceBots?: PracticeBots;
 }
 
 export function showSelect(container: HTMLElement, opts: SelectOptions): SelectController {
@@ -659,6 +677,32 @@ export function showSelect(container: HTMLElement, opts: SelectOptions): SelectC
     });
     laneButtons.set(lane, btn);
     laneRow.appendChild(btn);
+  }
+  // The practice select's enemy bots (src/game/practice_bots.ts): two
+  // buttons under the lane row, in its style, held once locked in.
+  let practiceBots: PracticeBots | null = opts.practiceBots ?? null;
+  const botsChoiceRow = el('div', 'menu-choices');
+  const botsChoiceButtons = new Map<PracticeBots, HTMLButtonElement>();
+  const renderBotsChoice = (): void => {
+    botsChoiceRow.classList.toggle('held', lockedIn);
+    for (const [option, b] of botsChoiceButtons) {
+      b.classList.toggle('picked', option === practiceBots);
+      b.disabled = lockedIn;
+    }
+  };
+  if (practiceBots !== null) {
+    for (const option of PRACTICE_BOTS) {
+      const btn = el('button', 'menu-choice', practiceBotsTitle(option)) as HTMLButtonElement;
+      attachTooltip(btn, () => [practiceBotsHint(option)]);
+      btn.addEventListener('click', () => {
+        if (lockedIn) return;
+        practiceBots = option;
+        renderBotsChoice();
+      });
+      botsChoiceButtons.set(option, btn);
+      botsChoiceRow.appendChild(btn);
+    }
+    renderBotsChoice();
   }
   // A card picked: the lane follows a champion's home lane (unless chosen),
   // or shows the bot's and holds the row.
@@ -790,12 +834,14 @@ export function showSelect(container: HTMLElement, opts: SelectOptions): SelectC
     lock.textContent = 'Locked';
     lockedIn = true;
     renderLanes();
+    renderBotsChoice();
     onLock({
       championId,
       sigils: [sigils[0]!, sigils[1]!],
       skin: skinIndex,
       ...(botId !== null ? { botId } : {}),
       lane: heldLane ?? choice.lane,
+      ...(practiceBots !== null ? { practiceBots } : {}),
     });
   });
 
@@ -984,6 +1030,9 @@ export function showSelect(container: HTMLElement, opts: SelectOptions): SelectC
   if (teamsBox) side.appendChild(teamsBox);
   const laneBlock = el('div', 'menu-lane-block');
   laneBlock.append(el('div', 'menu-label', 'Your lane'), laneRow, laneNote);
+  if (practiceBots !== null) {
+    laneBlock.append(el('div', 'menu-label', PRACTICE_BOTS_LABEL), botsChoiceRow);
+  }
   const looks = el('div', 'menu-select-looks');
   looks.append(
     el('div', 'menu-label', 'Skin (cosmetic only)'),

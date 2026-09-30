@@ -244,6 +244,35 @@ describe('matchmaker', () => {
     expect(matches[0]![1]).toMatchObject({ clientId: 2, championId: 'sylra' });
   });
 
+  // Who sits behind a seat is read as the select starts, while every
+  // seat's socket is open, and rides the pick: a seat whose socket closed
+  // during the select still says whose it is (server/guests.ts reads it).
+  it('carries whose each seat is onto the picks, a seat that dropped included', () => {
+    const open = new Map([
+      [1, -3],
+      [2, 12],
+    ]);
+    const { mm, matches } = harness({ resolveAccount: (clientId) => open.get(clientId) ?? null });
+    mm.addToQueue(1, 'Wanderer 0003', 0);
+    mm.addToQueue(2, 'alice', 0);
+    mm.startNow(1, 0);
+    // The account's socket closes before the select ends.
+    open.delete(2);
+    mm.removeEverywhere(2, 0);
+    mm.pick(1, 'vesk', ['riftstep', 'mend']);
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject([
+      { clientId: 1, team: 0, accountId: -3 },
+      { clientId: 2, team: 1, accountId: 12 },
+    ]);
+    // With nobody to ask, a pick says nothing of whose it is.
+    const plain = harness();
+    plain.mm.addToQueue(1, 'alice', 0);
+    plain.mm.startNow(1, 0);
+    plain.mm.pick(1, 'vesk', ['riftstep', 'mend']);
+    expect(plain.matches[0]![0]).not.toHaveProperty('accountId');
+  });
+
   it('does not carry a player who left the queue before Start', () => {
     const { mm, sent } = harness();
     mm.addToQueue(1, 'alice', 0);

@@ -15,6 +15,7 @@ import { registerForgedAssets } from './game/forged_visuals';
 import { requestGameFullscreen } from './game/fullscreen';
 import { parseJoinCode } from './game/invite';
 import { appNav, installNav, sectionFromHash } from './game/nav';
+import { type PracticeBots, practiceOpponents } from './game/practice_bots';
 import { advancePracticeClock, type PracticeClock, practiceHeld } from './game/practice_clock';
 import { practiceSeed } from './game/practice_seed';
 import { reenterAsAccount } from './game/reentry';
@@ -23,7 +24,7 @@ import type { ReplayMark } from './game/replay_marks';
 import { followedSeat } from './game/replay_seat';
 import type { ReplayWorkerIn, ReplayWorkerOut } from './game/replay_worker';
 import { ReplayWorld } from './game/replay_world';
-import { getSettings } from './game/settings';
+import { getSettings, updateSettings } from './game/settings';
 import { type SpectatorView, startSpectator } from './game/spectate';
 import {
   type LoadedOrchard,
@@ -58,7 +59,7 @@ import {
 import { whenChampionModelsReady } from './render/champions';
 import { installVersionedLoading } from './render/versioned_loading';
 import { attachBot } from './sim/content/bots';
-import { gentleSeats, type HouseSeat, houseSeats } from './sim/content/bots/house';
+import { type HouseSeat, houseSeats } from './sim/content/bots/house';
 import { contentFingerprint } from './sim/content/fingerprint';
 import type { StarOrchard } from './sim/content/star_orchard';
 import type { ForgedChampionDef } from './sim/forge/forged_def';
@@ -134,6 +135,9 @@ interface OfflinePick {
   // A Forge test drive: the draft to register in the offline sim before
   // picking it (the stylized figure carries the render).
   forged?: ForgedChampionDef;
+  // Who the opponents' lane seats play (src/game/practice_bots.ts): the
+  // choice locked in at select; Normal for a Forge test drive.
+  bots: PracticeBots;
 }
 
 function errorText(err: unknown): string {
@@ -218,14 +222,18 @@ async function pickForPractice(): Promise<OfflinePick | null> {
       self: null,
       team: 0,
       deadline: null,
-      onLock: ({ championId, sigils, skin, lane }) => {
+      onLock: ({ championId, sigils, skin, lane, practiceBots }) => {
         // Inside the lock-in click gesture, so the browser grants it.
         requestGameFullscreen();
         picker.remove();
         frame.closed();
-        resolve({ championId, sigils, skin, lane });
+        // The enemy bots chosen are the next select's too, in this browser.
+        const bots = practiceBots ?? getSettings().practiceBots;
+        updateSettings({ practiceBots: bots });
+        resolve({ championId, sigils, skin, lane, bots });
       },
       collection,
+      practiceBots: getSettings().practiceBots,
       onBack: leave,
     });
     // A layer over the page it opened from; Back leaves it with no pick.
@@ -271,8 +279,9 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
     // and seated with its fill seat's lane, with deterministic skin
     // variety (the sim clamps out-of-range picks). The opponents' lane
     // seats play the Gentle player (src/sim/content/playbooks/gentle.ts),
-    // a newcomer's fair first fight; a Forge test drive keeps the drawn
-    // styles, since its creator came to see the champion fight.
+    // a newcomer's fair first fight, unless Normal was chosen at select
+    // (src/game/practice_bots.ts); a Forge test drive meets Normal, since
+    // its creator came to see the champion fight.
     const champions = [self];
     const rng = new Rng(seed);
     const held = [{ championId: pick.championId, role: pick.forged?.role, lane: pick.lane }];
@@ -283,8 +292,7 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
       champions.push(unit);
     };
     for (const [i, house] of houseSeats(held, rng).entries()) seat(0, i, house);
-    const opponents = houseSeats([], rng);
-    for (const [i, house] of (pick.forged ? opponents : gentleSeats(opponents)).entries()) {
+    for (const [i, house] of practiceOpponents(houseSeats([], rng), pick.bots).entries()) {
       seat(1, i, house);
     }
     // A Forge test drive opens at the level the ultimate unlocks, everyone
@@ -1322,6 +1330,8 @@ async function boot(): Promise<void> {
           sigils: ['riftstep', 'mend'],
           skin: 0,
           forged: choice.forged,
+          // The drawn styles: its creator came to see the champion fight.
+          bots: 'normal',
         };
       } else if (lastPick) {
         pick = lastPick;
