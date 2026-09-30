@@ -390,3 +390,67 @@ describe('email claims', () => {
     expect(r.authenticate('bob', 'a good password')).toBeUndefined();
   });
 });
+
+// Points (ADR 0027): banked on the account's line, written on the flush
+// rather than on every minion, and the names the Guests chose kept out of
+// every account's reach but the one made from that Guest.
+describe('points and the names Guests hold', () => {
+  it('banks points in memory and writes them on the flush', () => {
+    const file = tmpFile();
+    const r = reg(file);
+    const bob = unwrap(r.register('bob', 'a good password', anEmail(), 0));
+    const written = readFileSync(file, 'utf8');
+    expect(r.addPoints(bob.id, 10)).toBe(10);
+    expect(r.addPoints(bob.id, 5)).toBe(15);
+    expect(r.addPoints(999, 5)).toBeNull();
+    expect(readFileSync(file, 'utf8')).toBe(written);
+    r.flush();
+    expect(reg(file).findById(bob.id)?.points).toBe(15);
+  });
+
+  it('refuses a name a Guest holds, to a registration and a rename alike', () => {
+    const r = reg();
+    const guestNames = new Set(['starling']);
+    r.holdNamesElsewhere((fold) => guestNames.has(fold));
+    expect(r.register('Star-ling', 'a good password', anEmail(), 0)).toEqual({
+      ok: false,
+      error: 'name_taken',
+    });
+    expect(r.nameAvailable('starling')).toBe(false);
+    const bob = unwrap(r.register('bob', 'a good password', anEmail(), 0));
+    expect(r.rename(bob.id, 'Starling', 1)).toEqual({ ok: false, error: 'name_taken' });
+    // An account's names, worn or left behind, are what a Guest is kept from.
+    expect(r.holdsName('bob')).toBe(true);
+    expect(r.holdsName('starling')).toBe(false);
+  });
+
+  it("lets the account made from a Guest take the Guest's name and points", () => {
+    const r = reg();
+    r.holdNamesElsewhere((fold) => fold === 'starling');
+    const a = unwrap(
+      r.register('Starling', 'a good password', anEmail(), 0, { fold: 'starling', points: 340 }),
+    );
+    expect(a.name).toBe('Starling');
+    expect(a.points).toBe(340);
+    // A Guest with no chosen name still brings its points, under any name.
+    const b = unwrap(
+      r.register('Nightjar', 'a good password', anEmail(), 0, { fold: null, points: 9 }),
+    );
+    expect(b.points).toBe(9);
+  });
+
+  it('keeps a Discord account off a Guest name, and moves the points across', () => {
+    const r = reg();
+    r.holdNamesElsewhere((fold) => fold === 'caym');
+    const created = unwrap(
+      r.registerWithDiscord({ id: '42', username: 'Caym' }, 0, { fold: null, points: 12 }),
+    );
+    expect(created.name).toBe('Caym2');
+    expect(created.points).toBe(12);
+    const claimed = unwrap(
+      r.registerWithDiscord({ id: '43', username: 'Caym' }, 0, { fold: 'caym', points: 0 }),
+    );
+    expect(claimed.name).toBe('Caym');
+    expect(claimed.points).toBeUndefined();
+  });
+});

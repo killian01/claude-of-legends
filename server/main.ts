@@ -108,10 +108,14 @@ import { SplitProvider } from './generation/split';
 import { TripoProvider } from './generation/tripo';
 import {
   GUEST_COOKIE,
-  GUEST_TTL_MS,
+  GUEST_COOKIE_MAX_AGE_S,
+  type Guest,
   GuestStore,
   gentleTeams,
+  guestClaim,
+  guestNameMessage,
   guestRefused,
+  isGuestId,
   ratedWithGuests,
 } from './guests';
 import { buildHomePage } from './home_page';
@@ -141,6 +145,8 @@ import {
 import { COACH_IDLE_DAYS } from './night_eligibility';
 import { passwordErrorMessage, validatePassword } from './password';
 import { type CoachDeps, coachPlaybook } from './playbook_suggest';
+import { bankAwards, humanSeats, MatchPoints } from './points';
+import { buildPointsLadder, type PointsEntry, type PointsReader } from './points_ladder';
 import { PracticeReportStore, parsePracticeReport } from './practice_reports';
 import { buildProfile } from './profile';
 import { CEILING_DEFAULTS, checkQuota, DAY_MS, spendQuota } from './quotas';
@@ -280,6 +286,9 @@ interface MatchEntry {
   // A Forge-queue match: its deltas land on the Forge queue's own rating
   // (ADR 0011), never the classic ladder.
   forge: boolean;
+  // What the human seats earn on the ladder of points (ADR 0027): a
+  // classic public queue match only, never a lobby or the Forge queue.
+  points: MatchPoints | null;
 }
 const matches = new Map<number, MatchEntry>();
 // Abandoned seats and leaver lockouts, both keyed on the account
@@ -297,8 +306,11 @@ const practiceReports = new PracticeReportStore(path.join(DATA_DIR, 'practice.js
 // each, read with scripts/feedback.mjs and by nothing else.
 const feedback = new FeedbackStore(path.join(DATA_DIR, 'feedback.jsonl'));
 const sessions = new SessionStore(path.join(DATA_DIR, 'sessions.json'));
-// Guests (ADR 0024), in memory only: a restart forgets them.
-const guests = new GuestStore();
+// Guests (ADR 0024): in memory until one scores or names itself, kept on
+// disk from then on under a hashed token (ADR 0027).
+const guests = new GuestStore({ file: path.join(DATA_DIR, 'guests.json') });
+// A name a Guest chose is nobody else's, accounts included (ADR 0027).
+registry.holdNamesElsewhere((fold) => guests.holderOf(fold) !== undefined);
 // What a wrong password costs the next attempt (server/login_throttle.ts).
 const logins = new LoginThrottle();
 // One-time links for confirming an address and for resetting a password
@@ -855,6 +867,9 @@ function onMatchReady(forge: boolean) {
       publicQueue: source === 'queue' && !forge,
       dropIns: new Set(),
       ledger: new PlayLedger(),
+      // Only the classic public queue scores (ADR 0027): a private lobby
+      // would be a points machine.
+      points: source === 'queue' && !forge ? new MatchPoints(match.sim) : null,
     });
     for (const p of picks) {
       const c = clients.get(p.clientId);
@@ -884,6 +899,30 @@ function collectionOfClient(c: Client): string[] {
 // select starts): the account's id, negative for a Guest.
 function accountOfClient(clientId: number): number | null {
   return clients.get(clientId)?.accountId ?? null;
+}
+
+// Points land on the account or the Guest behind the seat (ADR 0027);
+// null when that line is gone, and then nothing is told.
+function bankPoints(owner: number, delta: number): number | null {
+  return isGuestId(owner)
+    ? guests.addPoints(owner, delta, Date.now())
+    : registry.addPoints(owner, delta);
+}
+
+// Every human's line on the ladder of points: the accounts and the Guests
+// that have any (server/points_ladder.ts).
+function pointsEntries(): PointsEntry[] {
+  const out: PointsEntry[] = [];
+  for (const a of registry.all()) {
+    const points = a.points ?? 0;
+    if (points > 0) out.push({ key: a.id, name: a.name, points, guest: false, since: a.createdAt });
+  }
+  for (const g of guests.all()) {
+    if (g.points > 0) {
+      out.push({ key: g.id, name: g.name, points: g.points, guest: true, since: g.createdAt });
+    }
+  }
+  return out;
 }
 
 const matchmaker = new Matchmaker(send, onMatchReady(false), undefined, {
@@ -1068,6 +1107,22 @@ function accountForRequest(req: http.IncomingMessage, now: number): Account | un
   return account;
 }
 
+// The Guest behind a request's cookie (ADR 0024), rolled forward, or
+// undefined.
+function guestForRequest(req: http.IncomingMessage, now: number): Guest | undefined {
+  const token = parseCookies(req.headers.cookie).get(GUEST_COOKIE);
+  return token ? guests.resolve(token, now) : undefined;
+}
+
+// Who is reading the ladder of points, if anyone: the account when the
+// browser holds both cookies, as on the socket.
+function pointsReader(req: http.IncomingMessage, now: number): PointsReader | null {
+  const account = accountForRequest(req, now);
+  if (account) return { key: account.id, name: account.name, guest: false, named: true };
+  const guest = guestForRequest(req, now);
+  return guest ? { key: guest.id, name: guest.name, guest: true, named: guest.named } : null;
+}
+
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
   res.end(JSON.stringify(body));
@@ -1163,7 +1218,11 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (url === '/api/register') {
-        const created = registry.register(name, password, email, now);
+        // The Guest this browser played as, when it did (ADR 0027): the
+        // new account takes its points and may take its chosen name, and
+        // the Guest is retired, so one browser's line becomes one account.
+        const guest = guestForRequest(req, now);
+        const created = registry.register(name, password, email, now, guestClaim(guest));
         if (!created.ok) {
           // A taken name is not a failed credential guess, but it is still
           // an attempt: rate it, or the signup form becomes the oracle the
@@ -1177,6 +1236,10 @@ const server = http.createServer(async (req, res) => {
           return;
         }
         for (const key of keys) logins.recordSuccess(key);
+        if (guest) {
+          guests.retire(guest.id);
+          addCookie(res, clearCookie(GUEST_COOKIE, { secure: cookieSecure(req) }));
+        }
         openSession(res, req, created.value);
         sendJson(res, 200, selfAccount(created.value));
         // Not awaited: the account is usable now, the link can arrive when
@@ -1208,7 +1271,9 @@ const server = http.createServer(async (req, res) => {
     // Nothing here is anybody's: champion ids, a table of prices, and a
     // balance that is the caller's own or zero.
     // A Guest for the public queue (ADR 0024): the name and a cookie of
-    // its own, reused while it lives so a reload keeps the same Guest.
+    // its own, reused while it lives so a reload keeps the same Guest. The
+    // cookie is set again on every ask, so it lasts a year from the last
+    // visit rather than the first (ADR 0027).
     if (url === '/api/guest') {
       if (req.method !== 'POST') {
         sendJson(res, 405, { error: 'use POST' });
@@ -1217,19 +1282,44 @@ const server = http.createServer(async (req, res) => {
       const now = Date.now();
       const held = parseCookies(req.headers.cookie).get(GUEST_COOKIE);
       const known = held ? guests.resolve(held, now) : undefined;
-      if (known) {
-        sendJson(res, 200, { name: known.name });
-        return;
-      }
-      const { token, guest } = guests.issue(now);
+      const { token, guest } =
+        held !== undefined && known ? { token: held, guest: known } : guests.issue(now);
       addCookie(
         res,
         serializeCookie(GUEST_COOKIE, token, {
-          maxAgeS: Math.floor(GUEST_TTL_MS / 1000),
+          maxAgeS: GUEST_COOKIE_MAX_AGE_S,
           secure: cookieSecure(req),
         }),
       );
       sendJson(res, 200, { name: guest.name });
+      return;
+    }
+
+    // A Guest's name on the ladder (ADR 0027): the account name rules and
+    // the word filter, free among the accounts and the other Guests alike,
+    // and every refusal says why. An account's line wears its account's
+    // name, so the route is the Guest's alone.
+    if (url === '/api/ladder/name') {
+      if (req.method !== 'POST') {
+        sendJson(res, 405, { error: 'use POST' });
+        return;
+      }
+      const now = Date.now();
+      if (accountForRequest(req, now)) {
+        sendJson(res, 409, { error: 'Your name on the ladder is your account name.' });
+        return;
+      }
+      const guest = guestForRequest(req, now);
+      const body = await readJsonBody(req);
+      const name = typeof body?.name === 'string' ? body.name.trim() : '';
+      const named = guest
+        ? guests.setName(guest.id, name, now, (fold) => registry.holdsName(fold))
+        : ({ ok: false, error: 'unknown_guest' } as const);
+      if (!named.ok) {
+        sendJson(res, 409, { error: guestNameMessage(named.error) });
+        return;
+      }
+      sendJson(res, 200, { name: named.value.name });
       return;
     }
 
@@ -1304,15 +1394,25 @@ const server = http.createServer(async (req, res) => {
     }
 
     // The landing's ladder (server/landing_page.ts): the top of the ladder
-    // by hand and the top bots, names and numbers any account already
-    // reads on the ladder page, so a visitor sees whose names stand there
-    // before being asked for their own. No ids, no reader.
+    // of every human (ADR 0027), names and numbers, so a visitor sees
+    // whose names stand there and that one match puts theirs beside them.
+    // No ids; a returning Guest's own place when the cookie says who.
     if (url === '/api/public/landing') {
+      const now = Date.now();
       sendJson(
         res,
         200,
-        buildLandingPage({ seeds: ladderSeeds, stats: wayStatsFor, accounts: registry.count }),
+        buildLandingPage({ entries: pointsEntries(), reader: pointsReader(req, now) }),
       );
+      return;
+    }
+
+    // The ladder of every human (server/points_ladder.ts, ADR 0027): its
+    // top, names and numbers, and the reader's own place when the request
+    // carries an account or a Guest. What the end screen, the pause menu
+    // and the home's ladder read.
+    if (url === '/api/public/ladder') {
+      sendJson(res, 200, buildPointsLadder(pointsEntries(), pointsReader(req, Date.now())));
       return;
     }
 
@@ -1404,13 +1504,19 @@ const server = http.createServer(async (req, res) => {
       }
       // Nobody yet: this is the signup, and nothing was typed. The name
       // is derived from the Discord name; the account has no password and
-      // no email until its owner adds them.
-      const created = registry.registerWithDiscord(identity, now);
+      // no email until its owner adds them. The Guest this browser played
+      // as comes along, points and all, as at the form (ADR 0027).
+      const guest = guestForRequest(req, now);
+      const created = registry.registerWithDiscord(identity, now, guestClaim(guest));
       if (!created.ok) {
         // Only a race can land here: the same Discord finished two round
         // trips at once and the other one won.
         land('failed');
         return;
+      }
+      if (guest) {
+        guests.retire(guest.id);
+        addCookie(res, clearCookie(GUEST_COOKIE, { secure: cookieSecure(req) }));
       }
       openSession(res, req, created.value);
       // 'joined' says the account was made AND the player is now in the
@@ -2836,6 +2942,19 @@ setInterval(() => {
     for (const [matchId, entry] of matches) {
       try {
         entry.match.tick();
+        // What the tick earned the human seats of a public queue match
+        // (ADR 0027), banked on each line and told to that player alone.
+        if (entry.points) {
+          const seats = humanSeats(
+            entry.match.players.values(),
+            (cid) => clients.get(cid)?.accountId ?? null,
+          );
+          bankAwards(
+            entry.points.observe(entry.match.sim, entry.match.lastEvents, seats),
+            bankPoints,
+            send,
+          );
+        }
         if (entry.botSeats.size > 0) {
           entry.ledger.observe(entry.match.sim.tickCount, entry.match.lastEvents, entry.match.sim);
         }
@@ -3077,14 +3196,26 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
     console.log(`${sig}: shutting down`);
     // Write the session expiry extensions that touch() only made in
-    // memory, so a restart does not send everyone back to the login form.
+    // memory, so a restart does not send everyone back to the login form,
+    // and the points banked since the last flush (ADR 0027).
     sessions.flush();
+    registry.flush();
+    guests.flush();
     for (const c of clients.values()) c.ws.close();
     wss.close();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 2000).unref();
   });
 }
+
+// The ladder's points reach disk on a timer and at shutdown, never on
+// every minion (ADR 0027): a hard kill loses at most one interval of them,
+// and a quiet interval writes nothing.
+const POINTS_FLUSH_MS = 15_000;
+setInterval(() => {
+  registry.flush();
+  guests.flush();
+}, POINTS_FLUSH_MS).unref();
 
 // Housekeeping, hourly. None of this is load bearing: an expired session
 // and a spent link are already refused on read, and a lapsed email claim
@@ -3098,6 +3229,8 @@ setInterval(() => {
   // In memory and minutes old, so this is the one that would never grow
   // anyway; swept here so nothing is left holding a state from last week.
   discordFlows.purge(now);
+  // A Guest's line a year unseen leaves the ladder (ADR 0027).
+  guests.purgeExpired(now);
   // Rate-limit windows are a minute long; addresses idle past one go.
   apiLimiter.purge(now);
   // Quota events older than the day window will never be counted again.

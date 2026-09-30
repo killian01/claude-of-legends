@@ -12,6 +12,7 @@ import { AccountRegistry, publicAccount, selfAccount } from '../server/accounts'
 import { buildLadder } from '../server/ladder';
 import { buildLadderPage, placeOf } from '../server/ladder_page';
 import { hashPassword } from '../server/password';
+import { buildPointsLadder } from '../server/points_ladder';
 import { buildProfile } from '../server/profile';
 import { SessionStore } from '../server/sessions';
 
@@ -111,6 +112,13 @@ describe('account secrets', () => {
       body: placeOf(
         [{ id: account.id, accountId: account.id, name: account.name, rating: 1000, games: 1 }],
         account.id,
+      ),
+    },
+    {
+      what: '/api/public/ladder',
+      body: buildPointsLadder(
+        [{ key: account.id, name: account.name, points: 40, guest: false, since: 0 }],
+        { key: account.id, name: account.name, guest: false, named: true },
       ),
     },
   ];
@@ -296,6 +304,7 @@ describe('api methods', () => {
     '/api/public/stats',
     '/api/public/build',
     '/api/public/landing',
+    '/api/public/ladder',
     '/api/public/presence',
     '/api/discord/status',
     '/api/bots/arena',

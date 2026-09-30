@@ -1,5 +1,6 @@
 // Dev seeding for a server with people on it: eight accounts placed by
-// hand with a match log behind them, six ranked bots with Arena play in
+// hand with a match log behind them, points on the ladder of every human
+// for most of them and for five Guests, six ranked bots with Arena play in
 // their Records, and seven sealed forged champions with likes. A fresh
 // state directory shows every surface's empty state (the home's panels,
 // the ladder page, the Arena pool, the gallery) and nothing else, which is
@@ -19,6 +20,7 @@ import { AccountRegistry } from '../server/accounts';
 import { BotStore } from '../server/bot_store';
 import { ForgeStore } from '../server/forge_store';
 import { placeholderPng } from '../server/generation/placeholder';
+import { GuestStore } from '../server/guests';
 import type { MatchPlayerRecord, MatchRecord } from '../server/records';
 import { appendJsonl } from '../server/store';
 import type { NewRecordEntry } from '../src/net/record';
@@ -140,6 +142,36 @@ for (const [name, games, wins] of PLAN) {
     appendJsonl(matchesFile, rec);
   }
 }
+
+// --- the ladder of every human (ADR 0027) --------------------------------
+
+// Points on the accounts, and a handful of Guests beside them, some named
+// and some still wearing the name they were handed, so the landing and
+// the home's Points tab read the way a lived-in server does.
+const ACCOUNT_POINTS: readonly [string, number][] = [
+  ['Marrow', 1840],
+  ['Quillon', 1215],
+  ['Ashvale', 960],
+  ['Tessaly', 610],
+  ['Bramble', 355],
+  ['Orrin', 120],
+];
+for (const [name, points] of ACCOUNT_POINTS) registry.addPoints(idOf(name), points);
+registry.flush();
+const guests = new GuestStore({ file: path.join(DATA_DIR, 'guests.json') });
+const GUESTS: readonly [string | null, number][] = [
+  ['Nightjar', 1420],
+  [null, 780],
+  ['Starling', 505],
+  [null, 212],
+  [null, 64],
+];
+for (const [name, points] of GUESTS) {
+  const { guest } = guests.issue(now - 3 * 24 * HOUR);
+  guests.addPoints(guest.id, points, now - HOUR);
+  if (name) guests.setName(guest.id, name, now - HOUR, (fold) => registry.holdsName(fold));
+}
+guests.flush();
 
 // --- ranked bots with Arena play -------------------------------------------
 

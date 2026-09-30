@@ -1,51 +1,30 @@
-// The landing's request: what a visitor with no account reads of the
-// ladder. The top of the ladder by hand and the top bots, as names and
-// numbers, so the page shows whose names stand there before it asks for
-// theirs. Everything here is already public on the ladder page to any
-// account; what this answer leaves out is what a visitor has no use for
-// and a scraper would: ids, form, favorites, and any reader.
+// The landing's request: the ladder a visitor reads before anything else,
+// which is the ladder of every human (ADR 0027): the accounts and the
+// Guests with points, ranked by them, so the page shows whose names stand
+// there and that one match puts a visitor's own beside them. The bot
+// ladders stay inside the home and the Academy, where their owners read
+// them. Names and numbers only, and the reader's own place when the
+// request carries a Guest who has been here before.
 //
-// Pure over the same seeds and stats the home and the ladder page read
-// (server/home_page.ts), so the rows agree with the ladder to the number.
+// Pure over the same lines /api/public/ladder ranks (server/points_ladder.ts),
+// so the two never disagree.
 
-import { buildLadderPage, type LadderSeed } from './ladder_page';
-import type { WayStats } from './way_stats';
-import type { Way } from './ways';
+import {
+  buildPointsLadder,
+  type PointsEntry,
+  type PointsLadder,
+  type PointsReader,
+} from './points_ladder';
 
-export const LANDING_LADDER_ROWS = 5;
-
-// Nobody is reading: no row is "mine" and no place is computed.
-const NO_READER = -1;
-
-export interface LandingLadderRow {
-  rank: number;
-  name: string;
-  rating: number;
-  wins: number;
-  losses: number;
-  // The owner's name on a bot row; null by hand.
-  owner: string | null;
-}
-
-export interface LandingLadder {
-  way: Way;
-  // Placed subjects on the way, so the page can say how many stand behind
-  // the rows it shows.
-  total: number;
-  rows: LandingLadderRow[];
-}
+export const LANDING_LADDER_ROWS = 10;
 
 export interface LandingPage {
-  ladder: LandingLadder;
-  bots: LandingLadder;
-  // Accounts on the server, the same count the public stats give.
-  accounts: number;
+  ladder: PointsLadder;
 }
 
 export interface LandingInput {
-  seeds: (way: Way) => readonly LadderSeed[];
-  stats: (way: Way) => ReadonlyMap<string | number, WayStats>;
-  accounts: number;
+  entries: readonly PointsEntry[];
+  reader: PointsReader | null;
 }
 
 export interface LandingOpts {
@@ -53,28 +32,7 @@ export interface LandingOpts {
 }
 
 export function buildLandingPage(input: LandingInput, opts: LandingOpts = {}): LandingPage {
-  const cap = opts.rows ?? LANDING_LADDER_ROWS;
-  const top = (way: Way): LandingLadder => {
-    const page = buildLadderPage(way, input.seeds(way), input.stats(way), NO_READER, { cap });
-    return {
-      way,
-      total: page.total,
-      rows: page.rows.map((r) => ({
-        rank: r.rank,
-        name: r.name,
-        rating: r.rating,
-        wins: r.wins,
-        losses: r.losses,
-        owner: way === 'hand' ? null : (r.owner ?? null),
-      })),
-    };
+  return {
+    ladder: buildPointsLadder(input.entries, input.reader, opts.rows ?? LANDING_LADDER_ROWS),
   };
-  // The Arena's top, or live play's until the Arena has placed a bot: the
-  // same rule as the home's panel, so the two never disagree.
-  let bots = top('arena');
-  if (bots.total === 0) {
-    const live = top('bot');
-    if (live.total > 0) bots = live;
-  }
-  return { ladder: top('hand'), bots, accounts: input.accounts };
 }

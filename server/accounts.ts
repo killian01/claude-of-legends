@@ -96,6 +96,17 @@ export interface Account {
   // The day (server/laurels.ts dayIndex) the first-win bonus was last
   // paid, so the second win of a day pays the ordinary win.
   lastWinDay?: number;
+  // Banked on the ladder of every human (ADR 0027, server/points.ts),
+  // never spent. Absent reads as none.
+  points?: number;
+}
+
+// What an account created from a Guest takes with it (ADR 0027): the
+// Guest's points, and the Guest's chosen name when it chose one, which
+// the new account may then wear although a Guest holds it.
+export interface GuestClaim {
+  fold: string | null;
+  points: number;
 }
 
 // Everything about an account that may leave the server TO ANOTHER
@@ -196,6 +207,13 @@ export class AccountRegistry {
   // it arrived, and it is the way back into the account it points at.
   private readonly discordOwner = new Map<string, number>();
   private nextId = 1;
+  // A name held outside the registry: a Guest's chosen ladder name (ADR
+  // 0027, server/guests.ts). Taken for every account but the one created
+  // from that Guest.
+  private heldElsewhere: (fold: string) => boolean = () => false;
+  // Set when points moved in memory that disk does not know about: they
+  // come a minion at a time, and this file is rewritten whole.
+  private dirty = false;
 
   constructor(private readonly file: string) {
     const state = loadJson<StoredState>(file, { accounts: [], names: [] });
@@ -214,6 +232,7 @@ export class AccountRegistry {
   }
 
   private persist(): void {
+    this.dirty = false;
     // A broken disk must not break gameplay: identities keep working in
     // memory and the failure is loud in the log.
     try {
@@ -228,10 +247,24 @@ export class AccountRegistry {
   }
 
   // Whether this name is free for `forAccountId` to take. A name the
-  // asking account already holds or held is theirs to take back.
-  private nameFree(fold: string, forAccountId?: number): boolean {
+  // asking account already holds or held is theirs to take back. A name a
+  // Guest holds is nobody's but that Guest's, and the account made from
+  // it (`claimed`).
+  private nameFree(fold: string, forAccountId?: number, claimed?: string | null): boolean {
     const owner = this.nameOwner.get(fold);
-    return owner === undefined || owner === forAccountId;
+    if (owner !== undefined) return owner === forAccountId;
+    return fold === claimed || !this.heldElsewhere(fold);
+  }
+
+  // Tells the registry which names the Guests hold (server/guests.ts).
+  holdNamesElsewhere(check: (fold: string) => boolean): void {
+    this.heldElsewhere = check;
+  }
+
+  // Whether an account holds or once held this folded name: a Guest may
+  // not take it (ADR 0027), whether or not the account still wears it.
+  holdsName(fold: string): boolean {
+    return this.nameOwner.has(fold);
   }
 
   // Whether this address is free, releasing it first if the claim on it
@@ -260,11 +293,15 @@ export class AccountRegistry {
     account.email = undefined;
   }
 
+  // `claim` is the Guest this browser played as, when the request carried
+  // its cookie (ADR 0027): the new account takes its points and may take
+  // its chosen name. The caller retires the Guest once this succeeds.
   register(
     name: string,
     password: string,
     email: string,
     now: number,
+    claim?: GuestClaim,
   ): Result<Account, RegisterError> {
     const nameErr = validateName(name);
     if (nameErr) return { ok: false, error: 'name_invalid' };
@@ -279,7 +316,7 @@ export class AccountRegistry {
       if (emailErr) return { ok: false, error: 'email_invalid' };
     }
     const fold = foldName(name);
-    if (!this.nameFree(fold)) return { ok: false, error: 'name_taken' };
+    if (!this.nameFree(fold, undefined, claim?.fold)) return { ok: false, error: 'name_taken' };
     const eFold = wantsEmail ? foldEmail(email) : null;
     if (eFold !== null && !this.emailFree(eFold, now)) return { ok: false, error: 'email_taken' };
     const account: Account = {
@@ -292,6 +329,7 @@ export class AccountRegistry {
       rating: BASE_RATING,
       ratedGames: 0,
     };
+    if (claim && claim.points > 0) account.points = claim.points;
     if (eFold !== null) {
       account.email = { address: email.trim(), fold: eFold, claimedAt: now, confirmed: false };
       this.emailOwner.set(eFold, account.id);
@@ -307,13 +345,19 @@ export class AccountRegistry {
   // from the Discord name, uniqueness included, and the account starts
   // with no password and no email: Discord is how its owner gets back in,
   // until they add an address and reset themselves a password.
-  registerWithDiscord(identity: DiscordIdentity, now: number): Result<Account, 'discord_taken'> {
+  registerWithDiscord(
+    identity: DiscordIdentity,
+    now: number,
+    claim?: GuestClaim,
+  ): Result<Account, 'discord_taken'> {
     // Through findByDiscordId rather than the index directly, so an index
     // entry that outlived the account it pointed at (a hand-edited file)
     // refuses nobody. The caller signs that account in instead of landing
     // here, so this refusal is a race, not a flow.
     if (this.findByDiscordId(identity.id)) return { ok: false, error: 'discord_taken' };
-    const name = deriveName(identity.username, (candidate) => this.nameFree(foldName(candidate)));
+    const name = deriveName(identity.username, (candidate) =>
+      this.nameFree(foldName(candidate), undefined, claim?.fold),
+    );
     const fold = foldName(name);
     const account: Account = {
       id: this.nextId++,
@@ -325,6 +369,7 @@ export class AccountRegistry {
       rating: BASE_RATING,
       ratedGames: 0,
     };
+    if (claim && claim.points > 0) account.points = claim.points;
     this.byId.set(account.id, account);
     this.nameOwner.set(fold, account.id);
     this.discordOwner.set(identity.id, account.id);
@@ -502,6 +547,23 @@ export class AccountRegistry {
     if (!a) return;
     a.rating -= amount;
     this.persist();
+  }
+
+  // Points landed on this account's line of the ladder (ADR 0027). Memory
+  // only, like a touch: they come a minion at a time and this file is
+  // rewritten whole, so they reach disk on the flush that follows, or on
+  // the next persist for any reason. Null for an id nobody holds.
+  addPoints(id: number, delta: number): number | null {
+    const a = this.byId.get(id);
+    if (!a) return null;
+    a.points = (a.points ?? 0) + delta;
+    this.dirty = true;
+    return a.points;
+  }
+
+  // Writes the points that addPoints() only moved in memory.
+  flush(): void {
+    if (this.dirty) this.persist();
   }
 
   // The collection (CONTEXT.md), empty for an id nobody holds.

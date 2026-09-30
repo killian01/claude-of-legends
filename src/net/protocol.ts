@@ -257,6 +257,19 @@ export interface LobbyPlayer {
   team: TeamId;
 }
 
+// Why a seat earned points (server/points.ts, ADR 0027): a minion or camp
+// last hit, a champion kill or an assist, a tower the team took, a ring
+// creature or the Warden, an Ascendant, the win, or a loss played through.
+export type PointsReason =
+  | 'last_hit'
+  | 'kill'
+  | 'assist'
+  | 'tower'
+  | 'creature'
+  | 'ascendant'
+  | 'victory'
+  | 'finish';
+
 export type ServerMsg =
   // The account this socket belongs to, so the client can show who it is
   // logged in as without a second round trip.
@@ -346,6 +359,9 @@ export type ServerMsg =
       queue?: 'forge';
       way?: 'bot';
     }
+  // Points this player's seat just banked on the ladder (ADR 0027), sent
+  // to that player alone: what landed, the ladder total it makes, and why.
+  | { t: 'points'; delta: number; total: number; reason: PointsReason }
   | { t: 'match_end' }
   | { t: 'error'; message: string };
 
