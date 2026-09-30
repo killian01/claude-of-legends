@@ -53,3 +53,16 @@ export function unlockOrientation(win: Window = window): void {
 export function needsTurnPrompt(coarsePointer: boolean, landscapeLocked: boolean): boolean {
   return coarsePointer && !landscapeLocked;
 }
+
+// Whether the wall stands right now: the prompt is needed and the phone is
+// held upright. The HUD's stylesheet shows it on the same two conditions
+// (ui/hud.ts, .turn-needed under a portrait media query); this is the same
+// answer for what has to know without looking at the page (the practice
+// clock, the hint's clock).
+export function turnWallUp(
+  coarsePointer: boolean,
+  landscapeLocked: boolean,
+  portrait: boolean,
+): boolean {
+  return portrait && needsTurnPrompt(coarsePointer, landscapeLocked);
+}

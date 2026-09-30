@@ -1,7 +1,13 @@
 // The touch bar: the handful of orders that only live on keys with no
 // finger equivalent (B recall, P shop, Esc menu, Space recenter) as
 // buttons on the right screen edge, clear of the minimap in the corner.
-// Boot builds it on coarse-pointer devices only.
+// Boot builds it on coarse-pointer devices only. Its buttons are a
+// finger's size (MIN_TAP_PX; they were 38 px tall), and it keeps clear of
+// a phone's notch and rounded corners (the safe area: index.html asks for
+// the whole screen with viewport-fit=cover, so the page has to step in
+// from the edges itself).
+
+import { MIN_TAP_PX } from '../game/ui_scale';
 
 export interface TouchBarActions {
   onRecall(): void;
@@ -10,14 +16,15 @@ export interface TouchBarActions {
   onRecenterCamera(): void;
 }
 
-const CSS = `
+export const TOUCH_BAR_CSS = `
 .touchbar {
   /* Above the vertical middle: the minimap owns the bottom-right corner. */
-  position: absolute; right: 8px; top: 40%; transform: translateY(-50%);
+  position: absolute; right: calc(8px + env(safe-area-inset-right, 0px)); top: 40%;
+  transform: translateY(-50%);
   display: flex; flex-direction: column; gap: 8px; z-index: 30;
 }
 .touchbar-btn {
-  min-width: 54px; min-height: 38px; padding: 0 8px;
+  min-width: 56px; min-height: ${MIN_TAP_PX}px; padding: 0 8px;
   border-radius: 8px; border: 1px solid #466030;
   background: rgba(20, 30, 12, 0.72); color: #d8e6c0;
   font: 700 12px system-ui, sans-serif; letter-spacing: 0.04em;
@@ -25,7 +32,7 @@ const CSS = `
 }
 .touchbar-btn:active { background: rgba(70, 96, 48, 0.9); }
 /* With the thumb controls the right edge belongs to the casting thumb. */
-.touchbar.left { right: auto; left: 8px; top: 38%; }
+.touchbar.left { right: auto; left: calc(8px + env(safe-area-inset-left, 0px)); top: 38%; }
 `;
 
 // Returns a teardown removing the bar and its stylesheet, like the HUD's.
@@ -35,7 +42,7 @@ export function buildTouchBar(
   opts: { side?: 'left' | 'right' } = {},
 ): () => void {
   const style = document.createElement('style');
-  style.textContent = CSS;
+  style.textContent = TOUCH_BAR_CSS;
   document.head.appendChild(style);
   const root = document.createElement('div');
   root.className = opts.side === 'left' ? 'touchbar left' : 'touchbar';

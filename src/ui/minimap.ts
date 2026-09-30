@@ -58,9 +58,15 @@ export class Minimap {
     const coarse =
       typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
     const displayPx = coarse ? 112 : SIZE_PX;
+    // Stepped in from a phone's notch and rounded corners (the safe area;
+    // zero on a screen without them).
+    const edge =
+      opts.corner === 'top-right'
+        ? 'top:calc(58px + env(safe-area-inset-top, 0px))'
+        : 'bottom:calc(12px + env(safe-area-inset-bottom, 0px))';
     this.canvas.style.cssText =
       `width:${displayPx}px;height:${displayPx}px;` +
-      `position:absolute;right:12px;${opts.corner === 'top-right' ? 'top:58px' : 'bottom:12px'};` +
+      `position:absolute;right:calc(12px + env(safe-area-inset-right, 0px));${edge};` +
       'border:1px solid #466030;border-radius:6px;pointer-events:auto;z-index:5;opacity:0.88;';
     container.appendChild(this.canvas);
     this.stopScale = followUiScale(this.canvas, () => getSettings().uiScale);

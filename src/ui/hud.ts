@@ -7,7 +7,8 @@
 import { announceVoice } from '../game/announcer';
 import type { PostMatchAction } from '../game/flow';
 import { requestGameFullscreen, toggleGameFullscreen } from '../game/fullscreen';
-import { needsTurnPrompt } from '../game/orientation';
+import { needsTurnPrompt, turnWallUp } from '../game/orientation';
+import type { MatchCover } from '../game/practice_clock';
 import { getSettings } from '../game/settings';
 import { playSfx } from '../game/sfx';
 import type { CastTouch } from '../game/touch';
@@ -54,6 +55,7 @@ import {
   nudgeVisible,
   stepNudge,
 } from './feedback_box';
+import { HINTS_START, type HintsClock, hintsHold, stepHints } from './hints_fade';
 import {
   closeLaneCard,
   type GuideMode,
@@ -572,7 +574,8 @@ const CSS = `
    announcements. The score is the only one of the three that is always up,
    so it takes the very top and the other two moved down to clear it. */
 .hud-teamscore {
-  position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: calc(8px + env(safe-area-inset-top, 0px));
+  left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 12px;
   background: rgba(14, 20, 9, 0.85); border: 1px solid #3a4f28; border-radius: 6px;
   padding: 3px 14px; text-shadow: 0 1px 2px #000;
@@ -605,7 +608,8 @@ const CSS = `
 }
 .hud-target-bar .hud-bar-text { line-height: 10px; }
 .hud-kda {
-  position: absolute; top: 12px; right: 12px; text-align: right;
+  position: absolute; top: calc(12px + env(safe-area-inset-top, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px)); text-align: right;
   background: rgba(14, 20, 9, 0.85); border: 1px solid #3a4f28; border-radius: 6px;
   padding: 5px 12px; font-size: 15px; font-weight: 800; color: #e8f5c8;
   text-shadow: 0 1px 2px #000; pointer-events: auto;
@@ -619,6 +623,10 @@ const CSS = `
   background: rgba(0, 0, 0, 0.45); text-shadow: 0 2px 8px #000; z-index: 10;
 }
 .hud-overlay.open { display: flex; }
+/* The pause menu and the end screen stand over everything in the HUD,
+   the shop and the turn wall included: Back on a phone held upright opens
+   the pause menu, and it used to open under the wall, out of reach. */
+.hud-overlay.modal { z-index: 41; }
 .hud-overlay-title { font-size: 52px; font-weight: 800; letter-spacing: 2px; }
 .hud-overlay-sub { font-size: 16px; margin-top: 6px; }
 .hud-menu-btn {
@@ -739,10 +747,11 @@ const CSS = `
 .hud.compact .hud-spot { font-size: 32px; top: 96px; letter-spacing: 2px; }
 .hud.compact .hud-spot.top { font-size: 44px; letter-spacing: 3px; }
 .hud.compact .hud-feed { font-size: 11px; }
-.hud.compact .hud-hints {
-  font-size: 9px; max-width: 170px; line-height: 1.45;
-  animation: hud-hints-fade 1s 25s forwards;
-}
+.hud.compact .hud-hints { font-size: 9px; max-width: 170px; line-height: 1.45; }
+/* Faded once read, and read only while nothing covered it: the clock is
+   ui/hints_fade.ts, not a delay here, since a delay counted the seconds
+   the opening shop and the turn wall stood over it. */
+.hud-hints.faded { animation: hud-hints-fade 1s forwards; }
 @keyframes hud-hints-fade { to { opacity: 0; visibility: hidden; } }
 /* The thumb controls (CONTEXT.md: Thumb stick), the whole bottom of a
    phone's screen. The cluster: the attack button at the corner, Q W E R
@@ -756,9 +765,12 @@ const CSS = `
    top for it. The bar with the bars and the items slides left of the
    middle so the two never meet on a narrow phone. The sizes and places
    are numbers in src/ui/thumb_cluster.ts, where a test keeps every
-   circle clear of every other; only the look is written here. */
+   circle clear of every other and a finger wide; only the look is
+   written here. The corner is the safe area's (a phone's notch and
+   rounded corners and the home bar; zero on a screen without them). */
 .hud.thumbs .hud-slots {
-  position: absolute; right: 0; bottom: 0; display: block;
+  position: absolute; display: block;
+  right: env(safe-area-inset-right, 0px); bottom: env(safe-area-inset-bottom, 0px);
   transform: scale(var(--thumb-scale, 1)); transform-origin: 100% 100%;
 }
 .hud.thumbs .hud-slot {
@@ -769,7 +781,7 @@ const CSS = `
   touch-action: none;
 }
 .hud.thumbs .hud-slot-key { font-size: 9px; }
-.hud.thumbs .hud-slot-up { font-size: 15px; line-height: 20px; border-radius: 50%; }
+.hud.thumbs .hud-slot-up { font-size: 17px; line-height: 20px; border-radius: 50%; }
 .hud.thumbs .hud-attack {
   position: absolute; border-radius: 50%;
   border: 2px solid #c9a84a; background: rgba(60, 40, 12, 0.85); color: #f0d890;
@@ -786,16 +798,28 @@ ${thumbClusterCss()}
   max-width: 420px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .hud.thumbs .hud-hints {
-  max-width: 150px; left: 84px; bottom: auto; top: 44px; font-size: 10px;
-  animation: hud-hints-fade 1s 12s forwards;
+  max-width: 150px; left: calc(84px + env(safe-area-inset-left, 0px)); bottom: auto;
+  top: 44px; font-size: 10px;
 }
 /* A phone held upright: the stick and the bar need the width, so the
-   match waits behind one line until the phone turns. */
+   match waits behind the wall until the phone turns (a practice match
+   holds its clock meanwhile, game/practice_clock.ts). An iPhone never
+   turns the screen for the page, and with its rotation lock on it never
+   turns at all: the wall says where the lock is, and has a way out. */
 .hud-turn {
   display: none; position: absolute; inset: 0; z-index: 40; pointer-events: auto;
+  flex-direction: column; gap: 12px;
   align-items: center; justify-content: center; text-align: center; padding: 24px;
   background: rgba(4, 8, 16, 0.92); font-size: 18px; font-weight: 700; letter-spacing: 0.3px;
 }
+.hud-turn-line {
+  max-width: 300px; font-size: 14px; font-weight: 500; line-height: 1.45; color: #b8c7a0;
+  letter-spacing: 0;
+}
+.hud-turn .hud-menu-btn { margin-top: 8px; min-height: 44px; }
+/* Under the pause menu or the end screen the wall keeps its dark ground
+   and lets go of its words, so the two never read through each other. */
+.hud.overlay-open .hud-turn > * { visibility: hidden; }
 /* The shop on a touchscreen: the same chest, sized for the screen it is
    on. It stood 700 px wide (its desktop minimum) on an 844 px phone, with
    a 95 by 28 close button, covering three quarters of the screen the
@@ -844,7 +868,13 @@ ${thumbClusterCss()}
 }
 /* Only where the browser would not turn the screen itself
    (game/orientation.ts): with the lock granted there is nothing to ask. */
-@media (orientation: portrait) { .hud.compact.turn-needed .hud-turn { display: flex; } }
+@media (orientation: portrait) {
+  .hud.compact.turn-needed .hud-turn { display: flex; }
+  /* The touch bar rides above the HUD's layer; behind the wall its
+     buttons would float over it with nothing to act on. The wall's own
+     button is the way out, Back the way to the pause menu. */
+  .hud.compact.turn-needed ~ .touchbar { display: none; }
+}
 `;
 
 export interface NetHooks {
@@ -941,6 +971,19 @@ export class Hud {
   // The opening buy is the easiest thing in the genre to forget, so the
   // shop is already open when the match starts. Once, and only at the top.
   private openedOpeningShop = false;
+  // That opening shop is still up: from the moment it opens by itself to
+  // the first time it closes. A practice match holds its clock meanwhile
+  // (game/practice_clock.ts); the shop opened again later does not.
+  private openingShopUp = false;
+  // The controls hint and its fade clock (ui/hints_fade.ts): seconds of
+  // uncovered screen, null hold on a mouse where it stays.
+  private readonly hintsEl: HTMLElement;
+  private hintsClock: HintsClock = HINTS_START;
+  private readonly hintsHold: number | null;
+  // Whether the browser holds the screen in landscape (setLandscapeLocked),
+  // and whether the phone is upright: the two halves of the turn wall.
+  private landscapeLocked = false;
+  private readonly portrait: MediaQueryList | null;
   private endPlayed = false;
   // No account behind this match (ui/account_offer.ts).
   private readonly guest: boolean;
@@ -1018,6 +1061,9 @@ export class Hud {
     // landscape (setLandscapeLocked): a phone that refuses keeps the line
     // asking for a turn, which is what it had before.
     this.coarsePointer = coarsePointer;
+    this.portrait =
+      typeof window.matchMedia === 'function' ? window.matchMedia('(orientation: portrait)') : null;
+    this.hintsHold = hintsHold(coarsePointer, thumbs);
     root.className = coarsePointer ? `hud compact${thumbs ? ' thumbs' : ''} turn-needed` : 'hud';
     this.rootEl = root;
     // The interface size (src/game/ui_scale.ts): the screen's, or the
@@ -1290,6 +1336,7 @@ export class Hud {
     }
 
     const hints = el('div', 'hud-hints');
+    this.hintsEl = hints;
     hints.textContent = coarsePointer
       ? getSettings().touchScheme === 'thumbs'
         ? 'Left thumb: the stick walks. Right thumb: tap a spell to cast it, slide it to ' +
@@ -1552,8 +1599,23 @@ export class Hud {
       quit,
     );
 
+    // The turn wall: the ask, where an iPhone keeps its rotation lock, and
+    // the pause menu's own way out, for a phone that will not turn.
+    const turnWall = el('div', 'hud-turn');
+    const turnLeave = el('button', 'hud-menu-btn', 'Leave match');
+    turnLeave.addEventListener('click', () => onExit('menu'));
+    turnWall.append(
+      el('div', '', 'Turn your phone sideways to play'),
+      el(
+        'div',
+        'hud-turn-line',
+        'On iPhone, turn off Portrait Orientation Lock in Control Center.',
+      ),
+      turnLeave,
+    );
+
     root.append(
-      el('div', 'hud-turn', 'Turn your phone sideways to play'),
+      turnWall,
       bottom,
       hints,
       kda,
@@ -1615,7 +1677,23 @@ export class Hud {
   // (game/orientation.ts), so the line asking for a turn has nothing left
   // to ask. Called again whenever the request is retried.
   setLandscapeLocked(locked: boolean): void {
+    this.landscapeLocked = locked;
     this.rootEl.classList.toggle('turn-needed', needsTurnPrompt(this.coarsePointer, locked));
+  }
+
+  // The turn wall stands right now (the stylesheet's own two conditions).
+  private turnWallUp(): boolean {
+    return turnWallUp(this.coarsePointer, this.landscapeLocked, this.portrait?.matches ?? false);
+  }
+
+  // What stands over the match right now, for the practice clock
+  // (game/practice_clock.ts); read every frame, so it reads classes only.
+  covers(): MatchCover {
+    return {
+      turnWall: this.turnWallUp(),
+      pauseMenu: this.escapeOverlay.classList.contains('open'),
+      openingShop: this.openingShopUp && this.shop.classList.contains('open'),
+    };
   }
 
   // One feedback box, wired to this match: what it sends is read when
@@ -1652,6 +1730,7 @@ export class Hud {
   private setShopOpen(open: boolean): void {
     this.shop.classList.toggle('open', open);
     this.rootEl.classList.toggle('shop-open', open);
+    if (!open) this.openingShopUp = false;
   }
 
   toggleShop(): void {
@@ -1673,12 +1752,27 @@ export class Hud {
     );
   }
 
+  // Something covers the HUD: the shop, the pause menu, the end screen or
+  // the turn wall. The lane card, the feedback line and the controls hint
+  // wait for it to lift, and their clocks with them.
   private nudgeBlocked(): boolean {
     return (
       this.shop.classList.contains('open') ||
       this.escapeOverlay.classList.contains('open') ||
-      this.endOverlay.classList.contains('open')
+      this.endOverlay.classList.contains('open') ||
+      this.turnWallUp()
     );
+  }
+
+  private stepHints(): void {
+    if (this.hintsClock.faded || this.hintsHold === null) return;
+    this.hintsClock = stepHints(
+      this.hintsClock,
+      this.world.time,
+      this.nudgeBlocked(),
+      this.hintsHold,
+    );
+    if (this.hintsClock.faded) this.hintsEl.classList.add('faded');
   }
 
   private stepNudge(): void {
@@ -2239,14 +2333,19 @@ export class Hud {
       this.openedOpeningShop = true;
       // Only at the top of a live match: a rejoin or a replay opens to the
       // game, not to a shop nobody asked for.
-      if (this.world.time < 5 && this.world.winner === null) this.setShopOpen(true);
-      // The feedback line likewise: the start of a match only.
-      else this.nudge = { ...this.nudge, done: true };
+      if (this.world.time < 5 && this.world.winner === null) {
+        this.setShopOpen(true);
+        this.openingShopUp = true;
+      } else {
+        // The feedback line likewise: the start of a match only.
+        this.nudge = { ...this.nudge, done: true };
+      }
     }
     // The lane card is not held to the top of the match: a slow load, a
     // rejoin and a newcomer dropped into a seat are all told their lane.
     this.stepLaneGuide(u);
     this.stepNudge();
+    this.stepHints();
 
     if (this.spotUntil !== 0 && performance.now() > this.spotUntil) {
       this.spotUntil = 0;

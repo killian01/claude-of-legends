@@ -15,6 +15,7 @@ import { registerForgedAssets } from './game/forged_visuals';
 import { requestGameFullscreen } from './game/fullscreen';
 import { parseJoinCode } from './game/invite';
 import { appNav, installNav, sectionFromHash } from './game/nav';
+import { advancePracticeClock, type PracticeClock, practiceHeld } from './game/practice_clock';
 import { practiceSeed } from './game/practice_seed';
 import { reenterAsAccount } from './game/reentry';
 import { ReplayCursor } from './game/replay_cursor';
@@ -352,8 +353,12 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
       guide: 'play',
     });
     const TICK_MS = DT * 1000;
-    let last = performance.now();
-    let acc = 0;
+    // The match's clock (src/game/practice_clock.ts): it holds while the
+    // turn wall, the pause menu or the opening shop stands over the match,
+    // and picks up again without a burst. The first frame's timestamp
+    // predates the presentation's own setup (shader compiles, texture
+    // uploads: seconds on a slow GPU); the clock never counts that debt.
+    let clock: PracticeClock = { last: performance.now(), acc: 0 };
     function frame(now: number): void {
       if (stopped) return;
       if (guarded && world.winner !== null) {
@@ -363,13 +368,12 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
         ends.report();
         practice.report();
       }
-      // The first frame's timestamp predates the presentation's own setup
-      // (shader compiles, texture uploads: seconds on a slow GPU), which
-      // would leave the clock in debt and the match standing still for as
-      // long; a frame never counts for less than nothing.
-      acc += Math.max(0, Math.min(now - last, 250));
-      last = now;
-      while (acc >= TICK_MS) {
+      const step = advancePracticeClock(clock, now, practiceHeld(pres.covers()), TICK_MS);
+      clock = step.clock;
+      for (let i = 0; i < step.ticks; i++) {
+        // A tick can raise a cover (the opening shop opens on the first):
+        // the rest of this frame's ticks wait for it too.
+        if (i > 0 && practiceHeld(pres.covers())) break;
         const kills: { unitId: number; killerId: number }[] = [];
         const golds: number[] = [];
         const casts: { unitId: number; key?: AbilityKey }[] = [];
@@ -385,7 +389,6 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
             hits.push({ targetId: ev.targetId, amount: ev.amount });
         }
         pres.onWorldTick({ kills, golds, casts, hits, attacks });
-        acc -= TICK_MS;
       }
       requestAnimationFrame(frame);
     }

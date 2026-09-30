@@ -55,6 +55,12 @@ export const THUMB_DESIGN_HEIGHT = 420;
 export const MIN_THUMB_SCALE = 0.85;
 export const MAX_THUMB_SCALE = 1.6;
 
+// The smallest thing a finger is asked to hit on a touchscreen, in CSS
+// pixels across, at every size the thumb controls come in: the cluster's
+// buttons at MIN_THUMB_SCALE (ui/thumb_cluster.ts) and the touch bar's
+// (ui/touch_bar.ts). Phone makers' guidance lands on the same number.
+export const MIN_TAP_PX = 44;
+
 export function thumbScale(viewportHeight: number): number {
   if (!(viewportHeight > 0)) return 1;
   const raw = viewportHeight / THUMB_DESIGN_HEIGHT;

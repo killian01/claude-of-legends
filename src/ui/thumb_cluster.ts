@@ -6,6 +6,13 @@
 // shipped with the marks over the next slot along the arc and the slots'
 // corners touching, and a player wrote that the spells overlapped.
 //
+// Every button is a finger's size even on the shortest phone: a slot, a
+// sigil and a mark's tap ring are at least MIN_TAP_PX across once the
+// cluster is scaled down to MIN_THUMB_SCALE (ui_scale.ts). They were 34
+// to 43 px on a 360 px tall phone, and the level-up mark 19. A mark stays
+// small to look at and is tapped through a ring round it, pushed out from
+// its slot so that it reaches no deeper into the slot than the mark does.
+//
 // Coordinates are the distance of a circle's center from the screen's
 // right and bottom edges, in unscaled CSS pixels; the HUD scales the
 // whole cluster with the phone's height (ui_scale.ts, --thumb-scale).
@@ -32,26 +39,30 @@ export interface ThumbCluster {
   // upper-left shoulder, centered on its rim, which points away from the
   // next slot along the arc and from the sigils.
   marks: readonly ThumbCircle[];
+  // Where each mark is tapped, keyed like it: a finger-sized ring round
+  // the mark, pushed out along the shoulder.
+  taps: readonly ThumbCircle[];
 }
 
 const ATTACK: ThumbCircle = { key: 'attack', right: 44, bottom: 44, r: 32 };
-const SLOT_R = 23;
-const ULT_R = 25;
-const SIGIL_R = 20;
-export const MARK_R = 11;
-const ARC = { rx: 132, ry: 94 };
+const SLOT_R = 26;
+const ULT_R = 27;
+const SIGIL_R = 26;
+export const MARK_R = 13;
+export const MARK_TAP_R = 26;
+const ARC = { rx: 150, ry: 88 };
 const SLOT_ANGLES: readonly (readonly [string, number, number])[] = [
   ['Q', 180, SLOT_R],
-  ['W', 146, SLOT_R],
-  ['E', 116, SLOT_R],
+  ['W', 143, SLOT_R],
+  ['E', 114, SLOT_R],
   ['R', 90, ULT_R],
 ];
-const SIGIL_RING = { rx: 188, ry: 118 };
+const SIGIL_RING = { rx: 232, ry: 158 };
 const SIGIL_ANGLES: readonly (readonly [string, number])[] = [
   ['D', 180],
-  ['F', 152],
+  ['F', 150],
 ];
-const MARK_ANGLE = 135;
+const MARK_ANGLE = 125;
 const MARGIN = 4;
 
 const round = (v: number): number => Math.round(v * 10) / 10;
@@ -66,6 +77,15 @@ function onArc(rx: number, ry: number, degrees: number): { right: number; bottom
   };
 }
 
+// A point `by` pixels from `c` toward the slots' shoulder.
+function alongShoulder(
+  c: { right: number; bottom: number },
+  by: number,
+): { right: number; bottom: number } {
+  const a = (MARK_ANGLE * Math.PI) / 180;
+  return { right: round(c.right - by * Math.cos(a)), bottom: round(c.bottom + by * Math.sin(a)) };
+}
+
 export function thumbCluster(): ThumbCluster {
   const slots = SLOT_ANGLES.map(([key, deg, r]) => ({ key, r, ...onArc(ARC.rx, ARC.ry, deg) }));
   const sigils = SIGIL_ANGLES.map(([key, deg]) => ({
@@ -73,17 +93,17 @@ export function thumbCluster(): ThumbCluster {
     r: SIGIL_R,
     ...onArc(SIGIL_RING.rx, SIGIL_RING.ry, deg),
   }));
-  const a = (MARK_ANGLE * Math.PI) / 180;
-  const marks = slots.map((s) => ({
-    key: s.key,
-    r: MARK_R,
-    right: round(s.right - s.r * Math.cos(a)),
-    bottom: round(s.bottom + s.r * Math.sin(a)),
+  const marks = slots.map((s) => ({ key: s.key, r: MARK_R, ...alongShoulder(s, s.r) }));
+  // The ring's inner edge sits where the mark's own does.
+  const taps = marks.map((m) => ({
+    key: m.key,
+    r: MARK_TAP_R,
+    ...alongShoulder(m, MARK_TAP_R - MARK_R),
   }));
   const all = [ATTACK, ...slots, ...sigils, ...marks];
   const width = Math.ceil(Math.max(...all.map((c) => c.right + c.r)) + MARGIN);
   const height = Math.ceil(Math.max(...all.map((c) => c.bottom + c.r)) + MARGIN);
-  return { width, height, attack: ATTACK, slots, sigils, marks };
+  return { width, height, attack: ATTACK, slots, sigils, marks, taps };
 }
 
 // The clear space between two circles; negative when they overlap.
@@ -95,7 +115,8 @@ export function circleGap(a: ThumbCircle, b: ThumbCircle): number {
 
 // The geometry as CSS, sizes and places only; the look stays in the HUD's
 // stylesheet. A mark is a child of its slot, so it is placed inside the
-// slot's box.
+// slot's box; its tap ring is the mark's ::before (a tap on it is a tap on
+// the mark), placed from the mark's middle.
 export function thumbClusterCss(c: ThumbCluster = thumbCluster()): string {
   const px = (v: number): string => `${round(v)}px`;
   const place = (circle: ThumbCircle): string =>
@@ -117,9 +138,24 @@ export function thumbClusterCss(c: ThumbCluster = thumbCluster()): string {
       right: m.right - (s.right - s.r),
       bottom: m.bottom - (s.bottom - s.r),
     };
+    // The line height is the box less its 1 px border, so the + sits
+    // in the middle.
     lines.push(
       `.hud.thumbs .hud-slot[data-key='${m.key}'] .hud-slot-up { ` +
-        `left: auto; top: auto; transform: none; ${place(inside)} }`,
+        `left: auto; top: auto; transform: none; ${place(inside)} ` +
+        `line-height: ${px(2 * m.r - 2)}; }`,
+    );
+    const tap = c.taps.find((x) => x.key === m.key);
+    if (!tap) continue;
+    // Screen offsets from the mark's middle: right and bottom grow toward
+    // the left and the top of the screen.
+    const dx = m.right - tap.right;
+    const dy = m.bottom - tap.bottom;
+    lines.push(
+      `.hud.thumbs .hud-slot[data-key='${m.key}'] .hud-slot-up::before { ` +
+        `content: ''; position: absolute; border-radius: 50%; ` +
+        `left: calc(50% + ${px(dx - tap.r)}); top: calc(50% + ${px(dy - tap.r)}); ` +
+        `width: ${px(2 * tap.r)}; height: ${px(2 * tap.r)}; }`,
     );
   }
   return lines.join('\n');

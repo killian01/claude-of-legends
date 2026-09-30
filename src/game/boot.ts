@@ -10,7 +10,7 @@ import { schoolColorOf } from '../render/ability_vfx';
 import { aspectColor } from '../render/aspect_colors';
 import { Renderer } from '../render/renderer';
 import type { RenderTerrain } from '../render/terrain';
-import { effectiveRank, ULT_RANK_LEVELS } from '../sim/stats';
+import { effectiveRank } from '../sim/stats';
 import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
 import { DT } from '../sim/types';
 import { attackCursor, defaultCursor } from '../ui/cursors';
@@ -28,6 +28,7 @@ import {
 import { Minimap } from '../ui/minimap';
 import { buildThumbStickView } from '../ui/thumb_stick_view';
 import { buildTouchBar } from '../ui/touch_bar';
+import { unlearnedLine } from '../ui/unlearned_line';
 import type { IWorld } from '../world_api';
 import { castSoundOf } from './champion_sounds';
 import { installCursorLock } from './cursor_lock';
@@ -37,6 +38,7 @@ import { type InputHandlers, setupInput } from './input';
 import { startMusic, stopMusic } from './music';
 import { lockLandscape, unlockOrientation } from './orientation';
 import { nearestEnemy, pickEnemyAt, pickEnemyOnScreen, pickUnitOnScreen } from './picking';
+import type { MatchCover } from './practice_clock';
 import { getSettings } from './settings';
 import { playCastSfx, playSfx, preloadSfx } from './sfx';
 import { aimedPoint, quickPoint } from './thumb_cast';
@@ -78,6 +80,10 @@ export interface Presentation {
   // The pause menu, where Leave match lives: what the browser's Back does
   // mid-match instead of leaving (src/game/nav.ts). Back again resumes.
   toggleEscapeMenu(): void;
+  // What stands over the match right now (the turn wall, the pause menu,
+  // the opening shop), for the practice clock (game/practice_clock.ts). A
+  // match against the server never asks.
+  covers(): MatchCover;
   // Same-page teardown: render loop, input, HUD, minimap, GL, music. The
   // menu returns on the same document; nothing may keep running behind it.
   dispose(): void;
@@ -206,11 +212,7 @@ export function startPresentation(
     if (u && ab) {
       if (effectiveRank(u, key) <= 0) {
         playSfx('deny');
-        hud.toast(
-          key === 'R' && u.level < ULT_RANK_LEVELS[0]!
-            ? `${ab.name} unlocks at level ${ULT_RANK_LEVELS[0]}.`
-            : `${ab.name} needs a skill point: Alt+${key} or click the +.`,
-        );
+        hud.toast(unlearnedLine(ab.name, key, u.level, coarsePointer));
         return;
       }
       if ((u.cooldowns[key] ?? 0) > world.time) {
@@ -656,6 +658,7 @@ export function startPresentation(
     setMatchResult: (rated, delta, rating, queue, way) =>
       hud.setMatchResult(rated, delta, rating, queue, way),
     toggleEscapeMenu: () => hud.toggleEscapeMenu(),
+    covers: () => hud.covers(),
     dispose: () => {
       if (disposed) return;
       disposed = true;

@@ -461,7 +461,10 @@ _Avoid_: survey, form, support ticket
 **Practice**:
 The offline match against house bots, the fill completing both teams around the person's
 champion and lane preference on a new seed every match, the opponents' lane seats on the
-Gentle player, run entirely in the browser tab with nothing saved and no account needed. The same simulation the rated match runs. Its end sends the server the
+Gentle player, run entirely in the browser tab with nothing saved and no account needed. The
+same simulation the rated match runs. Its clock holds while the player cannot play (a phone
+waiting to be turned, the pause menu, the shop that opens by itself at the start) and picks up
+where it stopped; a match against the server never holds. Its end sends the server the
 practice report (PRIVACY.md): the scoreboard, the result and the minutes, nothing that names
 anyone, the one thing the server learns of a match it never saw run.
 _Avoid_: offline mode, sandbox, training, tutorial
