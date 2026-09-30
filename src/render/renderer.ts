@@ -47,6 +47,7 @@ import {
   PROJECTILE_Y,
   type SpawnOffset,
 } from './muzzle_spawn';
+import { RING_FOG_EDGE, ringFogOpening } from './ring_fog';
 import { pickShieldHolder, type ShieldCandidate } from './shield_holder';
 import { crownHeight, crownLift, flightProgress, isStill } from './structure_fire';
 import type { RenderTerrain } from './terrain';
@@ -2577,6 +2578,30 @@ export class Renderer {
       g.fillStyle = grad;
       g.beginPath();
       g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+    }
+    // A ring's whole circle while its creature rises (render/ring_fog.ts):
+    // paint only, the units on the ring are still the sim's to reveal.
+    for (const clock of this.world.ringClocks()) {
+      const age = clock.roseAt !== null ? this.world.time - clock.roseAt : null;
+      const open = ringFogOpening(clock.unitId !== null ? age : null);
+      if (open <= 0) continue;
+      const site = this.world.map.rings?.find((r) => r.id === clock.ring);
+      if (!site) continue;
+      const x = site.x * scale;
+      const y = site.z * scale;
+      const inner = site.r * scale;
+      const outer = (site.r + RING_FOG_EDGE) * scale;
+      const grad = g.createRadialGradient(x, y, inner, x, y, outer);
+      grad.addColorStop(0, `rgba(0,0,0,${open})`);
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grad;
+      g.beginPath();
+      g.arc(x, y, outer, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = `rgba(0,0,0,${open})`;
+      g.beginPath();
+      g.arc(x, y, inner, 0, Math.PI * 2);
       g.fill();
     }
     this.fogTexture.needsUpdate = true;
