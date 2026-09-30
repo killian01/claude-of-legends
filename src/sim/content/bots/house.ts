@@ -7,12 +7,15 @@
 // played the same way; the forest's seat plays the Jungler, the fifth
 // style, by post rather than by draw (ADR 0023). The styles are drawn on
 // the fill's stream right after the team's champions, so the lineup a
-// seed gives stays the fill's.
+// seed gives stays the fill's. The Gentle player, the sixth, is posted
+// too and never drawn: on the enemy lane seats a newcomer meets
+// (gentleSeats), after the draw, so the lineup and the stream stay put.
 
 import { fillSeats, type HeldSeat, seatLane, TEAM_SIZE } from '../../fill';
 import type { LanePreference } from '../../playbook/types';
 import type { Rng } from '../../rng';
 import { BRAWLER } from './brawler';
+import { GENTLE } from './gentle';
 import { JUNGLER } from './jungler';
 import { type BotDef, LANER } from './laner';
 import { OBJECTIVE } from './objective';
@@ -21,7 +24,7 @@ import { SIEGER } from './sieger';
 // The four a lane seat draws among.
 export const LANE_STYLES: readonly BotDef[] = [LANER, BRAWLER, SIEGER, OBJECTIVE];
 
-export const HOUSE_STYLES: readonly BotDef[] = [...LANE_STYLES, JUNGLER];
+export const HOUSE_STYLES: readonly BotDef[] = [...LANE_STYLES, JUNGLER, GENTLE];
 
 export const HOUSE_STYLE_IDS: readonly string[] = HOUSE_STYLES.map((b) => b.id);
 
@@ -57,4 +60,13 @@ export function houseSeats(held: readonly HeldSeat[], rng: Rng, size = TEAM_SIZE
     bot: seat.kind === 'jungle' ? JUNGLER.id : drawHouseStyle(rng),
     lane: seatLane(seat.kind),
   }));
+}
+
+// A team's house seats with the Gentle player on every lane seat and the
+// Jungler kept on the forest's: what a host seats against a newcomer (the
+// offline practice match, a public match whose people are all Guests).
+// Applied after houseSeats, so the champions, the lanes and the seed's
+// stream stay the fill's.
+export function gentleSeats(seats: readonly HouseSeat[]): HouseSeat[] {
+  return seats.map((seat) => (seat.bot === JUNGLER.id ? seat : { ...seat, bot: GENTLE.id }));
 }

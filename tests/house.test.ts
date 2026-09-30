@@ -52,8 +52,15 @@ function acted(sim: Sim, unitId: number, def: PlaybookDef, ticks: number): Set<s
 }
 
 describe('the house styles', () => {
-  it('are five valid playbooks in the registry, the Laner still the default', () => {
-    expect(HOUSE_STYLE_IDS).toEqual(['laner', 'brawler', 'sieger', 'objective', 'jungler']);
+  it('are six valid playbooks in the registry, the Laner still the default', () => {
+    expect(HOUSE_STYLE_IDS).toEqual([
+      'laner',
+      'brawler',
+      'sieger',
+      'objective',
+      'jungler',
+      'gentle',
+    ]);
     for (const def of HOUSE_STYLES) {
       expect(BOTS[def.id]).toBe(def);
       expect(def.playbook, def.id).toBeDefined();
@@ -64,6 +71,7 @@ describe('the house styles', () => {
     expect(houseName('sieger')).toBe('House sieger');
     expect(houseName('objective')).toBe('House objective player');
     expect(houseName('jungler')).toBe('House jungler');
+    expect(houseName('gentle')).toBe('House gentle player');
     expect(houseName('nobody')).toBe('House laner');
   });
 
@@ -80,7 +88,8 @@ describe('the house styles', () => {
       expect(seats.filter((s) => CHAMPIONS[s.championId]!.role === 'Support')).toHaveLength(1);
       expect(houseSeats([], new Rng(seed))).toEqual(seats);
     }
-    expect([...styles].sort()).toEqual([...HOUSE_STYLE_IDS].sort());
+    // Every style but the Gentle player, which is posted and never drawn.
+    expect([...styles].sort()).toEqual(HOUSE_STYLE_IDS.filter((id) => id !== 'gentle').sort());
     const drawn = new Set<string>();
     const rng = new Rng(3);
     for (let i = 0; i < 40; i++) drawn.add(drawHouseStyle(rng));
@@ -123,7 +132,8 @@ describe('the house styles', () => {
   });
 
   it('each leave the fountain and fight what they see', () => {
-    for (const def of HOUSE_STYLES) {
+    // The Gentle player starts no fight early (tests/gentle.test.ts).
+    for (const def of HOUSE_STYLES.filter((d) => d.id !== 'gentle')) {
       const sim = new Sim(41);
       const bot = sim.addChampion(0);
       sim.attachPolicy(bot.id, def.policy);

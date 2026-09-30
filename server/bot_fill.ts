@@ -8,10 +8,13 @@
 // person's settled choice at select, a ranked bot's playbook's first
 // lane; ADR 0026), then their roles, drawn from the same seed, each on a
 // house style drawn from it too (src/sim/content/bots/house.ts), named by
-// their style and seated with its fill seat's lane. Bots get negative
-// client ids; Match never registers them as players.
+// their style and seated with its fill seat's lane; on a team named in
+// `gentle` (the Guests' enemies, server/guests.ts gentleTeams) the lane
+// seats play the Gentle player instead, the draw made all the same so the
+// lineup is the seed's. Bots get negative client ids; Match never
+// registers them as players.
 
-import { houseName, houseSeats } from '../src/sim/content/bots/house';
+import { gentleSeats, houseName, houseSeats } from '../src/sim/content/bots/house';
 import { CHAMPIONS } from '../src/sim/content/champions';
 import { TEAM_SIZE } from '../src/sim/fill';
 import { Rng } from '../src/sim/rng';
@@ -45,6 +48,7 @@ export function fillWithBots(
   seed = 1,
   teamSize = TEAM_SIZE,
   pool: readonly PoolSeat[] = [],
+  gentle: readonly TeamId[] = [],
 ): MatchPick[] {
   const out: MatchPick[] = [...picks];
   const rng = new Rng(seed);
@@ -87,7 +91,8 @@ export function fillWithBots(
         lane: p.lanes?.[0] ?? p.playbook?.lanes?.[0] ?? null,
       }));
     let count = held.length;
-    for (const seat of houseSeats(held, rng, teamSize)) {
+    const drawn = houseSeats(held, rng, teamSize);
+    for (const seat of gentle.includes(team) ? gentleSeats(drawn) : drawn) {
       const c = CHAMPIONS[seat.championId];
       if (!c) continue;
       out.push({

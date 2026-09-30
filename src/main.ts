@@ -15,6 +15,7 @@ import { registerForgedAssets } from './game/forged_visuals';
 import { requestGameFullscreen } from './game/fullscreen';
 import { parseJoinCode } from './game/invite';
 import { appNav, installNav, sectionFromHash } from './game/nav';
+import { practiceSeed } from './game/practice_seed';
 import { reenterAsAccount } from './game/reentry';
 import { ReplayCursor } from './game/replay_cursor';
 import type { ReplayMark } from './game/replay_marks';
@@ -55,7 +56,7 @@ import {
 import { whenChampionModelsReady } from './render/champions';
 import { installVersionedLoading } from './render/versioned_loading';
 import { attachBot } from './sim/content/bots';
-import { type HouseSeat, houseSeats } from './sim/content/bots/house';
+import { gentleSeats, type HouseSeat, houseSeats } from './sim/content/bots/house';
 import { contentFingerprint } from './sim/content/fingerprint';
 import type { StarOrchard } from './sim/content/star_orchard';
 import type { ForgedChampionDef } from './sim/forge/forged_def';
@@ -247,7 +248,10 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
   const loaded = await loadOrchard(pick.forged ? [pick.forged.id] : []);
   if (!loaded) return 'menu';
   return new Promise((resolve) => {
-    const sim = orchardSim(loaded.orchard, 42);
+    // A new seed every match (src/game/practice_seed.ts): a new lineup,
+    // new styles, new rolls.
+    const seed = practiceSeed();
+    const sim = orchardSim(loaded.orchard, seed);
     if (pick.forged) sim.addForgedChampion(pick.forged);
     const world: IWorld = sim;
     const self = sim.addChampion(0, undefined, pick.championId, pick.skin);
@@ -259,9 +263,12 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
     // on the fill (src/sim/fill.ts), the roster's lanes completed around
     // your pick and your lane, each on a house style drawn from the seed
     // and seated with its fill seat's lane, with deterministic skin
-    // variety (the sim clamps out-of-range picks).
+    // variety (the sim clamps out-of-range picks). The opponents' lane
+    // seats play the Gentle player (src/sim/content/playbooks/gentle.ts),
+    // a newcomer's fair first fight; a Forge test drive keeps the drawn
+    // styles, since its creator came to see the champion fight.
     const champions = [self];
-    const rng = new Rng(42);
+    const rng = new Rng(seed);
     const held = [{ championId: pick.championId, role: pick.forged?.role, lane: pick.lane }];
     const seat = (team: TeamId, i: number, house: HouseSeat): void => {
       const unit = sim.addChampion(team, undefined, house.championId, i % 3);
@@ -270,7 +277,10 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
       champions.push(unit);
     };
     for (const [i, house] of houseSeats(held, rng).entries()) seat(0, i, house);
-    for (const [i, house] of houseSeats([], rng).entries()) seat(1, i, house);
+    const opponents = houseSeats([], rng);
+    for (const [i, house] of (pick.forged ? opponents : gentleSeats(opponents)).entries()) {
+      seat(1, i, house);
+    }
     // A Forge test drive opens at the level the ultimate unlocks, everyone
     // alike: the creator came to try R too, and the bots meet it on equal
     // footing (playtest).

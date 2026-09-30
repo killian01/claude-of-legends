@@ -180,6 +180,10 @@ export interface ObsSelf {
   // True while the recall channel runs (additive v0 field). A policy that
   // keeps issuing orders would reset its own channel forever without it.
   recalling?: boolean;
+  // When an enemy champion last damaged this champion, in sim seconds;
+  // null before the first such hit (additive v0 field). Its own health bar
+  // tells a person the same: what a trade back answers.
+  struckAt?: number | null;
   // The owner's live coach order (ADR 0013; additive v0 field): what the
   // person coaching this seat asked for, null or absent when nothing is.
   coachOrder?: CoachOrder | null;

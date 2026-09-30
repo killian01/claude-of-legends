@@ -69,6 +69,8 @@ export function describeTrigger(t: Trigger): string {
       return count(t, 'allied champions');
     case 'enemyVisible':
       return 'an enemy champion is in sight';
+    case 'struck':
+      return `an enemy champion hit me within ${t.within ?? 3} s`;
     case 'atFountain':
       return 'at the fountain';
     case 'underTower':
@@ -312,6 +314,10 @@ export const TRIGGER_FORMS: Readonly<Record<Trigger['kind'], KindForm>> = {
     ],
   },
   enemyVisible: { label: 'an enemy champion is in sight' },
+  struck: {
+    label: 'an enemy champion hit me',
+    nums: [{ key: 'within', label: 'within (s)', min: 0, max: 60, step: 1 }],
+  },
   atFountain: { label: 'at the fountain' },
   underTower: { label: 'under an enemy tower' },
   warden: {

@@ -20,7 +20,8 @@
 // 0022) added the creature trigger, the contestCreature behavior and the
 // creature coach order, additively, still version 4; the forest round
 // (ADR 0023) added the jungle behavior and the forest as a lane
-// preference and a lane trigger value, additively, still version 4.
+// preference and a lane trigger value, additively, still version 4; the
+// Gentle house style added the struck trigger, additively, still version 4.
 
 import type { CoachOrder } from '../coach';
 import type { ChampionRole } from '../content/champions';
@@ -63,6 +64,9 @@ export type Trigger =
   | { kind: 'allies'; within: number; atLeast?: number; atMost?: number }
   // At least one enemy champion is in the team's sight.
   | { kind: 'enemyVisible' }
+  // An enemy champion damaged the bot within the last `within` seconds
+  // (default 3): the hit a trade back answers.
+  | { kind: 'struck'; within?: number }
   | { kind: 'atFountain' }
   // Inside a live enemy tower's reach.
   | { kind: 'underTower' }

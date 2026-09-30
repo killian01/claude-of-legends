@@ -9,6 +9,9 @@ import type { SlotContext } from './micro';
 import { fightOdds, ODDS_RADIUS } from './odds';
 import type { CreatureName, Side, Trigger } from './types';
 
+// How long ago a hit still counts for the struck trigger, by default.
+export const STRUCK_WITHIN_S = 3;
+
 function within(value: number, below: number | undefined, atLeast: number | undefined): boolean {
   return (below === undefined || value < below) && (atLeast === undefined || value >= atLeast);
 }
@@ -75,6 +78,10 @@ export function holds(t: Trigger, ctx: SlotContext): boolean {
       return ctx.threatenedTowers(t.within ?? 200).length > 0;
     case 'enemyVisible':
       return ctx.champ !== null;
+    case 'struck': {
+      const at = s.struckAt ?? null;
+      return at !== null && obs.time - at <= (t.within ?? STRUCK_WITHIN_S);
+    }
     case 'atFountain':
       return ctx.atFountain;
     case 'underTower':

@@ -105,7 +105,14 @@ import { placeholderFor } from './generation/placeholder';
 import { type GenerationProvider, WEAPON_FAMILIES } from './generation/provider';
 import { SplitProvider } from './generation/split';
 import { TripoProvider } from './generation/tripo';
-import { GUEST_COOKIE, GUEST_TTL_MS, GuestStore, guestRefused, ratedWithGuests } from './guests';
+import {
+  GUEST_COOKIE,
+  GUEST_TTL_MS,
+  GuestStore,
+  gentleTeams,
+  guestRefused,
+  ratedWithGuests,
+} from './guests';
 import { buildHomePage } from './home_page';
 import { buildBotLadder, buildLadder } from './ladder';
 import { type BotSummary, buildLadderPage, type LadderSeed, placeOf } from './ladder_page';
@@ -785,7 +792,16 @@ function onMatchReady(forge: boolean) {
       const owner = registry.findById(bot.accountId)?.name;
       if (owner) pool.push({ bot, owner });
     }
-    const seated = fillWithBots(picks, seed, TEAM_SIZE, pool);
+    // A public match of Guests alone meets the Gentle player on the enemy
+    // lane seats (server/guests.ts): a newcomer's fair first fight.
+    const gentle = gentleTeams(
+      source === 'queue' && !forge,
+      picks.flatMap((p) => {
+        const c = clients.get(p.clientId);
+        return c ? [{ team: p.team, id: c.accountId }] : [];
+      }),
+    );
+    const seated = fillWithBots(picks, seed, TEAM_SIZE, pool, gentle);
     const match = new Match(seed, seated);
     const botSeats = new Map<
       number,

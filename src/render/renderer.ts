@@ -63,6 +63,7 @@ import {
 import { SPRITE } from './vfx/sprites';
 import { VfxSystem } from './vfx/system';
 import { disposeEffect } from './vfx/timed';
+import { TowerReachFx } from './vfx/tower_reach_fx';
 import { TowerShotFx } from './vfx/tower_shot_fx';
 
 const TEAM_COLORS: readonly number[] = [0x4a7dd6, 0xd65c5c];
@@ -292,6 +293,9 @@ export class Renderer {
   // The towers' shots: the gather, the departure, the missile and the
   // impact of the authored animation (src/render/tower_shot.ts).
   private readonly towerShots: TowerShotFx;
+  // An enemy tower's reach around the viewer's own champion when it comes
+  // near (src/render/tower_reach.ts), flashing on each shot at it.
+  private readonly towerReach: TowerReachFx;
   private readonly windups = new Map<number, WindupFx>();
   private readonly camDir = new THREE.Vector3(0, -1, 0);
   // The camera direction inside the scene, whose z axis is mirrored (see
@@ -426,6 +430,7 @@ export class Renderer {
 
     this.vfx = new VfxSystem(this.scene, terrain.heightAt);
     this.towerShots = new TowerShotFx(this.scene, terrain.heightAt);
+    this.towerReach = new TowerReachFx(this.scene, terrain.heightAt);
     this.vfx.onShake = (k) => this.addShake(k);
     this.vfx.particles.setViewport(
       Math.max(1, container.clientHeight),
@@ -1039,7 +1044,10 @@ export class Renderer {
       // bolt sound when it is shooting YOU.
       if (attacker?.kind === 'tower' && target) {
         this.flashMarker(target.pos.x, target.pos.z, 0xff5a3a);
-        if (atk.targetId === this.followId) playSfx('towershot');
+        if (atk.targetId === this.followId) {
+          playSfx('towershot');
+          this.towerReach.noteShot(atk.unitId, performance.now());
+        }
       }
     }
     // The viewer's own damage dealt: a crack sound plus numbers over the
@@ -2911,6 +2919,7 @@ export class Renderer {
     }
     const selfUnit = this.followId !== null ? this.world.units.get(this.followId) : undefined;
     this.selfRing.visible = selfUnit !== undefined && !selfUnit.dead;
+    this.towerReach.update(selfUnit ?? null, followPos, this.world.units.values(), now);
 
     // Low-hp warning: the vignette turns into a pulsing red frame under 30
     // percent health, scaling up as death gets closer.
@@ -3017,6 +3026,7 @@ export class Renderer {
     this.gl.domElement.remove();
     this.gl.dispose();
     this.towerShots.dispose();
+    this.towerReach.dispose();
     this.terrain.dispose();
   }
 }

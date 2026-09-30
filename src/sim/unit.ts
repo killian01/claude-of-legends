@@ -444,9 +444,14 @@ export function createCamp(id: number, def: CampDef, pos: Vec2, time = 0): Unit 
   return u;
 }
 
+// A tower's body and its reach, edge to edge: what it fires at, and what
+// the renderer draws on the ground around it (src/render/tower_reach.ts).
+export const TOWER_RADIUS = 1.4;
+export const TOWER_ATTACK_RANGE = 9;
+
 export function createTower(id: number, team: TeamId, pos: Vec2, structure: StructureMeta): Unit {
   const u = baseUnit(id, team, 'tower', pos);
-  u.radius = 1.4;
+  u.radius = TOWER_RADIUS;
   // Tuned down from 2500/40 after review F.0 measured towers as
   // mechanically unkillable (~96 s of uninterrupted champion dps).
   u.hp = 1800;
@@ -454,7 +459,7 @@ export function createTower(id: number, team: TeamId, pos: Vec2, structure: Stru
   u.stats.ad = 170;
   u.stats.armor = 25;
   u.stats.mr = 25;
-  u.stats.attackRange = 9;
+  u.stats.attackRange = TOWER_ATTACK_RANGE;
   u.stats.attackSpeed = 0.83;
   u.sightRange = 10;
   u.goldBounty = 250;

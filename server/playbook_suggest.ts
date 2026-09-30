@@ -139,6 +139,7 @@ least one of the two):
  {"kind":"level","below"?:1..18,"atLeast"?:1..18} {"kind":"gold",0..1000000} {"kind":"time",seconds 0..36000}
  {"kind":"enemies","within":0..200,"atLeast"?:0..10,"atMost"?:0..10} enemy champions in sight within the radius; {"kind":"allies",...} same for allies
  {"kind":"enemyVisible"} {"kind":"atFountain"} {"kind":"underTower"}
+ {"kind":"struck","within"?:0..60 (3)} an enemy champion damaged the bot within the last seconds: what a trade back answers
  {"kind":"warden","state":"up"|"spawning"|"down","within"?:seconds,"hpAtMost"?:0..1,"near"?:units} (spawning: due within the seconds, default 20; up narrows to a live Warden at or under hpAtMost of its health and within near units of the bot, what a finish play reads: every new bot has "finish-warden" and "finish-creature" right above "fight", the last strikes on a body in reach whatever is in sight, and they are VALID)
  {"kind":"creature","which"?:"pyrefang"|"voidmaul"|"ascendant"|"any","state":"up"|"spawning"|"down","within"?:seconds,"hpAtMost"?:0..1,"near"?:units} a ring creature (the Pyrefang on the bot ring, the Voidmaul on the top ring, ascendant for either ring's Ascendant, the fourth rise and every later one, a team's fight; any by default): up while one is alive, spawning when due within the seconds (default 20), down when none is
  {"kind":"abilityReady","key":"Q"|"W"|"E"|"R"} {"kind":"sigilReady","id":"riftstep"|"zephyr"|"mend"|"sear"} {"kind":"lane","is":"top"|"mid"|"bot"|"jungle"} (jungle: the seat holds no lane, the forest's)

@@ -254,6 +254,10 @@ function trigger(raw: unknown, at: string, depth: number, errors: Errors): Trigg
         ? { kind: 'towerThreatened' }
         : { kind: 'towerThreatened', within };
     }
+    case 'struck': {
+      const within = optNumber(raw, 'within', 0, 60, at, errors);
+      return within === undefined ? { kind: 'struck' } : { kind: 'struck', within };
+    }
     case 'numbers': {
       const within = reqNumber(raw, 'within', 0, 200, at, errors);
       const atLeast = optNumber(raw, 'atLeast', -10, 10, at, errors, true);

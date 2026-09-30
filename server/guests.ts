@@ -6,6 +6,7 @@
 // comes back to the same seat.
 
 import { randomBytes } from 'node:crypto';
+import type { TeamId } from '../src/sim/types';
 
 export interface Guest {
   // Negative, so it can never be an account's id (those count up from 1)
@@ -35,6 +36,19 @@ export function isGuestId(id: number): boolean {
 // hand in it (ADR 0024). Bot seats and house bots do not count here.
 export function ratedWithGuests(fromQueue: boolean, humanIds: readonly number[]): boolean {
   return fromQueue && !humanIds.some(isGuestId);
+}
+
+// The teams whose house lane seats play the Gentle player (CONTEXT.md:
+// House style): in a public queue match whose people are all Guests, the
+// teams no Guest sits on, which is to say the newcomers' enemies. A match
+// with an account in it keeps the drawn styles, and so does one with a
+// Guest on each team, where every house seat is someone's ally.
+export function gentleTeams(
+  publicQueue: boolean,
+  humans: readonly { team: TeamId; id: number }[],
+): TeamId[] {
+  if (!publicQueue || humans.length === 0 || !humans.every((h) => isGuestId(h.id))) return [];
+  return ([0, 1] as const).filter((team) => !humans.some((h) => h.team === team));
 }
 
 // What a Guest may not ask for on the socket: lobbies, the Forge queue,

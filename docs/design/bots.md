@@ -152,7 +152,8 @@ champions within a radius (count); an enemy champion missing (from the last-seen
 the lane wave ahead, behind, or under a tower; an enemy tower in reach; the Warden up,
 spawning within N seconds, or down; a ring creature (the Pyrefang, the Voidmaul, an
 Ascendant, or any) up, rising within N seconds, or down (ADR 0022); an ability or sigil
-ready; a coach order active; own lane assignment.
+ready; a coach order active; own lane assignment; struck by an enemy champion within the
+last seconds (the observation's additive `struckAt`, what a trade back answers).
 
 **Behaviors** (v1), each with its parameters: farm the lane, poke, engage, retreat, recall,
 siege, rotate to a lane, contest the Warden, contest a ring creature (the named one, an
@@ -267,7 +268,11 @@ of escort before the wave, a deeper dive under towers, a fight that holds alone,
 Warden only when healthy and close to its spawn, no regroup bell: three lanes of pressure
 all match); the Objective player
 (the Warden and the camps: at the pit forty-five seconds early, ground given under the
-tower when outnumbered alone, the camps before the wave). Every style rallies to an
+tower when outnumbered alone, the camps before the wave). A sixth style, the Gentle player,
+is posted and never drawn: the opponents' lane seats of offline practice and of a public
+match whose people are all Guests play it (the farm and the lane, a trade back when struck,
+no dive under an enemy tower with an enemy champion near, and no fight of its own before
+two minutes and level three), so a newcomer's first fight is fair. Every style rallies to an
 Ascendant (ADR 0022, round two) the way it rallies to the Warden: the same stance, the
 same health gate, the team and not a pair, and none of them starts on a creature, an
 Ascendant or the Warden without the party the body wants. Each is one playbook file under

@@ -26,9 +26,12 @@ _Avoid_: bot fill, backfill bot, default bot
 
 **House style**:
 One of the brains a house bot plays: the Laner, the Brawler, the Sieger, the Objective
-player or the Jungler, each a playbook anyone can read. A lane seat draws one of the first
-four from the match seed, on every host, so two matches on different seeds are not played
-the same way; the forest's seat plays the Jungler.
+player, the Jungler or the Gentle player, each a playbook anyone can read. A lane seat draws
+one of the first four from the match seed, on every host, so two matches on different seeds
+are not played the same way; the forest's seat plays the Jungler. The Gentle player is never
+drawn: it takes the opponents' lane seats of Practice and of a public match whose people are
+all Guests, a newcomer's fair first fight (it trades back when hit, never dives a tower, and
+starts nothing of its own before two minutes and level three).
 _Avoid_: personality, difficulty, AI level, preset, house playbook
 
 **Fill**:
@@ -457,8 +460,8 @@ _Avoid_: survey, form, support ticket
 
 **Practice**:
 The offline match against house bots, the fill completing both teams around the person's
-champion and lane preference, run entirely in the browser tab with nothing saved and no
-account needed. The same simulation the rated match runs. Its end sends the server the
+champion and lane preference on a new seed every match, the opponents' lane seats on the
+Gentle player, run entirely in the browser tab with nothing saved and no account needed. The same simulation the rated match runs. Its end sends the server the
 practice report (PRIVACY.md): the scoreboard, the result and the minutes, nothing that names
 anyone, the one thing the server learns of a match it never saw run.
 _Avoid_: offline mode, sandbox, training, tutorial
