@@ -95,6 +95,7 @@ import { pendingResetToken, showPasswordReset } from './ui/password_reset';
 import { showReloadNotice } from './ui/reload_notice';
 import { buildReplayBar, type ReplayBar } from './ui/replay_bar';
 import { replayRefusal } from './ui/replay_notice';
+import { attachTurnAsk } from './ui/turn_ask';
 import type { IWorld } from './world_api';
 
 const app = document.querySelector<HTMLElement>('#app');
@@ -156,6 +157,9 @@ async function loadOrchard(forgedIds: readonly string[] = []): Promise<LoadedOrc
   const { root, card } = screen(container);
   const line = el('p', 'menu-sub', 'Loading the terrain');
   card.append(el('h1', 'menu-title', 'Star Orchard'), line);
+  // A phone held upright is asked to turn while it waits, not once the
+  // match has opened behind the wall (ui/turn_ask.ts).
+  const stopTurnAsk = attachTurnAsk(card);
   try {
     const orchard = await loadStarOrchard();
     const terrain = await loadStarOrchardTerrain(orchard, (fraction) => {
@@ -169,6 +173,7 @@ async function loadOrchard(forgedIds: readonly string[] = []): Promise<LoadedOrc
     });
     return { orchard, terrain };
   } catch (err) {
+    stopTurnAsk();
     root.remove();
     await showNotice(
       container,
@@ -177,6 +182,7 @@ async function loadOrchard(forgedIds: readonly string[] = []): Promise<LoadedOrc
     );
     return null;
   } finally {
+    stopTurnAsk();
     root.remove();
   }
 }

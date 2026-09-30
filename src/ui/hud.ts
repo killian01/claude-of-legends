@@ -44,6 +44,7 @@ import {
   statusChipFace,
   wrathChipFace,
 } from './chip_text';
+import { COMPACT_ROW_GAP, COMPACT_SCALE, compactTapsCss } from './compact_taps';
 import {
   buildFeedbackBox,
   FEEDBACK_ASK,
@@ -95,8 +96,10 @@ import {
 } from './objective_line';
 import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
+import { rankable } from './slot_tap';
 import { TeamScore } from './team_score';
 import { attachTooltip, hideTooltip, LONG_PRESS_MS } from './tooltips';
+import { TURN_ASK, TURN_LOCK_LINE } from './turn_ask';
 
 const KEY_TINTS: Readonly<Record<string, [string, string]>> = {
   Q: ['#7a2f1f', '#c96a3a'],
@@ -467,11 +470,18 @@ const CSS = `
    (ui/feedback_box.ts): under the announcements, quiet, and a door, so the
    whole of it opens the menu where the box is. */
 /* The lane card (ui/lane_guide.ts; ADR 0026) shares the slot and the look,
-   and comes first: the seat's lane in gold, and a tap that walks there. */
+   and comes first: the seat's lane in gold, and a tap that walks there.
+   Both keep clear of a phone's notch, rounded corners and camera cut-out
+   (the safe area; zero on a screen without them). */
 .hud-nudge, .hud-lane-card {
-  position: absolute; top: 150px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: calc(150px + env(safe-area-inset-top, 0px));
+  left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 10px; pointer-events: auto; cursor: pointer;
-  max-width: min(520px, 90vw); padding: 8px 10px 8px 14px; border-radius: 10px;
+  max-width: min(
+    520px, 90vw,
+    calc(100vw - 16px - 2 * max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)))
+  );
+  padding: 8px 10px 8px 14px; border-radius: 10px;
   border: 1px solid #8a7430; background: rgba(30, 26, 12, 0.9); color: #e6dcb8;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55); text-shadow: none;
   opacity: 0; visibility: hidden; transition: opacity 0.4s, visibility 0.4s;
@@ -490,7 +500,9 @@ const CSS = `
   font-size: 15px; line-height: 1; padding: 0;
 }
 .hud-nudge-close:hover, .hud-lane-close:hover { color: #fff3cf; border-color: #c9a84a; }
-.hud.compact .hud-nudge, .hud.compact .hud-lane-card { top: 96px; padding: 6px 8px 6px 12px; }
+.hud.compact .hud-nudge, .hud.compact .hud-lane-card {
+  top: calc(96px + env(safe-area-inset-top, 0px)); padding: 6px 8px 6px 12px;
+}
 .hud.compact .hud-nudge-words b, .hud.compact .hud-lane-words b { font-size: 12px; }
 .hud.compact .hud-nudge-words span, .hud.compact .hud-lane-words span { font-size: 11px; }
 /* The multikill spotlight: bigger than an announcement because it is the
@@ -737,17 +749,24 @@ const CSS = `
    in a match on a phone anyway; pings still flash on the map), and the hints
    shrink and fade out once read. */
 .hud.compact .hud-bottom {
-  bottom: 4px; gap: 3px;
-  transform: translateX(-50%) scale(0.72); transform-origin: bottom center;
+  bottom: calc(4px + env(safe-area-inset-bottom, 0px)); gap: ${COMPACT_ROW_GAP}px;
+  transform: translateX(-50%) scale(${COMPACT_SCALE}); transform-origin: bottom center;
 }
-/* Post-scale the + is finger-sized again. */
-.hud.compact .hud-slot-up { width: 26px; height: 24px; top: -26px; font-size: 17px; line-height: 22px; }
+/* The tap to walk's slots, level-up marks and close buttons stay their
+   size to look at and are tapped through areas a finger wide once the
+   block is scaled: numbers in src/ui/compact_taps.ts, where a test keeps
+   the areas clear of each other. */
+${compactTapsCss()}
 .hud.compact .hud-chat { display: none; }
 .hud.compact .hud-announce { font-size: 20px; top: 62px; }
 .hud.compact .hud-spot { font-size: 32px; top: 96px; letter-spacing: 2px; }
 .hud.compact .hud-spot.top { font-size: 44px; letter-spacing: 3px; }
 .hud.compact .hud-feed { font-size: 11px; }
-.hud.compact .hud-hints { font-size: 9px; max-width: 170px; line-height: 1.45; }
+.hud.compact .hud-hints {
+  font-size: 9px; max-width: 170px; line-height: 1.45;
+  left: calc(12px + env(safe-area-inset-left, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
 /* Faded once read, and read only while nothing covered it: the clock is
    ui/hints_fade.ts, not a delay here, since a delay counted the seconds
    the opening shop and the turn wall stood over it. */
@@ -792,7 +811,8 @@ const CSS = `
 .hud.thumbs .hud-attack:active { background: rgba(120, 80, 20, 0.95); }
 ${thumbClusterCss()}
 .hud.thumbs .hud-bottom {
-  left: 40%; bottom: 2px; transform: translateX(-50%) scale(0.62);
+  left: 40%; bottom: calc(2px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%) scale(0.62);
 }
 .hud.thumbs .hud-meta {
   max-width: 420px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -964,6 +984,9 @@ export class Hud {
   private castTaps: { ability(key: AbilityKey): void; sigil(slot: number): void } | null = null;
   // The thumb controls' slots (game/touch.ts): pointer events forwarded raw.
   private castTouch: CastTouch | null = null;
+  // A mouse's click on a spell's slot (wired by boot): what it does to a
+  // spell not learned yet (ui/slot_tap.ts).
+  private slotClick: ((key: AbilityKey) => void) | null = null;
   private announceUntil = 0;
   private spotUntil = 0;
   private sawBattleBegin = false;
@@ -1194,12 +1217,18 @@ export class Hud {
       // Touch has no keyboard: a QUICK tap on the slot arms the two-step
       // cast (game/touch.ts). A press held past LONG_PRESS_MS is a read,
       // the tooltip shows while the finger rests (tooltips.ts), and must
-      // not arm on release. Mouse pointers keep the hover-only slot. With
-      // the thumb controls every pointer event goes raw to the cast touch,
-      // captured so a slide off the slot still ends on it.
+      // not arm on release. A mouse casts by the keys and reads the slot by
+      // hovering it; its click goes to setSlotClick, where only a spell not
+      // learned yet answers it. With the thumb controls every pointer event
+      // goes raw to the cast touch, captured so a slide off the slot still
+      // ends on it.
       let downAt = 0;
+      let clickDown = false;
       slot.addEventListener('pointerdown', (e) => {
-        if (e.pointerType !== 'touch') return;
+        if (e.pointerType !== 'touch') {
+          clickDown = e.button === 0 && e.target !== up;
+          return;
+        }
         if (e.target === up) return;
         e.preventDefault();
         downAt = performance.now();
@@ -1214,7 +1243,11 @@ export class Hud {
         }
       });
       slot.addEventListener('pointerup', (e) => {
-        if (e.pointerType !== 'touch') return;
+        if (e.pointerType !== 'touch') {
+          if (clickDown && e.button === 0 && e.target !== up) this.slotClick?.(key);
+          clickDown = false;
+          return;
+        }
         if (e.target === up) return;
         if (thumbs) {
           this.castTouch?.abilityUp(key, e.clientX, e.clientY);
@@ -1604,13 +1637,10 @@ export class Hud {
     const turnWall = el('div', 'hud-turn');
     const turnLeave = el('button', 'hud-menu-btn', 'Leave match');
     turnLeave.addEventListener('click', () => onExit('menu'));
+    // The loading card before the match asked already (ui/turn_ask.ts).
     turnWall.append(
-      el('div', '', 'Turn your phone sideways to play'),
-      el(
-        'div',
-        'hud-turn-line',
-        'On iPhone, turn off Portrait Orientation Lock in Control Center.',
-      ),
+      el('div', '', `${TURN_ASK} to play`),
+      el('div', 'hud-turn-line', TURN_LOCK_LINE),
       turnLeave,
     );
 
@@ -1871,6 +1901,10 @@ export class Hud {
 
   setCastTouch(touch: CastTouch): void {
     this.castTouch = touch;
+  }
+
+  setSlotClick(click: (key: AbilityKey) => void): void {
+    this.slotClick = click;
   }
 
   // Highlights the slot whose cast is armed; null clears every highlight.
@@ -2541,12 +2575,8 @@ export class Hud {
       for (let i = 0; i < slot.pips.childElementCount; i++) {
         (slot.pips.children[i] as HTMLElement).classList.toggle('on', i < rank);
       }
-      const canRank =
-        u.skillPoints > 0 &&
-        (key === 'R'
-          ? rank < ULT_MAX_RANK && u.level >= (ULT_RANK_LEVELS[rank] ?? Number.POSITIVE_INFINITY)
-          : rank < BASIC_MAX_RANK);
-      slot.up.style.display = canRank ? 'block' : 'none';
+      // The sim's rule for a skill point (ui/slot_tap.ts).
+      slot.up.style.display = rankable(u, key) ? 'block' : 'none';
       const cost = def ? def.abilities[key].manaCost : 0;
       slot.root.classList.toggle('nomana', u.mana < cost);
     }

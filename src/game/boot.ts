@@ -13,6 +13,7 @@ import type { RenderTerrain } from '../render/terrain';
 import { effectiveRank } from '../sim/stats';
 import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
 import { DT } from '../sim/types';
+import type { Unit } from '../sim/unit';
 import { attackCursor, defaultCursor } from '../ui/cursors';
 import { Hud, type NetHooks } from '../ui/hud';
 import { LaneArrow, laneArrowHalf } from '../ui/lane_arrow';
@@ -26,6 +27,7 @@ import {
   onScreen,
 } from '../ui/lane_guide';
 import { Minimap } from '../ui/minimap';
+import { slotTap } from '../ui/slot_tap';
 import { buildThumbStickView } from '../ui/thumb_stick_view';
 import { buildTouchBar } from '../ui/touch_bar';
 import { unlearnedLine } from '../ui/unlearned_line';
@@ -35,11 +37,12 @@ import { installCursorLock } from './cursor_lock';
 import type { PostMatchAction } from './flow';
 import { requestGameFullscreen } from './fullscreen';
 import { type InputHandlers, setupInput } from './input';
+import { moveRingWanted } from './move_ring';
 import { startMusic, stopMusic } from './music';
 import { lockLandscape, unlockOrientation } from './orientation';
 import { nearestEnemy, pickEnemyAt, pickEnemyOnScreen, pickUnitOnScreen } from './picking';
 import type { MatchCover } from './practice_clock';
-import { getSettings } from './settings';
+import { getSettings, updateSettings } from './settings';
 import { playCastSfx, playSfx, preloadSfx } from './sfx';
 import { aimedPoint, quickPoint } from './thumb_cast';
 import { leadPoint, STICK_LEAD_M, type StickOrder, shouldResend } from './thumb_stick';
@@ -202,6 +205,35 @@ export function startPresentation(
   };
   window.addEventListener('blur', onWindowBlur);
 
+  // Why a spell with no rank did nothing: the deny sound and the line
+  // (ui/unlearned_line.ts), in the words of the hands on the screen.
+  const sayUnlearned = (u: Readonly<Unit>, key: AbilityKey, name: string): void => {
+    playSfx('deny');
+    hud.toast(unlearnedLine(name, key, u.level, coarsePointer, u.skillPoints));
+  };
+  // The level-up command, whoever asks for it (Alt+key, a tap on a spell
+  // not learned yet): the one the slot's + sends, recorded and replayed
+  // like any command, with a sound that says whether it took.
+  const learnAbility = (key: AbilityKey): void => {
+    if (world.levelAbility(selfId, key)) playSfx('buy');
+    else playSfx('deny');
+  };
+  // A spell not learned yet, pressed on its slot (a finger in either touch
+  // scheme, or a click): learned while a skill point waits for it, refused
+  // with the line otherwise (ui/slot_tap.ts). True when the press went to
+  // the spell's rank, so it arms and casts nothing.
+  const pressUnlearned = (key: AbilityKey): boolean => {
+    const u = world.units.get(selfId);
+    const def = u?.championId ? world.championDef(u.championId) : null;
+    const ab = def?.abilities[key];
+    if (!u || !ab) return false;
+    const tap = slotTap(u, key);
+    if (tap === 'cast') return false;
+    if (tap === 'learn') learnAbility(key);
+    else sayUnlearned(u, key, ab.name);
+    return true;
+  };
+
   // Client-side cast gate: the sim (or server) still decides, but the player
   // hears and reads WHY nothing happened instead of pressing a dead key.
   const tryCast = (key: AbilityKey, aim: Vec2): void => {
@@ -211,8 +243,7 @@ export function startPresentation(
     const ab = def?.abilities[key];
     if (u && ab) {
       if (effectiveRank(u, key) <= 0) {
-        playSfx('deny');
-        hud.toast(unlearnedLine(ab.name, key, u.level, coarsePointer));
+        sayUnlearned(u, key, ab.name);
         return;
       }
       if ((u.cooldowns[key] ?? 0) > world.time) {
@@ -364,6 +395,9 @@ export function startPresentation(
       const def = u?.championId ? world.championDef(u.championId) : null;
       const ab = def?.abilities[key];
       if (!u || !ab) return;
+      // A spell not learned yet has nothing to aim: its press is spent on
+      // the rank when it ends (onThumbCast).
+      if (slotTap(u, key) !== 'cast') return;
       if (aimingKey !== key) inputHandlers.onCast(key, { x: 0, z: 0 });
       thumbAim = dir ? aimedPoint(u.pos, dir, k, ab.castRange) : { x: u.pos.x, z: u.pos.z };
       renderer.setAimWorld(thumbAim);
@@ -373,6 +407,7 @@ export function startPresentation(
       const def = u?.championId ? world.championDef(u.championId) : null;
       const ab = def?.abilities[key];
       if (!u || !ab) return;
+      if (press !== 'cancel' && pressUnlearned(key)) return;
       if (press === 'tap') {
         if (aimingKey === key) inputHandlers.onAimEnd(key, null);
         const target = nearestEnemy(world, selfTeam, u.pos, ab.castRange);
@@ -460,10 +495,7 @@ export function startPresentation(
       renderer.hideAimPreview();
       if (aim) tryCast(key, aim);
     },
-    onLevelAbility: (key) => {
-      if (world.levelAbility(selfId, key)) playSfx('buy');
-      else playSfx('deny');
-    },
+    onLevelAbility: (key) => learnAbility(key),
     onCastSigil: (slot, aim) => {
       pendingCast = null;
       const u = world.units.get(selfId);
@@ -507,16 +539,30 @@ export function startPresentation(
   // two-step casts armed by tapping HUD slots). The gesture listeners are
   // inert without a touchscreen; the button bar for key-only orders builds
   // on coarse-pointer devices only.
-  // A phone's stick is drawn only where there is a thumb to hold it.
-  const stickView = coarsePointer ? buildThumbStickView(container) : null;
+  // A phone's stick is drawn only where there is a thumb to hold it. A
+  // newcomer's first matches with it show the Move ring too, counted on
+  // this device (game/move_ring.ts).
+  const shownIn = getSettings().moveRingMatches;
+  const moveRing = moveRingWanted(thumbControls, guide === 'play', shownIn);
+  if (moveRing) updateSettings({ moveRingMatches: shownIn + 1 });
+  const stickView = coarsePointer ? buildThumbStickView(container, { moveRing }) : null;
   const touch = setupTouchControls(renderer, inputHandlers, {
     onArmedChange: (label) => hud.setArmedSlot(label),
     scheme: () => getSettings().touchScheme,
     ...(stickView ? { stick: stickView } : {}),
   });
   hud.setCastTaps({
-    ability: (key) => touch.armAbility(key),
+    // A spell not learned yet is learned (or refused) by its tap rather
+    // than armed for a cast the sim would refuse.
+    ability: (key) => {
+      if (!pressUnlearned(key)) touch.armAbility(key);
+    },
     sigil: (slot) => touch.armSigil(slot),
+  });
+  // A mouse casts by the keys; its click on a slot answers only for a
+  // spell not learned yet, the way a finger's tap does.
+  hud.setSlotClick((key) => {
+    pressUnlearned(key);
   });
   // The lane card's walk: one move order, the way a right-click on the
   // ground gives it, recorded and budgeted like any other.

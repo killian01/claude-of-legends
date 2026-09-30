@@ -352,12 +352,15 @@ _Avoid_: changelog, patch notes, release notes, feed, announcements, blog
 How a phone plays, both thumbs (`src/game/thumb_stick.ts`, `src/game/thumb_cast.ts`). Left:
 a touch in the left part of the screen raises a stick under the finger, the finger's offset
 from it is the direction, and the champion walks that way while the thumb steers; lifting
-it halts, and the camera stays on the champion. Right: the casting slots sit in a cluster
-round the attack button at the bottom right; a tap on a slot casts at the nearest enemy in
-range (else ahead along the stick, else on the champion), a slide on it aims along the
-slide with the range drawn on the ground and casts on release, a slide back onto the slot
-cancels; the attack button attacks the nearest enemy. A tap on the rest of the screen still
-walks or attacks; the setting "Touch controls" turns all of it off for the older tap to walk.
+it halts, and the camera stays on the champion. A device's first two matches with it show
+the Move ring, a ghost of the stick low on the left, until the stick is first used. Right:
+the casting slots sit in a cluster round the attack button at the bottom right; a tap on a
+slot casts at the nearest enemy in range (else ahead along the stick, else on the
+champion), a slide on it aims along the slide with the range drawn on the ground and casts
+on release, a slide back onto the slot cancels; the attack button attacks the nearest
+enemy. A tap on a spell not learned yet learns it while a skill point waits, in either
+scheme. A tap on the rest of the screen still walks or attacks; the setting "Touch
+controls" turns all of it off for the older tap to walk.
 _Avoid_: joystick, virtual pad, d-pad, analog stick, quick cast (that is a slot's tap)
 
 **Play tile**:

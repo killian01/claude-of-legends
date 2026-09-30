@@ -22,6 +22,9 @@ export interface GameSettings {
   // Who the opponents' lane seats play in Practice (practice_bots.ts): the
   // choice last locked in at its select.
   practiceBots: PracticeBots;
+  // The matches this device has shown the Move ring in (move_ring.ts),
+  // which stops after the first few. Not a choice the panel offers.
+  moveRingMatches: number;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -31,12 +34,18 @@ export const DEFAULT_SETTINGS: GameSettings = {
   uiScale: 'auto',
   touchScheme: 'thumbs',
   practiceBots: DEFAULT_PRACTICE_BOTS,
+  moveRingMatches: 0,
 };
 
 const STORAGE_KEY = 'loc-settings';
 
 const clamp01 = (v: unknown, fallback: number): number =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : fallback;
+
+// A count kept in storage: a whole number from zero, capped so that junk
+// in storage stays a small number.
+const count = (v: unknown): number =>
+  typeof v === 'number' && Number.isFinite(v) ? Math.min(1000, Math.max(0, Math.floor(v))) : 0;
 
 // Pure: any junk in, a valid settings object out.
 export function clampSettings(raw: unknown): GameSettings {
@@ -48,6 +57,7 @@ export function clampSettings(raw: unknown): GameSettings {
     uiScale: clampUiScale(r.uiScale),
     touchScheme: r.touchScheme === 'tap' ? 'tap' : 'thumbs',
     practiceBots: clampPracticeBots(r.practiceBots),
+    moveRingMatches: count(r.moveRingMatches),
   };
 }
 

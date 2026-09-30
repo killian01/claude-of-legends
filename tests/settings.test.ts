@@ -20,6 +20,7 @@ describe('player settings', () => {
       uiScale: 'auto',
       touchScheme: 'thumbs',
       practiceBots: 'gentle',
+      moveRingMatches: 0,
     });
     expect(clampSettings({ sfx: 0.35, music: 0.8, announcer: true })).toEqual({
       sfx: 0.35,
@@ -28,6 +29,7 @@ describe('player settings', () => {
       uiScale: 'auto',
       touchScheme: 'thumbs',
       practiceBots: 'gentle',
+      moveRingMatches: 0,
     });
   });
 
