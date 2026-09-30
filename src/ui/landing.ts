@@ -137,9 +137,13 @@ const CSS = `
    nobody was on. */
 .pg.land .pg-presence[hidden] { display: none; }
 /* The hero's second line: the game is ranked from the first match, in the
-   browser, with no account (ADR 0027). Gold, since it is the news. */
-.pg.land .pg-ranked { margin: 10px 0 0; font-size: clamp(14px, 1.5vw, 16.5px); font-weight: 700;
+   browser, with no account (ADR 0027). Gold, since it is the news. The gaps
+   around it give back the room it takes, so the two cards, and the gold
+   button in the Play now card, stay where they stood without it. */
+.pg.land .pg-ranked { margin: 6px 0 0; font-size: clamp(13.5px, 1.4vw, 15.5px); font-weight: 700;
   letter-spacing: 0.3px; color: #f0dca0; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.85); }
+.pg.land .pg-ranked + .pg-hero-cta { margin-top: 10px; }
+.pg.land .pg-hero { gap: clamp(10px, 1.7vh, 18px); }
 /* The ladder of every human (ui/landing_ladder.ts) stands in the grid of
    the two ways in: across both cards under them on a wide screen, and
    between the Play now card and the account card once they stack, so a
@@ -152,11 +156,14 @@ const CSS = `
 }
 /* A screen with little height, a phone held sideways above all: the crest
    and the gaps shrink so the Play now card rises as near the first screen
-   as it can. */
+   as it can, and the card leaves its painting out, so the ladder under it
+   is read on the second screen rather than the third. */
 @media (max-height: 560px) {
   .pg.land .pg-hero { padding-top: 6px; gap: 10px; }
   .pg.land .pg-lockup { width: 104px; }
   .pg.land .pg-hero-cta { margin-top: 14px; }
+  .pg.land .pg-ranked + .pg-hero-cta { margin-top: 10px; }
+  .pg.land .pg-card.plain > .pg-try { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pg.land .pg-cards .pg-card.glow { animation: none; }

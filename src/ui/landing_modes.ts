@@ -44,7 +44,9 @@ export const PLAY_NOW_LINE =
 // The caveats line used to end on "Unranked.". Every match in the public
 // queue now scores on the ladder of every human (ADR 0027), so what it
 // says is the opposite, and that is the news.
-export const PLAY_NOW_FINE = 'No account, nothing to install. Every match scores on the ladder.';
+// One line on the card at every width it has, so the gold button under
+// it stays where it was.
+export const PLAY_NOW_FINE = 'No account, no install. Every match scores on the ladder.';
 
 // The line under the hero's tagline, the first thing read after what the
 // game is: a game with a ladder, from the first match, with no account.
