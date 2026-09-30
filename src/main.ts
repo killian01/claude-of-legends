@@ -29,6 +29,7 @@ import {
   type LoadedOrchard,
   loadStarOrchardModel,
   loadStarOrchardTerrain,
+  prefetchStarOrchard,
 } from './game/star_orchard';
 import { loadStarOrchard } from './game/star_orchard_records';
 import { buildIdFromMeta, startBuildWatch } from './net/build_watch';
@@ -201,6 +202,10 @@ async function loadOrchardRecords(): Promise<StarOrchard | null> {
 // Resolves null when the select is left without a pick: its Back, or the
 // browser's.
 async function pickForPractice(): Promise<OfflinePick | null> {
+  // The map downloads while the player picks, as the online queue has it
+  // do: a pick takes long enough (8 s at the median) to hide most of it,
+  // where it used to start only at lock-in.
+  prefetchStarOrchard();
   const collection = await loadCollection();
   return new Promise((resolve) => {
     const leave = (): void => {

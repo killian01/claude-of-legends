@@ -9,6 +9,7 @@ import type { RenderTerrain } from '../render/terrain';
 import { loadTerrain } from '../render/terrain_loader';
 import type { StarOrchard } from '../sim/content/star_orchard';
 import { TerrainNavGrid } from '../sim/terrain_nav';
+import { downloadTotal } from './download_total';
 import { chooseModel, mapQualityFor, qualityOverride, readDeviceHints } from './map_quality';
 import { fetchOrchardFile, loadStarOrchard } from './star_orchard_records';
 
@@ -29,10 +30,11 @@ function report(value: number): void {
 }
 
 // Streams the body so the loading screen can show the model coming in;
-// the size comes from the manifest when the server does not say.
+// the size comes from the manifest when the server does not say, or says
+// it of a compressed body (download_total.ts).
 async function fetchBytes(path: string, expected: number): Promise<ArrayBuffer> {
   const res = await fetchOrchardFile(path);
-  const total = Number(res.headers.get('content-length')) || expected;
+  const total = downloadTotal(res.headers, expected);
   if (!res.body || !total) return res.arrayBuffer();
   const reader = res.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -84,6 +86,16 @@ export function loadStarOrchardModel(
       });
   }
   return model.finally(() => listeners.delete(onProgress));
+}
+
+// Starts the records and the model downloading for a match about to be
+// chosen (the practice select, as the online queue does with the records
+// it already holds), so the card at the match's door is brief. A failure
+// is left to that card: the loads forget it and ask again there.
+export function prefetchStarOrchard(): void {
+  loadStarOrchard()
+    .then((orchard) => loadStarOrchardModel(orchard, () => {}))
+    .catch(() => undefined);
 }
 
 // A match's terrain: the shared bytes parsed over a grid of their own (the

@@ -7,11 +7,12 @@
 // match log are JSON files under DATA_DIR.
 
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { pipeline } from 'node:stream';
 import { type WebSocket, WebSocketServer } from 'ws';
 import {
   type ForgedMatchAssets,
@@ -152,6 +153,7 @@ import { RejoinRegistry } from './rejoin';
 import { sealChampion, unsealChampion } from './seal';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
 import { starOrchard } from './star_orchard';
+import { planStatic, type StaticRequest, statStaticFile } from './static_files';
 import { isWebsiteId, STATS_SCRIPT, withStatsTag } from './stats_tag';
 import {
   appendJsonl,
@@ -2411,26 +2413,42 @@ const server = http.createServer(async (req, res) => {
         );
       }
     }
-    const body = isEntry
-      ? withVisitTag(
+    // The cache rule, the validator and the gzip twin are chosen by
+    // server/static_files.ts: the entry document is always revalidated,
+    // Vite's fingerprinted /assets/ and any address stamped with this
+    // build are kept for good, and a big model goes out precompressed to
+    // a browser that takes gzip.
+    const request: StaticRequest = {
+      pathname: url,
+      search: (req.url ?? '').slice(url.length),
+      acceptEncoding: req.headers['accept-encoding'],
+      ifNoneMatch: req.headers['if-none-match'],
+    };
+    const contentType = MIME[path.extname(filePath)] ?? 'application/octet-stream';
+    if (isEntry) {
+      const body = Buffer.from(
+        withVisitTag(
           withStatsTag(
             withBuildTag(await readFile(filePath, 'utf8'), BUILD_ID),
             STATS_ON ? STATS_WEBSITE_ID : '',
           ),
           visitId,
-        )
-      : await readFile(filePath);
-    // The client shipped no caching headers at all, which leaves a browser
-    // free to serve a stale index.html and with it the previous build's
-    // hashed bundle: you reload after a change and see yesterday's game.
-    // Vite fingerprints everything under /assets/, so those are immutable
-    // and the entry document must always be revalidated.
-    const immutable = url.startsWith('/assets/');
-    res.writeHead(200, {
-      'content-type': MIME[path.extname(filePath)] ?? 'application/octet-stream',
-      'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
-    });
-    res.end(body);
+        ),
+      );
+      const entry = { entry: true, size: body.length, mtimeMs: 0, gzip: null };
+      const plan = planStatic(request, entry, BUILD_ID, contentType);
+      res.writeHead(plan.status, plan.headers);
+      res.end(body);
+      return;
+    }
+    const plan = planStatic(request, await statStaticFile(filePath), BUILD_ID, contentType);
+    res.writeHead(plan.status, plan.headers);
+    if (plan.status === 304) {
+      res.end();
+      return;
+    }
+    // Streamed, and past the headers a failed read can only cut the reply.
+    pipeline(createReadStream(plan.gzip ? `${filePath}.gz` : filePath), res, () => undefined);
   } catch {
     res.writeHead(404, { 'content-type': 'text/plain' });
     res.end('not found');

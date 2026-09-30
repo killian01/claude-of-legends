@@ -2,6 +2,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import { offlineApiNotice, offlineApiReply } from './scripts/dev_api_fallback.ts';
+import { precompressDir } from './scripts/precompress.ts';
 
 // The raw Blender exports of the Star Orchard (docs/star-orchard.md) live
 // in art_src/map_exports/, gitignored and outside public/ so a build never
@@ -37,6 +38,25 @@ function serveMapExports(): Plugin {
   };
 }
 
+// The gzip twins beside the built client's big compressible files
+// (scripts/precompress.ts), written once the whole build, public/ copied
+// in, is on disk; the server sends them (server/static_files.ts).
+function precompressBuild(): Plugin {
+  let outDir = 'dist';
+  return {
+    name: 'loc-precompress',
+    apply: 'build',
+    configResolved(config) {
+      outDir = path.resolve(config.root, config.build.outDir);
+    },
+    async closeBundle() {
+      const r = await precompressDir(outDir);
+      const mb = (n: number): string => (n / 1e6).toFixed(1);
+      console.log(`gzip twins: ${r.files} files, ${mb(r.before)} MB to ${mb(r.after)} MB`);
+    },
+  };
+}
+
 // Dev: the Vite client talks to the game server on PORT, the variable the
 // server itself listens on, read from the shell or from .env (default
 // 8787). A second checkout, a worktree beside the first, then runs its own
@@ -45,7 +65,7 @@ function serveMapExports(): Plugin {
 export default defineConfig(({ mode }) => {
   const port = Number(loadEnv(mode, process.cwd(), '').PORT || 8787);
   return {
-    plugins: [serveMapExports()],
+    plugins: [serveMapExports(), precompressBuild()],
     server: {
       watch: {
         // art_src/ holds the raw 2048px icon sources: nothing imports them, and

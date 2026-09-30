@@ -12,10 +12,15 @@ let userMusicVolume = 1;
 const musicVol = (): number => MUSIC_VOL * userMusicVolume;
 
 // User setting, 0..1 over the authored level; ramps live when playing.
+// Only a score already playing is touched: the page applies the settings
+// at boot, long before any sound is wanted, and building the bus from
+// here fetched the whole recorded bank (231 files) on every page load.
+// startMusic reads the level when the score starts.
 export function setMusicVolume(v: number): void {
   userMusicVolume = v;
+  if (!state) return;
   const b = audioBus();
-  if (!b || !state) return;
+  if (!b) return;
   const g = state.out.gain;
   const t = b.ctx.currentTime;
   g.cancelScheduledValues(t);
