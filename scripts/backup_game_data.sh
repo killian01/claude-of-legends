@@ -62,7 +62,10 @@ echo "$LOG: wrote $ARCHIVE ($(du -h "$ARCHIVE" | cut -f1))"
 
 # An archive that unpacks to nothing is the failure this replaces: the one
 # that was sitting in this directory held a single empty directory entry.
-ENTRIES=$(tar tzf "$ARCHIVE" | head -200 | wc -l)
+# The whole listing is counted: cutting it short with head closed the pipe
+# on tar, which pipefail then turned into a failed run, so the script died
+# here every night and the rotation below never ran.
+ENTRIES=$(tar tzf "$ARCHIVE" | wc -l)
 if [ "$ENTRIES" -lt 5 ]; then
   echo "$LOG: REFUSED, archive holds $ENTRIES entries" >&2
   rm -f "$ARCHIVE"
