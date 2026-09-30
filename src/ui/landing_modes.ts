@@ -46,6 +46,29 @@ export const PLAY_NOW_FINE = 'No account, nothing to install. Unranked.';
 // works when the server does not.
 export const PRACTICE_ALONE_CALL = 'Or practice alone against bots, offline';
 
+// A way in that needs nothing: what its button says, and what the landing
+// resolves with when it is pressed (ui/landing.ts). Every button that
+// plays is built from one of these two, so the hero's and the card's
+// cannot come to do different things.
+export interface LandingDoor {
+  call: string;
+  kind: 'guest' | 'offline';
+}
+export const PLAY_NOW: LandingDoor = { call: PLAY_NOW_CALL, kind: 'guest' };
+export const PRACTICE_ALONE: LandingDoor = { call: PRACTICE_ALONE_CALL, kind: 'offline' };
+
+// The hero's row, the first screen on every device. A walk of the page as
+// visitors see it found the Play now card's button 934 px down a 900 px
+// laptop and 812 px down a phone held sideways, with the only gold thing
+// above the fold the repository's star, and most visitors who never played
+// had closed the tab within 15 s. So the hero's one gold button is the
+// card's own (PLAY_NOW), the offline match is one quiet line under it, and
+// the repository stands beside it outlined: still asked for, no longer
+// the thing to press.
+export const HERO_PLAY: LandingDoor = PLAY_NOW;
+export const HERO_QUIET: LandingDoor = PRACTICE_ALONE;
+export const HERO_STAR_CALL = 'Star on GitHub';
+
 export const LANDING_MODES: readonly LandingMode[] = [
   {
     id: 'ranked',

@@ -4,6 +4,8 @@
 // So the link to it is gold, carries a mark, and shows up in the three
 // places a visitor looks: the bar, under the tagline, and at the head of
 // the contribution band. One builder, three sizes, so they cannot drift.
+// Beside the landing's Play button it is outlined instead: two gold
+// buttons side by side ask the eye to choose, and playing comes first.
 //
 // The mark is a plain star drawn here, not a third party's logo (ADR
 // 0004): it says "star this" without borrowing anyone's emblem.
@@ -43,6 +45,15 @@ const CSS = `
 .repo-link.pill { padding: 7px 14px 7px 11px; font-size: 11px; }
 .repo-link.hero { padding: 13px 24px 13px 19px; font-size: 13px; letter-spacing: 1.6px; }
 .repo-link.wide { padding: 12px 24px 12px 19px; font-size: 12.5px; letter-spacing: 1.5px; }
+/* Outlined: the gold is the edge and the words, not the fill, and no sheen
+   crosses it, so the gold button beside it is the one that moves. */
+.repo-link.outline { color: #e6d7a8; background: rgba(8, 12, 22, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(230, 215, 168, 0.6), 0 8px 22px rgba(0, 0, 0, 0.35); }
+.repo-link.outline:hover, .repo-link.outline:focus-visible { color: #f6e4aa; filter: none;
+  background: rgba(38, 30, 12, 0.7);
+  box-shadow: inset 0 0 0 1px #e6d7a8, 0 12px 26px rgba(0, 0, 0, 0.45); }
+.repo-link.outline svg { filter: none; }
+.repo-link.outline::after { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .repo-link::after { animation: none; }
   .repo-link { transition: none; }
@@ -73,11 +84,17 @@ function starMark(): SVGSVGElement {
   return svg;
 }
 
+export type RepoLinkTone = 'gold' | 'outline';
+
 // `text` is what the button says, in the imperative where there is room
 // for a verb: the bar has room for the name and nothing else.
-export function buildRepoLink(size: RepoLinkSize, text: string): HTMLAnchorElement {
+export function buildRepoLink(
+  size: RepoLinkSize,
+  text: string,
+  tone: RepoLinkTone = 'gold',
+): HTMLAnchorElement {
   ensureCss();
-  const a = el('a', `repo-link ${size}`);
+  const a = el('a', `repo-link ${size}${tone === 'outline' ? ' outline' : ''}`);
   a.href = REPO;
   a.target = '_blank';
   a.rel = 'noreferrer';

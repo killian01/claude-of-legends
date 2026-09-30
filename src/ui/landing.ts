@@ -18,11 +18,15 @@ import { CONTRIBUTE_LEAD, CONTRIBUTE_TITLE, CONTRIBUTE_WAYS } from './landing_co
 import { mountEmbers } from './landing_embers';
 import { mountLandingLadder } from './landing_ladder';
 import {
+  HERO_PLAY,
+  HERO_QUIET,
+  HERO_STAR_CALL,
   LANDING_MODES,
-  PLAY_NOW_CALL,
+  type LandingDoor,
+  PLAY_NOW,
   PLAY_NOW_FINE,
   PLAY_NOW_LINE,
-  PRACTICE_ALONE_CALL,
+  PRACTICE_ALONE,
   PRACTICE_ART,
 } from './landing_modes';
 import { mountPresence } from './landing_presence';
@@ -99,17 +103,18 @@ const CSS = `
     0 0 80px rgba(240, 200, 110, 0.6); }
 }
 .pg.land .pg-card.glow h2 { color: #f0dca0; }
-.pg.land .pg-card .menu-btn.pg-play { position: relative; overflow: hidden;
+/* The gold button, wherever it stands: in the hero and in this card. */
+.pg.land .menu-btn.pg-play { position: relative; overflow: hidden;
   padding: 14px 18px; font-size: 15px; font-weight: 800; letter-spacing: 1.2px;
   text-transform: uppercase; color: #2a1d06; border: 1px solid #f3dc9a;
   background: linear-gradient(180deg, #f6e3a6 0%, #e2bf64 55%, #c99a3c 100%);
   box-shadow: 0 0 0 1px rgba(120, 86, 20, 0.6), 0 6px 22px rgba(232, 196, 108, 0.45),
     inset 0 1px 0 rgba(255, 250, 225, 0.8);
   transition: transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease; }
-.pg.land .pg-card .menu-btn.pg-play:hover { transform: translateY(-1px); filter: brightness(1.08);
+.pg.land .menu-btn.pg-play:hover { transform: translateY(-1px); filter: brightness(1.08);
   box-shadow: 0 0 0 1px rgba(120, 86, 20, 0.6), 0 8px 34px rgba(240, 206, 120, 0.75),
     inset 0 1px 0 rgba(255, 250, 225, 0.9); }
-.pg.land .pg-card .menu-btn.pg-play::after { content: ''; position: absolute; top: 0; bottom: 0;
+.pg.land .menu-btn.pg-play::after { content: ''; position: absolute; top: 0; bottom: 0;
   left: -60%; width: 45%; pointer-events: none; transform: skewX(-20deg);
   background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.65) 50%,
     rgba(255, 255, 255, 0) 100%);
@@ -132,14 +137,41 @@ const CSS = `
   background: none; font: inherit; font-size: 12px; color: #8ea4c4; cursor: pointer;
   text-decoration: underline; text-underline-offset: 3px; }
 .pg.land .pg-alone:hover { color: #dceaff; }
+/* The hero's row: the gold button with the offline line under it, and the
+   repository outlined beside it with the count. A grid rather than the
+   shared flex row, so the quiet line sits under the button it belongs to
+   while the star and the count center on the button, not on the pair. */
+.pg.land .pg-hero-cta { display: grid; justify-content: center; align-items: center;
+  grid-template-columns: auto auto auto; gap: 4px 18px;
+  grid-template-areas: 'play star stats' 'quiet . .'; }
+.pg.land .pg-hero-cta > .pg-play { grid-area: play; }
+.pg.land .pg-hero-cta > .repo-link { grid-area: star; }
+.pg.land .pg-hero-cta > .pg-stats { grid-area: stats; }
+.pg.land .pg-hero-cta > .pg-alone { grid-area: quiet; justify-self: center; margin-top: 2px; }
+.pg.land .pg-hero-cta .menu-btn.pg-play { width: auto; margin: 0; border-radius: 999px;
+  padding: 15px 34px; font-size: 16px; white-space: nowrap; }
 /* A phone's card is about 300 wide: one line, at a size that fits it. */
 @media (max-width: 560px) {
-  .pg.land .pg-card .menu-btn.pg-play { font-size: 13.5px; letter-spacing: 0.6px;
+  .pg.land .menu-btn.pg-play { font-size: 13.5px; letter-spacing: 0.6px;
     padding: 14px 10px; white-space: nowrap; }
+  /* Upright, the button takes the row, the line stays under it, and the
+     star and the count move to a row of their own below. */
+  .pg.land .pg-hero-cta { grid-template-columns: auto auto; gap: 4px 16px;
+    grid-template-areas: 'play play' 'quiet quiet' 'star stats'; }
+  .pg.land .pg-hero-cta .menu-btn.pg-play { padding: 15px 26px; font-size: 14.5px; }
+  .pg.land .pg-hero-cta > .repo-link { margin-top: 10px; }
+  .pg.land .pg-hero-cta > .pg-stats { margin-top: 10px; }
+}
+/* A screen with little height, a phone held sideways above all: the crest
+   and the gaps shrink so the gold button still shows without a scroll. */
+@media (max-height: 560px) {
+  .pg.land .pg-hero { padding-top: 6px; gap: 10px; }
+  .pg.land .pg-lockup { width: 104px; }
+  .pg.land .pg-hero-cta { margin-top: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pg.land .pg-cards .pg-card.glow { animation: none; }
-  .pg.land .pg-card .menu-btn.pg-play::after { animation: none; display: none; }
+  .pg.land .menu-btn.pg-play::after { animation: none; display: none; }
   .pg.land .pg-presence i { animation: none; }
 }
 
@@ -425,6 +457,14 @@ export function showLanding(
       root.remove();
       resolve(result);
     };
+    // Every button that plays, from one door (ui/landing_modes.ts): the
+    // hero's gold button and the card's do the same thing by construction.
+    const doorButton = (door: LandingDoor, cls: string): HTMLButtonElement => {
+      const b = el('button', cls, door.call);
+      b.type = 'button';
+      b.addEventListener('click', () => finish({ kind: door.kind }));
+      return b;
+    };
 
     // --- the bar: the same one the home wears, with the little it needs ---
     const toPlay = el('button', '', 'Play');
@@ -474,12 +514,19 @@ export function showLanding(
           'jungle camps and fog of war. Nothing to install.',
       ),
     );
-    // Under the tagline: the repository, big, and the count beside it.
-    // The genre hands you a game; this one hands you the source, and the
-    // front door says so before it asks for anything.
+    // Under the tagline: the way to play, on the first screen of every
+    // device, with the offline match one quiet line under it. The
+    // repository stands beside it, outlined, with the count: the genre
+    // hands you a game and this one hands you the source too, but a
+    // visitor came to play and the one gold thing here is that.
     const cta = el('div', 'pg-hero-cta');
     const stats = el('div', 'pg-stats');
-    cta.append(buildRepoLink('hero', 'Star on GitHub'), stats);
+    cta.append(
+      doorButton(HERO_PLAY, 'menu-btn pg-play'),
+      buildRepoLink('hero', HERO_STAR_CALL, 'outline'),
+      stats,
+      doorButton(HERO_QUIET, 'pg-alone'),
+    );
     copy.appendChild(cta);
     mountLiveStats(stats);
     hero.append(title, copy);
@@ -536,15 +583,12 @@ export function showLanding(
     // the same wall as the rest of the game and a visitor picks from what
     // a fresh account holds (ADR 0018).
     const offline = el('section', 'pg-card plain glow');
-    const playBtn = el('button', 'menu-btn pg-play', PLAY_NOW_CALL);
-    playBtn.addEventListener('click', () => finish({ kind: 'guest' }));
+    const playBtn = doorButton(PLAY_NOW, 'menu-btn pg-play');
     // Someone playing right now, over the button (ui/landing_presence.ts).
     const presence = el('div', 'pg-presence');
     presence.append(el('i', ''), el('span', ''));
     mountPresence(presence);
-    const aloneBtn = el('button', 'pg-alone', PRACTICE_ALONE_CALL);
-    aloneBtn.type = 'button';
-    aloneBtn.addEventListener('click', () => finish({ kind: 'offline' }));
+    const aloneBtn = doorButton(PRACTICE_ALONE, 'pg-alone');
     // The painting this card was missing. The heading above it says what
     // it is, so the picture is decoration and carries no label of its own.
     const tryArt = el('img', '');

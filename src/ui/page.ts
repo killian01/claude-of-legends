@@ -85,8 +85,8 @@ export const CSS = `
 /* First in its column now, so the gap it used to keep from the title is
    the hero's flex gap instead. */
 .pg-hero-copy .pg-tag { margin-top: 0; }
-/* The row under the tagline: the repository button, and the count beside
-   it. One line on a laptop; on a phone the count drops under the button. */
+/* The row under the tagline. The landing fills it and lays it out
+   (ui/landing.ts): the Play button, the repository, and the count. */
 .pg-hero-cta { display: flex; align-items: center; justify-content: center; gap: 22px;
   flex-wrap: wrap; margin-top: 22px; }
 .pg-hero-cta .pg-stats { margin: 0; }
