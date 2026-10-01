@@ -67,6 +67,7 @@ import type { LanePreference } from './sim/playbook/types';
 import { Rng } from './sim/rng';
 import type { Sim } from './sim/sim';
 import { ULT_RANK_LEVELS } from './sim/stats';
+import { TerrainNavGrid } from './sim/terrain_nav';
 import { type AbilityKey, DT, type TeamId } from './sim/types';
 import { type AuthedAccount, currentAccount } from './ui/auth';
 import { warmChampionArt } from './ui/champion_art';
@@ -792,9 +793,15 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
   return new Promise((resolve) => {
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${window.location.host}/ws`);
-    const world = new ClientWorld((msg) => {
-      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
-    }, orchard.map);
+    // The map's walkability grid, for the own champion's prediction
+    // (src/net/self_predict.ts): the grid the server's sim walks on.
+    const world = new ClientWorld(
+      (msg) => {
+        if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+      },
+      orchard.map,
+      new TerrainNavGrid(orchard.navigation),
+    );
 
     let queueUi: QueueController | null = null;
     let lobbyUi: LobbyController | null = null;

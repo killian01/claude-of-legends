@@ -11,6 +11,7 @@ import type {
   SnapUnit,
   SnapWall,
 } from '../src/net/protocol';
+import { unrootedMoveSpeed } from '../src/sim/combat/status';
 import { hasAnyFavor } from '../src/sim/favors';
 import type { Sim, SimEvent } from '../src/sim/sim';
 import { effectiveRank } from '../src/sim/stats';
@@ -18,6 +19,21 @@ import type { TeamId } from '../src/sim/types';
 import type { Unit } from '../src/sim/unit';
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+// The most of its path the own champion is told each snapshot: the
+// prediction re-walks it for a fraction of a second, and a path the
+// search smoothed seldom has more than a handful of corners.
+export const PATH_SENT_MAX = 16;
+
+// The seat's orders as the server applied them (server/match.ts): the
+// number of the last one and the match time it landed, for the client's
+// prediction (src/net/self_predict.ts).
+export interface SeatAck {
+  ack: number;
+  ackAt: number;
+}
+
+const NO_ACK: SeatAck = { ack: 0, ackAt: 0 };
 
 // Display-relevant statuses carried on every visible unit: crowd control,
 // the total mark stacks (Sylra's thorns, Elowen's mist) so a marked victim
@@ -68,6 +84,7 @@ export function buildSnapshot(
   selfUnitId: number,
   known: Set<number>,
   events: readonly SimEvent[],
+  seat: SeatAck = NO_ACK,
 ): ServerMsg {
   const units: SnapUnit[] = [];
   const visibleNow = new Set<number>();
@@ -207,7 +224,16 @@ export function buildSnapshot(
       // What the HUD tells the player (ADR 0026): the self block only, so
       // the other team never learns where this seat plays.
       lane: selfUnit.lane,
+      ms: round2(unrootedMoveSpeed(selfUnit, sim.time)),
+      rg: round2(selfUnit.stats.attackRange),
+      ack: seat.ack,
+      ackAt: round2(seat.ackAt),
     };
+    if (selfUnit.path.length > 0) {
+      self.path = selfUnit.path.slice(0, PATH_SENT_MAX).flatMap((p) => [round2(p.x), round2(p.z)]);
+    }
+    if (selfUnit.attackTargetId !== null) self.tgt = selfUnit.attackTargetId;
+    if (selfUnit.activeDash) self.dash = 1;
     const boon = sim.teamBuff(team);
     if (boon) {
       self.boonUntil = round2(boon.until);

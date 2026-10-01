@@ -176,6 +176,14 @@ export function mrBonus(u: Unit, time: number): number {
 
 export function effectiveMoveSpeed(u: Unit, time: number): number {
   if (isRooted(u, time)) return 0;
+  return unrootedMoveSpeed(u, time);
+}
+
+// The speed the unit walks at once nothing holds it in place: slows,
+// haste and favors, never a root or a stun. What the own champion's
+// prediction walks at (src/net/self_predict.ts), which waits out the
+// root itself.
+export function unrootedMoveSpeed(u: Unit, time: number): number {
   // Swiftness: the team's favor speeds a champion up between fights only.
   const swift = outOfCombat(u, time) ? favorBonus(u.favors, 'swiftness') : 0;
   return u.moveSpeed * (1 - slowPct(u, time)) * (1 + moveSpeedBonusPct(u, time) + swift);

@@ -126,6 +126,10 @@ _Avoid_: agent, external AI, remote controller
 The headless host that runs a match with no browser and no server, exposing the Policy contract over a line stream so a trainer outside the repo can step the match. One step is one decision slot.
 _Avoid_: gym, harness, env wrapper
 
+**Prediction**:
+Online, the client drawing its own champion where the server will have it once the orders on their way land: the newest snapshot walked forward with the sim's own path search and step, each unanswered order applied when it lands, and what a new snapshot corrects eased out over a few frames (ADR 0028). Display only: the server decides, and every rule that reads a position reads the server's.
+_Avoid_: client authority, rollback, netcode
+
 **Skin**:
 A purely cosmetic appearance variant of a champion, chosen at champion select and visible to everyone. Never affects gameplay, stats, or the Policy observation.
 _Avoid_: costume, chroma

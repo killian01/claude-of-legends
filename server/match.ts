@@ -68,6 +68,12 @@ interface MatchPlayer {
   // its match had loaded, its commands (how many, and the first), how far
   // its champion walked, and the points it banked. Ticks of sim.tickCount.
   stats: SeatStats;
+  // The number of the last order this connection sent that the sim
+  // applied, and the match time it did (ClientMsg n, SelfSnap ack), for
+  // the client's prediction: a seat taken back or taken over starts
+  // again from none, as its new connection numbers from one.
+  ack: number;
+  ackAt: number;
 }
 
 export interface SeatStats {
@@ -103,6 +109,30 @@ export const SEAT_ORDER_KINDS: ReadonlySet<string> = new Set([
   'skill',
   'order',
 ]);
+
+// The number an order carries for the client's prediction, when it is
+// one of the orders that carry one (ClientMsg n).
+export function orderNumber(msg: ClientMsg): number | undefined {
+  switch (msg.t) {
+    case 'move':
+    case 'attack':
+    case 'attack_move':
+    case 'stop':
+    case 'recall':
+    case 'cast':
+      return typeof msg.n === 'number' ? msg.n : undefined;
+    default:
+      return undefined;
+  }
+}
+
+// A command as the replay keeps it and the sim applies it: without the
+// client's order number.
+export function withoutOrderNumber(msg: ClientMsg): ClientMsg {
+  if (!('n' in msg) || orderNumber(msg) === undefined) return msg;
+  const { n: _n, ...rest } = msg as ClientMsg & { n?: number };
+  return rest as ClientMsg;
+}
 
 function freshStats(tick: number, x: number, z: number): SeatStats {
   return {
@@ -184,6 +214,8 @@ export class Match {
         lastCommandAt: 0,
         coach: p.playbook !== undefined,
         stats: this.statsAt(unitId),
+        ack: 0,
+        ackAt: 0,
       });
     });
   }
@@ -285,6 +317,8 @@ export class Match {
       coach: seat.coach === true,
       // A seat taken back or taken over starts a report of its own.
       stats: this.statsAt(seat.unitId),
+      ack: 0,
+      ackAt: 0,
     });
   }
 
@@ -361,16 +395,24 @@ export class Match {
     const kind = SEAT_ORDER_KINDS.has(msg.t) ? msg.t : 'other';
     p.stats.kinds[kind] = (p.stats.kinds[kind] ?? 0) + 1;
     if (p.stats.firstOrderTick === null) p.stats.firstOrderTick = this.sim.tickCount;
+    // The order's number is the client's own (src/net/self_predict.ts):
+    // told back in the seat's snapshots, never recorded, never applied.
+    const n = orderNumber(msg);
+    if (n !== undefined && Number.isSafeInteger(n) && n > p.ack) {
+      p.ack = n;
+      p.ackAt = this.sim.time;
+    }
+    const cmd = withoutOrderNumber(msg);
     // Recorded raw, then applied through the SAME validated path a replay
     // uses: an invalid command no-ops identically live and replayed.
-    this.recordReplay({ k: this.sim.tickCount, u: p.unitId, e: 'cmd', c: msg });
-    applySimCommand(this.sim, p.team, p.unitId, msg);
+    this.recordReplay({ k: this.sim.tickCount, u: p.unitId, e: 'cmd', c: cmd });
+    applySimCommand(this.sim, p.team, p.unitId, cmd);
   }
 
   buildSnapshotFor(clientId: number): ServerMsg | null {
     const p = this.players.get(clientId);
     if (!p) return null;
-    return buildSnapshot(this.sim, p.team, p.unitId, p.known, this.eventsThisTick);
+    return buildSnapshot(this.sim, p.team, p.unitId, p.known, this.eventsThisTick, p);
   }
 
   // Spectators: seatless viewers on one team's fog. selfUnitId 0 makes the

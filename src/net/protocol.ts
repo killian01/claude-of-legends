@@ -89,12 +89,16 @@ export type ClientMsg =
   // A coach order for the account's own bot seat (ADR 0013): one at a
   // time, free releases it. Refused on any other seat.
   | { t: 'order'; kind: CoachOrderKind; x?: number; z?: number; targetId?: number }
-  | { t: 'move'; x: number; z: number }
-  | { t: 'attack'; targetId: number }
-  | { t: 'attack_move'; x: number; z: number }
-  | { t: 'stop' }
-  | { t: 'recall' }
-  | { t: 'cast'; key: AbilityKey; x: number; z: number }
+  // n: the order's number in this connection's sequence, for the own
+  // champion's prediction (src/net/self_predict.ts): the server tells which
+  // it has applied (SelfSnap ack), so the client knows which of its orders
+  // the newest state already holds. Never recorded in a replay.
+  | { t: 'move'; x: number; z: number; n?: number }
+  | { t: 'attack'; targetId: number; n?: number }
+  | { t: 'attack_move'; x: number; z: number; n?: number }
+  | { t: 'stop'; n?: number }
+  | { t: 'recall'; n?: number }
+  | { t: 'cast'; key: AbilityKey; x: number; z: number; n?: number }
   | { t: 'sigil'; slot: number; x: number; z: number }
   | { t: 'buy'; itemId: string }
   | { t: 'sell'; slot: number }
@@ -229,6 +233,20 @@ export interface SelfSnap {
   // a fact a player must see to respect.
   favors?: FavorStacks;
   enemyFavors?: FavorStacks;
+  // What the own champion's prediction walks on (src/net/self_predict.ts,
+  // ADR 0028): the speed the champion walks at once no root holds it, its
+  // attack range, the path it still has to walk as x, z pairs (absent
+  // when none), the unit it is set on attacking (absent when none), and
+  // whether a dash carries it. ack is the number of the last order of
+  // this connection the server applied (0 before any) and ackAt the match
+  // time it applied it.
+  ms: number;
+  rg: number;
+  path?: number[];
+  tgt?: number;
+  dash?: 1;
+  ack: number;
+  ackAt: number;
 }
 
 export type SnapEvent =

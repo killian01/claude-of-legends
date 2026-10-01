@@ -355,6 +355,11 @@ export class Renderer {
   // Slightly zoomed in by default: characters read far better up close.
   private zoom = 0.85;
   private followId: number | null = null;
+  // The followed champion as this frame draws it when the world draws it
+  // ahead of its newest state (IWorld predictedPos: online, the own
+  // champion walking the orders on their way); null draws it between its
+  // last two snapshots like everything else.
+  private selfDrawn: { x: number; z: number; heading: Vec2 | null } | null = null;
   private viewerTeam = 0;
   private attackTargetId: number | null = null;
   private hoverTargetId: number | null = null;
@@ -2569,14 +2574,32 @@ export class Renderer {
     disposeDeep(w.group);
   }
 
+  // Where a tracked unit is drawn this frame: the followed champion where
+  // the world draws it ahead (selfDrawn), anything else between its last
+  // two snapshots.
+  private drawnXZ(id: number, t: { prev: Vec2; curr: Vec2 }, alpha: number): Vec2 {
+    const ahead = id === this.followId ? this.selfDrawn : null;
+    if (ahead) return { x: ahead.x, z: ahead.z };
+    return {
+      x: t.prev.x + (t.curr.x - t.prev.x) * alpha,
+      z: t.prev.z + (t.curr.z - t.prev.z) * alpha,
+    };
+  }
+
+  // The followed champion where this frame drew it, when the world draws
+  // it ahead of its newest state (the in-match guidance's arrow starts at
+  // its feet); null when it is drawn between snapshots.
+  selfDrawnAt(): Vec2 | null {
+    return this.selfDrawn ? { x: this.selfDrawn.x, z: this.selfDrawn.z } : null;
+  }
+
   // Per-frame telegraph upkeep: follow the caster, re-aim line shapes,
   // grow the progress fill, and run the charge effect at the caster.
   private updateWindups(now: number, alpha: number): void {
     for (const [id, w] of this.windups) {
       const t = this.tracked.get(id);
       if (!t) continue;
-      const cx = t.prev.x + (t.curr.x - t.prev.x) * alpha;
-      const cz = t.prev.z + (t.curr.z - t.prev.z) * alpha;
+      const { x: cx, z: cz } = this.drawnXZ(id, t, alpha);
       w.group.visible = t.mesh.visible;
       if (!w.group.visible) continue;
       if (w.followCaster) {
@@ -2681,16 +2704,19 @@ export class Renderer {
       this.pendingDamage.length = 0;
     }
     this.selfHitTargets.clear();
+    this.selfDrawn =
+      this.followId !== null ? (this.world.predictedPos?.(this.followId, now) ?? null) : null;
     let followPos: THREE.Vector3 | null = null;
     for (const [id, t] of this.tracked) {
-      const x = t.prev.x + (t.curr.x - t.prev.x) * alpha;
-      const z = t.prev.z + (t.curr.z - t.prev.z) * alpha;
-      const dx = t.curr.x - t.prev.x;
-      const dz = t.curr.z - t.prev.z;
+      const ahead = id === this.followId ? this.selfDrawn : null;
+      const { x, z } = this.drawnXZ(id, t, alpha);
+      const dx = ahead ? (ahead.heading?.x ?? 0) : t.curr.x - t.prev.x;
+      const dz = ahead ? (ahead.heading?.z ?? 0) : t.curr.z - t.prev.z;
       const creature = this.creatureVisuals.get(id);
       // A rigged creature turns and walks like the living do.
       const living = t.kind === 'champion' || t.kind === 'minion' || creature !== undefined;
-      const moving = living && Math.abs(dx) + Math.abs(dz) > 0.02;
+      const moving =
+        living && (ahead ? ahead.heading !== null : Math.abs(dx) + Math.abs(dz) > 0.02);
 
       if (living) {
         // Smoothly turn to face the direction of motion.
@@ -3044,8 +3070,7 @@ export class Renderer {
       const u = this.world.units.get(id);
       const t = this.tracked.get(id);
       if (!u || !t || u.dead || !t.mesh.visible) return false;
-      const x = t.prev.x + (t.curr.x - t.prev.x) * alpha;
-      const z = t.prev.z + (t.curr.z - t.prev.z) * alpha;
+      const { x, z } = this.drawnXZ(id, t, alpha);
       mesh.position.x = x;
       mesh.position.z = z;
       mesh.position.y = this.groundHeight(x, z) + 0.12;
