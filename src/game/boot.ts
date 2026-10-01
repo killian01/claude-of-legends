@@ -255,6 +255,12 @@ export function startPresentation(
     return true;
   };
 
+  // Where the own champion is drawn: ahead of its snapshots online, by the
+  // orders on their way (src/net/self_predict.ts), else where the world has
+  // it. An order built around the champion starts from there, so it lands
+  // around the champion the player sees.
+  const selfAt = (u: { pos: Vec2 }): Vec2 => renderer.selfDrawnAt() ?? u.pos;
+
   // Client-side cast gate: the sim (or server) still decides, but the player
   // hears and reads WHY nothing happened instead of pressing a dead key.
   const tryCast = (key: AbilityKey, aim: Vec2): void => {
@@ -278,7 +284,8 @@ export function startPresentation(
         return;
       }
       if (ab.spec.kind === 'zone' || ab.spec.kind === 'wall') {
-        const d = Math.hypot(u.pos.x - aim.x, u.pos.z - aim.z);
+        const at = selfAt(u);
+        const d = Math.hypot(at.x - aim.x, at.z - aim.z);
         if (d > ab.castRange) {
           pendingCast = { key, aim: { x: aim.x, z: aim.z } };
           world.orderMove(selfId, aim.x, aim.z);
@@ -312,7 +319,7 @@ export function startPresentation(
           halfAngle: spec.halfAngle,
         },
         schoolColorOf(ab.spec).main,
-        { x: u.pos.x, z: u.pos.z },
+        { ...selfAt(u) },
         aim,
       );
     }
@@ -328,14 +335,14 @@ export function startPresentation(
       pendingCast = null;
       return;
     }
-    const d = Math.hypot(u.pos.x - pendingCast.aim.x, u.pos.z - pendingCast.aim.z);
+    const at = selfAt(u);
+    const d = Math.hypot(at.x - pendingCast.aim.x, at.z - pendingCast.aim.z);
     if (d <= ab.castRange * 0.98) {
       const queued = pendingCast;
       pendingCast = null;
       tryCast(queued.key, queued.aim);
       // Stop like the genre does: the walk was for the cast, not a move.
-      const me = world.units.get(selfId);
-      if (me) world.orderMove(selfId, me.pos.x, me.pos.z);
+      world.orderMove(selfId, at.x, at.z);
     }
   };
 
@@ -394,16 +401,19 @@ export function startPresentation(
     onThumbMove: (dir) => {
       const self = world.units.get(selfId);
       if (!self) return;
+      // From where the champion is drawn, so the thumb's stop is where
+      // the player sees it and its lead is ahead of it.
+      const at = selfAt(self);
       if (dir === null) {
         if (stickOrder === null) return;
         stickOrder = null;
-        world.orderMove(selfId, self.pos.x, self.pos.z);
+        world.orderMove(selfId, at.x, at.z);
         return;
       }
       const now = performance.now();
       if (!shouldResend(stickOrder, dir, now)) return;
       stickOrder = { x: dir.x, z: dir.z, at: now };
-      const p = leadPoint(self.pos, dir, STICK_LEAD_M, world.map.size);
+      const p = leadPoint(at, dir, STICK_LEAD_M, world.map.size);
       world.orderMove(selfId, p.x, p.z);
       renderer.setAttackTarget(null);
       renderer.recenterCamera();
@@ -422,7 +432,8 @@ export function startPresentation(
       // the rank when it ends (onThumbCast).
       if (slotTap(u, key) !== 'cast') return;
       if (aimingKey !== key) inputHandlers.onCast(key, { x: 0, z: 0 });
-      thumbAim = dir ? aimedPoint(u.pos, dir, k, ab.castRange) : { x: u.pos.x, z: u.pos.z };
+      const at = selfAt(u);
+      thumbAim = dir ? aimedPoint(at, dir, k, ab.castRange) : { x: at.x, z: at.z };
       renderer.setAimWorld(thumbAim);
     },
     onThumbCast: (key, press) => {
@@ -433,8 +444,9 @@ export function startPresentation(
       if (press !== 'cancel' && pressUnlearned(key)) return;
       if (press === 'tap') {
         if (aimingKey === key) inputHandlers.onAimEnd(key, null);
-        const target = nearestEnemy(world, selfTeam, u.pos, ab.castRange);
-        tryCast(key, quickPoint(u.pos, target?.pos ?? null, stickFacing(), ab.castRange));
+        const at = selfAt(u);
+        const target = nearestEnemy(world, selfTeam, at, ab.castRange);
+        tryCast(key, quickPoint(at, target?.pos ?? null, stickFacing(), ab.castRange));
         return;
       }
       const aim = press === 'aimed' ? thumbAim : null;
@@ -445,11 +457,12 @@ export function startPresentation(
     onThumbSigil: (slot, press, dir, k) => {
       const u = world.units.get(selfId);
       if (!u || press === 'cancel') return;
-      const target = press === 'tap' ? nearestEnemy(world, selfTeam, u.pos, SIGIL_REACH) : null;
+      const at = selfAt(u);
+      const target = press === 'tap' ? nearestEnemy(world, selfTeam, at, SIGIL_REACH) : null;
       const aim =
         press === 'aimed' && dir
-          ? aimedPoint(u.pos, dir, k, SIGIL_REACH)
-          : quickPoint(u.pos, target?.pos ?? null, stickFacing(), SIGIL_REACH);
+          ? aimedPoint(at, dir, k, SIGIL_REACH)
+          : quickPoint(at, target?.pos ?? null, stickFacing(), SIGIL_REACH);
       inputHandlers.onCastSigil(slot, aim);
     },
     // The attack button: the nearest enemy in reach, champions first, or
@@ -457,7 +470,8 @@ export function startPresentation(
     onThumbAttack: () => {
       const u = world.units.get(selfId);
       if (!u) return;
-      const target = nearestEnemy(world, selfTeam, u.pos, ATTACK_REACH);
+      const at = selfAt(u);
+      const target = nearestEnemy(world, selfTeam, at, ATTACK_REACH);
       if (target) {
         pendingCast = null;
         world.orderAttack(selfId, target.id);
@@ -467,7 +481,7 @@ export function startPresentation(
       }
       const f = stickFacing();
       inputHandlers.onAttackMove(
-        f ? { x: u.pos.x + f.x * 3, z: u.pos.z + f.z * 3 } : { x: u.pos.x, z: u.pos.z },
+        f ? { x: at.x + f.x * 3, z: at.z + f.z * 3 } : { x: at.x, z: at.z },
       );
     },
     onLeftClick: (sx, sy) => {
@@ -680,12 +694,15 @@ export function startPresentation(
     const lane = hud.laneGuide();
     const me = world.units.get(selfId);
     const from = selfPrev ?? selfCurr;
+    // Where the champion is drawn: ahead of its snapshots online
+    // (src/net/self_predict.ts), between its last two otherwise.
+    const drawn = renderer.selfDrawnAt();
     const self =
       me && !me.dead && from && selfCurr
-        ? {
+        ? (drawn ?? {
             x: from.x + (selfCurr.x - from.x) * alpha,
             z: from.z + (selfCurr.z - from.z) * alpha,
-          }
+          })
         : null;
     const target = lane?.target ?? null;
     // Nothing projected once it has nothing to show (the common case).

@@ -5,12 +5,14 @@
 // Transport-agnostic: give it a send function, feed it server messages.
 
 import { ChampionRegistry } from '../sim/champion_registry';
+import { specForRank } from '../sim/combat/casting';
 import type { Status } from '../sim/combat/status';
 import type { ChampionDef } from '../sim/content/champions';
 import type { GameMap, WardenPit } from '../sim/content/map';
 import { creatureOfRing } from '../sim/content/rings';
 import { type FavorStacks, NO_FAVORS } from '../sim/favors';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
+import type { NavGrid } from '../sim/navgrid';
 import type { Projectile } from '../sim/projectiles';
 import type { RingClock } from '../sim/rings';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from '../sim/types';
@@ -18,7 +20,8 @@ import type { Unit } from '../sim/unit';
 import type { Wall } from '../sim/walls';
 import type { Zone } from '../sim/zones';
 import type { IWorld } from '../world_api';
-import type { ClientMsg, ServerMsg, SnapUnit } from './protocol';
+import type { ClientMsg, SelfSnap, ServerMsg, SnapUnit } from './protocol';
+import { type DrawnSelf, pathOfPairs, SelfPredictor } from './self_predict';
 
 // Rebuilds a displayable Status from its wire chip.
 function toStatus(k: string, until: number, v: number | undefined): Status | null {
@@ -182,12 +185,34 @@ export class ClientWorld implements IWorld {
   // registerForged() loads them before the first snapshot arrives.
   readonly champions = new ChampionRegistry();
 
+  // The own champion drawn where it is going (src/net/self_predict.ts,
+  // ADR 0028), when the host hands in the map's walkability grid; a
+  // spectator's mirror has none and draws what the server says.
+  private readonly predictor: SelfPredictor | null;
+
   // The map the match is played on (ADR 0021): the mirror renders and
   // reasons on the record the server's sim runs, handed in by the host.
   constructor(
     private readonly send: (msg: ClientMsg) => void,
     readonly map: GameMap,
-  ) {}
+    nav: NavGrid | null = null,
+    private readonly clock: () => number = () => performance.now(),
+  ) {
+    this.predictor = nav
+      ? new SelfPredictor(nav, (id) => {
+          const u = this.units.get(id);
+          return u && !u.dead ? { x: u.pos.x, z: u.pos.z, radius: u.radius } : null;
+        })
+      : null;
+  }
+
+  // Where the renderer draws a unit this frame when it is not where the
+  // newest snapshot put it: the own champion, ahead by the orders on
+  // their way (IWorld). Null draws the snapshot's position.
+  predictedPos(unitId: number, now: number): DrawnSelf | null {
+    if (unitId !== this.selfUnitId || !this.predictor) return null;
+    return this.predictor.drawnAt(now);
+  }
 
   championDef(championId: string): ChampionDef | null {
     return this.champions.get(championId);
@@ -244,30 +269,87 @@ export class ClientWorld implements IWorld {
     return this.units.has(unitId);
   }
 
+  // Each order the hands send carries its number for the prediction, which
+  // walks it at once; a coach's orders are the bot's to follow.
   orderMove(_unitId: number, x: number, z: number): void {
-    this.send(this.coach ? { t: 'order', kind: 'goto', x, z } : { t: 'move', x, z });
+    if (this.coach) {
+      this.send({ t: 'order', kind: 'goto', x, z });
+      return;
+    }
+    const n = this.predictor?.move({ x, z }, this.clock());
+    this.send(n === undefined ? { t: 'move', x, z } : { t: 'move', x, z, n });
   }
 
   orderAttack(_unitId: number, targetId: number): void {
-    this.send(this.coach ? { t: 'order', kind: 'focus', targetId } : { t: 'attack', targetId });
+    if (this.coach) {
+      this.send({ t: 'order', kind: 'focus', targetId });
+      return;
+    }
+    const n = this.predictor?.chase(targetId, this.clock());
+    this.send(n === undefined ? { t: 'attack', targetId } : { t: 'attack', targetId, n });
   }
 
+  // Walked like a move: the server stops it at the first enemy it meets,
+  // which the next snapshots tell.
   orderAttackMove(_unitId: number, x: number, z: number): void {
-    this.send(this.coach ? { t: 'order', kind: 'goto', x, z } : { t: 'attack_move', x, z });
+    if (this.coach) {
+      this.send({ t: 'order', kind: 'goto', x, z });
+      return;
+    }
+    const n = this.predictor?.move({ x, z }, this.clock());
+    this.send(n === undefined ? { t: 'attack_move', x, z } : { t: 'attack_move', x, z, n });
   }
 
+  // A recall stands the champion still to channel (src/sim/recall.ts).
   startRecall(_unitId: number): void {
-    this.send(this.coach ? { t: 'order', kind: 'back' } : { t: 'recall' });
+    if (this.coach) {
+      this.send({ t: 'order', kind: 'back' });
+      return;
+    }
+    const n = this.predictor?.stop(this.clock());
+    this.send(n === undefined ? { t: 'recall' } : { t: 'recall', n });
   }
 
   orderStop(_unitId: number): void {
-    this.send(this.coach ? { t: 'order', kind: 'hold' } : { t: 'stop' });
+    if (this.coach) {
+      this.send({ t: 'order', kind: 'hold' });
+      return;
+    }
+    const n = this.predictor?.stop(this.clock());
+    this.send(n === undefined ? { t: 'stop' } : { t: 'stop', n });
   }
 
   castAbility(_unitId: number, key: AbilityKey, aim: Vec2): boolean {
     if (this.coach) return false;
-    this.send({ t: 'cast', key, x: aim.x, z: aim.z });
+    const now = this.clock();
+    const n = this.predictor?.cast(this.windupOf(key, now), now);
+    this.send(
+      n === undefined
+        ? { t: 'cast', key, x: aim.x, z: aim.z }
+        : { t: 'cast', key, x: aim.x, z: aim.z, n },
+    );
     return true;
+  }
+
+  // The windup a cast sent now will plant the champion for, when the
+  // mirror can tell the sim will start it (src/sim/combat/casting.ts): the
+  // rank, the cooldown and the mana allow it, no stun stops it, and it
+  // needs no unit to aim at, which only the server's sight settles. Null
+  // when it will not plant the champion, or when that cannot be told.
+  private windupOf(key: AbilityKey, now: number): number | null {
+    const self = this.units.get(this.selfUnitId);
+    const def = self?.champion?.abilities[key];
+    if (!self || !def?.windup || def.windup <= 0 || !this.predictor) return null;
+    const rank = self.abilityRanks[key] ?? 0;
+    if (rank <= 0) return null;
+    const at = this.predictor.landsAt(now);
+    if ((self.cooldowns[key] ?? 0) > at || self.mana < def.manaCost) return null;
+    if (self.statuses.some((s) => (s.kind === 'stun' || s.kind === 'airborne') && s.until > at)) {
+      return null;
+    }
+    const kind = specForRank(def, rank).kind;
+    if (kind === 'enemy_target' || kind === 'dash') return null;
+    return def.windup;
   }
 
   castSigil(_unitId: number, slot: number, aim: Vec2): boolean {
@@ -499,6 +581,42 @@ export class ClientWorld implements IWorld {
       if (!seenW.has(id)) this.walls.delete(id);
     }
 
+    if (this.predictor && msg.self) this.observeSelf(msg.self, msg.time, msg.winner !== null);
     return true;
+  }
+
+  // The newest state of the own champion's walk, for the prediction.
+  private observeSelf(snap: SelfSnap, time: number, over: boolean): void {
+    const self = this.units.get(this.selfUnitId);
+    if (!self || !this.predictor) return;
+    let stillUntil = self.pendingSpell?.resolveAt ?? 0;
+    for (const s of snap.statuses) {
+      if (s.k === 'root' || s.k === 'stun' || s.k === 'airborne') {
+        stillUntil = Math.max(stillUntil, s.until);
+      }
+    }
+    this.predictor.observe(
+      {
+        time,
+        pos: { x: self.pos.x, z: self.pos.z },
+        path: pathOfPairs(snap.path),
+        speed: snap.ms,
+        stillUntil,
+        chaseId: snap.tgt ?? null,
+        range: snap.rg,
+        radius: self.radius,
+        // A server that does not tell the walk has nothing to predict on.
+        off:
+          self.dead ||
+          snap.dash === 1 ||
+          over ||
+          this.coach ||
+          typeof snap.ms !== 'number' ||
+          typeof snap.ack !== 'number',
+        ack: snap.ack ?? 0,
+        ackAt: snap.ackAt ?? 0,
+      },
+      this.clock(),
+    );
   }
 }

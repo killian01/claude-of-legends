@@ -39,6 +39,12 @@ export interface IWorld {
   teamFavors(team: TeamId): FavorStacks;
   // When a team's Wrath ends (ADR 0022, round two), null when it holds none.
   teamWrath(team: TeamId): number | null;
+  // Where to draw a unit this frame when it is not where the world's
+  // newest state put it: online, the own champion ahead by the orders on
+  // their way (src/net/self_predict.ts, ADR 0028), with the way it walks
+  // (null while it stands). Null, or absent offline, draws the world's
+  // own position.
+  predictedPos?(unitId: number, now: number): { x: number; z: number; heading: Vec2 | null } | null;
   orderMove(unitId: number, x: number, z: number): void;
   orderAttack(unitId: number, targetId: number): void;
   orderAttackMove(unitId: number, x: number, z: number): void;
