@@ -775,6 +775,7 @@ const CSS = `
 }
 .hud-ladder[hidden], .hud-ladder-row[hidden] { display: none; }
 .hud-ladder-line { display: block; font-size: 15px; color: #ffe08a; }
+.hud-ladder-earned { margin-left: 8px; color: #8fd06a; white-space: nowrap; }
 .hud-ladder-hint { display: block; margin-top: 2px; font-size: 12.5px; color: #c9bd93; }
 .hud-ladder-row { display: flex; gap: 8px; margin-top: 8px; align-items: stretch; }
 .hud-ladder-field {
@@ -1063,6 +1064,8 @@ export class Hud {
   private readonly pointsPop: HTMLElement;
   private readonly pointsLabel: HTMLElement;
   private pointsSeen = false;
+  // What this match has banked so far, for the ladder boxes.
+  private pointsEarned = 0;
   private readonly endLadder: LadderBox;
   private readonly pauseLadder: LadderBox;
   private readonly targetFrame: HTMLElement;
@@ -1826,6 +1829,9 @@ export class Hud {
   // points say plainly, once per browser, that the match is on a ladder.
   showPoints(delta: number, total: number, reason: PointsReason): void {
     this.pointsSeen = true;
+    this.pointsEarned += delta;
+    this.endLadder.setEarned(this.pointsEarned);
+    this.pauseLadder.setEarned(this.pointsEarned);
     this.pointsBox.classList.add('on');
     this.pointsTotal.textContent = total.toLocaleString('en-US');
     this.pointsLabel.textContent = pointsWord(total);

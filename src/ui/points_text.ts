@@ -50,6 +50,13 @@ export interface LadderPlace {
   named: boolean;
 }
 
+// What this match has banked so far, after the place: the result of the
+// match in points, on the end screen, and the running count in the pause
+// menu. Nothing before the first points.
+export function earnedText(earned: number): string {
+  return earned > 0 ? `+${earned.toLocaleString('en-US')} this match` : '';
+}
+
 export const UNPLACED_LINE = 'Your first points put your name on the ladder.';
 
 export function placeText(place: LadderPlace): string {
