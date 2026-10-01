@@ -39,6 +39,9 @@ export interface LandingPage {
 }
 
 export const LADDER_HEADING = 'The ladder';
+// What an empty ladder shows: its first places, open.
+export const GHOST_ROWS = 6;
+export const GHOST_NAME = 'Open: your name here';
 export const JOIN_CALL = 'Take your place';
 // The promise the section makes, in one line.
 export const LADDER_PROMISE = 'Play one match and your name is on it. No account needed.';
@@ -68,7 +71,7 @@ const CSS = `
   border: 1px solid #6b5a2e; background: rgba(6, 10, 20, 0.78);
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.5), 0 0 34px rgba(232, 196, 108, 0.08); }
 .pg-ladder-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-.pg-ladder h2 { font-family: Cinzel, Georgia, serif; font-size: 19px; letter-spacing: 1.8px;
+.pg-ladder h2 { font-family: Cinzel, Georgia, serif; font-size: 22px; letter-spacing: 1.8px;
   text-transform: uppercase; margin: 0; color: #f0dca0; }
 .pg-ladder .pg-ladder-promise { margin: 0; font-size: 14px; font-weight: 600; color: #e8f0d4; }
 .pg-ladder .pg-ladder-lead { margin: 6px 0 0; font-size: 12.5px; color: #9db2cf; }
@@ -83,7 +86,8 @@ const CSS = `
 .pg-ladder .pg-ladder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .pg-ladder .pg-ladder-name small { font-weight: 400; color: #8ea4c4; margin-left: 6px; font-size: 11.5px; }
 .pg-ladder .pg-ladder-points { font-variant-numeric: tabular-nums; color: #f0deae; font-weight: 700; }
-.pg-ladder .pg-ladder-empty { margin: 12px 0 0; padding: 6px 0; font-size: 12.5px; color: #8ea4c4; }
+.pg-ladder ol.ghost li { color: #6d829f; font-style: italic; }
+.pg-ladder ol.ghost .pg-ladder-rank, .pg-ladder ol.ghost .pg-ladder-points { color: #6b5a2e; }
 .pg-ladder .pg-ladder-join { margin-top: 14px; }
 .pg-ladder .pg-ladder-join .menu-btn { width: auto; padding: 8px 22px; }
 @media (max-width: 720px) {
@@ -115,7 +119,19 @@ export function renderLandingLadder(
   const mine = meLine(ladder.me);
   if (mine) host.appendChild(el('p', 'pg-ladder-me', mine));
   if (ladder.rows.length === 0) {
-    host.appendChild(el('p', 'pg-ladder-empty', 'No name on it yet.'));
+    // An empty ladder still reads as a ladder: its first places stand open,
+    // waiting for names, rather than a second line saying it is empty.
+    const list = el('ol', 'ghost');
+    for (let rank = 1; rank <= GHOST_ROWS; rank++) {
+      const item = el('li', '');
+      item.append(
+        el('span', 'pg-ladder-rank', `#${rank}`),
+        el('span', 'pg-ladder-name', GHOST_NAME),
+        el('span', 'pg-ladder-points', pointsText(0)),
+      );
+      list.appendChild(item);
+    }
+    host.appendChild(list);
   } else {
     const list = el('ol', '');
     for (const row of ladder.rows) {

@@ -49,11 +49,14 @@ const CSS = `
    counted it, and the account read as the price of the ladder rather
    than the way in. One card carries the account and shows what it opens
    inside itself, the other is the match as a Guest, and neither needs a
-   caption over it. The account card is the wider of the two: it is the
-   one with a form to type into. */
+   caption over it. On a wide screen the first row is the match and the
+   ladder it puts you on, side by side (the maintainer: the ladder had to
+   stand out), and the account card takes the whole row under them. */
 .pg.land .pg-cards { display: grid; max-width: 1180px; gap: 18px; align-items: stretch;
   margin-left: auto; margin-right: auto;
-  grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); }
+  grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); }
+.pg.land .pg-cards > .pg-card.plain { order: -2; }
+.pg.land .pg-cards > .pg-card.gold { grid-column: 1 / -1; }
 /* What the account opens, inside the card that opens it: the same three
    paintings the home stands at full height, in the same order, so the
    door and the room behind it look alike. Upright and edge to edge, with
@@ -145,10 +148,10 @@ const CSS = `
 .pg.land .pg-ranked + .pg-hero-cta { margin-top: 10px; }
 .pg.land .pg-hero { gap: clamp(10px, 1.7vh, 18px); }
 /* The ladder of every human (ui/landing_ladder.ts) stands in the grid of
-   the two ways in: across both cards under them on a wide screen, and
-   between the Play now card and the account card once they stack, so a
-   phone reaches it on the second screen rather than after the form. */
-.pg.land .pg-cards > .pg-ladder { grid-column: 1 / -1; margin: 0; width: auto; }
+   the two ways in: beside the Play now card on a wide screen, and between
+   the Play now card and the account card once they stack, so a phone
+   reaches it on the second screen rather than after the form. */
+.pg.land .pg-cards > .pg-ladder { order: -1; margin: 0; width: auto; }
 /* A phone's card is about 300 wide: one line, at a size that fits it. */
 @media (max-width: 560px) {
   .pg.land .menu-btn.pg-play { font-size: 13.5px; letter-spacing: 0.6px;
@@ -648,14 +651,14 @@ export function showLanding(
 
     // The ladder of every human, to a visitor (ui/landing_ladder.ts): the
     // names already standing there and the promise that one match puts
-    // theirs beside them. In the doors' own grid, so a phone reads it right
-    // under the Play now card; its button goes back to that card's gold.
+    // theirs beside them. In the doors' own grid, beside the Play now card
+    // on a wide screen and right under it on a phone. Its button starts the
+    // match the card's gold button starts: it used to scroll back to that
+    // card, which read as the page reloading and nothing happening.
     const ladder = el('section', 'pg-ladder');
     ways.append(online, playCard, ladder);
     inner.appendChild(ways);
-    mountLandingLadder(ladder, () => {
-      playCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    });
+    mountLandingLadder(ladder, () => finish({ kind: PLAY_NOW.kind }));
 
     // --- and the thing the genre does not offer ---
     const give = el('section', 'pg-give');
