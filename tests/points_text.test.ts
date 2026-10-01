@@ -4,7 +4,14 @@
 
 import { describe, expect, it } from 'vitest';
 import { fetchPlace, LADDER_ROUTE, NAME_ROUTE, saveName } from '../src/ui/ladder_box';
-import { firstPointsText, nameHint, placeText, pointsCount, popText } from '../src/ui/points_text';
+import {
+  earnedText,
+  firstPointsText,
+  nameHint,
+  placeText,
+  pointsCount,
+  popText,
+} from '../src/ui/points_text';
 
 describe('the pop', () => {
   it('says the number, and the reason when it is more than a last hit', () => {
@@ -35,6 +42,12 @@ describe('the ladder box', () => {
     );
     expect(placeText({ ...guest, rank: null, points: 0 })).toMatch(/first points/);
     expect(pointsCount(12_500)).toBe('12,500 points');
+  });
+
+  it('says what this match has banked, and nothing before its first points', () => {
+    expect(earnedText(0)).toBe('');
+    expect(earnedText(1)).toBe('+1 this match');
+    expect(earnedText(1_250)).toBe('+1,250 this match');
   });
 
   it('asks a Guest for a name, and tells an account its name is its own', () => {

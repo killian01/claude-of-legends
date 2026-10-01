@@ -8,7 +8,14 @@
 // is the drawing, built with the caller's element maker so the HUD's
 // classes stay in the HUD.
 
-import { type LadderPlace, NAME_SAVE, NAME_SAVED, nameHint, placeText } from './points_text';
+import {
+  earnedText,
+  type LadderPlace,
+  NAME_SAVE,
+  NAME_SAVED,
+  nameHint,
+  placeText,
+} from './points_text';
 
 export const LADDER_ROUTE = '/api/public/ladder';
 export const NAME_ROUTE = '/api/ladder/name';
@@ -71,6 +78,10 @@ export interface LadderBox {
   // Asks for the place again: the end screen and the pause menu call it
   // each time they open, so the numbers are the ones banked by then.
   refresh(): void;
+  // The points this match has banked so far, said after the place. The
+  // HUD calls it as points land, so the victory's, which can arrive with
+  // the end screen already open, join the count there.
+  setEarned(earned: number): void;
 }
 
 export interface LadderBoxOptions {
@@ -89,6 +100,9 @@ export function buildLadderBox(
   const root = el('div', 'hud-ladder');
   root.hidden = true;
   const line = el('b', 'hud-ladder-line');
+  const place = el('span', '');
+  const earned = el('span', 'hud-ladder-earned');
+  line.append(place, earned);
   const hint = el('span', 'hud-ladder-hint');
   const field = el('input', 'hud-ladder-field');
   field.type = 'text';
@@ -102,12 +116,12 @@ export function buildLadderBox(
   const status = el('div', 'hud-ladder-status');
   root.append(line, hint, row, status);
 
-  const show = (place: LadderPlace): void => {
-    line.textContent = placeText(place);
-    hint.textContent = nameHint(place);
-    row.hidden = !place.guest;
+  const show = (at: LadderPlace): void => {
+    place.textContent = placeText(at);
+    hint.textContent = nameHint(at);
+    row.hidden = !at.guest;
     // Never under the fingers of someone typing.
-    if (place.guest && document.activeElement !== field) field.value = place.name;
+    if (at.guest && document.activeElement !== field) field.value = at.name;
     root.hidden = false;
   };
   const refresh = (): void => {
@@ -144,5 +158,8 @@ export function buildLadderBox(
       if (type === 'keydown' && (e as KeyboardEvent).key === 'Enter') submit();
     });
   }
-  return { root, refresh };
+  const setEarned = (points: number): void => {
+    earned.textContent = earnedText(points);
+  };
+  return { root, refresh, setEarned };
 }
