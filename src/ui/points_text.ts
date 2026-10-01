@@ -73,5 +73,19 @@ export function nameHint(place: LadderPlace): string {
     : 'Pick the name you want beside your points.';
 }
 
+// What the name box offers before the player types. A Guest that never
+// chose a name stands on the ladder as its handed-out "Wanderer 4821",
+// whose space no chosen name may hold (server/account_name.ts: letters,
+// digits, _ and - only, 3 to 16), so offering it as it is made Save refuse
+// the very name in the field. The offer is that name without what the rule
+// refuses ("Wanderer4821"): one press keeps it, and the player may edit it.
+// A chosen name, or an account's, is offered as it is.
+// The account name rules' ceiling (server/account_name.ts), the field's too.
+export const NAME_FIELD_MAX = 16;
+export function nameSuggestion(place: LadderPlace): string {
+  if (!place.guest || place.named) return place.name;
+  return place.name.replace(/[^A-Za-z0-9_-]/g, '').slice(0, NAME_FIELD_MAX);
+}
+
 export const NAME_SAVE = 'Save';
 export const NAME_SAVED = 'Saved.';

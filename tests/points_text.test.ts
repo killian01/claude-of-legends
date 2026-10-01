@@ -3,11 +3,13 @@
 // (src/ui/ladder_box.ts).
 
 import { describe, expect, it } from 'vitest';
+import { validateName } from '../server/account_name';
 import { fetchPlace, LADDER_ROUTE, NAME_ROUTE, saveName } from '../src/ui/ladder_box';
 import {
   earnedText,
   firstPointsText,
   nameHint,
+  nameSuggestion,
   placeText,
   pointsCount,
   popText,
@@ -54,6 +56,19 @@ describe('the ladder box', () => {
     expect(nameHint(guest)).toMatch(/pick the name/i);
     expect(nameHint({ ...guest, named: true, name: 'Starling' })).toMatch(/change it/i);
     expect(nameHint({ ...guest, guest: false, named: true, name: 'bob' })).toContain('bob');
+  });
+
+  // The handed-out name has a space no chosen name may hold: the box must
+  // offer one Save accepts (the maintainer met the refusal, 2026-10-01).
+  it('offers a Guest a name the rules accept, and a chosen name as it is', () => {
+    expect(nameSuggestion(guest)).toBe('Wanderer4821');
+    expect(validateName(nameSuggestion(guest))).toBeNull();
+    for (let n = 0; n < 10_000; n += 37) {
+      const handed = `Wanderer ${String(n).padStart(4, '0')}`;
+      expect(validateName(nameSuggestion({ ...guest, name: handed }))).toBeNull();
+    }
+    expect(nameSuggestion({ ...guest, named: true, name: 'Starling' })).toBe('Starling');
+    expect(nameSuggestion({ ...guest, guest: false, named: true, name: 'bob' })).toBe('bob');
   });
 
   it("reads the reader's own place off the public ladder", async () => {

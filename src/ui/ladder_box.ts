@@ -11,16 +11,16 @@
 import {
   earnedText,
   type LadderPlace,
+  NAME_FIELD_MAX,
   NAME_SAVE,
   NAME_SAVED,
   nameHint,
+  nameSuggestion,
   placeText,
 } from './points_text';
 
 export const LADDER_ROUTE = '/api/public/ladder';
 export const NAME_ROUTE = '/api/ladder/name';
-// The account name rules' ceiling (server/account_name.ts).
-export const NAME_FIELD_MAX = 16;
 
 export type SaveOutcome = { ok: true; name: string } | { ok: false; error: string };
 
@@ -121,7 +121,7 @@ export function buildLadderBox(
     hint.textContent = nameHint(at);
     row.hidden = !at.guest;
     // Never under the fingers of someone typing.
-    if (at.guest && document.activeElement !== field) field.value = at.name;
+    if (at.guest && document.activeElement !== field) field.value = nameSuggestion(at);
     root.hidden = false;
   };
   const refresh = (): void => {
