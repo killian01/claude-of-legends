@@ -80,6 +80,12 @@ export type ClientMsg =
   // first served inside the team, answered with a select_update either
   // way, so a refused claim reverts. Meaningless once the match runs.
   | { t: 'lane'; lane: LanePreference }
+  // The match is on screen at last (src/main.ts, once its models are in):
+  // what the seat report's load time reads (server/seat_report.ts). Never
+  // a match command.
+  | { t: 'loaded' }
+  // The echo of the server's round-trip probe, sent back at once.
+  | { t: 'probe'; n: number }
   // A coach order for the account's own bot seat (ADR 0013): one at a
   // time, free releases it. Refused on any other seat.
   | { t: 'order'; kind: CoachOrderKind; x?: number; z?: number; targetId?: number }
@@ -344,6 +350,9 @@ export type ServerMsg =
   | { t: 'player_left'; name: string; team: TeamId }
   // A dropped teammate reconnected and took their champion back.
   | { t: 'player_back'; name: string; team: TeamId }
+  // The round-trip probe (server/seat_report.ts): the client echoes it at
+  // once, and the time to the echo is the round trip the player lives.
+  | { t: 'probe'; n: number }
   // Someone took a bot's seat mid-match (ADR 0025); sent to everyone.
   | { t: 'player_joined'; name: string; team: TeamId }
   // Sent once to each human player when the finished match is recorded:

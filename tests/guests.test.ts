@@ -89,7 +89,17 @@ describe('guests', () => {
   });
 
   it('have the public queue and the match, and no other door', () => {
-    for (const t of ['hello', 'queue', 'start_now', 'pick', 'lane', 'leave', 'chat', 'ping']) {
+    for (const t of [
+      'hello',
+      'queue',
+      'start_now',
+      'pick',
+      'lane',
+      'loaded',
+      'leave',
+      'chat',
+      'ping',
+    ]) {
       expect(guestRefused({ t })).toBe(false);
     }
     expect(guestRefused({ t: 'queue', forge: true })).toBe(true);

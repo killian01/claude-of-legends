@@ -157,6 +157,13 @@ import { checkReference, refusalMessage } from './reference_check';
 import { setForgedAttackRange } from './reforge';
 import { RejoinRegistry } from './rejoin';
 import { sealChampion, unsealChampion } from './seal';
+import {
+  buildSeatReport,
+  countryOf,
+  isMobileAgent,
+  type SeatEnd,
+  type SeatQueue,
+} from './seat_report';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
 import { starOrchard } from './star_orchard';
 import { planStatic, readFileStamps, type StaticRequest, statStaticFile } from './static_files';
@@ -252,6 +259,12 @@ interface Client {
   // A Guest (ADR 0024): the public queue and the match it lands in, and
   // nothing else.
   guest: boolean;
+  // For the seat report (server/seat_report.ts, PRIVACY.md): the country
+  // Cloudflare names for the connection, whether the browser says it is a
+  // phone, and the last round trips measured with WebSocket pings.
+  country: string | null;
+  mobile: boolean;
+  pings: number[];
   // The session this socket came in on, so closing it can be traced back
   // to a logout elsewhere.
   sessionId: string;
@@ -281,6 +294,10 @@ interface MatchEntry {
   // Who took a bot's seat after the start (ADR 0025): never rated for it,
   // never recorded under it, never a leaver.
   dropIns: Set<number>;
+  // Which queue it came from, and the clients whose seat already wrote its
+  // report (server/seat_report.ts): one line per seat, whichever way it ends.
+  queue: SeatQueue;
+  reported: Set<number>;
   // Time and deaths per play for the bot seats' Records (src/sim/playbook/report.ts).
   ledger: PlayLedger;
   // A Forge-queue match: its deltas land on the Forge queue's own rating
@@ -534,6 +551,12 @@ const artDeps = {
 const apiLimiter = new ApiLimiter(envNumber('API_RATE_PER_MIN', API_RATE_PER_MIN));
 
 const MATCHES_FILE = path.join(DATA_DIR, 'matches.jsonl');
+// One line per seat a person held online (server/seat_report.ts): read with
+// scripts/seat_report.mjs and by nothing else.
+const SEATS_FILE = path.join(DATA_DIR, 'seats.jsonl');
+// The round trip's measure: a WebSocket ping this often, the last ones kept.
+const PING_EVERY_MS = 5000;
+const PINGS_KEPT = 24;
 const REPLAYS_DIR = path.join(DATA_DIR, 'replays');
 // How many finished-match replays stay on disk (named by match id).
 const REPLAY_KEEP = 40;
@@ -868,6 +891,8 @@ function onMatchReady(forge: boolean) {
       botSeats,
       publicQueue: source === 'queue' && !forge,
       dropIns: new Set(),
+      queue: forge ? 'forge' : source === 'queue' ? 'public' : 'lobby',
+      reported: new Set(),
       ledger: new PlayLedger(),
       // Only the classic public queue scores (ADR 0027): a private lobby
       // would be a points machine. The Gentle teams decided above stay with
@@ -992,7 +1017,45 @@ const matchmakers = [matchmaker, forgeMatchmaker];
 // rated walk-out penalty and queue lockout when it applies, champion to a
 // bot with NO seat reservation, team notice, abandon check. Reservations
 // are for dropped connections only.
-function walkOutOfMatch(client: Client, entry: MatchEntry, matchId: number): void {
+// One line per seat a person held, when it ends (server/seat_report.ts,
+// PRIVACY.md): what the seat did, how long the match took to load, the
+// measured round trip, and the connection's country. Coach seats and
+// spectators write none. Never stops the game: a disk error is logged.
+function reportSeat(client: Client, entry: MatchEntry, how: SeatEnd): void {
+  if (entry.reported.has(client.id)) return;
+  const p = entry.match.players.get(client.id);
+  if (!p || p.coach) return;
+  entry.reported.add(client.id);
+  const u = entry.match.sim.units.get(p.unitId);
+  const rec = buildSeatReport({
+    at: Date.now(),
+    how,
+    queue: entry.queue,
+    guest: client.guest,
+    dropIn: entry.dropIns.has(client.accountId),
+    mobile: client.mobile,
+    country: client.country,
+    stats: p.stats,
+    tickCount: entry.match.sim.tickCount,
+    unit: u
+      ? { level: u.level, kills: u.kills, deaths: u.deaths, assists: u.assists, cs: u.cs }
+      : null,
+    pings: client.pings,
+  });
+  try {
+    appendJsonl(SEATS_FILE, rec);
+  } catch (err) {
+    console.error('seat report append failed', err);
+  }
+}
+
+function walkOutOfMatch(
+  client: Client,
+  entry: MatchEntry,
+  matchId: number,
+  how: SeatEnd = 'menu',
+): void {
+  reportSeat(client, entry, how);
   client.matchId = null;
   rejoins.drop(client.accountId);
   // A coach walking out leaves nothing behind: the bot keeps playing, so
@@ -2663,11 +2726,34 @@ wss.on('connection', (ws, req) => {
     name: who.name,
     guest: who.guest,
     sessionId: who.sessionId,
+    country: countryOf(req.headers['cf-ipcountry']),
+    mobile: isMobileAgent(req.headers['user-agent']),
+    pings: [],
     matchId: null,
     msgWindowStart: now,
     msgCount: 0,
   };
   clients.set(id, client);
+  // The round trip as the player lives it: a probe every few seconds that
+  // the game in the browser echoes at once, timed from its sending to its
+  // echo. A message of the game's own rather than a WebSocket ping, which
+  // a proxy on the way (Cloudflare, Caddy) may answer itself: this one has
+  // to reach the page and come back, the page's own delay included. The
+  // last ones are kept for the seat report (median and worst).
+  let probeN = 0;
+  let probeSentAt = 0;
+  const pinger = setInterval(() => {
+    if (ws.readyState !== ws.OPEN) return;
+    probeN += 1;
+    probeSentAt = performance.now();
+    send(id, { t: 'probe', n: probeN });
+  }, PING_EVERY_MS);
+  const probeAnswered = (n: unknown): void => {
+    if (n !== probeN || probeSentAt === 0) return;
+    client.pings.push(performance.now() - probeSentAt);
+    if (client.pings.length > PINGS_KEPT) client.pings.shift();
+    probeSentAt = 0;
+  };
   send(id, { t: 'welcome', clientId: id, name: who.name });
 
   ws.on('message', (data) => {
@@ -2872,6 +2958,17 @@ wss.on('connection', (ws, req) => {
         }
         break;
       }
+      // The echo of the round-trip probe (above). Never a match command.
+      case 'probe':
+        probeAnswered(msg.n);
+        break;
+      // The client's match is on screen (src/main.ts): for the seat
+      // report's load time. Never a match command.
+      case 'loaded': {
+        if (client.matchId === null) break;
+        matches.get(client.matchId)?.match.markLoaded(id);
+        break;
+      }
       default: {
         if (client.matchId === null) return;
         const entry = matches.get(client.matchId);
@@ -2881,6 +2978,7 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('close', () => {
+    clearInterval(pinger);
     connections.release(ip);
     for (const mm of matchmakers) mm.removeEverywhere(id);
     const matchId = client.matchId;
@@ -2892,6 +2990,7 @@ wss.on('connection', (ws, req) => {
       if (entry) {
         // A dropped spectator just stops watching.
         entry.match.removeSpectator(id);
+        reportSeat(client, entry, 'closed');
         // Hand the abandoned champion to a bot, tell the team, and reserve
         // the seat against the account so the player can come back, from
         // this browser or any other they log in on.
@@ -2955,7 +3054,10 @@ setInterval(() => {
           bankAwards(
             entry.points.observe(entry.match.sim, entry.match.lastEvents, seats),
             bankPoints,
-            send,
+            (cid, msg) => {
+              entry.match.notePoints(cid, msg.delta);
+              send(cid, msg);
+            },
           );
         }
         if (entry.botSeats.size > 0) {
@@ -2987,12 +3089,16 @@ setInterval(() => {
               t: 'error',
               message: 'Removed for inactivity: a bot takes your champion over.',
             });
-            walkOutOfMatch(c, entry, matchId);
+            walkOutOfMatch(c, entry, matchId, 'idle');
             console.log(`match ${matchId}: ${c.name} removed for inactivity`);
           }
         }
         if (entry.match.sim.winner !== null && entry.endedAt === null) {
           entry.endedAt = now;
+          for (const p of entry.match.players.values()) {
+            const c = clients.get(p.clientId);
+            if (c) reportSeat(c, entry, 'ended');
+          }
           // Record the finished match once, the moment the winner lands:
           // seats still held by a connected human carry their player id.
           const accountIdByUnit = new Map<number, number>();

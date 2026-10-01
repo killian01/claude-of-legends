@@ -136,6 +136,25 @@ and nothing else, read by the maintainer with `scripts/practice.mjs`, and it
 exists so the bots can be tuned to the strength of the people who meet them
 first.
 
+## What an online match notes about your seat
+
+When you leave a match played on the server, or it ends, the server writes
+one line about the seat you held (`src/net/protocol.ts`, `server/seat_report.ts`):
+how long you held it, how long the match took to load in your browser, how
+many orders you gave and when the first one came, how far your champion
+walked, the points it banked, its level, kills, deaths, assists and
+minions, how the seat ended (the menu, a closed tab, the inactivity rule, or
+the match's end), whether it was a Guest's, the round trip between your
+browser and the server as the game measured it (a small message the server
+sends every five seconds and the page answers), the country Cloudflare
+names for the connection, and
+whether your browser says it is a phone. No name, no account id, no
+address. The line lands in a file on this machine (`seats.jsonl`) with the
+time it was written, read by the maintainer with `scripts/seat_report.mjs`,
+and it exists to tell a slow connection or a slow load from a match that
+gave a newcomer nothing to do. The country is the coarsest place there is,
+and it is only ever read beside the round trip it explains.
+
 ## What you write in the feedback box
 
 At the end of a match, and in the pause menu, there is a box that asks what

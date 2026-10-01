@@ -63,6 +63,39 @@ interface MatchPlayer {
   // A coach seat (ADR 0013): the account's own bot plays; the person only
   // orders. Never idle-swept, never handed to a stand-in, never a leaver.
   coach: boolean;
+  // What the seat report says of this seat when it ends (server/
+  // seat_report.ts, PRIVACY.md): when it was taken, when the client said
+  // its match had loaded, its commands (how many, and the first), how far
+  // its champion walked, and the points it banked. Ticks of sim.tickCount.
+  stats: SeatStats;
+}
+
+export interface SeatStats {
+  startTick: number;
+  loadedTick: number | null;
+  orders: number;
+  firstOrderTick: number | null;
+  // Meters walked, from tick to tick; a step longer than WALK_STEP_MAX (a
+  // respawn, a recall, a blink) is not walking and is left out.
+  walked: number;
+  lastX: number;
+  lastZ: number;
+  points: number;
+}
+
+export const WALK_STEP_MAX = 3;
+
+function freshStats(tick: number, x: number, z: number): SeatStats {
+  return {
+    startTick: tick,
+    loadedTick: null,
+    orders: 0,
+    firstOrderTick: null,
+    walked: 0,
+    lastX: x,
+    lastZ: z,
+    points: 0,
+  };
 }
 
 // A connected player silent for this long in a multi-human match is
@@ -130,8 +163,28 @@ export class Match {
         known: new Set(),
         lastCommandAt: 0,
         coach: p.playbook !== undefined,
+        stats: this.statsAt(unitId),
       });
     });
+  }
+
+  private statsAt(unitId: number): SeatStats {
+    const u = this.sim.units.get(unitId);
+    return freshStats(this.sim.tickCount, u?.pos.x ?? 0, u?.pos.z ?? 0);
+  }
+
+  // The client says its match is on screen (the 'loaded' message): the
+  // first time only, so the seat report can tell a slow load from a
+  // player who saw the match and did nothing.
+  markLoaded(clientId: number): void {
+    const p = this.players.get(clientId);
+    if (p && p.stats.loadedTick === null) p.stats.loadedTick = this.sim.tickCount;
+  }
+
+  // Points banked for the seat (server/points.ts), for its report.
+  notePoints(clientId: number, delta: number): void {
+    const p = this.players.get(clientId);
+    if (p) p.stats.points += delta;
   }
 
   // The unit a pick became, by its index in pick order (the ids are
@@ -210,6 +263,8 @@ export class Match {
       // A fresh idle clock: a rejoin must not be flagged AFK on arrival.
       lastCommandAt: this.sim.tickCount,
       coach: seat.coach === true,
+      // A seat taken back or taken over starts a report of its own.
+      stats: this.statsAt(seat.unitId),
     });
   }
 
@@ -255,6 +310,16 @@ export class Match {
 
   tick(): void {
     this.eventsThisTick = this.sim.tick();
+    // How far each seat's champion walked, for its report. Bookkeeping
+    // beside the sim, never read by it.
+    for (const p of this.players.values()) {
+      const u = this.sim.units.get(p.unitId);
+      if (!u) continue;
+      const step = Math.hypot(u.pos.x - p.stats.lastX, u.pos.z - p.stats.lastZ);
+      if (!u.dead && step <= WALK_STEP_MAX) p.stats.walked += step;
+      p.stats.lastX = u.pos.x;
+      p.stats.lastZ = u.pos.z;
+    }
   }
 
   // The last tick's events, for the play ledger a bot seat's Record wants.
@@ -272,6 +337,8 @@ export class Match {
     // order from a hand seat is nobody's to obey.
     if (p.coach !== (msg.t === 'order')) return;
     p.lastCommandAt = this.sim.tickCount;
+    p.stats.orders += 1;
+    if (p.stats.firstOrderTick === null) p.stats.firstOrderTick = this.sim.tickCount;
     // Recorded raw, then applied through the SAME validated path a replay
     // uses: an invalid command no-ops identically live and replayed.
     this.recordReplay({ k: this.sim.tickCount, u: p.unitId, e: 'cmd', c: msg });

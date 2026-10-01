@@ -874,6 +874,9 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
       // The live match, the other half of the pace the practice match
       // reports above.
       trackStep('played');
+      // The match is on screen: the server's seat report reads its load
+      // time off this (server/seat_report.ts, PRIVACY.md).
+      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ t: 'loaded' }));
       const opened = startPresentation(container, world, world.selfUnitId, world.selfTeam, finish, {
         terrain: loaded.terrain,
         mode: 'online',
@@ -1092,6 +1095,11 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
           break;
         case 'player_left':
           pres?.pushChat('System', msg.team, `${msg.name} disconnected; a bot takes over.`);
+          break;
+        // The server's round-trip probe (server/seat_report.ts): answered at
+        // once, so the time to the echo is the round trip this page lives.
+        case 'probe':
+          if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ t: 'probe', n: msg.n }));
           break;
         case 'player_back':
           pres?.pushChat('System', msg.team, `${msg.name} reconnected.`);
