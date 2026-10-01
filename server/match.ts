@@ -74,6 +74,9 @@ export interface SeatStats {
   startTick: number;
   loadedTick: number | null;
   orders: number;
+  // The orders by kind (SEAT_ORDER_KINDS), the rest as 'other': a seat that
+  // gave orders and never walked says which ones it gave.
+  kinds: Record<string, number>;
   firstOrderTick: number | null;
   // Meters walked, from tick to tick; a step longer than WALK_STEP_MAX (a
   // respawn, a recall, a blink) is not walking and is left out.
@@ -85,11 +88,28 @@ export interface SeatStats {
 
 export const WALK_STEP_MAX = 3;
 
+// The kinds of order a seat's report counts by name; anything else a client
+// sends counts as 'other', so a client cannot grow the record.
+export const SEAT_ORDER_KINDS: ReadonlySet<string> = new Set([
+  'move',
+  'attack',
+  'attack_move',
+  'stop',
+  'recall',
+  'cast',
+  'sigil',
+  'buy',
+  'sell',
+  'skill',
+  'order',
+]);
+
 function freshStats(tick: number, x: number, z: number): SeatStats {
   return {
     startTick: tick,
     loadedTick: null,
     orders: 0,
+    kinds: {},
     firstOrderTick: null,
     walked: 0,
     lastX: x,
@@ -338,6 +358,8 @@ export class Match {
     if (p.coach !== (msg.t === 'order')) return;
     p.lastCommandAt = this.sim.tickCount;
     p.stats.orders += 1;
+    const kind = SEAT_ORDER_KINDS.has(msg.t) ? msg.t : 'other';
+    p.stats.kinds[kind] = (p.stats.kinds[kind] ?? 0) + 1;
     if (p.stats.firstOrderTick === null) p.stats.firstOrderTick = this.sim.tickCount;
     // Recorded raw, then applied through the SAME validated path a replay
     // uses: an invalid command no-ops identically live and replayed.

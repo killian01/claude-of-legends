@@ -1494,7 +1494,8 @@ export class Hud {
         : 'Tap: move / attack. Tap a spell, then tap the ground to cast it (tap the spell ' +
           'again to cancel). Drag pans the camera, pinch zooms, Center snaps back to your ' +
           'champion. Level up: tap the +.'
-      : 'Right-click: move / attack. A: attack-move. S: stop and hold. B: recall. ' +
+      : `${getSettings().leftClickMoves ? 'Click' : 'Right-click'}: move / attack. ` +
+        'A: attack-move. S: stop and hold. B: recall. ' +
         'Q W E R: hold to aim, release to cast (right-click cancels). D F: sigils. P: shop. ' +
         'Tab: scoreboard. Enter: chat. G: ping. Esc: menu. Screen edges pan the camera; ' +
         'Space recenters; left-click the minimap to look. Level up: Alt+key or click +.';

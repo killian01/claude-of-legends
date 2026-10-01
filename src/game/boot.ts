@@ -353,32 +353,36 @@ export function startPresentation(
   // button looks for somebody to hit.
   const SIGIL_REACH = 5.5;
   const ATTACK_REACH = 14;
+  // The click that orders: an attack on the enemy under the cursor, else a
+  // walk to the ground point. The right click's, and the left click's too
+  // unless the player turned that off (onLeftClick below).
+  const clickOrder = (p: Vec2, sx: number, sy: number): void => {
+    pendingCast = null;
+    // The genre's cancel: a right-click while aiming drops the cast and
+    // the release becomes a no-op; the move or attack order still goes.
+    if (aimingKey !== null) {
+      aimingKey = null;
+      renderer.hideAimPreview();
+    }
+    const enemy =
+      pickEnemyOnScreen(world, selfTeam, sx, sy, project) ?? pickEnemyAt(world, p, selfTeam);
+    if (enemy) {
+      world.orderAttack(selfId, enemy.id);
+      renderer.setAttackTarget(enemy.id);
+      hud.setTarget(enemy.id);
+    } else {
+      // A move order drops the attack reticle but keeps the SELECTION
+      // frame, like the genre; left-click on ground clears that. Touch
+      // has no left-click, so there a ground tap clears the frame too,
+      // or a tapped target would cover the top of the screen forever.
+      world.orderMove(selfId, p.x, p.z);
+      renderer.setAttackTarget(null);
+      renderer.flashMarker(p.x, p.z);
+      if (coarsePointer) hud.setTarget(null);
+    }
+  };
   const inputHandlers: InputHandlers = {
-    onRightClick: (p: Vec2, sx, sy) => {
-      pendingCast = null;
-      // The genre's cancel: a right-click while aiming drops the cast and
-      // the release becomes a no-op; the move or attack order still goes.
-      if (aimingKey !== null) {
-        aimingKey = null;
-        renderer.hideAimPreview();
-      }
-      const enemy =
-        pickEnemyOnScreen(world, selfTeam, sx, sy, project) ?? pickEnemyAt(world, p, selfTeam);
-      if (enemy) {
-        world.orderAttack(selfId, enemy.id);
-        renderer.setAttackTarget(enemy.id);
-        hud.setTarget(enemy.id);
-      } else {
-        // A move order drops the attack reticle but keeps the SELECTION
-        // frame, like the genre; left-click on ground clears that. Touch
-        // has no left-click, so there a ground tap clears the frame too,
-        // or a tapped target would cover the top of the screen forever.
-        world.orderMove(selfId, p.x, p.z);
-        renderer.setAttackTarget(null);
-        renderer.flashMarker(p.x, p.z);
-        if (coarsePointer) hud.setTarget(null);
-      }
-    },
+    onRightClick: (p: Vec2, sx, sy) => clickOrder(p, sx, sy),
     // The left thumb's stick (thumb_stick.ts): a direction while it
     // steers, null when it rests or lifts. A direction becomes a move
     // order a few meters ahead, resent as the thumb turns and on a
@@ -472,6 +476,12 @@ export function startPresentation(
       // repopulates it).
       const unit = pickUnitOnScreen(world, selfTeam, sx, sy, project);
       hud.setTarget(unit?.id ?? null);
+      // And, unless the player turned it off, the right click's order too
+      // (settings.ts leftClickMoves): a trackpad clicks left. Never while a
+      // cast is being aimed, whose release is what casts it.
+      if (aimingKey !== null || !getSettings().leftClickMoves) return;
+      const p = renderer.groundPointAt(sx, sy);
+      if (p) clickOrder(p, sx, sy);
     },
     onHover: (sx, sy) => {
       const now = performance.now();

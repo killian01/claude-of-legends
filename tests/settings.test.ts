@@ -23,6 +23,7 @@ describe('player settings', () => {
       moveRingMatches: 0,
       rotatedView: true,
       ladderTold: false,
+      leftClickMoves: true,
     });
     expect(clampSettings({ sfx: 0.35, music: 0.8, announcer: true })).toEqual({
       sfx: 0.35,
@@ -34,6 +35,7 @@ describe('player settings', () => {
       moveRingMatches: 0,
       rotatedView: true,
       ladderTold: false,
+      leftClickMoves: true,
     });
   });
 
@@ -84,6 +86,14 @@ describe('player settings', () => {
     expect(clampSettings({ ladderTold: true }).ladderTold).toBe(true);
     expect(clampSettings({ ladderTold: 'yes' }).ladderTold).toBe(false);
     expect(DEFAULT_SETTINGS.ladderTold).toBe(false);
+  });
+
+  // A trackpad clicks left: a left click walks and attacks unless the
+  // player turned it off (game/boot.ts, the seat report of 2026-10-01).
+  it('lets a left click walk by default, and keeps it off once turned off', () => {
+    expect(DEFAULT_SETTINGS.leftClickMoves).toBe(true);
+    expect(clampSettings({ leftClickMoves: false }).leftClickMoves).toBe(false);
+    expect(clampSettings({ leftClickMoves: 'no' }).leftClickMoves).toBe(true);
   });
 
   it('keeps an interface size in range and falls back to auto', () => {

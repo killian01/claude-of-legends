@@ -32,6 +32,11 @@ export interface GameSettings {
   // Guest's first points say so plainly (ui/hud.ts, ADR 0027). Not a
   // choice, so the settings panel never shows it.
   ladderTold: boolean;
+  // A left click on the ground walks and on an enemy attacks, like the
+  // right click (game/boot.ts): a laptop's trackpad clicks left, and a
+  // visitor whose clicks did nothing left within half a minute (the seat
+  // report, 2026-10-01). Off, a left click only selects, the genre's way.
+  leftClickMoves: boolean;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -44,6 +49,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   moveRingMatches: 0,
   rotatedView: true,
   ladderTold: false,
+  leftClickMoves: true,
 };
 
 const STORAGE_KEY = 'loc-settings';
@@ -69,6 +75,8 @@ export function clampSettings(raw: unknown): GameSettings {
     moveRingMatches: count(r.moveRingMatches),
     rotatedView: typeof r.rotatedView === 'boolean' ? r.rotatedView : DEFAULT_SETTINGS.rotatedView,
     ladderTold: r.ladderTold === true,
+    leftClickMoves:
+      typeof r.leftClickMoves === 'boolean' ? r.leftClickMoves : DEFAULT_SETTINGS.leftClickMoves,
   };
 }
 

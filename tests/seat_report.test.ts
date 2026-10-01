@@ -67,7 +67,12 @@ describe('the seat report', () => {
     match.handleCommand(1, { t: 'move', x: self.pos.x + 30, z: self.pos.z });
     for (let i = 0; i < 60; i++) match.tick();
     match.handleCommand(1, { t: 'move', x: self.pos.x - 5, z: self.pos.z });
-    expect(p.stats.orders).toBe(2);
+    match.handleCommand(1, { t: 'skill', key: 'Q' });
+    // A kind the report does not name counts as other, so a client cannot
+    // grow the record with names of its own.
+    match.handleCommand(1, { t: 'made_up' } as never);
+    expect(p.stats.orders).toBe(4);
+    expect(p.stats.kinds).toEqual({ move: 2, skill: 1, other: 1 });
     expect(p.stats.firstOrderTick).toBe(20);
     expect(p.stats.walked).toBeGreaterThan(10);
     match.notePoints(1, 3);
@@ -103,6 +108,7 @@ describe('the seat report', () => {
         startTick: 100,
         loadedTick: 160,
         orders: 4,
+        kinds: { buy: 1, skill: 2, move: 1 },
         firstOrderTick: 200,
         walked: 41.6,
         lastX: 0,
@@ -127,6 +133,7 @@ describe('the seat report', () => {
       loadS: 3,
       firstOrderS: 5,
       orders: 4,
+      kinds: { buy: 1, skill: 2, move: 1 },
       walkedM: 42,
       points: 2,
       level: 2,
@@ -149,6 +156,7 @@ describe('the seat report', () => {
         startTick: 0,
         loadedTick: null,
         orders: 0,
+        kinds: {},
         firstOrderTick: null,
         walked: 0,
         lastX: 0,

@@ -42,12 +42,16 @@ if (rows.length === 0) {
 }
 const pad = (v, n) => String(v ?? '-').padEnd(n);
 console.log(
-  `${pad('when (UTC)', 12)}${pad('cc', 4)}${pad('dev', 7)}${pad('who', 6)}${pad('how', 7)}${pad('held', 7)}${pad('load', 6)}${pad('1st', 6)}${pad('orders', 7)}${pad('walked', 7)}${pad('pts', 5)}${pad('cs', 4)}${pad('k/d/a', 7)}ping (max)`,
+  `${pad('when (UTC)', 12)}${pad('cc', 4)}${pad('dev', 7)}${pad('who', 6)}${pad('how', 7)}${pad('held', 7)}${pad('load', 6)}${pad('1st', 6)}${pad('orders', 7)}${pad('walked', 7)}${pad('pts', 5)}${pad('cs', 4)}${pad('k/d/a', 7)}ping (max)  orders by kind`,
 );
 for (const r of rows) {
   const when = new Date(r.at).toISOString().slice(5, 16).replace('T', ' ');
   console.log(
-    `${pad(when, 12)}${pad(r.country, 4)}${pad(r.mobile ? 'phone' : 'pc', 7)}${pad(r.guest ? 'guest' : 'acct', 6)}${pad(r.how, 7)}${pad(`${r.heldS}s`, 7)}${pad(r.loadS === null ? '-' : `${r.loadS}s`, 6)}${pad(r.firstOrderS === null ? '-' : `${r.firstOrderS}s`, 6)}${pad(r.orders, 7)}${pad(`${r.walkedM}m`, 7)}${pad(r.points, 5)}${pad(r.cs, 4)}${pad(`${r.kills}/${r.deaths}/${r.assists}`, 7)}${r.pingMs === null ? '-' : `${r.pingMs} ms (${r.pingMaxMs})`}`,
+    `${pad(when, 12)}${pad(r.country, 4)}${pad(r.mobile ? 'phone' : 'pc', 7)}${pad(r.guest ? 'guest' : 'acct', 6)}${pad(r.how, 7)}${pad(`${r.heldS}s`, 7)}${pad(r.loadS === null ? '-' : `${r.loadS}s`, 6)}${pad(r.firstOrderS === null ? '-' : `${r.firstOrderS}s`, 6)}${pad(r.orders, 7)}${pad(`${r.walkedM}m`, 7)}${pad(r.points, 5)}${pad(r.cs, 4)}${pad(`${r.kills}/${r.deaths}/${r.assists}`, 7)}${pad(r.pingMs === null ? '-' : `${r.pingMs} ms (${r.pingMaxMs})`, 12)}${Object.entries(
+      r.kinds ?? {},
+    )
+      .map(([k, n]) => `${k}:${n}`)
+      .join(' ')}`,
   );
 }
 const med = (xs) => {

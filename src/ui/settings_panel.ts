@@ -73,8 +73,24 @@ export function buildSettingsPanel(): HTMLElement {
   if (typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches) {
     panel.appendChild(touchRow(s.touchScheme));
     panel.appendChild(uprightRow(s.rotatedView));
+  } else {
+    // A mouse or a trackpad: whether a left click walks and attacks too.
+    panel.appendChild(leftClickRow(s.leftClickMoves));
   }
   return panel;
+}
+
+function leftClickRow(on: boolean): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'set-row';
+  const lab = document.createElement('label');
+  lab.textContent = 'Left click moves';
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.checked = on;
+  box.addEventListener('change', () => updateSettings({ leftClickMoves: box.checked }));
+  row.append(lab, box);
+  return row;
 }
 
 // A phone held upright that the browser will not turn (game/rotated_view.ts):

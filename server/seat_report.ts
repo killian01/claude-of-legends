@@ -38,6 +38,8 @@ export interface SeatReport {
   // Seconds from the seat's start to its first command; null for none.
   firstOrderS: number | null;
   orders: number;
+  // The orders by kind (server/match.ts SEAT_ORDER_KINDS).
+  kinds: Record<string, number>;
   walkedM: number;
   points: number;
   level: number;
@@ -104,6 +106,7 @@ export function buildSeatReport(i: SeatReportInput): SeatReport {
     loadS: s.loadedTick === null ? null : seconds(s.loadedTick - s.startTick),
     firstOrderS: s.firstOrderTick === null ? null : seconds(s.firstOrderTick - s.startTick),
     orders: s.orders,
+    kinds: { ...s.kinds },
     walkedM: Math.round(s.walked),
     points: s.points,
     level: i.unit?.level ?? 0,
