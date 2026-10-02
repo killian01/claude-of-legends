@@ -6,7 +6,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { CHAMPIONS } from '../src/sim/content/champions';
-import { nextKitStep, roleBuild } from '../src/sim/playbook/kit';
+import { ITEMS } from '../src/sim/content/items';
+import { roleBuild, stepToward, unsatisfied } from '../src/sim/playbook/kit';
 import { championXp } from '../src/sim/rewards';
 import {
   CAMP_XP_SCALE,
@@ -22,7 +23,8 @@ import {
   grantPiece,
   grantPieces,
   healShare,
-  nextPiece,
+  nextLootPiece,
+  seatBuild,
 } from '../src/sim/royale/loot';
 import { START_LEVEL } from '../src/sim/royale/types';
 import { Sim } from '../src/sim/sim';
@@ -37,12 +39,24 @@ function champ(id: string): Unit {
 }
 
 describe('the next piece', () => {
-  it('is what the house kit walker buys next with a bottomless purse', () => {
-    for (const id of Object.keys(CHAMPIONS)) {
-      const step = nextKitStep(roleBuild(id), [], Number.POSITIVE_INFINITY);
-      expect(step?.kind).toBe('buy');
-      expect(nextPiece(id, [])?.itemId).toBe(step?.kind === 'buy' ? step.itemId : null);
+  it('walks the build in order, component by component, without gold', () => {
+    const build = roleBuild('vesk');
+    const first = build[0]!;
+    const piece = nextLootPiece(build, []);
+    const comps = ITEMS[first]?.buildsFrom ?? [];
+    expect(piece?.itemId).toBe(comps.length > 0 ? stepToward(first, [], false).id : first);
+    expect(piece?.sell).toBeNull();
+    // Targets finish in the build's order while the bag has room.
+    const u = champ('vesk');
+    let done = 0;
+    for (let n = 0; n < 40 && u.items.length < 6; n++) {
+      grantPiece(u, build);
+      const left = unsatisfied(build, u.items);
+      expect(build.length - left.length).toBeGreaterThanOrEqual(done);
+      done = build.length - left.length;
+      expect(left).toEqual(build.slice(build.length - left.length));
     }
+    expect(done).toBeGreaterThan(0);
   });
 
   it('lands in the bag exactly as the shop lands the same purchase', () => {
@@ -50,16 +64,14 @@ describe('the next piece', () => {
       const sim = new Sim(1);
       const shopper = sim.addChampion(0, undefined, id);
       const looter = champ(id);
-      for (let n = 0; n < 30; n++) {
-        const step = nextKitStep(roleBuild(id), shopper.items, Number.POSITIVE_INFINITY);
-        if (step === null) break;
+      const build = seatBuild(id);
+      for (let n = 0; n < 60; n++) {
+        const piece = nextLootPiece(build, shopper.items);
+        if (piece === null) break;
         shopper.gold = 1e9;
-        if (step.kind === 'sell') {
-          expect(sim.sellItem(shopper.id, step.slot)).toBe(true);
-          continue;
-        }
-        expect(sim.buyItem(shopper.id, step.itemId)).toBe(true);
-        expect(grantPiece(looter)).toBe(step.itemId);
+        if (piece.sell !== null) expect(sim.sellItem(shopper.id, piece.sell)).toBe(true);
+        expect(sim.buyItem(shopper.id, piece.itemId)).toBe(true);
+        expect(grantPiece(looter, build)).toBe(piece.itemId);
         expect(looter.items).toEqual(shopper.items);
         expect(looter.maxHp).toBe(shopper.maxHp);
         expect(looter.stats).toEqual(shopper.stats);
@@ -67,17 +79,23 @@ describe('the next piece', () => {
     }
   });
 
-  it('gives two for a golden cache and nothing once the build is done', () => {
+  it('takes the seat build, gives two for a golden cache and nothing once done', () => {
+    expect(seatBuild('sylra')).toEqual([...roleBuild('sylra')]);
+    expect(seatBuild('sylra', ['heart_gem'])).toEqual(['heart_gem']);
     const u = champ('sylra');
+    const build = seatBuild('sylra');
     expect(GOLDEN_PIECES).toBe(2);
-    expect(grantPieces(u, GOLDEN_PIECES)).toHaveLength(2);
+    expect(grantPieces(u, build, GOLDEN_PIECES)).toHaveLength(2);
     let given = 2;
-    while (grantPiece(u) !== null) given++;
+    while (grantPiece(u, build) !== null) {
+      given++;
+      expect(given).toBeLessThan(80);
+    }
     expect(given).toBeGreaterThan(8);
-    expect(nextPiece('sylra', u.items)).toBeNull();
-    expect(grantPiece(u)).toBeNull();
-    expect(grantPieces(u, 2)).toEqual([]);
+    expect(nextLootPiece(build, u.items)).toBeNull();
+    expect(grantPieces(u, build, 2)).toEqual([]);
     expect(u.gold).toBe(0);
+    expect(u.items.length).toBeLessThanOrEqual(6);
   });
 
   it('heals a share of the maximum health, never past it', () => {

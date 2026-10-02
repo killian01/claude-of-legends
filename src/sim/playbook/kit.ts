@@ -145,7 +145,9 @@ export function unsatisfied(build: readonly string[], bag: readonly string[]): s
 // missing component, recursively; `direct` buys the target outright,
 // consuming whatever components are there (the sim allows it at the
 // combined price). `consumes` counts the bag items the purchase uses up.
-function stepToward(
+// Exported for the battle royale's loot, which walks the same recipes
+// without gold (royale/loot.ts).
+export function stepToward(
   target: string,
   bag: readonly string[],
   direct: boolean,
@@ -229,7 +231,7 @@ export function unwantedSlots(build: readonly string[], bag: readonly string[]):
 
 export type KitStep = { kind: 'buy'; itemId: string } | { kind: 'sell'; slot: number };
 
-function cheapestSlot(bag: readonly string[], among: readonly number[]): number {
+export function cheapestSlot(bag: readonly string[], among: readonly number[]): number {
   let best = among[0]!;
   for (const i of among) {
     if ((ITEMS[bag[i]!]?.cost ?? 0) < (ITEMS[bag[best]!]?.cost ?? 0)) best = i;

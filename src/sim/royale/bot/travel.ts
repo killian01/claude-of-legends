@@ -1,0 +1,174 @@
+// Where the battle royale bot walks when it is not fighting: out of the
+// dark first, ahead of the Dusk's next cap early (a launch pad when one is
+// on the way and its throw shortens the trip), to the nearest standing
+// cache inside the light, to a camp when nothing better is near, and
+// otherwise toward the light's heart. Pure over the slot's sense; every
+// distance a chord.
+
+import { dirTo, dist, type Vec3 } from '../../geo';
+import type { Action, ObsCache } from '../../policy';
+import { depthInside, insideCap } from '../dusk';
+import { along } from '../layout';
+import { padSaving } from '../pads';
+import { CACHE_REACH_M, type DuskCap } from '../types';
+import { p3, type Sense } from './sense';
+
+// A walk re-issued only when the goal moved this much from where the
+// current walk ends: an unchanged order would cost a path for nothing.
+export const REORDER_M = 1.2;
+// A pad is worth taking when it saves this many seconds.
+export const PAD_WORTH_S = 4;
+// How deep inside a cap the bot aims to stand when it heads for one.
+export const SAFE_DEPTH_M = 5;
+// How far the bot looks for a cache before it settles for a camp.
+export const CACHE_NEAR_M = 30;
+// How far it walks to a camp it believes up.
+export const CAMP_NEAR_M = 32;
+
+export function moveTo(sense: Sense, p: Vec3): Action {
+  const dest = sense.s.dest;
+  if (dest && dist(p3(dest), p) <= REORDER_M) return { kind: 'noop' };
+  return { kind: 'move', x: p.x, y: p.y, z: p.z };
+}
+
+// The point `depth` meters inside a cap along the way from the bot to its
+// center (the center itself for a small cap).
+export function intoCap(sense: Sense, cap: DuskCap, depth = SAFE_DEPTH_M): Vec3 {
+  const d = dist(sense.me, cap.center);
+  const want = cap.radius - depth;
+  if (want <= 0 || d <= want) return cap.center;
+  const dir = dirTo(sense.me, cap.center);
+  if (!dir) return cap.center;
+  return along(sense.me, dir as Vec3, d - want, sense.layout.radius);
+}
+
+// The pad that shortens the walk to `goal` the most, landing in the light,
+// or null.
+export function padOnTheWay(sense: Sense, goal: Vec3): Vec3 | null {
+  let best: Vec3 | null = null;
+  let bestSave = PAD_WORTH_S;
+  for (const pad of sense.r.pads) {
+    if (!insideCap(sense.now, pad.at) || !insideCap(sense.now, pad.to)) continue;
+    if (sense.next && !insideCap(sense.next, pad.to) && insideCap(sense.next, goal)) continue;
+    const save = padSaving({ id: pad.id, at: pad.at, to: pad.to }, sense.me, goal, sense.speed);
+    if (save > bestSave) {
+      best = pad.at;
+      bestSave = save;
+    }
+  }
+  return best;
+}
+
+function walkVia(sense: Sense, goal: Vec3): Action {
+  const pad = padOnTheWay(sense, goal);
+  return moveTo(sense, pad ?? goal);
+}
+
+// Out of the dark: the shortest way back into the light, now.
+export function leaveDark(sense: Sense): Action | null {
+  const cap = sense.now;
+  if (cap.radius <= 0) return moveTo(sense, cap.center);
+  if (depthInside(cap, sense.me) >= 1) return null;
+  return walkVia(sense, intoCap(sense, cap));
+}
+
+// Seconds until the light's edge reaches where the bot stands, as far as
+// the schedule says: never while the light holds and the bot is inside the
+// next cap.
+export function secondsToDark(sense: Sense): number {
+  const { r, obs } = sense;
+  const next = sense.next;
+  if (!next) return Number.POSITIVE_INFINITY;
+  if (insideCap(next, sense.me) && depthInside(next, sense.me) > 2) {
+    return Number.POSITIVE_INFINITY;
+  }
+  const untilChange = r.dusk.phaseEndsAt - obs.time;
+  if (r.dusk.shrinking) {
+    // The edge closes from where it is toward the next cap at about the
+    // Dusk's pace: the bot's depth now over the closing's remaining time.
+    const depth = depthInside(sense.now, sense.me);
+    const shrinkLeft = sense.now.radius - next.radius;
+    const pace = shrinkLeft > 0 ? shrinkLeft / Math.max(1, untilChange) : 0.74;
+    return depth / Math.max(0.2, pace);
+  }
+  return untilChange;
+}
+
+// Ahead of the Dusk: toward the next cap once the walk there, with the
+// skill's margin, takes about as long as the light will last here.
+export function beatDusk(sense: Sense): Action | null {
+  const next = sense.next;
+  if (!next) return null;
+  if (depthInside(next, sense.me) >= SAFE_DEPTH_M * 0.6) return null;
+  const goal = intoCap(sense, next);
+  const walk = dist(sense.me, goal) / Math.max(1, sense.speed);
+  if (secondsToDark(sense) > walk + sense.skill.duskMargin) return null;
+  return walkVia(sense, goal);
+}
+
+// Whether a point is a safe place to stand for a while: in the light now,
+// and inside the next cap too once the Dusk is about to close on it.
+function safeGround(sense: Sense, p: Vec3): boolean {
+  if (!insideCap(sense.now, p) || depthInside(sense.now, p) < 2) return false;
+  const next = sense.next;
+  if (!next) return true;
+  const soon = sense.r.dusk.shrinking || sense.r.dusk.phaseEndsAt - sense.obs.time < 25;
+  return !soon || insideCap(next, p);
+}
+
+// The cache worth walking to: the nearest standing one on safe ground,
+// golden ones counted closer, none an enemy in sight stands beside.
+export function pickCache(sense: Sense, within = Number.POSITIVE_INFINITY): ObsCache | null {
+  let best: ObsCache | null = null;
+  let bestD = within;
+  for (const c of sense.r.caches) {
+    if (!safeGround(sense, c)) continue;
+    let d = dist(sense.me, c);
+    if (c.golden) d -= 10;
+    if (d >= bestD) continue;
+    if (sense.enemies.some((e) => dist(p3(e), c) < 3)) continue;
+    best = c;
+    bestD = d;
+  }
+  return best;
+}
+
+// Looting: standing still beside a cache opens it; walking there first.
+export function lootCache(sense: Sense, cache: ObsCache): Action {
+  const d = dist(sense.me, cache);
+  if (d <= CACHE_REACH_M - 0.45) {
+    // Already still: keep standing; else stop where it is.
+    return sense.s.dest ? { kind: 'stop' } : { kind: 'noop' };
+  }
+  return walkVia(sense, { x: cache.x, y: cache.y, z: cache.z });
+}
+
+// The camp spot worth walking to: the nearest the bot's own memory does not
+// hold empty, on safe ground, within reach.
+export function pickCampSpot(sense: Sense): Vec3 | null {
+  let best: Vec3 | null = null;
+  let bestD = CAMP_NEAR_M;
+  const camps = sense.obs.camps ?? [];
+  for (const c of camps) {
+    const at = p3(c);
+    if (!safeGround(sense, at)) continue;
+    if (c.up === false && c.downSince !== null && sense.obs.time - c.downSince < 85) continue;
+    const d = dist(sense.me, at);
+    if (d < bestD) {
+      best = at;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+// With nothing else to do: toward the heart of the light, the next cap's
+// when it is drawn.
+export function roam(sense: Sense): Action {
+  const cap = sense.next ?? sense.now;
+  if (cap.radius >= 2 * sense.layout.radius - 1e-6) {
+    const c = pickCache(sense);
+    if (c) return lootCache(sense, c);
+  }
+  return walkVia(sense, intoCap(sense, cap, Math.min(cap.radius * 0.5, 20)));
+}
