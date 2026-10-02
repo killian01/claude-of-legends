@@ -1,0 +1,340 @@
+// One live battle royale (ADR 0031): the authoritative sim of the mode and
+// the people in it, beside server/match.ts's 5v5. Fifty seats, each its own
+// team; the people who started it on the champions they picked, bots on the
+// rest. A newcomer takes a bot's seat (ADR 0025): the champion as the bot
+// left it, a bot playing the champion they picked when there is one. A
+// person who leaves hands the seat to the mode's bot, held for them when the
+// connection only dropped. Transport-agnostic: the service hands it what a
+// socket said and sends what it answers.
+
+import { type ClientMsg, type ServerMsg, type StepId, wirePoint } from '../src/net/protocol';
+import type { RoyaleResult, RoyaleVariant, SeatLabel } from '../src/net/royale_wire';
+import { freshStats, orderNumber, type SeatStats, WALK_STEP_MAX } from './match';
+import { applyRoyaleCommand, ROYALE_VERBS } from './royale_commands';
+import { chooseBotSeat } from './royale_join';
+import { RoyalePoints } from './royale_points';
+import { type RankedSeat, royaleResult } from './royale_ranking';
+import { type RoyalePerson, royaleSeats } from './royale_seats';
+import type {
+  RoyaleBuild,
+  RoyaleSim,
+  RoyaleSimEvent,
+  RoyaleSimFactory,
+  RoyaleSkill,
+} from './royale_sim';
+import { buildRoyaleSnapshot, CACHES_EVERY_TICKS } from './royale_snapshot';
+
+export interface RoyalePlayer {
+  clientId: number;
+  // The account, or a Guest's negative id: whose points the seat banks and
+  // whose rejoin reservation holds it.
+  owner: number;
+  name: string;
+  guest: boolean;
+  unitId: number;
+  team: number;
+  known: Set<number>;
+  // sim.tickCount of the last command, for the end's "still playing".
+  lastCommandAt: number;
+  stats: SeatStats;
+  // The client's own order numbers (ClientMsg n), told back as in the 5v5.
+  ack: number;
+  ackAt: number;
+  // Took a bot's seat after the start (ADR 0025).
+  dropIn: boolean;
+  // The caches list reached this person at least once.
+  cachesSent: boolean;
+  // The result was told: out for good (One life), or the end.
+  resultSent: boolean;
+}
+
+interface SeatState {
+  unitId: number;
+  team: number;
+  name: string;
+  championId: string;
+  // A bot plays it now.
+  bot: boolean;
+  skill: RoyaleSkill;
+  softened: boolean;
+  // The person whose dropped connection this seat waits for, by owner.
+  heldFor: number | null;
+}
+
+// Every seat of a match this many seats wide, by default the mode's fifty.
+export class RoyaleMatch {
+  readonly sim: RoyaleSim;
+  readonly players = new Map<number, RoyalePlayer>();
+  readonly points: RoyalePoints;
+  private readonly seats = new Map<number, SeatState>();
+  private readonly standIn: RoyaleBuild['standIn'];
+  private events: readonly RoyaleSimEvent[] = [];
+
+  constructor(
+    readonly id: number,
+    readonly seed: number,
+    readonly variant: RoyaleVariant,
+    people: readonly RoyalePerson[],
+    factory: RoyaleSimFactory,
+    seatCount?: number,
+  ) {
+    const seats = royaleSeats(people, seed, seatCount);
+    const build = factory(seed, variant, seats);
+    this.sim = build.sim;
+    this.standIn = build.standIn;
+    seats.forEach((s, i) => {
+      const unitId = build.unitIds[i];
+      if (unitId === undefined) return;
+      this.seats.set(unitId, {
+        unitId,
+        // The team the sim seated the champion on: each its own.
+        team: this.sim.units.get(unitId)?.team ?? s.team,
+        name: s.name,
+        championId: s.championId,
+        bot: s.clientId === null,
+        skill: s.skill,
+        softened: s.bot?.softened ?? false,
+        heldFor: null,
+      });
+    });
+    seats.forEach((s, i) => {
+      const unitId = build.unitIds[i];
+      if (s.clientId === null || unitId === undefined) return;
+      const person = people.find((p) => p.clientId === s.clientId);
+      if (person) this.seat(person, unitId, false);
+    });
+    this.points = new RoyalePoints(this.sim, variant);
+  }
+
+  get seatCount(): number {
+    return this.seats.size;
+  }
+
+  get stage(): 'drop' | 'play' | 'over' {
+    return this.sim.royale.stage;
+  }
+
+  get over(): boolean {
+    return this.sim.royale.stage === 'over';
+  }
+
+  get lastEvents(): readonly RoyaleSimEvent[] {
+    return this.events;
+  }
+
+  // Who holds a seat now, for the names on the wire.
+  seatLabel(unitId: number): SeatLabel | undefined {
+    const s = this.seats.get(unitId);
+    return s ? { name: s.name, bot: s.bot } : undefined;
+  }
+
+  // Out for good: fallen in One life.
+  isOut(unitId: number): boolean {
+    return this.variant === 'one_life' && this.sim.royale.eliminated.includes(unitId);
+  }
+
+  private takeable(s: SeatState): boolean {
+    return s.bot && s.heldFor === null && !this.isOut(s.unitId);
+  }
+
+  // Bot seats a newcomer could take now.
+  get openBotSeats(): number {
+    let n = 0;
+    for (const s of this.seats.values()) if (this.takeable(s)) n += 1;
+    return n;
+  }
+
+  private seat(person: RoyalePerson, unitId: number, dropIn: boolean): RoyalePlayer {
+    const s = this.seats.get(unitId);
+    const u = this.sim.units.get(unitId);
+    const stats = freshStats(this.sim.tickCount, u?.pos.x ?? 0, u?.pos.z ?? 0);
+    if (u?.pos.y !== undefined) stats.lastY = u.pos.y;
+    const player: RoyalePlayer = {
+      clientId: person.clientId,
+      owner: person.owner,
+      name: person.name,
+      guest: person.guest,
+      unitId,
+      team: s?.team ?? 0,
+      known: new Set(),
+      lastCommandAt: this.sim.tickCount,
+      stats,
+      ack: 0,
+      ackAt: 0,
+      dropIn,
+      cachesSent: false,
+      resultSent: false,
+    };
+    this.players.set(person.clientId, player);
+    return player;
+  }
+
+  // The seat changed hands: everyone who knows the champion is sent its
+  // identity again, the new name and bot mark with it.
+  private reidentify(unitId: number): void {
+    for (const p of this.players.values()) p.known.delete(unitId);
+  }
+
+  // A newcomer takes a bot's seat (ADR 0025): the champion as the bot left
+  // it. Null when no seat is left to take.
+  takeBotSeat(person: RoyalePerson): RoyalePlayer | null {
+    const candidates = [...this.seats.values()].filter((s) => this.takeable(s));
+    const unitId = chooseBotSeat(
+      candidates.map((s) => ({
+        unitId: s.unitId,
+        championId: this.sim.units.get(s.unitId)?.championId ?? s.championId,
+        dead: this.sim.units.get(s.unitId)?.dead === true,
+        out: this.isOut(s.unitId),
+      })),
+      person.pick.championId,
+    );
+    const s = unitId === null ? undefined : this.seats.get(unitId);
+    if (unitId === null || !s) return null;
+    this.sim.detachPolicy(unitId);
+    s.bot = false;
+    s.name = person.name;
+    this.reidentify(unitId);
+    return this.seat(person, unitId, true);
+  }
+
+  // A person leaves the seat: the mode's bot plays it from here, and when
+  // `hold` (a dropped connection) the seat waits for its owner to return.
+  leave(clientId: number, hold: boolean): RoyalePlayer | null {
+    const p = this.players.get(clientId);
+    if (!p) return null;
+    this.players.delete(clientId);
+    const s = this.seats.get(p.unitId);
+    if (s) {
+      s.bot = true;
+      s.heldFor = hold ? p.owner : null;
+      this.standIn(p.unitId, s.skill, s.softened);
+      this.reidentify(p.unitId);
+    }
+    return p;
+  }
+
+  // The seat held for `person` (a dropped connection) is theirs again.
+  rejoin(person: RoyalePerson, unitId: number): RoyalePlayer | null {
+    const s = this.seats.get(unitId);
+    if (!s || s.heldFor !== person.owner || !s.bot) return null;
+    this.sim.detachPolicy(unitId);
+    s.bot = false;
+    s.heldFor = null;
+    s.name = person.name;
+    this.reidentify(unitId);
+    return this.seat(person, unitId, false);
+  }
+
+  // The reservation on a seat ran out: a newcomer may take it.
+  release(unitId: number): void {
+    const s = this.seats.get(unitId);
+    if (s) s.heldFor = null;
+  }
+
+  // The landing point a person picked during the drop.
+  pickDrop(clientId: number, x: unknown, y: unknown, z: unknown): void {
+    const p = this.players.get(clientId);
+    if (!p || this.sim.royale.stage !== 'drop') return;
+    const at = wirePoint(x, z, y);
+    if (!at || at.y === undefined) return;
+    p.lastCommandAt = this.sim.tickCount;
+    this.sim.pickDrop(p.unitId, { x: at.x, y: at.y, z: at.z });
+  }
+
+  handleCommand(clientId: number, msg: ClientMsg): void {
+    const p = this.players.get(clientId);
+    if (!p || !ROYALE_VERBS.has(msg.t)) return;
+    p.lastCommandAt = this.sim.tickCount;
+    p.stats.orders += 1;
+    p.stats.kinds[msg.t] = (p.stats.kinds[msg.t] ?? 0) + 1;
+    if (p.stats.firstOrderTick === null) p.stats.firstOrderTick = this.sim.tickCount;
+    const n = orderNumber(msg);
+    if (n !== undefined && Number.isSafeInteger(n) && n > p.ack) {
+      p.ack = n;
+      p.ackAt = this.sim.time;
+    }
+    applyRoyaleCommand(this.sim, p.team, p.unitId, msg);
+  }
+
+  markLoaded(clientId: number): void {
+    const p = this.players.get(clientId);
+    if (p && p.stats.loadedTick === null) p.stats.loadedTick = this.sim.tickCount;
+  }
+
+  noteStep(clientId: number, id: StepId | 'off'): void {
+    const p = this.players.get(clientId);
+    if (p && !p.stats.steps.includes(id)) p.stats.steps.push(id);
+  }
+
+  notePoints(clientId: number, delta: number): void {
+    const p = this.players.get(clientId);
+    if (p) p.stats.points += delta;
+  }
+
+  tick(): readonly RoyaleSimEvent[] {
+    this.events = this.sim.tick();
+    for (const p of this.players.values()) {
+      const u = this.sim.units.get(p.unitId);
+      if (!u) continue;
+      const dy = (u.pos.y ?? 0) - (p.stats.lastY ?? 0);
+      const step = Math.hypot(u.pos.x - p.stats.lastX, dy, u.pos.z - p.stats.lastZ);
+      if (!u.dead && step <= WALK_STEP_MAX) p.stats.walked += step;
+      p.stats.lastX = u.pos.x;
+      p.stats.lastZ = u.pos.z;
+      if (u.pos.y !== undefined) p.stats.lastY = u.pos.y;
+    }
+    return this.events;
+  }
+
+  // The people whose champion fell for good this tick (One life).
+  outThisTick(): RoyalePlayer[] {
+    const out: RoyalePlayer[] = [];
+    for (const ev of this.events) {
+      if (ev.type !== 'royale_out') continue;
+      for (const p of this.players.values()) if (p.unitId === ev.unitId) out.push(p);
+    }
+    return out;
+  }
+
+  snapshotFor(clientId: number): ServerMsg | null {
+    const p = this.players.get(clientId);
+    if (!p) return null;
+    const caches = !p.cachesSent || this.sim.tickCount % CACHES_EVERY_TICKS === 0;
+    p.cachesSent = true;
+    return buildRoyaleSnapshot(
+      this.sim,
+      { unitId: p.unitId, team: p.team, known: p.known, seat: p },
+      this.events,
+      {
+        seat: (id) => this.seatLabel(id),
+        seats: this.seats.size,
+        people: this.players.size,
+        caches,
+      },
+    );
+  }
+
+  // The scoreboard, the seat's name and bot mark on every line.
+  buildScore(): ServerMsg {
+    const rows = this.sim.scoreboard().map((r) => {
+      const s = this.seats.get(r.unitId);
+      return { ...r, player: s?.name ?? null, ...(s?.bot ? { b: 1 as const } : {}) };
+    });
+    return { t: 'score', rows };
+  }
+
+  rankedSeats(): RankedSeat[] {
+    return [...this.seats.values()].map((s) => ({
+      unitId: s.unitId,
+      name: s.name,
+      championId: this.sim.units.get(s.unitId)?.championId ?? s.championId,
+      bot: s.bot,
+      deaths: this.sim.units.get(s.unitId)?.deaths ?? 0,
+    }));
+  }
+
+  resultFor(clientId: number): RoyaleResult | null {
+    const p = this.players.get(clientId);
+    return p ? royaleResult(this.sim.royale, this.rankedSeats(), p.unitId) : null;
+  }
+}

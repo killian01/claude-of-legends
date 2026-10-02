@@ -157,6 +157,8 @@ import { buildMatchRecord, type MatchRecord } from './records';
 import { checkReference, refusalMessage } from './reference_check';
 import { setForgedAttackRange } from './reforge';
 import { RejoinRegistry } from './rejoin';
+import { RoyaleService } from './royale_service';
+import type { RoyaleSimFactory } from './royale_sim';
 import { sealChampion, unsealChampion } from './seal';
 import {
   buildSeatReport,
@@ -1014,6 +1016,32 @@ const forgeMatchmaker = new Matchmaker(send, onMatchReady(true), undefined, {
 // holding the client and no-ops on the other.
 const matchmakers = [matchmaker, forgeMatchmaker];
 
+// The battle royale's sim builder (ADR 0031); null while the mode is not
+// open, and entering one says so.
+const royaleFactory: RoyaleSimFactory | null = null;
+
+// The battle royale (ADR 0031, server/royale_service.ts): its matches run
+// beside the 5v5's, each counted against MAX_MATCHES by its weight.
+const royale = new RoyaleService({
+  send,
+  client: (id) => clients.get(id),
+  factory: royaleFactory,
+  newMatchId: () => nextMatchId++,
+  newSeed: (id) => (Date.now() % 2_000_000_000) + id,
+  capacityLeft: () => MAX_MATCHES - matches.size - royale.load(),
+  leaveQueues: (id) => {
+    for (const mm of matchmakers) mm.removeEverywhere(id);
+  },
+  playable: (id) => {
+    const c = clients.get(id);
+    return c ? playableAt(collectionOfClient(c), Date.now()) : null;
+  },
+  bank: bankPoints,
+  appendSeat: (rec) => appendJsonl(SEATS_FILE, rec),
+  now: () => Date.now(),
+  log: (line) => console.log(line),
+});
+
 // A player leaves a live match FOR GOOD, by choice or by the AFK sweep:
 // rated walk-out penalty and queue lockout when it applies, champion to a
 // bot with NO seat reservation, team notice, abandon check. Reservations
@@ -1393,7 +1421,10 @@ const server = http.createServer(async (req, res) => {
     // Who is playing right now, for the landing's line over its button
     // (ADR 0025): counts only, no names.
     if (url === '/api/public/presence') {
-      sendJson(res, 200, presenceOf(dropInCandidates(), matchmaker.queuedCount));
+      sendJson(res, 200, {
+        ...presenceOf(dropInCandidates(), matchmaker.queuedCount),
+        royale: royale.presence(),
+      });
       return;
     }
 
@@ -2553,6 +2584,7 @@ const server = http.createServer(async (req, res) => {
           ok: true,
           clients: clients.size,
           matches: matches.size,
+          royale: royale.matches.size,
           uptimeS: Math.round(process.uptime()),
           // How the world loop kept up over its last window (server/tick_meter.ts).
           tick: meter.last(),
@@ -2796,7 +2828,7 @@ wss.on('connection', (ws, req) => {
           }
           console.log(`match ${seat.matchId}: ${seat.name} reconnected`);
         }
-      }
+      } else royale.rejoin(client);
       return;
     }
 
@@ -2805,7 +2837,7 @@ wss.on('connection', (ws, req) => {
     const inMatch = client.matchId !== null;
     // Capacity gate at the entry points: a full server refuses new games
     // politely instead of degrading every running one.
-    const atCapacity = matches.size >= MAX_MATCHES;
+    const atCapacity = matches.size + royale.load() >= MAX_MATCHES;
     const refuseCapacity = (): void =>
       send(id, { t: 'error', message: 'The server is at capacity, try again in a bit.' });
     // A Guest has the public queue and the match it lands in (ADR 0024);
@@ -2814,6 +2846,8 @@ wss.on('connection', (ws, req) => {
       send(id, { t: 'error', message: 'This needs an account.' });
       return;
     }
+    // The battle royale's own messages, and every message of a seat in one.
+    if (royale.handle(client, msg)) return;
     switch (msg.t) {
       case 'queue': {
         if (inMatch) break;
@@ -2990,6 +3024,7 @@ wss.on('connection', (ws, req) => {
     clearInterval(pinger);
     connections.release(ip);
     for (const mm of matchmakers) mm.removeEverywhere(id);
+    royale.disconnect(client);
     const matchId = client.matchId;
     clients.delete(id);
     // Reap matches whose players are all gone (review F.2: ghost matches
@@ -3287,12 +3322,16 @@ setInterval(() => {
         }
       }
     }
-    if (matches.size > 0) meter.tick(performance.now() - tickStart, ran > 0);
+    // The battle royale's matches, inside the same measured tick.
+    royale.tick();
+    if (matches.size + royale.matches.size > 0) {
+      meter.tick(performance.now() - tickStart, ran > 0);
+    }
     ran++;
   }
   const report = meter.report(
     now,
-    [...matches.values()].filter((e) => e.endedAt === null).length,
+    [...matches.values()].filter((e) => e.endedAt === null).length + royale.matches.size,
     clients.size,
   );
   if (report && report.ticks > 0) console.log(formatTickReport(report));
