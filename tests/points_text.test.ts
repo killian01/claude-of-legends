@@ -26,6 +26,12 @@ describe('the pop', () => {
     expect(popText(25, 'ascendant')).toBe('+25 Ascendant');
     expect(popText(50, 'victory')).toBe('+50 victory');
     expect(popText(15, 'finish')).toBe('+15 played out');
+    // The battle royale's (ADR 0031).
+    expect(popText(1, 'cache')).toBe('+1 cache');
+    expect(popText(50, 'last_standing')).toBe('+50 last standing');
+    expect(popText(25, 'top_five')).toBe('+25 top five');
+    expect(popText(15, 'top_ten')).toBe('+15 top ten');
+    expect(popText(50, 'best_score')).toBe('+50 best score');
   });
 
   it("says plainly, on a Guest's first points, that the match is on a ladder", () => {

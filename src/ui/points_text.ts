@@ -19,6 +19,11 @@ const REASON_WORDS: Readonly<Record<PointsReason, string>> = {
   ascendant: 'Ascendant',
   victory: 'victory',
   finish: 'played out',
+  cache: 'cache',
+  last_standing: 'last standing',
+  top_five: 'top five',
+  top_ten: 'top ten',
+  best_score: 'best score',
 };
 
 export function popText(delta: number, reason: PointsReason): string {
