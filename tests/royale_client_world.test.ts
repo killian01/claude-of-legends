@@ -154,6 +154,7 @@ describe('the mirror on the planet', () => {
       }),
     );
     expect(world.seat(3)).toEqual({ name: 'Mossmantle', bot: true });
+    expect(world.units.get(3)?.bot).toBe(true);
     expect(world.seat(9)).toEqual({ name: 'bob', bot: false });
     // The seat changed hands: the identity comes again.
     world.applyServer(
@@ -164,6 +165,7 @@ describe('the mirror on the planet', () => {
       }),
     );
     expect(world.seat(3)).toEqual({ name: 'carol', bot: false });
+    expect(world.units.get(3)?.bot).toBe(false);
     world.applyServer({
       t: 'score',
       rows: [

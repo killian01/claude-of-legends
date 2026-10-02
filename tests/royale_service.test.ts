@@ -212,6 +212,12 @@ describe('playing', () => {
     const self = h.last(1, 'match_start')!.selfUnitId;
     expect(snaps.at(-1)?.units.map((u) => u.i)).toEqual([self]);
     expect(snaps.at(-1)?.units[0]?.y).toBeDefined();
+    // The scoreboard at once, every seat named and every bot marked.
+    const score = h.to(1, 'score')[0]!;
+    expect(score.rows).toHaveLength(ROYALE_SEATS);
+    expect(score.rows.find((r) => r.unitId === self)).toMatchObject({ player: 'alice' });
+    expect(score.rows.filter((r) => r.b === 1)).toHaveLength(ROYALE_SEATS - 1);
+    expect(h.to(1, 'score')).toHaveLength(1);
   });
 
   it('banks points as they come, and tells the person', () => {

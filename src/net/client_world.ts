@@ -167,8 +167,13 @@ function materializeUnit(s: SnapUnit): Unit {
   };
 }
 
+// A unit as the mirror holds it: in a battle royale a champion carries the
+// bot mark of its seat (the identity block's b, ADR 0031), beside the
+// sim's own fields.
+export type MirrorUnit = Unit & { bot?: boolean };
+
 export class ClientWorld implements IWorld {
-  readonly units = new Map<number, Unit>();
+  readonly units = new Map<number, MirrorUnit>();
   readonly projectiles = new Map<number, Projectile>();
   readonly zones = new Map<number, Zone>();
   readonly walls = new Map<number, Wall>();
@@ -509,7 +514,10 @@ export class ClientWorld implements IWorld {
       }
       // The seat's name and bot mark, with the identity block: sent again
       // when the seat changes hands.
-      if (s.k !== undefined) this.noteSeat(s.i, s.n, s.b === 1);
+      if (s.k !== undefined && s.n !== undefined) {
+        this.noteSeat(s.i, s.n, s.b === 1);
+        unit.bot = s.b === 1;
+      }
       unit.dead = s.d === 1;
       unit.play = s.p ?? null;
       unit.coachOrder = s.co ?? null;
@@ -689,7 +697,7 @@ export class ClientWorld implements IWorld {
     if (msg.royale) this.applyRoyale(msg.royale);
     // The kill feed names champions the mirror never saw.
     for (const e of msg.events) {
-      if (e.e === 'death' || e.e === 'out') {
+      if (e.e === 'death' || e.e === 'royale_out') {
         this.noteSeat(e.unitId, e.n, e.vb === 1);
         if (e.kn) this.noteSeat(e.killerId, e.kn, e.kb === 1);
       }

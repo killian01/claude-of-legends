@@ -194,26 +194,27 @@ function royaleEvents(
         if (sees(ev.unitId)) out.push({ e: 'atk', unitId: ev.unitId, targetId: ev.targetId });
         break;
       case 'royale_land':
-        if (sees(ev.unitId)) out.push({ e: 'land', unitId: ev.unitId });
+        if (sees(ev.unitId)) out.push({ e: 'royale_land', unitId: ev.unitId });
         break;
       case 'royale_loot':
         // A toast for the recipient's own pieces only.
         if (ev.unitId === self) {
-          out.push({ e: 'loot', unitId: ev.unitId, itemId: ev.itemId, source: ev.source });
+          out.push({ e: 'royale_loot', unitId: ev.unitId, itemId: ev.itemId, source: ev.source });
         }
         break;
       case 'royale_cache':
-        if (sees(ev.unitId)) out.push({ e: 'cache', unitId: ev.unitId, cacheId: ev.cacheId });
+        if (sees(ev.unitId))
+          out.push({ e: 'royale_cache', unitId: ev.unitId, cacheId: ev.cacheId });
         break;
       case 'royale_pad':
-        if (sees(ev.unitId)) out.push({ e: 'pad', unitId: ev.unitId, padId: ev.padId });
+        if (sees(ev.unitId)) out.push({ e: 'royale_pad', unitId: ev.unitId, padId: ev.padId });
         break;
       case 'royale_dusk':
-        out.push({ e: 'dusk', phase: ev.phase });
+        out.push({ e: 'royale_dusk', phase: ev.phase });
         break;
       case 'royale_out':
         out.push({
-          e: 'out',
+          e: 'royale_out',
           unitId: ev.unitId,
           killerId: ev.killerId,
           place: ev.place,
@@ -223,7 +224,7 @@ function royaleEvents(
       case 'royale_leader': {
         const s = ctx.seat(ev.unitId);
         out.push({
-          e: 'leader',
+          e: 'royale_leader',
           unitId: ev.unitId,
           n: s?.name ?? '',
           ...(s?.bot ? { b: 1 as const } : {}),
@@ -233,7 +234,7 @@ function royaleEvents(
       case 'royale_end': {
         const s = ev.winnerId !== null ? ctx.seat(ev.winnerId) : undefined;
         out.push({
-          e: 'end',
+          e: 'royale_end',
           winnerId: ev.winnerId,
           n: s?.name ?? null,
           ...(s?.bot ? { b: 1 as const } : {}),
