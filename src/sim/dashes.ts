@@ -3,10 +3,11 @@
 // every tick, terrain and ability walls stop it early, enemies crossed by a
 // pass-through dash are struck en route, and the landing payload resolves
 // where the flight actually ends, with the traveled distance as an effect
-// fact. Dashes declared without a speed keep the legacy instant blink.
+// fact. Dashes declared without a speed keep the legacy instant blink. On
+// the planet the flight keeps to its great circle (geo.ts, ADR 0029).
 
 import { applyEffects, type EffectSpec, type Power } from './combat/effects';
-import { hypot } from './exact';
+import { assign, copy, dist, offset, onSphere, segmentDist } from './geo';
 import type { CombatCtx } from './sim_context';
 import { isSpellTarget } from './spell_targets';
 import type { Vec2 } from './types';
@@ -14,6 +15,7 @@ import { hostile, type Unit } from './unit';
 
 export interface DashState {
   from: Vec2;
+  // The heading at `from`.
   dir: Vec2;
   speed: number;
   remaining: number;
@@ -29,11 +31,22 @@ export interface DashState {
 
 const SAMPLE_STEP = 0.3;
 
+// Where the flight is `s` further on this tick, from `here`. The plane steps
+// from where the unit stands, as it always did. The sphere measures every
+// point from the flight's start along its first heading: the chord back to
+// the start is then the distance flown, and a flight run to its end lands
+// exactly on the point it was aimed at, where chords stepped one after
+// another along the curve would fall a few millimeters short.
+function flightPoint(dash: DashState, here: Vec2, s: number): Vec2 {
+  if (onSphere(here)) return offset(dash.from, dash.dir, dash.traveled + s);
+  return offset(here, dash.dir, s);
+}
+
 function land(ctx: CombatCtx, u: Unit, dash: DashState): void {
   u.activeDash = null;
   u.path = [];
   const fx = {
-    center: { x: u.pos.x, z: u.pos.z },
+    center: copy(u.pos),
     distance: dash.traveled,
     lineFrom: dash.from,
     lineDir: dash.dir,
@@ -42,7 +55,7 @@ function land(ctx: CombatCtx, u: Unit, dash: DashState): void {
     for (const other of ctx.units.values()) {
       if (!hostile(u, other) || other.dead || ctx.dead.has(other.id)) continue;
       if (!isSpellTarget(other)) continue;
-      const d = hypot(other.pos.x - u.pos.x, other.pos.z - u.pos.z);
+      const d = dist(other.pos, u.pos);
       if (d > dash.landRadius + other.radius) continue;
       applyEffects(ctx, u.id, dash.power, other, dash.onLand, 'ability', fx);
     }
@@ -61,7 +74,7 @@ export function stepDashes(ctx: CombatCtx, dt: number): void {
       continue;
     }
     const budget = Math.min(dash.speed * dt, dash.remaining);
-    const from = { x: u.pos.x, z: u.pos.z };
+    const from = copy(u.pos);
     // Advance in small samples so a wall raised mid-flight stops the dash
     // at its face instead of being tunneled through.
     let advanced = 0;
@@ -69,15 +82,13 @@ export function stepDashes(ctx: CombatCtx, dt: number): void {
     let blocked = false;
     for (let i = 1; i <= steps; i++) {
       const t = (budget * i) / steps;
-      const x = from.x + dash.dir.x * t;
-      const z = from.z + dash.dir.z * t;
-      if (!ctx.nav.isWalkableAt(x, z)) {
+      const at = flightPoint(dash, from, t);
+      if (!ctx.ground.isWalkableAt(at)) {
         blocked = true;
         break;
       }
       advanced = t;
-      u.pos.x = x;
-      u.pos.z = z;
+      assign(u.pos, at);
     }
     dash.remaining -= advanced;
     dash.traveled += advanced;
@@ -88,7 +99,7 @@ export function stepDashes(ctx: CombatCtx, dt: number): void {
         if (!hostile(u, other) || other.dead || ctx.dead.has(other.id)) continue;
         if (!isSpellTarget(other)) continue;
         if (dash.hitIds.has(other.id)) continue;
-        const d = segmentDistance(other.pos, from, u.pos);
+        const d = segmentDist(other.pos, from, u.pos).d;
         if (d > 0.9 + other.radius) continue;
         dash.hitIds.add(other.id);
         applyEffects(ctx, u.id, dash.power, other, dash.passThrough, 'ability', {
@@ -101,13 +112,4 @@ export function stepDashes(ctx: CombatCtx, dt: number): void {
 
     if (blocked || dash.remaining <= 1e-9) land(ctx, u, dash);
   }
-}
-
-function segmentDistance(p: Vec2, a: Vec2, b: Vec2): number {
-  const abx = b.x - a.x;
-  const abz = b.z - a.z;
-  const len2 = abx * abx + abz * abz;
-  let t = 0;
-  if (len2 > 0) t = Math.max(0, Math.min(1, ((p.x - a.x) * abx + (p.z - a.z) * abz) / len2));
-  return hypot(p.x - (a.x + abx * t), p.z - (a.z + abz * t));
 }

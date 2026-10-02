@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { hypot } from '../src/sim/exact';
 import {
   advance,
+  along,
   basis,
   cross,
   delta,
@@ -15,10 +16,12 @@ import {
   heading,
   lerp,
   offset,
+  point,
   rotate,
   segmentDist,
   stepToward,
   turnLeft,
+  unit,
 } from '../src/sim/geo';
 import type { Vec2 } from '../src/sim/types';
 
@@ -129,5 +132,35 @@ describe('the sphere', () => {
       4,
     );
     expect(segmentDist(beyond, a, b).t).toBe(1);
+  });
+});
+
+describe('the functions added for the sim systems', () => {
+  it('keeps the plane forms the systems wrote inline', () => {
+    const v = { x: 3.3, z: -4.1 };
+    const len = hypot(v.x, v.z);
+    expect(unit(v)).toEqual({ x: v.x / len, z: v.z / len });
+    expect(unit({ x: 0, z: 0 })).toBeNull();
+    const p = { x: 12.3456, z: -7.891 };
+    const dir = { x: 0.6, z: 0.8 };
+    // An aftershock's eruption point: p + dir * length * t, left to right.
+    expect(along(p, dir, 13.7, 0.3)).toEqual({
+      x: p.x + dir.x * 13.7 * 0.3,
+      z: p.z + dir.z * 13.7 * 0.3,
+    });
+    expect(point(1, 2)).toEqual({ x: 1, z: 2 });
+    expect(point(1, 2, 3)).toEqual({ x: 1, y: 3, z: 2 });
+  });
+
+  it('measures along a great circle on the sphere', () => {
+    const p = sph(0.3, 0.5, 0.8);
+    const q = sph(0.35, 0.45, 0.82);
+    const dir = dirTo(p, q)!;
+    const u = unit({ x: dir.x * 5, y: (dir.y ?? 0) * 5, z: dir.z * 5 })!;
+    expect(Math.sqrt(u.x * u.x + (u.y ?? 0) ** 2 + u.z * u.z)).toBeCloseTo(1, 12);
+    expect(dot(u, dir)).toBeCloseTo(1, 12);
+    const a = along(p, dir, 10, 0.25);
+    expect(dist(p, a)).toBeCloseTo(2.5, 9);
+    expect(onR(a)).toBeCloseTo(R, 9);
   });
 });

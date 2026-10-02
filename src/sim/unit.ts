@@ -18,6 +18,7 @@ import {
 import { WARDEN_BODY, WARDEN_GOLD_BOUNTY } from './content/warden';
 import type { DashState } from './dashes';
 import { type FavorStacks, NO_FAVORS } from './favors';
+import { copy } from './geo';
 import type { LanePreference } from './playbook/types';
 import type { AbilityKey, TeamId, Vec2 } from './types';
 
@@ -127,7 +128,7 @@ export interface Unit {
   // An auto-attack strike winding up: locked to its target, landing at
   // resolveAt. Moving, a stun, a dash, or losing the target cancels it and
   // refunds the attack timer (the orb-walk rule).
-  pendingAttack: { targetId: number; resolveAt: number; startX: number; startZ: number } | null;
+  pendingAttack: { targetId: number; resolveAt: number; start: Vec2 } | null;
   // Remaining waypoints toward the current move order; empty when idle.
   path: Vec2[];
   // Progression and economy (champions).
@@ -203,7 +204,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     kind,
     championId: null,
     champion: null,
-    pos: { x: pos.x, z: pos.z },
+    pos: copy(pos),
     radius: 0.6,
     moveSpeed: 0,
     hp: 1,

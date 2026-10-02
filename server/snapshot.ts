@@ -149,7 +149,7 @@ export function buildSnapshot(
   // maphack vector).
   const projectiles: SnapMobile[] = [];
   for (const p of sim.projectiles.values()) {
-    if (p.team !== team && !sim.isPointVisible(team, p.pos.x, p.pos.z)) continue;
+    if (p.team !== team && !sim.isPointVisible(team, p.pos.x, p.pos.z, p.pos.y)) continue;
     const rec: SnapMobile = {
       i: p.id,
       x: round2(p.pos.x),
@@ -168,7 +168,7 @@ export function buildSnapshot(
   }
   const zones: SnapMobile[] = [];
   for (const z of sim.zones.values()) {
-    if (z.team !== team && !sim.isPointVisible(team, z.pos.x, z.pos.z)) continue;
+    if (z.team !== team && !sim.isPointVisible(team, z.pos.x, z.pos.z, z.pos.y)) continue;
     const rec: SnapMobile = {
       i: z.id,
       x: round2(z.pos.x),
