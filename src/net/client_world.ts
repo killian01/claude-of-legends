@@ -202,8 +202,8 @@ export class ClientWorld implements IWorld {
   // it (identity blocks, the kill feed, the scoreboard).
   private royaleMatch: { v: RoyaleVariant; seats: number } | null = null;
   private royaleView: RoyaleView | null = null;
-  private caches: readonly SnapCache[] = [];
-  private dropPicks: readonly WirePoint[] = [];
+  private caches: SnapCache[] = [];
+  private dropPicks: WirePoint[] = [];
   private readonly seats = new Map<number, SeatLabel>();
 
   // Match-scoped champion resolution, mirroring the server sim's registry:
@@ -287,8 +287,7 @@ export class ClientWorld implements IWorld {
     if (r.caches) this.caches = r.caches;
     if (r.st !== 'drop') this.dropPicks = [];
     else if (r.picks) this.dropPicks = r.picks;
-    const { caches: _c, picks: _p, ...block } = r;
-    this.royaleView = { ...block, caches: this.caches, picks: this.dropPicks };
+    this.royaleView = { ...r, caches: this.caches, picks: this.dropPicks };
   }
 
   championDef(championId: string): ChampionDef | null {

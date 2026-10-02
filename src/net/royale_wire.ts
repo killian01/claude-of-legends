@@ -80,10 +80,7 @@ export type RoyaleClientMsg =
 // IWorld.royale): the last snapshot's block, with the last caches list
 // and, during the drop, everyone else's last picks, which the block only
 // carries once a second.
-export type RoyaleView = Omit<SnapRoyale, 'caches' | 'picks'> & {
-  caches: readonly SnapCache[];
-  picks: readonly WirePoint[];
-};
+export type RoyaleView = SnapRoyale & { caches: SnapCache[] };
 
 // Who holds a champion's seat in a battle royale: the name the seat plays
 // under (a person's, or a bot's invented one) and the bot mark.
