@@ -24,6 +24,12 @@ export const FOUNTAIN_PAD = 2;
 // Enemies inside a fountain melt: diving the fountain is never free.
 export const FOUNTAIN_TRUE_DPS = 220;
 
+// A seat on the fountain: its center and one of the spawn offsets around
+// it, where the 5v5 seats a champion at the start and at every respawn.
+export function fountainSeat(fountain: Vec2, slot: Vec2): Vec2 {
+  return { x: fountain.x + slot.x, z: fountain.z + slot.z };
+}
+
 function onPad(pad: Disc, pos: Vec2): boolean {
   return hypot(pos.x - pad.x, pos.z - pad.z) <= pad.r + FOUNTAIN_PAD;
 }

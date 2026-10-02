@@ -1,10 +1,12 @@
 // Ability casting: validates mana, cooldown, and range, then turns the
 // ability's declarative CastSpec into live projectiles, zones, dashes, or
 // immediate effects. Content only declares; this module executes. Sigils
-// reuse executeCast with their own bookkeeping.
+// reuse executeCast with their own bookkeeping. Every aim, range and line is
+// measured on the ground the match stands on (geo.ts, ground.ts).
 
 import type { CastSoundId } from '../content/sounds';
-import { cos, hypot } from '../exact';
+import { cos } from '../exact';
+import { basis, copy, delta, dirTo, dist, dot, norm, offset } from '../geo';
 import { passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
 import type { SpellLook } from '../spell_look';
@@ -153,11 +155,9 @@ export function specForRank(def: AbilityDef, rank: number): CastSpec {
 }
 
 function clampToRange(from: Vec2, aim: Vec2, range: number): Vec2 {
-  const dx = aim.x - from.x;
-  const dz = aim.z - from.z;
-  const d = hypot(dx, dz);
-  if (d <= range || d === 0) return { x: aim.x, z: aim.z };
-  return { x: from.x + (dx / d) * range, z: from.z + (dz / d) * range };
+  const d = dist(from, aim);
+  const dir = d <= range || d === 0 ? null : dirTo(from, aim);
+  return dir ? offset(from, dir, range) : copy(aim);
 }
 
 function findEnemyTarget(
@@ -174,10 +174,9 @@ function findEnemyTarget(
     // Structures are never a spell's target (spell_targets.ts).
     if (!isSpellTarget(u)) continue;
     if (isStealthed(u, ctx.time) || isUntargetable(u, ctx.time)) continue;
-    const toCaster =
-      hypot(u.pos.x - caster.pos.x, u.pos.z - caster.pos.z) - caster.radius - u.radius;
+    const toCaster = dist(u.pos, caster.pos) - caster.radius - u.radius;
     if (toCaster > castRange) continue;
-    const d = hypot(u.pos.x - aim.x, u.pos.z - aim.z) - u.radius;
+    const d = dist(u.pos, aim) - u.radius;
     if (d > searchRadius) continue;
     if (d < bestD) {
       bestD = d;
@@ -191,7 +190,7 @@ function enemiesWithin(ctx: CombatCtx, caster: Unit, center: Vec2, radius: numbe
   const out: Unit[] = [];
   for (const u of ctx.units.values()) {
     if (!hostile(caster, u) || u.dead || ctx.dead.has(u.id) || !isSpellTarget(u)) continue;
-    if (hypot(u.pos.x - center.x, u.pos.z - center.z) <= radius + u.radius) out.push(u);
+    if (dist(u.pos, center) <= radius + u.radius) out.push(u);
   }
   return out;
 }
@@ -209,16 +208,14 @@ export function executeCast(
 ): boolean {
   switch (spec.kind) {
     case 'skillshot': {
-      const dx = aim.x - caster.pos.x;
-      const dz = aim.z - caster.pos.z;
-      const d = hypot(dx, dz);
-      const dir = d > 0 ? { x: dx / d, z: dz / d } : { x: 1, z: 0 };
+      // A cast on the caster's own spot flies east.
+      const dir = dirTo(caster.pos, aim) ?? basis(caster.pos).east;
       const id = ctx.allocId();
       ctx.projectiles.set(id, {
         id,
         sourceId: caster.id,
         team: caster.team,
-        pos: { x: caster.pos.x, z: caster.pos.z },
+        pos: copy(caster.pos),
         dir,
         speed: spec.speed,
         radius: spec.radius,
@@ -275,11 +272,11 @@ export function executeCast(
       // ally instead). An ally only steals the cast by being strictly
       // closer to the aim point.
       let target = caster;
-      let bestD = Math.min(spec.searchRadius, hypot(caster.pos.x - at.x, caster.pos.z - at.z));
+      let bestD = Math.min(spec.searchRadius, dist(caster.pos, at));
       for (const u of ctx.units.values()) {
         if (u.team !== caster.team || u.kind !== 'champion' || u.id === caster.id) continue;
         if (u.dead || ctx.dead.has(u.id)) continue;
-        const d = hypot(u.pos.x - at.x, u.pos.z - at.z);
+        const d = dist(u.pos, at);
         if (d < bestD) {
           bestD = d;
           target = u;
@@ -302,20 +299,15 @@ export function executeCast(
       // (src/sim/exact.ts): cos falls on [0, PI], so the angle is within
       // the half angle exactly when its cosine is at least the half
       // angle's. A cast on the caster's own spot aims east; a unit on the
-      // caster's own spot is inside every cone.
-      let dx = aim.x - caster.pos.x;
-      let dz = aim.z - caster.pos.z;
-      if (dx === 0 && dz === 0) {
-        dx = 1;
-        dz = 0;
-      }
-      const aimLen = hypot(dx, dz);
+      // caster's own spot is inside every cone. On the planet the angle is
+      // the one between the two headings at the caster.
+      let toAim = delta(caster.pos, aim);
+      if (toAim.x === 0 && toAim.z === 0 && (toAim.y ?? 0) === 0) toAim = basis(caster.pos).east;
+      const aimLen = norm(toAim);
       const cosHalf = cos(spec.halfAngle);
       for (const u of enemiesWithin(ctx, caster, caster.pos, spec.range)) {
-        const ux = u.pos.x - caster.pos.x;
-        const uz = u.pos.z - caster.pos.z;
-        const dot = dx * ux + dz * uz;
-        if (dot >= cosHalf * aimLen * hypot(ux, uz)) {
+        const toUnit = delta(caster.pos, u.pos);
+        if (dot(toAim, toUnit) >= cosHalf * aimLen * norm(toUnit)) {
           applyEffects(ctx, caster.id, power, u, spec.onHit);
         }
       }
@@ -341,16 +333,14 @@ export function executeCast(
       if (spec.speed !== undefined && spec.speed > 0) {
         // A real flight (dashes.ts): the unit is committed on its line and
         // the landing payload resolves wherever the flight actually ends.
-        const dx = at.x - caster.pos.x;
-        const dz = at.z - caster.pos.z;
-        const dist = hypot(dx, dz);
-        const dir = dist > 0 ? { x: dx / dist, z: dz / dist } : { x: 1, z: 0 };
+        const length = dist(caster.pos, at);
+        const dir = dirTo(caster.pos, at) ?? basis(caster.pos).east;
         caster.path = [];
         caster.activeDash = {
-          from: { x: caster.pos.x, z: caster.pos.z },
+          from: copy(caster.pos),
           dir,
           speed: spec.speed,
-          remaining: dist,
+          remaining: length,
           traveled: 0,
           landRadius: spec.landRadius ?? 0,
           onLand: spec.onLand ?? [],
@@ -363,19 +353,19 @@ export function executeCast(
         if (spec.untargetableDuringTravel) {
           addStatus(caster, {
             kind: 'untargetable',
-            until: ctx.time + dist / spec.speed + 0.05,
+            until: ctx.time + length / spec.speed + 0.05,
           });
         }
         return true;
       }
-      const landed = ctx.nav.isWalkableAt(at.x, at.z) ? at : ctx.nav.nearestWalkable(at.x, at.z, 6);
+      const landed = ctx.ground.isWalkableAt(at) ? at : ctx.ground.nearestWalkable(at, 6);
       if (landed) {
-        caster.pos = { x: landed.x, z: landed.z };
+        caster.pos = copy(landed);
         caster.path = [];
       }
       const fx = {
-        center: { x: caster.pos.x, z: caster.pos.z },
-        distance: hypot(caster.pos.x - aim.x, caster.pos.z - aim.z),
+        center: copy(caster.pos),
+        distance: dist(caster.pos, aim),
       };
       if (spec.onLand && spec.landRadius) {
         for (const u of enemiesWithin(ctx, caster, caster.pos, spec.landRadius)) {
@@ -387,8 +377,7 @@ export function executeCast(
     }
     case 'wall': {
       const at = clampToRange(caster.pos, aim, castRange);
-      const dir = { x: at.x - caster.pos.x, z: at.z - caster.pos.z };
-      raiseWall(ctx, caster.id, caster.team, at, dir, spec.length, spec.duration);
+      raiseWall(ctx, caster.id, caster.team, at, delta(caster.pos, at), spec.length, spec.duration);
       return true;
     }
   }
@@ -411,11 +400,11 @@ export function castAbility(
   if (armed && armed.key === key && armed.until > ctx.time) {
     if (isRooted(caster, ctx.time)) return false;
     caster.recastArmed = null;
-    const landed = ctx.nav.isWalkableAt(armed.origin.x, armed.origin.z)
+    const landed = ctx.ground.isWalkableAt(armed.origin)
       ? armed.origin
-      : ctx.nav.nearestWalkable(armed.origin.x, armed.origin.z, 6);
+      : ctx.ground.nearestWalkable(armed.origin, 6);
     if (landed) {
-      caster.pos = { x: landed.x, z: landed.z };
+      caster.pos = copy(landed);
       caster.path = [];
       caster.activeDash = null;
     }
@@ -458,7 +447,7 @@ export function castAbility(
       ? (allyDashAim(ctx, caster, aim, spec.range, spec.toAlly.searchRadius) ?? aim)
       : aim;
     const at = clampToRange(caster.pos, goal, spec.range);
-    if (!ctx.nav.lineOfWalk(caster.pos, at)) return false;
+    if (!ctx.ground.lineOfWalk(caster.pos, at)) return false;
   }
 
   caster.cooldowns[key] = ctx.time + def.cooldown * (1 - RANK_CD_SCALE * (rank - 1));
@@ -470,13 +459,13 @@ export function castAbility(
     caster.recastArmed = {
       key,
       until: ctx.time + def.recast.window,
-      origin: { x: caster.pos.x, z: caster.pos.z },
+      origin: copy(caster.pos),
     };
   }
   if (def.windup && def.windup > 0) {
     // Deferred resolution: the sim's windup step fires it (or a stun
     // cancels it). Costs stay paid either way.
-    caster.pendingSpell = { key, aim: { x: aim.x, z: aim.z }, resolveAt: ctx.time + def.windup };
+    caster.pendingSpell = { key, aim: copy(aim), resolveAt: ctx.time + def.windup };
     caster.path = [];
     return true;
   }

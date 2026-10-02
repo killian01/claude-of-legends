@@ -15,6 +15,8 @@ export type LaneId = 'top' | 'mid' | 'bot';
 export interface WallShape {
   x: number;
   z: number;
+  // On the planet a wall or a brush stands on the sphere (ADR 0029).
+  y?: number;
   r: number;
 }
 
