@@ -3,7 +3,7 @@
 // offline Sim satisfies it structurally; the online mirror world will
 // implement it in phase 6, pinned by a parity test.
 
-import type { RoyaleView, SeatLabel } from './net/royale_wire';
+import type { SeatLabel, SnapCache, SnapRoyale } from './net/royale_wire';
 import type { ChampionDef } from './sim/content/champions';
 import type { GameMap, WardenPit } from './sim/content/map';
 import type { FavorStacks } from './sim/favors';
@@ -51,11 +51,11 @@ export interface IWorld {
   // (null while it stands). Null, or absent offline, draws the world's
   // own position.
   predictedPos?(unitId: number, now: number): { x: number; z: number; heading: Vec2 | null } | null;
-  // The battle royale (ADR 0031), online: the mode as the last snapshot
-  // told it, with the last caches list and, during the drop, everyone
-  // else's picks (src/net/royale_wire.ts RoyaleView); null outside one.
-  // Absent offline.
-  royale?(): RoyaleView | null;
+  // The battle royale (ADR 0031) as the newest snapshot told it, with the
+  // caches the last cache list named (the list rides once a second, the
+  // client keeps it in between); null in a 5v5. Absent on a world that
+  // never runs one, which reads as a 5v5 too.
+  royale?(): (SnapRoyale & { caches: SnapCache[] }) | null;
   // The drop: the landing point picked on the globe, a point on the
   // planet's sphere.
   pickDrop?(p: Vec3): void;
