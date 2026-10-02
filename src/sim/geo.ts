@@ -353,3 +353,47 @@ export function settle(p: Vec2, r: number): Vec2 {
   const d = len3(p.x, p.y, p.z);
   return { x: (p.x / d) * r, y: (p.y / d) * r, z: (p.z / d) * r };
 }
+
+// The unit direction of a vector, or null when it has no length: the
+// plane's {x / d, z / d}.
+export function unit(v: Vec2): Vec2 | null {
+  if (v.y === undefined) {
+    const d = hypot(v.x, v.z);
+    if (d <= 0) return null;
+    return { x: v.x / d, z: v.z / d };
+  }
+  const d = len3(v.x, v.y, v.z);
+  if (d <= 0) return null;
+  return { x: v.x / d, y: v.y / d, z: v.z / d };
+}
+
+// The vector at p pointing away from `from`, as long as the distance
+// between them: the plane's p - from. On the sphere the reverse of the
+// delta from p toward `from`, a tangent at p (a knockback's push, the
+// heading a cast arrives with at its aim).
+export function away(p: Vec2, from: Vec2): Vec2 {
+  if (p.y === undefined || from.y === undefined) return { x: p.x - from.x, z: p.z - from.z };
+  const v = delta(p, from);
+  return { x: -v.x, y: -(v.y ?? 0), z: -v.z };
+}
+
+// The tangent at p with components e toward east and n toward north
+// (basis): the plane's {x: e, z: n}, unscaled.
+export function tangent(p: Vec2, e: number, n: number): Vec2 {
+  if (p.y === undefined) return { x: e, z: n };
+  const { east, north } = basis(p);
+  return {
+    x: east.x * e + north.x * n,
+    y: (east.y ?? 0) * e + (north.y ?? 0) * n,
+    z: east.z * e + north.z * n,
+  };
+}
+
+// p moved by the tangent v: the plane's p + v; on the sphere along v's
+// great circle by v's length, so the point stays on the sphere.
+export function shift(p: Vec2, v: Vec2): Vec2 {
+  if (p.y === undefined || v.y === undefined) return { x: p.x + v.x, z: p.z + v.z };
+  const dir = unit(v);
+  if (!dir) return copy(p);
+  return offset(p, dir, len3(v.x, v.y, v.z));
+}

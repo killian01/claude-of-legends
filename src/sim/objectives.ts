@@ -4,11 +4,12 @@
 // the plaza and the forest rooms on the Star Orchard, ADR 0023), fights
 // back against champions that damage it, leashes hard to its pit, and on
 // death hands the killing team the Warden's Boon (team_buffs.ts). Called
-// from the fixed tick order in sim.ts right after waves.
+// from the fixed tick order in sim.ts right after waves. A pit on the
+// planet carries y, and the leash measures on the sphere (geo.ts).
 
 import type { GameMap, WardenPit } from './content/map';
 import { CREATURE_CALM_REGEN_PER_S } from './content/rings';
-import { hypot } from './exact';
+import { copy, dist } from './geo';
 import type { Rng } from './rng';
 import type { CombatCtx } from './sim_context';
 import { DT, type Vec2 } from './types';
@@ -76,7 +77,7 @@ function nearestHostileChampion(ctx: CombatCtx, w: Unit, range: number): Unit | 
   for (const u of ctx.units.values()) {
     if (u.kind !== 'champion' || u.dead || ctx.dead.has(u.id)) continue;
     if (!hostile(w, u)) continue;
-    const d = hypot(u.pos.x - w.pos.x, u.pos.z - w.pos.z);
+    const d = dist(u.pos, w.pos);
     if (d <= range && d < bestD) {
       bestD = d;
       best = u;
@@ -102,7 +103,7 @@ export function stepObjectives(ctx: CombatCtx, map: GameMap, state: ObjectiveSta
   if (!w || w.dead || ctx.dead.has(w.id)) return;
 
   const pit = pitOf(map, state);
-  const fromPit = hypot(w.pos.x - pit.x, w.pos.z - pit.z);
+  const fromPit = dist(w.pos, pit);
   const angry = ctx.time - w.lastDamagedAt <= WARDEN_CALM_S;
 
   // Leash: pulled too far it resets to full at its pit; left alone it
@@ -110,7 +111,7 @@ export function stepObjectives(ctx: CombatCtx, map: GameMap, state: ObjectiveSta
   // rule (content/rings.ts, CREATURE_CALM_REGEN_PER_S).
   if (fromPit > WARDEN_LEASH_RANGE) {
     w.hp = w.maxHp;
-    w.pos = { x: pit.x, z: pit.z };
+    w.pos = copy(pit);
     w.path = [];
     w.attackTargetId = null;
     w.statuses = [];
@@ -118,7 +119,7 @@ export function stepObjectives(ctx: CombatCtx, map: GameMap, state: ObjectiveSta
   }
   if (!angry && (w.hp < w.maxHp || fromPit > 1)) {
     w.hp = Math.min(w.maxHp, w.hp + w.maxHp * CREATURE_CALM_REGEN_PER_S * DT);
-    w.pos = { x: pit.x, z: pit.z };
+    w.pos = copy(pit);
     w.path = [];
     w.attackTargetId = null;
     w.statuses = [];
@@ -132,7 +133,7 @@ export function stepObjectives(ctx: CombatCtx, map: GameMap, state: ObjectiveSta
       target &&
       !target.dead &&
       !ctx.dead.has(target.id) &&
-      hypot(target.pos.x - pit.x, target.pos.z - pit.z) <= WARDEN_LEASH_RANGE;
+      dist(target.pos, pit) <= WARDEN_LEASH_RANGE;
     if (!targetOk) {
       const next = nearestHostileChampion(ctx, w, WARDEN_LEASH_RANGE);
       w.attackTargetId = next ? next.id : null;
