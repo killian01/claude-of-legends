@@ -51,6 +51,9 @@ export interface SnapRoyale {
   opening?: { c: number; since: number };
   // The recipient's own landing pick during the drop.
   drop?: WirePoint;
+  // Everyone else's landing picks during the drop, sent with the caches
+  // once a second: the drop shows where the others mean to land.
+  picks?: WirePoint[];
 }
 
 // Sent to each person when their match ends or they are out for good.
@@ -72,3 +75,19 @@ export type RoyaleClientMsg =
   | { t: 'royale'; v: RoyaleVariant; championId: string; sigils: [string, string]; skin?: number }
   // The landing point picked during the drop.
   | { t: 'drop'; x: number; y: number; z: number };
+
+// The mode as the online mirror keeps it (src/net/client_world.ts,
+// IWorld.royale): the last snapshot's block, with the last caches list
+// and, during the drop, everyone else's last picks, which the block only
+// carries once a second.
+export type RoyaleView = Omit<SnapRoyale, 'caches' | 'picks'> & {
+  caches: readonly SnapCache[];
+  picks: readonly WirePoint[];
+};
+
+// Who holds a champion's seat in a battle royale: the name the seat plays
+// under (a person's, or a bot's invented one) and the bot mark.
+export interface SeatLabel {
+  name: string;
+  bot: boolean;
+}
