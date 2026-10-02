@@ -11,6 +11,7 @@ import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import type { TeamId, Vec2 } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { type LaneGuide, ownCamps } from './lane_guide';
+import { teamLook } from './team_look';
 
 const SIZE_PX = 168;
 const TEAM_COLORS = ['#4a7dd6', '#d65c5c'];
@@ -160,7 +161,7 @@ export class Minimap {
     for (const u of this.world.units.values()) {
       if (u.dead) continue;
       if (!this.world.isVisible(this.viewerTeam, u.id)) continue;
-      const color = TEAM_COLORS[u.team] ?? '#fff';
+      const color = TEAM_COLORS[teamLook(u.team, this.viewerTeam, this.world.teamCount)] ?? '#fff';
       const x = this.px(u.pos.x);
       const z = this.pz(u.pos.z);
       if (u.kind === 'tower') {

@@ -15,6 +15,7 @@ import { unrootedMoveSpeed } from '../src/sim/combat/status';
 import { hasAnyFavor } from '../src/sim/favors';
 import type { Sim, SimEvent } from '../src/sim/sim';
 import { effectiveRank } from '../src/sim/stats';
+import { otherTeam, TWO_TEAMS } from '../src/sim/teams';
 import type { TeamId } from '../src/sim/types';
 import type { Unit } from '../src/sim/unit';
 
@@ -239,19 +240,21 @@ export function buildSnapshot(
       self.boonUntil = round2(boon.until);
       self.boonStacks = boon.stacks;
     }
-    const enemyBoon = sim.teamBuff((1 - team) as TeamId);
+    // The enemy's side of each is the other team's, a 5v5 fact (ADR 0030).
+    const enemy = sim.teamCount === TWO_TEAMS ? otherTeam(team) : null;
+    const enemyBoon = enemy === null ? null : sim.teamBuff(enemy);
     if (enemyBoon) {
       self.enemyBoonUntil = round2(enemyBoon.until);
       self.enemyBoonStacks = enemyBoon.stacks;
     }
     const wrath = sim.teamWrath(team);
     if (wrath !== null) self.wrathUntil = round2(wrath);
-    const enemyWrath = sim.teamWrath((1 - team) as TeamId);
+    const enemyWrath = enemy === null ? null : sim.teamWrath(enemy);
     if (enemyWrath !== null) self.enemyWrathUntil = round2(enemyWrath);
     const favors = sim.teamFavors(team);
     if (hasAnyFavor(favors)) self.favors = favors;
-    const enemyFavors = sim.teamFavors((1 - team) as TeamId);
-    if (hasAnyFavor(enemyFavors)) self.enemyFavors = enemyFavors;
+    const enemyFavors = enemy === null ? null : sim.teamFavors(enemy);
+    if (enemyFavors && hasAnyFavor(enemyFavors)) self.enemyFavors = enemyFavors;
   }
 
   const snapEvents: SnapEvent[] = [];
