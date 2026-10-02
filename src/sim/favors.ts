@@ -14,6 +14,7 @@ import {
   FAVOR_MAX_STACKS,
   OUT_OF_COMBAT_S,
 } from './content/rings';
+import { perTeam, TWO_TEAMS } from './teams';
 import type { TeamId } from './types';
 
 export type FavorStacks = Readonly<Record<AspectId, number>>;
@@ -45,32 +46,35 @@ export function outOfCombat(
   return time - u.lastDamagedAt > OUT_OF_COMBAT_S && time - u.lastDealtDamageAt > OUT_OF_COMBAT_S;
 }
 
+// One record per team, in team order (ADR 0030).
 export class Favors {
-  private readonly held: [Record<AspectId, number>, Record<AspectId, number>] = [
-    { ...NO_FAVORS },
-    { ...NO_FAVORS },
-  ];
+  private readonly held: Record<AspectId, number>[];
 
-  // The stacks as plain data, for a world checkpoint (src/sim/snapshot.ts).
-  snapshot(): [FavorStacks, FavorStacks] {
-    return [{ ...this.held[0] }, { ...this.held[1] }];
+  constructor(teamCount = TWO_TEAMS) {
+    this.held = perTeam(teamCount, () => ({ ...NO_FAVORS }));
   }
 
-  restore(held: [FavorStacks, FavorStacks]): void {
-    Object.assign(this.held[0], held[0]);
-    Object.assign(this.held[1], held[1]);
+  // The stacks as plain data, for a world checkpoint (src/sim/snapshot.ts).
+  snapshot(): FavorStacks[] {
+    return this.held.map((h) => ({ ...h }));
+  }
+
+  restore(held: readonly FavorStacks[]): void {
+    for (const [team, h] of this.held.entries()) Object.assign(h, held[team] ?? NO_FAVORS);
   }
 
   // One more stack of the aspect for the team, up to the cap; returns the
-  // stacks held after.
+  // stacks held after. A team the match does not hold takes nothing.
   grant(team: TeamId, aspect: AspectId): number {
     const h = this.held[team];
+    if (!h) return 0;
     h[aspect] = Math.min(FAVOR_MAX_STACKS, h[aspect] + 1);
     return h[aspect];
   }
 
   // A frozen copy of the team's stacks: what a unit mirrors.
   stacks(team: TeamId): FavorStacks {
-    return Object.freeze({ ...this.held[team] });
+    const h = this.held[team];
+    return h ? Object.freeze({ ...h }) : NO_FAVORS;
   }
 }

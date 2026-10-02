@@ -16,6 +16,7 @@ import type { Vec3 } from '../sim/geo';
 import type { NavGrid } from '../sim/navgrid';
 import type { Projectile } from '../sim/projectiles';
 import type { RingClock } from '../sim/rings';
+import { TWO_TEAMS } from '../sim/teams';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { Wall } from '../sim/walls';
@@ -175,6 +176,8 @@ export class ClientWorld implements IWorld {
   winner: TeamId | null = null;
   selfUnitId = 0;
   selfTeam: TeamId = 0;
+  // The match's team count (ADR 0030), told by match_start.
+  teamCount = TWO_TEAMS;
   // A coach seat (ADR 0013): the orders translate into coach orders and
   // the hands-on verbs are refused here already; the bot plays by itself.
   coach = false;
@@ -469,6 +472,7 @@ export class ClientWorld implements IWorld {
       this.royaleMatch = msg.royale ?? null;
       this.selfUnitId = msg.selfUnitId;
       this.selfTeam = msg.team;
+      this.teamCount = msg.teams ?? TWO_TEAMS;
       this.coach = msg.coach === true;
       // Forge queue: the match's forged definitions land here, before any
       // snapshot can name one of them.

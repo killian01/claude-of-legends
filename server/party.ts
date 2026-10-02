@@ -4,6 +4,7 @@
 // A group that cannot fit both sides is skipped and simply waits. Pure,
 // so the seating rules are pinned by tests.
 
+import type { Side } from '../src/sim/teams';
 import type { TeamId } from '../src/sim/types';
 
 export interface PackedGroup {
@@ -27,9 +28,9 @@ export function packGroups(
     if (used[0] + used[1] + size > target) continue;
     // Prefer the emptier side; fall back to the other if the group only
     // fits there. Ties go blue.
-    const first: TeamId = used[0] <= used[1] ? 0 : 1;
-    const second: TeamId = first === 0 ? 1 : 0;
-    let team: TeamId | null = null;
+    const first: Side = used[0] <= used[1] ? 0 : 1;
+    const second: Side = first === 0 ? 1 : 0;
+    let team: Side | null = null;
     if (used[first] + size <= teamCap) team = first;
     else if (used[second] + size <= teamCap) team = second;
     if (team === null) continue;

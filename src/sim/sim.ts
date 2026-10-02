@@ -31,10 +31,11 @@ import { SIGILS } from './content/sigils';
 import { clampSkin } from './content/skins';
 import { stepDashes } from './dashes';
 import { hasDecisionToken, spendDecisionToken } from './decision_budget';
-import { hypot } from './exact';
 import { Favors, favorBonus } from './favors';
 import type { ForgedChampionDef } from './forge/forged_def';
-import { applyFountainRegen, withinFountain } from './fountain';
+import { applyFountainRegen, fountainSeat, withinFountain } from './fountain';
+import { copy, dist, point } from './geo';
+import { type Ground, PlaneGround } from './ground';
 import { stepIdleDefense } from './idle_defense';
 import { LANE_ACTIVITY_WINDOW_S, LaneSightings } from './lane_sightings';
 import { assignLanes, laneOf } from './lanes';
@@ -44,7 +45,6 @@ import { stepMovement } from './movement';
 import { NavGrid } from './navgrid';
 import { initialObjectiveState, onWardenSlain, stepObjectives, wardenPitOf } from './objectives';
 import { passiveOf, stepPassives } from './passives';
-import { findPath } from './pathfind';
 import { playbookPolicy } from './playbook/interpreter';
 import type { LanePreference, PlaybookDef } from './playbook/types';
 import type { Action, ObsCamp, Observation, Policy } from './policy';
@@ -56,7 +56,7 @@ import { respawnDelay } from './respawn';
 import { ASSIST_GOLD_FRAC, championBounty, grantKillRewards, grantPassiveGold } from './rewards';
 import { initialRingStates, onCreatureSlain, type RingClock, ringClocks, stepRings } from './rings';
 import { Rng } from './rng';
-import { stepSeparation } from './separation';
+import { MINIONS_ONLY, stepSeparation } from './separation';
 import type { CombatCtx } from './sim_context';
 import {
   deepCopy,
@@ -75,6 +75,7 @@ import {
   ULT_RANK_LEVELS,
 } from './stats';
 import { TeamBuffs } from './team_buffs';
+import { otherTeam, perTeam, TWO_TEAMS, validTeam } from './teams';
 import { stepTowerAi } from './tower_ai';
 import {
   type AbilityKey,
@@ -85,7 +86,7 @@ import {
   TICK_RATE,
   type Vec2,
 } from './types';
-import { createChampion, hostile, staticFootprint, type Unit } from './unit';
+import { createChampion, hostile, staticFootprint, type Unit, type UnitKind } from './unit';
 import { computeVisibility, sightBlocked } from './vision';
 import { clampThroughWalls, stepWalls, type Wall } from './walls';
 import { FIRST_WAVE_AT, spawnWave, WAVE_EVERY } from './waves';
@@ -129,20 +130,51 @@ const SPAWN_SLOTS: readonly { x: number; z: number }[] = [
 // docs/star-orchard.md): the map record, its walkability grid, and strict
 // navigation, which keeps every step, spawn and respawn on a walkable cell
 // of a grid finer than a unit's stride. Absent, the launch map as always.
+// The team count (ADR 0030) is two for the 5v5, the default, and one per
+// champion in a free-for-all; the systems only the 5v5 has (the map's
+// towers and Sanctums, waves, the fountain, lane sightings) run only in a
+// match of two teams. A mode that decides death on its own terms gives
+// respawnPoint (where a dead champion comes back; null keeps it dead, and
+// it is asked again every tick until it answers) and respawnDelay (how
+// long a champion that just died waits); without them, the fountain and
+// the 5v5's clock.
 export interface SimOptions {
   map?: GameMap;
   nav?: NavGrid;
   strictNavigation?: boolean;
+  teamCount?: number;
+  respawnPoint?: (unit: Unit, sim: Sim) => Vec2 | null;
+  respawnDelay?: (unit: Unit, sim: Sim) => number;
+  // The ground the match stands on (ground.ts, ADR 0029): the planet's
+  // sphere for a match on the Wanderseed. Absent, the plane over `nav`.
+  ground?: Ground;
+  // The kinds of unit that push each other apart (separation.ts): the
+  // minions alone on the Orchard, where champions walk through a wave as
+  // the genre's do; a crowd of champions on the planet adds them.
+  separation?: readonly UnitKind[];
+}
+
+// A team's fading memory of one enemy champion (Sim.lastSeen).
+export interface LastSeenRecord {
+  x: number;
+  z: number;
+  at: number;
+  hpFrac: number;
 }
 
 export class Sim {
   readonly rng: Rng;
   readonly map: GameMap;
+  // The 5v5's grid: its lanes, waves, towers and fountain walk it.
   readonly nav: NavGrid;
+  // What every system that also runs on the planet walks (ground.ts).
+  readonly ground: Ground;
   // Match-scoped champion resolution: the roster plus this match's forged
   // definitions (plan-forge phase 2). Register forged champions BEFORE
   // adding their units; the registration order is part of match identity.
   readonly champions = new ChampionRegistry();
+  // How many teams the match holds (ADR 0030): teams are 0 to teamCount - 1.
+  readonly teamCount: number;
   readonly units = new Map<number, Unit>();
   readonly projectiles = new Map<number, Projectile>();
   readonly zones = new Map<number, Zone>();
@@ -153,19 +185,19 @@ export class Sim {
   readonly remoteSeats = new Map<number, RemoteSeat>();
   // Each team's memory of who stood in which lane (CONTEXT.md: Lane
   // opponent), fed by the vision step.
-  readonly laneSightings = new LaneSightings();
+  readonly laneSightings: LaneSightings;
   time = 0;
   tickCount = 0;
   winner: TeamId | null = null;
-  private visibility: [Set<number>, Set<number>] = [new Set(), new Set()];
+  // One set per team, in team order.
+  private visibility: Set<number>[];
   // Each team's fading memory of enemy champions: where one was last SEEN
   // and how hurt it was. The honest mirror of a human remembering who ran
   // into which brush; observe.ts exposes only fresh, currently-unseen
   // entries (additive obs v0). Indexed by observing team, keyed by unit id.
-  readonly lastSeen: [
-    Map<number, { x: number; z: number; at: number; hpFrac: number }>,
-    Map<number, { x: number; z: number; at: number; hpFrac: number }>,
-  ] = [new Map(), new Map()];
+  readonly lastSeen: Map<number, LastSeenRecord>[];
+  // Every lane has a line for a wave to walk; the planet has none.
+  private readonly hasLanes: boolean;
   private nextWaveAt = FIRST_WAVE_AT;
   private waveCount = 0;
   private nextId = 1;
@@ -173,7 +205,7 @@ export class Sim {
   private readonly dead = new Set<number>();
   private readonly killers = new Map<number, number>();
   // The Warden's Boon lives outside units so it survives deaths.
-  readonly teamBuffs = new TeamBuffs();
+  readonly teamBuffs: TeamBuffs;
   // Public like teamBuffs: tests rewind the spawn clock instead of ticking
   // ten sim-minutes to meet the first Warden.
   readonly objectives = initialObjectiveState();
@@ -183,22 +215,41 @@ export class Sim {
   readonly ringStates: ReturnType<typeof initialRingStates>;
   // The favors each team holds (CONTEXT.md: Favor), the truth the units'
   // mirrors are refreshed from (grantFavor).
-  readonly favors = new Favors();
+  readonly favors: Favors;
 
   constructor(
     seed: number,
     private readonly options: SimOptions = {},
   ) {
+    const teamCount = options.teamCount ?? TWO_TEAMS;
+    if (!Number.isInteger(teamCount) || teamCount < 1) {
+      throw new Error(`a match holds at least one team, not ${teamCount}`);
+    }
+    this.teamCount = teamCount;
+    this.laneSightings = new LaneSightings(teamCount);
+    this.lastSeen = perTeam(teamCount, () => new Map<number, LastSeenRecord>());
+    this.teamBuffs = new TeamBuffs(teamCount);
+    this.favors = new Favors(teamCount);
     this.rng = new Rng(seed);
     this.map = options.map ?? GAME_MAP;
-    this.campStates = initialCampStates(this.map);
+    this.hasLanes = (['top', 'mid', 'bot'] as const).every((l) => this.map.lanes[l].length >= 2);
+    this.campStates = initialCampStates(this.map, teamCount);
     this.ringStates = initialRingStates(this.map);
     this.nav = options.nav ?? new NavGrid(this.map.size, this.map.walls, this.map.borderMargin);
-    for (const u of createMapUnits(this.map, () => this.nextId++)) {
-      this.units.set(u.id, u);
-      this.nav.blockCircle(u.pos.x, u.pos.z, staticFootprint(u));
+    this.ground = options.ground ?? new PlaneGround(this.nav);
+    // The towers and Sanctums are the two sides' (ADR 0030).
+    if (this.twoTeams()) {
+      for (const u of createMapUnits(this.map, () => this.nextId++)) {
+        this.units.set(u.id, u);
+        this.ground.blockCircle(u.pos, staticFootprint(u));
+      }
     }
-    this.visibility = computeVisibility(this.map, this.units, 0);
+    this.visibility = computeVisibility(this.map, this.units, 0, undefined, teamCount);
+  }
+
+  // The 5v5's shape: the systems only it has run in a match of two teams.
+  private twoTeams(): boolean {
+    return this.teamCount === TWO_TEAMS;
   }
 
   private ctx(): CombatCtx {
@@ -206,6 +257,7 @@ export class Sim {
       time: this.time,
       rng: this.rng,
       nav: this.nav,
+      ground: this.ground,
       units: this.units,
       projectiles: this.projectiles,
       zones: this.zones,
@@ -225,9 +277,28 @@ export class Sim {
     this.champions.addForged(def);
   }
 
+  // A champion joins at `at`, else at its team's spawn: the map's authored
+  // seats, else a slot around the fountain. A team without a fountain (a
+  // free-for-all's, ADR 0030) needs `at`.
   addChampion(team: TeamId, at?: Vec2, championId: string = DEFAULT_CHAMPION_ID, skin = 0): Unit {
     const def = this.champions.get(championId);
     if (!def) throw new Error(`unknown champion ${championId}`);
+    if (!validTeam(team, this.teamCount)) {
+      throw new Error(`no team ${team} in a match of ${this.teamCount}`);
+    }
+    const pos = at ?? this.spawnPoint(team);
+    const champ = createChampion(this.nextId++, team, pos, def);
+    champ.skin = clampSkin(championId, skin);
+    this.units.set(champ.id, champ);
+    this.assignLanes(team);
+    return champ;
+  }
+
+  // Where a team's next champion stands at the start: the map's authored
+  // spawns in turn, else a seat around the team's fountain. A map without a
+  // fountain for the team (the planet) seats a champion only where it is
+  // told to stand.
+  private spawnPoint(team: TeamId): Vec2 {
     const fountain = this.map.fountains.find((f) => f.team === team);
     if (!fountain) throw new Error(`no fountain for team ${team}`);
     let count = 0;
@@ -237,14 +308,7 @@ export class Sim {
     const slot = SPAWN_SLOTS[count % SPAWN_SLOTS.length]!;
     const authored = this.map.spawns?.filter((s) => s.team === team) ?? [];
     const spawn = authored[count % Math.max(1, authored.length)];
-    const pos =
-      at ??
-      (spawn ? { x: spawn.x, z: spawn.z } : { x: fountain.x + slot.x, z: fountain.z + slot.z });
-    const champ = createChampion(this.nextId++, team, pos, def);
-    champ.skin = clampSkin(championId, skin);
-    this.units.set(champ.id, champ);
-    this.assignLanes(team);
-    return champ;
+    return spawn ? { x: spawn.x, z: spawn.z } : fountainSeat(fountain, slot);
   }
 
   // Every champion of a team holds a lane from creation (CONTEXT.md: Home
@@ -423,6 +487,9 @@ export class Sim {
       mix(u.id);
       mix(Math.round(u.pos.x * 64));
       mix(Math.round(u.pos.z * 64));
+      // A point on the planet carries its third coordinate; the plane's
+      // checksum is the one replays already recorded.
+      if (u.pos.y !== undefined) mix(Math.round(u.pos.y * 64));
       mix(Math.round(u.hp));
     }
     return h >>> 0;
@@ -442,14 +509,15 @@ export class Sim {
     this.waveCount = s.waveCount;
     this.nextId = s.nextId;
     this.rng.state = s.rng;
-    this.nav.restoreBlockers(s.nav);
+    this.ground.restoreBlockers(s.nav);
     thawUnits(this.units, s.units, this.champions);
     refillMap(this.projectiles, s.projectiles);
     refillMap(this.zones, s.zones);
     refillMap(this.walls, s.walls);
     this.visibility = s.visibility;
-    refillMap(this.lastSeen[0], s.lastSeen[0]);
-    refillMap(this.lastSeen[1], s.lastSeen[1]);
+    for (const [team, memory] of this.lastSeen.entries()) {
+      refillMap(memory, s.lastSeen[team] ?? new Map());
+    }
     refillSet(this.dead, s.dead);
     refillMap(this.killers, s.killers);
     this.teamBuffs.restore(s.teamBuffs);
@@ -472,7 +540,7 @@ export class Sim {
       waveCount: this.waveCount,
       nextId: this.nextId,
       rng: this.rng.state,
-      nav: this.nav.snapshotBlockers(),
+      nav: this.ground.snapshotBlockers(),
       units: freezeUnits(this.units),
       projectiles: new Map(this.projectiles),
       zones: new Map(this.zones),
@@ -517,13 +585,13 @@ export class Sim {
   // True when any alive friendly unit has the point in sight range with no
   // wall in between (blinds shrink the radius). Fog-scopes projectiles and
   // zones on the wire AND in Policy observations: one rule, both consumers.
-  isPointVisible(team: TeamId, x: number, z: number): boolean {
+  // A point on the planet carries y.
+  isPointVisible(team: TeamId, x: number, z: number, y?: number): boolean {
+    const p = point(x, z, y);
     for (const u of this.units.values()) {
       if (u.team !== team || u.neutral || u.dead) continue;
-      if (hypot(u.pos.x - x, u.pos.z - z) > u.sightRange * sightFactor(u, this.time)) {
-        continue;
-      }
-      if (sightBlocked(this.map, u.pos, { x, z })) continue;
+      if (dist(u.pos, p) > u.sightRange * sightFactor(u, this.time)) continue;
+      if (sightBlocked(this.map, u.pos, p)) continue;
       return true;
     }
     return false;
@@ -551,7 +619,7 @@ export class Sim {
     ) {
       return true;
     }
-    return this.visibility[team].has(unitId);
+    return this.visibility[team]?.has(unitId) ?? false;
   }
 
   // The Warden's Boon state for a team, null when inactive (IWorld).
@@ -586,7 +654,7 @@ export class Sim {
   // spot, its kind, and the team's own memory of it.
   campsFor(team: TeamId): ObsCamp[] {
     return this.campStates.map((state) => {
-      const seen = state.seen[team];
+      const seen = state.seen[team] ?? null;
       return {
         x: state.spot.x,
         z: state.spot.z,
@@ -623,7 +691,9 @@ export class Sim {
     }
   }
 
-  orderMove(unitId: number, x: number, z: number): void {
+  // An order's point is the plane's (x, z), or on the planet the sphere
+  // point with y.
+  orderMove(unitId: number, x: number, z: number, y?: number): void {
     if (this.winner !== null) return;
     const u = this.units.get(unitId);
     if (!u || u.moveSpeed <= 0 || u.dead || this.dead.has(unitId)) return;
@@ -631,7 +701,7 @@ export class Sim {
     u.holding = false;
     u.attackTargetId = null;
     u.attackMoveTarget = null;
-    u.path = findPath(this.nav, u.pos, { x, z });
+    u.path = this.ground.findPath(u.pos, point(x, z, y));
   }
 
   // Stop (S): halt in place and HOLD, opting out of idle auto-defense until
@@ -658,10 +728,10 @@ export class Sim {
 
   // System-driven pathing (attack-move) that does not clear the standing
   // intent the way a player move order does.
-  orderPath(unitId: number, x: number, z: number): void {
+  orderPath(unitId: number, x: number, z: number, y?: number): void {
     const u = this.units.get(unitId);
     if (!u || u.moveSpeed <= 0 || u.dead) return;
-    u.path = findPath(this.nav, u.pos, { x, z });
+    u.path = this.ground.findPath(u.pos, point(x, z, y));
   }
 
   orderAttack(unitId: number, targetId: number): void {
@@ -677,15 +747,15 @@ export class Sim {
     u.attackTargetId = targetId;
   }
 
-  orderAttackMove(unitId: number, x: number, z: number): void {
+  orderAttackMove(unitId: number, x: number, z: number, y?: number): void {
     if (this.winner !== null) return;
     const u = this.units.get(unitId);
     if (u?.kind !== 'champion' || u.dead || this.dead.has(unitId)) return;
     cancelRecall(u);
     u.holding = false;
     u.attackTargetId = null;
-    u.attackMoveTarget = { x, z };
-    u.path = findPath(this.nav, u.pos, { x, z });
+    u.attackMoveTarget = point(x, z, y);
+    u.path = this.ground.findPath(u.pos, point(x, z, y));
   }
 
   startRecall(unitId: number): void {
@@ -818,6 +888,27 @@ export class Sim {
     return true;
   }
 
+  // Where a dead champion comes back, null to keep it dead for now: the
+  // mode's point when it decides (SimOptions.respawnPoint), else its own
+  // fountain, slotted by teammate order so two teammates can never share
+  // an exact respawn coordinate; a team without a fountain stays down.
+  private respawnSpot(u: Unit): Vec2 | null {
+    if (this.options.respawnPoint) {
+      const at = this.options.respawnPoint(u, this);
+      return at ? { ...at } : null;
+    }
+    const fountain = this.map.fountains.find((f) => f.team === u.team);
+    if (!fountain) return null;
+    let teammateIndex = 0;
+    for (const o of this.units.values()) {
+      if (o.kind === 'champion' && o.team === u.team && o.id < u.id) teammateIndex++;
+    }
+    const slot = SPAWN_SLOTS[teammateIndex % SPAWN_SLOTS.length]!;
+    const pos = fountainSeat(fountain, slot);
+    if (!this.options.strictNavigation) return pos;
+    return this.nav.nearestWalkable(pos.x, pos.z) ?? { x: fountain.x, z: fountain.z };
+  }
+
   tick(): SimEvent[] {
     const ctx = this.ctx();
 
@@ -840,7 +931,7 @@ export class Sim {
         u.hp = Math.min(u.maxHp, u.hp + (u.maxHp - u.hp) * favorBonus(u.favors, 'tide'));
       }
     }
-    applyFountainRegen(ctx, this.map);
+    if (this.twoTeams()) applyFountainRegen(ctx, this.map);
     stepPassives(ctx, this.tickCount);
     for (const u of this.units.values()) {
       if (u.coachOrder) stepCoachOrder(this, u);
@@ -849,12 +940,14 @@ export class Sim {
     runBotDecisions(this, this.policies);
     runRemoteDecisions(this, this.remoteSeats);
 
-    if (this.winner === null && this.time >= this.nextWaveAt) {
+    // A map without lanes sends no waves, and one without pits raises no
+    // Warden: the planet's creatures are its own mode's (ADR 0031).
+    if (this.twoTeams() && this.winner === null && this.hasLanes && this.time >= this.nextWaveAt) {
       spawnWave(ctx, this.map, this.waveCount++, this.options.strictNavigation);
       this.nextWaveAt += WAVE_EVERY;
     }
     if (this.winner === null) {
-      stepObjectives(ctx, this.map, this.objectives);
+      if (this.map.wardenPits.length > 0) stepObjectives(ctx, this.map, this.objectives);
       stepRings(ctx, this.ringStates);
       stepCamps(ctx, this.campStates);
     }
@@ -864,7 +957,7 @@ export class Sim {
     stepAttackMove(this);
     stepIdleDefense(this);
     stepWindups(ctx);
-    stepAutoAttacks(ctx, this.nav);
+    stepAutoAttacks(ctx);
     stepDashes(ctx, DT);
 
     for (const u of this.units.values()) {
@@ -876,10 +969,10 @@ export class Sim {
         // Stale paths can cross a wall raised after they were computed;
         // clamp the step at the wall face instead of walking through.
         if (this.walls.size > 0 || this.options.strictNavigation) {
-          const from = { x: u.pos.x, z: u.pos.z };
+          const from = copy(u.pos);
           stepMovement(u, DT, speed);
-          clampThroughWalls(this.nav, from, u);
-          if (this.options.strictNavigation && !this.nav.lineOfWalk(from, u.pos)) {
+          clampThroughWalls(this.ground, from, u);
+          if (this.options.strictNavigation && !this.ground.lineOfWalk(from, u.pos)) {
             u.pos = from;
             u.path = [];
           }
@@ -889,7 +982,7 @@ export class Sim {
       }
     }
 
-    stepSeparation(ctx, this.nav);
+    stepSeparation(ctx, this.options.separation ?? MINIONS_ONLY);
     stepProjectiles(ctx, DT);
     stepZones(ctx);
 
@@ -933,7 +1026,8 @@ export class Sim {
         u.deaths += 1;
         u.dead = true;
         u.hp = 0;
-        u.respawnAt = this.time + respawnDelay(u.level, this.time);
+        const delay = this.options.respawnDelay;
+        u.respawnAt = this.time + (delay ? delay(u, this) : respawnDelay(u.level, this.time));
         u.path = [];
         u.attackTargetId = null;
         u.statuses = [];
@@ -982,10 +1076,10 @@ export class Sim {
             }
           }
         }
-        if (u.moveSpeed <= 0) this.nav.unblockCircle(u.pos.x, u.pos.z, staticFootprint(u));
+        if (u.moveSpeed <= 0) this.ground.unblockCircle(u.pos, staticFootprint(u));
         this.units.delete(id);
         if (u.kind === 'sanctum' && this.winner === null) {
-          this.winner = (1 - u.team) as TeamId;
+          this.winner = otherTeam(u.team);
           this.events.push({ type: 'victory', team: this.winner });
         }
       }
@@ -996,43 +1090,46 @@ export class Sim {
     for (const u of this.units.values()) {
       if (this.winner !== null) break;
       if (u.kind !== 'champion' || !u.dead || this.time < u.respawnAt) continue;
-      const fountain = this.map.fountains.find((f) => f.team === u.team)!;
-      // Slot by teammate order so two teammates can never share an exact
-      // respawn coordinate; cooldowns persist through death (review F.2:
-      // dying was a free ultimate refresh).
-      let teammateIndex = 0;
-      for (const o of this.units.values()) {
-        if (o.kind === 'champion' && o.team === u.team && o.id < u.id) teammateIndex++;
-      }
-      const slot = SPAWN_SLOTS[teammateIndex % SPAWN_SLOTS.length]!;
+      // Cooldowns persist through death (review F.2: dying was a free
+      // ultimate refresh).
+      const back = this.respawnSpot(u);
+      if (!back) continue;
       u.dead = false;
-      u.pos = { x: fountain.x + slot.x, z: fountain.z + slot.z };
-      if (this.options.strictNavigation)
-        u.pos = this.nav.nearestWalkable(u.pos.x, u.pos.z) ?? { x: fountain.x, z: fountain.z };
+      u.pos = back;
       u.hp = u.maxHp;
       u.mana = u.maxMana;
       u.statuses = [];
     }
 
-    this.visibility = computeVisibility(this.map, this.units, this.time, this.zones);
+    this.visibility = computeVisibility(
+      this.map,
+      this.units,
+      this.time,
+      this.zones,
+      this.teamCount,
+    );
     noteCampSightings(this.campStates, this.time, (team, x, z) => this.isPointVisible(team, x, z));
 
     // Refresh each team's memory of the enemy champions it can see right
     // now; a dead champion is forgotten (its corpse spot means nothing).
+    // Every other team remembers; only a two-team match has lanes to note.
     for (const u of this.units.values()) {
       if (u.kind !== 'champion' || u.neutral) continue;
-      const observer = (1 - u.team) as TeamId;
-      if (u.dead) {
-        this.lastSeen[observer].delete(u.id);
-        continue;
-      }
-      if (this.visibility[observer].has(u.id)) {
-        this.lastSeen[observer].set(u.id, {
+      for (let observer = 0; observer < this.teamCount; observer++) {
+        if (observer === u.team) continue;
+        const memory = this.lastSeen[observer]!;
+        if (u.dead) {
+          memory.delete(u.id);
+          continue;
+        }
+        if (!this.visibility[observer]!.has(u.id)) continue;
+        memory.set(u.id, {
           x: u.pos.x,
           z: u.pos.z,
           at: this.time,
           hpFrac: u.maxHp > 0 ? u.hp / u.maxHp : 0,
         });
+        if (!this.twoTeams()) continue;
         const lane = laneOf(u.pos.x, u.pos.z, this.map);
         if (lane) this.laneSightings.record(observer, lane, u.id, this.time, DT);
       }
