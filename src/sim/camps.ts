@@ -21,6 +21,7 @@ import {
 import type { CampSpot, GameMap } from './content/map';
 import { hypot } from './exact';
 import type { CombatCtx } from './sim_context';
+import { perTeam, TWO_TEAMS } from './teams';
 import type { TeamId, Vec2 } from './types';
 import { createCamp, hostile, type Unit } from './unit';
 
@@ -42,15 +43,16 @@ export interface CampState {
   // The live bodies, empty between spawns.
   unitIds: number[];
   nextSpawnAt: number;
-  seen: [CampSighting | null, CampSighting | null];
+  // One sighting per team, in team order (ADR 0030).
+  seen: (CampSighting | null)[];
 }
 
-export function initialCampStates(map: GameMap): CampState[] {
+export function initialCampStates(map: GameMap, teamCount = TWO_TEAMS): CampState[] {
   return map.camps.map((spot) => ({
     spot,
     unitIds: [],
     nextSpawnAt: CAMP_FIRST_SPAWN_S,
-    seen: [null, null],
+    seen: perTeam(teamCount, () => null),
   }));
 }
 
@@ -170,7 +172,7 @@ export function noteCampSightings(
   if (time < CAMP_FIRST_SPAWN_S) return;
   for (const state of states) {
     const up = state.unitIds.length > 0;
-    for (const team of [0, 1] as const) {
+    for (let team = 0; team < state.seen.length; team++) {
       if (!isPointVisible(team, state.spot.x, state.spot.z)) continue;
       const before = state.seen[team];
       state.seen[team] = {
