@@ -54,8 +54,10 @@ export interface RoyalePlayer {
   ackAt: number;
   // Took a bot's seat after the start (ADR 0025).
   dropIn: boolean;
-  // The caches list reached this person at least once.
+  // The caches list, and the scoreboard with every seat's name and bot
+  // mark, reached this person at least once.
   cachesSent: boolean;
+  scoreSent: boolean;
   // The result was told: out for good (One life), or the end.
   resultSent: boolean;
 }
@@ -210,6 +212,7 @@ export class RoyaleMatch {
       ackAt: 0,
       dropIn,
       cachesSent: false,
+      scoreSent: false,
       resultSent: false,
     };
     this.players.set(person.clientId, player);

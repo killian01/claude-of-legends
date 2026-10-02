@@ -298,20 +298,20 @@ export type SnapEvent =
   | { e: 'victory'; team: TeamId }
   | RoyaleSnapEvent;
 
-// The battle royale's events on the wire (src/sim/royale/types.ts
-// RoyaleEvent, server/royale_snapshot.ts): a landing, a piece of loot, a
+// The battle royale's events on the wire, named as the sim names them
+// (src/sim/royale/types.ts RoyaleEvent, server/royale_snapshot.ts): a landing, a piece of loot, a
 // cache opened and a launch pad taken, when the recipient's champion did
 // it or the recipient sees who did; and to everyone, the Dusk's phase, a
 // champion out for good with its place (One life), the score leader
 // (Respawn), and the end. Names ride along for the kill feed.
 export type RoyaleSnapEvent =
-  | { e: 'land'; unitId: number }
-  | { e: 'loot'; unitId: number; itemId: string; source: 'cache' | 'camp' | 'takedown' }
-  | { e: 'cache'; unitId: number; cacheId: number }
-  | { e: 'pad'; unitId: number; padId: number }
-  | { e: 'dusk'; phase: number }
+  | { e: 'royale_land'; unitId: number }
+  | { e: 'royale_loot'; unitId: number; itemId: string; source: 'cache' | 'camp' | 'takedown' }
+  | { e: 'royale_cache'; unitId: number; cacheId: number }
+  | { e: 'royale_pad'; unitId: number; padId: number }
+  | { e: 'royale_dusk'; phase: number }
   | {
-      e: 'out';
+      e: 'royale_out';
       unitId: number;
       killerId: number;
       place: number;
@@ -320,8 +320,8 @@ export type RoyaleSnapEvent =
       vb?: 1;
       kb?: 1;
     }
-  | { e: 'leader'; unitId: number; n: string; b?: 1 }
-  | { e: 'end'; winnerId: number | null; n: string | null; b?: 1 };
+  | { e: 'royale_leader'; unitId: number; n: string; b?: 1 }
+  | { e: 'royale_end'; winnerId: number | null; n: string | null; b?: 1 };
 
 // A scoreboard line as the wire carries it: the sim's, the seat's player
 // filled in by the server, and in a battle royale 1 when a bot holds it.

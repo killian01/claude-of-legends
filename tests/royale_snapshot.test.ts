@@ -152,7 +152,7 @@ describe('the events', () => {
     expect(s.events).toEqual<SnapEvent[]>([
       { e: 'death', unitId: victim.id, killerId: killer.id, n: 'Bot20', kn: 'Bot21', vb: 1, kb: 1 },
       {
-        e: 'out',
+        e: 'royale_out',
         unitId: victim.id,
         killerId: killer.id,
         place: 50,
@@ -161,9 +161,9 @@ describe('the events', () => {
         vb: 1,
         kb: 1,
       },
-      { e: 'end', winnerId: killer.id, n: 'Bot21', b: 1 },
-      { e: 'dusk', phase: 2 },
-      { e: 'leader', unitId: killer.id, n: 'Bot21', b: 1 },
+      { e: 'royale_end', winnerId: killer.id, n: 'Bot21', b: 1 },
+      { e: 'royale_dusk', phase: 2 },
+      { e: 'royale_leader', unitId: killer.id, n: 'Bot21', b: 1 },
     ]);
   });
 
@@ -180,9 +180,9 @@ describe('the events', () => {
       { type: 'royale_pad', unitId: self.id, padId: 2 },
     ]);
     expect(s.events).toEqual<SnapEvent[]>([
-      { e: 'loot', unitId: self.id, itemId: 'longblade', source: 'cache' },
-      { e: 'land', unitId: self.id },
-      { e: 'pad', unitId: self.id, padId: 2 },
+      { e: 'royale_loot', unitId: self.id, itemId: 'longblade', source: 'cache' },
+      { e: 'royale_land', unitId: self.id },
+      { e: 'royale_pad', unitId: self.id, padId: 2 },
     ]);
   });
 });

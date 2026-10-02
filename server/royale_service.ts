@@ -449,11 +449,17 @@ export class RoyaleService {
       m.notePoints(cid, msg.delta);
       send(cid, msg);
     });
-    const score = m.sim.tickCount % ROYALE_SCORE_EVERY_TICKS === 0 ? m.buildScore() : null;
+    // The scoreboard every few seconds, and to a person just seated at once:
+    // the names the kill feed and the nameplates read.
+    let score = m.sim.tickCount % ROYALE_SCORE_EVERY_TICKS === 0 ? m.buildScore() : null;
     for (const p of m.players.values()) {
       const snap = m.snapshotFor(p.clientId);
       if (snap) send(p.clientId, snap);
-      if (score) send(p.clientId, score);
+      if (!score && !p.scoreSent) score = m.buildScore();
+      if (score && (!p.scoreSent || m.sim.tickCount % ROYALE_SCORE_EVERY_TICKS === 0)) {
+        send(p.clientId, score);
+      }
+      p.scoreSent = true;
     }
     // Out for good (One life): the result now, the end screen's Play again.
     for (const p of m.outThisTick()) {
