@@ -13,11 +13,14 @@ export const ULT_LEVEL = 6;
 
 export type DamageType = 'physical' | 'magic' | 'true';
 
-// Ground-plane coordinates. Named x/z so the Three.js renderer maps them onto
-// its ground plane without translation.
+// Ground coordinates. Named x/z so the Three.js renderer maps them onto its
+// ground plane without translation. On the planet the ground is a sphere and
+// a point carries y as well (src/sim/geo.ts, ADR 0029); a point on the plane
+// never has one.
 export interface Vec2 {
   x: number;
   z: number;
+  y?: number;
 }
 
 // One scoreboard line per champion; shared by the sim, the wire protocol,
