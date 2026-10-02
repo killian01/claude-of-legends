@@ -33,9 +33,11 @@ on 2026-10-02; this file keeps them in one place and tracks the build.
 ## The build
 
 1. Ground geometry (`src/sim/geo.ts`) and a pinned 5v5 (`tests/fixed_match.test.ts`). Done.
-2. Any number of teams (ADR 0030).
+2. Any number of teams (ADR 0030). Done.
 3. The sim's systems that run on the planet rewritten over `geo.ts`; the ground seam over the
-   Orchard's grid and the planet's cube-sphere grid (`src/sim/sphere_nav.ts`).
+   Orchard's grid and the planet's cube-sphere grid (`src/sim/sphere_nav.ts`). The systems and
+   the seam (`src/sim/ground.ts`) are done, pinned on an open sphere by the sphere tests'
+   shared planet (`tests/sphere_world.ts`); the cube-sphere grid goes behind `SphereGround`.
 4. The Wanderseed: layout, navigation, model, previews (`scripts/planet/`, `docs/planet.md`).
 5. The mode in the sim (`src/sim/royale/`): the drop, the Dusk, caches, pads, loot, levels,
    creatures, takedowns, respawn, scores, the end.

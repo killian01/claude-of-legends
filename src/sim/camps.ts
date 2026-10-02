@@ -22,7 +22,7 @@ import {
 } from './content/camps';
 import type { CampSpot, GameMap } from './content/map';
 import { copy, dist, shift, tangent } from './geo';
-import { landingAt } from './ground_walk';
+import { landingOn } from './ground';
 import type { CombatCtx } from './sim_context';
 import { perTeam, TWO_TEAMS } from './teams';
 import type { TeamId, Vec2 } from './types';
@@ -95,7 +95,7 @@ export function stepCamps(ctx: CombatCtx, states: CampState[]): void {
       if (ctx.time >= state.nextSpawnAt) {
         const def = CAMPS[state.spot.kind];
         for (const stand of campStands(state.spot, state.spot.kind)) {
-          const at = landingAt(ctx, stand) ?? copy(state.spot);
+          const at = landingOn(ctx.ground, stand) ?? copy(state.spot);
           const id = ctx.allocId();
           ctx.units.set(id, createCamp(id, def, at, ctx.time));
           state.unitIds.push(id);
@@ -165,17 +165,18 @@ export function onCampSlain(
 
 // Each team's memory of the spots, from the tick's vision: a spot in a
 // team's sight is noted as it stands. Nothing is noted before the opening
-// clock, so an empty spot at 0:10 is not a cleared one.
+// clock, so an empty spot at 0:10 is not a cleared one. A spot on the
+// planet is looked at where it stands on the sphere, its y included.
 export function noteCampSightings(
   states: CampState[],
   time: number,
-  isPointVisible: (team: TeamId, x: number, z: number) => boolean,
+  isPointVisible: (team: TeamId, x: number, z: number, y?: number) => boolean,
 ): void {
   if (time < CAMP_FIRST_SPAWN_S) return;
   for (const state of states) {
     const up = state.unitIds.length > 0;
     for (let team = 0; team < state.seen.length; team++) {
-      if (!isPointVisible(team, state.spot.x, state.spot.z)) continue;
+      if (!isPointVisible(team, state.spot.x, state.spot.z, state.spot.y)) continue;
       const before = state.seen[team];
       state.seen[team] = {
         at: time,

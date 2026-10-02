@@ -23,7 +23,7 @@ import {
   type RingId,
 } from './content/rings';
 import { copy, dist } from './geo';
-import { landingAt } from './ground_walk';
+import { landingOn } from './ground';
 import type { CombatCtx } from './sim_context';
 import { DT } from './types';
 import { createCreature, hostile, type Unit } from './unit';
@@ -94,7 +94,7 @@ export function stepRings(ctx: CombatCtx, states: RingState[]): void {
       if (ctx.time >= state.nextRiseAt) {
         const id = ctx.allocId();
         const center = copy(site);
-        const at = landingAt(ctx, center) ?? center;
+        const at = landingOn(ctx.ground, center) ?? center;
         ctx.units.set(
           id,
           createCreature(id, creatureDefOf(state), at, ringAspect(state), ctx.time),

@@ -69,46 +69,6 @@ describe('sim architecture', () => {
       .map((file) => path.relative(srcDir, file));
     expect(offenders).toEqual([path.join('net', 'replay.ts')]);
   });
-
-  // ADR 0029: the systems that run on the planet write their ground
-  // arithmetic once, over src/sim/geo.ts, so it plays on the plane and on
-  // the sphere alike. A length off the plane's hypot, a coordinate added
-  // or subtracted by hand, or a point copied as {x, z} (which drops a
-  // sphere point's y) is the flat arithmetic coming back.
-  it('keeps the kits, the passives and the creatures on the ground geometry', () => {
-    const onThePlanet = [
-      'combat/effects.ts',
-      'combat/casting.ts',
-      'combat/ally_dash.ts',
-      'combat/shield_burst.ts',
-      'passives.ts',
-      'passive_types.ts',
-      'content/item_passives.ts',
-      'forge/passive_templates.ts',
-      'rewards.ts',
-      'camps.ts',
-      'rings.ts',
-      'objectives.ts',
-      'team_buffs.ts',
-      'favors.ts',
-      'ground_walk.ts',
-      ...readdirSync(join(simDir, 'content', 'champions')).map((f) => `content/champions/${f}`),
-    ];
-    const flat: { re: RegExp; what: string }[] = [
-      { re: /\bhypot\b/, what: "the plane's length" },
-      { re: /\.(x|z)\s*[-+*/](?![-+*/=])/, what: 'a coordinate in arithmetic' },
-      { re: /[-+*/]\s*\(?\s*[\w.]+\.(x|z)\b/, what: 'a coordinate in arithmetic' },
-      { re: /\{\s*x:\s*[\w.]+\.x,\s*z:\s*[\w.]+\.z\s*\}/, what: 'a point copied without its y' },
-    ];
-    const offenders: string[] = [];
-    for (const file of onThePlanet) {
-      const text = readFileSync(join(simDir, file), 'utf8');
-      for (const rule of flat) {
-        if (rule.re.test(text)) offenders.push(`${file}: ${rule.what} (${rule.re})`);
-      }
-    }
-    expect(offenders).toEqual([]);
-  });
 });
 
 // ADR 0029: the systems that run on the planet measure, step and turn
@@ -117,7 +77,30 @@ describe('sim architecture', () => {
 // quietly flatten the sphere, so the converted files are held to it by a
 // scan. The systems only the 5v5 has (lanes, waves, towers, the fountain,
 // the recall) keep the plane's arithmetic and are not listed.
-const ON_THE_PLANET = [
+//
+// The kits, the passives and the creatures carry no arithmetic of their
+// own on a coordinate at all, so they are held to a stricter scan beside
+// it: no coordinate in any arithmetic, no point copied as {x, z} (which
+// drops a sphere point's y).
+const KITS_ON_THE_PLANET = [
+  'combat/effects.ts',
+  'combat/casting.ts',
+  'combat/ally_dash.ts',
+  'combat/shield_burst.ts',
+  'passives.ts',
+  'passive_types.ts',
+  'content/item_passives.ts',
+  'forge/passive_templates.ts',
+  'rewards.ts',
+  'camps.ts',
+  'rings.ts',
+  'objectives.ts',
+  'team_buffs.ts',
+  'favors.ts',
+  ...readdirSync(join(simDir, 'content', 'champions')).map((f) => `content/champions/${f}`),
+];
+
+const CORE_ON_THE_PLANET = [
   'attack_move.ts',
   'combat/ally_dash.ts',
   'combat/auto_attack.ts',
@@ -135,6 +118,8 @@ const ON_THE_PLANET = [
   'walls.ts',
   'zones.ts',
 ];
+
+const ON_THE_PLANET = [...new Set([...CORE_ON_THE_PLANET, ...KITS_ON_THE_PLANET])];
 
 const RAW_GROUND: { re: RegExp; why: string }[] = [
   { re: /\bhypot\(/, why: 'a length on the ground is geo.dist or geo.norm' },
@@ -177,6 +162,23 @@ describe('the ground geometry', () => {
       expect(rawGround(line)).not.toEqual([]);
     }
     expect(rawGround('const d = dist(u.pos, z.pos);')).toEqual([]);
+  });
+
+  it('keeps the kits, the passives and the creatures off coordinate arithmetic', () => {
+    const flat: { re: RegExp; what: string }[] = [
+      { re: /\bhypot\b/, what: "the plane's length" },
+      { re: /\.(x|z)\s*[-+*/](?![-+*/=])/, what: 'a coordinate in arithmetic' },
+      { re: /[-+*/]\s*\(?\s*[\w.]+\.(x|z)\b/, what: 'a coordinate in arithmetic' },
+      { re: /\{\s*x:\s*[\w.]+\.x,\s*z:\s*[\w.]+\.z\s*\}/, what: 'a point copied without its y' },
+    ];
+    const offenders: string[] = [];
+    for (const file of KITS_ON_THE_PLANET) {
+      const text = readFileSync(join(simDir, file), 'utf8');
+      for (const rule of flat) {
+        if (rule.re.test(text)) offenders.push(`${file}: ${rule.what} (${rule.re})`);
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });
 
