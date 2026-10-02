@@ -1046,6 +1046,10 @@ const royale = new RoyaleService({
   },
   bank: bankPoints,
   appendSeat: (rec) => appendJsonl(SEATS_FILE, rec),
+  saveReplay: (id, record) => {
+    saveJsonAtomic(path.join(REPLAYS_DIR, `${id}.json`), record);
+    pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP, botStore.heldReplayIds());
+  },
   now: () => Date.now(),
   log: (line) => console.log(line),
 });

@@ -5,6 +5,7 @@
 // real one is built by buildRoyaleSim in src/net/replay.ts, the one place
 // a match's sim is built (tests/architecture.test.ts).
 
+import type { ReplayPick } from '../src/net/replay';
 import type { RoyaleVariant } from '../src/net/royale_wire';
 import type { Vec3 } from '../src/sim/geo';
 import type { Projectile } from '../src/sim/projectiles';
@@ -66,6 +67,12 @@ export interface RoyaleBuild {
   sim: RoyaleSim;
   // The unit each pick became, in pick order.
   unitIds: number[];
+  // What rebuilds this sim for a replay (src/net/replay.ts): the picks as
+  // the builder took them, and the mode's own part of the record.
+  replay: {
+    picks: readonly ReplayPick[];
+    royale: { variant: RoyaleVariant; guestsOnly?: boolean };
+  };
   // Hands a seat to the battle royale's bot: a person left it.
   standIn(unitId: number, skill: RoyaleSkill, softened: boolean): void;
 }
