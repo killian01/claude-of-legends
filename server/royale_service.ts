@@ -13,7 +13,7 @@
 
 import { type ClientMsg, type ServerMsg, stepOnWire } from '../src/net/protocol';
 import type { RoyaleVariant } from '../src/net/royale_wire';
-import { bankAwards } from './points';
+import { activeNearEnd, bankAwards } from './points';
 import { ROYALE_VERBS } from './royale_commands';
 import { chooseRoyaleMatch, type RoyaleCandidate, takesPeople } from './royale_join';
 import { RoyaleMatch, type RoyalePlayer, type RoyaleReplay } from './royale_match';
@@ -478,7 +478,11 @@ export class RoyaleService {
   }
 
   // The last light went out, or the last champion stands: every person
-  // still in hears their result. Respawn hands back the people to move.
+  // still in hears their result. Respawn hands back the people to move: the
+  // ones still playing (a command in the last three minutes, ADR 0027's
+  // rule), so a tab left open does not play match after match for nobody;
+  // the others are told the match ended, and their end screen offers the
+  // way back in.
   private end(entry: RoyaleEntry): RoyaleClient[] | null {
     const m = entry.match;
     const people: RoyaleClient[] = [];
@@ -491,7 +495,9 @@ export class RoyaleService {
       const c = this.deps.client(p.clientId);
       if (!c) continue;
       this.report(c, entry, 'ended');
-      people.push(c);
+      if (m.variant !== 'respawn') continue;
+      if (activeNearEnd(m.sim.tickCount, p.lastCommandAt)) people.push(c);
+      else this.deps.send(p.clientId, { t: 'match_end' });
     }
     const replay = m.replayRecord();
     if (replay) {
