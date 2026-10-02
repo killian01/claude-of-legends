@@ -7,6 +7,7 @@
 // recording are the server's (server/main.ts through server/arena_runner).
 
 import type { ReplayPick } from '../src/net/replay';
+import type { Side } from '../src/sim/teams';
 import type { TeamId } from '../src/sim/types';
 import { fillWithBots } from './bot_fill';
 import type { BotRow } from './bot_store';
@@ -46,7 +47,7 @@ export function dueRound(lastAt: number | null, now: number, roundMs = ARENA_ROU
 
 // Sides snake by rating so the two teams come out even: 1st and 4th
 // together, 2nd and 3rd together, and so on.
-const SNAKE: readonly TeamId[] = [0, 1, 1, 0, 0, 1, 1, 0, 0, 1];
+const SNAKE: readonly Side[] = [0, 1, 1, 0, 0, 1, 1, 0, 0, 1];
 
 // Seats a sorted run of bots into one match: one bot per account, no
 // duplicate champion inside a team, snaked sides. Bots that cannot fit
@@ -66,8 +67,8 @@ function seatMatch(sorted: readonly { bot: BotRow; owner: string }[]): {
       continue;
     }
     const preferred = SNAKE[seats.length] ?? 0;
-    const other: TeamId = preferred === 0 ? 1 : 0;
-    let team: TeamId | null = null;
+    const other: Side = preferred === 0 ? 1 : 0;
+    let team: Side | null = null;
     for (const t of [preferred, other]) {
       if (count[t] < ARENA_TEAM_SIZE && !champions[t].has(entry.bot.championId)) {
         team = t;

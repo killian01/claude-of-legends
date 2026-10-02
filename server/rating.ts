@@ -15,8 +15,9 @@ export interface RatedSeat {
   rating: number;
 }
 
-export function isRated(humansByTeam: readonly [number, number]): boolean {
-  return humansByTeam[0] > 0 && humansByTeam[1] > 0;
+// Humans by team, indexed by team: rated when at least two teams hold one.
+export function isRated(humansByTeam: readonly number[]): boolean {
+  return humansByTeam.filter((n) => n > 0).length >= 2;
 }
 
 // Walking out of a live rated match costs a flat chunk of rating and a
@@ -26,7 +27,7 @@ export function isRated(humansByTeam: readonly [number, number]): boolean {
 export const LEAVER_RATING_PENALTY = 15;
 export const LEAVER_LOCKOUT_MS = 60_000;
 
-export function leaverPenalty(humansByTeam: readonly [number, number]): number {
+export function leaverPenalty(humansByTeam: readonly number[]): number {
   return isRated(humansByTeam) ? LEAVER_RATING_PENALTY : 0;
 }
 
@@ -42,7 +43,8 @@ function average(values: readonly number[]): number {
 export function ratingDeltas(seats: readonly RatedSeat[], winner: TeamId): Map<number, number> {
   const out = new Map<number, number>();
   const byTeam: [RatedSeat[], RatedSeat[]] = [[], []];
-  for (const s of seats) byTeam[s.team].push(s);
+  // The two sides of the 5v5; a seat of any other team is not rated here.
+  for (const s of seats) byTeam[s.team]?.push(s);
   if (byTeam[0].length === 0 || byTeam[1].length === 0) return out;
   const avg: [number, number] = [
     average(byTeam[0].map((s) => s.rating)),

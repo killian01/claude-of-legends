@@ -338,7 +338,7 @@ describe('zone boundary and reveal', () => {
     const map = { size: 40, walls: [], borderMargin: 0, brush: [], fountains: [] };
     // biome-ignore lint/suspicious/noExplicitAny: minimal map stub for vision
     const without = computeVisibility(map as any, ctx.units, 0, ctx.zones);
-    expect(without[0].has(enemy.id)).toBe(false);
+    expect(without[0]!.has(enemy.id)).toBe(false);
     executeCast(
       ctx,
       caster,
@@ -349,7 +349,7 @@ describe('zone boundary and reveal', () => {
     );
     // biome-ignore lint/suspicious/noExplicitAny: minimal map stub for vision
     const withZone = computeVisibility(map as any, ctx.units, 0, ctx.zones);
-    expect(withZone[0].has(enemy.id)).toBe(true);
+    expect(withZone[0]!.has(enemy.id)).toBe(true);
   });
 });
 

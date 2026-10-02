@@ -164,7 +164,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
   // ran into which brush, made observable).
   const LAST_SEEN_FRESH_S = 4;
   const lastSeen: ObsLastSeen[] = [];
-  for (const [id, rec] of sim.lastSeen[u.team]) {
+  for (const [id, rec] of sim.lastSeen[u.team] ?? []) {
     if (sim.time - rec.at > LAST_SEEN_FRESH_S) continue;
     const other = sim.units.get(id);
     if (!other || other.dead) continue;

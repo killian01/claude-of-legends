@@ -13,9 +13,11 @@ import type { CastSpec } from '../sim/combat/casting';
 import { isRooted, isStunned } from '../sim/combat/status';
 import { WRATH_EXECUTE_FRAC } from '../sim/content/rings';
 import type { Projectile } from '../sim/projectiles';
+import { otherTeam } from '../sim/teams';
 import { type AbilityKey, DT, type TeamId, type Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import { buildPictureNotice } from '../ui/picture_notice';
+import { teamLook } from '../ui/team_look';
 import type { IWorld } from '../world_api';
 import {
   buildProjectileMesh,
@@ -641,6 +643,12 @@ export class Renderer {
     this.viewerTeam = team;
   }
 
+  // The look a team wears for the viewer (src/ui/team_look.ts): the 5v5's
+  // sides, or the viewer's team against everyone else.
+  private look(team: TeamId): TeamId {
+    return teamLook(team, this.viewerTeam, this.world.teamCount);
+  }
+
   // The unit the player last ordered an attack on; null clears the reticle.
   setAttackTarget(id: number | null): void {
     this.attackTargetId = id;
@@ -1085,7 +1093,7 @@ export class Renderer {
       // the flash lands exactly when the damage does.
       if (attacker && target && attacker.stats.attackRange <= RANGED_THRESHOLD) {
         const targetId = atk.targetId;
-        const sparkColor = TEAM_LIGHT[attacker.team] ?? 0xffffff;
+        const sparkColor = TEAM_LIGHT[this.look(attacker.team)] ?? 0xffffff;
         const beatMs =
           attackWindupSeconds(attacker.stats.attackSpeed, attacker.kind === 'champion') * 1000;
         this.vfx.schedule(beatMs, () => {
@@ -1134,7 +1142,7 @@ export class Renderer {
       const caster = this.world.units.get(cast.unitId);
       if (!caster) continue;
       // Offline guard: never flash a cast the viewer's team cannot see.
-      if (!this.world.isVisible(this.viewerTeam as 0 | 1, cast.unitId)) continue;
+      if (!this.world.isVisible(this.viewerTeam, cast.unitId)) continue;
       const t = this.tracked.get(cast.unitId);
       const others = cast.unitId !== this.followId;
       // The local player's own casts already played their school sound in
@@ -1298,7 +1306,7 @@ export class Renderer {
     const authored = this.terrain.structure(u);
     if (authored) return authored;
     const kind = u.kind;
-    const color = TEAM_COLORS[u.team] ?? 0xffffff;
+    const color = TEAM_COLORS[this.look(u.team)] ?? 0xffffff;
     const holder = new THREE.Group();
     if (kind === 'minion') {
       const built = buildMinionMesh(u, color);
@@ -1760,7 +1768,7 @@ export class Renderer {
             const c =
               u.kind === 'creature'
                 ? aspectColor(u.aspect, u.ascendant).hex
-                : (TEAM_LIGHT[u.team] ?? 0xd8b0f0);
+                : (TEAM_LIGHT[this.look(u.team)] ?? 0xd8b0f0);
             const near = this.sfxGain(u.pos.x, u.pos.z);
             this.vfx.glowFlash(u.pos.x, 1.2, u.pos.z, 3.4, c, 0.35);
             this.vfx.sparkBurst(u.pos.x, 1.0, u.pos.z, c, 26, 9, { life: 0.6, size: 0.5 });
@@ -1784,8 +1792,7 @@ export class Renderer {
       // the fog; the rings' creatures, like the Warden, are always seen).
       const visible =
         (!u.dead || t.deadUntil > nowMs) &&
-        ((u.team === this.viewerTeam && !u.neutral) ||
-          this.world.isVisible(this.viewerTeam as 0 | 1, id));
+        ((u.team === this.viewerTeam && !u.neutral) || this.world.isVisible(this.viewerTeam, id));
       t.mesh.visible = visible;
 
       // Damage numbers: your own taken damage in red, your dealt damage via
@@ -2010,7 +2017,7 @@ export class Renderer {
         u.kind === 'champion' &&
         !u.dead &&
         u.hp <= WRATH_EXECUTE_FRAC * u.maxHp &&
-        this.world.teamWrath((1 - u.team) as TeamId) !== null;
+        this.world.teamWrath(otherTeam(u.team)) !== null;
       if (doomed && !t.wrathMark) {
         const mark = new THREE.Sprite(
           new THREE.SpriteMaterial({
@@ -2176,7 +2183,7 @@ export class Renderer {
     for (const [id, p] of this.world.projectiles) {
       const t = this.trackedProjectiles.get(id);
       if (!t) {
-        const teamLight = TEAM_LIGHT[p.team] ?? 0xffffff;
+        const teamLight = TEAM_LIGHT[this.look(p.team)] ?? 0xffffff;
         const colors = spellColorsOf(p.vfx, this.world, teamLight);
         const crown = this.crownFlight(p);
         // A structure's bolt is the authored missile (vfx/tower_shot_fx.ts),
@@ -2260,12 +2267,12 @@ export class Renderer {
 
     for (const [id, z] of this.world.zones) {
       if (!this.trackedZones.has(id)) {
-        const colors = spellColorsOf(z.vfx, this.world, TEAM_COLORS[z.team] ?? 0xffffff);
+        const colors = spellColorsOf(z.vfx, this.world, TEAM_COLORS[this.look(z.team)] ?? 0xffffff);
         const vis = spellVisualOf(z.vfx, this.world);
         const hostile = z.team !== this.viewerTeam;
         const mesh = vis?.zone
           ? vis.zone(z.radius, colors, hostile)
-          : buildZoneMesh(z, this.world, TEAM_COLORS[z.team] ?? 0xffffff);
+          : buildZoneMesh(z, this.world, TEAM_COLORS[this.look(z.team)] ?? 0xffffff);
         mesh.position.set(z.pos.x, this.groundHeight(z.pos.x, z.pos.z) + 0.1, z.pos.z);
         // Telegraphs must never lose the draw-order lottery against the
         // river's translucent layers: lift catalog meshes above them.
