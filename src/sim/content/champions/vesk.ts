@@ -4,6 +4,7 @@
 // the launch point (passive onCast, spawned at the pre-vault position).
 
 import { isRooted, slowPct } from '../../combat/status';
+import { copy } from '../../geo';
 import type { ChampionDef } from './index';
 
 const DEADSTILL_BONUS = 1.15;
@@ -34,7 +35,7 @@ export const VESK: ChampionDef = {
         id,
         sourceId: self.id,
         team: self.team,
-        pos: { x: self.pos.x, z: self.pos.z },
+        pos: copy(self.pos),
         radius: BACKSTEP_PATCH_RADIUS,
         until: ctx.time + BACKSTEP_PATCH_DURATION_S,
         tickEvery,

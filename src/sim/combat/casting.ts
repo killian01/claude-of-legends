@@ -6,7 +6,8 @@
 
 import type { CastSoundId } from '../content/sounds';
 import { cos } from '../exact';
-import { basis, copy, delta, dirTo, dist, dot, norm, offset } from '../geo';
+import { away, basis, copy, delta, dirTo, dist, dot, norm, offset, onSphere, settle } from '../geo';
+import { landingAt, walkLine } from '../ground_walk';
 import { passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
 import type { SpellLook } from '../spell_look';
@@ -154,10 +155,26 @@ export function specForRank(def: AbilityDef, rank: number): CastSpec {
   return spec;
 }
 
+// The aim on the caster's ground: on the sphere an aim is put back on the
+// caster's sphere, since a click or a bot's arithmetic can leave it a hair
+// off and a zone or a leap lands where the aim is.
+function aimOnGround(from: Vec2, aim: Vec2): Vec2 {
+  if (!onSphere(from) || !onSphere(aim) || norm(aim) <= 0) return aim;
+  return settle(aim, norm(from));
+}
+
 function clampToRange(from: Vec2, aim: Vec2, range: number): Vec2 {
-  const d = dist(from, aim);
-  const dir = d <= range || d === 0 ? null : dirTo(from, aim);
-  return dir ? offset(from, dir, range) : copy(aim);
+  const goal = aimOnGround(from, aim);
+  const d = dist(from, goal);
+  if (d <= range || d === 0) return copy(goal);
+  const dir = dirTo(from, goal);
+  return dir ? offset(from, dir, range) : copy(goal);
+}
+
+// The unit direction from the caster toward a point, east when the point
+// is the caster's own spot.
+function headingTo(from: Vec2, to: Vec2): Vec2 {
+  return dirTo(from, aimOnGround(from, to)) ?? basis(from).east;
 }
 
 function findEnemyTarget(
@@ -208,8 +225,7 @@ export function executeCast(
 ): boolean {
   switch (spec.kind) {
     case 'skillshot': {
-      // A cast on the caster's own spot flies east.
-      const dir = dirTo(caster.pos, aim) ?? basis(caster.pos).east;
+      const dir = headingTo(caster.pos, aim);
       const id = ctx.allocId();
       ctx.projectiles.set(id, {
         id,
@@ -299,9 +315,10 @@ export function executeCast(
       // (src/sim/exact.ts): cos falls on [0, PI], so the angle is within
       // the half angle exactly when its cosine is at least the half
       // angle's. A cast on the caster's own spot aims east; a unit on the
-      // caster's own spot is inside every cone. On the planet the angle is
-      // the one between the two headings at the caster.
-      let toAim = delta(caster.pos, aim);
+      // caster's own spot is inside every cone. On the sphere both are
+      // tangents at the caster (geo.ts, delta), so the angle is the
+      // bearing between the aim and the unit.
+      let toAim = delta(caster.pos, aimOnGround(caster.pos, aim));
       if (toAim.x === 0 && toAim.z === 0 && (toAim.y ?? 0) === 0) toAim = basis(caster.pos).east;
       const aimLen = norm(toAim);
       const cosHalf = cos(spec.halfAngle);
@@ -334,7 +351,7 @@ export function executeCast(
         // A real flight (dashes.ts): the unit is committed on its line and
         // the landing payload resolves wherever the flight actually ends.
         const length = dist(caster.pos, at);
-        const dir = dirTo(caster.pos, at) ?? basis(caster.pos).east;
+        const dir = headingTo(caster.pos, at);
         caster.path = [];
         caster.activeDash = {
           from: copy(caster.pos),
@@ -358,7 +375,7 @@ export function executeCast(
         }
         return true;
       }
-      const landed = ctx.ground.isWalkableAt(at) ? at : ctx.ground.nearestWalkable(at, 6);
+      const landed = landingAt(ctx, at, 6);
       if (landed) {
         caster.pos = copy(landed);
         caster.path = [];
@@ -376,8 +393,10 @@ export function executeCast(
       return true;
     }
     case 'wall': {
+      // The cast's heading as it arrives at the wall's center: on the
+      // plane the aim's offset from the caster.
       const at = clampToRange(caster.pos, aim, castRange);
-      raiseWall(ctx, caster.id, caster.team, at, delta(caster.pos, at), spec.length, spec.duration);
+      raiseWall(ctx, caster.id, caster.team, at, away(at, caster.pos), spec.length, spec.duration);
       return true;
     }
   }
@@ -400,9 +419,7 @@ export function castAbility(
   if (armed && armed.key === key && armed.until > ctx.time) {
     if (isRooted(caster, ctx.time)) return false;
     caster.recastArmed = null;
-    const landed = ctx.ground.isWalkableAt(armed.origin)
-      ? armed.origin
-      : ctx.ground.nearestWalkable(armed.origin, 6);
+    const landed = landingAt(ctx, armed.origin, 6);
     if (landed) {
       caster.pos = copy(landed);
       caster.path = [];
@@ -447,7 +464,7 @@ export function castAbility(
       ? (allyDashAim(ctx, caster, aim, spec.range, spec.toAlly.searchRadius) ?? aim)
       : aim;
     const at = clampToRange(caster.pos, goal, spec.range);
-    if (!ctx.ground.lineOfWalk(caster.pos, at)) return false;
+    if (!walkLine(ctx, caster.pos, at)) return false;
   }
 
   caster.cooldowns[key] = ctx.time + def.cooldown * (1 - RANK_CD_SCALE * (rank - 1));

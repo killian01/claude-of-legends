@@ -3,6 +3,7 @@
 // is inside the dash's range and lands touching them. With nobody in reach
 // there is no destination, so the cast is refused outright and costs
 // nothing (Dain's Cinder Guard: a rescue jump needs someone to rescue).
+// On the sphere the stop lies on the great circle toward the ally.
 
 import { copy, dirTo, dist, offset } from '../geo';
 import type { CombatCtx } from '../sim_context';

@@ -24,8 +24,7 @@ export function stepShieldBursts(ctx: CombatCtx): void {
         for (const other of ctx.units.values()) {
           if (!hostile(u, other) || other.dead || ctx.dead.has(other.id)) continue;
           if (!isSpellTarget(other)) continue;
-          const d = dist(other.pos, u.pos);
-          if (d > s.burst.radius + other.radius) continue;
+          if (dist(other.pos, u.pos) > s.burst.radius + other.radius) continue;
           applyEffects(ctx, s.burst.sourceId, s.burst.power, other, effects, 'ability', {
             center: u.pos,
           });
