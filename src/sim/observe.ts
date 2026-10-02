@@ -135,7 +135,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
   const projectiles: ObsProjectile[] = [];
   for (const p of sim.projectiles.values()) {
     const friendly = p.team === u.team;
-    if (!friendly && !sim.isPointVisible(u.team, p.pos.x, p.pos.z)) continue;
+    if (!friendly && !sim.isPointVisible(u.team, p.pos.x, p.pos.z, p.pos.y)) continue;
     projectiles.push({
       x: p.pos.x,
       z: p.pos.z,
@@ -150,7 +150,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
   const zones: ObsZone[] = [];
   for (const z of sim.zones.values()) {
     const friendly = z.team === u.team;
-    if (!friendly && !sim.isPointVisible(u.team, z.pos.x, z.pos.z)) continue;
+    if (!friendly && !sim.isPointVisible(u.team, z.pos.x, z.pos.z, z.pos.y)) continue;
     zones.push({
       x: z.pos.x,
       z: z.pos.z,
