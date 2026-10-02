@@ -245,6 +245,10 @@ describe('the end', () => {
     const b = h.connect(2, 'bob');
     h.enter(a);
     h.enter(b);
+    // Both play to the end: an order in the last three minutes each.
+    h.runTo(DROP_S + PLAY_S - 60);
+    h.say(a, { t: 'stop' });
+    h.say(b, { t: 'stop' });
     h.runTo(DROP_S + PLAY_S + 0.1);
     const result = h.last(1, 'royale_result')!;
     expect(result).toMatchObject({ v: 'respawn', of: ROYALE_SEATS });
@@ -306,6 +310,20 @@ describe('the end', () => {
     h.advance(ROYALE_LINGER_MS);
     h.step(1);
     expect(h.last(1, 'match_end')).toBeDefined();
+    expect(h.service.matches.size).toBe(0);
+    expect(a.matchId).toBeNull();
+  });
+});
+
+describe('a tab left open', () => {
+  it('hears its Respawn result and is not moved into the next match', () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    h.enter(a);
+    h.runTo(DROP_S + PLAY_S + 0.1);
+    expect(h.last(1, 'royale_result')).toBeDefined();
+    expect(h.last(1, 'match_end')).toBeDefined();
+    expect(h.fake.sims).toHaveLength(1);
     expect(h.service.matches.size).toBe(0);
     expect(a.matchId).toBeNull();
   });
