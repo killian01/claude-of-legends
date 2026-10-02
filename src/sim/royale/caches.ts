@@ -1,7 +1,8 @@
 // The caches (CONTEXT.md: Cache; ADR 0031): about a hundred and fifty
 // drawn each match among the layout's spots, golden ones always kept. A
 // cache opens for the champion who stands beside it, still, for
-// CACHE_OPEN_S; damage taken breaks the opening, and so does a step. One
+// CACHE_OPEN_S; a hit taken breaks the opening, and so do a step, a cast
+// and an attack order, the recall's rule. One
 // opener at a time: the nearest champion standing there takes it, the
 // lower id on a tie. An opened cache is gone for good in One life and
 // back after CACHE_BACK_S in Respawn. Pure over a view of the champions,
@@ -65,13 +66,15 @@ export function drawCaches(
 }
 
 // What the caches read of a champion: alive and on the ground (the caller
-// leaves out the dead, the fliers and the drop), whether it stood still
-// this tick, and when damage last landed on it.
+// leaves out the dead and the fliers), whether it stood still this tick
+// (no walk, no dash, no windup), and when it was last disturbed: a hit
+// taken (the Dusk's burn aside), a cast or a sigil pressed, an attack
+// ordered. Anything after the opening started breaks it, the recall's rule.
 export interface CacheSeeker {
   id: number;
   pos: Vec2;
   still: boolean;
-  lastDamagedAt: number;
+  disturbedAt: number;
 }
 
 export interface CacheOpened {
@@ -81,7 +84,7 @@ export interface CacheOpened {
 }
 
 function canOpen(c: CacheState, s: CacheSeeker, time: number): boolean {
-  if (!s.still || s.lastDamagedAt >= time) return false;
+  if (!s.still || s.disturbedAt >= time) return false;
   return dist2(c.pos, s.pos) <= CACHE_REACH_M * CACHE_REACH_M;
 }
 
@@ -112,7 +115,7 @@ export function stepCaches(
       const s = byId.get(c.opener);
       const holds =
         s?.still === true &&
-        s.lastDamagedAt <= c.openSince &&
+        s.disturbedAt <= c.openSince &&
         dist2(c.pos, s.pos) <= CACHE_REACH_M * CACHE_REACH_M;
       if (!holds) {
         busy.delete(c.opener);

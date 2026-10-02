@@ -67,7 +67,7 @@ function beside(c: CacheState, m: number, angle = 0): Vec3 {
 }
 
 function seeker(id: number, pos: Vec3, extra: Partial<CacheSeeker> = {}): CacheSeeker {
-  return { id, pos, still: true, lastDamagedAt: -999, ...extra };
+  return { id, pos, still: true, disturbedAt: -999, ...extra };
 }
 
 // Ticks the caches from `from` for `seconds`, returning every opening.
@@ -114,7 +114,7 @@ describe('opening a cache', () => {
     expect(opened).toHaveLength(1);
     expect(opened[0]!.t).toBeCloseTo(11 + DT + CACHE_OPEN_S, 6);
     const hit = oneCache();
-    opened = run(hit, (t) => [seeker(5, at, { lastDamagedAt: t >= 11 ? 11 : -999 })], 10, 4);
+    opened = run(hit, (t) => [seeker(5, at, { disturbedAt: t >= 11 ? 11 : -999 })], 10, 4);
     expect(opened[0]!.t).toBeCloseTo(11 + DT + CACHE_OPEN_S, 6);
   });
 

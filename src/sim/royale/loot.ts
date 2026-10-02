@@ -1,14 +1,26 @@
 // Loot (CONTEXT.md: Loot; ADR 0031): no shop, no gold, no recall. A cache,
-// a camp and a takedown each give the champion the next piece of its
-// house build, the role build the house bots walk (playbook/kit.ts), as
-// the kit walker would buy it with a bottomless purse: a component when a
-// component is next, the finished item once its parts are in the bag, a
-// sale first when the bag is full of what the build no longer wants. The
-// purchase lands the way the sim's shop lands one (equipItem): components
-// consumed, the item in the bag, the stats recomputed, the health the
-// item adds given at once. A finished build gives nothing more.
+// a camp and a takedown each give the champion the next piece of its build,
+// fixed for the seat when it is seated (the bot's kit build, else the role
+// build the house bots walk, the same rule for a person). The piece is
+// walked from the kit walker's own recipes (playbook/kit.ts) in build
+// order, without gold: the next target's first missing component, the
+// target itself once its parts are in the bag, the target outright when
+// the bag is full; with a full bag and a piece that needs a slot, what the
+// build no longer wants goes first, else the cheapest item when the target
+// is worth more. The purchase lands the way the shop lands one
+// (src/sim/purchase.ts): components consumed, the item in the bag, the
+// stats recomputed, the health the item adds given at once. A finished
+// build gives nothing more.
 
-import { nextKitStep, roleBuild } from '../playbook/kit';
+import { ITEMS } from '../content/items';
+import {
+  BAG_SLOTS,
+  cheapestSlot,
+  roleBuild,
+  stepToward,
+  unsatisfied,
+  unwantedSlots,
+} from '../playbook/kit';
 import { equipItem } from '../purchase';
 import { recalcChampion } from '../stats';
 import type { Unit } from '../unit';
@@ -17,48 +29,64 @@ import type { Unit } from '../unit';
 // takedown one.
 export const GOLDEN_PIECES = 2;
 
-// The next piece for this champion and bag, without touching either: the
-// item the walker buys next, and the slot it sells first when the bag is
-// full (null when it sells nothing). Null when the build is done.
-export function nextPiece(
-  championId: string | null,
-  bag: readonly string[],
-): { itemId: string; sell: number[] } | null {
-  const build = roleBuild(championId);
-  let items = [...bag];
-  const sell: number[] = [];
-  // At most a sale per slot before the buy; the walker never sells twice
-  // in a row without a purchase in between unless the bag asks it to.
-  for (let guard = 0; guard < 7; guard++) {
-    const step = nextKitStep(build, items, Number.POSITIVE_INFINITY);
-    if (step === null) return null;
-    if (step.kind === 'buy') return { itemId: step.itemId, sell };
-    sell.push(step.slot);
-    items = items.filter((_, i) => i !== step.slot);
-  }
-  return null;
+export interface LootStep {
+  itemId: string;
+  // The bag slot given up first to make room, null when none is.
+  sell: number | null;
 }
 
-// Gives the champion its next piece; returns the item given, or null when
-// its build is complete (or the bag cannot take it).
-export function grantPiece(u: Unit): string | null {
+function pieceFor(target: string, bag: readonly string[]): { id: string; consumes: number } {
+  return stepToward(target, bag, BAG_SLOTS - bag.length <= 0);
+}
+
+// The next piece of `build` for this bag, without touching it; null once
+// the build is done (or nothing in a full bag is worth less than it).
+export function nextLootPiece(build: readonly string[], bag: readonly string[]): LootStep | null {
+  const target = unsatisfied(build, bag)[0];
+  if (target === undefined) return null;
+  const step = pieceFor(target, bag);
+  if (step.consumes > 0 || bag.length < BAG_SLOTS) return { itemId: step.id, sell: null };
+  // A full bag and a piece that needs a slot.
+  const unwanted = unwantedSlots(build, bag);
+  let sell: number | null = null;
+  if (unwanted.length > 0) sell = cheapestSlot(bag, unwanted);
+  else {
+    const cheapest = cheapestSlot(
+      bag,
+      bag.map((_, i) => i),
+    );
+    if ((ITEMS[target]?.cost ?? 0) > (ITEMS[bag[cheapest]!]?.cost ?? 0)) sell = cheapest;
+  }
+  if (sell === null) return null;
+  const after = bag.filter((_, i) => i !== sell);
+  return { itemId: pieceFor(target, after).id, sell };
+}
+
+// The build a seat walks: the one it was seated with, else its role's.
+export function seatBuild(championId: string | null, kitBuild?: readonly string[]): string[] {
+  return [...(kitBuild && kitBuild.length > 0 ? kitBuild : roleBuild(championId))];
+}
+
+// Gives the champion its next piece of `build`; returns the item given, or
+// null when the build is complete.
+export function grantPiece(u: Unit, build: readonly string[]): string | null {
   if (u.kind !== 'champion') return null;
-  const piece = nextPiece(u.championId, u.items);
+  const piece = nextLootPiece(build, u.items);
   if (!piece) return null;
-  if (piece.sell.length > 0) {
-    // The sales the walker asked for, slot by slot as the walker saw the
-    // bag shrink; a royale sale pays nothing.
-    for (const slot of piece.sell) u.items = u.items.filter((_, i) => i !== slot);
+  if (piece.sell !== null) {
+    // A royale sale pays nothing: the slot is simply given up.
+    const slot = piece.sell;
+    u.items = u.items.filter((_, i) => i !== slot);
     recalcChampion(u);
   }
   return equipItem(u, piece.itemId) ? piece.itemId : null;
 }
 
 // Gives up to `count` pieces; returns the items given in order.
-export function grantPieces(u: Unit, count: number): string[] {
+export function grantPieces(u: Unit, build: readonly string[], count: number): string[] {
   const out: string[] = [];
   for (let i = 0; i < count; i++) {
-    const id = grantPiece(u);
+    const id = grantPiece(u, build);
     if (id === null) break;
     out.push(id);
   }
