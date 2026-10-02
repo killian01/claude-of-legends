@@ -29,11 +29,12 @@ describe('the landing page', () => {
     expect(page.ladder.me).toBeNull();
   });
 
-  it('caps the rows and still counts everyone on it', () => {
+  it('shows every line on it, up to a ceiling, and counts everyone past it', () => {
     const many = Array.from({ length: 14 }, (_, i) => line(i + 1, 10 + i));
     const page = buildLandingPage({ entries: many, reader: null });
-    expect(page.ladder.rows).toHaveLength(LANDING_LADDER_ROWS);
+    expect(page.ladder.rows).toHaveLength(14);
     expect(page.ladder.total).toBe(14);
+    expect(LANDING_LADDER_ROWS).toBeGreaterThanOrEqual(100);
     expect(buildLandingPage({ entries: many, reader: null }, { rows: 2 }).ladder.rows).toHaveLength(
       2,
     );

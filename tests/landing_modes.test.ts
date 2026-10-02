@@ -7,14 +7,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { PLAY_TILES, tileArtUrl } from '../src/ui/home_tiles';
+import { JOIN_CALL, LADDER_HEADING, ladderLead } from '../src/ui/landing_ladder';
 import {
   ACCOUNT_LINE,
   HERO_RANKED_LINE,
-  HERO_STAR_CALL,
   LANDING_MODES,
   PLAY_NOW,
   PLAY_NOW_CALL,
-  PLAY_NOW_FINE,
+  PLAY_NOW_LINE,
   PRACTICE_ART,
 } from '../src/ui/landing_modes';
 
@@ -86,19 +86,18 @@ describe("the landing's ways to play", () => {
     expect(PLAY_NOW).toEqual({ call: PLAY_NOW_CALL, kind: 'guest' });
   });
 
-  it('asks for the star in the hero without naming it the way to play', () => {
-    expect(HERO_STAR_CALL).toMatch(/github/i);
-    expect(HERO_STAR_CALL).not.toMatch(/play/i);
-  });
-
-  it('shows the way to play once, in the Play now card, the star outlined above', () => {
+  it('shows the way to play once, in the Play now card, and asks for no star', () => {
     // Read off the page module rather than a browser. A copy of the card's
     // gold button in the hero, right above the card, read as the same
-    // button twice (2026-09-30): the door is built once.
+    // button twice (2026-09-30): the door is built once. The star the hero
+    // asked for beside it nobody gave (2026-10-02): the hero asks for
+    // nothing but the match, and the bar names GitHub like any link.
     const landing = readFileSync(path.join(ROOT, 'src/ui/landing.ts'), 'utf8');
     const count = (needle: string): number => landing.split(needle).length - 1;
     expect(count('doorButton(PLAY_NOW,')).toBe(1);
-    expect(landing).toContain("buildRepoLink('hero', HERO_STAR_CALL, 'outline')");
+    expect(landing).not.toMatch(/star on github/i);
+    expect(count('buildRepoLink(')).toBe(1);
+    expect(landing).toContain("navLink('GitHub', REPO)");
     expect(landing).not.toMatch(/finish\(\{ kind: 'guest' \}\)/);
   });
 
@@ -130,10 +129,24 @@ describe('what the landing says at once (ADR 0027)', () => {
     expect(landing.slice(tagAt, rankedAt)).toMatch(/browser tab/);
   });
 
-  it('no longer calls the free match unranked', () => {
-    expect(PLAY_NOW_FINE).not.toMatch(/unranked/i);
-    expect(PLAY_NOW_FINE).toMatch(/ladder/i);
-    expect(PLAY_NOW_FINE).toMatch(/no account/i);
+  // Said once, in the hero: the Play now card and the ladder each said it
+  // again in their own words, until the page read as one promise three
+  // times (the maintainer, 2026-10-02).
+  it('says no account and the ladder from the first match once, in the hero', () => {
+    const said = [
+      HERO_RANKED_LINE,
+      PLAY_NOW_CALL,
+      PLAY_NOW_LINE,
+      ACCOUNT_LINE,
+      LADDER_HEADING,
+      JOIN_CALL,
+      ladderLead({ total: 21 }),
+    ];
+    const times = (re: RegExp): number => said.filter((s) => re.test(s)).length;
+    expect(times(/no account/i)).toBe(1);
+    expect(times(/every match/i)).toBe(1);
+    expect(times(/install/i)).toBe(0);
+    expect(PLAY_NOW_LINE).not.toMatch(/unranked/i);
   });
 
   it('says an account keeps the points on every device and opens the rest', () => {

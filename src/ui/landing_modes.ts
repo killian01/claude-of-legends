@@ -41,17 +41,14 @@ export const PRACTICE_ART = tileArtUrl('practice');
 export const PLAY_NOW_CALL = 'Play in the browser now';
 export const PLAY_NOW_LINE =
   'A real 5v5 online: players when they are on, bots in every empty seat.';
-// The caveats line used to end on "Unranked.". Every match in the public
-// queue now scores on the ladder of every human (ADR 0027), so what it
-// says is the opposite, and that is the news.
-// One line on the card at every width it has, so the gold button under
-// it stays where it was.
-export const PLAY_NOW_FINE = 'No account, no install. Every match scores on the ladder.';
 
 // The line under the hero's tagline, the first thing read after what the
 // game is: a game with a ladder, from the first match, with no account.
 // The tagline above it is the link preview's sentence too
-// (tests/social_card.test.ts), so the news goes under it.
+// (tests/social_card.test.ts), so the news goes under it. The one place
+// the page says it: the Play now card and the ladder used to say it again,
+// in their own words, until the page read as one promise three times (the
+// maintainer, 2026-10-02).
 export const HERO_RANKED_LINE =
   'Ranked from your first match: every match scores on the ladder. No account needed.';
 
@@ -71,13 +68,6 @@ export interface LandingDoor {
   kind: 'guest';
 }
 export const PLAY_NOW: LandingDoor = { call: PLAY_NOW_CALL, kind: 'guest' };
-
-// The hero's row: the repository's star, outlined, and the count. For a
-// day the hero also carried a copy of the card's gold Play button; with
-// the card right under the hero that read as the same button twice, so
-// the way to play is the card's alone, and the star up here stays
-// outlined so the card's gold is still the one thing to press.
-export const HERO_STAR_CALL = 'Star on GitHub';
 
 export const LANDING_MODES: readonly LandingMode[] = [
   {

@@ -1,20 +1,15 @@
-// The repository, as a button rather than a word. "Source" in the bar
-// named a place in twelve pixels of grey and asked nothing, on a page
-// whose one claim the genre cannot make is that the whole game is open.
-// So the link to it is gold, carries a mark, and shows up in the three
-// places a visitor looks: the bar, under the tagline, and at the head of
-// the contribution band. One builder, three sizes, so they cannot drift.
-// Under the landing's tagline it is outlined instead: the Play now card's
-// gold button right below is the page's one call to play, and a second
-// gold button above it would ask the eye to choose.
+// The repository, as a button rather than a word, at the head of the
+// landing's contribution band: the one claim the genre cannot make is that
+// the whole game is open, and that band is where it is made. It also stood
+// gold in the bar and outlined under the tagline, asking for a star nobody
+// gave (the maintainer, 2026-10-02): the bar names GitHub like any other
+// link now, and the hero asks for nothing but the match.
 //
 // The mark is a plain star drawn here, not a third party's logo (ADR
 // 0004): it says "star this" without borrowing anyone's emblem.
 
 import { REPO } from './links';
 import { el } from './menu';
-
-export type RepoLinkSize = 'pill' | 'hero' | 'wide';
 
 const CSS = `
 .repo-link { position: relative; display: inline-flex; align-items: center; gap: 9px;
@@ -43,18 +38,7 @@ const CSS = `
   0%, 62% { transform: translateX(-70%) skewX(-18deg); }
   100% { transform: translateX(70%) skewX(-18deg); }
 }
-.repo-link.pill { padding: 7px 14px 7px 11px; font-size: 11px; }
-.repo-link.hero { padding: 13px 24px 13px 19px; font-size: 13px; letter-spacing: 1.6px; }
 .repo-link.wide { padding: 12px 24px 12px 19px; font-size: 12.5px; letter-spacing: 1.5px; }
-/* Outlined: the gold is the edge and the words, not the fill, and no sheen
-   crosses it, so the gold button beside it is the one that moves. */
-.repo-link.outline { color: #e6d7a8; background: rgba(8, 12, 22, 0.55);
-  box-shadow: inset 0 0 0 1px rgba(230, 215, 168, 0.6), 0 8px 22px rgba(0, 0, 0, 0.35); }
-.repo-link.outline:hover, .repo-link.outline:focus-visible { color: #f6e4aa; filter: none;
-  background: rgba(38, 30, 12, 0.7);
-  box-shadow: inset 0 0 0 1px #e6d7a8, 0 12px 26px rgba(0, 0, 0, 0.45); }
-.repo-link.outline svg { filter: none; }
-.repo-link.outline::after { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .repo-link::after { animation: none; }
   .repo-link { transition: none; }
@@ -85,17 +69,10 @@ function starMark(): SVGSVGElement {
   return svg;
 }
 
-export type RepoLinkTone = 'gold' | 'outline';
-
-// `text` is what the button says, in the imperative where there is room
-// for a verb: the bar has room for the name and nothing else.
-export function buildRepoLink(
-  size: RepoLinkSize,
-  text: string,
-  tone: RepoLinkTone = 'gold',
-): HTMLAnchorElement {
+// `text` is what the button says, in the imperative.
+export function buildRepoLink(text: string): HTMLAnchorElement {
   ensureCss();
-  const a = el('a', `repo-link ${size}${tone === 'outline' ? ' outline' : ''}`);
+  const a = el('a', 'repo-link wide');
   a.href = REPO;
   a.target = '_blank';
   a.rel = 'noreferrer';

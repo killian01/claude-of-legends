@@ -22,17 +22,15 @@ import { mountLandingLadder } from './landing_ladder';
 import {
   ACCOUNT_LINE,
   HERO_RANKED_LINE,
-  HERO_STAR_CALL,
   LANDING_MODES,
   type LandingDoor,
   PLAY_NOW,
-  PLAY_NOW_FINE,
   PLAY_NOW_LINE,
   PRACTICE_ART,
 } from './landing_modes';
 import { mountPresence } from './landing_presence';
 import { revealOnScroll } from './landing_reveal';
-import { DISCORD, PRIVACY } from './links';
+import { DISCORD, PRIVACY, REPO } from './links';
 import { el, ensureMenuCss } from './menu';
 import { allNews, countdownText, dayText, isPinned, newestOf } from './news';
 import { newsImageUrl } from './news_images';
@@ -240,7 +238,6 @@ const CSS = `
   .pg.land .pg-card.plain > p { order: 2; }
   .pg.land .pg-card.plain > .pg-presence { order: 3; margin-top: 2px; }
   .pg.land .pg-card.plain > .menu-btn { order: 3; margin-top: 2px; }
-  .pg.land .pg-card.plain > .pg-card-fine { order: 4; margin: 8px 0 0; }
   .pg.land .pg-card.plain > .pg-try { order: 5; margin-top: 12px; }
   .pg.land .pg-card.plain > .pg-news { order: 6; }
   .pg-mode { height: auto; aspect-ratio: 3 / 4; }
@@ -250,9 +247,6 @@ const CSS = `
 }
 
 
-/* The second line of a way-in card: the caveats, which have to be read
-   before the button but must not compete with the offer above them. */
-.pg.land .pg-card .pg-card-fine { color: #8ea4c4; font-size: 12px; }
 /* The newest news, one line under the Play now card (ui/news_section.ts). */
 .pg.land .pg-news {
   display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 14px;
@@ -483,8 +477,9 @@ export function showLanding(
     });
     bar.links.appendChild(toGive);
     bar.right.appendChild(navLink('Discord', DISCORD));
-    // The repository, as the one gold thing in the bar (ui/repo_link.ts).
-    bar.right.appendChild(buildRepoLink('pill', 'GitHub'));
+    // The repository, a word like the others: the gold starred pill it was
+    // asked for a star nobody gave (the maintainer, 2026-10-02).
+    bar.right.appendChild(navLink('GitHub', REPO));
     // Last, and quiet, but on the page a first-time visitor actually
     // reads: a site that counts anything owes them somewhere to look.
     bar.right.appendChild(navLink('Privacy', PRIVACY));
@@ -516,13 +511,12 @@ export function showLanding(
       ),
       el('p', 'pg-ranked', HERO_RANKED_LINE),
     );
-    // Under the tagline: the repository, outlined, and the count beside it.
-    // The genre hands you a game and this one hands you the source too, but
-    // the one gold call on the page is the Play now card's, right under the
-    // hero: a second copy of it up here read as the same button twice.
+    // Under the tagline: the count. The repository's star stood beside it
+    // and nobody pressed it (the maintainer, 2026-10-02); the one call on
+    // the page is the Play now card's, right under the hero.
     const cta = el('div', 'pg-hero-cta');
     const stats = el('div', 'pg-stats');
-    cta.append(buildRepoLink('hero', HERO_STAR_CALL, 'outline'), stats);
+    cta.append(stats);
     copy.appendChild(cta);
     mountLiveStats(stats);
     hero.append(title, copy);
@@ -598,7 +592,6 @@ export function showLanding(
       el('h2', '', 'Play now'),
       el('p', '', PLAY_NOW_LINE),
       tryShot,
-      el('p', 'pg-card-fine', PLAY_NOW_FINE),
       presence,
       playBtn,
     );
@@ -665,7 +658,7 @@ export function showLanding(
     give.append(
       el('h2', '', CONTRIBUTE_TITLE),
       el('p', '', CONTRIBUTE_LEAD),
-      buildRepoLink('wide', 'Open the repository'),
+      buildRepoLink('Open the repository'),
     );
     const giveRow = el('div', 'pg-give-row');
     for (const way of CONTRIBUTE_WAYS) {
