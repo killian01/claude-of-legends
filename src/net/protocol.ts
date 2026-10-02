@@ -342,6 +342,8 @@ export type ServerMsg =
       coach?: true;
       // A bot's seat taken in a match already under way (ADR 0025).
       dropIn?: true;
+      // The match's team count (ADR 0030); absent for the 5v5's two.
+      teams?: number;
       forged?: ForgedChampionDef[];
       forgedAssets?: Record<string, ForgedMatchAssets>;
     }

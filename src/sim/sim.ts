@@ -75,6 +75,7 @@ import {
   ULT_RANK_LEVELS,
 } from './stats';
 import { TeamBuffs } from './team_buffs';
+import { otherTeam, perTeam, TWO_TEAMS, validTeam } from './teams';
 import { stepTowerAi } from './tower_ai';
 import {
   type AbilityKey,
@@ -129,10 +130,29 @@ const SPAWN_SLOTS: readonly { x: number; z: number }[] = [
 // docs/star-orchard.md): the map record, its walkability grid, and strict
 // navigation, which keeps every step, spawn and respawn on a walkable cell
 // of a grid finer than a unit's stride. Absent, the launch map as always.
+// The team count (ADR 0030) is two for the 5v5, the default, and one per
+// champion in a free-for-all; the systems only the 5v5 has (the map's
+// towers and Sanctums, waves, the fountain, lane sightings) run only in a
+// match of two teams. A mode that decides death on its own terms gives
+// respawnPoint (where a dead champion comes back; null keeps it dead, and
+// it is asked again every tick until it answers) and respawnDelay (how
+// long a champion that just died waits); without them, the fountain and
+// the 5v5's clock.
 export interface SimOptions {
   map?: GameMap;
   nav?: NavGrid;
   strictNavigation?: boolean;
+  teamCount?: number;
+  respawnPoint?: (unit: Unit, sim: Sim) => Vec2 | null;
+  respawnDelay?: (unit: Unit, sim: Sim) => number;
+}
+
+// A team's fading memory of one enemy champion (Sim.lastSeen).
+export interface LastSeenRecord {
+  x: number;
+  z: number;
+  at: number;
+  hpFrac: number;
 }
 
 export class Sim {
@@ -143,6 +163,8 @@ export class Sim {
   // definitions (plan-forge phase 2). Register forged champions BEFORE
   // adding their units; the registration order is part of match identity.
   readonly champions = new ChampionRegistry();
+  // How many teams the match holds (ADR 0030): teams are 0 to teamCount - 1.
+  readonly teamCount: number;
   readonly units = new Map<number, Unit>();
   readonly projectiles = new Map<number, Projectile>();
   readonly zones = new Map<number, Zone>();
@@ -153,19 +175,17 @@ export class Sim {
   readonly remoteSeats = new Map<number, RemoteSeat>();
   // Each team's memory of who stood in which lane (CONTEXT.md: Lane
   // opponent), fed by the vision step.
-  readonly laneSightings = new LaneSightings();
+  readonly laneSightings: LaneSightings;
   time = 0;
   tickCount = 0;
   winner: TeamId | null = null;
-  private visibility: [Set<number>, Set<number>] = [new Set(), new Set()];
+  // One set per team, in team order.
+  private visibility: Set<number>[];
   // Each team's fading memory of enemy champions: where one was last SEEN
   // and how hurt it was. The honest mirror of a human remembering who ran
   // into which brush; observe.ts exposes only fresh, currently-unseen
   // entries (additive obs v0). Indexed by observing team, keyed by unit id.
-  readonly lastSeen: [
-    Map<number, { x: number; z: number; at: number; hpFrac: number }>,
-    Map<number, { x: number; z: number; at: number; hpFrac: number }>,
-  ] = [new Map(), new Map()];
+  readonly lastSeen: Map<number, LastSeenRecord>[];
   private nextWaveAt = FIRST_WAVE_AT;
   private waveCount = 0;
   private nextId = 1;
@@ -173,7 +193,7 @@ export class Sim {
   private readonly dead = new Set<number>();
   private readonly killers = new Map<number, number>();
   // The Warden's Boon lives outside units so it survives deaths.
-  readonly teamBuffs = new TeamBuffs();
+  readonly teamBuffs: TeamBuffs;
   // Public like teamBuffs: tests rewind the spawn clock instead of ticking
   // ten sim-minutes to meet the first Warden.
   readonly objectives = initialObjectiveState();
@@ -183,22 +203,39 @@ export class Sim {
   readonly ringStates: ReturnType<typeof initialRingStates>;
   // The favors each team holds (CONTEXT.md: Favor), the truth the units'
   // mirrors are refreshed from (grantFavor).
-  readonly favors = new Favors();
+  readonly favors: Favors;
 
   constructor(
     seed: number,
     private readonly options: SimOptions = {},
   ) {
+    const teamCount = options.teamCount ?? TWO_TEAMS;
+    if (!Number.isInteger(teamCount) || teamCount < 1) {
+      throw new Error(`a match holds at least one team, not ${teamCount}`);
+    }
+    this.teamCount = teamCount;
+    this.laneSightings = new LaneSightings(teamCount);
+    this.lastSeen = perTeam(teamCount, () => new Map<number, LastSeenRecord>());
+    this.teamBuffs = new TeamBuffs(teamCount);
+    this.favors = new Favors(teamCount);
     this.rng = new Rng(seed);
     this.map = options.map ?? GAME_MAP;
-    this.campStates = initialCampStates(this.map);
+    this.campStates = initialCampStates(this.map, teamCount);
     this.ringStates = initialRingStates(this.map);
     this.nav = options.nav ?? new NavGrid(this.map.size, this.map.walls, this.map.borderMargin);
-    for (const u of createMapUnits(this.map, () => this.nextId++)) {
-      this.units.set(u.id, u);
-      this.nav.blockCircle(u.pos.x, u.pos.z, staticFootprint(u));
+    // The towers and Sanctums are the two sides' (ADR 0030).
+    if (this.twoTeams()) {
+      for (const u of createMapUnits(this.map, () => this.nextId++)) {
+        this.units.set(u.id, u);
+        this.nav.blockCircle(u.pos.x, u.pos.z, staticFootprint(u));
+      }
     }
-    this.visibility = computeVisibility(this.map, this.units, 0);
+    this.visibility = computeVisibility(this.map, this.units, 0, undefined, teamCount);
+  }
+
+  // The 5v5's shape: the systems only it has run in a match of two teams.
+  private twoTeams(): boolean {
+    return this.teamCount === TWO_TEAMS;
   }
 
   private ctx(): CombatCtx {
@@ -225,11 +262,17 @@ export class Sim {
     this.champions.addForged(def);
   }
 
+  // A champion joins at `at`, else at its team's spawn: the map's authored
+  // seats, else a slot around the fountain. A team without a fountain (a
+  // free-for-all's, ADR 0030) needs `at`.
   addChampion(team: TeamId, at?: Vec2, championId: string = DEFAULT_CHAMPION_ID, skin = 0): Unit {
     const def = this.champions.get(championId);
     if (!def) throw new Error(`unknown champion ${championId}`);
+    if (!validTeam(team, this.teamCount)) {
+      throw new Error(`no team ${team} in a match of ${this.teamCount}`);
+    }
     const fountain = this.map.fountains.find((f) => f.team === team);
-    if (!fountain) throw new Error(`no fountain for team ${team}`);
+    if (!fountain && !at) throw new Error(`no fountain for team ${team}`);
     let count = 0;
     for (const u of this.units.values()) {
       if (u.kind === 'champion' && u.team === team) count++;
@@ -239,7 +282,7 @@ export class Sim {
     const spawn = authored[count % Math.max(1, authored.length)];
     const pos =
       at ??
-      (spawn ? { x: spawn.x, z: spawn.z } : { x: fountain.x + slot.x, z: fountain.z + slot.z });
+      (spawn ? { x: spawn.x, z: spawn.z } : { x: fountain!.x + slot.x, z: fountain!.z + slot.z });
     const champ = createChampion(this.nextId++, team, pos, def);
     champ.skin = clampSkin(championId, skin);
     this.units.set(champ.id, champ);
@@ -448,8 +491,9 @@ export class Sim {
     refillMap(this.zones, s.zones);
     refillMap(this.walls, s.walls);
     this.visibility = s.visibility;
-    refillMap(this.lastSeen[0], s.lastSeen[0]);
-    refillMap(this.lastSeen[1], s.lastSeen[1]);
+    for (const [team, memory] of this.lastSeen.entries()) {
+      refillMap(memory, s.lastSeen[team] ?? new Map());
+    }
     refillSet(this.dead, s.dead);
     refillMap(this.killers, s.killers);
     this.teamBuffs.restore(s.teamBuffs);
@@ -551,7 +595,7 @@ export class Sim {
     ) {
       return true;
     }
-    return this.visibility[team].has(unitId);
+    return this.visibility[team]?.has(unitId) ?? false;
   }
 
   // The Warden's Boon state for a team, null when inactive (IWorld).
@@ -586,7 +630,7 @@ export class Sim {
   // spot, its kind, and the team's own memory of it.
   campsFor(team: TeamId): ObsCamp[] {
     return this.campStates.map((state) => {
-      const seen = state.seen[team];
+      const seen = state.seen[team] ?? null;
       return {
         x: state.spot.x,
         z: state.spot.z,
@@ -818,6 +862,27 @@ export class Sim {
     return true;
   }
 
+  // Where a dead champion comes back, null to keep it dead for now: the
+  // mode's point when it decides (SimOptions.respawnPoint), else its own
+  // fountain, slotted by teammate order so two teammates can never share
+  // an exact respawn coordinate; a team without a fountain stays down.
+  private respawnSpot(u: Unit): Vec2 | null {
+    if (this.options.respawnPoint) {
+      const at = this.options.respawnPoint(u, this);
+      return at ? { ...at } : null;
+    }
+    const fountain = this.map.fountains.find((f) => f.team === u.team);
+    if (!fountain) return null;
+    let teammateIndex = 0;
+    for (const o of this.units.values()) {
+      if (o.kind === 'champion' && o.team === u.team && o.id < u.id) teammateIndex++;
+    }
+    const slot = SPAWN_SLOTS[teammateIndex % SPAWN_SLOTS.length]!;
+    const pos = { x: fountain.x + slot.x, z: fountain.z + slot.z };
+    if (!this.options.strictNavigation) return pos;
+    return this.nav.nearestWalkable(pos.x, pos.z) ?? { x: fountain.x, z: fountain.z };
+  }
+
   tick(): SimEvent[] {
     const ctx = this.ctx();
 
@@ -840,7 +905,7 @@ export class Sim {
         u.hp = Math.min(u.maxHp, u.hp + (u.maxHp - u.hp) * favorBonus(u.favors, 'tide'));
       }
     }
-    applyFountainRegen(ctx, this.map);
+    if (this.twoTeams()) applyFountainRegen(ctx, this.map);
     stepPassives(ctx, this.tickCount);
     for (const u of this.units.values()) {
       if (u.coachOrder) stepCoachOrder(this, u);
@@ -849,7 +914,7 @@ export class Sim {
     runBotDecisions(this, this.policies);
     runRemoteDecisions(this, this.remoteSeats);
 
-    if (this.winner === null && this.time >= this.nextWaveAt) {
+    if (this.twoTeams() && this.winner === null && this.time >= this.nextWaveAt) {
       spawnWave(ctx, this.map, this.waveCount++, this.options.strictNavigation);
       this.nextWaveAt += WAVE_EVERY;
     }
@@ -933,7 +998,8 @@ export class Sim {
         u.deaths += 1;
         u.dead = true;
         u.hp = 0;
-        u.respawnAt = this.time + respawnDelay(u.level, this.time);
+        const delay = this.options.respawnDelay;
+        u.respawnAt = this.time + (delay ? delay(u, this) : respawnDelay(u.level, this.time));
         u.path = [];
         u.attackTargetId = null;
         u.statuses = [];
@@ -985,7 +1051,7 @@ export class Sim {
         if (u.moveSpeed <= 0) this.nav.unblockCircle(u.pos.x, u.pos.z, staticFootprint(u));
         this.units.delete(id);
         if (u.kind === 'sanctum' && this.winner === null) {
-          this.winner = (1 - u.team) as TeamId;
+          this.winner = otherTeam(u.team);
           this.events.push({ type: 'victory', team: this.winner });
         }
       }
@@ -996,43 +1062,46 @@ export class Sim {
     for (const u of this.units.values()) {
       if (this.winner !== null) break;
       if (u.kind !== 'champion' || !u.dead || this.time < u.respawnAt) continue;
-      const fountain = this.map.fountains.find((f) => f.team === u.team)!;
-      // Slot by teammate order so two teammates can never share an exact
-      // respawn coordinate; cooldowns persist through death (review F.2:
-      // dying was a free ultimate refresh).
-      let teammateIndex = 0;
-      for (const o of this.units.values()) {
-        if (o.kind === 'champion' && o.team === u.team && o.id < u.id) teammateIndex++;
-      }
-      const slot = SPAWN_SLOTS[teammateIndex % SPAWN_SLOTS.length]!;
+      // Cooldowns persist through death (review F.2: dying was a free
+      // ultimate refresh).
+      const back = this.respawnSpot(u);
+      if (!back) continue;
       u.dead = false;
-      u.pos = { x: fountain.x + slot.x, z: fountain.z + slot.z };
-      if (this.options.strictNavigation)
-        u.pos = this.nav.nearestWalkable(u.pos.x, u.pos.z) ?? { x: fountain.x, z: fountain.z };
+      u.pos = back;
       u.hp = u.maxHp;
       u.mana = u.maxMana;
       u.statuses = [];
     }
 
-    this.visibility = computeVisibility(this.map, this.units, this.time, this.zones);
+    this.visibility = computeVisibility(
+      this.map,
+      this.units,
+      this.time,
+      this.zones,
+      this.teamCount,
+    );
     noteCampSightings(this.campStates, this.time, (team, x, z) => this.isPointVisible(team, x, z));
 
     // Refresh each team's memory of the enemy champions it can see right
     // now; a dead champion is forgotten (its corpse spot means nothing).
+    // Every other team remembers; only a two-team match has lanes to note.
     for (const u of this.units.values()) {
       if (u.kind !== 'champion' || u.neutral) continue;
-      const observer = (1 - u.team) as TeamId;
-      if (u.dead) {
-        this.lastSeen[observer].delete(u.id);
-        continue;
-      }
-      if (this.visibility[observer].has(u.id)) {
-        this.lastSeen[observer].set(u.id, {
+      for (let observer = 0; observer < this.teamCount; observer++) {
+        if (observer === u.team) continue;
+        const memory = this.lastSeen[observer]!;
+        if (u.dead) {
+          memory.delete(u.id);
+          continue;
+        }
+        if (!this.visibility[observer]!.has(u.id)) continue;
+        memory.set(u.id, {
           x: u.pos.x,
           z: u.pos.z,
           at: this.time,
           hpFrac: u.maxHp > 0 ? u.hp / u.maxHp : 0,
         });
+        if (!this.twoTeams()) continue;
         const lane = laneOf(u.pos.x, u.pos.z, this.map);
         if (lane) this.laneSightings.record(observer, lane, u.id, this.time, DT);
       }

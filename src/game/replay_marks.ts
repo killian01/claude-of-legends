@@ -8,6 +8,7 @@
 
 import type { CreatureId } from '../sim/content/rings';
 import type { SimEvent } from '../sim/sim';
+import { otherTeam } from '../sim/teams';
 import type { TeamId } from '../sim/types';
 import type { Unit, UnitKind } from '../sim/unit';
 
@@ -93,7 +94,7 @@ export class MarkCollector {
         killer && killer.kind !== 'warden' && killer.kind !== 'camp' && killer.kind !== 'creature'
           ? killer.team
           : kind === 'tower' || kind === 'sanctum'
-            ? ((1 - victim.team) as TeamId)
+            ? otherTeam(victim.team)
             : null;
       const mark: ReplayMark = { tick, kind, team, unitId: ev.unitId, killerId: ev.killerId };
       if (kind === 'creature' && victim.creature) {
