@@ -24,6 +24,8 @@ describe('player settings', () => {
       rotatedView: true,
       ladderTold: false,
       leftClickMoves: true,
+      stepsOff: false,
+      stepsDone: [],
     });
     expect(clampSettings({ sfx: 0.35, music: 0.8, announcer: true })).toEqual({
       sfx: 0.35,
@@ -36,6 +38,8 @@ describe('player settings', () => {
       rotatedView: true,
       ladderTold: false,
       leftClickMoves: true,
+      stepsOff: false,
+      stepsDone: [],
     });
   });
 

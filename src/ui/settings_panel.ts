@@ -77,7 +77,26 @@ export function buildSettingsPanel(): HTMLElement {
     // A mouse or a trackpad: whether a left click walks and attacks too.
     panel.appendChild(leftClickRow(s.leftClickMoves));
   }
+  panel.appendChild(stepsRow(!s.stepsOff));
   return panel;
+}
+
+// The first steps (ui/first_steps.ts): hidden from the match with its own
+// button, brought back here, from its first step, for a match that starts
+// after.
+function stepsRow(on: boolean): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'set-row';
+  const lab = document.createElement('label');
+  lab.textContent = 'First steps guide';
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.checked = on;
+  box.addEventListener('change', () =>
+    updateSettings(box.checked ? { stepsOff: false, stepsDone: [] } : { stepsOff: true }),
+  );
+  row.append(lab, box);
+  return row;
 }
 
 function leftClickRow(on: boolean): HTMLElement {

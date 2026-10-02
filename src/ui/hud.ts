@@ -36,6 +36,7 @@ import {
 } from '../sim/stats';
 import { BOON_DAMAGE_PER_STACK } from '../sim/team_buffs';
 import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
+import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import { abilityIconUrl, passiveIconUrl, sigilIconUrl } from './ability_icons';
 import { accountOffer, OFFER_CALL } from './account_offer';
@@ -58,6 +59,18 @@ import {
   nudgeVisible,
   stepNudge,
 } from './feedback_box';
+import {
+  hideSteps,
+  STEPS_HIDE,
+  STEPS_TITLE,
+  type StepsInput,
+  type StepsState,
+  type StepsView,
+  stepLine,
+  stepSteps,
+  stepsFinished,
+  stepsStart,
+} from './first_steps';
 import { HINTS_START, type HintsClock, hintsHold, stepHints } from './hints_fade';
 import { buildLadderBox, type LadderBox } from './ladder_box';
 import {
@@ -100,6 +113,7 @@ import {
 import { firstPointsText, pointsWord, popText } from './points_text';
 import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
+import { suggestedItem } from './shop_suggestion';
 import { rankable } from './slot_tap';
 import { TeamScore } from './team_score';
 import { attachTooltip, hideTooltip, LONG_PRESS_MS } from './tooltips';
@@ -116,6 +130,10 @@ const KEY_TINTS: Readonly<Record<string, [string, string]>> = {
 
 const KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
 const TEAM_TEXT_COLORS = ['#9dbcf5', '#f5a3a3'];
+// How near an enemy minion or champion stands for the first steps to speak
+// of it (ui/first_steps.ts): the lane's reach, a little more than a spell's.
+const STEPS_MINION_NEAR_M = 14;
+const STEPS_CHAMPION_NEAR_M = 11;
 const TEAM_PORTRAIT_COLORS = [0x4a7dd6, 0xd65c5c];
 
 function statusLabel(s: Status, time: number): string {
@@ -385,6 +403,22 @@ const CSS = `
   box-shadow: 0 0 0 1px #e8c862, 0 0 16px rgba(232, 200, 98, 0.45), inset 0 1px 0 rgba(255, 243, 207, 0.25);
 }
 .hud-card.cant { opacity: 0.42; }
+/* The item that suits the champion (ui/shop_suggestion.ts): it glows under
+   a gold tag, affordable or not, so a newcomer knows what to buy or to
+   save for. */
+.hud-card.suggested { border-color: #ffd94a;
+  animation: hud-suggest-glow 1.6s ease-in-out infinite alternate; }
+.hud-card.suggested::before {
+  content: 'Suggested'; position: absolute; top: -9px; left: 50%; transform: translateX(-50%);
+  z-index: 2; padding: 1px 7px; border-radius: 999px; white-space: nowrap;
+  background: #ffd94a; color: #241a08; font-size: 9.5px; font-weight: 800;
+  letter-spacing: 0.6px; text-transform: uppercase;
+}
+.hud-card.suggested.cant { opacity: 0.8; }
+@keyframes hud-suggest-glow {
+  from { box-shadow: 0 0 0 2px #ffd94a, 0 0 8px rgba(255, 217, 74, 0.3); }
+  to { box-shadow: 0 0 0 2px #ffd94a, 0 0 24px rgba(255, 217, 74, 0.7); }
+}
 .hud-card img { border-radius: 5px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6); }
 .hud-card-name { line-height: 1.25; font-weight: 600; color: #e4f0cc; }
 .hud-card-cost {
@@ -510,6 +544,40 @@ const CSS = `
 }
 .hud.compact .hud-nudge-words b, .hud.compact .hud-lane-words b { font-size: 12px; }
 .hud.compact .hud-nudge-words span, .hud.compact .hud-lane-words span { font-size: 11px; }
+/* The first steps (ui/first_steps.ts): one line for a newcomer in the slot
+   of the lane card and the feedback line, under them while one is up, gold
+   edged on the left like a margin note, and the button that hides it. */
+.hud-steps {
+  position: absolute; top: calc(150px + env(safe-area-inset-top, 0px));
+  left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px; pointer-events: auto;
+  max-width: min(
+    560px, calc(92 * var(--vw, 1vw)),
+    calc(100 * var(--vw, 1vw) - 16px - 2 * max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)))
+  );
+  padding: 9px 10px 9px 14px; border-radius: 10px;
+  border: 1px solid #8a7430; border-left: 4px solid #e8c46c;
+  background: rgba(12, 16, 26, 0.93); color: #e6dcb8;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55); text-shadow: none;
+  opacity: 0; visibility: hidden; transition: opacity 0.4s, visibility 0.4s, top 0.3s;
+}
+.hud-steps.on { opacity: 1; visibility: visible; }
+.hud-steps.below { top: calc(206px + env(safe-area-inset-top, 0px)); }
+.hud-steps-words b { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: 1.4px;
+  text-transform: uppercase; color: #c9a84a; }
+.hud-steps-words span { display: block; margin-top: 2px; font-size: 14px; font-weight: 600;
+  line-height: 1.35; color: #f2e6c0; }
+.hud-steps-hide {
+  flex: none; padding: 5px 10px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  border: 1px solid #6e5a24; background: transparent; color: #c9bd93;
+  font-size: 11px; font-weight: 700;
+}
+.hud-steps-hide:hover { color: #fff3cf; border-color: #c9a84a; }
+.hud.compact .hud-steps { top: calc(96px + env(safe-area-inset-top, 0px));
+  padding: 6px 8px 6px 11px; gap: 8px; }
+.hud.compact .hud-steps.below { top: calc(146px + env(safe-area-inset-top, 0px)); }
+.hud.compact .hud-steps-words span { font-size: 12px; }
+.hud.overlay-open .hud-steps { visibility: hidden; }
 /* The multikill spotlight: bigger than an announcement because it is the
    rarest thing the game says. Scales in from just under full size, and the
    pentakill takes the room the quadrakill does not. */
@@ -986,6 +1054,9 @@ ${thumbClusterCss()}
 export interface NetHooks {
   sendChat?: (text: string) => void;
   sendPing?: (x: number, z: number) => void;
+  // A first step done, or 'off' for the guide hidden, for the seat report
+  // (ui/first_steps.ts, server/seat_report.ts).
+  sendStep?: (id: string) => void;
 }
 
 export class Hud {
@@ -1135,6 +1206,15 @@ export class Hud {
   // The card's walk: one ordinary move order, handed in by the host so it
   // goes the way a right-click's does (game/boot.ts).
   private laneWalk: ((p: Vec2) => void) | null = null;
+  // The first steps (ui/first_steps.ts): where the newcomer stands, the
+  // card that says the step, and how the player plays, for its words.
+  private steps: StepsState;
+  private readonly stepsEl: HTMLElement;
+  private readonly stepsLineEl: HTMLElement;
+  private readonly stepsInput: StepsInput;
+  // The shop picked the suggested item itself (ui/shop_suggestion.ts): it
+  // follows the suggestion as it moves, until the player picks their own.
+  private shopPickedSuggestion = false;
   private readonly endOffer: HTMLElement;
   private readonly endOfferLine: HTMLElement;
   private readonly endOfferReason: HTMLElement;
@@ -1189,6 +1269,12 @@ export class Hud {
     this.portrait =
       typeof window.matchMedia === 'function' ? window.matchMedia('(orientation: portrait)') : null;
     this.hintsHold = hintsHold(coarsePointer, thumbs);
+    // The first steps, for a person on the seat: what this browser has
+    // done, unless the player hid the guide. A coach or a replay viewer
+    // meets none, and that is not remembered as hidden.
+    const settingsNow = getSettings();
+    this.steps = stepsStart(settingsNow.stepsOff || guide !== 'play', settingsNow.stepsDone);
+    this.stepsInput = !coarsePointer ? 'mouse' : thumbs ? 'thumbs' : 'tap';
     root.className = coarsePointer ? `hud compact${thumbs ? ' thumbs' : ''} turn-needed` : 'hud';
     this.rootEl = root;
     // The interface size (src/game/ui_scale.ts): the screen's, or the
@@ -1494,11 +1580,16 @@ export class Hud {
         : 'Tap: move / attack. Tap a spell, then tap the ground to cast it (tap the spell ' +
           'again to cancel). Drag pans the camera, pinch zooms, Center snaps back to your ' +
           'champion. Level up: tap the +.'
-      : `${getSettings().leftClickMoves ? 'Click' : 'Right-click'}: move / attack. ` +
-        'A: attack-move. S: stop and hold. B: recall. ' +
-        'Q W E R: hold to aim, release to cast (right-click cancels). D F: sigils. P: shop. ' +
-        'Tab: scoreboard. Enter: chat. G: ping. Esc: menu. Screen edges pan the camera; ' +
-        'Space recenters; left-click the minimap to look. Level up: Alt+key or click +.';
+      : stepsFinished(this.steps)
+        ? `${getSettings().leftClickMoves ? 'Click' : 'Right-click'}: move / attack. ` +
+          'A: attack-move. S: stop and hold. B: recall. ' +
+          'Q W E R: hold to aim, release to cast (right-click cancels). D F: sigils. P: shop. ' +
+          'Tab: scoreboard. Enter: chat. G: ping. Esc: menu. Screen edges pan the camera; ' +
+          'Space recenters; left-click the minimap to look. Level up: Alt+key or click +.'
+        : // While the first steps lead a newcomer, the keys they need and no
+          // more: the steps say the rest when it comes up.
+          `${getSettings().leftClickMoves ? 'Click' : 'Right-click'}: move / attack. ` +
+          'Q W E R: spells. B: recall. P: shop. Esc: menu.';
 
     // The always-visible personal score: K / D / A plus creep
     // score, top right.
@@ -1645,6 +1736,21 @@ export class Hud {
       this.pauseFeedback.reveal(!coarsePointer);
     });
 
+    // The first steps' card: one line, under the lane card or the feedback
+    // line when one of them is up, and a button that hides the guide for
+    // good (the settings panel brings it back).
+    this.stepsEl = el('div', 'hud-steps');
+    const stepsWords = el('div', 'hud-steps-words');
+    this.stepsLineEl = el('span', '');
+    stepsWords.append(el('b', '', STEPS_TITLE), this.stepsLineEl);
+    const stepsHide = el('button', 'hud-steps-hide', STEPS_HIDE);
+    stepsHide.type = 'button';
+    stepsHide.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.hideFirstSteps();
+    });
+    this.stepsEl.append(stepsWords, stepsHide);
+
     // The lane card: the seat's lane, and a tap that walks the champion
     // there while it has not arrived; the close button only closes.
     this.laneCardEl = el('div', 'hud-lane-card');
@@ -1789,6 +1895,7 @@ export class Hud {
       this.announceEl,
       this.laneCardEl,
       this.nudgeEl,
+      this.stepsEl,
       this.spotEl,
       this.toastEl,
       this.score,
@@ -2055,6 +2162,88 @@ export class Hud {
     this.nudgeEl.classList.remove('on');
   }
 
+  // The first steps, one update (ui/first_steps.ts): what got done is
+  // remembered by the browser and told to the seat report, and the step
+  // up is drawn under the lane card or the feedback line when one is up.
+  private stepFirstSteps(u: Readonly<Unit>): void {
+    if (stepsFinished(this.steps) && !this.stepsEl.classList.contains('on')) return;
+    const view = this.stepsView(u);
+    const prev = this.steps;
+    this.steps = stepSteps(prev, view);
+    const fresh = this.steps.done.filter((id) => !prev.done.includes(id));
+    if (fresh.length > 0) {
+      updateSettings({ stepsDone: [...new Set([...getSettings().stepsDone, ...fresh])] });
+      for (const id of fresh) this.netHooks.sendStep?.(id);
+    }
+    const id = this.steps.current;
+    const visible = id !== null && !view.covered && !view.dead;
+    if (id !== null && visible) {
+      const line = stepLine(id, this.stepsInput);
+      if (this.stepsLineEl.textContent !== line) this.stepsLineEl.textContent = line;
+      this.stepsEl.classList.toggle(
+        'below',
+        this.laneCardEl.classList.contains('on') || this.nudgeEl.classList.contains('on'),
+      );
+    }
+    this.stepsEl.classList.toggle('on', visible);
+  }
+
+  // What the first steps read of the match: the champion, what is near
+  // it, and what covers the screen. Everything here is in the viewer's
+  // sight already.
+  private stepsView(u: Readonly<Unit>): StepsView {
+    const time = this.world.time;
+    const dist = (o: { pos: Vec2 }, p: Vec2): number => Math.hypot(o.pos.x - p.x, o.pos.z - p.z);
+    let enemyMinionNear = false;
+    let enemyChampionNear = false;
+    const allyMinions: Readonly<Unit>[] = [];
+    const enemyTowers: Readonly<Unit>[] = [];
+    for (const o of this.world.units.values()) {
+      if (o.dead || o.id === u.id) continue;
+      if (o.kind === 'minion') {
+        if (o.team === this.selfTeam) allyMinions.push(o);
+        else if (dist(o, u.pos) <= STEPS_MINION_NEAR_M) enemyMinionNear = true;
+      } else if (o.kind === 'champion') {
+        if (o.team !== this.selfTeam && dist(o, u.pos) <= STEPS_CHAMPION_NEAR_M) {
+          enemyChampionNear = true;
+        }
+      } else if (o.kind === 'tower' && o.team !== this.selfTeam && !o.neutral) {
+        enemyTowers.push(o);
+      }
+    }
+    // The tower's own rule for its reach (src/sim/tower_ai.ts).
+    const towerAlone = enemyTowers.some((t) => {
+      const reaches = (o: Readonly<Unit>): boolean =>
+        dist(o, t.pos) - t.radius - o.radius <= t.stats.attackRange;
+      return reaches(u) && !allyMinions.some(reaches);
+    });
+    const suggestion = suggestedItem(u.championId, u.items);
+    return {
+      time,
+      covered: this.nudgeBlocked(),
+      dead: u.dead,
+      level: u.level,
+      skillPoints: u.skillPoints,
+      learned: (['Q', 'W', 'E'] as const).some((k) => effectiveRank(u, k) > 0),
+      cast: (['Q', 'W', 'E', 'R'] as const).some((k) => (u.cooldowns[k] ?? 0) > time),
+      cs: u.cs,
+      enemyMinionNear,
+      enemyChampionNear,
+      hpFrac: u.maxHp > 0 ? u.hp / u.maxHp : 1,
+      towerAlone,
+      atFountain: withinFountain(this.world.map, this.selfTeam, u.pos),
+      canAffordSuggestion: suggestion !== null && u.gold >= effectiveItemCost(suggestion, u.items),
+    };
+  }
+
+  // The player hid the guide: for good, until the settings bring it back.
+  private hideFirstSteps(): void {
+    this.steps = hideSteps(this.steps);
+    this.stepsEl.classList.remove('on');
+    updateSettings({ stepsOff: true });
+    this.netHooks.sendStep?.('off');
+  }
+
   toggleEscapeMenu(): void {
     this.escapeOverlay.classList.toggle('open');
     this.syncOverlay();
@@ -2275,6 +2464,7 @@ export class Hud {
   }
 
   private selectShopItem(itemId: string): void {
+    this.shopPickedSuggestion = false;
     this.shopSelected = itemId;
     this.lastDetailSig = '';
     this.update();
@@ -2569,6 +2759,7 @@ export class Hud {
     // rejoin and a newcomer dropped into a seat are all told their lane.
     this.stepLaneGuide(u);
     this.stepNudge();
+    this.stepFirstSteps(u);
     this.stepHints();
 
     if (this.spotUntil !== 0 && performance.now() > this.spotUntil) {
@@ -2804,10 +2995,25 @@ export class Hud {
 
     if (this.shop.classList.contains('open')) {
       const shopOk = this.canShop();
+      // The next item of the build a house bot of this champion follows
+      // (ui/shop_suggestion.ts), lit, and shown in the detail pane with
+      // its Buy button until the player picks something of their own.
+      const suggestion = suggestedItem(u.championId, u.items);
+      if (
+        suggestion !== null &&
+        (this.shopSelected === null ||
+          (this.shopPickedSuggestion && this.shopSelected !== suggestion))
+      ) {
+        this.shopSelected = suggestion;
+        this.shopPickedSuggestion = true;
+        this.lastDetailSig = '';
+      }
       this.shopStatus.textContent = u.dead
         ? 'Dead, so spend the wait: buying works from here.'
         : shopOk
-          ? 'Click an item to inspect it; Buy or double-click to purchase.'
+          ? suggestion !== null
+            ? 'The glowing item suits your champion: Buy, or double-click an item.'
+            : 'Click an item to inspect it; Buy or double-click to purchase.'
           : 'Browse anywhere; buying needs your fountain.';
       this.shopGoldText.textContent = `${Math.floor(u.gold)}g`;
       for (const item of ITEM_LIST) {
@@ -2816,6 +3022,7 @@ export class Hud {
           const cost = effectiveItemCost(item.id, u.items);
           btn.classList.toggle('cant', !shopOk || u.gold < cost);
           btn.classList.toggle('sel', item.id === this.shopSelected);
+          btn.classList.toggle('suggested', item.id === suggestion);
         }
         const badge = this.ownBadges.get(item.id);
         if (badge) {

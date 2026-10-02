@@ -78,6 +78,12 @@ describe('the seat report', () => {
     match.notePoints(1, 3);
     match.notePoints(1, 10);
     expect(p.stats.points).toBe(13);
+    // The first steps the client says it did (src/ui/first_steps.ts), in
+    // order and each once, and the guide hidden.
+    match.noteStep(1, 'learn');
+    match.noteStep(1, 'learn');
+    match.noteStep(1, 'off');
+    expect(p.stats.steps).toEqual(['learn', 'off']);
     // A seat a bot stood in for and its player took back starts afresh.
     const seat = match.handleDisconnect(1)!;
     match.restorePlayer(9, seat);
@@ -110,6 +116,7 @@ describe('the seat report', () => {
         orders: 4,
         kinds: { buy: 1, skill: 2, move: 1 },
         firstOrderTick: 200,
+        steps: ['learn', 'last_hit'],
         walked: 41.6,
         lastX: 0,
         lastZ: 0,
@@ -134,6 +141,7 @@ describe('the seat report', () => {
       firstOrderS: 5,
       orders: 4,
       kinds: { buy: 1, skill: 2, move: 1 },
+      steps: ['learn', 'last_hit'],
       walkedM: 42,
       points: 2,
       level: 2,
@@ -158,6 +166,7 @@ describe('the seat report', () => {
         orders: 0,
         kinds: {},
         firstOrderTick: null,
+        steps: [],
         walked: 0,
         lastX: 0,
         lastZ: 0,

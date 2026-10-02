@@ -907,6 +907,7 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
       opened.setNetHooks({
         sendChat: (text) => ws.send(JSON.stringify({ t: 'chat', text })),
         sendPing: (x, z) => ws.send(JSON.stringify({ t: 'ping', x, z })),
+        sendStep: (id) => ws.send(JSON.stringify({ t: 'step', id })),
       });
       if (pendingPoints) {
         opened.showPoints(pendingPoints.delta, pendingPoints.total, pendingPoints.reason);

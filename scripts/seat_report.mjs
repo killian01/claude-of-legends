@@ -42,7 +42,7 @@ if (rows.length === 0) {
 }
 const pad = (v, n) => String(v ?? '-').padEnd(n);
 console.log(
-  `${pad('when (UTC)', 12)}${pad('cc', 4)}${pad('dev', 7)}${pad('who', 6)}${pad('how', 7)}${pad('held', 7)}${pad('load', 6)}${pad('1st', 6)}${pad('orders', 7)}${pad('walked', 7)}${pad('pts', 5)}${pad('cs', 4)}${pad('k/d/a', 7)}ping (max)  orders by kind`,
+  `${pad('when (UTC)', 12)}${pad('cc', 4)}${pad('dev', 7)}${pad('who', 6)}${pad('how', 7)}${pad('held', 7)}${pad('load', 6)}${pad('1st', 6)}${pad('orders', 7)}${pad('walked', 7)}${pad('pts', 5)}${pad('cs', 4)}${pad('k/d/a', 7)}ping (max)  orders by kind | first steps`,
 );
 for (const r of rows) {
   const when = new Date(r.at).toISOString().slice(5, 16).replace('T', ' ');
@@ -51,7 +51,7 @@ for (const r of rows) {
       r.kinds ?? {},
     )
       .map(([k, n]) => `${k}:${n}`)
-      .join(' ')}`,
+      .join(' ')}${r.steps?.length ? ` | ${r.steps.join(' ')}` : ''}`,
   );
 }
 const med = (xs) => {

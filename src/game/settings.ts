@@ -37,6 +37,12 @@ export interface GameSettings {
   // visitor whose clicks did nothing left within half a minute (the seat
   // report, 2026-10-01). Off, a left click only selects, the genre's way.
   leftClickMoves: boolean;
+  // The first steps (ui/first_steps.ts): hidden by the player, and the
+  // steps this browser has done, so a returning player meets only what
+  // they have not. The settings panel brings a hidden guide back, from
+  // its first step.
+  stepsOff: boolean;
+  stepsDone: string[];
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -50,6 +56,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   rotatedView: true,
   ladderTold: false,
   leftClickMoves: true,
+  stepsOff: false,
+  stepsDone: [],
 };
 
 const STORAGE_KEY = 'loc-settings';
@@ -77,6 +85,10 @@ export function clampSettings(raw: unknown): GameSettings {
     ladderTold: r.ladderTold === true,
     leftClickMoves:
       typeof r.leftClickMoves === 'boolean' ? r.leftClickMoves : DEFAULT_SETTINGS.leftClickMoves,
+    stepsOff: r.stepsOff === true,
+    stepsDone: Array.isArray(r.stepsDone)
+      ? [...new Set(r.stepsDone.filter((x): x is string => typeof x === 'string'))].slice(0, 32)
+      : [],
   };
 }
 

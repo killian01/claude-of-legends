@@ -86,6 +86,10 @@ export type ClientMsg =
   | { t: 'loaded' }
   // The echo of the server's round-trip probe, sent back at once.
   | { t: 'probe'; n: number }
+  // A first step done in this match, or 'off' when the player hid the
+  // guide (src/ui/first_steps.ts): what the seat report says of how far
+  // a newcomer was led (server/seat_report.ts). Never a match command.
+  | { t: 'step'; id: string }
   // A coach order for the account's own bot seat (ADR 0013): one at a
   // time, free releases it. Refused on any other seat.
   | { t: 'order'; kind: CoachOrderKind; x?: number; z?: number; targetId?: number }
@@ -391,6 +395,30 @@ export type ServerMsg =
   | { t: 'points'; delta: number; total: number; reason: PointsReason }
   | { t: 'match_end' }
   | { t: 'error'; message: string };
+
+// The first steps a newcomer is led through, in the order they are tried
+// (src/ui/first_steps.ts, CONTEXT.md: First steps). Here because the
+// server reads them off the wire for the seat report.
+export const STEP_IDS = [
+  'learn',
+  'low_health',
+  'spell',
+  'last_hit',
+  'tower',
+  'level_up',
+  'gold',
+  'goal',
+] as const;
+export type StepId = (typeof STEP_IDS)[number];
+
+// A step's id off the wire: a known step, or 'off' for the guide hidden;
+// anything else is nothing.
+export function stepOnWire(id: unknown): StepId | 'off' | null {
+  if (id === 'off') return 'off';
+  return typeof id === 'string' && (STEP_IDS as readonly string[]).includes(id)
+    ? (id as StepId)
+    : null;
+}
 
 // Loose structural parse; each handler validates its own fields before use.
 export function parseClientMsg(raw: string): ClientMsg | null {
