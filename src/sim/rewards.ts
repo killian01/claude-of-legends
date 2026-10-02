@@ -40,6 +40,13 @@ export function championBounty(victim: Unit): number {
   );
 }
 
+// The experience a champion's death pays, by the victim's level: taking
+// down the fed enemy accelerates your own spike (snowball review). The
+// battle royale pays the same, to the last hit alone (royale/levels.ts).
+export function championXp(victimLevel: number): number {
+  return 120 + 20 * victimLevel;
+}
+
 // Called once when a unit dies: gold to the killing champion, xp shared among
 // enemy champions near the death.
 export function grantKillRewards(ctx: CombatCtx, victim: Unit, killerId: number): void {
@@ -51,10 +58,10 @@ export function grantKillRewards(ctx: CombatCtx, victim: Unit, killerId: number)
       ctx.events.push({ type: 'gold', unitId: killer.id, amount: bounty });
     }
   }
-  // Champion kill xp scales with the victim's level, so taking down the fed
-  // enemy accelerates your own spike (snowball review). A neutral victim
-  // (the Warden) shares its xp among the KILLER's team nearby.
-  const xpBounty = victim.kind === 'champion' ? 120 + 20 * victim.level : victim.xpBounty;
+  // Champion kill xp scales with the victim's level (championXp). A
+  // neutral victim (the Warden) shares its xp among the KILLER's team
+  // nearby.
+  const xpBounty = victim.kind === 'champion' ? championXp(victim.level) : victim.xpBounty;
   if (xpBounty > 0) {
     const xpTeam = victim.neutral ? killer?.team : undefined;
     if (!victim.neutral || xpTeam !== undefined) {
