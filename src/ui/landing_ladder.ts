@@ -43,19 +43,27 @@ export const LADDER_HEADING = 'The ladder';
 export const GHOST_ROWS = 6;
 export const GHOST_NAME = 'Open: your name here';
 export const JOIN_CALL = 'Take your place';
-// The promise the section makes, in one line.
-export const LADDER_PROMISE = 'Play one match and your name is on it. No account needed.';
 
 export function pointsText(points: number): string {
   return points === 1 ? '1 point' : `${points.toLocaleString('en-US')} points`;
 }
 
+// A row's number. The lead over the rows says they are points, so each row
+// says the number alone: "points" twenty times down a list is the word,
+// not the ranking, that the eye reads.
+export function rowPoints(points: number): string {
+  return points.toLocaleString('en-US');
+}
+
 // What stands behind the rows. A fresh server says so plainly rather than
-// counting to zero.
+// counting to zero. The hero above has already said that one match puts a
+// name here, with no account (ui/landing_modes.ts HERO_RANKED_LINE): the
+// ladder says it no second time, and neither does it tell Guests from
+// accounts, which a visitor reading names has no use for.
 export function ladderLead(ladder: Pick<LandingLadder, 'total'>): string {
   if (ladder.total === 0) return 'Nobody is on it yet. The first name here could be yours.';
   const who = ladder.total === 1 ? '1 player' : `${ladder.total} players`;
-  return `${who} on it, Guests and accounts alike, ranked by the points their matches earned.`;
+  return `${who}, ranked by the points their matches earned.`;
 }
 
 // A returning visitor's own place, when the cookie said who they are.
@@ -73,18 +81,22 @@ const CSS = `
 .pg-ladder-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
 .pg-ladder h2 { font-family: Cinzel, Georgia, serif; font-size: 22px; letter-spacing: 1.8px;
   text-transform: uppercase; margin: 0; color: #f0dca0; }
-.pg-ladder .pg-ladder-promise { margin: 0; font-size: 14px; font-weight: 600; color: #e8f0d4; }
 .pg-ladder .pg-ladder-lead { margin: 6px 0 0; font-size: 12.5px; color: #9db2cf; }
 .pg-ladder .pg-ladder-me { margin: 8px 0 0; font-size: 13px; font-weight: 700; color: #f3e6bd; }
-.pg-ladder ol { list-style: none; margin: 14px 0 0; padding: 0;
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 26px; }
+/* Every line on the ladder, in a box that scrolls: ten and a half rows
+   high, so the half row at the foot says there is more under it. */
+.pg-ladder ol { list-style: none; margin: 14px 0 0; padding: 0 10px 0 0; position: relative;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 26px;
+  align-content: start; max-height: 318px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: #6b5a2e transparent; }
+.pg-ladder ol::-webkit-scrollbar { width: 6px; }
+.pg-ladder ol::-webkit-scrollbar-thumb { background: #6b5a2e; border-radius: 3px; }
 .pg-ladder li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px;
   align-items: baseline; padding: 6px 0; border-top: 1px solid rgba(140, 168, 208, 0.14);
   font-size: 13.5px; color: #dceaff; }
 .pg-ladder li.me { color: #f3e6bd; }
 .pg-ladder .pg-ladder-rank { color: #c9a84a; font-weight: 800; font-variant-numeric: tabular-nums; }
 .pg-ladder .pg-ladder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.pg-ladder .pg-ladder-name small { font-weight: 400; color: #8ea4c4; margin-left: 6px; font-size: 11.5px; }
 .pg-ladder .pg-ladder-points { font-variant-numeric: tabular-nums; color: #f0deae; font-weight: 700; }
 .pg-ladder ol.ghost li { color: #6d829f; font-style: italic; }
 .pg-ladder ol.ghost .pg-ladder-rank, .pg-ladder ol.ghost .pg-ladder-points { color: #6b5a2e; }
@@ -92,7 +104,12 @@ const CSS = `
 .pg-ladder .pg-ladder-join .menu-btn { width: auto; padding: 8px 22px; }
 @media (max-width: 720px) {
   .pg-ladder { padding: 14px 16px 16px; }
-  .pg-ladder ol { grid-template-columns: minmax(0, 1fr); }
+  .pg-ladder ol { grid-template-columns: minmax(0, 1fr); max-height: 348px; }
+}
+/* A phone held sideways: a box most of the screen high would take the
+   thumb's swipes meant for the page. */
+@media (max-height: 560px) {
+  .pg-ladder ol { max-height: 202px; }
 }
 `;
 
@@ -114,7 +131,7 @@ export function renderLandingLadder(
   host.textContent = '';
   const ladder = page.ladder;
   const head = el('div', 'pg-ladder-head');
-  head.append(el('h2', '', LADDER_HEADING), el('p', 'pg-ladder-promise', LADDER_PROMISE));
+  head.append(el('h2', '', LADDER_HEADING));
   host.append(head, el('p', 'pg-ladder-lead', ladderLead(ladder)));
   const mine = meLine(ladder.me);
   if (mine) host.appendChild(el('p', 'pg-ladder-me', mine));
@@ -127,7 +144,7 @@ export function renderLandingLadder(
       item.append(
         el('span', 'pg-ladder-rank', `#${rank}`),
         el('span', 'pg-ladder-name', GHOST_NAME),
-        el('span', 'pg-ladder-points', pointsText(0)),
+        el('span', 'pg-ladder-points', rowPoints(0)),
       );
       list.appendChild(item);
     }
@@ -136,12 +153,10 @@ export function renderLandingLadder(
     const list = el('ol', '');
     for (const row of ladder.rows) {
       const item = el('li', row.rank === ladder.me?.rank ? 'me' : '');
-      const name = el('span', 'pg-ladder-name', row.name);
-      if (row.guest) name.appendChild(el('small', '', 'Guest'));
       item.append(
         el('span', 'pg-ladder-rank', `#${row.rank}`),
-        name,
-        el('span', 'pg-ladder-points', pointsText(row.points)),
+        el('span', 'pg-ladder-name', row.name),
+        el('span', 'pg-ladder-points', rowPoints(row.points)),
       );
       list.appendChild(item);
     }
@@ -168,6 +183,13 @@ export function mountLandingLadder(host: HTMLElement, onJoin: () => void): void 
       }
       renderLandingLadder(host, page, onJoin);
       host.hidden = false;
+      // A returning player's own line, scrolled into the middle of the box
+      // rather than left under the fold of it.
+      const list = host.querySelector('ol');
+      const mine = list?.querySelector<HTMLElement>('li.me');
+      if (list && mine) {
+        list.scrollTop = Math.max(0, mine.offsetTop - (list.clientHeight - mine.offsetHeight) / 2);
+      }
     })
     .catch(() => host.remove());
 }

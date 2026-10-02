@@ -16,7 +16,10 @@ import {
   type PointsReader,
 } from './points_ladder';
 
-export const LANDING_LADDER_ROWS = 10;
+// Every line on the ladder, which the landing's list scrolls through: its
+// top ten hid everybody else (the maintainer, 2026-10-02). A ceiling far
+// above today's count bounds what one landing load carries.
+export const LANDING_LADDER_ROWS = 500;
 
 export interface LandingPage {
   ladder: PointsLadder;

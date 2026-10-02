@@ -3,18 +3,15 @@
 // returning Guest's own line.
 
 import { describe, expect, it } from 'vitest';
-import { LADDER_PROMISE, ladderLead, meLine, pointsText } from '../src/ui/landing_ladder';
+import { ladderLead, meLine, pointsText, rowPoints } from '../src/ui/landing_ladder';
 
 describe('the ladder on the landing', () => {
-  it('promises a place for one match, with no account', () => {
-    expect(LADDER_PROMISE).toMatch(/one match/i);
-    expect(LADDER_PROMISE).toMatch(/no account/i);
-  });
-
-  it('writes points as a number people read', () => {
+  it('writes points as a number people read, the word once over the rows', () => {
     expect(pointsText(1)).toBe('1 point');
     expect(pointsText(0)).toBe('0 points');
     expect(pointsText(1240)).toBe('1,240 points');
+    expect(rowPoints(1240)).toBe('1,240');
+    expect(ladderLead({ total: 37 })).toMatch(/points/);
   });
 
   it('speaks to a fresh server rather than counting to zero', () => {
@@ -23,9 +20,12 @@ describe('the ladder on the landing', () => {
     );
   });
 
-  it('counts everyone on it, Guests and accounts alike', () => {
-    expect(ladderLead({ total: 1 })).toMatch(/^1 player on it, Guests and accounts alike/);
-    expect(ladderLead({ total: 37 })).toMatch(/^37 players on it/);
+  // The hero says that one match puts a name here, with no account; the
+  // ladder says it no second time (the maintainer, 2026-10-02).
+  it('counts everyone on it, and repeats nothing the hero says', () => {
+    expect(ladderLead({ total: 1 })).toBe('1 player, ranked by the points their matches earned.');
+    expect(ladderLead({ total: 37 })).toMatch(/^37 players, ranked/);
+    expect(ladderLead({ total: 37 })).not.toMatch(/account|guest/i);
   });
 
   it('tells a returning Guest where they stand, once they are on it', () => {
