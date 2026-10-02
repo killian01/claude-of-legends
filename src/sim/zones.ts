@@ -1,9 +1,10 @@
 // Ground zones: damage-over-time fields, entry triggers, delayed
 // detonations, and ally-affecting fields (heals). Enemy effects target the
-// zone owner's enemies; allyOnTick targets its allies.
+// zone owner's enemies; allyOnTick targets its allies. A zone is a disc of
+// the ground it stands on, the plane's or the planet's (geo.ts).
 
 import { applyEffects, type EffectSpec, type Power } from './combat/effects';
-import { hypot } from './exact';
+import { copy, dist } from './geo';
 import type { CombatCtx } from './sim_context';
 import { isSpellTarget } from './spell_targets';
 import type { TeamId, Vec2 } from './types';
@@ -50,7 +51,7 @@ function unitsInside(ctx: CombatCtx, z: Zone, enemies: boolean): Unit[] {
     if (u.dead || ctx.dead.has(u.id) || !isSpellTarget(u)) continue;
     // Neutral units count as enemies for zones and never as allies.
     if (enemies ? !u.neutral && u.team === z.team : u.neutral || u.team !== z.team) continue;
-    if (hypot(u.pos.x - z.pos.x, u.pos.z - z.pos.z) <= z.radius + u.radius) out.push(u);
+    if (dist(u.pos, z.pos) <= z.radius + u.radius) out.push(u);
   }
   return out;
 }
@@ -82,7 +83,7 @@ export function stepZones(ctx: CombatCtx): void {
         if (insideNow.has(id)) continue;
         const u = ctx.units.get(id);
         if (!u || u.dead || ctx.dead.has(id) || u.activeDash) continue;
-        const d = hypot(u.pos.x - z.pos.x, u.pos.z - z.pos.z);
+        const d = dist(u.pos, z.pos);
         if (d - u.radius > z.radius + BOUNDARY_SHELL) continue;
         if ((z.boundaryNextAt.get(id) ?? 0) > ctx.time) continue;
         z.boundaryNextAt.set(id, ctx.time + z.boundary.perUnitEvery);
@@ -117,7 +118,7 @@ export function stepZones(ctx: CombatCtx): void {
           id,
           sourceId: z.sourceId,
           team: z.team,
-          pos: { x: z.pos.x, z: z.pos.z },
+          pos: copy(z.pos),
           radius: z.leaveZone.radius,
           until: ctx.time + z.leaveZone.duration,
           tickEvery,

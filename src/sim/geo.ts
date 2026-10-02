@@ -353,3 +353,30 @@ export function settle(p: Vec2, r: number): Vec2 {
   const d = len3(p.x, p.y, p.z);
   return { x: (p.x / d) * r, y: (p.y / d) * r, z: (p.z / d) * r };
 }
+
+// A vector made unit length: the plane's {v.x / len, v.z / len} with len
+// its length, the sphere's the same over all three axes; null for a zero
+// vector.
+export function unit(v: Vec2): Vec2 | null {
+  const len = norm(v);
+  if (len <= 0) return null;
+  return v.y === undefined
+    ? { x: v.x / len, z: v.z / len }
+    : { x: v.x / len, y: v.y / len, z: v.z / len };
+}
+
+// The point a fraction t of a line of the given length along the unit
+// direction dir from p: the plane's p + dir * length * t, in that order of
+// operations; the sphere's offset by length * t.
+export function along(p: Vec2, dir: Vec2, length: number, t: number): Vec2 {
+  if (p.y === undefined || dir.y === undefined) {
+    return { x: p.x + dir.x * length * t, z: p.z + dir.z * length * t };
+  }
+  return offset(p, dir, length * t);
+}
+
+// A ground point from its coordinates, as an order names it: the plane's
+// {x, z}, the sphere's with y.
+export function point(x: number, z: number, y?: number): Vec2 {
+  return y === undefined ? { x, z } : { x, y, z };
+}

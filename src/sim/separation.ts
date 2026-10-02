@@ -1,42 +1,38 @@
-// Soft unit collision among minions: overlapping minions push each other
-// apart a little each tick, so waves read as formations instead of a single
-// stacked blob (review F.0). Deterministic pair order; pushes never land on
-// blocked ground.
+// Soft unit collision: overlapping bodies push each other apart a little
+// each tick, so waves read as formations instead of a single stacked blob
+// (review F.0). The 5v5 separates its minions alone; a match on the planet
+// can separate its champions too (SimOptions.separation). Deterministic
+// pair order; pushes never land on blocked ground; a body in a dash's
+// flight is the dash's.
 
-import { hypot } from './exact';
-import type { NavGrid } from './navgrid';
+import { assign, carry, dirTo, dist, offset } from './geo';
 import type { CombatCtx } from './sim_context';
-import type { Unit } from './unit';
+import type { Unit, UnitKind } from './unit';
 
-export function stepSeparation(ctx: CombatCtx, nav: NavGrid): void {
-  const minions: Unit[] = [];
+export const MINIONS_ONLY: readonly UnitKind[] = ['minion'];
+
+export function stepSeparation(ctx: CombatCtx, kinds: readonly UnitKind[] = MINIONS_ONLY): void {
+  const bodies: Unit[] = [];
   for (const u of ctx.units.values()) {
-    if (u.kind === 'minion' && !u.dead && !ctx.dead.has(u.id)) minions.push(u);
+    if (!kinds.includes(u.kind) || u.dead || ctx.dead.has(u.id) || u.activeDash) continue;
+    bodies.push(u);
   }
-  for (let i = 0; i < minions.length; i++) {
-    const a = minions[i]!;
-    for (let j = i + 1; j < minions.length; j++) {
-      const b = minions[j]!;
-      const dx = b.pos.x - a.pos.x;
-      const dz = b.pos.z - a.pos.z;
-      const dist = hypot(dx, dz);
+  for (let i = 0; i < bodies.length; i++) {
+    const a = bodies[i]!;
+    for (let j = i + 1; j < bodies.length; j++) {
+      const b = bodies[j]!;
+      const d = dist(a.pos, b.pos);
       const minDist = a.radius + b.radius;
-      if (dist >= minDist || dist < 1e-6) continue;
-      const push = Math.min(0.12, (minDist - dist) / 2);
-      const nx = dx / dist;
-      const nz = dz / dist;
-      const ax = a.pos.x - nx * push;
-      const az = a.pos.z - nz * push;
-      const bx = b.pos.x + nx * push;
-      const bz = b.pos.z + nz * push;
-      if (nav.isWalkableAt(ax, az)) {
-        a.pos.x = ax;
-        a.pos.z = az;
-      }
-      if (nav.isWalkableAt(bx, bz)) {
-        b.pos.x = bx;
-        b.pos.z = bz;
-      }
+      if (d >= minDist || d < 1e-6) continue;
+      const dir = dirTo(a.pos, b.pos);
+      if (!dir) continue;
+      const push = Math.min(0.12, (minDist - d) / 2);
+      // a steps back along the line, b forward along it, the heading
+      // carried to b's own ground (the same heading on the plane).
+      const aTo = offset(a.pos, dir, -push);
+      const bTo = offset(b.pos, carry(dir, a.pos, b.pos), push);
+      if (ctx.ground.isWalkableAt(aTo)) assign(a.pos, aTo);
+      if (ctx.ground.isWalkableAt(bTo)) assign(b.pos, bTo);
     }
   }
 }

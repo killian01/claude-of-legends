@@ -6,12 +6,11 @@
 // skill (orb-walking) instead of a free action. Ranged units then fire a
 // homing bolt (like the genre, it cannot be dodged once loosed); melee
 // units strike directly. Taunts force the attack order; firing breaks
-// stealth at the start of the windup.
+// stealth at the start of the windup. Ranges and chases are measured on the
+// ground the match stands on (geo.ts, ground.ts).
 
-import { hypot } from '../exact';
-import type { NavGrid } from '../navgrid';
+import { copy, dist } from '../geo';
 import { passiveOf, runItemAttackHits } from '../passives';
-import { findPath } from '../pathfind';
 import type { CombatCtx } from '../sim_context';
 import { hostile, type Unit } from '../unit';
 import { dealDamage } from './damage';
@@ -74,8 +73,7 @@ function beginWindup(ctx: CombatCtx, u: Unit, target: Unit): void {
   u.pendingAttack = {
     targetId: target.id,
     resolveAt: ctx.time + attackWindupSeconds(cadence, u.kind === 'champion'),
-    startX: u.pos.x,
-    startZ: u.pos.z,
+    start: copy(u.pos),
   };
 }
 
@@ -102,7 +100,8 @@ function strike(ctx: CombatCtx, u: Unit, target: Unit): void {
       id,
       sourceId: u.id,
       team: u.team,
-      pos: { x: u.pos.x, z: u.pos.z },
+      pos: copy(u.pos),
+      // A homing bolt steers by its target, never by a heading.
       dir: { x: 0, z: 0 },
       speed: BOLT_SPEED,
       radius: 0.35,
@@ -142,7 +141,7 @@ function strike(ctx: CombatCtx, u: Unit, target: Unit): void {
         for (const other of ctx.units.values()) {
           if (!hostile(u, other) || other.dead || ctx.dead.has(other.id)) continue;
           if (other.id === target.id) continue;
-          const d = hypot(other.pos.x - target.pos.x, other.pos.z - target.pos.z);
+          const d = dist(other.pos, target.pos);
           if (d > empower.splashRadius + other.radius) continue;
           applyEffects(ctx, u.id, power, other, empower.splash);
         }
@@ -165,8 +164,7 @@ function stepPendingAttack(ctx: CombatCtx, u: Unit): void {
   // Displacement cancel is a champion rule (dashes, blinks): minions only
   // ever displace through separation drift, which must not eat their swings
   // in a packed wave.
-  const displaced =
-    u.kind === 'champion' && hypot(u.pos.x - pa.startX, u.pos.z - pa.startZ) > DISPLACEMENT_CANCEL;
+  const displaced = u.kind === 'champion' && dist(u.pos, pa.start) > DISPLACEMENT_CANCEL;
   const canceled =
     isStunned(u, ctx.time) ||
     u.path.length > 0 ||
@@ -183,12 +181,12 @@ function stepPendingAttack(ctx: CombatCtx, u: Unit): void {
   }
   if (ctx.time >= pa.resolveAt) {
     u.pendingAttack = null;
-    const edge = hypot(target.pos.x - u.pos.x, target.pos.z - u.pos.z) - u.radius - target.radius;
+    const edge = dist(target.pos, u.pos) - u.radius - target.radius;
     if (edge <= u.stats.attackRange + STRIKE_GRACE) strike(ctx, u, target);
   }
 }
 
-export function stepAutoAttacks(ctx: CombatCtx, nav: NavGrid): void {
+export function stepAutoAttacks(ctx: CombatCtx): void {
   for (const u of ctx.units.values()) {
     if (ctx.dead.has(u.id) || u.dead) continue;
     stepPendingAttack(ctx, u);
@@ -218,13 +216,12 @@ export function stepAutoAttacks(ctx: CombatCtx, nav: NavGrid): void {
       u.attackTargetId = null;
       continue;
     }
-    const edgeDist =
-      hypot(target.pos.x - u.pos.x, target.pos.z - u.pos.z) - u.radius - target.radius;
+    const edgeDist = dist(target.pos, u.pos) - u.radius - target.radius;
     if (edgeDist > u.stats.attackRange) {
       if (u.moveSpeed <= 0) continue;
       const end = u.path[u.path.length - 1];
-      if (!end || hypot(end.x - target.pos.x, end.z - target.pos.z) > REPATH_DISTANCE) {
-        u.path = findPath(nav, u.pos, target.pos);
+      if (!end || dist(end, target.pos) > REPATH_DISTANCE) {
+        u.path = ctx.ground.findPath(u.pos, target.pos);
       }
     } else {
       u.path = [];

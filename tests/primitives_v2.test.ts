@@ -10,6 +10,7 @@ import { stepShieldBursts } from '../src/sim/combat/shield_burst';
 import { addStatus, isStunned } from '../src/sim/combat/status';
 import { CHAMPIONS } from '../src/sim/content/champions';
 import { stepDashes } from '../src/sim/dashes';
+import { PlaneGround } from '../src/sim/ground';
 import { NavGrid } from '../src/sim/navgrid';
 import { stepProjectiles } from '../src/sim/projectiles';
 import { Rng } from '../src/sim/rng';
@@ -32,6 +33,7 @@ function mkCtx(nav = new NavGrid(40, [], 0)): { ctx: CombatCtx; advance: (s: num
     },
     rng: new Rng(7),
     nav,
+    ground: new PlaneGround(nav),
     units: new Map(),
     projectiles: new Map(),
     zones: new Map(),
