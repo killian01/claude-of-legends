@@ -897,7 +897,8 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
       ends = matchEndReporter('online', () => ({ winner: world.winner, seconds: world.time }));
       layer.guard(() => pres?.toggleEscapeMenu());
       // A coach seat (ADR 0013): the bar for the orders with no place to
-      // click; right-click already goes and focuses through the mirror.
+      // click; the click that orders already goes and focuses through the
+      // mirror.
       if (world.coach) {
         coachBar = buildCoachBar(opened.stage, (kind) =>
           ws.send(JSON.stringify({ t: 'order', kind })),
