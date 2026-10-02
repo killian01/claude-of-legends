@@ -616,6 +616,8 @@ export function startPresentation(
     renderer.setAttackTarget(null);
     renderer.flashMarker(p.x, p.z);
   });
+  // The recall key on the bar: the recall B gives.
+  hud.setRecall(() => inputHandlers.onRecall());
   // The arrow toward the lane, for a person on the seat only.
   const laneArrow = guide === 'play' ? new LaneArrow(stage.el) : null;
   const arrowHalf = laneArrowHalf();

@@ -129,6 +129,18 @@ const KEY_TINTS: Readonly<Record<string, [string, string]>> = {
 };
 
 const KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
+// The recall key's mark: a plain house, drawn here.
+function recallMark(): SVGSVGElement {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(NS, 'path');
+  path.setAttribute('d', 'M12 3 2.5 11.5H5.5V21H10.5V15H13.5V21H18.5V11.5H21.5Z');
+  svg.appendChild(path);
+  return svg;
+}
+
 const TEAM_TEXT_COLORS = ['#9dbcf5', '#f5a3a3'];
 // How near an enemy minion or champion stands for the first steps to speak
 // of it (ui/first_steps.ts): the lane's reach, a little more than a spell's.
@@ -255,6 +267,17 @@ const CSS = `
 .hud-slot.passive {
   width: 34px; height: 34px; border-radius: 50%; align-self: flex-end;
   border-color: #8a6d2c;
+}
+/* The recall's key (desktop): a house on a slot like the spells', gold
+   while a first step names it. */
+.hud-slot.recall { cursor: pointer; border-color: #6e5a24; }
+.hud-slot.recall svg { width: 24px; height: 24px; fill: #e8dfb4; }
+.hud-slot.recall:hover { border-color: #c9a84a; }
+.hud-slot.recall.hint { border-color: #ffd94a;
+  animation: hud-recall-hint 0.9s ease-in-out infinite alternate; }
+@keyframes hud-recall-hint {
+  from { box-shadow: 0 0 0 1px #ffd94a, 0 0 6px rgba(255, 217, 74, 0.3); }
+  to { box-shadow: 0 0 0 2px #ffd94a, 0 0 18px rgba(255, 217, 74, 0.75); }
 }
 .hud-slot-key {
   position: absolute; right: 3px; top: 1px;
@@ -1218,6 +1241,10 @@ export class Hud {
   // The shop picked the suggested item itself (ui/shop_suggestion.ts): it
   // follows the suggestion as it moves, until the player picks their own.
   private shopPickedSuggestion = false;
+  // The recall's key on the bar (a mouse only; a phone's touch bar has its
+  // own), and what pressing it does, handed in by the host (game/boot.ts).
+  private recallSlot: HTMLElement | null = null;
+  private recallPress: (() => void) | null = null;
   private readonly endOffer: HTMLElement;
   private readonly endOfferLine: HTMLElement;
   private readonly endOfferReason: HTMLElement;
@@ -1519,6 +1546,21 @@ export class Hud {
       });
       slots.appendChild(slot);
       this.sigilSlots.push({ root: slot, cd });
+    }
+
+    // The recall, a key on the bar beside the spells: B was a key nobody
+    // knew (the maintainer, 2026-10-02). A phone has its own Recall on the
+    // touch bar, and the thumb cluster no room for one more button.
+    if (!coarsePointer) {
+      const recall = el('div', 'hud-slot recall');
+      recall.append(recallMark(), el('span', 'hud-slot-key', 'B'));
+      attachTooltip(recall, () => [
+        'Recall (B)',
+        'Stand still a few seconds: you go home, heal, and can shop.',
+      ]);
+      recall.addEventListener('click', () => this.recallPress?.());
+      slots.appendChild(recall);
+      this.recallSlot = recall;
     }
 
     const inv = el('div', 'hud-inv');
@@ -2160,6 +2202,11 @@ export class Hud {
     this.laneWalk = walk;
   }
 
+  // The recall key's press: the host's recall, the way B gives it.
+  setRecall(press: () => void): void {
+    this.recallPress = press;
+  }
+
   private endNudge(): void {
     this.nudge = { ...this.nudge, done: true };
     this.nudgeEl.classList.remove('on');
@@ -2189,6 +2236,11 @@ export class Hud {
       );
     }
     this.stepsEl.classList.toggle('on', visible);
+    // A step that says B lights the key it names.
+    this.recallSlot?.classList.toggle(
+      'hint',
+      visible && (id === 'recall' || id === 'go_shop' || id === 'low_health'),
+    );
   }
 
   // What the first steps read of the match: the champion, what is near
@@ -2236,6 +2288,7 @@ export class Hud {
       towerAlone,
       atFountain: withinFountain(this.world.map, this.selfTeam, u.pos),
       canAffordSuggestion: suggestion !== null && u.gold >= effectiveItemCost(suggestion, u.items),
+      recalling: u.statuses.some((st) => st.kind === 'recall' && st.until > time),
     };
   }
 
