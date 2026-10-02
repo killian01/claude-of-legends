@@ -92,6 +92,8 @@ export interface SeatStats {
   walked: number;
   lastX: number;
   lastZ: number;
+  // On the planet's sphere (a battle royale, server/royale_match.ts).
+  lastY?: number;
   points: number;
 }
 
@@ -137,7 +139,7 @@ export function withoutOrderNumber(msg: ClientMsg): ClientMsg {
   return rest as ClientMsg;
 }
 
-function freshStats(tick: number, x: number, z: number): SeatStats {
+export function freshStats(tick: number, x: number, z: number): SeatStats {
   return {
     startTick: tick,
     loadedTick: null,
