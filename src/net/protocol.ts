@@ -406,6 +406,7 @@ export const STEP_IDS = [
   'last_hit',
   'tower',
   'level_up',
+  'go_shop',
   'gold',
   'goal',
 ] as const;

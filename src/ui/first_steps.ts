@@ -69,6 +69,16 @@ export const LAPSE_S = 4;
 export const GAP_S = 2;
 // When the goal is told: once the lane is under way.
 export const GOAL_AT_S = 150;
+// The last hit is a knack, and a newcomer can miss it for a long while: the
+// step says it for this long and lets the others come, rather than stand
+// over the lane until the player hides the guide (the maintainer,
+// 2026-10-02: the guide seemed to stop there).
+export const LAST_HIT_S = 25;
+// From when the guide says to go home and spend the gold the champion
+// carries: once the lane has had a moment.
+export const GO_SHOP_AT_S = 75;
+// Backing off when hurt comes before any other step: it takes the card
+// from whatever is up, which comes back later.
 
 interface StepRule {
   // It applies now.
@@ -95,7 +105,7 @@ const RULES: Readonly<Record<StepId, StepRule>> = {
   },
   last_hit: {
     when: (v) => v.enemyMinionNear && v.cs === 0,
-    over: (v) => v.cs > 0,
+    over: (v, up) => v.cs > 0 || up >= LAST_HIT_S,
     did: (v) => v.cs > 0,
   },
   tower: {
@@ -106,6 +116,12 @@ const RULES: Readonly<Record<StepId, StepRule>> = {
     when: (v) => v.learned && v.skillPoints > 0,
     over: (v) => v.skillPoints === 0,
     did: (v) => v.level >= 2 && v.learned && v.skillPoints === 0,
+  },
+  // Gold for the suggested item in the lane: going home to spend it is
+  // what nothing else told a newcomer.
+  go_shop: {
+    when: (v) => !v.atFountain && v.canAffordSuggestion && v.time >= GO_SHOP_AT_S,
+    over: (v, up) => v.atFountain || !v.canAffordSuggestion || up >= READ_S + SAY_S,
   },
   gold: {
     when: (v) => v.atFountain && v.canAffordSuggestion && v.time >= 60,
@@ -142,6 +158,14 @@ export function stepSteps(s: StepsState, v: StepsView): StepsState {
     if (!done.includes(id) && RULES[id].did?.(v)) done = [...done, id];
   }
   let next: StepsState = done === s.done ? s : { ...s, done };
+  if (
+    next.current !== 'low_health' &&
+    !done.includes('low_health') &&
+    !v.covered &&
+    RULES.low_health.when(v, done)
+  ) {
+    return { ...next, current: 'low_health', shownAt: v.time, lapsedAt: null };
+  }
   const current = next.current;
   if (current !== null) {
     const rule = RULES[current];
@@ -191,6 +215,7 @@ const MOUSE: Readonly<Record<StepId, string>> = {
   last_hit: 'Hit enemy minions as their health runs out: the last hit pays gold and points.',
   tower: 'Enemy towers hit hard: let your minions walk in first.',
   level_up: 'New level: click the + on a spell to make it stronger.',
+  go_shop: 'Gold to spend: press B to go home, then buy the glowing item in the shop.',
   gold: 'Gold to spend: press P, the glowing item suits your champion.',
   goal: 'The goal: take the towers down a lane with your minions, then the enemy Sanctum.',
 };
@@ -199,6 +224,7 @@ const TOUCH: Readonly<Partial<Record<StepId, string>>> = {
   learn: 'Learn your first spell: tap the + on a spell.',
   low_health: 'Low health: back off, or tap Recall to go home and heal.',
   level_up: 'New level: tap the + on a spell to make it stronger.',
+  go_shop: 'Gold to spend: tap Recall to go home, then buy the glowing item in the Shop.',
   gold: 'Gold to spend: tap Shop, the glowing item suits your champion.',
 };
 

@@ -11,8 +11,10 @@ import { effectiveItemCost, ITEMS } from '../src/sim/content/items';
 import { MAGIC_BUILD, SHELL_BUILD } from '../src/sim/playbook/kit';
 import {
   GAP_S,
+  GO_SHOP_AT_S,
   hideSteps,
   LAPSE_S,
+  LAST_HIT_S,
   SAY_S,
   type StepsState,
   type StepsView,
@@ -131,6 +133,44 @@ describe('the first steps', () => {
     expect(back.done).toEqual(['learn']);
     expect(stepSteps(back, START).current).toBeNull();
     expect(stepsFinished(stepsStart(false, [...STEP_IDS]))).toBe(true);
+  });
+
+  it('say the last hit for a while and move on, even with none taken', () => {
+    const lane = { ...START, skillPoints: 0, learned: true, enemyMinionNear: true };
+    let s = stepSteps(stepsStart(false, ['learn']), lane);
+    expect(s.current).toBe('last_hit');
+    s = stepSteps(s, { ...lane, time: 5 + LAST_HIT_S });
+    expect(s.current).toBeNull();
+    expect(s.done).toContain('last_hit');
+  });
+
+  it('let backing off take the card from any other step', () => {
+    const lane = { ...START, skillPoints: 0, learned: true, enemyMinionNear: true };
+    let s = stepSteps(stepsStart(false, ['learn']), lane);
+    expect(s.current).toBe('last_hit');
+    s = stepSteps(s, { ...lane, time: 8, hpFrac: 0.2 });
+    expect(s.current).toBe('low_health');
+    expect(s.done).not.toContain('last_hit');
+  });
+
+  it('tell a champion with gold in the lane to go home and spend it', () => {
+    const rich = {
+      ...START,
+      time: GO_SHOP_AT_S + 5,
+      skillPoints: 0,
+      learned: true,
+      atFountain: false,
+      canAffordSuggestion: true,
+    };
+    let s = stepSteps(stepsStart(false, ['learn']), rich);
+    expect(s.current).toBe('go_shop');
+    expect(stepLine('go_shop', 'mouse')).toMatch(/press B/);
+    expect(stepLine('go_shop', 'thumbs')).toMatch(/Recall/);
+    // Home: the step is done, and the shop's own step comes after the pause.
+    s = stepSteps(s, { ...rich, time: GO_SHOP_AT_S + 20, atFountain: true });
+    expect(s.done).toContain('go_shop');
+    s = stepSteps(s, { ...rich, time: GO_SHOP_AT_S + 20 + GAP_S, atFountain: true });
+    expect(s.current).toBe('gold');
   });
 
   it('tell the goal once the lane is under way', () => {

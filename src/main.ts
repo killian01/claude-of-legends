@@ -157,7 +157,14 @@ function errorText(err: unknown): string {
 async function loadOrchard(forgedIds: readonly string[] = []): Promise<LoadedOrchard | null> {
   const { root, card } = screen(container);
   const line = el('p', 'menu-sub', 'Loading the terrain');
-  card.append(el('h1', 'menu-title', 'Star Orchard'), line);
+  // The terrain is most of the wait, the champions the rest.
+  const bar = el('div', 'menu-progress');
+  const fill = el('i', '');
+  bar.appendChild(fill);
+  const showDone = (fraction: number): void => {
+    fill.style.width = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
+  };
+  card.append(el('h1', 'menu-title', 'Star Orchard'), line, bar);
   // A phone held upright is asked to turn while it waits, not once the
   // match has opened behind the wall (ui/turn_ask.ts).
   const stopTurnAsk = attachTurnAsk(card);
@@ -168,10 +175,13 @@ async function loadOrchard(forgedIds: readonly string[] = []): Promise<LoadedOrc
         fraction >= 1
           ? 'Preparing the scenery'
           : `Loading the terrain: ${Math.round(fraction * 100)}%`;
+      showDone(fraction * 0.75);
     });
     await whenChampionModelsReady(forgedIds, (loaded, total) => {
       line.textContent = `Loading the champions: ${loaded} / ${total}`;
+      showDone(0.75 + 0.25 * (total > 0 ? loaded / total : 1));
     });
+    showDone(1);
     return { orchard, terrain };
   } catch (err) {
     stopTurnAsk();
