@@ -27,6 +27,7 @@ import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { validateForged } from '../src/sim/forge/validate';
 import { PlayLedger } from '../src/sim/playbook/report';
 import { validatePlaybook } from '../src/sim/playbook/validate';
+import { TWO_TEAMS } from '../src/sim/teams';
 import { DT } from '../src/sim/types';
 import { foldName, nameErrorMessage } from './account_name';
 import {
@@ -819,6 +820,12 @@ function forgedPayload(match: Match): {
   };
 }
 
+// The match's team count on match_start (ADR 0030), absent for the 5v5's
+// two so its wire does not change.
+function teamsPayload(match: Match): { teams?: number } {
+  return match.sim.teamCount === TWO_TEAMS ? {} : { teams: match.sim.teamCount };
+}
+
 // Both queues (classic and Forge) start their matches the same way; the
 // flag only decides which ladder the result will move.
 function onMatchReady(forge: boolean) {
@@ -914,6 +921,7 @@ function onMatchReady(forge: boolean) {
           team: p.team,
           ...(player.coach ? { coach: true as const } : {}),
           ...forgedPayload(match),
+          ...teamsPayload(match),
         });
       }
     }
@@ -1093,9 +1101,9 @@ function walkOutOfMatch(
   // A seat taken mid-match was never rated, so leaving it costs nothing.
   const droppedIn = entry.dropIns.has(client.accountId);
   if (entry.ratedEligible && entry.match.sim.winner === null && !coach && !droppedIn) {
-    const humansByTeam: [number, number] = [0, 0];
+    const humansByTeam = [0, 0];
     for (const p of entry.match.players.values()) {
-      if (clients.has(p.clientId)) humansByTeam[p.team] += 1;
+      if (clients.has(p.clientId)) humansByTeam[p.team] = (humansByTeam[p.team] ?? 0) + 1;
     }
     const penalty = leaverPenalty(humansByTeam);
     const account = registry.findById(client.accountId);
@@ -1166,6 +1174,7 @@ function dropInto(client: Client): boolean {
     team: seat.team,
     dropIn: true,
     ...forgedPayload(entry.match),
+    ...teamsPayload(entry.match),
   });
   for (const cid of entry.match.players.keys()) {
     if (cid !== client.id) send(cid, { t: 'player_joined', name: client.name, team: seat.team });
@@ -2822,6 +2831,7 @@ wss.on('connection', (ws, req) => {
             team: seat.team,
             ...(seat.coach ? { coach: true as const } : {}),
             ...forgedPayload(entry.match),
+            ...teamsPayload(entry.match),
           });
           for (const cid of entry.match.players.keys()) {
             if (cid !== id) send(cid, { t: 'player_back', name: seat.name, team: seat.team });
@@ -2946,6 +2956,7 @@ wss.on('connection', (ws, req) => {
           selfUnitId: 0,
           team: msg.team === 1 ? 1 : 0,
           ...forgedPayload(target.match),
+          ...teamsPayload(target.match),
         });
         break;
       }

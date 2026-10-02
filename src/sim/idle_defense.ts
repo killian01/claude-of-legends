@@ -4,7 +4,7 @@
 // fought back).
 
 import { isRecalling, isStunned } from './combat/status';
-import { hypot } from './exact';
+import { dist } from './geo';
 import type { Sim } from './sim';
 
 export function stepIdleDefense(sim: Sim): void {
@@ -18,7 +18,7 @@ export function stepIdleDefense(sim: Sim): void {
       // The Warden is opt-in: idle defense never walks you into its pit.
       if (o.team === u.team || o.neutral || o.dead) continue;
       if (!sim.isVisible(u.team, o.id)) continue;
-      const edge = hypot(o.pos.x - u.pos.x, o.pos.z - u.pos.z) - u.radius - o.radius;
+      const edge = dist(o.pos, u.pos) - u.radius - o.radius;
       if (edge <= u.stats.attackRange && edge < bestD) {
         bestD = edge;
         best = o.id;

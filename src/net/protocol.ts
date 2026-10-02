@@ -411,6 +411,8 @@ export type ServerMsg =
       coach?: true;
       // A bot's seat taken in a match already under way (ADR 0025).
       dropIn?: true;
+      // The match's team count (ADR 0030); absent for the 5v5's two.
+      teams?: number;
       // A battle royale on the Wanderseed (ADR 0031): its variant and how
       // many seats it holds. A new one on the same socket (Respawn's next
       // match) starts the mirror over.

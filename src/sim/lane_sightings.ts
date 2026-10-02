@@ -6,6 +6,7 @@
 // it reads only what the team saw; deterministic, ties to the lower id.
 
 import type { LaneId } from './content/map';
+import { perTeam, TWO_TEAMS } from './teams';
 import type { TeamId } from './types';
 
 export const SIGHTING_BUCKET_S = 10;
@@ -19,21 +20,28 @@ interface Bucket {
   seconds: number;
 }
 
+// One memory per team, in team order (ADR 0030); only a two-team match
+// has lanes to remember, and a team the match does not hold remembers
+// nothing.
 export class LaneSightings {
-  private readonly seen: [Map<string, Bucket[]>, Map<string, Bucket[]>] = [new Map(), new Map()];
+  private readonly seen: Map<string, Bucket[]>[];
 
-  // The memory as plain data, for a world checkpoint (src/sim/snapshot.ts).
-  snapshot(): [Map<string, Bucket[]>, Map<string, Bucket[]>] {
-    const copy = (m: Map<string, Bucket[]>): Map<string, Bucket[]> =>
-      new Map([...m].map(([k, list]) => [k, list.map((b) => ({ ...b }))]));
-    return [copy(this.seen[0]), copy(this.seen[1])];
+  constructor(teamCount = TWO_TEAMS) {
+    this.seen = perTeam(teamCount, () => new Map<string, Bucket[]>());
   }
 
-  restore(seen: [Map<string, Bucket[]>, Map<string, Bucket[]>]): void {
-    for (const team of [0, 1] as const) {
-      this.seen[team].clear();
-      for (const [k, list] of seen[team]) {
-        this.seen[team].set(
+  // The memory as plain data, for a world checkpoint (src/sim/snapshot.ts).
+  snapshot(): Map<string, Bucket[]>[] {
+    const copy = (m: Map<string, Bucket[]>): Map<string, Bucket[]> =>
+      new Map([...m].map(([k, list]) => [k, list.map((b) => ({ ...b }))]));
+    return this.seen.map(copy);
+  }
+
+  restore(seen: readonly Map<string, Bucket[]>[]): void {
+    for (const [team, mine] of this.seen.entries()) {
+      mine.clear();
+      for (const [k, list] of seen[team] ?? []) {
+        mine.set(
           k,
           list.map((b) => ({ ...b })),
         );
@@ -43,12 +51,14 @@ export class LaneSightings {
 
   // One tick of an enemy champion seen inside a lane by a team.
   record(team: TeamId, lane: LaneId, enemyId: number, time: number, dt: number): void {
+    const mine = this.seen[team];
+    if (!mine) return;
     const key = `${lane}:${enemyId}`;
     const period = Math.floor(time / SIGHTING_BUCKET_S);
-    let list = this.seen[team].get(key);
+    let list = mine.get(key);
     if (!list) {
       list = [];
-      this.seen[team].set(key, list);
+      mine.set(key, list);
     }
     const last = list[list.length - 1];
     if (last && last.period === period) last.seconds += dt;
@@ -65,7 +75,7 @@ export class LaneSightings {
       Math.floor(time / SIGHTING_BUCKET_S) - Math.ceil(windowS / SIGHTING_BUCKET_S) + 1;
     const prefix = `${lane}:`;
     let total = 0;
-    for (const [key, list] of this.seen[team]) {
+    for (const [key, list] of this.seen[team] ?? []) {
       if (!key.startsWith(prefix)) continue;
       for (const b of list) if (b.period >= oldest) total += b.seconds;
     }
@@ -78,7 +88,7 @@ export class LaneSightings {
     const prefix = `${lane}:`;
     let best: number | null = null;
     let bestSeconds = 0;
-    for (const [key, list] of this.seen[team]) {
+    for (const [key, list] of this.seen[team] ?? []) {
       if (!key.startsWith(prefix)) continue;
       const id = Number(key.slice(prefix.length));
       let total = 0;

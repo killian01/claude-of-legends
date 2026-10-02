@@ -69,6 +69,115 @@ describe('sim architecture', () => {
       .map((file) => path.relative(srcDir, file));
     expect(offenders).toEqual([path.join('net', 'replay.ts')]);
   });
+
+  // ADR 0029: the systems that run on the planet write their ground
+  // arithmetic once, over src/sim/geo.ts, so it plays on the plane and on
+  // the sphere alike. A length off the plane's hypot, a coordinate added
+  // or subtracted by hand, or a point copied as {x, z} (which drops a
+  // sphere point's y) is the flat arithmetic coming back.
+  it('keeps the kits, the passives and the creatures on the ground geometry', () => {
+    const onThePlanet = [
+      'combat/effects.ts',
+      'combat/casting.ts',
+      'combat/ally_dash.ts',
+      'combat/shield_burst.ts',
+      'passives.ts',
+      'passive_types.ts',
+      'content/item_passives.ts',
+      'forge/passive_templates.ts',
+      'rewards.ts',
+      'camps.ts',
+      'rings.ts',
+      'objectives.ts',
+      'team_buffs.ts',
+      'favors.ts',
+      'ground_walk.ts',
+      ...readdirSync(join(simDir, 'content', 'champions')).map((f) => `content/champions/${f}`),
+    ];
+    const flat: { re: RegExp; what: string }[] = [
+      { re: /\bhypot\b/, what: "the plane's length" },
+      { re: /\.(x|z)\s*[-+*/](?![-+*/=])/, what: 'a coordinate in arithmetic' },
+      { re: /[-+*/]\s*\(?\s*[\w.]+\.(x|z)\b/, what: 'a coordinate in arithmetic' },
+      { re: /\{\s*x:\s*[\w.]+\.x,\s*z:\s*[\w.]+\.z\s*\}/, what: 'a point copied without its y' },
+    ];
+    const offenders: string[] = [];
+    for (const file of onThePlanet) {
+      const text = readFileSync(join(simDir, file), 'utf8');
+      for (const rule of flat) {
+        if (rule.re.test(text)) offenders.push(`${file}: ${rule.what} (${rule.re})`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+// ADR 0029: the systems that run on the planet measure, step and turn
+// through src/sim/geo.ts and walk through src/sim/ground.ts. The plane's
+// arithmetic written inline would still play the 5v5 to the bit and would
+// quietly flatten the sphere, so the converted files are held to it by a
+// scan. The systems only the 5v5 has (lanes, waves, towers, the fountain,
+// the recall) keep the plane's arithmetic and are not listed.
+const ON_THE_PLANET = [
+  'attack_move.ts',
+  'combat/ally_dash.ts',
+  'combat/auto_attack.ts',
+  'combat/casting.ts',
+  'combat/shield_burst.ts',
+  'dashes.ts',
+  'ground.ts',
+  'idle_defense.ts',
+  'movement.ts',
+  'projectiles.ts',
+  'separation.ts',
+  'sim.ts',
+  'spell_targets.ts',
+  'vision.ts',
+  'walls.ts',
+  'zones.ts',
+];
+
+const RAW_GROUND: { re: RegExp; why: string }[] = [
+  { re: /\bhypot\(/, why: 'a length on the ground is geo.dist or geo.norm' },
+  { re: /Math\.sqrt\(/, why: 'a length on the ground is geo.dist or geo.norm' },
+  {
+    re: /\.[xyz]\b\s*[-+*/]=?\s*[A-Za-z_$][\w$.]*\.[xyz]\b/,
+    why: 'arithmetic between coordinates is a geo.ts function',
+  },
+  { re: /\.[xyz]\s*[-+*/]=/, why: 'a step in place is geo.advance, geo.assign or geo.stepToward' },
+];
+
+function rawGround(text: string): string[] {
+  const found: string[] = [];
+  text.split('\n').forEach((line, i) => {
+    for (const rule of RAW_GROUND) {
+      if (rule.re.test(line)) found.push(`${i + 1}: ${line.trim()} (${rule.why})`);
+    }
+  });
+  return found;
+}
+
+describe('the ground geometry', () => {
+  it('keeps the systems that run on the planet on geo.ts', () => {
+    const offenders: string[] = [];
+    for (const file of ON_THE_PLANET) {
+      const text = readFileSync(join(simDir, file), 'utf8');
+      for (const hit of rawGround(text)) offenders.push(`${file}:${hit}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('keeps the scan honest: the inline forms it replaced are caught', () => {
+    for (const line of [
+      'const d = hypot(b.x - a.x, b.z - a.z);',
+      'const dx = target.pos.x - p.pos.x;',
+      'return { x: p.x + dir.x * s, z: p.z + dir.z * s };',
+      'p.pos.x += p.dir.x * step;',
+      'u.pos.z += (dz / d) * budget;',
+    ]) {
+      expect(rawGround(line)).not.toEqual([]);
+    }
+    expect(rawGround('const d = dist(u.pos, z.pos);')).toEqual([]);
+  });
 });
 
 // Everything an account holds that must never reach a client. The hash and

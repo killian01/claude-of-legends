@@ -13,6 +13,7 @@
 
 import type { PointsReason, ServerMsg } from '../src/net/protocol';
 import type { SimEvent } from '../src/sim/sim';
+import { otherTeam } from '../src/sim/teams';
 import { DT, type TeamId } from '../src/sim/types';
 
 // What each action is worth before the weight.
@@ -46,12 +47,12 @@ export const POINTS: Readonly<Record<PointsReason, number>> = {
 export const ACTIVE_END_TICKS = Math.round((3 * 60) / DT);
 
 // The weight the people put on an award, from the humans connected in the
-// match at that moment, the scoring seat included: another human on the
-// other team doubles it, another only on the seat's own team makes it one
-// and a half.
-export function humansWeight(team: TeamId, humansByTeam: readonly [number, number]): number {
-  if (humansByTeam[team === 0 ? 1 : 0] > 0) return 2;
-  if (humansByTeam[team] > 1) return 1.5;
+// match at that moment by team, the scoring seat included: another human
+// on any other team (ADR 0030) doubles it, another only on the seat's own
+// team makes it one and a half.
+export function humansWeight(team: TeamId, humansByTeam: readonly number[]): number {
+  if (humansByTeam.some((n, t) => t !== team && n > 0)) return 2;
+  if ((humansByTeam[team] ?? 0) > 1) return 1.5;
   return 1;
 }
 
@@ -60,14 +61,14 @@ export function humansWeight(team: TeamId, humansByTeam: readonly [number, numbe
 // start) earns half; against the drawn house styles, the whole.
 export const GENTLE_WEIGHT = 0.5;
 export function botsWeight(team: TeamId, gentle: readonly TeamId[]): number {
-  return gentle.includes(team === 0 ? 1 : 0) ? GENTLE_WEIGHT : 1;
+  return gentle.some((t) => t !== team) ? GENTLE_WEIGHT : 1;
 }
 
 // The weight of an award: the people's, times the bots'. `gentle` names
 // the teams whose house lane seats play the Gentle player.
 export function pointsWeight(
   team: TeamId,
-  humansByTeam: readonly [number, number],
+  humansByTeam: readonly number[],
   gentle: readonly TeamId[] = [],
 ): number {
   return humansWeight(team, humansByTeam) * botsWeight(team, gentle);
@@ -200,8 +201,8 @@ export class MatchPoints {
     seats: readonly PointsSeat[],
   ): PointsAward[] {
     if (this.ended) return [];
-    const humans: [number, number] = [0, 0];
-    for (const s of seats) humans[s.team] += 1;
+    const humans = [0, 0];
+    for (const s of seats) humans[s.team] = (humans[s.team] ?? 0) + 1;
     const bySeat = new Map<number, PointsSeat>();
     for (const s of seats) bySeat.set(s.unitId, s);
     const earned = new Map<string, PointsAward>();
@@ -251,7 +252,7 @@ export class MatchPoints {
         const towerTeam = this.towers.get(ev.unitId);
         if (towerTeam !== undefined) {
           this.towers.delete(ev.unitId);
-          team(towerTeam === 0 ? 1 : 0, 'tower');
+          team(otherTeam(towerTeam), 'tower');
           continue;
         }
         // The Warden's Boon goes to the team of the champion that killed
