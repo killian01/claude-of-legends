@@ -40,6 +40,10 @@ export interface SeatReport {
   orders: number;
   // The orders by kind (server/match.ts SEAT_ORDER_KINDS).
   kinds: Record<string, number>;
+  // The first steps the player did in this seat, in the order they did
+  // them, and 'off' when they hid the guide (src/ui/first_steps.ts); a
+  // browser that did a step in an earlier match does not tell it again.
+  steps: string[];
   walkedM: number;
   points: number;
   level: number;
@@ -107,6 +111,7 @@ export function buildSeatReport(i: SeatReportInput): SeatReport {
     firstOrderS: s.firstOrderTick === null ? null : seconds(s.firstOrderTick - s.startTick),
     orders: s.orders,
     kinds: { ...s.kinds },
+    steps: [...s.steps],
     walkedM: Math.round(s.walked),
     points: s.points,
     level: i.unit?.level ?? 0,

@@ -19,6 +19,7 @@ import {
   isFiniteVec,
   parseClientMsg,
   type ServerMsg,
+  stepOnWire,
 } from '../src/net/protocol';
 import { REPLAY_VERSION } from '../src/net/replay';
 import { contentFingerprint } from '../src/sim/content/fingerprint';
@@ -2967,6 +2968,14 @@ wss.on('connection', (ws, req) => {
       case 'loaded': {
         if (client.matchId === null) break;
         matches.get(client.matchId)?.match.markLoaded(id);
+        break;
+      }
+      // A first step done, or the guide hidden (src/ui/first_steps.ts):
+      // for the seat report, a known step or nothing. Never a match command.
+      case 'step': {
+        const step = stepOnWire(msg.id);
+        if (client.matchId === null || step === null) break;
+        matches.get(client.matchId)?.match.noteStep(id, step);
         break;
       }
       default: {

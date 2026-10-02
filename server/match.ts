@@ -3,7 +3,7 @@
 // a sim method (ADR 0001). Transport-agnostic and fully testable without a
 // socket.
 
-import { type ClientMsg, isSelectMsg, type ServerMsg } from '../src/net/protocol';
+import { type ClientMsg, isSelectMsg, type ServerMsg, type StepId } from '../src/net/protocol';
 import {
   applySimCommand,
   buildMatchSim,
@@ -84,6 +84,9 @@ export interface SeatStats {
   // gave orders and never walked says which ones it gave.
   kinds: Record<string, number>;
   firstOrderTick: number | null;
+  // The first steps the client said were done, and 'off' for the guide
+  // hidden (ClientMsg step), in order, each once.
+  steps: string[];
   // Meters walked, from tick to tick; a step longer than WALK_STEP_MAX (a
   // respawn, a recall, a blink) is not walking and is left out.
   walked: number;
@@ -141,6 +144,7 @@ function freshStats(tick: number, x: number, z: number): SeatStats {
     orders: 0,
     kinds: {},
     firstOrderTick: null,
+    steps: [],
     walked: 0,
     lastX: x,
     lastZ: z,
@@ -231,6 +235,13 @@ export class Match {
   markLoaded(clientId: number): void {
     const p = this.players.get(clientId);
     if (p && p.stats.loadedTick === null) p.stats.loadedTick = this.sim.tickCount;
+  }
+
+  // A first step the client did, or 'off' (ClientMsg step), checked on
+  // the wire already: for the seat's report, once each.
+  noteStep(clientId: number, id: StepId | 'off'): void {
+    const p = this.players.get(clientId);
+    if (p && !p.stats.steps.includes(id)) p.stats.steps.push(id);
   }
 
   // Points banked for the seat (server/points.ts), for its report.

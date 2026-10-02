@@ -96,6 +96,7 @@ describe('guests', () => {
       'pick',
       'lane',
       'loaded',
+      'step',
       'leave',
       'chat',
       'ping',

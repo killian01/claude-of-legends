@@ -480,6 +480,15 @@ with `scripts/feedback.mjs` (PRIVACY.md). It carries the words and the shape of 
 never a name.
 _Avoid_: survey, form, support ticket
 
+**First steps**:
+The short lines a newcomer's first matches show one at a time, picked from what is happening: learn
+a spell, back off when hurt, cast at an enemy champion, take the last hit, let the minions walk into
+an enemy tower first, rank a spell up, buy the shop's suggested item, and the goal. A step leaves
+once done, what a player does on their own counts as done, the browser remembers what is done, and
+the player can hide the guide for good (the settings bring it back). The shop's suggested item, the
+next step of the build a house bot of that champion follows, is lit for everyone.
+_Avoid_: tutorial (that is a scripted match), tips, coach (the bot seat's)
+
 **Practice**:
 The offline match against house bots, the fill completing both teams around the person's
 champion and lane preference on a new seed every match, the opponents' lane seats on the

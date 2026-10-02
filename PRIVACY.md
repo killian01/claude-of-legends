@@ -144,7 +144,9 @@ how long you held it, how long the match took to load in your browser, how
 many orders you gave and when the first one came, how far your champion
 walked, the points it banked, its level, kills, deaths, assists and
 minions, how the seat ended (the menu, a closed tab, the inactivity rule, or
-the match's end), whether it was a Guest's, the round trip between your
+the match's end), which of the first steps you did in that match and
+whether you hid them (`src/ui/first_steps.ts`), whether it was a Guest's,
+the round trip between your
 browser and the server as the game measured it (a small message the server
 sends every five seconds and the page answers), the country Cloudflare
 names for the connection, and
