@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { hypot } from '../src/sim/exact';
 import {
   advance,
+  away,
   basis,
   cross,
   delta,
@@ -14,11 +15,15 @@ import {
   dot,
   heading,
   lerp,
+  norm,
   offset,
   rotate,
   segmentDist,
+  shift,
   stepToward,
+  tangent,
   turnLeft,
+  unit,
 } from '../src/sim/geo';
 import type { Vec2 } from '../src/sim/types';
 
@@ -129,5 +134,41 @@ describe('the sphere', () => {
       4,
     );
     expect(segmentDist(beyond, a, b).t).toBe(1);
+  });
+});
+
+describe('the placement helpers', () => {
+  it('round on the plane exactly as the inline arithmetic did', () => {
+    const a = { x: 12.3456, z: -7.891 };
+    const b = { x: -3.21, z: 44.4 };
+    const v = { x: b.x - a.x, z: b.z - a.z };
+    const d = hypot(v.x, v.z);
+    expect(unit(v)).toEqual({ x: v.x / d, z: v.z / d });
+    expect(unit({ x: 0, z: 0 })).toBeNull();
+    expect(away(a, b)).toEqual({ x: a.x - b.x, z: a.z - b.z });
+    expect(tangent(a, 0.3, -1.7)).toEqual({ x: 0.3, z: -1.7 });
+    const side = 1.32 * 2.4;
+    expect(shift(a, tangent(a, side * 2, 0.7 * 2))).toEqual({
+      x: a.x + side * 2,
+      z: a.z + 0.7 * 2,
+    });
+  });
+
+  it('keep a point on the sphere and a push tangent where it starts', () => {
+    const p = sph(0.3, 0.5, 0.8);
+    const q = sph(0.36, 0.44, 0.81);
+    const out = away(p, q);
+    expect(Math.abs(dot(out, p))).toBeLessThan(1e-9);
+    expect(norm(out)).toBeCloseTo(dist(p, q), 9);
+    // Away from q at p is the reverse of the way toward q.
+    expect(dot(unit(out)!, dirTo(p, q)!)).toBeCloseTo(-1, 12);
+    const t = tangent(p, 3, 4);
+    expect(Math.abs(dot(t, p))).toBeLessThan(1e-9);
+    expect(norm(t)).toBeCloseTo(5, 12);
+    expect(dot(t, basis(p).east)).toBeCloseTo(3, 12);
+    const moved = shift(p, t);
+    expect(onR(moved)).toBeCloseTo(R, 9);
+    expect(dist(p, moved)).toBeCloseTo(5, 9);
+    expect(shift(p, tangent(p, 0, 0))).toEqual(p);
   });
 });

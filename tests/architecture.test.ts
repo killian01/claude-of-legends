@@ -69,6 +69,46 @@ describe('sim architecture', () => {
       .map((file) => path.relative(srcDir, file));
     expect(offenders).toEqual([path.join('net', 'replay.ts')]);
   });
+
+  // ADR 0029: the systems that run on the planet write their ground
+  // arithmetic once, over src/sim/geo.ts, so it plays on the plane and on
+  // the sphere alike. A length off the plane's hypot, a coordinate added
+  // or subtracted by hand, or a point copied as {x, z} (which drops a
+  // sphere point's y) is the flat arithmetic coming back.
+  it('keeps the kits, the passives and the creatures on the ground geometry', () => {
+    const onThePlanet = [
+      'combat/effects.ts',
+      'combat/casting.ts',
+      'combat/ally_dash.ts',
+      'combat/shield_burst.ts',
+      'passives.ts',
+      'passive_types.ts',
+      'content/item_passives.ts',
+      'forge/passive_templates.ts',
+      'rewards.ts',
+      'camps.ts',
+      'rings.ts',
+      'objectives.ts',
+      'team_buffs.ts',
+      'favors.ts',
+      'ground_walk.ts',
+      ...readdirSync(join(simDir, 'content', 'champions')).map((f) => `content/champions/${f}`),
+    ];
+    const flat: { re: RegExp; what: string }[] = [
+      { re: /\bhypot\b/, what: "the plane's length" },
+      { re: /\.(x|z)\s*[-+*/](?![-+*/=])/, what: 'a coordinate in arithmetic' },
+      { re: /[-+*/]\s*\(?\s*[\w.]+\.(x|z)\b/, what: 'a coordinate in arithmetic' },
+      { re: /\{\s*x:\s*[\w.]+\.x,\s*z:\s*[\w.]+\.z\s*\}/, what: 'a point copied without its y' },
+    ];
+    const offenders: string[] = [];
+    for (const file of onThePlanet) {
+      const text = readFileSync(join(simDir, file), 'utf8');
+      for (const rule of flat) {
+        if (rule.re.test(text)) offenders.push(`${file}: ${rule.what} (${rule.re})`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
 });
 
 // Everything an account holds that must never reach a client. The hash and
