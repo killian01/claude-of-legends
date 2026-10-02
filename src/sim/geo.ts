@@ -380,3 +380,34 @@ export function along(p: Vec2, dir: Vec2, length: number, t: number): Vec2 {
 export function point(x: number, z: number, y?: number): Vec2 {
   return y === undefined ? { x, z } : { x, y, z };
 }
+
+// The vector at p pointing away from `from`, as long as the distance
+// between them: the plane's p - from. On the sphere the reverse of the
+// delta from p toward `from`, a tangent at p (a knockback's push, the
+// heading a cast arrives with at its aim).
+export function away(p: Vec2, from: Vec2): Vec2 {
+  if (p.y === undefined || from.y === undefined) return { x: p.x - from.x, z: p.z - from.z };
+  const v = delta(p, from);
+  return { x: -v.x, y: -(v.y ?? 0), z: -v.z };
+}
+
+// The tangent at p with components e toward east and n toward north
+// (basis): the plane's {x: e, z: n}, unscaled.
+export function tangent(p: Vec2, e: number, n: number): Vec2 {
+  if (p.y === undefined) return { x: e, z: n };
+  const { east, north } = basis(p);
+  return {
+    x: east.x * e + north.x * n,
+    y: (east.y ?? 0) * e + (north.y ?? 0) * n,
+    z: east.z * e + north.z * n,
+  };
+}
+
+// p moved by the tangent v: the plane's p + v; on the sphere along v's
+// great circle by v's length, so the point stays on the sphere.
+export function shift(p: Vec2, v: Vec2): Vec2 {
+  if (p.y === undefined || v.y === undefined) return { x: p.x + v.x, z: p.z + v.z };
+  const dir = unit(v);
+  if (!dir) return copy(p);
+  return offset(p, dir, len3(v.x, v.y, v.z));
+}

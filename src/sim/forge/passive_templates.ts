@@ -8,7 +8,7 @@
 
 import { dealDamage } from '../combat/damage';
 import { addStatus, healFactor, isRooted, refreshBuff, slowPct } from '../combat/status';
-import { hypot } from '../exact';
+import { dist } from '../geo';
 import type { ChampionPassive } from '../passive_types';
 import type { CombatCtx } from '../sim_context';
 import type { Unit } from '../unit';
@@ -54,7 +54,7 @@ function nearestOtherAlly(ctx: CombatCtx, self: Unit, around: Unit, range: numbe
   for (const u of ctx.units.values()) {
     if (u.kind !== 'champion' || u.team !== self.team) continue;
     if (u.id === around.id || u.id === self.id || u.dead || ctx.dead.has(u.id)) continue;
-    const d = hypot(u.pos.x - around.pos.x, u.pos.z - around.pos.z);
+    const d = dist(u.pos, around.pos);
     if (d < bestD) {
       bestD = d;
       best = u;
@@ -81,7 +81,7 @@ const ALL: readonly PassiveTemplate[] = [
           if (u.kind !== 'champion' || u.team !== self.team || u.dead || ctx.dead.has(u.id)) {
             continue;
           }
-          if (hypot(u.pos.x - self.pos.x, u.pos.z - self.pos.z) > radius) continue;
+          if (dist(u.pos, self.pos) > radius) continue;
           refreshBuff(u, ctx.time, AURA_REFRESH_S, { armor, mr });
         }
       },
