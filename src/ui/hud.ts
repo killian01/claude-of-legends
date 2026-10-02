@@ -740,8 +740,11 @@ const CSS = `
 .hud-overlay.open { display: flex; }
 /* The pause menu and the end screen stand over everything in the HUD,
    the shop and the turn wall included: Back on a phone held upright opens
-   the pause menu, and it used to open under the wall, out of reach. */
-.hud-overlay.modal { z-index: 41; }
+   the pause menu, and it used to open under the wall, out of reach. And
+   they take every click, unlike the wash: the settings in the pause menu
+   took none, and a click on one fell through to the match and walked the
+   champion there (the maintainer, 2026-10-02, ticking the first steps). */
+.hud-overlay.modal { z-index: 41; pointer-events: auto; }
 .hud-overlay-title { font-size: 52px; font-weight: 800; letter-spacing: 2px; }
 .hud-overlay-sub { font-size: 16px; margin-top: 6px; }
 .hud-menu-btn {
