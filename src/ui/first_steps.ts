@@ -41,6 +41,8 @@ export interface StepsView {
   atFountain: boolean;
   // Gold enough for the shop's suggested item (ui/shop_suggestion.ts).
   canAffordSuggestion: boolean;
+  // Channelling a recall home (src/sim/recall.ts).
+  recalling: boolean;
 }
 
 export interface StepsState {
@@ -77,6 +79,11 @@ export const LAST_HIT_S = 25;
 // From when the guide says to go home and spend the gold the champion
 // carries: once the lane has had a moment.
 export const GO_SHOP_AT_S = 75;
+// From when the guide teaches the recall itself, whatever the health and
+// the gold: nobody knew B takes the champion home (the maintainer,
+// 2026-10-02), and the two steps that named it only came up when hurt or
+// rich. Done once the player recalls, or after it was said a while.
+export const RECALL_AT_S = 100;
 // Backing off when hurt comes before any other step: it takes the card
 // from whatever is up, which comes back later.
 
@@ -97,7 +104,7 @@ const RULES: Readonly<Record<StepId, StepRule>> = {
   },
   low_health: {
     when: (v) => !v.dead && v.hpFrac < LOW_HEALTH,
-    over: (v, up) => v.dead || v.hpFrac > 0.6 || up >= SAY_S,
+    over: (v, up) => v.dead || v.recalling || v.hpFrac > 0.6 || up >= SAY_S,
   },
   spell: {
     when: (v) => v.learned && v.enemyChampionNear && !v.cast,
@@ -107,6 +114,11 @@ const RULES: Readonly<Record<StepId, StepRule>> = {
     when: (v) => v.enemyMinionNear && v.cs === 0,
     over: (v, up) => v.cs > 0 || up >= LAST_HIT_S,
     did: (v) => v.cs > 0,
+  },
+  recall: {
+    when: (v) => !v.atFountain && !v.dead && v.time >= RECALL_AT_S,
+    over: (v, up) => v.recalling || up >= READ_S + SAY_S,
+    did: (v) => v.recalling,
   },
   tower: {
     when: (v) => v.towerAlone,
@@ -121,7 +133,7 @@ const RULES: Readonly<Record<StepId, StepRule>> = {
   // what nothing else told a newcomer.
   go_shop: {
     when: (v) => !v.atFountain && v.canAffordSuggestion && v.time >= GO_SHOP_AT_S,
-    over: (v, up) => v.atFountain || !v.canAffordSuggestion || up >= READ_S + SAY_S,
+    over: (v, up) => v.atFountain || v.recalling || !v.canAffordSuggestion || up >= READ_S + SAY_S,
   },
   gold: {
     when: (v) => v.atFountain && v.canAffordSuggestion && v.time >= 60,
@@ -210,12 +222,13 @@ export const STEPS_HIDE = 'Hide guide';
 
 const MOUSE: Readonly<Record<StepId, string>> = {
   learn: 'Learn your first spell: click the + on Q, W or E.',
-  low_health: 'Low health: back off, or press B to go home and heal.',
+  low_health: 'Low health: back off, or press B to recall home and heal.',
   spell: 'An enemy champion: press Q, W or E to cast at your cursor.',
   last_hit: 'Hit enemy minions as their health runs out: the last hit pays gold and points.',
+  recall: 'Press B to recall: stand still a few seconds and you are home, healed, at the shop.',
   tower: 'Enemy towers hit hard: let your minions walk in first.',
   level_up: 'New level: click the + on a spell to make it stronger.',
-  go_shop: 'Gold to spend: press B to go home, then buy the glowing item in the shop.',
+  go_shop: 'Gold to spend: press B to recall home, then buy the glowing item in the shop.',
   gold: 'Gold to spend: press P, the glowing item suits your champion.',
   goal: 'The goal: take the towers down a lane with your minions, then the enemy Sanctum.',
 };
@@ -223,6 +236,7 @@ const MOUSE: Readonly<Record<StepId, string>> = {
 const TOUCH: Readonly<Partial<Record<StepId, string>>> = {
   learn: 'Learn your first spell: tap the + on a spell.',
   low_health: 'Low health: back off, or tap Recall to go home and heal.',
+  recall: 'Tap Recall: stand still a few seconds and you are home, healed, at the shop.',
   level_up: 'New level: tap the + on a spell to make it stronger.',
   go_shop: 'Gold to spend: tap Recall to go home, then buy the glowing item in the Shop.',
   gold: 'Gold to spend: tap Shop, the glowing item suits your champion.',

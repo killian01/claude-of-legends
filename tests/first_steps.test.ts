@@ -15,6 +15,7 @@ import {
   hideSteps,
   LAPSE_S,
   LAST_HIT_S,
+  RECALL_AT_S,
   SAY_S,
   type StepsState,
   type StepsView,
@@ -41,6 +42,7 @@ const START: StepsView = {
   towerAlone: false,
   atFountain: true,
   canAffordSuggestion: false,
+  recalling: false,
 };
 
 // Steps the state through views, one update each.
@@ -171,6 +173,19 @@ describe('the first steps', () => {
     expect(s.done).toContain('go_shop');
     s = stepSteps(s, { ...rich, time: GO_SHOP_AT_S + 20 + GAP_S, atFountain: true });
     expect(s.current).toBe('gold');
+  });
+
+  it('teach the recall in the lane, and count it done once the player recalls', () => {
+    const lane = { ...START, time: RECALL_AT_S, skillPoints: 0, learned: true, atFountain: false };
+    let s = stepSteps(stepsStart(false, ['learn']), lane);
+    expect(s.current).toBe('recall');
+    expect(stepLine('recall', 'mouse')).toMatch(/Press B to recall/);
+    expect(stepLine('recall', 'thumbs')).toMatch(/Tap Recall/);
+    s = stepSteps(s, { ...lane, time: RECALL_AT_S + 3, recalling: true });
+    expect(s.done).toContain('recall');
+    // Somebody who recalls on their own is never told.
+    const own = stepSteps(stepsStart(false, ['learn']), { ...lane, time: 20, recalling: true });
+    expect(own.done).toContain('recall');
   });
 
   it('tell the goal once the lane is under way', () => {

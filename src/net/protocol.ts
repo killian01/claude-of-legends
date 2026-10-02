@@ -404,6 +404,7 @@ export const STEP_IDS = [
   'low_health',
   'spell',
   'last_hit',
+  'recall',
   'tower',
   'level_up',
   'go_shop',

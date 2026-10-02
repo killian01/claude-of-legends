@@ -482,7 +482,8 @@ _Avoid_: survey, form, support ticket
 
 **First steps**:
 The short lines a newcomer's first matches show one at a time, picked from what is happening: learn
-a spell, back off when hurt, cast at an enemy champion, take the last hit, let the minions walk into
+a spell, back off when hurt, cast at an enemy champion, take the last hit, recall with B (shown in
+the lane until the player first recalls; the key also stands on the bar), let the minions walk into
 an enemy tower first, rank a spell up, go home to spend the gold carried, buy the shop's suggested
 item, and the goal. Backing off when hurt takes the card from any other step. A step leaves once
 done or once said long enough, what a player does on their own counts as done, the browser
