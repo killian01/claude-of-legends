@@ -11,6 +11,7 @@ import type { GameMap, LaneId } from './content/map';
 import { hypot } from './exact';
 import type { CombatCtx } from './sim_context';
 import { laneFullyOpen } from './structure_rules';
+import { otherTeam } from './teams';
 import type { Vec2 } from './types';
 import { createMinion, type MinionVariant } from './unit';
 
@@ -79,7 +80,7 @@ export function spawnWave(
       // Lane escalation: once the ENEMY's towers on this lane are down,
       // every wave here carries a Vanguard, so winning a lane visibly
       // changes the map (systems review).
-      if (laneFullyOpen(ctx.units, 1 - team, lane)) spawnAt('vanguard');
+      if (laneFullyOpen(ctx.units, otherTeam(team), lane)) spawnAt('vanguard');
       for (let i = 0; i < MELEE_PER_WAVE; i++) spawnAt('melee');
     }
   }

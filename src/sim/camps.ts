@@ -9,6 +9,8 @@
 // since when it has seen the spot empty), the fog-honest knowledge a
 // jungler routes on (ADR 0023). Called from the fixed tick order right
 // after the rings' step, the sightings once the tick's vision is known.
+// The ground arithmetic is geo.ts's (ADR 0029): a spot on the planet
+// carries y, and its bodies, its leash and its reset stay on the sphere.
 
 import { addStatus } from './combat/status';
 import {
@@ -19,8 +21,10 @@ import {
   type CampKind,
 } from './content/camps';
 import type { CampSpot, GameMap } from './content/map';
-import { hypot } from './exact';
+import { copy, dist, shift, tangent } from './geo';
+import { landingAt } from './ground_walk';
 import type { CombatCtx } from './sim_context';
+import { perTeam, TWO_TEAMS } from './teams';
 import type { TeamId, Vec2 } from './types';
 import { createCamp, hostile, type Unit } from './unit';
 
@@ -42,20 +46,22 @@ export interface CampState {
   // The live bodies, empty between spawns.
   unitIds: number[];
   nextSpawnAt: number;
-  seen: [CampSighting | null, CampSighting | null];
+  // One sighting per team, in team order (ADR 0030).
+  seen: (CampSighting | null)[];
 }
 
-export function initialCampStates(map: GameMap): CampState[] {
+export function initialCampStates(map: GameMap, teamCount = TWO_TEAMS): CampState[] {
   return map.camps.map((spot) => ({
     spot,
     unitIds: [],
     nextSpawnAt: CAMP_FIRST_SPAWN_S,
-    seen: [null, null],
+    seen: perTeam(teamCount, () => null),
   }));
 }
 
 // Where a spot's bodies stand: the first on the spot, the rest fanned
-// behind it a stride apart, each on open ground.
+// behind it a stride apart, each on open ground. Behind is +z on the
+// plane, north in the spot's tangent frame on the sphere.
 export function campStands(spot: Vec2, kind: CampKind): Vec2[] {
   const def = CAMPS[kind];
   const gap = def.body.radius * 2.4;
@@ -63,7 +69,7 @@ export function campStands(spot: Vec2, kind: CampKind): Vec2[] {
   for (let i = 0; i < def.count; i++) {
     const side = i === 0 ? 0 : i % 2 === 1 ? 1 : -1;
     const row = Math.ceil(i / 2);
-    out.push({ x: spot.x + side * gap * row, z: spot.z + gap * 0.7 * row });
+    out.push(shift(spot, tangent(spot, side * gap * row, gap * 0.7 * row)));
   }
   return out;
 }
@@ -74,7 +80,7 @@ function nearestHostileChampion(ctx: CombatCtx, from: Unit, range: number): Unit
   for (const u of ctx.units.values()) {
     if (u.kind !== 'champion' || u.dead || ctx.dead.has(u.id)) continue;
     if (!hostile(from, u)) continue;
-    const d = hypot(u.pos.x - from.pos.x, u.pos.z - from.pos.z);
+    const d = dist(u.pos, from.pos);
     if (d <= range && d < bestD) {
       bestD = d;
       best = u;
@@ -89,9 +95,7 @@ export function stepCamps(ctx: CombatCtx, states: CampState[]): void {
       if (ctx.time >= state.nextSpawnAt) {
         const def = CAMPS[state.spot.kind];
         for (const stand of campStands(state.spot, state.spot.kind)) {
-          const at = ctx.nav.isWalkableAt(stand.x, stand.z)
-            ? stand
-            : (ctx.nav.nearestWalkable(stand.x, stand.z) ?? { x: state.spot.x, z: state.spot.z });
+          const at = landingAt(ctx, stand) ?? copy(state.spot);
           const id = ctx.allocId();
           ctx.units.set(id, createCamp(id, def, at, ctx.time));
           state.unitIds.push(id);
@@ -103,12 +107,12 @@ export function stepCamps(ctx: CombatCtx, states: CampState[]): void {
       const c = ctx.units.get(unitId);
       if (!c || c.dead || ctx.dead.has(c.id)) continue;
 
-      const fromSpot = hypot(c.pos.x - state.spot.x, c.pos.z - state.spot.z);
+      const fromSpot = dist(c.pos, state.spot);
       const angry = ctx.time - c.lastDamagedAt <= CAMP_CALM_S;
 
       if (fromSpot > CAMP_LEASH_RANGE || (!angry && (c.hp < c.maxHp || fromSpot > 3))) {
         c.hp = c.maxHp;
-        c.pos = { x: state.spot.x, z: state.spot.z };
+        c.pos = copy(state.spot);
         c.path = [];
         c.attackTargetId = null;
         c.statuses = [];
@@ -121,7 +125,7 @@ export function stepCamps(ctx: CombatCtx, states: CampState[]): void {
           target &&
           !target.dead &&
           !ctx.dead.has(target.id) &&
-          hypot(target.pos.x - state.spot.x, target.pos.z - state.spot.z) <= CAMP_LEASH_RANGE;
+          dist(target.pos, state.spot) <= CAMP_LEASH_RANGE;
         if (!targetOk) {
           const next = nearestHostileChampion(ctx, c, CAMP_LEASH_RANGE);
           c.attackTargetId = next ? next.id : null;
@@ -170,7 +174,7 @@ export function noteCampSightings(
   if (time < CAMP_FIRST_SPAWN_S) return;
   for (const state of states) {
     const up = state.unitIds.length > 0;
-    for (const team of [0, 1] as const) {
+    for (let team = 0; team < state.seen.length; team++) {
       if (!isPointVisible(team, state.spot.x, state.spot.z)) continue;
       const before = state.seen[team];
       state.seen[team] = {

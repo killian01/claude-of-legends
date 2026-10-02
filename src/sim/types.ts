@@ -4,7 +4,7 @@
 export const TICK_RATE = 20;
 export const DT = 1 / TICK_RATE;
 
-export type TeamId = 0 | 1;
+export type TeamId = number;
 
 export type AbilityKey = 'Q' | 'W' | 'E' | 'R';
 
