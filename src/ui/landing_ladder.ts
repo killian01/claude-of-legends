@@ -84,9 +84,11 @@ const CSS = `
 .pg-ladder .pg-ladder-lead { margin: 6px 0 0; font-size: 12.5px; color: #9db2cf; }
 .pg-ladder .pg-ladder-me { margin: 8px 0 0; font-size: 13px; font-weight: 700; color: #f3e6bd; }
 /* Every line on the ladder, in a box that scrolls: ten and a half rows
-   high, so the half row at the foot says there is more under it. */
+   high, so the half row at the foot says there is more under it. One
+   column, read down: two columns read #1 left, #2 right, #3 left, which
+   is no ladder anyone reads (the maintainer, 2026-10-02). */
 .pg-ladder ol { list-style: none; margin: 14px 0 0; padding: 0 10px 0 0; position: relative;
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 26px;
+  display: grid; grid-template-columns: minmax(0, 1fr);
   align-content: start; max-height: 318px; overflow-y: auto;
   scrollbar-width: thin; scrollbar-color: #6b5a2e transparent; }
 .pg-ladder ol::-webkit-scrollbar { width: 6px; }
@@ -104,7 +106,7 @@ const CSS = `
 .pg-ladder .pg-ladder-join .menu-btn { width: auto; padding: 8px 22px; }
 @media (max-width: 720px) {
   .pg-ladder { padding: 14px 16px 16px; }
-  .pg-ladder ol { grid-template-columns: minmax(0, 1fr); max-height: 348px; }
+  .pg-ladder ol { max-height: 348px; }
 }
 /* A phone held sideways: a box most of the screen high would take the
    thumb's swipes meant for the page. */

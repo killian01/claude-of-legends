@@ -35,6 +35,7 @@ import {
   standingOf,
 } from './collection';
 import { describeAbility, describeSigil } from './describe';
+import { startBackdrop } from './home_backdrop';
 import {
   botLane,
   chooseLane,
@@ -51,7 +52,6 @@ import {
   reconcile,
   stillChoosing,
 } from './lane_select';
-import { startMenuBackdrop } from './menu_backdrop';
 import { attachTooltip, hideTooltip } from './tooltips';
 
 const CSS = `
@@ -294,6 +294,56 @@ const CSS = `
   .menu-select-actions .menu-status {
     flex-basis: 100%; order: 1; margin-top: 2px; font-size: 11px; min-height: 0;
   }
+  .menu .menu-select-actions { background: rgb(6, 10, 20); }
+}
+/* The landing's dress on the pre-game cards (the queue, the lobby, champion
+   select, the notices, the loading card): dark cards edged in gold over the
+   painted backdrop, titles in Cinzel gold, and gold, not blue, on what is
+   chosen. They read as another game's screens between the landing and the
+   match (the maintainer, 2026-10-02). The teams keep their blue and red. */
+.menu .menu-card {
+  background: rgba(6, 10, 20, 0.86); border: 1px solid #6b5a2e; border-radius: 14px;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55), 0 0 34px rgba(232, 196, 108, 0.1);
+}
+.menu .menu-title {
+  font-family: Cinzel, Georgia, 'Times New Roman', serif; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase; color: #f0dca0;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
+}
+.menu .menu-sub, .menu .menu-status, .menu .menu-players { color: #a9b9cf; }
+.menu .menu-label { color: #c9a84a; letter-spacing: 0.4px; }
+.menu .menu-btn:not(.primary) {
+  background: rgba(14, 18, 28, 0.9); border-color: #6b5a2e; color: #e6dcb8;
+}
+.menu .menu-btn:not(.primary):hover:not(:disabled) { border-color: #c9a84a; color: #fff3cf; }
+.menu .menu-input { border-color: #4a3f22; background: rgba(10, 13, 22, 0.9); }
+.menu .menu-input:focus { border-color: #c9a84a; }
+.menu .menu-tab { background: rgba(14, 18, 28, 0.9); border-color: #4a3f22; color: #b9ab80; }
+.menu .menu-tab:hover { border-color: #c9a84a; }
+.menu .menu-tab.on { background: #3d3312; border-color: #d8b45a; color: #f6e4aa; }
+.menu .menu-champ { border-color: rgba(201, 168, 74, 0.3); background: #0d1220; }
+.menu .menu-champ:hover { border-color: #c9a84a; }
+.menu .menu-champ.picked {
+  border-color: #e8c46c;
+  box-shadow: 0 0 0 2px rgba(232, 196, 108, 0.55), 0 0 26px rgba(232, 196, 108, 0.32),
+    0 10px 24px rgba(0, 0, 0, 0.5);
+}
+.menu .menu-champ.locked, .menu .menu-champ.locked:hover { border-color: #2a2618; }
+.menu .menu-champ-name { color: #f6ecd0; }
+.menu .menu-lane, .menu .menu-choice, .menu .menu-skin {
+  background: rgba(14, 18, 28, 0.9); border-color: #4a3f22; color: #e6dcb8;
+}
+.menu .menu-lane.picked, .menu .menu-choice.picked, .menu .menu-skin.picked {
+  background: #3d3312; border-color: #d8b45a; color: #fff3cf;
+}
+/* How far the loading card has come (src/main.ts loadOrchard). */
+.menu-progress {
+  height: 6px; margin-top: 6px; border-radius: 3px; overflow: hidden;
+  background: rgba(201, 168, 74, 0.16);
+}
+.menu-progress i {
+  display: block; height: 100%; width: 0; border-radius: 3px;
+  background: linear-gradient(90deg, #a07830, #e8cc74); transition: width 0.3s ease;
 }
 `;
 
@@ -321,7 +371,9 @@ export function screen(
   root.className = 'menu';
   // The interface size the player set, or the screen's (src/game/ui_scale.ts).
   applyUiScale(root, effectiveUiScale(getSettings().uiScale, window.innerHeight));
-  if (backdrop) startMenuBackdrop(root);
+  // The landing's painted backdrop (ui/home_backdrop.ts), so the screens
+  // between the landing and the match read as the same game.
+  if (backdrop) startBackdrop(root);
   const card = document.createElement('div');
   card.className = 'menu-card';
   root.appendChild(card);
