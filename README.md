@@ -114,7 +114,7 @@ practice, ranked, lobbies and the bots' Arena alike. See
 
 ## How to play
 
-- Right-click: move or attack. A: attack-move. S: stop and hold. B: recall.
+- Click (left or right): move or attack; a tap on a phone. A: attack-move. S: stop and hold. B: recall.
 - Q W E R: abilities, cast at the cursor (hold for the range preview).
   Level them with Alt+key or by clicking the plus.
 - D F: sigils (picked in champion select). P: shop. Tab: scoreboard.
@@ -130,8 +130,8 @@ practice, ranked, lobbies and the bots' Arena alike. See
 - Or field a bot instead of playing by hand (`docs/design/bots.md`). In
   the Academy (the Bots tile on the home, or its bar) write its playbook by talking to the
   coach or editing the plays, spar it against house bots in seconds, then
-  queue with it and coach it live: right-click sends it somewhere,
-  right-click on an enemy focuses it, the coach bar carries Warden, Ring,
+  queue with it and coach it live: a click on the map sends it somewhere,
+  a click on an enemy focuses it, the coach bar carries Warden, Ring,
   back, group, hold and free. Deposit it in the Arena and read the Briefing in
   the morning. Three ladders rank the three ways to play: by hand, your
   bot live, your bot in the Arena.
