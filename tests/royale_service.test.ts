@@ -6,6 +6,7 @@
 // owner, and the points bank as they come.
 
 import { describe, expect, it } from 'vitest';
+import type { RoyaleReplay } from '../server/royale_match';
 import {
   ROYALE_LINGER_MS,
   ROYALE_MATCH_WEIGHT,
@@ -25,6 +26,7 @@ function harness(opts: { capacity?: number; open?: boolean } = {}) {
   const clients = new Map<number, RoyaleClient>();
   const seats: SeatReport[] = [];
   const banked = new Map<number, number>();
+  const replays = new Map<number, RoyaleReplay>();
   const fake = fakeFactory();
   let now = 1_000_000;
   let nextId = 100;
@@ -50,6 +52,7 @@ function harness(opts: { capacity?: number; open?: boolean } = {}) {
       return total;
     },
     appendSeat: (rec) => seats.push(rec),
+    saveReplay: (id, record) => replays.set(id, record),
     now: () => now,
     log: () => undefined,
   });
@@ -90,6 +93,7 @@ function harness(opts: { capacity?: number; open?: boolean } = {}) {
     sent,
     seats,
     banked,
+    replays,
     fake,
     connect,
     say,
@@ -183,6 +187,11 @@ describe('playing', () => {
     h.say(a, { t: 'buy', itemId: 'longblade' });
     h.say(a, { t: 'recall' });
     expect(sim.orders.map((o) => o.kind)).toEqual(['move', 'cast']);
+    // Recorded for the replay as applied: the drop, then the two orders,
+    // the order number left out.
+    const events = h.service.matches.get(a.matchId!)!.match.replayEvents;
+    expect(events.map((e) => e.c?.t)).toEqual(['drop', 'move', 'cast']);
+    expect(events[1]?.c).toEqual({ t: 'move', x: 1, y: 79.9, z: 2 });
     expect(sim.orders[0]?.p).toEqual({ x: 1, y: 79.9, z: 2 });
     // A drop pick after the drop is nothing.
     h.say(a, { t: 'drop', x: 80, y: 0, z: 0 });
@@ -245,6 +254,11 @@ describe('the end', () => {
     expect(a.matchId).toBe(b.matchId);
     h.step(1);
     expect(h.last(1, 'snap')?.royale?.st).toBe('drop');
+    // The finished match's replay: its picks, the drop picks and the mode.
+    const replay = h.replays.get(100)!;
+    expect(replay.royale).toEqual({ variant: 'respawn', guestsOnly: false });
+    expect(replay.picks).toHaveLength(ROYALE_SEATS);
+    expect(replay.ticks).toBeGreaterThan(0);
     // Each seat that ended wrote its report, the variant noted.
     expect(h.seats.map((s) => [s.how, s.queue, s.variant])).toEqual([
       ['ended', 'royale', 'respawn'],

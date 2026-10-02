@@ -310,6 +310,17 @@ export function fakeFactory(): {
     return {
       sim,
       unitIds,
+      replay: {
+        picks: picks.map((p) => ({
+          name: p.name,
+          team: p.team,
+          championId: p.championId,
+          sigils: p.sigils,
+          skin: p.skin,
+          ...(p.bot ? { bot: 'royale' } : {}),
+        })),
+        royale: { variant, guestsOnly: picks.some((p) => p.bot?.softened === true) },
+      },
       standIn: (unitId, skill) => {
         sim.policies.set(unitId, skill);
       },

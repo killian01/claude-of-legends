@@ -8,8 +8,20 @@
 // socket said and sends what it answers.
 
 import { type ClientMsg, type ServerMsg, type StepId, wirePoint } from '../src/net/protocol';
+import {
+  REPLAY_EVENT_CAP,
+  REPLAY_VERSION,
+  type ReplayEvent,
+  type ReplayPick,
+} from '../src/net/replay';
 import type { RoyaleResult, RoyaleVariant, SeatLabel } from '../src/net/royale_wire';
-import { freshStats, orderNumber, type SeatStats, WALK_STEP_MAX } from './match';
+import {
+  freshStats,
+  orderNumber,
+  type SeatStats,
+  WALK_STEP_MAX,
+  withoutOrderNumber,
+} from './match';
 import { applyRoyaleCommand, ROYALE_VERBS } from './royale_commands';
 import { chooseBotSeat } from './royale_join';
 import { RoyalePoints } from './royale_points';
@@ -61,6 +73,18 @@ interface SeatState {
   heldFor: number | null;
 }
 
+// A battle royale's replay (src/net/replay.ts ReplayRecord with the mode's
+// block): the seed, the picks and every event that steered the sim, the
+// variant and whether the bots played softer, so buildRoyaleSim rebuilds it.
+export interface RoyaleReplay {
+  version: number;
+  seed: number;
+  picks: readonly ReplayPick[];
+  events: readonly ReplayEvent[];
+  ticks: number;
+  royale: { variant: RoyaleVariant; guestsOnly?: boolean };
+}
+
 // Every seat of a match this many seats wide, by default the mode's fifty.
 export class RoyaleMatch {
   readonly sim: RoyaleSim;
@@ -68,6 +92,11 @@ export class RoyaleMatch {
   readonly points: RoyalePoints;
   private readonly seats = new Map<number, SeatState>();
   private readonly standIn: RoyaleBuild['standIn'];
+  private readonly replay: RoyaleBuild['replay'];
+  // Every event that steered the sim, as the 5v5 records them
+  // (server/match.ts): the people's commands, the drop picks among them,
+  // and the seats changing hands.
+  readonly replayEvents: ReplayEvent[] = [];
   private events: readonly RoyaleSimEvent[] = [];
 
   constructor(
@@ -82,6 +111,7 @@ export class RoyaleMatch {
     const build = factory(seed, variant, seats);
     this.sim = build.sim;
     this.standIn = build.standIn;
+    this.replay = build.replay;
     seats.forEach((s, i) => {
       const unitId = build.unitIds[i];
       if (unitId === undefined) return;
@@ -108,6 +138,23 @@ export class RoyaleMatch {
 
   get seatCount(): number {
     return this.seats.size;
+  }
+
+  private record(ev: ReplayEvent): void {
+    if (this.replayEvents.length < REPLAY_EVENT_CAP) this.replayEvents.push(ev);
+  }
+
+  // The match's replay, once it stayed within bounds; null past them.
+  replayRecord(): RoyaleReplay | null {
+    if (this.replayEvents.length >= REPLAY_EVENT_CAP) return null;
+    return {
+      version: REPLAY_VERSION,
+      seed: this.seed,
+      picks: this.replay.picks,
+      events: this.replayEvents,
+      ticks: this.sim.tickCount,
+      royale: this.replay.royale,
+    };
   }
 
   get stage(): 'drop' | 'play' | 'over' {
@@ -191,6 +238,7 @@ export class RoyaleMatch {
     const s = unitId === null ? undefined : this.seats.get(unitId);
     if (unitId === null || !s) return null;
     this.sim.detachPolicy(unitId);
+    this.record({ k: this.sim.tickCount, u: unitId, e: 'bot_off' });
     s.bot = false;
     s.name = person.name;
     this.reidentify(unitId);
@@ -208,6 +256,7 @@ export class RoyaleMatch {
       s.bot = true;
       s.heldFor = hold ? p.owner : null;
       this.standIn(p.unitId, s.skill, s.softened);
+      this.record({ k: this.sim.tickCount, u: p.unitId, e: 'bot_on' });
       this.reidentify(p.unitId);
     }
     return p;
@@ -218,6 +267,7 @@ export class RoyaleMatch {
     const s = this.seats.get(unitId);
     if (!s || s.heldFor !== person.owner || !s.bot) return null;
     this.sim.detachPolicy(unitId);
+    this.record({ k: this.sim.tickCount, u: unitId, e: 'bot_off' });
     s.bot = false;
     s.heldFor = null;
     s.name = person.name;
@@ -238,7 +288,9 @@ export class RoyaleMatch {
     const at = wirePoint(x, z, y);
     if (!at || at.y === undefined) return;
     p.lastCommandAt = this.sim.tickCount;
-    this.sim.pickDrop(p.unitId, { x: at.x, y: at.y, z: at.z });
+    const pick = { x: at.x, y: at.y, z: at.z };
+    this.record({ k: this.sim.tickCount, u: p.unitId, e: 'cmd', c: { t: 'drop', ...pick } });
+    this.sim.pickDrop(p.unitId, pick);
   }
 
   handleCommand(clientId: number, msg: ClientMsg): void {
@@ -253,7 +305,9 @@ export class RoyaleMatch {
       p.ack = n;
       p.ackAt = this.sim.time;
     }
-    applyRoyaleCommand(this.sim, p.team, p.unitId, msg);
+    const cmd = withoutOrderNumber(msg);
+    this.record({ k: this.sim.tickCount, u: p.unitId, e: 'cmd', c: cmd });
+    applyRoyaleCommand(this.sim, p.team, p.unitId, cmd);
   }
 
   markLoaded(clientId: number): void {

@@ -16,7 +16,7 @@ import type { RoyaleVariant } from '../src/net/royale_wire';
 import { bankAwards } from './points';
 import { ROYALE_VERBS } from './royale_commands';
 import { chooseRoyaleMatch, type RoyaleCandidate, takesPeople } from './royale_join';
-import { RoyaleMatch, type RoyalePlayer } from './royale_match';
+import { RoyaleMatch, type RoyalePlayer, type RoyaleReplay } from './royale_match';
 import { type RoyalePerson, type RoyalePick, royalePick } from './royale_seats';
 import type { RoyaleSimFactory } from './royale_sim';
 import { buildSeatReport, type SeatEnd, type SeatReport } from './seat_report';
@@ -66,6 +66,8 @@ export interface RoyaleDeps {
   // Banks points on a line (ADR 0027), answering the new total or null.
   bank(owner: number, delta: number): number | null;
   appendSeat(rec: SeatReport): void;
+  // Keeps a finished match's replay (src/net/replay.ts), when it has one.
+  saveReplay(matchId: number, record: RoyaleReplay): void;
   now(): number;
   log(line: string): void;
 }
@@ -484,6 +486,14 @@ export class RoyaleService {
       if (!c) continue;
       this.report(c, entry, 'ended');
       people.push(c);
+    }
+    const replay = m.replayRecord();
+    if (replay) {
+      try {
+        this.deps.saveReplay(m.id, replay);
+      } catch (err) {
+        this.deps.log(`royale ${m.id} replay save failed: ${String(err)}`);
+      }
     }
     this.deps.log(`royale ${m.id} ended with ${people.length} person(s) in`);
     if (m.variant !== 'respawn') return null;
