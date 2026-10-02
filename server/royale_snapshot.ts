@@ -46,6 +46,9 @@ export interface RoyaleSnapContext {
   people: number;
   // Send the caches list (and the drop's picks) with this one.
   caches: boolean;
+  // The recipient's place in the final ranking, once the match is over
+  // (Respawn's places are known only then).
+  finalPlace?: number;
 }
 
 const point = (p: Vec3): WirePoint => [round2(p.x), round2(p.y), round2(p.z)];
@@ -83,7 +86,7 @@ export function royaleBlock(
     people: ctx.people,
     score: r.scores.get(self) ?? 0,
   };
-  const place = placeOf(r, ctx.seats, self);
+  const place = placeOf(r, ctx.seats, self) ?? ctx.finalPlace ?? null;
   if (place !== null) block.place = place;
   if (r.variant === 'respawn' && r.leaderId !== null) {
     const leader: NonNullable<SnapRoyale['leader']> = {

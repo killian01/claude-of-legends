@@ -306,6 +306,7 @@ describe('the end', () => {
     sim.finish(self);
     h.step(1);
     expect(h.last(1, 'royale_result')).toMatchObject({ place: 1, winner: 'alice' });
+    expect(h.last(1, 'snap')?.royale?.place).toBe(1);
     expect(h.last(1, 'points')?.reason).toBe('last_standing');
     h.advance(ROYALE_LINGER_MS);
     h.step(1);

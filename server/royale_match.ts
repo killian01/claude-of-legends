@@ -25,7 +25,7 @@ import {
 import { applyRoyaleCommand, ROYALE_VERBS } from './royale_commands';
 import { chooseBotSeat } from './royale_join';
 import { RoyalePoints } from './royale_points';
-import { type RankedSeat, royaleResult } from './royale_ranking';
+import { finalPlaces, type RankedSeat, royaleRanking, royaleResult } from './royale_ranking';
 import { type RoyalePerson, royaleSeats } from './royale_seats';
 import type {
   RoyaleBuild,
@@ -100,6 +100,8 @@ export class RoyaleMatch {
   // and the seats changing hands.
   readonly replayEvents: ReplayEvent[] = [];
   private events: readonly RoyaleSimEvent[] = [];
+  // Every seat's place once the match is over, ranked once.
+  private places: Map<number, number> | null = null;
 
   constructor(
     readonly id: number,
@@ -358,6 +360,10 @@ export class RoyaleMatch {
     if (!p) return null;
     const caches = !p.cachesSent || this.sim.tickCount % CACHES_EVERY_TICKS === 0;
     p.cachesSent = true;
+    if (this.over && !this.places) {
+      this.places = finalPlaces(royaleRanking(this.sim.royale, this.rankedSeats()));
+    }
+    const finalPlace = this.places?.get(p.unitId);
     return buildRoyaleSnapshot(
       this.sim,
       { unitId: p.unitId, team: p.team, known: p.known, seat: p },
@@ -367,6 +373,7 @@ export class RoyaleMatch {
         seats: this.seats.size,
         people: this.players.size,
         caches,
+        ...(finalPlace !== undefined ? { finalPlace } : {}),
       },
     );
   }
