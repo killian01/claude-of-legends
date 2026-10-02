@@ -12,6 +12,7 @@ import type { GameMap, WardenPit } from '../sim/content/map';
 import { creatureOfRing } from '../sim/content/rings';
 import { type FavorStacks, NO_FAVORS } from '../sim/favors';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
+import type { Vec3 } from '../sim/geo';
 import type { NavGrid } from '../sim/navgrid';
 import type { Projectile } from '../sim/projectiles';
 import type { RingClock } from '../sim/rings';
@@ -21,6 +22,14 @@ import type { Wall } from '../sim/walls';
 import type { Zone } from '../sim/zones';
 import type { IWorld } from '../world_api';
 import type { ClientMsg, SelfSnap, ServerMsg, SnapUnit } from './protocol';
+import type {
+  RoyaleVariant,
+  RoyaleView,
+  SeatLabel,
+  SnapCache,
+  SnapRoyale,
+  WirePoint,
+} from './royale_wire';
 import { type DrawnSelf, pathOfPairs, SelfPredictor } from './self_predict';
 
 // Rebuilds a displayable Status from its wire chip.
@@ -80,7 +89,7 @@ function materializeUnit(s: SnapUnit): Unit {
     championId: s.c ?? null,
     // Resolved against the match registry by the caller (applyServer).
     champion: null,
-    pos: { x: s.x, z: s.z },
+    pos: s.y !== undefined ? { x: s.x, y: s.y, z: s.z } : { x: s.x, z: s.z },
     radius: s.r ?? 0.6,
     moveSpeed: 0,
     hp: s.h,
@@ -179,6 +188,15 @@ export class ClientWorld implements IWorld {
   private enemyBoon: { until: number; stacks: number } | null = null;
   private wrathUntil: number | null = null;
   private enemyWrathUntil: number | null = null;
+  // The battle royale (ADR 0031): the match's variant and seats, the mode as
+  // the last snapshot told it, the last caches list and drop picks (sent
+  // once a second), and who holds each champion's seat as the wire named
+  // it (identity blocks, the kill feed, the scoreboard).
+  private royaleMatch: { v: RoyaleVariant; seats: number } | null = null;
+  private royaleView: RoyaleView | null = null;
+  private caches: readonly SnapCache[] = [];
+  private dropPicks: readonly WirePoint[] = [];
+  private readonly seats = new Map<number, SeatLabel>();
 
   // Match-scoped champion resolution, mirroring the server sim's registry:
   // the Forge queue delivers the match's forged definitions at setup and
@@ -210,8 +228,59 @@ export class ClientWorld implements IWorld {
   // newest snapshot put it: the own champion, ahead by the orders on
   // their way (IWorld). Null draws the snapshot's position.
   predictedPos(unitId: number, now: number): DrawnSelf | null {
-    if (unitId !== this.selfUnitId || !this.predictor) return null;
-    return this.predictor.drawnAt(now);
+    if (unitId !== this.selfUnitId || !this.predicting) return null;
+    return this.predictor?.drawnAt(now) ?? null;
+  }
+
+  // The prediction walks the plane's grid (src/net/self_predict.ts): on the
+  // planet's sphere it stays off, and the own champion is drawn where the
+  // server says.
+  private get predicting(): boolean {
+    return this.predictor !== null && this.royaleMatch === null;
+  }
+
+  // The battle royale's state (IWorld): null outside one.
+  royale(): RoyaleView | null {
+    return this.royaleView;
+  }
+
+  // The drop: the landing point picked on the globe (IWorld).
+  pickDrop(p: Vec3): void {
+    this.send({ t: 'drop', x: p.x, y: p.y, z: p.z });
+  }
+
+  // Who holds a champion's seat, as the wire named it (IWorld).
+  seat(unitId: number): SeatLabel | null {
+    return this.seats.get(unitId) ?? null;
+  }
+
+  private noteSeat(unitId: number, name: string | undefined, bot: boolean): void {
+    if (name === undefined || name === '') return;
+    this.seats.set(unitId, { name, bot });
+  }
+
+  // A new match on the same socket (Respawn's next one): nothing of the last
+  // one stays in the mirror.
+  private resetMatch(): void {
+    this.units.clear();
+    this.projectiles.clear();
+    this.zones.clear();
+    this.walls.clear();
+    this.time = 0;
+    this.winner = null;
+    this.scoreRows = [];
+    this.royaleView = null;
+    this.caches = [];
+    this.dropPicks = [];
+    this.seats.clear();
+  }
+
+  private applyRoyale(r: SnapRoyale): void {
+    if (r.caches) this.caches = r.caches;
+    if (r.st !== 'drop') this.dropPicks = [];
+    else if (r.picks) this.dropPicks = r.picks;
+    const { caches: _c, picks: _p, ...block } = r;
+    this.royaleView = { ...block, caches: this.caches, picks: this.dropPicks };
   }
 
   championDef(championId: string): ChampionDef | null {
@@ -271,12 +340,16 @@ export class ClientWorld implements IWorld {
 
   // Each order the hands send carries its number for the prediction, which
   // walks it at once; a coach's orders are the bot's to follow.
-  orderMove(_unitId: number, x: number, z: number): void {
+  orderMove(_unitId: number, x: number, z: number, y?: number): void {
     if (this.coach) {
       this.send({ t: 'order', kind: 'goto', x, z });
       return;
     }
-    const n = this.predictor?.move({ x, z }, this.clock());
+    if (y !== undefined) {
+      this.send({ t: 'move', x, y, z });
+      return;
+    }
+    const n = this.predicting ? this.predictor?.move({ x, z }, this.clock()) : undefined;
     this.send(n === undefined ? { t: 'move', x, z } : { t: 'move', x, z, n });
   }
 
@@ -285,18 +358,22 @@ export class ClientWorld implements IWorld {
       this.send({ t: 'order', kind: 'focus', targetId });
       return;
     }
-    const n = this.predictor?.chase(targetId, this.clock());
+    const n = this.predicting ? this.predictor?.chase(targetId, this.clock()) : undefined;
     this.send(n === undefined ? { t: 'attack', targetId } : { t: 'attack', targetId, n });
   }
 
   // Walked like a move: the server stops it at the first enemy it meets,
   // which the next snapshots tell.
-  orderAttackMove(_unitId: number, x: number, z: number): void {
+  orderAttackMove(_unitId: number, x: number, z: number, y?: number): void {
     if (this.coach) {
       this.send({ t: 'order', kind: 'goto', x, z });
       return;
     }
-    const n = this.predictor?.move({ x, z }, this.clock());
+    if (y !== undefined) {
+      this.send({ t: 'attack_move', x, y, z });
+      return;
+    }
+    const n = this.predicting ? this.predictor?.move({ x, z }, this.clock()) : undefined;
     this.send(n === undefined ? { t: 'attack_move', x, z } : { t: 'attack_move', x, z, n });
   }
 
@@ -306,7 +383,7 @@ export class ClientWorld implements IWorld {
       this.send({ t: 'order', kind: 'back' });
       return;
     }
-    const n = this.predictor?.stop(this.clock());
+    const n = this.predicting ? this.predictor?.stop(this.clock()) : undefined;
     this.send(n === undefined ? { t: 'recall' } : { t: 'recall', n });
   }
 
@@ -315,14 +392,18 @@ export class ClientWorld implements IWorld {
       this.send({ t: 'order', kind: 'hold' });
       return;
     }
-    const n = this.predictor?.stop(this.clock());
+    const n = this.predicting ? this.predictor?.stop(this.clock()) : undefined;
     this.send(n === undefined ? { t: 'stop' } : { t: 'stop', n });
   }
 
   castAbility(_unitId: number, key: AbilityKey, aim: Vec2): boolean {
     if (this.coach) return false;
+    if (aim.y !== undefined) {
+      this.send({ t: 'cast', key, x: aim.x, y: aim.y, z: aim.z });
+      return true;
+    }
     const now = this.clock();
-    const n = this.predictor?.cast(this.windupOf(key, now), now);
+    const n = this.predicting ? this.predictor?.cast(this.windupOf(key, now), now) : undefined;
     this.send(
       n === undefined
         ? { t: 'cast', key, x: aim.x, z: aim.z }
@@ -354,7 +435,11 @@ export class ClientWorld implements IWorld {
 
   castSigil(_unitId: number, slot: number, aim: Vec2): boolean {
     if (this.coach) return false;
-    this.send({ t: 'sigil', slot, x: aim.x, z: aim.z });
+    this.send(
+      aim.y !== undefined
+        ? { t: 'sigil', slot, x: aim.x, y: aim.y, z: aim.z }
+        : { t: 'sigil', slot, x: aim.x, z: aim.z },
+    );
     return true;
   }
 
@@ -379,6 +464,9 @@ export class ClientWorld implements IWorld {
   // Returns true when the message changed world state (a new snapshot).
   applyServer(msg: ServerMsg): boolean {
     if (msg.t === 'match_start') {
+      // A battle royale's start is a new match even on the same socket.
+      if (msg.royale) this.resetMatch();
+      this.royaleMatch = msg.royale ?? null;
       this.selfUnitId = msg.selfUnitId;
       this.selfTeam = msg.team;
       this.coach = msg.coach === true;
@@ -389,6 +477,9 @@ export class ClientWorld implements IWorld {
     }
     if (msg.t === 'score') {
       this.scoreRows = msg.rows;
+      if (this.royaleMatch) {
+        for (const r of msg.rows) this.noteSeat(r.unitId, r.player ?? undefined, r.b === 1);
+      }
       return false;
     }
     if (msg.t !== 'snap') return false;
@@ -407,10 +498,14 @@ export class ClientWorld implements IWorld {
       } else {
         unit.pos.x = s.x;
         unit.pos.z = s.z;
+        if (s.y !== undefined) unit.pos.y = s.y;
         unit.hp = s.h;
         unit.maxHp = s.m;
         if (s.l !== undefined) unit.level = s.l;
       }
+      // The seat's name and bot mark, with the identity block: sent again
+      // when the seat changes hands.
+      if (s.k !== undefined) this.noteSeat(s.i, s.n, s.b === 1);
       unit.dead = s.d === 1;
       unit.play = s.p ?? null;
       unit.coachOrder = s.co ?? null;
@@ -418,7 +513,11 @@ export class ClientWorld implements IWorld {
       // Windup telegraph mirror: the renderer reads pendingSpell to draw
       // the charge and its aim for every visible champion.
       unit.pendingSpell = s.w
-        ? { key: s.w.k, aim: { x: s.w.x, z: s.w.z }, resolveAt: s.w.u }
+        ? {
+            key: s.w.k,
+            aim: s.w.y !== undefined ? { x: s.w.x, y: s.w.y, z: s.w.z } : { x: s.w.x, z: s.w.z },
+            resolveAt: s.w.u,
+          }
         : null;
     }
 
@@ -488,6 +587,7 @@ export class ClientWorld implements IWorld {
       if (existing) {
         existing.pos.x = p.x;
         existing.pos.z = p.z;
+        if (p.y !== undefined) existing.pos.y = p.y;
         // A bolt born in the fog can come into sight with its victim later.
         if (existing.homingTargetId === null && p.h !== undefined) existing.homingTargetId = p.h;
       } else {
@@ -495,7 +595,7 @@ export class ClientWorld implements IWorld {
           id: p.i,
           sourceId: p.s ?? 0,
           team: p.t,
-          pos: { x: p.x, z: p.z },
+          pos: p.y !== undefined ? { x: p.x, y: p.y, z: p.z } : { x: p.x, z: p.z },
           dir: { x: 1, z: 0 },
           speed: 0,
           radius: p.r,
@@ -531,12 +631,13 @@ export class ClientWorld implements IWorld {
         // misplace any future moving zone.
         existingZone.pos.x = z.x;
         existingZone.pos.z = z.z;
+        if (z.y !== undefined) existingZone.pos.y = z.y;
       } else {
         this.zones.set(z.i, {
           id: z.i,
           sourceId: 0,
           team: z.t,
-          pos: { x: z.x, z: z.z },
+          pos: z.y !== undefined ? { x: z.x, y: z.y, z: z.z } : { x: z.x, z: z.z },
           radius: z.r,
           until: 0,
           tickEvery: 0,
@@ -569,8 +670,8 @@ export class ClientWorld implements IWorld {
           id: w.i,
           sourceId: 0,
           team: w.t,
-          a: { x: w.x1, z: w.z1 },
-          b: { x: w.x2, z: w.z2 },
+          a: w.y1 !== undefined ? { x: w.x1, y: w.y1, z: w.z1 } : { x: w.x1, z: w.z1 },
+          b: w.y2 !== undefined ? { x: w.x2, y: w.y2, z: w.z2 } : { x: w.x2, z: w.z2 },
           until: w.u,
           // The mirror never blocks or unblocks: pathing is server truth.
           samples: [],
@@ -581,7 +682,16 @@ export class ClientWorld implements IWorld {
       if (!seenW.has(id)) this.walls.delete(id);
     }
 
-    if (this.predictor && msg.self) this.observeSelf(msg.self, msg.time, msg.winner !== null);
+    if (msg.royale) this.applyRoyale(msg.royale);
+    // The kill feed names champions the mirror never saw.
+    for (const e of msg.events) {
+      if (e.e === 'death' || e.e === 'out') {
+        this.noteSeat(e.unitId, e.n, e.vb === 1);
+        if (e.kn) this.noteSeat(e.killerId, e.kn, e.kb === 1);
+      }
+    }
+
+    if (this.predicting && msg.self) this.observeSelf(msg.self, msg.time, msg.winner !== null);
     return true;
   }
 

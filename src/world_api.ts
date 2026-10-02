@@ -3,9 +3,11 @@
 // offline Sim satisfies it structurally; the online mirror world will
 // implement it in phase 6, pinned by a parity test.
 
+import type { RoyaleView, SeatLabel } from './net/royale_wire';
 import type { ChampionDef } from './sim/content/champions';
 import type { GameMap, WardenPit } from './sim/content/map';
 import type { FavorStacks } from './sim/favors';
+import type { Vec3 } from './sim/geo';
 import type { Projectile } from './sim/projectiles';
 import type { RingClock } from './sim/rings';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from './sim/types';
@@ -45,9 +47,22 @@ export interface IWorld {
   // (null while it stands). Null, or absent offline, draws the world's
   // own position.
   predictedPos?(unitId: number, now: number): { x: number; z: number; heading: Vec2 | null } | null;
-  orderMove(unitId: number, x: number, z: number): void;
+  // The battle royale (ADR 0031), online: the mode as the last snapshot
+  // told it, with the last caches list and, during the drop, everyone
+  // else's picks (src/net/royale_wire.ts RoyaleView); null outside one.
+  // Absent offline.
+  royale?(): RoyaleView | null;
+  // The drop: the landing point picked on the globe, a point on the
+  // planet's sphere.
+  pickDrop?(p: Vec3): void;
+  // Who holds a champion's seat in a battle royale, the name and the bot
+  // mark, for a champion the mirror has been told of; null otherwise.
+  seat?(unitId: number): SeatLabel | null;
+  // y: a point on the planet's sphere carries it (ADR 0029), a point on
+  // the plane never does; an aim (Vec2) carries its own.
+  orderMove(unitId: number, x: number, z: number, y?: number): void;
   orderAttack(unitId: number, targetId: number): void;
-  orderAttackMove(unitId: number, x: number, z: number): void;
+  orderAttackMove(unitId: number, x: number, z: number, y?: number): void;
   orderStop(unitId: number): void;
   startRecall(unitId: number): void;
   castAbility(unitId: number, key: AbilityKey, aim: Vec2): boolean;
