@@ -181,15 +181,12 @@ export function mountLandingLadder(host: HTMLElement, onJoin: () => void): void 
         host.remove();
         return;
       }
+      // The box opens on the top of the ladder, whoever reads it: a
+      // returning player's own place is the line over the rows, and the
+      // box scrolled down to it read as a ladder opened at its foot (the
+      // maintainer, 2026-10-02).
       renderLandingLadder(host, page, onJoin);
       host.hidden = false;
-      // A returning player's own line, scrolled into the middle of the box
-      // rather than left under the fold of it.
-      const list = host.querySelector('ol');
-      const mine = list?.querySelector<HTMLElement>('li.me');
-      if (list && mine) {
-        list.scrollTop = Math.max(0, mine.offsetTop - (list.clientHeight - mine.offsetHeight) / 2);
-      }
     })
     .catch(() => host.remove());
 }

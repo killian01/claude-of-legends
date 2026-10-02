@@ -13,9 +13,9 @@ import {
   HERO_RANKED_LINE,
   LANDING_MODES,
   PLAY_NOW,
+  PLAY_NOW_ART,
   PLAY_NOW_CALL,
   PLAY_NOW_LINE,
-  PRACTICE_ART,
 } from '../src/ui/landing_modes';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -32,14 +32,15 @@ describe('the landing modes', () => {
     }
   });
 
-  it('leave the practice match out, and give it its own painting', () => {
+  it('leave the practice match out, and paint the free door as a match against people', () => {
     // The free door is not one of the three: nobody makes an account for
-    // the offline match. It wears a painting all the same, and the tile's
-    // own, or the landing reads as one offer and one footnote under it.
+    // the public queue. It wears the ranked tile's painting, a match
+    // against people, since the door is the public queue now and no
+    // longer the offline practice field (2026-10-02).
     expect(LANDING_MODES.some((m) => m.id === 'practice')).toBe(false);
-    const tile = PLAY_TILES.find((t) => t.id === 'practice');
+    const tile = PLAY_TILES.find((t) => t.id === 'ranked');
     expect(tile).toBeDefined();
-    expect(PRACTICE_ART).toBe(tileArtUrl(tile?.art ?? ''));
+    expect(PLAY_NOW_ART).toBe(tileArtUrl(tile?.art ?? ''));
   });
 
   it('wear the painting their tile wears', () => {

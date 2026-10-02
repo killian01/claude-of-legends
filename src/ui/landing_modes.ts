@@ -28,12 +28,12 @@ export interface LandingMode {
   art: string;
 }
 
-// The painting the other way in wears. The practice match is not one of
-// the three above, because nobody signs up for it: it is the door that
-// needs no account. It gets its tile's painting all the same, so the two
-// cards on the landing are an offer and an offer, rather than an offer and
-// a footnote under it.
-export const PRACTICE_ART = tileArtUrl('practice');
+// The painting the other way in wears. It was the practice match's, from
+// when that card's door was the offline game; the door is the public
+// queue now, people and bots on the ladder, and the practice field's
+// straw dummies were the wrong picture of it: it wears the ranked one,
+// the painting of a match against people (the maintainer, 2026-10-02).
+export const PLAY_NOW_ART = tileArtUrl('ranked');
 // Its button. It used to say "Play offline", which reads as a lesser game
 // to someone who came to play; what it offers is a match right here, with
 // nothing to install and no account: the public queue as a Guest (ADR

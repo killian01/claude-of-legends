@@ -25,8 +25,8 @@ import {
   LANDING_MODES,
   type LandingDoor,
   PLAY_NOW,
+  PLAY_NOW_ART,
   PLAY_NOW_LINE,
-  PRACTICE_ART,
 } from './landing_modes';
 import { mountPresence } from './landing_presence';
 import { revealOnScroll } from './landing_reveal';
@@ -247,18 +247,25 @@ const CSS = `
 }
 
 
-/* The newest news, one line under the Play now card (ui/news_section.ts). */
+/* The newest news, one line under the Play now card (ui/news_section.ts),
+   in the card's own dress: a faint gold edge, the title in Cinzel gold, a
+   chevron saying it opens. It was a navy box from another page. */
 .pg.land .pg-news {
   display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 14px;
-  padding: 8px; border-radius: 8px; border: 1px solid #2e4468; background: #0f1730;
-  color: #c9d9ee; text-align: left; cursor: pointer; font: inherit;
-  transition: border-color 0.15s ease;
+  padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(201, 168, 74, 0.38);
+  background: linear-gradient(180deg, rgba(232, 196, 108, 0.08), rgba(232, 196, 108, 0.02));
+  color: #c9d6ea; text-align: left; cursor: pointer; font: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
-.pg.land .pg-news:hover { border-color: #5b84c9; }
-.pg.land .pg-news img { width: 84px; height: 48px; object-fit: cover; border-radius: 4px; flex: none; }
-.pg-news-words { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
-.pg-news-words small { font-size: 11px; color: #8ea4c4; text-transform: uppercase; letter-spacing: 0.6px; }
-.pg-news-words b { font-size: 13.5px; color: #fff; }
+.pg.land .pg-news:hover { border-color: #e8c46c; background: rgba(232, 196, 108, 0.11); }
+.pg.land .pg-news img { width: 84px; height: 48px; object-fit: cover; border-radius: 6px; flex: none;
+  border: 1px solid rgba(201, 168, 74, 0.38); }
+.pg-news-words { display: flex; flex-direction: column; min-width: 0; gap: 3px; flex: 1; }
+.pg-news-words small { font-size: 10.5px; font-weight: 700; color: #c9a84a;
+  text-transform: uppercase; letter-spacing: 1.2px; }
+.pg-news-words b { font-family: Cinzel, Georgia, serif; font-size: 14px; font-weight: 700;
+  letter-spacing: 0.5px; color: #f0dca0; }
+.pg.land .pg-news .pg-news-go { flex: none; font-size: 20px; line-height: 1; color: #c9a84a; }
 .pg-news-host { position: fixed; inset: 0; z-index: 40; }
 
 /* The contribution band, under the two ways in. It is the one section
@@ -580,7 +587,7 @@ export function showLanding(
     // The painting this card was missing. The heading above it says what
     // it is, so the picture is decoration and carries no label of its own.
     const tryArt = el('img', '');
-    tryArt.src = PRACTICE_ART;
+    tryArt.src = PLAY_NOW_ART;
     tryArt.alt = '';
     tryArt.loading = 'lazy';
     tryArt.decoding = 'async';
@@ -617,8 +624,8 @@ export function showLanding(
         latest.at !== undefined && isPinned(latest, now)
           ? countdownText(latest.at, now)
           : dayText(latest.day);
-      words.append(el('small', '', when), el('b', '', latest.title));
-      line.appendChild(words);
+      words.append(el('small', '', `News · ${when}`), el('b', '', latest.title));
+      line.append(words, el('span', 'pg-news-go', '›'));
       line.addEventListener('click', () => {
         const host = el('div', 'pg-news-host');
         root.appendChild(host);
