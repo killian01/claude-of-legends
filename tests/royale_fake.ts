@@ -17,7 +17,7 @@ import { CHAMPIONS } from '../src/sim/content/champions';
 import type { Vec3 } from '../src/sim/geo';
 import type { Projectile } from '../src/sim/projectiles';
 import { DROP_S, PLAY_S, type RoyaleState } from '../src/sim/royale/types';
-import { type AbilityKey, DT, type ScoreRow, type TeamId, type Vec2 } from '../src/sim/types';
+import { type AbilityKey, DT, type ScoreRow, type Vec2 } from '../src/sim/types';
 import { createCamp, createChampion, createWarden, type Unit } from '../src/sim/unit';
 import type { Wall } from '../src/sim/walls';
 import type { Zone } from '../src/sim/zones';
@@ -57,6 +57,7 @@ export interface Order {
 export class FakeRoyaleSim implements RoyaleSim {
   time = 0;
   tickCount = 0;
+  teamCount = 0;
   readonly units = new Map<number, Unit>();
   readonly projectiles = new Map<number, Projectile>();
   readonly zones = new Map<number, Zone>();
@@ -96,7 +97,8 @@ export class FakeRoyaleSim implements RoyaleSim {
 
   addChampion(team: number, championId: string, at: Vec3): Unit {
     const def = CHAMPIONS[championId] ?? CHAMPIONS.sylra!;
-    const u = createChampion(this.nextId++, team as TeamId, { ...at }, def);
+    const u = createChampion(this.nextId++, team, { ...at }, def);
+    this.teamCount = Math.max(this.teamCount, team + 1);
     // On the sphere, y and all.
     u.pos = { ...at };
     this.units.set(u.id, u);
@@ -135,7 +137,7 @@ export class FakeRoyaleSim implements RoyaleSim {
     const p = {
       id: this.nextId++,
       sourceId,
-      team: team as TeamId,
+      team: team,
       pos: { ...at },
       dir: { x: 1, z: 0 },
       speed: 0,

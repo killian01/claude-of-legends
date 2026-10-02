@@ -13,7 +13,6 @@
 
 import { type ClientMsg, type ServerMsg, stepOnWire } from '../src/net/protocol';
 import type { RoyaleVariant } from '../src/net/royale_wire';
-import type { TeamId } from '../src/sim/types';
 import { bankAwards } from './points';
 import { ROYALE_VERBS } from './royale_commands';
 import { chooseRoyaleMatch, type RoyaleCandidate, takesPeople } from './royale_join';
@@ -227,7 +226,7 @@ export class RoyaleService {
         this.seat(client, entry, p, true);
         for (const other of entry.match.players.values()) {
           if (other.clientId === client.id) continue;
-          send(other.clientId, { t: 'player_joined', name: p.name, team: p.team as TeamId });
+          send(other.clientId, { t: 'player_joined', name: p.name, team: p.team });
         }
         this.deps.log(`royale ${entry.match.id}: ${client.name} dropped in`);
         return;
@@ -280,8 +279,10 @@ export class RoyaleService {
     this.deps.send(client.id, {
       t: 'match_start',
       selfUnitId: p.unitId,
-      team: p.team as TeamId,
+      team: p.team,
       ...(dropIn ? { dropIn: true as const } : {}),
+      // Each champion its own team (ADR 0030).
+      teams: entry.match.sim.teamCount,
       royale: { v: entry.match.variant, seats: entry.match.seatCount },
     });
   }
@@ -340,7 +341,7 @@ export class RoyaleService {
         this.deps.send(other.clientId, {
           t: 'player_left',
           name: left.name,
-          team: left.team as TeamId,
+          team: left.team,
         });
       }
     }
@@ -365,7 +366,7 @@ export class RoyaleService {
         this.deps.send(other.clientId, {
           t: 'player_left',
           name: left.name,
-          team: left.team as TeamId,
+          team: left.team,
         });
       }
     }
@@ -387,7 +388,7 @@ export class RoyaleService {
     this.seat(client, entry, p, false);
     for (const other of entry.match.players.values()) {
       if (other.clientId === client.id) continue;
-      this.deps.send(other.clientId, { t: 'player_back', name: p.name, team: p.team as TeamId });
+      this.deps.send(other.clientId, { t: 'player_back', name: p.name, team: p.team });
     }
     this.deps.log(`royale ${entry.match.id}: ${client.name} reconnected`);
     return true;

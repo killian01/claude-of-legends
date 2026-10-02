@@ -25,6 +25,8 @@ export type RoyaleSimEvent = SimEvent | RoyaleEvent;
 export interface RoyaleSim {
   readonly time: number;
   readonly tickCount: number;
+  // Each champion its own team (ADR 0030): as many teams as seats.
+  readonly teamCount: number;
   readonly units: ReadonlyMap<number, Unit>;
   readonly projectiles: ReadonlyMap<number, Projectile>;
   readonly zones: ReadonlyMap<number, Zone>;

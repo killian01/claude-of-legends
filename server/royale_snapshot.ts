@@ -13,7 +13,6 @@ import type { ServerMsg, SnapEvent, SnapMobile, SnapUnit, SnapWall } from '../sr
 import type { SeatLabel, SnapCache, SnapDusk, SnapRoyale, WirePoint } from '../src/net/royale_wire';
 import type { Vec3 } from '../src/sim/geo';
 import type { DuskState } from '../src/sim/royale/types';
-import type { TeamId } from '../src/sim/types';
 import { placeOf } from './royale_ranking';
 import type { RoyaleSim, RoyaleSimEvent } from './royale_sim';
 import {
@@ -317,7 +316,7 @@ export function buildRoyaleSnapshot(
     // the path to walk is not sent.
     self: selfUnit ? selfRecord(selfUnit, sim.time, viewer.seat, false) : null,
     events: royaleEvents(sim, viewer, knownBefore, events, ctx),
-    winner: winnerTeam as TeamId | null,
+    winner: winnerTeam,
     royale: royaleBlock(sim, viewer, ctx),
   };
 }

@@ -119,6 +119,7 @@ describe('entering', () => {
     h.enter(a);
     const start = h.last(1, 'match_start')!;
     expect(start.royale).toEqual({ v: 'respawn', seats: ROYALE_SEATS });
+    expect(start.teams).toBe(ROYALE_SEATS);
     expect(start.dropIn).toBeUndefined();
     const picks = h.fake.picks[0]!;
     expect(picks).toHaveLength(ROYALE_SEATS);
