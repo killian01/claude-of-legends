@@ -2,6 +2,7 @@
 // state a system needs plus the event and death buffers. Sim stays a thin
 // coordinator; systems stay host-agnostic modules a test can drive directly.
 
+import type { Ground } from './ground';
 import type { NavGrid } from './navgrid';
 import type { Projectile } from './projectiles';
 import type { Rng } from './rng';
@@ -14,7 +15,12 @@ import type { Zone } from './zones';
 export interface CombatCtx {
   readonly time: number;
   readonly rng: Rng;
+  // The grid the 5v5's own systems (lanes, waves, towers, the fountain)
+  // walk; everything that also runs on the planet goes through `ground`.
   readonly nav: NavGrid;
+  // The ground the match stands on (ground.ts, ADR 0029): the plane over
+  // `nav`, or the planet's sphere.
+  readonly ground: Ground;
   readonly units: Map<number, Unit>;
   readonly projectiles: Map<number, Projectile>;
   readonly zones: Map<number, Zone>;
