@@ -15,6 +15,7 @@ import {
   duskTolls,
   elsewhereText,
   type FeedContext,
+  FoldCount,
   feedKeeps,
   frostLevel,
   heartbeat,
@@ -216,6 +217,15 @@ describe('the feed', () => {
     expect(feedKeeps({ unitId: A, killerId: B }, ctx())).toBe(false);
     expect(feedKeeps({ unitId: A, killerId: 0 }, ctx())).toBe(false);
     expect(elsewhereText(7)).toBe('+7 elsewhere');
+  });
+
+  it('counts the folded deaths of its last moments, not of the whole fight', () => {
+    const fold = new FoldCount(6500);
+    for (let t = 0; t < 60_000; t += 1000) fold.add(t);
+    // One a second for a minute: the line says the last six and a half.
+    expect(fold.count(59_000)).toBe(7);
+    expect(fold.count(64_000)).toBe(2);
+    expect(fold.count(66_000)).toBe(0);
   });
 
   it('never keeps a Dusk death for the killer it does not have', () => {

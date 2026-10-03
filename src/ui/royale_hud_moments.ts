@@ -39,6 +39,7 @@ import {
   duskDepth,
   duskTolls,
   elsewhereText,
+  FoldCount,
   feedKeeps,
   frostLevel,
   heartbeat,
@@ -161,8 +162,7 @@ export class RoyaleHudMoments {
   private readonly arrows = new Map<string, HTMLElement>();
   private spotTimer = 0;
   private fold: HTMLElement | null = null;
-  private folded = 0;
-  private foldTimer = 0;
+  private readonly folded = new FoldCount(FEED_MS);
   private lastDusk: SnapDusk | null = null;
   // The viewer's health over the last two ticks, for a takedown's heal.
   private hpNow = -1;
@@ -208,6 +208,7 @@ export class RoyaleHudMoments {
     if (!r) return;
     const time = world.time;
     this.moments.seeStage(r.st);
+    if (this.fold) this.showFold();
     for (const c of r.caches) this.cachesAt.set(c[0], [c[1], c[2], c[3]]);
     const me = world.units.get(selfId);
 
@@ -323,18 +324,8 @@ export class RoyaleHudMoments {
       inSight: (id) => world.units.get(id)?.kind === 'champion' && world.isVisible(selfTeam, id),
     });
     if (!keep) {
-      this.folded += 1;
-      if (!this.fold?.isConnected) {
-        this.fold = el('div', 'br-feed-line fold');
-        feed.append(this.fold);
-      }
-      this.fold.textContent = elsewhereText(this.folded);
-      window.clearTimeout(this.foldTimer);
-      this.foldTimer = window.setTimeout(() => {
-        this.fold?.remove();
-        this.fold = null;
-        this.folded = 0;
-      }, FEED_MS);
+      this.folded.add(performance.now());
+      this.showFold();
       return;
     }
     const line = el('div', 'br-feed-line');
@@ -358,6 +349,23 @@ export class RoyaleHudMoments {
     const lines = [...feed.children].filter((c) => c !== this.fold);
     for (const extra of lines.slice(FEED_MAX)) extra.remove();
     window.setTimeout(() => line.remove(), FEED_MS);
+  }
+
+  // The folded line: how many deaths elsewhere in the feed's last moments,
+  // gone when none is.
+  private showFold(): void {
+    const n = this.folded.count(performance.now());
+    if (n === 0) {
+      this.fold?.remove();
+      this.fold = null;
+      return;
+    }
+    if (!this.fold?.isConnected) {
+      this.fold = el('div', 'br-feed-line fold');
+      this.host.feed.append(this.fold);
+    }
+    const text = elsewhereText(n);
+    if (this.fold.textContent !== text) this.fold.textContent = text;
   }
 
   // The mode's notes: the loot as it lands (what it adds, a finished item,
@@ -524,7 +532,6 @@ export class RoyaleHudMoments {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     window.clearTimeout(this.spotTimer);
-    window.clearTimeout(this.foldTimer);
     this.edges.remove();
     this.spot.remove();
     this.pulse.remove();
