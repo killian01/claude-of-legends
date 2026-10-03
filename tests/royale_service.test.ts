@@ -16,6 +16,8 @@ import {
 } from '../server/royale_service';
 import type { SeatReport } from '../server/seat_report';
 import type { ClientMsg, ServerMsg } from '../src/net/protocol';
+import { CHAMPION_LIST } from '../src/sim/content/champions';
+import { clampSkin } from '../src/sim/content/skins';
 import { CALM_S, DROP_S, JOIN_UNTIL_END_S, PLAY_S, ROYALE_SEATS } from '../src/sim/royale/types';
 import { fakeFactory, near } from './royale_fake';
 
@@ -45,7 +47,6 @@ function harness(opts: { capacity?: number; open?: boolean; standing?: boolean }
     newSeed: (id) => id * 7,
     capacityLeft: () => (opts.capacity ?? 50) - service.load(),
     leaveQueues: () => undefined,
-    playable: () => null,
     bank: (owner, delta) => {
       const total = (banked.get(owner) ?? 0) + delta;
       banked.set(owner, total);
@@ -466,5 +467,35 @@ describe('the match kept running for the next visitor', () => {
     expect(h.service.matches.size).toBe(2);
     expect(h.service.matches.has(first)).toBe(true);
     expect(h.service.presence().joinable).toBe(true);
+  });
+});
+
+describe('the champion picked', () => {
+  it('is the champion played, every one of the ten, as a Guest, fresh or dropping in', () => {
+    // A playtest (2026-10-03): a Guest who picked Dain, then Elowen, played
+    // Torv, the first of the 5v5's starters; and a person dropping into a
+    // running match played whatever the bot's seat held.
+    for (const c of CHAMPION_LIST) {
+      for (const standing of [false, true]) {
+        const h = harness({ standing });
+        h.step(1);
+        const a = h.connect(1, 'alice', true);
+        h.say(a, {
+          t: 'royale',
+          v: 'respawn',
+          championId: c.id,
+          sigils: ['zephyr', 'sear'],
+          skin: 1,
+        });
+        const start = h.last(1, 'match_start')!;
+        const entry = [...h.service.matches.values()].find((e) => e.match.players.has(1))!;
+        const u = entry.match.sim.units.get(start.selfUnitId)!;
+        const how = standing ? 'dropping in' : 'fresh';
+        expect(`${c.id} ${how}: ${u.championId}`).toBe(`${c.id} ${how}: ${c.id}`);
+        expect(start.dropIn === true).toBe(standing);
+        expect(u.sigils).toEqual(['zephyr', 'sear']);
+        expect(u.skin).toBe(clampSkin(c.id, 1));
+      }
+    }
   });
 });

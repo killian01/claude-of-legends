@@ -869,6 +869,21 @@ export class Sim {
     return true;
   }
 
+  // A champion's sigils and skin as a person who took its seat chose them
+  // (a battle royale's drop-in, server/royale_match.ts): the two sigils
+  // ready, the skin clamped to the champion's; unknown sigils are left as
+  // they were.
+  setLoadout(unitId: number, sigils: readonly string[], skin: number): void {
+    const u = this.units.get(unitId);
+    if (u?.kind !== 'champion') return;
+    const [a, b] = sigils;
+    if (sigils.length === 2 && a !== b && a && b && SIGILS[a] && SIGILS[b]) {
+      u.sigils = [a, b];
+      u.sigilCooldowns = [0, 0];
+    }
+    if (u.championId) u.skin = clampSkin(u.championId, skin);
+  }
+
   castSigil(unitId: number, slot: number, aim: Vec2): boolean {
     if (this.winner !== null || !this.royaleActs(unitId)) return false;
     const u = this.units.get(unitId);

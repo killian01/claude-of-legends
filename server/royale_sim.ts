@@ -45,6 +45,8 @@ export interface RoyaleSim {
   castSigil(unitId: number, slot: number, aim: Vec2): boolean;
   // A person takes the seat from its bot.
   detachPolicy(unitId: number): void;
+  // The sigils and skin that person chose (Sim.setLoadout).
+  setLoadout(unitId: number, sigils: readonly string[], skin: number): void;
 }
 
 // One seat as the builder takes it, in seat order: each its own team.

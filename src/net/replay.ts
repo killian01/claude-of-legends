@@ -93,9 +93,11 @@ export interface ReplayEvent {
   u: number;
   // cmd: a player command. bot_on and bot_off: a disconnect handing the
   // seat to the default bot, and a rejoin taking it back. Both change
-  // how the sim evolves, so both must replay.
-  e: 'cmd' | 'bot_on' | 'bot_off';
+  // how the sim evolves, so both must replay. kit: the sigils and skin a
+  // person who took a battle royale bot's seat brought (Sim.setLoadout).
+  e: 'cmd' | 'bot_on' | 'bot_off' | 'kit';
   c?: ClientMsg;
+  kit?: { sigils: [string, string]; skin: number };
 }
 
 // How often a match writes down where it stood. Every ten seconds of
@@ -340,6 +342,10 @@ export function applyReplayEvent(
   if (ev.e === 'cmd') {
     const team = unitTeams.get(ev.u);
     if (team !== undefined && ev.c) applySimCommand(sim, team, ev.u, ev.c);
+    return;
+  }
+  if (ev.e === 'kit') {
+    if (ev.kit) sim.setLoadout(ev.u, ev.kit.sigils, ev.kit.skin);
     return;
   }
   // The seat's default bot, as the live stand-in (server/match.ts): the

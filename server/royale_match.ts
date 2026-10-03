@@ -235,6 +235,12 @@ export class RoyaleMatch {
     if (unitId === null || !s) return null;
     this.sim.detachPolicy(unitId);
     this.record({ k: this.sim.tickCount, u: unitId, e: 'bot_off' });
+    // The person plays the sigils and skin they chose, not the bot's: the
+    // seat is one playing their champion whenever the match has one
+    // (chooseBotSeat, royaleSeats deals every champion to the bots).
+    const kit = { sigils: [...person.pick.sigils] as [string, string], skin: person.pick.skin };
+    this.sim.setLoadout(unitId, kit.sigils, kit.skin);
+    this.record({ k: this.sim.tickCount, u: unitId, e: 'kit', kit });
     s.bot = false;
     s.name = person.name;
     this.reidentify(unitId);

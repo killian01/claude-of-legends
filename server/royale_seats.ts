@@ -8,7 +8,12 @@
 // which the seats tell it. Pure: the same seed and people seat the same
 // match.
 
-import { CHAMPION_LIST, CHAMPIONS, DEFAULT_CHAMPION_ID } from '../src/sim/content/champions';
+import {
+  CHAMPION_LIST,
+  CHAMPIONS,
+  type ChampionDef,
+  DEFAULT_CHAMPION_ID,
+} from '../src/sim/content/champions';
 import { SIGIL_LIST, SIGILS } from '../src/sim/content/sigils';
 import { clampSkin, SKINS } from '../src/sim/content/skins';
 import { Rng } from '../src/sim/rng';
@@ -94,8 +99,23 @@ export function royaleSeats(
     rng,
     people.map((p) => p.name),
   );
+  // The house bots' champions: the roster dealt round and shuffled on the
+  // seed, so every champion sits in about as many seats as any other and a
+  // person dropping into a running match finds a seat playing the champion
+  // they picked (royale_join.ts chooseBotSeat). Drawn at random, a match
+  // could hold no Dain at all, and a Guest who picked Dain played whoever
+  // the seat held (a playtest, 2026-10-03).
+  const deck: ChampionDef[] = [];
+  while (deck.length < botCount) deck.push(...CHAMPION_LIST);
+  deck.length = botCount;
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = rng.int(i + 1);
+    const t = deck[i]!;
+    deck[i] = deck[j]!;
+    deck[j] = t;
+  }
   for (let i = 0; i < botCount; i++) {
-    const champion = CHAMPION_LIST[rng.int(CHAMPION_LIST.length)]!;
+    const champion = deck[i]!;
     const a = rng.int(SIGIL_LIST.length);
     const b = (a + 1 + rng.int(SIGIL_LIST.length - 1)) % SIGIL_LIST.length;
     const skins = SKINS[champion.id]?.length ?? 1;
