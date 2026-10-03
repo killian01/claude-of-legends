@@ -127,7 +127,10 @@ describe('a whole battle royale of fifty house bots', () => {
     // The middle of the field levelled up too.
     expect(a.levels[25]!).toBeGreaterThanOrEqual(6);
     expect(a.fighting).toBeGreaterThan(0.5);
-    expect(a.steals).toBeLessThan(0.3);
+    // The planet tuning evens the field: the weaker a champion, the more of
+    // its takedowns are steals, and no champion is a free kill any more, so
+    // the share rises with balance (27.9% before the tuning, 35% after).
+    expect(a.steals).toBeLessThan(0.4);
   }, 300_000);
 
   it('plays One life to the last standing, the same match twice', () => {
