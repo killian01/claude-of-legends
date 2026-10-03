@@ -562,6 +562,14 @@ export class PlanetStage {
     DUSK_UNIFORMS.colFadeN.value = near.length;
   }
 
+  // Whether a point of the renderer's space is near enough the focus for
+  // its champion to be seen through the props.
+  nearFocus(x: number, z: number): boolean {
+    const dx = x - this.half;
+    const dz = z - this.half;
+    return dx * dx + dz * dz <= FADE_REACH_M * FADE_REACH_M;
+  }
+
   // Whether a champion at this point of the renderer's space throws a
   // shadow: only near the focus, nearer on a phone.
   castsShadow(x: number, z: number): boolean {
