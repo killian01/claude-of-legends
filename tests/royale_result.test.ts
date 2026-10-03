@@ -87,6 +87,11 @@ describe('the Respawn end screen', () => {
     expect(end.won).toBe(true);
   });
 
+  it('goes into the next match when the server already moved the viewer there', () => {
+    expect(royaleEnd(result({ v: 'respawn' }), true).again).toBe('Play the next match');
+    expect(royaleEnd(result({ v: 'respawn' })).again).toBe('Play again');
+  });
+
   it('holds a short ranking as it is', () => {
     expect(royaleEnd(result({ v: 'respawn', top: top(3) })).rows).toHaveLength(3);
   });

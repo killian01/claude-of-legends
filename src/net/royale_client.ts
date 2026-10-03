@@ -1,7 +1,8 @@
 // The client's side of the battle royale on the wire (ADR 0031): entering
-// a match over the session's socket, the landing point picked during the
-// drop, and reading back what the server sends for the mode: the result at
-// the end, and the mode's events riding a snapshot. The message shapes are
+// a match over the session's socket, and reading back what the server
+// sends for the mode: the result at the end, the mode's events and the
+// names a death carries on a snapshot. The landing point picked during the
+// drop goes through the world (IWorld.pickDrop). The message shapes are
 // net/royale_wire.ts; the reading is tolerant, since a field the server
 // does not send yet must cost nothing but the line that would show it.
 
@@ -35,22 +36,6 @@ export function startRoyale(
   pick: RoyaleEntry,
 ): void {
   send(royaleEnterMsg(variant, pick));
-}
-
-// The landing point picked during the drop, a point on the sphere.
-export function dropMsg(p: {
-  x: number;
-  y: number;
-  z: number;
-}): Extract<RoyaleClientMsg, { t: 'drop' }> {
-  return { t: 'drop', x: p.x, y: p.y, z: p.z };
-}
-
-export function sendDrop(
-  send: (msg: RoyaleClientMsg) => void,
-  p: { x: number; y: number; z: number },
-): void {
-  send(dropMsg(p));
 }
 
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -145,4 +130,26 @@ export function royaleNotes(events: readonly unknown[] | undefined): RoyaleNote[
     }
   }
   return notes;
+}
+
+// A death on a battle royale's snapshot, with the names and bot marks the
+// server sends beside it (n and vb the victim's, kn and kb the killer's),
+// when it sends them.
+export function royaleKill(e: { unitId: number; killerId: number }): {
+  unitId: number;
+  killerId: number;
+  n?: string;
+  kn?: string;
+  vb?: boolean;
+  kb?: boolean;
+} {
+  const d = e as { n?: unknown; kn?: unknown; vb?: unknown; kb?: unknown };
+  return {
+    unitId: e.unitId,
+    killerId: e.killerId,
+    ...(typeof d.n === 'string' ? { n: d.n } : {}),
+    ...(typeof d.kn === 'string' ? { kn: d.kn } : {}),
+    ...(d.vb === 1 || d.vb === true ? { vb: true } : {}),
+    ...(d.kb === 1 || d.kb === true ? { kb: true } : {}),
+  };
 }

@@ -9,7 +9,7 @@
 // leaving the site, and a match is guarded, so Back opens the pause menu
 // and closing the tab asks first.
 
-import { type Presentation, startPresentation } from './game/boot';
+import { type KillNote, type Presentation, startPresentation } from './game/boot';
 import { nextStep, type PostMatchAction } from './game/flow';
 import { registerForgedAssets } from './game/forged_visuals';
 import { requestGameFullscreen } from './game/fullscreen';
@@ -49,7 +49,8 @@ import {
   replayPlayable,
   restorePolicies,
 } from './net/replay';
-import { dropMsg, isRoyaleResult, royaleNotes, startRoyale } from './net/royale_client';
+import { isRoyaleResult, royaleKill, royaleNotes, startRoyale } from './net/royale_client';
+import type { RoyaleResult } from './net/royale_wire';
 import {
   installStats,
   type MatchEndReporter,
@@ -1327,7 +1328,12 @@ async function runRoyale(
     let droppedIn = false;
     // What arrived before the presentation opened: the points, the result.
     let pendingPoints: Extract<ServerMsg, { t: 'points' }> | null = null;
-    let pendingResult: Parameters<Presentation['showRoyaleResult']>[0] | null = null;
+    let pendingResult: RoyaleResult | null = null;
+    // The result shown, and whether the next match runs behind it:
+    // Respawn moves the people still playing into its next match at once,
+    // on the same socket (server/royale_service.ts).
+    let shownResult: RoyaleResult | null = null;
+    let resultOverNext = false;
     const finish = (action: PostMatchAction): void => {
       if (finished) return;
       finished = true;
@@ -1369,18 +1375,24 @@ async function runRoyale(
       );
       pres = opening;
       ends = matchEndReporter('online', () => ({ winner: world.winner, seconds: world.time }));
-      if (!matchEnded && pendingResult === null) layer.guard(() => pres?.toggleEscapeMenu());
+      if (!matchEnded && (pendingResult === null || resultOverNext)) {
+        layer.guard(() => pres?.toggleEscapeMenu());
+      }
+      // The drop's landing point goes through the world (IWorld.pickDrop).
       opening.setNetHooks({
         sendChat: (text) => send({ t: 'chat', text }),
         sendPing: (x, z) => send({ t: 'ping', x, z }),
         sendStep: (id) => send({ t: 'step', id }),
-        sendDrop: (p) => send(dropMsg(p)),
       });
       if (pendingPoints) {
         opening.showPoints(pendingPoints.delta, pendingPoints.total, pendingPoints.reason);
         pendingPoints = null;
       }
-      if (pendingResult) opening.showRoyaleResult(pendingResult);
+      if (pendingResult) {
+        opening.showRoyaleResult(pendingResult, resultOverNext);
+        shownResult = pendingResult;
+        pendingResult = null;
+      }
       if (droppedIn) {
         opening.pushChat(
           'System',
@@ -1405,8 +1417,11 @@ async function runRoyale(
       // The result is the mode's own message (net/royale_wire.ts).
       if (isRoyaleResult(raw)) {
         layer.unguard();
-        if (pres) pres.showRoyaleResult(raw);
-        else pendingResult = raw;
+        resultOverNext = false;
+        if (pres) {
+          pres.showRoyaleResult(raw);
+          shownResult = raw;
+        } else pendingResult = raw;
         ends?.report();
         return;
       }
@@ -1415,18 +1430,31 @@ async function runRoyale(
         case 'match_start':
           registerForgedFromMatch(msg.forgedAssets);
           droppedIn = msg.dropIn === true;
+          // Respawn's next match on the same socket: the last one's
+          // presentation goes, its end screen stands over the next one's
+          // drop until Play the next match closes it.
+          if (pres && shownResult) {
+            ends?.dispose();
+            ends = null;
+            pres.dispose();
+            pres = null;
+            pendingResult = shownResult;
+            shownResult = null;
+            resultOverNext = true;
+            matchEnded = false;
+          }
           world.applyServer(msg);
           break;
         case 'snap': {
           const changed = world.applyServer(msg);
           if (!pres && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) open();
           if (changed && pres) {
-            const kills: { unitId: number; killerId: number }[] = [];
+            const kills: KillNote[] = [];
             const casts: { unitId: number; key?: AbilityKey }[] = [];
             const hits: { targetId: number; amount: number }[] = [];
             const attacks: { unitId: number; targetId: number }[] = [];
             for (const e of msg.events) {
-              if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
+              if (e.e === 'death') kills.push(royaleKill(e));
               else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
               else if (e.e === 'atk') attacks.push({ unitId: e.unitId, targetId: e.targetId });
               else if (e.e === 'dmg') hits.push({ targetId: e.targetId, amount: e.amount });
@@ -1484,7 +1512,7 @@ async function runRoyale(
     });
     ws.addEventListener('close', () => {
       buildWatch.poke();
-      if (finished || matchEnded || pendingResult !== null) return;
+      if (finished || matchEnded || shownResult !== null || pendingResult !== null) return;
       joining.remove();
       void showNotice(
         container,

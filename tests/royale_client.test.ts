@@ -4,11 +4,10 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  dropMsg,
   isRoyaleResult,
   royaleEnterMsg,
+  royaleKill,
   royaleNotes,
-  sendDrop,
   startRoyale,
 } from '../src/net/royale_client';
 import type { RoyaleClientMsg } from '../src/net/royale_wire';
@@ -27,13 +26,6 @@ describe('entering a battle royale', () => {
     expect(royaleEnterMsg('one_life', { championId: 'vesk', sigils: ['a', 'b'], skin: 0 }).v).toBe(
       'one_life',
     );
-  });
-
-  it('sends the landing point picked during the drop', () => {
-    const sent: RoyaleClientMsg[] = [];
-    sendDrop((m) => sent.push(m), { x: 1, y: 79, z: -2 });
-    expect(sent).toEqual([{ t: 'drop', x: 1, y: 79, z: -2 }]);
-    expect(dropMsg({ x: 0, y: 80, z: 0 })).toEqual({ t: 'drop', x: 0, y: 80, z: 0 });
   });
 });
 
@@ -99,5 +91,23 @@ describe("the mode's events on a snapshot", () => {
       ]),
     ).toEqual([]);
     expect(royaleNotes(undefined)).toEqual([]);
+  });
+});
+
+describe('a death on a snapshot', () => {
+  it('keeps the names and bot marks the server sends with it', () => {
+    expect(
+      royaleKill({ unitId: 3, killerId: 7, n: 'Quill', kn: 'Kestrel', vb: 1 } as never),
+    ).toEqual({
+      unitId: 3,
+      killerId: 7,
+      n: 'Quill',
+      kn: 'Kestrel',
+      vb: true,
+    });
+  });
+
+  it('is the bare death when the server sends no names', () => {
+    expect(royaleKill({ unitId: 3, killerId: 7 })).toEqual({ unitId: 3, killerId: 7 });
   });
 });
