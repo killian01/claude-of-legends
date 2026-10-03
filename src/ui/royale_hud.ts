@@ -338,7 +338,7 @@ export class RoyaleHud {
   }
 
   private state(): (SnapRoyale & { caches: unknown[] }) | null {
-    return this.host.world.royale?.() ?? null;
+    return this.host.world.royaleView?.() ?? null;
   }
 
   // Once per world tick.

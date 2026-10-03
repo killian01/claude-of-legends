@@ -54,11 +54,14 @@ export interface IWorld {
   // The battle royale (ADR 0031) as the newest snapshot told it, with the
   // caches the last cache list named (the list rides once a second, the
   // client keeps it in between); null in a 5v5. Absent on a world that
-  // never runs one, which reads as a 5v5 too.
-  royale?(): (SnapRoyale & { caches: SnapCache[] }) | null;
+  // never runs one, which reads as a 5v5 too. Not `royale`: the offline
+  // Sim holds the mode's own state under that name, and satisfies IWorld.
+  royaleView?(): (SnapRoyale & { caches: SnapCache[] }) | null;
   // The drop: the landing point picked on the globe, a point on the
   // planet's sphere.
-  pickDrop?(p: Vec3): void;
+  // The unit first, like every order here, so the offline Sim's own
+  // pickDrop satisfies the seam.
+  pickDrop?(unitId: number, p: Vec3): void;
   // Who holds a champion's seat in a battle royale, the name and the bot
   // mark, for a champion the mirror has been told of; null otherwise.
   seat?(unitId: number): SeatLabel | null;
