@@ -207,6 +207,24 @@ export function feedKeeps(k: { unitId: number; killerId: number }, ctx: FeedCont
   return ids.some((id) => id === ctx.selfId || ctx.person(id) || ctx.marked(id) || ctx.inSight(id));
 }
 
+// How many deaths the feed folded within its last `windowMs` (wall clock,
+// as the feed's lines live): a busy planet says "+7 elsewhere", not a
+// count that only climbs while anyone anywhere is fighting.
+export class FoldCount {
+  private readonly at: number[] = [];
+
+  constructor(readonly windowMs: number) {}
+
+  add(nowMs: number): void {
+    this.at.push(nowMs);
+  }
+
+  count(nowMs: number): number {
+    while (this.at.length > 0 && nowMs - (this.at[0] ?? 0) >= this.windowMs) this.at.shift();
+    return this.at.length;
+  }
+}
+
 // The words of the folded line.
 export function elsewhereText(n: number): string {
   return `+${n} elsewhere`;
