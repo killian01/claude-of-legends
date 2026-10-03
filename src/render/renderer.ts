@@ -468,6 +468,7 @@ export class Renderer {
         this.gl.domElement,
         () => this.canvasRect(),
         this.camera,
+        (x, y) => pointOnStage(this.gl.domElement, x, y),
       );
       this.planet = planet;
       this.world = planet.world;

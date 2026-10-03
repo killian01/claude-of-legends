@@ -112,6 +112,11 @@ export class PlanetStage {
   private readonly history = new Map<number, PlanetChart>();
   // The drop: the orbit the globe is seen from, and the dive's start.
   private orbit: DropOrbit = { azimuth: 0.35, elevation: 0.5, distance: 270 };
+  // The drop as the last frame drew it (the globe's camera, the dive's
+  // start, the fog): a frame's own state. What a click or a tap means is
+  // read off the world as it is now (dropNow), never off this: on a slow
+  // frame the snapshots may have landed the match long before the next
+  // draw, and a click then must move the champion, not pick a landing.
   private dropping = false;
   private diveFrom: { pos: THREE.Vector3; target: THREE.Vector3; up: THREE.Vector3 } | null = null;
   private diveStartMs = 0;
@@ -135,6 +140,10 @@ export class PlanetStage {
     private readonly canvas: HTMLCanvasElement,
     private readonly screenRect: () => { left: number; top: number; width: number; height: number },
     private readonly camera: THREE.PerspectiveCamera,
+    private readonly toStage: (x: number, y: number) => { x: number; y: number } = (x, y) => ({
+      x,
+      y,
+    }),
   ) {
     this.radius = ground.radius;
     this.half = PLANET_WINDOW / 2;
@@ -340,8 +349,13 @@ export class PlanetStage {
   // A ray from the camera against the planet: the sphere point under a
   // screen point, its height refined a few times like the plane's.
   groundPointAt(ray: THREE.Ray): Vec3 | null {
-    if (this.dropping) return null;
+    if (this.dropNow()) return null;
     return this.rayOnSphere(ray);
+  }
+
+  // Whether the match is in its drop, as the world says right now.
+  dropNow(): boolean {
+    return this.base.royaleView?.()?.st === 'drop';
   }
 
   private rayOnSphere(ray: THREE.Ray): Vec3 | null {
@@ -375,7 +389,7 @@ export class PlanetStage {
   // the camera, behind the planet, or past the view's reach.
   projectSphere(p: Vec3, lift: number): { x: number; y: number } | null {
     const w = this.shownAt(p, lift);
-    if (!this.dropping) {
+    if (!this.dropNow()) {
       const q = this.window.toLocal(p);
       const dx = q.x - this.half;
       const dz = q.z - this.half;
@@ -647,7 +661,7 @@ export class PlanetStage {
   private listenForDrop(): void {
     const el = this.canvas;
     const down = (e: PointerEvent): void => {
-      if (!this.dropping) return;
+      if (!this.dropNow()) return;
       this.drag.active = true;
       this.drag.x = e.clientX;
       this.drag.y = e.clientY;
@@ -667,11 +681,14 @@ export class PlanetStage {
     const up = (e: PointerEvent): void => {
       if (!this.drag.active || e.pointerId !== this.drag.id) return;
       this.drag.active = false;
-      if (!this.dropping || this.drag.moved > 8) return;
+      if (!this.dropNow() || this.drag.moved > 8) return;
+      // The page's pixels to the match stage's (turned on a phone held
+      // upright), the frame the canvas's rect is given in.
+      const at = this.toStage(e.clientX, e.clientY);
       const rect = this.screenRect();
       const ndc = new THREE.Vector2(
-        ((e.clientX - rect.left) / rect.width) * 2 - 1,
-        -((e.clientY - rect.top) / rect.height) * 2 + 1,
+        ((at.x - rect.left) / rect.width) * 2 - 1,
+        -((at.y - rect.top) / rect.height) * 2 + 1,
       );
       const ray = new THREE.Raycaster();
       ray.setFromCamera(ndc, this.camera);
