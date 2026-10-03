@@ -141,7 +141,11 @@ describe('levels', () => {
   });
 
   it('pays the sim bounties, scaled, to the last hit', () => {
-    expect(takedownXp(5)).toBeCloseTo(championXp(5) * TAKEDOWN_XP_SCALE, 9);
+    expect(takedownXp('one_life', 5)).toBeCloseTo(championXp(5) * TAKEDOWN_XP_SCALE.one_life, 9);
+    expect(takedownXp('respawn', 5)).toBeLessThan(takedownXp('one_life', 5));
+    // A fed killer learns little from a low victim, a low one much from a fed one.
+    expect(takedownXp('one_life', 4, 12)).toBeLessThan(takedownXp('one_life', 4, 4) / 2);
+    expect(takedownXp('one_life', 12, 4)).toBeGreaterThan(takedownXp('one_life', 12, 12));
     expect(creatureXp(110)).toBeCloseTo(110 * CAMP_XP_SCALE, 9);
   });
 });
