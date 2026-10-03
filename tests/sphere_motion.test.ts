@@ -1,42 +1,14 @@
-// The core systems on a sphere (ADR 0029): a bare planet of radius 80 with
-// no lanes, towers, fountains or pits, open everywhere (OpenSphereGround),
-// and champions set down on it. Walking, attacking, a skillshot, a dash, a
-// zone, a spell wall, separation and sight all play on the sphere through
-// the same code the 5v5 plays on the plane, and keep every body on it.
+// The core systems on a sphere (ADR 0029): the sphere tests' shared planet
+// (tests/sphere_world.ts), a bare sphere of radius 80 with no lanes,
+// towers, fountains or pits, open everywhere, and champions set down on
+// it. Walking, attacking, a skillshot, a dash, a zone, a spell wall,
+// separation and sight all play on the sphere through the same code the
+// 5v5 plays on the plane, and keep every body on it.
 
 import { describe, expect, it } from 'vitest';
-import type { GameMap } from '../src/sim/content/map';
 import { basis, dirTo, dist, dot, heading, offset, turnLeft } from '../src/sim/geo';
-import { OpenSphereGround } from '../src/sim/ground';
-import { Sim } from '../src/sim/sim';
 import type { Vec2 } from '../src/sim/types';
-import type { UnitKind } from '../src/sim/unit';
-
-const R = 80;
-
-// The planet's record: nothing of the 5v5 on it.
-const PLANET: GameMap = {
-  size: 1,
-  borderMargin: 0,
-  laneWidth: 0,
-  river: { a: { x: 0, z: 0 }, b: { x: 0, z: 0 }, width: 0 },
-  fountains: [],
-  sanctums: [],
-  towers: [],
-  lanes: { top: [], mid: [], bot: [] },
-  walls: [],
-  brush: [],
-  wardenPits: [],
-  camps: [],
-};
-
-function planetSim(separation?: readonly UnitKind[]): Sim {
-  return new Sim(3, { map: PLANET, ground: new OpenSphereGround(R), separation });
-}
-
-function radius(p: Vec2): number {
-  return Math.sqrt(p.x * p.x + (p.y ?? 0) * (p.y ?? 0) + p.z * p.z);
-}
+import { planetSim, R, radius } from './sphere_world';
 
 // The unit normal of the great circle through a and b.
 function circleNormal(a: Vec2, b: Vec2): Vec2 {
@@ -202,7 +174,7 @@ describe('the core systems on a sphere', () => {
   });
 
   it('pushes two overlapping champions apart when the match separates them', () => {
-    const sim = planetSim(['minion', 'champion']);
+    const sim = planetSim({ separation: ['minion', 'champion'] });
     const a = sim.addChampion(0, START, 'korrath');
     const b = sim.addChampion(0, at(0.3), 'korrath');
     for (let i = 0; i < 20; i++) {
@@ -245,5 +217,7 @@ describe('the core systems on a sphere', () => {
     expect(victim.dead).toBe(true);
     expect([...sim.units.values()].filter((u) => u.kind !== 'champion')).toEqual([]);
     expect(Math.abs(radius(vesk.pos) - R)).toBeLessThan(1e-6);
+    // No lanes, so no lane was ever noted for anyone seen.
+    expect(sim.laneSightings.snapshot().every((byLane) => byLane.size === 0)).toBe(true);
   });
 });

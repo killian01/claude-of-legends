@@ -7,7 +7,7 @@
 import type { CastSoundId } from '../content/sounds';
 import { cos } from '../exact';
 import { away, basis, copy, delta, dirTo, dist, dot, norm, offset, onSphere, settle } from '../geo';
-import { landingAt, walkLine } from '../ground_walk';
+import { landingOn } from '../ground';
 import { passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
 import type { SpellLook } from '../spell_look';
@@ -375,7 +375,7 @@ export function executeCast(
         }
         return true;
       }
-      const landed = landingAt(ctx, at, 6);
+      const landed = landingOn(ctx.ground, at, 6);
       if (landed) {
         caster.pos = copy(landed);
         caster.path = [];
@@ -419,7 +419,7 @@ export function castAbility(
   if (armed && armed.key === key && armed.until > ctx.time) {
     if (isRooted(caster, ctx.time)) return false;
     caster.recastArmed = null;
-    const landed = landingAt(ctx, armed.origin, 6);
+    const landed = landingOn(ctx.ground, armed.origin, 6);
     if (landed) {
       caster.pos = copy(landed);
       caster.path = [];
@@ -464,7 +464,7 @@ export function castAbility(
       ? (allyDashAim(ctx, caster, aim, spec.range, spec.toAlly.searchRadius) ?? aim)
       : aim;
     const at = clampToRange(caster.pos, goal, spec.range);
-    if (!walkLine(ctx, caster.pos, at)) return false;
+    if (!ctx.ground.lineOfWalk(caster.pos, at)) return false;
   }
 
   caster.cooldowns[key] = ctx.time + def.cooldown * (1 - RANK_CD_SCALE * (rank - 1));
