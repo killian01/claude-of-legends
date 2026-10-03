@@ -17,8 +17,9 @@ export interface RoyaleSkill {
   // Meters of scatter on every aim point.
   aimError: number;
   // The odds (the bot's share of the strength in reach, 0.5 even) a fight
-  // must show before the bot starts it: a normal or strong bot takes an
-  // even duel, a gentle one only answers it.
+  // must show before the bot starts it: every skill takes an even duel (a
+  // playtest, 2026-10-03: gentle bots that only answered one stood beside
+  // each other), a stronger one a worse fight too.
   fightOdds: number;
   // Below this share of its health the bot backs off.
   retreatHp: number;
@@ -40,7 +41,7 @@ export const ROYALE_SKILLS: Readonly<Record<RoyaleSkillId, RoyaleSkill>> = {
     attention: 0.45,
     aimLead: 0.25,
     aimError: 1.8,
-    fightOdds: 0.52,
+    fightOdds: 0.5,
     retreatHp: 0.45,
     dodge: 0.2,
     chase: 9,
@@ -53,7 +54,7 @@ export const ROYALE_SKILLS: Readonly<Record<RoyaleSkillId, RoyaleSkill>> = {
     attention: 0.8,
     aimLead: 0.7,
     aimError: 0.8,
-    fightOdds: 0.47,
+    fightOdds: 0.45,
     retreatHp: 0.32,
     dodge: 0.55,
     chase: 13,
@@ -66,7 +67,7 @@ export const ROYALE_SKILLS: Readonly<Record<RoyaleSkillId, RoyaleSkill>> = {
     attention: 1,
     aimLead: 1,
     aimError: 0.25,
-    fightOdds: 0.42,
+    fightOdds: 0.4,
     retreatHp: 0.24,
     dodge: 0.85,
     chase: 17,

@@ -9,7 +9,12 @@
 // tuning against. With --passive N, N seats of every One life match are a
 // passive stand-in instead (it only walks to caches, keeps to the light,
 // and backs off when hit: a newcomer who never fights back), and the
-// report says how long they lasted. Bundled and run by
+// report says how long they lasted. It also measures what a player sees
+// of the bots: of the seconds a bot had an enemy in its sight within
+// ENGAGE_M, the share it spent fighting a champion (dealt one damage in
+// the last ENGAGED_S), and the share of takedowns that were steals (the
+// killer dealt under STEAL_SHARE of the champion damage the victim took in
+// its last STEAL_WINDOW_S). Bundled and run by
 // scripts/royale_report.mjs:
 //   node scripts/royale_report.mjs [--seeds 4] [--from 1]
 //     [--variant both|respawn|one_life] [--passive 0] [--quiet]
@@ -122,7 +127,19 @@ interface Match {
   lastedBySkill: Record<string, number[]>;
   tickAvgMs: number;
   tickMaxMs: number;
+  // Bot-seconds with an enemy in sight within ENGAGE_M, and those of them
+  // spent fighting a champion.
+  nearSeconds: number;
+  engagedSeconds: number;
+  // Takedowns between champions, and those that were steals.
+  champTakedowns: number;
+  steals: number;
 }
+
+const ENGAGE_M = 8;
+const ENGAGED_S = 3;
+const STEAL_SHARE = 0.25;
+const STEAL_WINDOW_S = 10;
 
 function clock(seconds: number | null): string {
   if (seconds === null) return '-';
@@ -163,6 +180,14 @@ function play(planet: RoyalePlanet, variant: RoyaleVariant, seed: number, passiv
   let tickMax = 0;
   let playTicks = 0;
   let ticks = 0;
+  // The last time each seat dealt damage to a champion, and the champion
+  // damage each seat took lately, by source.
+  const lastHit = new Map<number, number>();
+  const taken = new Map<number, { src: number; amount: number; t: number }[]>();
+  let nearSeconds = 0;
+  let engagedSeconds = 0;
+  let champTakedowns = 0;
+  let steals = 0;
   while (mode.state.stage !== 'over' && ticks < cap) {
     const t0 = performance.now();
     const events = sim.tick();
@@ -176,15 +201,49 @@ function play(planet: RoyalePlanet, variant: RoyaleVariant, seed: number, passiv
     const minute = Math.max(0, Math.floor((sim.time - landAt) / 60));
     for (const e of events) {
       if (e.type === 'royale_cache') bump(cachesByMin, minute);
+      if (e.type === 'damage') {
+        if (e.sourceId === e.targetId || !seats.has(e.sourceId) || !seats.has(e.targetId)) continue;
+        lastHit.set(e.sourceId, sim.time);
+        const list = taken.get(e.targetId) ?? [];
+        list.push({ src: e.sourceId, amount: e.amount, t: sim.time });
+        while (list.length > 0 && sim.time - list[0]!.t > STEAL_WINDOW_S) list.shift();
+        taken.set(e.targetId, list);
+        continue;
+      }
       if (e.type !== 'death') continue;
       const victim = seats.get(e.unitId);
       if (!victim) continue;
       if (variant === 'one_life' && !fellAt.has(e.unitId)) fellAt.set(e.unitId, sim.time - landAt);
       const killer = seats.get(e.killerId);
       if (!killer || killer.id === victim.id) continue;
+      champTakedowns++;
+      const recent = (taken.get(victim.id) ?? []).filter((h) => sim.time - h.t <= STEAL_WINDOW_S);
+      const all = recent.reduce((a, h) => a + h.amount, 0);
+      const own = recent.filter((h) => h.src === killer.id).reduce((a, h) => a + h.amount, 0);
+      if (all > 0 && own < all * STEAL_SHARE) steals++;
+      taken.delete(victim.id);
       bump(takedownsByMin, minute);
       duels[killer.skill] ??= {};
       duels[killer.skill]![victim.skill] = (duels[killer.skill]![victim.skill] ?? 0) + 1;
+    }
+    if (mode.state.stage === 'play' && sim.tickCount % TICK_RATE === 0) {
+      const alive = [...seats.values()]
+        .map((seat) => sim.units.get(seat.id))
+        .filter((u) => u !== undefined && !u.dead);
+      for (const u of alive) {
+        if (!u || seats.get(u.id)?.skill === 'passive') continue;
+        const near = alive.some(
+          (o) =>
+            o !== u &&
+            o !== undefined &&
+            dist(u.pos, o.pos) <= ENGAGE_M &&
+            sim.isVisible(u.team, o.id),
+        );
+        if (!near) continue;
+        nearSeconds++;
+        if (sim.time - (lastHit.get(u.id) ?? Number.NEGATIVE_INFINITY) <= ENGAGED_S)
+          engagedSeconds++;
+      }
     }
   }
   const end = sim.time - landAt;
@@ -237,7 +296,15 @@ function play(planet: RoyalePlanet, variant: RoyaleVariant, seed: number, passiv
     lastedBySkill,
     tickAvgMs: playTicks > 0 ? tickMs / playTicks : 0,
     tickMaxMs: tickMax,
+    nearSeconds,
+    engagedSeconds,
+    champTakedowns,
+    steals,
   };
+}
+
+function pct(a: number, b: number): string {
+  return b > 0 ? `${Math.round((100 * a) / b)}%` : '-';
 }
 
 function mean(xs: readonly number[]): number {
@@ -284,6 +351,10 @@ function print(m: Match): void {
       .join(', ');
     console.log(`  lasted on average: ${lasted}`);
   }
+  console.log(
+    `  enemy within ${ENGAGE_M} m in sight: fighting ${pct(m.engagedSeconds, m.nearSeconds)} of ${m.nearSeconds} bot-seconds; ` +
+      `steals ${pct(m.steals, m.champTakedowns)} of ${m.champTakedowns} takedowns`,
+  );
   console.log(`  tick ${m.tickAvgMs.toFixed(2)} ms average, ${m.tickMaxMs.toFixed(1)} ms max`);
 }
 
@@ -317,6 +388,17 @@ function summary(all: readonly Match[]): void {
         totals[a]![b] = (totals[a]![b] ?? 0) + n;
       }
     }
+  }
+  for (const variant of ['respawn', 'one_life'] as const) {
+    const ms = all.filter((x) => x.variant === variant);
+    if (ms.length === 0) continue;
+    const near = ms.reduce((a, m) => a + m.nearSeconds, 0);
+    const engaged = ms.reduce((a, m) => a + m.engagedSeconds, 0);
+    const tds = ms.reduce((a, m) => a + m.champTakedowns, 0);
+    const steals = ms.reduce((a, m) => a + m.steals, 0);
+    console.log(
+      `${variant}: an enemy in sight within ${ENGAGE_M} m, fighting ${pct(engaged, near)} of the time; steals ${pct(steals, tds)} of takedowns`,
+    );
   }
   const t = (a: string, b: string) => totals[a]?.[b] ?? 0;
   const share = (a: number, b: number) => (a + b > 0 ? `${Math.round((100 * a) / (a + b))}%` : '-');

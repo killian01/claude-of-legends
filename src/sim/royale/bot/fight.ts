@@ -65,16 +65,16 @@ export function royaleOdds(sense: Sense, target?: ObsUnit, within = ODDS_RADIUS)
   return total > 0 ? own / total : 0.5;
 }
 
-// The target: a hard-CC'd enemy in reach first, else the weakest in chase
-// reach weighed by distance; null when none is worth it. Never one standing
-// in the dark.
-export function pickTarget(sense: Sense): ObsUnit | null {
+// The target: a hard-CC'd enemy in reach first, else the weakest within
+// `reach` (the skill's chase unless told) weighed by distance; null when
+// none is worth it. Never one standing in the dark.
+export function pickTarget(sense: Sense, reach = sense.skill.chase): ObsUnit | null {
   let best: ObsUnit | null = null;
   let bestScore = Number.POSITIVE_INFINITY;
   for (const e of sense.enemies) {
     const at = p3(e);
     const d = dist(sense.me, at);
-    if (d > sense.skill.chase) continue;
+    if (d > reach) continue;
     // Never into the dark, while there is light to stay in.
     if (sense.now.radius > 0 && !insideCap(sense.now, at)) continue;
     const ccd = hardCCd(e, sense.obs.time) && d <= CHAMPION_ATTACK_RANGE;
