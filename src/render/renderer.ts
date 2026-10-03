@@ -1378,7 +1378,9 @@ export class Renderer {
       // moves (the stage never carries them), and the shadows only need
       // to cover the curve the camera sees.
       for (const o of [sky, sun, sun.target]) o.userData.chartFixed = true;
-      const near = 70;
+      // The casters near the focus: the camera sees about this far along
+      // the curve, and a tighter box keeps the shadow map sharp.
+      const near = 45;
       sun.shadow.camera.left = -near;
       sun.shadow.camera.right = near;
       sun.shadow.camera.top = near;
@@ -2923,6 +2925,17 @@ export class Renderer {
       if (this.planet) {
         t.overhead.rotation.y += this.planet.overheadYaw(x, z);
         t.overhead.visible = this.planet.sees(x, z, t.barY + 1);
+        // Shadows from the bodies near the focus only (the shadow pass
+        // draws each caster's body a second time).
+        const casts = t.mesh.visible && this.planet.castsShadow(x, z);
+        if (t.mesh.userData.casts !== casts) {
+          t.mesh.userData.casts = casts;
+          t.mesh.traverse((o) => {
+            if (!(o as THREE.Mesh).isMesh) return;
+            if (o.userData.caster === undefined) o.userData.caster = o.castShadow;
+            o.castShadow = casts && o.userData.caster === true;
+          });
+        }
       }
 
       const anim = t.mesh.userData.anim as AnimParts | undefined;
