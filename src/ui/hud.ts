@@ -929,7 +929,7 @@ const CSS = `
    down, and its own layer takes the top of the screen. */
 .hud.royale .hud-teamscore, .hud.royale .hud-meta, .hud.royale .hud-lane-card,
 .hud.royale .hud-kda .cs, .hud.royale .hud-feed, .hud.royale .hud-shop, .hud.royale .hud-score,
-.hud.royale .hud-gold, .hud.royale .hud-slot.recall, .hud.royale .hud-slot.passive {
+.hud.royale .hud-gold, .hud.royale .hud-slot.recall {
   display: none; }
 /* The bag as loot: a gold word ahead of it, the empty places drawn as
    places to fill, and the pieces held edged in gold. */
