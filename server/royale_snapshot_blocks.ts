@@ -21,6 +21,7 @@ import type {
 import type { CacheState } from '../src/sim/royale/types';
 import type { RoyaleSim } from './royale_sim';
 import type { RoyaleSnapContext, RoyaleViewer } from './royale_snapshot';
+import { round2 } from './snapshot';
 
 // A cache's kind on the wire: 0 plain, 1 golden, 2 a Seedfall's.
 export function cacheKindOf(c: CacheState): SnapCache[4] {
@@ -74,7 +75,16 @@ export const graftsBlock: Builder<string[]> = () => undefined;
 export const seedfallsBlock: Builder<SnapSeedfall[]> = () => undefined;
 export const risingsBlock: Builder<SnapRising[]> = () => undefined;
 export const marksBlock: Builder<SnapMark[]> = () => undefined;
-export const clamorsBlock: Builder<SnapClamor[]> = () => undefined;
+// The Clamors still ringing, everyone's, sent the tick they change. The
+// client hears each once and lets it fall silent CLAMOR_S after it rang,
+// so a list gone empty needs no send of its own beyond the change.
+export const clamorsBlock: Builder<SnapClamor[]> = (sim, viewer) => {
+  if (sim.royale.stage !== 'play') return undefined;
+  const list = sim.royale.clamors.map(
+    (c): SnapClamor => [round2(c.pos.x), round2(c.pos.y), round2(c.pos.z), round2(c.at)],
+  );
+  return sentOnChange(viewer, 'cl', list, sim.time);
+};
 export const rankBlock: Builder<number> = () => undefined;
 export const gapBlock: Builder<number> = () => undefined;
 export const reprieveBlock: Builder<number> = () => undefined;
