@@ -62,6 +62,10 @@ export function dealDamage(
     if (!source.neutral) {
       amount *= ctx.teamBuffs.damageMultiplier(source.team, ctx.time);
     }
+    // The planet's tuning (content/royale_tuning.ts): a champion's damage
+    // to champions, scaled per champion on the Wanderseed; 1 everywhere
+    // else, where x * 1 is the number it always was.
+    if (source.kind === 'champion' && target.kind === 'champion') amount *= source.dmgScale;
   }
   const penFlat =
     source === undefined ? 0 : dtype === 'physical' ? source.stats.armorPen : source.stats.mrPen;

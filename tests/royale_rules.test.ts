@@ -12,6 +12,7 @@ import { buildRoyaleSim, type ReplayPick } from '../src/net/replay';
 import { dealDamage } from '../src/sim/combat/damage';
 import { unrootedMoveSpeed } from '../src/sim/combat/status';
 import { DUSK_PHASES } from '../src/sim/content/dusk';
+import { planetTuning } from '../src/sim/content/royale_tuning';
 import { clampSkin } from '../src/sim/content/skins';
 import { basis, dirTo, dist, offset, type Vec3 } from '../src/sim/geo';
 import { buildObservation } from '../src/sim/observe';
@@ -299,7 +300,7 @@ describe('the rules of play', () => {
     expect(calm - fighting).toBeCloseTo(u.maxHp * OUT_OF_COMBAT_HEAL, 6);
   });
 
-  it('lands every champion with a quarter more health than the 5v5 gives it', () => {
+  it('lands every champion with a quarter more health than the 5v5, times its own tuning', () => {
     const { sim, unitIds } = build(5);
     land(sim);
     for (const id of unitIds) {
@@ -307,7 +308,7 @@ describe('the rules of play', () => {
       const def = u.champion!;
       expect(u.level).toBe(START_LEVEL);
       const fives = def.base.hp + def.growth.hp * (START_LEVEL - 1);
-      expect(u.maxHp).toBeCloseTo(fives * ROYALE_HP_SCALE, 9);
+      expect(u.maxHp).toBeCloseTo(fives * ROYALE_HP_SCALE * planetTuning(def.id).hp, 9);
       expect(u.hp).toBe(u.maxHp);
     }
   });
