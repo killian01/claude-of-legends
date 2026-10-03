@@ -14,7 +14,16 @@ import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { LanePreference } from '../sim/playbook/types';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from '../sim/types';
 import type { StructureMeta, UnitKind } from '../sim/unit';
-import type { RoyaleClientMsg, RoyaleResult, RoyaleVariant, SnapRoyale } from './royale_wire';
+import type {
+  LastLightStep,
+  MarkKind,
+  RisingKind,
+  RoyaleClientMsg,
+  RoyaleResult,
+  RoyaleVariant,
+  SnapRoyale,
+  WirePoint,
+} from './royale_wire';
 
 // The sealed asset pointers a match carries per forged champion, so every
 // client in it can load the generated model: the model path is relative to
@@ -304,7 +313,10 @@ export type SnapEvent =
 // cache opened and a launch pad taken, when the recipient's champion did
 // it or the recipient sees who did; and to everyone, the Dusk's phase, a
 // champion out for good with its place (One life), the score leader
-// (Respawn), and the end. Names ride along for the kill feed.
+// (Respawn), and the end. Names ride along for the kill feed. Then, to
+// everyone: a Seedfall called and landed, a Rising called, the Wrath
+// passed, a mark shown, a run snuffed out, a Reprieve, the Dusk hastening
+// and the Last light's steps; a Pad slam only to who sees the slammer.
 export type RoyaleSnapEvent =
   | { e: 'royale_land'; unitId: number }
   | { e: 'royale_loot'; unitId: number; itemId: string; source: 'cache' | 'camp' | 'takedown' }
@@ -322,7 +334,26 @@ export type RoyaleSnapEvent =
       kb?: 1;
     }
   | { e: 'royale_leader'; unitId: number; n: string; b?: 1 }
-  | { e: 'royale_end'; winnerId: number | null; n: string | null; b?: 1 };
+  | { e: 'royale_end'; winnerId: number | null; n: string | null; b?: 1 }
+  | { e: 'royale_seedfall'; id: number; at: WirePoint; landsAt: number }
+  | { e: 'royale_seedfall_land'; id: number; at: WirePoint }
+  | { e: 'royale_rising'; kind: RisingKind; at: WirePoint; risesAt: number }
+  | { e: 'royale_wrath_passed'; from: number; to: number | null; n: string | null; b?: 1 }
+  | { e: 'royale_mark'; unitId: number; kind: MarkKind; n: string; b?: 1 }
+  | {
+      e: 'royale_snuffed';
+      unitId: number;
+      killerId: number;
+      streak: number;
+      n: string;
+      kn: string | null;
+      vb?: 1;
+      kb?: 1;
+    }
+  | { e: 'royale_reprieve'; unitId: number; backAt: number }
+  | { e: 'royale_dusk_hastens'; by: number; alive: number }
+  | { e: 'royale_last_light'; step: LastLightStep }
+  | { e: 'royale_pad_slam'; unitId: number; at: WirePoint; hit: number[] };
 
 // A scoreboard line as the wire carries it: the sim's, the seat's player
 // filled in by the server, and in a battle royale 1 when a bot holds it.

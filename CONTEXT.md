@@ -260,6 +260,10 @@ one of its champions brings under a fifth of its max health dies on the spot (th
 blow credited to that champion), and every attack or ability hit burns 3 percent of the
 target's max health over 3 s, true damage. Towers and minions execute nobody; nothing but a
 champion is executed. Shown as a chip for both teams and as a mark on an enemy under the line.
+On the Wanderseed the Wrath belongs to one champion, not a team: the Warden's last hit
+carries it (sixty seconds in One life, two minutes in Respawn), and whoever takes its holder
+down inherits what is left of it, at least forty-five seconds; a fall to the Dusk, a Seedfall
+or a creature ends it.
 _Avoid_: execute buff, verdict, dread, aspect of anything
 
 **Rally**:
@@ -387,7 +391,9 @@ _Avoid_: anonymous player, visitor account
 To take a bot's seat in a public match already under way (ADR 0025), which is what entering
 the public queue does when nobody is waiting in it and such a match has people in it, early
 enough. The champion comes as the bot left it, in the seat's assigned lane, which the
-newcomer is told on arrival; the seat is never rated or recorded.
+newcomer is told on arrival; the seat is never rated or recorded. In a Respawn battle royale
+the seat is not handed over in place: it makes an Arrival over the globe and lands where it
+picks, keeping the bot's level, pieces and score but none of its run.
 _Avoid_: late join, hot join, backfill
 
 **Home**:
@@ -1105,3 +1111,80 @@ _Avoid_: grace period, safe time
 What replaces the shop in the battle royale: the next piece of the champion's house build,
 given at once by a cache, a camp or a takedown.
 _Avoid_: drop (the landing), reward, item pickup
+
+**Graft**:
+A lasting gift a champion chooses on the Wanderseed: one of three cards offered over the
+globe during the drop, then on events (takedowns, caches, a Seedfall cache, a big creature,
+some levels). An offer waits ten seconds, then its first card is taken. Each Graft has a
+grade: a **Sprout** raises a raw stat and stacks twice, a **Bough** changes a rule, a
+**Heartwood** changes the kit and shows on the champion for everyone to see.
+_Avoid_: augment, boon (the Warden's), perk, upgrade, card alone; tier (a rating's band)
+and rarity for the grade
+
+**Seedfall**:
+A seed of the Star Orchard falling on the Wanderseed at a time and place called twenty
+seconds ahead, inside the light, five a match from two minutes after landing (two seeds at
+once in Respawn). Its impact throws up and hurts whoever stands under it. In code, prefer
+seedfall-prefixed names: seed alone is the match's rng seed.
+_Avoid_: supply drop, air drop, care package
+
+**Seedfall cache**:
+What a Seedfall leaves where it landed: a cache that takes three seconds to open, any hit
+breaking the opening, and pays a piece, a full heal and a Heartwood Graft. It never comes
+back, in either variant.
+_Avoid_: legendary chest, crate
+
+**Clamor**:
+The sound and the minimap flash a takedown leaves for three seconds, heard by bearing and
+distance; late in One life, bots answer it.
+_Avoid_: ping, flare, fight marker, kindling
+
+**Rising**:
+A big creature or the Warden coming up on the Wanderseed, called thirty seconds ahead,
+the Warden's inside the light.
+_Avoid_: spawn, boss fight
+
+**Lodestar**:
+The leader everyone steers by, shown to all on the globe every twenty seconds: the score
+leader in Respawn, the takedown leader in One life from the Dusk's second closing. Taking
+them down counts double and pays a piece.
+_Avoid_: bounty, crown, kill leader, lantern
+
+**Ablaze**:
+A champion on a run of takedowns without dying (three in One life, five in Respawn, the
+three longest runs only), shown to everyone every fifteen seconds. Ending the run snuffs
+it out and pays pieces.
+_Avoid_: on fire, killing spree, heating up
+
+**Reprieve**:
+One life's one comeback: a champion that falls during the calm comes back once, eight
+seconds later at the edge of the light with sixty percent of its health. The fall still
+counts for whoever landed it. (First proposed as "Second wind", a name another game's
+revive already carries.)
+_Avoid_: second wind, gulag, redeploy, extra life
+
+**Last light**:
+Respawn's last closing of the Dusk, until the light goes out at the end of the match: a
+takedown counts double, and in its last fifteen seconds a death is final.
+_Avoid_: sudden death, final circle
+
+**Hastening**:
+One life's Dusk hurrying, by up to thirty seconds at a time, when the field first falls to
+sixteen and again to eight. (First proposed as "Quickening", a name another game's signature
+attack already carries.)
+_Avoid_: quickening, zone speedup
+
+**Arrival**:
+A Respawn drop-in's moment over the globe before it lands where it picks, ranked from then
+on by what it does since it landed.
+_Avoid_: spawn, deploy
+
+**Pad slam**:
+The hit a launch pad's flight makes where it comes down, after the flyer steered it within
+twenty-five meters: it hurts and slows the enemies standing there.
+_Avoid_: ground pound
+
+**Death beat**:
+The two and a half seconds the camera holds on whoever took a One life champion down,
+before following them.
+_Avoid_: kill cam, death recap

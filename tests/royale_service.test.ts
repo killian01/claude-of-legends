@@ -18,7 +18,14 @@ import type { SeatReport } from '../server/seat_report';
 import type { ClientMsg, ServerMsg } from '../src/net/protocol';
 import { CHAMPION_LIST } from '../src/sim/content/champions';
 import { clampSkin } from '../src/sim/content/skins';
-import { CALM_S, DROP_S, JOIN_UNTIL_END_S, PLAY_S, ROYALE_SEATS } from '../src/sim/royale/types';
+import {
+  CALM_S,
+  DROP_S,
+  JOIN_UNTIL_END_S,
+  PLAY_S,
+  ROYALE_RULES_VERSION,
+  ROYALE_SEATS,
+} from '../src/sim/royale/types';
 import { fakeFactory, near } from './royale_fake';
 
 type Msg<T extends ServerMsg['t']> = Extract<ServerMsg, { t: T }>;
@@ -201,6 +208,24 @@ describe('playing', () => {
     expect(sim.royale.drops.get(self)).toEqual({ x: 0, y: 80, z: 0 });
   });
 
+  it('accepts a Graft pick and a watch request and changes nothing yet', () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    h.enter(a);
+    const sim = h.fake.sims[0]!;
+    h.runTo(DROP_S + 1);
+    const match = h.service.matches.get(a.matchId!)!.match;
+    const recorded = match.replayEvents.length;
+    const sentBefore = h.sent.length;
+    const state = structuredClone(sim.royale);
+    expect(h.say(a, { t: 'graft', pick: 1 })).toBe(true);
+    expect(h.say(a, { t: 'watch', next: true })).toBe(true);
+    expect(sim.orders).toEqual([]);
+    expect(match.replayEvents).toHaveLength(recorded);
+    expect(h.sent).toHaveLength(sentBefore);
+    expect(sim.royale).toEqual(state);
+  });
+
   it('sends each person their own snapshots, with the mode and the caches once a second', () => {
     const h = harness();
     const a = h.connect(1, 'alice');
@@ -269,7 +294,11 @@ describe('the end', () => {
     expect(h.last(1, 'snap')?.royale?.st).toBe('drop');
     // The finished match's replay: its picks, the drop picks and the mode.
     const replay = h.replays.get(100)!;
-    expect(replay.royale).toEqual({ variant: 'respawn', guestsOnly: false });
+    expect(replay.royale).toEqual({
+      variant: 'respawn',
+      guestsOnly: false,
+      rules: ROYALE_RULES_VERSION,
+    });
     expect(replay.picks).toHaveLength(ROYALE_SEATS);
     expect(replay.ticks).toBeGreaterThan(0);
     // Each seat that ended wrote its report, the variant noted.

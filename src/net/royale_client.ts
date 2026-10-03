@@ -6,7 +6,15 @@
 // net/royale_wire.ts; the reading is tolerant, since a field the server
 // does not send yet must cost nothing but the line that would show it.
 
-import type { RoyaleClientMsg, RoyaleResult, RoyaleVariant } from './royale_wire';
+import type {
+  LastLightStep,
+  MarkKind,
+  RisingKind,
+  RoyaleClientMsg,
+  RoyaleResult,
+  RoyaleVariant,
+  WirePoint,
+} from './royale_wire';
 
 export interface RoyaleEntry {
   championId: string;
@@ -79,7 +87,34 @@ export type RoyaleNote =
   | { kind: 'dusk'; phase: number }
   | { kind: 'out'; unitId: number; killerId: number; place: number }
   | { kind: 'leader'; unitId: number }
-  | { kind: 'end'; winnerId: number | null };
+  | { kind: 'end'; winnerId: number | null }
+  | { kind: 'seedfall'; id: number; at: WirePoint; landsAt: number }
+  | { kind: 'seedfall_land'; id: number; at: WirePoint }
+  | { kind: 'rising'; rising: RisingKind; at: WirePoint; risesAt: number }
+  | { kind: 'wrath_passed'; from: number; to: number | null }
+  | { kind: 'mark'; unitId: number; mark: MarkKind }
+  | { kind: 'snuffed'; unitId: number; killerId: number; streak: number }
+  | { kind: 'reprieve'; unitId: number; backAt: number }
+  | { kind: 'hastens'; by: number; alive: number }
+  | { kind: 'last_light'; step: LastLightStep }
+  | { kind: 'pad_slam'; unitId: number; at: WirePoint; hit: number[] };
+
+// A point on the wire, or on the sim's event ({x, y, z}).
+function pointOf(v: unknown): WirePoint | null {
+  if (Array.isArray(v) && v.length === 3) {
+    const [x, y, z] = v as unknown[];
+    if (num(x) && num(y) && num(z)) return [x, y, z];
+  }
+  if (typeof v === 'object' && v !== null) {
+    const p = v as { x?: unknown; y?: unknown; z?: unknown };
+    if (num(p.x) && num(p.y) && num(p.z)) return [p.x, p.y, p.z];
+  }
+  return null;
+}
+
+const RISINGS: readonly string[] = ['pyrefang', 'voidmaul', 'warden'];
+const MARKS: readonly string[] = ['lodestar', 'ablaze', 'wrath', 'slayer'];
+const LAST_LIGHT: readonly string[] = ['heads_up', 'double', 'final'];
 
 export function royaleNotes(events: readonly unknown[] | undefined): RoyaleNote[] {
   const notes: RoyaleNote[] = [];
@@ -125,6 +160,63 @@ export function royaleNotes(events: readonly unknown[] | undefined): RoyaleNote[
       case 'royale_end':
         notes.push({ kind: 'end', winnerId: num(ev.winnerId) ? ev.winnerId : null });
         break;
+      case 'royale_seedfall': {
+        const id = num(ev.id) ? ev.id : ev.seedfallId;
+        const at = pointOf(ev.at);
+        if (num(id) && at && num(ev.landsAt)) {
+          notes.push({ kind: 'seedfall', id, at, landsAt: ev.landsAt });
+        }
+        break;
+      }
+      case 'royale_seedfall_land': {
+        const id = num(ev.id) ? ev.id : ev.seedfallId;
+        const at = pointOf(ev.at);
+        if (num(id) && at) notes.push({ kind: 'seedfall_land', id, at });
+        break;
+      }
+      case 'royale_rising': {
+        const at = pointOf(ev.at);
+        if (typeof ev.kind === 'string' && RISINGS.includes(ev.kind) && at && num(ev.risesAt)) {
+          notes.push({ kind: 'rising', rising: ev.kind as RisingKind, at, risesAt: ev.risesAt });
+        }
+        break;
+      }
+      case 'royale_wrath_passed':
+        if (num(ev.from)) {
+          notes.push({ kind: 'wrath_passed', from: ev.from, to: num(ev.to) ? ev.to : null });
+        }
+        break;
+      case 'royale_mark':
+        if (num(unitId) && typeof ev.kind === 'string' && MARKS.includes(ev.kind)) {
+          notes.push({ kind: 'mark', unitId, mark: ev.kind as MarkKind });
+        }
+        break;
+      case 'royale_snuffed':
+        if (num(unitId) && num(ev.killerId) && num(ev.streak)) {
+          notes.push({ kind: 'snuffed', unitId, killerId: ev.killerId, streak: ev.streak });
+        }
+        break;
+      case 'royale_reprieve':
+        if (num(unitId) && num(ev.backAt))
+          notes.push({ kind: 'reprieve', unitId, backAt: ev.backAt });
+        break;
+      case 'royale_dusk_hastens':
+        if (num(ev.by) && num(ev.alive))
+          notes.push({ kind: 'hastens', by: ev.by, alive: ev.alive });
+        break;
+      case 'royale_last_light':
+        if (typeof ev.step === 'string' && LAST_LIGHT.includes(ev.step)) {
+          notes.push({ kind: 'last_light', step: ev.step as LastLightStep });
+        }
+        break;
+      case 'royale_pad_slam': {
+        const at = pointOf(ev.at);
+        if (num(unitId) && at) {
+          const hit = Array.isArray(ev.hit) ? ev.hit.filter(num) : [];
+          notes.push({ kind: 'pad_slam', unitId, at, hit });
+        }
+        break;
+      }
       default:
         break;
     }

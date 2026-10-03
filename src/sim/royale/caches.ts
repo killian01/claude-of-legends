@@ -17,6 +17,7 @@ import {
   CACHE_BACK_S,
   CACHE_OPEN_S,
   CACHE_REACH_M,
+  type CacheKind,
   type CacheState,
   type RoyaleVariant,
 } from './types';
@@ -55,7 +56,7 @@ export function drawCaches(
     out.push({
       id: out.length,
       pos: { ...s.pos },
-      golden: s.golden,
+      kind: s.golden ? 'golden' : 'plain',
       present: true,
       respawnAt: null,
       opener: null,
@@ -80,7 +81,7 @@ export interface CacheSeeker {
 export interface CacheOpened {
   cacheId: number;
   unitId: number;
-  golden: boolean;
+  kind: CacheKind;
 }
 
 function canOpen(c: CacheState, s: CacheSeeker, time: number): boolean {
@@ -121,7 +122,7 @@ export function stepCaches(
         busy.delete(c.opener);
         c.opener = null;
       } else if (time - c.openSince >= CACHE_OPEN_S - 1e-9) {
-        opened.push({ cacheId: c.id, unitId: c.opener, golden: c.golden });
+        opened.push({ cacheId: c.id, unitId: c.opener, kind: c.kind });
         busy.delete(c.opener);
         c.opener = null;
         c.present = false;

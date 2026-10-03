@@ -84,6 +84,12 @@ export function dispatchAction(sim: Sim, unitId: number, action: Action): boolea
       if (!finite(action.x, action.z) || !Number.isFinite(action.y)) return false;
       sim.pickDrop(unitId, { x: action.x, y: action.y, z: action.z });
       return true;
+    case 'graft':
+      // Free like 'level' and 'drop': no decision token, and the mode
+      // decides whether an offer is open.
+      if (action.pick !== 0 && action.pick !== 1 && action.pick !== 2) return false;
+      sim.pickGraft(unitId, action.pick);
+      return true;
     default:
       return true;
   }

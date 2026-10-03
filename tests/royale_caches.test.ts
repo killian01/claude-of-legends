@@ -31,7 +31,8 @@ describe('drawing the caches', () => {
     const caches = drawCaches(layout.cacheSpots, new Rng(3));
     expect(caches).toHaveLength(CACHE_COUNT);
     const golden = layout.cacheSpots.filter((s) => s.golden).length;
-    expect(caches.filter((c) => c.golden)).toHaveLength(golden);
+    expect(caches.filter((c) => c.kind === 'golden')).toHaveLength(golden);
+    expect(caches.filter((c) => c.kind === 'plain')).toHaveLength(caches.length - golden);
     expect(caches.map((c) => c.id)).toEqual(caches.map((_, i) => i));
     expect(caches.every((c) => c.present && c.opener === null)).toBe(true);
     expect(drawCaches(layout.cacheSpots, new Rng(3))).toEqual(caches);
@@ -49,7 +50,7 @@ function oneCache(golden = false): CacheState[] {
     {
       id: 0,
       pos: sph(1, 0.2, 0.3),
-      golden,
+      kind: golden ? 'golden' : 'plain',
       present: true,
       respawnAt: null,
       opener: null,
@@ -162,6 +163,6 @@ describe('opening a cache', () => {
     expect(back[0]!.present).toBe(false);
     stepCaches(back, [], openedAt + CACHE_BACK_S, 'respawn');
     expect(back[0]!.present).toBe(true);
-    expect(back[0]!.golden).toBe(true);
+    expect(back[0]!.kind).toBe('golden');
   });
 });

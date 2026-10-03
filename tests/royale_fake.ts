@@ -10,7 +10,7 @@ import { CAMPS } from '../src/sim/content/camps';
 import { CHAMPIONS } from '../src/sim/content/champions';
 import type { Vec3 } from '../src/sim/geo';
 import type { Projectile } from '../src/sim/projectiles';
-import { DROP_S, PLAY_S, type RoyaleState } from '../src/sim/royale/types';
+import { DROP_S, PLAY_S, ROYALE_RULES_VERSION, type RoyaleState } from '../src/sim/royale/types';
 import { type AbilityKey, DT, type ScoreRow, type Vec2 } from '../src/sim/types';
 import { createCamp, createChampion, createWarden, type Unit } from '../src/sim/unit';
 import type { Wall } from '../src/sim/walls';
@@ -86,6 +86,17 @@ export class FakeRoyaleSim implements RoyaleSim {
       winnerId: null,
       leaderId: null,
       leaderShownAt: -999,
+      seedfalls: [],
+      risings: [],
+      marks: [],
+      clamors: [],
+      wrathHolder: null,
+      offers: new Map(),
+      grafts: new Map(),
+      reprieveUsed: new Set(),
+      duskOffset: 0,
+      respawnPicks: new Map(),
+      arriving: new Set(),
     };
   }
 
@@ -118,7 +129,7 @@ export class FakeRoyaleSim implements RoyaleSim {
     this.royale.caches.push({
       id,
       pos: { ...at },
-      golden,
+      kind: golden ? 'golden' : 'plain',
       present: true,
       respawnAt: null,
       opener: null,
@@ -247,6 +258,13 @@ export class FakeRoyaleSim implements RoyaleSim {
     this.royale.drops.set(unitId, { ...p });
   }
 
+  // No Graft is ever offered here: a pick takes nothing.
+  pickGraft(_unitId: number, _pick: number): boolean {
+    return false;
+  }
+
+  beginArrival(_unitId: number): void {}
+
   orderMove(unitId: number, x: number, z: number, y?: number): void {
     this.orders.push({ unitId, kind: 'move', p: y === undefined ? { x, z } : { x, y, z } });
   }
@@ -320,7 +338,11 @@ export function fakeFactory(): {
           skin: p.skin,
           ...(p.bot ? { bot: 'royale' } : {}),
         })),
-        royale: { variant, guestsOnly: picks.some((p) => p.bot?.softened === true) },
+        royale: {
+          variant,
+          guestsOnly: picks.some((p) => p.bot?.softened === true),
+          rules: ROYALE_RULES_VERSION,
+        },
       },
       standIn: (unitId) => {
         sim.policies.add(unitId);

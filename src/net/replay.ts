@@ -16,7 +16,7 @@ import { NavGrid } from '../sim/navgrid';
 import type { LanePreference, PlaybookDef } from '../sim/playbook/types';
 import { royaleSeatSkills } from '../sim/royale/fill';
 import { type PlanetLayoutRecord, planetGameMap, royaleLayoutOf } from '../sim/royale/planet_map';
-import type { RoyaleVariant } from '../sim/royale/types';
+import { ROYALE_RULES_VERSION, type RoyaleVariant } from '../sim/royale/types';
 import { Sim } from '../sim/sim';
 import { TerrainNavGrid } from '../sim/terrain_nav';
 import type { TeamId } from '../sim/types';
@@ -95,7 +95,8 @@ export interface ReplayEvent {
   // seat to the default bot, and a rejoin taking it back. Both change
   // how the sim evolves, so both must replay. kit: the sigils and skin a
   // person who took a battle royale bot's seat brought (Sim.setLoadout).
-  e: 'cmd' | 'bot_on' | 'bot_off' | 'kit';
+  // arrive: a Respawn drop-in's Arrival over the globe (Sim.beginArrival).
+  e: 'cmd' | 'bot_on' | 'bot_off' | 'kit' | 'arrive';
   c?: ClientMsg;
   kit?: { sigils: [string, string]; skin: number };
 }
@@ -134,7 +135,9 @@ export interface ReplayRecord {
   // A battle royale on the Wanderseed (ADR 0031), built by buildRoyaleSim
   // from the same seed and picks (each pick's team its seat index), absent
   // on every 5v5. Additive: a record without it is a 5v5 as it always was.
-  royale?: { variant: RoyaleVariant; guestsOnly?: boolean };
+  // `rules` is the ROYALE_RULES_VERSION it ran under: the planet's rules
+  // move without REPLAY_VERSION, and royaleReplayPlayable checks them.
+  royale?: { variant: RoyaleVariant; guestsOnly?: boolean; rules?: number };
 }
 
 // A bare Sim on the Star Orchard: a fresh walkability grid over the shared
@@ -226,6 +229,31 @@ export function buildRoyaleSim(
     if (p.bot !== undefined || p.playbook) attachRoyaleBot(sim, unit.id);
   });
   return { sim, unitIds };
+}
+
+// Whether a battle royale's record still plays out the match it recorded:
+// the version this build speaks and the royale rules it runs (a record
+// without them was made before they were written down, and is refused).
+export function royaleReplayPlayable(record: {
+  version?: unknown;
+  royale?: { variant?: unknown; guestsOnly?: unknown; rules?: unknown } | undefined;
+}): boolean {
+  return record.version === REPLAY_VERSION && record.royale?.rules === ROYALE_RULES_VERSION;
+}
+
+// The royale replay loader: a battle royale's record rebuilt on the
+// Wanderseed by the one construction (buildRoyaleSim), or null when the
+// record is not a royale's or was made under other rules. The recorded
+// events are then applied as they come (applyReplayEvent).
+export function loadRoyaleReplay(
+  planet: RoyalePlanet,
+  record: Pick<ReplayRecord, 'version' | 'seed' | 'picks' | 'royale'>,
+): { sim: Sim; unitIds: number[] } | null {
+  const royale = record.royale;
+  if (!royale || !royaleReplayPlayable(record)) return null;
+  return buildRoyaleSim(planet, record.seed, record.picks, royale.variant, {
+    guestsOnly: royale.guestsOnly === true,
+  });
 }
 
 const ABILITY_KEYS = new Set(['Q', 'W', 'E', 'R']);
@@ -327,6 +355,11 @@ export function applySimCommand(sim: Sim, team: TeamId, unitId: number, msg: Cli
       ) {
         sim.pickDrop(unitId, { x: m.x, y: m.y, z: m.z });
       }
+      // A card of the open Graft offer (royale_wire.ts), likewise.
+      const g = msg as { t: string; pick?: unknown };
+      if (g.t === 'graft' && (g.pick === 0 || g.pick === 1 || g.pick === 2)) {
+        sim.pickGraft(unitId, g.pick);
+      }
       break;
     }
   }
@@ -346,6 +379,10 @@ export function applyReplayEvent(
   }
   if (ev.e === 'kit') {
     if (ev.kit) sim.setLoadout(ev.u, ev.kit.sigils, ev.kit.skin);
+    return;
+  }
+  if (ev.e === 'arrive') {
+    sim.beginArrival(ev.u);
     return;
   }
   // The seat's default bot, as the live stand-in (server/match.ts): the

@@ -5,9 +5,10 @@
 //   the drop (only decisions run, then everyone lands) ->
 //   [play] before the tick: health noted for One life's ties ->
 //   after the walk: the launch pads ->
-//   after the zones: the Dusk's burn ->
+//   after the zones: the Dusk's burn, then a Seedfall's impact ->
 //   in the deaths: takedowns, loot, experience, places ->
-//   after the deaths: caches, the leader, the end.
+//   after the deaths: caches, Seedfalls, Risings, marks, Grafts, the
+//   leader, the end.
 // Everything here moves with the match and is in the world checkpoint
 // (snapshot, restore); the schedule and the layout are fixed at the start.
 
@@ -26,10 +27,13 @@ import type { Unit } from '../unit';
 import { drawCaches, openingBy, stepCaches } from './caches';
 import { escortLandings, normalizePick, resolveLandings } from './drop';
 import { type DuskSchedule, drawDusk, duskAt, insideCap } from './dusk';
+import { observeGrafts, pickGraft, stepGrafts } from './grafts';
 import type { RoyaleGround, RoyaleLayout } from './layout';
 import { creatureXp, grantXp, landingLevels, takedownXp } from './levels';
 import { GOLDEN_PIECES, grantPieces, healShare, manaShare, seatBuild, streakShare } from './loot';
+import { observeMarks, stepMarks } from './marks';
 import { flightOver, flightPos, type PadFlight, padSites, padUnder, startFlight } from './pads';
+import { observeRisings, stepRisings } from './risings';
 import {
   edgeOfLight,
   type Fallen,
@@ -40,6 +44,7 @@ import {
   type Standing,
   takedownScore,
 } from './score';
+import { observeSeedfalls, stepSeedfalls } from './seedfall';
 import {
   CACHE_MANA,
   CAMP_BACK_S,
@@ -147,6 +152,17 @@ export class RoyaleMode {
       winnerId: null,
       leaderId: null,
       leaderShownAt: landAt,
+      seedfalls: [],
+      risings: [],
+      marks: [],
+      clamors: [],
+      wrathHolder: null,
+      offers: new Map(),
+      grafts: new Map(),
+      reprieveUsed: new Set(),
+      duskOffset: 0,
+      respawnPicks: new Map(),
+      arriving: new Set(),
     };
   }
 
@@ -185,6 +201,37 @@ export class RoyaleMode {
     if (!pick) return false;
     this.state.drops.set(unitId, pick);
     return true;
+  }
+
+  // A seat's pick of its open Graft offer (the 'graft' action, Sim.pickGraft):
+  // free like the drop's pick, taken while dead, flying or dropping. False
+  // when nothing was taken (grafts.ts).
+  pickGraft(unitId: number, pick: number, time: number): boolean {
+    return pickGraft(this, unitId, pick, time);
+  }
+
+  // A Respawn drop-in's Arrival (CONTEXT.md): the seat a person takes from
+  // its bot hangs over the globe before it lands where it picks. Nothing
+  // happens yet: the seat is handed over in place (ADR 0025).
+  beginArrival(_unitId: number, _time: number): void {}
+
+  // Whether the bot driver runs a dead seat's policy this tick (a Graft
+  // offer to pick, a Respawn landing to choose). Never yet: a dead seat
+  // decides nothing, in the royale as in the 5v5.
+  wantsDeadDecision(_unitId: number): boolean {
+    return false;
+  }
+
+  // The health a champion comes back with (the sim's respawn loop): all of
+  // it, until a Reprieve brings one back with less.
+  respawnHealth(u: Unit): number {
+    return u.maxHp;
+  }
+
+  // The Wrath handed to a champion on the planet (an Ascendant's last hit):
+  // its team's, as everywhere, until the mode tracks a holder.
+  grantWrath(sim: Sim, killer: Unit): void {
+    sim.grantWrath(killer.team);
   }
 
   private champions(sim: Sim): Unit[] {
@@ -314,6 +361,11 @@ export class RoyaleMode {
     }
   }
 
+  // A Seedfall's impact, right after the Dusk (after the zones, before the
+  // deaths), so a champion it kills dies on the same tick (seedfall.ts).
+  // Nothing falls yet.
+  stepSeedfallImpact(_ctx: CombatCtx, _sim: Sim): void {}
+
   // A death's rewards, in the sim's death handling instead of the shared
   // bounties: everything to the last hit. A champion's: experience, the
   // next piece, a share of health, the score, One life's place. A camp
@@ -420,9 +472,14 @@ export class RoyaleMode {
       if (!u) continue;
       this.tally.cachesOpened++;
       this.emit(sim, { type: 'royale_cache', unitId: o.unitId, cacheId: o.cacheId });
-      this.loot(sim, u, o.golden ? GOLDEN_PIECES : 1, 'cache');
+      this.loot(sim, u, o.kind === 'golden' ? GOLDEN_PIECES : 1, 'cache');
       manaShare(u, CACHE_MANA);
     }
+    // What makes a match a story, each its own module.
+    stepSeedfalls(this, sim);
+    stepRisings(this, sim);
+    stepMarks(this, sim);
+    stepGrafts(this, sim);
     // The leader.
     if (this.variant === 'respawn') {
       s.leaderId = leaderOf(this.standings(sim));
@@ -488,7 +545,13 @@ export class RoyaleMode {
         dusk: s.dusk,
         caches: s.caches
           .filter((c) => c.present)
-          .map((c) => ({ id: c.id, x: c.pos.x, y: c.pos.y, z: c.pos.z, golden: c.golden })),
+          .map((c) => ({
+            id: c.id,
+            x: c.pos.x,
+            y: c.pos.y,
+            z: c.pos.z,
+            golden: c.kind === 'golden',
+          })),
         pads: s.pads,
         alive: this.alive(sim),
       };
@@ -519,6 +582,10 @@ export class RoyaleMode {
       flying: this.flights.has(u.id),
       score: s.scores.get(u.id) ?? 0,
       leader,
+      ...observeGrafts(this, sim, u),
+      ...observeSeedfalls(this, sim, u),
+      ...observeRisings(this, sim, u),
+      ...observeMarks(this, sim, u),
     };
   }
 

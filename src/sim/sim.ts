@@ -290,6 +290,23 @@ export class Sim {
     return this.royaleMode.pickDrop(unitId, p, this.time);
   }
 
+  // A seat's pick of its open Graft offer in the battle royale (the 'graft'
+  // action and command): a card index, free, taken while dead, flying or
+  // dropping. False when nothing was taken, and outside a battle royale.
+  pickGraft(unitId: number, pick: number): boolean {
+    const u = this.units.get(unitId);
+    if (!this.royaleMode || u?.kind !== 'champion') return false;
+    return this.royaleMode.pickGraft(unitId, pick, this.time);
+  }
+
+  // A Respawn drop-in's Arrival over the globe (server/royale_match.ts, the
+  // replay's 'arrive' event); nothing outside a battle royale.
+  beginArrival(unitId: number): void {
+    const u = this.units.get(unitId);
+    if (!this.royaleMode || u?.kind !== 'champion') return;
+    this.royaleMode.beginArrival(unitId, this.time);
+  }
+
   // Whether a seat may act right now in the battle royale: on the ground,
   // in play, not carried by a launch pad. Always true elsewhere.
   private royaleActs(unitId: number): boolean {
@@ -1082,6 +1099,7 @@ export class Sim {
     if (royale && this.winner === null) {
       royale.stepRecovery(ctx);
       royale.stepDusk(ctx, this);
+      royale.stepSeedfallImpact(ctx, this);
     }
 
     for (const id of this.dead) {
@@ -1174,6 +1192,7 @@ export class Sim {
           const killer = this.units.get(killerId);
           if (fall !== null && killer && killer.kind === 'champion') {
             if (fall.aspect !== null) this.grantFavor(killer.team, fall.aspect);
+            else if (royale) royale.grantWrath(this, killer);
             else this.teamBuffs.grantWrath(killer.team, this.time);
             for (const member of this.units.values()) {
               if (member.kind !== 'champion' || member.team !== killer.team) continue;
@@ -1219,7 +1238,7 @@ export class Sim {
       if (!back) continue;
       u.dead = false;
       u.pos = back;
-      u.hp = u.maxHp;
+      u.hp = royale ? royale.respawnHealth(u) : u.maxHp;
       u.mana = u.maxMana;
       u.statuses = [];
     }

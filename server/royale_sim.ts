@@ -37,6 +37,10 @@ export interface RoyaleSim {
   scoreboard(): readonly ScoreRow[];
   // The landing point a seat picked during the drop.
   pickDrop(unitId: number, p: Vec3): void;
+  // A card of the seat's open Graft offer; false when nothing was taken.
+  pickGraft(unitId: number, pick: number): boolean;
+  // A Respawn drop-in's Arrival over the globe (Sim.beginArrival).
+  beginArrival(unitId: number): void;
   orderMove(unitId: number, x: number, z: number, y?: number): void;
   orderAttack(unitId: number, targetId: number): void;
   orderAttackMove(unitId: number, x: number, z: number, y?: number): void;
@@ -70,7 +74,7 @@ export interface RoyaleBuild {
   // the builder took them, and the mode's own part of the record.
   replay: {
     picks: readonly ReplayPick[];
-    royale: { variant: RoyaleVariant; guestsOnly?: boolean };
+    royale: { variant: RoyaleVariant; guestsOnly?: boolean; rules?: number };
   };
   // Hands a seat to the battle royale's bot: a person left it.
   standIn(unitId: number): void;
