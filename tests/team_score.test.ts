@@ -33,6 +33,10 @@ describe('the team kill score', () => {
     ]);
   });
 
+  it('keeps a slot for every team a row names, the two sides at least', () => {
+    expect(teamKills([row(1, 2), { ...row(1, 4), team: 3 }])).toEqual([0, 2, 0, 4]);
+  });
+
   it('matches the scoreboard the sim reports in a real match', () => {
     const sim = new Sim(11);
     const a = sim.addChampion(0, { x: 75, z: 75 }, CHAMPION_LIST[0]!.id);
@@ -44,9 +48,9 @@ describe('the team kill score', () => {
     const rows = sim.scoreboard();
     expect(teamKills(rows)).toEqual([1, 0]);
     // And it stays the sum of the rows, whatever the roster size.
-    const byHand = rows.reduce<[number, number]>(
+    const byHand = rows.reduce<number[]>(
       (acc, r) => {
-        acc[r.team] += r.kills;
+        acc[r.team] = (acc[r.team] ?? 0) + r.kills;
         return acc;
       },
       [0, 0],

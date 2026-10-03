@@ -10,6 +10,7 @@ import { stepShieldBursts } from '../src/sim/combat/shield_burst';
 import { addStatus, isStunned } from '../src/sim/combat/status';
 import { CHAMPIONS } from '../src/sim/content/champions';
 import { stepDashes } from '../src/sim/dashes';
+import { PlaneGround } from '../src/sim/ground';
 import { NavGrid } from '../src/sim/navgrid';
 import { stepProjectiles } from '../src/sim/projectiles';
 import { Rng } from '../src/sim/rng';
@@ -32,6 +33,7 @@ function mkCtx(nav = new NavGrid(40, [], 0)): { ctx: CombatCtx; advance: (s: num
     },
     rng: new Rng(7),
     nav,
+    ground: new PlaneGround(nav),
     units: new Map(),
     projectiles: new Map(),
     zones: new Map(),
@@ -338,7 +340,7 @@ describe('zone boundary and reveal', () => {
     const map = { size: 40, walls: [], borderMargin: 0, brush: [], fountains: [] };
     // biome-ignore lint/suspicious/noExplicitAny: minimal map stub for vision
     const without = computeVisibility(map as any, ctx.units, 0, ctx.zones);
-    expect(without[0].has(enemy.id)).toBe(false);
+    expect(without[0]!.has(enemy.id)).toBe(false);
     executeCast(
       ctx,
       caster,
@@ -349,7 +351,7 @@ describe('zone boundary and reveal', () => {
     );
     // biome-ignore lint/suspicious/noExplicitAny: minimal map stub for vision
     const withZone = computeVisibility(map as any, ctx.units, 0, ctx.zones);
-    expect(withZone[0].has(enemy.id)).toBe(true);
+    expect(withZone[0]!.has(enemy.id)).toBe(true);
   });
 });
 

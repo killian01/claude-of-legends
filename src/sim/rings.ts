@@ -9,7 +9,8 @@
 // the bigger body, no aspect, the Wrath on its death (team_buffs.ts), a
 // longer return. Called from the fixed tick order right after the Warden
 // step. A map without rings (the launch map) has no state here and
-// nothing rises.
+// nothing rises. On the planet a ring is a plain circle on the sphere
+// (ADR 0029, geo.ts), its leash the disc and its margin.
 
 import type { GameMap, RingSite } from './content/map';
 import {
@@ -21,7 +22,8 @@ import {
   creatureOfRing,
   type RingId,
 } from './content/rings';
-import { hypot } from './exact';
+import { copy, dist } from './geo';
+import { landingOn } from './ground';
 import type { CombatCtx } from './sim_context';
 import { DT } from './types';
 import { createCreature, hostile, type Unit } from './unit';
@@ -76,7 +78,7 @@ function nearestHostileChampion(ctx: CombatCtx, from: Unit, range: number): Unit
   for (const u of ctx.units.values()) {
     if (u.kind !== 'champion' || u.dead || ctx.dead.has(u.id)) continue;
     if (!hostile(from, u)) continue;
-    const d = hypot(u.pos.x - from.pos.x, u.pos.z - from.pos.z);
+    const d = dist(u.pos, from.pos);
     if (d <= range && d < bestD) {
       bestD = d;
       best = u;
@@ -91,10 +93,8 @@ export function stepRings(ctx: CombatCtx, states: RingState[]): void {
     if (state.unitId === null) {
       if (ctx.time >= state.nextRiseAt) {
         const id = ctx.allocId();
-        const center = { x: site.x, z: site.z };
-        const at = ctx.nav.isWalkableAt(center.x, center.z)
-          ? center
-          : (ctx.nav.nearestWalkable(center.x, center.z) ?? center);
+        const center = copy(site);
+        const at = landingOn(ctx.ground, center) ?? center;
         ctx.units.set(
           id,
           createCreature(id, creatureDefOf(state), at, ringAspect(state), ctx.time),
@@ -108,7 +108,7 @@ export function stepRings(ctx: CombatCtx, states: RingState[]): void {
     const c = ctx.units.get(state.unitId);
     if (!c || c.dead || ctx.dead.has(c.id)) continue;
 
-    const fromCenter = hypot(c.pos.x - site.x, c.pos.z - site.z);
+    const fromCenter = dist(c.pos, site);
     const angry = ctx.time - c.lastDamagedAt <= CREATURE_CALM_S;
 
     // Leash: pulled off the platform (the disc and its stairs) it resets
@@ -116,7 +116,7 @@ export function stepRings(ctx: CombatCtx, states: RingState[]): void {
     // fast rather than snapping (CREATURE_CALM_REGEN_PER_S).
     if (fromCenter > site.leash) {
       c.hp = c.maxHp;
-      c.pos = { x: site.x, z: site.z };
+      c.pos = copy(site);
       c.path = [];
       c.attackTargetId = null;
       c.statuses = [];
@@ -124,7 +124,7 @@ export function stepRings(ctx: CombatCtx, states: RingState[]): void {
     }
     if (!angry && (c.hp < c.maxHp || fromCenter > 1)) {
       c.hp = Math.min(c.maxHp, c.hp + c.maxHp * CREATURE_CALM_REGEN_PER_S * DT);
-      c.pos = { x: site.x, z: site.z };
+      c.pos = copy(site);
       c.path = [];
       c.attackTargetId = null;
       c.statuses = [];
@@ -136,10 +136,7 @@ export function stepRings(ctx: CombatCtx, states: RingState[]): void {
     if (angry) {
       const target = c.attackTargetId !== null ? ctx.units.get(c.attackTargetId) : undefined;
       const targetOk =
-        target &&
-        !target.dead &&
-        !ctx.dead.has(target.id) &&
-        hypot(target.pos.x - site.x, target.pos.z - site.z) <= site.leash;
+        target && !target.dead && !ctx.dead.has(target.id) && dist(target.pos, site) <= site.leash;
       if (!targetOk) {
         const next = nearestHostileChampion(ctx, c, site.leash);
         c.attackTargetId = next ? next.id : null;

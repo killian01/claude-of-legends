@@ -4,8 +4,22 @@
 // cast time so a projectile in flight stays deterministic even if the caster
 // dies before impact.
 
-import { hypot } from '../exact';
 import { favorBonus } from '../favors';
+import {
+  away,
+  carry,
+  copy,
+  cross,
+  delta,
+  dist,
+  norm,
+  offset,
+  tangent,
+  turnLeft,
+  turnRight,
+  unit,
+} from '../geo';
+import { landingOn } from '../ground';
 import type { DamageVia } from '../passive_types';
 import { passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
@@ -16,7 +30,8 @@ import { addMarkStack, addStatus, clearMarks, healFactor, isRooted, slowPct } fr
 
 // The eight compass directions as unit vectors, every 45 degrees: the
 // constants are exact, where the engine's cosine of a multiple of PI/4
-// is not (src/sim/exact.ts).
+// is not (src/sim/exact.ts). East and north components: on the sphere
+// they are read in the tangent frame at the target (geo.ts, tangent).
 const D = Math.SQRT1_2;
 const TERRAIN_RING: readonly (readonly [number, number])[] = [
   [1, 0],
@@ -39,6 +54,9 @@ export interface Power {
 // Facts about HOW an effect list arrived, supplied by the resolving system
 // (projectile impact, dash landing, zone detonation). Predicates and
 // directional displacement read them; a missing fact fails its predicate.
+// On the sphere the points carry y like every ground point (ADR 0029), and
+// lineDir may be the heading at lineFrom or further along the same great
+// circle: the knock-aside reads it back at lineFrom.
 export interface EffectCtx {
   // Distance the delivery traveled before resolving (projectile, dash).
   distance?: number;
@@ -89,7 +107,7 @@ export function evaluatePredicate(
       for (const u of ctx.units.values()) {
         if (u.id === target.id || u.dead || ctx.dead.has(u.id)) continue;
         if (u.kind !== 'champion' || u.neutral || u.team !== target.team) continue;
-        if (hypot(u.pos.x - target.pos.x, u.pos.z - target.pos.z) <= p.radius) return false;
+        if (dist(u.pos, target.pos) <= p.radius) return false;
       }
       return true;
     }
@@ -97,11 +115,10 @@ export function evaluatePredicate(
       return slowPct(target, ctx.time) > 0 || isRooted(target, ctx.time);
     case 'targetNearTerrain': {
       // Eight-direction sample ring: cheap, deterministic, and honest about
-      // both map terrain and ability walls (walls block NavGrid cells).
+      // both map terrain and ability walls (both block the ground's cells).
       for (const [ux, uz] of TERRAIN_RING) {
-        const x = target.pos.x + ux * p.distance;
-        const z = target.pos.z + uz * p.distance;
-        if (!ctx.nav.isWalkableAt(x, z)) return true;
+        const at = offset(target.pos, tangent(target.pos, ux, uz), p.distance);
+        if (!ctx.ground.isWalkableAt(at)) return true;
       }
       return false;
     }
@@ -113,8 +130,7 @@ export function evaluatePredicate(
       );
     case 'withinCenter': {
       if (!fx.center) return false;
-      const d = hypot(target.pos.x - fx.center.x, target.pos.z - fx.center.z);
-      return d <= p.radius + target.radius;
+      return dist(target.pos, fx.center) <= p.radius + target.radius;
     }
   }
 }
@@ -190,19 +206,26 @@ export type EffectSpec =
       splash?: readonly EffectSpec[];
     };
 
-// Displaces a unit along dir by up to `distance`, clamped to walkable ground.
-function displace(ctx: CombatCtx, target: Unit, dx: number, dz: number, distance: number): void {
-  const len = hypot(dx, dz);
-  if (len === 0 || target.moveSpeed <= 0) return;
-  const dest = {
-    x: target.pos.x + (dx / len) * distance,
-    z: target.pos.z + (dz / len) * distance,
-  };
-  const landed = ctx.nav.isWalkableAt(dest.x, dest.z)
-    ? dest
-    : ctx.nav.nearestWalkable(dest.x, dest.z, 6);
-  if (landed) target.pos = { x: landed.x, z: landed.z };
+// Displaces a unit along v (a vector at its position, any length) by up to
+// `distance`, clamped to walkable ground. On the sphere the push follows
+// the great circle, so the unit lands on the sphere.
+function displace(ctx: CombatCtx, target: Unit, v: Vec2, distance: number): void {
+  const dir = unit(v);
+  if (dir === null || target.moveSpeed <= 0) return;
+  const landed = landingOn(ctx.ground, offset(target.pos, dir, distance), 6);
+  if (landed) target.pos = copy(landed);
   target.path = [];
+}
+
+// The knock-aside's push: perpendicular to the delivery's line, toward the
+// side of it the target already stands on. On the sphere the line is a
+// great circle: its heading is read back at lineFrom (carry), its left
+// side is the circle's normal, and the push is that normal at the target.
+function asidePush(target: Unit, lineFrom: Vec2, lineDir: Vec2): Vec2 {
+  const heading = carry(lineDir, lineFrom, lineFrom);
+  const side = cross(heading, delta(lineFrom, target.pos), lineFrom);
+  const push = side >= 0 ? turnLeft(heading, lineFrom) : turnRight(heading, lineFrom);
+  return carry(push, lineFrom, target.pos);
 }
 
 // Resolve (CONTEXT.md: Favor): the target's tenacity shortens a stun, a
@@ -307,35 +330,22 @@ export function applyEffects(
         if (direction === 'aside' && fx.lineFrom && fx.lineDir) {
           // Off the delivery's travel line: perpendicular, away from the
           // side of the line the target already stands on.
-          const side =
-            fx.lineDir.x * (target.pos.z - fx.lineFrom.z) -
-            fx.lineDir.z * (target.pos.x - fx.lineFrom.x);
-          const px = side >= 0 ? -fx.lineDir.z : fx.lineDir.z;
-          const pz = side >= 0 ? fx.lineDir.x : -fx.lineDir.x;
-          displace(ctx, target, px, pz, spec.distance);
+          displace(ctx, target, asidePush(target, fx.lineFrom, fx.lineDir), spec.distance);
         } else if (direction === 'toCenter' && fx.center) {
-          displace(
-            ctx,
-            target,
-            fx.center.x - target.pos.x,
-            fx.center.z - target.pos.z,
-            spec.distance,
-          );
+          displace(ctx, target, delta(target.pos, fx.center), spec.distance);
         } else {
           const source = ctx.units.get(sourceId);
           const from = source ? source.pos : target.pos;
-          displace(ctx, target, target.pos.x - from.x, target.pos.z - from.z, spec.distance);
+          displace(ctx, target, away(target.pos, from), spec.distance);
         }
         break;
       }
       case 'pull': {
         const source = ctx.units.get(sourceId);
         if (!source) break;
-        const dx = source.pos.x - target.pos.x;
-        const dz = source.pos.z - target.pos.z;
-        const gap = hypot(dx, dz);
-        const travel = Math.min(spec.distance, Math.max(0, gap - 1));
-        if (travel > 0) displace(ctx, target, dx, dz, travel);
+        const toward = delta(target.pos, source.pos);
+        const travel = Math.min(spec.distance, Math.max(0, norm(toward) - 1));
+        if (travel > 0) displace(ctx, target, toward, travel);
         break;
       }
       case 'knockup':

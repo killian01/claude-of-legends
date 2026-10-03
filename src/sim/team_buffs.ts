@@ -6,6 +6,7 @@
 // stacked; what it does lives in the damage pipeline (combat/damage.ts).
 
 import { WRATH_DURATION_S } from './content/rings';
+import { perTeam, TWO_TEAMS, validTeam } from './teams';
 import type { TeamId } from './types';
 
 export const BOON_DAMAGE_PER_STACK = 0.08;
@@ -20,53 +21,59 @@ export interface TeamBuff {
   stacks: number;
 }
 
+// One entry per team, in team order (ADR 0030).
 export interface TeamBuffsState {
-  boons: [TeamBuff, TeamBuff];
-  wraths: [number, number];
+  boons: TeamBuff[];
+  wraths: number[];
 }
 
 export class TeamBuffs {
-  private readonly boons: [TeamBuff, TeamBuff] = [
-    { until: 0, stacks: 0 },
-    { until: 0, stacks: 0 },
-  ];
+  private readonly boons: TeamBuff[];
   // When each team's Wrath ends; zero or past means none.
-  private readonly wraths: [number, number] = [0, 0];
+  private readonly wraths: number[];
+
+  constructor(teamCount = TWO_TEAMS) {
+    this.boons = perTeam(teamCount, () => ({ until: 0, stacks: 0 }));
+    this.wraths = perTeam(teamCount, () => 0);
+  }
 
   // The buffs as plain data, for a world checkpoint (src/sim/snapshot.ts).
   snapshot(): TeamBuffsState {
     return {
-      boons: [{ ...this.boons[0] }, { ...this.boons[1] }],
-      wraths: [this.wraths[0], this.wraths[1]],
+      boons: this.boons.map((b) => ({ ...b })),
+      wraths: [...this.wraths],
     };
   }
 
   restore(state: TeamBuffsState): void {
-    Object.assign(this.boons[0], state.boons[0]);
-    Object.assign(this.boons[1], state.boons[1]);
-    this.wraths[0] = state.wraths[0];
-    this.wraths[1] = state.wraths[1];
+    for (const [team, b] of this.boons.entries()) {
+      const saved = state.boons[team];
+      if (saved) Object.assign(b, saved);
+    }
+    for (const team of this.wraths.keys()) this.wraths[team] = state.wraths[team] ?? 0;
   }
 
+  // A team the match does not hold takes nothing and holds nothing.
   grantWrath(team: TeamId, time: number): void {
-    this.wraths[team] = time + WRATH_DURATION_S;
+    if (validTeam(team, this.wraths.length)) this.wraths[team] = time + WRATH_DURATION_S;
   }
 
   // When the team's Wrath ends, null when it holds none.
   wrathUntil(team: TeamId, time: number): number | null {
-    const until = this.wraths[team];
+    const until = this.wraths[team] ?? 0;
     return until > time ? until : null;
   }
 
   grantBoon(team: TeamId, time: number): void {
     const b = this.boons[team];
+    if (!b) return;
     b.stacks = b.until > time ? Math.min(BOON_MAX_STACKS, b.stacks + 1) : 1;
     b.until = time + BOON_DURATION_S;
   }
 
   boon(team: TeamId, time: number): TeamBuff | null {
     const b = this.boons[team];
-    return b.until > time ? b : null;
+    return b && b.until > time ? b : null;
   }
 
   // The damage multiplier a unit of `team` deals with right now.
