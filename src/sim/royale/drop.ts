@@ -3,8 +3,8 @@
 // policy. When the drop ends every champion lands: at its pick, snapped to
 // the nearest walkable ground, or, with no pick, somewhere quiet: the
 // walkable point farthest from every pick and every landing already
-// placed, among a sample drawn from the match's stream. Then a few house
-// bots come down beside each person (escortLandings).
+// placed, among a sample drawn from the match's stream. Then a house bot
+// or two comes down beside each person (escortLandings).
 
 import { dist2, norm, settle, type Vec3 } from '../geo';
 import type { Rng } from '../rng';
@@ -16,6 +16,7 @@ import {
   randomHeading,
   randomWalkable,
 } from './layout';
+import type { RoyaleVariant } from './types';
 
 // How many candidate points a quiet landing weighs.
 export const QUIET_SAMPLE = 48;
@@ -95,34 +96,60 @@ export function resolveLandings(
   return out;
 }
 
-// Company at the landing: ESCORTS house bots come down ESCORT_MIN_M to
-// ESCORT_MAX_M from each person, so a newcomer's first fight finds them
-// within seconds, the genre's own way with its newcomers (their first
-// champions come to them). Fifty seats on the planet left a person who
-// landed a minute with nobody in sight, one who picked no point in the
+// Company at the landing: ESCORTS[variant] house bots come down
+// ESCORT_MIN_M to ESCORT_MAX_M from each person, so a person's first fight
+// finds them within seconds, the genre's own way with its newcomers (their
+// first champions come to them). Fifty seats on the planet left a person
+// who landed a minute with nobody in sight, one who picked no point in the
 // quietest spot there is, and the visitors of the first days closed the
-// tab inside two minutes (the seat reports, 2026-10-03).
-export const ESCORTS = 2;
+// tab inside two minutes (the seat reports, 2026-10-03). One in One life,
+// where a fall is final; two in Respawn. The mode deals a normal bot
+// first, one that also fights the other escort, so the first fight is a
+// three-way and not two victims waiting in line; gentle ones only on a
+// person's very first royale (mode.ts).
+export const ESCORTS: Readonly<Record<RoyaleVariant, number>> = { one_life: 1, respawn: 2 };
 export const ESCORT_MIN_M = 8;
 export const ESCORT_MAX_M = 13;
 
-// Moves the landings of `bots`, taken in the order given, ESCORTS to each
-// of `people` in turn, each at a heading and a reach drawn from the
-// match's stream, snapped to walkable ground.
-export function escortLandings(
+// One person's company: the person's seat and the bots that come down
+// beside it, in order.
+export interface EscortGroup {
+  person: number;
+  bots: readonly number[];
+}
+
+// Deals each person `count` bots from `pool`, in turn, each person taking
+// the first bots of the pool as `order(person)` sorts it; a bot is dealt
+// once.
+export function dealEscorts(
   people: readonly number[],
-  bots: readonly number[],
+  pool: readonly number[],
+  count: number,
+  order: (person: number) => (a: number, b: number) => number,
+): EscortGroup[] {
+  const left = [...pool];
+  const out: EscortGroup[] = [];
+  for (const person of people) {
+    left.sort(order(person));
+    out.push({ person, bots: left.splice(0, count) });
+  }
+  return out;
+}
+
+// Moves the landings of each group's bots beside its person, each at a
+// heading and a reach drawn from the match's stream, snapped to walkable
+// ground.
+export function escortLandings(
+  groups: readonly EscortGroup[],
   landings: Map<number, Vec3>,
   rng: Rng,
   layout: RoyaleLayout,
   ground: RoyaleGround,
 ): void {
-  let next = 0;
-  for (const person of people) {
+  for (const { person, bots } of groups) {
     const at = landings.get(person);
     if (!at) continue;
-    for (let k = 0; k < ESCORTS && next < bots.length; k++) {
-      const bot = bots[next++]!;
+    for (const bot of bots) {
       const reach = ESCORT_MIN_M + (ESCORT_MAX_M - ESCORT_MIN_M) * rng.next();
       const spot = along(at, randomHeading(rng, at), reach, layout.radius);
       const p = snapLanding(spot, layout, ground);

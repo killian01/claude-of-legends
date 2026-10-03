@@ -41,7 +41,9 @@ export const BYSTANDERS = 2;
 
 // The bot's share of the strength of a fight against `target`: 0.5 an even
 // duel. The nearest other enemies in reach count too, at a bystander's
-// weight; with no target, every enemy in reach at full weight.
+// weight, those within the skill's bystanderFullM at full weight (a
+// strong bot reads the champion beside the fight as a third fighter);
+// with no target, every enemy in reach at full weight.
 export function royaleOdds(sense: Sense, target?: ObsUnit, within = ODDS_RADIUS): number {
   const own = strength(sense.s.hpFrac, sense.s.level, sense.s.items);
   let enemy = 0;
@@ -52,8 +54,9 @@ export function royaleOdds(sense: Sense, target?: ObsUnit, within = ODDS_RADIUS)
       enemy += strength(e.hpFrac, e.level, e.items);
       continue;
     }
-    if (dist(sense.me, p3(e)) > within) continue;
-    if (target === undefined) {
+    const d = dist(sense.me, p3(e));
+    if (d > within) continue;
+    if (target === undefined || d <= sense.skill.bystanderFullM) {
       enemy += strength(e.hpFrac, e.level, e.items);
       continue;
     }
@@ -74,15 +77,18 @@ export const TARGET_HP_WEIGHT = 4;
 export const TARGET_M_WEIGHT = 0.6;
 
 // The target: a hard-CC'd enemy in reach first, else the best of health
-// and distance within `reach` (the skill's chase unless told); null when
-// none is worth it. Never one standing in the dark.
-export function pickTarget(sense: Sense, reach = sense.skill.chase): ObsUnit | null {
+// and distance within `reach` (the skill's chase unless told, or a reach
+// per enemy); null when none is worth it. Never one standing in the dark.
+export function pickTarget(
+  sense: Sense,
+  reach: number | ((e: ObsUnit) => number) = sense.skill.chase,
+): ObsUnit | null {
   let best: ObsUnit | null = null;
   let bestScore = Number.POSITIVE_INFINITY;
   for (const e of sense.enemies) {
     const at = p3(e);
     const d = dist(sense.me, at);
-    if (d > reach) continue;
+    if (d > (typeof reach === 'number' ? reach : reach(e))) continue;
     // Never into the dark, while there is light to stay in.
     if (sense.now.radius > 0 && !insideCap(sense.now, at)) continue;
     const ccd = hardCCd(e, sense.obs.time) && d <= CHAMPION_ATTACK_RANGE;
@@ -217,9 +223,22 @@ export function awayPoint(sense: Sense, len: number): Vec3 {
   return dir ? along(sense.me, dir, len, R) : sense.me;
 }
 
-// The escape: the escape key or the Riftstep toward the way out, the Mend
-// when hurt. Null when none is ready.
+// The escape: the way out cast (exitCast), the Mend when hurt. Null when
+// none is ready.
 export function escapeCast(sense: Sense): Action | null {
+  const out = exitCast(sense);
+  if (out) return out;
+  const mend = readySigil(sense.s, 'mend');
+  if (mend !== -1 && sense.s.hpFrac < 0.5) {
+    return { kind: 'sigil', slot: mend, x: sense.me.x, y: sense.me.y, z: sense.me.z };
+  }
+  return null;
+}
+
+// A cast that takes the bot out of a fight: the escape key or the
+// Riftstep toward the way out, else the Zephyr's stride. Null when none is
+// ready.
+export function exitCast(sense: Sense): Action | null {
   const { s, def, hints } = sense;
   if (def) {
     for (const key of ['Q', 'W', 'E'] as const) {
@@ -233,18 +252,147 @@ export function escapeCast(sense: Sense): Action | null {
     const p = awayPoint(sense, 5.5);
     return { kind: 'sigil', slot: rift, x: p.x, y: p.y, z: p.z };
   }
-  const mend = readySigil(s, 'mend');
-  if (mend !== -1 && s.hpFrac < 0.5) {
-    return { kind: 'sigil', slot: mend, x: sense.me.x, y: sense.me.y, z: sense.me.z };
+  const zephyr = readySigil(s, 'zephyr');
+  if (zephyr !== -1) {
+    return { kind: 'sigil', slot: zephyr, x: sense.me.x, y: sense.me.y, z: sense.me.z };
   }
   return null;
 }
 
-// A sigil worth pressing mid-fight: the Mend when hurt.
-export function fightSigil(sense: Sense): Action | null {
+// An enemy walking away from the bot faster than this is leaving a fight.
+export const FLEEING_SPEED = 1;
+// The commit (bots with intent): a winning bot keeps after a leaving
+// enemy out to its skill's chase plus COMMIT_M while it can catch it:
+// under COMMIT_HP, no faster than the bot, or a dash or the Zephyr ready.
+// The trades that let a fleeing enemy go left One life's duels unended
+// (3 of 40 ended in a death within 45 s, the duel probes of 2026-10-03).
+export const COMMIT_M = 4;
+export const COMMIT_HP = 0.4;
+
+function velocity(e: ObsUnit): Vec3 {
+  return { x: e.vx ?? 0, y: e.vy ?? 0, z: e.vz ?? 0 };
+}
+
+// How fast an enemy walks away from the bot, meters a second (negative
+// when it comes closer).
+export function awaySpeed(sense: Sense, e: ObsUnit): number {
+  const dir = dirTo(sense.me, p3(e));
+  if (!dir) return 0;
+  const v = velocity(e);
+  return v.x * dir.x + v.y * (dir.y ?? 0) + v.z * dir.z;
+}
+
+export function leaving(sense: Sense, e: ObsUnit): boolean {
+  return awaySpeed(sense, e) >= FLEEING_SPEED;
+}
+
+// A dash of its own kit ready (one that lands on an enemy or a point, not
+// on an ally).
+export function dashReady(sense: Sense): boolean {
+  const { s, def } = sense;
+  if (!def) return false;
+  for (const key of ['Q', 'W', 'E'] as const) {
+    if (!s.abilityReady[key]) continue;
+    const spec = def.abilities[key].spec;
+    if (spec.kind === 'dash' && !spec.toAlly) return true;
+  }
+  return false;
+}
+
+// Whether the bot can catch a leaving enemy.
+export function canCatch(sense: Sense, e: ObsUnit): boolean {
+  if (e.hpFrac < COMMIT_HP) return true;
+  if (sense.speed + 1e-9 >= norm(velocity(e))) return true;
+  return dashReady(sense) || readySigil(sense.s, 'zephyr') !== -1;
+}
+
+// How far the bot follows this enemy: past its chase while it is leaving
+// and can be caught.
+export function chaseReach(sense: Sense, e: ObsUnit): number {
+  const chase = sense.skill.chase;
+  return leaving(sense, e) && canCatch(sense, e) ? chase + COMMIT_M : chase;
+}
+
+// The exits of a losing fight (bots with intent): a cast that takes the
+// bot out (exitCast); a launch pad within EXIT_PAD_M, in the light, that
+// the bot reaches before its pursuer; another enemy within EXIT_THIRD_M
+// that the bot reaches before its pursuer does, so the pursuer runs into
+// a third fighter. Turning its back with none of these handed the pursuer
+// a free kill (a playtest, 2026-10-03).
+export const EXIT_PAD_M = 15;
+export const EXIT_THIRD_M = 12;
+// With no exit, a hurt bot answers at odds this far under its nerve.
+export const NO_EXIT_MARGIN = 0.2;
+
+export function exitPad(sense: Sense, pursuer: ObsUnit | null): Vec3 | null {
+  let best: Vec3 | null = null;
+  let bestD = EXIT_PAD_M;
+  for (const pad of sense.r.pads) {
+    const d = dist(sense.me, pad.at);
+    if (d > bestD) continue;
+    if (sense.now.radius > 0 && (!insideCap(sense.now, pad.at) || !insideCap(sense.now, pad.to))) {
+      continue;
+    }
+    if (pursuer && dist(p3(pursuer), pad.at) <= d) continue;
+    best = pad.at;
+    bestD = d;
+  }
+  return best;
+}
+
+export function exitThird(sense: Sense, pursuer: ObsUnit | null): ObsUnit | null {
+  if (!pursuer) return null;
+  let best: ObsUnit | null = null;
+  for (const e of sense.enemies) {
+    if (e.id === pursuer.id) continue;
+    const d = dist(sense.me, p3(e));
+    if (d > EXIT_THIRD_M) break;
+    if (dist(p3(pursuer), p3(e)) <= d) continue;
+    if (sense.now.radius > 0 && !insideCap(sense.now, p3(e))) continue;
+    best = e;
+    break;
+  }
+  return best;
+}
+
+// The way out of a losing fight from `pursuer`, or null when there is none.
+export function exitFrom(sense: Sense, pursuer: ObsUnit | null): Action | null {
+  const out = exitCast(sense);
+  if (out) return out;
+  const pad = exitPad(sense, pursuer);
+  if (pad) return { kind: 'move', x: pad.x, y: pad.y, z: pad.z };
+  const third = exitThird(sense, pursuer);
+  if (third) return { kind: 'move', x: third.x, y: third.y ?? 0, z: third.z };
+  return null;
+}
+
+// How far the Zephyr's chase reaches, and the Sear's finish.
+export const ZEPHYR_CHASE_M = 10;
+export const SEAR_HP = 0.35;
+export const SEAR_M = 7;
+
+// A sigil worth pressing mid-fight: the Mend when hurt, the Sear on a
+// target low enough to finish, the Zephyr after a target leaving reach.
+export function fightSigil(sense: Sense, target?: ObsUnit): Action | null {
   const mend = readySigil(sense.s, 'mend');
   if (mend !== -1 && sense.s.hpFrac < 0.45) {
     return { kind: 'sigil', slot: mend, x: sense.me.x, y: sense.me.y, z: sense.me.z };
+  }
+  if (!target) return null;
+  const at = p3(target);
+  const d = dist(sense.me, at);
+  const sear = readySigil(sense.s, 'sear');
+  if (sear !== -1 && target.hpFrac < SEAR_HP && d <= SEAR_M) {
+    return { kind: 'sigil', slot: sear, x: at.x, y: at.y, z: at.z };
+  }
+  const zephyr = readySigil(sense.s, 'zephyr');
+  if (
+    zephyr !== -1 &&
+    d <= ZEPHYR_CHASE_M &&
+    d > sense.attackRange + 0.5 &&
+    leaving(sense, target)
+  ) {
+    return { kind: 'sigil', slot: zephyr, x: sense.me.x, y: sense.me.y, z: sense.me.z };
   }
   return null;
 }
