@@ -15,6 +15,8 @@ import { playSfx } from '../game/sfx';
 import type { CastTouch } from '../game/touch';
 import { followThumbScale, followUiScale, SETTINGS_EVENT } from '../game/ui_scale';
 import type { PointsReason } from '../net/protocol';
+import type { RoyaleNote } from '../net/royale_client';
+import type { RoyaleResult } from '../net/royale_wire';
 import { trackStep } from '../net/stats';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
@@ -26,6 +28,7 @@ import { SIGILS } from '../sim/content/sigils';
 import type { FavorStacks } from '../sim/favors';
 import { withinFountain } from '../sim/fountain';
 import type { RingClock } from '../sim/rings';
+import type { RoyaleVariant } from '../sim/royale/types';
 import {
   BASIC_MAX_RANK,
   effectiveRank,
@@ -111,6 +114,15 @@ import {
   wrathChipText,
 } from './objective_line';
 import { firstPointsText, pointsWord, popText } from './points_text';
+import { RoyaleHud } from './royale_hud';
+import {
+  hideRoyaleSteps,
+  type RoyaleStepsState,
+  royaleStepLine,
+  royaleStepsFinished,
+  royaleStepsStart,
+  stepRoyaleSteps,
+} from './royale_steps';
 import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
 import { suggestedItem } from './shop_suggestion';
@@ -909,6 +921,14 @@ const CSS = `
   margin: 0; border-color: #8a7430; background: #3a3014; color: #f2e6c0; white-space: nowrap;
 }
 .hud-end-offer .hud-menu-btn:hover { border-color: #c9a84a; }
+/* The battle royale (ADR 0031, ui/royale_hud.ts) has no gold, no shop,
+   no recall, no lanes, no towers and no teams: what would say so stands
+   down, and its own layer takes the top of the screen. */
+.hud.royale .hud-teamscore, .hud.royale .hud-meta, .hud.royale .hud-lane-card,
+.hud.royale .hud-kda .cs, .hud.royale .hud-feed { display: none; }
+.hud.royale.br-dropping .hud-nudge, .hud.royale.br-dropping .hud-steps { visibility: hidden; }
+.hud.royale .hud-announce { top: 112px; }
+.hud.compact.royale .hud-announce { top: 70px; }
 /* Compact mode (touchscreens): the desktop sizes swallow a phone screen, so
    the whole bottom block scales down, the chat goes (there is no way to type
    in a match on a phone anyway; pings still flash on the map), and the hints
@@ -1083,6 +1103,9 @@ export interface NetHooks {
   // A first step done, or 'off' for the guide hidden, for the seat report
   // (ui/first_steps.ts, server/seat_report.ts).
   sendStep?: (id: string) => void;
+  // The battle royale's landing point, picked on the globe during the drop
+  // (ADR 0031; net/royale_client.ts dropMsg): a point on the sphere.
+  sendDrop?: (p: { x: number; y: number; z: number }) => void;
 }
 
 export class Hud {
@@ -1137,6 +1160,7 @@ export class Hud {
   private lastFavorSum: [number, number] = [0, 0];
   private deathRecap = '';
   private readonly deathOverlay: HTMLElement;
+  private readonly deathTitle: HTMLElement;
   private readonly deathSub: HTMLElement;
   private readonly endOverlay: HTMLElement;
   private readonly endTitle: HTMLElement;
@@ -1256,6 +1280,10 @@ export class Hud {
   private readonly stopScale: () => void;
   private readonly stopThumbScale: () => void;
   private readonly styleEl: HTMLStyleElement;
+  // The battle royale's layer (ui/royale_hud.ts) and its first steps
+  // (ui/royale_steps.ts), in a match on the Wanderseed; null in a 5v5.
+  private readonly royale: RoyaleHud | null;
+  private royaleSteps: RoyaleStepsState | null = null;
 
   constructor(
     container: HTMLElement,
@@ -1270,6 +1298,8 @@ export class Hud {
     // Who is in front of the screen, for the lane guidance: a person on
     // the seat, a coach whose bot plays it, or a replay viewer.
     guide: GuideMode = 'play',
+    // The battle royale's rule set when this match is one (ADR 0031).
+    royale: RoyaleVariant | null = null,
   ) {
     this.world = world;
     this.selfId = selfId;
@@ -1303,9 +1333,20 @@ export class Hud {
     // done, unless the player hid the guide. A coach or a replay viewer
     // meets none, and that is not remembered as hidden.
     const settingsNow = getSettings();
-    this.steps = stepsStart(settingsNow.stepsOff || guide !== 'play', settingsNow.stepsDone);
+    // The battle royale has its own list (ui/royale_steps.ts), under the
+    // same Hide guide; the 5v5's stands finished there.
+    const guideOff = settingsNow.stepsOff || guide !== 'play';
+    this.steps = stepsStart(guideOff || royale !== null, settingsNow.stepsDone);
+    if (royale) this.royaleSteps = royaleStepsStart(guideOff, settingsNow.royaleStepsDone);
+    // No shop opens itself, no minions spawn: a battle royale starts on
+    // the drop (ADR 0031).
+    if (royale) {
+      this.openedOpeningShop = true;
+      this.sawBattleBegin = true;
+    }
     this.stepsInput = !coarsePointer ? 'mouse' : thumbs ? 'thumbs' : 'tap';
     root.className = coarsePointer ? `hud compact${thumbs ? ' thumbs' : ''} turn-needed` : 'hud';
+    if (royale) root.classList.add('royale');
     this.rootEl = root;
     // The interface size (src/game/ui_scale.ts): the screen's, or the
     // player's choice, followed live while the match is on. The screen is
@@ -1380,7 +1421,9 @@ export class Hud {
       'Spend it in the shop (P) at your fountain.',
     ]);
     const mainRow = el('div', 'hud-main');
-    mainRow.append(this.levelBadge, bars, goldBox);
+    // No gold in a battle royale: loot is the build (ADR 0031).
+    if (royale) mainRow.append(this.levelBadge, bars);
+    else mainRow.append(this.levelBadge, bars, goldBox);
 
     const self = world.units.get(selfId);
     const def = self?.championId ? world.championDef(self.championId) : null;
@@ -1551,7 +1594,8 @@ export class Hud {
     // The recall, a key on the bar beside the spells: B was a key nobody
     // knew (the maintainer, 2026-10-02). A phone has its own Recall on the
     // touch bar, and the thumb cluster no room for one more button.
-    if (!coarsePointer) {
+    // No recall in a battle royale (ADR 0031).
+    if (!coarsePointer && !royale) {
       const recall = el('div', 'hud-slot recall');
       recall.append(recallMark(), el('span', 'hud-slot-key', 'B'));
       attachTooltip(recall, () => [
@@ -1570,16 +1614,15 @@ export class Hud {
         const u = this.world.units.get(this.selfId);
         const itemId = u?.items[i];
         const itemDef = itemId ? ITEMS[itemId] : undefined;
-        return itemDef
-          ? [
-              ...describeItem(itemDef, statLabel(itemDef.stats)),
-              'Right-click to sell (70 percent back, at fountain).',
-            ]
-          : [];
+        if (!itemDef) return [];
+        const lines = describeItem(itemDef, statLabel(itemDef.stats));
+        // Nothing to sell it for in a battle royale: no gold, no fountain.
+        return royale ? lines : [...lines, 'Right-click to sell (70 percent back, at fountain).'];
       });
       // Right-click sells at the fountain for 70 percent of the price.
       slot.addEventListener('contextmenu', (e) => {
         e.preventDefault();
+        if (this.royale) return;
         const u = this.world.units.get(this.selfId);
         const itemId = u?.items[i];
         if (!u || itemId === undefined) return;
@@ -1618,23 +1661,32 @@ export class Hud {
 
     const hints = el('div', 'hud-hints');
     this.hintsEl = hints;
-    hints.textContent = coarsePointer
-      ? getSettings().touchScheme === 'thumbs'
-        ? 'Left thumb: the stick walks. Right thumb: tap a spell to cast it, slide it to ' +
-          'aim. ATK attacks. Tap the + to level up.'
-        : 'Tap: move / attack. Tap a spell, then tap the ground to cast it (tap the spell ' +
-          'again to cancel). Drag pans the camera, pinch zooms, Center snaps back to your ' +
-          'champion. Level up: tap the +.'
-      : stepsFinished(this.steps)
-        ? `${getSettings().leftClickMoves ? 'Click' : 'Right-click'}: move / attack. ` +
-          'A: attack-move. S: stop and hold. B: recall. ' +
-          'Q W E R: hold to aim, release to cast (right-click cancels). D F: sigils. P: shop. ' +
-          'Tab: scoreboard. Enter: chat. G: ping. Esc: menu. Screen edges pan the camera; ' +
-          'Space recenters; left-click the minimap to look. Level up: Alt+key or click +.'
-        : // While the first steps lead a newcomer, the keys they need and no
-          // more: the steps say the rest when it comes up.
-          `${getSettings().leftClickMoves ? 'Click' : 'Right-click'}: move / attack. ` +
-          'Q W E R: spells. B: recall. P: shop. Esc: menu.';
+    hints.textContent = royale
+      ? coarsePointer
+        ? getSettings().touchScheme === 'thumbs'
+          ? 'Left thumb: the stick walks. Right thumb: tap a spell to cast it, slide it to ' +
+            'aim. ATK attacks.'
+          : 'Tap: move / attack. Tap a spell, then tap the ground to cast it. Drag pans the ' +
+            'camera, Center snaps back to your champion.'
+        : `${getSettings().leftClickMoves ? 'Click' : 'Right-click'}: move / attack. ` +
+          'Q W E R: hold to aim, release to cast. D F: sigils. Space recenters. Esc: menu.'
+      : coarsePointer
+        ? getSettings().touchScheme === 'thumbs'
+          ? 'Left thumb: the stick walks. Right thumb: tap a spell to cast it, slide it to ' +
+            'aim. ATK attacks. Tap the + to level up.'
+          : 'Tap: move / attack. Tap a spell, then tap the ground to cast it (tap the spell ' +
+            'again to cancel). Drag pans the camera, pinch zooms, Center snaps back to your ' +
+            'champion. Level up: tap the +.'
+        : stepsFinished(this.steps)
+          ? `${getSettings().leftClickMoves ? 'Click' : 'Right-click'}: move / attack. ` +
+            'A: attack-move. S: stop and hold. B: recall. ' +
+            'Q W E R: hold to aim, release to cast (right-click cancels). D F: sigils. P: shop. ' +
+            'Tab: scoreboard. Enter: chat. G: ping. Esc: menu. Screen edges pan the camera; ' +
+            'Space recenters; left-click the minimap to look. Level up: Alt+key or click +.'
+          : // While the first steps lead a newcomer, the keys they need and no
+            // more: the steps say the rest when it comes up.
+            `${getSettings().leftClickMoves ? 'Click' : 'Right-click'}: move / attack. ` +
+            'Q W E R: spells. B: recall. P: shop. Esc: menu.';
 
     // The always-visible personal score: K / D / A plus creep
     // score, top right.
@@ -1835,7 +1887,8 @@ export class Hud {
 
     this.deathOverlay = el('div', 'hud-overlay');
     this.deathSub = el('div', 'hud-overlay-sub');
-    this.deathOverlay.append(el('div', 'hud-overlay-title', 'SLAIN'), this.deathSub);
+    this.deathTitle = el('div', 'hud-overlay-title', 'SLAIN');
+    this.deathOverlay.append(this.deathTitle, this.deathSub);
 
     this.endOverlay = el('div', 'hud-overlay modal');
     this.endTitle = el('div', 'hud-overlay-title');
@@ -1949,6 +2002,18 @@ export class Hud {
       this.escapeOverlay,
     );
     container.appendChild(root);
+    this.royale = royale
+      ? new RoyaleHud({
+          root,
+          world,
+          selfId,
+          selfTeam,
+          variant: royale,
+          touch: coarsePointer,
+          onExit,
+        })
+      : null;
+    this.royale?.setAnnounce((text, color) => this.announce(text, color));
   }
 
   setNetHooks(hooks: NetHooks): void {
@@ -1999,10 +2064,59 @@ export class Hud {
     }
   }
 
+  // The battle royale's events off a world tick (net/royale_client.ts): the
+  // loot that lands, and what the first steps count.
+  onRoyaleNotes(notes: readonly RoyaleNote[]): void {
+    if (notes.length > 0) this.royale?.onNotes(notes);
+  }
+
+  // The battle royale's end screen, when the server says this person is
+  // out for good or the match is over (RoyaleResult). The ladder box, the
+  // account offer and the feedback box move under it from the 5v5's end
+  // screen, which a battle royale never opens.
+  showRoyaleResult(result: RoyaleResult): void {
+    if (!this.royale) return;
+    if (this.escapeOverlay.classList.contains('open')) this.toggleEscapeMenu();
+    const extras: HTMLElement[] = [];
+    if (this.scores()) {
+      this.endLadder.refresh();
+      extras.push(this.endLadder.root);
+    }
+    const won = result.place === 1;
+    const own = this.world.scoreboard().find((r) => r.unitId === this.selfId);
+    const me = this.world.units.get(this.selfId);
+    const def = me?.championId ? this.world.championDef(me.championId) : null;
+    const offer = accountOffer({
+      guest: this.guest,
+      scored: this.scores(),
+      won,
+      kills: own?.kills ?? result.score,
+      deaths: own?.deaths ?? 0,
+      assists: own?.assists ?? 0,
+      champion: def?.name ?? null,
+    });
+    if (offer) {
+      this.endOfferLine.textContent = offer.line;
+      this.endOfferReason.textContent = offer.reason;
+      this.endOffer.classList.add('open');
+      extras.push(this.endOffer);
+    }
+    extras.push(this.endFeedback.root);
+    this.royale.showResult(result, extras);
+    this.deathOverlay.classList.remove('open');
+    if (!this.endPlayed) {
+      this.endPlayed = true;
+      playSfx(won ? 'victory' : 'defeat');
+      announceVoice(won ? 'victory' : 'defeat', true);
+    }
+    this.syncOverlay();
+  }
+
   // Same-page teardown: the HUD tree and its stylesheet go; a floating
   // tooltip attached to a removed element must not be left hanging.
   dispose(): void {
     hideTooltip();
+    this.royale?.dispose();
     this.stopScale();
     this.stopThumbScale();
     window.removeEventListener(SETTINGS_EVENT, this.onSettings);
@@ -2085,11 +2199,15 @@ export class Hud {
   }
 
   toggleShop(): void {
+    // No shop in a battle royale: loot is the build (ADR 0031).
+    if (this.royale) return;
     this.setShopOpen(!this.shop.classList.contains('open'));
     this.update();
   }
 
   toggleScoreboard(): void {
+    // The two teams' table has nothing to say of fifty champions.
+    if (this.royale) return;
     this.score.classList.toggle('open');
     this.update();
   }
@@ -2099,7 +2217,9 @@ export class Hud {
   private syncOverlay(): void {
     this.rootEl.classList.toggle(
       'overlay-open',
-      this.escapeOverlay.classList.contains('open') || this.endOverlay.classList.contains('open'),
+      this.escapeOverlay.classList.contains('open') ||
+        this.endOverlay.classList.contains('open') ||
+        this.royale?.resultShown() === true,
     );
   }
 
@@ -2111,6 +2231,7 @@ export class Hud {
       this.shop.classList.contains('open') ||
       this.escapeOverlay.classList.contains('open') ||
       this.endOverlay.classList.contains('open') ||
+      this.royale?.resultShown() === true ||
       this.turnWallUp()
     );
   }
@@ -2139,7 +2260,7 @@ export class Hud {
   // it: the guide starts over and the card comes back), whether the
   // player got there, and the card's words and life. Nothing in a replay.
   private stepLaneGuide(self: { lane: LaneGuide['lane']; pos: Vec2; dead: boolean }): void {
-    if (this.guideMode === 'watch') return;
+    if (this.guideMode === 'watch' || this.royale) return;
     const prev = this.guide;
     this.guide = stepGuide(
       prev,
@@ -2216,6 +2337,10 @@ export class Hud {
   // remembered by the browser and told to the seat report, and the step
   // up is drawn under the lane card or the feedback line when one is up.
   private stepFirstSteps(u: Readonly<Unit>): void {
+    if (this.royale) {
+      this.stepRoyaleFirstSteps(u, this.royale);
+      return;
+    }
     if (stepsFinished(this.steps) && !this.stepsEl.classList.contains('on')) return;
     const view = this.stepsView(u);
     const prev = this.steps;
@@ -2241,6 +2366,33 @@ export class Hud {
       'hint',
       visible && (id === 'recall' || id === 'go_shop' || id === 'low_health'),
     );
+  }
+
+  // The battle royale's first steps (ui/royale_steps.ts), in the same card
+  // and under the same rules as the 5v5's: remembered by the browser on a
+  // list of their own.
+  private stepRoyaleFirstSteps(u: Readonly<Unit>, royale: RoyaleHud): void {
+    const prev = this.royaleSteps;
+    if (!prev) return;
+    if (royaleStepsFinished(prev) && !this.stepsEl.classList.contains('on')) return;
+    const view = royale.stepsView(u, this.nudgeBlocked());
+    const next = stepRoyaleSteps(prev, view);
+    this.royaleSteps = next;
+    const fresh = next.done.filter((id) => !prev.done.includes(id));
+    if (fresh.length > 0) {
+      updateSettings({
+        royaleStepsDone: [...new Set([...getSettings().royaleStepsDone, ...fresh])],
+      });
+      for (const id of fresh) this.netHooks.sendStep?.(id);
+    }
+    const id = next.current;
+    const visible = id !== null && !view.covered && !view.dead;
+    if (id !== null && visible) {
+      const line = royaleStepLine(id, this.stepsInput);
+      if (this.stepsLineEl.textContent !== line) this.stepsLineEl.textContent = line;
+      this.stepsEl.classList.toggle('below', this.nudgeEl.classList.contains('on'));
+    }
+    this.stepsEl.classList.toggle('on', visible);
   }
 
   // What the first steps read of the match: the champion, what is near
@@ -2295,6 +2447,7 @@ export class Hud {
   // The player hid the guide: for good, until the settings bring it back.
   private hideFirstSteps(): void {
     this.steps = hideSteps(this.steps);
+    if (this.royaleSteps) this.royaleSteps = hideRoyaleSteps(this.royaleSteps);
     this.stepsEl.classList.remove('on');
     updateSettings({ stepsOff: true });
     this.netHooks.sendStep?.('off');
@@ -2351,7 +2504,8 @@ export class Hud {
     return (
       this.shop.classList.contains('open') ||
       this.escapeOverlay.classList.contains('open') ||
-      this.endOverlay.classList.contains('open')
+      this.endOverlay.classList.contains('open') ||
+      this.royale?.resultShown() === true
     );
   }
 
@@ -2685,7 +2839,9 @@ export class Hud {
                 ? `Killed by the ${CREATURES[killerUnit2.creatureId].name}`
                 : killerUnit2?.kind === 'camp' && killerUnit2.campKind
                   ? `Killed by the ${CAMPS[killerUnit2.campKind].name}`
-                  : 'Killed by minions';
+                  : this.royale
+                    ? 'Burned by the Dusk'
+                    : 'Killed by minions';
         const me = this.world.units.get(this.selfId);
         if (me) {
           const helpers = me.recentDamagers
@@ -2726,6 +2882,12 @@ export class Hud {
         if (shout.spotlight) this.spotlight(shout);
         else this.announce(shout.text, shout.color);
         announceVoice(shout.voice, true, true, shout.intensity);
+      }
+      // The battle royale's feed is its own (ui/royale_hud.ts): every
+      // champion for themself, a bot mark beside every bot.
+      if (this.royale) {
+        this.royale.pushKill(k);
+        continue;
       }
       const killerRow = rowOf(k.killerId);
       let killerName = killerRow ? who(killerRow) : 'The lane';
@@ -2845,7 +3007,7 @@ export class Hud {
       }
     }
     const towerCount = [...this.world.units.values()].filter((x) => x.kind === 'tower').length;
-    if (this.lastTowerCount !== null && towerCount < this.lastTowerCount) {
+    if (!this.royale && this.lastTowerCount !== null && towerCount < this.lastTowerCount) {
       this.announce('A tower has fallen');
       playSfx('tower');
       announceVoice('tower_fallen');
@@ -2862,10 +3024,14 @@ export class Hud {
     const wardenUp = objAt === null;
     const rings = this.world.ringClocks();
     const pit = this.world.wardenPit() ?? undefined;
-    this.metaText.textContent = `${clock} · ${objectiveLine(rings, objAt, this.world.time, pit)}`;
+    if (!this.royale) {
+      this.metaText.textContent = `${clock} · ${objectiveLine(rings, objAt, this.world.time, pit)}`;
+    }
     const mineBoon = this.world.teamBuff(this.selfTeam);
     const enemyBoon = this.world.teamBuff((1 - this.selfTeam) as TeamId);
-    if (this.lastWardenUp !== null && wardenUp !== this.lastWardenUp) {
+    // The Warden's Boon and the rings' favors are team claims: a battle
+    // royale has no teams to give them to (ADR 0031).
+    if (!this.royale && this.lastWardenUp !== null && wardenUp !== this.lastWardenUp) {
       if (wardenUp) {
         this.announce(
           pit ? `The Warden has awoken at the ${pit.name}` : 'The Warden has awoken',
@@ -2891,7 +3057,7 @@ export class Hud {
     if (enemyBoon) this.lastBoonEnemyUntil = Math.max(this.lastBoonEnemyUntil, enemyBoon.until);
     const mineFavors = this.world.teamFavors(this.selfTeam);
     const enemyFavors = this.world.teamFavors((1 - this.selfTeam) as TeamId);
-    this.announceRings(rings, mineFavors, enemyFavors);
+    if (!this.royale) this.announceRings(rings, mineFavors, enemyFavors);
     this.levelBadge.textContent = String(u.level);
     this.goldText.textContent = `${Math.floor(u.gold)}g`;
     if (this.lastLevel !== -1 && u.level > this.lastLevel) {
@@ -3172,6 +3338,22 @@ export class Hud {
       }
     }
 
+    if (this.royale) {
+      // The battle royale's own wash (ui/royale_hud.ts), gone once its end
+      // screen stands; and its own end screen, from the server's result.
+      this.royale.update();
+      const dead = u.dead && !this.royale.resultShown();
+      this.deathOverlay.classList.toggle('open', dead);
+      if (dead) {
+        const words = this.royale.deathWords(u);
+        if (this.deathTitle.textContent !== words.title) this.deathTitle.textContent = words.title;
+        this.deathSub.textContent = this.deathRecap
+          ? `${this.deathRecap} · ${words.sub}`
+          : words.sub;
+      }
+      this.syncOverlay();
+      return;
+    }
     this.deathOverlay.classList.toggle('open', u.dead);
     if (u.dead) {
       const respawn = `Respawn in ${Math.max(0, u.respawnAt - this.world.time).toFixed(1)}s`;

@@ -7,10 +7,13 @@
 // authoritative answer.
 
 import type { PointsReason } from '../net/protocol';
+import type { RoyaleNote } from '../net/royale_client';
+import type { RoyaleResult } from '../net/royale_wire';
 import { schoolColorOf } from '../render/ability_vfx';
 import { aspectColor } from '../render/aspect_colors';
 import { Renderer } from '../render/renderer';
 import type { RenderTerrain } from '../render/terrain';
+import type { RoyaleVariant } from '../sim/royale/types';
 import { effectiveRank } from '../sim/stats';
 import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
 import { DT } from '../sim/types';
@@ -71,6 +74,9 @@ export interface WorldNotes {
   hits: readonly { targetId: number; amount: number }[];
   // Auto-attacks fired by visible units, for swing animations.
   attacks: readonly { unitId: number; targetId: number }[];
+  // The battle royale's events (net/royale_client.ts), for the HUD's
+  // notices and its first steps; absent in a 5v5.
+  royale?: readonly RoyaleNote[];
 }
 
 export interface Presentation {
@@ -85,6 +91,9 @@ export interface Presentation {
   // Points this player's seat banked on the ladder (ADR 0027): the total
   // beside the K/D/A and a pop with the reason.
   showPoints(delta: number, total: number, reason: PointsReason): void;
+  // The battle royale's end screen (ui/royale_hud.ts), from the result the
+  // server sends this person; nothing in a 5v5.
+  showRoyaleResult(result: RoyaleResult): void;
   // The pause menu, where Leave match lives: what the browser's Back does
   // mid-match instead of leaving (src/game/nav.ts). Back again resumes.
   toggleEscapeMenu(): void;
@@ -125,6 +134,10 @@ export function startPresentation(
     // arrow), a coach whose bot plays it (the card and the lane, no walk,
     // no arrow), or a replay viewer (none of it).
     guide?: GuideMode;
+    // A battle royale on the Wanderseed (ADR 0031), on this rule set: the
+    // HUD draws the mode's layer and leaves out the shop, the gold, the
+    // recall and the lanes.
+    royale?: RoyaleVariant;
   },
 ): Presentation {
   const guide = options.guide ?? 'play';
@@ -154,6 +167,7 @@ export function startPresentation(
     options.guest === true,
     options.mode ?? 'practice',
     guide,
+    options.royale ?? null,
   );
   // The thumb controls (CONTEXT.md: Thumb stick): a touchscreen playing
   // by the stick, which moves the minimap and the touch bar out of the
@@ -618,16 +632,22 @@ export function startPresentation(
   });
   // The recall key on the bar: the recall B gives.
   hud.setRecall(() => inputHandlers.onRecall());
-  // The arrow toward the lane, for a person on the seat only.
-  const laneArrow = guide === 'play' ? new LaneArrow(stage.el) : null;
+  // The arrow toward the lane, for a person on the seat only; a battle
+  // royale has no lanes.
+  const laneArrow = guide === 'play' && !options.royale ? new LaneArrow(stage.el) : null;
   const arrowHalf = laneArrowHalf();
   if (thumbControls) hud.setCastTouch(touch.castTouch);
   const teardownTouchBar = coarsePointer
     ? buildTouchBar(
         stage.el,
         {
-          onRecall: () => inputHandlers.onRecall(),
-          onToggleShop: () => inputHandlers.onToggleShop(),
+          // No shop and no recall in a battle royale (ADR 0031).
+          ...(options.royale
+            ? {}
+            : {
+                onRecall: () => inputHandlers.onRecall(),
+                onToggleShop: () => inputHandlers.onToggleShop(),
+              }),
           onToggleMenu: () => inputHandlers.onToggleMenu(),
           onRecenterCamera: () => inputHandlers.onRecenterCamera(),
         },
@@ -676,6 +696,7 @@ export function startPresentation(
     minimap.update();
     if (notes) {
       if (notes.kills.length > 0) hud.pushKills(notes.kills);
+      if (notes.royale) hud.onRoyaleNotes(notes.royale);
       if (
         notes.golds.length > 0 ||
         notes.casts.length > 0 ||
@@ -752,6 +773,7 @@ export function startPresentation(
     setMatchResult: (rated, delta, rating, queue, way) =>
       hud.setMatchResult(rated, delta, rating, queue, way),
     showPoints: (delta, total, reason) => hud.showPoints(delta, total, reason),
+    showRoyaleResult: (result) => hud.showRoyaleResult(result),
     toggleEscapeMenu: () => hud.toggleEscapeMenu(),
     covers: () => hud.covers(),
     stage: stage.el,

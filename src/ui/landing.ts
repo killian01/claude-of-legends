@@ -21,12 +21,16 @@ import { mountEmbers } from './landing_embers';
 import { mountLandingLadder } from './landing_ladder';
 import {
   ACCOUNT_LINE,
+  CLASSIC_ART,
   HERO_RANKED_LINE,
   LANDING_MODES,
+  LANDING_WAYS,
   type LandingDoor,
+  type LandingPlay,
+  type LandingWay,
   PLAY_NOW,
-  PLAY_NOW_ART,
   PLAY_NOW_LINE,
+  WAYS_LABEL,
 } from './landing_modes';
 import { mountPresence } from './landing_presence';
 import { revealOnScroll } from './landing_reveal';
@@ -36,6 +40,7 @@ import { allNews, countdownText, dayText, isPinned, newestOf } from './news';
 import { newsImageUrl } from './news_images';
 import { openNews } from './news_section';
 import { buildPage, ensurePageCss, mountLiveStats, navLink } from './page';
+import { planetEmblem } from './planet_emblem';
 import { buildRepoLink } from './repo_link';
 
 // Only what the landing page adds to the shared chrome: the bento, which
@@ -49,10 +54,14 @@ const CSS = `
    inside itself, the other is the match as a Guest, and neither needs a
    caption over it. On a wide screen the first row is the match and the
    ladder it puts you on, side by side (the maintainer: the ladder had to
-   stand out), and the account card takes the whole row under them. */
+   stand out), and the account card takes the whole row under them. The
+   match's card is a little wider than it was, since it carries three ways
+   in now (ADR 0031) and each says its rules in a line: at four parts in
+   eleven the Respawn line ran to four lines and pushed the gold button
+   under the fold of a laptop. */
 .pg.land .pg-cards { display: grid; max-width: 1180px; gap: 18px; align-items: stretch;
   margin-left: auto; margin-right: auto;
-  grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); }
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
 .pg.land .pg-cards > .pg-card.plain { order: -2; }
 .pg.land .pg-cards > .pg-card.gold { grid-column: 1 / -1; }
 /* What the account opens, inside the card that opens it: the same three
@@ -73,19 +82,41 @@ const CSS = `
 .pg-opens-form { display: flex; flex-direction: column; justify-content: center;
   padding: 16px; border-radius: 12px; border: 1px solid rgba(140, 168, 208, 0.28);
   background: rgba(6, 10, 20, 0.72); }
-/* The other way in, wearing the practice tile's painting. Without one it
-   was two lines and a button beside a card carrying a form and three
-   paintings: an offer and a footnote under it, when the two are meant to
-   read as a choice. The painting takes whatever height the account card
-   leaves over, which is what puts the two feet on one line without either
-   card being told what it measures. */
-.pg-try { position: relative; overflow: hidden; flex: 1 1 auto; min-height: 150px;
-  margin: 0 0 14px; border-radius: 12px; border: 1px solid #2b3f60; background: #0a1120; }
-/* Composed upright like the band's three, so the crop favours the top and
-   the eye lands on the fight rather than on the ground in front of it. */
-.pg-try img { position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: cover; object-position: 50% 30%; }
-/* The button sits at the foot of its card, under the painting. */
+/* The other way in, and its three ways to play (ui/landing_modes.ts
+   LANDING_WAYS): the battle royale's two rule sets and the 5v5, a row
+   each, each a door. A row is an emblem, the kind of match in small gold
+   letters, the name, and the line that says the rules. Respawn's row
+   carries the gold edge, because the gold button under the rows plays it.
+   The rows take whatever height the account card leaves over, which is
+   what puts the two feet on one line without either card being told
+   what it measures. */
+.pg-ways { display: flex; flex-direction: column; justify-content: flex-start; gap: 8px;
+  flex: 1 1 auto; margin: 16px 0 0; }
+.pg-ways-label { font-size: 10.5px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase;
+  color: #8ba1c0; margin: 0 0 -2px 2px; }
+.pg-way { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 12px;
+  border-radius: 12px; border: 1px solid #2b3f60; background: rgba(10, 16, 30, 0.72);
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease; }
+.pg-way:hover, .pg-way:focus-visible { border-color: #c9a84a; outline: none;
+  background: rgba(24, 26, 36, 0.86); transform: translateX(2px); }
+.pg-way.lead { border-color: #8a7433;
+  background: linear-gradient(90deg, rgba(232, 196, 108, 0.13), rgba(10, 16, 30, 0.72) 70%); }
+.pg-way-words { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.pg-way-words small { font-size: 10px; font-weight: 800; letter-spacing: 1.4px;
+  text-transform: uppercase; color: #c9a84a; }
+.pg-way-words b { font-family: Cinzel, Georgia, serif; font-size: 15px; font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase; color: #f0dca0; line-height: 1.15; }
+.pg-way-words span { font-size: 12px; line-height: 1.4; color: #b9cbe4; }
+.pg-way-go { flex: none; font-size: 20px; line-height: 1; color: #c9a84a; }
+/* The emblem: the Wanderseed (ui/planet_emblem.ts) for the battle
+   royale's two, the ranked painting for the 5v5. */
+.pg-way > .pg-way-art { flex: none; width: 46px; height: 46px; --planet: 46px; position: relative; }
+.pg-way-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  object-position: 50% 30%; }
+.pg-way-art.painting { border-radius: 12px; border: 1px solid #2b3f60; overflow: hidden;
+  background: #0a1120; }
+/* The button sits over the ways in. */
 .pg.land .pg-card.plain .menu-btn { margin-top: 4px; }
 /* The one door that needs nothing, so it is the one that glows: the card
    breathes a gold halo and the button wears the GitHub star's gold with a
@@ -164,7 +195,11 @@ const CSS = `
   .pg.land .pg-lockup { width: 104px; }
   .pg.land .pg-hero-cta { margin-top: 14px; }
   .pg.land .pg-ranked + .pg-hero-cta { margin-top: 10px; }
-  .pg.land .pg-card.plain > .pg-try { display: none; }
+  .pg-ways { gap: 6px; margin-top: 12px; }
+  .pg-way { padding: 7px 10px; gap: 10px; }
+  .pg-way > .pg-way-art { width: 40px; height: 40px; --planet: 40px; }
+  .pg-way-words b { font-size: 13.5px; }
+  .pg-way-words span { font-size: 11.5px; line-height: 1.3; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pg.land .pg-cards .pg-card.glow { animation: none; }
@@ -220,7 +255,7 @@ const CSS = `
      from becoming the tallest thing on the page as the column widens:
      without it the free card outgrew the account card at 1000, which
      says the wrong thing about which of the two is the offer. */
-  .pg-try { flex: none; aspect-ratio: 16 / 7; max-height: 190px; }
+  .pg-ways { flex: none; }
 }
 /* Narrow, the two stack and the band goes first: it is what the card is
    selling, and the form is what the reader scrolls to when they have
@@ -238,7 +273,7 @@ const CSS = `
   .pg.land .pg-card.plain > p { order: 2; }
   .pg.land .pg-card.plain > .pg-presence { order: 3; margin-top: 2px; }
   .pg.land .pg-card.plain > .menu-btn { order: 3; margin-top: 2px; }
-  .pg.land .pg-card.plain > .pg-try { order: 5; margin-top: 12px; }
+  .pg.land .pg-card.plain > .pg-ways { order: 5; }
   .pg.land .pg-card.plain > .pg-news { order: 6; }
   .pg-mode { height: auto; aspect-ratio: 3 / 4; }
   .pg-mode-body { padding: 34px 8px 8px; }
@@ -368,8 +403,8 @@ const CSS = `
 .pg.land .pg-card:hover { transform: translateY(-4px); border-color: #b8963f;
   box-shadow: 0 30px 70px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(232, 196, 108, 0.18),
     0 0 46px rgba(220, 184, 94, 0.14); }
-.pg-mode img, .pg-try img { transition: transform 1.4s cubic-bezier(0.2, 0.7, 0.2, 1); }
-.pg.land .pg-card:hover .pg-mode img, .pg.land .pg-card:hover .pg-try img { transform: scale(1.06); }
+.pg-mode img { transition: transform 1.4s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.pg.land .pg-card:hover .pg-mode img { transform: scale(1.06); }
 .pg-mode { transition: filter 0.4s ease; }
 .pg-mode:hover { filter: brightness(1.12); }
 /* The bar's sections underline themselves from the middle out. */
@@ -416,9 +451,10 @@ function ensureCss(): void {
 export type LandingResult =
   // Signed in: everything the server allows is now reachable.
   | { kind: 'account'; account: AuthedAccount }
-  // Chose the public queue as a Guest (ADR 0024), on the ladder from its
-  // first points (ADR 0027).
-  | { kind: 'guest' };
+  // Chose a match as a Guest (ADR 0024), on the ladder from its first
+  // points (ADR 0027): the battle royale on one of its rule sets (ADR
+  // 0031), or the 5v5's public queue.
+  | { kind: 'guest'; play: LandingPlay };
 
 // Why the landing is being shown again, when it is: 'register' after a
 // visitor took the account offer at the end of a match
@@ -462,8 +498,33 @@ export function showLanding(
     const doorButton = (door: LandingDoor, cls: string): HTMLButtonElement => {
       const b = el('button', cls, door.call);
       b.type = 'button';
-      b.addEventListener('click', () => finish({ kind: door.kind }));
+      b.addEventListener('click', () => finish({ kind: door.kind, play: door.play }));
       return b;
+    };
+    // One of the Play now card's ways in, a door of its own: the emblem,
+    // the kind of match, the name and its rules, and the chevron.
+    const wayRow = (way: LandingWay): HTMLButtonElement => {
+      const row = el('button', `pg-way${way.door === PLAY_NOW ? ' lead' : ''}`);
+      row.type = 'button';
+      row.dataset.way = way.id;
+      const art =
+        way.id === 'classic'
+          ? el('span', 'pg-way-art painting')
+          : planetEmblem(way.id, 'pg-way-art');
+      if (way.id === 'classic') {
+        const img = el('img', '');
+        img.src = CLASSIC_ART;
+        // The name beside it says which match this is.
+        img.alt = '';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        art.appendChild(img);
+      }
+      const words = el('span', 'pg-way-words');
+      words.append(el('small', '', way.kicker), el('b', '', way.title), el('span', '', way.line));
+      row.append(art, words, el('span', 'pg-way-go', '\u203a'));
+      row.addEventListener('click', () => finish({ kind: way.door.kind, play: way.door.play }));
+      return row;
     };
 
     // --- the bar: the same one the home wears, with the little it needs ---
@@ -569,38 +630,35 @@ export function showLanding(
     openRow.append(formPanel, opens);
     online.appendChild(openRow);
 
-    // The other way in, and the one that needs nothing: the public queue
-    // as a Guest (ADR 0024), scored on the ladder from the first match
-    // (ADR 0027). The offline match that stood one quiet line under it
-    // left the landing: visitors play online now, and the page falls back
-    // to practice by itself when no Guest can be opened (src/main.ts). It
-    // says what it is in one line: a visitor who has read the title of the
-    // page knows what a 5v5 is. It no longer brags about the whole roster
-    // being open in it, because it is not: a visitor picks from what a
-    // fresh account holds (ADR 0018).
+    // The other way in, and the one that needs nothing: a match as a Guest
+    // (ADR 0024), scored on the ladder from the first match (ADR 0027).
+    // Its gold button plays the battle royale's Respawn (ADR 0031), and the
+    // rows over it are the three ways to play, each a door of its own: the
+    // two rule sets of the battle royale and the 5v5 on the Star Orchard.
+    // The offline match that stood one quiet line under it left the
+    // landing: visitors play online now, and the page falls back to
+    // practice by itself when no Guest can be opened (src/main.ts).
     const playCard = el('section', 'pg-card plain glow');
     const playBtn = doorButton(PLAY_NOW, 'menu-btn pg-play');
     // Someone playing right now, over the button (ui/landing_presence.ts).
     const presence = el('div', 'pg-presence');
     presence.append(el('i', ''), el('span', ''));
     mountPresence(presence);
-    // The painting this card was missing. The heading above it says what
-    // it is, so the picture is decoration and carries no label of its own.
-    const tryArt = el('img', '');
-    tryArt.src = PLAY_NOW_ART;
-    tryArt.alt = '';
-    tryArt.loading = 'lazy';
-    tryArt.decoding = 'async';
-    const tryShot = el('div', 'pg-try');
-    tryShot.appendChild(tryArt);
+    // The ways in, under the gold button: the battle royale's two rule
+    // sets and the 5v5 (ui/landing_modes.ts). The button stands over them
+    // so it holds the first screen of a laptop, where it always stood; the
+    // gold edge on Respawn's row, right under it, says which it plays.
+    const wayList = el('div', 'pg-ways');
+    wayList.appendChild(el('div', 'pg-ways-label', WAYS_LABEL));
+    for (const way of LANDING_WAYS) wayList.appendChild(wayRow(way));
     playCard.append(
       // "Or try it first" while it stood second; stacked it stands first
       // now, and a heading that begins with "Or" has nothing to follow.
       el('h2', '', 'Play now'),
       el('p', '', PLAY_NOW_LINE),
-      tryShot,
       presence,
       playBtn,
+      wayList,
     );
     // The newest news in one line (CONTEXT.md: News): a site whose last
     // word is from yesterday reads inhabited before anything is clicked.
@@ -658,7 +716,7 @@ export function showLanding(
     const ladder = el('section', 'pg-ladder');
     ways.append(online, playCard, ladder);
     inner.appendChild(ways);
-    mountLandingLadder(ladder, () => finish({ kind: PLAY_NOW.kind }));
+    mountLandingLadder(ladder, () => finish({ kind: PLAY_NOW.kind, play: PLAY_NOW.play }));
 
     // --- and the thing the genre does not offer ---
     const give = el('section', 'pg-give');
