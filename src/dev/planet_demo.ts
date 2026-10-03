@@ -29,7 +29,8 @@ if (params.get('hud') === '0') {
 }
 
 const [ground] = await Promise.all([
-  loadPlanetGround({ light: coarse }),
+  // ?light=1: the phone's model on any screen.
+  loadPlanetGround({ light: coarse || params.get('light') === '1' }),
   whenChampionModelsReady(),
 ]);
 const at = params.get('at')?.split(',').map(Number);
@@ -39,6 +40,7 @@ const world = new PlanetDemoWorld(ground, {
     : {}),
   dropS: Number.isFinite(dropS) ? dropS : 8,
   duskNear: params.get('dusk') === 'near',
+  ...(params.has('near') ? { near: Number(params.get('near')) } : {}),
   seed: Number(params.get('seed') ?? 3),
 });
 const terrain = planetTerrain(ground);
@@ -102,5 +104,15 @@ requestAnimationFrame(frame);
       p95Ms: at(0.95),
       ...(renderer ? renderer.renderStats() : {}),
     };
+  },
+  // One draw without the shadow pass, for its share of the cost.
+  withoutShadows() {
+    if (!renderer) return null;
+    const gl = (renderer as unknown as { gl: { shadowMap: { enabled: boolean } } }).gl;
+    gl.shadowMap.enabled = false;
+    renderer.render(1);
+    const stats = renderer.renderStats();
+    gl.shadowMap.enabled = true;
+    return stats;
   },
 };

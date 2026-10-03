@@ -34,6 +34,9 @@ export interface PlanetGround {
   readonly layout: PlanetLayout;
   // True for the procedural stand-in.
   readonly placeholder: boolean;
+  // The light model, a phone's: the renderer keeps its draw lighter too
+  // (fewer shadow casters).
+  readonly light?: boolean;
   // Meters above the sim sphere at a sphere point.
   heightAt(p: Vec3): number;
   // Whether nothing can stand there (water, rock, a trunk), when known.
@@ -201,6 +204,7 @@ function standInGround(segments: number): THREE.Mesh {
   const ground = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true }));
   ground.receiveShadow = true;
   ground.name = 'ground';
+  ground.userData.ground = true;
   return ground;
 }
 
@@ -467,6 +471,15 @@ export function standInGroundPlanet(): PlanetGround {
   return groundOf(standInModel(), standInLayout(), (p) => standInHeight(unit(p)), true);
 }
 
+// The terrain and the water of the shipped model (docs/planet.md names
+// them), as against its props: by the node's name or an ancestor's.
+export function isGroundMesh(o: THREE.Object3D): boolean {
+  for (let n: THREE.Object3D | null = o; n; n = n.parent) {
+    if (/^(terrain|water|ground)/i.test(n.name)) return true;
+  }
+  return false;
+}
+
 // The battle royale's terrain in one call: what a host hands the
 // presentation (game/boot.ts) where a 5v5 hands the Star Orchard's. The
 // light model on a coarse pointer, like the Orchard's quality rule.
@@ -546,19 +559,26 @@ export async function loadPlanetGround(
     const model = new THREE.Group();
     model.name = 'planet';
     model.add(asset.scene);
+    // Everything takes shadows; only the props throw them, and on the light
+    // model (a phone) none do: the ground's own relief throwing on itself
+    // was a second draw of 300k triangles for a shade nobody reads.
     model.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
       mesh.receiveShadow = true;
-      mesh.castShadow = true;
+      mesh.castShadow = !opts.light && !isGroundMesh(mesh);
+      if (isGroundMesh(mesh)) mesh.userData.ground = true;
     });
-    return groundOf(
-      model,
-      layout,
-      (p) => heights.heightAt(p),
-      false,
-      (p) => heights.blocked(p),
-    );
+    return {
+      ...groundOf(
+        model,
+        layout,
+        (p) => heights.heightAt(p),
+        false,
+        (p) => heights.blocked(p),
+      ),
+      light: opts.light === true,
+    };
   } catch (err) {
     console.warn('planet export unreadable, drawing the stand-in', err);
     return standInGroundPlanet();

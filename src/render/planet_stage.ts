@@ -27,6 +27,7 @@ import { PlanetMarks } from './planet_marks';
 import { PlanetMinimap } from './planet_minimap';
 import { PlanetSky } from './planet_sky';
 import type { PlanetGround } from './planet_terrain';
+import { PlanetCuller } from './planet_tiles';
 import type { ChartRemap } from './vfx/chart_shift';
 
 // The chart window's side: the renderer frames a square this big, the
@@ -36,6 +37,10 @@ export const PLANET_WINDOW = 200;
 const RECENTER_M = 1;
 // Beyond this far from the focus, along the ground, nothing is drawn.
 export const VIEW_REACH_M = 70;
+// Champions this near the focus throw shadows, on the full model and on a
+// phone's light one: the shadow pass draws every caster's body again.
+const UNIT_SHADOW_M = 30;
+const UNIT_SHADOW_LIGHT_M = 12;
 // The dive from the globe to the champion, seconds.
 export const DIVE_S = 1.1;
 // A pad's arc, meters at its top.
@@ -99,6 +104,8 @@ export class PlanetStage {
   // The minimap's window of the same chart (planet_minimap.ts).
   readonly minimap: PlanetMinimap;
   private readonly marks: PlanetMarks;
+  // The model cut into tiles, only those in view drawn (planet_tiles.ts).
+  readonly culler: PlanetCuller;
   private readonly half: number;
   private readonly history = new Map<number, PlanetChart>();
   // The drop: the orbit the globe is seen from, and the dive's start.
@@ -137,6 +144,7 @@ export class PlanetStage {
     this.root.userData.unbent = true;
     this.root.userData.chartFixed = true;
     this.root.name = 'planet-root';
+    this.culler = new PlanetCuller(ground.model, ground.radius);
     this.root.add(ground.model);
     this.root.add(atmosphere(this.radius));
     this.marks = new PlanetMarks(ground, this.radius);
@@ -530,6 +538,15 @@ export class PlanetStage {
     return r;
   }
 
+  // Whether a champion at this point of the renderer's space throws a
+  // shadow: only near the focus, nearer on a phone.
+  castsShadow(x: number, z: number): boolean {
+    const reach = this.ground.light ? UNIT_SHADOW_LIGHT_M : UNIT_SHADOW_M;
+    const dx = x - this.half;
+    const dz = z - this.half;
+    return dx * dx + dz * dz <= reach * reach;
+  }
+
   // How far above its ground a unit is drawn: thrown by a pad along its
   // arc, or falling the last stretch of the drop.
   liftOf(unitId: number, x: number, z: number): number {
@@ -643,6 +660,11 @@ export class PlanetStage {
   // chart point is bent to. After it: everything back.
   beginDraw(lights: readonly THREE.PointLight[]): () => void {
     this.sky.follow(this.camera, 2 * this.half);
+    // The chart may have moved since update(): the planet's matrix as it
+    // is drawn, for the ground's shading and for the tiles in view.
+    this.root.updateMatrixWorld(true);
+    DUSK_UNIFORMS.colPlanetInv.value.copy(this.root.matrixWorld).invert();
+    this.culler.update(this.camera, this.root.matrixWorld, this.view.chart.up);
     BEND_UNIFORMS.colBendO.value.set(this.half, 0, this.half);
     BEND_UNIFORMS.colBendR.value = this.radius;
     BEND_UNIFORMS.colBendOn.value = 1;
@@ -724,7 +746,7 @@ function atmosphere(radius: number): THREE.Mesh {
     blending: THREE.AdditiveBlending,
     side: THREE.FrontSide,
   });
-  const shell = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.045, 96, 64), material);
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.045, 64, 40), material);
   shell.name = 'atmosphere';
   shell.userData.noDusk = true;
   shell.renderOrder = 2;
