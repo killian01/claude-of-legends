@@ -34,6 +34,15 @@ export interface Ground {
   restoreBlockers(b: Uint8Array): void;
 }
 
+// Where a unit is put down rather than walked (a knockback, a pull, a blink
+// and its return, a camp or a creature rising): p itself when it is
+// walkable, else the nearest walkable point within maxCells (the grid's own
+// default when absent), null when there is none. On the plane these are the
+// very grid calls the sim always made.
+export function landingOn(ground: Ground, p: Vec2, maxCells?: number): Vec2 | null {
+  return ground.isWalkableAt(p) ? p : ground.nearestWalkable(p, maxCells);
+}
+
 // The plane: the map's NavGrid (or the Star Orchard's terrain grid) and the
 // grid's A*.
 export class PlaneGround implements Ground {
