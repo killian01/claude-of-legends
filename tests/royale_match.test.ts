@@ -148,7 +148,10 @@ describe('a whole battle royale of fifty house bots', () => {
     // mostly fought (a tenth of the time before), few takedowns are steals,
     // and the field does not fall in the first minutes.
     expect(a.fighting).toBeGreaterThan(0.4);
-    expect(a.steals).toBeLessThan(0.12);
+    // A losing bot now drags its pursuer into a third fighter on purpose
+    // (bots with intent): a few more takedowns land on a champion someone
+    // else wore down, still far fewer than the steals of old.
+    expect(a.steals).toBeLessThan(0.2);
     expect(a.ticks).toBeGreaterThan(Math.round((DROP_S + 360) * 20));
   }, 300_000);
 });

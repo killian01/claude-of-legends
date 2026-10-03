@@ -5,8 +5,9 @@
 // better is near, and otherwise a wander where it stands. Pure over the
 // slot's sense; every distance a chord.
 
+import { ROAM_GOAL_M, SEEDFALL_STANDOFF_M } from '../../content/bots/royale_skills';
 import { dirTo, dist, heading, type Vec3 } from '../../geo';
-import type { Action, ObsCache } from '../../policy';
+import type { Action, ObsCache, ObsSeedfall } from '../../policy';
 import { depthInside, insideCap } from '../dusk';
 import { along } from '../layout';
 import { padSaving } from '../pads';
@@ -28,8 +29,15 @@ export const CAMP_NEAR_M = 32;
 export function moveTo(sense: Sense, p: Vec3): Action {
   const dest = sense.s.dest;
   if (dest && dist(p3(dest), p) <= REORDER_M) return { kind: 'noop' };
+  // Already there: hold. A walk to where the bot stands ends at once and
+  // leaves it idle, and the sim's idle defense then strikes whoever comes
+  // into reach: four fights in five began that way (a probe, 2026-10-03).
+  if (!dest && dist(sense.me, p) <= ARRIVED_M) return holdStill(sense);
   return { kind: 'move', x: p.x, y: p.y, z: p.z };
 }
+
+// A goal this close is where the bot stands.
+export const ARRIVED_M = 1;
 
 // The point `depth` meters inside a cap along the way from the bot to its
 // center (the center itself for a small cap).
@@ -59,7 +67,7 @@ export function padOnTheWay(sense: Sense, goal: Vec3): Vec3 | null {
   return best;
 }
 
-function walkVia(sense: Sense, goal: Vec3): Action {
+export function walkVia(sense: Sense, goal: Vec3): Action {
   const pad = padOnTheWay(sense, goal);
   return moveTo(sense, pad ?? goal);
 }
@@ -138,10 +146,7 @@ export function pickCache(sense: Sense, within = Number.POSITIVE_INFINITY): ObsC
 // Looting: standing still beside a cache opens it; walking there first.
 export function lootCache(sense: Sense, cache: ObsCache): Action {
   const d = dist(sense.me, cache);
-  if (d <= CACHE_REACH_M - 0.45) {
-    // Already still: keep standing; else stop where it is.
-    return sense.s.dest ? { kind: 'stop' } : { kind: 'noop' };
-  }
+  if (d <= CACHE_REACH_M - 0.45) return holdStill(sense);
   return walkVia(sense, { x: cache.x, y: cache.y, z: cache.z });
 }
 
@@ -160,6 +165,63 @@ export function pickCampSpot(sense: Sense): Vec3 | null {
       best = at;
       bestD = d;
     }
+  }
+  return best;
+}
+
+// Holding still where the bot stands: a stop when it is walking or not yet
+// holding. The stop holds its fire too (the sim's idle defense strikes
+// any enemy that walks into reach of a champion standing idle): a bot
+// opening a cache that struck every passer-by started half the first
+// minute's fights, and broke its own opening doing it.
+export function holdStill(sense: Sense): Action {
+  return sense.s.dest || sense.s.holding !== true ? { kind: 'stop' } : { kind: 'noop' };
+}
+
+// Toward a Seedfall: before it lands, to a point SEEDFALL_STANDOFF_M off
+// it on the bot's side, out of the impact's reach, and held there; once
+// landed, to its cache (`cache`, when the observation shows it) and opened.
+export function approachSeedfall(sense: Sense, sf: ObsSeedfall, cache: ObsCache | null): Action {
+  const seed = p3(sf);
+  if (sf.landed) return cache ? lootCache(sense, cache) : moveTo(sense, seed);
+  const d = dist(sense.me, seed);
+  if (d <= SEEDFALL_STANDOFF_M + 1) {
+    if (d >= SEEDFALL_STANDOFF_M - 1.5) return holdStill(sense);
+  }
+  const out = d > 1e-3 ? dirTo(seed, sense.me) : null;
+  const spot = out ? along(seed, out as Vec3, SEEDFALL_STANDOFF_M, sense.layout.radius) : seed;
+  return walkVia(sense, spot);
+}
+
+// A Seedfall's cache once it landed: the one the observation marks as a
+// Seedfall's nearest the point, else any standing on the point.
+export function seedfallCache(sense: Sense, sf: ObsSeedfall): ObsCache | null {
+  let best: ObsCache | null = null;
+  let bestD = Number.POSITIVE_INFINITY;
+  for (const c of sense.r.caches) {
+    const d = dist(p3(sf), c);
+    if (c.kind !== 'seedfall' && d > SEEDFALL_CACHE_M) continue;
+    if (d < bestD) {
+      best = c;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+// A cache this close to a Seedfall's point is its cache, whatever its kind
+// reads.
+export const SEEDFALL_CACHE_M = 2.5;
+
+// The nearest unopened Seedfall within `within`, or null.
+export function nearestSeedfall(sense: Sense, within: number): ObsSeedfall | null {
+  let best: ObsSeedfall | null = null;
+  let bestD = within;
+  for (const sf of sense.r.seedfalls ?? []) {
+    const d = dist(sense.me, p3(sf));
+    if (d >= bestD) continue;
+    best = sf;
+    bestD = d;
   }
   return best;
 }
@@ -188,18 +250,21 @@ function cellOf(p: Vec3): number {
   return (Math.imul(i, 73856093) ^ Math.imul(j, 19349663) ^ Math.imul(k, 83492791)) >>> 0;
 }
 
-// With nothing else to do, the bot wanders where it is, on safe ground,
-// one leg of up to WANDER_M at a time, drawn by the seat, the stretch of
-// time and the spot it stands on: the Dusk brings the field together.
-// Every bot walking to the light's heart once the caches were gone made
-// the second minute of One life a massacre. While the whole planet is
-// lit, the nearest cache anywhere first.
+// With nothing else to do, the bot heads for the nearest unopened cache
+// or Seedfall within ROAM_GOAL_M (anywhere while the whole planet is lit);
+// with none, it wanders where it is, on safe ground, one leg of up to
+// WANDER_M at a time, drawn by the seat, the stretch of time and the spot
+// it stands on: the Dusk brings the field together. Every bot walking to
+// the light's heart once the caches were gone made the second minute of
+// One life a massacre; a wander beside a standing cache made bots that ran
+// everywhere and went nowhere (a playtest, 2026-10-03).
 export function roam(sense: Sense): Action {
   const cap = sense.next ?? sense.now;
-  if (cap.radius >= 2 * sense.layout.radius - 1e-6) {
-    const c = pickCache(sense);
-    if (c) return lootCache(sense, c);
-  }
+  const whole = cap.radius >= 2 * sense.layout.radius - 1e-6;
+  const c = pickCache(sense, whole ? Number.POSITIVE_INFINITY : ROAM_GOAL_M);
+  if (c) return lootCache(sense, c);
+  const sf = nearestSeedfall(sense, ROAM_GOAL_M);
+  if (sf && safeGround(sense, p3(sf))) return approachSeedfall(sense, sf, seedfallCache(sense, sf));
   if (!safeGround(sense, sense.me)) return walkVia(sense, intoCap(sense, cap));
   const dest = sense.s.dest;
   if (dest && safeGround(sense, p3(dest)) && dist(sense.me, p3(dest)) <= WANDER_M * 1.5) {

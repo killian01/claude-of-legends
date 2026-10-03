@@ -33,6 +33,13 @@ export interface RoyaleSkill {
   duskMargin: number;
   // Takes on the big creatures once strong enough.
   creatures: boolean;
+  // Bystanders this close weigh in the odds as much as the target: a
+  // strong bot reads the champion beside the fight as a third fighter.
+  // Zero for the others (fight.ts BYSTANDER_WEIGHT).
+  bystanderFullM: number;
+  // How far it hears a Seedfall called, and a Clamor; zero for never.
+  seedfallM: number;
+  clamorM: number;
 }
 
 export const ROYALE_SKILLS: Readonly<Record<RoyaleSkillId, RoyaleSkill>> = {
@@ -48,6 +55,9 @@ export const ROYALE_SKILLS: Readonly<Record<RoyaleSkillId, RoyaleSkill>> = {
     kite: false,
     duskMargin: 8,
     creatures: false,
+    bystanderFullM: 0,
+    seedfallM: 30,
+    clamorM: 0,
   },
   normal: {
     id: 'normal',
@@ -61,19 +71,30 @@ export const ROYALE_SKILLS: Readonly<Record<RoyaleSkillId, RoyaleSkill>> = {
     kite: true,
     duskMargin: 14,
     creatures: false,
+    bystanderFullM: 0,
+    seedfallM: 55,
+    clamorM: 30,
   },
   strong: {
     id: 'strong',
     attention: 1,
     aimLead: 1,
     aimError: 0.25,
-    fightOdds: 0.4,
+    // 0.40 sent the strong bots into every fight they met, and they fell
+    // first of the three (1:03 on average in One life, 2026-10-03).
+    fightOdds: 0.46,
     retreatHp: 0.24,
-    dodge: 0.85,
+    // 0.85 sidestepped half its strikes away: strong bots lost most of
+    // their fights against normal ones (38% of them, the report,
+    // 2026-10-03); at the normal's 0.55 they win most (61%).
+    dodge: 0.55,
     chase: 17,
     kite: true,
     duskMargin: 22,
     creatures: true,
+    bystanderFullM: 8,
+    seedfallM: 55,
+    clamorM: 45,
   },
 };
 
@@ -82,8 +103,61 @@ export const ROYALE_MIX: Readonly<{ gentle: number; normal: number }> = {
   gentle: 0.5,
   normal: 1 / 3,
 };
-// With only Guests in the match: softer.
+// With only Guests in the match: a little softer. Seven in ten gentle
+// left a field that loots and never fights back.
 export const ROYALE_MIX_GUESTS: Readonly<{ gentle: number; normal: number }> = {
-  gentle: 0.7,
-  normal: 0.25,
+  gentle: 0.5,
+  normal: 0.35,
 };
+
+// The sharpening (bots with intent): a seat plays at least as well as the
+// match has shown it to be. A score of SHARPEN_NORMAL_AT takedowns plays
+// as normal, SHARPEN_STRONG_AT as strong, and from the Dusk's
+// SHARPEN_GENTLE_PHASE a gentle seat plays as normal: by the last closings
+// the ones left play like the field's best.
+export const SHARPEN_NORMAL_AT = 2;
+export const SHARPEN_STRONG_AT = 4;
+export const SHARPEN_GENTLE_PHASE = 3;
+// One life's calm (the Dusk's phase 0): the odds a fight must show rise by
+// this much unless the bot was struck, so the first minute is a loot and
+// not a cull.
+export const CALM_NERVE = 0.1;
+// One life's pace: the champions still in at each minute from the landing
+// that the match is tuned to (fifty, then 44, 36, 27, ...; the last one
+// standing by the tenth). A bot that is not struck asks PACE_NERVE_PER_SEAT
+// more of a fight's odds for every champion fallen ahead of that pace (up
+// to PACE_NERVE_MAX; never less than its own nerve, PACE_NERVE_MIN): the
+// field's own clock, read off the count everyone sees. With fights that
+// end, the field fell to a third by the third minute without it (the
+// report, 2026-10-03), and to a sixth by the fifth.
+export const ONE_LIFE_PACE: readonly number[] = [50, 44, 36, 27, 19, 12, 7, 4, 2, 1];
+export const PACE_NERVE_PER_SEAT = 0.08;
+export const PACE_NERVE_MIN = 0;
+export const PACE_NERVE_MAX = 0.6;
+
+// The calls (src/sim/royale/bot/calls.ts), data: a bot answers only at
+// CALL_HP of its health or more, a Clamor at CLAMOR_HP.
+export const CALL_HP = 0.6;
+export const CLAMOR_HP = 0.7;
+// A Seedfall call sets off only while the walk there at CALL_WALK_SPEED
+// takes no longer than the time to its landing plus SEEDFALL_LATE_S: a bot
+// that would arrive later lets that race go. Once landed, its cache is a
+// goal like any other within the skill's reach. Before the landing a bot
+// waits SEEDFALL_STANDOFF_M from the point, out of the impact's reach.
+export const CALL_WALK_SPEED = 3.7;
+export const SEEDFALL_LATE_S = 5;
+export const SEEDFALL_STANDOFF_M = 5.5;
+// The ambush: a bot within AMBUSH_REACH_M of a Seedfall it called that
+// finds a champion within AMBUSH_SEED_M of the point waits in the nearest
+// bush within AMBUSH_REACH_M of it, until the opening starts, the opener
+// falls under AMBUSH_STRIKE_HP, or AMBUSH_WAIT_S past the landing.
+export const AMBUSH_REACH_M = 12;
+export const AMBUSH_SEED_M = 6;
+export const AMBUSH_STRIKE_HP = 0.6;
+export const AMBUSH_WAIT_S = 10;
+// One life's Clamor draws the packs from the Dusk's CLAMOR_PHASE, or once
+// CLAMOR_ALIVE or fewer are left.
+export const CLAMOR_PHASE = 2;
+export const CLAMOR_ALIVE = 25;
+// A wander never starts while a cache or a Seedfall stands this close.
+export const ROAM_GOAL_M = 80;

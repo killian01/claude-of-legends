@@ -201,7 +201,9 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     const other = sim.units.get(id);
     if (!other || other.dead) continue;
     if (sim.isVisible(u.team, id)) continue;
-    lastSeen.push({ id, x: rec.x, z: rec.z, at: rec.at, hpFrac: rec.hpFrac });
+    // On the planet the third coordinate too (additive v0 field).
+    const y = rec.y !== undefined ? { y: rec.y } : {};
+    lastSeen.push({ id, x: rec.x, z: rec.z, ...y, at: rec.at, hpFrac: rec.hpFrac });
   }
 
   // The seats: every champion of both teams, public from champion select;

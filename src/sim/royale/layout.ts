@@ -44,6 +44,10 @@ export interface RoyaleLayout {
   pyrefang: Vec3;
   voidmaul: Vec3;
   warden: Vec3;
+  // The bushes that hide a champion standing in them, as every player sees
+  // them on the ground (absent on a layout that lists none): where a bot
+  // waits to ambush a Seedfall's opener (bot/calls.ts).
+  bushes?: readonly { at: Vec3; r: number }[];
 }
 
 // The ground's two answers the mode needs: whether a champion may stand
