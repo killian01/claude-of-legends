@@ -162,3 +162,59 @@ export class EdgeChimes {
     return out;
   }
 }
+
+// A box on the screen the arrows keep off (the minimap, the thumb stick,
+// the ability buttons), in the same pixels.
+export interface EdgeRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+function hits(x: number, y: number, half: number, r: EdgeRect): boolean {
+  return x + half > r.left && x - half < r.right && y + half > r.top && y - half < r.bottom;
+}
+
+// An arrow `half` pixels around its point, slid along the safe area's
+// border (around a corner when it must) to the nearest place clear of
+// every obstacle; where it was when the whole border is covered.
+export function clearOf(
+  at: { x: number; y: number },
+  half: number,
+  obstacles: readonly EdgeRect[],
+  v: EdgeView,
+): { x: number; y: number } {
+  const blocked = (x: number, y: number): boolean => obstacles.some((r) => hits(x, y, half, r));
+  if (!blocked(at.x, at.y)) return at;
+  const r = safeRect(v);
+  const w = r.x1 - r.x0;
+  const h = r.y1 - r.y0;
+  const perimeter = 2 * (w + h);
+  // The border as one loop: the top left to right, the right down, the
+  // bottom right to left, the left up.
+  const pointAt = (s: number): { x: number; y: number } => {
+    const u = ((s % perimeter) + perimeter) % perimeter;
+    if (u < w) return { x: r.x0 + u, y: r.y0 };
+    if (u < w + h) return { x: r.x1, y: r.y0 + (u - w) };
+    if (u < 2 * w + h) return { x: r.x1 - (u - w - h), y: r.y1 };
+    return { x: r.x0, y: r.y1 - (u - 2 * w - h) };
+  };
+  const onTop = Math.abs(at.y - r.y0) < 0.5;
+  const onRight = Math.abs(at.x - r.x1) < 0.5;
+  const onBottom = Math.abs(at.y - r.y1) < 0.5;
+  const s0 = onTop
+    ? at.x - r.x0
+    : onRight
+      ? w + (at.y - r.y0)
+      : onBottom
+        ? w + h + (r.x1 - at.x)
+        : 2 * w + h + (r.y1 - at.y);
+  for (let d = 4; d <= perimeter / 2; d += 4) {
+    for (const s of [s0 + d, s0 - d]) {
+      const p = pointAt(s);
+      if (!blocked(p.x, p.y)) return p;
+    }
+  }
+  return at;
+}

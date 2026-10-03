@@ -13,7 +13,6 @@ import type { RoyaleNote } from '../net/royale_client';
 import type { RoyaleResult, SnapDusk, SnapRoyale } from '../net/royale_wire';
 import { CAMPS } from '../sim/content/camps';
 import { CHAMPIONS } from '../sim/content/champions';
-import { ITEMS } from '../sim/content/items';
 import { CREATURES } from '../sim/content/rings';
 import { ROYALE_SEATS, type RoyaleVariant } from '../sim/royale/types';
 import { effectiveRank } from '../sim/stats';
@@ -21,19 +20,20 @@ import type { TeamId } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import { setPortrait } from './champion_art';
-import { itemIconUrl } from './icons';
+import { type MomentDeath, RoyaleHudMoments } from './royale_hud_moments';
 import { royaleMode } from './royale_modes';
+import type { MomentCall } from './royale_moments';
 import { type RoyaleEndModel, royaleEnd } from './royale_result';
 import type { RoyaleStepsView } from './royale_steps';
 import {
   countLine,
   dropBanner,
   duskLine,
+  duskPill,
   duskTurn,
   isBot,
   leaderBadge,
   levelText,
-  lootText,
   openingFraction,
   outsideLight,
   placeText,
@@ -42,11 +42,10 @@ import {
 
 // An enemy champion this close counts as near, for the takedown step.
 const ENEMY_NEAR_M = 11;
-// How long a feed line and a notice stay up, milliseconds.
-const FEED_MS = 6500;
+// How long a notice stays up, milliseconds (the feed's lines keep their
+// own clock, ui/royale_hud_moments.ts).
 const NOTICE_MS = 3000;
 const NOTICE_FADE_MS = 400;
-const FEED_MAX = 5;
 
 const CSS = `
 .br { position: absolute; inset: 0; pointer-events: none; }
@@ -301,6 +300,11 @@ export class RoyaleHud {
   private padUsed = false;
   // Announcements go through the HUD's own line (ui/hud.ts announce).
   private announce: (text: string, color: string) => void = () => undefined;
+  // The loud moments (ui/royale_hud_moments.ts): the feed, the calls, the
+  // cache's ritual, the Dusk's toll and wind, the Clamors, the arrows.
+  private readonly moments: RoyaleHudMoments;
+  // Until when the opening's ring shows red, broken (performance.now()).
+  private crackUntil = 0;
 
   constructor(host: RoyaleHudHost) {
     this.host = host;
@@ -335,6 +339,22 @@ export class RoyaleHud {
     this.notes = el('div', 'br-notes');
     this.layer.append(top, this.dropEl, this.feed, this.openEl, this.notes);
     host.root.appendChild(this.layer);
+    this.moments = new RoyaleHudMoments({
+      root: host.root,
+      world: host.world,
+      selfId: host.selfId,
+      selfTeam: host.selfTeam,
+      variant: host.variant,
+      feed: this.feed,
+      notice: (text, icon, kind) => this.notice(text, icon, kind),
+      announce: (text, color) => this.announce(text, color),
+      victimName: (k) => this.victimName(k),
+      killerName: (k) => this.killerName(k),
+      botOf: (id) => this.botOf(id),
+      crackRing: () => {
+        this.crackUntil = performance.now() + 700;
+      },
+    });
   }
 
   setAnnounce(announce: (text: string, color: string) => void): void {
@@ -354,6 +374,7 @@ export class RoyaleHud {
     root.classList.toggle('br-dropping', r?.st === 'drop');
     if (!r) return;
     const time = world.time;
+    this.moments.step(r);
     const line = duskLine(r, time);
     if (this.duskText.textContent !== line.text) this.duskText.textContent = line.text;
     this.duskEl.className = `br-dusk ${line.tone}`;
@@ -376,8 +397,8 @@ export class RoyaleHud {
     const outside = me && !me.dead && r.st === 'play' ? outsideLight(me.pos, r.dusk) : null;
     this.burnEl.hidden = outside !== true;
     if (outside === true) {
-      const pct = Math.max(1, Math.round(r.dusk.b * 100));
-      this.burnEl.textContent = `Outside the light: the Dusk burns ${pct} percent a second`;
+      const pill = duskPill(r.dusk.b);
+      if (this.burnEl.textContent !== pill) this.burnEl.textContent = pill;
     }
 
     const drop = dropBanner(r, time, touch);
@@ -388,7 +409,9 @@ export class RoyaleHud {
     }
 
     const f = openingFraction(r, time);
-    this.openEl.hidden = f === null;
+    const cracked = f === null && performance.now() < this.crackUntil;
+    this.openEl.hidden = f === null && !cracked;
+    this.openEl.classList.toggle('cracked', cracked);
     if (f !== null) this.ring.style.setProperty('--f', f.toFixed(3));
 
     if (me) {
@@ -432,40 +455,22 @@ export class RoyaleHud {
     return k.kn ?? this.nameOf(k.killerId);
   }
 
-  // One line of the kill feed: "Name > Name", the own name in gold, a bot
-  // mark beside every bot.
-  pushKill(k: RoyaleKill): void {
-    const { selfId } = this.host;
-    const line = el('div', 'br-feed-line');
-    if (k.killerId === selfId || k.unitId === selfId) line.classList.add('mine');
-    const dusk = k.killerId === k.unitId || k.killerId === 0;
-    const who = (id: number, name: string, bot: boolean): HTMLElement => {
-      const wrap = el('span', 'br-who');
-      wrap.appendChild(el('span', id === selfId ? 'me' : '', id === selfId ? 'You' : name));
-      if (id !== selfId && bot) wrap.appendChild(el('span', 'br-bot', 'BOT'));
-      return wrap;
-    };
-    const killer = dusk
-      ? el('span', 'br-dusk-name', 'The Dusk')
-      : who(k.killerId, this.killerName(k), k.kb ?? this.botOf(k.killerId));
-    line.append(
-      killer,
-      el('span', 'gt', '>'),
-      who(k.unitId, this.victimName(k), k.vb ?? this.botOf(k.unitId)),
-    );
-    this.feed.prepend(line);
-    while (this.feed.children.length > FEED_MAX) this.feed.lastElementChild?.remove();
-    window.setTimeout(() => line.remove(), FEED_MS);
+  // A death of the snapshot (ui/hud.ts royaleKills): its feed line or its
+  // fold, and the loud moments it calls, played after the HUD's own line.
+  kill(k: RoyaleKill): { calls: MomentCall[]; champion: boolean } {
+    return this.moments.kill(k satisfies MomentDeath);
   }
 
-  // The mode's events: the loot that lands on the own champion, and what
-  // the first steps count.
+  play(calls: readonly MomentCall[]): void {
+    this.moments.play(calls);
+  }
+
+  // The mode's events: what the first steps count, and the loud moments
+  // (the loot as it lands, the caches, the calls).
   onNotes(notes: readonly RoyaleNote[]): void {
     const { selfId } = this.host;
     for (const n of notes) {
       if (n.kind === 'loot' && n.unitId === selfId) {
-        const item = ITEMS[n.itemId];
-        this.notice(lootText(item?.name ?? n.itemId), item ? itemIconUrl(item) : null, 'loot');
         if (n.source === 'cache') this.openedCache = true;
       } else if (n.kind === 'cache' && n.unitId === selfId) {
         this.openedCache = true;
@@ -473,9 +478,14 @@ export class RoyaleHud {
         this.padUsed = true;
       }
     }
+    this.moments.onNotes(notes);
   }
 
-  private notice(text: string, icon: string | null, kind: 'loot' | 'level'): void {
+  private notice(
+    text: string,
+    icon: string | null,
+    kind: 'loot' | 'level' | 'done' | 'whole',
+  ): void {
     const note = el('div', `br-note ${kind}`);
     if (icon) {
       const img = el('img', '');
@@ -636,6 +646,7 @@ export class RoyaleHud {
   }
 
   dispose(): void {
+    this.moments.dispose();
     this.layer.remove();
     this.endEl?.remove();
     this.style.remove();

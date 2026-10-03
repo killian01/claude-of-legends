@@ -6,12 +6,15 @@
 // and the planet exist. Nothing here is reachable from the production UI.
 //
 // ?royale-ui-demo=<scene>: pick, pick-one, home, drop, calm, closing, out,
-// end-one, end-respawn.
+// end-one, end-respawn, moments (the loud moments: the Seedfalls' edge
+// arrows, the Clamors, the feed folding, the run's spotlight, the cache's
+// ritual and the loot's words, the Dusk's pill, every new block faked).
 
 import { orchardSim } from '../net/replay';
 import type { RoyaleNote } from '../net/royale_client';
-import type { RoyaleResult, SnapRoyale } from '../net/royale_wire';
+import type { RoyaleResult, SnapClamor, SnapRoyale, SnapSeedfall } from '../net/royale_wire';
 import { whenChampionModelsReady } from '../render/champions';
+import { setRoyaleProjector } from '../render/royale_cues';
 import { attachBot } from '../sim/content/bots';
 import { ITEM_LIST } from '../sim/content/items';
 import type { RoyaleVariant } from '../sim/royale/types';
@@ -108,7 +111,33 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
   }
 
   const variant: RoyaleVariant =
-    scene === 'closing' || scene === 'out' || scene === 'end-one' ? 'one_life' : 'respawn';
+    scene === 'closing' || scene === 'out' || scene === 'end-one' || scene === 'moments'
+      ? 'one_life'
+      : 'respawn';
+  const moments = scene === 'moments';
+  // The loud moments' blocks, faked: two Seedfalls (one called and one
+  // landed), a Clamor every two seconds, a Lodestar's mark.
+  const seedfalls = (t: number): SnapSeedfall[] => [
+    [1, -60, 50, 10, t + 12, 0],
+    [2, 50, 60, -20, t - 3, 1],
+  ];
+  let clamors: SnapClamor[] = [];
+  if (moments) {
+    // The two Seedfalls off the screen: one to the left, one behind the
+    // camera; the screen is the stage's.
+    setRoyaleProjector({
+      project: (p) => {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        return p.x < 0
+          ? { x: -0.4 * w, y: 0.35 * h, behind: false }
+          : { x: 0.62 * w, y: 0.2 * h, behind: true };
+      },
+      bearing: () => 0.8,
+      self: () => ({ x: 0, y: 80, z: 0 }),
+      view: () => ({ width: window.innerWidth, height: window.innerHeight }),
+    });
+  }
   const leader = others[0]!;
   const state = (): SnapRoyale & { caches: [] } => {
     const t = sim.time;
@@ -137,6 +166,17 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
         score: 4,
         leader: { i: leader.id, s: 9, ...(Math.floor(t / 4) % 2 === 0 ? { at: [0, 80, 0] } : {}) },
         opening: { c: 3, since: Math.floor(t / 2.5) * 2.5 },
+      };
+    }
+    if (moments) {
+      return {
+        ...base,
+        st: 'play',
+        dusk: { p: 3, c: [0, 80, 0], r: 40, pe: t + 18, sh: 1, b: 0.03 },
+        opening: { c: 3, since: Math.floor(t / 3) * 3, d: 2 },
+        sf: seedfalls(t),
+        cl: clamors,
+        mk: [[leader.id, 'lodestar', 0, 80, 0, t]],
       };
     }
     return {
@@ -188,7 +228,8 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
     const events = sim.tick();
     const t = sim.time;
     const w = wall();
-    if (scene === 'closing') (self.pos as { y?: number }).y = -80;
+    if (scene === 'closing' || moments) (self.pos as { y?: number }).y = -80;
+    if (moments && Math.floor(t * 10) % 40 === 0) clamors = [[3, 79, 4, t]];
     if (scene === 'out') {
       self.dead = true;
       self.hp = 0;
@@ -204,13 +245,16 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
       k++;
       const a = others[k % others.length]!;
       const b = others[(k + 3) % others.length]!;
-      kills.push(
-        k % 4 === 0 ? { unitId: b.id, killerId: self.id } : { unitId: b.id, killerId: a.id },
-      );
+      // The moments: the viewer on a run (a takedown every other one), and
+      // the rest of the planet folding away.
+      const own = moments ? k % 2 === 0 : k % 4 === 0;
+      kills.push(own ? { unitId: b.id, killerId: self.id } : { unitId: b.id, killerId: a.id });
     }
-    if (scene === 'calm' && w >= nextLoot) {
+    if ((scene === 'calm' || moments) && w >= nextLoot) {
       nextLoot = w + 2.4;
-      const itemId = items[k % items.length]!.id;
+      const itemId = moments
+        ? (['iron_blade', 'doombrand', 'heart_gem', 'warbrand'][k % 4] ?? 'iron_blade')
+        : items[k % items.length]!.id;
       // The loot lands in the bag, as the sim equips it.
       if (self.items.length < 6) self.items.push(itemId);
       royale.push({ kind: 'loot', unitId: self.id, itemId, source: 'cache' });
