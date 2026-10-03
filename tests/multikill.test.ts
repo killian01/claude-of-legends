@@ -12,6 +12,7 @@ import {
   MULTIKILL_TOP,
   MultikillLadder,
   multikillLook,
+  ROYALE_MULTIKILL_LEASH,
 } from '../src/ui/multikill';
 
 const HERO = 1;
@@ -139,5 +140,38 @@ describe('what a rung is worth', () => {
   it('has nothing to say about a single kill', () => {
     expect(multikillLook(1)).toBeNull();
     expect(multikillLook(MULTIKILL_TOP + 1)).toBeNull();
+  });
+});
+
+describe("the battle royale's table", () => {
+  const royaleRun = (times: readonly number[]): number[] => {
+    const ladder = new MultikillLadder(ROYALE_MULTIKILL_LEASH);
+    return times.map((t, i) => ladder.record(FOE + i, HERO, t)?.tier ?? 0);
+  };
+
+  it('caps the ladder at the triple', () => {
+    // Fifty on a planet pile up at a Seedfall: a quadra there is not a
+    // fight won. The royale says a long run with Ablaze instead.
+    expect(new MultikillLadder(ROYALE_MULTIKILL_LEASH).top).toBe(3);
+    expect(royaleRun([0, 5, 10, 12, 14])).toEqual([0, 2, 3, 0, 2]);
+    expect(royaleRun([0, 1, 2, 3, 4, 5]).some((t) => t > 3)).toBe(false);
+  });
+
+  it('keeps the 5v5 links up to the triple', () => {
+    expect(ROYALE_MULTIKILL_LEASH).toEqual(MULTIKILL_LEASH.slice(0, 2));
+    expect(royaleRun([0, 7, 17])).toEqual([0, 2, 3]);
+    expect(royaleRun([0, 7.01])).toEqual([0, 0]);
+    expect(royaleRun([0, 7, 17.01])).toEqual([0, 2, 0]);
+  });
+
+  it('leaves the 5v5 ladder whole', () => {
+    expect(new MultikillLadder().top).toBe(MULTIKILL_TOP);
+  });
+
+  it('calls its two rungs privately, in the recorded voice', () => {
+    expect(multikillLook(2)?.voice).toBe('double_kill');
+    expect(multikillLook(3)?.voice).toBe('triple_kill');
+    expect(multikillLook(2)?.everyone).toBe(false);
+    expect(multikillLook(3)?.everyone).toBe(false);
   });
 });

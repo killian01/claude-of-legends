@@ -4,22 +4,32 @@
 
 import { describe, expect, it } from 'vitest';
 import type { SnapRoyale } from '../src/net/royale_wire';
+import { ITEM_PASSIVES } from '../src/sim/content/item_passives';
+import { ITEMS } from '../src/sim/content/items';
+import { nextLootPiece, seatBuild } from '../src/sim/royale/loot';
 import { CACHE_OPEN_S } from '../src/sim/royale/types';
 import {
+  BUILD_COMPLETE,
+  buildComplete,
   clockText,
+  completedText,
   countLine,
   dropBanner,
   duskLine,
+  duskPill,
   duskTurn,
   isBot,
+  itemGain,
   LOOT_EMPTY,
   LOOT_LABEL,
   leaderBadge,
   levelText,
+  lootNotice,
   lootText,
   openingFraction,
   ordinal,
   outsideLight,
+  passiveLine,
   peopleText,
   placeText,
   royaleHints,
@@ -49,7 +59,7 @@ const snap = (over: Partial<SnapRoyale> = {}): SnapRoyale => ({
 
 describe('the Dusk line', () => {
   it('counts the calm down, then says whether the light holds or closes', () => {
-    expect(duskLine(snap(), 35)).toEqual({ text: 'Calm 1:05', tone: 'calm' });
+    expect(duskLine(snap(), 35)).toEqual({ text: 'The Dusk holds 1:05', tone: 'calm' });
     expect(duskLine(snap({ dusk: { ...DUSK, p: 2, pe: 200, sh: 0 } }), 158)).toEqual({
       text: 'Light holds 0:42',
       tone: 'hold',
@@ -153,6 +163,61 @@ describe('the notices and the places', () => {
   it('says the loot and the level', () => {
     expect(lootText('Storm Staff')).toBe('+ Storm Staff');
     expect(levelText(5)).toBe('Level 5');
+  });
+
+  it('says what a component adds, in words', () => {
+    expect(lootNotice('iron_blade')).toEqual({
+      text: '+ Iron Blade · +10 attack damage',
+      completed: false,
+    });
+    expect(lootNotice('swift_fang').text).toBe('+ Swift Fang · +12% attack speed');
+    expect(lootNotice('heart_gem').text).toBe('+ Heart Gem · +150 health');
+  });
+
+  it('says a finished item completed, with its passive, and never a component', () => {
+    expect(completedText(ITEMS.iron_blade!)).toBeNull();
+    expect(completedText(ITEMS.doombrand!)).toBe(
+      'Completed: Doombrand · Deathmark, +12% damage to targets under 30%',
+    );
+    expect(lootNotice('doombrand').completed).toBe(true);
+    // No passive: what it adds over its parts (two Iron Blades into 56).
+    expect(itemGain(ITEMS.warbrand!).ad).toBe(36);
+    expect(completedText(ITEMS.warbrand!)).toBe('Completed: Warbrand · +36 attack damage');
+  });
+
+  it("keeps each passive's short line true to its description", () => {
+    for (const [id, p] of Object.entries(ITEM_PASSIVES)) {
+      const line = passiveLine(id)!;
+      expect(line.startsWith(`${p.name}, `)).toBe(true);
+      for (const n of line.match(/[0-9.]+/g) ?? []) {
+        expect(p.description, `${id}: ${n}`).toContain(n);
+      }
+    }
+  });
+
+  it("says Build complete once the seat's build has nothing left to give", () => {
+    expect(BUILD_COMPLETE).toBe('Build complete');
+    expect(buildComplete('dain', [])).toBe(false);
+    // Walk the build the way the caches do.
+    let bag: string[] = [];
+    for (let i = 0; i < 40; i++) {
+      const step = nextLootPiece(seatBuild('dain'), bag);
+      if (!step) break;
+      expect(buildComplete('dain', bag)).toBe(false);
+      if (step.sell !== null) bag = bag.filter((_, j) => j !== step.sell);
+      const def = ITEMS[step.itemId]!;
+      for (const part of def.buildsFrom ?? []) {
+        const at = bag.indexOf(part);
+        if (at >= 0) bag.splice(at, 1);
+      }
+      bag.push(step.itemId);
+    }
+    expect(buildComplete('dain', bag)).toBe(true);
+  });
+
+  it('prices the Dusk per second on its pill', () => {
+    expect(duskPill(0.03)).toBe('In the Dusk -3%/s');
+    expect(duskPill(0.001)).toBe('In the Dusk -1%/s');
   });
 
   it('says a place in English', () => {
