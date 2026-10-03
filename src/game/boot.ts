@@ -11,6 +11,7 @@ import { schoolColorOf } from '../render/ability_vfx';
 import { aspectColor } from '../render/aspect_colors';
 import { Renderer } from '../render/renderer';
 import type { RenderTerrain } from '../render/terrain';
+import { copy, dist, onSphere } from '../sim/geo';
 import { effectiveRank } from '../sim/stats';
 import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
 import { DT } from '../sim/types';
@@ -159,17 +160,26 @@ export function startPresentation(
   // by the stick, which moves the minimap and the touch bar out of the
   // thumbs' way and hands the HUD's slots to the cast touch.
   const thumbControls = coarsePointer && getSettings().touchScheme === 'thumbs';
+  // On the planet the minimap is a window of the renderer's chart around
+  // the champion, heading up (render/planet_minimap.ts): its points go
+  // back to the sphere before they become orders.
+  const planetMap = renderer.planetMinimap();
+  const fromMap = (p: Vec2): Vec2 => (planetMap ? planetMap.toSphere(p.x, p.z) : p);
   const minimap = new Minimap(
     stage.el,
-    world,
+    planetMap?.world ?? world,
     selfTeam,
     selfId,
-    (p) => {
-      world.orderMove(selfId, p.x, p.z);
-      renderer.flashMarker(p.x, p.z);
+    (m) => {
+      const p = fromMap(m);
+      world.orderMove(selfId, p.x, p.z, p.y);
+      renderer.flashMarker(p.x, p.z, undefined, p.y);
     },
-    (p) => renderer.lookAtPoint(p.x, p.z),
-    options.terrain.minimap,
+    (m) => {
+      const p = fromMap(m);
+      renderer.lookAtPoint(p.x, p.z, p.y);
+    },
+    planetMap?.background ?? options.terrain.minimap,
     { corner: thumbControls ? 'top-right' : 'bottom-right' },
   );
   // No edge panning while a modal is up or the cursor sits on the minimap
@@ -207,7 +217,12 @@ export function startPresentation(
     hud.pushChat(from, team, 'pinged the map');
   };
 
-  const project = (x: number, y: number, z: number) => renderer.projectToScreen(x, y, z);
+  const project = (x: number, y: number, z: number, groundY?: number) =>
+    renderer.projectToScreen(x, y, z, groundY);
+  // Ground distance, for the client's own gates: the plane's as it was,
+  // the sphere's through geo.ts (ADR 0029).
+  const groundDist = (a: Vec2, b: Vec2): number =>
+    onSphere(a) && onSphere(b) ? dist(a, b) : Math.hypot(a.x - b.x, a.z - b.z);
   // A dev probe like the replay viewer's (src/main.ts __replay): the
   // browser e2e scripts read the champion's position off it, and whether
   // the stage is turned.
@@ -285,11 +300,11 @@ export function startPresentation(
       }
       if (ab.spec.kind === 'zone' || ab.spec.kind === 'wall') {
         const at = selfAt(u);
-        const d = Math.hypot(at.x - aim.x, at.z - aim.z);
+        const d = groundDist(at, aim);
         if (d > ab.castRange) {
-          pendingCast = { key, aim: { x: aim.x, z: aim.z } };
-          world.orderMove(selfId, aim.x, aim.z);
-          renderer.flashMarker(aim.x, aim.z, 0x6ac9e8);
+          pendingCast = { key, aim: copy(aim) };
+          world.orderMove(selfId, aim.x, aim.z, aim.y);
+          renderer.flashMarker(aim.x, aim.z, 0x6ac9e8, aim.y);
           return;
         }
       }
@@ -336,13 +351,13 @@ export function startPresentation(
       return;
     }
     const at = selfAt(u);
-    const d = Math.hypot(at.x - pendingCast.aim.x, at.z - pendingCast.aim.z);
+    const d = groundDist(at, pendingCast.aim);
     if (d <= ab.castRange * 0.98) {
       const queued = pendingCast;
       pendingCast = null;
       tryCast(queued.key, queued.aim);
       // Stop like the genre does: the walk was for the cast, not a move.
-      world.orderMove(selfId, at.x, at.z);
+      world.orderMove(selfId, at.x, at.z, at.y);
     }
   };
 
@@ -353,7 +368,8 @@ export function startPresentation(
   // resend rule; null while the thumb rests.
   let stickOrder: StickOrder | null = null;
   // Where the stick points, for a quick cast with no target in range.
-  const stickFacing = (): Vec2 | null => (stickOrder ? { x: stickOrder.x, z: stickOrder.z } : null);
+  const stickFacing = (): Vec2 | null =>
+    stickOrder ? copy({ x: stickOrder.x, z: stickOrder.z, y: stickOrder.y }) : null;
   // Where the right thumb's aim stands while a slot is held (thumb_cast.ts).
   let thumbAim: Vec2 | null = null;
   // How far a sigil reaches (Riftstep's dash), and how far the attack
@@ -382,9 +398,9 @@ export function startPresentation(
       // frame, like the genre; left-click on ground clears that. Touch
       // has no left-click, so there a ground tap clears the frame too,
       // or a tapped target would cover the top of the screen forever.
-      world.orderMove(selfId, p.x, p.z);
+      world.orderMove(selfId, p.x, p.z, p.y);
       renderer.setAttackTarget(null);
-      renderer.flashMarker(p.x, p.z);
+      renderer.flashMarker(p.x, p.z, undefined, p.y);
       if (coarsePointer) hud.setTarget(null);
     }
   };
@@ -407,14 +423,14 @@ export function startPresentation(
       if (dir === null) {
         if (stickOrder === null) return;
         stickOrder = null;
-        world.orderMove(selfId, at.x, at.z);
+        world.orderMove(selfId, at.x, at.z, at.y);
         return;
       }
       const now = performance.now();
       if (!shouldResend(stickOrder, dir, now)) return;
-      stickOrder = { x: dir.x, z: dir.z, at: now };
+      stickOrder = dir.y === undefined ? { x: dir.x, z: dir.z, at: now } : { ...dir, at: now };
       const p = leadPoint(at, dir, STICK_LEAD_M, world.map.size);
-      world.orderMove(selfId, p.x, p.z);
+      world.orderMove(selfId, p.x, p.z, p.y);
       renderer.setAttackTarget(null);
       renderer.recenterCamera();
     },
@@ -433,7 +449,7 @@ export function startPresentation(
       if (slotTap(u, key) !== 'cast') return;
       if (aimingKey !== key) inputHandlers.onCast(key, { x: 0, z: 0 });
       const at = selfAt(u);
-      thumbAim = dir ? aimedPoint(at, dir, k, ab.castRange) : { x: at.x, z: at.z };
+      thumbAim = dir ? aimedPoint(at, dir, k, ab.castRange) : copy(at);
       renderer.setAimWorld(thumbAim);
     },
     onThumbCast: (key, press) => {
@@ -480,9 +496,7 @@ export function startPresentation(
         return;
       }
       const f = stickFacing();
-      inputHandlers.onAttackMove(
-        f ? { x: at.x + f.x * 3, z: at.z + f.z * 3 } : { x: at.x, z: at.z },
-      );
+      inputHandlers.onAttackMove(f ? aimedPoint(at, f, 1, 3) : copy(at));
     },
     onLeftClick: (sx, sy) => {
       // MOBA-style selection: any visible unit shows its frame with exact
@@ -550,8 +564,8 @@ export function startPresentation(
     },
     onAttackMove: (aim) => {
       pendingCast = null;
-      world.orderAttackMove(selfId, aim.x, aim.z);
-      renderer.flashMarker(aim.x, aim.z, 0xffa53e);
+      world.orderAttackMove(selfId, aim.x, aim.z, aim.y);
+      renderer.flashMarker(aim.x, aim.z, 0xffa53e, aim.y);
     },
     onRecall: () => {
       pendingCast = null;
@@ -648,7 +662,7 @@ export function startPresentation(
     lastTick = performance.now();
     const me = world.units.get(selfId);
     selfPrev = selfCurr;
-    selfCurr = me ? { x: me.pos.x, z: me.pos.z } : null;
+    selfCurr = me ? copy(me.pos) : null;
     stepPendingCast();
     // Warden spawn: ping its pit on the minimap and flash the ground so
     // nobody misses it (the HUD adds the announcement and the voice).

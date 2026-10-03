@@ -167,8 +167,8 @@ export class PlanetMarks {
     this.owned.push(disc, discMat, ring, this.padGlowMat, arcGeo, arcMat);
 
     // The crossroads' beacons: tall faint columns of light.
-    const beam = new THREE.CylinderGeometry(0.5, 0.28, 20, 12, 1, true);
-    beam.translate(0, 10, 0);
+    const beam = new THREE.CylinderGeometry(0.22, 0.12, 9, 10, 1, true);
+    beam.translate(0, 4.5, 0);
     const column = columnTexture();
     this.owned.push(column);
     this.beaconMat = new THREE.MeshBasicMaterial({

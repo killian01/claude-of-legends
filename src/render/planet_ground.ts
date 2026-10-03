@@ -136,6 +136,8 @@ export interface PlanetLayout {
   pads: PlanetPad[];
   caches: PlanetCacheSpot[];
   bushes: { at: Vec3; r: number }[];
+  // Circles approximating every tall solid thing (sight blockers).
+  blockers: { at: Vec3; r: number }[];
 }
 
 // A point read off the layout, as [x, y, z] or {x, y, z}, put on the sphere.
@@ -184,7 +186,14 @@ export function parseLayout(json: unknown, radius = PLANET_RADIUS): PlanetLayout
       return at ? { at, r: Number.isFinite(r) ? r : 2 } : null;
     })
     .filter((b): b is { at: Vec3; r: number } => b !== null);
-  return { radius, crossroads, pads, caches, bushes };
+  const blockers = listOf(o.sightBlockers)
+    .map((b) => {
+      const at = pointOf((b as { at?: unknown })?.at ?? b, radius);
+      const r = Number((b as { r?: unknown })?.r ?? 1);
+      return at ? { at, r: Number.isFinite(r) ? r : 1 } : null;
+    })
+    .filter((b): b is { at: Vec3; r: number } => b !== null);
+  return { radius, crossroads, pads, caches, bushes, blockers };
 }
 
 // The cube's eight corners on the sphere: where three regions meet.

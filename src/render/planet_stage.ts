@@ -24,6 +24,7 @@ import { bendTurn, PlanetChart, rotateAbout } from './planet_chart';
 import { capAngle, DUSK_UNIFORMS } from './planet_dusk';
 import { PlanetSky } from './planet_sky';
 import { PlanetMarks } from './planet_marks';
+import { PlanetMinimap } from './planet_minimap';
 import type { PlanetGround } from './planet_terrain';
 import { type DropOrbit, diveProgress, orbitPosition } from './planet_drop';
 import type { ChartRemap } from './vfx/chart_shift';
@@ -36,7 +37,7 @@ const RECENTER_M = 1;
 // Beyond this far from the focus, along the ground, nothing is drawn.
 export const VIEW_REACH_M = 70;
 // The dive from the globe to the champion, seconds.
-const DIVE_S = 1.1;
+export const DIVE_S = 1.1;
 // A pad's arc, meters at its top.
 const PAD_ARC_M = 9;
 // Charts kept for beats queued under an earlier one.
@@ -95,6 +96,8 @@ export class PlanetStage {
   // caches, pads, the drop's dots. Never bent.
   readonly root = new THREE.Group();
   readonly sky: PlanetSky;
+  // The minimap's window of the same chart (planet_minimap.ts).
+  readonly minimap: PlanetMinimap;
   private readonly marks: PlanetMarks;
   private readonly half: number;
   private readonly history = new Map<number, PlanetChart>();
@@ -103,6 +106,8 @@ export class PlanetStage {
   private dropping = false;
   private diveFrom: { pos: THREE.Vector3; target: THREE.Vector3; up: THREE.Vector3 } | null = null;
   private diveStartMs = 0;
+  // The dive's length; a dev page may slow it down to look at it.
+  diveSeconds = DIVE_S;
   private dropEndsAt = Number.NEGATIVE_INFINITY;
   // Unit positions on the sphere at the last two ticks, for the pads'
   // flights.
@@ -134,6 +139,7 @@ export class PlanetStage {
     this.marks = new PlanetMarks(ground, this.radius);
     this.root.add(this.marks.group);
     this.sky = new PlanetSky();
+    this.minimap = new PlanetMinimap(base, this.view, ground);
     BEND_UNIFORMS.colBendO.value.set(this.half, 0, this.half);
     BEND_UNIFORMS.colBendR.value = this.radius;
     DUSK_UNIFORMS.colRadius.value = this.radius;
@@ -382,7 +388,7 @@ export class PlanetStage {
     const pos = new THREE.Vector3(target.x + o.x, target.y + o.y, target.z + o.z);
     const upV = new THREE.Vector3(up.x, up.y, up.z);
     if (this.diveFrom) {
-      const k = diveProgress((performance.now() - this.diveStartMs) / 1000 / DIVE_S);
+      const k = diveProgress((performance.now() - this.diveStartMs) / 1000 / this.diveSeconds);
       if (k >= 1) this.diveFrom = null;
       else {
         const c = this.center;
@@ -484,6 +490,7 @@ export class PlanetStage {
       DUSK_UNIFORMS.colNextOn.value = 0;
     }
     this.marks.update(now, this.caches, royale, this.dropping);
+    this.minimap.paint(now, royale?.dusk ?? null, this.caches);
   }
 
   // The drop ended: the chart lands on the champion and the camera dives

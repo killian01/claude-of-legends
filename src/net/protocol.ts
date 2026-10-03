@@ -97,13 +97,16 @@ export type ClientMsg =
   // champion's prediction (src/net/self_predict.ts): the server tells which
   // it has applied (SelfSnap ack), so the client knows which of its orders
   // the newest state already holds. Never recorded in a replay.
-  | { t: 'move'; x: number; z: number; n?: number }
+  // y: on the planet a point is a sphere point (ADR 0029) and carries y
+  // beside x and z; a point on the plane has none, so the 5v5's orders
+  // keep their shape.
+  | { t: 'move'; x: number; z: number; y?: number; n?: number }
   | { t: 'attack'; targetId: number; n?: number }
-  | { t: 'attack_move'; x: number; z: number; n?: number }
+  | { t: 'attack_move'; x: number; z: number; y?: number; n?: number }
   | { t: 'stop'; n?: number }
   | { t: 'recall'; n?: number }
-  | { t: 'cast'; key: AbilityKey; x: number; z: number; n?: number }
-  | { t: 'sigil'; slot: number; x: number; z: number }
+  | { t: 'cast'; key: AbilityKey; x: number; z: number; y?: number; n?: number }
+  | { t: 'sigil'; slot: number; x: number; z: number; y?: number }
   | { t: 'buy'; itemId: string }
   | { t: 'sell'; slot: number }
   | { t: 'skill'; key: AbilityKey }
