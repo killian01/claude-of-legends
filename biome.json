@@ -36,7 +36,9 @@
       "!**/dist-champions*",
       "!**/node_modules",
       "!**/.pnpm-store",
-      "!**/public/vendor"
+      "!**/public/vendor",
+      "!**/public/map/planet",
+      "!**/.claude/worktrees"
     ]
   }
 }
