@@ -31,5 +31,8 @@ export interface CombatCtx {
   readonly killers: Map<number, number>;
   // Team-wide, death-surviving buffs (the Warden's Boon).
   readonly teamBuffs: TeamBuffs;
+  // Every champion on a team of its own (ADR 0030): a battle royale. Rules
+  // about allies read it, since nobody has any.
+  readonly freeForAll?: boolean;
   allocId(): number;
 }

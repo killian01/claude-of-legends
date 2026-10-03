@@ -14,6 +14,7 @@
 import { dealDamage } from '../combat/damage';
 import { addStatus, cancelRecall } from '../combat/status';
 import type { RoyaleSkillId } from '../content/bots/royale_skills';
+import { outOfCombat } from '../favors';
 import { copy, dist2, type Vec3 } from '../geo';
 import type { Ground } from '../ground';
 import type { ObsRoyale } from '../policy';
@@ -27,7 +28,7 @@ import { normalizePick, resolveLandings } from './drop';
 import { type DuskSchedule, drawDusk, duskAt, insideCap } from './dusk';
 import type { RoyaleGround, RoyaleLayout } from './layout';
 import { creatureXp, grantXp, landingLevels, takedownXp } from './levels';
-import { GOLDEN_PIECES, grantPieces, healShare, seatBuild } from './loot';
+import { GOLDEN_PIECES, grantPieces, healShare, manaShare, seatBuild, streakShare } from './loot';
 import { flightOver, flightPos, type PadFlight, padSites, padUnder, startFlight } from './pads';
 import {
   edgeOfLight,
@@ -40,10 +41,13 @@ import {
   takedownScore,
 } from './score';
 import {
+  CACHE_MANA,
   CAMP_BACK_S,
   CAMP_HEAL,
+  CAMP_MANA,
   DROP_S,
   LEADER_SHOW_EVERY_S,
+  OUT_OF_COMBAT_MANA,
   OUT_OF_COMBAT_SPEED,
   PAD_REACH_M,
   PLAY_S,
@@ -52,6 +56,7 @@ import {
   type RoyaleState,
   type RoyaleVariant,
   TAKEDOWN_HEAL,
+  TAKEDOWN_MANA,
 } from './types';
 
 export interface RoyaleOptions {
@@ -260,6 +265,16 @@ export class RoyaleMode {
     }
   }
 
+  // Mana with no fountain: out of combat (neither hit nor hitting for
+  // OUT_OF_COMBAT_S), a share of the maximum back every second.
+  stepMana(ctx: CombatCtx): void {
+    for (const u of ctx.units.values()) {
+      if (u.kind !== 'champion' || u.dead || u.maxMana <= 0 || u.mana >= u.maxMana) continue;
+      if (!outOfCombat(u, ctx.time)) continue;
+      u.mana = Math.min(u.maxMana, u.mana + u.maxMana * OUT_OF_COMBAT_MANA * DT);
+    }
+  }
+
   // The Dusk's tick: the light now, its phase told when it changes, the
   // burn outside it. The burn is no fight: it leaves the out of combat
   // clock and a cache's opening alone, and a kill it makes goes to the
@@ -295,7 +310,9 @@ export class RoyaleMode {
         if (this.tally.firstTakedownAt === null) this.tally.firstTakedownAt = sim.time;
         grantXp(champ, takedownXp(this.variant, victim.level, champ.level));
         this.loot(sim, champ, 1, 'takedown');
-        healShare(champ, TAKEDOWN_HEAL);
+        const share = streakShare(champ.killStreak);
+        healShare(champ, TAKEDOWN_HEAL * share);
+        manaShare(champ, TAKEDOWN_MANA * share);
         const score = takedownScore(victim.id, this.state.leaderId);
         this.state.scores.set(champ.id, (this.state.scores.get(champ.id) ?? 0) + score);
       }
@@ -312,6 +329,7 @@ export class RoyaleMode {
         this.tally.campsTaken++;
         this.loot(sim, champ, 1, 'camp');
         healShare(champ, CAMP_HEAL);
+        manaShare(champ, CAMP_MANA);
       }
       return;
     }
@@ -384,6 +402,7 @@ export class RoyaleMode {
       this.tally.cachesOpened++;
       this.emit(sim, { type: 'royale_cache', unitId: o.unitId, cacheId: o.cacheId });
       this.loot(sim, u, o.golden ? GOLDEN_PIECES : 1, 'cache');
+      manaShare(u, CACHE_MANA);
     }
     // The leader.
     if (this.variant === 'respawn') {

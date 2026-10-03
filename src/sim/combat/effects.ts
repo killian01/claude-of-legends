@@ -104,9 +104,14 @@ export function evaluatePredicate(
     case 'targetDying':
       return target.dead || target.hp <= 0 || ctx.dead.has(target.id);
     case 'targetIsolated': {
+      // In a free-for-all nobody has an ally, so every target would always
+      // be a stray: there, isolated means no other champion near at all,
+      // the source aside (a playtest, 2026-10-03: Fenn's Twin Fangs always
+      // took their isolation bonus and he won most matches).
       for (const u of ctx.units.values()) {
         if (u.id === target.id || u.dead || ctx.dead.has(u.id)) continue;
-        if (u.kind !== 'champion' || u.neutral || u.team !== target.team) continue;
+        if (u.kind !== 'champion' || u.neutral) continue;
+        if (ctx.freeForAll ? u.id === sourceId : u.team !== target.team) continue;
         if (dist(u.pos, target.pos) <= p.radius) return false;
       }
       return true;

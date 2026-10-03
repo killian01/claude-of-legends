@@ -32,7 +32,6 @@ import {
   NEW_TAG,
   NEW_TITLE,
   PLAY_NOW,
-  PLAY_NOW_LINE,
   WAYS_LABEL,
 } from './landing_modes';
 import { mountPresence } from './landing_presence';
@@ -718,7 +717,7 @@ export function showLanding(
     newTitle.append(el('span', 'pg-new-tag', NEW_TAG), ` ${NEW_TITLE}`);
     bannerWords.append(el('div', 'pg-new-kicker', ROYALE_LABEL), newTitle, el('p', '', NEW_LINE));
     banner.append(planetEmblem('respawn'), bannerWords);
-    playCard.append(banner, presence, playBtn, el('p', 'pg-fine', PLAY_NOW_LINE), wayList);
+    playCard.append(banner, presence, playBtn, wayList);
     // The newest news in one line (CONTEXT.md: News): a site whose last
     // word is from yesterday reads inhabited before anything is clicked.
     // It opens the section over the landing, with the nav told, so Back

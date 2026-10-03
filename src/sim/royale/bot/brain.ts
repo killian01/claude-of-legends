@@ -39,8 +39,29 @@ export const DANGER_M = 11;
 export const LAST_LIGHT_M = 20;
 export const LAST_LIGHT_NERVE = 0.15;
 // One life's caution: the odds a fight needs, and the health under which
-// a bot backs off, both rise by this much.
-export const ONE_LIFE_CAUTION = 0.1;
+// a bot backs off, both rise by this much. Small: at 0.1 two even bots
+// passed each other by, and a playtest (2026-10-03) saw bots that never
+// fought one another.
+export const ONE_LIFE_CAUTION = 0.06;
+// How much better than its nerve the odds must be for a bot to START a
+// fight, by the Dusk's phase (0 the calm, 1 to 5 the closings, 6 dark):
+// the calm is for looting, each closing brings fights on, and the last
+// light takes them all. A hit is answered and a low enemy finished in
+// every phase. Without it the bots either ignored each other until the
+// Dusk crammed them in (a playtest, 2026-10-03) or turned the drop into a
+// bloodbath that ended One life in three minutes.
+export const PHASE_NERVE: readonly number[] = [0.12, 0.08, 0.05, 0.03, 0.01, 0, 0];
+// An even fight (odds within EVEN_ODDS of the bot's nerve) is not refused
+// for good: each decision with one in sight the bot starts it with this
+// chance, by the Dusk's phase, so the takedowns come all along the match
+// rather than all at once when the light corners everyone.
+export const EVEN_ODDS = 0.06;
+// A far stronger enemy this close is run from before it strikes: a fed
+// champion otherwise walked through a crowd that waited its turn (one took
+// thirty takedowns in under three minutes). The odds against it alone.
+export const FLEE_ODDS = 0.3;
+export const FLEE_M = 10;
+export const EVEN_FIGHT_CHANCE: readonly number[] = [0.004, 0.01, 0.018, 0.03, 0.05, 0.1, 0.3];
 // A camp body this close is worth hitting.
 export const CAMP_FIGHT_M = 14;
 // The bot's own health share to take a camp.
@@ -181,13 +202,26 @@ export function decide(
       const caution = r.variant === 'one_life' && !cornered ? ONE_LIFE_CAUTION : 0;
       const backOff = cornered ? skill.retreatHp / 2 : skill.retreatHp + caution;
       if (near && sense.s.hpFrac < backOff) return retreat(sense);
+      if (!cornered) {
+        const close = sense.enemies[0];
+        if (
+          close &&
+          dist(sense.me, p3(close)) <= FLEE_M &&
+          royaleOdds(sense, close, 0) < FLEE_ODDS
+        ) {
+          return retreat(sense);
+        }
+      }
       const target = pickTarget(sense);
       if (target) {
         const odds = royaleOdds(sense, target);
         const finish = target.hpFrac < FINISH_HP && sense.s.hpFrac > target.hpFrac;
         const nerve = skill.fightOdds + caution - (cornered ? LAST_LIGHT_NERVE : 0);
+        const start = nerve + (PHASE_NERVE[r.dusk.phase] ?? 0);
+        const even =
+          odds >= nerve - EVEN_ODDS && rng.next() < (EVEN_FIGHT_CHANCE[r.dusk.phase] ?? 0);
         const answer = sense.struck && (cornered || odds >= nerve - 0.1);
-        if (odds >= nerve || finish || answer) return fight(sense, target, rng);
+        if (odds >= start || even || finish || answer) return fight(sense, target, rng);
       }
       if (near && sense.struck && !cornered) return retreat(sense);
     }

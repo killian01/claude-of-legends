@@ -24,6 +24,7 @@ import {
 import { equipItem } from '../purchase';
 import { recalcChampion } from '../stats';
 import type { Unit } from '../unit';
+import { STREAK_FALLOFF } from './types';
 
 // A golden cache gives this many pieces, a plain one, a camp or a
 // takedown one.
@@ -98,4 +99,16 @@ export function grantPieces(u: Unit, build: readonly string[], count: number): s
 export function healShare(u: Unit, share: number): void {
   if (u.dead) return;
   u.hp = Math.min(u.maxHp, u.hp + u.maxHp * share);
+}
+
+// The share of a takedown's heal and mana a killer on this streak gets.
+export function streakShare(streak: number): number {
+  return 1 / (1 + STREAK_FALLOFF * Math.max(0, streak - 1));
+}
+
+// A share of the maximum mana back, capped at full: what a takedown, a camp
+// and a cache restore (TAKEDOWN_MANA, CAMP_MANA, CACHE_MANA).
+export function manaShare(u: Unit, share: number): void {
+  if (u.dead || u.maxMana <= 0) return;
+  u.mana = Math.min(u.maxMana, u.mana + u.maxMana * share);
 }

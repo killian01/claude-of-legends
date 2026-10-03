@@ -48,9 +48,6 @@ export const CLASSIC_ART = tileArtUrl('ranked');
 // nothing to install and no account: the public queue as a Guest (ADR
 // 0024), people when they are on and bots in every empty seat.
 export const PLAY_NOW_CALL = 'Play in the browser now';
-// The card's line. The three ways in under it each say what they are, so
-// this one says what they share: a match online, never an empty one.
-export const PLAY_NOW_LINE = 'Online, with people when they are on and bots in every empty seat.';
 
 // The line under the hero's tagline, the first thing read after what the
 // game is: a game with a ladder, from the first match, with no account.

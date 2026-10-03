@@ -11,12 +11,18 @@ import { buildRoyaleSim, type ReplayPick } from '../src/net/replay';
 import { dealDamage } from '../src/sim/combat/damage';
 import { unrootedMoveSpeed } from '../src/sim/combat/status';
 import { DUSK_PHASES } from '../src/sim/content/dusk';
-import { dist, type Vec3 } from '../src/sim/geo';
+import { basis, dirTo, dist, offset, type Vec3 } from '../src/sim/geo';
 import { buildObservation } from '../src/sim/observe';
 import { insideCap } from '../src/sim/royale/dusk';
 import {
+  PLANET_CLOSE_SIGHT_M,
+  planetGameMap,
+  SIGHT_BLOCKER_MIN_R,
+} from '../src/sim/royale/planet_map';
+import {
   CACHE_OPEN_S,
   DROP_S,
+  OUT_OF_COMBAT_MANA,
   OUT_OF_COMBAT_S,
   PAD_FLIGHT_S,
   RESPAWN_S,
@@ -25,6 +31,7 @@ import {
   type RoyaleVariant,
   START_LEVEL,
   TAKEDOWN_HEAL,
+  TAKEDOWN_MANA,
   WARDEN_AT_S,
 } from '../src/sim/royale/types';
 import type { Sim, SimEvent } from '../src/sim/sim';
@@ -202,6 +209,22 @@ describe('the rules of play', () => {
     expect(calm).toBeCloseTo(fighting * 1.4, 9);
   });
 
+  it('gives mana back out of combat, there being no fountain to refill at', () => {
+    const { sim, unitIds } = build(1);
+    land(sim);
+    const u = sim.units.get(unitIds[0]!)!;
+    u.mana = 0;
+    // Fresh from a fight: only the champion's own regeneration.
+    u.lastDamagedAt = sim.time;
+    run(sim, 1);
+    const fighting = u.mana;
+    run(sim, OUT_OF_COMBAT_S);
+    const before = u.mana;
+    run(sim, 1);
+    const calm = u.mana - before;
+    expect(calm - fighting).toBeCloseTo(u.maxMana * OUT_OF_COMBAT_MANA, 6);
+  });
+
   it('raises the big creatures on the mode clock', () => {
     const { sim } = build(1);
     expect(sim.objectives.nextSpawnAt).toBe(DROP_S + WARDEN_AT_S);
@@ -227,6 +250,8 @@ describe('takedowns', () => {
     const victim = sim.units.get(unitIds[1]!)!;
     const xp = killer.xp;
     const items = killer.items.length;
+    killer.mana = 0;
+    const manaBefore = killer.mana;
     const events = takedown(sim, killer, victim);
     expect(victim.dead).toBe(true);
     expect(killer.xp).toBeGreaterThan(xp);
@@ -235,6 +260,10 @@ describe('takedowns', () => {
     // Half health, the takedown's share on top (and whatever the level and
     // the piece add to the maximum).
     expect(killer.hp).toBeGreaterThanOrEqual(killer.maxHp * (0.5 + TAKEDOWN_HEAL) - 1);
+    // And a share of the mana.
+    expect(killer.mana).toBeGreaterThanOrEqual(
+      Math.min(killer.maxMana, manaBefore + killer.maxMana * TAKEDOWN_MANA) - 1,
+    );
     expect(sim.royale!.scores.get(killer.id)).toBe(1);
     expect(sim.royaleMode!.tally.takedowns).toBe(1);
     run(sim, RESPAWN_S + 0.1);
@@ -295,5 +324,29 @@ describe('what a seat reads, and the checkpoint', () => {
     run(sim, 15);
     expect(sim.checksum()).toBe(after);
     expect(JSON.stringify([...sim.royale!.scores])).toBe(royaleAfter);
+  });
+});
+
+describe('sight on the planet', () => {
+  it('lets only the big solid things block a sight line, and hides nothing at arm length', () => {
+    const planet = loadPlanet();
+    const map = planetGameMap(planet.layout);
+    const listed = planet.layout.sightBlockers ?? [];
+    expect(map.walls.length).toBe(listed.filter((b) => b.r >= SIGHT_BLOCKER_MIN_R).length);
+    expect(map.walls.length).toBeLessThan(listed.length);
+    expect(map.closeSight).toBe(PLANET_CLOSE_SIGHT_M);
+    // Two champions of different teams in one bush, one outside it at three
+    // meters: the close one is seen whatever the bush says.
+    const { sim, unitIds } = build(2);
+    land(sim);
+    const a = sim.units.get(unitIds[0]!)!;
+    const b = sim.units.get(unitIds[1]!)!;
+    const bush = planet.layout.bushes![0]!;
+    place(b, bush.at as Vec3);
+    const dir = dirTo(b.pos, sim.ground.nearestWalkable(b.pos, 40)!) ?? basis(b.pos).east;
+    place(a, offset(b.pos, dir, bush.r + 2.5) as Vec3);
+    sim.tick();
+    const d = dist(a.pos, b.pos);
+    if (d <= PLANET_CLOSE_SIGHT_M) expect(sim.isVisible(a.team, b.id)).toBe(true);
   });
 });

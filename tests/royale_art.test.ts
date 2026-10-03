@@ -53,9 +53,10 @@ describe("the landing's New banner", () => {
 
   it('stands at the top of the Play now card, right over the gold button that plays it', () => {
     const landing = readFileSync(path.join(ROOT, 'src/ui/landing.ts'), 'utf8');
-    expect(landing).toContain(
-      "playCard.append(banner, presence, playBtn, el('p', 'pg-fine', PLAY_NOW_LINE), wayList);",
-    );
+    expect(landing).toContain('playCard.append(banner, presence, playBtn, wayList);');
+    // No fine print under the button: the banner and the three ways say it
+    // (the maintainer, 2026-10-03).
+    expect(landing).not.toContain('bots in every empty seat');
     // The gold button still plays Respawn, and still says where it plays.
     expect(PLAY_NOW.play).toEqual({ to: 'royale', variant: 'respawn' });
     expect(PLAY_NOW_CALL).toBe('Play in the browser now');

@@ -317,6 +317,7 @@ export class Sim {
       dead: this.dead,
       killers: this.killers,
       teamBuffs: this.teamBuffs,
+      freeForAll: this.teamCount > TWO_TEAMS,
       allocId: () => this.nextId++,
     };
   }
@@ -1063,7 +1064,10 @@ export class Sim {
     stepSeparation(ctx, this.options.separation ?? MINIONS_ONLY);
     stepProjectiles(ctx, DT);
     stepZones(ctx);
-    if (royale && this.winner === null) royale.stepDusk(ctx, this);
+    if (royale && this.winner === null) {
+      royale.stepMana(ctx);
+      royale.stepDusk(ctx, this);
+    }
 
     for (const id of this.dead) {
       const u = this.units.get(id);

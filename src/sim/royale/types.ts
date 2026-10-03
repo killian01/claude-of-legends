@@ -35,6 +35,17 @@ export const CAMP_HEAL = 0.3;
 // Out of combat (no damage dealt or taken for this long), speed grows.
 export const OUT_OF_COMBAT_S = 5;
 export const OUT_OF_COMBAT_SPEED = 0.4;
+// There is no fountain to refill at: out of combat, a share of the maximum
+// mana comes back every second (a playtest, 2026-10-03: a match ended with
+// no mana left), and a takedown, a camp and a cache each give some back.
+export const OUT_OF_COMBAT_MANA = 0.04;
+export const TAKEDOWN_MANA = 0.3;
+export const CAMP_MANA = 0.3;
+export const CACHE_MANA = 0.25;
+// A takedown's heal and mana fall off with the killer's streak: the share
+// is 1 / (1 + STREAK_FALLOFF * (streak - 1)). A fed assassin otherwise came
+// out of every kill healed for the next and emptied a match alone.
+export const STREAK_FALLOFF = 0.5;
 // A launch pad throws a champion this far (chord, meters), over this long.
 export const PAD_THROW_M = 50;
 export const PAD_FLIGHT_S = 1.6;

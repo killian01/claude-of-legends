@@ -65,8 +65,9 @@ export function computeVisibility(
       if (!seen || seen.has(target.id)) continue;
       const d = dist(src.pos, target.pos);
       if (d > src.sightRange * sightFactor(src, time)) continue;
-      if (targetBrush !== -1 && brush.get(src.id) !== targetBrush) continue;
-      if (sightBlocked(map, src.pos, target.pos)) continue;
+      const close = map.closeSight !== undefined && d <= map.closeSight;
+      if (!close && targetBrush !== -1 && brush.get(src.id) !== targetBrush) continue;
+      if (!close && sightBlocked(map, src.pos, target.pos)) continue;
       seen.add(target.id);
       looking -= 1;
     }
