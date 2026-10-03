@@ -64,6 +64,8 @@ const NAMES = [
 export interface DemoOptions {
   // Where the player starts, a direction; absent, off a crossroads.
   at?: Vec3;
+  // How many champions land around the player (9, a crowded fight).
+  near?: number;
   // Seconds of the drop over the globe at the start; 0 lands at once.
   dropS: number;
   // The Dusk's edge a few meters from the player's start (for a look at it).
@@ -189,7 +191,7 @@ export class PlanetDemoWorld implements IWorld {
       const at =
         i === 0
           ? this.start
-          : i < 10
+          : i <= (opts.near ?? 9)
             ? around(this.start, 6 + this.rand() * 14, this.rand)
             : onSphere({ x: this.rand() * 2 - 1, y: this.rand() * 2 - 1, z: this.rand() * 2 - 1 });
       const u = createChampion(id, i as TeamId, copy(at), def);
@@ -421,7 +423,7 @@ export class PlanetDemoWorld implements IWorld {
     let i = 0;
     for (const u of this.units.values()) {
       if (u.id === this.selfId) u.pos = copy(at);
-      else if (i < 9) u.pos = around(at, 6 + this.rand() * 14, this.rand);
+      else if (i < (this.opts.near ?? 9)) u.pos = around(at, 6 + this.rand() * 14, this.rand);
       i++;
     }
   }
@@ -519,7 +521,7 @@ export class PlanetDemoWorld implements IWorld {
       b.heading = rotate(b.heading, (this.rand() - 0.5) * 2.2, u.pos) as Vec3;
     }
     // Strays drift back toward the fight around the player.
-    if (dist(u.pos, this.self.pos) > 34 && u.id <= 10) {
+    if (dist(u.pos, this.self.pos) > 34 && u.id <= 1 + (this.opts.near ?? 9)) {
       b.heading = (dirTo(u.pos, this.self.pos) as Vec3) ?? b.heading;
     }
     // Rock, water or a trunk ahead: turn away.
