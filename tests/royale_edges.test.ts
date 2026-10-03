@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   clampToEdge,
+  clearOf,
   distanceLabel,
   EDGE_PRIORITY,
   EdgeChimes,
@@ -158,5 +159,39 @@ describe('the chime', () => {
     expect(chimes.step([t], VIEW)).toHaveLength(1);
     chimes.step([], VIEW);
     expect(chimes.step([t], VIEW)).toHaveLength(1);
+  });
+});
+
+describe('the obstacles', () => {
+  it('slide an arrow along its border clear of the minimap', () => {
+    // The phone's minimap, top right under the bar.
+    const minimap = { left: 720, top: 58, right: 832, bottom: 170 };
+    const at = clampToEdge(target({ x: 3000, y: 120 }), VIEW);
+    expect(at.x).toBeCloseTo(VIEW.width - VIEW.right);
+    const moved = clearOf(at, 14, [minimap], VIEW);
+    expect(moved.x).toBeCloseTo(at.x);
+    expect(moved.y - 14).toBeGreaterThanOrEqual(minimap.bottom);
+    expect(moved.y).toBeLessThanOrEqual(VIEW.height - VIEW.bottom);
+  });
+
+  it('leave an arrow that is already clear where it stands', () => {
+    const at = { x: VIEW.left, y: 200 };
+    expect(clearOf(at, 14, [{ left: 700, top: 0, right: 844, bottom: 100 }], VIEW)).toEqual(at);
+  });
+
+  it('go around a corner when their whole border is covered', () => {
+    const bottom = { left: 0, top: 270, right: 844, bottom: 390 };
+    const at = { x: 422, y: VIEW.height - VIEW.bottom };
+    const moved = clearOf(at, 14, [bottom], VIEW);
+    expect(moved.y + 14).toBeLessThanOrEqual(bottom.top);
+    expect(moved.x === VIEW.left || moved.x === VIEW.width - VIEW.right).toBe(true);
+  });
+
+  it('slide along the top or bottom border sideways', () => {
+    const bar = { left: 300, top: 250, right: 560, bottom: 390 };
+    const at = { x: 422, y: VIEW.height - VIEW.bottom };
+    const moved = clearOf(at, 14, [bar], VIEW);
+    expect(moved.y).toBe(at.y);
+    expect(moved.x + 14 <= bar.left || moved.x - 14 >= bar.right).toBe(true);
   });
 });
