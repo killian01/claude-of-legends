@@ -928,7 +928,11 @@ ${compactTapsCss()}
 .hud.compact .hud-announce { font-size: 20px; top: 62px; }
 .hud.compact .hud-spot { font-size: 32px; top: 96px; letter-spacing: 2px; }
 .hud.compact .hud-spot.top { font-size: 44px; letter-spacing: 3px; }
-.hud.compact .hud-feed { font-size: 11px; }
+.hud.compact .hud-feed { font-size: 11px; left: calc(12px + var(--safe-left, env(safe-area-inset-left, 0px))); }
+/* With the thumbs the touch bar (ui/touch_bar.ts) holds the left edge, and
+   the feed ran down over its Menu and Shop buttons: it starts past the
+   column, where the coach bar starts too. */
+.hud.thumbs .hud-feed { left: calc(84px + var(--safe-left, env(safe-area-inset-left, 0px))); }
 .hud.compact .hud-hints {
   font-size: 9px; max-width: 170px; line-height: 1.45;
   left: calc(12px + env(safe-area-inset-left, 0px));
