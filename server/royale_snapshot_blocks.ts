@@ -75,14 +75,29 @@ export const graftsBlock: Builder<string[]> = () => undefined;
 export const seedfallsBlock: Builder<SnapSeedfall[]> = () => undefined;
 export const risingsBlock: Builder<SnapRising[]> = () => undefined;
 export const marksBlock: Builder<SnapMark[]> = () => undefined;
-// The Clamors still ringing, everyone's, sent the tick they change. The
-// client hears each once and lets it fall silent CLAMOR_S after it rang,
-// so a list gone empty needs no send of its own beyond the change.
+// How far from the viewer a Clamor is sent: past the client's hearing
+// (60 m, ui/royale_moments.ts CLAMOR_HEAR_M) and the minimap's corners
+// (planet_minimap.ts, a 110 m square), nobody on that screen can use it.
+// A bandwidth bound, not a fog: every seat's observation keeps them all.
+export const CLAMOR_SEND_M = 80;
+
+// The Clamors ringing within CLAMOR_SEND_M of the viewer, sent the tick
+// that list changes. The client hears each once and lets it fall silent
+// CLAMOR_S after it rang.
 export const clamorsBlock: Builder<SnapClamor[]> = (sim, viewer) => {
   if (sim.royale.stage !== 'play') return undefined;
-  const list = sim.royale.clamors.map(
-    (c): SnapClamor => [round2(c.pos.x), round2(c.pos.y), round2(c.pos.z), round2(c.at)],
-  );
+  const at = sim.units.get(viewer.unitId)?.pos;
+  const reach2 = CLAMOR_SEND_M * CLAMOR_SEND_M;
+  const list: SnapClamor[] = [];
+  for (const c of sim.royale.clamors) {
+    if (at && at.y !== undefined) {
+      const dx = c.pos.x - at.x;
+      const dy = c.pos.y - at.y;
+      const dz = c.pos.z - at.z;
+      if (dx * dx + dy * dy + dz * dz > reach2) continue;
+    }
+    list.push([round2(c.pos.x), round2(c.pos.y), round2(c.pos.z), round2(c.at)]);
+  }
   return sentOnChange(viewer, 'cl', list, sim.time);
 };
 export const rankBlock: Builder<number> = () => undefined;
