@@ -27,13 +27,7 @@ import { chooseBotSeat } from './royale_join';
 import { RoyalePoints } from './royale_points';
 import { finalPlaces, type RankedSeat, royaleRanking, royaleResult } from './royale_ranking';
 import { type RoyalePerson, royaleSeats } from './royale_seats';
-import type {
-  RoyaleBuild,
-  RoyaleSim,
-  RoyaleSimEvent,
-  RoyaleSimFactory,
-  RoyaleSkill,
-} from './royale_sim';
+import type { RoyaleBuild, RoyaleSim, RoyaleSimEvent, RoyaleSimFactory } from './royale_sim';
 import { buildRoyaleSnapshot, CACHES_EVERY_TICKS } from './royale_snapshot';
 
 export interface RoyalePlayer {
@@ -69,8 +63,6 @@ interface SeatState {
   championId: string;
   // A bot plays it now.
   bot: boolean;
-  skill: RoyaleSkill;
-  softened: boolean;
   // The person whose dropped connection this seat waits for, by owner.
   heldFor: number | null;
 }
@@ -126,8 +118,6 @@ export class RoyaleMatch {
         name: s.name,
         championId: s.championId,
         bot: s.clientId === null,
-        skill: s.skill,
-        softened: s.bot?.softened ?? false,
         heldFor: null,
       });
     });
@@ -260,7 +250,7 @@ export class RoyaleMatch {
     if (s) {
       s.bot = true;
       s.heldFor = hold ? p.owner : null;
-      this.standIn(p.unitId, s.skill, s.softened);
+      this.standIn(p.unitId);
       this.record({ k: this.sim.tickCount, u: p.unitId, e: 'bot_on' });
       this.reidentify(p.unitId);
     }

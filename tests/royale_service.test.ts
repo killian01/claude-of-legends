@@ -340,7 +340,7 @@ describe('leaving and coming back', () => {
     const entry = h.service.matches.get(a.matchId!)!;
     const open = entry.match.openBotSeats;
     h.service.disconnect(a);
-    expect(sim.policies.get(self)).toBeDefined();
+    expect(sim.policies.has(self)).toBe(true);
     expect(entry.match.openBotSeats).toBe(open);
     expect(h.seats.at(-1)?.how).toBe('closed');
     // Back on a new socket: hello claims the seat.
@@ -372,7 +372,7 @@ describe('leaving and coming back', () => {
     const sim = h.fake.sims[0]!;
     h.say(a, { t: 'leave' });
     expect(a.matchId).toBeNull();
-    expect(sim.policies.get(self)).toBe('normal');
+    expect(sim.policies.has(self)).toBe(true);
     expect(h.last(2, 'player_left')?.name).toBe('alice');
     expect(h.service.rejoin(a)).toBe(false);
     // Bob still plays; the first person's seat is anyone's to take now.
