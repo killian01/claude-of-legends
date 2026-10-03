@@ -2871,6 +2871,7 @@ export class Renderer {
     this.selfDrawn =
       this.followId !== null ? (this.world.predictedPos?.(this.followId, now) ?? null) : null;
     let followPos: THREE.Vector3 | null = null;
+    const fadeAt: { id: number; x: number; y: number; z: number }[] = [];
     for (const [id, t] of this.tracked) {
       const ahead = id === this.followId ? this.selfDrawn : null;
       const { x, z } = this.drawnXZ(id, t, alpha);
@@ -3051,8 +3052,14 @@ export class Renderer {
       const spinners = t.mesh.userData.spinners as THREE.Object3D[] | undefined;
       if (spinners) for (const sp of spinners) sp.rotation.y = now * 0.0006;
       if (id === this.followId) followPos = new THREE.Vector3(x, this.groundHeight(x, z), z);
+      // The champions the planet's props thin out for: the followed one,
+      // then the nearest others in view (planet_dusk.ts).
+      if (this.planet && t.kind === 'champion' && t.mesh.visible) {
+        fadeAt.push({ id, x, y: t.mesh.position.y, z });
+      }
     }
 
+    if (this.planet) this.planet.setFadeTargets(fadeAt, this.followId);
     this.placeIndicators(now, alpha);
     this.updateAimPreview();
     for (const t of this.trackedProjectiles.values()) {

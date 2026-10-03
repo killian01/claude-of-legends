@@ -8,6 +8,7 @@
 
 import { startPresentation } from '../game/boot';
 import { whenChampionModelsReady } from '../render/champions/readiness';
+import { DUSK_UNIFORMS } from '../render/planet_dusk';
 import { loadPlanetGround, planetTerrain } from '../render/planet_terrain';
 import type { Renderer } from '../render/renderer';
 import { DT } from '../sim/types';
@@ -104,6 +105,10 @@ requestAnimationFrame(frame);
       p95Ms: at(0.95),
       ...(renderer ? renderer.renderStats() : {}),
     };
+  },
+  // The props' see-through around the champions on or off (its radius).
+  fade(on = true) {
+    DUSK_UNIFORMS.colFadeR.value = on ? 2.4 : 0;
   },
   // One draw without the shadow pass, for its share of the cost.
   withoutShadows() {
