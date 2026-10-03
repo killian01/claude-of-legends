@@ -35,6 +35,23 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-10-03',
+    title: 'The Wanderseed: a battle royale for fifty champions',
+    body: [
+      'A new way to play: fifty champions on the Wanderseed, a small planet you can walk all ' +
+        'the way round. Pick where you land, open the glowing caches for the next piece of your ' +
+        'build, take the launch pads across the world, and stay in the light: the Dusk closes in ' +
+        'five phases and burns whoever it catches outside.',
+      'Two rule sets. In Respawn a death costs five seconds, and the most takedowns when the ' +
+        'last light goes out wins. In One life you get one, and the last one standing wins.',
+      'House bots fill every seat nobody takes, each with a name of its own and a bot mark ' +
+        'beside it, so you always know who is a person. Play now on the front page lands you in ' +
+        'Respawn, and the classic 5v5 is one click away.',
+    ],
+    image: 'wanderseed.webp',
+    link: { label: 'Play the battle royale', to: 'play' },
+  },
+  {
     day: '2026-09-30',
     title: 'Every match puts you on the ladder',
     body: [

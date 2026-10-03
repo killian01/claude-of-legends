@@ -105,6 +105,17 @@ export interface LandingWay {
 // The small heading over the rows.
 export const WAYS_LABEL = 'Three ways to play';
 
+// The battle royale's arrival, said at the top of the Play now card
+// (ADR 0031): the word New, the planet's name, and what one does there,
+// over the gold button that plays it. A banner, not a second card: a
+// second card pushed the button under the first screen of a phone held
+// sideways.
+export const NEW_TAG = 'New';
+export const NEW_TITLE = 'The Wanderseed';
+export const NEW_LINE =
+  'Fifty champions on a small planet you can walk all the way round. Land where you like, ' +
+  'loot, stay in the light.';
+
 export const LANDING_WAYS: readonly LandingWay[] = [
   {
     id: 'respawn',
