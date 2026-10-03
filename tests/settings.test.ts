@@ -26,6 +26,8 @@ describe('player settings', () => {
       leftClickMoves: true,
       stepsOff: false,
       stepsDone: [],
+      royaleStepsDone: [],
+      royalePick: null,
     });
     expect(clampSettings({ sfx: 0.35, music: 0.8, announcer: true })).toEqual({
       sfx: 0.35,
@@ -40,7 +42,35 @@ describe('player settings', () => {
       leftClickMoves: true,
       stepsOff: false,
       stepsDone: [],
+      royaleStepsDone: [],
+      royalePick: null,
     });
+  });
+
+  // The battle royale's quick pick keeps the champion, the skin and the two
+  // sigils last played (ui/royale_pick.ts); junk keeps nothing.
+  it('remembers the quick pick of the battle royale, or nothing', () => {
+    expect(DEFAULT_SETTINGS.royalePick).toBeNull();
+    const kept = { championId: 'torv', skin: 2, sigils: ['zephyr', 'sear'] };
+    expect(clampSettings({ royalePick: kept }).royalePick).toEqual(kept);
+    expect(clampSettings({ royalePick: { ...kept, skin: -3 } }).royalePick?.skin).toBe(0);
+    expect(clampSettings({ royalePick: { ...kept, skin: 1.7 } }).royalePick?.skin).toBe(1);
+    for (const junk of [
+      'torv',
+      { ...kept, championId: '' },
+      { ...kept, championId: 7 },
+      { ...kept, sigils: ['zephyr'] },
+      { ...kept, sigils: ['zephyr', 'zephyr'] },
+      { ...kept, sigils: ['zephyr', 3] },
+    ]) {
+      expect(clampSettings({ royalePick: junk }).royalePick).toBeNull();
+    }
+  });
+
+  it('keeps the battle royale steps done apart from the 5v5 ones', () => {
+    const s = clampSettings({ stepsDone: ['learn'], royaleStepsDone: ['br_cache', 'br_cache', 4] });
+    expect(s.stepsDone).toEqual(['learn']);
+    expect(s.royaleStepsDone).toEqual(['br_cache']);
   });
 
   it('knows the two ways a phone plays and defaults to the stick', () => {

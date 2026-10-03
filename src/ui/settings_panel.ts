@@ -81,8 +81,9 @@ export function buildSettingsPanel(): HTMLElement {
   return panel;
 }
 
-// The first steps (ui/first_steps.ts): hidden from the match with its own
-// button, brought back here, from its first step, for a match that starts
+// The first steps (ui/first_steps.ts, and the battle royale's,
+// ui/royale_steps.ts): hidden from the match with its own button, brought
+// back here, both lists from their first step, for a match that starts
 // after.
 function stepsRow(on: boolean): HTMLElement {
   const row = document.createElement('div');
@@ -93,7 +94,9 @@ function stepsRow(on: boolean): HTMLElement {
   box.type = 'checkbox';
   box.checked = on;
   box.addEventListener('change', () =>
-    updateSettings(box.checked ? { stepsOff: false, stepsDone: [] } : { stepsOff: true }),
+    updateSettings(
+      box.checked ? { stepsOff: false, stepsDone: [], royaleStepsDone: [] } : { stepsOff: true },
+    ),
   );
   row.append(lab, box);
   return row;
