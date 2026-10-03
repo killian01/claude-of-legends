@@ -70,10 +70,13 @@ export function dropBanner(
   };
 }
 
-// How far the own cache is opened, 0 to 1, or null while none is.
+// How far the own cache is opened, 0 to 1, or null while none is: over
+// the opening's own length when the server sends one (a Seedfall cache's),
+// else CACHE_OPEN_S.
 export function openingFraction(r: Pick<SnapRoyale, 'opening'>, time: number): number | null {
   if (!r.opening) return null;
-  return Math.max(0, Math.min(1, (time - r.opening.since) / CACHE_OPEN_S));
+  const d = r.opening.d !== undefined && r.opening.d > 0 ? r.opening.d : CACHE_OPEN_S;
+  return Math.max(0, Math.min(1, (time - r.opening.since) / d));
 }
 
 // The score leader's badge in Respawn: who leads, with how many, whether it
