@@ -5,7 +5,7 @@
 // walkable point farthest from every pick and every landing already
 // placed, among a sample drawn from the match's stream.
 
-import { dist2, settle, type Vec3 } from '../geo';
+import { dist2, norm, settle, type Vec3 } from '../geo';
 import type { Rng } from '../rng';
 import { nearPole, type RoyaleGround, type RoyaleLayout, randomWalkable } from './layout';
 
@@ -16,7 +16,7 @@ export const QUIET_SAMPLE = 48;
 // (a pick there is pushed off along the meridian by the snap below).
 export function normalizePick(p: Vec3, radius: number): Vec3 | null {
   if (![p.x, p.y, p.z].every(Number.isFinite)) return null;
-  if (p.x * p.x + p.y * p.y + p.z * p.z < 1e-6) return null;
+  if (norm(p) < 1e-3) return null;
   return settle(p, radius) as Vec3;
 }
 

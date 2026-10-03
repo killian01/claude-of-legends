@@ -8,7 +8,7 @@
 // cannot see must not fling them. A champion just landed is not thrown
 // again before it has moved off.
 
-import { dist2, lerp, type Vec3 } from '../geo';
+import { dist, dist2, lerp, type Vec3 } from '../geo';
 import type { Vec2 } from '../types';
 import { PAD_FLIGHT_S, PAD_REACH_M, type PadSite } from './types';
 
@@ -68,10 +68,7 @@ export function flightOver(f: PadFlight, time: number): boolean {
 // The trip a pad saves: from `from` to `goal`, walking straight against
 // walking to the pad and riding it. Positive when the pad is shorter.
 export function padSaving(pad: PadSite, from: Vec2, goal: Vec2, walkSpeed: number): number {
-  const walk = Math.sqrt(dist2(from, goal)) / walkSpeed;
-  const ride =
-    Math.sqrt(dist2(from, pad.at)) / walkSpeed +
-    PAD_FLIGHT_S +
-    Math.sqrt(dist2(pad.to, goal)) / walkSpeed;
+  const walk = dist(from, goal) / walkSpeed;
+  const ride = dist(from, pad.at) / walkSpeed + PAD_FLIGHT_S + dist(pad.to, goal) / walkSpeed;
   return walk - ride;
 }

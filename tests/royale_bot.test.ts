@@ -255,10 +255,36 @@ describe('fighting', () => {
     const e = enemy(9, along(here, east, 5, R));
     const loot = along(here, north, 20, R);
     const caches = [{ id: 1, x: loot.x, y: loot.y, z: loot.z, golden: false }];
-    const s = decide(obs(here, { units: [e], royale: { caches } }), new Rng(1), layout, strong);
+    const rs = { caches, variant: 'respawn' as const };
+    const s = decide(obs(here, { units: [e], royale: rs }), new Rng(1), layout, strong);
     expect(['cast', 'attack']).toContain(s.kind);
-    const g = decide(obs(here, { units: [e], royale: { caches } }), new Rng(1), layout, gentle);
+    const g = decide(obs(here, { units: [e], royale: rs }), new Rng(1), layout, gentle);
     expect(['cast', 'attack']).not.toContain(g.kind);
+    // One life weighs a fight harder: even the strong one walks on.
+    const ol = { caches, variant: 'one_life' as const };
+    const o = decide(obs(here, { units: [e], royale: ol }), new Rng(1), layout, strong);
+    expect(['cast', 'attack']).not.toContain(o.kind);
+  });
+
+  it('counts the nearest bystanders only, so a crowd still fights', () => {
+    const target = enemy(9, along(here, east, 5, R));
+    const crowd = Array.from({ length: 12 }, (_, i) =>
+      enemy(20 + i, along(here, north, 6 + i * 0.5, R)),
+    );
+    const sense = buildSense(obs(here, { units: [target, ...crowd] }), royale(), layout, strong);
+    expect(royaleOdds(sense, target)).toBeCloseTo(1 / 2.5, 9);
+    expect(royaleOdds(sense)).toBeLessThan(0.15);
+  });
+
+  it('answers a hit and fights on in the last light', () => {
+    const s = drawDusk(new Rng(3), layout, fakeGround, 10);
+    const d = duskAt(s, 10 + 560);
+    expect(d.now.radius).toBeLessThanOrEqual(20);
+    const at = d.now.center;
+    const e = enemy(9, along(at, dirTo(at, sph(0, -1, 0)) as Vec3, 3, R), { level: 8 });
+    const struck = obs(at, { units: [e], royale: { dusk: d } }, { struckAt: 19.8, hpFrac: 0.3 });
+    const a = decide(struck, new Rng(1), layout, gentle);
+    expect(['cast', 'attack', 'sigil']).toContain(a.kind);
   });
 
   it('finishes a low enemy whatever the skill', () => {
