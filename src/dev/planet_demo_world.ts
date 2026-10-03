@@ -20,6 +20,7 @@ import {
   copy,
   dirTo,
   dist,
+  lerp,
   offset,
   rotate,
   settle,
@@ -149,6 +150,8 @@ export class PlanetDemoWorld implements IWorld {
     attacks: { unitId: number; targetId: number }[];
   } = { kills: [], casts: [], hits: [], attacks: [] };
   private readonly pending: Pending[] = [];
+  // Champions thrown by a pad: from, to, and when they left.
+  private readonly thrown = new Map<number, { from: Vec3; to: Vec3; at: number }>();
   private readonly dropEndsAt: number;
   private readonly start: Vec3;
   private readonly duskCenter: Vec3;
@@ -256,7 +259,7 @@ export class PlanetDemoWorld implements IWorld {
   isVisible(team: TeamId, unitId: number): boolean {
     const u = this.units.get(unitId);
     if (!u) return false;
-    if (u.team === team) return true;
+    if (u.team === team || this.thrown.has(unitId)) return true;
     const me = this.self;
     return dist(me.pos, u.pos) <= me.sightRange + 2;
   }
@@ -438,6 +441,14 @@ export class PlanetDemoWorld implements IWorld {
 
   private think(u: Unit): void {
     const b = this.brain(u);
+    const throw_ = this.thrown.get(u.id);
+    if (throw_) {
+      // 50 m in 1.6 s along the pad's great circle (PAD_THROW_M).
+      const t = Math.min(1, (this.time - throw_.at) / 1.6);
+      u.pos = settle(lerp(throw_.from, throw_.to, t), R);
+      if (t >= 1) this.thrown.delete(u.id);
+      return;
+    }
     if (u.dead) {
       if (this.time >= u.respawnAt) {
         u.dead = false;
@@ -513,6 +524,25 @@ export class PlanetDemoWorld implements IWorld {
     }
     advance(u.pos, b.heading, speed);
     u.path = [offset(u.pos, b.heading, 3)];
+  }
+
+  // The champion nearest the player's nearest pad stands on it and is
+  // thrown: a look at a flight's arc. Returns the thrown unit's id.
+  throwOnPad(): number | null {
+    const me = this.self;
+    const pad = [...this.ground.layout.pads].sort(
+      (a, b) => dist(a.at, me.pos) - dist(b.at, me.pos),
+    )[0];
+    if (!pad) return null;
+    let best: Unit | null = null;
+    for (const u of this.units.values()) {
+      if (u.id === me.id || u.dead) continue;
+      if (!best || dist(u.pos, pad.at) < dist(best.pos, pad.at)) best = u;
+    }
+    if (!best) return null;
+    best.pos = copy(pad.at);
+    this.thrown.set(best.id, { from: pad.at, to: pad.to, at: this.time });
+    return best.id;
   }
 
   // Every champion near the player casts its ultimate at once, aimed a
