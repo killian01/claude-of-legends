@@ -1,9 +1,9 @@
 // Where the battle royale bot walks when it is not fighting: out of the
 // dark first, ahead of the Dusk's next cap early (a launch pad when one is
 // on the way and its throw shortens the trip), to the nearest standing
-// cache inside the light, to a camp when nothing better is near, and
-// otherwise toward the light's heart. Pure over the slot's sense; every
-// distance a chord.
+// cache inside the light no enemy will reach first, to a camp when nothing
+// better is near, and otherwise a wander where it stands. Pure over the
+// slot's sense; every distance a chord.
 
 import { dirTo, dist, heading, type Vec3 } from '../../geo';
 import type { Action, ObsCache } from '../../policy';
@@ -117,16 +117,18 @@ function safeGround(sense: Sense, p: Vec3): boolean {
 }
 
 // The cache worth walking to: the nearest standing one on safe ground,
-// golden ones counted closer, none an enemy in sight stands beside.
+// golden ones counted closer, none an enemy in sight stands beside or
+// will reach first. Racing every enemy to the same caches made the first
+// minute of One life a massacre of half the field.
 export function pickCache(sense: Sense, within = Number.POSITIVE_INFINITY): ObsCache | null {
   let best: ObsCache | null = null;
   let bestD = within;
   for (const c of sense.r.caches) {
     if (!safeGround(sense, c)) continue;
-    let d = dist(sense.me, c);
-    if (c.golden) d -= 10;
+    const mine = dist(sense.me, c);
+    const d = c.golden ? mine - 10 : mine;
     if (d >= bestD) continue;
-    if (sense.enemies.some((e) => dist(p3(e), c) < 3)) continue;
+    if (sense.enemies.some((e) => dist(p3(e), c) < Math.max(3, mine))) continue;
     best = c;
     bestD = d;
   }
@@ -162,7 +164,7 @@ export function pickCampSpot(sense: Sense): Vec3 | null {
   return best;
 }
 
-// How long a wandering bot keeps one goal before it picks the next.
+// How long a wandering bot keeps one way before it picks the next.
 export const WANDER_S = 12;
 
 // A number from 0 to 1 fixed by the seat and the stretch of time: a
@@ -175,23 +177,39 @@ function wanderDraw(id: number, time: number, salt: number): number {
   return h / 4294967296;
 }
 
-// With nothing else to do, the bot goes where the others will be: the
-// heart of the light, the next cap's when it is drawn, and once there a
-// wander inside it (a goal held for WANDER_S); a gentle bot keeps to the
-// rim. While the whole planet is lit, the nearest cache anywhere first.
+// How far a wandering bot walks from where it stands, at most.
+export const WANDER_M = 11;
+
+// The spot a point stands on, as a number: a 6 m lattice cell.
+function cellOf(p: Vec3): number {
+  const i = Math.floor(p.x / 6);
+  const j = Math.floor(p.y / 6);
+  const k = Math.floor(p.z / 6);
+  return (Math.imul(i, 73856093) ^ Math.imul(j, 19349663) ^ Math.imul(k, 83492791)) >>> 0;
+}
+
+// With nothing else to do, the bot wanders where it is, on safe ground,
+// one leg of up to WANDER_M at a time, drawn by the seat, the stretch of
+// time and the spot it stands on: the Dusk brings the field together.
+// Every bot walking to the light's heart once the caches were gone made
+// the second minute of One life a massacre. While the whole planet is
+// lit, the nearest cache anywhere first.
 export function roam(sense: Sense): Action {
   const cap = sense.next ?? sense.now;
   if (cap.radius >= 2 * sense.layout.radius - 1e-6) {
     const c = pickCache(sense);
     if (c) return lootCache(sense, c);
   }
+  if (!safeGround(sense, sense.me)) return walkVia(sense, intoCap(sense, cap));
+  const dest = sense.s.dest;
+  if (dest && safeGround(sense, p3(dest)) && dist(sense.me, p3(dest)) <= WANDER_M * 1.5) {
+    return { kind: 'noop' };
+  }
   const R = sense.layout.radius;
-  const share = sense.skill.id === 'gentle' ? 0.6 : 0.3;
-  const heart = Math.min(cap.radius * share, 30);
-  if (dist(sense.me, cap.center) > heart + 2)
-    return walkVia(sense, intoCap(sense, cap, cap.radius - heart));
-  const angle = wanderDraw(sense.s.id, sense.obs.time, 1) * 2 * Math.PI;
-  const reach = heart * wanderDraw(sense.s.id, sense.obs.time, 2);
-  const goal = along(cap.center, heading(cap.center, angle) as Vec3, reach, R);
-  return moveTo(sense, goal);
+  const salt = cellOf(sense.me);
+  const angle = wanderDraw(sense.s.id, sense.obs.time, salt) * 2 * Math.PI;
+  const reach = WANDER_M * (0.4 + 0.6 * wanderDraw(sense.s.id, sense.obs.time, salt + 1));
+  const goal = along(sense.me, heading(sense.me, angle) as Vec3, reach, R);
+  if (safeGround(sense, goal)) return moveTo(sense, goal);
+  return walkVia(sense, intoCap(sense, cap));
 }

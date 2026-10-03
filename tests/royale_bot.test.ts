@@ -24,6 +24,7 @@ import { fakeGround, fakeLayout, R, sph } from './royale_fixture';
 const layout = fakeLayout();
 const strong = ROYALE_SKILLS.strong;
 const gentle = ROYALE_SKILLS.gentle;
+const normal = ROYALE_SKILLS.normal;
 
 function wholeDusk(center: Vec3): DuskState {
   return {
@@ -186,7 +187,8 @@ describe('the Dusk', () => {
     const d = duskAt(s, 10 + 230);
     expect(d.shrinking).toBe(false);
     const next = d.next!;
-    // Standing just inside the light, far outside the next cap.
+    // Standing just inside the light, far outside the next cap, ten
+    // seconds before the light closes on it.
     const at = along(next.center, dirTo(next.center, d.now.center) as Vec3, 0, R);
     const far = along(
       d.now.center,
@@ -194,19 +196,21 @@ describe('the Dusk', () => {
       d.now.radius - 3,
       R,
     );
+    const late = { tick: 4800, time: 240 };
     const plain = decide(
-      obs(far, { royale: { dusk: d } }, { struckAt: null }),
+      { ...obs(far, { royale: { dusk: d } }, { struckAt: null }), ...late },
       new Rng(1),
       layout,
       strong,
     );
     expect(plain.kind).toBe('move');
     expect(dist(point(plain), next.center)).toBeLessThan(dist(far, next.center));
-    // A pad at the bot's feet throwing it toward the next cap.
+    expect(insideCap(next, point(plain))).toBe(true);
+    // A pad at the bot's feet throwing it into the next cap.
     const toward = dirTo(far, next.center) as Vec3;
-    const pad = { id: 0, at: along(far, toward, 3, R), to: along(far, toward, 53, R) };
+    const pad = { id: 0, at: along(far, toward, 3, R), to: along(far, toward, 27, R) };
     const viaPad = decide(
-      obs(far, { royale: { dusk: d, pads: [pad] } }),
+      { ...obs(far, { royale: { dusk: d, pads: [pad] } }), ...late },
       new Rng(1),
       layout,
       strong,
@@ -251,23 +255,46 @@ describe('fighting', () => {
     expect(royaleOdds(worse)).toBeLessThan(0.42);
   });
 
-  it('takes an even fight when strong, walks on when gentle, and loots in the calm', () => {
+  it('takes an even fight at every skill, in either variant, from the calm on', () => {
+    // A playtest (2026-10-03): in One life the bots let each other be and
+    // only came for a low champion someone else had worn down.
     const e = enemy(9, along(here, east, 5, R));
     const loot = along(here, north, 20, R);
     const caches = [{ id: 1, x: loot.x, y: loot.y, z: loot.z, golden: false }];
-    // Late, the light closing: a strong bot takes an even duel at once, a
-    // gentle one walks on.
-    const late = { ...wholeDusk(sph(1, 0, 0)), phase: 5 };
-    const rs = { caches, variant: 'respawn' as const, dusk: late };
-    const s = decide(obs(here, { units: [e], royale: rs }), new Rng(1), layout, strong);
-    expect(['cast', 'attack']).toContain(s.kind);
-    const g = decide(obs(here, { units: [e], royale: rs }), new Rng(1), layout, gentle);
-    expect(['cast', 'attack']).not.toContain(g.kind);
-    // One life weighs a fight harder and the calm is for looting: even the
-    // strong one leaves an even duel for later.
-    const ol = { caches, variant: 'one_life' as const };
-    const o = decide(obs(here, { units: [e], royale: ol }), new Rng(3), layout, strong);
-    expect(['cast', 'attack']).not.toContain(o.kind);
+    for (const skill of [gentle, normal, strong]) {
+      for (const variant of ['one_life', 'respawn'] as const) {
+        let fights = 0;
+        for (let seed = 1; seed <= 20; seed++) {
+          const a = decide(
+            obs(here, { units: [e], royale: { caches, variant } }),
+            new Rng(seed),
+            layout,
+            skill,
+          );
+          // A slot its eye is elsewhere keeps to its order: never a walk
+          // off to the cache with the enemy beside it.
+          expect(`${skill.id} ${variant} ${a.kind}`).toMatch(/ (cast|attack|noop)$/);
+          if (a.kind !== 'noop') fights++;
+        }
+        expect(fights).toBeGreaterThanOrEqual(Math.floor(20 * skill.attention * 0.6));
+      }
+    }
+  });
+
+  it('runs from a far stronger enemy close by', () => {
+    const at = along(here, east, 6, R);
+    const hearts = ['colossus_heart', 'colossus_heart', 'colossus_heart', 'colossus_heart'];
+    const fed = enemy(9, at, { level: 16, items: hearts });
+    for (const skill of [gentle, normal, strong]) {
+      const a = decide(
+        obs(here, { units: [fed] }, { struckAt: 19.8, sigilReady: [false, false] }),
+        new Rng(1),
+        layout,
+        skill,
+      );
+      expect(a.kind).toBe('move');
+      expect(dist(point(a), at)).toBeGreaterThan(dist(here, at));
+    }
   });
 
   it('counts the nearest bystanders only, so a crowd still fights', () => {

@@ -1,12 +1,13 @@
 // The battle royale bot's decision, one per slot (ADR 0031): a Policy's
 // body, deterministic over (observation, rng) and blind past what its own
 // sight shows. In order: the drop's pick; out of the dark; the dodge; the
-// fight when an enemy in sight is noticed (backing off and kiting when low,
-// finishing a low enemy, never chasing into the Dusk); holding still while
-// a cache opens; ahead of the Dusk's next cap; the nearest cache; a camp
-// when nothing better is near; the big creatures for a strong bot strong
-// enough; the light's heart. Its skill (content/bots/royale_skills.ts)
-// slows its eye, scatters its aim and sets its nerve.
+// fight when an enemy in sight is noticed (running from a far stronger
+// one, backing off and kiting when low, finishing a low enemy, never
+// chasing into the Dusk); holding still while a cache opens; ahead of the
+// Dusk's next cap; the nearest cache; a camp when nothing better is near;
+// the big creatures for a strong bot strong enough; a wander where it
+// stands. Its skill (content/bots/royale_skills.ts) slows its eye,
+// scatters its aim and sets its nerve.
 
 import type { RoyaleSkill } from '../../content/bots/royale_skills';
 import { dist, dot, norm, scale, turnLeft, type Vec3 } from '../../geo';
@@ -38,30 +39,21 @@ export const DANGER_M = 11;
 // Once the light is this small, every bot's nerve rises by this much.
 export const LAST_LIGHT_M = 20;
 export const LAST_LIGHT_NERVE = 0.15;
-// One life's caution: the odds a fight needs, and the health under which
-// a bot backs off, both rise by this much. Small: at 0.1 two even bots
-// passed each other by, and a playtest (2026-10-03) saw bots that never
-// fought one another.
-export const ONE_LIFE_CAUTION = 0.06;
-// How much better than its nerve the odds must be for a bot to START a
-// fight, by the Dusk's phase (0 the calm, 1 to 5 the closings, 6 dark):
-// the calm is for looting, each closing brings fights on, and the last
-// light takes them all. A hit is answered and a low enemy finished in
-// every phase. Without it the bots either ignored each other until the
-// Dusk crammed them in (a playtest, 2026-10-03) or turned the drop into a
-// bloodbath that ended One life in three minutes.
-export const PHASE_NERVE: readonly number[] = [0.12, 0.08, 0.05, 0.03, 0.01, 0, 0];
-// An even fight (odds within EVEN_ODDS of the bot's nerve) is not refused
-// for good: each decision with one in sight the bot starts it with this
-// chance, by the Dusk's phase, so the takedowns come all along the match
-// rather than all at once when the light corners everyone.
-export const EVEN_ODDS = 0.06;
 // A far stronger enemy this close is run from before it strikes: a fed
 // champion otherwise walked through a crowd that waited its turn (one took
 // thirty takedowns in under three minutes). The odds against it alone.
 export const FLEE_ODDS = 0.3;
 export const FLEE_M = 10;
-export const EVEN_FIGHT_CHANCE: readonly number[] = [0.004, 0.01, 0.018, 0.03, 0.05, 0.1, 0.3];
+// How far under its nerve the odds may be for a struck bot to hit back
+// rather than back off.
+export const ANSWER_MARGIN = 0.1;
+// One life: how close an enemy must be for the bot to go and start a
+// fight on it, by the Dusk's phase (0 the calm, 1 to 5 the closings, 6
+// dark), never past the skill's chase. The calm is for looting: an enemy
+// in its face is fought, one across the clearing left to its cache; each
+// closing widens it. Walking to every enemy in sight emptied the planet
+// in two minutes and a half. A hit is answered at any reach.
+export const ONE_LIFE_ENGAGE_M: readonly number[] = [6, 8, 10, 13, 17, 17, 17];
 // A camp body this close is worth hitting.
 export const CAMP_FIGHT_M = 14;
 // The bot's own health share to take a camp.
@@ -192,39 +184,41 @@ export function decide(
   if (sidestep) return sidestep;
 
   if (sense.enemies.length > 0) {
+    // The skill's eye: on a slot it does not take the enemies in, the bot
+    // keeps to its order, the fight it is in included. Falling through to
+    // the loot instead walked bots off mid-fight, and two bots passed each
+    // other by (a playtest, 2026-10-03).
     const noticed = sense.struck || rng.next() < skill.attention;
-    if (noticed) {
-      const near = sense.enemies.some((e) => dist(sense.me, p3(e)) <= DANGER_M);
-      // The last light leaves nowhere to go: everyone's nerve rises, and a
-      // hit is answered rather than run from.
-      const cornered = lightsOut || sense.now.radius <= LAST_LIGHT_M;
-      // One life: a death is the end, so every bot weighs a fight harder.
-      const caution = r.variant === 'one_life' && !cornered ? ONE_LIFE_CAUTION : 0;
-      const backOff = cornered ? skill.retreatHp / 2 : skill.retreatHp + caution;
-      if (near && sense.s.hpFrac < backOff) return retreat(sense);
-      if (!cornered) {
-        const close = sense.enemies[0];
-        if (
-          close &&
-          dist(sense.me, p3(close)) <= FLEE_M &&
-          royaleOdds(sense, close, 0) < FLEE_ODDS
-        ) {
-          return retreat(sense);
-        }
+    if (!noticed) return NOOP;
+    const near = sense.enemies.some((e) => dist(sense.me, p3(e)) <= DANGER_M);
+    // The last light leaves nowhere to go: everyone's nerve rises, and a
+    // hit is answered rather than run from.
+    const cornered = lightsOut || sense.now.radius <= LAST_LIGHT_M;
+    const backOff = cornered ? skill.retreatHp / 2 : skill.retreatHp;
+    if (near && sense.s.hpFrac < backOff) return retreat(sense);
+    if (!cornered) {
+      const close = sense.enemies[0];
+      if (close && dist(sense.me, p3(close)) <= FLEE_M && royaleOdds(sense, close, 0) < FLEE_ODDS) {
+        return retreat(sense);
       }
-      const target = pickTarget(sense);
-      if (target) {
-        const odds = royaleOdds(sense, target);
-        const finish = target.hpFrac < FINISH_HP && sense.s.hpFrac > target.hpFrac;
-        const nerve = skill.fightOdds + caution - (cornered ? LAST_LIGHT_NERVE : 0);
-        const start = nerve + (PHASE_NERVE[r.dusk.phase] ?? 0);
-        const even =
-          odds >= nerve - EVEN_ODDS && rng.next() < (EVEN_FIGHT_CHANCE[r.dusk.phase] ?? 0);
-        const answer = sense.struck && (cornered || odds >= nerve - 0.1);
-        if (odds >= start || even || finish || answer) return fight(sense, target, rng);
-      }
-      if (near && sense.struck && !cornered) return retreat(sense);
     }
+    // Every skill takes a fight its odds reach its nerve on, in either
+    // variant and from the calm on: an even duel is fought, a weaker
+    // enemy hunted, a low one finished, a hit answered. One life starts
+    // its fights closer while the light is wide.
+    const reach =
+      r.variant === 'one_life' && !sense.struck
+        ? Math.min(skill.chase, ONE_LIFE_ENGAGE_M[r.dusk.phase] ?? skill.chase)
+        : skill.chase;
+    const target = pickTarget(sense, reach);
+    if (target) {
+      const odds = royaleOdds(sense, target);
+      const finish = target.hpFrac < FINISH_HP && sense.s.hpFrac > target.hpFrac;
+      const nerve = skill.fightOdds - (cornered ? LAST_LIGHT_NERVE : 0);
+      const answer = sense.struck && (cornered || odds >= nerve - ANSWER_MARGIN);
+      if (odds >= nerve || finish || answer) return fight(sense, target, rng);
+    }
+    if (near && sense.struck && !cornered) return retreat(sense);
   }
 
   if (r.opening) return sense.s.dest ? { kind: 'stop' } : NOOP;
