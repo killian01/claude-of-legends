@@ -18,9 +18,11 @@ const HTML = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 // page a scraper reads and in the page a person reads, and the two must be
 // the same sentence: a description that has drifted from the landing is a
 // promise the page does not keep.
+// It names both games since the battle royale came (ADR 0031): Play now
+// launches it, and the 5v5 stands beside it.
 const PITCH =
-  'A 5v5 MOBA that runs in a browser tab. Three lanes, ten champions, ' +
-  'jungle camps and fog of war. Nothing to install.';
+  'A MOBA in a browser tab: a fifty-champion battle royale on a small planet, ' +
+  'and the classic 5v5. Nothing to install.';
 
 // The value of a meta tag, whichever attribute names it and however the
 // formatter has wrapped the line.
