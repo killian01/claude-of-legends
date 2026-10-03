@@ -23,7 +23,6 @@ import type { IWorld } from '../world_api';
 import { setPortrait } from './champion_art';
 import { itemIconUrl } from './icons';
 import { royaleMode } from './royale_modes';
-import { type MomentCall, momentCalls } from './royale_moments';
 import { type RoyaleEndModel, royaleEnd } from './royale_result';
 import type { RoyaleStepsView } from './royale_steps';
 import {
@@ -474,11 +473,7 @@ export class RoyaleHud {
         this.padUsed = true;
       }
     }
-    this.playMoments(momentCalls(notes, selfId));
   }
-
-  // The loud moments a snapshot's notes make (ui/royale_moments.ts).
-  private playMoments(_calls: readonly MomentCall[]): void {}
 
   private notice(text: string, icon: string | null, kind: 'loot' | 'level'): void {
     const note = el('div', `br-note ${kind}`);

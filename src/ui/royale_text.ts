@@ -7,6 +7,9 @@
 // (ui/royale_hud.ts).
 
 import type { SnapDusk, SnapRoyale } from '../net/royale_wire';
+import { ITEM_PASSIVES } from '../sim/content/item_passives';
+import { ITEMS, type ItemDef, type ItemStats } from '../sim/content/items';
+import { nextLootPiece, seatBuild } from '../sim/royale/loot';
 import { CACHE_OPEN_S } from '../sim/royale/types';
 
 // Seconds as a clock, rounded up so it reads 0:01 until the moment passes.
@@ -30,7 +33,8 @@ export function duskLine(
   const d = r.dusk;
   if (r.st === 'over' || d.p >= 6) return { text: 'Last light', tone: 'dark' };
   const left = clockText(d.pe - time);
-  if (d.p === 0) return { text: `Calm ${left}`, tone: 'calm' };
+  // The calm says what it is waiting for: the Dusk, holding off.
+  if (d.p === 0) return { text: `The Dusk holds ${left}`, tone: 'calm' };
   if (d.sh === 1) return { text: `The Dusk closes ${left}`, tone: 'close' };
   return { text: `Light holds ${left}`, tone: 'hold' };
 }
@@ -94,8 +98,98 @@ export function leaderBadge(
   };
 }
 
-export function lootText(itemName: string): string {
-  return `+ ${itemName}`;
+// A loot notice: the piece, and what it adds, "+ Iron Blade · +10 attack
+// damage".
+export function lootText(itemName: string, gain = ''): string {
+  return gain ? `+ ${itemName} · ${gain}` : `+ ${itemName}`;
+}
+
+const STAT_WORDS: readonly [keyof ItemStats, string, boolean][] = [
+  ['ad', 'attack damage', false],
+  ['ap', 'ability power', false],
+  ['hp', 'health', false],
+  ['mana', 'mana', false],
+  ['armor', 'armor', false],
+  ['mr', 'magic resist', false],
+  ['attackSpeedPct', 'attack speed', true],
+  ['moveSpeed', 'move speed', false],
+  ['armorPen', 'armor penetration', false],
+  ['mrPen', 'magic penetration', false],
+  ['armorPenPct', 'armor penetration', true],
+  ['mrPenPct', 'magic penetration', true],
+];
+
+// Stats in words, "+10 attack damage, +12% attack speed"; only what rises.
+export function statText(s: ItemStats): string {
+  const parts: string[] = [];
+  for (const [key, word, pct] of STAT_WORDS) {
+    const v = s[key] ?? 0;
+    if (v <= 0) continue;
+    const n = pct ? `${Math.round(v * 100)}%` : `${Math.round(v * 100) / 100}`;
+    parts.push(`+${n} ${word}`);
+  }
+  return parts.join(', ');
+}
+
+// What a piece adds to the bag: its stats, less those of the components it
+// consumes on the way in (a finished item's gain over its parts).
+export function itemGain(def: ItemDef): ItemStats {
+  const out: ItemStats = { ...def.stats };
+  for (const partId of def.buildsFrom ?? []) {
+    const part = ITEMS[partId];
+    if (!part) continue;
+    for (const [k, v] of Object.entries(part.stats) as [keyof ItemStats, number][]) {
+      out[k] = (out[k] ?? 0) - v;
+    }
+  }
+  return out;
+}
+
+// A finished item's signature, in a line a phone holds; the passive's own
+// description is the fallback (src/sim/content/item_passives.ts).
+const PASSIVE_SHORT: Readonly<Record<string, string>> = {
+  worldheart: '2% health a second after 5 s unhurt',
+  doombrand: '+12% damage to targets under 30%',
+  skyshear: '+12% move speed for 1.5 s on champion hits',
+};
+
+export function passiveLine(itemId: string): string | null {
+  const p = ITEM_PASSIVES[itemId];
+  if (!p) return null;
+  return `${p.name}, ${PASSIVE_SHORT[itemId] ?? p.description.replace(/\.$/, '')}`;
+}
+
+// An item finished from its components: "Completed: Doombrand · Deathmark,
+// +12% damage to targets under 30%", or its gain when it has no passive.
+// Null for a component, which completes nothing.
+export function completedText(def: ItemDef): string | null {
+  if (!def.buildsFrom || def.buildsFrom.length === 0) return null;
+  const tail = passiveLine(def.id) ?? statText(itemGain(def));
+  return tail ? `Completed: ${def.name} · ${tail}` : `Completed: ${def.name}`;
+}
+
+// The loot notice for a piece by id: the plain line for a component, the
+// completed line for a finished item.
+export function lootNotice(itemId: string): { text: string; completed: boolean } {
+  const def = ITEMS[itemId];
+  if (!def) return { text: lootText(itemId), completed: false };
+  const done = completedText(def);
+  if (done) return { text: done, completed: true };
+  return { text: lootText(def.name, statText(itemGain(def))), completed: false };
+}
+
+// The bag is the whole build: nothing left for a cache to give. A person's
+// seat walks its champion's build (src/sim/royale/loot.ts seatBuild, the
+// same rule the sim seats it with), so the client reads it off the bag.
+// Said once, when the last piece lands.
+export const BUILD_COMPLETE = 'Build complete';
+export function buildComplete(championId: string | null, bag: readonly string[]): boolean {
+  return bag.length > 0 && nextLootPiece(seatBuild(championId), bag) === null;
+}
+
+// The pill while the champion stands in the Dusk: what it costs a second.
+export function duskPill(burn: number): string {
+  return `In the Dusk -${Math.max(1, Math.round(burn * 100))}%/s`;
 }
 
 export function levelText(level: number): string {
