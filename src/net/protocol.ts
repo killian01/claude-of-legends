@@ -85,8 +85,9 @@ export type ClientMsg =
   // what the seat report's load time reads (server/seat_report.ts). Never
   // a match command.
   | { t: 'loaded' }
-  // The echo of the server's round-trip probe, sent back at once.
-  | { t: 'probe'; n: number }
+  // The echo of the server's round-trip probe, sent back at once, with the
+  // frames a second the page drew since the last one (null while hidden).
+  | { t: 'probe'; n: number; fps?: number | null }
   // A first step done in this match, or 'off' when the player hid the
   // guide (src/ui/first_steps.ts): what the seat report says of how far
   // a newcomer was led (server/seat_report.ts). Never a match command.
@@ -492,14 +493,20 @@ export const STEP_IDS = [
   'goal',
 ] as const;
 export type StepId = (typeof STEP_IDS)[number];
+// The battle royale's own first steps (src/ui/royale_steps.ts), told on
+// the same wire: its seats reported none while they were left off it.
+export const ROYALE_STEP_IDS = ['br_cache', 'br_dusk', 'br_takedown', 'br_pad', 'br_ult'] as const;
+export type RoyaleStepId = (typeof ROYALE_STEP_IDS)[number];
+export type WireStepId = StepId | RoyaleStepId;
 
-// A step's id off the wire: a known step, or 'off' for the guide hidden;
-// anything else is nothing.
-export function stepOnWire(id: unknown): StepId | 'off' | null {
+// A step's id off the wire: a known step of either guide, or 'off' for the
+// guide hidden; anything else is nothing.
+export function stepOnWire(id: unknown): WireStepId | 'off' | null {
   if (id === 'off') return 'off';
-  return typeof id === 'string' && (STEP_IDS as readonly string[]).includes(id)
-    ? (id as StepId)
-    : null;
+  if (typeof id !== 'string') return null;
+  if ((STEP_IDS as readonly string[]).includes(id)) return id as StepId;
+  if ((ROYALE_STEP_IDS as readonly string[]).includes(id)) return id as RoyaleStepId;
+  return null;
 }
 
 // Loose structural parse; each handler validates its own fields before use.

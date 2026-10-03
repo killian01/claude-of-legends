@@ -166,6 +166,7 @@ import { sealChampion, unsealChampion } from './seal';
 import {
   buildSeatReport,
   countryOf,
+  fpsOnWire,
   isMobileAgent,
   type SeatEnd,
   type SeatQueue,
@@ -271,6 +272,8 @@ interface Client {
   country: string | null;
   mobile: boolean;
   pings: number[];
+  // The frames a second the page said it drew, with each probe's echo.
+  fps: number[];
   // The session this socket came in on, so closing it can be traced back
   // to a logout elsewhere.
   sessionId: string;
@@ -1084,6 +1087,7 @@ function reportSeat(client: Client, entry: MatchEntry, how: SeatEnd): void {
       ? { level: u.level, kills: u.kills, deaths: u.deaths, assists: u.assists, cs: u.cs }
       : null,
     pings: client.pings,
+    fps: client.fps,
   });
   try {
     appendJsonl(SEATS_FILE, rec);
@@ -2777,6 +2781,7 @@ wss.on('connection', (ws, req) => {
     country: countryOf(req.headers['cf-ipcountry']),
     mobile: isMobileAgent(req.headers['user-agent']),
     pings: [],
+    fps: [],
     matchId: null,
     msgWindowStart: now,
     msgCount: 0,
@@ -2796,11 +2801,16 @@ wss.on('connection', (ws, req) => {
     probeSentAt = performance.now();
     send(id, { t: 'probe', n: probeN });
   }, PING_EVERY_MS);
-  const probeAnswered = (n: unknown): void => {
+  const probeAnswered = (n: unknown, fps: unknown): void => {
     if (n !== probeN || probeSentAt === 0) return;
     client.pings.push(performance.now() - probeSentAt);
     if (client.pings.length > PINGS_KEPT) client.pings.shift();
     probeSentAt = 0;
+    const rate = fpsOnWire(fps);
+    if (rate !== null) {
+      client.fps.push(rate);
+      if (client.fps.length > PINGS_KEPT) client.fps.shift();
+    }
   };
   send(id, { t: 'welcome', clientId: id, name: who.name });
 
@@ -3012,7 +3022,7 @@ wss.on('connection', (ws, req) => {
       }
       // The echo of the round-trip probe (above). Never a match command.
       case 'probe':
-        probeAnswered(msg.n);
+        probeAnswered(msg.n, msg.fps);
         break;
       // The client's match is on screen (src/main.ts): for the seat
       // report's load time. Never a match command.

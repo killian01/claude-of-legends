@@ -1,20 +1,22 @@
 // The seat report (server/seat_report.ts, PRIVACY.md): what one line says
 // about a seat a person held online, how a live match counts it (orders,
-// the first one, the walk, the load, the points), and that nothing in it
-// names anybody.
+// the first one, the walk, the load, the points, the first moments, the
+// frame rate), and that nothing in it names anybody.
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { Match, WALK_STEP_MAX } from '../server/match';
+import { freshStats, Match, noteMoments, WALK_STEP_MAX } from '../server/match';
 import {
   buildSeatReport,
   countryOf,
+  fpsOnWire,
   isMobileAgent,
   median,
   SEAT_REPORT_VERSION,
 } from '../server/seat_report';
+import { stepOnWire } from '../src/net/protocol';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -121,10 +123,16 @@ describe('the seat report', () => {
         lastX: 0,
         lastZ: 0,
         points: 2,
+        firstHitTick: 300,
+        firstHurtTick: 260,
+        firstTakedownTick: null,
+        firstDeathTick: 1100,
+        firstCacheTick: null,
       },
       tickCount: 1300,
       unit: { level: 2, kills: 0, deaths: 1, assists: 0, cs: 2 },
       pings: [62, 58, 140],
+      fps: [58.2, 31.4, 60],
     });
     expect(rec).toEqual({
       v: SEAT_REPORT_VERSION,
@@ -151,6 +159,13 @@ describe('the seat report', () => {
       cs: 2,
       pingMs: 62,
       pingMaxMs: 140,
+      firstHitS: 10,
+      firstHurtS: 8,
+      firstTakedownS: null,
+      diedS: 50,
+      firstCacheS: null,
+      fps: 58,
+      fpsLow: 31,
     });
     const none = buildSeatReport({
       at: 0,
@@ -171,15 +186,56 @@ describe('the seat report', () => {
         lastX: 0,
         lastZ: 0,
         points: 0,
+        firstHitTick: null,
+        firstHurtTick: null,
+        firstTakedownTick: null,
+        firstDeathTick: null,
+        firstCacheTick: null,
       },
       tickCount: 0,
       unit: null,
       pings: [],
+      fps: [],
     });
     expect(none.loadS).toBeNull();
     expect(none.firstOrderS).toBeNull();
     expect(none.pingMs).toBeNull();
+    expect(none.fps).toBeNull();
+    expect(none.firstHitS).toBeNull();
     for (const key of Object.keys(rec)) expect(key).not.toMatch(/name|account|addr|ip|id$/i);
+  });
+
+  it("notes a seat's first moments once each, champions only", () => {
+    // The visitors of the first days left inside two minutes: had anything
+    // happened to them by then?
+    const stats = freshStats(0, 0, 0);
+    const champion = (id: number) => id < 100;
+    noteMoments(stats, 7, [{ type: 'damage', sourceId: 7, targetId: 150 }], 10, champion);
+    expect(stats.firstHitTick).toBeNull();
+    noteMoments(stats, 7, [{ type: 'damage', sourceId: 7, targetId: 8 }], 20, champion);
+    noteMoments(stats, 7, [{ type: 'damage', sourceId: 8, targetId: 7 }], 25, champion);
+    noteMoments(stats, 7, [{ type: 'damage', sourceId: 7, targetId: 8 }], 30, champion);
+    noteMoments(stats, 7, [{ type: 'royale_cache', unitId: 7 }], 40, champion);
+    noteMoments(stats, 7, [{ type: 'death', unitId: 8, killerId: 7 }], 50, champion);
+    noteMoments(stats, 7, [{ type: 'death', unitId: 7, killerId: 9 }], 60, champion);
+    expect(stats.firstHitTick).toBe(20);
+    expect(stats.firstHurtTick).toBe(25);
+    expect(stats.firstCacheTick).toBe(40);
+    expect(stats.firstTakedownTick).toBe(50);
+    expect(stats.firstDeathTick).toBe(60);
+  });
+
+  it("hears the battle royale's first steps and a frame rate off the wire", () => {
+    expect(stepOnWire('br_cache')).toBe('br_cache');
+    expect(stepOnWire('br_takedown')).toBe('br_takedown');
+    expect(stepOnWire('learn')).toBe('learn');
+    expect(stepOnWire('off')).toBe('off');
+    expect(stepOnWire('br_nothing')).toBeNull();
+    expect(fpsOnWire(58.4)).toBe(58.4);
+    expect(fpsOnWire(0)).toBeNull();
+    expect(fpsOnWire(5000)).toBeNull();
+    expect(fpsOnWire('60')).toBeNull();
+    expect(fpsOnWire(Number.NaN)).toBeNull();
   });
 
   it('is named in the privacy notice, file and module alike', () => {

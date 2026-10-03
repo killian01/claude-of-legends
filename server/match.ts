@@ -3,7 +3,7 @@
 // a sim method (ADR 0001). Transport-agnostic and fully testable without a
 // socket.
 
-import { type ClientMsg, isSelectMsg, type ServerMsg, type StepId } from '../src/net/protocol';
+import { type ClientMsg, isSelectMsg, type ServerMsg, type WireStepId } from '../src/net/protocol';
 import {
   applySimCommand,
   buildMatchSim,
@@ -96,6 +96,46 @@ export interface SeatStats {
   // On the planet's sphere (a battle royale, server/royale_match.ts).
   lastY?: number;
   points: number;
+  // The seat's first moments (noteMoments), as ticks: a blow given to a
+  // champion and one taken from a champion, a takedown, the champion's
+  // first fall, the first cache it opened (a battle royale's). What a
+  // visitor who left after a minute had met by then.
+  firstHitTick: number | null;
+  firstHurtTick: number | null;
+  firstTakedownTick: number | null;
+  firstDeathTick: number | null;
+  firstCacheTick: number | null;
+}
+
+// The events that make a seat's first moments, as the sims of both modes
+// tell them.
+export type MomentEvent =
+  | { type: 'damage'; sourceId: number; targetId: number }
+  | { type: 'death'; unitId: number; killerId: number }
+  | { type: 'royale_cache'; unitId: number }
+  | { type: string };
+
+// Notes the first moments of a seat's champion off one tick's events;
+// `champion` says whether an id is a champion's.
+export function noteMoments(
+  stats: SeatStats,
+  unitId: number,
+  events: readonly MomentEvent[],
+  tick: number,
+  champion: (id: number) => boolean,
+): void {
+  for (const e of events) {
+    if (e.type === 'damage' && 'sourceId' in e) {
+      if (e.sourceId === e.targetId) continue;
+      if (e.sourceId === unitId && champion(e.targetId)) stats.firstHitTick ??= tick;
+      if (e.targetId === unitId && champion(e.sourceId)) stats.firstHurtTick ??= tick;
+    } else if (e.type === 'death' && 'killerId' in e) {
+      if (e.unitId === unitId) stats.firstDeathTick ??= tick;
+      else if (e.killerId === unitId && champion(e.unitId)) stats.firstTakedownTick ??= tick;
+    } else if (e.type === 'royale_cache' && 'unitId' in e && e.unitId === unitId) {
+      stats.firstCacheTick ??= tick;
+    }
+  }
 }
 
 export const WALK_STEP_MAX = 3;
@@ -152,6 +192,11 @@ export function freshStats(tick: number, x: number, z: number): SeatStats {
     lastX: x,
     lastZ: z,
     points: 0,
+    firstHitTick: null,
+    firstHurtTick: null,
+    firstTakedownTick: null,
+    firstDeathTick: null,
+    firstCacheTick: null,
   };
 }
 
@@ -242,7 +287,7 @@ export class Match {
 
   // A first step the client did, or 'off' (ClientMsg step), checked on
   // the wire already: for the seat's report, once each.
-  noteStep(clientId: number, id: StepId | 'off'): void {
+  noteStep(clientId: number, id: WireStepId | 'off'): void {
     const p = this.players.get(clientId);
     if (p && !p.stats.steps.includes(id)) p.stats.steps.push(id);
   }
@@ -388,8 +433,12 @@ export class Match {
       if (!u.dead && step <= WALK_STEP_MAX) p.stats.walked += step;
       p.stats.lastX = u.pos.x;
       p.stats.lastZ = u.pos.z;
+      noteMoments(p.stats, p.unitId, this.eventsThisTick, this.sim.tickCount, this.isChampion);
     }
   }
+
+  private readonly isChampion = (id: number): boolean =>
+    this.sim.units.get(id)?.kind === 'champion';
 
   // The last tick's events, for the play ledger a bot seat's Record wants.
   get lastEvents(): readonly SimEvent[] {

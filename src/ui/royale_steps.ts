@@ -9,6 +9,7 @@
 // Hide guide hiding the guide for good. Pure: the HUD hands in what it
 // reads of the match (RoyaleStepsView) and draws the line this answers.
 
+import { ROYALE_STEP_IDS, type RoyaleStepId } from '../net/protocol';
 import {
   advanceGuide,
   type GuideState,
@@ -23,10 +24,9 @@ import {
   type StepTable,
 } from './first_steps';
 
-// In the order they are tried. Never on the wire's list of steps
-// (net/protocol.ts STEP_IDS): the seat report counts the 5v5's.
-export const ROYALE_STEP_IDS = ['br_cache', 'br_dusk', 'br_takedown', 'br_pad', 'br_ult'] as const;
-export type RoyaleStepId = (typeof ROYALE_STEP_IDS)[number];
+// In the order they are tried, kept with the wire's (net/protocol.ts) so
+// the seat report counts them.
+export { ROYALE_STEP_IDS, type RoyaleStepId };
 
 export type RoyaleStepsState = GuideState<RoyaleStepId>;
 

@@ -66,6 +66,7 @@ function harness(opts: { capacity?: number; open?: boolean } = {}) {
       country: null,
       mobile: false,
       pings: [],
+      fps: [],
     };
     clients.set(id, c);
     return c;

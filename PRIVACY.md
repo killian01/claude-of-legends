@@ -148,8 +148,11 @@ the match's end), which of the first steps you did in that match and
 whether you hid them (`src/ui/first_steps.ts`), whether it was a Guest's,
 the round trip between your
 browser and the server as the game measured it (a small message the server
-sends every five seconds and the page answers), the country Cloudflare
-names for the connection, and
+sends every five seconds and the page answers), how many frames a second
+the page drew (the same answer carries it), when the seat's first moments
+came (the first blow your champion gave and took, its first takedown, its
+first fall, the first cache it opened, in seconds from the seat's start),
+the country Cloudflare names for the connection, and
 whether your browser says it is a phone. No name, no account id, no
 address. The line lands in a file on this machine (`seats.jsonl`) with the
 time it was written, read by the maintainer with `scripts/seat_report.mjs`,

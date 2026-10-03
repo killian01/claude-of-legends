@@ -6,13 +6,16 @@
 // id, no address: whether the seat was a Guest's, what the seat did, how
 // long the match took to load, the measured round trip to the server, the
 // country Cloudflare names for the connection and whether the browser said
-// it was a phone. Pure, so a test reads every field without a socket.
+// it was a phone, the seat's first moments (a blow given and taken, a
+// takedown, a fall, a cache) and the frames a second the page drew. Pure,
+// so a test reads every field without a socket.
 
 import type { RoyaleVariant } from '../src/net/royale_wire';
 import { DT } from '../src/sim/types';
 import type { SeatStats } from './match';
 
-export const SEAT_REPORT_VERSION = 1;
+// 2: the seat's first moments and the page's frame rate (2026-10-03).
+export const SEAT_REPORT_VERSION = 2;
 
 // How the seat ended: the pause menu's Leave or the end screen's way out
 // ('menu'), the socket closing with no word (a closed tab, a lost network:
@@ -60,6 +63,19 @@ export interface SeatReport {
   // median and worst, in ms.
   pingMs: number | null;
   pingMaxMs: number | null;
+  // The seat's first moments, in seconds from its start (server/match.ts
+  // noteMoments): a blow given to a champion, one taken from a champion, a
+  // takedown, the champion's first fall, the first cache it opened; null
+  // for one that never came. What a visitor who left had met by then.
+  firstHitS: number | null;
+  firstHurtS: number | null;
+  firstTakedownS: number | null;
+  diedS: number | null;
+  firstCacheS: number | null;
+  // The frames a second the page drew, as the probe's echo said, median
+  // and lowest; null when it never said.
+  fps: number | null;
+  fpsLow: number | null;
 }
 
 // Cloudflare's country header, a two-letter code; its own codes for
@@ -97,11 +113,15 @@ export interface SeatReportInput {
   tickCount: number;
   unit: { level: number; kills: number; deaths: number; assists: number; cs: number } | null;
   pings: readonly number[];
+  fps: readonly number[];
 }
 
 export function buildSeatReport(i: SeatReportInput): SeatReport {
   const s = i.stats;
   const ping = median(i.pings);
+  const fps = median(i.fps);
+  const since = (tick: number | null): number | null =>
+    tick === null ? null : seconds(tick - s.startTick);
   return {
     v: SEAT_REPORT_VERSION,
     at: i.at,
@@ -128,5 +148,18 @@ export function buildSeatReport(i: SeatReportInput): SeatReport {
     cs: i.unit?.cs ?? 0,
     pingMs: ping === null ? null : Math.round(ping),
     pingMaxMs: i.pings.length === 0 ? null : Math.round(Math.max(...i.pings)),
+    firstHitS: since(s.firstHitTick),
+    firstHurtS: since(s.firstHurtTick),
+    firstTakedownS: since(s.firstTakedownTick),
+    diedS: since(s.firstDeathTick),
+    firstCacheS: since(s.firstCacheTick),
+    fps: fps === null ? null : Math.round(fps),
+    fpsLow: i.fps.length === 0 ? null : Math.round(Math.min(...i.fps)),
   };
+}
+
+// A frame rate off the probe's echo: a number of frames a second a page
+// can draw, or nothing.
+export function fpsOnWire(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 1000 ? v : null;
 }
