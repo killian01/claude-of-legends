@@ -202,7 +202,7 @@ export class ClientWorld implements IWorld {
   // once a second), and who holds each champion's seat as the wire named
   // it (identity blocks, the kill feed, the scoreboard).
   private royaleMatch: { v: RoyaleVariant; seats: number } | null = null;
-  private royaleView: RoyaleView | null = null;
+  private royaleBlock: RoyaleView | null = null;
   private caches: SnapCache[] = [];
   private dropPicks: WirePoint[] = [];
   private readonly seats = new Map<number, SeatLabel>();
@@ -249,12 +249,12 @@ export class ClientWorld implements IWorld {
   }
 
   // The battle royale's state (IWorld): null outside one.
-  royale(): RoyaleView | null {
-    return this.royaleView;
+  royaleView(): RoyaleView | null {
+    return this.royaleBlock;
   }
 
   // The drop: the landing point picked on the globe (IWorld).
-  pickDrop(p: Vec3): void {
+  pickDrop(_unitId: number, p: Vec3): void {
     this.send({ t: 'drop', x: p.x, y: p.y, z: p.z });
   }
 
@@ -278,7 +278,7 @@ export class ClientWorld implements IWorld {
     this.time = 0;
     this.winner = null;
     this.scoreRows = [];
-    this.royaleView = null;
+    this.royaleBlock = null;
     this.caches = [];
     this.dropPicks = [];
     this.seats.clear();
@@ -288,7 +288,7 @@ export class ClientWorld implements IWorld {
     if (r.caches) this.caches = r.caches;
     if (r.st !== 'drop') this.dropPicks = [];
     else if (r.picks) this.dropPicks = r.picks;
-    this.royaleView = { ...r, caches: this.caches, picks: this.dropPicks };
+    this.royaleBlock = { ...r, caches: this.caches, picks: this.dropPicks };
   }
 
   championDef(championId: string): ChampionDef | null {
