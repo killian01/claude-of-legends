@@ -18,18 +18,24 @@ import type {
   SnapRoyale,
   SnapSeedfall,
 } from '../src/net/royale_wire';
-import type { CacheState } from '../src/sim/royale/types';
+import { cacheOpenS } from '../src/sim/royale/caches';
+import { firstSeedfallCallAt } from '../src/sim/royale/seedfall';
+import { CACHE_OPEN_S, type CacheState } from '../src/sim/royale/types';
 import type { RoyaleSim } from './royale_sim';
 import type { RoyaleSnapContext, RoyaleViewer } from './royale_snapshot';
+import { round2 } from './snapshot';
 
 // A cache's kind on the wire: 0 plain, 1 golden, 2 a Seedfall's.
 export function cacheKindOf(c: CacheState): SnapCache[4] {
   return c.kind === 'golden' ? 1 : c.kind === 'seedfall' ? 2 : 0;
 }
 
-// How long the recipient's opening takes, when it is not CACHE_OPEN_S.
-export function openingDuration(_sim: RoyaleSim, _c: CacheState): number | undefined {
-  return undefined;
+// How long the recipient's opening takes, when it is not CACHE_OPEN_S (a
+// Seedfall cache's): the sim's own rule (caches.ts cacheOpenS).
+export function openingDuration(sim: RoyaleSim, c: CacheState): number | undefined {
+  const opener = c.opener !== null ? sim.units.get(c.opener) : undefined;
+  const d = cacheOpenS(c, opener);
+  return Math.abs(d - CACHE_OPEN_S) < 1e-9 ? undefined : round2(d);
 }
 
 // What a viewer was last sent of one block: its value as JSON, and when.
@@ -71,7 +77,26 @@ type Builder<T> = (sim: RoyaleSim, viewer: RoyaleViewer, ctx: RoyaleSnapContext)
 
 export const offerBlock: Builder<SnapGraftOffer> = () => undefined;
 export const graftsBlock: Builder<string[]> = () => undefined;
-export const seedfallsBlock: Builder<SnapSeedfall[]> = () => undefined;
+// The Seedfalls called and not yet opened, everyone's: on the tick the list
+// changes and once a second otherwise, from the first call on (an empty
+// list once the last is opened, so the mirror lets go of it).
+export const seedfallsBlock: Builder<SnapSeedfall[]> = (sim, viewer) => {
+  const r = sim.royale;
+  if (r.seedfalls.length === 0 && sim.time + 1e-9 < firstSeedfallCallAt(r.dropEndsAt)) {
+    return undefined;
+  }
+  const value = r.seedfalls.map(
+    (f): SnapSeedfall => [
+      f.id,
+      round2(f.pos.x),
+      round2(f.pos.y),
+      round2(f.pos.z),
+      round2(f.landsAt),
+      f.landed ? 1 : 0,
+    ],
+  );
+  return sentOnChange(viewer, 'sf', value, sim.time, 1);
+};
 export const risingsBlock: Builder<SnapRising[]> = () => undefined;
 export const marksBlock: Builder<SnapMark[]> = () => undefined;
 export const clamorsBlock: Builder<SnapClamor[]> = () => undefined;

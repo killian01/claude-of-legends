@@ -1,14 +1,16 @@
 // The caches (CONTEXT.md: Cache; ADR 0031): about a hundred and fifty
 // drawn each match among the layout's spots, golden ones always kept. A
-// cache opens for the champion who stands beside it, still, for
-// CACHE_OPEN_S; a hit taken breaks the opening, and so do a step, a cast
-// and an attack order, the recall's rule. One
+// cache opens for the champion who stands beside it, still, for its
+// opening time (CACHE_OPEN_S, a Seedfall cache's SEEDFALL_OPEN_S, read by
+// kind through cacheOpenS); a hit taken breaks the opening, and so do a
+// step, a cast and an attack order, the recall's rule. One
 // opener at a time: the nearest champion standing there takes it, the
 // lower id on a tie. An opened cache is gone for good in One life and
-// back after CACHE_BACK_S in Respawn. Pure over a view of the champions,
-// so the rule is tested without a sim; the loot the opening pays lives in
-// loot.ts.
+// back after CACHE_BACK_S in Respawn, except a Seedfall cache, which never
+// comes back. Pure over a view of the champions, so the rule is tested
+// without a sim; the loot the opening pays lives in loot.ts.
 
+import { SEEDFALL_OPEN_S, SEEDFALL_REACH_M } from '../content/royale_events';
 import { dist2 } from '../geo';
 import type { Rng } from '../rng';
 import type { Vec2 } from '../types';
@@ -32,6 +34,17 @@ export function drawCaches(
   rng: Rng,
   count = CACHE_COUNT,
 ): CacheState[] {
+  return drawCacheSpots(spots, rng, count).caches;
+}
+
+// The same draw, with the indices of the spots it left empty, in spot
+// order: where a Seedfall may land (seedfall.ts) without standing on a
+// cache. A Seedfall cache is appended after these, its id the next one.
+export function drawCacheSpots(
+  spots: readonly CacheSpot[],
+  rng: Rng,
+  count = CACHE_COUNT,
+): { caches: CacheState[]; unused: number[] } {
   const keep = new Array<boolean>(spots.length).fill(false);
   const plain: number[] = [];
   let kept = 0;
@@ -51,8 +64,12 @@ export function drawCaches(
     kept++;
   }
   const out: CacheState[] = [];
+  const unused: number[] = [];
   spots.forEach((s, i) => {
-    if (!keep[i]) return;
+    if (!keep[i]) {
+      unused.push(i);
+      return;
+    }
     out.push({
       id: out.length,
       pos: { ...s.pos },
@@ -63,7 +80,19 @@ export function drawCaches(
       openSince: 0,
     });
   });
-  return out;
+  return { caches: out, unused };
+}
+
+// How long a cache takes to open, read by its kind: the one place an
+// opening's length is decided (the sim's rule, the snapshot's opening.d).
+// The opener is the seam a per-champion factor reads (a Graft, later).
+export function cacheOpenS(c: Pick<CacheState, 'kind'>, _opener?: { id: number }): number {
+  return c.kind === 'seedfall' ? SEEDFALL_OPEN_S : CACHE_OPEN_S;
+}
+
+// The reach from a cache's center within which a champion opens it.
+export function cacheReachM(c: Pick<CacheState, 'kind'>): number {
+  return c.kind === 'seedfall' ? SEEDFALL_REACH_M : CACHE_REACH_M;
 }
 
 // What the caches read of a champion: alive and on the ground (the caller
@@ -84,9 +113,14 @@ export interface CacheOpened {
   kind: CacheKind;
 }
 
+function inReach(c: CacheState, s: CacheSeeker): boolean {
+  const reach = cacheReachM(c);
+  return dist2(c.pos, s.pos) <= reach * reach;
+}
+
 function canOpen(c: CacheState, s: CacheSeeker, time: number): boolean {
   if (!s.still || s.disturbedAt >= time) return false;
-  return dist2(c.pos, s.pos) <= CACHE_REACH_M * CACHE_REACH_M;
+  return inReach(c, s);
 }
 
 // One tick of the caches: comebacks, openings broken or finished, and new
@@ -114,19 +148,16 @@ export function stepCaches(
     }
     if (c.opener !== null) {
       const s = byId.get(c.opener);
-      const holds =
-        s?.still === true &&
-        s.disturbedAt <= c.openSince &&
-        dist2(c.pos, s.pos) <= CACHE_REACH_M * CACHE_REACH_M;
+      const holds = s?.still === true && s.disturbedAt <= c.openSince && inReach(c, s);
       if (!holds) {
         busy.delete(c.opener);
         c.opener = null;
-      } else if (time - c.openSince >= CACHE_OPEN_S - 1e-9) {
+      } else if (time - c.openSince >= cacheOpenS(c, s) - 1e-9) {
         opened.push({ cacheId: c.id, unitId: c.opener, kind: c.kind });
         busy.delete(c.opener);
         c.opener = null;
         c.present = false;
-        c.respawnAt = variant === 'respawn' ? time + CACHE_BACK_S : null;
+        c.respawnAt = variant === 'respawn' && c.kind !== 'seedfall' ? time + CACHE_BACK_S : null;
         continue;
       } else continue;
     }
