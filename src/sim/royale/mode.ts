@@ -24,7 +24,7 @@ import type { Sim } from '../sim';
 import type { CombatCtx } from '../sim_context';
 import { DT } from '../types';
 import type { Unit } from '../unit';
-import { drawCaches, openingBy, stepCaches } from './caches';
+import { drawCacheSpots, openingBy, stepCaches } from './caches';
 import { noteClamor, observeClamors, stepClamors } from './clamors';
 import { escortLandings, normalizePick, resolveLandings } from './drop';
 import { type DuskSchedule, drawDusk, duskAt, insideCap } from './dusk';
@@ -45,7 +45,15 @@ import {
   type Standing,
   takedownScore,
 } from './score';
-import { observeSeedfalls, stepSeedfalls } from './seedfall';
+import {
+  observeSeedfalls,
+  openedSeedfall,
+  type SeedfallCall,
+  seedfallImpact,
+  seedfallSchedule,
+  seedfallSpots,
+  stepSeedfalls,
+} from './seedfall';
 import {
   CACHE_MANA,
   CAMP_BACK_S,
@@ -110,6 +118,10 @@ export class RoyaleMode {
   readonly layout: RoyaleLayout;
   readonly ground: RoyaleGround;
   readonly schedule: DuskSchedule;
+  // The Seedfalls' calls and the spots a seed may land on, fixed at the
+  // start like the Dusk's schedule (seedfall.ts).
+  readonly seedfallCalls: readonly SeedfallCall[];
+  readonly seedfallSpots: readonly Vec3[];
   state: RoyaleState;
   // Moving parts beside the public state.
   flights = new Map<number, PadFlight>();
@@ -152,13 +164,21 @@ export class RoyaleMode {
     this.ground = royaleGround(ground);
     const landAt = DROP_S;
     this.schedule = drawDusk(rng, this.layout, this.ground, landAt);
+    const drawn = drawCacheSpots(this.layout.cacheSpots, rng);
+    this.seedfallCalls = seedfallSchedule(this.variant, landAt);
+    this.seedfallSpots = seedfallSpots(
+      this.layout.cacheSpots,
+      drawn.unused,
+      this.layout,
+      this.ground,
+    );
     this.state = {
       variant: this.variant,
       stage: 'drop',
       dropEndsAt: landAt,
       endsAt: landAt + PLAY_S,
       dusk: duskAt(this.schedule, 0),
-      caches: drawCaches(this.layout.cacheSpots, rng),
+      caches: drawn.caches,
       pads: padSites(this.layout.pads),
       drops: new Map(),
       scores: new Map(),
@@ -382,8 +402,9 @@ export class RoyaleMode {
 
   // A Seedfall's impact, right after the Dusk (after the zones, before the
   // deaths), so a champion it kills dies on the same tick (seedfall.ts).
-  // Nothing falls yet.
-  stepSeedfallImpact(_ctx: CombatCtx, _sim: Sim): void {}
+  stepSeedfallImpact(ctx: CombatCtx, _sim: Sim): void {
+    seedfallImpact(this, ctx);
+  }
 
   // A death's rewards, in the sim's death handling instead of the shared
   // bounties: everything to the last hit. A champion's: experience, the
@@ -492,6 +513,15 @@ export class RoyaleMode {
       if (!u) continue;
       this.tally.cachesOpened++;
       this.emit(sim, { type: 'royale_cache', unitId: o.unitId, cacheId: o.cacheId });
+      // A Seedfall cache pays its own (seedfall.ts); the Heartwood Graft
+      // offer joins here once Grafts ship.
+      const seedfall = o.kind === 'seedfall' ? openedSeedfall(this, sim, o.cacheId) : null;
+      if (seedfall) {
+        this.loot(sim, u, seedfall.pieces, 'cache');
+        healShare(u, seedfall.heal);
+        manaShare(u, seedfall.mana);
+        continue;
+      }
       this.loot(sim, u, o.kind === 'golden' ? GOLDEN_PIECES : 1, 'cache');
       manaShare(u, CACHE_MANA);
     }
@@ -572,6 +602,7 @@ export class RoyaleMode {
             y: c.pos.y,
             z: c.pos.z,
             golden: c.kind === 'golden',
+            kind: c.kind,
           })),
         pads: s.pads,
         alive: this.alive(sim),
