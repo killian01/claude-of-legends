@@ -47,11 +47,13 @@ import {
   CAMP_MANA,
   DROP_S,
   LEADER_SHOW_EVERY_S,
+  OUT_OF_COMBAT_HEAL,
   OUT_OF_COMBAT_MANA,
   OUT_OF_COMBAT_SPEED,
   PAD_REACH_M,
   PLAY_S,
   RESPAWN_S,
+  ROYALE_HP_SCALE,
   type RoyaleEvent,
   type RoyaleState,
   type RoyaleVariant,
@@ -145,11 +147,12 @@ export class RoyaleMode {
     };
   }
 
-  // A champion seated for the mode: no gold, landing at level 3 with Q, W
-  // and E, the out of combat speed, its build fixed.
+  // A champion seated for the mode: no gold, the planet's health, landing
+  // at level 3 with Q, W and E, the out of combat speed, its build fixed.
   seat(u: Unit, kitBuild?: readonly string[], skill?: RoyaleSkillId): void {
     u.gold = 0;
     u.outOfCombatBonus = OUT_OF_COMBAT_SPEED;
+    u.hpScale = ROYALE_HP_SCALE;
     landingLevels(u);
     this.builds.set(u.id, seatBuild(u.championId, kitBuild));
     if (skill) this.skills.set(u.id, skill);
@@ -265,13 +268,18 @@ export class RoyaleMode {
     }
   }
 
-  // Mana with no fountain: out of combat (neither hit nor hitting for
-  // OUT_OF_COMBAT_S), a share of the maximum back every second.
-  stepMana(ctx: CombatCtx): void {
+  // Recovery with no fountain: out of combat (neither hit nor hitting for
+  // OUT_OF_COMBAT_S), a share of the maximum mana back every second, and
+  // of the maximum health while inside the light.
+  stepRecovery(ctx: CombatCtx): void {
     for (const u of ctx.units.values()) {
-      if (u.kind !== 'champion' || u.dead || u.maxMana <= 0 || u.mana >= u.maxMana) continue;
+      if (u.kind !== 'champion' || u.dead) continue;
       if (!outOfCombat(u, ctx.time)) continue;
-      u.mana = Math.min(u.maxMana, u.mana + u.maxMana * OUT_OF_COMBAT_MANA * DT);
+      if (u.maxMana > 0) {
+        u.mana = Math.min(u.maxMana, u.mana + u.maxMana * OUT_OF_COMBAT_MANA * DT);
+      }
+      if (u.pos.y !== undefined && !insideCap(this.state.dusk.now, u.pos as Vec3)) continue;
+      u.hp = Math.min(u.maxHp, u.hp + u.maxHp * OUT_OF_COMBAT_HEAL * DT);
     }
   }
 

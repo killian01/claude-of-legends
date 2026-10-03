@@ -2,15 +2,16 @@
 // body, deterministic over (observation, rng) and blind past what its own
 // sight shows. In order: the drop's pick; out of the dark; the dodge; the
 // fight when an enemy in sight is noticed (running from a far stronger
-// one, backing off and kiting when low, finishing a low enemy, never
-// chasing into the Dusk); holding still while a cache opens; ahead of the
-// Dusk's next cap; the nearest cache; a camp when nothing better is near;
-// the big creatures for a strong bot strong enough; a wander where it
-// stands. Its skill (content/bots/royale_skills.ts) slows its eye,
-// scatters its aim and sets its nerve.
+// one, backing off when low and losing, the swing never thrown away, a
+// kite between strikes, a low enemy finished, a fleeing one let go in One
+// life's early trades, never a chase into the Dusk); holding still while
+// a cache opens; ahead of the Dusk's next cap; the nearest cache; a camp
+// when nothing better is near; the big creatures for a strong bot strong
+// enough; a wander where it stands. Its skill (content/bots/
+// royale_skills.ts) slows its eye, scatters its aim and sets its nerve.
 
 import type { RoyaleSkill } from '../../content/bots/royale_skills';
-import { dist, dot, norm, scale, turnLeft, type Vec3 } from '../../geo';
+import { dirTo, dist, dot, norm, scale, turnLeft, type Vec3 } from '../../geo';
 import { KITE_DANGER_FRAC, KITE_STEP, RANGED_MIN_RANGE } from '../../playbook/micro';
 import type { Action, Observation, ObsUnit } from '../../policy';
 import type { Rng } from '../../rng';
@@ -47,13 +48,32 @@ export const FLEE_M = 10;
 // How far under its nerve the odds may be for a struck bot to hit back
 // rather than back off.
 export const ANSWER_MARGIN = 0.1;
-// One life: how close an enemy must be for the bot to go and start a
-// fight on it, by the Dusk's phase (0 the calm, 1 to 5 the closings, 6
-// dark), never past the skill's chase. The calm is for looting: an enemy
-// in its face is fought, one across the clearing left to its cache; each
-// closing widens it. Walking to every enemy in sight emptied the planet
-// in two minutes and a half. A hit is answered at any reach.
-export const ONE_LIFE_ENGAGE_M: readonly number[] = [6, 8, 10, 13, 17, 17, 17];
+// The odds under which a hurt bot backs off: only from a fight it is
+// losing. Backing off from every enemy in reach, two hurt bots that met
+// circled one another without a blow (a playtest, 2026-10-03).
+export const LOSING_ODDS = 0.5;
+// One life, until the Dusk's SKIRMISH_UNTIL_PHASE: a fight between
+// champions is a trade, the way the genre keeps its early game alive (its
+// bots fight one another and seldom see it through): the loser backs off
+// sooner (its skill's health line raised by SKIRMISH_HP), the winner lets
+// a fleeing enemy go unless it can finish it where it stands, and both
+// heal out of combat (types.ts). Fought to the death from every bot's
+// first sight, fifty champions fell to a handful in two minutes. From that
+// phase on the light leaves no room to back off into, and fights go to
+// the end.
+export const SKIRMISH_UNTIL_PHASE = 5;
+export const SKIRMISH_HP = 0.15;
+// An enemy walking away from the bot faster than this, under this share
+// of its health, is fleeing a fight; a passer-by at full health is not.
+export const FLEEING_SPEED = 1;
+export const FLEEING_HP = 0.6;
+// An enemy this close is fought on odds this much under the bot's nerve:
+// two champions face to face do not walk past each other.
+export const CLOSE_M = 6;
+export const CLOSE_MARGIN = 0.08;
+// How far past its own reach the bot still follows a fleeing enemy it can
+// finish.
+export const FINISH_REACH = 2.5;
 // A camp body this close is worth hitting.
 export const CAMP_FIGHT_M = 14;
 // The bot's own health share to take a camp.
@@ -121,11 +141,12 @@ function retreat(sense: Sense): Action {
 }
 
 function fight(sense: Sense, target: ObsUnit, rng: Rng): Action {
+  const { s, obs } = sense;
+  if (s.attackSwingUntil != null && s.attackSwingUntil > obs.time) return NOOP;
   const c = pickCast(sense, target, rng);
   if (c) return c;
   const sigil = fightSigil(sense);
   if (sigil) return sigil;
-  const { s, obs } = sense;
   const d = dist(sense.me, p3(target));
   if (
     sense.skill.kite &&
@@ -150,6 +171,20 @@ function neutralTarget(sense: Sense): ObsUnit | null {
     if (sense.skill.creatures && sense.s.level >= 9 && sense.s.hpFrac >= 0.8) return n;
   }
   return null;
+}
+
+// A fleeing enemy the bot lets go: walking away and past the bot's reach,
+// unless it is low enough to finish within FINISH_REACH of it.
+function lettingGo(sense: Sense, target: ObsUnit): boolean {
+  const at = p3(target);
+  const d = dist(sense.me, at);
+  const dir = dirTo(sense.me, at);
+  if (!dir) return false;
+  const away = dot({ x: target.vx ?? 0, y: target.vy ?? 0, z: target.vz ?? 0 }, dir);
+  if (away < FLEEING_SPEED || target.hpFrac >= FLEEING_HP) return false;
+  const reach = sense.attackRange + 0.5;
+  if (d <= reach) return false;
+  return !(target.hpFrac < FINISH_HP && d <= reach + FINISH_REACH);
 }
 
 export function decide(
@@ -180,7 +215,12 @@ export function decide(
     return dark;
   }
 
-  const sidestep = dodge(sense, rng);
+  // A swing in the air is never thrown away but to run (the house bots'
+  // orb walk, playbook/behaviors.ts): a sidestep or a kite step mid-swing
+  // canceled one strike in five, and two bots circled each other without
+  // a blow (a playtest, 2026-10-03).
+  const swing = sense.s.attackSwingUntil;
+  const sidestep = swing != null && swing > obs.time ? null : dodge(sense, rng);
   if (sidestep) return sidestep;
 
   if (sense.enemies.length > 0) {
@@ -194,8 +234,9 @@ export function decide(
     // The last light leaves nowhere to go: everyone's nerve rises, and a
     // hit is answered rather than run from.
     const cornered = lightsOut || sense.now.radius <= LAST_LIGHT_M;
-    const backOff = cornered ? skill.retreatHp / 2 : skill.retreatHp;
-    if (near && sense.s.hpFrac < backOff) return retreat(sense);
+    const skirmish = r.variant === 'one_life' && r.dusk.phase < SKIRMISH_UNTIL_PHASE && !cornered;
+    const backOff = cornered ? skill.retreatHp / 2 : skill.retreatHp + (skirmish ? SKIRMISH_HP : 0);
+    if (near && sense.s.hpFrac < backOff && royaleOdds(sense) < LOSING_ODDS) return retreat(sense);
     if (!cornered) {
       const close = sense.enemies[0];
       if (close && dist(sense.me, p3(close)) <= FLEE_M && royaleOdds(sense, close, 0) < FLEE_ODDS) {
@@ -203,20 +244,17 @@ export function decide(
       }
     }
     // Every skill takes a fight its odds reach its nerve on, in either
-    // variant and from the calm on: an even duel is fought, a weaker
-    // enemy hunted, a low one finished, a hit answered. One life starts
-    // its fights closer while the light is wide.
-    const reach =
-      r.variant === 'one_life' && !sense.struck
-        ? Math.min(skill.chase, ONE_LIFE_ENGAGE_M[r.dusk.phase] ?? skill.chase)
-        : skill.chase;
-    const target = pickTarget(sense, reach);
+    // variant and from the landing on: an even duel is fought, a weaker
+    // enemy hunted, a low one finished, a hit answered.
+    const target = pickTarget(sense);
     if (target) {
       const odds = royaleOdds(sense, target);
       const finish = target.hpFrac < FINISH_HP && sense.s.hpFrac > target.hpFrac;
       const nerve = skill.fightOdds - (cornered ? LAST_LIGHT_NERVE : 0);
       const answer = sense.struck && (cornered || odds >= nerve - ANSWER_MARGIN);
-      if (odds >= nerve || finish || answer) return fight(sense, target, rng);
+      const margin = dist(sense.me, p3(target)) <= CLOSE_M ? CLOSE_MARGIN : 0;
+      const go = odds >= nerve - margin || finish || answer;
+      if (go && !(skirmish && lettingGo(sense, target))) return fight(sense, target, rng);
     }
     if (near && sense.struck && !cornered) return retreat(sense);
   }

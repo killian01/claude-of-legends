@@ -48,7 +48,7 @@ export function recalcChampion(u: Unit): void {
   const lvl = u.level - 1;
   const items = sumItemStats(u.items);
 
-  const newMaxHp = def.base.hp + def.growth.hp * lvl + items.hp;
+  const newMaxHp = (def.base.hp + def.growth.hp * lvl + items.hp) * u.hpScale;
   const hpDelta = newMaxHp - u.maxHp;
   u.maxHp = newMaxHp;
   u.hp = Math.min(u.maxHp, Math.max(0, u.hp + Math.max(0, hpDelta)));

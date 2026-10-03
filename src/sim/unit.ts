@@ -89,6 +89,10 @@ export interface Unit {
   // favor's (the battle royale's 40 percent, ADR 0031); zero everywhere
   // else, where the sum it joins is the one it always was.
   outOfCombatBonus: number;
+  // The share a mode's rules scale a champion's maximum health by (the
+  // battle royale's sturdier champions, ADR 0031); 1 everywhere else,
+  // where the product is the sum it always was.
+  hpScale: number;
   // The favors the unit's team holds (CONTEXT.md: Favor), mirrored from
   // the sim's Favors record whenever one is granted, so the stat
   // recalculation and the effect seam read the unit alone. Champions
@@ -240,6 +244,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     lastDamagedAt: -999,
     lastDealtDamageAt: -999,
     outOfCombatBonus: 0,
+    hpScale: 1,
     favors: NO_FAVORS,
     creatureId: null,
     aspect: null,

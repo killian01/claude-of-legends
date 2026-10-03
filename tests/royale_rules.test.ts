@@ -4,7 +4,8 @@
 // a cache opened by standing beside it, a launch pad's flight, a
 // takedown's rewards, Respawn's score and return at the edge of the light,
 // One life's places and its winner, the creatures on the mode's clock, the
-// out of combat speed, the observation's block and the world checkpoint.
+// out of combat speed, mana and health, the planet's health scale, the
+// observation's block and the world checkpoint.
 
 import { describe, expect, it } from 'vitest';
 import { buildRoyaleSim, type ReplayPick } from '../src/net/replay';
@@ -22,11 +23,13 @@ import {
 import {
   CACHE_OPEN_S,
   DROP_S,
+  OUT_OF_COMBAT_HEAL,
   OUT_OF_COMBAT_MANA,
   OUT_OF_COMBAT_S,
   PAD_FLIGHT_S,
   RESPAWN_S,
   RING_CREATURES_AT_S,
+  ROYALE_HP_SCALE,
   type RoyaleEvent,
   type RoyaleVariant,
   START_LEVEL,
@@ -144,7 +147,8 @@ describe('the rules of play', () => {
     const hitAt = u.lastDamagedAt;
     run(sim, 2);
     const lost = u.maxHp - u.hp;
-    // The burn less the champion's own regeneration.
+    // The burn less the champion's own regeneration: out of combat as it
+    // is, nothing heals it in the dark.
     expect(lost).toBeGreaterThan((u.maxHp * dusk.burn - u.stats.hpRegen) * 2 * 0.9);
     expect(lost).toBeLessThan(u.maxHp * dusk.burn * 2 * 1.2);
     expect(u.lastDamagedAt).toBe(hitAt);
@@ -223,6 +227,35 @@ describe('the rules of play', () => {
     run(sim, 1);
     const calm = u.mana - before;
     expect(calm - fighting).toBeCloseTo(u.maxMana * OUT_OF_COMBAT_MANA, 6);
+  });
+
+  it('gives health back out of combat inside the light, as the genre does between fights', () => {
+    const { sim, unitIds } = build(1);
+    land(sim);
+    const u = sim.units.get(unitIds[0]!)!;
+    u.hp = u.maxHp * 0.3;
+    // Fresh from a fight: only the champion's own regeneration.
+    u.lastDamagedAt = sim.time;
+    run(sim, 1);
+    const fighting = u.hp - u.maxHp * 0.3;
+    run(sim, OUT_OF_COMBAT_S);
+    const before = u.hp;
+    run(sim, 1);
+    const calm = u.hp - before;
+    expect(calm - fighting).toBeCloseTo(u.maxHp * OUT_OF_COMBAT_HEAL, 6);
+  });
+
+  it('lands every champion with a quarter more health than the 5v5 gives it', () => {
+    const { sim, unitIds } = build(5);
+    land(sim);
+    for (const id of unitIds) {
+      const u = sim.units.get(id)!;
+      const def = u.champion!;
+      expect(u.level).toBe(START_LEVEL);
+      const fives = def.base.hp + def.growth.hp * (START_LEVEL - 1);
+      expect(u.maxHp).toBeCloseTo(fives * ROYALE_HP_SCALE, 9);
+      expect(u.hp).toBe(u.maxHp);
+    }
   });
 
   it('raises the big creatures on the mode clock', () => {

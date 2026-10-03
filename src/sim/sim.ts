@@ -1065,7 +1065,7 @@ export class Sim {
     stepProjectiles(ctx, DT);
     stepZones(ctx);
     if (royale && this.winner === null) {
-      royale.stepMana(ctx);
+      royale.stepRecovery(ctx);
       royale.stepDusk(ctx, this);
     }
 

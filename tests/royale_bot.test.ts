@@ -1,7 +1,8 @@
 // The battle royale bot's decisions (src/sim/royale/bot/), on observations
 // built by hand: the skill mix by seat, the drop, out of the dark, ahead of
 // the Dusk by a launch pad, looting, the fight's odds by skill, aiming
-// where the target will be, backing off when low, never chasing into the
+// where the target will be, backing off when low and losing, the swing
+// never thrown away, One life's early trades, never chasing into the
 // dark.
 
 import { describe, expect, it } from 'vitest';
@@ -295,6 +296,87 @@ describe('fighting', () => {
       expect(a.kind).toBe('move');
       expect(dist(point(a), at)).toBeGreaterThan(dist(here, at));
     }
+  });
+
+  it('backs off when hurt only from a fight it is losing', () => {
+    // A playtest (2026-10-03): hurt bots backed off from every enemy in
+    // reach, and two of them that met circled one another without a blow.
+    const at = along(here, east, 4, R);
+    const self = { hp: 180, hpFrac: 0.3, struckAt: 19.8, sigilReady: [false, false] };
+    const fresh = decide(obs(here, { units: [enemy(9, at)] }, self), new Rng(1), layout, normal);
+    expect(fresh.kind).toBe('move');
+    expect(dist(point(fresh), at)).toBeGreaterThan(dist(here, at));
+    const worse = enemy(9, at, { hpFrac: 0.2 });
+    const fights = decide(obs(here, { units: [worse] }, self), new Rng(1), layout, normal);
+    expect(['cast', 'attack']).toContain(fights.kind);
+  });
+
+  it('never throws its own swing away for a sidestep or a kite step', () => {
+    // On top of it, with a bolt on course: between swings a strong bot
+    // steps aside or back; mid-swing it holds, and the strike lands.
+    const e = enemy(9, along(here, east, 2.5, R));
+    const from = along(here, north, 6, R);
+    const dir = dirTo(from, here) as Vec3;
+    const bolt = {
+      x: from.x,
+      y: from.y,
+      z: from.z,
+      dirX: dir.x,
+      dirY: dir.y,
+      dirZ: dir.z,
+      speed: 20,
+      radius: 0.5,
+      friendly: false,
+      homing: false,
+    };
+    const quiet = { abilityReady: { Q: false, W: false, E: false, R: false }, attackReadyAt: 21.5 };
+    let moved = 0;
+    for (let seed = 1; seed <= 10; seed++) {
+      const at = (swing: number | null) =>
+        decide(
+          {
+            ...obs(here, { units: [e] }, { ...quiet, attackSwingUntil: swing }),
+            projectiles: [bolt],
+          },
+          new Rng(seed),
+          layout,
+          strong,
+        );
+      if (at(null).kind === 'move') moved++;
+      expect(at(20.2).kind).toBe('noop');
+    }
+    expect(moved).toBeGreaterThanOrEqual(7);
+  });
+
+  it("lets a hurt enemy walking away go in One life's early trades, never late nor in Respawn", () => {
+    const v = { vx: east.x * 3.7, vy: east.y * 3.7, vz: east.z * 3.7 };
+    const hurt = enemy(9, along(here, east, 9, R), { hpFrac: 0.4, ...v });
+    const early = decide(obs(here, { units: [hurt] }), new Rng(1), layout, strong);
+    expect(['cast', 'attack']).not.toContain(early.kind);
+    // Low enough to finish within reach: followed.
+    const low = enemy(9, along(here, east, 7, R), { hpFrac: 0.15, ...v });
+    const finish = decide(obs(here, { units: [low] }), new Rng(1), layout, strong);
+    expect(['cast', 'attack']).toContain(finish.kind);
+    // A passer-by at full health walking away is fought as ever.
+    const passing = enemy(9, along(here, east, 7, R), v);
+    const met = decide(obs(here, { units: [passing] }), new Rng(1), layout, strong);
+    expect(['cast', 'attack']).toContain(met.kind);
+    // Late in the Dusk, and in Respawn, the hurt one is chased down.
+    const late = { ...wholeDusk(sph(1, 0, 0)), phase: 5 };
+    const chased = decide(
+      obs(here, { units: [hurt], royale: { dusk: late } }),
+      new Rng(1),
+      layout,
+      strong,
+    );
+    expect(['cast', 'attack']).toContain(chased.kind);
+    const respawn = decide(
+      obs(here, { units: [hurt], royale: { variant: 'respawn' } }),
+      new Rng(1),
+      layout,
+      strong,
+    );
+    expect(['cast', 'attack']).toContain(respawn.kind);
   });
 
   it('counts the nearest bystanders only, so a crowd still fights', () => {
