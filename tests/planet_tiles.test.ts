@@ -26,12 +26,13 @@ describe('the planet tiles', () => {
     const grid = tileGrid();
     expect(grid).toHaveLength(6 * TILE_K * TILE_K);
     for (const [i, t] of grid.entries()) expect(tileOf(t.dir)).toBe(i);
-    // A tile's middle is within its reach of all its corners, about 20 m
+    // A tile's middle is within its reach of all its corners, some meters
     // at a face's middle.
-    const middle = grid[2 * TILE_K * TILE_K + 3 * TILE_K + 3]!;
-    expect(middle.angle * R).toBeGreaterThan(8);
+    const half = Math.floor(TILE_K / 2);
+    const middle = grid[2 * TILE_K * TILE_K + half * TILE_K + half]!;
+    expect(middle.angle * R).toBeGreaterThan(4);
     expect(middle.angle * R).toBeLessThan(20);
-    expect(tileOf(faceDir(4, -0.99, 0.99))).toBe(4 * TILE_K * TILE_K + 7 * TILE_K);
+    expect(tileOf(faceDir(4, -0.99, 0.99))).toBe(4 * TILE_K * TILE_K + (TILE_K - 1) * TILE_K);
   });
 
   it('see over the horizon what stands near, not what lies beyond', () => {

@@ -22,7 +22,7 @@ import { type ChartView, ChartWindow, ChartWorld } from './chart_world';
 import { BEND_UNIFORMS, bendTree } from './planet_bend';
 import { bendTurn, PlanetChart, rotateAbout } from './planet_chart';
 import { type DropOrbit, diveProgress, orbitPosition } from './planet_drop';
-import { capAngle, DUSK_UNIFORMS } from './planet_dusk';
+import { capAngle, DUSK_UNIFORMS, FADE_TARGETS } from './planet_dusk';
 import { PlanetMarks } from './planet_marks';
 import { PlanetMinimap } from './planet_minimap';
 import { PlanetSky } from './planet_sky';
@@ -41,6 +41,8 @@ export const VIEW_REACH_M = 70;
 // phone's light one: the shadow pass draws every caster's body again.
 const UNIT_SHADOW_M = 30;
 const UNIT_SHADOW_LIGHT_M = 12;
+// Champions this near the focus are seen through the props too.
+const FADE_REACH_M = 16;
 // The dive from the globe to the champion, seconds.
 export const DIVE_S = 1.1;
 // A pad's arc, meters at its top.
@@ -538,6 +540,28 @@ export class PlanetStage {
     return r;
   }
 
+  // The champions the props thin out for (planet_dusk.ts): the followed
+  // one first, then the nearest others within FADE_REACH_M of the focus,
+  // as points of the renderer's space at their feet; their chests in
+  // world space go to the shader.
+  setFadeTargets(
+    champions: readonly { id: number; x: number; y: number; z: number }[],
+    followId: number | null,
+  ): void {
+    const reach2 = FADE_REACH_M * FADE_REACH_M;
+    const o = this.half;
+    const near = champions
+      .map((c) => ({ c, d2: (c.x - o) ** 2 + (c.z - o) ** 2 }))
+      .filter(({ c, d2 }) => c.id === followId || d2 <= reach2)
+      .sort((a, b) => (a.c.id === followId ? -1 : b.c.id === followId ? 1 : a.d2 - b.d2))
+      .slice(0, FADE_TARGETS);
+    const at = DUSK_UNIFORMS.colFadeAt.value;
+    for (const [i, { c }] of near.entries()) {
+      at[i]!.copy(this.bentWorld(c.x, c.y + 1.2, c.z));
+    }
+    DUSK_UNIFORMS.colFadeN.value = near.length;
+  }
+
   // Whether a champion at this point of the renderer's space throws a
   // shadow: only near the focus, nearer on a phone.
   castsShadow(x: number, z: number): boolean {
@@ -665,6 +689,8 @@ export class PlanetStage {
     this.root.updateMatrixWorld(true);
     DUSK_UNIFORMS.colPlanetInv.value.copy(this.root.matrixWorld).invert();
     this.culler.update(this.camera, this.root.matrixWorld, this.view.chart.up);
+    DUSK_UNIFORMS.colFadeEye.value.copy(this.camera.position);
+    if (this.dropping || this.diveFrom) DUSK_UNIFORMS.colFadeN.value = 0;
     BEND_UNIFORMS.colBendO.value.set(this.half, 0, this.half);
     BEND_UNIFORMS.colBendR.value = this.radius;
     BEND_UNIFORMS.colBendOn.value = 1;

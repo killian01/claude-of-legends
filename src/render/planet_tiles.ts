@@ -15,13 +15,13 @@ import * as THREE from 'three';
 import type { Vec3 } from '../sim/geo';
 import { FACES, faceDir, faceOf, faceUV } from './planet_ground';
 
-// Tiles along each face edge: 8 gives tiles of about 20 m at a face's
-// middle, 384 over the planet.
-export const TILE_K = 8;
+// Tiles along each face edge: 12 gives tiles of about 13 m at a face's
+// middle, 864 over the planet.
+export const TILE_K = 12;
 // The tallest a tile counts as standing for the horizon: a tree's tip past
 // the horizon pokes over its line by a sliver at the top of the screen,
 // not worth drawing a whole tile of ground for.
-export const HORIZON_TOP_M = 5;
+export const HORIZON_TOP_M = 3;
 // The small things (grass, flowers, pebbles, undergrowth): none bigger
 // than this across, drawn only this near the focus, where they read.
 export const DETAIL_SIZE_M = 1.3;
