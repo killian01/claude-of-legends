@@ -31,6 +31,14 @@ export const POINTS: Readonly<Record<PointsReason, number>> = {
   // The end: the winning side, and the losing side that played it out.
   victory: 50,
   finish: 15,
+  // The battle royale (server/royale_points.ts, ADR 0031): a cache opened,
+  // and the end, by place in One life (the last standing, the top five, the
+  // top ten) and to the best score in Respawn.
+  cache: 1,
+  last_standing: 50,
+  top_five: 25,
+  top_ten: 15,
+  best_score: 50,
 };
 
 // The end bonus goes to a seat that issued a command in the last three

@@ -3,7 +3,7 @@
 // offline Sim satisfies it structurally; the online mirror world will
 // implement it in phase 6, pinned by a parity test.
 
-import type { SnapRoyale } from './net/royale_wire';
+import type { SeatLabel, SnapCache, SnapRoyale } from './net/royale_wire';
 import type { ChampionDef } from './sim/content/champions';
 import type { GameMap, WardenPit } from './sim/content/map';
 import type { FavorStacks } from './sim/favors';
@@ -55,16 +55,22 @@ export interface IWorld {
     unitId: number,
     now: number,
   ): { x: number; z: number; y?: number; heading: Vec2 | null } | null;
-  // A battle royale's mode as its snapshot carries it (ADR 0031,
-  // src/net/royale_wire.ts): the stage, the Dusk, the caches; null, or
-  // absent, outside one.
-  royale?(): SnapRoyale | null;
-  // The drop (ADR 0031): the landing point picked on the globe, a point on
-  // the planet's sphere.
-  pickDrop?(point: Vec3): void;
-  // Orders on the planet carry the point's y (ADR 0029): a sphere point is
-  // (x, y, z), and a point on the plane has none, so the 5v5's orders keep
-  // their shape.
+  // The battle royale (ADR 0031) as the newest snapshot told it, with the
+  // caches the last cache list named (the list rides once a second, the
+  // client keeps it in between); null in a 5v5. Absent on a world that
+  // never runs one, which reads as a 5v5 too. Not `royale`: the offline
+  // Sim holds the mode's own state under that name, and satisfies IWorld.
+  royaleView?(): (SnapRoyale & { caches: SnapCache[] }) | null;
+  // The drop: the landing point picked on the globe, a point on the
+  // planet's sphere.
+  // The unit first, like every order here, so the offline Sim's own
+  // pickDrop satisfies the seam.
+  pickDrop?(unitId: number, p: Vec3): void;
+  // Who holds a champion's seat in a battle royale, the name and the bot
+  // mark, for a champion the mirror has been told of; null otherwise.
+  seat?(unitId: number): SeatLabel | null;
+  // y: a point on the planet's sphere carries it (ADR 0029), a point on
+  // the plane never does; an aim (Vec2) carries its own.
   orderMove(unitId: number, x: number, z: number, y?: number): void;
   orderAttack(unitId: number, targetId: number): void;
   orderAttackMove(unitId: number, x: number, z: number, y?: number): void;

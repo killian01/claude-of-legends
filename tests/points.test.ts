@@ -142,6 +142,12 @@ describe('the weight', () => {
       ascendant: 25,
       victory: 50,
       finish: 15,
+      // The battle royale's (ADR 0031): a cache, and the end by place.
+      cache: 1,
+      last_standing: 50,
+      top_five: 25,
+      top_ten: 15,
+      best_score: 50,
     });
     expect(ACTIVE_END_TICKS).toBe(3 * 60 * 20);
   });

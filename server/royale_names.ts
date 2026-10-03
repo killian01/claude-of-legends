@@ -1,0 +1,176 @@
+// The names the battle royale's bots play under (ADR 0031: each bot named,
+// with a bot mark beside it). Handles that read like the names people pick,
+// invented compounds of plants, stones and small household things so they
+// are plainly the game's own: no real person, nothing borrowed, nothing
+// that names a champion, a creature, a camp or a sigil, and none with a
+// space (a Guest's handed-out name has one, server/guests.ts). Data as
+// code; the draw is seeded, so the same match seed names the same bots.
+
+import type { Rng } from '../src/sim/rng';
+
+export const BOT_HANDLES: readonly string[] = [
+  'Mossmantle',
+  'Quillspark',
+  'Flintwhistle',
+  'Nettlequill',
+  'Pebblewick',
+  'Sorrelstep',
+  'Yarrowbloom',
+  'Loamweaver',
+  'Cinderbrook',
+  'Thistlewick',
+  'Bramblecoat',
+  'Fernspindle',
+  'Ashpocket',
+  'Emberknot',
+  'Slatewhisper',
+  'Rimecandle',
+  'Tallowspark',
+  'Copperfern',
+  'Driftmoss',
+  'Glimmerroot',
+  'Hollowquill',
+  'Ivylantern',
+  'Juniperhaze',
+  'Kindlebark',
+  'Marrowmist',
+  'Oakbuckle',
+  'Pinetinder',
+  'Quartzpetal',
+  'Reedwhistle',
+  'Rustlemoss',
+  'Sagebristle',
+  'Shalecomb',
+  'Sparkthimble',
+  'Thornpebble',
+  'Umberwisp',
+  'Valemote',
+  'Willowknack',
+  'Wispkettle',
+  'Yarrowpatch',
+  'Briarlamp',
+  'Clovertwine',
+  'Echopebble',
+  'Glenmarrow',
+  'Hazelquill',
+  'Loamlantern',
+  'Mistbuckle',
+  'Nimbuspatch',
+  'Opalthistle',
+  'Pinecobble',
+  'Shaleflicker',
+  'Tallowfern',
+  'Wickerbloom',
+  'Barleyspark',
+  'Chalkwhistle',
+  'Dewknuckle',
+  'Elmsprocket',
+  'Fogtinder',
+  'Gorsepipe',
+  'Heathcinder',
+  'Inkbramble',
+  'Jasperwick',
+  'Kelpmantle',
+  'Lichenbell',
+  'Mintcobble',
+  'Nutmegstride',
+  'Oatglimmer',
+  'Peatbuckle',
+  'Quincepetal',
+  'Rushlantern',
+  'Saffronknot',
+  'Teaselwick',
+  'Uplandreed',
+  'Vetchspark',
+  'Wheatwhistle',
+  'Acornfizz',
+  'Burdockquill',
+  'Cobblespire',
+  'Damsonflick',
+  'Elderkindle',
+  'Flaxbellow',
+  'Gingerslate',
+  'Hopsprocket',
+  'Indigomoss',
+  'Kettlebramble',
+  'Lavenderflint',
+  'Maplecrumb',
+  'Nettlebuckle',
+  'Orrisglow',
+  'Parsleyspark',
+  'Quillpebble',
+  'Rosehipdrum',
+  'Sloeknuckle',
+  'Tansyflare',
+  'Umbelwick',
+  'Verbenaquill',
+  'Woadlantern',
+  'Yewcobble',
+  'Zestbramble',
+  'Alderfizz',
+  'Birchtinder',
+  'Cedarthimble',
+  'Dockweave',
+  'Embermint',
+  'Furzeglow',
+  'Gravelquill',
+  'Hempspindle',
+  'Inkspindle',
+  'Kalefizzle',
+  'Larchbuckle',
+  'Madderspark',
+  'Nettledrum',
+  'Oakwhistle',
+  'Plumtinder',
+  'Quarrypip',
+  'Rowanflick',
+  'Sedgelamp',
+  'Thymeknot',
+  'Umberknoll',
+  'Vervainspark',
+  'Woolbramble',
+  'Yarrowflint',
+  'Zinniaquill',
+  'Ashcobble',
+  'Bracketmoss',
+  'Cloudpebble',
+  'Dandelamp',
+  'Emberpip',
+  'Fiddlefern',
+  'Gloamwick',
+  'Huskspark',
+  'Inglespark',
+  'Jutequill',
+  'Kindlepatch',
+  'Lintwhistle',
+  'Mossfiddle',
+  'Nookbramble',
+  'Oakpip',
+  'Pumicequill',
+  'Quiltwhisk',
+  'Rimeflicker',
+];
+
+const fold = (name: string): string => name.trim().toLowerCase();
+
+// `count` distinct handles drawn from the seed, none equal (by case) to a
+// name in `taken` (the people seated in the match). Past the list, which a
+// fifty seat match never reaches, a handle comes back with a number.
+export function botNames(count: number, rng: Rng, taken: Iterable<string> = []): string[] {
+  const held = new Set<string>();
+  for (const name of taken) held.add(fold(name));
+  const pool = BOT_HANDLES.filter((h) => !held.has(fold(h)));
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = rng.int(i + 1);
+    const t = pool[i]!;
+    pool[i] = pool[j]!;
+    pool[j] = t;
+  }
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const base = pool[i % pool.length]!;
+    const round = Math.floor(i / pool.length);
+    out.push(round === 0 ? base : `${base}${round + 1}`);
+  }
+  return out;
+}

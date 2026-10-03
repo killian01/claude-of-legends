@@ -29,7 +29,7 @@ if (params.get('hud') === '0') {
 }
 
 const [ground] = await Promise.all([
-  loadPlanetGround('/map/planet/', { light: coarse }),
+  loadPlanetGround({ light: coarse }),
   whenChampionModelsReady(),
 ]);
 const at = params.get('at')?.split(',').map(Number);

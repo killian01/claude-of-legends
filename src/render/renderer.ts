@@ -683,6 +683,7 @@ export class Renderer {
 
   followUnit(id: number): void {
     this.followId = id;
+    if (this.planet) this.planet.picker = id;
   }
 
   // The team whose fog of war this client renders.
