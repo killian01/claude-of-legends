@@ -56,6 +56,14 @@ import { respawnDelay } from './respawn';
 import { ASSIST_GOLD_FRAC, championBounty, grantKillRewards, grantPassiveGold } from './rewards';
 import { initialRingStates, onCreatureSlain, type RingClock, ringClocks, stepRings } from './rings';
 import { Rng } from './rng';
+import { RoyaleMode, type RoyaleOptions } from './royale/mode';
+import {
+  DROP_S,
+  RING_CREATURES_AT_S,
+  type RoyaleEvent,
+  type RoyaleState,
+  WARDEN_AT_S,
+} from './royale/types';
 import { MINIONS_ONLY, stepSeparation } from './separation';
 import type { CombatCtx } from './sim_context';
 import {
@@ -109,7 +117,9 @@ export type SimEvent =
   // An Ascendant fell and the team holds the Wrath.
   | { type: 'wrath'; team: TeamId; creature: CreatureId }
   // The Wrath finished a champion brought under its line.
-  | { type: 'execute'; unitId: number; killerId: number };
+  | { type: 'execute'; unitId: number; killerId: number }
+  // The battle royale's own (royale/types.ts).
+  | RoyaleEvent;
 
 // How long a champion's damage on a victim keeps earning an assist.
 const ASSIST_WINDOW_S = 10;
@@ -152,6 +162,10 @@ export interface SimOptions {
   // minions alone on the Orchard, where champions walk through a wave as
   // the genre's do; a crowd of champions on the planet adds them.
   separation?: readonly UnitKind[];
+  // The battle royale (ADR 0031, src/sim/royale/mode.ts): the variant and
+  // the planet's layout. The match then drops, lands, loots and burns
+  // under the Dusk; nothing of the 5v5 runs.
+  royale?: RoyaleOptions;
 }
 
 // A team's fading memory of one enemy champion (Sim.lastSeen).
@@ -216,6 +230,8 @@ export class Sim {
   // The favors each team holds (CONTEXT.md: Favor), the truth the units'
   // mirrors are refreshed from (grantFavor).
   readonly favors: Favors;
+  // The battle royale's rules and state, null in every other match.
+  readonly royaleMode: RoyaleMode | null;
 
   constructor(
     seed: number,
@@ -244,7 +260,40 @@ export class Sim {
         this.ground.blockCircle(u.pos, staticFootprint(u));
       }
     }
+    this.royaleMode = options.royale ? new RoyaleMode(this.rng, this.ground, options.royale) : null;
+    if (this.royaleMode) {
+      // The big creatures rise on the mode's clock, counted from landing.
+      this.objectives.nextSpawnAt = DROP_S + WARDEN_AT_S;
+      for (const ring of this.ringStates) ring.nextRiseAt = DROP_S + RING_CREATURES_AT_S;
+    }
     this.visibility = computeVisibility(this.map, this.units, 0, undefined, teamCount);
+  }
+
+  // The battle royale's state (royale/types.ts), null in every other match.
+  get royale(): RoyaleState | null {
+    return this.royaleMode?.state ?? null;
+  }
+
+  // An event from a mode's step, into this tick's stream.
+  pushEvent(e: SimEvent): void {
+    this.events.push(e);
+  }
+
+  // The landing point a seat picks during the battle royale's drop: a point
+  // on the sphere, kept until the drop ends (the last pick wins). False
+  // outside a battle royale's drop.
+  pickDrop(unitId: number, p: { x: number; y: number; z: number }): boolean {
+    const u = this.units.get(unitId);
+    if (!this.royaleMode || u?.kind !== 'champion') return false;
+    return this.royaleMode.pickDrop(unitId, p, this.time);
+  }
+
+  // Whether a seat may act right now in the battle royale: on the ground,
+  // in play, not carried by a launch pad. Always true elsewhere.
+  private royaleActs(unitId: number): boolean {
+    const mode = this.royaleMode;
+    if (!mode) return true;
+    return mode.state.stage === 'play' && !mode.isFlying(unitId);
   }
 
   // The 5v5's shape: the systems only it has run in a match of two teams.
@@ -526,6 +575,7 @@ export class Sim {
     this.ringStates.splice(0, this.ringStates.length, ...s.ringStates);
     this.favors.restore(s.favors);
     this.laneSightings.restore(s.laneSightings);
+    if (this.royaleMode && s.royale) this.royaleMode.restore(s.royale);
     this.events = [];
   }
 
@@ -555,6 +605,7 @@ export class Sim {
       ringStates: this.ringStates.map((r) => ({ ...r })),
       favors: this.favors.snapshot(),
       laneSightings: this.laneSightings.snapshot(),
+      royale: this.royaleMode ? this.royaleMode.snapshot() : null,
     };
   }
 
@@ -658,6 +709,7 @@ export class Sim {
       return {
         x: state.spot.x,
         z: state.spot.z,
+        ...(state.spot.y !== undefined ? { y: state.spot.y } : {}),
         kind: state.spot.kind,
         seenAt: seen ? seen.at : null,
         up: seen ? seen.up : null,
@@ -694,7 +746,7 @@ export class Sim {
   // An order's point is the plane's (x, z), or on the planet the sphere
   // point with y.
   orderMove(unitId: number, x: number, z: number, y?: number): void {
-    if (this.winner !== null) return;
+    if (this.winner !== null || !this.royaleActs(unitId)) return;
     const u = this.units.get(unitId);
     if (!u || u.moveSpeed <= 0 || u.dead || this.dead.has(unitId)) return;
     cancelRecall(u);
@@ -707,7 +759,7 @@ export class Sim {
   // Stop (S): halt in place and HOLD, opting out of idle auto-defense until
   // the next movement or attack order. The genre's wave-freeze verb.
   orderStop(unitId: number): void {
-    if (this.winner !== null) return;
+    if (this.winner !== null || !this.royaleActs(unitId)) return;
     const u = this.units.get(unitId);
     if (u?.kind !== 'champion' || u.dead || this.dead.has(unitId)) return;
     u.holding = true;
@@ -735,7 +787,7 @@ export class Sim {
   }
 
   orderAttack(unitId: number, targetId: number): void {
-    if (this.winner !== null) return;
+    if (this.winner !== null || !this.royaleActs(unitId)) return;
     const u = this.units.get(unitId);
     const target = this.units.get(targetId);
     if (!u || !target || u.dead || target.dead) return;
@@ -745,10 +797,11 @@ export class Sim {
     u.holding = false;
     u.attackMoveTarget = null;
     u.attackTargetId = targetId;
+    this.royaleMode?.noteAct(unitId, this.time);
   }
 
   orderAttackMove(unitId: number, x: number, z: number, y?: number): void {
-    if (this.winner !== null) return;
+    if (this.winner !== null || !this.royaleActs(unitId)) return;
     const u = this.units.get(unitId);
     if (u?.kind !== 'champion' || u.dead || this.dead.has(unitId)) return;
     cancelRecall(u);
@@ -759,7 +812,8 @@ export class Sim {
   }
 
   startRecall(unitId: number): void {
-    if (this.winner !== null) return;
+    // No recall in the battle royale: there is no fountain to go home to.
+    if (this.winner !== null || this.royaleMode) return;
     const u = this.units.get(unitId);
     if (u?.kind !== 'champion' || u.dead || this.dead.has(unitId)) return;
     if (isStunned(u, this.time)) return;
@@ -767,7 +821,7 @@ export class Sim {
   }
 
   castAbility(unitId: number, key: AbilityKey, aim: Vec2): boolean {
-    if (this.winner !== null) return false;
+    if (this.winner !== null || !this.royaleActs(unitId)) return false;
     const u = this.units.get(unitId);
     if (!u || u.championId === null || u.dead) return false;
     const def = u.champion?.abilities[key];
@@ -777,6 +831,7 @@ export class Sim {
     if (ok) {
       spendDecisionToken(u, this.time);
       cancelRecall(u);
+      this.royaleMode?.noteAct(unitId, this.time);
     }
     return ok;
   }
@@ -794,7 +849,8 @@ export class Sim {
   // caps at 3 with champion-level gates 6/11/16. Free action (no decision
   // token): it is meta-progression, not an in-world act.
   levelAbility(unitId: number, key: AbilityKey): boolean {
-    if (this.winner !== null) return false;
+    // The battle royale ranks every spell itself (royale/levels.ts).
+    if (this.winner !== null || this.royaleMode) return false;
     const u = this.units.get(unitId);
     if (u?.kind !== 'champion' || u.championId === null) return false;
     if (u.skillPoints <= 0) return false;
@@ -811,7 +867,7 @@ export class Sim {
   }
 
   castSigil(unitId: number, slot: number, aim: Vec2): boolean {
-    if (this.winner !== null) return false;
+    if (this.winner !== null || !this.royaleActs(unitId)) return false;
     const u = this.units.get(unitId);
     if (u?.kind !== 'champion' || u.dead || this.dead.has(unitId)) return false;
     if (isStunned(u, this.time)) return false;
@@ -833,6 +889,7 @@ export class Sim {
     if (!ok) return false;
     spendDecisionToken(u, this.time);
     cancelRecall(u);
+    this.royaleMode?.noteAct(unitId, this.time);
     u.sigilCooldowns[slot] = this.time + def.cooldown;
     breakStealth(u);
     this.events.push({ type: 'sigil', unitId, slot });
@@ -840,7 +897,8 @@ export class Sim {
   }
 
   buyItem(unitId: number, itemId: string): boolean {
-    if (this.winner !== null) return false;
+    // No shop in the battle royale: loot is the build (royale/loot.ts).
+    if (this.winner !== null || this.royaleMode) return false;
     const u = this.units.get(unitId);
     const def = ITEMS[itemId];
     if (!u || !def || u.kind !== 'champion') return false;
@@ -874,7 +932,7 @@ export class Sim {
   // Sells the item in `slot` for 70 percent of its own price, fountain
   // only (player review: one misclick should not be gold gone forever).
   sellItem(unitId: number, slot: number): boolean {
-    if (this.winner !== null) return false;
+    if (this.winner !== null || this.royaleMode) return false;
     const u = this.units.get(unitId);
     if (u?.kind !== 'champion' || u.dead || this.dead.has(unitId)) return false;
     if (!withinFountain(this.map, u.team, u.pos)) return false;
@@ -893,6 +951,7 @@ export class Sim {
   // fountain, slotted by teammate order so two teammates can never share
   // an exact respawn coordinate; a team without a fountain stays down.
   private respawnSpot(u: Unit): Vec2 | null {
+    if (this.royaleMode) return this.royaleMode.respawnPoint(u, this);
     if (this.options.respawnPoint) {
       const at = this.options.respawnPoint(u, this);
       return at ? { ...at } : null;
@@ -909,8 +968,24 @@ export class Sim {
     return this.nav.nearestWalkable(pos.x, pos.z) ?? { x: fountain.x, z: fountain.z };
   }
 
+  // The battle royale's drop: nothing stands on the ground yet, so only the
+  // seats decide (their landing picks) until everyone lands together.
+  private tickDrop(royale: RoyaleMode): SimEvent[] {
+    runBotDecisions(this, this.policies);
+    runRemoteDecisions(this, this.remoteSeats);
+    this.time += DT;
+    this.tickCount += 1;
+    royale.stepDrop(this);
+    const out = this.events;
+    this.events = [];
+    return out;
+  }
+
   tick(): SimEvent[] {
+    const royale = this.royaleMode;
+    if (royale && royale.state.stage === 'drop') return this.tickDrop(royale);
     const ctx = this.ctx();
+    royale?.beforeTick(this);
 
     stepRecalls(ctx, this.map);
     // Shield detonations must fire before generic expiry prunes them.
@@ -919,7 +994,7 @@ export class Sim {
     stepWalls(ctx);
 
     stepDots(ctx);
-    if (this.winner === null) grantPassiveGold(ctx);
+    if (this.winner === null && !royale) grantPassiveGold(ctx);
     const tideTick = this.tickCount % (TIDE_PERIOD_S * TICK_RATE) === 0;
     for (const u of this.units.values()) {
       if (u.dead) continue;
@@ -982,15 +1057,24 @@ export class Sim {
       }
     }
 
+    royale?.stepPads(this);
     stepSeparation(ctx, this.options.separation ?? MINIONS_ONLY);
     stepProjectiles(ctx, DT);
     stepZones(ctx);
+    if (royale && this.winner === null) royale.stepDusk(ctx, this);
 
     for (const id of this.dead) {
       const u = this.units.get(id);
       if (!u) continue;
       const killerId = this.killers.get(id) ?? 0;
-      grantKillRewards(ctx, u, killerId);
+      if (royale) {
+        // Everything to the last hit (royale/mode.ts); a camp spot's last
+        // body pays the piece.
+        const spot = u.kind === 'camp' ? this.campStates.find((c) => c.unitIds.includes(id)) : null;
+        royale.onDeath(this, u, killerId, spot ? spot.unitIds.length === 1 : false);
+      } else {
+        grantKillRewards(ctx, u, killerId);
+      }
       if (u.kind === 'champion') {
         const killer = this.units.get(killerId);
         if (killer && killer.kind === 'champion' && killer.team !== u.team) {
@@ -1027,7 +1111,13 @@ export class Sim {
         u.dead = true;
         u.hp = 0;
         const delay = this.options.respawnDelay;
-        u.respawnAt = this.time + (delay ? delay(u, this) : respawnDelay(u.level, this.time));
+        u.respawnAt =
+          this.time +
+          (royale
+            ? royale.respawnDelay()
+            : delay
+              ? delay(u, this)
+              : respawnDelay(u.level, this.time));
         u.path = [];
         u.attackTargetId = null;
         u.statuses = [];
@@ -1047,7 +1137,12 @@ export class Sim {
           onWardenSlain(this.objectives, this.time, this.rng, this.map.wardenPits.length);
         }
         if (u.kind === 'camp') {
+          const spot = this.campStates.find((c) => c.unitIds.includes(id));
           onCampSlain(this.campStates, id, this.units.get(killerId), this.time);
+          // The mode's camps come back on its own clock, whatever the kind.
+          if (royale && spot && spot.unitIds.length === 0) {
+            spot.nextSpawnAt = royale.campBackAt(this.time);
+          }
         }
         // A ring's creature falls: its aspect becomes the killing team's
         // favor (the Wrath when it was the Ascendant), every member of
@@ -1086,6 +1181,13 @@ export class Sim {
     }
     this.dead.clear();
     this.killers.clear();
+    if (royale && royale.state.stage === 'play') {
+      royale.stepAfterDeaths(this);
+      if (royale.isOver() && this.winner === null) {
+        const w = royale.state.winnerId;
+        this.winner = w !== null ? (this.units.get(w)?.team ?? null) : null;
+      }
+    }
 
     for (const u of this.units.values()) {
       if (this.winner !== null) break;

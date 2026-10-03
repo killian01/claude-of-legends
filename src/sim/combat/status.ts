@@ -184,8 +184,10 @@ export function effectiveMoveSpeed(u: Unit, time: number): number {
 // prediction walks at (src/net/self_predict.ts), which waits out the
 // root itself.
 export function unrootedMoveSpeed(u: Unit, time: number): number {
-  // Swiftness: the team's favor speeds a champion up between fights only.
-  const swift = outOfCombat(u, time) ? favorBonus(u.favors, 'swiftness') : 0;
+  // Swiftness: the team's favor speeds a champion up between fights only,
+  // and so does a mode's own out of combat share (Unit.outOfCombatBonus,
+  // zero outside the battle royale: adding it leaves the sum as it was).
+  const swift = outOfCombat(u, time) ? favorBonus(u.favors, 'swiftness') + u.outOfCombatBonus : 0;
   return u.moveSpeed * (1 - slowPct(u, time)) * (1 + moveSpeedBonusPct(u, time) + swift);
 }
 

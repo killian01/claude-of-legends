@@ -6,6 +6,7 @@
 import { effectiveMoveSpeed } from './combat/status';
 import { SIGILS } from './content/sigils';
 import { hypot } from './exact';
+import { carry, copy, dirTo } from './geo';
 import type {
   Observation,
   ObsLastSeen,
@@ -54,6 +55,23 @@ function velocityOf(u: Unit, time: number): { vx: number; vz: number } {
   return { vx: (dx / d) * speed, vz: (dz / d) * speed };
 }
 
+// The same motion on the sphere, a tangent at the unit (ADR 0029): the
+// dash's heading carried to where the body is now, else the heading toward
+// the next waypoint.
+function sphereVelocityOf(u: Unit, time: number): { vx: number; vy: number; vz: number } {
+  if (u.activeDash) {
+    const d = carry(u.activeDash.dir, u.activeDash.from, u.pos);
+    const s = u.activeDash.speed;
+    return { vx: d.x * s, vy: (d.y ?? 0) * s, vz: d.z * s };
+  }
+  const wp = u.path[0];
+  if (!wp || u.pendingSpell) return { vx: 0, vy: 0, vz: 0 };
+  const dir = dirTo(u.pos, wp);
+  if (!dir) return { vx: 0, vy: 0, vz: 0 };
+  const speed = effectiveMoveSpeed(u, time);
+  return { vx: dir.x * speed, vy: (dir.y ?? 0) * speed, vz: dir.z * speed };
+}
+
 export function buildObservation(sim: Sim, unitId: number): Observation | null {
   const u = sim.units.get(unitId);
   if (u?.kind !== 'champion' || u.championId === null) return null;
@@ -98,9 +116,19 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     if (other.kind === 'tower' || other.kind === 'sanctum') {
       row.invulnerable = isInvulnerable(sim.units, other);
     }
-    const vel = velocityOf(other, sim.time);
-    row.vx = vel.vx;
-    row.vz = vel.vz;
+    if (other.pos.y !== undefined) {
+      // On the planet (additive v0 fields): the third coordinate and the
+      // velocity's.
+      row.y = other.pos.y;
+      const vel = sphereVelocityOf(other, sim.time);
+      row.vx = vel.vx;
+      row.vy = vel.vy;
+      row.vz = vel.vz;
+    } else {
+      const vel = velocityOf(other, sim.time);
+      row.vx = vel.vx;
+      row.vz = vel.vz;
+    }
     if (other.kind === 'champion') {
       const visible: ObsStatus[] = [];
       for (const st of other.statuses) {
@@ -120,10 +148,12 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       const pending = other.pendingSpell;
       const spec = other.champion?.abilities[pending.key]?.spec;
       const selfCentered = spec?.kind === 'burst' || spec?.kind === 'cone';
+      const landing = selfCentered ? other.pos : pending.aim;
       row.windup = {
         key: pending.key,
-        x: selfCentered ? other.pos.x : pending.aim.x,
-        z: selfCentered ? other.pos.z : pending.aim.z,
+        x: landing.x,
+        z: landing.z,
+        ...(landing.y !== undefined ? { y: landing.y } : {}),
         resolveAt: pending.resolveAt,
       };
     }
@@ -141,6 +171,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       z: p.pos.z,
       dirX: p.dir.x,
       dirZ: p.dir.z,
+      ...(p.pos.y !== undefined ? { y: p.pos.y, dirY: p.dir.y ?? 0 } : {}),
       speed: p.speed,
       radius: p.radius,
       friendly,
@@ -154,6 +185,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     zones.push({
       x: z.pos.x,
       z: z.pos.z,
+      ...(z.pos.y !== undefined ? { y: z.pos.y } : {}),
       radius: z.radius,
       friendly,
       detonateAt: z.detonateAt,
@@ -238,6 +270,16 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       struckAt: u.lastHitByChampion !== 0 ? u.lastHitAt : null,
       // The owner's coach order, additive: absent for every uncoached seat.
       ...(u.coachOrder ? { coachOrder: u.coachOrder } : {}),
+      // On the planet (additive v0 fields): the third coordinate, where the
+      // walk ends and the stride, what a person reads off their own
+      // champion.
+      ...(u.pos.y !== undefined
+        ? {
+            y: u.pos.y,
+            dest: u.path.length > 0 ? copy(u.path[u.path.length - 1]!) : null,
+            moveSpeed: effectiveMoveSpeed(u, sim.time),
+          }
+        : {}),
     },
     units,
     objectiveSpawnAt: sim.objectiveSpawnAt(),
@@ -252,5 +294,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     seats,
     laneOpponents: sim.laneOpponents(u.team),
     laneActivity: sim.laneActivity(u.team),
+    // The battle royale's block (additive v0 field), only in one.
+    ...(sim.royaleMode ? { royale: sim.royaleMode.observe(sim, u) } : {}),
   };
 }

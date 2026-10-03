@@ -23,8 +23,8 @@ import { START_LEVEL } from './types';
 
 // The scale on the sim's bounties: a takedown and a camp body pay this
 // many times what they pay in the 5v5.
-export const TAKEDOWN_XP_SCALE = 1.6;
-export const CAMP_XP_SCALE = 1.6;
+export const TAKEDOWN_XP_SCALE = 2;
+export const CAMP_XP_SCALE = 2;
 
 // Spends every skill point the champion holds, as the rule above says.
 export function spendSkillPoints(u: Unit): void {
@@ -65,9 +65,16 @@ export function grantXp(u: Unit, amount: number): void {
   spendSkillPoints(u);
 }
 
-// What a takedown pays its last hit, by the victim's level.
-export function takedownXp(victimLevel: number): number {
-  return championXp(victimLevel) * TAKEDOWN_XP_SCALE;
+// What a takedown pays its last hit: the victim's bounty, weighed by the
+// victim's level over the killer's (a fed champion learns little from the
+// weak, a low one much from the strong), within these bounds.
+export const TAKEDOWN_XP_MIN_RATIO = 0.35;
+export const TAKEDOWN_XP_MAX_RATIO = 1.5;
+
+export function takedownXp(victimLevel: number, killerLevel = victimLevel): number {
+  const ratio = victimLevel / Math.max(1, killerLevel);
+  const weigh = Math.min(TAKEDOWN_XP_MAX_RATIO, Math.max(TAKEDOWN_XP_MIN_RATIO, ratio));
+  return championXp(victimLevel) * TAKEDOWN_XP_SCALE * weigh;
 }
 
 // What a camp body or a big creature pays its last hit.

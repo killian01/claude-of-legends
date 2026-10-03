@@ -33,14 +33,20 @@ export function strength(hpFrac: number, level: number | undefined, items?: read
   return Math.max(0, hpFrac) * lvl * (1 + itemPower(items));
 }
 
-// The bot's share of the strength within reach: 0.5 an even fight. In a
-// free-for-all every other champion counts against it.
-export function royaleOdds(sense: Sense, within = ODDS_RADIUS): number {
+// How much a bystander weighs in a free-for-all's odds: the others in reach
+// are as busy with each other as with the bot.
+export const BYSTANDER_WEIGHT = 0.25;
+
+// The bot's share of the strength of a fight against `target`: 0.5 an even
+// duel. Every other enemy in reach counts too, at a bystander's weight; no
+// target, the whole crowd at full weight.
+export function royaleOdds(sense: Sense, target?: ObsUnit, within = ODDS_RADIUS): number {
   const own = strength(sense.s.hpFrac, sense.s.level, sense.s.items);
   let enemy = 0;
   for (const e of sense.enemies) {
-    if (dist(sense.me, p3(e)) > within) continue;
-    enemy += strength(e.hpFrac, e.level, e.items);
+    const w = target === undefined || e.id === target.id ? 1 : BYSTANDER_WEIGHT;
+    if (e.id !== target?.id && dist(sense.me, p3(e)) > within) continue;
+    enemy += w * strength(e.hpFrac, e.level, e.items);
   }
   const total = own + enemy;
   return total > 0 ? own / total : 0.5;
