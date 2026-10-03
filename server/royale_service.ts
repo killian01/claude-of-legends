@@ -47,6 +47,7 @@ export interface RoyaleClient {
   readonly country: string | null;
   readonly mobile: boolean;
   readonly pings: readonly number[];
+  readonly fps: readonly number[];
 }
 
 export interface RoyaleDeps {
@@ -318,6 +319,7 @@ export class RoyaleService {
             ? { level: u.level, kills: u.kills, deaths: u.deaths, assists: u.assists, cs: u.cs }
             : null,
           pings: client.pings,
+          fps: client.fps,
         }),
       );
     } catch (err) {

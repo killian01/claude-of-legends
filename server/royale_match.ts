@@ -7,7 +7,7 @@
 // connection only dropped. Transport-agnostic: the service hands it what a
 // socket said and sends what it answers.
 
-import { type ClientMsg, type ServerMsg, type StepId, wirePoint } from '../src/net/protocol';
+import { type ClientMsg, type ServerMsg, type WireStepId, wirePoint } from '../src/net/protocol';
 import {
   REPLAY_EVENT_CAP,
   REPLAY_VERSION,
@@ -17,6 +17,7 @@ import {
 import type { RoyaleResult, RoyaleVariant, SeatLabel } from '../src/net/royale_wire';
 import {
   freshStats,
+  noteMoments,
   orderNumber,
   type SeatStats,
   WALK_STEP_MAX,
@@ -310,7 +311,7 @@ export class RoyaleMatch {
     if (p && p.stats.loadedTick === null) p.stats.loadedTick = this.sim.tickCount;
   }
 
-  noteStep(clientId: number, id: StepId | 'off'): void {
+  noteStep(clientId: number, id: WireStepId | 'off'): void {
     const p = this.players.get(clientId);
     if (p && !p.stats.steps.includes(id)) p.stats.steps.push(id);
   }
@@ -331,9 +332,13 @@ export class RoyaleMatch {
       p.stats.lastX = u.pos.x;
       p.stats.lastZ = u.pos.z;
       if (u.pos.y !== undefined) p.stats.lastY = u.pos.y;
+      noteMoments(p.stats, p.unitId, this.events, this.sim.tickCount, this.isChampion);
     }
     return this.events;
   }
+
+  private readonly isChampion = (id: number): boolean =>
+    this.sim.units.get(id)?.kind === 'champion';
 
   // The people whose champion fell for good this tick (One life).
   outThisTick(): RoyalePlayer[] {

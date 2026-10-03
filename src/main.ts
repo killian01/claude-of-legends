@@ -12,6 +12,7 @@
 import { type KillNote, type Presentation, startPresentation } from './game/boot';
 import { nextStep, type PostMatchAction } from './game/flow';
 import { registerForgedAssets } from './game/forged_visuals';
+import { frameRate } from './game/frame_rate';
 import { requestGameFullscreen } from './game/fullscreen';
 import { parseJoinCode } from './game/invite';
 import { appNav, installNav, sectionFromHash } from './game/nav';
@@ -1134,7 +1135,9 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
         // The server's round-trip probe (server/seat_report.ts): answered at
         // once, so the time to the echo is the round trip this page lives.
         case 'probe':
-          if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ t: 'probe', n: msg.n }));
+          if (ws.readyState === ws.OPEN) {
+            ws.send(JSON.stringify({ t: 'probe', n: msg.n, fps: frameRate() }));
+          }
           break;
         case 'player_back':
           pres?.pushChat('System', msg.team, `${msg.name} reconnected.`);
@@ -1517,7 +1520,7 @@ async function runRoyale(
           pres?.showPing(msg.x, msg.z, msg.from, msg.team);
           break;
         case 'probe':
-          send({ t: 'probe', n: msg.n });
+          send({ t: 'probe', n: msg.n, fps: frameRate() });
           break;
         case 'player_joined':
           pres?.pushChat('System', msg.team, `${msg.name} joined the match.`);
