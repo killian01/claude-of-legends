@@ -15,6 +15,7 @@
 import { dealDamage } from '../combat/damage';
 import { addStatus, cancelRecall } from '../combat/status';
 import type { RoyaleSkillId } from '../content/bots/royale_skills';
+import { planetTuning } from '../content/royale_tuning';
 import { outOfCombat } from '../favors';
 import { copy, dist2, type Vec3 } from '../geo';
 import type { Ground } from '../ground';
@@ -180,12 +181,16 @@ export class RoyaleMode {
     };
   }
 
-  // A champion seated for the mode: no gold, the planet's health, landing
-  // at level 3 with Q, W and E, the out of combat speed, its build fixed.
+  // A champion seated for the mode: no gold, the planet's health and
+  // damage (the planet's share times the champion's own tuning, content/
+  // royale_tuning.ts), landing at level 3 with Q, W and E, the out of
+  // combat speed, its build fixed.
   seat(u: Unit, kitBuild?: readonly string[], skill?: RoyaleSkillId): void {
+    const tuning = planetTuning(u.championId);
     u.gold = 0;
     u.outOfCombatBonus = OUT_OF_COMBAT_SPEED;
-    u.hpScale = ROYALE_HP_SCALE;
+    u.hpScale = ROYALE_HP_SCALE * tuning.hp;
+    u.dmgScale = tuning.dmg;
     landingLevels(u);
     this.builds.set(u.id, seatBuild(u.championId, kitBuild));
     if (skill) this.skills.set(u.id, skill);
