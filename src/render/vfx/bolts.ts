@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import type { GroundHeight } from '../terrain';
+import { type ChartRemap, framed, type SpawnFrame } from './chart_shift';
 
 const POOL = 6;
 // Midpoint passes: 3 passes on a 2-point seed gives 9 points.
@@ -40,6 +41,7 @@ export class LightningBolts {
   constructor(
     scene: THREE.Scene,
     private readonly groundHeight?: GroundHeight,
+    private readonly frame?: SpawnFrame,
   ) {
     for (let i = 0; i < POOL; i++) {
       const geo = new THREE.BufferGeometry();
@@ -65,6 +67,8 @@ export class LightningBolts {
       mesh.frustumCulled = false;
       mesh.visible = false;
       mesh.renderOrder = 6;
+      // Its points are rebuilt from the slot's ends, carried by rechart.
+      mesh.userData.chartFixed = true;
       scene.add(mesh);
       this.slots.push({
         mesh,
@@ -97,8 +101,14 @@ export class LightningBolts {
     slot.active = true;
     slot.from.copy(from);
     slot.to.copy(to);
-    slot.from.y += this.groundHeight?.(from.x, from.z) ?? 0;
-    slot.to.y += this.groundHeight?.(to.x, to.z) ?? 0;
+    const a = framed(this.frame, from.x, from.z);
+    const b = framed(this.frame, to.x, to.z);
+    slot.from.x = a.x;
+    slot.from.z = a.z;
+    slot.to.x = b.x;
+    slot.to.z = b.z;
+    slot.from.y += this.groundHeight?.(slot.from.x, slot.from.z) ?? 0;
+    slot.to.y += this.groundHeight?.(slot.to.x, slot.to.z) ?? 0;
     slot.width = width;
     slot.jag = jag;
     slot.bornAt = performance.now();
@@ -154,6 +164,21 @@ export class LightningBolts {
     }
     s.pos.needsUpdate = true;
     s.geo.setDrawRange(0, (count - 1) * 6);
+  }
+
+  // The planet's chart moved (vfx/chart_shift.ts): both ends carried, the
+  // jagged line rebuilt from them at the next flicker.
+  rechart(map: ChartRemap): void {
+    for (const s of this.slots) {
+      if (!s.active) continue;
+      const a = map(s.from.x, s.from.z);
+      const b = map(s.to.x, s.to.z);
+      s.from.x = a.x;
+      s.from.z = a.z;
+      s.to.x = b.x;
+      s.to.z = b.z;
+      s.nextFlickAt = 0;
+    }
   }
 
   update(now: number, camDir: THREE.Vector3): void {

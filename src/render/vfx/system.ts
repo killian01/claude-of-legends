@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import type { GroundHeight } from '../terrain';
 import { LightningBolts } from './bolts';
+import { type ChartRemap, framed, type SpawnFrame } from './chart_shift';
 import { DebrisField } from './debris';
 import { GroundDecals } from './decals';
 import { ParticleCloud } from './particles';
@@ -36,34 +37,67 @@ export class VfxSystem {
   readonly timed: TimedEffects;
   // Injected by the renderer: adds trauma to the camera shake budget.
   onShake: (strength: number) => void = () => undefined;
-  private readonly beats: { at: number; fn: () => void }[] = [];
+  private readonly beats: { at: number; fn: () => void; epoch: number }[] = [];
   private readonly lights: LightSlot[] = [];
+  // The planet's chart (vfx/chart_shift.ts): the epoch it is in, bumped by
+  // every re-center, and the carry from an earlier epoch's points to now.
+  // A beat remembers the epoch it was queued in and fires through the
+  // carry, so the points it captured land where they meant. Live beats
+  // (epoch -1) read the scene as it is and are never carried. Unused on
+  // the plane: the epoch stays 0 and nothing carries.
+  chartEpoch = 0;
+  chartCarry: ((epoch: number) => ChartRemap | null) | null = null;
+  private readonly frame: SpawnFrame = { map: null };
+  private firing: number | null = null;
 
   constructor(
     scene: THREE.Scene,
     private readonly groundHeight?: GroundHeight,
   ) {
-    this.timed = new TimedEffects(scene);
-    this.particles = new ParticleCloud(scene, groundHeight);
-    this.rings = new ShockRings(scene, groundHeight);
-    this.pillars = new LightPillars(scene, groundHeight);
-    this.bolts = new LightningBolts(scene, groundHeight);
-    this.decals = new GroundDecals(scene, groundHeight);
-    this.debris = new DebrisField(scene, groundHeight);
+    this.timed = new TimedEffects(scene, this.frame);
+    this.particles = new ParticleCloud(scene, groundHeight, this.frame);
+    this.rings = new ShockRings(scene, groundHeight, this.frame);
+    this.pillars = new LightPillars(scene, groundHeight, this.frame);
+    this.bolts = new LightningBolts(scene, groundHeight, this.frame);
+    this.decals = new GroundDecals(scene, groundHeight, this.frame);
+    this.debris = new DebrisField(scene, groundHeight, this.frame);
     // The light pool is created eagerly and stays visible at intensity 0:
     // Three bakes the light COUNT into every lit material's program, so a
     // light appearing mid-fight would relink all of them (the woc lesson).
     for (let i = 0; i < LIGHT_POOL; i++) {
       const light = new THREE.PointLight(0xffffff, 0, 26, 2);
       light.position.set(0, 3, 0);
+      // Placed at each pulse, carried by rechart.
+      light.userData.chartFixed = true;
       scene.add(light);
       this.lights.push({ light, bornAt: 0, duration: 1, peak: 0, active: false });
     }
   }
 
-  schedule(delayMs: number, fn: () => void): void {
+  // A beat queued from inside another inherits its epoch: it captured
+  // the same points. `live` marks a beat that reads the scene when it
+  // fires (where a body stands then) and must not be carried.
+  schedule(delayMs: number, fn: () => void, live = false): void {
     if (this.beats.length >= MAX_BEATS) return;
-    this.beats.push({ at: performance.now() + delayMs, fn });
+    const epoch = live ? -1 : (this.firing ?? this.chartEpoch);
+    this.beats.push({ at: performance.now() + delayMs, fn, epoch });
+  }
+
+  // The planet's chart moved: everything alive carried with the ground.
+  rechart(map: ChartRemap): void {
+    this.particles.rechart(map);
+    this.debris.rechart(map);
+    this.bolts.rechart(map);
+    for (const s of this.lights) {
+      const q = map(s.light.position.x, s.light.position.z);
+      s.light.position.x = q.x;
+      s.light.position.z = q.z;
+    }
+  }
+
+  // The lights of the pool, for a host that has to place them itself.
+  pooledLights(): readonly THREE.PointLight[] {
+    return this.lights.map((s) => s.light);
   }
 
   // The ground under a point, for effects placed by absolute height.
@@ -80,6 +114,7 @@ export class VfxSystem {
     slot.duration = durationMs;
     slot.peak = intensity;
     slot.light.color.set(color);
+    ({ x, z } = framed(this.frame, x, z));
     slot.light.position.set(x, 3 + (this.groundHeight?.(x, z) ?? 0), z);
   }
 
@@ -163,7 +198,15 @@ export class VfxSystem {
       const beat = this.beats[i]!;
       if (now >= beat.at) {
         this.beats.splice(i, 1);
-        beat.fn();
+        const stale = beat.epoch >= 0 && beat.epoch !== this.chartEpoch;
+        this.frame.map = stale ? (this.chartCarry?.(beat.epoch) ?? null) : null;
+        this.firing = beat.epoch >= 0 ? beat.epoch : null;
+        try {
+          beat.fn();
+        } finally {
+          this.frame.map = null;
+          this.firing = null;
+        }
       }
     }
     const dtS = Math.min(0.1, dtMs / 1000);

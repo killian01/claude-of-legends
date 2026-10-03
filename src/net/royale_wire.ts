@@ -51,6 +51,9 @@ export interface SnapRoyale {
   opening?: { c: number; since: number };
   // The recipient's own landing pick during the drop.
   drop?: WirePoint;
+  // During the drop, everyone else's landing picks so far, the globe's
+  // dots ("others' picks show", docs/plan-royale.md).
+  picks?: WirePoint[];
 }
 
 // Sent to each person when their match ends or they are out for good.

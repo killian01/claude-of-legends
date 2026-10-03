@@ -6,6 +6,7 @@
 
 import * as THREE from 'three';
 import type { GroundHeight } from '../terrain';
+import { framed, type SpawnFrame } from './chart_shift';
 
 const POOL = 14;
 
@@ -59,6 +60,7 @@ export class ShockRings {
   constructor(
     scene: THREE.Scene,
     private readonly groundHeight?: GroundHeight,
+    private readonly frame?: SpawnFrame,
   ) {
     const proto = new THREE.ShaderMaterial({
       uniforms: {
@@ -96,6 +98,7 @@ export class ShockRings {
     durationMs: number,
     opts?: { width?: number; alpha?: number },
   ): void {
+    ({ x, z } = framed(this.frame, x, z));
     let slot = this.slots.find((s) => !s.active);
     if (!slot) {
       slot = this.slots.reduce((a, b) => (a.bornAt <= b.bornAt ? a : b));

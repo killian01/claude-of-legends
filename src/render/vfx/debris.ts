@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import type { GroundHeight } from '../terrain';
+import { type ChartRemap, framed, type SpawnFrame } from './chart_shift';
 
 const CAP = 64;
 const GRAVITY = 26;
@@ -40,6 +41,7 @@ export class DebrisField {
   constructor(
     scene: THREE.Scene,
     private readonly groundHeight?: GroundHeight,
+    private readonly frame?: SpawnFrame,
   ) {
     const geo = new THREE.IcosahedronGeometry(1, 0);
     const mat = new THREE.MeshLambertMaterial({ flatShading: true });
@@ -47,6 +49,8 @@ export class DebrisField {
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.count = 0;
     this.mesh.frustumCulled = false;
+    // Its chunks live in the slots, carried by rechart.
+    this.mesh.userData.chartFixed = true;
     scene.add(this.mesh);
     for (let i = 0; i < CAP; i++) {
       this.chunks.push({
@@ -79,6 +83,7 @@ export class DebrisField {
     const up = opts?.up ?? 9;
     const size = opts?.size ?? 0.22;
     const life = opts?.life ?? 1.4;
+    ({ x, z } = framed(this.frame, x, z));
     tmpColor.set(color);
     for (let i = 0; i < count; i++) {
       if (this.count >= CAP) break;
@@ -103,6 +108,16 @@ export class DebrisField {
       this.mesh.setColorAt(idx, tmpColor);
     }
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+  }
+
+  // The planet's chart moved (vfx/chart_shift.ts).
+  rechart(map: ChartRemap): void {
+    for (let i = 0; i < this.count; i++) {
+      const c = this.chunks[i]!;
+      const q = map(c.x, c.z);
+      c.x = q.x;
+      c.z = q.z;
+    }
   }
 
   update(dtS: number): void {
