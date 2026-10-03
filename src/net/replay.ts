@@ -137,7 +137,10 @@ export interface ReplayRecord {
   // on every 5v5. Additive: a record without it is a 5v5 as it always was.
   // `rules` is the ROYALE_RULES_VERSION it ran under: the planet's rules
   // move without REPLAY_VERSION, and royaleReplayPlayable checks them.
-  royale?: { variant: RoyaleVariant; guestsOnly?: boolean; rules?: number };
+  // `newcomers` are the seats (pick indices) of the people who had never
+  // banked a battle royale award, whose escorts are dealt differently;
+  // absent when there were none.
+  royale?: RoyaleRecord;
 }
 
 // A bare Sim on the Star Orchard: a fresh walkability grid over the shared
@@ -191,6 +194,18 @@ export interface RoyalePlanet {
 export interface RoyaleBuildOptions {
   // Only Guests among the people: the bots play softer (the server knows).
   guestsOnly?: boolean;
+  // The seats (pick indices) of the people new to the battle royale (the
+  // server knows; RoyaleMode.newcomers). Nothing reads them yet.
+  newcomers?: readonly number[];
+}
+
+// A battle royale's own part of a replay record (ReplayRecord.royale), the
+// server's record and its builder's alike.
+export interface RoyaleRecord {
+  variant: RoyaleVariant;
+  guestsOnly?: boolean;
+  rules?: number;
+  newcomers?: number[];
 }
 
 // The one sim construction for a battle royale, live and replayed alike,
@@ -228,6 +243,8 @@ export function buildRoyaleSim(
     unitIds.push(unit.id);
     if (p.bot !== undefined || p.playbook) attachRoyaleBot(sim, unit.id);
   });
+  const newcomers = options.newcomers ?? [];
+  mode.setNewcomers(unitIds.filter((_, i) => newcomers.includes(i)));
   return { sim, unitIds };
 }
 
@@ -253,6 +270,7 @@ export function loadRoyaleReplay(
   if (!royale || !royaleReplayPlayable(record)) return null;
   return buildRoyaleSim(planet, record.seed, record.picks, royale.variant, {
     guestsOnly: royale.guestsOnly === true,
+    ...(royale.newcomers ? { newcomers: royale.newcomers } : {}),
   });
 }
 

@@ -7,7 +7,10 @@
 // sent on change, and a royale replay refused under other rules.
 
 import { describe, expect, it } from 'vitest';
+import { royaleFactory } from '../server/royale_build';
+import { royaleSeats } from '../server/royale_seats';
 import { buildRoyaleSnapshot, type RoyaleViewer } from '../server/royale_snapshot';
+import { sentOnChange } from '../server/royale_snapshot_blocks';
 import { ClientWorld } from '../src/net/client_world';
 import type { ServerMsg } from '../src/net/protocol';
 import {
@@ -30,7 +33,7 @@ import {
   type RoyaleVariant,
 } from '../src/sim/royale/types';
 import { Sim } from '../src/sim/sim';
-import { FakeRoyaleSim, spot } from './royale_fake';
+import { FakeRoyaleSim, fakeFactory, spot } from './royale_fake';
 import { loadPlanet } from './royale_planet';
 
 type Snap = Extract<ServerMsg, { t: 'snap' }>;
@@ -91,6 +94,28 @@ describe('the state and the observation', () => {
       expect(r.respawnPicks.size).toBe(0);
       expect(r.arriving.size).toBe(0);
     }
+  });
+
+  it('counts no Seedfall, deals no newcomer and scales no damage', () => {
+    const { sim } = landed();
+    const mode = sim.royaleMode!;
+    expect(mode.tally.seedfallsLanded).toBe(0);
+    expect(mode.tally.seedfallsOpened).toBe(0);
+    expect(mode.tally.seedfallsContested).toBe(0);
+    expect(mode.newcomers.size).toBe(0);
+    for (const u of sim.units.values()) expect(u.dmgScale).toBe(1);
+    const fivevfive = new Sim(4);
+    fivevfive.addChampion(0, undefined, 'dain');
+    for (const u of fivevfive.units.values()) expect(u.dmgScale).toBe(1);
+  });
+
+  it('rings no Clamor for a takedown yet', () => {
+    const { sim, unitIds } = landed('one_life');
+    const victim = sim.units.get(unitIds[1]!)!;
+    sim.royaleMode!.onDeath(sim, victim, unitIds[0]!, false);
+    expect(sim.royale!.clamors).toEqual([]);
+    sim.tick();
+    expect(sim.royale!.clamors).toEqual([]);
   });
 
   it('keeps every cache plain or golden, as the layout drew it', () => {
@@ -303,6 +328,70 @@ describe('the wire', () => {
     });
     world.applyServer(snap(base));
     expect(world.royaleView()).not.toHaveProperty('sf');
+  });
+});
+
+describe('a block sent on change', () => {
+  const viewer = (seat: { ack: number; ackAt: number }): RoyaleViewer => ({
+    unitId: 1,
+    team: 0,
+    known: new Set(),
+    seat,
+  });
+
+  it('remembers what each seat was sent, across fresh viewer literals', () => {
+    const seat = { ack: 0, ackAt: 0 };
+    expect(sentOnChange(viewer(seat), 'sf', [1, 2], 10)).toEqual([1, 2]);
+    expect(sentOnChange(viewer(seat), 'sf', [1, 2], 10.05)).toBeUndefined();
+    expect(sentOnChange(viewer(seat), 'sf', [1, 3], 10.1)).toEqual([1, 3]);
+    // Another block, and another seat, have their own memory.
+    expect(sentOnChange(viewer(seat), 'cl', [1, 3], 10.1)).toEqual([1, 3]);
+    expect(sentOnChange(viewer({ ack: 0, ackAt: 0 }), 'sf', [1, 3], 10.1)).toEqual([1, 3]);
+  });
+
+  it('sends an unchanged block again once its period has passed', () => {
+    const seat = { ack: 0, ackAt: 0 };
+    expect(sentOnChange(viewer(seat), 'sf', [], 20, 1)).toEqual([]);
+    expect(sentOnChange(viewer(seat), 'sf', [], 20.95, 1)).toBeUndefined();
+    expect(sentOnChange(viewer(seat), 'sf', [], 21, 1)).toEqual([]);
+    expect(sentOnChange(viewer(seat), 'sf', [], 21.5, 1)).toBeUndefined();
+  });
+});
+
+describe('the newcomers', () => {
+  it('flags a newcomer seat from the person through the builder to the record', () => {
+    const pick = { championId: 'dain', sigils: ['riftstep', 'mend'] as [string, string], skin: 0 };
+    const people = [
+      { clientId: 1, owner: 1, name: 'one', guest: false, pick },
+      { clientId: 2, owner: 2, name: 'two', guest: false, pick, newcomer: true },
+    ];
+    const seats = royaleSeats(people, 4, 4);
+    expect(seats.map((s) => s.newcomer === true)).toEqual([false, true, false, false]);
+    const fake = fakeFactory();
+    expect(fake.factory(4, 'one_life', seats).replay.royale.newcomers).toEqual([1]);
+    const build = royaleFactory(loadPlanet)(4, 'one_life', seats);
+    expect(build.replay.royale.newcomers).toEqual([1]);
+    const mode = (build.sim as unknown as Sim).royaleMode!;
+    expect([...mode.newcomers]).toEqual([build.unitIds[1]]);
+    const none = royaleFactory(loadPlanet)(4, 'one_life', royaleSeats(people.slice(0, 1), 4, 4));
+    expect(none.replay.royale).not.toHaveProperty('newcomers');
+  });
+
+  it('replays a record with newcomers as the same match, the newcomers dealt nothing yet', () => {
+    const record = {
+      version: REPLAY_VERSION,
+      seed: 4,
+      picks: picks(4),
+      royale: { variant: 'one_life' as const, rules: ROYALE_RULES_VERSION, newcomers: [0, 2] },
+    };
+    const { sim: royale, unitIds } = loadRoyaleReplay(loadPlanet(), record)!;
+    expect([...royale.royaleMode!.newcomers]).toEqual([unitIds[0], unitIds[2]]);
+    const { sim: plain } = buildRoyaleSim(loadPlanet(), 4, picks(4), 'one_life');
+    for (let i = 0; i < 400; i++) {
+      royale.tick();
+      plain.tick();
+    }
+    expect(royale.checksum()).toBe(plain.checksum());
   });
 });
 

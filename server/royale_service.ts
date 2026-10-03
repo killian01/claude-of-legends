@@ -69,6 +69,10 @@ export interface RoyaleDeps {
   leaveQueues(clientId: number): void;
   // Banks points on a line (ADR 0027), answering the new total or null.
   bank(owner: number, delta: number): number | null;
+  // Whether an owner never banked a battle royale award: a newcomer, whose
+  // escorts the mode deals differently (RoyalePerson.newcomer). Unset, no
+  // one is.
+  newcomer?(owner: number): boolean;
   appendSeat(rec: SeatReport): void;
   // Keeps a finished match's replay (src/net/replay.ts), when it has one.
   saveReplay(matchId: number, record: RoyaleReplay): void;
@@ -191,6 +195,7 @@ export class RoyaleService {
       name: client.name,
       guest: client.guest,
       pick,
+      ...(this.deps.newcomer?.(client.accountId) ? { newcomer: true } : {}),
     };
   }
 

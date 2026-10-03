@@ -12,12 +12,8 @@ import type { RoyaleMode } from './mode';
 // One tick of the marks after the deaths: who is shown, and when.
 export function stepMarks(_mode: RoyaleMode, _sim: Sim): void {}
 
-// The marks as everyone sees them (ObsRoyale.marks) and the Clamors
-// (ObsRoyale.clamors); nothing yet.
-export function observeMarks(
-  _mode: RoyaleMode,
-  _sim: Sim,
-  _u: Unit,
-): Pick<ObsRoyale, 'marks' | 'clamors'> {
+// The marks as everyone sees them (ObsRoyale.marks); nothing yet. The
+// Clamors are their own module (clamors.ts).
+export function observeMarks(_mode: RoyaleMode, _sim: Sim, _u: Unit): Pick<ObsRoyale, 'marks'> {
   return {};
 }

@@ -69,6 +69,9 @@ export const WARDEN_AT_S = 360;
 // How long a mark stays shown on everyone's globe after each show: the one
 // figure the observation and the snapshot both read (marks.ts).
 export const MARK_SHOWN_S = 4;
+// How long a Clamor rings out after its takedown: the one figure the
+// observation and the snapshot both read (clamors.ts).
+export const CLAMOR_S = 3;
 // The battle royale's rules as a replay records them (RoyaleReplay.royale.rules):
 // the planet's rules move with each tranche of play changes without moving the
 // 5v5's REPLAY_VERSION or the content fingerprint, and a royale replay loader
@@ -209,7 +212,7 @@ export interface RoyaleState {
   risings: RisingState[];
   // Champions shown to everyone (marks.ts).
   marks: MarkState[];
-  // Takedowns still ringing out (CLAMOR_S).
+  // Takedowns still ringing out, for CLAMOR_S each (clamors.ts).
   clamors: ClamorState[];
   // Who carries the Wrath on the planet, and until when.
   wrathHolder: { unitId: number; until: number } | null;
