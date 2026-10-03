@@ -489,8 +489,23 @@ item, and the goal. Backing off when hurt takes the card from any other step. A 
 done or once said long enough, what a player does on their own counts as done, the browser
 remembers what is done, and
 the player can hide the guide for good (the settings bring it back). The shop's suggested item, the
-next step of the build a house bot of that champion follows, is lit for everyone.
+next step of the build a house bot of that champion follows, is lit for everyone. The battle
+royale has a list of its own, under the same rules and the same Hide guide: open a cache, stay in
+the light (standing in the Dusk takes the card from any other step), what a takedown gives, fly a
+launch pad, and the ultimate ready at level 6.
 _Avoid_: tutorial (that is a scripted match), tips, coach (the bot seat's)
+
+**Quick pick**:
+The battle royale's one card between Play and the drop: the ten champions with no lanes, no bans
+and no clock, the champion, skin and two sigils last played already chosen, a Random button and
+Play. Duplicates are allowed, so nothing is ever taken.
+_Avoid_: champion select (the 5v5's, with its lanes and its clock), draft, loadout
+
+**Bot mark**:
+The small BOT beside a bot's name wherever the battle royale names a seat: the kill feed, the
+end screen's ranking. Every bot there has a name of its own, so the mark is what tells it from a
+person.
+_Avoid_: bot tag, AI label
 
 **Practice**:
 The offline match against house bots, the fill completing both teams around the person's
