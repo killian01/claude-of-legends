@@ -149,7 +149,9 @@ export class PlanetMarks {
         prev = w;
       }
     }
-    discs.count = pads.length;
+    // The shipped model carries its own pads and beacons (docs/planet.md):
+    // only the stand-in needs the discs and columns drawn here.
+    discs.count = ground.placeholder ? pads.length : 0;
     rings.count = ringCount;
     const arcGeo = new THREE.BufferGeometry();
     arcGeo.setAttribute('position', new THREE.Float32BufferAttribute(arcPoints, 3));
@@ -187,7 +189,7 @@ export class PlanetMarks {
     const crossroads = ground.layout.crossroads;
     this.beacons = new THREE.InstancedMesh(beam, this.beaconMat, Math.max(1, crossroads.length));
     for (const [i, c] of crossroads.entries()) this.beacons.setMatrixAt(i, this.standing(c, 0, 1));
-    this.beacons.count = crossroads.length;
+    this.beacons.count = ground.placeholder ? crossroads.length : 0;
     this.beacons.frustumCulled = false;
     this.group.add(this.beacons);
     this.owned.push(beam, this.beaconMat);
