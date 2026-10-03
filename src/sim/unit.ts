@@ -95,8 +95,8 @@ export interface Unit {
   hpScale: number;
   // The share a mode's rules scale a champion's damage to champions by (the
   // battle royale's planet tuning, per champion); 1 everywhere else, where
-  // x * 1 is the number it always was. Nothing reads it yet: the damage
-  // step (combat/damage.ts) multiplies by it once the tuning lands.
+  // x * 1 is the number it always was. The damage step (combat/damage.ts)
+  // multiplies a champion's hit on a champion by it, after the passives.
   dmgScale: number;
   // The favors the unit's team holds (CONTEXT.md: Favor), mirrored from
   // the sim's Favors record whenever one is granted, so the stat
