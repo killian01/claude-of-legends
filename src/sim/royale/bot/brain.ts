@@ -38,6 +38,9 @@ export const DANGER_M = 11;
 // Once the light is this small, every bot's nerve rises by this much.
 export const LAST_LIGHT_M = 20;
 export const LAST_LIGHT_NERVE = 0.15;
+// One life's caution: the odds a fight needs, and the health under which
+// a bot backs off, both rise by this much.
+export const ONE_LIFE_CAUTION = 0.1;
 // A camp body this close is worth hitting.
 export const CAMP_FIGHT_M = 14;
 // The bot's own health share to take a camp.
@@ -152,7 +155,10 @@ export function decide(
   if (r.stage !== 'play' || obs.self.dead || r.flying) return NOOP;
   const sense = buildSense(obs, r, layout, skill);
 
-  const dark = leaveDark(sense);
+  // Once the last light is out there is nowhere to go: no way out of the
+  // dark, every fight is the last one.
+  const lightsOut = sense.now.radius <= 0;
+  const dark = lightsOut ? null : leaveDark(sense);
   if (dark) {
     if (sense.struck && sense.enemies.length > 0) {
       const esc = escapeCast(sense);
@@ -168,17 +174,22 @@ export function decide(
     const noticed = sense.struck || rng.next() < skill.attention;
     if (noticed) {
       const near = sense.enemies.some((e) => dist(sense.me, p3(e)) <= DANGER_M);
-      if (near && sense.s.hpFrac < skill.retreatHp) return retreat(sense);
+      // The last light leaves nowhere to go: everyone's nerve rises, and a
+      // hit is answered rather than run from.
+      const cornered = lightsOut || sense.now.radius <= LAST_LIGHT_M;
+      // One life: a death is the end, so every bot weighs a fight harder.
+      const caution = r.variant === 'one_life' && !cornered ? ONE_LIFE_CAUTION : 0;
+      const backOff = cornered ? skill.retreatHp / 2 : skill.retreatHp + caution;
+      if (near && sense.s.hpFrac < backOff) return retreat(sense);
       const target = pickTarget(sense);
       if (target) {
         const odds = royaleOdds(sense, target);
         const finish = target.hpFrac < FINISH_HP && sense.s.hpFrac > target.hpFrac;
-        // The last light leaves nowhere to go: everyone's nerve rises.
-        const nerve = skill.fightOdds - (sense.now.radius <= LAST_LIGHT_M ? LAST_LIGHT_NERVE : 0);
-        const answer = sense.struck && odds >= nerve - 0.1;
+        const nerve = skill.fightOdds + caution - (cornered ? LAST_LIGHT_NERVE : 0);
+        const answer = sense.struck && (cornered || odds >= nerve - 0.1);
         if (odds >= nerve || finish || answer) return fight(sense, target, rng);
       }
-      if (near && sense.struck) return retreat(sense);
+      if (near && sense.struck && !cornered) return retreat(sense);
     }
   }
 

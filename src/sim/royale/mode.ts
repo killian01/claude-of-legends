@@ -293,7 +293,7 @@ export class RoyaleMode {
       if (champ && champ.team !== victim.team) {
         this.tally.takedowns++;
         if (this.tally.firstTakedownAt === null) this.tally.firstTakedownAt = sim.time;
-        grantXp(champ, takedownXp(victim.level, champ.level));
+        grantXp(champ, takedownXp(this.variant, victim.level, champ.level));
         this.loot(sim, champ, 1, 'takedown');
         healShare(champ, TAKEDOWN_HEAL);
         const score = takedownScore(victim.id, this.state.leaderId);
