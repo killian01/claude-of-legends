@@ -3,7 +3,7 @@
 // is reached or replaced; when the current target dies, the next one is
 // acquired automatically.
 
-import { hypot } from './exact';
+import { dist } from './geo';
 import type { Sim } from './sim';
 
 const ACQUIRE_RADIUS = 8;
@@ -21,7 +21,7 @@ export function stepAttackMove(sim: Sim): void {
         // Attack-move never auto-engages the neutral Warden.
         if (o.team === u.team || o.neutral || o.dead) continue;
         if (!sim.isVisible(u.team, o.id)) continue;
-        const d = hypot(o.pos.x - u.pos.x, o.pos.z - u.pos.z);
+        const d = dist(o.pos, u.pos);
         if (d <= ACQUIRE_RADIUS && d < bestD) {
           bestD = d;
           best = o.id;
@@ -30,11 +30,11 @@ export function stepAttackMove(sim: Sim): void {
       if (best !== null) {
         u.attackTargetId = best;
       } else if (u.path.length === 0) {
-        const d = hypot(goal.x - u.pos.x, goal.z - u.pos.z);
+        const d = dist(goal, u.pos);
         if (d <= ARRIVE_RADIUS) {
           u.attackMoveTarget = null;
         } else {
-          sim.orderPath(u.id, goal.x, goal.z);
+          sim.orderPath(u.id, goal.x, goal.z, goal.y);
         }
       }
     }
