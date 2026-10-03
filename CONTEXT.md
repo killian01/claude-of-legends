@@ -134,12 +134,15 @@ _Avoid_: spawn pick, deploy
 
 **Cache**:
 A glowing chest on the Wanderseed: a champion who stands beside it for a second and a half
-opens it and gets the next piece of its build. A golden cache gives two. Damage breaks the
-opening.
+opens it and gets the next piece of its build. A golden cache gives two. A hit, a step, a cast
+or an attack order breaks the opening. Gone once opened in One life, back after a while in
+Respawn.
 _Avoid_: chest, loot box, crate
 
 **Launch pad**:
-A disc on the Wanderseed that throws a champion stepping on it 50 m along a fixed great circle.
+A disc on the Wanderseed that throws a champion whose walk ends on it (stopped there, or sent
+onto it; walking across toward somewhere else does not) 50 m along a fixed great circle,
+untargetable while it flies.
 _Avoid_: jump pad, trampoline, tremplin
 
 **Beacon**:
@@ -1074,59 +1077,16 @@ in the Arena, or by hand in the Forge queue. One rating and one ladder per way, 
 the way's rated subject.
 _Avoid_: mode, queue (where the match came from, not how the seat was played), category
 
-**Battle royale**:
-The mode of fifty champions each for themself on the Wanderseed (ADR 0031): house bots fill
-every seat a person does not take, loot replaces the shop, the Dusk closes in, and the match
-ends when the last light goes out. Played in two variants, Respawn and One life.
-_Avoid_: BR, free-for-all mode, survival
-
-**Wanderseed**:
-The battle royale's planet: a true sphere of radius 80 m walked all the way round (ADR 0029),
-six regions like the faces of a die, its two poles' landmarks impassable.
-_Avoid_: globe (the drop's view of it), world, arena
-
 **Region**:
 One of the Wanderseed's six faces: the Sanctuary, the Open ground, the Ruins, the Cypress
 groves, the Lakes and the Cliffs, each with a heart where its golden cache stands.
 _Avoid_: zone (a spell's ground effect), biome, area
 
-**Dusk**:
-The dark closing over the Wanderseed: after the calm, the lit cap shrinks toward a final point
-drawn each match in five phases, each closing then holding, the next cap always drawn; outside
-the light it burns a share of maximum health every second, more each phase.
-_Avoid_: storm, zone, circle, gas
-
 **Calm**:
 The first minute and a half after landing, before the Dusk first moves.
 _Avoid_: grace period, safe time
-
-**Drop**:
-The ten seconds over the globe before a battle royale lands, each seat picking where to land;
-a seat that picks nothing lands somewhere quiet.
-_Avoid_: deploy, spawn select
-
-**Cache**:
-A chest on the Wanderseed opened by standing still beside it for a moment, broken by a step or
-a hit; it gives the next piece of the opener's build (a golden one two). Gone once opened in
-One life, back after a while in Respawn.
-_Avoid_: chest, crate, loot box
 
 **Loot**:
 What replaces the shop in the battle royale: the next piece of the champion's house build,
 given at once by a cache, a camp or a takedown.
 _Avoid_: drop (the landing), reward, item pickup
-
-**Launch pad**:
-A plate at a Wanderseed crossroads that throws a champion whose walk ends on it fifty meters
-along a fixed great circle, untargetable while it flies.
-_Avoid_: jump pad, catapult, teleporter
-
-**Respawn** (the variant):
-The battle royale where a death costs five seconds and the champion comes back at the edge of
-the light keeping everything; the most takedowns when the last light goes out wins, and the
-score leader shows to everyone every thirty seconds and counts double.
-_Avoid_: deathmatch, arcade
-
-**One life**:
-The battle royale where a death is final; the last champion standing wins.
-_Avoid_: hardcore, survival, elimination

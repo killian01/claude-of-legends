@@ -5,7 +5,7 @@
 // otherwise toward the light's heart. Pure over the slot's sense; every
 // distance a chord.
 
-import { dirTo, dist, type Vec3 } from '../../geo';
+import { dirTo, dist, heading, type Vec3 } from '../../geo';
 import type { Action, ObsCache } from '../../policy';
 import { depthInside, insideCap } from '../dusk';
 import { along } from '../layout';
@@ -162,13 +162,36 @@ export function pickCampSpot(sense: Sense): Vec3 | null {
   return best;
 }
 
-// With nothing else to do: toward the heart of the light, the next cap's
-// when it is drawn.
+// How long a wandering bot keeps one goal before it picks the next.
+export const WANDER_S = 12;
+
+// A number from 0 to 1 fixed by the seat and the stretch of time: a
+// wander goal that holds still for WANDER_S without any memory.
+function wanderDraw(id: number, time: number, salt: number): number {
+  let h =
+    (Math.imul(id, 0x9e3779b1) ^ Math.imul(Math.floor(time / WANDER_S) + salt, 0x85ebca6b)) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0;
+  h = (h ^ (h >>> 12)) >>> 0;
+  return h / 4294967296;
+}
+
+// With nothing else to do, the bot goes where the others will be: the
+// heart of the light, the next cap's when it is drawn, and once there a
+// wander inside it (a goal held for WANDER_S); a gentle bot keeps to the
+// rim. While the whole planet is lit, the nearest cache anywhere first.
 export function roam(sense: Sense): Action {
   const cap = sense.next ?? sense.now;
   if (cap.radius >= 2 * sense.layout.radius - 1e-6) {
     const c = pickCache(sense);
     if (c) return lootCache(sense, c);
   }
-  return walkVia(sense, intoCap(sense, cap, Math.min(cap.radius * 0.5, 20)));
+  const R = sense.layout.radius;
+  const share = sense.skill.id === 'gentle' ? 0.6 : 0.3;
+  const heart = Math.min(cap.radius * share, 30);
+  if (dist(sense.me, cap.center) > heart + 2)
+    return walkVia(sense, intoCap(sense, cap, cap.radius - heart));
+  const angle = wanderDraw(sense.s.id, sense.obs.time, 1) * 2 * Math.PI;
+  const reach = heart * wanderDraw(sense.s.id, sense.obs.time, 2);
+  const goal = along(cap.center, heading(cap.center, angle) as Vec3, reach, R);
+  return moveTo(sense, goal);
 }

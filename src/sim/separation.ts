@@ -5,6 +5,7 @@
 // pair order; pushes never land on blocked ground; a body in a dash's
 // flight is the dash's.
 
+import { isUntargetable } from './combat/status';
 import { assign, carry, dirTo, dist, offset } from './geo';
 import type { CombatCtx } from './sim_context';
 import type { Unit, UnitKind } from './unit';
@@ -15,6 +16,9 @@ export function stepSeparation(ctx: CombatCtx, kinds: readonly UnitKind[] = MINI
   const bodies: Unit[] = [];
   for (const u of ctx.units.values()) {
     if (!kinds.includes(u.kind) || u.dead || ctx.dead.has(u.id) || u.activeDash) continue;
+    // A body nothing can touch (a launch pad's flier, a champion gone
+    // untargetable) is not pushed and pushes nobody.
+    if (isUntargetable(u, ctx.time)) continue;
     bodies.push(u);
   }
   for (let i = 0; i < bodies.length; i++) {

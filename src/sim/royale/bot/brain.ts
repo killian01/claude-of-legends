@@ -35,6 +35,9 @@ const NOOP: Action = { kind: 'noop' };
 export const FINISH_HP = 0.25;
 // An enemy this close counts as on top of the bot when it backs off.
 export const DANGER_M = 11;
+// Once the light is this small, every bot's nerve rises by this much.
+export const LAST_LIGHT_M = 20;
+export const LAST_LIGHT_NERVE = 0.15;
 // A camp body this close is worth hitting.
 export const CAMP_FIGHT_M = 14;
 // The bot's own health share to take a camp.
@@ -168,10 +171,12 @@ export function decide(
       if (near && sense.s.hpFrac < skill.retreatHp) return retreat(sense);
       const target = pickTarget(sense);
       if (target) {
-        const odds = royaleOdds(sense);
+        const odds = royaleOdds(sense, target);
         const finish = target.hpFrac < FINISH_HP && sense.s.hpFrac > target.hpFrac;
-        const answer = sense.struck && odds >= skill.fightOdds - 0.1;
-        if (odds >= skill.fightOdds || finish || answer) return fight(sense, target, rng);
+        // The last light leaves nowhere to go: everyone's nerve rises.
+        const nerve = skill.fightOdds - (sense.now.radius <= LAST_LIGHT_M ? LAST_LIGHT_NERVE : 0);
+        const answer = sense.struck && odds >= nerve - 0.1;
+        if (odds >= nerve || finish || answer) return fight(sense, target, rng);
       }
       if (near && sense.struck) return retreat(sense);
     }

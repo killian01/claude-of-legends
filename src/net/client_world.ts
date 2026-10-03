@@ -110,6 +110,7 @@ function materializeUnit(s: SnapUnit): Unit {
     passiveStacks: 0,
     lastDamagedAt: -999,
     lastDealtDamageAt: -999,
+    outOfCombatBonus: 0,
     favors: NO_FAVORS,
     creatureId: s.cr ?? null,
     aspect: s.a ?? null,
