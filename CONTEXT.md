@@ -134,12 +134,15 @@ _Avoid_: spawn pick, deploy
 
 **Cache**:
 A glowing chest on the Wanderseed: a champion who stands beside it for a second and a half
-opens it and gets the next piece of its build. A golden cache gives two. Damage breaks the
-opening.
+opens it and gets the next piece of its build. A golden cache gives two. A hit, a step, a cast
+or an attack order breaks the opening. Gone once opened in One life, back after a while in
+Respawn.
 _Avoid_: chest, loot box, crate
 
 **Launch pad**:
-A disc on the Wanderseed that throws a champion stepping on it 50 m along a fixed great circle.
+A disc on the Wanderseed that throws a champion whose walk ends on it (stopped there, or sent
+onto it; walking across toward somewhere else does not) 50 m along a fixed great circle,
+untargetable while it flies.
 _Avoid_: jump pad, trampoline, tremplin
 
 **Beacon**:
@@ -1073,3 +1076,17 @@ How an owned seat was played: by hand, by the account's bot in a live match, by 
 in the Arena, or by hand in the Forge queue. One rating and one ladder per way, held by
 the way's rated subject.
 _Avoid_: mode, queue (where the match came from, not how the seat was played), category
+
+**Region**:
+One of the Wanderseed's six faces: the Sanctuary, the Open ground, the Ruins, the Cypress
+groves, the Lakes and the Cliffs, each with a heart where its golden cache stands.
+_Avoid_: zone (a spell's ground effect), biome, area
+
+**Calm**:
+The first minute and a half after landing, before the Dusk first moves.
+_Avoid_: grace period, safe time
+
+**Loot**:
+What replaces the shop in the battle royale: the next piece of the champion's house build,
+given at once by a cache, a camp or a takedown.
+_Avoid_: drop (the landing), reward, item pickup
