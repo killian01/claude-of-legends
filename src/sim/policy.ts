@@ -242,6 +242,11 @@ export interface ObsSeedfall {
   z: number;
   landsAt: number;
   landed: boolean;
+  // The champion opening its cache and since when (additive v0 field):
+  // present only while the seat's team sees that champion (sim.isVisible)
+  // or the seat opens it itself, absent otherwise, so it stays fog-honest.
+  // What a bot waiting on a Seedfall strikes on.
+  opener?: { id: number; since: number };
 }
 
 // A Rising as everyone sees it (additive v0 block): called ahead, then the

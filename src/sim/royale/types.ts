@@ -242,7 +242,8 @@ export type RoyaleEvent =
   | { type: 'royale_leader'; unitId: number }
   | { type: 'royale_end'; winnerId: number | null }
   // The Seedfalls, Risings, marks, Reprieves, the Hastening, the Last light
-  // and the Pad slam, typed and forwarded before any rule emits them (server/royale_snapshot.ts, src/net/royale_client.ts).
+  // and the Pad slam, typed and forwarded before any rule emits them
+  // (server/royale_snapshot.ts, src/net/royale_client.ts).
   | { type: 'royale_seedfall'; seedfallId: number; at: Vec3; landsAt: number }
   | { type: 'royale_seedfall_land'; seedfallId: number; at: Vec3 }
   | { type: 'royale_rising'; kind: RisingKind; at: Vec3; risesAt: number }
