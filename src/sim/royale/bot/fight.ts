@@ -65,8 +65,16 @@ export function royaleOdds(sense: Sense, target?: ObsUnit, within = ODDS_RADIUS)
   return total > 0 ? own / total : 0.5;
 }
 
-// The target: a hard-CC'd enemy in reach first, else the weakest within
-// `reach` (the skill's chase unless told) weighed by distance; null when
+// How a target weighs: its health share and its distance. Health once
+// counted ten times a meter's 0.3, and a bot walked past an enemy at full
+// health beside it to finish a low one fifteen meters off (a playtest,
+// 2026-10-03: the bots only came for a champion someone else had worn
+// down). A low enemy close by still comes first.
+export const TARGET_HP_WEIGHT = 4;
+export const TARGET_M_WEIGHT = 0.6;
+
+// The target: a hard-CC'd enemy in reach first, else the best of health
+// and distance within `reach` (the skill's chase unless told); null when
 // none is worth it. Never one standing in the dark.
 export function pickTarget(sense: Sense, reach = sense.skill.chase): ObsUnit | null {
   let best: ObsUnit | null = null;
@@ -78,7 +86,7 @@ export function pickTarget(sense: Sense, reach = sense.skill.chase): ObsUnit | n
     // Never into the dark, while there is light to stay in.
     if (sense.now.radius > 0 && !insideCap(sense.now, at)) continue;
     const ccd = hardCCd(e, sense.obs.time) && d <= CHAMPION_ATTACK_RANGE;
-    const score = (ccd ? -10 : 0) + e.hpFrac * 10 + d * 0.3;
+    const score = (ccd ? -10 : 0) + e.hpFrac * TARGET_HP_WEIGHT + d * TARGET_M_WEIGHT;
     if (score < bestScore || (score === bestScore && best !== null && e.id < best.id)) {
       best = e;
       bestScore = score;
