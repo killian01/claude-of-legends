@@ -589,6 +589,8 @@ export function startPresentation(
       renderer.flashMarker(aim.x, aim.z, 0xffa53e, aim.y);
     },
     onRecall: () => {
+      // No recall in a battle royale (ADR 0031): B is no key there.
+      if (options.royale) return;
       pendingCast = null;
       world.startRecall(selfId);
     },

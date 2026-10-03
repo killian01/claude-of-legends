@@ -574,8 +574,8 @@ export function showLanding(
       el(
         'p',
         'pg-tag',
-        'A 5v5 MOBA that runs in a browser tab. Three lanes, ten champions, ' +
-          'jungle camps and fog of war. Nothing to install.',
+        'A MOBA in a browser tab: a fifty-champion battle royale on a small planet, ' +
+          'and the classic 5v5. Nothing to install.',
       ),
       el('p', 'pg-ranked', HERO_RANKED_LINE),
     );
