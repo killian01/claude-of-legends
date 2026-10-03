@@ -35,8 +35,10 @@ export const PLANET_BUILDS: Readonly<Record<string, readonly string[]>> = {
   dain: ['doombrand', 'worldheart', 'rendfang', 'swiftplate', 'clarity_stone', 'swift_treads'],
   torv: ['doombrand', 'worldheart', 'rendfang', 'swiftplate', 'clarity_stone', 'swift_treads'],
   korrath: ['doombrand', 'worldheart', 'rendfang', 'swiftplate', 'clarity_stone', 'swift_treads'],
-  // The shell that scales on ability power: the Heartbeat, then magic.
-  maera: ['worldheart', 'tempest_core', 'null_engine', 'archmind', 'clarity_stone', 'swift_treads'],
+  // Maera's ranged attack carries her on the planet, where her heals and
+  // shields find no ally: the attack speed line and its Gale, the
+  // execute, then the Heartbeat's two Heart Gems.
+  maera: ['skyshear', 'doombrand', 'worldheart', 'rendfang', 'swiftplate', 'swift_treads'],
 };
 
 export function planetBuild(championId: string | null): readonly string[] | undefined {
