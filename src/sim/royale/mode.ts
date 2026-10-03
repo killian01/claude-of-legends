@@ -237,10 +237,13 @@ export class RoyaleMode {
   beginArrival(_unitId: number, _time: number): void {}
 
   // Whether the bot driver runs a dead seat's policy this tick (a Graft
-  // offer to pick, a Respawn landing to choose). Never yet: a dead seat
-  // decides nothing, in the royale as in the 5v5.
+  // offer to pick, a Respawn landing to choose): in Respawn's play while a
+  // Seedfall is called, a dead seat may ask to come back beside it
+  // (bot/brain.ts respawnPick). Never in One life, never in the 5v5.
   wantsDeadDecision(_unitId: number): boolean {
-    return false;
+    return (
+      this.variant === 'respawn' && this.state.stage === 'play' && this.state.seedfalls.length > 0
+    );
   }
 
   // The health a champion comes back with (the sim's respawn loop): all of

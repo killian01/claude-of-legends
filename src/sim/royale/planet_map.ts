@@ -54,6 +54,7 @@ export function royaleLayoutOf(rec: PlanetLayoutRecord): RoyaleLayout {
     pyrefang: pt(rec.creatures.pyrefang.at),
     voidmaul: pt(rec.creatures.voidmaul.at),
     warden: pt(rec.creatures.warden.at),
+    bushes: (rec.bushes ?? []).map((b) => ({ at: pt(b.at), r: b.r })),
   };
 }
 
