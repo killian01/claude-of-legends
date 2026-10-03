@@ -148,7 +148,9 @@ describe('a whole battle royale of fifty house bots', () => {
     // mostly fought (a tenth of the time before), few takedowns are steals,
     // and the field does not fall in the first minutes.
     expect(a.fighting).toBeGreaterThan(0.4);
-    expect(a.steals).toBeLessThan(0.12);
+    // A Seedfall's cache draws the few left standing to one point, so a
+    // takedown lands a little more often on a champion someone else wore down.
+    expect(a.steals).toBeLessThan(0.15);
     expect(a.ticks).toBeGreaterThan(Math.round((DROP_S + 360) * 20));
   }, 300_000);
 });
