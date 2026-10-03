@@ -16,10 +16,6 @@ import type { Unit } from '../src/sim/unit';
 import type { Wall } from '../src/sim/walls';
 import type { Zone } from '../src/sim/zones';
 
-// A bot seat's skill (docs/plan-royale.md: about half gentle, a third
-// normal, the rest strong).
-export type RoyaleSkill = 'gentle' | 'normal' | 'strong';
-
 // What a tick of the mode answers: the sim's events and the mode's own.
 export type RoyaleSimEvent = SimEvent | RoyaleEvent;
 
@@ -58,9 +54,10 @@ export interface RoyaleSeatPick {
   championId: string;
   sigils: [string, string];
   skin: number;
-  // A bot's seat from the start: its skill, and whether the match's
-  // people are Guests only, which softens the bots (docs/plan-royale.md).
-  bot?: { skill: RoyaleSkill; softened: boolean };
+  // A bot's seat from the start, and whether the match's people are
+  // Guests only, which softens the bots (docs/plan-royale.md); the builder
+  // deals each bot its skill from the seed.
+  bot?: { softened: boolean };
 }
 
 export interface RoyaleBuild {
@@ -74,7 +71,7 @@ export interface RoyaleBuild {
     royale: { variant: RoyaleVariant; guestsOnly?: boolean };
   };
   // Hands a seat to the battle royale's bot: a person left it.
-  standIn(unitId: number, skill: RoyaleSkill, softened: boolean): void;
+  standIn(unitId: number): void;
 }
 
 export type RoyaleSimFactory = (

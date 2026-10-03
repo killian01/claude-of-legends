@@ -1,16 +1,10 @@
 // Who sits in a battle royale (server/royale_seats.ts, server/royale_names.ts,
 // ADR 0031): the person's pick made valid, the bots' invented names, the
-// skill mix, and fifty seats each on its own team.
+// softening, and fifty seats each on its own team.
 
 import { describe, expect, it } from 'vitest';
 import { BOT_HANDLES, botNames } from '../server/royale_names';
-import {
-  DEFAULT_SIGILS,
-  type RoyalePerson,
-  royalePick,
-  royaleSeats,
-  skillMix,
-} from '../server/royale_seats';
+import { DEFAULT_SIGILS, type RoyalePerson, royalePick, royaleSeats } from '../server/royale_seats';
 import { CHAMPION_LIST, CHAMPIONS } from '../src/sim/content/champions';
 import { SIGILS } from '../src/sim/content/sigils';
 import { Rng } from '../src/sim/rng';
@@ -81,24 +75,6 @@ describe('the pick', () => {
   it('holds to what the person may pick (ADR 0018)', () => {
     expect(royalePick({ championId: 'vesk' }, ['torv', 'fenn']).championId).toBe('torv');
     expect(royalePick({ championId: 'fenn' }, ['torv', 'fenn']).championId).toBe('fenn');
-  });
-});
-
-describe('the skill mix', () => {
-  const count = (skills: string[], s: string): number => skills.filter((x) => x === s).length;
-
-  it('is about half gentle, a third normal, the rest strong', () => {
-    const skills = skillMix(49, new Rng(1), false);
-    expect(count(skills, 'gentle')).toBe(25);
-    expect(count(skills, 'normal')).toBe(16);
-    expect(count(skills, 'strong')).toBe(8);
-  });
-
-  it('is softer when only Guests are in', () => {
-    const skills = skillMix(49, new Rng(1), true);
-    expect(count(skills, 'gentle')).toBe(33);
-    expect(count(skills, 'normal')).toBe(12);
-    expect(count(skills, 'strong')).toBe(4);
   });
 });
 

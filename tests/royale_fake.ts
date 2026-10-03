@@ -4,13 +4,7 @@
 // runs the drop, the play and the end, and helpers a test calls to make
 // things happen (a takedown, a cache, a camp, a projectile).
 
-import type {
-  RoyaleBuild,
-  RoyaleSeatPick,
-  RoyaleSim,
-  RoyaleSimEvent,
-  RoyaleSkill,
-} from '../server/royale_sim';
+import type { RoyaleBuild, RoyaleSeatPick, RoyaleSim, RoyaleSimEvent } from '../server/royale_sim';
 import type { RoyaleVariant } from '../src/net/royale_wire';
 import { CAMPS } from '../src/sim/content/camps';
 import { CHAMPIONS } from '../src/sim/content/champions';
@@ -64,8 +58,8 @@ export class FakeRoyaleSim implements RoyaleSim {
   readonly walls = new Map<number, Wall>();
   readonly royale: RoyaleState;
   readonly orders: Order[] = [];
-  // Who plays each seat now: a skill for a bot, absent for a person.
-  readonly policies = new Map<number, RoyaleSkill>();
+  // The seats a bot plays now; a person's is absent.
+  readonly policies = new Set<number>();
   // Events the next tick answers with.
   readonly pending: RoyaleSimEvent[] = [];
   private nextId = 1;
@@ -302,7 +296,7 @@ export function fakeFactory(): {
       const u = sim.addChampion(p.team, p.championId, spot(i, picks.length));
       u.skin = p.skin;
       u.sigils = [...p.sigils];
-      if (p.bot) sim.policies.set(u.id, p.bot.skill);
+      if (p.bot) sim.policies.add(u.id);
       return u.id;
     });
     sims.push(sim);
@@ -321,8 +315,8 @@ export function fakeFactory(): {
         })),
         royale: { variant, guestsOnly: picks.some((p) => p.bot?.softened === true) },
       },
-      standIn: (unitId, skill) => {
-        sim.policies.set(unitId, skill);
+      standIn: (unitId) => {
+        sim.policies.add(unitId);
       },
     };
   };

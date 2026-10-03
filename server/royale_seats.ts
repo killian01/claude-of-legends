@@ -1,10 +1,12 @@
 // Who sits in a battle royale (ADR 0031): the people who started it, each
 // on the champion they picked, and house bots on every other seat, each
 // with an invented name (server/royale_names.ts), a champion of the roster
-// drawn from the match seed (duplicates allowed), a pair of sigils, a skin
-// and a skill. The skill mix (docs/plan-royale.md): about half gentle, a
-// third normal, the rest strong; softer when everyone the match started
-// with is a Guest. Pure: the same seed and people seat the same match.
+// drawn from the match seed (duplicates allowed), a pair of sigils and a
+// skin. Each bot's skill is the sim's to deal from the seed
+// (src/net/replay.ts buildRoyaleSim): about half gentle, a third normal,
+// the rest strong, softer when everyone the match started with is a Guest,
+// which the seats tell it. Pure: the same seed and people seat the same
+// match.
 
 import { CHAMPION_LIST, CHAMPIONS, DEFAULT_CHAMPION_ID } from '../src/sim/content/champions';
 import { SIGIL_LIST, SIGILS } from '../src/sim/content/sigils';
@@ -12,7 +14,7 @@ import { clampSkin, SKINS } from '../src/sim/content/skins';
 import { Rng } from '../src/sim/rng';
 import { ROYALE_SEATS } from '../src/sim/royale/types';
 import { botNames } from './royale_names';
-import type { RoyaleSeatPick, RoyaleSkill } from './royale_sim';
+import type { RoyaleSeatPick } from './royale_sim';
 
 export const DEFAULT_SIGILS: [string, string] = ['riftstep', 'mend'];
 
@@ -48,29 +50,6 @@ export function royalePick(
   };
 }
 
-// The shares of the skill mix, gentle and normal; strong takes the rest.
-export const SKILL_MIX = { gentle: 1 / 2, normal: 1 / 3 } as const;
-// With only Guests in: two in three gentle, a quarter normal, a few strong.
-export const SKILL_MIX_GUESTS = { gentle: 2 / 3, normal: 1 / 4 } as const;
-
-// `count` skills in a seeded order, the mix's counts rounded.
-export function skillMix(count: number, rng: Rng, onlyGuests: boolean): RoyaleSkill[] {
-  const mix = onlyGuests ? SKILL_MIX_GUESTS : SKILL_MIX;
-  const gentle = Math.min(count, Math.round(count * mix.gentle));
-  const normal = Math.min(count - gentle, Math.round(count * mix.normal));
-  const out: RoyaleSkill[] = [];
-  for (let i = 0; i < count; i++) {
-    out.push(i < gentle ? 'gentle' : i < gentle + normal ? 'normal' : 'strong');
-  }
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = rng.int(i + 1);
-    const t = out[i]!;
-    out[i] = out[j]!;
-    out[j] = t;
-  }
-  return out;
-}
-
 // One person seated at the start.
 export interface RoyalePerson {
   clientId: number;
@@ -85,12 +64,12 @@ export interface RoyalePerson {
 // sat in it at the start (a person's client id, or null for a bot).
 export interface RoyaleSeat extends RoyaleSeatPick {
   clientId: number | null;
-  skill: RoyaleSkill;
 }
 
 // Every seat of a new match: the people first, in the order given, then
-// the bots. The bots' skills are decided here, once, by the people the
-// match starts with (ADR 0027 keeps a match's softening from its start).
+// the bots. Whether they play softer is decided here, once, by the people
+// the match starts with (ADR 0027 keeps a match's softening from its
+// start).
 export function royaleSeats(
   people: readonly RoyalePerson[],
   seed: number,
@@ -106,7 +85,6 @@ export function royaleSeats(
       sigils: [p.pick.sigils[0], p.pick.sigils[1]],
       skin: p.pick.skin,
       clientId: p.clientId,
-      skill: 'normal',
     });
   }
   const botCount = seats - out.length;
@@ -116,13 +94,11 @@ export function royaleSeats(
     rng,
     people.map((p) => p.name),
   );
-  const skills = skillMix(botCount, rng, onlyGuests);
   for (let i = 0; i < botCount; i++) {
     const champion = CHAMPION_LIST[rng.int(CHAMPION_LIST.length)]!;
     const a = rng.int(SIGIL_LIST.length);
     const b = (a + 1 + rng.int(SIGIL_LIST.length - 1)) % SIGIL_LIST.length;
     const skins = SKINS[champion.id]?.length ?? 1;
-    const skill = skills[i]!;
     out.push({
       name: names[i]!,
       team: out.length,
@@ -130,8 +106,7 @@ export function royaleSeats(
       sigils: [SIGIL_LIST[a]!.id, SIGIL_LIST[b]!.id],
       skin: rng.int(skins),
       clientId: null,
-      skill,
-      bot: { skill, softened: onlyGuests },
+      bot: { softened: onlyGuests },
     });
   }
   return out;
