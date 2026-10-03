@@ -28,6 +28,9 @@ import {
   type LandingDoor,
   type LandingPlay,
   type LandingWay,
+  NEW_LINE,
+  NEW_TAG,
+  NEW_TITLE,
   PLAY_NOW,
   PLAY_NOW_LINE,
   WAYS_LABEL,
@@ -42,6 +45,7 @@ import { openNews } from './news_section';
 import { buildPage, ensurePageCss, mountLiveStats, navLink } from './page';
 import { planetEmblem } from './planet_emblem';
 import { buildRepoLink } from './repo_link';
+import { ROYALE_LABEL, royaleArtUrl } from './royale_modes';
 
 // Only what the landing page adds to the shared chrome: the bento, which
 // is the home's row of tiles as a visitor can have it.
@@ -90,6 +94,33 @@ const CSS = `
    The rows take whatever height the account card leaves over, which is
    what puts the two feet on one line without either card being told
    what it measures. */
+/* The battle royale's arrival at the top of the Play now card (ADR 0031):
+   the Wanderseed from orbit, the word New in gold, the planet's name and
+   one line, over a view of its ground that fades into the card. A banner
+   inside the card rather than a card of its own, so the gold button under
+   it keeps the first screen of a laptop and of a phone either way up. */
+.pg-new { position: relative; display: flex; align-items: center; gap: 14px; margin: 0 0 14px;
+  padding: 12px 14px; border-radius: 12px; border: 1px solid #8a7433; overflow: hidden;
+  background: #0a1120; }
+.pg-new::before { content: ''; position: absolute; inset: 0; background: var(--view) 50% 40% / cover
+  no-repeat; opacity: 0.6; }
+.pg-new::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg,
+  rgba(6, 10, 20, 0.25) 0%, rgba(6, 10, 20, 0.86) 34%, rgba(6, 10, 20, 0.94) 100%); }
+.pg-new > * { position: relative; z-index: 1; }
+.pg-new > .planet-emblem { --planet: 84px; }
+.pg-new-words { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.pg-new-kicker { display: flex; align-items: center; gap: 8px; font-size: 10.5px; font-weight: 800;
+  letter-spacing: 1.6px; text-transform: uppercase; color: #c9a84a; }
+.pg-new-tag { display: inline-block; vertical-align: 3px; margin-right: 4px; padding: 2px 8px;
+  border-radius: 999px; color: #241a08; letter-spacing: 1.2px; font-family: system-ui, sans-serif;
+  font-size: 10.5px; font-weight: 800; line-height: 1.3;
+  background: linear-gradient(180deg, #f6e3a6 0%, #e2bf64 55%, #c99a3c 100%);
+  box-shadow: 0 0 12px rgba(232, 196, 108, 0.45); }
+.pg.land .pg-card .pg-new h2 { margin: 0; font-size: 20px; letter-spacing: 1.8px; color: #f0dca0; }
+.pg.land .pg-card .pg-new p { margin: 0; font-size: 12.5px; line-height: 1.45; color: #c9d6ea; }
+/* What every way in shares, in small print under the gold button. */
+.pg.land .pg-card p.pg-fine { margin: 8px 0 0; font-size: 11.5px; line-height: 1.4;
+  color: #8ba1c0; text-align: center; }
 .pg-ways { display: flex; flex-direction: column; justify-content: flex-start; gap: 8px;
   flex: 1 1 auto; margin: 16px 0 0; }
 .pg-ways-label { font-size: 10.5px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase;
@@ -195,11 +226,29 @@ const CSS = `
   .pg.land .pg-lockup { width: 104px; }
   .pg.land .pg-hero-cta { margin-top: 14px; }
   .pg.land .pg-ranked + .pg-hero-cta { margin-top: 10px; }
+  .pg.land .pg-cards { margin-top: 14px; }
+  .pg.land .pg-card.plain { padding-top: 14px; }
+  .pg-new { padding: 8px 12px; gap: 12px; margin-bottom: 10px; }
+  .pg-new-kicker { display: none; }
+  .pg-new > .planet-emblem { --planet: 54px; }
+  .pg.land .pg-card .pg-new h2 { font-size: 16px; }
+  .pg.land .pg-card .pg-new p { font-size: 11.5px; line-height: 1.35; }
   .pg-ways { gap: 6px; margin-top: 12px; }
   .pg-way { padding: 7px 10px; gap: 10px; }
   .pg-way > .pg-way-art { width: 40px; height: 40px; --planet: 40px; }
   .pg-way-words b { font-size: 13.5px; }
   .pg-way-words span { font-size: 11.5px; line-height: 1.3; }
+}
+/* Sideways on a phone the stacked hero, crest over words, took the whole
+   first screen and the gold button sat under it: the crest stands beside
+   the words instead, and the card rises with the button on the first
+   screen. */
+@media (max-height: 560px) and (min-width: 640px) {
+  .pg.land .pg-hero { flex-direction: row; justify-content: center; gap: 20px; text-align: left; }
+  .pg.land .pg-lockup { width: 76px; }
+  .pg.land .pg-hero-copy { align-items: flex-start; }
+  .pg.land .pg-hero-cta { justify-content: flex-start; margin-top: 6px; }
+  .pg.land .pg-ranked + .pg-hero-cta { margin-top: 6px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pg.land .pg-cards .pg-card.glow { animation: none; }
@@ -269,11 +318,14 @@ const CSS = `
      one thing to press at the foot of a card that had already used the
      screen. Heading, line, button, then the picture as what it is,
      decoration under the offer. */
-  .pg.land .pg-card.plain > h2 { order: 1; }
-  .pg.land .pg-card.plain > p { order: 2; }
+  .pg.land .pg-card.plain > .pg-new { order: 1; }
   .pg.land .pg-card.plain > .pg-presence { order: 3; margin-top: 2px; }
   .pg.land .pg-card.plain > .menu-btn { order: 3; margin-top: 2px; }
+  .pg.land .pg-card.plain > .pg-fine { order: 4; }
   .pg.land .pg-card.plain > .pg-ways { order: 5; }
+  .pg-new { gap: 12px; }
+  .pg-new > .planet-emblem { --planet: 56px; }
+  .pg.land .pg-card .pg-new h2 { font-size: 13.5px; letter-spacing: 0.6px; white-space: nowrap; }
   .pg.land .pg-card.plain > .pg-news { order: 6; }
   .pg-mode { height: auto; aspect-ratio: 3 / 4; }
   .pg-mode-body { padding: 34px 8px 8px; }
@@ -632,9 +684,10 @@ export function showLanding(
 
     // The other way in, and the one that needs nothing: a match as a Guest
     // (ADR 0024), scored on the ladder from the first match (ADR 0027).
-    // Its gold button plays the battle royale's Respawn (ADR 0031), and the
-    // rows over it are the three ways to play, each a door of its own: the
-    // two rule sets of the battle royale and the 5v5 on the Star Orchard.
+    // Its gold button plays the battle royale's Respawn (ADR 0031) under the
+    // banner that announces it, and the rows under it are the three ways to
+    // play, each a door of its own: the two rule sets of the battle royale
+    // and the 5v5 on the Star Orchard.
     // The offline match that stood one quiet line under it left the
     // landing: visitors play online now, and the page falls back to
     // practice by itself when no Guest can be opened (src/main.ts).
@@ -651,15 +704,21 @@ export function showLanding(
     const wayList = el('div', 'pg-ways');
     wayList.appendChild(el('div', 'pg-ways-label', WAYS_LABEL));
     for (const way of LANDING_WAYS) wayList.appendChild(wayRow(way));
-    playCard.append(
-      // "Or try it first" while it stood second; stacked it stands first
-      // now, and a heading that begins with "Or" has nothing to follow.
-      el('h2', '', 'Play now'),
-      el('p', '', PLAY_NOW_LINE),
-      presence,
-      playBtn,
-      wayList,
-    );
+    // The battle royale's arrival heads the card (ui/landing_modes.ts):
+    // where the heading Play now and its line stood, the planet, the word
+    // New and what one does there, right over the gold button that plays
+    // it. The line the card used to open on, what every way in shares,
+    // goes under the button in small print.
+    const banner = el('div', 'pg-new');
+    banner.style.setProperty('--view', `url(${royaleArtUrl('view')})`);
+    const bannerWords = el('div', 'pg-new-words');
+    // The word New on the title's own line, so a short screen can leave
+    // the kicker out and keep it.
+    const newTitle = el('h2', '');
+    newTitle.append(el('span', 'pg-new-tag', NEW_TAG), ` ${NEW_TITLE}`);
+    bannerWords.append(el('div', 'pg-new-kicker', ROYALE_LABEL), newTitle, el('p', '', NEW_LINE));
+    banner.append(planetEmblem('respawn'), bannerWords);
+    playCard.append(banner, presence, playBtn, el('p', 'pg-fine', PLAY_NOW_LINE), wayList);
     // The newest news in one line (CONTEXT.md: News): a site whose last
     // word is from yesterday reads inhabited before anything is clicked.
     // It opens the section over the landing, with the nav told, so Back
