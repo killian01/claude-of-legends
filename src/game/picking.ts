@@ -10,6 +10,7 @@
 // is a last-hit order, not a nearby champion's), and champions beat minions
 // on overlap.
 
+import { dist, onSphere } from '../sim/geo';
 import { isInvulnerable } from '../sim/structure_rules';
 import type { TeamId, Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
@@ -20,8 +21,19 @@ const CLICK_SLOP_PX = 24;
 
 // Projects a world point (x, y up, z) to screen pixels, the match stage's
 // like the pointer it is compared with (game/match_stage.ts); null when
-// behind the camera. The renderer provides this.
-export type ScreenProjector = (x: number, y: number, z: number) => { x: number; y: number } | null;
+// behind the camera. The renderer provides this. On the planet the ground
+// point is a sphere point and its y comes fourth (ADR 0029).
+export type ScreenProjector = (
+  x: number,
+  y: number,
+  z: number,
+  groundY?: number,
+) => { x: number; y: number } | null;
+
+// Ground distance: the plane's as it always was, the sphere's chord.
+function groundDist(a: Vec2, b: Vec2): number {
+  return onSphere(a) && onSphere(b) ? dist(a, b) : Math.hypot(a.x - b.x, a.z - b.z);
+}
 
 function pickable(world: IWorld, u: Readonly<Unit>, selfTeam: TeamId): boolean {
   if (u.dead) return false;
@@ -67,9 +79,9 @@ export function pickUnitOnScreen(
     if (u.dead) continue;
     if (u.team !== selfTeam && !world.isVisible(selfTeam, u.id)) continue;
     const h = bodyHeight(u);
-    const c = project(u.pos.x, h, u.pos.z);
+    const c = project(u.pos.x, h, u.pos.z, u.pos.y);
     if (!c) continue;
-    const edge = project(u.pos.x + u.radius, h, u.pos.z);
+    const edge = project(u.pos.x + u.radius, h, u.pos.z, u.pos.y);
     const radiusPx = edge ? Math.hypot(edge.x - c.x, edge.y - c.y) : 0;
     const d = Math.hypot(c.x - screenX, c.y - screenY) - radiusPx;
     if (d > CLICK_SLOP_PX) continue;
@@ -94,9 +106,9 @@ export function pickEnemyOnScreen(
   for (const u of world.units.values()) {
     if (!pickable(world, u, selfTeam)) continue;
     const h = bodyHeight(u);
-    const c = project(u.pos.x, h, u.pos.z);
+    const c = project(u.pos.x, h, u.pos.z, u.pos.y);
     if (!c) continue;
-    const edge = project(u.pos.x + u.radius, h, u.pos.z);
+    const edge = project(u.pos.x + u.radius, h, u.pos.z, u.pos.y);
     const radiusPx = edge ? Math.hypot(edge.x - c.x, edge.y - c.y) : 0;
     const d = Math.hypot(c.x - screenX, c.y - screenY) - radiusPx;
     if (d > CLICK_SLOP_PX) continue;
@@ -123,7 +135,7 @@ export function nearestEnemy(
   let bestScore = Number.POSITIVE_INFINITY;
   for (const u of world.units.values()) {
     if (!pickable(world, u, selfTeam)) continue;
-    const d = Math.hypot(u.pos.x - from.x, u.pos.z - from.z) - u.radius;
+    const d = groundDist(u.pos, from) - u.radius;
     if (d > reach) continue;
     const score = kindPriority(u) * 1000 + d;
     if (score < bestScore) {
@@ -139,7 +151,7 @@ export function pickEnemyAt(world: IWorld, p: Vec2, selfTeam: TeamId): Readonly<
   let bestScore = Number.POSITIVE_INFINITY;
   for (const u of world.units.values()) {
     if (!pickable(world, u, selfTeam)) continue;
-    const d = Math.hypot(u.pos.x - p.x, u.pos.z - p.z) - u.radius;
+    const d = groundDist(u.pos, p) - u.radius;
     if (d > CLICK_SLOP) continue;
     // Sim-space keeps the original genre rule: champions beat everything
     // under the cursor, then closest wins.

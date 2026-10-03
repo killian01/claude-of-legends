@@ -7,6 +7,7 @@
 // cancels. Pure, with no DOM and no sim, pinned by tests/thumb_cast.test.ts;
 // touch.ts feeds it, boot.ts turns its answers into the sim's casts.
 
+import { copy, offset, onSphere } from '../sim/geo';
 import type { Vec2 } from '../sim/types';
 
 // A press that has not slid this far, in CSS pixels, is a tap.
@@ -68,8 +69,10 @@ export class ThumbAim {
 
 // The point a slide names: along the world direction, at the slide's
 // share of the range, never past it and never on the caster's own feet.
+// On the planet the point is carried along the great circle (geo.ts).
 export function aimedPoint(self: Vec2, dir: Vec2, k: number, range: number): Vec2 {
   const d = range * Math.max(AIM_FLOOR, Math.min(1, k));
+  if (onSphere(self) && dir.y !== undefined) return offset(self, dir, d);
   return { x: self.x + dir.x * d, z: self.z + dir.z * d };
 }
 
@@ -82,12 +85,15 @@ export function quickPoint(
   facing: Vec2 | null,
   range: number,
 ): Vec2 {
-  if (target) return { x: target.x, z: target.z };
+  if (target) return copy(target);
+  if (facing && onSphere(self) && facing.y !== undefined) {
+    return offset(self, facing, range * QUICK_SHARE);
+  }
   if (facing) {
     return {
       x: self.x + facing.x * range * QUICK_SHARE,
       z: self.z + facing.z * range * QUICK_SHARE,
     };
   }
-  return { x: self.x, z: self.z };
+  return copy(self);
 }

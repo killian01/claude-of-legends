@@ -15,6 +15,7 @@ import { registerForgedAssets } from './game/forged_visuals';
 import { requestGameFullscreen } from './game/fullscreen';
 import { parseJoinCode } from './game/invite';
 import { appNav, installNav, sectionFromHash } from './game/nav';
+import { loadPlanetRecords } from './game/planet_records';
 import { type PracticeBots, practiceOpponents } from './game/practice_bots';
 import { advancePracticeClock, type PracticeClock, practiceHeld } from './game/practice_clock';
 import { practiceSeed } from './game/practice_seed';
@@ -60,17 +61,22 @@ import {
   trackStep,
 } from './net/stats';
 import { whenChampionModelsReady } from './render/champions';
+import { loadPlanetTerrain } from './render/planet_terrain';
+import type { RenderTerrain } from './render/terrain';
 import { installVersionedLoading } from './render/versioned_loading';
 import { attachBot } from './sim/content/bots';
 import { type HouseSeat, houseSeats } from './sim/content/bots/house';
 import { CHAMPION_LIST, DEFAULT_CHAMPION_ID } from './sim/content/champions';
 import { contentFingerprint } from './sim/content/fingerprint';
+import type { GameMap } from './sim/content/map';
+import { assemblePlanet } from './sim/content/planet';
 import { SIGIL_LIST } from './sim/content/sigils';
 import { SKINS } from './sim/content/skins';
 import type { StarOrchard } from './sim/content/star_orchard';
 import type { ForgedChampionDef } from './sim/forge/forged_def';
 import type { LanePreference } from './sim/playbook/types';
 import { Rng } from './sim/rng';
+import { planetGameMap } from './sim/royale/planet_map';
 import type { RoyaleVariant } from './sim/royale/types';
 import type { Sim } from './sim/sim';
 import { ULT_RANK_LEVELS } from './sim/stats';
@@ -1292,11 +1298,42 @@ async function pickForRoyale(variant: RoyaleVariant): Promise<RoyalePick | null>
 }
 
 // The ground a battle royale is drawn on, and the map its mirror world
-// holds. The Star Orchard's for now: the Wanderseed's own loader (the
-// planet's model, its grid, the globe) takes this function's place when
-// it lands (docs/plan-royale.md, step 8), and nothing around it changes.
-async function loadRoyaleGround(): Promise<LoadedOrchard | null> {
-  return loadOrchard();
+// holds: the Wanderseed's records, its model drawn as a sphere
+// (render/planet_terrain.ts) and the champions, behind a loading card like
+// the Orchard's. Null after the notice when the planet cannot load.
+async function loadRoyaleGround(): Promise<{ map: GameMap; terrain: RenderTerrain } | null> {
+  const { root, card } = screen(container);
+  const line = el('p', 'menu-sub', 'Loading the planet');
+  const bar = el('div', 'menu-progress');
+  const fill = el('i', '');
+  bar.appendChild(fill);
+  const showDone = (fraction: number): void => {
+    fill.style.width = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
+  };
+  card.append(el('h1', 'menu-title', 'Wanderseed'), line, bar);
+  const stopTurnAsk = attachTurnAsk(card);
+  try {
+    const records = await loadPlanetRecords();
+    showDone(0.25);
+    const terrain = await loadPlanetTerrain({ records });
+    showDone(0.75);
+    await whenChampionModelsReady([], (loaded, total) => {
+      line.textContent = `Loading the champions: ${loaded} / ${total}`;
+      showDone(0.75 + 0.25 * (total > 0 ? loaded / total : 1));
+    });
+    showDone(1);
+    return { map: planetGameMap(assemblePlanet(records.layout)), terrain };
+  } catch (err) {
+    await showNotice(
+      container,
+      'Wanderseed unavailable',
+      `The planet could not be loaded: ${errorText(err)}`,
+    );
+    return null;
+  } finally {
+    stopTurnAsk();
+    root.remove();
+  }
 }
 
 // One battle royale: straight in with the pick (net/royale_client.ts
@@ -1317,7 +1354,7 @@ async function runRoyale(
     const send = (msg: unknown): void => {
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
     };
-    const world = new ClientWorld((msg) => send(msg), loaded.orchard.map);
+    const world = new ClientWorld((msg) => send(msg), loaded.map);
     let pres: Presentation | null = null;
     let ends: MatchEndReporter | null = null;
     // The card between Play and the first snapshot, Cancel its way out.

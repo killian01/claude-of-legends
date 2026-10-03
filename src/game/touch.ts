@@ -9,6 +9,7 @@
 // machine with no DOM, so tests can drive it event by event.
 
 import type { Renderer } from '../render/renderer';
+import { dirTo, onSphere } from '../sim/geo';
 import type { AbilityKey, Vec2 } from '../sim/types';
 import type { ThumbStickView } from '../ui/thumb_stick_view';
 import type { InputHandlers } from './input';
@@ -176,6 +177,8 @@ export function setupTouchControls(
     const a = renderer.groundPointAt(width / 2, height / 2);
     const b = renderer.groundPointAt(width / 2 + vx * 50, height / 2 + vy * 50);
     if (!a || !b) return null;
+    // On the planet: the great circle's heading at the middle (geo.ts).
+    if (onSphere(a) && onSphere(b)) return dirTo(a, b);
     const dx = b.x - a.x;
     const dz = b.z - a.z;
     const d = Math.hypot(dx, dz);
@@ -299,7 +302,7 @@ export function setupTouchControls(
       // the finger, whatever the zoom or camera angle.
       const from = renderer.groundPointAt(action.fromX, action.fromY);
       const to = renderer.groundPointAt(action.toX, action.toY);
-      if (from && to) renderer.panBy(from.x - to.x, from.z - to.z);
+      if (from && to) renderer.panAlong(from, to);
     } else if (action.kind === 'aim') {
       renderer.setPointerHint(action.x, action.y);
     } else {

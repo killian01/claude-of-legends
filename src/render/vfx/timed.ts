@@ -5,6 +5,7 @@
 // effects that are geometry of their own. Presentation only.
 
 import type * as THREE from 'three';
+import { framed, type SpawnFrame } from './chart_shift';
 
 interface TimedEffect {
   object: THREE.Object3D;
@@ -28,7 +29,10 @@ export function disposeEffect(object: THREE.Object3D): void {
 export class TimedEffects {
   private readonly live: TimedEffect[] = [];
 
-  constructor(private readonly scene: THREE.Scene) {}
+  constructor(
+    private readonly scene: THREE.Scene,
+    private readonly frame?: SpawnFrame,
+  ) {}
 
   // Adds the object for `durationMs`; `tick` runs at once with age 0 and
   // then every update, so the first frame already shows the authored start.
@@ -38,6 +42,11 @@ export class TimedEffects {
     tick?: (ageMs: number) => void,
     now = performance.now(),
   ): void {
+    if (this.frame?.map) {
+      const at = framed(this.frame, object.position.x, object.position.z);
+      object.position.x = at.x;
+      object.position.z = at.z;
+    }
     this.scene.add(object);
     this.live.push({ object, bornAt: now, durationMs, tick });
     tick?.(0);

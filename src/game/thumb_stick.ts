@@ -12,6 +12,7 @@
 // intention outside the decision budget (ADR 0003), so a stick that speaks
 // every tick costs nobody anything and gives no throughput a bot lacks.
 
+import { offset, onSphere } from '../sim/geo';
 import type { Vec2 } from '../sim/types';
 
 // How far the knob travels from the base, in CSS pixels: the ring a thumb
@@ -120,19 +121,26 @@ export const STICK_TURN_RAD = 0.12;
 export interface StickOrder {
   x: number;
   z: number;
+  // On the planet the direction is a tangent vector with y (geo.ts).
+  y?: number;
   at: number;
 }
 
 export function shouldResend(last: StickOrder | null, dir: Vec2, now: number): boolean {
   if (last === null) return true;
   if (now - last.at >= STICK_RESEND_MS) return true;
-  const dot = Math.max(-1, Math.min(1, last.x * dir.x + last.z * dir.z));
+  const dot = Math.max(
+    -1,
+    Math.min(1, last.x * dir.x + last.z * dir.z + (last.y ?? 0) * (dir.y ?? 0)),
+  );
   return Math.acos(dot) >= STICK_TURN_RAD;
 }
 
 // The point the order names: ahead along the direction, held inside the
 // map so the edge of the world is never asked for.
+// On the planet: along the great circle, a sphere with no edge to keep to.
 export function leadPoint(self: Vec2, dir: Vec2, lead: number, mapSize: number): Vec2 {
+  if (onSphere(self) && dir.y !== undefined) return offset(self, dir, lead);
   const clamp = (v: number): number => Math.max(0, Math.min(mapSize, v));
   return { x: clamp(self.x + dir.x * lead), z: clamp(self.z + dir.z * lead) };
 }
