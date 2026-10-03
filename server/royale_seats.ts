@@ -63,6 +63,9 @@ export interface RoyalePerson {
   name: string;
   guest: boolean;
   pick: RoyalePick;
+  // Never banked a battle royale award (RoyaleDeps.newcomer): the seat is
+  // flagged for the builder (RoyaleSeatPick.newcomer). Absent otherwise.
+  newcomer?: boolean;
 }
 
 // A seat as the match keeps it: the pick the sim was built from, and who
@@ -90,6 +93,7 @@ export function royaleSeats(
       sigils: [p.pick.sigils[0], p.pick.sigils[1]],
       skin: p.pick.skin,
       clientId: p.clientId,
+      ...(p.newcomer ? { newcomer: true } : {}),
     });
   }
   const botCount = seats - out.length;

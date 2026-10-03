@@ -119,6 +119,7 @@ const CORE_ON_THE_PLANET = [
   'zones.ts',
   // The battle royale's rules and its bot's travel (ADR 0031).
   'royale/caches.ts',
+  'royale/clamors.ts',
   'royale/drop.ts',
   'royale/dusk.ts',
   'royale/grafts.ts',

@@ -5,7 +5,7 @@
 // real one is built by buildRoyaleSim in src/net/replay.ts, the one place
 // a match's sim is built (tests/architecture.test.ts).
 
-import type { ReplayPick } from '../src/net/replay';
+import type { ReplayPick, RoyaleRecord } from '../src/net/replay';
 import type { RoyaleVariant } from '../src/net/royale_wire';
 import type { Vec3 } from '../src/sim/geo';
 import type { Projectile } from '../src/sim/projectiles';
@@ -64,6 +64,10 @@ export interface RoyaleSeatPick {
   // Guests only, which softens the bots (docs/plan-royale.md); the builder
   // deals each bot its skill from the seed.
   bot?: { softened: boolean };
+  // A person who never banked a battle royale award (server/royale_seats.ts
+  // RoyalePerson.newcomer): the builder records the seat (RoyaleRecord
+  // newcomers) and the mode deals their escorts. Absent for everyone else.
+  newcomer?: boolean;
 }
 
 export interface RoyaleBuild {
@@ -74,7 +78,7 @@ export interface RoyaleBuild {
   // the builder took them, and the mode's own part of the record.
   replay: {
     picks: readonly ReplayPick[];
-    royale: { variant: RoyaleVariant; guestsOnly?: boolean; rules?: number };
+    royale: RoyaleRecord;
   };
   // Hands a seat to the battle royale's bot: a person left it.
   standIn(unitId: number): void;

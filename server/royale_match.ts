@@ -13,6 +13,7 @@ import {
   REPLAY_VERSION,
   type ReplayEvent,
   type ReplayPick,
+  type RoyaleRecord,
 } from '../src/net/replay';
 import type { RoyaleResult, RoyaleVariant, SeatLabel } from '../src/net/royale_wire';
 import {
@@ -70,16 +71,17 @@ interface SeatState {
 
 // A battle royale's replay (src/net/replay.ts ReplayRecord with the mode's
 // block): the seed, the picks and every event that steered the sim, the
-// variant and whether the bots played softer, so buildRoyaleSim rebuilds it,
-// and the royale rules it ran under (ROYALE_RULES_VERSION), which a loader
-// checks (src/net/replay.ts royaleReplayPlayable).
+// variant, whether the bots played softer and the newcomers' seats, so
+// buildRoyaleSim rebuilds it, and the royale rules it ran under
+// (ROYALE_RULES_VERSION), which a loader checks (src/net/replay.ts
+// royaleReplayPlayable).
 export interface RoyaleReplay {
   version: number;
   seed: number;
   picks: readonly ReplayPick[];
   events: readonly ReplayEvent[];
   ticks: number;
-  royale: { variant: RoyaleVariant; guestsOnly?: boolean; rules?: number };
+  royale: RoyaleRecord;
 }
 
 // Every seat of a match this many seats wide, by default the mode's fifty.

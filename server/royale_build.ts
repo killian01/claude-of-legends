@@ -31,13 +31,26 @@ export function royaleFactory(planet: () => RoyalePlanet): RoyaleSimFactory {
       skin: p.skin,
       ...(p.bot ? { bot: ROYALE_BOT_ID } : {}),
     }));
-    const { sim, unitIds } = buildRoyaleSim(planet(), seed, replayPicks, variant, { guestsOnly });
+    // The newcomers' seats, recorded so a replay deals the same escorts.
+    const newcomers: number[] = [];
+    picks.forEach((p, i) => {
+      if (p.newcomer) newcomers.push(i);
+    });
+    const { sim, unitIds } = buildRoyaleSim(planet(), seed, replayPicks, variant, {
+      guestsOnly,
+      newcomers,
+    });
     return {
       sim: royaleSimOf(sim),
       unitIds,
       replay: {
         picks: replayPicks,
-        royale: { variant, guestsOnly, rules: ROYALE_RULES_VERSION },
+        royale: {
+          variant,
+          guestsOnly,
+          rules: ROYALE_RULES_VERSION,
+          ...(newcomers.length > 0 ? { newcomers } : {}),
+        },
       },
       standIn: (unitId) => attachRoyaleBot(sim, unitId),
     };

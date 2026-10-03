@@ -93,6 +93,11 @@ export interface Unit {
   // battle royale's sturdier champions, ADR 0031); 1 everywhere else,
   // where the product is the sum it always was.
   hpScale: number;
+  // The share a mode's rules scale a champion's damage to champions by (the
+  // battle royale's planet tuning, per champion); 1 everywhere else, where
+  // x * 1 is the number it always was. Nothing reads it yet: the damage
+  // step (combat/damage.ts) multiplies by it once the tuning lands.
+  dmgScale: number;
   // The favors the unit's team holds (CONTEXT.md: Favor), mirrored from
   // the sim's Favors record whenever one is granted, so the stat
   // recalculation and the effect seam read the unit alone. Champions
@@ -245,6 +250,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     lastDealtDamageAt: -999,
     outOfCombatBonus: 0,
     hpScale: 1,
+    dmgScale: 1,
     favors: NO_FAVORS,
     creatureId: null,
     aspect: null,

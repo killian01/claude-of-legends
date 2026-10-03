@@ -306,7 +306,9 @@ function royaleEvents(
       case 'royale_last_light':
         out.push({ e: 'royale_last_light', step: ev.step });
         break;
-      // Where it lands is where the slammer stands: only to who sees them.
+      // Where it lands is where the slammer stands: only to who sees them,
+      // as royale_pad. Fogged on purpose, the one new event that is not
+      // everyone's: sent to all, it would show a champion through the fog.
       case 'royale_pad_slam':
         if (sees(ev.unitId)) {
           out.push({ e: 'royale_pad_slam', unitId: ev.unitId, at: point(ev.at), hit: [...ev.hit] });

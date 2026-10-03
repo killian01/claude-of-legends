@@ -326,6 +326,11 @@ export function fakeFactory(): {
     });
     sims.push(sim);
     picksSeen.push(picks);
+    // The newcomers' seats, as the real builder records them.
+    const newcomers: number[] = [];
+    picks.forEach((p, i) => {
+      if (p.newcomer) newcomers.push(i);
+    });
     return {
       sim,
       unitIds,
@@ -342,6 +347,7 @@ export function fakeFactory(): {
           variant,
           guestsOnly: picks.some((p) => p.bot?.softened === true),
           rules: ROYALE_RULES_VERSION,
+          ...(newcomers.length > 0 ? { newcomers } : {}),
         },
       },
       standIn: (unitId) => {

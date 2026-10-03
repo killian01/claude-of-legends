@@ -7,8 +7,8 @@
 //   after the walk: the launch pads ->
 //   after the zones: the Dusk's burn, then a Seedfall's impact ->
 //   in the deaths: takedowns, loot, experience, places ->
-//   after the deaths: caches, Seedfalls, Risings, marks, Grafts, the
-//   leader, the end.
+//   after the deaths: caches, Seedfalls, Risings, marks, Clamors, Grafts,
+//   the leader, the end.
 // Everything here moves with the match and is in the world checkpoint
 // (snapshot, restore); the schedule and the layout are fixed at the start.
 
@@ -25,6 +25,7 @@ import type { CombatCtx } from '../sim_context';
 import { DT } from '../types';
 import type { Unit } from '../unit';
 import { drawCaches, openingBy, stepCaches } from './caches';
+import { noteClamor, observeClamors, stepClamors } from './clamors';
 import { escortLandings, normalizePick, resolveLandings } from './drop';
 import { type DuskSchedule, drawDusk, duskAt, insideCap } from './dusk';
 import { observeGrafts, pickGraft, stepGrafts } from './grafts';
@@ -83,6 +84,11 @@ export interface RoyaleTally {
   duskDeaths: number;
   padsUsed: number;
   campsTaken: number;
+  // The Seedfalls (seedfall.ts): landed, their cache opened, and opened
+  // with two or more champions within 12 m (contested).
+  seedfallsLanded: number;
+  seedfallsOpened: number;
+  seedfallsContested: number;
 }
 
 // The ground's answers as the mode's rules ask them.
@@ -113,6 +119,11 @@ export class RoyaleMode {
   builds = new Map<number, string[]>();
   // The skill each seat's bot plays (a stand-in plays the seat's).
   skills = new Map<number, RoyaleSkillId>();
+  // The seats of people new to the battle royale (never banked an award),
+  // fixed before the first tick by the builder (src/net/replay.ts
+  // buildRoyaleSim): their escorts are dealt differently once the rule
+  // lands. Nothing reads it yet.
+  newcomers: ReadonlySet<number> = new Set();
   // When each seat last pressed a cast or a sigil or ordered an attack:
   // what disturbs a cache's opening beside a hit.
   lastActAt = new Map<number, number>();
@@ -123,6 +134,9 @@ export class RoyaleMode {
     duskDeaths: 0,
     padsUsed: 0,
     campsTaken: 0,
+    seedfallsLanded: 0,
+    seedfallsOpened: 0,
+    seedfallsContested: 0,
   };
   private hpBefore = new Map<number, number>();
   private aliveBefore = 0;
@@ -176,6 +190,11 @@ export class RoyaleMode {
     this.builds.set(u.id, seatBuild(u.championId, kitBuild));
     if (skill) this.skills.set(u.id, skill);
     this.state.scores.set(u.id, 0);
+  }
+
+  // The newcomers' unit ids, set once by the builder before the first tick.
+  setNewcomers(unitIds: readonly number[]): void {
+    this.newcomers = new Set(unitIds);
   }
 
   skillOf(unitId: number): RoyaleSkillId {
@@ -376,6 +395,7 @@ export class RoyaleMode {
     const champ = killer && killer.kind === 'champion' ? killer : null;
     if (victim.kind === 'champion') {
       if (this.duskHit.has(victim.id)) this.tally.duskDeaths++;
+      noteClamor(this, sim, victim, champ && champ.team !== victim.team ? champ : null);
       if (champ && champ.team !== victim.team) {
         this.tally.takedowns++;
         if (this.tally.firstTakedownAt === null) this.tally.firstTakedownAt = sim.time;
@@ -479,6 +499,7 @@ export class RoyaleMode {
     stepSeedfalls(this, sim);
     stepRisings(this, sim);
     stepMarks(this, sim);
+    stepClamors(this, sim);
     stepGrafts(this, sim);
     // The leader.
     if (this.variant === 'respawn') {
@@ -586,6 +607,7 @@ export class RoyaleMode {
       ...observeSeedfalls(this, sim, u),
       ...observeRisings(this, sim, u),
       ...observeMarks(this, sim, u),
+      ...observeClamors(this, sim, u),
     };
   }
 

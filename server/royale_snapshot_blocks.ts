@@ -5,9 +5,9 @@
 // the Reprieve, the Arrival, the Last light's final seconds and the watched
 // champion; and a cache's kind and its opening time. A builder answers
 // undefined to leave its block off the wire, which every one does until its
-// rules ship. A block sent on change keeps what it last sent per viewer in
-// its own memory here (a WeakMap keyed by the viewer), never in the shared
-// snapshot code.
+// rules ship. A block sent on change (sf, cl) asks sentOnChange below, the
+// one memory of what each viewer was last sent, never a tracker of its own
+// and never the shared snapshot code.
 
 import type {
   SnapCache,
@@ -30,6 +30,41 @@ export function cacheKindOf(c: CacheState): SnapCache[4] {
 // How long the recipient's opening takes, when it is not CACHE_OPEN_S.
 export function openingDuration(_sim: RoyaleSim, _c: CacheState): number | undefined {
   return undefined;
+}
+
+// What a viewer was last sent of one block: its value as JSON, and when.
+interface Sent {
+  json: string;
+  at: number;
+}
+
+// Keyed on viewer.seat, the person's own seat record (server/royale_match.ts
+// RoyalePlayer), which lives as long as their seat: the viewer itself is a
+// fresh literal every snapshot, so a key on it would never be found again.
+const lastSent = new WeakMap<object, Map<string, Sent>>();
+
+// A block sent on change: the value on the tick it differs from what this
+// viewer was last sent under that key (or was never sent), and with everyS
+// again once that long has passed since the last send; undefined otherwise,
+// which leaves the block off the wire (the client keeps the last one).
+export function sentOnChange<T>(
+  viewer: RoyaleViewer,
+  key: string,
+  value: T,
+  time: number,
+  everyS?: number,
+): T | undefined {
+  let memory = lastSent.get(viewer.seat);
+  if (!memory) {
+    memory = new Map();
+    lastSent.set(viewer.seat, memory);
+  }
+  const json = JSON.stringify(value);
+  const last = memory.get(key);
+  const due = everyS !== undefined && last !== undefined && time - last.at >= everyS - 1e-9;
+  if (last && last.json === json && !due) return undefined;
+  memory.set(key, { json, at: time });
+  return value;
 }
 
 type Builder<T> = (sim: RoyaleSim, viewer: RoyaleViewer, ctx: RoyaleSnapContext) => T | undefined;
