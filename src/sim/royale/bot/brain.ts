@@ -1,34 +1,68 @@
 // The battle royale bot's decision, one per slot (ADR 0031): a Policy's
 // body, deterministic over (observation, rng) and blind past what its own
-// sight shows. In order: the drop's pick; out of the dark; the dodge; the
-// fight when an enemy in sight is noticed (running from a far stronger
-// one, backing off when low and losing, the swing never thrown away, a
-// kite between strikes, a low enemy finished, a fleeing one let go in One
-// life's early trades, never a chase into the Dusk); holding still while
-// a cache opens; ahead of the Dusk's next cap; the nearest cache; a camp
-// when nothing better is near; the big creatures for a strong bot strong
-// enough; a wander where it stands. Its skill (content/bots/
-// royale_skills.ts) slows its eye, scatters its aim and sets its nerve.
+// sight shows. In order: the drop's pick, and a dead Respawn seat's pick
+// of where to come back; out of the dark; the dodge; an ambush waiting in
+// a bush; the fight when an enemy in sight is noticed (a losing bot backs
+// off only toward an exit, else answers; the swing never thrown away; a
+// kite between strikes; a low enemy finished; a leaving one chased while
+// it can be caught; never a chase into the Dusk); holding still while a
+// cache opens; ahead of the Dusk's next cap; a winning bot after its
+// target into the bush; the calls (a Seedfall, a Clamor); the nearest
+// cache; a camp when nothing better is near; the big creatures for a
+// strong bot strong enough; a cache or a Seedfall further off, a wander
+// only with none near. Its skill (content/bots/royale_skills.ts), sharpened
+// by its score and the Dusk, slows its eye, scatters its aim and sets its
+// nerve.
 
-import type { RoyaleSkill } from '../../content/bots/royale_skills';
+import {
+  CALL_HP,
+  CALM_NERVE,
+  ONE_LIFE_PACE,
+  PACE_NERVE_MAX,
+  PACE_NERVE_MIN,
+  PACE_NERVE_PER_SEAT,
+  ROYALE_SKILLS,
+  type RoyaleSkill,
+  type RoyaleSkillId,
+  SHARPEN_GENTLE_PHASE,
+  SHARPEN_NORMAL_AT,
+  SHARPEN_STRONG_AT,
+} from '../../content/bots/royale_skills';
 import { dirTo, dist, dot, norm, scale, turnLeft, type Vec3 } from '../../geo';
 import { KITE_DANGER_FRAC, KITE_STEP, RANGED_MIN_RANGE } from '../../playbook/micro';
-import type { Action, Observation, ObsUnit } from '../../policy';
+import type { Action, Observation, ObsRoyale, ObsSeedfall, ObsUnit } from '../../policy';
 import type { Rng } from '../../rng';
-import { depthInside } from '../dusk';
+import { depthInside, insideCap } from '../dusk';
 import { along, type RoyaleLayout } from '../layout';
+import { RESPAWN_S } from '../types';
+import { ambushCall, royaleCall } from './calls';
 import { pickDropPoint } from './drop_pick';
-import { awayPoint, escapeCast, fightSigil, pickCast, pickTarget, royaleOdds } from './fight';
+import {
+  awayPoint,
+  COMMIT_M,
+  chaseReach,
+  escapeCast,
+  exitFrom,
+  fightSigil,
+  NO_EXIT_MARGIN,
+  pickCast,
+  pickTarget,
+  royaleOdds,
+} from './fight';
 import { buildSense, p3, type Sense } from './sense';
 import {
+  approachSeedfall,
   beatDusk,
   CACHE_NEAR_M,
+  holdStill,
   leaveDark,
   lootCache,
   moveTo,
   pickCache,
   pickCampSpot,
   roam,
+  seedfallCache,
+  walkVia,
 } from './travel';
 
 const NOOP: Action = { kind: 'noop' };
@@ -50,32 +84,37 @@ export const FLEE_M = 10;
 export const ANSWER_MARGIN = 0.1;
 // The odds under which a hurt bot backs off: only from a fight it is
 // losing. Backing off from every enemy in reach, two hurt bots that met
-// circled one another without a blow (a playtest, 2026-10-03).
+// circled one another without a blow (a playtest, 2026-10-03). It backs
+// off only toward an exit (fight.ts exitFrom); with none it answers at
+// odds down to NO_EXIT_MARGIN under its nerve: One life's early trades,
+// where the loser turned its back at 60% and the winner let it go, left
+// the duels unended and the losers walked down from behind.
 export const LOSING_ODDS = 0.5;
-// One life, until the Dusk's SKIRMISH_UNTIL_PHASE: a fight between
-// champions is a trade, the way the genre keeps its early game alive (its
-// bots fight one another and seldom see it through): the loser backs off
-// sooner (its skill's health line raised by SKIRMISH_HP), the winner lets
-// a fleeing enemy go unless it can finish it where it stands, and both
-// heal out of combat (types.ts). Fought to the death from every bot's
-// first sight, fifty champions fell to a handful in two minutes. From that
-// phase on the light leaves no room to back off into, and fights go to
-// the end.
-export const SKIRMISH_UNTIL_PHASE = 5;
-export const SKIRMISH_HP = 0.15;
-// An enemy walking away from the bot faster than this, under this share
-// of its health, is fleeing a fight; a passer-by at full health is not.
-export const FLEEING_SPEED = 1;
-export const FLEEING_HP = 0.6;
+// How long a winning bot follows its target out of sight: to the point it
+// was last seen while that sighting is fresher than this.
+export const FOLLOW_S = 4;
 // An enemy this close is fought on odds this much under the bot's nerve:
 // two champions face to face do not walk past each other.
 export const CLOSE_M = 6;
 export const CLOSE_MARGIN = 0.08;
-// How far past its own reach the bot still follows a fleeing enemy it can
-// finish.
-export const FINISH_REACH = 2.5;
+// An ambush waits this close to its bush's heart.
+export const AMBUSH_HOLD_M = 0.8;
 // A camp body this close is worth hitting.
 export const CAMP_FIGHT_M = 14;
+// A bot that passes on a fight gives an enemy this close room, a step of
+// ROOM_STEP_M away.
+export const ROOM_M = 8;
+export const ROOM_STEP_M = 6;
+// No camp is taken, nor walked to, with an enemy champion this close: at
+// the camp the sim's idle defense turns the bot on whoever stands in
+// reach, a fight nobody chose (one first blow in three, a probe,
+// 2026-10-03).
+export const CAMP_CLEAR_M = 12;
+
+function enemyBeside(sense: Sense): boolean {
+  const e = sense.enemies[0];
+  return e !== undefined && dist(sense.me, p3(e)) <= CAMP_CLEAR_M;
+}
 // The bot's own health share to take a camp.
 export const CAMP_HP = 0.5;
 
@@ -133,11 +172,29 @@ function awayFrom(sense: Sense, from: Vec3, len: number): Vec3 {
   return along(sense.me, scale(rel, 1 / n) as Vec3, Math.max(0.5, len), R);
 }
 
-// Backing off: the escape when there is one, else a step away.
-function retreat(sense: Sense): Action {
-  const esc = escapeCast(sense);
-  if (esc) return esc;
-  return moveTo(sense, awayPoint(sense, 6));
+// A walk ending this close is all but over.
+export const SETTLE_M = 2.5;
+// A slot whose eye is elsewhere: the bot keeps to its order (a walk, the
+// fight it is in), but one standing idle holds its fire rather than let
+// the sim's idle defense start a fight it never looked at.
+function unnoticed(sense: Sense): Action {
+  const s = sense.s;
+  if (s.holding === true || sense.struck) return NOOP;
+  if (s.dest) {
+    // About to arrive: hold here instead, before the walk's end leaves it
+    // idle in an enemy's reach. A walk to a cache goes on.
+    const end = p3(s.dest);
+    if (dist(sense.me, end) > SETTLE_M) return NOOP;
+    if (sense.r.caches.some((c) => dist(end, c) <= 2)) return NOOP;
+    return { kind: 'stop' };
+  }
+  if (s.attackSwingUntil != null && s.attackSwingUntil > sense.obs.time) return NOOP;
+  return { kind: 'stop' };
+}
+
+// Out of the dark with an enemy on it: the escape when there is one.
+function darkEscape(sense: Sense): Action | null {
+  return sense.struck && sense.enemies.length > 0 ? escapeCast(sense) : null;
 }
 
 function fight(sense: Sense, target: ObsUnit, rng: Rng): Action {
@@ -145,7 +202,7 @@ function fight(sense: Sense, target: ObsUnit, rng: Rng): Action {
   if (s.attackSwingUntil != null && s.attackSwingUntil > obs.time) return NOOP;
   const c = pickCast(sense, target, rng);
   if (c) return c;
-  const sigil = fightSigil(sense);
+  const sigil = fightSigil(sense, target);
   if (sigil) return sigil;
   const d = dist(sense.me, p3(target));
   if (
@@ -163,6 +220,7 @@ function fight(sense: Sense, target: ObsUnit, rng: Rng): Action {
 // A camp body, or a big creature for a strong bot strong enough, in reach.
 function neutralTarget(sense: Sense): ObsUnit | null {
   if (sense.s.hpFrac < CAMP_HP) return null;
+  if (enemyBeside(sense)) return null;
   for (const n of sense.neutrals) {
     const d = dist(sense.me, p3(n));
     if (d > CAMP_FIGHT_M) break;
@@ -173,26 +231,130 @@ function neutralTarget(sense: Sense): ObsUnit | null {
   return null;
 }
 
-// A fleeing enemy the bot lets go: walking away and past the bot's reach,
-// unless it is low enough to finish within FINISH_REACH of it.
-function lettingGo(sense: Sense, target: ObsUnit): boolean {
-  const at = p3(target);
-  const d = dist(sense.me, at);
-  const dir = dirTo(sense.me, at);
-  if (!dir) return false;
-  const away = dot({ x: target.vx ?? 0, y: target.vy ?? 0, z: target.vz ?? 0 }, dir);
-  if (away < FLEEING_SPEED || target.hpFrac >= FLEEING_HP) return false;
-  const reach = sense.attackRange + 0.5;
-  if (d <= reach) return false;
-  return !(target.hpFrac < FINISH_HP && d <= reach + FINISH_REACH);
+const RANK: Readonly<Record<RoyaleSkillId, number>> = { gentle: 0, normal: 1, strong: 2 };
+
+// The sharpening: the skill a seat plays this slot, at least its own. A
+// score of SHARPEN_NORMAL_AT plays as normal, SHARPEN_STRONG_AT as strong,
+// and from the Dusk's SHARPEN_GENTLE_PHASE a gentle seat plays as normal.
+export function effectiveSkill(skill: RoyaleSkill, r: ObsRoyale): RoyaleSkill {
+  let id: RoyaleSkillId = skill.id;
+  const raise = (to: RoyaleSkillId) => {
+    if (RANK[to] > RANK[id]) id = to;
+  };
+  if (r.score >= SHARPEN_STRONG_AT) raise('strong');
+  else if (r.score >= SHARPEN_NORMAL_AT) raise('normal');
+  if (r.dusk.phase >= SHARPEN_GENTLE_PHASE) raise('normal');
+  return id === skill.id ? skill : ROYALE_SKILLS[id];
+}
+
+// The champions One life's pace expects still in at sim time `time`.
+export function paceAlive(r: ObsRoyale, time: number): number {
+  const minutes = Math.max(0, (time - r.dropEndsAt) / 60);
+  const i = Math.floor(minutes);
+  const last = ONE_LIFE_PACE.length - 1;
+  if (i >= last) return ONE_LIFE_PACE[last]!;
+  const f = minutes - i;
+  return ONE_LIFE_PACE[i]! * (1 - f) + ONE_LIFE_PACE[i + 1]! * f;
+}
+
+// How much more a fight's odds must show in One life for the field's
+// pace: more when champions fell ahead of it, less when behind.
+export function paceNerve(r: ObsRoyale, time: number): number {
+  if (r.variant !== 'one_life') return 0;
+  const ahead = paceAlive(r, time) - r.alive;
+  return Math.min(PACE_NERVE_MAX, Math.max(PACE_NERVE_MIN, ahead * PACE_NERVE_PER_SEAT));
+}
+
+// The odds a fight must show for this bot to start it: its skill's, less
+// in the last light; in One life, unless it was struck, more in the calm
+// (the first minute a loot, not a cull) and by the field's pace.
+export function nerveOf(sense: Sense, cornered: boolean): number {
+  const r = sense.r;
+  const base = sense.skill.fightOdds - (cornered ? LAST_LIGHT_NERVE : 0);
+  if (r.variant !== 'one_life' || sense.struck) return base;
+  const calm = r.dusk.phase === 0 ? CALM_NERVE : 0;
+  return base + calm + paceNerve(r, sense.obs.time);
+}
+
+// Why a slot chose its action: what scripts/royale_report.ts counts (the
+// roam share). Never read by the bot itself.
+export type DecideTrace = (why: string) => void;
+type Why = (why: string, a: Action) => Action;
+
+// A losing bot: an exit when there is one; with none, it answers at odds
+// down to NO_EXIT_MARGIN under its nerve, and only past that steps away.
+function losing(sense: Sense, foe: ObsUnit | null, nerve: number, rng: Rng, why: Why): Action {
+  const pursuer = foe ?? sense.enemies[0] ?? null;
+  const exit = exitFrom(sense, pursuer);
+  if (exit) return why('exit', exit);
+  if (pursuer && royaleOdds(sense, pursuer) >= nerve - NO_EXIT_MARGIN) {
+    return why('answer', fight(sense, pursuer, rng));
+  }
+  return why('back-off', moveTo(sense, awayPoint(sense, 6)));
+}
+
+// A winning bot after a target that left its sight: to the point the
+// target was last seen while that sighting is fresher than FOLLOW_S, in
+// the light, within the chase and a commit, the target worse off than the
+// bot. Null when none.
+export function followLastSeen(sense: Sense): Action | null {
+  let best: Vec3 | null = null;
+  let bestD = sense.skill.chase + COMMIT_M;
+  for (const rec of sense.obs.lastSeen ?? []) {
+    if (rec.y === undefined || sense.obs.time - rec.at >= FOLLOW_S) continue;
+    if (rec.hpFrac >= sense.s.hpFrac) continue;
+    const at = p3(rec);
+    if (sense.now.radius > 0 && !insideCap(sense.now, at)) continue;
+    const d = dist(sense.me, at);
+    if (d > bestD) continue;
+    best = at;
+    bestD = d;
+  }
+  return best ? moveTo(sense, best) : null;
+}
+
+// How far within the window of a Seedfall's landing a dead Respawn seat
+// asks to come back beside it.
+export const RESPAWN_PICK_S = 20;
+
+// A dead Respawn seat's pick of where to come back (the 'drop' action,
+// while dead): beside the Seedfall whose landing falls within
+// RESPAWN_PICK_S of its return (RESPAWN_S at the latest, the death timer
+// every player reads), at the point inside the light nearest it; else no
+// pick.
+export function respawnPick(obs: Observation, r: ObsRoyale): Action | null {
+  if (r.variant !== 'respawn' || r.stage !== 'play') return null;
+  const backAt = obs.time + RESPAWN_S;
+  let best: ObsSeedfall | null = null;
+  let bestGap = RESPAWN_PICK_S + 1e-9;
+  for (const sf of r.seedfalls ?? []) {
+    const gap = Math.abs(sf.landsAt - backAt);
+    if (gap > bestGap || (gap === bestGap && best !== null && sf.id > best.id)) continue;
+    best = sf;
+    bestGap = gap;
+  }
+  if (!best) return null;
+  const now = r.dusk.now;
+  let at: Vec3 = p3(best);
+  if (now.radius > 0 && !insideCap(now, at)) {
+    const dir = dirTo(now.center, at);
+    if (dir) at = along(now.center, dir as Vec3, Math.max(0, now.radius - 2), norm(now.center));
+  }
+  if (r.drop && dist(p3(r.drop), at) < 1) return NOOP;
+  return { kind: 'drop', x: at.x, y: at.y, z: at.z };
 }
 
 export function decide(
   obs: Observation,
   rng: Rng,
   layout: RoyaleLayout,
-  skill: RoyaleSkill,
+  seatSkill: RoyaleSkill,
+  trace?: DecideTrace,
 ): Action {
+  const why: Why = (w, a) => {
+    trace?.(w);
+    return a;
+  };
   const r = obs.royale;
   if (!r) return NOOP;
   if (r.stage === 'drop') {
@@ -200,20 +362,16 @@ export function decide(
     const p = pickDropPoint(layout, rng);
     return { kind: 'drop', x: p.x, y: p.y, z: p.z };
   }
-  if (r.stage !== 'play' || obs.self.dead || r.flying) return NOOP;
+  if (obs.self.dead) return respawnPick(obs, r) ?? NOOP;
+  if (r.stage !== 'play' || r.flying) return NOOP;
+  const skill = effectiveSkill(seatSkill, r);
   const sense = buildSense(obs, r, layout, skill);
 
   // Once the last light is out there is nowhere to go: no way out of the
   // dark, every fight is the last one.
   const lightsOut = sense.now.radius <= 0;
   const dark = lightsOut ? null : leaveDark(sense);
-  if (dark) {
-    if (sense.struck && sense.enemies.length > 0) {
-      const esc = escapeCast(sense);
-      if (esc) return esc;
-    }
-    return dark;
-  }
+  if (dark) return why('dark', darkEscape(sense) ?? dark);
 
   // A swing in the air is never thrown away but to run (the house bots'
   // orb walk, playbook/behaviors.ts): a sidestep or a kite step mid-swing
@@ -221,63 +379,94 @@ export function decide(
   // a blow (a playtest, 2026-10-03).
   const swing = sense.s.attackSwingUntil;
   const sidestep = swing != null && swing > obs.time ? null : dodge(sense, rng);
-  if (sidestep) return sidestep;
+  if (sidestep) return why('dodge', sidestep);
 
   if (sense.enemies.length > 0) {
+    // An ambush waits in its bush with the champion it waits on in sight,
+    // and strikes on its cue; a hit taken ends the wait.
+    const ambush = sense.s.hpFrac >= CALL_HP && !sense.struck ? ambushCall(sense) : null;
+    if (ambush?.strike) return why('ambush-strike', fight(sense, ambush.strike, rng));
+    if (ambush) {
+      const bush = { x: ambush.x, y: ambush.y, z: ambush.z };
+      const wait = dist(sense.me, bush) <= AMBUSH_HOLD_M ? holdStill(sense) : moveTo(sense, bush);
+      return why('ambush-wait', wait);
+    }
     // The skill's eye: on a slot it does not take the enemies in, the bot
     // keeps to its order, the fight it is in included. Falling through to
     // the loot instead walked bots off mid-fight, and two bots passed each
     // other by (a playtest, 2026-10-03).
     const noticed = sense.struck || rng.next() < skill.attention;
-    if (!noticed) return NOOP;
+    if (!noticed) return why('unnoticed', unnoticed(sense));
     const near = sense.enemies.some((e) => dist(sense.me, p3(e)) <= DANGER_M);
     // The last light leaves nowhere to go: everyone's nerve rises, and a
     // hit is answered rather than run from.
     const cornered = lightsOut || sense.now.radius <= LAST_LIGHT_M;
-    const skirmish = r.variant === 'one_life' && r.dusk.phase < SKIRMISH_UNTIL_PHASE && !cornered;
-    const backOff = cornered ? skill.retreatHp / 2 : skill.retreatHp + (skirmish ? SKIRMISH_HP : 0);
-    if (near && sense.s.hpFrac < backOff && royaleOdds(sense) < LOSING_ODDS) return retreat(sense);
+    const nerve = nerveOf(sense, cornered);
+    const backOff = cornered ? skill.retreatHp / 2 : skill.retreatHp;
+    // Every skill takes a fight its odds reach its nerve on, in either
+    // variant and from the landing on: an even duel is fought, a weaker
+    // enemy hunted, a low one finished, a hit answered, a leaving one
+    // chased while it can be caught.
+    const target = pickTarget(sense, (e) => chaseReach(sense, e));
+    if (near && sense.s.hpFrac < backOff && royaleOdds(sense) < LOSING_ODDS) {
+      return losing(sense, target, nerve, rng, why);
+    }
     if (!cornered) {
       const close = sense.enemies[0];
       if (close && dist(sense.me, p3(close)) <= FLEE_M && royaleOdds(sense, close, 0) < FLEE_ODDS) {
-        return retreat(sense);
+        return losing(sense, close, nerve, rng, why);
       }
     }
-    // Every skill takes a fight its odds reach its nerve on, in either
-    // variant and from the landing on: an even duel is fought, a weaker
-    // enemy hunted, a low one finished, a hit answered.
-    const target = pickTarget(sense);
     if (target) {
       const odds = royaleOdds(sense, target);
       const finish = target.hpFrac < FINISH_HP && sense.s.hpFrac > target.hpFrac;
-      const nerve = skill.fightOdds - (cornered ? LAST_LIGHT_NERVE : 0);
       const answer = sense.struck && (cornered || odds >= nerve - ANSWER_MARGIN);
       const margin = dist(sense.me, p3(target)) <= CLOSE_M ? CLOSE_MARGIN : 0;
-      const go = odds >= nerve - margin || finish || answer;
-      if (go && !(skirmish && lettingGo(sense, target))) return fight(sense, target, rng);
+      const go =
+        odds >= nerve - margin ? 'fight' : finish ? 'finish' : answer ? 'struck-back' : null;
+      if (go) return why(go, fight(sense, target, rng));
     }
-    if (near && sense.struck && !cornered) return retreat(sense);
+    if (near && sense.struck && !cornered) return losing(sense, target, nerve, rng, why);
+    // A fight passed on: room given rather than loot beside the enemy,
+    // where the first stray blow starts it anyway.
+    const close = sense.enemies[0];
+    if (!cornered && close && dist(sense.me, p3(close)) <= ROOM_M) {
+      return why('give-room', moveTo(sense, awayPoint(sense, ROOM_STEP_M)));
+    }
   }
 
-  if (r.opening) return sense.s.dest ? { kind: 'stop' } : NOOP;
+  if (r.opening) return why('opening', holdStill(sense));
 
   const ahead = beatDusk(sense);
-  if (ahead) return ahead;
+  if (ahead) return why('beat-dusk', ahead);
+
+  const follow = followLastSeen(sense);
+  if (follow) return why('follow', follow);
+
+  const call = royaleCall(sense);
+  if (call) {
+    const id = call.seedfallId;
+    const sf = id !== undefined ? r.seedfalls?.find((x) => x.id === id) : undefined;
+    if (call.kind === 'seedfall' && sf) {
+      return why('seedfall', approachSeedfall(sense, sf, seedfallCache(sense, sf)));
+    }
+    return why(call.kind, walkVia(sense, { x: call.x, y: call.y, z: call.z }));
+  }
 
   const cache = pickCache(sense, CACHE_NEAR_M);
-  if (cache) return lootCache(sense, cache);
+  if (cache) return why('cache-near', lootCache(sense, cache));
 
   const neutral = neutralTarget(sense);
   if (neutral) {
     const c = pickCast(sense, neutral, rng, true, false);
-    if (c && sense.s.mana > sense.s.maxMana * 0.4) return c;
-    return { kind: 'attack', targetId: neutral.id };
+    if (c && sense.s.mana > sense.s.maxMana * 0.4) return why('neutral', c);
+    return why('neutral', { kind: 'attack', targetId: neutral.id });
   }
 
-  const camp = pickCampSpot(sense);
-  if (camp && sense.s.hpFrac >= CAMP_HP) return moveTo(sense, camp);
+  const camp = enemyBeside(sense) ? null : pickCampSpot(sense);
+  if (camp && sense.s.hpFrac >= CAMP_HP) return why('camp', moveTo(sense, camp));
 
   const far = pickCache(sense);
-  if (far) return lootCache(sense, far);
-  return roam(sense);
+  if (far) return why('cache-far', lootCache(sense, far));
+  return why('roam', roam(sense));
 }

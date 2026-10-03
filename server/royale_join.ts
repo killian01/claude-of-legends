@@ -3,7 +3,8 @@
 // takes people, in a bot's seat, and a new match starts for them when none
 // does. Respawn takes people until JOIN_UNTIL_END_S before the end; One
 // life only during the drop and the calm, before anyone can have fallen
-// for good. Pure: the service hands in what it knows of its matches.
+// for good. Pure: the service hands in what it knows of its matches. And
+// who comes to the battle royale for the first time (isRoyaleNewcomer).
 
 import {
   CALM_S,
@@ -11,6 +12,7 @@ import {
   type RoyaleStage,
   type RoyaleVariant,
 } from '../src/sim/royale/types';
+import { loadJson, saveJsonAtomic } from './store';
 
 export interface RoyaleCandidate {
   matchId: number;
@@ -82,4 +84,46 @@ export function chooseBotSeat(
     }
   }
   return best ? best.unitId : null;
+}
+
+// The owners who ever banked a battle royale award (server/points.ts
+// through the royale's bank, server/main.ts): everyone else is a
+// newcomer, whose escorts come down gentle first (RoyaleMode.newcomers).
+// Kept on disk, one sorted list of owner ids, written when it grows.
+export class RoyaleVeterans {
+  private readonly ids: Set<number>;
+
+  constructor(
+    ids: readonly number[] = [],
+    private readonly save: (ids: number[]) => void = () => {},
+  ) {
+    this.ids = new Set(ids.filter((id) => Number.isInteger(id)));
+  }
+
+  static atFile(file: string): RoyaleVeterans {
+    const ids = loadJson<unknown>(file, []);
+    return new RoyaleVeterans(Array.isArray(ids) ? (ids as number[]) : [], (list) =>
+      saveJsonAtomic(file, list),
+    );
+  }
+
+  has(owner: number): boolean {
+    return this.ids.has(owner);
+  }
+
+  // A battle royale award banked for `owner`.
+  noteBanked(owner: number): void {
+    if (this.ids.has(owner)) return;
+    this.ids.add(owner);
+    this.save([...this.ids].sort((a, b) => a - b));
+  }
+}
+
+// Whether `owner` comes to the battle royale for the first time: never
+// banked an award in one.
+export function isRoyaleNewcomer(
+  veterans: { has(owner: number): boolean },
+  owner: number,
+): boolean {
+  return !veterans.has(owner);
 }

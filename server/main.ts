@@ -160,6 +160,7 @@ import { checkReference, refusalMessage } from './reference_check';
 import { setForgedAttackRange } from './reforge';
 import { RejoinRegistry } from './rejoin';
 import { royaleFactory as royaleSimFactory } from './royale_build';
+import { isRoyaleNewcomer, RoyaleVeterans } from './royale_join';
 import { RoyaleService } from './royale_service';
 import type { RoyaleSimFactory } from './royale_sim';
 import { sealChampion, unsealChampion } from './seal';
@@ -1033,6 +1034,10 @@ const matchmakers = [matchmaker, forgeMatchmaker];
 // process reads once (server/planet.ts), on first use.
 const royaleFactory: RoyaleSimFactory = royaleSimFactory(planet);
 
+// Who ever banked a battle royale award: everyone else is a newcomer,
+// whose escorts come down gentle first (server/royale_join.ts).
+const royaleVeterans = RoyaleVeterans.atFile(path.join(DATA_DIR, 'royale_veterans.json'));
+
 // The battle royale (ADR 0031, server/royale_service.ts): its matches run
 // beside the 5v5's, each counted against MAX_MATCHES by its weight.
 const royale = new RoyaleService({
@@ -1045,7 +1050,11 @@ const royale = new RoyaleService({
   leaveQueues: (id) => {
     for (const mm of matchmakers) mm.removeEverywhere(id);
   },
-  bank: bankPoints,
+  bank: (owner, delta) => {
+    royaleVeterans.noteBanked(owner);
+    return bankPoints(owner, delta);
+  },
+  newcomer: (owner) => isRoyaleNewcomer(royaleVeterans, owner),
   appendSeat: (rec) => appendJsonl(SEATS_FILE, rec),
   saveReplay: (id, record) => {
     saveJsonAtomic(path.join(REPLAYS_DIR, `${id}.json`), record);
