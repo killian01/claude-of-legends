@@ -124,6 +124,7 @@ import {
   royaleStepsStart,
   stepRoyaleSteps,
 } from './royale_steps';
+import { LOOT_EMPTY, LOOT_LABEL, royaleHints } from './royale_text';
 import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
 import { suggestedItem } from './shop_suggestion';
@@ -927,7 +928,16 @@ const CSS = `
    no recall, no lanes, no towers and no teams: what would say so stands
    down, and its own layer takes the top of the screen. */
 .hud.royale .hud-teamscore, .hud.royale .hud-meta, .hud.royale .hud-lane-card,
-.hud.royale .hud-kda .cs, .hud.royale .hud-feed { display: none; }
+.hud.royale .hud-kda .cs, .hud.royale .hud-feed, .hud.royale .hud-shop, .hud.royale .hud-score,
+.hud.royale .hud-gold, .hud.royale .hud-slot.recall, .hud.royale .hud-slot.passive {
+  display: none; }
+/* The bag as loot: a gold word ahead of it, the empty places drawn as
+   places to fill, and the pieces held edged in gold. */
+.hud-inv-label { align-self: center; margin-right: 4px; font-size: 9.5px; font-weight: 800;
+  letter-spacing: 1.4px; text-transform: uppercase; color: #c9a84a; text-shadow: 0 1px 2px #000; }
+.hud.royale .hud-inv-slot { background: rgba(10, 12, 20, 0.55); border: 1px dashed #5a4c28; }
+.hud.royale .hud-inv-slot.full { border: 1px solid #b8963f; background-color: #17140a;
+  box-shadow: 0 0 6px rgba(232, 196, 108, 0.25); }
 .hud.royale.br-dropping .hud-nudge, .hud.royale.br-dropping .hud-steps { visibility: hidden; }
 .hud.royale .hud-announce { top: 112px; }
 .hud.compact.royale .hud-announce { top: 70px; }
@@ -1443,7 +1453,9 @@ export class Hud {
     // The passive, visible in-game at last: a small round emblem ahead of
     // Q whose tooltip carries the passive's name and what it does. The
     // thumb cluster has no room for a button that casts nothing.
-    if (def && !thumbs) {
+    // Not in a battle royale: a gold disc marked P ahead of Q read as the
+    // shop's button there, where there is no shop (ADR 0031).
+    if (def && !thumbs && !royale) {
       const passive = el('div', 'hud-slot passive');
       passive.style.backgroundImage = `url(${passiveIconUrl(def.id)})`;
       passive.style.backgroundSize = 'cover';
@@ -1611,13 +1623,16 @@ export class Hud {
     }
 
     const inv = el('div', 'hud-inv');
+    // In a battle royale the bag is the loot the champion holds, named as
+    // such, so its empty places never read as a shop's (ADR 0031).
+    if (royale) inv.appendChild(el('span', 'hud-inv-label', LOOT_LABEL));
     for (let i = 0; i < 6; i++) {
       const slot = el('div', 'hud-inv-slot');
       attachTooltip(slot, () => {
         const u = this.world.units.get(this.selfId);
         const itemId = u?.items[i];
         const itemDef = itemId ? ITEMS[itemId] : undefined;
-        if (!itemDef) return [];
+        if (!itemDef) return royale ? [...LOOT_EMPTY] : [];
         const lines = describeItem(itemDef, statLabel(itemDef.stats));
         // Nothing to sell it for in a battle royale: no gold, no fountain.
         return royale ? lines : [...lines, 'Right-click to sell (70 percent back, at fountain).'];
@@ -1665,14 +1680,7 @@ export class Hud {
     const hints = el('div', 'hud-hints');
     this.hintsEl = hints;
     hints.textContent = royale
-      ? coarsePointer
-        ? getSettings().touchScheme === 'thumbs'
-          ? 'Left thumb: the stick walks. Right thumb: tap a spell to cast it, slide it to ' +
-            'aim. ATK attacks.'
-          : 'Tap: move / attack. Tap a spell, then tap the ground to cast it. Drag pans the ' +
-            'camera, Center snaps back to your champion.'
-        : `${getSettings().leftClickMoves ? 'Click' : 'Right-click'}: move / attack. ` +
-          'Q W E R: hold to aim, release to cast. D F: sigils. Space recenters. Esc: menu.'
+      ? royaleHints(this.stepsInput, getSettings().leftClickMoves)
       : coarsePointer
         ? getSettings().touchScheme === 'thumbs'
           ? 'Left thumb: the stick walks. Right thumb: tap a spell to cast it, slide it to ' +
@@ -3240,6 +3248,7 @@ export class Hud {
       const itemId = u.items[i];
       const slot = this.invSlots[i]!;
       const def = itemId ? ITEMS[itemId] : undefined;
+      slot.classList.toggle('full', itemId !== undefined);
       if (def) {
         slot.textContent = '';
         slot.style.backgroundImage = `url(${itemIconUrl(def)})`;

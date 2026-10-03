@@ -210,12 +210,10 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
     }
     if (scene === 'calm' && w >= nextLoot) {
       nextLoot = w + 2.4;
-      royale.push({
-        kind: 'loot',
-        unitId: self.id,
-        itemId: items[k % items.length]!.id,
-        source: 'cache',
-      });
+      const itemId = items[k % items.length]!.id;
+      // The loot lands in the bag, as the sim equips it.
+      if (self.items.length < 6) self.items.push(itemId);
+      royale.push({ kind: 'loot', unitId: self.id, itemId, source: 'cache' });
     }
     if (scene === 'calm' && w >= nextLevel && self.level < 7) {
       nextLevel = w + 4;
