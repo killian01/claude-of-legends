@@ -14,19 +14,19 @@
 // (O, -R, O) in both.
 
 import * as THREE from 'three';
-import type { SnapCache, SnapRoyale, WirePoint } from '../net/royale_wire';
+import type { SnapCache, WirePoint } from '../net/royale_wire';
 import { segmentDist, type Vec3 } from '../sim/geo';
 import { DT, type Vec2 } from '../sim/types';
 import type { IWorld } from '../world_api';
-import { ChartWindow, ChartWorld, type ChartView } from './chart_world';
+import { type ChartView, ChartWindow, ChartWorld } from './chart_world';
 import { BEND_UNIFORMS, bendTree } from './planet_bend';
 import { bendTurn, PlanetChart, rotateAbout } from './planet_chart';
+import { type DropOrbit, diveProgress, orbitPosition } from './planet_drop';
 import { capAngle, DUSK_UNIFORMS } from './planet_dusk';
-import { PlanetSky } from './planet_sky';
 import { PlanetMarks } from './planet_marks';
 import { PlanetMinimap } from './planet_minimap';
+import { PlanetSky } from './planet_sky';
 import type { PlanetGround } from './planet_terrain';
-import { type DropOrbit, diveProgress, orbitPosition } from './planet_drop';
 import type { ChartRemap } from './vfx/chart_shift';
 
 // The chart window's side: the renderer frames a square this big, the
@@ -303,7 +303,8 @@ export class PlanetStage {
     const dx = x - this.half;
     const dz = z - this.half;
     if (dx * dx + dz * dz > VIEW_REACH_M * VIEW_REACH_M) return false;
-    if (this.dropping) return false;
+    // Read off the world, not the last frame: a tick may come first.
+    if (this.base.royale?.()?.st === 'drop') return false;
     return !this.occluded(this.bentWorld(x, this.heightAt(x, z) + lift, z));
   }
 
@@ -316,7 +317,8 @@ export class PlanetStage {
     const lx = x - this.half;
     const lz = this.half - z;
     const r = Math.hypot(lx, lz);
-    const v = r < 1e-9 ? right : rotateAbout(right, { x: lz / r, y: 0, z: -lx / r }, -r / this.radius);
+    const v =
+      r < 1e-9 ? right : rotateAbout(right, { x: lz / r, y: 0, z: -lx / r }, -r / this.radius);
     // In the scene's mirrored space, three's rotation.y lays +x at
     // (cos a, 0, -sin a): the world's z is the scene's -z.
     return Math.atan2(v.z, v.x);
@@ -470,7 +472,8 @@ export class PlanetStage {
     DUSK_UNIFORMS.colPlanetInv.value.copy(this.root.matrixWorld).invert();
     DUSK_UNIFORMS.colTime.value = now / 1000;
     DUSK_UNIFORMS.colFogMap.value = fog;
-    DUSK_UNIFORMS.colFogOn.value = this.dropping ? 0 : 1;
+    // No fog of war over the globe, nor through the dive down from it.
+    DUSK_UNIFORMS.colFogOn.value = this.dropping || this.diveFrom ? 0 : 1;
     const dusk = royale?.dusk;
     if (dusk) {
       const c = wirePoint(dusk.c);
@@ -538,7 +541,10 @@ export class PlanetStage {
       );
       const t = Math.max(
         0,
-        Math.min(1, Math.hypot(p.x - flight.from.x, p.y - flight.from.y, p.z - flight.from.z) / total),
+        Math.min(
+          1,
+          Math.hypot(p.x - flight.from.x, p.y - flight.from.y, p.z - flight.from.z) / total,
+        ),
       );
       lift += 4 * PAD_ARC_M * t * (1 - t);
     }
@@ -721,4 +727,3 @@ function atmosphere(radius: number): THREE.Mesh {
   shell.renderOrder = 2;
   return shell;
 }
-

@@ -15,6 +15,10 @@ export interface SpawnFrame {
 }
 
 // A spawn point through the frame.
-export function framed(frame: SpawnFrame | undefined, x: number, z: number): { x: number; z: number } {
+export function framed(
+  frame: SpawnFrame | undefined,
+  x: number,
+  z: number,
+): { x: number; z: number } {
   return frame?.map ? frame.map(x, z) : { x, z };
 }

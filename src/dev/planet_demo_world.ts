@@ -10,6 +10,7 @@
 import type { WorldNotes } from '../game/boot';
 import type { SnapCache, SnapRoyale, WirePoint } from '../net/royale_wire';
 import type { PlanetGround } from '../render/planet_terrain';
+import { RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import { CHAMPION_LIST, CHAMPIONS } from '../sim/content/champions';
 import type { GameMap } from '../sim/content/map';
 import { GAME_MAP } from '../sim/content/map';
@@ -27,7 +28,6 @@ import {
   type Vec3,
 } from '../sim/geo';
 import type { Projectile } from '../sim/projectiles';
-import { RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from '../sim/types';
 import { DT } from '../sim/types';
 import { createChampion, type Unit } from '../sim/unit';
@@ -172,7 +172,11 @@ export class PlanetDemoWorld implements IWorld {
     this.start = opts.at
       ? onSphere(opts.at)
       : (settle(
-          offset(corner, dirTo(corner, onSphere({ x: 1, y: 0.2, z: 0.15 })) ?? { x: 1, y: 0, z: 0 }, 9),
+          offset(
+            corner,
+            dirTo(corner, onSphere({ x: 1, y: 0.2, z: 0.15 })) ?? { x: 1, y: 0, z: 0 },
+            9,
+          ),
           R,
         ) as Vec3);
     for (let i = 0; i < 20; i++) {
@@ -556,9 +560,10 @@ export class PlanetDemoWorld implements IWorld {
     if (spec.kind === 'skillshot') {
       this.spawnBolt(u, aim, tag, spec.speed, spec.radius, Math.min(spec.range, 40), null);
     } else if (spec.kind === 'zone') {
-      const at = dist(u.pos, aim) > def.castRange
-        ? (offset(u.pos, dirTo(u.pos, aim)!, def.castRange) as Vec3)
-        : aim;
+      const at =
+        dist(u.pos, aim) > def.castRange
+          ? (offset(u.pos, dirTo(u.pos, aim)!, def.castRange) as Vec3)
+          : aim;
       const id = this.nextId++;
       this.zones.set(id, {
         id,
@@ -597,7 +602,8 @@ export class PlanetDemoWorld implements IWorld {
       }
     } else {
       // Burst, cone, targeted: the cast note's effect, damage around.
-      const reach = spec.kind === 'burst' ? spec.radius : spec.kind === 'cone' ? spec.range : def.castRange;
+      const reach =
+        spec.kind === 'burst' ? spec.radius : spec.kind === 'cone' ? spec.range : def.castRange;
       for (const o of this.units.values()) {
         if (o.id === u.id || o.dead) continue;
         if (dist(o.pos, u.pos) <= reach) this.damage(u, o, 60 + this.rand() * 50);

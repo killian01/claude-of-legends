@@ -179,8 +179,7 @@ export function bendMaterial(material: THREE.Material): void {
     shader.uniforms.colBendOn = BEND_UNIFORMS.colBendOn;
     shader.vertexShader = bendVertexShader(shader.vertexShader);
   };
-  material.customProgramCacheKey = () =>
-    `col-bend|${own ? own.call(material) : beforeSource}`;
+  material.customProgramCacheKey = () => `col-bend|${own ? own.call(material) : beforeSource}`;
   material.needsUpdate = true;
 }
 

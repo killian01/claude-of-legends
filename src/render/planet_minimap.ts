@@ -9,7 +9,7 @@
 import type { SnapCache, SnapDusk } from '../net/royale_wire';
 import type { Vec3 } from '../sim/geo';
 import type { IWorld } from '../world_api';
-import { ChartWindow, ChartWorld, type ChartView } from './chart_world';
+import { type ChartView, ChartWindow, ChartWorld } from './chart_world';
 import { capAngle } from './planet_dusk';
 import type { PlanetGround } from './planet_terrain';
 
@@ -109,7 +109,8 @@ export class PlanetMinimap {
       g.fill();
     };
     for (const pad of this.ground.layout.pads) dot(pad.at, 3, '#ffcf4a');
-    for (const [, x, y, z, golden] of caches) dot({ x, y, z }, golden ? 2.6 : 1.7, golden ? '#ffd23a' : '#fff1b0');
+    for (const [, x, y, z, golden] of caches)
+      dot({ x, y, z }, golden ? 2.6 : 1.7, golden ? '#ffd23a' : '#fff1b0');
   }
 }
 

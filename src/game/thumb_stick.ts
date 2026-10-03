@@ -129,7 +129,10 @@ export interface StickOrder {
 export function shouldResend(last: StickOrder | null, dir: Vec2, now: number): boolean {
   if (last === null) return true;
   if (now - last.at >= STICK_RESEND_MS) return true;
-  const dot = Math.max(-1, Math.min(1, last.x * dir.x + last.z * dir.z + (last.y ?? 0) * (dir.y ?? 0)));
+  const dot = Math.max(
+    -1,
+    Math.min(1, last.x * dir.x + last.z * dir.z + (last.y ?? 0) * (dir.y ?? 0)),
+  );
   return Math.acos(dot) >= STICK_TURN_RAD;
 }
 

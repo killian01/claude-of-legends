@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { Vec3 } from '../sim/geo';
+import { duskTree } from './planet_dusk';
 import {
   cubeCorners,
   FACES,
@@ -21,7 +22,6 @@ import {
   type PlanetLayout,
   parseLayout,
 } from './planet_ground';
-import { duskTree } from './planet_dusk';
 import type { RenderTerrain } from './terrain';
 
 export interface PlanetGround {
@@ -196,10 +196,7 @@ function standInGround(segments: number): THREE.Mesh {
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
-  const ground = new THREE.Mesh(
-    geometry,
-    new THREE.MeshLambertMaterial({ vertexColors: true }),
-  );
+  const ground = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true }));
   ground.receiveShadow = true;
   ground.name = 'ground';
   return ground;
@@ -232,18 +229,19 @@ export function standInModel(segments = 72): THREE.Group {
   const trees = new THREE.IcosahedronGeometry(1.4, 0);
   trees.translate(0, 2.2, 0);
   const lush = [...pick(4, 90), ...pick(3, 40)];
-  root.add(scatter(trees, new THREE.MeshLambertMaterial({ color: 0x4f8a3e, flatShading: true }), lush));
+  root.add(
+    scatter(trees, new THREE.MeshLambertMaterial({ color: 0x4f8a3e, flatShading: true }), lush),
+  );
   const column = new THREE.CylinderGeometry(0.45, 0.55, 3.4, 8);
   column.translate(0, 1.7, 0);
   root.add(scatter(column, new THREE.MeshLambertMaterial({ color: 0xd9ceb0 }), pick(0, 140)));
   const rock = new THREE.IcosahedronGeometry(1.2, 0);
   rock.translate(0, 0.5, 0);
   root.add(
-    scatter(
-      rock,
-      new THREE.MeshLambertMaterial({ color: 0x8a8f96, flatShading: true }),
-      [...pick(5, 220), ...pick(3, 30)],
-    ),
+    scatter(rock, new THREE.MeshLambertMaterial({ color: 0x8a8f96, flatShading: true }), [
+      ...pick(5, 220),
+      ...pick(3, 30),
+    ]),
   );
   const spire = new THREE.Mesh(
     new THREE.ConeGeometry(2.2, 18, 6),
@@ -304,7 +302,11 @@ export function standInLayout(): PlanetLayout {
 // navigation.bin itself, each region's color, the blocked cells as water
 // where the ground around them dips and as rock where it does not, the
 // sight blockers as trees, columns or boulders by region, the bushes.
-export function gridModel(heights: PlanetHeights, layout: PlanetLayout, segments = 120): THREE.Group {
+export function gridModel(
+  heights: PlanetHeights,
+  layout: PlanetLayout,
+  segments = 120,
+): THREE.Group {
   const root = new THREE.Group();
   root.name = 'planet-grid-stand-in';
   const verts = (segments + 1) * (segments + 1);
@@ -323,9 +325,13 @@ export function gridModel(heights: PlanetHeights, layout: PlanetLayout, segments
         let c: [number, number, number] = [0, 0, 0];
         for (let g = 0; g < 6; g++) {
           const rgb = REGION_RGB[g]!;
-          c = [c[0] + (w[g]! * rgb[0]) / 255, c[1] + (w[g]! * rgb[1]) / 255, c[2] + (w[g]! * rgb[2]) / 255];
+          c = [
+            c[0] + (w[g]! * rgb[0]) / 255,
+            c[1] + (w[g]! * rgb[1]) / 255,
+            c[2] + (w[g]! * rgb[2]) / 255,
+          ];
         }
-        const shade = 0.88 + 0.12 * Math.sin(d.x * 41 + d.y * 37 + d.z * 29) + h * 0.05;
+        const shade = 0.94 + 0.04 * Math.sin(d.x * 131 + d.y * 97 + d.z * 113) + h * 0.05;
         c = [c[0] * shade, c[1] * shade, c[2] * shade];
         if (heights.blocked(p)) {
           if (h < 0.1) {
@@ -379,14 +385,24 @@ export function gridModel(heights: PlanetHeights, layout: PlanetLayout, segments
     const d = unit(s.at);
     const f = faceOf(d);
     const kind = f === 1 ? 0 : f === 0 ? 1 : f === 5 || f === 3 ? 2 : 3;
-    kinds[kind]!.push({ dir: d, lift: 0, turn: rand() * Math.PI * 2, scale: Math.max(0.5, s.r * 0.75) });
+    kinds[kind]!.push({
+      dir: d,
+      lift: 0,
+      turn: rand() * Math.PI * 2,
+      scale: Math.max(0.5, s.r * 0.75),
+    });
   }
   const at = (dir: Vec3, lift: number, turn: number, scale: number): THREE.Matrix4 => {
     const up = new THREE.Vector3(dir.x, dir.y, dir.z);
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
     q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), turn));
-    const r = PLANET_RADIUS + heights.heightAt({ x: dir.x * 80, y: dir.y * 80, z: dir.z * 80 }) + lift;
-    return new THREE.Matrix4().compose(up.multiplyScalar(r), q, new THREE.Vector3(scale, scale, scale));
+    const r =
+      PLANET_RADIUS + heights.heightAt({ x: dir.x * 80, y: dir.y * 80, z: dir.z * 80 }) + lift;
+    return new THREE.Matrix4().compose(
+      up.multiplyScalar(r),
+      q,
+      new THREE.Vector3(scale, scale, scale),
+    );
   };
   const shapes: [THREE.BufferGeometry, number][] = [
     [new THREE.ConeGeometry(0.8, 4.6, 7).translate(0, 2.3, 0), 0x2d5a34],
@@ -446,12 +462,7 @@ function groundOf(
 
 // The stand-in as a planet ground.
 export function standInGroundPlanet(): PlanetGround {
-  return groundOf(
-    standInModel(),
-    standInLayout(),
-    (p) => standInHeight(unit(p)),
-    true,
-  );
+  return groundOf(standInModel(), standInLayout(), (p) => standInHeight(unit(p)), true);
 }
 
 // A planet ground as the renderer's terrain. Its own heightAt is never

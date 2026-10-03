@@ -5,8 +5,8 @@
 // drawn.
 
 import { describe, expect, it } from 'vitest';
-import { offset, type Vec3 } from '../src/sim/geo';
 import { bend, bendTurn, PlanetChart, unbend } from '../src/render/planet_chart';
+import { offset, type Vec3 } from '../src/sim/geo';
 
 const R = 80;
 
@@ -198,7 +198,11 @@ describe('the bend', () => {
     const lifted = bend(30, -12, h, R);
     const ground = bend(30, -12, 0, R);
     const nrm = bendTurn({ x: 0, y: 1, z: 0 }, 30, -12, R);
-    near(lifted, { x: ground.x + nrm.x * h, y: ground.y + nrm.y * h, z: ground.z + nrm.z * h }, 1e-9);
+    near(
+      lifted,
+      { x: ground.x + nrm.x * h, y: ground.y + nrm.y * h, z: ground.z + nrm.z * h },
+      1e-9,
+    );
     const close = bend(0.5, 0.25, 0, R);
     expect(close.x).toBeCloseTo(0.5, 4);
     expect(close.z).toBeCloseTo(0.25, 4);
