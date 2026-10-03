@@ -472,9 +472,16 @@ export class RoyaleHudMoments {
         left: 26,
       };
       for (const c of this.chimes.step(targets, view)) playSfx('chime', 0.85, { pan: c.pan });
-      const obstacles = this.measureObstacles(stage);
+      // Each arrow placed keeps the next off it.
+      const obstacles = [...this.measureObstacles(stage)];
       for (const a of edgeArrows(targets, view)) {
         const at = clearOf(a, ARROW_HALF, obstacles, view);
+        obstacles.push({
+          left: at.x - ARROW_HALF,
+          top: at.y - ARROW_HALF,
+          right: at.x + ARROW_HALF,
+          bottom: at.y + ARROW_HALF,
+        });
         let node = this.arrows.get(a.key);
         if (!node) {
           node = el('div', 'br-edge');
