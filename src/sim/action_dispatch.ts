@@ -8,9 +8,22 @@
 
 import type { Action } from './policy';
 import type { Sim } from './sim';
+import type { Vec2 } from './types';
 
 function finite(a: number, b: number): boolean {
   return Number.isFinite(a) && Number.isFinite(b);
+}
+
+// The third coordinate of a point on the planet (ADR 0029): absent on the
+// plane; present and not finite, the action is malformed.
+function third(y: number | undefined): { ok: boolean; y: number | undefined } {
+  if (y === undefined) return { ok: true, y: undefined };
+  return { ok: Number.isFinite(y), y };
+}
+
+// The point an action names: the plane's {x, z}, the sphere's with y.
+function at(x: number, z: number, y: number | undefined): Vec2 {
+  return y === undefined ? { x, z } : { x, y, z };
 }
 
 // Dispatch one action for one seat. Returns false when the action was
@@ -21,10 +34,12 @@ export function dispatchAction(sim: Sim, unitId: number, action: Action): boolea
   const u = sim.units.get(unitId);
   if (!u) return false;
   switch (action.kind) {
-    case 'move':
-      if (!finite(action.x, action.z)) return false;
-      sim.orderMove(unitId, action.x, action.z);
+    case 'move': {
+      const y = third(action.y);
+      if (!finite(action.x, action.z) || !y.ok) return false;
+      sim.orderMove(unitId, action.x, action.z, y.y);
       return true;
+    }
     case 'attack':
       // Fog applies to acting, not only to seeing: a policy sees just what
       // its team sees (observe.ts), so ordering an attack on a unit outside
@@ -35,15 +50,19 @@ export function dispatchAction(sim: Sim, unitId: number, action: Action): boolea
       if (!sim.isVisible(u.team, action.targetId)) return false;
       sim.orderAttack(unitId, action.targetId);
       return true;
-    case 'cast':
-      if (!finite(action.x, action.z)) return false;
-      sim.castAbility(unitId, action.key, { x: action.x, z: action.z });
+    case 'cast': {
+      const y = third(action.y);
+      if (!finite(action.x, action.z) || !y.ok) return false;
+      sim.castAbility(unitId, action.key, at(action.x, action.z, y.y));
       return true;
-    case 'sigil':
+    }
+    case 'sigil': {
       if (action.slot !== 0 && action.slot !== 1) return false;
-      if (!finite(action.x, action.z)) return false;
-      sim.castSigil(unitId, action.slot, { x: action.x, z: action.z });
+      const y = third(action.y);
+      if (!finite(action.x, action.z) || !y.ok) return false;
+      sim.castSigil(unitId, action.slot, at(action.x, action.z, y.y));
       return true;
+    }
     case 'buy':
       if (typeof action.itemId !== 'string') return false;
       sim.buyItem(unitId, action.itemId);
@@ -60,6 +79,10 @@ export function dispatchAction(sim: Sim, unitId: number, action: Action): boolea
       return true;
     case 'stop':
       sim.orderStop(unitId);
+      return true;
+    case 'drop':
+      if (!finite(action.x, action.z) || !Number.isFinite(action.y)) return false;
+      sim.pickDrop(unitId, { x: action.x, y: action.y, z: action.z });
       return true;
     default:
       return true;

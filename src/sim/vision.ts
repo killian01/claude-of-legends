@@ -8,10 +8,11 @@
 
 import { isStealthed, sightFactor } from './combat/status';
 import type { GameMap } from './content/map';
-import { dist, segmentDist } from './geo';
+import { dist } from './geo';
 import { perTeam, TWO_TEAMS } from './teams';
 import type { Vec2 } from './types';
 import type { Unit } from './unit';
+import { anyWallOnLine } from './wall_index';
 import type { Zone } from './zones';
 
 export function brushIndexAt(map: GameMap, p: Vec2): number {
@@ -25,11 +26,10 @@ export function brushIndexAt(map: GameMap, p: Vec2): number {
 // True when the sight line from a to b passes through a jungle wall blob:
 // rock blocks sight, not just movement (player review: units were visible
 // straight through terrain).
+// A map of many walls (the planet's) asks a spatial index for the walls
+// near the line first (wall_index.ts); the answer is the same.
 export function sightBlocked(map: GameMap, a: Vec2, b: Vec2): boolean {
-  for (const w of map.walls) {
-    if (segmentDist(w, a, b).d <= w.r) return true;
-  }
-  return false;
+  return anyWallOnLine(map.walls, a, b);
 }
 
 // For each team (one set per team, in team order, ADR 0030), the set of

@@ -127,7 +127,8 @@ function aimAt(
 
 // The true reach of an ability, read from its CastSpec (kits-v2: the old
 // bot used one hardcoded 7 for everyone and refused to poke at range).
-function abilityRange(def: AbilityDef): number {
+// Exported for the battle royale's bot, which casts by the same reach.
+export function abilityRange(def: AbilityDef): number {
   const spec = def.spec;
   switch (spec.kind) {
     case 'skillshot':
