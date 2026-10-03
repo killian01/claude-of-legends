@@ -148,7 +148,7 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
   };
   const world = new Proxy(sim, {
     get(target, key) {
-      if (key === 'royale') return state;
+      if (key === 'royaleView') return state;
       if (key === 'scoreboard') {
         return (): ScoreRow[] =>
           target.scoreboard().map((row) => {
