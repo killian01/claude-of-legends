@@ -1,7 +1,7 @@
 // The battle royale's whole server path on the real sim (ADR 0031): the
 // service (server/royale_service.ts) on buildRoyaleSim over the shipped
-// Wanderseed, one person's socket faked and forty-nine bots. The person
-// enters Respawn, picks a landing during the drop, lands, plays; a second
+// Wanderseed (server/planet.ts), one person's socket faked and forty-nine
+// bots. The person enters Respawn, picks a landing during the drop, lands, plays; a second
 // person drops into a bot's seat mid-match; every snapshot holds to the
 // person's own sight with y on every position and the mode's block; the end
 // tells both their result, the points add up, and the next match starts at
@@ -9,34 +9,12 @@
 // calm. What it costs is printed for the report.
 
 import { describe, expect, it } from 'vitest';
+import { planet } from '../server/planet';
 import { royaleFactory } from '../server/royale_build';
 import { type RoyaleClient, RoyaleService } from '../server/royale_service';
 import type { ClientMsg, ServerMsg } from '../src/net/protocol';
-import type { RoyalePlanet } from '../src/net/replay';
-import { OpenSphereGround } from '../src/sim/ground';
-import type { PlanetLayoutRecord } from '../src/sim/royale/planet_map';
 import { CALM_S, DROP_S, PLAY_S, ROYALE_SEATS } from '../src/sim/royale/types';
 import type { Sim } from '../src/sim/sim';
-import { fakeLayout, R } from './royale_fixture';
-
-// The planet the matches stand on: the rules' stand-in layout
-// (tests/royale_fixture.ts) as the export's record, on open ground.
-function standInPlanet(): RoyalePlanet {
-  const l = fakeLayout();
-  const disc = (at: { x: number; y: number; z: number }) => ({ at, r: 4 });
-  const layout: PlanetLayoutRecord = {
-    radius: R,
-    regions: l.regions.map((r) => ({ id: r.id, heart: r.heart })),
-    pads: l.pads.map((p) => ({ at: p.at, to: p.to })),
-    caches: l.cacheSpots.map((c) => ({ at: c.pos, golden: c.golden })),
-    camps: l.camps.map((c) => ({ at: c.pos, kind: c.kind })),
-    creatures: { warden: disc(l.warden), pyrefang: disc(l.pyrefang), voidmaul: disc(l.voidmaul) },
-  };
-  return { layout, ground: () => new OpenSphereGround(R) };
-}
-
-const PLANET = standInPlanet();
-const planet = (): RoyalePlanet => PLANET;
 
 type Msg<T extends ServerMsg['t']> = Extract<ServerMsg, { t: T }>;
 

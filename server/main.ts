@@ -146,6 +146,7 @@ import {
 } from './night_coach';
 import { COACH_IDLE_DAYS } from './night_eligibility';
 import { passwordErrorMessage, validatePassword } from './password';
+import { planet } from './planet';
 import { type CoachDeps, coachPlaybook } from './playbook_suggest';
 import { bankAwards, humanSeats, MatchPoints } from './points';
 import { buildPointsLadder, type PointsEntry, type PointsReader } from './points_ladder';
@@ -158,6 +159,7 @@ import { buildMatchRecord, type MatchRecord } from './records';
 import { checkReference, refusalMessage } from './reference_check';
 import { setForgedAttackRange } from './reforge';
 import { RejoinRegistry } from './rejoin';
+import { royaleFactory as royaleSimFactory } from './royale_build';
 import { RoyaleService } from './royale_service';
 import type { RoyaleSimFactory } from './royale_sim';
 import { sealChampion, unsealChampion } from './seal';
@@ -1024,9 +1026,9 @@ const forgeMatchmaker = new Matchmaker(send, onMatchReady(true), undefined, {
 // holding the client and no-ops on the other.
 const matchmakers = [matchmaker, forgeMatchmaker];
 
-// The battle royale's sim builder (ADR 0031); null while the mode is not
-// open, and entering one says so.
-const royaleFactory: RoyaleSimFactory | null = null;
+// The battle royale's sim builder (ADR 0031), on the Wanderseed this
+// process reads once (server/planet.ts), on first use.
+const royaleFactory: RoyaleSimFactory = royaleSimFactory(planet);
 
 // The battle royale (ADR 0031, server/royale_service.ts): its matches run
 // beside the 5v5's, each counted against MAX_MATCHES by its weight.
