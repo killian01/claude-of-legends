@@ -42,6 +42,9 @@ export class ReplayWorld implements IWorld {
   get winner(): TeamId | null {
     return this.sim.winner;
   }
+  get teamCount(): number {
+    return this.sim.teamCount;
+  }
   get units(): ReadonlyMap<number, Readonly<Unit>> {
     return this.sim.units;
   }

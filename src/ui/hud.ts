@@ -35,6 +35,7 @@ import {
   xpForNext,
 } from '../sim/stats';
 import { BOON_DAMAGE_PER_STACK } from '../sim/team_buffs';
+import { otherTeam } from '../sim/teams';
 import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
@@ -115,6 +116,7 @@ import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
 import { suggestedItem } from './shop_suggestion';
 import { rankable } from './slot_tap';
+import { teamLook } from './team_look';
 import { TeamScore } from './team_score';
 import { attachTooltip, hideTooltip, LONG_PRESS_MS } from './tooltips';
 import { TURN_ASK, TURN_LOCK_LINE } from './turn_ask';
@@ -2369,12 +2371,18 @@ export class Hud {
     this.chatInput.blur();
   }
 
+  // The look a team wears on this screen (src/ui/team_look.ts): the 5v5's
+  // sides, or the viewer's team against everyone else.
+  private look(team: TeamId): TeamId {
+    return teamLook(team, this.selfTeam, this.world.teamCount);
+  }
+
   pushChat(from: string, team: TeamId, text: string): void {
     const line = document.createElement('div');
     line.className = 'hud-chat-line';
     const name = document.createElement('span');
     name.textContent = `${from}: `;
-    name.style.color = TEAM_TEXT_COLORS[team] ?? '#c9d8ae';
+    name.style.color = TEAM_TEXT_COLORS[this.look(team)] ?? '#c9d8ae';
     const body = document.createElement('span');
     body.textContent = text;
     line.append(name, body);
@@ -2392,7 +2400,7 @@ export class Hud {
     const mineSum = sum(mine);
     const enemySum = sum(enemy);
     const mineWrath = this.world.teamWrath(this.selfTeam) ?? 0;
-    const enemyWrath = this.world.teamWrath((1 - this.selfTeam) as TeamId) ?? 0;
+    const enemyWrath = this.world.teamWrath(otherTeam(this.selfTeam)) ?? 0;
     for (const clock of rings) {
       const up = clock.unitId !== null;
       const was = this.lastRingUp.get(clock.ring);
@@ -2733,12 +2741,12 @@ export class Hud {
       }
       const killerRow = rowOf(k.killerId);
       let killerName = killerRow ? who(killerRow) : 'The lane';
-      let killerColor = killerRow ? TEAM_TEXT_COLORS[killerRow.team] : '#c9d8ae';
+      let killerColor = killerRow ? TEAM_TEXT_COLORS[this.look(killerRow.team)] : '#c9d8ae';
       if (!killerRow) {
         const killerUnit = this.world.units.get(k.killerId);
         if (killerUnit?.kind === 'tower') killerName = 'A tower';
         else if (killerUnit?.kind === 'minion') killerName = 'Minions';
-        if (killerUnit) killerColor = TEAM_TEXT_COLORS[killerUnit.team];
+        if (killerUnit) killerColor = TEAM_TEXT_COLORS[this.look(killerUnit.team)];
       }
       const entry = document.createElement('div');
       entry.className = 'hud-feed-entry';
@@ -2749,7 +2757,7 @@ export class Hud {
       middle.textContent = ' killed ';
       const victim = document.createElement('span');
       victim.textContent = who(victimRow);
-      victim.style.color = TEAM_TEXT_COLORS[victimRow.team] ?? '#c9d8ae';
+      victim.style.color = TEAM_TEXT_COLORS[this.look(victimRow.team)] ?? '#c9d8ae';
       entry.append(killer, middle, victim);
       this.feed.appendChild(entry);
       window.setTimeout(() => entry.remove(), 6000);
@@ -2868,7 +2876,7 @@ export class Hud {
     const pit = this.world.wardenPit() ?? undefined;
     this.metaText.textContent = `${clock} · ${objectiveLine(rings, objAt, this.world.time, pit)}`;
     const mineBoon = this.world.teamBuff(this.selfTeam);
-    const enemyBoon = this.world.teamBuff((1 - this.selfTeam) as TeamId);
+    const enemyBoon = this.world.teamBuff(otherTeam(this.selfTeam));
     if (this.lastWardenUp !== null && wardenUp !== this.lastWardenUp) {
       if (wardenUp) {
         this.announce(
@@ -2894,7 +2902,7 @@ export class Hud {
     if (mineBoon) this.lastBoonMineUntil = Math.max(this.lastBoonMineUntil, mineBoon.until);
     if (enemyBoon) this.lastBoonEnemyUntil = Math.max(this.lastBoonEnemyUntil, enemyBoon.until);
     const mineFavors = this.world.teamFavors(this.selfTeam);
-    const enemyFavors = this.world.teamFavors((1 - this.selfTeam) as TeamId);
+    const enemyFavors = this.world.teamFavors(otherTeam(this.selfTeam));
     this.announceRings(rings, mineFavors, enemyFavors);
     this.levelBadge.textContent = String(u.level);
     this.goldText.textContent = `${Math.floor(u.gold)}g`;
@@ -2957,7 +2965,7 @@ export class Hud {
     // player must see to respect.
     for (const [enemy, until] of [
       [false, this.world.teamWrath(this.selfTeam)],
-      [true, this.world.teamWrath((1 - this.selfTeam) as TeamId)],
+      [true, this.world.teamWrath(otherTeam(this.selfTeam))],
     ] as const) {
       if (until === null) continue;
       chip(
@@ -3116,7 +3124,7 @@ export class Hud {
       const key = `${target.id}|${target.level}`;
       if (this.targetKey !== key) {
         this.targetKey = key;
-        const tint = TEAM_PORTRAIT_COLORS[target.team] ?? 0xd65c5c;
+        const tint = TEAM_PORTRAIT_COLORS[this.look(target.team)] ?? 0xd65c5c;
         if (target.kind === 'champion' && target.championId) {
           this.targetPortrait.src = championPortraitUrl(target.championId, target.skin, tint);
           const row = this.world.scoreboard().find((r) => r.unitId === target.id);
@@ -3151,7 +3159,7 @@ export class Hud {
             ? '#d8a6f5'
             : target.kind === 'creature'
               ? aspectColor(target.aspect).css
-              : (TEAM_TEXT_COLORS[target.team] ?? '#f5a3a3');
+              : (TEAM_TEXT_COLORS[this.look(target.team)] ?? '#f5a3a3');
       }
       this.targetHpFill.style.transform = `scaleX(${Math.max(0, target.hp / target.maxHp)})`;
       this.targetHpText.textContent = `${Math.ceil(target.hp)} / ${Math.round(target.maxHp)}`;

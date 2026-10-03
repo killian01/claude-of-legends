@@ -25,6 +25,9 @@ describe('rating policy', () => {
     expect(isRated([5, 5])).toBe(true);
     expect(isRated([1, 0])).toBe(false);
     expect(isRated([0, 0])).toBe(false);
+    // Any count of teams (ADR 0030): humans on two of them at least.
+    expect(isRated([1, 0, 1])).toBe(true);
+    expect(isRated([0, 0, 2])).toBe(false);
   });
 
   it('equal teams split K evenly and symmetrically', () => {

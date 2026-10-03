@@ -1,11 +1,12 @@
 // Projectiles in flight: linear skillshots (optionally piercing, optionally
 // affecting allies they pass through) and homing auto-attack bolts. Hit tests
 // use point-to-segment distance so fast projectiles cannot tunnel through a
-// unit between two ticks.
+// unit between two ticks. On the planet a skillshot flies its great circle:
+// its heading is advanced with it every step (geo.ts, ADR 0029).
 
 import { applyEffects, type EffectSpec, type Power } from './combat/effects';
 import { isStealthed, isUntargetable } from './combat/status';
-import { hypot } from './exact';
+import { advance, along, carry, copy, dist, offset, segmentDist, stepToward } from './geo';
 import type { DamageVia } from './passive_types';
 import { passiveOf, runItemAttackHits } from './passives';
 import type { CombatCtx } from './sim_context';
@@ -58,25 +59,14 @@ function applySplash(ctx: CombatCtx, p: Projectile, around: Unit): void {
   for (const u of ctx.units.values()) {
     if ((!u.neutral && u.team === p.team) || u.dead || ctx.dead.has(u.id)) continue;
     if (u.id === around.id || !isSpellTarget(u)) continue;
-    if (hypot(u.pos.x - around.pos.x, u.pos.z - around.pos.z) > p.splashOnHit.radius) continue;
+    if (dist(u.pos, around.pos) > p.splashOnHit.radius) continue;
     applyEffects(ctx, p.sourceId, p.power, u, p.splashOnHit.effects);
   }
 }
 
-function segmentDistance(p: Vec2, a: Vec2, b: Vec2): number {
-  const abx = b.x - a.x;
-  const abz = b.z - a.z;
-  const len2 = abx * abx + abz * abz;
-  let t = 0;
-  if (len2 > 0) t = Math.max(0, Math.min(1, ((p.x - a.x) * abx + (p.z - a.z) * abz) / len2));
-  const cx = a.x + abx * t;
-  const cz = a.z + abz * t;
-  return hypot(p.x - cx, p.z - cz);
-}
-
 export function stepProjectiles(ctx: CombatCtx, dt: number): void {
   for (const p of [...ctx.projectiles.values()]) {
-    const from = { x: p.pos.x, z: p.pos.z };
+    const from = copy(p.pos);
 
     if (p.homingTargetId !== null) {
       const target = ctx.units.get(p.homingTargetId);
@@ -84,9 +74,7 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
         ctx.projectiles.delete(p.id);
         continue;
       }
-      const dx = target.pos.x - p.pos.x;
-      const dz = target.pos.z - p.pos.z;
-      const d = hypot(dx, dz);
+      const d = dist(p.pos, target.pos);
       const step = p.speed * dt;
       if (d <= step + p.radius + target.radius) {
         const via = p.via ?? 'ability';
@@ -102,14 +90,12 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
         ctx.projectiles.delete(p.id);
         continue;
       }
-      p.pos.x += (dx / d) * step;
-      p.pos.z += (dz / d) * step;
+      stepToward(p.pos, target.pos, step);
       continue;
     }
 
     const step = Math.min(p.speed * dt, Math.max(0, p.maxRange - p.traveled));
-    p.pos.x += p.dir.x * step;
-    p.pos.z += p.dir.z * step;
+    advance(p.pos, p.dir, step);
     p.traveled += step;
 
     // Enemies crossed this step, nearest-first for determinism. Neutral
@@ -122,22 +108,25 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
       // by a tower standing on its line.
       if (spellBolt && !isSpellTarget(u)) continue;
       if (p.hitIds.has(u.id) || u.id === p.sourceId) continue;
-      if (segmentDistance(u.pos, from, p.pos) > p.radius + u.radius) continue;
-      crossed.push({ u, d: hypot(u.pos.x - from.x, u.pos.z - from.z) });
+      if (segmentDist(u.pos, from, p.pos).d > p.radius + u.radius) continue;
+      crossed.push({ u, d: dist(u.pos, from) });
     }
     crossed.sort((a, b) => a.d - b.d || a.u.id - b.u.id);
 
     // Where this bolt left its caster; distance to a victim is an effect
     // fact (kits-v2 distance conditionals), the line feeds knock-asides.
-    const origin = { x: p.pos.x - p.dir.x * p.traveled, z: p.pos.z - p.dir.z * p.traveled };
+    // The heading there is the one at the bolt carried back (itself on the
+    // plane).
+    const origin = offset(p.pos, p.dir, -p.traveled);
+    const originDir = carry(p.dir, p.pos, origin);
 
     let despawned = false;
     for (const { u } of crossed) {
       p.hitIds.add(u.id);
       applyEffects(ctx, p.sourceId, p.power, u, p.onHit, p.via ?? 'ability', {
-        distance: hypot(u.pos.x - origin.x, u.pos.z - origin.z),
+        distance: dist(u.pos, origin),
         lineFrom: origin,
-        lineDir: p.dir,
+        lineDir: originDir,
       });
       if (!p.pierce) {
         // A chain bolt jumps once instead of dying: it homes to the nearest
@@ -150,13 +139,13 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
             if (spellBolt && !isSpellTarget(c)) continue;
             if (p.hitIds.has(c.id) || c.id === p.sourceId) continue;
             if (isStealthed(c, ctx.time) || isUntargetable(c, ctx.time)) continue;
-            const cd = hypot(c.pos.x - u.pos.x, c.pos.z - u.pos.z);
+            const cd = dist(c.pos, u.pos);
             if (cd > p.chain.radius || cd >= bestD) continue;
             bestD = cd;
             next = c;
           }
           if (next) {
-            p.pos = { x: u.pos.x, z: u.pos.z };
+            p.pos = copy(u.pos);
             p.homingTargetId = next.id;
             p.onHit = p.chain.onHit;
             p.chain = null;
@@ -180,7 +169,7 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
         if (u.team !== p.team || u.id === p.sourceId || u.dead || ctx.dead.has(u.id)) continue;
         if (u.kind !== 'champion' && u.kind !== 'minion') continue;
         if (p.hitIds.has(u.id)) continue;
-        if (segmentDistance(u.pos, from, p.pos) > p.radius + u.radius) continue;
+        if (segmentDist(u.pos, from, p.pos).d > p.radius + u.radius) continue;
         p.hitIds.add(u.id);
         applyEffects(ctx, p.sourceId, p.power, u, p.allyEffects);
       }
@@ -205,7 +194,7 @@ export function stepProjectiles(ctx: CombatCtx, dt: number): void {
             id,
             sourceId: p.sourceId,
             team: p.team,
-            pos: { x: origin.x + p.dir.x * p.traveled * t, z: origin.z + p.dir.z * p.traveled * t },
+            pos: along(origin, originDir, p.traveled, t),
             radius: shock.radius,
             until: ctx.time + shock.delay + 0.1,
             tickEvery: 0,

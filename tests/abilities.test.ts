@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { applyEffects, type EffectSpec } from '../src/sim/combat/effects';
 import { isRooted, slowPct } from '../src/sim/combat/status';
 import { CHAMPIONS } from '../src/sim/content/champions';
+import { PlaneGround } from '../src/sim/ground';
 import { NavGrid } from '../src/sim/navgrid';
 import { Rng } from '../src/sim/rng';
 import { Sim } from '../src/sim/sim';
@@ -94,10 +95,12 @@ describe('Sylra', () => {
   it('the third mark triggers the passive root', () => {
     const rng = new Rng(1);
     const b = createChampion(2, 1, { x: 0, z: 0 }, CHAMPIONS.sylra!);
+    const nav = new NavGrid(10, [], 0);
     const ctx: CombatCtx = {
       time: 0,
       rng,
-      nav: new NavGrid(10, [], 0),
+      nav,
+      ground: new PlaneGround(nav),
       units: new Map([[b.id, b]]),
       projectiles: new Map(),
       zones: new Map(),
