@@ -15,7 +15,8 @@ import type { RoyaleMode } from './mode';
 // it, leaving its cache.
 export function stepSeedfalls(_mode: RoyaleMode, _sim: Sim): void {}
 
-// The Seedfalls as everyone sees them (ObsRoyale.seedfalls); nothing yet.
+// The Seedfalls as everyone sees them (ObsRoyale.seedfalls), each with its
+// opener while the seat's team sees it (ObsSeedfall.opener); nothing yet.
 export function observeSeedfalls(
   _mode: RoyaleMode,
   _sim: Sim,
