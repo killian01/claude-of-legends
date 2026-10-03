@@ -8,7 +8,7 @@
 import type { RoyaleVariant } from '../sim/royale/types';
 import { el } from './menu';
 import { planetEmblem } from './planet_emblem';
-import { ROYALE_LABEL, ROYALE_MODES } from './royale_modes';
+import { ROYALE_MODES } from './royale_modes';
 
 const CSS = `
 .royale-tiles { display: grid; grid-template-columns: 5fr 4fr; gap: 12px; max-width: 1180px;
@@ -29,8 +29,6 @@ const CSS = `
     radial-gradient(ellipse at 82% 50%, rgba(232, 106, 74, 0.14) 0%, rgba(232, 106, 74, 0) 46%),
     linear-gradient(160deg, #120d1c 0%, #08060d 100%); }
 .royale-tile-words { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.royale-tile small { font-size: 11px; font-weight: 800; letter-spacing: 1.6px;
-  text-transform: uppercase; color: #c9a84a; }
 .royale-tile h3 { margin: 0; font-family: Cinzel, Georgia, serif; font-size: 26px;
   letter-spacing: 2.4px; text-transform: uppercase; color: #f0dca0; line-height: 1.05; }
 .royale-tile p { margin: 0; font-size: 13px; line-height: 1.5; color: #b9cbe4; max-width: 46ch; }
@@ -73,8 +71,8 @@ export function buildRoyaleTiles(onPick: (variant: RoyaleVariant) => void): HTML
     tile.type = 'button';
     tile.dataset.royale = mode.variant;
     const words = el('div', 'royale-tile-words');
+    // The section's heading says Battle royale over both (ui/home_screen.ts).
     words.append(
-      el('small', '', ROYALE_LABEL),
       el('h3', '', mode.title),
       el('p', '', mode.line),
       el('span', 'royale-tile-cta', mode.call),

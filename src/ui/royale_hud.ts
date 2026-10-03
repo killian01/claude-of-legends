@@ -209,31 +209,35 @@ const CSS = `
   padding: 6px 8px 6px 12px; gap: 10px; }
 .hud.compact .br-drop b { font-size: 14px; letter-spacing: 0.8px; }
 .hud.compact .br-drop span { font-size: 14px; min-width: 40px; padding: 3px 8px; }
-.hud.compact .br-feed { font-size: 10.5px; gap: 3px; right: calc(76px + var(--safe-right, env(safe-area-inset-right, 0px))); }
+.hud.compact .br-feed { font-size: 10.5px; gap: 3px;
+  top: calc(40% + 58px); right: calc(12px + var(--safe-right, env(safe-area-inset-right, 0px))); }
 .hud.compact.thumbs .br-feed { right: calc(12px + var(--safe-right, env(safe-area-inset-right, 0px)));
   top: calc(178px + var(--safe-top, env(safe-area-inset-top, 0px))); }
 .hud.compact .br-feed-line { padding: 2px 7px; }
-.hud.compact .br-feed-line:nth-child(n + 4),
-.hud.compact.thumbs .br-feed-line:nth-child(n + 3) { display: none; }
-.hud.compact .br-open { bottom: 118px; }
+.hud.compact .br-feed-line:nth-child(n + 3) { display: none; }
+.hud.compact .br-open { left: calc(50% + 175px); bottom: 24px; }
 .hud.compact.thumbs .br-open { left: calc(40% + 132px); bottom: 18px; }
 .hud.compact .br-ring { width: 36px; height: 36px; }
 .hud.compact .br-ring::after { inset: 5px; }
-.hud.compact .br-notes { bottom: 168px; }
+.hud.compact .br-notes { bottom: 112px; }
 .hud.compact.thumbs .br-notes { left: 40%; bottom: 64px; }
 .hud.compact .br-note:nth-last-child(n + 3) { display: none; }
 .hud.compact .br-note { font-size: 12.5px; padding: 3px 10px 3px 4px; }
 .hud.compact .br-note img { width: 22px; height: 22px; }
 .hud.compact .br-note.level { padding-left: 10px; }
 .hud.compact .br-end { justify-content: flex-start; padding: 8px 10px 14px; }
-.hud.compact .br-end-card { padding: 12px 14px 12px; }
+/* The buttons climb over the ranking: a phone held sideways shows the
+   title, the lines and the three buttons on its first screen, and the
+   ranking scrolls under them. */
+.hud.compact .br-end-card { padding: 12px 14px 12px; display: flex; flex-direction: column; flex: none; }
+.hud.compact .br-end-btns { order: 1; margin-top: 8px; }
+.hud.compact .br-end-rank { order: 2; }
 .hud.compact .br-end h2 { font-size: 21px; margin: 2px 0 2px; letter-spacing: 1.2px; }
 .hud.compact .br-end-line { font-size: 12px; }
 .hud.compact .br-end-line:first-of-type { font-size: 12.5px; }
 .hud.compact .br-end-rank { margin-top: 8px; }
 .hud.compact .br-end-row { font-size: 12px; padding: 2px 6px; grid-template-columns: 24px 24px minmax(0, 1fr) auto; }
 .hud.compact .br-end-row img { width: 24px; height: 24px; }
-.hud.compact .br-end-btns { margin-top: 8px; }
 .hud.compact .br-end-btns button { min-height: 44px; padding: 6px 10px; font-size: 13px; min-width: 100px; }
 `;
 
