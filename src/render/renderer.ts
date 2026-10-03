@@ -53,6 +53,7 @@ import {
   type SpawnOffset,
 } from './muzzle_spawn';
 import { type PictureWatch, watchPicture } from './picture_watch';
+import { attachGhosts, ghostColor, ghostMaterial } from './planet_ghost';
 import type { PlanetMinimap } from './planet_minimap';
 import { PlanetStage } from './planet_stage';
 import { RING_FOG_EDGE, ringFogOpening } from './ring_fog';
@@ -1509,11 +1510,13 @@ export class Renderer {
       holder.add(ready.root);
       holder.userData.poolKey = poolKey;
       enableShadows(holder);
+      this.ghostBody(holder, ready.root);
       this.championVisuals.set(u.id, ready);
       return { holder, barY };
     }
     const figure = buildChampionMesh(u.championId, color, u.skin);
     holder.add(figure);
+    this.ghostBody(holder, figure);
     // Surface the figure's limb pivots on the holder the render loop sees;
     // without this hoist the walk cycle never runs.
     holder.userData.anim = figure.userData.anim;
@@ -1589,8 +1592,23 @@ export class Renderer {
       enableShadows(visual.root);
       toonifyMaterials(visual.root);
       holder.add(visual.root);
+      this.ghostBody(holder, visual.root);
       this.championVisuals.set(unitId, visual);
     });
+  }
+
+  // On the planet, a champion's body gets its silhouette twins
+  // (planet_ghost.ts), one material for the whole body, colored and
+  // switched each frame by render().
+  private ghostBody(holder: THREE.Object3D, body: THREE.Object3D): void {
+    if (!this.planet) return;
+    let mat = holder.userData.ghostMat as THREE.MeshBasicMaterial | undefined;
+    if (!mat) {
+      mat = ghostMaterial(ghostColor('enemy') ?? 0xffffff);
+      mat.visible = false;
+      holder.userData.ghostMat = mat;
+    }
+    attachGhosts(body, mat);
   }
 
   // Health bar, plus a thin mana strip stacked BELOW it for champions: two
@@ -3056,6 +3074,18 @@ export class Renderer {
       // then the nearest others in view (planet_dusk.ts).
       if (this.planet && t.kind === 'champion' && t.mesh.visible) {
         fadeAt.push({ id, x, y: t.mesh.position.y, z });
+      }
+      // Its silhouette through what hides it: the followed champion's
+      // always, the others' near the focus, in the relation's color.
+      const ghost = t.mesh.userData.ghostMat as THREE.MeshBasicMaterial | undefined;
+      if (ghost && this.planet) {
+        const team = this.world.units.get(id)?.team;
+        const color = ghostColor(
+          id === this.followId ? 'own' : team === this.viewerTeam ? 'ally' : 'enemy',
+        );
+        ghost.visible =
+          t.mesh.visible && color !== null && (id === this.followId || this.planet.nearFocus(x, z));
+        if (color !== null && ghost.color.getHex() !== color) ghost.color.setHex(color);
       }
     }
 
