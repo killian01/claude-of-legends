@@ -206,6 +206,9 @@ export class ClientWorld implements IWorld {
   private royaleBlock: RoyaleView | null = null;
   private caches: SnapCache[] = [];
   private dropPicks: WirePoint[] = [];
+  // The blocks sent on change (the Seedfalls, the Risings, the marks, the
+  // Clamors): the last of each, kept between sends.
+  private kept: Pick<SnapRoyale, 'sf' | 'ri' | 'mk' | 'cl'> = {};
   private readonly seats = new Map<number, SeatLabel>();
 
   // Match-scoped champion resolution, mirroring the server sim's registry:
@@ -282,6 +285,7 @@ export class ClientWorld implements IWorld {
     this.royaleBlock = null;
     this.caches = [];
     this.dropPicks = [];
+    this.kept = {};
     this.seats.clear();
   }
 
@@ -289,7 +293,11 @@ export class ClientWorld implements IWorld {
     if (r.caches) this.caches = r.caches;
     if (r.st !== 'drop') this.dropPicks = [];
     else if (r.picks) this.dropPicks = r.picks;
-    this.royaleBlock = { ...r, caches: this.caches, picks: this.dropPicks };
+    if (r.sf) this.kept.sf = r.sf;
+    if (r.ri) this.kept.ri = r.ri;
+    if (r.mk) this.kept.mk = r.mk;
+    if (r.cl) this.kept.cl = r.cl;
+    this.royaleBlock = { ...r, ...this.kept, caches: this.caches, picks: this.dropPicks };
   }
 
   championDef(championId: string): ChampionDef | null {

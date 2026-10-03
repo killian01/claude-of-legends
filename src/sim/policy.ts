@@ -12,7 +12,15 @@ import type { CampKind } from './content/camps';
 import type { ChampionRole } from './content/champions';
 import type { AspectId } from './content/rings';
 import type { Rng } from './rng';
-import type { DuskState, RoyaleStage, RoyaleVariant } from './royale/types';
+import type {
+  CacheKind,
+  DuskState,
+  GraftGrade,
+  MarkKind,
+  RisingKind,
+  RoyaleStage,
+  RoyaleVariant,
+} from './royale/types';
 import type { AbilityKey, TeamId } from './types';
 import type { UnitKind } from './unit';
 
@@ -121,6 +129,8 @@ export interface ObsLastSeen {
   id: number;
   x: number;
   z: number;
+  // On the sphere (additive v0 field).
+  y?: number;
   at: number;
   hpFrac: number;
 }
@@ -217,6 +227,61 @@ export interface ObsCache {
   y: number;
   z: number;
   golden: boolean;
+  // What kind of cache it is (additive v0 field): a Seedfall's opens slower
+  // and pays more. Absent reads as golden or plain by `golden`.
+  kind?: CacheKind;
+}
+
+// A Seedfall as everyone sees it (additive v0 block): announced from
+// landsAt - 20 s, where it falls, and whether it landed; listed until its
+// cache is opened.
+export interface ObsSeedfall {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  landsAt: number;
+  landed: boolean;
+}
+
+// A Rising as everyone sees it (additive v0 block): called ahead, then the
+// body's health while it stands.
+export interface ObsRising {
+  kind: RisingKind;
+  x: number;
+  y: number;
+  z: number;
+  risesAt: number;
+  up: boolean;
+  hpFrac: number;
+}
+
+// A champion shown to everyone (additive v0 block): why, its level, and the
+// last point shown with when; `at` holds still while the mark is hidden.
+export interface ObsMark {
+  id: number;
+  kind: MarkKind;
+  streak?: number;
+  level: number;
+  at: { x: number; y: number; z: number };
+  shownAt: number;
+}
+
+// A takedown ringing out (additive v0 block, CONTEXT.md: Clamor): where and
+// when, for CLAMOR_S.
+export interface ObsClamor {
+  x: number;
+  y: number;
+  z: number;
+  at: number;
+}
+
+// The seat's own open Graft offer (additive v0 block): the grade, the three
+// cards, and when card 0 is taken for it.
+export interface ObsGraftOffer {
+  grade: GraftGrade;
+  cards: readonly [string, string, string];
+  until: number;
 }
 
 // The battle royale as any player knows it (additive v0 block, present only
@@ -249,6 +314,19 @@ export interface ObsRoyale {
   alive: number;
   // Respawn: the score leader, and where they stand while shown.
   leader: { id: number; score: number; at?: { x: number; y: number; z: number } } | null;
+  // Additive v0 fields, absent until their rules ship: the seat's open
+  // Graft offer and the Grafts it holds; the Seedfalls, the Risings, the
+  // marks and the Clamors everyone sees; whether this seat is arriving
+  // over the globe (a Respawn drop-in), and when its Reprieve brings it back
+  // (One life), null when none is pending.
+  offer?: ObsGraftOffer | null;
+  grafts?: readonly string[];
+  seedfalls?: readonly ObsSeedfall[];
+  risings?: readonly ObsRising[];
+  marks?: readonly ObsMark[];
+  clamors?: readonly ObsClamor[];
+  arriving?: boolean;
+  reprieveAt?: number | null;
 }
 
 // A ring's clock as the team reads it (additive v0 block, ADR 0022): the
@@ -358,6 +436,11 @@ export type Action =
   | { kind: 'stop' }
   // The battle royale's landing pick during the drop (additive v0 action):
   // the same pick a person makes on the globe (Sim.pickDrop).
-  | { kind: 'drop'; x: number; y: number; z: number };
+  | { kind: 'drop'; x: number; y: number; z: number }
+  // The battle royale's Graft pick (additive v0 action): one of the open
+  // offer's three cards, the same pick a person makes. Free like 'level'
+  // and 'drop' (no decision token), accepted while dead, flying or in the
+  // drop.
+  | { kind: 'graft'; pick: 0 | 1 | 2 };
 
 export type Policy = (obs: Observation, rng: Rng) => Action;

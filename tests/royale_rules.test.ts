@@ -213,7 +213,7 @@ describe('the rules of play', () => {
     const { sim, unitIds } = build(1);
     land(sim);
     const u = sim.units.get(unitIds[0]!)!;
-    const cache = sim.royale!.caches.find((c) => !c.golden && c.present)!;
+    const cache = sim.royale!.caches.find((c) => c.kind === 'plain' && c.present)!;
     place(u, near(sim, cache.pos));
     expect(dist(u.pos, cache.pos)).toBeLessThan(1.6);
     const items = u.items.length;

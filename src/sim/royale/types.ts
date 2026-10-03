@@ -66,6 +66,14 @@ export const LEADER_TAKEDOWN_SCORE = 2;
 // When the big creatures rise, seconds after landing.
 export const RING_CREATURES_AT_S = 180;
 export const WARDEN_AT_S = 360;
+// How long a mark stays shown on everyone's globe after each show: the one
+// figure the observation and the snapshot both read (marks.ts).
+export const MARK_SHOWN_S = 4;
+// The battle royale's rules as a replay records them (RoyaleReplay.royale.rules):
+// the planet's rules move with each tranche of play changes without moving the
+// 5v5's REPLAY_VERSION or the content fingerprint, and a royale replay loader
+// refuses a record made under other rules. Bumped once per merged tranche.
+export const ROYALE_RULES_VERSION = 1;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {
@@ -88,10 +96,14 @@ export interface DuskState {
   burn: number;
 }
 
+// What a cache is: a plain one, a region's golden one, or what a Seedfall
+// leaves (seedfall.ts). Its opening time and reach are read by kind.
+export type CacheKind = 'plain' | 'golden' | 'seedfall';
+
 export interface CacheState {
   id: number;
   pos: Vec3;
-  golden: boolean;
+  kind: CacheKind;
   present: boolean;
   // Respawn: when an opened cache comes back.
   respawnAt: number | null;
@@ -107,6 +119,65 @@ export interface PadSite {
 }
 
 export type RoyaleStage = 'drop' | 'play' | 'over';
+
+// A Graft's grade (CONTEXT.md: Graft): raw stats, a changed rule, a changed kit.
+export type GraftGrade = 'sprout' | 'bough' | 'heartwood';
+
+// A Graft offered to a seat: three cards of a grade, queued; the head of the
+// queue is open until `until` (null while it waits behind another).
+export interface GraftOffer {
+  grade: GraftGrade;
+  cards: string[];
+  offeredAt: number;
+  until: number | null;
+}
+
+// A Seedfall announced (CONTEXT.md: Seedfall): where it falls and when, and
+// the cache it left once it landed (null before).
+export interface SeedfallState {
+  id: number;
+  pos: Vec3;
+  announcedAt: number;
+  landsAt: number;
+  landed: boolean;
+  cacheId: number | null;
+}
+
+// What comes up on the planet (CONTEXT.md: Rising).
+export type RisingKind = 'pyrefang' | 'voidmaul' | 'warden';
+
+// A Rising called ahead: where and when, and the body once it stands.
+export interface RisingState {
+  kind: RisingKind;
+  pos: Vec3;
+  risesAt: number;
+  up: boolean;
+  unitId: number | null;
+}
+
+// Why a champion is shown to everyone (marks.ts): the Lodestar, an Ablaze
+// run, the Wrath's holder, the slayer of a big creature.
+export type MarkKind = 'lodestar' | 'ablaze' | 'wrath' | 'slayer';
+
+// A mark: whom, why, the run behind an Ablaze, and the last point shown
+// with when; `at` is never updated while the mark is hidden.
+export interface MarkState {
+  unitId: number;
+  kind: MarkKind;
+  streak?: number;
+  at: Vec3;
+  shownAt: number;
+}
+
+// A Clamor (CONTEXT.md): where a takedown rang out and when.
+export interface ClamorState {
+  pos: Vec3;
+  at: number;
+}
+
+// Respawn's Last light as its events tell it: the heads-up, the double
+// takedowns, the final seconds where a death is final.
+export type LastLightStep = 'heads_up' | 'double' | 'final';
 
 export interface RoyaleState {
   variant: RoyaleVariant;
@@ -129,6 +200,32 @@ export interface RoyaleState {
   // Respawn: the score leader, and when they were last shown to everyone.
   leaderId: number | null;
   leaderShownAt: number;
+  // What makes a match on the planet a story (Seedfalls, Risings, marks,
+  // Grafts, Reprieves, Arrivals), every field public state with its
+  // default, so a checkpoint carries it:
+  // Seedfalls announced and not yet opened (seedfall.ts).
+  seedfalls: SeedfallState[];
+  // Risings called ahead and standing (risings.ts).
+  risings: RisingState[];
+  // Champions shown to everyone (marks.ts).
+  marks: MarkState[];
+  // Takedowns still ringing out (CLAMOR_S).
+  clamors: ClamorState[];
+  // Who carries the Wrath on the planet, and until when.
+  wrathHolder: { unitId: number; until: number } | null;
+  // Graft offers queued per seat, head first (grafts.ts).
+  offers: Map<number, GraftOffer[]>;
+  // Grafts held per seat, in the order taken.
+  grafts: Map<number, string[]>;
+  // One life: the seats whose Reprieve is spent.
+  reprieveUsed: Set<number>;
+  // One life: seconds the Dusk's clock runs ahead of the match's (the
+  // Hastening).
+  duskOffset: number;
+  // Respawn: where a dead or arriving seat picked to come back.
+  respawnPicks: Map<number, Vec3>;
+  // Respawn: the drop-in seats over the globe, not yet landed (Arrival).
+  arriving: Set<number>;
 }
 
 // The events the mode adds to the sim's stream.
@@ -140,4 +237,16 @@ export type RoyaleEvent =
   | { type: 'royale_dusk'; phase: number }
   | { type: 'royale_out'; unitId: number; killerId: number; place: number }
   | { type: 'royale_leader'; unitId: number }
-  | { type: 'royale_end'; winnerId: number | null };
+  | { type: 'royale_end'; winnerId: number | null }
+  // The Seedfalls, Risings, marks, Reprieves, the Hastening, the Last light
+  // and the Pad slam, typed and forwarded before any rule emits them (server/royale_snapshot.ts, src/net/royale_client.ts).
+  | { type: 'royale_seedfall'; seedfallId: number; at: Vec3; landsAt: number }
+  | { type: 'royale_seedfall_land'; seedfallId: number; at: Vec3 }
+  | { type: 'royale_rising'; kind: RisingKind; at: Vec3; risesAt: number }
+  | { type: 'royale_wrath_passed'; from: number; to: number | null }
+  | { type: 'royale_mark'; unitId: number; kind: MarkKind }
+  | { type: 'royale_snuffed'; unitId: number; killerId: number; streak: number }
+  | { type: 'royale_reprieve'; unitId: number; backAt: number }
+  | { type: 'royale_dusk_hastens'; by: number; alive: number }
+  | { type: 'royale_last_light'; step: LastLightStep }
+  | { type: 'royale_pad_slam'; unitId: number; at: Vec3; hit: number[] };

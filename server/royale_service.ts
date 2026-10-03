@@ -167,6 +167,11 @@ export class RoyaleService {
       case 'chat':
       case 'ping':
         return true;
+      // A card of a Graft offer, and the next survivor to watch once out:
+      // taken and answered by nothing yet.
+      case 'graft':
+      case 'watch':
+        return true;
       default:
         if (!ROYALE_VERBS.has(msg.t)) return false;
         entry.match.handleCommand(client.id, msg);

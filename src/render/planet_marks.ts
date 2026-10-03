@@ -2,13 +2,15 @@
 // caches (glowing chests, the golden ones bigger and golden), the launch
 // pads (gold discs with a faint arc to where they throw), the beacons of
 // the crossroads, and during the drop the landing picks (the own one a
-// tall light, everyone else's a dot). All of it lives on the planet, in
+// tall light, everyone else's a dot); and the pillars of light over what
+// everyone should find (planet_pillars.ts). All of it lives on the planet, in
 // sphere coordinates, turned with it under the chart and never bent: a few
 // instanced draws whatever the count.
 
 import * as THREE from 'three';
 import type { SnapCache, SnapRoyale } from '../net/royale_wire';
 import type { Vec3 } from '../sim/geo';
+import { PlanetPillars } from './planet_pillars';
 import type { PlanetGround } from './planet_terrain';
 
 const MAX_CACHES = 320;
@@ -62,6 +64,7 @@ export class PlanetMarks {
   private readonly picks: THREE.Points;
   private readonly pickMat: THREE.PointsMaterial;
   private shownCaches: readonly SnapCache[] | null = null;
+  private readonly pillars: PlanetPillars;
   private readonly owned: { dispose(): void }[] = [];
 
   constructor(
@@ -69,6 +72,9 @@ export class PlanetMarks {
     private readonly radius: number,
   ) {
     this.group.name = 'planet-marks';
+    this.pillars = new PlanetPillars(ground, radius);
+    this.group.add(this.pillars.group);
+    this.owned.push(this.pillars);
     const glow = glowTexture();
     this.owned.push(glow);
 
@@ -331,6 +337,7 @@ export class PlanetMarks {
     positions.needsUpdate = true;
     this.picks.geometry.setDrawRange(0, n);
     this.pickMat.size = 15 + 3 * Math.sin(t * 5);
+    this.pillars.setPillars([]);
   }
 
   dispose(): void {

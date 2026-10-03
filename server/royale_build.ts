@@ -8,7 +8,7 @@
 
 import { buildRoyaleSim, type ReplayPick, type RoyalePlanet } from '../src/net/replay';
 import { attachRoyaleBot, ROYALE_BOT_ID } from '../src/sim/content/bots/royale';
-import type { RoyaleState } from '../src/sim/royale/types';
+import { ROYALE_RULES_VERSION, type RoyaleState } from '../src/sim/royale/types';
 import type { Sim } from '../src/sim/sim';
 import type { RoyaleSim, RoyaleSimFactory } from './royale_sim';
 
@@ -35,7 +35,10 @@ export function royaleFactory(planet: () => RoyalePlanet): RoyaleSimFactory {
     return {
       sim: royaleSimOf(sim),
       unitIds,
-      replay: { picks: replayPicks, royale: { variant, guestsOnly } },
+      replay: {
+        picks: replayPicks,
+        royale: { variant, guestsOnly, rules: ROYALE_RULES_VERSION },
+      },
       standIn: (unitId) => attachRoyaleBot(sim, unitId),
     };
   };

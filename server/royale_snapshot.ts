@@ -15,6 +15,7 @@ import type { Vec3 } from '../src/sim/geo';
 import type { DuskState } from '../src/sim/royale/types';
 import { placeOf } from './royale_ranking';
 import type { RoyaleSim, RoyaleSimEvent } from './royale_sim';
+import { addRoyaleBlocks, cacheKindOf, openingDuration } from './royale_snapshot_blocks';
 import {
   projectileRecord,
   round2,
@@ -101,7 +102,8 @@ export function royaleBlock(
   }
   for (const c of r.caches) {
     if (c.present && c.opener === self) {
-      block.opening = { c: c.id, since: round2(c.openSince) };
+      const d = openingDuration(sim, c);
+      block.opening = { c: c.id, since: round2(c.openSince), ...(d !== undefined ? { d } : {}) };
       break;
     }
   }
@@ -113,13 +115,7 @@ export function royaleBlock(
     block.caches = r.caches
       .filter((c) => c.present)
       .map(
-        (c): SnapCache => [
-          c.id,
-          round2(c.pos.x),
-          round2(c.pos.y),
-          round2(c.pos.z),
-          c.golden ? 1 : 0,
-        ],
+        (c): SnapCache => [c.id, round2(c.pos.x), round2(c.pos.y), round2(c.pos.z), cacheKindOf(c)],
       );
     if (r.stage === 'drop') {
       const picks: WirePoint[] = [];
@@ -127,6 +123,7 @@ export function royaleBlock(
       block.picks = picks;
     }
   }
+  addRoyaleBlocks(block, sim, viewer, ctx);
   return block;
 }
 
@@ -244,6 +241,77 @@ function royaleEvents(
         });
         break;
       }
+      // Everyone's: called on the globe for all to see.
+      case 'royale_seedfall':
+        out.push({
+          e: 'royale_seedfall',
+          id: ev.seedfallId,
+          at: point(ev.at),
+          landsAt: round2(ev.landsAt),
+        });
+        break;
+      case 'royale_seedfall_land':
+        out.push({ e: 'royale_seedfall_land', id: ev.seedfallId, at: point(ev.at) });
+        break;
+      case 'royale_rising':
+        out.push({
+          e: 'royale_rising',
+          kind: ev.kind,
+          at: point(ev.at),
+          risesAt: round2(ev.risesAt),
+        });
+        break;
+      case 'royale_wrath_passed': {
+        const s = ev.to !== null ? ctx.seat(ev.to) : undefined;
+        out.push({
+          e: 'royale_wrath_passed',
+          from: ev.from,
+          to: ev.to,
+          n: s?.name ?? null,
+          ...(s?.bot ? { b: 1 as const } : {}),
+        });
+        break;
+      }
+      case 'royale_mark': {
+        const s = ctx.seat(ev.unitId);
+        out.push({
+          e: 'royale_mark',
+          unitId: ev.unitId,
+          kind: ev.kind,
+          n: s?.name ?? '',
+          ...(s?.bot ? { b: 1 as const } : {}),
+        });
+        break;
+      }
+      case 'royale_snuffed': {
+        const names = feedNames(ctx, ev.unitId, ev.killerId, isChampion(ev.killerId));
+        out.push({
+          e: 'royale_snuffed',
+          unitId: ev.unitId,
+          killerId: ev.killerId,
+          streak: ev.streak,
+          n: names.n,
+          kn: names.kn,
+          ...(names.vb ? { vb: 1 as const } : {}),
+          ...(names.kb ? { kb: 1 as const } : {}),
+        });
+        break;
+      }
+      case 'royale_reprieve':
+        out.push({ e: 'royale_reprieve', unitId: ev.unitId, backAt: round2(ev.backAt) });
+        break;
+      case 'royale_dusk_hastens':
+        out.push({ e: 'royale_dusk_hastens', by: round2(ev.by), alive: ev.alive });
+        break;
+      case 'royale_last_light':
+        out.push({ e: 'royale_last_light', step: ev.step });
+        break;
+      // Where it lands is where the slammer stands: only to who sees them.
+      case 'royale_pad_slam':
+        if (sees(ev.unitId)) {
+          out.push({ e: 'royale_pad_slam', unitId: ev.unitId, at: point(ev.at), hit: [...ev.hit] });
+        }
+        break;
       default:
         break;
     }
