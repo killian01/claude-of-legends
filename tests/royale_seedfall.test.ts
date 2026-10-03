@@ -6,7 +6,9 @@
 // them up, before the deaths and like the Dusk's burn (no fight, the Dusk's
 // kill credit); its cache opens in 3 s, breaks on a hit, pays two pieces
 // (one and a Heartwood Graft once Grafts ship), all the health and all the
-// mana, and never comes back. What a seat observes of it is here too.
+// mana, and never comes back. What a seat observes of it and what the wire
+// carries (the sf block, the cache kind, the opening's length) are here
+// too.
 
 import { describe, expect, it } from 'vitest';
 import { buildRoyaleSim, type ReplayPick } from '../src/net/replay';
@@ -47,6 +49,9 @@ import {
 import type { Sim, SimEvent } from '../src/sim/sim';
 import { DT } from '../src/sim/types';
 import type { Unit } from '../src/sim/unit';
+import { openingFraction } from '../src/ui/royale_text';
+import { fakeSnap } from './royale_contract_fixture';
+import { spot } from './royale_fake';
 import { sph } from './royale_fixture';
 import { loadPlanet } from './royale_planet';
 
@@ -478,5 +483,76 @@ describe('the Seedfall cache', () => {
     expect(seen(opener)).toEqual({ id: opener.id, since: cache.openSince });
     expect(seen(watcher)).toEqual({ id: opener.id, since: cache.openSince });
     expect(seen(far)).toBeUndefined();
+  });
+});
+
+describe('on the wire', () => {
+  function withSeedfall(sim: ReturnType<typeof fakeSnap>['sim'], id: number, landsAt: number) {
+    sim.royale.seedfalls.push({
+      id,
+      pos: spot(id, 8),
+      announcedAt: landsAt - SEEDFALL_WARN_S,
+      landsAt,
+      landed: false,
+      cacheId: null,
+    });
+  }
+
+  it('sends the Seedfalls on change and once a second, from the first call on', () => {
+    const { sim, snap } = fakeSnap();
+    sim.royale.stage = 'play';
+    const callAt = DROP_S + SEEDFALL_AT_S[0]! - SEEDFALL_WARN_S;
+    sim.time = callAt - 1;
+    expect(snap().royale).not.toHaveProperty('sf');
+    sim.time = callAt;
+    withSeedfall(sim, 0, callAt + SEEDFALL_WARN_S);
+    const first = snap().royale!.sf!;
+    expect(first).toHaveLength(1);
+    const [id, x, y, z, landsAt, landed] = first[0]!;
+    expect(id).toBe(0);
+    expect([x, y, z].every((v) => Number.isFinite(v))).toBe(true);
+    expect(landsAt).toBe(callAt + SEEDFALL_WARN_S);
+    expect(landed).toBe(0);
+    sim.time = callAt + 0.5;
+    expect(snap().royale).not.toHaveProperty('sf');
+    sim.time = callAt + 1;
+    expect(snap().royale!.sf).toEqual(first);
+    sim.time = callAt + 1.05;
+    sim.royale.seedfalls[0]!.landed = true;
+    expect(snap().royale!.sf![0]![5]).toBe(1);
+    // Opened: an empty list, so the mirror lets go of it.
+    sim.time = callAt + 1.1;
+    sim.royale.seedfalls.length = 0;
+    expect(snap().royale!.sf).toEqual([]);
+    sim.time = callAt + 1.15;
+    expect(snap().royale).not.toHaveProperty('sf');
+  });
+
+  it('sends a Seedfall cache as kind 2, with its 3 s opening', () => {
+    const { sim, self, snap } = fakeSnap();
+    sim.royale.stage = 'play';
+    sim.addCache(spot(2, 4), true);
+    sim.addCache(spot(3, 4));
+    sim.royale.caches.push({
+      id: 7,
+      pos: { ...spot(0, 4) },
+      kind: 'seedfall',
+      present: true,
+      respawnAt: null,
+      opener: self.id,
+      openSince: 40,
+    });
+    const r = snap().royale!;
+    expect(r.caches!.map((c) => c[4])).toEqual([1, 0, 2]);
+    expect(r.opening).toEqual({ c: 7, since: 40, d: SEEDFALL_OPEN_S });
+    expect(openingFraction(r, 40 + SEEDFALL_OPEN_S / 2)).toBeCloseTo(0.5);
+    expect(openingFraction(r, 40 + SEEDFALL_OPEN_S)).toBe(1);
+    // A plain cache's opening carries no length: CACHE_OPEN_S.
+    sim.royale.caches[2]!.opener = null;
+    sim.royale.caches[1]!.opener = self.id;
+    sim.royale.caches[1]!.openSince = 50;
+    const plain = snap().royale!;
+    expect(plain.opening).toEqual({ c: sim.royale.caches[1]!.id, since: 50 });
+    expect(openingFraction(plain, 50 + CACHE_OPEN_S / 2)).toBeCloseTo(0.5);
   });
 });
