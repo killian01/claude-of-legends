@@ -109,6 +109,8 @@ const CSS = `
 .br-feed-line.mine { border-color: #b8963f; }
 .br-feed-line .me { color: #ffd94a; font-weight: 800; }
 .br-feed-line .gt { color: #c9a84a; font-weight: 800; }
+.br-who { display: inline-flex; align-items: center; gap: 4px; }
+.br-dusk-name { color: #ffb27a; font-weight: 700; }
 @keyframes br-in { from { transform: translateX(10px); } }
 .br-bot { display: inline-block; padding: 0 4px; border-radius: 3px; border: 1px solid #5b84c9;
   background: #1d3a63; color: #cfe3ff; font-size: 8.5px; font-weight: 800; letter-spacing: 0.8px;
@@ -234,6 +236,19 @@ const CSS = `
 .hud.compact .br-end-btns { margin-top: 8px; }
 .hud.compact .br-end-btns button { min-height: 44px; padding: 6px 10px; font-size: 13px; min-width: 100px; }
 `;
+
+// A death as the feed reads it: who and by whom, and in a battle royale
+// the names and bot marks the server sends with it (the victim's n and
+// vb, the killer's kn and kb), since the feed names champions this screen
+// has never seen.
+export interface RoyaleKill {
+  unitId: number;
+  killerId: number;
+  n?: string;
+  kn?: string;
+  vb?: boolean;
+  kb?: boolean;
+}
 
 export interface RoyaleHudHost {
   // The HUD's root: this layer is drawn in it, and marks it during the drop.
@@ -382,6 +397,8 @@ export class RoyaleHud {
 
   // Who a unit is on the screen: the seat's name, else what it is.
   private nameOf(unitId: number): string {
+    const seat = this.host.world.seat?.(unitId);
+    if (seat) return seat.name;
     const row = this.host.world.scoreboard().find((x) => x.unitId === unitId);
     if (row) return seatName(row);
     const u = this.host.world.units.get(unitId);
@@ -395,29 +412,43 @@ export class RoyaleHud {
   }
 
   private botOf(unitId: number): boolean {
+    const seat = this.host.world.seat?.(unitId);
+    if (seat) return seat.bot;
     const row = this.host.world.scoreboard().find((x) => x.unitId === unitId);
     return isBot(row) || isBot(this.host.world.units.get(unitId));
   }
 
+  // The names a death carries, else the seats', else what the unit is.
+  victimName(k: RoyaleKill): string {
+    return k.n ?? this.nameOf(k.unitId);
+  }
+
+  killerName(k: RoyaleKill): string {
+    if (k.killerId === k.unitId || k.killerId === 0) return 'The Dusk';
+    return k.kn ?? this.nameOf(k.killerId);
+  }
+
   // One line of the kill feed: "Name > Name", the own name in gold, a bot
   // mark beside every bot.
-  pushKill(k: { unitId: number; killerId: number }): void {
+  pushKill(k: RoyaleKill): void {
     const { selfId } = this.host;
     const line = el('div', 'br-feed-line');
     if (k.killerId === selfId || k.unitId === selfId) line.classList.add('mine');
-    const who = (id: number, killer: boolean): HTMLElement => {
-      const span = el('span', id === selfId ? 'me' : '');
-      const name = killer && id === k.unitId ? 'The Dusk' : this.nameOf(id);
-      span.textContent = id === selfId ? 'You' : name;
-      const wrap = el('span', '');
-      wrap.style.display = 'inline-flex';
-      wrap.style.alignItems = 'center';
-      wrap.style.gap = '4px';
-      wrap.appendChild(span);
-      if (id !== selfId && this.botOf(id)) wrap.appendChild(el('span', 'br-bot', 'BOT'));
+    const dusk = k.killerId === k.unitId || k.killerId === 0;
+    const who = (id: number, name: string, bot: boolean): HTMLElement => {
+      const wrap = el('span', 'br-who');
+      wrap.appendChild(el('span', id === selfId ? 'me' : '', id === selfId ? 'You' : name));
+      if (id !== selfId && bot) wrap.appendChild(el('span', 'br-bot', 'BOT'));
       return wrap;
     };
-    line.append(who(k.killerId, true), el('span', 'gt', '>'), who(k.unitId, false));
+    const killer = dusk
+      ? el('span', 'br-dusk-name', 'The Dusk')
+      : who(k.killerId, this.killerName(k), k.kb ?? this.botOf(k.killerId));
+    line.append(
+      killer,
+      el('span', 'gt', '>'),
+      who(k.unitId, this.victimName(k), k.vb ?? this.botOf(k.unitId)),
+    );
     this.feed.prepend(line);
     while (this.feed.children.length > FEED_MAX) this.feed.lastElementChild?.remove();
     window.setTimeout(() => line.remove(), FEED_MS);
@@ -525,11 +556,13 @@ export class RoyaleHud {
   // The end screen, from the result the server sent; `extras` are the
   // HUD's own boxes that belong under it (the ladder, the account offer,
   // the feedback box).
-  showResult(result: RoyaleResult, extras: readonly HTMLElement[] = []): void {
+  // `next`: the next match is already under way behind the screen, and Play
+  // again only closes it.
+  showResult(result: RoyaleResult, extras: readonly HTMLElement[] = [], next = false): void {
     this.endEl?.remove();
-    const model = royaleEnd(result);
+    const model = royaleEnd(result, next);
     const end = el('div', 'br-end');
-    end.appendChild(this.endCard(model, result));
+    end.appendChild(this.endCard(model, result, next));
     const more = el('div', 'br-end-extras');
     for (const x of extras) more.appendChild(x);
     if (extras.length > 0) end.appendChild(more);
@@ -538,7 +571,14 @@ export class RoyaleHud {
     this.host.root.classList.add('overlay-open');
   }
 
-  private endCard(model: RoyaleEndModel, result: RoyaleResult): HTMLElement {
+  // The end screen leaves, the match behind it stays: Respawn's next one.
+  private hideResult(): void {
+    this.endEl?.remove();
+    this.endEl = null;
+    this.host.root.classList.remove('overlay-open');
+  }
+
+  private endCard(model: RoyaleEndModel, result: RoyaleResult, next: boolean): HTMLElement {
     const card = el('div', `br-end-card${model.won ? ' won' : ''}`);
     card.append(
       el('div', 'br-end-kicker', `Battle royale · ${royaleMode(result.v).title}`),
@@ -577,7 +617,8 @@ export class RoyaleHud {
         // The next match may skip every click before it: this is the
         // gesture that takes it fullscreen.
         if (action !== 'menu') requestGameFullscreen();
-        this.host.onExit(action);
+        if (action === 'again' && next) this.hideResult();
+        else this.host.onExit(action);
       });
       return b;
     };

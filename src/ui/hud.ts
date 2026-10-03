@@ -114,7 +114,7 @@ import {
   wrathChipText,
 } from './objective_line';
 import { firstPointsText, pointsWord, popText } from './points_text';
-import { RoyaleHud } from './royale_hud';
+import { RoyaleHud, type RoyaleKill } from './royale_hud';
 import {
   hideRoyaleSteps,
   type RoyaleStepsState,
@@ -1103,9 +1103,6 @@ export interface NetHooks {
   // A first step done, or 'off' for the guide hidden, for the seat report
   // (ui/first_steps.ts, server/seat_report.ts).
   sendStep?: (id: string) => void;
-  // The battle royale's landing point, picked on the globe during the drop
-  // (ADR 0031; net/royale_client.ts dropMsg): a point on the sphere.
-  sendDrop?: (p: { x: number; y: number; z: number }) => void;
 }
 
 export class Hud {
@@ -2074,7 +2071,10 @@ export class Hud {
   // out for good or the match is over (RoyaleResult). The ladder box, the
   // account offer and the feedback box move under it from the 5v5's end
   // screen, which a battle royale never opens.
-  showRoyaleResult(result: RoyaleResult): void {
+  // `next`: Respawn's next match is already under way on this socket
+  // (the server moves the people still playing into it), so Play again
+  // only closes the screen over it.
+  showRoyaleResult(result: RoyaleResult, next = false): void {
     if (!this.royale) return;
     if (this.escapeOverlay.classList.contains('open')) this.toggleEscapeMenu();
     const extras: HTMLElement[] = [];
@@ -2102,9 +2102,10 @@ export class Hud {
       extras.push(this.endOffer);
     }
     extras.push(this.endFeedback.root);
-    this.royale.showResult(result, extras);
+    this.royale.showResult(result, extras, next);
     this.deathOverlay.classList.remove('open');
-    if (!this.endPlayed) {
+    // Heard once, when it came: not again over the next match.
+    if (!this.endPlayed && !next) {
       this.endPlayed = true;
       playSfx(won ? 'victory' : 'defeat');
       announceVoice(won ? 'victory' : 'defeat', true);
@@ -2538,6 +2539,9 @@ export class Hud {
   // its expiry: the side whose total grew this frame made the kill; a
   // creature that fell to nobody's champion is nobody's claim.
   private announceRings(rings: readonly RingClock[], mine: FavorStacks, enemy: FavorStacks): void {
+    // A favor is a team's claim: a battle royale has no teams to give one
+    // to (ADR 0031), and its creatures say nothing of the kind.
+    if (this.royale) return;
     const sum = (f: FavorStacks): number => ASPECT_IDS.reduce((n, a) => n + f[a], 0);
     const mineSum = sum(mine);
     const enemySum = sum(enemy);
@@ -2792,8 +2796,14 @@ export class Hud {
   }
 
   // One feed line per champion death, team-colored.
-  pushKills(kills: readonly { unitId: number; killerId: number }[]): void {
+  pushKills(kills: readonly RoyaleKill[]): void {
     if (kills.length === 0) return;
+    // The battle royale's deaths take their own path (royaleKills): every
+    // champion for themself, named by the death itself.
+    if (this.royale) {
+      this.royaleKills(kills, this.royale);
+      return;
+    }
     const rows = this.world.scoreboard();
     const rowOf = (id: number) => rows.find((r) => r.unitId === id);
     // Who a line is about: the person when a person holds the seat, the
@@ -2839,9 +2849,7 @@ export class Hud {
                 ? `Killed by the ${CREATURES[killerUnit2.creatureId].name}`
                 : killerUnit2?.kind === 'camp' && killerUnit2.campKind
                   ? `Killed by the ${CAMPS[killerUnit2.campKind].name}`
-                  : this.royale
-                    ? 'Burned by the Dusk'
-                    : 'Killed by minions';
+                  : 'Killed by minions';
         const me = this.world.units.get(this.selfId);
         if (me) {
           const helpers = me.recentDamagers
@@ -2883,12 +2891,6 @@ export class Hud {
         else this.announce(shout.text, shout.color);
         announceVoice(shout.voice, true, true, shout.intensity);
       }
-      // The battle royale's feed is its own (ui/royale_hud.ts): every
-      // champion for themself, a bot mark beside every bot.
-      if (this.royale) {
-        this.royale.pushKill(k);
-        continue;
-      }
       const killerRow = rowOf(k.killerId);
       let killerName = killerRow ? who(killerRow) : 'The lane';
       let killerColor = killerRow ? TEAM_TEXT_COLORS[killerRow.team] : '#c9d8ae';
@@ -2911,6 +2913,28 @@ export class Hud {
       entry.append(killer, middle, victim);
       this.feed.appendChild(entry);
       window.setTimeout(() => entry.remove(), 6000);
+    }
+  }
+
+  // The battle royale's deaths: the own death and the own takedown said
+  // and heard, the recap under SLAIN, and every death a line of the feed
+  // with its bot marks (ui/royale_hud.ts). Names come with the death on
+  // the wire, since the feed names champions this screen never saw.
+  private royaleKills(kills: readonly RoyaleKill[], royale: RoyaleHud): void {
+    for (const k of kills) {
+      if (k.unitId === this.selfId) {
+        playSfx('death');
+        announceVoice('self_slain', true, true);
+        this.deathRecap =
+          k.killerId === k.unitId || k.killerId === 0
+            ? 'Burned by the Dusk'
+            : `Taken down by ${royale.killerName(k)}`;
+      } else if (k.killerId === this.selfId) {
+        playSfx('kill');
+        this.announce(`You took down ${royale.victimName(k)}`, '#ffd94a');
+        announceVoice('self_kill', true, true);
+      }
+      royale.pushKill(k);
     }
   }
 
@@ -3019,19 +3043,18 @@ export class Hud {
     // Elapsed time at the top of the screen, on the team score box.
     this.teamScore.setClock(clock);
     // The Warden clock rides the meta line; state edges drive announcements
-    // (works identically offline and online, no extra wire events).
+    // (works identically offline and online, no extra wire events). The
+    // Boon is a team's claim: a battle royale never announces its edges
+    // (ADR 0031), and hides the line.
+    if (this.royale) this.lastWardenUp = null;
     const objAt = this.world.objectiveSpawnAt();
     const wardenUp = objAt === null;
     const rings = this.world.ringClocks();
     const pit = this.world.wardenPit() ?? undefined;
-    if (!this.royale) {
-      this.metaText.textContent = `${clock} · ${objectiveLine(rings, objAt, this.world.time, pit)}`;
-    }
+    this.metaText.textContent = `${clock} · ${objectiveLine(rings, objAt, this.world.time, pit)}`;
     const mineBoon = this.world.teamBuff(this.selfTeam);
     const enemyBoon = this.world.teamBuff((1 - this.selfTeam) as TeamId);
-    // The Warden's Boon and the rings' favors are team claims: a battle
-    // royale has no teams to give them to (ADR 0031).
-    if (!this.royale && this.lastWardenUp !== null && wardenUp !== this.lastWardenUp) {
+    if (this.lastWardenUp !== null && wardenUp !== this.lastWardenUp) {
       if (wardenUp) {
         this.announce(
           pit ? `The Warden has awoken at the ${pit.name}` : 'The Warden has awoken',
@@ -3057,7 +3080,7 @@ export class Hud {
     if (enemyBoon) this.lastBoonEnemyUntil = Math.max(this.lastBoonEnemyUntil, enemyBoon.until);
     const mineFavors = this.world.teamFavors(this.selfTeam);
     const enemyFavors = this.world.teamFavors((1 - this.selfTeam) as TeamId);
-    if (!this.royale) this.announceRings(rings, mineFavors, enemyFavors);
+    this.announceRings(rings, mineFavors, enemyFavors);
     this.levelBadge.textContent = String(u.level);
     this.goldText.textContent = `${Math.floor(u.gold)}g`;
     if (this.lastLevel !== -1 && u.level > this.lastLevel) {
