@@ -5,9 +5,11 @@
 // themselves, experience to the last hit on the sim's own curve.
 
 import { describe, expect, it } from 'vitest';
-import { CHAMPIONS } from '../src/sim/content/champions';
+import { CHAMPION_LIST, CHAMPIONS } from '../src/sim/content/champions';
+import { ITEM_PASSIVES } from '../src/sim/content/item_passives';
 import { ITEMS } from '../src/sim/content/items';
-import { roleBuild, stepToward, unsatisfied } from '../src/sim/playbook/kit';
+import { PASSIVE_BY_PIECE, PASSIVE_ITEMS, PLANET_BUILDS } from '../src/sim/content/royale_builds';
+import { ownedCount, roleBuild, stepToward, unsatisfied } from '../src/sim/playbook/kit';
 import { championXp } from '../src/sim/rewards';
 import {
   CAMP_XP_SCALE,
@@ -80,8 +82,9 @@ describe('the next piece', () => {
   });
 
   it('takes the seat build, gives two for a golden cache and nothing once done', () => {
-    expect(seatBuild('sylra')).toEqual([...roleBuild('sylra')]);
+    expect(seatBuild('sylra')).toEqual([...PLANET_BUILDS.sylra!]);
     expect(seatBuild('sylra', ['heart_gem'])).toEqual(['heart_gem']);
+    expect(seatBuild(null)).toEqual([...roleBuild(null)]);
     const u = champ('sylra');
     const build = seatBuild('sylra');
     expect(GOLDEN_PIECES).toBe(2);
@@ -96,6 +99,56 @@ describe('the next piece', () => {
     expect(grantPieces(u, build, 2)).toEqual([]);
     expect(u.gold).toBe(0);
     expect(u.items.length).toBeLessThanOrEqual(6);
+  });
+
+  it('walks a planet build for every champion, six real items, to the end', () => {
+    expect(Object.keys(PLANET_BUILDS).sort()).toEqual(CHAMPION_LIST.map((c) => c.id).sort());
+    for (const c of CHAMPION_LIST) {
+      const build = PLANET_BUILDS[c.id]!;
+      expect(build, c.id).toHaveLength(6);
+      for (const id of build) expect(ITEMS[id], `${c.id} ${id}`).toBeDefined();
+      const u = champ(c.id);
+      let given = 0;
+      while (grantPiece(u, build) !== null) {
+        given++;
+        expect(given).toBeLessThan(60);
+      }
+      expect([...u.items].sort(), c.id).toEqual([...build].sort());
+    }
+  });
+
+  it('reaches an item passive by the seventh piece on every planet build', () => {
+    expect(PASSIVE_BY_PIECE).toBe(7);
+    for (const id of PASSIVE_ITEMS) expect(ITEM_PASSIVES[id], id).toBeDefined();
+    for (const c of CHAMPION_LIST) {
+      const u = champ(c.id);
+      const build = seatBuild(c.id);
+      let at: number | null = null;
+      for (let piece = 1; piece <= PASSIVE_BY_PIECE && at === null; piece++) {
+        expect(grantPiece(u, build)).not.toBeNull();
+        if (u.items.some((it) => PASSIVE_ITEMS.includes(it))) at = piece;
+      }
+      expect(at, c.id).not.toBeNull();
+    }
+  });
+
+  it('puts the shells on bruiser lines of two Heart Gems at most', () => {
+    const shells = CHAMPION_LIST.filter((c) => ['Tank', 'Support', 'Fighter'].includes(c.role)).map(
+      (c) => c.id,
+    );
+    expect(shells.sort()).toEqual(['dain', 'korrath', 'maera', 'torv']);
+    for (const id of shells) {
+      const build = PLANET_BUILDS[id]!;
+      expect(ownedCount(build, 'heart_gem'), id).toBeLessThanOrEqual(2);
+      // A bruiser line: damage as well as a body.
+      const damage = build.some((it) => {
+        const st = ITEMS[it]!.stats;
+        return (st.ad ?? 0) > 0 || (st.ap ?? 0) > 0;
+      });
+      expect(damage, id).toBe(true);
+    }
+    // The 5v5's shell build stacked five.
+    expect(ownedCount(roleBuild('torv'), 'heart_gem')).toBeGreaterThanOrEqual(5);
   });
 
   it('heals a share of the maximum health, never past it', () => {

@@ -1,7 +1,8 @@
 // Loot (CONTEXT.md: Loot; ADR 0031): no shop, no gold, no recall. A cache,
 // a camp and a takedown each give the champion the next piece of its build,
-// fixed for the seat when it is seated (the bot's kit build, else the role
-// build the house bots walk, the same rule for a person). The piece is
+// fixed for the seat when it is seated (the bot's kit build, else the
+// champion's planet build, content/royale_builds.ts, the same rule for a
+// person). The piece is
 // walked from the kit walker's own recipes (playbook/kit.ts) in build
 // order, without gold: the next target's first missing component, the
 // target itself once its parts are in the bag, the target outright when
@@ -13,6 +14,7 @@
 // build gives nothing more.
 
 import { ITEMS } from '../content/items';
+import { planetBuild } from '../content/royale_builds';
 import {
   BAG_SLOTS,
   cheapestSlot,
@@ -63,9 +65,11 @@ export function nextLootPiece(build: readonly string[], bag: readonly string[]):
   return { itemId: pieceFor(target, after).id, sell };
 }
 
-// The build a seat walks: the one it was seated with, else its role's.
+// The build a seat walks: the one it was seated with, else its
+// champion's planet build (content/royale_builds.ts), else its role's.
 export function seatBuild(championId: string | null, kitBuild?: readonly string[]): string[] {
-  return [...(kitBuild && kitBuild.length > 0 ? kitBuild : roleBuild(championId))];
+  if (kitBuild && kitBuild.length > 0) return [...kitBuild];
+  return [...(planetBuild(championId) ?? roleBuild(championId))];
 }
 
 // Gives the champion its next piece of `build`; returns the item given, or
