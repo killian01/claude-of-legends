@@ -16,7 +16,6 @@ import {
   LANDING_WAYS,
   PLAY_NOW,
   PLAY_NOW_CALL,
-  PLAY_NOW_LINE,
 } from '../src/ui/landing_modes';
 import { CLASSIC_TITLE, ONE_LIFE_LINE, RESPAWN_LINE } from '../src/ui/royale_modes';
 
@@ -170,7 +169,6 @@ describe('what the landing says at once (ADR 0027)', () => {
     const said = [
       HERO_RANKED_LINE,
       PLAY_NOW_CALL,
-      PLAY_NOW_LINE,
       ...LANDING_WAYS.map((w) => w.line),
       ACCOUNT_LINE,
       LADDER_HEADING,
@@ -181,7 +179,6 @@ describe('what the landing says at once (ADR 0027)', () => {
     expect(times(/no account/i)).toBe(1);
     expect(times(/every match/i)).toBe(1);
     expect(times(/install/i)).toBe(0);
-    expect(PLAY_NOW_LINE).not.toMatch(/unranked/i);
   });
 
   it('says an account keeps the points on every device and opens the rest', () => {

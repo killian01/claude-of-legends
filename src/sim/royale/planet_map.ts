@@ -82,6 +82,15 @@ function ringOf(id: 'bot' | 'top', c: { at: PlanetPoint; r: number }): RingSite 
 // the Warden's one pit, the camps, the bushes as brush, the sight blockers
 // as the walls that stop a sight line. Movement never reads these walls:
 // the planet's own grid (sphere_nav.ts) holds what blocks a step.
+// Only the big solid things stop a sight line on the planet: rocks, ruin
+// walls, the halls (a blocker this wide or wider). The trunks and small
+// stones the layout also lists hid a champion every few steps of a chase,
+// and a playtest (2026-10-03) saw them vanish for no reason it could see.
+export const SIGHT_BLOCKER_MIN_R = 2;
+// Within this reach nothing hides an enemy in sight range: a champion one
+// step away is seen, in a bush or behind a pillar alike.
+export const PLANET_CLOSE_SIGHT_M = 4;
+
 export function planetGameMap(rec: PlanetLayoutRecord): GameMap {
   const origin = { x: 0, z: 0 };
   return {
@@ -93,7 +102,8 @@ export function planetGameMap(rec: PlanetLayoutRecord): GameMap {
     sanctums: [],
     towers: [],
     lanes: { top: [], mid: [], bot: [] },
-    walls: (rec.sightBlockers ?? []).map(circle),
+    walls: (rec.sightBlockers ?? []).filter((b) => b.r >= SIGHT_BLOCKER_MIN_R).map(circle),
+    closeSight: PLANET_CLOSE_SIGHT_M,
     brush: (rec.bushes ?? []).map(circle),
     wardenPits: [
       {

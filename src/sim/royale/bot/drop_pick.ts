@@ -8,10 +8,12 @@ import type { Rng } from '../../rng';
 import { nearPole, type RoyaleLayout, randomAround } from '../layout';
 
 // The share of the bots that land in the Sanctuary, and how far around its
-// heart; how far around a region's heart the others land.
-export const HOT_DROP_SHARE = 0.2;
-export const HOT_DROP_M = 16;
-export const REGION_DROP_M = 38;
+// heart; how far around a region's heart the others land. Spread wide: ten
+// bots on the Sanctuary and eight around each heart made the second minute
+// a bloodbath that emptied half of One life.
+export const HOT_DROP_SHARE = 0.12;
+export const HOT_DROP_M = 22;
+export const REGION_DROP_M = 56;
 
 export function pickDropPoint(layout: RoyaleLayout, rng: Rng): Vec3 {
   const R = layout.radius;

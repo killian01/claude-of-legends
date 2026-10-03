@@ -19,7 +19,7 @@ import {
   FINAL_RING_M,
   FINAL_RING_MIN,
 } from '../content/dusk';
-import { dist, dist2, heading, lerp, settle, type Vec3 } from '../geo';
+import { dist, dist2, dot, heading, lerp, settle, type Vec3 } from '../geo';
 import type { Rng } from '../rng';
 import {
   along,
@@ -177,6 +177,9 @@ export function darkBurn(pastEnd: number): number {
 // (the dark) holds nothing.
 export function insideCap(cap: DuskCap, p: Vec3): boolean {
   if (cap.radius <= 0) return false;
+  // A cap as wide as the planet (the calm's) holds every point, its own
+  // antipode too, whatever the last bit of the arithmetic says.
+  if (cap.radius * cap.radius >= 4 * dot(cap.center, cap.center)) return true;
   return dist2(cap.center, p) <= cap.radius * cap.radius;
 }
 

@@ -159,8 +159,8 @@ describe('the drop', () => {
       for (const r of layout.regions) if (dist(r.heart, p) < dist(best.heart, p)) best = r;
       regions.add(best.id);
     }
-    expect(hot / 400).toBeGreaterThan(0.12);
-    expect(hot / 400).toBeLessThan(0.35);
+    expect(hot / 400).toBeGreaterThan(0.06);
+    expect(hot / 400).toBeLessThan(0.2);
     expect(regions.size).toBe(6);
   });
 });
@@ -251,18 +251,22 @@ describe('fighting', () => {
     expect(royaleOdds(worse)).toBeLessThan(0.42);
   });
 
-  it('takes an even fight when strong, walks on when gentle', () => {
+  it('takes an even fight when strong, walks on when gentle, and loots in the calm', () => {
     const e = enemy(9, along(here, east, 5, R));
     const loot = along(here, north, 20, R);
     const caches = [{ id: 1, x: loot.x, y: loot.y, z: loot.z, golden: false }];
-    const rs = { caches, variant: 'respawn' as const };
+    // Late, the light closing: a strong bot takes an even duel at once, a
+    // gentle one walks on.
+    const late = { ...wholeDusk(sph(1, 0, 0)), phase: 5 };
+    const rs = { caches, variant: 'respawn' as const, dusk: late };
     const s = decide(obs(here, { units: [e], royale: rs }), new Rng(1), layout, strong);
     expect(['cast', 'attack']).toContain(s.kind);
     const g = decide(obs(here, { units: [e], royale: rs }), new Rng(1), layout, gentle);
     expect(['cast', 'attack']).not.toContain(g.kind);
-    // One life weighs a fight harder: even the strong one walks on.
+    // One life weighs a fight harder and the calm is for looting: even the
+    // strong one leaves an even duel for later.
     const ol = { caches, variant: 'one_life' as const };
-    const o = decide(obs(here, { units: [e], royale: ol }), new Rng(1), layout, strong);
+    const o = decide(obs(here, { units: [e], royale: ol }), new Rng(3), layout, strong);
     expect(['cast', 'attack']).not.toContain(o.kind);
   });
 

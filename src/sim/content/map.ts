@@ -82,6 +82,10 @@ export interface GameMap {
   towers: readonly TowerSpot[];
   // Each lane is a polyline from team 0's base toward team 1's.
   lanes: Readonly<Record<LaneId, readonly Vec2[]>>;
+  // Within this many meters nothing hides a unit from an enemy that has it
+  // in sight range, neither brush nor a wall on the line; absent, brush and
+  // walls hide at any distance (the 5v5's maps).
+  closeSight?: number;
   // Circular jungle wall blobs; blocked for movement and vision-opaque later.
   walls: readonly WallShape[];
   // Circular brush patches; walkable, will hide occupants when vision lands.
