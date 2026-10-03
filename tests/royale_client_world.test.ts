@@ -80,7 +80,7 @@ describe('the mirror on the planet', () => {
 
   it('keeps the mode block, the last caches list and the drop picks', () => {
     const { world } = mirror();
-    expect(world.royale()).toBeNull();
+    expect(world.royaleView()).toBeNull();
     world.applyServer(
       snap({
         royale: {
@@ -100,7 +100,7 @@ describe('the mirror on the planet', () => {
     world.applyServer(
       snap({ royale: { v: 'respawn', st: 'drop', de: 10, end: 610, dusk, alive: 50, people: 2 } }),
     );
-    const r = world.royale()!;
+    const r = world.royaleView()!;
     expect(r.caches).toEqual([[1, 0, -80, 0, 1]]);
     expect(r.picks).toEqual([[80, 0, 0]]);
     expect(r.people).toBe(2);
@@ -108,13 +108,13 @@ describe('the mirror on the planet', () => {
     world.applyServer(
       snap({ royale: { v: 'respawn', st: 'play', de: 10, end: 610, dusk, alive: 50, people: 2 } }),
     );
-    expect(world.royale()?.picks).toEqual([]);
-    expect(world.royale()?.caches).toHaveLength(1);
+    expect(world.royaleView()?.picks).toEqual([]);
+    expect(world.royaleView()?.caches).toHaveLength(1);
   });
 
   it('sends the drop pick and the orders with y, and no prediction numbers', () => {
     const { world, sent } = mirror();
-    world.pickDrop({ x: 0, y: 80, z: 0 });
+    world.pickDrop(1, { x: 0, y: 80, z: 0 });
     world.orderMove(1, 1, 2, 79);
     world.orderAttackMove(1, 1, 2, 79);
     world.castAbility(1, 'Q', { x: 1, y: 79, z: 2 });
@@ -214,7 +214,7 @@ describe('the mirror on the planet', () => {
       royale: { v: 'respawn', seats: 50 },
     });
     expect(world.units.size).toBe(0);
-    expect(world.royale()).toBeNull();
+    expect(world.royaleView()).toBeNull();
     expect(world.seat(1)).toBeNull();
     expect(world.selfUnitId).toBe(4);
   });
@@ -272,9 +272,9 @@ describe('the server and the mirror together', () => {
     expect(world.units.get(self)?.pos.y).toBeDefined();
     expect(world.units.get(other.id)?.pos.y).toBeCloseTo(other.pos.y!, 1);
     expect(world.seat(other.id)?.bot).toBe(true);
-    expect(world.royale()).toMatchObject({ v: 'one_life', st: 'play', alive: 50, people: 1 });
+    expect(world.royaleView()).toMatchObject({ v: 'one_life', st: 'play', alive: 50, people: 1 });
     // The mirror's drop pick lands on the server's sim.
-    world.pickDrop({ x: 0, y: 80, z: 0 });
+    world.pickDrop(self, { x: 0, y: 80, z: 0 });
     expect(sent).toEqual([{ t: 'drop', x: 0, y: 80, z: 0 }]);
   });
 });
