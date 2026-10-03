@@ -168,10 +168,12 @@ export interface SimOptions {
   royale?: RoyaleOptions;
 }
 
-// A team's fading memory of one enemy champion (Sim.lastSeen).
+// A team's fading memory of one enemy champion (Sim.lastSeen): where it
+// stood, y included on the planet (ADR 0029).
 export interface LastSeenRecord {
   x: number;
   z: number;
+  y?: number;
   at: number;
   hpFrac: number;
 }
@@ -1210,11 +1212,14 @@ export class Sim {
       this.zones,
       this.teamCount,
     );
-    noteCampSightings(this.campStates, this.time, (team, x, z) => this.isPointVisible(team, x, z));
+    noteCampSightings(this.campStates, this.time, (team, x, z, y) =>
+      this.isPointVisible(team, x, z, y),
+    );
 
     // Refresh each team's memory of the enemy champions it can see right
     // now; a dead champion is forgotten (its corpse spot means nothing).
-    // Every other team remembers; only a two-team match has lanes to note.
+    // Every other team remembers; only a two-team match on a map with lanes
+    // has lanes to note.
     for (const u of this.units.values()) {
       if (u.kind !== 'champion' || u.neutral) continue;
       for (let observer = 0; observer < this.teamCount; observer++) {
@@ -1225,13 +1230,15 @@ export class Sim {
           continue;
         }
         if (!this.visibility[observer]!.has(u.id)) continue;
-        memory.set(u.id, {
+        const seen: LastSeenRecord = {
           x: u.pos.x,
           z: u.pos.z,
           at: this.time,
           hpFrac: u.maxHp > 0 ? u.hp / u.maxHp : 0,
-        });
-        if (!this.twoTeams()) continue;
+        };
+        if (u.pos.y !== undefined) seen.y = u.pos.y;
+        memory.set(u.id, seen);
+        if (!this.twoTeams() || !this.hasLanes) continue;
         const lane = laneOf(u.pos.x, u.pos.z, this.map);
         if (lane) this.laneSightings.record(observer, lane, u.id, this.time, DT);
       }

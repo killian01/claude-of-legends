@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  landingOn,
   OpenSphereGround,
   PlaneGround,
   SphereGround,
@@ -42,6 +43,27 @@ describe('the plane ground', () => {
       }
     }
     expect(ground.heightAt({ x: 5, z: 5 })).toBe(0);
+  });
+
+  it('puts a unit down where the grid would: on its point, else the nearest open one', () => {
+    const nav = new NavGrid(30, walls, 1);
+    const twin = new NavGrid(30, walls, 1);
+    const ground = new PlaneGround(nav);
+    const open = { x: 4.2, z: 9.7 };
+    // A walkable point is kept as it is, the same object.
+    expect(landingOn(ground, open)).toBe(open);
+    const rock = { x: 10, z: 10 };
+    expect(nav.isWalkableAt(rock.x, rock.z)).toBe(false);
+    expect(landingOn(ground, rock)).toEqual(twin.nearestWalkable(rock.x, rock.z));
+    expect(landingOn(ground, rock, 6)).toEqual(twin.nearestWalkable(rock.x, rock.z, 6));
+    // Nothing open within the search: nowhere to land.
+    expect(twin.nearestWalkable(rock.x, rock.z, 1)).toBeNull();
+    expect(landingOn(ground, rock, 1)).toBeNull();
+    // The open sphere keeps a sphere point and has no place for the plane's.
+    const sphere = new OpenSphereGround(80);
+    const p = { x: 0, y: 80, z: 0 };
+    expect(landingOn(sphere, p)).toBe(p);
+    expect(landingOn(sphere, { x: 0, z: 0 })).toBeNull();
   });
 
   it('blocks and restores the grid it stands on', () => {
