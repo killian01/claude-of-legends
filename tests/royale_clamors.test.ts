@@ -5,11 +5,13 @@
 // stay as they were.
 
 import { describe, expect, it } from 'vitest';
+import { CLAMOR_SEND_M } from '../server/royale_snapshot_blocks';
+import type { Vec3 } from '../src/sim/geo';
 import { buildObservation } from '../src/sim/observe';
 import { noteClamor } from '../src/sim/royale/clamors';
 import { CLAMOR_S, DROP_S } from '../src/sim/royale/types';
 import { fakeSnap, landed } from './royale_contract_fixture';
-import { spot } from './royale_fake';
+import { near, spot } from './royale_fake';
 
 const r2 = (n: number): number => Math.round(n * 100) / 100;
 
@@ -73,7 +75,8 @@ describe('a Clamor in the sim', () => {
 
 describe('the cl block', () => {
   it('is sent the tick the Clamors change, and not between', () => {
-    const { sim, snap } = fakeSnap();
+    const { sim, self, snap } = fakeSnap();
+    const here = self.pos as Vec3;
     // None through the drop.
     expect(snap().royale).not.toHaveProperty('cl');
     sim.royale.stage = 'play';
@@ -81,13 +84,13 @@ describe('the cl block', () => {
     // The first play snapshot tells the empty list once.
     expect(snap().royale!.cl).toEqual([]);
     expect(snap().royale).not.toHaveProperty('cl');
-    const p = spot(2, 4);
+    const p = near(here, 20);
     sim.royale.clamors.push({ pos: p, at: sim.time });
     expect(snap().royale!.cl).toEqual([[r2(p.x), r2(p.y), r2(p.z), r2(sim.time)]]);
     sim.time += 0.05;
     expect(snap().royale).not.toHaveProperty('cl');
     // A second one: the whole list again.
-    sim.royale.clamors.push({ pos: spot(3, 4), at: sim.time });
+    sim.royale.clamors.push({ pos: near(here, 30), at: sim.time });
     expect(snap().royale!.cl).toHaveLength(2);
     // Gone silent: the empty list, once.
     sim.royale.clamors = [];
@@ -96,16 +99,26 @@ describe('the cl block', () => {
     expect(snap().royale).not.toHaveProperty('cl');
   });
 
-  it("reaches a viewer who cannot see the fight: a Clamor is everyone's", () => {
+  it('reaches a viewer who cannot see the fight, within hearing of it', () => {
     const { sim, self, snap } = fakeSnap();
     sim.royale.stage = 'play';
     sim.time = DROP_S + 5;
-    const far = [...sim.units.values()][3]!;
-    expect(sim.isVisible(self.team, far.id)).toBe(false);
-    sim.royale.clamors.push({
-      pos: { ...(far.pos as { x: number; y: number; z: number }) },
-      at: sim.time,
-    });
-    expect(snap().royale!.cl).toHaveLength(1);
+    // Out of sight (the fake's sight is 12 m) and well within reach.
+    const off = near(self.pos as Vec3, 40);
+    sim.royale.clamors.push({ pos: off, at: sim.time });
+    expect(snap().royale!.cl).toEqual([[r2(off.x), r2(off.y), r2(off.z), r2(sim.time)]]);
+  });
+
+  it(`leaves out a Clamor past ${CLAMOR_SEND_M} m, which no screen there can use`, () => {
+    const { sim, self, snap } = fakeSnap();
+    sim.royale.stage = 'play';
+    sim.time = DROP_S + 5;
+    const p = self.pos as Vec3;
+    const q = spot(2, 4);
+    expect(Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z)).toBeGreaterThan(CLAMOR_SEND_M);
+    sim.royale.clamors.push({ pos: q, at: sim.time });
+    expect(snap().royale!.cl).toEqual([]);
+    // Every seat's observation keeps it all the same: the bound is the wire's.
+    expect(sim.royale.clamors).toHaveLength(1);
   });
 });
