@@ -86,7 +86,7 @@ describe('the planet tuning table', () => {
     const { sim, unitIds } = landedRoster();
     const u = sim.units.get(unitIds[0]!)!;
     const t = planetTuning(u.championId);
-    dealDamage(ctxOf(sim), unitIds[1]!, u, u.hp + 1, 'true');
+    dealDamage(ctxOf(sim), unitIds[1]!, u, 1e6, 'true');
     sim.tick();
     expect(u.dead).toBe(true);
     for (let i = 0; i < 20 * 10 && u.dead; i++) sim.tick();
