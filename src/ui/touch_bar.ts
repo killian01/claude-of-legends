@@ -10,9 +10,11 @@
 
 import { MIN_TAP_PX } from '../game/ui_scale';
 
+// The recall and the shop are absent in a battle royale (ADR 0031), and
+// so are their buttons.
 export interface TouchBarActions {
-  onRecall(): void;
-  onToggleShop(): void;
+  onRecall?(): void;
+  onToggleShop?(): void;
   onToggleMenu(): void;
   onRecenterCamera(): void;
 }
@@ -58,8 +60,8 @@ export function buildTouchBar(
     root.appendChild(btn);
   };
   add('Menu', actions.onToggleMenu);
-  add('Shop', actions.onToggleShop);
-  add('Recall', actions.onRecall);
+  if (actions.onToggleShop) add('Shop', actions.onToggleShop);
+  if (actions.onRecall) add('Recall', actions.onRecall);
   add('Center', actions.onRecenterCamera);
   container.appendChild(root);
   return () => {

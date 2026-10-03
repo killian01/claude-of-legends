@@ -10,13 +10,15 @@ import { PLAY_TILES, tileArtUrl } from '../src/ui/home_tiles';
 import { JOIN_CALL, LADDER_HEADING, ladderLead } from '../src/ui/landing_ladder';
 import {
   ACCOUNT_LINE,
+  CLASSIC_ART,
   HERO_RANKED_LINE,
   LANDING_MODES,
+  LANDING_WAYS,
   PLAY_NOW,
-  PLAY_NOW_ART,
   PLAY_NOW_CALL,
   PLAY_NOW_LINE,
 } from '../src/ui/landing_modes';
+import { CLASSIC_TITLE, ONE_LIFE_LINE, RESPAWN_LINE } from '../src/ui/royale_modes';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -32,15 +34,15 @@ describe('the landing modes', () => {
     }
   });
 
-  it('leave the practice match out, and paint the free door as a match against people', () => {
+  it('leave the practice match out, and paint the 5v5 as a match against people', () => {
     // The free door is not one of the three: nobody makes an account for
-    // the public queue. It wears the ranked tile's painting, a match
-    // against people, since the door is the public queue now and no
-    // longer the offline practice field (2026-10-02).
+    // a Guest's match. Among its ways in, the 5v5 wears the ranked tile's
+    // painting, a match against people, and not the offline practice
+    // field's (2026-10-02).
     expect(LANDING_MODES.some((m) => m.id === 'practice')).toBe(false);
     const tile = PLAY_TILES.find((t) => t.id === 'ranked');
     expect(tile).toBeDefined();
-    expect(PLAY_NOW_ART).toBe(tileArtUrl(tile?.art ?? ''));
+    expect(CLASSIC_ART).toBe(tileArtUrl(tile?.art ?? ''));
   });
 
   it('wear the painting their tile wears', () => {
@@ -83,8 +85,39 @@ describe('the landing modes', () => {
 });
 
 describe("the landing's ways to play", () => {
-  it('sends the gold button to the Guest queue', () => {
-    expect(PLAY_NOW).toEqual({ call: PLAY_NOW_CALL, kind: 'guest' });
+  // Play now launches Respawn (ADR 0031): the gold button is the battle
+  // royale as a Guest, no longer the 5v5's public queue.
+  it("sends the gold button to the battle royale's Respawn, as a Guest", () => {
+    expect(PLAY_NOW).toEqual({
+      call: PLAY_NOW_CALL,
+      kind: 'guest',
+      play: { to: 'royale', variant: 'respawn' },
+    });
+  });
+
+  it('offers the two rule sets of the battle royale and the 5v5, a row each', () => {
+    expect(LANDING_WAYS.map((w) => w.id)).toEqual(['respawn', 'one_life', 'classic']);
+    expect(LANDING_WAYS.map((w) => w.title)).toEqual(['Respawn', 'One life', CLASSIC_TITLE]);
+    expect(CLASSIC_TITLE).toBe('Classic 5v5');
+    // Respawn's row is the gold button's own door, so the two cannot differ.
+    expect(LANDING_WAYS[0]?.door).toBe(PLAY_NOW);
+    expect(LANDING_WAYS.map((w) => w.door.play)).toEqual([
+      { to: 'royale', variant: 'respawn' },
+      { to: 'royale', variant: 'one_life' },
+      { to: 'classic' },
+    ]);
+    for (const way of LANDING_WAYS) expect(way.door.kind).toBe('guest');
+  });
+
+  it('says the rules of each in a line, the same words the home uses', () => {
+    expect(RESPAWN_LINE).toBe(
+      'Fifty champions on a small planet. Come back five seconds after a death; the most ' +
+        'takedowns when the last light goes out wins.',
+    );
+    expect(ONE_LIFE_LINE).toBe('Fifty champions, one life each. The last one standing wins.');
+    expect(LANDING_WAYS[0]?.line).toBe(RESPAWN_LINE);
+    expect(LANDING_WAYS[1]?.line).toBe(ONE_LIFE_LINE);
+    expect(LANDING_WAYS[2]?.line).toMatch(/Star Orchard/);
   });
 
   it('shows the way to play once, in the Play now card, and asks for no star', () => {
@@ -138,6 +171,7 @@ describe('what the landing says at once (ADR 0027)', () => {
       HERO_RANKED_LINE,
       PLAY_NOW_CALL,
       PLAY_NOW_LINE,
+      ...LANDING_WAYS.map((w) => w.line),
       ACCOUNT_LINE,
       LADDER_HEADING,
       JOIN_CALL,

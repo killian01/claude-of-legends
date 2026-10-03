@@ -24,6 +24,7 @@ import type { ReplayMark } from './game/replay_marks';
 import { followedSeat } from './game/replay_seat';
 import type { ReplayWorkerIn, ReplayWorkerOut } from './game/replay_worker';
 import { ReplayWorld } from './game/replay_world';
+import { royaleNext } from './game/royale_flow';
 import { getSettings, updateSettings } from './game/settings';
 import { type SpectatorView, startSpectator } from './game/spectate';
 import {
@@ -48,6 +49,7 @@ import {
   replayPlayable,
   restorePolicies,
 } from './net/replay';
+import { dropMsg, isRoyaleResult, royaleNotes, startRoyale } from './net/royale_client';
 import {
   installStats,
   type MatchEndReporter,
@@ -60,11 +62,15 @@ import { whenChampionModelsReady } from './render/champions';
 import { installVersionedLoading } from './render/versioned_loading';
 import { attachBot } from './sim/content/bots';
 import { type HouseSeat, houseSeats } from './sim/content/bots/house';
+import { CHAMPION_LIST, DEFAULT_CHAMPION_ID } from './sim/content/champions';
 import { contentFingerprint } from './sim/content/fingerprint';
+import { SIGIL_LIST } from './sim/content/sigils';
+import { SKINS } from './sim/content/skins';
 import type { StarOrchard } from './sim/content/star_orchard';
 import type { ForgedChampionDef } from './sim/forge/forged_def';
 import type { LanePreference } from './sim/playbook/types';
 import { Rng } from './sim/rng';
+import type { RoyaleVariant } from './sim/royale/types';
 import type { Sim } from './sim/sim';
 import { ULT_RANK_LEVELS } from './sim/stats';
 import { TerrainNavGrid } from './sim/terrain_nav';
@@ -78,6 +84,7 @@ import { takeConfirmResult } from './ui/email_status';
 import { preloadBackdrop } from './ui/home_backdrop';
 import { HOME_SECTION_KEYS, type HomeChoice, showHome } from './ui/home_screen';
 import { type LandingIntent, showLanding } from './ui/landing';
+import type { LandingPlay } from './ui/landing_modes';
 import {
   type BotPick,
   type CommunityPick,
@@ -96,6 +103,8 @@ import { pendingResetToken, showPasswordReset } from './ui/password_reset';
 import { showReloadNotice } from './ui/reload_notice';
 import { buildReplayBar, type ReplayBar } from './ui/replay_bar';
 import { replayRefusal } from './ui/replay_notice';
+import { showRoyaleJoining, showRoyalePick } from './ui/royale_pick';
+import { initialPick, type RoyalePick } from './ui/royale_pick_rules';
 import { attachTurnAsk } from './ui/turn_ask';
 import type { IWorld } from './world_api';
 
@@ -1242,6 +1251,278 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
   });
 }
 
+// --- the battle royale (ADR 0031) ---
+
+// The quick pick (ui/royale_pick.ts), a layer over the page it opened
+// from: the pick last played already chosen, remembered on Play for next
+// time. Null when it is left without a pick: its Back, Escape, or the
+// browser's Back.
+async function pickForRoyale(variant: RoyaleVariant): Promise<RoyalePick | null> {
+  // The map downloads while the person picks, as for every other match.
+  prefetchStarOrchard();
+  return new Promise((resolve) => {
+    const leave = (): void => {
+      picker.remove();
+      frame.closed();
+      resolve(null);
+    };
+    const initial = initialPick(
+      getSettings().royalePick,
+      CHAMPION_LIST.map((c) => c.id),
+      (id) => SKINS[id]?.length ?? 1,
+      SIGIL_LIST.map((s) => s.id),
+      DEFAULT_CHAMPION_ID,
+    );
+    const picker = showRoyalePick(container, {
+      variant,
+      initial,
+      onPlay: (pick) => {
+        // Inside the Play click gesture, so the browser grants it.
+        requestGameFullscreen();
+        picker.remove();
+        frame.closed();
+        updateSettings({ royalePick: pick });
+        resolve(pick);
+      },
+      onBack: leave,
+    });
+    const frame = appNav().push('royale-pick', leave);
+  });
+}
+
+// The ground a battle royale is drawn on, and the map its mirror world
+// holds. The Star Orchard's for now: the Wanderseed's own loader (the
+// planet's model, its grid, the globe) takes this function's place when
+// it lands (docs/plan-royale.md, step 8), and nothing around it changes.
+async function loadRoyaleGround(): Promise<LoadedOrchard | null> {
+  return loadOrchard();
+}
+
+// One battle royale: straight in with the pick (net/royale_client.ts
+// startRoyale), no queue and no select; the server answers with
+// match_start like any match, then snapshots carrying the mode, and the
+// result when this person is out for good or the match is over. Resolves
+// with the exit the end screen or the pause menu gave.
+async function runRoyale(
+  variant: RoyaleVariant,
+  pick: RoyalePick,
+  guest: boolean,
+): Promise<PostMatchAction> {
+  const loaded = await loadRoyaleGround();
+  if (!loaded) return 'menu';
+  return new Promise((resolve) => {
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${window.location.host}/ws`);
+    const send = (msg: unknown): void => {
+      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+    };
+    const world = new ClientWorld((msg) => send(msg), loaded.orchard.map);
+    let pres: Presentation | null = null;
+    let ends: MatchEndReporter | null = null;
+    // The card between Play and the first snapshot, Cancel its way out.
+    const joining = showRoyaleJoining(container, variant, () => finish('menu'));
+    let opened = false;
+    let matchEnded = false;
+    let finished = false;
+    let droppedIn = false;
+    // What arrived before the presentation opened: the points, the result.
+    let pendingPoints: Extract<ServerMsg, { t: 'points' }> | null = null;
+    let pendingResult: Parameters<Presentation['showRoyaleResult']>[0] | null = null;
+    const finish = (action: PostMatchAction): void => {
+      if (finished) return;
+      finished = true;
+      ends?.report();
+      ends?.dispose();
+      ends = null;
+      joining.remove();
+      pres?.dispose();
+      pres = null;
+      if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify({ t: 'leave' }));
+        ws.close();
+      }
+      layer.closed();
+      resolve(action);
+    };
+    // One layer, guarded once the match is on screen: Back opens the pause
+    // menu, closing the tab asks first. The result lifts the guard: the
+    // person is out for good, and Back is then Back home.
+    const layer = appNav().push('session', () => finish('menu'));
+    const open = (): void => {
+      joining.remove();
+      // The match is on screen at last (server/seat_report.ts reads it).
+      trackStep('played');
+      send({ t: 'loaded' });
+      const opening = startPresentation(
+        container,
+        world,
+        world.selfUnitId,
+        world.selfTeam,
+        finish,
+        {
+          terrain: loaded.terrain,
+          mode: 'online',
+          guest,
+          guide: 'play',
+          royale: variant,
+        },
+      );
+      pres = opening;
+      ends = matchEndReporter('online', () => ({ winner: world.winner, seconds: world.time }));
+      if (!matchEnded && pendingResult === null) layer.guard(() => pres?.toggleEscapeMenu());
+      opening.setNetHooks({
+        sendChat: (text) => send({ t: 'chat', text }),
+        sendPing: (x, z) => send({ t: 'ping', x, z }),
+        sendStep: (id) => send({ t: 'step', id }),
+        sendDrop: (p) => send(dropMsg(p)),
+      });
+      if (pendingPoints) {
+        opening.showPoints(pendingPoints.delta, pendingPoints.total, pendingPoints.reason);
+        pendingPoints = null;
+      }
+      if (pendingResult) opening.showRoyaleResult(pendingResult);
+      if (droppedIn) {
+        opening.pushChat(
+          'System',
+          world.selfTeam,
+          'You joined a match in progress, in place of a bot. Good luck.',
+        );
+      }
+    };
+    ws.addEventListener('open', () => {
+      opened = true;
+      ws.send(JSON.stringify({ t: 'hello' }));
+      startRoyale((msg) => send(msg), variant, pick);
+    });
+    ws.addEventListener('message', (event) => {
+      if (finished) return;
+      let raw: unknown;
+      try {
+        raw = JSON.parse(String(event.data));
+      } catch {
+        return;
+      }
+      // The result is the mode's own message (net/royale_wire.ts).
+      if (isRoyaleResult(raw)) {
+        layer.unguard();
+        if (pres) pres.showRoyaleResult(raw);
+        else pendingResult = raw;
+        ends?.report();
+        return;
+      }
+      const msg = raw as ServerMsg;
+      switch (msg.t) {
+        case 'match_start':
+          registerForgedFromMatch(msg.forgedAssets);
+          droppedIn = msg.dropIn === true;
+          world.applyServer(msg);
+          break;
+        case 'snap': {
+          const changed = world.applyServer(msg);
+          if (!pres && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) open();
+          if (changed && pres) {
+            const kills: { unitId: number; killerId: number }[] = [];
+            const casts: { unitId: number; key?: AbilityKey }[] = [];
+            const hits: { targetId: number; amount: number }[] = [];
+            const attacks: { unitId: number; targetId: number }[] = [];
+            for (const e of msg.events) {
+              if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
+              else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
+              else if (e.e === 'atk') attacks.push({ unitId: e.unitId, targetId: e.targetId });
+              else if (e.e === 'dmg') hits.push({ targetId: e.targetId, amount: e.amount });
+            }
+            pres.onWorldTick({
+              kills,
+              golds: [],
+              casts,
+              hits,
+              attacks,
+              royale: royaleNotes(msg.events),
+            });
+          }
+          break;
+        }
+        case 'score':
+          world.applyServer(msg);
+          break;
+        case 'chat':
+          pres?.pushChat(msg.from, msg.team, msg.text);
+          break;
+        case 'ping':
+          pres?.showPing(msg.x, msg.z, msg.from, msg.team);
+          break;
+        case 'probe':
+          send({ t: 'probe', n: msg.n });
+          break;
+        case 'player_joined':
+          pres?.pushChat('System', msg.team, `${msg.name} joined the match.`);
+          break;
+        case 'points':
+          if (pres) pres.showPoints(msg.delta, msg.total, msg.reason);
+          else pendingPoints = msg;
+          break;
+        case 'match_end':
+          matchEnded = true;
+          layer.unguard();
+          if (!pres) finish('menu');
+          break;
+        case 'error': {
+          console.warn('server:', msg.message);
+          const message = msg.message;
+          if (!pres) {
+            joining.remove();
+            void showNotice(container, 'Notice', message).then(() => finish('menu'));
+          } else {
+            finish('menu');
+            void showNotice(container, 'Notice', message);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    });
+    ws.addEventListener('close', () => {
+      buildWatch.poke();
+      if (finished || matchEnded || pendingResult !== null) return;
+      joining.remove();
+      void showNotice(
+        container,
+        opened ? 'Disconnected' : 'Server unreachable',
+        opened
+          ? 'Lost the connection to the battle royale.'
+          : 'Could not reach the game server. Try again in a moment.',
+      ).then(() => finish('menu'));
+    });
+  });
+}
+
+// What a Guest plays from the landing (ui/landing_modes.ts LandingPlay):
+// the battle royale, which Play now launches, or the 5v5's public queue,
+// Play again queueing again. Resolves with the exit that ended it.
+async function playAsGuest(guestName: string, play: LandingPlay): Promise<PostMatchAction> {
+  if (play.to === 'royale') return royaleLoop(play.variant, true);
+  let action: PostMatchAction = 'again';
+  while (action === 'again') action = await runOnline({ name: guestName, mode: 'queue' }, true);
+  return action;
+}
+
+// Battle royales back to back (game/royale_flow.ts): the quick pick once,
+// then Play again and the other rule set straight into the next match with
+// the same pick. Resolves with the exit that left the loop: home, or the
+// account offer taken.
+async function royaleLoop(variant: RoyaleVariant, guest: boolean): Promise<PostMatchAction> {
+  const pick = await pickForRoyale(variant);
+  if (!pick) return 'menu';
+  let rules = variant;
+  for (;;) {
+    const action = await runRoyale(rules, pick, guest);
+    const next = royaleNext(action, rules);
+    if (next.to === 'match') rules = next.variant;
+    else return next.to === 'register' ? 'account' : 'menu';
+  }
+}
+
 async function boot(): Promise<void> {
   // Every address the renderer's loaders fetch carries the build's stamp
   // (src/game/asset_version.ts), before the first model is asked for.
@@ -1331,10 +1612,7 @@ async function boot(): Promise<void> {
       if (entry.kind === 'guest') {
         const guestName = await openGuest();
         if (guestName !== null) {
-          let action: PostMatchAction = 'again';
-          while (action === 'again') {
-            action = await runOnline({ name: guestName, mode: 'queue' }, true);
-          }
+          const action = await playAsGuest(guestName, entry.play);
           if (action === 'account') landingIntent = 'register';
           continue;
         }
@@ -1397,6 +1675,8 @@ async function boot(): Promise<void> {
       action = await runReplay(choice.replayId, choice.replayAt, choice.replayFollow);
     } else if (choice.mode === 'spectate' && choice.matchId !== undefined) {
       action = await runSpectate(choice.matchId, choice.team === 1 ? 1 : 0);
+    } else if (choice.mode === 'royale') {
+      action = await royaleLoop(choice.royale ?? 'respawn', false);
     } else {
       action = await runOnline(choice);
     }
@@ -1416,4 +1696,12 @@ async function boot(): Promise<void> {
   }
 }
 
-void boot();
+// A dev harness for the battle royale's screens (game/royale_demo.ts):
+// ?royale-ui-demo on the dev server feeds mock state to the HUD and the end
+// screens. import.meta.env.DEV is false in a build, which drops the import.
+if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('royale-ui-demo')) {
+  installVersionedLoading();
+  void import('./game/royale_demo').then((demo) => demo.runRoyaleDemo(container));
+} else {
+  void boot();
+}

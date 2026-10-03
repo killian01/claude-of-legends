@@ -43,6 +43,21 @@ export interface GameSettings {
   // its first step.
   stepsOff: boolean;
   stepsDone: string[];
+  // The battle royale's first steps (ui/royale_steps.ts): the steps this
+  // browser has done there. One guide with two lists of steps: Hide guide
+  // hides both (stepsOff), and the settings panel brings both back.
+  royaleStepsDone: string[];
+  // The battle royale's quick pick (ui/royale_pick.ts): the champion, the
+  // skin and the two sigils last played, ready the next time; null before
+  // the first. Which champions exist is the pick's to check
+  // (ui/royale_pick_rules.ts), not the storage's.
+  royalePick: RoyalePickMemory | null;
+}
+
+export interface RoyalePickMemory {
+  championId: string;
+  skin: number;
+  sigils: [string, string];
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -58,6 +73,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   leftClickMoves: true,
   stepsOff: false,
   stepsDone: [],
+  royaleStepsDone: [],
+  royalePick: null,
 };
 
 const STORAGE_KEY = 'loc-settings';
@@ -69,6 +86,27 @@ const clamp01 = (v: unknown, fallback: number): number =>
 // in storage stays a small number.
 const count = (v: unknown): number =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(1000, Math.max(0, Math.floor(v))) : 0;
+
+// A list of step ids kept in storage: strings, once each, a few at most.
+const idList = (v: unknown): string[] =>
+  Array.isArray(v)
+    ? [...new Set(v.filter((x): x is string => typeof x === 'string'))].slice(0, 32)
+    : [];
+
+// The quick pick remembered: a champion id, a skin index and two different
+// sigil ids, or nothing.
+function royalePickOf(v: unknown): RoyalePickMemory | null {
+  if (typeof v !== 'object' || v === null) return null;
+  const r = v as Partial<Record<keyof RoyalePickMemory, unknown>>;
+  if (typeof r.championId !== 'string' || r.championId.length === 0) return null;
+  if (r.championId.length > 64) return null;
+  const sigils = Array.isArray(r.sigils) ? r.sigils : [];
+  const [a, b] = sigils;
+  if (sigils.length !== 2 || typeof a !== 'string' || typeof b !== 'string' || a === b) {
+    return null;
+  }
+  return { championId: r.championId, skin: Math.min(count(r.skin), 32), sigils: [a, b] };
+}
 
 // Pure: any junk in, a valid settings object out.
 export function clampSettings(raw: unknown): GameSettings {
@@ -86,9 +124,9 @@ export function clampSettings(raw: unknown): GameSettings {
     leftClickMoves:
       typeof r.leftClickMoves === 'boolean' ? r.leftClickMoves : DEFAULT_SETTINGS.leftClickMoves,
     stepsOff: r.stepsOff === true,
-    stepsDone: Array.isArray(r.stepsDone)
-      ? [...new Set(r.stepsDone.filter((x): x is string => typeof x === 'string'))].slice(0, 32)
-      : [],
+    stepsDone: idList(r.stepsDone),
+    royaleStepsDone: idList(r.royaleStepsDone),
+    royalePick: royalePickOf(r.royalePick),
   };
 }
 

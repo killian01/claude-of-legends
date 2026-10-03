@@ -18,12 +18,7 @@ import { STEP_IDS, type StepId } from '../net/protocol';
 export type { StepId } from '../net/protocol';
 
 // What the HUD reads of the match for the steps, every update.
-export interface StepsView {
-  // Match time, seconds.
-  time: number;
-  // The shop, a menu or the end screen covers the screen: no step starts.
-  covered: boolean;
-  dead: boolean;
+export interface StepsView extends GuideView {
   level: number;
   skillPoints: number;
   // Q, W or E holds a rank.
@@ -45,17 +40,31 @@ export interface StepsView {
   recalling: boolean;
 }
 
-export interface StepsState {
+// Where a guide stands in a match: hidden or not, what is done, the step
+// up and its clocks. Shared by every list of steps (the battle royale has
+// its own, ui/royale_steps.ts), each with its own ids.
+export interface GuideState<Id extends string> {
   // Hidden by the player, for good until the settings bring it back.
   off: boolean;
-  done: readonly StepId[];
-  current: StepId | null;
+  done: readonly Id[];
+  current: Id | null;
   // Match time the current step came up.
   shownAt: number;
   // Match time the current step stopped applying, null while it applies.
   lapsedAt: number | null;
   // Match time the last step left: the next waits a moment.
   lastEnd: number;
+}
+
+export type StepsState = GuideState<StepId>;
+
+// What every list of steps reads of the match, whatever else it reads.
+export interface GuideView {
+  // Match time, seconds.
+  time: number;
+  // A shop, a menu or the end screen covers the screen: no step starts.
+  covered: boolean;
+  dead: boolean;
 }
 
 // Health under which backing off is the step.
@@ -87,16 +96,25 @@ export const RECALL_AT_S = 100;
 // Backing off when hurt comes before any other step: it takes the card
 // from whatever is up, which comes back later.
 
-interface StepRule {
+export interface StepRule<Id extends string, V> {
   // It applies now.
-  when(v: StepsView, done: readonly StepId[]): boolean;
+  when(v: V, done: readonly Id[]): boolean;
   // It is done, given how long it has been up.
-  over(v: StepsView, upFor: number): boolean;
+  over(v: V, upFor: number): boolean;
   // The player did it on their own: done, whether or not it ever showed.
-  did?(v: StepsView): boolean;
+  did?(v: V): boolean;
 }
 
-const RULES: Readonly<Record<StepId, StepRule>> = {
+// A list of steps: the ids in the order they are tried, the rule of each,
+// and the one step, if any, that takes the card from whatever is up when it
+// applies (backing off when hurt, in the 5v5).
+export interface StepTable<Id extends string, V extends GuideView> {
+  ids: readonly Id[];
+  rules: Readonly<Record<Id, StepRule<Id, V>>>;
+  urgent: Id | null;
+}
+
+const RULES: Readonly<Record<StepId, StepRule<StepId, StepsView>>> = {
   learn: {
     when: (v) => v.skillPoints > 0 && !v.learned,
     over: (v) => v.learned,
@@ -145,10 +163,16 @@ const RULES: Readonly<Record<StepId, StepRule>> = {
   },
 };
 
-export function stepsStart(off: boolean, done: readonly string[]): StepsState {
+const FIVE: StepTable<StepId, StepsView> = { ids: STEP_IDS, rules: RULES, urgent: 'low_health' };
+
+export function guideStart<Id extends string>(
+  ids: readonly Id[],
+  off: boolean,
+  done: readonly string[],
+): GuideState<Id> {
   return {
     off,
-    done: STEP_IDS.filter((id) => done.includes(id)),
+    done: ids.filter((id) => done.includes(id)),
     current: null,
     shownAt: 0,
     lapsedAt: null,
@@ -156,31 +180,33 @@ export function stepsStart(off: boolean, done: readonly string[]): StepsState {
   };
 }
 
-// Every step done: nothing left to lead through.
-export function stepsFinished(s: StepsState): boolean {
-  return s.off || s.done.length === STEP_IDS.length;
-}
-
-// One update: what the player did on their own is done, the step up is
-// kept, ended or lapsed, and with none up the first that applies comes up.
-export function stepSteps(s: StepsState, v: StepsView): StepsState {
+// One update of any list: what the player did on their own is done, the
+// urgent step takes the card when it applies, the step up is kept, ended
+// or lapsed, and with none up the first that applies comes up.
+export function advanceGuide<Id extends string, V extends GuideView>(
+  table: StepTable<Id, V>,
+  s: GuideState<Id>,
+  v: V,
+): GuideState<Id> {
   if (s.off) return s;
+  const { ids, rules, urgent } = table;
   let done = s.done;
-  for (const id of STEP_IDS) {
-    if (!done.includes(id) && RULES[id].did?.(v)) done = [...done, id];
+  for (const id of ids) {
+    if (!done.includes(id) && rules[id].did?.(v)) done = [...done, id];
   }
-  let next: StepsState = done === s.done ? s : { ...s, done };
+  let next: GuideState<Id> = done === s.done ? s : { ...s, done };
   if (
-    next.current !== 'low_health' &&
-    !done.includes('low_health') &&
+    urgent !== null &&
+    next.current !== urgent &&
+    !done.includes(urgent) &&
     !v.covered &&
-    RULES.low_health.when(v, done)
+    rules[urgent].when(v, done)
   ) {
-    return { ...next, current: 'low_health', shownAt: v.time, lapsedAt: null };
+    return { ...next, current: urgent, shownAt: v.time, lapsedAt: null };
   }
   const current = next.current;
   if (current !== null) {
-    const rule = RULES[current];
+    const rule = rules[current];
     if (done.includes(current) || rule.over(v, v.time - next.shownAt)) {
       return {
         ...next,
@@ -200,17 +226,42 @@ export function stepSteps(s: StepsState, v: StepsView): StepsState {
     return next.lapsedAt === null ? next : { ...next, lapsedAt: null };
   }
   if (v.covered || v.dead || v.time - next.lastEnd < GAP_S) return next;
-  for (const id of STEP_IDS) {
-    if (done.includes(id) || !RULES[id].when(v, done)) continue;
+  for (const id of ids) {
+    if (done.includes(id) || !rules[id].when(v, done)) continue;
     next = { ...next, current: id, shownAt: v.time, lapsedAt: null };
     break;
   }
   return next;
 }
 
+// Every step of a list done, or the guide hidden: nothing left to lead.
+export function guideFinished<Id extends string>(ids: readonly Id[], s: GuideState<Id>): boolean {
+  return s.off || s.done.length === ids.length;
+}
+
+// The player hid the guide.
+export function hideGuide<Id extends string>(s: GuideState<Id>): GuideState<Id> {
+  return { ...s, off: true, current: null };
+}
+
+export function stepsStart(off: boolean, done: readonly string[]): StepsState {
+  return guideStart(STEP_IDS, off, done);
+}
+
+// Every step done: nothing left to lead through.
+export function stepsFinished(s: StepsState): boolean {
+  return guideFinished(STEP_IDS, s);
+}
+
+// One update: what the player did on their own is done, the step up is
+// kept, ended or lapsed, and with none up the first that applies comes up.
+export function stepSteps(s: StepsState, v: StepsView): StepsState {
+  return advanceGuide(FIVE, s, v);
+}
+
 // The player hid the guide.
 export function hideSteps(s: StepsState): StepsState {
-  return { ...s, off: true, current: null };
+  return hideGuide(s);
 }
 
 // How the player plays: a mouse and keys, or a phone tapping or with the

@@ -11,7 +11,16 @@
 // chosen. The painting is the tile's, so a mode looks the same on both
 // sides of the door.
 
+import type { RoyaleVariant } from '../sim/royale/types';
 import { type TileId, tileArtUrl } from './home_tiles';
+import {
+  CLASSIC_LINE,
+  CLASSIC_TITLE,
+  ONE_LIFE_LINE,
+  RESPAWN_LINE,
+  ROYALE_LABEL,
+  royaleMode,
+} from './royale_modes';
 
 export interface LandingMode {
   // The play tile this stands for, which is what pins the two rows together.
@@ -28,19 +37,20 @@ export interface LandingMode {
   art: string;
 }
 
-// The painting the other way in wears. It was the practice match's, from
-// when that card's door was the offline game; the door is the public
-// queue now, people and bots on the ladder, and the practice field's
-// straw dummies were the wrong picture of it: it wears the ranked one,
-// the painting of a match against people (the maintainer, 2026-10-02).
-export const PLAY_NOW_ART = tileArtUrl('ranked');
+// The painting the 5v5 wears among the ways in: the ranked tile's, a match
+// against people. It was the whole Play now card's until the card became
+// the battle royale's door (ADR 0031), and before that the practice
+// match's, whose straw dummies were the wrong picture of a public match
+// (the maintainer, 2026-10-02).
+export const CLASSIC_ART = tileArtUrl('ranked');
 // Its button. It used to say "Play offline", which reads as a lesser game
 // to someone who came to play; what it offers is a match right here, with
 // nothing to install and no account: the public queue as a Guest (ADR
 // 0024), people when they are on and bots in every empty seat.
 export const PLAY_NOW_CALL = 'Play in the browser now';
-export const PLAY_NOW_LINE =
-  'A real 5v5 online: players when they are on, bots in every empty seat.';
+// The card's line. The three ways in under it each say what they are, so
+// this one says what they share: a match online, never an empty one.
+export const PLAY_NOW_LINE = 'Online, with people when they are on and bots in every empty seat.';
 
 // The line under the hero's tagline, the first thing read after what the
 // game is: a game with a ladder, from the first match, with no account.
@@ -57,17 +67,71 @@ export const HERO_RANKED_LINE =
 export const ACCOUNT_LINE =
   'It keeps your points on every device, and opens ranked, bots and the Forge.';
 
+// What a way in plays as a Guest (ADR 0024): the battle royale on one of its
+// two rule sets (ADR 0031), or the 5v5 on the Star Orchard.
+export type LandingPlay = { to: 'royale'; variant: RoyaleVariant } | { to: 'classic' };
+
 // The way in that needs nothing: what its button says, and what the
 // landing resolves with when it is pressed (ui/landing.ts). The Play now
 // card's button is built from it, so what the button says and what it
-// does cannot come apart. The offline practice link that stood under it
-// left the landing (ADR 0027): visitors play online now, and the page
-// falls back to practice by itself when no Guest can be opened.
+// does cannot come apart. It plays Respawn (ADR 0031: Play now launches
+// Respawn); One life and the 5v5 are the card's other two ways in. The
+// offline practice link that stood under it left the landing (ADR 0027):
+// visitors play online now, and the page falls back to practice by itself
+// when no Guest can be opened.
 export interface LandingDoor {
   call: string;
   kind: 'guest';
+  play: LandingPlay;
 }
-export const PLAY_NOW: LandingDoor = { call: PLAY_NOW_CALL, kind: 'guest' };
+export const PLAY_NOW: LandingDoor = {
+  call: PLAY_NOW_CALL,
+  kind: 'guest',
+  play: { to: 'royale', variant: 'respawn' },
+};
+
+// The Play now card's ways in, one row each, in the order they stand: the
+// two rule sets of the battle royale, Respawn first since the gold button
+// over them plays it, and the 5v5. Each row is a door of its own.
+export interface LandingWay {
+  id: RoyaleVariant | 'classic';
+  // The small word over the name: what kind of match it is.
+  kicker: string;
+  title: string;
+  line: string;
+  door: LandingDoor;
+}
+
+// The small heading over the rows.
+export const WAYS_LABEL = 'Three ways to play';
+
+export const LANDING_WAYS: readonly LandingWay[] = [
+  {
+    id: 'respawn',
+    kicker: ROYALE_LABEL,
+    title: royaleMode('respawn').title,
+    line: RESPAWN_LINE,
+    door: PLAY_NOW,
+  },
+  {
+    id: 'one_life',
+    kicker: ROYALE_LABEL,
+    title: royaleMode('one_life').title,
+    line: ONE_LIFE_LINE,
+    door: {
+      call: royaleMode('one_life').call,
+      kind: 'guest',
+      play: { to: 'royale', variant: 'one_life' },
+    },
+  },
+  {
+    id: 'classic',
+    kicker: 'Star Orchard',
+    title: CLASSIC_TITLE,
+    line: CLASSIC_LINE,
+    door: { call: 'Play the 5v5', kind: 'guest', play: { to: 'classic' } },
+  },
+];
 
 export const LANDING_MODES: readonly LandingMode[] = [
   {

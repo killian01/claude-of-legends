@@ -9,6 +9,7 @@
 // the promise with a HomeChoice and takes the page down.
 
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
+import type { RoyaleVariant } from '../sim/royale/types';
 import type { TeamId } from '../sim/types';
 import { openAcademy } from './academy';
 import { openAccountDrawer } from './account_drawer';
@@ -29,6 +30,8 @@ import { openNews } from './news_section';
 import { buildPage, ensurePageCss, fetchStats, renderStats } from './page';
 import { buildJoinLine, buildPlayTiles } from './play_tiles';
 import { openRosterBrowser } from './roster_browser';
+import { CLASSIC_TITLE, ROYALE_LABEL } from './royale_modes';
+import { buildRoyaleTiles } from './royale_tiles';
 import { createSectionHost } from './section_host';
 import type { Drawer } from './side_drawer';
 
@@ -77,8 +80,10 @@ export interface HomeChoice {
   name: string;
   // 'forge-queue' is the Forge's own public queue (plan-forge phase 6):
   // same flow as 'queue', a separate ladder, forged champions in select.
-  mode: 'practice' | 'queue' | 'forge-queue' | 'create' | 'join' | 'replay' | 'spectate';
+  // 'royale' is the battle royale (ADR 0031), on the rule set `royale` names.
+  mode: 'practice' | 'queue' | 'forge-queue' | 'create' | 'join' | 'replay' | 'spectate' | 'royale';
   code?: string;
+  royale?: RoyaleVariant;
   // For mode 'replay': the saved replay to watch, and the tick to open it
   // at when a Match sheet asked for one (a death, a few seconds before).
   replayId?: number;
@@ -310,9 +315,17 @@ export function showHome(
       if (tile.goes.to === 'mode') done(tile.goes.mode);
       else if (tile.goes.key === 'academy') showAcademy();
     };
+    // The battle royale first (ADR 0031), its two rule sets in a row of
+    // their own, then the 5v5's tiles under the name the landing gives it.
+    const onRoyale = (variant: RoyaleVariant): void => {
+      leave();
+      resolve({ name: accountName, mode: 'royale', royale: variant });
+    };
     const main = el('section', 'home-main');
     main.append(
-      el('h2', 'home-kicker', 'Play'),
+      el('h2', 'home-kicker', ROYALE_LABEL),
+      buildRoyaleTiles(onRoyale),
+      el('h2', 'home-kicker', CLASSIC_TITLE),
       buildPlayTiles(PLAY_TILES, onTile),
       buildJoinLine(prefillCode, (code) => done('join', code)),
     );
