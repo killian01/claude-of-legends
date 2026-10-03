@@ -8,8 +8,8 @@
 
 import { startPresentation } from '../game/boot';
 import { whenChampionModelsReady } from '../render/champions/readiness';
-import type { Renderer } from '../render/renderer';
 import { loadPlanetGround, planetTerrain } from '../render/planet_terrain';
+import type { Renderer } from '../render/renderer';
 import { DT } from '../sim/types';
 import { PlanetDemoWorld } from './planet_demo_world';
 
@@ -34,7 +34,9 @@ const [ground] = await Promise.all([
 ]);
 const at = params.get('at')?.split(',').map(Number);
 const world = new PlanetDemoWorld(ground, {
-  ...(at && at.length === 3 && at.every(Number.isFinite) ? { at: { x: at[0]!, y: at[1]!, z: at[2]! } } : {}),
+  ...(at && at.length === 3 && at.every(Number.isFinite)
+    ? { at: { x: at[0]!, y: at[1]!, z: at[2]! } }
+    : {}),
   dropS: Number.isFinite(dropS) ? dropS : 8,
   duskNear: params.get('dusk') === 'near',
   seed: Number(params.get('seed') ?? 3),
@@ -92,7 +94,8 @@ requestAnimationFrame(frame);
   // The draw's cost over the last frames: milliseconds and draw calls.
   frameStats() {
     const sorted = [...frameMs].sort((x, y) => x - y);
-    const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0;
+    const at = (q: number) =>
+      sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0;
     return {
       frames: sorted.length,
       medianMs: at(0.5),

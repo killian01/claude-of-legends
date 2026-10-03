@@ -88,7 +88,10 @@ export class PlanetMarks {
       this.group.add(m);
     }
     const glowGeo = new THREE.BufferGeometry();
-    glowGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_CACHES * 3), 3));
+    glowGeo.setAttribute(
+      'position',
+      new THREE.BufferAttribute(new Float32Array(MAX_CACHES * 3), 3),
+    );
     glowGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MAX_CACHES * 3), 3));
     glowGeo.setDrawRange(0, 0);
     this.cacheGlowMat = new THREE.PointsMaterial({
@@ -206,12 +209,16 @@ export class PlanetMarks {
     this.pickBeam.visible = false;
     this.group.add(this.pickBeam);
     const picksGeo = new THREE.BufferGeometry();
-    picksGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_PICKS * 3), 3));
+    picksGeo.setAttribute(
+      'position',
+      new THREE.BufferAttribute(new Float32Array(MAX_PICKS * 3), 3),
+    );
     picksGeo.setDrawRange(0, 0);
     this.pickMat = new THREE.PointsMaterial({
-      size: 7,
+      size: 16,
+      sizeAttenuation: false,
       map: glow,
-      color: 0xffe6b0,
+      color: 0xffb85a,
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
@@ -286,7 +293,12 @@ export class PlanetMarks {
     this.cacheGlow.geometry.setDrawRange(0, n);
   }
 
-  update(now: number, caches: readonly SnapCache[], royale: SnapRoyale | null, dropping: boolean): void {
+  update(
+    now: number,
+    caches: readonly SnapCache[],
+    royale: SnapRoyale | null,
+    dropping: boolean,
+  ): void {
     if (caches !== this.shownCaches) {
       this.shownCaches = caches;
       this.placeCaches(caches);
@@ -300,7 +312,11 @@ export class PlanetMarks {
     this.pickBeam.visible = own !== undefined;
     if (own) {
       this.pickBeam.matrix.copy(this.standing({ x: own[0], y: own[1], z: own[2] }, 0, 1));
-      this.pickBeam.matrix.decompose(this.pickBeam.position, this.pickBeam.quaternion, this.pickBeam.scale);
+      this.pickBeam.matrix.decompose(
+        this.pickBeam.position,
+        this.pickBeam.quaternion,
+        this.pickBeam.scale,
+      );
     }
     const others = dropping ? (royale?.picks ?? []) : [];
     const positions = this.picks.geometry.getAttribute('position') as THREE.BufferAttribute;
@@ -312,7 +328,7 @@ export class PlanetMarks {
     }
     positions.needsUpdate = true;
     this.picks.geometry.setDrawRange(0, n);
-    this.pickMat.size = 6.5 + 1.2 * Math.sin(t * 5);
+    this.pickMat.size = 15 + 3 * Math.sin(t * 5);
   }
 
   dispose(): void {

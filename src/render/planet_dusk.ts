@@ -127,7 +127,10 @@ export function duskMaterial(material: THREE.Material): void {
       .replace('#include <project_vertex>', `#include <project_vertex>\n${VERTEX_BODY}`);
     shader.fragmentShader = shader.fragmentShader
       .replace('void main() {', `${FRAGMENT_PARS}\nvoid main() {`)
-      .replace('#include <colorspace_fragment>', `#include <colorspace_fragment>\n${FRAGMENT_BODY}`);
+      .replace(
+        '#include <colorspace_fragment>',
+        `#include <colorspace_fragment>\n${FRAGMENT_BODY}`,
+      );
   };
   material.customProgramCacheKey = () => 'col-dusk';
   material.needsUpdate = true;

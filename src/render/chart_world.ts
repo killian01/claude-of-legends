@@ -187,9 +187,11 @@ export class ChartWorld implements IWorld {
       (u) => {
         const out = Object.create(u) as Unit;
         out.pos = w.toLocal(u.pos);
-        if (u.pendingSpell) out.pendingSpell = { ...u.pendingSpell, aim: w.toLocal(u.pendingSpell.aim) };
+        if (u.pendingSpell)
+          out.pendingSpell = { ...u.pendingSpell, aim: w.toLocal(u.pendingSpell.aim) };
         if (u.attackMoveTarget) out.attackMoveTarget = w.toLocal(u.attackMoveTarget);
-        if (u.recastArmed) out.recastArmed = { ...u.recastArmed, origin: w.toLocal(u.recastArmed.origin) };
+        if (u.recastArmed)
+          out.recastArmed = { ...u.recastArmed, origin: w.toLocal(u.recastArmed.origin) };
         return out;
       },
       (u) => u.pendingSpell,

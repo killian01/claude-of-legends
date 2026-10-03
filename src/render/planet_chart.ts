@@ -78,7 +78,11 @@ export class PlanetChart {
   ) {
     this.up = unit(up);
     const k = dot(east, this.up);
-    const e = unit({ x: east.x - k * this.up.x, y: east.y - k * this.up.y, z: east.z - k * this.up.z });
+    const e = unit({
+      x: east.x - k * this.up.x,
+      y: east.y - k * this.up.y,
+      z: east.z - k * this.up.z,
+    });
     this.east = e;
     this.north = cross(e, this.up);
   }

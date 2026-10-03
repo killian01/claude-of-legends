@@ -200,6 +200,7 @@ export function parseLayout(json: unknown, radius = PLANET_RADIUS): PlanetLayout
 export function cubeCorners(radius = PLANET_RADIUS): Vec3[] {
   const k = radius / Math.sqrt(3);
   const out: Vec3[] = [];
-  for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) out.push({ x: x * k, y: y * k, z: z * k });
+  for (const x of [-1, 1])
+    for (const y of [-1, 1]) for (const z of [-1, 1]) out.push({ x: x * k, y: y * k, z: z * k });
   return out;
 }

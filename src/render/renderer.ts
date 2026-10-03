@@ -67,8 +67,8 @@ import {
   type SpellVisual,
   spellVisualOf,
 } from './vfx/catalog';
-import { SPRITE } from './vfx/sprites';
 import type { ChartRemap } from './vfx/chart_shift';
+import { SPRITE } from './vfx/sprites';
 import { VfxSystem } from './vfx/system';
 import { disposeEffect } from './vfx/timed';
 import { TowerReachFx } from './vfx/tower_reach_fx';
@@ -459,9 +459,13 @@ export class Renderer {
     const aspect = container.clientWidth / Math.max(1, container.clientHeight);
     this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 500);
     if (terrain.planet) {
-      const planet = new PlanetStage(world, terrain.planet, this.gl.domElement, () =>
-        this.canvasRect(),
-      this.camera);
+      const planet = new PlanetStage(
+        world,
+        terrain.planet,
+        this.gl.domElement,
+        () => this.canvasRect(),
+        this.camera,
+      );
       this.planet = planet;
       this.world = planet.world;
       this.terrain = {
@@ -3119,8 +3123,7 @@ export class Renderer {
         // into the ground it stood on.
         d.mesh.scale.setScalar(Math.max(0.01, 1 - age));
         d.mesh.rotation.x = age * 1.1;
-        d.mesh.position.y =
-          this.groundHeight(d.mesh.position.x, d.mesh.position.z) - age * 0.35;
+        d.mesh.position.y = this.groundHeight(d.mesh.position.x, d.mesh.position.z) - age * 0.35;
       }
     }
     for (let i = this.markers.length - 1; i >= 0; i--) {
