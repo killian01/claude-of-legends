@@ -19,7 +19,7 @@ import {
   turnRight,
   unit,
 } from '../geo';
-import { landingAt, walkableAt } from '../ground_walk';
+import { landingOn } from '../ground';
 import type { DamageVia } from '../passive_types';
 import { passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
@@ -115,10 +115,10 @@ export function evaluatePredicate(
       return slowPct(target, ctx.time) > 0 || isRooted(target, ctx.time);
     case 'targetNearTerrain': {
       // Eight-direction sample ring: cheap, deterministic, and honest about
-      // both map terrain and ability walls (walls block NavGrid cells).
+      // both map terrain and ability walls (both block the ground's cells).
       for (const [ux, uz] of TERRAIN_RING) {
         const at = offset(target.pos, tangent(target.pos, ux, uz), p.distance);
-        if (!walkableAt(ctx, at)) return true;
+        if (!ctx.ground.isWalkableAt(at)) return true;
       }
       return false;
     }
@@ -212,7 +212,7 @@ export type EffectSpec =
 function displace(ctx: CombatCtx, target: Unit, v: Vec2, distance: number): void {
   const dir = unit(v);
   if (dir === null || target.moveSpeed <= 0) return;
-  const landed = landingAt(ctx, offset(target.pos, dir, distance), 6);
+  const landed = landingOn(ctx.ground, offset(target.pos, dir, distance), 6);
   if (landed) target.pos = copy(landed);
   target.path = [];
 }
