@@ -10,7 +10,7 @@
 // is a last-hit order, not a nearby champion's), and champions beat minions
 // on overlap.
 
-import { dist, onSphere } from '../sim/geo';
+import { basis, dist, offset, onSphere } from '../sim/geo';
 import { isInvulnerable } from '../sim/structure_rules';
 import type { TeamId, Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
@@ -29,6 +29,15 @@ export type ScreenProjector = (
   z: number,
   groundY?: number,
 ) => { x: number; y: number } | null;
+
+// A point on the rim of a unit's body, for its size on screen: along +x on
+// the plane, along the ground's east on the sphere (adding the radius to a
+// sphere point's x would step off the sphere, or along its normal where x
+// is the normal, and make the body a dot).
+function edgeOf(u: Readonly<Unit>): Vec2 {
+  if (onSphere(u.pos)) return offset(u.pos, basis(u.pos).east, u.radius);
+  return { x: u.pos.x + u.radius, z: u.pos.z };
+}
 
 // Ground distance: the plane's as it always was, the sphere's chord.
 function groundDist(a: Vec2, b: Vec2): number {
@@ -81,7 +90,8 @@ export function pickUnitOnScreen(
     const h = bodyHeight(u);
     const c = project(u.pos.x, h, u.pos.z, u.pos.y);
     if (!c) continue;
-    const edge = project(u.pos.x + u.radius, h, u.pos.z, u.pos.y);
+    const e = edgeOf(u);
+    const edge = project(e.x, h, e.z, e.y);
     const radiusPx = edge ? Math.hypot(edge.x - c.x, edge.y - c.y) : 0;
     const d = Math.hypot(c.x - screenX, c.y - screenY) - radiusPx;
     if (d > CLICK_SLOP_PX) continue;
@@ -108,7 +118,8 @@ export function pickEnemyOnScreen(
     const h = bodyHeight(u);
     const c = project(u.pos.x, h, u.pos.z, u.pos.y);
     if (!c) continue;
-    const edge = project(u.pos.x + u.radius, h, u.pos.z, u.pos.y);
+    const e = edgeOf(u);
+    const edge = project(e.x, h, e.z, e.y);
     const radiusPx = edge ? Math.hypot(edge.x - c.x, edge.y - c.y) : 0;
     const d = Math.hypot(c.x - screenX, c.y - screenY) - radiusPx;
     if (d > CLICK_SLOP_PX) continue;
