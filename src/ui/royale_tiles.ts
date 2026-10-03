@@ -1,14 +1,15 @@
 // The home's battle royale row (ADR 0031): its two rule sets side by side
 // over the 5v5's tiles, Respawn the wider and in gold since it is what Play
-// now launches. A tile is the button, the Wanderseed drawn at its right
-// (ui/planet_emblem.ts), the name, the line that says the rules
+// now launches. A tile is the button: a view of the Wanderseed's ground
+// behind it, fading into the words on the left, the globe from orbit at
+// its right (ui/planet_emblem.ts), the name, the line that says the rules
 // (ui/royale_modes.ts) and the pill. Same frame as the play tiles
 // (ui/play_tiles.ts), so the two rows read as one section.
 
 import type { RoyaleVariant } from '../sim/royale/types';
 import { el } from './menu';
 import { planetEmblem } from './planet_emblem';
-import { ROYALE_MODES } from './royale_modes';
+import { ROYALE_MODES, royaleArtUrl, viewArt } from './royale_modes';
 
 const CSS = `
 .royale-tiles { display: grid; grid-template-columns: 5fr 4fr; gap: 12px; max-width: 1180px;
@@ -28,6 +29,13 @@ const CSS = `
 .royale-tile.one_life { background:
     radial-gradient(ellipse at 82% 50%, rgba(232, 106, 74, 0.14) 0%, rgba(232, 106, 74, 0) 46%),
     linear-gradient(160deg, #120d1c 0%, #08060d 100%); }
+.royale-tile::before { content: ''; position: absolute; inset: 0;
+  background: var(--view) 50% 45% / cover no-repeat; opacity: 0.55;
+  transition: transform 0.7s ease; }
+.royale-tile::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg,
+  rgba(6, 10, 20, 0.95) 0%, rgba(6, 10, 20, 0.82) 48%, rgba(6, 10, 20, 0.35) 100%); }
+.royale-tile:hover::before { transform: scale(1.05); }
+.royale-tile > * { position: relative; z-index: 1; }
 .royale-tile-words { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .royale-tile h3 { margin: 0; font-family: Cinzel, Georgia, serif; font-size: 26px;
   letter-spacing: 2.4px; text-transform: uppercase; color: #f0dca0; line-height: 1.05; }
@@ -70,6 +78,7 @@ export function buildRoyaleTiles(onPick: (variant: RoyaleVariant) => void): HTML
     const tile = el('button', `royale-tile ${mode.variant}${lead ? ' lead' : ''}`);
     tile.type = 'button';
     tile.dataset.royale = mode.variant;
+    tile.style.setProperty('--view', `url(${royaleArtUrl(viewArt(mode.variant))})`);
     const words = el('div', 'royale-tile-words');
     // The section's heading says Battle royale over both (ui/home_screen.ts).
     words.append(

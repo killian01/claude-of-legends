@@ -4,6 +4,7 @@
 // data, no DOM, so a test reads the offer without a browser; ui/landing.ts
 // and ui/home_screen.ts draw it.
 
+import { versioned } from '../game/asset_version';
 import type { RoyaleVariant } from '../sim/royale/types';
 
 export interface RoyaleMode {
@@ -44,3 +45,25 @@ export function otherVariant(variant: RoyaleVariant): RoyaleVariant {
 export const CLASSIC_TITLE = 'Classic 5v5';
 export const CLASSIC_LINE =
   'Five against five on the Star Orchard: three lanes, towers, and the Sanctum to take.';
+
+// The Wanderseed's own pictures (public/art/royale/, made from the planet's
+// Blender previews, docs/planet.md): the globe seen from orbit, round on a
+// transparent rim, for Respawn, and the same globe fallen into the Dusk for
+// One life; and a view on the ground behind each, for the home's tiles and
+// the landing's banner. Stamped like every public file
+// (game/asset_version.ts).
+export type RoyaleArt = 'globe' | 'globe_dusk' | 'view' | 'view_dusk';
+export const ROYALE_ART: readonly RoyaleArt[] = ['globe', 'globe_dusk', 'view', 'view_dusk'];
+
+export function royaleArtUrl(art: RoyaleArt): string {
+  return versioned(`/art/royale/${art}.webp`);
+}
+
+// The globe a rule set wears, and the ground under it.
+export function globeArt(variant: RoyaleVariant): RoyaleArt {
+  return variant === 'one_life' ? 'globe_dusk' : 'globe';
+}
+
+export function viewArt(variant: RoyaleVariant): RoyaleArt {
+  return variant === 'one_life' ? 'view_dusk' : 'view';
+}
