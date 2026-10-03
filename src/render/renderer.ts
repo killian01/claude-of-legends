@@ -51,6 +51,7 @@ import {
   type SpawnOffset,
 } from './muzzle_spawn';
 import { type PictureWatch, watchPicture } from './picture_watch';
+import type { PlanetMinimap } from './planet_minimap';
 import { PlanetStage } from './planet_stage';
 import { RING_FOG_EDGE, ringFogOpening } from './ring_fog';
 import { pickShieldHolder, type ShieldCandidate } from './shield_holder';
@@ -660,6 +661,12 @@ export class Renderer {
     for (const t of this.tracked.values()) t.prev = { ...t.curr };
   }
 
+  // The planet's minimap window (planet_minimap.ts): its world, its
+  // background and the way back to the sphere; null on the plane.
+  planetMinimap(): PlanetMinimap | null {
+    return this.planet?.minimap ?? null;
+  }
+
   get domElement(): HTMLCanvasElement {
     return this.gl.domElement;
   }
@@ -784,7 +791,7 @@ export class Renderer {
     if (p.kind === 'skillshot' || p.kind === 'dash') {
       const len = p.range ?? p.castRange;
       const width = Math.max(0.5, (p.radius ?? 0.3) * 2);
-      const geo = new THREE.PlaneGeometry(width, len);
+      const geo = new THREE.PlaneGeometry(width, len, 1, this.lineSegments(len));
       geo.translate(0, len / 2, 0);
       this.aimGuide = add(new THREE.Mesh(geo, mat(0.22)));
     } else if (p.kind === 'cone') {
@@ -843,7 +850,7 @@ export class Renderer {
       mesh.position.set(from.x, 0.14, from.z);
     } else if (p.kind === 'dash') {
       const len = Math.min(p.range ?? p.castRange, Math.hypot(dx, dz) || 1);
-      const geo = new THREE.PlaneGeometry(0.7, len);
+      const geo = new THREE.PlaneGeometry(0.7, len, 1, this.lineSegments(len));
       geo.translate(0, len / 2, 0);
       mesh = new THREE.Mesh(geo, mat);
       mesh.rotation.x = -Math.PI / 2;
@@ -879,6 +886,13 @@ export class Renderer {
         this.markers.push({ mesh: dot, material: dotMat, bornAt: performance.now(), grow: true });
       }
     }
+  }
+
+  // How many cuts a flat strip `len` long gets along its length: one on
+  // the plane, a cut every meter and a half on the planet, whose vertex
+  // bend can only curve a strip where it has vertices.
+  private lineSegments(len: number): number {
+    return this.planet ? Math.max(1, Math.min(96, Math.ceil(len / 1.5))) : 1;
   }
 
   // Radial glow used by projectile trails; built once.
@@ -2587,12 +2601,15 @@ export class Renderer {
         shownAim = clampAim(spec.range);
         len = Math.hypot(shownAim.x - u.pos.x, shownAim.z - u.pos.z) || spec.range;
       }
-      const outlineGeo = new THREE.PlaneGeometry(width, 1);
+      // A unit strip stretched to the range: on the planet cut along its
+      // length so the bend lays it on the curve (a 120 m line included).
+      const cuts = this.lineSegments(len);
+      const outlineGeo = new THREE.PlaneGeometry(width, 1, 1, cuts);
       outlineGeo.translate(0, 0.5, 0);
       const outline = flat(new THREE.Mesh(outlineGeo, mat(0.24)), 0.12);
       outline.scale.y = len;
       group.add(outline);
-      const fillGeo = new THREE.PlaneGeometry(width * 0.92, 1);
+      const fillGeo = new THREE.PlaneGeometry(width * 0.92, 1, 1, cuts);
       fillGeo.translate(0, 0.5, 0);
       fill = flat(new THREE.Mesh(fillGeo, mat(0.48)), 0.13);
       fill.scale.y = 0.001;
@@ -2601,7 +2618,7 @@ export class Renderer {
       // Hard edge rails: the classic MOBA read that survives any ground color.
       const rails: THREE.Mesh[] = [];
       for (const side of [-1, 1]) {
-        const railGeo = new THREE.PlaneGeometry(0.14, 1);
+        const railGeo = new THREE.PlaneGeometry(0.14, 1, 1, cuts);
         railGeo.translate((side * width) / 2, 0.5, 0);
         const rail = flat(new THREE.Mesh(railGeo, mat(0.85)), 0.14);
         rail.scale.y = len;

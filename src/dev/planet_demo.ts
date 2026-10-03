@@ -8,6 +8,7 @@
 
 import { startPresentation } from '../game/boot';
 import { whenChampionModelsReady } from '../render/champions/readiness';
+import type { Renderer } from '../render/renderer';
 import { loadPlanetGround, planetTerrain } from '../render/planet_terrain';
 import { DT } from '../sim/types';
 import { PlanetDemoWorld } from './planet_demo_world';
@@ -31,19 +32,30 @@ const [ground] = await Promise.all([
   loadPlanetGround('/map/planet/', { light: coarse }),
   whenChampionModelsReady(),
 ]);
+const at = params.get('at')?.split(',').map(Number);
 const world = new PlanetDemoWorld(ground, {
+  ...(at && at.length === 3 && at.every(Number.isFinite) ? { at: { x: at[0]!, y: at[1]!, z: at[2]! } } : {}),
   dropS: Number.isFinite(dropS) ? dropS : 8,
   duskNear: params.get('dusk') === 'near',
   seed: Number(params.get('seed') ?? 3),
 });
 const terrain = planetTerrain(ground);
-let renderer: unknown = null;
+let renderer: Renderer | null = null;
+// The draw's own time, frame by frame (the last 120), for the probe.
+const frameMs: number[] = [];
 const pres = startPresentation(app, world, world.selfId, 0, () => undefined, {
   terrain,
   fullscreen: false,
   guide: 'watch',
   onRenderer: (r) => {
     renderer = r;
+    const render = r.render.bind(r);
+    r.render = (alpha: number) => {
+      const t0 = performance.now();
+      render(alpha);
+      frameMs.push(performance.now() - t0);
+      if (frameMs.length > 120) frameMs.shift();
+    };
   },
 });
 
@@ -77,4 +89,15 @@ requestAnimationFrame(frame);
     paused = on;
   },
   placeholder: ground.placeholder,
+  // The draw's cost over the last frames: milliseconds and draw calls.
+  frameStats() {
+    const sorted = [...frameMs].sort((x, y) => x - y);
+    const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0;
+    return {
+      frames: sorted.length,
+      medianMs: at(0.5),
+      p95Ms: at(0.95),
+      ...(renderer ? renderer.renderStats() : {}),
+    };
+  },
 };

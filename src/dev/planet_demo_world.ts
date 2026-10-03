@@ -61,6 +61,8 @@ const NAMES = [
 ];
 
 export interface DemoOptions {
+  // Where the player starts, a direction; absent, off a crossroads.
+  at?: Vec3;
   // Seconds of the drop over the globe at the start; 0 lands at once.
   dropS: number;
   // The Dusk's edge a few meters from the player's start (for a look at it).
@@ -160,14 +162,19 @@ export class PlanetDemoWorld implements IWorld {
     private readonly opts: DemoOptions,
   ) {
     this.rand = seeded(opts.seed);
-    this.dropEndsAt = this.time + opts.dropS;
+    // No drop: the match is long under way (nobody is still landing).
+    this.dropEndsAt = opts.dropS > 0 ? this.time + opts.dropS : -60;
     // The start: off a crossroads, toward the Ruins, where three regions
     // and a pad meet.
-    const corner = ground.layout.crossroads[7] ?? onSphere({ x: 1, y: 1, z: 1 });
-    this.start = settle(
-      offset(corner, dirTo(corner, onSphere({ x: 1, y: 0.2, z: 0.15 })) ?? { x: 1, y: 0, z: 0 }, 9),
-      R,
-    ) as Vec3;
+    const toward = onSphere({ x: 1, y: 1, z: 1 });
+    const corner =
+      [...ground.layout.crossroads].sort((a, b) => dist(a, toward) - dist(b, toward))[0] ?? toward;
+    this.start = opts.at
+      ? onSphere(opts.at)
+      : (settle(
+          offset(corner, dirTo(corner, onSphere({ x: 1, y: 0.2, z: 0.15 })) ?? { x: 1, y: 0, z: 0 }, 9),
+          R,
+        ) as Vec3);
     for (let i = 0; i < 20; i++) {
       const def = CHAMPION_LIST[i % CHAMPION_LIST.length]!;
       const id = i + 1;
@@ -276,7 +283,7 @@ export class PlanetDemoWorld implements IWorld {
 
   royale(): SnapRoyale {
     const dropping = this.time < this.dropEndsAt;
-    const play = Math.max(0, this.time - this.dropEndsAt);
+    const play = Math.max(0, this.time - Math.max(this.dropEndsAt, 5));
     const r = Math.max(24, this.duskFrom - play * 0.35);
     const picks: WirePoint[] = [];
     if (dropping) {
@@ -495,8 +502,25 @@ export class PlanetDemoWorld implements IWorld {
     if (dist(u.pos, this.self.pos) > 34 && u.id <= 10) {
       b.heading = (dirTo(u.pos, this.self.pos) as Vec3) ?? b.heading;
     }
+    // Rock, water or a trunk ahead: turn away.
+    if (this.ground.blocked(offset(u.pos, b.heading, 1.2) as Vec3)) {
+      b.heading = rotate(b.heading, Math.PI * (0.5 + this.rand()), u.pos) as Vec3;
+      return;
+    }
     advance(u.pos, b.heading, speed);
     u.path = [offset(u.pos, b.heading, 3)];
+  }
+
+  // Every champion near the player casts its ultimate at once, aimed a
+  // few meters off the player: a look at the effects on the curve.
+  showcase(): void {
+    const me = this.self;
+    for (const u of this.units.values()) {
+      if (u.id === me.id || u.dead || dist(u.pos, me.pos) > 18) continue;
+      this.brain(u).castAt = this.time + 4;
+      u.cooldowns = {};
+      this.beginCast(u, 'R', around(me.pos as Vec3, 3 + this.rand() * 4, this.rand));
+    }
   }
 
   private beginCast(u: Unit, key: AbilityKey, aim: Vec3): void {
