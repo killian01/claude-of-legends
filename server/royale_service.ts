@@ -25,6 +25,11 @@ import { buildSeatReport, type SeatEnd, type SeatReport } from './seat_report';
 // matches against MAX_MATCHES (server/main.ts): its champions are five
 // matches' worth, and the champions and their bots are most of a tick.
 export const ROYALE_MATCH_WEIGHT = 5;
+// Every champion of the roster may be picked in a battle royale (ADR 0031:
+// the ten, quick pick), whatever the 5v5's collection holds (ADR 0018): a
+// Guest who picked Dain played Torv, the first of the Guests' starters
+// (a playtest, 2026-10-03).
+const ROYALE_ROSTER = null;
 // A dropped connection's seat waits this long for its owner.
 export const ROYALE_REJOIN_GRACE_MS = 60_000;
 // One life's end screen: the finished match stays this long.
@@ -62,8 +67,6 @@ export interface RoyaleDeps {
   capacityLeft(): number;
   // Out of the 5v5's queues: one seat at a time.
   leaveQueues(clientId: number): void;
-  // What the person may pick of the roster (ADR 0018), null for anything.
-  playable(clientId: number): readonly string[] | null;
   // Banks points on a line (ADR 0027), answering the new total or null.
   bank(owner: number, delta: number): number | null;
   appendSeat(rec: SeatReport): void;
@@ -187,7 +190,7 @@ export class RoyaleService {
   }
 
   private pickOf(client: RoyaleClient): RoyalePick {
-    return this.picks.get(client.id) ?? royalePick({}, this.deps.playable(client.id));
+    return this.picks.get(client.id) ?? royalePick({}, ROYALE_ROSTER);
   }
 
   private candidates(): RoyaleCandidate[] {
@@ -230,7 +233,7 @@ export class RoyaleService {
     } else if (client.matchId !== null) {
       return;
     }
-    this.picks.set(client.id, royalePick(msg, this.deps.playable(client.id)));
+    this.picks.set(client.id, royalePick(msg, ROYALE_ROSTER));
     this.deps.leaveQueues(client.id);
     if (this.rejoin(client)) return;
     const person = this.person(client, this.pickOf(client));

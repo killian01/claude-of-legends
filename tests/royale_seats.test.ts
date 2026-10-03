@@ -96,6 +96,28 @@ describe('the seats', () => {
     }
   });
 
+  it('deals every champion to the bots, about as many seats each', () => {
+    // A person dropping into a running match takes a seat playing the
+    // champion they picked: there must be one of each.
+    const count = (seats: ReturnType<typeof royaleSeats>) => {
+      const by = new Map<string, number>();
+      for (const s of seats)
+        if (s.clientId === null) by.set(s.championId, (by.get(s.championId) ?? 0) + 1);
+      return by;
+    };
+    for (const seed of [1, 7, 42]) {
+      const empty = count(royaleSeats([], seed));
+      expect(empty.size).toBe(CHAMPION_LIST.length);
+      for (const c of CHAMPION_LIST)
+        expect(empty.get(c.id)).toBe(ROYALE_SEATS / CHAMPION_LIST.length);
+      const one = count(royaleSeats([person(1, 'alice')], seed));
+      for (const c of CHAMPION_LIST) {
+        expect(one.get(c.id)!).toBeGreaterThanOrEqual(4);
+        expect(one.get(c.id)!).toBeLessThanOrEqual(5);
+      }
+    }
+  });
+
   it('seats the same match from the same seed', () => {
     expect(royaleSeats([person(1, 'alice')], 9)).toEqual(royaleSeats([person(1, 'alice')], 9));
     expect(royaleSeats([person(1, 'alice')], 9)).not.toEqual(royaleSeats([person(1, 'alice')], 10));

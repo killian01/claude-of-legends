@@ -1045,10 +1045,6 @@ const royale = new RoyaleService({
   leaveQueues: (id) => {
     for (const mm of matchmakers) mm.removeEverywhere(id);
   },
-  playable: (id) => {
-    const c = clients.get(id);
-    return c ? playableAt(collectionOfClient(c), Date.now()) : null;
-  },
   bank: bankPoints,
   appendSeat: (rec) => appendJsonl(SEATS_FILE, rec),
   saveReplay: (id, record) => {

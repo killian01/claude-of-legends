@@ -276,6 +276,13 @@ export class FakeRoyaleSim implements RoyaleSim {
   detachPolicy(unitId: number): void {
     this.policies.delete(unitId);
   }
+
+  setLoadout(unitId: number, sigils: readonly string[], skin: number): void {
+    const u = this.units.get(unitId);
+    if (!u || sigils.length !== 2) return;
+    u.sigils = [sigils[0]!, sigils[1]!];
+    u.skin = skin;
+  }
 }
 
 // The factory the service takes, keeping every sim it built for the test.

@@ -12,6 +12,7 @@ import { buildRoyaleSim, type ReplayPick } from '../src/net/replay';
 import { dealDamage } from '../src/sim/combat/damage';
 import { unrootedMoveSpeed } from '../src/sim/combat/status';
 import { DUSK_PHASES } from '../src/sim/content/dusk';
+import { clampSkin } from '../src/sim/content/skins';
 import { basis, dirTo, dist, offset, type Vec3 } from '../src/sim/geo';
 import { buildObservation } from '../src/sim/observe';
 import { ESCORT_MAX_M, ESCORTS, snapLanding } from '../src/sim/royale/drop';
@@ -146,6 +147,22 @@ describe('the rules of play', () => {
     expect(beside.length).toBeGreaterThanOrEqual(ESCORTS);
     const gentle = beside.filter((id) => mode.skillOf(id) === 'gentle');
     expect(gentle.length).toBeGreaterThanOrEqual(ESCORTS);
+  });
+
+  it('gives a person who takes a seat the sigils and skin they chose', () => {
+    const { sim, unitIds } = buildRoyaleSim(loadPlanet(), 3, picks(2, true), 'respawn');
+    land(sim);
+    const u = sim.units.get(unitIds[0]!)!;
+    u.sigilCooldowns = [sim.time + 30, sim.time + 30];
+    sim.setLoadout(u.id, ['zephyr', 'sear'], 99);
+    expect(u.sigils).toEqual(['zephyr', 'sear']);
+    expect(u.sigilCooldowns).toEqual([0, 0]);
+    expect(u.skin).toBe(clampSkin(u.championId!, 99));
+    // Nonsense leaves the sigils as they were.
+    sim.setLoadout(u.id, ['zephyr', 'zephyr'], 0);
+    expect(u.sigils).toEqual(['zephyr', 'sear']);
+    sim.setLoadout(u.id, ['nothing', 'sear'], 0);
+    expect(u.sigils).toEqual(['zephyr', 'sear']);
   });
 
   it('lands every bot where it picked when no person plays', () => {

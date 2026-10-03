@@ -43,7 +43,6 @@ function server() {
     newSeed: (id) => id * 7919,
     capacityLeft: () => 50 - service.load(),
     leaveQueues: () => undefined,
-    playable: () => null,
     bank: (owner, delta) => {
       const total = (banked.get(owner) ?? 0) + delta;
       banked.set(owner, total);
