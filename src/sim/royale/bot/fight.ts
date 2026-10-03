@@ -33,20 +33,33 @@ export function strength(hpFrac: number, level: number | undefined, items?: read
   return Math.max(0, hpFrac) * lvl * (1 + itemPower(items));
 }
 
-// How much a bystander weighs in a free-for-all's odds: the others in reach
-// are as busy with each other as with the bot.
+// How much a bystander weighs in a free-for-all's odds, and how many count:
+// the others in reach are as busy with each other as with the bot, and a
+// crowd is no more of a threat than the two nearest of it.
 export const BYSTANDER_WEIGHT = 0.25;
+export const BYSTANDERS = 2;
 
 // The bot's share of the strength of a fight against `target`: 0.5 an even
-// duel. Every other enemy in reach counts too, at a bystander's weight; no
-// target, the whole crowd at full weight.
+// duel. The nearest other enemies in reach count too, at a bystander's
+// weight; with no target, every enemy in reach at full weight.
 export function royaleOdds(sense: Sense, target?: ObsUnit, within = ODDS_RADIUS): number {
   const own = strength(sense.s.hpFrac, sense.s.level, sense.s.items);
   let enemy = 0;
+  let bystanders = 0;
+  // sense.enemies is nearest first.
   for (const e of sense.enemies) {
-    const w = target === undefined || e.id === target.id ? 1 : BYSTANDER_WEIGHT;
-    if (e.id !== target?.id && dist(sense.me, p3(e)) > within) continue;
-    enemy += w * strength(e.hpFrac, e.level, e.items);
+    if (target !== undefined && e.id === target.id) {
+      enemy += strength(e.hpFrac, e.level, e.items);
+      continue;
+    }
+    if (dist(sense.me, p3(e)) > within) continue;
+    if (target === undefined) {
+      enemy += strength(e.hpFrac, e.level, e.items);
+      continue;
+    }
+    if (bystanders >= BYSTANDERS) continue;
+    bystanders++;
+    enemy += BYSTANDER_WEIGHT * strength(e.hpFrac, e.level, e.items);
   }
   const total = own + enemy;
   return total > 0 ? own / total : 0.5;
@@ -62,7 +75,8 @@ export function pickTarget(sense: Sense): ObsUnit | null {
     const at = p3(e);
     const d = dist(sense.me, at);
     if (d > sense.skill.chase) continue;
-    if (!insideCap(sense.now, at)) continue;
+    // Never into the dark, while there is light to stay in.
+    if (sense.now.radius > 0 && !insideCap(sense.now, at)) continue;
     const ccd = hardCCd(e, sense.obs.time) && d <= CHAMPION_ATTACK_RANGE;
     const score = (ccd ? -10 : 0) + e.hpFrac * 10 + d * 0.3;
     if (score < bestScore || (score === bestScore && best !== null && e.id < best.id)) {
