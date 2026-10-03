@@ -50,7 +50,11 @@ export interface IWorld {
   // their way (src/net/self_predict.ts, ADR 0028), with the way it walks
   // (null while it stands). Null, or absent offline, draws the world's
   // own position.
-  predictedPos?(unitId: number, now: number): { x: number; z: number; heading: Vec2 | null } | null;
+  // On the planet the drawn point carries y like every sphere point.
+  predictedPos?(
+    unitId: number,
+    now: number,
+  ): { x: number; z: number; y?: number; heading: Vec2 | null } | null;
   // The battle royale (ADR 0031) as the newest snapshot told it, with the
   // caches the last cache list named (the list rides once a second, the
   // client keeps it in between); null in a 5v5. Absent on a world that

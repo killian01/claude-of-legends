@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import type { GroundHeight } from '../terrain';
+import { type ChartRemap, framed, type SpawnFrame } from './chart_shift';
 import { SPRITE, spriteAtlas } from './sprites';
 
 const CAP = 2048;
@@ -117,6 +118,7 @@ export class ParticleCloud {
   constructor(
     scene: THREE.Scene,
     private readonly groundHeight?: GroundHeight,
+    private readonly frame?: SpawnFrame,
   ) {
     for (let i = 0; i < CAP; i++) {
       this.slots.push({
@@ -168,6 +170,8 @@ export class ParticleCloud {
     this.points = new THREE.Points(this.geometry, this.material);
     this.points.frustumCulled = false;
     this.points.renderOrder = 6;
+    // Its points live in the slots, carried by rechart, not by its place.
+    this.points.userData.chartFixed = true;
     scene.add(this.points);
   }
 
@@ -179,9 +183,10 @@ export class ParticleCloud {
   spawn(p: ParticleSpawn): void {
     if (this.count >= CAP) return;
     const s = this.slots[this.count++]!;
-    s.x = p.x;
-    s.y = p.y + (this.groundHeight?.(p.x, p.z) ?? 0);
-    s.z = p.z;
+    const at = framed(this.frame, p.x, p.z);
+    s.x = at.x;
+    s.y = p.y + (this.groundHeight?.(at.x, at.z) ?? 0);
+    s.z = at.z;
     s.vx = p.vx ?? 0;
     s.vy = p.vy ?? 0;
     s.vz = p.vz ?? 0;
@@ -204,6 +209,17 @@ export class ParticleCloud {
     s.rotVel = p.rotVel ?? 0;
     s.gravity = p.gravity ?? 0;
     s.drag = p.drag ?? 0;
+  }
+
+  // The planet's chart moved (vfx/chart_shift.ts): every live particle
+  // carried to the same spot of ground.
+  rechart(map: ChartRemap): void {
+    for (let i = 0; i < this.count; i++) {
+      const s = this.slots[i]!;
+      const q = map(s.x, s.z);
+      s.x = q.x;
+      s.z = q.z;
+    }
   }
 
   update(dtS: number): void {

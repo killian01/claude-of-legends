@@ -53,6 +53,8 @@ import {
   type SpawnOffset,
 } from './muzzle_spawn';
 import { type PictureWatch, watchPicture } from './picture_watch';
+import type { PlanetMinimap } from './planet_minimap';
+import { PlanetStage } from './planet_stage';
 import { RING_FOG_EDGE, ringFogOpening } from './ring_fog';
 import { pickShieldHolder, type ShieldCandidate } from './shield_holder';
 import { crownHeight, crownLift, flightProgress, isStill } from './structure_fire';
@@ -67,6 +69,7 @@ import {
   type SpellVisual,
   spellVisualOf,
 } from './vfx/catalog';
+import type { ChartRemap } from './vfx/chart_shift';
 import { SPRITE } from './vfx/sprites';
 import { VfxSystem } from './vfx/system';
 import { disposeEffect } from './vfx/timed';
@@ -350,6 +353,8 @@ export class Renderer {
     start: number;
     holdMs?: number;
     step?: (dtMs: number) => void;
+    // Takes a pooled champion figure off the body before it is released.
+    release?: () => void;
   }[] = [];
   private readonly targetReticle: THREE.Group;
   private readonly targetSpinner: THREE.Mesh;
@@ -403,13 +408,24 @@ export class Renderer {
   // The WebGL context's comings and goings (picture_watch.ts): nothing is
   // drawn while it is gone, or back with the terrain still being redrawn.
   private readonly picture: PictureWatch;
+  // The planet mode (planet_stage.ts): set when the terrain is the
+  // Wanderseed. The renderer then draws the world through the stage's flat
+  // chart (this.world is the chart's view of the real one, `base`), and
+  // every point it hands out or takes in through its public methods is a
+  // point of the sphere.
+  private readonly planet: PlanetStage | null;
+  private readonly terrain: RenderTerrain;
+  // The key light, which the planet's drop view swings with its camera.
+  private sun: THREE.DirectionalLight | null = null;
+  // Champion figures kept for a champion coming back into sight, by
+  // champion, skin and tint (planet mode: fifty champions slip in and out
+  // of sight all match, and a fresh clone each time hitches).
+  private readonly visualPool = new Map<string, ChampionVisual[]>();
 
-  constructor(
-    container: HTMLElement,
-    world: IWorld,
-    private readonly terrain: RenderTerrain,
-  ) {
+  constructor(container: HTMLElement, world: IWorld, terrain: RenderTerrain) {
+    this.terrain = terrain;
     this.world = world;
+    this.planet = null;
     this.quality = renderQualityFor(
       readDeviceHints(window),
       window.devicePixelRatio,
@@ -444,14 +460,37 @@ export class Renderer {
 
     const aspect = container.clientWidth / Math.max(1, container.clientHeight);
     this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 500);
+    if (terrain.planet) {
+      const planet = new PlanetStage(
+        world,
+        terrain.planet,
+        this.gl.domElement,
+        () => this.canvasRect(),
+        this.camera,
+      );
+      this.planet = planet;
+      this.world = planet.world;
+      this.terrain = {
+        ...terrain,
+        root: planet.root,
+        heightAt: (x, z) => planet.heightAt(x, z),
+        structure: () => null,
+      };
+      this.scene.background = new THREE.Color(0x02040b);
+      this.scene.fog = new THREE.Fog(0x0b1a33, 150, 330);
+    }
     // The z mirror (see sceneZ). Three flips face winding under a negative
     // scale and sprites stay upright, so nothing inside the scene notices.
     this.scene.scale.z = -1;
-    this.scene.position.z = world.map.size;
+    this.scene.position.z = this.world.map.size;
 
-    this.vfx = new VfxSystem(this.scene, terrain.heightAt);
-    this.towerShots = new TowerShotFx(this.scene, terrain.heightAt);
-    this.towerReach = new TowerReachFx(this.scene, terrain.heightAt);
+    this.vfx = new VfxSystem(this.scene, this.terrain.heightAt);
+    this.towerShots = new TowerShotFx(this.scene, this.terrain.heightAt);
+    this.towerReach = new TowerReachFx(this.scene, this.terrain.heightAt);
+    if (this.planet) {
+      const planet = this.planet;
+      this.vfx.chartCarry = (epoch) => planet.carryFrom(epoch);
+    }
     this.vfx.onShake = (k) => this.addShake(k);
     this.vfx.particles.setViewport(
       Math.max(1, container.clientHeight),
@@ -530,7 +569,7 @@ export class Renderer {
     this.fogCanvas.height = 128;
     this.fogTexture = new THREE.CanvasTexture(this.fogCanvas);
     const fogMesh = new THREE.Mesh(
-      fogSheetGeometry(world.map.size, terrain.heightAt),
+      fogSheetGeometry(this.world.map.size, this.terrain.heightAt),
       new THREE.MeshBasicMaterial({
         map: this.fogTexture,
         transparent: true,
@@ -539,9 +578,11 @@ export class Renderer {
         fog: false,
       }),
     );
-    this.scene.add(fogMesh);
+    // On the planet the ground darkens by the fog canvas itself
+    // (planet_dusk.ts): no sheet over it.
+    if (!this.planet) this.scene.add(fogMesh);
 
-    this.fct = new FloatingText(this.scene, terrain.heightAt);
+    this.fct = new FloatingText(this.scene, this.terrain.heightAt);
     this.selfRing = new THREE.Mesh(
       new THREE.RingGeometry(0.85, 1.05, 28),
       new THREE.MeshBasicMaterial({ color: 0x86e06d, transparent: true, opacity: 0.8 }),
@@ -626,6 +667,12 @@ export class Renderer {
     for (const t of this.tracked.values()) t.prev = { ...t.curr };
   }
 
+  // The planet's minimap window (planet_minimap.ts): its world, its
+  // background and the way back to the sphere; null on the plane.
+  planetMinimap(): PlanetMinimap | null {
+    return this.planet?.minimap ?? null;
+  }
+
   get domElement(): HTMLCanvasElement {
     return this.gl.domElement;
   }
@@ -636,6 +683,7 @@ export class Renderer {
 
   followUnit(id: number): void {
     this.followId = id;
+    if (this.planet) this.planet.picker = id;
   }
 
   // The team whose fog of war this client renders.
@@ -659,8 +707,10 @@ export class Renderer {
     this.hoverTargetId = id;
   }
 
-  // Point the free camera at a world position (minimap look).
-  lookAtPoint(x: number, z: number): void {
+  // Point the free camera at a world position (minimap look); on the
+  // planet a sphere point, its y fourth.
+  lookAtPoint(x: number, z: number, y?: number): void {
+    if (this.planet && y !== undefined) ({ x, z } = this.planet.toLocal({ x, y, z }));
     const size = this.world.map.size;
     this.freeCam = new THREE.Vector3(
       Math.max(0, Math.min(size, x)),
@@ -683,6 +733,19 @@ export class Renderer {
     this.freeCam.z = Math.max(0, Math.min(size, this.freeCam.z + dz));
   }
 
+  // Camera pan for touch drags by two ground points, the one the finger
+  // left and the one it is over: the plane's world delta, or on the
+  // planet the delta between the two in the chart.
+  panAlong(from: Vec2, to: Vec2): void {
+    if (this.planet) {
+      const a = this.planet.toLocal(from);
+      const b = this.planet.toLocal(to);
+      this.panBy(a.x - b.x, a.z - b.z);
+      return;
+    }
+    this.panBy(from.x - to.x, from.z - to.z);
+  }
+
   // Pinch zoom, sharing the wheel's bounds; a factor above 1 (fingers
   // spreading) zooms in.
   scaleZoom(factor: number): void {
@@ -699,6 +762,7 @@ export class Renderer {
   }
 
   setAimWorld(p: Vec2 | null): void {
+    if (p && this.planet && p.y !== undefined) p = this.planet.toLocal(p);
     this.aimWorld = p ? { x: p.x, z: p.z } : null;
   }
 
@@ -740,7 +804,7 @@ export class Renderer {
     if (p.kind === 'skillshot' || p.kind === 'dash') {
       const len = p.range ?? p.castRange;
       const width = Math.max(0.5, (p.radius ?? 0.3) * 2);
-      const geo = new THREE.PlaneGeometry(width, len);
+      const geo = new THREE.PlaneGeometry(width, len, 1, this.lineSegments(len));
       geo.translate(0, len / 2, 0);
       this.aimGuide = add(new THREE.Mesh(geo, mat(0.22)));
     } else if (p.kind === 'cone') {
@@ -767,6 +831,10 @@ export class Renderer {
   // nothing happening. The shape mirrors the aim preview, in the ability's
   // school color, and fades through the shared markers list.
   spawnCastFx(p: AimPreview, color: number, from: Vec2, aim: Vec2): void {
+    if (this.planet) {
+      if (from.y !== undefined) from = this.planet.toLocal(from);
+      if (aim.y !== undefined) aim = this.planet.toLocal(aim);
+    }
     const mat = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
@@ -795,7 +863,7 @@ export class Renderer {
       mesh.position.set(from.x, 0.14, from.z);
     } else if (p.kind === 'dash') {
       const len = Math.min(p.range ?? p.castRange, Math.hypot(dx, dz) || 1);
-      const geo = new THREE.PlaneGeometry(0.7, len);
+      const geo = new THREE.PlaneGeometry(0.7, len, 1, this.lineSegments(len));
       geo.translate(0, len / 2, 0);
       mesh = new THREE.Mesh(geo, mat);
       mesh.rotation.x = -Math.PI / 2;
@@ -831,6 +899,13 @@ export class Renderer {
         this.markers.push({ mesh: dot, material: dotMat, bornAt: performance.now(), grow: true });
       }
     }
+  }
+
+  // How many cuts a flat strip `len` long gets along its length: one on
+  // the plane, a cut every meter and a half on the planet, whose vertex
+  // bend can only curve a strip where it has vertices.
+  private lineSegments(len: number): number {
+    return this.planet ? Math.max(1, Math.min(96, Math.ceil(len / 1.5))) : 1;
   }
 
   // Radial glow used by projectile trails; built once.
@@ -903,7 +978,7 @@ export class Renderer {
     }
     const cursor =
       this.aimWorld ??
-      (this.pointerX >= 0 ? this.groundPointAt(this.pointerX, this.pointerY) : null);
+      (this.pointerX >= 0 ? this.localGroundPointAt(this.pointerX, this.pointerY) : null);
     if (!cursor) return;
     const dx = cursor.x - sx;
     const dz = cursor.z - sz;
@@ -967,7 +1042,24 @@ export class Renderer {
   // it stands straight); null when behind the camera. Used by screen-space
   // picking so clicks land on visible bodies, and to place what is drawn
   // over the canvas.
-  projectToScreen(x: number, y: number, z: number): { x: number; y: number } | null {
+  // On the planet the ground point is a sphere point: its y comes fourth
+  // (`groundY`), and a point behind the planet or past the view's reach
+  // projects to nothing.
+  projectToScreen(
+    x: number,
+    y: number,
+    z: number,
+    groundY?: number,
+  ): { x: number; y: number } | null {
+    if (this.planet) {
+      if (groundY !== undefined) return this.planet.projectSphere({ x, y: groundY, z }, y);
+      const w = this.planet.bentWorld(x, y + this.groundHeight(x, z), z);
+      if (this.planet.occluded(w)) return null;
+      const pv = w.project(this.camera);
+      if (pv.z > 1) return null;
+      const r = this.canvasRect();
+      return { x: r.left + ((pv.x + 1) / 2) * r.width, y: r.top + ((1 - pv.y) / 2) * r.height };
+    }
     const v = new THREE.Vector3(x, y + this.groundHeight(x, z), this.sceneZ(z)).project(
       this.camera,
     );
@@ -989,7 +1081,9 @@ export class Renderer {
   }
 
   // A brief ground ring: move orders (green) and cast flashes (team tint).
-  flashMarker(x: number, z: number, color = 0x9be86a): void {
+  // On the planet the point is a sphere point, its y fourth.
+  flashMarker(x: number, z: number, color = 0x9be86a, y?: number): void {
+    if (this.planet && y !== undefined) ({ x, z } = this.planet.toLocal({ x, y, z }));
     const material = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
@@ -1257,8 +1351,10 @@ export class Renderer {
   private buildLights(): void {
     // Warm golden key against a cool sky fill and a green ground bounce:
     // the color contrast between key and fill does most of the work.
-    this.scene.add(new THREE.HemisphereLight(0xdcefff, 0x465f39, 1.15));
+    const sky = new THREE.HemisphereLight(0xdcefff, 0x465f39, 1.15);
+    this.scene.add(sky);
     const sun = new THREE.DirectionalLight(0xffdfaa, 2.4);
+    this.sun = sun;
     const half = this.world.map.size / 2;
     // In sim coordinates, inside the mirror: the key sits up-screen and to
     // the right, so shadows fall down and to the left of what casts them.
@@ -1277,6 +1373,17 @@ export class Renderer {
     sun.shadow.bias = -0.0006;
     sun.shadow.normalBias = 0.035;
     sun.shadow.radius = 2.25;
+    if (this.planet) {
+      // On the planet the lights stay put over the chart's origin as it
+      // moves (the stage never carries them), and the shadows only need
+      // to cover the curve the camera sees.
+      for (const o of [sky, sun, sun.target]) o.userData.chartFixed = true;
+      const near = 70;
+      sun.shadow.camera.left = -near;
+      sun.shadow.camera.right = near;
+      sun.shadow.camera.top = near;
+      sun.shadow.camera.bottom = -near;
+    }
     this.scene.add(sun, sun.target);
   }
 
@@ -1300,6 +1407,7 @@ export class Renderer {
   // painted structures come parsed from the export.
   private buildMap(): void {
     this.scene.add(this.terrain.root);
+    if (this.planet) this.scene.add(this.planet.sky.group);
   }
 
   private buildUnitMesh(u: Readonly<Unit>): { holder: THREE.Group; barY: number } {
@@ -1392,9 +1500,12 @@ export class Renderer {
     // The match waited for the models before it was shown (readiness.ts),
     // so the rig is normally on hand and mounts in one go: the procedural
     // figure is never seen, not even for the frame an upgrade would take.
-    const ready = createChampionVisualNow(u.championId, color, u.skin);
+    const poolKey = `${u.championId}|${u.skin}|${color}`;
+    const pooled = this.planet ? this.visualPool.get(poolKey)?.pop() : undefined;
+    const ready = pooled ?? createChampionVisualNow(u.championId, color, u.skin);
     if (ready) {
       holder.add(ready.root);
+      holder.userData.poolKey = poolKey;
       enableShadows(holder);
       this.championVisuals.set(u.id, ready);
       return { holder, barY };
@@ -1409,6 +1520,23 @@ export class Renderer {
       this.upgradeChampionView(holder, figure, u.id, u.championId, color, u.skin);
     }
     return { holder, barY };
+  }
+
+  // A champion's figure off a body that left, kept for the next of its
+  // kind (a few each); the rest released.
+  private poolVisual(key: string, cv: ChampionVisual): void {
+    cv.root.removeFromParent();
+    cv.root.position.set(0, 0, 0);
+    cv.root.rotation.set(0, 0, 0);
+    cv.root.scale.setScalar(1);
+    const list = this.visualPool.get(key) ?? [];
+    if (list.length >= 4) {
+      cv.dispose();
+      disposeDeep(cv.root);
+      return;
+    }
+    list.push(cv);
+    this.visualPool.set(key, list);
   }
 
   // Swaps the Pyrefang's figure for its rigged model once the file is in.
@@ -1677,6 +1805,7 @@ export class Renderer {
   // Called once after every sim tick: shifts interpolation history and syncs
   // the mesh sets with the world's units, projectiles, and zones.
   onSimTick(): void {
+    this.planet?.onTick();
     const scoreRows = this.world.scoreboard();
     for (const [id, u] of this.world.units) {
       let t = this.tracked.get(id);
@@ -1792,7 +1921,10 @@ export class Renderer {
       // the fog; the rings' creatures, like the Warden, are always seen).
       const visible =
         (!u.dead || t.deadUntil > nowMs) &&
-        ((u.team === this.viewerTeam && !u.neutral) || this.world.isVisible(this.viewerTeam, id));
+        ((u.team === this.viewerTeam && !u.neutral) || this.world.isVisible(this.viewerTeam, id)) &&
+        // On the planet: within the view's reach, in front of the horizon,
+        // and nothing on the ground while the drop shows the globe.
+        (this.planet === null || this.planet.sees(u.pos.x, u.pos.z, 1));
       t.mesh.visible = visible;
 
       // Damage numbers: your own taken damage in red, your dealt damage via
@@ -2172,10 +2304,19 @@ export class Renderer {
         this.tracked.delete(id);
         const cv = this.championVisuals.get(id);
         if (cv) {
-          // Stop the mixer now; the clone's GPU resources go with the mesh
-          // when the death fade hands it to disposeDeep.
-          cv.dispose();
           this.championVisuals.delete(id);
+          const key = t.mesh.userData.poolKey as string | undefined;
+          if (this.planet && key !== undefined) {
+            // Kept for the champion's return: taken off its body once the
+            // fade is over, the hit flash put back first.
+            if (t.flashMats) for (const f of t.flashMats) f.mat.emissive.setHex(f.orig);
+            const entry = this.dying[this.dying.length - 1];
+            if (entry?.mesh === t.mesh) entry.release = () => this.poolVisual(key, cv);
+          } else {
+            // Stop the mixer now; the clone's GPU resources go with the mesh
+            // when the death fade hands it to disposeDeep.
+            cv.dispose();
+          }
         }
       }
     }
@@ -2472,12 +2613,15 @@ export class Renderer {
         shownAim = clampAim(spec.range);
         len = Math.hypot(shownAim.x - u.pos.x, shownAim.z - u.pos.z) || spec.range;
       }
-      const outlineGeo = new THREE.PlaneGeometry(width, 1);
+      // A unit strip stretched to the range: on the planet cut along its
+      // length so the bend lays it on the curve (a 120 m line included).
+      const cuts = this.lineSegments(len);
+      const outlineGeo = new THREE.PlaneGeometry(width, 1, 1, cuts);
       outlineGeo.translate(0, 0.5, 0);
       const outline = flat(new THREE.Mesh(outlineGeo, mat(0.24)), 0.12);
       outline.scale.y = len;
       group.add(outline);
-      const fillGeo = new THREE.PlaneGeometry(width * 0.92, 1);
+      const fillGeo = new THREE.PlaneGeometry(width * 0.92, 1, 1, cuts);
       fillGeo.translate(0, 0.5, 0);
       fill = flat(new THREE.Mesh(fillGeo, mat(0.48)), 0.13);
       fill.scale.y = 0.001;
@@ -2486,7 +2630,7 @@ export class Renderer {
       // Hard edge rails: the classic MOBA read that survives any ground color.
       const rails: THREE.Mesh[] = [];
       for (const side of [-1, 1]) {
-        const railGeo = new THREE.PlaneGeometry(0.14, 1);
+        const railGeo = new THREE.PlaneGeometry(0.14, 1, 1, cuts);
         railGeo.translate((side * width) / 2, 0.5, 0);
         const rail = flat(new THREE.Mesh(railGeo, mat(0.85)), 0.14);
         rail.scale.y = len;
@@ -2597,7 +2741,9 @@ export class Renderer {
   // it ahead of its newest state (the in-match guidance's arrow starts at
   // its feet); null when it is drawn between snapshots.
   selfDrawnAt(): Vec2 | null {
-    return this.selfDrawn ? { x: this.selfDrawn.x, z: this.selfDrawn.z } : null;
+    if (!this.selfDrawn) return null;
+    if (this.planet) return this.planet.toSphere(this.selfDrawn.x, this.selfDrawn.z);
+    return { x: this.selfDrawn.x, z: this.selfDrawn.z };
   }
 
   // Per-frame telegraph upkeep: follow the caster, re-aim line shapes,
@@ -2696,6 +2842,15 @@ export class Renderer {
     const now = performance.now();
     const dtMs = Math.min(100, now - this.lastFrameAt);
     this.lastFrameAt = now;
+    // The planet: its stage first (the drop, the landing), then the chart
+    // re-centered on the focus, everything already placed carried along.
+    if (this.planet) {
+      const follow = this.followId !== null ? this.planet.base.units.get(this.followId) : undefined;
+      this.planet.update(now, dtMs, this.fogTexture, follow?.pos ?? null);
+      const remap =
+        this.planet.takeRemap() ?? this.planet.recenterOn(this.camFocus.x, this.camFocus.z);
+      if (remap) this.rechart(remap);
+    }
 
     // Flush the deferred damage numbers: combat notes have run by now, so
     // any victim the viewer hit this tick is skipped (its gold number is
@@ -2750,6 +2905,8 @@ export class Renderer {
           bobY = 1.2 + Math.sin(now * 0.02) * 0.15;
         }
       }
+      // On the planet: thrown along a pad's arc, or the last of the drop.
+      if (this.planet && t.kind === 'champion') bobY += this.planet.liftOf(id, x, z);
       // Auto-attack lunge: a short hop toward the victim.
       const swinging = t.swingUntil > now;
       const swingK = swinging ? Math.sin((1 - (t.swingUntil - now) / 200) * Math.PI) : 0;
@@ -2760,7 +2917,13 @@ export class Renderer {
       );
       if (swinging) t.mesh.rotation.y = t.yaw;
       // The overhead UI never turns with the body: its anchors stay put.
+      // On the planet it also turns to the camera on the curve, and hides
+      // behind the horizon (its marks draw through everything).
       t.overhead.rotation.y = -t.mesh.rotation.y;
+      if (this.planet) {
+        t.overhead.rotation.y += this.planet.overheadYaw(x, z);
+        t.overhead.visible = this.planet.sees(x, z, t.barY + 1);
+      }
 
       const anim = t.mesh.userData.anim as AnimParts | undefined;
       creature?.update(dtMs, { moving, speed: Math.hypot(dx, dz) / DT }, (at) =>
@@ -2957,16 +3120,18 @@ export class Renderer {
       const age = (now - d.start - (d.holdMs ?? 0)) / 380;
       if (age < 0) continue;
       if (age >= 1) {
+        d.release?.();
         (d.mesh.userData.dispose as (() => void) | undefined)?.();
         this.unitLayer.remove(d.mesh);
         this.scene.remove(d.mesh);
         disposeDeep(d.mesh);
         this.dying.splice(i, 1);
       } else {
-        // Fall over and sink while shrinking, instead of popping away.
+        // Fall over and sink while shrinking, instead of popping away,
+        // into the ground it stood on.
         d.mesh.scale.setScalar(Math.max(0.01, 1 - age));
         d.mesh.rotation.x = age * 1.1;
-        d.mesh.position.y = -age * 0.35;
+        d.mesh.position.y = this.groundHeight(d.mesh.position.x, d.mesh.position.z) - age * 0.35;
       }
     }
     for (let i = this.markers.length - 1; i >= 0; i--) {
@@ -3054,6 +3219,26 @@ export class Renderer {
       new THREE.Vector3(this.world.map.size / 2, 0, this.world.map.size / 2);
     this.camFocus.x = target.x;
     this.camFocus.z = target.z;
+    if (this.planet) {
+      // The rig on the curve (the globe's orbit through the drop).
+      const focus = target.clone();
+      focus.y = this.groundHeight(focus.x, focus.z);
+      this.planet.placeView(focus, this.zoom, dtMs);
+      if (this.shakeAmp > 0.001) {
+        const k = this.shakeAmp * this.shakeAmp * 0.55;
+        this.camera.position.x += (Math.random() * 2 - 1) * k;
+        this.camera.position.z += (Math.random() * 2 - 1) * k;
+        this.shakeAmp = Math.max(0, this.shakeAmp - dtMs * 0.0021);
+      }
+      this.planet.sunFollow(this.sun);
+      this.camera.getWorldDirection(this.camDir);
+      this.camDirScene.set(this.camDir.x, this.camDir.y, -this.camDir.z);
+      this.planet.bendScene(this.scene);
+      const restore = this.planet.beginDraw(this.vfx.pooledLights());
+      this.gl.render(this.scene, this.camera);
+      restore();
+      return;
+    }
     const eye = this.toScene(target);
     this.camera.position.copy(eye).addScaledVector(this.cameraOffset, this.zoom);
     if (this.shakeAmp > 0.001) {
@@ -3066,6 +3251,46 @@ export class Renderer {
     this.camera.getWorldDirection(this.camDir);
     this.camDirScene.set(this.camDir.x, this.camDir.y, -this.camDir.z);
     this.gl.render(this.scene, this.camera);
+  }
+
+  // The planet's chart moved (planet_stage.ts): every point already placed
+  // in it carried to the same spot of ground in the new one, the tracked
+  // histories, the scene's placed objects, the pooled effects.
+  private rechart(map: ChartRemap): void {
+    const mv = (p: Vec2): Vec2 => map(p.x, p.z);
+    for (const t of this.tracked.values()) {
+      t.prev = mv(t.prev);
+      t.curr = mv(t.curr);
+    }
+    for (const t of this.trackedProjectiles.values()) {
+      t.prev = mv(t.prev);
+      t.curr = mv(t.curr);
+      if (t.crown) t.crown.from = mv(t.crown.from);
+    }
+    for (const tz of this.trackedZones.values()) {
+      const q = map(tz.x, tz.z);
+      tz.x = q.x;
+      tz.z = q.z;
+    }
+    for (const w of this.windups.values()) w.aim = mv(w.aim);
+    if (this.freeCam) {
+      const q = map(this.freeCam.x, this.freeCam.z);
+      this.freeCam.x = q.x;
+      this.freeCam.z = q.z;
+    }
+    this.camFocus = mv(this.camFocus);
+    if (this.aimWorld) this.aimWorld = mv(this.aimWorld);
+    const shift = (o: THREE.Object3D): void => {
+      if (o.userData.chartFixed || o.userData.unbent) return;
+      const q = map(o.position.x, o.position.z);
+      o.position.x = q.x;
+      o.position.z = q.z;
+    };
+    for (const o of this.scene.children) if (o !== this.unitLayer) shift(o);
+    for (const o of this.unitLayer.children) shift(o);
+    this.vfx.rechart(map);
+    this.fct.rechart(map);
+    if (this.planet) this.vfx.chartEpoch = this.planet.epoch;
   }
 
   // Places the attack reticle and hover ring on their units' interpolated
@@ -3097,8 +3322,23 @@ export class Renderer {
   }
 
   // Unprojects a screen point, in the stage's pixels (a pointer mapped by
-  // game/match_stage.ts), onto the ground plane.
+  // game/match_stage.ts), onto the ground plane. On the planet, onto the
+  // sphere: the point carries y (null through the drop, whose taps pick
+  // a landing instead).
   groundPointAt(screenX: number, screenY: number): Vec2 | null {
+    if (this.planet) {
+      this.setRayFrom(screenX, screenY);
+      return this.planet.groundPointAt(this.raycaster.ray);
+    }
+    return this.localGroundPointAt(screenX, screenY);
+  }
+
+  // The same in the renderer's own space (the plane's, the planet's chart).
+  private localGroundPointAt(screenX: number, screenY: number): Vec2 | null {
+    if (this.planet) {
+      const p = this.groundPointAt(screenX, screenY);
+      return p ? this.planet.toLocal(p) : null;
+    }
     this.setRayFrom(screenX, screenY);
     const hit = new THREE.Vector3();
     if (this.raycaster.ray.intersectPlane(this.groundPlane, hit)) {
@@ -3139,6 +3379,9 @@ export class Renderer {
     this.gl.dispose();
     this.towerShots.dispose();
     this.towerReach.dispose();
+    this.planet?.dispose();
+    for (const list of this.visualPool.values()) for (const cv of list) cv.dispose();
+    this.visualPool.clear();
     this.terrain.dispose();
   }
 }
