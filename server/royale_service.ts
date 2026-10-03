@@ -71,6 +71,11 @@ export interface RoyaleDeps {
   saveReplay(matchId: number, record: RoyaleReplay): void;
   now(): number;
   log(line: string): void;
+  // Respawn keeps a match running for the next visitor to drop into, its
+  // seats played by the house bots while nobody is in it (server/main.ts
+  // turns it on): a visitor lands in a fight under way, and the landing
+  // says a match is on. Off, a match starts only with a person.
+  readonly standing?: boolean;
 }
 
 interface RoyaleEntry {
@@ -81,6 +86,9 @@ interface RoyaleEntry {
   failures: number;
   // The clients whose seat already wrote its report.
   reported: Set<number>;
+  // Whether a person ever held a seat in it: a match the house bots
+  // played alone keeps no replay.
+  hadPeople: boolean;
 }
 
 interface Reservation {
@@ -109,17 +117,22 @@ export class RoyaleService {
     return this.matches.size * ROYALE_MATCH_WEIGHT;
   }
 
-  // People playing, and whether Play now would drop into a running match,
-  // for the landing's line (ADR 0025).
-  presence(): { playing: number; joinable: boolean } {
+  // People playing, whether Play now would drop into a running match, and
+  // the seconds left in the match it would drop into, for the landing's
+  // line (ADR 0025). People only: the house bots are never counted.
+  presence(): { playing: number; joinable: boolean; endsInS: number | null } {
     let playing = 0;
     let joinable = false;
-    for (const c of this.candidates()) {
+    const candidates = this.candidates();
+    for (const c of candidates) {
       if (c.closing) continue;
       playing += c.people;
       if (c.variant === 'respawn' && takesPeople(c)) joinable = true;
     }
-    return { playing, joinable };
+    const id = chooseRoyaleMatch(candidates, 'respawn');
+    const into = candidates.find((c) => c.matchId === id);
+    const endsInS = into ? Math.max(0, Math.round(into.endsAt - into.time)) : null;
+    return { playing, joinable, endsInS };
   }
 
   // The socket's message, when it is the battle royale's to answer: true
@@ -265,6 +278,7 @@ export class RoyaleService {
       abandonedAt: null,
       failures: 0,
       reported: new Set(),
+      hadPeople: clients.length > 0,
     };
     this.matches.set(id, entry);
     for (const c of clients) {
@@ -279,6 +293,7 @@ export class RoyaleService {
     client.matchId = entry.match.id;
     this.seated.set(client.id, entry.match.id);
     entry.abandonedAt = null;
+    entry.hadPeople = true;
     this.deps.send(client.id, {
       t: 'match_start',
       selfUnitId: p.unitId,
@@ -328,9 +343,26 @@ export class RoyaleService {
   }
 
   private noteEmpty(entry: RoyaleEntry): void {
-    if (entry.match.players.size === 0 && entry.abandonedAt === null) {
-      entry.abandonedAt = this.deps.now();
-    }
+    if (entry.match.players.size !== 0 || entry.abandonedAt !== null) return;
+    // The match kept for the next visitor plays on with its bots.
+    if (this.deps.standing && this.onlyOpen(entry.match.id)) return;
+    entry.abandonedAt = this.deps.now();
+  }
+
+  // Whether this match is the one Respawn match that takes people.
+  private onlyOpen(matchId: number): boolean {
+    const open = this.candidates().filter((c) => c.variant === 'respawn' && takesPeople(c));
+    return open.length === 1 && open[0]!.matchId === matchId;
+  }
+
+  // Respawn always has a match to drop into: when none takes people, one
+  // starts with nobody in it and house bots in every seat. The one before
+  // runs out its clock (Respawn takes nobody in its last minutes).
+  private keepOneOpen(): void {
+    if (!this.deps.factory) return;
+    const open = this.candidates().some((c) => c.variant === 'respawn' && takesPeople(c));
+    if (open || this.deps.capacityLeft() < ROYALE_MATCH_WEIGHT) return;
+    this.start('respawn', []);
   }
 
   // Leaving for good (the pause menu, Play again): the bot plays on, and
@@ -433,6 +465,7 @@ export class RoyaleService {
         this.deps.log(`royale ${entry.match.id} reaped: nobody came back`);
       }
     }
+    if (this.deps.standing) this.keepOneOpen();
   }
 
   // One match's tick; the people to move into Respawn's next match when
@@ -501,7 +534,7 @@ export class RoyaleService {
       if (activeNearEnd(m.sim.tickCount, p.lastCommandAt)) people.push(c);
       else this.deps.send(p.clientId, { t: 'match_end' });
     }
-    const replay = m.replayRecord();
+    const replay = entry.hadPeople ? m.replayRecord() : null;
     if (replay) {
       try {
         this.deps.saveReplay(m.id, replay);

@@ -5,7 +5,12 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { fetchPresence, PRESENCE_ROUTE, presenceLine } from '../src/ui/landing_presence';
+import {
+  fetchPresence,
+  PRESENCE_ROUTE,
+  presenceAfter,
+  presenceLine,
+} from '../src/ui/landing_presence';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -24,6 +29,24 @@ describe('the presence line', () => {
     expect(presenceLine({ playing: 0, queued: 0, joinable: false })).toBeNull();
   });
 
+  it('says a battle royale is on and the time it has left, counting people only', () => {
+    // Respawn always has a match running to drop into: the line says so
+    // and how long it runs, and never counts the house bots as people.
+    const none = { playing: 0, queued: 0, joinable: false };
+    const on = { ...none, royale: { playing: 0, joinable: true, endsInS: 372 } };
+    expect(presenceLine(on)).toBe('A battle royale is on right now, 6:12 left. Jump in.');
+    const someone = { ...none, royale: { playing: 1, joinable: true, endsInS: 372 } };
+    expect(presenceLine(someone)).toBe('Someone is on the Wanderseed right now. Jump in.');
+    const two = { ...none, royale: { playing: 2, joinable: true, endsInS: 372 } };
+    expect(presenceLine(two)).toMatch(/^2 people are on the Wanderseed/);
+    // Nothing to drop into: the 5v5's line, or nothing.
+    const shut = { ...none, royale: { playing: 0, joinable: false, endsInS: null } };
+    expect(presenceLine(shut)).toBeNull();
+    // The clock runs down between two reads, and stops at the end.
+    expect(presenceLine(presenceAfter(on, 12_400))).toMatch(/, 6:00 left/);
+    expect(presenceLine(presenceAfter(on, 400_000))).toBeNull();
+  });
+
   it('reads the route, and answers null for anything it cannot trust', async () => {
     let asked = '';
     const ok = (async (input: RequestInfo | URL) => {
@@ -31,6 +54,20 @@ describe('the presence line', () => {
       return new Response(JSON.stringify({ playing: 2, queued: 0, joinable: true }));
     }) as typeof fetch;
     expect(await fetchPresence(ok)).toEqual({ playing: 2, queued: 0, joinable: true });
+    const royale = (async () =>
+      new Response(
+        JSON.stringify({
+          playing: 0,
+          queued: 0,
+          joinable: false,
+          royale: { playing: 0, joinable: true, endsInS: 300 },
+        }),
+      )) as typeof fetch;
+    expect((await fetchPresence(royale))?.royale).toEqual({
+      playing: 0,
+      joinable: true,
+      endsInS: 300,
+    });
     expect(asked).toBe(PRESENCE_ROUTE);
     const bad = (async () => new Response(JSON.stringify({ playing: 'x' }))) as typeof fetch;
     expect(await fetchPresence(bad)).toBeNull();
