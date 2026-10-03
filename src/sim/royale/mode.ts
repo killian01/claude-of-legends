@@ -26,7 +26,7 @@ import { DT } from '../types';
 import type { Unit } from '../unit';
 import { drawCaches, openingBy, stepCaches } from './caches';
 import { noteClamor, observeClamors, stepClamors } from './clamors';
-import { escortLandings, normalizePick, resolveLandings } from './drop';
+import { dealEscorts, ESCORTS, escortLandings, normalizePick, resolveLandings } from './drop';
 import { type DuskSchedule, drawDusk, duskAt, insideCap } from './dusk';
 import { observeGrafts, pickGraft, stepGrafts } from './grafts';
 import type { RoyaleGround, RoyaleLayout } from './layout';
@@ -102,8 +102,11 @@ export function royaleGround(ground: Ground): RoyaleGround {
   };
 }
 
-// The skills a person's company is drawn from, in order.
-const ESCORT_ORDER: readonly RoyaleSkillId[] = ['gentle', 'normal', 'strong'];
+// The skills a person's company is drawn from, in order: a normal bot
+// first, one that fights the other escort too; a newcomer (a person who
+// never banked a battle royale award) gets the gentle ones first.
+export const ESCORT_ORDER: readonly RoyaleSkillId[] = ['normal', 'strong', 'gentle'];
+export const NEWCOMER_ESCORT_ORDER: readonly RoyaleSkillId[] = ['gentle', 'normal', 'strong'];
 
 export class RoyaleMode {
   readonly variant: RoyaleVariant;
@@ -121,8 +124,7 @@ export class RoyaleMode {
   skills = new Map<number, RoyaleSkillId>();
   // The seats of people new to the battle royale (never banked an award),
   // fixed before the first tick by the builder (src/net/replay.ts
-  // buildRoyaleSim): their escorts are dealt differently once the rule
-  // lands. Nothing reads it yet.
+  // buildRoyaleSim): their escorts are dealt gentle first (stepDrop).
   newcomers: ReadonlySet<number> = new Set();
   // When each seat last pressed a cast or a sigil or ordered an attack:
   // what disturbs a cache's opening beside a hit.
@@ -264,18 +266,20 @@ export class RoyaleMode {
   }
 
   // The drop's tick: at its end every seat lands, in id order, and house
-  // bots, the gentle first, come down beside each person (a seat no
-  // policy plays).
+  // bots come down beside each person (a seat no policy plays): a normal
+  // one first, the gentle first for a newcomer.
   stepDrop(sim: Sim): void {
     if (sim.time + 1e-9 < this.state.dropEndsAt) return;
     const seats = this.champions(sim).map((u) => u.id);
     const at = resolveLandings(seats, this.state.drops, sim.rng, this.layout, this.ground);
     const people = seats.filter((id) => !sim.policies.has(id));
-    const gentleFirst = (id: number): number => ESCORT_ORDER.indexOf(this.skillOf(id));
-    const bots = seats
-      .filter((id) => sim.policies.has(id))
-      .sort((a, b) => gentleFirst(a) - gentleFirst(b) || a - b);
-    escortLandings(people, bots, at, sim.rng, this.layout, this.ground);
+    const bots = seats.filter((id) => sim.policies.has(id));
+    const groups = dealEscorts(people, bots, ESCORTS[this.variant], (person) => {
+      const order = this.newcomers.has(person) ? NEWCOMER_ESCORT_ORDER : ESCORT_ORDER;
+      const rank = (id: number): number => order.indexOf(this.skillOf(id));
+      return (a, b) => rank(a) - rank(b) || a - b;
+    });
+    escortLandings(groups, at, sim.rng, this.layout, this.ground);
     for (const id of seats) {
       const u = sim.units.get(id)!;
       const p = at.get(id);
