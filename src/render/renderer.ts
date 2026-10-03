@@ -17,6 +17,7 @@ import { otherTeam } from '../sim/teams';
 import { type AbilityKey, DT, type TeamId, type Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import { buildPictureNotice } from '../ui/picture_notice';
+import { duskDepth, frostLevel } from '../ui/royale_moments';
 import { teamLook } from '../ui/team_look';
 import type { IWorld } from '../world_api';
 import {
@@ -57,6 +58,13 @@ import { attachGhosts, ghostColor, ghostMaterial } from './planet_ghost';
 import type { PlanetMinimap } from './planet_minimap';
 import { PlanetStage } from './planet_stage';
 import { RING_FOG_EDGE, ringFogOpening } from './ring_fog';
+import {
+  clearRoyaleProjector,
+  onRoyaleCue,
+  type RoyaleCue,
+  type RoyaleProjector,
+  setRoyaleProjector,
+} from './royale_cues';
 import { pickShieldHolder, type ShieldCandidate } from './shield_holder';
 import { crownHeight, crownLift, flightProgress, isStill } from './structure_fire';
 import type { RenderTerrain } from './terrain';
@@ -387,6 +395,13 @@ export class Renderer {
   // The display-grade vignette div; doubles as the low-hp warning.
   private readonly vignette: HTMLDivElement;
   private lowHpActive = false;
+  // The battle royale's frost at the screen's edge while the followed
+  // champion stands in the Dusk (the loud moments), beside the low-health
+  // frame, and the level it shows.
+  private readonly frost: HTMLDivElement;
+  private frostShown = 0;
+  // A takedown's punch: the camera leans in for a moment (performance.now()).
+  private punchAt = Number.NEGATIVE_INFINITY;
   // The active cast preview (held ability key) and its throwaway meshes.
   private aimPreview: AimPreview | null = null;
   private aimMeshes: THREE.Mesh[] = [];
@@ -458,6 +473,12 @@ export class Renderer {
       'position:absolute;inset:0;pointer-events:none;' +
       'background:radial-gradient(ellipse at center, transparent 55%, rgba(8,12,5,0.3) 100%);';
     container.appendChild(this.vignette);
+    this.frost = document.createElement('div');
+    this.frost.style.cssText =
+      'position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 0.35s;' +
+      'background:radial-gradient(ellipse at center, transparent 50%, rgba(150,200,255,0.18) 72%, ' +
+      'rgba(214,236,255,0.62) 100%);box-shadow:inset 0 0 60px rgba(200,230,255,0.55);';
+    container.appendChild(this.frost);
 
     const aspect = container.clientWidth / Math.max(1, container.clientHeight);
     this.camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 500);
@@ -494,6 +515,12 @@ export class Renderer {
       this.vfx.chartCarry = (epoch) => planet.carryFrom(epoch);
     }
     this.vfx.onShake = (k) => this.addShake(k);
+    if (this.planet) {
+      const projector = this.royaleProjector(this.planet);
+      setRoyaleProjector(projector);
+      this.cleanups.push(() => clearRoyaleProjector(projector));
+      this.cleanups.push(onRoyaleCue((cue) => this.onRoyaleCue(cue)));
+    }
     this.vfx.particles.setViewport(
       Math.max(1, container.clientHeight),
       (this.camera.fov * Math.PI) / 180,
@@ -1823,6 +1850,85 @@ export class Renderer {
     return { x: dx, z: dz };
   }
 
+  // The planet's points on the screen for the battle royale's HUD
+  // (render/royale_cues.ts): the edge arrows and the sounds by bearing.
+  private royaleProjector(planet: PlanetStage): RoyaleProjector {
+    return {
+      project: (p, lift) => {
+        const w = planet.shownAt(p, lift);
+        const cam = w.clone().applyMatrix4(this.camera.matrixWorldInverse);
+        const v = w.clone().project(this.camera);
+        const r = this.canvasRect();
+        return {
+          x: r.left + ((v.x + 1) / 2) * r.width,
+          y: r.top + ((1 - v.y) / 2) * r.height,
+          behind: cam.z > 0,
+        };
+      },
+      bearing: (p) => {
+        const cam = planet.shownAt(p, 0).applyMatrix4(this.camera.matrixWorldInverse);
+        if (Math.abs(cam.x) < 1e-6 && Math.abs(cam.z) < 1e-6) return 0;
+        return Math.atan2(cam.x, -cam.z);
+      },
+      self: () => {
+        const u = this.followId !== null ? planet.base.units.get(this.followId) : undefined;
+        const p = u?.pos;
+        return p && p.y !== undefined ? { x: p.x, y: p.y, z: p.z } : null;
+      },
+      view: () => {
+        const r = this.canvasRect();
+        return { width: r.width, height: r.height };
+      },
+    };
+  }
+
+  // A moment the HUD called (render/royale_cues.ts): a takedown punches the
+  // camera in and floats its heal; the caches' cues are the marks' own.
+  private onRoyaleCue(cue: RoyaleCue): void {
+    if (cue.kind !== 'takedown') return;
+    this.addShake(0.25);
+    this.punchAt = performance.now();
+    const u = this.followId !== null ? this.world.units.get(this.followId) : undefined;
+    const t = this.followId !== null ? this.tracked.get(this.followId) : undefined;
+    if (u && cue.heal >= 1) {
+      this.fct.spawn(`+${cue.heal}`, '#7dff8a', u.pos.x, (t?.barY ?? 2.4) + 1.6, u.pos.z, 1.1);
+    }
+  }
+
+  // The camera's lean on a takedown: 6% in at once, eased back over 250 ms.
+  private punchZoom(now: number): number {
+    const t = (now - this.punchAt) / 250;
+    if (t < 0 || t >= 1) return 1;
+    return 1 - 0.06 * (1 - t) * (1 - t);
+  }
+
+  // The frost at the edges: how deep the followed champion stands in the
+  // Dusk, eased; and the landing's dust and thud after the drop.
+  private stepRoyaleFrame(planet: PlanetStage): void {
+    const r = planet.base.royaleView?.() ?? null;
+    const u = this.followId !== null ? planet.base.units.get(this.followId) : undefined;
+    const depth = r && u && !u.dead && r.st === 'play' ? duskDepth(u.pos, r.dusk) : null;
+    const level = frostLevel(depth);
+    if (Math.abs(level - this.frostShown) > 0.02) {
+      this.frostShown = level;
+      this.frost.style.opacity = level.toFixed(2);
+    }
+    if (planet.takeLanding()) {
+      const me = this.followId !== null ? this.world.units.get(this.followId) : undefined;
+      if (me && !me.dead) {
+        this.addShake(0.4);
+        playSfx('land');
+        this.vfx.rings.spawn(me.pos.x, me.pos.z, 3.4, 0xcbb48a, 700, { alpha: 0.8 });
+        this.vfx.rings.spawn(me.pos.x, me.pos.z, 1.8, 0xe8dcc0, 450, { alpha: 0.7 });
+        this.vfx.sparkBurst(me.pos.x, 0.3, me.pos.z, 0xb8a27a, 18, 5, {
+          life: 0.8,
+          up: 2.5,
+          gravity: 4,
+        });
+      }
+    }
+  }
+
   // Called once after every sim tick: shifts interpolation history and syncs
   // the mesh sets with the world's units, projectiles, and zones.
   onSimTick(): void {
@@ -1995,7 +2101,12 @@ export class Renderer {
         // An allied bot's active play rides the plate (ADR 0013): what it is
         // doing, readable at a glance in spectate, replay and practice.
         const play = u.play !== null && u.team === this.viewerTeam ? `  ${u.play}` : '';
-        const label = `${row?.name ?? u.championId ?? ''}  Lv${u.level}${play}`;
+        // In a battle royale the plate reads the seat's name (a person's,
+        // or a bot's invented one) with the bot mark, and the level.
+        const seat = this.planet ? (this.world.seat?.(id) ?? null) : null;
+        const label = seat
+          ? `${seat.name}${seat.bot ? ' [bot]' : ''}  Lv${u.level}`
+          : `${row?.name ?? u.championId ?? ''}  Lv${u.level}${play}`;
         if (t.nameKey !== label) {
           if (t.namePlate) {
             t.overhead.remove(t.namePlate);
@@ -3274,7 +3385,8 @@ export class Renderer {
       // The rig on the curve (the globe's orbit through the drop).
       const focus = target.clone();
       focus.y = this.groundHeight(focus.x, focus.z);
-      this.planet.placeView(focus, this.zoom, dtMs);
+      this.stepRoyaleFrame(this.planet);
+      this.planet.placeView(focus, this.zoom * this.punchZoom(now), dtMs);
       if (this.shakeAmp > 0.001) {
         const k = this.shakeAmp * this.shakeAmp * 0.55;
         this.camera.position.x += (Math.random() * 2 - 1) * k;
@@ -3426,6 +3538,7 @@ export class Renderer {
     this.championVisuals.clear();
     this.fogTexture.dispose();
     this.vignette.remove();
+    this.frost.remove();
     this.gl.domElement.remove();
     this.gl.dispose();
     this.towerShots.dispose();

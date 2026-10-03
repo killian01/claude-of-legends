@@ -1,5 +1,8 @@
 // What the battle royale sets on the Wanderseed's ground (ADR 0031): the
-// caches (glowing chests, the golden ones bigger and golden), the launch
+// caches (glowing chests, the golden ones bigger and golden, a Seedfall's
+// biggest and white-gold), a cache's opening (it goes at once, its lid
+// flips in gold sparks under a short column, or a red ring when an opening
+// is broken, render/royale_cues.ts), the launch
 // pads (gold discs with a faint arc to where they throw), the beacons of
 // the crossroads, and during the drop the landing picks (the own one a
 // tall light, everyone else's a dot); and the pillars of light over what
@@ -10,13 +13,60 @@
 import * as THREE from 'three';
 import type { SnapCache, SnapRoyale } from '../net/royale_wire';
 import type { Vec3 } from '../sim/geo';
-import { PlanetPillars } from './planet_pillars';
+import { type Pillar, PlanetPillars } from './planet_pillars';
 import type { PlanetGround } from './planet_terrain';
+import { onRoyaleCue, type RoyaleCue } from './royale_cues';
 
 const MAX_CACHES = 320;
+// A burst's life, and its sparks; at most this many bursts at once.
+const BURST_MS = 1200;
+const LID_MS = 380;
+const SPARKS = 24;
+const MAX_BURSTS = 4;
+const CRACK_MS = 650;
+
+// A cache's look by its kind on the wire (0 plain, 1 golden, 2 a
+// Seedfall's): its size, its body and lid, its glow and the glow's lift.
+interface CacheLook {
+  scale: number;
+  body: number;
+  lid: number;
+  glow: [number, number, number];
+  lift: number;
+}
+const CACHE_LOOKS: readonly CacheLook[] = [
+  { scale: 1, body: 0x9a6a3c, lid: 0xd8b060, glow: [0.55, 0.75, 1], lift: 1.0 },
+  { scale: 1.45, body: 0xf2c640, lid: 0xfff0a0, glow: [1, 0.78, 0.25], lift: 1.5 },
+  { scale: 1.8, body: 0xfff3c8, lid: 0xffffff, glow: [1, 0.95, 0.7], lift: 1.9 },
+];
+
+export function cacheLook(kind: number): CacheLook {
+  return CACHE_LOOKS[kind] ?? CACHE_LOOKS[0]!;
+}
+
+// One cache opening as it plays: the lid flipping, the sparks, the column.
+interface Burst {
+  startMs: number;
+  lid: THREE.Mesh;
+  column: THREE.Mesh;
+  sparks: THREE.Points;
+  velocities: Float32Array;
+  base: THREE.Vector3;
+  normal: THREE.Vector3;
+  // The lid's standing turn, before it swings.
+  turn: THREE.Quaternion;
+}
+
+// A broken opening's red ring.
+interface Crack {
+  startMs: number;
+  ring: THREE.Mesh;
+}
 const MAX_PICKS = 64;
 
 const UP = new THREE.Vector3(0, 1, 0);
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+const SWING = new THREE.Quaternion();
 
 // A column's light: bright at its foot, gone at its top.
 function columnTexture(): THREE.CanvasTexture {
@@ -66,6 +116,17 @@ export class PlanetMarks {
   private shownCaches: readonly SnapCache[] | null = null;
   private readonly pillars: PlanetPillars;
   private readonly owned: { dispose(): void }[] = [];
+  // Caches that opened before the list said so: hidden at once.
+  private readonly hidden = new Set<number>();
+  private readonly bursts: Burst[] = [];
+  private readonly cracks: Crack[] = [];
+  private readonly burstColumnGeo: THREE.CylinderGeometry;
+  private readonly burstLidGeo: THREE.BoxGeometry;
+  private readonly crackGeo: THREE.RingGeometry;
+  private readonly sparkTexture: THREE.Texture;
+  private readonly column: THREE.Texture;
+  private readonly stopCues: () => void;
+  private lastNow = 0;
 
   constructor(
     private readonly ground: PlanetGround,
@@ -77,6 +138,18 @@ export class PlanetMarks {
     this.owned.push(this.pillars);
     const glow = glowTexture();
     this.owned.push(glow);
+    this.sparkTexture = glow;
+    this.column = columnTexture();
+    this.owned.push(this.column);
+    this.burstColumnGeo = new THREE.CylinderGeometry(0.7, 0.35, 1, 12, 1, true);
+    this.burstColumnGeo.translate(0, 0.5, 0);
+    this.burstLidGeo = new THREE.BoxGeometry(1.18, 0.24, 0.8);
+    // Hinged at its back edge.
+    this.burstLidGeo.translate(0, 0.12, 0.4);
+    this.crackGeo = new THREE.RingGeometry(0.8, 1, 40);
+    this.crackGeo.rotateX(-Math.PI / 2);
+    this.owned.push(this.burstColumnGeo, this.burstLidGeo, this.crackGeo);
+    this.stopCues = onRoyaleCue((cue) => this.onCue(cue));
 
     // Caches: a chest body and its lid, instanced; a glow per cache.
     const body = new THREE.BoxGeometry(1.1, 0.62, 0.72);
@@ -272,23 +345,25 @@ export class PlanetMarks {
   private placeCaches(caches: readonly SnapCache[]): void {
     const colors = this.cacheGlow.geometry.getAttribute('color') as THREE.BufferAttribute;
     const positions = this.cacheGlow.geometry.getAttribute('position') as THREE.BufferAttribute;
-    const wood = new THREE.Color(0x9a6a3c);
-    const gold = new THREE.Color(0xf2c640);
-    const trim = new THREE.Color(0xd8b060);
-    const n = Math.min(MAX_CACHES, caches.length);
-    for (let i = 0; i < n; i++) {
-      const [, x, y, z, golden] = caches[i]!;
+    // A cache the list no longer carries needs hiding no more.
+    const listed = new Set(caches.map((c) => c[0]));
+    for (const id of this.hidden) if (!listed.has(id)) this.hidden.delete(id);
+    let n = 0;
+    for (const c of caches) {
+      if (n >= MAX_CACHES) break;
+      const [id, x, y, z, kind] = c;
+      if (this.hidden.has(id)) continue;
+      const look = cacheLook(kind);
       const p = { x, y, z };
-      const s = golden ? 1.45 : 1;
-      const m = this.standing(p, 0, s);
-      this.chests.setMatrixAt(i, m);
-      this.lids.setMatrixAt(i, m);
-      this.chests.setColorAt(i, golden ? gold : wood);
-      this.lids.setColorAt(i, golden ? new THREE.Color(0xfff0a0) : trim);
-      const g = this.point(p, golden ? 1.5 : 1.0);
-      positions.setXYZ(i, g.x, g.y, g.z);
-      if (golden) colors.setXYZ(i, 1, 0.78, 0.25);
-      else colors.setXYZ(i, 0.55, 0.75, 1);
+      const m = this.standing(p, 0, look.scale);
+      this.chests.setMatrixAt(n, m);
+      this.lids.setMatrixAt(n, m);
+      this.chests.setColorAt(n, new THREE.Color(look.body));
+      this.lids.setColorAt(n, new THREE.Color(look.lid));
+      const g = this.point(p, look.lift);
+      positions.setXYZ(n, g.x, g.y, g.z);
+      colors.setXYZ(n, look.glow[0], look.glow[1], look.glow[2]);
+      n++;
     }
     this.chests.count = n;
     this.lids.count = n;
@@ -301,16 +376,227 @@ export class PlanetMarks {
     this.cacheGlow.geometry.setDrawRange(0, n);
   }
 
+  // A cue from the HUD (render/royale_cues.ts): a cache opened, or an
+  // opening broken.
+  private onCue(cue: RoyaleCue): void {
+    if (cue.kind === 'cache_open') this.openNow(cue.cacheId);
+    else if (cue.kind === 'cache_crack') this.crackAt(cue.cacheId);
+  }
+
+  private cacheById(cacheId: number): SnapCache | undefined {
+    return this.shownCaches?.find((c) => c[0] === cacheId);
+  }
+
+  // A cache opened: it goes at once, before the next list says so, and
+  // bursts where it stood.
+  openNow(cacheId: number): void {
+    const c = this.cacheById(cacheId);
+    if (!c || this.hidden.has(cacheId)) return;
+    this.hidden.add(cacheId);
+    if (this.shownCaches) this.placeCaches(this.shownCaches);
+    this.burst({ x: c[1], y: c[2], z: c[3] }, c[4]);
+  }
+
+  // The lid flips back, gold sparks fly, a column stands for 1.2 s: twice
+  // as tall and gold for a golden cache and a Seedfall's.
+  private burst(p: Vec3, kind: number): void {
+    while (this.bursts.length >= MAX_BURSTS) this.endBurst(this.bursts.shift()!);
+    const look = cacheLook(kind);
+    const rich = kind > 0;
+    const normal = new THREE.Vector3(p.x, p.y, p.z).normalize();
+    const base = this.point(p, 0);
+    const q = new THREE.Quaternion().setFromUnitVectors(UP, normal);
+
+    const lidMat = new THREE.MeshLambertMaterial({
+      color: look.lid,
+      emissive: rich ? 0x806020 : 0x604010,
+      transparent: true,
+    });
+    const lid = new THREE.Mesh(this.burstLidGeo, lidMat);
+    lid.position.copy(this.point(p, 0.6 * look.scale));
+    lid.quaternion.copy(q);
+    lid.scale.setScalar(look.scale);
+    this.group.add(lid);
+
+    const columnMat = new THREE.MeshBasicMaterial({
+      color: rich ? 0xffd34a : 0xfff0c0,
+      map: this.column,
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      fog: false,
+    });
+    const column = new THREE.Mesh(this.burstColumnGeo, columnMat);
+    column.position.copy(base);
+    column.quaternion.copy(q);
+    column.userData.h = rich ? 12 : 6;
+    column.scale.set(look.scale, 0.05, look.scale);
+    this.group.add(column);
+
+    const sparkGeo = new THREE.BufferGeometry();
+    const pos = new Float32Array(SPARKS * 3);
+    const vel = new Float32Array(SPARKS * 3);
+    const start = this.point(p, 0.7);
+    const a = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+    const b = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+    for (let i = 0; i < SPARKS; i++) {
+      pos[i * 3] = start.x;
+      pos[i * 3 + 1] = start.y;
+      pos[i * 3 + 2] = start.z;
+      const ang = Math.random() * Math.PI * 2;
+      const out = 1.2 + Math.random() * 2.2;
+      const up = 3.5 + Math.random() * 4.5;
+      const v = normal
+        .clone()
+        .multiplyScalar(up)
+        .addScaledVector(a, Math.cos(ang) * out)
+        .addScaledVector(b, Math.sin(ang) * out);
+      vel[i * 3] = v.x;
+      vel[i * 3 + 1] = v.y;
+      vel[i * 3 + 2] = v.z;
+    }
+    sparkGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const sparkMat = new THREE.PointsMaterial({
+      size: rich ? 0.75 : 0.55,
+      map: this.sparkTexture,
+      color: 0xffd060,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      fog: false,
+    });
+    const sparks = new THREE.Points(sparkGeo, sparkMat);
+    sparks.frustumCulled = false;
+    this.group.add(sparks);
+
+    this.bursts.push({
+      startMs: this.lastNow,
+      lid,
+      column,
+      sparks,
+      velocities: vel,
+      base,
+      normal,
+      turn: q.clone(),
+    });
+  }
+
+  private endBurst(b: Burst): void {
+    for (const o of [b.lid, b.column, b.sparks]) {
+      this.group.remove(o);
+      (o.material as THREE.Material).dispose();
+    }
+    b.sparks.geometry.dispose();
+  }
+
+  // A broken opening: a red ring swells and fades at the cache.
+  crackAt(cacheId: number): void {
+    const c = this.cacheById(cacheId);
+    if (!c) return;
+    const p = { x: c[1], y: c[2], z: c[3] };
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xff3a2a,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      fog: false,
+    });
+    const ring = new THREE.Mesh(this.crackGeo, mat);
+    ring.matrixAutoUpdate = false;
+    ring.matrix.copy(this.standing(p, 0.12, 1));
+    this.group.add(ring);
+    this.cracks.push({ startMs: this.lastNow, ring });
+  }
+
+  // The bursts and the cracks, every frame.
+  private stepEffects(now: number): void {
+    const dt = Math.min(0.05, Math.max(0, (now - this.lastNow) / 1000));
+    this.lastNow = now;
+    for (let i = this.bursts.length - 1; i >= 0; i--) {
+      const b = this.bursts[i]!;
+      const age = now - b.startMs;
+      if (age >= BURST_MS) {
+        this.endBurst(b);
+        this.bursts.splice(i, 1);
+        continue;
+      }
+      const k = age / BURST_MS;
+      // The lid swings back on its hinge, then fades.
+      const swing = Math.min(1, age / LID_MS);
+      const open = -1.9 * (1 - (1 - swing) * (1 - swing));
+      b.lid.quaternion.copy(b.turn).multiply(SWING.setFromAxisAngle(X_AXIS, open));
+      (b.lid.material as THREE.MeshLambertMaterial).opacity = 1 - k * k;
+      // The column rises fast and fades.
+      const rise = Math.min(1, age / 220);
+      b.column.scale.y = Math.max(0.05, (b.column.userData.h as number) * rise);
+      (b.column.material as THREE.MeshBasicMaterial).opacity = 0.85 * (1 - k);
+      // The sparks fly and fall back toward the planet.
+      const pos = b.sparks.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const arr = pos.array as Float32Array;
+      for (let j = 0; j < SPARKS; j++) {
+        const o = j * 3;
+        b.velocities[o] = (b.velocities[o] ?? 0) - b.normal.x * 9 * dt;
+        b.velocities[o + 1] = (b.velocities[o + 1] ?? 0) - b.normal.y * 9 * dt;
+        b.velocities[o + 2] = (b.velocities[o + 2] ?? 0) - b.normal.z * 9 * dt;
+        arr[o] = (arr[o] ?? 0) + (b.velocities[o] ?? 0) * dt;
+        arr[o + 1] = (arr[o + 1] ?? 0) + (b.velocities[o + 1] ?? 0) * dt;
+        arr[o + 2] = (arr[o + 2] ?? 0) + (b.velocities[o + 2] ?? 0) * dt;
+      }
+      pos.needsUpdate = true;
+      (b.sparks.material as THREE.PointsMaterial).opacity = 1 - k;
+    }
+    for (let i = this.cracks.length - 1; i >= 0; i--) {
+      const c = this.cracks[i]!;
+      const age = now - c.startMs;
+      if (age >= CRACK_MS) {
+        this.group.remove(c.ring);
+        (c.ring.material as THREE.Material).dispose();
+        this.cracks.splice(i, 1);
+        continue;
+      }
+      const k = age / CRACK_MS;
+      const r = 0.8 + 1.8 * k;
+      const m = c.ring.matrix.clone();
+      const pos = new THREE.Vector3();
+      const q = new THREE.Quaternion();
+      m.decompose(pos, q, new THREE.Vector3());
+      c.ring.matrix.compose(pos, q, new THREE.Vector3(r, 1, r));
+      (c.ring.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - k);
+    }
+  }
+
+  // The pillars of the frame, from the mode's blocks: each Seedfall not
+  // yet opened, counting down to its landing and lit once landed.
+  static pillarsOf(royale: SnapRoyale | null): Pillar[] {
+    const out: Pillar[] = [];
+    if (royale?.st !== 'play') return out;
+    for (const s of royale.sf ?? []) {
+      out.push({
+        kind: 'seedfall',
+        at: { x: s[1], y: s[2], z: s[3] },
+        until: s[4],
+        lit: s[5] === 1,
+      });
+    }
+    return out;
+  }
+
   update(
     now: number,
     caches: readonly SnapCache[],
     royale: SnapRoyale | null,
     dropping: boolean,
+    time = 0,
   ): void {
     if (caches !== this.shownCaches) {
       this.shownCaches = caches;
       this.placeCaches(caches);
     }
+    this.stepEffects(now);
     const t = now / 1000;
     this.cacheGlowMat.size = 3 + 0.5 * Math.sin(t * 2.4);
     this.cacheGlowMat.opacity = 0.75 + 0.2 * Math.sin(t * 2.4);
@@ -337,10 +623,15 @@ export class PlanetMarks {
     positions.needsUpdate = true;
     this.picks.geometry.setDrawRange(0, n);
     this.pickMat.size = 15 + 3 * Math.sin(t * 5);
-    this.pillars.setPillars([]);
+    this.pillars.setPillars(PlanetMarks.pillarsOf(royale), time, now);
   }
 
   dispose(): void {
+    this.stopCues();
+    for (const b of this.bursts) this.endBurst(b);
+    this.bursts.length = 0;
+    for (const c of this.cracks) (c.ring.material as THREE.Material).dispose();
+    this.cracks.length = 0;
     for (const o of this.owned) o.dispose();
   }
 }

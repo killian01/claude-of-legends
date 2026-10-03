@@ -3,10 +3,12 @@
 // turned the way the camera looks, drawn by the HUD's own minimap like the
 // 5v5's (ui/minimap.ts) over a background painted from the planet: the
 // regions and their water, the night outside the light, the next cap's
-// golden line, the pads and the caches. The window is a second view of
-// the stage's chart, so the two never disagree.
+// golden line, the pads and the caches (a Seedfall's bigger and white),
+// and the loud moments: each Seedfall's column a pulsing gold star, each
+// Clamor a red ring swelling where a takedown rang out. The window is a
+// second view of the stage's chart, so the two never disagree.
 
-import type { SnapCache, SnapDusk } from '../net/royale_wire';
+import type { SnapCache, SnapClamor, SnapDusk, SnapSeedfall } from '../net/royale_wire';
 import type { Vec3 } from '../sim/geo';
 import type { IWorld } from '../world_api';
 import { type ChartView, ChartWindow, ChartWorld } from './chart_world';
@@ -18,6 +20,8 @@ export const MINIMAP_WINDOW = 110;
 const PX = 168;
 const CELLS = 56;
 const REPAINT_MS = 120;
+// A Clamor's flash on the minimap, seconds (CLAMOR_S rings it out).
+const CLAMOR_FLASH_S = 3;
 
 function angleBetween(a: Vec3, b: Vec3): number {
   const cx = a.y * b.z - a.z * b.y;
@@ -30,11 +34,15 @@ export class PlanetMinimap {
   readonly window: ChartWindow;
   readonly world: ChartWorld;
   readonly background = document.createElement('canvas');
+  // The ground and the Dusk, painted on the slow beat; the marks go over
+  // a copy of it, on the quick beat while something on it moves.
+  private readonly terrain = document.createElement('canvas');
   private paintedAt = Number.NEGATIVE_INFINITY;
+  private terrainAt = Number.NEGATIVE_INFINITY;
   private paintedEpoch = -1;
 
   constructor(
-    base: IWorld,
+    private readonly base: IWorld,
     view: ChartView,
     private readonly ground: PlanetGround,
   ) {
@@ -42,6 +50,8 @@ export class PlanetMinimap {
     this.world = new ChartWorld(base, this.window);
     this.background.width = PX;
     this.background.height = PX;
+    this.terrain.width = PX;
+    this.terrain.height = PX;
   }
 
   // The sphere point under a minimap point (its window's coordinates).
@@ -52,11 +62,32 @@ export class PlanetMinimap {
   // Repaints the background when the chart moved or a beat has passed.
   paint(now: number, dusk: SnapDusk | null, caches: readonly SnapCache[]): void {
     const epoch = this.window.view.epoch;
-    if (epoch === this.paintedEpoch && now - this.paintedAt < REPAINT_MS * 4) return;
+    const royale = this.base.royaleView?.() ?? null;
+    const time = this.base.time;
+    const clamors = (royale?.cl ?? []).filter(
+      (c) => time - c[3] >= 0 && time - c[3] < CLAMOR_FLASH_S,
+    );
+    const seedfalls = royale?.st === 'play' ? (royale.sf ?? []) : [];
+    // Something on it moves: repaint at the quick beat.
+    const lively = clamors.length > 0 || seedfalls.length > 0;
+    if (!lively && epoch === this.paintedEpoch && now - this.paintedAt < REPAINT_MS * 4) return;
     if (now - this.paintedAt < REPAINT_MS) return;
     this.paintedAt = now;
-    this.paintedEpoch = epoch;
-    const g = this.background.getContext('2d');
+    const out = this.background.getContext('2d');
+    if (!out) return;
+    if (epoch !== this.paintedEpoch || now - this.terrainAt >= REPAINT_MS * 4) {
+      this.paintedEpoch = epoch;
+      this.terrainAt = now;
+      this.paintTerrain(dusk);
+    }
+    out.drawImage(this.terrain, 0, 0);
+    this.paintMarks(out, now, time, caches, seedfalls, clamors);
+  }
+
+  // The ground's regions and relief, the night outside the light, the
+  // light's edge and the next cap's line.
+  private paintTerrain(dusk: SnapDusk | null): void {
+    const g = this.terrain.getContext('2d');
     if (!g) return;
     const R = this.ground.radius;
     const lit = dusk ? { c: dirOf(dusk.c), a: capAngle(dusk.r, R) } : null;
@@ -99,6 +130,17 @@ export class PlanetMinimap {
         }
       }
     }
+  }
+
+  // The pads, the caches, the Seedfalls and the Clamors over the ground.
+  private paintMarks(
+    g: CanvasRenderingContext2D,
+    now: number,
+    time: number,
+    caches: readonly SnapCache[],
+    seedfalls: readonly SnapSeedfall[],
+    clamors: readonly SnapClamor[],
+  ): void {
     const k = PX / MINIMAP_WINDOW;
     const dot = (p: Vec3, r: number, fill: string): void => {
       const q = this.window.toLocal(p);
@@ -109,8 +151,30 @@ export class PlanetMinimap {
       g.fill();
     };
     for (const pad of this.ground.layout.pads) dot(pad.at, 3, '#ffcf4a');
-    for (const [, x, y, z, golden] of caches)
-      dot({ x, y, z }, golden ? 2.6 : 1.7, golden ? '#ffd23a' : '#fff1b0');
+    for (const [, x, y, z, kind] of caches) {
+      if (kind === 2) dot({ x, y, z }, 3.4, '#fffbe6');
+      else dot({ x, y, z }, kind === 1 ? 2.6 : 1.7, kind === 1 ? '#ffd23a' : '#fff1b0');
+    }
+    // The Seedfalls: a gold star that pulses, clamped to the edge when the
+    // column stands beyond the window.
+    const pulse = 0.5 + 0.5 * Math.sin(now / 160);
+    for (const sf of seedfalls) {
+      const q = this.window.toLocal({ x: sf[1], y: sf[2], z: sf[3] });
+      const cx = Math.max(6, Math.min(PX - 6, q.x * k));
+      const cy = Math.max(6, Math.min(PX - 6, PX - q.z * k));
+      star(g, cx, cy, 5.5 + 1.5 * pulse, sf[5] === 1 ? '#fff6c8' : '#ffd35a');
+    }
+    // The Clamors: a red ring swelling and fading where each rang out.
+    for (const c of clamors) {
+      const q = this.window.toLocal({ x: c[0], y: c[1], z: c[2] });
+      if (q.x < 0 || q.z < 0 || q.x > MINIMAP_WINDOW || q.z > MINIMAP_WINDOW) continue;
+      const age = (time - c[3]) / CLAMOR_FLASH_S;
+      g.strokeStyle = `rgba(255,70,50,${(0.95 * (1 - age)).toFixed(3)})`;
+      g.lineWidth = 2;
+      g.beginPath();
+      g.arc(q.x * k, PX - q.z * k, 3 + 9 * age, 0, Math.PI * 2);
+      g.stroke();
+    }
   }
 }
 
@@ -122,4 +186,23 @@ function dirOf(w: readonly [number, number, number]): Vec3 {
 function dirOf3(p: Vec3): Vec3 {
   const d = Math.hypot(p.x, p.y, p.z) || 1;
   return { x: p.x / d, y: p.y / d, z: p.z / d };
+}
+
+// A four-pointed star, for a Seedfall on the minimap.
+function star(g: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string): void {
+  g.fillStyle = fill;
+  g.strokeStyle = 'rgba(40,24,0,0.85)';
+  g.lineWidth = 1;
+  g.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i * Math.PI) / 4 - Math.PI / 2;
+    const d = i % 2 === 0 ? r : r * 0.42;
+    const px = x + Math.cos(a) * d;
+    const py = y + Math.sin(a) * d;
+    if (i === 0) g.moveTo(px, py);
+    else g.lineTo(px, py);
+  }
+  g.closePath();
+  g.fill();
+  g.stroke();
 }
