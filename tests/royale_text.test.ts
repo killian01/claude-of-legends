@@ -12,6 +12,8 @@ import {
   duskLine,
   duskTurn,
   isBot,
+  LOOT_EMPTY,
+  LOOT_LABEL,
   leaderBadge,
   levelText,
   lootText,
@@ -20,6 +22,7 @@ import {
   outsideLight,
   peopleText,
   placeText,
+  royaleHints,
   seatName,
   takedownsText,
 } from '../src/ui/royale_text';
@@ -208,5 +211,35 @@ describe('the light and its turns', () => {
     expect(duskTurn({ p: 5, sh: 1 }, { p: 6, sh: 0 })).toBe('The last light is out');
     expect(duskTurn({ p: 2, sh: 1 }, { p: 2, sh: 1 })).toBeNull();
     expect(duskTurn({ p: 6, sh: 0 }, { p: 6, sh: 0 })).toBeNull();
+  });
+});
+
+describe('the keys and the bag in a battle royale', () => {
+  it("say the mode's own verbs and none of the 5v5's", () => {
+    const all = [
+      royaleHints('mouse', true),
+      royaleHints('mouse', false),
+      royaleHints('tap', true),
+      royaleHints('thumbs', true),
+    ];
+    for (const line of all) {
+      expect(line).toMatch(/cache/);
+      expect(line).not.toMatch(/shop|recall|gold|scoreboard|tower|minion|\bB\b|\bP\b|Tab/i);
+    }
+    expect(royaleHints('mouse', true)).toMatch(/^Click: move/);
+    expect(royaleHints('mouse', false)).toMatch(/^Right-click: move/);
+    expect(royaleHints('mouse', true)).toMatch(/Q W E R/);
+    expect(royaleHints('mouse', true)).toMatch(/stay in the light/);
+    expect(royaleHints('thumbs', true)).toMatch(/Left thumb walks/);
+    // As short as the 5v5's, in the thumbs' narrow corner.
+    expect(royaleHints('thumbs', true).length).toBeLessThanOrEqual(120);
+  });
+
+  it('calls the bag loot, filled by caches, camps and takedowns', () => {
+    expect(LOOT_LABEL).toBe('Loot');
+    expect(LOOT_EMPTY.join(' ')).toMatch(/cache/i);
+    expect(LOOT_EMPTY.join(' ')).toMatch(/camps/);
+    expect(LOOT_EMPTY.join(' ')).toMatch(/takedowns/);
+    expect(LOOT_EMPTY.join(' ')).not.toMatch(/shop|buy|gold|sell/i);
   });
 });

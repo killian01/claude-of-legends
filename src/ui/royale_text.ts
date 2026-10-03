@@ -166,3 +166,36 @@ export function duskTurn(
   }
   return null;
 }
+
+// The keys at the bottom left in a battle royale, in the words of the hands
+// on the screen: the mode's own verbs (a cache, the light), and none of the
+// 5v5's (no shop, no recall, no gold, no scoreboard).
+export function royaleHints(input: 'mouse' | 'tap' | 'thumbs', leftClickMoves: boolean): string {
+  // The thumbs' corner is narrow, between the touch bar and the first
+  // steps' card: four short lines, as the 5v5's.
+  if (input === 'thumbs') {
+    return (
+      'Left thumb walks. Right thumb: tap a spell to cast, slide to aim. ATK attacks. ' +
+      'Stand by a glowing cache to open it.'
+    );
+  }
+  if (input === 'tap') {
+    return (
+      'Tap: move / attack. Tap a spell, then tap the ground to cast it. Stand by a glowing ' +
+      'cache to open it, and stay in the light. Center snaps back to your champion.'
+    );
+  }
+  return (
+    `${leftClickMoves ? 'Click' : 'Right-click'}: move / attack. Q W E R: hold to aim, ` +
+    'release to cast. D F: sigils. Stand by a glowing cache to open it, and stay in the ' +
+    'light. Space recenters. Esc: menu.'
+  );
+}
+
+// The bag of loot under the bar: its label, and what an empty place in it
+// says when asked.
+export const LOOT_LABEL = 'Loot';
+export const LOOT_EMPTY: readonly string[] = [
+  'Loot',
+  'Caches, camps and takedowns fill this bag with the next piece of your build, equipped at once.',
+];
