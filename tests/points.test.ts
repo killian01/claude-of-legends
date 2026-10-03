@@ -112,6 +112,18 @@ describe('the weight', () => {
     expect(botsWeight(1, [1])).toBe(1);
   });
 
+  it('counts a human on any other team as an opponent, in a match of any team count', () => {
+    // A free-for-all of fifty (ADR 0030): humans on teams 37 and 12.
+    const humans = Array.from({ length: 50 }, (_, t) => (t === 37 || t === 12 ? 1 : 0));
+    expect(humansWeight(37, humans)).toBe(2);
+    const alone = Array.from({ length: 50 }, (_, t) => (t === 37 ? 1 : 0));
+    expect(humansWeight(37, alone)).toBe(1);
+    const pair = Array.from({ length: 50 }, (_, t) => (t === 37 ? 2 : 0));
+    expect(humansWeight(37, pair)).toBe(1.5);
+    expect(botsWeight(37, [12])).toBe(GENTLE_WEIGHT);
+    expect(botsWeight(37, [37])).toBe(1);
+  });
+
   it('rounds each weighted action to an integer', () => {
     expect(weighted(POINTS.last_hit, 1.5)).toBe(2);
     expect(weighted(POINTS.assist, 1.5)).toBe(8);

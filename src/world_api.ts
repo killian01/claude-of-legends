@@ -19,6 +19,10 @@ export interface IWorld {
   readonly map: GameMap;
   readonly time: number;
   readonly winner: TeamId | null;
+  // How many teams the match holds (ADR 0030); absent reads as the 5v5's
+  // two. The presentation draws a match of other counts as the viewer's
+  // team against everyone else (src/ui/team_look.ts).
+  readonly teamCount?: number;
   readonly units: ReadonlyMap<number, Readonly<Unit>>;
   readonly projectiles: ReadonlyMap<number, Readonly<Projectile>>;
   readonly zones: ReadonlyMap<number, Readonly<Zone>>;

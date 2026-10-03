@@ -15,6 +15,7 @@ import { attachBot } from '../src/sim/content/bots';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import type { LanePreference, PlaybookDef } from '../src/sim/playbook/types';
 import type { Sim, SimEvent } from '../src/sim/sim';
+import { isSide } from '../src/sim/teams';
 import type { TeamId } from '../src/sim/types';
 import { dropInTeam } from './drop_in';
 import { buildSnapshot } from './snapshot';
@@ -347,10 +348,11 @@ export class Match {
     clientId: number,
     name: string,
   ): { unitId: number; team: TeamId; pool: boolean } | null {
+    // The drop in balances the 5v5's two sides.
     const humans: [number, number] = [0, 0];
-    for (const p of this.players.values()) humans[p.team] += 1;
+    for (const p of this.players.values()) if (isSide(p.team)) humans[p.team] += 1;
     const seats: [number, number] = [0, 0];
-    for (const s of this.botSeats.values()) seats[s.team] += 1;
+    for (const s of this.botSeats.values()) if (isSide(s.team)) seats[s.team] += 1;
     const team = dropInTeam(humans, seats);
     if (team === null) return null;
     const chosen = [...this.botSeats]

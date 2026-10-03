@@ -4,10 +4,14 @@
 
 import type { ScoreRow, TeamId } from '../sim/types';
 
-// Total champion takedowns per team, indexed by team id.
-export function teamKills(rows: readonly ScoreRow[]): readonly [number, number] {
-  const totals: [number, number] = [0, 0];
-  for (const r of rows) totals[r.team] += r.kills;
+// Total champion takedowns per team, indexed by team id: the 5v5's two
+// at least, and every team a row names (ADR 0030).
+export function teamKills(rows: readonly ScoreRow[]): readonly number[] {
+  const totals = [0, 0];
+  for (const r of rows) {
+    while (totals.length <= r.team) totals.push(0);
+    totals[r.team] = (totals[r.team] ?? 0) + r.kills;
+  }
   return totals;
 }
 
@@ -50,7 +54,7 @@ export class TeamScore {
   }
 
   update(rows: readonly ScoreRow[]): void {
-    const [a, b] = teamKills(rows);
+    const [a = 0, b = 0] = teamKills(rows);
     if (a === this.shown[0] && b === this.shown[1]) return;
     this.shown = [a, b];
     this.numbers[0].textContent = String(a);

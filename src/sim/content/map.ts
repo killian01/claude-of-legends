@@ -15,6 +15,8 @@ export type LaneId = 'top' | 'mid' | 'bot';
 export interface WallShape {
   x: number;
   z: number;
+  // On the planet a wall or a brush stands on the sphere (ADR 0029).
+  y?: number;
   r: number;
 }
 
@@ -102,22 +104,27 @@ export interface WardenPit extends Vec2 {
   name: string;
 }
 
-// A camp spot and the kind of body it holds (content/camps.ts).
+// A camp spot and the kind of body it holds (content/camps.ts). On the
+// planet the spot is a point on the sphere and carries y (ADR 0029).
 export interface CampSpot {
   x: number;
   z: number;
+  y?: number;
   kind: CampKind;
 }
 
 // A ring (CONTEXT.md): the raised stone circle at the elbow of a side
 // lane, neutral ground between the two outer towers, where a creature
 // rises on a clock (src/sim/rings.ts). The disc is its leash. The launch
-// map has none; the Star Orchard export traces two.
+// map has none; the Star Orchard export traces two. On the planet a ring
+// is a plain circle on the sphere, without stairs: its center carries y
+// (ADR 0029) and its leash is the disc and a margin.
 export interface RingSite {
   id: RingId;
   lane: LaneId;
   x: number;
   z: number;
+  y?: number;
   // The disc's radius: where the creature rises and a bot pre-positions.
   r: number;
   // How far from the center the creature holds its target and stays

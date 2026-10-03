@@ -96,6 +96,55 @@ exported with its collisions and gameplay points (docs/star-orchard.md).
 Ranked, lobbies, practice, bots, replays and the environment all run on it.
 _Avoid_: Verger astral (its working title in French), the new map, the Blender map, the test map
 
+**Wanderseed**:
+The planet the battle royale is played on (ADR 0031): a seed of the Star Orchard that drifted
+into space and grew into a small world, a true sphere of radius 80 m walked all the way round
+(ADR 0029). Six regions like the faces of a die (the Sanctuary, the Ruins, the Cypress groves,
+the Lakes, the Cliffs, the Open ground) and eight crossroads where three of them meet
+(docs/planet.md).
+_Avoid_: the island, the BR map, the globe (the drop view is a globe; the planet is the Wanderseed)
+
+**Battle royale**:
+The mode of fifty champions each for themself on the Wanderseed, ten minutes under the Dusk
+(ADR 0031), in two variants, Respawn and One life. Every other match is the classic 5v5.
+_Avoid_: BR in game text, royale alone, free-for-all as the mode's name (a free-for-all is
+how its teams are counted, ADR 0030)
+
+**Respawn**:
+The battle royale variant where a death costs five seconds: the champion comes back at the edge
+of the light with everything it had, and the most takedowns when the last light goes out wins.
+What Play now launches.
+_Avoid_: loop mode, deathmatch
+
+**One life**:
+The battle royale variant where a death is the end of the match for that champion: the last one
+standing wins.
+_Avoid_: sudden death, hardcore
+
+**Dusk**:
+The night that closes on the Wanderseed in a battle royale: the lit cap shrinks in five phases
+toward a point drawn each match, and outside it the Dusk burns a share of maximum health every
+second. The cap it closes to next is always drawn.
+_Avoid_: the zone, the storm, the circle, the ring (a Ring is the 5v5's stone circle)
+
+**Drop**:
+The battle royale's first ten seconds, over the globe: every seat picks where its champion
+lands, and everyone lands together.
+_Avoid_: spawn pick, deploy
+
+**Cache**:
+A glowing chest on the Wanderseed: a champion who stands beside it for a second and a half
+opens it and gets the next piece of its build. A golden cache gives two. Damage breaks the
+opening.
+_Avoid_: chest, loot box, crate
+
+**Launch pad**:
+A disc on the Wanderseed that throws a champion stepping on it 50 m along a fixed great circle.
+_Avoid_: jump pad, trampoline, tremplin
+
+**Beacon**:
+The tall light at each of the Wanderseed's eight crossroads, seen from far, to find one's way.
+
 **Launch map**:
 The point-symmetric three-lane square in `src/sim/content/map.ts` the game
 launched on. Since ADR 0021 it is the tests' fixture map: the default of the
