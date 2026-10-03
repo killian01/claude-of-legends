@@ -3,9 +3,11 @@
 // offline Sim satisfies it structurally; the online mirror world will
 // implement it in phase 6, pinned by a parity test.
 
+import type { SnapRoyale } from './net/royale_wire';
 import type { ChampionDef } from './sim/content/champions';
 import type { GameMap, WardenPit } from './sim/content/map';
 import type { FavorStacks } from './sim/favors';
+import type { Vec3 } from './sim/geo';
 import type { Projectile } from './sim/projectiles';
 import type { RingClock } from './sim/rings';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from './sim/types';
@@ -44,10 +46,24 @@ export interface IWorld {
   // their way (src/net/self_predict.ts, ADR 0028), with the way it walks
   // (null while it stands). Null, or absent offline, draws the world's
   // own position.
-  predictedPos?(unitId: number, now: number): { x: number; z: number; heading: Vec2 | null } | null;
-  orderMove(unitId: number, x: number, z: number): void;
+  // On the planet the drawn point carries y like every sphere point.
+  predictedPos?(
+    unitId: number,
+    now: number,
+  ): { x: number; z: number; y?: number; heading: Vec2 | null } | null;
+  // A battle royale's mode as its snapshot carries it (ADR 0031,
+  // src/net/royale_wire.ts): the stage, the Dusk, the caches; null, or
+  // absent, outside one.
+  royale?(): SnapRoyale | null;
+  // The drop (ADR 0031): the landing point picked on the globe, a point on
+  // the planet's sphere.
+  pickDrop?(point: Vec3): void;
+  // Orders on the planet carry the point's y (ADR 0029): a sphere point is
+  // (x, y, z), and a point on the plane has none, so the 5v5's orders keep
+  // their shape.
+  orderMove(unitId: number, x: number, z: number, y?: number): void;
   orderAttack(unitId: number, targetId: number): void;
-  orderAttackMove(unitId: number, x: number, z: number): void;
+  orderAttackMove(unitId: number, x: number, z: number, y?: number): void;
   orderStop(unitId: number): void;
   startRecall(unitId: number): void;
   castAbility(unitId: number, key: AbilityKey, aim: Vec2): boolean;

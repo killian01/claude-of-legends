@@ -80,6 +80,16 @@ export class FloatingText {
     });
   }
 
+  // The planet's chart moved (vfx/chart_shift.ts): every number carried
+  // with the spot it rose from.
+  rechart(map: (x: number, z: number) => { x: number; z: number }): void {
+    for (const e of this.entries) {
+      const q = map(e.baseX, e.baseZ);
+      e.baseX = q.x;
+      e.baseZ = q.z;
+    }
+  }
+
   update(now: number): void {
     for (let i = this.entries.length - 1; i >= 0; i--) {
       const e = this.entries[i]!;

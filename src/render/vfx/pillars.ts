@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import type { GroundHeight } from '../terrain';
+import { framed, type SpawnFrame } from './chart_shift';
 
 const POOL = 8;
 
@@ -25,6 +26,7 @@ export class LightPillars {
   constructor(
     scene: THREE.Scene,
     private readonly groundHeight?: GroundHeight,
+    private readonly frame?: SpawnFrame,
   ) {
     this.geometry = new THREE.CylinderGeometry(0.55, 1, 1, 10, 1, true);
     this.geometry.translate(0, 0.5, 0);
@@ -65,6 +67,7 @@ export class LightPillars {
     durationMs: number,
     peakOpacity = 0.3,
   ): void {
+    ({ x, z } = framed(this.frame, x, z));
     let slot = this.slots.find((s) => !s.active);
     if (!slot) slot = this.slots.reduce((a, b) => (a.bornAt <= b.bornAt ? a : b));
     slot.active = true;
