@@ -116,6 +116,9 @@ export class PlanetStage {
   private caches: SnapCache[] = [];
   private readonly drag = { active: false, x: 0, y: 0, moved: 0, id: -1 };
   private readonly cleanups: (() => void)[] = [];
+  // The champion whose landing a tap on the globe picks (the renderer's
+  // followed unit).
+  picker: number | null = null;
 
   constructor(
     readonly base: IWorld,
@@ -155,7 +158,7 @@ export class PlanetStage {
     for (const u of this.base.units.values()) {
       if (u.pos.y !== undefined) return u.pos as Vec3;
     }
-    const drop = this.base.royale?.()?.drop;
+    const drop = this.base.royaleView?.()?.drop;
     if (drop) return wirePoint(drop);
     return { x: 0.3 * this.radius, y: 0.9 * this.radius, z: 0.3 * this.radius };
   }
@@ -304,7 +307,7 @@ export class PlanetStage {
     const dz = z - this.half;
     if (dx * dx + dz * dz > VIEW_REACH_M * VIEW_REACH_M) return false;
     // Read off the world, not the last frame: a tick may come first.
-    if (this.base.royale?.()?.st === 'drop') return false;
+    if (this.base.royaleView?.()?.st === 'drop') return false;
     return !this.occluded(this.bentWorld(x, this.heightAt(x, z) + lift, z));
   }
 
@@ -458,7 +461,7 @@ export class PlanetStage {
   // Per frame, before the draw: the stage, the planet under the chart,
   // the Dusk, the fog, the sky, the caches, the drop's dots and camera.
   update(now: number, dtMs: number, fog: THREE.Texture, follow: Vec2 | null): void {
-    const royale = this.base.royale?.() ?? null;
+    const royale = this.base.royaleView?.() ?? null;
     const stage = royale?.st ?? null;
     if (royale?.caches) this.caches = royale.caches;
     if (royale) this.dropEndsAt = royale.de;
@@ -624,7 +627,7 @@ export class PlanetStage {
       const ray = new THREE.Raycaster();
       ray.setFromCamera(ndc, this.camera);
       const p = this.rayOnSphere(ray.ray);
-      if (p) this.base.pickDrop?.(p);
+      if (p && this.picker !== null) this.base.pickDrop?.(this.picker, p);
     };
     el.addEventListener('pointerdown', down);
     window.addEventListener('pointermove', move);

@@ -292,12 +292,16 @@ export class ChartWorld implements IWorld {
     return { x: local.x, z: local.z, heading };
   }
 
-  royale() {
-    return this.base.royale?.() ?? null;
+  royaleView() {
+    return this.base.royaleView?.() ?? null;
   }
 
-  pickDrop(point: Vec3): void {
-    this.base.pickDrop?.(point);
+  pickDrop(unitId: number, p: Vec3): void {
+    this.base.pickDrop?.(unitId, p);
+  }
+
+  seat(unitId: number) {
+    return this.base.seat?.(unitId) ?? null;
   }
 
   // Orders given in the window's coordinates, sent as sphere points.

@@ -85,6 +85,10 @@ export interface Unit {
   // Last time this unit's damage landed on anyone; with lastDamagedAt,
   // what "out of combat" means (favors.ts outOfCombat).
   lastDealtDamageAt: number;
+  // The speed share a mode's rules give out of combat, on top of the
+  // favor's (the battle royale's 40 percent, ADR 0031); zero everywhere
+  // else, where the sum it joins is the one it always was.
+  outOfCombatBonus: number;
   // The favors the unit's team holds (CONTEXT.md: Favor), mirrored from
   // the sim's Favors record whenever one is granted, so the stat
   // recalculation and the effect seam read the unit alone. Champions
@@ -235,6 +239,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     passiveStacks: 0,
     lastDamagedAt: -999,
     lastDealtDamageAt: -999,
+    outOfCombatBonus: 0,
     favors: NO_FAVORS,
     creatureId: null,
     aspect: null,

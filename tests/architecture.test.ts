@@ -117,6 +117,18 @@ const CORE_ON_THE_PLANET = [
   'vision.ts',
   'walls.ts',
   'zones.ts',
+  // The battle royale's rules and its bot's travel (ADR 0031).
+  'royale/caches.ts',
+  'royale/drop.ts',
+  'royale/dusk.ts',
+  'royale/levels.ts',
+  'royale/loot.ts',
+  'royale/mode.ts',
+  'royale/pads.ts',
+  'royale/score.ts',
+  'royale/bot/drop_pick.ts',
+  'royale/bot/sense.ts',
+  'royale/bot/travel.ts',
 ];
 
 const ON_THE_PLANET = [...new Set([...CORE_ON_THE_PLANET, ...KITS_ON_THE_PLANET])];

@@ -10,6 +10,8 @@
 import * as THREE from 'three';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { versioned } from '../game/asset_version';
+import { loadPlanetRecords, PLANET_ROOT, type PlanetRecords } from '../game/planet_records';
 import type { Vec3 } from '../sim/geo';
 import { duskTree } from './planet_dusk';
 import {
@@ -465,6 +467,20 @@ export function standInGroundPlanet(): PlanetGround {
   return groundOf(standInModel(), standInLayout(), (p) => standInHeight(unit(p)), true);
 }
 
+// The battle royale's terrain in one call: what a host hands the
+// presentation (game/boot.ts) where a 5v5 hands the Star Orchard's. The
+// light model on a coarse pointer, like the Orchard's quality rule.
+export async function loadPlanetTerrain(
+  opts: { light?: boolean; records?: PlanetRecords } = {},
+): Promise<RenderTerrain> {
+  const light =
+    opts.light ??
+    (typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(pointer: coarse)').matches);
+  return planetTerrain(await loadPlanetGround({ ...opts, light }));
+}
+
 // A planet ground as the renderer's terrain. Its own heightAt is never
 // called: on the planet the renderer reads heights through its chart.
 export function planetTerrain(planet: PlanetGround): RenderTerrain {
@@ -490,7 +506,7 @@ export function planetTerrain(planet: PlanetGround): RenderTerrain {
 
 async function fetchBytes(url: string): Promise<ArrayBuffer | null> {
   try {
-    const res = await fetch(url);
+    const res = await fetch(versioned(url));
     if (!res.ok) return null;
     const type = res.headers.get('content-type') ?? '';
     // The dev server answers a missing file with the page itself.
@@ -501,23 +517,21 @@ async function fetchBytes(url: string): Promise<ArrayBuffer | null> {
   }
 }
 
-// Loads the shipped Wanderseed from `base`, or builds the stand-in when
-// the export is not there: the light model on a phone (`light`).
+// Loads the shipped Wanderseed, or builds the stand-in when the export is
+// not there: the light model on a phone (`light`). The layout and the grid
+// come through the page's one copy of the records (game/planet_records.ts),
+// the sim's own, unless a host hands them over.
 export async function loadPlanetGround(
-  base = '/map/planet/',
-  opts: { light?: boolean } = {},
+  opts: { light?: boolean; records?: PlanetRecords } = {},
 ): Promise<PlanetGround> {
-  const [layoutBytes, navBytes] = await Promise.all([
-    fetchBytes(`${base}layout.json`),
-    fetchBytes(`${base}navigation.bin`),
-  ]);
+  const records = opts.records ?? (await loadPlanetRecords().catch(() => null));
   const modelBytes =
-    (opts.light ? await fetchBytes(`${base}planet-light.glb`) : null) ??
-    (await fetchBytes(`${base}planet.glb`));
-  if (!layoutBytes || !navBytes) return standInGroundPlanet();
+    (opts.light ? await fetchBytes(`${PLANET_ROOT}planet-light.glb`) : null) ??
+    (await fetchBytes(`${PLANET_ROOT}planet.glb`));
+  if (!records) return standInGroundPlanet();
   try {
-    const layout = parseLayout(JSON.parse(new TextDecoder().decode(layoutBytes)));
-    const heights = new PlanetHeights(new Int16Array(navBytes));
+    const layout = parseLayout(records.layout);
+    const heights = new PlanetHeights(new Int16Array(records.navigation));
     if (!modelBytes) {
       return groundOf(
         gridModel(heights, layout),

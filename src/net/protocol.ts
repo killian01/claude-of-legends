@@ -12,8 +12,9 @@ import type { FavorStacks } from '../sim/favors';
 import type { ForgedDisplay } from '../sim/forge/display';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { LanePreference } from '../sim/playbook/types';
-import type { AbilityKey, ScoreRow, TeamId } from '../sim/types';
+import type { AbilityKey, ScoreRow, TeamId, Vec2 } from '../sim/types';
 import type { StructureMeta, UnitKind } from '../sim/unit';
+import type { RoyaleClientMsg, RoyaleResult, RoyaleVariant, SnapRoyale } from './royale_wire';
 
 // The sealed asset pointers a match carries per forged champion, so every
 // client in it can load the generated model: the model path is relative to
@@ -97,9 +98,8 @@ export type ClientMsg =
   // champion's prediction (src/net/self_predict.ts): the server tells which
   // it has applied (SelfSnap ack), so the client knows which of its orders
   // the newest state already holds. Never recorded in a replay.
-  // y: on the planet a point is a sphere point (ADR 0029) and carries y
-  // beside x and z; a point on the plane has none, so the 5v5's orders
-  // keep their shape.
+  // y: a point on the planet's sphere carries it beside x and z (ADR 0029);
+  // a point on the plane never does.
   | { t: 'move'; x: number; z: number; y?: number; n?: number }
   | { t: 'attack'; targetId: number; n?: number }
   | { t: 'attack_move'; x: number; z: number; y?: number; n?: number }
@@ -111,7 +111,10 @@ export type ClientMsg =
   | { t: 'sell'; slot: number }
   | { t: 'skill'; key: AbilityKey }
   | { t: 'chat'; text: string }
-  | { t: 'ping'; x: number; z: number };
+  | { t: 'ping'; x: number; z: number }
+  // The battle royale's own (src/net/royale_wire.ts, ADR 0031): entering
+  // one, and the landing point picked during the drop.
+  | RoyaleClientMsg;
 
 // Lite fields ride every snapshot; the optional identity block only on the
 // first snapshot after the unit (re)enters this client's vision.
@@ -119,6 +122,9 @@ export interface SnapUnit {
   i: number;
   x: number;
   z: number;
+  // On the planet's sphere (ADR 0029): the third coordinate. Never on the
+  // plane, so the Star Orchard's records keep their shape.
+  y?: number;
   h: number;
   m: number;
   l?: number;
@@ -137,7 +143,7 @@ export interface SnapUnit {
   // Pending windup cast: ability key, aim point, and resolve time. Rides
   // every snapshot while the champion charges, so BOTH teams see the
   // telegraph (the counterplay window is only fair if it is visible).
-  w?: { k: AbilityKey; x: number; z: number; u: number };
+  w?: { k: AbilityKey; x: number; z: number; y?: number; u: number };
   // The active play of an ALLIED bot (ADR 0013), for the overlay. Never
   // sent for the other team: a bot's decisions are its own team's business.
   p?: string;
@@ -153,6 +159,11 @@ export interface SnapUnit {
   asc?: 1;
   // A camp body's kind (content/camps.ts), in the identity block.
   ck?: CampKind;
+  // The battle royale (ADR 0031), identity block only: the seat's name,
+  // a person's or an invented one, and 1 when a bot holds the seat. Sent
+  // again whenever the seat changes hands (a drop in, a person leaving).
+  n?: string;
+  b?: 1;
 }
 
 // A ring's clock on the wire (ADR 0022): the ring, the live creature's id
@@ -174,6 +185,8 @@ export interface SnapMobile {
   i: number;
   x: number;
   z: number;
+  // On the planet's sphere, like a unit's.
+  y?: number;
   r: number;
   t: TeamId;
   // Cosmetic ability tag ('championId_KEY' or 'sigil_id'); absent for auto
@@ -196,6 +209,9 @@ export interface SnapWall {
   z1: number;
   x2: number;
   z2: number;
+  // On the planet's sphere, each endpoint's third coordinate.
+  y1?: number;
+  y2?: number;
   t: TeamId;
   u: number;
 }
@@ -257,7 +273,19 @@ export interface SelfSnap {
 }
 
 export type SnapEvent =
-  | { e: 'death'; unitId: number; killerId: number }
+  // In a battle royale a champion's death carries the names the kill feed
+  // shows, the victim's and the killer's when a champion landed it, and
+  // which of them a bot holds: the feed names champions the recipient has
+  // never seen.
+  | {
+      e: 'death';
+      unitId: number;
+      killerId: number;
+      n?: string;
+      kn?: string;
+      vb?: 1;
+      kb?: 1;
+    }
   | { e: 'gold'; amount: number }
   // The ability key rides along so clients can pick per-spell cast visuals
   // and sounds; sigil casts relay without one.
@@ -267,7 +295,37 @@ export type SnapEvent =
   | { e: 'dmg'; targetId: number; amount: number }
   // A visible unit fired an auto-attack; drives swing animations.
   | { e: 'atk'; unitId: number; targetId: number }
-  | { e: 'victory'; team: TeamId };
+  | { e: 'victory'; team: TeamId }
+  | RoyaleSnapEvent;
+
+// The battle royale's events on the wire, named as the sim names them
+// (src/sim/royale/types.ts RoyaleEvent, server/royale_snapshot.ts): a landing, a piece of loot, a
+// cache opened and a launch pad taken, when the recipient's champion did
+// it or the recipient sees who did; and to everyone, the Dusk's phase, a
+// champion out for good with its place (One life), the score leader
+// (Respawn), and the end. Names ride along for the kill feed.
+export type RoyaleSnapEvent =
+  | { e: 'royale_land'; unitId: number }
+  | { e: 'royale_loot'; unitId: number; itemId: string; source: 'cache' | 'camp' | 'takedown' }
+  | { e: 'royale_cache'; unitId: number; cacheId: number }
+  | { e: 'royale_pad'; unitId: number; padId: number }
+  | { e: 'royale_dusk'; phase: number }
+  | {
+      e: 'royale_out';
+      unitId: number;
+      killerId: number;
+      place: number;
+      n: string;
+      kn: string | null;
+      vb?: 1;
+      kb?: 1;
+    }
+  | { e: 'royale_leader'; unitId: number; n: string; b?: 1 }
+  | { e: 'royale_end'; winnerId: number | null; n: string | null; b?: 1 };
+
+// A scoreboard line as the wire carries it: the sim's, the seat's player
+// filled in by the server, and in a battle royale 1 when a bot holds it.
+export type WireScoreRow = ScoreRow & { b?: 1 };
 
 export interface SelectPlayer {
   name: string;
@@ -291,6 +349,9 @@ export interface LobbyPlayer {
 // Why a seat earned points (server/points.ts, ADR 0027): a minion or camp
 // last hit, a champion kill or an assist, a tower the team took, a ring
 // creature or the Warden, an Ascendant, the win, or a loss played through.
+// The battle royale adds (server/royale_points.ts, ADR 0031): a cache
+// opened, and the end, One life's last standing, top five and top ten,
+// Respawn's best score.
 export type PointsReason =
   | 'last_hit'
   | 'kill'
@@ -299,7 +360,12 @@ export type PointsReason =
   | 'creature'
   | 'ascendant'
   | 'victory'
-  | 'finish';
+  | 'finish'
+  | 'cache'
+  | 'last_standing'
+  | 'top_five'
+  | 'top_ten'
+  | 'best_score';
 
 export type ServerMsg =
   // The account this socket belongs to, so the client can show who it is
@@ -347,6 +413,10 @@ export type ServerMsg =
       dropIn?: true;
       // The match's team count (ADR 0030); absent for the 5v5's two.
       teams?: number;
+      // A battle royale on the Wanderseed (ADR 0031): its variant and how
+      // many seats it holds. A new one on the same socket (Respawn's next
+      // match) starts the mirror over.
+      royale?: { v: RoyaleVariant; seats: number };
       forged?: ForgedChampionDef[];
       forgedAssets?: Record<string, ForgedMatchAssets>;
     }
@@ -369,8 +439,11 @@ export type ServerMsg =
       objPit?: number;
       // The rings' clocks (ADR 0022); absent on a map without rings.
       rings?: SnapRing[];
+      // The battle royale's state for this recipient (ADR 0031), every
+      // snapshot of one; absent in the 5v5.
+      royale?: SnapRoyale;
     }
-  | { t: 'score'; rows: ScoreRow[] }
+  | { t: 'score'; rows: WireScoreRow[] }
   | { t: 'chat'; from: string; team: TeamId; text: string }
   | { t: 'ping'; from: string; team: TeamId; x: number; z: number }
   // A teammate's connection dropped; a bot policy took the seat over.
@@ -398,6 +471,8 @@ export type ServerMsg =
   // Points this player's seat just banked on the ladder (ADR 0027), sent
   // to that player alone: what landed, the ladder total it makes, and why.
   | { t: 'points'; delta: number; total: number; reason: PointsReason }
+  // A battle royale's end for this person, or their elimination (One life).
+  | RoyaleResult
   | { t: 'match_end' }
   | { t: 'error'; message: string };
 
@@ -449,4 +524,16 @@ export function isSelectMsg(msg: { t: string }): boolean {
 
 export function isFiniteVec(x: unknown, z: unknown): boolean {
   return typeof x === 'number' && Number.isFinite(x) && typeof z === 'number' && Number.isFinite(z);
+}
+
+// A ground point off the wire: x and z, and y beside them when the client
+// sent one (a point on the planet's sphere, ADR 0029); null when any
+// coordinate given is not a finite number.
+export function wirePoint(x: unknown, z: unknown, y?: unknown): Vec2 | null {
+  if (!isFiniteVec(x, z)) return null;
+  const px = x as number;
+  const pz = z as number;
+  if (y === undefined) return { x: px, z: pz };
+  if (typeof y !== 'number' || !Number.isFinite(y)) return null;
+  return { x: px, y, z: pz };
 }

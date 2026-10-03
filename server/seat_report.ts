@@ -8,6 +8,7 @@
 // country Cloudflare names for the connection and whether the browser said
 // it was a phone. Pure, so a test reads every field without a socket.
 
+import type { RoyaleVariant } from '../src/net/royale_wire';
 import { DT } from '../src/sim/types';
 import type { SeatStats } from './match';
 
@@ -18,13 +19,17 @@ export const SEAT_REPORT_VERSION = 1;
 // 'closed'), the AFK sweep ('idle'), or the match ending with the seat
 // still held ('ended').
 export type SeatEnd = 'menu' | 'closed' | 'idle' | 'ended';
-export type SeatQueue = 'public' | 'lobby' | 'forge';
+// 'royale': a battle royale seat (server/royale_service.ts), its variant
+// beside it.
+export type SeatQueue = 'public' | 'lobby' | 'forge' | 'royale';
 
 export interface SeatReport {
   v: number;
   at: number;
   how: SeatEnd;
   queue: SeatQueue;
+  // A battle royale's variant (ADR 0031); absent on every other seat.
+  variant?: RoyaleVariant;
   guest: boolean;
   dropIn: boolean;
   mobile: boolean;
@@ -83,6 +88,7 @@ export interface SeatReportInput {
   at: number;
   how: SeatEnd;
   queue: SeatQueue;
+  variant?: RoyaleVariant;
   guest: boolean;
   dropIn: boolean;
   mobile: boolean;
@@ -101,6 +107,7 @@ export function buildSeatReport(i: SeatReportInput): SeatReport {
     at: i.at,
     how: i.how,
     queue: i.queue,
+    ...(i.variant !== undefined ? { variant: i.variant } : {}),
     guest: i.guest,
     dropIn: i.dropIn,
     mobile: i.mobile,

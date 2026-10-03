@@ -288,7 +288,7 @@ export class PlanetDemoWorld implements IWorld {
     return null;
   }
 
-  royale(): SnapRoyale {
+  royaleView(): SnapRoyale & { caches: SnapCache[] } {
     const dropping = this.time < this.dropEndsAt;
     const play = Math.max(0, this.time - Math.max(this.dropEndsAt, 5));
     const r = Math.max(24, this.duskFrom - play * 0.35);
@@ -327,7 +327,12 @@ export class PlanetDemoWorld implements IWorld {
     };
   }
 
-  pickDrop(point: Vec3): void {
+  seat(unitId: number) {
+    const name = this.names.get(unitId);
+    return name === undefined ? null : { name, bot: unitId !== this.selfId };
+  }
+
+  pickDrop(_unitId: number, point: Vec3): void {
     if (this.time >= this.dropEndsAt) return;
     this.ownPick = settle(point, R) as Vec3;
   }

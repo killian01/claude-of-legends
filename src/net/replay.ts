@@ -7,10 +7,16 @@
 
 import { parseCoachOrder } from '../sim/coach';
 import { attachBot, botPolicy } from '../sim/content/bots';
+import { attachRoyaleBot, royaleBotPolicy } from '../sim/content/bots/royale';
 import { contentMatches } from '../sim/content/fingerprint';
 import type { StarOrchard } from '../sim/content/star_orchard';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
+import type { Ground } from '../sim/ground';
+import { NavGrid } from '../sim/navgrid';
 import type { LanePreference, PlaybookDef } from '../sim/playbook/types';
+import { royaleSeatSkills } from '../sim/royale/fill';
+import { type PlanetLayoutRecord, planetGameMap, royaleLayoutOf } from '../sim/royale/planet_map';
+import type { RoyaleVariant } from '../sim/royale/types';
 import { Sim } from '../sim/sim';
 import { TerrainNavGrid } from '../sim/terrain_nav';
 import type { TeamId } from '../sim/types';
@@ -123,6 +129,10 @@ export interface ReplayRecord {
   // forged id means nothing outside its match, so the replay carries the
   // data, not the reference. Absent for roster-only matches.
   forged?: ForgedChampionDef[];
+  // A battle royale on the Wanderseed (ADR 0031), built by buildRoyaleSim
+  // from the same seed and picks (each pick's team its seat index), absent
+  // on every 5v5. Additive: a record without it is a 5v5 as it always was.
+  royale?: { variant: RoyaleVariant; guestsOnly?: boolean };
 }
 
 // A bare Sim on the Star Orchard: a fresh walkability grid over the shared
@@ -164,24 +174,88 @@ export function buildMatchSim(
   return { sim, unitIds };
 }
 
+// The Wanderseed as a host has read it (ADR 0031): the layout record and a
+// maker of its ground, the SphereGround over a fresh decode of the planet's
+// grid (sphere_nav.ts): a match's walls block cells, so no two sims share
+// one.
+export interface RoyalePlanet {
+  layout: PlanetLayoutRecord;
+  ground: () => Ground;
+}
+
+export interface RoyaleBuildOptions {
+  // Only Guests among the people: the bots play softer (the server knows).
+  guestsOnly?: boolean;
+}
+
+// The one sim construction for a battle royale, live and replayed alike,
+// beside buildMatchSim: one team per seat (ADR 0030), the planet's map and
+// ground, the mode's rules, every seat seated in pick order (team = the
+// seat's index): no gold, level 3 with Q, W and E, its build fixed, its bot
+// skill dealt from the seed; the house seats' bots attached. Seats that
+// name no bot are people, driven by their commands.
+export function buildRoyaleSim(
+  planet: RoyalePlanet,
+  seed: number,
+  picks: readonly ReplayPick[],
+  variant: RoyaleVariant,
+  options: RoyaleBuildOptions = {},
+): { sim: Sim; unitIds: number[] } {
+  const layout = royaleLayoutOf(planet.layout);
+  const sim = new Sim(seed, {
+    map: planetGameMap(planet.layout),
+    // The 5v5's own systems never run here; their grid is a token.
+    nav: new NavGrid(1, [], 0),
+    ground: planet.ground(),
+    teamCount: Math.max(1, picks.length),
+    separation: ['minion', 'champion'],
+    royale: { variant, layout },
+  });
+  const mode = sim.royaleMode!;
+  const skills = royaleSeatSkills(seed, picks.length, options.guestsOnly === true);
+  // Where everyone waits while the drop runs: no system reads it.
+  const waiting = layout.regions[0]?.heart ?? { x: layout.radius, y: 0, z: 0 };
+  const unitIds: number[] = [];
+  picks.forEach((p, i) => {
+    const unit = sim.addChampion(i, { ...waiting }, p.championId, p.skin ?? 0);
+    unit.sigils = [...p.sigils];
+    mode.seat(unit, p.playbook?.kit?.build, skills[i]);
+    unitIds.push(unit.id);
+    if (p.bot !== undefined || p.playbook) attachRoyaleBot(sim, unit.id);
+  });
+  return { sim, unitIds };
+}
+
 const ABILITY_KEYS = new Set(['Q', 'W', 'E', 'R']);
+
+// The third coordinate a command may carry on the planet (ADR 0029):
+// undefined when absent, null when it is there and not a number.
+function thirdOf(msg: unknown): number | undefined | null {
+  const y = (msg as { y?: unknown }).y;
+  if (y === undefined) return undefined;
+  return typeof y === 'number' && Number.isFinite(y) ? y : null;
+}
 
 // The one validated command application path, live and replayed alike.
 // Validation is deterministic given identical sim state, so recording the
 // raw message is enough: an invalid command no-ops identically both times.
 export function applySimCommand(sim: Sim, team: TeamId, unitId: number, msg: ClientMsg): void {
   switch (msg.t) {
-    case 'move':
-      if (isFiniteVec(msg.x, msg.z)) sim.orderMove(unitId, msg.x, msg.z);
+    case 'move': {
+      const y = thirdOf(msg);
+      if (isFiniteVec(msg.x, msg.z) && y !== null) sim.orderMove(unitId, msg.x, msg.z, y);
       break;
+    }
     case 'attack':
       if (typeof msg.targetId === 'number' && sim.isVisible(team, msg.targetId)) {
         sim.orderAttack(unitId, msg.targetId);
       }
       break;
-    case 'attack_move':
-      if (isFiniteVec(msg.x, msg.z)) sim.orderAttackMove(unitId, msg.x, msg.z);
+    case 'attack_move': {
+      const y = thirdOf(msg);
+      if (isFiniteVec(msg.x, msg.z) && y !== null) sim.orderAttackMove(unitId, msg.x, msg.z, y);
       break;
+    }
     case 'stop':
       sim.orderStop(unitId);
       break;
@@ -191,16 +265,33 @@ export function applySimCommand(sim: Sim, team: TeamId, unitId: number, msg: Cli
     case 'recall':
       sim.startRecall(unitId);
       break;
-    case 'cast':
-      if (typeof msg.key === 'string' && ABILITY_KEYS.has(msg.key) && isFiniteVec(msg.x, msg.z)) {
-        sim.castAbility(unitId, msg.key, { x: msg.x, z: msg.z });
+    case 'cast': {
+      const y = thirdOf(msg);
+      if (
+        typeof msg.key === 'string' &&
+        ABILITY_KEYS.has(msg.key) &&
+        isFiniteVec(msg.x, msg.z) &&
+        y !== null
+      ) {
+        sim.castAbility(
+          unitId,
+          msg.key,
+          y === undefined ? { x: msg.x, z: msg.z } : { x: msg.x, y, z: msg.z },
+        );
       }
       break;
-    case 'sigil':
-      if ((msg.slot === 0 || msg.slot === 1) && isFiniteVec(msg.x, msg.z)) {
-        sim.castSigil(unitId, msg.slot, { x: msg.x, z: msg.z });
+    }
+    case 'sigil': {
+      const y = thirdOf(msg);
+      if ((msg.slot === 0 || msg.slot === 1) && isFiniteVec(msg.x, msg.z) && y !== null) {
+        sim.castSigil(
+          unitId,
+          msg.slot,
+          y === undefined ? { x: msg.x, z: msg.z } : { x: msg.x, y, z: msg.z },
+        );
       }
       break;
+    }
     case 'buy':
       if (typeof msg.itemId === 'string') sim.buyItem(unitId, msg.itemId);
       break;
@@ -219,8 +310,23 @@ export function applySimCommand(sim: Sim, team: TeamId, unitId: number, msg: Cli
       sim.setCoachOrder(unitId, order);
       break;
     }
-    default:
+    default: {
+      // The battle royale's landing pick (royale_wire.ts RoyaleClientMsg),
+      // recorded and replayed like any command.
+      const m = msg as { t: string; x?: unknown; y?: unknown; z?: unknown };
+      if (
+        m.t === 'drop' &&
+        typeof m.x === 'number' &&
+        typeof m.y === 'number' &&
+        typeof m.z === 'number' &&
+        Number.isFinite(m.x) &&
+        Number.isFinite(m.y) &&
+        Number.isFinite(m.z)
+      ) {
+        sim.pickDrop(unitId, { x: m.x, y: m.y, z: m.z });
+      }
       break;
+    }
   }
 }
 
@@ -239,7 +345,9 @@ export function applyReplayEvent(
   // The seat's default bot, as the live stand-in (server/match.ts): the
   // Jungler on a seat that asked for the forest, the Laner elsewhere.
   if (ev.e === 'bot_on') {
-    attachBot(sim, ev.u, undefined);
+    // In a battle royale the stand-in is the seat's royale bot.
+    if (sim.royaleMode) attachRoyaleBot(sim, ev.u);
+    else attachBot(sim, ev.u, undefined);
     return;
   }
   sim.detachPolicy(ev.u);
@@ -268,17 +376,21 @@ export function restorePolicies(
   picks.forEach((p, i) => {
     const unitId = unitIds[i];
     if (unitId === undefined) return;
-    const policy = p.playbook
-      ? sim.policyForPlaybook(p.playbook)
-      : p.bot !== undefined
-        ? botPolicy(sim, p.bot, unitId)
-        : null;
+    const policy = sim.royaleMode
+      ? p.bot !== undefined || p.playbook
+        ? royaleBotPolicy(sim, unitId)
+        : null
+      : p.playbook
+        ? sim.policyForPlaybook(p.playbook)
+        : p.bot !== undefined
+          ? botPolicy(sim, p.bot, unitId)
+          : null;
     if (policy) sim.attachPolicy(unitId, policy);
   });
   for (const ev of events) {
     if (ev.k >= tick) break;
     if (ev.e === 'bot_on') {
-      const policy = botPolicy(sim, undefined, ev.u);
+      const policy = sim.royaleMode ? royaleBotPolicy(sim, ev.u) : botPolicy(sim, undefined, ev.u);
       if (policy) sim.attachPolicy(ev.u, policy);
     } else if (ev.e === 'bot_off') {
       sim.policies.delete(ev.u);

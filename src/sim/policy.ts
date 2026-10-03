@@ -12,6 +12,7 @@ import type { CampKind } from './content/camps';
 import type { ChampionRole } from './content/champions';
 import type { AspectId } from './content/rings';
 import type { Rng } from './rng';
+import type { DuskState, RoyaleStage, RoyaleVariant } from './royale/types';
 import type { AbilityKey, TeamId } from './types';
 import type { UnitKind } from './unit';
 
@@ -31,6 +32,9 @@ export interface ObsUnit {
   friendly: boolean;
   x: number;
   z: number;
+  // On the planet's sphere (ADR 0029), the third coordinate (additive v0
+  // field, absent on the plane): a point is {x, y, z} on the sphere.
+  y?: number;
   hpFrac: number;
   radius: number;
   // Health in points and its cap (additive v0 fields, plan-bots phase 16):
@@ -44,12 +48,14 @@ export interface ObsUnit {
   // (additive v0 field). x/z is the LANDING center (the caster itself for
   // bursts and cones), resolveAt the sim time it lands. Fairness mirror of
   // the on-screen telegraph: whoever sees the caster sees the charge.
-  windup?: { key: AbilityKey; x: number; z: number; resolveAt: number };
+  windup?: { key: AbilityKey; x: number; z: number; y?: number; resolveAt: number };
   // World-frame velocity in units per second, the motion a viewer sees
   // (additive v0 fields): the dash in flight, else the step toward the next
   // waypoint at effective speed, else zero. Predictive aim reads this.
   vx?: number;
   vz?: number;
+  // On the sphere, the velocity's third component (additive v0 field).
+  vy?: number;
   // Champions only: visible statuses, absent when there are none (additive
   // v0 field). A policy that ignores them keeps its old behavior.
   statuses?: readonly ObsStatus[];
@@ -73,6 +79,10 @@ export interface ObsProjectile {
   z: number;
   dirX: number;
   dirZ: number;
+  // On the sphere (additive v0 fields): the position's and the heading's
+  // third components, the heading a tangent at the bolt.
+  y?: number;
+  dirY?: number;
   speed: number;
   radius: number;
   friendly: boolean;
@@ -84,6 +94,8 @@ export interface ObsProjectile {
 export interface ObsZone {
   x: number;
   z: number;
+  // On the sphere (additive v0 field).
+  y?: number;
   radius: number;
   friendly: boolean;
   detonateAt: number | null;
@@ -132,6 +144,8 @@ export interface ObsSelf {
   team: TeamId;
   x: number;
   z: number;
+  // On the sphere (additive v0 field).
+  y?: number;
   hp: number;
   maxHp: number;
   hpFrac: number;
@@ -187,6 +201,54 @@ export interface ObsSelf {
   // The owner's live coach order (ADR 0013; additive v0 field): what the
   // person coaching this seat asked for, null or absent when nothing is.
   coachOrder?: CoachOrder | null;
+  // Where the current walk ends, null when standing (additive v0 field):
+  // the marker a person sees under their own last click.
+  dest?: { x: number; z: number; y?: number } | null;
+  // Speed right now, slows and haste included (additive v0 field): what a
+  // person reads off their own champion's stride.
+  moveSpeed?: number;
+}
+
+// A cache as everyone's minimap shows it (the battle royale, ADR 0031):
+// still standing, where, golden or not.
+export interface ObsCache {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  golden: boolean;
+}
+
+// The battle royale as any player knows it (additive v0 block, present only
+// in a battle royale): the stage and its clocks, the Dusk (drawn on the
+// ground and the globe for everyone), the caches still standing, the
+// pads, and the seat's own share: its landing pick, the cache it is
+// opening, its flight, its score, and the leader while shown. Fog-honest:
+// nothing here is about another champion's whereabouts except the leader
+// at the moments the globe shows them to all.
+export interface ObsRoyale {
+  variant: RoyaleVariant;
+  stage: RoyaleStage;
+  dropEndsAt: number;
+  endsAt: number;
+  dusk: DuskState;
+  caches: readonly ObsCache[];
+  pads: readonly {
+    id: number;
+    at: { x: number; y: number; z: number };
+    to: { x: number; y: number; z: number };
+  }[];
+  // The seat's own landing pick during the drop, null before it picks.
+  drop: { x: number; y: number; z: number } | null;
+  // The cache this seat is opening and since when, null when none.
+  opening: { cacheId: number; since: number } | null;
+  // True while a launch pad's flight carries this seat.
+  flying: boolean;
+  score: number;
+  // Champions still in (One life) or in the match (Respawn).
+  alive: number;
+  // Respawn: the score leader, and where they stand while shown.
+  leader: { id: number; score: number; at?: { x: number; y: number; z: number } } | null;
 }
 
 // A ring's clock as the team reads it (additive v0 block, ADR 0022): the
@@ -221,6 +283,8 @@ export interface ObsCreature {
 export interface ObsCamp {
   x: number;
   z: number;
+  // On the sphere (additive v0 field).
+  y?: number;
   kind: CampKind;
   seenAt: number | null;
   up: boolean | null;
@@ -268,14 +332,17 @@ export interface Observation {
   // Seconds enemy champions were seen in each lane over the last minute
   // (additive v0 field): how busy each lane is, for a split push.
   laneActivity?: Readonly<Record<'top' | 'mid' | 'bot', number>>;
+  // The battle royale (additive v0 block; see ObsRoyale), absent elsewhere.
+  royale?: ObsRoyale;
 }
 
 export type Action =
   | { kind: 'noop' }
-  | { kind: 'move'; x: number; z: number }
+  // On the sphere a point carries y as well (additive v0 field).
+  | { kind: 'move'; x: number; z: number; y?: number }
   | { kind: 'attack'; targetId: number }
-  | { kind: 'cast'; key: AbilityKey; x: number; z: number }
-  | { kind: 'sigil'; slot: number; x: number; z: number }
+  | { kind: 'cast'; key: AbilityKey; x: number; z: number; y?: number }
+  | { kind: 'sigil'; slot: number; x: number; z: number; y?: number }
   | { kind: 'buy'; itemId: string }
   // Spends one skill point (free action, outside the decision budget).
   | { kind: 'level'; key: AbilityKey }
@@ -288,6 +355,9 @@ export type Action =
   // Stops and holds (additive v0 action, plan-bots phase 16): the same S
   // humans press, opting out of idle defense until the next order. What a
   // wave freeze stands on. An intention like move, outside the budget.
-  | { kind: 'stop' };
+  | { kind: 'stop' }
+  // The battle royale's landing pick during the drop (additive v0 action):
+  // the same pick a person makes on the globe (Sim.pickDrop).
+  | { kind: 'drop'; x: number; y: number; z: number };
 
 export type Policy = (obs: Observation, rng: Rng) => Action;
