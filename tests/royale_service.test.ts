@@ -16,12 +16,12 @@ import {
 } from '../server/royale_service';
 import type { SeatReport } from '../server/seat_report';
 import type { ClientMsg, ServerMsg } from '../src/net/protocol';
-import { CALM_S, DROP_S, PLAY_S, ROYALE_SEATS } from '../src/sim/royale/types';
+import { CALM_S, DROP_S, JOIN_UNTIL_END_S, PLAY_S, ROYALE_SEATS } from '../src/sim/royale/types';
 import { fakeFactory, near } from './royale_fake';
 
 type Msg<T extends ServerMsg['t']> = Extract<ServerMsg, { t: T }>;
 
-function harness(opts: { capacity?: number; open?: boolean } = {}) {
+function harness(opts: { capacity?: number; open?: boolean; standing?: boolean } = {}) {
   const sent: { to: number; msg: ServerMsg }[] = [];
   const clients = new Map<number, RoyaleClient>();
   const seats: SeatReport[] = [];
@@ -55,6 +55,7 @@ function harness(opts: { capacity?: number; open?: boolean } = {}) {
     saveReplay: (id, record) => replays.set(id, record),
     now: () => now,
     log: () => undefined,
+    standing: opts.standing === true,
   });
   const connect = (id: number, name: string, guest = false): RoyaleClient => {
     const c: RoyaleClient = {
@@ -403,5 +404,67 @@ describe('the seat changing hands on the wire', () => {
     const again = h.last(1, 'snap')!.units.find((u) => u.i === other.id)!;
     expect(again).toMatchObject({ k: 'champion', n: 'bob' });
     expect(again.b).toBeUndefined();
+  });
+});
+
+describe('the match kept running for the next visitor', () => {
+  it('starts none by itself unless the server asks for it', () => {
+    const h = harness();
+    h.step(5);
+    expect(h.service.matches.size).toBe(0);
+    expect(h.service.presence()).toEqual({ playing: 0, joinable: false, endsInS: null });
+  });
+
+  it('runs a Respawn match with the house bots in every seat, and a visitor drops into it', () => {
+    const h = harness({ standing: true });
+    h.step(1);
+    expect(h.service.matches.size).toBe(1);
+    const [entry] = [...h.service.matches.values()];
+    expect(entry!.match.variant).toBe('respawn');
+    expect(entry!.match.players.size).toBe(0);
+    // The landing's line: a match to drop into and its clock; nobody is
+    // counted, the house bots never are.
+    const p = h.service.presence();
+    expect(p.playing).toBe(0);
+    expect(p.joinable).toBe(true);
+    expect(p.endsInS).toBeGreaterThan(PLAY_S - 5);
+    h.runTo(DROP_S + 30);
+    const a = h.connect(1, 'alice', true);
+    h.enter(a);
+    expect(h.service.matches.size).toBe(1);
+    expect(h.last(1, 'match_start')?.dropIn).toBe(true);
+    expect(h.service.presence().playing).toBe(1);
+  });
+
+  it('plays on when the visitor leaves, and keeps no replay of a match nobody played', () => {
+    const h = harness({ standing: true });
+    h.step(1);
+    const a = h.connect(1, 'alice', true);
+    h.enter(a);
+    h.say(a, { t: 'leave' });
+    h.advance(ROYALE_REJOIN_GRACE_MS + 1000);
+    h.step(2);
+    expect(h.service.matches.size).toBe(1);
+    expect([...h.service.matches.values()][0]!.match.players.size).toBe(0);
+    // A match the bots played alone, to its end: no replay, and the next.
+    const b = harness({ standing: true });
+    b.step(1);
+    const first = [...b.service.matches.keys()][0]!;
+    b.runTo(DROP_S + PLAY_S + 1);
+    b.step(2);
+    expect(b.replays.size).toBe(0);
+    expect(b.service.matches.has(first)).toBe(false);
+    expect(b.service.matches.size).toBe(1);
+  });
+
+  it('opens the next one when the running one stops taking people', () => {
+    const h = harness({ standing: true });
+    h.step(1);
+    const first = [...h.service.matches.keys()][0]!;
+    h.runTo(DROP_S + PLAY_S - JOIN_UNTIL_END_S + 1);
+    h.step(1);
+    expect(h.service.matches.size).toBe(2);
+    expect(h.service.matches.has(first)).toBe(true);
+    expect(h.service.presence().joinable).toBe(true);
   });
 });

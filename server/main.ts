@@ -1057,6 +1057,7 @@ const royale = new RoyaleService({
   },
   now: () => Date.now(),
   log: (line) => console.log(line),
+  standing: true,
 });
 
 // A player leaves a live match FOR GOOD, by choice or by the AFK sweep:
