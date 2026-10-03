@@ -24,7 +24,7 @@ import type { CombatCtx } from '../sim_context';
 import { DT } from '../types';
 import type { Unit } from '../unit';
 import { drawCaches, openingBy, stepCaches } from './caches';
-import { normalizePick, resolveLandings } from './drop';
+import { escortLandings, normalizePick, resolveLandings } from './drop';
 import { type DuskSchedule, drawDusk, duskAt, insideCap } from './dusk';
 import type { RoyaleGround, RoyaleLayout } from './layout';
 import { creatureXp, grantXp, landingLevels, takedownXp } from './levels';
@@ -90,6 +90,9 @@ export function royaleGround(ground: Ground): RoyaleGround {
     },
   };
 }
+
+// The skills a person's company is drawn from, in order.
+const ESCORT_ORDER: readonly RoyaleSkillId[] = ['gentle', 'normal', 'strong'];
 
 export class RoyaleMode {
   readonly variant: RoyaleVariant;
@@ -194,11 +197,19 @@ export class RoyaleMode {
     sim.pushEvent(e);
   }
 
-  // The drop's tick: at its end every seat lands, in id order.
+  // The drop's tick: at its end every seat lands, in id order, and house
+  // bots, the gentle first, come down beside each person (a seat no
+  // policy plays).
   stepDrop(sim: Sim): void {
     if (sim.time + 1e-9 < this.state.dropEndsAt) return;
     const seats = this.champions(sim).map((u) => u.id);
     const at = resolveLandings(seats, this.state.drops, sim.rng, this.layout, this.ground);
+    const people = seats.filter((id) => !sim.policies.has(id));
+    const gentleFirst = (id: number): number => ESCORT_ORDER.indexOf(this.skillOf(id));
+    const bots = seats
+      .filter((id) => sim.policies.has(id))
+      .sort((a, b) => gentleFirst(a) - gentleFirst(b) || a - b);
+    escortLandings(people, bots, at, sim.rng, this.layout, this.ground);
     for (const id of seats) {
       const u = sim.units.get(id)!;
       const p = at.get(id);

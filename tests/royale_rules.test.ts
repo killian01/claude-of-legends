@@ -14,7 +14,9 @@ import { unrootedMoveSpeed } from '../src/sim/combat/status';
 import { DUSK_PHASES } from '../src/sim/content/dusk';
 import { basis, dirTo, dist, offset, type Vec3 } from '../src/sim/geo';
 import { buildObservation } from '../src/sim/observe';
+import { ESCORT_MAX_M, ESCORTS, snapLanding } from '../src/sim/royale/drop';
 import { insideCap } from '../src/sim/royale/dusk';
+import { royaleGround } from '../src/sim/royale/mode';
 import {
   PLANET_CLOSE_SIGHT_M,
   planetGameMap,
@@ -127,6 +129,41 @@ describe('the rules of play', () => {
     expect(sim.levelAbility(u.id, 'Q')).toBe(false);
     sim.startRecall(u.id);
     expect(u.statuses.some((s) => s.kind === 'recall')).toBe(false);
+  });
+
+  it('brings two house bots down beside each person, the gentle first', () => {
+    // The visitors of the first days met nobody for a minute and closed
+    // the tab: a person's first fight now comes to them.
+    const { sim, unitIds } = buildRoyaleSim(loadPlanet(), 3, picks(10, true), 'one_life');
+    const person = unitIds[4]!;
+    sim.detachPolicy(person);
+    land(sim);
+    const me = sim.units.get(person)!;
+    const mode = sim.royaleMode!;
+    const beside = unitIds.filter(
+      (id) => id !== person && dist(sim.units.get(id)!.pos, me.pos) <= ESCORT_MAX_M + 2,
+    );
+    expect(beside.length).toBeGreaterThanOrEqual(ESCORTS);
+    const gentle = beside.filter((id) => mode.skillOf(id) === 'gentle');
+    expect(gentle.length).toBeGreaterThanOrEqual(ESCORTS);
+  });
+
+  it('lands every bot where it picked when no person plays', () => {
+    const { sim, unitIds } = buildRoyaleSim(loadPlanet(), 3, picks(10, true), 'one_life');
+    run(sim, DROP_S - DT);
+    const picked = new Map(sim.royaleMode!.state.drops);
+    // Just past the landing, before anyone walks off.
+    sim.tick();
+    sim.tick();
+    const mode = sim.royaleMode!;
+    expect(mode.state.stage).toBe('play');
+    for (const id of unitIds) {
+      const pick = picked.get(id);
+      expect(pick).toBeDefined();
+      const at = snapLanding(pick!, mode.layout, royaleGround(sim.ground));
+      // A tick's walk at most.
+      expect(dist(sim.units.get(id)!.pos, at!)).toBeLessThan(0.5);
+    }
   });
 
   it('burns a champion outside the light, and the burn is no fight', () => {

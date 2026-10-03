@@ -3,11 +3,19 @@
 // policy. When the drop ends every champion lands: at its pick, snapped to
 // the nearest walkable ground, or, with no pick, somewhere quiet: the
 // walkable point farthest from every pick and every landing already
-// placed, among a sample drawn from the match's stream.
+// placed, among a sample drawn from the match's stream. Then a few house
+// bots come down beside each person (escortLandings).
 
 import { dist2, norm, settle, type Vec3 } from '../geo';
 import type { Rng } from '../rng';
-import { nearPole, type RoyaleGround, type RoyaleLayout, randomWalkable } from './layout';
+import {
+  along,
+  nearPole,
+  type RoyaleGround,
+  type RoyaleLayout,
+  randomHeading,
+  randomWalkable,
+} from './layout';
 
 // How many candidate points a quiet landing weighs.
 export const QUIET_SAMPLE = 48;
@@ -85,4 +93,40 @@ export function resolveLandings(
     taken.push(at);
   }
   return out;
+}
+
+// Company at the landing: ESCORTS house bots come down ESCORT_MIN_M to
+// ESCORT_MAX_M from each person, so a newcomer's first fight finds them
+// within seconds, the genre's own way with its newcomers (their first
+// champions come to them). Fifty seats on the planet left a person who
+// landed a minute with nobody in sight, one who picked no point in the
+// quietest spot there is, and the visitors of the first days closed the
+// tab inside two minutes (the seat reports, 2026-10-03).
+export const ESCORTS = 2;
+export const ESCORT_MIN_M = 8;
+export const ESCORT_MAX_M = 13;
+
+// Moves the landings of `bots`, taken in the order given, ESCORTS to each
+// of `people` in turn, each at a heading and a reach drawn from the
+// match's stream, snapped to walkable ground.
+export function escortLandings(
+  people: readonly number[],
+  bots: readonly number[],
+  landings: Map<number, Vec3>,
+  rng: Rng,
+  layout: RoyaleLayout,
+  ground: RoyaleGround,
+): void {
+  let next = 0;
+  for (const person of people) {
+    const at = landings.get(person);
+    if (!at) continue;
+    for (let k = 0; k < ESCORTS && next < bots.length; k++) {
+      const bot = bots[next++]!;
+      const reach = ESCORT_MIN_M + (ESCORT_MAX_M - ESCORT_MIN_M) * rng.next();
+      const spot = along(at, randomHeading(rng, at), reach, layout.radius);
+      const p = snapLanding(spot, layout, ground);
+      if (p) landings.set(bot, p);
+    }
+  }
 }
