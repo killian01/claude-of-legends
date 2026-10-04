@@ -49,6 +49,7 @@ import {
 } from './creatures/pyrefang_visual';
 import { FloatingText, makeTextSprite } from './floating_text';
 import { fogSheetGeometry } from './fog_sheet';
+import { FrameMemo } from './frame_memo';
 import { LOW_HEALTH_STYLE, lowHealthOpacity } from './low_health';
 import { buildMinionMesh } from './minion_shapes';
 import {
@@ -467,6 +468,10 @@ export class Renderer {
   // (program_warmup.ts); null on the plane.
   private readonly warmup: ProgramWarmup | null = null;
   private disposed = false;
+  // Where the canvas stands, read once a frame (frame_memo.ts).
+  private readonly canvasAt = new FrameMemo(() =>
+    rectOnStage(this.gl.domElement, this.gl.domElement.getBoundingClientRect()),
+  );
 
   constructor(container: HTMLElement, world: IWorld, terrain: RenderTerrain) {
     this.terrain = terrain;
@@ -564,6 +569,7 @@ export class Renderer {
     );
 
     const onResize = (): void => {
+      this.canvasAt.forget();
       this.gl.setSize(container.clientWidth, container.clientHeight);
       this.camera.aspect = container.clientWidth / Math.max(1, container.clientHeight);
       this.camera.updateProjectionMatrix();
@@ -1159,7 +1165,7 @@ export class Renderer {
   // its client rect on a page standing straight, the stage's whole box on
   // a turned one.
   private canvasRect(): { left: number; top: number; width: number; height: number } {
-    return rectOnStage(this.gl.domElement, this.gl.domElement.getBoundingClientRect());
+    return this.canvasAt.get();
   }
 
   // Projects a world point to screen pixels, the stage's (the page's while
@@ -3156,6 +3162,8 @@ export class Renderer {
 
   // alpha in [0, 1): progress through the current tick, for interpolation.
   render(alpha: number): void {
+    // A new frame: the canvas's place is read again, once.
+    this.canvasAt.forget();
     // No context, or a restored one still waiting on the terrain's
     // pictures: a draw now would upload the closed ones.
     if (this.picture.blocked()) return;
