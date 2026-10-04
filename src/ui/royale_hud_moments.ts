@@ -41,8 +41,12 @@ import {
   duskDepth,
   duskTolls,
   elsewhereText,
+  FEED_MS,
+  type FeedTier,
   FoldCount,
-  feedKeeps,
+  feedLife,
+  feedOverflow,
+  feedTier,
   frostLevel,
   heartbeat,
   impactGain,
@@ -58,9 +62,8 @@ import {
 } from './royale_moments';
 import { BUILD_COMPLETE, buildComplete, lootNotice, openingFraction } from './royale_text';
 
-// How long a feed line, the fold and a spotlight stay up, milliseconds.
-const FEED_MS = 6500;
-const FEED_MAX = 5;
+// How long a spotlight stays up, milliseconds (the feed's lines and its
+// fold keep ui/royale_moments.ts feedLife).
 const SPOT_MS = 2800;
 // How often the obstacles are measured (an arrow's own room is
 // ui/royale_edges.ts arrowBox).
@@ -347,7 +350,8 @@ export class RoyaleHudMoments {
     const { selfId, selfTeam, world, feed } = this.host;
     const r = this.view();
     const marked = new Set((r?.mk ?? []).map((m) => m[0]));
-    const keep = feedKeeps(k, {
+    const leader = r?.v === 'respawn' && r.leader && r.leader.s > 0 ? r.leader.i : null;
+    const tier = feedTier(k, {
       selfId,
       person: (id) => {
         if (id === k.unitId && k.vb !== undefined) return !k.vb;
@@ -357,13 +361,15 @@ export class RoyaleHudMoments {
       },
       marked: (id) => marked.has(id),
       inSight: (id) => world.units.get(id)?.kind === 'champion' && world.isVisible(selfTeam, id),
+      leader: (id) => id === leader,
     });
-    if (!keep) {
+    if (tier === 'fold') {
       this.folded.add(performance.now());
       this.showFold();
       return;
     }
     const line = el('div', 'br-feed-line');
+    line.dataset.tier = tier;
     if (k.killerId === selfId || k.unitId === selfId) line.classList.add('mine');
     const dusk = k.killerId === k.unitId || k.killerId === 0;
     const who = (id: number, name: string, bot: boolean): HTMLElement => {
@@ -381,9 +387,18 @@ export class RoyaleHudMoments {
       who(k.unitId, this.host.victimName(k), k.vb ?? this.host.botOf(k.unitId)),
     );
     feed.prepend(line);
-    const lines = [...feed.children].filter((c) => c !== this.fold);
-    for (const extra of lines.slice(FEED_MAX)) extra.remove();
-    window.setTimeout(() => line.remove(), FEED_MS);
+    const lines = [...feed.children].filter((c): c is HTMLElement => c !== this.fold);
+    const tiers = lines.map((c) => (c.dataset.tier ?? 'near') as FeedTier);
+    let folded = false;
+    for (const i of feedOverflow(tiers)) {
+      if (tiers[i] === 'near') {
+        this.folded.add(performance.now());
+        folded = true;
+      }
+      lines[i]?.remove();
+    }
+    if (folded) this.showFold();
+    window.setTimeout(() => line.remove(), feedLife(tier));
   }
 
   // The folded line: how many deaths elsewhere in the feed's last moments,
