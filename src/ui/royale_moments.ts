@@ -13,7 +13,14 @@
 
 import type { VoiceLineId } from '../game/voice_lines';
 import type { RoyaleNote } from '../net/royale_client';
-import type { RoyaleVariant, SnapClamor, SnapDusk, WirePoint } from '../net/royale_wire';
+import type {
+  RoyaleVariant,
+  SnapClamor,
+  SnapDusk,
+  SnapSeedfall,
+  WirePoint,
+} from '../net/royale_wire';
+import { SEEDFALL_IMPACT_M, SEEDFALL_WARN_S } from '../sim/content/royale_events';
 import { CLAMOR_S } from '../sim/royale/types';
 import { MultikillLadder, multikillLook, ROYALE_MULTIKILL_LEASH } from './multikill';
 
@@ -28,6 +35,8 @@ export type MomentSfx =
   | 'whoosh'
   | 'clash'
   | 'chime'
+  | 'gong'
+  | 'boom'
   | 'multikill';
 
 // One call: what to show, what to play, and how big.
@@ -47,6 +56,9 @@ export interface MomentCall {
   gain?: number;
   // The music dips under the call for this long.
   duckMs?: number;
+  // The announcement holds its line for its whole moment (holdMs), and
+  // what is announced meanwhile waits its turn (ui/hud.ts announce).
+  keep?: boolean;
 }
 
 // A run of takedowns without dying, by variant: the rung that shows the
@@ -165,9 +177,16 @@ export class RoyaleMoments {
   }
 
   // The mode's notes: the run the viewer snuffed out, the Seedfalls called
-  // and landing.
-  onNotes(notes: readonly RoyaleNote[]): MomentCall[] {
+  // and landing. A batch's Seedfalls make one call (Respawn's two seeds
+  // land together): the call kept on its line with the seconds to the
+  // landing, `time` the match's clock, and the landing's line without a
+  // sound, since the impact's boom is played by distance
+  // (ui/royale_hud_moments.ts).
+  onNotes(notes: readonly RoyaleNote[], time?: number): MomentCall[] {
     const calls: MomentCall[] = [];
+    let called = 0;
+    let landsAt = Number.POSITIVE_INFINITY;
+    let landed = 0;
     for (const n of notes) {
       if (n.kind === 'snuffed' && n.killerId === this.selfId && n.unitId !== this.selfId) {
         calls.push({
@@ -179,13 +198,92 @@ export class RoyaleMoments {
           gain: 0.6,
         });
       } else if (n.kind === 'seedfall') {
-        calls.push({ text: 'A Seedfall is coming', color: '#ffe7a0', sfx: 'chime' });
+        called += 1;
+        landsAt = Math.min(landsAt, n.landsAt);
       } else if (n.kind === 'seedfall_land') {
-        calls.push({ text: 'A Seedfall has landed', color: '#ffe7a0', sfx: 'whoosh' });
+        landed += 1;
       }
+    }
+    if (called > 0) {
+      const secs =
+        time !== undefined && Number.isFinite(landsAt)
+          ? Math.max(1, Math.round(landsAt - time))
+          : SEEDFALL_WARN_S;
+      calls.push({
+        text: seedfallCallText(called, secs),
+        color: '#ffe7a0',
+        sfx: 'gong',
+        keep: true,
+        holdMs: 4000,
+      });
+    }
+    if (landed > 0) {
+      calls.push({
+        text: landed === 1 ? 'A Seedfall has landed' : `${countWord(landed)} Seedfalls have landed`,
+        color: '#ffe7a0',
+      });
     }
     return calls;
   }
+}
+
+function countWord(n: number): string {
+  return n === 2 ? 'Two' : n === 3 ? 'Three' : String(n);
+}
+
+// The call of a Seedfall: how many and how long until they land.
+export function seedfallCallText(count: number, seconds: number): string {
+  return count === 1
+    ? `A Seedfall in ${seconds} s`
+    : `${countWord(count)} Seedfalls in ${seconds} s`;
+}
+
+// A seed's rush through the sky leads into its landing: the whoosh rises
+// for this long before the impact so its low thud falls on it.
+export const WHOOSH_LEAD_S = 0.7;
+
+// The seeds falling now, each rushed once: the Seedfall block's ids whose
+// landing is under WHOOSH_LEAD_S away (one already down is not rushed).
+export class SeedfallRush {
+  private readonly rushed = new Set<number>();
+
+  step(list: readonly SnapSeedfall[] | undefined, time: number): number[] {
+    const out: number[] = [];
+    const now = new Set<number>();
+    for (const s of list ?? []) {
+      now.add(s[0]);
+      if (s[5] === 1 || this.rushed.has(s[0])) continue;
+      const left = s[4] - time;
+      if (left > WHOOSH_LEAD_S + 1e-9 || left < -0.5) continue;
+      this.rushed.add(s[0]);
+      out.push(s[0]);
+    }
+    for (const id of this.rushed) if (!now.has(id)) this.rushed.delete(id);
+    return out;
+  }
+}
+
+// The impact's boom by distance along the ground: full within
+// IMPACT_FULL_M, falling to IMPACT_FLOOR at IMPACT_FAR_M and held there,
+// since a seed landing anywhere is news.
+export const IMPACT_FULL_M = 20;
+export const IMPACT_FAR_M = 160;
+export const IMPACT_FLOOR = 0.3;
+export function impactGain(distance: number): number {
+  if (distance <= IMPACT_FULL_M) return 1;
+  if (distance >= IMPACT_FAR_M) return IMPACT_FLOOR;
+  const k = (distance - IMPACT_FULL_M) / (IMPACT_FAR_M - IMPACT_FULL_M);
+  return 1 - (1 - IMPACT_FLOOR) * k;
+}
+
+// The camera's shake at the impact: full inside its reach (the champion
+// was thrown up), nothing past IMPACT_SHAKE_M.
+export const IMPACT_SHAKE = 0.6;
+export const IMPACT_SHAKE_M = 40;
+export function impactShake(distance: number): number {
+  if (distance <= SEEDFALL_IMPACT_M) return IMPACT_SHAKE;
+  if (distance >= IMPACT_SHAKE_M) return 0;
+  return IMPACT_SHAKE * (1 - (distance - SEEDFALL_IMPACT_M) / (IMPACT_SHAKE_M - SEEDFALL_IMPACT_M));
 }
 
 // Who the feed keeps (ui/royale_hud_moments.ts): a death involving the
@@ -330,6 +428,46 @@ export class ClamorEar {
       out.push(c);
     }
     return out;
+  }
+}
+
+// The Clamor heard: of the fresh ones, the loudest, at most one every
+// CLAMOR_GAP_S (late in Respawn every takedown on the planet is within
+// earshot, and a clash a tick would be a rattle). A takedown the viewer
+// made or saw (seen, at the victim's place) is no news from out of sight
+// and rings nothing.
+export const CLAMOR_GAP_S = 1.5;
+const SEEN_M = 3;
+const SEEN_S = 1.5;
+
+export class ClamorBell {
+  private last = Number.NEGATIVE_INFINITY;
+  private seenAt: { at: Point; time: number }[] = [];
+
+  seen(at: Point, time: number): void {
+    this.seenAt.push({ at, time });
+  }
+
+  pick(
+    fresh: readonly SnapClamor[],
+    self: Point,
+    time: number,
+  ): { at: { x: number; y: number; z: number }; gain: number } | null {
+    this.seenAt = this.seenAt.filter((s) => time - s.time <= CLAMOR_S + 1);
+    let best: { at: { x: number; y: number; z: number }; gain: number } | null = null;
+    for (const c of fresh) {
+      const at = wirePoint(c);
+      const known = this.seenAt.some(
+        (s) => Math.abs(s.time - c[3]) <= SEEN_S && arcDistance(s.at, at) <= SEEN_M,
+      );
+      if (known) continue;
+      const gain = clamorGain(arcDistance(self, at));
+      if (gain <= 0 || (best && best.gain >= gain)) continue;
+      best = { at, gain };
+    }
+    if (!best || time - this.last < CLAMOR_GAP_S) return null;
+    this.last = time;
+    return best;
   }
 }
 

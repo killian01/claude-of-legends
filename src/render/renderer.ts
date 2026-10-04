@@ -1907,8 +1907,13 @@ export class Renderer {
   }
 
   // A moment the HUD called (render/royale_cues.ts): a takedown punches the
-  // camera in and floats its heal; the caches' cues are the marks' own.
+  // camera in and floats its heal, a seed's landing shakes it by distance;
+  // the world's side of the caches and of the landing is the marks' own.
   private onRoyaleCue(cue: RoyaleCue): void {
+    if (cue.kind === 'seedfall_land') {
+      if (cue.shake > 0) this.addShake(cue.shake);
+      return;
+    }
     if (cue.kind !== 'takedown') return;
     this.addShake(0.25);
     this.punchAt = performance.now();

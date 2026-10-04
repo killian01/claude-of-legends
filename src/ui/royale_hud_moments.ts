@@ -17,7 +17,7 @@ import { rectOnStage, stageSizeOf } from '../game/match_stage';
 import { duckMusic, setHeartbeat, setMusicIntensity } from '../game/music';
 import { playSfx } from '../game/sfx';
 import type { RoyaleNote } from '../net/royale_client';
-import type { SnapCache, SnapDusk, SnapRoyale } from '../net/royale_wire';
+import type { SnapCache, SnapClamor, SnapDusk, SnapRoyale } from '../net/royale_wire';
 import { royaleProjector, sendRoyaleCue } from '../render/royale_cues';
 import { ITEMS } from '../sim/content/items';
 import type { RoyaleVariant } from '../sim/royale/types';
@@ -37,8 +37,8 @@ import {
 } from './royale_edges';
 import {
   arcDistance,
+  ClamorBell,
   ClamorEar,
-  clamorGain,
   duskDepth,
   duskTolls,
   elsewhereText,
@@ -46,12 +46,15 @@ import {
   feedKeeps,
   frostLevel,
   heartbeat,
+  impactGain,
+  impactShake,
   type MomentCall,
   type MomentKill,
   musicIntensity,
   OpeningRitual,
   panOf,
   RoyaleMoments,
+  SeedfallRush,
   wirePoint,
 } from './royale_moments';
 import { BUILD_COMPLETE, buildComplete, lootNotice, openingFraction } from './royale_text';
@@ -131,7 +134,8 @@ export interface MomentsHost {
   // The royale layer's feed column and notices (ui/royale_hud.ts).
   feed: HTMLElement;
   notice(text: string, icon: string | null, kind: 'loot' | 'level' | 'done' | 'whole'): void;
-  announce(text: string, color: string): void;
+  // A kept announcement holds its line for `holdMs` (ui/hud.ts announce).
+  announce(text: string, color: string, holdMs?: number, keep?: boolean): void;
   // The names a feed line shows, and whether a seat is a bot.
   victimName(k: MomentDeath): string;
   killerName(k: MomentDeath): string;
@@ -157,6 +161,11 @@ export class RoyaleHudMoments {
   private readonly moments: RoyaleMoments;
   private readonly ritual = new OpeningRitual();
   private readonly ear = new ClamorEar();
+  private readonly bell = new ClamorBell();
+  // The Clamors of a tick wait one tick: the tick's deaths are read after
+  // its state, and a takedown the viewer made or saw rings nothing.
+  private clamorsDue: SnapClamor[] = [];
+  private readonly rush = new SeedfallRush();
   private readonly chimes = new EdgeChimes();
   private readonly style: HTMLStyleElement;
   private readonly spot: HTMLElement;
@@ -251,15 +260,24 @@ export class RoyaleHudMoments {
     setMusicIntensity(musicIntensity(r.st, r.dusk.p, since));
     setHeartbeat(me ? heartbeat(me.hp, me.maxHp, me.dead) && r.st === 'play' : false);
 
-    // The Clamors: a clash by bearing, quieter with distance.
+    // The Clamors: the loudest out of sight, a clash by bearing, quieter
+    // with distance, at most one every second and a half.
     const self = me && me.pos.y !== undefined ? me.pos : null;
-    for (const c of this.ear.fresh(r.cl, time)) {
-      if (!self) continue;
-      const at = wirePoint(c);
-      const gain = clamorGain(arcDistance(self, at));
-      if (gain <= 0) continue;
+    const due = this.clamorsDue;
+    this.clamorsDue = this.ear.fresh(r.cl, time);
+    const clash = self ? this.bell.pick(due, self, time) : null;
+    if (clash) {
+      const bearing = royaleProjector()?.bearing(clash.at) ?? 0;
+      playSfx('clash', 0.9 * clash.gain, { pan: panOf(bearing) });
+    }
+
+    // A seed's rush leads into its landing, by distance and bearing.
+    for (const id of this.rush.step(r.sf, time)) {
+      const s = r.sf?.find((x) => x[0] === id);
+      if (!s || !self) continue;
+      const at = { x: s[1], y: s[2], z: s[3] };
       const bearing = royaleProjector()?.bearing(at) ?? 0;
-      playSfx('clash', 0.9 * gain, { pan: panOf(bearing) });
+      playSfx('whoosh', impactGain(arcDistance(self, at)), { pan: panOf(bearing) });
     }
   }
 
@@ -281,6 +299,11 @@ export class RoyaleHudMoments {
       killerChampion,
     };
     const calls = this.moments.onKill(m, world.time);
+    // A takedown the viewer made, took or saw is no Clamor from afar.
+    const victim = world.units.get(k.unitId);
+    const seen =
+      k.killerId === selfId || k.unitId === selfId || world.isVisible(this.host.selfTeam, k.unitId);
+    if (seen && victim && victim.pos.y !== undefined) this.bell.seen(victim.pos, world.time);
     if (k.killerId === selfId && killerChampion) {
       this.lastCombat = world.time;
       const heal = this.hpBefore >= 0 ? Math.round(this.hpNow - this.hpBefore) : 0;
@@ -294,7 +317,7 @@ export class RoyaleHudMoments {
   play(calls: readonly MomentCall[]): void {
     for (const c of calls) {
       if (c.spotlight) this.spotlight(c);
-      else this.host.announce(c.text, c.color);
+      else this.host.announce(c.text, c.color, c.holdMs, c.keep);
       if (c.voice) announceVoice(c.voice, true, true);
       if (c.sfx) playSfx(c.sfx, c.gain ?? 1);
       if (c.duckMs) duckMusic(c.duckMs);
@@ -401,7 +424,28 @@ export class RoyaleHudMoments {
         this.wasWhole = whole;
       }
     }
-    this.play(this.moments.onNotes(notes));
+    this.landings(notes);
+    this.play(this.moments.onNotes(notes, world.time));
+  }
+
+  // The seeds that crashed down this batch: each one's shockwave, dust and
+  // flash, the camera shaken by how near it fell, and one boom, the
+  // nearest's, by distance and bearing.
+  private landings(notes: readonly RoyaleNote[]): void {
+    const { world, selfId } = this.host;
+    const me = world.units.get(selfId);
+    const self = me && me.pos.y !== undefined && !me.dead ? me.pos : null;
+    let nearest: { at: { x: number; y: number; z: number }; d: number } | null = null;
+    for (const n of notes) {
+      if (n.kind !== 'seedfall_land') continue;
+      const at = wirePoint(n.at);
+      const d = self ? arcDistance(self, at) : Number.POSITIVE_INFINITY;
+      sendRoyaleCue({ kind: 'seedfall_land', at, shake: self ? impactShake(d) : 0 });
+      if (!nearest || d < nearest.d) nearest = { at, d };
+    }
+    if (!nearest) return;
+    const bearing = royaleProjector()?.bearing(nearest.at) ?? 0;
+    playSfx('boom', impactGain(nearest.d), { pan: panOf(bearing) });
   }
 
   // The piece's icon flies from where it came from (the chest, or the
