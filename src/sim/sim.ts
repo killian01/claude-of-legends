@@ -299,12 +299,13 @@ export class Sim {
     return this.royaleMode.pickGraft(unitId, pick, this.time);
   }
 
-  // A Respawn drop-in's Arrival over the globe (server/royale_match.ts, the
-  // replay's 'arrive' event); nothing outside a battle royale.
+  // A drop-in's Arrival in the battle royale (server/royale_match.ts, the
+  // replay's 'arrive' event): the seat comes down fresh at a quiet spot, in
+  // its Grace (royale/grace.ts); nothing outside a battle royale.
   beginArrival(unitId: number): void {
     const u = this.units.get(unitId);
     if (!this.royaleMode || u?.kind !== 'champion') return;
-    this.royaleMode.beginArrival(unitId, this.time);
+    this.royaleMode.beginArrival(this, unitId);
   }
 
   // Whether a seat may act right now in the battle royale: on the ground,
@@ -1241,6 +1242,8 @@ export class Sim {
       u.hp = royale ? royale.respawnHealth(u) : u.maxHp;
       u.mana = u.maxMana;
       u.statuses = [];
+      // The battle royale's return comes back in its Grace (royale/grace.ts).
+      royale?.onRespawn(this, u);
     }
 
     this.visibility = computeVisibility(

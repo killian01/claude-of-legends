@@ -122,6 +122,7 @@ const CORE_ON_THE_PLANET = [
   'royale/clamors.ts',
   'royale/drop.ts',
   'royale/dusk.ts',
+  'royale/grace.ts',
   'royale/grafts.ts',
   'royale/levels.ts',
   'royale/loot.ts',

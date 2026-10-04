@@ -1,8 +1,10 @@
 // One live battle royale (ADR 0031): the authoritative sim of the mode and
 // the people in it, beside server/match.ts's 5v5. Fifty seats, each its own
 // team; the people who started it on the champions they picked, bots on the
-// rest. A newcomer takes a bot's seat (ADR 0025): the champion as the bot
-// left it, a bot playing the champion they picked when there is one. A
+// rest. A newcomer takes a bot's seat (ADR 0025), a bot playing the
+// champion they picked when there is one: once the match is in play the
+// champion arrives fresh at a quiet spot, in its Grace, its tally from zero
+// (CONTEXT.md: Arrival; src/sim/royale/grace.ts). A
 // person who leaves hands the seat to the mode's bot, held for them when the
 // connection only dropped. Transport-agnostic: the service hands it what a
 // socket said and sends what it answers.
@@ -222,8 +224,12 @@ export class RoyaleMatch {
     for (const p of this.players.values()) p.known.delete(unitId);
   }
 
-  // A newcomer takes a bot's seat (ADR 0025): the champion as the bot left
-  // it. Null when no seat is left to take.
+  // A newcomer takes a bot's seat (ADR 0025), with the sigils and skin they
+  // chose; in play, the champion's Arrival (Sim.beginArrival): fresh at a
+  // quiet spot inside the light, in its Grace, its score, kills, deaths and
+  // assists from zero, recorded so a replay re-simulates it on the same
+  // tick. During the drop the seat simply lands with everyone. Null when no
+  // seat is left to take.
   takeBotSeat(person: RoyalePerson): RoyalePlayer | null {
     const candidates = [...this.seats.values()].filter((s) => this.takeable(s));
     const unitId = chooseBotSeat(
@@ -245,6 +251,10 @@ export class RoyaleMatch {
     const kit = { sigils: [...person.pick.sigils] as [string, string], skin: person.pick.skin };
     this.sim.setLoadout(unitId, kit.sigils, kit.skin);
     this.record({ k: this.sim.tickCount, u: unitId, e: 'kit', kit });
+    if (this.sim.royale.stage === 'play') {
+      this.sim.beginArrival(unitId);
+      this.record({ k: this.sim.tickCount, u: unitId, e: 'arrive' });
+    }
     s.bot = false;
     s.name = person.name;
     this.reidentify(unitId);
