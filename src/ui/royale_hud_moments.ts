@@ -110,9 +110,9 @@ const CSS = `
    sits clear above the bar. */
 .hud.compact .br-note { white-space: normal; max-width: 300px; line-height: 1.25; }
 .hud.compact.thumbs .br-notes { left: 44%; bottom: 82px; }
-.hud.compact .br-spot { font-size: 30px; letter-spacing: 3px;
-  top: calc(150px + var(--safe-top, env(safe-area-inset-top, 0px))); }
-.hud.compact .br-spot.top { font-size: 40px; letter-spacing: 5px; }
+.hud.compact .br-spot { font-size: 26px; letter-spacing: 3px;
+  top: calc(98px + var(--safe-top, env(safe-area-inset-top, 0px))); }
+.hud.compact .br-spot.top { font-size: 34px; letter-spacing: 4px; }
 `;
 
 // A death as the HUD gets it (ui/royale_hud.ts RoyaleKill).
@@ -411,7 +411,7 @@ export class RoyaleHudMoments {
       } else if (n.kind === 'loot' && n.unitId === selfId) {
         const item = ITEMS[n.itemId];
         const icon = item ? itemIconUrl(item) : null;
-        const line = lootNotice(n.itemId);
+        const line = lootNotice(n.itemId, this.host.root.classList.contains('compact'));
         this.host.notice(line.text, icon, line.completed ? 'done' : 'loot');
         if (line.completed) playSfx('completed');
         if (icon) this.flyToBag(n.itemId, icon, n.source === 'cache' ? this.openedCache : null);

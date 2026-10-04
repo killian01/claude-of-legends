@@ -34,7 +34,7 @@ export function duskLine(
   if (r.st === 'over' || d.p >= 6) return { text: 'Last light', tone: 'dark' };
   const left = clockText(d.pe - time);
   // The calm says what it is waiting for: the Dusk, holding off.
-  if (d.p === 0) return { text: `The Dusk holds ${left}`, tone: 'calm' };
+  if (d.p === 0) return { text: `Dusk in ${left}`, tone: 'calm' };
   if (d.sh === 1) return { text: `The Dusk closes ${left}`, tone: 'close' };
   return { text: `Light holds ${left}`, tone: 'hold' };
 }
@@ -164,19 +164,22 @@ export function passiveLine(itemId: string): string | null {
 
 // An item finished from its components: "Completed: Doombrand · Deathmark,
 // +12% damage to targets under 30%", or its gain when it has no passive.
-// Null for a component, which completes nothing.
-export function completedText(def: ItemDef): string | null {
+// On a phone (`compact`) only the names: the long line wraps across the
+// playfield. Null for a component, which completes nothing.
+export function completedText(def: ItemDef, compact = false): string | null {
   if (!def.buildsFrom || def.buildsFrom.length === 0) return null;
-  const tail = passiveLine(def.id) ?? statText(itemGain(def));
+  const tail = compact
+    ? (ITEM_PASSIVES[def.id]?.name ?? null)
+    : (passiveLine(def.id) ?? statText(itemGain(def)));
   return tail ? `Completed: ${def.name} · ${tail}` : `Completed: ${def.name}`;
 }
 
 // The loot notice for a piece by id: the plain line for a component, the
-// completed line for a finished item.
-export function lootNotice(itemId: string): { text: string; completed: boolean } {
+// completed line for a finished item (its short form on a phone).
+export function lootNotice(itemId: string, compact = false): { text: string; completed: boolean } {
   const def = ITEMS[itemId];
   if (!def) return { text: lootText(itemId), completed: false };
-  const done = completedText(def);
+  const done = completedText(def, compact);
   if (done) return { text: done, completed: true };
   return { text: lootText(def.name, statText(itemGain(def))), completed: false };
 }

@@ -216,7 +216,9 @@ const CSS = `
 .hud.compact.thumbs .br-feed { right: calc(12px + var(--safe-right, env(safe-area-inset-right, 0px)));
   top: calc(178px + var(--safe-top, env(safe-area-inset-top, 0px))); }
 .hud.compact .br-feed-line { padding: 2px 7px; }
-.hud.compact .br-feed-line:nth-child(n + 3) { display: none; }
+/* Two kept lines on a phone; the "+N elsewhere" fold (appended last)
+   still shows under them. */
+.hud.compact .br-feed-line:not(.fold):nth-child(n + 3) { display: none; }
 .hud.compact .br-open { left: calc(50% + 175px); bottom: 24px; }
 .hud.compact.thumbs .br-open { left: calc(40% + 132px); bottom: 18px; }
 .hud.compact .br-ring { width: 36px; height: 36px; }
