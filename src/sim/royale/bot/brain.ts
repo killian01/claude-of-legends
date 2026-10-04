@@ -1,7 +1,8 @@
 // The battle royale bot's decision, one per slot (ADR 0031): a Policy's
 // body, deterministic over (observation, rng) and blind past what its own
-// sight shows. In order: the drop's pick, and a dead Respawn seat's pick
-// of where to come back; out of the dark; a held Respawn Seedfall opening
+// sight shows. In order: an open Graft offer's card (graft_pick.ts); the
+// drop's pick, and a dead Respawn seat's pick of where to come back; out
+// of the dark; a held Respawn Seedfall opening
 // kept; the dodge; an ambush waiting in a bush; Respawn's Seedfall errand
 // past a fight the bot did not strike in; the fight when an enemy in
 // sight is noticed (a losing bot backs
@@ -53,6 +54,7 @@ import {
   pickTarget,
   royaleOdds,
 } from './fight';
+import { graftPick } from './graft_pick';
 import { buildSense, p3, type Sense } from './sense';
 import {
   approachSeedfall,
@@ -429,6 +431,9 @@ export function decide(
   };
   const r = obs.royale;
   if (!r) return NOOP;
+  // An open Graft offer is answered first, dead, flying or dropping.
+  const graft = graftPick(obs);
+  if (graft) return why('graft', graft);
   if (r.stage === 'drop') {
     if (r.drop) return NOOP;
     const p = pickDropPoint(layout, rng);

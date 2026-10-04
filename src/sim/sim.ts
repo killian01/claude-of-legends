@@ -44,7 +44,7 @@ import { stepMinionAi } from './minion_ai';
 import { stepMovement } from './movement';
 import { NavGrid } from './navgrid';
 import { initialObjectiveState, onWardenSlain, stepObjectives, wardenPitOf } from './objectives';
-import { passiveOf, stepPassives } from './passives';
+import { passiveOf, runGraftTakedown, stepPassives } from './passives';
 import { playbookPolicy } from './playbook/interpreter';
 import type { LanePreference, PlaybookDef } from './playbook/types';
 import type { Action, ObsCamp, Observation, Policy } from './policy';
@@ -297,7 +297,7 @@ export class Sim {
   pickGraft(unitId: number, pick: number): boolean {
     const u = this.units.get(unitId);
     if (!this.royaleMode || u?.kind !== 'champion') return false;
-    return this.royaleMode.pickGraft(unitId, pick, this.time);
+    return this.royaleMode.pickGraft(this, unitId, pick);
   }
 
   // A drop-in's Arrival in the battle royale (server/royale_match.ts, the
@@ -1123,6 +1123,7 @@ export class Sim {
           killer.kills += 1;
           killer.killStreak += 1;
           passiveOf(killer)?.onTakedown?.(ctx, killer, u);
+          if (killer.grafts.length > 0) runGraftTakedown(ctx, killer, u);
         }
         // Assists: every enemy champion that damaged the victim within the
         // window, killer excluded. Dead helpers still earn theirs, and the

@@ -29,7 +29,7 @@ import {
   SEEDFALL_IMPACT_SHARE,
   SEEDFALL_MANA,
   SEEDFALL_PAIR_M,
-  SEEDFALL_PIECES_BEFORE_GRAFTS,
+  SEEDFALL_PIECES,
   SEEDFALL_SEEDS,
   SEEDFALL_WARN_S,
 } from '../content/royale_events';
@@ -229,9 +229,9 @@ export function underImpact(at: Vec3, p: Vec3): boolean {
   return dist2(at, p) <= SEEDFALL_IMPACT_M * SEEDFALL_IMPACT_M;
 }
 
-// What a Seedfall cache pays. Until Grafts ship: two pieces, all the health
-// and all the mana. The Heartwood Graft offer (CONTEXT.md: Graft) replaces
-// the second piece then: SEEDFALL_PIECES and heartwood true.
+// What a Seedfall cache pays: SEEDFALL_PIECES, all the health, all the mana
+// and a Heartwood Graft offer (CONTEXT.md: Graft; royale/grafts.ts), which
+// took the place of the second piece it paid before the Grafts.
 export interface SeedfallReward {
   pieces: number;
   heal: number;
@@ -241,10 +241,10 @@ export interface SeedfallReward {
 
 export function seedfallReward(): SeedfallReward {
   return {
-    pieces: SEEDFALL_PIECES_BEFORE_GRAFTS,
+    pieces: SEEDFALL_PIECES,
     heal: SEEDFALL_HEAL,
     mana: SEEDFALL_MANA,
-    heartwood: false,
+    heartwood: true,
   };
 }
 
