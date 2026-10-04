@@ -170,6 +170,15 @@ export const AMBUSH_REACH_M = 12;
 export const AMBUSH_SEED_M = 6;
 export const AMBUSH_STRIKE_HP = 0.6;
 export const AMBUSH_WAIT_S = 10;
+// Respawn's Seedfall errand (calls.ts seedfallErrand): a bot with
+// ERRAND_HP of its health or more that hears a Seedfall it can reach in
+// time walks there past the fights on its way, unless it is in one it
+// struck in (its own swing still recovering); a low enemy in its reach is
+// finished on the way. Within ERRAND_NEAR_M of the point the race is over
+// and the bot's own rules fight for the cache. Lower than CALL_HP: the
+// cache heals all, and in Respawn a fall costs seconds, not the match.
+export const ERRAND_HP = 0.35;
+export const ERRAND_NEAR_M = 12;
 // One life's Clamor draws the packs from the Dusk's CLAMOR_PHASE, or once
 // CLAMOR_ALIVE or fewer are left.
 export const CLAMOR_PHASE = 2;

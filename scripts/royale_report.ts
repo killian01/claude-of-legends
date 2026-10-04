@@ -15,11 +15,12 @@
 // - --passive N (default 1): a passive seat (it only walks to caches,
 //   keeps to the light, and backs off when hit: a newcomer who never
 //   fights back), with how long it lasted, its place, and its longest
-//   stretch with no enemy in sight;
+//   stretch with no enemy in sight (and when that stretch began);
 // - --standin N (default 1): a person's seat played by the normal brain:
 //   it picks its landing like a person, takes no part in the bots' drop
 //   (so the house bots escort it, ESCORTS by variant), and the report
-//   says how long each of its lives lasted.
+//   says how long each of its lives lasted, and in Respawn the median by
+//   the minute each life began (where the short ones are).
 // It also measures what a player sees of the bots: of the seconds a bot
 // had an enemy in its sight within ENGAGE_M, the share it spent fighting a
 // champion (dealt one damage in the last ENGAGED_S), and the share of
@@ -184,6 +185,8 @@ interface Match {
   // The passive seats: longest stretch alive with no enemy in sight, and
   // (One life) when they fell and their place.
   passiveGaps: number[];
+  // When each passive seat's longest stretch began, seconds from landing.
+  passiveGapFrom: number[];
   passiveFell: number[];
   // The stand-in seats' lives, seconds each (a life cut by the end
   // counted too), and when each began, seconds from landing.
@@ -308,6 +311,7 @@ function play(
   // Passive seats: the current and longest stretch with no enemy in sight.
   const gapNow = new Map<number, number>();
   const gapMax = new Map<number, number>();
+  const gapFrom = new Map<number, number>();
   // Duels: the open ones by pair, and the last champion hit on each seat by
   // source.
   const lastHitOn = new Map<number, Map<number, number>>();
@@ -435,7 +439,10 @@ function play(
           const seen = alive.some((o) => o !== u && o !== undefined && sim.isVisible(u.team, o.id));
           const gap = seen ? 0 : (gapNow.get(u.id) ?? 0) + 1;
           gapNow.set(u.id, gap);
-          gapMax.set(u.id, Math.max(gapMax.get(u.id) ?? 0, gap));
+          if (gap > (gapMax.get(u.id) ?? 0)) {
+            gapMax.set(u.id, gap);
+            gapFrom.set(u.id, sim.time - landAt - gap);
+          }
           continue;
         }
         if (kind === 'standin') continue;
@@ -521,6 +528,9 @@ function play(
     passiveGaps: [...seats.values()]
       .filter((s) => s.skill === 'passive')
       .map((s) => gapMax.get(s.id) ?? 0),
+    passiveGapFrom: [...seats.values()]
+      .filter((s) => s.skill === 'passive')
+      .map((s) => gapFrom.get(s.id) ?? 0),
     passiveFell: [...seats.values()]
       .filter((s) => s.skill === 'passive')
       .map((s) => fellAt.get(s.id) ?? end),
@@ -624,7 +634,7 @@ function print(m: Match): void {
   }
   if (m.passiveGaps.length > 0) {
     console.log(
-      `  passive: longest without an enemy in sight ${m.passiveGaps.map((g) => `${g} s`).join(', ')}` +
+      `  passive: longest without an enemy in sight ${m.passiveGaps.map((g, i) => `${g} s from ${clock(m.passiveGapFrom[i] ?? 0)}`).join(', ')}` +
         (m.variant === 'one_life' ? `; fell at ${m.passiveFell.map(clock).join(', ')}` : ''),
     );
   }
@@ -730,6 +740,16 @@ function acceptance(all: readonly Match[]): void {
       `  respawn stand-in median life: ${l === null ? '-' : l.toFixed(0)} s over ${lives.length} lives (min ${STANDIN_LIFE_MIN_S}): ${verdict(l === null || l >= STANDIN_LIFE_MIN_S)}; ` +
         `of the lives begun before ${clock(STANDIN_EARLY_S)}: ${e === null ? '-' : e.toFixed(0)} s over ${early.length}`,
     );
+    // The same by the minute each life began: where the short ones are.
+    const byMinute: string[] = [];
+    for (let minute = 0; minute < PLAY_S / 60; minute++) {
+      const of = rs.flatMap((m) =>
+        m.standinLives.filter((_, i) => Math.floor((m.standinLifeStarts[i] ?? 0) / 60) === minute),
+      );
+      const med = median(of);
+      byMinute.push(`${minute}: ${med === null ? '-' : med.toFixed(0)} (${of.length})`);
+    }
+    console.log(`  respawn stand-in median life by the minute it began: ${byMinute.join(', ')}`);
   }
   for (const variant of ['one_life', 'respawn'] as const) {
     const ms = all.filter((m) => m.variant === variant);
