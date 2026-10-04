@@ -276,15 +276,18 @@ export function nerveOf(sense: Sense, cornered: boolean): number {
   return base + calm + paceNerve(r, sense.obs.time);
 }
 
-// Whether an ambush's cue becomes a strike: always in Respawn; in One life
-// only on odds within AMBUSH_MARGIN of the bot's nerve, the field's pace
-// included. Struck on every cue, a Seedfall's cache drew the field to one
-// point and emptied One life a minute after the first landing (the
-// tranche 1 merge, 2026-10-04: 32 alive at 2:00, 12 at 3:00). A cue passed
-// on holds where the ambush waits.
+// Whether an ambush's cue becomes a strike: always in Respawn, and in One
+// life while the field is on or behind its pace; with champions fallen
+// ahead of it, only on odds within AMBUSH_MARGIN of the bot's nerve, the
+// pace included. Struck on every cue, a Seedfall's cache drew the field to
+// one point and emptied One life a minute after the first landing (the
+// tranche 1 merge, 2026-10-04: 32 alive at 2:00, 12 at 3:00); held on the
+// odds alone, the last few waited in their bushes around a cache nobody
+// opened. A cue passed on holds where the ambush waits.
 export const AMBUSH_MARGIN = 0.1;
 export function strikesFromAmbush(sense: Sense, target: ObsUnit): boolean {
   if (sense.r.variant !== 'one_life') return true;
+  if (paceNerve(sense.r, sense.obs.time) <= 0) return true;
   return royaleOdds(sense, target) >= nerveOf(sense, false) - AMBUSH_MARGIN;
 }
 
