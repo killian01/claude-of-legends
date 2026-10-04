@@ -53,9 +53,20 @@ export class TeamBuffs {
     for (const team of this.wraths.keys()) this.wraths[team] = state.wraths[team] ?? 0;
   }
 
-  // A team the match does not hold takes nothing and holds nothing.
-  grantWrath(team: TeamId, time: number): void {
-    if (validTeam(team, this.wraths.length)) this.wraths[team] = time + WRATH_DURATION_S;
+  // A team the match does not hold takes nothing and holds nothing. The
+  // battle royale hands its own length (royale/risings.ts).
+  grantWrath(team: TeamId, time: number, duration = WRATH_DURATION_S): void {
+    if (validTeam(team, this.wraths.length)) this.wraths[team] = time + duration;
+  }
+
+  // The Wrath held until `until` exactly (a passing on the planet carries
+  // what was left), and taken away (its holder fell).
+  setWrath(team: TeamId, until: number): void {
+    if (validTeam(team, this.wraths.length)) this.wraths[team] = until;
+  }
+
+  clearWrath(team: TeamId): void {
+    if (validTeam(team, this.wraths.length)) this.wraths[team] = 0;
   }
 
   // When the team's Wrath ends, null when it holds none.

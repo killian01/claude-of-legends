@@ -91,9 +91,19 @@ export type RoyaleNote =
   | { kind: 'seedfall'; id: number; at: WirePoint; landsAt: number }
   | { kind: 'seedfall_land'; id: number; at: WirePoint }
   | { kind: 'rising'; rising: RisingKind; at: WirePoint; risesAt: number }
-  | { kind: 'wrath_passed'; from: number; to: number | null }
-  | { kind: 'mark'; unitId: number; mark: MarkKind }
-  | { kind: 'snuffed'; unitId: number; killerId: number; streak: number }
+  // The names the server sends beside the hunted's notes (the champion
+  // marked, the Wrath's new holder, the snuffed and their killer), when it
+  // sends them.
+  | { kind: 'wrath_passed'; from: number; to: number | null; name?: string }
+  | { kind: 'mark'; unitId: number; mark: MarkKind; name?: string }
+  | {
+      kind: 'snuffed';
+      unitId: number;
+      killerId: number;
+      streak: number;
+      name?: string;
+      killerName?: string;
+    }
   | { kind: 'reprieve'; unitId: number; backAt: number }
   | { kind: 'hastens'; by: number; alive: number }
   | { kind: 'last_light'; step: LastLightStep }
@@ -110,6 +120,11 @@ function pointOf(v: unknown): WirePoint | null {
     if (num(p.x) && num(p.y) && num(p.z)) return [p.x, p.y, p.z];
   }
   return null;
+}
+
+// A name the server sent, as an optional field of a note.
+function nameOf<K extends string>(v: unknown, key: K): Partial<Record<K, string>> {
+  return typeof v === 'string' && v.length > 0 ? ({ [key]: v } as Record<K, string>) : {};
 }
 
 const RISINGS: readonly string[] = ['pyrefang', 'voidmaul', 'warden'];
@@ -183,17 +198,29 @@ export function royaleNotes(events: readonly unknown[] | undefined): RoyaleNote[
       }
       case 'royale_wrath_passed':
         if (num(ev.from)) {
-          notes.push({ kind: 'wrath_passed', from: ev.from, to: num(ev.to) ? ev.to : null });
+          notes.push({
+            kind: 'wrath_passed',
+            from: ev.from,
+            to: num(ev.to) ? ev.to : null,
+            ...nameOf(ev.n, 'name'),
+          });
         }
         break;
       case 'royale_mark':
         if (num(unitId) && typeof ev.kind === 'string' && MARKS.includes(ev.kind)) {
-          notes.push({ kind: 'mark', unitId, mark: ev.kind as MarkKind });
+          notes.push({ kind: 'mark', unitId, mark: ev.kind as MarkKind, ...nameOf(ev.n, 'name') });
         }
         break;
       case 'royale_snuffed':
         if (num(unitId) && num(ev.killerId) && num(ev.streak)) {
-          notes.push({ kind: 'snuffed', unitId, killerId: ev.killerId, streak: ev.streak });
+          notes.push({
+            kind: 'snuffed',
+            unitId,
+            killerId: ev.killerId,
+            streak: ev.streak,
+            ...nameOf(ev.n, 'name'),
+            ...nameOf(ev.kn, 'killerName'),
+          });
         }
         break;
       case 'royale_reprieve':

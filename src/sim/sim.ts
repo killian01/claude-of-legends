@@ -27,6 +27,7 @@ import { type ChampionDef, DEFAULT_CHAMPION_ID, homeLane } from './content/champ
 import { ITEMS } from './content/items';
 import { GAME_MAP, type GameMap, type LaneId, type WardenPit } from './content/map';
 import { type AspectId, type CreatureId, RING_GOLD_EACH, TIDE_PERIOD_S } from './content/rings';
+import { PLANET_NEUTRAL_SCALE, RING_RISE_AT_S, WARDEN_RISE_AT_S } from './content/royale_events';
 import { SIGILS } from './content/sigils';
 import { clampSkin } from './content/skins';
 import { stepDashes } from './dashes';
@@ -58,13 +59,7 @@ import { initialRingStates, onCreatureSlain, type RingClock, ringClocks, stepRin
 import { Rng } from './rng';
 import { keepHold } from './royale/grace';
 import { RoyaleMode, type RoyaleOptions } from './royale/mode';
-import {
-  DROP_S,
-  RING_CREATURES_AT_S,
-  type RoyaleEvent,
-  type RoyaleState,
-  WARDEN_AT_S,
-} from './royale/types';
+import { DROP_S, type RoyaleEvent, type RoyaleState } from './royale/types';
 import { MINIONS_ONLY, stepSeparation } from './separation';
 import type { CombatCtx } from './sim_context';
 import {
@@ -265,9 +260,10 @@ export class Sim {
     }
     this.royaleMode = options.royale ? new RoyaleMode(this.rng, this.ground, options.royale) : null;
     if (this.royaleMode) {
-      // The big creatures rise on the mode's clock, counted from landing.
-      this.objectives.nextSpawnAt = DROP_S + WARDEN_AT_S;
-      for (const ring of this.ringStates) ring.nextRiseAt = DROP_S + RING_CREATURES_AT_S;
+      // The big creatures rise on the mode's clock, counted from landing
+      // (royale/risings.ts keeps it from there).
+      this.objectives.nextSpawnAt = DROP_S + WARDEN_RISE_AT_S[this.royaleMode.variant];
+      for (const ring of this.ringStates) ring.nextRiseAt = DROP_S + RING_RISE_AT_S;
     }
     this.visibility = computeVisibility(this.map, this.units, 0, undefined, teamCount);
   }
@@ -337,6 +333,7 @@ export class Sim {
       killers: this.killers,
       teamBuffs: this.teamBuffs,
       freeForAll: this.teamCount > TWO_TEAMS,
+      ...(this.royaleMode ? { neutralScale: PLANET_NEUTRAL_SCALE } : {}),
       allocId: () => this.nextId++,
     };
   }
@@ -1170,11 +1167,13 @@ export class Sim {
           if (killer && killer.kind === 'champion' && killer.team !== u.team) killer.cs += 1;
         }
         // The Warden falls: the killing team claims the Boon and the
-        // respawn clock starts.
+        // respawn clock starts. On the planet its last hit carries the
+        // Wrath instead (royale/risings.ts), and it never rises again.
         if (u.kind === 'warden') {
           const killer = this.units.get(killerId);
           if (killer && killer.kind === 'champion') {
-            this.teamBuffs.grantBoon(killer.team, this.time);
+            if (royale) royale.grantWrath(this, killer);
+            else this.teamBuffs.grantBoon(killer.team, this.time);
           }
           onWardenSlain(this.objectives, this.time, this.rng, this.map.wardenPits.length);
         }

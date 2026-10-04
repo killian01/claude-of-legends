@@ -342,8 +342,11 @@ describe('takedowns', () => {
     expect(victim.hp).toBe(victim.maxHp);
     expect(insideCap(sim.royale!.dusk.now, victim.pos as Vec3)).toBe(true);
     expect(sim.ground.isWalkableAt(victim.pos)).toBe(true);
-    // The leader is the killer, and a takedown on the leader is worth two.
+    // The leader is the killer; once it counts five it is the Lodestar
+    // (royale/marks.ts), and a takedown on it is worth two.
     expect(sim.royale!.leaderId).toBe(killer.id);
+    sim.royale!.scores.set(killer.id, 5);
+    run(sim, 0.1);
     const hunter = sim.units.get(unitIds[2]!)!;
     takedown(sim, hunter, killer);
     expect(sim.royale!.scores.get(hunter.id)).toBe(2);

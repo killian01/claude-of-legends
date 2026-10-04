@@ -55,6 +55,33 @@ export function placeOf(state: RankState, seatCount: number, unitId: number): nu
   return null;
 }
 
+// Respawn's standing as the HUD's top line tells it (src/ui/royale_text.ts
+// countLine): the seat's rank in the ranking, and the gap in takedowns to
+// the seat above it, or for the first its lead over the second. Null for a
+// seat not in the ranking.
+export function rankAndGap(
+  state: RankState,
+  seats: readonly RankedSeat[],
+  unitId: number,
+): { rank: number; gap: number } | null {
+  return rankAndGapIn(royaleRanking(state, seats), state, unitId);
+}
+
+// The same, over a ranking already made (one per tick for every viewer).
+export function rankAndGapIn(
+  ranking: readonly number[],
+  state: Pick<RoyaleState, 'scores'>,
+  unitId: number,
+): { rank: number; gap: number } | null {
+  const i = ranking.indexOf(unitId);
+  if (i < 0) return null;
+  const score = (id: number | undefined): number =>
+    id === undefined ? 0 : (state.scores.get(id) ?? 0);
+  const own = score(unitId);
+  const gap = i === 0 ? own - score(ranking[1]) : score(ranking[i - 1]) - own;
+  return { rank: i + 1, gap: Math.max(0, gap) };
+}
+
 // The places of every seat at the end, from the ranking.
 export function finalPlaces(ranking: readonly number[]): Map<number, number> {
   return new Map(ranking.map((id, i) => [id, i + 1]));

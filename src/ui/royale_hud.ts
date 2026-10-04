@@ -43,8 +43,8 @@ import {
   duskPill,
   duskTurn,
   isBot,
-  leaderBadge,
   levelText,
+  markBadge,
   openingFraction,
   outsideLight,
   placeText,
@@ -64,8 +64,8 @@ type AnnounceFn = (text: string, color: string, holdMs?: number, keep?: boolean)
 const CSS = `
 .br { position: absolute; inset: 0; pointer-events: none; }
 .br [hidden] { display: none !important; }
-/* The top center: the Dusk line, the count under it, then the leader's
-   badge and the Dusk's warning. The 5v5's team score and clock stood
+/* The top center: the Dusk line, the count under it, then the badge of a
+   mark the viewer carries and the Dusk's warning. The 5v5's team score and clock stood
    here; the battle royale has neither. */
 .br-top { position: absolute; top: calc(8px + var(--safe-top, env(safe-area-inset-top, 0px)));
   left: 50%; transform: translateX(-50%); display: flex; flex-direction: column;
@@ -94,6 +94,12 @@ const CSS = `
 .br-leader.self { background: linear-gradient(180deg, #e8cc74, #b8903c); color: #241a08;
   border-color: #f0deae; text-shadow: none; }
 .br-leader.shown { box-shadow: 0 0 0 0 rgba(240, 206, 120, 0.7); animation: br-shown 1.6s ease-out infinite; }
+/* The mark the viewer carries (ui/royale_text.ts markBadge): the Lodestar's
+   gold above, the Wrath's white-violet, an Ablaze run's ember. */
+.br-leader.self[data-mark='wrath'] { background: linear-gradient(180deg, #f6f2ff, #b8a8e8);
+  color: #221a3c; border-color: #ffffff; }
+.br-leader.self[data-mark='ablaze'] { background: linear-gradient(180deg, #ffc48a, #e0702a);
+  color: #2a1004; border-color: #ffe0b8; }
 @keyframes br-shown { 100% { box-shadow: 0 0 0 10px rgba(240, 206, 120, 0); } }
 .br-crown { width: 13px; height: 9px; flex: none; background: currentColor;
   clip-path: polygon(0 100%, 0 20%, 25% 60%, 50% 0, 75% 60%, 100% 20%, 100% 100%); }
@@ -433,18 +439,22 @@ export class RoyaleHud {
     const line = duskLine(r, time);
     if (this.duskText.textContent !== line.text) this.duskText.textContent = line.text;
     this.duskEl.className = `br-dusk ${line.tone}`;
-    const count = countLine(r);
+    const compact = root.classList.contains('compact');
+    const count = countLine(r, compact);
     if (this.countEl.textContent !== count) this.countEl.textContent = count;
     // The Dusk's turns, said once each as they come.
     const turn = duskTurn(this.lastDusk, r.dusk);
     if (turn) this.announce(turn, r.dusk.p >= 6 ? '#f5a3a3' : '#ffb27a');
     this.lastDusk = r.dusk;
 
-    const badge = leaderBadge(r, selfId, (id) => this.nameOf(id));
+    // The mark the viewer carries (the Lodestar, the Wrath, a run): every
+    // globe shows them, and the badge pulses while it does.
+    const badge = markBadge(r, selfId, time, compact);
     this.leaderEl.hidden = badge === null;
     if (badge) {
       if (this.leaderText.textContent !== badge.text) this.leaderText.textContent = badge.text;
-      this.leaderEl.classList.toggle('self', badge.self);
+      this.leaderEl.classList.toggle('self', true);
+      this.leaderEl.dataset.mark = badge.kind;
       this.leaderEl.classList.toggle('shown', badge.shown);
     }
 

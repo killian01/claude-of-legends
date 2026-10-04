@@ -202,6 +202,15 @@ interface Match {
   seedfallsOpened: number;
   seedfallsContested: number;
   seedfallOpenDelays: number[];
+  // The Risings and the hunted: each big body that fell, what and when
+  // (seconds from landing), the Wrath's passings, the takedowns each
+  // holder made while it held it, the takedowns on the Lodestar, and the
+  // takedowns on a marked champion (the Lodestar, an Ablaze run).
+  fallen: { kind: string; at: number }[];
+  wrathPasses: number;
+  wrathKills: number[];
+  lodestarDowns: number;
+  markTakedowns: number;
 }
 
 const ENGAGE_M = 8;
@@ -324,8 +333,18 @@ function play(
   const seedfallOpenDelays: number[] = [];
   let landedSeen = false;
   let lastMinute = -1;
+  // The Risings and the hunted.
+  const fallen: { kind: string; at: number }[] = [];
+  let standing = new Map<string, boolean>();
+  let wrathPasses = 0;
+  const wrathKills: number[] = [];
+  let holder: number | null = null;
+  let holderKills = 0;
+  let lodestarDowns = 0;
   while (mode.state.stage !== 'over' && ticks < cap) {
     const t0 = performance.now();
+    const holderBefore = mode.state.wrathHolder?.unitId ?? null;
+    const lodestarBefore = mode.state.marks.find((k) => k.kind === 'lodestar')?.unitId ?? null;
     const events = sim.tick();
     const ms = performance.now() - t0;
     ticks++;
@@ -348,6 +367,26 @@ function play(
     }
     for (const sf of mode.state.seedfalls) {
       if (sf.cacheId !== null) seedfallOfCache.set(sf.cacheId, sf.id);
+    }
+    const nowStanding = new Map(mode.state.risings.map((x) => [x.kind as string, x.up]));
+    for (const [kind, up] of standing) {
+      if (up && !nowStanding.has(kind)) fallen.push({ kind, at: sim.time - landAt });
+    }
+    standing = nowStanding;
+    for (const e of events) {
+      if (e.type === 'royale_wrath_passed' && e.to !== null) wrathPasses++;
+      if (e.type === 'death' && seats.has(e.unitId) && e.killerId !== e.unitId) {
+        if (holderBefore !== null && e.killerId === holderBefore) holderKills++;
+        if (lodestarBefore !== null && e.unitId === lodestarBefore && seats.has(e.killerId)) {
+          lodestarDowns++;
+        }
+      }
+    }
+    const holderNow = mode.state.wrathHolder?.unitId ?? null;
+    if (holderNow !== holder) {
+      if (holder !== null) wrathKills.push(holderKills);
+      holder = holderNow;
+      holderKills = 0;
     }
     for (const e of events) {
       if (e.type === 'royale_seedfall_land') landedAt.set(e.seedfallId, sim.time);
@@ -544,6 +583,11 @@ function play(
     seedfallsOpened: mode.tally.seedfallsOpened,
     seedfallsContested: mode.tally.seedfallsContested,
     seedfallOpenDelays,
+    fallen,
+    wrathPasses,
+    wrathKills: holder !== null ? [...wrathKills, holderKills] : wrathKills,
+    lodestarDowns,
+    markTakedowns: mode.tally.markTakedowns,
   };
 }
 
@@ -650,6 +694,11 @@ function print(m: Match): void {
         `landing to opening ${m.seedfallOpenDelays.map((s) => `${Math.round(s)}`).join(' ')} s`,
     );
   }
+  console.log(
+    `  risings: ${m.fallen.map((f) => `${f.kind} ${clock(f.at)}`).join(', ') || 'none fell'}; ` +
+      `the Wrath passed ${m.wrathPasses} times, takedowns per holder ${m.wrathKills.join(' ') || '-'}; ` +
+      `lodestar taken down ${m.lodestarDowns}; takedowns on a mark ${m.markTakedowns} of ${m.takedowns}`,
+  );
   console.log(
     `  enemy within ${ENGAGE_M} m in sight: fighting ${pct(m.engagedSeconds, m.nearSeconds)} of ${m.nearSeconds} bot-seconds; ` +
       `steals ${pct(m.steals, m.champTakedowns)} of ${m.champTakedowns} takedowns`,
@@ -768,6 +817,49 @@ function acceptance(all: readonly Match[]): void {
   }
 }
 
+// The Risings and the hunted (risings-and-the-hunted's acceptance): each of
+// the Pyrefang and the Voidmaul taken in 80% of the matches, the Warden in
+// 70% of Respawn's and 40% of One life's, the Wrath passed at least once in
+// half of Respawn's, a holder's takedowns with it at most 4 at the median,
+// Respawn's Lodestar taken down 8 times a match, and a tenth of the
+// takedowns on a marked champion.
+function risingsAcceptance(all: readonly Match[]): void {
+  for (const variant of ['respawn', 'one_life'] as const) {
+    const ms = all.filter((m) => m.variant === variant);
+    if (ms.length === 0) continue;
+    const share = (kind: string) => ms.filter((m) => m.fallen.some((f) => f.kind === kind)).length;
+    const wardenMin = variant === 'respawn' ? 0.7 : 0.4;
+    const line = (kind: string, min: number) => {
+      const n = share(kind);
+      return `${kind} ${n}/${ms.length} (min ${min * 100}%): ${verdict(n / ms.length >= min)}`;
+    };
+    console.log(
+      `  ${variant} risings taken: ${line('pyrefang', 0.8)}, ${line('voidmaul', 0.8)}, ${line('warden', wardenMin)}`,
+    );
+    const firsts = (kind: string) =>
+      ms.map((m) => m.fallen.find((f) => f.kind === kind)?.at ?? null).filter((x) => x !== null);
+    console.log(
+      `  ${variant} first falls: pyrefang ${firsts('pyrefang').map(clock).join(' ')}, voidmaul ${firsts('voidmaul').map(clock).join(' ')}, warden ${firsts('warden').map(clock).join(' ')}`,
+    );
+    const perHolder = median(ms.flatMap((m) => m.wrathKills));
+    const passed = ms.filter((m) => m.wrathPasses > 0).length;
+    console.log(
+      `  ${variant} the Wrath: passed in ${passed}/${ms.length}` +
+        (variant === 'respawn' ? ` (min 50%): ${verdict(passed / ms.length >= 0.5)}` : '') +
+        `; takedowns per holder median ${perHolder === null ? '-' : perHolder} (max 4): ${verdict(perHolder === null || perHolder <= 4)}`,
+    );
+    const marked = ms.reduce((a, m) => a + m.markTakedowns, 0);
+    const td = ms.reduce((a, m) => a + m.takedowns, 0);
+    const downs = mean(ms.map((m) => m.lodestarDowns));
+    console.log(
+      `  ${variant} the hunted: takedowns on a mark ${pct(marked, td)} (min 10%): ${verdict(td > 0 && marked / td >= 0.1)}` +
+        (variant === 'respawn'
+          ? `; the Lodestar taken down ${downs.toFixed(1)} a match (min 8): ${verdict(downs >= 8)}`
+          : `; the Lodestar taken down ${downs.toFixed(1)} a match`),
+    );
+  }
+}
+
 function summary(all: readonly Match[]): void {
   console.log(
     '\nvariant   seed  length first  td/min  last2/min peak/min winner                 top5 kills       dusk pads caches(0-3) camps lvl-med tick',
@@ -870,6 +962,8 @@ function summary(all: readonly Match[]): void {
     );
   }
   acceptance(all);
+  console.log('\nacceptance (the Risings and the hunted):');
+  risingsAcceptance(all);
 }
 
 const planet = loadPlanet();
