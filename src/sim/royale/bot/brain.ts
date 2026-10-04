@@ -1,8 +1,10 @@
 // The battle royale bot's decision, one per slot (ADR 0031): a Policy's
 // body, deterministic over (observation, rng) and blind past what its own
 // sight shows. In order: the drop's pick, and a dead Respawn seat's pick
-// of where to come back; out of the dark; the dodge; an ambush waiting in
-// a bush; the fight when an enemy in sight is noticed (a losing bot backs
+// of where to come back; out of the dark; a held Respawn Seedfall opening
+// kept; the dodge; an ambush waiting in a bush; Respawn's Seedfall errand
+// past a fight the bot did not strike in; the fight when an enemy in
+// sight is noticed (a losing bot backs
 // off only toward an exit, else answers; the swing never thrown away; a
 // kite between strikes; a low enemy finished; a leaving one chased while
 // it can be caught; never a chase into the Dusk); holding still while a
@@ -17,6 +19,7 @@
 import {
   CALL_HP,
   CALM_NERVE,
+  ERRAND_NEAR_M,
   ONE_LIFE_PACE,
   PACE_NERVE_MAX,
   PACE_NERVE_MIN,
@@ -35,7 +38,7 @@ import type { Rng } from '../../rng';
 import { depthInside, insideCap } from '../dusk';
 import { along, type RoyaleLayout } from '../layout';
 import { RESPAWN_S } from '../types';
-import { ambushBush, ambushCall, royaleCall } from './calls';
+import { ambushBush, ambushCall, type RoyaleCall, royaleCall, seedfallErrand } from './calls';
 import { pickDropPoint } from './drop_pick';
 import {
   awayPoint,
@@ -291,6 +294,58 @@ export function strikesFromAmbush(sense: Sense, target: ObsUnit): boolean {
   return royaleOdds(sense, target) >= nerveOf(sense, false) - AMBUSH_MARGIN;
 }
 
+// Whether the bot is in a fight it struck in: its own swing in the air or
+// its attack still recovering from one. What a Respawn Seedfall errand
+// does not walk out of; a fight it only took hits in, it does.
+export function inOwnFight(sense: Sense): boolean {
+  const { s, obs } = sense;
+  return (s.attackSwingUntil ?? 0) > obs.time || (s.attackReadyAt ?? 0) > obs.time;
+}
+
+// A Respawn Seedfall cache this bot is opening (its opening held,
+// caches.ts openingHeld): it keeps to the reach. Struck, it hits back at
+// the nearest enemy already in its attack reach, never a step or a cast
+// that would carry it out; else it holds still, its fire held. Null when
+// the bot opens no such cache.
+export const HELD_REACH_SLACK_M = 0.3;
+export function heldOpening(sense: Sense): Action | null {
+  const r = sense.r;
+  const opening = r.opening;
+  if (!opening || r.variant !== 'respawn') return null;
+  const c = r.caches.find((k) => k.id === opening.cacheId);
+  if (c?.kind !== 'seedfall') return null;
+  if (sense.struck) {
+    const s = sense.s;
+    if (s.attackSwingUntil != null && s.attackSwingUntil > sense.obs.time) return NOOP;
+    const e = sense.enemies[0];
+    if (e && dist(sense.me, p3(e)) <= sense.attackRange + HELD_REACH_SLACK_M) {
+      return { kind: 'attack', targetId: e.id };
+    }
+  }
+  return holdStill(sense);
+}
+
+// Respawn's Seedfall errand, with enemies in sight: a bot that heard a
+// Seedfall (calls.ts seedfallErrand) and is not in a fight it struck in
+// walks on past the fight while farther than ERRAND_NEAR_M from the
+// point. Null when no errand holds: the bot's own rules decide (near the
+// point, the fight for the cache). Measured against two other ways (the
+// report, seeds 1 to 8): finishing a low enemy in reach on the way made
+// more of the takedowns steals, and facing an enemy within CLOSE_M
+// shortened lives for no fewer steals.
+export function errandPast(sense: Sense, errand: RoyaleCall | null): Action | null {
+  if (!errand || inOwnFight(sense)) return null;
+  const sf = sense.r.seedfalls?.find((x) => x.id === errand.seedfallId);
+  if (!sf || dist(sense.me, p3(sf)) <= ERRAND_NEAR_M) return null;
+  return approachSeedfall(sense, sf, seedfallCache(sense, sf));
+}
+
+// The walk of a Respawn Seedfall errand: toward the point and its cache.
+function errandWalk(sense: Sense, errand: RoyaleCall): Action | null {
+  const sf = sense.r.seedfalls?.find((x) => x.id === errand.seedfallId);
+  return sf ? approachSeedfall(sense, sf, seedfallCache(sense, sf)) : null;
+}
+
 // Why a slot chose its action: what scripts/royale_report.ts counts (the
 // roam share). Never read by the bot itself.
 export type DecideTrace = (why: string) => void;
@@ -388,6 +443,11 @@ export function decide(
   const dark = lightsOut ? null : leaveDark(sense);
   if (dark) return why('dark', darkEscape(sense) ?? dark);
 
+  // A held opening keeps to its reach: no sidestep out of it.
+  const held = heldOpening(sense);
+  if (held) return why('opening-held', held);
+  const errand = seedfallErrand(sense);
+
   // A swing in the air is never thrown away but to run (the house bots'
   // orb walk, playbook/behaviors.ts): a sidestep or a kite step mid-swing
   // canceled one strike in five, and two bots circled each other without
@@ -416,6 +476,9 @@ export function decide(
       const wait = dist(sense.me, bush) <= AMBUSH_HOLD_M ? holdStill(sense) : moveTo(sense, bush);
       return why('ambush-wait', wait);
     }
+    // Respawn's Seedfall errand walks past a fight it did not strike in.
+    const past = errandPast(sense, errand);
+    if (past) return why('errand', past);
     // The skill's eye: on a slot it does not take the enemies in, the bot
     // keeps to its order, the fight it is in included. Falling through to
     // the loot instead walked bots off mid-fight, and two bots passed each
@@ -452,6 +515,9 @@ export function decide(
       if (go) return why(go, fight(sense, target, rng));
     }
     if (near && sense.struck && !cornered) return losing(sense, target, nerve, rng, why);
+    // A fight passed on beside the Seedfall it came for: on to its cache.
+    const walk = errand ? errandWalk(sense, errand) : null;
+    if (walk) return why('errand', walk);
     // A fight passed on: room given rather than loot beside the enemy,
     // where the first stray blow starts it anyway.
     const close = sense.enemies[0];
@@ -468,7 +534,7 @@ export function decide(
   const follow = followLastSeen(sense);
   if (follow) return why('follow', follow);
 
-  const call = royaleCall(sense);
+  const call = royaleCall(sense) ?? errand;
   if (call) {
     const id = call.seedfallId;
     const sf = id !== undefined ? r.seedfalls?.find((x) => x.id === id) : undefined;

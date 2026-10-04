@@ -15,6 +15,8 @@ import {
   CALM_NERVE,
   CLAMOR_ALIVE,
   CLAMOR_PHASE,
+  ERRAND_HP,
+  ERRAND_NEAR_M,
   ONE_LIFE_PACE,
   PACE_NERVE_MAX,
   PACE_NERVE_PER_SEAT,
@@ -29,8 +31,11 @@ import type { Action, Observation, ObsRoyale, ObsSeedfall, ObsUnit } from '../sr
 import { Rng } from '../src/sim/rng';
 import {
   CAMP_CLEAR_M,
+  CLOSE_M,
   decide,
   effectiveSkill,
+  HELD_REACH_SLACK_M,
+  inOwnFight,
   nerveOf,
   paceAlive,
   paceNerve,
@@ -38,7 +43,7 @@ import {
   ROOM_M,
   SETTLE_M,
 } from '../src/sim/royale/bot/brain';
-import { royaleCall } from '../src/sim/royale/bot/calls';
+import { royaleCall, seedfallErrand } from '../src/sim/royale/bot/calls';
 import { HOT_DROP_M, pickDropPoint } from '../src/sim/royale/bot/drop_pick';
 import { aimAt, royaleOdds } from '../src/sim/royale/bot/fight';
 import { buildSense } from '../src/sim/royale/bot/sense';
@@ -1029,5 +1034,150 @@ describe('a fight passed on', () => {
     const far = enemy(9, along(here, east, ROOM_M + 2, R));
     const r2 = whys(obs(here, { units: [far], royale: { caches, alive: 40 } }), strong);
     expect(r2.why).not.toContain('give-room');
+  });
+});
+
+describe("Respawn's Seedfall errand", () => {
+  const seed = along(here, east, 30, R);
+  const landedSf: ObsSeedfall = {
+    id: 1,
+    x: seed.x,
+    y: seed.y,
+    z: seed.z,
+    landsAt: 15,
+    landed: true,
+  };
+  // A worn enemy beside the bot, out of face-to-face reach: a fight the
+  // bot's nerve takes.
+  const worn = enemy(9, along(here, north, CLOSE_M + 1, R), { hpFrac: 0.5 });
+  const on = (
+    variant: 'respawn' | 'one_life',
+    self: object = {},
+    units: ObsUnit[] = [worn],
+    at: Vec3 = here,
+  ) => whys(obs(at, { units, royale: { variant, seedfalls: [landedSf] } }, self), strong);
+
+  it('walks past a fight it did not strike in, toward a Seedfall it heard, in Respawn only', () => {
+    const go = on('respawn');
+    expect(go.why).toEqual(['errand']);
+    expect(dist(point(go.a), seed)).toBeLessThan(0.01);
+    expect(on('one_life').why).toEqual(['fight']);
+    // Struck but not striking: a fight it did not start, walked out of.
+    expect(on('respawn', { struckAt: 19.5 }).why).toEqual(['errand']);
+  });
+
+  it('stays in a fight it struck in', () => {
+    expect(inOwnFight(buildSense(obs(here), royale(), layout, strong))).toBe(false);
+    for (const self of [{ attackReadyAt: 20.4 }, { attackSwingUntil: 20.1 }]) {
+      const o = obs(here, {}, self);
+      expect(inOwnFight(buildSense(o, o.royale!, layout, strong))).toBe(true);
+      expect(on('respawn', self).why).toEqual(['fight']);
+    }
+  });
+
+  it('walks past even a worn enemy face to face, and fights for the cache within 12 m of the point', () => {
+    const face = enemy(9, along(here, north, CLOSE_M - 1, R), { hpFrac: 0.2 });
+    expect(on('respawn', {}, [face]).why).toEqual(['errand']);
+    expect(on('one_life', {}, [face]).why).not.toContain('errand');
+    const near = along(seed, dirTo(seed, here) as Vec3, ERRAND_NEAR_M - 1, R);
+    const there = enemy(9, along(near, north, CLOSE_M + 1, R), { hpFrac: 0.5 });
+    expect(on('respawn', {}, [there], near).why).toEqual(['fight']);
+  });
+
+  it('answers the call from 35% of its health in Respawn, 60% in One life', () => {
+    expect(ERRAND_HP).toBe(0.35);
+    const hurt = { hpFrac: 0.4, hp: 240 };
+    expect(on('respawn', hurt, []).why).toEqual(['seedfall']);
+    expect(on('one_life', hurt, []).why).not.toContain('seedfall');
+    expect(on('respawn', { hpFrac: 0.34, hp: 204 }, []).why).not.toContain('seedfall');
+    const sense = (variant: 'respawn' | 'one_life', hpFrac: number) => {
+      const o = obs(here, { royale: { variant, seedfalls: [landedSf] } }, { hpFrac });
+      return buildSense(o, o.royale!, layout, strong);
+    };
+    expect(seedfallErrand(sense('respawn', 0.4))?.kind).toBe('seedfall');
+    expect(seedfallErrand(sense('one_life', 1))).toBeNull();
+  });
+
+  it('walks on to the cache, not away, from a fight it passes on beside the point', () => {
+    const near = along(seed, dirTo(seed, here) as Vec3, ERRAND_NEAR_M - 2, R);
+    const foe = enemy(9, along(near, north, CLOSE_M + 1, R), { hpFrac: 0.8 });
+    const self = { hpFrac: 0.4, hp: 240 };
+    const o = obs(
+      near,
+      { units: [foe], royale: { variant: 'respawn', seedfalls: [landedSf] } },
+      self,
+    );
+    const odds = royaleOdds(buildSense(o, o.royale!, layout, strong), foe);
+    expect(odds).toBeGreaterThan(0.3);
+    expect(odds).toBeLessThan(strong.fightOdds);
+    const r = whys(o, strong);
+    expect(r.why).toEqual(['errand']);
+    expect(dist(point(r.a), seed)).toBeLessThan(0.01);
+    const one = obs(near, { units: [foe], royale: { seedfalls: [landedSf] } }, self);
+    expect(whys(one, strong).why).toEqual(['give-room']);
+  });
+});
+
+describe('a held Respawn Seedfall opening', () => {
+  const cache = {
+    id: 7,
+    x: here.x,
+    y: here.y,
+    z: here.z,
+    golden: false,
+    kind: 'seedfall' as const,
+  };
+  const opening = { cacheId: 7, since: 19 };
+  const on = (
+    over: { variant?: 'respawn' | 'one_life'; kind?: 'seedfall' | 'plain'; units?: ObsUnit[] },
+    self: object = {},
+  ) =>
+    whys(
+      obs(
+        here,
+        {
+          units: over.units ?? [],
+          royale: {
+            variant: over.variant ?? 'respawn',
+            opening,
+            caches: [{ ...cache, kind: over.kind ?? 'seedfall' }],
+          },
+        },
+        self,
+      ),
+      strong,
+    );
+  const beside = enemy(9, along(here, east, 3, R));
+  const off = enemy(9, along(here, east, 6 + HELD_REACH_SLACK_M + 0.5, R));
+
+  it('holds still, its fire held, while nobody strikes it', () => {
+    const r = on({ units: [beside] });
+    expect(r.why).toEqual(['opening-held']);
+    expect(r.a.kind).toBe('stop');
+    expect(on({ units: [beside] }, { holding: true }).a.kind).toBe('noop');
+  });
+
+  it('struck, hits back at an enemy in its attack reach, never one past it', () => {
+    const struck = { struckAt: 19.8 };
+    const r = on({ units: [beside] }, struck);
+    expect(r.why).toEqual(['opening-held']);
+    expect(r.a).toEqual({ kind: 'attack', targetId: 9 });
+    expect(on({ units: [off] }, struck).a.kind).toBe('stop');
+    expect(on({ units: [beside] }, { ...struck, attackSwingUntil: 20.2 }).a.kind).toBe('noop');
+  });
+
+  it('never sidesteps out of the reach', () => {
+    const zone = { x: here.x, y: here.y, z: here.z, radius: 2, friendly: false, detonateAt: null };
+    const o = obs(
+      here,
+      { units: [], royale: { variant: 'respawn', opening, caches: [cache] } },
+      {},
+    );
+    expect(whys({ ...o, zones: [zone] }, strong).why).toEqual(['opening-held']);
+  });
+
+  it('is Respawn and a Seedfall cache only', () => {
+    expect(on({ variant: 'one_life', units: [beside] }).why).not.toContain('opening-held');
+    expect(on({ kind: 'plain', units: [beside] }).why).not.toContain('opening-held');
   });
 });
