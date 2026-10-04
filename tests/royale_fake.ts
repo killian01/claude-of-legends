@@ -258,8 +258,10 @@ export class FakeRoyaleSim implements RoyaleSim {
     this.royale.drops.set(unitId, { ...p });
   }
 
-  // No Graft is ever offered here: a pick takes nothing.
-  pickGraft(_unitId: number, _pick: number): boolean {
+  // No Graft is ever offered here: a pick is noted and takes nothing.
+  readonly graftPicks: { unitId: number; pick: number }[] = [];
+  pickGraft(unitId: number, pick: number): boolean {
+    this.graftPicks.push({ unitId, pick });
     return false;
   }
 

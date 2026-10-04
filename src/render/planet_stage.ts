@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import { ownGraceUntil } from '../net/royale_client';
 import type { SnapCache, WirePoint } from '../net/royale_wire';
+import { heartwoodOf } from '../sim/content/grafts';
 import { segmentDist, type Vec3 } from '../sim/geo';
 import { DT, type Vec2 } from '../sim/types';
 import type { IWorld } from '../world_api';
@@ -25,6 +26,7 @@ import { bendTurn, PlanetChart, rotateAbout } from './planet_chart';
 import { type DropOrbit, diveProgress, orbitPosition } from './planet_drop';
 import { capAngle, DUSK_UNIFORMS, FADE_TARGETS } from './planet_dusk';
 import { ownGraceFresh } from './planet_grace';
+import type { HeartwoodNote } from './planet_graft_aura';
 import { PlanetMarks } from './planet_marks';
 import { PlanetMinimap } from './planet_minimap';
 import { PlanetSky } from './planet_sky';
@@ -540,6 +542,8 @@ export class PlanetStage {
           }
         : undefined,
     );
+    // The Heartwoods in sight, standing where the renderer draws them.
+    this.marks.graftAura.update(royale?.st === 'play' ? this.heartwoods(drawnAt) : [], now);
     // An own Grace just begun (an Arrival, a Respawn return): the champion
     // has come down, and lands with the drop's dust and thud.
     const graceUntil =
@@ -554,6 +558,25 @@ export class PlanetStage {
       if (this.base.time - this.dropEndsAt < 2) this.pendingLanding = true;
     }
     this.minimap.paint(now, royale?.dusk ?? null, this.caches);
+  }
+
+  // The champions in sight carrying a Heartwood (CONTEXT.md: Graft), where
+  // the renderer draws them, else where the world puts them.
+  private heartwoods(drawnAt: ((unitId: number) => Vec2 | null) | null): HeartwoodNote[] {
+    const out: HeartwoodNote[] = [];
+    for (const u of this.base.units.values()) {
+      if (u.kind !== 'champion' || u.dead || u.grafts.length === 0) continue;
+      const graft = heartwoodOf(u);
+      if (!graft) continue;
+      const p = drawnAt?.(u.id) ?? null;
+      const at: Vec3 | null = p
+        ? this.window.toSphere(p.x, p.z)
+        : u.pos.y !== undefined
+          ? { x: u.pos.x, y: u.pos.y, z: u.pos.z }
+          : null;
+      if (at) out.push({ unitId: u.id, graft, at });
+    }
+    return out;
   }
 
   // The drop ended: the chart lands on the champion and the camera dives

@@ -11,6 +11,7 @@ import { playCastSfx, playSfx } from '../game/sfx';
 import { attackWindupSeconds, RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import type { CastSpec } from '../sim/combat/casting';
 import { isRooted, isStunned } from '../sim/combat/status';
+import { heartwoodOf } from '../sim/content/grafts';
 import { WRATH_EXECUTE_FRAC } from '../sim/content/rings';
 import type { Projectile } from '../sim/projectiles';
 import { otherTeam } from '../sim/teams';
@@ -56,6 +57,7 @@ import {
 } from './muzzle_spawn';
 import { type PictureWatch, watchPicture } from './picture_watch';
 import { attachGhosts, ghostColor, ghostMaterial } from './planet_ghost';
+import { heartwoodIcon } from './planet_graft_aura';
 import type { PlanetMinimap } from './planet_minimap';
 import { PlanetStage } from './planet_stage';
 import { RING_FOG_EDGE, ringFogOpening } from './ring_fog';
@@ -170,6 +172,10 @@ interface TrackedUnit {
   markKey: number;
   namePlate: THREE.Sprite | null;
   nameKey: string;
+  // The battle royale's Heartwood mark over the plate (CONTEXT.md: Graft),
+  // rebuilt when the Graft changes.
+  graftIcon: THREE.Sprite | null;
+  graftKey: string;
   prev: Vec2;
   curr: Vec2;
   // Presentation-only animation state: smoothed facing, walk-cycle blend,
@@ -2044,6 +2050,8 @@ export class Renderer {
           markKey: 0,
           namePlate: null,
           nameKey: '',
+          graftIcon: null,
+          graftKey: '',
           prev: { x: u.pos.x, z: u.pos.z },
           curr: { x: u.pos.x, z: u.pos.z },
           yaw: 0,
@@ -2182,6 +2190,24 @@ export class Renderer {
             t.namePlate = plate;
           }
           t.nameKey = label;
+        }
+        // A Heartwood's mark over the plate, for everyone who sees it.
+        const hw = this.planet && u.grafts.length > 0 ? (heartwoodOf(u) ?? '') : '';
+        if (t.graftKey !== hw) {
+          if (t.graftIcon) {
+            t.overhead.remove(t.graftIcon);
+            const mat = t.graftIcon.material as THREE.SpriteMaterial;
+            mat.map?.dispose();
+            mat.dispose();
+            t.graftIcon = null;
+          }
+          const icon = hw ? heartwoodIcon(hw) : null;
+          if (icon) {
+            icon.position.set(0, t.barY + 1.75, 0);
+            t.overhead.add(icon);
+            t.graftIcon = icon;
+          }
+          t.graftKey = hw;
         }
       }
 

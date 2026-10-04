@@ -39,7 +39,8 @@ describe('the state', () => {
       expect(r.marks).toEqual([]);
       expect(r.clamors).toEqual([]);
       expect(r.wrathHolder).toBeNull();
-      expect(r.offers.size).toBe(0);
+      // No offer but each seat's drop Bough since the Grafts (grafts.ts).
+      for (const q of r.offers.values()) expect(q.map((o) => o.grade)).toEqual(['bough']);
       expect(r.grafts.size).toBe(0);
       expect(r.reprieveUsed.size).toBe(0);
       expect(r.duskOffset).toBe(0);

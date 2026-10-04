@@ -173,9 +173,8 @@ export class RoyaleService {
       case 'chat':
       case 'ping':
         return true;
-      // A card of a Graft offer, and the next survivor to watch once out:
-      // taken and answered by nothing yet.
-      case 'graft':
+      // The next survivor to watch once out: answered by nothing yet. A
+      // Graft's card is a verb (royale_commands.ts), recorded and replayed.
       case 'watch':
         return true;
       default:

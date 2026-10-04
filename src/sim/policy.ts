@@ -77,6 +77,10 @@ export interface ObsUnit {
   // Champions only: the level on its health bar (additive v0 field,
   // plan-bots phase 16), what the fight's odds weigh a champion by.
   level?: number;
+  // Champions only, in the battle royale: the Heartwood Graft it carries
+  // (additive v0 field, CONTEXT.md: Graft), shown on it for everyone;
+  // absent when none.
+  heartwood?: string;
 }
 
 // A projectile the team can see (additive v0 block: dodging is impossible

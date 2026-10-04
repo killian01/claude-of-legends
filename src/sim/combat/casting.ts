@@ -8,7 +8,7 @@ import type { CastSoundId } from '../content/sounds';
 import { cos } from '../exact';
 import { away, basis, copy, delta, dirTo, dist, dot, norm, offset, onSphere, settle } from '../geo';
 import { landingOn } from '../ground';
-import { passiveOf } from '../passives';
+import { passiveOf, runGraftCast } from '../passives';
 import type { CombatCtx } from '../sim_context';
 import type { SpellLook } from '../spell_look';
 import { isSpellTarget } from '../spell_targets';
@@ -471,6 +471,8 @@ export function castAbility(
   caster.mana -= def.manaCost;
   breakStealth(caster);
   passiveOf(caster)?.onCast?.(ctx, caster, key);
+  // A Graft's say on the cooldown just set (Overgrowth); none in the 5v5.
+  if (caster.grafts.length > 0) runGraftCast(ctx, caster, key);
   ctx.events.push({ type: 'cast', unitId: caster.id, key });
   if (def.recast) {
     caster.recastArmed = {

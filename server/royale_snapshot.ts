@@ -11,6 +11,7 @@
 
 import type { ServerMsg, SnapEvent, SnapMobile, SnapUnit, SnapWall } from '../src/net/protocol';
 import type { SeatLabel, SnapCache, SnapDusk, SnapRoyale, WirePoint } from '../src/net/royale_wire';
+import { heartwoodOf } from '../src/sim/content/grafts';
 import type { Vec3 } from '../src/sim/geo';
 import { type DuskState, MARK_SHOWN_S } from '../src/sim/royale/types';
 import { placeOf } from './royale_ranking';
@@ -347,6 +348,10 @@ export function buildRoyaleSnapshot(
         if (seat.bot) rec.b = 1;
       }
     }
+    // The Heartwood a champion carries, in every record, for everyone who
+    // sees it.
+    const hw = u.grafts.length > 0 ? heartwoodOf(u) : null;
+    if (hw) rec.hw = hw;
     units.push(rec);
   }
   const gone: number[] = [];
