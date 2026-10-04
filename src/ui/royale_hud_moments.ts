@@ -113,6 +113,9 @@ const CSS = `
 .hud.compact .br-spot { font-size: 26px; letter-spacing: 3px;
   top: calc(98px + var(--safe-top, env(safe-area-inset-top, 0px))); }
 .hud.compact .br-spot.top { font-size: 34px; letter-spacing: 4px; }
+/* There it stands in the first steps' band: the card steps aside while it
+   shows. */
+.hud.compact.br-spotting .hud-steps { visibility: hidden; }
 `;
 
 // A death as the HUD gets it (ui/royale_hud.ts RoyaleKill).
@@ -331,8 +334,12 @@ export class RoyaleHudMoments {
     this.spot.classList.remove('on');
     void this.spot.offsetWidth;
     this.spot.classList.add('on');
+    this.host.root.classList.add('br-spotting');
     window.clearTimeout(this.spotTimer);
-    this.spotTimer = window.setTimeout(() => this.spot.classList.remove('on'), c.holdMs ?? SPOT_MS);
+    this.spotTimer = window.setTimeout(() => {
+      this.spot.classList.remove('on');
+      this.host.root.classList.remove('br-spotting');
+    }, c.holdMs ?? SPOT_MS);
   }
 
   // One line of the feed, or one more folded away.
@@ -605,7 +612,7 @@ export class RoyaleHudMoments {
     this.measureInsets();
     const picks = stage.querySelectorAll<HTMLElement>(
       '.hud-slots, .hud-bottom, .hud-kda, .stick-base, .stick-ghost, .touchbar, .br-top, ' +
-        '.br-feed, .br-open, canvas[style*="right"]',
+        '.br-feed, .br-open, .br-note, .hud-steps, canvas[style*="right"]',
     );
     const out: EdgeRect[] = [];
     for (const node of picks) {
@@ -632,6 +639,7 @@ export class RoyaleHudMoments {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     window.clearTimeout(this.spotTimer);
+    this.host.root.classList.remove('br-spotting');
     this.edges.remove();
     this.spot.remove();
     this.pulse.remove();
