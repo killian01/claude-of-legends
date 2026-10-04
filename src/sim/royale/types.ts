@@ -45,10 +45,13 @@ export const CACHE_MANA = 0.25;
 // The genre keeps a match alive with what a fight leaves to recover from
 // (a playtest, 2026-10-03: bots that fought on sight brought fifty
 // champions down to a handful in two minutes): champions on the Wanderseed
-// carry a quarter more health than in the 5v5, and out of combat, inside
+// carry two fifths more health than in the 5v5, and out of combat, inside
 // the light, a share of the maximum health comes back every second. Much
-// more health made a fresh duel last over a minute.
-export const ROYALE_HP_SCALE = 1.25;
+// more health made a fresh duel last over a minute. A quarter more left a
+// Respawn stand-in a median life of 14 s; two fifths more, 18 s (31 s for
+// the lives begun before 6:00), with a post-calm duel at 16.5 s (the
+// report and scripts/royale_duel.ts, 2026-10-04).
+export const ROYALE_HP_SCALE = 1.4;
 export const OUT_OF_COMBAT_HEAL = 0.04;
 // A takedown's heal and mana fall off with the killer's streak: the share
 // is 1 / (1 + STREAK_FALLOFF * (streak - 1)). A fed assassin otherwise came
