@@ -2,12 +2,17 @@
 // on the planet (a Respawn return, a drop-in's Arrival) cannot be damaged or
 // targeted for ARRIVAL_GRACE_S, ended early by its own first attack or cast;
 // readable in the observation (its own, and the graced champions in sight)
-// so the bots do not waste attacks on it; in the world checkpoint.
+// so the bots do not waste attacks on it; on the wire for the shimmer; in
+// the world checkpoint. And the shimmer's own pure rules.
 
 import { describe, expect, it } from 'vitest';
+import { royaleSimOf } from '../server/royale_build';
+import { arrivalBlock } from '../server/royale_snapshot_blocks';
+import { gracesOf, ownGraceUntil } from '../src/net/royale_client';
+import { freshGraces, shimmerOpacity } from '../src/render/planet_grace';
 import { dealDamage } from '../src/sim/combat/damage';
 import { ROYALE_SKILLS } from '../src/sim/content/bots/royale_skills';
-import type { Vec3 } from '../src/sim/geo';
+import { dist, type Vec3 } from '../src/sim/geo';
 import { buildObservation } from '../src/sim/observe';
 import { Rng } from '../src/sim/rng';
 import { pickTarget } from '../src/sim/royale/bot/fight';
@@ -172,5 +177,71 @@ describe('the Grace in the observation', () => {
     beside(sim, u, bot, 2.5);
     sim.tick();
     expect(pickTarget(senseNow(), 30)?.id).toBe(u.id);
+  });
+});
+
+describe('the Grace on the wire', () => {
+  it('lists the graced champions the viewer sees, itself included', () => {
+    const { sim, unitIds, u, backAt } = returned();
+    const near = sim.units.get(unitIds[2]!)!;
+    const far = sim.units.get(unitIds[3]!)!;
+    beside(sim, u, near, 3);
+    beside(sim, u, far, 70);
+    sim.tick();
+    const rs = royaleSimOf(sim);
+    const ctx = { seat: () => undefined, seats: 4, people: 4, caches: false };
+    const viewer = (v: Unit) => ({
+      unitId: v.id,
+      team: v.team,
+      known: new Set<number>(),
+      seat: { ack: 0, ackAt: 0 },
+    });
+    const own = arrivalBlock(rs, viewer(u), ctx)!;
+    expect(own).toHaveLength(1);
+    expect(own[0]![0]).toBe(u.id);
+    expect(own[0]![1]).toBeCloseTo(backAt + ARRIVAL_GRACE_S, 2);
+    expect(dist({ x: own[0]![2], y: own[0]![3], z: own[0]![4] }, u.pos)).toBeLessThan(0.01);
+    expect(arrivalBlock(rs, viewer(near), ctx)!.map((g) => g[0])).toEqual([u.id]);
+    expect(arrivalBlock(rs, viewer(far), ctx)).toBeUndefined();
+    // The client reads it back.
+    expect(gracesOf({ ar: own })).toEqual([
+      { unitId: u.id, until: own[0]![1], at: [own[0]![2], own[0]![3], own[0]![4]] },
+    ]);
+    expect(ownGraceUntil({ ar: own }, u.id)).toBe(own[0]![1]);
+    expect(ownGraceUntil({ ar: own }, near.id)).toBeNull();
+    expect(gracesOf({ ar: [[1, 2], 'x', [1, 2, 3, 4, 'z']] })).toEqual([]);
+    expect(gracesOf(null)).toEqual([]);
+    // Gone once it runs out.
+    tickUntil(sim, backAt + ARRIVAL_GRACE_S + 0.1);
+    expect(arrivalBlock(rs, viewer(u), ctx)).toBeUndefined();
+  });
+});
+
+describe('the shimmer', () => {
+  it('pulses softly and fades through its last half second', () => {
+    for (const ms of [0, 130, 300, 777]) {
+      const o = shimmerOpacity(10, 7, ms);
+      expect(o).toBeGreaterThanOrEqual(0.25 - 1e-9);
+      expect(o).toBeLessThanOrEqual(0.45 + 1e-9);
+    }
+    expect(shimmerOpacity(10, 9.75, 0)).toBeCloseTo(shimmerOpacity(10, 7, 0) / 2, 9);
+    expect(shimmerOpacity(10, 10, 0)).toBe(0);
+    expect(shimmerOpacity(10, 11, 0)).toBe(0);
+  });
+
+  it('raises the dust once, for a Grace just begun', () => {
+    const seen = new Set<number>();
+    const g = (unitId: number, until: number) => ({ unitId, until, at: [0, 80, 0] as const });
+    const fresh = [g(1, 5 + ARRIVAL_GRACE_S), g(2, 5 + 1)];
+    // Seat 2 walked into sight two seconds into its Grace: no dust.
+    const first = freshGraces(
+      seen,
+      fresh.map((x) => ({ ...x, at: [...x.at] as [number, number, number] })),
+      5,
+    );
+    expect(first.map((x) => x.unitId)).toEqual([1]);
+    expect(freshGraces(seen, [{ ...g(1, 8), at: [0, 80, 0] }], 5.1)).toEqual([]);
+    expect(freshGraces(seen, [], 6)).toEqual([]);
+    expect(seen.size).toBe(0);
   });
 });
