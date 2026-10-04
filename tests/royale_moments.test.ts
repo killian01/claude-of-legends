@@ -16,9 +16,17 @@ import {
   duskDepth,
   duskTolls,
   elsewhereText,
+  FEED_MAX,
+  FEED_MS,
+  FEED_NEAR_MAX,
+  FEED_NEAR_MS,
   type FeedContext,
+  type FeedTier,
   FoldCount,
   feedKeeps,
+  feedLife,
+  feedOverflow,
+  feedTier,
   frostLevel,
   heartbeat,
   impactGain,
@@ -238,6 +246,50 @@ describe('the feed', () => {
     // The Dusk's own say is killer 0 or the victim itself: only the victim
     // decides.
     expect(feedKeeps({ unitId: A, killerId: 0 }, ctx({ person: (id) => id === 0 }))).toBe(false);
+  });
+
+  it("ranks the viewer's and the leader's deaths above the rest", () => {
+    const lead = (id: number): boolean => id === B;
+    expect(feedTier({ unitId: A, killerId: SELF }, ctx({ leader: lead }))).toBe('own');
+    expect(feedTier({ unitId: SELF, killerId: B }, ctx({ leader: lead }))).toBe('own');
+    expect(feedTier({ unitId: A, killerId: B }, ctx({ leader: lead }))).toBe('lead');
+    expect(feedTier({ unitId: B, killerId: 0 }, ctx({ leader: lead }))).toBe('lead');
+    // A bot on a bot in sight, a person, a mark: the near tier.
+    expect(feedTier({ unitId: A, killerId: C }, ctx({ inSight: (id) => id === A }))).toBe('near');
+    expect(feedTier({ unitId: A, killerId: C }, ctx({ person: (id) => id === C }))).toBe('near');
+    expect(feedTier({ unitId: A, killerId: C }, ctx({ leader: lead }))).toBe('fold');
+    // One life has no leader: the old rule.
+    expect(feedTier({ unitId: A, killerId: C }, ctx())).toBe('fold');
+  });
+
+  it('keeps the near tier a shorter while than the own lines', () => {
+    expect(feedLife('own')).toBe(FEED_MS);
+    expect(feedLife('lead')).toBe(FEED_MS);
+    expect(feedLife('near')).toBe(FEED_NEAR_MS);
+    expect(FEED_NEAR_MS).toBeLessThan(FEED_MS);
+  });
+
+  it('folds a late Respawn of bots on bots instead of standing five rows deep', () => {
+    // Newest first: a new near line over two near lines pushes the oldest
+    // near one out.
+    expect(feedOverflow(['near', 'near', 'near'])).toEqual([2]);
+    expect(feedOverflow(['near', 'own', 'near', 'lead', 'near'])).toEqual([4]);
+    // Never more than FEED_MAX lines, a near one leaving before the
+    // viewer's and the leader's.
+    expect(feedOverflow(['own', 'lead', 'near', 'own', 'lead'])).toEqual([2]);
+    expect(feedOverflow(['own', 'own', 'lead', 'own', 'own'])).toEqual([4]);
+    expect(feedOverflow(['own', 'near'])).toEqual([]);
+    // However they come, what stands is at most FEED_MAX lines and
+    // FEED_NEAR_MAX near ones.
+    const tiers: FeedTier[] = ['own', 'lead', 'near'];
+    let feed: FeedTier[] = [];
+    for (let i = 0; i < 40; i++) {
+      feed = [tiers[(i * 7) % 3] as FeedTier, ...feed];
+      const gone = new Set(feedOverflow(feed));
+      feed = feed.filter((_, j) => !gone.has(j));
+      expect(feed.length).toBeLessThanOrEqual(FEED_MAX);
+      expect(feed.filter((t) => t === 'near').length).toBeLessThanOrEqual(FEED_NEAR_MAX);
+    }
   });
 });
 
