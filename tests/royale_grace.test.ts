@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { royaleSimOf } from '../server/royale_build';
 import { arrivalBlock } from '../server/royale_snapshot_blocks';
 import { gracesOf, ownGraceUntil } from '../src/net/royale_client';
-import { freshGraces, shimmerOpacity } from '../src/render/planet_grace';
+import { freshGraces, ownGraceFresh, shimmerOpacity } from '../src/render/planet_grace';
 import { dealDamage } from '../src/sim/combat/damage';
 import { ROYALE_SKILLS } from '../src/sim/content/bots/royale_skills';
 import { dist, type Vec3 } from '../src/sim/geo';
@@ -243,5 +243,15 @@ describe('the shimmer', () => {
     expect(freshGraces(seen, [{ ...g(1, 8), at: [0, 80, 0] }], 5.1)).toEqual([]);
     expect(freshGraces(seen, [], 6)).toEqual([]);
     expect(seen.size).toBe(0);
+  });
+
+  it('lands the own champion once, when its Grace has just begun', () => {
+    // An Arrival or a return seen at once: the thud.
+    expect(ownGraceFresh(5 + ARRIVAL_GRACE_S, false, 5.1)).toBe(true);
+    // The same Grace on the next frame: already landed.
+    expect(ownGraceFresh(5 + ARRIVAL_GRACE_S, true, 5.15)).toBe(false);
+    // First seen a second late (a slow load): no thud.
+    expect(ownGraceFresh(5 + ARRIVAL_GRACE_S, false, 6)).toBe(false);
+    expect(ownGraceFresh(null, false, 5)).toBe(false);
   });
 });
