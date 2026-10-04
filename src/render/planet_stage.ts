@@ -519,7 +519,14 @@ export class PlanetStage {
       DUSK_UNIFORMS.colDuskOn.value = 0;
       DUSK_UNIFORMS.colNextOn.value = 0;
     }
-    this.marks.update(now, this.caches, royale, this.dropping);
+    this.marks.update(now, this.caches, royale, this.dropping, this.base.time);
+    // The landing: the followed champion's feet touch the ground the
+    // second after the drop ends (liftOf's fall).
+    if (this.dropping) this.landed = false;
+    else if (!this.landed && royale && this.base.time - this.dropEndsAt >= 1) {
+      this.landed = true;
+      if (this.base.time - this.dropEndsAt < 2) this.pendingLanding = true;
+    }
     this.minimap.paint(now, royale?.dusk ?? null, this.caches);
   }
 
@@ -543,6 +550,15 @@ export class PlanetStage {
     }
     this.diveFrom = from;
     this.diveStartMs = performance.now();
+  }
+
+  // The own landing's moment, for the renderer's dust and thud; taken once.
+  private landed = true;
+  private pendingLanding = false;
+  takeLanding(): boolean {
+    const l = this.pendingLanding;
+    this.pendingLanding = false;
+    return l;
   }
 
   // A carry the stage made itself (the landing), for the renderer to

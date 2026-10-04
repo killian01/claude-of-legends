@@ -27,6 +27,19 @@ export type SfxName =
   | 'buy'
   | 'impact'
   | 'towershot'
+  // The battle royale's loud moments (ui/royale_moments.ts): a cache
+  // flipping open, the opening's rising ticks, an opening broken, an item
+  // finished, the Dusk's toll, a landing's thud, a Seedfall's rush, a
+  // takedown heard from afar, a column of light appearing unseen.
+  | 'chest'
+  | 'tick'
+  | 'crack'
+  | 'completed'
+  | 'toll'
+  | 'land'
+  | 'whoosh'
+  | 'clash'
+  | 'chime'
   // The basic-attack palette a forged creator picks from
   // (src/sim/content/sounds.ts): swing and gunshot the roster's own, the
   // rest recordings in the bank, synthesized through their family.
@@ -48,6 +61,21 @@ let sfxVolume = 1;
 // Per-call gain multiplier, set by playSfx/playCastSfx for the voices they
 // schedule synchronously; distance attenuation for other units' combat.
 let callGain = 1;
+// Per-call stereo pan (-1 left to 1 right) and pitch factor, set by playSfx
+// for the voices it schedules synchronously: a Clamor heard by bearing, a
+// cache's ticks climbing.
+let callPan = 0;
+let callPitch = 1;
+
+// The voice's way out: through a panner when the call is panned.
+function outlet(b: AudioBus, gain: GainNode): void {
+  if (callPan !== 0 && typeof b.ctx.createStereoPanner === 'function') {
+    const pan = b.ctx.createStereoPanner();
+    pan.pan.value = Math.max(-1, Math.min(1, callPan));
+    gain.connect(pan);
+    pan.connect(b.sfx);
+  } else gain.connect(b.sfx);
+}
 
 // User setting, 0..1; applies live and to a bus built later.
 export function setSfxVolume(v: number): void {
@@ -134,8 +162,10 @@ function tone(b: AudioBus, o: ToneOpts): void {
   const t0 = b.ctx.currentTime + (o.delay ?? 0);
   const osc = b.ctx.createOscillator();
   osc.type = o.type ?? 'sine';
-  osc.frequency.setValueAtTime(o.freq, t0);
-  if (o.slideTo !== undefined) osc.frequency.exponentialRampToValueAtTime(o.slideTo, t0 + o.dur);
+  osc.frequency.setValueAtTime(o.freq * callPitch, t0);
+  if (o.slideTo !== undefined) {
+    osc.frequency.exponentialRampToValueAtTime(o.slideTo * callPitch, t0 + o.dur);
+  }
   const gain = b.ctx.createGain();
   const vol = (o.vol ?? 0.5) * 0.16 * callGain;
   const attack = o.attack ?? 0.005;
@@ -151,7 +181,7 @@ function tone(b: AudioBus, o: ToneOpts): void {
     head = lp;
   }
   head.connect(gain);
-  gain.connect(b.sfx);
+  outlet(b, gain);
   if (o.verb) {
     const send = b.ctx.createGain();
     send.gain.value = o.verb;
@@ -183,8 +213,10 @@ function noise(b: AudioBus, o: NoiseOpts): void {
   const filter = b.ctx.createBiquadFilter();
   filter.type = o.type ?? 'bandpass';
   filter.Q.value = o.q ?? 1;
-  filter.frequency.setValueAtTime(o.freq, t0);
-  if (o.slideTo !== undefined) filter.frequency.exponentialRampToValueAtTime(o.slideTo, t0 + o.dur);
+  filter.frequency.setValueAtTime(o.freq * callPitch, t0);
+  if (o.slideTo !== undefined) {
+    filter.frequency.exponentialRampToValueAtTime(o.slideTo * callPitch, t0 + o.dur);
+  }
   const gain = b.ctx.createGain();
   const vol = (o.vol ?? 0.5) * 0.16 * callGain;
   gain.gain.setValueAtTime(0.0001, t0);
@@ -192,7 +224,7 @@ function noise(b: AudioBus, o: NoiseOpts): void {
   gain.gain.exponentialRampToValueAtTime(0.0001, t0 + o.dur);
   src.connect(filter);
   filter.connect(gain);
-  gain.connect(b.sfx);
+  outlet(b, gain);
   if (o.verb) {
     const send = b.ctx.createGain();
     send.gain.value = o.verb;
@@ -210,6 +242,9 @@ const MIN_INTERVAL_MS: Partial<Record<SfxName, number>> = {
   deny: 160,
   impact: 70,
   towershot: 120,
+  tick: 60,
+  clash: 140,
+  chime: 200,
 };
 const MIN_ATTACK_INTERVAL_MS = 90;
 
@@ -311,18 +346,27 @@ export function playCastSfx(school: string, gain = 1): void {
   callGain = 1;
 }
 
+// How a synthesized call is placed: its stereo pan (-1 left to 1 right)
+// and a pitch factor (1 the authored one).
+export interface SfxPlace {
+  pan?: number;
+  pitch?: number;
+}
+
 // gain scales the whole sound (1 = authored volume); combat events from
 // other units pass a distance-attenuated gain so nearby fights are audible
 // without the whole map playing at your ear.
-export function playSfx(name: SfxName, gain = 1): void {
+export function playSfx(name: SfxName, gain = 1, place: SfxPlace = {}): void {
   const b = audioBus();
   if (!b || b.ctx.state === 'suspended' || gain <= 0.02) return;
   const now = performance.now();
   const min = MIN_INTERVAL_MS[name] ?? (attackFamilyOf(name) ? MIN_ATTACK_INTERVAL_MS : 0);
   if (min > 0 && now - (lastPlay.get(name) ?? 0) < min) return;
   lastPlay.set(name, now);
-  if (playSfxBank(b, name, gain)) return;
+  if (place.pan === undefined && place.pitch === undefined && playSfxBank(b, name, gain)) return;
   callGain = Math.min(1.5, gain);
+  callPan = place.pan ?? 0;
+  callPitch = place.pitch ?? 1;
 
   // A little pitch jitter keeps rapid-fire combat sounds from stuttering
   // like one looped sample.
@@ -482,8 +526,78 @@ export function playSfx(name: SfxName, gain = 1): void {
       tone(b, { freq: 990, dur: 0.08, type: 'triangle', vol: 0.28 });
       tone(b, { freq: 1480, dur: 0.11, type: 'triangle', delay: 0.06, vol: 0.28, verb: 0.3 });
       break;
+    case 'chest':
+      // A heavy lid thrown back: the wood's knock, the hinge's creak, and
+      // a shower of gold glints climbing over it.
+      tone(b, { freq: 150, slideTo: 70, dur: 0.18, type: 'sine', vol: 0.7 });
+      noise(b, { dur: 0.14, freq: 700, slideTo: 260, type: 'lowpass', vol: 0.5 });
+      noise(b, { dur: 0.22, freq: 1600, slideTo: 2400, q: 6, vol: 0.18, delay: 0.03 });
+      for (const [i, f] of [1318.5, 1760, 2093, 2637].entries()) {
+        tone(b, {
+          freq: f,
+          dur: 0.22,
+          type: 'triangle',
+          delay: 0.08 + i * 0.05,
+          vol: 0.2,
+          verb: 0.6,
+        });
+      }
+      noise(b, { dur: 0.5, freq: 7000, type: 'highpass', vol: 0.1, delay: 0.08, verb: 0.6 });
+      break;
+    case 'tick':
+      // A latch working loose: a dry wooden click with a bright edge, its
+      // pitch climbing with every tick of the opening (SfxPlace.pitch).
+      noise(b, { dur: 0.035, freq: 2600, q: 3, vol: 0.5, attack: 0.001 });
+      tone(b, { freq: 880, dur: 0.07, type: 'triangle', vol: 0.3 });
+      break;
+    case 'crack':
+      // The opening broken: a split of wood and a falling buzz.
+      noise(b, { dur: 0.06, freq: 2000, slideTo: 500, q: 0.8, vol: 0.8, attack: 0.001 });
+      tone(b, { freq: 330, slideTo: 140, dur: 0.22, type: 'sawtooth', vol: 0.3, lpf: 900 });
+      break;
+    case 'completed':
+      // An item finished: an anvil's ring under a rising fifth.
+      tone(b, { freq: 1046.5, dur: 0.5, type: 'triangle', vol: 0.32, verb: 0.7 });
+      tone(b, { freq: 1568, dur: 0.6, type: 'sine', delay: 0.09, vol: 0.28, verb: 0.7 });
+      tone(b, { freq: 2093, dur: 0.7, type: 'sine', delay: 0.18, vol: 0.18, verb: 0.8 });
+      noise(b, { dur: 0.05, freq: 3400, q: 2, vol: 0.35, attack: 0.001 });
+      break;
+    case 'toll':
+      // The Dusk closing: a deep bell, its inharmonic partials ringing
+      // long into the hall.
+      tone(b, { freq: 82, dur: 2.6, type: 'sine', vol: 0.9, attack: 0.01, verb: 0.8 });
+      tone(b, { freq: 164 * 1.19, dur: 2.0, type: 'sine', vol: 0.32, verb: 0.8 });
+      tone(b, { freq: 82 * 2.76, dur: 1.4, type: 'triangle', vol: 0.18, verb: 0.9 });
+      noise(b, { dur: 0.08, freq: 600, type: 'lowpass', vol: 0.4 });
+      break;
+    case 'land':
+      // Boots into the ground after the drop: a sub thud and dust.
+      tone(b, { freq: 90, slideTo: 32, dur: 0.45, type: 'sine', vol: 1.0 });
+      noise(b, { dur: 0.5, freq: 900, slideTo: 140, type: 'lowpass', vol: 0.6, verb: 0.4 });
+      break;
+    case 'whoosh':
+      // Something big falling through the sky.
+      noise(b, { dur: 0.9, freq: 300, slideTo: 2600, q: 0.7, vol: 0.55, attack: 0.5, verb: 0.5 });
+      tone(b, { freq: 60, slideTo: 38, dur: 0.6, type: 'sine', delay: 0.7, vol: 0.6 });
+      break;
+    case 'clash':
+      // Steel far off: two metal rings and a dull impact, softened by the
+      // distance (the gain) and placed by bearing (the pan).
+      noise(b, { dur: 0.08, freq: 2400, q: 2.5, vol: 0.5, attack: 0.001 });
+      tone(b, { freq: 1900, slideTo: 1500, dur: 0.25, type: 'triangle', vol: 0.18, verb: 0.6 });
+      tone(b, { freq: 2650, dur: 0.2, type: 'sine', delay: 0.11, vol: 0.12, verb: 0.6 });
+      noise(b, { dur: 0.18, freq: 500, slideTo: 160, type: 'lowpass', vol: 0.4, delay: 0.1 });
+      break;
+    case 'chime':
+      // A column of light standing up: a high glassy bell and its octave.
+      tone(b, { freq: 1567.98, dur: 0.9, type: 'sine', vol: 0.32, verb: 0.9 });
+      tone(b, { freq: 2349.3, dur: 0.7, type: 'sine', delay: 0.08, vol: 0.2, verb: 0.9 });
+      tone(b, { freq: 3135.96, dur: 0.5, type: 'triangle', delay: 0.16, vol: 0.1, verb: 0.9 });
+      break;
     default:
       break;
   }
   callGain = 1;
+  callPan = 0;
+  callPitch = 1;
 }
