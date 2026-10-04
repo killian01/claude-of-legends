@@ -17,7 +17,7 @@ import { otherTeam } from '../sim/teams';
 import { type AbilityKey, DT, type TeamId, type Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import { buildPictureNotice } from '../ui/picture_notice';
-import { duskDepth, frostLevel } from '../ui/royale_moments';
+import { duskDepth, duskTickOnly, frostLevel } from '../ui/royale_moments';
 import { teamLook } from '../ui/team_look';
 import type { IWorld } from '../world_api';
 import {
@@ -1935,6 +1935,19 @@ export class Renderer {
     return 1 - 0.06 * (1 - t) * (1 - t);
   }
 
+  // A health drop that is the Dusk's burn alone (ui/royale_moments.ts
+  // duskTickOnly): no number over the head, no hit sound, no flash. The
+  // HUD's pill says the burn; a tick a frame piled "-1 -2" into a smear.
+  private duskTick(id: number, dhp: number, maxHp: number): boolean {
+    const planet = this.planet;
+    if (!planet) return false;
+    const r = planet.base.royaleView?.() ?? null;
+    const u = planet.base.units.get(id);
+    if (!r || !u || u.dead || r.st !== 'play') return false;
+    const depth = duskDepth(u.pos, r.dusk);
+    return duskTickOnly(dhp, maxHp, r.dusk.b, depth !== null && depth > 0);
+  }
+
   // The frost at the edges: how deep the followed champion stands in the
   // Dusk, eased; and the landing's dust and thud after the drop.
   private stepRoyaleFrame(planet: PlanetStage): void {
@@ -2093,7 +2106,7 @@ export class Renderer {
       // Every visible hit also lands a white flash and, on the player, a
       // camera kick, so fights read as impacts rather than draining bars.
       const dhp = t.lastHp - u.hp;
-      if (visible && dhp >= 1) {
+      if (visible && dhp >= 1 && !this.duskTick(id, dhp, u.maxHp)) {
         t.flashUntil = performance.now() + 130;
         // Rigged champions flinch on meaningful hits; the threshold keeps
         // damage-over-time ticks from looping the react forever.
