@@ -20,18 +20,33 @@ import {
   CLAMOR_HP,
   CLAMOR_PHASE,
   ERRAND_HP,
+  MARK_CALL_M,
+  MARK_FRESH_S,
+  RISING_CALL_M,
+  RISING_DARK_BURN,
+  RISING_DARK_HP,
+  RISING_DARK_M,
+  RISING_HP,
+  RISING_LEAD_S,
+  RISING_LEVEL,
   SEEDFALL_LATE_S,
+  STEAL_BODY_HP,
+  STEAL_M,
+  WARY_M,
+  WARY_STEP_M,
 } from '../../content/bots/royale_skills';
-import { dist, type Vec3 } from '../../geo';
-import type { ObsSeedfall, ObsUnit } from '../../policy';
-import { insideCap } from '../dusk';
+import { dirTo, dist, type Vec3 } from '../../geo';
+import type { ObsMark, ObsRising, ObsSeedfall, ObsUnit } from '../../policy';
+import { depthInside, insideCap } from '../dusk';
+import { along } from '../layout';
 import { CLAMOR_S } from '../types';
+import { strength } from './fight';
 import { p3, type Sense } from './sense';
 
 // A call's goal: a point to walk to, and why. An ambush names the
 // champion it strikes, or none while it waits at the point (the bush).
 export interface RoyaleCall {
-  kind: 'seedfall' | 'ambush' | 'clamor' | 'rising' | 'mark';
+  kind: 'seedfall' | 'ambush' | 'clamor' | 'rising' | 'mark' | 'wary';
   x: number;
   y: number;
   z: number;
@@ -163,9 +178,116 @@ export function clamorCall(sense: Sense): RoyaleCall | null {
   return best ? callAt('clamor', best) : null;
 }
 
-// The call that applies to this slot, or null: the ambush, the Seedfall,
-// the Clamor, the first that applies. Only at CALL_HP of health or more.
-export function royaleCall(sense: Sense): RoyaleCall | null {
+// Whether the bot takes on a big body (a Rising standing): a skill that
+// takes the creatures at RISING_LEVEL or more, with `hp` of its own health;
+// any skill to steal one under STEAL_BODY_HP.
+export function takesBody(sense: Sense, bodyHpFrac: number, hp: number): boolean {
+  if (bodyHpFrac < STEAL_BODY_HP) return true;
+  return sense.skill.creatures && sense.s.level >= RISING_LEVEL && sense.s.hpFrac >= hp;
+}
+
+// Whether a big body's site is in reach of the bot's errand: in the light,
+// or past its edge by RISING_DARK_M at most while the dark burns
+// RISING_DARK_BURN or less and the bot keeps RISING_DARK_HP of its health.
+export function risingReachable(sense: Sense, at: Vec3): boolean {
+  const now = sense.now;
+  if (now.radius <= 0) return false;
+  if (insideCap(now, at)) return true;
+  return (
+    sense.r.dusk.burn <= RISING_DARK_BURN + 1e-9 &&
+    depthInside(now, at) >= -RISING_DARK_M &&
+    sense.s.hpFrac >= RISING_DARK_HP
+  );
+}
+
+// The Rising call: the nearest Rising in reach the bot answers, a
+// creature-taking skill at RISING_LEVEL and RISING_HP within RISING_CALL_M
+// from RISING_LEAD_S before it rises; any skill to a standing body under
+// STEAL_BODY_HP within STEAL_M (the steal).
+export function risingCall(sense: Sense): RoyaleCall | null {
+  let best: ObsRising | null = null;
+  let bestD = Number.POSITIVE_INFINITY;
+  for (const r of sense.r.risings ?? []) {
+    const at = p3(r);
+    if (!risingReachable(sense, at)) continue;
+    const d = dist(sense.me, at);
+    const steal = r.up && r.hpFrac < STEAL_BODY_HP && d <= STEAL_M;
+    const answer =
+      d <= RISING_CALL_M &&
+      sense.obs.time + 1e-9 >= r.risesAt - RISING_LEAD_S &&
+      takesBody(sense, 1, RISING_HP);
+    if (!steal && !answer) continue;
+    if (d < bestD) {
+      best = r;
+      bestD = d;
+    }
+  }
+  return best ? callAt('rising', p3(best)) : null;
+}
+
+// The bot's odds against a marked champion it cannot see: its own health
+// and level against the mark's level at full health.
+export function markOdds(sense: Sense, m: ObsMark): number {
+  const own = strength(sense.s.hpFrac, sense.s.level);
+  const them = strength(1, m.level);
+  return own + them > 0 ? own / (own + them) : 0.5;
+}
+
+function freshMarks(sense: Sense, within: number): ObsMark[] {
+  const out: ObsMark[] = [];
+  for (const m of sense.r.marks ?? []) {
+    if (m.id === sense.s.id || sense.obs.time - m.shownAt > MARK_FRESH_S + 1e-9) continue;
+    if (dist(sense.me, p3(m.at)) <= within) out.push(m);
+  }
+  return out;
+}
+
+// The hunt: the nearest mark shown in the last MARK_FRESH_S within
+// MARK_CALL_M, in the light, for a creature-taking skill whose odds
+// against it reach its nerve; to the point it was last shown.
+export function markCall(sense: Sense, nerve: number): RoyaleCall | null {
+  if (!sense.skill.creatures) return null;
+  let best: ObsMark | null = null;
+  let bestD = Number.POSITIVE_INFINITY;
+  for (const m of freshMarks(sense, MARK_CALL_M)) {
+    const at = p3(m.at);
+    if (sense.now.radius > 0 && !insideCap(sense.now, at)) continue;
+    if (markOdds(sense, m) < nerve) continue;
+    const d = dist(sense.me, at);
+    if (d < bestD) {
+      best = m;
+      bestD = d;
+    }
+  }
+  return best ? callAt('mark', p3(best.at)) : null;
+}
+
+// A gentle bot's care: a mark shown in the last MARK_FRESH_S within WARY_M
+// is walked away from, WARY_STEP_M, while that keeps it in the light.
+export function waryCall(sense: Sense): RoyaleCall | null {
+  if (sense.skill.creatures) return null;
+  const near = freshMarks(sense, WARY_M).filter((m) => m.kind !== 'slayer');
+  if (near.length === 0) return null;
+  const from = p3(near[0]!.at);
+  const dir = dirTo(from, sense.me);
+  if (!dir) return null;
+  const to = along(sense.me, dir as Vec3, WARY_STEP_M, sense.layout.radius);
+  if (sense.now.radius > 0 && depthInside(sense.now, to) < 3) return null;
+  return callAt('wary', to);
+}
+
+// The call that applies to this slot, or null: a gentle bot's care first,
+// then the ambush, the Seedfall, the Clamor, a Rising, the hunt of a mark,
+// the first that applies. Only at CALL_HP of health or more, but the care.
+export function royaleCall(sense: Sense, nerve = Number.POSITIVE_INFINITY): RoyaleCall | null {
+  const wary = waryCall(sense);
+  if (wary) return wary;
   if (sense.s.hpFrac < CALL_HP) return null;
-  return ambushCall(sense) ?? seedfallCall(sense) ?? clamorCall(sense);
+  return (
+    ambushCall(sense) ??
+    seedfallCall(sense) ??
+    clamorCall(sense) ??
+    risingCall(sense) ??
+    markCall(sense, nerve)
+  );
 }

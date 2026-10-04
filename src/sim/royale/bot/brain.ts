@@ -9,9 +9,10 @@
 // kite between strikes; a low enemy finished; a leaving one chased while
 // it can be caught; never a chase into the Dusk); holding still while a
 // cache opens; ahead of the Dusk's next cap; a winning bot after its
-// target into the bush; the calls (a Seedfall, a Clamor); the nearest
-// cache; a camp when nothing better is near; the big creatures for a
-// strong bot strong enough; a cache or a Seedfall further off, a wander
+// target into the bush; a big body in reach it takes on; the calls (a
+// gentle bot's care near a mark, a Seedfall, a Clamor, a Rising, the hunt
+// of a mark); the nearest cache; a camp when nothing better is near; a
+// cache or a Seedfall further off, a wander
 // only with none near. Its skill (content/bots/royale_skills.ts), sharpened
 // by its score and the Dusk, slows its eye, scatters its aim and sets its
 // nerve.
@@ -19,6 +20,7 @@
 import {
   CALL_HP,
   CALM_NERVE,
+  CREATURE_HP,
   ERRAND_NEAR_M,
   ONE_LIFE_PACE,
   PACE_NERVE_MAX,
@@ -38,7 +40,16 @@ import type { Rng } from '../../rng';
 import { depthInside, insideCap } from '../dusk';
 import { along, type RoyaleLayout } from '../layout';
 import { RESPAWN_S } from '../types';
-import { ambushBush, ambushCall, type RoyaleCall, royaleCall, seedfallErrand } from './calls';
+import {
+  ambushBush,
+  ambushCall,
+  type RoyaleCall,
+  risingCall,
+  risingReachable,
+  royaleCall,
+  seedfallErrand,
+  takesBody,
+} from './calls';
 import { pickDropPoint } from './drop_pick';
 import {
   awayPoint,
@@ -221,18 +232,42 @@ function fight(sense: Sense, target: ObsUnit, rng: Rng): Action {
   return { kind: 'attack', targetId: target.id };
 }
 
-// A camp body, or a big creature for a strong bot strong enough, in reach.
-function neutralTarget(sense: Sense): ObsUnit | null {
+// A camp body, or a big body (a Rising standing) the bot takes on, in
+// reach: a creature-taking skill at RISING_LEVEL and CREATURE_HP, any
+// skill to steal one under STEAL_BODY_HP (calls.ts takesBody).
+// An enemy beside the bot keeps it off a camp, never off a big body: the
+// race for its last hit is the Rising's gamble (two bots that each waited
+// for the other to leave stood a minute beside a Pyrefang nobody touched,
+// a probe, tranche 2).
+export function neutralTarget(sense: Sense): ObsUnit | null {
   if (sense.s.hpFrac < CAMP_HP) return null;
-  if (enemyBeside(sense)) return null;
+  const beside = enemyBeside(sense);
   for (const n of sense.neutrals) {
     const d = dist(sense.me, p3(n));
     if (d > CAMP_FIGHT_M) break;
-    if (depthInside(sense.now, p3(n)) < 2) continue;
-    if (n.kind === 'camp') return n;
-    if (sense.skill.creatures && sense.s.level >= 9 && sense.s.hpFrac >= 0.8) return n;
+    if (n.kind === 'camp') {
+      if (!beside && depthInside(sense.now, p3(n)) >= 2) return n;
+      continue;
+    }
+    if (risingReachable(sense, p3(n)) && takesBody(sense, n.hpFrac, CREATURE_HP)) return n;
   }
   return null;
+}
+
+// A bot in the dark on a Rising's errand (calls.ts risingReachable): a big
+// body it takes on in reach, or a Rising it answers; it stays out there,
+// neither leaving the dark nor walking ahead of the Dusk, while it holds.
+export function risingInDark(sense: Sense): boolean {
+  if (sense.now.radius <= 0 || depthInside(sense.now, sense.me) >= 1) return false;
+  const body = neutralTarget(sense);
+  if (body && body.kind !== 'camp') return true;
+  return sense.s.hpFrac >= CALL_HP && risingCall(sense) !== null;
+}
+
+function hitNeutral(sense: Sense, n: ObsUnit, rng: Rng): Action {
+  const c = pickCast(sense, n, rng, true, false);
+  if (c && sense.s.mana > sense.s.maxMana * 0.4) return c;
+  return { kind: 'attack', targetId: n.id };
 }
 
 const RANK: Readonly<Record<RoyaleSkillId, number>> = { gentle: 0, normal: 1, strong: 2 };
@@ -442,7 +477,10 @@ export function decide(
   // Once the last light is out there is nowhere to go: no way out of the
   // dark, every fight is the last one.
   const lightsOut = sense.now.radius <= 0;
-  const dark = lightsOut ? null : leaveDark(sense);
+  // A Rising's errand may stand a little way into the dark while it burns
+  // mildly (risingInDark); otherwise out of it at once.
+  const errandInDark = !lightsOut && risingInDark(sense);
+  const dark = lightsOut || errandInDark ? null : leaveDark(sense);
   if (dark) return why('dark', darkEscape(sense) ?? dark);
 
   // A held opening keeps to its reach: no sidestep out of it.
@@ -530,13 +568,19 @@ export function decide(
 
   if (r.opening) return why('opening', holdStill(sense));
 
-  const ahead = beatDusk(sense);
+  const ahead = errandInDark ? null : beatDusk(sense);
   if (ahead) return why('beat-dusk', ahead);
 
   const follow = followLastSeen(sense);
   if (follow) return why('follow', follow);
 
-  const call = royaleCall(sense) ?? errand;
+  // A big body in reach comes before the calls (a Rising's call walks the
+  // bot here), a camp after the near caches.
+  const neutral = neutralTarget(sense);
+  if (neutral && neutral.kind !== 'camp')
+    return why('rising-fight', hitNeutral(sense, neutral, rng));
+
+  const call = royaleCall(sense, nerveOf(sense, false)) ?? errand;
   if (call) {
     const id = call.seedfallId;
     const sf = id !== undefined ? r.seedfalls?.find((x) => x.id === id) : undefined;
@@ -549,12 +593,7 @@ export function decide(
   const cache = pickCache(sense, CACHE_NEAR_M);
   if (cache) return why('cache-near', lootCache(sense, cache));
 
-  const neutral = neutralTarget(sense);
-  if (neutral) {
-    const c = pickCast(sense, neutral, rng, true, false);
-    if (c && sense.s.mana > sense.s.maxMana * 0.4) return why('neutral', c);
-    return why('neutral', { kind: 'attack', targetId: neutral.id });
-  }
+  if (neutral) return why('neutral', hitNeutral(sense, neutral, rng));
 
   const camp = enemyBeside(sense) ? null : pickCampSpot(sense);
   if (camp && sense.s.hpFrac >= CAMP_HP) return why('camp', moveTo(sense, camp));
