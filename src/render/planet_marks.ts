@@ -156,11 +156,16 @@ export class PlanetMarks {
   private readonly sparkTexture: THREE.Texture;
   private readonly column: THREE.Texture;
   private readonly stopCues: () => void;
-  private lastNow = 0;
+  // The last frame's time; null before the first. An effect starts at the
+  // frame it was built after, or, before any frame (the planet's first
+  // frame held while its programs link), at the clock: a cache opened or a
+  // seed come down then is timed from when it happened, not ended at once.
+  private lastNow: number | null = null;
 
   constructor(
     private readonly ground: PlanetGround,
     private readonly radius: number,
+    private readonly clock: () => number = () => performance.now(),
   ) {
     this.group.name = 'planet-marks';
     this.pillars = new PlanetPillars(ground, radius);
@@ -356,8 +361,9 @@ export class PlanetMarks {
 
     // One burst built hidden now and gone at the first frame: its lid and
     // sparks link their programs with the planet's, before its first
-    // frame, not at the first cache opened (the programs are kept).
-    this.burst({ x: 0, y: radius, z: 0 }, 0);
+    // frame, not at the first cache opened (the programs are kept). Its
+    // life ended before it began.
+    this.burst({ x: 0, y: radius, z: 0 }, 0, Number.NEGATIVE_INFINITY);
     for (const b of this.bursts) for (const o of [b.lid, b.column, b.sparks]) o.visible = false;
   }
 
@@ -450,7 +456,7 @@ export class PlanetMarks {
 
   // The lid flips back, gold sparks fly, a column stands for 1.2 s: twice
   // as tall and gold for a golden cache and a Seedfall's.
-  private burst(p: Vec3, kind: number): void {
+  private burst(p: Vec3, kind: number, startMs = this.startNow()): void {
     while (this.bursts.length >= MAX_BURSTS) this.endBurst(this.bursts.shift()!);
     const look = cacheLook(kind);
     const rich = kind > 0;
@@ -523,7 +529,7 @@ export class PlanetMarks {
     this.group.add(sparks);
 
     this.bursts.push({
-      startMs: this.lastNow,
+      startMs,
       lid,
       column,
       sparks,
@@ -581,7 +587,7 @@ export class PlanetMarks {
     column.quaternion.setFromUnitVectors(UP, normal);
     column.scale.set(3, 0.05, 3);
     this.group.add(column);
-    this.flashes.push({ startMs: this.lastNow, column });
+    this.flashes.push({ startMs: this.startNow(), column });
   }
 
   // A champion come down fresh (an Arrival, a return): a pale ring and a
@@ -619,12 +625,17 @@ export class PlanetMarks {
     ring.matrixAutoUpdate = false;
     ring.matrix.copy(this.standing(p, 0.12, r0));
     this.group.add(ring);
-    this.cracks.push({ startMs: this.lastNow, ring, ms, r0, r1, peak });
+    this.cracks.push({ startMs: this.startNow(), ring, ms, r0, r1, peak });
+  }
+
+  // When an effect built now starts.
+  private startNow(): number {
+    return this.lastNow ?? this.clock();
   }
 
   // The bursts and the cracks, every frame.
   private stepEffects(now: number): void {
-    const dt = Math.min(0.05, Math.max(0, (now - this.lastNow) / 1000));
+    const dt = Math.min(0.05, Math.max(0, (now - (this.lastNow ?? now)) / 1000));
     this.lastNow = now;
     for (let i = this.bursts.length - 1; i >= 0; i--) {
       const b = this.bursts[i]!;
