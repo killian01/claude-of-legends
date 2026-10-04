@@ -99,9 +99,8 @@ export interface Presentation {
   // beside the K/D/A and a pop with the reason.
   showPoints(delta: number, total: number, reason: PointsReason): void;
   // The battle royale's end screen (ui/royale_hud.ts), from the result the
-  // server sends this person; nothing in a 5v5. `next`: Respawn's next
-  // match already runs behind it.
-  showRoyaleResult(result: RoyaleResult, next?: boolean): void;
+  // server sends this person; nothing in a 5v5.
+  showRoyaleResult(result: RoyaleResult): void;
   // The pause menu, where Leave match lives: what the browser's Back does
   // mid-match instead of leaving (src/game/nav.ts). Back again resumes.
   toggleEscapeMenu(): void;
@@ -796,7 +795,7 @@ export function startPresentation(
     setMatchResult: (rated, delta, rating, queue, way) =>
       hud.setMatchResult(rated, delta, rating, queue, way),
     showPoints: (delta, total, reason) => hud.showPoints(delta, total, reason),
-    showRoyaleResult: (result, next) => hud.showRoyaleResult(result, next),
+    showRoyaleResult: (result) => hud.showRoyaleResult(result),
     toggleEscapeMenu: () => hud.toggleEscapeMenu(),
     covers: () => hud.covers(),
     stage: stage.el,

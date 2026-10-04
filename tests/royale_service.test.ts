@@ -1,9 +1,10 @@
 // The battle royale on the server (server/royale_service.ts, ADR 0031) on a
 // fake sim (tests/royale_fake.ts): entering starts a match or drops into
 // one, the drop and the orders reach the sim, each person gets their own
-// snapshots, the end tells each their result, Respawn moves the people into
-// the next match, One life offers Play again, a dropped seat waits for its
-// owner, and the points bank as they come.
+// snapshots, the end tells each their result, Respawn lets everyone go and
+// its Play the next match drops them into the match kept running, One life
+// offers Play again, a dropped seat waits for its owner, and the points bank
+// as they come.
 
 import { describe, expect, it } from 'vitest';
 import type { RoyaleReplay } from '../server/royale_match';
@@ -267,7 +268,7 @@ describe('playing', () => {
 });
 
 describe('the end', () => {
-  it('Respawn tells each person their result and moves them into the next match', () => {
+  it('Respawn tells each person their result and the end, and moves nobody', () => {
     const h = harness();
     const a = h.connect(1, 'alice');
     const b = h.connect(2, 'bob');
@@ -282,16 +283,19 @@ describe('the end', () => {
     expect(result).toMatchObject({ v: 'respawn', of: ROYALE_SEATS });
     expect(result.top.length).toBeGreaterThan(0);
     expect(h.last(2, 'royale_result')).toBeDefined();
-    // The next match, at once, with both people in its drop.
-    expect(h.fake.sims).toHaveLength(2);
-    expect(h.service.matches.size).toBe(1);
-    expect(h.to(1, 'match_start')).toHaveLength(2);
-    expect(h.to(2, 'match_start')).toHaveLength(2);
-    const next = h.fake.picks[1]!;
-    expect(next.filter((p) => !p.bot).map((p) => p.name)).toEqual(['alice', 'bob']);
-    expect(a.matchId).toBe(b.matchId);
-    h.step(1);
-    expect(h.last(1, 'snap')?.royale?.st).toBe('drop');
+    // The result, then the end: no next match behind the end screen.
+    for (const id of [1, 2]) {
+      const kinds = h.sent.filter((s) => s.to === id && s.msg.t !== 'snap').map((s) => s.msg.t);
+      expect(kinds.slice(-2)).toEqual(['royale_result', 'match_end']);
+      expect(h.to(id, 'match_start')).toHaveLength(1);
+    }
+    expect(h.fake.sims).toHaveLength(1);
+    expect(h.service.matches.size).toBe(0);
+    expect(a.matchId).toBeNull();
+    expect(b.matchId).toBeNull();
+    expect(h.service.owns(1)).toBe(false);
+    h.step(5);
+    expect(h.to(1, 'match_start')).toHaveLength(1);
     // The finished match's replay: its picks, the drop picks and the mode.
     const replay = h.replays.get(100)!;
     expect(replay.royale).toEqual({
@@ -306,6 +310,22 @@ describe('the end', () => {
       ['ended', 'royale', 'respawn'],
       ['ended', 'royale', 'respawn'],
     ]);
+  });
+
+  it('Respawn: Play the next match enters anew with the same pick', () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    h.enter(a, 'respawn', 'torv');
+    h.runTo(DROP_S + PLAY_S + 0.1);
+    expect(h.last(1, 'match_end')).toBeDefined();
+    // The end screen's first button: the same entry as Play now. With no
+    // match running, a new one starts with the person in it.
+    h.enter(a, 'respawn', 'torv');
+    expect(h.fake.sims).toHaveLength(2);
+    expect(h.to(1, 'match_start')).toHaveLength(2);
+    const start = h.last(1, 'match_start')!;
+    const entry = h.service.matches.get(a.matchId!)!;
+    expect(entry.match.sim.units.get(start.selfUnitId)?.championId).toBe('torv');
   });
 
   it('One life tells the fallen at once, and Play again enters anew', () => {
@@ -349,7 +369,7 @@ describe('the end', () => {
 });
 
 describe('a tab left open', () => {
-  it('hears its Respawn result and is not moved into the next match', () => {
+  it('hears its Respawn result, and no match starts for it', () => {
     const h = harness();
     const a = h.connect(1, 'alice');
     h.enter(a);
@@ -485,6 +505,50 @@ describe('the match kept running for the next visitor', () => {
     expect(b.replays.size).toBe(0);
     expect(b.service.matches.has(first)).toBe(false);
     expect(b.service.matches.size).toBe(1);
+  });
+
+  it('outlives a Respawn end: the person goes, and the next match takes them with an Arrival', () => {
+    const h = harness({ standing: true });
+    h.step(1);
+    const first = [...h.service.matches.keys()][0]!;
+    const a = h.connect(1, 'alice', true);
+    h.enter(a, 'respawn', 'torv');
+    expect(a.matchId).toBe(first);
+    const sim = h.fake.sims[0]!;
+    // Played to the end, an order now and then.
+    while (sim.royale.stage !== 'over') {
+      h.step(1);
+      if (sim.tickCount % 400 === 0) h.say(a, { t: 'stop' });
+    }
+    h.step(1);
+    expect(h.last(1, 'royale_result')).toMatchObject({ v: 'respawn' });
+    expect(h.last(1, 'match_end')).toBeDefined();
+    expect(h.to(1, 'match_start')).toHaveLength(1);
+    expect(a.matchId).toBeNull();
+    // The match kept for visitors runs on, nobody moved into it.
+    expect(h.service.matches.has(first)).toBe(false);
+    expect(h.service.matches.size).toBe(1);
+    const [standing] = [...h.service.matches.values()];
+    expect(standing!.match.players.size).toBe(0);
+    expect(h.service.presence().joinable).toBe(true);
+    // Play the next match: a drop in, the champion arriving fresh.
+    const arrived: number[] = [];
+    const next = h.fake.sims[1]!;
+    next.beginArrival = (id: number) => {
+      arrived.push(id);
+    };
+    h.enter(a, 'respawn', 'torv');
+    const start = h.last(1, 'match_start')!;
+    expect(start.dropIn).toBe(true);
+    expect(a.matchId).toBe(standing!.match.id);
+    expect(arrived).toEqual([start.selfUnitId]);
+    expect(next.units.get(start.selfUnitId)?.championId).toBe('torv');
+    // And one is always open after it ends in turn.
+    while (next.royale.stage !== 'over') h.step(1);
+    h.step(1);
+    expect(h.service.presence().joinable).toBe(true);
+    expect(h.last(1, 'match_end')).toBeDefined();
+    expect(h.to(1, 'match_start')).toHaveLength(2);
   });
 
   it('opens the next one when the running one stops taking people', () => {

@@ -1369,11 +1369,10 @@ async function runRoyale(
     // What arrived before the presentation opened: the points, the result.
     let pendingPoints: Extract<ServerMsg, { t: 'points' }> | null = null;
     let pendingResult: RoyaleResult | null = null;
-    // The result shown, and whether the next match runs behind it:
-    // Respawn moves the people still playing into its next match at once,
-    // on the same socket (server/royale_service.ts).
+    // The result shown: the end screen stays until one of its buttons, and
+    // Play again (Respawn's Play the next match) enters anew on a new socket
+    // (server/royale_service.ts moves nobody).
     let shownResult: RoyaleResult | null = null;
-    let resultOverNext = false;
     const finish = (action: PostMatchAction): void => {
       if (finished) return;
       finished = true;
@@ -1418,7 +1417,7 @@ async function runRoyale(
         winner: world.winner,
         seconds: world.time,
       }));
-      if (!matchEnded && (pendingResult === null || resultOverNext)) {
+      if (!matchEnded && pendingResult === null) {
         layer.guard(() => pres?.toggleEscapeMenu());
       }
       // The drop's landing point goes through the world (IWorld.pickDrop).
@@ -1432,7 +1431,7 @@ async function runRoyale(
         pendingPoints = null;
       }
       if (pendingResult) {
-        opening.showRoyaleResult(pendingResult, resultOverNext);
+        opening.showRoyaleResult(pendingResult);
         shownResult = pendingResult;
         pendingResult = null;
       }
@@ -1460,7 +1459,6 @@ async function runRoyale(
       // The result is the mode's own message (net/royale_wire.ts).
       if (isRoyaleResult(raw)) {
         layer.unguard();
-        resultOverNext = false;
         if (pres) {
           pres.showRoyaleResult(raw);
           shownResult = raw;
@@ -1473,19 +1471,6 @@ async function runRoyale(
         case 'match_start':
           registerForgedFromMatch(msg.forgedAssets);
           droppedIn = msg.dropIn === true;
-          // Respawn's next match on the same socket: the last one's
-          // presentation goes, its end screen stands over the next one's
-          // drop until Play the next match closes it.
-          if (pres && shownResult) {
-            ends?.dispose();
-            ends = null;
-            pres.dispose();
-            pres = null;
-            pendingResult = shownResult;
-            shownResult = null;
-            resultOverNext = true;
-            matchEnded = false;
-          }
           world.applyServer(msg);
           break;
         case 'snap': {
