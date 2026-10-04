@@ -411,3 +411,17 @@ export function shift(p: Vec2, v: Vec2): Vec2 {
   if (!dir) return copy(p);
   return offset(p, dir, len3(v.x, v.y, v.z));
 }
+
+// The raw difference a - b on every axis (the plane's two): a chord as a
+// vector, left as it is, where delta turns it into a's tangent plane. For
+// a decision's own vector sums (a line's lateral offset, a push away).
+export function sub(a: Vec2, b: Vec2): Vec2 {
+  if (a.y === undefined || b.y === undefined) return { x: a.x - b.x, z: a.z - b.z };
+  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+}
+
+// u + v * s on every axis (the plane's two): two directions blended.
+export function addScaled(u: Vec2, v: Vec2, s: number): Vec2 {
+  if (u.y === undefined || v.y === undefined) return { x: u.x + v.x * s, z: u.z + v.z * s };
+  return { x: u.x + v.x * s, y: u.y + v.y * s, z: u.z + v.z * s };
+}

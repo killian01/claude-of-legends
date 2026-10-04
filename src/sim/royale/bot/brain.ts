@@ -28,7 +28,7 @@ import {
   SHARPEN_NORMAL_AT,
   SHARPEN_STRONG_AT,
 } from '../../content/bots/royale_skills';
-import { dirTo, dist, dot, norm, scale, turnLeft, type Vec3 } from '../../geo';
+import { dirTo, dist, dot, norm, scale, sub, turnLeft, type Vec3 } from '../../geo';
 import { KITE_DANGER_FRAC, KITE_STEP, RANGED_MIN_RANGE } from '../../playbook/micro';
 import type { Action, Observation, ObsRoyale, ObsSeedfall, ObsUnit } from '../../policy';
 import type { Rng } from '../../rng';
@@ -136,10 +136,10 @@ export function dodge(sense: Sense, rng: Rng): Action | null {
     if (p.friendly || p.homing) continue;
     const pos = { x: p.x, y: p.y ?? 0, z: p.z };
     const dir = { x: p.dirX, y: p.dirY ?? 0, z: p.dirZ };
-    const rel = { x: me.x - pos.x, y: me.y - pos.y, z: me.z - pos.z };
+    const rel = sub(me, pos) as Vec3;
     const ahead = dot(rel, dir);
     if (ahead < 0 || ahead / Math.max(1, p.speed) > DODGE_ETA_S) continue;
-    const lat = { x: rel.x - dir.x * ahead, y: rel.y - dir.y * ahead, z: rel.z - dir.z * ahead };
+    const lat = sub(rel, scale(dir, ahead)) as Vec3;
     const lateral = norm(lat);
     if (lateral > p.radius + SELF_RADIUS + 0.5) continue;
     if (rng.next() >= sense.skill.dodge) return null;
@@ -166,7 +166,7 @@ export function dodge(sense: Sense, rng: Rng): Action | null {
 
 function awayFrom(sense: Sense, from: Vec3, len: number): Vec3 {
   const R = sense.layout.radius;
-  const rel = { x: sense.me.x - from.x, y: sense.me.y - from.y, z: sense.me.z - from.z };
+  const rel = sub(sense.me, from) as Vec3;
   const n = norm(rel);
   if (n < 1e-6) return sense.me;
   return along(sense.me, scale(rel, 1 / n) as Vec3, Math.max(0.5, len), R);

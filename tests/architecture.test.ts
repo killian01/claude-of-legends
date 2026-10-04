@@ -131,8 +131,10 @@ const CORE_ON_THE_PLANET = [
   'royale/risings.ts',
   'royale/score.ts',
   'royale/seedfall.ts',
+  'royale/bot/brain.ts',
   'royale/bot/calls.ts',
   'royale/bot/drop_pick.ts',
+  'royale/bot/fight.ts',
   'royale/bot/sense.ts',
   'royale/bot/travel.ts',
 ];

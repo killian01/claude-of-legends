@@ -7,7 +7,7 @@
 
 import type { AbilityDef } from '../../combat/casting';
 import { ITEMS } from '../../content/items';
-import { dirTo, dist, norm, scale, type Vec3 } from '../../geo';
+import { addScaled, dirTo, dist, dot, norm, scale, unit, type Vec3 } from '../../geo';
 import { abilityRange, CHAMPION_ATTACK_RANGE, hardCCd, readySigil } from '../../playbook/micro';
 import { LEVEL_WEIGHT } from '../../playbook/odds';
 import type { Action, ObsUnit } from '../../policy';
@@ -207,16 +207,13 @@ export function awayPoint(sense: Sense, len: number): Vec3 {
   }
   const inward = sense.now.radius > 0 ? dirTo(sense.me, sense.now.center) : null;
   let dir: Vec3 | null = null;
-  const n = Math.sqrt(ax * ax + ay * ay + az * az);
+  const n = norm({ x: ax, y: ay, z: az });
   if (n > 1e-6) dir = { x: ax / n, y: ay / n, z: az / n };
   if (dir && inward) {
     const out = along(sense.me, dir, len, R);
     if (depthInside(sense.now, out) < 3) {
-      const mx = dir.x + inward.x * 1.5;
-      const my = dir.y + (inward.y ?? 0) * 1.5;
-      const mz = dir.z + inward.z * 1.5;
-      const m = Math.sqrt(mx * mx + my * my + mz * mz);
-      dir = m > 1e-6 ? { x: mx / m, y: my / m, z: mz / m } : (inward as Vec3);
+      const mixed = addScaled(dir, inward, 1.5);
+      dir = norm(mixed) > 1e-6 ? (unit(mixed) as Vec3) : (inward as Vec3);
     }
   }
   if (!dir) dir = (inward as Vec3 | null) ?? null;
@@ -279,7 +276,7 @@ export function awaySpeed(sense: Sense, e: ObsUnit): number {
   const dir = dirTo(sense.me, p3(e));
   if (!dir) return 0;
   const v = velocity(e);
-  return v.x * dir.x + v.y * (dir.y ?? 0) + v.z * dir.z;
+  return dot(v, dir);
 }
 
 export function leaving(sense: Sense, e: ObsUnit): boolean {
