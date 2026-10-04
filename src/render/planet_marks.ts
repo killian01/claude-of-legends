@@ -5,15 +5,19 @@
 // is broken, render/royale_cues.ts), the launch
 // pads (gold discs with a faint arc to where they throw), the beacons of
 // the crossroads, and during the drop the landing picks (the own one a
-// tall light, everyone else's a dot); and the pillars of light over what
-// everyone should find (planet_pillars.ts). All of it lives on the planet, in
+// tall light, everyone else's a dot); the pillars of light over what
+// everyone should find (planet_pillars.ts); and the shimmer of a champion
+// in its Grace with the dust of its coming down (planet_grace.ts). All of
+// it lives on the planet, in
 // sphere coordinates, turned with it under the chart and never bent: a few
 // instanced draws whatever the count.
 
 import * as THREE from 'three';
+import { gracesOf } from '../net/royale_client';
 import type { SnapCache, SnapRoyale } from '../net/royale_wire';
 import { SEEDFALL_IMPACT_M } from '../sim/content/royale_events';
 import type { Vec3 } from '../sim/geo';
+import { PlanetGrace } from './planet_grace';
 import { type Pillar, PlanetPillars } from './planet_pillars';
 import type { PlanetGround } from './planet_terrain';
 import { onRoyaleCue, type RoyaleCue } from './royale_cues';
@@ -134,6 +138,7 @@ export class PlanetMarks {
   private readonly pickMat: THREE.PointsMaterial;
   private shownCaches: readonly SnapCache[] | null = null;
   private readonly pillars: PlanetPillars;
+  private readonly grace: PlanetGrace;
   private readonly owned: { dispose(): void }[] = [];
   // Caches that opened before the list said so: hidden at once.
   private readonly hidden = new Set<number>();
@@ -157,6 +162,12 @@ export class PlanetMarks {
     this.pillars = new PlanetPillars(ground, radius);
     this.group.add(this.pillars.group);
     this.owned.push(this.pillars);
+    this.grace = new PlanetGrace(
+      (p, lift, scale) => this.standing(p, lift, scale),
+      (p) => this.arrivalDust(p),
+    );
+    this.group.add(this.grace.group);
+    this.owned.push(this.grace);
     const glow = glowTexture();
     this.owned.push(glow);
     this.sparkTexture = glow;
@@ -557,6 +568,13 @@ export class PlanetMarks {
     this.flashes.push({ startMs: this.lastNow, column });
   }
 
+  // A champion come down fresh (an Arrival, a return): a pale ring and a
+  // puff of dust at its feet.
+  arrivalDust(p: Vec3): void {
+    this.wave(p, this.crackGeo, 0xe8dcc0, true, 600, 0.8, 2.8, 0.7);
+    this.wave(p, this.dustGeo, 0xcbb48a, false, 1100, 0.6, 3.6, 0.6);
+  }
+
   private endFlash(f: Flash): void {
     this.group.remove(f.column);
     (f.column.material as THREE.Material).dispose();
@@ -680,6 +698,9 @@ export class PlanetMarks {
     royale: SnapRoyale | null,
     dropping: boolean,
     time = 0,
+    // Where the renderer draws a champion, when the stage tells it: the
+    // Grace's shimmer stands there (else at the snapshot's point, eased).
+    unitAt?: (unitId: number) => Vec3 | null,
   ): void {
     if (caches !== this.shownCaches) {
       this.shownCaches = caches;
@@ -713,6 +734,7 @@ export class PlanetMarks {
     this.picks.geometry.setDrawRange(0, n);
     this.pickMat.size = 15 + 3 * Math.sin(t * 5);
     this.pillars.setPillars(PlanetMarks.pillarsOf(royale), time, now);
+    this.grace.update(royale?.st === 'play' ? gracesOf(royale) : [], time, now, unitAt);
   }
 
   dispose(): void {

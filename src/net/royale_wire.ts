@@ -57,6 +57,10 @@ export type SnapMark = [number, MarkKind, number, number, number, number];
 // A Clamor: where a takedown rang out, and when.
 export type SnapClamor = [number, number, number, number];
 
+// A champion in its Grace: its unit id, when the Grace runs out, and where
+// it stands.
+export type SnapGrace = [number, number, number, number, number];
+
 // The recipient's own open Graft offer: its grade, the three cards, and
 // when card 0 is taken for them.
 export interface SnapGraftOffer {
@@ -109,9 +113,11 @@ export interface SnapRoyale {
   gap?: number;
   // One life: when the recipient's Reprieve brings them back, while pending.
   rp?: number;
-  // Respawn: when the recipient's Arrival lands at the latest, while over
-  // the globe.
-  ar?: number;
+  // The champions in their Grace the recipient sees, itself included (a
+  // drop-in's Arrival, a Respawn return; src/sim/royale/grace.ts): each
+  // [unit id, when it runs out, x, y, z]; absent when none. Sent every
+  // snapshot while any is graced.
+  ar?: SnapGrace[];
   // Respawn's Last light: 1 once a death is final.
   fi?: 1;
   // The champion the recipient watches once out, when not their own.
