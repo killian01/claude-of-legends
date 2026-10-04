@@ -474,6 +474,14 @@ export class Renderer {
   // (program_warmup.ts); null on the plane.
   private readonly warmup: ProgramWarmup | null = null;
   private disposed = false;
+  // The first frame on the canvas: what a card in front of the match waits
+  // for (game/first_frame.ts), since a canvas never drawn on is black and
+  // the planet holds its first frame while its programs link. Settles on
+  // dispose too, so nothing waits on a renderer gone.
+  private markDrawn: (() => void) | null = null;
+  readonly drawn = new Promise<void>((done) => {
+    this.markDrawn = done;
+  });
   // Where the canvas stands, read once a frame (frame_memo.ts).
   private readonly canvasAt = new FrameMemo(() =>
     rectOnStage(this.gl.domElement, this.gl.domElement.getBoundingClientRect()),
@@ -3641,6 +3649,7 @@ export class Renderer {
       this.gl.render(this.scene, this.camera);
       restore();
       this.programs.keep(this.gl.info.programs ?? []);
+      this.shown();
       return;
     }
     const eye = this.toScene(target);
@@ -3656,6 +3665,14 @@ export class Renderer {
     this.camDirScene.set(this.camDir.x, this.camDir.y, -this.camDir.z);
     this.gl.render(this.scene, this.camera);
     this.programs.keep(this.gl.info.programs ?? []);
+    this.shown();
+  }
+
+  // A frame is on the canvas: the first one settles `drawn`.
+  private shown(): void {
+    if (!this.markDrawn) return;
+    this.markDrawn();
+    this.markDrawn = null;
   }
 
   // The planet's chart moved (planet_stage.ts): every point already placed
@@ -3774,6 +3791,7 @@ export class Renderer {
   // deliberately survives for the next match.
   dispose(): void {
     this.disposed = true;
+    this.shown();
     for (const off of this.cleanups) off();
     this.cleanups.length = 0;
     for (const cv of this.championVisuals.values()) cv.dispose();
