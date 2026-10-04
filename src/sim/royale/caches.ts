@@ -150,8 +150,8 @@ function canOpen(c: CacheState, s: CacheSeeker, time: number): boolean {
 // the opener, keeps the count, and the cache goes to whoever stands in it
 // when the count is full. While nobody opens a held cache its openSince
 // holds that kept time (seconds, zero for none); while someone does, it is
-// the start that time implies, so `time - openSince` reads the same. Returns the caches opened this tick, in id order. It
-// runs once a tick, `dt` apart: a held opening's slowed tick moves its
+// the start that time implies, so `time - openSince` reads the same.
+// Returns the caches opened this tick, in id order. It runs once a tick, `dt` apart: a held opening's slowed tick moves its
 // start later by the share of `dt` it did not count, so `time - openSince`
 // is the time it has counted (what the observation and the snapshot show
 // of it, a bar that slows).

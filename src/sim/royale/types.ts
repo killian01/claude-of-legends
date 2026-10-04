@@ -113,8 +113,12 @@ export interface CacheState {
   present: boolean;
   // Respawn: when an opened cache comes back.
   respawnAt: number | null;
-  // The champion opening it and since when, or null.
+  // The champion opening it, or null.
   opener: number | null;
+  // With an opener: the start its count implies, so `time - openSince` is
+  // the time counted (a held opening's slowed ticks move it later). With no
+  // opener: zero, except a Respawn Seedfall's held cache, which keeps here
+  // the seconds already counted for the next opener (caches.ts).
   openSince: number;
 }
 
