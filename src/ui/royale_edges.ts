@@ -6,6 +6,8 @@
 // safe area beside them, and the arrows come out placed and turned. The
 // HUD draws them (ui/royale_hud_moments.ts).
 
+import { SEEDFALL_AT_S } from '../sim/content/royale_events';
+
 // What an arrow points at, in priority order: a Seedfall before a Rising
 // before the Wrath before the Lodestar before an Ablaze run.
 export type EdgeKind = 'seedfall' | 'rising' | 'wrath' | 'lodestar' | 'ablaze';
@@ -24,13 +26,21 @@ export const MAX_ARROWS = 3;
 // pixels (off the screen when it is), whether it stands behind the camera
 // (the point is then mirrored through the screen's middle, as a
 // perspective projection leaves it), and how far it is along the ground.
+// `hidden` when the planet stands between it and the camera: past the
+// horizon a point still projects onto the globe's disc, inside the screen,
+// so it is pointed at by `bearing` (radians off the camera's forward along
+// the ground, positive to the right) instead. `secondsLeft` until what it
+// marks happens, read under the arrow while it counts down.
 export interface EdgeTarget {
   key: string;
   kind: EdgeKind;
   x: number;
   y: number;
   behind: boolean;
+  hidden?: boolean;
+  bearing?: number;
   distance: number;
+  secondsLeft?: number;
 }
 
 // The screen, and the band at each side the arrows keep out of (the top
@@ -62,6 +72,23 @@ export function distanceLabel(m: number): string {
   return `${Math.max(1, Math.round(m))} m`;
 }
 
+// The arrow's line: the distance, and the seconds left while it counts.
+function arrowLabel(t: Pick<EdgeTarget, 'distance' | 'secondsLeft'>): string {
+  const d = distanceLabel(t.distance);
+  if (t.secondsLeft === undefined) return d;
+  const s = Math.max(0, Math.ceil(t.secondsLeft));
+  return `${d} \u00b7 ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+// A landed Seedfall nobody opened stops being pointed at once the next
+// one is due (an interval after it landed): its column stands, but it no
+// longer holds one of the few arrows.
+export const SEEDFALL_STALE_S = (SEEDFALL_AT_S[1] ?? 200) - (SEEDFALL_AT_S[0] ?? 120);
+
+export function seedfallPointed(landsAt: number, landed: boolean, now: number): boolean {
+  return !landed || now - landsAt <= SEEDFALL_STALE_S;
+}
+
 // The safe area's rectangle, never inverted on a tiny screen.
 function safeRect(v: EdgeView): { x0: number; y0: number; x1: number; y1: number } {
   const x0 = Math.min(v.left, v.width / 2 - 1);
@@ -73,19 +100,26 @@ function safeRect(v: EdgeView): { x0: number; y0: number; x1: number; y1: number
 
 // Whether a target stands inside the safe area, in front of the camera:
 // then it is seen and wants no arrow.
-export function onScreen(t: Pick<EdgeTarget, 'x' | 'y' | 'behind'>, v: EdgeView): boolean {
-  if (t.behind) return false;
+export function onScreen(
+  t: Pick<EdgeTarget, 'x' | 'y' | 'behind' | 'hidden'>,
+  v: EdgeView,
+): boolean {
+  if (t.behind || t.hidden) return false;
   const r = safeRect(v);
   return t.x >= r.x0 && t.x <= r.x1 && t.y >= r.y0 && t.y <= r.y1;
 }
 
 // The direction from the screen's middle toward a target: through its
 // projection, mirrored when it stands behind the camera. A target dead
-// behind points down, the way a turn around would bring it.
+// behind points down, the way a turn around would bring it. A target the
+// planet hides goes by its ground bearing: ahead is up the screen.
 export function edgeDirection(
-  t: Pick<EdgeTarget, 'x' | 'y' | 'behind'>,
+  t: Pick<EdgeTarget, 'x' | 'y' | 'behind' | 'hidden' | 'bearing'>,
   v: EdgeView,
 ): { dx: number; dy: number } {
+  if (t.hidden && t.bearing !== undefined) {
+    return { dx: Math.sin(t.bearing), dy: -Math.cos(t.bearing) };
+  }
   const cx = v.width / 2;
   const cy = v.height / 2;
   let dx = t.x - cx;
@@ -104,7 +138,7 @@ export function edgeDirection(
 // The arrow for one target: on the safe area's border along the ray from
 // the screen's middle, pointing out.
 export function clampToEdge(
-  t: Pick<EdgeTarget, 'x' | 'y' | 'behind'>,
+  t: Pick<EdgeTarget, 'x' | 'y' | 'behind' | 'hidden' | 'bearing'>,
   v: EdgeView,
 ): { x: number; y: number; angle: number } {
   const r = safeRect(v);
@@ -117,9 +151,42 @@ export function clampToEdge(
   return { x: cx + dx * k, y: cy + dy * k, angle: Math.atan2(dy, dx) };
 }
 
+// A phone's ring: the border there is the thumbs', the bar's, the
+// minimap's and the feed's, so an arrow slid along it lands far from
+// where it points. The arrows stand instead on an ellipse round the
+// champion (the camera looks at it: the screen's middle), well inside the
+// safe area.
+export interface EdgeRing {
+  rx: number;
+  ry: number;
+}
+
+export function compactRing(v: EdgeView): EdgeRing {
+  const r = safeRect(v);
+  const cx = v.width / 2;
+  const cy = v.height / 2;
+  return {
+    rx: 0.62 * Math.min(cx - r.x0, r.x1 - cx),
+    ry: 0.8 * Math.min(cy - r.y0, r.y1 - cy),
+  };
+}
+
+// The point of the ring at a heading.
+function ringAt(angle: number, v: EdgeView, ring: EdgeRing): { x: number; y: number } {
+  return {
+    x: v.width / 2 + ring.rx * Math.cos(angle),
+    y: v.height / 2 + ring.ry * Math.sin(angle),
+  };
+}
+
 // The arrows this frame: the targets off the screen, by priority then
-// nearest, at most MAX_ARROWS.
-export function edgeArrows(targets: readonly EdgeTarget[], v: EdgeView): EdgeArrow[] {
+// nearest, at most MAX_ARROWS; on the safe area's border, or on the ring
+// when one is given.
+export function edgeArrows(
+  targets: readonly EdgeTarget[],
+  v: EdgeView,
+  ring?: EdgeRing,
+): EdgeArrow[] {
   const off = targets.filter((t) => !onScreen(t, v));
   off.sort((a, b) => {
     const pa = EDGE_PRIORITY.indexOf(a.kind);
@@ -127,7 +194,12 @@ export function edgeArrows(targets: readonly EdgeTarget[], v: EdgeView): EdgeArr
     return pa !== pb ? pa - pb : a.distance - b.distance;
   });
   return off.slice(0, MAX_ARROWS).map((t) => {
-    const at = clampToEdge(t, v);
+    let at: { x: number; y: number; angle: number };
+    if (ring) {
+      const { dx, dy } = edgeDirection(t, v);
+      const angle = Math.atan2(dy, dx);
+      at = { ...ringAt(angle, v, ring), angle };
+    } else at = clampToEdge(t, v);
     return {
       key: t.key,
       kind: t.kind,
@@ -135,7 +207,7 @@ export function edgeArrows(targets: readonly EdgeTarget[], v: EdgeView): EdgeArr
       y: at.y,
       angle: at.angle,
       distance: t.distance,
-      label: distanceLabel(t.distance),
+      label: arrowLabel(t),
     };
   });
 }
@@ -178,14 +250,21 @@ function hits(x: number, y: number, half: number, r: EdgeRect): boolean {
 
 // An arrow `half` pixels around its point, slid along the safe area's
 // border (around a corner when it must) to the nearest place clear of
-// every obstacle; where it was when the whole border is covered.
+// every obstacle; where it was when the whole border is covered. Given the
+// way it points, it never slides into the half of the screen behind that
+// way: an arrow at the top pointing down would read backwards.
 export function clearOf(
   at: { x: number; y: number },
   half: number,
   obstacles: readonly EdgeRect[],
   v: EdgeView,
+  dir?: { dx: number; dy: number },
 ): { x: number; y: number } {
-  const blocked = (x: number, y: number): boolean => obstacles.some((r) => hits(x, y, half, r));
+  const cx = v.width / 2;
+  const cy = v.height / 2;
+  const blocked = (x: number, y: number): boolean =>
+    obstacles.some((r) => hits(x, y, half, r)) ||
+    (dir !== undefined && (x - cx) * dir.dx + (y - cy) * dir.dy <= 0);
   if (!blocked(at.x, at.y)) return at;
   const r = safeRect(v);
   const w = r.x1 - r.x0;
@@ -217,4 +296,29 @@ export function clearOf(
     }
   }
   return at;
+}
+
+// How far round the ring an arrow may slide off its heading, radians:
+// under a right angle, so it stays on the side it points to.
+const RING_SLIDE = 1.1;
+
+// An arrow on the ring slid round it to the nearest place clear of every
+// obstacle, within RING_SLIDE of its heading; where it was otherwise.
+export function clearOnRing(
+  at: { x: number; y: number; angle: number },
+  half: number,
+  obstacles: readonly EdgeRect[],
+  v: EdgeView,
+  ring: EdgeRing,
+): { x: number; y: number } {
+  const blocked = (p: { x: number; y: number }): boolean =>
+    obstacles.some((r) => hits(p.x, p.y, half, r));
+  if (!blocked(at)) return { x: at.x, y: at.y };
+  for (let d = 0.05; d <= RING_SLIDE; d += 0.05) {
+    for (const a of [at.angle + d, at.angle - d]) {
+      const p = ringAt(a, v, ring);
+      if (!blocked(p)) return p;
+    }
+  }
+  return { x: at.x, y: at.y };
 }

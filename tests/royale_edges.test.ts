@@ -7,6 +7,8 @@ import { describe, expect, it } from 'vitest';
 import {
   clampToEdge,
   clearOf,
+  clearOnRing,
+  compactRing,
   distanceLabel,
   EDGE_PRIORITY,
   EdgeChimes,
@@ -16,6 +18,8 @@ import {
   edgeDirection,
   MAX_ARROWS,
   onScreen,
+  SEEDFALL_STALE_S,
+  seedfallPointed,
 } from '../src/ui/royale_edges';
 
 // A phone held sideways: the top bar, the ability bar and the minimap's
@@ -193,5 +197,113 @@ describe('the obstacles', () => {
     const moved = clearOf(at, 14, [bar], VIEW);
     expect(moved.y).toBe(at.y);
     expect(moved.x + 14 <= bar.left || moved.x - 14 >= bar.right).toBe(true);
+  });
+});
+
+describe("the planet's horizon", () => {
+  it('points at a target the planet hides, though it projects inside the safe area', () => {
+    // Over the horizon dead ahead: its foot projects onto the globe's disc
+    // low on the screen, but the ground bearing says ahead.
+    const over = target({ x: 422, y: 300, hidden: true, bearing: 0 });
+    expect(onScreen(over, VIEW)).toBe(false);
+    const [a] = edgeArrows([over], VIEW);
+    expect(a).toBeDefined();
+    expect(a!.y).toBeCloseTo(VIEW.top);
+    expect(a!.x).toBeCloseTo(422);
+    expect(a!.angle).toBeCloseTo(-Math.PI / 2);
+  });
+
+  it('turns a hidden target by its ground bearing, not by where it projects', () => {
+    const right = edgeDirection(
+      target({ x: 100, y: 195, hidden: true, bearing: Math.PI / 2 }),
+      VIEW,
+    );
+    expect(right.dx).toBeCloseTo(1);
+    expect(right.dy).toBeCloseTo(0);
+    const back = edgeDirection(target({ x: 422, y: 60, hidden: true, bearing: Math.PI }), VIEW);
+    expect(back.dy).toBeCloseTo(1);
+  });
+
+  it('chimes for a pillar that appears hidden by the planet, panned toward it', () => {
+    const chimes = new EdgeChimes();
+    const heard = chimes.step(
+      [target({ key: 'sf9', x: 422, y: 250, hidden: true, bearing: -Math.PI / 2 })],
+      VIEW,
+    );
+    expect(heard).toHaveLength(1);
+    expect(heard[0]!.pan).toBeCloseTo(-1);
+  });
+});
+
+describe('the countdown under an arrow', () => {
+  it('reads the seconds left of a Seedfall still falling', () => {
+    const [a] = edgeArrows([target({ x: -900, distance: 84, secondsLeft: 11.2 })], VIEW);
+    expect(a!.label).toBe('84 m \u00b7 0:12');
+    const [b] = edgeArrows([target({ x: -900, distance: 84 })], VIEW);
+    expect(b!.label).toBe('84 m');
+  });
+});
+
+describe('the Seedfalls pointed at', () => {
+  it('drop one landed and left unopened past an interval, so it frees its slot', () => {
+    expect(seedfallPointed(140, false, 130)).toBe(true);
+    expect(seedfallPointed(140, true, 140 + SEEDFALL_STALE_S - 1)).toBe(true);
+    expect(seedfallPointed(140, true, 140 + SEEDFALL_STALE_S + 1)).toBe(false);
+  });
+});
+
+describe('the ring on a phone', () => {
+  const ring = compactRing(VIEW);
+  const cx = VIEW.width / 2;
+  const cy = VIEW.height / 2;
+
+  it('stands every arrow round the champion, on the side it points to', () => {
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
+      const far = target({ key: `a${a}`, x: cx + Math.cos(a) * 5000, y: cy + Math.sin(a) * 5000 });
+      const [arrow] = edgeArrows([far], VIEW, ring);
+      expect(arrow, `angle ${a}`).toBeDefined();
+      const ox = arrow!.x - cx;
+      const oy = arrow!.y - cy;
+      expect(ox * Math.cos(a) + oy * Math.sin(a), `angle ${a}`).toBeGreaterThan(0);
+      expect((ox / ring.rx) ** 2 + (oy / ring.ry) ** 2).toBeCloseTo(1);
+      expect(arrow!.angle).toBeCloseTo(Math.atan2(Math.sin(a), Math.cos(a)));
+    }
+  });
+
+  it('keeps the ring inside the safe area', () => {
+    expect(ring.rx).toBeLessThan(cx - VIEW.left);
+    expect(ring.ry).toBeLessThan(cy - VIEW.top);
+    expect(ring.ry).toBeLessThan(VIEW.height - VIEW.bottom - cy + 1e-9);
+  });
+
+  it('slides an arrow along the ring clear of an obstacle, never to the other half', () => {
+    // The thumb stick's corner, bottom left.
+    const stick = { left: 0, top: 200, right: 330, bottom: 390 };
+    const a = (3 * Math.PI) / 4;
+    const at = { x: cx + ring.rx * Math.cos(a), y: cy + ring.ry * Math.sin(a), angle: a };
+    const moved = clearOnRing(at, 14, [stick], VIEW, ring);
+    const blocked =
+      moved.x + 14 > stick.left &&
+      moved.x - 14 < stick.right &&
+      moved.y + 14 > stick.top &&
+      moved.y - 14 < stick.bottom;
+    expect(blocked).toBe(false);
+    expect((moved.x - cx) * Math.cos(a) + (moved.y - cy) * Math.sin(a)).toBeGreaterThan(0);
+  });
+});
+
+describe('the border slide on a phone', () => {
+  it('never carries an arrow to the half of the screen it does not point to', () => {
+    // The bottom, the left and the right all covered (the thumbs, the
+    // feed, the minimap): an arrow pointing down stays down, overlapping,
+    // rather than standing at the top pointing down.
+    const covered = [
+      { left: 0, top: 120, right: 844, bottom: 390 },
+      { left: 0, top: 0, right: 120, bottom: 390 },
+      { left: 724, top: 0, right: 844, bottom: 390 },
+    ];
+    const at = { x: 422, y: VIEW.height - VIEW.bottom };
+    const moved = clearOf(at, 14, covered, VIEW, { dx: 0, dy: 1 });
+    expect(moved.y).toBeGreaterThan(VIEW.height / 2);
   });
 });

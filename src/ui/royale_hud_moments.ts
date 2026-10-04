@@ -26,11 +26,14 @@ import type { IWorld } from '../world_api';
 import { itemIconUrl } from './icons';
 import {
   clearOf,
+  clearOnRing,
+  compactRing,
   EdgeChimes,
   type EdgeRect,
   type EdgeTarget,
   type EdgeView,
   edgeArrows,
+  seedfallPointed,
 } from './royale_edges';
 import {
   arcDistance,
@@ -94,7 +97,7 @@ const CSS = `
 .br-edge i::after { content: ''; position: absolute; left: 21px; top: 6px; width: 0; height: 0;
   border-top: 7px solid transparent; border-bottom: 7px solid transparent;
   border-left: 11px solid #ffe7a0; filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.8)); }
-.br-edge b { position: absolute; left: -30px; top: 15px; width: 60px; text-align: center;
+.br-edge b { position: absolute; left: -45px; top: 15px; width: 90px; text-align: center;
   font: 800 11.5px system-ui, sans-serif; color: #ffe7a0; text-shadow: 0 1px 3px #000;
   font-variant-numeric: tabular-nums; }
 .br-flight { position: absolute; width: 34px; height: 34px; border-radius: 7px; pointer-events: none;
@@ -175,6 +178,8 @@ export class RoyaleHudMoments {
   private readonly cachesAt = new Map<number, [number, number, number]>();
   private obstacles: EdgeRect[] = [];
   private obstaclesAt = 0;
+  // The phone's safe-area insets, pixels, measured with the obstacles.
+  private insets = { top: 0, right: 0, bottom: 0, left: 0 };
   private raf = 0;
   private disposed = false;
 
@@ -439,7 +444,10 @@ export class RoyaleHudMoments {
     window.setTimeout(() => img.remove(), FLIGHT_MS + 200);
   }
 
-  // The edge arrows, every frame: the Seedfalls not on the screen.
+  // The edge arrows, every frame: the Seedfalls not on the screen (a
+  // landed one left unopened past an interval no longer), with their
+  // seconds left while they fall. On a phone they stand on a ring round the
+  // champion, inside the thumbs; on a desktop on the screen's border.
   private placeArrows(): void {
     const r = this.view();
     const projector = royaleProjector();
@@ -447,35 +455,50 @@ export class RoyaleHudMoments {
     const seen = new Set<string>();
     if (r && projector && stage && r.st === 'play' && (r.sf?.length ?? 0) > 0) {
       const self = projector.self();
+      const time = this.host.world.time;
       const targets: EdgeTarget[] = [];
       for (const s of r.sf ?? []) {
+        const landed = s[5] === 1;
+        if (!seedfallPointed(s[4], landed, time)) continue;
         const at = { x: s[1], y: s[2], z: s[3] };
         const p = projector.project(at, ARROW_LIFT_M);
         if (!p) continue;
+        const hidden = p.hidden === true;
         targets.push({
           key: `sf${s[0]}`,
           kind: 'seedfall',
           x: p.x,
           y: p.y,
           behind: p.behind,
+          hidden,
+          bearing: hidden ? (projector.bearing(at) ?? undefined) : undefined,
           distance: self ? arcDistance(self, at) : 0,
+          secondsLeft: landed ? undefined : Math.max(0, s[4] - time),
         });
       }
       const size = projector.view();
+      const obstacles = [...this.measureObstacles(stage)];
+      const inset = this.insets;
       const view: EdgeView = {
         width: size.width,
         height: size.height,
-        // Room for the dial on the sides, and for its distance under it.
-        top: 14,
-        right: 26,
-        bottom: 38,
-        left: 26,
+        // Room for the dial on the sides, and for its distance under it,
+        // inside a notched phone's safe area.
+        top: 14 + inset.top,
+        right: 26 + inset.right,
+        bottom: 38 + inset.bottom,
+        left: 26 + inset.left,
       };
       for (const c of this.chimes.step(targets, view)) playSfx('chime', 0.85, { pan: c.pan });
+      const ring = this.host.root.classList.contains('compact') ? compactRing(view) : undefined;
       // Each arrow placed keeps the next off it.
-      const obstacles = [...this.measureObstacles(stage)];
-      for (const a of edgeArrows(targets, view)) {
-        const at = clearOf(a, ARROW_HALF, obstacles, view);
+      for (const a of edgeArrows(targets, view, ring)) {
+        const at = ring
+          ? clearOnRing(a, ARROW_HALF, obstacles, view, ring)
+          : clearOf(a, ARROW_HALF, obstacles, view, {
+              dx: Math.cos(a.angle),
+              dy: Math.sin(a.angle),
+            });
         obstacles.push({
           left: at.x - ARROW_HALF,
           top: at.y - ARROW_HALF,
@@ -504,12 +527,38 @@ export class RoyaleHudMoments {
     }
   }
 
+  // The safe-area insets as the stage has them (a notch, a rounded
+  // corner), read off a probe in the arrows' layer.
+  private measureInsets(): void {
+    const probe = el('div', '');
+    probe.style.cssText =
+      'position:absolute;visibility:hidden;pointer-events:none;' +
+      'top:var(--safe-top, env(safe-area-inset-top, 0px));' +
+      'right:var(--safe-right, env(safe-area-inset-right, 0px));' +
+      'bottom:var(--safe-bottom, env(safe-area-inset-bottom, 0px));' +
+      'left:var(--safe-left, env(safe-area-inset-left, 0px));';
+    this.edges.appendChild(probe);
+    const cs = getComputedStyle(probe);
+    const px = (v: string): number => {
+      const n = Number.parseFloat(v);
+      return Number.isFinite(n) ? Math.max(0, n) : 0;
+    };
+    this.insets = {
+      top: px(cs.top),
+      right: px(cs.right),
+      bottom: px(cs.bottom),
+      left: px(cs.left),
+    };
+    probe.remove();
+  }
+
   // What the arrows keep off, in the stage's pixels: the minimap, the
   // thumbs and the bar, the top line and the feed. Measured twice a second.
   private measureObstacles(stage: HTMLElement): EdgeRect[] {
     const now = performance.now();
     if (now - this.obstaclesAt < OBSTACLES_MS) return this.obstacles;
     this.obstaclesAt = now;
+    this.measureInsets();
     const picks = stage.querySelectorAll<HTMLElement>(
       '.hud-slots, .hud-bottom, .hud-kda, .stick-base, .stick-ghost, .touchbar, .br-top, ' +
         '.br-feed, .br-open, canvas[style*="right"]',
