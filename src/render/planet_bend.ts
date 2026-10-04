@@ -14,6 +14,7 @@
 // portrait, the next 5v5 on the same page) draws there unbent.
 
 import * as THREE from 'three';
+import { drawInOnePassWhereAlike } from './single_pass';
 
 // The shared uniforms: the chart's origin in world space, the sphere's
 // radius, and the switch.
@@ -180,6 +181,10 @@ export function bendMaterial(material: THREE.Material): void {
     shader.vertexShader = bendVertexShader(shader.vertexShader);
   };
   material.customProgramCacheKey = () => `col-bend|${own ? own.call(material) : beforeSource}`;
+  // Met once here, as everything the planet draws is: a see-through
+  // double-sided glow drawn in one pass where that looks the same
+  // (single_pass.ts).
+  drawInOnePassWhereAlike(material);
   material.needsUpdate = true;
 }
 
