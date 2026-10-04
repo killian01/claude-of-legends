@@ -39,6 +39,7 @@ import {
   ClamorBell,
   ClamorEar,
   duskDepth,
+  duskTickOnly,
   duskTolls,
   elsewhereText,
   FEED_MS,
@@ -186,6 +187,8 @@ export class RoyaleHudMoments {
   private hpNow = -1;
   private hpBefore = -1;
   private lastCombat = Number.NEGATIVE_INFINITY;
+  // When the viewer last took a hit (the Dusk's burn aside), sim time.
+  private lastHit = Number.NEGATIVE_INFINITY;
   // The cache the viewer last opened, where its piece flies from.
   private openedCache: number | null = null;
   private wasWhole = false;
@@ -232,9 +235,15 @@ export class RoyaleHudMoments {
     for (const c of r.caches) this.cachesAt.set(c[0], [c[1], c[2], c[3]]);
     const me = world.units.get(selfId);
 
-    // The viewer's health, for the heal a takedown gives and the fight.
+    // The viewer's health, for the heal a takedown gives and the fight: a
+    // hit taken, the Dusk's own burn aside.
     if (me) {
-      if (this.hpNow >= 0 && me.hp < this.hpNow - 0.5 && !me.dead) this.lastCombat = time;
+      const drop = this.hpNow >= 0 ? this.hpNow - me.hp : 0;
+      const out = !me.dead && r.st === 'play' && (duskDepth(me.pos, r.dusk) ?? 0) > 0;
+      if (drop > 0.5 && !me.dead && !duskTickOnly(drop, me.maxHp, r.dusk.b, out)) {
+        this.lastCombat = time;
+        this.lastHit = time;
+      }
       this.hpBefore = this.hpNow;
       this.hpNow = me.hp;
     }
@@ -652,6 +661,12 @@ export class RoyaleHudMoments {
     }
     this.obstacles = out;
     return out;
+  }
+
+  // Seconds since the viewer last took a hit, the Dusk's burn aside; null
+  // before the first.
+  sinceHit(time: number): number | null {
+    return Number.isFinite(this.lastHit) ? time - this.lastHit : null;
   }
 
   // How many arrows stand now (for the dev harness's checks).

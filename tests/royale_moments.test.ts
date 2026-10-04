@@ -13,7 +13,9 @@ import {
   ClamorBell,
   ClamorEar,
   clamorGain,
+  DUSK_TICK_WINDOW_S,
   duskDepth,
+  duskTickOnly,
   duskTolls,
   elsewhereText,
   FEED_MAX,
@@ -290,6 +292,23 @@ describe('the feed', () => {
       expect(feed.length).toBeLessThanOrEqual(FEED_MAX);
       expect(feed.filter((t) => t === 'near').length).toBeLessThanOrEqual(FEED_NEAR_MAX);
     }
+  });
+});
+
+describe("the Dusk's ticks", () => {
+  // 2000 health, 3% a second: 3 a tick at 20 Hz.
+  it('are the burn alone while small and outside the light', () => {
+    expect(duskTickOnly(3, 2000, 0.03, true)).toBe(true);
+    // A frame carrying a few ticks.
+    expect(duskTickOnly(12, 2000, 0.03, true)).toBe(true);
+    expect(duskTickOnly(2000 * 0.03 * DUSK_TICK_WINDOW_S + 1, 2000, 0.03, true)).toBe(true);
+  });
+
+  it('let a real hit through, and every drop inside the light or in the calm', () => {
+    expect(duskTickOnly(80, 2000, 0.03, true)).toBe(false);
+    expect(duskTickOnly(3, 2000, 0.03, false)).toBe(false);
+    expect(duskTickOnly(3, 2000, 0, true)).toBe(false);
+    expect(duskTickOnly(0, 2000, 0.03, true)).toBe(false);
   });
 });
 
