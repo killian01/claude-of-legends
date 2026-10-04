@@ -5,10 +5,11 @@
 // mock royale state, for the browser checks to look at before the server
 // and the planet exist. Nothing here is reachable from the production UI.
 //
-// ?royale-ui-demo=<scene>: pick, pick-one, home, drop, calm, closing, out,
-// end-one, end-respawn, moments (the loud moments: the Seedfalls' edge
-// arrows, the Clamors, the feed folding, the run's spotlight, the cache's
-// ritual and the loot's words, the Dusk's pill, every new block faked).
+// ?royale-ui-demo=<scene>: pick, pick-one, home, drop, calm (with the
+// status chips), closing, out, end-one, end-respawn, moments (the loud
+// moments: the Seedfalls' edge arrows, the Clamors, the feed folding, the
+// run's spotlight, the cache's ritual and the loot's words, the Dusk's
+// pill, every new block faked).
 
 import { orchardSim } from '../net/replay';
 import type { RoyaleNote } from '../net/royale_client';
@@ -258,6 +259,18 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
       // The loot lands in the bag, as the sim equips it.
       if (self.items.length < 6) self.items.push(itemId);
       royale.push({ kind: 'loot', unitId: self.id, itemId, source: 'cache' });
+    }
+    // The status chips the playtest could not read ("BO", "MA x1", "AI
+    // 0.1"): a camp's boost, a mark and a short lift, kept up.
+    if (scene === 'calm') {
+      const has = (kind: string): boolean => self.statuses.some((s) => s.kind === kind);
+      if (!has('buff')) {
+        self.statuses.push({ kind: 'buff', until: t + 6, msPct: 0, asPct: 0.2, armor: 0, mr: 0 });
+      }
+      if (!has('mark')) {
+        self.statuses.push({ kind: 'mark', until: t + 4, stacks: 1, sourceId: others[0]!.id });
+      }
+      if (!has('airborne')) self.statuses.push({ kind: 'airborne', until: t + 0.9 });
     }
     if (scene === 'calm' && w >= nextLevel && self.level < 7) {
       nextLevel = w + 4;

@@ -20,7 +20,6 @@ import type { RoyaleResult } from '../net/royale_wire';
 import { trackStep } from '../net/stats';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
-import type { Status } from '../sim/combat/status';
 import { CAMPS } from '../sim/content/camps';
 import { effectiveItemCost, ITEM_LIST, ITEMS } from '../sim/content/items';
 import { ASPECT_IDS, ASPECTS, type AspectId, CREATURES } from '../sim/content/rings';
@@ -44,13 +43,7 @@ import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import { abilityIconUrl, passiveIconUrl, sigilIconUrl } from './ability_icons';
 import { accountOffer, OFFER_CALL } from './account_offer';
-import {
-  boonChipFace,
-  type ChipFace,
-  favorChipFace,
-  statusChipFace,
-  wrathChipFace,
-} from './chip_text';
+import { boonChipFace, type ChipFace, favorChipFace, statusChip, wrathChipFace } from './chip_text';
 import { COMPACT_ROW_GAP, COMPACT_SCALE, compactTapsCss } from './compact_taps';
 import {
   buildFeedbackBox,
@@ -169,40 +162,6 @@ const STEPS_MINION_NEAR_M = 14;
 const STEPS_CHAMPION_NEAR_M = 11;
 const TEAM_PORTRAIT_COLORS = [0x4a7dd6, 0xd65c5c];
 
-function statusLabel(s: Status, time: number): string {
-  const left = Math.max(0, s.until - time);
-  switch (s.kind) {
-    case 'stun':
-      return `STUN ${left.toFixed(1)}`;
-    case 'airborne':
-      return `AIRBORNE ${left.toFixed(1)}`;
-    case 'untargetable':
-      return 'UNTOUCHABLE';
-    case 'root':
-      return `ROOT ${left.toFixed(1)}`;
-    case 'recall':
-      return `RECALL ${left.toFixed(1)}`;
-    case 'slow':
-      return `SLOW ${Math.round(s.pct * 100)}%`;
-    case 'shield':
-      return `SHIELD ${Math.round(s.remaining)}`;
-    case 'mark':
-      return `MARK x${s.stacks}`;
-    case 'dot':
-      return 'BURNING';
-    case 'grievous':
-      return 'GRIEVOUS';
-    case 'stealth':
-      return 'HIDDEN';
-    case 'taunt':
-      return 'TAUNTED';
-    case 'buff':
-      return 'BOOSTED';
-    default:
-      return '';
-  }
-}
-
 function itemInitials(id: string): string {
   return id
     .split('_')
@@ -221,13 +180,20 @@ const CSS = `
   display: flex; flex-direction: column; gap: 6px; align-items: center;
 }
 .hud-statuses { display: flex; gap: 4px; min-height: 24px; justify-content: center; flex-wrap: wrap; }
+/* A chip: a short word ("Stun", "Boost", "Airborne"), the whole seconds
+   or the number under it (ui/chip_text.ts), as wide as its word. */
 .hud-chip {
-  position: relative; width: 26px; height: 24px; border-radius: 5px; flex: none;
+  position: relative; min-width: 26px; height: 24px; padding: 0 5px; border-radius: 5px; flex: none;
   background: #3d3312; border: 1px solid #8a6d2c; color: #f0dfae;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 800; line-height: 1; pointer-events: auto; cursor: default;
+  font-size: 9.5px; font-weight: 800; line-height: 1; pointer-events: auto; cursor: default;
+  white-space: nowrap;
 }
-.hud-chip-sub { font-size: 7px; font-weight: 700; opacity: 0.9; margin-top: 1px; }
+.hud-chip-sub { font-size: 8px; font-weight: 700; opacity: 0.9; margin-top: 1px; }
+/* A phone draws the bottom block scaled down: the words keep a size to
+   read there. */
+.hud.compact .hud-chip { height: 30px; font-size: 13px; padding: 0 6px; }
+.hud.compact .hud-chip-sub { font-size: 10.5px; }
 .hud-chip-tip {
   display: none; position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
   white-space: nowrap; background: #14190d; border: 1px solid #6e5a24; color: #e8dfb4;
@@ -3222,7 +3188,7 @@ export class Hud {
       if (s.until <= this.world.time) continue;
       const n = (seen.get(s.kind) ?? 0) + 1;
       seen.set(s.kind, n);
-      chip(`status-${s.kind}-${n}`, statusChipFace(statusLabel(s, this.world.time)), null);
+      chip(`status-${s.kind}-${n}`, statusChip(s, this.world.time), null);
     }
     this.reconcileChips(wanted);
 
