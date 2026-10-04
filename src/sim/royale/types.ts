@@ -62,9 +62,7 @@ export const PAD_THROW_M = 50;
 export const PAD_FLIGHT_S = 1.6;
 // Reach of a pad's center that triggers it.
 export const PAD_REACH_M = 1.4;
-// Respawn: the score leader shows to everyone this often, and a takedown
-// on them counts this much.
-export const LEADER_SHOW_EVERY_S = 30;
+// A takedown on the Lodestar counts this much (marks.ts markPayout).
 export const LEADER_TAKEDOWN_SCORE = 2;
 // When the big creatures first rise, seconds after landing, and the
 // Warden in Respawn (One life's earlier: content/royale_events.ts

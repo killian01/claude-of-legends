@@ -1,6 +1,5 @@
 // Scores and the end (ADR 0031). Respawn: a takedown scores one for its
-// last hit, two on the score leader, who shows to everyone every
-// LEADER_SHOW_EVERY_S; a death costs RESPAWN_S and the champion comes back
+// last hit, more on a mark (marks.ts markPayout); a death costs RESPAWN_S and the champion comes back
 // at the edge of the light, away from enemies; when the last light goes
 // out the best score wins, fewer deaths then the lower id breaking ties.
 // One life: a death is final, the fallen are kept in order with their
@@ -13,7 +12,7 @@ import { dist2, heading, type Vec3 } from '../geo';
 import type { Rng } from '../rng';
 import { insideCap } from './dusk';
 import { along, type RoyaleGround, type RoyaleLayout, randomWalkable } from './layout';
-import { type DuskCap, LEADER_TAKEDOWN_SCORE } from './types';
+import type { DuskCap } from './types';
 
 export interface Standing {
   id: number;
@@ -34,11 +33,6 @@ export function leaderOf(standings: readonly Standing[]): number | null {
     if (best === null || compareStanding(s, best) < 0) best = s;
   }
   return best ? best.id : null;
-}
-
-// What a takedown scores for its last hit.
-export function takedownScore(victimId: number, leaderId: number | null): number {
-  return victimId === leaderId ? LEADER_TAKEDOWN_SCORE : 1;
 }
 
 export function respawnRanking(standings: readonly Standing[]): number[] {
