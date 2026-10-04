@@ -59,7 +59,7 @@ const snap = (over: Partial<SnapRoyale> = {}): SnapRoyale => ({
 
 describe('the Dusk line', () => {
   it('counts the calm down, then says whether the light holds or closes', () => {
-    expect(duskLine(snap(), 35)).toEqual({ text: 'The Dusk holds 1:05', tone: 'calm' });
+    expect(duskLine(snap(), 35)).toEqual({ text: 'Dusk in 1:05', tone: 'calm' });
     expect(duskLine(snap({ dusk: { ...DUSK, p: 2, pe: 200, sh: 0 } }), 158)).toEqual({
       text: 'Light holds 0:42',
       tone: 'hold',
@@ -183,6 +183,17 @@ describe('the notices and the places', () => {
     // No passive: what it adds over its parts (two Iron Blades into 56).
     expect(itemGain(ITEMS.warbrand!).ad).toBe(36);
     expect(completedText(ITEMS.warbrand!)).toBe('Completed: Warbrand · +36 attack damage');
+  });
+
+  it("says only the item and its passive's name on a phone, where the long line wraps", () => {
+    expect(completedText(ITEMS.doombrand!, true)).toBe('Completed: Doombrand · Deathmark');
+    expect(lootNotice('doombrand', true)).toEqual({
+      text: 'Completed: Doombrand · Deathmark',
+      completed: true,
+    });
+    expect(completedText(ITEMS.warbrand!, true)).toBe('Completed: Warbrand');
+    // A component's line is short already.
+    expect(lootNotice('iron_blade', true).text).toBe('+ Iron Blade · +10 attack damage');
   });
 
   it("keeps each passive's short line true to its description", () => {
