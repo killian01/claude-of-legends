@@ -40,6 +40,7 @@ import {
   forgedBarY,
   preloadChampionAssets,
 } from './champions';
+import { CHAMPION_VISUALS } from './champions/manifest';
 import { buildCreatureMesh } from './creature_shapes';
 import {
   createPyrefangVisual,
@@ -80,15 +81,19 @@ import {
   genericImpact,
   genericWindupTick,
   type SchoolColors,
+  SPELL_VFX,
   type SpellVisual,
   spellVisualOf,
 } from './vfx/catalog';
 import type { ChartRemap } from './vfx/chart_shift';
+import { preloadElowenEffects } from './vfx/elowen_fx';
 import { SPRITE } from './vfx/sprites';
+import { preloadSylraEffects } from './vfx/sylra_fx';
 import { VfxSystem } from './vfx/system';
 import { disposeEffect } from './vfx/timed';
 import { TowerReachFx } from './vfx/tower_reach_fx';
 import { TowerShotFx } from './vfx/tower_shot_fx';
+import { texturesOf, type WarmBody, warmFights } from './warm_samples';
 
 const TEAM_COLORS: readonly number[] = [0x4a7dd6, 0xd65c5c];
 const TEAM_LIGHT: readonly number[] = [0x9dbcf5, 0xf5a3a3];
@@ -458,6 +463,7 @@ export class Renderer {
   // The planet's programs linking before its first frame
   // (program_warmup.ts); null on the plane.
   private readonly warmup: ProgramWarmup | null = null;
+  private disposed = false;
 
   constructor(container: HTMLElement, world: IWorld, terrain: RenderTerrain) {
     this.terrain = terrain;
@@ -727,13 +733,56 @@ export class Renderer {
         this.gl.compile(this.scene, this.camera);
         const linking = [...(this.gl.info.programs ?? [])];
         this.programs.keep(linking);
-        return whenLinked(
+        const linked = whenLinked(
           linking,
           () => this.gl.info.programs ?? [],
           (ms) => new Promise((done) => window.setTimeout(done, ms)),
         );
+        // Then the fights' art, a piece a frame, while the match plays.
+        void linked.then(() => this.warmFights(planet));
+        return linked;
       }, performance.now());
     }
+  }
+
+  // Every spell's art, every Rising and every champion built off screen
+  // and compiled against the planet's scene (warm_samples.ts), so the
+  // first of each in a fight finds its programs linked.
+  private warmFights(planet: PlanetStage): void {
+    void warmFights({
+      compile: (scene) => {
+        planet.bendScene(scene);
+        this.gl.compile(scene, this.camera, this.scene);
+        this.programs.keep(this.gl.info.programs ?? []);
+        for (const texture of texturesOf(scene)) this.gl.initTexture(texture);
+      },
+      body: (body: WarmBody) => {
+        const u = { id: -1, team: -1, pos: { x: 0, z: 0 }, ...body } as unknown as Unit;
+        const { holder } = this.buildUnitMesh(u);
+        // The Pyrefang's rigged model too, which a live one swaps in.
+        if (body.creatureId === 'pyrefang') {
+          const visual = createPyrefangVisual(null, holder.scale.x);
+          if (visual) holder.add(visual.root);
+        }
+        return holder;
+      },
+      champion: (id) => {
+        const cv = createChampionVisualNow(id, 0xffffff, 0);
+        if (!cv) return null;
+        const holder = new THREE.Group();
+        holder.add(cv.root);
+        enableShadows(holder);
+        this.ghostBody(holder, cv.root);
+        return { root: holder, dispose: () => cv.dispose() };
+      },
+      championIds: Object.keys(CHAMPION_VISUALS),
+      catalog: Object.values(SPELL_VFX),
+      makeFx: (scene) => new VfxSystem(scene, this.terrain.heightAt),
+      preload: () =>
+        Promise.all([preloadSylraEffects(), preloadElowenEffects(), preloadPyrefang()]),
+      next: () => new Promise((done) => requestAnimationFrame(() => done())),
+      gone: () => this.disposed,
+    }).catch(() => undefined);
   }
 
   // The planet's minimap window (planet_minimap.ts): its world, its
@@ -3667,6 +3716,7 @@ export class Renderer {
   // and the JS side goes with this instance. The shared champion template
   // cache (assets.ts) deliberately survives for the next match.
   dispose(): void {
+    this.disposed = true;
     for (const off of this.cleanups) off();
     this.cleanups.length = 0;
     for (const cv of this.championVisuals.values()) cv.dispose();
