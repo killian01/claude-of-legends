@@ -88,8 +88,6 @@ const CSS = `
 .br-open.cracked .br-ring { background: conic-gradient(#ff4a3a 1turn, transparent 0);
   box-shadow: 0 0 22px rgba(255, 60, 40, 0.9); }
 .br-open.cracked b { color: #ff9a8a; }
-/* The notices keep above the opening's ring, however tall a line runs. */
-.br-notes { bottom: 270px; }
 .br-pulse { position: absolute; inset: 0; pointer-events: none; opacity: 0;
   background: radial-gradient(ellipse at center, transparent 40%, rgba(200, 20, 30, 0.55) 100%); }
 .br-pulse.on { animation: br-pulse 1s ease-out; }

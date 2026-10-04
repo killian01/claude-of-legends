@@ -117,6 +117,12 @@ import {
 import { firstPointsText, pointsWord, popText } from './points_text';
 import { RoyaleHud, type RoyaleKill } from './royale_hud';
 import {
+  STEPS_CLEAR_MIDDLE_PX,
+  STEPS_LEFT_PX,
+  STEPS_MAX_W_PX,
+  STEPS_TOP_PX,
+} from './royale_layout';
+import {
   hideRoyaleSteps,
   type RoyaleStepsState,
   royaleStepLine,
@@ -939,6 +945,20 @@ const CSS = `
 .hud.royale .hud-inv-slot.full { border: 1px solid #b8963f; background-color: #17140a;
   box-shadow: 0 0 6px rgba(232, 196, 108, 0.25); }
 .hud.royale.br-dropping .hud-nudge, .hud.royale.br-dropping .hud-steps { visibility: hidden; }
+/* On a desktop the first steps stand small at the top left, out of the
+   middle where the first fight is read (the card covered it at 960x540);
+   on a phone they keep their band and fold while a fight is on
+   (ui/royale_steps.ts foldForFight). */
+.hud.royale:not(.compact) .hud-steps, .hud.royale:not(.compact) .hud-steps.below {
+  left: calc(${STEPS_LEFT_PX}px + var(--safe-left, env(safe-area-inset-left, 0px)));
+  top: calc(${STEPS_TOP_PX}px + env(safe-area-inset-top, 0px)); transform: none;
+  max-width: min(${STEPS_MAX_W_PX}px, calc(50% - ${STEPS_CLEAR_MIDDLE_PX}px));
+  flex-direction: column; align-items: flex-start; gap: 6px; padding: 7px 10px 8px 12px; }
+.hud.royale:not(.compact) .hud-steps-words span { font-size: 13px; }
+/* The points' pop comes out to the left of the box, as on a phone: under
+   it stands the battle royale's feed, and "+5 assist" fell under its
+   first line, "+1 cache" on its fold. */
+.hud.royale .hud-points-pop { top: 11px; right: calc(100% + 6px); }
 .hud.royale .hud-announce { top: 112px; }
 .hud.compact.royale .hud-announce { top: 70px; }
 /* Compact mode (touchscreens): the desktop sizes swallow a phone screen, so
