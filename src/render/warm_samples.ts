@@ -95,18 +95,76 @@ export const WARM_BODIES: readonly WarmBody[] = [
   { kind: 'camp', campKind: 'barkmaw' },
 ];
 
+// One sample of the warm-up, as the files it waits for are looked up: a
+// champion, a body, or a spell's art by its catalog key (the champion's
+// id, then the spell's key: sylra_Q).
+export type WarmSample =
+  | { kind: 'champion'; id: string }
+  | { kind: 'body'; body: WarmBody }
+  | { kind: 'spell'; id: string };
+
+// The files a sample can wait for: the Pyrefang's rigged model, which a
+// live one swaps in, and the authored effect files of the champions whose
+// spells are drawn from them, by champion.
+export interface WarmFiles {
+  pyrefang(): Promise<unknown>;
+  effects: Readonly<Record<string, () => Promise<unknown>>>;
+}
+
+// What a sample waits for before it is built, null when it needs no file:
+// a Pyrefang's body waits for its model and a spell for its champion's
+// effect files, while the champions and every other body need none.
+export function filesFor(sample: WarmSample, files: WarmFiles): Promise<unknown> | null {
+  if (sample.kind === 'body') {
+    return sample.body.creatureId === 'pyrefang' ? files.pyrefang() : null;
+  }
+  if (sample.kind === 'spell') {
+    const owner = sample.id.slice(0, sample.id.indexOf('_'));
+    return Object.hasOwn(files.effects, owner) ? (files.effects[owner]?.() ?? null) : null;
+  }
+  return null;
+}
+
+// One step of the warm-up: what it builds, and the files it waits for
+// first (none when absent).
+export interface WarmStep {
+  run(): void;
+  waits?: Promise<unknown> | null;
+}
+
 // Runs the steps one at a time, waiting on `next` between them, so no
 // single frame pays for the whole warm-up; stops early once `stop` says so
-// (the match went).
+// (the match went). A step whose files are still on their way is passed
+// over for the next ones and runs once they land, loaded or failed (its
+// sample is then built the way the match would draw it without them).
+// While every step left is waiting, `idle` paces the wait, so a match gone
+// in the meantime is still seen.
 export async function runSteps(
-  steps: readonly (() => void)[],
+  steps: readonly WarmStep[],
   next: () => Promise<void>,
   stop: () => boolean,
+  idle: () => Promise<void>,
 ): Promise<number> {
+  const queue = steps.map((step) => {
+    const entry = { step, ready: !step.waits, landed: Promise.resolve() };
+    if (step.waits) {
+      const land = (): void => {
+        entry.ready = true;
+      };
+      entry.landed = step.waits.then(land, land);
+    }
+    return entry;
+  });
   let ran = 0;
-  for (const step of steps) {
+  while (queue.length > 0) {
     if (stop()) break;
-    tryHook(step);
+    const at = queue.findIndex((entry) => entry.ready);
+    if (at < 0) {
+      await Promise.race([...queue.map((entry) => entry.landed), idle()]);
+      continue;
+    }
+    const [entry] = queue.splice(at, 1);
+    if (entry) tryHook(() => entry.step.run());
     ran++;
     await next();
   }
@@ -115,18 +173,20 @@ export async function runSteps(
 
 // What the warm-up needs of the renderer: the planet's compile (bent, then
 // linked against the planet's scene, then kept), its unit and champion
-// builders, the art to sample, a VFX system for the samples' scene, the
-// effect files to wait for, the pause between steps, and whether the
+// builders, the art to sample by its catalog key, a VFX system for the
+// samples' scene, the files the samples wait for, the pause between steps
+// and the pause while every step left waits for its files, and whether the
 // match is gone.
 export interface FightWarmHost {
   compile(scene: THREE.Scene): void;
   body(body: WarmBody): THREE.Object3D | null;
   champion(id: string): { root: THREE.Object3D; dispose(): void } | null;
   championIds: readonly string[];
-  catalog: readonly SpellVisual[];
+  catalog: Readonly<Record<string, SpellVisual>>;
   makeFx(scene: THREE.Scene): VfxSystem;
-  preload(): Promise<unknown>;
+  files: WarmFiles;
   next(): Promise<void>;
+  idle(): Promise<void>;
   gone(): boolean;
 }
 
@@ -135,48 +195,51 @@ export interface FightWarmHost {
 const LATER_MS = 450;
 
 // Builds, compiles and releases every sample, one champion, one body or
-// one spell a step. Returns how many steps ran.
+// one spell a step, each as soon as the files it needs are in: nothing
+// waits for a file it does not draw from. Returns how many steps ran.
 export async function warmFights(host: FightWarmHost): Promise<number> {
-  await host.preload();
   if (host.gone()) return 0;
   const scene = new THREE.Scene();
   const fx = host.makeFx(scene);
   // The samples' own lights would count as more lights than the planet
   // has: hidden, the programs see the planet's.
   for (const light of fx.pooledLights()) light.visible = false;
-  const steps: (() => void)[] = [];
+  const steps: WarmStep[] = [];
   // A step builds its samples through `add`, and hands `after` whatever
   // must be let go once they are released.
   type Build = (add: (o: THREE.Object3D) => void, after: (release: () => void) => void) => void;
-  const step = (build: Build): void => {
-    steps.push(() => {
-      const built: THREE.Object3D[] = [];
-      const releases: (() => void)[] = [];
-      try {
-        build(
-          (o) => {
-            built.push(o);
-            scene.add(o);
-          },
-          (release) => releases.push(release),
-        );
-        host.compile(scene);
-        fx.update(performance.now() + LATER_MS, 16, new THREE.Vector3(0, -1, 0));
-        host.compile(scene);
-      } finally {
-        fx.timed.dispose();
-        for (const o of built) {
-          scene.remove(o);
-          releaseMaterials(o);
+  const step = (sample: WarmSample, build: Build): void => {
+    steps.push({
+      waits: filesFor(sample, host.files),
+      run: () => {
+        const built: THREE.Object3D[] = [];
+        const releases: (() => void)[] = [];
+        try {
+          build(
+            (o) => {
+              built.push(o);
+              scene.add(o);
+            },
+            (release) => releases.push(release),
+          );
+          host.compile(scene);
+          fx.update(performance.now() + LATER_MS, 16, new THREE.Vector3(0, -1, 0));
+          host.compile(scene);
+        } finally {
+          fx.timed.dispose();
+          for (const o of built) {
+            scene.remove(o);
+            releaseMaterials(o);
+          }
+          for (const release of releases) release();
         }
-        for (const release of releases) release();
-      }
+      },
     });
   };
   // The champions first, the first thing a landing meets, then the bodies,
   // then the spells.
   for (const id of host.championIds) {
-    step((add, after) => {
+    step({ kind: 'champion', id }, (add, after) => {
       const cv = host.champion(id);
       if (!cv) return;
       add(cv.root);
@@ -184,15 +247,15 @@ export async function warmFights(host: FightWarmHost): Promise<number> {
     });
   }
   for (const body of WARM_BODIES) {
-    step((add) => {
+    step({ kind: 'body', body }, (add) => {
       const built = host.body(body);
       if (built) add(built);
     });
   }
-  for (const vis of host.catalog) {
-    step((add) => sampleSpellArt(vis, fx, add, () => host.compile(scene)));
+  for (const [id, vis] of Object.entries(host.catalog)) {
+    step({ kind: 'spell', id }, (add) => sampleSpellArt(vis, fx, add, () => host.compile(scene)));
   }
-  return runSteps(steps, host.next, host.gone);
+  return runSteps(steps, host.next, host.gone, host.idle);
 }
 
 // Disposes the materials under a sample; its geometry and textures may be

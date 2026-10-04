@@ -104,6 +104,9 @@ const WARM_UNIT = { id: -1, team: -1, pos: { x: 0, z: 0 } };
 // How much of a frame the fights' warm-up may take before it waits for
 // the next, milliseconds: light samples share a frame, a heavy one waits.
 const WARM_SLICE_MS = 4;
+// How often the warm-up looks again while every sample left waits for a
+// file.
+const WARM_IDLE_MS = 100;
 const TEAM_LIGHT: readonly number[] = [0x9dbcf5, 0xf5a3a3];
 
 // Background and fog share the forest-skirt tone so the world edge melts
@@ -799,15 +802,22 @@ export class Renderer {
         };
       },
       championIds: Object.keys(CHAMPION_VISUALS),
-      catalog: Object.values(SPELL_VFX),
+      catalog: SPELL_VFX,
       makeFx: (scene) => new VfxSystem(scene, this.terrain.heightAt),
-      preload: () =>
-        Promise.all([preloadSylraEffects(), preloadElowenEffects(), preloadPyrefang()]),
+      // Only the samples drawn from a file wait for it (warm_samples.ts
+      // filesFor): the Pyrefang's bodies, Sylra's and Elowen's spells.
+      files: {
+        pyrefang: preloadPyrefang,
+        effects: { sylra: preloadSylraEffects, elowen: preloadElowenEffects },
+      },
       next: sliced(
         WARM_SLICE_MS,
         () => performance.now(),
         () => new Promise((done) => requestAnimationFrame(() => done())),
       ),
+      // A timer, not a frame: it still fires in a tab put away, so a match
+      // that ended meanwhile lets go of the warm-up.
+      idle: () => new Promise((done) => window.setTimeout(done, WARM_IDLE_MS)),
       gone: () => this.disposed,
     }).catch(() => undefined);
   }
