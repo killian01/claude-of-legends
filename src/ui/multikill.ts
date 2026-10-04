@@ -31,6 +31,14 @@ export const MULTIKILL_LEASH: readonly number[] = [7, 10, 10, 30];
 // number the voice cannot say.
 export const MULTIKILL_TOP = MULTIKILL_LEASH.length + 1;
 
+// The battle royale's table (ADR 0031, the loud moments): the same tight
+// first link and a looser second, capped at the triple. Fifty champions on
+// a planet are not five in a lane: the quadra and the penta would call a
+// pile-up at a Seedfall, not a fight won, and the royale has its own word
+// for a long run (Ablaze, ui/royale_moments.ts). The calls stay private to
+// the killer, as the double and the triple are in the 5v5.
+export const ROYALE_MULTIKILL_LEASH: readonly number[] = [7, 10];
+
 // The rung a killer just reached, when it is worth calling.
 export interface MultikillCall {
   killerId: number;
@@ -111,6 +119,14 @@ export function multikillLook(tier: number): MultikillLook | null {
 export class MultikillLadder {
   private readonly chain = new Map<number, number>();
   private readonly last = new Map<number, number>();
+  // The top rung this ladder climbs to: one past its last link.
+  readonly top: number;
+
+  // `leash`: the seconds per link (MULTIKILL_LEASH for the 5v5,
+  // ROYALE_MULTIKILL_LEASH for the battle royale).
+  constructor(private readonly leash: readonly number[] = MULTIKILL_LEASH) {
+    this.top = leash.length + 1;
+  }
 
   // One champion death at sim time `now`, in seconds. `killerId` is null
   // when nothing that can hold a chain did it (a tower, a wave of minions).
@@ -127,10 +143,10 @@ export class MultikillLadder {
 
     const at = this.chain.get(killerId) ?? 0;
     const since = this.last.get(killerId);
-    const leash = MULTIKILL_LEASH[Math.min(at, MULTIKILL_LEASH.length) - 1] ?? 0;
+    const leash = this.leash[Math.min(at, this.leash.length) - 1] ?? 0;
     const tier = at >= 1 && since !== undefined && now - since <= leash ? at + 1 : 1;
 
-    if (tier >= MULTIKILL_TOP) {
+    if (tier >= this.top) {
       // The slate is clean after the top rung, so the next fight can
       // escalate again from the bottom.
       this.chain.delete(killerId);

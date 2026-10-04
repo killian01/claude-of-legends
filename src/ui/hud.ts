@@ -2937,24 +2937,31 @@ export class Hud {
   }
 
   // The battle royale's deaths: the own death and the own takedown said
-  // and heard, the recap under SLAIN, and every death a line of the feed
-  // with its bot marks (ui/royale_hud.ts). Names come with the death on
-  // the wire, since the feed names champions this screen never saw.
+  // and heard, the recap under SLAIN, every champion's death a line of the
+  // feed with its bot marks or one more folded "elsewhere", and the loud
+  // moments it calls (ui/royale_hud_moments.ts): First blood, the double
+  // and the triple, a run Ablaze, Payback. A call that speaks replaces the
+  // ordinary line's voice rather than talking over it. A camp or a
+  // creature dying is no takedown and says nothing. Names come with the
+  // death on the wire, since the feed names champions this screen never
+  // saw.
   private royaleKills(kills: readonly RoyaleKill[], royale: RoyaleHud): void {
     for (const k of kills) {
+      const { calls, champion } = royale.kill(k);
+      const spoken = calls.some((c) => c.voice !== undefined);
       if (k.unitId === this.selfId) {
         playSfx('death');
-        announceVoice('self_slain', true, true);
+        if (!spoken) announceVoice('self_slain', true, true);
         this.deathRecap =
           k.killerId === k.unitId || k.killerId === 0
             ? 'Burned by the Dusk'
             : `Taken down by ${royale.killerName(k)}`;
-      } else if (k.killerId === this.selfId) {
+      } else if (k.killerId === this.selfId && champion) {
         playSfx('kill');
         this.announce(`You took down ${royale.victimName(k)}`, '#ffd94a');
-        announceVoice('self_kill', true, true);
+        if (!spoken) announceVoice('self_kill', true, true);
       }
-      royale.pushKill(k);
+      royale.play(calls);
     }
   }
 

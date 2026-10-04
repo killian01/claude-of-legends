@@ -83,6 +83,27 @@ interface MusicState {
 
 let state: MusicState | null = null;
 
+// How thick the score plays, 0 to 3 (the battle royale's loud moments,
+// ui/royale_moments.ts musicIntensity): 0 thins it to the drums' bones for
+// the calm, 1 is the score as written, 2 doubles the drums and the ticks,
+// 3 drives every beat for the last closing. The 5v5 leaves it at 1. Read
+// by scheduleBeat, so a change lands on the next beat, never mid-note.
+let intensity: 0 | 1 | 2 | 3 = 1;
+// A heart under the score while the champion's health runs low.
+let heart = false;
+
+export function setMusicIntensity(level: 0 | 1 | 2 | 3): void {
+  intensity = level;
+}
+
+export function musicIntensityNow(): 0 | 1 | 2 | 3 {
+  return intensity;
+}
+
+export function setHeartbeat(on: boolean): void {
+  heart = on;
+}
+
 function envOsc(
   out: GainNode,
   freq: number,
@@ -191,19 +212,35 @@ function scheduleBeat(out: GainNode, beat: number, t0: number): void {
   const half = BEAT_S / 2;
 
   // War drums: heavy hands on 0 and 4, a pickup double before each, and a
-  // rising four-hit roll at the end of every chord.
-  if (step === 0) taiko(out, t0, 0.13);
-  if (step === 4) taiko(out, t0, 0.1);
-  if (step === 3 || step === 7) taiko(out, t0 + half, 0.06);
-  if (step === 7) {
+  // rising four-hit roll at the end of every chord. The calm keeps the
+  // hands alone; a closing doubles them; the last closing drives them.
+  const level = intensity;
+  if (step === 0) taiko(out, t0, level === 0 ? 0.09 : 0.13);
+  if (step === 4 && level >= 1) taiko(out, t0, 0.1);
+  if ((step === 3 || step === 7) && level >= 1) taiko(out, t0 + half, 0.06);
+  if (step === 7 && level >= 1) {
     for (let i = 0; i < 4; i++) {
       taiko(out, t0 + (i * BEAT_S) / 4, 0.045 + i * 0.02);
     }
   }
+  if (level >= 2 && (step === 2 || step === 6)) taiko(out, t0, 0.08);
+  if (level >= 3 && step % 2 === 1) taiko(out, t0, 0.07);
 
-  // Martial tick on every offbeat: a dry snare-edge pulse.
-  envNoise(out, t0 + half, 0.05, 0.022, { bpf: 2100 });
-  if (step % 2 === 1) envNoise(out, t0, 0.04, 0.014, { bpf: 3200 });
+  // Martial tick on every offbeat: a dry snare-edge pulse; sixteenths over
+  // it once the Dusk closes in.
+  if (level >= 1) {
+    envNoise(out, t0 + half, 0.05, 0.022, { bpf: 2100 });
+    if (step % 2 === 1) envNoise(out, t0, 0.04, 0.014, { bpf: 3200 });
+  }
+  if (level >= 2) {
+    for (const q of [0.25, 0.75]) envNoise(out, t0 + BEAT_S * q, 0.03, 0.012, { bpf: 4200 });
+  }
+
+  // The heart under the score: two low beats, the second softer.
+  if (heart) {
+    envOsc(out, 58, t0, 0.16, 0.12, 'sine', { slideTo: 40 });
+    envOsc(out, 54, t0 + 0.2, 0.14, 0.07, 'sine', { slideTo: 38 });
+  }
 
   // Low string ostinato: staccato eighth pulses on the chord root, with
   // accents on the drum hands.
@@ -244,6 +281,14 @@ function scheduleBeat(out: GainNode, beat: number, t0: number): void {
         verb: 0.6,
         attack: 0.07,
       });
+      // The last closing: the call doubled an octave up, brighter.
+      if (level >= 3) {
+        envOsc(out, hz(note.n + 24), nt, dur, 0.022, 'sawtooth', {
+          lpf: 1800,
+          verb: 0.8,
+          attack: 0.07,
+        });
+      }
     }
   }
 }
@@ -309,6 +354,9 @@ function startBed(out: GainNode): MusicState['bed'] {
 export function startMusic(): void {
   const b = audioBus();
   if (!b || state) return;
+  // A new score plays as written until a mode says otherwise.
+  intensity = 1;
+  heart = false;
   const out = b.ctx.createGain();
   out.gain.value = musicVol();
   out.connect(b.master);
@@ -351,6 +399,8 @@ export function stopMusic(fadeS = 2.5): void {
   if (!b || !state) return;
   const s = state;
   state = null;
+  intensity = 1;
+  heart = false;
   window.clearInterval(s.timer);
   const t = b.ctx.currentTime;
   s.out.gain.setValueAtTime(s.out.gain.value, t);
