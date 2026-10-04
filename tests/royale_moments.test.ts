@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { RECORDED_VOICE_LINE_IDS } from '../src/game/voice_lines';
 import type { SnapClamor } from '../src/net/royale_wire';
-import { SEEDFALL_IMPACT_M } from '../src/sim/content/royale_events';
+import { SEEDFALL_IMPACT_M, SEEDFALL_WARN_S } from '../src/sim/content/royale_events';
 import { CLAMOR_S } from '../src/sim/royale/types';
 import {
   arcDistance,
@@ -436,10 +436,10 @@ describe('the Seedfall calls', () => {
     const m = watching('one_life');
     const [call, ...rest] = m.onNotes(
       [{ kind: 'seedfall', id: 1, at: [0, 80, 0], landsAt: 140 }],
-      120,
+      140 - SEEDFALL_WARN_S,
     );
     expect(rest).toEqual([]);
-    expect(call!.text).toBe('A Seedfall in 20 s');
+    expect(call!.text).toBe('A Seedfall in 30 s');
     expect(call!.keep).toBe(true);
     // Not the chime: that one is the edge arrows', panned toward the column.
     expect(call!.sfx).toBe('gong');
@@ -452,9 +452,9 @@ describe('the Seedfall calls', () => {
         { kind: 'seedfall', id: 1, at: [0, 80, 0], landsAt: 140 },
         { kind: 'seedfall', id: 2, at: [80, 0, 0], landsAt: 140 },
       ],
-      120,
+      140 - SEEDFALL_WARN_S,
     );
-    expect(texts(called)).toEqual(['Two Seedfalls in 20 s']);
+    expect(texts(called)).toEqual(['Two Seedfalls in 30 s']);
     const landed = m.onNotes([
       { kind: 'seedfall_land', id: 1, at: [0, 80, 0] },
       { kind: 'seedfall_land', id: 2, at: [80, 0, 0] },

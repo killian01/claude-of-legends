@@ -1122,7 +1122,7 @@ _Avoid_: augment, boon (the Warden's), perk, upgrade, card alone; tier (a rating
 and rarity for the grade
 
 **Seedfall**:
-A seed of the Star Orchard falling on the Wanderseed at a time and place called twenty
+A seed of the Star Orchard falling on the Wanderseed at a time and place called thirty
 seconds ahead, inside the light, five a match from two minutes after landing (two seeds at
 once in Respawn). Its impact throws up and hurts whoever stands under it. In code, prefer
 seedfall-prefixed names: seed alone is the match's rng seed.
