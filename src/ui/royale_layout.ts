@@ -75,3 +75,106 @@ export function stepsBox(width: number): ScreenBox {
 export function overlaps(a: ScreenBox, b: ScreenBox): boolean {
   return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 }
+
+// The kill feed at the top right (ui/royale_hud.ts): under the K/D/A box,
+// a line at most FEED_MAX_W_PX wide (a long name is cut short), up to four
+// lines and the "+N elsewhere" fold.
+export const FEED_TOP_PX = 62;
+export const FEED_RIGHT_PX = 12;
+export const FEED_MAX_W_PX = 280;
+// A name in the feed at most this wide, so a line with two names and
+// their bot marks keeps inside FEED_MAX_W_PX.
+export const FEED_NAME_MAX_W_PX = 86;
+export const FEED_LINE_H_PX = 27;
+export const FEED_LINES = 5;
+
+export function feedBox(width: number): ScreenBox {
+  return {
+    left: width - FEED_RIGHT_PX - FEED_MAX_W_PX,
+    top: FEED_TOP_PX,
+    right: width - FEED_RIGHT_PX,
+    bottom: FEED_TOP_PX + FEED_LINES * FEED_LINE_H_PX,
+  };
+}
+
+// The announcement (ui/hud.ts announce: "You took down Rushlantern", "Two
+// Seedfalls have landed"): centered under the top line, and never wider
+// than the room between the first steps' card and the feed, with
+// ANNOUNCE_GAP_PX either side, so a long one wraps rather than runs under
+// the feed (at 960x540 with four lines up, "Rushlantern" read
+// "Rushlanterr"). Two lines at most.
+export const ANNOUNCE_TOP_PX = 112;
+export const ANNOUNCE_GAP_PX = 12;
+export const ANNOUNCE_LINE_PX = 32;
+export const ANNOUNCE_LINES = 2;
+
+// How far in from each side the widest of the two reaches.
+export function announceReach(width: number): number {
+  return Math.max(FEED_RIGHT_PX + FEED_MAX_W_PX, STEPS_LEFT_PX + stepsWidth(width));
+}
+
+export function announceWidth(width: number): number {
+  return width - 2 * (announceReach(width) + ANNOUNCE_GAP_PX);
+}
+
+export function announceBox(width: number): ScreenBox {
+  const half = announceWidth(width) / 2;
+  return {
+    left: width / 2 - half,
+    top: ANNOUNCE_TOP_PX,
+    right: width / 2 + half,
+    bottom: ANNOUNCE_TOP_PX + ANNOUNCE_LINES * ANNOUNCE_LINE_PX,
+  };
+}
+
+// The announcement's max-width as CSS: announceWidth with the card's
+// width as the stylesheet computes it (ui/hud.ts).
+export function announceMaxWidthCss(): string {
+  const steps = `(${STEPS_LEFT_PX}px + min(${STEPS_MAX_W_PX}px, 50% - ${STEPS_CLEAR_MIDDLE_PX}px))`;
+  const reach = `max(${FEED_RIGHT_PX + FEED_MAX_W_PX}px, ${steps})`;
+  return `calc(100% - 2 * (${reach} + ${ANNOUNCE_GAP_PX}px))`;
+}
+
+// The wash over a dead champion (ui/hud.ts .hud-overlay, SLAIN or OUT)
+// stands over the field, and the announcement over the wash: SLAIN dimmed
+// "Two Seedfalls have landed" under it. The modal screens (the pause
+// menu, the end card) stand over both.
+export const WASH_Z = 10;
+export const ANNOUNCE_Z = 11;
+export const MODAL_Z = 41;
+
+// The wash's title and line, centered on the screen.
+export function slainBox(width: number, height: number): ScreenBox {
+  return {
+    left: width / 2 - 260,
+    top: height / 2 - 40,
+    right: width / 2 + 260,
+    bottom: height / 2 + 40,
+  };
+}
+
+// The spotlight (ui/royale_hud_moments.ts: ABLAZE, WILDFIRE) fades in and
+// out over SPOT_FADE_MS. On a phone it stands in the first steps' band, so
+// the card is gone from its first frame until its fade out is over: from
+// the call for `holdMs` and SPOT_FADE_MS more.
+export const SPOT_FADE_MS = 220;
+
+export function spotCoverMs(holdMs: number): number {
+  return Math.max(0, holdMs) + SPOT_FADE_MS;
+}
+
+// A phone's notices (ui/royale_hud_moments.ts): a loot line wraps in a
+// column COMPACT_NOTE_MAX_W_PX wide, but a finished item's line ("Completed:
+// Doombrand · Deathmark", the names only on a phone) and "Build complete"
+// hold one line, up to COMPACT_DONE_MAX_W_PX wide (border included); the
+// chrome is the icon, its gap, the padding and the border.
+export const COMPACT_NOTE_MAX_W_PX = 300;
+export const COMPACT_DONE_MAX_W_PX = 360;
+export const COMPACT_NOTE_FONT_PX = 12.5;
+export const COMPACT_NOTE_CHROME_PX = 22 + 8 + 14 + 2;
+// A bold system face's widest average letter, in ems.
+export const BOLD_EM_PER_CHAR = 0.64;
+
+export function compactNoteWidth(text: string): number {
+  return text.length * COMPACT_NOTE_FONT_PX * BOLD_EM_PER_CHAR + COMPACT_NOTE_CHROME_PX;
+}

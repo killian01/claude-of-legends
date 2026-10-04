@@ -20,6 +20,7 @@ import type { RoyaleResult } from '../net/royale_wire';
 import { trackStep } from '../net/stats';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
+import type { Status } from '../sim/combat/status';
 import { CAMPS } from '../sim/content/camps';
 import { effectiveItemCost, ITEM_LIST, ITEMS } from '../sim/content/items';
 import { ASPECT_IDS, ASPECTS, type AspectId, CREATURES } from '../sim/content/rings';
@@ -43,7 +44,15 @@ import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import { abilityIconUrl, passiveIconUrl, sigilIconUrl } from './ability_icons';
 import { accountOffer, OFFER_CALL } from './account_offer';
-import { boonChipFace, type ChipFace, favorChipFace, statusChip, wrathChipFace } from './chip_text';
+import {
+  AuraWatch,
+  boonChipFace,
+  type ChipFace,
+  favorChipFace,
+  statusChip,
+  statusKey,
+  wrathChipFace,
+} from './chip_text';
 import { COMPACT_ROW_GAP, COMPACT_SCALE, compactTapsCss } from './compact_taps';
 import {
   buildFeedbackBox,
@@ -110,6 +119,9 @@ import {
 import { firstPointsText, pointsWord, popText } from './points_text';
 import { RoyaleHud, type RoyaleKill } from './royale_hud';
 import {
+  ANNOUNCE_TOP_PX,
+  ANNOUNCE_Z,
+  announceMaxWidthCss,
   STEPS_CLEAR_MIDDLE_PX,
   STEPS_LEFT_PX,
   STEPS_MAX_W_PX,
@@ -925,7 +937,14 @@ const CSS = `
    it stands the battle royale's feed, and "+5 assist" fell under its
    first line, "+1 cache" on its fold. */
 .hud.royale .hud-points-pop { top: 11px; right: calc(100% + 6px); }
-.hud.royale .hud-announce { top: 112px; }
+/* The battle royale's announcement stands over the wash of a death (SLAIN
+   dimmed "Two Seedfalls have landed"), under the modal screens; on a
+   desktop it keeps between the first steps' card and the feed, wrapping
+   rather than running under the feed (ui/royale_layout.ts announceBox:
+   at 960x540 "You took down Rushlantern" was cut to "Rushlanterr"). */
+.hud.royale .hud-announce { top: ${ANNOUNCE_TOP_PX}px; z-index: ${ANNOUNCE_Z}; }
+.hud.royale:not(.compact) .hud-announce { width: max-content; max-width: ${announceMaxWidthCss()};
+  text-align: center; text-wrap: balance; line-height: 1.2; }
 .hud.compact.royale .hud-announce { top: 70px; }
 /* Compact mode (touchscreens): the desktop sizes swallow a phone screen, so
    the whole bottom block scales down, the chat goes (there is no way to type
@@ -1114,6 +1133,7 @@ export class Hud {
   private readonly metaText: HTMLElement;
   private readonly teamScore: TeamScore;
   private readonly statusRow: HTMLElement;
+  private readonly auraWatch = new AuraWatch();
   private readonly hpFill: HTMLElement;
   private readonly hpShield: HTMLElement;
   private readonly hpText: HTMLElement;
@@ -3180,12 +3200,22 @@ export class Hud {
         );
       }
     }
+    // A status an aura keeps renewing shows without a countdown
+    // (chip_text.ts AuraWatch: Torv's own Bulwark read "Boost 1s" all match).
     const seen = new Map<string, number>();
+    const standing = new Map<string, number>();
+    const shown: [Status, string, number][] = [];
     for (const s of u.statuses) {
       if (s.until <= this.world.time) continue;
       const n = (seen.get(s.kind) ?? 0) + 1;
       seen.set(s.kind, n);
-      chip(`status-${s.kind}-${n}`, statusChip(s, this.world.time), null);
+      const key = statusKey(s, n);
+      standing.set(key, s.until - this.world.time);
+      shown.push([s, key, n]);
+    }
+    this.auraWatch.step(standing);
+    for (const [s, key, n] of shown) {
+      chip(`status-${s.kind}-${n}`, statusChip(s, this.world.time, this.auraWatch.held(key)), null);
     }
     this.reconcileChips(wanted);
 

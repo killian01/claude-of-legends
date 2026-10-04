@@ -313,16 +313,14 @@ export function arrowRect(at: { x: number; y: number }, box: EdgeBox, dx = 0): E
 // the way the arrow points; null when the whole border is covered.
 function findOnBorder(
   at: { x: number; y: number },
-  box: EdgeBox,
-  obstacles: readonly EdgeRect[],
+  taken: (x: number, y: number) => boolean,
   v: EdgeView,
   dir?: { dx: number; dy: number },
 ): { x: number; y: number } | null {
   const cx = v.width / 2;
   const cy = v.height / 2;
   const blocked = (x: number, y: number): boolean =>
-    obstacles.some((r) => hits(x, y, box, r)) ||
-    (dir !== undefined && (x - cx) * dir.dx + (y - cy) * dir.dy <= 0);
+    taken(x, y) || (dir !== undefined && (x - cx) * dir.dx + (y - cy) * dir.dy <= 0);
   if (!blocked(at.x, at.y)) return at;
   const r = safeRect(v);
   const w = r.x1 - r.x0;
@@ -369,7 +367,8 @@ export function clearOf(
   v: EdgeView,
   dir?: { dx: number; dy: number },
 ): { x: number; y: number } {
-  return findOnBorder(at, boxOf(size), obstacles, v, dir) ?? at;
+  const box = boxOf(size);
+  return findOnBorder(at, (x, y) => obstacles.some((r) => hits(x, y, box, r)), v, dir) ?? at;
 }
 
 // How far round the ring an arrow may slide off its heading, radians:
@@ -378,18 +377,15 @@ const RING_SLIDE = 1.1;
 
 function findOnRing(
   at: { x: number; y: number; angle: number },
-  box: EdgeBox,
-  obstacles: readonly EdgeRect[],
+  taken: (x: number, y: number) => boolean,
   v: EdgeView,
   ring: EdgeRing,
 ): { x: number; y: number } | null {
-  const blocked = (p: { x: number; y: number }): boolean =>
-    obstacles.some((r) => hits(p.x, p.y, box, r));
-  if (!blocked(at)) return { x: at.x, y: at.y };
+  if (!taken(at.x, at.y)) return { x: at.x, y: at.y };
   for (let d = 0.05; d <= RING_SLIDE; d += 0.05) {
     for (const a of [at.angle + d, at.angle - d]) {
       const p = ringAt(a, v, ring);
-      if (!blocked(p)) return p;
+      if (!taken(p.x, p.y)) return p;
     }
   }
   return null;
@@ -404,7 +400,9 @@ export function clearOnRing(
   v: EdgeView,
   ring: EdgeRing,
 ): { x: number; y: number } {
-  return findOnRing(at, boxOf(size), obstacles, v, ring) ?? { x: at.x, y: at.y };
+  const box = boxOf(size);
+  const taken = (x: number, y: number): boolean => obstacles.some((r) => hits(x, y, box, r));
+  return findOnRing(at, taken, v, ring) ?? { x: at.x, y: at.y };
 }
 
 // How far in the next track stands when an arrow finds no room on its
@@ -428,23 +426,44 @@ function trackPoint(
   return { x: at.x, y: at.y, angle };
 }
 
+// The gap kept between two arrows' rooms, pixels: two arrows on the same
+// edge stood side by side with their lines touching, and the lines read as
+// one ("201 m \u00b7 0:1679 m \u00b7 0:16").
+export const ARROW_GAP_PX = 10;
+
+// Two rooms closer than ARROW_GAP_PX on both axes: their lines would touch.
+export function crowds(a: EdgeRect, b: EdgeRect, gap = ARROW_GAP_PX): boolean {
+  return (
+    a.left < b.right + gap &&
+    a.right > b.left - gap &&
+    a.top < b.bottom + gap &&
+    a.bottom > b.top - gap
+  );
+}
+
+function overlapsRect(a: EdgeRect, b: EdgeRect): boolean {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
 // The arrows of a frame placed together (ui/royale_hud_moments.ts), in
-// their priority order: each clear of the HUD's boxes and of every arrow
-// placed before it, its distance line counted in its room. When its track
-// has no room it steps onto the track inside (the phone's two Seedfall
-// arrows to the same side drew on each other, "5? m"); then onto its own
-// track clear of the other arrows alone; where it points last of all. Its
-// line slides in from the screen's side. `labelWidths[i]` is the width of
-// arrow i's line, pixels.
+// their priority order: each clear of the HUD's boxes, and ARROW_GAP_PX
+// clear of every arrow placed before it, its distance line counted in its
+// room where it stands once slid in from the screen's side. When its
+// track has no room it steps onto the track inside (the phone's two
+// Seedfall arrows to the same side drew on each other, "5? m"); then onto
+// its own track clear of the other arrows alone; where it points last of
+// all, and then without its line when that line would touch another's:
+// two lines never run together. `labelWidths[i]` is the width of arrow
+// i's line, pixels.
 export function layoutArrows(
   arrows: readonly Pick<EdgeArrow, 'x' | 'y' | 'angle'>[],
   labelWidths: readonly number[],
   obstacles: readonly EdgeRect[],
   v: EdgeView,
   ring?: EdgeRing,
-): { x: number; y: number; labelDx: number }[] {
+): { x: number; y: number; labelDx: number; labelShown: boolean }[] {
   const placed: EdgeRect[] = [];
-  const out: { x: number; y: number; labelDx: number }[] = [];
+  const out: { x: number; y: number; labelDx: number; labelShown: boolean }[] = [];
   const inner: EdgeView = {
     ...v,
     top: v.top + INNER_BORDER_PX,
@@ -457,24 +476,35 @@ export function layoutArrows(
     const width = labelWidths[i] ?? 0;
     const box = arrowBox(width);
     const dir = { dx: Math.cos(a.angle), dy: Math.sin(a.angle) };
+    const room = (x: number, y: number): EdgeRect =>
+      arrowRect({ x, y }, box, labelShift(x, width, v.width));
+    // Clear of the others alone, or of the HUD too.
+    const crowded = (x: number, y: number): boolean => {
+      const r = room(x, y);
+      return placed.some((p) => crowds(r, p));
+    };
+    const blocked = (x: number, y: number): boolean => {
+      const r = room(x, y);
+      return obstacles.some((o) => overlapsRect(r, o)) || placed.some((p) => crowds(r, p));
+    };
     const find = (
       at: { x: number; y: number; angle: number },
       track: EdgeView,
       trackRing: EdgeRing | undefined,
-      avoid: readonly EdgeRect[],
+      taken: (x: number, y: number) => boolean,
     ): { x: number; y: number } | null =>
-      trackRing
-        ? findOnRing(at, box, avoid, track, trackRing)
-        : findOnBorder(at, box, avoid, track, dir);
-    const all = [...obstacles, ...placed];
+      trackRing ? findOnRing(at, taken, track, trackRing) : findOnBorder(at, taken, track, dir);
     const own = { x: a.x, y: a.y, angle: a.angle };
     const innerView = ring ? v : inner;
-    const p = find(own, v, ring, all) ??
-      find(trackPoint(a.angle, innerView, innerRing), innerView, innerRing, all) ??
-      find(own, v, ring, placed) ?? { x: a.x, y: a.y };
+    const p = find(own, v, ring, blocked) ??
+      find(trackPoint(a.angle, innerView, innerRing), innerView, innerRing, blocked) ??
+      find(own, v, ring, crowded) ?? { x: a.x, y: a.y };
     const labelDx = labelShift(p.x, width, v.width);
-    placed.push(arrowRect(p, box, labelDx));
-    out.push({ x: p.x, y: p.y, labelDx });
+    // Where it points over another arrow's room, it goes without its line
+    // and keeps only its dial's room.
+    const labelShown = !crowded(p.x, p.y);
+    placed.push(labelShown ? room(p.x, p.y) : arrowRect(p, arrowBox(0)));
+    out.push({ x: p.x, y: p.y, labelDx, labelShown });
   }
   return out;
 }

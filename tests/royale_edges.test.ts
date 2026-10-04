@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  ARROW_GAP_PX,
   arrowBox,
   arrowRect,
   clampToEdge,
@@ -19,7 +20,9 @@ import {
   type EdgeView,
   edgeArrows,
   edgeDirection,
+  LABEL_H,
   LABEL_MARGIN,
+  LABEL_TOP,
   labelShift,
   layoutArrows,
   MAX_ARROWS,
@@ -397,5 +400,97 @@ describe('the border slide on a phone', () => {
     const at = { x: 422, y: VIEW.height - VIEW.bottom };
     const moved = clearOf(at, 14, covered, VIEW, { dx: 0, dy: 1 });
     expect(moved.y).toBeGreaterThan(VIEW.height / 2);
+  });
+});
+
+describe('the distance lines of arrows side by side', () => {
+  // The line under a placed arrow, as the HUD draws it.
+  const line = (p: { x: number; y: number; labelDx: number }, w: number): EdgeRect => ({
+    left: p.x + p.labelDx - w / 2,
+    top: p.y + LABEL_TOP,
+    right: p.x + p.labelDx + w / 2,
+    bottom: p.y + LABEL_TOP + LABEL_H,
+  });
+  // Apart by the gap on one axis at least.
+  const apart = (a: EdgeRect, b: EdgeRect): boolean =>
+    a.right + ARROW_GAP_PX <= b.left + 1e-9 ||
+    b.right + ARROW_GAP_PX <= a.left + 1e-9 ||
+    a.bottom + ARROW_GAP_PX <= b.top + 1e-9 ||
+    b.bottom + ARROW_GAP_PX <= a.top + 1e-9;
+
+  it('never touch on the same edge ("201 m \u00b7 0:1679 m \u00b7 0:16")', () => {
+    // The playtest at 960x540: two Seedfalls up and to the left, their
+    // arrows on the top border next to each other.
+    const view: EdgeView = { width: 960, height: 540, top: 14, right: 26, bottom: 38, left: 26 };
+    const targets = [
+      target({ key: 'sf1', x: 150, y: -900, distance: 201, secondsLeft: 16 }),
+      target({ key: 'sf2', x: 235, y: -900, distance: 79, secondsLeft: 16 }),
+    ];
+    const arrows = edgeArrows(targets, view);
+    expect(arrows.map((a) => a.label)).toEqual(['79 m \u00b7 0:16', '201 m \u00b7 0:16']);
+    const widths = [74, 82];
+    const at = layoutArrows(arrows, widths, [], view);
+    expect(at.every((p) => p.labelShown)).toBe(true);
+    expect(apart(line(at[0]!, 74), line(at[1]!, 82))).toBe(true);
+  });
+
+  it('never touch, on the border or the ring, wherever two or three point', () => {
+    const views: EdgeView[] = [
+      { width: 960, height: 540, top: 14, right: 26, bottom: 38, left: 26 },
+      { width: 1280, height: 720, top: 14, right: 26, bottom: 38, left: 26 },
+      { width: 844, height: 390, top: 14, right: 26, bottom: 38, left: 26 },
+    ];
+    const widths = [84, 60, 92];
+    for (const view of views) {
+      const bar = {
+        left: view.width / 2 - 150,
+        top: view.height - 170,
+        right: view.width / 2 + 150,
+        bottom: view.height,
+      };
+      for (const ring of [undefined, compactRing(view)]) {
+        for (let k = 0; k < 24; k++) {
+          const a = (k / 24) * 2 * Math.PI;
+          for (const n of [2, 3]) {
+            const targets = Array.from({ length: n }, (_, i) =>
+              target({
+                key: `sf${i}`,
+                x: view.width / 2 + 3000 * Math.cos(a + i * 0.04),
+                y: view.height / 2 + 3000 * Math.sin(a + i * 0.04),
+                distance: 40 + i,
+                secondsLeft: 12,
+              }),
+            );
+            const arrows = edgeArrows(targets, view, ring);
+            const at = layoutArrows(arrows, widths, [bar], view, ring);
+            for (let i = 0; i < at.length; i++) {
+              for (let j = i + 1; j < at.length; j++) {
+                if (!at[i]!.labelShown || !at[j]!.labelShown) continue;
+                const where = `${view.width} ${ring ? 'ring' : 'border'} ${k} ${n}: ${i} ${j}`;
+                expect(apart(line(at[i]!, widths[i]!), line(at[j]!, widths[j]!)), where).toBe(true);
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it('drop a line rather than let it touch another when nowhere is clear', () => {
+    // A screen too small for three lines side by side: the last stands
+    // where it points and goes without its line.
+    const view: EdgeView = { width: 150, height: 100, top: 14, right: 26, bottom: 38, left: 26 };
+    const arrows = edgeArrows(
+      [0, 1, 2].map((i) => target({ key: `sf${i}`, x: 75 + i, y: -900, distance: 40 + i })),
+      view,
+    );
+    const at = layoutArrows(arrows, [84, 84, 84], [], view);
+    expect(at.some((p) => !p.labelShown)).toBe(true);
+    for (let i = 0; i < at.length; i++) {
+      for (let j = i + 1; j < at.length; j++) {
+        if (!at[i]!.labelShown || !at[j]!.labelShown) continue;
+        expect(apart(line(at[i]!, 84), line(at[j]!, 84))).toBe(true);
+      }
+    }
   });
 });
