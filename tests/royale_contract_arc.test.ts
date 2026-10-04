@@ -1,17 +1,17 @@
-// The match arc before its rules (CONTEXT.md: Reprieve, Arrival, Last
-// light): no Arrival and no Reprieve in the observation or on the wire, a
-// champion back at full health, and an Arrival begun or replayed changing
-// nothing. Owned by tranche 2's match-arc worktree (T2-C), which deletes or
-// rewrites this file as its rules land; no other worktree edits it.
+// The match arc before its rules (CONTEXT.md: Reprieve, Last light): no
+// Reprieve in the observation or on the wire (nor a Grace while nobody is
+// in one), a champion back at full health, and no Arrival in the 5v5. The Arrival's own rules and its Grace
+// are pinned in tests/royale_arrival.test.ts and tests/royale_grace.test.ts.
+// Owned by tranche 2's match-arc worktree (T2-C), which deletes or rewrites
+// this file as its rules land.
 
 import { describe, expect, it } from 'vitest';
-import { applyReplayEvent } from '../src/net/replay';
 import { buildObservation } from '../src/sim/observe';
 import { Sim } from '../src/sim/sim';
-import { fakeSnap, fingerprint, landed } from './royale_contract_fixture';
+import { fakeSnap, landed } from './royale_contract_fixture';
 
 describe('the match arc, inert', () => {
-  for (const key of ['arriving', 'reprieveAt']) {
+  for (const key of ['arriving', 'graced', 'reprieveAt']) {
     it(`leaves ${key} out of the observation`, () => {
       const { sim, unitIds } = landed();
       expect(buildObservation(sim, unitIds[0]!)!.royale).not.toHaveProperty(key);
@@ -39,14 +39,5 @@ describe('the match arc, inert', () => {
     expect({ checksum: sim.checksum(), rng: sim.rng.state, tokens: u.decisionTokens }).toEqual(
       before,
     );
-  });
-
-  it('replays an arrive event as nothing', () => {
-    const { sim, unitIds } = landed();
-    const teams = new Map(unitIds.map((id, i) => [id, i]));
-    const before = fingerprint(sim);
-    applyReplayEvent(sim, teams, { k: sim.tickCount, u: unitIds[1]!, e: 'arrive' });
-    expect(fingerprint(sim)).toEqual(before);
-    expect(sim.policies.size).toBe(0);
   });
 });

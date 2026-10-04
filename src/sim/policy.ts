@@ -321,9 +321,11 @@ export interface ObsRoyale {
   leader: { id: number; score: number; at?: { x: number; y: number; z: number } } | null;
   // Additive v0 fields, absent until their rules ship: the seat's open
   // Graft offer and the Grafts it holds; the Seedfalls, the Risings, the
-  // marks and the Clamors everyone sees; whether this seat is arriving
-  // over the globe (a Respawn drop-in), and when its Reprieve brings it back
-  // (One life), null when none is pending.
+  // marks and the Clamors everyone sees; whether this seat is in its Grace
+  // (royale/grace.ts: a drop-in's Arrival or a Respawn return, absent when
+  // not), the champions in sight in theirs with when it runs out (no attack
+  // or spell touches them; absent when none), and when its Reprieve brings
+  // it back (One life), null when none is pending.
   offer?: ObsGraftOffer | null;
   grafts?: readonly string[];
   seedfalls?: readonly ObsSeedfall[];
@@ -331,6 +333,7 @@ export interface ObsRoyale {
   marks?: readonly ObsMark[];
   clamors?: readonly ObsClamor[];
   arriving?: boolean;
+  graced?: readonly { id: number; until: number }[];
   reprieveAt?: number | null;
 }
 

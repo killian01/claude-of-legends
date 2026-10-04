@@ -76,9 +76,20 @@ export function royaleOdds(sense: Sense, target?: ObsUnit, within = ODDS_RADIUS)
 export const TARGET_HP_WEIGHT = 4;
 export const TARGET_M_WEIGHT = 0.6;
 
+// Whether an enemy in sight is in its Grace (ObsRoyale.graced,
+// royale/grace.ts): nothing touches it until it runs out or the enemy
+// strikes first, so an attack on it is wasted.
+export function isGraced(sense: Sense, id: number): boolean {
+  const graced = sense.r.graced;
+  if (!graced) return false;
+  for (const g of graced) if (g.id === id && g.until > sense.obs.time) return true;
+  return false;
+}
+
 // The target: a hard-CC'd enemy in reach first, else the best of health
 // and distance within `reach` (the skill's chase unless told, or a reach
-// per enemy); null when none is worth it. Never one standing in the dark.
+// per enemy); null when none is worth it. Never one standing in the dark,
+// never one in its Grace.
 export function pickTarget(
   sense: Sense,
   reach: number | ((e: ObsUnit) => number) = sense.skill.chase,
@@ -86,6 +97,7 @@ export function pickTarget(
   let best: ObsUnit | null = null;
   let bestScore = Number.POSITIVE_INFINITY;
   for (const e of sense.enemies) {
+    if (isGraced(sense, e.id)) continue;
     const at = p3(e);
     const d = dist(sense.me, at);
     if (d > (typeof reach === 'number' ? reach : reach(e))) continue;

@@ -29,6 +29,7 @@ import { drawCacheSpots, openingBy, stepCaches } from './caches';
 import { noteClamor, observeClamors, stepClamors } from './clamors';
 import { dealEscorts, ESCORTS, escortLandings, normalizePick, resolveLandings } from './drop';
 import { type DuskSchedule, drawDusk, duskAt, insideCap } from './dusk';
+import { arrive, beginGrace, type Grace, observeGrace, stepGraces } from './grace';
 import { observeGrafts, pickGraft, stepGrafts } from './grafts';
 import type { RoyaleGround, RoyaleLayout } from './layout';
 import { creatureXp, grantXp, landingLevels, takedownXp } from './levels';
@@ -140,8 +141,11 @@ export class RoyaleMode {
   // buildRoyaleSim): their escorts are dealt gentle first (stepDrop).
   newcomers: ReadonlySet<number> = new Set();
   // When each seat last pressed a cast or a sigil or ordered an attack:
-  // what disturbs a cache's opening beside a hit.
+  // what disturbs a cache's opening beside a hit, and ends a Grace.
   lastActAt = new Map<number, number>();
+  // The fresh champions in their Grace (grace.ts), by unit id, in the
+  // order they began; RoyaleState.arriving lists the same seats.
+  graces = new Map<number, Grace>();
   tally: RoyaleTally = {
     firstTakedownAt: null,
     takedowns: 0,
@@ -256,10 +260,20 @@ export class RoyaleMode {
     return pickGraft(this, unitId, pick, time);
   }
 
-  // A Respawn drop-in's Arrival (CONTEXT.md): the seat a person takes from
-  // its bot hangs over the globe before it lands where it picks. Nothing
-  // happens yet: the seat is handed over in place (ADR 0025).
-  beginArrival(_unitId: number, _time: number): void {}
+  // A drop-in's Arrival (CONTEXT.md; Sim.beginArrival, the replay's
+  // 'arrive' event): the seat a person takes from its bot comes down fresh
+  // at a quiet spot inside the light, in its Grace, its tally from zero
+  // (grace.ts arrive). Only in play.
+  beginArrival(sim: Sim, unitId: number): void {
+    const u = sim.units.get(unitId);
+    if (u) arrive(this, sim, u);
+  }
+
+  // A champion back from a Respawn death (the sim's respawn loop, once its
+  // statuses are cleared): in its Grace.
+  onRespawn(sim: Sim, u: Unit): void {
+    beginGrace(this, u, sim.time);
+  }
 
   // Whether the bot driver runs a dead seat's policy this tick (a Graft
   // offer to pick, a Respawn landing to choose). Never yet: the Respawn
@@ -319,6 +333,7 @@ export class RoyaleMode {
   }
 
   beforeTick(sim: Sim): void {
+    stepGraces(this, sim);
     this.hpBefore.clear();
     this.aliveBefore = 0;
     for (const u of sim.units.values()) {
@@ -475,7 +490,9 @@ export class RoyaleMode {
   }
 
   // The respawn's delay and place (SimOptions.respawnDelay, respawnPoint):
-  // RESPAWN_S and the edge of the light in Respawn, never in One life.
+  // RESPAWN_S and the edge of the light in Respawn, never in One life. The
+  // place is the candidate on the light's edge farthest from every other
+  // champion standing (score.ts edgeOfLight), never the first one drawn.
   respawnDelay(): number {
     return this.variant === 'respawn' ? RESPAWN_S : Number.POSITIVE_INFINITY;
   }
@@ -651,6 +668,7 @@ export class RoyaleMode {
       ...observeRisings(this, sim, u),
       ...observeMarks(this, sim, u),
       ...observeClamors(this, sim, u),
+      ...observeGrace(this, sim, u),
     };
   }
 
@@ -664,6 +682,7 @@ export class RoyaleMode {
       builds: this.builds,
       skills: this.skills,
       lastActAt: this.lastActAt,
+      graces: this.graces,
       tally: this.tally,
     };
   }
@@ -675,6 +694,7 @@ export class RoyaleMode {
     this.builds = s.builds;
     this.skills = s.skills;
     this.lastActAt = s.lastActAt;
+    this.graces = s.graces;
     this.tally = s.tally;
     this.obsTick = -1;
     this.obsShared = null;
