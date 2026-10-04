@@ -9,6 +9,8 @@
 // development, on a self-hosted instance without stats, and in a browser
 // that blocks it, window.umami is absent and every call below is a no-op.
 
+import type { RoyaleVariant } from '../sim/royale/types';
+
 // The paces past arriving, each sent once per page as a named event, so
 // the dashboard can divide them by the visitors they are read against.
 // 'stayed' is the line between a visitor and a click that bounced before
@@ -26,25 +28,35 @@ export type StatsStep = (typeof STATS_STEPS)[number];
 
 // How a match ended for this browser, sent once when it leaves the match
 // screen: 'finished' when the match had a winner, 'left' when the player
-// walked out before one, with how many minutes it had run and whether it
-// was practice or online. Read against 'played', it is the one number
-// that says whether a match that started was worth staying in.
+// walked out before one, with how many minutes it had run and which kind
+// of match it was: practice, an online 5v5, or a battle royale with its
+// rule set, so the two online modes are never read as one. Read against
+// 'played', it is the one number that says whether a match that started
+// was worth staying in.
 export const MATCH_ENDS = ['finished', 'left'] as const;
 export type MatchEnd = (typeof MATCH_ENDS)[number];
-export type MatchMode = 'practice' | 'online';
+export type MatchMode = 'practice' | 'online' | 'royale';
+
+// A battle royale names its rule set beside the mode.
+export interface MatchKind {
+  mode: MatchMode;
+  variant?: RoyaleVariant;
+}
 
 export interface MatchEndEvent {
   name: MatchEnd;
-  data: { minutes: number; mode: MatchMode };
+  data: { minutes: number; mode: MatchMode; variant?: RoyaleVariant };
 }
 
 export function matchEndEvent(
   winner: number | null,
   seconds: number,
   mode: MatchMode,
+  variant?: RoyaleVariant,
 ): MatchEndEvent {
   const minutes = Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds / 60) : 0;
-  return { name: winner === null ? 'left' : 'finished', data: { minutes, mode } };
+  const data = variant === undefined ? { minutes, mode } : { minutes, mode, variant };
+  return { name: winner === null ? 'left' : 'finished', data };
 }
 
 // How long a visitor has to still be here to count as having stayed. Long
@@ -191,10 +203,11 @@ export function trackStep(step: StatsStep, win: StatsWindow = window as StatsWin
 export function trackMatchEnd(
   winner: number | null,
   seconds: number,
-  mode: MatchMode,
+  kind: MatchMode | MatchKind,
   win: StatsWindow = window as StatsWindow,
 ): void {
-  const e = matchEndEvent(winner, seconds, mode);
+  const { mode, variant } = typeof kind === 'string' ? { mode: kind, variant: undefined } : kind;
+  const e = matchEndEvent(winner, seconds, mode, variant);
   try {
     win.umami?.track(e.name, e.data);
   } catch {
@@ -234,13 +247,13 @@ export interface ReporterWindow extends StatsWindow {
 // and the tracker sends with keepalive, so a report from it leaves with
 // the page.
 export function matchEndReporter(
-  mode: MatchMode,
+  kind: MatchMode | MatchKind,
   current: () => MatchState,
   win: ReporterWindow = window as ReporterWindow,
 ): MatchEndReporter {
   return matchEndOnce(
     current,
-    (state) => trackMatchEnd(state.winner, state.seconds, mode, win),
+    (state) => trackMatchEnd(state.winner, state.seconds, kind, win),
     win,
   );
 }

@@ -105,7 +105,8 @@ it, and everything it takes away before a record leaves your browser.
   created here). And one when a match ends for this browser: `finished`
   (the match had a winner) or `left` (you walked out, or closed the page,
   before one), carrying how many minutes it had run and whether it was
-  practice or online.
+  practice, an online 5v5, or a battle royale (and then which rule set,
+  Respawn or One life).
   Nothing about who won or what you played.
 - What every counter of this kind reads off the request: the browser and
   operating system, the kind of device, the screen size, the language, and

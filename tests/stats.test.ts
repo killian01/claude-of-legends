@@ -180,6 +180,18 @@ describe('how a match ended', () => {
     expect([...MATCH_ENDS]).toEqual(['finished', 'left']);
   });
 
+  it('names a battle royale apart from a 5v5, with its rule set', () => {
+    expect(matchEndEvent(null, 5 * 60, 'royale', 'respawn')).toEqual({
+      name: 'left',
+      data: { minutes: 5, mode: 'royale', variant: 'respawn' },
+    });
+    expect(matchEndEvent(1, 9 * 60, 'royale', 'one_life').data).toEqual({
+      minutes: 9,
+      mode: 'royale',
+      variant: 'one_life',
+    });
+  });
+
   // A window with a tracker and the page's lifecycle events, both fakes.
   function fakeWindow(): ReporterWindow & { track: ReturnType<typeof vi.fn>; fire(): void } {
     const track = vi.fn();
@@ -221,6 +233,18 @@ describe('how a match ended', () => {
     win.fire();
     expect(win.track).toHaveBeenCalledTimes(1);
     expect(win.track).toHaveBeenCalledWith('left', { minutes: 5, mode: 'online' });
+  });
+
+  it('tells a battle royale and its rule set on the way out', () => {
+    const win = fakeWindow();
+    const state: MatchState = { winner: null, seconds: 6 * 60 };
+    matchEndReporter({ mode: 'royale', variant: 'one_life' }, () => state, win);
+    win.fire();
+    expect(win.track).toHaveBeenCalledWith('left', {
+      minutes: 6,
+      mode: 'royale',
+      variant: 'one_life',
+    });
   });
 
   it('stops listening once disposed, and still reports on the way out', () => {
