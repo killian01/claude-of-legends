@@ -25,14 +25,13 @@ import type { TeamId } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { itemIconUrl } from './icons';
 import {
-  clearOf,
-  clearOnRing,
   compactRing,
   EdgeChimes,
   type EdgeRect,
   type EdgeTarget,
   type EdgeView,
   edgeArrows,
+  layoutArrows,
   seedfallPointed,
 } from './royale_edges';
 import {
@@ -40,10 +39,15 @@ import {
   ClamorBell,
   ClamorEar,
   duskDepth,
+  duskTickOnly,
   duskTolls,
   elsewhereText,
+  FEED_MS,
+  type FeedTier,
   FoldCount,
-  feedKeeps,
+  feedLife,
+  feedOverflow,
+  feedTier,
   frostLevel,
   heartbeat,
   impactGain,
@@ -59,13 +63,11 @@ import {
 } from './royale_moments';
 import { BUILD_COMPLETE, buildComplete, lootNotice, openingFraction } from './royale_text';
 
-// How long a feed line, the fold and a spotlight stay up, milliseconds.
-const FEED_MS = 6500;
-const FEED_MAX = 5;
+// How long a spotlight stays up, milliseconds (the feed's lines and its
+// fold keep ui/royale_moments.ts feedLife).
 const SPOT_MS = 2800;
-// The arrows' half size with their distance under them, pixels, and how
-// often the obstacles are measured.
-const ARROW_HALF = 30;
+// How often the obstacles are measured (an arrow's own room is
+// ui/royale_edges.ts arrowBox).
 const OBSTACLES_MS = 500;
 // How high above its ground an arrow aims at a column.
 const ARROW_LIFT_M = 2;
@@ -86,8 +88,6 @@ const CSS = `
 .br-open.cracked .br-ring { background: conic-gradient(#ff4a3a 1turn, transparent 0);
   box-shadow: 0 0 22px rgba(255, 60, 40, 0.9); }
 .br-open.cracked b { color: #ff9a8a; }
-/* The notices keep above the opening's ring, however tall a line runs. */
-.br-notes { bottom: 270px; }
 .br-pulse { position: absolute; inset: 0; pointer-events: none; opacity: 0;
   background: radial-gradient(ellipse at center, transparent 40%, rgba(200, 20, 30, 0.55) 100%); }
 .br-pulse.on { animation: br-pulse 1s ease-out; }
@@ -100,9 +100,11 @@ const CSS = `
 .br-edge i::after { content: ''; position: absolute; left: 21px; top: 6px; width: 0; height: 0;
   border-top: 7px solid transparent; border-bottom: 7px solid transparent;
   border-left: 11px solid #ffe7a0; filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.8)); }
-.br-edge b { position: absolute; left: -45px; top: 15px; width: 90px; text-align: center;
-  font: 800 11.5px system-ui, sans-serif; color: #ffe7a0; text-shadow: 0 1px 3px #000;
-  font-variant-numeric: tabular-nums; }
+/* The distance under the dial, slid in from the screen's side when the
+   arrow stands at it (ui/royale_edges.ts labelShift). */
+.br-edge b { position: absolute; left: 0; top: 15px; white-space: nowrap; text-align: center;
+  transform: translateX(-50%); font: 800 11.5px system-ui, sans-serif; color: #ffe7a0;
+  text-shadow: 0 1px 3px #000; font-variant-numeric: tabular-nums; }
 .br-flight { position: absolute; width: 34px; height: 34px; border-radius: 7px; pointer-events: none;
   border: 1px solid #f0c860; box-shadow: 0 0 16px rgba(240, 200, 96, 0.9); z-index: 7; }
 /* A phone: a loot line that says what the piece adds runs long, so it
@@ -183,6 +185,8 @@ export class RoyaleHudMoments {
   private hpNow = -1;
   private hpBefore = -1;
   private lastCombat = Number.NEGATIVE_INFINITY;
+  // When the viewer last took a hit (the Dusk's burn aside), sim time.
+  private lastHit = Number.NEGATIVE_INFINITY;
   // The cache the viewer last opened, where its piece flies from.
   private openedCache: number | null = null;
   private wasWhole = false;
@@ -229,9 +233,15 @@ export class RoyaleHudMoments {
     for (const c of r.caches) this.cachesAt.set(c[0], [c[1], c[2], c[3]]);
     const me = world.units.get(selfId);
 
-    // The viewer's health, for the heal a takedown gives and the fight.
+    // The viewer's health, for the heal a takedown gives and the fight: a
+    // hit taken, the Dusk's own burn aside.
     if (me) {
-      if (this.hpNow >= 0 && me.hp < this.hpNow - 0.5 && !me.dead) this.lastCombat = time;
+      const drop = this.hpNow >= 0 ? this.hpNow - me.hp : 0;
+      const out = !me.dead && r.st === 'play' && (duskDepth(me.pos, r.dusk) ?? 0) > 0;
+      if (drop > 0.5 && !me.dead && !duskTickOnly(drop, me.maxHp, r.dusk.b, out)) {
+        this.lastCombat = time;
+        this.lastHit = time;
+      }
       this.hpBefore = this.hpNow;
       this.hpNow = me.hp;
     }
@@ -347,7 +357,8 @@ export class RoyaleHudMoments {
     const { selfId, selfTeam, world, feed } = this.host;
     const r = this.view();
     const marked = new Set((r?.mk ?? []).map((m) => m[0]));
-    const keep = feedKeeps(k, {
+    const leader = r?.v === 'respawn' && r.leader && r.leader.s > 0 ? r.leader.i : null;
+    const tier = feedTier(k, {
       selfId,
       person: (id) => {
         if (id === k.unitId && k.vb !== undefined) return !k.vb;
@@ -357,13 +368,15 @@ export class RoyaleHudMoments {
       },
       marked: (id) => marked.has(id),
       inSight: (id) => world.units.get(id)?.kind === 'champion' && world.isVisible(selfTeam, id),
+      leader: (id) => id === leader,
     });
-    if (!keep) {
+    if (tier === 'fold') {
       this.folded.add(performance.now());
       this.showFold();
       return;
     }
     const line = el('div', 'br-feed-line');
+    line.dataset.tier = tier;
     if (k.killerId === selfId || k.unitId === selfId) line.classList.add('mine');
     const dusk = k.killerId === k.unitId || k.killerId === 0;
     const who = (id: number, name: string, bot: boolean): HTMLElement => {
@@ -381,9 +394,18 @@ export class RoyaleHudMoments {
       who(k.unitId, this.host.victimName(k), k.vb ?? this.host.botOf(k.unitId)),
     );
     feed.prepend(line);
-    const lines = [...feed.children].filter((c) => c !== this.fold);
-    for (const extra of lines.slice(FEED_MAX)) extra.remove();
-    window.setTimeout(() => line.remove(), FEED_MS);
+    const lines = [...feed.children].filter((c): c is HTMLElement => c !== this.fold);
+    const tiers = lines.map((c) => (c.dataset.tier ?? 'near') as FeedTier);
+    let folded = false;
+    for (const i of feedOverflow(tiers)) {
+      if (tiers[i] === 'near') {
+        this.folded.add(performance.now());
+        folded = true;
+      }
+      lines[i]?.remove();
+    }
+    if (folded) this.showFold();
+    window.setTimeout(() => line.remove(), feedLife(tier));
   }
 
   // The folded line: how many deaths elsewhere in the feed's last moments,
@@ -542,20 +564,9 @@ export class RoyaleHudMoments {
       };
       for (const c of this.chimes.step(targets, view)) playSfx('chime', 0.85, { pan: c.pan });
       const ring = this.host.root.classList.contains('compact') ? compactRing(view) : undefined;
-      // Each arrow placed keeps the next off it.
-      for (const a of edgeArrows(targets, view, ring)) {
-        const at = ring
-          ? clearOnRing(a, ARROW_HALF, obstacles, view, ring)
-          : clearOf(a, ARROW_HALF, obstacles, view, {
-              dx: Math.cos(a.angle),
-              dy: Math.sin(a.angle),
-            });
-        obstacles.push({
-          left: at.x - ARROW_HALF,
-          top: at.y - ARROW_HALF,
-          right: at.x + ARROW_HALF,
-          bottom: at.y + ARROW_HALF,
-        });
+      const arrows = edgeArrows(targets, view, ring);
+      // Each line's words first: its width is part of the arrow's room.
+      const nodes = arrows.map((a) => {
         let node = this.arrows.get(a.key);
         if (!node) {
           node = el('div', 'br-edge');
@@ -563,11 +574,30 @@ export class RoyaleHudMoments {
           this.edges.appendChild(node);
           this.arrows.set(a.key, node);
         }
+        const label = node.lastElementChild as HTMLElement;
+        if (label.textContent !== a.label) {
+          label.textContent = a.label;
+          node.dataset.w = String(label.offsetWidth);
+        }
+        return node;
+      });
+      // Placed together: each clear of the HUD and of the ones before it.
+      const places = layoutArrows(
+        arrows,
+        nodes.map((n) => Number(n.dataset.w ?? 0)),
+        obstacles,
+        view,
+        ring,
+      );
+      for (const [i, a] of arrows.entries()) {
+        const node = nodes[i];
+        const at = places[i];
+        if (!node || !at) continue;
         node.style.transform = `translate(${at.x.toFixed(1)}px, ${at.y.toFixed(1)}px)`;
         const dial = node.firstElementChild as HTMLElement;
         dial.style.transform = `rotate(${a.angle.toFixed(3)}rad)`;
         const label = node.lastElementChild as HTMLElement;
-        if (label.textContent !== a.label) label.textContent = a.label;
+        label.style.transform = `translateX(calc(-50% + ${at.labelDx.toFixed(1)}px))`;
         seen.add(a.key);
       }
     }
@@ -612,7 +642,8 @@ export class RoyaleHudMoments {
     this.measureInsets();
     const picks = stage.querySelectorAll<HTMLElement>(
       '.hud-slots, .hud-bottom, .hud-kda, .stick-base, .stick-ghost, .touchbar, .br-top, ' +
-        '.br-feed, .br-open, .br-note, .hud-steps, canvas[style*="right"]',
+        '.br-feed, .br-open, .br-note, .hud-steps, .hud-points, .hud-hints, ' +
+        'canvas[style*="right"]',
     );
     const out: EdgeRect[] = [];
     for (const node of picks) {
@@ -628,6 +659,12 @@ export class RoyaleHudMoments {
     }
     this.obstacles = out;
     return out;
+  }
+
+  // Seconds since the viewer last took a hit, the Dusk's burn aside; null
+  // before the first.
+  sinceHit(time: number): number | null {
+    return Number.isFinite(this.lastHit) ? time - this.lastHit : null;
   }
 
   // How many arrows stand now (for the dev harness's checks).

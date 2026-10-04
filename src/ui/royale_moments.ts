@@ -286,9 +286,12 @@ export function impactShake(distance: number): number {
   return IMPACT_SHAKE * (1 - (distance - SEEDFALL_IMPACT_M) / (IMPACT_SHAKE_M - SEEDFALL_IMPACT_M));
 }
 
-// Who the feed keeps (ui/royale_hud_moments.ts): a death involving the
-// viewer, a person, a shown mark or a champion in sight. The rest folds
-// into "+N elsewhere".
+// Who the feed keeps (ui/royale_hud_moments.ts), and for how long. A
+// death involving the viewer or the score leader is the feed's own line
+// and stays its full time; one involving another person, a shown mark or
+// a champion in sight stays a shorter while, at most FEED_NEAR_MAX of
+// them at once (late in Respawn the feed stood five rows deep of bots
+// taking bots down); the rest folds into "+N elsewhere" at once.
 export interface FeedContext {
   selfId: number;
   // A person holds the seat (not a bot).
@@ -297,12 +300,51 @@ export interface FeedContext {
   marked(unitId: number): boolean;
   // In the viewer's sight.
   inSight(unitId: number): boolean;
+  // The score leader (Respawn's badge); absent where there is none.
+  leader?(unitId: number): boolean;
+}
+
+export type FeedTier = 'own' | 'lead' | 'near' | 'fold';
+
+export function feedTier(k: { unitId: number; killerId: number }, ctx: FeedContext): FeedTier {
+  const ids = [k.unitId];
+  if (k.killerId !== 0 && k.killerId !== k.unitId) ids.push(k.killerId);
+  if (ids.includes(ctx.selfId)) return 'own';
+  if (ctx.leader && ids.some((id) => ctx.leader?.(id) === true)) return 'lead';
+  if (ids.some((id) => ctx.person(id) || ctx.marked(id) || ctx.inSight(id))) return 'near';
+  return 'fold';
 }
 
 export function feedKeeps(k: { unitId: number; killerId: number }, ctx: FeedContext): boolean {
-  const ids = [k.unitId];
-  if (k.killerId !== 0 && k.killerId !== k.unitId) ids.push(k.killerId);
-  return ids.some((id) => id === ctx.selfId || ctx.person(id) || ctx.marked(id) || ctx.inSight(id));
+  return feedTier(k, ctx) !== 'fold';
+}
+
+// How long a line stays, milliseconds, by its tier; how many lines stand
+// at once, and how many of them the near tier may hold.
+export const FEED_MS = 6500;
+export const FEED_NEAR_MS = 3500;
+export const FEED_MAX = 4;
+export const FEED_NEAR_MAX = 2;
+
+export function feedLife(tier: FeedTier): number {
+  return tier === 'own' || tier === 'lead' ? FEED_MS : FEED_NEAR_MS;
+}
+
+// The lines a new one pushes out, by index into `tiers` (newest first, the
+// new one included): the oldest near lines past FEED_NEAR_MAX, then the
+// oldest lines past FEED_MAX, a near one before the viewer's or the
+// leader's. A near line pushed out joins the fold.
+export function feedOverflow(tiers: readonly FeedTier[]): number[] {
+  const out = new Set<number>();
+  const standing = (): number[] => tiers.map((_, i) => i).filter((i) => !out.has(i));
+  const near = standing().filter((i) => tiers[i] === 'near');
+  for (const i of near.slice(FEED_NEAR_MAX)) out.add(i);
+  while (standing().length > FEED_MAX) {
+    const rest = standing();
+    const oldestNear = rest.filter((i) => tiers[i] === 'near').pop();
+    out.add(oldestNear ?? (rest[rest.length - 1] as number));
+  }
+  return [...out].sort((a, b) => a - b);
 }
 
 // How many deaths the feed folded within its last `windowMs` (wall clock,
@@ -386,6 +428,18 @@ export function duskDepth(pos: Point, dusk: Pick<SnapDusk, 'c' | 'r' | 'p'>): nu
   if (dusk.p === 0) return 0;
   const [cx, cy, cz] = dusk.c;
   return Math.max(0, len3(pos.x - cx, pos.y - cy, pos.z - cz) - dusk.r);
+}
+
+// The Dusk's burn takes a sliver of health every tick (maxHp * burn * DT,
+// src/sim/royale/mode.ts). A drop no bigger than DUSK_TICK_WINDOW_S of it
+// (a frame may carry a few ticks), while the champion stands outside the
+// light, is the Dusk alone: no damage floater (the playtest's "-1 -2"
+// piled over the head), no hit sound or flash, and no fight. The burn is
+// the HUD's pill ("In the Dusk -2%/s").
+export const DUSK_TICK_WINDOW_S = 0.3;
+export function duskTickOnly(drop: number, maxHp: number, burn: number, outside: boolean): boolean {
+  if (!outside || !(burn > 0) || !(drop > 0)) return false;
+  return drop <= maxHp * burn * DUSK_TICK_WINDOW_S + 1;
 }
 
 // The frost at the screen's edge and the wind's level, 0 to 1, by depth:
