@@ -245,3 +245,36 @@ export function royaleKill(e: { unitId: number; killerId: number }): {
     ...(d.kb === 1 || d.kb === true ? { kb: true } : {}),
   };
 }
+
+// A champion in its Grace as the client reads the snapshot's ar block
+// (src/sim/royale/grace.ts): who, until when, and where it stood.
+export interface GraceNote {
+  unitId: number;
+  until: number;
+  at: WirePoint;
+}
+
+// The Graces on a royale block, tolerant of a malformed entry; empty when
+// the block is absent (no champion in sight is graced).
+export function gracesOf(view: { ar?: unknown } | null | undefined): GraceNote[] {
+  const out: GraceNote[] = [];
+  const list = view?.ar;
+  if (!Array.isArray(list)) return out;
+  for (const raw of list) {
+    if (!Array.isArray(raw) || raw.length < 5) continue;
+    const [id, until, x, y, z] = raw as unknown[];
+    if (num(id) && num(until) && num(x) && num(y) && num(z)) {
+      out.push({ unitId: id, until, at: [x, y, z] });
+    }
+  }
+  return out;
+}
+
+// When the own champion's Grace runs out, null when it is not graced.
+export function ownGraceUntil(
+  view: { ar?: unknown } | null | undefined,
+  selfId: number,
+): number | null {
+  for (const g of gracesOf(view)) if (g.unitId === selfId) return g.until;
+  return null;
+}
