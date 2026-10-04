@@ -1414,7 +1414,10 @@ async function runRoyale(
         },
       );
       pres = opening;
-      ends = matchEndReporter('online', () => ({ winner: world.winner, seconds: world.time }));
+      ends = matchEndReporter({ mode: 'royale', variant }, () => ({
+        winner: world.winner,
+        seconds: world.time,
+      }));
       if (!matchEnded && (pendingResult === null || resultOverNext)) {
         layer.guard(() => pres?.toggleEscapeMenu());
       }
