@@ -35,6 +35,12 @@ import {
   seedfallPointed,
 } from './royale_edges';
 import {
+  COMPACT_DONE_MAX_W_PX,
+  COMPACT_NOTE_MAX_W_PX,
+  SPOT_FADE_MS,
+  spotCoverMs,
+} from './royale_layout';
+import {
   arcDistance,
   ClamorBell,
   ClamorEar,
@@ -78,7 +84,8 @@ const CSS = `
 .br-spot { position: absolute; left: 50%; top: 30%; transform: translateX(-50%) scale(0.82);
   font-family: Cinzel, Georgia, serif; font-size: 50px; font-weight: 900; letter-spacing: 5px;
   white-space: nowrap; text-shadow: 0 3px 18px #000, 0 0 32px currentColor; opacity: 0;
-  transition: opacity 0.22s ease-out, transform 0.22s ease-out; pointer-events: none; }
+  transition: opacity ${SPOT_FADE_MS}ms ease-out, transform ${SPOT_FADE_MS}ms ease-out;
+  pointer-events: none; }
 .br-spot.on { opacity: 1; transform: translateX(-50%) scale(1); }
 .br-spot.top { font-size: 66px; letter-spacing: 8px; }
 .br-feed-line.fold { color: #a9a48c; border-color: #2a2618; font-style: italic; }
@@ -110,14 +117,24 @@ const CSS = `
 /* A phone: a loot line that says what the piece adds runs long, so it
    wraps in a column between the thumb stick and the ability buttons, and
    sits clear above the bar. */
-.hud.compact .br-note { white-space: normal; max-width: 300px; line-height: 1.25; }
+.hud.compact .br-note { white-space: normal; max-width: ${COMPACT_NOTE_MAX_W_PX}px; line-height: 1.25; }
+/* A finished item and the whole build hold one line (it wrapped to
+   "Completed: Doombrand ·" over "Deathmark"): every such line fits
+   (ui/royale_layout.ts compactNoteWidth), and one that did not would be
+   cut short rather than wrap. */
+.hud.compact .br-note.done, .hud.compact .br-note.whole { white-space: nowrap;
+  max-width: ${COMPACT_DONE_MAX_W_PX}px; box-sizing: border-box; }
+.hud.compact .br-note.done span, .hud.compact .br-note.whole span { min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; }
 .hud.compact.thumbs .br-notes { left: 44%; bottom: 82px; }
 .hud.compact .br-spot { font-size: 26px; letter-spacing: 3px;
   top: calc(98px + var(--safe-top, env(safe-area-inset-top, 0px))); }
 .hud.compact .br-spot.top { font-size: 34px; letter-spacing: 4px; }
 /* There it stands in the first steps' band: the card steps aside while it
-   shows. */
-.hud.compact.br-spotting .hud-steps { visibility: hidden; }
+   shows, from the spotlight's first frame (no fade: "WILDFIRE" was drawn
+   across the card while it faded) to the end of its fade out
+   (ui/royale_layout.ts spotCoverMs). */
+.hud.compact.br-spotting .hud-steps { visibility: hidden; opacity: 0; transition: none; }
 `;
 
 // A death as the HUD gets it (ui/royale_hud.ts RoyaleKill).
@@ -346,10 +363,15 @@ export class RoyaleHudMoments {
     this.spot.classList.add('on');
     this.host.root.classList.add('br-spotting');
     window.clearTimeout(this.spotTimer);
+    const hold = c.holdMs ?? SPOT_MS;
     this.spotTimer = window.setTimeout(() => {
       this.spot.classList.remove('on');
-      this.host.root.classList.remove('br-spotting');
-    }, c.holdMs ?? SPOT_MS);
+      // The card comes back once the word has faded, not under it.
+      this.spotTimer = window.setTimeout(
+        () => this.host.root.classList.remove('br-spotting'),
+        spotCoverMs(hold) - hold,
+      );
+    }, hold);
   }
 
   // One line of the feed, or one more folded away.
@@ -598,6 +620,8 @@ export class RoyaleHudMoments {
         dial.style.transform = `rotate(${a.angle.toFixed(3)}rad)`;
         const label = node.lastElementChild as HTMLElement;
         label.style.transform = `translateX(calc(-50% + ${at.labelDx.toFixed(1)}px))`;
+        // A line that would touch another arrow's goes (ui/royale_edges.ts).
+        label.style.visibility = at.labelShown ? '' : 'hidden';
         seen.add(a.key);
       }
     }
