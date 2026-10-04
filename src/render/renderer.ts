@@ -49,6 +49,7 @@ import {
 } from './creatures/pyrefang_visual';
 import { FloatingText, makeTextSprite } from './floating_text';
 import { fogSheetGeometry } from './fog_sheet';
+import { LOW_HEALTH_STYLE, lowHealthOpacity } from './low_health';
 import { buildMinionMesh } from './minion_shapes';
 import {
   estimatedMuzzleOffset,
@@ -411,8 +412,10 @@ export class Renderer {
   // Camera trauma: squared on apply so small hits barely register and big
   // impacts kick; decays every frame, capped so fights cannot stack it.
   private shakeAmp = 0;
-  // The display-grade vignette div; doubles as the low-hp warning.
+  // The display-grade vignette div, and the low-hp warning's red frame over
+  // it in its stead (low_health.ts), painted once, its opacity pulsing.
   private readonly vignette: HTMLDivElement;
+  private readonly lowHpFrame: HTMLDivElement;
   private lowHpActive = false;
   // The battle royale's frost at the screen's edge while the followed
   // champion stands in the Dusk (the loud moments), beside the low-health
@@ -500,6 +503,9 @@ export class Renderer {
       'position:absolute;inset:0;pointer-events:none;' +
       'background:radial-gradient(ellipse at center, transparent 55%, rgba(8,12,5,0.3) 100%);';
     container.appendChild(this.vignette);
+    this.lowHpFrame = document.createElement('div');
+    this.lowHpFrame.style.cssText = LOW_HEALTH_STYLE;
+    container.appendChild(this.lowHpFrame);
     this.frost = document.createElement('div');
     this.frost.style.cssText =
       'position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 0.35s;' +
@@ -3547,15 +3553,21 @@ export class Renderer {
     // Low-hp warning: the vignette turns into a pulsing red frame under 30
     // percent health, scaling up as death gets closer.
     const hpFrac = selfUnit && !selfUnit.dead ? selfUnit.hp / selfUnit.maxHp : 1;
-    if (hpFrac < 0.3) {
-      this.lowHpActive = true;
-      const danger = 1 - hpFrac / 0.3;
-      const a = (0.22 + 0.18 * danger + 0.1 * Math.sin(now * 0.008)) * (0.6 + 0.4 * danger);
-      this.vignette.style.background = `radial-gradient(ellipse at center, transparent 45%, rgba(150,20,10,${a.toFixed(3)}) 100%)`;
+    const lowHp = lowHealthOpacity(hpFrac, now);
+    if (lowHp !== null) {
+      if (!this.lowHpActive) {
+        this.lowHpActive = true;
+        // Its own layer while it pulses: an opacity change then repaints
+        // nothing.
+        this.lowHpFrame.style.willChange = 'opacity';
+        this.vignette.style.visibility = 'hidden';
+      }
+      this.lowHpFrame.style.opacity = lowHp.toFixed(3);
     } else if (this.lowHpActive) {
       this.lowHpActive = false;
-      this.vignette.style.background =
-        'radial-gradient(ellipse at center, transparent 55%, rgba(8,12,5,0.3) 100%)';
+      this.lowHpFrame.style.opacity = '0';
+      this.lowHpFrame.style.willChange = '';
+      this.vignette.style.visibility = '';
     }
 
     this.updateFreeCam(dtMs, followPos);
@@ -3725,6 +3737,7 @@ export class Renderer {
     this.championVisuals.clear();
     this.fogTexture.dispose();
     this.vignette.remove();
+    this.lowHpFrame.remove();
     this.frost.remove();
     this.gl.domElement.remove();
     this.gl.dispose();
