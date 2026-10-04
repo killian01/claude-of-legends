@@ -66,6 +66,8 @@ export type SnapGrace = [number, number, number, number, number];
 export interface SnapGraftOffer {
   g: GraftGrade;
   c: [string, string, string];
+  // When it was offered (it stays open until the pick): with the cards,
+  // what tells one offer from the next.
   u: number;
 }
 

@@ -1,9 +1,10 @@
 // The Grafts on the screen (ui/royale_grafts.ts, render/planet_graft_aura.ts,
-// the mirror in src/net/client_world.ts): what the cards say, the seconds
-// and the chip, the phone's fold, the keys, the end card's list, where the
-// cards and the chip stand (clear of the champion, on the screen, the chip
-// clear of the thumbs' corners), the aura's breath and color, and the mirror
-// keeping the Grafts and the Heartwoods and sending a pick.
+// the mirror in src/net/client_world.ts): what the cards say, the title and
+// the grade hints, the fold (put off or a fight) and the chip, the keys, the
+// end card's list, where the cards and the chip stand (a row across the top
+// with the champion in sight, the chip clear of the thumbs' corners), the
+// aura's breath and color, and the mirror keeping the Grafts and the
+// Heartwoods and sending a pick.
 
 import { describe, expect, it } from 'vitest';
 import { ClientWorld } from '../src/net/client_world';
@@ -15,14 +16,14 @@ import { Sim } from '../src/sim/sim';
 import {
   cardOfKey,
   cardsBox,
-  cardsClearOfChampion,
+  cardsLeaveChampionInSight,
   chipBox,
+  GRADE_HINTS,
+  GRAFT_TITLE,
   graftCards,
   graftChip,
   graftFolded,
   graftNames,
-  graftSecondsLeft,
-  graftTimeShare,
 } from '../src/ui/royale_grafts';
 import { championBox, overlaps, type ScreenBox } from '../src/ui/royale_layout';
 import { royaleEnd } from '../src/ui/royale_result';
@@ -60,15 +61,23 @@ describe('the cards', () => {
     expect(cards[2]!.delta).toBe('+300 health now');
   });
 
-  it('count the seconds, drain the bar and fold on a phone in a fight only', () => {
-    expect(graftSecondsLeft(OFFER, 21.2)).toBe(9);
-    expect(graftSecondsLeft(OFFER, 31)).toBe(0);
-    expect(graftChip(OFFER, 22)).toBe('Graft 8s');
-    expect(graftTimeShare(OFFER, 25, 10)).toBeCloseTo(0.5, 9);
-    expect(graftFolded(true, 1, false)).toBe(true);
-    expect(graftFolded(true, 5, false)).toBe(false);
-    expect(graftFolded(true, 1, true)).toBe(false);
-    expect(graftFolded(false, 1, false)).toBe(false);
+  it('say what they are and what each grade does, with no clock: the offer waits', () => {
+    // The maintainer (2026-10-04): the cards were not understood, and a
+    // card taken after ten seconds left no time to read them.
+    expect(GRAFT_TITLE).toBe('Choose a Graft');
+    expect(graftChip()).toBe('Choose a Graft');
+    expect(Object.values(GRADE_HINTS).every((h) => h.length > 0 && h.length <= 26)).toBe(true);
+  });
+
+  it('fold when put off or in a fight, never over the globe, and open again from the chip', () => {
+    // sinceHit, dropping, put off, reopened
+    expect(graftFolded(1, false, false, false)).toBe(true);
+    expect(graftFolded(5, false, false, false)).toBe(false);
+    expect(graftFolded(null, false, false, false)).toBe(false);
+    expect(graftFolded(1, true, false, false)).toBe(false);
+    expect(graftFolded(null, false, true, false)).toBe(true);
+    expect(graftFolded(null, false, true, true)).toBe(false);
+    expect(graftFolded(1, false, false, true)).toBe(false);
   });
 
   it('pick by the keys 1, 2 and 3 only', () => {
@@ -103,19 +112,23 @@ describe('where the cards stand', () => {
     [1920, 1080],
   ] as const;
 
-  it('keeps them off the champion and on the screen, on a desktop and a phone', () => {
+  it('stand in a row across the top, on the screen, the champion in sight below', () => {
+    // The maintainer: "faut quand meme qu'on voit le jeu".
     for (const [w, h] of desks) {
-      expect(cardsClearOfChampion(w, h, false)).toBe(true);
-      expect(inside(cardsBox(w, h, false, false), w, h)).toBe(true);
+      expect(cardsLeaveChampionInSight(w, h, false)).toBe(true);
+      expect(inside(cardsBox(w, false), w, h)).toBe(true);
     }
-    expect(cardsClearOfChampion(844, 390, true)).toBe(true);
-    for (const dropping of [false, true]) {
-      expect(inside(cardsBox(844, 390, true, dropping), 844, 390)).toBe(true);
-    }
+    expect(cardsLeaveChampionInSight(844, 390, true)).toBe(true);
+    expect(inside(cardsBox(844, true), 844, 390)).toBe(true);
   });
 
-  it('sets the phone chip above the bar, off the champion and clear of both thumbs', () => {
-    const chip = chipBox(844, 390);
+  it('sets the chip under the top line on a desktop, above the bar clear of the thumbs on a phone', () => {
+    for (const [w, h] of desks) {
+      const chip = chipBox(w, h, false);
+      expect(inside(chip, w, h)).toBe(true);
+      expect(overlaps(chip, championBox(w, h))).toBe(false);
+    }
+    const chip = chipBox(844, 390, true);
     expect(inside(chip, 844, 390)).toBe(true);
     expect(overlaps(chip, championBox(844, 390))).toBe(false);
     // The stick's quarter and the cluster's corner (ui/thumb_cluster.ts).

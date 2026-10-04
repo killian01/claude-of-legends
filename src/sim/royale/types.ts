@@ -134,12 +134,12 @@ export type RoyaleStage = 'drop' | 'play' | 'over';
 export type GraftGrade = 'sprout' | 'bough' | 'heartwood';
 
 // A Graft offered to a seat: three cards of a grade, queued; the head of the
-// queue is open until `until` (null while it waits behind another).
+// queue is open until the seat picks, with no time limit (the maintainer,
+// 2026-10-04: time to read the cards).
 export interface GraftOffer {
   grade: GraftGrade;
   cards: string[];
   offeredAt: number;
-  until: number | null;
 }
 
 // A Seedfall announced (CONTEXT.md: Seedfall): where it falls and when, and

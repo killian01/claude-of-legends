@@ -1115,7 +1115,7 @@ _Avoid_: drop (the landing), reward, item pickup
 **Graft**:
 A lasting gift a champion chooses on the Wanderseed: one of three cards offered over the
 globe during the drop, then on events (takedowns, caches, a Seedfall cache, a big creature,
-some levels). An offer waits ten seconds, then its first card is taken. Each Graft has a
+some levels). An offer waits until the champion picks, with no time limit. Each Graft has a
 grade: a **Sprout** raises a raw stat and stacks twice, a **Bough** changes a rule, a
 **Heartwood** changes the kit and shows on the champion for everyone to see.
 _Avoid_: augment, boon (the Warden's), perk, upgrade, card alone; tier (a rating's band)

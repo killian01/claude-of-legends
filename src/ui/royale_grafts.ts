@@ -1,15 +1,15 @@
 // The Graft cards, decided (CONTEXT.md: Graft; ADR 0032): what each of the
-// three cards of an open offer says (its key, name, grade and line, and
-// for a Sprout what it adds to the own champion now), the seconds left,
-// the chip a phone folds them into mid-fight, the key a press picks, the
-// names the end card lists, and where the cards and the chip stand on a
-// screen, as boxes a test keeps clear of the champion and the controls.
-// Pure; ui/royale_hud_grafts.ts draws it.
+// three cards of an open offer says (its key, name, grade, what the grade
+// does, its line, and for a Sprout what it adds to the own champion now),
+// the title over them, when they fold into the chip (put off, or a fight),
+// the key a press picks, the names the end card lists, and where the cards
+// and the chip stand on a screen, as boxes a test checks. The offer never
+// runs out. Pure; ui/royale_hud_grafts.ts draws it.
 
 import type { SnapGraftOffer } from '../net/royale_wire';
 import { GRAFTS, graftStacks } from '../sim/content/grafts';
 import type { GraftGrade } from '../sim/royale/types';
-import { championBox, overlaps, type ScreenBox } from './royale_layout';
+import { championBox, type ScreenBox } from './royale_layout';
 import { foldForFight } from './royale_steps';
 
 export const GRADE_NAMES: Readonly<Record<GraftGrade, string>> = {
@@ -77,27 +77,34 @@ export function graftCards(offer: SnapGraftOffer, me: GraftReader | null): Graft
   });
 }
 
-// Whole seconds left before card 0 is taken, never under zero.
-export function graftSecondsLeft(offer: SnapGraftOffer, time: number): number {
-  return Math.max(0, Math.ceil(offer.u - time - 1e-9));
+// The cards' title, and what each grade does, in words a newcomer reads
+// (the maintainer, 2026-10-04: "on comprend pas").
+export const GRAFT_TITLE = 'Choose a Graft';
+export const GRAFT_SUBTITLE = 'A power for the rest of this match. Take your time.';
+export const GRADE_HINTS: Readonly<Record<GraftGrade, string>> = {
+  sprout: 'Stat boost, stacks twice',
+  bough: 'Changes a rule',
+  heartwood: 'Changes your spells',
+};
+
+// The folded chip's words: the cards wait, with no time limit.
+export function graftChip(): string {
+  return GRAFT_TITLE;
 }
 
-// The share of the pick's time left, 1 to 0, for the draining bar.
-export function graftTimeShare(offer: SnapGraftOffer, time: number, openFor: number): number {
-  if (openFor <= 0) return 0;
-  return Math.max(0, Math.min(1, (offer.u - time) / openFor));
-}
-
-// The folded chip's words.
-export function graftChip(offer: SnapGraftOffer, time: number): string {
-  return `Graft ${graftSecondsLeft(offer, time)}s`;
-}
-
-// A phone folds the cards into the chip while the champion fights (a hit
-// in the last FIGHT_FOLD_S, ui/royale_steps.ts), never over the globe; a
-// desktop never folds them.
-export function graftFolded(compact: boolean, sinceHit: number | null, dropping: boolean): boolean {
-  return !dropping && foldForFight(sinceHit, compact);
+// Whether the cards fold into the chip: never over the globe in the drop;
+// otherwise when the person put them off (Later) or is in a fight (a hit
+// in the last FIGHT_FOLD_S), on a phone as on a desktop, unless they
+// opened them again from the chip. The offer never runs out, so folding
+// costs nothing but the look.
+export function graftFolded(
+  sinceHit: number | null,
+  dropping: boolean,
+  putOff: boolean,
+  reopened: boolean,
+): boolean {
+  if (dropping || reopened) return false;
+  return putOff || foldForFight(sinceHit, true);
 }
 
 // The card a key picks: 1, 2 and 3 on the top row or the number pad.
@@ -120,53 +127,58 @@ export function graftNames(ids: readonly string[]): string[] {
   return out;
 }
 
-// Where the cards stand, at interface size 1. A desktop stacks them in a
-// column right of the champion, over the globe in the drop as in play. A
-// phone sets them in a row: under the top line in play, at the foot of the
-// screen over the globe (the bar and the thumbs are hidden in the drop).
-export const DESK_CARD_W_PX = 200;
-export const DESK_CARD_H_PX = 62;
-export const DESK_FROM_MIDDLE_PX = 80;
-export const PHONE_CARD_W_PX = 132;
-export const PHONE_CARD_H_PX = 48;
+// Where the cards stand, at interface size 1: a row of three big cards
+// across the top of the view, under the top line, the title above them,
+// so the world and the champion's body stay in sight below (the
+// maintainer: "faut quand meme qu'on voit le jeu"). A phone uses the same
+// row, smaller.
+export const DESK_CARD_W_PX = 248;
+export const DESK_CARD_H_PX = 132;
+export const DESK_TOP_PX = 96;
+export const PHONE_CARD_W_PX = 240;
+export const PHONE_CARD_H_PX = 104;
 export const PHONE_TOP_PX = 54;
-export const PHONE_DROP_BOTTOM_PX = 10;
-export const CARD_GAP_PX = 6;
-// The folded chip on a phone: above the bar, which slides left of the
-// middle for the thumbs (ui/hud.ts), where the notices also stand.
+export const TITLE_H_PX = 30;
+export const PHONE_TITLE_H_PX = 22;
+export const CARD_GAP_PX = 12;
+export const PHONE_CARD_GAP_PX = 8;
+// The folded chip: under the top line on a desktop; on a phone above the
+// bar, which slides left of the middle for the thumbs (ui/hud.ts).
+export const DESK_CHIP_TOP_PX = 96;
 export const CHIP_LEFT_SHARE = 0.4;
 export const CHIP_BOTTOM_PX = 128;
-export const CHIP_W_PX = 112;
+export const CHIP_W_PX = 150;
 export const CHIP_H_PX = 30;
 
-export function cardsBox(
-  width: number,
-  height: number,
-  compact: boolean,
-  dropping: boolean,
-): ScreenBox {
-  if (!compact) {
-    const h = 3 * DESK_CARD_H_PX + 2 * CARD_GAP_PX;
-    const left = width / 2 + DESK_FROM_MIDDLE_PX;
-    return {
-      left,
-      top: height / 2 - h / 2,
-      right: left + DESK_CARD_W_PX,
-      bottom: height / 2 + h / 2,
-    };
-  }
-  const w = 3 * PHONE_CARD_W_PX + 2 * CARD_GAP_PX;
-  const top = dropping ? height - PHONE_DROP_BOTTOM_PX - PHONE_CARD_H_PX : PHONE_TOP_PX;
-  return { left: width / 2 - w / 2, top, right: width / 2 + w / 2, bottom: top + PHONE_CARD_H_PX };
+export function cardsBox(width: number, compact: boolean): ScreenBox {
+  const w = compact ? PHONE_CARD_W_PX : DESK_CARD_W_PX;
+  const h = compact ? PHONE_CARD_H_PX : DESK_CARD_H_PX;
+  const gap = compact ? PHONE_CARD_GAP_PX : CARD_GAP_PX;
+  const top = (compact ? PHONE_TOP_PX : DESK_TOP_PX) + (compact ? PHONE_TITLE_H_PX : TITLE_H_PX);
+  const row = 3 * w + 2 * gap;
+  return { left: width / 2 - row / 2, top, right: width / 2 + row / 2, bottom: top + h };
 }
 
-export function chipBox(width: number, height: number): ScreenBox {
+export function chipBox(width: number, height: number, compact: boolean): ScreenBox {
+  if (!compact) {
+    return {
+      left: width / 2 - CHIP_W_PX / 2,
+      top: DESK_CHIP_TOP_PX,
+      right: width / 2 + CHIP_W_PX / 2,
+      bottom: DESK_CHIP_TOP_PX + CHIP_H_PX,
+    };
+  }
   const mid = width * CHIP_LEFT_SHARE;
   const bottom = height - CHIP_BOTTOM_PX;
   return { left: mid - CHIP_W_PX / 2, top: bottom - CHIP_H_PX, right: mid + CHIP_W_PX / 2, bottom };
 }
 
-// Whether the cards in play keep off the champion on a screen this size.
-export function cardsClearOfChampion(width: number, height: number, compact: boolean): boolean {
-  return !overlaps(cardsBox(width, height, compact, false), championBox(width, height));
+// Whether the champion's body stays in sight under the cards: the row ends
+// above the middle of the screen, where the camera holds the champion.
+export function cardsLeaveChampionInSight(
+  width: number,
+  height: number,
+  compact: boolean,
+): boolean {
+  return cardsBox(width, compact).bottom <= championBox(width, height).bottom - 30;
 }

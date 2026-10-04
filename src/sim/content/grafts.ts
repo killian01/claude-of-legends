@@ -22,10 +22,6 @@ import type { CombatCtx } from '../sim_context';
 import type { DamageType } from '../types';
 import { hostile, type Unit } from '../unit';
 
-// Seconds a seat has to pick the open offer's card before card 0 is taken.
-export const GRAFT_PICK_S = 10;
-// The drop's offer closes this long after the landing instead.
-export const GRAFT_DROP_LAND_S = 3;
 // Offers a seat queues at most, the open one included.
 export const GRAFT_QUEUE_MAX = 3;
 // Stacks a Sprout reaches at most.
