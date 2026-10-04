@@ -130,7 +130,9 @@ describe('a whole battle royale of fifty house bots', () => {
     // The planet tuning evens the field: the weaker a champion, the more of
     // its takedowns are steals, and no champion is a free kill any more, so
     // the share rises with balance (27.9% before the tuning, 35% after).
-    expect(a.steals).toBeLessThan(0.4);
+    // A Respawn Seedfall's held opening draws a crowd that fights over it,
+    // and a crowd's takedowns are more often steals (about 40% with it).
+    expect(a.steals).toBeLessThan(0.45);
   }, 300_000);
 
   it('plays One life to the last standing, the same match twice', () => {
