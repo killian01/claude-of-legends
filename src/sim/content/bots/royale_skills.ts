@@ -138,8 +138,14 @@ export const CALM_NERVE = 0.12;
 // ahead of the curve it holds to. Held to the measured curve itself, the
 // field fell to 33 by the second minute and the match ended before 7:30;
 // held 43 at the second minute, the calm's end no longer releases every
-// fight at once (the report, seeds 1 to 10, 2026-10-04).
-export const ONE_LIFE_PACE: readonly number[] = [50, 44, 43, 32, 22, 15, 10, 6, 3, 1];
+// fight at once (the report, seeds 1 to 10, 2026-10-04). Held 44 through
+// the second minute, fewer of the calm's fights carry over past it; held
+// 3 at the eighth, about half the matches ended before 8:00 and the
+// eighth minute counted 1.4 standing against 2, while 4 ran several past
+// 8:30; 3.75 counts 1.8 to 2 with the end at 7:40 to 8:45 (median 8:22).
+// A sixteenth at the fifth minute keeps the fourth from running three
+// under 19 (the report, seeds 1 to 10, tranche 1 round 3).
+export const ONE_LIFE_PACE: readonly number[] = [50, 44, 44, 31, 22, 16, 10, 6, 3.75, 1];
 export const PACE_NERVE_PER_SEAT = 0.08;
 export const PACE_NERVE_MIN = 0;
 export const PACE_NERVE_MAX = 0.6;
