@@ -120,17 +120,26 @@ export const SHARPEN_STRONG_AT = 4;
 export const SHARPEN_GENTLE_PHASE = 3;
 // One life's calm (the Dusk's phase 0): the odds a fight must show rise by
 // this much unless the bot was struck, so the first minute is a loot and
-// not a cull.
-export const CALM_NERVE = 0.1;
+// not a cull. A sharp dial: at 0.10 up to ten fell in the first minute, at
+// 0.13 none did and the field met all at once when the calm ended (17 to
+// 23 in the second minute); 0.12 gives five to nine, then fewer (the
+// report, seeds 1 to 10, 2026-10-04).
+export const CALM_NERVE = 0.12;
 // One life's pace: the champions still in at each minute from the landing
-// that the match is tuned to (fifty, then 44, 36, 27, ...; the last one
-// standing by the tenth). A bot that is not struck asks PACE_NERVE_PER_SEAT
+// that the bots hold to. A bot that is not struck asks PACE_NERVE_PER_SEAT
 // more of a fight's odds for every champion fallen ahead of that pace (up
 // to PACE_NERVE_MAX; never less than its own nerve, PACE_NERVE_MIN): the
 // field's own clock, read off the count everyone sees. With fights that
 // end, the field fell to a third by the third minute without it (the
-// report, 2026-10-03), and to a sixth by the fifth.
-export const ONE_LIFE_PACE: readonly number[] = [50, 44, 36, 27, 19, 12, 7, 4, 2, 1];
+// report, 2026-10-03), and to a sixth by the fifth. The match is measured
+// against 50, 44, 36, 27, 19, 12, 7, 4, 2, 1 (scripts/royale_report.ts);
+// the bots hold to a curve a few champions over it, because fights already
+// under way end whatever the pace says and the field runs two to five
+// ahead of the curve it holds to. Held to the measured curve itself, the
+// field fell to 33 by the second minute and the match ended before 7:30;
+// held 43 at the second minute, the calm's end no longer releases every
+// fight at once (the report, seeds 1 to 10, 2026-10-04).
+export const ONE_LIFE_PACE: readonly number[] = [50, 44, 43, 32, 22, 15, 10, 6, 3, 1];
 export const PACE_NERVE_PER_SEAT = 0.08;
 export const PACE_NERVE_MIN = 0;
 export const PACE_NERVE_MAX = 0.6;

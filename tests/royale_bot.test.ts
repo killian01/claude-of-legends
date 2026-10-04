@@ -351,7 +351,9 @@ describe('fighting', () => {
 
   it('never throws its own swing away for a sidestep or a kite step', () => {
     // On top of it, with a bolt on course: between swings a strong bot
-    // steps aside or back; mid-swing it holds, and the strike lands.
+    // steps aside or back; mid-swing it holds, and the strike lands. Past
+    // the calm, where an even duel is a fight for a strong bot (in the
+    // calm its nerve sits a hair over even odds and it gives room).
     const e = enemy(9, along(here, east, 2.5, R));
     const from = along(here, north, 6, R);
     const dir = dirTo(from, here) as Vec3;
@@ -373,7 +375,11 @@ describe('fighting', () => {
       const at = (swing: number | null) =>
         decide(
           {
-            ...obs(here, { units: [e] }, { ...quiet, attackSwingUntil: swing }),
+            ...obs(
+              here,
+              { units: [e], royale: { dusk: phase1 } },
+              { ...quiet, attackSwingUntil: swing },
+            ),
             projectiles: [bolt],
           },
           new Rng(seed),
