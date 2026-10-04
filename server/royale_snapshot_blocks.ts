@@ -2,7 +2,7 @@
 // SnapRoyale), one builder each, beside royale_snapshot.ts which calls them
 // all through addRoyaleBlocks: the recipient's Graft offer and Grafts, the
 // Seedfalls, the Risings, the marks, the Clamors, the Respawn rank and gap,
-// the Reprieve, the Arrival, the Last light's final seconds and the watched
+// the Reprieve, the Graces (an Arrival, a return), the Last light's final seconds and the watched
 // champion; and a cache's kind and its opening time. A builder answers
 // undefined to leave its block off the wire, which every one does until its
 // rules ship. A block sent on change (sf, cl) asks sentOnChange below, the
@@ -12,6 +12,7 @@
 import type {
   SnapCache,
   SnapClamor,
+  SnapGrace,
   SnapGraftOffer,
   SnapMark,
   SnapRising,
@@ -127,7 +128,28 @@ export const clamorsBlock: Builder<SnapClamor[]> = (sim, viewer) => {
 export const rankBlock: Builder<number> = () => undefined;
 export const gapBlock: Builder<number> = () => undefined;
 export const reprieveBlock: Builder<number> = () => undefined;
-export const arrivalBlock: Builder<number> = () => undefined;
+// The champions in their Grace the viewer sees, itself included
+// (src/sim/royale/grace.ts; RoyaleState.arriving), each with when it runs
+// out (its untargetable status) and where it stands: what the shimmer
+// draws (render/planet_grace.ts). Every snapshot while any is graced, so
+// the mirror keeps nothing between sends.
+export const arrivalBlock: Builder<SnapGrace[]> = (sim, viewer) => {
+  const r = sim.royale;
+  if (r.arriving.size === 0) return undefined;
+  const out: SnapGrace[] = [];
+  for (const id of r.arriving) {
+    if (id !== viewer.unitId && !sim.isVisible(viewer.team, id)) continue;
+    const u = sim.units.get(id);
+    if (!u || u.dead || u.pos.y === undefined) continue;
+    let until = Number.NEGATIVE_INFINITY;
+    for (const s of u.statuses) {
+      if (s.kind === 'untargetable' && s.until > until) until = s.until;
+    }
+    if (until <= sim.time) continue;
+    out.push([id, round2(until), round2(u.pos.x), round2(u.pos.y), round2(u.pos.z)]);
+  }
+  return out.length > 0 ? out : undefined;
+};
 export const finalBlock: Builder<1> = () => undefined;
 export const watchBlock: Builder<number> = () => undefined;
 
