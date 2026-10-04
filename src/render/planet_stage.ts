@@ -14,8 +14,10 @@
 // (O, -R, O) in both.
 
 import * as THREE from 'three';
+import { ownGraceUntil } from '../net/royale_client';
 import type { SnapCache, WirePoint } from '../net/royale_wire';
 import { segmentDist, type Vec3 } from '../sim/geo';
+import { ARRIVAL_GRACE_S } from '../sim/royale/grace';
 import { DT, type Vec2 } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { type ChartView, ChartWindow, ChartWorld } from './chart_world';
@@ -23,6 +25,7 @@ import { BEND_UNIFORMS, bendTree } from './planet_bend';
 import { bendTurn, PlanetChart, rotateAbout } from './planet_chart';
 import { type DropOrbit, diveProgress, orbitPosition } from './planet_drop';
 import { capAngle, DUSK_UNIFORMS, FADE_TARGETS } from './planet_dusk';
+import { DUST_WITHIN_S } from './planet_grace';
 import { PlanetMarks } from './planet_marks';
 import { PlanetMinimap } from './planet_minimap';
 import { PlanetSky } from './planet_sky';
@@ -133,6 +136,11 @@ export class PlanetStage {
   // The champion whose landing a tap on the globe picks (the renderer's
   // followed unit).
   picker: number | null = null;
+  // Where the renderer draws a unit, in its scene space, when it says: the
+  // Grace's shimmer stands there (planet_grace.ts).
+  drawnAt: ((unitId: number) => Vec2 | null) | null = null;
+  // Whether the followed champion was in its Grace last frame.
+  private ownGraced = false;
 
   constructor(
     readonly base: IWorld,
@@ -519,7 +527,32 @@ export class PlanetStage {
       DUSK_UNIFORMS.colDuskOn.value = 0;
       DUSK_UNIFORMS.colNextOn.value = 0;
     }
-    this.marks.update(now, this.caches, royale, this.dropping, this.base.time);
+    const drawnAt = this.drawnAt;
+    this.marks.update(
+      now,
+      this.caches,
+      royale,
+      this.dropping,
+      this.base.time,
+      drawnAt
+        ? (id) => {
+            const p = drawnAt(id);
+            return p ? this.window.toSphere(p.x, p.z) : null;
+          }
+        : undefined,
+    );
+    // An own Grace just begun (an Arrival, a Respawn return): the champion
+    // has come down, and lands with the drop's dust and thud.
+    const graceUntil =
+      this.picker !== null && royale?.st === 'play' ? ownGraceUntil(royale, this.picker) : null;
+    if (
+      graceUntil !== null &&
+      !this.ownGraced &&
+      graceUntil - this.base.time >= ARRIVAL_GRACE_S - DUST_WITHIN_S
+    ) {
+      this.pendingLanding = true;
+    }
+    this.ownGraced = graceUntil !== null;
     // The landing: the followed champion's feet touch the ground the
     // second after the drop ends (liftOf's fall).
     if (this.dropping) this.landed = false;
