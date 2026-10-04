@@ -21,17 +21,22 @@ export type RoyaleCue =
 
 // A planet point as the screen has it, in the stage's pixels (game/
 // match_stage.ts), off the screen when it is; `behind` when it stands
-// behind the camera (the point is then mirrored through the middle).
+// behind the camera (the point is then mirrored through the middle);
+// `hidden` when the planet stands between it and the camera (past the
+// horizon it still projects onto the globe's disc, inside the screen).
 export interface CueProjection {
   x: number;
   y: number;
   behind: boolean;
+  hidden?: boolean;
 }
 
 export interface RoyaleProjector {
   // A sphere point lifted `lift` meters off its ground.
   project(p: Vec3, lift: number): CueProjection | null;
-  // Radians off the camera's forward, positive to the right: a sound's pan.
+  // Radians off the camera's forward along the ground from the followed
+  // champion, positive to the right: a sound's pan, and the way to point
+  // at what the planet hides.
   bearing(p: Vec3): number | null;
   // Where the followed champion stands on the sphere, for distances.
   self(): Vec3 | null;

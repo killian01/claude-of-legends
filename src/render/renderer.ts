@@ -1863,12 +1863,36 @@ export class Renderer {
           x: r.left + ((v.x + 1) / 2) * r.width,
           y: r.top + ((1 - v.y) / 2) * r.height,
           behind: cam.z > 0,
+          // Past the horizon the foot projects onto the globe, inside the
+          // screen: the HUD points at it by its bearing instead.
+          hidden: planet.occluded(w),
         };
       },
       bearing: (p) => {
-        const cam = planet.shownAt(p, 0).applyMatrix4(this.camera.matrixWorldInverse);
-        if (Math.abs(cam.x) < 1e-6 && Math.abs(cam.z) < 1e-6) return 0;
-        return Math.atan2(cam.x, -cam.z);
+        // The way along the ground from the followed champion, as the
+        // screen draws a step that way from its feet: up is ahead. A far
+        // point (over the horizon, round the globe) still reads by the
+        // ground's way to it, not by where the sphere puts it.
+        const u = this.followId !== null ? planet.base.units.get(this.followId) : undefined;
+        const me = u?.pos;
+        if (!me || me.y === undefined) {
+          const cam = planet.shownAt(p, 0).applyMatrix4(this.camera.matrixWorldInverse);
+          if (Math.abs(cam.x) < 1e-6 && Math.abs(cam.z) < 1e-6) return 0;
+          return Math.atan2(cam.x, -cam.z);
+        }
+        const self = { x: me.x, y: me.y, z: me.z };
+        const foot = planet.shownAt(self, 0);
+        const up = planet.shownAt(self, 1).sub(foot).normalize();
+        const way = planet.shownAt(p, 0).sub(foot);
+        way.addScaledVector(up, -way.dot(up));
+        if (way.lengthSq() < 1e-9) return 0;
+        const a = foot.clone().project(this.camera);
+        const b = foot.clone().addScaledVector(way.normalize(), 1).project(this.camera);
+        const r = this.canvasRect();
+        const dx = ((b.x - a.x) * r.width) / 2;
+        const dy = ((a.y - b.y) * r.height) / 2;
+        if (Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9) return 0;
+        return Math.atan2(dx, -dy);
       },
       self: () => {
         const u = this.followId !== null ? planet.base.units.get(this.followId) : undefined;
