@@ -1,5 +1,5 @@
 // The Seedfalls (src/sim/royale/seedfall.ts, CONTEXT.md: Seedfall): five a
-// match from 2:00, one every 80 s, called 20 s ahead (two seeds at once in
+// match from 2:00, one every 70 s, called 20 s ahead (two seeds at once in
 // Respawn); each lands inside the light as it will stand 30 s later, at
 // least 10 m from its edge, on a cache spot the draw left empty; its impact
 // hits whoever stands within 4 m for a tenth of their health and throws
@@ -130,13 +130,13 @@ function combatCtx(sim: Sim): Parameters<typeof dealDamage>[0] {
 }
 
 describe('the schedule', () => {
-  it('calls five Seedfalls from 2:00, every 80 s, 20 s ahead, two seeds each in Respawn', () => {
+  it('calls five Seedfalls from 2:00, every 70 s, 20 s ahead, two seeds each in Respawn', () => {
     const land = DROP_S;
     const one = seedfallSchedule('one_life', land);
-    expect(SEEDFALL_AT_S).toEqual([120, 200, 280, 360, 440]);
+    expect(SEEDFALL_AT_S).toEqual([120, 190, 260, 330, 400]);
     expect(SEEDFALL_WARN_S).toBe(20);
-    expect(one.map((c) => c.landsAt)).toEqual([130, 210, 290, 370, 450]);
-    expect(one.map((c) => c.announceAt)).toEqual([110, 190, 270, 350, 430]);
+    expect(one.map((c) => c.landsAt)).toEqual([130, 200, 270, 340, 410]);
+    expect(one.map((c) => c.announceAt)).toEqual([110, 180, 250, 320, 390]);
     expect(one.map((c) => c.ids)).toEqual([[0], [1], [2], [3], [4]]);
     const two = seedfallSchedule('respawn', land);
     expect(two.map((c) => c.landsAt)).toEqual(one.map((c) => c.landsAt));
@@ -203,10 +203,11 @@ describe('where a seed falls, on the Wanderseed', () => {
           expect(depthInside(cap, p)).toBeGreaterThanOrEqual(SEEDFALL_DEPTH_M - 1e-6);
         }
         const apart = dist(points[0]!, points[1]!);
-        // The last light closes to under 60 m of room 10 m deep (a cap of
-        // about 38 m at 7:50): there the twins stand as far as they can.
+        // The fifth pair's light leaves about 60 m of room 10 m deep (a cap
+        // of 50 m at 7:10): there the twins stand as far as they can, 58 m
+        // apart at the least over these seeds.
         if (wave < all.length - 1) expect(apart).toBeGreaterThanOrEqual(SEEDFALL_PAIR_M);
-        else expect(apart).toBeGreaterThan(25);
+        else expect(apart).toBeGreaterThan(50);
       });
     }
   });
