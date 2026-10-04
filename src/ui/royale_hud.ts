@@ -162,8 +162,15 @@ const CSS = `
 /* The end screen: the landing's card over the match, which plays on
    behind it in One life. */
 .br-end { position: absolute; inset: 0; z-index: 41; display: flex; align-items: center;
-  justify-content: center; flex-direction: column; pointer-events: auto; overflow-y: auto;
+  justify-content: flex-start; flex-direction: column; pointer-events: auto; overflow-y: auto;
   padding: 24px 16px; background: rgba(2, 4, 10, 0.62); }
+/* Centered while it fits, from the top once it does not: a centered
+   column taller than the screen put its title and the ranking's head
+   above the scroll's reach (960x540), and a shrunk card let the ladder's
+   name card ride over it. The two spacers take the slack, never the
+   card's own height. */
+.br-end::before, .br-end::after { content: ''; flex: 1 0 0; }
+.br-end > * { flex: none; }
 .br-end-card { width: min(620px, 94%); padding: 22px 26px 20px; border-radius: 14px;
   border: 1px solid #6b5a2e; background: rgba(6, 10, 20, 0.9); color: #e6dcb8;
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55), 0 0 34px rgba(232, 196, 108, 0.1);
@@ -205,6 +212,19 @@ const CSS = `
   margin-top: 6px; width: min(620px, 94%); }
 .br-end-extras > * { margin-left: auto; margin-right: auto; }
 .br-end-extras .hud-end-offer { width: 100%; }
+/* A short desktop (960x540, a laptop's 720): the buttons climb over the
+   ranking as on a phone, and the rows tighten, so the first screen holds
+   the title, the lines, the buttons and the ranking's head. */
+@media (max-height: 760px) {
+  .hud:not(.compact) .br-end { padding: 12px 16px; }
+  .hud:not(.compact) .br-end-card { padding: 14px 20px; display: flex; flex-direction: column; }
+  .hud:not(.compact) .br-end-btns { order: 1; margin-top: 10px; }
+  .hud:not(.compact) .br-end-rank { order: 2; margin-top: 10px; }
+  .hud:not(.compact) .br-end h2 { font-size: 24px; margin: 2px 0 2px; }
+  .hud:not(.compact) .br-end-row { padding: 2px 8px; font-size: 13px;
+    grid-template-columns: 26px 26px minmax(0, 1fr) auto; }
+  .hud:not(.compact) .br-end-row img { width: 26px; height: 26px; }
+}
 
 /* A phone: the top is one row, the 5v5's team score's height, so the
    announcements and the first steps keep their places; the feed keeps
@@ -240,6 +260,7 @@ const CSS = `
 .hud.compact .br-note img { width: 22px; height: 22px; }
 .hud.compact .br-note.level { padding-left: 10px; }
 .hud.compact .br-end { justify-content: flex-start; padding: 8px 10px 14px; }
+.hud.compact .br-end::before, .hud.compact .br-end::after { display: none; }
 /* The buttons climb over the ranking: a phone held sideways shows the
    title, the lines and the three buttons on its first screen, and the
    ranking scrolls under them. */
