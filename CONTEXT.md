@@ -391,9 +391,9 @@ _Avoid_: anonymous player, visitor account
 To take a bot's seat in a public match already under way (ADR 0025), which is what entering
 the public queue does when nobody is waiting in it and such a match has people in it, early
 enough. The champion comes as the bot left it, in the seat's assigned lane, which the
-newcomer is told on arrival; the seat is never rated or recorded. In a Respawn battle royale
-the seat is not handed over in place: it makes an Arrival over the globe and lands where it
-picks, keeping the bot's level, pieces and score but none of its run.
+newcomer is told on arrival; the seat is never rated or recorded. In a battle royale under
+way the seat is not handed over in place: it makes an Arrival, keeping the bot's level and
+pieces but none of its score or run.
 _Avoid_: late join, hot join, backfill
 
 **Home**:
@@ -1175,9 +1175,17 @@ attack already carries.)
 _Avoid_: quickening, zone speedup
 
 **Arrival**:
-A Respawn drop-in's moment over the globe before it lands where it picks, ranked from then
-on by what it does since it landed.
+A battle royale drop-in's coming down: the seat a person takes from its bot in play lands
+fresh (full health and mana, everything ready) at a quiet spot inside the light, its tally
+from zero, and in its Grace.
 _Avoid_: spawn, deploy
+
+**Grace**:
+The three seconds a champion just come down (an Arrival, a Respawn return) can be neither
+hurt nor targeted; its own first attack, cast or sigil ends it early. Not the Calm, which is
+the whole field's. A word of the code for now: players see the Untouchable status, and the
+word needs an IP check before any player reads it (another game's respawn points carry it).
+_Avoid_: spawn protection, invulnerability
 
 **Pad slam**:
 The hit a launch pad's flight makes where it comes down, after the flyer steered it within

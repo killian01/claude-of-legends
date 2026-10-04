@@ -234,7 +234,8 @@ export interface RoyaleState {
   duskOffset: number;
   // Respawn: where a dead or arriving seat picked to come back.
   respawnPicks: Map<number, Vec3>;
-  // Respawn: the drop-in seats over the globe, not yet landed (Arrival).
+  // The champions in their Grace (grace.ts): a drop-in's Arrival or a
+  // Respawn return, untouchable until it runs out or they act.
   arriving: Set<number>;
 }
 
