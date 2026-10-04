@@ -35,7 +35,7 @@ import type { Rng } from '../../rng';
 import { depthInside, insideCap } from '../dusk';
 import { along, type RoyaleLayout } from '../layout';
 import { RESPAWN_S } from '../types';
-import { ambushCall, royaleCall } from './calls';
+import { ambushBush, ambushCall, royaleCall } from './calls';
 import { pickDropPoint } from './drop_pick';
 import {
   awayPoint,
@@ -276,6 +276,18 @@ export function nerveOf(sense: Sense, cornered: boolean): number {
   return base + calm + paceNerve(r, sense.obs.time);
 }
 
+// Whether an ambush's cue becomes a strike: always in Respawn; in One life
+// only on odds within AMBUSH_MARGIN of the bot's nerve, the field's pace
+// included. Struck on every cue, a Seedfall's cache drew the field to one
+// point and emptied One life a minute after the first landing (the
+// tranche 1 merge, 2026-10-04: 32 alive at 2:00, 12 at 3:00). A cue passed
+// on holds where the ambush waits.
+export const AMBUSH_MARGIN = 0.1;
+export function strikesFromAmbush(sense: Sense, target: ObsUnit): boolean {
+  if (sense.r.variant !== 'one_life') return true;
+  return royaleOdds(sense, target) >= nerveOf(sense, false) - AMBUSH_MARGIN;
+}
+
 // Why a slot chose its action: what scripts/royale_report.ts counts (the
 // roam share). Never read by the bot itself.
 export type DecideTrace = (why: string) => void;
@@ -385,7 +397,17 @@ export function decide(
     // An ambush waits in its bush with the champion it waits on in sight,
     // and strikes on its cue; a hit taken ends the wait.
     const ambush = sense.s.hpFrac >= CALL_HP && !sense.struck ? ambushCall(sense) : null;
-    if (ambush?.strike) return why('ambush-strike', fight(sense, ambush.strike, rng));
+    if (ambush?.strike) {
+      if (strikesFromAmbush(sense, ambush.strike)) {
+        return why('ambush-strike', fight(sense, ambush.strike, rng));
+      }
+      // The cue passed on: the bot keeps to its bush (or where it stands)
+      // until the odds or the field's pace let it strike.
+      const sf = r.seedfalls?.find((x) => x.id === ambush.seedfallId);
+      const bush = sf ? ambushBush(sense, p3(sf)) : null;
+      const far = bush !== null && dist(sense.me, bush) > AMBUSH_HOLD_M;
+      return why('ambush-hold', far ? moveTo(sense, bush) : holdStill(sense));
+    }
     if (ambush) {
       const bush = { x: ambush.x, y: ambush.y, z: ambush.z };
       const wait = dist(sense.me, bush) <= AMBUSH_HOLD_M ? holdStill(sense) : moveTo(sense, bush);
