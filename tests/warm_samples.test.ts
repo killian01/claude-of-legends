@@ -2,7 +2,9 @@
 // of a spell's art runs once (a zone through its life, for a foe and a
 // friend), a failing hook keeps to itself, the steps run one at a time and
 // stop once the match is gone, and every sample is compiled at its start
-// and again later, then released.
+// and again later, then released. The champions and the bodies drawn from
+// no file start at once: only a Pyrefang's body waits for its model and a
+// spell for its champion's effect files.
 
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
@@ -10,11 +12,13 @@ import type { SpellVisual } from '../src/render/vfx/catalog';
 import type { VfxSystem } from '../src/render/vfx/system';
 import {
   type FightWarmHost,
+  filesFor,
   runSteps,
   sampleSpellArt,
   sliced,
   texturesOf,
   WARM_BODIES,
+  type WarmFiles,
   warmFights,
 } from '../src/render/warm_samples';
 
@@ -107,21 +111,41 @@ describe("a spell's art sampled", () => {
   });
 });
 
+// A file on its way: it lands when the test says so.
+function onTheWay(): { promise: Promise<void>; land: () => void; fail: () => void } {
+  let land = (): void => undefined;
+  let fail = (): void => undefined;
+  const promise = new Promise<void>((done, refuse) => {
+    land = () => done();
+    fail = () => refuse(new Error('404'));
+  });
+  return { promise, land, fail };
+}
+
+const settle = async (): Promise<void> => {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+};
+
 describe('the warm-up steps', () => {
+  const never = (): Promise<void> => new Promise(() => undefined);
+
   it('run in order, one between each pause, past a failing one', async () => {
     const order: string[] = [];
     const ran = await runSteps(
       [
-        () => order.push('a'),
-        () => {
-          throw new Error('x');
+        { run: () => order.push('a') },
+        {
+          run: () => {
+            throw new Error('x');
+          },
         },
-        () => order.push('c'),
+        { run: () => order.push('c') },
       ],
       async () => {
         order.push('|');
       },
       () => false,
+      never,
     );
     expect(ran).toBe(3);
     expect(order).toEqual(['a', '|', '|', 'c', '|']);
@@ -131,14 +155,87 @@ describe('the warm-up steps', () => {
     let gone = false;
     const order: string[] = [];
     const ran = await runSteps(
-      [() => order.push('a'), () => order.push('b')],
+      [{ run: () => order.push('a') }, { run: () => order.push('b') }],
       async () => {
         gone = true;
       },
       () => gone,
+      never,
     );
     expect(ran).toBe(1);
     expect(order).toEqual(['a']);
+  });
+
+  it('pass over a step whose files are on their way, and run it once they land', async () => {
+    const file = onTheWay();
+    const order: string[] = [];
+    const done = runSteps(
+      [
+        { run: () => order.push('waits'), waits: file.promise },
+        { run: () => order.push('a') },
+        { run: () => order.push('b') },
+      ],
+      async () => undefined,
+      () => false,
+      never,
+    );
+    await settle();
+    expect(order).toEqual(['a', 'b']);
+    file.land();
+    expect(await done).toBe(3);
+    expect(order).toEqual(['a', 'b', 'waits']);
+  });
+
+  it('run a step whose file failed, as the match would draw it', async () => {
+    const file = onTheWay();
+    const order: string[] = [];
+    const done = runSteps(
+      [{ run: () => order.push('waits'), waits: file.promise }],
+      async () => undefined,
+      () => false,
+      never,
+    );
+    file.fail();
+    expect(await done).toBe(1);
+    expect(order).toEqual(['waits']);
+  });
+
+  it('let go of a file that never lands once the match is gone', async () => {
+    let gone = false;
+    let idles = 0;
+    const ran = await runSteps(
+      [{ run: () => undefined, waits: never() }],
+      async () => undefined,
+      () => gone,
+      async () => {
+        idles++;
+        if (idles === 3) gone = true;
+      },
+    );
+    expect(ran).toBe(0);
+    expect(idles).toBe(3);
+  });
+});
+
+describe('the files a sample waits for', () => {
+  const files: WarmFiles = {
+    pyrefang: () => Promise.resolve('pyrefang'),
+    effects: { sylra: () => Promise.resolve('sylra') },
+  };
+
+  it('are none for a champion and for every body but the Pyrefang', async () => {
+    expect(filesFor({ kind: 'champion', id: 'sylra' }, files)).toBeNull();
+    for (const body of WARM_BODIES) {
+      const waits = filesFor({ kind: 'body', body }, files);
+      if (body.creatureId === 'pyrefang') expect(await waits).toBe('pyrefang');
+      else expect(waits).toBeNull();
+    }
+  });
+
+  it("are a spell's champion's effect files, none for a champion without", async () => {
+    expect(await filesFor({ kind: 'spell', id: 'sylra_Q' }, files)).toBe('sylra');
+    expect(filesFor({ kind: 'spell', id: 'dain_R' }, files)).toBeNull();
+    expect(filesFor({ kind: 'spell', id: 'constructor_Q' }, files)).toBeNull();
   });
 });
 
@@ -191,10 +288,11 @@ describe('the fights warmed', () => {
         },
       }),
       championIds: ['torv', 'sylra'],
-      catalog: [{ impact: () => undefined }, { zone: () => made() }],
+      catalog: { dain_A: { impact: () => undefined }, dain_R: { zone: () => made() } },
       makeFx: () => fx as unknown as VfxSystem,
-      preload: async () => undefined,
+      files: { pyrefang: async () => undefined, effects: {} },
       next: async () => undefined,
+      idle: async () => undefined,
       gone: () => false,
       ...over,
     };
@@ -228,18 +326,65 @@ describe('the fights warmed', () => {
         order.push(`body ${b.kind}`);
         return null;
       },
-      catalog: [
-        {
+      catalog: {
+        dain_R: {
           impact: () => {
             order.push('spell');
           },
         },
-      ],
+      },
     });
     expect(order[0]).toBe('champion torv');
     expect(order[1]).toBe('champion sylra');
     expect(order[2]).toMatch(/^body /);
     expect(order.at(-1)).toBe('spell');
+  });
+
+  it('starts the champions and the plain bodies without the Pyrefang and the effect files', async () => {
+    const pyrefang = onTheWay();
+    const effects = onTheWay();
+    const order: string[] = [];
+    const { h } = host();
+    const done = warmFights({
+      ...h,
+      champion: (id) => {
+        order.push(`champion ${id}`);
+        return null;
+      },
+      body: (b) => {
+        order.push(`body ${b.creatureId ?? b.campKind ?? b.kind}${b.ascendant ? '+' : ''}`);
+        return null;
+      },
+      catalog: {
+        dain_R: { impact: () => void order.push('spell dain_R') },
+        sylra_Q: { impact: () => void order.push('spell sylra_Q') },
+      },
+      files: {
+        pyrefang: () => pyrefang.promise,
+        effects: { sylra: () => effects.promise },
+      },
+      // Only a file landing moves the wait on.
+      idle: () => new Promise(() => undefined),
+    });
+    await settle();
+    // Nothing that draws from a file has run; everything else has.
+    expect(order).toEqual([
+      'champion torv',
+      'champion sylra',
+      'body voidmaul',
+      'body voidmaul+',
+      'body warden',
+      'body spinecrest',
+      'body brackenlings',
+      'body barkmaw',
+      'spell dain_R',
+    ]);
+    effects.land();
+    await settle();
+    expect(order.at(-1)).toBe('spell sylra_Q');
+    pyrefang.land();
+    expect(await done).toBe(2 + WARM_BODIES.length + 2);
+    expect(order.slice(-2)).toEqual(['body pyrefang', 'body pyrefang+']);
   });
 
   it("hides the samples' own lights from the programs", async () => {
