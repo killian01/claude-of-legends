@@ -15,25 +15,33 @@
 // parallel link without waiting on it (three's typings leave it out).
 export type LinkingProgram = object;
 
-function linked(program: LinkingProgram): boolean {
-  const ready = (program as { isReady?: () => boolean }).isReady;
-  return typeof ready !== 'function' || ready.call(program);
+// Whether a program has nothing left to wait for. Three's isReady answers
+// false while the link runs and true once it is done; on a lost context it
+// answers null, and keeps answering null, so only a false is worth asking
+// again.
+function settled(program: LinkingProgram): boolean {
+  const ready = (program as { isReady?: () => unknown }).isReady;
+  return typeof ready !== 'function' || ready.call(program) !== false;
 }
 
 const POLL_MS = 16;
 
-// Resolves once every program in `linking` is linked or gone from the
-// renderer's list (`live`), polling through `later`.
+// Resolves once every program in `linking` is settled or gone from the
+// renderer's list (`live`), polling through `later`, or as soon as `stop`
+// says the wait is over (the renderer went, the hold's bound passed): no
+// poll is left running behind it, holding the renderer.
 export function whenLinked(
   linking: readonly LinkingProgram[],
   live: () => readonly LinkingProgram[],
   later: (ms: number) => Promise<void>,
+  stop: () => boolean = () => false,
 ): Promise<void> {
   const waiting = new Set(linking);
   const check = (): Promise<void> => {
+    if (stop()) return Promise.resolve();
     const present = new Set(live());
     for (const p of waiting) {
-      if (!present.has(p) || linked(p)) waiting.delete(p);
+      if (!present.has(p) || settled(p)) waiting.delete(p);
     }
     if (waiting.size === 0) return Promise.resolve();
     return later(POLL_MS).then(check);
@@ -41,16 +49,20 @@ export function whenLinked(
   return check();
 }
 
+// How long the planet's first frame may wait for its programs.
+export const WARM_HOLD_MS = 2500;
+
 // A warm-up's hold over the draw.
 export class ProgramWarmup {
   private pending = true;
   private readonly until: number;
 
-  constructor(work: () => Promise<unknown>, now: number, maxHoldMs = 2500) {
+  // `work` is told when the hold ends, so its own waiting ends with it.
+  constructor(work: (until: number) => Promise<unknown>, now: number, maxHoldMs = WARM_HOLD_MS) {
     this.until = now + maxHoldMs;
     let started: Promise<unknown>;
     try {
-      started = work();
+      started = work(this.until);
     } catch {
       this.pending = false;
       return;
