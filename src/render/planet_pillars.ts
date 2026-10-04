@@ -164,6 +164,12 @@ export class PlanetPillars {
       for (const m of [columns, rings]) {
         m.count = 0;
         m.frustumCulled = false;
+        // The colors exist from the start, so the program the first column
+        // draws with is the one the planet linked before its first frame,
+        // not a new one mid-match; and a kind with nothing standing is not
+        // drawn at all.
+        m.setColorAt(0, this.tint.setHex(0xffffff));
+        m.visible = false;
         this.group.add(m);
       }
       this.kinds.set(kind, { look, columns, columnMat, rings, ringMat });
@@ -209,12 +215,17 @@ export class PlanetPillars {
           draw.rings.setMatrixAt(rings++, this.standing(p.at, new THREE.Vector3(still, 1, still)));
         }
       }
-      if (draw.columns.instanceColor) draw.columns.instanceColor.needsUpdate = true;
-      if (draw.rings.instanceColor) draw.rings.instanceColor.needsUpdate = true;
-      draw.columns.count = mine.length;
-      draw.rings.count = rings;
-      draw.columns.instanceMatrix.needsUpdate = true;
-      draw.rings.instanceMatrix.needsUpdate = true;
+      // Uploaded only while something stands: an empty kind sends nothing.
+      for (const [mesh, count] of [
+        [draw.columns, mine.length],
+        [draw.rings, rings],
+      ] as const) {
+        mesh.count = count;
+        mesh.visible = count > 0;
+        if (count === 0) continue;
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      }
       const lit = mine.some((p) => p.lit);
       draw.columnMat.opacity = (lit ? 0.42 : 0.28) + 0.06 * Math.sin(t * 2.2);
       draw.ringMat.opacity = 0.6 + 0.3 * Math.sin(t * 6);
