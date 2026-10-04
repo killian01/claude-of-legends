@@ -611,13 +611,11 @@ export class RoyaleHud {
   // The end screen, from the result the server sent; `extras` are the
   // HUD's own boxes that belong under it (the ladder, the account offer,
   // the feedback box).
-  // `next`: the next match is already under way behind the screen, and Play
-  // again only closes it.
-  showResult(result: RoyaleResult, extras: readonly HTMLElement[] = [], next = false): void {
+  showResult(result: RoyaleResult, extras: readonly HTMLElement[] = []): void {
     this.endEl?.remove();
-    const model = royaleEnd(result, next);
+    const model = royaleEnd(result);
     const end = el('div', 'br-end');
-    end.appendChild(this.endCard(model, result, next));
+    end.appendChild(this.endCard(model, result));
     const more = el('div', 'br-end-extras');
     for (const x of extras) more.appendChild(x);
     if (extras.length > 0) end.appendChild(more);
@@ -626,14 +624,7 @@ export class RoyaleHud {
     this.host.root.classList.add('overlay-open');
   }
 
-  // The end screen leaves, the match behind it stays: Respawn's next one.
-  private hideResult(): void {
-    this.endEl?.remove();
-    this.endEl = null;
-    this.host.root.classList.remove('overlay-open');
-  }
-
-  private endCard(model: RoyaleEndModel, result: RoyaleResult, next: boolean): HTMLElement {
+  private endCard(model: RoyaleEndModel, result: RoyaleResult): HTMLElement {
     const card = el('div', `br-end-card${model.won ? ' won' : ''}`);
     card.append(
       el('div', 'br-end-kicker', `Battle royale · ${royaleMode(result.v).title}`),
@@ -672,8 +663,7 @@ export class RoyaleHud {
         // The next match may skip every click before it: this is the
         // gesture that takes it fullscreen.
         if (action !== 'menu') requestGameFullscreen();
-        if (action === 'again' && next) this.hideResult();
-        else this.host.onExit(action);
+        this.host.onExit(action);
       });
       return b;
     };

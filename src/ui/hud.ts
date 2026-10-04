@@ -2073,10 +2073,7 @@ export class Hud {
   // out for good or the match is over (RoyaleResult). The ladder box, the
   // account offer and the feedback box move under it from the 5v5's end
   // screen, which a battle royale never opens.
-  // `next`: Respawn's next match is already under way on this socket
-  // (the server moves the people still playing into it), so Play again
-  // only closes the screen over it.
-  showRoyaleResult(result: RoyaleResult, next = false): void {
+  showRoyaleResult(result: RoyaleResult): void {
     if (!this.royale) return;
     if (this.escapeOverlay.classList.contains('open')) this.toggleEscapeMenu();
     const extras: HTMLElement[] = [];
@@ -2104,10 +2101,10 @@ export class Hud {
       extras.push(this.endOffer);
     }
     extras.push(this.endFeedback.root);
-    this.royale.showResult(result, extras, next);
+    this.royale.showResult(result, extras);
     this.deathOverlay.classList.remove('open');
-    // Heard once, when it came: not again over the next match.
-    if (!this.endPlayed && !next) {
+    // Heard once, when it came.
+    if (!this.endPlayed) {
       this.endPlayed = true;
       playSfx(won ? 'victory' : 'defeat');
       announceVoice(won ? 'victory' : 'defeat', true);

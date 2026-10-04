@@ -13,8 +13,10 @@ import type { RoyaleVariant } from '../royale/types';
 // seeds 1 to 40); every 70 s, 92% (the report, tuning round 1, 2026-10-04).
 export const SEEDFALL_AT_S: readonly number[] = [120, 190, 260, 330, 400];
 // A Seedfall is called this long before it lands (the announce draws its
-// point and tells everyone).
-export const SEEDFALL_WARN_S = 20;
+// point and tells everyone). 20 s called seeds 70 to 200 m away that
+// nobody could reach before the impact (the second playtest, 2026-10-04);
+// 30 s, with the landing times kept, calls the first one as the calm ends.
+export const SEEDFALL_WARN_S = 30;
 // Seeds per Seedfall: one in One life, two at once in Respawn, where fifty
 // seats keep coming back and one seed would be a single crowd.
 export const SEEDFALL_SEEDS: Readonly<Record<RoyaleVariant, number>> = {
