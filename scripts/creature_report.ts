@@ -10,11 +10,29 @@
 // fastest duo (the tank pair is meant to fail). Bundled and run by
 // scripts/creature_report.mjs:
 //   node scripts/creature_report.mjs [--clocks 240,390,720,1200] [--which pyrefang,warden,ascendant]
+// With --planet it measures the battle royale's bodies instead (content/
+// royale_events.ts PLANET_NEUTRAL_SCALE): every champion alone, at level 6
+// with four pieces of its seat build, against the Pyrefang and the Voidmaul
+// at their 3:00 rise and the Warden at its rise in each variant, on the
+// Wanderseed with the Dusk's burn held off; the standard is a big creature
+// in 18 to 25 s with 30% of the health left or more, the Warden in 25 to
+// 35 s (the median of the ten):
+//   node scripts/creature_report.mjs --planet [--level 6] [--pieces 4] [--seed 3]
 
+import { readFileSync } from 'node:fs';
 import { starOrchard } from '../server/star_orchard';
+import { buildRoyaleSim, type ReplayPick, type RoyalePlanet } from '../src/net/replay';
 import { CHAMPIONS } from '../src/sim/content/champions';
+import { assemblePlanet } from '../src/sim/content/planet';
+import { RING_RISE_AT_S, WARDEN_RISE_AT_S } from '../src/sim/content/royale_events';
+import { SphereGround } from '../src/sim/ground';
 import { nextKitStep, roleBuild } from '../src/sim/playbook/kit';
+import { grantXp } from '../src/sim/royale/levels';
+import { grantPieces } from '../src/sim/royale/loot';
+import { DROP_S } from '../src/sim/royale/types';
 import { Sim } from '../src/sim/sim';
+import { decodeSphereNav, findSpherePath, SphereNavGrid } from '../src/sim/sphere_nav';
+import { xpForNext } from '../src/sim/stats';
 import { TerrainNavGrid } from '../src/sim/terrain_nav';
 import type { AbilityKey } from '../src/sim/types';
 import type { Unit } from '../src/sim/unit';
@@ -175,6 +193,121 @@ const DUOS: readonly (readonly string[])[] = [
   ['sylra', 'fenn'],
 ];
 const FIVE: readonly string[] = ['ashvyn', 'torv', 'dain', 'sylra', 'fenn'];
+
+// The battle royale's bodies (--planet).
+function loadPlanet(dir = 'public/map/planet/'): RoyalePlanet {
+  const planet = assemblePlanet(JSON.parse(readFileSync(`${dir}layout.json`, 'utf8')));
+  const bin = readFileSync(`${dir}navigation.bin`);
+  const buffer = bin.buffer.slice(bin.byteOffset, bin.byteOffset + bin.byteLength) as ArrayBuffer;
+  const data = decodeSphereNav(planet.nav, buffer);
+  return {
+    layout: planet,
+    ground: () => new SphereGround(new SphereNavGrid(data), findSpherePath),
+  };
+}
+
+type PlanetBody = 'pyrefang' | 'voidmaul' | 'warden-one-life' | 'warden-respawn';
+const PLANET_TARGETS: Record<PlanetBody, { s: [number, number]; hp: number }> = {
+  pyrefang: { s: [18, 25], hp: 0.3 },
+  voidmaul: { s: [18, 25], hp: 0.3 },
+  'warden-one-life': { s: [25, 35], hp: 0 },
+  'warden-respawn': { s: [25, 35], hp: 0 },
+};
+
+function planetFight(
+  planet: RoyalePlanet,
+  championId: string,
+  body: PlanetBody,
+  level: number,
+  pieces: number,
+  seed: number,
+): Outcome {
+  // One life's clock, on a Respawn match: a lone seat would win One life
+  // on the first tick.
+  const clockOf = body === 'warden-one-life' ? 'one_life' : 'respawn';
+  const picks: ReplayPick[] = [{ name: 'solo', team: 0, championId, sigils: ['riftstep', 'mend'] }];
+  const { sim, unitIds } = buildRoyaleSim(planet, seed, picks, 'respawn');
+  const m = sim.royaleMode!;
+  // The Dusk's burn held off: the body is what is measured.
+  m.stepDusk = () => {};
+  while (sim.time < DROP_S + 4) sim.tick();
+  const u = sim.units.get(unitIds[0]!)!;
+  for (let n = 0; n < 30 && u.level < level; n++) grantXp(u, xpForNext(u.level) - u.xp);
+  grantPieces(u, m.builds.get(u.id)!, pieces);
+  u.hp = u.maxHp;
+  u.mana = u.maxMana;
+  const at =
+    body === 'pyrefang' || body === 'voidmaul'
+      ? DROP_S + RING_RISE_AT_S
+      : DROP_S + WARDEN_RISE_AT_S[clockOf];
+  sim.time = at;
+  for (const st of sim.ringStates) {
+    st.nextRiseAt = st.creature === body ? sim.time : Number.POSITIVE_INFINITY;
+  }
+  sim.objectives.nextSpawnAt = body.startsWith('warden') ? sim.time : Number.POSITIVE_INFINITY;
+  let target: Unit | undefined;
+  for (let i = 0; i < 5 && !target; i++) {
+    sim.tick();
+    target = [...sim.units.values()].find(
+      (x) => (x.kind === 'creature' || x.kind === 'warden') && !x.dead,
+    );
+  }
+  if (!target) throw new Error(`${body} never rose`);
+  const near = sim.ground.nearestWalkable(
+    { x: target.pos.x + 2.5, y: target.pos.y, z: target.pos.z },
+    10,
+  );
+  if (near) u.pos = { ...near };
+  u.path = [];
+  const start = sim.time;
+  // The lowest the champion fell (the last hit's prize heals it all).
+  let lowest = 1;
+  let deaths = 0;
+  while (sim.time - start < 120 && sim.units.has(target.id) && !u.dead) {
+    lowest = Math.min(lowest, u.hp / u.maxHp);
+    if (u.attackTargetId !== target.id) sim.orderAttack(u.id, target.id);
+    for (const k of ['R', 'Q', 'W', 'E'] as AbilityKey[]) {
+      sim.castAbility(u.id, k, { x: target.pos.x, y: target.pos.y, z: target.pos.z });
+    }
+    for (const e of sim.tick()) if (e.type === 'death' && e.unitId === u.id) deaths++;
+  }
+  return {
+    killed: !sim.units.has(target.id) || target.dead,
+    seconds: sim.time - start,
+    hpLeft: [u.dead ? 0 : lowest],
+    deaths,
+    bodyLeft: sim.units.has(target.id) ? target.hp / target.maxHp : 0,
+  };
+}
+
+function planetReport(): void {
+  const level = Number(opt('--level', '6'));
+  const pieces = Number(opt('--pieces', '4'));
+  const seed = Number(opt('--seed', '3'));
+  const planet = loadPlanet();
+  const out: string[] = [];
+  for (const body of Object.keys(PLANET_TARGETS) as PlanetBody[]) {
+    console.log(`\n== ${body} on the planet, champions L${level} with ${pieces} pieces`);
+    const solos = Object.keys(CHAMPIONS).map(
+      (ch) => [ch, planetFight(planet, ch, body, level, pieces, seed)] as const,
+    );
+    for (const [ch, o] of solos) console.log(line(ch, o));
+    const t = PLANET_TARGETS[body];
+    const kills = solos.filter(([, o]) => o.killed);
+    const secs = median(kills.map(([, o]) => o.seconds));
+    const left = median(kills.map(([, o]) => o.hpLeft[0]!));
+    const ok = kills.length >= 8 && inRange(secs, t.s) && left >= t.hp;
+    const v = `${ok ? 'OK ' : 'KO '} ${body}: ${kills.length}/10 kill it alone, median ${secs.toFixed(0)} s (want ${t.s[0]}-${t.s[1]}), lowest health median ${pct(left)}${t.hp > 0 ? ` (want ${pct(t.hp)} or more)` : ''}`;
+    console.log(`  -> ${v}`);
+    out.push(v);
+  }
+  console.log(`\n${out.join('\n')}`);
+}
+
+if (args.includes('--planet')) {
+  planetReport();
+  process.exit(0);
+}
 
 const verdicts: string[] = [];
 for (const time of clocks) {
