@@ -209,7 +209,7 @@ describe('playing', () => {
     expect(sim.royale.drops.get(self)).toEqual({ x: 0, y: 80, z: 0 });
   });
 
-  it('accepts a Graft pick and a watch request and changes nothing yet', () => {
+  it('hands a Graft pick to the sim, recorded, and takes a watch request as nothing yet', () => {
     const h = harness();
     const a = h.connect(1, 'alice');
     h.enter(a);
@@ -220,9 +220,16 @@ describe('playing', () => {
     const sentBefore = h.sent.length;
     const state = structuredClone(sim.royale);
     expect(h.say(a, { t: 'graft', pick: 1 })).toBe(true);
+    const self = h.last(1, 'match_start')!.selfUnitId;
+    expect(sim.graftPicks).toEqual([{ unitId: self, pick: 1 }]);
+    expect(match.replayEvents).toHaveLength(recorded + 1);
+    expect(match.replayEvents.at(-1)?.c).toEqual({ t: 'graft', pick: 1 });
+    // A card out of range reaches nothing, recorded or not.
+    h.say(a, { t: 'graft', pick: 3 });
+    expect(sim.graftPicks).toHaveLength(1);
     expect(h.say(a, { t: 'watch', next: true })).toBe(true);
     expect(sim.orders).toEqual([]);
-    expect(match.replayEvents).toHaveLength(recorded);
+    expect(match.replayEvents).toHaveLength(recorded + 2);
     expect(h.sent).toHaveLength(sentBefore);
     expect(sim.royale).toEqual(state);
   });

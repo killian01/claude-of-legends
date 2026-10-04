@@ -414,6 +414,11 @@ export class RoyaleMatch {
 
   resultFor(clientId: number): RoyaleResult | null {
     const p = this.players.get(clientId);
-    return p ? royaleResult(this.sim.royale, this.rankedSeats(), p.unitId) : null;
+    if (!p) return null;
+    const result = royaleResult(this.sim.royale, this.rankedSeats(), p.unitId);
+    // The Grafts the seat took, in order, for the end card.
+    const grafts = this.sim.royale.grafts.get(p.unitId);
+    if (grafts && grafts.length > 0) result.grafts = [...grafts];
+    return result;
   }
 }

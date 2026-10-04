@@ -66,6 +66,9 @@ export interface IWorld {
   // The unit first, like every order here, so the offline Sim's own
   // pickDrop satisfies the seam.
   pickDrop?(unitId: number, p: Vec3): void;
+  // A card of the seat's open Graft offer (CONTEXT.md: Graft), 0 to 2; the
+  // offline Sim's own pickGraft satisfies the seam.
+  pickGraft?(unitId: number, pick: number): void;
   // Who holds a champion's seat in a battle royale, the name and the bot
   // mark, for a champion the mirror has been told of; null otherwise.
   seat?(unitId: number): SeatLabel | null;

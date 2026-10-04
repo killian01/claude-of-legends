@@ -2,7 +2,8 @@
 // the sim like the 5v5's (src/net/replay.ts applySimCommand), with the
 // point's y passed along on the planet's sphere (ADR 0029). The mode has no
 // shop, no recall and no ranks to spend (loot is the build, spells rank
-// themselves), so those verbs are nobody's here; nor is a coach's order.
+// themselves), so those verbs are nobody's here; nor is a coach's order. A
+// card of the open Graft offer is theirs, free like the landing pick.
 
 import { type ClientMsg, wirePoint } from '../src/net/protocol';
 import type { AbilityKey } from '../src/sim/types';
@@ -18,6 +19,7 @@ export const ROYALE_VERBS: ReadonlySet<string> = new Set([
   'stop',
   'cast',
   'sigil',
+  'graft',
 ]);
 
 export function applyRoyaleCommand(
@@ -57,6 +59,9 @@ export function applyRoyaleCommand(
       if ((msg.slot === 0 || msg.slot === 1) && p) sim.castSigil(unitId, msg.slot, p);
       break;
     }
+    case 'graft':
+      if (msg.pick === 0 || msg.pick === 1 || msg.pick === 2) sim.pickGraft(unitId, msg.pick);
+      break;
     default:
       break;
   }
