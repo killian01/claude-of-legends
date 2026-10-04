@@ -25,14 +25,13 @@ import type { TeamId } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { itemIconUrl } from './icons';
 import {
-  clearOf,
-  clearOnRing,
   compactRing,
   EdgeChimes,
   type EdgeRect,
   type EdgeTarget,
   type EdgeView,
   edgeArrows,
+  layoutArrows,
   seedfallPointed,
 } from './royale_edges';
 import {
@@ -63,9 +62,8 @@ import { BUILD_COMPLETE, buildComplete, lootNotice, openingFraction } from './ro
 const FEED_MS = 6500;
 const FEED_MAX = 5;
 const SPOT_MS = 2800;
-// The arrows' half size with their distance under them, pixels, and how
-// often the obstacles are measured.
-const ARROW_HALF = 30;
+// How often the obstacles are measured (an arrow's own room is
+// ui/royale_edges.ts arrowBox).
 const OBSTACLES_MS = 500;
 // How high above its ground an arrow aims at a column.
 const ARROW_LIFT_M = 2;
@@ -100,9 +98,11 @@ const CSS = `
 .br-edge i::after { content: ''; position: absolute; left: 21px; top: 6px; width: 0; height: 0;
   border-top: 7px solid transparent; border-bottom: 7px solid transparent;
   border-left: 11px solid #ffe7a0; filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.8)); }
-.br-edge b { position: absolute; left: -45px; top: 15px; width: 90px; text-align: center;
-  font: 800 11.5px system-ui, sans-serif; color: #ffe7a0; text-shadow: 0 1px 3px #000;
-  font-variant-numeric: tabular-nums; }
+/* The distance under the dial, slid in from the screen's side when the
+   arrow stands at it (ui/royale_edges.ts labelShift). */
+.br-edge b { position: absolute; left: 0; top: 15px; white-space: nowrap; text-align: center;
+  transform: translateX(-50%); font: 800 11.5px system-ui, sans-serif; color: #ffe7a0;
+  text-shadow: 0 1px 3px #000; font-variant-numeric: tabular-nums; }
 .br-flight { position: absolute; width: 34px; height: 34px; border-radius: 7px; pointer-events: none;
   border: 1px solid #f0c860; box-shadow: 0 0 16px rgba(240, 200, 96, 0.9); z-index: 7; }
 /* A phone: a loot line that says what the piece adds runs long, so it
@@ -542,20 +542,9 @@ export class RoyaleHudMoments {
       };
       for (const c of this.chimes.step(targets, view)) playSfx('chime', 0.85, { pan: c.pan });
       const ring = this.host.root.classList.contains('compact') ? compactRing(view) : undefined;
-      // Each arrow placed keeps the next off it.
-      for (const a of edgeArrows(targets, view, ring)) {
-        const at = ring
-          ? clearOnRing(a, ARROW_HALF, obstacles, view, ring)
-          : clearOf(a, ARROW_HALF, obstacles, view, {
-              dx: Math.cos(a.angle),
-              dy: Math.sin(a.angle),
-            });
-        obstacles.push({
-          left: at.x - ARROW_HALF,
-          top: at.y - ARROW_HALF,
-          right: at.x + ARROW_HALF,
-          bottom: at.y + ARROW_HALF,
-        });
+      const arrows = edgeArrows(targets, view, ring);
+      // Each line's words first: its width is part of the arrow's room.
+      const nodes = arrows.map((a) => {
         let node = this.arrows.get(a.key);
         if (!node) {
           node = el('div', 'br-edge');
@@ -563,11 +552,30 @@ export class RoyaleHudMoments {
           this.edges.appendChild(node);
           this.arrows.set(a.key, node);
         }
+        const label = node.lastElementChild as HTMLElement;
+        if (label.textContent !== a.label) {
+          label.textContent = a.label;
+          node.dataset.w = String(label.offsetWidth);
+        }
+        return node;
+      });
+      // Placed together: each clear of the HUD and of the ones before it.
+      const places = layoutArrows(
+        arrows,
+        nodes.map((n) => Number(n.dataset.w ?? 0)),
+        obstacles,
+        view,
+        ring,
+      );
+      for (const [i, a] of arrows.entries()) {
+        const node = nodes[i];
+        const at = places[i];
+        if (!node || !at) continue;
         node.style.transform = `translate(${at.x.toFixed(1)}px, ${at.y.toFixed(1)}px)`;
         const dial = node.firstElementChild as HTMLElement;
         dial.style.transform = `rotate(${a.angle.toFixed(3)}rad)`;
         const label = node.lastElementChild as HTMLElement;
-        if (label.textContent !== a.label) label.textContent = a.label;
+        label.style.transform = `translateX(calc(-50% + ${at.labelDx.toFixed(1)}px))`;
         seen.add(a.key);
       }
     }
@@ -612,7 +620,8 @@ export class RoyaleHudMoments {
     this.measureInsets();
     const picks = stage.querySelectorAll<HTMLElement>(
       '.hud-slots, .hud-bottom, .hud-kda, .stick-base, .stick-ghost, .touchbar, .br-top, ' +
-        '.br-feed, .br-open, .br-note, .hud-steps, canvas[style*="right"]',
+        '.br-feed, .br-open, .br-note, .hud-steps, .hud-points, .hud-hints, ' +
+        'canvas[style*="right"]',
     );
     const out: EdgeRect[] = [];
     for (const node of picks) {
