@@ -85,6 +85,9 @@ export class PlanetGraftAura {
     this.veilGeo.translate(0, VEIL_H / 2, 0);
     this.ringGeo = new THREE.RingGeometry(VEIL_R * 0.8, VEIL_R * 1.2, 32);
     this.ringGeo.rotateX(-Math.PI / 2);
+    // The first aura stands ready, hidden: its programs link with the
+    // planet's before its first frame.
+    this.take(0);
   }
 
   private take(i: number): Aura {

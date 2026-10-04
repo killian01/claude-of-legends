@@ -109,6 +109,9 @@ export class PlanetGrace {
     this.veilGeo.translate(0, VEIL_H / 2, 0);
     this.ringGeo = new THREE.RingGeometry(VEIL_R * 0.9, VEIL_R * 1.35, 32);
     this.ringGeo.rotateX(-Math.PI / 2);
+    // The first shimmer stands ready, hidden: its programs link with the
+    // planet's before its first frame, where an Arrival's Grace shows.
+    this.take();
   }
 
   private take(): Shimmer {

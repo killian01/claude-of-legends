@@ -205,6 +205,9 @@ export class PlanetMarks {
       m.count = 0;
       m.castShadow = true;
       m.frustumCulled = false;
+      // The colors exist from the start, so the program the first caches
+      // draw with is the one the planet linked before its first frame.
+      m.setColorAt(0, new THREE.Color(0xffffff));
       this.group.add(m);
     }
     const glowGeo = new THREE.BufferGeometry();
@@ -350,6 +353,12 @@ export class PlanetMarks {
     this.picks.frustumCulled = false;
     this.group.add(this.picks);
     this.owned.push(pickGeo, pickBeamMat, picksGeo, this.pickMat);
+
+    // One burst built hidden now and gone at the first frame: its lid and
+    // sparks link their programs with the planet's, before its first
+    // frame, not at the first cache opened (the programs are kept).
+    this.burst({ x: 0, y: radius, z: 0 }, 0);
+    for (const b of this.bursts) for (const o of [b.lid, b.column, b.sparks]) o.visible = false;
   }
 
   // A sphere point on the ground, lifted along its normal.
