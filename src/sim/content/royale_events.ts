@@ -31,9 +31,27 @@ export const SEEDFALL_IMPACT_M = 4;
 export const SEEDFALL_IMPACT_SHARE = 0.1;
 export const SEEDFALL_AIRBORNE_S = 0.75;
 // The Seedfall cache: opened by standing still beside it this long, from
-// this reach of its center, broken like any cache's opening.
+// this reach of its center, broken like any cache's opening in One life.
 export const SEEDFALL_OPEN_S = 3;
 export const SEEDFALL_REACH_M = 2.2;
+// In Respawn a Seedfall cache's opening is held, not broken: a hit taken,
+// a cast or an attack ordered, or a step inside the reach slows its clock
+// to SEEDFALL_HELD_RATE until the opener has gone SEEDFALL_CALM_S
+// undisturbed and still; only leaving the reach (or falling) breaks it.
+// Fifty seats that come back fight about a hundred times a minute, and
+// any hit broke a 3 s opening: fewer than half the Seedfalls were opened
+// (tranche 1, 2026-10-04). A pause in place of the slowing left a crowd
+// around the opener that never let its clock run. The opener keeps its
+// claim while it holds, and when it falls or is driven out the cache keeps
+// the time counted for the next one (caches.ts): the cache goes to whoever
+// stands in the ring when the count is full. One life keeps the plain
+// rule: its field is thin and a hit is a decision.
+export const SEEDFALL_HELD: Readonly<Record<RoyaleVariant, boolean>> = {
+  one_life: false,
+  respawn: true,
+};
+export const SEEDFALL_HELD_RATE = 0.5;
+export const SEEDFALL_CALM_S = 1;
 // What it pays: pieces of the build, a share of the maximum health and of
 // the maximum mana (both all of it). With Grafts it pays one piece and a
 // Heartwood Graft offer; until Grafts ship, two pieces.

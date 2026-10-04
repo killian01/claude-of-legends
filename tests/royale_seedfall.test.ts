@@ -4,7 +4,8 @@
 // least 10 m from its edge, on a cache spot the draw left empty; its impact
 // hits whoever stands within 4 m for a tenth of their health and throws
 // them up, before the deaths and like the Dusk's burn (no fight, the Dusk's
-// kill credit); its cache opens in 3 s, breaks on a hit, pays two pieces
+// kill credit); its cache opens in 3 s, breaks on a hit in One life (held
+// in Respawn: tests/royale_respawn_pace.test.ts), pays two pieces
 // (one and a Heartwood Graft once Grafts ship), all the health and all the
 // mana, and never comes back. What a seat observes of it and what the wire
 // carries (the sf block, the cache kind, the opening's length) are here
