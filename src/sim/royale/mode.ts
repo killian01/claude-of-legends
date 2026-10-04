@@ -34,18 +34,22 @@ import { observeGrafts, pickGraft, stepGrafts } from './grafts';
 import type { RoyaleGround, RoyaleLayout } from './layout';
 import { creatureXp, grantXp, landingLevels, takedownXp } from './levels';
 import { GOLDEN_PIECES, grantPieces, healShare, manaShare, seatBuild, streakShare } from './loot';
-import { observeMarks, stepMarks } from './marks';
+import { markOf, markPayout, markSlayer, observeMarks, stepMarks } from './marks';
 import { flightOver, flightPos, type PadFlight, padSites, padUnder, startFlight } from './pads';
-import { observeRisings, stepRisings } from './risings';
+import {
+  grantRoyaleWrath,
+  observeRisings,
+  risingReward,
+  stepRisings,
+  wrathOnDeath,
+} from './risings';
 import {
   edgeOfLight,
   type Fallen,
-  leaderOf,
   oneLifeRanking,
   placeFallen,
   respawnRanking,
   type Standing,
-  takedownScore,
 } from './score';
 import {
   observeSeedfalls,
@@ -62,7 +66,7 @@ import {
   CAMP_HEAL,
   CAMP_MANA,
   DROP_S,
-  LEADER_SHOW_EVERY_S,
+  MARK_SHOWN_S,
   OUT_OF_COMBAT_HEAL,
   OUT_OF_COMBAT_MANA,
   OUT_OF_COMBAT_SPEED,
@@ -82,9 +86,6 @@ export interface RoyaleOptions {
   layout: RoyaleLayout;
 }
 
-// How long the leader stays shown on the globe after each show.
-export const LEADER_SHOWN_FOR_S = 4;
-
 // What a match measured of itself: the numbers a test reads to tell a fun
 // match from a dull one. Not part of any rule.
 export interface RoyaleTally {
@@ -99,6 +100,12 @@ export interface RoyaleTally {
   seedfallsLanded: number;
   seedfallsOpened: number;
   seedfallsContested: number;
+  // The Risings and the hunted (risings.ts, marks.ts): big creatures and
+  // Wardens taken, and takedowns on a marked champion (the Lodestar, an
+  // Ablaze).
+  creaturesTaken: number;
+  wardensTaken: number;
+  markTakedowns: number;
 }
 
 // The ground's answers as the mode's rules ask them.
@@ -156,6 +163,9 @@ export class RoyaleMode {
     seedfallsLanded: 0,
     seedfallsOpened: 0,
     seedfallsContested: 0,
+    creaturesTaken: 0,
+    wardensTaken: 0,
+    markTakedowns: 0,
   };
   private hpBefore = new Map<number, number>();
   private aliveBefore = 0;
@@ -291,10 +301,18 @@ export class RoyaleMode {
     return u.maxHp;
   }
 
-  // The Wrath handed to a champion on the planet (an Ascendant's last hit):
-  // its team's, as everywhere, until the mode tracks a holder.
+  // The Wrath handed to a champion on the planet (the Warden's last hit, an
+  // Ascendant's): its own, the one holder there is (risings.ts).
   grantWrath(sim: Sim, killer: Unit): void {
-    sim.grantWrath(killer.team);
+    grantRoyaleWrath(this, sim, killer);
+  }
+
+  // A Heartwood Graft offered for a big creature's last hit (CONTEXT.md:
+  // Graft): whether one was. The Grafts wire it (grafts.ts); until they
+  // ship none is, and the prize pays a piece in its place (risings.ts
+  // risingReward).
+  offerHeartwood(_sim: Sim, _u: Unit): boolean {
+    return false;
   }
 
   private champions(sim: Sim): Unit[] {
@@ -443,17 +461,32 @@ export class RoyaleMode {
     const champ = killer && killer.kind === 'champion' ? killer : null;
     if (victim.kind === 'champion') {
       if (this.duskHit.has(victim.id)) this.tally.duskDeaths++;
-      noteClamor(this, sim, victim, champ && champ.team !== victim.team ? champ : null);
-      if (champ && champ.team !== victim.team) {
+      const taker = champ && champ.team !== victim.team ? champ : null;
+      noteClamor(this, sim, victim, taker);
+      wrathOnDeath(this, sim, victim, taker);
+      if (taker) {
         this.tally.takedowns++;
         if (this.tally.firstTakedownAt === null) this.tally.firstTakedownAt = sim.time;
-        grantXp(champ, takedownXp(this.variant, victim.level, champ.level));
-        this.loot(sim, champ, 1, 'takedown');
-        const share = streakShare(champ.killStreak);
-        healShare(champ, TAKEDOWN_HEAL * share);
-        manaShare(champ, TAKEDOWN_MANA * share);
-        const score = takedownScore(victim.id, this.state.leaderId);
-        this.state.scores.set(champ.id, (this.state.scores.get(champ.id) ?? 0) + score);
+        grantXp(taker, takedownXp(this.variant, victim.level, taker.level));
+        // A mark taken down pays more (marks.ts): the Lodestar, an Ablaze.
+        const marks = this.state.marks;
+        const lodestar = markOf(marks, victim.id, 'lodestar') !== null;
+        const run = markOf(marks, victim.id, 'ablaze') !== null ? victim.killStreak : null;
+        const pay = markPayout(this.variant, lodestar, run);
+        if (lodestar || run !== null) this.tally.markTakedowns++;
+        this.loot(sim, taker, 1 + pay.pieces, 'takedown');
+        const share = streakShare(taker.killStreak);
+        healShare(taker, TAKEDOWN_HEAL * share);
+        manaShare(taker, TAKEDOWN_MANA * share);
+        this.state.scores.set(taker.id, (this.state.scores.get(taker.id) ?? 0) + pay.score);
+        if (pay.snuffed !== null) {
+          this.emit(sim, {
+            type: 'royale_snuffed',
+            unitId: victim.id,
+            killerId: taker.id,
+            streak: pay.snuffed,
+          });
+        }
       }
       if (this.variant === 'one_life') {
         this.fallen.push({ id: victim.id, hpBefore: this.hpBefore.get(victim.id) ?? 0 });
@@ -474,6 +507,18 @@ export class RoyaleMode {
     }
     if (victim.kind === 'creature' || victim.kind === 'warden') {
       grantXp(champ, creatureXp(victim.xpBounty));
+    }
+    // A big creature's last hit (risings.ts): pieces, all the health and
+    // mana, the slayer shown to everyone. The Warden's is the Wrath.
+    if (victim.kind === 'creature') {
+      this.tally.creaturesTaken++;
+      const pay = risingReward(this.offerHeartwood(sim, champ));
+      this.loot(sim, champ, pay.pieces, 'camp');
+      healShare(champ, pay.heal);
+      manaShare(champ, pay.mana);
+      markSlayer(this, sim, champ);
+    } else if (victim.kind === 'warden') {
+      this.tally.wardensTaken++;
     }
   }
 
@@ -560,14 +605,6 @@ export class RoyaleMode {
     stepMarks(this, sim);
     stepClamors(this, sim);
     stepGrafts(this, sim);
-    // The leader.
-    if (this.variant === 'respawn') {
-      s.leaderId = leaderOf(this.standings(sim));
-      if (s.leaderId !== null && time - s.leaderShownAt >= LEADER_SHOW_EVERY_S - 1e-9) {
-        s.leaderShownAt = time;
-        this.emit(sim, { type: 'royale_leader', unitId: s.leaderId });
-      }
-    }
     // The end.
     if (s.stage !== 'play') return;
     if (this.variant === 'one_life') {
@@ -642,8 +679,7 @@ export class RoyaleMode {
     let leader: ObsRoyale['leader'] = null;
     if (s.leaderId !== null) {
       const lu = sim.units.get(s.leaderId);
-      const shown =
-        sim.time - s.leaderShownAt <= LEADER_SHOWN_FOR_S && s.leaderShownAt > s.dropEndsAt;
+      const shown = sim.time - s.leaderShownAt <= MARK_SHOWN_S && s.leaderShownAt > s.dropEndsAt;
       leader = {
         id: s.leaderId,
         score: s.scores.get(s.leaderId) ?? 0,

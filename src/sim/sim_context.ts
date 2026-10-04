@@ -2,6 +2,7 @@
 // state a system needs plus the event and death buffers. Sim stays a thin
 // coordinator; systems stay host-agnostic modules a test can drive directly.
 
+import type { NeutralScale } from './content/royale_events';
 import type { Ground } from './ground';
 import type { NavGrid } from './navgrid';
 import type { Projectile } from './projectiles';
@@ -34,5 +35,10 @@ export interface CombatCtx {
   // Every champion on a team of its own (ADR 0030): a battle royale. Rules
   // about allies read it, since nobody has any.
   readonly freeForAll?: boolean;
+  // The battle royale's neutral bodies at their rise (content/
+  // royale_events.ts PLANET_NEUTRAL_SCALE): a share of the health and of
+  // the strike a big creature and the Warden carry, since a champion on the
+  // planet fights them alone. Undefined in the 5v5, where they are unchanged.
+  readonly neutralScale?: { readonly creature: NeutralScale; readonly warden: NeutralScale };
   allocId(): number;
 }

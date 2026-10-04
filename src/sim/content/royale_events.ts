@@ -4,7 +4,7 @@
 // landing; distances are chords (src/sim/geo.ts). The rules that read these
 // live in src/sim/royale/seedfall.ts and src/sim/royale/caches.ts.
 
-import type { RoyaleVariant } from '../royale/types';
+import { RING_CREATURES_AT_S, type RoyaleVariant, WARDEN_AT_S } from '../royale/types';
 
 // When each Seedfall lands, seconds after landing: five a match, the first
 // at 2:00 as the caches run dry, then one every 70 s. Every 80 s, One life's
@@ -70,3 +70,78 @@ export const SEEDFALL_MANA = 1;
 // stand within this reach of the cache as it opens: a measurement, no rule.
 export const SEEDFALL_CONTEST_M = 12;
 export const SEEDFALL_CONTEST_MIN = 2;
+
+// The Risings (CONTEXT.md: Rising; src/sim/royale/risings.ts): the big
+// creatures and the Warden come up on the planet's own clocks, each called
+// RISING_WARN_S ahead. The Pyrefang and the Voidmaul rise at 3:00 on their
+// rings and RISING_RETURN_S after each death; the Warden once, inside the
+// light (4:30 in One life, 6:00 in Respawn), and never a second time. The
+// 5v5's bodies are sized for a duo or a team; on the planet a champion
+// fights alone, so a body is scaled at its rise (CombatCtx.neutralScale):
+// a level 6 champion with four pieces takes a big creature alone in about
+// 20 s with a third of its health left, the Warden in about half a minute
+// (scripts/creature_report.mjs --planet).
+export const RISING_WARN_S = 30;
+export const RING_RISE_AT_S = RING_CREATURES_AT_S;
+export const RISING_RETURN_S = 150;
+export const WARDEN_RISE_AT_S: Readonly<Record<RoyaleVariant, number>> = {
+  one_life: 270,
+  respawn: WARDEN_AT_S,
+};
+// The Warden's site is the walkable point nearest the center of the light
+// as it will stand this long after the rise: inside the light, where the
+// field is headed.
+export const WARDEN_SITE_FORECAST_S = 30;
+export interface NeutralScale {
+  hp: number;
+  ad: number;
+}
+export const PLANET_NEUTRAL_SCALE: Readonly<{ creature: NeutralScale; warden: NeutralScale }> = {
+  creature: { hp: 0.35, ad: 0.7 },
+  warden: { hp: 0.3, ad: 0.7 },
+};
+// What a big creature's last hit pays (risings.ts risingReward): pieces of
+// the build, all the health and all the mana, and the slayer shown to
+// everyone for MARK_SHOWN_S. With Grafts it pays two pieces and a Heartwood
+// Graft offer; until Grafts ship, three pieces.
+export const RISING_PIECES = 2;
+export const RISING_PIECES_BEFORE_GRAFTS = 3;
+export const RISING_HEAL = 1;
+export const RISING_MANA = 1;
+// The Wrath on the planet (CONTEXT.md: Wrath): the Warden's last hit
+// carries it this long, and it passes to whoever takes its holder down,
+// with whatever was left but never less than WRATH_PASS_MIN_S.
+export const WRATH_ROYALE_S: Readonly<Record<RoyaleVariant, number>> = {
+  one_life: 60,
+  respawn: 120,
+};
+export const WRATH_PASS_MIN_S = 45;
+
+// The hunted (CONTEXT.md: Lodestar, Ablaze; src/sim/royale/marks.ts): the
+// champions shown to everyone. The Lodestar is Respawn's score leader with
+// LODESTAR_RESPAWN_SCORE or more, and in One life, from the Dusk's
+// LODESTAR_ONE_LIFE_PHASE (the second closing), the most takedowns with
+// LODESTAR_ONE_LIFE_SCORE or more. Ablaze is a run of takedowns without
+// falling, ABLAZE_RUN by variant, only the ABLAZE_TOP longest runs.
+export const LODESTAR_RESPAWN_SCORE = 5;
+export const LODESTAR_ONE_LIFE_SCORE = 2;
+export const LODESTAR_ONE_LIFE_PHASE = 2;
+export const ABLAZE_RUN: Readonly<Record<RoyaleVariant, number>> = { one_life: 3, respawn: 5 };
+export const ABLAZE_TOP = 3;
+// How often each mark is shown again (each show lasts MARK_SHOWN_S): the
+// Lodestar every 20 s, every 10 s while it leads the second by
+// LODESTAR_RUNAWAY or more; an Ablaze every 15 s; the Wrath's holder every
+// 10 s.
+export const LODESTAR_EVERY_S = 20;
+export const LODESTAR_RUNAWAY_EVERY_S = 10;
+export const LODESTAR_RUNAWAY = 8;
+export const ABLAZE_EVERY_S = 15;
+export const WRATH_EVERY_S = 10;
+// What a takedown on a mark pays its last hit: on the Lodestar, the
+// takedown counts LEADER_TAKEDOWN_SCORE (types.ts) and a piece; on an
+// Ablaze (snuffed out), 1 + floor(run / 3) pieces, at most SNUFF_MAX_PIECES,
+// and in Respawn SNUFF_RESPAWN_SCORE more to the score.
+export const LODESTAR_PIECES = 1;
+export const SNUFF_RUN_PER_PIECE = 3;
+export const SNUFF_MAX_PIECES = 3;
+export const SNUFF_RESPAWN_SCORE = 1;
