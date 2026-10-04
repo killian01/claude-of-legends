@@ -56,6 +56,7 @@ import { respawnDelay } from './respawn';
 import { ASSIST_GOLD_FRAC, championBounty, grantKillRewards, grantPassiveGold } from './rewards';
 import { initialRingStates, onCreatureSlain, type RingClock, ringClocks, stepRings } from './rings';
 import { Rng } from './rng';
+import { keepHold } from './royale/grace';
 import { RoyaleMode, type RoyaleOptions } from './royale/mode';
 import {
   DROP_S,
@@ -787,6 +788,7 @@ export class Sim {
     u.path = [];
     u.attackTargetId = null;
     u.attackMoveTarget = null;
+    if (this.royaleMode) keepHold(this.royaleMode, unitId);
   }
 
   // The owner's coach order for a bot seat (ADR 0013): sim state like any

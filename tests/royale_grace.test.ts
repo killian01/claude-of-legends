@@ -126,6 +126,43 @@ describe('the Grace of a Respawn return', () => {
     expect(idle.sim.royale!.arriving.has(idle.u.id)).toBe(false);
   });
 
+  it('holds its fire through a step of its own, an enemy beside it where it stops', () => {
+    const { sim, unitIds, u, backAt } = returned();
+    const foe = sim.units.get(unitIds[2]!)!;
+    beside(sim, u, foe, 70);
+    tickUntil(sim, backAt + 0.4);
+    const R = sim.royaleMode!.layout.radius;
+    const to = along(u.pos as Vec3, randomHeading(new Rng(7), u.pos as Vec3), 1.5, R);
+    sim.orderMove(u.id, to.x, to.z, to.y);
+    expect(u.holding).toBe(false);
+    while (u.path.length > 0 && sim.time < backAt + 2) sim.tick();
+    expect(u.path.length).toBe(0);
+    beside(sim, u, foe, 2);
+    sim.tick();
+    sim.tick();
+    expect(u.attackTargetId).toBeNull();
+    expect(u.pendingAttack).toBeNull();
+    expect(sim.royale!.arriving.has(u.id)).toBe(true);
+    // Out of its Grace, the idle defense is its own again.
+    tickUntil(sim, backAt + ARRIVAL_GRACE_S + 0.1);
+    beside(sim, u, foe, 2);
+    sim.tick();
+    expect(u.attackTargetId).toBe(foe.id);
+  });
+
+  it('keeps the hold of a Stop pressed during it, and lets go of its own', () => {
+    const stopped = returned();
+    stopped.sim.orderStop(stopped.u.id);
+    tickUntil(stopped.sim, stopped.backAt + ARRIVAL_GRACE_S + 0.1);
+    expect(stopped.sim.royale!.arriving.has(stopped.u.id)).toBe(false);
+    expect(stopped.u.holding).toBe(true);
+
+    const idle = returned();
+    tickUntil(idle.sim, idle.backAt + ARRIVAL_GRACE_S + 0.1);
+    expect(idle.sim.royale!.arriving.has(idle.u.id)).toBe(false);
+    expect(idle.u.holding).toBe(false);
+  });
+
   it('is in the world checkpoint', () => {
     const { sim, u } = returned();
     const snap = sim.snapshot();
