@@ -47,10 +47,47 @@ export function statusWord(kind: Status['kind']): string {
   return STATUS_WORDS[kind][0];
 }
 
-export function statusChip(s: Status, time: number): ChipFace {
+// A status an aura keeps renewing (Torv's Bulwark Aura on himself and on
+// the allies by him: a few tenths of a second, renewed every passive tick)
+// never runs down while the aura holds, and its "1s" read as a timer stuck
+// all match. Such a status shows without a countdown: one that has never
+// had more than AURA_WINDOW_S left (the aura's 0.4 s, with room for a
+// mirror's clock a tick behind; a status that short has no second to
+// count anyway). A status that ran longer keeps its countdown to its end.
+export const AURA_WINDOW_S = 0.75;
+
+// The status's identity from frame to frame: a buff by what it gives (the
+// sim renews an identical one in place, combat/status.ts refreshBuff),
+// another by its kind and its place among its kind.
+export function statusKey(s: Status, nth: number): string {
+  if (s.kind === 'buff') return `buff:${s.msPct}:${s.asPct}:${s.armor}:${s.mr}`;
+  return `${s.kind}:${nth}`;
+}
+
+// The most each standing status has had left, frame to frame: the HUD
+// steps it with the statuses it shows, and asks whether one is an aura's.
+export class AuraWatch {
+  private readonly most = new Map<string, number>();
+
+  // The statuses standing now, by key with their seconds left; a key gone
+  // is forgotten, so a status that comes back starts anew.
+  step(standing: ReadonlyMap<string, number>): void {
+    for (const k of [...this.most.keys()]) if (!standing.has(k)) this.most.delete(k);
+    for (const [k, left] of standing) this.most.set(k, Math.max(this.most.get(k) ?? 0, left));
+  }
+
+  held(key: string): boolean {
+    const most = this.most.get(key);
+    return most !== undefined && most <= AURA_WINDOW_S;
+  }
+}
+
+// `held` when an aura keeps it up (AuraWatch): the word alone, and a tip
+// that says so instead of the seconds.
+export function statusChip(s: Status, time: number, held = false): ChipFace {
   const [word, says] = STATUS_WORDS[s.kind];
   const secs = Math.max(1, Math.ceil(s.until - time));
-  const left = `${secs} s left`;
+  const left = held ? 'while the aura holds' : `${secs} s left`;
   if (s.kind === 'slow') {
     const pct = `${Math.round(s.pct * 100)}%`;
     return { glyph: word, sub: pct, tip: `${says} ${pct}, ${left}` };
@@ -67,7 +104,7 @@ export function statusChip(s: Status, time: number): ChipFace {
       tip: `${says}${s.stacks > 1 ? ` ${s.stacks} times` : ''}, ${left}`,
     };
   }
-  return { glyph: word, sub: `${secs}s`, tip: `${says}, ${left}` };
+  return { glyph: word, sub: held ? '' : `${secs}s`, tip: `${says}, ${left}` };
 }
 
 // A favor's chip word: the aspect's own name.
