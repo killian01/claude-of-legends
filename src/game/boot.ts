@@ -112,6 +112,9 @@ export interface Presentation {
   // a phone held upright: a host's own bar over the match (the replay's,
   // the coach's) goes in here so it turns too.
   readonly stage: HTMLElement;
+  // The match's first frame on the canvas (Renderer.drawn): a card in front
+  // of the match waits for it (game/first_frame.ts).
+  readonly drawn: Promise<void>;
   // Same-page teardown: render loop, input, HUD, minimap, GL, music. The
   // menu returns on the same document; nothing may keep running behind it.
   dispose(): void;
@@ -801,6 +804,7 @@ export function startPresentation(
     toggleEscapeMenu: () => hud.toggleEscapeMenu(),
     covers: () => hud.covers(),
     stage: stage.el,
+    drawn: renderer.drawn,
     dispose: () => {
       if (disposed) return;
       disposed = true;

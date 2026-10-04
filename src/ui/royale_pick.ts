@@ -268,6 +268,7 @@ const JOIN_CSS = `
 @keyframes br-join-turn { to { transform: rotate(360deg); } }
 .br-join .menu-progress i { width: 40%; animation: br-join-sweep 1.4s ease-in-out infinite alternate; }
 @keyframes br-join-sweep { from { margin-left: 0; } to { margin-left: 60%; } }
+.menu.br-join-over { z-index: 45; }
 @media (prefers-reduced-motion: reduce) {
   .br-join .planet-emblem, .br-join .menu-progress i { animation: none; }
 }
@@ -275,11 +276,19 @@ const JOIN_CSS = `
 
 let joinCssInstalled = false;
 
+// The joining card, which can also stay over the match it found until the
+// match's first frame is drawn (game/first_frame.ts).
+export interface RoyaleJoiningController extends RoyalePickController {
+  // The match is built under the card: the card rises over the match's
+  // HUD, its pause menu and end screen included, until it is removed.
+  overMatch(): void;
+}
+
 export function showRoyaleJoining(
   container: HTMLElement,
   variant: RoyaleVariant,
   onCancel: () => void,
-): RoyalePickController {
+): RoyaleJoiningController {
   if (!joinCssInstalled) {
     joinCssInstalled = true;
     const style = document.createElement('style');
@@ -300,5 +309,8 @@ export function showRoyaleJoining(
     bar,
     cancel,
   );
-  return { remove: () => root.remove() };
+  return {
+    remove: () => root.remove(),
+    overMatch: () => root.classList.add('br-join-over'),
+  };
 }

@@ -10,6 +10,7 @@
 // and closing the tab asks first.
 
 import { type KillNote, type Presentation, startPresentation } from './game/boot';
+import { FIRST_FRAME_WAIT_MS, untilDrawn } from './game/first_frame';
 import { nextStep, type PostMatchAction } from './game/flow';
 import { registerForgedAssets } from './game/forged_visuals';
 import { frameRate } from './game/frame_rate';
@@ -1394,7 +1395,11 @@ async function runRoyale(
     // person is out for good, and Back is then Back home.
     const layer = appNav().push('session', () => finish('menu'));
     const open = (): void => {
-      joining.remove();
+      // The card stays over the match until its first frame is drawn: the
+      // planet holds that frame while its programs link, and the canvas is
+      // black until then (game/first_frame.ts). Bounded, so a renderer
+      // that never draws never leaves the card up.
+      joining.overMatch();
       // The match is on screen at last (server/seat_report.ts reads it).
       trackStep('played');
       send({ t: 'loaded' });
@@ -1413,6 +1418,10 @@ async function runRoyale(
         },
       );
       pres = opening;
+      void untilDrawn(opening.drawn, FIRST_FRAME_WAIT_MS, (run, ms) => {
+        const id = window.setTimeout(run, ms);
+        return () => window.clearTimeout(id);
+      }).then(() => joining.remove());
       ends = matchEndReporter({ mode: 'royale', variant }, () => ({
         winner: world.winner,
         seconds: world.time,
