@@ -338,6 +338,51 @@ describe('the Wrath on the planet', () => {
     expect(sim.teamWrath(a.team)).toBeNull();
   });
 
+  it('is dropped by the Dusk even with a champion credited for the fall', () => {
+    const { sim, unitIds } = build(3, 'one_life');
+    const [a, b] = unitIds.map((id) => sim.units.get(id)!) as [Unit, Unit];
+    sim.royaleMode!.grantWrath(sim, a);
+    sim.tick();
+    // b struck a, then the burn finished it: b takes the credit, not the Wrath.
+    dealDamage(ctxOf(sim), b.id, a, 1, 'true');
+    a.hp = 0.01;
+    a.lastDamagedAt = sim.time;
+    const dark = { ...sim.royale!.dusk.now };
+    sim.royaleMode!.stepDusk = (ctx) => {
+      sim.royaleMode!.state.dusk = { ...sim.royaleMode!.state.dusk, now: dark, burn: 1 };
+      dealDamage(ctx, 0, a, a.maxHp, 'true');
+      (sim.royaleMode as unknown as { duskHit: Set<number> }).duskHit.add(a.id);
+    };
+    const events = sim.tick();
+    expect(of(events, 'death').find((e) => e.unitId === a.id)?.killerId).toBe(b.id);
+    expect(of(events, 'royale_wrath_passed')).toEqual([
+      { type: 'royale_wrath_passed', from: a.id, to: null },
+    ]);
+    expect(sim.teamWrath(b.team)).toBeNull();
+  });
+
+  it('is dropped by a Seedfall impact even with a champion credited', () => {
+    const { sim, unitIds } = build(3, 'one_life');
+    const [a, b] = unitIds.map((id) => sim.units.get(id)!) as [Unit, Unit];
+    sim.royaleMode!.grantWrath(sim, a);
+    sim.tick();
+    dealDamage(ctxOf(sim), b.id, a, 1, 'true');
+    a.hp = 0.01;
+    sim.royale!.seedfalls.push({
+      id: 99,
+      pos: { ...(a.pos as Vec3) },
+      announcedAt: sim.time - 30,
+      landsAt: sim.time,
+      landed: false,
+      cacheId: null,
+    });
+    const events = sim.tick();
+    expect(of(events, 'death').find((e) => e.unitId === a.id)?.killerId).toBe(b.id);
+    expect(of(events, 'royale_wrath_passed')).toEqual([
+      { type: 'royale_wrath_passed', from: a.id, to: null },
+    ]);
+  });
+
   it('leaves a Respawn holder who fell and came back without it', () => {
     const { sim, unitIds } = build(3, 'respawn');
     const a = sim.units.get(unitIds[0]!)!;
