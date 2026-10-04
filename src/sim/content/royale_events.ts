@@ -7,8 +7,11 @@
 import type { RoyaleVariant } from '../royale/types';
 
 // When each Seedfall lands, seconds after landing: five a match, the first
-// at 2:00 as the caches run dry, then one every 80 s.
-export const SEEDFALL_AT_S: readonly number[] = [120, 200, 280, 360, 440];
+// at 2:00 as the caches run dry, then one every 70 s. Every 80 s, One life's
+// fifth landed at 7:20 with two to five champions left, and two in five
+// matches ended before anyone opened it (86% of the Seedfalls opened over
+// seeds 1 to 40); every 70 s, 92% (the report, tuning round 1, 2026-10-04).
+export const SEEDFALL_AT_S: readonly number[] = [120, 190, 260, 330, 400];
 // A Seedfall is called this long before it lands (the announce draws its
 // point and tells everyone).
 export const SEEDFALL_WARN_S = 20;
