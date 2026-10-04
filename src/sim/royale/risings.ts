@@ -197,10 +197,10 @@ export function grantRoyaleWrath(mode: RoyaleMode, sim: Sim, killer: Unit): void
 }
 
 // The holder fell (onDeath's champion branch, every variant): its Wrath goes
-// with it, and to the champion credited with the takedown with what was
-// left, at least WRATH_PASS_MIN_S; a fall nobody is credited with (the
-// Dusk's burn, a Seedfall's impact, a creature with no champion's hit in
-// the credit window) drops it. Nothing when the victim holds no Wrath.
+// with it, and to the champion that took it down (`killer`) with what was
+// left, at least WRATH_PASS_MIN_S; a fall the world dealt (the Dusk's burn,
+// a Seedfall's impact, whoever the credit names: the mode passes null) or
+// nobody is credited with drops it. Nothing when the victim holds no Wrath.
 export function wrathOnDeath(mode: RoyaleMode, sim: Sim, victim: Unit, killer: Unit | null): void {
   const s = mode.state;
   const h = s.wrathHolder;

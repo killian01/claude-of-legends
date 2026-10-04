@@ -102,7 +102,7 @@ export interface RoyaleTally {
   seedfallsContested: number;
   // The Risings and the hunted (risings.ts, marks.ts): big creatures and
   // Wardens taken, and takedowns on a marked champion (the Lodestar, an
-  // Ablaze).
+  // Ablaze run, the Wrath's holder).
   creaturesTaken: number;
   wardensTaken: number;
   markTakedowns: number;
@@ -172,6 +172,9 @@ export class RoyaleMode {
   private fallen: Fallen[] = [];
   private fallenKiller = new Map<number, number>();
   private duskHit = new Set<number>();
+  // Champions a Seedfall's impact finished this tick (no Wrath passes on
+  // a fall the world dealt: risings.ts wrathOnDeath).
+  private impactHit = new Set<number>();
   private obsTick = -1;
   private obsShared: Pick<ObsRoyale, 'caches' | 'pads' | 'dusk' | 'alive'> | null = null;
 
@@ -362,6 +365,7 @@ export class RoyaleMode {
     this.fallen = [];
     this.fallenKiller.clear();
     this.duskHit.clear();
+    this.impactHit.clear();
   }
 
   // The launch pads, after the walk: fliers carried along their circle and
@@ -448,7 +452,12 @@ export class RoyaleMode {
   // A Seedfall's impact, right after the Dusk (after the zones, before the
   // deaths), so a champion it kills dies on the same tick (seedfall.ts).
   stepSeedfallImpact(ctx: CombatCtx, _sim: Sim): void {
+    const before = ctx.dead.size;
     seedfallImpact(this, ctx);
+    if (ctx.dead.size === before) return;
+    // The deaths it added are the set's last.
+    let i = 0;
+    for (const id of ctx.dead) if (i++ >= before) this.impactHit.add(id);
   }
 
   // A death's rewards, in the sim's death handling instead of the shared
@@ -463,7 +472,9 @@ export class RoyaleMode {
       if (this.duskHit.has(victim.id)) this.tally.duskDeaths++;
       const taker = champ && champ.team !== victim.team ? champ : null;
       noteClamor(this, sim, victim, taker);
-      wrathOnDeath(this, sim, victim, taker);
+      // The Wrath passes to a taker who dealt the fall, not the world.
+      const world = this.duskHit.has(victim.id) || this.impactHit.has(victim.id);
+      wrathOnDeath(this, sim, victim, world ? null : taker);
       if (taker) {
         this.tally.takedowns++;
         if (this.tally.firstTakedownAt === null) this.tally.firstTakedownAt = sim.time;
@@ -473,7 +484,8 @@ export class RoyaleMode {
         const lodestar = markOf(marks, victim.id, 'lodestar') !== null;
         const run = markOf(marks, victim.id, 'ablaze') !== null ? victim.killStreak : null;
         const pay = markPayout(this.variant, lodestar, run);
-        if (lodestar || run !== null) this.tally.markTakedowns++;
+        const holder = markOf(marks, victim.id, 'wrath') !== null;
+        if (lodestar || run !== null || holder) this.tally.markTakedowns++;
         this.loot(sim, taker, 1 + pay.pieces, 'takedown');
         const share = streakShare(taker.killStreak);
         healShare(taker, TAKEDOWN_HEAL * share);

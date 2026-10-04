@@ -79,8 +79,9 @@ export const SEEDFALL_CONTEST_MIN = 2;
 // 5v5's bodies are sized for a duo or a team; on the planet a champion
 // fights alone, so a body is scaled at its rise (CombatCtx.neutralScale):
 // a level 6 champion with four pieces takes a big creature alone in about
-// 20 s with a third of its health left, the Warden in about half a minute
-// (scripts/creature_report.mjs --planet).
+// 20 s and the Warden in about half a minute, keeping most of its health
+// (scripts/creature_report.mjs --planet): the gamble is the steal, and the
+// slayer shown to everyone.
 export const RISING_WARN_S = 30;
 export const RING_RISE_AT_S = RING_CREATURES_AT_S;
 export const RISING_RETURN_S = 150;
@@ -98,7 +99,10 @@ export interface NeutralScale {
 }
 export const PLANET_NEUTRAL_SCALE: Readonly<{ creature: NeutralScale; warden: NeutralScale }> = {
   creature: { hp: 0.35, ad: 0.7 },
-  warden: { hp: 0.3, ad: 0.7 },
+  // 0.3 left the Warden 45 s (One life's 4:30) to 50 s (Respawn's 6:00)
+  // for the median lone champion, 0.2 23 to 28 s; 0.22 takes it to about
+  // half a minute in both.
+  warden: { hp: 0.22, ad: 0.7 },
 };
 // What a big creature's last hit pays (risings.ts risingReward): pieces of
 // the build, all the health and all the mana, and the slayer shown to
