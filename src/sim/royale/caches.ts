@@ -134,7 +134,8 @@ export function openingHeld(c: Pick<CacheState, 'kind'>, variant: RoyaleVariant)
 }
 
 // How fast a held opening's clock runs this tick: in full with the opener
-// still and undisturbed for SEEDFALL_CALM_S, else at SEEDFALL_HELD_RATE.
+// still this tick and undisturbed (no hit, cast or attack order) for
+// SEEDFALL_CALM_S, else at SEEDFALL_HELD_RATE.
 export function heldClockRate(s: CacheSeeker, time: number): number {
   return s.still && time - s.disturbedAt >= SEEDFALL_CALM_S - 1e-9 ? 1 : SEEDFALL_HELD_RATE;
 }

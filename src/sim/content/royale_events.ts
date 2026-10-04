@@ -37,10 +37,12 @@ export const SEEDFALL_AIRBORNE_S = 0.75;
 // this reach of its center, broken like any cache's opening in One life.
 export const SEEDFALL_OPEN_S = 3;
 export const SEEDFALL_REACH_M = 2.2;
-// In Respawn a Seedfall cache's opening is held, not broken: a hit taken,
-// a cast or an attack ordered, or a step inside the reach slows its clock
-// to SEEDFALL_HELD_RATE until the opener has gone SEEDFALL_CALM_S
-// undisturbed and still; only leaving the reach (or falling) breaks it.
+// In Respawn a Seedfall cache's opening is held, not broken: a hit taken
+// or dealt, a cast or an attack ordered slows its clock to
+// SEEDFALL_HELD_RATE until the opener has gone SEEDFALL_CALM_S without one,
+// and a step inside the reach slows it only while the opener moves (the
+// full rate is back on its first still tick); only leaving the reach (or
+// falling) breaks it.
 // Fifty seats that come back fight about a hundred times a minute, and
 // any hit broke a 3 s opening: fewer than half the Seedfalls were opened
 // (tranche 1, 2026-10-04). A pause in place of the slowing left a crowd
