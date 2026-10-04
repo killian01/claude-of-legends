@@ -5,10 +5,12 @@
 // Mounted by PlanetMarks, which hands it the pillars of the frame. The
 // Seedfall's kind stands here (the loud moments): a pale gold column sixty
 // meters tall over where the seed falls, a ring on the ground closing as
-// the landing nears, and the column brighter once it has landed. The
+// the landing nears onto a still ring at the impact's reach (who stands
+// inside it is hit), and the column brighter once it has landed. The
 // Rising, the Wrath and the Lodestar add their kinds in tranche 2.
 
 import * as THREE from 'three';
+import { SEEDFALL_IMPACT_M, SEEDFALL_WARN_S } from '../sim/content/royale_events';
 import type { Vec3 } from '../sim/geo';
 import type { PlanetGround } from './planet_terrain';
 
@@ -24,23 +26,44 @@ export interface Pillar {
   lit?: boolean;
 }
 
-// How a kind looks: its color, height and width, and the countdown's
-// length in seconds (the ring is widest that long before).
-interface KindLook {
+// How a kind looks: its color, height and width, the countdown's length
+// in seconds (the ring is widest that long before), and the reach of what
+// happens there in meters: the still ring stands at it and the closing
+// ring closes onto it, so what a player reads is what the sim hits.
+export interface KindLook {
   color: number;
   height: number;
   width: number;
   countdown: number;
+  reach: number;
 }
 
-const LOOKS: Partial<Record<PillarKind, KindLook>> = {
-  seedfall: { color: 0xffcf6a, height: 60, width: 1.2, countdown: 20 },
+export const PILLAR_LOOKS: Partial<Record<PillarKind, KindLook>> = {
+  seedfall: {
+    color: 0xffcf6a,
+    height: 60,
+    width: 1.2,
+    countdown: SEEDFALL_WARN_S,
+    reach: SEEDFALL_IMPACT_M,
+  },
 };
 
 // At most this many columns of a kind (five Seedfalls a match).
 const MAX_PER_KIND = 8;
-// The countdown ring's radius at its widest, meters.
-const RING_M = 7;
+// The countdown ring at its widest, as a multiple of the reach.
+const RING_WIDEST = 2.5;
+
+// The two rings' outer radii, meters, `time` the match's clock: the
+// closing one from RING_WIDEST times the reach when called down onto the
+// reach at the moment, and the still one on the reach.
+export function countdownRings(
+  look: KindLook,
+  until: number,
+  time: number,
+): { closing: number; still: number } {
+  const left = Math.max(0, Math.min(1, (until - time) / look.countdown));
+  return { closing: look.reach * (1 + (RING_WIDEST - 1) * left), still: look.reach };
+}
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -82,7 +105,7 @@ export class PlanetPillars {
     this.group.name = 'planet-pillars';
     const texture = columnTexture();
     this.owned.push(texture);
-    for (const [kind, look] of Object.entries(LOOKS) as [PillarKind, KindLook][]) {
+    for (const [kind, look] of Object.entries(PILLAR_LOOKS) as [PillarKind, KindLook][]) {
       const beam = new THREE.CylinderGeometry(
         look.width,
         look.width * 0.6,
@@ -153,11 +176,12 @@ export class PlanetPillars {
         const swell = p.lit ? 1.4 : 1 + 0.06 * Math.sin(t * 3 + i);
         draw.columns.setMatrixAt(i, this.standing(p.at, new THREE.Vector3(swell, 1, swell)));
         if (p.until !== undefined && !p.lit) {
-          const left = Math.max(0, Math.min(1, (p.until - time) / draw.look.countdown));
-          const r = RING_M * (0.12 + 0.88 * left);
-          draw.rings.setMatrixAt(rings++, this.standing(p.at, new THREE.Vector3(r, 1, r)));
-          const outer = RING_M * 0.12;
-          draw.rings.setMatrixAt(rings++, this.standing(p.at, new THREE.Vector3(outer, 1, outer)));
+          const { closing, still } = countdownRings(draw.look, p.until, time);
+          draw.rings.setMatrixAt(
+            rings++,
+            this.standing(p.at, new THREE.Vector3(closing, 1, closing)),
+          );
+          draw.rings.setMatrixAt(rings++, this.standing(p.at, new THREE.Vector3(still, 1, still)));
         }
       }
       draw.columns.count = mine.length;
