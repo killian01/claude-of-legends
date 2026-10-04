@@ -3,17 +3,25 @@
 // cache opens for the champion who stands beside it, still, for its
 // opening time (CACHE_OPEN_S, a Seedfall cache's SEEDFALL_OPEN_S, read by
 // kind through cacheOpenS); a hit taken breaks the opening, and so do a
-// step, a cast and an attack order, the recall's rule. One
+// step, a cast and an attack order, the recall's rule; a Respawn Seedfall
+// cache's opening is held instead (openingHeld: those slow its clock, only
+// leaving its reach breaks it). One
 // opener at a time: the nearest champion standing there takes it, the
 // lower id on a tie. An opened cache is gone for good in One life and
 // back after CACHE_BACK_S in Respawn, except a Seedfall cache, which never
 // comes back. Pure over a view of the champions, so the rule is tested
 // without a sim; the loot the opening pays lives in loot.ts.
 
-import { SEEDFALL_OPEN_S, SEEDFALL_REACH_M } from '../content/royale_events';
+import {
+  SEEDFALL_CALM_S,
+  SEEDFALL_HELD,
+  SEEDFALL_HELD_RATE,
+  SEEDFALL_OPEN_S,
+  SEEDFALL_REACH_M,
+} from '../content/royale_events';
 import { dist2 } from '../geo';
 import type { Rng } from '../rng';
-import type { Vec2 } from '../types';
+import { DT, type Vec2 } from '../types';
 import type { CacheSpot } from './layout';
 import {
   CACHE_BACK_S,
@@ -118,18 +126,41 @@ function inReach(c: CacheState, s: CacheSeeker): boolean {
   return dist2(c.pos, s.pos) <= reach * reach;
 }
 
+// Whether a cache's opening is held through a disturbance rather than
+// broken by it: a Seedfall cache's, in the variants that say so
+// (content/royale_events.ts SEEDFALL_HELD, Respawn).
+export function openingHeld(c: Pick<CacheState, 'kind'>, variant: RoyaleVariant): boolean {
+  return c.kind === 'seedfall' && SEEDFALL_HELD[variant];
+}
+
+// How fast a held opening's clock runs this tick: in full with the opener
+// still and undisturbed for SEEDFALL_CALM_S, else at SEEDFALL_HELD_RATE.
+export function heldClockRate(s: CacheSeeker, time: number): number {
+  return s.still && time - s.disturbedAt >= SEEDFALL_CALM_S - 1e-9 ? 1 : SEEDFALL_HELD_RATE;
+}
+
 function canOpen(c: CacheState, s: CacheSeeker, time: number): boolean {
   if (!s.still || s.disturbedAt >= time) return false;
   return inReach(c, s);
 }
 
-// One tick of the caches: comebacks, openings broken or finished, and new
-// openers. Returns the caches opened this tick, in id order.
+// One tick of the caches: comebacks, openings broken, held or finished,
+// and new openers. A held opening that breaks leaves the time it counted
+// with the cache, and the next opener goes on from there: the ring, not
+// the opener, keeps the count, and the cache goes to whoever stands in it
+// when the count is full. While nobody opens a held cache its openSince
+// holds that kept time (seconds, zero for none); while someone does, it is
+// the start that time implies, so `time - openSince` reads the same. Returns the caches opened this tick, in id order. It
+// runs once a tick, `dt` apart: a held opening's slowed tick moves its
+// start later by the share of `dt` it did not count, so `time - openSince`
+// is the time it has counted (what the observation and the snapshot show
+// of it, a bar that slows).
 export function stepCaches(
   caches: CacheState[],
   seekers: readonly CacheSeeker[],
   time: number,
   variant: RoyaleVariant,
+  dt = DT,
 ): CacheOpened[] {
   const opened: CacheOpened[] = [];
   const byId = new Map<number, CacheSeeker>();
@@ -148,10 +179,15 @@ export function stepCaches(
     }
     if (c.opener !== null) {
       const s = byId.get(c.opener);
-      const holds = s?.still === true && s.disturbedAt <= c.openSince && inReach(c, s);
+      const held = openingHeld(c, variant);
+      if (held && s && inReach(c, s)) c.openSince += dt * (1 - heldClockRate(s, time));
+      const holds =
+        s !== undefined && (held || (s.still && s.disturbedAt <= c.openSince)) && inReach(c, s);
       if (!holds) {
         busy.delete(c.opener);
         c.opener = null;
+        // A held opening keeps the time it counted for the next opener.
+        if (held) c.openSince = Math.max(0, time - c.openSince);
       } else if (time - c.openSince >= cacheOpenS(c, s) - 1e-9) {
         opened.push({ cacheId: c.id, unitId: c.opener, kind: c.kind });
         busy.delete(c.opener);
@@ -173,7 +209,8 @@ export function stepCaches(
     }
     if (best) {
       c.opener = best.id;
-      c.openSince = time;
+      // A held opening goes on from the time the cache kept.
+      c.openSince = openingHeld(c, variant) ? time - c.openSince : time;
       busy.add(best.id);
     }
   }

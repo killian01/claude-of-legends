@@ -5,7 +5,9 @@
 // brain consults them after the Dusk's walk and before the plain caches,
 // only with the bot's health at CALL_HP or more, and the ambush also
 // inside a fight: a bot waiting in a bush holds there with the opener in
-// sight. Radii and clocks are data (content/bots/royale_skills.ts).
+// sight. Respawn's Seedfall errand is the Seedfall call from ERRAND_HP,
+// also inside a fight the bot did not strike in. Radii and clocks are
+// data (content/bots/royale_skills.ts).
 
 import {
   AMBUSH_REACH_M,
@@ -17,6 +19,7 @@ import {
   CLAMOR_ALIVE,
   CLAMOR_HP,
   CLAMOR_PHASE,
+  ERRAND_HP,
   SEEDFALL_LATE_S,
 } from '../../content/bots/royale_skills';
 import { dist, type Vec3 } from '../../geo';
@@ -117,6 +120,14 @@ export function ambushCall(sense: Sense): RoyaleCall | null {
     return callAt('ambush', bush, { seedfallId: sf.id, strike: null });
   }
   return null;
+}
+
+// Respawn's Seedfall errand: the Seedfall call for a bot with ERRAND_HP
+// of its health or more, in Respawn only (the brain walks it past the
+// fights it did not strike in). Null otherwise.
+export function seedfallErrand(sense: Sense): RoyaleCall | null {
+  if (sense.r.variant !== 'respawn' || sense.s.hpFrac < ERRAND_HP) return null;
+  return seedfallCall(sense);
 }
 
 // Whether One life's Clamor draws the packs yet: from the Dusk's
