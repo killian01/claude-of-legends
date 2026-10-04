@@ -7,7 +7,7 @@ export const KILL_CREDIT_WINDOW_S = 10;
 
 import { WRATH_BURN_PCT, WRATH_BURN_S, WRATH_EXECUTE_FRAC } from '../content/rings';
 import type { DamageVia } from '../passive_types';
-import { applyItemDamageModifiers, passiveOf } from '../passives';
+import { applyItemDamageModifiers, passiveOf, runGraftDamaged } from '../passives';
 import type { CombatCtx } from '../sim_context';
 import { isInvulnerable } from '../structure_rules';
 import type { DamageType } from '../types';
@@ -156,5 +156,9 @@ export function dealDamage(
     }
     ctx.killers.set(target.id, creditId);
     ctx.events.push({ type: 'death', unitId: target.id, killerId: creditId });
+    return;
   }
+  // The battle royale's Grafts answering a hit taken (content/grafts.ts):
+  // nothing for a champion holding none, so nothing in the 5v5.
+  if (target.grafts.length > 0) runGraftDamaged(ctx, target, source, after, via);
 }

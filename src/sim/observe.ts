@@ -4,6 +4,7 @@
 // scoping is for human clients.
 
 import { effectiveMoveSpeed } from './combat/status';
+import { heartwoodOf } from './content/grafts';
 import { SIGILS } from './content/sigils';
 import { hypot } from './exact';
 import { carry, copy, dirTo } from './geo';
@@ -141,6 +142,11 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       if (other.championId) row.championId = other.championId;
       row.items = [...other.items];
       row.level = other.level;
+      // The battle royale's Heartwood, on the champion for everyone to see.
+      if (other.grafts.length > 0) {
+        const hw = heartwoodOf(other);
+        if (hw) row.heartwood = hw;
+      }
     }
     // The observable telegraph: a visible champion mid-windup announces
     // where the cast lands. Bursts and cones land on the caster.

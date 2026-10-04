@@ -62,11 +62,14 @@ export function landingLevels(u: Unit): void {
   spendSkillPoints(u);
 }
 
-// Experience to a champion, its points spent at once.
-export function grantXp(u: Unit, amount: number): void {
-  if (u.kind !== 'champion' || amount <= 0) return;
+// Experience to a champion, its points spent at once. Returns the levels
+// it rose (the mode offers the Grafts of the levels passed, grafts.ts).
+export function grantXp(u: Unit, amount: number): number {
+  if (u.kind !== 'champion' || amount <= 0) return 0;
+  const from = u.level;
   gainXp(u, amount);
   spendSkillPoints(u);
+  return u.level - from;
 }
 
 // What a takedown pays its last hit: the victim's bounty, weighed by the

@@ -2,6 +2,7 @@
 // + item stats. Called on level up and on inventory change. Max hp and mana
 // increases carry over to current values (buying hp heals by the delta).
 
+import { graftShares } from './content/grafts';
 import { ITEMS, type ItemStats } from './content/items';
 import { favorBonus } from './favors';
 import type { Unit } from './unit';
@@ -48,7 +49,10 @@ export function recalcChampion(u: Unit): void {
   const lvl = u.level - 1;
   const items = sumItemStats(u.items);
 
-  const newMaxHp = (def.base.hp + def.growth.hp * lvl + items.hp) * u.hpScale;
+  // The battle royale's Sprouts (content/grafts.ts) multiply the totals,
+  // only for a champion holding a Graft: the 5v5 never reads them.
+  const graft = u.grafts.length > 0 ? graftShares(u) : null;
+  const newMaxHp = (def.base.hp + def.growth.hp * lvl + items.hp) * u.hpScale * (graft?.hp ?? 1);
   const hpDelta = newMaxHp - u.maxHp;
   u.maxHp = newMaxHp;
   u.hp = Math.min(u.maxHp, Math.max(0, u.hp + Math.max(0, hpDelta)));
@@ -73,6 +77,11 @@ export function recalcChampion(u: Unit): void {
   u.stats.armorPenPct = Math.min(0.7, items.armorPenPct);
   u.stats.mrPenPct = Math.min(0.7, items.mrPenPct);
   u.moveSpeed = def.base.moveSpeed + items.moveSpeed;
+  if (graft) {
+    u.stats.ad *= graft.ad;
+    u.stats.ap *= graft.ap;
+    u.stats.attackSpeed *= graft.attackSpeed;
+  }
 }
 
 // XP needed to go from `level` to `level + 1`. Tuned down after review F.0

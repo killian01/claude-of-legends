@@ -161,8 +161,11 @@ describe('a whole battle royale of fifty house bots', () => {
     // A Seedfall's cache draws the few left standing to one point, and a
     // losing bot now drags its pursuer into a third fighter on purpose (bots
     // with intent): a few more takedowns land on a champion someone else
-    // wore down, still far fewer than the steals of old.
-    expect(a.steals).toBeLessThan(0.2);
+    // wore down, still far fewer than the steals of old. The Grafts' area
+    // damage (Chainsap's arc, Thornburst, Thornhide's return) lands on
+    // fights the holder is not in: this seed 35%, the report's seeds 1 to 3
+    // and 7 to 10 a mean of 19% and 24% (17% before the Grafts).
+    expect(a.steals).toBeLessThan(0.4);
     expect(a.ticks).toBeGreaterThan(Math.round((DROP_S + 360) * 20));
   }, 300_000);
 });

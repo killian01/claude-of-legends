@@ -5,9 +5,9 @@
 // hits whoever stands within 4 m for a tenth of their health and throws
 // them up, before the deaths and like the Dusk's burn (no fight, the Dusk's
 // kill credit); its cache opens in 3 s, breaks on a hit in One life (held
-// in Respawn: tests/royale_respawn_pace.test.ts), pays two pieces
-// (one and a Heartwood Graft once Grafts ship), all the health and all the
-// mana, and never comes back. What a seat observes of it and what the wire
+// in Respawn: tests/royale_respawn_pace.test.ts), pays one piece, a
+// Heartwood Graft offer, all the health and all the mana, and never comes
+// back. What a seat observes of it and what the wire
 // carries (the sf block, the cache kind, the opening's length) are here
 // too.
 
@@ -22,7 +22,7 @@ import {
   SEEDFALL_IMPACT_SHARE,
   SEEDFALL_OPEN_S,
   SEEDFALL_PAIR_M,
-  SEEDFALL_PIECES_BEFORE_GRAFTS,
+  SEEDFALL_PIECES,
   SEEDFALL_REACH_M,
   SEEDFALL_WARN_S,
 } from '../src/sim/content/royale_events';
@@ -402,14 +402,14 @@ describe('the Seedfall cache', () => {
     expect(caches[0]!.present).toBe(false);
   });
 
-  it('pays two pieces, all the health and all the mana, until Grafts ship', () => {
+  it('pays one piece, a Heartwood offer, all the health and all the mana', () => {
     expect(seedfallReward()).toEqual({
-      pieces: SEEDFALL_PIECES_BEFORE_GRAFTS,
+      pieces: SEEDFALL_PIECES,
       heal: 1,
       mana: 1,
-      heartwood: false,
+      heartwood: true,
     });
-    expect(SEEDFALL_PIECES_BEFORE_GRAFTS).toBe(2);
+    expect(SEEDFALL_PIECES).toBe(1);
     const { sim, units } = landed(1, 'respawn');
     const u = units[0]!;
     const p = lit(sim);
@@ -427,8 +427,9 @@ describe('the Seedfall cache', () => {
     while (ofType(events, 'royale_cache').length === 0) events = sim.tick();
     // The tick at t leaves the world at t + DT.
     expect(sim.time - DT - since).toBeCloseTo(SEEDFALL_OPEN_S, 6);
-    expect(ofType(events, 'royale_loot')).toHaveLength(2);
-    expect(u.items.length).toBe(items + 2);
+    expect(ofType(events, 'royale_loot')).toHaveLength(1);
+    expect(u.items.length).toBe(items + 1);
+    expect(sim.royale!.offers.get(u.id)!.map((o) => o.grade)).toContain('heartwood');
     expect(u.hp).toBe(u.maxHp);
     expect(u.mana).toBe(u.maxMana);
     const tally = sim.royaleMode!.tally;
