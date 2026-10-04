@@ -430,6 +430,18 @@ export function duskDepth(pos: Point, dusk: Pick<SnapDusk, 'c' | 'r' | 'p'>): nu
   return Math.max(0, len3(pos.x - cx, pos.y - cy, pos.z - cz) - dusk.r);
 }
 
+// The Dusk's burn takes a sliver of health every tick (maxHp * burn * DT,
+// src/sim/royale/mode.ts). A drop no bigger than DUSK_TICK_WINDOW_S of it
+// (a frame may carry a few ticks), while the champion stands outside the
+// light, is the Dusk alone: no damage floater (the playtest's "-1 -2"
+// piled over the head), no hit sound or flash, and no fight. The burn is
+// the HUD's pill ("In the Dusk -2%/s").
+export const DUSK_TICK_WINDOW_S = 0.3;
+export function duskTickOnly(drop: number, maxHp: number, burn: number, outside: boolean): boolean {
+  if (!outside || !(burn > 0) || !(drop > 0)) return false;
+  return drop <= maxHp * burn * DUSK_TICK_WINDOW_S + 1;
+}
+
 // The frost at the screen's edge and the wind's level, 0 to 1, by depth:
 // a step past the edge is felt, twelve meters in is the full cold.
 export const FROST_FULL_M = 12;
