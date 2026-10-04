@@ -17,6 +17,7 @@ import { otherTeam } from '../sim/teams';
 import { type AbilityKey, DT, type TeamId, type Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import { buildPictureNotice } from '../ui/picture_notice';
+import { MARK_COLORS, markAuras } from '../ui/royale_hunted';
 import { duskDepth, duskTickOnly, frostLevel } from '../ui/royale_moments';
 import { teamLook } from '../ui/team_look';
 import type { IWorld } from '../world_api';
@@ -157,6 +158,10 @@ interface TrackedUnit {
   lastHp: number;
   stunMark: THREE.Sprite | null;
   rootMark: THREE.Mesh | null;
+  // The battle royale's hunted (ui/royale_hunted.ts markAuras): a ring at
+  // the feet in the color of the mark the champion carries (the Wrath, the
+  // Lodestar, an Ablaze run), created lazily the first time it carries one.
+  markAura: THREE.Mesh | null;
   // The Wrath's mark (CONTEXT.md): a champion under the execute line while
   // the enemy holds the Wrath, created lazily the first time it is doomed.
   wrathMark: THREE.Sprite | null;
@@ -337,6 +342,7 @@ export class Renderer {
   }
   private readonly markerGeometry = new THREE.RingGeometry(0.5, 0.8, 24);
   private readonly rootGeometry = new THREE.RingGeometry(0.7, 0.95, 18);
+  private readonly auraGeometry = new THREE.RingGeometry(1.0, 1.4, 36);
   private readonly markers: {
     mesh: THREE.Mesh;
     material: THREE.MeshBasicMaterial;
@@ -1980,6 +1986,8 @@ export class Renderer {
   onSimTick(): void {
     this.planet?.onTick();
     const scoreRows = this.world.scoreboard();
+    // The marked champions on the planet and the mark each wears.
+    const auras = this.planet ? markAuras(this.planet.base.royaleView?.() ?? null) : null;
     for (const [id, u] of this.world.units) {
       let t = this.tracked.get(id);
       if (!t) {
@@ -2030,6 +2038,7 @@ export class Renderer {
           lastHp: u.hp,
           stunMark: null,
           rootMark: null,
+          markAura: null,
           wrathMark: null,
           markPips: null,
           markKey: 0,
@@ -2316,6 +2325,34 @@ export class Renderer {
         t.rootMark = ring;
       }
       if (t.rootMark) t.rootMark.visible = rooted;
+
+      // The hunted's aura: everyone who sees the champion sees why every
+      // globe shows it, pulsing in the mark's color.
+      const aura = auras?.get(id) ?? null;
+      if (aura && !t.markAura) {
+        const ring = new THREE.Mesh(
+          this.auraGeometry,
+          new THREE.MeshBasicMaterial({
+            color: MARK_COLORS[aura].hex,
+            transparent: true,
+            opacity: 0.8,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+          }),
+        );
+        ring.userData.sharedGeo = true;
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.11;
+        t.mesh.add(ring);
+        t.markAura = ring;
+      }
+      if (t.markAura) {
+        t.markAura.visible = visible && aura !== null && !u.dead;
+        if (aura) {
+          (t.markAura.material as THREE.MeshBasicMaterial).color.setHex(MARK_COLORS[aura].hex);
+          t.markAura.scale.setScalar(1 + 0.12 * Math.sin(nowMs / 160));
+        }
+      }
 
       // The Wrath's mark (CONTEXT.md): while the enemy team holds the
       // Wrath, a champion at or under the execute line wears a pulsing

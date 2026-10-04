@@ -31,7 +31,8 @@ export interface RoyaleSkill {
   kite: boolean;
   // Seconds of margin it keeps ahead of the Dusk's next cap.
   duskMargin: number;
-  // Takes on the big creatures once strong enough.
+  // Takes on the big creatures once strong enough (RISING_LEVEL,
+  // CREATURE_HP) and answers a Rising's call; without it only a steal.
   creatures: boolean;
   // Bystanders this close weigh in the odds as much as the target: a
   // strong bot reads the champion beside the fight as a third fighter.
@@ -70,7 +71,7 @@ export const ROYALE_SKILLS: Readonly<Record<RoyaleSkillId, RoyaleSkill>> = {
     chase: 13,
     kite: true,
     duskMargin: 14,
-    creatures: false,
+    creatures: true,
     bystanderFullM: 0,
     seedfallM: 55,
     clamorM: 30,
@@ -185,3 +186,35 @@ export const CLAMOR_PHASE = 2;
 export const CLAMOR_ALIVE = 25;
 // A wander never starts while a cache or a Seedfall stands this close.
 export const ROAM_GOAL_M = 80;
+// The Risings (calls.ts risingCall): a normal or strong bot at RISING_LEVEL
+// or more and RISING_HP of its health sets off for a Rising within
+// RISING_CALL_M from RISING_LEAD_S before it rises, and takes on a big body
+// in reach (brain.ts neutralTarget) at RISING_LEVEL and CREATURE_HP; a
+// gentle bot only steals: a body under STEAL_BODY_HP within STEAL_M. At
+// level 5 and within 60 m, the Pyrefang fell in one match of three (the
+// report, seeds 1 to 6): few seats stand at level 5 by 3:00, and a ring is
+// far from most of them.
+export const RISING_LEVEL = 4;
+export const RISING_HP = 0.75;
+export const RISING_CALL_M = 80;
+export const RISING_LEAD_S = 10;
+export const CREATURE_HP = 0.6;
+export const STEAL_BODY_HP = 0.3;
+export const STEAL_M = 30;
+// The hunted (calls.ts markCall): a mark shown within MARK_FRESH_S and
+// MARK_CALL_M draws a normal or strong bot whose odds against it (its
+// level, at full health) reach its nerve; a gentle bot walks WARY_STEP_M
+// away from one shown within WARY_M.
+export const MARK_FRESH_S = 10;
+export const MARK_CALL_M = 50;
+export const WARY_M = 25;
+export const WARY_STEP_M = 10;
+// A Rising's site past the light's edge (calls.ts risingReachable): the
+// rings stand where they stand, and from 3:00 the first closing leaves
+// half the planet dark, so half the big creatures rose in the dark and
+// nobody took them (the report, tranche 2). A bot goes in for one while the
+// dark burns RISING_DARK_BURN a second or less, within RISING_DARK_M of the
+// edge, with RISING_DARK_HP of its health or more; under it, it leaves.
+export const RISING_DARK_BURN = 0.02;
+export const RISING_DARK_M = 30;
+export const RISING_DARK_HP = 0.45;

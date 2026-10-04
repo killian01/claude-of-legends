@@ -34,6 +34,7 @@ import {
   layoutArrows,
   seedfallPointed,
 } from './royale_edges';
+import { huntedCalls, huntedTargets, RisingWatch, risenCalls } from './royale_hunted';
 import {
   COMPACT_DONE_MAX_W_PX,
   COMPACT_NOTE_MAX_W_PX,
@@ -112,6 +113,19 @@ const CSS = `
 .br-edge b { position: absolute; left: 0; top: 15px; white-space: nowrap; text-align: center;
   transform: translateX(-50%); font: 800 11.5px system-ui, sans-serif; color: #ffe7a0;
   text-shadow: 0 1px 3px #000; font-variant-numeric: tabular-nums; }
+/* The Risings and the hunted keep the dial's shape in their own colors
+   (ui/royale_hunted.ts). */
+.br-edge[data-kind='rising'] i { background: radial-gradient(circle at 40% 40%, #ffe2c8, #ff8a3c 60%, #7a2a08);
+  box-shadow: 0 0 14px rgba(255, 140, 60, 0.85); }
+.br-edge[data-kind='rising'] b { color: #ffc89a; }
+.br-edge[data-kind='wrath'] i { background: radial-gradient(circle at 40% 40%, #ffffff, #d8ccff 60%, #4a3a80);
+  box-shadow: 0 0 14px rgba(230, 220, 255, 0.9); }
+.br-edge[data-kind='wrath'] b { color: #efe8ff; }
+.br-edge[data-kind='lodestar'] i { background: radial-gradient(circle at 40% 40%, #fffbe0, #ffd24a 60%, #8a6a10);
+  box-shadow: 0 0 14px rgba(255, 214, 80, 0.9); }
+.br-edge[data-kind='ablaze'] i { background: radial-gradient(circle at 40% 40%, #ffe0c0, #ff7a2a 60%, #6a1a04);
+  box-shadow: 0 0 14px rgba(255, 120, 40, 0.85); }
+.br-edge[data-kind='ablaze'] b { color: #ffb070; }
 .br-flight { position: absolute; width: 34px; height: 34px; border-radius: 7px; pointer-events: none;
   border: 1px solid #f0c860; box-shadow: 0 0 16px rgba(240, 200, 96, 0.9); z-index: 7; }
 /* A phone: a loot line that says what the piece adds runs long, so it
@@ -188,6 +202,8 @@ export class RoyaleHudMoments {
   // its state, and a takedown the viewer made or saw rings nothing.
   private clamorsDue: SnapClamor[] = [];
   private readonly rush = new SeedfallRush();
+  // The Risings that came up since the last tick (ui/royale_hunted.ts).
+  private readonly risings = new RisingWatch();
   private readonly chimes = new EdgeChimes();
   private readonly style: HTMLStyleElement;
   private readonly spot: HTMLElement;
@@ -300,6 +316,9 @@ export class RoyaleHudMoments {
       const bearing = royaleProjector()?.bearing(clash.at) ?? 0;
       playSfx('clash', 0.9 * clash.gain, { pan: panOf(bearing) });
     }
+
+    // A Rising come up: its call (the Warden's in the recorded voice).
+    if (r.st === 'play') this.play(risenCalls(this.risings.step(r.ri).risen));
 
     // A seed's rush leads into its landing, by distance and bearing.
     for (const id of this.rush.step(r.sf, time)) {
@@ -477,6 +496,9 @@ export class RoyaleHudMoments {
     }
     this.landings(notes);
     this.play(this.moments.onNotes(notes, world.time));
+    // The Risings called, the marks, the Wrath passing, a run snuffed out.
+    const nameOf = (id: number) => this.host.victimName({ unitId: id, killerId: 0 });
+    this.play(huntedCalls(notes, selfId, world.time, nameOf));
   }
 
   // The seeds that crashed down this batch: each one's shockwave, dust and
@@ -548,10 +570,29 @@ export class RoyaleHudMoments {
     const projector = royaleProjector();
     const stage = this.edges.parentElement;
     const seen = new Set<string>();
-    if (r && projector && stage && r.st === 'play' && (r.sf?.length ?? 0) > 0) {
+    const hunted = r ? huntedTargets(r, this.host.world.time, this.host.selfId) : [];
+    const any = (r?.sf?.length ?? 0) > 0 || hunted.length > 0;
+    if (r && projector && stage && r.st === 'play' && any) {
       const self = projector.self();
       const time = this.host.world.time;
       const targets: EdgeTarget[] = [];
+      // The Risings called or standing and the marks while shown.
+      for (const h of hunted) {
+        const p = projector.project(h.at, ARROW_LIFT_M);
+        if (!p) continue;
+        const hidden = p.hidden === true;
+        targets.push({
+          key: h.key,
+          kind: h.kind,
+          x: p.x,
+          y: p.y,
+          behind: p.behind,
+          hidden,
+          bearing: hidden ? (projector.bearing(h.at) ?? undefined) : undefined,
+          distance: self ? arcDistance(self, h.at) : 0,
+          ...(h.secondsLeft !== undefined ? { secondsLeft: h.secondsLeft } : {}),
+        });
+      }
       for (const s of r.sf ?? []) {
         const landed = s[5] === 1;
         if (!seedfallPointed(s[4], landed, time)) continue;
@@ -584,7 +625,9 @@ export class RoyaleHudMoments {
         bottom: 38 + inset.bottom,
         left: 26 + inset.left,
       };
-      for (const c of this.chimes.step(targets, view)) playSfx('chime', 0.85, { pan: c.pan });
+      // A chime for news (a Seedfall, a Rising), not for each show of a mark.
+      const news = targets.filter((t) => t.kind === 'seedfall' || t.kind === 'rising');
+      for (const c of this.chimes.step(news, view)) playSfx('chime', 0.85, { pan: c.pan });
       const ring = this.host.root.classList.contains('compact') ? compactRing(view) : undefined;
       const arrows = edgeArrows(targets, view, ring);
       // Each line's words first: its width is part of the arrow's room.
@@ -592,6 +635,7 @@ export class RoyaleHudMoments {
         let node = this.arrows.get(a.key);
         if (!node) {
           node = el('div', 'br-edge');
+          node.dataset.kind = a.kind;
           node.append(el('i', ''), el('b', ''));
           this.edges.appendChild(node);
           this.arrows.set(a.key, node);

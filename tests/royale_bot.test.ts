@@ -15,19 +15,41 @@ import {
   CALM_NERVE,
   CLAMOR_ALIVE,
   CLAMOR_PHASE,
+  CREATURE_HP,
   ERRAND_HP,
   ERRAND_NEAR_M,
+  MARK_CALL_M,
+  MARK_FRESH_S,
   ONE_LIFE_PACE,
   PACE_NERVE_MAX,
   PACE_NERVE_PER_SEAT,
+  RISING_CALL_M,
+  RISING_DARK_BURN,
+  RISING_DARK_HP,
+  RISING_DARK_M,
+  RISING_HP,
+  RISING_LEAD_S,
+  RISING_LEVEL,
   ROAM_GOAL_M,
   ROYALE_SKILLS,
   SEEDFALL_LATE_S,
   SEEDFALL_STANDOFF_M,
+  STEAL_BODY_HP,
+  STEAL_M,
+  WARY_M,
+  WARY_STEP_M,
 } from '../src/sim/content/bots/royale_skills';
 import { CHAMPIONS } from '../src/sim/content/champions';
 import { dirTo, dist, type Vec3 } from '../src/sim/geo';
-import type { Action, Observation, ObsRoyale, ObsSeedfall, ObsUnit } from '../src/sim/policy';
+import type {
+  Action,
+  Observation,
+  ObsMark,
+  ObsRising,
+  ObsRoyale,
+  ObsSeedfall,
+  ObsUnit,
+} from '../src/sim/policy';
 import { Rng } from '../src/sim/rng';
 import {
   CAMP_CLEAR_M,
@@ -41,9 +63,10 @@ import {
   paceNerve,
   RESPAWN_PICK_S,
   ROOM_M,
+  risingInDark,
   SETTLE_M,
 } from '../src/sim/royale/bot/brain';
-import { royaleCall, seedfallErrand } from '../src/sim/royale/bot/calls';
+import { markOdds, royaleCall, seedfallErrand } from '../src/sim/royale/bot/calls';
 import { HOT_DROP_M, pickDropPoint } from '../src/sim/royale/bot/drop_pick';
 import { aimAt, royaleOdds } from '../src/sim/royale/bot/fight';
 import { buildSense } from '../src/sim/royale/bot/sense';
@@ -1200,5 +1223,158 @@ describe('a held Respawn Seedfall opening', () => {
   it('is Respawn and a Seedfall cache only', () => {
     expect(on({ variant: 'one_life', units: [beside] }).why).not.toContain('opening-held');
     expect(on({ kind: 'plain', units: [beside] }).why).not.toContain('opening-held');
+  });
+});
+
+describe('the Risings and the hunted', () => {
+  const callOf = (o: Observation, skill = normal, nerve = 0.5) =>
+    royaleCall(buildSense(o, o.royale!, layout, skill), nerve);
+  function rising(at: Vec3, over: Partial<ObsRising> = {}): ObsRising {
+    return {
+      kind: 'pyrefang',
+      x: at.x,
+      y: at.y,
+      z: at.z,
+      risesAt: 25,
+      up: false,
+      hpFrac: 1,
+      ...over,
+    };
+  }
+  function mark(id: number, at: Vec3, over: Partial<ObsMark> = {}): ObsMark {
+    return { id, kind: 'lodestar', level: 3, at: { ...at }, shownAt: 18, ...over };
+  }
+  const level = (n: number, hpFrac = 1) => ({ level: n, hpFrac });
+
+  it('answers a Rising at its level and three quarters of its health, from 10 s ahead, in reach', () => {
+    const at = along(here, east, RISING_CALL_M - 1, R);
+    const on = (self: object, r: Partial<ObsRising> = {}, skill = normal) =>
+      callOf(obs(here, { royale: { risings: [rising(at, r)] } }, self), skill)?.kind ?? null;
+    expect(on(level(RISING_LEVEL))).toBe('rising');
+    expect(on(level(RISING_LEVEL), {}, strong)).toBe('rising');
+    expect(on(level(RISING_LEVEL - 1))).toBeNull();
+    expect(on(level(RISING_LEVEL, RISING_HP - 0.01))).toBeNull();
+    // From 10 s before it rises (time 20 in the observation).
+    expect(on(level(RISING_LEVEL), { risesAt: 20 + RISING_LEAD_S })).toBe('rising');
+    expect(on(level(RISING_LEVEL), { risesAt: 20 + RISING_LEAD_S + 0.5 })).toBeNull();
+    const far = along(here, east, RISING_CALL_M + 1, R);
+    expect(
+      callOf(obs(here, { royale: { risings: [rising(far)] } }, level(RISING_LEVEL))),
+    ).toBeNull();
+    // A gentle bot does not answer the call.
+    expect(on(level(9), {}, gentle)).toBeNull();
+  });
+
+  it('goes a little way into a mild dark for a Rising, and stays there for it', () => {
+    const dusk = (burn: number): DuskState => ({
+      phase: 1,
+      now: { center: here, radius: 40 },
+      next: { center: here, radius: 30 },
+      phaseEndsAt: 100,
+      shrinking: false,
+      burn,
+    });
+    const site = along(here, east, 40 + RISING_DARK_M - 2, R);
+    const beyond = along(here, east, 40 + RISING_DARK_M + 4, R);
+    const call = (at: Vec3, burn: number, hpFrac = 1) =>
+      callOf(obs(here, { royale: { dusk: dusk(burn), risings: [rising(at)] } }, level(9, hpFrac)))
+        ?.kind ?? null;
+    expect(call(site, RISING_DARK_BURN)).toBe('rising');
+    expect(call(site, RISING_DARK_BURN + 0.01)).toBeNull();
+    expect(call(beyond, RISING_DARK_BURN)).toBeNull();
+    // Standing in the dark by a body it takes on: no step back to the light.
+    const by = along(site, north, 3, R);
+    const body: ObsUnit = {
+      id: 40,
+      kind: 'creature',
+      friendly: false,
+      ...site,
+      hpFrac: 1,
+      radius: 1,
+    };
+    const there = obs(by, { units: [body], royale: { dusk: dusk(RISING_DARK_BURN) } }, level(9));
+    const sense = buildSense(there, there.royale!, layout, normal);
+    expect(risingInDark(sense)).toBe(true);
+    expect(whys(there, normal).why).toEqual(['rising-fight']);
+    // Hurt under RISING_DARK_HP, or with the dark burning harder: out.
+    const hurt = obs(
+      by,
+      { units: [body], royale: { dusk: dusk(RISING_DARK_BURN) } },
+      level(9, RISING_DARK_HP - 0.01),
+    );
+    expect(whys(hurt, normal).why).toEqual(['dark']);
+    const hot = obs(by, { units: [body], royale: { dusk: dusk(0.04) } }, level(9));
+    expect(whys(hot, normal).why).toEqual(['dark']);
+  });
+
+  it('lets a gentle bot steal a body under 30% within 30 m', () => {
+    const on = (hpFrac: number, d = STEAL_M - 1) =>
+      callOf(
+        obs(here, { royale: { risings: [rising(along(here, east, d, R), { up: true, hpFrac })] } }),
+        gentle,
+      )?.kind ?? null;
+    expect(on(STEAL_BODY_HP - 0.01)).toBe('rising');
+    expect(on(STEAL_BODY_HP + 0.01)).toBeNull();
+    expect(on(0.1, STEAL_M + 1)).toBeNull();
+  });
+
+  it('takes on a big body in reach at its level and 60% of its health', () => {
+    const at = along(here, north, 6, R);
+    const body: ObsUnit = {
+      id: 40,
+      kind: 'creature',
+      friendly: false,
+      x: at.x,
+      y: at.y,
+      z: at.z,
+      hpFrac: 1,
+      radius: 1,
+    };
+    const on = (skill: typeof normal, self: object, b: Partial<ObsUnit> = {}) =>
+      whys(obs(here, { units: [{ ...body, ...b }] }, self), skill).why;
+    expect(on(normal, level(RISING_LEVEL, CREATURE_HP))).toEqual(['rising-fight']);
+    expect(on(strong, level(RISING_LEVEL, CREATURE_HP))).toEqual(['rising-fight']);
+    expect(on(normal, level(RISING_LEVEL - 1))).not.toContain('rising-fight');
+    expect(on(normal, level(RISING_LEVEL, CREATURE_HP - 0.01))).not.toContain('rising-fight');
+    expect(on(gentle, level(9))).not.toContain('rising-fight');
+    expect(on(gentle, level(3), { hpFrac: STEAL_BODY_HP - 0.01 })).toEqual(['rising-fight']);
+    // An enemy beside it is the race for the last hit, not a reason to wait.
+    const rival = enemy(9, along(here, east, 9, R));
+    const raced = whys(obs(here, { units: [body, rival] }, level(RISING_LEVEL)), normal, layout, 3);
+    expect(raced.why).toContain('rising-fight');
+  });
+
+  it('hunts a mark shown in the last 10 s within 50 m when its odds reach the nerve', () => {
+    const at = along(here, east, MARK_CALL_M - 1, R);
+    const on = (m: Partial<ObsMark>, nerve = 0.5, self: object = level(3)) =>
+      callOf(obs(here, { royale: { marks: [mark(7, at, m)] } }, self), normal, nerve)?.kind ?? null;
+    expect(on({})).toBe('mark');
+    expect(on({ shownAt: 20 - MARK_FRESH_S - 0.1 })).toBeNull();
+    expect(on({ level: 9 })).toBeNull();
+    expect(on({ level: 9 }, 0.5, level(9))).toBe('mark');
+    expect(on({}, 0.51)).toBeNull();
+    // Its own mark is no hunt.
+    expect(on({ id: 1 })).toBeNull();
+    const far = along(here, east, MARK_CALL_M + 1, R);
+    expect(callOf(obs(here, { royale: { marks: [mark(7, far)] } }), normal, 0.5)).toBeNull();
+    const sense = buildSense(obs(here), royale(), layout, normal);
+    expect(markOdds(sense, mark(7, at))).toBeCloseTo(0.5, 9);
+  });
+
+  it('walks a gentle bot away from a mark shown within 25 m, even hurt', () => {
+    const at = along(here, east, WARY_M - 1, R);
+    const o = obs(here, { royale: { marks: [mark(7, at)] } }, { hpFrac: 0.3 });
+    const c = callOf(o, gentle);
+    expect(c?.kind).toBe('wary');
+    const to = { x: c!.x, y: c!.y, z: c!.z };
+    expect(dist(to, at)).toBeGreaterThan(dist(here, at));
+    expect(dist(here, to)).toBeGreaterThan(WARY_STEP_M * 0.8);
+    expect(dist(here, to)).toBeLessThanOrEqual(WARY_STEP_M + 1e-6);
+    const far = obs(here, { royale: { marks: [mark(7, along(here, east, WARY_M + 1, R))] } });
+    expect(callOf(far, gentle)).toBeNull();
+    expect(callOf(o, normal)).toBeNull();
+    // A slayer, at full health after its creature, is no threat to flee.
+    const slayer = obs(here, { royale: { marks: [mark(7, at, { kind: 'slayer' })] } });
+    expect(callOf(slayer, gentle)).toBeNull();
   });
 });

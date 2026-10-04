@@ -19,9 +19,11 @@ import type {
   SnapRoyale,
   SnapSeedfall,
 } from '../src/net/royale_wire';
+import { RING_RISE_AT_S, RISING_WARN_S } from '../src/sim/content/royale_events';
 import { cacheOpenS } from '../src/sim/royale/caches';
 import { firstSeedfallCallAt } from '../src/sim/royale/seedfall';
 import { CACHE_OPEN_S, type CacheState } from '../src/sim/royale/types';
+import { type RankedSeat, rankAndGapIn, royaleRanking } from './royale_ranking';
 import type { RoyaleSim } from './royale_sim';
 import type { RoyaleSnapContext, RoyaleViewer } from './royale_snapshot';
 import { round2 } from './snapshot';
@@ -98,8 +100,53 @@ export const seedfallsBlock: Builder<SnapSeedfall[]> = (sim, viewer) => {
   );
   return sentOnChange(viewer, 'sf', value, sim.time, 1);
 };
-export const risingsBlock: Builder<SnapRising[]> = () => undefined;
-export const marksBlock: Builder<SnapMark[]> = () => undefined;
+// A standing body's health share on the wire, in steps of this: the bar
+// moves visibly, and the block is not resent for every point of damage.
+export const RISING_HP_STEP = 0.02;
+
+// The Risings called and standing, everyone's (src/sim/royale/risings.ts):
+// on the tick the list changes, from the first call on (an empty list
+// once none stands, so the mirror lets go of it).
+export const risingsBlock: Builder<SnapRising[]> = (sim, viewer) => {
+  const r = sim.royale;
+  if (r.stage !== 'play') return undefined;
+  if (r.risings.length === 0 && sim.time + 1e-9 < r.dropEndsAt + RING_RISE_AT_S - RISING_WARN_S) {
+    return undefined;
+  }
+  const value = r.risings.map((x): SnapRising => {
+    const body = x.unitId !== null ? sim.units.get(x.unitId) : undefined;
+    const frac = body && body.maxHp > 0 ? body.hp / body.maxHp : 1;
+    return [
+      x.kind,
+      round2(x.pos.x),
+      round2(x.pos.y),
+      round2(x.pos.z),
+      round2(x.risesAt),
+      x.up ? 1 : 0,
+      round2(Math.ceil(frac / RISING_HP_STEP) * RISING_HP_STEP),
+    ];
+  });
+  return sentOnChange(viewer, 'ri', value, sim.time);
+};
+
+// The marks, everyone's (src/sim/royale/marks.ts): who, why, the last point
+// shown and when, on the tick the list changes (a shown mark's point
+// follows its champion while the show lasts; hidden, it holds still).
+export const marksBlock: Builder<SnapMark[]> = (sim, viewer) => {
+  const r = sim.royale;
+  if (r.stage !== 'play') return undefined;
+  const value = r.marks.map(
+    (m): SnapMark => [
+      m.unitId,
+      m.kind,
+      round2(m.at.x),
+      round2(m.at.y),
+      round2(m.at.z),
+      round2(m.shownAt),
+    ],
+  );
+  return sentOnChange(viewer, 'mk', value, sim.time);
+};
 // How far from the viewer a Clamor is sent: past the client's hearing
 // (60 m, ui/royale_moments.ts CLAMOR_HEAR_M) and the minimap's corners
 // (planet_minimap.ts, a 110 m square), nobody on that screen can use it.
@@ -125,8 +172,32 @@ export const clamorsBlock: Builder<SnapClamor[]> = (sim, viewer) => {
   }
   return sentOnChange(viewer, 'cl', list, sim.time);
 };
-export const rankBlock: Builder<number> = () => undefined;
-export const gapBlock: Builder<number> = () => undefined;
+// Respawn's ranking, made once a tick for every viewer of the match.
+const rankings = new WeakMap<RoyaleSim, { tick: number; ranking: number[] }>();
+
+function respawnRankingOf(sim: RoyaleSim): number[] {
+  const kept = rankings.get(sim);
+  if (kept && kept.tick === sim.tickCount) return kept.ranking;
+  const seats: RankedSeat[] = [];
+  for (const u of sim.units.values()) {
+    if (u.kind !== 'champion') continue;
+    seats.push({ unitId: u.id, name: '', championId: '', bot: false, deaths: u.deaths });
+  }
+  const ranking = royaleRanking(sim.royale, seats);
+  rankings.set(sim, { tick: sim.tickCount, ranking });
+  return ranking;
+}
+
+function standing(sim: RoyaleSim, viewer: RoyaleViewer) {
+  const r = sim.royale;
+  if (r.variant !== 'respawn' || r.stage !== 'play') return null;
+  return rankAndGapIn(respawnRankingOf(sim), r, viewer.unitId);
+}
+
+// Respawn: the recipient's rank and its gap (server/royale_ranking.ts
+// rankAndGap), every snapshot of the play: the HUD's top line.
+export const rankBlock: Builder<number> = (sim, viewer) => standing(sim, viewer)?.rank;
+export const gapBlock: Builder<number> = (sim, viewer) => standing(sim, viewer)?.gap;
 export const reprieveBlock: Builder<number> = () => undefined;
 // The champions in their Grace the viewer sees, itself included
 // (src/sim/royale/grace.ts; RoyaleState.arriving), each with when it runs

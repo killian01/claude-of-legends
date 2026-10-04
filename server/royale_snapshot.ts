@@ -12,7 +12,7 @@
 import type { ServerMsg, SnapEvent, SnapMobile, SnapUnit, SnapWall } from '../src/net/protocol';
 import type { SeatLabel, SnapCache, SnapDusk, SnapRoyale, WirePoint } from '../src/net/royale_wire';
 import type { Vec3 } from '../src/sim/geo';
-import type { DuskState } from '../src/sim/royale/types';
+import { type DuskState, MARK_SHOWN_S } from '../src/sim/royale/types';
 import { placeOf } from './royale_ranking';
 import type { RoyaleSim, RoyaleSimEvent } from './royale_sim';
 import { addRoyaleBlocks, cacheKindOf, openingDuration } from './royale_snapshot_blocks';
@@ -26,9 +26,6 @@ import {
   zoneRecord,
 } from './snapshot';
 
-// How long the score leader's position stays on the wire after the mode
-// shows it (Respawn, LEADER_SHOW_EVERY_S): long enough to see on the globe.
-export const LEADER_SHOWN_S = 3;
 // Ticks between two caches lists (one a second at 20 Hz).
 export const CACHES_EVERY_TICKS = 20;
 
@@ -95,7 +92,10 @@ export function royaleBlock(
       s: r.scores.get(r.leaderId) ?? 0,
     };
     const at = sim.units.get(r.leaderId)?.pos;
-    if (at?.y !== undefined && sim.time - r.leaderShownAt < LEADER_SHOWN_S) {
+    // Where only while the Lodestar's show lasts (marks.ts), the one
+    // length the observation reads too.
+    const shown = sim.time - r.leaderShownAt <= MARK_SHOWN_S && r.leaderShownAt > r.dropEndsAt;
+    if (at?.y !== undefined && shown) {
       leader.at = point(at as Vec3);
     }
     block.leader = leader;

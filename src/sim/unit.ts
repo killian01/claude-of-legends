@@ -413,6 +413,17 @@ function growBody(u: Unit, body: CreatureBody, time: number): void {
   u.xpBounty = body.xpBounty;
 }
 
+// A neutral body scaled at its rise (CombatCtx.neutralScale, the battle
+// royale): its health and its flat strike by the shares given, the bite
+// left alone (a share of the target's health already). Nothing when no
+// scale is given.
+export function scaleNeutral(u: Unit, scale: { hp: number; ad: number } | undefined): void {
+  if (!scale) return;
+  u.hp = Math.round(u.hp * scale.hp);
+  u.maxHp = u.hp;
+  u.stats.ad = Math.round(u.stats.ad * scale.ad);
+}
+
 // The Warden (CONTEXT.md): the neutral river monster. Nominal team 0, but
 // neutral: true makes it hostile to everyone via hostile(). Its body
 // (content/warden.ts) grows with the game clock, the way waves grow.

@@ -50,3 +50,27 @@ code rests on.
   5v5 has never run on the planet.
 - The bots gain a battle royale style under the same decision budget and the same vision as a
   person: a champion sees what its own sight shows.
+
+## Amended: the Risings and the hunted (2026-10-04)
+
+Nine measured matches left the three big creatures untouched, and fifty champions had nothing
+to steer by but the nearest fight. This overrides **Creatures** above for the big ones:
+
+- **Risings.** The Pyrefang and the Voidmaul still rise at 3:00 on their rings, and again
+  150 s after each death; the Warden rises once, at 4:30 in One life and 6:00 in Respawn, at the
+  walkable point nearest the center of the light as it will stand 30 s later, never in the
+  Sanctuary's pit and never a second time. Each is called 30 s ahead. On the planet a champion
+  fights them alone, so their bodies rise at a share of the 5v5's (a big creature at 0.35 of its
+  health, the Warden at 0.22, both at 0.7 of the strike): a level 6 champion with four pieces
+  takes a big creature in about 20 s, the Warden in about half a minute.
+- **What they pay.** A big creature's last hit pays three pieces (two and a Heartwood Graft
+  once Grafts ship), all the health and mana, and shows the slayer to everyone for 4 s. The
+  Warden's last hit carries the Wrath instead of the Boon: one champion's, not a team's, for
+  60 s in One life and 120 s in Respawn, passed to whoever takes its holder down with what was
+  left and at least 45 s, lost to a fall the world dealt.
+- **The hunted.** The Lodestar (Respawn's leader from five takedowns, One life's from two once
+  the second closing starts), an Ablaze run (three in One life, five in Respawn, the three
+  longest) and the Wrath's holder are shown to everyone where they stand, every 20, 15 and 10 s,
+  each show 4 s long. A takedown on the Lodestar counts double and pays a piece; snuffing out a
+  run pays up to three pieces. The 30 s leader show it replaces is gone.
+- **Bots answer them** from the same public signals a person reads (`src/sim/royale/bot/calls.ts`).

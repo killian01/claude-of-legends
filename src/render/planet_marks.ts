@@ -17,6 +17,7 @@ import { gracesOf } from '../net/royale_client';
 import type { SnapCache, SnapRoyale } from '../net/royale_wire';
 import { SEEDFALL_IMPACT_M } from '../sim/content/royale_events';
 import type { Vec3 } from '../sim/geo';
+import { huntedPillars } from '../ui/royale_hunted';
 import { PlanetGrace } from './planet_grace';
 import { type Pillar, PlanetPillars } from './planet_pillars';
 import type { PlanetGround } from './planet_terrain';
@@ -677,8 +678,9 @@ export class PlanetMarks {
   }
 
   // The pillars of the frame, from the mode's blocks: each Seedfall not
-  // yet opened, counting down to its landing and lit once landed.
-  static pillarsOf(royale: SnapRoyale | null): Pillar[] {
+  // yet opened, counting down to its landing and lit once landed; each
+  // Rising, and each mark while shown (ui/royale_hunted.ts), at `time`.
+  static pillarsOf(royale: SnapRoyale | null, time = 0): Pillar[] {
     const out: Pillar[] = [];
     if (royale?.st !== 'play') return out;
     for (const s of royale.sf ?? []) {
@@ -689,6 +691,7 @@ export class PlanetMarks {
         lit: s[5] === 1,
       });
     }
+    out.push(...huntedPillars(royale, time));
     return out;
   }
 
@@ -733,7 +736,7 @@ export class PlanetMarks {
     positions.needsUpdate = true;
     this.picks.geometry.setDrawRange(0, n);
     this.pickMat.size = 15 + 3 * Math.sin(t * 5);
-    this.pillars.setPillars(PlanetMarks.pillarsOf(royale), time, now);
+    this.pillars.setPillars(PlanetMarks.pillarsOf(royale, time), time, now);
     this.grace.update(royale?.st === 'play' ? gracesOf(royale) : [], time, now, unitAt);
   }
 

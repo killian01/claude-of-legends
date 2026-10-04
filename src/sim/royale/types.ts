@@ -66,7 +66,9 @@ export const PAD_REACH_M = 1.4;
 // on them counts this much.
 export const LEADER_SHOW_EVERY_S = 30;
 export const LEADER_TAKEDOWN_SCORE = 2;
-// When the big creatures rise, seconds after landing.
+// When the big creatures first rise, seconds after landing, and the
+// Warden in Respawn (One life's earlier: content/royale_events.ts
+// WARDEN_RISE_AT_S).
 export const RING_CREATURES_AT_S = 180;
 export const WARDEN_AT_S = 360;
 // How long a mark stays shown on everyone's globe after each show: the one

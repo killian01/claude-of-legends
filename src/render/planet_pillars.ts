@@ -6,24 +6,28 @@
 // Seedfall's kind stands here (the loud moments): a pale gold column sixty
 // meters tall over where the seed falls, a ring on the ground closing as
 // the landing nears onto a still ring at the impact's reach (who stands
-// inside it is hit), and the column brighter once it has landed. The
-// Rising, the Wrath and the Lodestar add their kinds in tranche 2.
+// inside it is hit), and the column brighter once it has landed. A Rising
+// stands a taller one over its site in its creature's color, counting down
+// to its rise on a ring at its leash and lit while it stands; the hunted
+// (the Wrath's holder, the Lodestar, an Ablaze run, a slayer) a column where
+// each was last shown, for the show's length (ui/royale_hunted.ts).
 
 import * as THREE from 'three';
-import { SEEDFALL_IMPACT_M, SEEDFALL_WARN_S } from '../sim/content/royale_events';
+import { RISING_WARN_S, SEEDFALL_IMPACT_M, SEEDFALL_WARN_S } from '../sim/content/royale_events';
 import type { Vec3 } from '../sim/geo';
 import type { PlanetGround } from './planet_terrain';
 
-export type PillarKind = 'seedfall' | 'rising' | 'wrath' | 'lodestar';
+export type PillarKind = 'seedfall' | 'rising' | 'wrath' | 'lodestar' | 'ablaze';
 
 // One column this frame: its kind, where it stands, and when what it
 // marks happens (a landing, a rise), for a countdown ring; `lit` once it
-// has happened.
+// has happened; its own color over its kind's (a Rising's creature).
 export interface Pillar {
   kind: PillarKind;
   at: Vec3;
   until?: number;
   lit?: boolean;
+  color?: number;
 }
 
 // How a kind looks: its color, height and width, the countdown's length
@@ -38,6 +42,10 @@ export interface KindLook {
   reach: number;
 }
 
+// A Rising's ring stands about where its body fights: its leash on the
+// planet (a ring's disc and margin, the Warden's thirteen meters).
+export const RISING_RING_M = 8;
+
 export const PILLAR_LOOKS: Partial<Record<PillarKind, KindLook>> = {
   seedfall: {
     color: 0xffcf6a,
@@ -46,6 +54,16 @@ export const PILLAR_LOOKS: Partial<Record<PillarKind, KindLook>> = {
     countdown: SEEDFALL_WARN_S,
     reach: SEEDFALL_IMPACT_M,
   },
+  rising: {
+    color: 0xff7a2e,
+    height: 75,
+    width: 1.6,
+    countdown: RISING_WARN_S,
+    reach: RISING_RING_M,
+  },
+  wrath: { color: 0xf3ecff, height: 50, width: 0.9, countdown: 1, reach: 1 },
+  lodestar: { color: 0xffd24a, height: 55, width: 1.0, countdown: 1, reach: 1 },
+  ablaze: { color: 0xff8a3c, height: 40, width: 0.7, countdown: 1, reach: 1 },
 };
 
 // At most this many columns of a kind (five Seedfalls a match).
@@ -97,6 +115,7 @@ export class PlanetPillars {
   private shown: readonly Pillar[] = [];
   private readonly kinds = new Map<PillarKind, KindDraw>();
   private readonly owned: { dispose(): void }[] = [];
+  private readonly tint = new THREE.Color();
 
   constructor(
     readonly ground: PlanetGround,
@@ -115,8 +134,10 @@ export class PlanetPillars {
         true,
       );
       beam.translate(0, look.height / 2, 0);
+      // White under each column's own color (setColorAt): a kind's look
+      // or the pillar's.
       const columnMat = new THREE.MeshBasicMaterial({
-        color: look.color,
+        color: 0xffffff,
         map: texture,
         transparent: true,
         opacity: 0.35,
@@ -130,7 +151,7 @@ export class PlanetPillars {
       ring.rotateX(-Math.PI / 2);
       ring.translate(0, 0.15, 0);
       const ringMat = new THREE.MeshBasicMaterial({
-        color: look.color,
+        color: 0xffffff,
         transparent: true,
         opacity: 0.8,
         depthWrite: false,
@@ -175,15 +196,21 @@ export class PlanetPillars {
         // Lit, the column swells and burns brighter; called, it breathes.
         const swell = p.lit ? 1.4 : 1 + 0.06 * Math.sin(t * 3 + i);
         draw.columns.setMatrixAt(i, this.standing(p.at, new THREE.Vector3(swell, 1, swell)));
+        const color = this.tint.setHex(p.color ?? draw.look.color);
+        draw.columns.setColorAt(i, color);
         if (p.until !== undefined && !p.lit) {
           const { closing, still } = countdownRings(draw.look, p.until, time);
+          draw.rings.setColorAt(rings, color);
           draw.rings.setMatrixAt(
             rings++,
             this.standing(p.at, new THREE.Vector3(closing, 1, closing)),
           );
+          draw.rings.setColorAt(rings, color);
           draw.rings.setMatrixAt(rings++, this.standing(p.at, new THREE.Vector3(still, 1, still)));
         }
       }
+      if (draw.columns.instanceColor) draw.columns.instanceColor.needsUpdate = true;
+      if (draw.rings.instanceColor) draw.rings.instanceColor.needsUpdate = true;
       draw.columns.count = mine.length;
       draw.rings.count = rings;
       draw.columns.instanceMatrix.needsUpdate = true;
