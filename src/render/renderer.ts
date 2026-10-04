@@ -60,6 +60,7 @@ import { attachGhosts, ghostColor, ghostMaterial } from './planet_ghost';
 import { heartwoodIcon } from './planet_graft_aura';
 import type { PlanetMinimap } from './planet_minimap';
 import { PlanetStage } from './planet_stage';
+import { ProgramKeeper } from './program_keeper';
 import { RING_FOG_EDGE, ringFogOpening } from './ring_fog';
 import {
   clearRoyaleProjector,
@@ -449,6 +450,10 @@ export class Renderer {
   // champion, skin and tint (planet mode: fifty champions slip in and out
   // of sight all match, and a fresh clone each time hitches).
   private readonly visualPool = new Map<string, ChampionVisual[]>();
+  // Every shader program linked here kept until the renderer goes
+  // (program_keeper.ts): an effect cast again finds its program instead of
+  // linking it anew mid-fight.
+  private readonly programs = new ProgramKeeper();
 
   constructor(container: HTMLElement, world: IWorld, terrain: RenderTerrain) {
     this.terrain = terrain;
@@ -3509,6 +3514,7 @@ export class Renderer {
       const restore = this.planet.beginDraw(this.vfx.pooledLights());
       this.gl.render(this.scene, this.camera);
       restore();
+      this.programs.keep(this.gl.info.programs ?? []);
       return;
     }
     const eye = this.toScene(target);
@@ -3523,6 +3529,7 @@ export class Renderer {
     this.camera.getWorldDirection(this.camDir);
     this.camDirScene.set(this.camDir.x, this.camDir.y, -this.camDir.z);
     this.gl.render(this.scene, this.camera);
+    this.programs.keep(this.gl.info.programs ?? []);
   }
 
   // The planet's chart moved (planet_stage.ts): every point already placed
