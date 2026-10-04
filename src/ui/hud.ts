@@ -54,6 +54,7 @@ import {
   wrathChipFace,
 } from './chip_text';
 import { COMPACT_ROW_GAP, COMPACT_SCALE, compactTapsCss } from './compact_taps';
+import { setText } from './dom_write';
 import {
   buildFeedbackBox,
   FEEDBACK_ASK,
@@ -3089,7 +3090,7 @@ export class Hud {
     const wardenUp = objAt === null;
     const rings = this.world.ringClocks();
     const pit = this.world.wardenPit() ?? undefined;
-    this.metaText.textContent = `${clock} · ${objectiveLine(rings, objAt, this.world.time, pit)}`;
+    setText(this.metaText, `${clock} · ${objectiveLine(rings, objAt, this.world.time, pit)}`);
     const mineBoon = this.world.teamBuff(this.selfTeam);
     const enemyBoon = this.world.teamBuff(otherTeam(this.selfTeam));
     if (this.lastWardenUp !== null && wardenUp !== this.lastWardenUp) {
@@ -3119,8 +3120,8 @@ export class Hud {
     const mineFavors = this.world.teamFavors(this.selfTeam);
     const enemyFavors = this.world.teamFavors(otherTeam(this.selfTeam));
     this.announceRings(rings, mineFavors, enemyFavors);
-    this.levelBadge.textContent = String(u.level);
-    this.goldText.textContent = `${Math.floor(u.gold)}g`;
+    setText(this.levelBadge, String(u.level));
+    setText(this.goldText, `${Math.floor(u.gold)}g`);
     if (this.lastLevel !== -1 && u.level > this.lastLevel) {
       playSfx('levelup');
       this.levelBadge.classList.remove('pop');
@@ -3139,16 +3140,20 @@ export class Hud {
     const shieldFrac = Math.max(0, Math.min(1, hpFrac + shield / u.maxHp) - hpFrac);
     this.hpShield.style.left = `${hpFrac * 100}%`;
     this.hpShield.style.width = `${shieldFrac * 100}%`;
-    this.hpText.textContent =
+    setText(
+      this.hpText,
       shield > 0
         ? `${Math.ceil(u.hp)} (+${Math.round(shield)}) / ${Math.round(u.maxHp)}`
-        : `${Math.ceil(u.hp)} / ${Math.round(u.maxHp)}`;
+        : `${Math.ceil(u.hp)} / ${Math.round(u.maxHp)}`,
+    );
     this.manaFill.style.transform = `scaleX(${Math.max(0, u.mana / u.maxMana)})`;
-    this.manaText.textContent = `${Math.floor(u.mana)} / ${Math.round(u.maxMana)}`;
+    setText(this.manaText, `${Math.floor(u.mana)} / ${Math.round(u.maxMana)}`);
     const xpFrac = u.level >= MAX_LEVEL ? 1 : Math.min(1, u.xp / xpForNext(u.level));
     this.xpFill.style.transform = `scaleX(${xpFrac})`;
-    this.xpText.textContent =
-      u.level >= MAX_LEVEL ? 'max level' : `XP ${Math.floor(u.xp)} / ${xpForNext(u.level)}`;
+    setText(
+      this.xpText,
+      u.level >= MAX_LEVEL ? 'max level' : `XP ${Math.floor(u.xp)} / ${xpForNext(u.level)}`,
+    );
 
     // Every chip is an icon (chip_text.ts): a glyph, a small number, and
     // the whole fact in a tooltip on hover; the row of full sentences took
@@ -3235,11 +3240,13 @@ export class Hud {
       if (rank <= 0) {
         slot.cd.style.display = 'flex';
         // R waits on champion level; basics wait on a skill point.
-        slot.cd.textContent =
-          key === 'R' && u.level < ULT_RANK_LEVELS[0]! ? `Lv${ULT_RANK_LEVELS[0]}` : '+';
+        setText(
+          slot.cd,
+          key === 'R' && u.level < ULT_RANK_LEVELS[0]! ? `Lv${ULT_RANK_LEVELS[0]}` : '+',
+        );
       } else if (remaining > 0) {
         slot.cd.style.display = 'flex';
-        slot.cd.textContent = remaining >= 1 ? String(Math.ceil(remaining)) : remaining.toFixed(1);
+        setText(slot.cd, remaining >= 1 ? String(Math.ceil(remaining)) : remaining.toFixed(1));
       } else {
         slot.cd.style.display = 'none';
       }
@@ -3266,7 +3273,7 @@ export class Hud {
       const remaining = (u.sigilCooldowns[i] ?? 0) - this.world.time;
       if (remaining > 0) {
         slot.cd.style.display = 'flex';
-        slot.cd.textContent = String(Math.ceil(remaining));
+        setText(slot.cd, String(Math.ceil(remaining)));
       } else {
         slot.cd.style.display = 'none';
       }
@@ -3278,11 +3285,11 @@ export class Hud {
       const def = itemId ? ITEMS[itemId] : undefined;
       slot.classList.toggle('full', itemId !== undefined);
       if (def) {
-        slot.textContent = '';
+        setText(slot, '');
         slot.style.backgroundImage = `url(${itemIconUrl(def)})`;
         slot.style.backgroundSize = 'cover';
       } else {
-        slot.textContent = itemId ? itemInitials(itemId) : '';
+        setText(slot, itemId ? itemInitials(itemId) : '');
         slot.style.backgroundImage = '';
       }
     }
@@ -3388,7 +3395,7 @@ export class Hud {
               : (TEAM_TEXT_COLORS[this.look(target.team)] ?? '#f5a3a3');
       }
       this.targetHpFill.style.transform = `scaleX(${Math.max(0, target.hp / target.maxHp)})`;
-      this.targetHpText.textContent = `${Math.ceil(target.hp)} / ${Math.round(target.maxHp)}`;
+      setText(this.targetHpText, `${Math.ceil(target.hp)} / ${Math.round(target.maxHp)}`);
     } else {
       this.targetKey = '';
     }
@@ -3400,8 +3407,8 @@ export class Hud {
     const selfRow = scoreRows.find((r) => r.unitId === this.selfId);
     if (selfRow) {
       // Defensive ?? 0: an older server may send rows without these fields.
-      this.kdaText.textContent = `${selfRow.kills} / ${selfRow.deaths} / ${selfRow.assists ?? 0}`;
-      this.kdaCs.textContent = `CS ${selfRow.cs ?? 0}`;
+      setText(this.kdaText, `${selfRow.kills} / ${selfRow.deaths} / ${selfRow.assists ?? 0}`);
+      setText(this.kdaCs, `CS ${selfRow.cs ?? 0}`);
     }
 
     if (this.score.classList.contains('open')) {
@@ -3419,9 +3426,7 @@ export class Hud {
       if (dead) {
         const words = this.royale.deathWords(u);
         if (this.deathTitle.textContent !== words.title) this.deathTitle.textContent = words.title;
-        this.deathSub.textContent = this.deathRecap
-          ? `${this.deathRecap} · ${words.sub}`
-          : words.sub;
+        setText(this.deathSub, this.deathRecap ? `${this.deathRecap} · ${words.sub}` : words.sub);
       }
       this.syncOverlay();
       return;

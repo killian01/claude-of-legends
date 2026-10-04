@@ -21,6 +21,7 @@ import type { TeamId } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import { setPortrait } from './champion_art';
+import { setClassName, setData, setHidden } from './dom_write';
 import { RoyaleHudGrafts } from './royale_hud_grafts';
 import { type MomentDeath, RoyaleHudMoments } from './royale_hud_moments';
 import {
@@ -449,7 +450,7 @@ export class RoyaleHud {
     const r = this.state();
     const { world, selfId, root, touch } = this.host;
     this.stepNotices();
-    this.layer.hidden = r === null;
+    setHidden(this.layer, r === null);
     root.classList.toggle('br-dropping', r?.st === 'drop');
     if (!r) return;
     const time = world.time;
@@ -463,7 +464,7 @@ export class RoyaleHud {
     );
     const line = duskLine(r, time);
     if (this.duskText.textContent !== line.text) this.duskText.textContent = line.text;
-    this.duskEl.className = `br-dusk ${line.tone}`;
+    setClassName(this.duskEl, `br-dusk ${line.tone}`);
     const compact = root.classList.contains('compact');
     const count = countLine(r, compact);
     if (this.countEl.textContent !== count) this.countEl.textContent = count;
@@ -475,24 +476,24 @@ export class RoyaleHud {
     // The mark the viewer carries (the Lodestar, the Wrath, a run): every
     // globe shows them, and the badge pulses while it does.
     const badge = markBadge(r, selfId, time, compact);
-    this.leaderEl.hidden = badge === null;
+    setHidden(this.leaderEl, badge === null);
     if (badge) {
       if (this.leaderText.textContent !== badge.text) this.leaderText.textContent = badge.text;
       this.leaderEl.classList.toggle('self', true);
-      this.leaderEl.dataset.mark = badge.kind;
+      setData(this.leaderEl, 'mark', badge.kind);
       this.leaderEl.classList.toggle('shown', badge.shown);
     }
 
     const me = world.units.get(selfId);
     const outside = me && !me.dead && r.st === 'play' ? outsideLight(me.pos, r.dusk) : null;
-    this.burnEl.hidden = outside !== true;
+    setHidden(this.burnEl, outside !== true);
     if (outside === true) {
       const pill = duskPill(r.dusk.b);
       if (this.burnEl.textContent !== pill) this.burnEl.textContent = pill;
     }
 
     const drop = dropBanner(r, time, touch);
-    this.dropEl.hidden = drop === null;
+    setHidden(this.dropEl, drop === null);
     if (drop) {
       if (this.dropText.textContent !== drop.text) this.dropText.textContent = drop.text;
       if (this.dropLeft.textContent !== drop.left) this.dropLeft.textContent = drop.left;
@@ -500,7 +501,7 @@ export class RoyaleHud {
 
     const f = openingFraction(r, time);
     const cracked = f === null && performance.now() < this.crackUntil;
-    this.openEl.hidden = f === null && !cracked;
+    setHidden(this.openEl, f === null && !cracked);
     this.openEl.classList.toggle('cracked', cracked);
     if (f !== null) this.ring.style.setProperty('--f', f.toFixed(3));
 
