@@ -492,6 +492,10 @@ export class Renderer {
         (x, y) => pointOnStage(this.gl.domElement, x, y),
       );
       this.planet = planet;
+      planet.drawnAt = (id) => {
+        const t = this.tracked.get(id);
+        return t ? { x: t.mesh.position.x, z: t.mesh.position.z } : null;
+      };
       this.world = planet.world;
       this.terrain = {
         ...terrain,
