@@ -30,6 +30,7 @@ import {
   spellColorsOf,
 } from './ability_vfx';
 import { aspectColor, WRATH_COLOR } from './aspect_colors';
+import { bodyDress, dressBody, warmUnit } from './body_dress';
 import { buildCampMesh, campBarWidth } from './camp_shapes';
 import { buildChampionMesh } from './champion_shapes';
 import {
@@ -76,7 +77,6 @@ import {
 import { pickShieldHolder, type ShieldCandidate } from './shield_holder';
 import { crownHeight, crownLift, flightProgress, isStill } from './structure_fire';
 import type { RenderTerrain } from './terrain';
-import { toonifyMaterials } from './toon';
 import { CHARGE_S, nextChargeDelayS } from './tower_shot';
 import {
   genericDetonate,
@@ -98,9 +98,6 @@ import { TowerShotFx } from './vfx/tower_shot_fx';
 import { sliced, texturesOf, type WarmBody, warmFights } from './warm_samples';
 
 const TEAM_COLORS: readonly number[] = [0x4a7dd6, 0xd65c5c];
-// What the fights' warm-up hands the body builder for a sample: no seat,
-// no team, nowhere.
-const WARM_UNIT = { id: -1, team: -1, pos: { x: 0, z: 0 } };
 // How much of a frame the fights' warm-up may take before it waits for
 // the next, milliseconds: light samples share a frame, a heavy one waits.
 const WARM_SLICE_MS = 4;
@@ -780,9 +777,10 @@ export class Renderer {
         this.programs.keep(this.gl.info.programs ?? []);
         for (const texture of texturesOf(scene)) this.gl.initTexture(texture);
       },
-      // Built the way a live one is (buildBody), so the programs match.
+      // Built and dressed the way a live one is (buildBody, body_dress.ts),
+      // so the programs match.
       body: (body: WarmBody) => {
-        const { holder } = this.buildBody({ ...WARM_UNIT, ...body } as unknown as Unit);
+        const { holder } = this.buildBody(warmUnit(body));
         // The Pyrefang's rigged model too, which a live one swaps in.
         if (body.creatureId === 'pyrefang') {
           const visual = createPyrefangVisual(null, holder.scale.x);
@@ -791,7 +789,7 @@ export class Renderer {
         return holder;
       },
       champion: (id) => {
-        const u = { ...WARM_UNIT, kind: 'champion', championId: id, skin: 0 } as unknown as Unit;
+        const u = warmUnit({ kind: 'champion', championId: id, skin: 0 });
         const { holder } = this.buildBody(u);
         return {
           root: holder,
@@ -1567,11 +1565,18 @@ export class Renderer {
     if (this.planet) this.scene.add(this.planet.sky.group);
   }
 
-  // A unit's body as the match shows it: its mesh, toonified unless the
-  // terrain authored it. The fights' warm-up builds its samples here too.
+  // A unit's body as the match shows it: its mesh, dressed (body_dress.ts:
+  // toon unless the terrain authored it, a champion's ghosts on the
+  // planet). The fights' warm-up builds its samples here too. The holder
+  // holds nothing but the body yet, so the holder is what is dressed.
   private buildBody(u: Readonly<Unit>): { holder: THREE.Group; barY: number } {
     const built = this.buildUnitMesh(u);
-    if (!built.holder.userData.authoredTerrain) toonifyMaterials(built.holder);
+    const { holder } = built;
+    const dress = bodyDress(u.kind, {
+      authored: holder.userData.authoredTerrain === true,
+      planet: this.planet !== null,
+    });
+    dressBody(holder, dress, (body) => this.ghostBody(holder, body));
     return built;
   }
 
@@ -1672,13 +1677,11 @@ export class Renderer {
       holder.add(ready.root);
       holder.userData.poolKey = poolKey;
       enableShadows(holder);
-      this.ghostBody(holder, ready.root);
       this.championVisuals.set(u.id, ready);
       return { holder, barY };
     }
     const figure = buildChampionMesh(u.championId, color, u.skin);
     holder.add(figure);
-    this.ghostBody(holder, figure);
     // Surface the figure's limb pivots on the holder the render loop sees;
     // without this hoist the walk cycle never runs.
     holder.userData.anim = figure.userData.anim;
@@ -1752,16 +1755,17 @@ export class Renderer {
       disposeDeep(figure);
       delete holder.userData.anim;
       enableShadows(visual.root);
-      toonifyMaterials(visual.root);
+      // Dressed as buildBody dressed the figure it replaces.
+      const dress = bodyDress('champion', { authored: false, planet: this.planet !== null });
+      dressBody(visual.root, dress, (body) => this.ghostBody(holder, body));
       holder.add(visual.root);
-      this.ghostBody(holder, visual.root);
       this.championVisuals.set(unitId, visual);
     });
   }
 
   // On the planet, a champion's body gets its silhouette twins
   // (planet_ghost.ts), one material for the whole body, colored and
-  // switched each frame by render().
+  // switched each frame by render(); body_dress.ts says which bodies.
   private ghostBody(holder: THREE.Object3D, body: THREE.Object3D): void {
     if (!this.planet) return;
     let mat = holder.userData.ghostMat as THREE.MeshBasicMaterial | undefined;
