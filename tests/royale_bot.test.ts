@@ -1129,7 +1129,12 @@ describe('a held Respawn Seedfall opening', () => {
   };
   const opening = { cacheId: 7, since: 19 };
   const on = (
-    over: { variant?: 'respawn' | 'one_life'; kind?: 'seedfall' | 'plain'; units?: ObsUnit[] },
+    over: {
+      variant?: 'respawn' | 'one_life';
+      kind?: 'seedfall' | 'plain';
+      units?: ObsUnit[];
+      graced?: { id: number; until: number }[];
+    },
     self: object = {},
   ) =>
     whys(
@@ -1141,6 +1146,7 @@ describe('a held Respawn Seedfall opening', () => {
             variant: over.variant ?? 'respawn',
             opening,
             caches: [{ ...cache, kind: over.kind ?? 'seedfall' }],
+            ...(over.graced ? { graced: over.graced } : {}),
           },
         },
         self,
@@ -1164,6 +1170,21 @@ describe('a held Respawn Seedfall opening', () => {
     expect(r.a).toEqual({ kind: 'attack', targetId: 9 });
     expect(on({ units: [off] }, struck).a.kind).toBe('stop');
     expect(on({ units: [beside] }, { ...struck, attackSwingUntil: 20.2 }).a.kind).toBe('noop');
+  });
+
+  it('struck, never hits back at a graced enemy, the next one in reach instead', () => {
+    const struck = { struckAt: 19.8 };
+    const nearer = enemy(8, along(here, east, 2, R));
+    const graced = [{ id: 8, until: 22 }];
+    expect(on({ units: [nearer, beside], graced }, struck).a).toEqual({
+      kind: 'attack',
+      targetId: 9,
+    });
+    expect(on({ units: [nearer], graced }, struck).a.kind).toBe('stop');
+    expect(on({ units: [nearer], graced: [{ id: 8, until: 19.9 }] }, struck).a).toEqual({
+      kind: 'attack',
+      targetId: 8,
+    });
   });
 
   it('never sidesteps out of the reach', () => {

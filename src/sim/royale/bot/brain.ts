@@ -47,6 +47,7 @@ import {
   escapeCast,
   exitFrom,
   fightSigil,
+  isGraced,
   NO_EXIT_MARGIN,
   pickCast,
   pickTarget,
@@ -304,7 +305,8 @@ export function inOwnFight(sense: Sense): boolean {
 
 // A Respawn Seedfall cache this bot is opening (its opening held,
 // caches.ts openingHeld): it keeps to the reach. Struck, it hits back at
-// the nearest enemy already in its attack reach, never a step or a cast
+// the nearest enemy already in its attack reach and out of its Grace (an
+// order the sim drops would only slow its own clock), never a step or a cast
 // that would carry it out; else it holds still, its fire held. Null when
 // the bot opens no such cache.
 export const HELD_REACH_SLACK_M = 0.3;
@@ -317,7 +319,7 @@ export function heldOpening(sense: Sense): Action | null {
   if (sense.struck) {
     const s = sense.s;
     if (s.attackSwingUntil != null && s.attackSwingUntil > sense.obs.time) return NOOP;
-    const e = sense.enemies[0];
+    const e = sense.enemies.find((x) => !isGraced(sense, x.id));
     if (e && dist(sense.me, p3(e)) <= sense.attackRange + HELD_REACH_SLACK_M) {
       return { kind: 'attack', targetId: e.id };
     }
