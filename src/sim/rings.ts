@@ -26,7 +26,7 @@ import { copy, dist } from './geo';
 import { landingOn } from './ground';
 import type { CombatCtx } from './sim_context';
 import { DT } from './types';
-import { createCreature, hostile, type Unit } from './unit';
+import { createCreature, hostile, scaleNeutral, type Unit } from './unit';
 
 export interface RingState {
   ring: RingId;
@@ -95,10 +95,10 @@ export function stepRings(ctx: CombatCtx, states: RingState[]): void {
         const id = ctx.allocId();
         const center = copy(site);
         const at = landingOn(ctx.ground, center) ?? center;
-        ctx.units.set(
-          id,
-          createCreature(id, creatureDefOf(state), at, ringAspect(state), ctx.time),
-        );
+        const body = createCreature(id, creatureDefOf(state), at, ringAspect(state), ctx.time);
+        // On the planet a champion takes it alone (CombatCtx.neutralScale).
+        scaleNeutral(body, ctx.neutralScale?.creature);
+        ctx.units.set(id, body);
         state.unitId = id;
         state.riseIndex += 1;
         state.roseAt = ctx.time;

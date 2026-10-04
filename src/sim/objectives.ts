@@ -9,11 +9,11 @@
 
 import type { GameMap, WardenPit } from './content/map';
 import { CREATURE_CALM_REGEN_PER_S } from './content/rings';
-import { copy, dist } from './geo';
+import { copy, dist, type Vec3 } from './geo';
 import type { Rng } from './rng';
 import type { CombatCtx } from './sim_context';
 import { DT, type Vec2 } from './types';
-import { createWarden, hostile, type Unit } from './unit';
+import { createWarden, hostile, scaleNeutral, type Unit } from './unit';
 
 // 720 s: the Warden is the last creature to rise (docs/plan-rings.md), the
 // match's prize after the rings' Pyrefang (4:00) and Voidmaul (6:30); it
@@ -43,6 +43,9 @@ export interface ObjectiveState {
   // map's pits. Public once the Warden stands there, told to nobody
   // before (the observation and the wire carry it only while it lives).
   pit: number;
+  // A site that stands in for the map's pits (the battle royale draws the
+  // Warden's inside the light, royale/risings.ts); null where the pits rule.
+  site: Vec3 | null;
 }
 
 export function initialObjectiveState(): ObjectiveState {
@@ -52,6 +55,7 @@ export function initialObjectiveState(): ObjectiveState {
     spawnIndex: 0,
     roseAt: null,
     pit: 0,
+    site: null,
   };
 }
 
@@ -62,8 +66,10 @@ export function drawPit(rng: Rng, count: number, last: number): number {
   return (last + 1 + rng.int(count - 1)) % count;
 }
 
-// The pit the state names, on the map the match is played on.
+// The pit the state names, on the map the match is played on, or the site
+// that stands in for it.
 export function wardenPitOf(map: GameMap, state: ObjectiveState): WardenPit {
+  if (state.site) return { ...state.site, name: 'the light' };
   return map.wardenPits[state.pit % map.wardenPits.length] ?? map.wardenPits[0]!;
 }
 
@@ -91,7 +97,10 @@ export function stepObjectives(ctx: CombatCtx, map: GameMap, state: ObjectiveSta
     if (ctx.time >= state.nextSpawnAt) {
       const pit = wardenPitOf(map, state);
       const id = ctx.allocId();
-      ctx.units.set(id, createWarden(id, pit, ctx.time));
+      const w = createWarden(id, pit, ctx.time);
+      // On the planet a champion takes it alone (CombatCtx.neutralScale).
+      scaleNeutral(w, ctx.neutralScale?.warden);
+      ctx.units.set(id, w);
       state.wardenId = id;
       state.roseAt = ctx.time;
       state.spawnIndex += 1;
