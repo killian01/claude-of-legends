@@ -98,6 +98,9 @@ import { TowerShotFx } from './vfx/tower_shot_fx';
 import { texturesOf, type WarmBody, warmFights } from './warm_samples';
 
 const TEAM_COLORS: readonly number[] = [0x4a7dd6, 0xd65c5c];
+// What the fights' warm-up hands the body builder for a sample: no seat,
+// no team, nowhere.
+const WARM_UNIT = { id: -1, team: -1, pos: { x: 0, z: 0 } };
 const TEAM_LIGHT: readonly number[] = [0x9dbcf5, 0xf5a3a3];
 
 // Background and fog share the forest-skirt tone so the world edge melts
@@ -768,9 +771,9 @@ export class Renderer {
         this.programs.keep(this.gl.info.programs ?? []);
         for (const texture of texturesOf(scene)) this.gl.initTexture(texture);
       },
+      // Built the way a live one is (buildBody), so the programs match.
       body: (body: WarmBody) => {
-        const u = { id: -1, team: -1, pos: { x: 0, z: 0 }, ...body } as unknown as Unit;
-        const { holder } = this.buildUnitMesh(u);
+        const { holder } = this.buildBody({ ...WARM_UNIT, ...body } as unknown as Unit);
         // The Pyrefang's rigged model too, which a live one swaps in.
         if (body.creatureId === 'pyrefang') {
           const visual = createPyrefangVisual(null, holder.scale.x);
@@ -779,13 +782,15 @@ export class Renderer {
         return holder;
       },
       champion: (id) => {
-        const cv = createChampionVisualNow(id, 0xffffff, 0);
-        if (!cv) return null;
-        const holder = new THREE.Group();
-        holder.add(cv.root);
-        enableShadows(holder);
-        this.ghostBody(holder, cv.root);
-        return { root: holder, dispose: () => cv.dispose() };
+        const u = { ...WARM_UNIT, kind: 'champion', championId: id, skin: 0 } as unknown as Unit;
+        const { holder } = this.buildBody(u);
+        return {
+          root: holder,
+          dispose: () => {
+            this.championVisuals.get(u.id)?.dispose();
+            this.championVisuals.delete(u.id);
+          },
+        };
       },
       championIds: Object.keys(CHAMPION_VISUALS),
       catalog: Object.values(SPELL_VFX),
@@ -1542,6 +1547,14 @@ export class Renderer {
     if (this.planet) this.scene.add(this.planet.sky.group);
   }
 
+  // A unit's body as the match shows it: its mesh, toonified unless the
+  // terrain authored it. The fights' warm-up builds its samples here too.
+  private buildBody(u: Readonly<Unit>): { holder: THREE.Group; barY: number } {
+    const built = this.buildUnitMesh(u);
+    if (!built.holder.userData.authoredTerrain) toonifyMaterials(built.holder);
+    return built;
+  }
+
   private buildUnitMesh(u: Readonly<Unit>): { holder: THREE.Group; barY: number } {
     const authored = this.terrain.structure(u);
     if (authored) return authored;
@@ -2082,8 +2095,7 @@ export class Renderer {
     for (const [id, u] of this.world.units) {
       let t = this.tracked.get(id);
       if (!t) {
-        const { holder, barY } = this.buildUnitMesh(u);
-        if (!holder.userData.authoredTerrain) toonifyMaterials(holder);
+        const { holder, barY } = this.buildBody(u);
         // Minion bars widen with their max hp so a beefy siege minion never
         // reads as "almost dead" while it still soaks several hits.
         const structure =
