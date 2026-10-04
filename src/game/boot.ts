@@ -53,6 +53,7 @@ import { playCastSfx, playSfx, preloadSfx } from './sfx';
 import { aimedPoint, quickPoint } from './thumb_cast';
 import { leadPoint, STICK_LEAD_M, type StickOrder, shouldResend } from './thumb_stick';
 import { setupTouchControls } from './touch';
+import type { VoidmaulSlamNote } from './voidmaul_slam_notes';
 
 export interface KillNote {
   unitId: number;
@@ -81,6 +82,7 @@ export interface WorldNotes {
   hits: readonly { targetId: number; amount: number }[];
   // Auto-attacks fired by visible units, for swing animations.
   attacks: readonly { unitId: number; targetId: number }[];
+  voidmaulSlams?: readonly VoidmaulSlamNote[];
   // The battle royale's events (net/royale_client.ts), for the HUD's
   // notices and its first steps; absent in a 5v5.
   royale?: readonly RoyaleNote[];
@@ -725,7 +727,8 @@ export function startPresentation(
         notes.golds.length > 0 ||
         notes.casts.length > 0 ||
         notes.hits.length > 0 ||
-        notes.attacks.length > 0
+        notes.attacks.length > 0 ||
+        (notes.voidmaulSlams?.length ?? 0) > 0
       )
         renderer.onCombatNotes(notes);
     }

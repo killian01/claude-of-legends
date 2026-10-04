@@ -194,6 +194,11 @@ function royaleEvents(
       case 'attack':
         if (sees(ev.unitId)) out.push({ e: 'atk', unitId: ev.unitId, targetId: ev.targetId });
         break;
+      case 'voidmaul_slam': {
+        const { type: _type, ...impact } = ev;
+        if (sees(ev.unitId)) out.push({ e: 'voidmaul_slam', ...impact });
+        break;
+      }
       case 'royale_land':
         if (sees(ev.unitId)) out.push({ e: 'royale_land', unitId: ev.unitId });
         break;

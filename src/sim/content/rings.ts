@@ -14,6 +14,8 @@
 // a duo in about thirty, five in about fifteen; the Warden wants a team;
 // the Ascendant wants a team and forty seconds.
 
+import { VOIDMAUL_SLAM } from './voidmaul_slam';
+
 export type RingId = 'bot' | 'top';
 export type CreatureId = 'pyrefang' | 'voidmaul';
 export type AspectId = 'might' | 'tide' | 'tempo' | 'bulwark' | 'swiftness' | 'resolve';
@@ -83,6 +85,10 @@ export interface CreatureBody {
   radius: number;
   // Shared among the killing team present, like the Warden's.
   xpBounty: number;
+  // A strike's own windup in seconds, when the body's swing is authored
+  // longer than the swarm's light beat (the Voidmaul's slam); absent, the
+  // shared rule (combat/auto_attack.ts).
+  windupS?: number;
 }
 
 export interface AscendantDef {
@@ -134,6 +140,10 @@ const ASCENDANT_BODY: CreatureBody = {
   xpBounty: 400,
 };
 
+// The Voidmaul's slam: from the swing's start to the paw's contact, the
+// beat its authored Attack clip lands on (docs/voidmaul-model.md).
+export const VOIDMAUL_SLAM_WINDUP_S = 1.75;
+
 // The Pyrefang first, because two laners already stand beside the bot
 // ring at 4:00; the Voidmaul two and a half minutes later, so a team that
 // takes one must choose between holding its lane and crossing for the
@@ -157,11 +167,32 @@ export const CREATURES: Record<CreatureId, CreatureDef> = {
     firstRiseS: 390,
     returnS: 180,
     aspects: ['bulwark', 'swiftness', 'resolve'],
-    body: { ...RING_BODY, attackRange: 2.2, attackSpeed: 0.5, moveSpeed: 2.8, radius: 1.15 },
+    // One slow slam: the forepaw rises for 1.75 s before it lands, and the
+    // next starts once the last has settled. Each lands harder for it, so
+    // its damage over time is the 0.5 and 0.55 cadences' it replaced; a
+    // champion who steps out of reach during the rise is not hit.
+    body: {
+      ...RING_BODY,
+      ad: 23,
+      bitePct: 0.0133,
+      attackRange: 2.2,
+      attackSpeed: 0.3,
+      windupS: VOIDMAUL_SLAM_WINDUP_S,
+      moveSpeed: 2.8,
+      radius: 1.15,
+    },
     ascendant: {
       name: 'Voidmaul Ascendant',
       returnS: 300,
-      body: { ...ASCENDANT_BODY, attackSpeed: 0.55, moveSpeed: 2.6, radius: 1.5 },
+      body: {
+        ...ASCENDANT_BODY,
+        ad: 26,
+        bitePct: 0.0257,
+        attackSpeed: 0.3,
+        windupS: VOIDMAUL_SLAM_WINDUP_S,
+        moveSpeed: 2.6,
+        radius: 1.5,
+      },
     },
   },
 };
@@ -243,6 +274,7 @@ export const WRATH_BURN_S = 3;
 export const RINGS_CONTENT = {
   aspects: ASPECTS,
   creatures: CREATURES,
+  voidmaulSlam: VOIDMAUL_SLAM,
   maxStacks: FAVOR_MAX_STACKS,
   tidePeriod: TIDE_PERIOD_S,
   outOfCombat: OUT_OF_COMBAT_S,

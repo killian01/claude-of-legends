@@ -9,6 +9,7 @@
 // stealth at the start of the windup. Ranges and chases are measured on the
 // ground the match stands on (geo.ts, ground.ts).
 
+import { CREATURES } from '../content/rings';
 import { copy, dist } from '../geo';
 import { passiveOf, runItemAttackHits } from '../passives';
 import type { CombatCtx } from '../sim_context';
@@ -25,6 +26,7 @@ import {
   tauntSourceId,
 } from './status';
 import { towerShotAd, towerShotHpPct } from './tower_shot';
+import { prepareVoidmaulSlam, resolveVoidmaulSlam } from './voidmaul_slam';
 
 // Exported for presentation: the renderer schedules a melee contact spark
 // only for attackers below this range (ranged autos flash at bolt impact).
@@ -46,6 +48,22 @@ export function attackWindupSeconds(cadence: number, champion = true): number {
   const fraction = champion ? ATTACK_WINDUP_FRACTION : SWARM_WINDUP_FRACTION;
   const max = champion ? ATTACK_WINDUP_MAX : SWARM_WINDUP_MAX;
   return Math.min(max, fraction / Math.max(0.1, cadence));
+}
+
+// A unit's strike windup: a ring creature whose body authors its own swing
+// (content/rings.ts windupS) keeps it at any cadence; every other unit the
+// shared rule above. Read by the renderer too, so the swing it plays lands
+// on the damage.
+export function strikeWindupSeconds(
+  u: Pick<Unit, 'kind' | 'creatureId' | 'ascendant'>,
+  cadence: number,
+): number {
+  if (u.kind === 'creature' && u.creatureId) {
+    const def = CREATURES[u.creatureId];
+    const own = (u.ascendant ? def.ascendant.body : def.body).windupS;
+    if (own !== undefined) return own;
+  }
+  return attackWindupSeconds(cadence, u.kind === 'champion');
 }
 
 // A dash (or any scripted displacement) beyond this distance mid-windup
@@ -70,10 +88,12 @@ function beginWindup(ctx: CombatCtx, u: Unit, target: Unit): void {
   ctx.events.push({ type: 'attack', unitId: u.id, targetId: target.id });
   const cadence = Math.max(0.1, u.stats.attackSpeed * (1 + attackSpeedBonusPct(u, ctx.time)));
   u.attackReadyAt = ctx.time + 1 / cadence;
+  const voidmaulSlam = prepareVoidmaulSlam(u, target);
   u.pendingAttack = {
     targetId: target.id,
-    resolveAt: ctx.time + attackWindupSeconds(cadence, u.kind === 'champion'),
+    resolveAt: ctx.time + strikeWindupSeconds(u, cadence),
     start: copy(u.pos),
+    ...(voidmaulSlam ? { voidmaulSlam } : {}),
   };
 }
 
@@ -181,6 +201,10 @@ function stepPendingAttack(ctx: CombatCtx, u: Unit): void {
   }
   if (ctx.time >= pa.resolveAt) {
     u.pendingAttack = null;
+    if (pa.voidmaulSlam) {
+      resolveVoidmaulSlam(ctx, u, target.id, pa.voidmaulSlam);
+      return;
+    }
     const edge = dist(target.pos, u.pos) - u.radius - target.radius;
     if (edge <= u.stats.attackRange + STRIKE_GRACE) strike(ctx, u, target);
   }

@@ -315,6 +315,9 @@ export function buildSnapshot(
       snapEvents.push({ e: 'cast', unitId: ev.unitId });
     } else if (ev.type === 'attack' && sim.isVisible(team, ev.unitId)) {
       snapEvents.push({ e: 'atk', unitId: ev.unitId, targetId: ev.targetId });
+    } else if (ev.type === 'voidmaul_slam' && sim.isVisible(team, ev.unitId)) {
+      const { type: _type, ...impact } = ev;
+      snapEvents.push({ e: 'voidmaul_slam', ...impact });
     } else if (ev.type === 'victory') {
       snapEvents.push({ e: 'victory', team: ev.team });
     }

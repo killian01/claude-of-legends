@@ -87,6 +87,7 @@ const KITS_ON_THE_PLANET = [
   'combat/casting.ts',
   'combat/ally_dash.ts',
   'combat/shield_burst.ts',
+  'combat/voidmaul_slam.ts',
   'passives.ts',
   'passive_types.ts',
   'content/item_passives.ts',
