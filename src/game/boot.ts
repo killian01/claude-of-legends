@@ -607,6 +607,8 @@ export function startPresentation(
       if (hooks.sendPing) hooks.sendPing(aim.x, aim.z);
       else showPing(aim.x, aim.z, 'You', selfTeam);
     },
+    // A battle royale's Graft card, by its key (1, 2, 3).
+    onPickCard: (card) => hud.pickGraft(card),
     isTyping: () => hud.isChatOpen(),
   };
   const teardownInput = setupInput(renderer, inputHandlers);

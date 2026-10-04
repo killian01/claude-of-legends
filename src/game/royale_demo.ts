@@ -5,15 +5,21 @@
 // mock royale state, for the browser checks to look at before the server
 // and the planet exist. Nothing here is reachable from the production UI.
 //
-// ?royale-ui-demo=<scene>: pick, pick-one, home, drop, calm (with the
-// status chips), closing, out, end-one, end-respawn, moments (the loud
+// ?royale-ui-demo=<scene>: pick, pick-one, home, drop (with a Graft
+// offer), calm (with the status chips and a Heartwood offer), closing, out, end-one, end-respawn, moments (the loud
 // moments: the Seedfalls' edge arrows, the Clamors, the feed folding, the
 // run's spotlight, the cache's ritual and the loot's words, the Dusk's
 // pill, every new block faked).
 
 import { orchardSim } from '../net/replay';
 import type { RoyaleNote } from '../net/royale_client';
-import type { RoyaleResult, SnapClamor, SnapRoyale, SnapSeedfall } from '../net/royale_wire';
+import type {
+  RoyaleResult,
+  SnapClamor,
+  SnapGraftOffer,
+  SnapRoyale,
+  SnapSeedfall,
+} from '../net/royale_wire';
 import { whenChampionModelsReady } from '../render/champions';
 import { setRoyaleProjector } from '../render/royale_cues';
 import { attachBot } from '../sim/content/bots';
@@ -60,6 +66,7 @@ function result(v: RoyaleVariant, place: number, score: number): RoyaleResult {
       score: i + 1 === place ? score : s,
       bot: i + 1 !== place && i % 2 === 0,
     })),
+    grafts: ['thornhide', 'keen_edge', 'keen_edge', 'chainsap'],
   };
 }
 
@@ -140,6 +147,10 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
     });
   }
   const leader = others[0]!;
+  // A Graft offer open for ten seconds out of every twelve (CONTEXT.md:
+  // Graft); a pick hides it until the next.
+  const offer = (g: SnapGraftOffer['g'], c: SnapGraftOffer['c'], t: number) =>
+    t % 12 < 10 ? { offer: { g, c, u: Math.floor(t / 12) * 12 + 10 } } : {};
   const state = (): SnapRoyale & { caches: [] } => {
     const t = sim.time;
     const base = {
@@ -157,6 +168,7 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
         de: 9.5,
         alive: 50,
         dusk: { p: 0, c: [0, 80, 0], r: 160, pe: 99.5, sh: 0, b: 0 },
+        ...offer('bough', ['second_breath', 'stoneblood', 'thornhide'], t),
       };
     }
     if (scene === 'calm' || scene === 'end-respawn') {
@@ -167,6 +179,8 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
         score: 4,
         leader: { i: leader.id, s: 9, ...(Math.floor(t / 4) % 2 === 0 ? { at: [0, 80, 0] } : {}) },
         opening: { c: 3, since: Math.floor(t / 2.5) * 2.5 },
+        gr: ['hunters_eye', 'keen_edge'],
+        ...offer('heartwood', ['reaping_graft', 'chainsap', 'overgrowth'], t),
       };
     }
     if (moments) {
@@ -178,6 +192,7 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
         sf: seedfalls(t),
         cl: clamors,
         mk: [[leader.id, 'lodestar', 0, 80, 0, t]],
+        ...offer('sprout', ['keen_edge', 'quick_sap', 'deep_roots'], t),
       };
     }
     return {

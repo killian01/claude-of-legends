@@ -6,6 +6,7 @@
 // home. Pure; ui/royale_hud.ts draws it.
 
 import type { RoyaleResult } from '../net/royale_wire';
+import { graftNames } from './royale_grafts';
 import { otherVariant, royaleMode } from './royale_modes';
 import { ordinal, placeText, takedownsText } from './royale_text';
 
@@ -32,6 +33,9 @@ export interface RoyaleEndModel {
   lines: string[];
   heading: string;
   rows: RoyaleEndRow[];
+  // The Grafts taken this match, in order (CONTEXT.md: Graft); null for
+  // none.
+  grafts: string | null;
   again: string;
   other: string;
   home: string;
@@ -74,6 +78,7 @@ export function royaleEnd(r: RoyaleResult): RoyaleEndModel {
     lines,
     heading: oneLife ? 'The top five' : 'The final ranking',
     rows,
+    grafts: r.grafts && r.grafts.length > 0 ? `Grafts: ${graftNames(r.grafts).join(', ')}` : null,
     again: oneLife ? 'Play again' : 'Play the next match',
     other: `Try ${royaleMode(otherVariant(r.v)).title}`,
     home: 'Back home',
