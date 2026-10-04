@@ -10,6 +10,7 @@
 
 import type { SnapGraftOffer, SnapRoyale } from '../net/royale_wire';
 import { GRAFTS } from '../sim/content/grafts';
+import { setHidden } from './dom_write';
 import {
   CARD_GAP_PX,
   CHIP_BOTTOM_PX,
@@ -165,8 +166,8 @@ export class RoyaleHudGrafts {
     if (this.picked !== null && this.picked !== key) this.picked = null;
     this.offer = offer && key !== this.picked ? offer : null;
     if (!this.offer || key === null) {
-      this.box.hidden = true;
-      this.chip.hidden = true;
+      setHidden(this.box, true);
+      setHidden(this.chip, true);
       this.shown = null;
       return;
     }
@@ -177,12 +178,14 @@ export class RoyaleHudGrafts {
       this.reopened === key,
     );
     if (this.shown !== key) this.build(this.offer, me);
-    this.box.hidden = folded;
-    this.chip.hidden = !folded;
+    setHidden(this.box, folded);
+    setHidden(this.chip, !folded);
     if (folded) {
       const text = graftChip();
       if (this.chip.textContent !== text) this.chip.textContent = text;
-      this.chip.style.setProperty('--c', GRADE_COLORS[this.offer.g]);
+      const grade = GRADE_COLORS[this.offer.g];
+      if (this.chip.style.getPropertyValue('--c') !== grade)
+        this.chip.style.setProperty('--c', grade);
     }
   }
 
