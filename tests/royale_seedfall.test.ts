@@ -1,5 +1,5 @@
 // The Seedfalls (src/sim/royale/seedfall.ts, CONTEXT.md: Seedfall): five a
-// match from 2:00, one every 70 s, called 20 s ahead (two seeds at once in
+// match from 2:00, one every 70 s, called 30 s ahead (two seeds at once in
 // Respawn); each lands inside the light as it will stand 30 s later, at
 // least 10 m from its edge, on a cache spot the draw left empty; its impact
 // hits whoever stands within 4 m for a tenth of their health and throws
@@ -43,6 +43,7 @@ import {
 import {
   CACHE_BACK_S,
   CACHE_OPEN_S,
+  CALM_S,
   type CacheState,
   DROP_S,
   type RoyaleVariant,
@@ -130,13 +131,15 @@ function combatCtx(sim: Sim): Parameters<typeof dealDamage>[0] {
 }
 
 describe('the schedule', () => {
-  it('calls five Seedfalls from 2:00, every 70 s, 20 s ahead, two seeds each in Respawn', () => {
+  it('calls five Seedfalls from 2:00, every 70 s, 30 s ahead, two seeds each in Respawn', () => {
     const land = DROP_S;
     const one = seedfallSchedule('one_life', land);
     expect(SEEDFALL_AT_S).toEqual([120, 190, 260, 330, 400]);
-    expect(SEEDFALL_WARN_S).toBe(20);
+    expect(SEEDFALL_WARN_S).toBe(30);
     expect(one.map((c) => c.landsAt)).toEqual([130, 200, 270, 340, 410]);
-    expect(one.map((c) => c.announceAt)).toEqual([110, 180, 250, 320, 390]);
+    expect(one.map((c) => c.announceAt)).toEqual([100, 170, 240, 310, 380]);
+    // The first is called as the calm ends, never during it.
+    expect(one[0]!.announceAt).toBe(land + CALM_S);
     expect(one.map((c) => c.ids)).toEqual([[0], [1], [2], [3], [4]]);
     const two = seedfallSchedule('respawn', land);
     expect(two.map((c) => c.landsAt)).toEqual(one.map((c) => c.landsAt));
@@ -223,7 +226,7 @@ describe('where a seed falls, on the Wanderseed', () => {
 });
 
 describe('the call and the landing, in a match', () => {
-  it('shows a Seedfall from 20 s before it lands, exactly, then lands it with its cache', () => {
+  it('shows a Seedfall from 30 s before it lands, exactly, then lands it with its cache', () => {
     const { sim, units } = landed(2, 'one_life');
     const self = units[0]!;
     const [first] = sim.royaleMode!.seedfallCalls;
