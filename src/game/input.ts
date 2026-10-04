@@ -1,10 +1,12 @@
 // Local input, kept dumb: it reports ground points and key presses; the
 // entry point decides what they mean. Keys: right-click move/attack, A
 // attack-move, B recall, QWER abilities, DF sigils, P shop, Tab scoreboard,
-// Enter chat, G ping, Space center camera, Escape menu.
+// Enter chat, G ping, Space center camera, Escape menu, 1 2 3 a battle
+// royale's Graft card.
 
 import type { Renderer } from '../render/renderer';
 import type { AbilityKey, Vec2 } from '../sim/types';
+import { cardOfKey } from '../ui/royale_grafts';
 import { pointOnStage } from './match_stage';
 import type { SlotPress } from './thumb_cast';
 
@@ -31,6 +33,9 @@ export interface InputHandlers {
   onToggleMenu(): void;
   onOpenChat(): void;
   onPing(aim: Vec2): void;
+  // A battle royale's Graft card by its key, 1 to 3 as 0 to 2: true when an
+  // offer was open to take it.
+  onPickCard?(card: number): boolean;
   // The left thumb's stick (thumb_stick.ts): a world direction, unit
   // length, every frame while the thumb steers; null when it rests or
   // lifts. The handler turns it into the sim's move orders.
@@ -116,6 +121,11 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): () => v
       return;
     }
     if (e.repeat) return;
+    const card = cardOfKey(e.key);
+    if (card !== null && handlers.onPickCard?.(card)) {
+      e.preventDefault();
+      return;
+    }
     const aim = (): Vec2 | null => renderer.groundPointAt(mouseX, mouseY);
     const lower = e.key.toLowerCase();
     // Alt + ability key spends a skill point (Ctrl is browser-reserved).
