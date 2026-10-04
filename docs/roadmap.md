@@ -40,8 +40,9 @@ Living document. The 48 hour build scope is defined by the ADRs in `docs/adr/` a
   seasons) remain deferred.
 - **Reconnect to a live match**; a bot substituting for a disconnected
   player.
-- **Post-review polish tail**: health potions, assists, camera freedom,
-  range indicators, fog terrain dimming.
+- **Post-review polish tail**: health potions (planned in
+  `docs/plan-potion.md`), assists, camera freedom, range indicators, fog
+  terrain dimming.
 
 - **Model-weights registry and server-side inference** for community-trained RL bots. For now trained bots join as normal clients only (bot-as-client, see ADR 0002).
 - **Gymnasium bindings** over the environment stream (`headless/README.md`). The NDJSON stdio environment itself has shipped; the Python wrapper around it has not.
