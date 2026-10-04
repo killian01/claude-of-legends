@@ -47,6 +47,9 @@ const ENEMY_NEAR_M = 11;
 const NOTICE_MS = 3000;
 const NOTICE_FADE_MS = 400;
 
+// The HUD's announcement line (ui/hud.ts announce).
+type AnnounceFn = (text: string, color: string, holdMs?: number, keep?: boolean) => void;
+
 const CSS = `
 .br { position: absolute; inset: 0; pointer-events: none; }
 .br [hidden] { display: none !important; }
@@ -298,8 +301,9 @@ export class RoyaleHud {
   // What this champion did this match, for the first steps.
   private openedCache = false;
   private padUsed = false;
-  // Announcements go through the HUD's own line (ui/hud.ts announce).
-  private announce: (text: string, color: string) => void = () => undefined;
+  // Announcements go through the HUD's own line (ui/hud.ts announce): a
+  // kept one holds its line for `holdMs`, what comes meanwhile waits.
+  private announce: AnnounceFn = () => undefined;
   // The loud moments (ui/royale_hud_moments.ts): the feed, the calls, the
   // cache's ritual, the Dusk's toll and wind, the Clamors, the arrows.
   private readonly moments: RoyaleHudMoments;
@@ -347,7 +351,7 @@ export class RoyaleHud {
       variant: host.variant,
       feed: this.feed,
       notice: (text, icon, kind) => this.notice(text, icon, kind),
-      announce: (text, color) => this.announce(text, color),
+      announce: (text, color, holdMs, keep) => this.announce(text, color, holdMs, keep),
       victimName: (k) => this.victimName(k),
       killerName: (k) => this.killerName(k),
       botOf: (id) => this.botOf(id),
@@ -357,7 +361,7 @@ export class RoyaleHud {
     });
   }
 
-  setAnnounce(announce: (text: string, color: string) => void): void {
+  setAnnounce(announce: AnnounceFn): void {
     this.announce = announce;
   }
 

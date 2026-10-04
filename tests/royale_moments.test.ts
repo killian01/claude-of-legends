@@ -6,9 +6,11 @@
 import { describe, expect, it } from 'vitest';
 import { RECORDED_VOICE_LINE_IDS } from '../src/game/voice_lines';
 import type { SnapClamor } from '../src/net/royale_wire';
+import { SEEDFALL_IMPACT_M } from '../src/sim/content/royale_events';
 import { CLAMOR_S } from '../src/sim/royale/types';
 import {
   arcDistance,
+  ClamorBell,
   ClamorEar,
   clamorGain,
   duskDepth,
@@ -19,6 +21,8 @@ import {
   feedKeeps,
   frostLevel,
   heartbeat,
+  impactGain,
+  impactShake,
   type MomentCall,
   type MomentKill,
   musicIntensity,
@@ -28,7 +32,9 @@ import {
   RUN_DUCK_MS,
   RUN_LADDER,
   ringing,
+  SeedfallRush,
   tickPitch,
+  WHOOSH_LEAD_S,
 } from '../src/ui/royale_moments';
 
 const SELF = 1;
@@ -351,5 +357,85 @@ describe("the cache's ritual", () => {
     const beats = ritual.step(8, 0);
     expect(beats).toEqual([{ kind: 'tick', index: 0, pitch: tickPitch(0) }]);
     expect(ritual.step(8, 0.1)).toEqual([{ kind: 'crack', cacheId: 7 }]);
+  });
+});
+
+describe('the Seedfall calls', () => {
+  it('calls one Seedfall with its seconds, kept, under its own gong', () => {
+    const m = watching('one_life');
+    const [call, ...rest] = m.onNotes(
+      [{ kind: 'seedfall', id: 1, at: [0, 80, 0], landsAt: 140 }],
+      120,
+    );
+    expect(rest).toEqual([]);
+    expect(call!.text).toBe('A Seedfall in 20 s');
+    expect(call!.keep).toBe(true);
+    // Not the chime: that one is the edge arrows', panned toward the column.
+    expect(call!.sfx).toBe('gong');
+  });
+
+  it("folds Respawn's two seeds into one call, and one landing line", () => {
+    const m = watching('respawn');
+    const called = m.onNotes(
+      [
+        { kind: 'seedfall', id: 1, at: [0, 80, 0], landsAt: 140 },
+        { kind: 'seedfall', id: 2, at: [80, 0, 0], landsAt: 140 },
+      ],
+      120,
+    );
+    expect(texts(called)).toEqual(['Two Seedfalls in 20 s']);
+    const landed = m.onNotes([
+      { kind: 'seedfall_land', id: 1, at: [0, 80, 0] },
+      { kind: 'seedfall_land', id: 2, at: [80, 0, 0] },
+    ]);
+    expect(texts(landed)).toEqual(['Two Seedfalls have landed']);
+    // The impact's boom is played by distance, not by the line.
+    expect(landed[0]!.sfx).toBeUndefined();
+  });
+
+  it('rushes once a seed, just before it lands, so the thud falls on the impact', () => {
+    const rush = new SeedfallRush();
+    const sf: [number, number, number, number, number, 0 | 1][] = [[1, 0, 80, 0, 140, 0]];
+    expect(rush.step(sf, 139 - WHOOSH_LEAD_S)).toEqual([]);
+    expect(rush.step(sf, 140 - WHOOSH_LEAD_S)).toEqual([1]);
+    expect(rush.step(sf, 139.9)).toEqual([]);
+    // One already down when first seen is not rushed.
+    expect(new SeedfallRush().step([[2, 0, 80, 0, 100, 1]], 120)).toEqual([]);
+  });
+
+  it('booms loudest near, and shakes the camera only close to the impact', () => {
+    expect(impactGain(5)).toBe(1);
+    expect(impactGain(80)).toBeLessThan(1);
+    expect(impactGain(400)).toBeGreaterThan(0);
+    expect(impactShake(SEEDFALL_IMPACT_M)).toBeGreaterThan(impactShake(SEEDFALL_IMPACT_M + 10));
+    expect(impactShake(60)).toBe(0);
+  });
+});
+
+describe('the Clamor bell', () => {
+  const self = { x: 0, y: 80, z: 0 };
+  const near: SnapClamor = [0, 80, 20, 100];
+  const far: SnapClamor = [0, 80, 45, 100];
+
+  it('rings the loudest of a batch, panned by bearing', () => {
+    const bell = new ClamorBell();
+    const rung = bell.pick([far, near], self, 100);
+    expect(rung?.at).toEqual({ x: 0, y: 80, z: 20 });
+    expect(rung!.gain).toBeGreaterThan(clamorGain(arcDistance(self, { x: 0, y: 80, z: 45 })));
+  });
+
+  it('rests at least a second and a half between two clashes', () => {
+    const bell = new ClamorBell();
+    expect(bell.pick([near], self, 100)).not.toBeNull();
+    expect(bell.pick([far], self, 101)).toBeNull();
+    expect(bell.pick([far], self, 101.6)).not.toBeNull();
+  });
+
+  it('stays quiet for a takedown the viewer made or saw: it is no news from out of sight', () => {
+    const bell = new ClamorBell();
+    bell.seen({ x: 0.5, y: 80, z: 20 }, 100);
+    expect(bell.pick([near], self, 100.05)).toBeNull();
+    // Another one elsewhere still rings.
+    expect(bell.pick([far], self, 100.1)).not.toBeNull();
   });
 });

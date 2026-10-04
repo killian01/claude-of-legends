@@ -17,7 +17,10 @@ export type RoyaleCue =
   // lid flips in gold sparks under a short column.
   | { kind: 'cache_open'; cacheId: number }
   // The viewer's opening was broken: a red ring at the cache.
-  | { kind: 'cache_crack'; cacheId: number };
+  | { kind: 'cache_crack'; cacheId: number }
+  // A seed crashed down: a shockwave and dust at its point, a flash up its
+  // column, and the camera shaken by `shake` (by the viewer's distance).
+  | { kind: 'seedfall_land'; at: Vec3; shake: number };
 
 // A planet point as the screen has it, in the stage's pixels (game/
 // match_stage.ts), off the screen when it is; `behind` when it stands

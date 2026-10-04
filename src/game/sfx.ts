@@ -40,6 +40,9 @@ export type SfxName =
   | 'whoosh'
   | 'clash'
   | 'chime'
+  // A Seedfall called (a bronze gong) and landing (the seed's impact).
+  | 'gong'
+  | 'boom'
   // The basic-attack palette a forged creator picks from
   // (src/sim/content/sounds.ts): swing and gunshot the roster's own, the
   // rest recordings in the bank, synthesized through their family.
@@ -245,6 +248,10 @@ const MIN_INTERVAL_MS: Partial<Record<SfxName, number>> = {
   tick: 60,
   clash: 140,
   chime: 200,
+  // Respawn's two seeds call and land on one tick: one sound each.
+  whoosh: 300,
+  gong: 400,
+  boom: 300,
 };
 const MIN_ATTACK_INTERVAL_MS = 90;
 
@@ -587,6 +594,29 @@ export function playSfx(name: SfxName, gain = 1, place: SfxPlace = {}): void {
       tone(b, { freq: 1900, slideTo: 1500, dur: 0.25, type: 'triangle', vol: 0.18, verb: 0.6 });
       tone(b, { freq: 2650, dur: 0.2, type: 'sine', delay: 0.11, vol: 0.12, verb: 0.6 });
       noise(b, { dur: 0.18, freq: 500, slideTo: 160, type: 'lowpass', vol: 0.4, delay: 0.1 });
+      break;
+    case 'gong':
+      // A Seedfall called: a struck bronze gong, brighter and shorter than
+      // the Dusk's toll, its partials shimmering apart.
+      tone(b, { freq: 196, dur: 2.2, type: 'sine', vol: 0.6, attack: 0.004, verb: 0.8 });
+      tone(b, { freq: 196 * 2.41, dur: 1.6, type: 'sine', vol: 0.26, verb: 0.85 });
+      tone(b, { freq: 196 * 3.93, dur: 1.1, type: 'triangle', vol: 0.12, verb: 0.9 });
+      tone(b, {
+        freq: 196 * 5.4,
+        slideTo: 196 * 5.3,
+        dur: 0.8,
+        type: 'sine',
+        vol: 0.08,
+        verb: 0.9,
+      });
+      noise(b, { dur: 0.05, freq: 1400, q: 1.2, vol: 0.35, attack: 0.001 });
+      break;
+    case 'boom':
+      // A seed's impact: a deep detonation, the ground's rumble after it,
+      // and a crack of splinters on top.
+      tone(b, { freq: 70, slideTo: 24, dur: 1.1, type: 'sine', vol: 1.0, attack: 0.002 });
+      noise(b, { dur: 1.3, freq: 700, slideTo: 90, type: 'lowpass', vol: 0.8, verb: 0.6 });
+      noise(b, { dur: 0.12, freq: 2600, slideTo: 900, q: 0.9, vol: 0.45, attack: 0.001 });
       break;
     case 'chime':
       // A column of light standing up: a high glassy bell and its octave.

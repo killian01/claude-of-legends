@@ -12,6 +12,7 @@
 
 import * as THREE from 'three';
 import type { SnapCache, SnapRoyale } from '../net/royale_wire';
+import { SEEDFALL_IMPACT_M } from '../sim/content/royale_events';
 import type { Vec3 } from '../sim/geo';
 import { type Pillar, PlanetPillars } from './planet_pillars';
 import type { PlanetGround } from './planet_terrain';
@@ -24,6 +25,12 @@ const LID_MS = 380;
 const SPARKS = 24;
 const MAX_BURSTS = 4;
 const CRACK_MS = 650;
+// A seed's impact: its shockwave out to three times its reach, the dust
+// rolling after it, the flash up its column.
+const SHOCK_MS = 900;
+const DUST_MS = 1500;
+const FLASH_MS = 800;
+const FLASH_H = 40;
 
 // A cache's look by its kind on the wire (0 plain, 1 golden, 2 a
 // Seedfall's): its size, its body and lid, its glow and the glow's lift.
@@ -57,10 +64,22 @@ interface Burst {
   turn: THREE.Quaternion;
 }
 
-// A broken opening's red ring.
+// A ring swelling and fading on the ground: a broken opening's red one, a
+// seed's shockwave and its dust. From r0 to r1 meters over ms, from its
+// peak opacity to nothing.
 interface Crack {
   startMs: number;
   ring: THREE.Mesh;
+  ms: number;
+  r0: number;
+  r1: number;
+  peak: number;
+}
+
+// A flash up a column: rises at once and fades.
+interface Flash {
+  startMs: number;
+  column: THREE.Mesh;
 }
 const MAX_PICKS = 64;
 
@@ -123,6 +142,8 @@ export class PlanetMarks {
   private readonly burstColumnGeo: THREE.CylinderGeometry;
   private readonly burstLidGeo: THREE.BoxGeometry;
   private readonly crackGeo: THREE.RingGeometry;
+  private readonly dustGeo: THREE.RingGeometry;
+  private readonly flashes: Flash[] = [];
   private readonly sparkTexture: THREE.Texture;
   private readonly column: THREE.Texture;
   private readonly stopCues: () => void;
@@ -148,7 +169,9 @@ export class PlanetMarks {
     this.burstLidGeo.translate(0, 0.12, 0.4);
     this.crackGeo = new THREE.RingGeometry(0.8, 1, 40);
     this.crackGeo.rotateX(-Math.PI / 2);
-    this.owned.push(this.burstColumnGeo, this.burstLidGeo, this.crackGeo);
+    this.dustGeo = new THREE.RingGeometry(0.45, 1, 48);
+    this.dustGeo.rotateX(-Math.PI / 2);
+    this.owned.push(this.burstColumnGeo, this.burstLidGeo, this.crackGeo, this.dustGeo);
     this.stopCues = onRoyaleCue((cue) => this.onCue(cue));
 
     // Caches: a chest body and its lid, instanced; a glow per cache.
@@ -381,6 +404,7 @@ export class PlanetMarks {
   private onCue(cue: RoyaleCue): void {
     if (cue.kind === 'cache_open') this.openNow(cue.cacheId);
     else if (cue.kind === 'cache_crack') this.crackAt(cue.cacheId);
+    else if (cue.kind === 'seedfall_land') this.impactAt(cue.at);
   }
 
   private cacheById(cacheId: number): SnapCache | undefined {
@@ -495,21 +519,73 @@ export class PlanetMarks {
   crackAt(cacheId: number): void {
     const c = this.cacheById(cacheId);
     if (!c) return;
-    const p = { x: c[1], y: c[2], z: c[3] };
+    this.wave(
+      { x: c[1], y: c[2], z: c[3] },
+      this.crackGeo,
+      0xff3a2a,
+      true,
+      CRACK_MS,
+      0.8,
+      2.6,
+      0.9,
+    );
+  }
+
+  // A seed crashed down: a gold-white shockwave runs out past its reach,
+  // dust rolls after it, and a flash goes up its column.
+  impactAt(p: Vec3): void {
+    const reach = SEEDFALL_IMPACT_M;
+    this.wave(p, this.crackGeo, 0xfff0c0, true, SHOCK_MS, 1, reach * 3, 1);
+    this.wave(p, this.dustGeo, 0xb89a70, false, DUST_MS, reach * 0.5, reach * 2.4, 0.6);
+    while (this.flashes.length >= MAX_BURSTS) this.endFlash(this.flashes.shift()!);
     const mat = new THREE.MeshBasicMaterial({
-      color: 0xff3a2a,
+      color: 0xfff6d8,
+      map: this.column,
       transparent: true,
-      opacity: 0.9,
+      opacity: 1,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       fog: false,
     });
-    const ring = new THREE.Mesh(this.crackGeo, mat);
+    const column = new THREE.Mesh(this.burstColumnGeo, mat);
+    const normal = new THREE.Vector3(p.x, p.y, p.z).normalize();
+    column.position.copy(this.point(p, 0));
+    column.quaternion.setFromUnitVectors(UP, normal);
+    column.scale.set(3, 0.05, 3);
+    this.group.add(column);
+    this.flashes.push({ startMs: this.lastNow, column });
+  }
+
+  private endFlash(f: Flash): void {
+    this.group.remove(f.column);
+    (f.column.material as THREE.Material).dispose();
+  }
+
+  private wave(
+    p: Vec3,
+    geo: THREE.RingGeometry,
+    color: number,
+    additive: boolean,
+    ms: number,
+    r0: number,
+    r1: number,
+    peak: number,
+  ): void {
+    const mat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: peak,
+      depthWrite: false,
+      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+      side: THREE.DoubleSide,
+      fog: false,
+    });
+    const ring = new THREE.Mesh(geo, mat);
     ring.matrixAutoUpdate = false;
-    ring.matrix.copy(this.standing(p, 0.12, 1));
+    ring.matrix.copy(this.standing(p, 0.12, r0));
     this.group.add(ring);
-    this.cracks.push({ startMs: this.lastNow, ring });
+    this.cracks.push({ startMs: this.lastNow, ring, ms, r0, r1, peak });
   }
 
   // The bursts and the cracks, every frame.
@@ -552,20 +628,33 @@ export class PlanetMarks {
     for (let i = this.cracks.length - 1; i >= 0; i--) {
       const c = this.cracks[i]!;
       const age = now - c.startMs;
-      if (age >= CRACK_MS) {
+      if (age >= c.ms) {
         this.group.remove(c.ring);
         (c.ring.material as THREE.Material).dispose();
         this.cracks.splice(i, 1);
         continue;
       }
-      const k = age / CRACK_MS;
-      const r = 0.8 + 1.8 * k;
+      const k = age / c.ms;
+      // Fast out, easing: a wave, not a slide.
+      const r = c.r0 + (c.r1 - c.r0) * (1 - (1 - k) * (1 - k));
       const m = c.ring.matrix.clone();
       const pos = new THREE.Vector3();
       const q = new THREE.Quaternion();
       m.decompose(pos, q, new THREE.Vector3());
       c.ring.matrix.compose(pos, q, new THREE.Vector3(r, 1, r));
-      (c.ring.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - k);
+      (c.ring.material as THREE.MeshBasicMaterial).opacity = c.peak * (1 - k);
+    }
+    for (let i = this.flashes.length - 1; i >= 0; i--) {
+      const f = this.flashes[i]!;
+      const age = now - f.startMs;
+      if (age >= FLASH_MS) {
+        this.endFlash(f);
+        this.flashes.splice(i, 1);
+        continue;
+      }
+      const k = age / FLASH_MS;
+      f.column.scale.y = Math.max(0.05, FLASH_H * Math.min(1, age / 120));
+      (f.column.material as THREE.MeshBasicMaterial).opacity = (1 - k) * (1 - k);
     }
   }
 
@@ -632,6 +721,8 @@ export class PlanetMarks {
     this.bursts.length = 0;
     for (const c of this.cracks) (c.ring.material as THREE.Material).dispose();
     this.cracks.length = 0;
+    for (const f of this.flashes) this.endFlash(f);
+    this.flashes.length = 0;
     for (const o of this.owned) o.dispose();
   }
 }

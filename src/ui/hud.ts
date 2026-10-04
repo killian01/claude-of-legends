@@ -2024,7 +2024,9 @@ export class Hud {
           onExit,
         })
       : null;
-    this.royale?.setAnnounce((text, color) => this.announce(text, color));
+    this.royale?.setAnnounce((text, color, holdMs, keep) =>
+      this.announce(text, color, holdMs, keep),
+    );
   }
 
   setNetHooks(hooks: NetHooks): void {
