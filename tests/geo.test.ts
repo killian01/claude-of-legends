@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { hypot } from '../src/sim/exact';
 import {
+  addScaled,
   advance,
   along,
   away,
@@ -23,6 +24,7 @@ import {
   segmentDist,
   shift,
   stepToward,
+  sub,
   tangent,
   turnLeft,
   unit,
@@ -202,5 +204,18 @@ describe('the placement helpers', () => {
     expect(onR(moved)).toBeCloseTo(R, 9);
     expect(dist(p, moved)).toBeCloseTo(5, 9);
     expect(shift(p, tangent(p, 0, 0))).toEqual(p);
+  });
+});
+
+describe('the raw vector sums', () => {
+  it('subtract and blend on every axis, the plane keeping to two', () => {
+    expect(sub({ x: 3, y: 5, z: 7 }, { x: 1, y: 2, z: 3 })).toEqual({ x: 2, y: 3, z: 4 });
+    expect(sub({ x: 3, z: 7 }, { x: 1, z: 3 })).toEqual({ x: 2, z: 4 });
+    expect(addScaled({ x: 1, y: 0, z: 0 }, { x: 0, y: 2, z: 4 }, 1.5)).toEqual({
+      x: 1,
+      y: 3,
+      z: 6,
+    });
+    expect(addScaled({ x: 1, z: 0 }, { x: 0, z: 4 }, 0.5)).toEqual({ x: 1, z: 2 });
   });
 });
