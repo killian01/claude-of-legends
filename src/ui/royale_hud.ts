@@ -21,10 +21,11 @@ import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import { setPortrait } from './champion_art';
 import { type MomentDeath, RoyaleHudMoments } from './royale_hud_moments';
+import { NOTES_BOTTOM_PX, NOTES_FROM_MIDDLE_PX, NOTES_MAX, SIDE_MARGIN_PX } from './royale_layout';
 import { royaleMode } from './royale_modes';
 import type { MomentCall } from './royale_moments';
 import { type RoyaleEndModel, royaleEnd } from './royale_result';
-import type { RoyaleStepsView } from './royale_steps';
+import { foldForFight, type RoyaleStepsView } from './royale_steps';
 import {
   countLine,
   dropBanner,
@@ -128,9 +129,18 @@ const CSS = `
   background: radial-gradient(circle at 40% 35%, #3a2e14, #0b0d16 75%); }
 .br-open b { font-size: 12px; font-weight: 800; color: #f0dca0; letter-spacing: 0.6px;
   text-shadow: 0 1px 3px #000; }
-/* The notices: the loot as it lands, the levels. */
+/* The notices: the loot as it lands, the levels. On a desktop they stand
+   in a lane of their own left of the bar, over the bag they fill and
+   above the hints, never in the middle where the champion stands (at
+   960x540 the loot, "Completed:" and the level stacked on it): right
+   aligned on the bar's side, wrapping before the screen's edge. */
 .br-notes { position: absolute; left: 50%; bottom: 262px; transform: translateX(-50%);
   display: flex; flex-direction: column-reverse; align-items: center; gap: 6px; }
+.hud:not(.compact) .br-notes { left: auto; transform: none; align-items: flex-end;
+  right: calc(50% + ${NOTES_FROM_MIDDLE_PX}px); bottom: ${NOTES_BOTTOM_PX}px;
+  width: calc(50% - ${NOTES_FROM_MIDDLE_PX + SIDE_MARGIN_PX}px - var(--safe-left, env(safe-area-inset-left, 0px))); }
+.hud:not(.compact) .br-note { white-space: normal; max-width: 100%; line-height: 1.25;
+  font-size: 14px; }
 .br-note { display: flex; align-items: center; gap: 8px; padding: 5px 14px 5px 6px;
   border-radius: 10px; border: 1px solid #8a7430; background: rgba(30, 26, 12, 0.9);
   color: #ffe08a; font-size: 15px; font-weight: 800; white-space: nowrap;
@@ -502,7 +512,7 @@ export class RoyaleHud {
     note.appendChild(el('span', '', text));
     note.dataset.until = String(performance.now() + NOTICE_MS);
     this.notes.appendChild(note);
-    while (this.notes.children.length > 4) this.notes.firstElementChild?.remove();
+    while (this.notes.children.length > NOTES_MAX) this.notes.firstElementChild?.remove();
   }
 
   // The notices' clock: each fades for its last moment, then leaves.
@@ -534,9 +544,13 @@ export class RoyaleHud {
       }
     }
     const rCooling = (u.cooldowns.R ?? 0) > time;
+    const fight = foldForFight(
+      this.moments.sinceHit(time),
+      this.host.root.classList.contains('compact'),
+    );
     return {
       time,
-      covered: covered || this.endEl !== null,
+      covered: covered || this.endEl !== null || fight,
       dead: u.dead,
       sinceLanding: landed && r ? Math.max(0, time - r.de) : null,
       openedCache: this.openedCache,

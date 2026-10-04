@@ -9,6 +9,8 @@ import { STEP_IDS } from '../src/net/protocol';
 import { GAP_S, READ_S, SAY_S } from '../src/ui/first_steps';
 import {
   CACHE_AFTER_S,
+  FIGHT_FOLD_S,
+  foldForFight,
   hideRoyaleSteps,
   PAD_AFTER_S,
   ROYALE_STEP_IDS,
@@ -168,5 +170,19 @@ describe('the battle royale first steps', () => {
         expect(royaleStepLine(id, input)).not.toMatch(/recall|shop|tower|minion|\bB\b|\bP\b/i);
       }
     }
+  });
+});
+
+describe('the first steps in a fight', () => {
+  it('fold on a phone while a hit was taken in the last seconds', () => {
+    expect(foldForFight(0, true)).toBe(true);
+    expect(foldForFight(FIGHT_FOLD_S - 0.1, true)).toBe(true);
+    expect(foldForFight(FIGHT_FOLD_S, true)).toBe(false);
+    expect(foldForFight(null, true)).toBe(false);
+  });
+
+  it('never fold on a desktop, where the card stands at the side', () => {
+    expect(foldForFight(0, false)).toBe(false);
+    expect(foldForFight(1, false)).toBe(false);
   });
 });

@@ -91,6 +91,15 @@ const TABLE: StepTable<RoyaleStepId, RoyaleStepsView> = {
   urgent: 'br_dusk',
 };
 
+// On a phone the card stands in the band over the champion, where a fight
+// is read: it folds while the champion is in one (a hit taken, the Dusk's
+// burn aside, in the last FIGHT_FOLD_S) and comes back after. On a desktop
+// it stands at the side (ui/hud.ts) and never folds for a fight.
+export const FIGHT_FOLD_S = 3;
+export function foldForFight(sinceHit: number | null, compact: boolean): boolean {
+  return compact && sinceHit !== null && sinceHit >= 0 && sinceHit < FIGHT_FOLD_S;
+}
+
 export function royaleStepsStart(off: boolean, done: readonly string[]): RoyaleStepsState {
   return guideStart(ROYALE_STEP_IDS, off, done);
 }
