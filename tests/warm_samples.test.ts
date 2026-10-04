@@ -12,6 +12,7 @@ import {
   type FightWarmHost,
   runSteps,
   sampleSpellArt,
+  sliced,
   texturesOf,
   WARM_BODIES,
   warmFights,
@@ -141,6 +142,34 @@ describe('the warm-up steps', () => {
   });
 });
 
+describe('the pause between steps', () => {
+  it('lets a frame go only once its budget is spent', async () => {
+    let t = 0;
+    let frames = 0;
+    const next = sliced(
+      4,
+      () => t,
+      async () => {
+        frames++;
+        t += 16;
+      },
+    );
+    // Two light steps of a millisecond share the frame.
+    t += 1;
+    await next();
+    t += 1;
+    await next();
+    expect(frames).toBe(0);
+    // A heavy one spends the rest: the next step waits for a new frame.
+    t += 5;
+    await next();
+    expect(frames).toBe(1);
+    t += 1;
+    await next();
+    expect(frames).toBe(1);
+  });
+});
+
 describe('the fights warmed', () => {
   function host(over: Partial<FightWarmHost> = {}) {
     const fx = fakeFx();
@@ -184,6 +213,33 @@ describe('the fights warmed', () => {
     expect(fx.updates).toBe(expected);
     expect(fx.timedDisposed).toBe(expected);
     expect(champions()).toBe(2);
+  });
+
+  it('warms the champions first, then the bodies, then the spells', async () => {
+    const order: string[] = [];
+    const { h } = host();
+    await warmFights({
+      ...h,
+      champion: (id) => {
+        order.push(`champion ${id}`);
+        return null;
+      },
+      body: (b) => {
+        order.push(`body ${b.kind}`);
+        return null;
+      },
+      catalog: [
+        {
+          impact: () => {
+            order.push('spell');
+          },
+        },
+      ],
+    });
+    expect(order[0]).toBe('champion torv');
+    expect(order[1]).toBe('champion sylra');
+    expect(order[2]).toMatch(/^body /);
+    expect(order.at(-1)).toBe('spell');
   });
 
   it("hides the samples' own lights from the programs", async () => {

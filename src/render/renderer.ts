@@ -95,12 +95,15 @@ import { VfxSystem } from './vfx/system';
 import { disposeEffect } from './vfx/timed';
 import { TowerReachFx } from './vfx/tower_reach_fx';
 import { TowerShotFx } from './vfx/tower_shot_fx';
-import { texturesOf, type WarmBody, warmFights } from './warm_samples';
+import { sliced, texturesOf, type WarmBody, warmFights } from './warm_samples';
 
 const TEAM_COLORS: readonly number[] = [0x4a7dd6, 0xd65c5c];
 // What the fights' warm-up hands the body builder for a sample: no seat,
 // no team, nowhere.
 const WARM_UNIT = { id: -1, team: -1, pos: { x: 0, z: 0 } };
+// How much of a frame the fights' warm-up may take before it waits for
+// the next, milliseconds: light samples share a frame, a heavy one waits.
+const WARM_SLICE_MS = 4;
 const TEAM_LIGHT: readonly number[] = [0x9dbcf5, 0xf5a3a3];
 
 // Background and fog share the forest-skirt tone so the world edge melts
@@ -797,7 +800,11 @@ export class Renderer {
       makeFx: (scene) => new VfxSystem(scene, this.terrain.heightAt),
       preload: () =>
         Promise.all([preloadSylraEffects(), preloadElowenEffects(), preloadPyrefang()]),
-      next: () => new Promise((done) => requestAnimationFrame(() => done())),
+      next: sliced(
+        WARM_SLICE_MS,
+        () => performance.now(),
+        () => new Promise((done) => requestAnimationFrame(() => done())),
+      ),
       gone: () => this.disposed,
     }).catch(() => undefined);
   }

@@ -134,8 +134,8 @@ export interface FightWarmHost {
 // beats have fired and their timed pieces have moved on.
 const LATER_MS = 450;
 
-// Builds, compiles and releases every sample, one spell, one body or one
-// champion a step. Returns how many steps ran.
+// Builds, compiles and releases every sample, one champion, one body or
+// one spell a step. Returns how many steps ran.
 export async function warmFights(host: FightWarmHost): Promise<number> {
   await host.preload();
   if (host.gone()) return 0;
@@ -173,15 +173,8 @@ export async function warmFights(host: FightWarmHost): Promise<number> {
       }
     });
   };
-  for (const vis of host.catalog) {
-    step((add) => sampleSpellArt(vis, fx, add, () => host.compile(scene)));
-  }
-  for (const body of WARM_BODIES) {
-    step((add) => {
-      const built = host.body(body);
-      if (built) add(built);
-    });
-  }
+  // The champions first, the first thing a landing meets, then the bodies,
+  // then the spells.
   for (const id of host.championIds) {
     step((add, after) => {
       const cv = host.champion(id);
@@ -189,6 +182,15 @@ export async function warmFights(host: FightWarmHost): Promise<number> {
       add(cv.root);
       after(() => cv.dispose());
     });
+  }
+  for (const body of WARM_BODIES) {
+    step((add) => {
+      const built = host.body(body);
+      if (built) add(built);
+    });
+  }
+  for (const vis of host.catalog) {
+    step((add) => sampleSpellArt(vis, fx, add, () => host.compile(scene)));
   }
   return runSteps(steps, host.next, host.gone);
 }
@@ -219,4 +221,20 @@ export function texturesOf(root: THREE.Object3D): THREE.Texture[] {
     }
   });
   return [...out];
+}
+
+// The pause between steps: a frame is let go only once `budgetMs` of it
+// has gone into the warm-up, so several light steps share a frame and a
+// heavy one has its frame to itself.
+export function sliced(
+  budgetMs: number,
+  now: () => number,
+  nextFrame: () => Promise<void>,
+): () => Promise<void> {
+  let from = now();
+  return async () => {
+    if (now() - from < budgetMs) return;
+    await nextFrame();
+    from = now();
+  };
 }
