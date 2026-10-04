@@ -6,7 +6,7 @@ import { nextStep } from '../src/game/flow';
 import { royaleNext } from '../src/game/royale_flow';
 
 describe('after a battle royale', () => {
-  it('plays the same rule set again', () => {
+  it("plays the same rule set again: Respawn's Play the next match enters anew", () => {
     expect(royaleNext('again', 'respawn')).toEqual({ to: 'match', variant: 'respawn' });
     expect(royaleNext('again', 'one_life')).toEqual({ to: 'match', variant: 'one_life' });
   });

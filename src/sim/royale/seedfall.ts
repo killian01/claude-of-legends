@@ -1,5 +1,5 @@
 // The Seedfalls (CONTEXT.md: Seedfall): five a match from two minutes after
-// landing, each called twenty seconds ahead, its impact throwing up whoever
+// landing, each called thirty seconds ahead, its impact throwing up whoever
 // stands under it, its cache opened once. Pure where it can be (the
 // schedule, the point drawn, the impact's reach, the reward); the mode
 // drives it from stepAfterDeaths (the announce, the landing and its cache)

@@ -37,10 +37,10 @@ export interface RoyaleEndModel {
   home: string;
 }
 
-// `next`: Respawn's next match already runs behind the screen (the server
-// moves the people still playing into it at once), and the first button
-// goes into it.
-export function royaleEnd(r: RoyaleResult, next = false): RoyaleEndModel {
+// The first button enters again with the same pick: One life's Play again,
+// Respawn's Play the next match, which drops into the match kept running
+// for visitors (server/royale_service.ts), the champion arriving fresh.
+export function royaleEnd(r: RoyaleResult): RoyaleEndModel {
   const oneLife = r.v === 'one_life';
   const won = r.place === 1;
   const title = won
@@ -74,7 +74,7 @@ export function royaleEnd(r: RoyaleResult, next = false): RoyaleEndModel {
     lines,
     heading: oneLife ? 'The top five' : 'The final ranking',
     rows,
-    again: next ? 'Play the next match' : 'Play again',
+    again: oneLife ? 'Play again' : 'Play the next match',
     other: `Try ${royaleMode(otherVariant(r.v)).title}`,
     home: 'Back home',
   };

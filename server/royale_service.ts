@@ -5,15 +5,16 @@
 // them and forty-nine bots. Each tick runs every match, banks what the
 // people earned (server/royale_points.ts), sends each person their own
 // snapshot, and tells a person their result when they are out for good
-// (One life) or the match ends. Respawn then starts the next match at once
-// with the people still connected; One life lingers on its end screen,
-// whose Play again enters anew. A dropped connection leaves the seat to the
-// mode's bot, held for its owner for a minute. Transport-agnostic: main.ts
-// hands it the socket's messages through one case and its deps.
+// (One life) or the match ends. Respawn then lets every person go, and its
+// end screen's Play the next match enters anew, dropping into the match
+// kept running for visitors; One life lingers on its end screen, whose Play
+// again enters anew. A dropped connection leaves the seat to the mode's
+// bot, held for its owner for a minute. Transport-agnostic: main.ts hands
+// it the socket's messages through one case and its deps.
 
 import { type ClientMsg, type ServerMsg, stepOnWire } from '../src/net/protocol';
 import type { RoyaleVariant } from '../src/net/royale_wire';
-import { activeNearEnd, bankAwards } from './points';
+import { bankAwards } from './points';
 import { ROYALE_VERBS } from './royale_commands';
 import { chooseRoyaleMatch, type RoyaleCandidate, takesPeople } from './royale_join';
 import { RoyaleMatch, type RoyalePlayer, type RoyaleReplay } from './royale_match';
@@ -108,7 +109,8 @@ export class RoyaleService {
   readonly matches = new Map<number, RoyaleEntry>();
   // Seats held for a dropped connection, by the owner who may claim them.
   private readonly reservations = new Map<number, Reservation>();
-  // The last pick each client entered with: Respawn's next match seats it.
+  // The last pick each client entered with: a held seat claimed again
+  // seats it.
   private readonly picks = new Map<number, RoyalePick>();
   private readonly seated = new Map<number, number>();
 
@@ -446,11 +448,9 @@ export class RoyaleService {
   // One step of every match, at the server's 20 Hz.
   tick(): void {
     const now = this.deps.now();
-    const next: RoyaleClient[][] = [];
     for (const entry of [...this.matches.values()]) {
       try {
-        const movers = this.tickOne(entry, now);
-        if (movers) next.push(movers);
+        this.tickOne(entry, now);
         entry.failures = 0;
       } catch (err) {
         this.deps.log(`royale ${entry.match.id} tick failed: ${String(err)}`);
@@ -459,12 +459,6 @@ export class RoyaleService {
           this.close(entry, true);
           this.deps.log(`royale ${entry.match.id} force-closed after repeated tick failures`);
         }
-      }
-    }
-    // Respawn's next match, with the people its last one ended with.
-    for (const movers of next) {
-      if (!this.start('respawn', movers)) {
-        for (const c of movers) this.deps.send(c.id, { t: 'match_end' });
       }
     }
     for (const [owner, r] of this.reservations) {
@@ -481,9 +475,8 @@ export class RoyaleService {
     if (this.deps.standing) this.keepOneOpen();
   }
 
-  // One match's tick; the people to move into Respawn's next match when
-  // this one just ended.
-  private tickOne(entry: RoyaleEntry, now: number): RoyaleClient[] | null {
+  // One match's tick.
+  private tickOne(entry: RoyaleEntry, now: number): void {
     const { send } = this.deps;
     const m = entry.match;
     m.tick();
@@ -519,21 +512,23 @@ export class RoyaleService {
     }
     if (m.over && entry.endedAt === null) {
       entry.endedAt = now;
-      return this.end(entry);
+      this.end(entry);
+      return;
     }
     if (entry.endedAt !== null && now - entry.endedAt > ROYALE_LINGER_MS) this.close(entry, true);
-    return null;
   }
 
   // The last light went out, or the last champion stands: every person
-  // still in hears their result. Respawn hands back the people to move: the
-  // ones still playing (a command in the last three minutes, ADR 0027's
-  // rule), so a tab left open does not play match after match for nobody;
-  // the others are told the match ended, and their end screen offers the
-  // way back in.
-  private end(entry: RoyaleEntry): RoyaleClient[] | null {
+  // still in hears their result. Respawn then closes at once and tells each
+  // person the match ended; nobody is moved. The end screen's Play the next
+  // match enters anew with the same pick, into the match kept running for
+  // visitors (keepOneOpen) with an Arrival, fresh and graced. Moving the
+  // people at once landed their champion behind the end screen, where it
+  // stood idle and was taken down (the second playtest, 2026-10-04); and a
+  // tab left open plays no match for nobody.
+  private end(entry: RoyaleEntry): void {
     const m = entry.match;
-    const people: RoyaleClient[] = [];
+    let people = 0;
     for (const p of m.players.values()) {
       if (!p.resultSent) {
         const result = m.resultFor(p.clientId);
@@ -543,9 +538,7 @@ export class RoyaleService {
       const c = this.deps.client(p.clientId);
       if (!c) continue;
       this.report(c, entry, 'ended');
-      if (m.variant !== 'respawn') continue;
-      if (activeNearEnd(m.sim.tickCount, p.lastCommandAt)) people.push(c);
-      else this.deps.send(p.clientId, { t: 'match_end' });
+      people += 1;
     }
     const replay = entry.hadPeople ? m.replayRecord() : null;
     if (replay) {
@@ -555,10 +548,8 @@ export class RoyaleService {
         this.deps.log(`royale ${m.id} replay save failed: ${String(err)}`);
       }
     }
-    this.deps.log(`royale ${m.id} ended with ${people.length} person(s) in`);
-    if (m.variant !== 'respawn') return null;
-    this.close(entry, false);
-    return people.length > 0 ? people : null;
+    this.deps.log(`royale ${m.id} ended with ${people} person(s) in`);
+    if (m.variant === 'respawn') this.close(entry, true);
   }
 
   private close(entry: RoyaleEntry, notify: boolean): void {
