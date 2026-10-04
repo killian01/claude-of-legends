@@ -174,6 +174,9 @@ export interface SnapUnit {
   // again whenever the seat changes hands (a drop in, a person leaving).
   n?: string;
   b?: 1;
+  // The battle royale: the Heartwood Graft a champion carries (CONTEXT.md:
+  // Graft), shown on it to everyone who sees it; every record while held.
+  hw?: string;
 }
 
 // A ring's clock on the wire (ADR 0022): the ring, the live creature's id

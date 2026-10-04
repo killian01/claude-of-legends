@@ -122,6 +122,14 @@ function materializeUnit(s: SnapUnit): Unit {
     outOfCombatBonus: 0,
     hpScale: 1,
     dmgScale: 1,
+    // The battle royale's Heartwood the record carries (hw), all the
+    // mirror knows of a champion's Grafts.
+    grafts: s.hw ? [s.hw] : [],
+    graftHits: 0,
+    graftShieldAt: 0,
+    graftThornAt: 0,
+    graftRushAt: 0,
+    graftRootAt: [],
     favors: NO_FAVORS,
     creatureId: s.cr ?? null,
     aspect: s.a ?? null,
@@ -208,8 +216,8 @@ export class ClientWorld implements IWorld {
   private caches: SnapCache[] = [];
   private dropPicks: WirePoint[] = [];
   // The blocks sent on change (the Seedfalls, the Risings, the marks, the
-  // Clamors): the last of each, kept between sends.
-  private kept: Pick<SnapRoyale, 'sf' | 'ri' | 'mk' | 'cl'> = {};
+  // Clamors, the own Grafts): the last of each, kept between sends.
+  private kept: Pick<SnapRoyale, 'sf' | 'ri' | 'mk' | 'cl' | 'gr'> = {};
   private readonly seats = new Map<number, SeatLabel>();
 
   // Match-scoped champion resolution, mirroring the server sim's registry:
@@ -263,6 +271,11 @@ export class ClientWorld implements IWorld {
     this.send({ t: 'drop', x: p.x, y: p.y, z: p.z });
   }
 
+  // A card of the open Graft offer (IWorld).
+  pickGraft(_unitId: number, pick: number): void {
+    this.send({ t: 'graft', pick });
+  }
+
   // Who holds a champion's seat, as the wire named it (IWorld).
   seat(unitId: number): SeatLabel | null {
     return this.seats.get(unitId) ?? null;
@@ -298,6 +311,7 @@ export class ClientWorld implements IWorld {
     if (r.ri) this.kept.ri = r.ri;
     if (r.mk) this.kept.mk = r.mk;
     if (r.cl) this.kept.cl = r.cl;
+    if (r.gr) this.kept.gr = r.gr;
     this.royaleBlock = { ...r, ...this.kept, caches: this.caches, picks: this.dropPicks };
   }
 
@@ -529,6 +543,7 @@ export class ClientWorld implements IWorld {
         unit.bot = s.b === 1;
       }
       unit.dead = s.d === 1;
+      if (unit.kind === 'champion') unit.grafts = s.hw ? [s.hw] : [];
       unit.play = s.p ?? null;
       unit.coachOrder = s.co ?? null;
       applyWireStatuses(unit, s.st, ccUntil);

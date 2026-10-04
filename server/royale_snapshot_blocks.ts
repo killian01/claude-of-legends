@@ -76,8 +76,27 @@ export function sentOnChange<T>(
 
 type Builder<T> = (sim: RoyaleSim, viewer: RoyaleViewer, ctx: RoyaleSnapContext) => T | undefined;
 
-export const offerBlock: Builder<SnapGraftOffer> = () => undefined;
-export const graftsBlock: Builder<string[]> = () => undefined;
+// The recipient's open Graft offer (src/sim/royale/grafts.ts): its grade,
+// the three cards and when card 0 is taken; every snapshot while open, so
+// its absence says none is.
+export const offerBlock: Builder<SnapGraftOffer> = (sim, viewer) => {
+  const head = sim.royale.offers.get(viewer.unitId)?.[0];
+  if (!head || head.until === null || head.cards.length < 3) return undefined;
+  return {
+    g: head.grade,
+    c: [head.cards[0]!, head.cards[1]!, head.cards[2]!],
+    u: round2(head.until),
+  };
+};
+// The Grafts the recipient holds, in the order taken: sent the tick they
+// change (the mirror keeps the last list), from the first one on, and
+// every GRAFTS_RESEND_S again for a mirror that started over (a rejoin).
+export const GRAFTS_RESEND_S = 5;
+export const graftsBlock: Builder<string[]> = (sim, viewer) => {
+  const held = sim.royale.grafts.get(viewer.unitId);
+  if (!held || held.length === 0) return undefined;
+  return sentOnChange(viewer, 'gr', [...held], sim.time, GRAFTS_RESEND_S);
+};
 // The Seedfalls called and not yet opened, everyone's: on the tick the list
 // changes and once a second otherwise, from the first call on (an empty
 // list once the last is opened, so the mirror lets go of it).

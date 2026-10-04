@@ -300,6 +300,10 @@ export class ChartWorld implements IWorld {
     this.base.pickDrop?.(unitId, p);
   }
 
+  pickGraft(unitId: number, pick: number): void {
+    this.base.pickGraft?.(unitId, pick);
+  }
+
   seat(unitId: number) {
     return this.base.seat?.(unitId) ?? null;
   }
