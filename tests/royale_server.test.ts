@@ -4,9 +4,9 @@
 // bots. The person enters Respawn, picks a landing during the drop, lands, plays; a second
 // person drops into a bot's seat mid-match; every snapshot holds to the
 // person's own sight with y on every position and the mode's block; the end
-// tells both their result, the points add up, and the next match starts at
-// once with both people in its drop. One life closes its door after the
-// calm. What it costs is printed for the report.
+// tells both their result and lets them go, the points add up, and Play the
+// next match enters anew. One life closes its door after the calm. What it
+// costs is printed for the report.
 
 import { describe, expect, it } from 'vitest';
 import { planet } from '../server/planet';
@@ -85,7 +85,7 @@ function server() {
 const SEC = 20;
 
 describe('a Respawn match on the real sim', () => {
-  it('runs a person through the drop, the play, a drop in, the end and the next match', () => {
+  it('runs a person through the drop, the play, a drop in, the end and the way back in', () => {
     const s = server();
     const a = s.connect(1, 'Wanderer 1');
     s.say(a, { t: 'royale', v: 'respawn', championId: 'fenn', sigils: ['riftstep', 'mend'] });
@@ -172,11 +172,18 @@ describe('a Respawn match on the real sim', () => {
     const told = s.all(1, 'points').reduce((sum, p) => sum + p.delta, 0);
     expect(s.banked.get(-1) ?? 0).toBe(told);
 
-    // The next match, at once, both people in its drop.
+    // Nobody moved: each told the match ended, the match gone.
+    expect(s.last(1, 'match_end')).toBeDefined();
+    expect(s.last(2, 'match_end')).toBeDefined();
+    expect(s.all(1, 'match_start')).toHaveLength(1);
+    expect(a.matchId).toBeNull();
+    expect(b?.matchId).toBeNull();
+    expect(s.service.matches.size).toBe(0);
+    // Play the next match: the same entry with the same pick, a new match
+    // in its drop.
+    s.say(a, { t: 'royale', v: 'respawn', championId: 'fenn', sigils: ['riftstep', 'mend'] });
     expect(s.all(1, 'match_start')).toHaveLength(2);
-    expect(s.all(2, 'match_start')).toHaveLength(2);
     expect(a.matchId).not.toBe(entry.match.id);
-    expect(a.matchId).toBe(b?.matchId);
     s.tick();
     expect(s.last(1, 'snap')?.royale?.st).toBe('drop');
 
