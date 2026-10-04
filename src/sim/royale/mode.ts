@@ -15,6 +15,7 @@
 import { dealDamage } from '../combat/damage';
 import { addStatus, cancelRecall } from '../combat/status';
 import type { RoyaleSkillId } from '../content/bots/royale_skills';
+import { GRAFT_TRIGGERS, recoveryOf, takedownHealOf } from '../content/grafts';
 import { planetTuning } from '../content/royale_tuning';
 import { outOfCombat } from '../favors';
 import { copy, dist2, type Vec3 } from '../geo';
@@ -30,7 +31,19 @@ import { noteClamor, observeClamors, stepClamors } from './clamors';
 import { dealEscorts, ESCORTS, escortLandings, normalizePick, resolveLandings } from './drop';
 import { type DuskSchedule, drawDusk, duskAt, insideCap } from './dusk';
 import { arrive, beginGrace, type Grace, observeGrace, stepGraces } from './grace';
-import { observeGrafts, pickGraft, stepGrafts } from './grafts';
+import {
+  clearOffers,
+  type GraftTally,
+  hasOpenOffer,
+  observeGrafts,
+  offerCreatureHeartwood,
+  offerDrop,
+  offerOnLevels,
+  offerOnTrigger,
+  pickGraft,
+  stepGrafts,
+  tallyOf,
+} from './grafts';
 import type { RoyaleGround, RoyaleLayout } from './layout';
 import { creatureXp, grantXp, landingLevels, takedownXp } from './levels';
 import { GOLDEN_PIECES, grantPieces, healShare, manaShare, seatBuild, streakShare } from './loot';
@@ -69,6 +82,7 @@ import {
   MARK_SHOWN_S,
   OUT_OF_COMBAT_HEAL,
   OUT_OF_COMBAT_MANA,
+  OUT_OF_COMBAT_S,
   OUT_OF_COMBAT_SPEED,
   PAD_REACH_M,
   PLAY_S,
@@ -153,6 +167,8 @@ export class RoyaleMode {
   // The fresh champions in their Grace (grace.ts), by unit id, in the
   // order they began; RoyaleState.arriving lists the same seats.
   graces = new Map<number, Grace>();
+  // What each seat did toward its Graft offers (grafts.ts GraftTally).
+  graftTally = new Map<number, GraftTally>();
   tally: RoyaleTally = {
     firstTakedownAt: null,
     takedowns: 0,
@@ -269,8 +285,8 @@ export class RoyaleMode {
   // A seat's pick of its open Graft offer (the 'graft' action, Sim.pickGraft):
   // free like the drop's pick, taken while dead, flying or dropping. False
   // when nothing was taken (grafts.ts).
-  pickGraft(unitId: number, pick: number, time: number): boolean {
-    return pickGraft(this, unitId, pick, time);
+  pickGraft(sim: Sim, unitId: number, pick: number): boolean {
+    return pickGraft(this, sim, unitId, pick);
   }
 
   // A drop-in's Arrival (CONTEXT.md; Sim.beginArrival, the replay's
@@ -279,7 +295,7 @@ export class RoyaleMode {
   // (grace.ts arrive). Only in play.
   beginArrival(sim: Sim, unitId: number): void {
     const u = sim.units.get(unitId);
-    if (u) arrive(this, sim, u);
+    if (u && arrive(this, sim, u)) offerOnTrigger(this, sim, unitId, 'arrival');
   }
 
   // A champion back from a Respawn death (the sim's respawn loop, once its
@@ -288,14 +304,13 @@ export class RoyaleMode {
     beginGrace(this, u, sim.time);
   }
 
-  // Whether the bot driver runs a dead seat's policy this tick (a Graft
-  // offer to pick, a Respawn landing to choose). Never yet: the Respawn
-  // pick (bot/brain.ts respawnPick) is a 'drop' that pickDrop refuses
-  // outside the drop until tranche 2 (T2-C) takes it while dead and gives
-  // a person the same pick, so asking would only spend a decision. Never
-  // in One life, never in the 5v5.
-  wantsDeadDecision(_unitId: number): boolean {
-    return false;
+  // Whether the bot driver runs a dead seat's policy this tick: while its
+  // Graft offer is open (a Respawn seat; One life's elimination clears the
+  // queue). The Respawn landing pick (bot/brain.ts respawnPick) is a
+  // 'drop' that pickDrop refuses outside the drop until tranche 2 (T2-C)
+  // takes it while dead, so it asks nothing more yet. Never in the 5v5.
+  wantsDeadDecision(unitId: number): boolean {
+    return hasOpenOffer(this, unitId);
   }
 
   // The health a champion comes back with (the sim's respawn loop): all of
@@ -311,11 +326,18 @@ export class RoyaleMode {
   }
 
   // A Heartwood Graft offered for a big creature's last hit (CONTEXT.md:
-  // Graft): whether one was. The Grafts wire it (grafts.ts); until they
-  // ship none is, and the prize pays a piece in its place (risings.ts
-  // risingReward).
-  offerHeartwood(_sim: Sim, _u: Unit): boolean {
-    return false;
+  // Graft): whether the seat was paid one (grafts.ts). A draw that came
+  // short pays its piece in the offer's place and counts as paid; a seat
+  // that can take no offer (out of One life, the match over) is not, and
+  // the prize pays a piece in its place (risings.ts risingReward).
+  offerHeartwood(sim: Sim, u: Unit): boolean {
+    if (!GRAFT_TRIGGERS[this.variant].creature) return false;
+    if (this.state.stage === 'over') return false;
+    if (this.variant === 'one_life' && (u.dead || this.state.eliminated.includes(u.id))) {
+      return false;
+    }
+    offerCreatureHeartwood(this, sim, u.id);
+    return true;
   }
 
   private champions(sim: Sim): Unit[] {
@@ -332,8 +354,12 @@ export class RoyaleMode {
   // bots come down beside each person (a seat no policy plays): a normal
   // one first, the gentle first for a newcomer.
   stepDrop(sim: Sim): void {
+    // The drop's Graft offer (grafts.ts): the tick after a seat's landing
+    // pick, in seat order, then at the drop's end for any that made none.
+    for (const id of [...this.state.drops.keys()].sort((a, b) => a - b)) offerDrop(this, sim, id);
     if (sim.time + 1e-9 < this.state.dropEndsAt) return;
     const seats = this.champions(sim).map((u) => u.id);
+    for (const id of seats) offerDrop(this, sim, id);
     const at = resolveLandings(seats, this.state.drops, sim.rng, this.layout, this.ground);
     const people = seats.filter((id) => !sim.policies.has(id));
     const bots = seats.filter((id) => sim.policies.has(id));
@@ -417,15 +443,26 @@ export class RoyaleMode {
   // Recovery with no fountain: out of combat (neither hit nor hitting for
   // OUT_OF_COMBAT_S), a share of the maximum mana back every second, and
   // of the maximum health while inside the light.
+  // A Graft may start the heal sooner and make it stronger (Second Breath,
+  // content/grafts.ts recoveryOf); the mana and the speed keep
+  // OUT_OF_COMBAT_S.
   stepRecovery(ctx: CombatCtx): void {
     for (const u of ctx.units.values()) {
       if (u.kind !== 'champion' || u.dead) continue;
-      if (!outOfCombat(u, ctx.time)) continue;
-      if (u.maxMana > 0) {
+      const calm = outOfCombat(u, ctx.time);
+      if (calm && u.maxMana > 0) {
         u.mana = Math.min(u.maxMana, u.mana + u.maxMana * OUT_OF_COMBAT_MANA * DT);
       }
+      const heal =
+        u.grafts.length > 0
+          ? recoveryOf(u, OUT_OF_COMBAT_S, OUT_OF_COMBAT_HEAL)
+          : { afterS: OUT_OF_COMBAT_S, share: OUT_OF_COMBAT_HEAL };
+      const healing =
+        calm ||
+        (ctx.time - u.lastDamagedAt > heal.afterS && ctx.time - u.lastDealtDamageAt > heal.afterS);
+      if (!healing) continue;
       if (u.pos.y !== undefined && !insideCap(this.state.dusk.now, u.pos as Vec3)) continue;
-      u.hp = Math.min(u.maxHp, u.hp + u.maxHp * OUT_OF_COMBAT_HEAL * DT);
+      u.hp = Math.min(u.maxHp, u.hp + u.maxHp * heal.share * DT);
     }
   }
 
@@ -478,6 +515,7 @@ export class RoyaleMode {
       if (taker) {
         this.tally.takedowns++;
         if (this.tally.firstTakedownAt === null) this.tally.firstTakedownAt = sim.time;
+        const from = taker.level;
         grantXp(taker, takedownXp(this.variant, victim.level, taker.level));
         // A mark taken down pays more (marks.ts): the Lodestar, an Ablaze.
         const marks = this.state.marks;
@@ -486,9 +524,9 @@ export class RoyaleMode {
         const pay = markPayout(this.variant, lodestar, run);
         const holder = markOf(marks, victim.id, 'wrath') !== null;
         if (lodestar || run !== null || holder) this.tally.markTakedowns++;
-        this.loot(sim, taker, 1 + pay.pieces, 'takedown');
+        this.lootPieces(sim, taker, 1 + pay.pieces, 'takedown');
         const share = streakShare(taker.killStreak);
-        healShare(taker, TAKEDOWN_HEAL * share);
+        healShare(taker, takedownHealOf(taker, TAKEDOWN_HEAL) * share);
         manaShare(taker, TAKEDOWN_MANA * share);
         this.state.scores.set(taker.id, (this.state.scores.get(taker.id) ?? 0) + pay.score);
         if (pay.snuffed !== null) {
@@ -499,6 +537,13 @@ export class RoyaleMode {
             streak: pay.snuffed,
           });
         }
+        // The Grafts: One life's first and third takedowns, then the
+        // levels passed.
+        const t = tallyOf(this, taker.id);
+        t.takedowns++;
+        if (t.takedowns === 1) offerOnTrigger(this, sim, taker.id, 'first_takedown', 'takedown');
+        if (t.takedowns === 3) offerOnTrigger(this, sim, taker.id, 'third_takedown', 'takedown');
+        offerOnLevels(this, sim, taker, from);
       }
       if (this.variant === 'one_life') {
         this.fallen.push({ id: victim.id, hpBefore: this.hpBefore.get(victim.id) ?? 0 });
@@ -507,25 +552,31 @@ export class RoyaleMode {
       return;
     }
     if (!champ) return;
+    const from = champ.level;
     if (victim.kind === 'camp') {
       grantXp(champ, creatureXp(victim.xpBounty));
       if (lastOfCamp) {
         this.tally.campsTaken++;
-        this.loot(sim, champ, 1, 'camp');
+        this.lootPieces(sim, champ, 1, 'camp');
         healShare(champ, CAMP_HEAL);
         manaShare(champ, CAMP_MANA);
+        const t = tallyOf(this, champ.id);
+        t.camps++;
+        if (t.camps === 1) offerOnTrigger(this, sim, champ.id, 'first_camp', 'camp');
       }
+      offerOnLevels(this, sim, champ, from);
       return;
     }
     if (victim.kind === 'creature' || victim.kind === 'warden') {
       grantXp(champ, creatureXp(victim.xpBounty));
+      offerOnLevels(this, sim, champ, from);
     }
     // A big creature's last hit (risings.ts): pieces, all the health and
     // mana, the slayer shown to everyone. The Warden's is the Wrath.
     if (victim.kind === 'creature') {
       this.tally.creaturesTaken++;
       const pay = risingReward(this.offerHeartwood(sim, champ));
-      this.loot(sim, champ, pay.pieces, 'camp');
+      this.lootPieces(sim, champ, pay.pieces, 'camp');
       healShare(champ, pay.heal);
       manaShare(champ, pay.mana);
       markSlayer(this, sim, champ);
@@ -539,7 +590,9 @@ export class RoyaleMode {
     return time + CAMP_BACK_S;
   }
 
-  private loot(sim: Sim, u: Unit, count: number, source: 'cache' | 'camp' | 'takedown'): void {
+  // The next pieces of a seat's build, told (also what a Graft offer whose
+  // draw came short pays instead, grafts.ts).
+  lootPieces(sim: Sim, u: Unit, count: number, source: 'cache' | 'camp' | 'takedown'): void {
     const build = this.builds.get(u.id) ?? seatBuild(u.championId);
     for (const itemId of grantPieces(u, build, count)) {
       this.emit(sim, { type: 'royale_loot', unitId: u.id, itemId, source });
@@ -575,6 +628,7 @@ export class RoyaleMode {
           continue;
         }
         s.eliminated.push(id);
+        clearOffers(this, id);
         const killerId = this.fallenKiller.get(id) ?? 0;
         this.emit(sim, { type: 'royale_out', unitId: id, killerId, place });
       }
@@ -599,17 +653,24 @@ export class RoyaleMode {
       if (!u) continue;
       this.tally.cachesOpened++;
       this.emit(sim, { type: 'royale_cache', unitId: o.unitId, cacheId: o.cacheId });
-      // A Seedfall cache pays its own (seedfall.ts); the Heartwood Graft
-      // offer joins here once Grafts ship.
+      const t = tallyOf(this, u.id);
+      t.caches++;
+      // A Seedfall cache pays its own (seedfall.ts) with a Heartwood offer.
       const seedfall = o.kind === 'seedfall' ? openedSeedfall(this, sim, o.cacheId) : null;
       if (seedfall) {
-        this.loot(sim, u, seedfall.pieces, 'cache');
+        this.lootPieces(sim, u, seedfall.pieces, 'cache');
         healShare(u, seedfall.heal);
         manaShare(u, seedfall.mana);
+        if (seedfall.heartwood) offerOnTrigger(this, sim, u.id, 'seedfall');
+        if (t.caches === 2) offerOnTrigger(this, sim, u.id, 'second_cache');
         continue;
       }
-      this.loot(sim, u, o.kind === 'golden' ? GOLDEN_PIECES : 1, 'cache');
+      // Respawn's golden cache trades its second piece for a Bough offer.
+      const goldenBough = o.kind === 'golden' && GRAFT_TRIGGERS[this.variant].golden_cache;
+      this.lootPieces(sim, u, o.kind === 'golden' && !goldenBough ? GOLDEN_PIECES : 1, 'cache');
       manaShare(u, CACHE_MANA);
+      if (goldenBough) offerOnTrigger(this, sim, u.id, 'golden_cache');
+      if (t.caches === 2) offerOnTrigger(this, sim, u.id, 'second_cache');
     }
     // What makes a match a story, each its own module.
     stepSeedfalls(this, sim);
@@ -731,6 +792,7 @@ export class RoyaleMode {
       skills: this.skills,
       lastActAt: this.lastActAt,
       graces: this.graces,
+      graftTally: this.graftTally,
       tally: this.tally,
     };
   }
@@ -743,6 +805,7 @@ export class RoyaleMode {
     this.skills = s.skills;
     this.lastActAt = s.lastActAt;
     this.graces = s.graces;
+    this.graftTally = s.graftTally;
     this.tally = s.tally;
     this.obsTick = -1;
     this.obsShared = null;

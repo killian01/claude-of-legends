@@ -2493,6 +2493,12 @@ export class Hud {
     return this.chatInput.style.display === 'block';
   }
 
+  // A battle royale Graft card picked by its key (game/input.ts, 1 to 3):
+  // true when an offer was open to take it.
+  pickGraft(card: number): boolean {
+    return this.royale?.pickGraft(card) ?? false;
+  }
+
   // Wires the touch two-step cast: slot taps call these (boot provides them).
   setCastTaps(taps: { ability(key: AbilityKey): void; sigil(slot: number): void }): void {
     this.castTaps = taps;

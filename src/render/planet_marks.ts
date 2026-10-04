@@ -19,6 +19,7 @@ import { SEEDFALL_IMPACT_M } from '../sim/content/royale_events';
 import type { Vec3 } from '../sim/geo';
 import { huntedPillars } from '../ui/royale_hunted';
 import { PlanetGrace } from './planet_grace';
+import { PlanetGraftAura } from './planet_graft_aura';
 import { type Pillar, PlanetPillars } from './planet_pillars';
 import type { PlanetGround } from './planet_terrain';
 import { onRoyaleCue, type RoyaleCue } from './royale_cues';
@@ -140,6 +141,8 @@ export class PlanetMarks {
   private shownCaches: readonly SnapCache[] | null = null;
   private readonly pillars: PlanetPillars;
   private readonly grace: PlanetGrace;
+  // The Heartwoods' auras (planet_graft_aura.ts), fed by the stage.
+  readonly graftAura: PlanetGraftAura;
   private readonly owned: { dispose(): void }[] = [];
   // Caches that opened before the list said so: hidden at once.
   private readonly hidden = new Set<number>();
@@ -169,6 +172,9 @@ export class PlanetMarks {
     );
     this.group.add(this.grace.group);
     this.owned.push(this.grace);
+    this.graftAura = new PlanetGraftAura((p, lift, scale) => this.standing(p, lift, scale));
+    this.group.add(this.graftAura.group);
+    this.owned.push(this.graftAura);
     const glow = glowTexture();
     this.owned.push(glow);
     this.sparkTexture = glow;

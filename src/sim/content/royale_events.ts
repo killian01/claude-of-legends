@@ -60,10 +60,9 @@ export const SEEDFALL_HELD: Readonly<Record<RoyaleVariant, boolean>> = {
 export const SEEDFALL_HELD_RATE = 0.5;
 export const SEEDFALL_CALM_S = 1;
 // What it pays: pieces of the build, a share of the maximum health and of
-// the maximum mana (both all of it). With Grafts it pays one piece and a
-// Heartwood Graft offer; until Grafts ship, two pieces.
+// the maximum mana (both all of it), and a Heartwood Graft offer
+// (royale/grafts.ts), which took the second piece's place.
 export const SEEDFALL_PIECES = 1;
-export const SEEDFALL_PIECES_BEFORE_GRAFTS = 2;
 export const SEEDFALL_HEAL = 1;
 export const SEEDFALL_MANA = 1;
 // An opening is contested when this many champions (the opener counted)

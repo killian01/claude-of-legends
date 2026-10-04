@@ -3,8 +3,9 @@
 // the count at the top center, the score leader's badge under them, the
 // warning while the champion stands in the Dusk, the drop's banner, the
 // kill feed at the top right with a bot mark on every bot, the ring of the
-// cache being opened, the loot and level notices, and the end screen built
-// from the result the server sends. What any of it says is decided in
+// cache being opened, the loot and level notices, the Graft cards (ui/
+// royale_hud_grafts.ts), and the end screen built from the result the
+// server sends. What any of it says is decided in
 // ui/royale_text.ts and ui/royale_result.ts; this module only draws.
 
 import type { PostMatchAction } from '../game/flow';
@@ -20,6 +21,7 @@ import type { TeamId } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import { setPortrait } from './champion_art';
+import { RoyaleHudGrafts } from './royale_hud_grafts';
 import { type MomentDeath, RoyaleHudMoments } from './royale_hud_moments';
 import {
   COMPACT_NOTE_FONT_PX,
@@ -174,6 +176,9 @@ const CSS = `
 .br-note img { width: 28px; height: 28px; border-radius: 6px; border: 1px solid #6b5a2e; }
 .br-note.level { color: #e6c8ff; border-color: #7a5ab0; background: rgba(30, 20, 44, 0.9);
   padding-left: 14px; }
+.br-note.graft { color: #d8f0c0; border-color: #5a8a3a; background: rgba(16, 28, 12, 0.9);
+  padding-left: 14px; }
+.br-end-grafts { margin: 6px 0 0; font-size: 13px; color: #cdb8f0; }
 /* Seen from its first frame, whatever the frame rate: a slow phone must
    not spend the notice's life on a fade in. It leaves on the HUD's own
    clock (update), not a keyframe's. */
@@ -366,6 +371,8 @@ export class RoyaleHud {
   private readonly moments: RoyaleHudMoments;
   // Until when the opening's ring shows red, broken (performance.now()).
   private crackUntil = 0;
+  // The Graft cards and their chip (ui/royale_hud_grafts.ts).
+  private readonly grafts: RoyaleHudGrafts;
 
   constructor(host: RoyaleHudHost) {
     this.host = host;
@@ -416,6 +423,17 @@ export class RoyaleHud {
         this.crackUntil = performance.now() + 700;
       },
     });
+    this.grafts = new RoyaleHudGrafts({
+      layer: this.layer,
+      root: host.root,
+      pick: (card) => host.world.pickGraft?.(host.selfId, card),
+      notice: (text) => this.notice(text, null, 'graft'),
+    });
+  }
+
+  // A key (1, 2, 3) or a tap on a Graft card: true when an offer took it.
+  pickGraft(card: number): boolean {
+    return this.grafts.pick(card);
   }
 
   setAnnounce(announce: AnnounceFn): void {
@@ -436,6 +454,13 @@ export class RoyaleHud {
     if (!r) return;
     const time = world.time;
     this.moments.step(r);
+    const own = world.units.get(selfId);
+    this.grafts.update(
+      r,
+      time,
+      own ? { ad: own.stats.ad, maxHp: own.maxHp, grafts: r.gr ?? [] } : null,
+      this.moments.sinceHit(time),
+    );
     const line = duskLine(r, time);
     if (this.duskText.textContent !== line.text) this.duskText.textContent = line.text;
     this.duskEl.className = `br-dusk ${line.tone}`;
@@ -549,7 +574,7 @@ export class RoyaleHud {
   private notice(
     text: string,
     icon: string | null,
-    kind: 'loot' | 'level' | 'done' | 'whole',
+    kind: 'loot' | 'level' | 'done' | 'whole' | 'graft',
   ): void {
     const note = el('div', `br-note ${kind}`);
     if (icon) {
@@ -659,6 +684,7 @@ export class RoyaleHud {
       el('h2', '', model.title),
     );
     for (const line of model.lines) card.appendChild(el('p', 'br-end-line', line));
+    if (model.grafts) card.appendChild(el('p', 'br-end-grafts', model.grafts));
     if (model.rows.length > 0) {
       const rank = el('div', 'br-end-rank');
       rank.appendChild(el('h3', '', model.heading));
@@ -705,6 +731,7 @@ export class RoyaleHud {
   }
 
   dispose(): void {
+    this.grafts.dispose();
     this.moments.dispose();
     this.layer.remove();
     this.endEl?.remove();

@@ -1,9 +1,10 @@
-// The bots' intent where it meets the contract: a dead seat decides
-// nowhere in tranche 1. Its one choice, the Respawn pick of where to come
-// back (bot/brain.ts respawnPick), reaches nothing until tranche 2 (T2-C)
-// lets the sim take a 'drop' while dead and gives a person the same pick,
-// so running the policy would only cost a decision per slot. Never in One
-// life, never in the 5v5. A newcomer's escorts are tested in
+// The bots' intent where it meets the contract: a dead seat decides only
+// while its Graft offer is open (royale/grafts.ts). The Respawn pick of
+// where to come back (bot/brain.ts respawnPick) reaches nothing until
+// tranche 2 (T2-C) lets the sim take a 'drop' while dead and gives a
+// person the same pick, so running the policy for it would only cost a
+// decision per slot. Never in One life (an elimination clears the queue),
+// never in the 5v5. A newcomer's escorts are tested in
 // tests/royale_drop.test.ts. Owned by tranche 1's bots-with-intent
 // worktree (T1-C).
 
@@ -27,6 +28,9 @@ describe('the dead seats that decide', () => {
   it('asks no dead Respawn seat while the pick reaches nothing, a Seedfall called or not', () => {
     const { sim, unitIds } = landed('respawn');
     const mode = sim.royaleMode!;
+    // The drop's Graft offer is open: that asks; once taken, nothing does.
+    expect(mode.wantsDeadDecision(unitIds[1]!)).toBe(true);
+    expect(sim.pickGraft(unitIds[1]!, 0)).toBe(true);
     expect(mode.wantsDeadDecision(unitIds[1]!)).toBe(false);
     calledSeedfall(sim);
     expect(mode.wantsDeadDecision(unitIds[1]!)).toBe(false);
@@ -43,6 +47,7 @@ describe('the dead seats that decide', () => {
 
   it('never asks one in One life', () => {
     const { sim, unitIds } = landed('one_life');
+    sim.royaleMode!.state.offers.clear();
     calledSeedfall(sim);
     expect(sim.royaleMode!.wantsDeadDecision(unitIds[1]!)).toBe(false);
   });

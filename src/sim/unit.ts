@@ -98,6 +98,19 @@ export interface Unit {
   // x * 1 is the number it always was. The damage step (combat/damage.ts)
   // multiplies a champion's hit on a champion by it, after the passives.
   dmgScale: number;
+  // The battle royale's Grafts this champion holds (CONTEXT.md: Graft;
+  // content/grafts.ts), in the order taken, a Sprout once per stack; empty
+  // everywhere else, where every graft hook and multiplier is skipped. The
+  // clocks beside it are the Grafts' own: chainsap's attack count,
+  // stoneblood's next shield, thornburst's and last_rush's next trigger,
+  // and rootbound's last root per target, [target id, ready again at],
+  // at most GRAFT_ROOT_MEMORY of them.
+  grafts: string[];
+  graftHits: number;
+  graftShieldAt: number;
+  graftThornAt: number;
+  graftRushAt: number;
+  graftRootAt: [number, number][];
   // The favors the unit's team holds (CONTEXT.md: Favor), mirrored from
   // the sim's Favors record whenever one is granted, so the stat
   // recalculation and the effect seam read the unit alone. Champions
@@ -251,6 +264,12 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     outOfCombatBonus: 0,
     hpScale: 1,
     dmgScale: 1,
+    grafts: [],
+    graftHits: 0,
+    graftShieldAt: 0,
+    graftThornAt: 0,
+    graftRushAt: 0,
+    graftRootAt: [],
     favors: NO_FAVORS,
     creatureId: null,
     aspect: null,

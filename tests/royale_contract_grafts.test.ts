@@ -1,73 +1,98 @@
-// The Grafts before their rules (CONTEXT.md: Graft): no offer and no Graft
-// in the observation or on the wire, and the pick accepted, free, changing
-// nothing (no state, no rng), live, replayed and in the 5v5. Owned by
-// tranche 2's grafts worktree (T2-B), which deletes or rewrites this file
-// as its rules land; no other worktree edits it.
+// The Grafts where they meet the contract (CONTEXT.md: Graft; ADR 0032):
+// the offer and the Grafts in the seat's observation and on the wire, the
+// pick free (no decision token) and taken the same live and replayed, and
+// nothing of it in the 5v5. The rules themselves are tests/royale_grafts.
+// test.ts. Owned by tranche 2's grafts worktree (T2-B).
 
 import { describe, expect, it } from 'vitest';
 import { applySimCommand } from '../src/net/replay';
 import { dispatchAction } from '../src/sim/action_dispatch';
+import { GRAFT_DROP_LAND_S } from '../src/sim/content/grafts';
 import { buildObservation } from '../src/sim/observe';
+import { DROP_S } from '../src/sim/royale/types';
 import { Sim } from '../src/sim/sim';
-import { fakeSnap, fingerprint, landed } from './royale_contract_fixture';
+import { fakeSnap, landed } from './royale_contract_fixture';
 
-describe('the Grafts, inert', () => {
-  for (const key of ['offer', 'grafts']) {
-    it(`leaves ${key} out of the observation`, () => {
-      const { sim, unitIds } = landed();
-      expect(buildObservation(sim, unitIds[0]!)!.royale).not.toHaveProperty(key);
-    });
-  }
-
-  for (const key of ['offer', 'gr']) {
-    it(`sends no ${key} block`, () => {
-      expect(fakeSnap().snap().royale).not.toHaveProperty(key);
-    });
-  }
-
-  it('picks no Graft', () => {
-    const { sim, unitIds } = landed('one_life');
-    expect(sim.royaleMode!.pickGraft(unitIds[1]!, 0, sim.time)).toBe(false);
-  });
-
-  it('accepts the graft action, free, and changes nothing', () => {
+describe('the Grafts on the contract', () => {
+  it('shows the seat its open offer and its Grafts', () => {
     const { sim, unitIds } = landed();
-    const before = fingerprint(sim);
-    for (const pick of [0, 1, 2] as const) {
-      expect(dispatchAction(sim, unitIds[0]!, { kind: 'graft', pick })).toBe(true);
-    }
-    expect(dispatchAction(sim, unitIds[0]!, { kind: 'graft', pick: 3 as 0 })).toBe(false);
-    expect(fingerprint(sim)).toEqual(before);
+    const r = buildObservation(sim, unitIds[0]!)!.royale!;
+    expect(r.offer).not.toBeNull();
+    expect(r.offer!.grade).toBe('bough');
+    expect(r.offer!.cards).toHaveLength(3);
+    expect(r.offer!.until).toBeCloseTo(DROP_S + GRAFT_DROP_LAND_S, 6);
+    expect(r.grafts).toEqual([]);
   });
 
-  it('changes nothing in the 5v5 either', () => {
+  it('sends the open offer every snapshot, and the Grafts held when they change', () => {
+    const { sim, self, snap } = fakeSnap();
+    expect(snap().royale).not.toHaveProperty('offer');
+    expect(snap().royale).not.toHaveProperty('gr');
+    sim.royale.offers.set(self.id, [
+      {
+        grade: 'heartwood',
+        cards: ['chainsap', 'rootbound', 'overgrowth'],
+        offeredAt: 0,
+        until: 9.5,
+      },
+    ]);
+    expect(snap().royale!.offer).toEqual({
+      g: 'heartwood',
+      c: ['chainsap', 'rootbound', 'overgrowth'],
+      u: 9.5,
+    });
+    expect(snap().royale!.offer).toBeDefined();
+    sim.royale.grafts.set(self.id, ['keen_edge']);
+    expect(snap().royale!.gr).toEqual(['keen_edge']);
+    expect(snap().royale).not.toHaveProperty('gr');
+    sim.royale.grafts.get(self.id)!.push('stoneblood');
+    expect(snap().royale!.gr).toEqual(['keen_edge', 'stoneblood']);
+  });
+
+  it('carries a Heartwood on the champion, for everyone who sees it', () => {
+    const { sim, self, snap } = fakeSnap();
+    sim.royale.stage = 'play';
+    const other = [...sim.units.values()].find((u) => u.id !== self.id)!;
+    other.pos = { ...self.pos };
+    other.grafts = ['quick_sap', 'chainsap'];
+    const rec = snap().units.find((u) => u.i === other.id);
+    expect(rec?.hw).toBe('chainsap');
+    expect(snap().units.find((u) => u.i === self.id)).not.toHaveProperty('hw');
+  });
+
+  it('takes the graft action free, and refuses a card out of range', () => {
+    const { sim, unitIds } = landed();
+    const u = sim.units.get(unitIds[0]!)!;
+    const tokens = u.decisionTokens;
+    const card = sim.royale!.offers.get(u.id)![0]!.cards[2]!;
+    expect(dispatchAction(sim, u.id, { kind: 'graft', pick: 3 as 0 })).toBe(false);
+    expect(dispatchAction(sim, u.id, { kind: 'graft', pick: 2 })).toBe(true);
+    expect(u.grafts).toEqual([card]);
+    expect(u.decisionTokens).toBe(tokens);
+  });
+
+  it('changes nothing in the 5v5', () => {
     const sim = new Sim(31);
     const u = sim.addChampion(0);
     sim.tick();
     const before = { checksum: sim.checksum(), rng: sim.rng.state, tokens: u.decisionTokens };
     expect(dispatchAction(sim, u.id, { kind: 'graft', pick: 0 })).toBe(true);
     expect(sim.pickGraft(u.id, 0)).toBe(false);
+    applySimCommand(sim, 0, u.id, { t: 'graft', pick: 1 });
     expect({ checksum: sim.checksum(), rng: sim.rng.state, tokens: u.decisionTokens }).toEqual(
       before,
     );
+    expect(u.grafts).toEqual([]);
   });
 
-  it('replays a graft command as nothing', () => {
-    const { sim, unitIds } = landed();
-    const before = fingerprint(sim);
-    applySimCommand(sim, 0, unitIds[0]!, { t: 'graft', pick: 2 });
-    expect(fingerprint(sim)).toEqual(before);
-    expect(sim.policies.size).toBe(0);
-  });
-
-  it('plays the same match with the picks pressed as without', () => {
+  it('replays a graft command as the live pick', () => {
     const a = landed();
     const b = landed();
-    for (let i = 0; i < 100; i++) {
-      for (const id of a.unitIds) dispatchAction(a.sim, id, { kind: 'graft', pick: 0 });
-      a.sim.tick();
-      b.sim.tick();
-    }
-    expect(a.sim.checksum()).toBe(b.sim.checksum());
+    const id = a.unitIds[1]!;
+    dispatchAction(a.sim, id, { kind: 'graft', pick: 1 });
+    applySimCommand(b.sim, 1, id, { t: 'graft', pick: 1 });
+    expect(b.sim.units.get(id)!.grafts).toEqual(a.sim.units.get(id)!.grafts);
+    expect(b.sim.royale!.grafts).toEqual(a.sim.royale!.grafts);
+    expect(b.sim.checksum()).toBe(a.sim.checksum());
   });
 });

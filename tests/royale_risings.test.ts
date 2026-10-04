@@ -234,16 +234,20 @@ describe('the clocks', () => {
 });
 
 describe('a big creature last hit', () => {
-  it('pays three pieces until Grafts, all the health and the mana, and shows the slayer', () => {
+  it('pays two pieces and a Heartwood offer, all the health and the mana, and shows the slayer', () => {
     const { sim, unitIds } = build(2);
     const body = riseRing(sim, 'pyrefang');
     const killer = sim.units.get(unitIds[0]!)!;
     killer.hp = killer.maxHp * 0.3;
     killer.mana = 0;
+    const queued = sim.royale!.offers.get(killer.id)?.length ?? 0;
     const events = lastHit(sim, killer, body);
     expect(of(events, 'royale_loot').filter((e) => e.unitId === killer.id)).toHaveLength(
-      RISING_PIECES_BEFORE_GRAFTS,
+      RISING_PIECES,
     );
+    const queue = sim.royale!.offers.get(killer.id) ?? [];
+    expect(queue.length).toBe(Math.min(queued + 1, 3));
+    expect(queue.at(-1)?.grade).toBe('heartwood');
     expect(killer.hp).toBeCloseTo(killer.maxHp, 0);
     expect(killer.mana).toBeCloseTo(killer.maxMana, 0);
     expect(of(events, 'royale_mark')).toEqual([

@@ -2,8 +2,10 @@
 // controller, movement exempt, refill over sim time.
 
 import { describe, expect, it } from 'vitest';
+import { dispatchAction } from '../src/sim/action_dispatch';
 import { DECISION_CAP } from '../src/sim/decision_budget';
 import { Sim } from '../src/sim/sim';
+import { landed } from './royale_contract_fixture';
 
 describe('decision budget', () => {
   it('caps ability casts at the bucket size, then refills over time', () => {
@@ -46,6 +48,15 @@ describe('decision budget', () => {
     expect(a.path.length).toBeGreaterThan(0);
     sim.orderAttack(a.id, b.id);
     expect(a.attackTargetId).toBe(b.id);
+  });
+
+  it('a Graft pick spends no token, the bucket empty or not (the battle royale)', () => {
+    const { sim, unitIds } = landed('respawn');
+    const a = sim.units.get(unitIds[0]!)!;
+    a.decisionTokens = 0;
+    expect(dispatchAction(sim, a.id, { kind: 'graft', pick: 0 })).toBe(true);
+    expect(a.grafts).toHaveLength(1);
+    expect(a.decisionTokens).toBe(0);
   });
 
   it('a failed cast does not burn a token', () => {
