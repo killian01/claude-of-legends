@@ -4,9 +4,12 @@
 // Arrival) is never slain before it has seen where it stands. Its own first
 // attack or cast ends it: a cast, a sigil or an attack order pressed
 // (RoyaleMode.lastActAt), or a strike starting to wind up, read at the
-// start of the next tick, before anyone else acts in it. The champion holds its fire meanwhile (the
-// Stop order's hold, let go when the Grace ends), so an enemy walking into
-// its reach never draws an idle swing that would end the Grace unasked.
+// start of the next tick, before anyone else acts in it. The champion holds
+// its fire meanwhile, whatever it was last ordered: the Stop order's hold is
+// put on (let go when the Grace ends, unless the seat pressed Stop of its
+// own in the meantime), and the idle defense passes a graced champion by
+// (idle_defense.ts), so an enemy walking into its reach after a step never
+// draws an idle swing that would end the Grace unasked.
 // The Grace is the sim's own untargetable status, so every rule that
 // spares an untargetable body (damage, a cast's targets, a bolt, an
 // attack) spares a graced one; the mode keeps when each began and ends
@@ -29,7 +32,8 @@ import { leaderOf } from './score';
 export const ARRIVAL_GRACE_S = 3;
 
 // One Grace: when it began (an act at or after it ends it), when it runs
-// out, and whether it put the champion on hold (to let go at its end).
+// out, and whether the hold is its own to let go at its end (it put the
+// hold on, and the seat has not pressed Stop since).
 export interface Grace {
   since: number;
   until: number;
@@ -56,6 +60,13 @@ export function endGrace(mode: RoyaleMode, u: Unit): void {
   mode.state.arriving.delete(u.id);
   if (g.held) u.holding = false;
   u.statuses = u.statuses.filter((s) => !(s.kind === 'untargetable' && s.until === g.until));
+}
+
+// A Stop the seat pressed (Sim.orderStop): the hold is its own now, kept
+// when the Grace ends.
+export function keepHold(mode: RoyaleMode, unitId: number): void {
+  const g = mode.graces.get(unitId);
+  if (g) g.held = false;
 }
 
 // Whether a champion is in its Grace at `time`.
