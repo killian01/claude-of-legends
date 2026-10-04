@@ -1,13 +1,16 @@
 // The shader programs kept for the renderer's life (src/render/program_keeper.ts):
 // a program the keeper holds survives its last material's disposal, so the
 // next material of the same setup finds it instead of linking it again; a
-// hand-written shader's program is left to three; the hold is bounded. The
-// cache below is three's own rule (WebGLPrograms acquireProgram and
-// releaseProgram), and the last test pins that three still has it.
+// hand-written shader's program is left to three; the hold is bounded, by
+// the programs the current list still has (a restored context starts it
+// again); and a renderer closed for good loses its context, the kept
+// programs with it. The cache below is three's own rule (WebGLPrograms
+// acquireProgram and releaseProgram), and the last test pins that three
+// still has it.
 
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { type KeepableProgram, ProgramKeeper } from '../src/render/program_keeper';
+import { closeRenderer, type KeepableProgram, ProgramKeeper } from '../src/render/program_keeper';
 
 interface Program extends KeepableProgram {
   key: string;
@@ -92,6 +95,49 @@ describe('the program keeper', () => {
     expect(cache.programs).toHaveLength(2);
   });
 
+  it('counts its bound on the current list: a restored context starts it again', () => {
+    const keeper = new ProgramKeeper(3);
+    const lost = new ProgramCache();
+    for (const key of ['a', 'b', 'c']) lost.acquire(key);
+    expect(keeper.keep(lost.programs)).toBe(3);
+    expect(keeper.size).toBe(3);
+    // The context comes back: three's program cache is a new one, its list
+    // a new list, every program in it linked anew.
+    for (let restore = 0; restore < 4; restore++) {
+      const restored = new ProgramCache();
+      for (const key of ['a', 'b', 'c']) restored.acquire(key);
+      expect(keeper.keep(restored.programs)).toBe(3);
+      expect(keeper.size).toBe(3);
+      for (const p of restored.programs) expect(p.usedTimes).toBe(2);
+    }
+  });
+
+  it('counts the held programs a copy of the list carries alike', () => {
+    const cache = new ProgramCache();
+    const keeper = new ProgramKeeper(2);
+    for (const key of ['a', 'b']) cache.acquire(key);
+    // The warm-up hands a copy, the frames the list itself.
+    expect(keeper.keep([...cache.programs])).toBe(2);
+    expect(keeper.keep(cache.programs)).toBe(0);
+    expect(keeper.size).toBe(2);
+    cache.acquire('c');
+    expect(keeper.keep(cache.programs)).toBe(0);
+  });
+
+  it('closes a renderer by losing its context after three lets go of it', () => {
+    const calls: string[] = [];
+    closeRenderer({
+      dispose: () => calls.push('dispose'),
+      forceContextLoss: () => calls.push('lose'),
+    });
+    expect(calls).toEqual(['dispose', 'lose']);
+    // The renderer closes this way, last, and nowhere only disposes.
+    const source = readFileSync('src/render/renderer.ts', 'utf8');
+    const teardown = source.slice(source.indexOf('  dispose(): void {'));
+    expect(teardown).toMatch(/closeRenderer\(this\.gl\);\n {2}\}/);
+    expect(source).not.toContain('this.gl.dispose()');
+  });
+
   it('rests on three still deleting a program at its last release, by usedTimes', () => {
     const programs = readFileSync(
       'node_modules/three/src/renderers/webgl/WebGLPrograms.js',
@@ -104,5 +150,11 @@ describe('the program keeper', () => {
     expect(program).toContain('this.type = parameters.shaderType;');
     const renderer = readFileSync('node_modules/three/src/renderers/WebGLRenderer.js', 'utf8');
     expect(renderer).toContain('info.programs = programCache.programs;');
+    // A restore builds the cache anew (initGLContext), and dispose deletes
+    // no program.
+    expect(renderer).toMatch(/function onContextRestore\([^)]*\) \{[\s\S]*?initGLContext\(\);/);
+    expect(renderer).toMatch(/programCache = new WebGLPrograms\(/);
+    const dispose = renderer.slice(renderer.indexOf('this.dispose = function'));
+    expect(dispose.slice(0, dispose.indexOf('};'))).not.toContain('releaseProgram');
   });
 });

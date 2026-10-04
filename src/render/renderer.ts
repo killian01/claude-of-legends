@@ -63,7 +63,7 @@ import { attachGhosts, ghostColor, ghostMaterial } from './planet_ghost';
 import { heartwoodIcon } from './planet_graft_aura';
 import type { PlanetMinimap } from './planet_minimap';
 import { PlanetStage } from './planet_stage';
-import { ProgramKeeper } from './program_keeper';
+import { closeRenderer, ProgramKeeper } from './program_keeper';
 import { ProgramWarmup, whenLinked } from './program_warmup';
 import { RING_FOG_EDGE, ringFogOpening } from './ring_fog';
 import {
@@ -3754,9 +3754,10 @@ export class Renderer {
 
   // Full teardown for the same-page return to menu: window listeners off,
   // animation mixers stopped, DOM out, GL context released. Scene objects
-  // are not disposed one by one: losing the context reclaims the GPU side,
-  // and the JS side goes with this instance. The shared champion template
-  // cache (assets.ts) deliberately survives for the next match.
+  // are not disposed one by one: losing the context (closeRenderer, last)
+  // reclaims the GPU side, the kept programs with it, and the JS side goes
+  // with this instance. The shared champion template cache (assets.ts)
+  // deliberately survives for the next match.
   dispose(): void {
     this.disposed = true;
     for (const off of this.cleanups) off();
@@ -3770,12 +3771,12 @@ export class Renderer {
     this.lowHpFrame.remove();
     this.frost.remove();
     this.gl.domElement.remove();
-    this.gl.dispose();
     this.towerShots.dispose();
     this.towerReach.dispose();
     this.planet?.dispose();
     for (const list of this.visualPool.values()) for (const cv of list) cv.dispose();
     this.visualPool.clear();
     this.terrain.dispose();
+    closeRenderer(this.gl);
   }
 }

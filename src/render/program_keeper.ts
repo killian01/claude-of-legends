@@ -32,22 +32,48 @@ export class ProgramKeeper {
   // Holds every program in the list not held yet; the renderer's list
   // (gl.info.programs), after a draw or a compile. Cheap to run every
   // frame. Returns how many it took hold of.
+  //
+  // The bound counts the held programs the list still has: a restored
+  // context comes back with a new list of new programs (three builds its
+  // program cache anew), and the old ones, gone with the old context, no
+  // longer count against it.
   keep(programs: readonly KeepableProgram[]): number {
+    let held = 0;
+    for (const program of programs) if (this.kept.has(program)) held++;
     let took = 0;
     for (const program of programs) {
-      if (this.count >= this.max) break;
+      if (held >= this.max) break;
       if (this.kept.has(program)) continue;
       if (program.type === 'ShaderMaterial' || program.type === 'RawShaderMaterial') continue;
       program.usedTimes++;
       this.kept.add(program);
-      this.count++;
+      held++;
       took++;
     }
+    this.count = held;
     return took;
   }
 
-  // How many programs are held.
+  // How many programs of the last list are held.
   get size(): number {
     return this.count;
   }
+}
+
+// What closing a renderer for good needs of three's WebGLRenderer.
+export interface ClosingRenderer {
+  dispose(): void;
+  forceContextLoss(): void;
+}
+
+// A renderer let go for good, at a match's end. Three's dispose deletes no
+// program (its program cache forgets only the custom shaders' sources),
+// and the keeper's hold means no material's disposal deletes one either:
+// the context is lost on purpose after it, taking every program, buffer
+// and picture with it rather than leaving them to the collector. The
+// canvas is the renderer's own and out of the page by then; the next
+// match builds a renderer, a canvas and a context of its own.
+export function closeRenderer(gl: ClosingRenderer): void {
+  gl.dispose();
+  gl.forceContextLoss();
 }
