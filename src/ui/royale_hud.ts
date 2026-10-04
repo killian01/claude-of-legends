@@ -21,7 +21,17 @@ import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import { setPortrait } from './champion_art';
 import { type MomentDeath, RoyaleHudMoments } from './royale_hud_moments';
-import { NOTES_BOTTOM_PX, NOTES_FROM_MIDDLE_PX, NOTES_MAX, SIDE_MARGIN_PX } from './royale_layout';
+import {
+  COMPACT_NOTE_FONT_PX,
+  FEED_MAX_W_PX,
+  FEED_NAME_MAX_W_PX,
+  FEED_RIGHT_PX,
+  FEED_TOP_PX,
+  NOTES_BOTTOM_PX,
+  NOTES_FROM_MIDDLE_PX,
+  NOTES_MAX,
+  SIDE_MARGIN_PX,
+} from './royale_layout';
 import { royaleMode } from './royale_modes';
 import type { MomentCall } from './royale_moments';
 import { type RoyaleEndModel, royaleEnd } from './royale_result';
@@ -102,17 +112,25 @@ const CSS = `
 .br-drop span { flex: none; min-width: 52px; padding: 4px 10px; border-radius: 9px; text-align: center;
   background: linear-gradient(180deg, #e8cc74 0%, #c9a84a 55%, #a07830 100%); color: #241a08;
   font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums; }
-/* The kill feed, top right under the K/D/A box. */
-.br-feed { position: absolute; right: calc(12px + var(--safe-right, env(safe-area-inset-right, 0px)));
-  top: calc(62px + var(--safe-top, env(safe-area-inset-top, 0px)));
+/* The kill feed, top right under the K/D/A box, never wider than its
+   column (ui/royale_layout.ts feedBox): a long name is cut short, so the
+   announcement beside it keeps its room. */
+.br-feed { position: absolute;
+  right: calc(${FEED_RIGHT_PX}px + var(--safe-right, env(safe-area-inset-right, 0px)));
+  top: calc(${FEED_TOP_PX}px + var(--safe-top, env(safe-area-inset-top, 0px)));
+  max-width: ${FEED_MAX_W_PX}px;
   display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 12.5px; }
 .br-feed-line { display: flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 6px;
   background: rgba(6, 10, 20, 0.82); border: 1px solid #3a3420; color: #e6dcb8;
-  text-shadow: 0 1px 2px #000; white-space: nowrap; animation: br-in 0.25s ease-out; }
+  text-shadow: 0 1px 2px #000; white-space: nowrap; animation: br-in 0.25s ease-out;
+  box-sizing: border-box; max-width: 100%; min-width: 0; overflow: hidden; }
 .br-feed-line.mine { border-color: #b8963f; }
 .br-feed-line .me { color: #ffd94a; font-weight: 800; }
-.br-feed-line .gt { color: #c9a84a; font-weight: 800; }
-.br-who { display: inline-flex; align-items: center; gap: 4px; }
+.br-feed-line .gt { flex: none; color: #c9a84a; font-weight: 800; }
+.br-who { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.br-who > span:first-child { min-width: 0; max-width: ${FEED_NAME_MAX_W_PX}px; overflow: hidden;
+  text-overflow: ellipsis; }
+.br-who .br-bot { flex: none; }
 .br-dusk-name { color: #ffb27a; font-weight: 700; }
 @keyframes br-in { from { transform: translateX(10px); } }
 .br-bot { display: inline-block; padding: 0 4px; border-radius: 3px; border: 1px solid #5b84c9;
@@ -256,7 +274,7 @@ const CSS = `
 .hud.compact .br-notes { bottom: 112px; }
 .hud.compact.thumbs .br-notes { left: 40%; bottom: 64px; }
 .hud.compact .br-note:nth-last-child(n + 3) { display: none; }
-.hud.compact .br-note { font-size: 12.5px; padding: 3px 10px 3px 4px; }
+.hud.compact .br-note { font-size: ${COMPACT_NOTE_FONT_PX}px; padding: 3px 10px 3px 4px; }
 .hud.compact .br-note img { width: 22px; height: 22px; }
 .hud.compact .br-note.level { padding-left: 10px; }
 .hud.compact .br-end { justify-content: flex-start; padding: 8px 10px 14px; }

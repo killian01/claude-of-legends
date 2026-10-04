@@ -4,12 +4,16 @@
 // "MA x1" or "AI 0.1".
 
 import { describe, expect, it } from 'vitest';
-import type { Status } from '../src/sim/combat/status';
+import { refreshBuff, type Status } from '../src/sim/combat/status';
+import type { Unit } from '../src/sim/unit';
 import {
+  AURA_WINDOW_S,
+  AuraWatch,
   aspectGlyph,
   boonChipFace,
   favorChipFace,
   statusChip,
+  statusKey,
   statusWord,
   wrathChipFace,
 } from '../src/ui/chip_text';
@@ -102,5 +106,90 @@ describe('team chips', () => {
       sub: 'x2',
       tip: 'ENEMY TIDE 4%',
     });
+  });
+});
+
+describe('a status an aura keeps renewing', () => {
+  // The HUD's frames over a stretch of sim time: the statuses standing on
+  // the champion stepped into the watch, the chips read as it reads them.
+  const frames = (
+    u: { statuses: Status[] },
+    from: number,
+    to: number,
+    renew: (t: number) => void,
+    lag = 0,
+  ): { faces: ReturnType<typeof statusChip>[][]; watch: AuraWatch } => {
+    const watch = new AuraWatch();
+    const faces: ReturnType<typeof statusChip>[][] = [];
+    for (let t = from; t <= to + 1e-9; t += 0.05) {
+      renew(t);
+      u.statuses = u.statuses.filter((s) => s.until > t);
+      // A mirror reads the world a little behind the sim.
+      const seen = t - lag;
+      const standing = new Map<string, number>();
+      const shown: [Status, string][] = [];
+      const nth = new Map<string, number>();
+      for (const s of u.statuses) {
+        const n = (nth.get(s.kind) ?? 0) + 1;
+        nth.set(s.kind, n);
+        const key = statusKey(s, n);
+        standing.set(key, s.until - seen);
+        shown.push([s, key]);
+      }
+      watch.step(standing);
+      faces.push(shown.map(([s, key]) => statusChip(s, seen, watch.held(key))));
+    }
+    return { faces, watch };
+  };
+
+  it('shows Torv\'s own Bulwark without a countdown all match (it read "Boost 1s")', () => {
+    const torv = { statuses: [] as Status[] };
+    // The aura's passive tick, every quarter second, 0.4 s each time.
+    let next = 0;
+    const aura = (t: number): void => {
+      if (t + 1e-9 < next) return;
+      next = t + 0.25;
+      refreshBuff(torv as unknown as Unit, t, 0.4, { armor: 8 });
+    };
+    for (const lag of [0, 0.1]) {
+      torv.statuses = [];
+      next = 0;
+      const { faces } = frames(torv, 0, 30, aura, lag);
+      for (const face of faces) {
+        expect(face).toHaveLength(1);
+        expect(face[0]).toEqual({ glyph: 'Boost', sub: '', tip: 'Boosted, while the aura holds' });
+      }
+    }
+  });
+
+  it('keeps the countdown of a status that ran longer, to its end', () => {
+    const u = { statuses: [] as Status[] };
+    const { faces } = frames(u, 0, 2.95, (t) => {
+      if (t === 0) refreshBuff(u as unknown as Unit, t, 3, { asPct: 0.2 });
+    });
+    const last = faces.at(-1)?.[0];
+    expect(last?.sub).toBe('1s');
+    expect(faces.every((f) => f[0]?.sub !== '')).toBe(true);
+  });
+
+  it('keeps the countdown of a burst renewed by hits (Mistborne, 1.2 s)', () => {
+    const u = { statuses: [] as Status[] };
+    const { faces } = frames(u, 0, 4, (t) => {
+      if (Math.abs(t / 0.8 - Math.round(t / 0.8)) < 1e-6) {
+        refreshBuff(u as unknown as Unit, t, 1.2, { msPct: 0.2 });
+      }
+    });
+    expect(faces.every((f) => f.every((c) => c.sub !== ''))).toBe(true);
+  });
+
+  it('forgets a status gone, so one that comes back longer counts again', () => {
+    const watch = new AuraWatch();
+    const key = statusKey({ kind: 'buff', until: 1, msPct: 0, asPct: 0, armor: 8, mr: 0 }, 1);
+    watch.step(new Map([[key, 0.4]]));
+    expect(watch.held(key)).toBe(true);
+    watch.step(new Map());
+    expect(watch.held(key)).toBe(false);
+    watch.step(new Map([[key, AURA_WINDOW_S + 2]]));
+    expect(watch.held(key)).toBe(false);
   });
 });
