@@ -21,8 +21,17 @@
 // measures first, and it falls on level 3 or 4 as the table moves; the
 // champions rank differently at each (Dain won 35% of his duels at level
 // 3, and 83% at level 4 with 0.1 more damage), so a step is judged at
-// both. At landing, with nothing in the bag, the marksmen still lose most
-// duels. scripts/royale_duel.ts measures them.
+// both. Round 3 judged a step at four stages (level 3 with 0, 3 and 4
+// pieces, level 4 with 4; seeds 1 to 20): Maera won 70 to 74% at level 3
+// up to her third piece and gave back a step of health, Ashvyn lost most
+// duels at every stage and took half a step. A whole step for Ashvyn (1.4)
+// took him from 38% to 56% at four pieces (1.45 with 0.05 more damage, to
+// 83%), and he won half the One life matches: his late items carry him. At
+// landing, with nothing in the bag, the marksmen still lose most duels
+// (Ashvyn 14%, Vesk 28%), and at three pieces the mages do (about 30%:
+// two Heart Gems and no damage yet); a single scale cannot hold those
+// stages and the ones after, which wait on the builds or the landing kit.
+// scripts/royale_duel.ts measures them.
 //
 // Data, but planet rules only: the 5v5 never reads it, so it stays out of
 // the content fingerprint (fingerprint.ts) and a change moves
@@ -35,7 +44,7 @@ export interface PlanetTuning {
 
 export const PLANET_TUNING: Readonly<Record<string, PlanetTuning>> = {
   fenn: { hp: 1.15, dmg: 0.75 },
-  ashvyn: { hp: 1.3, dmg: 0.7 },
+  ashvyn: { hp: 1.35, dmg: 0.7 },
   rhoka: { hp: 1, dmg: 0.92 },
   vesk: { hp: 1.3, dmg: 0.95 },
   sylra: { hp: 1, dmg: 1.35 },
@@ -43,7 +52,7 @@ export const PLANET_TUNING: Readonly<Record<string, PlanetTuning>> = {
   dain: { hp: 1.05, dmg: 0.95 },
   torv: { hp: 0.95, dmg: 1.55 },
   korrath: { hp: 0.9, dmg: 1.3 },
-  maera: { hp: 1.1, dmg: 1.5 },
+  maera: { hp: 1.05, dmg: 1.5 },
 };
 
 const NEUTRAL: PlanetTuning = { hp: 1, dmg: 1 };
