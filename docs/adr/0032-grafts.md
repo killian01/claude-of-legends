@@ -30,8 +30,11 @@ champion a different one each run (CONTEXT.md: Graft).
   out of a fight in Respawn's Last light or with five left in One life); short of three, filled
   from the grade below; still short, one piece of loot instead.
 - **The queue**: three offers at most. A fourth drops, among the waiting ones and itself, the
-  lowest grade, the newest of equals. The head is open for ten seconds from the later of its
-  offer and the last pick; at its deadline card 0 is taken. One life's elimination clears it.
+  lowest grade, the newest of equals. The head stays open until the seat picks, with no time
+  limit: a card taken for a person after ten seconds was a card they never had the time to
+  read (the maintainer, 2026-10-04). A pick opens the next head. One life's elimination
+  clears it. The cards stand big in a row across the top of the view, under a title that says
+  what they are, the world in sight below; Later or a fight folds them into a chip.
 - **The pick is an action**, `{kind: 'graft', pick: 0 | 1 | 2}`, additive to the v0 contract
   (ADR 0002): free like `level` and `drop` (no decision token, ADR 0003), taken while dead, flying
   or dropping, and not gated by the stage. A person sends the client message `graft`; the

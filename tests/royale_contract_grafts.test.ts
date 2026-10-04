@@ -7,7 +7,6 @@
 import { describe, expect, it } from 'vitest';
 import { applySimCommand } from '../src/net/replay';
 import { dispatchAction } from '../src/sim/action_dispatch';
-import { GRAFT_DROP_LAND_S } from '../src/sim/content/grafts';
 import { buildObservation } from '../src/sim/observe';
 import { DROP_S } from '../src/sim/royale/types';
 import { Sim } from '../src/sim/sim';
@@ -20,7 +19,8 @@ describe('the Grafts on the contract', () => {
     expect(r.offer).not.toBeNull();
     expect(r.offer!.grade).toBe('bough');
     expect(r.offer!.cards).toHaveLength(3);
-    expect(r.offer!.until).toBeCloseTo(DROP_S + GRAFT_DROP_LAND_S, 6);
+    // Offered as the drop ended; it waits for the pick, with no time limit.
+    expect(r.offer!.offeredAt).toBeCloseTo(DROP_S, 6);
     expect(r.grafts).toEqual([]);
   });
 
@@ -32,8 +32,7 @@ describe('the Grafts on the contract', () => {
       {
         grade: 'heartwood',
         cards: ['chainsap', 'rootbound', 'overgrowth'],
-        offeredAt: 0,
-        until: 9.5,
+        offeredAt: 9.5,
       },
     ]);
     expect(snap().royale!.offer).toEqual({

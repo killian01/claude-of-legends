@@ -15,9 +15,7 @@ import { applyReplayEvent, buildRoyaleSim, loadRoyaleReplay } from '../src/net/r
 import { dealDamage } from '../src/sim/combat/damage';
 import {
   BLOODSAP_HEAL,
-  GRAFT_DROP_LAND_S,
   GRAFT_LIST,
-  GRAFT_PICK_S,
   GRAFTS,
   type GraftOfferCtx,
   graftRoleOf,
@@ -56,6 +54,7 @@ import {
   DROP_S,
   type GraftOffer,
   OUT_OF_COMBAT_HEAL,
+  RESPAWN_S,
   TAKEDOWN_HEAL,
 } from '../src/sim/royale/types';
 import { Sim } from '../src/sim/sim';
@@ -72,7 +71,7 @@ function ctxOf(sim: Sim): CombatCtx {
 }
 
 function offer(grade: GraftOffer['grade'], at: number, cards = ['a', 'b', 'c']): GraftOffer {
-  return { grade, cards, offeredAt: at, until: null };
+  return { grade, cards, offeredAt: at };
 }
 
 // Two champions on the plane, a few meters apart (the hooks run wherever a
@@ -173,7 +172,6 @@ describe('the draw', () => {
 describe('the queue', () => {
   it('holds three, dropping the lowest grade among the waiting, the newest of equals', () => {
     const q = [offer('sprout', 1), offer('heartwood', 2), offer('sprout', 3), offer('bough', 4)];
-    q[0]!.until = 11;
     trimQueue(q);
     // The open head stays, whatever its grade.
     expect(q.map((o) => o.offeredAt)).toEqual([1, 2, 4]);
@@ -182,23 +180,23 @@ describe('the queue', () => {
     expect(r.map((o) => o.offeredAt)).toEqual([1, 2, 3]);
   });
 
-  it('opens the next offer at the later of its time and the pick, for ten seconds', () => {
+  it('opens the next offer once the open one is picked', () => {
     const { sim, unitIds } = landed('respawn');
     const mode = sim.royaleMode!;
     const id = unitIds[0]!;
     expect(offerGraft(mode, sim, id, 'sprout')).toBe(true);
     const queue = sim.royale!.offers.get(id)!;
     expect(queue).toHaveLength(2);
-    expect(queue[1]!.until).toBeNull();
     for (let i = 0; i < 10; i++) sim.tick();
+    expect(queue).toHaveLength(2);
     expect(sim.pickGraft(id, 1)).toBe(true);
+    expect(queue).toHaveLength(1);
     expect(queue[0]!.grade).toBe('sprout');
-    expect(queue[0]!.until).toBeCloseTo(sim.time + GRAFT_PICK_S, 9);
   });
 });
 
 describe('the pick', () => {
-  it('opens the drop offer the tick after the landing pick, closing three seconds after landing', () => {
+  it('opens the drop offer the tick after the landing pick, and keeps it open after the landing', () => {
     const { sim, unitIds } = buildRoyaleSim(loadPlanet(), 4, picks(4), 'one_life');
     sim.tick();
     expect(sim.pickDrop(unitIds[0]!, { x: 0, y: 80, z: 0 })).toBe(true);
@@ -206,11 +204,11 @@ describe('the pick', () => {
     sim.tick();
     const head = sim.royale!.offers.get(unitIds[0]!)![0]!;
     expect(head.grade).toBe('bough');
-    expect(head.until).toBe(DROP_S + GRAFT_DROP_LAND_S);
     expect(sim.royale!.offers.has(unitIds[1]!)).toBe(false);
-    // The rest get theirs as the drop ends.
+    // The rest get theirs as the drop ends, and all stay open after it.
     while (sim.royale!.stage === 'drop') sim.tick();
-    for (const id of unitIds) expect(sim.royale!.offers.get(id)![0]!.until).toBe(13);
+    for (let i = 0; i < 200; i++) sim.tick();
+    for (const id of unitIds) expect(sim.royale!.offers.get(id)![0]).toBeDefined();
     // A pick during the drop is taken.
     const fresh = buildRoyaleSim(loadPlanet(), 4, picks(4), 'one_life');
     fresh.sim.pickDrop(fresh.unitIds[0]!, { x: 0, y: 80, z: 0 });
@@ -220,19 +218,17 @@ describe('the pick', () => {
     expect(fresh.sim.units.get(fresh.unitIds[0]!)!.grafts).toEqual([card]);
   });
 
-  it('takes card 0 exactly at the deadline', () => {
+  it('never takes a card for the seat: the offer waits for its pick', () => {
+    // The maintainer (2026-10-04): time to read the cards, no time limit.
     const { sim, unitIds } = landed('one_life');
     const id = unitIds[2]!;
     const head = sim.royale!.offers.get(id)![0]!;
-    const until = head.until!;
-    // The world stands at the deadline: nothing taken yet; the tick run at
-    // the deadline takes card 0.
-    while (sim.time < until - 1e-9) sim.tick();
-    expect(sim.time).toBeCloseTo(until, 6);
+    for (let i = 0; i < 20 * 60; i++) sim.tick();
     expect(sim.units.get(id)!.grafts).toEqual([]);
-    sim.tick();
-    expect(sim.units.get(id)!.grafts).toEqual([head.cards[0]]);
-    expect(sim.royale!.grafts.get(id)).toEqual([head.cards[0]]);
+    expect(sim.royale!.offers.get(id)![0]).toBe(head);
+    expect(sim.pickGraft(id, 2)).toBe(true);
+    expect(sim.units.get(id)!.grafts).toEqual([head.cards[2]]);
+    expect(sim.royale!.grafts.get(id)).toEqual([head.cards[2]]);
     expect(sim.royale!.offers.has(id)).toBe(false);
   });
 
@@ -554,7 +550,7 @@ describe('the bot', () => {
   function obsWith(cards: [string, string, string], championId: string, hpFrac = 1): Observation {
     return {
       self: { championId, hp: 100 * hpFrac, maxHp: 100 },
-      royale: { offer: { grade: 'bough', cards, until: 20 } },
+      royale: { offer: { grade: 'bough', cards, offeredAt: 20 } },
     } as unknown as Observation;
   }
 
@@ -580,7 +576,7 @@ describe('the bot', () => {
     expect(graftPick({ self: {}, royale: { offer: null } } as unknown as Observation)).toBeNull();
   });
 
-  it('lets no offer of a fifty-bot match time out in the first 90 s, dead seats included', () => {
+  it('answers every offer of a fifty-bot match within a respawn, dead seats included', () => {
     const ids = GRAFT_LIST.length;
     expect(ids).toBe(14);
     const seats = Array.from({ length: 50 }, (_, i) => ({
@@ -590,19 +586,19 @@ describe('the bot', () => {
       bot: 'royale',
     }));
     const { sim } = buildRoyaleSim(loadPlanet(), 9, seats, 'respawn');
-    // Every open offer, a dead seat's too, is answered well before its
-    // deadline: none is ever a tick from running out.
+    // Every open offer, a dead seat's too once it is back, is answered at
+    // the bot's first decision: none waits longer than a respawn.
     let taken = 0;
-    let late = 0;
+    let oldest = 0;
     while (sim.time < DROP_S + 90) {
       for (const q of sim.royale!.offers.values()) {
         const head = q[0]!;
-        if (head.until !== null && head.until - sim.time <= DT + 1e-9) late++;
+        oldest = Math.max(oldest, sim.time - head.offeredAt);
       }
       sim.tick();
     }
     for (const u of sim.units.values()) taken += u.grafts.length;
-    expect(late).toBe(0);
+    expect(oldest).toBeLessThan(RESPAWN_S + 2);
     expect(taken).toBeGreaterThanOrEqual(50);
   }, 120_000);
 });
@@ -627,7 +623,7 @@ describe('a match with picks, replayed', () => {
     let picks = 0;
     while (sim.time < DROP_S + 40) {
       const head = sim.royale!.offers.get(self)?.[0];
-      if (head && head.until !== null && sim.tickCount % 7 === 0) {
+      if (head && sim.tickCount % 7 === 0) {
         match.handleCommand(1, { t: 'graft', pick: 2 });
         picks++;
       }

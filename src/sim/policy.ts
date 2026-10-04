@@ -290,7 +290,8 @@ export interface ObsClamor {
 export interface ObsGraftOffer {
   grade: GraftGrade;
   cards: readonly [string, string, string];
-  until: number;
+  // When it was offered: it stays open until the seat picks.
+  offeredAt: number;
 }
 
 // The battle royale as any player knows it (additive v0 block, present only

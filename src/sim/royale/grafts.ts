@@ -1,11 +1,11 @@
 // The Grafts (CONTEXT.md: Graft; ADR 0032): the offers of three cards a
 // seat gets on the drop and on events, queued at most three deep, the head
-// open for ten seconds (the drop's until three seconds after the landing)
-// before card 0 is taken for it, and the Grafts each seat holds. The mode
-// drives it: an offer on its triggers (offerGraft, offerOnTrigger,
-// offerOnLevels), the deadlines from stepAfterDeaths (stepGrafts), a
-// seat's pick (Sim.pickGraft, the 'graft' action). The cards are data
-// (content/grafts.ts).
+// open until the seat picks, with no time limit (the maintainer, 2026-10-04:
+// a person needs the time to read the cards; a card taken for them after
+// ten seconds was a card they never chose), and the Grafts each seat holds.
+// The mode drives it: an offer on its triggers (offerGraft, offerOnTrigger,
+// offerOnLevels), a seat's pick (Sim.pickGraft, the 'graft' action). The
+// cards are data (content/grafts.ts).
 //
 // The draw, at offer time, from the match's stream: three distinct Grafts
 // of the grade, each weighing GRAFT_ROLE_WEIGHT when its role tag matches
@@ -18,15 +18,13 @@
 //
 // The queue: a fourth offer drops, among the waiting ones and itself (never
 // the open head a person is reading), the lowest grade, the newest of
-// equals. The next head opens at max(its offer time, the last pick) +
-// GRAFT_PICK_S. One life's elimination clears the seat's queue.
+// equals. A pick opens the next head. One life's elimination clears the
+// seat's queue.
 
 import {
   GRADE_ORDER,
-  GRAFT_DROP_LAND_S,
   GRAFT_LEVELS,
   GRAFT_LIST,
-  GRAFT_PICK_S,
   GRAFT_QUEUE_MAX,
   GRAFT_ROLE_WEIGHT,
   GRAFT_TRIGGERS,
@@ -150,7 +148,6 @@ export function offerGraft(
   unitId: number,
   grade: GraftGrade,
   source: 'cache' | 'camp' | 'takedown' = 'cache',
-  dropOffer = false,
 ): boolean {
   const s = mode.state;
   if (s.stage === 'over') return false;
@@ -164,11 +161,7 @@ export function offerGraft(
     mode.lootPieces(sim, u, 1, source);
     return false;
   }
-  const time = sim.time;
-  const offer: GraftOffer = { grade, cards, offeredAt: time, until: null };
-  if (queue.length === 0) {
-    offer.until = dropOffer ? s.dropEndsAt + GRAFT_DROP_LAND_S : time + GRAFT_PICK_S;
-  }
+  const offer: GraftOffer = { grade, cards, offeredAt: sim.time };
   queue.push(offer);
   trimQueue(queue);
   s.offers.set(unitId, queue);
@@ -185,7 +178,7 @@ export function offerOnTrigger(
 ): boolean {
   const grade = GRAFT_TRIGGERS[mode.variant][trigger];
   if (!grade) return false;
-  return offerGraft(mode, sim, unitId, grade, source, trigger === 'drop');
+  return offerGraft(mode, sim, unitId, grade, source);
 }
 
 // The drop's offer, once per seat: on its landing pick, or at the drop's
@@ -235,21 +228,14 @@ function take(mode: RoyaleMode, sim: Sim, unitId: number, card: number): void {
   if (!queue || !head || !u) return;
   queue.shift();
   holdGraft(mode, u, head.cards[card]!);
-  const next = queue[0];
-  if (next) next.until = Math.max(next.offeredAt, sim.time) + GRAFT_PICK_S;
-  else mode.state.offers.delete(unitId);
+  if (queue.length === 0) mode.state.offers.delete(unitId);
 }
 
-// One tick of the offers: every open offer whose time ran out takes its
-// card 0.
-export function stepGrafts(mode: RoyaleMode, sim: Sim): void {
+// One tick of the offers: an emptied queue goes. No offer runs out: the
+// head waits for the seat's pick.
+export function stepGrafts(mode: RoyaleMode, _sim: Sim): void {
   for (const [id, queue] of [...mode.state.offers]) {
-    const head = queue[0];
-    if (!head) {
-      mode.state.offers.delete(id);
-      continue;
-    }
-    if (head.until !== null && sim.time + 1e-9 >= head.until) take(mode, sim, id, 0);
+    if (queue.length === 0) mode.state.offers.delete(id);
   }
 }
 
@@ -258,7 +244,7 @@ export function stepGrafts(mode: RoyaleMode, sim: Sim): void {
 export function pickGraft(mode: RoyaleMode, sim: Sim, unitId: number, pick: number): boolean {
   if (mode.state.stage === 'over') return false;
   const head = mode.state.offers.get(unitId)?.[0];
-  if (!head || head.until === null) return false;
+  if (!head) return false;
   if (!Number.isInteger(pick) || pick < 0 || pick >= head.cards.length) return false;
   take(mode, sim, unitId, pick);
   return true;
@@ -271,8 +257,7 @@ export function clearOffers(mode: RoyaleMode, unitId: number): void {
 
 // Whether a seat has an offer open (the bot driver asks a dead seat).
 export function hasOpenOffer(mode: RoyaleMode, unitId: number): boolean {
-  const head = mode.state.offers.get(unitId)?.[0];
-  return head !== undefined && head.until !== null;
+  return mode.state.offers.get(unitId)?.[0] !== undefined;
 }
 
 // The seat's own open offer and its Grafts (ObsRoyale.offer, grafts).
@@ -282,13 +267,12 @@ export function observeGrafts(
   u: Unit,
 ): Pick<ObsRoyale, 'offer' | 'grafts'> {
   const head = mode.state.offers.get(u.id)?.[0];
-  const offer: ObsGraftOffer | null =
-    head && head.until !== null
-      ? {
-          grade: head.grade,
-          cards: [head.cards[0]!, head.cards[1]!, head.cards[2]!],
-          until: head.until,
-        }
-      : null;
+  const offer: ObsGraftOffer | null = head
+    ? {
+        grade: head.grade,
+        cards: [head.cards[0]!, head.cards[1]!, head.cards[2]!],
+        offeredAt: head.offeredAt,
+      }
+    : null;
   return { offer, grafts: [...(mode.state.grafts.get(u.id) ?? [])] };
 }

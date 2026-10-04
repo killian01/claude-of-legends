@@ -79,15 +79,17 @@ export function sentOnChange<T>(
 type Builder<T> = (sim: RoyaleSim, viewer: RoyaleViewer, ctx: RoyaleSnapContext) => T | undefined;
 
 // The recipient's open Graft offer (src/sim/royale/grafts.ts): its grade,
-// the three cards and when card 0 is taken; every snapshot while open, so
-// its absence says none is.
+// the three cards and when it was offered; every snapshot while open, so
+// its absence says none is. Nothing once the match is over: no pick is
+// taken then.
 export const offerBlock: Builder<SnapGraftOffer> = (sim, viewer) => {
+  if (sim.royale.stage === 'over') return undefined;
   const head = sim.royale.offers.get(viewer.unitId)?.[0];
-  if (!head || head.until === null || head.cards.length < 3) return undefined;
+  if (!head || head.cards.length < 3) return undefined;
   return {
     g: head.grade,
     c: [head.cards[0]!, head.cards[1]!, head.cards[2]!],
-    u: round2(head.until),
+    u: round2(head.offeredAt),
   };
 };
 // The Grafts the recipient holds, in the order taken: sent the tick they
