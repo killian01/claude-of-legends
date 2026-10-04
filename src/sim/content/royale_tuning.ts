@@ -31,7 +31,13 @@
 // (Ashvyn 14%, Vesk 28%), and at three pieces the mages do (about 30%:
 // two Heart Gems and no damage yet); a single scale cannot hold those
 // stages and the ones after, which wait on the builds or the landing kit.
-// scripts/royale_duel.ts measures them.
+// scripts/royale_duel.ts measures them. The Grafts (tranche 2, seeds 1 to
+// 3, then 1 to 6) moved two mages and a marksman: Elowen, whose bots take
+// Hunter's Eye and Keen Edge twice, rose from 22.3 to 35.4 a seat and gave
+// back two steps (1.5 to 1.4); Sylra fell from 16.5 to 10.9 and took three
+// (1.35 to 1.5); Ashvyn, with Chainsap and Bloodsap, rose to 28.6 and gave
+// back one (0.7 to 0.65): Respawn back to 13.4 to 24.7 a seat over seeds
+// 1 to 6, a spread of 1.84.
 //
 // Data, but planet rules only: the 5v5 never reads it, so it stays out of
 // the content fingerprint (fingerprint.ts) and a change moves
@@ -44,11 +50,11 @@ export interface PlanetTuning {
 
 export const PLANET_TUNING: Readonly<Record<string, PlanetTuning>> = {
   fenn: { hp: 1.15, dmg: 0.75 },
-  ashvyn: { hp: 1.35, dmg: 0.7 },
+  ashvyn: { hp: 1.35, dmg: 0.65 },
   rhoka: { hp: 1, dmg: 0.92 },
   vesk: { hp: 1.3, dmg: 0.95 },
-  sylra: { hp: 1, dmg: 1.35 },
-  elowen: { hp: 1, dmg: 1.5 },
+  sylra: { hp: 1, dmg: 1.5 },
+  elowen: { hp: 1, dmg: 1.4 },
   dain: { hp: 1.05, dmg: 0.95 },
   torv: { hp: 0.95, dmg: 1.55 },
   korrath: { hp: 0.9, dmg: 1.3 },

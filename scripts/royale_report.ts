@@ -33,6 +33,7 @@
 import { readFileSync } from 'node:fs';
 import { buildRoyaleSim, type ReplayPick, type RoyalePlanet } from '../src/net/replay';
 import { ROYALE_SKILLS, type RoyaleSkillId } from '../src/sim/content/bots/royale_skills';
+import { GRAFT_LIST, GRAFTS } from '../src/sim/content/grafts';
 import { assemblePlanet } from '../src/sim/content/planet';
 import { dist } from '../src/sim/geo';
 import { SphereGround } from '../src/sim/ground';
@@ -160,7 +161,14 @@ interface Match {
   cachesByMin: number[];
   takedowns: number;
   winner: { championId: string; skill: string; kills: number; level: number } | null;
-  top: { championId: string; skill: string; kills: number; deaths: number; level: number }[];
+  top: {
+    championId: string;
+    skill: string;
+    kills: number;
+    deaths: number;
+    level: number;
+    grafts: string[];
+  }[];
   duskDeaths: number;
   pads: number;
   camps: number;
@@ -202,6 +210,14 @@ interface Match {
   seedfallsOpened: number;
   seedfallsContested: number;
   seedfallOpenDelays: number[];
+  // The Grafts: held per seat at its fall (One life) or the end, every
+  // Graft taken by id, the Bough offers and those filled with a Sprout,
+  // and the offers of the bots' seats that ran out (card 0 taken for them).
+  graftsHeld: number[];
+  graftsTaken: Record<string, number>;
+  boughOffers: number;
+  boughFallbacks: number;
+  botTimeouts: number;
 }
 
 const ENGAGE_M = 8;
@@ -324,9 +340,29 @@ function play(
   const seedfallOpenDelays: number[] = [];
   let landedSeen = false;
   let lastMinute = -1;
+  // The Grafts.
+  const heldAtFall = new Map<number, number>();
+  const offersSeen = new WeakSet<object>();
+  let boughOffers = 0;
+  let boughFallbacks = 0;
+  let botTimeouts = 0;
   while (mode.state.stage !== 'over' && ticks < cap) {
+    for (const [id, q] of mode.state.offers) {
+      const head = q[0];
+      if (!head || head.until === null || seats.get(id)?.skill === 'passive') continue;
+      if (mode.state.stage === 'play' && sim.time + 1e-9 >= head.until) botTimeouts++;
+    }
     const t0 = performance.now();
     const events = sim.tick();
+    for (const q of mode.state.offers.values()) {
+      for (const o of q) {
+        if (offersSeen.has(o)) continue;
+        offersSeen.add(o);
+        if (o.grade !== 'bough') continue;
+        boughOffers++;
+        if (o.cards.some((c) => GRAFTS[c]?.grade === 'sprout')) boughFallbacks++;
+      }
+    }
     const ms = performance.now() - t0;
     ticks++;
     if (mode.state.stage !== 'drop') {
@@ -394,6 +430,9 @@ function play(
       if (e.type !== 'death') continue;
       const victim = seats.get(e.unitId);
       if (!victim) continue;
+      if (variant === 'one_life' && !heldAtFall.has(victim.id)) {
+        heldAtFall.set(victim.id, sim.units.get(victim.id)?.grafts.length ?? 0);
+      }
       bump(deathsByMin, minute);
       if (victim.skill === 'standin') {
         const since = aliveSince.get(victim.id);
@@ -505,6 +544,7 @@ function play(
       kills: u.kills,
       deaths: u.deaths,
       level: u.level,
+      grafts: [...u.grafts],
     })),
     duskDeaths: mode.tally.duskDeaths,
     pads: mode.tally.padsUsed,
@@ -544,6 +584,16 @@ function play(
     seedfallsOpened: mode.tally.seedfallsOpened,
     seedfallsContested: mode.tally.seedfallsContested,
     seedfallOpenDelays,
+    graftsHeld: champs.map((u) => heldAtFall.get(u.id) ?? u.grafts.length),
+    graftsTaken: [...mode.state.grafts.values()]
+      .flat()
+      .reduce<Record<string, number>>((acc, id) => {
+        acc[id] = (acc[id] ?? 0) + 1;
+        return acc;
+      }, {}),
+    boughOffers,
+    boughFallbacks,
+    botTimeouts,
   };
 }
 
@@ -608,6 +658,9 @@ function print(m: Match): void {
   console.log(
     `  top kills: ${m.top.map((t) => `${t.championId}/${t.skill} ${t.kills}-${t.deaths} L${t.level}`).join(', ')}`,
   );
+  console.log(
+    `  top grafts: ${m.top.map((t) => `${t.championId} ${t.grafts.join('+') || '-'}`).join(', ')}`,
+  );
   console.log(`  dusk deaths ${m.duskDeaths}, pads ${m.pads}, camps ${m.camps}`);
   console.log(
     `  levels: ${histogram(m.levels)} (median ${m.levels[Math.floor(m.levels.length / 2)]})`,
@@ -650,6 +703,10 @@ function print(m: Match): void {
         `landing to opening ${m.seedfallOpenDelays.map((s) => `${Math.round(s)}`).join(' ')} s`,
     );
   }
+  console.log(
+    `  grafts: held ${histogram(m.graftsHeld)} (mean ${mean(m.graftsHeld).toFixed(1)}), ` +
+      `bough offers ${m.boughOffers} (${m.boughFallbacks} with a sprout), bot offers run out ${m.botTimeouts}`,
+  );
   console.log(
     `  enemy within ${ENGAGE_M} m in sight: fighting ${pct(m.engagedSeconds, m.nearSeconds)} of ${m.nearSeconds} bot-seconds; ` +
       `steals ${pct(m.steals, m.champTakedowns)} of ${m.champTakedowns} takedowns`,
@@ -768,6 +825,51 @@ function acceptance(all: readonly Match[]): void {
   }
 }
 
+// The Grafts' acceptance (ADR 0032): every One life seat holds one, the
+// mean held at a seat's fall or the end, each Graft's share of its grade's
+// picks against an even share, the Bough offers filled with a Sprout, and
+// no bot offer run out.
+function graftAcceptance(all: readonly Match[]): void {
+  console.log('\ngrafts:');
+  const band = { one_life: [1.5, 3], respawn: [4, 7] } as const;
+  for (const variant of ['one_life', 'respawn'] as const) {
+    const ms = all.filter((m) => m.variant === variant);
+    if (ms.length === 0) continue;
+    const held = ms.flatMap((m) => m.graftsHeld);
+    const avg = mean(held);
+    const [lo, hi] = band[variant];
+    const none = held.filter((n) => n === 0).length;
+    console.log(
+      `  ${variant} held at the fall or the end: mean ${avg.toFixed(2)} (${lo} to ${hi}): ${verdict(avg >= lo && avg <= hi)}` +
+        (variant === 'one_life'
+          ? `; seats holding none ${none} of ${held.length} (0): ${verdict(none === 0)}`
+          : ''),
+    );
+    const offers = ms.reduce((a, m) => a + m.boughOffers, 0);
+    const fell = ms.reduce((a, m) => a + m.boughFallbacks, 0);
+    console.log(
+      `  ${variant} bough offers filled with a sprout: ${pct(fell, offers)} of ${offers} (max 30%): ${verdict(fell <= offers * 0.3)}`,
+    );
+    const late = ms.reduce((a, m) => a + m.botTimeouts, 0);
+    console.log(`  ${variant} bot offers run out: ${late} (0): ${verdict(late === 0)}`);
+    const taken: Record<string, number> = {};
+    for (const m of ms) {
+      for (const [id, n] of Object.entries(m.graftsTaken)) taken[id] = (taken[id] ?? 0) + n;
+    }
+    for (const grade of ['sprout', 'bough', 'heartwood'] as const) {
+      const ids = GRAFT_LIST.filter((g) => g.grade === grade).map((g) => g.id);
+      const total = ids.reduce((a, id) => a + (taken[id] ?? 0), 0);
+      if (total === 0) continue;
+      const even = 1 / ids.length;
+      const top = Math.max(...ids.map((id) => (taken[id] ?? 0) / total));
+      console.log(
+        `  ${variant} ${grade} picks (${total}): ${ids.map((id) => `${id} ${pct(taken[id] ?? 0, total)}`).join(', ')}; ` +
+          `top ${(top * 100).toFixed(0)}% against an even ${(even * 100).toFixed(0)}% (max 1.5x): ${verdict(top <= even * 1.5)}`,
+      );
+    }
+  }
+}
+
 function summary(all: readonly Match[]): void {
   console.log(
     '\nvariant   seed  length first  td/min  last2/min peak/min winner                 top5 kills       dusk pads caches(0-3) camps lvl-med tick',
@@ -852,11 +954,13 @@ function summary(all: readonly Match[]): void {
         by.set(s.championId, row);
       }
     }
+    const rates = [...by.values()].map((r) => r.kills / r.n);
+    const low = Math.min(...rates);
     console.log(
       `${variant} takedowns per seat by champion: ${[...by.entries()]
         .sort((a, b) => b[1].kills / b[1].n - a[1].kills / a[1].n)
         .map(([id, r]) => `${id} ${(r.kills / r.n).toFixed(1)}/${(r.deaths / r.n).toFixed(1)}`)
-        .join(', ')}`,
+        .join(', ')}; spread ${low > 0 ? (Math.max(...rates) / low).toFixed(2) : '-'}`,
     );
   }
   const wins = new Map<string, number>();
@@ -870,6 +974,7 @@ function summary(all: readonly Match[]): void {
     );
   }
   acceptance(all);
+  graftAcceptance(all);
 }
 
 const planet = loadPlanet();

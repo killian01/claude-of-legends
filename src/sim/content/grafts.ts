@@ -239,7 +239,7 @@ const HEARTWOODS: GraftDef[] = [
     id: 'reaping_graft',
     name: 'Reaping Graft',
     grade: 'heartwood',
-    roles: ['magic'],
+    roles: ['magic', 'damage'],
     text: 'A takedown resets your Q, W and E',
     color: 0xc04a6a,
     onTakedown(_ctx, self) {
