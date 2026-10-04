@@ -154,7 +154,12 @@ export interface Unit {
   // An auto-attack strike winding up: locked to its target, landing at
   // resolveAt. Moving, a stun, a dash, or losing the target cancels it and
   // refunds the attack timer (the orb-walk rule).
-  pendingAttack: { targetId: number; resolveAt: number; start: Vec2 } | null;
+  pendingAttack: {
+    targetId: number;
+    resolveAt: number;
+    start: Vec2;
+    voidmaulSlam?: { point: Vec2; radius: number };
+  } | null;
   // Remaining waypoints toward the current move order; empty when idle.
   path: Vec2[];
   // Progression and economy (champions).

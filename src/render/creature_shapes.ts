@@ -7,23 +7,24 @@
 // Ascendant (CONTEXT.md) is the same silhouette a third bigger, its
 // accent in the Wrath's white-violet, a spinning halo of shards above its
 // back, so the fourth rise reads as another creature from across the
-// ring. The Pyrefang's figure is the stand-in until its rigged model
-// loads (creatures/pyrefang_visual.ts), which replaces the body and keeps
+// ring. Each figure is the stand-in until its rigged model
+// loads (creatures/*_visual.ts), which replaces the body and keeps
 // the beacon and the halo.
 
 import * as THREE from 'three';
 import type { Unit } from '../sim/unit';
 import { aspectColor } from './aspect_colors';
+import { VOIDMAUL_REST_HEIGHT, VOIDMAUL_SCALE } from './creatures/voidmaul_visual';
 
 export interface CreatureFigure {
   holder: THREE.Group;
   barY: number;
   // The body alone, without the beacon or the halo: what a rigged model
-  // replaces (creatures/pyrefang_visual.ts).
+  // replaces (creatures/*_visual.ts).
   body?: THREE.Group;
 }
 
-function beaconOf(color: number): THREE.Mesh {
+function beaconOf(color: number, y = 8): THREE.Mesh {
   const beacon = new THREE.Mesh(
     new THREE.CylinderGeometry(0.7, 1.2, 16, 6, 1, true),
     new THREE.MeshBasicMaterial({
@@ -34,7 +35,7 @@ function beaconOf(color: number): THREE.Mesh {
       depthWrite: false,
     }),
   );
-  beacon.position.y = 8;
+  beacon.position.y = y;
   beacon.userData.spin = true;
   return beacon;
 }
@@ -92,10 +93,18 @@ function pyrefang(holder: THREE.Group, accent: number): CreatureFigure {
   return { holder, barY: 9, body: figure };
 }
 
+// The bar and the beacon ride over the Voidmaul's rigged model, which
+// towers over its stand-in: the model's rest height times its scale, and a
+// margin for the crest's rise in the Spawn's bellow and for the steep
+// camera, under which the back of so deep a body draws above its crown.
+const VOIDMAUL_BAR_Y = VOIDMAUL_REST_HEIGHT * VOIDMAUL_SCALE * 1.45;
+
 // The Voidmaul: a slab of a body close to the ground, four pillar legs, a
 // blunt head sunk into the shoulders, veins of light across the hide, and
 // the maul held low at its right side, its head glowing at the seams.
 function voidmaul(holder: THREE.Group, accent: number, ascendant = false): CreatureFigure {
+  const figure = new THREE.Group();
+  holder.add(figure);
   // The hide glows faintly with the accent; the Wrath's near-white would
   // wash the whole slab pale, so the Ascendant keeps its void black and
   // lets the veins carry the color.
@@ -109,40 +118,40 @@ function voidmaul(holder: THREE.Group, accent: number, ascendant = false): Creat
   const body = new THREE.Mesh(new THREE.IcosahedronGeometry(1.35, 0), hide);
   body.position.y = 1.5;
   body.scale.set(1.35, 0.95, 1.25);
-  holder.add(body);
+  figure.add(body);
   const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.6, 0), hide);
   head.position.set(0, 1.9, 1.35);
   head.scale.set(1.1, 0.8, 1);
-  holder.add(head);
+  figure.add(head);
   for (const side of [-1, 1]) {
     for (const front of [-1, 1]) {
       const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.4, 1.2, 6), hide);
       leg.position.set(side * 1.05, 0.6, front * 0.85);
-      holder.add(leg);
+      figure.add(leg);
     }
     const veinBar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 2.2), vein);
     veinBar.position.set(side * 0.75, 2.35, 0.1);
     veinBar.rotation.y = side * 0.18;
-    holder.add(veinBar);
+    figure.add(veinBar);
   }
   const eyes = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 0.12), vein);
   eyes.position.set(0, 2.0, 1.9);
-  holder.add(eyes);
+  figure.add(eyes);
   const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 2.6, 6), hide);
   handle.position.set(1.9, 1.3, -0.2);
   handle.rotation.z = 0.35;
-  holder.add(handle);
+  figure.add(handle);
   const maulHead = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 1.3), hide);
   maulHead.position.set(2.35, 2.5, -0.2);
   maulHead.rotation.z = 0.35;
-  holder.add(maulHead);
+  figure.add(maulHead);
   const seam = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.14, 1.35), vein);
   seam.position.copy(maulHead.position);
   seam.rotation.z = 0.35;
-  holder.add(seam);
-  holder.add(beaconOf(accent));
+  figure.add(seam);
+  holder.add(beaconOf(accent, VOIDMAUL_BAR_Y + 1.6));
   holder.scale.setScalar(1.1);
-  return { holder, barY: 4.2 };
+  return { holder, barY: VOIDMAUL_BAR_Y, body: figure };
 }
 
 // How much bigger an Ascendant stands than its creature.

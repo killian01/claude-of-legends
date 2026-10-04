@@ -5,6 +5,7 @@
 // records, the world-of-claudecraft pattern).
 
 import type { CoachOrder, CoachOrderKind } from '../sim/coach';
+import type { VoidmaulSlamEvent } from '../sim/combat/voidmaul_slam';
 import type { CampKind } from '../sim/content/camps';
 import type { LaneId } from '../sim/content/map';
 import type { AspectId, CreatureId, RingId } from '../sim/content/rings';
@@ -308,6 +309,8 @@ export type SnapEvent =
   | { e: 'dmg'; targetId: number; amount: number }
   // A visible unit fired an auto-attack; drives swing animations.
   | { e: 'atk'; unitId: number; targetId: number }
+  // Resolved ground contact, including its committed position and area.
+  | ({ e: 'voidmaul_slam' } & Omit<VoidmaulSlamEvent, 'type'>)
   | { e: 'victory'; team: TeamId }
   | RoyaleSnapEvent;
 
