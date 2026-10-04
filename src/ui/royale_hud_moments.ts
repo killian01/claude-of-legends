@@ -631,6 +631,7 @@ export class RoyaleHudMoments {
       const ring = this.host.root.classList.contains('compact') ? compactRing(view) : undefined;
       const arrows = edgeArrows(targets, view, ring);
       // Each line's words first: its width is part of the arrow's room.
+      const relabeled: HTMLElement[] = [];
       const nodes = arrows.map((a) => {
         let node = this.arrows.get(a.key);
         if (!node) {
@@ -643,10 +644,15 @@ export class RoyaleHudMoments {
         const label = node.lastElementChild as HTMLElement;
         if (label.textContent !== a.label) {
           label.textContent = a.label;
-          node.dataset.w = String(label.offsetWidth);
+          relabeled.push(node);
         }
         return node;
       });
+      // The new lines measured once all are written: one layout for them
+      // all, not one a line.
+      for (const node of relabeled) {
+        node.dataset.w = String((node.lastElementChild as HTMLElement).offsetWidth);
+      }
       // Placed together: each clear of the HUD and of the ones before it.
       const places = layoutArrows(
         arrows,
