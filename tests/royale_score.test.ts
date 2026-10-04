@@ -1,5 +1,5 @@
 // Scores and places (src/sim/royale/score.ts): the leader by takedowns,
-// fewer deaths then the lower id; a takedown on the leader worth two; the
+// fewer deaths then the lower id; the
 // places of One life, champions falling on one tick ordered by the health
 // they had on the tick before.
 
@@ -10,9 +10,7 @@ import {
   oneLifeRanking,
   placeFallen,
   respawnRanking,
-  takedownScore,
 } from '../src/sim/royale/score';
-import { LEADER_TAKEDOWN_SCORE } from '../src/sim/royale/types';
 
 describe('Respawn scores', () => {
   it('names the leader by takedowns, then fewer deaths, then the lower id', () => {
@@ -27,12 +25,6 @@ describe('Respawn scores', () => {
     expect(leaderOf(rows)).toBe(2);
     expect(respawnRanking(rows)).toEqual([2, 4, 7, 9]);
     expect(compareStanding(rows[0]!, rows[3]!)).toBeLessThan(0);
-  });
-
-  it('counts a takedown on the leader double', () => {
-    expect(takedownScore(5, 5)).toBe(LEADER_TAKEDOWN_SCORE);
-    expect(takedownScore(5, 6)).toBe(1);
-    expect(takedownScore(5, null)).toBe(1);
   });
 });
 

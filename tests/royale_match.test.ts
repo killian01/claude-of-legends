@@ -160,8 +160,8 @@ describe('a whole battle royale of fifty house bots', () => {
     // their bushes: a fifth to a third of the time near an enemy is
     // fighting (tranche 1, seeds 1 to 7: 21 to 31%; this seed 34%, and 24%
     // once the Seedfalls came every 70 s instead of 80; 18.5% with the
-    // Grafts, the report's seeds 1 to 3 down from a mean of 28% to 20%).
-    expect(a.fighting).toBeGreaterThan(0.15);
+    // Grafts alone, 23.5% with the Grafts and the Risings together).
+    expect(a.fighting).toBeGreaterThan(0.2);
     // A Seedfall's cache draws the few left standing to one point, and a
     // losing bot now drags its pursuer into a third fighter on purpose (bots
     // with intent): a few more takedowns land on a champion someone else
@@ -169,8 +169,8 @@ describe('a whole battle royale of fifty house bots', () => {
     // shown mark lands on a fight under way the same way (this seed 20.4%
     // with the marks alone), and the Grafts' area damage (Chainsap's arc,
     // Thornburst, Thornhide's return) lands on fights the holder is not in
-    // (35% with the Grafts alone; the report's seeds a mean of 19 to 24%).
-    expect(a.steals).toBeLessThan(0.4);
+    // (35% with the Grafts alone). Both together, this seed 28.6%.
+    expect(a.steals).toBeLessThan(0.33);
     expect(a.ticks).toBeGreaterThan(Math.round((DROP_S + 360) * 20));
   }, 300_000);
 });
