@@ -61,6 +61,7 @@ import { heartwoodIcon } from './planet_graft_aura';
 import type { PlanetMinimap } from './planet_minimap';
 import { PlanetStage } from './planet_stage';
 import { ProgramKeeper } from './program_keeper';
+import { ProgramWarmup, whenLinked } from './program_warmup';
 import { RING_FOG_EDGE, ringFogOpening } from './ring_fog';
 import {
   clearRoyaleProjector,
@@ -454,6 +455,9 @@ export class Renderer {
   // (program_keeper.ts): an effect cast again finds its program instead of
   // linking it anew mid-fight.
   private readonly programs = new ProgramKeeper();
+  // The planet's programs linking before its first frame
+  // (program_warmup.ts); null on the plane.
+  private readonly warmup: ProgramWarmup | null = null;
 
   constructor(container: HTMLElement, world: IWorld, terrain: RenderTerrain) {
     this.terrain = terrain;
@@ -715,6 +719,21 @@ export class Renderer {
     this.onSimTick();
     // First sync has no history: snap prev onto curr so nothing lerps from 0,0.
     for (const t of this.tracked.values()) t.prev = { ...t.curr };
+    if (this.planet) {
+      const planet = this.planet;
+      this.warmup = new ProgramWarmup(() => {
+        // Bent first: the bend keys a material's program apart.
+        planet.bendScene(this.scene);
+        this.gl.compile(this.scene, this.camera);
+        const linking = [...(this.gl.info.programs ?? [])];
+        this.programs.keep(linking);
+        return whenLinked(
+          linking,
+          () => this.gl.info.programs ?? [],
+          (ms) => new Promise((done) => window.setTimeout(done, ms)),
+        );
+      }, performance.now());
+    }
   }
 
   // The planet's minimap window (planet_minimap.ts): its world, its
@@ -3086,6 +3105,8 @@ export class Renderer {
     // pictures: a draw now would upload the closed ones.
     if (this.picture.blocked()) return;
     const now = performance.now();
+    // The planet's programs still linking: the picture waits for them.
+    if (this.warmup?.holds(now)) return;
     const dtMs = Math.min(100, now - this.lastFrameAt);
     this.lastFrameAt = now;
     // The planet: its stage first (the drop, the landing), then the chart
