@@ -56,6 +56,13 @@ export function freshGraces(
   return fresh;
 }
 
+// Whether the own champion has just come down (the stage's landing, its
+// thud and shake): its Grace, running out at `until` (null for none), seen
+// this frame and not the last, at most DUST_WITHIN_S old at `time`.
+export function ownGraceFresh(until: number | null, wasGraced: boolean, time: number): boolean {
+  return until !== null && !wasGraced && until - time >= ARRIVAL_GRACE_S - DUST_WITHIN_S;
+}
+
 // A veil's light: brightest at the feet, gone at the head.
 function veilTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');

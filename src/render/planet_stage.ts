@@ -17,7 +17,6 @@ import * as THREE from 'three';
 import { ownGraceUntil } from '../net/royale_client';
 import type { SnapCache, WirePoint } from '../net/royale_wire';
 import { segmentDist, type Vec3 } from '../sim/geo';
-import { ARRIVAL_GRACE_S } from '../sim/royale/grace';
 import { DT, type Vec2 } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { type ChartView, ChartWindow, ChartWorld } from './chart_world';
@@ -25,7 +24,7 @@ import { BEND_UNIFORMS, bendTree } from './planet_bend';
 import { bendTurn, PlanetChart, rotateAbout } from './planet_chart';
 import { type DropOrbit, diveProgress, orbitPosition } from './planet_drop';
 import { capAngle, DUSK_UNIFORMS, FADE_TARGETS } from './planet_dusk';
-import { DUST_WITHIN_S } from './planet_grace';
+import { ownGraceFresh } from './planet_grace';
 import { PlanetMarks } from './planet_marks';
 import { PlanetMinimap } from './planet_minimap';
 import { PlanetSky } from './planet_sky';
@@ -545,13 +544,7 @@ export class PlanetStage {
     // has come down, and lands with the drop's dust and thud.
     const graceUntil =
       this.picker !== null && royale?.st === 'play' ? ownGraceUntil(royale, this.picker) : null;
-    if (
-      graceUntil !== null &&
-      !this.ownGraced &&
-      graceUntil - this.base.time >= ARRIVAL_GRACE_S - DUST_WITHIN_S
-    ) {
-      this.pendingLanding = true;
-    }
+    if (ownGraceFresh(graceUntil, this.ownGraced, this.base.time)) this.pendingLanding = true;
     this.ownGraced = graceUntil !== null;
     // The landing: the followed champion's feet touch the ground the
     // second after the drop ends (liftOf's fall).
