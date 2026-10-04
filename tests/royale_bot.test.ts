@@ -798,6 +798,34 @@ describe('the calls', () => {
       expect(on({ lay: layout }).why).toEqual(['ambush-strike']);
       expect(on({ self: { struckAt: 19.5 } }).why).not.toContain('ambush-wait');
     });
+
+    it("holds its cue in One life while the field's pace asks more of a fight, never in Respawn", () => {
+      // Twenty fallen ten seconds after the landing: the pace's whole nerve.
+      const ahead = (variant: 'one_life' | 'respawn') => {
+        const o = obs(
+          bushAt,
+          {
+            units: [opener],
+            royale: {
+              variant,
+              alive: 30,
+              seedfalls: [{ ...sf, landed: true, opener: { id: 9, since: 26 } }],
+            },
+          },
+          {},
+        );
+        return whys({ ...o, time: 27 }, normal, bushy);
+      };
+      const held = ahead('one_life');
+      expect(held.why).toEqual(['ambush-hold']);
+      expect(hits(held.a)).toBe(false);
+      expect(ahead('respawn').why).toEqual(['ambush-strike']);
+      // Away from its bush, it walks back to it.
+      const o = obs(here, { units: [opener], royale: { alive: 30, seedfalls: [sf] } }, {});
+      const back = whys({ ...o, time: 25 + AMBUSH_WAIT_S }, normal, bushy);
+      expect(back.why).toEqual(['ambush-hold']);
+      expect(dist(point(back.a), bushAt)).toBeLessThan(0.01);
+    });
   });
 
   describe('the Clamor', () => {
