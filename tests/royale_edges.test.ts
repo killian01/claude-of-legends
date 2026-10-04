@@ -5,6 +5,8 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  arrowBox,
+  arrowRect,
   clampToEdge,
   clearOf,
   clearOnRing,
@@ -12,10 +14,14 @@ import {
   distanceLabel,
   EDGE_PRIORITY,
   EdgeChimes,
+  type EdgeRect,
   type EdgeTarget,
   type EdgeView,
   edgeArrows,
   edgeDirection,
+  LABEL_MARGIN,
+  labelShift,
+  layoutArrows,
   MAX_ARROWS,
   onScreen,
   SEEDFALL_STALE_S,
@@ -289,6 +295,92 @@ describe('the ring on a phone', () => {
       moved.y - 14 < stick.bottom;
     expect(blocked).toBe(false);
     expect((moved.x - cx) * Math.cos(a) + (moved.y - cy) * Math.sin(a)).toBeGreaterThan(0);
+  });
+});
+
+describe('the distance line under an arrow', () => {
+  it('stays whole at the screen sides ("138 m, 0:0" and "6 m, 0:11")', () => {
+    // A line 84 px wide under a dial at the left border of a 960 screen.
+    expect(labelShift(26, 84, 960)).toBeCloseTo(LABEL_MARGIN + 42 - 26);
+    expect(labelShift(934, 84, 960)).toBeCloseTo(960 - LABEL_MARGIN - 42 - 934);
+    expect(labelShift(480, 84, 960)).toBe(0);
+    for (const x of [0, 10, 26, 300, 700, 934, 960]) {
+      const left = x + labelShift(x, 84, 960) - 42;
+      expect(left).toBeGreaterThanOrEqual(LABEL_MARGIN - 1e-9);
+      expect(left + 84).toBeLessThanOrEqual(960 - LABEL_MARGIN + 1e-9);
+    }
+  });
+
+  it('counts in the room an arrow keeps clear', () => {
+    const box = arrowBox(84);
+    expect(box.left).toBe(42);
+    expect(box.right).toBe(42);
+    expect(box.bottom).toBeGreaterThanOrEqual(30);
+    expect(arrowBox(0).left).toBeGreaterThanOrEqual(13);
+  });
+});
+
+describe('the arrows placed together', () => {
+  const hit = (a: EdgeRect, b: EdgeRect): boolean =>
+    a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+
+  it('never draw two arrows on each other on a phone ("5? m")', () => {
+    // The phone's view as the HUD gives it, the thumb stick's corner and
+    // the bar covered: two Seedfalls to the left, one ahead and one behind.
+    const view: EdgeView = { width: 844, height: 390, top: 14, right: 26, bottom: 38, left: 26 };
+    const ring = compactRing(view);
+    const stick = { left: 20, top: 200, right: 240, bottom: 390 };
+    const bar = { left: 240, top: 300, right: 460, bottom: 390 };
+    const touchbar = { left: 0, top: 90, right: 80, bottom: 200 };
+    const targets = [
+      target({ key: 'sf1', x: -340, y: 136, distance: 59 }),
+      target({ key: 'sf2', x: 523, y: 78, behind: true, distance: 70 }),
+    ];
+    const arrows = edgeArrows(targets, view, ring);
+    expect(arrows).toHaveLength(2);
+    const widths = [40, 84];
+    const at = layoutArrows(arrows, widths, [stick, bar, touchbar], view, ring);
+    const rects = at.map((p, i) => arrowRect(p, arrowBox(widths[i] ?? 0), p.labelDx));
+    expect(hit(rects[0]!, rects[1]!)).toBe(false);
+  });
+
+  it('keep every arrow off the others however many point the same way', () => {
+    const view: EdgeView = { width: 960, height: 540, top: 14, right: 26, bottom: 38, left: 26 };
+    for (const ring of [undefined, compactRing(view)]) {
+      const targets = [0, 1, 2].map((i) =>
+        target({ key: `sf${i}`, x: -2000, y: 270 + i, distance: 50 + i }),
+      );
+      const arrows = edgeArrows(targets, view, ring);
+      const widths = arrows.map(() => 84);
+      const at = layoutArrows(arrows, widths, [], view, ring);
+      const rects = at.map((p) => arrowRect(p, arrowBox(84), p.labelDx));
+      for (let i = 0; i < rects.length; i++) {
+        for (let j = i + 1; j < rects.length; j++) {
+          expect(hit(rects[i]!, rects[j]!), `${ring ? 'ring' : 'border'} ${i} ${j}`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('slide off the points box at the top right (the arrow drew over "17 points")', () => {
+    const view: EdgeView = { width: 960, height: 540, top: 14, right: 26, bottom: 38, left: 26 };
+    const points = { left: 784, top: 8, right: 856, bottom: 56 };
+    const kda = { left: 856, top: 8, right: 950, bottom: 44 };
+    const [a] = edgeArrows([target({ x: 840, y: -400, distance: 84, secondsLeft: 19 })], view);
+    const [p] = layoutArrows([a!], [84], [points, kda], view);
+    const r = arrowRect(p!, arrowBox(84), p!.labelDx);
+    expect(hit(r, points)).toBe(false);
+    expect(hit(r, kda)).toBe(false);
+    expect(r.left).toBeGreaterThanOrEqual(0);
+    expect(r.right).toBeLessThanOrEqual(960);
+  });
+
+  it('keep a clear arrow where it points', () => {
+    const view: EdgeView = { width: 960, height: 540, top: 14, right: 26, bottom: 38, left: 26 };
+    const [a] = edgeArrows([target({ x: -500, y: 270 })], view);
+    const [p] = layoutArrows([a!], [40], [], view);
+    expect(p!.x).toBeCloseTo(a!.x);
+    expect(p!.y).toBeCloseTo(a!.y);
   });
 });
 
