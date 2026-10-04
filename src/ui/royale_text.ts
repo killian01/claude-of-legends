@@ -1,5 +1,6 @@
 // What the battle royale's HUD says (ADR 0031): the Dusk line and the count
-// at the top of the screen, the drop's banner, the score leader's badge,
+// at the top of the screen, the drop's banner, the badge of a mark the
+// viewer carries,
 // the cache being opened, the loot and level notices, the kill feed's
 // names with their bot marks, and the place a champion finished in. Pure:
 // the HUD hands in the mode's state as the last snapshot told it
@@ -10,7 +11,7 @@ import type { SnapDusk, SnapRoyale } from '../net/royale_wire';
 import { ITEM_PASSIVES } from '../sim/content/item_passives';
 import { ITEMS, type ItemDef, type ItemStats } from '../sim/content/items';
 import { nextLootPiece, seatBuild } from '../sim/royale/loot';
-import { CACHE_OPEN_S } from '../sim/royale/types';
+import { CACHE_OPEN_S, MARK_SHOWN_S, type MarkKind } from '../sim/royale/types';
 
 // Seconds as a clock, rounded up so it reads 0:01 until the moment passes.
 export function clockText(seconds: number): string {
@@ -43,15 +44,31 @@ export function peopleText(n: number): string {
   return n === 1 ? '1 person' : `${n} people`;
 }
 
-// The count beside the Dusk line. One life: who is still in and how many
-// of them are people. Respawn: the own takedowns and the leader's. Before
-// anyone lands, how many are in the match.
+// The count beside the Dusk line. One life: who is still in and the own
+// takedowns. Respawn: the own rank of everyone in the match, the own
+// takedowns, and how far behind the seat above (the lead, when first),
+// "#14 of 50 · 3 takedowns · 2 behind #13". Before anyone lands, how many
+// are in the match. On a phone (`compact`) the top is one row beside the
+// Dusk line and the minimap: the rank line leaves the takedowns out.
 export function countLine(
-  r: Pick<SnapRoyale, 'v' | 'st' | 'alive' | 'people' | 'score' | 'leader'>,
+  r: Pick<SnapRoyale, 'v' | 'st' | 'alive' | 'people' | 'score' | 'rk' | 'gap'>,
+  compact = false,
 ): string {
   if (r.st === 'drop') return `${r.alive} in the match, ${peopleText(r.people)}`;
-  if (r.v === 'one_life') return `${r.alive} left, ${peopleText(r.people)}`;
-  return `Your takedowns ${r.score ?? 0}, leader ${r.leader?.s ?? 0}`;
+  const takedowns = takedownsText(r.score ?? 0);
+  if (r.v === 'one_life') return `${r.alive} left · ${takedowns}`;
+  if (r.rk === undefined) return takedowns;
+  const gap = gapText(r.rk, r.gap ?? 0);
+  return compact
+    ? `#${r.rk} of ${r.alive} · ${gap}`
+    : `#${r.rk} of ${r.alive} · ${takedowns} · ${gap}`;
+}
+
+// The gap of the rank line: behind the seat above, level with it, or the
+// lead when first.
+export function gapText(rank: number, gap: number): string {
+  if (rank <= 1) return gap > 0 ? `Leading by ${gap}` : 'Tied for the lead';
+  return gap > 0 ? `${gap} behind #${rank - 1}` : `Level with #${rank - 1}`;
 }
 
 // The drop's banner: the ask, in the words of the hands on the screen, and
@@ -83,22 +100,30 @@ export function openingFraction(r: Pick<SnapRoyale, 'opening'>, time: number): n
   return Math.max(0, Math.min(1, (time - r.opening.since) / d));
 }
 
-// The score leader's badge in Respawn: who leads, with how many, whether it
-// is the viewer, and whether the globe shows them right now.
-export function leaderBadge(
-  r: Pick<SnapRoyale, 'v' | 'st' | 'leader'>,
+// The badge of what the viewer carries that shows them to everyone
+// (src/sim/royale/marks.ts): the Lodestar, the Wrath, an Ablaze run, the
+// first that applies, and whether the globe shows them right now (for
+// MARK_SHOWN_S after each show). Null when they carry none.
+const MARK_BADGE: Readonly<Partial<Record<MarkKind, [string, string]>>> = {
+  lodestar: ['You are the Lodestar', 'Lodestar'],
+  wrath: ['You hold the Wrath', 'Wrath'],
+  ablaze: ['You are Ablaze', 'Ablaze'],
+};
+
+export function markBadge(
+  r: Pick<SnapRoyale, 'st' | 'mk'>,
   selfId: number,
-  nameOf: (unitId: number) => string,
-): { text: string; self: boolean; shown: boolean; unitId: number } | null {
-  if (r.v !== 'respawn' || r.st === 'drop' || !r.leader || r.leader.s <= 0) return null;
-  const self = r.leader.i === selfId;
-  const n = r.leader.s;
-  return {
-    text: self ? `You lead with ${n}` : `Leader ${nameOf(r.leader.i)} ${n}`,
-    self,
-    shown: r.leader.at !== undefined,
-    unitId: r.leader.i,
-  };
+  time: number,
+  compact = false,
+): { text: string; kind: MarkKind; shown: boolean } | null {
+  if (r.st !== 'play') return null;
+  for (const kind of ['lodestar', 'wrath', 'ablaze'] as const) {
+    const m = (r.mk ?? []).find((x) => x[0] === selfId && x[1] === kind);
+    if (!m) continue;
+    const words = MARK_BADGE[kind]!;
+    return { text: compact ? words[1] : words[0], kind, shown: time - m[5] <= MARK_SHOWN_S };
+  }
+  return null;
 }
 
 // A loot notice: the piece, and what it adds, "+ Iron Blade · +10 attack

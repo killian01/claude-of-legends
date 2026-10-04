@@ -5,11 +5,15 @@
 // regions and their water, the night outside the light, the next cap's
 // golden line, the pads and the caches (a Seedfall's bigger and white),
 // and the loud moments: each Seedfall's column a pulsing gold star, each
-// Clamor a red ring swelling where a takedown rang out. The window is a
+// Clamor a red ring swelling where a takedown rang out; and the Risings
+// and the hunted (ui/royale_hunted.ts): each Rising a dot in its color, the
+// Lodestar a crown where it was last shown and the Wrath's holder a
+// diamond, bright while shown. The window is a
 // second view of the stage's chart, so the two never disagree.
 
 import type { SnapCache, SnapClamor, SnapDusk, SnapSeedfall } from '../net/royale_wire';
 import type { Vec3 } from '../sim/geo';
+import { type MinimapIcon, minimapIcons } from '../ui/royale_hunted';
 import type { IWorld } from '../world_api';
 import { type ChartView, ChartWindow, ChartWorld } from './chart_world';
 import { capAngle } from './planet_dusk';
@@ -68,8 +72,9 @@ export class PlanetMinimap {
       (c) => time - c[3] >= 0 && time - c[3] < CLAMOR_FLASH_S,
     );
     const seedfalls = royale?.st === 'play' ? (royale.sf ?? []) : [];
+    const icons = minimapIcons(royale, time);
     // Something on it moves: repaint at the quick beat.
-    const lively = clamors.length > 0 || seedfalls.length > 0;
+    const lively = clamors.length > 0 || seedfalls.length > 0 || icons.length > 0;
     if (!lively && epoch === this.paintedEpoch && now - this.paintedAt < REPAINT_MS * 4) return;
     if (now - this.paintedAt < REPAINT_MS) return;
     this.paintedAt = now;
@@ -81,7 +86,7 @@ export class PlanetMinimap {
       this.paintTerrain(dusk);
     }
     out.drawImage(this.terrain, 0, 0);
-    this.paintMarks(out, now, time, caches, seedfalls, clamors);
+    this.paintMarks(out, now, time, caches, seedfalls, clamors, icons);
   }
 
   // The ground's regions and relief, the night outside the light, the
@@ -140,6 +145,7 @@ export class PlanetMinimap {
     caches: readonly SnapCache[],
     seedfalls: readonly SnapSeedfall[],
     clamors: readonly SnapClamor[],
+    icons: readonly MinimapIcon[],
   ): void {
     const k = PX / MINIMAP_WINDOW;
     const dot = (p: Vec3, r: number, fill: string): void => {
@@ -164,6 +170,25 @@ export class PlanetMinimap {
       const cy = Math.max(6, Math.min(PX - 6, PX - q.z * k));
       star(g, cx, cy, 5.5 + 1.5 * pulse, sf[5] === 1 ? '#fff6c8' : '#ffd35a');
     }
+    // The Risings and the hunted, clamped to the edge like a Seedfall.
+    for (const ic of icons) {
+      const q = this.window.toLocal(ic.at);
+      const cx = Math.max(6, Math.min(PX - 6, q.x * k));
+      const cy = Math.max(6, Math.min(PX - 6, PX - q.z * k));
+      g.globalAlpha = ic.shown ? 1 : 0.6;
+      if (ic.icon === 'crown') crown(g, cx, cy, ic.shown ? 7 + 1.5 * pulse : 6, ic.color);
+      else if (ic.icon === 'diamond') diamond(g, cx, cy, ic.shown ? 6 + pulse : 5, ic.color);
+      else {
+        g.fillStyle = ic.color;
+        g.strokeStyle = 'rgba(20,8,0,0.85)';
+        g.lineWidth = 1;
+        g.beginPath();
+        g.arc(cx, cy, ic.shown ? 4.5 + pulse : 3.5, 0, Math.PI * 2);
+        g.fill();
+        g.stroke();
+      }
+      g.globalAlpha = 1;
+    }
     // The Clamors: a red ring swelling and fading where each rang out.
     for (const c of clamors) {
       const q = this.window.toLocal({ x: c[0], y: c[1], z: c[2] });
@@ -186,6 +211,39 @@ function dirOf(w: readonly [number, number, number]): Vec3 {
 function dirOf3(p: Vec3): Vec3 {
   const d = Math.hypot(p.x, p.y, p.z) || 1;
   return { x: p.x / d, y: p.y / d, z: p.z / d };
+}
+
+// A crown, for the Lodestar on the minimap: three points over a band.
+function crown(g: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string): void {
+  g.fillStyle = fill;
+  g.strokeStyle = 'rgba(40,24,0,0.9)';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(x - r, y + r * 0.6);
+  g.lineTo(x - r, y - r * 0.5);
+  g.lineTo(x - r * 0.5, y);
+  g.lineTo(x, y - r * 0.8);
+  g.lineTo(x + r * 0.5, y);
+  g.lineTo(x + r, y - r * 0.5);
+  g.lineTo(x + r, y + r * 0.6);
+  g.closePath();
+  g.fill();
+  g.stroke();
+}
+
+// A diamond, for the Wrath's holder on the minimap.
+function diamond(g: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string): void {
+  g.fillStyle = fill;
+  g.strokeStyle = 'rgba(30,20,60,0.9)';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(x, y - r);
+  g.lineTo(x + r * 0.7, y);
+  g.lineTo(x, y + r);
+  g.lineTo(x - r * 0.7, y);
+  g.closePath();
+  g.fill();
+  g.stroke();
 }
 
 // A four-pointed star, for a Seedfall on the minimap.

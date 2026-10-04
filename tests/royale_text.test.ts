@@ -7,7 +7,7 @@ import type { SnapRoyale } from '../src/net/royale_wire';
 import { ITEM_PASSIVES } from '../src/sim/content/item_passives';
 import { ITEMS } from '../src/sim/content/items';
 import { nextLootPiece, seatBuild } from '../src/sim/royale/loot';
-import { CACHE_OPEN_S } from '../src/sim/royale/types';
+import { CACHE_OPEN_S, MARK_SHOWN_S } from '../src/sim/royale/types';
 import {
   BUILD_COMPLETE,
   buildComplete,
@@ -18,14 +18,15 @@ import {
   duskLine,
   duskPill,
   duskTurn,
+  gapText,
   isBot,
   itemGain,
   LOOT_EMPTY,
   LOOT_LABEL,
-  leaderBadge,
   levelText,
   lootNotice,
   lootText,
+  markBadge,
   openingFraction,
   ordinal,
   outsideLight,
@@ -83,17 +84,52 @@ describe('the Dusk line', () => {
 });
 
 describe('the count', () => {
-  it('says who is left in One life, and how many are people', () => {
-    expect(countLine(snap({ v: 'one_life', alive: 37, people: 2 }))).toBe('37 left, 2 people');
-    expect(countLine(snap({ v: 'one_life', alive: 12, people: 1 }))).toBe('12 left, 1 person');
+  it('says who is left in One life, and the own takedowns', () => {
+    expect(countLine(snap({ v: 'one_life', alive: 37, people: 2, score: 3 }))).toBe(
+      '37 left · 3 takedowns',
+    );
+    expect(countLine(snap({ v: 'one_life', alive: 12, people: 1, score: 1 }))).toBe(
+      '12 left · 1 takedown',
+    );
     expect(peopleText(0)).toBe('0 people');
   });
 
-  it('says the own takedowns and the leader in Respawn', () => {
-    expect(countLine(snap({ score: 4, leader: { i: 9, s: 9 } }))).toBe(
-      'Your takedowns 4, leader 9',
+  it('says the rank, the own takedowns and the gap to the seat above in Respawn', () => {
+    expect(countLine(snap({ alive: 50, score: 3, rk: 14, gap: 2 }))).toBe(
+      '#14 of 50 · 3 takedowns · 2 behind #13',
     );
-    expect(countLine(snap())).toBe('Your takedowns 0, leader 0');
+    expect(countLine(snap({ alive: 50, score: 50, rk: 50, gap: 9 }))).toBe(
+      '#50 of 50 · 50 takedowns · 9 behind #49',
+    );
+  });
+
+  it('says the lead at the top, and a tie as level', () => {
+    expect(countLine(snap({ alive: 50, score: 12, rk: 1, gap: 4 }))).toBe(
+      '#1 of 50 · 12 takedowns · Leading by 4',
+    );
+    expect(countLine(snap({ alive: 50, score: 12, rk: 1, gap: 0 }))).toBe(
+      '#1 of 50 · 12 takedowns · Tied for the lead',
+    );
+    expect(countLine(snap({ alive: 50, score: 7, rk: 3, gap: 0 }))).toBe(
+      '#3 of 50 · 7 takedowns · Level with #2',
+    );
+    expect(gapText(2, 1)).toBe('1 behind #1');
+  });
+
+  it('leaves the takedowns out of the rank line on a phone', () => {
+    expect(countLine(snap({ alive: 50, score: 3, rk: 14, gap: 2 }), true)).toBe(
+      '#14 of 50 · 2 behind #13',
+    );
+    expect(countLine(snap({ alive: 50, score: 9, rk: 1, gap: 2 }), true)).toBe(
+      '#1 of 50 · Leading by 2',
+    );
+    expect(countLine(snap({ v: 'one_life', alive: 9, score: 2 }), true)).toBe(
+      '9 left · 2 takedowns',
+    );
+  });
+
+  it('says only the takedowns before the first rank arrives', () => {
+    expect(countLine(snap({ score: 0 }))).toBe('0 takedowns');
   });
 
   it('says how many are in the match during the drop', () => {
@@ -134,28 +170,32 @@ describe('the cache being opened', () => {
   });
 });
 
-describe("the leader's badge", () => {
-  const names = (id: number): string => (id === 9 ? 'Kestrel' : 'someone');
-
-  it('names the leader and the score, and says so when it is you', () => {
-    expect(leaderBadge(snap({ leader: { i: 9, s: 7 } }), 1, names)).toEqual({
-      text: 'Leader Kestrel 7',
-      self: false,
-      shown: false,
-      unitId: 9,
-    });
-    expect(leaderBadge(snap({ leader: { i: 1, s: 4, at: [0, 80, 0] } }), 1, names)).toEqual({
-      text: 'You lead with 4',
-      self: true,
+describe('the badge of a mark the viewer carries', () => {
+  it('names the Lodestar, the Wrath, a run, and whether the globe shows them now', () => {
+    const mk = (id: number, kind: 'lodestar' | 'wrath' | 'ablaze' | 'slayer', at: number) =>
+      [id, kind, 0, 80, 0, at] as [number, typeof kind, number, number, number, number];
+    expect(markBadge(snap({ mk: [mk(1, 'lodestar', 100)] }), 1, 102)).toEqual({
+      text: 'You are the Lodestar',
+      kind: 'lodestar',
       shown: true,
-      unitId: 1,
     });
+    expect(markBadge(snap({ mk: [mk(1, 'wrath', 100)] }), 1, 100 + MARK_SHOWN_S + 1)).toEqual({
+      text: 'You hold the Wrath',
+      kind: 'wrath',
+      shown: false,
+    });
+    expect(markBadge(snap({ mk: [mk(1, 'ablaze', 100)] }), 1, 101)?.text).toBe('You are Ablaze');
+    expect(markBadge(snap({ mk: [mk(1, 'ablaze', 100)] }), 1, 101, true)?.text).toBe('Ablaze');
+    expect(
+      markBadge(snap({ mk: [mk(1, 'ablaze', 90), mk(1, 'lodestar', 90)] }), 1, 101)?.kind,
+    ).toBe('lodestar');
   });
 
-  it('stands only in Respawn, once somebody has scored', () => {
-    expect(leaderBadge(snap({ v: 'one_life', leader: { i: 9, s: 7 } }), 1, names)).toBeNull();
-    expect(leaderBadge(snap({ leader: { i: 9, s: 0 } }), 1, names)).toBeNull();
-    expect(leaderBadge(snap(), 1, names)).toBeNull();
+  it('stands only for the viewer, and never for a slayer', () => {
+    const others = snap({ mk: [[9, 'lodestar', 0, 80, 0, 100]] });
+    expect(markBadge(others, 1, 101)).toBeNull();
+    expect(markBadge(snap({ mk: [[1, 'slayer', 0, 80, 0, 100]] }), 1, 101)).toBeNull();
+    expect(markBadge(snap(), 1, 101)).toBeNull();
   });
 });
 
