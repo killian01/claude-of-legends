@@ -1,10 +1,12 @@
 // The planet's programs linked before its first frame
 // (src/render/program_warmup.ts): the draw is held while the programs
 // link, let go once they all report linked (or are gone), and never held
-// past the bound or by a warm-up that failed.
+// past the bound or by a warm-up that failed. The wait for the links ends
+// on a lost context's answer and once the renderer or the bound is gone,
+// so no poll outlives the match.
 
 import { describe, expect, it } from 'vitest';
-import { ProgramWarmup, whenLinked } from '../src/render/program_warmup';
+import { ProgramWarmup, WARM_HOLD_MS, whenLinked } from '../src/render/program_warmup';
 
 // A program whose parallel link finishes after `polls` checks.
 function linkingAfter(polls: number): { isReady: () => boolean; checks: number } {
@@ -67,6 +69,58 @@ describe('waiting for the links', () => {
     expect(done).toBe(true);
   });
 
+  it("takes a lost context's answer as settled, not as still linking", async () => {
+    // Three's isReady on a lost context: null, at every ask.
+    let asked = 0;
+    const lost = {
+      isReady: () => {
+        asked++;
+        return null;
+      },
+    };
+    const clock = manualLater();
+    let done = false;
+    void whenLinked([lost], () => [lost], clock.later).then(() => {
+      done = true;
+    });
+    await clock.step();
+    expect(done).toBe(true);
+    expect(asked).toBe(1);
+  });
+
+  it('stops polling once told to, the renderer gone or the bound passed', async () => {
+    const stuck = linkingAfter(1_000_000);
+    let polls = 0;
+    const clock = manualLater();
+    const later = (ms: number): Promise<void> => {
+      polls++;
+      return clock.later(ms);
+    };
+    let disposed = false;
+    let done = false;
+    void whenLinked(
+      [stuck],
+      () => [stuck],
+      later,
+      () => disposed,
+    ).then(() => {
+      done = true;
+    });
+    await clock.step();
+    await clock.step();
+    expect(done).toBe(false);
+    const before = polls;
+    disposed = true;
+    await clock.step();
+    expect(done).toBe(true);
+    // Nothing waits behind it any more.
+    await clock.step();
+    await clock.step();
+    expect(polls).toBe(before);
+    // Asked at the start and at each of the two steps before the stop.
+    expect(stuck.checks).toBe(3);
+  });
+
   it('counts a program with no way to ask as linked', async () => {
     await expect(
       whenLinked(
@@ -90,6 +144,15 @@ describe('the hold over the draw', () => {
     await work;
     await Promise.resolve();
     expect(warm.holds(20)).toBe(false);
+  });
+
+  it('tells the work when the hold ends', () => {
+    let told = 0;
+    new ProgramWarmup((until) => {
+      told = until;
+      return new Promise(() => undefined);
+    }, 1000);
+    expect(told).toBe(1000 + WARM_HOLD_MS);
   });
 
   it('never holds past its bound', () => {

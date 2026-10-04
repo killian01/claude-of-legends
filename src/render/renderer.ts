@@ -745,16 +745,19 @@ export class Renderer {
     for (const t of this.tracked.values()) t.prev = { ...t.curr };
     if (this.planet) {
       const planet = this.planet;
-      this.warmup = new ProgramWarmup(() => {
+      this.warmup = new ProgramWarmup((until) => {
         // Bent first: the bend keys a material's program apart.
         planet.bendScene(this.scene);
         this.gl.compile(this.scene, this.camera);
         const linking = [...(this.gl.info.programs ?? [])];
         this.programs.keep(linking);
+        // The wait ends with the hold, or with the renderer: the first
+        // frame links whatever is left.
         const linked = whenLinked(
           linking,
           () => this.gl.info.programs ?? [],
           (ms) => new Promise((done) => window.setTimeout(done, ms)),
+          () => this.disposed || performance.now() >= until,
         );
         // Then the fights' art, a piece a frame, while the match plays.
         void linked.then(() => this.warmFights(planet));
