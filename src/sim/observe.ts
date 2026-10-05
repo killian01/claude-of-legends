@@ -6,6 +6,7 @@
 import { effectiveMoveSpeed } from './combat/status';
 import { heartwoodOf } from './content/grafts';
 import { SIGILS } from './content/sigils';
+import { draughtLeft } from './draught';
 import { hypot } from './exact';
 import { carry, copy, dirTo } from './geo';
 import type {
@@ -275,6 +276,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       recastArmed: u.recastArmed && u.recastArmed.until > sim.time ? u.recastArmed.key : null,
       lane: u.kind === 'champion' ? (u.lane as 'top' | 'mid' | 'bot' | null) : null,
       recalling: u.statuses.some((s) => s.kind === 'recall' && s.until > sim.time),
+      drinking: draughtLeft(u, sim.time),
       struckAt: u.lastHitByChampion !== 0 ? u.lastHitAt : null,
       // The owner's coach order, additive: absent for every uncoached seat.
       ...(u.coachOrder ? { coachOrder: u.coachOrder } : {}),

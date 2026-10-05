@@ -54,7 +54,7 @@ can overturn before the first phase lands.
 
 ## The phases
 
-1. **The sim and the contract.** The item, the status, the action, the observation field, the
+1. **The sim and the contract** (landed 2026-10-05; `src/sim/draught.ts`, `tests/draught.test.ts`). The item, the status, the action, the observation field, the
    wire message, the replay path, `CONTEXT.md` and `headless/README.md`. The shop and the bots
    do not offer it yet (`buyItem` refuses a consumable until phase 2), so nothing a player sees
    changes. Tests: a drink heals 150 over 10 s and empties the slot; refused while one runs,
