@@ -98,6 +98,8 @@ export function stepRings(ctx: CombatCtx, states: RingState[]): void {
         const body = createCreature(id, creatureDefOf(state), at, ringAspect(state), ctx.time);
         // On the planet a champion takes it alone (CombatCtx.neutralScale).
         scaleNeutral(body, ctx.neutralScale?.creature);
+        // Its platform: where the Voidmaul's slam throws its stones.
+        body.ringHome = { center: copy(site), radius: site.r };
         ctx.units.set(id, body);
         state.unitId = id;
         state.riseIndex += 1;

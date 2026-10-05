@@ -9,6 +9,8 @@ export const VOIDMAUL_SLAM = {
   ascendantScale: 1.35,
   ascendantRadius: 7.25,
   splashRatio: 0.65,
+  // A stone of the rain landing on a unit: this share of a slam's hit.
+  stoneRatio: 0.4,
 } as const;
 
 export const VOIDMAUL_SLAM_PAW_SIDE = VOIDMAUL_SLAM.pawSide;

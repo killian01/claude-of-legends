@@ -37,7 +37,7 @@ describe('Voidmaul attack fracture', () => {
 
   it('lands fragments once and leaves a stationary crater after dust dissipates', () => {
     const fx = new VoidmaulAttackFx(5);
-    fx.update(7);
+    fx.update(3.6);
     const settled = snapshot(fx);
     const dust = fx.root.getObjectByName('Voidmaul_AttackDust')!;
     const shockwave = fx.root.getObjectByName('Voidmaul_AttackShockwave')!;
@@ -48,10 +48,11 @@ describe('Voidmaul attack fracture', () => {
     expect(dust.visible).toBe(false);
     expect(shockwave.visible).toBe(false);
     expect(crater.material.uniforms.uFade!.value).toBe(1);
-    fx.update(26);
+    fx.update(4.4);
     expect(snapshot(fx)).toEqual(settled);
     expect(crater.material.uniforms.uFade!.value).toBe(1);
-    fx.update(31.5);
+    // The scar and the stones fade a few seconds after the rain.
+    fx.update(5.5);
     expect(crater.material.uniforms.uFade!.value).toBeCloseTo(0.5);
     expect(rocks(fx)[0]!.material).toHaveProperty('opacity', 0.5);
     expect(fx.update(VOIDMAUL_ATTACK_FX_DURATION_S)).toBe(false);
@@ -86,7 +87,7 @@ describe('Voidmaul attack fracture', () => {
     expect(snapshot(fx)).toEqual(snapshot(seeked));
     const matrix = new THREE.Matrix4();
     const position = new THREE.Vector3();
-    for (const age of [0.8, 8]) {
+    for (const age of [0.8, 4]) {
       fx.update(age);
       for (const mesh of rocks(fx)) {
         for (let i = 0; i < mesh.count; i++) {
@@ -97,7 +98,7 @@ describe('Voidmaul attack fracture', () => {
       }
     }
     const settled = snapshot(fx);
-    fx.update(26);
+    fx.update(4.4);
     expect(snapshot(fx)).toEqual(settled);
     fx.dispose();
     seeked.dispose();
@@ -112,7 +113,7 @@ describe('Voidmaul attack fracture', () => {
       const fx = new VoidmaulAttackFx(5.5);
       fx.conformGround(terrain);
       terrain.mockClear();
-      fx.update(10);
+      fx.update(4);
       expect(terrain).not.toHaveBeenCalled();
       const matrix = new THREE.Matrix4();
       const vertex = new THREE.Vector3();
@@ -129,7 +130,7 @@ describe('Voidmaul attack fracture', () => {
         }
       }
       const settled = snapshot(fx);
-      fx.update(26);
+      fx.update(4.4);
       expect(snapshot(fx)).toEqual(settled);
       expect(terrain).not.toHaveBeenCalled();
       fx.dispose();
@@ -150,7 +151,7 @@ describe('Voidmaul attack fracture', () => {
     const cells = new Set<string>();
     let highFlying = 0;
     let large = 0;
-    for (const age of [0.13, 0.4, 1.2, 2.1, 10]) {
+    for (const age of [0.13, 0.4, 1.2, 2.1, 4]) {
       fx.update(age);
       for (const mesh of rocks(fx)) {
         const geometry = mesh.geometry.getAttribute('position');
@@ -164,7 +165,7 @@ describe('Voidmaul attack fracture', () => {
               arena.radius,
             );
           }
-          if (age !== 10) continue;
+          if (age !== 4) continue;
           const x = position.x - arena.centerX;
           const z = position.z - arena.centerZ;
           const angle = THREE.MathUtils.euclideanModulo(Math.atan2(z, x), Math.PI * 2);
@@ -182,8 +183,8 @@ describe('Voidmaul attack fracture', () => {
     expect(cells.size).toBe(128);
     expect(highFlying).toBeGreaterThan(100);
     expect(large).toBeGreaterThanOrEqual(90);
-    for (const age of [0.4, 1.2, 2.1, 10]) fx.update(age);
-    seeked.update(10);
+    for (const age of [0.4, 1.2, 2.1, 4]) fx.update(age);
+    seeked.update(4);
     expect(snapshot(fx)).toEqual(snapshot(seeked));
     const wave = fx.root.getObjectByName('Voidmaul_AttackShockwave') as THREE.Mesh<
       THREE.BufferGeometry,

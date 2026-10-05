@@ -4,6 +4,7 @@
 
 import type { CoachOrder } from './coach';
 import type { Status } from './combat/status';
+import type { StoneArena, StoneRain } from './combat/voidmaul_stones';
 import type { CampDef, CampKind } from './content/camps';
 import type { ChampionDef } from './content/champions';
 import type { LaneId } from './content/map';
@@ -160,6 +161,11 @@ export interface Unit {
     start: Vec2;
     voidmaulSlam?: { point: Vec2; radius: number };
   } | null;
+  // A ring creature's platform, set at its rise (rings.ts): where the
+  // Voidmaul's stones come down (combat/voidmaul_stones.ts).
+  ringHome?: StoneArena;
+  // The Voidmaul's stones still in the air, slam by slam.
+  stoneRains?: StoneRain[];
   // Remaining waypoints toward the current move order; empty when idle.
   path: Vec2[];
   // Progression and economy (champions).

@@ -16,8 +16,10 @@ import {
 } from '../sim/combat/auto_attack';
 import type { CastSpec } from '../sim/combat/casting';
 import { isRooted, isStunned } from '../sim/combat/status';
+import { stoneArena, voidmaulStones } from '../sim/combat/voidmaul_stones';
 import { heartwoodOf } from '../sim/content/grafts';
-import { WRATH_EXECUTE_FRAC } from '../sim/content/rings';
+import { creatureOfRing, WRATH_EXECUTE_FRAC } from '../sim/content/rings';
+import { copy } from '../sim/geo';
 import type { Projectile } from '../sim/projectiles';
 import { otherTeam } from '../sim/teams';
 import { type AbilityKey, DT, type TeamId, type Vec2 } from '../sim/types';
@@ -1303,6 +1305,19 @@ export class Renderer {
     for (const slam of notes.voidmaulSlams ?? []) {
       const t = this.tracked.get(slam.unitId);
       const point = this.planet ? this.planet.toLocal(slam) : slam;
+      // The stones the sim lands (combat/voidmaul_stones.ts), from the same
+      // ring and contact, brought into the scene.
+      const site = (this.planet?.base.map.rings ?? this.world.map.rings)?.find(
+        (r) => creatureOfRing(r.id).id === 'voidmaul',
+      );
+      const home = site ? { center: copy(site), radius: site.r } : null;
+      const stones = voidmaulStones(slam, slam.radius, stoneArena(home, slam, slam.radius)).map(
+        (s) => ({
+          ...s,
+          origin: this.planet ? this.planet.toLocal(s.origin) : s.origin,
+          target: this.planet ? this.planet.toLocal(s.target) : s.target,
+        }),
+      );
       this.voidmaulImpacts.start(
         slam,
         this.world.time,
@@ -1314,6 +1329,7 @@ export class Renderer {
           (x, z) => this.groundHeight(x, z),
           this.planet ? (center) => this.planet!.toLocal(center) : undefined,
         ),
+        stones,
       );
     }
     // The viewer's own damage dealt: a crack sound plus numbers over the
