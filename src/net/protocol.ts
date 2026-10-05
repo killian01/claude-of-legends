@@ -9,6 +9,7 @@ import type { VoidmaulSlamEvent } from '../sim/combat/voidmaul_slam';
 import type { CampKind } from '../sim/content/camps';
 import type { LaneId } from '../sim/content/map';
 import type { AspectId, CreatureId, RingId } from '../sim/content/rings';
+import type { VoidmaulAttackKind } from '../sim/content/voidmaul_slam';
 import type { FavorStacks } from '../sim/favors';
 import type { ForgedDisplay } from '../sim/forge/display';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
@@ -308,7 +309,7 @@ export type SnapEvent =
   // floating combat numbers only.
   | { e: 'dmg'; targetId: number; amount: number }
   // A visible unit fired an auto-attack; drives swing animations.
-  | { e: 'atk'; unitId: number; targetId: number }
+  | { e: 'atk'; unitId: number; targetId: number; voidmaulAttack?: VoidmaulAttackKind }
   // Resolved ground contact, including its committed position and area.
   | ({ e: 'voidmaul_slam' } & Omit<VoidmaulSlamEvent, 'type'>)
   | { e: 'victory'; team: TeamId }

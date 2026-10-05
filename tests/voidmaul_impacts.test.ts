@@ -52,6 +52,36 @@ describe('resolved Voidmaul impacts', () => {
     impacts.dispose();
   });
 
+  it('uses the authoritative Crush kind once and retains both paw prints after a late seek', () => {
+    const scene = new THREE.Scene();
+    const feedback = vi.fn();
+    const impacts = new VoidmaulImpacts(scene, (x, z) => x * 0.1 - z * 0.04, feedback);
+    const note = { ...slam(), kind: 'crush' as const };
+    const anchor = new THREE.Vector3(10, 0.2, 20);
+    expect(impacts.start(note, 5.75, anchor, true, 0.7)).toBe(true);
+    expect(feedback).not.toHaveBeenCalled();
+    const root = scene.children[0]!;
+    root.updateMatrixWorld(true);
+    for (const name of ['Voidmaul_AttackCrater', 'Voidmaul_CrushCrater_Right']) {
+      const mesh = root.getObjectByName(name) as THREE.Mesh<
+        THREE.BufferGeometry,
+        THREE.ShaderMaterial
+      >;
+      expect(mesh.material.uniforms.uFade!.value).toBe(1);
+      const point = new THREE.Vector3().fromBufferAttribute(
+        mesh.geometry.getAttribute('position'),
+        0,
+      );
+      mesh.localToWorld(point);
+      expect(point.y - (point.x * 0.1 - point.z * 0.04)).toBeCloseTo(0.018, 5);
+    }
+    expect(impacts.start(note, 12, anchor)).toBe(false);
+    impacts.update(24000);
+    expect(impacts.count).toBe(0);
+    expect(scene.children).toHaveLength(0);
+    impacts.dispose();
+  });
+
   it('consumes hidden and expired impacts, rejecting invalid or future records', () => {
     const scene = new THREE.Scene();
     const onImpact = vi.fn();

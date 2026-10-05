@@ -1,4 +1,4 @@
-"""Export Voidmaul's six game clips through an isolated duplicate rig.
+"""Export Voidmaul's seven game clips through an isolated duplicate rig.
 
 The authored scene, meshes, actions and constraints are preserved. A temporary
 scene receives copied rig/mesh datablocks, its IK and modifier targets are
@@ -28,9 +28,16 @@ CLIPS = (
     ('Hurt', 'Voidmaul_Hurt_20f'),
     ('Death', 'Voidmaul_Death_77f'),
     ('Spawn', 'Voidmaul_Spawn_96f'),
+    ('AttackCrush', 'Voidmaul_AttackCrush_77f'),
 )
 CHECK_POSES = (('Idle', 0.0), ('Walk', .5), ('Attack', 1.5), ('Attack', 1.75),
-               ('Death', 3.2), ('Spawn', 0.0), ('Spawn', 2.0), ('Spawn', 4.0))
+               ('Death', 3.2), ('Spawn', 0.0), ('Spawn', 2.0), ('Spawn', 4.0),
+               ('AttackCrush', 1.166667), ('AttackCrush', 1.75),
+               ('AttackCrush', 2.125), ('AttackCrush', 76/24))
+CRUSH_CHECK_POSES = (('AttackCrush', 0.0), ('AttackCrush', 1.166667),
+                     ('AttackCrush', 1.5), ('AttackCrush', 1.75),
+                     ('AttackCrush', 1.875), ('AttackCrush', 2.125),
+                     ('AttackCrush', 76/24))
 BLENDER_TO_GLTF = Matrix(((1, 0, 0, 0), (0, 0, 1, 0),
                           (0, -1, 0, 0), (0, 0, 0, 1)))
 
@@ -165,12 +172,12 @@ def _duplicate(scene, source_rig, source_meshes, owned_objects, owned_data):
     return rig, meshes
 
 
-def _native_samples(scene, rig, actions):
+def _native_samples(scene, rig, actions, checks=CHECK_POSES):
     samples = []
     conversion = BLENDER_TO_GLTF
     inverse_conversion = conversion.inverted()
     deform = [bone.name for bone in rig.data.bones if bone.use_deform]
-    for canonical, seconds in CHECK_POSES:
+    for canonical, seconds in checks:
         action = actions[canonical]
         _set_action(rig, action)
         start, end = action.frame_range
@@ -249,6 +256,7 @@ def main(out_path=None, rig=None, meshes=None, clip_actions=None):
         _frame(export_scene, float(actions['Idle'].frame_range[0]))
         rest_bounds = _bounds(duplicate_meshes, duplicate_rig)
         samples = _native_samples(export_scene, duplicate_rig, actions)
+        crush_samples = _native_samples(export_scene, duplicate_rig, actions, CRUSH_CHECK_POSES)
         duplicate_rig.animation_data.action = None
         durations = {}
         for canonical, _ in CLIPS:
@@ -302,6 +310,10 @@ def main(out_path=None, rig=None, meshes=None, clip_actions=None):
                                   ('landing', 'landing_seconds', 2.65),
                                   ('stomp', 'stomp_seconds', 2.30))},
             'native_skeletal_pose_samples': samples,
+            'native_crush_pose_samples': crush_samples,
+            'attack_crush_release_s': float(actions['AttackCrush'].get('impact_seconds', ATTACK_RELEASE_S)),
+            'attack_crush_contact_gltf': list(actions['AttackCrush'].get('contact_centroid_gltf', ())),
+            'attack_crush_half_spread_gltf': list(actions['AttackCrush'].get('contact_half_spread_gltf', ())),
             'native_samples_units': 'armature/model metres; glTF sample basis x,z,-y',
             'source_scene_preserved': True,
         }

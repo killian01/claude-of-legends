@@ -85,11 +85,16 @@ const STRIKE_GRACE = 2;
 // lands in strike() when the windup resolves.
 function beginWindup(ctx: CombatCtx, u: Unit, target: Unit): void {
   breakStealth(u);
+  const voidmaulSlam = prepareVoidmaulSlam(u, target);
   // Presentation hook: renderers play a swing animation off this event.
-  ctx.events.push({ type: 'attack', unitId: u.id, targetId: target.id });
+  ctx.events.push({
+    type: 'attack',
+    unitId: u.id,
+    targetId: target.id,
+    ...(voidmaulSlam?.kind ? { voidmaulAttack: voidmaulSlam.kind } : {}),
+  });
   const cadence = Math.max(0.1, u.stats.attackSpeed * (1 + attackSpeedBonusPct(u, ctx.time)));
   u.attackReadyAt = ctx.time + 1 / cadence;
-  const voidmaulSlam = prepareVoidmaulSlam(u, target);
   u.pendingAttack = {
     targetId: target.id,
     resolveAt: ctx.time + strikeWindupSeconds(u, cadence),

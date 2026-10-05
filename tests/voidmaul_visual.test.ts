@@ -16,6 +16,7 @@ function makeTemplate(): VoidmaulTemplate {
     Idle: 4,
     Walk: 4 / 3,
     Attack: 76 / 24,
+    AttackCrush: 76 / 24,
     Hurt: 0.8,
     Death: 3.2,
     Spawn: 4,
@@ -52,6 +53,24 @@ function pump(v: VoidmaulVisual, ms: number, input = STANDING): void {
 }
 
 describe('Voidmaul quadruped playback', () => {
+  it('plays the authoritative crush choice on its contact beat and returns to its gait', () => {
+    const visual = new VoidmaulVisual(makeTemplate(), null, 1.1);
+    visual.playAttack(1.75, 'crush');
+    visual.playHit();
+    pump(visual, 1750);
+    expect(internal(visual).shot).toBe(action(visual, 'AttackCrush'));
+    expect(action(visual, 'AttackCrush').time).toBeCloseTo(VOIDMAUL_ATTACK_RELEASE_S, 5);
+    expect(action(visual, 'Attack').isRunning()).toBe(false);
+    pump(visual, 1700, WALKING);
+    expect(action(visual, 'AttackCrush').getEffectiveWeight()).toBeLessThan(0.01);
+    expect(action(visual, 'Walk').getEffectiveWeight()).toBeGreaterThan(0.99);
+    visual.playAttack(0.5, 'slam');
+    pump(visual, 500);
+    expect(action(visual, 'Attack').time).toBeCloseTo(VOIDMAUL_ATTACK_RELEASE_S, 5);
+    expect(action(visual, 'AttackCrush').getEffectiveWeight()).toBeLessThan(0.01);
+    visual.dispose();
+  });
+
   it('lands the authored slam on the simulation damage beat at different attack speeds', () => {
     const visual = new VoidmaulVisual(makeTemplate(), null, 1.1);
     for (const windup of [0.6, 0.35, 0.15]) {

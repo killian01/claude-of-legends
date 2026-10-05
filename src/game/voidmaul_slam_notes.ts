@@ -14,7 +14,16 @@ export function voidmaulSlamsFrom(events: readonly (SimEvent | SnapEvent)[]): Vo
     ) {
       const { unitId, targetId, x, z, radius, at } = event;
       return [
-        { unitId, targetId, x, z, radius, at, ...(event.y !== undefined ? { y: event.y } : {}) },
+        {
+          unitId,
+          targetId,
+          x,
+          z,
+          radius,
+          at,
+          ...(event.y !== undefined ? { y: event.y } : {}),
+          ...(event.kind !== undefined ? { kind: event.kind } : {}),
+        },
       ];
     }
     return [];

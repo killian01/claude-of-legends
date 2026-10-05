@@ -9,6 +9,7 @@
 // leaving the site, and a match is guarded, so Back opens the pause menu
 // and closing the tab asks first.
 
+import { attacksFrom } from './game/attack_notes';
 import { type KillNote, type Presentation, startPresentation } from './game/boot';
 import { creatureNowFrom, riseCreatureNow } from './game/creature_now';
 import { nextStep, type PostMatchAction } from './game/flow';
@@ -434,14 +435,12 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
         const golds: number[] = [];
         const casts: { unitId: number; key?: AbilityKey }[] = [];
         const hits: { targetId: number; amount: number }[] = [];
-        const attacks: { unitId: number; targetId: number }[] = [];
         const events = sim.tick();
         for (const ev of events) {
           if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
           else if (ev.type === 'gold' && ev.unitId === self.id) golds.push(ev.amount);
           else if (ev.type === 'cast') casts.push({ unitId: ev.unitId, key: ev.key });
           else if (ev.type === 'sigil') casts.push({ unitId: ev.unitId });
-          else if (ev.type === 'attack') attacks.push({ unitId: ev.unitId, targetId: ev.targetId });
           else if (ev.type === 'damage' && ev.sourceId === self.id && ev.targetId !== self.id)
             hits.push({ targetId: ev.targetId, amount: ev.amount });
         }
@@ -450,7 +449,7 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
           golds,
           casts,
           hits,
-          attacks,
+          attacks: attacksFrom(events),
           voidmaulSlams: voidmaulSlamsFrom(events),
         });
       }
@@ -602,14 +601,12 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
       }
       const kills: { unitId: number; killerId: number }[] = [];
       const casts: { unitId: number; key?: AbilityKey }[] = [];
-      const attacks: { unitId: number; targetId: number }[] = [];
       const events = sim.tick();
       for (const ev of events) {
         if (silent) continue;
         if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
         else if (ev.type === 'cast') casts.push({ unitId: ev.unitId, key: ev.key });
         else if (ev.type === 'sigil') casts.push({ unitId: ev.unitId });
-        else if (ev.type === 'attack') attacks.push({ unitId: ev.unitId, targetId: ev.targetId });
       }
       if (!silent)
         pres.onWorldTick({
@@ -617,7 +614,7 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
           golds: [],
           casts,
           hits: [],
-          attacks,
+          attacks: attacksFrom(events),
           voidmaulSlams: voidmaulSlamsFrom(events),
         });
       checkDrift();
@@ -800,18 +797,16 @@ async function runSpectate(matchId: number, team: TeamId): Promise<PostMatchActi
           if (changed && view) {
             const kills: { unitId: number; killerId: number }[] = [];
             const casts: { unitId: number; key?: AbilityKey }[] = [];
-            const attacks: { unitId: number; targetId: number }[] = [];
             for (const e of msg.events) {
               if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
               else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
-              else if (e.e === 'atk') attacks.push({ unitId: e.unitId, targetId: e.targetId });
             }
             view.onWorldTick({
               kills,
               golds: [],
               casts,
               hits: [],
-              attacks,
+              attacks: attacksFrom(msg.events),
               voidmaulSlams: voidmaulSlamsFrom(msg.events),
             });
           }
@@ -1213,12 +1208,10 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
             const golds: number[] = [];
             const casts: { unitId: number; key?: AbilityKey }[] = [];
             const hits: { targetId: number; amount: number }[] = [];
-            const attacks: { unitId: number; targetId: number }[] = [];
             for (const e of msg.events) {
               if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
               else if (e.e === 'gold') golds.push(e.amount);
               else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
-              else if (e.e === 'atk') attacks.push({ unitId: e.unitId, targetId: e.targetId });
               else if (e.e === 'dmg') hits.push({ targetId: e.targetId, amount: e.amount });
             }
             pres?.onWorldTick({
@@ -1226,7 +1219,7 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
               golds,
               casts,
               hits,
-              attacks,
+              attacks: attacksFrom(msg.events),
               voidmaulSlams: voidmaulSlamsFrom(msg.events),
             });
           }
@@ -1520,11 +1513,9 @@ async function runRoyale(
             const kills: KillNote[] = [];
             const casts: { unitId: number; key?: AbilityKey }[] = [];
             const hits: { targetId: number; amount: number }[] = [];
-            const attacks: { unitId: number; targetId: number }[] = [];
             for (const e of msg.events) {
               if (e.e === 'death') kills.push(royaleKill(e));
               else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
-              else if (e.e === 'atk') attacks.push({ unitId: e.unitId, targetId: e.targetId });
               else if (e.e === 'dmg') hits.push({ targetId: e.targetId, amount: e.amount });
             }
             pres.onWorldTick({
@@ -1532,7 +1523,7 @@ async function runRoyale(
               golds: [],
               casts,
               hits,
-              attacks,
+              attacks: attacksFrom(msg.events),
               voidmaulSlams: voidmaulSlamsFrom(msg.events),
               royale: royaleNotes(msg.events),
             });

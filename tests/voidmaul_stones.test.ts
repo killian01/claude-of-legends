@@ -112,10 +112,38 @@ describe('the Voidmaul slam rain of stones', () => {
     expect(clear.hp).toBe(1000);
   });
 
+  it('throws the stones of a crush from under each of its two paws, and says where they stand', () => {
+    const { boss, ctx, step } = fixture();
+    boss.voidmaulAttackCount = 1;
+    step(0);
+    const plan = boss.pendingAttack!.voidmaulSlam!;
+    expect(plan.kind).toBe('crush');
+    const [left, right] = plan.paws!;
+    expect(dist(left, right)).toBeGreaterThan(6);
+    step(VOIDMAUL_SLAM_WINDUP_S);
+    const slam = ctx.events.find((e) => e.type === 'voidmaul_slam');
+    expect(slam).toMatchObject({ kind: 'crush', paws: [left, right] });
+    const stones = voidmaulStones(
+      plan.point,
+      plan.radius,
+      stoneArena(boss.ringHome, plan.point, plan.radius),
+      plan.paws,
+    );
+    for (const [i, stone] of stones.entries()) {
+      const paw = i % 2 === 0 ? left : right;
+      expect(dist(stone.origin, paw)).toBeLessThan(plan.radius * 0.37);
+    }
+  });
+
   it('lands each drawn stone on its sim target at its sim time', () => {
     const arena = { center: { x: -3, z: -4 }, radius: 16.35 };
     const stones = voidmaulStones({ x: 0, z: 0 }, 5.5, arena);
-    const fx = new VoidmaulAttackFx(5.5, { centerX: -3, centerZ: -4, radius: 16.35 }, stones);
+    const fx = new VoidmaulAttackFx(
+      5.5,
+      { centerX: -3, centerZ: -4, radius: 16.35 },
+      'slam',
+      stones,
+    );
     fx.conformGround(() => 0);
     const meshes = fx.root.children.filter(
       (c): c is THREE.InstancedMesh => c instanceof THREE.InstancedMesh,

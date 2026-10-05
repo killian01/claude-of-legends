@@ -80,6 +80,7 @@ describe('Voidmaul committed area slam', () => {
         ...impact,
         radius: 5.5,
         at: VOIDMAUL_SLAM_WINDUP_S,
+        kind: 'slam',
       },
     ]);
     for (const victim of [target, nearby]) {
@@ -248,5 +249,133 @@ describe('Voidmaul committed area slam', () => {
     expect(target.hp).toBe(890);
     expect(nearby.hp).toBe(1000);
     expect(ctx.events.filter((e) => e.type === 'voidmaul_slam')).toHaveLength(0);
+    expect(ctx.events.find((e) => e.type === 'attack')).not.toHaveProperty('voidmaulAttack');
+    expect(boss.voidmaulAttackCount).toBe(0);
   });
+
+  it('alternates completed slam and crush contacts with the same damage and only one contact each', () => {
+    const { boss, target, ctx, step, add } = fixture();
+    const nearby = add(voidmaulSlamPoint(boss, target.pos, 'crush'));
+    for (const [index, kind] of ['slam', 'crush', 'slam'].entries()) {
+      const begin = index * 4;
+      step(begin);
+      expect(boss.pendingAttack!.voidmaulSlam!.kind).toBe(kind);
+      expect(ctx.events.filter((e) => e.type === 'attack').at(-1)).toMatchObject({
+        voidmaulAttack: kind,
+      });
+      expect(boss.voidmaulAttackCount).toBe(index);
+      step(begin + VOIDMAUL_SLAM_WINDUP_S);
+      expect(boss.voidmaulAttackCount).toBe(index + 1);
+      expect(target.hp).toBe(1000 - 110 * (index + 1));
+      expect(nearby.hp).toBe(1000 - 71.5 * (index + 1));
+      expect(ctx.events.filter((e) => e.type === 'voidmaul_slam').at(-1)).toMatchObject({ kind });
+      step(begin + VOIDMAUL_SLAM_WINDUP_S);
+      expect(boss.voidmaulAttackCount).toBe(index + 1);
+      // The contacts alone: this slam's stones are pinned in voidmaul_stones.
+      boss.stoneRains = [];
+    }
+    expect(ctx.events.filter((e) => e.type === 'voidmaul_slam')).toHaveLength(3);
+  });
+
+  it('keeps the chosen crush after a canceled retry and advances after a fully dodged contact', () => {
+    const { boss, target, ctx, step } = fixture();
+    boss.voidmaulAttackCount = 1;
+    step(0);
+    expect(boss.pendingAttack!.voidmaulSlam!.kind).toBe('crush');
+    boss.statuses.push({ kind: 'stun', until: 0.5 });
+    step(0.2);
+    expect(boss.pendingAttack).toBeNull();
+    expect(boss.voidmaulAttackCount).toBe(1);
+    step(0.6);
+    const point = copy(boss.pendingAttack!.voidmaulSlam!.point);
+    expect(boss.pendingAttack!.voidmaulSlam!.kind).toBe('crush');
+    target.pos = offset(point, heading(point, 0), 15);
+    step(0.6 + VOIDMAUL_SLAM_WINDUP_S);
+    expect(target.hp).toBe(1000);
+    expect(boss.voidmaulAttackCount).toBe(2);
+    expect(ctx.events.filter((e) => e.type === 'voidmaul_slam')).toMatchObject([
+      { ...point, kind: 'crush' },
+    ]);
+    target.pos = offset(boss.pos, heading(boss.pos, Math.PI / 2), 2.5);
+    boss.path = [];
+    step(4);
+    expect(boss.pendingAttack!.voidmaulSlam!.kind).toBe('slam');
+  });
+
+  it('keeps each creature’s sequence independent when two wind up on the same tick', () => {
+    const { boss, ctx, step, add } = fixture();
+    boss.voidmaulAttackCount = 1;
+    const second = createCreature(
+      100_001,
+      CREATURES.voidmaul,
+      offset(boss.pos, heading(boss.pos, 0), 20),
+      'bulwark',
+    );
+    const otherTarget = add(offset(second.pos, heading(second.pos, Math.PI / 2), 2.5));
+    second.attackTargetId = otherTarget.id;
+    ctx.units.set(second.id, second);
+    step(0);
+    expect(boss.pendingAttack!.voidmaulSlam!.kind).toBe('crush');
+    expect(second.pendingAttack!.voidmaulSlam!.kind).toBe('slam');
+    step(VOIDMAUL_SLAM_WINDUP_S);
+    expect(boss.voidmaulAttackCount).toBe(2);
+    expect(second.voidmaulAttackCount).toBe(1);
+  });
+
+  it('restores a midpoint crush windup and its counter, then continues with slam after replaying its contact', () => {
+    const { sim, boss, target, ctx, step } = fixture();
+    boss.voidmaulAttackCount = 1;
+    step(0);
+    step(0.8);
+    sim.time = ctx.time;
+    const checkpoint = structuredClone(sim.snapshot());
+    const complete = () => {
+      step(VOIDMAUL_SLAM_WINDUP_S);
+      const source = ctx.units.get(boss.id)!;
+      const hp = ctx.units.get(target.id)!.hp;
+      const impact = ctx.events.filter((e) => e.type === 'voidmaul_slam').at(-1);
+      step(4);
+      return { hp, impact, counter: source.voidmaulAttackCount, next: source.pendingAttack };
+    };
+    const live = structuredClone(complete());
+    sim.restore(checkpoint);
+    ctx.events.length = 0;
+    expect(ctx.units.get(boss.id)!.voidmaulAttackCount).toBe(1);
+    expect(ctx.units.get(boss.id)!.pendingAttack!.voidmaulSlam!.kind).toBe('crush');
+    expect(complete()).toEqual(live);
+    expect(live.impact).toMatchObject({ kind: 'crush' });
+    expect(live.counter).toBe(2);
+    expect(live.next!.voidmaulSlam!.kind).toBe('slam');
+  });
+
+  it.each([false, true])(
+    'centres a crush on the double-paw contact and preserves sphere ground (Ascendant=%s)',
+    (ascendant) => {
+      const { boss, target, step, ctx, add } = fixture('voidmaul', ascendant, true);
+      boss.voidmaulAttackCount = 1;
+      const point = voidmaulSlamPoint(boss, target.pos, 'crush');
+      const size = ascendant ? VOIDMAUL_SLAM.ascendantScale : 1;
+      expect(offGround(point)).toBeNull();
+      expect(dist(boss.pos, point)).toBeCloseTo(
+        Math.hypot(VOIDMAUL_SLAM.crushPawSide, VOIDMAUL_SLAM.crushPawForward) * size,
+        10,
+      );
+      const nearby = add(point);
+      step(0);
+      const expectedRadius = ascendant ? 7.25 : 5.5;
+      expect(boss.pendingAttack!.voidmaulSlam).toMatchObject({
+        kind: 'crush',
+        point,
+        radius: expectedRadius,
+      });
+      step(VOIDMAUL_SLAM_WINDUP_S);
+      expect(ctx.events.find((e) => e.type === 'voidmaul_slam')).toMatchObject({
+        ...point,
+        kind: 'crush',
+        radius: expectedRadius,
+      });
+      expect(target.hp).toBe(890);
+      expect(nearby.hp).toBe(928.5);
+    },
+  );
 });

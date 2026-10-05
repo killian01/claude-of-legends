@@ -314,7 +314,12 @@ export function buildSnapshot(
       // Sigils relay as keyless casts: the flash and pulse still show.
       snapEvents.push({ e: 'cast', unitId: ev.unitId });
     } else if (ev.type === 'attack' && sim.isVisible(team, ev.unitId)) {
-      snapEvents.push({ e: 'atk', unitId: ev.unitId, targetId: ev.targetId });
+      snapEvents.push({
+        e: 'atk',
+        unitId: ev.unitId,
+        targetId: ev.targetId,
+        ...(ev.voidmaulAttack ? { voidmaulAttack: ev.voidmaulAttack } : {}),
+      });
     } else if (ev.type === 'voidmaul_slam' && sim.isVisible(team, ev.unitId)) {
       const { type: _type, ...impact } = ev;
       snapEvents.push({ e: 'voidmaul_slam', ...impact });

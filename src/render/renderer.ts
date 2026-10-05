@@ -19,6 +19,7 @@ import { isRooted, isStunned } from '../sim/combat/status';
 import { stoneArena, voidmaulStones } from '../sim/combat/voidmaul_stones';
 import { heartwoodOf } from '../sim/content/grafts';
 import { creatureOfRing, WRATH_EXECUTE_FRAC } from '../sim/content/rings';
+import type { VoidmaulAttackKind } from '../sim/content/voidmaul_slam';
 import { copy } from '../sim/geo';
 import type { Projectile } from '../sim/projectiles';
 import { otherTeam } from '../sim/teams';
@@ -238,7 +239,7 @@ export interface CombatNotes {
   // Damage the viewer dealt to others; the only cross-unit numbers shown.
   hits: readonly { targetId: number; amount: number }[];
   // Auto-attacks fired by visible units, for swing animations.
-  attacks: readonly { unitId: number; targetId: number }[];
+  attacks: readonly { unitId: number; targetId: number; voidmaulAttack?: VoidmaulAttackKind }[];
   voidmaulSlams?: readonly VoidmaulSlamNote[];
 }
 
@@ -1238,6 +1239,7 @@ export class Renderer {
               : attacker
                 ? strikeWindupSeconds(attacker, attacker.stats.attackSpeed)
                 : 0.5,
+            atk.voidmaulAttack,
           );
         this.championVisuals
           .get(atk.unitId)
@@ -1311,13 +1313,16 @@ export class Renderer {
         (r) => creatureOfRing(r.id).id === 'voidmaul',
       );
       const home = site ? { center: copy(site), radius: site.r } : null;
-      const stones = voidmaulStones(slam, slam.radius, stoneArena(home, slam, slam.radius)).map(
-        (s) => ({
-          ...s,
-          origin: this.planet ? this.planet.toLocal(s.origin) : s.origin,
-          target: this.planet ? this.planet.toLocal(s.target) : s.target,
-        }),
-      );
+      const stones = voidmaulStones(
+        slam,
+        slam.radius,
+        stoneArena(home, slam, slam.radius),
+        slam.paws,
+      ).map((s) => ({
+        ...s,
+        origin: this.planet ? this.planet.toLocal(s.origin) : s.origin,
+        target: this.planet ? this.planet.toLocal(s.target) : s.target,
+      }));
       this.voidmaulImpacts.start(
         slam,
         this.world.time,
