@@ -32,6 +32,7 @@ import { SIGILS } from './content/sigils';
 import { clampSkin } from './content/skins';
 import { stepDashes } from './dashes';
 import { hasDecisionToken, spendDecisionToken } from './decision_budget';
+import { startDraught, stepDraughts } from './draught';
 import { Favors, favorBonus } from './favors';
 import type { ForgedChampionDef } from './forge/forged_def';
 import { applyFountainRegen, fountainSeat, withinFountain } from './fountain';
@@ -940,6 +941,9 @@ export class Sim {
     // Death is shopping time, like the genre: a corpse respawns at its own
     // fountain, so the range check is waived while it waits. Selling still
     // wants a live champion standing there.
+    // The Sapdraught is not on sale before the HUD can drink it
+    // (docs/plan-potion.md, phase 2).
+    if (def.drink) return false;
     const dead = u.dead || this.dead.has(unitId);
     if (!dead && !withinFountain(this.map, u.team, u.pos)) return false;
 
@@ -979,6 +983,16 @@ export class Sim {
     u.gold += Math.floor(def.cost * 0.7);
     recalcChampion(u);
     return true;
+  }
+
+  // Drinks the Sapdraught in `slot` (draught.ts), anywhere, alive. Free
+  // like a sale: no decision token, and not an order, so a recall channel
+  // carries on.
+  drinkItem(unitId: number, slot: number): boolean {
+    if (this.winner !== null || this.royaleMode) return false;
+    const u = this.units.get(unitId);
+    if (u?.kind !== 'champion' || u.dead || this.dead.has(unitId)) return false;
+    return startDraught(u, slot, this.time);
   }
 
   // Where a dead champion comes back, null to keep it dead for now: the
@@ -1029,6 +1043,7 @@ export class Sim {
     stepWalls(ctx);
 
     stepDots(ctx);
+    stepDraughts(ctx);
     if (this.winner === null && !royale) grantPassiveGold(ctx);
     const tideTick = this.tickCount % (TIDE_PERIOD_S * TICK_RATE) === 0;
     for (const u of this.units.values()) {

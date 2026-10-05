@@ -347,6 +347,10 @@ export class ChartWorld implements IWorld {
     return this.base.sellItem(unitId, slot);
   }
 
+  drinkItem(unitId: number, slot: number): boolean {
+    return this.base.drinkItem(unitId, slot);
+  }
+
   levelAbility(unitId: number, key: AbilityKey): boolean {
     return this.base.levelAbility(unitId, key);
   }

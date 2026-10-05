@@ -390,6 +390,10 @@ export class PlanetDemoWorld implements IWorld {
     return false;
   }
 
+  drinkItem(): boolean {
+    return false;
+  }
+
   levelAbility(): boolean {
     return false;
   }
