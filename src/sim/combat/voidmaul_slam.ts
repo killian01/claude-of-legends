@@ -7,6 +7,7 @@ import type { Vec2 } from '../types';
 import { hostile, type Unit } from '../unit';
 import { dealDamage } from './damage';
 import { isUntargetable } from './status';
+import { throwStones } from './voidmaul_stones';
 
 export interface VoidmaulSlamEvent {
   type: 'voidmaul_slam';
@@ -60,6 +61,8 @@ export function resolveVoidmaulSlam(
     radius: plan.radius,
     at: ctx.time,
   });
+  // The broken rock flies across the ring and lands over the next seconds.
+  throwStones(ctx, u, point, plan.radius);
   const hit = new Set<number>();
   for (const other of ctx.units.values()) {
     if (

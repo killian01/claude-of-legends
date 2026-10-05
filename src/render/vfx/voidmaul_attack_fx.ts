@@ -1,10 +1,13 @@
 // Contact-time rock fracture and the scar left by Voidmaul's ground slam.
 // Coordinates are world metres, Y up. The owner supplies the fixed terrain anchor.
 import * as THREE from 'three';
+import { type VoidmaulStone, voidmaulStones } from '../../sim/combat/voidmaul_stones';
 
-export const VOIDMAUL_ATTACK_FX_DURATION_S = 34;
+// The scar and the stones stay a few seconds after the last stone lands,
+// then fade: a fight around the ring is not buried under old debris.
+export const VOIDMAUL_ATTACK_FX_DURATION_S = 6.5;
+const FADE_FROM_S = 4.5;
 const TAU = Math.PI * 2;
-const STONE_COUNT = 128;
 const DUST_COUNT = 112;
 const SPARK_COUNT = 128;
 const GRAVITY = 12;
@@ -156,6 +159,8 @@ interface StoneFlight {
   originHeight: number;
   landing: number;
   bounce: number;
+  // How far it rolls on past its landing.
+  roll: number;
   spin: THREE.Vector3;
 }
 
@@ -222,7 +227,7 @@ export class VoidmaulAttackFx {
   private age = 0;
   private disposed = false;
 
-  constructor(radius: number, arena?: VoidmaulAttackArena) {
+  constructor(radius: number, arena?: VoidmaulAttackArena, stones?: readonly VoidmaulStone[]) {
     this.radius = Number.isFinite(radius) ? Math.max(0.2, radius) : 1;
     this.arena =
       arena &&
@@ -291,59 +296,35 @@ void main() {
     this.wave.position.y = 0.035;
     this.wave.material.blending = THREE.AdditiveBlending;
     this.wave.renderOrder = 8;
-    this.flights = Array.from({ length: STONE_COUNT }, (_, i) => {
-      // Every one of sixteen sectors gets center, middle and edge landings.
-      // Targets are centred on the arena, while all launches start at the paw.
-      const band = i % 8;
-      const angle = ((Math.floor(i / 8) + 0.5) / 16) * TAU + (random(i + 2) - 0.5) * 0.16;
-      const size = Math.min(
-        this.arena.radius * 0.045,
-        this.radius *
-          (band !== 0 && band !== 3
-            ? 0.065 + random(i + 19) * 0.083
-            : 0.023 + random(i + 19) * 0.034),
-      );
-      const radial = [0.065, 0.195, 0.325, 0.455, 0.585, 0.715, 0.845, 0.97][band]!;
-      const margin = size * 1.5 + 0.08;
-      const targetRadius = Math.max(
-        0,
-        Math.min(this.arena.radius - margin, this.arena.radius * radial),
-      );
-      const target = new THREE.Vector2(
-        this.arena.centerX + Math.cos(angle) * targetRadius,
-        this.arena.centerZ + Math.sin(angle) * targetRadius,
-      );
-      const originAngle = i * 2.399963 + random(i + 10) * 0.5;
-      const origin = new THREE.Vector2(Math.cos(originAngle), Math.sin(originAngle)).multiplyScalar(
-        this.radius * (0.11 + random(i + 11) * 0.25),
-      );
-      const fromCenter = origin
-        .clone()
-        .sub(new THREE.Vector2(this.arena.centerX, this.arena.centerZ));
-      if (fromCenter.length() > this.arena.radius - margin) {
-        fromCenter.setLength(Math.max(0, this.arena.radius - margin));
-        origin.set(this.arena.centerX + fromCenter.x, this.arena.centerZ + fromCenter.y);
-      }
-      const direction = target.clone().sub(origin);
+    // The very stones the sim lands (combat/voidmaul_stones.ts), in this
+    // effect's frame; a stone that lands on a unit hurts it, so each one
+    // flies from its origin to exactly its target in its own flight time.
+    const thrown =
+      stones ??
+      voidmaulStones({ x: 0, z: 0 }, this.radius, {
+        center: { x: this.arena.centerX, z: this.arena.centerZ },
+        radius: this.arena.radius,
+      });
+    this.flights = thrown.map((stone, i) => {
+      const origin = new THREE.Vector2(stone.origin.x, stone.origin.z);
+      const direction = new THREE.Vector2(stone.target.x, stone.target.z).sub(origin);
       const distance = direction.length();
-      direction.normalize();
-      const duration = 1.95 + random(i + 16) * 0.52 + (distance / this.arena.radius) * 0.36;
-      const up = GRAVITY * duration * 0.5;
-      const bounce = 1.2 + random(i + 34) * 0.95;
-      const bounceDuration = (2 * bounce) / GRAVITY;
+      if (distance > 0) direction.divideScalar(distance);
+      const bounce = 0.8 + random(i + 34) * 0.6;
       return {
-        born: random(i + 8) * 0.12,
+        born: stone.born,
         direction,
         origin,
         distance,
-        duration,
-        speed: distance / (duration + bounceDuration * 0.32),
-        up,
-        size,
-        groundY: size * 0.7,
+        duration: stone.flight,
+        speed: distance / stone.flight,
+        up: GRAVITY * stone.flight * 0.5,
+        size: stone.size,
+        groundY: stone.size * 0.7,
         originHeight: 0,
-        landing: duration,
+        landing: stone.flight,
         bounce,
+        roll: stone.size * 0.3,
         spin: new THREE.Vector3(
           random(i + 25) - 0.5,
           random(i + 26) - 0.5,
@@ -360,7 +341,7 @@ void main() {
           flatShading: true,
           transparent: true,
         }),
-        STONE_COUNT / 4,
+        Math.ceil(this.flights.length / 4),
       );
       mesh.name = `Voidmaul_AttackRockShards_${variant}`;
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -400,35 +381,9 @@ void main() {
       );
       flight.up =
         GRAVITY * flight.duration * 0.5 + (plannedHeight - flight.originHeight) / flight.duration;
-      const clearance = (t: number): number => {
-        const travel = Math.min(t * flight.speed, flight.distance);
-        return (
-          flight.originHeight +
-          flight.up * t -
-          0.5 * GRAVITY * t * t -
-          this.groundHeight(
-            flight.origin.x + flight.direction.x * travel,
-            flight.origin.y + flight.direction.y * travel,
-          )
-        );
-      };
-      // Find the first contact with the stepped ground, then bisect it. This
-      // precomputed landing keeps backwards/late seeks independent of frame rate.
-      let prior = 0;
-      for (let t = 0.02; t <= 5; t += 0.02) {
-        if (clearance(t) <= 0) {
-          let left = prior;
-          let right = t;
-          for (let i = 0; i < 12; i++) {
-            const middle = (left + right) * 0.5;
-            if (clearance(middle) > 0) left = middle;
-            else right = middle;
-          }
-          flight.landing = right;
-          break;
-        }
-        prior = t;
-      }
+      // The arc meets the ground at the target on the sim's landing beat,
+      // the moment the stone hurts what stands there.
+      flight.landing = flight.duration;
     }
     this.cacheRestPoses();
     this.update(this.age);
@@ -468,10 +423,7 @@ void main() {
     for (let i = 0; i < this.flights.length; i++) {
       const flight = this.flights[i]!;
       const bounceDuration = (2 * flight.bounce) / GRAVITY;
-      const travel = Math.min(
-        flight.distance,
-        flight.landing * flight.speed + bounceDuration * flight.speed * 0.32,
-      );
+      const travel = flight.distance + flight.roll;
       this.setRockPose(
         i,
         flight,
@@ -496,7 +448,7 @@ void main() {
     const alive = now < VOIDMAUL_ATTACK_FX_DURATION_S;
     this.root.visible = alive;
     if (!alive) return false;
-    const scarFade = 1 - smooth(29, VOIDMAUL_ATTACK_FX_DURATION_S, now);
+    const scarFade = 1 - smooth(FADE_FROM_S, VOIDMAUL_ATTACK_FX_DURATION_S, now);
     const imprint = smooth(0, 0.08, now) * scarFade;
     this.crater.material.uniforms.uAge!.value = now;
     this.crater.material.uniforms.uFade!.value = imprint;
@@ -516,10 +468,9 @@ void main() {
       }
       const flying = Math.min(t, flight.landing);
       const rolling = Math.min(bounced, bounceDuration);
-      const travel = Math.min(
-        flight.distance,
-        flying * flight.speed + rolling * flight.speed * 0.32,
-      );
+      const travel =
+        Math.min(flight.distance, flying * flight.speed) +
+        flight.roll * (bounceDuration > 0 ? rolling / bounceDuration : 0);
       const x = flight.origin.x + flight.direction.x * travel;
       const z = flight.origin.y + flight.direction.y * travel;
       const spinTime = flying + rolling * 0.6;

@@ -193,9 +193,20 @@ events without replaying flashes, rejects duplicates, and keeps the captured
 ground anchor independently of movement or death. It owns a bounded set of
 effects and releases evicted, expired and teardown resources.
 
-[The rock effect](../src/render/vfx/voidmaul_attack_fx.ts) throws 128 fractured
-stones, including 96 larger blocks, with rotation, gravity, a bounce and final
-resting positions. The debris covers sixteen sectors and eight radial bands
+The broken rock is part of the attack. [The stone rain](../src/sim/combat/voidmaul_stones.ts)
+lays out 128 stones, 96 of them larger blocks, from a fixed integer hash and
+exact angles: each leaves the ground near the paw and lands on its own point
+of the ring between about 2 and 3.3 s after the contact. A stone that comes
+down on a hostile body deals 40% of a slam's hit (physical, and the health
+bite on a champion), once per slam however many stones fall on that body.
+The pending stones live on the creature, so a world checkpoint carries them;
+a Voidmaul killed while its stones are in the air takes the rest with it.
+The creature remembers its ring at its rise (`ringHome`), which the renderer
+reads from `map.rings`, so both build the same rain from the same slam event.
+
+[The rock effect](../src/render/vfx/voidmaul_attack_fx.ts) draws those very
+stones, with rotation and gravity, each arc meeting the ground at its sim
+target on its sim landing time, then a short bounce and roll. The debris covers sixteen sectors and eight radial bands
 of the whole authored ring. [The arena helper](../src/render/voidmaul_arena.ts)
 reads the actual platform centre and radius from `map.rings`, independently
 of the offset paw contact. In Star Orchard revision 123 the radius is 16.35
@@ -208,7 +219,8 @@ particles, 128 bright fragments and a stronger central flash. The trajectory
 and rebound keep the complete rock geometry within the platform. A torn
 shockwave still reaches the damage radius. An
 irregular dark crater, branching cracks and scattered stones remain after the
-burst. The footprint holds until 29 s and fades out by 34 s. It is a visual
+burst. The footprint and the stones hold until 4.5 s and fade out by 6.5 s,
+so a fight at the ring is not buried under old debris. It is a visual
 ground mark; terrain navigation remains unchanged. Subdivided ground geometry
 follows the sampled terrain, including the ring's steps, and polygon offsets
 keep it on the surface. The renderer adds a stronger attack-specific impact
@@ -228,10 +240,6 @@ ground is checked geometrically. Light/camera feedback and actual damage
 dispatch are covered separately by renderer and simulation tests. Reproduce
 with Vite on port 5187 and `node scripts/smoke_voidmaul_attack.mjs`.
 
-Focused Voidmaul tests, TypeScript, Biome and both production builds pass.
-The broader architecture gate still rejects the existing direct `new Sim`
-in `src/dev/map_playtest_world.ts`; that map-playtest module is unchanged by
-the slam work.
 
 ## Articulated death
 

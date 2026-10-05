@@ -27,6 +27,7 @@ import {
 } from './status';
 import { towerShotAd, towerShotHpPct } from './tower_shot';
 import { prepareVoidmaulSlam, resolveVoidmaulSlam } from './voidmaul_slam';
+import { stepStoneRains } from './voidmaul_stones';
 
 // Exported for presentation: the renderer schedules a melee contact spark
 // only for attackers below this range (ranged autos flash at bolt impact).
@@ -213,6 +214,7 @@ function stepPendingAttack(ctx: CombatCtx, u: Unit): void {
 export function stepAutoAttacks(ctx: CombatCtx): void {
   for (const u of ctx.units.values()) {
     if (ctx.dead.has(u.id) || u.dead) continue;
+    stepStoneRains(ctx, u);
     stepPendingAttack(ctx, u);
     // Mid-windup the unit is committed: it neither chases nor re-paths (a
     // self-issued chase path would cancel its own strike). Only an external

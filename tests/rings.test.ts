@@ -229,8 +229,11 @@ describe('the rings', () => {
       sim.tick();
     }
     expect(target.hp).toBeLessThan(hp);
+    const pawLoss = hp - target.hp;
 
-    // Walking out of reach while the paw rises: the slam misses.
+    // Walking out of reach while the paw rises: the paw misses. A stone of
+    // its rain may still come down on the walker, a lesser share of a hit.
+    for (let i = 0; i < 4 * TICKS_PER_S; i++) sim.tick();
     target.hp = target.maxHp;
     swing();
     sim.orderMove(target.id, target.pos.x + 12, target.pos.z);
@@ -238,7 +241,7 @@ describe('the rings', () => {
       v.lastDamagedAt = sim.time;
       sim.tick();
     }
-    expect(target.hp).toBe(target.maxHp);
+    expect(target.maxHp - target.hp).toBeLessThan(pawLoss * 0.5);
   });
 
   it('left alone while hurt, heals fast rather than snapping to full', () => {

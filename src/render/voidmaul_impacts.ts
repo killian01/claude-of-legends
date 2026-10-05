@@ -2,6 +2,7 @@
 // attacker, while old snapshots cannot replay an impact or camera kick.
 import type * as THREE from 'three';
 import type { VoidmaulSlamNote } from '../game/voidmaul_slam_notes';
+import type { VoidmaulStone } from '../sim/combat/voidmaul_stones';
 import type { GroundHeight } from './terrain';
 import { VOIDMAUL_ATTACK_FX_DURATION_S, VoidmaulAttackFx } from './vfx/voidmaul_attack_fx';
 import type { VoidmaulArena } from './voidmaul_arena';
@@ -34,6 +35,8 @@ export class VoidmaulImpacts {
     visible = true,
     yaw = 0,
     arena?: VoidmaulArena,
+    // The slam's stones (combat/voidmaul_stones.ts) in scene coordinates.
+    stones?: readonly VoidmaulStone[],
   ): boolean {
     const age = worldTime - note.at;
     if (
@@ -56,11 +59,18 @@ export class VoidmaulImpacts {
     const sin = Math.sin(yaw);
     const dx = arena ? arena.center.x - groundAnchor.x : 0;
     const dz = arena ? arena.center.z - groundAnchor.z : 0;
+    // Into the effect's frame: from its anchor, turned back by its yaw.
+    const local = (p: { x: number; z: number }) => {
+      const px = p.x - groundAnchor.x;
+      const pz = p.z - groundAnchor.z;
+      return { x: px * cos - pz * sin, z: px * sin + pz * cos };
+    };
     const effect = new VoidmaulAttackFx(
       note.radius,
       arena
         ? { centerX: dx * cos - dz * sin, centerZ: dx * sin + dz * cos, radius: arena.radius }
         : undefined,
+      stones?.map((s) => ({ ...s, origin: local(s.origin), target: local(s.target) })),
     );
     effect.root.position.copy(groundAnchor);
     effect.root.rotation.y = yaw;

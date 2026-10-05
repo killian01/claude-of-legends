@@ -4,6 +4,7 @@ import type { VoidmaulSlamNote } from '../src/game/voidmaul_slam_notes';
 import { Renderer } from '../src/render/renderer';
 import { VoidmaulAttackFx } from '../src/render/vfx/voidmaul_attack_fx';
 import { VOIDMAUL_MAX_IMPACTS, VoidmaulImpacts } from '../src/render/voidmaul_impacts';
+import { VOIDMAUL_STONE_COUNT } from '../src/sim/combat/voidmaul_stones';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -27,7 +28,7 @@ describe('resolved Voidmaul impacts', () => {
       expect(worldY - floor).toBeCloseTo(0.018, 5);
     }
     anchor.set(50, 8, 60);
-    impacts.update(10000);
+    impacts.update(3000);
     expect(root.position.toArray()).toEqual([10, 3, 20]);
     expect(root.parent).toBe(scene);
     expect(root.getObjectByName('Voidmaul_AttackCrater')?.visible).toBe(true);
@@ -39,10 +40,10 @@ describe('resolved Voidmaul impacts', () => {
     const onImpact = vi.fn();
     const update = vi.spyOn(VoidmaulAttackFx.prototype, 'update');
     const impacts = new VoidmaulImpacts(new THREE.Scene(), () => 0, onImpact);
-    expect(impacts.start(slam(), 11.75, new THREE.Vector3())).toBe(true);
-    expect(update).toHaveBeenLastCalledWith(10);
+    expect(impacts.start(slam(), 5.75, new THREE.Vector3())).toBe(true);
+    expect(update).toHaveBeenLastCalledWith(4);
     expect(onImpact).not.toHaveBeenCalled();
-    expect(impacts.start(slam(), 12, new THREE.Vector3())).toBe(false);
+    expect(impacts.start(slam(), 6, new THREE.Vector3())).toBe(false);
     impacts.update(25000);
     expect(impacts.count).toBe(0);
     expect(impacts.start(slam(), 1.75, new THREE.Vector3())).toBe(false);
@@ -118,7 +119,10 @@ describe('resolved Voidmaul impacts', () => {
     expect(yaw).toBe(0.3);
     expect(arena.center.toArray()).toEqual([104, -11, 115]);
     expect(arena.radius).toBe(9);
-    expect(toLocal).toHaveBeenCalledTimes(2);
+    // The sim's stones come along, each of their two ends in the chart.
+    const stones = start.mock.calls[0]![6];
+    expect(stones).toHaveLength(VOIDMAUL_STONE_COUNT);
+    expect(toLocal).toHaveBeenCalledTimes(2 + 2 * VOIDMAUL_STONE_COUNT);
   });
 
   it('keeps debris inside the real arena after an offset, rotated impact', () => {
@@ -131,7 +135,7 @@ describe('resolved Voidmaul impacts', () => {
     // entire debris field stay attached to the captured ground context.
     arena.center.set(99, 0, 99);
     anchor.set(99, 0, 99);
-    impacts.update(10000);
+    impacts.update(4000);
     const root = scene.children[0]!;
     root.updateMatrixWorld(true);
     const matrix = new THREE.Matrix4();
