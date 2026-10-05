@@ -43,8 +43,8 @@ export interface PlanetGround {
   blocked(p: Vec3): boolean;
   // The region a sphere point lies in, the face index (planet_ground.ts).
   regionAt(p: Vec3): number;
-  // A region's color for the minimap, as CSS.
-  regionColor(region: number): string;
+  // A region's color for the minimap, red, green and blue.
+  regionRgb(region: number): readonly [number, number, number];
 }
 
 // The regions' ground colors, the generator's own debug palette
@@ -57,7 +57,7 @@ const REGION_RGB: readonly [number, number, number][] = [
   [128, 176, 110],
   [138, 150, 160],
 ];
-const REGION_CSS = REGION_RGB.map(([r, g, b]) => `rgb(${r},${g},${b})`);
+const NO_REGION_RGB: readonly [number, number, number] = [102, 102, 102];
 
 const WATER_LEVEL = -0.4;
 
@@ -462,7 +462,7 @@ function groundOf(
     heightAt,
     blocked,
     regionAt: (p) => faceOf(p),
-    regionColor: (r) => REGION_CSS[r] ?? '#666',
+    regionRgb: (r) => REGION_RGB[r] ?? NO_REGION_RGB,
   };
 }
 

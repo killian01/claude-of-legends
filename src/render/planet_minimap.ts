@@ -16,6 +16,7 @@ import type { Vec3 } from '../sim/geo';
 import { type MinimapIcon, minimapIcons } from '../ui/royale_hunted';
 import type { IWorld } from '../world_api';
 import { type ChartView, ChartWindow, ChartWorld } from './chart_world';
+import { type CellDusk, paintCell } from './minimap_cells';
 import { capAngle } from './planet_dusk';
 import type { PlanetGround } from './planet_terrain';
 
@@ -41,6 +42,11 @@ export class PlanetMinimap {
   // The ground and the Dusk, painted on the slow beat; the marks go over
   // a copy of it, on the quick beat while something on it moves.
   private readonly terrain = document.createElement('canvas');
+  // The ground one pixel a cell (minimap_cells.ts), put up whole and drawn
+  // onto the terrain at the minimap's size.
+  private readonly cells = document.createElement('canvas');
+  private cellPixels: ImageData | null = null;
+  private readonly cellDusk: CellDusk = { past: null, next: null };
   private paintedAt = Number.NEGATIVE_INFINITY;
   private terrainAt = Number.NEGATIVE_INFINITY;
   private paintedEpoch = -1;
@@ -56,6 +62,8 @@ export class PlanetMinimap {
     this.background.height = PX;
     this.terrain.width = PX;
     this.terrain.height = PX;
+    this.cells.width = CELLS;
+    this.cells.height = CELLS;
   }
 
   // The sphere point under a minimap point (its window's coordinates).
@@ -90,16 +98,20 @@ export class PlanetMinimap {
   }
 
   // The ground's regions and relief, the night outside the light, the
-  // light's edge and the next cap's line.
+  // light's edge and the next cap's line: a color a cell, worked out in
+  // numbers into one picture, then drawn at the minimap's size.
   private paintTerrain(dusk: SnapDusk | null): void {
     const g = this.terrain.getContext('2d');
-    if (!g) return;
+    const c = this.cells.getContext('2d');
+    if (!g || !c) return;
+    this.cellPixels ??= c.createImageData(CELLS, CELLS);
+    const data = this.cellPixels.data;
     const R = this.ground.radius;
     const lit = dusk ? { c: dirOf(dusk.c), a: capAngle(dusk.r, R) } : null;
     const next =
       dusk?.nc && dusk.nr !== undefined ? { c: dirOf(dusk.nc), a: capAngle(dusk.nr, R) } : null;
-    const cell = PX / CELLS;
     const span = MINIMAP_WINDOW / CELLS;
+    const cell = this.cellDusk;
     for (let j = 0; j < CELLS; j++) {
       for (let i = 0; i < CELLS; i++) {
         // Canvas row 0 is the window's far edge (+z up the map).
@@ -107,34 +119,22 @@ export class PlanetMinimap {
         const z = MINIMAP_WINDOW - (j + 0.5) * span;
         const p = this.window.toSphere(x, z);
         const h = this.ground.heightAt(p);
-        let color = this.ground.regionColor(this.ground.regionAt(p));
-        if (h < -0.4) color = 'rgb(52,112,150)';
-        g.fillStyle = color;
-        g.fillRect(i * cell, j * cell, cell + 0.5, cell + 0.5);
-        // Relief: lighter up high, darker down low.
-        const shade = Math.max(-0.25, Math.min(0.25, h * 0.12));
-        g.fillStyle = shade > 0 ? `rgba(255,255,255,${shade})` : `rgba(0,0,0,${-shade})`;
-        g.fillRect(i * cell, j * cell, cell + 0.5, cell + 0.5);
-        if (lit) {
-          const past = (angleBetween(dirOf3(p), lit.c) - lit.a) * R;
-          if (past > 0) {
-            g.fillStyle = `rgba(8,14,46,${Math.min(0.72, 0.35 + past * 0.08)})`;
-            g.fillRect(i * cell, j * cell, cell + 0.5, cell + 0.5);
-          }
-          if (Math.abs(past) < span * 0.6) {
-            g.fillStyle = 'rgba(255,140,60,0.85)';
-            g.fillRect(i * cell, j * cell, cell + 0.5, cell + 0.5);
-          }
-        }
-        if (next) {
-          const edge = Math.abs((angleBetween(dirOf3(p), next.c) - next.a) * R);
-          if (edge < span * 0.5) {
-            g.fillStyle = 'rgba(255,214,90,0.9)';
-            g.fillRect(i * cell, j * cell, cell + 0.5, cell + 0.5);
-          }
-        }
+        const d = lit || next ? dirOf3(p) : null;
+        cell.past = lit && d ? (angleBetween(d, lit.c) - lit.a) * R : null;
+        cell.next = next && d ? Math.abs((angleBetween(d, next.c) - next.a) * R) : null;
+        paintCell(
+          data,
+          (j * CELLS + i) * 4,
+          this.ground.regionRgb(this.ground.regionAt(p)),
+          h,
+          cell,
+          span,
+        );
       }
     }
+    c.putImageData(this.cellPixels, 0, 0);
+    g.imageSmoothingEnabled = false;
+    g.drawImage(this.cells, 0, 0, PX, PX);
   }
 
   // The pads, the caches, the Seedfalls and the Clamors over the ground.

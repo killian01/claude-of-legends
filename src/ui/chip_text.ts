@@ -31,6 +31,7 @@ const STATUS_WORDS: Readonly<Record<Status['kind'], [word: string, tip: string]>
   untargetable: ['Untouchable', 'Untouchable'],
   root: ['Rooted', 'Rooted'],
   recall: ['Recall', 'Recalling'],
+  draught: ['Drink', 'Drinking a Sapdraught'],
   slow: ['Slow', 'Slowed'],
   shield: ['Shield', 'Shield'],
   mark: ['Mark', 'Marked'],

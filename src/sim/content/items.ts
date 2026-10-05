@@ -29,6 +29,9 @@ export interface ItemDef {
   tier: 1 | 2 | 3;
   stats: ItemStats;
   buildsFrom?: readonly string[];
+  // A consumable (CONTEXT.md: Sapdraught): drunk from its bag slot, it
+  // gives `heal` health spread over `seconds` and leaves the bag.
+  drink?: { heal: number; seconds: number };
 }
 
 const T1: readonly ItemDef[] = [
@@ -215,8 +218,21 @@ const T3: readonly ItemDef[] = [
   },
 ];
 
+// Consumables: no stats, so the recalc folds nothing in. Kept out of
+// ITEM_LIST, the build items the shop and the playbook editor list.
+const CONSUMABLES: readonly ItemDef[] = [
+  {
+    id: 'sapdraught',
+    name: 'Sapdraught',
+    cost: 50,
+    tier: 1,
+    stats: {},
+    drink: { heal: 150, seconds: 10 },
+  },
+];
+
 export const ITEMS: Readonly<Record<string, ItemDef>> = Object.fromEntries(
-  [...T1, ...T2, ...T3].map((i) => [i.id, i]),
+  [...T1, ...T2, ...T3, ...CONSUMABLES].map((i) => [i.id, i]),
 );
 
 // The price after consuming owned components, mirroring the sim's buy rule.

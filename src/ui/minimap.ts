@@ -54,6 +54,10 @@ export class Minimap {
     this.canvas = document.createElement('canvas');
     this.canvas.width = SIZE_PX;
     this.canvas.height = SIZE_PX;
+    // Sized once: setting a canvas's size allocates its picture anew, and
+    // the fog is redrawn on every world tick.
+    this.fog.width = SIZE_PX;
+    this.fog.height = SIZE_PX;
     // Touchscreens are phone-sized: the map draws at full resolution but
     // displays smaller, leaving the middle of the screen to the game. The
     // click mapping below reads the on-screen rect, so it needs no change.
@@ -132,10 +136,10 @@ export class Minimap {
 
     // Fog of war shading: darken everything, then punch soft holes around
     // friendly sight before drawing units on top.
-    this.fog.width = SIZE_PX;
-    this.fog.height = SIZE_PX;
     const f = this.fog.getContext('2d');
     if (f) {
+      f.globalCompositeOperation = 'source-over';
+      f.clearRect(0, 0, SIZE_PX, SIZE_PX);
       f.fillStyle = 'rgba(0, 0, 0, 0.42)';
       f.fillRect(0, 0, SIZE_PX, SIZE_PX);
       f.globalCompositeOperation = 'destination-out';

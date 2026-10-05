@@ -158,6 +158,10 @@ _Avoid_: default map, classic map, the old map
 One of the utility spells a participant picks two of at champion select. Launch pool: Riftstep, Zephyr, Mend, Sear.
 _Avoid_: utility spell, and the names other MOBAs give this pick
 
+**Sapdraught**:
+The one consumable: bought at the fountain for 50 gold, carried in a bag slot, drunk anywhere alive for 150 health over 10 seconds. One runs at a time; damage does not stop it, and a drink neither starts nor cancels a recall. Never in the battle royale.
+_Avoid_: potion, flask, and the names other games give theirs
+
 **Decision budget**:
 The token bucket that rate-limits budgeted actions identically for every participant: refills at about 4 per second of sim time, capacity at most 2, both configurable. Ability casts are budgeted; movement is not.
 _Avoid_: APM cap, input throttle
