@@ -70,6 +70,7 @@ export class VoidmaulImpacts {
       arena
         ? { centerX: dx * cos - dz * sin, centerZ: dx * sin + dz * cos, radius: arena.radius }
         : undefined,
+      note.kind ?? 'slam',
       stones?.map((s) => ({ ...s, origin: local(s.origin), target: local(s.target) })),
     );
     effect.root.position.copy(groundAnchor);

@@ -66,7 +66,14 @@ export function stoneArena(home: StoneArena | null | undefined, point: Vec2, rad
 // Every one of sixteen sectors gets landings from the center to the rim;
 // every stone starts close to the paw. Larger stones on six of the eight
 // bands, chips on the other two.
-export function voidmaulStones(point: Vec2, radius: number, arena: StoneArena): VoidmaulStone[] {
+export function voidmaulStones(
+  point: Vec2,
+  radius: number,
+  arena: StoneArena,
+  // A crush's two paws: the even stones leave from under the first, the
+  // odd ones from under the second.
+  paws?: readonly [Vec2, Vec2],
+): VoidmaulStone[] {
   const out: VoidmaulStone[] = [];
   for (let i = 0; i < VOIDMAUL_STONE_COUNT; i++) {
     const band = i % 8;
@@ -81,9 +88,10 @@ export function voidmaulStones(point: Vec2, radius: number, arena: StoneArena): 
     const angle = ((Math.floor(i / 8) + 0.5) / 16) * TAU + (stoneRandom(i + 2) - 0.5) * 0.16;
     const target = offset(arena.center, heading(arena.center, angle), reach);
     const originAngle = i * 2.399963 + stoneRandom(i + 10) * 0.5;
+    const from = paws ? paws[i % 2]! : point;
     const origin = offset(
-      point,
-      heading(point, originAngle),
+      from,
+      heading(from, originAngle),
       radius * (0.11 + stoneRandom(i + 11) * 0.25),
     );
     const flight = 1.95 + stoneRandom(i + 16) * 0.52 + (dist(origin, target) / arena.radius) * 0.36;
@@ -93,9 +101,15 @@ export function voidmaulStones(point: Vec2, radius: number, arena: StoneArena): 
 }
 
 // The slam's rain, armed at the contact: each stone lands at its time.
-export function throwStones(ctx: CombatCtx, u: Unit, point: Vec2, radius: number): void {
+export function throwStones(
+  ctx: CombatCtx,
+  u: Unit,
+  point: Vec2,
+  radius: number,
+  paws?: readonly [Vec2, Vec2],
+): void {
   const arena = stoneArena(u.ringHome, point, radius);
-  const stones = voidmaulStones(point, radius, arena)
+  const stones = voidmaulStones(point, radius, arena, paws)
     .map((s) => ({ pos: s.target, at: ctx.time + s.born + s.flight, r: s.size }))
     .sort((a, b) => a.at - b.at);
   const rain: StoneRain = { stones, hit: [], ad: u.stats.ad, bitePct: u.bitePct };

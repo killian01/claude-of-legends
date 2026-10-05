@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneRig } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import type { VoidmaulAttackKind } from '../../sim/content/voidmaul_slam';
 import { toonifyMaterials } from '../toon';
 
 export const VOIDMAUL_MODEL_URL = '/models/creatures/voidmaul.glb';
@@ -13,7 +14,15 @@ export const VOIDMAUL_SCALE = 12.9;
 export const VOIDMAUL_REST_HEIGHT = 0.9965;
 export const VOIDMAUL_ATTACK_RELEASE_S = 1.75;
 export const VOIDMAUL_WALK_SOURCE_SPEED = 0.11994158146948393;
-export const VOIDMAUL_CLIPS = ['Idle', 'Walk', 'Attack', 'Hurt', 'Death', 'Spawn'] as const;
+export const VOIDMAUL_CLIPS = [
+  'Idle',
+  'Walk',
+  'Attack',
+  'AttackCrush',
+  'Hurt',
+  'Death',
+  'Spawn',
+] as const;
 type ClipName = (typeof VOIDMAUL_CLIPS)[number];
 const FADE_BASE = 0.2;
 const FADE_SHOT = 0.08;
@@ -177,7 +186,9 @@ export class VoidmaulVisual {
     if (previous && previous !== next) previous.fadeOut(fade);
   }
 
-  private playShot(name: 'Attack' | 'Hurt' | 'Death'): THREE.AnimationAction | undefined {
+  private playShot(
+    name: 'Attack' | 'AttackCrush' | 'Hurt' | 'Death',
+  ): THREE.AnimationAction | undefined {
     const action = this.actions.get(name);
     if (!action) return;
     const previous = this.shot ?? this.current;
@@ -187,9 +198,9 @@ export class VoidmaulVisual {
     return action;
   }
 
-  playAttack(windupSeconds: number): void {
+  playAttack(windupSeconds: number, kind: VoidmaulAttackKind = 'slam'): void {
     if (this.dead) return;
-    this.playShot('Attack')?.setEffectiveTimeScale(
+    this.playShot(kind === 'crush' ? 'AttackCrush' : 'Attack')?.setEffectiveTimeScale(
       VOIDMAUL_ATTACK_RELEASE_S / Math.max(0.01, windupSeconds),
     );
   }

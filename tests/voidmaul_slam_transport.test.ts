@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { buildRoyaleSnapshot } from '../server/royale_snapshot';
 import { buildSnapshot } from '../server/snapshot';
+import { attacksFrom } from '../src/game/attack_notes';
 import { voidmaulSlamsFrom } from '../src/game/voidmaul_slam_notes';
 import type { ServerMsg, SnapEvent } from '../src/net/protocol';
 import type { VoidmaulSlamEvent } from '../src/sim/combat/voidmaul_slam';
 import { CREATURES } from '../src/sim/content/rings';
+import type { VoidmaulAttackKind } from '../src/sim/content/voidmaul_slam';
 import { Sim, type SimEvent } from '../src/sim/sim';
 import { createCreature } from '../src/sim/unit';
 import { FakeRoyaleSim, near, spot } from './royale_fake';
@@ -30,6 +32,68 @@ function wire(event: VoidmaulSlamEvent): SnapEvent {
 }
 
 describe('the authoritative Voidmaul impact on the wire', () => {
+  it.each(['slam', 'crush'] as const)(
+    'preserves the chosen %s swing and impact in 5v5 and Royale snapshots',
+    (kind: VoidmaulAttackKind) => {
+      const sim = new Sim(81);
+      const self = sim.addChampion(0);
+      const boss = createCreature(9001, CREATURES.voidmaul, { x: 160, z: 160 }, 'bulwark');
+      sim.units.set(boss.id, boss);
+      const swing: SimEvent = {
+        type: 'attack',
+        unitId: boss.id,
+        targetId: self.id,
+        voidmaulAttack: kind,
+      };
+      const contact: VoidmaulSlamEvent = { ...impact(boss.id, self.id), kind };
+      const events = [swing, contact];
+      const snapshot = JSON.parse(
+        JSON.stringify(buildSnapshot(sim, 0, self.id, new Set(), events)),
+      ) as Snap;
+      expect(attacksFrom(snapshot.events)).toEqual(attacksFrom(events));
+      expect(attacksFrom(snapshot.events)[0]!.voidmaulAttack).toBe(kind);
+      expect(voidmaulSlamsFrom(snapshot.events)).toEqual(voidmaulSlamsFrom(events));
+      expect(voidmaulSlamsFrom(snapshot.events)[0]!.kind).toBe(kind);
+
+      const planet = new FakeRoyaleSim('respawn');
+      planet.royale.stage = 'play';
+      const me = planet.addChampion(0, 'fenn', spot(0, 50));
+      const seen = planet.addCreature(near(me.pos as never, 5));
+      const hidden = planet.addCreature(spot(25, 50));
+      const seenEvents: SimEvent[] = [
+        { type: 'attack', unitId: seen.id, targetId: me.id, voidmaulAttack: kind },
+        { ...impact(seen.id, me.id, seen.pos.y), kind },
+      ];
+      const hiddenEvents: SimEvent[] = [
+        { type: 'attack', unitId: hidden.id, targetId: me.id, voidmaulAttack: kind },
+        { ...impact(hidden.id, me.id, hidden.pos.y), kind },
+      ];
+      const royale = JSON.parse(
+        JSON.stringify(
+          buildRoyaleSnapshot(
+            planet,
+            { unitId: me.id, team: me.team, known: new Set(), seat: { ack: 0, ackAt: 0 } },
+            [...seenEvents, ...hiddenEvents],
+            { seat: () => undefined, seats: 1, people: 1, caches: false },
+          ),
+        ),
+      ) as Snap;
+      expect(attacksFrom(royale.events)).toEqual(attacksFrom(seenEvents));
+      expect(voidmaulSlamsFrom(royale.events)).toEqual(voidmaulSlamsFrom(seenEvents));
+    },
+  );
+
+  it('leaves legacy swings and impacts untagged for the viewer’s slam fallback', () => {
+    const local: SimEvent = { type: 'attack', unitId: 12, targetId: 17 };
+    const network: SnapEvent = { e: 'atk', unitId: 12, targetId: 17 };
+    expect(attacksFrom([local, network])).toEqual([
+      { unitId: 12, targetId: 17 },
+      { unitId: 12, targetId: 17 },
+    ]);
+    expect(attacksFrom([local])[0]).not.toHaveProperty('voidmaulAttack');
+    expect(voidmaulSlamsFrom([impact(12, 17)])[0]).not.toHaveProperty('kind');
+  });
+
   it('preserves the exact anchor, optional height, radius and contact time through a 5v5 snapshot', () => {
     const sim = new Sim(81);
     const self = sim.addChampion(0);

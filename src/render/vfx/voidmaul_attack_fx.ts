@@ -2,6 +2,8 @@
 // Coordinates are world metres, Y up. The owner supplies the fixed terrain anchor.
 import * as THREE from 'three';
 import { type VoidmaulStone, voidmaulStones } from '../../sim/combat/voidmaul_stones';
+import { VOIDMAUL_SLAM, type VoidmaulAttackKind } from '../../sim/content/voidmaul_slam';
+import { VoidmaulCrushPawFx } from './voidmaul_crush_paw_fx';
 
 // The scar and the stones stay a few seconds after the last stone lands,
 // then fade: a fight around the ring is not buried under old debris.
@@ -212,6 +214,9 @@ export class VoidmaulAttackFx {
   readonly root = new THREE.Group();
   private readonly radius: number;
   private readonly arena: VoidmaulAttackArena;
+  private readonly pawSpread: number;
+  private readonly pawSpreadForward: number;
+  private readonly crushPaws: VoidmaulCrushPawFx | null;
   private readonly crater: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
   private readonly cracks: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   private readonly wave: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
@@ -227,8 +232,21 @@ export class VoidmaulAttackFx {
   private age = 0;
   private disposed = false;
 
-  constructor(radius: number, arena?: VoidmaulAttackArena, stones?: readonly VoidmaulStone[]) {
+  constructor(
+    radius: number,
+    arena?: VoidmaulAttackArena,
+    readonly kind: VoidmaulAttackKind = 'slam',
+    // The sim's stones (combat/voidmaul_stones.ts) in this effect's frame;
+    // absent, the same layout laid out here.
+    stones?: readonly VoidmaulStone[],
+  ) {
     this.radius = Number.isFinite(radius) ? Math.max(0.2, radius) : 1;
+    const size =
+      radius > (VOIDMAUL_SLAM.radius + VOIDMAUL_SLAM.ascendantRadius) * 0.5
+        ? VOIDMAUL_SLAM.ascendantScale
+        : 1;
+    this.pawSpread = kind === 'crush' ? VOIDMAUL_SLAM.crushPawSpread * size : 0;
+    this.pawSpreadForward = kind === 'crush' ? VOIDMAUL_SLAM.crushPawSpreadForward * size : 0;
     this.arena =
       arena &&
       [arena.centerX, arena.centerZ, arena.radius].every(Number.isFinite) &&
@@ -296,15 +314,39 @@ void main() {
     this.wave.position.y = 0.035;
     this.wave.material.blending = THREE.AdditiveBlending;
     this.wave.renderOrder = 8;
+    if (kind === 'crush') {
+      this.crater.geometry
+        .scale(0.43, 1, 0.66)
+        .translate(-this.pawSpread, 0, -this.pawSpreadForward);
+      this.crater.userData.paw = 'left';
+      this.cracks.geometry
+        .scale(0.58, 1, 0.58)
+        .translate(-this.pawSpread, 0, -this.pawSpreadForward);
+      this.crushPaws = new VoidmaulCrushPawFx(
+        this.crater,
+        this.cracks,
+        this.wave,
+        this.pawSpread,
+        this.pawSpreadForward,
+      );
+      this.root.add(this.crushPaws.root);
+    } else this.crushPaws = null;
     // The very stones the sim lands (combat/voidmaul_stones.ts), in this
     // effect's frame; a stone that lands on a unit hurts it, so each one
     // flies from its origin to exactly its target in its own flight time.
     const thrown =
       stones ??
-      voidmaulStones({ x: 0, z: 0 }, this.radius, {
-        center: { x: this.arena.centerX, z: this.arena.centerZ },
-        radius: this.arena.radius,
-      });
+      voidmaulStones(
+        { x: 0, z: 0 },
+        this.radius,
+        { center: { x: this.arena.centerX, z: this.arena.centerZ }, radius: this.arena.radius },
+        kind === 'crush'
+          ? [
+              { x: -this.pawSpread, z: -this.pawSpreadForward },
+              { x: this.pawSpread, z: this.pawSpreadForward },
+            ]
+          : undefined,
+      );
     this.flights = thrown.map((stone, i) => {
       const origin = new THREE.Vector2(stone.origin.x, stone.origin.z);
       const direction = new THREE.Vector2(stone.target.x, stone.target.z).sub(origin);
@@ -363,7 +405,12 @@ void main() {
       const height = heightAt(x, z);
       return Number.isFinite(height) ? height : 0;
     };
-    for (const mesh of [this.crater, this.cracks, this.wave]) {
+    for (const mesh of [
+      this.crater,
+      this.cracks,
+      this.wave,
+      ...(this.crushPaws?.groundMeshes ?? []),
+    ]) {
       const position = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
       for (let i = 0; i < position.count; i++) {
         position.setY(i, this.groundHeight(position.getX(i), position.getZ(i)));
@@ -453,9 +500,11 @@ void main() {
     this.crater.material.uniforms.uAge!.value = now;
     this.crater.material.uniforms.uFade!.value = imprint;
     this.cracks.material.opacity = imprint * 0.89;
+    this.crushPaws?.update(now, imprint);
     this.wave.visible = now < 0.64;
     this.wave.material.uniforms.uAge!.value = now;
-    this.wave.material.uniforms.uFade!.value = (1 - smooth(0.3, 0.64, now)) * 1.1;
+    this.wave.material.uniforms.uFade!.value =
+      (1 - smooth(0.3, 0.64, now)) * (this.kind === 'crush' ? 1.55 : 1.1);
     for (let i = 0; i < this.flights.length; i++) {
       const flight = this.flights[i]!;
       const t = Math.max(0, now - flight.born);
@@ -515,8 +564,12 @@ void main() {
       const angle = i * 2.399963 + random(i + 104) * 0.6;
       const progress = Math.min(1, t / (life * (dust ? 0.86 : 0.75)));
       const targetRadius = this.arena.radius * (0.4 + random(i + 109) * 0.55);
-      const x = (this.arena.centerX + Math.cos(angle) * targetRadius) * progress;
-      const z = (this.arena.centerZ + Math.sin(angle) * targetRadius) * progress;
+      const originX = (i % 2 === 0 ? -1 : 1) * this.pawSpread;
+      const originZ = (i % 2 === 0 ? -1 : 1) * this.pawSpreadForward;
+      const x =
+        originX * (1 - progress) + (this.arena.centerX + Math.cos(angle) * targetRadius) * progress;
+      const z =
+        originZ * (1 - progress) + (this.arena.centerZ + Math.sin(angle) * targetRadius) * progress;
       const height = dust
         ? this.radius * (0.03 + t * (0.2 + random(i + 106) * 0.25))
         : Math.max(0.035, this.radius * (t * (1.3 + random(i + 106)) - t * t * 1.55));

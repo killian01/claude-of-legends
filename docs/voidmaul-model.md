@@ -3,7 +3,7 @@
 Voidmaul is a quadruped with two large forelegs and two shorter hindlegs. The
 authored Blender asset retains the Tripo design, shared 4K atlas and original
 deform skeleton, with repaired topology, 14 editable anatomical segments and
-six game animation clips.
+seven game animation clips.
 
 ## Asset lineage
 
@@ -13,8 +13,8 @@ six game animation clips.
 | [Segmented source](../art_src/models_raw/voidmaul/voidmaul_segmented.blend) | Repaired surface, UVs, segmentation and quadruped walk controls. |
 | [Pre-attack backup](../art_src/models_raw/voidmaul/voidmaul_pre_attack.blend) | Snapshot before the reference attack was added. |
 | [First animation revision](../art_src/models_raw/voidmaul/voidmaul_animation_v1.blend) | Archived revision with the rejected shoulder twist and rigid death. |
-| [Final animated scene](../art_src/models_raw/voidmaul/voidmaul_animated.blend) | Editable rig, six game clips and full reference attack action. |
-| [Game GLB](../public/models/creatures/voidmaul.glb) | Skinned meshes, packed texture and six canonical animation names. |
+| [Final animated scene](../art_src/models_raw/voidmaul/voidmaul_animated.blend) | Editable rig, seven game clips and full reference attack action. |
+| [Game GLB](../public/models/creatures/voidmaul.glb) | Skinned meshes, packed texture and seven canonical animation names. |
 | [Export report](../public/models/creatures/voidmaul.export.json) | Clip durations, skeletal samples, texture information and coordinate conventions. |
 
 Raw Blender assets, references and audit files live under `art_src/`; the game
@@ -63,6 +63,7 @@ the closing pose for a loop.
 | Idle | `Voidmaul_Idle_Loop_96f` | 1-97 | 4.0000 s | Loop. |
 | Walk | `Voidmaul_Walk_Loop_32f` | 1-33 | 1.3333 s | Four-beat quadruped loop. |
 | Attack | `Voidmaul_Attack` | 1-77 | 3.1667 s | One forepaw slam and recovery. |
+| AttackCrush | `Voidmaul_AttackCrush_77f` | 1-77 | 3.1667 s | Rear on planted hindfeet, lift both forepaws, double slam and recovery. |
 | Hurt | `Voidmaul_Hurt_20f` | 1-21 | 0.8333 s | Grounded recoil and settle. |
 | Death | `Voidmaul_Death_77f` | 1-78 | 3.2083 s | Collapse, then hold the final corpse pose. |
 | Spawn | `Voidmaul_Spawn_96f` | 1-97 | 4.0000 s | Staggered grips, forceful pull, landing, forepaw stomp and crest bellow. |
@@ -241,6 +242,59 @@ dispatch are covered separately by renderer and simulation tests. Reproduce
 with Vite on port 5187 and `node scripts/smoke_voidmaul_attack.mjs`.
 
 
+## Second attack and alternating swings
+
+[AttackCrush](../scripts/voidmaul_crush.py) shifts the chest back and up while
+both rear feet remain planted, raises both forepaws together, and drives them
+down at 1.75 s. The torso compresses on contact, recoils and returns exactly
+to its starting guard by 3.1667 s. The [front/profile motion sheet](../art_src/models_raw/voidmaul/crush_review/crush_multiview_sheet.jpg)
+shows the complete motion. The [quarter-frame audit](../art_src/models_raw/voidmaul/crush_review/crush_pose_QA.json)
+checks 305 poses for sole contact, floor clearance, shared seams and endpoints.
+The [shoulder audit](../art_src/models_raw/voidmaul/crush_review/crush_skin_QA.json)
+checks native and four-weight skinning of both sockets; the worst median local
+volume ratio is 0.8165 on the right and 0.8685 on the left. The
+[export preservation proof](../art_src/models_raw/voidmaul/crush_review/glb_preservation.json)
+compares raw accessors and embedded data: all six previous animation tracks,
+geometry, indices, UVs, skin weights, bind matrices, materials and atlas remain
+identical. Only the new clip is added.
+
+The simulation alternates `slam`, `crush`, `slam` per creature through its
+saved `voidmaulAttackCount`. A completed ground contact advances the sequence,
+including an attack the target dodges; an interrupted windup retries the same
+choice. The committed plan carries that choice through a mid-attack checkpoint.
+The swing event's `voidmaulAttack` and resolved event's `kind` travel through
+local play, replay, 5v5 and Royale. [The swing note adapter](../src/game/attack_notes.ts)
+preserves the server's choice. The renderer selects `Attack` or `AttackCrush`
+from that note; it never runs its own animation counter. Legacy notes without
+a kind retain the original slam. Both attacks keep the existing damage rules,
+radii and contact timing.
+
+Crush's impact disk is centred on the equal-weight midpoint of the two actual
+sole centroids. At regular world scale, that point is 0.404608 metres to the
+right and 3.624891 metres forward. The right sole is another 3.362299 metres
+right and 0.246527 metres back, and the left has the opposite offsets. These
+values live beside the original attack's calibration in match content and
+scale with the Ascendant body. [The paired impact effect](../src/render/vfx/voidmaul_crush_paw_fx.ts)
+puts a scar and pressure burst at each sole, emits debris from both feet and
+strengthens the central wave. Its 128 rocks still cover the whole authored
+arena and settle on the sampled terrain. They are the same stone rain as the
+slam's, hurting what they land on; the sim throws the even stones from under
+the left sole and the odd ones from under the right, and the `voidmaul_slam`
+event of a Crush carries both paw points so every host draws the same rain.
+
+The [Crush MP4](../art_src/models_raw/voidmaul/voidmaul_attack_crush.mp4) uses the
+production animation and shaders. The [runtime WebGL report](../art_src/models_raw/voidmaul/crush_impact_review/report.json)
+checks both paw effects against both exported soles, normal and Ascendant
+placements, the complete debris trajectories, stepped terrain and persistent
+scars. Native comparisons include the new clip; the report's pinned hashes
+identify the exported asset and runtime code used. The scene uses a circular
+platform with the shipped dimensions; renderer light/camera feedback and damage
+dispatch are checked separately. Run the same smoke script with
+`VOIDMAUL_ATTACK_KIND=crush` to reproduce it. The
+[attack sequence test](../tests/voidmaul_attack_sequence.test.ts) checks actual
+simulation ticks, replayed commands and a checkpoint during Crush against the
+original events, damage and final state.
+
 ## Articulated death
 
 The [death builder](../scripts/voidmaul_death.py) replaces the first revision's
@@ -265,7 +319,7 @@ volume statistics alone are not used as visual approval.
 
 [VoidmaulVisual](../src/render/creatures/voidmaul_visual.ts) loads the canonical
 clips and clones the skeleton for each creature. Idle and Walk loop; Attack,
-Hurt and Spawn return to the current base clip. Death clamps at its final pose.
+AttackCrush, Hurt and Spawn return to the current base clip. Death clamps at its final pose.
 The existing creature aspect beacon and Ascendant halo remain attached.
 
 The walk is authored in place with a virtual forward speed of
@@ -311,7 +365,7 @@ reopens the current blend and confirms that geometry, UVs, skin weights, bind
 pose, constraints and every other action remain unchanged. Its
 [quarter-frame audit](../art_src/models_raw/voidmaul/spawn_review/spawn_final_quarterframe_audit.json)
 checks 385 poses. The previous slow Spawn is archived in Blender and excluded
-from the six canonical game clips.
+from the canonical game clips.
 The current [real WebGL report](../art_src/models_raw/voidmaul/rift_review/report.json)
 checks the revised appearance with no shader errors. Across eight poses, 168
 exported joints match Blender within 0.000000474 metres. All 831 shared segment
@@ -346,6 +400,7 @@ The reusable Blender modules are:
   [anatomical segmentation](../scripts/voidmaul_segment.py).
 - [Quadruped walk and controls](../scripts/voidmaul_walk.py).
 - [Reference attack build](../scripts/voidmaul_attack.py).
+- [Two-paw crush build](../scripts/voidmaul_crush.py).
 - [Idle, Hurt, Death and Spawn build](../scripts/voidmaul_extra_clips.py).
 - [Forceful Spawn build](../scripts/voidmaul_spawn.py).
 - [Structural validation](../scripts/voidmaul_validate.py) and

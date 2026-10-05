@@ -4,6 +4,7 @@ import {
   VOIDMAUL_ATTACK_FX_DURATION_S,
   VoidmaulAttackFx,
 } from '../src/render/vfx/voidmaul_attack_fx';
+import { VOIDMAUL_SLAM } from '../src/sim/content/voidmaul_slam';
 
 function rocks(fx: VoidmaulAttackFx): THREE.InstancedMesh[] {
   return fx.root.children.filter(
@@ -197,25 +198,122 @@ describe('Voidmaul attack fracture', () => {
     seeked.dispose();
   });
 
-  it('releases every owned geometry, material and instance buffer only once', () => {
-    const fx = new VoidmaulAttackFx(4);
-    const scene = new THREE.Scene();
-    scene.add(fx.root);
-    const disposals: ReturnType<typeof vi.spyOn>[] = [];
-    fx.root.traverse((child) => {
-      if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
-        disposals.push(vi.spyOn(child.geometry, 'dispose'));
-        for (const material of Array.isArray(child.material) ? child.material : [child.material]) {
-          disposals.push(vi.spyOn(material, 'dispose'));
-        }
+  it('Crush erupts from both paws and leaves two terrain-conforming prints while retaining arena coverage', () => {
+    const arena = { centerX: 0, centerZ: -3.4, radius: 16.35 };
+    const fx = new VoidmaulAttackFx(5.5, arena, 'crush');
+    const seeked = new VoidmaulAttackFx(5.5, arena, 'crush');
+    const height = (x: number, z: number) => x * 0.04 - z * 0.03;
+    fx.conformGround(height);
+    seeked.conformGround(height);
+    const left = fx.root.getObjectByName('Voidmaul_AttackCrater') as THREE.Mesh<
+      THREE.BufferGeometry,
+      THREE.ShaderMaterial
+    >;
+    const right = fx.root.getObjectByName('Voidmaul_CrushCrater_Right') as typeof left;
+    expect(left.geometry.getAttribute('position').getX(0)).toBeCloseTo(
+      -VOIDMAUL_SLAM.crushPawSpread,
+      5,
+    );
+    expect(right.geometry.getAttribute('position').getX(0)).toBeCloseTo(
+      VOIDMAUL_SLAM.crushPawSpread,
+      5,
+    );
+    expect(left.geometry.getAttribute('position').getZ(0)).toBeCloseTo(
+      -VOIDMAUL_SLAM.crushPawSpreadForward,
+      5,
+    );
+    expect(right.geometry.getAttribute('position').getZ(0)).toBeCloseTo(
+      VOIDMAUL_SLAM.crushPawSpreadForward,
+      5,
+    );
+    for (const mesh of [left, right]) {
+      const vertices = mesh.geometry.getAttribute('position');
+      for (let i = 0; i < vertices.count; i++) {
+        expect(vertices.getY(i)).toBeCloseTo(height(vertices.getX(i), vertices.getZ(i)), 5);
       }
-      if (child instanceof THREE.InstancedMesh) disposals.push(vi.spyOn(child, 'dispose'));
-    });
+    }
+    fx.update(0.13);
+    const matrix = new THREE.Matrix4();
+    const position = new THREE.Vector3();
+    const vertex = new THREE.Vector3();
+    const sourceSides = new Set<number>();
+    for (const mesh of rocks(fx)) {
+      for (let i = 0; i < mesh.count; i++) {
+        mesh.getMatrixAt(i, matrix);
+        position.setFromMatrixPosition(matrix);
+        if (Math.abs(position.x) > 2) sourceSides.add(Math.sign(position.x));
+      }
+    }
+    expect(sourceSides.size).toBe(2);
+    expect(fx.root.getObjectByName('Voidmaul_CrushPawBurst_Left')?.visible).toBe(true);
+    expect(fx.root.getObjectByName('Voidmaul_CrushPawBurst_Right')?.visible).toBe(true);
+    for (const age of [0.4, 0.9, 1.8, 4]) fx.update(age);
+    seeked.update(4);
+    expect(snapshot(fx)).toEqual(snapshot(seeked));
+    const cells = new Set<string>();
+    for (const mesh of rocks(fx)) {
+      const vertices = mesh.geometry.getAttribute('position');
+      for (let i = 0; i < mesh.count; i++) {
+        mesh.getMatrixAt(i, matrix);
+        position.setFromMatrixPosition(matrix);
+        const angle = THREE.MathUtils.euclideanModulo(
+          Math.atan2(position.z - arena.centerZ, position.x),
+          Math.PI * 2,
+        );
+        const band = Math.floor(
+          (Math.hypot(position.x, position.z - arena.centerZ) / arena.radius) * 8,
+        );
+        cells.add(`${Math.floor((angle / (Math.PI * 2)) * 16)}:${band}`);
+        let clearance = Infinity;
+        for (let j = 0; j < vertices.count; j++) {
+          vertex.fromBufferAttribute(vertices, j).applyMatrix4(matrix);
+          expect(Math.hypot(vertex.x, vertex.z - arena.centerZ)).toBeLessThan(arena.radius);
+          clearance = Math.min(clearance, vertex.y - height(vertex.x, vertex.z));
+        }
+        expect(clearance).toBeCloseTo(0.005, 5);
+      }
+    }
+    expect(cells.size).toBe(128);
+    expect(left.material.uniforms.uFade!.value).toBe(1);
+    expect(right.material.uniforms.uFade!.value).toBe(1);
+    const ascendant = new VoidmaulAttackFx(VOIDMAUL_SLAM.ascendantRadius, undefined, 'crush');
+    const ascRight = ascendant.root.getObjectByName('Voidmaul_CrushCrater_Right') as typeof left;
+    expect(ascRight.geometry.getAttribute('position').getX(0)).toBeCloseTo(
+      VOIDMAUL_SLAM.crushPawSpread * VOIDMAUL_SLAM.ascendantScale,
+      5,
+    );
+    expect(ascRight.geometry.getAttribute('position').getZ(0)).toBeCloseTo(
+      VOIDMAUL_SLAM.crushPawSpreadForward * VOIDMAUL_SLAM.ascendantScale,
+      5,
+    );
     fx.dispose();
-    fx.dispose();
-    for (const dispose of disposals) expect(dispose).toHaveBeenCalledTimes(1);
-    expect(scene.children).toHaveLength(0);
-    expect(fx.root.children).toHaveLength(0);
-    expect(fx.update(0.3)).toBe(false);
+    seeked.dispose();
+    ascendant.dispose();
+  });
+
+  it('releases every owned geometry, material and instance buffer only once', () => {
+    for (const kind of ['slam', 'crush'] as const) {
+      const fx = new VoidmaulAttackFx(4, undefined, kind);
+      const scene = new THREE.Scene();
+      scene.add(fx.root);
+      const disposals: ReturnType<typeof vi.spyOn>[] = [];
+      fx.root.traverse((child) => {
+        if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
+          disposals.push(vi.spyOn(child.geometry, 'dispose'));
+          for (const material of Array.isArray(child.material)
+            ? child.material
+            : [child.material]) {
+            disposals.push(vi.spyOn(material, 'dispose'));
+          }
+        }
+        if (child instanceof THREE.InstancedMesh) disposals.push(vi.spyOn(child, 'dispose'));
+      });
+      fx.dispose();
+      fx.dispose();
+      for (const dispose of disposals) expect(dispose).toHaveBeenCalledTimes(1);
+      expect(scene.children).toHaveLength(0);
+      expect(fx.root.children).toHaveLength(0);
+      expect(fx.update(0.3)).toBe(false);
+    }
   });
 });

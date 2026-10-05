@@ -77,7 +77,7 @@ function startClip(model: { scene: THREE.Group; animations: THREE.AnimationClip[
   };
 }
 
-function proximalShoulderPatch(scene: THREE.Object3D, inverse: THREE.Matrix4) {
+function proximalShoulderPatch(scene: THREE.Object3D, inverse: THREE.Matrix4, side = 'R') {
   const vertices: { mesh: THREE.SkinnedMesh; index: number; rest: THREE.Vector3 }[] = [];
   const identifiers = new Map<string, number>();
   const upperRight = new Set<number>();
@@ -87,7 +87,10 @@ function proximalShoulderPatch(scene: THREE.Object3D, inverse: THREE.Matrix4) {
     const mesh = node as THREE.SkinnedMesh;
     if (!mesh.isSkinnedMesh) return;
     if (!centre) {
-      const joint = mesh.skeleton.bones.findIndex((bone) => bone.name === 'bone_10');
+      const shoulderName = side === 'R' ? 'bone_10' : 'tripo::0_Left_Limb_0';
+      const joint = mesh.skeleton.bones.findIndex(
+        (bone) => bone.name === THREE.PropertyBinding.sanitizeNodeName(shoulderName),
+      );
       if (joint >= 0) {
         centre = new THREE.Vector3()
           .setFromMatrixPosition(mesh.skeleton.boneInverses[joint]!.clone().invert())
@@ -112,7 +115,7 @@ function proximalShoulderPatch(scene: THREE.Object3D, inverse: THREE.Matrix4) {
         vertices.push({ mesh, index, rest });
       }
       ids.push(id);
-      if (mesh.name.includes('ForeUpperR')) upperRight.add(id);
+      if (mesh.name.includes(`ForeUpper${side}`)) upperRight.add(id);
     }
     const index = mesh.geometry.index;
     const count = index?.count ?? positions.count;
@@ -308,13 +311,19 @@ describe('shipped Voidmaul export', () => {
     expect(gaps[0]!.metres, JSON.stringify(gaps.slice(0, 5))).toBeLessThan(0.003);
   });
 
-  it('raises the attacking arm without flipping its shoulder or crushing its proximal surface', async () => {
+  it.each([
+    ['Attack', 'R'],
+    ['AttackCrush', 'R'],
+    ['AttackCrush', 'L'],
+  ])('preserves the %s %s shoulder through the raised and contact poses', async (clip, side) => {
     const model = await readModel();
-    const playback = startClip(model, 'Attack');
+    const playback = startClip(model, clip);
     const initialInverse = playback.sample(0);
-    const shoulder = model.scene.getObjectByName('bone_10')!;
+    const shoulder = model.scene.getObjectByName(
+      THREE.PropertyBinding.sanitizeNodeName(side === 'R' ? 'bone_10' : 'tripo::0_Left_Limb_0'),
+    )!;
     const initialRotation = shoulder.quaternion.clone();
-    const { vertices, patch, edges } = proximalShoulderPatch(model.scene, initialInverse);
+    const { vertices, patch, edges } = proximalShoulderPatch(model.scene, initialInverse, side);
     expect(patch.size).toBeGreaterThan(200);
     expect(edges.length).toBeGreaterThan(500);
     let maximumRotation = 0;
@@ -346,6 +355,44 @@ describe('shipped Voidmaul export', () => {
     expect(maximumRotation, diagnostics).toBeLessThan(THREE.MathUtils.degToRad(100));
     expect(worstP05, diagnostics).toBeGreaterThan(0.65);
     expect(maximumCrushedFraction, diagnostics).toBeLessThan(0.1);
+  });
+
+  it('rears on its hindfeet and lands both forepaws together in the distinct crush clip', async () => {
+    const model = await readModel();
+    const playback = startClip(model, 'AttackCrush');
+    const initialInverse = playback.sample(0);
+    const initial = poses(model.scene);
+    const rest = bodyHeight(model.scene, initialInverse);
+    const raisedInverse = playback.sample(1.2);
+    const raised = bodyHeight(model.scene, raisedInverse);
+    for (const side of ['L', 'R']) {
+      expect(footHeight(model.scene, raisedInverse, `ForeFoot${side}`)).toBeGreaterThan(
+        rest.height * 0.15,
+      );
+      expect(footHeight(model.scene, raisedInverse, `HindFoot${side}`)).toBeLessThan(0.003);
+    }
+    expect(raised.bodyY - rest.bodyY).toBeGreaterThan(rest.height * 0.05);
+    const contactInverse = playback.sample(VOIDMAUL_ATTACK_RELEASE_S);
+    for (const side of ['L', 'R']) {
+      expect(footHeight(model.scene, contactInverse, `ForeFoot${side}`)).toBeLessThan(0.004);
+    }
+    for (let frame = 0; frame <= 76 * 4; frame++) {
+      const inverse = playback.sample(frame / 96);
+      for (const side of ['L', 'R']) {
+        const height = footHeight(model.scene, inverse, `HindFoot${side}`);
+        expect(height).toBeGreaterThan(-0.001);
+        expect(height).toBeLessThan(0.003);
+      }
+    }
+    playback.sample(playback.duration);
+    const final = poses(model.scene);
+    let worst = 0;
+    for (const [name, matrix] of initial) {
+      for (let i = 0; i < 16; i++) {
+        worst = Math.max(worst, Math.abs(matrix.elements[i]! - final.get(name)!.elements[i]!));
+      }
+    }
+    expect(worst).toBeLessThan(0.0001);
   });
 
   it('buckles its forelegs before the hips and finishes as a low corpse without a rigid side roll', async () => {
