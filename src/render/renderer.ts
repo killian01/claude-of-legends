@@ -38,6 +38,7 @@ import {
   spellColorsOf,
 } from './ability_vfx';
 import { aspectColor, WRATH_COLOR } from './aspect_colors';
+import { bodyDress, dressBody, warmUnit } from './body_dress';
 import { buildCampMesh, campBarWidth } from './camp_shapes';
 import { buildChampionMesh } from './champion_shapes';
 import {
@@ -48,6 +49,7 @@ import {
   forgedBarY,
   preloadChampionAssets,
 } from './champions';
+import { CHAMPION_VISUALS } from './champions/manifest';
 import { creatureRest, HOME_RADIUS, REST_AFTER_SWING_MS } from './creature_facing';
 import { buildCreatureMesh } from './creature_shapes';
 import {
@@ -63,6 +65,8 @@ import {
 } from './creatures/voidmaul_visual';
 import { FloatingText, makeTextSprite } from './floating_text';
 import { fogSheetGeometry } from './fog_sheet';
+import { FrameMemo } from './frame_memo';
+import { LOW_HEALTH_STYLE, lowHealthOpacity } from './low_health';
 import { buildMinionMesh } from './minion_shapes';
 import {
   estimatedMuzzleOffset,
@@ -75,6 +79,8 @@ import { attachGhosts, ghostColor, ghostMaterial } from './planet_ghost';
 import { heartwoodIcon } from './planet_graft_aura';
 import type { PlanetMinimap } from './planet_minimap';
 import { PlanetStage } from './planet_stage';
+import { closeRenderer, ProgramKeeper } from './program_keeper';
+import { ProgramWarmup, whenLinked } from './program_warmup';
 import { RING_FOG_EDGE, ringFogOpening } from './ring_fog';
 import {
   clearRoyaleProjector,
@@ -86,18 +92,20 @@ import {
 import { pickShieldHolder, type ShieldCandidate } from './shield_holder';
 import { crownHeight, crownLift, flightProgress, isStill } from './structure_fire';
 import type { RenderTerrain } from './terrain';
-import { toonifyMaterials } from './toon';
 import { CHARGE_S, nextChargeDelayS } from './tower_shot';
 import {
   genericDetonate,
   genericImpact,
   genericWindupTick,
   type SchoolColors,
+  SPELL_VFX,
   type SpellVisual,
   spellVisualOf,
 } from './vfx/catalog';
 import type { ChartRemap } from './vfx/chart_shift';
+import { preloadElowenEffects } from './vfx/elowen_fx';
 import { SPRITE } from './vfx/sprites';
+import { preloadSylraEffects } from './vfx/sylra_fx';
 import { VfxSystem } from './vfx/system';
 import { disposeEffect } from './vfx/timed';
 import { TowerReachFx } from './vfx/tower_reach_fx';
@@ -108,8 +116,15 @@ import { voidmaulAttackFeedback } from './voidmaul_attack_feedback';
 import { VoidmaulImpacts } from './voidmaul_impacts';
 import { VoidmaulRifts } from './voidmaul_rifts';
 import type { VoidmaulSpawnBeat } from './voidmaul_spawn';
+import { sliced, texturesOf, type WarmBody, warmFights } from './warm_samples';
 
 const TEAM_COLORS: readonly number[] = [0x4a7dd6, 0xd65c5c];
+// How much of a frame the fights' warm-up may take before it waits for
+// the next, milliseconds: light samples share a frame, a heavy one waits.
+const WARM_SLICE_MS = 4;
+// How often the warm-up looks again while every sample left waits for a
+// file.
+const WARM_IDLE_MS = 100;
 const TEAM_LIGHT: readonly number[] = [0x9dbcf5, 0xf5a3a3];
 
 // Background and fog share the forest-skirt tone so the world edge melts
@@ -435,8 +450,10 @@ export class Renderer {
   // Camera trauma: squared on apply so small hits barely register and big
   // impacts kick; decays every frame, capped so fights cannot stack it.
   private shakeAmp = 0;
-  // The display-grade vignette div; doubles as the low-hp warning.
+  // The display-grade vignette div, and the low-hp warning's red frame over
+  // it in its stead (low_health.ts), painted once, its opacity pulsing.
   private readonly vignette: HTMLDivElement;
+  private readonly lowHpFrame: HTMLDivElement;
   private lowHpActive = false;
   // The battle royale's frost at the screen's edge while the followed
   // champion stands in the Dusk (the loud moments), beside the low-health
@@ -480,6 +497,26 @@ export class Renderer {
   // champion, skin and tint (planet mode: fifty champions slip in and out
   // of sight all match, and a fresh clone each time hitches).
   private readonly visualPool = new Map<string, ChampionVisual[]>();
+  // Every shader program linked here kept until the renderer goes
+  // (program_keeper.ts): an effect cast again finds its program instead of
+  // linking it anew mid-fight.
+  private readonly programs = new ProgramKeeper();
+  // The planet's programs linking before its first frame
+  // (program_warmup.ts); null on the plane.
+  private readonly warmup: ProgramWarmup | null = null;
+  private disposed = false;
+  // The first frame on the canvas: what a card in front of the match waits
+  // for (game/first_frame.ts), since a canvas never drawn on is black and
+  // the planet holds its first frame while its programs link. Settles on
+  // dispose too, so nothing waits on a renderer gone.
+  private markDrawn: (() => void) | null = null;
+  readonly drawn = new Promise<void>((done) => {
+    this.markDrawn = done;
+  });
+  // Where the canvas stands, read once a frame (frame_memo.ts).
+  private readonly canvasAt = new FrameMemo(() =>
+    rectOnStage(this.gl.domElement, this.gl.domElement.getBoundingClientRect()),
+  );
 
   constructor(container: HTMLElement, world: IWorld, terrain: RenderTerrain) {
     this.terrain = terrain;
@@ -517,6 +554,9 @@ export class Renderer {
       'position:absolute;inset:0;pointer-events:none;' +
       'background:radial-gradient(ellipse at center, transparent 55%, rgba(8,12,5,0.3) 100%);';
     container.appendChild(this.vignette);
+    this.lowHpFrame = document.createElement('div');
+    this.lowHpFrame.style.cssText = LOW_HEALTH_STYLE;
+    container.appendChild(this.lowHpFrame);
     this.frost = document.createElement('div');
     this.frost.style.cssText =
       'position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity 0.35s;' +
@@ -588,6 +628,7 @@ export class Renderer {
     );
 
     const onResize = (): void => {
+      this.canvasAt.forget();
       this.gl.setSize(container.clientWidth, container.clientHeight);
       this.camera.aspect = container.clientWidth / Math.max(1, container.clientHeight);
       this.camera.updateProjectionMatrix();
@@ -755,6 +796,81 @@ export class Renderer {
     this.onSimTick();
     // First sync has no history: snap prev onto curr so nothing lerps from 0,0.
     for (const t of this.tracked.values()) t.prev = { ...t.curr };
+    if (this.planet) {
+      const planet = this.planet;
+      this.warmup = new ProgramWarmup((until) => {
+        // Bent first: the bend keys a material's program apart.
+        planet.bendScene(this.scene);
+        this.gl.compile(this.scene, this.camera);
+        const linking = [...(this.gl.info.programs ?? [])];
+        this.programs.keep(linking);
+        // The wait ends with the hold, or with the renderer: the first
+        // frame links whatever is left.
+        const linked = whenLinked(
+          linking,
+          () => this.gl.info.programs ?? [],
+          (ms) => new Promise((done) => window.setTimeout(done, ms)),
+          () => this.disposed || performance.now() >= until,
+        );
+        // Then the fights' art, a piece a frame, while the match plays.
+        void linked.then(() => this.warmFights(planet));
+        return linked;
+      }, performance.now());
+    }
+  }
+
+  // Every spell's art, every Rising and every champion built off screen
+  // and compiled against the planet's scene (warm_samples.ts), so the
+  // first of each in a fight finds its programs linked.
+  private warmFights(planet: PlanetStage): void {
+    void warmFights({
+      compile: (scene) => {
+        planet.bendScene(scene);
+        this.gl.compile(scene, this.camera, this.scene);
+        this.programs.keep(this.gl.info.programs ?? []);
+        for (const texture of texturesOf(scene)) this.gl.initTexture(texture);
+      },
+      // Built and dressed the way a live one is (buildBody, body_dress.ts),
+      // so the programs match.
+      body: (body: WarmBody) => {
+        const { holder } = this.buildBody(warmUnit(body));
+        // The Pyrefang's rigged model too, which a live one swaps in.
+        if (body.creatureId === 'pyrefang') {
+          const visual = createPyrefangVisual(null, holder.scale.x);
+          if (visual) holder.add(visual.root);
+        }
+        return holder;
+      },
+      champion: (id) => {
+        const u = warmUnit({ kind: 'champion', championId: id, skin: 0 });
+        const { holder } = this.buildBody(u);
+        return {
+          root: holder,
+          dispose: () => {
+            this.championVisuals.get(u.id)?.dispose();
+            this.championVisuals.delete(u.id);
+          },
+        };
+      },
+      championIds: Object.keys(CHAMPION_VISUALS),
+      catalog: SPELL_VFX,
+      makeFx: (scene) => new VfxSystem(scene, this.terrain.heightAt),
+      // Only the samples drawn from a file wait for it (warm_samples.ts
+      // filesFor): the Pyrefang's bodies, Sylra's and Elowen's spells.
+      files: {
+        pyrefang: preloadPyrefang,
+        effects: { sylra: preloadSylraEffects, elowen: preloadElowenEffects },
+      },
+      next: sliced(
+        WARM_SLICE_MS,
+        () => performance.now(),
+        () => new Promise((done) => requestAnimationFrame(() => done())),
+      ),
+      // A timer, not a frame: it still fires in a tab put away, so a match
+      // that ended meanwhile lets go of the warm-up.
+      idle: () => new Promise((done) => window.setTimeout(done, WARM_IDLE_MS)),
+      gone: () => this.disposed,
+    }).catch(() => undefined);
   }
 
   // The planet's minimap window (planet_minimap.ts): its world, its
@@ -1125,7 +1241,7 @@ export class Renderer {
   // its client rect on a page standing straight, the stage's whole box on
   // a turned one.
   private canvasRect(): { left: number; top: number; width: number; height: number } {
-    return rectOnStage(this.gl.domElement, this.gl.domElement.getBoundingClientRect());
+    return this.canvasAt.get();
   }
 
   // Projects a world point to screen pixels, the stage's (the page's while
@@ -1574,6 +1690,21 @@ export class Renderer {
     if (this.planet) this.scene.add(this.planet.sky.group);
   }
 
+  // A unit's body as the match shows it: its mesh, dressed (body_dress.ts:
+  // toon unless the terrain authored it, a champion's ghosts on the
+  // planet). The fights' warm-up builds its samples here too. The holder
+  // holds nothing but the body yet, so the holder is what is dressed.
+  private buildBody(u: Readonly<Unit>): { holder: THREE.Group; barY: number } {
+    const built = this.buildUnitMesh(u);
+    const { holder } = built;
+    const dress = bodyDress(u.kind, {
+      authored: holder.userData.authoredTerrain === true,
+      planet: this.planet !== null,
+    });
+    dressBody(holder, dress, (body) => this.ghostBody(holder, body));
+    return built;
+  }
+
   private buildUnitMesh(u: Readonly<Unit>): { holder: THREE.Group; barY: number } {
     const authored = this.terrain.structure(u);
     if (authored) return authored;
@@ -1684,13 +1815,11 @@ export class Renderer {
       holder.add(ready.root);
       holder.userData.poolKey = poolKey;
       enableShadows(holder);
-      this.ghostBody(holder, ready.root);
       this.championVisuals.set(u.id, ready);
       return { holder, barY };
     }
     const figure = buildChampionMesh(u.championId, color, u.skin);
     holder.add(figure);
-    this.ghostBody(holder, figure);
     // Surface the figure's limb pivots on the holder the render loop sees;
     // without this hoist the walk cycle never runs.
     holder.userData.anim = figure.userData.anim;
@@ -1769,16 +1898,17 @@ export class Renderer {
       disposeDeep(figure);
       delete holder.userData.anim;
       enableShadows(visual.root);
-      toonifyMaterials(visual.root);
+      // Dressed as buildBody dressed the figure it replaces.
+      const dress = bodyDress('champion', { authored: false, planet: this.planet !== null });
+      dressBody(visual.root, dress, (body) => this.ghostBody(holder, body));
       holder.add(visual.root);
-      this.ghostBody(holder, visual.root);
       this.championVisuals.set(unitId, visual);
     });
   }
 
   // On the planet, a champion's body gets its silhouette twins
   // (planet_ghost.ts), one material for the whole body, colored and
-  // switched each frame by render().
+  // switched each frame by render(); body_dress.ts says which bodies.
   private ghostBody(holder: THREE.Object3D, body: THREE.Object3D): void {
     if (!this.planet) return;
     let mat = holder.userData.ghostMat as THREE.MeshBasicMaterial | undefined;
@@ -2132,8 +2262,7 @@ export class Renderer {
     for (const [id, u] of this.world.units) {
       let t = this.tracked.get(id);
       if (!t) {
-        const { holder, barY } = this.buildUnitMesh(u);
-        if (!holder.userData.authoredTerrain) toonifyMaterials(holder);
+        const { holder, barY } = this.buildBody(u);
         // Minion bars widen with their max hp so a beefy siege minion never
         // reads as "almost dead" while it still soaks several hits.
         const structure =
@@ -3218,10 +3347,14 @@ export class Renderer {
 
   // alpha in [0, 1): progress through the current tick, for interpolation.
   render(alpha: number): void {
+    // A new frame: the canvas's place is read again, once.
+    this.canvasAt.forget();
     // No context, or a restored one still waiting on the terrain's
     // pictures: a draw now would upload the closed ones.
     if (this.picture.blocked()) return;
     const now = performance.now();
+    // The planet's programs still linking: the picture waits for them.
+    if (this.warmup?.holds(now)) return;
     const dtMs = Math.min(100, now - this.lastFrameAt);
     this.lastFrameAt = now;
     // The planet: its stage first (the drop, the landing), then the chart
@@ -3631,15 +3764,21 @@ export class Renderer {
     // Low-hp warning: the vignette turns into a pulsing red frame under 30
     // percent health, scaling up as death gets closer.
     const hpFrac = selfUnit && !selfUnit.dead ? selfUnit.hp / selfUnit.maxHp : 1;
-    if (hpFrac < 0.3) {
-      this.lowHpActive = true;
-      const danger = 1 - hpFrac / 0.3;
-      const a = (0.22 + 0.18 * danger + 0.1 * Math.sin(now * 0.008)) * (0.6 + 0.4 * danger);
-      this.vignette.style.background = `radial-gradient(ellipse at center, transparent 45%, rgba(150,20,10,${a.toFixed(3)}) 100%)`;
+    const lowHp = lowHealthOpacity(hpFrac, now);
+    if (lowHp !== null) {
+      if (!this.lowHpActive) {
+        this.lowHpActive = true;
+        // Its own layer while it pulses: an opacity change then repaints
+        // nothing.
+        this.lowHpFrame.style.willChange = 'opacity';
+        this.vignette.style.visibility = 'hidden';
+      }
+      this.lowHpFrame.style.opacity = lowHp.toFixed(3);
     } else if (this.lowHpActive) {
       this.lowHpActive = false;
-      this.vignette.style.background =
-        'radial-gradient(ellipse at center, transparent 55%, rgba(8,12,5,0.3) 100%)';
+      this.lowHpFrame.style.opacity = '0';
+      this.lowHpFrame.style.willChange = '';
+      this.vignette.style.visibility = '';
     }
 
     this.updateFreeCam(dtMs, followPos);
@@ -3668,6 +3807,8 @@ export class Renderer {
       const restore = this.planet.beginDraw(this.vfx.pooledLights());
       this.gl.render(this.scene, this.camera);
       restore();
+      this.programs.keep(this.gl.info.programs ?? []);
+      this.shown();
       return;
     }
     const eye = this.toScene(target);
@@ -3682,6 +3823,15 @@ export class Renderer {
     this.camera.getWorldDirection(this.camDir);
     this.camDirScene.set(this.camDir.x, this.camDir.y, -this.camDir.z);
     this.gl.render(this.scene, this.camera);
+    this.programs.keep(this.gl.info.programs ?? []);
+    this.shown();
+  }
+
+  // A frame is on the canvas: the first one settles `drawn`.
+  private shown(): void {
+    if (!this.markDrawn) return;
+    this.markDrawn();
+    this.markDrawn = null;
   }
 
   // The planet's chart moved (planet_stage.ts): every point already placed
@@ -3794,10 +3944,13 @@ export class Renderer {
 
   // Full teardown for the same-page return to menu: window listeners off,
   // animation mixers stopped, DOM out, GL context released. Scene objects
-  // are not disposed one by one: losing the context reclaims the GPU side,
-  // and the JS side goes with this instance. The shared champion template
-  // cache (assets.ts) deliberately survives for the next match.
+  // are not disposed one by one: losing the context (closeRenderer, last)
+  // reclaims the GPU side, the kept programs with it, and the JS side goes
+  // with this instance. The shared champion template cache (assets.ts)
+  // deliberately survives for the next match.
   dispose(): void {
+    this.disposed = true;
+    this.shown();
     for (const off of this.cleanups) off();
     this.cleanups.length = 0;
     for (const cv of this.championVisuals.values()) cv.dispose();
@@ -3806,9 +3959,9 @@ export class Renderer {
     this.championVisuals.clear();
     this.fogTexture.dispose();
     this.vignette.remove();
+    this.lowHpFrame.remove();
     this.frost.remove();
     this.gl.domElement.remove();
-    this.gl.dispose();
     this.towerShots.dispose();
     this.towerReach.dispose();
     this.planet?.dispose();
@@ -3817,5 +3970,6 @@ export class Renderer {
     this.voidmaulRifts.dispose();
     this.voidmaulImpacts.dispose();
     this.terrain.dispose();
+    closeRenderer(this.gl);
   }
 }

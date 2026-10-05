@@ -208,6 +208,9 @@ export interface ObsSelf {
   // True while the recall channel runs (additive v0 field). A policy that
   // keeps issuing orders would reset its own channel forever without it.
   recalling?: boolean;
+  // The seconds of a Sapdraught still to drink, 0 when none runs (additive
+  // v0 field): a second one is refused until it reads 0.
+  drinking?: number;
   // When an enemy champion last damaged this champion, in sim seconds;
   // null before the first such hit (additive v0 field). Its own health bar
   // tells a person the same: what a trade back answers.
@@ -443,6 +446,9 @@ export type Action =
   // Sells the item in a bag slot (additive v0 action, ADR 0014): the same
   // rule humans get, at the fountain, for seventy percent of its price.
   | { kind: 'sell'; slot: number }
+  // Drinks the Sapdraught in a bag slot (additive v0 action): the same rule
+  // humans get, anywhere alive, one at a time, free like 'sell'.
+  | { kind: 'drink'; slot: number }
   // Stops and holds (additive v0 action, plan-bots phase 16): the same S
   // humans press, opting out of idle defense until the next order. What a
   // wave freeze stands on. An intention like move, outside the budget.

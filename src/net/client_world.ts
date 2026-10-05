@@ -488,6 +488,12 @@ export class ClientWorld implements IWorld {
     return true;
   }
 
+  drinkItem(_unitId: number, slot: number): boolean {
+    if (this.coach) return false;
+    this.send({ t: 'drink', slot });
+    return true;
+  }
+
   levelAbility(_unitId: number, key: AbilityKey): boolean {
     if (this.coach) return false;
     this.send({ t: 'skill', key });

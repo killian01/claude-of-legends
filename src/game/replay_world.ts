@@ -104,6 +104,9 @@ export class ReplayWorld implements IWorld {
   sellItem(): boolean {
     return false;
   }
+  drinkItem(): boolean {
+    return false;
+  }
   levelAbility(): boolean {
     return false;
   }
