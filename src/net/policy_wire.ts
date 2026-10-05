@@ -46,6 +46,10 @@ export function parseAction(raw: unknown): Action | null {
       return typeof a.slot === 'number' && Number.isInteger(a.slot) && a.slot >= 0
         ? { kind: 'sell', slot: a.slot }
         : null;
+    case 'drink':
+      return typeof a.slot === 'number' && Number.isInteger(a.slot) && a.slot >= 0
+        ? { kind: 'drink', slot: a.slot }
+        : null;
     case 'stop':
       return { kind: 'stop' };
     default:

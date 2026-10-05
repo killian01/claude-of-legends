@@ -152,6 +152,7 @@ export const SEAT_ORDER_KINDS: ReadonlySet<string> = new Set([
   'sigil',
   'buy',
   'sell',
+  'drink',
   'skill',
   'order',
 ]);

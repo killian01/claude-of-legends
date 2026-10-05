@@ -119,6 +119,7 @@ export type ClientMsg =
   | { t: 'sigil'; slot: number; x: number; z: number; y?: number }
   | { t: 'buy'; itemId: string }
   | { t: 'sell'; slot: number }
+  | { t: 'drink'; slot: number }
   | { t: 'skill'; key: AbilityKey }
   | { t: 'chat'; text: string }
   | { t: 'ping'; x: number; z: number }

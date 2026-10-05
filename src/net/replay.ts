@@ -310,6 +310,9 @@ export function applySimCommand(sim: Sim, team: TeamId, unitId: number, msg: Cli
     case 'sell':
       if (typeof msg.slot === 'number') sim.sellItem(unitId, msg.slot);
       break;
+    case 'drink':
+      if (typeof msg.slot === 'number') sim.drinkItem(unitId, msg.slot);
+      break;
     case 'recall':
       sim.startRecall(unitId);
       break;

@@ -11,6 +11,9 @@ export type Status =
   | { kind: 'slow'; until: number; pct: number }
   | { kind: 'root'; until: number }
   | { kind: 'recall'; until: number }
+  // A Sapdraught being drunk (draught.ts): `left` is the health still to
+  // give, at `perSecond`.
+  | { kind: 'draught'; until: number; perSecond: number; left: number }
   | { kind: 'stun'; until: number }
   // Knocked into the air: acts like a stun and renders as a lift.
   | { kind: 'airborne'; until: number }
