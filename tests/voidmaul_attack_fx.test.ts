@@ -4,6 +4,7 @@ import {
   VOIDMAUL_ATTACK_FX_DURATION_S,
   VoidmaulAttackFx,
 } from '../src/render/vfx/voidmaul_attack_fx';
+import { VOIDMAUL_STONE_COUNT } from '../src/sim/combat/voidmaul_stones';
 import { VOIDMAUL_SLAM } from '../src/sim/content/voidmaul_slam';
 
 function rocks(fx: VoidmaulAttackFx): THREE.InstancedMesh[] {
@@ -23,7 +24,7 @@ describe('Voidmaul attack fracture', () => {
     for (const age of [0.05, 0.18, 0.44, 0.81]) stepped.update(age);
     seeked.update(0.81);
     expect(snapshot(seeked)).toEqual(snapshot(stepped));
-    expect(rocks(seeked).reduce((count, mesh) => count + mesh.count, 0)).toBe(128);
+    expect(rocks(seeked).reduce((count, mesh) => count + mesh.count, 0)).toBe(VOIDMAUL_STONE_COUNT);
     const flying = new THREE.Vector3().setFromMatrixPosition(
       new THREE.Matrix4().fromArray(rocks(seeked)[0]!.instanceMatrix.array, 0),
     );
@@ -170,8 +171,8 @@ describe('Voidmaul attack fracture', () => {
           const x = position.x - arena.centerX;
           const z = position.z - arena.centerZ;
           const angle = THREE.MathUtils.euclideanModulo(Math.atan2(z, x), Math.PI * 2);
-          const sector = Math.floor((angle / (Math.PI * 2)) * 16);
-          const band = Math.floor((Math.hypot(x, z) / arena.radius) * 8);
+          const sector = Math.floor((angle / (Math.PI * 2)) * 8);
+          const band = Math.floor((Math.hypot(x, z) / arena.radius) * 4);
           sectors.add(sector);
           bands.add(band);
           cells.add(`${sector}:${band}`);
@@ -179,11 +180,13 @@ describe('Voidmaul attack fracture', () => {
         }
       }
     }
-    expect(sectors.size).toBe(16);
-    expect(bands.size).toBe(8);
-    expect(cells.size).toBe(128);
-    expect(highFlying).toBeGreaterThan(100);
-    expect(large).toBeGreaterThanOrEqual(90);
+    // Eight sectors by four rings: a sparse rain that still reaches every
+    // part of the platform, every stone a block.
+    expect(sectors.size).toBe(8);
+    expect(bands.size).toBe(4);
+    expect(cells.size).toBeGreaterThanOrEqual(24);
+    expect(highFlying).toBeGreaterThan(VOIDMAUL_STONE_COUNT * 0.75);
+    expect(large).toBe(VOIDMAUL_STONE_COUNT);
     for (const age of [0.4, 1.2, 2.1, 4]) fx.update(age);
     seeked.update(4);
     expect(snapshot(fx)).toEqual(snapshot(seeked));
@@ -261,9 +264,9 @@ describe('Voidmaul attack fracture', () => {
           Math.PI * 2,
         );
         const band = Math.floor(
-          (Math.hypot(position.x, position.z - arena.centerZ) / arena.radius) * 8,
+          (Math.hypot(position.x, position.z - arena.centerZ) / arena.radius) * 4,
         );
-        cells.add(`${Math.floor((angle / (Math.PI * 2)) * 16)}:${band}`);
+        cells.add(`${Math.floor((angle / (Math.PI * 2)) * 8)}:${band}`);
         let clearance = Infinity;
         for (let j = 0; j < vertices.count; j++) {
           vertex.fromBufferAttribute(vertices, j).applyMatrix4(matrix);
@@ -273,7 +276,7 @@ describe('Voidmaul attack fracture', () => {
         expect(clearance).toBeCloseTo(0.005, 5);
       }
     }
-    expect(cells.size).toBe(128);
+    expect(cells.size).toBeGreaterThanOrEqual(24);
     expect(left.material.uniforms.uFade!.value).toBe(1);
     expect(right.material.uniforms.uFade!.value).toBe(1);
     const ascendant = new VoidmaulAttackFx(VOIDMAUL_SLAM.ascendantRadius, undefined, 'crush');

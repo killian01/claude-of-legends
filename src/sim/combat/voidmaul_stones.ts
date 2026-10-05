@@ -14,7 +14,11 @@ import { hostile, type Unit } from '../unit';
 import { dealDamage } from './damage';
 import { isUntargetable } from './status';
 
-export const VOIDMAUL_STONE_COUNT = 128;
+// Eight sectors of four rings each: enough to read as a rain over the whole
+// platform, few enough that each block is seen (128 was a blizzard).
+const SECTORS = 8;
+const BANDS = 4;
+export const VOIDMAUL_STONE_COUNT = SECTORS * BANDS;
 const TAU = 6.283185307179586;
 
 // Where the stones come down: the creature's ring, or, off a ring (a test
@@ -63,9 +67,9 @@ export function stoneArena(home: StoneArena | null | undefined, point: Vec2, rad
   return home && home.radius > 0 ? home : { center: point, radius: radius * 2.7 };
 }
 
-// Every one of sixteen sectors gets landings from the center to the rim;
-// every stone starts close to the paw. Larger stones on six of the eight
-// bands, chips on the other two.
+// Every one of eight sectors gets landings from the center to the rim, the
+// rings staggered half a sector so no spoke lines up; every stone starts
+// close to the paw, and every one is a block.
 export function voidmaulStones(
   point: Vec2,
   radius: number,
@@ -76,16 +80,14 @@ export function voidmaulStones(
 ): VoidmaulStone[] {
   const out: VoidmaulStone[] = [];
   for (let i = 0; i < VOIDMAUL_STONE_COUNT; i++) {
-    const band = i % 8;
-    const big = band !== 0 && band !== 3;
-    const size = Math.min(
-      arena.radius * 0.045,
-      radius * (big ? 0.065 + stoneRandom(i + 19) * 0.083 : 0.023 + stoneRandom(i + 19) * 0.034),
-    );
-    const radial = [0.065, 0.195, 0.325, 0.455, 0.585, 0.715, 0.845, 0.97][band]!;
+    const band = i % BANDS;
+    const sector = Math.floor(i / BANDS);
+    const size = Math.min(arena.radius * 0.045, radius * (0.065 + stoneRandom(i + 19) * 0.083));
+    const radial = [0.2, 0.45, 0.7, 0.92][band]! + (stoneRandom(i + 5) - 0.5) * 0.1;
     const margin = size * 1.5 + 0.08;
     const reach = Math.max(0, Math.min(arena.radius - margin, arena.radius * radial));
-    const angle = ((Math.floor(i / 8) + 0.5) / 16) * TAU + (stoneRandom(i + 2) - 0.5) * 0.16;
+    const angle =
+      ((sector + 0.5 + (band % 2) * 0.5) / SECTORS) * TAU + (stoneRandom(i + 2) - 0.5) * 0.5;
     const target = offset(arena.center, heading(arena.center, angle), reach);
     const originAngle = i * 2.399963 + stoneRandom(i + 10) * 0.5;
     const from = paws ? paws[i % 2]! : point;
