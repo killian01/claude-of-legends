@@ -150,7 +150,7 @@ describe('the Voidmaul slam rain of stones', () => {
     );
     const matrix = new THREE.Matrix4();
     const at = new THREE.Vector3();
-    for (const i of [0, 9, 37, 101]) {
+    for (const i of [0, 9, 17, 31]) {
       const s = stones[i]!;
       fx.update(s.born + s.flight);
       meshes[i % 4]!.getMatrixAt(Math.floor(i / 4), matrix);

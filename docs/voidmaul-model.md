@@ -195,7 +195,8 @@ ground anchor independently of movement or death. It owns a bounded set of
 effects and releases evicted, expired and teardown resources.
 
 The broken rock is part of the attack. [The stone rain](../src/sim/combat/voidmaul_stones.ts)
-lays out 128 stones, 96 of them larger blocks, from a fixed integer hash and
+lays out 32 blocks (eight sectors by four rings; 128 read as a blizzard),
+from a fixed integer hash and
 exact angles: each leaves the ground near the paw and lands on its own point
 of the ring between about 2 and 3.3 s after the contact. A stone that comes
 down on a hostile body deals 40% of a slam's hit (physical, and the health
@@ -207,7 +208,7 @@ reads from `map.rings`, so both build the same rain from the same slam event.
 
 [The rock effect](../src/render/vfx/voidmaul_attack_fx.ts) draws those very
 stones, with rotation and gravity, each arc meeting the ground at its sim
-target on its sim landing time, then a short bounce and roll. The debris covers sixteen sectors and eight radial bands
+target on its sim landing time, then a short bounce and roll. The debris covers eight sectors and four staggered rings
 of the whole authored ring. [The arena helper](../src/render/voidmaul_arena.ts)
 reads the actual platform centre and radius from `map.rings`, independently
 of the offset paw contact. In Star Orchard revision 123 the radius is 16.35
@@ -276,7 +277,7 @@ right and 0.246527 metres back, and the left has the opposite offsets. These
 values live beside the original attack's calibration in match content and
 scale with the Ascendant body. [The paired impact effect](../src/render/vfx/voidmaul_crush_paw_fx.ts)
 puts a scar and pressure burst at each sole, emits debris from both feet and
-strengthens the central wave. Its 128 rocks still cover the whole authored
+strengthens the central wave. Its 32 blocks still cover the whole authored
 arena and settle on the sampled terrain. They are the same stone rain as the
 slam's, hurting what they land on; the sim throws the even stones from under
 the left sole and the odd ones from under the right, and the `voidmaul_slam`

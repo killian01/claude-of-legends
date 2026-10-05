@@ -183,7 +183,7 @@ describe('resolved Voidmaul impacts', () => {
         rocks++;
       }
     });
-    expect(rocks).toBeGreaterThanOrEqual(100);
+    expect(rocks).toBe(VOIDMAUL_STONE_COUNT);
     expect(farthest).toBeGreaterThan(14);
     impacts.dispose();
   });
