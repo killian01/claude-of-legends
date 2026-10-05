@@ -192,8 +192,19 @@ function royaleEvents(
         if (sees(ev.unitId)) out.push({ e: 'cast', unitId: ev.unitId });
         break;
       case 'attack':
-        if (sees(ev.unitId)) out.push({ e: 'atk', unitId: ev.unitId, targetId: ev.targetId });
+        if (sees(ev.unitId))
+          out.push({
+            e: 'atk',
+            unitId: ev.unitId,
+            targetId: ev.targetId,
+            ...(ev.voidmaulAttack ? { voidmaulAttack: ev.voidmaulAttack } : {}),
+          });
         break;
+      case 'voidmaul_slam': {
+        const { type: _type, ...impact } = ev;
+        if (sees(ev.unitId)) out.push({ e: 'voidmaul_slam', ...impact });
+        break;
+      }
       case 'royale_land':
         if (sees(ev.unitId)) out.push({ e: 'royale_land', unitId: ev.unitId });
         break;

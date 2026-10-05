@@ -136,6 +136,7 @@ function materializeUnit(s: SnapUnit): Unit {
     ascendant: s.asc === 1,
     campKind: s.ck ?? null,
     bitePct: 0,
+    voidmaulAttackCount: 0,
     play: null,
     coachOrder: null,
     coachOrderSeenAt: 0,

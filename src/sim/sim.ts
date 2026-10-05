@@ -23,6 +23,7 @@ import {
   isStunned,
   sightFactor,
 } from './combat/status';
+import type { VoidmaulSlamEvent } from './combat/voidmaul_slam';
 import { type ChampionDef, DEFAULT_CHAMPION_ID, homeLane } from './content/champions';
 import { ITEMS } from './content/items';
 import { GAME_MAP, type GameMap, type LaneId, type WardenPit } from './content/map';
@@ -30,6 +31,7 @@ import { type AspectId, type CreatureId, RING_GOLD_EACH, TIDE_PERIOD_S } from '.
 import { PLANET_NEUTRAL_SCALE, RING_RISE_AT_S, WARDEN_RISE_AT_S } from './content/royale_events';
 import { SIGILS } from './content/sigils';
 import { clampSkin } from './content/skins';
+import type { VoidmaulAttackKind } from './content/voidmaul_slam';
 import { stepDashes } from './dashes';
 import { hasDecisionToken, spendDecisionToken } from './decision_budget';
 import { startDraught, stepDraughts } from './draught';
@@ -100,7 +102,8 @@ import { stepZones } from './zones';
 
 export type SimEvent =
   | { type: 'damage'; sourceId: number; targetId: number; amount: number; dtype: DamageType }
-  | { type: 'attack'; unitId: number; targetId: number }
+  | { type: 'attack'; unitId: number; targetId: number; voidmaulAttack?: VoidmaulAttackKind }
+  | VoidmaulSlamEvent
   | { type: 'death'; unitId: number; killerId: number }
   | { type: 'cast'; unitId: number; key: AbilityKey }
   | { type: 'sigil'; unitId: number; slot: number }

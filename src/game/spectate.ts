@@ -117,7 +117,12 @@ export function startSpectator(
       lastTick = performance.now();
       renderer.onSimTick();
       minimap.update();
-      if (notes && (notes.casts.length > 0 || notes.attacks.length > 0)) {
+      if (
+        notes &&
+        (notes.casts.length > 0 ||
+          notes.attacks.length > 0 ||
+          (notes.voidmaulSlams?.length ?? 0) > 0)
+      ) {
         renderer.onCombatNotes(notes);
       }
       if (world.winner !== null) stopMusic();

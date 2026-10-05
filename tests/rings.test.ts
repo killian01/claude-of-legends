@@ -19,6 +19,7 @@ import {
   CREATURES,
   FAVOR_MAX_STACKS,
   RING_GOLD_EACH,
+  VOIDMAUL_SLAM_WINDUP_S,
   WRATH_DURATION_S,
 } from '../src/sim/content/rings';
 import {
@@ -188,6 +189,59 @@ describe('the rings', () => {
     const ring = sim.map.rings!.find((r) => r.id === 'top')!;
     expect(Math.hypot(v.pos.x - ring.x, v.pos.z - ring.z)).toBeLessThan(1);
     expect(v.attackTargetId).toBeNull();
+  });
+
+  it('slams on its authored beat: the Voidmaul lands 1.75 s after the swing, unless stepped out of', () => {
+    expect(CREATURES.voidmaul.body.windupS).toBe(VOIDMAUL_SLAM_WINDUP_S);
+    // A slam's period holds its whole clip, and its damage over time is
+    // the one the faster cadence it replaced dealt.
+    for (const body of [CREATURES.voidmaul.body, CREATURES.voidmaul.ascendant.body]) {
+      expect(1 / body.attackSpeed).toBeGreaterThanOrEqual(3.17);
+    }
+    expect(CREATURES.voidmaul.body.ad * 0.3).toBeCloseTo(14 * 0.5, 0);
+
+    const sim = orchardSim();
+    const v = rise(sim, 'voidmaul');
+    const target = sim.addChampion(0, { x: v.pos.x + 2.5, z: v.pos.z });
+    const provoke = () => {
+      v.lastDamagedAt = sim.time;
+      v.attackTargetId = target.id;
+    };
+    const swing = () => {
+      for (let i = 0; i < 6 * TICKS_PER_S && !v.pendingAttack; i++) {
+        provoke();
+        sim.tick();
+      }
+      expect(v.pendingAttack).not.toBeNull();
+      return sim.time;
+    };
+
+    // Standing in reach: nothing lands until the paw does.
+    const start = swing();
+    const hp = target.hp;
+    while (sim.time < start + VOIDMAUL_SLAM_WINDUP_S - 0.1) {
+      provoke();
+      sim.tick();
+      expect(target.hp).toBe(hp);
+    }
+    for (let i = 0; i < 4; i++) {
+      provoke();
+      sim.tick();
+    }
+    expect(target.hp).toBeLessThan(hp);
+    const pawLoss = hp - target.hp;
+
+    // Walking out of reach while the paw rises: the paw misses. A stone of
+    // its rain may still come down on the walker, a lesser share of a hit.
+    for (let i = 0; i < 4 * TICKS_PER_S; i++) sim.tick();
+    target.hp = target.maxHp;
+    swing();
+    sim.orderMove(target.id, target.pos.x + 12, target.pos.z);
+    for (let i = 0; i < 2 * TICKS_PER_S; i++) {
+      v.lastDamagedAt = sim.time;
+      sim.tick();
+    }
+    expect(target.maxHp - target.hp).toBeLessThan(pawLoss * 0.5);
   });
 
   it('left alone while hurt, heals fast rather than snapping to full', () => {

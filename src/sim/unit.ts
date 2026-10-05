@@ -4,6 +4,7 @@
 
 import type { CoachOrder } from './coach';
 import type { Status } from './combat/status';
+import type { StoneArena, StoneRain } from './combat/voidmaul_stones';
 import type { CampDef, CampKind } from './content/camps';
 import type { ChampionDef } from './content/champions';
 import type { LaneId } from './content/map';
@@ -15,6 +16,7 @@ import {
   type CreatureDef,
   type CreatureId,
 } from './content/rings';
+import type { VoidmaulAttackKind } from './content/voidmaul_slam';
 import { WARDEN_BODY, WARDEN_GOLD_BOUNTY } from './content/warden';
 import type { DashState } from './dashes';
 import { type FavorStacks, NO_FAVORS } from './favors';
@@ -128,6 +130,9 @@ export interface Unit {
   // attack damage, true damage (content/rings.ts, CreatureBody): the
   // neutral bodies' rule; zero for everyone else.
   bitePct: number;
+  // Completed Voidmaul contacts; parity chooses its next authored strike.
+  // Plain unit state so a replay checkpoint preserves the sequence.
+  voidmaulAttackCount: number;
   // The playbook play acting for this seat right now (bots, ADR 0013),
   // null for seats played by hand. Presentation and reports read it; no
   // sim rule ever does.
@@ -154,7 +159,22 @@ export interface Unit {
   // An auto-attack strike winding up: locked to its target, landing at
   // resolveAt. Moving, a stun, a dash, or losing the target cancels it and
   // refunds the attack timer (the orb-walk rule).
-  pendingAttack: { targetId: number; resolveAt: number; start: Vec2 } | null;
+  pendingAttack: {
+    targetId: number;
+    resolveAt: number;
+    start: Vec2;
+    voidmaulSlam?: {
+      point: Vec2;
+      radius: number;
+      kind?: VoidmaulAttackKind;
+      paws?: [Vec2, Vec2];
+    };
+  } | null;
+  // A ring creature's platform, set at its rise (rings.ts): where the
+  // Voidmaul's stones come down (combat/voidmaul_stones.ts).
+  ringHome?: StoneArena;
+  // The Voidmaul's stones still in the air, slam by slam.
+  stoneRains?: StoneRain[];
   // Remaining waypoints toward the current move order; empty when idle.
   path: Vec2[];
   // Progression and economy (champions).
@@ -276,6 +296,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     ascendant: false,
     campKind: null,
     bitePct: 0,
+    voidmaulAttackCount: 0,
     play: null,
     coachOrder: null,
     coachOrderSeenAt: 0,

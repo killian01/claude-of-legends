@@ -37,6 +37,7 @@ import { buildThumbStickView } from '../ui/thumb_stick_view';
 import { buildTouchBar } from '../ui/touch_bar';
 import { unlearnedLine } from '../ui/unlearned_line';
 import type { IWorld } from '../world_api';
+import type { AttackNote } from './attack_notes';
 import { castSoundOf } from './champion_sounds';
 import { installCursorLock } from './cursor_lock';
 import type { PostMatchAction } from './flow';
@@ -53,6 +54,7 @@ import { playCastSfx, playSfx, preloadSfx } from './sfx';
 import { aimedPoint, quickPoint } from './thumb_cast';
 import { leadPoint, STICK_LEAD_M, type StickOrder, shouldResend } from './thumb_stick';
 import { setupTouchControls } from './touch';
+import type { VoidmaulSlamNote } from './voidmaul_slam_notes';
 
 export interface KillNote {
   unitId: number;
@@ -80,7 +82,8 @@ export interface WorldNotes {
   // Damage the player dealt this tick, for personal combat numbers.
   hits: readonly { targetId: number; amount: number }[];
   // Auto-attacks fired by visible units, for swing animations.
-  attacks: readonly { unitId: number; targetId: number }[];
+  attacks: readonly AttackNote[];
+  voidmaulSlams?: readonly VoidmaulSlamNote[];
   // The battle royale's events (net/royale_client.ts), for the HUD's
   // notices and its first steps; absent in a 5v5.
   royale?: readonly RoyaleNote[];
@@ -728,7 +731,8 @@ export function startPresentation(
         notes.golds.length > 0 ||
         notes.casts.length > 0 ||
         notes.hits.length > 0 ||
-        notes.attacks.length > 0
+        notes.attacks.length > 0 ||
+        (notes.voidmaulSlams?.length ?? 0) > 0
       )
         renderer.onCombatNotes(notes);
     }
