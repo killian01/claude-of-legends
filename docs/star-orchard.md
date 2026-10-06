@@ -125,9 +125,10 @@ ground.
   pointer also draws at 1.5 pixels per CSS pixel at most, into a 1024
   shadow map (`renderQualityFor` in `src/game/map_quality.ts`).
 - Fill: the Star Orchard's ground shades at about two and a half times the
-  planet's cost a pixel. A device that cannot keep its screen's rate steps
-  its pixel ratio down to 0.75, then the ground's shadows, and its next
-  match drops the effects' pooled lights, then the antialiasing
+  planet's cost a pixel. A device that draws under three quarters of its
+  screen's rate steps its pixel ratio down toward 0.75, then the ground's
+  shadows, and a match spent mostly below its best makes the next one drop
+  the effects' pooled lights, then the antialiasing
   (`src/game/quality_ladder.ts`, `src/game/quality_memory.ts`). The light
   model buys no frames on that account (measured the same as the full
   one), so the ladder never reaches for it. `?quality=full` holds a match
