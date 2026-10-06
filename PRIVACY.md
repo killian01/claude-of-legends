@@ -166,11 +166,12 @@ gave a newcomer nothing to do. The country is the coarsest place there is,
 and it is only ever read beside the round trip it explains.
 
 Your browser also keeps, in its own storage and for itself alone, how
-finely its last match of each kind was drawn and the rate your screen
-refreshes at, one line under `col.quality` (`src/game/quality_memory.ts`),
-so that a slow machine's next match starts at the step that suited it
-rather than relearning it. It is never sent anywhere; the step the match
-stands on is what the seat line above carries.
+finely its last match of each kind was drawn (how many steps below your
+screen's best, and that best) and the rate your screen refreshes at, one
+line under `col.quality` (`src/game/quality_memory.ts`), so that a slow
+machine's next match starts near the step that suited it rather than
+relearning it. It is never sent anywhere; the step the match stands on is
+what the seat line above carries.
 
 ## What you write in the feedback box
 
