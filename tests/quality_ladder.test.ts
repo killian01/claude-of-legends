@@ -1,10 +1,13 @@
 // How finely a match is drawn, stepped by the frame rate
-// (src/game/quality_ladder.ts): a machine that holds its screen's rate is
-// never touched, whatever that rate is; a weak GPU steps down until it
-// holds it and stays there; a page held back by something else than its
-// pixels gets one trial, undone; the ladder steps back up slowly, even
-// from a rung it holds short of room, and settles rather than swings;
-// stalls, hitches, hidden tabs and a match's first seconds do not count.
+// (src/game/quality_ladder.ts): a machine that draws three quarters of its
+// screen's rate or more is never touched, whatever that rate is; a weak GPU
+// steps down while the median of its last eight windows is under that line
+// and the step gains, then stays; a page held back by something else than
+// its pixels gets one trial, undone; the ladder steps back up after three
+// calm minutes when the rung above holds the line, and once a step up kept
+// is given up it stays put; stalls, hitches, hidden tabs and a match's first
+// seconds do not count. Whole matches on realistic machines are in
+// quality_scenarios.test.ts.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -12,92 +15,26 @@ import {
   LADDER_RULES,
   ladderRungs,
   PHONE_RATIO_FLOOR,
-  QualityLadder,
-  type Rung,
   refreshHz,
 } from '../src/game/quality_ladder';
+import {
+  deepest,
+  drive,
+  fillBound,
+  ladderFor,
+  type Machine,
+  SETTLE,
+  scriptBound,
+  swings,
+} from './quality_machine';
 
-// A machine: its screen's refresh, and the work a frame takes on a rung.
-// The browser begins a frame on a refresh and hands its time over; a
-// frame's work starts once the one before is done, so the rate follows
-// the work while the times stay on the refreshes (what Chrome does with a
-// frame slower than one refresh: intervals of one and two refreshes).
-interface Machine {
-  refreshMs: number;
-  workMs: (rung: Rung, at: number) => number;
-}
+const P = 1000 / 60;
+// The line under which a window is short on a 60 Hz screen: 45.
+const LINE = LADDER_RULES.shortShare * 60;
 
-interface Run {
-  at: number;
-  // Every rung change, with when it happened.
-  changes: { at: number; index: number }[];
-  // The rungs the ladder settled on, in order: they move only when a step
-  // is kept.
-  settled: number[];
-  // Frames a second over the run's last ten seconds.
-  lastFps: number;
-}
-
-// Steps up kept and then given up for the rung below.
-function swings(run: Run): number {
-  const s = run.settled;
-  let n = 0;
-  for (let i = 2; i < s.length; i++) if (s[i - 1]! < s[i - 2]! && s[i]! > s[i - 1]!) n++;
-  return n;
-}
-
-function drive(
-  ladder: QualityLadder,
-  m: Machine,
-  seconds: number,
-  from = 0,
-  scriptShare?: number,
-): Run {
-  let at = from;
-  let free = from;
-  const end = from + seconds * 1000;
-  const changes: Run['changes'] = [];
-  const settled = [ladder.settled];
-  const stamps: number[] = [];
-  while (at < end) {
-    const work = m.workMs(ladder.rung, at);
-    free = Math.max(free, at) + work;
-    at = Math.max(at + m.refreshMs, Math.floor(free / m.refreshMs) * m.refreshMs);
-    const before = ladder.index;
-    ladder.frame(at, scriptShare === undefined ? undefined : scriptShare * work);
-    if (ladder.index !== before) changes.push({ at, index: ladder.index });
-    if (ladder.settled !== settled.at(-1)) settled.push(ladder.settled);
-    stamps.push(at);
-  }
-  const tail = stamps.filter((s) => s > end - 10_000);
-  const lastFps = tail.length > 1 ? ((tail.length - 1) * 1000) / (tail.at(-1)! - tail[0]!) : 0;
-  return { at, changes, settled, lastFps };
-}
-
-// A GPU held back by its pixels: the work goes with the pixels drawn, and
-// shadows left out take 15 percent off.
-function fillBound(refreshHz: number, msAtTop: number, top: number): Machine {
-  return {
-    refreshMs: 1000 / refreshHz,
-    workMs: (r) => msAtTop * (r.ratio / top) ** 2 * (r.shadows ? 1 : 0.85),
-  };
-}
-
-// A page held back by its script: the same work on every rung.
-const scriptBound = (refreshHz: number, ms: number): Machine => ({
-  refreshMs: 1000 / refreshHz,
-  workMs: () => ms,
-});
-
-const SETTLE = 10_000;
-// `known`: the screen's rate known before the match (the page's lighter
-// frames, the browser's memory).
-const ladderFor = (top: number, index = 0, known: number | null = null) =>
-  new QualityLadder(ladderRungs(top, DESK_RATIO_FLOOR), {
-    index,
-    known,
-    settleUntil: SETTLE,
-  });
+// The steps up in a run's changes.
+const ups = (changes: { at: number; index: number }[]) =>
+  changes.filter((c, i) => c.index < (i === 0 ? 0 : changes[i - 1]!.index));
 
 describe('the rungs', () => {
   it('step the ratio down to the floor, then leave the shadows out', () => {
@@ -166,7 +103,7 @@ describe("the screen's refresh", () => {
     const run = drive(l, fillBound(60, 33.4, 1.25), 120);
     expect(l.screenHz).toBeCloseTo(60, 0);
     expect(run.changes[0]).toEqual({ at: expect.any(Number), index: 1 });
-    expect(run.lastFps).toBeGreaterThan(LADDER_RULES.shortShare * 60);
+    expect(run.lastFps).toBeGreaterThan(LINE);
   });
 
   it('is kept only when the frames came slower than it', () => {
@@ -195,8 +132,16 @@ describe('a machine that holds its screen', () => {
     const l = ladderFor(1.25);
     // Every thirtieth frame misses its refresh.
     let n = 0;
-    const m: Machine = { refreshMs: 1000 / 60, workMs: () => (++n % 30 === 0 ? 30 : 12) };
+    const m: Machine = { refreshMs: P, workMs: () => (++n % 30 === 0 ? 30 : 12) };
     expect(drive(l, m, 600).changes).toEqual([]);
+  });
+
+  it('is never stepped down at 46 on a 60 Hz screen, its pixels or not', () => {
+    // Three quarters of the screen's rate is playable: no step is tried.
+    for (const m of [fillBound(60, 1000 / 46, 1.25), scriptBound(60, 1000 / 46)]) {
+      const l = ladderFor(1.25, 0, 60);
+      expect(drive(l, m, 600).changes).toEqual([]);
+    }
   });
 
   it('is never stepped down on a 144 Hz screen drawing 70', () => {
@@ -223,31 +168,42 @@ describe('a machine that holds its screen', () => {
 });
 
 describe('a weak GPU', () => {
-  it('steps down until it holds the screen, and stays there', () => {
-    // 22 frames a second at the top, as the seat reports said.
+  it('steps down until it holds the line, and stays there', () => {
+    // 22 frames a second at the top, as the seat reports said: 35 a rung
+    // down, 48 two rungs down.
     const l = ladderFor(1.25);
     const run = drive(l, fillBound(60, 45, 1.25), 600);
     expect(l.screenHz).toBeCloseTo(60, 0);
-    // Down a rung every few seconds once the first ten are past.
-    expect(run.changes.slice(0, 3)).toEqual([
+    // Down a rung once eight windows are in, the next as soon as the
+    // first is kept.
+    expect(run.changes.slice(0, 2)).toEqual([
       { at: expect.any(Number), index: 1 },
       { at: expect.any(Number), index: 2 },
-      { at: expect.any(Number), index: 3 },
     ]);
-    expect(run.changes[2]!.at).toBeLessThan(30_000);
-    expect(l.index).toBe(3);
-    expect(l.deepest).toBe(3);
-    expect(run.lastFps).toBeGreaterThan(LADDER_RULES.shortShare * 60);
+    expect(run.changes[1]!.at).toBeLessThan(SETTLE + 20_000);
+    expect(l.index).toBe(2);
+    expect(deepest(run)).toBe(2);
+    expect(run.lastFps).toBeGreaterThan(LINE);
     // Then only a look one rung up now and then, undone within seconds,
-    // never sooner than a minute after the last step down, rarer each time.
-    const looks = run.changes.slice(3);
+    // never sooner than three minutes after the last step down, rarer
+    // each time.
+    const looks = run.changes.slice(2);
+    expect(looks.length).toBeGreaterThan(0);
     expect(looks.length).toBeLessThanOrEqual(4);
     for (let i = 0; i < looks.length; i += 2) {
-      expect(looks[i]!.index).toBe(2);
-      expect(looks[i + 1]!.index).toBe(3);
-      expect(looks[i + 1]!.at - looks[i]!.at).toBeLessThan(5_000);
+      expect(looks[i]!.index).toBe(1);
+      expect(looks[i + 1]!.index).toBe(2);
+      expect(looks[i + 1]!.at - looks[i]!.at).toBeLessThan(12_000);
     }
-    expect(looks[0]!.at - run.changes[2]!.at).toBeGreaterThanOrEqual(LADDER_RULES.upAfterDownMs);
+    expect(looks[0]!.at - run.changes[1]!.at).toBeGreaterThanOrEqual(180_000);
+  });
+
+  it('at 30 frames a second steps one rung, and stays there', () => {
+    const l = ladderFor(1.25, 0, 60);
+    const run = drive(l, fillBound(60, 1000 / 30, 1.25), 600);
+    expect(run.changes[0]).toEqual({ at: expect.any(Number), index: 1 });
+    expect(run.settled).toEqual([0, 1]);
+    expect(run.lastFps).toBeGreaterThan(LINE);
   });
 
   it('steps past a rung that brings no frame under a refresh', () => {
@@ -255,25 +211,23 @@ describe('a weak GPU', () => {
     // waits for its refresh shows no gain a rung down, two rungs down it
     // holds 60.
     const l = ladderFor(1.25, 0, 60);
-    const m: Machine = { refreshMs: 1000 / 60, workMs: (r) => (r.ratio >= 1 ? 33.4 : 12) };
+    const m: Machine = { refreshMs: P, workMs: (r) => (r.ratio >= 1 ? 33.4 : 12) };
     const run = drive(l, m, 300);
     // Through 1 on the way, kept at 2; a look back up now and then.
     expect(run.changes.slice(0, 2).map((c) => c.index)).toEqual([1, 2]);
     expect(run.changes.slice(2).every((c, i) => c.index === (i % 2 === 0 ? 1 : 2))).toBe(true);
-    expect(l.settled).toBe(2);
-    expect(l.deepest).toBe(2);
-    expect(run.lastFps).toBeGreaterThan(LADDER_RULES.shortShare * 60);
+    expect(run.settled).toEqual([0, 2]);
+    expect(run.lastFps).toBeGreaterThan(LINE);
   });
 
-  it('does not walk down for a slowdown its pixels have no part in', () => {
-    // Twelve seconds at 45 frames a second, one refresh and two, whatever
-    // the rung: one rung tried, undone.
+  it('goes one rung past a rung that gains nothing, never two', () => {
+    // Two refreshes a frame down to the floor: a rung tried, one further,
+    // and both undone.
     const l = ladderFor(1.25, 0, 60);
-    const m: Machine = {
-      refreshMs: 1000 / 60,
-      workMs: (_r, at) => (at > 40_000 && at < 52_000 ? 22 : 10),
-    };
-    expect(drive(l, m, 120).changes.map((c) => c.index)).toEqual([1, 0]);
+    const m: Machine = { refreshMs: P, workMs: (r) => (r.shadows ? 33.4 : 12) };
+    const run = drive(l, m, 120);
+    expect(run.changes.map((c) => c.index)).toEqual([1, 2, 0]);
+    expect(run.settled).toEqual([0]);
   });
 
   it('goes as far as the shadows when the pixels are not enough', () => {
@@ -286,29 +240,31 @@ describe('a weak GPU', () => {
   it('starts where an earlier match left it', () => {
     const l = ladderFor(1.25, 2, 60);
     expect(l.rung).toEqual({ ratio: 0.85, shadows: true });
-    // Holding the screen there, short one rung up: no step down, and a
-    // single look up in five minutes.
-    const run = drive(l, fillBound(60, 34, 1.25), 300);
+    // Holding the line there, short of it one rung up: no step down, and
+    // a single look up in five minutes.
+    const run = drive(l, fillBound(60, 40, 1.25), 300);
     expect(l.index).toBe(2);
-    expect(run.changes.length).toBeLessThanOrEqual(2);
+    expect(run.changes.length).toBe(2);
     expect(run.changes.every((c) => c.index <= 2)).toBe(true);
   });
 
-  it('steps back up once the fight is over, one rung at a time', () => {
+  it('steps back up after three calm minutes, one rung at a time', () => {
+    // 22 frames a second at the top for a minute and a half, then light.
     const l = ladderFor(1.25);
     let heavy = true;
     const m: Machine = {
-      refreshMs: 1000 / 60,
-      workMs: (r) => (heavy ? 30 : 8) * (r.ratio / 1.25) ** 2,
+      refreshMs: P,
+      workMs: (r) => (heavy ? 45 : 8) * (r.ratio / 1.25) ** 2,
     };
     let run = drive(l, m, 90);
-    const down = l.index;
-    expect(down).toBeGreaterThan(0);
+    expect(l.index).toBe(2);
+    const down = run.changes[1]!.at;
     heavy = false;
-    run = drive(l, m, 25, run.at);
-    expect(l.index).toBe(down - 1);
-    drive(l, m, 120, run.at);
-    expect(l.index).toBe(0);
+    run = drive(l, m, 400, run.at);
+    expect(run.changes.map((c) => c.index)).toEqual([1, 0]);
+    // Three minutes on each rung before the look up, and its trial.
+    expect(run.changes[0]!.at - down).toBeGreaterThan(180_000);
+    expect(run.changes[1]!.at - run.changes[0]!.at).toBeGreaterThan(180_000);
   });
 
   it('holds a rung when stepping up brings the slow frames back, longer each time', () => {
@@ -317,23 +273,23 @@ describe('a weak GPU', () => {
     const l = ladderFor(1.25);
     const run = drive(l, fillBound(60, 25, 1.25), 1800);
     expect(l.index).toBe(1);
-    const ups = run.changes.filter((c, i) => c.index < (i === 0 ? 0 : run.changes[i - 1]!.index));
-    expect(ups.length).toBeGreaterThan(0);
-    expect(ups.length).toBeLessThanOrEqual(3);
-    const gaps = ups.slice(1).map((u, i) => u.at - ups[i]!.at);
+    const looks = ups(run.changes);
+    expect(looks.length).toBeGreaterThan(0);
+    expect(looks.length).toBeLessThanOrEqual(3);
+    const gaps = looks.slice(1).map((u, i) => u.at - looks[i]!.at);
     for (let i = 1; i < gaps.length; i++) expect(gaps[i]!).toBeGreaterThan(gaps[i - 1]!);
   });
 });
 
 describe('a step up', () => {
-  it('is undone when it leaves the frames hovering just short', () => {
-    // Room to spare one rung down; at the top the rate swings about the
-    // line, a window over it and the next under.
+  it('is undone when the frames on the rung above are short of the line', () => {
+    // Room to spare one rung down; at the top the rate swings about 44, a
+    // window at 40 and the next at 48.
     const l = ladderFor(1.25, 1, 60);
     const m: Machine = {
-      refreshMs: 1000 / 60,
+      refreshMs: P,
       workMs: (r, at) =>
-        r.ratio < 1.25 ? 12 : 1000 / (49.5 + 4 * Math.sign(Math.sin((at / 1000) * Math.PI))),
+        r.ratio < 1.25 ? 12 : 1000 / (44 + 4 * Math.sign(Math.sin((at / 1000) * Math.PI))),
     };
     const run = drive(l, m, 600);
     expect(l.index).toBe(1);
@@ -344,58 +300,38 @@ describe('a step up', () => {
     }
   });
 
+  it('is kept when the frames on the rung above hold the line', () => {
+    // At the top the rate swings about 49, never under 45.
+    const l = ladderFor(1.25, 1, 60);
+    const m: Machine = {
+      refreshMs: P,
+      workMs: (r, at) =>
+        r.ratio < 1.25 ? 12 : 1000 / (49.5 + 4 * Math.sign(Math.sin((at / 1000) * Math.PI))),
+    };
+    expect(drive(l, m, 600).changes.map((c) => c.index)).toEqual([0]);
+  });
+
   it('comes to a page that holds its rung short of room, for minutes on end', () => {
-    // 54 frames a second whatever the rung, 0.9 of the screen: never
-    // short, never room. Started two rungs down by an earlier match, it
-    // climbs back to the top within the match and stays.
+    // 54 frames a second whatever the rung. Started two rungs down by an
+    // earlier match, it climbs back to the top within the match and stays.
     const l = ladderFor(1.25, 2, 60);
     const run = drive(l, scriptBound(60, 1000 / 54), 1800);
     expect(l.index).toBe(0);
     expect(run.changes.map((c) => c.index)).toEqual([1, 0]);
-    expect(l.deepest).toBeNull();
   });
 
-  it('settles when the rung above hovers just over the line', () => {
-    // Room to spare one rung down; at the top each second draws at 47 to
-    // 56, a mean just over the short line with runs under it now and
-    // then. A step up kept there and then given up is a swing: at most
-    // one in half an hour, whatever the draw. The rung the ladder has
-    // settled on moves only when a step is kept.
-    for (let seed = 1; seed <= 6; seed++) {
-      let x = seed * 7919;
-      const rates = Array.from({ length: 1800 }, () => {
-        x = (x * 1103515245 + 12345) & 0x7fffffff;
-        return 47 + (9 * x) / 0x7fffffff;
-      });
-      const l = ladderFor(1.25, 0, 60);
-      const m: Machine = {
-        refreshMs: 1000 / 60,
-        workMs: (r, at) => (r.ratio < 1.25 ? 12 : 1000 / rates[Math.floor(at / 1000)]!),
-      };
-      const run = drive(l, m, 1800);
-      expect(swings(run)).toBeLessThanOrEqual(1);
-      // The first step down, then a look now and then, rarer each time.
-      expect(run.changes.length).toBeLessThanOrEqual(7);
-    }
-  });
-
-  it('waits longer after giving up a step up it had kept', () => {
-    // At the top, ten heavy seconds every hundred, the rung below fine
+  it('is not tried again in the match once one kept is given up', () => {
+    // At the top, fifteen heavy seconds every hundred, the rung below fine
     // through them: a step up kept in the calm is given up at the next
-    // spell. Without the swing counted, that would come round every
-    // spell.
+    // spell, and the ladder stays a rung down from then on.
     const m: Machine = {
-      refreshMs: 1000 / 60,
+      refreshMs: P,
       workMs: (r, at) => (r.ratio < 1.25 || at % 100_000 < 85_000 ? 10 : 30),
     };
     const run = drive(ladderFor(1.25, 0, 60), m, 1800);
-    expect(swings(run)).toBeLessThanOrEqual(1);
-    const unswung = new QualityLadder(
-      ladderRungs(1.25, DESK_RATIO_FLOOR),
-      { index: 0, known: 60, settleUntil: SETTLE },
-      { ...LADDER_RULES, swingMs: 0 },
-    );
-    expect(swings(drive(unswung, m, 1800))).toBeGreaterThan(5);
+    expect(swings(run)).toBe(1);
+    expect(run.settled).toEqual([0, 1, 0, 1]);
+    expect(run.changes.at(-1)!.index).toBe(1);
   });
 });
 
@@ -404,7 +340,7 @@ describe('a page held back by something else', () => {
     const l = ladderFor(1.25);
     const run = drive(l, scriptBound(60, 36), 600);
     expect(l.index).toBe(0);
-    expect(l.deepest).toBeNull();
+    expect(run.settled).toEqual([0]);
     // One rung each time: its frames came one and two refreshes apart.
     expect(run.changes.every((c) => c.index <= 1)).toBe(true);
     const trials = run.changes.filter((c) => c.index === 1);
@@ -415,7 +351,7 @@ describe('a page held back by something else', () => {
 
   it('gets no trial at all when its own script fills the frame', () => {
     const l = ladderFor(1.25);
-    expect(drive(l, scriptBound(60, 36), 600, 0, 0.9).changes).toEqual([]);
+    expect(drive(l, { ...scriptBound(60, 36), scriptShare: 0.9 }, 600).changes).toEqual([]);
   });
 });
 
@@ -428,7 +364,7 @@ describe('what does not count', () => {
       at += 1000;
       l.frame(at);
       for (let k = 0; k < 60; k++) {
-        at += 1000 / 60;
+        at += P;
         l.frame(at);
       }
     }
@@ -440,14 +376,13 @@ describe('what does not count', () => {
     // 200 ms (a program linking, a collection): under a stall's length,
     // but one frame in a window, not its rate.
     const l = ladderFor(1.25, 0, 60);
-    const p = 1000 / 60;
     let at = 0;
     let hitchAt = 30_000;
     const changes: number[] = [];
     while (at < 120_000) {
       const hitch = at >= hitchAt && hitchAt < 33_000;
       if (hitch) hitchAt += 1000;
-      at += hitch ? 200 : p;
+      at += hitch ? 200 : P;
       l.frame(at);
       if (changes.at(-1) !== l.index) changes.push(l.index);
     }
@@ -455,10 +390,10 @@ describe('what does not count', () => {
   });
 
   it('frames that miss their refresh often are the rate, not hitches', () => {
-    // 22 ms a frame: one interval in three two refreshes long, so most of
-    // them are one refresh, and the rate is 45, short.
+    // 26 ms a frame: most intervals one refresh, the rest two, and the
+    // rate is 38, short.
     const l = ladderFor(1.25, 0, 60);
-    expect(drive(l, fillBound(60, 22, 1.25), 30).changes[0]).toEqual({
+    expect(drive(l, fillBound(60, 26, 1.25), 30).changes[0]).toEqual({
       at: expect.any(Number),
       index: 1,
     });
@@ -466,11 +401,11 @@ describe('what does not count', () => {
 
   it('a sudden steady drop is the frame rate, not a run of stalls', () => {
     // 60 frames a second, then three a second for good: the slow frames
-    // are judged once a few have come in a row, and the ladder steps.
+    // are judged once they have lasted three seconds, and the ladder steps.
     const l = ladderFor(1.25, 0, 60);
     let slow = false;
     const m: Machine = {
-      refreshMs: 1000 / 60,
+      refreshMs: P,
       workMs: (r) => (slow ? 330 * (r.ratio / 1.25) ** 2 : 10),
     };
     let run = drive(l, m, 20);
@@ -480,6 +415,28 @@ describe('what does not count', () => {
     expect(l.judgedMs).toBeGreaterThan(judged + 60_000);
     expect(run.changes[0]).toEqual({ at: expect.any(Number), index: 1 });
     expect(l.index).toBeGreaterThan(0);
+  });
+
+  it('a run of stalls under three seconds is not the frame rate', () => {
+    // A machine at 60 whose frames come three at a time 300 ms apart,
+    // once a second for six seconds: programs linking for a fight's
+    // spells. A hitch past one frame a window, but not the rate.
+    const l = ladderFor(1.25, 0, 60);
+    let burst = 0;
+    let next = 40_000;
+    const m: Machine = {
+      refreshMs: P,
+      workMs: (_r, at) => {
+        if (at >= next && at < 46_000) {
+          burst = 3;
+          next += 1000;
+        }
+        if (burst === 0) return 9;
+        burst--;
+        return 300;
+      },
+    };
+    expect(drive(l, m, 300).changes).toEqual([]);
   });
 
   it('a pause forgets the usual interval', () => {
@@ -495,7 +452,7 @@ describe('what does not count', () => {
   it("a match's first seconds are not judged", () => {
     // Slow while the match loads and links, smooth after.
     const l = ladderFor(1.25);
-    const m: Machine = { refreshMs: 1000 / 60, workMs: (_r, at) => (at < SETTLE ? 80 : 10) };
+    const m: Machine = { refreshMs: P, workMs: (_r, at) => (at < SETTLE ? 80 : 10) };
     expect(drive(l, m, 120).changes).toEqual([]);
   });
 
@@ -519,7 +476,7 @@ describe('what does not count', () => {
       let at = 0;
       const seen = new Set<number>();
       for (let i = 0; i < 2000; i++) {
-        at += 1000 / 60;
+        at += P;
         if (i % 2 === 0) l.gap();
         else seen.add(l.frame(at));
       }
