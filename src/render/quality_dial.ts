@@ -217,6 +217,7 @@ export class QualityDial {
           rungs: this.rungs,
           spentMs: this.ladder.spentMs,
           start: this.start,
+          fellEarly: this.ladder.fellEarly,
         }),
       },
     };

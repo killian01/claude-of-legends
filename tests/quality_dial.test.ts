@@ -1,8 +1,9 @@
 // The quality ladder at work on a renderer (src/render/quality_dial.ts):
 // the canvas's ratio and the ground's shadows follow the rung, with no
 // relink (the objects stop receiving shadows, the sun keeps casting); the
-// next match starts where this one spent most of its time, leaner;
-// ?quality= holds it; the seat report hears how finely the match is drawn.
+// next match starts leaner from the top, and at the leanest where this one
+// spent most of its time; ?quality= holds it; the seat report hears how
+// finely the match is drawn.
 
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -108,7 +109,9 @@ describe('the dial', () => {
     play(dial, gl, 75, SETTLE_MS / 1000 - 1);
     expect(gl.ratio).toBe(1.25);
     play(dial, gl, 75, 120);
-    expect(ratios).toEqual([1, 0.85, 0.75]);
+    // Each step tried, the rung it left drawn again, and kept; the
+    // shadows last, on the floor's ratio.
+    expect(ratios).toEqual([1, 1.25, 1, 0.85, 1, 0.85, 0.75, 0.85, 0.75]);
     expect(gl.shadowMap.autoUpdate).toBe(false);
     expect(floor.receiveShadow).toBe(false);
     expect(drawnQuality()).toMatchObject({ step: 4, ratio: 0.75, w: 1152, h: 648, shadows: false });
@@ -116,23 +119,35 @@ describe('the dial', () => {
     expect(drawnQuality()).toBeNull();
   });
 
-  it('starts the next match of the kind where this one stood, without the lights', () => {
-    const first = laptop();
-    const gl = fakeGl(1.25);
-    first.attach({
-      gl: gl as unknown as THREE.WebGLRenderer,
-      scene: new THREE.Scene(),
-      onRatio() {},
-    });
-    play(first, gl, 40, 120);
-    const stood = first.rung;
-    expect(stood.ratio).toBeLessThan(1.25);
-    first.dispose();
+  it('starts the next match of the kind leaner from the top, and at the leanest where it stood', () => {
+    // Five minutes at 40 ms a frame at the top, whatever the lean: below
+    // the top from the first minute, so each match makes the next leaner
+    // and starts it at the top, until the leanest keeps its rung.
+    const leans: unknown[] = [];
+    let stood = laptop().rung;
+    for (let i = 0; i < 3; i++) {
+      const dial = laptop();
+      expect(dial.rung.ratio).toBe(1.25);
+      leans.push(dial.lean);
+      const gl = fakeGl(1.25);
+      dial.attach({
+        gl: gl as unknown as THREE.WebGLRenderer,
+        scene: new THREE.Scene(),
+        onRatio() {},
+      });
+      play(dial, gl, 40, 300);
+      stood = dial.rung;
+      expect(stood.ratio).toBeLessThan(1.25);
+      dial.dispose();
+    }
     expect(JSON.parse(store.get(QUALITY_KEY)!).hz).toBeCloseTo(60, 0);
+    expect(leans).toEqual([
+      { antialias: true, effectLights: true },
+      { antialias: true, effectLights: false },
+      { antialias: false, effectLights: false },
+    ]);
     const next = laptop();
-    expect(next.lean).toEqual({ antialias: true, effectLights: false });
-    // The rung it spent most of the match on: the calm step up climbs from
-    // there when the lights bought room.
+    expect(next.lean).toEqual({ antialias: false, effectLights: false });
     expect(next.rung).toEqual(stood);
     // The other kind of match learned nothing.
     expect(laptop(null, 'royale').rung.ratio).toBe(1.25);

@@ -18,23 +18,44 @@
 // The ladder is for those machines and leaves every other alone: a page
 // drawing three quarters of its target rate or more (45 frames a second
 // on a 60 Hz screen) is playable, and a step taken for nothing costs more
-// than it buys. A step down comes only when the median of the last eight
-// one-second windows is under that line, both its middle windows (four
-// short and four long are a change of pace, not a pace), and is a trial:
-// the median of the eight windows after two left for the change, set
-// against those eight, keeps it for a gain of 1.15 and undoes it
-// otherwise, the next trial then held back a while, twice as long after
-// each one undone, so a page held back by its scripts rather than its
-// pixels is left as it was. A trial that gained nothing while every frame
-// still took the same two or three refreshes goes one rung further, never
-// more: a screen that waits for its refresh shows nothing until a frame
-// fits under one refresh fewer. A step back up comes after three minutes
-// with no window under the line and is kept when the median of its eight
-// windows stays on or over it, both middle windows again; once a step up
-// kept is given up, the ladder stays where it is for the rest of the
-// match. One slow frame in a second is a hitch, not the second's rate;
-// slow frames one after another are a stall until they have lasted three
-// seconds.
+// than it buys. A step down is a trial. It begins when the median of the
+// last eight one-second windows is under that line, both its middle
+// windows (four short and four long are a change of pace, not a pace),
+// and is set against a before: those eight windows' median when they were
+// measured whatever they showed (the first eight after a settling, a trial
+// or a change of pace), else four more windows on the same rung, still
+// under the line by their median, since windows that crossed under it
+// lean low for having been the ones that did. Two windows are left for
+// the change, and the step gains when the slowest but one of the next
+// eight draws 1.15 times the before. The rung it left is then drawn again
+// for four windows: the step is kept only while that rung is still short,
+// reads as it did before within the same 1.15, and the step still gains
+// over it, so a fight that ends, or another that begins, during the trial
+// is not taken for the step's gain. A step undone holds the next trial
+// back a while, twice as long after each, so a page held back by its
+// scripts rather than its pixels is left as it was. A trial that gained
+// nothing while every frame still took the same two or three refreshes
+// goes one rung further, never more: a screen that waits for its refresh
+// shows nothing until a frame fits under one refresh fewer.
+//
+// A step kept is on probation: as soon as its rung holds the line, the
+// rung above is drawn again for eight windows, twice at most, and the step
+// is given back when that rung is no longer short (its upper middle window
+// on the line); until then the step's time counts on the rung it came
+// from. Otherwise a step back up comes after three minutes on a rung whose
+// last eight windows hold the line, both middle windows, and is kept when
+// the eight windows above hold it too; a step up given up within three
+// minutes of being kept is a rung hovering about the line, and the ladder
+// stays where it is for the rest of the match (a step over a slowdown to
+// under half the line is no hover). A match started below the top, where
+// the last one left it (quality_memory.ts), first draws the top again for
+// eight windows after its settling, and stays there when their median
+// holds the line: a machine that got faster, or a step remembered for a
+// slowdown, costs the next match a few seconds. One slow frame in a second
+// is a hitch, not the second's rate; slow frames one after another are a
+// stall until they have lasted three seconds, and then a new pace: the
+// window that spans the change is left out, and the four after it are a
+// step down's before at once.
 //
 // The screen's rate is never assumed: a browser hands
 // requestAnimationFrame the time of the screen's refresh, so every
@@ -87,18 +108,25 @@ export interface LadderRules {
   windowMs: number;
   windowFrames: number;
   // The windows a median is taken over (under the line when both its
-  // middle windows are, on or over it when both are), and the windows
-  // left for a change before a trial counts its own.
+  // middle windows are, on or over it when both are), the fresh ones a
+  // step down may be set against and the ones the rung it left is drawn
+  // again for, and the windows left for a change before a trial counts
+  // its own.
   medianWindows: number;
+  freshWindows: number;
   changeWindows: number;
   // A step down is kept when the median rose by this much.
   gain: number;
-  // Windows in a row, none of them short, before a step up.
+  // Windows on a rung before a step up, its median holding the line.
   calmWindows: number;
   // An undone step down, or step up, holds the next one of its kind back
   // this long, twice as long after each further one.
   downHoldMs: number;
   upHoldMs: number;
+  // A step up given up within this long of being kept is a hover, unless
+  // the step down was over a slowdown to under this share of the line.
+  hoverMs: number;
+  deepShare: number;
   // Frames whose own script takes this share of their interval are held
   // back by the script, which fewer pixels do not help.
   scriptShare: number;
@@ -108,15 +136,23 @@ export const LADDER_RULES: LadderRules = {
   capHz: 60,
   shortShare: 0.75,
   windowMs: 1000,
-  windowFrames: 6,
+  windowFrames: 4,
   medianWindows: 8,
+  freshWindows: 4,
   changeWindows: 2,
   gain: 1.15,
   calmWindows: 180,
   downHoldMs: 180_000,
   upHoldMs: 300_000,
+  hoverMs: 180_000,
+  deepShare: 0.5,
   scriptShare: 0.75,
 };
+
+// The judged time a match's start is weighed over: a step down from the
+// top within it says the top did not hold from the start, and a match
+// judged less long says too little to remember (quality_memory.ts).
+export const EVIDENCE_MS = 180_000;
 
 // An interval this many times the usual one is a stall, a hidden tab or a
 // frame the renderer skipped, not the frame rate, and never under this;
@@ -127,6 +163,11 @@ export const LADDER_RULES: LadderRules = {
 const STALL_FACTOR = 4;
 const STALL_MIN_MS = 250;
 const STALL_RUN_MS = 3000;
+// A step down kept is on probation this many windows at most while its
+// rung does not hold the line, longer than a fight, and the rung above is
+// drawn again this many times at most.
+const PROBATION_WINDOWS = 30;
+const PROBATION_LOOKS = 2;
 // A window's longest interval, when it is this many times the window's
 // median, is a hitch (a program linking, a collection) and left out of its
 // rate: one slow frame is not a slow second. Frames a refresh or two late
@@ -188,6 +229,12 @@ function middle(xs: readonly number[]): { low: number; high: number; median: num
 
 const median = (xs: readonly number[]): number => middle(xs).median;
 
+// The slowest of `xs` but one.
+function steady(xs: readonly number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.min(1, s.length - 1)]!;
+}
+
 // Frames a second over a window's intervals, its hitch left out.
 function windowRate(intervals: readonly number[]): number {
   const sum = intervals.reduce((a, b) => a + b, 0);
@@ -197,7 +244,7 @@ function windowRate(intervals: readonly number[]): number {
 }
 
 export interface LadderStart {
-  // The rung to start on.
+  // The rung to start on: below the top, the top is tried first.
   index: number;
   // The screen's rate known before the match: read off the page's own
   // frames, its menus' light ones among them (frame_rate.ts), else
@@ -207,26 +254,39 @@ export interface LadderStart {
   settleUntil: number;
 }
 
-// A step on trial: up or down, from which rung, the median it is set
-// against (a step down's), the windows seen since the change and the rates
-// of those after the ones left for it, and whether a step down that gained
-// nothing went a rung further.
+// A step on trial: down, up, the rung above drawn again for a step on
+// probation, or the top tried at the start of a match begun below it;
+// from which rung, the median a step down is set against, the windows
+// seen since the change and the rates of those after the ones left for
+// it, whether a step down that gained nothing went a rung further, the
+// judged time and the time it began at, and, for a step down that gained,
+// the rung it gained on and that rung's windows while the rung it left is
+// drawn again.
 interface Trial {
-  up: boolean;
+  kind: 'down' | 'up' | 'look' | 'probe';
   from: number;
   before: number;
   seen: number;
   rates: number[];
   walked: boolean;
+  judged: number;
+  at: number;
+  gained: { to: number; rates: number[] } | null;
 }
+
+// The start probe: none (started at the top), due at the first judged
+// window, on, or over, the top held or not.
+type Probe = 'none' | 'due' | 'on' | 'held' | 'failed';
 
 export class QualityLadder {
   private current: number;
   private lastAt: number | null = null;
-  // The usual interval, for telling a stall, and how long the stalls in a
-  // row have lasted.
+  // The usual interval, for telling a stall, how long the stalls in a
+  // row have lasted, and whether the window in progress spans a run of
+  // them taken for the new pace.
   private usual: number | null = null;
   private stalled = 0;
+  private paced = false;
   private sum = 0;
   private frames = 0;
   private scripts: number[] = [];
@@ -236,19 +296,30 @@ export class QualityLadder {
   private refresh: number | null = null;
   private read: number | null = null;
   private readonly known: number | null;
-  // The last judged windows' rates outside a trial, and the windows in a
-  // row none of them short.
+  // The last judged windows' rates outside a trial, the fresh ones
+  // measured since they crossed under the line (null while none are),
+  // and the windows judged on the rung since the ladder came to it.
   private recent: number[] = [];
+  private fresh: number[] | null = null;
   private calm = 0;
+  // The recent windows were measured since they were last emptied, none
+  // of them picked by a crossing yet.
+  private unpicked = true;
+  // A step down on probation: the rung it came from, the windows and the
+  // looks it has left, and whether the top had fallen early before it.
+  private probation: { from: number; left: number; looks: number; early: boolean } | null = null;
   private trial: Trial | null = null;
   private downHeldUntil = Number.NEGATIVE_INFINITY;
   private downFails = 0;
   private upHeldUntil = Number.NEGATIVE_INFINITY;
   private upFails = 0;
-  // A step up kept this match; once a step down is kept after it, no step
-  // up again.
-  private upKept = false;
+  // When a step up was last kept; one given up soon after holds the
+  // ladder where it is for the rest of the match.
+  private upKeptAt = Number.NEGATIVE_INFINITY;
   private upsOver = false;
+  private probe: Probe;
+  // A step down from the top kept within the first judged minutes.
+  private droppedEarly = false;
   // The milliseconds judged on each rung the ladder stood on.
   private readonly spent: number[];
 
@@ -261,6 +332,7 @@ export class QualityLadder {
     this.known = start.known !== null && start.known > 0 ? start.known : null;
     this.settleUntil = start.settleUntil;
     this.spent = rungs.map(() => 0);
+    this.probe = this.current > 0 ? 'due' : 'none';
   }
 
   get index(): number {
@@ -271,20 +343,27 @@ export class QualityLadder {
     return this.rungs[this.current]!;
   }
 
-  // The rung the ladder stands on outside a trial: what is worth
-  // remembering for the next match.
+  // The rung the ladder stands on outside a trial and a step's probation:
+  // what is worth remembering for the next match.
   get settled(): number {
-    return this.trial?.from ?? this.current;
+    return this.probation?.from ?? this.trial?.from ?? this.current;
   }
 
   // Milliseconds of drawing judged on each rung the ladder stood on (past
-  // the settling, a trial's on the rung it was tried from), and in all.
+  // the settling and the start probe, a trial's and a probation's on the
+  // rung it was tried from), and in all.
   get spentMs(): readonly number[] {
     return [...this.spent];
   }
 
   get judgedMs(): number {
     return this.spent.reduce((a, b) => a + b, 0);
+  }
+
+  // The top did not hold early in the match: the start probe gave it up,
+  // or a step down from it was kept within the first judged minutes.
+  get fellEarly(): boolean {
+    return this.probe === 'failed' || this.droppedEarly;
   }
 
   // The screen's rate as best known: the refresh read off the intervals
@@ -315,6 +394,7 @@ export class QualityLadder {
       this.stalled += dt;
       if (this.stalled < STALL_RUN_MS) return this.current;
       this.usual = null;
+      this.paced = true;
     }
     this.stalled = 0;
     this.usual = this.usual === null ? Math.min(dt, 1000) : this.usual * 0.9 + dt * 0.1;
@@ -329,15 +409,22 @@ export class QualityLadder {
     const script = this.scripts.length > 0 ? median(this.scripts) : 0;
     const hz = refreshHz(this.intervals);
     const spent = this.sum;
+    const paced = this.paced;
     this.sum = 0;
     this.frames = 0;
     this.scripts = [];
     this.intervals = [];
+    this.paced = false;
     if (hz !== null) this.heard(hz, fps);
     this.bestHz = Math.max(this.bestHz, fps);
     if (at < this.settleUntil) return this.current;
-    this.spent[this.settled]! += spent;
-    this.judge(fps, script, at);
+    if (this.probe === 'due') {
+      this.probe = 'on';
+      this.begin('probe', 0, at);
+      return this.current;
+    }
+    if (this.probe !== 'on') this.spent[this.settled]! += spent;
+    this.judge(fps, script, at, paced);
     return this.current;
   }
 
@@ -366,12 +453,15 @@ export class QualityLadder {
     this.lastAt = null;
     this.usual = null;
     this.stalled = 0;
+    this.paced = false;
     this.sum = 0;
     this.frames = 0;
     this.scripts = [];
     this.intervals = [];
     this.recent = [];
+    this.fresh = null;
     this.calm = 0;
+    this.unpicked = true;
     this.settleUntil = Math.max(this.settleUntil, until);
     if (this.trial) {
       this.trial.seen = 0;
@@ -379,66 +469,161 @@ export class QualityLadder {
     }
   }
 
-  private judge(fps: number, script: number, at: number): void {
+  private judge(fps: number, script: number, at: number, paced: boolean): void {
     const r = this.rules;
     const target = Math.min(r.capHz, this.screenHz ?? r.capHz);
     const line = r.shortShare * target;
     const trial = this.trial;
     if (trial) {
-      // The first windows after a step carry the change itself.
-      if (++trial.seen <= r.changeWindows) return;
+      // The first windows after a step carry the change itself; one that
+      // spans a change of pace is neither pace.
+      if (++trial.seen <= r.changeWindows || paced) return;
       trial.rates.push(fps);
-      if (trial.rates.length >= r.medianWindows) this.decide(trial, target, at);
+      const needed = trial.gained ? r.freshWindows : r.medianWindows;
+      if (trial.rates.length >= needed) this.decide(trial, target, at);
+      return;
+    }
+    const down =
+      this.current < this.rungs.length - 1 &&
+      at >= this.downHeldUntil &&
+      // Held back by its own script: fewer pixels would not help.
+      script < r.scriptShare;
+    if (paced) {
+      // Stalls for three seconds on end: the windows before them were
+      // another pace, and the next ones are weighed at once.
+      this.recent = [];
+      this.calm = 0;
+      this.unpicked = true;
+      this.fresh = down ? [] : null;
       return;
     }
     this.recent.push(fps);
     if (this.recent.length > r.medianWindows) this.recent.shift();
-    this.calm = fps < line ? 0 : this.calm + 1;
-    const mid = this.recent.length >= r.medianWindows ? middle(this.recent) : null;
+    this.calm++;
+    if (this.fresh) {
+      this.fresh.push(fps);
+      if (this.fresh.length < r.freshWindows) return;
+      const before = median(this.fresh);
+      this.fresh = null;
+      if (before < line && down) this.begin('down', before, at);
+      return;
+    }
+    const up = this.current > 0 && !this.upsOver;
+    const probation = this.probation;
+    if (probation && --probation.left <= 0) this.probation = null;
     if (
-      mid !== null &&
-      mid.high < line &&
-      this.current < this.rungs.length - 1 &&
-      at >= this.downHeldUntil &&
-      // Held back by its own script: fewer pixels would not help.
-      script < r.scriptShare
+      this.probation &&
+      up &&
+      this.calm >= r.freshWindows &&
+      median(this.recent.slice(-r.freshWindows)) >= line
     ) {
-      this.begin(false, mid.median);
+      // The step's rung holds the line: the rung above is drawn again.
+      this.begin('look', 0, at);
+      return;
+    }
+    const mid = this.recent.length >= r.medianWindows ? middle(this.recent) : null;
+    const unpicked = this.unpicked && mid !== null;
+    if (mid !== null) this.unpicked = false;
+    if (mid !== null && mid.high < line && down) {
+      // Windows measured whatever they showed are a fair before; ones
+      // that crossed under the line lean low, and fresh ones are measured.
+      if (unpicked) this.begin('down', mid.median, at);
+      else this.fresh = [];
     } else if (
       this.calm >= r.calmWindows &&
-      this.current > 0 &&
-      !this.upsOver &&
+      mid !== null &&
+      mid.low >= line &&
+      up &&
       at >= this.upHeldUntil
     ) {
-      this.begin(true, 0);
+      this.begin('up', 0, at);
     }
   }
 
-  private begin(up: boolean, before: number): void {
-    this.trial = { up, from: this.current, before, seen: 0, rates: [], walked: false };
-    this.current += up ? -1 : 1;
+  private begin(kind: Trial['kind'], before: number, at: number): void {
+    const judged = this.judgedMs;
+    this.trial = {
+      kind,
+      from: this.current,
+      before,
+      seen: 0,
+      rates: [],
+      walked: false,
+      judged,
+      at,
+      gained: null,
+    };
+    this.current = kind === 'down' ? this.current + 1 : kind === 'probe' ? 0 : this.current - 1;
     this.recent = [];
+    this.fresh = null;
     this.calm = 0;
+    this.unpicked = true;
   }
 
-  // A trial's windows are in: kept, a rung further, or undone.
+  // A trial's windows are in: kept, looked back on, a rung further, or
+  // undone.
   private decide(trial: Trial, target: number, at: number): void {
     const r = this.rules;
+    const line = r.shortShare * target;
     const mid = middle(trial.rates);
-    const after = mid.median;
-    const kept = trial.up ? mid.low >= r.shortShare * target : after >= trial.before * r.gain;
-    if (kept) {
+    if (trial.kind === 'probe') {
       this.trial = null;
-      // Its windows are the new rung's: still short after a step down,
-      // the next one comes at once.
-      this.recent = trial.rates;
-      if (trial.up) {
-        this.upKept = true;
-        this.upFails = 0;
+      if (mid.median >= line) {
+        this.probe = 'held';
+        this.recent = trial.rates;
+        this.upKeptAt = at;
       } else {
-        this.downFails = 0;
-        this.upsOver = this.upKept;
+        this.probe = 'failed';
+        this.current = trial.from;
       }
+      return;
+    }
+    if (trial.kind === 'up' || trial.kind === 'look') {
+      this.trial = null;
+      const probation = this.probation;
+      // A step up is kept when the rung above holds the line; a step on
+      // probation is given back when the rung above is no longer short.
+      if (trial.kind === 'look' ? mid.high >= line : mid.low >= line) {
+        if (probation) this.droppedEarly = probation.early;
+        this.probation = null;
+        this.recent = trial.rates;
+        this.upKeptAt = at;
+        this.upFails = 0;
+        return;
+      }
+      this.current = trial.from;
+      if (trial.kind === 'look' && probation && --probation.looks > 0) {
+        probation.left = PROBATION_WINDOWS;
+        return;
+      }
+      this.probation = null;
+      this.upHeldUntil = at + r.upHoldMs * 2 ** this.upFails;
+      this.upFails++;
+      return;
+    }
+    const gained = trial.gained;
+    if (gained) {
+      // The rung it left, drawn again: still short, and the step still
+      // gaining over it, the step is the gain; on the line, the slowdown
+      // is over.
+      const back = mid.median;
+      const same = Math.max(back, trial.before) < r.gain * Math.min(back, trial.before);
+      if (back < line && same && steady(gained.rates) >= back * r.gain) {
+        this.current = gained.to;
+        this.kept(trial, gained.rates, line);
+      } else {
+        this.undone(trial, at);
+      }
+      return;
+    }
+    const after = steady(trial.rates);
+    if (after >= trial.before * r.gain) {
+      // The step, or a slowdown that ended during the trial: the rung it
+      // left is drawn again to tell.
+      trial.gained = { to: this.current, rates: trial.rates };
+      this.current = trial.from;
+      trial.seen = 0;
+      trial.rates = [];
       return;
     }
     // A step down that gained nothing, every frame still taking the same
@@ -448,23 +633,45 @@ export class QualityLadder {
     // Slower frames cross a refresh with any rung's gain.
     const refreshes = target / after;
     const waiting = refreshes >= 1.5 && refreshes < 3.5 && wholeTimes(refreshes);
-    if (!trial.up && !trial.walked && waiting && this.current < this.rungs.length - 1) {
+    if (!trial.walked && waiting && this.current < this.rungs.length - 1) {
       this.current++;
       trial.walked = true;
       trial.seen = 0;
       trial.rates = [];
       return;
     }
-    // Not what held it back, or not room enough: undone, and the next one
-    // of its kind waits.
+    this.undone(trial, at);
+  }
+
+  // A step down kept, on probation, its windows the new rung's: still
+  // short, the next one comes at once.
+  private kept(trial: Trial, rates: number[], line: number): void {
+    const r = this.rules;
+    this.trial = null;
+    this.recent = rates;
+    this.unpicked = true;
+    this.calm = 0;
+    this.probation = {
+      from: trial.from,
+      left: PROBATION_WINDOWS,
+      looks: PROBATION_LOOKS,
+      early: this.droppedEarly,
+    };
+    this.downFails = 0;
+    if (trial.from === 0 && trial.judged < EVIDENCE_MS) this.droppedEarly = true;
+    // A step up given up this soon after it was kept: the rung above
+    // hovers about the line.
+    if (trial.at - this.upKeptAt < r.hoverMs && trial.before >= r.deepShare * line) {
+      this.upsOver = true;
+    }
+  }
+
+  // Not what held it back, or not room enough: undone, and the next one
+  // waits.
+  private undone(trial: Trial, at: number): void {
     this.trial = null;
     this.current = trial.from;
-    if (trial.up) {
-      this.upHeldUntil = at + r.upHoldMs * 2 ** this.upFails;
-      this.upFails++;
-    } else {
-      this.downHeldUntil = at + r.downHoldMs * 2 ** this.downFails;
-      this.downFails++;
-    }
+    this.downHeldUntil = at + this.rules.downHoldMs * 2 ** this.downFails;
+    this.downFails++;
   }
 }
