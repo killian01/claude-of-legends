@@ -173,6 +173,27 @@ describe('a step down', () => {
     expect(tried(32)).toBeGreaterThan(80);
   });
 
+  it('undone, judges none of the windows from before its trial again', () => {
+    // 36 whatever the rung, the trial undone; the page then draws 20 at the
+    // top, well under the 36 it was weighed against: eight windows of its
+    // own and four fresh ones before the next, not the old ones and four.
+    const l = ladderFor();
+    let tried = false;
+    let undoneAt = Number.POSITIVE_INFINITY;
+    const run = exact(
+      l,
+      (i, at) => {
+        if (l.trying) tried = true;
+        else if (tried && undoneAt === Number.POSITIVE_INFINITY) undoneAt = at;
+        return at < undoneAt ? 36 : i === 0 ? 20 : 40;
+      },
+      90,
+    );
+    const next = (downsFromTop(run.changes)[1]!.at - undoneAt) / 1000;
+    expect(next).toBeGreaterThan(11.5);
+    expect(next).toBeLessThan(13.5);
+  });
+
   it('whose page slowed under it holds nothing, and fresh windows follow at once', () => {
     // 40 whatever the rung until 28 s in, then 20 at the top and 32 a rung
     // down: the trial's windows read 32, well under its 40; four windows

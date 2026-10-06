@@ -182,6 +182,24 @@ describe('the dial', () => {
     dial.dispose();
   });
 
+  it("keeps the other kind of match's memory when it writes its own", () => {
+    const royale = { lean: 2, played: 3, slow: 1 };
+    store.set(QUALITY_KEY, JSON.stringify({ hz: 60, modes: { royale } }));
+    const dial = laptop();
+    const { gl } = attached(dial);
+    play(dial, gl, 40, 125);
+    dial.dispose();
+    expect(remembered().modes).toEqual({ royale, classic: { lean: 0, played: 0, slow: 1 } });
+  });
+
+  it("stops a phone's rungs at the ratio 1, a desktop's at 0.75", () => {
+    const rungs = (phone: boolean, pin: 'low' | null = null) =>
+      new QualityDial({ mode: 'classic', top: 1.5, phone, pin, now: 0 });
+    expect(rungs(true).rungs.map((r) => r.ratio)).toEqual([1.5, 1.25, 1, 1]);
+    expect(rungs(true, 'low').rung).toEqual({ ratio: 1, shadows: false });
+    expect(rungs(false).rungs.map((r) => r.ratio)).toEqual([1.5, 1.25, 1, 0.85, 0.75, 0.75]);
+  });
+
   it('hands the ladder the cost its rungs are documented to draw at', () => {
     // A ratio of 1 instead of 1.25 in 0.70 of the time, about 0.9 of it
     // without shadows.
