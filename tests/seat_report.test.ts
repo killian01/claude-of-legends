@@ -287,7 +287,7 @@ describe('the seat report', () => {
     expect(page).toContain('`seats.jsonl`');
     expect(page).toContain('`server/seat_report.ts`');
     expect(page).toContain('`scripts/seat_report.mjs`');
-    // And what the browser keeps of its quality step, which it never sends.
+    // And what the browser keeps of how it draws, which it never sends.
     expect(page).toContain(`\`${QUALITY_KEY}\``);
     expect(page).toContain('`src/game/quality_memory.ts`');
   });
