@@ -43,7 +43,7 @@ function play(
   seconds: number,
   interval: (rung: Rung, at: number) => number,
 ): ModeMemory {
-  const l = new QualityLadder(rungs, { index: start.index, known: [60], settleUntil: 10_000 });
+  const l = new QualityLadder(rungs, { index: start.index, known: 60, settleUntil: 10_000 });
   let at = 0;
   while (at < seconds * 1000) {
     at += interval(l.rung, at);

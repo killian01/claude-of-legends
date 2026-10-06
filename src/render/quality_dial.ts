@@ -121,7 +121,9 @@ export class QualityDial {
     this.leanLevel = start.lean;
     this.ladder = new QualityLadder(this.rungs, {
       index: start.index,
-      known: [screenRefresh(), this.atStart.hz].filter((hz) => hz !== null),
+      // This page's own frames tell this screen best: a browser that
+      // holds every page at 30 (a battery saver) shows it there.
+      known: screenRefresh() ?? this.atStart.hz,
       settleUntil: setup.now + SETTLE_MS,
     });
   }
