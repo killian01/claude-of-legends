@@ -64,7 +64,7 @@ function server() {
       mobile: false,
       pings: [],
       fps: [],
-      quality: [],
+      quality: null,
     };
     clients.set(id, c);
     return c;

@@ -16,6 +16,7 @@ import {
   median,
   qualityOnWire,
   SEAT_REPORT_VERSION,
+  seeQuality,
 } from '../server/seat_report';
 import { QUALITY_KEY } from '../src/game/quality_memory';
 import { stepOnWire } from '../src/net/protocol';
@@ -139,7 +140,7 @@ describe('the seat report', () => {
         { step: 0, lean: 0, ratio: 1.25, w: 1920, h: 1080, shadows: true },
         { step: 3, lean: 0, ratio: 0.75, w: 1152, h: 648, shadows: true },
         { step: 1, lean: 0, ratio: 1, w: 1536, h: 864, shadows: true },
-      ],
+      ].reduce(seeQuality, null),
     });
     expect(rec).toEqual({
       v: SEAT_REPORT_VERSION,
@@ -209,7 +210,7 @@ describe('the seat report', () => {
       unit: null,
       pings: [],
       fps: [],
-      quality: [],
+      quality: null,
     });
     expect(none.loadS).toBeNull();
     expect(none.firstOrderS).toBeNull();
@@ -269,6 +270,16 @@ describe('the seat report', () => {
     expect(qualityOnWire({ ...q, w: 0 })).toBeNull();
     expect(qualityOnWire({ ...q, h: 99999 })).toBeNull();
     expect(qualityOnWire({ ...q, shadows: 'yes' })).toBeNull();
+  });
+
+  it('keeps the deepest step of the whole seat, past the last echoes', () => {
+    // Three steps down in the first minute, then half an hour of echoes
+    // back at the top: the deepest is still three.
+    const at = (step: number) => ({ step, lean: 0, ratio: 1, w: 1, h: 1, shadows: true });
+    let seen = seeQuality(null, at(0));
+    seen = seeQuality(seen, at(3));
+    for (let i = 0; i < 360; i++) seen = seeQuality(seen, at(i < 10 ? 1 : 0));
+    expect(seen).toEqual({ last: at(0), deepest: 3 });
   });
 
   it('is named in the privacy notice, file and module alike', () => {

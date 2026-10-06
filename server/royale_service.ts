@@ -12,12 +12,7 @@
 // bot, held for its owner for a minute. Transport-agnostic: main.ts hands
 // it the socket's messages through one case and its deps.
 
-import {
-  type ClientMsg,
-  type DrawnQualityWire,
-  type ServerMsg,
-  stepOnWire,
-} from '../src/net/protocol';
+import { type ClientMsg, type ServerMsg, stepOnWire } from '../src/net/protocol';
 import type { RoyaleVariant } from '../src/net/royale_wire';
 import { bankAwards } from './points';
 import { ROYALE_VERBS } from './royale_commands';
@@ -25,7 +20,7 @@ import { chooseRoyaleMatch, type RoyaleCandidate, takesPeople } from './royale_j
 import { RoyaleMatch, type RoyalePlayer, type RoyaleReplay } from './royale_match';
 import { type RoyalePerson, type RoyalePick, royalePick } from './royale_seats';
 import type { RoyaleSimFactory } from './royale_sim';
-import { buildSeatReport, type SeatEnd, type SeatReport } from './seat_report';
+import { buildSeatReport, type SeatEnd, type SeatReport, type SeenQuality } from './seat_report';
 
 // What a match of fifty champions costs the server, counted in 5v5
 // matches against MAX_MATCHES (server/main.ts): its champions are five
@@ -59,7 +54,7 @@ export interface RoyaleClient {
   readonly mobile: boolean;
   readonly pings: readonly number[];
   readonly fps: readonly number[];
-  readonly quality: readonly DrawnQualityWire[];
+  readonly quality: SeenQuality | null;
 }
 
 export interface RoyaleDeps {
