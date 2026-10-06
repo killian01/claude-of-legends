@@ -137,6 +137,21 @@ describe('the dial', () => {
     expect(laptop(null, 'royale').rung.ratio).toBe(1.25);
   });
 
+  it('never remembers a refresh that only matched the frames', () => {
+    // Every frame two refreshes on a 60 Hz screen, nothing known before:
+    // a 30 Hz screen would draw the same, so 30 is not kept as its rate.
+    const dial = laptop();
+    const gl = fakeGl(1.25);
+    dial.attach({
+      gl: gl as unknown as THREE.WebGLRenderer,
+      scene: new THREE.Scene(),
+      onRatio() {},
+    });
+    play(dial, gl, 33.4, 60);
+    dial.dispose();
+    expect(JSON.parse(store.get(QUALITY_KEY)!).hz).toBeNull();
+  });
+
   it('is held by the address, and remembers nothing then', () => {
     const full = laptop('full');
     const gl = fakeGl(1.25);

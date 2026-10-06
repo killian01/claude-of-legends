@@ -14,7 +14,7 @@ import { drawnQuality } from './game/drawn_quality';
 import { FIRST_FRAME_WAIT_MS, untilDrawn } from './game/first_frame';
 import { nextStep, type PostMatchAction } from './game/flow';
 import { registerForgedAssets } from './game/forged_visuals';
-import { frameRate } from './game/frame_rate';
+import { frameRate, watchFrames } from './game/frame_rate';
 import { requestGameFullscreen } from './game/fullscreen';
 import { parseJoinCode } from './game/invite';
 import { appNav, installNav, sectionFromHash } from './game/nav';
@@ -1600,6 +1600,9 @@ async function boot(): Promise<void> {
   // sends it. Before anything else, so it is in place when the tracker's
   // deferred tag runs after this module.
   installStats();
+  // The page's frames counted from here (src/game/frame_rate.ts): the
+  // menus' light ones tell the quality ladder the screen's refresh.
+  watchFrames();
   // Half a minute later, if this page is still in front of somebody: the
   // line between a visitor who looked and a click that left before the
   // art had drawn. A tab in the background does not count: nobody is
