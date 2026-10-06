@@ -50,8 +50,15 @@ describe('the start of a match', () => {
 });
 
 describe('what a match leaves for the next', () => {
-  const at = (settled: number, deepest: number | null, lean = 0, judgedMs = 300_000) => ({
+  const at = (
+    settled: number,
+    deepest: number | null,
+    lean = 0,
+    judgedMs = 300_000,
+    start = 0,
+  ) => ({
     rungs: laptop,
+    start,
     settled,
     deepest,
     judgedMs,
@@ -112,15 +119,31 @@ describe('what a match leaves for the next', () => {
     // A short match tells nothing either way; a step down starts over.
     expect(afterMatch({ ...memory, quiet: 1 }, at(0, null, 1, QUIET_MS - 1)).quiet).toBe(1);
     expect(afterMatch({ ...memory, quiet: 1 }, at(1, 1, 1)).quiet).toBe(0);
+    // Nor does a match that started below the top and stepped up to it.
+    expect(afterMatch({ ...memory, quiet: 1 }, at(0, null, 1, QUIET_MS, 1)).quiet).toBe(0);
   });
 
   it("goes past a phone's lights only once its shadows were left out", () => {
     const phone = ladderRungs(1, PHONE_RATIO_FLOOR);
     expect(
-      afterMatch(undefined, { rungs: phone, settled: 1, deepest: 1, judgedMs: 0, lean: 0 }),
+      afterMatch(undefined, {
+        rungs: phone,
+        start: 0,
+        settled: 1,
+        deepest: 1,
+        judgedMs: 0,
+        lean: 0,
+      }),
     ).toMatchObject({ lean: 1, ratio: 1, shadows: true });
     expect(
-      afterMatch(undefined, { rungs: phone, settled: 1, deepest: 1, judgedMs: 0, lean: 1 }).lean,
+      afterMatch(undefined, {
+        rungs: phone,
+        start: 0,
+        settled: 1,
+        deepest: 1,
+        judgedMs: 0,
+        lean: 1,
+      }).lean,
     ).toBe(2);
   });
 });

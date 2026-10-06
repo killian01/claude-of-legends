@@ -190,8 +190,8 @@ describe('a weak GPU', () => {
     expect(l.index).toBe(3);
     expect(l.deepest).toBe(3);
     expect(run.lastFps).toBeGreaterThan(LADDER_RULES.shortShare * 60);
-    // Then only a look one rung up now and then, undone at once, never
-    // sooner than a minute after the last step down and rarer each time.
+    // Then only a look one rung up now and then, undone within seconds,
+    // never sooner than a minute after the last step down, rarer each time.
     const looks = run.changes.slice(3);
     expect(looks.length).toBeLessThanOrEqual(4);
     for (let i = 0; i < looks.length; i += 2) {
@@ -248,6 +248,26 @@ describe('a weak GPU', () => {
     expect(ups.length).toBeLessThanOrEqual(3);
     const gaps = ups.slice(1).map((u, i) => u.at - ups[i]!.at);
     for (let i = 1; i < gaps.length; i++) expect(gaps[i]!).toBeGreaterThan(gaps[i - 1]!);
+  });
+});
+
+describe('a step up', () => {
+  it('is undone when it leaves the frames hovering just short', () => {
+    // Room to spare one rung down; at the top the rate swings about the
+    // line, a window over it and the next under.
+    const l = ladderFor(1.25, 1, 60);
+    const m: Machine = {
+      refreshMs: 1000 / 60,
+      workMs: (r, at) =>
+        r.ratio < 1.25 ? 12 : 1000 / (49.5 + 4 * Math.sign(Math.sin((at / 1000) * Math.PI))),
+    };
+    const run = drive(l, m, 600);
+    expect(l.index).toBe(1);
+    expect(run.changes.length).toBeGreaterThan(0);
+    for (let i = 0; i < run.changes.length; i += 2) {
+      expect(run.changes[i]!.index).toBe(0);
+      expect(run.changes[i + 1]?.index).toBe(1);
+    }
   });
 });
 
