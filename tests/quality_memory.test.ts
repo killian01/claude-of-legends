@@ -209,15 +209,15 @@ describe('a match played, then the next', () => {
   });
 
   it('a weak GPU keeps its step and its lean level', () => {
-    // Fill bound: 45 ms a frame at the top, 60 frames a second by the
-    // floor; each frame's work starts once the last is done, its time on
-    // a refresh.
+    // Fill bound: 45 ms a frame at the top, 48 frames a second two rungs
+    // down; each frame's work starts once the last is done, its time on a
+    // refresh.
     let free = 0;
     const next = play(laptop, { index: 0, lean: 0 }, 600, (r, at) => {
       free = Math.max(free, at) + 45 * (r.ratio / 1.25) ** 2;
       return Math.max(P, Math.floor(free / P) * P - at);
     });
-    expect(next).toEqual(mem(2, 1));
+    expect(next).toEqual(mem(1, 1));
   });
 });
 
