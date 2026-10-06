@@ -304,6 +304,34 @@ describe('what does not count', () => {
     expect(l.index).toBe(0);
   });
 
+  it('a sudden steady drop is the frame rate, not a run of stalls', () => {
+    // 60 frames a second, then three a second for good: the slow frames
+    // are judged once a few have come in a row, and the ladder steps.
+    const l = ladderFor(1.25, 0, 60);
+    let slow = false;
+    const m: Machine = {
+      refreshMs: 1000 / 60,
+      workMs: (r) => (slow ? 330 * (r.ratio / 1.25) ** 2 : 10),
+    };
+    let run = drive(l, m, 20);
+    const judged = l.judgedMs;
+    slow = true;
+    run = drive(l, m, 120, run.at);
+    expect(l.judgedMs).toBeGreaterThan(judged + 60_000);
+    expect(run.changes[0]).toEqual({ at: expect.any(Number), index: 1 });
+    expect(l.index).toBeGreaterThan(0);
+  });
+
+  it('a pause forgets the usual interval', () => {
+    // Slow frames after a pause are the frame rate from their first.
+    const l = ladderFor(1.25, 0, 60);
+    let run = drive(l, fillBound(60, 10, 1.25), 20);
+    l.pause(run.at);
+    const judged = l.judgedMs;
+    run = drive(l, scriptBound(60, 330), 30, run.at);
+    expect(l.judgedMs - judged).toBeGreaterThan(25_000);
+  });
+
   it("a match's first seconds are not judged", () => {
     // Slow while the match loads and links, smooth after.
     const l = ladderFor(1.25);
