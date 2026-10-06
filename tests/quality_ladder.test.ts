@@ -296,6 +296,17 @@ describe('a step up', () => {
     expect(run.settled.map((s) => s.index)).toEqual([0, 3, 0]);
   });
 
+  it("walks on a faster screen's own refreshes only far under the line", () => {
+    // A 144 Hz screen: 43 at the top, 48 a rung down (a third of 144, but
+    // 1.12 over 43, no gain) is undone, never walked on to the 60 below it.
+    // Far under the line, 16 at the top and 18 a rung down (nine and eight
+    // refreshes) walk on.
+    const noisy = exact(ladderFor(1.25, 144), (i) => [43, 48, 60, 60, 60][i]!, 60);
+    expect(indexes(noisy.changes)).toEqual([1, 0]);
+    const dropped = exact(ladderFor(1.25, 144), (i) => [16, 18, 48, 48, 48][i]!, 60);
+    expect(dropped.settled.at(-1)!.index).toBe(2);
+  });
+
   it('kept, holds the next step down back as one undone', () => {
     // 40 whatever the rung for 27 s, then 60, and from 60 s 40 again at the
     // top only: the step kept as the first slowdown ended, given back, holds

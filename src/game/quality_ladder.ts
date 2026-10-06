@@ -48,6 +48,7 @@ export const LADDER_RULES = {
   upHoldMostMs: 300_000,
   scriptShare: 0.75, // frames this much script are not held back by pixels
   topQuantile: 0.9, // the top's share: nine windows in ten at it or under
+  walkFastShare: 0.45, // of the target: under it, a fast screen's refreshes walk
 };
 
 // One slow frame in a window is a hitch, left out of its rate; slow frames
@@ -311,13 +312,31 @@ export class QualityLadder {
     } else if (after * r.gain < trial.before) {
       this.current = trial.from;
       this.fresh = [];
-    } else if (wholeTimes((this.screenHz ?? target) / after) && this.current < this.floor) {
+    } else if (this.mayWalk(trial.before, after, target) && this.current < this.floor) {
       this.current++;
       this.trial = { ...trial, seen: 0, rates: [], walked: true };
     } else {
       this.current = trial.from;
       this.holdDown(trial.before, at);
     }
+  }
+
+  // A step that gained nothing walks a rung further when every frame still
+  // takes the same whole refreshes of the target, which a rung between them
+  // cannot change. On a screen faster than the target, the screen's own
+  // refreshes count only for a page far under the line before and after
+  // (a sudden drop): a noisy page or a fight on a 144 Hz screen lands on a
+  // whole fraction of it by chance, and walking it costs pixels for nothing.
+  private mayWalk(before: number, after: number, target: number): boolean {
+    if (wholeTimes(target / after)) return true;
+    const hz = this.screenHz;
+    return (
+      hz !== null &&
+      hz > target &&
+      after < LADDER_RULES.walkFastShare * target &&
+      wholeTimes(hz / after) &&
+      wholeTimes(hz / before)
+    );
   }
 
   private holdDown(before: number, at: number): void {
