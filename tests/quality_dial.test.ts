@@ -137,6 +137,23 @@ describe('the dial', () => {
     expect(laptop(null, 'royale').rung.ratio).toBe(1.25);
   });
 
+  it('starts a match on a screen with another ratio at its own top', () => {
+    // A match at a ratio of 1 that held its top, then a 2 panel: not
+    // capped at 1 by what the first one left.
+    const first = new QualityDial({ mode: 'classic', top: 1, phone: false, pin: null, now: 0 });
+    const gl = fakeGl(1);
+    first.attach({
+      gl: gl as unknown as THREE.WebGLRenderer,
+      scene: new THREE.Scene(),
+      onRatio() {},
+    });
+    play(first, gl, 8, 180);
+    first.dispose();
+    const next = new QualityDial({ mode: 'classic', top: 2, phone: false, pin: null, now: 0 });
+    expect(next.rung.ratio).toBe(2);
+    expect(next.lean).toEqual({ antialias: true, effectLights: true });
+  });
+
   it('never remembers a refresh that only matched the frames', () => {
     // Every frame two refreshes on a 60 Hz screen, nothing known before:
     // a 30 Hz screen would draw the same, so 30 is not kept as its rate.

@@ -226,10 +226,11 @@ export class QualityLadder {
   private bounces = 0;
   private downAt = Number.NEGATIVE_INFINITY;
   private upKeptAt = Number.NEGATIVE_INFINITY;
-  // The deepest rung a step down kept this match (null for none), and how
-  // long the match was judged.
+  // The deepest rung a step down kept this match (null for none), how
+  // long the match was judged, and how much of that below the top.
   private deepestKept: number | null = null;
   private judged = 0;
+  private below = 0;
 
   constructor(
     private readonly rungs: readonly Rung[],
@@ -259,9 +260,14 @@ export class QualityLadder {
     return this.deepestKept;
   }
 
-  // Milliseconds of drawing judged so far (past the settling).
+  // Milliseconds of drawing judged so far (past the settling), and those
+  // settled below the top.
   get judgedMs(): number {
     return this.judged;
+  }
+
+  get belowMs(): number {
+    return this.below;
   }
 
   // The screen's rate as best known: the refresh read off the intervals
@@ -313,6 +319,7 @@ export class QualityLadder {
     this.bestHz = Math.max(this.bestHz, fps);
     if (at < this.settleUntil) return this.current;
     this.judged += spent;
+    if (this.settled > 0) this.below += spent;
     this.judge(fps, script, at);
     return this.current;
   }

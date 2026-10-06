@@ -94,7 +94,6 @@ export class QualityDial {
   readonly rungs: readonly Rung[];
   readonly top: number;
   readonly leanLevel: number;
-  private readonly start: number;
   private readonly ladder: QualityLadder;
   private readonly pinned: boolean;
   private readonly mode: LadderMode;
@@ -120,7 +119,6 @@ export class QualityDial {
           ? { index: this.rungs.length - 1, lean: LEANEST }
           : matchStart(this.atStart.modes[this.mode], this.rungs);
     this.leanLevel = start.lean;
-    this.start = start.index;
     this.ladder = new QualityLadder(this.rungs, {
       index: start.index,
       known: [screenRefresh(), this.atStart.hz].filter((hz) => hz !== null),
@@ -211,12 +209,12 @@ export class QualityDial {
       hz: seen > 0 ? seen : this.atStart.hz,
       modes: {
         ...this.atStart.modes,
-        [this.mode]: afterMatch(this.atStart.modes[this.mode], {
+        [this.mode]: afterMatch({
           rungs: this.rungs,
-          start: this.start,
           settled: this.ladder.settled,
           deepest: this.ladder.deepest,
           judgedMs: this.ladder.judgedMs,
+          belowMs: this.ladder.belowMs,
           lean: this.leanLevel,
         }),
       },
