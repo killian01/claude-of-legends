@@ -106,9 +106,11 @@ export const LADDER_RULES: LadderRules = {
 };
 
 // An interval this many times the usual one is a stall, a hidden tab or a
-// frame the renderer skipped, not the frame rate, and never under this.
+// frame the renderer skipped, not the frame rate, and never under this;
+// unless this many come in a row: then the frames are that slow now.
 const STALL_FACTOR = 4;
 const STALL_MIN_MS = 250;
+const STALLS_IN_A_ROW = 3;
 // A divisor of the intervals is searched down to a refresh this short.
 const FASTEST_REFRESH_MS = 1000 / 250;
 const MAX_DIVISOR = 8;
@@ -151,8 +153,9 @@ export interface LadderStart {
 export class QualityLadder {
   private current: number;
   private lastAt: number | null = null;
-  // The usual interval, for telling a stall.
+  // The usual interval, for telling a stall, and the stalls in a row.
   private usual: number | null = null;
+  private stalls = 0;
   private sum = 0;
   private frames = 0;
   private scripts: number[] = [];
@@ -225,8 +228,10 @@ export class QualityLadder {
     const dt = at - last;
     if (!(dt > 0)) return this.current;
     if (this.usual !== null && dt > Math.max(STALL_MIN_MS, STALL_FACTOR * this.usual)) {
-      return this.current;
+      if (++this.stalls < STALLS_IN_A_ROW) return this.current;
+      this.usual = null;
     }
+    this.stalls = 0;
     this.usual = this.usual === null ? Math.min(dt, 1000) : this.usual * 0.9 + dt * 0.1;
     this.sum += dt;
     this.frames++;
@@ -257,10 +262,13 @@ export class QualityLadder {
   }
 
   // The view changed under the ladder (a hidden tab back, the planet's
-  // drop over): the window so far is dropped and nothing is judged until
-  // `until`, a trial in progress starting its count again.
+  // drop over): the window so far and the usual interval are dropped and
+  // nothing is judged until `until`, a trial in progress starting its
+  // count again.
   pause(until: number): void {
     this.lastAt = null;
+    this.usual = null;
+    this.stalls = 0;
     this.sum = 0;
     this.frames = 0;
     this.scripts = [];
