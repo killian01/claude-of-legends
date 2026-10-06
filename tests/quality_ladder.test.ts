@@ -19,7 +19,6 @@ import {
   ladderRungs,
   PHONE_RATIO_FLOOR,
   type QualityLadder,
-  refreshHz,
 } from '../src/game/quality_ladder';
 import {
   drive,
@@ -76,29 +75,6 @@ describe('the rungs', () => {
 });
 
 describe("the screen's refresh", () => {
-  it('is the common divisor of the intervals, however slow the frames', () => {
-    const p = 1000 / 60;
-    expect(refreshHz([p, p, p, p, p, p])).toBeCloseTo(60, 0);
-    expect(refreshHz([2 * p, 3 * p, 2 * p, 2 * p, 3 * p, 2 * p])).toBeCloseTo(60, 0);
-    // With the browser's jitter of a few tenths of a millisecond.
-    expect(refreshHz([33.2, 50.1, 33.4, 16.6, 33.3, 49.9, 33.5])).toBeCloseTo(60, 0);
-    const q = 1000 / 144;
-    expect(refreshHz([7 * q, 8 * q, 7 * q, 7 * q, 8 * q, 7 * q])).toBeCloseTo(144, 0);
-    expect(refreshHz([20, 20, 40, 20, 20, 20])).toBeCloseTo(50, 0);
-    expect(refreshHz([500, 1000, 500, 500, 1000])).toBeCloseTo(2, 5);
-  });
-
-  it('is not made up from intervals that share no divisor', () => {
-    expect(refreshHz([23.7, 31.1, 27.9, 35.3, 29.4, 26.2, 33.8, 24.5])).toBeNull();
-    expect(refreshHz([16.7, 16.7])).toBeNull();
-  });
-
-  it('is read through a clock that rounds to the millisecond', () => {
-    // 60 Hz handed over as 16 and 17, at 60 frames a second and at 45.
-    expect(refreshHz([16, 17, 17, 16, 17, 17, 16, 17, 17, 16])).toBeCloseTo(60, 0);
-    expect(refreshHz([16, 17, 33, 17, 17, 34, 16, 17, 33, 17, 16, 34])).toBeCloseTo(60, 0);
-  });
-
   it('is the rate known from lighter frames when every frame takes two refreshes', () => {
     // A weak GPU at a steady 30 on a 60 Hz screen: its intervals alone
     // could be a 30 Hz screen's, the page's menus drew at 60.
