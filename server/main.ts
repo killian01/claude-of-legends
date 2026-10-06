@@ -15,7 +15,6 @@ import { performance } from 'node:perf_hooks';
 import { pipeline } from 'node:stream';
 import { type WebSocket, WebSocketServer } from 'ws';
 import {
-  type DrawnQualityWire,
   type ForgedMatchAssets,
   isFiniteVec,
   parseClientMsg,
@@ -173,6 +172,8 @@ import {
   qualityOnWire,
   type SeatEnd,
   type SeatQueue,
+  type SeenQuality,
+  seeQuality,
 } from './seat_report';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
 import { starOrchard } from './star_orchard';
@@ -275,10 +276,10 @@ interface Client {
   country: string | null;
   mobile: boolean;
   pings: number[];
-  // The frames a second the page said it drew, and how finely, with each
-  // probe's echo.
+  // The frames a second the page said it drew with each probe's echo, and
+  // how finely over the whole socket.
   fps: number[];
-  quality: DrawnQualityWire[];
+  quality: SeenQuality | null;
   // The session this socket came in on, so closing it can be traced back
   // to a logout elsewhere.
   sessionId: string;
@@ -2793,7 +2794,7 @@ wss.on('connection', (ws, req) => {
     mobile: isMobileAgent(req.headers['user-agent']),
     pings: [],
     fps: [],
-    quality: [],
+    quality: null,
     matchId: null,
     msgWindowStart: now,
     msgCount: 0,
@@ -2824,10 +2825,7 @@ wss.on('connection', (ws, req) => {
       if (client.fps.length > PINGS_KEPT) client.fps.shift();
     }
     const drawn = qualityOnWire(q);
-    if (drawn !== null) {
-      client.quality.push(drawn);
-      if (client.quality.length > PINGS_KEPT) client.quality.shift();
-    }
+    if (drawn !== null) client.quality = seeQuality(client.quality, drawn);
   };
   send(id, { t: 'welcome', clientId: id, name: who.name });
 

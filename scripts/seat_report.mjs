@@ -42,8 +42,9 @@ if (rows.length === 0) {
 }
 const pad = (v, n) => String(v ?? '-').padEnd(n);
 // The seat's first moments and its frame rate (version 2 lines on), and
-// how finely the page drew (version 3 on): the step it stood on and the
-// deepest, the lean level (1 no effect lights, 2 no antialiasing either),
+// how finely the page drew (version 3 on): the step it last stood on and
+// the deepest of the seat (a match may start below the top, where its last
+// one left it), the lean level (1 no effect lights, 2 no antialiasing either),
 // the ratio, the picture's pixels, and no shadows when they were off.
 function moments(r) {
   if (r.v < 2) return '';
@@ -101,7 +102,7 @@ if (v3.length > 0) {
     return Math.round((w * h) / 1e4) / 100;
   };
   console.log(
-    `since the quality step is told (${v3.length} seats): stepped down ${v3.filter((r) => r.stepDeep > 0).length}, lean ${v3.filter((r) => r.lean > 0).length}, median megapixels ${med(v3.map((r) => mpx(r.px)))}`,
+    `since the quality step is told (${v3.length} seats): below the top at some point ${v3.filter((r) => r.stepDeep > 0).length}, still below at the end ${v3.filter((r) => r.step > 0).length}, lean ${v3.filter((r) => r.lean > 0).length}, median megapixels ${med(v3.map((r) => mpx(r.px)))}`,
   );
 }
 const byCountry = new Map();

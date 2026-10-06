@@ -80,10 +80,10 @@ export interface SeatReport {
   fpsLow: number | null;
   // How finely the page drew, as the probe's echo said
   // (src/game/quality_ladder.ts): the step it last stood on (0 the
-  // device's best) and the deepest it went, the lean level its context
-  // was made with (src/game/quality_memory.ts), its pixels per CSS pixel,
-  // the picture's size in pixels ('1920x1080') and whether the ground
-  // showed shadows; null when it never said.
+  // device's best) and the deepest any echo of the seat named, the lean
+  // level its context was made with (src/game/quality_memory.ts), its
+  // pixels per CSS pixel, the picture's size in pixels ('1920x1080') and
+  // whether the ground showed shadows; null when it never said.
   step: number | null;
   stepDeep: number | null;
   lean: number | null;
@@ -128,7 +128,7 @@ export interface SeatReportInput {
   unit: { level: number; kills: number; deaths: number; assists: number; cs: number } | null;
   pings: readonly number[];
   fps: readonly number[];
-  quality: readonly DrawnQualityWire[];
+  quality: SeenQuality | null;
 }
 
 export function buildSeatReport(i: SeatReportInput): SeatReport {
@@ -137,7 +137,7 @@ export function buildSeatReport(i: SeatReportInput): SeatReport {
   const fps = median(i.fps);
   const since = (tick: number | null): number | null =>
     tick === null ? null : seconds(tick - s.startTick);
-  const q = i.quality.at(-1) ?? null;
+  const q = i.quality?.last ?? null;
   return {
     v: SEAT_REPORT_VERSION,
     at: i.at,
@@ -172,7 +172,7 @@ export function buildSeatReport(i: SeatReportInput): SeatReport {
     fps: fps === null ? null : Math.round(fps),
     fpsLow: i.fps.length === 0 ? null : Math.round(Math.min(...i.fps)),
     step: q?.step ?? null,
-    stepDeep: q === null ? null : Math.max(...i.quality.map((x) => x.step)),
+    stepDeep: i.quality?.deepest ?? null,
     lean: q?.lean ?? null,
     ratio: q?.ratio ?? null,
     px: q === null ? null : `${q.w}x${q.h}`,
@@ -184,6 +184,19 @@ export function buildSeatReport(i: SeatReportInput): SeatReport {
 // can draw, or nothing.
 export function fpsOnWire(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 1000 ? v : null;
+}
+
+// How finely a page drew over a seat: what the last echo said, and the
+// deepest step any of them named. A running record, not the last few
+// echoes the round trips keep, so a step down in the first minute of a
+// long match is still told at its end.
+export interface SeenQuality {
+  last: DrawnQualityWire;
+  deepest: number;
+}
+
+export function seeQuality(seen: SeenQuality | null, q: DrawnQualityWire): SeenQuality {
+  return { last: q, deepest: Math.max(seen?.deepest ?? 0, q.step) };
 }
 
 const whole = (v: unknown, max: number): v is number =>
