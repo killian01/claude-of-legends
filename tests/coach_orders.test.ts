@@ -116,8 +116,9 @@ describe('coach orders', () => {
       }).ok,
     ).toBe(false);
     expect(validatePlaybook(NEW_BOT_PLAYBOOK).ok).toBe(true);
-    expect(NEW_BOT_PLAYBOOK.plays[0]!.id).toBe('retreat');
-    expect(NEW_BOT_PLAYBOOK.plays[1]!.id).toBe(COACH_PLAY_ID);
+    expect(NEW_BOT_PLAYBOOK.plays[0]!.id).toBe('drink');
+    expect(NEW_BOT_PLAYBOOK.plays[1]!.id).toBe('retreat');
+    expect(NEW_BOT_PLAYBOOK.plays[2]!.id).toBe(COACH_PLAY_ID);
     // A house bot never listens: the Laner has no such play.
     const sim = new Sim(3);
     const me = sim.addChampion(0, { x: 60, z: 60 });

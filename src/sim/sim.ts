@@ -24,7 +24,7 @@ import {
   sightFactor,
 } from './combat/status';
 import { type ChampionDef, DEFAULT_CHAMPION_ID, homeLane } from './content/champions';
-import { ITEMS } from './content/items';
+import { ITEMS, mayCarryDraught } from './content/items';
 import { GAME_MAP, type GameMap, type LaneId, type WardenPit } from './content/map';
 import { type AspectId, type CreatureId, RING_GOLD_EACH, TIDE_PERIOD_S } from './content/rings';
 import { PLANET_NEUTRAL_SCALE, RING_RISE_AT_S, WARDEN_RISE_AT_S } from './content/royale_events';
@@ -941,9 +941,7 @@ export class Sim {
     // Death is shopping time, like the genre: a corpse respawns at its own
     // fountain, so the range check is waived while it waits. Selling still
     // wants a live champion standing there.
-    // The Sapdraught is not on sale before the HUD can drink it
-    // (docs/plan-potion.md, phase 2).
-    if (def.drink) return false;
+    if (def.drink && !mayCarryDraught(u.items)) return false;
     const dead = u.dead || this.dead.has(unitId);
     if (!dead && !withinFountain(this.map, u.team, u.pos)) return false;
 

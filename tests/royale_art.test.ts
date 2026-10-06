@@ -66,9 +66,10 @@ describe("the landing's New banner", () => {
 describe('the news of the battle royale', () => {
   const entry = NEWS.find((e) => e.day === '2026-10-03');
 
-  it('is the newest entry, so the landing shows it', () => {
+  it('was the newest entry on its day, so the landing showed it', () => {
     expect(entry).toBeDefined();
-    expect(newestOf(NEWS, Date.parse('2026-10-03T12:00:00Z'))).toBe(entry);
+    const byThen = NEWS.filter((e) => e.day <= '2026-10-03');
+    expect(newestOf(byThen, Date.parse('2026-10-03T12:00:00Z'))).toBe(entry);
     expect(entry?.image).toBe('wanderseed.webp');
     expect(entry?.link?.to).toBe('play');
   });

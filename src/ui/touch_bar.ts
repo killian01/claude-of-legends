@@ -11,10 +11,11 @@
 import { MIN_TAP_PX } from '../game/ui_scale';
 
 // The recall and the shop are absent in a battle royale (ADR 0031), and
-// so are their buttons.
+// so are their buttons. Drink shows only while a Sapdraught is carried.
 export interface TouchBarActions {
   onRecall?(): void;
   onToggleShop?(): void;
+  onDrink?(): void;
   onToggleMenu(): void;
   onRecenterCamera(): void;
 }
@@ -39,33 +40,58 @@ export const TOUCH_BAR_CSS = `
 .touchbar.left {
   right: auto; left: calc(8px + var(--safe-left, env(safe-area-inset-left, 0px))); top: 38%;
 }
+/* On the right, Drink sits beside the bottom button so the column keeps its
+   height between the score box and the minimap; on the left the column has
+   the room, and beside it is the stick's. */
+.touchbar-btn.drink { position: absolute; bottom: 0; right: calc(100% + 8px); }
+.touchbar.left .touchbar-btn.drink { position: static; }
 `;
 
-// Returns a teardown removing the bar and its stylesheet, like the HUD's.
+export interface TouchBar {
+  // Shows the Drink button or hides it; the match calls it every tick.
+  showDrink(on: boolean): void;
+  // Removes the bar and its stylesheet, like the HUD's teardown.
+  dispose(): void;
+}
+
 export function buildTouchBar(
   container: HTMLElement,
   actions: TouchBarActions,
   opts: { side?: 'left' | 'right' } = {},
-): () => void {
+): TouchBar {
   const style = document.createElement('style');
   style.textContent = TOUCH_BAR_CSS;
   document.head.appendChild(style);
   const root = document.createElement('div');
   root.className = opts.side === 'left' ? 'touchbar left' : 'touchbar';
-  const add = (label: string, onTap: () => void): void => {
+  const add = (label: string, onTap: () => void): HTMLButtonElement => {
     const btn = document.createElement('button');
     btn.className = 'touchbar-btn';
     btn.textContent = label;
     btn.addEventListener('click', onTap);
     root.appendChild(btn);
+    return btn;
   };
   add('Menu', actions.onToggleMenu);
   if (actions.onToggleShop) add('Shop', actions.onToggleShop);
   if (actions.onRecall) add('Recall', actions.onRecall);
   add('Center', actions.onRecenterCamera);
+  const drink = actions.onDrink ? add('Drink', actions.onDrink) : null;
+  if (drink) {
+    drink.classList.add('drink');
+    drink.style.display = 'none';
+  }
+  let drinkShown = false;
   container.appendChild(root);
-  return () => {
-    root.remove();
-    style.remove();
+  return {
+    showDrink(on) {
+      if (!drink || on === drinkShown) return;
+      drinkShown = on;
+      drink.style.display = on ? '' : 'none';
+    },
+    dispose() {
+      root.remove();
+      style.remove();
+    },
   };
 }

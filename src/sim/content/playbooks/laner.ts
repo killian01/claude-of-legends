@@ -11,10 +11,12 @@
 // Q, W, E; the fight's auto stance kites on ranged champions.
 
 import type { PlaybookDef } from '../../playbook/types';
+import { DRINK_PLAY } from './drink';
 
 export const LANER_PLAYBOOK: PlaybookDef = {
   version: 2,
   plays: [
+    DRINK_PLAY,
     // Survive first: under a third of health, run home by the fastest
     // means (escape key, Riftstep, Zephyr, Mend, recall, feet).
     { id: 'retreat', when: { kind: 'hp', below: 0.32 }, do: { kind: 'retreat' } },

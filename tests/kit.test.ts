@@ -472,13 +472,16 @@ describe('a sparring on an owner build', () => {
     const { sim, unitIds } = buildMatchSim(starOrchard(), 11, picks, []);
     const me = sim.units.get(unitIds[0]!)!;
     while (sim.winner === null && sim.tickCount < 20 * 60 * 25) sim.tick();
-    for (const id of me.items) {
+    // A Sapdraught the walker carries beside the build is no rot.
+    const kept = me.items.filter((id) => !ITEMS[id]?.drink);
+    expect(me.items.length - kept.length).toBeLessThanOrEqual(1);
+    for (const id of kept) {
       expect(
         build.some((t) => t === id || ownsTarget([t], id) || ownsTarget([id], t)),
         `${id} in ${me.items.join(',')}`,
       ).toBe(true);
     }
-    expect(unwantedSlots(build, me.items)).toEqual([]);
-    expect(me.items.length).toBeGreaterThanOrEqual(3);
+    expect(unwantedSlots(build, kept)).toEqual([]);
+    expect(kept.length).toBeGreaterThanOrEqual(3);
   }, 120_000);
 });

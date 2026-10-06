@@ -396,6 +396,7 @@ function behavior(raw: unknown, at: string, errors: Errors): Behavior {
     case 'hold':
     case 'shop':
     case 'goShop':
+    case 'drink':
     case 'finishSanctum':
     case 'takeCamp':
     case 'obeyOrder':

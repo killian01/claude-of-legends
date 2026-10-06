@@ -22,7 +22,14 @@ import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
 import type { Status } from '../sim/combat/status';
 import { CAMPS } from '../sim/content/camps';
-import { effectiveItemCost, ITEM_LIST, ITEMS } from '../sim/content/items';
+import {
+  CONSUMABLE_LIST,
+  DRAUGHT_CARRY,
+  effectiveItemCost,
+  ITEM_LIST,
+  ITEMS,
+  mayCarryDraught,
+} from '../sim/content/items';
 import { ASPECT_IDS, ASPECTS, type AspectId, CREATURES } from '../sim/content/rings';
 import { SIGILS } from '../sim/content/sigils';
 import type { FavorStacks } from '../sim/favors';
@@ -1642,8 +1649,12 @@ export class Hud {
         if (!itemDef) return royale ? [...LOOT_EMPTY] : [];
         const lines = describeItem(itemDef, statLabel(itemDef.stats));
         // Nothing to sell it for in a battle royale: no gold, no fountain.
-        return royale ? lines : [...lines, 'Right-click to sell (70 percent back, at fountain).'];
+        if (royale) return lines;
+        if (itemDef.drink) lines.push(`Click or press ${i + 1} to drink it.`);
+        return [...lines, 'Right-click to sell (70 percent back, at fountain).'];
       });
+      // A click on a Sapdraught drinks it, anywhere.
+      slot.addEventListener('click', () => this.drinkSlot(i));
       // Right-click sells at the fountain for 70 percent of the price.
       slot.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -1803,6 +1814,7 @@ export class Hud {
       'Legendary upgrades, built from a finished item',
       ITEM_LIST.filter((i) => i.tier === 3),
     );
+    addSection(`Drinks, ${DRAUGHT_CARRY} carried at most`, CONSUMABLE_LIST);
     this.shopDetail = el('div', 'hud-shop-detail');
     shopBody.append(shopGrid, this.shopDetail);
     this.shop.append(shopHead, shopBody);
@@ -2691,6 +2703,11 @@ export class Hud {
       this.toast('You must be at your fountain to buy.');
       return;
     }
+    if (ITEMS[itemId]?.drink && !mayCarryDraught(u.items)) {
+      playSfx('deny');
+      this.toast(`You carry ${DRAUGHT_CARRY} drinks already.`);
+      return;
+    }
     const cost = effectiveItemCost(itemId, u.items);
     if (u.gold < cost) {
       playSfx('deny');
@@ -2699,6 +2716,17 @@ export class Hud {
     }
     if (this.world.buyItem(this.selfId, itemId)) playSfx('buy');
     this.update();
+  }
+
+  // Drinks the Sapdraught in bag slot `slot` (a click on it, its number
+  // key, the touch bar's Drink); a slot holding anything else does nothing.
+  drinkSlot(slot: number): void {
+    if (this.royale) return;
+    const u = this.world.units.get(this.selfId);
+    const itemId = u?.items[slot];
+    if (!u || u.dead || !itemId || !ITEMS[itemId]?.drink) return;
+    if (this.world.drinkItem(this.selfId, slot)) this.update();
+    else this.toast('A drink is already working.');
   }
 
   // A bright pulse on the mana bar so "why did my key do nothing" has a
@@ -2752,12 +2780,26 @@ export class Hud {
       mk('hud-detail-name', def.name),
       mk(
         'hud-detail-tier',
-        def.tier === 1 ? 'Component' : def.tier === 2 ? 'Finished item' : 'Legendary upgrade',
+        def.drink
+          ? 'Drink'
+          : def.tier === 1
+            ? 'Component'
+            : def.tier === 2
+              ? 'Finished item'
+              : 'Legendary upgrade',
       ),
     );
     head.append(bigIcon, title);
     d.appendChild(head);
-    d.appendChild(mk('hud-detail-stats', statLabel(def.stats)));
+    d.appendChild(
+      mk(
+        'hud-detail-stats',
+        def.drink
+          ? `${def.drink.heal} health over ${def.drink.seconds} s. Click it in your bag, ` +
+              'or press its number, to drink it anywhere.'
+          : statLabel(def.stats),
+      ),
+    );
 
     const buildIcon = (itemId: string, owned: boolean): HTMLElement => {
       const item = ITEMS[itemId];
@@ -2819,10 +2861,12 @@ export class Hud {
     buy.type = 'button';
     buy.className = 'hud-buy';
     buy.textContent = `Buy (${eff}g)`;
-    buy.disabled = !shopOk || u.gold < eff;
+    const full = def.drink !== undefined && !mayCarryDraught(u.items);
+    buy.disabled = !shopOk || u.gold < eff || full;
     buy.addEventListener('click', () => this.tryBuy(def.id));
     d.appendChild(buy);
     if (!shopOk) d.appendChild(mk('hud-buy-why', 'Return to your fountain to buy.'));
+    else if (full) d.appendChild(mk('hud-buy-why', `You carry ${DRAUGHT_CARRY} already.`));
     else if (u.gold < eff)
       d.appendChild(mk('hud-buy-why', `You need ${Math.ceil(eff - u.gold)} more gold.`));
   }
@@ -3317,11 +3361,12 @@ export class Hud {
             : 'Click an item to inspect it; Buy or double-click to purchase.'
           : 'Browse anywhere; buying needs your fountain.';
       this.shopGoldText.textContent = `${Math.floor(u.gold)}g`;
-      for (const item of ITEM_LIST) {
+      for (const item of [...ITEM_LIST, ...CONSUMABLE_LIST]) {
         const btn = this.itemButtons.get(item.id);
         if (btn) {
           const cost = effectiveItemCost(item.id, u.items);
-          btn.classList.toggle('cant', !shopOk || u.gold < cost);
+          const full = item.drink !== undefined && !mayCarryDraught(u.items);
+          btn.classList.toggle('cant', !shopOk || u.gold < cost || full);
           btn.classList.toggle('sel', item.id === this.shopSelected);
           btn.classList.toggle('suggested', item.id === suggestion);
         }

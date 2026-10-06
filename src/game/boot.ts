@@ -13,6 +13,7 @@ import { schoolColorOf } from '../render/ability_vfx';
 import { aspectColor } from '../render/aspect_colors';
 import { Renderer } from '../render/renderer';
 import type { RenderTerrain } from '../render/terrain';
+import { draughtSlot } from '../sim/content/items';
 import { copy, dist, onSphere } from '../sim/geo';
 import type { RoyaleVariant } from '../sim/royale/types';
 import { effectiveRank } from '../sim/stats';
@@ -612,6 +613,7 @@ export function startPresentation(
     },
     // A battle royale's Graft card, by its key (1, 2, 3).
     onPickCard: (card) => hud.pickGraft(card),
+    onDrinkSlot: (slot) => hud.drinkSlot(slot),
     isTyping: () => hud.isChatOpen(),
   };
   const teardownInput = setupInput(renderer, inputHandlers);
@@ -664,7 +666,7 @@ export function startPresentation(
   const laneArrow = guide === 'play' && !options.royale ? new LaneArrow(stage.el) : null;
   const arrowHalf = laneArrowHalf();
   if (thumbControls) hud.setCastTouch(touch.castTouch);
-  const teardownTouchBar = coarsePointer
+  const touchBar = coarsePointer
     ? buildTouchBar(
         stage.el,
         {
@@ -674,6 +676,10 @@ export function startPresentation(
             : {
                 onRecall: () => inputHandlers.onRecall(),
                 onToggleShop: () => inputHandlers.onToggleShop(),
+                onDrink: () => {
+                  const me = world.units.get(selfId);
+                  if (me) hud.drinkSlot(draughtSlot(me.items));
+                },
               }),
           onToggleMenu: () => inputHandlers.onToggleMenu(),
           onRecenterCamera: () => inputHandlers.onRecenterCamera(),
@@ -696,6 +702,7 @@ export function startPresentation(
     const me = world.units.get(selfId);
     selfPrev = selfCurr;
     selfCurr = me ? copy(me.pos) : null;
+    touchBar?.showDrink(me !== undefined && !me.dead && draughtSlot(me.items) !== -1);
     stepPendingCast();
     // Warden spawn: ping its pit on the minimap and flash the ground so
     // nobody misses it (the HUD adds the announcement and the voice).
@@ -815,7 +822,7 @@ export function startPresentation(
       teardownCursorLock();
       touch.dispose();
       stickView?.dispose();
-      teardownTouchBar?.();
+      touchBar?.dispose();
       hud.dispose();
       laneArrow?.dispose();
       minimap.dispose();

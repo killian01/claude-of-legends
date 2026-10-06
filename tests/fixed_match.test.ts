@@ -57,4 +57,4 @@ describe('a recorded 5v5', () => {
   }, 120_000);
 });
 
-const PINNED = 2333111759;
+const PINNED = 97662613;

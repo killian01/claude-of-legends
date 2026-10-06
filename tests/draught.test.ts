@@ -79,12 +79,18 @@ describe('the Sapdraught', () => {
     expect(buildObservation(sim, me.id)?.self.drinking).toBeGreaterThan(6);
   });
 
-  it('is not on sale yet', () => {
+  it('is sold at the fountain for 50, two carried at most', () => {
     const sim = new Sim(7);
     const me = sim.addChampion(0);
     me.gold = 500;
+    expect(sim.buyItem(me.id, 'sapdraught')).toBe(true);
+    expect(sim.buyItem(me.id, 'sapdraught')).toBe(true);
     expect(sim.buyItem(me.id, 'sapdraught')).toBe(false);
-    expect(me.items).toEqual([]);
+    expect(me.items).toEqual(['sapdraught', 'sapdraught']);
+    expect(me.gold).toBe(400);
+    me.pos = { x: 75, z: 75 };
+    expect(sim.drinkItem(me.id, 1)).toBe(true);
+    expect(sim.buyItem(me.id, 'sapdraught')).toBe(false);
   });
 });
 
