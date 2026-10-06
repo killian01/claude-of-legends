@@ -286,9 +286,10 @@ export class QualityLadder {
   // A trial's windows are in. Up: kept, the step down it undoes failed too,
   // or back and held. Down: kept, and still short the next at once against
   // its windows; the page slowed under it, fresh windows at once, nothing
-  // held; every frame still the same whole number of refreshes, a rung
-  // further (a screen waiting for its refresh shows nothing until a frame
-  // fits under one fewer); else back and held.
+  // held; every frame still the same whole number of the screen's own
+  // refreshes, a rung further (a screen waiting for its refresh shows
+  // nothing until a frame fits under one fewer: 120/8 to 120/7 a second
+  // gains 1.14); else back and held.
   private decide(trial: Trial, target: number, at: number): void {
     const r = LADDER_RULES;
     const after = median(trial.rates);
@@ -310,7 +311,7 @@ export class QualityLadder {
     } else if (after * r.gain < trial.before) {
       this.current = trial.from;
       this.fresh = [];
-    } else if (wholeTimes(target / after) && this.current < this.floor) {
+    } else if (wholeTimes((this.screenHz ?? target) / after) && this.current < this.floor) {
       this.current++;
       this.trial = { ...trial, seen: 0, rates: [], walked: true };
     } else {
