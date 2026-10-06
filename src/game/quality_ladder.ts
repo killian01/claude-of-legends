@@ -20,20 +20,23 @@
 // same two or three refreshes (a screen that waits for its refresh shows
 // nothing until a frame fits under one refresh fewer), otherwise undone
 // and not tried again for a while, so a page held back by its scripts
-// rather than its pixels is left as it was. A step back up
-// comes after a spell with room to spare, or minutes on end with no
-// window short (a page that holds its rung at 0.9 of the screen's rate
-// is not left there), and is a trial too: undone at its first short
-// window, kept after half a minute without one. One undone, or one kept
-// and given up soon after, holds the next back longer each time: the
-// ladder settles rather than swings. The screen's rate is never
-// assumed: a browser hands requestAnimationFrame the time of the screen's
-// refresh, so every interval is a whole number of refreshes and their
-// common divisor is the refresh, however slow the frames; the best rate
-// seen counts too. Frames that all take two refreshes on a 60 Hz screen
-// read as a 30 Hz screen's would, so the rate the page read off its
-// lighter frames (frame_rate.ts), or remembered, stands when the read is a
-// whole fraction of it. Nothing faster than 60 frames a second is chased.
+// rather than its pixels is left as it was. A step back up comes after a
+// spell with room to spare, or minutes on end with no window short (a
+// page that holds its rung at 0.9 of the screen's rate is not left
+// there), and is a trial too: undone at its first short window, kept
+// after half a minute without one. One undone, or one kept and given up
+// soon after, holds the next back longer each time: the ladder settles
+// rather than swings. One slow frame in a second is a hitch, not the
+// second's rate.
+//
+// The screen's rate is never assumed: a browser hands
+// requestAnimationFrame the time of the screen's refresh, so every
+// interval is a whole number of refreshes and their common divisor is the
+// refresh, however slow the frames; the best rate seen counts too. Frames
+// that all take two refreshes on a 60 Hz screen read as a 30 Hz screen's
+// would, so the rate the page read off its lighter frames (frame_rate.ts),
+// or remembered, stands when the read is a whole fraction of it. Nothing
+// faster than 60 frames a second is chased.
 //
 // Pure: the renderer feeds it each drawn frame's time and applies the rung
 // it answers (src/render/renderer.ts).
