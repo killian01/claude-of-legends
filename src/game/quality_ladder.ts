@@ -16,8 +16,11 @@
 // take; the floor, 0.75 on a desktop, is soft but reads.
 //
 // A step down is a trial: kept only when the frame rate rose with it,
-// otherwise undone and not tried again for a while, so a page held back by
-// its scripts rather than its pixels is left as it was. A step back up
+// going a rung further while it did not and every frame still took the
+// same two or three refreshes (a screen that waits for its refresh shows
+// nothing until a frame fits under one refresh fewer), otherwise undone
+// and not tried again for a while, so a page held back by its scripts
+// rather than its pixels is left as it was. A step back up
 // comes after a spell with room to spare, or minutes on end with no
 // window short (a page that holds its rung at 0.9 of the screen's rate
 // is not left there), and is a trial too: undone at its first short
@@ -81,7 +84,9 @@ export interface LadderRules {
   recoverWindows: number;
   calmWindows: number;
   // A step down is judged on the median of this many windows, after one
-  // left for the change itself; kept when the rate rose by `gain`.
+  // left for the change itself; kept when the rate rose by `gain`, tried
+  // a rung further while it did not and every frame still took the same
+  // two or three refreshes.
   trialWindows: number;
   gain: number;
   // An undone step down is not tried again for this long, twice as long
@@ -386,6 +391,19 @@ export class QualityLadder {
       trial.rates.push(fps);
       if (trial.rates.length < r.trialWindows) return;
       const after = median(trial.rates);
+      // No gain, every frame still taking the same two or three refreshes
+      // of the rate aimed for: a screen that waits for its refresh shows
+      // nothing until a frame fits under one refresh fewer, so the next
+      // rung down is tried against the same rate, as far as the last.
+      // Slower frames cross a refresh with any rung's gain.
+      const refreshes = target / after;
+      const waiting = refreshes >= 1.5 && refreshes < 3.5 && wholeTimes(refreshes);
+      if (after < trial.before * r.gain && waiting && this.current < this.rungs.length - 1) {
+        this.current++;
+        trial.seen = 0;
+        trial.rates = [];
+        return;
+      }
       this.trial = null;
       this.runsOver();
       if (after >= trial.before * r.gain) {
