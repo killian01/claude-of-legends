@@ -136,8 +136,8 @@ export class QualityDial {
     this.atStart = readQualityMemory();
     this.start =
       setup.pin === null
-        ? (this.atStart.modes[this.mode] ?? { lean: 0, played: 0 })
-        : { lean: setup.pin === 'low' ? LEANEST : 0, played: 0 };
+        ? (this.atStart.modes[this.mode] ?? { lean: 0, played: 0, slow: 0 })
+        : { lean: setup.pin === 'low' ? LEANEST : 0, played: 0, slow: 0 };
     this.leanLevel = this.start.lean;
     // This page's own frames tell this screen best: a browser that holds
     // every page at 30 (a battery saver) shows it there.

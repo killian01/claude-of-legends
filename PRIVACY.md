@@ -167,13 +167,13 @@ and it is only ever read beside the round trip it explains.
 
 Your browser also keeps, in its own storage and for itself alone, for each
 kind of match whether the next one lets spells light the ground and smooths
-edges, and for how many matches it has drawn that way, and the rate your
-screen refreshes at: one line under `col.quality`
-(`src/game/quality_memory.ts`), so that a machine too slow for the effects
-starts its next match lighter rather than learning it again. How finely a
-match was drawn is not kept: every match starts at your screen's best. It
-is never sent anywhere; the step the match stands on is what the seat line
-above carries.
+edges, for how many matches it has drawn that way, and how many in a row
+drew far too slowly, and the rate your screen refreshes at: one line under
+`col.quality` (`src/game/quality_memory.ts`), so that a machine too slow
+for the effects starts its next match lighter rather than learning it
+again. How finely a match was drawn is not kept: every match starts at
+your screen's best. It is never sent anywhere; the step the match stands
+on is what the seat line above carries.
 
 ## What you write in the feedback box
 

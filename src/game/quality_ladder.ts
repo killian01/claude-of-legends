@@ -9,17 +9,17 @@
 //
 // Small on purpose: a step taken over a slowdown that passed is given back
 // by the next trial up and never carries over, rather than ruled out. Every
-// match starts on the top rung and draws it 20 judged seconds first, the
-// rate the next match's lean is weighed on. Under three quarters of the
-// target (45 frames a second on a 60 Hz screen) by the median of the last
-// eight one-second windows, four fresh windows are measured, since windows
-// that crossed lean low; still under, the rung below is tried and kept when
-// the median of eight windows after a change of two draws 1.15 times the
-// fresh one. A lower rung that then draws nine tenths of the target, or no
-// longer 1.15 times what its step was weighed against, tries at once the
-// rung its step came from, kept when it holds three quarters. A failed step
-// holds the next of its kind back, twice as long after each, never past a
-// ceiling.
+// match starts on the top rung and draws it 20 judged seconds first; the
+// top's windows are what the next match's lean is weighed on. Under three
+// quarters of the target (45 frames a second on a 60 Hz screen) by the
+// median of the last eight one-second windows, four fresh windows are
+// measured, since windows that crossed lean low; still under, the rung
+// below is tried and kept when the median of eight windows after a change
+// of two draws 1.15 times the fresh one. A lower rung that then draws nine
+// tenths of the target, or no longer 1.15 times what its step was weighed
+// against, tries at once the rung its step came from, kept when it holds
+// three quarters. A failed step holds the next of its kind back, twice as
+// long after each, never past a ceiling.
 //
 // A browser hands requestAnimationFrame the refresh's time, so frames that
 // all take two refreshes on a 60 Hz screen read as a 30 Hz screen's would
@@ -45,6 +45,7 @@ export const LADDER_RULES = {
   upHoldMs: 20_000, // after a step up undone, doubling
   upHoldMostMs: 300_000,
   scriptShare: 0.75, // frames this much script are not held back by pixels
+  topQuantile: 0.9, // the top's share: nine windows in ten at it or under
 };
 
 // One slow frame in a window is a hitch, left out of its rate; slow frames
@@ -138,9 +139,13 @@ export class QualityLadder {
     return this.trial?.from ?? this.current;
   }
 
-  // The median of the top's windows as a share of the target.
+  // The top's windows as shares of the target, nine in ten of them at this
+  // or under: under 0.6 the top drew far too slowly all along
+  // (quality_memory.ts), not for a fight or three that filled most of its
+  // windows while the ladder stood a rung down between them.
   get topShare(): number | null {
-    return this.topShares.length > 0 ? median(this.topShares) : null;
+    const s = [...this.topShares].sort((a, b) => a - b);
+    return s.length > 0 ? s[Math.floor(s.length * LADDER_RULES.topQuantile)]! : null;
   }
 
   // The screen's rate: the refresh read (else known), or the best seen.
