@@ -76,10 +76,12 @@ const scriptBound = (refreshHz: number, ms: number): Machine => ({
 });
 
 const SETTLE = 10_000;
-const ladderFor = (top: number, index = 0, screenHz: number | null = null) =>
+// `known`: the screen's rates known before the match (the page's lighter
+// frames, the browser's memory).
+const ladderFor = (top: number, index = 0, known: number[] = []) =>
   new QualityLadder(ladderRungs(top, DESK_RATIO_FLOOR), {
     index,
-    screenHz,
+    known,
     settleUntil: SETTLE,
   });
 
@@ -136,6 +138,37 @@ describe("the screen's refresh", () => {
     expect(refreshHz([23.7, 31.1, 27.9, 35.3, 29.4, 26.2, 33.8, 24.5])).toBeNull();
     expect(refreshHz([16.7, 16.7])).toBeNull();
   });
+
+  it('is read through a clock that rounds to the millisecond', () => {
+    // 60 Hz handed over as 16 and 17, at 60 frames a second and at 45.
+    expect(refreshHz([16, 17, 17, 16, 17, 17, 16, 17, 17, 16])).toBeCloseTo(60, 0);
+    expect(refreshHz([16, 17, 33, 17, 17, 34, 16, 17, 33, 17, 16, 34])).toBeCloseTo(60, 0);
+  });
+
+  it('is the rate known from lighter frames when every frame takes two refreshes', () => {
+    // A weak GPU at a steady 30 on a 60 Hz screen: its intervals alone
+    // could be a 30 Hz screen's, the page's menus drew at 60.
+    for (const known of [[60], [144, 60]]) {
+      const l = ladderFor(1.25, 0, known);
+      const run = drive(l, fillBound(60, 33.4, 1.25), 120);
+      expect(l.screenHz).toBeCloseTo(60, 0);
+      expect(run.changes[0]).toEqual({ at: expect.any(Number), index: 1 });
+      expect(run.lastFps).toBeGreaterThan(LADDER_RULES.shortShare * 60);
+    }
+  });
+
+  it('is kept only when the frames came slower than it', () => {
+    // A steady 30 with nothing known: a 30 Hz screen as far as anyone
+    // can tell, and nothing worth remembering.
+    const steady = ladderFor(1.25);
+    expect(drive(steady, fillBound(60, 33.4, 1.25), 120).changes).toEqual([]);
+    expect(steady.screenHz).toBeCloseTo(30, 0);
+    expect(steady.refreshRead).toBeNull();
+    // At 45 a second, one refresh and two: the refresh itself.
+    const mixed = ladderFor(1.25);
+    drive(mixed, fillBound(60, 22, 1.25), 60);
+    expect(mixed.refreshRead).toBeCloseTo(60, 0);
+  });
 });
 
 describe('a machine that holds its screen', () => {
@@ -162,15 +195,18 @@ describe('a machine that holds its screen', () => {
   it('is never stepped down on a 50 Hz panel drawing its 50', () => {
     // A screen slower than 60 is not taken for a slow machine, even with
     // 60 remembered from another screen.
-    const l = ladderFor(1.25, 0, 60);
+    const l = ladderFor(1.25, 0, [60]);
     expect(drive(l, fillBound(50, 15, 1.25), 600).changes).toEqual([]);
     expect(l.screenHz).toBeCloseTo(50, 0);
   });
 
   it('is never stepped down under a steady 30 frames a second it was asked for', () => {
-    // A virtual clock (scripts/tour_match.mjs) or a 30 Hz screen.
-    const l = ladderFor(1.25);
-    expect(drive(l, fillBound(30, 20, 1.25), 600).changes).toEqual([]);
+    // A virtual clock (scripts/tour_match.mjs) or a 30 Hz screen, its
+    // menus drawn at 30 too, or nothing known.
+    for (const known of [[30], []]) {
+      const l = ladderFor(1.25, 0, known);
+      expect(drive(l, fillBound(30, 20, 1.25), 600).changes).toEqual([]);
+    }
   });
 });
 
@@ -210,7 +246,7 @@ describe('a weak GPU', () => {
   });
 
   it('starts where an earlier match left it', () => {
-    const l = ladderFor(1.25, 2, 60);
+    const l = ladderFor(1.25, 2, [60]);
     expect(l.rung).toEqual({ ratio: 0.85, shadows: true });
     // Holding the screen there, short one rung up: no step down, and a
     // single look up in five minutes.
@@ -255,7 +291,7 @@ describe('a step up', () => {
   it('is undone when it leaves the frames hovering just short', () => {
     // Room to spare one rung down; at the top the rate swings about the
     // line, a window over it and the next under.
-    const l = ladderFor(1.25, 1, 60);
+    const l = ladderFor(1.25, 1, [60]);
     const m: Machine = {
       refreshMs: 1000 / 60,
       workMs: (r, at) =>
@@ -308,7 +344,7 @@ describe('what does not count', () => {
     // A machine at 60 whose next three seconds each take one frame of
     // 200 ms (a program linking, a collection): under a stall's length,
     // but one frame in a window, not its rate.
-    const l = ladderFor(1.25, 0, 60);
+    const l = ladderFor(1.25, 0, [60]);
     const p = 1000 / 60;
     let at = 0;
     let hitchAt = 30_000;
@@ -326,7 +362,7 @@ describe('what does not count', () => {
   it('frames that miss their refresh often are the rate, not hitches', () => {
     // 22 ms a frame: one interval in three two refreshes long, so most of
     // them are one refresh, and the rate is 45, short.
-    const l = ladderFor(1.25, 0, 60);
+    const l = ladderFor(1.25, 0, [60]);
     expect(drive(l, fillBound(60, 22, 1.25), 30).changes[0]).toEqual({
       at: expect.any(Number),
       index: 1,
@@ -336,7 +372,7 @@ describe('what does not count', () => {
   it('a sudden steady drop is the frame rate, not a run of stalls', () => {
     // 60 frames a second, then three a second for good: the slow frames
     // are judged once a few have come in a row, and the ladder steps.
-    const l = ladderFor(1.25, 0, 60);
+    const l = ladderFor(1.25, 0, [60]);
     let slow = false;
     const m: Machine = {
       refreshMs: 1000 / 60,
@@ -353,7 +389,7 @@ describe('what does not count', () => {
 
   it('a pause forgets the usual interval', () => {
     // Slow frames after a pause are the frame rate from their first.
-    const l = ladderFor(1.25, 0, 60);
+    const l = ladderFor(1.25, 0, [60]);
     let run = drive(l, fillBound(60, 10, 1.25), 20);
     l.pause(run.at);
     const judged = l.judgedMs;

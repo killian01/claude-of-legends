@@ -24,7 +24,10 @@
 // assumed: a browser hands requestAnimationFrame the time of the screen's
 // refresh, so every interval is a whole number of refreshes and their
 // common divisor is the refresh, however slow the frames; the best rate
-// seen counts too. Nothing faster than 60 frames a second is chased.
+// seen counts too. Frames that all take two refreshes on a 60 Hz screen
+// read as a 30 Hz screen's would, so the rate the page read off its
+// lighter frames (frame_rate.ts), or remembered, stands when the read is a
+// whole fraction of it. Nothing faster than 60 frames a second is chased.
 //
 // Pure: the renderer feeds it each drawn frame's time and applies the rung
 // it answers (src/render/renderer.ts).
@@ -119,23 +122,43 @@ const HITCH_FACTOR = 4;
 // A divisor of the intervals is searched down to a refresh this short.
 const FASTEST_REFRESH_MS = 1000 / 250;
 const MAX_DIVISOR = 8;
+// How far a browser's clock may round a frame's time (one that hands over
+// whole milliseconds, and its jitter).
+const ROUNDING_MS = 1.5;
+// Frames under this share of the refresh read off their intervals took
+// more refreshes some times than others: the read is the refresh itself.
+const CLEAR_SHARE = 0.95;
+
+// Whether `ratio` is a whole number, one or more, give or take a tenth.
+function wholeTimes(ratio: number): boolean {
+  return ratio >= 0.9 && Math.abs(ratio - Math.round(ratio)) <= 0.1;
+}
 
 // The screen's refresh in Hz read off frame intervals, each a whole
 // number of refreshes give or take a tenth of one, nine in ten of them
-// at least; null when no divisor fits.
+// at least; null when no divisor fits. The shortest intervals are
+// averaged before the search and the refresh is the time they span over
+// the refreshes they count, so a clock that rounds to the millisecond
+// (16 and 17 for 60 Hz) reads true.
 export function refreshHz(intervals: readonly number[]): number | null {
   if (intervals.length < 4) return null;
   const sorted = [...intervals].sort((a, b) => a - b);
-  const shortest = sorted[Math.floor(sorted.length * 0.05)]!;
+  const from = sorted[Math.floor(sorted.length * 0.05)]!;
+  const low = sorted.filter((x) => x >= from && x <= from + ROUNDING_MS);
+  const shortest = low.reduce((a, b) => a + b, 0) / low.length;
   for (let k = 1; k <= MAX_DIVISOR; k++) {
     const p = shortest / k;
     if (p < FASTEST_REFRESH_MS) break;
     let fit = 0;
+    let spanned = 0;
+    let refreshes = 0;
     for (const x of intervals) {
-      const n = x / p;
-      if (Math.abs(n - Math.round(n)) <= 0.1) fit++;
+      if (!wholeTimes(x / p)) continue;
+      fit++;
+      spanned += x;
+      refreshes += Math.round(x / p);
     }
-    if (fit >= intervals.length * 0.9) return 1000 / p;
+    if (fit >= intervals.length * 0.9) return (1000 * refreshes) / spanned;
   }
   return null;
 }
@@ -157,8 +180,9 @@ function windowRate(intervals: readonly number[]): number {
 export interface LadderStart {
   // The rung to start on.
   index: number;
-  // The screen's rate remembered from an earlier match; null for none.
-  screenHz: number | null;
+  // The screen's rates known before the match: read off the page's
+  // lighter frames (frame_rate.ts), remembered from an earlier match.
+  known: readonly number[];
   // Until when nothing is judged: a match's first seconds load and link.
   settleUntil: number;
 }
@@ -176,7 +200,8 @@ export class QualityLadder {
   private settleUntil: number;
   private bestHz = 0;
   private refresh: number | null = null;
-  private readonly remembered: number | null;
+  private read: number | null = null;
+  private readonly known: readonly number[];
   private shortRun: number[] = [];
   private roomRun = 0;
   private trial: { from: number; before: number; seen: number; rates: number[] } | null = null;
@@ -197,7 +222,7 @@ export class QualityLadder {
     private readonly rules: LadderRules = LADDER_RULES,
   ) {
     this.current = Math.max(0, Math.min(rungs.length - 1, start.index));
-    this.remembered = start.screenHz;
+    this.known = start.known.filter((hz) => hz > 0);
     this.settleUntil = start.settleUntil;
   }
 
@@ -225,10 +250,18 @@ export class QualityLadder {
   }
 
   // The screen's rate as best known: the refresh read off the intervals
-  // (else the one remembered), or the best rate seen when it is higher.
+  // (else the fastest known), or the best rate seen when it is higher.
   get screenHz(): number | null {
-    const hz = Math.max(this.bestHz, this.refresh ?? this.remembered ?? 0);
+    const hz = Math.max(this.bestHz, this.refresh ?? Math.max(0, ...this.known));
     return hz > 0 ? hz : null;
+  }
+
+  // The refresh read off windows whose frames came slower than it, some
+  // taking more refreshes than others: the screen's own, worth keeping.
+  // Null while every window's frames took the same refreshes each, which
+  // a screen as fast as the frames would show as well.
+  get refreshRead(): number | null {
+    return this.read;
   }
 
   // A frame drawn at `at` (the refresh's time requestAnimationFrame
@@ -261,12 +294,23 @@ export class QualityLadder {
     this.frames = 0;
     this.scripts = [];
     this.intervals = [];
-    if (hz !== null) this.refresh = Math.max(this.refresh ?? 0, hz);
+    if (hz !== null) this.heard(hz, fps);
     this.bestHz = Math.max(this.bestHz, fps);
     if (at < this.settleUntil) return this.current;
     this.judged += spent;
     this.judge(fps, script, at);
     return this.current;
+  }
+
+  // A window's frames came at `fps`, their intervals whole numbers of a
+  // refresh at `hz`. Frames that all take two refreshes on a 60 Hz screen
+  // read 30, as a 30 Hz screen's would: a rate known before the match
+  // that the read is a whole fraction of stands, one it is not a whole
+  // fraction of (60 on a 50 Hz panel) belongs to another screen.
+  private heard(hz: number, fps: number): void {
+    if (fps < CLEAR_SHARE * hz) this.read = Math.max(this.read ?? 0, hz);
+    const rate = Math.max(hz, ...this.known.filter((k) => wholeTimes(k / hz)));
+    this.refresh = Math.max(this.refresh ?? 0, rate);
   }
 
   // A frame the renderer did not draw: the next interval does not count.

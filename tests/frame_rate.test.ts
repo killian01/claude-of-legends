@@ -1,7 +1,9 @@
 // The page's frame rate for the seat report (src/game/frame_rate.ts): the
 // frames a second painted between two probe echoes, over the time they
 // were painted in, nothing on the first call, nothing while the tab is
-// hidden, and a tab hidden for most of the window not read as slow.
+// hidden, and a tab hidden for most of the window not read as slow. And
+// the screen's refresh for the quality ladder, read off the frames the
+// page paints from its start, the menus' light ones included.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -69,5 +71,30 @@ describe("the page's frame rate", () => {
     clock += 4000;
     paint(1, 1000 / 60);
     expect(frameRate(clock)).toBe(60);
+  });
+});
+
+describe("the screen's refresh", () => {
+  it('is read off the frames painted from the start, and never lowered', async () => {
+    const { screenRefresh, watchFrames } = await import('../src/game/frame_rate');
+    expect(screenRefresh()).toBeNull();
+    watchFrames();
+    watchFrames();
+    // The menus, light: every refresh of a 60 Hz screen painted.
+    paint(40, 1000 / 60);
+    expect(screenRefresh()).toBeCloseTo(60, 0);
+    // A match on a weak GPU, every frame two refreshes: a 30 Hz screen's
+    // cadence, which does not take the 60 back.
+    paint(300, 2000 / 60);
+    expect(screenRefresh()).toBeCloseTo(60, 0);
+    // One loop, however often it was asked for.
+    expect(painters.length).toBe(1);
+  });
+
+  it('is nothing until enough frames were painted', async () => {
+    const { frameRate, screenRefresh } = await import('../src/game/frame_rate');
+    frameRate(clock);
+    paint(10, 1000 / 60);
+    expect(screenRefresh()).toBeNull();
   });
 });

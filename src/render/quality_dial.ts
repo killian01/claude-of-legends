@@ -16,6 +16,7 @@
 
 import type * as THREE from 'three';
 import { reportQuality } from '../game/drawn_quality';
+import { screenRefresh } from '../game/frame_rate';
 import type { LadderPin } from '../game/map_quality';
 import {
   DESK_RATIO_FLOOR,
@@ -122,7 +123,7 @@ export class QualityDial {
     this.start = start.index;
     this.ladder = new QualityLadder(this.rungs, {
       index: start.index,
-      screenHz: this.atStart.hz,
+      known: [screenRefresh(), this.atStart.hz].filter((hz) => hz !== null),
       settleUntil: setup.now + SETTLE_MS,
     });
   }
@@ -202,8 +203,12 @@ export class QualityDial {
   private save(at: number): void {
     this.savedRung = this.ladder.settled;
     this.savedAt = at;
+    // The screen's refresh as the page's frames have read it, the menus'
+    // light ones among them, or as the match's mixed ones did; never the
+    // match's cadence alone, which a slower screen would show as well.
+    const seen = Math.max(screenRefresh() ?? 0, this.ladder.refreshRead ?? 0);
     const memory: QualityMemory = {
-      hz: this.ladder.screenHz ?? this.atStart.hz,
+      hz: seen > 0 ? seen : this.atStart.hz,
       modes: {
         ...this.atStart.modes,
         [this.mode]: afterMatch(this.atStart.modes[this.mode], {
