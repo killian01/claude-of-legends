@@ -24,7 +24,8 @@
 // D. A machine that got faster draws its top from the next match's start,
 //    and its lean falls a level each five matches, to none.
 // E. A sudden steady drop to 2 to 22 frames a second has a step kept within
-//    60 s, or within the hold of a step undone before it and 60 s.
+//    60 s, or within the hold of a step undone before it and 60 s, on a 120
+//    or 144 Hz screen waiting for its refresh too.
 // F. Matches of 2 to 10 minutes, as when a player joins a running one, hold
 //    all of that.
 
@@ -330,6 +331,27 @@ describe('E. a sudden steady drop', () => {
             expect(steppedAfter(p!, drop), `${fps} at ${drop}`).toBeLessThanOrEqual(60);
           }
         }
+      }
+    }
+  });
+
+  it('has one within 60 s on a 120 or 144 Hz screen waiting for its refresh', () => {
+    // 120/8 to 120/7 a second gains 1.14, short of 1.15 only by the
+    // refreshes: the walk counts the screen's own, not the target's.
+    for (const hz of [120, 144]) {
+      for (const fps of [12, 15, 16.5]) {
+        const drop = 60_000;
+        const weak = fill(1000 / fps, 2);
+        const [p] = series([
+          {
+            refreshHz: hz,
+            strict: true,
+            top: 2,
+            seconds: 180,
+            workMs: (r, l, at) => (at < drop ? 5.5 * (r.ratio / 2) ** 2 : weak(r, l, at)),
+          },
+        ]);
+        expect(steppedAfter(p!, drop), `${hz} Hz at ${fps}`).toBeLessThanOrEqual(60);
       }
     }
   });
