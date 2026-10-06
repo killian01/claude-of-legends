@@ -18,13 +18,13 @@
 // A step down is a trial: kept only when the frame rate rose with it,
 // otherwise undone and not tried again for a while, so a page held back by
 // its scripts rather than its pixels is left as it was. A step back up
-// comes after a long spell at the screen's rate, and one that brings the
-// slow frames straight back is undone and not tried again for longer each
-// time: the ladder never swings. The screen's rate is never assumed: a
-// browser hands requestAnimationFrame the time of the screen's refresh,
-// so every interval is a whole number of refreshes and their common
-// divisor is the refresh, however slow the frames; the best rate seen
-// counts too. Nothing faster than 60 frames a second is chased.
+// comes after a long spell at the screen's rate and is a trial too: one
+// that brings the frames short again is undone and not tried again for
+// longer each time. The ladder never swings. The screen's rate is never
+// assumed: a browser hands requestAnimationFrame the time of the screen's
+// refresh, so every interval is a whole number of refreshes and their
+// common divisor is the refresh, however slow the frames; the best rate
+// seen counts too. Nothing faster than 60 frames a second is chased.
 //
 // Pure: the renderer feeds it each drawn frame's time and applies the rung
 // it answers (src/render/renderer.ts).
@@ -79,11 +79,10 @@ export interface LadderRules {
   // An undone step down is not tried again for this long, twice as long
   // after each further one.
   downHoldMs: number;
-  // No step up this soon after a step down was kept; a step up undone
-  // this soon after (`bounceMs`) holds the next one back for `upHoldMs`,
-  // twice as long after each further one.
+  // No step up this soon after a step down was kept. A step up is judged
+  // like a step down, and undone when its windows are short; the next one
+  // is then held back for `upHoldMs`, twice as long after each further one.
   upAfterDownMs: number;
-  bounceMs: number;
   upHoldMs: number;
   // Frames whose own script takes this share of their interval are held
   // back by the script, which fewer pixels do not help.
@@ -102,7 +101,6 @@ export const LADDER_RULES: LadderRules = {
   gain: 1.1,
   downHoldMs: 180_000,
   upAfterDownMs: 60_000,
-  bounceMs: 60_000,
   upHoldMs: 300_000,
   scriptShare: 0.75,
 };
@@ -166,11 +164,11 @@ export class QualityLadder {
   private shortRun: number[] = [];
   private roomRun = 0;
   private trial: { from: number; before: number; seen: number; rates: number[] } | null = null;
+  private upTrial: { from: number; seen: number; rates: number[] } | null = null;
   private downHeldUntil = Number.NEGATIVE_INFINITY;
   private downFails = 0;
   private upHeldUntil = Number.NEGATIVE_INFINITY;
   private bounces = 0;
-  private upAt: number | null = null;
   private downAt = Number.NEGATIVE_INFINITY;
   // The deepest rung a step down kept this match (null for none), and how
   // long the match was judged.
@@ -198,7 +196,7 @@ export class QualityLadder {
   // The rung the ladder stands on outside a trial: what is worth
   // remembering for the next match.
   get settled(): number {
-    return this.trial ? this.trial.from : this.current;
+    return (this.trial ?? this.upTrial)?.from ?? this.current;
   }
 
   get deepest(): number | null {
@@ -270,9 +268,10 @@ export class QualityLadder {
     this.shortRun = [];
     this.roomRun = 0;
     this.settleUntil = Math.max(this.settleUntil, until);
-    if (this.trial) {
-      this.trial.seen = 0;
-      this.trial.rates = [];
+    for (const t of [this.trial, this.upTrial]) {
+      if (!t) continue;
+      t.seen = 0;
+      t.rates = [];
     }
   }
 
@@ -306,20 +305,32 @@ export class QualityLadder {
       this.roomRun = 0;
       return;
     }
+    if (this.upTrial) {
+      const up = this.upTrial;
+      up.seen++;
+      if (up.seen === 1) return;
+      up.rates.push(fps);
+      if (up.rates.length < r.trialWindows) return;
+      // Judged on the windows' mean: a rate that hovers at the line, one
+      // window over and one under, is short.
+      const mean = up.rates.reduce((a, b) => a + b, 0) / up.rates.length;
+      if (mean < r.shortShare * target) {
+        // Short again: back down where it stood, and up later.
+        this.current = up.from;
+        this.upHeldUntil = at + r.upHoldMs * 2 ** this.bounces;
+        this.bounces++;
+      }
+      this.upTrial = null;
+      this.shortRun = [];
+      this.roomRun = 0;
+      return;
+    }
     const short = fps < r.shortShare * target;
     this.shortRun = short ? [...this.shortRun, fps] : [];
     this.roomRun = fps >= r.roomShare * target ? this.roomRun + 1 : 0;
     if (this.shortRun.length >= r.sustainWindows) {
       const before = median(this.shortRun);
       this.shortRun = [];
-      if (this.upAt !== null && at - this.upAt < r.bounceMs) {
-        // Back up too soon: down again where it stood, and up later.
-        this.current = Math.min(this.rungs.length - 1, this.current + 1);
-        this.upHeldUntil = at + r.upHoldMs * 2 ** this.bounces;
-        this.bounces++;
-        this.upAt = null;
-        return;
-      }
       if (this.current >= this.rungs.length - 1 || at < this.downHeldUntil) return;
       // Held back by its own script: fewer pixels would not help.
       if (script >= r.scriptShare) return;
@@ -334,8 +345,8 @@ export class QualityLadder {
       at >= this.upHeldUntil &&
       at - this.downAt >= r.upAfterDownMs
     ) {
+      this.upTrial = { from: this.current, seen: 0, rates: [] };
       this.current--;
-      this.upAt = at;
       this.roomRun = 0;
     }
   }

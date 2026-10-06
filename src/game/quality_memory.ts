@@ -127,8 +127,9 @@ export function matchStart(
 
 export interface MatchQuality {
   rungs: readonly Rung[];
-  // The rung it stands on outside a trial, and the deepest a step down
-  // kept (null when none did).
+  // The rung it started on, the one it stands on outside a trial, and the
+  // deepest a step down kept (null when none did).
+  start: number;
   settled: number;
   deepest: number | null;
   judgedMs: number;
@@ -154,7 +155,7 @@ export function afterMatch(atStart: ModeMemory | undefined, m: MatchQuality): Mo
       lean++;
       settled = Math.max(0, settled - 1);
     }
-  } else if (settled === 0 && lean > 0) {
+  } else if (m.start === 0 && settled === 0 && lean > 0) {
     // At the top all along: a level back after enough such matches. One
     // too short to tell counts neither way.
     quiet = m.judgedMs >= QUIET_MS ? before + 1 : before;
