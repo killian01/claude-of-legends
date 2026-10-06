@@ -7,15 +7,17 @@
 // long the match took to load, the measured round trip to the server, the
 // country Cloudflare names for the connection and whether the browser said
 // it was a phone, the seat's first moments (a blow given and taken, a
-// takedown, a fall, a cache) and the frames a second the page drew. Pure,
-// so a test reads every field without a socket.
+// takedown, a fall, a cache), the frames a second the page drew and how
+// finely it drew them. Pure, so a test reads every field without a socket.
 
+import type { DrawnQualityWire } from '../src/net/protocol';
 import type { RoyaleVariant } from '../src/net/royale_wire';
 import { DT } from '../src/sim/types';
 import type { SeatStats } from './match';
 
 // 2: the seat's first moments and the page's frame rate (2026-10-03).
-export const SEAT_REPORT_VERSION = 2;
+// 3: how finely the page drew, its quality step and pixels (2026-10-06).
+export const SEAT_REPORT_VERSION = 3;
 
 // How the seat ended: the pause menu's Leave or the end screen's way out
 // ('menu'), the socket closing with no word (a closed tab, a lost network:
@@ -76,6 +78,18 @@ export interface SeatReport {
   // and lowest; null when it never said.
   fps: number | null;
   fpsLow: number | null;
+  // How finely the page drew, as the probe's echo said
+  // (src/game/quality_ladder.ts): the step it last stood on (0 the
+  // device's best) and the deepest it went, the lean level its context
+  // was made with (src/game/quality_memory.ts), its pixels per CSS pixel,
+  // the picture's size in pixels ('1920x1080') and whether the ground
+  // showed shadows; null when it never said.
+  step: number | null;
+  stepDeep: number | null;
+  lean: number | null;
+  ratio: number | null;
+  px: string | null;
+  shadows: boolean | null;
 }
 
 // Cloudflare's country header, a two-letter code; its own codes for
@@ -114,6 +128,7 @@ export interface SeatReportInput {
   unit: { level: number; kills: number; deaths: number; assists: number; cs: number } | null;
   pings: readonly number[];
   fps: readonly number[];
+  quality: readonly DrawnQualityWire[];
 }
 
 export function buildSeatReport(i: SeatReportInput): SeatReport {
@@ -122,6 +137,7 @@ export function buildSeatReport(i: SeatReportInput): SeatReport {
   const fps = median(i.fps);
   const since = (tick: number | null): number | null =>
     tick === null ? null : seconds(tick - s.startTick);
+  const q = i.quality.at(-1) ?? null;
   return {
     v: SEAT_REPORT_VERSION,
     at: i.at,
@@ -155,6 +171,12 @@ export function buildSeatReport(i: SeatReportInput): SeatReport {
     firstCacheS: since(s.firstCacheTick),
     fps: fps === null ? null : Math.round(fps),
     fpsLow: i.fps.length === 0 ? null : Math.round(Math.min(...i.fps)),
+    step: q?.step ?? null,
+    stepDeep: q === null ? null : Math.max(...i.quality.map((x) => x.step)),
+    lean: q?.lean ?? null,
+    ratio: q?.ratio ?? null,
+    px: q === null ? null : `${q.w}x${q.h}`,
+    shadows: q?.shadows ?? null,
   };
 }
 
@@ -162,4 +184,20 @@ export function buildSeatReport(i: SeatReportInput): SeatReport {
 // can draw, or nothing.
 export function fpsOnWire(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 1000 ? v : null;
+}
+
+const whole = (v: unknown, max: number): v is number =>
+  typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= max;
+
+// How finely a page drew, off the probe's echo: a step and a lean level
+// a ladder can have, a ratio a canvas can draw at, a picture a screen can
+// hold, or nothing. Only these fields are kept, whatever else came along.
+export function qualityOnWire(v: unknown): DrawnQualityWire | null {
+  if (typeof v !== 'object' || v === null) return null;
+  const { step, lean, ratio, w, h, shadows } = v as Record<string, unknown>;
+  if (!whole(step, 16) || !whole(lean, 4)) return null;
+  if (typeof ratio !== 'number' || !(ratio >= 0.25 && ratio <= 4)) return null;
+  if (!whole(w, 16384) || !whole(h, 16384) || w === 0 || h === 0) return null;
+  if (typeof shadows !== 'boolean') return null;
+  return { step, lean, ratio, w, h, shadows };
 }

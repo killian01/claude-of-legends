@@ -12,7 +12,12 @@
 // bot, held for its owner for a minute. Transport-agnostic: main.ts hands
 // it the socket's messages through one case and its deps.
 
-import { type ClientMsg, type ServerMsg, stepOnWire } from '../src/net/protocol';
+import {
+  type ClientMsg,
+  type DrawnQualityWire,
+  type ServerMsg,
+  stepOnWire,
+} from '../src/net/protocol';
 import type { RoyaleVariant } from '../src/net/royale_wire';
 import { bankAwards } from './points';
 import { ROYALE_VERBS } from './royale_commands';
@@ -54,6 +59,7 @@ export interface RoyaleClient {
   readonly mobile: boolean;
   readonly pings: readonly number[];
   readonly fps: readonly number[];
+  readonly quality: readonly DrawnQualityWire[];
 }
 
 export interface RoyaleDeps {
@@ -349,6 +355,7 @@ export class RoyaleService {
             : null,
           pings: client.pings,
           fps: client.fps,
+          quality: client.quality,
         }),
       );
     } catch (err) {
