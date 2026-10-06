@@ -355,10 +355,13 @@ describe('what does not count', () => {
     let at = 0;
     for (let i = 0; i < 2000; i++) {
       at += 1000 / 60;
-      // Every other refresh is skipped by the renderer itself (a hold).
+      // Every other refresh is skipped by the renderer itself (a hold):
+      // no interval is left whole, so nothing is judged or read.
       if (i % 2 === 0) l.gap();
       else l.frame(at);
     }
     expect(l.index).toBe(0);
+    expect(l.judgedMs).toBe(0);
+    expect(l.screenHz).toBeNull();
   });
 });
