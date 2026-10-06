@@ -15,11 +15,12 @@
 // median of the last eight one-second windows, four fresh windows are
 // measured, since windows that crossed lean low; still under, the rung
 // below is tried and kept when the median of eight windows after a change
-// of two draws 1.15 times the fresh one. A lower rung that then draws nine
-// tenths of the target, or no longer 1.15 times what its step was weighed
-// against, tries at once the rung its step came from, kept when it holds
-// three quarters. A failed step holds the next of its kind back, twice as
-// long after each, never past a ceiling.
+// of two draws 1.15 times the fresh one, or the gain its rungs are
+// documented to buy less a margin when that is less (about 1.08 for the
+// shadows). A lower rung that then draws nine tenths of the target, or no
+// longer what its step was kept on, tries at once the rung its step came
+// from, kept when it holds three quarters. A failed step holds the next of
+// its kind back, twice as long after each, never past a ceiling.
 //
 // A browser hands requestAnimationFrame the refresh's time, so frames that
 // all take two refreshes on a 60 Hz screen read as a 30 Hz screen's would
@@ -39,6 +40,7 @@ export const LADDER_RULES = {
   freshWindows: 4, // measured after a crossing, and a walked rung's trial
   changeWindows: 2, // left for a change of rung
   gain: 1.15, // a step down kept draws this many times its before
+  gainMargin: 0.03, // or its documented gain less this, when that is less
   startMs: 20_000, // judged on the top before a step down from it
   downHoldMs: 45_000, // after a step down undone or given back, doubling
   downHoldMostMs: 180_000,
@@ -103,7 +105,7 @@ export class QualityLadder {
   private recent: number[] = [];
   private fresh: number[] | null = null;
   private trial: Trial | null = null;
-  private readonly steps: { from: number; before: number }[] = [];
+  private readonly steps: { from: number; before: number; gain: number }[] = [];
   private downHeldUntil = Number.NEGATIVE_INFINITY;
   private downFails = 0;
   private heldBefore = 0;
@@ -117,13 +119,26 @@ export class QualityLadder {
   topMs = 0;
   refreshRead: number | null = null;
 
-  // `rungs` from the top; `known`: the screen's rate before the match
+  // `costs`: a frame's documented cost on each rung from the top
+  // (quality_dial.ts); `known`: the screen's rate before the match
   // (frame_rate.ts, else remembered); nothing judged before `settleUntil`.
   constructor(
-    private readonly rungs: number,
+    private readonly costs: readonly number[],
     private readonly known: number | null,
     private settleUntil: number,
   ) {}
+
+  private get floor(): number {
+    return this.costs.length - 1;
+  }
+
+  // What a step from `from` to `to` keeps on: 1.15, or the gain its rungs
+  // are documented to buy less a margin, when that is less (leaving out the
+  // shadows buys about 1.11).
+  private keepGain(from: number, to: number): number {
+    const r = LADDER_RULES;
+    return Math.min(r.gain, this.costs[from]! / this.costs[to]! - r.gainMargin);
+  }
 
   // The rung to draw on, 0 the top, of the dial's `rungs`.
   get index(): number {
@@ -242,7 +257,7 @@ export class QualityLadder {
     } else if (
       step &&
       at >= this.upHeldUntil &&
-      (now >= r.roomShare * target || now < r.gain * step.before)
+      (now >= r.roomShare * target || now < step.gain * step.before)
     ) {
       this.begin(false, 0);
     }
@@ -254,7 +269,7 @@ export class QualityLadder {
   private mayStepDown(rate: number, script: number, at: number): boolean {
     const r = LADDER_RULES;
     return (
-      this.current < this.rungs - 1 &&
+      this.current < this.floor &&
       (this.current > 0 || this.topMs >= r.startMs) &&
       script < r.scriptShare &&
       (at >= this.downHeldUntil || rate * r.gain < this.heldBefore)
@@ -277,6 +292,7 @@ export class QualityLadder {
   private decide(trial: Trial, target: number, at: number): void {
     const r = LADDER_RULES;
     const after = median(trial.rates);
+    const gain = this.keepGain(trial.from, this.current);
     this.trial = null;
     if (!trial.down) {
       if (after >= r.lineShare * target) {
@@ -287,14 +303,14 @@ export class QualityLadder {
         this.current = trial.from;
         this.upHeldUntil = at + hold(r.upHoldMs, r.upHoldMostMs, this.upFails++);
       }
-    } else if (after >= r.gain * trial.before) {
-      this.steps.push({ from: trial.from, before: trial.before });
+    } else if (after >= gain * trial.before) {
+      this.steps.push({ from: trial.from, before: trial.before, gain });
       this.recent = trial.rates;
       if (after < r.lineShare * target && this.mayStepDown(after, 0, at)) this.begin(true, after);
     } else if (after * r.gain < trial.before) {
       this.current = trial.from;
       this.fresh = [];
-    } else if (wholeTimes(target / after) && this.current < this.rungs - 1) {
+    } else if (wholeTimes(target / after) && this.current < this.floor) {
       this.current++;
       this.trial = { ...trial, seen: 0, rates: [], walked: true };
     } else {

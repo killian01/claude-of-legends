@@ -17,8 +17,10 @@
 //    percent of its judged time at most on average.
 // C. A weak GPU (20 to 30 frames a second at the top) stands within 60 s of
 //    each match's settling on a rung that holds three quarters of its
-//    screen's rate, swings twice at most in half an hour, leans after two
-//    slow matches, and the retry every fifth match costs that match alone.
+//    screen's rate (on the documented costs, where only the shadowless
+//    floor holds at 20, draws it within 60 s and keeps it), swings twice at
+//    most in half an hour, leans after two slow matches, and the retry every
+//    fifth match costs that match alone.
 // D. A machine that got faster draws its top from the next match's start,
 //    and its lean falls a level each five matches, to none.
 // E. A sudden steady drop to 2 to 22 frames a second has a step kept within
@@ -30,6 +32,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModeMemory, QUALITY_KEY } from '../src/game/quality_memory';
 import {
   capableMatch,
+  documented,
   fill,
   holding,
   type MatchMachine,
@@ -249,6 +252,18 @@ describe('C. a weak GPU', () => {
       });
     },
   );
+
+  it('at 20 on the documented costs, draws the shadowless floor within 60 s and keeps it', () => {
+    // 20, 28.6, 36.2, 42.9 and 47.6 a second down the rungs: only the floor
+    // without shadows holds 45, 1.11 over the rung above it.
+    const work = documented(50, 1.25);
+    expect(holding(work, 1.25, 0, false)).toEqual([4]);
+    const [p] = series([{ refreshHz: 60, top: 1.25, seconds: 300, workMs: work }]);
+    const reached = p!.changes.find((c) => c.index === 4)!;
+    expect((reached.at - SETTLE) / 1000).toBeLessThanOrEqual(60);
+    expect(p!.settled.map((s) => s.index)).toEqual([0, 1, 2, 3, 4]);
+    expect((p!.settled.at(-1)!.at - SETTLE) / 1000).toBeLessThanOrEqual(65);
+  });
 
   it('swings twice at most in half an hour', () => {
     for (const [fps, top] of [
