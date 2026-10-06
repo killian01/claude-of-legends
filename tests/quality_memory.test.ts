@@ -2,7 +2,7 @@
 // (src/game/quality_memory.ts): only the lean level for each kind of match,
 // the matches played at it and the slow ones in a row, and the screen's
 // refresh. A match judged a hundred seconds whose top drew under 0.6 of the
-// target three windows in four, of twenty seconds of them or more, is slow;
+// target nine windows in ten, of twenty seconds of them or more, is slow;
 // two in a row make the next one leaner by a level, the lights first and
 // then the antialiasing; five matches at a level give one back, a retry its
 // match alone tells; nothing else moves it, and a broken line is dropped.
