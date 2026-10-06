@@ -249,9 +249,7 @@ export class QualityLadder {
   // up again.
   private upKept = false;
   private upsOver = false;
-  // The deepest rung a step down kept this match (null for none), and the
-  // milliseconds judged on each rung the ladder stood on.
-  private deepestKept: number | null = null;
+  // The milliseconds judged on each rung the ladder stood on.
   private readonly spent: number[];
 
   constructor(
@@ -279,23 +277,14 @@ export class QualityLadder {
     return this.trial?.from ?? this.current;
   }
 
-  get deepest(): number | null {
-    return this.deepestKept;
-  }
-
   // Milliseconds of drawing judged on each rung the ladder stood on (past
-  // the settling, a trial's on the rung it was tried from), in all, and
-  // below the top.
+  // the settling, a trial's on the rung it was tried from), and in all.
   get spentMs(): readonly number[] {
     return [...this.spent];
   }
 
   get judgedMs(): number {
     return this.spent.reduce((a, b) => a + b, 0);
-  }
-
-  get belowMs(): number {
-    return this.judgedMs - this.spent[0]!;
   }
 
   // The screen's rate as best known: the refresh read off the intervals
@@ -449,7 +438,6 @@ export class QualityLadder {
       } else {
         this.downFails = 0;
         this.upsOver = this.upKept;
-        this.deepestKept = Math.max(this.deepestKept ?? 0, this.current);
       }
       return;
     }

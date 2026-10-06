@@ -3,9 +3,17 @@
 // a page at 45 frames a second or more, noisy, collected, stalled by
 // programs linking or slowed by a fight its pixels have no part in, is
 // left alone or goes back to its top; a rung above that hovers about the
-// line swings once at most.
+// line swings once at most. And matches in a row through the quality dial
+// (src/render/quality_dial.ts), the browser's memory between them
+// (src/game/quality_memory.ts): such a page never starts the next match
+// lower or leaner, and a weak GPU settles on one start instead of
+// alternating between two.
 
-import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Rung } from '../src/game/quality_ladder';
+import { type Lean, QUALITY_KEY } from '../src/game/quality_memory';
+import { QualityDial } from '../src/render/quality_dial';
 import {
   deepest,
   drive,
@@ -17,6 +25,77 @@ import {
 } from './quality_machine';
 
 const P = 1000 / 60;
+
+let store: Map<string, string>;
+
+beforeEach(() => {
+  // A browser that keeps its memory, its menus having drawn at 60.
+  store = new Map([[QUALITY_KEY, JSON.stringify({ hz: 60, modes: {} })]]);
+  vi.stubGlobal('localStorage', {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => store.set(k, v),
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+interface Start {
+  index: number;
+  lean: number;
+}
+
+type Work = (rung: Rung, lean: Lean, at: number) => number;
+
+// `matches` classic matches in a row on a laptop whose top is 1.25 and
+// whose screen refreshes at 60, each `seconds` long, from a browser that
+// remembers nothing yet; a frame's work in the match `i` by its rung, its
+// lean and the time. Answers where each one started.
+function season(matches: number, seconds: number, work: (i: number) => Work): Start[] {
+  store.set(QUALITY_KEY, JSON.stringify({ hz: 60, modes: {} }));
+  const starts: Start[] = [];
+  for (let i = 0; i < matches; i++) {
+    const workMs = work(i);
+    const dial = new QualityDial({ mode: 'classic', top: 1.25, phone: false, pin: null, now: 0 });
+    starts.push({ index: dial.rungs.indexOf(dial.rung), lean: dial.leanLevel });
+    const gl = {
+      ratio: dial.rung.ratio,
+      shadowMap: { autoUpdate: true, needsUpdate: false },
+      domElement: { width: 1920, height: 1080 },
+      getPixelRatio: () => gl.ratio,
+      setPixelRatio: (r: number) => {
+        gl.ratio = r;
+      },
+    };
+    dial.attach({
+      gl: gl as unknown as THREE.WebGLRenderer,
+      scene: new THREE.Scene(),
+      onRatio() {},
+    });
+    let at = 0;
+    let free = 0;
+    while (at < seconds * 1000) {
+      free = Math.max(free, at) + workMs(dial.rung, dial.lean, at);
+      at = Math.max(at + P, Math.floor(free / P) * P);
+      dial.frame(at, 2);
+    }
+    dial.dispose();
+  }
+  return starts;
+}
+
+// A GPU held back by its pixels: `msAtTop` at the ratio 1.25, as the
+// pixels go, 0.87 of it without shadows, 0.63 without the effects' lights
+// and 0.83 of that without antialiasing.
+const fill =
+  (msAtTop: number): Work =>
+  (rung, lean) =>
+    msAtTop *
+    (rung.ratio / 1.25) ** 2 *
+    (rung.shadows ? 1 : 0.87) *
+    (lean.effectLights ? 1 : 0.63) *
+    (lean.antialias ? 1 : 0.83);
 
 describe('a page held back by its script, noisily', () => {
   it('keeps no step down when each second draws 46 to 60', () => {
@@ -195,5 +274,69 @@ describe('a rung above that hovers about the line', () => {
         }
       }
     }
+  });
+});
+
+describe('the next match', () => {
+  it('starts at the top with everything after a noisy page that held the line', () => {
+    // Six twenty-minute matches, each second at 47 to 56, or 46 to 60,
+    // whatever the rung and the lean.
+    for (const [lo, hi] of [
+      [47, 56],
+      [46, 60],
+    ] as const) {
+      const starts = season(6, 1200, (i) => {
+        const page = noisy(lo, hi, 1, 1000 + 17 * i);
+        return (rung, _lean, at) => page.workMs(rung, at);
+      });
+      expect(starts, `${lo}-${hi}`).toEqual(Array(6).fill({ index: 0, lean: 0 }));
+    }
+  });
+
+  it('starts at the top with everything after a slowdown near the end of the last', () => {
+    // A capable machine, a last fight its pixels have no part in nine
+    // minutes in, and the match over 20 to 90 seconds after it.
+    for (const [fps, seconds] of [
+      [45, 5],
+      [40, 4],
+      [30, 8],
+      [30, 12],
+      [30, 16],
+    ] as const) {
+      for (const after of [20, 40, 60, 90]) {
+        const work: Work = (_r, _l, at) =>
+          at > 540_000 && at < 540_000 + seconds * 1000 ? 1000 / fps : 9;
+        const starts = season(2, 540 + seconds + after, () => work);
+        expect(starts[1], `${fps} for ${seconds} s, ${after} s before the end`).toEqual({
+          index: 0,
+          lean: 0,
+        });
+      }
+    }
+  });
+
+  it('starts a weak GPU on one rung and lean level, not two in turn', () => {
+    // 30 frames a second at the top: a rung down, lean from the second
+    // match on, and at the top with the lights off from the third.
+    expect(season(6, 900, () => fill(1000 / 30)).map((s) => [s.index, s.lean])).toEqual([
+      [0, 0],
+      [1, 1],
+      [0, 1],
+      [0, 1],
+      [0, 1],
+      [0, 1],
+    ]);
+    // 22: two rungs down, then one with the lights off, then one with
+    // the antialiasing off as well.
+    expect(season(6, 900, () => fill(1000 / 22)).map((s) => [s.index, s.lean])).toEqual([
+      [0, 0],
+      [2, 1],
+      [1, 2],
+      [1, 2],
+      [1, 2],
+      [1, 2],
+    ]);
+    // 45: never anything.
+    expect(season(6, 900, () => fill(1000 / 45))).toEqual(Array(6).fill({ index: 0, lean: 0 }));
   });
 });

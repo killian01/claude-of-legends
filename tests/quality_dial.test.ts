@@ -1,8 +1,8 @@
 // The quality ladder at work on a renderer (src/render/quality_dial.ts):
 // the canvas's ratio and the ground's shadows follow the rung, with no
 // relink (the objects stop receiving shadows, the sun keeps casting); the
-// next match starts where this one stood, leaner; ?quality= holds it; the
-// seat report hears how finely the match is drawn.
+// next match starts where this one spent most of its time, leaner;
+// ?quality= holds it; the seat report hears how finely the match is drawn.
 
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -124,15 +124,16 @@ describe('the dial', () => {
       scene: new THREE.Scene(),
       onRatio() {},
     });
-    play(first, gl, 40, 60);
+    play(first, gl, 40, 120);
     const stood = first.rung;
     expect(stood.ratio).toBeLessThan(1.25);
     first.dispose();
     expect(JSON.parse(store.get(QUALITY_KEY)!).hz).toBeCloseTo(60, 0);
     const next = laptop();
     expect(next.lean).toEqual({ antialias: true, effectLights: false });
-    // A rung up from where it stood: the lights buy about that.
-    expect(next.rung.ratio).toBeGreaterThan(stood.ratio);
+    // The rung it spent most of the match on: the calm step up climbs from
+    // there when the lights bought room.
+    expect(next.rung).toEqual(stood);
     // The other kind of match learned nothing.
     expect(laptop(null, 'royale').rung.ratio).toBe(1.25);
   });
