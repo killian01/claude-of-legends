@@ -41,13 +41,21 @@ if (rows.length === 0) {
   process.exit(0);
 }
 const pad = (v, n) => String(v ?? '-').padEnd(n);
-// The seat's first moments and its frame rate (version 2 lines on).
+// The seat's first moments and its frame rate (version 2 lines on), and
+// how finely the page drew (version 3 on): the step it stood on and the
+// deepest, the lean level (1 no effect lights, 2 no antialiasing either),
+// the ratio, the picture's pixels, and no shadows when they were off.
 function moments(r) {
   if (r.v < 2) return '';
   const at = (label, s) => (s === null || s === undefined ? '' : ` ${label}@${s}s`);
   const fps = r.fps === null ? '' : ` fps ${r.fps} (low ${r.fpsLow})`;
   const mode = r.variant ? ` ${r.variant}` : ` ${r.queue}`;
-  return ` |${mode}${at('hit', r.firstHitS)}${at('hurt', r.firstHurtS)}${at('takedown', r.firstTakedownS)}${at('cache', r.firstCacheS)}${at('died', r.diedS)}${fps}`;
+  return ` |${mode}${at('hit', r.firstHitS)}${at('hurt', r.firstHurtS)}${at('takedown', r.firstTakedownS)}${at('cache', r.firstCacheS)}${at('died', r.diedS)}${fps}${drawn(r)}`;
+}
+function drawn(r) {
+  if (r.v < 3 || r.step === null || r.step === undefined) return '';
+  const lean = r.lean > 0 ? ` lean ${r.lean}` : '';
+  return ` step ${r.step} (deep ${r.stepDeep})${lean} x${r.ratio} ${r.px}${r.shadows ? '' : ' no shadows'}`;
 }
 console.log(
   `${pad('when (UTC)', 12)}${pad('cc', 4)}${pad('dev', 7)}${pad('who', 6)}${pad('how', 7)}${pad('held', 7)}${pad('load', 6)}${pad('1st', 6)}${pad('orders', 7)}${pad('walked', 7)}${pad('pts', 5)}${pad('cs', 4)}${pad('k/d/a', 7)}ping (max)  orders by kind | first steps`,
@@ -84,6 +92,16 @@ if (v2.length > 0) {
   const within = (key, s) => v2.filter((r) => r[key] !== null && r[key] <= s).length;
   console.log(
     `since the first moments are told (${v2.length} seats): a blow given within 30 s ${within('firstHitS', 30)}, taken within 30 s ${within('firstHurtS', 30)}, a cache within 60 s ${within('firstCacheS', 60)}, a takedown at all ${v2.filter((r) => r.firstTakedownS !== null).length}; median fps ${med(v2.map((r) => r.fps))}`,
+  );
+}
+const v3 = rows.filter((r) => r.v >= 3 && r.step !== null && r.step !== undefined);
+if (v3.length > 0) {
+  const mpx = (px) => {
+    const [w, h] = String(px).split('x').map(Number);
+    return Math.round((w * h) / 1e4) / 100;
+  };
+  console.log(
+    `since the quality step is told (${v3.length} seats): stepped down ${v3.filter((r) => r.stepDeep > 0).length}, lean ${v3.filter((r) => r.lean > 0).length}, median megapixels ${med(v3.map((r) => mpx(r.px)))}`,
   );
 }
 const byCountry = new Map();

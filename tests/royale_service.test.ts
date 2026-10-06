@@ -77,6 +77,7 @@ function harness(opts: { capacity?: number; open?: boolean; standing?: boolean }
       mobile: false,
       pings: [],
       fps: [],
+      quality: [],
     };
     clients.set(id, c);
     return c;
