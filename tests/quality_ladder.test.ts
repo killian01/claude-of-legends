@@ -2,8 +2,9 @@
 // (src/game/quality_ladder.ts): a machine that holds its screen's rate is
 // never touched, whatever that rate is; a weak GPU steps down until it
 // holds it and stays there; a page held back by something else than its
-// pixels gets one trial, undone; the ladder steps back up slowly and never
-// swings; stalls, hidden tabs and a match's first seconds do not count.
+// pixels gets one trial, undone; the ladder steps back up slowly, even
+// from a rung it holds short of room, and settles rather than swings;
+// stalls, hitches, hidden tabs and a match's first seconds do not count.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -30,8 +31,19 @@ interface Run {
   at: number;
   // Every rung change, with when it happened.
   changes: { at: number; index: number }[];
+  // The rungs the ladder settled on, in order: they move only when a step
+  // is kept.
+  settled: number[];
   // Frames a second over the run's last ten seconds.
   lastFps: number;
+}
+
+// Steps up kept and then given up for the rung below.
+function swings(run: Run): number {
+  const s = run.settled;
+  let n = 0;
+  for (let i = 2; i < s.length; i++) if (s[i - 1]! < s[i - 2]! && s[i]! > s[i - 1]!) n++;
+  return n;
 }
 
 function drive(
@@ -45,6 +57,7 @@ function drive(
   let free = from;
   const end = from + seconds * 1000;
   const changes: Run['changes'] = [];
+  const settled = [ladder.settled];
   const stamps: number[] = [];
   while (at < end) {
     const work = m.workMs(ladder.rung, at);
@@ -53,11 +66,12 @@ function drive(
     const before = ladder.index;
     ladder.frame(at, scriptShare === undefined ? undefined : scriptShare * work);
     if (ladder.index !== before) changes.push({ at, index: ladder.index });
+    if (ladder.settled !== settled.at(-1)) settled.push(ladder.settled);
     stamps.push(at);
   }
   const tail = stamps.filter((s) => s > end - 10_000);
   const lastFps = tail.length > 1 ? ((tail.length - 1) * 1000) / (tail.at(-1)! - tail[0]!) : 0;
-  return { at, changes, lastFps };
+  return { at, changes, settled, lastFps };
 }
 
 // A GPU held back by its pixels: the work goes with the pixels drawn, and
@@ -304,6 +318,60 @@ describe('a step up', () => {
       expect(run.changes[i]!.index).toBe(0);
       expect(run.changes[i + 1]?.index).toBe(1);
     }
+  });
+
+  it('comes to a page that holds its rung short of room, for minutes on end', () => {
+    // 54 frames a second whatever the rung, 0.9 of the screen: never
+    // short, never room. Started two rungs down by an earlier match, it
+    // climbs back to the top within the match and stays.
+    const l = ladderFor(1.25, 2, [60]);
+    const run = drive(l, scriptBound(60, 1000 / 54), 1800);
+    expect(l.index).toBe(0);
+    expect(run.changes.map((c) => c.index)).toEqual([1, 0]);
+    expect(l.deepest).toBeNull();
+  });
+
+  it('settles when the rung above hovers just over the line', () => {
+    // Room to spare one rung down; at the top each second draws at 47 to
+    // 56, a mean just over the short line with runs under it now and
+    // then. A step up kept there and then given up is a swing: at most
+    // one in half an hour, whatever the draw. The rung the ladder has
+    // settled on moves only when a step is kept.
+    for (let seed = 1; seed <= 6; seed++) {
+      let x = seed * 7919;
+      const rates = Array.from({ length: 1800 }, () => {
+        x = (x * 1103515245 + 12345) & 0x7fffffff;
+        return 47 + (9 * x) / 0x7fffffff;
+      });
+      const l = ladderFor(1.25, 0, [60]);
+      const m: Machine = {
+        refreshMs: 1000 / 60,
+        workMs: (r, at) => (r.ratio < 1.25 ? 12 : 1000 / rates[Math.floor(at / 1000)]!),
+      };
+      const run = drive(l, m, 1800);
+      expect(swings(run)).toBeLessThanOrEqual(1);
+      // The first step down, then a look now and then, rarer each time.
+      expect(run.changes.length).toBeLessThanOrEqual(7);
+    }
+  });
+
+  it('waits longer after giving up a step up it had kept', () => {
+    // At the top, ten heavy seconds every hundred, the rung below fine
+    // through them: a step up kept in the calm is given up at the next
+    // spell. Without the swing counted, that would come round every
+    // spell.
+    const m: Machine = {
+      refreshMs: 1000 / 60,
+      workMs: (r, at) => (r.ratio < 1.25 || at % 100_000 < 85_000 ? 10 : 30),
+    };
+    const run = drive(ladderFor(1.25, 0, [60]), m, 1800);
+    expect(swings(run)).toBeLessThanOrEqual(1);
+    const unswung = new QualityLadder(
+      ladderRungs(1.25, DESK_RATIO_FLOOR),
+      { index: 0, known: [60], settleUntil: SETTLE },
+      { ...LADDER_RULES, swingMs: 0 },
+    );
+    expect(swings(drive(unswung, m, 1800))).toBeGreaterThan(5);
   });
 });
 
