@@ -416,17 +416,21 @@ describe('what does not count', () => {
   });
 
   it('a frame not drawn breaks the interval', () => {
-    const l = ladderFor(1.25);
-    let at = 0;
-    for (let i = 0; i < 2000; i++) {
-      at += 1000 / 60;
-      // Every other refresh is skipped by the renderer itself (a hold):
-      // no interval is left whole, so nothing is judged or read.
-      if (i % 2 === 0) l.gap();
-      else l.frame(at);
+    // Every other refresh is skipped by the renderer itself (a hold): no
+    // interval is left whole, so nothing is judged or read. Joined, they
+    // would be frames at 30 on a screen known to refresh at 60.
+    for (const known of [[], [60]]) {
+      const l = ladderFor(1.25, 0, known);
+      let at = 0;
+      const seen = new Set<number>();
+      for (let i = 0; i < 2000; i++) {
+        at += 1000 / 60;
+        if (i % 2 === 0) l.gap();
+        else seen.add(l.frame(at));
+      }
+      expect([...seen]).toEqual([0]);
+      expect(l.judgedMs).toBe(0);
+      expect(l.screenHz).toBe(known[0] ?? null);
     }
-    expect(l.index).toBe(0);
-    expect(l.judgedMs).toBe(0);
-    expect(l.screenHz).toBeNull();
   });
 });
