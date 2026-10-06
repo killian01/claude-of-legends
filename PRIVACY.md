@@ -165,17 +165,15 @@ and it exists to tell a slow connection or a slow load from a match that
 gave a newcomer nothing to do. The country is the coarsest place there is,
 and it is only ever read beside the round trip it explains.
 
-Your browser also keeps, in its own storage and for itself alone, how
-finely its last match of each kind was drawn (the step below your screen's
-best it spent most of that match on, when a match of three minutes or more
-spent two thirds of its time below that best, else none, and that best;
-whether the next one lets spells light the ground and smooths edges, and
-for how many matches it has drawn that way) and the rate your screen
-refreshes at, one line under `col.quality` (`src/game/quality_memory.ts`),
-so that a slow machine's next match starts near the step that suited it
-rather than relearning it, after a few seconds at your screen's best to see
-whether it still needs to. It is never sent anywhere; the step the match
-stands on is what the seat line above carries.
+Your browser also keeps, in its own storage and for itself alone, for each
+kind of match whether the next one lets spells light the ground and smooths
+edges, and for how many matches it has drawn that way, and the rate your
+screen refreshes at: one line under `col.quality`
+(`src/game/quality_memory.ts`), so that a machine too slow for the effects
+starts its next match lighter rather than learning it again. How finely a
+match was drawn is not kept: every match starts at your screen's best. It
+is never sent anywhere; the step the match stands on is what the seat line
+above carries.
 
 ## What you write in the feedback box
 
