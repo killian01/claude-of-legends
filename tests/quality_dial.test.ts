@@ -169,6 +169,35 @@ describe('the dial', () => {
     expect(JSON.parse(store.get(QUALITY_KEY)!).hz).toBeNull();
   });
 
+  it("takes the page's own refresh over the one remembered", async () => {
+    // A battery saver holds every page at 30, the menus too: the 60 an
+    // earlier session remembered is not this page's to reach.
+    vi.resetModules();
+    const painters: ((at: number) => void)[] = [];
+    vi.stubGlobal('requestAnimationFrame', (cb: (at: number) => void) => painters.push(cb));
+    const { watchFrames } = await import('../src/game/frame_rate');
+    const fresh = await import('../src/render/quality_dial');
+    store.set(QUALITY_KEY, JSON.stringify({ hz: 60, modes: {} }));
+    watchFrames();
+    for (let i = 1; i <= 60; i++) painters.shift()?.((i * 1000) / 30);
+    const dial = new fresh.QualityDial({
+      mode: 'classic',
+      top: 1.25,
+      phone: false,
+      pin: null,
+      now: 0,
+    });
+    const gl = fakeGl(1.25);
+    dial.attach({
+      gl: gl as unknown as THREE.WebGLRenderer,
+      scene: new THREE.Scene(),
+      onRatio() {},
+    });
+    play(dial, gl, 33.4, 120);
+    expect(gl.ratio).toBe(1.25);
+    dial.dispose();
+  });
+
   it('is held by the address, and remembers nothing then', () => {
     const full = laptop('full');
     const gl = fakeGl(1.25);

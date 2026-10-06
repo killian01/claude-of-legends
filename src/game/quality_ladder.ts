@@ -193,9 +193,10 @@ function windowRate(intervals: readonly number[]): number {
 export interface LadderStart {
   // The rung to start on.
   index: number;
-  // The screen's rates known before the match: read off the page's
-  // lighter frames (frame_rate.ts), remembered from an earlier match.
-  known: readonly number[];
+  // The screen's rate known before the match: read off the page's own
+  // frames, its menus' light ones among them (frame_rate.ts), else
+  // remembered from an earlier match; null for none.
+  known: number | null;
   // Until when nothing is judged: a match's first seconds load and link.
   settleUntil: number;
 }
@@ -214,7 +215,7 @@ export class QualityLadder {
   private bestHz = 0;
   private refresh: number | null = null;
   private read: number | null = null;
-  private readonly known: readonly number[];
+  private readonly known: number | null;
   private shortRun: number[] = [];
   private roomRun = 0;
   private calmRun = 0;
@@ -238,7 +239,7 @@ export class QualityLadder {
     private readonly rules: LadderRules = LADDER_RULES,
   ) {
     this.current = Math.max(0, Math.min(rungs.length - 1, start.index));
-    this.known = start.known.filter((hz) => hz > 0);
+    this.known = start.known !== null && start.known > 0 ? start.known : null;
     this.settleUntil = start.settleUntil;
   }
 
@@ -271,9 +272,9 @@ export class QualityLadder {
   }
 
   // The screen's rate as best known: the refresh read off the intervals
-  // (else the fastest known), or the best rate seen when it is higher.
+  // (else the one known), or the best rate seen when it is higher.
   get screenHz(): number | null {
-    const hz = Math.max(this.bestHz, this.refresh ?? Math.max(0, ...this.known));
+    const hz = Math.max(this.bestHz, this.refresh ?? this.known ?? 0);
     return hz > 0 ? hz : null;
   }
 
@@ -326,12 +327,13 @@ export class QualityLadder {
 
   // A window's frames came at `fps`, their intervals whole numbers of a
   // refresh at `hz`. Frames that all take two refreshes on a 60 Hz screen
-  // read 30, as a 30 Hz screen's would: a rate known before the match
-  // that the read is a whole fraction of stands, one it is not a whole
-  // fraction of (60 on a 50 Hz panel) belongs to another screen.
+  // read 30, as a 30 Hz screen's would: the rate known before the match
+  // stands when the read is a whole fraction of it; when it is not (60 on
+  // a 50 Hz panel), the known one was another screen's.
   private heard(hz: number, fps: number): void {
     if (fps < CLEAR_SHARE * hz) this.read = Math.max(this.read ?? 0, hz);
-    const rate = Math.max(hz, ...this.known.filter((k) => wholeTimes(k / hz)));
+    const known = this.known;
+    const rate = known !== null && known > hz && wholeTimes(known / hz) ? known : hz;
     this.refresh = Math.max(this.refresh ?? 0, rate);
   }
 
