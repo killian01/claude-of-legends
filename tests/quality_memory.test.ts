@@ -18,7 +18,7 @@ import {
   readQualityMemory,
   writeQualityMemory,
 } from '../src/game/quality_memory';
-import { exact, ladderFor } from './quality_machine';
+import { drive, exact, ladderFor } from './quality_machine';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -111,6 +111,16 @@ describe('what a match leaves for the next', () => {
     expect(afterMatch({ start: mem(0, 0, 1), ...pick(fast) })).toEqual(mem(0));
   });
 
+  it("is weighed on the screen's own rate: a 30 Hz screen at full rate never leans", () => {
+    let memory = mem(0);
+    for (let i = 0; i < 3; i++) {
+      const l = ladderFor(1.25, 30);
+      drive(l, { refreshHz: 30, top: 1.25, workMs: () => 20 }, 130);
+      expect(l.topShare).toBeCloseTo(1, 2);
+      memory = afterMatch({ start: memory, ...pick(l) });
+    }
+    expect(memory).toEqual(mem(0));
+  });
 });
 
 describe('the stored line', () => {
