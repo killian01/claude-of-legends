@@ -1,26 +1,49 @@
 // The quality ladder (src/game/quality_ladder.ts) over whole matches on
-// realistic machines, the frame sequences that broke its earlier versions:
-// a page at 45 frames a second or more, noisy, collected, stalled by
-// programs linking or slowed by a fight its pixels have no part in, is
-// left alone or goes back to its top; a rung above that hovers about the
-// line swings once at most in half an hour. And matches in a row through
-// the quality dial (src/render/quality_dial.ts), the browser's memory
-// between them (src/game/quality_memory.ts): a slowdown at the end of one
-// never starts the next lower or leaner.
+// realistic machines, and matches in a row through the quality dial
+// (src/render/quality_dial.ts) and the browser's memory between them
+// (src/game/quality_memory.ts), held to what the design answers for:
+//
+// A. A capable machine (60, 120 or 144 Hz, its frames shown as they come
+//    or on the refresh after, holding the line but for what slows it a
+//    while: fights, assets streaming, programs linking, collections,
+//    hitches, a hidden tab, a resize, another pixel ratio between matches)
+//    is at the top within 30 s of each match's settling, below it for a
+//    tenth of the judged time at most, and never leaner.
+// B. So is a page held back by its script whose rate is drawn afresh every
+//    1, 2 or 5 s, whatever the rung, from 40-55 to 46-60.
+// C. A weak GPU (20 to 30 frames a second at the top, a ratio of 1.25 or
+//    1.5) rests within 60 s of each settling on the finest rung that holds
+//    the line on its lean level, swings once at most in half an hour, is
+//    leaner within two matches, and the retry every fifth match costs that
+//    match alone.
+// D. A machine that got faster is at the top from the next match's start
+//    probe, and its lean falls a level each retry, never rising, to none.
+// E. A sudden steady drop to 2 to 22 frames a second has a step kept that
+//    gains within 40 s.
+// F. Matches of 2 to 10 minutes, as when a player joins a running one,
+//    change none of that, but for what a match judged under three minutes
+//    cannot tell: it leaves the next at the top with its lean.
 
-import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Rung } from '../src/game/quality_ladder';
-import { type Lean, QUALITY_KEY } from '../src/game/quality_memory';
-import { QualityDial } from '../src/render/quality_dial';
+import { type ModeMemory, QUALITY_KEY } from '../src/game/quality_memory';
+import { SETTLE_MS } from '../src/render/quality_dial';
 import {
+  capableMatch,
   deepest,
   drive,
+  fill,
+  finestHolding,
   ladderFor,
   type Machine,
+  type MatchMachine,
   noisy,
+  type Played,
+  playMatch,
+  restingAt,
   sequence,
   swings,
+  swingsOf,
+  type Work,
 } from './quality_machine';
 
 const P = 1000 / 60;
@@ -40,49 +63,262 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-interface Start {
-  index: number;
-  lean: number;
+// Matches in a row from a browser that remembers only its screen's rate,
+// or `memory` as well.
+function series(hz: number, machines: MatchMachine[], memory?: ModeMemory): Played[] {
+  store.set(QUALITY_KEY, JSON.stringify({ hz, modes: memory ? { classic: memory } : {} }));
+  return machines.map(playMatch);
 }
 
-type Work = (rung: Rung, lean: Lean, at: number) => number;
+const remembered = (): ModeMemory | undefined =>
+  JSON.parse(store.get(QUALITY_KEY)!).modes.classic as ModeMemory | undefined;
 
-// `matches` classic matches in a row on a laptop whose top is 1.25 and
-// whose screen refreshes at 60, each `seconds` long, from a browser that
-// remembers nothing yet; a frame's work in the match `i` by its rung, its
-// lean and the time. Answers where each one started.
-function season(matches: number, seconds: number, work: (i: number) => Work): Start[] {
-  store.set(QUALITY_KEY, JSON.stringify({ hz: 60, modes: {} }));
-  const starts: Start[] = [];
-  for (let i = 0; i < matches; i++) {
-    const workMs = work(i);
-    const dial = new QualityDial({ mode: 'classic', top: 1.25, phone: false, pin: null, now: 0 });
-    starts.push({ index: dial.rungs.indexOf(dial.rung), lean: dial.leanLevel });
-    const gl = {
-      ratio: dial.rung.ratio,
-      shadowMap: { autoUpdate: true, needsUpdate: false },
-      domElement: { width: 1920, height: 1080 },
-      getPixelRatio: () => gl.ratio,
-      setPixelRatio: (r: number) => {
-        gl.ratio = r;
-      },
-    };
-    dial.attach({
-      gl: gl as unknown as THREE.WebGLRenderer,
-      scene: new THREE.Scene(),
-      onRatio() {},
-    });
-    let at = 0;
-    let free = 0;
-    while (at < seconds * 1000) {
-      free = Math.max(free, at) + workMs(dial.rung, dial.lean, at);
-      at = Math.max(at + P, Math.floor(free / P) * P);
-      dial.frame(at, 2);
+// A and B: at the top within 30 s of the settling, below it a tenth of the
+// judged time at most, never leaner.
+function heldTheTop(p: Played, label: string): void {
+  expect(p.topAfter, label).not.toBeNull();
+  expect(p.topAfter!, label).toBeLessThanOrEqual(30);
+  expect(p.belowMs, label).toBeLessThanOrEqual(0.1 * p.judgedMs);
+  expect(p.start.lean, label).toBe(0);
+}
+
+const LENGTHS = [120, 300, 600, 1200];
+
+describe('A. a capable machine, whatever slows it a while', () => {
+  it.each([
+    [60, false],
+    [60, true],
+    [120, false],
+    [120, true],
+    [144, false],
+    [144, true],
+  ])('holds the top at %i Hz, shown on the refresh after: %s', (hz, strict) => {
+    for (const seconds of LENGTHS) {
+      for (let seed = 1; seed <= 4; seed++) {
+        const rand = sequence(seed * 7919 + seconds + hz * 13 + (strict ? 1 : 0));
+        // Another pixel ratio now and then between matches.
+        const tops = Array.from({ length: 6 }, () =>
+          rand() < 0.3 ? [1, 1.5, 2][Math.floor(rand() * 3)]! : 1.25,
+        );
+        const machines = tops.map((top) => ({ ...capableMatch(rand, hz, seconds, top), strict }));
+        series(hz, machines).forEach((p, i) => {
+          heldTheTop(p, `${seconds} s, seed ${seed}, match ${i + 1}`);
+        });
+        expect(remembered()?.lean ?? 0).toBe(0);
+      }
     }
-    dial.dispose();
-  }
-  return starts;
+  });
+});
+
+describe('B. a page held back by its script, noisily', () => {
+  it.each([
+    [40, 55],
+    [42, 56],
+    [44, 58],
+    [46, 60],
+  ])('holds the top while each second, two or five draw %i to %i', (lo, hi) => {
+    for (const every of [1, 2, 5]) {
+      for (const seconds of LENGTHS) {
+        for (let seed = 1; seed <= 4; seed++) {
+          const machines = Array.from({ length: 6 }, (_, i): MatchMachine => {
+            const page = noisy(lo, hi, every, seed * 7717 + i * 131 + seconds);
+            return {
+              refreshHz: 60,
+              top: 1.25,
+              seconds,
+              workMs: (rung, _lean, at) => page.workMs(rung, at),
+            };
+          });
+          series(60, machines).forEach((p, i) => {
+            heldTheTop(p, `every ${every} s, ${seconds} s, seed ${seed}, match ${i + 1}`);
+          });
+        }
+      }
+    }
+  });
+});
+
+// C: matches in a row on a weak GPU; each rests, from 60 s after its
+// settling, on the finest rung that holds the line on its lean level.
+function weakSeason(fps: number, top: number, strict: boolean, seconds: number, n: number) {
+  const work = fill(1000 / fps, top);
+  const played = series(
+    60,
+    Array.from({ length: n }, () => ({ refreshHz: 60, strict, top, seconds, workMs: work })),
+  );
+  return { work, played };
 }
+
+function restedOnItsRung(p: Played, finest: number, label: string): void {
+  const from = SETTLE_MS + 60_000;
+  expect(restingAt(p, from), label).toBe(finest);
+  expect(
+    p.rests.filter((r) => r.at > from).map((r) => r.index),
+    label,
+  ).toEqual([]);
+}
+
+describe('C. a weak GPU', () => {
+  const cases: [number, number, boolean][] = [];
+  for (const fps of [20, 22, 25, 28, 30]) {
+    for (const top of [1.25, 1.5])
+      for (const strict of [false, true]) cases.push([fps, top, strict]);
+  }
+
+  it.each(cases)(
+    'at %i frames a second, top %d, strict %s: one rung, leaner, one retry',
+    (fps, top, strict) => {
+      const { work, played } = weakSeason(fps, top, strict, 900, 14);
+      played.forEach((p, i) => {
+        const label = `match ${i + 1} from ${p.start.index}/${p.start.lean}`;
+        const finest = finestHolding(work, top, p.start.lean, 60, strict);
+        // Every frame two refreshes from the top to the floor with shadows,
+        // one only without them: three rungs past one that gains nothing,
+        // where the walk goes one rung further at most. The lean takes it
+        // from the next match.
+        const walled = fps === 20 && top === 1.25 && strict && p.start.lean === 0;
+        restedOnItsRung(p, walled ? 1 : finest!, label);
+        expect(swingsOf(p.settled), label).toBeLessThanOrEqual(1);
+      });
+      const leans = played.map((p) => p.start.lean);
+      // Leaner within two matches.
+      if (finestHolding(work, top, 0, 60, strict) !== 0) expect(leans[2]).toBeGreaterThan(0);
+      // From the fourth on, the lean it needs, but for a retry every fifth
+      // match, the one after it back at the lean it needs.
+      const needed = leans[3]!;
+      leans.slice(3).forEach((lean, i) => {
+        if (lean === needed) return;
+        expect(lean, `match ${i + 4}`).toBe(needed - 1);
+        if (i + 4 < leans.length) expect(leans[i + 4], `match ${i + 5}`).toBe(needed);
+      });
+      expect(leans.slice(3).filter((l) => l !== needed).length).toBeLessThanOrEqual(3);
+    },
+  );
+
+  it('swings once at most over half an hour from a browser that remembers nothing', () => {
+    for (const [fps, top] of [
+      [20, 1.25],
+      [25, 1.5],
+      [30, 1.25],
+    ] as const) {
+      for (const strict of [false, true]) {
+        const { played } = weakSeason(fps, top, strict, 1800, 2);
+        for (const p of played) expect(swingsOf(p.settled), `${fps} ${top}`).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+});
+
+describe('D. a machine that got faster', () => {
+  it('is at the top from the next start probe, and its lean falls a level each retry', () => {
+    const top = 1.25;
+    for (const seconds of [120, 600]) {
+      for (const strict of [false, true]) {
+        for (const [step, lean, played] of [
+          [1, 1, 0],
+          [2, 1, 0],
+          [1, 2, 2],
+          [2, 2, 0],
+          [3, 1, 0],
+          [4, 2, 0],
+          [4, 0, 0],
+        ] as const) {
+          const label = `${seconds} s from ${step}/${lean}/${played}`;
+          const machines = Array.from({ length: 12 }, () => ({
+            refreshHz: 60,
+            strict,
+            top,
+            seconds,
+            workMs: fill(9, top),
+          }));
+          const season = series(60, machines, { top, step, lean, played });
+          // The first match tries the top right after its settling and
+          // stays; the next ones start there.
+          expect(season[0]!.topAfter!, label).toBeLessThanOrEqual(12);
+          expect(season[0]!.belowMs, label).toBe(0);
+          expect(
+            season.slice(1).map((p) => p.start.index),
+            label,
+          ).toEqual(Array(11).fill(0));
+          for (const p of season) expect(p.belowMs, label).toBe(0);
+          // One level back after each five matches at it, never one more.
+          const leans = season.map((p) => p.start.lean);
+          for (let i = 1; i < leans.length; i++) {
+            expect(leans[i]!, label).toBeLessThanOrEqual(leans[i - 1]!);
+          }
+          const zero = leans.indexOf(0);
+          expect(zero, label).toBeGreaterThanOrEqual(0);
+          expect(zero, label).toBeLessThanOrEqual(5 * lean - played);
+        }
+      }
+    }
+  });
+});
+
+describe('E. a sudden steady drop', () => {
+  it('has a step kept that gains within 40 s, from 2 to 22 frames a second', () => {
+    for (const strict of [false, true]) {
+      for (const fps of [2, 3, 5, 8, 12, 15, 20, 22]) {
+        for (const drop of [40_000, 40_097, 40_194, 40_291, 40_388, 75_000, 200_000]) {
+          const after = fill(1000 / fps, 1.25);
+          const [p] = series(60, [
+            {
+              refreshHz: 60,
+              strict,
+              top: 1.25,
+              seconds: drop / 1000 + 60,
+              workMs: (rung, lean, at) => (at < drop ? 9 : after(rung, lean, at)),
+            },
+          ]);
+          const kept = p!.rests.find((r) => r.at > drop && r.index > 0);
+          expect(kept, `${fps} at ${drop}`).toBeDefined();
+          expect(kept!.at - drop, `${fps} at ${drop}`).toBeLessThanOrEqual(40_000);
+        }
+      }
+    }
+  });
+});
+
+describe('F. short matches', () => {
+  it('a weak GPU still finds its rung within a minute, and leans from five-minute matches', () => {
+    for (const [fps, top, strict] of [
+      [22, 1.25, false],
+      [25, 1.5, true],
+      [30, 1.25, false],
+    ] as const) {
+      for (const seconds of [120, 300]) {
+        const { work, played } = weakSeason(fps, top, strict, seconds, 8);
+        played.forEach((p, i) => {
+          const finest = finestHolding(work, top, p.start.lean, 60, strict)!;
+          restedOnItsRung(p, finest, `${fps} ${seconds} s match ${i + 1}`);
+        });
+        const leans = played.map((p) => p.start.lean);
+        if (seconds >= 300) expect(leans[2]).toBeGreaterThan(0);
+        // Judged under three minutes, a match tells too little to keep:
+        // each starts at the top with everything and finds its rung.
+        else
+          expect(played.map((p) => [p.start.index, p.start.lean])).toEqual(Array(8).fill([0, 0]));
+      }
+    }
+  });
+
+  it('a drop early in a match joined late has a step kept within 40 s', () => {
+    for (const fps of [3, 12, 22]) {
+      const after = fill(1000 / fps, 1.25);
+      const drop = SETTLE_MS + 15_000;
+      const [p] = series(60, [
+        {
+          refreshHz: 60,
+          top: 1.25,
+          seconds: 120,
+          workMs: (rung, lean, at) => (at < drop ? 9 : after(rung, lean, at)),
+        },
+      ]);
+      const kept = p!.rests.find((r) => r.at > drop && r.index > 0);
+      expect(kept!.at - drop, `${fps}`).toBeLessThanOrEqual(40_000);
+    }
+  });
+});
 
 describe('a page held back by its script, noisily', () => {
   it('keeps no step down when each second draws 46 to 60', () => {
@@ -286,8 +522,9 @@ describe('the next match', () => {
       for (const after of [20, 40, 60, 90]) {
         const work: Work = (_r, _l, at) =>
           at > 540_000 && at < 540_000 + seconds * 1000 ? 1000 / fps : 9;
-        const starts = season(2, 540 + seconds + after, () => work);
-        expect(starts[1], `${fps} for ${seconds} s, ${after} s before the end`).toEqual({
+        const match = { refreshHz: 60, top: 1.25, seconds: 540 + seconds + after, workMs: work };
+        const [, next] = series(60, [match, match]);
+        expect(next!.start, `${fps} for ${seconds} s, ${after} s before the end`).toEqual({
           index: 0,
           lean: 0,
         });
