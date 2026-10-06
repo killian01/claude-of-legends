@@ -96,7 +96,8 @@ export class QualityDial {
   readonly top: number;
   readonly leanLevel: number;
   private readonly start: MatchStart;
-  private readonly ladder: QualityLadder;
+  // Read by the tests that play matches through the dial.
+  readonly ladder: QualityLadder;
   private readonly pinned: boolean;
   private readonly mode: LadderMode;
   private readonly atStart: QualityMemory;

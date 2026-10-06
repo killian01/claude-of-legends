@@ -343,6 +343,11 @@ export class QualityLadder {
     return this.rungs[this.current]!;
   }
 
+  // A step is on trial: the rung drawn is not yet the ladder's.
+  get trying(): boolean {
+    return this.trial !== null;
+  }
+
   // The rung the ladder stands on outside a trial and a step's probation:
   // what is worth remembering for the next match.
   get settled(): number {
