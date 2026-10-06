@@ -250,6 +250,32 @@ describe('a weak GPU', () => {
     expect(looks[0]!.at - run.changes[2]!.at).toBeGreaterThanOrEqual(LADDER_RULES.upAfterDownMs);
   });
 
+  it('steps past a rung that brings no frame under a refresh', () => {
+    // Two refreshes a frame at 1.25 and at 1, one at 0.85: a screen that
+    // waits for its refresh shows no gain a rung down, two rungs down it
+    // holds 60.
+    const l = ladderFor(1.25, 0, 60);
+    const m: Machine = { refreshMs: 1000 / 60, workMs: (r) => (r.ratio >= 1 ? 33.4 : 12) };
+    const run = drive(l, m, 300);
+    // Through 1 on the way, kept at 2; a look back up now and then.
+    expect(run.changes.slice(0, 2).map((c) => c.index)).toEqual([1, 2]);
+    expect(run.changes.slice(2).every((c, i) => c.index === (i % 2 === 0 ? 1 : 2))).toBe(true);
+    expect(l.settled).toBe(2);
+    expect(l.deepest).toBe(2);
+    expect(run.lastFps).toBeGreaterThan(LADDER_RULES.shortShare * 60);
+  });
+
+  it('does not walk down for a slowdown its pixels have no part in', () => {
+    // Twelve seconds at 45 frames a second, one refresh and two, whatever
+    // the rung: one rung tried, undone.
+    const l = ladderFor(1.25, 0, 60);
+    const m: Machine = {
+      refreshMs: 1000 / 60,
+      workMs: (_r, at) => (at > 40_000 && at < 52_000 ? 22 : 10),
+    };
+    expect(drive(l, m, 120).changes.map((c) => c.index)).toEqual([1, 0]);
+  });
+
   it('goes as far as the shadows when the pixels are not enough', () => {
     const l = ladderFor(1.25);
     const run = drive(l, fillBound(60, 75, 1.25), 300);
@@ -378,6 +404,9 @@ describe('a page held back by something else', () => {
     const l = ladderFor(1.25);
     const run = drive(l, scriptBound(60, 36), 600);
     expect(l.index).toBe(0);
+    expect(l.deepest).toBeNull();
+    // One rung each time: its frames came one and two refreshes apart.
+    expect(run.changes.every((c) => c.index <= 1)).toBe(true);
     const trials = run.changes.filter((c) => c.index === 1);
     expect(trials.length).toBeGreaterThan(0);
     // Three minutes, then six: no more than three trials in ten minutes.
