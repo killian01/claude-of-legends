@@ -1,8 +1,9 @@
 // The quality ladder at work on a renderer (src/render/quality_dial.ts): the
 // canvas's ratio and the ground's shadows follow the rung, with no relink
 // (the objects stop receiving shadows, the sun keeps casting); every match
-// starts at the top, and one whose top drew far too slowly makes the next
-// leaner; ?quality= holds it; the seat report hears how finely it draws.
+// starts at the top, and two in a row whose top drew far too slowly make
+// the next leaner; ?quality= holds it; the seat report hears how finely it
+// draws.
 
 import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -136,11 +137,11 @@ describe('the dial', () => {
     expect(drawnQuality()).toBeNull();
   });
 
-  it('starts every match at the top, the next leaner after a top far too slow', () => {
+  it('starts every match at the top, a level leaner after two tops far too slow', () => {
     // 40 ms a frame at the top, whatever the lean: under 0.6 of 60 a second,
-    // so each match makes the next leaner, until the leanest.
+    // so every second match makes the next leaner, until the leanest.
     const leans: unknown[] = [];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {
       const dial = laptop();
       expect(dial.rung).toEqual({ ratio: 1.25, shadows: true });
       leans.push(dial.lean);
@@ -149,12 +150,13 @@ describe('the dial', () => {
       expect(gl.ratio).toBeLessThan(1.25);
       dial.dispose();
     }
-    expect(leans).toEqual([
+    const [full, lights, both] = [
       { antialias: true, effectLights: true },
       { antialias: true, effectLights: false },
       { antialias: false, effectLights: false },
-    ]);
-    expect(remembered().modes.classic).toEqual({ lean: 2, played: 1 });
+    ];
+    expect(leans).toEqual([full, full, lights, lights, both]);
+    expect(remembered().modes.classic).toEqual({ lean: 2, played: 1, slow: 1 });
     expect(remembered().hz).toBeCloseTo(60, 0);
     // The other kind of match learned nothing; another ratio starts at its own.
     expect(laptop(null, 'royale').lean).toEqual({ antialias: true, effectLights: true });
@@ -176,7 +178,7 @@ describe('the dial', () => {
     const { gl } = attached(dial);
     play(dial, gl, 40, 125);
     expect(writes).toBe(5);
-    expect(remembered().modes.classic).toEqual({ lean: 1, played: 0 });
+    expect(remembered().modes.classic).toEqual({ lean: 0, played: 0, slow: 1 });
     dial.dispose();
   });
 
@@ -234,7 +236,8 @@ describe('the dial', () => {
     expect(gl.ratio).toBe(1.25);
     full.dispose();
     expect(store.has(QUALITY_KEY)).toBe(false);
-    store.set(QUALITY_KEY, JSON.stringify({ hz: 60, modes: { classic: { lean: 2, played: 0 } } }));
+    const classic = { lean: 2, played: 0, slow: 0 };
+    store.set(QUALITY_KEY, JSON.stringify({ hz: 60, modes: { classic } }));
     expect(laptop('full').lean).toEqual({ antialias: true, effectLights: true });
     const low = laptop('low');
     expect(low.rung).toEqual({ ratio: 0.75, shadows: false });

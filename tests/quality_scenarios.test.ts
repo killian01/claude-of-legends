@@ -8,7 +8,8 @@
 //    never steps without a transient; with up to three (fights at 30 to 45
 //    whatever the rung, programs linking, collections, hitches, assets
 //    streaming at 30 for the first 20 s, a hidden tab, a resize) it never
-//    leans, gives a step back within 90 s of the transient's end, and draws
+//    leans (not even for three 20 s fights at 30 in every two-minute
+//    match), gives a step back within 90 s of the transient's end, and draws
 //    below the top 30 percent of a match's judged time at most, a tenth on
 //    average.
 // B. A page held back by its script, its rate drawn afresh every 1, 2 or
@@ -16,8 +17,8 @@
 //    percent of its judged time at most on average.
 // C. A weak GPU (20 to 30 frames a second at the top) stands within 60 s of
 //    each match's settling on a rung that holds three quarters of its
-//    screen's rate, swings twice at most in half an hour, leans after its
-//    first match, and the retry every fifth match costs that match alone.
+//    screen's rate, swings twice at most in half an hour, leans after two
+//    slow matches, and the retry every fifth match costs that match alone.
 // D. A machine that got faster draws its top from the next match's start,
 //    and its lean falls a level each five matches, to none.
 // E. A sudden steady drop to 2 to 22 frames a second has a step kept within
@@ -63,6 +64,14 @@ function series(machines: MatchMachine[], memory?: ModeMemory): Played[] {
 }
 
 const remembered = (): ModeMemory => JSON.parse(store.get(QUALITY_KEY)!).modes.classic;
+const HZS: [number, boolean][] = [
+  [60, false],
+  [60, true],
+  [120, false],
+  [120, true],
+  [144, false],
+  [144, true],
+];
 const share = (p: Played) => p.belowMs / p.judgedMs;
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 const LENGTHS = [120, 300, 600, 1200];
@@ -123,6 +132,41 @@ describe('A. a capable machine', () => {
       }
     }
     expect(mean(shares)).toBeLessThanOrEqual(0.1);
+  });
+
+  it('never leans for three 20 s fights at 30 in every two-minute match', () => {
+    // The fights fill most of the top's windows, the ladder a rung down
+    // between them: as the verifier placed them, and anywhere.
+    const fightsAt = (at: readonly number[], hz: number, strict: boolean, top: number) => {
+      const base = hz === 60 ? 9 : 5.5;
+      return {
+        refreshHz: hz,
+        strict,
+        top,
+        seconds: 120,
+        workMs: (r: { ratio: number }, _l: unknown, t: number) =>
+          Math.max(
+            base * (r.ratio / top) ** 2,
+            at.some((a) => t > a && t < a + 20_000) ? 1000 / 30 : 0,
+          ),
+      };
+    };
+    for (const [hz, strict] of HZS) {
+      const placed = series(
+        Array.from({ length: 6 }, () => fightsAt([15_000, 50_000, 85_000], hz, strict, 1.25)),
+      );
+      for (const p of placed) expect(p.lean, `${hz} ${strict}`).toBe(0);
+      expect(remembered(), `${hz} ${strict}`).toEqual({ lean: 0, played: 0, slow: 0 });
+      const rand = sequence(hz * 31 + (strict ? 7 : 0));
+      const anywhere = Array.from({ length: 6 }, () => {
+        const a = SETTLE + rand() * 20_000;
+        const b = a + 20_500 + rand() * 10_000;
+        const c = b + 20_500 + rand() * (120_000 - b - 41_000);
+        return fightsAt([a, b, c], hz, strict, [1.25, 1.5, 2][Math.floor(rand() * 3)]!);
+      });
+      for (const p of series(anywhere)) expect(p.lean, `${hz} ${strict} anywhere`).toBe(0);
+      expect(remembered().lean).toBe(0);
+    }
   });
 });
 
@@ -191,15 +235,17 @@ describe('C. a weak GPU', () => {
         stoodOnAHoldingRung(p, holding(work, top, p.lean, strict), label);
         expect(swings(p.settled), label).toBeLessThanOrEqual(2);
       });
-      // Leaner after the first match; from then on the lean it needs, but for
-      // a retry every fifth match at it, the next one back.
+      // Leaner after two slow matches; from the first at the lean it needs
+      // on, that one but for a retry every fifth match at it, the next back.
       const leans = played.map((p) => p.lean);
-      expect(leans[1]).toBe(1);
+      expect(leans.slice(0, 3)).toEqual([0, 0, 1]);
       const needed = Math.max(...leans);
-      leans.slice(1).forEach((lean, i) => {
-        if (lean === needed || i + 2 >= leans.length) return;
-        expect(lean, `match ${i + 2}`).toBe(needed - 1);
-        expect(leans[i + 2], `match ${i + 3}`).toBe(needed);
+      const from = leans.indexOf(needed);
+      leans.slice(from).forEach((lean, i) => {
+        const at = from + i;
+        if (lean === needed || at + 1 >= leans.length) return;
+        expect(lean, `match ${at + 1}`).toBe(needed - 1);
+        expect(leans[at + 1], `match ${at + 2}`).toBe(needed);
       });
     },
   );
@@ -233,7 +279,7 @@ describe('D. a machine that got faster', () => {
             seconds: 120,
             workMs: fill(9, 1.25),
           })),
-          { lean, played },
+          { lean, played, slow: 0 },
         );
         for (const p of season) expect([p.settled.length, p.belowMs]).toEqual([1, 0]);
         const leans = season.map((p) => p.lean);
@@ -316,7 +362,7 @@ describe('F. short matches', () => {
       played.forEach((p, i) => {
         stoodOnAHoldingRung(p, holding(work, top, p.lean, strict), `${fps} match ${i + 1}`);
       });
-      expect(played[1]!.lean).toBe(1);
+      expect(played.map((p) => p.lean)).toEqual([0, 0, 1, 1]);
     }
   });
 
