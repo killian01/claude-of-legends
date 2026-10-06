@@ -390,7 +390,7 @@ describe("a step down's trial", () => {
     // just after them: the top short both times, but not the same short.
     const m: Machine = {
       refreshMs: P,
-      workMs: (_r, at) => (at < 20_000 ? 1000 / 30 : at > 31_000 && at < 45_000 ? 1000 / 38 : 9),
+      workMs: (_r, at) => (at < 20_000 ? 1000 / 30 : at > 28_000 && at < 45_000 ? 1000 / 38 : 9),
     };
     const l = ladderFor(1.25, 0, 60);
     const run = drive(l, m, 120);
@@ -600,15 +600,16 @@ describe('a step up', () => {
 describe('a page held back by something else', () => {
   it('gets a trial that is undone, then is left alone a while', () => {
     const l = ladderFor(1.25);
-    const run = drive(l, scriptBound(60, 36), 600);
+    const run = drive(l, scriptBound(60, 36), 1200);
     expect(l.index).toBe(0);
     expect(run.settled).toEqual([0]);
     // One rung each time: its frames came one and two refreshes apart.
     expect(run.changes.every((c) => c.index <= 1)).toBe(true);
-    const trials = run.changes.filter((c) => c.index === 1);
-    expect(trials.length).toBeGreaterThan(0);
-    // Three minutes, then six: no more than three trials in ten minutes.
-    expect(trials.length).toBeLessThanOrEqual(3);
+    const trials = run.changes.filter((c) => c.index === 1).map((c) => c.at);
+    // Three minutes, then six, then twelve: three trials in twenty minutes.
+    expect(trials.length).toBe(3);
+    expect(trials[1]! - trials[0]!).toBeGreaterThan(180_000);
+    expect(trials[2]! - trials[1]!).toBeGreaterThan(360_000);
   });
 
   it('gets no trial at all when its own script fills the frame', () => {
