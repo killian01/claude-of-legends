@@ -31,7 +31,7 @@ describe('patch operations', () => {
     expect(ids(def).indexOf('hold-mid')).toBe(ids(def).indexOf('farm') - 1);
     def = must(applyPatchOp(def, { op: 'move', id: 'hold-mid', before: null }));
     expect(ids(def).at(-1)).toBe('hold-mid');
-    def = must(applyPatchOp(def, { op: 'move', id: 'hold-mid', before: 'retreat' }));
+    def = must(applyPatchOp(def, { op: 'move', id: 'hold-mid', before: 'drink' }));
     expect(ids(def)[0]).toBe('hold-mid');
     def = must(
       applyPatchOp(def, { op: 'set', id: 'retreat', play: { when: { kind: 'hp', below: 0.4 } } }),

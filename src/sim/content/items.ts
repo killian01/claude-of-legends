@@ -251,4 +251,21 @@ export function effectiveItemCost(itemId: string, owned: readonly string[]): num
   return def.cost - discount;
 }
 
+// At most two carried, so a bag is never filled with them (the shop and
+// the house kits read the same rule).
+export const DRAUGHT_CARRY = 2;
+
+export function mayCarryDraught(bag: readonly string[]): boolean {
+  return bag.filter((id) => ITEMS[id]?.drink).length < DRAUGHT_CARRY;
+}
+
+// The first bag slot holding a consumable, -1 when none does: the slot a
+// person's Drink button and a bot's drink play both reach for.
+export function draughtSlot(bag: readonly string[]): number {
+  return bag.findIndex((id) => ITEMS[id]?.drink !== undefined);
+}
+
 export const ITEM_LIST: readonly ItemDef[] = [...T1, ...T2, ...T3];
+
+// What the shop sells besides the build: its own section.
+export const CONSUMABLE_LIST: readonly ItemDef[] = CONSUMABLES;

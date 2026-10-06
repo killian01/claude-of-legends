@@ -35,6 +35,19 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-10-06',
+    title: 'The Sapdraught: a drink for a rough lane',
+    body: [
+      'The shop sells its first drink. A Sapdraught costs 50 gold and gives back 150 health ' +
+        'over ten seconds, wherever you are. A hit does not stop it, so a lost trade is no ' +
+        'longer a walk home. One works at a time, and you can carry two.',
+      'Click it in your bag or press its number to drink it; on a phone, a Drink button joins ' +
+        'the touch bar while you carry one. The house bots drink by the same rule: they leave ' +
+        'the fountain with one and reach for it when a fight goes badly.',
+    ],
+    link: { label: 'Play a match', to: 'play' },
+  },
+  {
     day: '2026-10-03',
     title: 'The Wanderseed: a battle royale for fifty champions',
     body: [

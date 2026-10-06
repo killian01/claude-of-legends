@@ -13,10 +13,12 @@
 // sat at 45/60/40.
 
 import type { PlaybookDef } from '../../playbook/types';
+import { DRINK_PLAY } from './drink';
 
 export const SIEGER_PLAYBOOK: PlaybookDef = {
   version: 4,
   plays: [
+    DRINK_PLAY,
     { id: 'retreat', when: { kind: 'hp', below: 0.3 }, do: { kind: 'retreat' } },
     {
       id: 'rest',

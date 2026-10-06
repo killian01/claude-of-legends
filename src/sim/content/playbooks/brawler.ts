@@ -12,10 +12,12 @@
 // with the odds is what the style is, so it carries it.
 
 import type { PlaybookDef } from '../../playbook/types';
+import { DRINK_PLAY } from './drink';
 
 export const BRAWLER_PLAYBOOK: PlaybookDef = {
   version: 4,
   plays: [
+    DRINK_PLAY,
     { id: 'retreat', when: { kind: 'hp', below: 0.25 }, do: { kind: 'retreat' } },
     {
       id: 'rest',

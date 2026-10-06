@@ -61,7 +61,14 @@ can overturn before the first phase lands.
    dead, in a royale, or on a slot without one; damage does not stop it; recall survives it;
    the replay of a drink matches the live match; the remote policy path parses and applies
    it. One night.
-2. **People and bots together.** The shop lists it, the desktop click and keys, the phone's
+2. **People and bots together** (landed 2026-10-06; `tests/draught_bots.test.ts`). On the
+   touch bar Drink rides beside the bottom button on the right edge (the column has no room
+   between the score box and the minimap) and as a fifth row on the left. The kit walker
+   carries one Sapdraught whenever the build has nothing to buy and a slot is spare
+   (`draughtStep`, `kit.ts`), not only at the start; every house style leads with the shared
+   `DRINK_PLAY` (`content/playbooks/drink.ts`). Left for later: the Drink button greyed while
+   a draught runs online (`ccChips` in `server/snapshot.ts` and `toStatus` in the client
+   world do not carry `draught` yet), and a painting for the icon. The shop lists it, the desktop click and keys, the phone's
    Drink button, the house kits and the laner's play, the playbook `drink` kind. Tests: a
    house bot buys one at the start and drinks under the same guard a person meets (through
    `action_dispatch`, not a side door); the validator accepts the new `do` kind. Checked in a

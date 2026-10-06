@@ -318,7 +318,11 @@ export function statLabel(s: ItemStats): string {
 }
 
 export function describeItem(def: ItemDef, statLine: string): string[] {
-  const lines = [`${def.name} (${def.cost}g)`, statLine];
+  const lines = [`${def.name} (${def.cost}g)`];
+  if (statLine) lines.push(statLine);
+  if (def.drink) {
+    lines.push(`Drink: ${def.drink.heal} health over ${def.drink.seconds} s, one at a time.`);
+  }
   const passive = ITEM_PASSIVES[def.id];
   if (passive) lines.push(`Passive, ${passive.name}: ${passive.description}`);
   if (def.buildsFrom) {

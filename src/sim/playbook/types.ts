@@ -178,6 +178,9 @@ export type Behavior =
   | { kind: 'goShop' }
   // Sell one named item, at the fountain, when the bag holds it.
   | { kind: 'sell'; item: string }
+  // Drink a carried Sapdraught, anywhere. Passes the turn when none is
+  // carried or one already runs.
+  | { kind: 'drink' }
   // Step out of a tower's reach unless escorted and healthy, or securing
   // a kill.
   | { kind: 'avoidTower'; escortMin?: number; hpBelow?: number }
