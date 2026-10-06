@@ -1,35 +1,23 @@
-// What a browser remembers of how finely it drew its last match of each
-// kind, so the next one starts near there instead of at the top and
-// relearns little (quality_ladder.ts). Kept in the browser's own storage
-// under one key, never sent anywhere (PRIVACY.md); a browser that keeps
-// nothing starts every match at the top, as before.
+// What a browser remembers between matches of how finely it draws: only
+// what a new WebGL context can change, the lean level, for each kind of
+// match, with the matches played at it, and the screen's refresh. Every
+// match starts on the top rung of its ladder (quality_ladder.ts), whatever
+// the last one did, so a step taken for a slowdown never carries over and
+// a screen with another pixel ratio needs nothing of its own. Kept in the
+// browser's own storage under one key, never sent anywhere (PRIVACY.md); a
+// browser that keeps nothing starts every match with everything.
 //
-// A step below the top is remembered only from a match that drew below
-// it for two thirds of its judged time or more, and was judged three
-// minutes at least: a fight, a slowdown it came back from or a short
-// match leaves the top. The step is the rung below the top the match
-// spent most of that time on, kept as rungs below the device's own ratio,
-// with that ratio: a screen with another (a zoom, another monitor) starts
-// at its own top, the steps having been another screen's. A match started
-// below the top tries the top first (the ladder's start probe), so a step
-// remembered for nothing costs a few seconds, and that time is not judged.
-//
-// It also carries what only a new WebGL context can change, the lean
-// level. It rises a level on the same evidence, from a match whose top
-// did not hold from the start (its start probe given up, or a step down
-// from the top kept within its first three judged minutes): first without
-// the effects' lights (three pooled point lights every lit pixel of the
-// ground shades, at intensity 0 while no spell flashes: the frame drawn
-// in 0.63 of the time on the Star Orchard and 0.80 on the planet without
-// them, for a flash that no longer lights the ground), then without
-// antialiasing as well (0.83 and 0.62 more, for jagged edges). Five
-// matches at a level give one back, a retry: a machine that still needs
-// it falls from the top again in the next one and leans again. When the
-// lean changes the step goes back to the top, the rung that suited the
-// old level being no guide to the new one. A line kept in an older shape
-// is dropped.
-
-import { EVIDENCE_MS, type Rung } from './quality_ladder';
+// The lean level is weighed on the top rung's own rate, which every match
+// draws for its first judged seconds: a match judged two minutes, its
+// settling aside, whose top windows (twenty seconds of them at least) drew
+// under 0.6 of the target rate by their median makes the next one leaner
+// by a level: first without the effects' lights (three pooled point lights
+// every lit pixel of the ground shades: the frame drawn in 0.63 of the time
+// on the Star Orchard and 0.80 on the planet without them, for a flash that
+// no longer lights the ground), then without antialiasing as well (0.83
+// and 0.62 more, for jagged edges). Five such matches at a level give one
+// back, a retry: a machine that still needs it leans again after that one
+// match. Nothing else moves it.
 
 export const QUALITY_KEY = 'col.quality';
 
@@ -52,12 +40,13 @@ export const LEANEST = LEAN_LEVELS.length - 1;
 
 // Matches played at a lean level before one is given back.
 export const RETRY_MATCHES = 5;
+// A match judged this long tells; its top judged this long at least, under
+// this share of the target rate by the median of its windows, leans.
+export const EVIDENCE_MS = 100_000;
+export const TOP_EVIDENCE_MS = 20_000;
+export const LEAN_SHARE = 0.6;
 
 export interface ModeMemory {
-  // The device's own ratio, the top of its ladder.
-  top: number;
-  // The rung to start the next match on, counted from the top.
-  step: number;
   // The lean level for the next match, and the matches played at it.
   lean: number;
   played: number;
@@ -71,21 +60,19 @@ export interface QualityMemory {
 
 const MODES: readonly LadderMode[] = ['classic', 'royale'];
 
-function modeOf(v: unknown): ModeMemory | null {
-  if (typeof v !== 'object' || v === null) return null;
-  const o = v as Record<string, unknown>;
-  const { top, step, lean, played } = o;
-  if (typeof top !== 'number' || !(top >= 0.25 && top <= 4)) return null;
-  if (!whole(step, 16) || !whole(lean, LEANEST) || !whole(played, RETRY_MATCHES)) return null;
-  return { top, step, lean, played };
-}
-
 function whole(v: unknown, max: number): v is number {
   return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= max;
 }
 
-// A stored line read back: anything broken, out of range or in an older
-// shape is dropped, never trusted.
+function modeOf(v: unknown): ModeMemory | null {
+  if (typeof v !== 'object' || v === null) return null;
+  const { lean, played } = v as Record<string, unknown>;
+  if (!whole(lean, LEANEST) || !whole(played, RETRY_MATCHES - 1)) return null;
+  return { lean, played };
+}
+
+// A stored line read back: anything broken or out of range is dropped,
+// never trusted.
 export function parseQualityMemory(raw: string | null): QualityMemory {
   const empty: QualityMemory = { hz: null, modes: {} };
   if (raw === null) return empty;
@@ -119,58 +106,29 @@ export function writeQualityMemory(memory: QualityMemory): void {
   try {
     localStorage.setItem(QUALITY_KEY, JSON.stringify(memory));
   } catch {
-    // storage unavailable: the next match starts at the top
+    // storage unavailable: the next match starts with everything
   }
-}
-
-export interface MatchStart {
-  // The rung to start on, and the lean level with the matches played at it.
-  index: number;
-  lean: number;
-  played: number;
-}
-
-// Where a match starts: the step its last one left, on a screen with the
-// same top, else the top; with its lean level.
-export function matchStart(memory: ModeMemory | undefined, rungs: readonly Rung[]): MatchStart {
-  if (!memory) return { index: 0, lean: 0, played: 0 };
-  const same = Math.abs(memory.top - rungs[0]!.ratio) < 0.001;
-  return {
-    index: same ? Math.min(memory.step, rungs.length - 1) : 0,
-    lean: memory.lean,
-    played: memory.played,
-  };
 }
 
 export interface MatchQuality {
-  rungs: readonly Rung[];
-  // The milliseconds judged on each rung (quality_ladder.ts spentMs).
-  spentMs: readonly number[];
-  // How it started.
-  start: MatchStart;
-  // Its top did not hold from the start (quality_ladder.ts fellEarly).
-  fellEarly: boolean;
+  // The lean level the match was drawn at, and the matches played at it.
+  start: ModeMemory;
+  // Milliseconds judged in all and on the top rung, and the median of the
+  // top's windows as a share of the target rate (quality_ladder.ts).
+  judgedMs: number;
+  topMs: number;
+  topShare: number | null;
 }
 
 // What a match leaves for the next one of its kind: the same however often
-// it is saved along the way. A match not judged at all leaves the memory
-// as it found it.
+// it is saved along the way. A match judged too short to tell leaves the
+// memory as it found it.
 export function afterMatch(m: MatchQuality): ModeMemory {
-  const top = m.rungs[0]!.ratio;
-  const { index, lean, played } = m.start;
-  const judged = m.spentMs.reduce((a, b) => a + b, 0);
-  if (!(judged > 0)) return { top, step: index, lean, played };
-  const below = judged - (m.spentMs[0] ?? 0);
-  const sustained = judged >= EVIDENCE_MS && 3 * below >= 2 * judged;
-  if (sustained && m.fellEarly && lean < LEANEST)
-    return { top, step: 0, lean: lean + 1, played: 0 };
-  if (played + 1 >= RETRY_MATCHES && lean > 0) return { top, step: 0, lean: lean - 1, played: 0 };
-  // The rung below the top it spent most of its judged time on, the finer
-  // of two alike.
-  let step = 0;
-  if (sustained) {
-    step = 1;
-    for (let i = 2; i < m.spentMs.length; i++) if (m.spentMs[i]! > m.spentMs[step]!) step = i;
-  }
-  return { top, step, lean, played: Math.min(played + 1, RETRY_MATCHES) };
+  const { lean, played } = m.start;
+  if (m.judgedMs < EVIDENCE_MS) return { lean, played };
+  const slow = m.topMs >= TOP_EVIDENCE_MS && m.topShare !== null && m.topShare < LEAN_SHARE;
+  if (slow && lean < LEANEST) return { lean: lean + 1, played: 0 };
+  if (lean === 0) return { lean, played: 0 };
+  if (played + 1 >= RETRY_MATCHES) return { lean: lean - 1, played: 0 };
+  return { lean, played: played + 1 };
 }
