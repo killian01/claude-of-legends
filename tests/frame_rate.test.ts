@@ -91,6 +91,28 @@ describe("the screen's refresh", () => {
     expect(painters.length).toBe(1);
   });
 
+  it('is the common divisor of the intervals, however slow the frames', async () => {
+    const { refreshHz } = await import('../src/game/frame_rate');
+    const p = 1000 / 60;
+    expect(refreshHz([p, p, p, p, p, p])).toBeCloseTo(60, 0);
+    expect(refreshHz([2 * p, 3 * p, 2 * p, 2 * p, 3 * p, 2 * p])).toBeCloseTo(60, 0);
+    // With the browser's jitter of a few tenths of a millisecond, or its
+    // clock rounding to the millisecond, at 60 frames a second and at 45.
+    expect(refreshHz([33.2, 50.1, 33.4, 16.6, 33.3, 49.9, 33.5])).toBeCloseTo(60, 0);
+    expect(refreshHz([16, 17, 17, 16, 17, 17, 16, 17, 17, 16])).toBeCloseTo(60, 0);
+    expect(refreshHz([16, 17, 33, 17, 17, 34, 16, 17, 33, 17, 16, 34])).toBeCloseTo(60, 0);
+    const q = 1000 / 144;
+    expect(refreshHz([7 * q, 8 * q, 7 * q, 7 * q, 8 * q, 7 * q])).toBeCloseTo(144, 0);
+    expect(refreshHz([20, 20, 40, 20, 20, 20])).toBeCloseTo(50, 0);
+    expect(refreshHz([500, 1000, 500, 500, 1000])).toBeCloseTo(2, 5);
+  });
+
+  it('is not made up from intervals that share no divisor, or too few', async () => {
+    const { refreshHz } = await import('../src/game/frame_rate');
+    expect(refreshHz([23.7, 31.1, 27.9, 35.3, 29.4, 26.2, 33.8, 24.5])).toBeNull();
+    expect(refreshHz([16.7, 16.7])).toBeNull();
+  });
+
   it('is nothing until enough frames were painted', async () => {
     const { frameRate, screenRefresh } = await import('../src/game/frame_rate');
     frameRate(clock);

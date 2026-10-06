@@ -57,10 +57,8 @@
 // window that spans the change is left out, and the four after it are a
 // step down's before at once.
 //
-// The screen's rate is never assumed: a browser hands
-// requestAnimationFrame the time of the screen's refresh, so every
-// interval is a whole number of refreshes and their common divisor is the
-// refresh, however slow the frames; the best rate seen counts too. Frames
+// The screen's rate is never assumed: it is read off the intervals
+// (frame_rate.ts), and the best rate seen counts too. Frames
 // that all take two refreshes on a 60 Hz screen read as a 30 Hz screen's
 // would, so the rate the page read off its lighter frames (frame_rate.ts),
 // or remembered, stands when the read is a whole fraction of it. Nothing
@@ -68,6 +66,8 @@
 //
 // Pure: the renderer feeds it each drawn frame's time and applies the rung
 // it answers (src/render/renderer.ts).
+
+import { refreshHz, wholeTimes } from './frame_rate';
 
 // One rung: the canvas's pixels per CSS pixel, and whether the ground
 // shows the sun's shadows.
@@ -173,49 +173,9 @@ const PROBATION_LOOKS = 2;
 // rate: one slow frame is not a slow second. Frames a refresh or two late
 // are well under it, and only the one is left out.
 const HITCH_FACTOR = 4;
-// A divisor of the intervals is searched down to a refresh this short.
-const FASTEST_REFRESH_MS = 1000 / 250;
-const MAX_DIVISOR = 8;
-// How far a browser's clock may round a frame's time (one that hands over
-// whole milliseconds, and its jitter).
-const ROUNDING_MS = 1.5;
 // Frames under this share of the refresh read off their intervals took
 // more refreshes some times than others: the read is the refresh itself.
 const CLEAR_SHARE = 0.95;
-
-// Whether `ratio` is a whole number, one or more, give or take a tenth.
-function wholeTimes(ratio: number): boolean {
-  return ratio >= 0.9 && Math.abs(ratio - Math.round(ratio)) <= 0.1;
-}
-
-// The screen's refresh in Hz read off frame intervals, each a whole
-// number of refreshes give or take a tenth of one, nine in ten of them
-// at least; null when no divisor fits. The shortest intervals are
-// averaged before the search and the refresh is the time they span over
-// the refreshes they count, so a clock that rounds to the millisecond
-// (16 and 17 for 60 Hz) reads true.
-export function refreshHz(intervals: readonly number[]): number | null {
-  if (intervals.length < 4) return null;
-  const sorted = [...intervals].sort((a, b) => a - b);
-  const from = sorted[Math.floor(sorted.length * 0.05)]!;
-  const low = sorted.filter((x) => x >= from && x <= from + ROUNDING_MS);
-  const shortest = low.reduce((a, b) => a + b, 0) / low.length;
-  for (let k = 1; k <= MAX_DIVISOR; k++) {
-    const p = shortest / k;
-    if (p < FASTEST_REFRESH_MS) break;
-    let fit = 0;
-    let spanned = 0;
-    let refreshes = 0;
-    for (const x of intervals) {
-      if (!wholeTimes(x / p)) continue;
-      fit++;
-      spanned += x;
-      refreshes += Math.round(x / p);
-    }
-    if (fit >= intervals.length * 0.9) return (1000 * refreshes) / spanned;
-  }
-  return null;
-}
 
 // The middle values of `xs`, the lower and the upper (the same one for an
 // odd count), and their mean.

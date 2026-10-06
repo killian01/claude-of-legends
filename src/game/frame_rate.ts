@@ -15,13 +15,44 @@
 // (quality_ladder.ts), from the page's start: the menus' frames are light
 // and come on every refresh, where a match on a weak GPU may take two
 // refreshes for each of its frames, a cadence a screen half as fast would
-// show as well. The fastest refresh read is kept.
-
-import { refreshHz } from './quality_ladder';
+// show as well. The fastest refresh read is kept. A browser hands
+// requestAnimationFrame the time of the screen's refresh, so every interval
+// is a whole number of refreshes and their common divisor is the refresh,
+// however slow the frames.
 
 const LONGEST_MS = 1000;
+// The refresh is searched down to this short, over divisors up to the
+// most, through a clock that rounds a frame's time this far.
+const FASTEST_REFRESH_MS = 1000 / 250;
+const MAX_DIVISOR = 8;
+const ROUNDING_MS = 1.5;
 // Intervals a refresh is read off at a time.
 const REFRESH_FRAMES = 30;
+
+// Whether `ratio` is a whole number, one or more, give or take a tenth.
+export const wholeTimes = (ratio: number): boolean =>
+  ratio >= 0.9 && Math.abs(ratio - Math.round(ratio)) <= 0.1;
+
+// The screen's refresh in Hz read off frame intervals, nine in ten of them
+// a whole number of refreshes; null when no divisor fits. The shortest are
+// averaged first, so a clock that rounds to the millisecond reads true.
+export function refreshHz(intervals: readonly number[]): number | null {
+  if (intervals.length < 4) return null;
+  const sorted = [...intervals].sort((a, b) => a - b);
+  const from = sorted[Math.floor(sorted.length * 0.05)]!;
+  const low = sorted.filter((x) => x >= from && x <= from + ROUNDING_MS);
+  const shortest = low.reduce((a, b) => a + b, 0) / low.length;
+  for (let k = 1; k <= MAX_DIVISOR; k++) {
+    const p = shortest / k;
+    if (p < FASTEST_REFRESH_MS) break;
+    const fit = intervals.filter((x) => wholeTimes(x / p));
+    if (fit.length >= intervals.length * 0.9) {
+      const refreshes = fit.reduce((n, x) => n + Math.round(x / p), 0);
+      return (1000 * refreshes) / fit.reduce((a, b) => a + b, 0);
+    }
+  }
+  return null;
+}
 
 let frames = 0;
 let spent = 0;
