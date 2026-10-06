@@ -480,9 +480,8 @@ export class QualityLadder {
     const line = r.shortShare * target;
     const trial = this.trial;
     if (trial) {
-      // The first windows after a step carry the change itself; one that
-      // spans a change of pace is neither pace.
-      if (++trial.seen <= r.changeWindows || paced) return;
+      // The first windows after a step carry the change itself.
+      if (++trial.seen <= r.changeWindows) return;
       trial.rates.push(fps);
       const needed = trial.gained ? r.freshWindows : r.medianWindows;
       if (trial.rates.length >= needed) this.decide(trial, target, at);
