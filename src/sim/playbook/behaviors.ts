@@ -7,9 +7,10 @@
 import { GOTO_DONE_RADIUS } from '../coach';
 import { CAMP_FIRST_SPAWN_S, CAMPS } from '../content/camps';
 import { CHAMPIONS, type ChampionRole } from '../content/champions';
+import { draughtSlot } from '../content/items';
 import { hypot } from '../exact';
 import type { Action, ObsCamp, ObsCreature, Observation, ObsUnit } from '../policy';
-import { nextKitStep } from './kit';
+import { draughtStep, nextKitStep } from './kit';
 import {
   BESIDE_RANGE,
   CAST_RANGE,
@@ -58,6 +59,8 @@ export function runBehavior(b: Behavior, ctx: SlotContext): Action | null {
       return goShop(ctx);
     case 'sell':
       return sellNamed(ctx, b.item);
+    case 'drink':
+      return drink(ctx);
     case 'avoidTower':
       return avoidTower(ctx, b.escortMin ?? ESCORT_MIN, b.hpBelow ?? 0.65);
     case 'finishSanctum':
@@ -165,10 +168,19 @@ function retreat(ctx: SlotContext): Action {
 // force, or the sale that makes room for it. Both need the fountain; the
 // sim refuses either elsewhere (src/sim/fountain.ts), and a sale is never
 // worth a wasted slot.
+// With nothing of the build to buy, the walker carries a Sapdraught.
 function shop(ctx: SlotContext): Action | null {
-  const step = nextKitStep(ctx.kit().build, ctx.s.items, ctx.s.gold);
-  if (!step || !ctx.atFountain) return null;
-  return step;
+  if (!ctx.atFountain) return null;
+  const { build } = ctx.kit();
+  return nextKitStep(build, ctx.s.items, ctx.s.gold) ?? draughtStep(build, ctx.s.items, ctx.s.gold);
+}
+
+// Drink the first Sapdraught in the bag, the same action a person's click
+// sends; the sim refuses a second while one runs, so the play passes then.
+function drink(ctx: SlotContext): Action | null {
+  if ((ctx.s.drinking ?? 0) > 0) return null;
+  const slot = draughtSlot(ctx.s.items);
+  return slot === -1 ? null : { kind: 'drink', slot };
 }
 
 // Sell one named item, the owner's own rule.

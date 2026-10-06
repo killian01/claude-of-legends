@@ -142,12 +142,14 @@ describe('the validator', () => {
   };
 
   it('accepts the default playbook and returns only known fields', () => {
+    const retreat = LANER_PLAYBOOK.plays.find((p) => p.id === 'retreat')!;
     const def = ok({
       ...LANER_PLAYBOOK,
       stray: 1,
-      plays: [{ ...LANER_PLAYBOOK.plays[0]!, note: 'x', do: { kind: 'retreat', bogus: 2 } }],
+      plays: [{ ...retreat, note: 'x', do: { kind: 'retreat', bogus: 2 } }],
     });
-    expect(def).toEqual({ version: LANER_PLAYBOOK.version, plays: [LANER_PLAYBOOK.plays[0]] });
+    expect(def).toEqual({ version: LANER_PLAYBOOK.version, plays: [retreat] });
+    expect(ok(LANER_PLAYBOOK)).toEqual(LANER_PLAYBOOK);
   });
 
   it('accepts every version up to the current one and refuses newer ones', () => {

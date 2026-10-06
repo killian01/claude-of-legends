@@ -147,6 +147,8 @@ export function describeBehavior(b: Behavior): string {
       return 'buy the next item';
     case 'goShop':
       return 'go home to shop';
+    case 'drink':
+      return 'drink a Sapdraught';
     case 'avoidTower':
       return `step out of tower reach (escort under ${b.escortMin ?? 3} or health below ${pct(
         b.hpBelow ?? 0.65,
@@ -468,6 +470,7 @@ export const BEHAVIOR_FORMS: Readonly<Record<Behavior['kind'], KindForm>> = {
   hold: { label: 'hold still' },
   shop: { label: 'buy the next item' },
   goShop: { label: 'go home to shop' },
+  drink: { label: 'drink a Sapdraught' },
   avoidTower: {
     label: 'step out of tower reach',
     nums: [

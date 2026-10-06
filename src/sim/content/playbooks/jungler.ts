@@ -11,11 +11,13 @@
 // everyone, once the round is done.
 
 import type { PlaybookDef } from '../../playbook/types';
+import { DRINK_PLAY } from './drink';
 
 export const JUNGLER_PLAYBOOK: PlaybookDef = {
   version: 4,
   lanes: ['jungle'],
   plays: [
+    DRINK_PLAY,
     { id: 'retreat', when: { kind: 'hp', below: 0.32 }, do: { kind: 'retreat' } },
     {
       id: 'rest',

@@ -7,10 +7,12 @@
 // tail. Its matches are decided at the pits.
 
 import type { PlaybookDef } from '../../playbook/types';
+import { DRINK_PLAY } from './drink';
 
 export const OBJECTIVE_PLAYBOOK: PlaybookDef = {
   version: 2,
   plays: [
+    DRINK_PLAY,
     { id: 'retreat', when: { kind: 'hp', below: 0.32 }, do: { kind: 'retreat' } },
     {
       id: 'rest',

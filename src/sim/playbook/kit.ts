@@ -5,7 +5,7 @@
 // pure over data, reading only the item catalog and the champion roles.
 
 import { CHAMPIONS, type ChampionRole } from '../content/champions';
-import { effectiveItemCost, ITEMS } from '../content/items';
+import { draughtSlot, effectiveItemCost, ITEMS } from '../content/items';
 import type { SlotContext } from './micro';
 import { holds } from './triggers';
 import type { KitDef, SkillKey } from './types';
@@ -230,6 +230,23 @@ export function unwantedSlots(build: readonly string[], bag: readonly string[]):
 }
 
 export type KitStep = { kind: 'buy'; itemId: string } | { kind: 'sell'; slot: number };
+
+// The Sapdraught a bot carries (docs/plan-potion.md): one, bought only
+// when the build has nothing to buy right now and the bag keeps a slot
+// free for it beyond, so it never delays an item or crowds one out.
+export const DRAUGHT_ID = 'sapdraught';
+
+export function draughtStep(
+  build: readonly string[],
+  bag: readonly string[],
+  gold: number,
+): KitStep | null {
+  if (draughtSlot(bag) !== -1 || BAG_SLOTS - bag.length < 2) return null;
+  if (nextKitStep(build, bag, gold) !== null) return null;
+  return gold >= (ITEMS[DRAUGHT_ID]?.cost ?? Number.POSITIVE_INFINITY)
+    ? { kind: 'buy', itemId: DRAUGHT_ID }
+    : null;
+}
 
 export function cheapestSlot(bag: readonly string[], among: readonly number[]): number {
   let best = among[0]!;

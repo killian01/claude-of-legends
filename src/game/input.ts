@@ -36,6 +36,8 @@ export interface InputHandlers {
   // A battle royale's Graft card by its key, 1 to 3 as 0 to 2: true when an
   // offer was open to take it.
   onPickCard?(card: number): boolean;
+  // The keys 1 to 6 drink from that bag slot, as 0 to 5 (a Sapdraught).
+  onDrinkSlot?(slot: number): void;
   // The left thumb's stick (thumb_stick.ts): a world direction, unit
   // length, every frame while the thumb steers; null when it rests or
   // lifts. The handler turns it into the sim's move orders.
@@ -124,6 +126,10 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): () => v
     const card = cardOfKey(e.key);
     if (card !== null && handlers.onPickCard?.(card)) {
       e.preventDefault();
+      return;
+    }
+    if (!e.altKey && e.key >= '1' && e.key <= '6') {
+      handlers.onDrinkSlot?.(Number(e.key) - 1);
       return;
     }
     const aim = (): Vec2 | null => renderer.groundPointAt(mouseX, mouseY);

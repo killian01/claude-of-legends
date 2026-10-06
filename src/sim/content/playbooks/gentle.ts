@@ -20,6 +20,7 @@
 // stands still beside a champion (src/sim/idle_defense.ts), as for anyone.
 
 import type { PlaybookDef, Trigger } from '../../playbook/types';
+import { DRINK_PLAY } from './drink';
 
 // The threshold: before both hold, the Gentle player starts nothing.
 export const GENTLE_FROM_S = 120;
@@ -36,6 +37,7 @@ const PAST_THRESHOLD: Trigger = {
 export const GENTLE_PLAYBOOK: PlaybookDef = {
   version: 4,
   plays: [
+    DRINK_PLAY,
     { id: 'retreat', when: { kind: 'hp', below: 0.32 }, do: { kind: 'retreat' } },
     {
       id: 'rest',

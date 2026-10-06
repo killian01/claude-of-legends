@@ -125,7 +125,7 @@ const OPS: PatchOp[] = [
   {
     op: 'add',
     play: { id: 'careful', when: { kind: 'hp', below: 0.5 }, do: { kind: 'retreat' } },
-    before: 'retreat',
+    before: 'drink',
   },
 ];
 
