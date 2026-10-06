@@ -31,6 +31,7 @@ import {
   LEAN_LEVELS,
   LEANEST,
   type Lean,
+  type MatchStart,
   matchStart,
   type QualityMemory,
   readQualityMemory,
@@ -94,6 +95,7 @@ export class QualityDial {
   readonly rungs: readonly Rung[];
   readonly top: number;
   readonly leanLevel: number;
+  private readonly start: MatchStart;
   private readonly ladder: QualityLadder;
   private readonly pinned: boolean;
   private readonly mode: LadderMode;
@@ -112,15 +114,15 @@ export class QualityDial {
     this.rungs = ladderRungs(setup.top, setup.phone ? PHONE_RATIO_FLOOR : DESK_RATIO_FLOOR);
     this.pinned = setup.pin !== null;
     this.atStart = this.pinned ? { hz: null, modes: {} } : readQualityMemory();
-    const start =
+    this.start =
       setup.pin === 'full'
-        ? { index: 0, lean: 0 }
+        ? { index: 0, lean: 0, played: 0 }
         : setup.pin === 'low'
-          ? { index: this.rungs.length - 1, lean: LEANEST }
+          ? { index: this.rungs.length - 1, lean: LEANEST, played: 0 }
           : matchStart(this.atStart.modes[this.mode], this.rungs);
-    this.leanLevel = start.lean;
+    this.leanLevel = this.start.lean;
     this.ladder = new QualityLadder(this.rungs, {
-      index: start.index,
+      index: this.start.index,
       // This page's own frames tell this screen best: a browser that
       // holds every page at 30 (a battery saver) shows it there.
       known: screenRefresh() ?? this.atStart.hz,
@@ -213,11 +215,8 @@ export class QualityDial {
         ...this.atStart.modes,
         [this.mode]: afterMatch({
           rungs: this.rungs,
-          settled: this.ladder.settled,
-          deepest: this.ladder.deepest,
-          judgedMs: this.ladder.judgedMs,
-          belowMs: this.ladder.belowMs,
-          lean: this.leanLevel,
+          spentMs: this.ladder.spentMs,
+          start: this.start,
         }),
       },
     };
