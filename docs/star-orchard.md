@@ -127,8 +127,9 @@ ground.
 - Fill: the Star Orchard's ground shades at about two and a half times the
   planet's cost a pixel. A device that draws under three quarters of its
   screen's rate steps its pixel ratio down toward 0.75, then the ground's
-  shadows, and a match spent mostly below its best makes the next one drop
-  the effects' pooled lights, then the antialiasing
+  shadows, and a match of three minutes or more whose best gave way from
+  the start and that spent two thirds of its time below it makes the next
+  one drop the effects' pooled lights, then the antialiasing
   (`src/game/quality_ladder.ts`, `src/game/quality_memory.ts`). The light
   model buys no frames on that account (measured the same as the full
   one), so the ladder never reaches for it. `?quality=full` holds a match
