@@ -50,9 +50,12 @@ export class VfxSystem {
   private readonly frame: SpawnFrame = { map: null };
   private firing: number | null = null;
 
+  // `lightPool`: how many pooled lights, none on a lean context
+  // (game/quality_memory.ts), where a pulse then lights nothing.
   constructor(
     scene: THREE.Scene,
     private readonly groundHeight?: GroundHeight,
+    lightPool = LIGHT_POOL,
   ) {
     this.timed = new TimedEffects(scene, this.frame);
     this.particles = new ParticleCloud(scene, groundHeight, this.frame);
@@ -64,7 +67,7 @@ export class VfxSystem {
     // The light pool is created eagerly and stays visible at intensity 0:
     // Three bakes the light COUNT into every lit material's program, so a
     // light appearing mid-fight would relink all of them (the woc lesson).
-    for (let i = 0; i < LIGHT_POOL; i++) {
+    for (let i = 0; i < lightPool; i++) {
       const light = new THREE.PointLight(0xffffff, 0, 26, 2);
       light.position.set(0, 3, 0);
       // Placed at each pulse, carried by rechart.
@@ -106,6 +109,7 @@ export class VfxSystem {
   }
 
   lightPulse(x: number, z: number, color: number, intensity: number, durationMs: number): void {
+    if (this.lights.length === 0) return;
     let slot = this.lights.find((s) => !s.active);
     // Steal the dimmest pulse so the biggest moment always shows.
     if (!slot) slot = this.lights.reduce((a, b) => (a.peak <= b.peak ? a : b));

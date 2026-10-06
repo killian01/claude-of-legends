@@ -790,7 +790,7 @@ export function startPresentation(
   function frame(now: number): void {
     if (disposed) return;
     const alpha = Math.max(0, Math.min(1, (now - lastTick) / TICK_MS));
-    renderer.render(alpha);
+    renderer.render(alpha, now);
     placeArrow(alpha);
     rafId = requestAnimationFrame(frame);
   }

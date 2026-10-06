@@ -5,7 +5,12 @@
 
 import * as THREE from 'three';
 import { attackSoundOf, castSoundOf } from '../game/champion_sounds';
-import { type RenderQuality, readDeviceHints, renderQualityFor } from '../game/map_quality';
+import {
+  ladderOverride,
+  type RenderQuality,
+  readDeviceHints,
+  renderQualityFor,
+} from '../game/map_quality';
 import { pointOnStage, rectOnStage, stageSizeOf } from '../game/match_stage';
 import { playCastSfx, playSfx } from '../game/sfx';
 import { attackWindupSeconds, RANGED_THRESHOLD } from '../sim/combat/auto_attack';
@@ -66,6 +71,7 @@ import type { PlanetMinimap } from './planet_minimap';
 import { PlanetStage } from './planet_stage';
 import { closeRenderer, ProgramKeeper } from './program_keeper';
 import { ProgramWarmup, whenLinked } from './program_warmup';
+import { QualityDial } from './quality_dial';
 import { RING_FOG_EDGE, ringFogOpening } from './ring_fog';
 import {
   clearRoyaleProjector,
@@ -450,6 +456,13 @@ export class Renderer {
   // How finely this device draws: a phone's canvas and shadow map are
   // capped (src/game/map_quality.ts).
   private readonly quality: RenderQuality;
+  // How finely this match draws, stepped by its frame rate
+  // (quality_dial.ts): the canvas's ratio and the ground's shadows, with
+  // the context's antialiasing and the effects' lights chosen at its start.
+  private readonly dial: QualityDial;
+  // Whether the last frame was the planet's drop or dive, which the dial
+  // does not judge.
+  private viewingDrop = false;
   // The WebGL context's comings and goings (picture_watch.ts): nothing is
   // drawn while it is gone, or back with the terrain still being redrawn.
   private readonly picture: PictureWatch;
@@ -491,13 +504,17 @@ export class Renderer {
     this.terrain = terrain;
     this.world = world;
     this.planet = null;
-    this.quality = renderQualityFor(
-      readDeviceHints(window),
-      window.devicePixelRatio,
-      terrain.highDetail === true,
-    );
-    this.gl = new THREE.WebGLRenderer({ antialias: true });
-    this.gl.setPixelRatio(this.quality.pixelRatio);
+    const hints = readDeviceHints(window);
+    this.quality = renderQualityFor(hints, window.devicePixelRatio, terrain.highDetail === true);
+    this.dial = new QualityDial({
+      mode: terrain.planet ? 'royale' : 'classic',
+      top: this.quality.pixelRatio,
+      phone: hints.coarsePointer,
+      pin: ladderOverride(window.location.search),
+      now: performance.now(),
+    });
+    this.gl = new THREE.WebGLRenderer({ antialias: this.dial.lean.antialias });
+    this.gl.setPixelRatio(this.dial.rung.ratio);
     this.gl.setSize(container.clientWidth, container.clientHeight);
     this.gl.shadowMap.enabled = true;
     // Plain PCF, not PCFSoft: it is the kernel that honors shadow.radius.
@@ -563,7 +580,11 @@ export class Renderer {
     this.scene.scale.z = -1;
     this.scene.position.z = this.world.map.size;
 
-    this.vfx = new VfxSystem(this.scene, this.terrain.heightAt);
+    this.vfx = new VfxSystem(
+      this.scene,
+      this.terrain.heightAt,
+      this.dial.lean.effectLights ? undefined : 0,
+    );
     this.towerShots = new TowerShotFx(this.scene, this.terrain.heightAt);
     this.towerReach = new TowerReachFx(this.scene, this.terrain.heightAt);
     if (this.planet) {
@@ -577,23 +598,33 @@ export class Renderer {
       this.cleanups.push(() => clearRoyaleProjector(projector));
       this.cleanups.push(onRoyaleCue((cue) => this.onRoyaleCue(cue)));
     }
-    this.vfx.particles.setViewport(
-      Math.max(1, container.clientHeight),
-      (this.camera.fov * Math.PI) / 180,
-    );
+    // The particles' size is in the canvas's pixels: kept as it looks at
+    // the device's own ratio whatever rung the dial stands on.
+    const fitParticles = (): void =>
+      this.vfx.particles.setViewport(
+        Math.max(1, container.clientHeight),
+        (this.camera.fov * Math.PI) / 180,
+        this.gl.getPixelRatio() / this.dial.top,
+      );
+    fitParticles();
 
     const onResize = (): void => {
       this.canvasAt.forget();
       this.gl.setSize(container.clientWidth, container.clientHeight);
       this.camera.aspect = container.clientWidth / Math.max(1, container.clientHeight);
       this.camera.updateProjectionMatrix();
-      this.vfx.particles.setViewport(
-        Math.max(1, container.clientHeight),
-        (this.camera.fov * Math.PI) / 180,
-      );
+      fitParticles();
     };
     window.addEventListener('resize', onResize);
     this.cleanups.push(() => window.removeEventListener('resize', onResize));
+    // A hidden tab draws nothing; back in front, its first seconds are
+    // not judged.
+    const onVisibility = (): void => {
+      if (!document.hidden) this.dial.pause(performance.now());
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    this.cleanups.push(() => document.removeEventListener('visibilitychange', onVisibility));
+    this.cleanups.push(() => this.dial.dispose());
 
     // Mouse-wheel zoom within sane bounds.
     this.gl.domElement.addEventListener(
@@ -748,6 +779,7 @@ export class Renderer {
       this.picture.dispose();
       notice.dispose();
     });
+    this.dial.attach({ gl: this.gl, scene: this.scene, onRatio: fitParticles });
     this.onSimTick();
     // First sync has no history: snap prev onto curr so nothing lerps from 0,0.
     for (const t of this.tracked.values()) t.prev = { ...t.curr };
@@ -3205,15 +3237,23 @@ export class Renderer {
   }
 
   // alpha in [0, 1): progress through the current tick, for interpolation.
-  render(alpha: number): void {
+  // `frameAt`: the time requestAnimationFrame handed the frame, which the
+  // quality dial reads the screen's refresh from.
+  render(alpha: number, frameAt?: number): void {
     // A new frame: the canvas's place is read again, once.
     this.canvasAt.forget();
     // No context, or a restored one still waiting on the terrain's
     // pictures: a draw now would upload the closed ones.
-    if (this.picture.blocked()) return;
+    if (this.picture.blocked()) {
+      this.dial.gap();
+      return;
+    }
     const now = performance.now();
     // The planet's programs still linking: the picture waits for them.
-    if (this.warmup?.holds(now)) return;
+    if (this.warmup?.holds(now)) {
+      this.dial.gap();
+      return;
+    }
     const dtMs = Math.min(100, now - this.lastFrameAt);
     this.lastFrameAt = now;
     // The planet: its stage first (the drop, the landing), then the chart
@@ -3650,6 +3690,7 @@ export class Renderer {
       restore();
       this.programs.keep(this.gl.info.programs ?? []);
       this.shown();
+      this.drew(now, frameAt);
       return;
     }
     const eye = this.toScene(target);
@@ -3666,6 +3707,24 @@ export class Renderer {
     this.gl.render(this.scene, this.camera);
     this.programs.keep(this.gl.info.programs ?? []);
     this.shown();
+    this.drew(now, frameAt);
+  }
+
+  // A frame drawn, begun at `began`: the quality dial judges it, unless it
+  // was the planet's drop or dive (a view of its own), and starts afresh
+  // on the ground after them.
+  private drew(began: number, frameAt: number | undefined): void {
+    const drop = this.planet !== null && (this.planet.droppingNow || this.planet.divingNow);
+    if (drop) {
+      this.viewingDrop = true;
+      this.dial.gap();
+      return;
+    }
+    if (this.viewingDrop) {
+      this.viewingDrop = false;
+      this.dial.pause(began);
+    }
+    this.dial.frame(frameAt ?? began, performance.now() - began);
   }
 
   // A frame is on the canvas: the first one settles `drawn`.

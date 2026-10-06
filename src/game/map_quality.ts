@@ -76,6 +76,19 @@ export function qualityOverride(search: string): MapQuality | null {
   return value === 'light' || value === 'full' ? value : null;
 }
 
+// ?quality=full holds a match at the device's best, as before the ladder
+// (quality_ladder.ts): for screenshots and recordings on a machine too
+// slow to keep it. ?quality=low holds it at the floor, leanest, to see
+// what a weak laptop sees. Anything else leaves the ladder to decide.
+export const LADDER_PARAM = 'quality';
+
+export type LadderPin = 'full' | 'low';
+
+export function ladderOverride(search: string): LadderPin | null {
+  const value = new URLSearchParams(search).get(LADDER_PARAM);
+  return value === 'full' || value === 'low' ? value : null;
+}
+
 export interface ModelChoice {
   file: string;
   bytes: number;
