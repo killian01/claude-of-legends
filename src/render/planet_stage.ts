@@ -491,6 +491,11 @@ export class PlanetStage {
     return this.dropping;
   }
 
+  // True while the camera dives from the globe to the champion.
+  get divingNow(): boolean {
+    return this.diveFrom !== null;
+  }
+
   // Per frame, before the draw: the stage, the planet under the chart,
   // the Dusk, the fog, the sky, the caches, the drop's dots and camera.
   update(now: number, dtMs: number, fog: THREE.Texture, follow: Vec2 | null): void {

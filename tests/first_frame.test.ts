@@ -78,9 +78,9 @@ describe('the wait for the first frame', () => {
 describe("the renderer's first frame", () => {
   it('is told only once a frame is drawn, never while the hold keeps it', () => {
     const source = readFileSync('src/render/renderer.ts', 'utf8');
-    const start = source.indexOf('  render(alpha: number): void {');
+    const start = source.indexOf('  render(alpha: number, frameAt?: number): void {');
     const render = source.slice(start, source.indexOf('\n  }\n', start));
-    const held = render.indexOf('if (this.warmup?.holds(now)) return;');
+    const held = render.indexOf('if (this.warmup?.holds(now)) {');
     expect(held).toBeGreaterThan(-1);
     // Each branch (the planet, the plane) tells it right after its draw.
     const told = [...render.matchAll(/this\.shown\(\);/g)].map((m) => m.index ?? 0);

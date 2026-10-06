@@ -10,6 +10,7 @@
 // and closing the tab asks first.
 
 import { type KillNote, type Presentation, startPresentation } from './game/boot';
+import { drawnQuality } from './game/drawn_quality';
 import { FIRST_FRAME_WAIT_MS, untilDrawn } from './game/first_frame';
 import { nextStep, type PostMatchAction } from './game/flow';
 import { registerForgedAssets } from './game/forged_visuals';
@@ -1137,7 +1138,7 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
         // once, so the time to the echo is the round trip this page lives.
         case 'probe':
           if (ws.readyState === ws.OPEN) {
-            ws.send(JSON.stringify({ t: 'probe', n: msg.n, fps: frameRate() }));
+            ws.send(JSON.stringify({ t: 'probe', n: msg.n, fps: frameRate(), q: drawnQuality() }));
           }
           break;
         case 'player_back':
@@ -1517,7 +1518,7 @@ async function runRoyale(
           pres?.showPing(msg.x, msg.z, msg.from, msg.team);
           break;
         case 'probe':
-          send({ t: 'probe', n: msg.n, fps: frameRate() });
+          send({ t: 'probe', n: msg.n, fps: frameRate(), q: drawnQuality() });
           break;
         case 'player_joined':
           pres?.pushChat('System', msg.team, `${msg.name} joined the match.`);

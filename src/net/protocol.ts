@@ -50,6 +50,20 @@ export interface ForgedMatchAssets {
   icons?: Record<string, string>;
 }
 
+// How finely the page draws its match (src/game/quality_ladder.ts), for
+// the seat report (server/seat_report.ts): the step on the device's ladder
+// (0 its best), the lean level the context was made with
+// (src/game/quality_memory.ts), the canvas's pixels per CSS pixel, the
+// picture's size in pixels, and whether the ground shows shadows.
+export interface DrawnQualityWire {
+  step: number;
+  lean: number;
+  ratio: number;
+  w: number;
+  h: number;
+  shadows: boolean;
+}
+
 export type ClientMsg =
   // Carries no identity: the session cookie settled that on the upgrade
   // (ADR 0006). It only asks whether a live match is still holding this
@@ -95,8 +109,9 @@ export type ClientMsg =
   // a match command.
   | { t: 'loaded' }
   // The echo of the server's round-trip probe, sent back at once, with the
-  // frames a second the page drew since the last one (null while hidden).
-  | { t: 'probe'; n: number; fps?: number | null }
+  // frames a second the page drew since the last one (null while hidden)
+  // and how finely it draws them (null outside a match).
+  | { t: 'probe'; n: number; fps?: number | null; q?: DrawnQualityWire | null }
   // A first step done in this match, or 'off' when the player hid the
   // guide (src/ui/first_steps.ts): what the seat report says of how far
   // a newcomer was led (server/seat_report.ts). Never a match command.

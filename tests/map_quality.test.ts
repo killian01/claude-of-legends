@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   chooseModel,
+  ladderOverride,
   mapQualityFor,
   PHONE_PIXEL_RATIO,
   PHONE_SHADOW_MAP,
@@ -75,6 +76,13 @@ describe('the address', () => {
     expect(qualityOverride('?a=1&map=full')).toBe('full');
     expect(qualityOverride('?map=medium')).toBeNull();
     expect(qualityOverride('')).toBeNull();
+  });
+
+  it('can hold the quality ladder at either end, and nothing else counts', () => {
+    expect(ladderOverride('?quality=full')).toBe('full');
+    expect(ladderOverride('?map=light&quality=low')).toBe('low');
+    expect(ladderOverride('?quality=auto')).toBeNull();
+    expect(ladderOverride('')).toBeNull();
   });
 });
 

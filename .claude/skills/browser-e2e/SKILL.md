@@ -55,4 +55,6 @@ A visual change ships before and after screenshots under `docs/screenshots`, ref
 from the PR body (`CLAUDE.md`, `CONTRIBUTING.md`). Take the "before" on `main` (a
 worktree with its own `PORT` and `CLIENT_PORT` works) and the "after" on the branch, at
 the same viewport, and commit only the stills the PR shows: `docs/screenshots/frame-*.jpg`
-are ignored on purpose.
+are ignored on purpose. A match drawn on SwiftShader is far below any screen's rate, and
+the quality ladder (`src/game/quality_ladder.ts`) steps it down within its first minute:
+open the page with `?quality=full` for a still of a match at its best.

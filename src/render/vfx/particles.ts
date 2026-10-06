@@ -9,6 +9,9 @@ import { type ChartRemap, framed, type SpawnFrame } from './chart_shift';
 import { SPRITE, spriteAtlas } from './sprites';
 
 const CAP = 2048;
+// The largest a point is drawn, in the canvas's pixels at the device's own
+// ratio: a spark at the camera's nose stays a spark.
+const MAX_POINT_PX = 110;
 // pos(3) color(3) size(1) alpha(1) rot(1) sprite(1)
 const STRIDE = 10;
 
@@ -69,13 +72,14 @@ attribute float aAlpha;
 attribute float aRot;
 attribute float aSprite;
 uniform float uScale;
+uniform float uMax;
 varying vec3 vColor;
 varying float vAlpha;
 varying float vRot;
 varying float vSprite;
 void main() {
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  gl_PointSize = clamp(aSize * uScale / -mv.z, 0.0, 110.0);
+  gl_PointSize = clamp(aSize * uScale / -mv.z, 0.0, uMax);
   vColor = aColor;
   vAlpha = aAlpha;
   vRot = aRot;
@@ -160,6 +164,7 @@ export class ParticleCloud {
       uniforms: {
         uMap: { value: spriteAtlas() },
         uScale: { value: 600 },
+        uMax: { value: MAX_POINT_PX },
       },
       vertexShader: VERT,
       fragmentShader: FRAG,
@@ -176,8 +181,12 @@ export class ParticleCloud {
   }
 
   // Perspective point scaling: pixels tall a size-1 particle is at depth 1.
-  setViewport(heightPx: number, fovRadians: number): void {
-    this.material.uniforms.uScale!.value = heightPx / (2 * Math.tan(fovRadians / 2));
+  // A point's size is in the canvas's own pixels: `pixelScale`, the
+  // canvas's ratio against the one the effects were sized at, keeps a
+  // spark as big on the screen when the quality dial draws fewer pixels.
+  setViewport(heightPx: number, fovRadians: number, pixelScale = 1): void {
+    this.material.uniforms.uScale!.value = (heightPx * pixelScale) / (2 * Math.tan(fovRadians / 2));
+    this.material.uniforms.uMax!.value = MAX_POINT_PX * pixelScale;
   }
 
   spawn(p: ParticleSpawn): void {
