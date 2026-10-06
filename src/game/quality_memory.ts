@@ -4,25 +4,32 @@
 // under one key, never sent anywhere (PRIVACY.md); a browser that keeps
 // nothing starts every match at the top, as before.
 //
-// The step is the rung the last match spent most of its judged time on,
-// kept as rungs below the device's own ratio, with that ratio: a screen
-// with another (a zoom, another monitor) starts at its own top, the steps
-// having been another screen's. Nothing is given back at a match's end:
-// the ladder's calm step up climbs within the match when there is room,
-// and a slowdown it came back from soon leaves the top as the step.
+// A step below the top is remembered only from a match that drew below
+// it for two thirds of its judged time or more, and was judged three
+// minutes at least: a fight, a slowdown it came back from or a short
+// match leaves the top. The step is the rung below the top the match
+// spent most of that time on, kept as rungs below the device's own ratio,
+// with that ratio: a screen with another (a zoom, another monitor) starts
+// at its own top, the steps having been another screen's. A match started
+// below the top tries the top first (the ladder's start probe), so a step
+// remembered for nothing costs a few seconds, and that time is not judged.
 //
 // It also carries what only a new WebGL context can change, the lean
-// level. A match that spent most of its judged time below the top makes
-// the next one leaner by a level: first without the effects' lights (three
-// pooled point lights every lit pixel of the ground shades, at intensity 0
-// while no spell flashes: the frame drawn in 0.63 of the time on the Star
-// Orchard and 0.80 on the planet without them, for a flash that no longer
-// lights the ground), then without antialiasing as well (0.83 and 0.62
-// more, for jagged edges). Five matches at a level give one back, a retry:
-// a machine that still needs it is below the top again in the next one
-// and leans again. A line kept in an older shape is dropped.
+// level. It rises a level on the same evidence, from a match whose top
+// did not hold from the start (its start probe given up, or a step down
+// from the top kept within its first three judged minutes): first without
+// the effects' lights (three pooled point lights every lit pixel of the
+// ground shades, at intensity 0 while no spell flashes: the frame drawn
+// in 0.63 of the time on the Star Orchard and 0.80 on the planet without
+// them, for a flash that no longer lights the ground), then without
+// antialiasing as well (0.83 and 0.62 more, for jagged edges). Five
+// matches at a level give one back, a retry: a machine that still needs
+// it falls from the top again in the next one and leans again. When the
+// lean changes the step goes back to the top, the rung that suited the
+// old level being no guide to the new one. A line kept in an older shape
+// is dropped.
 
-import type { Rung } from './quality_ladder';
+import { EVIDENCE_MS, type Rung } from './quality_ladder';
 
 export const QUALITY_KEY = 'col.quality';
 
@@ -141,6 +148,8 @@ export interface MatchQuality {
   spentMs: readonly number[];
   // How it started.
   start: MatchStart;
+  // Its top did not hold from the start (quality_ladder.ts fellEarly).
+  fellEarly: boolean;
 }
 
 // What a match leaves for the next one of its kind: the same however often
@@ -151,11 +160,17 @@ export function afterMatch(m: MatchQuality): ModeMemory {
   const { index, lean, played } = m.start;
   const judged = m.spentMs.reduce((a, b) => a + b, 0);
   if (!(judged > 0)) return { top, step: index, lean, played };
-  // The rung it spent most of its judged time on, the finer of two alike.
-  let step = 0;
-  for (let i = 1; i < m.spentMs.length; i++) if (m.spentMs[i]! > m.spentMs[step]!) step = i;
   const below = judged - (m.spentMs[0] ?? 0);
-  if (2 * below > judged && lean < LEANEST) return { top, step, lean: lean + 1, played: 0 };
-  if (played + 1 >= RETRY_MATCHES && lean > 0) return { top, step, lean: lean - 1, played: 0 };
+  const sustained = judged >= EVIDENCE_MS && 3 * below >= 2 * judged;
+  if (sustained && m.fellEarly && lean < LEANEST)
+    return { top, step: 0, lean: lean + 1, played: 0 };
+  if (played + 1 >= RETRY_MATCHES && lean > 0) return { top, step: 0, lean: lean - 1, played: 0 };
+  // The rung below the top it spent most of its judged time on, the finer
+  // of two alike.
+  let step = 0;
+  if (sustained) {
+    step = 1;
+    for (let i = 2; i < m.spentMs.length; i++) if (m.spentMs[i]! > m.spentMs[step]!) step = i;
+  }
   return { top, step, lean, played: Math.min(played + 1, RETRY_MATCHES) };
 }
