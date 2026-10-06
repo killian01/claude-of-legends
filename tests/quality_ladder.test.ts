@@ -2,10 +2,11 @@
 // (src/game/quality_ladder.ts), held to each of its rules at their edges:
 // the top drawn twenty judged seconds first, the line at three quarters of
 // the target, four fresh windows, two windows for a change and eight judged,
-// a gain of 1.15, the next step at once while still short, the walk past
-// rungs that take the same refreshes, the holds and their ceilings, the step
-// back up at nine tenths or once a step no longer pays, the script's share,
-// and what is not the frame rate: stalls, hitches, a pause, a frame not drawn.
+// a gain of 1.15 or the shadows' documented one less a margin, the next step
+// at once while still short, the walk past rungs that take the same
+// refreshes, the holds and their ceilings, the step back up at nine tenths
+// or once a step no longer pays, the script's share, the top's own rate, and
+// what is not the frame rate: stalls, hitches, a pause, a frame not drawn.
 // Whole matches through the dial are in quality_scenarios.test.ts.
 
 import { describe, expect, it } from 'vitest';
@@ -88,6 +89,20 @@ describe('a step down', () => {
     expect(exact(ladderFor(), (i) => (i === 0 ? 30 : 34.8), 60).settled.at(-1)!.index).toBe(1);
     const undone = exact(ladderFor(), (i) => (i === 0 ? 30 : 34.2), 60);
     expect(indexes(undone.changes)).toEqual([1, 0]);
+  });
+
+  it('onto the shadows is kept for 1.09, its documented 1.11 less a margin, undone for 1.07', () => {
+    // A weak GPU on the documented costs: 20 at the top, 47.6 without the
+    // shadows, 1.11 over the floor's ratio with them.
+    const rates = (last: number) => [20, 28.6, 36.2, 42.9, last];
+    // Kept, it pays what it was kept on: nothing tried above it.
+    const kept = exact(ladderFor(), (i) => rates(46.8)[i]!, 300);
+    expect(indexes(kept.changes)).toEqual([1, 2, 3, 4]);
+    expect(kept.settled.map((s) => s.index)).toEqual([0, 1, 2, 3, 4]);
+    expect(exact(ladderFor(), (i) => rates(47.6)[i]!, 300).settled.at(-1)!.index).toBe(4);
+    const undone = exact(ladderFor(), (i) => rates(45.9)[i]!, 120);
+    expect(undone.settled.map((s) => s.index)).toEqual([0, 1, 2, 3]);
+    expect(indexes(undone.changes).slice(-2)).toEqual([4, 3]);
   });
 
   it('is weighed against the fresh windows, not the ones that crossed', () => {

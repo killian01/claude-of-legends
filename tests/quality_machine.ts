@@ -16,6 +16,7 @@ import {
   ladderRungs,
   QualityDial,
   type Rung,
+  rungCosts,
   SETTLE_MS,
 } from '../src/render/quality_dial';
 
@@ -73,7 +74,7 @@ export interface Run {
 
 // A ladder on a desktop rung set from `top`, the screen's rate known.
 export const ladderFor = (top = 1.25, known: number | null = 60) =>
-  new QualityLadder(ladderRungs(top, DESK_RATIO_FLOOR).length, known, SETTLE);
+  new QualityLadder(rungCosts(ladderRungs(top, DESK_RATIO_FLOOR)), known, SETTLE);
 
 // Drives `ladder` with machine `m` for `seconds` from `from`.
 export function drive(ladder: QualityLadder, m: Machine, seconds: number, from = 0): Run {
@@ -150,6 +151,18 @@ export const fill =
     msAtTop *
     (rung.ratio / top) ** 2 *
     (rung.shadows ? 1 : 0.87) *
+    (lean.effectLights ? 1 : 0.63) *
+    (lean.antialias ? 1 : 0.83);
+
+// A GPU on the costs the dial documents (rungCosts): `msAtTop` at the ratio
+// `top`, five sixths of it as the pixels go, 0.9 of it without shadows, the
+// lean levels as in fill.
+export const documented =
+  (msAtTop: number, top: number): Work =>
+  (rung, lean) =>
+    msAtTop *
+    (1 / 6 + (5 / 6) * (rung.ratio / top) ** 2) *
+    (rung.shadows ? 1 : 0.9) *
     (lean.effectLights ? 1 : 0.63) *
     (lean.antialias ? 1 : 0.83);
 

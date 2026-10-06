@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { drawnQuality } from '../src/game/drawn_quality';
 import { QUALITY_KEY } from '../src/game/quality_memory';
-import { QualityDial, receiveShadows } from '../src/render/quality_dial';
+import { QualityDial, receiveShadows, rungCosts } from '../src/render/quality_dial';
 
 let store: Map<string, string>;
 
@@ -180,6 +180,15 @@ describe('the dial', () => {
     expect(writes).toBe(5);
     expect(remembered().modes.classic).toEqual({ lean: 0, played: 0, slow: 1 });
     dial.dispose();
+  });
+
+  it('hands the ladder the cost its rungs are documented to draw at', () => {
+    // A ratio of 1 instead of 1.25 in 0.70 of the time, about 0.9 of it
+    // without shadows.
+    const costs = rungCosts(laptop().rungs);
+    expect(costs[0]).toBe(1);
+    expect(costs[1]).toBeCloseTo(0.7, 3);
+    expect(costs[4]! / costs[3]!).toBeCloseTo(0.9, 3);
   });
 
   it('judges nothing for four seconds after the view changed under it', () => {

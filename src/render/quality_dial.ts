@@ -58,6 +58,20 @@ export function ladderRungs(top: number, floor: number): Rung[] {
   return rungs;
 }
 
+// A frame's documented cost on each rung, the top's 1: five sixths of it
+// goes as the pixels (a ratio of 1 instead of 1.25 draws in 0.70 of the
+// time), and about 0.9 of it is left without the ground's shadows. A step
+// is kept on the gain its rungs buy (quality_ladder.ts).
+const PIXEL_SHARE = 5 / 6;
+const SHADOWLESS_COST = 0.9;
+export function rungCosts(rungs: readonly Rung[]): number[] {
+  const top = rungs[0]!.ratio;
+  return rungs.map(
+    (r) =>
+      (1 - PIXEL_SHARE + PIXEL_SHARE * (r.ratio / top) ** 2) * (r.shadows ? 1 : SHADOWLESS_COST),
+  );
+}
+
 // A match's first seconds are not judged: the terrain uploads, programs
 // link, the camera settles.
 export const SETTLE_MS = 10_000;
@@ -142,7 +156,7 @@ export class QualityDial {
     // This page's own frames tell this screen best: a browser that holds
     // every page at 30 (a battery saver) shows it there.
     this.ladder = new QualityLadder(
-      this.rungs.length,
+      rungCosts(this.rungs),
       screenRefresh() ?? this.atStart.hz,
       setup.now + SETTLE_MS,
     );
