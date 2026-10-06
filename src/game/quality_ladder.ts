@@ -111,6 +111,11 @@ export const LADDER_RULES: LadderRules = {
 const STALL_FACTOR = 4;
 const STALL_MIN_MS = 250;
 const STALLS_IN_A_ROW = 3;
+// A window's longest interval, when it is this many times the window's
+// median, is a hitch (a program linking, a collection) and left out of its
+// rate: one slow frame is not a slow second. Frames a refresh or two late
+// are well under it, and only the one is left out.
+const HITCH_FACTOR = 4;
 // A divisor of the intervals is searched down to a refresh this short.
 const FASTEST_REFRESH_MS = 1000 / 250;
 const MAX_DIVISOR = 8;
@@ -139,6 +144,14 @@ function median(xs: readonly number[]): number {
   const s = [...xs].sort((a, b) => a - b);
   const mid = Math.floor(s.length / 2);
   return s.length % 2 === 1 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
+}
+
+// Frames a second over a window's intervals, its hitch left out.
+function windowRate(intervals: readonly number[]): number {
+  const sum = intervals.reduce((a, b) => a + b, 0);
+  const longest = Math.max(...intervals);
+  const hitch = longest > HITCH_FACTOR * median(intervals) ? longest : 0;
+  return (1000 * (intervals.length - (hitch > 0 ? 1 : 0))) / (sum - hitch);
 }
 
 export interface LadderStart {
@@ -240,7 +253,7 @@ export class QualityLadder {
     if (this.sum < this.rules.windowMs || this.frames < this.rules.windowFrames) {
       return this.current;
     }
-    const fps = (1000 * this.frames) / this.sum;
+    const fps = windowRate(this.intervals);
     const script = this.scripts.length > 0 ? median(this.scripts) : 0;
     const hz = refreshHz(this.intervals);
     const spent = this.sum;

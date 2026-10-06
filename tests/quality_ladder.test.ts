@@ -304,6 +304,35 @@ describe('what does not count', () => {
     expect(l.index).toBe(0);
   });
 
+  it('an isolated hitch does not make its window short', () => {
+    // A machine at 60 whose next three seconds each take one frame of
+    // 200 ms (a program linking, a collection): under a stall's length,
+    // but one frame in a window, not its rate.
+    const l = ladderFor(1.25, 0, 60);
+    const p = 1000 / 60;
+    let at = 0;
+    let hitchAt = 30_000;
+    const changes: number[] = [];
+    while (at < 120_000) {
+      const hitch = at >= hitchAt && hitchAt < 33_000;
+      if (hitch) hitchAt += 1000;
+      at += hitch ? 200 : p;
+      l.frame(at);
+      if (changes.at(-1) !== l.index) changes.push(l.index);
+    }
+    expect(changes).toEqual([0]);
+  });
+
+  it('frames that miss their refresh often are the rate, not hitches', () => {
+    // 22 ms a frame: one interval in three two refreshes long, so most of
+    // them are one refresh, and the rate is 45, short.
+    const l = ladderFor(1.25, 0, 60);
+    expect(drive(l, fillBound(60, 22, 1.25), 30).changes[0]).toEqual({
+      at: expect.any(Number),
+      index: 1,
+    });
+  });
+
   it('a sudden steady drop is the frame rate, not a run of stalls', () => {
     // 60 frames a second, then three a second for good: the slow frames
     // are judged once a few have come in a row, and the ladder steps.
