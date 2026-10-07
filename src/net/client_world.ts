@@ -8,8 +8,10 @@ import { ChampionRegistry } from '../sim/champion_registry';
 import { specForRank } from '../sim/combat/casting';
 import type { Status } from '../sim/combat/status';
 import type { ChampionDef } from '../sim/content/champions';
+import { ITEMS } from '../sim/content/items';
 import type { GameMap, WardenPit } from '../sim/content/map';
 import { creatureOfRing } from '../sim/content/rings';
+import { draughtLeft } from '../sim/draught';
 import { type FavorStacks, NO_FAVORS } from '../sim/favors';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { Vec3 } from '../sim/geo';
@@ -32,6 +34,9 @@ import type {
   WirePoint,
 } from './royale_wire';
 import { type DrawnSelf, pathOfPairs, SelfPredictor } from './self_predict';
+
+const SAP = ITEMS.sapdraught?.drink;
+const DRAUGHT_PER_SECOND = SAP ? SAP.heal / SAP.seconds : 1;
 
 // Rebuilds a displayable Status from its wire chip.
 function toStatus(k: string, until: number, v: number | undefined): Status | null {
@@ -63,6 +68,9 @@ function toStatus(k: string, until: number, v: number | undefined): Status | nul
       return { kind: 'taunt', until, sourceId: 0 };
     case 'buff':
       return { kind: 'buff', until, msPct: 0, asPct: 0, armor: 0, mr: 0 };
+    case 'draught':
+      // The health still to drink; the pace is the one drink's (draught.ts).
+      return { kind: 'draught', until, perSecond: DRAUGHT_PER_SECOND, left: v ?? 0 };
     default:
       return null;
   }
@@ -489,6 +497,10 @@ export class ClientWorld implements IWorld {
 
   drinkItem(_unitId: number, slot: number): boolean {
     if (this.coach) return false;
+    // The sim's own rule (draught.ts): one draught at a time. Refused here,
+    // the HUD says so, as it does offline.
+    const self = this.units.get(this.selfUnitId);
+    if (self && draughtLeft(self, this.time) > 0) return false;
     this.send({ t: 'drink', slot });
     return true;
   }

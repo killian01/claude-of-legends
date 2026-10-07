@@ -32,6 +32,7 @@ import {
 } from '../sim/content/items';
 import { ASPECT_IDS, ASPECTS, type AspectId, CREATURES } from '../sim/content/rings';
 import { SIGILS } from '../sim/content/sigils';
+import { draughtLeft } from '../sim/draught';
 import type { FavorStacks } from '../sim/favors';
 import { withinFountain } from '../sim/fountain';
 import type { RingClock } from '../sim/rings';
@@ -318,6 +319,7 @@ const CSS = `
   border: 1px solid #3a4f28; color: #c9d8ae; font-size: 10px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
 }
+.hud-inv-slot.waiting { opacity: 0.45; filter: grayscale(1); }
 .hud-hints {
   position: absolute; left: 12px; bottom: 12px; font-size: 10px; color: #93a87c;
   text-shadow: 0 1px 2px #000; max-width: 240px; line-height: 1.6;
@@ -3323,11 +3325,14 @@ export class Hud {
       }
     }
 
+    const drinking = draughtLeft(u, this.world.time) > 0;
     for (let i = 0; i < this.invSlots.length; i++) {
       const itemId = u.items[i];
       const slot = this.invSlots[i]!;
       const def = itemId ? ITEMS[itemId] : undefined;
       slot.classList.toggle('full', itemId !== undefined);
+      // A Sapdraught waits greyed while another is being drunk.
+      slot.classList.toggle('waiting', def?.drink !== undefined && drinking);
       if (def) {
         setText(slot, '');
         slot.style.backgroundImage = `url(${itemIconUrl(def)})`;

@@ -9,9 +9,13 @@
 // (game/match_stage.ts), which trade edges when the stage is turned.
 
 import { MIN_TAP_PX } from '../game/ui_scale';
+import { draughtSlot } from '../sim/content/items';
+import { draughtLeft } from '../sim/draught';
+import type { Unit } from '../sim/unit';
 
 // The recall and the shop are absent in a battle royale (ADR 0031), and
-// so are their buttons. Drink shows only while a Sapdraught is carried.
+// so are their buttons. Drink shows only while a Sapdraught is carried,
+// greyed while one is being drunk.
 export interface TouchBarActions {
   onRecall?(): void;
   onToggleShop?(): void;
@@ -45,11 +49,21 @@ export const TOUCH_BAR_CSS = `
    the room, and beside it is the stick's. */
 .touchbar-btn.drink { position: absolute; bottom: 0; right: calc(100% + 8px); }
 .touchbar.left .touchbar-btn.drink { position: static; }
+.touchbar-btn.drink.busy { opacity: 0.45; filter: grayscale(1); }
 `;
 
+// The Drink button's look for the champion: hidden with no Sapdraught
+// carried (or dead), greyed while a draught still runs, else ready.
+export type DrinkButton = 'hidden' | 'busy' | 'ready';
+
+export function drinkButton(me: Unit | undefined, time: number): DrinkButton {
+  if (!me || me.dead || draughtSlot(me.items) === -1) return 'hidden';
+  return draughtLeft(me, time) > 0 ? 'busy' : 'ready';
+}
+
 export interface TouchBar {
-  // Shows the Drink button or hides it; the match calls it every tick.
-  showDrink(on: boolean): void;
+  // Shows the Drink button as `drinkButton` says; the match calls it every tick.
+  setDrink(look: DrinkButton): void;
   // Removes the bar and its stylesheet, like the HUD's teardown.
   dispose(): void;
 }
@@ -81,13 +95,14 @@ export function buildTouchBar(
     drink.classList.add('drink');
     drink.style.display = 'none';
   }
-  let drinkShown = false;
+  let drinkLook: DrinkButton = 'hidden';
   container.appendChild(root);
   return {
-    showDrink(on) {
-      if (!drink || on === drinkShown) return;
-      drinkShown = on;
-      drink.style.display = on ? '' : 'none';
+    setDrink(look) {
+      if (!drink || look === drinkLook) return;
+      drinkLook = look;
+      drink.style.display = look === 'hidden' ? 'none' : '';
+      drink.classList.toggle('busy', look === 'busy');
     },
     dispose() {
       root.remove();

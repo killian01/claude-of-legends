@@ -66,9 +66,10 @@ can overturn before the first phase lands.
    between the score box and the minimap) and as a fifth row on the left. The kit walker
    carries one Sapdraught whenever the build has nothing to buy and a slot is spare
    (`draughtStep`, `kit.ts`), not only at the start; every house style leads with the shared
-   `DRINK_PLAY` (`content/playbooks/drink.ts`). Left for later: the Drink button greyed while
-   a draught runs online (`ccChips` in `server/snapshot.ts` and `toStatus` in the client
-   world do not carry `draught` yet), and a painting for the icon. The shop lists it, the desktop click and keys, the phone's
+   `DRINK_PLAY` (`content/playbooks/drink.ts`). Online, the seat's own status block carries
+   the draught (2026-10-07, `tests/draught_wire.test.ts`): the Drink button and the waiting
+   bag slot grey while one runs, and the client refuses a second drink with the HUD's toast.
+   Left for later: a painting for the icon. The shop lists it, the desktop click and keys, the phone's
    Drink button, the house kits and the laner's play, the playbook `drink` kind. Tests: a
    house bot buys one at the start and drinks under the same guard a person meets (through
    `action_dispatch`, not a side door); the validator accepts the new `do` kind. Checked in a

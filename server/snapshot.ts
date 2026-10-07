@@ -77,6 +77,9 @@ export function statusValue(s: Unit['statuses'][number]): number | undefined {
       return s.perSecond;
     case 'grievous':
       return round2(s.factor);
+    // The health still to drink, so the client knows the draught runs.
+    case 'draught':
+      return Math.ceil(s.left);
     default:
       return undefined;
   }
