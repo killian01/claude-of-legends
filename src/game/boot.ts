@@ -35,7 +35,7 @@ import {
 import { Minimap } from '../ui/minimap';
 import { slotTap } from '../ui/slot_tap';
 import { buildThumbStickView } from '../ui/thumb_stick_view';
-import { buildTouchBar } from '../ui/touch_bar';
+import { buildTouchBar, drinkButton } from '../ui/touch_bar';
 import { unlearnedLine } from '../ui/unlearned_line';
 import type { IWorld } from '../world_api';
 import { castSoundOf } from './champion_sounds';
@@ -702,7 +702,7 @@ export function startPresentation(
     const me = world.units.get(selfId);
     selfPrev = selfCurr;
     selfCurr = me ? copy(me.pos) : null;
-    touchBar?.showDrink(me !== undefined && !me.dead && draughtSlot(me.items) !== -1);
+    touchBar?.setDrink(drinkButton(me, world.time));
     stepPendingCast();
     // Warden spawn: ping its pit on the minimap and flash the ground so
     // nobody misses it (the HUD adds the announcement and the voice).
