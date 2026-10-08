@@ -17,6 +17,7 @@ import type {
   RoyaleVariant,
   SnapClamor,
   SnapDusk,
+  SnapMark,
   SnapSeedfall,
   WirePoint,
 } from '../net/royale_wire';
@@ -59,6 +60,42 @@ export interface MomentCall {
   // The announcement holds its line for its whole moment (holdMs), and
   // what is announced meanwhile waits its turn (ui/hud.ts announce).
   keep?: boolean;
+  // One quiet line of the kill feed instead of a banner (news from afar,
+  // newsCall): no spotlight, no sound.
+  feed?: boolean;
+}
+
+// The news of a mark (the Lodestar, an Ablaze run, a slayer, a run snuffed
+// out) is a centered banner only when it names the viewer or its champion
+// stands within NEWS_NEAR_M of them; the rest is one quiet line in the
+// feed. A playtest's banners were mostly about strangers on the far side
+// of the planet, said over the viewer's own fight.
+export const NEWS_NEAR_M = 40;
+
+// Whether a champion is near enough for its news to be a banner: unknown
+// where it stands is far; an unknown viewer (no body yet) hears it all as
+// before.
+export function newsNear(viewer: Point | null, champion: Point | null): boolean {
+  if (!viewer) return true;
+  if (!champion) return false;
+  return arcDistance(viewer, champion) <= NEWS_NEAR_M;
+}
+
+// A call as the news reaches the viewer: itself when near, else one quiet
+// line of the feed with its words and color and nothing else.
+export function newsCall(call: MomentCall, near: boolean): MomentCall {
+  return near ? call : { text: call.text, color: call.color, feed: true };
+}
+
+// The point a champion's latest mark was shown at (SnapRoyale mk), the
+// best guess the mirror has for a champion out of sight; null for none.
+export function lastMarkPoint(
+  mk: readonly SnapMark[] | undefined,
+  unitId: number,
+): { x: number; y: number; z: number } | null {
+  let best: SnapMark | null = null;
+  for (const m of mk ?? []) if (m[0] === unitId && (!best || m[5] > best[5])) best = m;
+  return best ? { x: best[2], y: best[3], z: best[4] } : null;
 }
 
 // A run of takedowns without dying, by variant: the rung that shows the

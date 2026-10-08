@@ -59,9 +59,11 @@ import {
   heartbeat,
   impactGain,
   impactShake,
+  lastMarkPoint,
   type MomentCall,
   type MomentKill,
   musicIntensity,
+  newsNear,
   OpeningRitual,
   panOf,
   RoyaleMoments,
@@ -90,6 +92,10 @@ const CSS = `
 .br-spot.on { opacity: 1; transform: translateX(-50%) scale(1); }
 .br-spot.top { font-size: 66px; letter-spacing: 8px; }
 .br-feed-line.fold { color: #a9a48c; border-color: #2a2618; font-style: italic; }
+/* News from afar (ui/royale_moments.ts newsCall): a line of the feed in
+   the mark's own color, cut short like a name rather than wrapped. */
+.br-feed-line.news { font-weight: 700; }
+.br-feed-line.news span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .br-note.done { color: #fff1b8; border-color: #f0c860; box-shadow: 0 0 18px rgba(240, 200, 96, 0.55); }
 .br-note.whole { color: #241a08; border-color: #f0deae; padding-left: 14px;
   background: linear-gradient(180deg, #e8cc74 0%, #c9a84a 55%, #a07830 100%); text-shadow: none; }
@@ -362,9 +368,14 @@ export class RoyaleHudMoments {
     return { calls, champion };
   }
 
-  // Plays calls: the spotlight or the announcement, the voice, the sound.
+  // Plays calls: the spotlight or the announcement, the voice, the sound;
+  // news from afar as one quiet line of the feed.
   play(calls: readonly MomentCall[]): void {
     for (const c of calls) {
+      if (c.feed) {
+        this.newsLine(c);
+        continue;
+      }
       if (c.spotlight) this.spotlight(c);
       else this.host.announce(c.text, c.color, c.holdMs, c.keep);
       if (c.voice) announceVoice(c.voice, true, true);
@@ -395,7 +406,7 @@ export class RoyaleHudMoments {
 
   // One line of the feed, or one more folded away.
   private feedLine(k: MomentDeath): void {
-    const { selfId, selfTeam, world, feed } = this.host;
+    const { selfId, selfTeam, world } = this.host;
     const r = this.view();
     const marked = new Set((r?.mk ?? []).map((m) => m[0]));
     const leader = r?.v === 'respawn' && r.leader && r.leader.s > 0 ? r.leader.i : null;
@@ -434,6 +445,23 @@ export class RoyaleHudMoments {
       el('span', 'gt', '>'),
       who(k.unitId, this.host.victimName(k), k.vb ?? this.host.botOf(k.unitId)),
     );
+    this.pushLine(line, tier);
+  }
+
+  // News from afar (a mark, a run snuffed out): one line of the feed in the
+  // call's color, kept the near tier's while.
+  private newsLine(c: MomentCall): void {
+    const line = el('div', 'br-feed-line news');
+    line.dataset.tier = 'near';
+    line.style.color = c.color;
+    line.appendChild(el('span', '', c.text));
+    this.pushLine(line, 'near');
+  }
+
+  // A line on top of the feed: the ones it pushes out go (a near one
+  // joins the fold), and it leaves once its tier's time is up.
+  private pushLine(line: HTMLElement, tier: FeedTier): void {
+    const { feed } = this.host;
     feed.prepend(line);
     const lines = [...feed.children].filter((c): c is HTMLElement => c !== this.fold);
     const tiers = lines.map((c) => (c.dataset.tier ?? 'near') as FeedTier);
@@ -496,9 +524,22 @@ export class RoyaleHudMoments {
     }
     this.landings(notes);
     this.play(this.moments.onNotes(notes, world.time));
-    // The Risings called, the marks, the Wrath passing, a run snuffed out.
+    // The Risings called, the marks, the Wrath passing, a run snuffed out:
+    // another's news a banner only from within reach, a feed line beyond.
     const nameOf = (id: number) => this.host.victimName({ unitId: id, killerId: 0 });
-    this.play(huntedCalls(notes, selfId, world.time, nameOf));
+    this.play(huntedCalls(notes, selfId, world.time, nameOf, (id) => this.near(id)));
+  }
+
+  // Whether a champion stands within the news' reach of the viewer
+  // (ui/royale_moments.ts newsNear): its body where the mirror holds it,
+  // else where its latest mark showed it.
+  private near(unitId: number): boolean {
+    const { world, selfId } = this.host;
+    const me = world.units.get(selfId);
+    const self = me && me.pos.y !== undefined ? me.pos : null;
+    const u = world.units.get(unitId);
+    const body = u && !u.dead && u.pos.y !== undefined ? u.pos : null;
+    return newsNear(self, body ?? lastMarkPoint(this.view()?.mk, unitId));
   }
 
   // The seeds that crashed down this batch: each one's shockwave, dust and
