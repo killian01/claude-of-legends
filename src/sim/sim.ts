@@ -280,12 +280,13 @@ export class Sim {
   }
 
   // The landing point a seat picks during the battle royale's drop: a point
-  // on the sphere, kept until the drop ends (the last pick wins). False
-  // outside a battle royale's drop.
+  // on the sphere, kept until the drop ends (the last pick wins); in
+  // Respawn, a dead seat's pick of where it comes back (royale/
+  // return_pick.ts). False otherwise, and outside a battle royale.
   pickDrop(unitId: number, p: { x: number; y: number; z: number }): boolean {
     const u = this.units.get(unitId);
     if (!this.royaleMode || u?.kind !== 'champion') return false;
-    return this.royaleMode.pickDrop(unitId, p, this.time);
+    return this.royaleMode.pickDrop(unitId, p, this.time, u.dead);
   }
 
   // A seat's pick of its open Graft offer in the battle royale (the 'graft'

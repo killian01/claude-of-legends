@@ -316,7 +316,9 @@ export interface ObsRoyale {
     at: { x: number; y: number; z: number };
     to: { x: number; y: number; z: number };
   }[];
-  // The seat's own landing pick during the drop, null before it picks.
+  // The seat's own landing pick during the drop, and in Respawn's play its
+  // pick of where it comes back while dead (royale/return_pick.ts); null
+  // before it picks.
   drop: { x: number; y: number; z: number } | null;
   // The cache this seat is opening and since when, null when none.
   opening: { cacheId: number; since: number } | null;
@@ -454,7 +456,8 @@ export type Action =
   // wave freeze stands on. An intention like move, outside the budget.
   | { kind: 'stop' }
   // The battle royale's landing pick during the drop (additive v0 action):
-  // the same pick a person makes on the globe (Sim.pickDrop).
+  // the same pick a person makes on the globe (Sim.pickDrop); in Respawn,
+  // a dead seat's pick of where it comes back, likewise.
   | { kind: 'drop'; x: number; y: number; z: number }
   // The battle royale's Graft pick (additive v0 action): one of the open
   // offer's three cards, the same pick a person makes. Free like 'level'
