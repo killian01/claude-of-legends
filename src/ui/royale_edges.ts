@@ -457,14 +457,19 @@ function overlapsRect(a: EdgeRect, b: EdgeRect): boolean {
 // its own track clear of the other arrows alone; where it points last of
 // all, and then without its line when that line would touch another's:
 // two lines never run together. `labelWidths[i]` is the width of arrow
-// i's line, pixels.
+// i's line, pixels. `covers` are boxes no line may stand on, ever (the
+// open Graft cards, read and tapped there): an arrow keeps off them as off
+// an obstacle, and where it finds no room clear of them it goes without
+// its line.
 export function layoutArrows(
   arrows: readonly Pick<EdgeArrow, 'x' | 'y' | 'angle'>[],
   labelWidths: readonly number[],
   obstacles: readonly EdgeRect[],
   v: EdgeView,
   ring?: EdgeRing,
+  covers: readonly EdgeRect[] = [],
 ): { x: number; y: number; labelDx: number; labelShown: boolean }[] {
+  const blocks = covers.length > 0 ? [...obstacles, ...covers] : obstacles;
   const placed: EdgeRect[] = [];
   const out: { x: number; y: number; labelDx: number; labelShown: boolean }[] = [];
   const inner: EdgeView = {
@@ -488,7 +493,7 @@ export function layoutArrows(
     };
     const blocked = (x: number, y: number): boolean => {
       const r = room(x, y);
-      return obstacles.some((o) => overlapsRect(r, o)) || placed.some((p) => crowds(r, p));
+      return blocks.some((o) => overlapsRect(r, o)) || placed.some((p) => crowds(r, p));
     };
     const find = (
       at: { x: number; y: number; angle: number },
@@ -503,9 +508,9 @@ export function layoutArrows(
       find(trackPoint(a.angle, innerView, innerRing), innerView, innerRing, blocked) ??
       find(own, v, ring, crowded) ?? { x: a.x, y: a.y };
     const labelDx = labelShift(p.x, width, v.width);
-    // Where it points over another arrow's room, it goes without its line
-    // and keeps only its dial's room.
-    const labelShown = !crowded(p.x, p.y);
+    // Where it points over another arrow's room or a cover, it goes
+    // without its line and keeps only its dial's room.
+    const labelShown = !crowded(p.x, p.y) && !covers.some((c) => overlapsRect(room(p.x, p.y), c));
     placed.push(labelShown ? room(p.x, p.y) : arrowRect(p, arrowBox(0)));
     out.push({ x: p.x, y: p.y, labelDx, labelShown });
   }

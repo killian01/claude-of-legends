@@ -242,6 +242,11 @@ export class RoyaleHudMoments {
   private readonly cachesAt = new Map<number, [number, number, number]>();
   private obstacles: EdgeRect[] = [];
   private obstaclesAt = 0;
+  // The open Graft cards' box, which no arrow's line stands on, and
+  // whether they were open at the last look (opened or closed, the boxes
+  // are measured again at once).
+  private covers: EdgeRect[] = [];
+  private cardsOpen = false;
   // The phone's safe-area insets, pixels, measured with the obstacles.
   private insets = { top: 0, right: 0, bottom: 0, left: 0 };
   private raf = 0;
@@ -668,6 +673,7 @@ export class RoyaleHudMoments {
       }
       const size = projector.view();
       const obstacles = [...this.measureObstacles(stage)];
+      const covers = this.covers;
       const inset = this.insets;
       const view: EdgeView = {
         width: size.width,
@@ -714,6 +720,7 @@ export class RoyaleHudMoments {
         obstacles,
         view,
         ring,
+        covers,
       );
       for (const [i, a] of arrows.entries()) {
         const node = nodes[i];
@@ -762,15 +769,28 @@ export class RoyaleHudMoments {
   }
 
   // What the arrows keep off, in the stage's pixels: the minimap, the
-  // thumbs and the bar, the top line and the feed. Measured twice a second.
+  // thumbs and the bar, the top line and the feed, the Graft chip; and the
+  // open Graft cards, which their lines never stand on (ui/royale_edges.ts
+  // layoutArrows covers). Measured twice a second, and at once when the
+  // cards open or fold.
   private measureObstacles(stage: HTMLElement): EdgeRect[] {
     const now = performance.now();
-    if (now - this.obstaclesAt < OBSTACLES_MS) return this.obstacles;
+    const cards = stage.querySelector<HTMLElement>('.br-grafts');
+    const cardsOpen = cards !== null && !cards.hidden;
+    if (cardsOpen === this.cardsOpen && now - this.obstaclesAt < OBSTACLES_MS) {
+      return this.obstacles;
+    }
+    this.cardsOpen = cardsOpen;
     this.obstaclesAt = now;
     this.measureInsets();
+    this.covers = [];
+    if (cards && cardsOpen) {
+      const b = cards.getBoundingClientRect();
+      if (b.width > 0 && b.height > 0) this.covers.push(rectOnStage(cards, b));
+    }
     const picks = stage.querySelectorAll<HTMLElement>(
       '.hud-slots, .hud-bottom, .hud-kda, .stick-base, .stick-ghost, .touchbar, .br-top, ' +
-        '.br-feed, .br-open, .br-note, .hud-steps, .hud-points, .hud-hints, ' +
+        '.br-feed, .br-open, .br-note, .hud-steps, .hud-points, .hud-hints, .br-graft-chip, ' +
         'canvas[style*="right"]',
     );
     const out: EdgeRect[] = [];
