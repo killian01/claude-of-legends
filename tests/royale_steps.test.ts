@@ -197,6 +197,14 @@ describe('the battle royale first steps', () => {
     expect(royaleStepLine('br_fight', 'mouse')).toBe(
       'Click an enemy champion to attack it, and press Q, W or E to cast at your cursor.',
     );
+    // The leftClickMoves setting off: the right button attacks, and the
+    // card says so (it said "Click" whatever the setting).
+    expect(royaleStepLine('br_fight', 'mouse', false)).toBe(
+      'Right-click an enemy champion to attack it, and press Q, W or E to cast at your cursor.',
+    );
+    expect(royaleStepLine('br_fight', 'mouse', true)).toBe(royaleStepLine('br_fight', 'mouse'));
+    expect(royaleStepLine('br_cache', 'mouse', false)).toBe(royaleStepLine('br_cache', 'mouse'));
+    expect(royaleStepLine('br_fight', 'tap', false)).toBe(royaleStepLine('br_fight', 'tap'));
     expect(royaleStepLine('br_fight', 'tap')).toBe(
       'Tap an enemy champion to attack it, then tap a spell and where to cast it.',
     );

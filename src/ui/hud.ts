@@ -2511,7 +2511,7 @@ export class Hud {
     const id = next.current;
     const visible = id !== null && !view.covered && !view.dead;
     if (id !== null && visible) {
-      const line = royaleStepLine(id, this.stepsInput);
+      const line = royaleStepLine(id, this.stepsInput, getSettings().leftClickMoves);
       if (this.stepsLineEl.textContent !== line) this.stepsLineEl.textContent = line;
       this.stepsEl.classList.toggle('below', this.nudgeEl.classList.contains('on'));
     }
