@@ -137,6 +137,7 @@ import {
   STEPS_TOP_PX,
 } from './royale_layout';
 import { RoyaleLife, SeenChampions } from './royale_life';
+import { respawnTally, royaleSting } from './royale_result';
 import {
   hideRoyaleSteps,
   type RoyaleStepsState,
@@ -1325,6 +1326,9 @@ export class Hud {
   private readonly royaleLife = new RoyaleLife();
   private readonly royaleSeen = new SeenChampions();
   private readonly deathLife: HTMLElement;
+  // The best Respawn tally this browser kept before this match's card,
+  // read once (game/settings.ts royaleBest).
+  private royaleBestBefore: number | null = null;
 
   constructor(
     container: HTMLElement,
@@ -2140,13 +2144,29 @@ export class Hud {
       extras.push(this.endOffer);
     }
     extras.push(this.endFeedback.root);
-    this.royale.showResult(result, extras);
+    // Respawn's best (game/settings.ts royaleBest): the one kept before
+    // this match goes on the card, and this seat's tally is kept after it
+    // when higher. Read once, so a card drawn again says the same.
+    const respawn = result.v === 'respawn';
+    if (this.royaleBestBefore === null) this.royaleBestBefore = getSettings().royaleBest;
+    const best = this.royaleBestBefore;
+    this.royale.showResult(result, extras, {
+      assists: own?.assists ?? 0,
+      best: respawn ? best : 0,
+    });
+    if (respawn && respawnTally(result) > getSettings().royaleBest) {
+      updateSettings({ royaleBest: respawnTally(result) });
+    }
     this.deathOverlay.classList.remove('open');
-    // Heard once, when it came.
+    // Heard once, when it came: Respawn's middle of the field hears
+    // nothing (ui/royale_result.ts royaleSting).
     if (!this.endPlayed) {
       this.endPlayed = true;
-      playSfx(won ? 'victory' : 'defeat');
-      announceVoice(won ? 'victory' : 'defeat', true);
+      const sting = royaleSting(result);
+      if (sting) {
+        playSfx(sting);
+        announceVoice(sting, true);
+      }
     }
     this.syncOverlay();
   }

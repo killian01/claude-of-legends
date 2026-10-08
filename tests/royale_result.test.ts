@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { RoyaleResult } from '../src/net/royale_wire';
-import { ONE_LIFE_TOP, RESPAWN_TOP, royaleEnd } from '../src/ui/royale_result';
+import { ONE_LIFE_TOP, RESPAWN_TOP, royaleEnd, royaleSting } from '../src/ui/royale_result';
 
 const top = (n: number) =>
   Array.from({ length: n }, (_, i) => ({
@@ -74,10 +74,7 @@ describe('the Respawn end screen', () => {
     expect(end.heading).toBe('The final ranking');
     expect(end.rows).toHaveLength(RESPAWN_TOP);
     expect(end.rows[2]?.self).toBe(true);
-    expect(end.lines).toEqual([
-      '9 takedowns when the light went out',
-      'Kestrel won with 20 takedowns.',
-    ]);
+    expect(end.lines).toEqual(['9 takedowns', 'Kestrel won with 20 takedowns']);
     expect(end.other).toBe('Try One life');
   });
 
@@ -98,5 +95,131 @@ describe('the Respawn end screen', () => {
 
   it('holds a short ranking as it is', () => {
     expect(royaleEnd(result({ v: 'respawn', top: top(3) })).rows).toHaveLength(3);
+  });
+});
+
+// A visitor drops into the standing Respawn match minutes in: the card
+// counts from their landing (both playthrough cards opened "YOU PLACED
+// 50TH OF 50" behind bots on 72), says how close the seat above was, and
+// the best this browser kept.
+describe('the Respawn end screen of a drop-in', () => {
+  const winnerTop = top(10).map((t, i) => (i === 0 ? { ...t, name: 'Gloamwick', score: 72 } : t));
+  const dropIn = (over: Partial<RoyaleResult> = {}): RoyaleResult =>
+    result({
+      v: 'respawn',
+      place: 38,
+      score: 3,
+      winner: 'Gloamwick',
+      top: winnerTop,
+      window: { rank: 4, of: 50, score: 3 },
+      gap: { name: 'Seat 9', by: 1 },
+      held: 372,
+      ...over,
+    });
+
+  it('titles the place since landing and keeps the lines in order', () => {
+    const end = royaleEnd(dropIn(), { assists: 12, best: 0 });
+    expect(end.title).toBe('4th since you landed');
+    expect(end.won).toBe(false);
+    expect(end.lines).toEqual([
+      '3 takedowns and 12 assists in 6:12',
+      'One takedown short of 3rd',
+      'Gloamwick won with 72 takedowns',
+      'Whole match: 38th of 50',
+    ]);
+    // The rows and the buttons are the whole match's, as before.
+    expect(end.rows.map((r) => r.place)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(end.rows.some((r) => r.self)).toBe(false);
+    expect(end.again).toBe('Play the next match');
+  });
+
+  it('says a near miss of two, and none past it or without one', () => {
+    const two = royaleEnd(dropIn({ gap: { name: 'Seat 9', by: 2 } }), { assists: 0, best: 0 });
+    expect(two.lines[1]).toBe('2 takedowns short of 3rd');
+    const none = royaleEnd(dropIn({ gap: undefined }), { assists: 0, best: 0 });
+    expect(none.lines).toEqual([
+      '3 takedowns in 6:12',
+      'Gloamwick won with 72 takedowns',
+      'Whole match: 38th of 50',
+    ]);
+  });
+
+  it('says a new best, the best standing above, and nothing on a first match', () => {
+    const lines = (best: number) => royaleEnd(dropIn(), { assists: 0, best }).lines;
+    expect(lines(2)[2]).toBe('A new best: 3 takedowns');
+    expect(lines(7)[2]).toBe('Your best: 7 takedowns');
+    expect(lines(0)).not.toContainEqual(expect.stringMatching(/best/));
+    expect(lines(3)).not.toContainEqual(expect.stringMatching(/best/));
+  });
+
+  it('tells a seat from the drop its whole-match place and near miss', () => {
+    const end = royaleEnd(
+      result({ v: 'respawn', place: 12, score: 9, held: 600, gap: { name: 'Seat 11', by: 2 } }),
+      { assists: 4, best: 0 },
+    );
+    expect(end.title).toBe('You placed 12th of 50');
+    expect(end.lines).toEqual([
+      '9 takedowns and 4 assists in 10:00',
+      '2 takedowns short of 11th',
+      'Kestrel won with 20 takedowns',
+    ]);
+  });
+
+  it('crowns the most takedowns without a near miss or a winner line', () => {
+    const end = royaleEnd(result({ v: 'respawn', place: 1, score: 20, held: 600 }), {
+      assists: 6,
+      best: 25,
+    });
+    expect(end.title).toBe('Most takedowns');
+    expect(end.lines).toEqual(['20 takedowns and 6 assists in 10:00', 'Your best: 25 takedowns']);
+  });
+
+  it('reads an older result without the new fields as before', () => {
+    const end = royaleEnd(result({ v: 'respawn', place: 3, score: 9, held: 'x' as never }));
+    expect(end.lines).toEqual(['9 takedowns', 'Kestrel won with 20 takedowns']);
+  });
+
+  it('leaves One life as it was, whatever the result carries', () => {
+    const r = result({ window: { rank: 4, of: 50, score: 3 }, gap: { name: 'x', by: 1 }, held: 9 });
+    const end = royaleEnd(r, { assists: 5, best: 9 });
+    expect(end.title).toBe('You placed 7th of 50');
+    expect(end.lines).toEqual(['3 takedowns', 'Kestrel is the last one standing.']);
+  });
+});
+
+// What the end plays: Respawn's middle hears nothing, and a drop-in is
+// judged on their window ("defeat" was every place but first).
+describe('the end sting', () => {
+  const at = (place: number, rank?: number): RoyaleResult =>
+    result({
+      v: 'respawn',
+      place,
+      ...(rank !== undefined ? { window: { rank, of: 50, score: 1 } } : {}),
+    });
+
+  it('plays a victory first, a defeat in the bottom half, nothing between', () => {
+    expect([1, 3, 20, 40].map((p) => royaleSting(at(p)))).toEqual([
+      'victory',
+      null,
+      null,
+      'defeat',
+    ]);
+    expect(royaleSting(at(25))).toBeNull();
+    expect(royaleSting(at(26))).toBe('defeat');
+  });
+
+  it('judges a drop-in on their window: a top three is a victory', () => {
+    expect([1, 3, 20, 40].map((rank) => royaleSting(at(45, rank)))).toEqual([
+      'victory',
+      'victory',
+      null,
+      'defeat',
+    ]);
+  });
+
+  it('keeps One life as it was', () => {
+    expect(royaleSting(result({ place: 1 }))).toBe('victory');
+    expect(royaleSting(result({ place: 3 }))).toBe('defeat');
+    expect(royaleSting(result({ place: 3, window: { rank: 1, of: 50, score: 2 } }))).toBe('defeat');
   });
 });
