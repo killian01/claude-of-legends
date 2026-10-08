@@ -119,6 +119,30 @@ export const ROYALE_MIX_GUESTS: Readonly<{ gentle: number; normal: number }> = {
 export const SHARPEN_NORMAL_AT = 2;
 export const SHARPEN_STRONG_AT = 4;
 export const SHARPEN_GENTLE_PHASE = 3;
+
+// The skills from the softest: what a sharpening raises, and how soft an
+// Arrival's first foe plays (royale/grace.ts).
+export const ROYALE_SKILL_RANK: Readonly<Record<RoyaleSkillId, number>> = {
+  gentle: 0,
+  normal: 1,
+  strong: 2,
+};
+
+// The skill a seat dealt `id` plays now, at least its own: as normal from a
+// score of SHARPEN_NORMAL_AT, as strong from SHARPEN_STRONG_AT, and a
+// gentle one as normal from the Dusk's SHARPEN_GENTLE_PHASE. The bot reads
+// it off its observation (royale/bot/brain.ts effectiveSkill), the mode off
+// its state.
+export function sharpenedSkill(id: RoyaleSkillId, score: number, duskPhase: number): RoyaleSkillId {
+  let out = id;
+  const raise = (to: RoyaleSkillId) => {
+    if (ROYALE_SKILL_RANK[to] > ROYALE_SKILL_RANK[out]) out = to;
+  };
+  if (score >= SHARPEN_STRONG_AT) raise('strong');
+  else if (score >= SHARPEN_NORMAL_AT) raise('normal');
+  if (duskPhase >= SHARPEN_GENTLE_PHASE) raise('normal');
+  return out;
+}
 // One life's calm (the Dusk's phase 0): the odds a fight must show rise by
 // this much unless the bot was struck, so the first minute is a loot and
 // not a cull. A sharp dial: at 0.10 up to ten fell in the first minute, at
