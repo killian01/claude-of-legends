@@ -40,6 +40,7 @@ import { unlearnedLine } from '../ui/unlearned_line';
 import type { IWorld } from '../world_api';
 import { castSoundOf } from './champion_sounds';
 import { installCursorLock } from './cursor_lock';
+import { BeatCamera } from './death_beat';
 import type { PostMatchAction } from './flow';
 import { requestGameFullscreen } from './fullscreen';
 import { type InputHandlers, setupInput } from './input';
@@ -729,6 +730,11 @@ export function startPresentation(
 
   startMusic();
 
+  // The Death beat in Respawn (game/death_beat.ts): while the champion
+  // waits to come back, the camera is on whoever took it down when the
+  // mirror knows where they stand, and back on the champion at the return.
+  const beat = options.royale === 'respawn' ? new BeatCamera(world, renderer, selfId) : null;
+
   let lastTick = performance.now();
   let wardenWasUp = false;
   const ringWasUp = new Map<string, boolean>();
@@ -780,6 +786,7 @@ export function startPresentation(
       )
         renderer.onCombatNotes(notes);
     }
+    beat?.tick(notes?.kills ?? []);
     if (world.winner !== null) stopMusic();
   };
 
