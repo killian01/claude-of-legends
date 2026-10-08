@@ -15,15 +15,25 @@
 
 import * as THREE from 'three';
 import { ownGraceUntil } from '../net/royale_client';
-import type { SnapCache, WirePoint } from '../net/royale_wire';
+import type { RoyaleView, SnapCache, WirePoint } from '../net/royale_wire';
 import { heartwoodOf } from '../sim/content/grafts';
 import { segmentDist, type Vec3 } from '../sim/geo';
+import { intoLight } from '../sim/royale/return_pick';
 import { DT, type Vec2 } from '../sim/types';
+import { returnGlobeOn, returnLight } from '../ui/royale_return';
 import type { IWorld } from '../world_api';
 import { type ChartView, ChartWindow, ChartWorld } from './chart_world';
 import { BEND_UNIFORMS, bendTree } from './planet_bend';
 import { bendTurn, PlanetChart, rotateAbout } from './planet_chart';
-import { type DropOrbit, diveProgress, orbitPosition } from './planet_drop';
+import {
+  type DropOrbit,
+  diveProgress,
+  facingOrbit,
+  orbitPosition,
+  RETURN_GLOBE_DOWN,
+  RETURN_GLOBE_RIGHT,
+  returnOrbitDistance,
+} from './planet_drop';
 import { capAngle, DUSK_UNIFORMS, FADE_TARGETS } from './planet_dusk';
 import { ownGraceFresh } from './planet_grace';
 import type { HeartwoodNote } from './planet_graft_aura';
@@ -49,6 +59,10 @@ const UNIT_SHADOW_LIGHT_M = 12;
 const FADE_REACH_M = 16;
 // The dive from the globe to the champion, seconds.
 export const DIVE_S = 1.1;
+// The rise from the fallen champion to the Respawn wait's globe, seconds.
+export const RISE_S = 0.7;
+// A camera's own forward axis.
+const FORWARD = new THREE.Vector3(0, 0, -1);
 // A pad's arc, meters at its top.
 const PAD_ARC_M = 9;
 // Charts kept for beats queued under an earlier one.
@@ -142,6 +156,14 @@ export class PlanetStage {
   drawnAt: ((unitId: number) => Vec2 | null) | null = null;
   // Whether the followed champion was in its Grace last frame.
   private ownGraced = false;
+  // The Respawn wait's globe (ui/royale_return.ts) as the last frame drew
+  // it: shown over the dead followed champion, the camera risen to it from
+  // the play rig's pose, and the own pick of where to come back, shown
+  // before the server echoes it.
+  private returning = false;
+  private riseFrom: { pos: THREE.Vector3; quat: THREE.Quaternion } | null = null;
+  private riseStartMs = 0;
+  private returnPick: Vec3 | null = null;
 
   constructor(
     readonly base: IWorld,
@@ -335,7 +357,7 @@ export class PlanetStage {
     const dz = z - this.half;
     if (dx * dx + dz * dz > VIEW_REACH_M * VIEW_REACH_M) return false;
     // Read off the world, not the last frame: a tick may come first.
-    if (this.base.royaleView?.()?.st === 'drop') return false;
+    if (this.base.royaleView?.()?.st === 'drop' || this.returnNow()) return false;
     return !this.occluded(this.bentWorld(x, this.heightAt(x, z) + lift, z));
   }
 
@@ -358,13 +380,21 @@ export class PlanetStage {
   // A ray from the camera against the planet: the sphere point under a
   // screen point, its height refined a few times like the plane's.
   groundPointAt(ray: THREE.Ray): Vec3 | null {
-    if (this.dropNow()) return null;
+    if (this.dropNow() || this.returnNow()) return null;
     return this.rayOnSphere(ray);
   }
 
   // Whether the match is in its drop, as the world says right now.
   dropNow(): boolean {
     return this.base.royaleView?.()?.st === 'drop';
+  }
+
+  // Whether the Respawn wait's globe shows over the followed champion, as
+  // the world says right now: a tap then picks where it comes back.
+  returnNow(): boolean {
+    const r = this.base.royaleView?.() ?? null;
+    const u = this.picker !== null ? this.base.units.get(this.picker) : undefined;
+    return r !== null && u !== undefined && returnGlobeOn(r, u, this.base.time);
   }
 
   private rayOnSphere(ray: THREE.Ray): Vec3 | null {
@@ -398,7 +428,7 @@ export class PlanetStage {
   // the camera, behind the planet, or past the view's reach.
   projectSphere(p: Vec3, lift: number): { x: number; y: number } | null {
     const w = this.shownAt(p, lift);
-    if (!this.dropNow()) {
+    if (!this.dropNow() && !this.returnNow()) {
       const q = this.window.toLocal(p);
       const dx = q.x - this.half;
       const dz = q.z - this.half;
@@ -443,12 +473,47 @@ export class PlanetStage {
     this.camera.lookAt(target);
   }
 
-  // The camera this frame: the globe's orbit through the drop, the play
-  // rig (the dive blended in) after it.
+  // The camera this frame: the globe's orbit through the drop and the
+  // Respawn wait, the play rig (the dive blended in) after them.
   placeView(focus: THREE.Vector3, zoom: number, dtMs: number): void {
     if (this.dropping) this.placeOrbitCamera(dtMs);
+    else if (this.returning) this.placeReturnCamera();
     else this.placeCamera(focus, zoom);
     this.camera.updateMatrixWorld(true);
+  }
+
+  // The Respawn wait's camera: the globe from its orbit, still, set right
+  // of and under the screen's middle (RETURN_GLOBE_RIGHT, RETURN_GLOBE_DOWN)
+  // so the death wash's lines and the Graft cards stay clear of it; risen
+  // to from the play rig's pose. The view looks at the center, then turns
+  // in its own frame so the center falls on that point of the screen: the
+  // ray through it, in the camera's space, turned onto the view's axis.
+  private placeReturnCamera(): void {
+    const c = this.center;
+    const at = orbitPosition(c, this.orbit);
+    const pos = new THREE.Vector3(at.x, at.y, at.z);
+    this.camera.position.copy(pos);
+    this.camera.up.set(0, 1, 0);
+    this.camera.lookAt(c);
+    const tanH = Math.tan((this.camera.fov * Math.PI) / 360);
+    const ray = new THREE.Vector3(
+      2 * RETURN_GLOBE_RIGHT * this.camera.aspect * tanH,
+      -2 * RETURN_GLOBE_DOWN * tanH,
+      -1,
+    ).normalize();
+    this.camera.quaternion.multiply(new THREE.Quaternion().setFromUnitVectors(ray, FORWARD));
+    if (this.riseFrom) {
+      const k = diveProgress((performance.now() - this.riseStartMs) / 1000 / RISE_S);
+      if (k >= 1) this.riseFrom = null;
+      else {
+        const a = this.riseFrom.pos.clone().sub(c);
+        const b = pos.clone().sub(c);
+        const dir = a.clone().normalize().lerp(b.clone().normalize(), k).normalize();
+        pos.copy(c).addScaledVector(dir, a.length() + (b.length() - a.length()) * k);
+        this.camera.quaternion.copy(this.riseFrom.quat.clone().slerp(this.camera.quaternion, k));
+      }
+    }
+    this.camera.position.copy(pos);
   }
 
   // The key light: over the chart's origin through the play, as the 5v5
@@ -457,7 +522,7 @@ export class PlanetStage {
   sunFollow(sun: THREE.DirectionalLight | null): void {
     if (!sun) return;
     const o = this.half;
-    if (!this.dropping && !this.diveFrom) {
+    if (!this.dropping && !this.returning && !this.diveFrom) {
       sun.position.set(o + 70, 120, o + 45);
       sun.target.position.set(o, 0, o);
       return;
@@ -486,9 +551,10 @@ export class PlanetStage {
     this.camera.lookAt(c);
   }
 
-  // True while the drop holds the camera (the renderer skips its own).
+  // True while the globe holds the camera, the drop's or the Respawn
+  // wait's (the renderer skips its own).
   get droppingNow(): boolean {
-    return this.dropping;
+    return this.dropping || this.returning;
   }
 
   // True while the camera dives from the globe to the champion.
@@ -507,6 +573,15 @@ export class PlanetStage {
     this.dropping = stage === 'drop';
     if (this.dropping && !wasDropping) this.diveFrom = null;
     if (!this.dropping && wasDropping) this.beginDive(follow);
+    // The Respawn wait's globe: risen to over the fallen champion, dived
+    // from to where it comes back.
+    const wasReturning = this.returning;
+    this.returning = !this.dropping && this.returnNow();
+    if (this.returning && !wasReturning) this.beginRise();
+    if (!this.returning && wasReturning) {
+      this.returnPick = null;
+      this.beginDive(follow);
+    }
     void dtMs;
 
     this.root.updateMatrixWorld(true);
@@ -514,7 +589,7 @@ export class PlanetStage {
     DUSK_UNIFORMS.colTime.value = now / 1000;
     DUSK_UNIFORMS.colFogMap.value = fog;
     // No fog of war over the globe, nor through the dive down from it.
-    DUSK_UNIFORMS.colFogOn.value = this.dropping || this.diveFrom ? 0 : 1;
+    DUSK_UNIFORMS.colFogOn.value = this.dropping || this.returning || this.diveFrom ? 0 : 1;
     const dusk = royale?.dusk;
     if (dusk) {
       const c = wirePoint(dusk.c);
@@ -546,6 +621,7 @@ export class PlanetStage {
             return p ? this.window.toSphere(p.x, p.z) : null;
           }
         : undefined,
+      this.returning && royale ? this.returnMarks(royale) : null,
     );
     // The Heartwoods in sight, standing where the renderer draws them.
     this.marks.graftAura.update(royale?.st === 'play' ? this.heartwoods(drawnAt) : [], now);
@@ -563,6 +639,35 @@ export class PlanetStage {
       if (this.base.time - this.dropEndsAt < 2) this.pendingLanding = true;
     }
     this.minimap.paint(now, royale?.dusk ?? null, this.caches);
+  }
+
+  // What the wait's globe marks: where the followed champion fell, and its
+  // pick of where to come back, the tap shown at once, else the one the
+  // server echoes, brought into the light the return comes back in as the
+  // sim brings it (return_pick.ts).
+  private returnMarks(royale: RoyaleView): { pick: Vec3 | null; fell: Vec3 | null } {
+    const body = this.picker !== null ? this.base.units.get(this.picker) : undefined;
+    const fell = body?.pos.y !== undefined ? (body.pos as Vec3) : null;
+    const tapped = this.returnPick ?? (royale.bk ? wirePoint(royale.bk) : null);
+    const light = returnLight(royale.dusk);
+    const cap = { center: wirePoint(light.c), radius: light.r };
+    return { pick: tapped ? intoLight(tapped, cap, this.radius) : null, fell };
+  }
+
+  // The wait's globe rises: the orbit faces the light the return comes
+  // back in, near enough for a small one to be tapped, and the camera
+  // leaves the play rig's pose for it.
+  private beginRise(): void {
+    const royale = this.base.royaleView?.() ?? null;
+    const light = royale ? returnLight(royale.dusk) : null;
+    if (light) {
+      const toward = this.shownAt(wirePoint(light.c), 0).sub(this.center);
+      this.orbit = facingOrbit(toward, returnOrbitDistance(light.r));
+    } else this.orbit = { ...this.orbit, distance: returnOrbitDistance(2 * this.radius) };
+    this.riseFrom = { pos: this.camera.position.clone(), quat: this.camera.quaternion.clone() };
+    this.riseStartMs = performance.now();
+    this.diveFrom = null;
+    this.returnPick = null;
   }
 
   // The champions in sight carrying a Heartwood (CONTEXT.md: Graft), where
@@ -588,18 +693,25 @@ export class PlanetStage {
   // from where the globe was seen, the globe turned with the chart so
   // nothing jumps.
   private beginDive(follow: Vec2 | null): void {
+    // Where the globe's camera looked and its own up: the planet's center
+    // from the drop's orbit, a point beside it from the wait's.
+    const c = this.center;
+    const m = this.camera.matrixWorld.elements;
+    const look = new THREE.Vector3(-m[8]!, -m[9]!, -m[10]!).normalize();
     const from = {
       pos: this.camera.position.clone(),
-      target: this.center,
-      up: this.camera.up.clone(),
+      target: this.camera.position
+        .clone()
+        .addScaledVector(look, this.camera.position.distanceTo(c)),
+      up: new THREE.Vector3(m[4], m[5], m[6]).normalize(),
     };
     if (follow && follow.y !== undefined) {
       const before = this.view.chart;
       const remap = this.recenterAt(follow as Vec3);
       this.pendingRemap = remap;
       const turn = chartTurn(before, this.view.chart);
-      const c = this.center;
       from.pos.sub(c).applyMatrix3(turn).add(c);
+      from.target.sub(c).applyMatrix3(turn).add(c);
       from.up.applyMatrix3(turn);
     }
     this.diveFrom = from;
@@ -731,7 +843,7 @@ export class PlanetStage {
   private listenForDrop(): void {
     const el = this.canvas;
     const down = (e: PointerEvent): void => {
-      if (!this.dropNow()) return;
+      if (!this.dropNow() && !this.returnNow()) return;
       this.drag.active = true;
       this.drag.x = e.clientX;
       this.drag.y = e.clientY;
@@ -751,7 +863,8 @@ export class PlanetStage {
     const up = (e: PointerEvent): void => {
       if (!this.drag.active || e.pointerId !== this.drag.id) return;
       this.drag.active = false;
-      if (!this.dropNow() || this.drag.moved > 8) return;
+      const back = this.returnNow();
+      if ((!this.dropNow() && !back) || this.drag.moved > 8) return;
       // The page's pixels to the match stage's (turned on a phone held
       // upright), the frame the canvas's rect is given in.
       const at = this.toStage(e.clientX, e.clientY);
@@ -763,7 +876,10 @@ export class PlanetStage {
       const ray = new THREE.Raycaster();
       ray.setFromCamera(ndc, this.camera);
       const p = this.rayOnSphere(ray.ray);
-      if (p && this.picker !== null) this.base.pickDrop?.(this.picker, p);
+      if (!p || this.picker === null) return;
+      // In the Respawn wait, where the champion comes back (return_pick.ts).
+      if (back) this.returnPick = p;
+      this.base.pickDrop?.(this.picker, p);
     };
     el.addEventListener('pointerdown', down);
     window.addEventListener('pointermove', move);
@@ -785,7 +901,7 @@ export class PlanetStage {
     DUSK_UNIFORMS.colPlanetInv.value.copy(this.root.matrixWorld).invert();
     this.culler.update(this.camera, this.root.matrixWorld, this.view.chart.up);
     DUSK_UNIFORMS.colFadeEye.value.copy(this.camera.position);
-    if (this.dropping || this.diveFrom) DUSK_UNIFORMS.colFadeN.value = 0;
+    if (this.dropping || this.returning || this.diveFrom) DUSK_UNIFORMS.colFadeN.value = 0;
     BEND_UNIFORMS.colBendO.value.set(this.half, 0, this.half);
     BEND_UNIFORMS.colBendR.value = this.radius;
     BEND_UNIFORMS.colBendOn.value = 1;

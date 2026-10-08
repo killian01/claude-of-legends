@@ -114,7 +114,9 @@ how its teams are counted, ADR 0030)
 The battle royale variant where a death costs five seconds: the champion comes back at the edge
 of the light (of the light it closes to, while the Dusk closes) with everything it had, and the
 most takedowns when the last light goes out wins. A takedown's experience goes to its last hit,
-and a share of it to every champion with an assist on it.
+and a share of it to every champion with an assist on it. During the wait the globe shows, and a
+tap on it picks where the champion comes back instead: inside that light, at least ten meters
+from every champion standing, the nearest such point to the pick.
 What Play now launches.
 _Avoid_: loop mode, deathmatch
 
