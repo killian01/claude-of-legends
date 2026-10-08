@@ -485,6 +485,7 @@ export class RoyaleHud {
       own ? { ad: own.stats.ad, maxHp: own.maxHp, grafts: r.gr ?? [] } : null,
       this.moments.sinceHit(time),
       sinceLanding(this.landing, r.st, time),
+      r.v === 'respawn' && r.st === 'play' && own?.dead === true,
     );
     const line = duskLine(r, time);
     if (this.duskText.textContent !== line.text) this.duskText.textContent = line.text;

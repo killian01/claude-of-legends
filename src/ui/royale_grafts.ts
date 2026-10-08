@@ -101,19 +101,23 @@ export const GRAFT_SETTLE_S = 12;
 
 // Whether the cards fold into the chip: never over the globe in the drop;
 // otherwise when the person put them off (Later), is in a fight (a hit in
-// the last FIGHT_FOLD_S), or landed less than GRAFT_SETTLE_S ago, on a
-// phone as on a desktop, unless they opened them again from the chip. The
-// offer never runs out, so folding costs nothing but the look.
+// the last FIGHT_FOLD_S), landed less than GRAFT_SETTLE_S ago, or waits
+// to come back in Respawn (`waiting`: the death wash's lines and the globe
+// of where to come back are the wait's, and the cards open over the top
+// third of a desktop and half a phone covered them), on a phone as on a
+// desktop, unless they opened them again from the chip. The offer never
+// runs out, so folding costs nothing but the look.
 export function graftFolded(
   sinceHit: number | null,
   dropping: boolean,
   putOff: boolean,
   reopened: boolean,
   sinceLanding: number | null,
+  waiting = false,
 ): boolean {
   if (dropping || reopened) return false;
   const settling = sinceLanding !== null && sinceLanding < GRAFT_SETTLE_S;
-  return putOff || foldForFight(sinceHit, true) || settling;
+  return putOff || waiting || foldForFight(sinceHit, true) || settling;
 }
 
 // The card a key picks: 1, 2 and 3 on the top row or the number pad.
