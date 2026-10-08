@@ -54,6 +54,15 @@ export type SnapRising = [RisingKind, number, number, number, number, 0 | 1, num
 // when it was shown.
 export type SnapMark = [number, MarkKind, number, number, number, number];
 
+// The recipient's own Burr (CONTEXT.md: Burr; src/sim/royale/burr.ts): the
+// carrier's unit id, when the Burr runs out, and where the carrier stands
+// while it stands (absent while it is dead).
+export interface SnapBurr {
+  i: number;
+  u: number;
+  at?: WirePoint;
+}
+
 // A Clamor: where a takedown rang out, and when.
 export type SnapClamor = [number, number, number, number];
 
@@ -110,6 +119,9 @@ export interface SnapRoyale {
   ri?: SnapRising[];
   mk?: SnapMark[];
   cl?: SnapClamor[];
+  // Respawn: the recipient's own Burr while it lasts, every snapshot, so
+  // its absence says none does (the mirror keeps nothing between sends).
+  bu?: SnapBurr;
   // Respawn: the recipient's rank and how far behind the seat above it.
   rk?: number;
   gap?: number;
