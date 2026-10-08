@@ -147,6 +147,7 @@ import {
 import { LOOT_EMPTY, LOOT_LABEL, royaleHints } from './royale_text';
 import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
+import { shopSections } from './shop_sections';
 import { suggestedItem } from './shop_suggestion';
 import { rankable } from './slot_tap';
 import { teamLook } from './team_look';
@@ -1749,8 +1750,9 @@ export class Hud {
     this.targetFrame.append(this.targetPortrait, targetBody);
 
     // The shop: a large centered window (clear of the minimap) laid out like
-    // the genre expects. Components on top, finished items below with their
-    // recipes visible on the card, and a detail pane showing the full build
+    // the genre expects. Components and drinks on top (ui/shop_sections.ts),
+    // finished items below with their recipes visible on the card, and a
+    // detail pane showing the full build
     // path, the discounted price, and a Buy button.
     this.shop = el('div', 'hud-shop');
     const shopHead = el('div', 'hud-shop-head');
@@ -1804,19 +1806,7 @@ export class Hud {
       for (const item of items) cards.appendChild(makeCard(item));
       shopGrid.appendChild(cards);
     };
-    addSection(
-      'Components',
-      ITEM_LIST.filter((i) => i.tier === 1),
-    );
-    addSection(
-      'Finished items, built from two components',
-      ITEM_LIST.filter((i) => i.tier === 2),
-    );
-    addSection(
-      'Legendary upgrades, built from a finished item',
-      ITEM_LIST.filter((i) => i.tier === 3),
-    );
-    addSection(`Drinks, ${DRAUGHT_CARRY} carried at most`, CONSUMABLE_LIST);
+    for (const section of shopSections()) addSection(section.title, section.items);
     this.shopDetail = el('div', 'hud-shop-detail');
     shopBody.append(shopGrid, this.shopDetail);
     this.shop.append(shopHead, shopBody);
