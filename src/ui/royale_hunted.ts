@@ -16,7 +16,7 @@ import type { SnapMark, SnapRising, SnapRoyale } from '../net/royale_wire';
 import { RISING_WARN_S } from '../sim/content/royale_events';
 import type { Vec3 } from '../sim/geo';
 import { MARK_SHOWN_S, type MarkKind, type RisingKind } from '../sim/royale/types';
-import type { MomentCall } from './royale_moments';
+import { type MomentCall, newsCall } from './royale_moments';
 
 // Each Rising's color: the Pyrefang's ember, the Voidmaul's violet, the
 // Warden's white-violet (the Wrath's own, which its last hit carries).
@@ -225,11 +225,15 @@ export function risenCalls(kinds: readonly RisingKind[]): MomentCall[] {
 // Wrath taken, an Ablaze run of someone else's, a slayer), the Wrath
 // passing, and a run someone else snuffed out. `nameOf` reads a champion's
 // name (the notes carry the server's, which win); the viewer is "You".
+// `near` says whether a champion stands close enough for its news to be a
+// banner (ui/royale_moments.ts newsNear): another's Lodestar, Ablaze run,
+// slaying or snuffing from afar is one quiet line of the feed instead.
 export function huntedCalls(
   notes: readonly RoyaleNote[],
   selfId: number,
   time: number,
   nameOf: (unitId: number) => string,
+  near: (unitId: number) => boolean = () => true,
 ): MomentCall[] {
   const calls: MomentCall[] = [];
   const called: RisingKind[] = [];
@@ -253,7 +257,7 @@ export function huntedCalls(
                 sfx: 'gong',
                 keep: true,
               }
-            : { text: `${name} is the Lodestar`, color, sfx: 'chime' },
+            : newsCall({ text: `${name} is the Lodestar`, color, sfx: 'chime' }, near(n.unitId)),
         );
       } else if (n.mark === 'wrath') {
         calls.push(
@@ -262,13 +266,18 @@ export function huntedCalls(
             : { text: `${name} holds the Wrath`, color, sfx: 'gong' },
         );
       } else if (n.mark === 'ablaze' && !self) {
-        calls.push({ text: `${name} is Ablaze`, color });
+        calls.push(newsCall({ text: `${name} is Ablaze`, color }, near(n.unitId)));
       } else if (n.mark === 'slayer') {
-        calls.push({
-          text: self ? 'You took the Rising: every globe shows you' : `${name} took the Rising`,
-          color,
-          sfx: 'chime',
-        });
+        calls.push(
+          newsCall(
+            {
+              text: self ? 'You took the Rising: every globe shows you' : `${name} took the Rising`,
+              color,
+              sfx: 'chime',
+            },
+            self || near(n.unitId),
+          ),
+        );
       }
     } else if (n.kind === 'wrath_passed') {
       const color = MARK_COLORS.wrath.css;
@@ -284,10 +293,15 @@ export function huntedCalls(
       } else
         calls.push({ text: `The Wrath has passed to ${who(n.to, n.name)}`, color, sfx: 'gong' });
     } else if (n.kind === 'snuffed' && n.killerId !== selfId && n.unitId !== selfId) {
-      calls.push({
-        text: `${who(n.killerId, n.killerName)} snuffed out ${who(n.unitId, n.name)}`,
-        color: '#9fe8ff',
-      });
+      calls.push(
+        newsCall(
+          {
+            text: `${who(n.killerId, n.killerName)} snuffed out ${who(n.unitId, n.name)}`,
+            color: '#9fe8ff',
+          },
+          near(n.killerId) || near(n.unitId),
+        ),
+      );
     }
   }
   if (called.length > 0) {
