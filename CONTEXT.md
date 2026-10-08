@@ -552,9 +552,10 @@ done or once said long enough, what a player does on their own counts as done, t
 remembers what is done, and
 the player can hide the guide for good (the settings bring it back). The shop's suggested item, the
 next step of the build a house bot of that champion follows, is lit for everyone. The battle
-royale has a list of its own, under the same rules and the same Hide guide: open a cache, stay in
-the light (standing in the Dusk takes the card from any other step), what a takedown gives, fly a
-launch pad, and the ultimate ready at level 6.
+royale has a list of its own, under the same rules and the same Hide guide: attack and cast at an
+enemy champion, open a cache, stay in the light (standing in the Dusk, or about to be overtaken by
+it, takes the card from any other step), what a takedown gives, fly a launch pad, and the ultimate
+ready at level 6.
 _Avoid_: tutorial (that is a scripted match), tips, coach (the bot seat's)
 
 **Quick pick**:
