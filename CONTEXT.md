@@ -1171,7 +1171,8 @@ _Avoid_: on fire, killing spree, heating up
 **Burr**:
 Respawn's score to settle: whoever takes a champion down carries that champion's Burr for
 sixty seconds, seen by nobody but the champion it was taken from (a bearing at the screen's
-edge, a line on the wash of the death). Taking the carrier down while it lasts counts double
+edge, a line on the wash of the death, a red light where the carrier stands on the globe of the
+wait). Taking the carrier down while it lasts counts double
 and pays a piece; a later takedown of the same champion moves the Burr to the new taker.
 _Avoid_: bounty, nemesis, vendetta, revenge mark, grudge
 
@@ -1218,8 +1219,9 @@ _Avoid_: ground pound
 
 **Death beat**:
 The camera on whoever took a champion down, right after the fall. In One life, the two and a
-half seconds it holds on them, before following them. In Respawn, the wait before the return:
-it follows them while the world shows their body or a mark shows them on the globe, holds on
-where the champion fell otherwise, and is back on the champion as it returns. A fallen
-champion sees nothing, so the beat shows only what the fog lets through.
+half seconds it holds on them, before following them. In Respawn, the first second of the wait,
+before the globe rises: it follows them while the world shows their body or a mark shows them,
+holds on where the champion fell otherwise; on the globe the Burr's red light shows where they
+stand, and the camera is back on the champion as it returns. A fallen champion sees nothing,
+so the beat shows only what the fog lets through.
 _Avoid_: kill cam, death recap
