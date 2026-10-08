@@ -177,3 +177,39 @@ and Respawn's experience; One life and every Respawn return are unchanged.
   against 17.0 s, the fighting share 66.4 percent on both. A local
   playthrough on a loaded box had the joining card come down 3.45 s after the Arrival with
   2.55 s of Grace left, where rules 5 had ended it half a second before the world showed.
+
+## Amended: the Respawn wait picks the return (2026-10-08)
+
+The seat reports: 4 of the 10 visitors who died in the standing Respawn match left during the
+5 s wait, a wait with nothing in it but a count. A return set at the edge of the light came
+back within 10 m of a champion 41 percent of the time (over seeds 1 and 2 of fifty house bots,
+415 of 1,014 returns and 389 of 980). This gives the wait a choice; One life is unchanged.
+
+- **The globe in the wait.** A second after a Respawn champion falls, the camera rises to the
+  drop's globe, faced to the light it comes back in (the cap the Dusk closes to while it
+  closes, score.ts returnCap), the fall marked on it. A tap or a click on it picks where it
+  comes back (the death wash says "Tap the globe to choose where you come back" on a phone,
+  "Click the globe..." on a desktop); the last pick wins. The globe sits right of the middle and
+  the wash's lines move left of it, its recap and life lines whole, clear of the Graft cards and,
+  on a phone, standing on the folded Graft chip; the thumb controls stand down meanwhile. When
+  the champion stands again the camera dives down to it as after the drop
+  (`src/ui/royale_return.ts`, `src/render/planet_stage.ts`).
+- **The rule.** The pick is the 'drop' command and action, taken while dead in Respawn's play
+  (Sim.pickDrop), recorded and replayed like the drop's. The return is set down at the pick
+  brought inside that light at an Arrival's depth, on walkable ground, and at least 10 m from
+  every champion standing; when the pick is not such a point, the nearest of eight rings 3 m
+  apart around it that holds one gives its point farthest from everyone, and with none the edge
+  of the light as before. Each wait picks afresh; no pick, the return is as before
+  (`src/sim/royale/return_pick.ts`). The return keeps its Grace.
+- **The bots.** A dead Respawn seat is asked its decision until it picked (the dead decision a
+  Graft offer already asks), through the same observation, which reads the pick back in its
+  `drop`; the brain picks beside a Seedfall landing within 20 s of its return
+  (`bot/brain.ts` respawnPick), else picks nothing and comes back at the edge.
+- **Measured** over fifty house bots, seeds 1 to 3: 30 percent of the returns are picked (339 of
+  1,069, 296 of 1,023, 331 of 1,094), none of them within 10 m of a champion (11 m at the
+  median), none outside the light; the dead seats' decisions cost about 15,000 more
+  observations a match, some 3 percent of the sim's time. Four stand-in seats played by the
+  bots' brain among them, seeds 1 to 4, per life after a return: with no pick (the edge), 19 s
+  at the median, the first hit after 5.9 s, 0.86 takedowns; picking where it fell, 12 s, 2.6 s,
+  0.71; picking the far side of the light from its fall, 18.5 s, 4.0 s, 1.60. The pick is a real
+  choice: back into the same fight is quick and short, a fresh side of the light pays.

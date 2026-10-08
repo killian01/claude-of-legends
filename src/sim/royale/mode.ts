@@ -51,6 +51,7 @@ import { creatureXp, grantXp, landingLevels, takedownXp } from './levels';
 import { GOLDEN_PIECES, grantPieces, healShare, manaShare, seatBuild, streakShare } from './loot';
 import { markOf, markPayout, markSlayer, observeMarks, stepMarks } from './marks';
 import { flightOver, flightPos, type PadFlight, padSites, padUnder, startFlight } from './pads';
+import { returnSpot, takesReturnPick } from './return_pick';
 import {
   grantRoyaleWrath,
   observeRisings,
@@ -127,6 +128,8 @@ export interface RoyaleTally {
   burrTakedowns: number;
   // Respawn Arrivals that came down beside a fair first fight (grace.ts).
   fairArrivals: number;
+  // Respawn returns set down at the seat's own pick (return_pick.ts).
+  returnsPicked: number;
 }
 
 // The ground's answers as the mode's rules ask them.
@@ -191,6 +194,7 @@ export class RoyaleMode {
     markTakedowns: 0,
     burrTakedowns: 0,
     fairArrivals: 0,
+    returnsPicked: 0,
   };
   private hpBefore = new Map<number, number>();
   private aliveBefore = 0;
@@ -283,12 +287,21 @@ export class RoyaleMode {
     this.lastActAt.set(unitId, time);
   }
 
-  // A landing pick during the drop; false outside it or for a bad point.
-  pickDrop(unitId: number, p: Vec3, time: number): boolean {
-    if (this.state.stage !== 'drop' || time >= this.state.dropEndsAt) return false;
+  // A landing pick during the drop, or in Respawn's play a dead seat's
+  // pick of where it comes back (return_pick.ts; the last pick wins); false
+  // otherwise or for a bad point.
+  pickDrop(unitId: number, p: Vec3, time: number, dead = false): boolean {
+    const s = this.state;
+    if (s.stage === 'play') {
+      if (!takesReturnPick(this.variant, s.stage, dead)) return false;
+      const back = normalizePick(p, this.layout.radius);
+      if (back) s.respawnPicks.set(unitId, back);
+      return back !== null;
+    }
+    if (s.stage !== 'drop' || time >= s.dropEndsAt) return false;
     const pick = normalizePick(p, this.layout.radius);
     if (!pick) return false;
-    this.state.drops.set(unitId, pick);
+    s.drops.set(unitId, pick);
     return true;
   }
 
@@ -305,6 +318,8 @@ export class RoyaleMode {
   // fight, else at a quiet spot, in its Grace, its tally from zero
   // (grace.ts arrive). Only in play.
   beginArrival(sim: Sim, unitId: number): void {
+    // The bot's pick of where to come back is not the person's.
+    this.state.respawnPicks.delete(unitId);
     const u = sim.units.get(unitId);
     if (!u || !arrive(this, sim, u)) return;
     // It never fell and took nobody down: no Burr either way (burr.ts).
@@ -320,11 +335,14 @@ export class RoyaleMode {
 
   // Whether the bot driver runs a dead seat's policy this tick: while its
   // Graft offer is open (a Respawn seat; One life's elimination clears the
-  // queue). The Respawn landing pick (bot/brain.ts respawnPick) is a
-  // 'drop' that pickDrop refuses outside the drop until tranche 2 (T2-C)
-  // takes it while dead, so it asks nothing more yet. Never in the 5v5.
+  // queue), and in Respawn's play until it picked where it comes back (the
+  // 'drop' while dead, bot/brain.ts respawnPick), as a person picks on the
+  // globe through the wait. Never in the 5v5.
   wantsDeadDecision(unitId: number): boolean {
-    return hasOpenOffer(this, unitId);
+    if (hasOpenOffer(this, unitId)) return true;
+    return (
+      takesReturnPick(this.variant, this.state.stage, true) && !this.state.respawnPicks.has(unitId)
+    );
   }
 
   // The health a champion comes back with (the sim's respawn loop): all of
@@ -621,10 +639,13 @@ export class RoyaleMode {
 
   // The respawn's delay and place (SimOptions.respawnDelay, respawnPoint):
   // RESPAWN_S and the edge of the light in Respawn, never in One life. The
-  // place is the candidate on the light's edge farthest from every other
-  // champion standing (score.ts edgeOfLight), never the first one drawn;
-  // while the Dusk closes, the edge of the light it closes to (returnCap),
-  // for every seat.
+  // place is the seat's own pick when it made one during the wait and a
+  // point near it will do (return_pick.ts returnSpot: inside the light, at
+  // least RETURN_CLEAR_M from every champion standing), else the candidate
+  // on the light's edge farthest from every other champion standing
+  // (score.ts edgeOfLight), never the first one drawn; while the Dusk
+  // closes, in the light it closes to (returnCap), for every seat. The pick
+  // is spent either way: each wait picks afresh.
   respawnDelay(): number {
     return this.variant === 'respawn' ? RESPAWN_S : Number.POSITIVE_INFINITY;
   }
@@ -636,7 +657,15 @@ export class RoyaleMode {
       if (o.kind !== 'champion' || o.dead || o.id === u.id || o.pos.y === undefined) continue;
       enemies.push(o.pos as Vec3);
     }
-    return edgeOfLight(sim.rng, returnCap(this.state.dusk), enemies, this.layout, this.ground);
+    const cap = returnCap(this.state.dusk);
+    const pick = this.state.respawnPicks.get(u.id);
+    this.state.respawnPicks.delete(u.id);
+    const at = pick ? returnSpot(pick, cap, enemies, this.layout, this.ground) : null;
+    if (at) {
+      this.tally.returnsPicked++;
+      return at;
+    }
+    return edgeOfLight(sim.rng, cap, enemies, this.layout, this.ground);
   }
 
   // After the deaths: One life's places, the caches, the leader, the end.
@@ -771,7 +800,7 @@ export class RoyaleMode {
       };
     }
     const opening = openingBy(s.caches, u.id);
-    const drop = s.drops.get(u.id) ?? null;
+    const drop = (s.stage === 'drop' ? s.drops.get(u.id) : s.respawnPicks.get(u.id)) ?? null;
     let leader: ObsRoyale['leader'] = null;
     if (s.leaderId !== null) {
       const lu = sim.units.get(s.leaderId);

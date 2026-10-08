@@ -116,6 +116,9 @@ export function royaleBlock(
     const mine = r.drops.get(self);
     if (mine) block.drop = point(mine);
   }
+  // Respawn: where the recipient picked to come back, while it waits.
+  const back = r.stage === 'play' ? r.respawnPicks.get(self) : undefined;
+  if (back) block.bk = point(back);
   if (ctx.caches) {
     block.caches = r.caches
       .filter((c) => c.present)

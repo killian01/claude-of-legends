@@ -161,6 +161,8 @@ export class PlanetDemoWorld implements IWorld {
   private readonly duskFrom: number;
   private readonly caches: SnapCache[];
   private ownPick: Vec3 | null = null;
+  // The player's pick of where to come back while it waits (fall()).
+  private ownBack: Vec3 | null = null;
 
   constructor(
     private readonly ground: PlanetGround,
@@ -326,7 +328,30 @@ export class PlanetDemoWorld implements IWorld {
       score: this.self.kills,
       ...(dropping && this.ownPick ? { drop: wire(this.ownPick) } : {}),
       ...(dropping ? { picks } : {}),
+      ...(this.self.dead && this.ownBack ? { bk: wire(this.ownBack) } : {}),
     };
+  }
+
+  // The player taken down by the nearest champion, back in `waitS`
+  // seconds (the probe's fall(), to look at the Respawn wait's globe).
+  fall(waitS = 5): void {
+    const me = this.self;
+    if (me.dead) return;
+    let killer: Unit | null = null;
+    for (const o of this.units.values()) {
+      if (o.id === me.id || o.dead) continue;
+      if (!killer || dist(o.pos, me.pos) < dist(killer.pos, me.pos)) killer = o;
+    }
+    me.hp = 0;
+    me.dead = true;
+    me.deaths++;
+    me.respawnAt = this.time + waitS;
+    me.pendingSpell = null;
+    this.ownBack = null;
+    if (killer) {
+      killer.kills++;
+      this.notes.kills.push({ unitId: me.id, killerId: killer.id });
+    }
   }
 
   seat(unitId: number) {
@@ -335,6 +360,11 @@ export class PlanetDemoWorld implements IWorld {
   }
 
   pickDrop(_unitId: number, point: Vec3): void {
+    // While the player waits: where it comes back.
+    if (this.self.dead) {
+      this.ownBack = settle(point, R) as Vec3;
+      return;
+    }
     if (this.time >= this.dropEndsAt) return;
     this.ownPick = settle(point, R) as Vec3;
   }
@@ -465,7 +495,11 @@ export class PlanetDemoWorld implements IWorld {
         u.dead = false;
         u.hp = u.maxHp;
         u.mana = u.maxMana;
-        u.pos = around(this.self.pos as Vec3, 8 + this.rand() * 12, this.rand);
+        u.pos =
+          u.id === this.selfId && this.ownBack
+            ? copy(this.ownBack)
+            : around(this.self.pos as Vec3, 8 + this.rand() * 12, this.rand);
+        if (u.id === this.selfId) this.ownBack = null;
         b.heading = randomHeading(u.pos as Vec3, this.rand);
       }
       return;
