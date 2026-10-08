@@ -41,6 +41,8 @@ import {
   COMPACT_NOTE_MAX_W_PX,
   SPOT_FADE_MS,
   spotCoverMs,
+  THUMBS_NOTES_BOTTOM_PX,
+  THUMBS_NOTES_LEFT_PCT,
 } from './royale_layout';
 import {
   arcDistance,
@@ -152,7 +154,8 @@ const CSS = `
   max-width: ${COMPACT_DONE_MAX_W_PX}px; box-sizing: border-box; }
 .hud.compact .br-note.done span, .hud.compact .br-note.whole span { min-width: 0;
   overflow: hidden; text-overflow: ellipsis; }
-.hud.compact.thumbs .br-notes { left: 44%; bottom: 82px; }
+.hud.compact.thumbs .br-notes { left: ${THUMBS_NOTES_LEFT_PCT}%;
+  bottom: ${THUMBS_NOTES_BOTTOM_PX}px; }
 .hud.compact .br-spot { font-size: 26px; letter-spacing: 3px;
   top: calc(98px + var(--safe-top, env(safe-area-inset-top, 0px))); }
 .hud.compact .br-spot.top { font-size: 34px; letter-spacing: 4px; }

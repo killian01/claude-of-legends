@@ -27,6 +27,7 @@ import { RoyaleHudGrafts } from './royale_hud_grafts';
 import { type MomentDeath, RoyaleHudMoments } from './royale_hud_moments';
 import {
   COMPACT_NOTE_FONT_PX,
+  COMPACT_NOTES_BOTTOM_PX,
   FEED_MAX_W_PX,
   FEED_NAME_MAX_W_PX,
   FEED_RIGHT_PX,
@@ -297,8 +298,7 @@ const CSS = `
 .hud.compact.thumbs .br-open { left: calc(40% + 132px); bottom: 18px; }
 .hud.compact .br-ring { width: 36px; height: 36px; }
 .hud.compact .br-ring::after { inset: 5px; }
-.hud.compact .br-notes { bottom: 112px; }
-.hud.compact.thumbs .br-notes { left: 40%; bottom: 64px; }
+.hud.compact .br-notes { bottom: ${COMPACT_NOTES_BOTTOM_PX}px; }
 .hud.compact .br-note:nth-last-child(n + 3) { display: none; }
 .hud.compact .br-note { font-size: ${COMPACT_NOTE_FONT_PX}px; padding: 3px 10px 3px 4px; }
 .hud.compact .br-note img { width: 22px; height: 22px; }

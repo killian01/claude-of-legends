@@ -178,3 +178,68 @@ export const BOLD_EM_PER_CHAR = 0.64;
 export function compactNoteWidth(text: string): number {
   return text.length * COMPACT_NOTE_FONT_PX * BOLD_EM_PER_CHAR + COMPACT_NOTE_CHROME_PX;
 }
+
+// The top line (ui/royale_hud.ts .br-top) at its fullest, a test's
+// worst case: the Dusk's line and the count, the mark's badge and the
+// Dusk's pill under them; on a phone the line and the count share a row.
+export const TOP_LINE_TOP_PX = 8;
+export const TOP_LINE_HALF_W_PX = 170;
+export const TOP_LINE_H_PX = 104;
+export const COMPACT_TOP_LINE_HALF_W_PX = 190;
+export const COMPACT_TOP_LINE_H_PX = 78;
+
+export function topLineBox(width: number, compact: boolean): ScreenBox {
+  const half = compact ? COMPACT_TOP_LINE_HALF_W_PX : TOP_LINE_HALF_W_PX;
+  return {
+    left: width / 2 - half,
+    top: TOP_LINE_TOP_PX,
+    right: width / 2 + half,
+    bottom: TOP_LINE_TOP_PX + (compact ? COMPACT_TOP_LINE_H_PX : TOP_LINE_H_PX),
+  };
+}
+
+// The spotlight (ui/royale_hud_moments.ts .br-spot, ABLAZE, WILDFIRE) at
+// its biggest: 30 percent down a desktop, under the announcement on a
+// phone.
+export const SPOT_TOP_SHARE = 0.3;
+export const SPOT_HALF_W_PX = 330;
+export const SPOT_H_PX = 84;
+export const COMPACT_SPOT_TOP_PX = 98;
+export const COMPACT_SPOT_HALF_W_PX = 190;
+export const COMPACT_SPOT_H_PX = 46;
+
+export function spotBox(width: number, height: number, compact: boolean): ScreenBox {
+  const top = compact ? COMPACT_SPOT_TOP_PX : height * SPOT_TOP_SHARE;
+  const half = compact ? COMPACT_SPOT_HALF_W_PX : SPOT_HALF_W_PX;
+  return {
+    left: width / 2 - half,
+    top,
+    right: width / 2 + half,
+    bottom: top + (compact ? COMPACT_SPOT_H_PX : SPOT_H_PX),
+  };
+}
+
+// A phone's notices' column (ui/royale_hud_moments.ts .br-notes): centered
+// over the bar, or with the thumb controls left of the middle between the
+// stick and the ability buttons, its foot this high; two notices show, a
+// loot line wrapped to two lines at most, a finished item's on one line
+// up to COMPACT_DONE_MAX_W_PX wide.
+export const COMPACT_NOTES_BOTTOM_PX = 112;
+export const THUMBS_NOTES_BOTTOM_PX = 82;
+export const THUMBS_NOTES_LEFT_PCT = 44;
+export const COMPACT_NOTES_SHOWN = 2;
+export const COMPACT_NOTE_H_PX = 40;
+export const COMPACT_NOTES_GAP_PX = 6;
+
+export function compactNotesBox(width: number, height: number, thumbs: boolean): ScreenBox {
+  const mid = thumbs ? (width * THUMBS_NOTES_LEFT_PCT) / 100 : width / 2;
+  const bottom = height - (thumbs ? THUMBS_NOTES_BOTTOM_PX : COMPACT_NOTES_BOTTOM_PX);
+  const tall =
+    COMPACT_NOTES_SHOWN * COMPACT_NOTE_H_PX + (COMPACT_NOTES_SHOWN - 1) * COMPACT_NOTES_GAP_PX;
+  return {
+    left: mid - COMPACT_DONE_MAX_W_PX / 2,
+    top: bottom - tall,
+    right: mid + COMPACT_DONE_MAX_W_PX / 2,
+    bottom,
+  };
+}
