@@ -139,6 +139,13 @@ import {
 import { RoyaleLife, SeenChampions } from './royale_life';
 import { respawnTally, royaleSting } from './royale_result';
 import {
+  RETURN_WASH_LINE_VW,
+  RETURN_WASH_PHONE_BOTTOM_PX,
+  RETURN_WASH_RIGHT_VW,
+  returnGlobeOn,
+  returnHint,
+} from './royale_return';
+import {
   hideRoyaleSteps,
   type RoyaleStepsState,
   royaleStepLine,
@@ -785,6 +792,20 @@ const CSS = `
 /* A Respawn death's life line, under the subtitle (ui/royale_life.ts). */
 .hud-overlay-life { font-size: 14px; margin-top: 6px; color: #e6dcb8;
   font-variant-numeric: tabular-nums; }
+/* The Respawn wait's globe (ui/royale_return.ts): the wash's lines move
+   left of the middle, clear of the globe the camera sets on the right
+   (render/planet_drop.ts RETURN_GLOBE_RIGHT) and of the Graft cards over
+   the top, the shade thins toward the globe, and its line says what a tap
+   or a click on it does. */
+.hud-overlay.returning { padding-right: ${RETURN_WASH_RIGHT_VW}vw;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.32) 45%,
+    rgba(0, 0, 0, 0.06) 70%); }
+.hud-overlay.returning > * { max-width: ${RETURN_WASH_LINE_VW}vw; text-align: center;
+  text-wrap: balance; }
+.hud-overlay-hint { font-size: 15px; font-weight: 700; margin-top: 8px; color: #ffe3a0; }
+/* The thumb controls stand down meanwhile: their box under the right thumb
+   took the tap meant for the globe, and a dead champion casts nothing. */
+.hud.thumbs.wait-globe .hud-slots { visibility: hidden; }
 .hud-menu-btn {
   pointer-events: auto; margin-top: 10px; padding: 10px 26px; border-radius: 6px;
   border: 1px solid #466030; background: #1d2a14; color: #d8e6c0;
@@ -827,6 +848,10 @@ const CSS = `
 .hud.compact .hud-overlay-title { font-size: 26px; letter-spacing: 1px; }
 .hud.compact .hud-overlay-sub { font-size: 12.5px; margin-top: 2px; }
 .hud.compact .hud-overlay-life { font-size: 11.5px; margin-top: 3px; }
+.hud.compact .hud-overlay-hint { font-size: 12.5px; margin-top: 3px; }
+.hud.compact .hud-overlay.returning { justify-content: flex-end;
+  padding-bottom: ${RETURN_WASH_PHONE_BOTTOM_PX}px; }
+.hud.compact .hud-overlay.returning .hud-overlay-title { font-size: 20px; }
 .hud.compact .hud-end-rating { font-size: 13px; margin-top: 2px; min-height: 0; }
 .hud.compact .hud-end-join { margin-top: 8px; font-size: 11.5px; }
 .hud.compact .hud-menu-btn { margin-top: 6px; padding: 8px 18px; font-size: 13px; }
@@ -1326,6 +1351,8 @@ export class Hud {
   private readonly royaleLife = new RoyaleLife();
   private readonly royaleSeen = new SeenChampions();
   private readonly deathLife: HTMLElement;
+  // The Respawn wait's globe line (ui/royale_return.ts returnHint).
+  private readonly deathHint: HTMLElement;
   // The best Respawn tally this browser kept before this match's card,
   // read once (game/settings.ts royaleBest).
   private royaleBestBefore: number | null = null;
@@ -1928,7 +1955,9 @@ export class Hud {
     this.deathTitle = el('div', 'hud-overlay-title', 'SLAIN');
     this.deathLife = el('div', 'hud-overlay-life');
     this.deathLife.hidden = true;
-    this.deathOverlay.append(this.deathTitle, this.deathSub, this.deathLife);
+    this.deathHint = el('div', 'hud-overlay-hint');
+    this.deathHint.hidden = true;
+    this.deathOverlay.append(this.deathTitle, this.deathSub, this.deathLife, this.deathHint);
 
     this.endOverlay = el('div', 'hud-overlay modal');
     this.endTitle = el('div', 'hud-overlay-title');
@@ -3534,6 +3563,14 @@ export class Hud {
       const life = dead && this.royaleVariant === 'respawn' ? this.royaleLife.line(selfRow) : null;
       if (life !== null) setText(this.deathLife, life);
       if (this.deathLife.hidden !== (life === null)) this.deathLife.hidden = life === null;
+      // The wait's globe: the lines up top, and what a tap on it does.
+      const view = this.world.royaleView?.() ?? null;
+      const globe = dead && view !== null && returnGlobeOn(view, u, time);
+      this.deathOverlay.classList.toggle('returning', globe);
+      this.rootEl.classList.toggle('wait-globe', globe);
+      const hint = globe ? returnHint(this.coarsePointer, view?.bk !== undefined) : null;
+      if (hint !== null) setText(this.deathHint, hint);
+      if (this.deathHint.hidden !== (hint === null)) this.deathHint.hidden = hint === null;
       this.syncOverlay();
       return;
     }

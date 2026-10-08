@@ -14,7 +14,7 @@
 
 import * as THREE from 'three';
 import { gracesOf } from '../net/royale_client';
-import type { SnapCache, SnapRoyale } from '../net/royale_wire';
+import type { SnapCache, SnapRoyale, WirePoint } from '../net/royale_wire';
 import { SEEDFALL_IMPACT_M } from '../sim/content/royale_events';
 import type { Vec3 } from '../sim/geo';
 import { huntedPillars } from '../ui/royale_hunted';
@@ -88,6 +88,10 @@ interface Flash {
   column: THREE.Mesh;
 }
 const MAX_PICKS = 64;
+// The drop's dots: the others' picks; in the Respawn wait, where the
+// champion fell.
+const PICK_COLOR = 0xffb85a;
+const FELL_COLOR = 0xff5a4a;
 
 const UP = new THREE.Vector3(0, 1, 0);
 const X_AXIS = new THREE.Vector3(1, 0, 0);
@@ -348,7 +352,7 @@ export class PlanetMarks {
       size: 16,
       sizeAttenuation: false,
       map: glow,
-      color: 0xffb85a,
+      color: PICK_COLOR,
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
@@ -730,6 +734,10 @@ export class PlanetMarks {
     // Where the renderer draws a champion, when the stage tells it: the
     // Grace's shimmer stands there (else at the snapshot's point, eased).
     unitAt?: (unitId: number) => Vec3 | null,
+    // In the Respawn wait (planet_stage.ts): the own pick of where to come
+    // back, where the drop's tall light stands, and where the champion
+    // fell, one dot of the drop's in the fall's red.
+    wait: { pick: Vec3 | null; fell: Vec3 | null } | null = null,
   ): void {
     if (caches !== this.shownCaches) {
       this.shownCaches = caches;
@@ -741,17 +749,24 @@ export class PlanetMarks {
     this.cacheGlowMat.opacity = 0.75 + 0.2 * Math.sin(t * 2.4);
     this.beaconMat.opacity = 0.42 + 0.12 * Math.sin(t * 1.3);
     this.padGlowMat.opacity = 0.4 + 0.2 * Math.sin(t * 3.1);
-    const own = dropping ? royale?.drop : undefined;
-    this.pickBeam.visible = own !== undefined;
+    const drop = dropping ? royale?.drop : undefined;
+    const own = drop ? { x: drop[0], y: drop[1], z: drop[2] } : (wait?.pick ?? null);
+    this.pickBeam.visible = own !== null;
     if (own) {
-      this.pickBeam.matrix.copy(this.standing({ x: own[0], y: own[1], z: own[2] }, 0, 1));
+      this.pickBeam.matrix.copy(this.standing(own, 0, 1));
       this.pickBeam.matrix.decompose(
         this.pickBeam.position,
         this.pickBeam.quaternion,
         this.pickBeam.scale,
       );
     }
-    const others = dropping ? (royale?.picks ?? []) : [];
+    const fell = wait?.fell;
+    const others: readonly WirePoint[] = dropping
+      ? (royale?.picks ?? [])
+      : fell
+        ? [[fell.x, fell.y, fell.z]]
+        : [];
+    this.pickMat.color.setHex(dropping || !fell ? PICK_COLOR : FELL_COLOR);
     const positions = this.picks.geometry.getAttribute('position') as THREE.BufferAttribute;
     const n = Math.min(MAX_PICKS, others.length);
     for (let i = 0; i < n; i++) {

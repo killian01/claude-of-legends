@@ -137,8 +137,11 @@ back within 10 m of a champion 41 percent of the time (over seeds 1 and 2 of fif
   drop's globe, faced to the light it comes back in (the cap the Dusk closes to while it
   closes, score.ts returnCap), the fall marked on it. A tap or a click on it picks where it
   comes back (the death wash says "Tap the globe to choose where you come back" on a phone,
-  "Click the globe..." on a desktop); the last pick wins. When it stands again the camera dives
-  down to it as after the drop (`src/ui/royale_return.ts`, `src/render/planet_stage.ts`).
+  "Click the globe..." on a desktop); the last pick wins. The globe sits right of the middle and
+  the wash's lines move left of it, its recap and life lines whole, clear of the Graft cards and,
+  on a phone, standing on the folded Graft chip; the thumb controls stand down meanwhile. When
+  the champion stands again the camera dives down to it as after the drop
+  (`src/ui/royale_return.ts`, `src/render/planet_stage.ts`).
 - **The rule.** The pick is the 'drop' command and action, taken while dead in Respawn's play
   (Sim.pickDrop), recorded and replayed like the drop's. The return is set down at the pick
   brought inside that light at an Arrival's depth, on walkable ground, and at least 10 m from
