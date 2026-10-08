@@ -22,6 +22,7 @@ import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import { setPortrait } from './champion_art';
 import { setClassName, setData, setHidden } from './dom_write';
+import { goalBar } from './royale_goal_bar';
 import { RoyaleHudGrafts } from './royale_hud_grafts';
 import { type MomentDeath, RoyaleHudMoments } from './royale_hud_moments';
 import {
@@ -732,6 +733,7 @@ export class RoyaleHud {
     );
     for (const line of model.lines) card.appendChild(el('p', 'br-end-line', line));
     if (model.grafts) card.appendChild(el('p', 'br-end-grafts', model.grafts));
+    if (model.goal) card.appendChild(goalBar(model.goal));
     if (model.rows.length > 0) {
       const rank = el('div', 'br-end-rank');
       rank.appendChild(el('h3', '', model.heading));

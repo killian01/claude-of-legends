@@ -70,7 +70,7 @@ import type { RenderTerrain } from './render/terrain';
 import { installVersionedLoading } from './render/versioned_loading';
 import { attachBot } from './sim/content/bots';
 import { type HouseSeat, houseSeats } from './sim/content/bots/house';
-import { CHAMPION_LIST, DEFAULT_CHAMPION_ID } from './sim/content/champions';
+import { CHAMPION_LIST } from './sim/content/champions';
 import { contentFingerprint } from './sim/content/fingerprint';
 import type { GameMap } from './sim/content/map';
 import { assemblePlanet } from './sim/content/planet';
@@ -115,7 +115,7 @@ import { showReloadNotice } from './ui/reload_notice';
 import { buildReplayBar, type ReplayBar } from './ui/replay_bar';
 import { replayRefusal } from './ui/replay_notice';
 import { showRoyaleJoining, showRoyalePick } from './ui/royale_pick';
-import { initialPick, type RoyalePick } from './ui/royale_pick_rules';
+import { FIRST_ROYALE_CHAMPION, initialPick, type RoyalePick } from './ui/royale_pick_rules';
 import { attachTurnAsk } from './ui/turn_ask';
 import type { IWorld } from './world_api';
 
@@ -1284,7 +1284,7 @@ async function pickForRoyale(variant: RoyaleVariant): Promise<RoyalePick | null>
       CHAMPION_LIST.map((c) => c.id),
       (id) => SKINS[id]?.length ?? 1,
       SIGIL_LIST.map((s) => s.id),
-      DEFAULT_CHAMPION_ID,
+      FIRST_ROYALE_CHAMPION,
     );
     const picker = showRoyalePick(container, {
       variant,

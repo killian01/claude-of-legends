@@ -29,6 +29,7 @@ import {
   feedLife,
   feedOverflow,
   feedTier,
+  foldsOut,
   frostLevel,
   heartbeat,
   impactGain,
@@ -269,6 +270,18 @@ describe('the feed', () => {
     expect(feedLife('lead')).toBe(FEED_MS);
     expect(feedLife('near')).toBe(FEED_NEAR_MS);
     expect(FEED_NEAR_MS).toBeLessThan(FEED_MS);
+  });
+
+  it('keeps the news from afar a near line that never counts as a death elsewhere', () => {
+    expect(feedLife('news')).toBe(FEED_NEAR_MS);
+    // News and near deaths share the near rows, the oldest leaving first.
+    expect(feedOverflow(['news', 'news', 'news'])).toEqual([2]);
+    expect(feedOverflow(['news', 'near', 'news'])).toEqual([2]);
+    expect(feedOverflow(['own', 'news', 'own', 'lead', 'own'])).toEqual([1]);
+    // A death pushed out joins "+N elsewhere"; a news line just goes.
+    expect(foldsOut('near')).toBe(true);
+    expect(foldsOut('news')).toBe(false);
+    expect(foldsOut('own')).toBe(false);
   });
 
   it('folds a late Respawn of bots on bots instead of standing five rows deep', () => {

@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { RoyaleResult } from '../src/net/royale_wire';
+import { goalModel } from '../src/ui/royale_goal';
 import { ONE_LIFE_TOP, RESPAWN_TOP, royaleEnd, royaleSting } from '../src/ui/royale_result';
 
 const top = (n: number) =>
@@ -222,5 +223,24 @@ describe('the end sting', () => {
     expect(royaleSting(result({ place: 1 }))).toBe('victory');
     expect(royaleSting(result({ place: 3 }))).toBe('defeat');
     expect(royaleSting(result({ place: 3, window: { rank: 1, of: 50, score: 2 } }))).toBe('defeat');
+  });
+});
+
+describe('the goal across matches on the end card', () => {
+  const goal = goalModel(30, 34);
+
+  it("stands on Respawn's card when the seat banks points", () => {
+    const end = royaleEnd(result({ v: 'respawn' }), { assists: 0, best: 0, goal });
+    expect(end.goal).toBe(goal);
+    expect(royaleEnd(result({ v: 'respawn' }), { assists: 0, best: 0 }).goal).toBeNull();
+  });
+
+  it("is never One life's", () => {
+    expect(royaleEnd(result(), { assists: 0, best: 0, goal }).goal).toBeNull();
+  });
+
+  it('names no ladder entry and no other player', () => {
+    const words = `${goal.title} ${goal.line}`;
+    expect(words).not.toMatch(/ladder|rank|place|Kestrel/i);
   });
 });

@@ -404,6 +404,10 @@ export class Renderer {
   // Slightly zoomed in by default: characters read far better up close.
   private zoom = 0.85;
   private followId: number | null = null;
+  // The unit the camera looks at in the followed one's stead (the Death
+  // beat, game/death_beat.ts), while the world draws it; null for none.
+  // Nothing else moves to it: the followed champion stays the viewer's.
+  private watchId: number | null = null;
   // The followed champion as this frame draws it when the world draws it
   // ahead of its newest state (IWorld predictedPos: online, the own
   // champion walking the orders on their way); null draws it between its
@@ -877,6 +881,13 @@ export class Renderer {
   followUnit(id: number): void {
     this.followId = id;
     if (this.planet) this.planet.picker = id;
+  }
+
+  // The camera looks at this unit instead of the followed one while the
+  // world draws it, the followed one's place otherwise; null ends it. A
+  // free camera (a pan, a minimap look) still comes first.
+  watchUnit(id: number | null): void {
+    this.watchId = id;
   }
 
   // The team whose fog of war this client renders.
@@ -3283,6 +3294,7 @@ export class Renderer {
     this.selfDrawn =
       this.followId !== null ? (this.world.predictedPos?.(this.followId, now) ?? null) : null;
     let followPos: THREE.Vector3 | null = null;
+    let watchPos: THREE.Vector3 | null = null;
     const fadeAt: { id: number; x: number; y: number; z: number }[] = [];
     for (const [id, t] of this.tracked) {
       const ahead = id === this.followId ? this.selfDrawn : null;
@@ -3464,6 +3476,7 @@ export class Renderer {
       const spinners = t.mesh.userData.spinners as THREE.Object3D[] | undefined;
       if (spinners) for (const sp of spinners) sp.rotation.y = now * 0.0006;
       if (id === this.followId) followPos = new THREE.Vector3(x, this.groundHeight(x, z), z);
+      if (id === this.watchId) watchPos = new THREE.Vector3(x, this.groundHeight(x, z), z);
       // The champions the planet's props thin out for: the followed one,
       // then the nearest others in view (planet_dusk.ts).
       if (this.planet && t.kind === 'champion' && t.mesh.visible) {
@@ -3662,9 +3675,10 @@ export class Renderer {
       this.vignette.style.visibility = '';
     }
 
-    this.updateFreeCam(dtMs, followPos);
+    this.updateFreeCam(dtMs, watchPos ?? followPos);
     const target =
       this.freeCam ??
+      watchPos ??
       followPos ??
       new THREE.Vector3(this.world.map.size / 2, 0, this.world.map.size / 2);
     this.camFocus.x = target.x;
