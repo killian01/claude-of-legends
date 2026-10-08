@@ -223,15 +223,41 @@ describe('a drop-in in a Respawn match', () => {
     expect(match.players.get(1)!.window).toBeNull();
   });
 
-  it('has none for a seat taken during the drop, in One life, or on a rejoin', () => {
+  it('has none for a seat taken during the drop, in One life, or a seat from the drop rejoined', () => {
     const fake = fakeFactory();
     const match = new RoyaleMatch(1, 3, 'respawn', [person(1)], fake.factory, 6);
     expect(match.takeBotSeat(person(2))!.window).toBeNull();
     expect(started('one_life').match.takeBotSeat(person(2))!.window).toBeNull();
-    const { match: live } = started();
-    const p = live.takeBotSeat(person(2))!;
-    live.leave(2, true);
-    expect(live.rejoin(person(2), p.unitId)!.window).toBeNull();
+    const { match: live, self } = started();
+    live.leave(1, true);
+    expect(live.rejoin(person(1), self)!.window).toBeNull();
+  });
+
+  it('keeps a drop-in counting from its landing across a dropped connection', () => {
+    const { match, sim, self } = started();
+    const p = match.takeBotSeat(person(2))!;
+    const from = p.window!.from;
+    match.leave(2, true);
+    match.tick();
+    // A newcomer comes down meanwhile: its seat counts from its Arrival in
+    // the held window too.
+    const other = [...sim.units.values()].find((u) => u.id !== p.unitId && u.id !== self)!;
+    sim.royale.scores.set(other.id, 7);
+    const third = match.takeBotSeat(person(3, other.championId!))!;
+    expect(third.unitId).toBe(other.id);
+    const back = match.rejoin(person(2), p.unitId)!;
+    expect(back.window?.from).toBe(from);
+    expect(back.window?.base.get(other.id)).toBe(sim.royale.scores.get(other.id));
+  });
+
+  it('lets the held window go with the reservation', () => {
+    const { match } = started();
+    const p = match.takeBotSeat(person(2))!;
+    match.leave(2, true);
+    match.release(p.unitId);
+    const next = match.takeBotSeat(person(4))!;
+    expect(next.unitId).toBe(p.unitId);
+    expect(next.window?.from).toBe(match.sim.time);
   });
 
   it('counts a seat another newcomer comes down on from that Arrival', () => {
