@@ -1,7 +1,8 @@
 // The battle royale snapshot's optional blocks (src/net/royale_wire.ts
 // SnapRoyale), one builder each, beside royale_snapshot.ts which calls them
 // all through addRoyaleBlocks: the recipient's Graft offer and Grafts, the
-// Seedfalls, the Risings, the marks, the Clamors, the Respawn rank and gap
+// Seedfalls, the Risings, the marks, the recipient's Burr, the Clamors, the
+// Respawn rank and gap
 // (a drop-in's since they landed, with rs), the Reprieve, the Graces (an Arrival, a return), the Last light's final seconds and the watched
 // champion; and a cache's kind and its opening time. A builder answers
 // undefined to leave its block off the wire, which every one does until its
@@ -10,6 +11,7 @@
 // and never the shared snapshot code.
 
 import type {
+  SnapBurr,
   SnapCache,
   SnapClamor,
   SnapGrace,
@@ -20,6 +22,7 @@ import type {
   SnapSeedfall,
 } from '../src/net/royale_wire';
 import { RING_RISE_AT_S, RISING_WARN_S } from '../src/sim/content/royale_events';
+import { liveBurr } from '../src/sim/royale/burr';
 import { cacheOpenS } from '../src/sim/royale/caches';
 import { firstSeedfallCallAt } from '../src/sim/royale/seedfall';
 import { CACHE_OPEN_S, type CacheState } from '../src/sim/royale/types';
@@ -168,6 +171,22 @@ export const marksBlock: Builder<SnapMark[]> = (sim, viewer) => {
   );
   return sentOnChange(viewer, 'mk', value, sim.time);
 };
+// The recipient's own Burr (src/sim/royale/burr.ts), every snapshot of the
+// play while it lasts: the carrier, when it runs out, and where the carrier
+// stands while it stands, the one point the sim shows the owner alone (its
+// observation's burr reads the same). Nobody else is ever sent it.
+export const burrBlock: Builder<SnapBurr> = (sim, viewer) => {
+  const r = sim.royale;
+  if (r.stage !== 'play') return undefined;
+  const b = liveBurr(r.burrs, viewer.unitId, sim.time);
+  if (!b) return undefined;
+  const out: SnapBurr = { i: b.carrierId, u: round2(b.until) };
+  const c = sim.units.get(b.carrierId);
+  if (c && !c.dead && c.pos.y !== undefined) {
+    out.at = [round2(c.pos.x), round2(c.pos.y), round2(c.pos.z)];
+  }
+  return out;
+};
 // How far from the viewer a Clamor is sent: past the client's hearing
 // (60 m, ui/royale_moments.ts CLAMOR_HEAR_M) and the minimap's corners
 // (planet_minimap.ts, a 110 m square), nobody on that screen can use it.
@@ -278,6 +297,8 @@ export function addRoyaleBlocks(
   if (ri !== undefined) block.ri = ri;
   const mk = marksBlock(sim, viewer, ctx);
   if (mk !== undefined) block.mk = mk;
+  const bu = burrBlock(sim, viewer, ctx);
+  if (bu !== undefined) block.bu = bu;
   const cl = clamorsBlock(sim, viewer, ctx);
   if (cl !== undefined) block.cl = cl;
   const rk = rankBlock(sim, viewer, ctx);
