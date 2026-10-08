@@ -106,12 +106,15 @@ export const WAYS_LABEL = 'Three ways to play';
 // (ADR 0031): the word New, the planet's name, and what one does there,
 // over the gold button that plays it. A banner, not a second card: a
 // second card pushed the button under the first screen of a phone held
-// sideways.
+// sideways. The line says what the button gives: Respawn always has a
+// match to drop into (server/royale_service.ts), and a drop-in is set down
+// a few steps from a fair first fight rather than where it likes (ADR 0031,
+// amended 2026-10-08: 16 of 18 visitors dropped in).
 export const NEW_TAG = 'New';
 export const NEW_TITLE = 'The Wanderseed';
 export const NEW_LINE =
-  'Fifty champions on a small planet you can walk all the way round. Land where you like, ' +
-  'loot, stay in the light.';
+  'Fifty champions on a small planet you can walk all the way round. Drop into a match under ' +
+  'way, a fair fight a few steps off; loot, and stay in the light.';
 
 export const LANDING_WAYS: readonly LandingWay[] = [
   {

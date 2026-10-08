@@ -3,11 +3,13 @@
 // the champion, and the sigils toggle the way champion select's do.
 
 import { describe, expect, it } from 'vitest';
-import { CHAMPION_LIST, DEFAULT_CHAMPION_ID } from '../src/sim/content/champions';
+import { CHAMPION_LIST, CHAMPIONS, DEFAULT_CHAMPION_ID } from '../src/sim/content/champions';
+import { planetTuning } from '../src/sim/content/royale_tuning';
 import { SIGIL_LIST } from '../src/sim/content/sigils';
 import { SKINS } from '../src/sim/content/skins';
 import {
   DEFAULT_SIGILS,
+  FIRST_ROYALE_CHAMPION,
   initialPick,
   pickReady,
   randomChampion,
@@ -38,6 +40,25 @@ describe('the quick pick', () => {
       sigils: DEFAULT_SIGILS,
     });
     expect(DEFAULT_SIGILS.every((id) => SIGIL_IDS.includes(id))).toBe(true);
+  });
+
+  it("opens a browser's first battle royale on a sturdier fighter than the Mage", () => {
+    const first = initialPick(null, ROSTER, skinsOf, SIGIL_IDS, FIRST_ROYALE_CHAMPION);
+    expect(first.championId).toBe('dain');
+    expect(ROSTER).toContain(FIRST_ROYALE_CHAMPION);
+    const dain = CHAMPIONS[FIRST_ROYALE_CHAMPION]!;
+    const sylra = CHAMPIONS[DEFAULT_CHAMPION_ID]!;
+    expect(sylra.role).toBe('Mage');
+    expect(dain.role).not.toBe('Mage');
+    // More health on the planet at every level, the planet's scale with it.
+    const hpAt = (c: typeof dain, level: number) =>
+      (c.base.hp + c.growth.hp * (level - 1)) * planetTuning(c.id).hp;
+    for (const level of [1, 3, 6, 9]) expect(hpAt(dain, level)).toBeGreaterThan(hpAt(sylra, level));
+    // A pick remembered still wins over it.
+    const last = { championId: 'torv', skin: 0, sigils: DEFAULT_SIGILS };
+    expect(initialPick(last, ROSTER, skinsOf, SIGIL_IDS, FIRST_ROYALE_CHAMPION).championId).toBe(
+      'torv',
+    );
   });
 
   it('keeps what still exists of a pick and drops the rest', () => {
