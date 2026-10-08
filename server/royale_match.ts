@@ -3,8 +3,9 @@
 // team; the people who started it on the champions they picked, bots on the
 // rest. A newcomer takes a bot's seat (ADR 0025), a bot playing the
 // champion they picked when there is one: once the match is in play the
-// champion arrives fresh at a quiet spot, in its Grace, its tally from zero
-// (CONTEXT.md: Arrival; src/sim/royale/grace.ts). A
+// champion arrives fresh (in Respawn beside a fair first fight, else at a
+// quiet spot), in its Grace, its tally from zero (CONTEXT.md: Arrival;
+// src/sim/royale/grace.ts). A
 // person who leaves hands the seat to the mode's bot, held for them when the
 // connection only dropped. Transport-agnostic: the service hands it what a
 // socket said and sends what it answers.
@@ -18,6 +19,7 @@ import {
   type RoyaleRecord,
 } from '../src/net/replay';
 import type { RoyaleResult, RoyaleVariant, SeatLabel } from '../src/net/royale_wire';
+import { lowerMedian } from '../src/sim/royale/levels';
 import {
   freshStats,
   noteMoments,
@@ -225,21 +227,26 @@ export class RoyaleMatch {
   }
 
   // A newcomer takes a bot's seat (ADR 0025), with the sigils and skin they
-  // chose; in play, the champion's Arrival (Sim.beginArrival): fresh at a
-  // quiet spot inside the light, in its Grace, its score, kills, deaths and
-  // assists from zero, recorded so a replay re-simulates it on the same
-  // tick. During the drop the seat simply lands with everyone. Null when no
-  // seat is left to take.
+  // chose; in play, the champion's Arrival (Sim.beginArrival): fresh inside
+  // the light (in Respawn at the field's level, beside a fair first fight),
+  // in its Grace, its score, kills, deaths and assists from zero, recorded
+  // so a replay re-simulates it on the same tick. During the drop the seat
+  // simply lands with everyone. Null when no seat is left to take.
   takeBotSeat(person: RoyalePerson): RoyalePlayer | null {
     const candidates = [...this.seats.values()].filter((s) => this.takeable(s));
+    // Respawn's seat is the one nearest the field's level (royale_join.ts).
+    const levels: number[] = [];
+    for (const u of this.sim.units.values()) if (u.kind === 'champion') levels.push(u.level);
     const unitId = chooseBotSeat(
       candidates.map((s) => ({
         unitId: s.unitId,
         championId: this.sim.units.get(s.unitId)?.championId ?? s.championId,
         dead: this.sim.units.get(s.unitId)?.dead === true,
         out: this.isOut(s.unitId),
+        level: this.sim.units.get(s.unitId)?.level ?? 1,
       })),
       person.pick.championId,
+      this.variant === 'respawn' ? lowerMedian(levels) : undefined,
     );
     const s = unitId === null ? undefined : this.seats.get(unitId);
     if (unitId === null || !s) return null;
