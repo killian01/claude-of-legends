@@ -61,6 +61,7 @@ import {
   matchEndOnce,
   matchEndReporter,
   STAYED_MS,
+  trackAgain,
   trackStep,
 } from './net/stats';
 import { whenChampionModelsReady } from './render/champions';
@@ -1362,6 +1363,9 @@ async function runRoyale(
     const world = new ClientWorld((msg) => send(msg), loaded.map);
     let pres: Presentation | null = null;
     let ends: MatchEndReporter | null = null;
+    // When the match came on screen (performance.now), for the seconds it
+    // was held (src/net/stats.ts MatchState).
+    let openedAt = 0;
     // The card between Play and the first snapshot, Cancel its way out.
     const joining = showRoyaleJoining(container, variant, () => finish('menu'));
     let opened = false;
@@ -1381,6 +1385,9 @@ async function runRoyale(
       ends?.report();
       ends?.dispose();
       ends = null;
+      // Play again from the end card: the counter's one sign of a second
+      // match.
+      if (action === 'again' && shownResult !== null) trackAgain({ mode: 'royale', variant });
       joining.remove();
       pres?.dispose();
       pres = null;
@@ -1423,9 +1430,12 @@ async function runRoyale(
         const id = window.setTimeout(run, ms);
         return () => window.clearTimeout(id);
       }).then(() => joining.remove());
+      openedAt = performance.now();
       ends = matchEndReporter({ mode: 'royale', variant }, () => ({
         winner: world.winner,
         seconds: world.time,
+        held: (performance.now() - openedAt) / 1000,
+        dropIn: droppedIn,
       }));
       if (!matchEnded && pendingResult === null) {
         layer.guard(() => pres?.toggleEscapeMenu());

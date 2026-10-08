@@ -106,7 +106,10 @@ it, and everything it takes away before a record leaves your browser.
   (the match had a winner) or `left` (you walked out, or closed the page,
   before one), carrying how many minutes it had run and whether it was
   practice, an online 5v5, or a battle royale (and then which rule set,
-  Respawn or One life).
+  Respawn or One life). A battle royale's also carries `held`, how many
+  seconds the match was on your screen, and `dropIn`, whether you joined
+  it already running. And `again` when you press Play again on a battle
+  royale's end card, with the same mode and rule set.
   Nothing about who won or what you played.
 - What every counter of this kind reads off the request: the browser and
   operating system, the kind of device, the screen size, the language, and

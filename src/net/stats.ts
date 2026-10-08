@@ -32,7 +32,10 @@ export type StatsStep = (typeof STATS_STEPS)[number];
 // of match it was: practice, an online 5v5, or a battle royale with its
 // rule set, so the two online modes are never read as one. Read against
 // 'played', it is the one number that says whether a match that started
-// was worth staying in.
+// was worth staying in. A battle royale adds how long this browser held it
+// on screen, in seconds, and whether it dropped into a match already
+// running: its minutes are the match's clock, which a drop-in joins
+// minutes in, not the time held.
 export const MATCH_ENDS = ['finished', 'left'] as const;
 export type MatchEnd = (typeof MATCH_ENDS)[number];
 export type MatchMode = 'practice' | 'online' | 'royale';
@@ -45,17 +48,33 @@ export interface MatchKind {
 
 export interface MatchEndEvent {
   name: MatchEnd;
-  data: { minutes: number; mode: MatchMode; variant?: RoyaleVariant };
+  data: {
+    minutes: number;
+    mode: MatchMode;
+    variant?: RoyaleVariant;
+    held?: number;
+    dropIn?: boolean;
+  };
 }
+
+// What a seat adds to its match's end: the seconds held on screen and
+// whether it dropped in (MatchState).
+export type MatchSeat = Pick<MatchState, 'held' | 'dropIn'>;
 
 export function matchEndEvent(
   winner: number | null,
   seconds: number,
   mode: MatchMode,
   variant?: RoyaleVariant,
+  seat: MatchSeat = {},
 ): MatchEndEvent {
   const minutes = Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds / 60) : 0;
-  const data = variant === undefined ? { minutes, mode } : { minutes, mode, variant };
+  const data: MatchEndEvent['data'] =
+    variant === undefined ? { minutes, mode } : { minutes, mode, variant };
+  if (seat.held !== undefined) {
+    data.held = Number.isFinite(seat.held) && seat.held > 0 ? Math.round(seat.held) : 0;
+  }
+  if (seat.dropIn !== undefined) data.dropIn = seat.dropIn;
   return { name: winner === null ? 'left' : 'finished', data };
 }
 
@@ -201,13 +220,12 @@ export function trackStep(step: StatsStep, win: StatsWindow = window as StatsWin
 }
 
 export function trackMatchEnd(
-  winner: number | null,
-  seconds: number,
+  state: MatchState,
   kind: MatchMode | MatchKind,
   win: StatsWindow = window as StatsWindow,
 ): void {
   const { mode, variant } = typeof kind === 'string' ? { mode: kind, variant: undefined } : kind;
-  const e = matchEndEvent(winner, seconds, mode, variant);
+  const e = matchEndEvent(state.winner, state.seconds, mode, variant, state);
   try {
     win.umami?.track(e.name, e.data);
   } catch {
@@ -215,11 +233,27 @@ export function trackMatchEnd(
   }
 }
 
+// Play again pressed on a match's end card, the one sign of a second match
+// the counter had none of: 'again', with the kind of match played again.
+export function trackAgain(kind: MatchKind, win: StatsWindow = window as StatsWindow): void {
+  const data =
+    kind.variant === undefined ? { mode: kind.mode } : { mode: kind.mode, variant: kind.variant };
+  try {
+    win.umami?.track('again', data);
+  } catch {
+    // The tracker's problem, not the page's.
+  }
+}
+
 // What a match's end is read off, at the moment of asking: the world's
-// winner and its clock.
+// winner and its clock, and for a battle royale the seconds the match was
+// on this screen (from the presentation's open, the browser's own clock)
+// and whether the seat dropped into a match already running.
 export interface MatchState {
   winner: number | null;
   seconds: number;
+  held?: number;
+  dropIn?: boolean;
 }
 
 export interface MatchEndReporter {
@@ -251,11 +285,7 @@ export function matchEndReporter(
   current: () => MatchState,
   win: ReporterWindow = window as ReporterWindow,
 ): MatchEndReporter {
-  return matchEndOnce(
-    current,
-    (state) => trackMatchEnd(state.winner, state.seconds, kind, win),
-    win,
-  );
+  return matchEndOnce(current, (state) => trackMatchEnd(state, kind, win), win);
 }
 
 // The mechanism under the reporter, for anything else a match says once

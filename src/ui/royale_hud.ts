@@ -38,7 +38,17 @@ import {
 import { royaleMode } from './royale_modes';
 import type { MomentCall } from './royale_moments';
 import { type RoyaleEndModel, royaleEnd } from './royale_result';
-import { foldForFight, type RoyaleStepsView } from './royale_steps';
+import {
+  duskOvertakes,
+  type FightTally,
+  foldForFight,
+  foughtBetween,
+  type Landing,
+  NOT_LANDED,
+  noteLanding,
+  type RoyaleStepsView,
+  sinceLanding,
+} from './royale_steps';
 import {
   countLine,
   dropBanner,
@@ -54,8 +64,11 @@ import {
   seatName,
 } from './royale_text';
 
-// An enemy champion this close counts as near, for the takedown step.
+// An enemy champion this close counts as near, for the fight and takedown
+// steps.
 const ENEMY_NEAR_M = 11;
+// The spells whose cast says the champion fought, for the fight step.
+const FIGHT_KEYS = ['Q', 'W', 'E'] as const;
 // How long a notice stays up, milliseconds (the feed's lines keep their
 // own clock, ui/royale_hud_moments.ts).
 const NOTICE_MS = 3000;
@@ -364,6 +377,13 @@ export class RoyaleHud {
   // What this champion did this match, for the first steps.
   private openedCache = false;
   private padUsed = false;
+  // When this champion landed (ui/royale_steps.ts noteLanding), for the
+  // first steps and the Graft cards.
+  private landing: Landing = NOT_LANDED;
+  // Fought since it landed (a Q, W or E cast, a takedown or an assist):
+  // sticky, read off the tally of the update before.
+  private fought = false;
+  private tally: FightTally | null = null;
   // Announcements go through the HUD's own line (ui/hud.ts announce): a
   // kept one holds its line for `holdMs`, what comes meanwhile waits.
   private announce: AnnounceFn = () => undefined;
@@ -454,13 +474,16 @@ export class RoyaleHud {
     root.classList.toggle('br-dropping', r?.st === 'drop');
     if (!r) return;
     const time = world.time;
+    this.landing = noteLanding(this.landing, r.st, r.de, time);
     this.moments.step(r);
     const own = world.units.get(selfId);
+    if (own && this.landing.at !== null && !this.fought) this.noteFight(r, own);
     this.grafts.update(
       r,
       time,
       own ? { ad: own.stats.ad, maxHp: own.maxHp, grafts: r.gr ?? [] } : null,
       this.moments.sinceHit(time),
+      sinceLanding(this.landing, r.st, time),
     );
     const line = duskLine(r, time);
     if (this.duskText.textContent !== line.text) this.duskText.textContent = line.text;
@@ -511,6 +534,19 @@ export class RoyaleHud {
       }
       this.lastLevel = me.level;
     }
+  }
+
+  // The fight step's tally, one update: a cast, a takedown or an assist
+  // since the last makes it fought.
+  private noteFight(r: SnapRoyale, u: Readonly<Unit>): void {
+    const row = this.host.world.scoreboard().find((x) => x.unitId === this.host.selfId);
+    const now: FightTally = {
+      cooldowns: FIGHT_KEYS.map((k) => u.cooldowns[k] ?? 0),
+      takedowns: r.score ?? u.kills,
+      assists: row?.assists ?? u.assists,
+    };
+    if (this.tally !== null && foughtBetween(this.tally, now)) this.fought = true;
+    this.tally = now;
   }
 
   // Who a unit is on the screen: the seat's name, else what it is.
@@ -605,7 +641,11 @@ export class RoyaleHud {
     const { world, selfId, selfTeam } = this.host;
     const r = this.state();
     const time = world.time;
-    const landed = r !== null && r.st !== 'drop';
+    // The landing noted here too: the HUD asks for the steps before this
+    // layer's update, and on the first tick in play a step with no landing
+    // gate (the ultimate, for a drop-in at the bot's level) took the card
+    // from the fight's.
+    if (r) this.landing = noteLanding(this.landing, r.st, r.de, time);
     let enemyNear = false;
     for (const o of world.units.values()) {
       if (o.id === selfId || o.dead || o.kind !== 'champion' || o.team === selfTeam) continue;
@@ -627,11 +667,12 @@ export class RoyaleHud {
       time,
       covered: covered || this.endEl !== null || fight,
       dead: u.dead,
-      sinceLanding: landed && r ? Math.max(0, time - r.de) : null,
+      sinceLanding: r ? sinceLanding(this.landing, r.st, time) : null,
+      fought: this.fought,
       openedCache: this.openedCache,
       padUsed: this.padUsed,
-      closing: r !== null && r.dusk.p >= 1,
       outside: r && !u.dead ? outsideLight(u.pos, r.dusk) : null,
+      overtaken: r && !u.dead ? duskOvertakes(u.pos, r.dusk) : null,
       enemyNear,
       takedowns: r?.score ?? u.kills,
       level: u.level,
