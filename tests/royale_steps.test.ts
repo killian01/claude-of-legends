@@ -237,6 +237,23 @@ describe('the fight step', () => {
     expect(sinceLanding(NOT_LANDED, 'play', 13)).toBeNull();
   });
 
+  it('comes before the ultimate for a drop-in landing at the level of the bot it replaced', () => {
+    // A drop-in at 7:53 took a level 7 seat with R ready: the ultimate's
+    // card took the landing's.
+    let s = stepRoyaleSteps(
+      royaleStepsStart(false, []),
+      at(0, { level: 7, ultReady: true, time: 473 }),
+    );
+    expect(s.current).toBe('br_fight');
+    s = stepRoyaleSteps(s, at(1, { level: 7, ultReady: true, fought: true, time: 474 }));
+    expect(s.done).toContain('br_fight');
+    s = stepRoyaleSteps(
+      s,
+      at(1 + GAP_S, { level: 7, ultReady: true, openedCache: true, time: 474 + GAP_S }),
+    );
+    expect(s.current).toBe('br_ult');
+  });
+
   it('is done once the champion fights, and counts a fight unaided as done', () => {
     let s = run(royaleStepsStart(false, []), [at(0)]);
     expect(s.current).toBe('br_fight');
