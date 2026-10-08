@@ -19,7 +19,6 @@ import {
   type RoyaleRecord,
 } from '../src/net/replay';
 import type { RoyaleResult, RoyaleVariant, SeatLabel } from '../src/net/royale_wire';
-import { lowerMedian } from '../src/sim/royale/levels';
 import {
   freshStats,
   noteMoments,
@@ -29,7 +28,7 @@ import {
   withoutOrderNumber,
 } from './match';
 import { applyRoyaleCommand, ROYALE_VERBS } from './royale_commands';
-import { chooseBotSeat } from './royale_join';
+import { chooseBotSeat, lowerMedian } from './royale_join';
 import { RoyalePoints } from './royale_points';
 import { finalPlaces, type RankedSeat, royaleRanking, royaleResult } from './royale_ranking';
 import { type RoyalePerson, royaleSeats } from './royale_seats';
