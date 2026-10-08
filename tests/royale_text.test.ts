@@ -139,11 +139,22 @@ describe('the count', () => {
   it('says the rank since landing for a drop-in, on a desktop and a phone', () => {
     const late = snap({ score: 3, rk: 4, gap: 1, rs: 1 });
     expect(countLine(late)).toBe('#4 since you landed · 3 takedowns · 1 behind #3');
-    expect(countLine(late, true)).toBe('#4 since you landed · 1 behind #3');
-    expect(countLine(snap({ score: 5, rk: 1, gap: 2, rs: 1 }), true)).toBe(
-      '#1 since you landed · Leading by 2',
+    expect(countLine(snap({ score: 5, rk: 1, gap: 2, rs: 1 }))).toBe(
+      '#1 since you landed · 5 takedowns · Leading by 2',
     );
     expect(countLine(snap({ score: 0 }))).toBe('0 takedowns');
+  });
+
+  // A phone's top row holds the Dusk line, the count and the Wrath's badge
+  // between the edge and the minimap's points: a drop-in's line is no
+  // longer than the whole match's ("#46 of 50 · 1 behind #45").
+  it('keeps a drop-in phone line to the rank alone, no longer than the whole match one', () => {
+    const late = snap({ score: 3, rk: 46, gap: 1, rs: 1, alive: 50 });
+    expect(countLine(late, true)).toBe('#46 since you landed');
+    expect(countLine(snap({ score: 5, rk: 1, gap: 2, rs: 1 }), true)).toBe('#1 since you landed');
+    const whole = countLine(snap({ score: 3, rk: 46, gap: 1, alive: 50 }), true);
+    expect(whole).toBe('#46 of 50 · 1 behind #45');
+    expect(countLine(late, true).length).toBeLessThanOrEqual(whole.length);
   });
 
   it('says how many are in the match during the drop', () => {
