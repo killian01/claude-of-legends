@@ -62,6 +62,7 @@ import {
   oneLifeRanking,
   placeFallen,
   respawnRanking,
+  returnCap,
   type Standing,
 } from './score';
 import {
@@ -602,7 +603,9 @@ export class RoyaleMode {
   // The respawn's delay and place (SimOptions.respawnDelay, respawnPoint):
   // RESPAWN_S and the edge of the light in Respawn, never in One life. The
   // place is the candidate on the light's edge farthest from every other
-  // champion standing (score.ts edgeOfLight), never the first one drawn.
+  // champion standing (score.ts edgeOfLight), never the first one drawn;
+  // while the Dusk closes, the edge of the light it closes to (returnCap),
+  // for every seat.
   respawnDelay(): number {
     return this.variant === 'respawn' ? RESPAWN_S : Number.POSITIVE_INFINITY;
   }
@@ -614,7 +617,7 @@ export class RoyaleMode {
       if (o.kind !== 'champion' || o.dead || o.id === u.id || o.pos.y === undefined) continue;
       enemies.push(o.pos as Vec3);
     }
-    return edgeOfLight(sim.rng, this.state.dusk.now, enemies, this.layout, this.ground);
+    return edgeOfLight(sim.rng, returnCap(this.state.dusk), enemies, this.layout, this.ground);
   }
 
   // After the deaths: One life's places, the caches, the leader, the end.
