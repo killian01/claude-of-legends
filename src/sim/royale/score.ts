@@ -1,6 +1,7 @@
 // Scores and the end (ADR 0031). Respawn: a takedown scores one for its
 // last hit, more on a mark (marks.ts markPayout); a death costs RESPAWN_S and the champion comes back
-// at the edge of the light, away from enemies; when the last light goes
+// at the edge of the light (of the light it closes to, while the Dusk
+// closes), away from enemies; when the last light goes
 // out the best score wins, fewer deaths then the lower id breaking ties.
 // One life: a death is final, the fallen are kept in order with their
 // place, and the last standing wins; champions falling on the same tick
@@ -12,7 +13,7 @@ import { dist2, heading, type Vec3 } from '../geo';
 import type { Rng } from '../rng';
 import { insideCap } from './dusk';
 import { along, type RoyaleGround, type RoyaleLayout, randomWalkable } from './layout';
-import type { DuskCap } from './types';
+import type { DuskCap, DuskState } from './types';
 
 export interface Standing {
   id: number;
@@ -66,6 +67,15 @@ export function oneLifeRanking(winnerId: number | null, eliminated: readonly num
     if (id !== winnerId) out.push(id);
   }
   return out;
+}
+
+// The light a fresh champion is set down in (a Respawn return, an
+// Arrival): while the Dusk closes, the cap it closes to, else the light
+// now. Each next cap lies inside the closing one by construction (dusk.ts),
+// so the spot stays lit until the phase ends: a return set 4 m inside an
+// edge still closing came back burning (the playthrough, 2026-10-08).
+export function returnCap(d: Pick<DuskState, 'now' | 'next' | 'shrinking'>): DuskCap {
+  return d.shrinking && d.next ? d.next : d.now;
 }
 
 // How far inside the edge a respawn stands, at most, and as a share of a
