@@ -545,7 +545,14 @@ export const STEP_IDS = [
 export type StepId = (typeof STEP_IDS)[number];
 // The battle royale's own first steps (src/ui/royale_steps.ts), told on
 // the same wire: its seats reported none while they were left off it.
-export const ROYALE_STEP_IDS = ['br_cache', 'br_dusk', 'br_takedown', 'br_pad', 'br_ult'] as const;
+export const ROYALE_STEP_IDS = [
+  'br_fight',
+  'br_cache',
+  'br_dusk',
+  'br_takedown',
+  'br_pad',
+  'br_ult',
+] as const;
 export type RoyaleStepId = (typeof ROYALE_STEP_IDS)[number];
 export type WireStepId = StepId | RoyaleStepId;
 

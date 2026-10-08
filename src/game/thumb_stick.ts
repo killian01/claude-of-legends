@@ -12,7 +12,7 @@
 // intention outside the decision budget (ADR 0003), so a stick that speaks
 // every tick costs nobody anything and gives no throughput a bot lacks.
 
-import { offset, onSphere } from '../sim/geo';
+import { dot, offset, onSphere } from '../sim/geo';
 import type { Vec2 } from '../sim/types';
 
 // How far the knob travels from the base, in CSS pixels: the ring a thumb
@@ -143,4 +143,24 @@ export function leadPoint(self: Vec2, dir: Vec2, lead: number, mapSize: number):
   if (onSphere(self) && dir.y !== undefined) return offset(self, dir, lead);
   const clamp = (v: number): number => Math.max(0, Math.min(mapSize, v));
   return { x: clamp(self.x + dir.x * lead), z: clamp(self.z + dir.z * lead) };
+}
+
+// The attack the player gave last, by the attack button or a tap or click
+// on an enemy, which the stick keeps while it points that way.
+export interface AttackHold {
+  targetId: number;
+}
+
+// How far toward the target the thumb has to point to keep the attack:
+// anywhere toward or sideways of it.
+export const STICK_YIELD_DOT = 0;
+
+// Whether the stick yields to the attack held: an attack given, its target
+// in sight (toTarget, the direction toward it from the champion), and the
+// thumb pointing toward or sideways of it. While it yields the stick sends
+// nothing, so its keep-alive no longer turns the attack into a walk (a
+// phone's 31 attack orders landed 96 damage, its target left at 99%);
+// pointed away, the walk goes at once.
+export function stickYields(hold: AttackHold | null, dir: Vec2, toTarget: Vec2 | null): boolean {
+  return hold !== null && toTarget !== null && dot(dir, toTarget) >= STICK_YIELD_DOT;
 }

@@ -23,6 +23,7 @@ import {
   type StatsWindow,
   scrubUrl,
   statsChoice,
+  trackAgain,
   trackStep,
   WAIT_TRIES,
 } from '../src/net/stats';
@@ -180,6 +181,24 @@ describe('how a match ended', () => {
     expect([...MATCH_ENDS]).toEqual(['finished', 'left']);
   });
 
+  it("carries a battle royale's seconds held and whether it dropped in", () => {
+    // The match's clock is not the time held: a drop-in joins minutes in.
+    expect(matchEndEvent(null, 8 * 60, 'royale', 'respawn', { held: 41.6, dropIn: true })).toEqual({
+      name: 'left',
+      data: { minutes: 8, mode: 'royale', variant: 'respawn', held: 42, dropIn: true },
+    });
+    expect(matchEndEvent(1, 610, 'royale', 'respawn', { held: 600, dropIn: false }).data).toEqual({
+      minutes: 10,
+      mode: 'royale',
+      variant: 'respawn',
+      held: 600,
+      dropIn: false,
+    });
+    expect(matchEndEvent(null, 60, 'royale', 'one_life', { held: Number.NaN }).data.held).toBe(0);
+    // A match that says neither carries neither.
+    expect(matchEndEvent(null, 60, 'online').data).toEqual({ minutes: 1, mode: 'online' });
+  });
+
   it('names a battle royale apart from a 5v5, with its rule set', () => {
     expect(matchEndEvent(null, 5 * 60, 'royale', 'respawn')).toEqual({
       name: 'left',
@@ -247,6 +266,20 @@ describe('how a match ended', () => {
     });
   });
 
+  it('tells the seconds held and the drop-in on the way out', () => {
+    const win = fakeWindow();
+    const state: MatchState = { winner: null, seconds: 300, held: 39.2, dropIn: true };
+    matchEndReporter({ mode: 'royale', variant: 'respawn' }, () => state, win);
+    win.fire();
+    expect(win.track).toHaveBeenCalledWith('left', {
+      minutes: 5,
+      mode: 'royale',
+      variant: 'respawn',
+      held: 39,
+      dropIn: true,
+    });
+  });
+
   it('stops listening once disposed, and still reports on the way out', () => {
     const win = fakeWindow();
     const state: MatchState = { winner: null, seconds: 90 };
@@ -279,6 +312,28 @@ describe('how a match ended', () => {
       ends.report();
       ends.dispose();
     }).not.toThrow();
+  });
+});
+
+describe('a match played again', () => {
+  it("is 'again', with the mode and the rule set", () => {
+    const track = vi.fn();
+    trackAgain({ mode: 'royale', variant: 'one_life' }, { umami: { track } });
+    expect(track).toHaveBeenCalledWith('again', { mode: 'royale', variant: 'one_life' });
+    trackAgain({ mode: 'online' }, { umami: { track } });
+    expect(track).toHaveBeenLastCalledWith('again', { mode: 'online' });
+  });
+
+  it('stays silent with a tracker that throws, or none', () => {
+    const broken = {
+      umami: {
+        track: () => {
+          throw new Error('down');
+        },
+      },
+    };
+    expect(() => trackAgain({ mode: 'royale', variant: 'respawn' }, broken)).not.toThrow();
+    expect(() => trackAgain({ mode: 'royale', variant: 'respawn' }, {})).not.toThrow();
   });
 });
 

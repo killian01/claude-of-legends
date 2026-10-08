@@ -1,5 +1,6 @@
 // The left thumb's stick (src/game/thumb_stick.ts): which touch is the
-// stick, what direction the thumb gives, and when that becomes an order.
+// stick, what direction the thumb gives, when that becomes an order, and
+// when it keeps the attack given meanwhile.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -8,7 +9,9 @@ import {
   STICK_DEAD,
   STICK_RADIUS,
   STICK_RESEND_MS,
+  STICK_YIELD_DOT,
   shouldResend,
+  stickYields,
   ThumbStick,
 } from '../src/game/thumb_stick';
 
@@ -80,5 +83,35 @@ describe('when the stick becomes an order', () => {
   it('names a point ahead, inside the map', () => {
     expect(leadPoint({ x: 10, z: 10 }, { x: 1, z: 0 }, 4, 156)).toEqual({ x: 14, z: 10 });
     expect(leadPoint({ x: 1, z: 155 }, { x: -1, z: 1 }, 4, 156)).toEqual({ x: 0, z: 156 });
+  });
+});
+
+describe('when the stick keeps the attack', () => {
+  // A phone's 31 attack orders landed 96 damage: the stick's keep-alive
+  // turned each into a walk.
+  const hold = { targetId: 7 };
+  const toTarget = { x: 1, z: 0 };
+
+  it('yields pointing toward or sideways of the target', () => {
+    expect(stickYields(hold, { x: 1, z: 0 }, toTarget)).toBe(true);
+    expect(stickYields(hold, { x: Math.SQRT1_2, z: Math.SQRT1_2 }, toTarget)).toBe(true);
+    expect(stickYields(hold, { x: 0, z: 1 }, toTarget)).toBe(true);
+    expect(STICK_YIELD_DOT).toBe(0);
+  });
+
+  it('lets go pointing away', () => {
+    expect(stickYields(hold, { x: -1, z: 0 }, toTarget)).toBe(false);
+    expect(stickYields(hold, { x: -0.2, z: 0.98 }, toTarget)).toBe(false);
+  });
+
+  it('counts the height on the planet', () => {
+    // Tangent directions with y: toward the target only through y.
+    expect(stickYields(hold, { x: 0, y: 1, z: 0 }, { x: 0, y: 1, z: 0 })).toBe(true);
+    expect(stickYields(hold, { x: 0.1, y: -1, z: 0 }, { x: 0, y: 1, z: 0 })).toBe(false);
+  });
+
+  it('keeps nothing with no target in sight or no attack given', () => {
+    expect(stickYields(hold, { x: 1, z: 0 }, null)).toBe(false);
+    expect(stickYields(null, { x: 1, z: 0 }, toTarget)).toBe(false);
   });
 });
