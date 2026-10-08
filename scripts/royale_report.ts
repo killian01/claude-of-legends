@@ -278,6 +278,8 @@ interface Match {
   wrathKills: number[];
   lodestarDowns: number;
   markTakedowns: number;
+  // Respawn's takedowns that settled a Burr (royale/burr.ts).
+  burrTakedowns: number;
   // The Grafts: held per seat at its fall (One life) or the end, every
   // Graft taken by id, the Bough offers and those filled with a Sprout,
   // and the offers of the bots' seats that ran out (card 0 taken for them).
@@ -807,6 +809,7 @@ function play(
     wrathKills: holder !== null ? [...wrathKills, holderKills] : wrathKills,
     lodestarDowns,
     markTakedowns: mode.tally.markTakedowns,
+    burrTakedowns: mode.tally.burrTakedowns,
     graftsHeld: champs.map((u) => heldAtFall.get(u.id) ?? u.grafts.length),
     graftsTaken: [...mode.state.grafts.values()]
       .flat()
@@ -1072,7 +1075,8 @@ function acceptance(all: readonly Match[]): void {
 // 70% of Respawn's and 40% of One life's, the Wrath passed at least once in
 // half of Respawn's, a holder's takedowns with it at most 4 at the median,
 // Respawn's Lodestar taken down 8 times a match, and a tenth of the
-// takedowns on a marked champion.
+// takedowns on a marked champion; Respawn's share that settled a Burr
+// beside them, with no bar.
 function risingsAcceptance(all: readonly Match[]): void {
   for (const variant of ['respawn', 'one_life'] as const) {
     const ms = all.filter((m) => m.variant === variant);
@@ -1101,10 +1105,12 @@ function risingsAcceptance(all: readonly Match[]): void {
     const marked = ms.reduce((a, m) => a + m.markTakedowns, 0);
     const td = ms.reduce((a, m) => a + m.takedowns, 0);
     const downs = mean(ms.map((m) => m.lodestarDowns));
+    const burrs = ms.reduce((a, m) => a + m.burrTakedowns, 0);
     console.log(
       `  ${variant} the hunted: takedowns on a mark ${pct(marked, td)} (min 10%): ${verdict(td > 0 && marked / td >= 0.1)}` +
         (variant === 'respawn'
-          ? `; the Lodestar taken down ${downs.toFixed(1)} a match (min 8): ${verdict(downs >= 8)}`
+          ? `; the Lodestar taken down ${downs.toFixed(1)} a match (min 8): ${verdict(downs >= 8)}` +
+            `; Burrs settled ${pct(burrs, td)} of the takedowns`
           : `; the Lodestar taken down ${downs.toFixed(1)} a match`),
     );
   }
