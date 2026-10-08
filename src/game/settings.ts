@@ -52,6 +52,10 @@ export interface GameSettings {
   // the first. Which champions exist is the pick's to check
   // (ui/royale_pick_rules.ts), not the storage's.
   royalePick: RoyalePickMemory | null;
+  // The most Respawn takedowns this browser scored in one seat, counted
+  // since landing for a drop-in: the end card's best (ui/royale_result.ts).
+  // 0 before the first. Not a choice, so the settings panel never shows it.
+  royaleBest: number;
 }
 
 export interface RoyalePickMemory {
@@ -75,6 +79,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   stepsDone: [],
   royaleStepsDone: [],
   royalePick: null,
+  royaleBest: 0,
 };
 
 const STORAGE_KEY = 'loc-settings';
@@ -127,6 +132,7 @@ export function clampSettings(raw: unknown): GameSettings {
     stepsDone: idList(r.stepsDone),
     royaleStepsDone: idList(r.royaleStepsDone),
     royalePick: royalePickOf(r.royalePick),
+    royaleBest: count(r.royaleBest),
   };
 }
 

@@ -37,7 +37,7 @@ import {
 } from './royale_layout';
 import { royaleMode } from './royale_modes';
 import type { MomentCall } from './royale_moments';
-import { type RoyaleEndModel, royaleEnd } from './royale_result';
+import { type RoyaleEndMine, type RoyaleEndModel, royaleEnd } from './royale_result';
 import { foldForFight, type RoyaleStepsView } from './royale_steps';
 import {
   countLine,
@@ -664,10 +664,15 @@ export class RoyaleHud {
 
   // The end screen, from the result the server sent; `extras` are the
   // HUD's own boxes that belong under it (the ladder, the account offer,
-  // the feedback box).
-  showResult(result: RoyaleResult, extras: readonly HTMLElement[] = []): void {
+  // the feedback box); `mine`, what the card reads off this screen (the
+  // own assists, the best kept).
+  showResult(
+    result: RoyaleResult,
+    extras: readonly HTMLElement[] = [],
+    mine?: RoyaleEndMine,
+  ): void {
     this.endEl?.remove();
-    const model = royaleEnd(result);
+    const model = royaleEnd(result, mine);
     const end = el('div', 'br-end');
     end.appendChild(this.endCard(model, result));
     const more = el('div', 'br-end-extras');
