@@ -1,8 +1,8 @@
 // The battle royale snapshot's optional blocks (src/net/royale_wire.ts
 // SnapRoyale), one builder each, beside royale_snapshot.ts which calls them
 // all through addRoyaleBlocks: the recipient's Graft offer and Grafts, the
-// Seedfalls, the Risings, the marks, the Clamors, the Respawn rank and gap,
-// the Reprieve, the Graces (an Arrival, a return), the Last light's final seconds and the watched
+// Seedfalls, the Risings, the marks, the Clamors, the Respawn rank and gap
+// (a drop-in's since they landed, with rs), the Reprieve, the Graces (an Arrival, a return), the Last light's final seconds and the watched
 // champion; and a cache's kind and its opening time. A builder answers
 // undefined to leave its block off the wire, which every one does until its
 // rules ship. A block sent on change (sf, cl) asks sentOnChange below, the
@@ -23,7 +23,7 @@ import { RING_RISE_AT_S, RISING_WARN_S } from '../src/sim/content/royale_events'
 import { cacheOpenS } from '../src/sim/royale/caches';
 import { firstSeedfallCallAt } from '../src/sim/royale/seedfall';
 import { CACHE_OPEN_S, type CacheState } from '../src/sim/royale/types';
-import { type RankedSeat, rankAndGapIn, royaleRanking } from './royale_ranking';
+import { type RankedSeat, rankAndGapIn, royaleRanking, windowStanding } from './royale_ranking';
 import type { RoyaleSim } from './royale_sim';
 import type { RoyaleSnapContext, RoyaleViewer } from './royale_snapshot';
 import { round2 } from './snapshot';
@@ -209,16 +209,31 @@ function respawnRankingOf(sim: RoyaleSim): number[] {
   return ranking;
 }
 
-function standing(sim: RoyaleSim, viewer: RoyaleViewer) {
+// The standing the top line tells: in the whole match, or for a drop-in
+// (ctx.windowBase) since they landed, from their first takedown since
+// then (before it, a rank among the seats that scored reads as a verdict
+// on seconds of play).
+function standing(
+  sim: RoyaleSim,
+  viewer: RoyaleViewer,
+  ctx: RoyaleSnapContext,
+): { rank: number; gap: number; since?: 1 } | null {
   const r = sim.royale;
   if (r.variant !== 'respawn' || r.stage !== 'play') return null;
-  return rankAndGapIn(respawnRankingOf(sim), r, viewer.unitId);
+  const ranking = respawnRankingOf(sim);
+  if (ctx.windowBase) {
+    const w = windowStanding(r.scores, ctx.windowBase, ranking, viewer.unitId);
+    return w.score > 0 ? { rank: w.rank, gap: w.gap, since: 1 } : null;
+  }
+  return rankAndGapIn(ranking, r, viewer.unitId);
 }
 
 // Respawn: the recipient's rank and its gap (server/royale_ranking.ts
-// rankAndGap), every snapshot of the play: the HUD's top line.
-export const rankBlock: Builder<number> = (sim, viewer) => standing(sim, viewer)?.rank;
-export const gapBlock: Builder<number> = (sim, viewer) => standing(sim, viewer)?.gap;
+// rankAndGap, or windowStanding for a drop-in, then with rs), every
+// snapshot of the play: the HUD's top line.
+export const rankBlock: Builder<number> = (sim, viewer, ctx) => standing(sim, viewer, ctx)?.rank;
+export const gapBlock: Builder<number> = (sim, viewer, ctx) => standing(sim, viewer, ctx)?.gap;
+export const sinceBlock: Builder<1> = (sim, viewer, ctx) => standing(sim, viewer, ctx)?.since;
 export const reprieveBlock: Builder<number> = () => undefined;
 // The champions in their Grace the viewer sees, itself included
 // (src/sim/royale/grace.ts; RoyaleState.arriving), each with when it runs
@@ -269,6 +284,8 @@ export function addRoyaleBlocks(
   if (rk !== undefined) block.rk = rk;
   const gap = gapBlock(sim, viewer, ctx);
   if (gap !== undefined) block.gap = gap;
+  const rs = sinceBlock(sim, viewer, ctx);
+  if (rs !== undefined) block.rs = rs;
   const rp = reprieveBlock(sim, viewer, ctx);
   if (rp !== undefined) block.rp = rp;
   const ar = arrivalBlock(sim, viewer, ctx);

@@ -113,6 +113,10 @@ export interface SnapRoyale {
   // Respawn: the recipient's rank and how far behind the seat above it.
   rk?: number;
   gap?: number;
+  // 1: rk and gap count since the recipient landed (a drop-in's window,
+  // server/royale_ranking.ts windowStanding). The three are sent from the
+  // recipient's first takedown since landing.
+  rs?: 1;
   // One life: when the recipient's Reprieve brings them back, while pending.
   rp?: number;
   // The champions in their Grace the recipient sees, itself included (a
@@ -157,12 +161,17 @@ export interface RoyaleResult {
     heartwood?: string;
     bot?: boolean;
   };
-  // The near miss: the seat just above, and by how much.
+  // The near miss: the seat just above (since the recipient landed when
+  // they dropped in, else in the whole match), and by how many takedowns,
+  // when that is one or two (Respawn).
   gap?: { name: string; by: number };
   // The winner's health share at the end (One life).
   winnerHp?: number;
   // Respawn: the standing since the recipient landed (a drop-in's window).
   window?: { rank: number; of: number; score: number };
+  // Respawn: seconds since the recipient landed (a drop-in's Arrival, else
+  // the drop's end).
+  held?: number;
   // The ranking around the recipient: the podium and their own row with
   // two above and two below, people first.
   slice?: { place: number; name: string; championId: string; score: number; bot: boolean }[];

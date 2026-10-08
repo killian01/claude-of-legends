@@ -136,6 +136,54 @@ describe('the mode block', () => {
   });
 });
 
+describe('the rank line of a drop-in', () => {
+  // Every seat but the recipient's scored 5 before they landed, and seat 7
+  // scored 2 more since.
+  function landedLate() {
+    const s = setup();
+    s.sim.royale.stage = 'play';
+    for (const u of s.champions.slice(1)) s.sim.royale.scores.set(u.id, 5);
+    const windowBase = new Map(s.sim.royale.scores);
+    s.sim.royale.scores.set(s.champions[7]!.id, 7);
+    const ctx = (base?: ReadonlyMap<number, number>): RoyaleSnapContext => ({
+      seat: (id) => s.labels.get(id),
+      seats: 50,
+      people: 1,
+      caches: false,
+      ...(base ? { windowBase: base } : {}),
+    });
+    const block = (base?: ReadonlyMap<number, number>) =>
+      (buildRoyaleSnapshot(s.sim, s.viewer, [], ctx(base)) as Snap).royale!;
+    return { ...s, windowBase, block };
+  }
+
+  it('sends no rank before the first takedown since landing', () => {
+    const { block, windowBase } = landedLate();
+    const r = block(windowBase);
+    expect(r.rk).toBeUndefined();
+    expect(r.gap).toBeUndefined();
+    expect(r.rs).toBeUndefined();
+    expect(r.score).toBe(0);
+  });
+
+  it('counts the rank and the gap since landing, with rs', () => {
+    const { sim, self, block, windowBase } = landedLate();
+    sim.royale.scores.set(self.id, 1);
+    expect(block(windowBase)).toMatchObject({ rk: 2, gap: 1, rs: 1, score: 1 });
+    sim.royale.scores.set(self.id, 4);
+    expect(block(windowBase)).toMatchObject({ rk: 1, gap: 2, rs: 1 });
+  });
+
+  it('leaves a seat from the drop on the whole match, without rs', () => {
+    const { sim, self, block } = landedLate();
+    sim.royale.scores.set(self.id, 1);
+    const r = block();
+    expect(r.rk).toBe(50);
+    expect(r.gap).toBe(4);
+    expect(r.rs).toBeUndefined();
+  });
+});
+
 describe('the events', () => {
   it('names the fallen and their killer for everyone, bot marks included', () => {
     const { sim, champions, snap } = setup(50, 'one_life');
