@@ -26,6 +26,7 @@ import type { Sim } from '../sim';
 import type { CombatCtx } from '../sim_context';
 import { DT } from '../types';
 import type { Unit } from '../unit';
+import { payAssists } from './assists';
 import { drawCacheSpots, openingBy, stepCaches } from './caches';
 import { noteClamor, observeClamors, stepClamors } from './clamors';
 import { dealEscorts, ESCORTS, escortLandings, normalizePick, resolveLandings } from './drop';
@@ -549,6 +550,8 @@ export class RoyaleMode {
         if (t.takedowns === 1) offerOnTrigger(this, sim, taker.id, 'first_takedown', 'takedown');
         if (t.takedowns === 3) offerOnTrigger(this, sim, taker.id, 'third_takedown', 'takedown');
         offerOnLevels(this, sim, taker, from);
+        // Respawn's assists, a share each (assists.ts).
+        payAssists(this, sim, victim, taker);
       }
       if (this.variant === 'one_life') {
         this.fallen.push({ id: victim.id, hpBefore: this.hpBefore.get(victim.id) ?? 0 });

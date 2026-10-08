@@ -41,13 +41,25 @@
 // one, its first takedown and its takedowns in the first DROPIN_EARLY_S,
 // and its first life; then the shares by join time, and one compare line
 // (the stand-in median life, the fighting share, the steals, the final
-// level median) to hold a change against. Bundled and run by
-// scripts/royale_report.mjs:
+// level median) to hold a change against. --load 4 (seconds, default 0)
+// leaves each drop-in's seat without an order for that long after its
+// Arrival, the person behind a slow client's joining card (src/game/
+// first_frame.ts FIRST_FRAME_WAIT_MS) and taking a first look, before the
+// stand-in brain plays it.
+// Every seat's assists and level at the end are kept too: the compare
+// line gives the level median of the seats with at most FEW_TAKEDOWNS
+// takedowns (a person who helps and seldom lands the last hit) and their
+// assists.
+// --dump out.json writes the matches played instead of only printing them,
+// and --merge a.json,b.json prints the summary of matches dumped before (a
+// run split over several processes, each its own --from and --seeds).
+// Bundled and run by scripts/royale_report.mjs:
 //   node scripts/royale_report.mjs [--seeds 4] [--from 1]
 //     [--variant both|respawn|one_life] [--passive 1] [--standin 1]
-//     [--dropin 60,180,300,420] [--quiet]
+//     [--dropin 60,180,300,420] [--load 0] [--dump out.json]
+//     [--merge a.json,b.json] [--quiet]
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { chooseBotSeat } from '../server/royale_join';
 import { buildRoyaleSim, type ReplayPick, type RoyalePlanet } from '../src/net/replay';
 import { ROYALE_SKILLS, type RoyaleSkillId } from '../src/sim/content/bots/royale_skills';
@@ -99,6 +111,11 @@ const dropinTimes = opt('--dropin', '')
   .map(Number)
   .filter((x) => Number.isFinite(x) && x >= 0)
   .sort((a, b) => a - b);
+const loadS = Math.max(0, Number(opt('--load', '0')) || 0);
+const dumpTo = opt('--dump', '');
+const mergeFrom = opt('--merge', '')
+  .split(',')
+  .filter((x) => x.trim() !== '');
 const quiet = args.includes('--quiet');
 const variants: RoyaleVariant[] =
   variantArg === 'respawn' || variantArg === 'one_life' ? [variantArg] : ['respawn', 'one_life'];
@@ -128,6 +145,8 @@ const DUEL_QUIET_S = 10;
 // a burn the bot left behind lands farther off, in the first second.
 const DROPIN_EARLY_S = 60;
 const DROPIN_HIT_M = 16;
+// The seats that seldom land the last hit: at most this many takedowns.
+const FEW_TAKEDOWNS = 3;
 
 function loadPlanet(dir = 'public/map/planet/'): RoyalePlanet {
   const planet = assemblePlanet(JSON.parse(readFileSync(`${dir}layout.json`, 'utf8')));
@@ -232,8 +251,16 @@ interface Match {
   pads: number;
   camps: number;
   levels: number[];
-  // Every seat's champion, skill and takedowns.
-  seats: { championId: string; skill: string; kills: number; deaths: number }[];
+  // Every seat's champion, skill, takedowns, deaths, assists and level at
+  // the end.
+  seats: {
+    championId: string;
+    skill: string;
+    kills: number;
+    deaths: number;
+    assists: number;
+    level: number;
+  }[];
   // Takedowns between skills: killer skill -> victim skill -> count.
   duels: Record<string, Record<string, number>>;
   // One life: seconds from landing each seat fell (the end for the last).
@@ -427,10 +454,13 @@ function play(
   // The drop-ins: the times still to come, and each one taken, with its
   // landing.
   const dropinsLeft = [...dropins];
+  // A drop-in's seat is played from `playsAt` (its landing and --load).
   const dropIns: {
     id: number;
     nearestId: number;
     landedAt: number;
+    playsAt: number;
+    playing: boolean;
     row: DropIn;
     alive: boolean;
   }[] = [];
@@ -464,7 +494,7 @@ function play(
     const fairBefore = mode.tally.fairArrivals ?? 0;
     sim.beginArrival(id);
     const fair = (mode.tally.fairArrivals ?? 0) > fairBefore;
-    sim.attachPolicy(id, traced('normal', false));
+    if (loadS <= 0) sim.attachPolicy(id, traced('normal', false));
     seat.skill = 'dropin';
     const u = sim.units.get(id)!;
     let nearest: number | null = null;
@@ -481,6 +511,8 @@ function play(
       id,
       nearestId,
       landedAt: sim.time,
+      playsAt: sim.time + loadS,
+      playing: loadS <= 0,
       alive: true,
       row: {
         joinAt,
@@ -505,6 +537,12 @@ function play(
       sim.time - landAt + 1e-9 >= dropinsLeft[0]!
     ) {
       dropIn(dropinsLeft.shift()!);
+    }
+    // A drop-in's person sees the world at last: the stand-in brain plays.
+    for (const d of dropIns) {
+      if (d.playing || sim.time + 1e-9 < d.playsAt) continue;
+      d.playing = true;
+      sim.attachPolicy(d.id, traced('normal', false));
     }
     for (const [id, q] of mode.state.offers) {
       const head = q[0];
@@ -773,6 +811,8 @@ function play(
       skill: seats.get(u.id)?.skill ?? '?',
       kills: u.kills,
       deaths: u.deaths,
+      assists: u.assists,
+      level: u.level,
     })),
     duels,
     lastedBySkill,
@@ -1215,10 +1255,18 @@ function compareLine(all: readonly Match[]): void {
     const tds = ms.reduce((a, m) => a + m.champTakedowns, 0);
     const steals = ms.reduce((a, m) => a + m.steals, 0);
     const level = median(ms.flatMap((m) => m.levels));
+    // The seats that seldom land the last hit, and what their help earned.
+    const few = ms.flatMap((m) => m.seats.filter((x) => x.kills <= FEW_TAKEDOWNS));
+    const fewLevel = median(few.map((x) => x.level));
+    const fewAssists = median(few.map((x) => x.assists));
+    const dropLife = median(ms.flatMap((m) => m.dropIns.map((d) => d.firstLife)));
     console.log(
       `\ncompare ${variant}: stand-in median life ${life === null ? '-' : life.toFixed(1)} s, ` +
         `fighting ${near > 0 ? ((100 * engaged) / near).toFixed(1) : '-'}%, ` +
-        `steals ${tds > 0 ? ((100 * steals) / tds).toFixed(1) : '-'}%, final level median ${level ?? '-'}`,
+        `steals ${tds > 0 ? ((100 * steals) / tds).toFixed(1) : '-'}%, final level median ${level ?? '-'}, ` +
+        `level median ${fewLevel ?? '-'} for the ${few.length} seats with at most ${FEW_TAKEDOWNS} takedowns ` +
+        `(assists median ${fewAssists ?? '-'}), ` +
+        `drop-in first life median ${dropLife === null ? '-' : dropLife.toFixed(1)} s`,
     );
   }
 }
@@ -1334,13 +1382,18 @@ function summary(all: readonly Match[]): void {
   compareLine(all);
 }
 
-const planet = loadPlanet();
 const all: Match[] = [];
-for (const variant of variants) {
-  for (let seed = firstSeed; seed < firstSeed + seeds; seed++) {
-    const m = play(planet, variant, seed, passiveSeats, standinSeats, dropinTimes);
-    all.push(m);
-    if (!quiet) print(m);
+if (mergeFrom.length > 0) {
+  for (const file of mergeFrom) all.push(...(JSON.parse(readFileSync(file, 'utf8')) as Match[]));
+} else {
+  const planet = loadPlanet();
+  for (const variant of variants) {
+    for (let seed = firstSeed; seed < firstSeed + seeds; seed++) {
+      const m = play(planet, variant, seed, passiveSeats, standinSeats, dropinTimes);
+      all.push(m);
+      if (!quiet) print(m);
+    }
   }
+  if (dumpTo !== '') writeFileSync(dumpTo, JSON.stringify(all));
 }
 summary(all);
