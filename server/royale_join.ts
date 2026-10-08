@@ -58,6 +58,10 @@ export function chooseRoyaleMatch(
   return best ? best.matchId : null;
 }
 
+// The field's level a seat is weighed against: the lower median of every
+// champion's (src/sim/royale/levels.ts, where a Respawn Arrival reads it).
+export { lowerMedian } from '../src/sim/royale/levels';
+
 // A bot seat as the choice reads it.
 export interface BotSeatCandidate {
   unitId: number;
