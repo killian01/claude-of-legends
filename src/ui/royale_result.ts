@@ -151,14 +151,15 @@ export function royaleEnd(
 
 // What the end plays, the sting and the voice: One life a victory for the
 // last one standing and a defeat for everyone else. Respawn a victory for
-// the most takedowns or a top three since landing, a defeat only in the
-// bottom half (since landing for a drop-in), and nothing in between: a
-// visitor who came in late and did well is not told they lost.
+// the most takedowns or a top three since landing, a defeat only for a
+// whole match in the bottom half, and nothing in between. A drop-in is
+// never told they lost: they came in late against a field that had been
+// scoring for minutes, and the defeat was the last thing they heard
+// before closing the tab.
 export function royaleSting(r: RoyaleResult): 'victory' | 'defeat' | null {
   if (r.v === 'one_life') return r.place === 1 ? 'victory' : 'defeat';
   const w = windowOf(r);
   if (r.place === 1 || (w !== null && w.rank <= 3)) return 'victory';
-  const rank = w?.rank ?? r.place;
-  const of = w?.of ?? r.of;
-  return rank > of / 2 ? 'defeat' : null;
+  if (w !== null) return null;
+  return r.place > r.of / 2 ? 'defeat' : null;
 }
