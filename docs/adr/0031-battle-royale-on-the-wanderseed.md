@@ -224,3 +224,32 @@ back within 10 m of a champion 41 percent of the time (over seeds 1 and 2 of fif
   half the time (79 percent), and took their first takedown after 23 s at the median (18): the
   field's levels sit closer together and the Burr keeps more bots in a fight, so fewer soft bots
   out of combat stand at or under the drop-in's level (`grace.ts` fairFoes).
+
+## Amended: the Last light, and the Death beat's killer (2026-10-08)
+
+A Respawn ranking was mostly settled before the end: the last minutes asked nothing new of a
+seat a few takedowns behind. And the Death beat, designed to follow the killer for the first
+second of the wait, held on the fallen body instead: a dead champion sees nothing, so the
+killer's record left the snapshot on the fall. One life is unchanged.
+
+- **The Last light** (CONTEXT.md). From the start of the Dusk's last closing (528 s after
+  landing, the last 72 s of the 600) until the light goes out, a Respawn takedown counts twice
+  on the score: a plain one 2, the Lodestar 4, a settled Burr times its own factor too, for
+  people and bots alike (it is scoring, not behaviour). The sim tells it once, as it begins
+  (`royale_last_light`, step 'double'); the screen calls "LAST LIGHT" in the spotlight with a
+  sound of its own, then "Takedowns count double until the light goes out", and a small "x2"
+  stands beside the rank line while it lasts. The window is read off the match clock
+  (`src/sim/royale/last_light.ts`), so nothing new enters the checkpoint or the wire. No death
+  is final: the final seconds first planned for it, and the wire's `fi` block, are removed.
+- **The Death beat's killer.** Through the Respawn wait the fallen seat alone is sent, in the
+  mode block's `wa`, its killer's unit id, champion, skin, team, point and health, while the
+  killer stands (the carrier of the Burr hung by this very fall; nothing for a fall nobody
+  landed). The mirror draws the body from it (`src/net/watch_body.ts`) and hands it over to the
+  killer's own record once it is back in sight, so the camera follows it until the globe rises
+  (`src/game/death_beat.ts`). No observation reads it: the bots see nothing new.
+- **Rules 7.** The planet's rules version moves from 6 to 7.
+- **Measured** (`node scripts/royale_report.mjs --seeds 6`, both variants, against the same
+  report on rules 6). Respawn: the bots fight 65.2 percent of the seconds an enemy is in reach
+  against 65.4, the steals stay 42.9 percent, the stand-in's median life stays 15.7 s, the final
+  level median stays 10. The winners change on five of the six seeds (the Lodestar and the marks
+  follow the score). One life is identical, match for match.
