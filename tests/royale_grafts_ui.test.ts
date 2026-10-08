@@ -15,6 +15,7 @@ import { auraOpacity, heartwoodColor } from '../src/render/planet_graft_aura';
 import { GRAFT_LIST, GRAFTS } from '../src/sim/content/grafts';
 import { Sim } from '../src/sim/sim';
 import {
+  CARDS_ASIDE,
   cardOfKey,
   cardsBox,
   cardsCoverBox,
@@ -213,6 +214,24 @@ describe('where the cards stand', () => {
       ['cluster', { left: w - 300, top: 160, right: w, bottom: 390 }],
     ];
     for (const [name, box] of near) expect(overlaps(chip, box), name).toBe(false);
+  });
+
+  it('stand over the first steps and the thumbs hints, which step aside while they are open', () => {
+    // At 960x540 the row's left end covered the card's right end; on a
+    // phone the row stands over the whole card and the hints showed
+    // through it.
+    expect(overlaps(cardsCoverBox(960, false), stepsBox(960))).toBe(true);
+    const phoneSteps = { left: 211, top: 96, right: 633, bottom: 156 };
+    const thumbsHints = { left: 84, top: 44, right: 234, bottom: 117 };
+    expect(overlaps(cardsCoverBox(844, true), phoneSteps)).toBe(true);
+    expect(overlaps(cardsCoverBox(844, true), thumbsHints)).toBe(true);
+    expect(CARDS_ASIDE).toEqual(['.hud-steps', '.hud-hints']);
+  });
+
+  it('keep clear of the touch bar on a phone (Menu stood on the first card)', () => {
+    expect(overlaps(cardsCoverBox(844, true), { left: 8, top: 100, right: 74, bottom: 196 })).toBe(
+      false,
+    );
   });
 
   it('cover the title, the row and Later, inside the screen', () => {

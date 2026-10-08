@@ -147,7 +147,7 @@ export function graftNames(ids: readonly string[]): string[] {
 export const DESK_CARD_W_PX = 248;
 export const DESK_CARD_H_PX = 132;
 export const DESK_TOP_PX = 96;
-export const PHONE_CARD_W_PX = 240;
+export const PHONE_CARD_W_PX = 222;
 export const PHONE_CARD_H_PX = 104;
 export const PHONE_TOP_PX = 54;
 export const TITLE_H_PX = 30;
@@ -188,6 +188,12 @@ export function cardsCoverBox(width: number, compact: boolean): ScreenBox {
     bottom: row.bottom + (compact ? PHONE_LATER_H_PX : LATER_H_PX),
   };
 }
+
+// What steps aside while the cards are open: the first steps' card and
+// the controls' hints, which the cards' row stands over (at 960x540 the
+// card's right end, on a phone the whole card and the thumbs' hints) and
+// which showed through them.
+export const CARDS_ASIDE: readonly string[] = ['.hud-steps', '.hud-hints'];
 
 export function chipBox(_width: number, _height: number, _compact: boolean): ScreenBox {
   return {

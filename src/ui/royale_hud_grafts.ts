@@ -14,6 +14,7 @@ import { GRAFTS } from '../sim/content/grafts';
 import { setHidden } from './dom_write';
 import {
   CARD_GAP_PX,
+  CARDS_ASIDE,
   CHIP_H_PX,
   CHIP_LEFT_PX,
   CHIP_TOP_PX,
@@ -81,6 +82,9 @@ const CSS = `
   animation: br-graft-pulse 1.1s ease-in-out infinite; }
 @keyframes br-graft-pulse { 50% { box-shadow: 0 0 0 7px rgba(232, 196, 90, 0); }
   0%, 100% { box-shadow: 0 0 0 0 rgba(232, 196, 90, 0.6); } }
+/* While the cards are open, what they stand over steps aside. */
+${CARDS_ASIDE.map((s) => `.hud.br-cards-open ${s}`).join(', ')} {
+  visibility: hidden; opacity: 0; transition: none; }
 /* A phone: the same row under the top line, smaller; the chip in its corner. */
 .hud.compact .br-grafts { top: calc(${PHONE_TOP_PX}px + var(--safe-top, env(safe-area-inset-top, 0px))); }
 .hud.compact .br-grafts .ttl { height: ${PHONE_TITLE_H_PX}px; font-size: 15px; }
@@ -178,6 +182,7 @@ export class RoyaleHudGrafts {
     if (!this.offer || key === null) {
       setHidden(this.box, true);
       setHidden(this.chip, true);
+      this.host.root.classList.toggle('br-cards-open', false);
       this.shown = null;
       return;
     }
@@ -192,6 +197,7 @@ export class RoyaleHudGrafts {
     if (this.shown !== key) this.build(this.offer, me);
     setHidden(this.box, folded);
     setHidden(this.chip, !folded);
+    this.host.root.classList.toggle('br-cards-open', !folded);
     if (folded) {
       const text = graftChip();
       if (this.chip.textContent !== text) this.chip.textContent = text;
@@ -209,6 +215,7 @@ export class RoyaleHudGrafts {
     this.offer = null;
     this.box.hidden = true;
     this.chip.hidden = true;
+    this.host.root.classList.remove('br-cards-open');
     this.shown = null;
     this.host.pick(i);
     return true;
@@ -254,6 +261,7 @@ export class RoyaleHudGrafts {
   }
 
   dispose(): void {
+    this.host.root.classList.remove('br-cards-open');
     this.box.remove();
     this.chip.remove();
     this.style.remove();
