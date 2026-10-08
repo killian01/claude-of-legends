@@ -279,6 +279,17 @@ export interface ObsMark {
   shownAt: number;
 }
 
+// The seat's own Burr (additive v0 block, CONTEXT.md: Burr): the champion
+// that last took it down, its level, until when taking it down pays, and
+// where it stands while it stands (absent while it is dead). Only the
+// seat it was taken from reads it.
+export interface ObsBurr {
+  id: number;
+  level: number;
+  until: number;
+  at?: { x: number; y: number; z: number };
+}
+
 // A takedown ringing out (additive v0 block, CONTEXT.md: Clamor): where and
 // when, for CLAMOR_S.
 export interface ObsClamor {
@@ -339,6 +350,8 @@ export interface ObsRoyale {
   seedfalls?: readonly ObsSeedfall[];
   risings?: readonly ObsRising[];
   marks?: readonly ObsMark[];
+  // The seat's own Burr while it lasts (Respawn), absent otherwise.
+  burr?: ObsBurr;
   clamors?: readonly ObsClamor[];
   arriving?: boolean;
   graced?: readonly { id: number; until: number }[];

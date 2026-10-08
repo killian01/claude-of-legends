@@ -10,7 +10,7 @@ import type { RoyaleSkill } from '../../content/bots/royale_skills';
 import type { ChampionDef } from '../../content/champions';
 import { CHAMPIONS } from '../../content/champions';
 import { dist, type Vec3 } from '../../geo';
-import type { Observation, ObsRoyale, ObsSelf, ObsUnit } from '../../policy';
+import type { ObsBurr, Observation, ObsRoyale, ObsSelf, ObsUnit } from '../../policy';
 import type { RoyaleLayout } from '../layout';
 import type { DuskCap } from '../types';
 
@@ -34,6 +34,8 @@ export interface Sense {
   readonly attackRange: number;
   // Hit by an enemy champion within the last two seconds.
   readonly struck: boolean;
+  // The seat's own Burr while it lasts (ObsRoyale.burr), else null.
+  readonly burr: ObsBurr | null;
 }
 
 export function p3(u: { x: number; z: number; y?: number }): Vec3 {
@@ -69,5 +71,6 @@ export function buildSense(
     speed: s.moveSpeed ?? 3.7,
     attackRange: s.attackRange ?? 5,
     struck: s.struckAt !== null && s.struckAt !== undefined && obs.time - s.struckAt <= 2,
+    burr: r.burr && r.burr.until >= obs.time ? r.burr : null,
   };
 }

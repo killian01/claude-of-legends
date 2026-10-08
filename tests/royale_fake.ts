@@ -89,6 +89,7 @@ export class FakeRoyaleSim implements RoyaleSim {
       seedfalls: [],
       risings: [],
       marks: [],
+      burrs: new Map(),
       clamors: [],
       wrathHolder: null,
       offers: new Map(),
