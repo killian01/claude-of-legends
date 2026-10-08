@@ -10,7 +10,7 @@ on 2026-10-02; this file keeps them in one place and tracks the build.
 |---|---|
 | Format | 50 champions, each for themself. House bots fill; a person takes a bot's seat. |
 | Variants | Respawn and One life, on the same planet with the same Dusk; only death differs. |
-| Respawn | Back in 5 s at the edge of the light, keeping everything. The most takedowns when the last light goes out wins. The score leader shows on the globe every 30 s and is worth 2. Join until 2 min from the end; the next match starts at once. |
+| Respawn | Back in 5 s at the edge of the light, keeping everything, or where a tap on the globe during the wait picked, inside the light and 10 m from everyone. The most takedowns when the last light goes out wins. The score leader shows on the globe every 30 s and is worth 2. Join until 2 min from the end; the next match starts at once. |
 | One life | One life, the last standing wins. Join during the calm 1:30. |
 | Length | 10 min: 1:30 calm, then the Dusk closes in 5 phases. |
 | Planet | The Wanderseed: a true sphere, radius 80 m, walked round in every direction; about 1,100 m2 a champion; equator 500 m. |
