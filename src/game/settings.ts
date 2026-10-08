@@ -34,8 +34,7 @@ export interface GameSettings {
   ladderTold: boolean;
   // A left click on the ground walks and on an enemy attacks, like the
   // right click (game/boot.ts): a laptop's trackpad clicks left, and a
-  // visitor whose clicks did nothing left within half a minute (the seat
-  // report, 2026-10-01). Off, a left click only selects, the genre's way.
+  // left click that did nothing left a trackpad with no way to play. Off, a left click only selects, the genre's way.
   leftClickMoves: boolean;
   // The first steps (ui/first_steps.ts): hidden by the player, and the
   // steps this browser has done, so a returning player meets only what

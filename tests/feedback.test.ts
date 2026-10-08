@@ -162,8 +162,8 @@ describe('the server side', () => {
   });
 });
 
-// The line at the start of a match that says the box exists: most matches
-// end with the tab closed, so the end screen alone asks almost nobody.
+// The line at the start of a match that says the box exists: a match can
+// end without its end screen, so the end screen alone is not enough.
 describe('the feedback nudge', () => {
   it('waits for the opening shop, then stays its moment and goes', () => {
     let s = NUDGE_START;

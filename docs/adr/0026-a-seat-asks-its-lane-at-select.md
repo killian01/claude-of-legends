@@ -2,8 +2,8 @@
 
 A person used to be seated in a lane nobody told them about: the sim dealt every champion its
 role's home lane (`src/sim/lanes.ts`), a human's seat counted like a bot's, and nothing on
-the wire or on screen said which lane it was. The maintainer's reading of the first visitors
-was that they were dropped on the map with no direction. `docs/plan-forest.md` had deferred
+the wire or on screen said which lane it was. A person was dropped on the map with no
+direction. `docs/plan-forest.md` had deferred
 "a human's lane label for the forest (a human roams as they like)"; this decision reverses it.
 
 - **The choice.** Champion select offers four lane preferences: top lane, mid lane, bot lane

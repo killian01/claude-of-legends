@@ -150,7 +150,7 @@ describe('player settings', () => {
   });
 
   // A trackpad clicks left: a left click walks and attacks unless the
-  // player turned it off (game/boot.ts, the seat report of 2026-10-01).
+  // player turned it off (game/boot.ts).
   it('lets a left click walk by default, and keeps it off once turned off', () => {
     expect(DEFAULT_SETTINGS.leftClickMoves).toBe(true);
     expect(clampSettings({ leftClickMoves: false }).leftClickMoves).toBe(false);

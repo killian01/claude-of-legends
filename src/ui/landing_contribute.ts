@@ -9,7 +9,7 @@
 // Three ways in, and they are ordered by how far a newcomer has to walk.
 // Adding a champion is first because it is the one that sounds impossible
 // and is not. Training a bot is second because it is the strangest thing
-// here and the reason some people will stay. An open issue is last because
+// here and the one only this game offers. An open issue is last because
 // it is the ordinary answer, and the one that needs no imagination.
 //
 // Each line says what the visitor would get to do, and nothing about how

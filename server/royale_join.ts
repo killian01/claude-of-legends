@@ -72,12 +72,12 @@ export interface BotSeatCandidate {
   level: number;
 }
 
-// The seat a newcomer takes: never one out for good; a bot playing the
+// The seat a drop-in takes: never one out for good; a bot playing the
 // champion they picked first, then one standing; within that, given the
 // field's level (the lower median of every champion's, Respawn's
 // RoyaleMatch.takeBotSeat), the seat nearest it, then the higher level (a
-// visitor took a level 3 seat at 7:26 with 46 of the 49 champions above
-// it, the seat reports, 2026-10-08); then the lowest unit id, so the
+// seat taken minutes in could be level 3 with nearly every champion above
+// it); then the lowest unit id, so the
 // choice depends on nothing but the match.
 export function chooseBotSeat(
   seats: readonly BotSeatCandidate[],

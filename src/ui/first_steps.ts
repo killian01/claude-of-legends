@@ -1,10 +1,9 @@
 // First steps (CONTEXT.md): what a newcomer's first matches tell them to
 // do, one short line at a time, picked from what is happening and gone
-// once it is done. A visitor who never played the genre lands with four
+// once it is done. A player who never played the genre lands with four
 // locked spells and a lane to find, and nobody told them to learn a spell,
 // to take the last hit on a minion, to throw the spell at the enemy
-// champion or to back off when hurt (the seat reports, 2026-10-01: a
-// minute and a half of clicks, then the tab closed).
+// champion or to back off when hurt.
 //
 // A step shows when it applies and leaves when it is done. What the player
 // does on their own counts as done too, shown or not, so somebody who

@@ -19,10 +19,10 @@
 // ready, items kept, its level kept unless Respawn lifts it to the field's,
 // and the seat's tally (score, kills, deaths, assists, streak) started from
 // zero for the person taking it.
-// A Respawn Arrival's Grace waits on the person (the seat reports,
-// 2026-10-08: the server began it while a slow client kept its joining
-// card up to FIRST_FRAME_WAIT_MS, so a newcomer could first see the world
-// with the Grace over and a foe 10 m away): past ARRIVAL_GRACE_S it lasts
+// A Respawn Arrival's Grace waits on the person (the server begins it as
+// the seat is taken, while a slow client keeps its joining card up to
+// FIRST_FRAME_WAIT_MS, so the world could first show with the Grace over
+// and a foe 10 m away): past ARRIVAL_GRACE_S it lasts
 // until the seat's first order of any kind, at most ARRIVAL_GRACE_MAX_S.
 // No signal from the client is trusted: the orders are the seat's own and
 // recorded, so a replay re-simulates it, and a bot, which orders on its

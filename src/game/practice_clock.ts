@@ -2,7 +2,7 @@
 // the tab, one player against house bots, so nothing is lost by holding
 // it still while that player cannot play: the phone still upright behind
 // the line asking for a turn, the pause menu open, or the shop that opens
-// by itself at the start of the match still up. A phone visitor used to
+// by itself at the start of the match still up. A phone used to
 // lose the first seconds of the match to all three, and on an iPhone the
 // wall could last until the tab was closed. A match against the server
 // never holds; its clock is the server's (src/main.ts only asks this of

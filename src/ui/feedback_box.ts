@@ -21,9 +21,9 @@ export const FEEDBACK_PLACEHOLDER = 'What felt wrong, what is missing, what you 
 export const FEEDBACK_SEND = 'Send';
 export const FEEDBACK_THANKS = 'Thank you. I read every one of these.';
 
-// The line at the start of a match that says the box exists. Most matches
-// end with the tab closed, never on the end screen or through the pause
-// menu, so a player who is only asked there is never asked at all. It
+// The line at the start of a match that says the box exists. A match can
+// end without its end screen or the pause menu, so a player who is only
+// asked there may never be asked at all. It
 // comes up once the opening shop is out of the way, stays a moment, and a
 // click on it opens the menu where the box is.
 export const NUDGE_CALL_MOUSE = 'Tell me what to improve: click here, or press Esc at any time.';

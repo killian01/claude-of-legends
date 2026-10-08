@@ -94,8 +94,7 @@ describe('the cards', () => {
   });
 
   it('wait folded for the first seconds after landing, then open', () => {
-    // 4 visitors in 8 never picked the cards open on landing, and all 4
-    // left within 39 s.
+    // Open on landing, the cards covered the first fight.
     expect(GRAFT_SETTLE_S).toBe(12);
     expect(graftFolded(null, false, false, false, 0)).toBe(true);
     expect(graftFolded(null, false, false, false, GRAFT_SETTLE_S - 0.1)).toBe(true);

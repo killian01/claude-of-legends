@@ -1,8 +1,7 @@
 // The own champion drawn where it is going (ADR 0028). Online, an order
 // reaches the server half a round trip after the click and its effect
 // comes back half a trip later, so the champion used to answer a click a
-// round trip late: a third of a second from Brazil (the seat report,
-// 2026-10-01). The client keeps the orders it sent and draws its champion
+// round trip late: a third of a second on a far connection. The client keeps the orders it sent and draws its champion
 // as the server will have it once they land: every frame it re-walks the
 // newest state the server told for the time an order sent now would land
 // at, the orders still on their way applied when each lands, with the

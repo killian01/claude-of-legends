@@ -375,11 +375,11 @@ proxying CDN the chain names the player, and with DNS-only records that header
 is absent and `X-Real-IP` (the peer Caddy saw) is the right answer. Changing
 either `header_up` line means rereading `server/edge.ts` first.
 
-The two `lb_` lines are what a visitor sees during a deployment. Recreating the
+The two `lb_` lines are what a page load meets during a deployment. Recreating the
 container leaves nothing to dial for ten to twenty seconds, and without them
 every request in that window is a 502, which Cloudflare shows as its own "Bad
-gateway" page; that is what the first Reddit visitors met. With them Caddy
-holds the request and keeps trying for up to 30 seconds, so the visitor sees a
+gateway" page. With them Caddy
+holds the request and keeps trying for up to 30 seconds, so the browser shows a
 pause and then the page. Cloudflare waits 100 seconds on an origin, so the
 hold is well inside it.
 

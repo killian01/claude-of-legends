@@ -386,8 +386,7 @@ describe('the keys and the bag in a battle royale', () => {
 });
 
 // The wash of a Respawn death: who, how close it was, and what the life
-// held (4 of the 10 visitors who died left within 5 s of the first death,
-// during a wait that said only who and when).
+// held (the wait used to say only who and when).
 describe('a Respawn death', () => {
   it('names the killer with its level, champion and health while its body was seen', () => {
     expect(royaleRecap('Pinetinder', { champion: 'Korrath', level: 6, hpShare: 0.31 })).toBe(

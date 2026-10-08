@@ -4,8 +4,8 @@
 // champion comes back, inside the light it comes back to. What the stage
 // (render/planet_stage.ts) and the death wash (ui/hud.ts) both decide off
 // the world, pure: whether the globe shows, the light it faces, and the
-// wash's line about it. 4 of the 10 visitors who died left during the 5 s
-// wait (the seat reports, 2026-10-08): the wait now holds a choice.
+// wash's line about it. The 5 s wait held nothing but a count: it now
+// holds a choice.
 
 import type { SnapDusk, SnapRoyale, WirePoint } from '../net/royale_wire';
 import type { Vec3 } from '../sim/geo';

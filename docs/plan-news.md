@@ -11,8 +11,8 @@ what was decided; the two changes ship in that order, each as one commit and one
 **What a news is.** Written by hand, in English, about the server only: an update, an
 event, a decision. Nothing generated from the players (no sealed champions, no Arena
 nights, no promotions) and no counter, because a counter reads small on a quiet day and the
-home's panels already show the latest from the Forge and the ladder. The goal is that a
-visitor sees life on a quiet day, and a dated note from three days ago is alive where a
+home's panels already show the latest from the Forge and the ladder. The goal is that the
+server reads alive on a quiet day, and a dated note from three days ago is alive where a
 zero is not.
 
 **Where the entries live.** In the repository, as data-as-code: one object per entry in a

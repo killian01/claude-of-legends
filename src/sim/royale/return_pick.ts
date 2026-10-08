@@ -12,8 +12,7 @@
 // nearest ring holding one gives the point farthest from every champion
 // (the first heading on a tie); with none, the edge of the light as
 // without a pick (score.ts edgeOfLight). No draw from the match's stream.
-// 4 of the 10 visitors who died left during the 5 s wait (the seat
-// reports, 2026-10-08): the wait now holds a choice.
+// The 5 s wait held nothing but a count: it now holds a choice.
 
 import { dist2, dot, heading, unit, type Vec3 } from '../geo';
 import { arrivalDepth, deepInLight, snapLanding } from './drop';

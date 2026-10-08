@@ -3,13 +3,12 @@
 > Amends ADR 0006 (a Guest now has a line on a ladder, kept by a cookie; the rating ladder is
 > untouched) and ADR 0024 (a Guest is kept on disk once it scores or names itself).
 
-ADR 0024 let a visitor play the public queue without an account, and kept the Guest off every
+ADR 0024 let a person play the public queue without an account, and kept the Guest off every
 ladder, because a ladder was a rating and a stranger nobody can hold to a name must not move an
 account's number. That is still right for the rating. What it left the landing was a ladder of a
-handful of accounts, a bot column most visitors could not place on, and a Play button whose fine
-print said "Unranked." The counter's reading of the visitors is that they come to play people and
-leave before a match ends: one end of match reported for thirty-seven started. A ladder only the
-patient could reach was one nobody reached.
+handful of accounts, a bot column most players could not place on, and a Play button whose fine
+print said "Unranked." A ladder reached only by registering and finishing ranked matches is one
+few players ever stand on.
 
 So every human now scores, from the first match, on one ladder: the ladder of every human, the
 accounts and the Guests together (CONTEXT.md: Points, Ladder).

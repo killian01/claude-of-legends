@@ -2,8 +2,8 @@
 // play, ui/hud.ts): it fades once it has been read, and it is only read
 // while nothing covers it. It used to fade 12 s after the HUD appeared
 // whatever stood over it, and on a phone the opening shop and the turn
-// wall stood over it for most of those 12 s: a visitor who closed the shop
-// after 8 s never saw it. So its clock runs only while nothing covers the
+// wall stood over it for most of those 12 s: closing the shop after 8 s
+// left it barely seen. So its clock runs only while nothing covers the
 // HUD (the shop, the pause menu, the end screen, the turn wall), in match
 // seconds, the lane card's clock (ui/lane_guide.ts).
 

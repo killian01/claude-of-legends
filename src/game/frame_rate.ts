@@ -3,8 +3,8 @@
 // counts the frames the browser paints, and each answer to the server's
 // round-trip probe carries the rate since the one before. Nothing while
 // the tab is hidden: a browser stops painting it, and that is no frame
-// rate. Visitors left inside two minutes and nothing said whether the
-// planet drew at five frames a second on their machine (2026-10-03).
+// rate. Without it nothing said whether the planet drew at five frames a
+// second on a given machine.
 //
 // The rate is the frames over the time between them, not over the time
 // since the last probe: a tab hidden for four of its five seconds and

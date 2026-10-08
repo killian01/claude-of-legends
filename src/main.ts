@@ -386,8 +386,8 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
     const layer = appNav().push('match', () => exit('menu'));
     layer.guard(() => pres.toggleEscapeMenu());
     let guarded = true;
-    // A match is on screen, which is as far down the funnel as a visitor
-    // with no account can get. Practice and the Forge test drive both land
+    // A match is on screen, the 'played' step of the counter's steps
+    // (src/net/stats.ts). Practice and the Forge test drive both land
     // here; the replay viewer below deliberately does not, since watching
     // is not playing.
     trackStep('played');
