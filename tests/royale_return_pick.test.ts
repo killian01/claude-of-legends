@@ -223,6 +223,18 @@ describe('a Respawn return', () => {
   });
 });
 
+describe('a seat taken while it waits', () => {
+  it('drops the pick its bot made: the Arrival comes down on its own rule', () => {
+    const { sim, unitIds } = landed('respawn');
+    const id = unitIds[2]!;
+    down(sim, id, RESPAWN_S);
+    expect(sim.pickDrop(id, sim.units.get(unitIds[0]!)!.pos as Vec3)).toBe(true);
+    sim.beginArrival(id);
+    expect(sim.units.get(id)!.dead).toBe(false);
+    expect(sim.royale!.respawnPicks.has(id)).toBe(false);
+  });
+});
+
 function person(clientId: number): RoyalePerson {
   return {
     clientId,
