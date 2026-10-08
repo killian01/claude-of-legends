@@ -654,7 +654,7 @@ export class RoyaleHud {
     }
     return {
       title: 'SLAIN',
-      sub: `Back in ${Math.max(0, u.respawnAt - this.host.world.time).toFixed(1)} s, at the edge of the light`,
+      sub: `Back in ${Math.max(0, u.respawnAt - this.host.world.time).toFixed(1)} s`,
     };
   }
 
