@@ -113,7 +113,8 @@ how its teams are counted, ADR 0030)
 **Respawn**:
 The battle royale variant where a death costs five seconds: the champion comes back at the edge
 of the light (of the light it closes to, while the Dusk closes) with everything it had, and the
-most takedowns when the last light goes out wins.
+most takedowns when the last light goes out wins. A takedown's experience goes to its last hit,
+and a share of it to every champion with an assist on it.
 What Play now launches.
 _Avoid_: loop mode, deathmatch
 
@@ -1185,14 +1186,17 @@ A battle royale drop-in's coming down: the seat a person takes from its bot in p
 fresh (full health and mana, everything ready), its tally from zero, in its Grace. In Respawn
 it comes down at least one level under the middle of the field, a few steps from a fair first
 fight (a bot out of combat, the softest in reach, no higher in level, in sight of each other,
-nobody else near), else at a quiet spot; in One life at a quiet spot.
+nobody else near), else at a quiet spot, and its Grace waits for the person's first order; in
+One life at a quiet spot.
 _Avoid_: spawn, deploy
 
 **Grace**:
 The three seconds a champion just come down (an Arrival, a Respawn return) can be neither
-hurt nor targeted; its own first attack, cast or sigil ends it early. Not the Calm, which is
-the whole field's. A word of the code for now: players see the Untouchable status, and the
-word needs an IP check before any player reads it (another game's respawn points carry it).
+hurt nor targeted; its own first attack, cast or sigil ends it early. A Respawn Arrival's waits
+for the person, whose screen may still be loading: past its three seconds it lasts until the
+seat's first order of any kind, six seconds at most. Not the Calm, which is the whole field's.
+A word of the code for now: players see the Untouchable status, and the word needs an IP check
+before any player reads it (another game's respawn points carry it).
 _Avoid_: spawn protection, invulnerability
 
 **Pad slam**:
