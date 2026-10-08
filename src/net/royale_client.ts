@@ -274,11 +274,14 @@ export function royaleKill(e: { unitId: number; killerId: number }): {
 }
 
 // A champion in its Grace as the client reads the snapshot's ar block
-// (src/sim/royale/grace.ts): who, until when, and where it stood.
+// (src/sim/royale/grace.ts): who, until when, where it stood, and for a
+// Grace that waits on the seat's first order (a Respawn Arrival's) from
+// when an order ends it.
 export interface GraceNote {
   unitId: number;
   until: number;
   at: WirePoint;
+  from?: number;
 }
 
 // The Graces on a royale block, tolerant of a malformed entry; empty when
@@ -289,12 +292,22 @@ export function gracesOf(view: { ar?: unknown } | null | undefined): GraceNote[]
   if (!Array.isArray(list)) return out;
   for (const raw of list) {
     if (!Array.isArray(raw) || raw.length < 5) continue;
-    const [id, until, x, y, z] = raw as unknown[];
+    const [id, until, x, y, z, from] = raw as unknown[];
     if (num(id) && num(until) && num(x) && num(y) && num(z)) {
-      out.push({ unitId: id, until, at: [x, y, z] });
+      out.push({ unitId: id, until, at: [x, y, z], ...(num(from) ? { from } : {}) });
     }
   }
   return out;
+}
+
+// From when an order ends the own champion's Grace (a Respawn Arrival's
+// floor), null when it is not graced or its Grace waits on no order.
+export function ownGraceFloor(
+  view: { ar?: unknown } | null | undefined,
+  selfId: number,
+): number | null {
+  for (const g of gracesOf(view)) if (g.unitId === selfId) return g.from ?? null;
+  return null;
 }
 
 // When the own champion's Grace runs out, null when it is not graced.

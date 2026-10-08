@@ -85,6 +85,20 @@ export class AuraWatch {
 
 // `held` when an aura keeps it up (AuraWatch): the word alone, and a tip
 // that says so instead of the seconds.
+// The own champion's Grace while it waits on an order (a Respawn
+// Arrival's, src/sim/royale/grace.ts graceFloor): its seconds counted down
+// to the floor `from`, since an order before it does not end it, and past
+// the floor no number, since the first move ends it, whatever the status's
+// own run-out says.
+export function graceWaitChip(from: number, time: number): ChipFace {
+  const [word, says] = STATUS_WORDS.untargetable;
+  if (time < from) {
+    const secs = Math.max(1, Math.ceil(from - time));
+    return { glyph: word, sub: `${secs}s`, tip: `${says}, ${secs} s left, then until you move` };
+  }
+  return { glyph: word, sub: '', tip: `${says} until you move` };
+}
+
 export function statusChip(s: Status, time: number, held = false): ChipFace {
   const [word, says] = STATUS_WORDS[s.kind];
   const secs = Math.max(1, Math.ceil(s.until - time));

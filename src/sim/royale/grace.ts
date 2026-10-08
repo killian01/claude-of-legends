@@ -109,6 +109,14 @@ export function inGrace(mode: RoyaleMode, unitId: number, time: number): boolean
   return g !== undefined && time < g.until;
 }
 
+// When an order starts to end a champion's Grace (a Respawn Arrival's
+// floor), null for a Grace that waits on none and for no Grace: what the
+// screen counts down to, since past it the Grace lasts until the seat moves
+// (server/royale_snapshot_blocks.ts arrivalBlock, ui/chip_text.ts).
+export function graceFloor(mode: RoyaleMode, unitId: number): number | null {
+  return mode.graces.get(unitId)?.orderEndsFrom ?? null;
+}
+
 // At the start of a tick: a Grace run out, ended by its champion's own
 // first attack or cast, or past a Respawn Arrival's floor with an order
 // given, ends (in the order they began).

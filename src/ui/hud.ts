@@ -15,7 +15,7 @@ import { playSfx } from '../game/sfx';
 import type { CastTouch } from '../game/touch';
 import { followThumbScale, followUiScale, SETTINGS_EVENT } from '../game/ui_scale';
 import type { PointsReason } from '../net/protocol';
-import type { RoyaleNote } from '../net/royale_client';
+import { ownGraceFloor, type RoyaleNote } from '../net/royale_client';
 import type { RoyaleResult } from '../net/royale_wire';
 import { trackStep } from '../net/stats';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
@@ -57,6 +57,7 @@ import {
   boonChipFace,
   type ChipFace,
   favorChipFace,
+  graceWaitChip,
   statusChip,
   statusKey,
   wrathChipFace,
@@ -3380,8 +3381,14 @@ export class Hud {
       shown.push([s, key, n]);
     }
     this.auraWatch.step(standing);
+    // A Respawn Arrival's Grace counts to its floor, then waits on a move.
+    const graceFrom = this.royale ? ownGraceFloor(this.world.royaleView?.(), this.selfId) : null;
     for (const [s, key, n] of shown) {
-      chip(`status-${s.kind}-${n}`, statusChip(s, this.world.time, this.auraWatch.held(key)), null);
+      const face =
+        s.kind === 'untargetable' && graceFrom !== null
+          ? graceWaitChip(graceFrom, this.world.time)
+          : statusChip(s, this.world.time, this.auraWatch.held(key));
+      chip(`status-${s.kind}-${n}`, face, null);
     }
     this.reconcileChips(wanted);
 
@@ -3600,11 +3607,7 @@ export class Hud {
       const view = this.world.royaleView?.() ?? null;
       // And who carries the Burr of it: the next life's target.
       const burr = dead
-        ? burrWashLine(
-            view,
-            time,
-            (id) => this.world.seat?.(id)?.name ?? null,
-          )
+        ? burrWashLine(view, time, (id) => this.world.seat?.(id)?.name ?? null)
         : null;
       if (burr !== null) setText(this.deathBurr, burr);
       if (this.deathBurr.hidden !== (burr === null)) this.deathBurr.hidden = burr === null;

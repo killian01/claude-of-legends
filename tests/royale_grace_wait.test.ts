@@ -12,9 +12,12 @@ import { describe, expect, it } from 'vitest';
 import { royaleFactory } from '../server/royale_build';
 import { RoyaleMatch } from '../server/royale_match';
 import type { RoyalePerson } from '../server/royale_seats';
+import { arrivalBlock } from '../server/royale_snapshot_blocks';
 import { FIRST_FRAME_WAIT_MS } from '../src/game/first_frame';
 import type { ClientMsg } from '../src/net/protocol';
 import { applyReplayEvent, loadRoyaleReplay } from '../src/net/replay';
+import { gracesOf, ownGraceFloor } from '../src/net/royale_client';
+import { freshGraces, graceBegan } from '../src/render/planet_grace';
 import type { Vec3 } from '../src/sim/geo';
 import { buildObservation } from '../src/sim/observe';
 import { Rng } from '../src/sim/rng';
@@ -23,6 +26,7 @@ import { along, randomHeading } from '../src/sim/royale/layout';
 import { CALM_S, DROP_S } from '../src/sim/royale/types';
 import type { Sim } from '../src/sim/sim';
 import type { Unit } from '../src/sim/unit';
+import { graceWaitChip, statusChip } from '../src/ui/chip_text';
 import { loadPlanet } from './royale_planet';
 
 const SEATS = 12;
@@ -200,5 +204,62 @@ describe('the waiting Grace in a replay', () => {
     expect(wasGraced).toBe(true);
     for (const [k, g] of live) expect(replayed.get(k)).toBe(g);
     expect(replay.sim.checksum()).toBe(sim.checksum());
+  });
+});
+
+describe('the screen of a Grace that waits', () => {
+  const ctx = { seat: () => undefined, seats: SEATS, people: 1, caches: false };
+  const viewer = (v: Unit) => ({
+    unitId: v.id,
+    team: v.team,
+    known: new Set<number>(),
+    seat: { ack: 0, ackAt: 0 },
+  });
+
+  it('is sent with its floor, and a fixed Grace without one', () => {
+    const { match, u, t } = droppedIn();
+    match.tick();
+    const own = arrivalBlock(match.sim, viewer(u), ctx)!;
+    expect(own[0]![0]).toBe(u.id);
+    expect(own[0]![1]).toBeCloseTo(t + ARRIVAL_GRACE_MAX_S, 2);
+    expect(own[0]![5]).toBeCloseTo(t + ARRIVAL_GRACE_S, 2);
+    expect(ownGraceFloor({ ar: own }, u.id)).toBeCloseTo(t + ARRIVAL_GRACE_S, 2);
+    expect(gracesOf({ ar: own })[0]!.from).toBeCloseTo(t + ARRIVAL_GRACE_S, 2);
+    // One life's Arrival waits on nothing: no floor on the wire.
+    const one = droppedIn('one_life', 11, CALM_S / 2);
+    one.match.tick();
+    const fixed = arrivalBlock(one.match.sim, viewer(one.u), ctx)!;
+    expect(fixed[0]).toHaveLength(5);
+    expect(ownGraceFloor({ ar: fixed }, one.u.id)).toBeNull();
+    expect(gracesOf({ ar: fixed })[0]).not.toHaveProperty('from');
+  });
+
+  it('counts its chip down to the floor, then waits on a move with no number', () => {
+    // Before the floor: the seconds to it, as a fixed Grace's are counted.
+    expect(graceWaitChip(13, 10.2)).toEqual({
+      glyph: 'Untouchable',
+      sub: '3s',
+      tip: 'Untouchable, 3 s left, then until you move',
+    });
+    expect(graceWaitChip(13, 12.5).sub).toBe('1s');
+    // Past it, the status still runs to the cap, but a move ends it.
+    expect(graceWaitChip(13, 13)).toEqual({
+      glyph: 'Untouchable',
+      sub: '',
+      tip: 'Untouchable until you move',
+    });
+    expect(statusChip({ kind: 'untargetable', until: 16 }, 13).sub).toBe('3s');
+  });
+
+  it('raises the dust only when it has just begun, its floor telling when', () => {
+    const at: [number, number, number] = [0, 80, 0];
+    expect(graceBegan({ until: 10 + ARRIVAL_GRACE_MAX_S, from: 10 + ARRIVAL_GRACE_S })).toBe(10);
+    expect(graceBegan({ until: 10 + ARRIVAL_GRACE_S })).toBe(10);
+    const seen = new Set<number>();
+    const waiting = { unitId: 1, until: 10 + ARRIVAL_GRACE_MAX_S, from: 10 + ARRIVAL_GRACE_S, at };
+    // Walked into sight 2 s into a waiting Grace: no dust, though 4 s are left.
+    expect(freshGraces(seen, [waiting], 12)).toEqual([]);
+    seen.clear();
+    expect(freshGraces(seen, [waiting], 10.2).map((g) => g.unitId)).toEqual([1]);
   });
 });
