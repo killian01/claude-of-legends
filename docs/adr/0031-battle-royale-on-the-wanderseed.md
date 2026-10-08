@@ -156,4 +156,8 @@ back within 10 m of a champion 41 percent of the time (over seeds 1 and 2 of fif
 - **Measured** over fifty house bots, seeds 1 to 3: 30 percent of the returns are picked (339 of
   1,069, 296 of 1,023, 331 of 1,094), none of them within 10 m of a champion (11 m at the
   median), none outside the light; the dead seats' decisions cost about 15,000 more
-  observations a match, some 3 percent of the sim's time.
+  observations a match, some 3 percent of the sim's time. Four stand-in seats played by the
+  bots' brain among them, seeds 1 to 4, per life after a return: with no pick (the edge), 19 s
+  at the median, the first hit after 5.9 s, 0.86 takedowns; picking where it fell, 12 s, 2.6 s,
+  0.71; picking the far side of the light from its fall, 18.5 s, 4.0 s, 1.60. The pick is a real
+  choice: back into the same fight is quick and short, a fresh side of the light pays.
