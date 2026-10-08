@@ -48,6 +48,10 @@ export interface RoyaleSnapContext {
   // The recipient's place in the final ranking, once the match is over
   // (Respawn's places are known only then).
   finalPlace?: number;
+  // Respawn, a drop-in: every seat's score when the recipient landed
+  // (server/royale_match.ts RoyalePlayer.window); the rank line counts
+  // from there.
+  windowBase?: ReadonlyMap<number, number>;
 }
 
 const point = (p: Vec3): WirePoint => [round2(p.x), round2(p.y), round2(p.z)];
