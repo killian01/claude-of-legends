@@ -126,6 +126,7 @@ import {
   wrathChipText,
 } from './objective_line';
 import { firstPointsText, pointsWord, popText } from './points_text';
+import { GoalTrack } from './royale_goal';
 import { RoyaleHud, type RoyaleKill } from './royale_hud';
 import {
   ANNOUNCE_TOP_PX,
@@ -1329,6 +1330,9 @@ export class Hud {
   // The best Respawn tally this browser kept before this match's card,
   // read once (game/settings.ts royaleBest).
   private royaleBestBefore: number | null = null;
+  // The points this browser's battle royale seats earned before this match
+  // and since, for the end card's goal (ui/royale_goal.ts); null in a 5v5.
+  private readonly royaleGoal: GoalTrack | null;
 
   constructor(
     container: HTMLElement,
@@ -1353,6 +1357,12 @@ export class Hud {
     this.mode = mode;
     this.guideMode = guide;
     this.royaleVariant = royale;
+    this.royaleGoal = royale
+      ? new GoalTrack(
+          () => getSettings().royaleGoal,
+          (total) => updateSettings({ royaleGoal: total }),
+        )
+      : null;
 
     const style = document.createElement('style');
     style.textContent = CSS;
@@ -2090,6 +2100,7 @@ export class Hud {
   showPoints(delta: number, total: number, reason: PointsReason): void {
     this.pointsSeen = true;
     this.pointsEarned += delta;
+    this.royaleGoal?.earn(delta);
     this.endLadder.setEarned(this.pointsEarned);
     this.pauseLadder.setEarned(this.pointsEarned);
     this.pointsBox.classList.add('on');
@@ -2153,6 +2164,7 @@ export class Hud {
     this.royale.showResult(result, extras, {
       assists: own?.assists ?? 0,
       best: respawn ? best : 0,
+      goal: this.scores() ? (this.royaleGoal?.model() ?? null) : null,
     });
     if (respawn && respawnTally(result) > getSettings().royaleBest) {
       updateSettings({ royaleBest: respawnTally(result) });

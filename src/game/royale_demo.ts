@@ -229,7 +229,14 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
   if (scene === 'end-one') {
     window.setTimeout(() => pres.showRoyaleResult(result('one_life', 7, 3)), 600);
   } else if (scene === 'end-respawn') {
-    window.setTimeout(() => pres.showRoyaleResult(result('respawn', 3, 9)), 600);
+    window.setTimeout(() => {
+      // What the seat banked, for the goal across matches on the card
+      // (ui/royale_goal.ts): nine takedowns, four assists, three caches.
+      for (let i = 0; i < 9; i++) pres.showPoints(10, 10 * (i + 1), 'kill');
+      for (let i = 0; i < 4; i++) pres.showPoints(5, 90 + 5 * (i + 1), 'assist');
+      for (let i = 0; i < 3; i++) pres.showPoints(1, 110 + i + 1, 'cache');
+      pres.showRoyaleResult(result('respawn', 3, 9));
+    }, 600);
   }
   const items = ITEM_LIST.filter((i) => i.tier === 2);
   // The notices run on the wall clock: a software renderer steps the sim

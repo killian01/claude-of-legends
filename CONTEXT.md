@@ -1070,7 +1070,10 @@ the people's times the bots': two with a human on the other team, one and a half
 only on the seat's own, one alone; and half for a seat whose opposing lane seats play the Gentle
 player, which the match's start decides. Deaths cost nothing, and a seat left to a bot earns
 nothing more for its player. Never spent, and distinct from the rating, which only rated matches
-move, and from laurels and embers.
+move, and from laurels and embers. Respawn's end card also climbs the points a browser's battle
+royale seats have earned as levels, kept in that browser alone: Level 2 at 50 points, each next
+level a little further, the bar running from the last one reached to the next. Plain numbered
+levels, never named after the ladder or anyone on it, and not a champion's level.
 _Avoid_: score (the scoreboard's word), XP (the champion's), rating
 
 **Ladder**:
