@@ -136,6 +136,8 @@ import {
   STEPS_MAX_W_PX,
   STEPS_TOP_PX,
 } from './royale_layout';
+import { RoyaleLife, SeenChampions } from './royale_life';
+import { respawnTally, royaleSting } from './royale_result';
 import {
   hideRoyaleSteps,
   type RoyaleStepsState,
@@ -144,7 +146,7 @@ import {
   royaleStepsStart,
   stepRoyaleSteps,
 } from './royale_steps';
-import { LOOT_EMPTY, LOOT_LABEL, royaleHints } from './royale_text';
+import { LOOT_EMPTY, LOOT_LABEL, royaleHints, royaleRecap } from './royale_text';
 import { renderScoreboardTeam } from './scoreboard_table';
 import { buildSettingsPanel } from './settings_panel';
 import { shopSections } from './shop_sections';
@@ -780,6 +782,9 @@ const CSS = `
 .hud-overlay.modal { z-index: 41; pointer-events: auto; }
 .hud-overlay-title { font-size: 52px; font-weight: 800; letter-spacing: 2px; }
 .hud-overlay-sub { font-size: 16px; margin-top: 6px; }
+/* A Respawn death's life line, under the subtitle (ui/royale_life.ts). */
+.hud-overlay-life { font-size: 14px; margin-top: 6px; color: #e6dcb8;
+  font-variant-numeric: tabular-nums; }
 .hud-menu-btn {
   pointer-events: auto; margin-top: 10px; padding: 10px 26px; border-radius: 6px;
   border: 1px solid #466030; background: #1d2a14; color: #d8e6c0;
@@ -821,6 +826,7 @@ const CSS = `
 .hud.compact .hud-end-card { max-height: none; margin-top: 8px; padding: 8px 10px; gap: 8px; }
 .hud.compact .hud-overlay-title { font-size: 26px; letter-spacing: 1px; }
 .hud.compact .hud-overlay-sub { font-size: 12.5px; margin-top: 2px; }
+.hud.compact .hud-overlay-life { font-size: 11.5px; margin-top: 3px; }
 .hud.compact .hud-end-rating { font-size: 13px; margin-top: 2px; min-height: 0; }
 .hud.compact .hud-end-join { margin-top: 8px; font-size: 11.5px; }
 .hud.compact .hud-menu-btn { margin-top: 6px; padding: 8px 18px; font-size: 13px; }
@@ -1314,6 +1320,15 @@ export class Hud {
   // (ui/royale_steps.ts), in a match on the Wanderseed; null in a 5v5.
   private readonly royale: RoyaleHud | null;
   private royaleSteps: RoyaleStepsState | null = null;
+  // Respawn's wash (ui/royale_life.ts): the life that just ended, under
+  // the subtitle, and the champions last seen, for the killer's recap.
+  private readonly royaleVariant: RoyaleVariant | null;
+  private readonly royaleLife = new RoyaleLife();
+  private readonly royaleSeen = new SeenChampions();
+  private readonly deathLife: HTMLElement;
+  // The best Respawn tally this browser kept before this match's card,
+  // read once (game/settings.ts royaleBest).
+  private royaleBestBefore: number | null = null;
 
   constructor(
     container: HTMLElement,
@@ -1337,6 +1352,7 @@ export class Hud {
     this.guest = guest;
     this.mode = mode;
     this.guideMode = guide;
+    this.royaleVariant = royale;
 
     const style = document.createElement('style');
     style.textContent = CSS;
@@ -1910,7 +1926,9 @@ export class Hud {
     this.deathOverlay = el('div', 'hud-overlay');
     this.deathSub = el('div', 'hud-overlay-sub');
     this.deathTitle = el('div', 'hud-overlay-title', 'SLAIN');
-    this.deathOverlay.append(this.deathTitle, this.deathSub);
+    this.deathLife = el('div', 'hud-overlay-life');
+    this.deathLife.hidden = true;
+    this.deathOverlay.append(this.deathTitle, this.deathSub, this.deathLife);
 
     this.endOverlay = el('div', 'hud-overlay modal');
     this.endTitle = el('div', 'hud-overlay-title');
@@ -2126,13 +2144,29 @@ export class Hud {
       extras.push(this.endOffer);
     }
     extras.push(this.endFeedback.root);
-    this.royale.showResult(result, extras);
+    // Respawn's best (game/settings.ts royaleBest): the one kept before
+    // this match goes on the card, and this seat's tally is kept after it
+    // when higher. Read once, so a card drawn again says the same.
+    const respawn = result.v === 'respawn';
+    if (this.royaleBestBefore === null) this.royaleBestBefore = getSettings().royaleBest;
+    const best = this.royaleBestBefore;
+    this.royale.showResult(result, extras, {
+      assists: own?.assists ?? 0,
+      best: respawn ? best : 0,
+    });
+    if (respawn && respawnTally(result) > getSettings().royaleBest) {
+      updateSettings({ royaleBest: respawnTally(result) });
+    }
     this.deathOverlay.classList.remove('open');
-    // Heard once, when it came.
+    // Heard once, when it came: Respawn's middle of the field hears
+    // nothing (ui/royale_result.ts royaleSting).
     if (!this.endPlayed) {
       this.endPlayed = true;
-      playSfx(won ? 'victory' : 'defeat');
-      announceVoice(won ? 'victory' : 'defeat', true);
+      const sting = royaleSting(result);
+      if (sting) {
+        playSfx(sting);
+        announceVoice(sting, true);
+      }
     }
     this.syncOverlay();
   }
@@ -3003,14 +3037,36 @@ export class Hud {
         this.deathRecap =
           k.killerId === k.unitId || k.killerId === 0
             ? 'Burned by the Dusk'
-            : `Taken down by ${royale.killerName(k)}`;
+            : this.royaleVariant === 'respawn'
+              ? this.respawnRecap(k, royale)
+              : `Taken down by ${royale.killerName(k)}`;
       } else if (k.killerId === this.selfId && champion) {
+        this.royaleLife.tookDown();
         playSfx('kill');
         this.announce(`You took down ${royale.victimName(k)}`, '#ffd94a');
         if (!spoken) announceVoice('self_kill', true, true);
       }
       royale.play(calls);
     }
+  }
+
+  // Respawn's recap: who, and how close it was. The killer's body is read
+  // as last seen (ui/royale_life.ts SeenChampions), the death having taken
+  // the sight that showed it, and frozen in the line.
+  private respawnRecap(k: RoyaleKill, royale: RoyaleHud): string {
+    const time = this.world.time;
+    const body = this.royaleSeen.body(k.killerId, this.world.units.get(k.killerId), time);
+    const def = body ? this.world.championDef(body.championId) : null;
+    return royaleRecap(
+      royale.killerName(k),
+      body && def
+        ? {
+            champion: def.name,
+            level: body.level,
+            hpShare: body.maxHp > 0 ? body.hp / body.maxHp : 0,
+          }
+        : null,
+    );
   }
 
   // Called once per world tick.
@@ -3461,6 +3517,10 @@ export class Hud {
       // The battle royale's own wash (ui/royale_hud.ts), gone once its end
       // screen stands; and its own end screen, from the server's result.
       this.royale.update();
+      const time = this.world.time;
+      const inPlay = this.world.royaleView?.()?.st === 'play';
+      this.royaleLife.step(time, inPlay, u.dead, selfRow);
+      this.royaleSeen.note(this.world.units.values(), this.selfId, time);
       const dead = u.dead && !this.royale.resultShown();
       this.deathOverlay.classList.toggle('open', dead);
       if (dead) {
@@ -3468,6 +3528,10 @@ export class Hud {
         if (this.deathTitle.textContent !== words.title) this.deathTitle.textContent = words.title;
         setText(this.deathSub, this.deathRecap ? `${this.deathRecap} · ${words.sub}` : words.sub);
       }
+      // Respawn only: what the life that just ended held.
+      const life = dead && this.royaleVariant === 'respawn' ? this.royaleLife.line(selfRow) : null;
+      if (life !== null) setText(this.deathLife, life);
+      if (this.deathLife.hidden !== (life === null)) this.deathLife.hidden = life === null;
       this.syncOverlay();
       return;
     }

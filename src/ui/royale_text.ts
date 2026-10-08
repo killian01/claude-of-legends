@@ -2,7 +2,8 @@
 // at the top of the screen, the drop's banner, the badge of a mark the
 // viewer carries,
 // the cache being opened, the loot and level notices, the kill feed's
-// names with their bot marks, and the place a champion finished in. Pure:
+// names with their bot marks, a Respawn death's recap and its life line,
+// and the place a champion finished in. Pure:
 // the HUD hands in the mode's state as the last snapshot told it
 // (SnapRoyale, src/net/royale_wire.ts) and draws the words this answers
 // (ui/royale_hud.ts).
@@ -47,11 +48,14 @@ export function peopleText(n: number): string {
 // The count beside the Dusk line. One life: who is still in and the own
 // takedowns. Respawn: the own rank of everyone in the match, the own
 // takedowns, and how far behind the seat above (the lead, when first),
-// "#14 of 50 · 3 takedowns · 2 behind #13". Before anyone lands, how many
-// are in the match. On a phone (`compact`) the top is one row beside the
-// Dusk line and the minimap: the rank line leaves the takedowns out.
+// "#14 of 50 · 3 takedowns · 2 behind #13"; for a drop-in (rs) the rank
+// since they landed, "#4 since you landed · 3 takedowns · 1 behind #3",
+// which the server sends from their first takedown since then. Before
+// anyone lands, how many are in the match. On a phone (`compact`) the top
+// is one row beside the Dusk line and the minimap: the rank line leaves
+// the takedowns out.
 export function countLine(
-  r: Pick<SnapRoyale, 'v' | 'st' | 'alive' | 'people' | 'score' | 'rk' | 'gap'>,
+  r: Pick<SnapRoyale, 'v' | 'st' | 'alive' | 'people' | 'score' | 'rk' | 'gap' | 'rs'>,
   compact = false,
 ): string {
   if (r.st === 'drop') return `${r.alive} in the match, ${peopleText(r.people)}`;
@@ -59,9 +63,45 @@ export function countLine(
   if (r.v === 'one_life') return `${r.alive} left · ${takedowns}`;
   if (r.rk === undefined) return takedowns;
   const gap = gapText(r.rk, r.gap ?? 0);
-  return compact
-    ? `#${r.rk} of ${r.alive} · ${gap}`
-    : `#${r.rk} of ${r.alive} · ${takedowns} · ${gap}`;
+  const rank = r.rs === 1 ? `#${r.rk} since you landed` : `#${r.rk} of ${r.alive}`;
+  return compact ? `${rank} · ${gap}` : `${rank} · ${takedowns} · ${gap}`;
+}
+
+// Who ended a Respawn life, on the wash of the death: the seat's name and,
+// while the killer's body was in sight, its level, champion and health
+// then, "Taken down by Pinetinder, a level 6 Korrath on 31% health" (a
+// whole percent, at least 1%: it still stood). The champion's title after
+// its comma is left out, and the champion itself when it is the name.
+export function royaleRecap(
+  killerName: string,
+  killer: { champion: string; level: number; hpShare: number } | null,
+): string {
+  if (!killer) return `Taken down by ${killerName}`;
+  const champion = killer.champion.split(',')[0]?.trim() || killer.champion;
+  const pct = Math.min(100, Math.max(1, Math.round(killer.hpShare * 100)));
+  const body =
+    champion === killerName ? `level ${killer.level}` : `a level ${killer.level} ${champion}`;
+  return `Taken down by ${killerName}, ${body} on ${pct}% health`;
+}
+
+// A life's length on the wash: seconds under a minute, "42 s", the clock
+// past it, "2:05".
+function lifeClock(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+export function assistsText(n: number): string {
+  return n === 1 ? '1 assist' : `${n} assists`;
+}
+
+// What the Respawn life that just ended held, under the wash's subtitle:
+// "This life: 42 s · 1 takedown · 2 assists", a count of zero left out.
+export function lifeLine(seconds: number, takedowns: number, assists: number): string {
+  const parts = [`This life: ${lifeClock(seconds)}`];
+  if (takedowns > 0) parts.push(takedownsText(takedowns));
+  if (assists > 0) parts.push(assistsText(assists));
+  return parts.join(' · ');
 }
 
 // The gap of the rank line: behind the seat above, level with it, or the
