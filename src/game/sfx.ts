@@ -43,6 +43,9 @@ export type SfxName =
   // A Seedfall called (a bronze gong) and landing (the seed's impact).
   | 'gong'
   | 'boom'
+  // Respawn's Last light beginning (takedowns count double): a horn-like
+  // call rising a fifth over a low drum.
+  | 'lastlight'
   // The basic-attack palette a forged creator picks from
   // (src/sim/content/sounds.ts): swing and gunshot the roster's own, the
   // rest recordings in the bank, synthesized through their family.
@@ -617,6 +620,31 @@ export function playSfx(name: SfxName, gain = 1, place: SfxPlace = {}): void {
       tone(b, { freq: 70, slideTo: 24, dur: 1.1, type: 'sine', vol: 1.0, attack: 0.002 });
       noise(b, { dur: 1.3, freq: 700, slideTo: 90, type: 'lowpass', vol: 0.8, verb: 0.6 });
       noise(b, { dur: 0.12, freq: 2600, slideTo: 900, q: 0.9, vol: 0.45, attack: 0.001 });
+      break;
+    case 'lastlight':
+      // The Last light: a low drum, then a brass-like call rising a fifth,
+      // held, so it reads over the Dusk's toll on the same moment.
+      tone(b, { freq: 55, slideTo: 40, dur: 0.5, type: 'sine', vol: 0.9, attack: 0.003 });
+      noise(b, { dur: 0.25, freq: 400, slideTo: 120, type: 'lowpass', vol: 0.5 });
+      tone(b, {
+        freq: 293.66,
+        dur: 0.5,
+        type: 'sawtooth',
+        delay: 0.12,
+        vol: 0.16,
+        lpf: 1400,
+        verb: 0.6,
+      });
+      tone(b, {
+        freq: 440,
+        dur: 1.2,
+        type: 'sawtooth',
+        delay: 0.5,
+        vol: 0.2,
+        lpf: 1600,
+        verb: 0.7,
+      });
+      tone(b, { freq: 880, dur: 1.0, type: 'triangle', delay: 0.5, vol: 0.08, verb: 0.8 });
       break;
     case 'chime':
       // A column of light standing up: a high glassy bell and its octave.

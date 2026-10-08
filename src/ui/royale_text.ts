@@ -11,6 +11,7 @@
 import type { SnapDusk, SnapRoyale } from '../net/royale_wire';
 import { ITEM_PASSIVES } from '../sim/content/item_passives';
 import { ITEMS, type ItemDef, type ItemStats } from '../sim/content/items';
+import { LAST_LIGHT_FACTOR, lastLightOn } from '../sim/royale/last_light';
 import { nextLootPiece, seatBuild } from '../sim/royale/loot';
 import { CACHE_OPEN_S, MARK_SHOWN_S, type MarkKind } from '../sim/royale/types';
 
@@ -71,6 +72,17 @@ export function countLine(
   }
   const rank = `#${r.rk} of ${r.alive}`;
   return compact ? `${rank} · ${gap}` : `${rank} · ${takedowns} · ${gap}`;
+}
+
+// The small mark beside the rank line while Respawn's Last light counts a
+// takedown double, "x2", read off the snapshot's clock as the sim reads its
+// own (src/sim/royale/last_light.ts); null otherwise.
+export function doubleBadge(
+  r: Pick<SnapRoyale, 'v' | 'st' | 'de' | 'end'>,
+  time: number,
+): string | null {
+  const clock = { variant: r.v, stage: r.st, dropEndsAt: r.de, endsAt: r.end };
+  return lastLightOn(clock, time) ? `x${LAST_LIGHT_FACTOR}` : null;
 }
 
 // Who ended a Respawn life, on the wash of the death: the seat's name and,

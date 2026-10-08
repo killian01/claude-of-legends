@@ -52,6 +52,7 @@ import {
 } from './royale_steps';
 import {
   countLine,
+  doubleBadge,
   dropBanner,
   duskLine,
   duskPill,
@@ -104,7 +105,12 @@ const CSS = `
 .br-dusk.dark i { background: #3a0e18; box-shadow: 0 0 10px rgba(232, 74, 90, 0.6); }
 @keyframes br-ember { 50% { transform: scale(1.25); } }
 .br-count { font-size: 12.5px; font-weight: 700; color: #e6dcb8; letter-spacing: 0.3px;
-  white-space: nowrap; }
+  white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+/* Respawn's Last light: takedowns count double while it shows. */
+.br-x2 { padding: 0 6px; border-radius: 6px; background: #ffd36b; color: #2a1c04;
+  font-size: 11px; font-weight: 900; line-height: 16px; letter-spacing: 0.4px;
+  box-shadow: 0 0 8px rgba(255, 211, 107, 0.7); }
+.br-x2[hidden] { display: none; }
 .br-leader { display: flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
   border: 1px solid #8a7430; background: rgba(30, 26, 12, 0.88); color: #ffe08a;
   font-size: 12px; font-weight: 800; white-space: nowrap; }
@@ -278,7 +284,8 @@ const CSS = `
 .hud.compact .br-head { flex-direction: row; gap: 8px; }
 .hud.compact .br-dusk { font-size: 13px; padding: 3px 12px 3px 9px; gap: 7px; }
 .hud.compact .br-dusk i { width: 10px; height: 10px; }
-.hud.compact .br-count { font-size: 11px; }
+.hud.compact .br-count { font-size: 11px; gap: 4px; }
+.hud.compact .br-x2 { font-size: 10px; line-height: 14px; padding: 0 4px; }
 .hud.compact .br-leader { font-size: 10.5px; padding: 2px 8px; }
 .hud.compact .br-burn { font-size: 11px; padding: 3px 10px; }
 .hud.compact .br-drop { top: calc(66px + var(--safe-top, env(safe-area-inset-top, 0px)));
@@ -362,6 +369,9 @@ export class RoyaleHud {
   private readonly duskEl: HTMLElement;
   private readonly duskText: HTMLElement;
   private readonly countEl: HTMLElement;
+  private readonly countText: HTMLElement;
+  // Respawn's Last light: "x2" beside the rank line while it lasts.
+  private readonly doubleEl: HTMLElement;
   private readonly leaderEl: HTMLElement;
   private readonly leaderText: HTMLElement;
   private readonly burnEl: HTMLElement;
@@ -407,6 +417,10 @@ export class RoyaleHud {
     this.duskText = el('span', '');
     this.duskEl.append(el('i', ''), this.duskText);
     this.countEl = el('div', 'br-count');
+    this.countText = el('span', '');
+    this.doubleEl = el('b', 'br-x2');
+    this.doubleEl.hidden = true;
+    this.countEl.append(this.countText, this.doubleEl);
     this.leaderEl = el('div', 'br-leader');
     this.leaderText = el('span', '');
     this.leaderEl.append(el('i', 'br-crown'), this.leaderText);
@@ -492,7 +506,10 @@ export class RoyaleHud {
     setClassName(this.duskEl, `br-dusk ${line.tone}`);
     const compact = root.classList.contains('compact');
     const count = countLine(r, compact);
-    if (this.countEl.textContent !== count) this.countEl.textContent = count;
+    if (this.countText.textContent !== count) this.countText.textContent = count;
+    const double = doubleBadge(r, time);
+    setHidden(this.doubleEl, double === null);
+    if (double !== null && this.doubleEl.textContent !== double) this.doubleEl.textContent = double;
     // The Dusk's turns, said once each as they come.
     const turn = duskTurn(this.lastDusk, r.dusk);
     if (turn) this.announce(turn, r.dusk.p >= 6 ? '#f5a3a3' : '#ffb27a');

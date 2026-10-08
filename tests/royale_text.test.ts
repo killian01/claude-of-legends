@@ -14,6 +14,7 @@ import {
   clockText,
   completedText,
   countLine,
+  doubleBadge,
   dropBanner,
   duskLine,
   duskPill,
@@ -58,6 +59,19 @@ const snap = (over: Partial<SnapRoyale> = {}): SnapRoyale => ({
   alive: 50,
   people: 2,
   ...over,
+});
+
+describe("the Last light's mark", () => {
+  it('shows x2 beside the rank line from the Dusk last closing to the end', () => {
+    expect(doubleBadge(snap(), 10 + 527.9)).toBeNull();
+    expect(doubleBadge(snap(), 10 + 528)).toBe('x2');
+    expect(doubleBadge(snap(), 609)).toBe('x2');
+    expect(doubleBadge(snap({ st: 'over' }), 611)).toBeNull();
+  });
+
+  it('never shows in One life', () => {
+    expect(doubleBadge(snap({ v: 'one_life' }), 600)).toBeNull();
+  });
 });
 
 describe('the Dusk line', () => {
