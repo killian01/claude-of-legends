@@ -222,8 +222,15 @@ const THUMBS: Readonly<Partial<Record<RoyaleStepId, string>>> = {
   br_ult: 'Level 6: your ultimate is ready: tap R to cast it, or slide it to aim.',
 };
 
-export function royaleStepLine(id: RoyaleStepId, input: StepsInput): string {
+// With a mouse, the fight's line says the button that attacks: the left
+// one, or the right one when the leftClickMoves setting is off (the bar's
+// hints say the same, ui/royale_text.ts royaleHints).
+const RIGHT_CLICK_FIGHT =
+  'Right-click an enemy champion to attack it, and press Q, W or E to cast at your cursor.';
+
+export function royaleStepLine(id: RoyaleStepId, input: StepsInput, leftClickMoves = true): string {
   if (input === 'tap') return TAP[id] ?? MOUSE[id];
   if (input === 'thumbs') return THUMBS[id] ?? MOUSE[id];
+  if (id === 'br_fight' && !leftClickMoves) return RIGHT_CLICK_FIGHT;
   return MOUSE[id];
 }
