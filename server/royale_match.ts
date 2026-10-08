@@ -19,6 +19,7 @@ import {
   type RoyaleRecord,
 } from '../src/net/replay';
 import type { RoyaleResult, RoyaleVariant, SeatLabel } from '../src/net/royale_wire';
+import { takesReturnPick } from '../src/sim/royale/return_pick';
 import {
   freshStats,
   noteMoments,
@@ -335,10 +336,15 @@ export class RoyaleMatch {
     }
   }
 
-  // The landing point a person picked during the drop.
+  // The landing point a person picked during the drop, or in Respawn's
+  // play the point they picked to come back at while dead (src/sim/royale/
+  // return_pick.ts): a pick the sim would refuse is not recorded.
   pickDrop(clientId: number, x: unknown, y: unknown, z: unknown): void {
     const p = this.players.get(clientId);
-    if (!p || this.sim.royale.stage !== 'drop') return;
+    if (!p) return;
+    const r = this.sim.royale;
+    const dead = this.sim.units.get(p.unitId)?.dead === true;
+    if (r.stage !== 'drop' && !takesReturnPick(r.variant, r.stage, dead)) return;
     const at = wirePoint(x, z, y);
     if (!at || at.y === undefined) return;
     p.lastCommandAt = this.sim.tickCount;

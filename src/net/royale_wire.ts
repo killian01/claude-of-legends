@@ -98,6 +98,9 @@ export interface SnapRoyale {
   // Everyone else's landing picks during the drop, sent with the caches
   // once a second: the drop shows where the others mean to land.
   picks?: WirePoint[];
+  // Respawn: where the recipient picked to come back, while dead and once
+  // picked (src/sim/royale/return_pick.ts); absent otherwise.
+  bk?: WirePoint;
   // Optional blocks, absent until their rules ship
   // (server/royale_snapshot_blocks.ts builds each one):
   // The recipient's open Graft offer, and the Grafts they hold.
@@ -182,7 +185,8 @@ export type RoyaleClientMsg =
   // Enter a battle royale: joins a running match when one takes people
   // (ADR 0025's drop in), else starts one at once.
   | { t: 'royale'; v: RoyaleVariant; championId: string; sigils: [string, string]; skin?: number }
-  // The landing point picked during the drop.
+  // The landing point picked during the drop; in Respawn, while dead, the
+  // point picked to come back at.
   | { t: 'drop'; x: number; y: number; z: number }
   // A card of the open Graft offer.
   | { t: 'graft'; pick: number }
