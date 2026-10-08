@@ -1162,6 +1162,13 @@ three longest runs only), shown to everyone every fifteen seconds. Ending the ru
 it out and pays pieces.
 _Avoid_: on fire, killing spree, heating up
 
+**Burr**:
+Respawn's score to settle: whoever takes a champion down carries that champion's Burr for
+sixty seconds, seen by nobody but the champion it was taken from (a bearing at the screen's
+edge, a line on the wash of the death). Taking the carrier down while it lasts counts double
+and pays a piece; a later takedown of the same champion moves the Burr to the new taker.
+_Avoid_: bounty, nemesis, vendetta, revenge mark, grudge
+
 **Reprieve**:
 One life's one comeback: a champion that falls during the calm comes back once, eight
 seconds later at the edge of the light with sixty percent of its health. The fall still

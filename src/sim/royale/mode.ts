@@ -26,6 +26,7 @@ import type { Sim } from '../sim';
 import type { CombatCtx } from '../sim_context';
 import { DT } from '../types';
 import type { Unit } from '../unit';
+import { burrTakedown, clearBurrs, observeBurr, stepBurrs } from './burr';
 import { drawCacheSpots, openingBy, stepCaches } from './caches';
 import { noteClamor, observeClamors, stepClamors } from './clamors';
 import { dealEscorts, ESCORTS, escortLandings, normalizePick, resolveLandings } from './drop';
@@ -121,6 +122,8 @@ export interface RoyaleTally {
   creaturesTaken: number;
   wardensTaken: number;
   markTakedowns: number;
+  // Respawn takedowns that settled a Burr (burr.ts).
+  burrTakedowns: number;
   // Respawn Arrivals that came down beside a fair first fight (grace.ts).
   fairArrivals: number;
 }
@@ -185,6 +188,7 @@ export class RoyaleMode {
     creaturesTaken: 0,
     wardensTaken: 0,
     markTakedowns: 0,
+    burrTakedowns: 0,
     fairArrivals: 0,
   };
   private hpBefore = new Map<number, number>();
@@ -229,6 +233,7 @@ export class RoyaleMode {
       seedfalls: [],
       risings: [],
       marks: [],
+      burrs: new Map(),
       clamors: [],
       wrathHolder: null,
       offers: new Map(),
@@ -300,7 +305,10 @@ export class RoyaleMode {
   // (grace.ts arrive). Only in play.
   beginArrival(sim: Sim, unitId: number): void {
     const u = sim.units.get(unitId);
-    if (u && arrive(this, sim, u)) offerOnTrigger(this, sim, unitId, 'arrival');
+    if (!u || !arrive(this, sim, u)) return;
+    // It never fell and took nobody down: no Burr either way (burr.ts).
+    clearBurrs(this.state, unitId);
+    offerOnTrigger(this, sim, unitId, 'arrival');
   }
 
   // A champion back from a Respawn death (the sim's respawn loop, once its
@@ -529,11 +537,15 @@ export class RoyaleMode {
         const pay = markPayout(this.variant, lodestar, run);
         const holder = markOf(marks, victim.id, 'wrath') !== null;
         if (lodestar || run !== null || holder) this.tally.markTakedowns++;
-        this.lootPieces(sim, taker, 1 + pay.pieces, 'takedown');
+        // A Burr settled counts double and pays a piece more (burr.ts).
+        const burr = burrTakedown(this, sim, victim, taker);
+        if (burr.pieces > 0) this.tally.burrTakedowns++;
+        this.lootPieces(sim, taker, 1 + pay.pieces + burr.pieces, 'takedown');
         const share = streakShare(taker.killStreak);
         healShare(taker, takedownHealOf(taker, TAKEDOWN_HEAL) * share);
         manaShare(taker, TAKEDOWN_MANA * share);
-        this.state.scores.set(taker.id, (this.state.scores.get(taker.id) ?? 0) + pay.score);
+        const score = pay.score * burr.factor;
+        this.state.scores.set(taker.id, (this.state.scores.get(taker.id) ?? 0) + score);
         if (pay.snuffed !== null) {
           this.emit(sim, {
             type: 'royale_snuffed',
@@ -683,6 +695,7 @@ export class RoyaleMode {
     stepSeedfalls(this, sim);
     stepRisings(this, sim);
     stepMarks(this, sim);
+    stepBurrs(this, sim);
     stepClamors(this, sim);
     stepGrafts(this, sim);
     // The end.
@@ -783,6 +796,7 @@ export class RoyaleMode {
       ...observeSeedfalls(this, sim, u),
       ...observeRisings(this, sim, u),
       ...observeMarks(this, sim, u),
+      ...observeBurr(this, sim, u),
       ...observeClamors(this, sim, u),
       ...observeGrace(this, sim, u),
     };
