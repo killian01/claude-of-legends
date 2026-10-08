@@ -483,6 +483,7 @@ export class RoyaleHud {
       time,
       own ? { ad: own.stats.ad, maxHp: own.maxHp, grafts: r.gr ?? [] } : null,
       this.moments.sinceHit(time),
+      sinceLanding(this.landing, r.st, time),
     );
     const line = duskLine(r, time);
     if (this.duskText.textContent !== line.text) this.duskText.textContent = line.text;
