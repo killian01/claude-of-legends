@@ -208,12 +208,13 @@ describe('the end sting', () => {
     expect(royaleSting(at(26))).toBe('defeat');
   });
 
-  it('judges a drop-in on their window: a top three is a victory', () => {
-    expect([1, 3, 20, 40].map((rank) => royaleSting(at(45, rank)))).toEqual([
+  it('judges a drop-in on their window: a top three is a victory, and never a defeat', () => {
+    expect([1, 3, 20, 40, 50].map((rank) => royaleSting(at(45, rank)))).toEqual([
       'victory',
       'victory',
       null,
-      'defeat',
+      null,
+      null,
     ]);
   });
 
