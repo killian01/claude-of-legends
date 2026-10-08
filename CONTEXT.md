@@ -1201,6 +1201,9 @@ twenty-five meters: it hurts and slows the enemies standing there.
 _Avoid_: ground pound
 
 **Death beat**:
-The two and a half seconds the camera holds on whoever took a One life champion down,
-before following them.
+The camera on whoever took a champion down, right after the fall. In One life, the two and a
+half seconds it holds on them, before following them. In Respawn, the wait before the return:
+it follows them while the world shows their body or a mark shows them on the globe, holds on
+where the champion fell otherwise, and is back on the champion as it returns. A fallen
+champion sees nothing, so the beat shows only what the fog lets through.
 _Avoid_: kill cam, death recap
