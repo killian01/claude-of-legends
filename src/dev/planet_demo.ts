@@ -2,9 +2,10 @@
 // presentation (renderer, HUD, minimap, input) over a stand-in world on the
 // Wanderseed (planet_demo_world.ts), stepped at the sim's 20 Hz. Query
 // flags: ?drop=8 seconds of drop over the globe (0 lands at once),
-// ?dusk=near puts the Dusk's edge a few meters off, ?seed=n. A probe at
-// window.__planetDemo lets a headless browser steer it. Never imported by
-// the game.
+// ?dusk=near puts the Dusk's edge a few meters off, ?seed=n, ?royale=1 the
+// battle royale's HUD (Respawn). A probe at window.__planetDemo lets a
+// headless browser steer it (fall() shows the Respawn wait's globe). Never
+// imported by the game.
 
 import { startPresentation } from '../game/boot';
 import { whenChampionModelsReady } from '../render/champions/readiness';
@@ -52,6 +53,7 @@ const pres = startPresentation(app, world, world.selfId, 0, () => undefined, {
   terrain,
   fullscreen: false,
   guide: 'watch',
+  ...(params.get('royale') === '1' ? { royale: 'respawn' as const } : {}),
   onRenderer: (r) => {
     renderer = r;
     const render = r.render.bind(r);
@@ -92,6 +94,10 @@ requestAnimationFrame(frame);
   },
   pause(on = true) {
     paused = on;
+  },
+  // The player taken down: the Respawn wait and its globe.
+  fall(waitS = 5) {
+    world.fall(waitS);
   },
   placeholder: ground.placeholder,
   // The draw's cost over the last frames: milliseconds and draw calls.
