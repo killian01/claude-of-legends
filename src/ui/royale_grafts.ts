@@ -154,11 +154,13 @@ export const TITLE_H_PX = 30;
 export const PHONE_TITLE_H_PX = 22;
 export const CARD_GAP_PX = 12;
 export const PHONE_CARD_GAP_PX = 8;
-// The folded chip: under the top line on a desktop; on a phone above the
-// bar, which slides left of the middle for the thumbs (ui/hud.ts).
-export const DESK_CHIP_TOP_PX = 96;
-export const CHIP_LEFT_SHARE = 0.4;
-export const CHIP_BOTTOM_PX = 128;
+// The folded chip: in the top left corner, on a desktop as on a phone,
+// above the first steps' card and the thumbs' hints. Under the top line
+// in the middle it stood where the announcements come (at 112 px, over
+// it from the first takedown) and the mark's badge and the Dusk's pill
+// stack; above a phone's bar it stood on the notices ("Completed:").
+export const CHIP_LEFT_PX = 12;
+export const CHIP_TOP_PX = 8;
 export const CHIP_W_PX = 150;
 export const CHIP_H_PX = 30;
 
@@ -171,18 +173,13 @@ export function cardsBox(width: number, compact: boolean): ScreenBox {
   return { left: width / 2 - row / 2, top, right: width / 2 + row / 2, bottom: top + h };
 }
 
-export function chipBox(width: number, height: number, compact: boolean): ScreenBox {
-  if (!compact) {
-    return {
-      left: width / 2 - CHIP_W_PX / 2,
-      top: DESK_CHIP_TOP_PX,
-      right: width / 2 + CHIP_W_PX / 2,
-      bottom: DESK_CHIP_TOP_PX + CHIP_H_PX,
-    };
-  }
-  const mid = width * CHIP_LEFT_SHARE;
-  const bottom = height - CHIP_BOTTOM_PX;
-  return { left: mid - CHIP_W_PX / 2, top: bottom - CHIP_H_PX, right: mid + CHIP_W_PX / 2, bottom };
+export function chipBox(_width: number, _height: number, _compact: boolean): ScreenBox {
+  return {
+    left: CHIP_LEFT_PX,
+    top: CHIP_TOP_PX,
+    right: CHIP_LEFT_PX + CHIP_W_PX,
+    bottom: CHIP_TOP_PX + CHIP_H_PX,
+  };
 }
 
 // Whether the champion's body stays in sight under the cards: the row ends

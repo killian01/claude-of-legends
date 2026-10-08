@@ -856,8 +856,8 @@ const CSS = `
 .hud.compact .hud-overlay-sub { font-size: 12.5px; margin-top: 2px; }
 .hud.compact .hud-overlay-life { font-size: 11.5px; margin-top: 3px; }
 /* A phone: the Burr's line in two short lines, clear of the feed at the
-   right, and the wash raised by their height, clear of the Graft chip under
-   it (ui/royale_grafts.ts chipBox: its top 232 px down at 844x390). */
+   right, and the wash raised by their height, clear of the notices under
+   it (ui/royale_layout.ts compactNotesBox). */
 .hud.compact .hud-overlay-burr { font-size: 11.5px; margin-top: 4px; max-width: 250px;
   line-height: 1.2; text-wrap: balance; }
 .hud.compact .hud-overlay:not(.returning):has(> .hud-overlay-burr:not([hidden])) { padding-bottom: 36px; }

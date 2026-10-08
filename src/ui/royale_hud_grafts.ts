@@ -14,13 +14,12 @@ import { GRAFTS } from '../sim/content/grafts';
 import { setHidden } from './dom_write';
 import {
   CARD_GAP_PX,
-  CHIP_BOTTOM_PX,
   CHIP_H_PX,
-  CHIP_LEFT_SHARE,
+  CHIP_LEFT_PX,
+  CHIP_TOP_PX,
   CHIP_W_PX,
   DESK_CARD_H_PX,
   DESK_CARD_W_PX,
-  DESK_CHIP_TOP_PX,
   DESK_TOP_PX,
   GRADE_COLORS,
   GRADE_HINTS,
@@ -72,15 +71,17 @@ const CSS = `
   border: 1px solid rgba(255, 243, 214, 0.45); background: rgba(8, 10, 20, 0.78); color: #e6dcbc;
   font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; touch-action: manipulation; }
 .br-grafts .later:hover { border-color: #fff3cf; color: #fff3d6; }
-.br-graft-chip { position: absolute; left: 50%; top: calc(${DESK_CHIP_TOP_PX}px + var(--safe-top, env(safe-area-inset-top, 0px)));
-  transform: translateX(-50%); width: ${CHIP_W_PX}px; height: ${CHIP_H_PX}px; box-sizing: border-box;
+.br-graft-chip { position: absolute;
+  left: calc(${CHIP_LEFT_PX}px + var(--safe-left, env(safe-area-inset-left, 0px)));
+  top: calc(${CHIP_TOP_PX}px + var(--safe-top, env(safe-area-inset-top, 0px)));
+  width: ${CHIP_W_PX}px; height: ${CHIP_H_PX}px; box-sizing: border-box;
   padding: 0 10px; border-radius: 999px; border: 2px solid var(--c, #e8c45a); background: rgba(8, 10, 20, 0.9);
   color: #fff3d6; font: inherit; font-size: 13px; font-weight: 900; text-align: center; cursor: pointer;
   pointer-events: auto; touch-action: manipulation; z-index: 6;
   animation: br-graft-pulse 1.1s ease-in-out infinite; }
 @keyframes br-graft-pulse { 50% { box-shadow: 0 0 0 7px rgba(232, 196, 90, 0); }
   0%, 100% { box-shadow: 0 0 0 0 rgba(232, 196, 90, 0.6); } }
-/* A phone: the same row under the top line, smaller; the chip above the bar. */
+/* A phone: the same row under the top line, smaller; the chip in its corner. */
 .hud.compact .br-grafts { top: calc(${PHONE_TOP_PX}px + var(--safe-top, env(safe-area-inset-top, 0px))); }
 .hud.compact .br-grafts .ttl { height: ${PHONE_TITLE_H_PX}px; font-size: 15px; }
 .hud.compact .br-grafts .ttl small { font-size: 11px; }
@@ -94,7 +95,6 @@ const CSS = `
 .hud.compact .br-graft .t { margin-top: 3px; font-size: 12px; line-height: 1.25; }
 .hud.compact .br-graft .d { font-size: 11px; }
 .hud.compact .br-grafts .later { margin-top: 5px; padding: 3px 14px; font-size: 12px; }
-.hud.compact .br-graft-chip { left: ${CHIP_LEFT_SHARE * 100}%; top: auto; bottom: ${CHIP_BOTTOM_PX}px; }
 `;
 
 export interface GraftsHost {

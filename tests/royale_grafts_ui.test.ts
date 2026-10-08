@@ -27,7 +27,21 @@ import {
   graftFolded,
   graftNames,
 } from '../src/ui/royale_grafts';
-import { championBox, overlaps, type ScreenBox } from '../src/ui/royale_layout';
+import {
+  announceBox,
+  COMPACT_DONE_MAX_W_PX,
+  championBox,
+  compactNotesBox,
+  compactNoteWidth,
+  feedBox,
+  notesLane,
+  overlaps,
+  type ScreenBox,
+  slainBox,
+  spotBox,
+  stepsBox,
+  topLineBox,
+} from '../src/ui/royale_layout';
 import { royaleEnd } from '../src/ui/royale_result';
 import type { Snap } from './royale_contract_fixture';
 
@@ -148,18 +162,56 @@ describe('where the cards stand', () => {
     expect(inside(cardsBox(844, true), 844, 390)).toBe(true);
   });
 
-  it('sets the chip under the top line on a desktop, above the bar clear of the thumbs on a phone', () => {
-    for (const [w, h] of desks) {
-      const chip = chipBox(w, h, false);
+  it('sets the chip in the top left corner, on the screen and off the champion', () => {
+    for (const [w, h] of [...desks, [844, 390] as const]) {
+      const compact = w === 844;
+      const chip = chipBox(w, h, compact);
       expect(inside(chip, w, h)).toBe(true);
       expect(overlaps(chip, championBox(w, h))).toBe(false);
+      expect(chip.right).toBeLessThan(w / 2);
+      expect(chip.bottom).toBeLessThan(h / 4);
     }
-    const chip = chipBox(844, 390, true);
-    expect(inside(chip, 844, 390)).toBe(true);
-    expect(overlaps(chip, championBox(844, 390))).toBe(false);
-    // The stick's quarter and the cluster's corner (ui/thumb_cluster.ts).
-    expect(overlaps(chip, { left: 0, top: 230, right: 230, bottom: 390 })).toBe(false);
-    expect(overlaps(chip, { left: 844 - 300, top: 160, right: 844, bottom: 390 })).toBe(false);
+  });
+
+  it('keeps the chip off the banners, the badge and the pill, the spotlight, the steps and the feed on a desktop', () => {
+    // At 112 px down the announcements came over it, and the badge and the
+    // Dusk's pill stacked on it: it shows through every Respawn wait.
+    for (const [w, h] of desks) {
+      const chip = chipBox(w, h, false);
+      const near: [string, ScreenBox][] = [
+        ['announcement', announceBox(w)],
+        ['top line', topLineBox(w, false)],
+        ['spotlight', spotBox(w, h, false)],
+        ['first steps', stepsBox(w)],
+        ['feed', feedBox(w)],
+        ['wash', slainBox(w, h)],
+        ['notices', notesLane(w, h)],
+      ];
+      for (const [name, box] of near) expect(overlaps(chip, box), `${name} ${w}x${h}`).toBe(false);
+    }
+  });
+
+  it('keeps the chip off the notices and the thumbs on a phone, the Completed line included', () => {
+    const [w, h] = [844, 390];
+    const chip = chipBox(w, h, true);
+    for (const thumbs of [true, false]) {
+      expect(overlaps(chip, compactNotesBox(w, h, thumbs)), `thumbs ${thumbs}`).toBe(false);
+    }
+    // The longest finished item's line fits the column the box counts.
+    expect(compactNoteWidth('Completed: Doombrand \u00b7 Deathmark')).toBeLessThanOrEqual(
+      COMPACT_DONE_MAX_W_PX,
+    );
+    const near: [string, ScreenBox][] = [
+      ['top line', topLineBox(w, true)],
+      ['spotlight', spotBox(w, h, true)],
+      // The thumbs' hints, the touch bar's buttons, the stick's quarter
+      // and the cluster's corner (ui/hud.ts, ui/thumb_cluster.ts).
+      ['hints', { left: 84, top: 44, right: 234, bottom: 117 }],
+      ['touch bar', { left: 8, top: 100, right: 74, bottom: 196 }],
+      ['stick', { left: 0, top: 230, right: 230, bottom: 390 }],
+      ['cluster', { left: w - 300, top: 160, right: w, bottom: 390 }],
+    ];
+    for (const [name, box] of near) expect(overlaps(chip, box), name).toBe(false);
   });
 });
 

@@ -12,7 +12,6 @@ import type { Vec3 } from '../sim/geo';
 import { intoLight } from '../sim/royale/return_pick';
 import { RESPAWN_S } from '../sim/royale/types';
 import { burrTarget } from './royale_burr';
-import { CHIP_BOTTOM_PX, CHIP_H_PX } from './royale_grafts';
 
 // Seconds after the fall the globe rises: the body is seen to fall first.
 export const RETURN_GLOBE_AFTER_S = 1;
@@ -86,11 +85,10 @@ export function waitMarks(
 // stands some 57 percent across a 1280x720 screen and 60 on a phone's.
 export const RETURN_WASH_RIGHT_VW = 34;
 export const RETURN_WASH_LINE_VW = 46;
-// On a phone the lines stand on the folded Graft chip, which keeps
-// CHIP_BOTTOM_PX over the bottom (ui/royale_grafts.ts): their last ends
-// RETURN_WASH_CHIP_GAP_PX above it, whatever the screen's height.
-export const RETURN_WASH_CHIP_GAP_PX = 6;
-export const RETURN_WASH_PHONE_BOTTOM_PX = CHIP_BOTTOM_PX + CHIP_H_PX + RETURN_WASH_CHIP_GAP_PX;
+// On a phone the lines end RETURN_WASH_PHONE_BOTTOM_PX over the bottom,
+// whatever the screen's height: above the notices' column and the bar
+// (ui/royale_layout.ts compactNotesBox).
+export const RETURN_WASH_PHONE_BOTTOM_PX = 164;
 
 // The wash's line under the recap while the globe shows: what to do with
 // it, a phone's tap or a desktop's click, and once picked, that it holds.
