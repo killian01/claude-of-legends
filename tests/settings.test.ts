@@ -29,6 +29,7 @@ describe('player settings', () => {
       royaleStepsDone: [],
       royalePick: null,
       royaleBest: 0,
+      royaleGoal: 0,
     });
     expect(clampSettings({ sfx: 0.35, music: 0.8, announcer: true })).toEqual({
       sfx: 0.35,
@@ -46,6 +47,7 @@ describe('player settings', () => {
       royaleStepsDone: [],
       royalePick: null,
       royaleBest: 0,
+      royaleGoal: 0,
     });
   });
 
@@ -57,6 +59,18 @@ describe('player settings', () => {
     expect(clampSettings({ royaleBest: 7.9 }).royaleBest).toBe(7);
     for (const junk of [-3, '7', null, Number.NaN, Number.POSITIVE_INFINITY, { n: 7 }]) {
       expect(clampSettings({ royaleBest: junk }).royaleBest).toBe(0);
+    }
+  });
+
+  // The Respawn end card's goal (ui/royale_goal.ts): the points this
+  // browser's battle royale seats earned, a whole number, far past a
+  // count's cap, junk read as nothing.
+  it('keeps the battle royale points of the goal as a whole number, 0 by default', () => {
+    expect(DEFAULT_SETTINGS.royaleGoal).toBe(0);
+    expect(clampSettings({ royaleGoal: 1234.7 }).royaleGoal).toBe(1234);
+    expect(clampSettings({ royaleGoal: 5e9 }).royaleGoal).toBe(10_000_000);
+    for (const junk of [-3, '70', null, Number.NaN, Number.POSITIVE_INFINITY, { n: 7 }]) {
+      expect(clampSettings({ royaleGoal: junk }).royaleGoal).toBe(0);
     }
   });
 

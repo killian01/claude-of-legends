@@ -31,8 +31,9 @@
 // person into the running match at each listed time the server would take
 // one (Respawn until JOIN_UNTIL_END_S before the end, One life in the
 // calm): one bot seat taken the way the server does (chooseBotSeat with
-// DEFAULT_CHAMPION_ID and, in Respawn, the field's level), its bot
-// detached, its Arrival begun, then the --standin brain attached. Each
+// FIRST_ROYALE_CHAMPION, what a first visit's quick pick opens on, and, in
+// Respawn, the field's level), its bot detached, its Arrival begun, then
+// the --standin brain attached. Each
 // drop-in tells its level at landing, the nearest enemy then, whether a
 // fair first fight was found (RoyaleTally.fairArrivals), whether it sees
 // an enemy on the first tick after landing (team vision), the seconds to
@@ -63,7 +64,6 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { chooseBotSeat } from '../server/royale_join';
 import { buildRoyaleSim, type ReplayPick, type RoyalePlanet } from '../src/net/replay';
 import { ROYALE_SKILLS, type RoyaleSkillId } from '../src/sim/content/bots/royale_skills';
-import { DEFAULT_CHAMPION_ID } from '../src/sim/content/champions';
 import { GRAFT_LIST, GRAFTS } from '../src/sim/content/grafts';
 import { assemblePlanet } from '../src/sim/content/planet';
 import { dist } from '../src/sim/geo';
@@ -94,6 +94,7 @@ import {
 } from '../src/sim/royale/types';
 import { decodeSphereNav, findSpherePath, SphereNavGrid } from '../src/sim/sphere_nav';
 import { TICK_RATE } from '../src/sim/types';
+import { FIRST_ROYALE_CHAMPION } from '../src/ui/royale_pick_rules';
 
 const args = process.argv.slice(2);
 const opt = (name: string, fallback: string): string => {
@@ -487,7 +488,7 @@ function play(
       });
     const id = chooseBotSeat(
       candidates,
-      DEFAULT_CHAMPION_ID,
+      FIRST_ROYALE_CHAMPION,
       variant === 'respawn' ? fieldLevel : undefined,
     );
     if (id === null) return;

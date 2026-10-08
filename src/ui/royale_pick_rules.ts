@@ -16,6 +16,17 @@ export interface RoyalePick {
 // A first pick's sigils, the ones champion select starts on too.
 export const DEFAULT_SIGILS: [string, string] = ['riftstep', 'mend'];
 
+// The champion a browser's first battle royale opens the quick pick on,
+// with no pick remembered. A drop-in plays the champion it picked
+// (server/royale_join.ts chooseBotSeat), so this is what a first visit
+// lands with. Dain is a fighter, with a fighter's health and blows that
+// land in reach: of the duels on the planet (scripts/royale_duel.ts,
+// seeds 1 to 10, 2026-10-08) he wins 71% at landing and 67% after the
+// calm, second and third of the ten. Sylra, the house default, wins more
+// from a bot's hands, but a Mage keeps her foes off with aimed spells, and
+// a newcomer's first fight is won with what lands.
+export const FIRST_ROYALE_CHAMPION = 'dain';
+
 // What the card opens on: the pick remembered, kept to what exists now (a
 // champion still in the roster, a skin it still has, two sigils that still
 // exist), else the house default.

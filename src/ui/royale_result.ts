@@ -8,6 +8,7 @@
 // (royaleSting). Pure; ui/royale_hud.ts draws it.
 
 import type { RoyaleResult } from '../net/royale_wire';
+import type { GoalModel } from './royale_goal';
 import { graftNames } from './royale_grafts';
 import { otherVariant, royaleMode } from './royale_modes';
 import { assistsText, clockText, ordinal, placeText, takedownsText } from './royale_text';
@@ -39,17 +40,24 @@ export interface RoyaleEndModel {
   // The Grafts taken this match, in order (CONTEXT.md: Graft); null for
   // none.
   grafts: string | null;
+  // Respawn's goal across matches (ui/royale_goal.ts): the bar from the
+  // last level to the next; null in One life or when the seat banks no
+  // points.
+  goal: GoalModel | null;
   again: string;
   other: string;
   home: string;
 }
 
 // What the card reads off this screen rather than the result: the own
-// scoreboard row's assists, and the best Respawn tally this browser kept
-// before this match (game/settings.ts royaleBest; 0 before the first).
+// scoreboard row's assists, the best Respawn tally this browser kept
+// before this match (game/settings.ts royaleBest; 0 before the first), and
+// the goal the browser climbs with the points the seat banked (absent when
+// it banks none).
 export interface RoyaleEndMine {
   assists: number;
   best: number;
+  goal?: GoalModel | null;
 }
 
 const whole = (v: unknown): number | null =>
@@ -143,6 +151,7 @@ export function royaleEnd(
     heading: oneLife ? 'The top five' : 'The final ranking',
     rows,
     grafts: r.grafts && r.grafts.length > 0 ? `Grafts: ${graftNames(r.grafts).join(', ')}` : null,
+    goal: oneLife ? null : (mine.goal ?? null),
     again: oneLife ? 'Play again' : 'Play the next match',
     other: `Try ${royaleMode(otherVariant(r.v)).title}`,
     home: 'Back home',

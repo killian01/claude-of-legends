@@ -25,6 +25,7 @@ import {
   risenCalls,
   risingCallText,
 } from '../src/ui/royale_hunted';
+import { lastMarkPoint, NEWS_NEAR_M, newsCall, newsNear } from '../src/ui/royale_moments';
 
 const base: SnapRoyale = {
   v: 'respawn',
@@ -206,5 +207,78 @@ describe('the calls of the notes', () => {
       'The Wrath is yours',
     ]);
     expect(calls.every((c) => c.voice === undefined)).toBe(true);
+  });
+});
+
+describe('the news from afar', () => {
+  // The planet's radius is about 80 m: 40 m of arc is half a radian.
+  const R = 80;
+  const onPlanet = (angle: number) => ({ x: R * Math.sin(angle), y: R * Math.cos(angle), z: 0 });
+  const viewer = onPlanet(0);
+
+  it('is a banner within 40 m of the viewer, a feed line beyond, and far when unknown', () => {
+    expect(NEWS_NEAR_M).toBe(40);
+    expect(newsNear(viewer, onPlanet(30 / R))).toBe(true);
+    expect(newsNear(viewer, onPlanet(50 / R))).toBe(false);
+    expect(newsNear(viewer, null)).toBe(false);
+    // A viewer with no body yet hears it all as before.
+    expect(newsNear(null, onPlanet(2))).toBe(true);
+  });
+
+  it('turns a far call into one quiet line of the feed, its words and color kept', () => {
+    const call = { text: 'Wren is the Lodestar', color: '#ffd86a', sfx: 'chime' as const };
+    expect(newsCall(call, true)).toBe(call);
+    expect(newsCall(call, false)).toEqual({ text: call.text, color: call.color, feed: true });
+  });
+
+  it("reads a champion's latest mark as where it stands when out of sight", () => {
+    const mk: SnapMark[] = [
+      [5, 'ablaze', 1, 80, 0, 100],
+      [5, 'lodestar', 2, 80, 0, 120],
+      [6, 'ablaze', 9, 80, 0, 130],
+    ];
+    expect(lastMarkPoint(mk, 5)).toEqual({ x: 2, y: 80, z: 0 });
+    expect(lastMarkPoint(mk, 7)).toBeNull();
+    expect(lastMarkPoint(undefined, 5)).toBeNull();
+  });
+
+  it("keeps another's Lodestar, Ablaze run, slaying and snuffing off the middle from afar", () => {
+    const notes = royaleNotes([
+      { e: 'royale_mark', unitId: 7, kind: 'lodestar', n: 'Kestrel' },
+      { e: 'royale_mark', unitId: 5, kind: 'ablaze', n: 'Wren' },
+      { e: 'royale_mark', unitId: 6, kind: 'slayer', n: 'Moss' },
+      { e: 'royale_mark', unitId: 4, kind: 'wrath', n: 'Ivo' },
+      { e: 'royale_snuffed', unitId: 5, killerId: 3, streak: 4, n: 'Wren', kn: 'Ash' },
+    ]);
+    const far = huntedCalls(notes, 1, 300, names, () => false);
+    expect(far.map((c) => [c.text, c.feed === true, c.sfx ?? null])).toEqual([
+      ['Kestrel is the Lodestar', true, null],
+      ['Wren is Ablaze', true, null],
+      ['Moss took the Rising', true, null],
+      // The Wrath is the Warden's news, said wherever it is.
+      ['Ivo holds the Wrath', false, 'gong'],
+      ['Ash snuffed out Wren', true, null],
+    ]);
+    const near = huntedCalls(notes, 1, 300, names, (id) => id === 7 || id === 3);
+    expect(near.filter((c) => c.feed).map((c) => c.text)).toEqual([
+      'Wren is Ablaze',
+      'Moss took the Rising',
+    ]);
+    expect(near[0]).toMatchObject({ text: 'Kestrel is the Lodestar', sfx: 'chime' });
+  });
+
+  it('still calls what names the viewer in the middle, however far', () => {
+    const notes = royaleNotes([
+      { e: 'royale_mark', unitId: 1, kind: 'lodestar', n: 'Me' },
+      { e: 'royale_mark', unitId: 1, kind: 'slayer', n: 'Me' },
+      { e: 'royale_wrath_passed', from: 4, to: 1, n: 'Me' },
+    ]);
+    const calls = huntedCalls(notes, 1, 300, names, () => false);
+    expect(calls.map((c) => c.text)).toEqual([
+      'You are the Lodestar: every globe shows you',
+      'You took the Rising: every globe shows you',
+      'The Wrath is yours',
+    ]);
+    expect(calls.some((c) => c.feed)).toBe(false);
   });
 });

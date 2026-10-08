@@ -1073,7 +1073,10 @@ the people's times the bots': two with a human on the other team, one and a half
 only on the seat's own, one alone; and half for a seat whose opposing lane seats play the Gentle
 player, which the match's start decides. Deaths cost nothing, and a seat left to a bot earns
 nothing more for its player. Never spent, and distinct from the rating, which only rated matches
-move, and from laurels and embers.
+move, and from laurels and embers. Respawn's end card also climbs the points a browser's battle
+royale seats have earned as levels, kept in that browser alone: Level 2 at 50 points, each next
+level a little further, the bar running from the last one reached to the next. Plain numbered
+levels, never named after the ladder or anyone on it, and not a champion's level.
 _Avoid_: score (the scoreboard's word), XP (the champion's), rating
 
 **Ladder**:
@@ -1214,6 +1217,9 @@ twenty-five meters: it hurts and slows the enemies standing there.
 _Avoid_: ground pound
 
 **Death beat**:
-The two and a half seconds the camera holds on whoever took a One life champion down,
-before following them.
+The camera on whoever took a champion down, right after the fall. In One life, the two and a
+half seconds it holds on them, before following them. In Respawn, the wait before the return:
+it follows them while the world shows their body or a mark shows them on the globe, holds on
+where the champion fell otherwise, and is back on the champion as it returns. A fallen
+champion sees nothing, so the beat shows only what the fog lets through.
 _Avoid_: kill cam, death recap
