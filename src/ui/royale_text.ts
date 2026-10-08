@@ -53,7 +53,9 @@ export function peopleText(n: number): string {
 // which the server sends from their first takedown since then. Before
 // anyone lands, how many are in the match. On a phone (`compact`) the top
 // is one row beside the Dusk line and the minimap: the rank line leaves
-// the takedowns out.
+// the takedowns out, and a drop-in's the gap too ("#4 since you landed"):
+// with it the row reached the points' pop beside the minimap (a playthrough
+// at 844x390, 2026-10-08), the end card telling the near miss instead.
 export function countLine(
   r: Pick<SnapRoyale, 'v' | 'st' | 'alive' | 'people' | 'score' | 'rk' | 'gap' | 'rs'>,
   compact = false,
@@ -63,7 +65,11 @@ export function countLine(
   if (r.v === 'one_life') return `${r.alive} left · ${takedowns}`;
   if (r.rk === undefined) return takedowns;
   const gap = gapText(r.rk, r.gap ?? 0);
-  const rank = r.rs === 1 ? `#${r.rk} since you landed` : `#${r.rk} of ${r.alive}`;
+  if (r.rs === 1) {
+    const rank = `#${r.rk} since you landed`;
+    return compact ? rank : `${rank} · ${takedowns} · ${gap}`;
+  }
+  const rank = `#${r.rk} of ${r.alive}`;
   return compact ? `${rank} · ${gap}` : `${rank} · ${takedowns} · ${gap}`;
 }
 
