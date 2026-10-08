@@ -223,8 +223,7 @@ describe('the seat report', () => {
   });
 
   it("notes a seat's first moments once each, champions only", () => {
-    // The visitors of the first days left inside two minutes: had anything
-    // happened to them by then?
+    // What happened to a seat in its first minutes.
     const stats = freshStats(0, 0, 0);
     const champion = (id: number) => id < 100;
     noteMoments(stats, 7, [{ type: 'damage', sourceId: 7, targetId: 150 }], 10, champion);

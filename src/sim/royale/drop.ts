@@ -135,11 +135,9 @@ export function arrivalSpot(
 
 // A Respawn Arrival's fair first fight (grace.ts arrive): a few steps from
 // one bot, inside its sight (a champion's 12 m, unit.ts), with nobody else
-// near either of them. 16 of 18 visitors dropped into the standing Respawn
-// match, where no escort lands, 25 m from everyone (arrivalSpot): their
-// first damage came 12 to 35 s after landing and 12 of the 13 with no
-// takedown left by 75 s; the two who stayed to the end had a takedown
-// about 10 s after first contact (the seat reports, 2026-10-08). The foes
+// near either of them. A drop-in into the standing Respawn match lands
+// where no escort does, and the quiet spot (arrivalSpot) set it 25 m from
+// everyone, its first fight late and on nobody's terms. The foes
 // are weighed softest first (the skill the bot plays now, 0 gentle to 2
 // strong, then its health share, its level, the lower id); one with any
 // other champion within FOE_CLEAR_M is passed over, and each of the first
@@ -234,11 +232,10 @@ export function resolveLandings(
 
 // Company at the landing: ESCORTS[variant] house bots come down
 // ESCORT_MIN_M to ESCORT_MAX_M from each person, so a person's first fight
-// finds them within seconds, the genre's own way with its newcomers (their
-// first champions come to them). Fifty seats on the planet left a person
+// finds them within seconds, the genre's own way with a first match (its
+// first champions come to the player). Fifty seats on the planet left a person
 // who landed a minute with nobody in sight, one who picked no point in the
-// quietest spot there is, and the visitors of the first days closed the
-// tab inside two minutes (the seat reports, 2026-10-03). One in One life,
+// quietest spot there is. One in One life,
 // where a fall is final; two in Respawn. The mode deals a normal bot
 // first, one that also fights the other escort, so the first fight is a
 // three-way and not two victims waiting in line; gentle ones only on a

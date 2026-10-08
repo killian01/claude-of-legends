@@ -4,7 +4,7 @@
 // (the 'drop' while dead that royale/return_pick.ts takes, the same pick a
 // person makes on the globe; the house brain picks nothing, bot/brain.ts;
 // the rule is pinned in tests/royale_return_pick.test.ts). Never in One
-// life (an elimination clears the queue), never in the 5v5. A newcomer's
+// life (an elimination clears the queue), never in the 5v5. A first royale's
 // escorts are tested in tests/royale_drop.test.ts. Owned by tranche 1's
 // bots-with-intent worktree (T1-C).
 

@@ -21,8 +21,7 @@ import type { RoyaleVariant } from '../sim/royale/types';
 // opened, by hand or by the offer; 'account' an account created here, by
 // form or by Discord. Between 'played' and 'offer' stands the match's own
 // end, below: 'finished' is the line between trying and playing through.
-// Read each against the one before it and the funnel says where people
-// leave.
+// Each is read against the one before it.
 export const STATS_STEPS = ['stayed', 'played', 'offer', 'form', 'account'] as const;
 export type StatsStep = (typeof STATS_STEPS)[number];
 
@@ -31,8 +30,8 @@ export type StatsStep = (typeof STATS_STEPS)[number];
 // walked out before one, with how many minutes it had run and which kind
 // of match it was: practice, an online 5v5, or a battle royale with its
 // rule set, so the two online modes are never read as one. Read against
-// 'played', it is the one number that says whether a match that started
-// was worth staying in. A battle royale adds how long this browser held it
+// 'played', it is the one number that says how many matches that started
+// were played to their end. A battle royale adds how long this browser held it
 // on screen, in seconds, and whether it dropped into a match already
 // running: its minutes are the match's clock, which a drop-in joins
 // minutes in, not the time held.

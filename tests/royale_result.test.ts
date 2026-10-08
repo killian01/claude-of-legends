@@ -99,7 +99,7 @@ describe('the Respawn end screen', () => {
   });
 });
 
-// A visitor drops into the standing Respawn match minutes in: the card
+// A person drops into the standing Respawn match minutes in: the card
 // counts from their landing (both playthrough cards opened "YOU PLACED
 // 50TH OF 50" behind bots on 72), says how close the seat above was, and
 // the best this browser kept.

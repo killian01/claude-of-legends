@@ -77,9 +77,8 @@ of the game.
 
 ## Amended 2026-09-17: the address is asked for after the door, not at it
 
-The form at the door asked for a name, a password and an address before a visitor had played
-anything, and the counter said what that cost: visitors took the offline match, which asks for
-nothing, and left without an account. The address is now optional at signup. The form asks for a
+The form at the door asked for a name, a password and an address before a person had played
+anything, while the offline match asked for nothing. The address is now optional at signup. The form asks for a
 name and a password; the home then carries the line it already carried for accounts old enough to
 predate addresses, "No email address on this account. Add one to be able to reset a forgotten
 password", with the field beside it, and `/api/email` claims the address exactly as signup did.
@@ -87,6 +86,6 @@ password", with the field beside it, and `/api/email` claims the address exactly
 Nothing else here moves. A claim is still held from the moment it is made, still lapses
 unconfirmed after seven days, and a reset still goes only to a confirmed address. What changes is
 who bears the cost of the missing recovery path: an account whose owner declined to give an
-address, knowingly, on a line that says what it is for, rather than every visitor at the door. An
+address, knowingly, on a line that says what it is for, rather than everyone at the door. An
 account without an address stands where ADR 0006 left every account, and the line on the home is
 its way out.

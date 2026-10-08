@@ -3,7 +3,7 @@
 // icons, the sounds) goes out with a hash of its own bytes as its ?v=
 // stamp (src/game/asset_version.ts), so an address can only ever mean one
 // content. The stamp used to be the deployment's, which moved with every
-// deploy and every restart, several a day, and made every visitor
+// deploy and every restart, several a day, and made every browser
 // download the map and the models again each time; now a deployment that
 // leaves a file alone leaves its address alone, and one that changes it
 // gives it an address no cache has seen.

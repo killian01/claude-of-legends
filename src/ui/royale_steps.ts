@@ -73,8 +73,8 @@ export const DUSK_NEAR_M = 6;
 // Whether the closing Dusk is about to overtake a champion: the light is
 // shrinking toward a next cap the champion stands outside, and its edge is
 // within DUSK_NEAR_M. Standing deep inside, or while the light holds, the
-// Dusk is nothing to say yet (10 visitors in 12 were first told to stay in
-// the light while they stood well inside it). Null when the point carries
+// Dusk is nothing to say yet (telling a champion well inside the light to
+// stay in it says nothing). Null when the point carries
 // no height, as for outsideLight (ui/royale_text.ts).
 export function duskOvertakes(
   pos: { x: number; z: number; y?: number },
@@ -129,8 +129,8 @@ export function foughtBetween(prev: FightTally, next: FightTally): boolean {
 
 const RULES: Readonly<Record<RoyaleStepId, StepRule<RoyaleStepId, RoyaleStepsView>>> = {
   // The first card on landing: how to attack and cast. Nothing else in the
-  // guide said it, and the visitors who stayed fought from the first
-  // seconds. Once lapsed it comes back when an enemy is near.
+  // guide said it, and a battle royale is played from the first seconds.
+  // Once lapsed it comes back when an enemy is near.
   br_fight: {
     when: (v) =>
       v.sinceLanding !== null && !v.fought && (v.enemyNear || v.sinceLanding < FIGHT_EARLY_S),

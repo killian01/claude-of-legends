@@ -110,7 +110,7 @@ function respawnLines(r: RoyaleResult, mine: RoyaleEndMine, won: boolean): strin
 
 // The first button enters again with the same pick: One life's Play again,
 // Respawn's Play the next match, which drops into the match kept running
-// for visitors (server/royale_service.ts), the champion arriving fresh.
+// for drop-ins (server/royale_service.ts), the champion arriving fresh.
 // Respawn's title is the place since the seat landed for a drop-in, the
 // whole match's otherwise.
 export function royaleEnd(
@@ -163,8 +163,8 @@ export function royaleEnd(
 // the most takedowns or a top three since landing, a defeat only for a
 // whole match in the bottom half, and nothing in between. A drop-in is
 // never told they lost: they came in late against a field that had been
-// scoring for minutes, and the defeat was the last thing they heard
-// before closing the tab.
+// scoring for minutes, and a defeat would end their match on a loss
+// they had no fair chance against.
 export function royaleSting(r: RoyaleResult): 'victory' | 'defeat' | null {
   if (r.v === 'one_life') return r.place === 1 ? 'victory' : 'defeat';
   const w = windowOf(r);

@@ -1,8 +1,8 @@
 # Newcomers drop into a bot's seat
 
-ADR 0024 let a visitor play the public queue with no account, and the queue fills every empty
+ADR 0024 let a person play the public queue with no account, and the queue fills every empty
 seat with bots, so nobody waits. What it could not do was put two strangers in the same match:
-five to ten people come through the landing in a day, and the queue only brought two of them
+with few people on at once, the queue only brought two of them
 together if both were in it within the same few seconds, then only if the second one answered
 a ten-second countdown the first one started. Two people on during the same twenty-minute
 match is a far likelier event than two people pressing Play in the same ten seconds, so the
@@ -33,7 +33,7 @@ rejoin reservation). Private lobbies and the Forge queue are untouched.
 ## Considered and rejected
 
 - **A longer queue.** Holding a lone player in the queue for a minute or two hoping for a
-  second one costs every visitor that wait and still misses the overlap most of the time.
+  second one costs every player that wait and still misses the overlap most of the time.
 - **Dropping in at any point.** Past the first minutes the match is decided and the newcomer
   arrives with nothing of the start to learn from; eight minutes is where towers start to fall.
 - **Rating a drop-in seat.** A seat that was a bot for part of the match is not a result that

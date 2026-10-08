@@ -1,8 +1,7 @@
 // The seat report (PRIVACY.md): one line per seat a person held in an
 // online match, written when the seat ends, in seats.jsonl under the data
-// directory. Visitors were leaving after a minute and nothing said whether
-// they had moved, waited on a slow load, or fought a laggy connection (the
-// maintainer, 2026-10-01): this says, and nothing more. No name, no account
+// directory. It says whether a seat moved, waited on a slow load, or
+// fought a laggy connection, and nothing more. No name, no account
 // id, no address: whether the seat was a Guest's, what the seat did, how
 // long the match took to load, the measured round trip to the server, the
 // country Cloudflare names for the connection and whether the browser said

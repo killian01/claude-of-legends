@@ -99,7 +99,7 @@ export interface SeatStats {
   // The seat's first moments (noteMoments), as ticks: a blow given to a
   // champion and one taken from a champion, a takedown, the champion's
   // first fall, the first cache it opened (a battle royale's). What a
-  // visitor who left after a minute had met by then.
+  // seat had met in its first minutes.
   firstHitTick: number | null;
   firstHurtTick: number | null;
   firstTakedownTick: number | null;

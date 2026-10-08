@@ -5,12 +5,11 @@
 
 ADR 0006 made an account the price of reaching the server, and named the middle it rejected:
 "Guests keep playing, unranked". Its cost was stated as real and paid by the invited player.
-Two weeks of the audience counter (2026-09-14 to 2026-09-28) put a number on it: 112 matches
-started and 5 accounts created, and the maintainer's reading of the visitors is that they want
-to play people and will not register first. The practice match is a 5v5 against bots in a tab;
+The maintainer's reading is that a person wants to play people first and register later, if at
+all. The practice match is a 5v5 against bots in a tab;
 what the landing promises is a MOBA.
 
-So a visitor can now enter the public queue with no account. The landing's gold button asks
+So a person can now enter the public queue with no account. The landing's gold button asks
 the server for a Guest (`POST /api/guest`), which answers with a name (`Wanderer 4821`) and a
 cookie of its own, `loc_guest`, separate from the account session. The WebSocket upgrade
 accepts either cookie. Everything else ADR 0006 decided stands, because the Guest is kept out

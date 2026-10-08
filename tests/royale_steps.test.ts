@@ -101,8 +101,8 @@ describe('the battle royale first steps', () => {
   });
 
   it('say nothing of the Dusk inside the light once the calm is over', () => {
-    // 10 visitors in 12 were first told to stay in the light while they
-    // stood 4 to 140 m inside it.
+    // Standing well inside the light, the champion is not told to stay in
+    // it.
     const s = run(fought(['br_cache', 'br_pad']), [at(0), at(95), at(96)]);
     expect(s.current).toBeNull();
     expect(s.done).not.toContain('br_dusk');

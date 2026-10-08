@@ -1,8 +1,7 @@
 // The phone turns itself for a match (CONTEXT.md: Thumb stick). The game
-// is laid out for a screen wider than it is tall, and a visitor who
-// arrives on a phone holding it upright used to meet a line telling them
-// to turn it: the two people who tried the game on phones one evening
-// both stopped there. So the match asks the browser for landscape
+// is laid out for a screen wider than it is tall, and a phone held
+// upright used to meet a line telling the player to turn it, one more
+// step before playing. So the match asks the browser for landscape
 // instead, and only the browsers that refuse still get the line.
 //
 // The lock is granted to a fullscreen document, which is why the match's

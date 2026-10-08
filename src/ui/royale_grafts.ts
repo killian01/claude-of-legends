@@ -95,8 +95,7 @@ export function graftChip(): string {
 
 // The cards wait this long after the champion lands, folded into the chip:
 // the first seconds are for the fight and the caches. Open, they covered
-// the top third of a desktop and half a phone, and the 4 visitors in 8 who
-// never picked one all left within 39 s.
+// the top third of a desktop and half a phone, over the first fight.
 export const GRAFT_SETTLE_S = 12;
 
 // Whether the cards fold into the chip: never over the globe in the drop;

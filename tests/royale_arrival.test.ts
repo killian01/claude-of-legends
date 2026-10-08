@@ -1,10 +1,10 @@
 // The Arrival (CONTEXT.md; src/sim/royale/grace.ts arrive): a person who
 // drops into a running match takes a bot's seat and the champion comes down
 // fresh inside the light, in its Grace, its tally from zero (a playtest,
-// 2026-10-04: a visitor took a seat mid-fight at half health and was slain
+// 2026-10-04: a person took a seat mid-fight at half health and was slain
 // five seconds after joining, with the bot's score and kills). In Respawn
 // it comes down at the field's level, a few steps from a fair first fight
-// when a bot offers one, else at a quiet spot (the seat reports,
+// when a bot offers one, else at a quiet spot (ADR 0031, amended
 // 2026-10-08). Recorded as an 'arrive' replay event, so a replay
 // re-simulates it alike. The quiet spot (drop.ts arrivalSpot), the fair
 // foe's (drop.ts fairFoeSpot) and the Respawn return's point (score.ts

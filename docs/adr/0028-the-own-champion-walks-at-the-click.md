@@ -6,10 +6,8 @@
 Online play had no prediction. A click went up the wire, the server applied it between two ticks,
 the next snapshot came back down, and the renderer drew it between its last two snapshots: the
 champion answered a round trip and a tick or two after the click. From Europe that is a tenth of a
-second and nobody notices. The seat report (`server/seat_report.ts`) showed what it is from
-further away: a visitor from Brazil on 2026-10-01, 226 ms of median round trip with a spike at
-2.9 s, gave 44 orders in 85 seconds, 32 of them moves, and closed the tab. Every click of theirs
-took about a third of a second to show. The server is in Helsinki and stays there, so the client
+second and nobody notices. From another continent, a median round trip over 200 ms with spikes
+of seconds, every click takes about a third of a second to show. The server is in Helsinki and stays there, so the client
 has to stop waiting for it.
 
 So the own champion is drawn where it is going (CONTEXT.md: Prediction), and nothing else moves.
@@ -53,7 +51,7 @@ So the own champion is drawn where it is going (CONTEXT.md: Prediction), and not
 
 ## Consequences
 
-- From Brazil the champion turns and walks on the frame after the click instead of a third of a
+- From another continent the champion turns and walks on the frame after the click instead of a third of a
   second later; from Europe the difference is small and the walk looks the same.
 - The own champion is drawn ahead of every other unit by about a round trip: at 250 ms and
   walking speed, about a meter. An auto attack starts when the server's champion is in range, so

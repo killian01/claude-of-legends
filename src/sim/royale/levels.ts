@@ -8,8 +8,8 @@
 // its ultimate around the third or fourth minute and about level eleven by
 // the end. In Respawn each assist on a takedown is paid a share of it too
 // (assists.ts): a seat that helps and never lands the last hit still
-// climbs (the seat reports, 2026-10-08: 25 assists, level 3 all match),
-// and the field's levels sit closer together.
+// climbs instead of staying near its landing level all match, and the
+// field's levels sit closer together.
 
 import { DEFAULT_SKILLS } from '../playbook/kit';
 import { championXp } from '../rewards';
@@ -79,10 +79,10 @@ export function landingLevels(u: Unit): void {
   spendSkillPoints(u);
 }
 
-// A Respawn drop-in's level (grace.ts arrive): a visitor who took a level 3
-// seat at 7:26 found 46 of the 49 champions above it, its first foe a level
-// 6 with 2572 health against its 1487 (the seat reports, 2026-10-08). The
-// seat comes down ARRIVAL_LEVEL_BEHIND under the middle of the field, the
+// A Respawn drop-in's level (grace.ts arrive): a seat taken minutes in
+// could be level 3 with nearly every champion above it, its first foe a
+// level 6 with 2572 health against its 1487 (a playthrough). The seat
+// comes down ARRIVAL_LEVEL_BEHIND under the middle of the field, the
 // lower median of every other seat's level (the fallen too), and never
 // below its own.
 export const ARRIVAL_LEVEL_BEHIND = 1;

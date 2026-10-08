@@ -109,7 +109,7 @@ export const WAYS_LABEL = 'Three ways to play';
 // sideways. The line says what the button gives: Respawn always has a
 // match to drop into (server/royale_service.ts), and a drop-in is set down
 // a few steps from a fair first fight rather than where it likes (ADR 0031,
-// amended 2026-10-08: 16 of 18 visitors dropped in).
+// amended 2026-10-08).
 export const NEW_TAG = 'New';
 export const NEW_TITLE = 'The Wanderseed';
 export const NEW_LINE =

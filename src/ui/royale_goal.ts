@@ -8,7 +8,7 @@
 // The points are the ones a seat banks (server/royale_points.ts): a
 // champion taken down 10, an assist 5, a camp's last hit or a cache opened
 // 1, a big creature 15, Respawn's best score 50 at the end, each doubled
-// while another person plays the match. A visitor's short stay earns a
+// while another person plays the match. A few minutes' play earns a
 // few, a match played through 50 to 250 (three takedowns and five assists
 // alone are 55), so the first level is a match's worth and each after it
 // asks a little more.

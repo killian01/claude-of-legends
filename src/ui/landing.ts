@@ -291,8 +291,7 @@ const CSS = `
   /* Two cards, stacked, and the free one first. The account card went
      first until a phone was measured: with the form above it, the button
      that needs no account sat 1402 px down an 844 px screen, one and
-     seven tenths of a screen of scrolling, and the two visitors who came
-     on phones one evening both left without finding it. The end screen
+     seven tenths of a screen of scrolling. The end screen
      makes the account offer once a match has been played
      (ui/account_offer.ts), which is the better moment to ask anyway. */
   .pg.land .pg-cards { grid-template-columns: minmax(0, 1fr); max-width: 620px; gap: 22px; }

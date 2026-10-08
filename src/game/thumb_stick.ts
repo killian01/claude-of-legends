@@ -159,7 +159,8 @@ export const STICK_YIELD_DOT = 0;
 // in sight (toTarget, the direction toward it from the champion), and the
 // thumb pointing toward or sideways of it. While it yields the stick sends
 // nothing, so its keep-alive no longer turns the attack into a walk (a
-// phone's 31 attack orders landed 96 damage, its target left at 99%);
+// phone's attack orders landed next to nothing, its target left near full
+// health);
 // pointed away, the walk goes at once.
 export function stickYields(hold: AttackHold | null, dir: Vec2, toTarget: Vec2 | null): boolean {
   return hold !== null && toTarget !== null && dot(dir, toTarget) >= STICK_YIELD_DOT;

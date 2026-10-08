@@ -156,9 +156,8 @@ export async function fetchStats(): Promise<PublicStats | null> {
 // The count, as one cell. Players online and matches running used to
 // stand beside it and they were the wrong two numbers to show at this
 // stage: a young server is empty most of the hour, so both read zero and
-// the honest live counter announced a dead game to the one visitor who
-// might have filled it. Accounts only ever grows, and it is the count
-// that says what this is: people came and stayed. Nothing is padded;
+// the honest live counter read as a dead game. Accounts only ever grows,
+// and it is the count that says what this is. Nothing is padded;
 // /api/public/stats is still the whole truth, and the bar's Live pill
 // still reads the running matches straight off it.
 export function renderStats(into: HTMLElement, s: PublicStats): void {

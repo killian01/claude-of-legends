@@ -1,6 +1,6 @@
 # Battle royale on the Wanderseed
 
-The seat reports say it plainly: a visitor walks a minute to a lane and leaves. On 2026-10-02
+The 5v5 opens on a minute's walk to a lane before the first fight. On 2026-10-02
 the maintainer asked for a battle royale, a big one, fifty players, and settled every choice
 of it in one sitting (`docs/plan-royale.md` holds them all). This records the decisions the
 code rests on.
@@ -77,13 +77,11 @@ to steer by but the nearest fight. This overrides **Creatures** above for the bi
 
 ## Amended: an Arrival meets a fair first fight (2026-10-08)
 
-The seat reports since 2026-10-03: 16 of the 18 visitors outside the maintainer's own testing
-dropped into the standing Respawn match while it ran, where no escort ever lands. Of the 13
-drop-ins without a takedown, 12 left by 75 s; the only two who stayed to the end had a takedown
-about 10 s after first contact. The quiet spot put a drop-in 25 m from every champion: its first
-damage came 12 to 35 s after landing, and 6 of 12 left alive, 3 of them never attacking. The
-seat itself ignored level: one visitor arrived at level 3 at 7:26 with 46 of the 49 champions
-above it, and the playthrough's first foe was a level 6 with 2572 health against its 1487. And a
+A drop-in usually comes down in the standing Respawn match while it runs, where no escort ever
+lands. The quiet spot put a drop-in 25 m from every champion, so its first fight came late and
+on nobody's terms. The seat itself ignored level: a seat taken minutes in could be level 3 with
+nearly every champion above it, and a playthrough's first foe was a level 6 with 2572 health
+against its 1487. And a
 Respawn return set 4 m inside an edge still closing came back burning; one Arrival landed 1 m
 inside a closing edge with a foe 1.3 m away. This overrides the Arrival's quiet spot in Respawn;
 One life's Arrival and every One life rule are unchanged.
@@ -128,13 +126,12 @@ One life's Arrival and every One life rule are unchanged.
 
 ## Amended: a Grace that waits for the person, and assists that pay (2026-10-08)
 
-After the fair first fight, the seat reports still said: of the ten drop-ins who died, four left
-during the five second wait; nobody without a takedown stayed; one visitor made 25 assists and
-stayed at level 3 all match, since only the last hit learned anything, while about two Respawn
+After the fair first fight, only a takedown's last hit learned anything: a seat could make two
+dozen assists and stay at level 3 all match, while about two Respawn
 takedowns in five go to a champion who dealt under a quarter of the damage (the royale report's
 steals). And the server began an Arrival's three second Grace as the seat was taken, while a slow
 client keeps its joining card over the match until its first frame, up to four seconds
-(`src/game/first_frame.ts` FIRST_FRAME_WAIT_MS): a newcomer could first see the world with the
+(`src/game/first_frame.ts` FIRST_FRAME_WAIT_MS): a slow client could first show the world with the
 Grace over and its foe ten meters off. This overrides the Grace's length for a Respawn Arrival
 and Respawn's experience; One life and every Respawn return are unchanged.
 
@@ -180,8 +177,7 @@ and Respawn's experience; One life and every Respawn return are unchanged.
 
 ## Amended: the Respawn wait picks the return (2026-10-08)
 
-The seat reports: 4 of the 10 visitors who died in the standing Respawn match left during the
-5 s wait, a wait with nothing in it but a count. A return set at the edge of the light came
+The 5 s Respawn wait held nothing but a count. A return set at the edge of the light came
 back within 10 m of a champion 41 percent of the time (over seeds 1 and 2 of fifty house bots,
 415 of 1,014 returns and 389 of 980). This gives the wait a choice; One life is unchanged.
 
