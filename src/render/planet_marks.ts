@@ -17,6 +17,7 @@ import { gracesOf } from '../net/royale_client';
 import type { SnapCache, SnapRoyale, WirePoint } from '../net/royale_wire';
 import { SEEDFALL_IMPACT_M } from '../sim/content/royale_events';
 import type { Vec3 } from '../sim/geo';
+import { BURR_COLOR } from '../ui/royale_burr';
 import { huntedPillars } from '../ui/royale_hunted';
 import { PlanetGrace } from './planet_grace';
 import { PlanetGraftAura } from './planet_graft_aura';
@@ -142,6 +143,9 @@ export class PlanetMarks {
   private readonly pickBeam: THREE.Mesh;
   private readonly picks: THREE.Points;
   private readonly pickMat: THREE.PointsMaterial;
+  // The wait's globe: where the own Burr's carrier stands (thorn red).
+  private readonly burrDot: THREE.Points;
+  private readonly burrMat: THREE.PointsMaterial;
   private shownCaches: readonly SnapCache[] | null = null;
   private readonly pillars: PlanetPillars;
   private readonly grace: PlanetGrace;
@@ -361,7 +365,23 @@ export class PlanetMarks {
     this.picks = new THREE.Points(picksGeo, this.pickMat);
     this.picks.frustumCulled = false;
     this.group.add(this.picks);
-    this.owned.push(pickGeo, pickBeamMat, picksGeo, this.pickMat);
+    const burrGeo = new THREE.BufferGeometry();
+    burrGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
+    this.burrMat = new THREE.PointsMaterial({
+      size: 22,
+      sizeAttenuation: false,
+      map: glow,
+      color: new THREE.Color(BURR_COLOR),
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      fog: false,
+    });
+    this.burrDot = new THREE.Points(burrGeo, this.burrMat);
+    this.burrDot.frustumCulled = false;
+    this.burrDot.visible = false;
+    this.group.add(this.burrDot);
+    this.owned.push(pickGeo, pickBeamMat, picksGeo, this.pickMat, burrGeo, this.burrMat);
 
     // One burst built hidden now and gone at the first frame: its lid and
     // sparks link their programs with the planet's, before its first
@@ -734,10 +754,11 @@ export class PlanetMarks {
     // Where the renderer draws a champion, when the stage tells it: the
     // Grace's shimmer stands there (else at the snapshot's point, eased).
     unitAt?: (unitId: number) => Vec3 | null,
-    // In the Respawn wait (planet_stage.ts): the own pick of where to come
-    // back, where the drop's tall light stands, and where the champion
-    // fell, one dot of the drop's in the fall's red.
-    wait: { pick: Vec3 | null; fell: Vec3 | null } | null = null,
+    // In the Respawn wait (planet_stage.ts, ui/royale_return.ts waitMarks):
+    // the own pick of where to come back, where the drop's tall light
+    // stands, where the champion fell, one dot of the drop's in the fall's
+    // red, and the own Burr's carrier, a larger dot in the Burr's color.
+    wait: { pick: Vec3 | null; fell: Vec3 | null; burr: Vec3 | null } | null = null,
   ): void {
     if (caches !== this.shownCaches) {
       this.shownCaches = caches;
@@ -777,6 +798,15 @@ export class PlanetMarks {
     positions.needsUpdate = true;
     this.picks.geometry.setDrawRange(0, n);
     this.pickMat.size = 15 + 3 * Math.sin(t * 5);
+    const burr = wait?.burr ?? null;
+    this.burrDot.visible = burr !== null;
+    if (burr) {
+      const g = this.point(burr, 1.6);
+      const at = this.burrDot.geometry.getAttribute('position') as THREE.BufferAttribute;
+      at.setXYZ(0, g.x, g.y, g.z);
+      at.needsUpdate = true;
+      this.burrMat.size = 20 + 4 * Math.sin(t * 3.3);
+    }
     this.pillars.setPillars(PlanetMarks.pillarsOf(royale, time), time, now);
     this.grace.update(royale?.st === 'play' ? gracesOf(royale) : [], time, now, unitAt);
   }

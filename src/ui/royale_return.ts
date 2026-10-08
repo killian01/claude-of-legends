@@ -7,8 +7,11 @@
 // wash's line about it. 4 of the 10 visitors who died left during the 5 s
 // wait (the seat reports, 2026-10-08): the wait now holds a choice.
 
-import type { SnapDusk, WirePoint } from '../net/royale_wire';
+import type { SnapDusk, SnapRoyale, WirePoint } from '../net/royale_wire';
+import type { Vec3 } from '../sim/geo';
+import { intoLight } from '../sim/royale/return_pick';
 import { RESPAWN_S } from '../sim/royale/types';
+import { burrTarget } from './royale_burr';
 import { CHIP_BOTTOM_PX, CHIP_H_PX } from './royale_grafts';
 
 // Seconds after the fall the globe rises: the body is seen to fall first.
@@ -43,6 +46,37 @@ export function returnGlobeOn(r: ReturnView, u: ReturnSeat, time: number): boole
 export function returnLight(d: SnapDusk): { c: WirePoint; r: number } {
   if (d.sh === 1 && d.nc && d.nr !== undefined) return { c: d.nc, r: d.nr };
   return { c: d.c, r: d.r };
+}
+
+// What the wait's globe marks (render/planet_marks.ts): the own pick of
+// where to come back (the tap shown at once, else the one the server
+// echoes), brought into the light the return comes back in as the sim
+// brings it (return_pick.ts intoLight); where the champion fell; and while
+// its Burr lasts, where the champion carrying it stands (the bu block's,
+// what the owner's observation reads too, CONTEXT.md: Burr), so the pick
+// can be made toward it or away from it.
+export interface WaitMarks {
+  pick: Vec3 | null;
+  fell: Vec3 | null;
+  burr: Vec3 | null;
+}
+
+export function waitMarks(
+  r: Pick<SnapRoyale, 'st' | 'dusk' | 'bk' | 'bu'>,
+  time: number,
+  tapped: Vec3 | null,
+  fell: Vec3 | null,
+  radius: number,
+): WaitMarks {
+  const wire = r.bk ? { x: r.bk[0], y: r.bk[1], z: r.bk[2] } : null;
+  const picked = tapped ?? wire;
+  const light = returnLight(r.dusk);
+  const cap = { center: { x: light.c[0], y: light.c[1], z: light.c[2] }, radius: light.r };
+  return {
+    pick: picked ? intoLight(picked, cap, radius) : null,
+    fell,
+    burr: burrTarget(r, time)?.at ?? null,
+  };
 }
 
 // The wash while the globe shows (ui/hud.ts): its lines centered in the

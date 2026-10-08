@@ -18,9 +18,8 @@ import { ownGraceUntil } from '../net/royale_client';
 import type { RoyaleView, SnapCache, WirePoint } from '../net/royale_wire';
 import { heartwoodOf } from '../sim/content/grafts';
 import { segmentDist, type Vec3 } from '../sim/geo';
-import { intoLight } from '../sim/royale/return_pick';
 import { DT, type Vec2 } from '../sim/types';
-import { returnGlobeOn, returnLight } from '../ui/royale_return';
+import { returnGlobeOn, returnLight, type WaitMarks, waitMarks } from '../ui/royale_return';
 import type { IWorld } from '../world_api';
 import { type ChartView, ChartWindow, ChartWorld } from './chart_world';
 import { BEND_UNIFORMS, bendTree } from './planet_bend';
@@ -641,17 +640,13 @@ export class PlanetStage {
     this.minimap.paint(now, royale?.dusk ?? null, this.caches);
   }
 
-  // What the wait's globe marks: where the followed champion fell, and its
-  // pick of where to come back, the tap shown at once, else the one the
-  // server echoes, brought into the light the return comes back in as the
-  // sim brings it (return_pick.ts).
-  private returnMarks(royale: RoyaleView): { pick: Vec3 | null; fell: Vec3 | null } {
+  // What the wait's globe marks (ui/royale_return.ts waitMarks): where the
+  // followed champion fell, its pick of where to come back, and the
+  // carrier of its Burr.
+  private returnMarks(royale: RoyaleView): WaitMarks {
     const body = this.picker !== null ? this.base.units.get(this.picker) : undefined;
     const fell = body?.pos.y !== undefined ? (body.pos as Vec3) : null;
-    const tapped = this.returnPick ?? (royale.bk ? wirePoint(royale.bk) : null);
-    const light = returnLight(royale.dusk);
-    const cap = { center: wirePoint(light.c), radius: light.r };
-    return { pick: tapped ? intoLight(tapped, cap, this.radius) : null, fell };
+    return waitMarks(royale, this.base.time, this.returnPick, fell, this.radius);
   }
 
   // The wait's globe rises: the orbit faces the light the return comes

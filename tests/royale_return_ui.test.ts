@@ -19,6 +19,7 @@ import {
   returnGlobeOn,
   returnHint,
   returnLight,
+  waitMarks,
 } from '../src/ui/royale_return';
 
 describe('the wait for a return', () => {
@@ -78,6 +79,38 @@ describe('the wait for a return', () => {
     expect(returnLight({ p: 0, c: [0, 80, 0], r: 160, pe: 90, sh: 1, b: 0 })).toEqual({
       c: [0, 80, 0],
       r: 160,
+    });
+  });
+});
+
+describe("the wait globe's marks", () => {
+  const dusk: SnapDusk = { p: 0, c: [0, 80, 0], r: 60, pe: 90, sh: 0, b: 0 };
+  const fell = { x: 0, y: 80, z: 0 };
+
+  it('marks the fall, the pick (the tap before the echo) and the Burr carrier while it lasts', () => {
+    const view = {
+      st: 'play' as const,
+      dusk,
+      bk: [3, 79.9, 0] as [number, number, number],
+      bu: { i: 7, u: 140, at: [10, 79.3, 0] as [number, number, number] },
+    };
+    const m = waitMarks(view, 100, null, fell, 80);
+    expect(m.fell).toEqual(fell);
+    expect(m.pick).toEqual({ x: 3, y: 79.9, z: 0 });
+    expect(m.burr).toEqual({ x: 10, y: 79.3, z: 0 });
+    // The own tap shows before the server echoes it.
+    expect(waitMarks(view, 100, { x: 1, y: 80, z: 0 }, fell, 80).pick).toEqual({
+      x: 1,
+      y: 80,
+      z: 0,
+    });
+    // The Burr run out, or its carrier down: no dot.
+    expect(waitMarks(view, 141, null, fell, 80).burr).toBeNull();
+    expect(waitMarks({ ...view, bu: { i: 7, u: 140 } }, 100, null, fell, 80).burr).toBeNull();
+    expect(waitMarks({ st: 'play', dusk }, 100, null, null, 80)).toEqual({
+      pick: null,
+      fell: null,
+      burr: null,
     });
   });
 });
