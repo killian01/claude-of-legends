@@ -83,6 +83,16 @@ describe('the cards', () => {
     expect(graftFolded(1, false, false, true, settled)).toBe(false);
   });
 
+  it('fold while the champion waits to come back, unless opened from the chip', () => {
+    // The death wash's four lines and the globe are the wait's: the cards
+    // open covered them (a phone at 844x390, a playthrough, 2026-10-08).
+    const settled = GRAFT_SETTLE_S + 1;
+    expect(graftFolded(null, false, false, false, settled, true)).toBe(true);
+    expect(graftFolded(30, false, false, false, settled, true)).toBe(true);
+    expect(graftFolded(null, false, false, true, settled, true)).toBe(false);
+    expect(graftFolded(null, false, false, false, settled, false)).toBe(false);
+  });
+
   it('wait folded for the first seconds after landing, then open', () => {
     // 4 visitors in 8 never picked the cards open on landing, and all 4
     // left within 39 s.

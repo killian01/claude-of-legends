@@ -159,14 +159,16 @@ export class RoyaleHudGrafts {
   }
 
   // Once per world tick: the snapshot's offer and Grafts, the own champion
-  // as the cards read it, how long since it was last hit (a fight), and how
-  // long since it landed (null during the drop).
+  // as the cards read it, how long since it was last hit (a fight), how
+  // long since it landed (null during the drop), and whether it waits to
+  // come back in Respawn.
   update(
     r: SnapRoyale,
     _time: number,
     me: GraftReader | null,
     sinceHit: number | null,
     sinceLanding: number | null,
+    waiting = false,
   ): void {
     this.noteTaken(r.gr ?? []);
     const offer = r.offer ?? null;
@@ -185,6 +187,7 @@ export class RoyaleHudGrafts {
       this.putOff === key,
       this.reopened === key,
       sinceLanding,
+      waiting,
     );
     if (this.shown !== key) this.build(this.offer, me);
     setHidden(this.box, folded);
