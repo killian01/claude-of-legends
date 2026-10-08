@@ -52,7 +52,13 @@ describe('the wait for a return', () => {
     expect(returnHint(true, true)).toBe('You come back where you tapped');
     expect(returnHint(false, true)).toBe('You come back where you clicked');
     for (const touch of [true, false]) {
-      for (const picked of [true, false]) expect(returnHint(touch, picked)).not.toMatch(/[–—]/);
+      for (const picked of [true, false]) {
+        const words = returnHint(touch, picked);
+        // No en or em dash in game text.
+        expect(
+          [...words].some((ch) => ch.charCodeAt(0) === 0x2013 || ch.charCodeAt(0) === 0x2014),
+        ).toBe(false);
+      }
     }
   });
 
