@@ -80,6 +80,24 @@ export const ARRIVAL_QUIET_M = 25;
 export const ARRIVAL_DEPTH_M = 6;
 export const ARRIVAL_SAMPLE = 64;
 
+// Whether a cap is the whole planet's light (the calm's).
+function wholeLight(cap: DuskCap, radius: number): boolean {
+  return cap.radius >= 2 * radius - 1e-6;
+}
+
+// How deep inside the light an Arrival comes down, and a fair first foe
+// stands: ARRIVAL_DEPTH_M, a share of a small light's radius, none in the
+// whole planet's.
+export function arrivalDepth(cap: DuskCap, radius: number): number {
+  return wholeLight(cap, radius) ? 0 : Math.min(ARRIVAL_DEPTH_M, cap.radius * 0.4);
+}
+
+// Inside the light at an Arrival's depth.
+export function deepInLight(cap: DuskCap, p: Vec3, radius: number): boolean {
+  if (!insideCap(cap, p)) return false;
+  return wholeLight(cap, radius) || depthInside(cap, p) >= arrivalDepth(cap, radius);
+}
+
 export function arrivalSpot(
   rng: Rng,
   cap: DuskCap,
@@ -88,8 +106,8 @@ export function arrivalSpot(
   ground: RoyaleGround,
 ): Vec3 {
   const R = layout.radius;
-  const whole = cap.radius >= 2 * R - 1e-6;
-  const depth = whole ? 0 : Math.min(ARRIVAL_DEPTH_M, cap.radius * 0.4);
+  const whole = wholeLight(cap, R);
+  const depth = arrivalDepth(cap, R);
   const reach = Math.max(0, cap.radius - depth);
   const quiet2 = ARRIVAL_QUIET_M * ARRIVAL_QUIET_M;
   let best: Vec3 | null = null;
@@ -113,6 +131,73 @@ export function arrivalSpot(
   }
   if (best) return best;
   return snapLanding(cap.center, layout, ground) ?? cap.center;
+}
+
+// A Respawn Arrival's fair first fight (grace.ts arrive): a few steps from
+// one bot, inside its sight (a champion's 12 m, unit.ts), with nobody else
+// near either of them. 16 of 18 visitors dropped into the standing Respawn
+// match, where no escort lands, 25 m from everyone (arrivalSpot): their
+// first damage came 12 to 35 s after landing and 12 of the 13 with no
+// takedown left by 75 s; the two who stayed to the end had a takedown
+// about 10 s after first contact (the seat reports, 2026-10-08). The foes
+// are weighed softest first (the skill the bot plays now, 0 gentle to 2
+// strong, then its health share, its level, the lower id); one with any
+// other champion within FOE_CLEAR_M is passed over, and each of the first
+// FOE_MAX left gets FOE_TRIES draws from the match's stream, FOE_MIN_M to
+// FOE_MAX_M away in a drawn heading, snapped to walkable ground. A draw is
+// kept inside the light at an Arrival's depth, its chord to the foe within
+// a meter of the band, and with nobody but the foe within FOE_CLEAR_M:
+// the first kept wins; null when none is (the quiet spot then).
+export const FOE_MIN_M = 9;
+export const FOE_MAX_M = 11;
+export const FOE_CLEAR_M = 12;
+export const FOE_TRIES = 8;
+export const FOE_MAX = 6;
+
+// A bot an Arrival may come down beside, as the mode weighs it.
+export interface FoeCandidate {
+  id: number;
+  pos: Vec3;
+  // The skill it plays now (content/bots/royale_skills.ts
+  // ROYALE_SKILL_RANK): 0 gentle, 1 normal, 2 strong.
+  soft: number;
+  hpShare: number;
+  level: number;
+}
+
+export function fairFoeSpot(
+  rng: Rng,
+  cap: DuskCap,
+  foes: readonly FoeCandidate[],
+  others: readonly { id: number; pos: Vec3 }[],
+  layout: RoyaleLayout,
+  ground: RoyaleGround,
+): { at: Vec3; foeId: number } | null {
+  const R = layout.radius;
+  const clear2 = FOE_CLEAR_M * FOE_CLEAR_M;
+  const lo = FOE_MIN_M - 1;
+  const hi = FOE_MAX_M + 1;
+  const crowded = (p: Vec3, foeId: number): boolean =>
+    others.some((o) => o.id !== foeId && dist2(p, o.pos) <= clear2);
+  const order = [...foes].sort(
+    (a, b) => a.soft - b.soft || a.hpShare - b.hpShare || a.level - b.level || a.id - b.id,
+  );
+  let weighed = 0;
+  for (const foe of order) {
+    if (weighed >= FOE_MAX) break;
+    if (crowded(foe.pos, foe.id)) continue;
+    weighed++;
+    for (let i = 0; i < FOE_TRIES; i++) {
+      const dir = randomHeading(rng, foe.pos);
+      const reach = FOE_MIN_M + (FOE_MAX_M - FOE_MIN_M) * rng.next();
+      const p = snapLanding(along(foe.pos, dir, reach, R), layout, ground);
+      if (!p || !deepInLight(cap, p, R)) continue;
+      const d2 = dist2(p, foe.pos);
+      if (d2 < lo * lo || d2 > hi * hi || crowded(p, foe.id)) continue;
+      return { at: p, foeId: foe.id };
+    }
+  }
+  return null;
 }
 
 // Every seat's landing, in the order given (the sim passes unit ids

@@ -62,6 +62,7 @@ import {
   oneLifeRanking,
   placeFallen,
   respawnRanking,
+  returnCap,
   type Standing,
 } from './score';
 import {
@@ -120,6 +121,8 @@ export interface RoyaleTally {
   creaturesTaken: number;
   wardensTaken: number;
   markTakedowns: number;
+  // Respawn Arrivals that came down beside a fair first fight (grace.ts).
+  fairArrivals: number;
 }
 
 // The ground's answers as the mode's rules ask them.
@@ -182,6 +185,7 @@ export class RoyaleMode {
     creaturesTaken: 0,
     wardensTaken: 0,
     markTakedowns: 0,
+    fairArrivals: 0,
   };
   private hpBefore = new Map<number, number>();
   private aliveBefore = 0;
@@ -291,7 +295,8 @@ export class RoyaleMode {
 
   // A drop-in's Arrival (CONTEXT.md; Sim.beginArrival, the replay's
   // 'arrive' event): the seat a person takes from its bot comes down fresh
-  // at a quiet spot inside the light, in its Grace, its tally from zero
+  // inside the light, in Respawn at the field's level beside a fair first
+  // fight, else at a quiet spot, in its Grace, its tally from zero
   // (grace.ts arrive). Only in play.
   beginArrival(sim: Sim, unitId: number): void {
     const u = sim.units.get(unitId);
@@ -602,7 +607,9 @@ export class RoyaleMode {
   // The respawn's delay and place (SimOptions.respawnDelay, respawnPoint):
   // RESPAWN_S and the edge of the light in Respawn, never in One life. The
   // place is the candidate on the light's edge farthest from every other
-  // champion standing (score.ts edgeOfLight), never the first one drawn.
+  // champion standing (score.ts edgeOfLight), never the first one drawn;
+  // while the Dusk closes, the edge of the light it closes to (returnCap),
+  // for every seat.
   respawnDelay(): number {
     return this.variant === 'respawn' ? RESPAWN_S : Number.POSITIVE_INFINITY;
   }
@@ -614,7 +621,7 @@ export class RoyaleMode {
       if (o.kind !== 'champion' || o.dead || o.id === u.id || o.pos.y === undefined) continue;
       enemies.push(o.pos as Vec3);
     }
-    return edgeOfLight(sim.rng, this.state.dusk.now, enemies, this.layout, this.ground);
+    return edgeOfLight(sim.rng, returnCap(this.state.dusk), enemies, this.layout, this.ground);
   }
 
   // After the deaths: One life's places, the caches, the leader, the end.
