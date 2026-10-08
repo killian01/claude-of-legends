@@ -32,6 +32,17 @@ export function sightBlocked(map: GameMap, a: Vec2, b: Vec2): boolean {
   return anyWallOnLine(map.walls, a, b);
 }
 
+// Whether two champions standing at a and b see each other, sight range
+// and status aside, by computeVisibility's rules both ways: within the
+// map's close sight always; past it, both out of brush or in the same
+// bush, and no wall on the line between them. What a Respawn Arrival's
+// fair first fight asks of its spot (royale/grace.ts).
+export function inMutualSight(map: GameMap, a: Vec2, b: Vec2): boolean {
+  if (map.closeSight !== undefined && dist(a, b) <= map.closeSight) return true;
+  if (brushIndexAt(map, a) !== brushIndexAt(map, b)) return false;
+  return !sightBlocked(map, a, b);
+}
+
 // For each team (one set per team, in team order, ADR 0030), the set of
 // ENEMY unit ids that team can currently see. Reveal zones (kits-v2) add
 // their area on top: enemies inside are seen through brush and stealth

@@ -28,6 +28,7 @@ import type { ObsRoyale } from '../policy';
 import type { Sim } from '../sim';
 import { levelTo } from '../stats';
 import type { Unit } from '../unit';
+import { inMutualSight } from '../vision';
 import { arrivalSpot, deepInLight, type FoeCandidate, fairFoeSpot } from './drop';
 import { arrivalLevel, spendSkillPoints } from './levels';
 import type { RoyaleMode } from './mode';
@@ -132,7 +133,8 @@ export function observeGrace(
 // levels lifted, the Arrival's own Bough stays the one), then comes down a
 // few steps from a fair first fight (drop.ts fairFoeSpot): a bot's seat,
 // standing, out of its Grace and off any pad, out of combat, no higher in
-// level, deep enough inside the light. The foe holds its fire only while
+// level, deep enough inside the light, and the spot in its sight both ways
+// (vision.ts inMutualSight). The foe holds its fire only while
 // the Grace lasts (bot/fight.ts isGraced), so the person strikes first and
 // the bot fights on sight after that. With no such bot, and always in One
 // life, a quiet spot (drop.ts arrivalSpot). Either is in the light that
@@ -152,8 +154,9 @@ export function arrive(mode: RoyaleMode, sim: Sim, u: Unit): boolean {
     if (o.kind !== 'champion' || o.dead || o.id === u.id || o.pos.y === undefined) continue;
     others.push({ id: o.id, pos: o.pos as Vec3 });
   }
+  const sees = (a: Vec3, b: Vec3): boolean => inMutualSight(sim.map, a, b);
   const fair = respawn
-    ? fairFoeSpot(sim.rng, cap, fairFoes(mode, sim, u, cap), others, mode.layout, mode.ground)
+    ? fairFoeSpot(sim.rng, cap, fairFoes(mode, sim, u, cap), others, mode.layout, mode.ground, sees)
     : null;
   if (fair) mode.tally.fairArrivals++;
   const at =

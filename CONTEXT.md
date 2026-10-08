@@ -1184,8 +1184,8 @@ _Avoid_: quickening, zone speedup
 A battle royale drop-in's coming down: the seat a person takes from its bot in play lands
 fresh (full health and mana, everything ready), its tally from zero, in its Grace. In Respawn
 it comes down at least one level under the middle of the field, a few steps from a fair first
-fight (a bot out of combat, the softest in reach, no higher in level, nobody else near), else
-at a quiet spot; in One life at a quiet spot.
+fight (a bot out of combat, the softest in reach, no higher in level, in sight of each other,
+nobody else near), else at a quiet spot; in One life at a quiet spot.
 _Avoid_: spawn, deploy
 
 **Grace**:

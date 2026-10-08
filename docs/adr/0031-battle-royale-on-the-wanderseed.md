@@ -101,9 +101,11 @@ One life's Arrival and every One life rule are unchanged.
   level than the drop-in, and deep enough inside the light, the softest first: the skill it plays
   now (its sharpening included), then its health share, its level, the lower id. A foe with
   anyone else within 12 m is passed over, six foes are weighed, eight draws each, and a draw is
-  kept deep enough inside the light with nobody but the foe within 12 m of it. With none, the
-  quiet spot as before (`src/sim/royale/drop.ts`). The foe holds its fire only while the Grace
-  lasts, so the person strikes first; the bot fights on sight after that, as every bot does.
+  kept deep enough inside the light, in the foe's sight both ways (no bush between them, no rock
+  on the line, `src/sim/vision.ts` inMutualSight), with nobody but the foe within 12 m of it.
+  With none, the quiet spot as before (`src/sim/royale/drop.ts`). The foe holds its fire only
+  while the Grace lasts, so the person strikes first; the bot fights on sight after that, as
+  every bot does.
 - **The light it stands in.** While the Dusk closes, a Respawn return and an Arrival are set
   down in the cap it closes to, which lies inside the closing one, so a fresh champion is not
   overtaken before the phase ends; while it holds, the light now (`src/sim/royale/score.ts`
@@ -117,3 +119,9 @@ One life's Arrival and every One life rule are unchanged.
   9 of 16 against 5 of 16. The first life is shorter at the median, 25 s against 33 s (31.5 s
   against 35 s over seeds 1 to 12, 50 s against 42 s on average): on seeds 1 to 4 the fair foe
   ended none of them, the champions drawn to the fight from just past 12 m did.
+- **In sight** (the same day, on merging the tranche). Over seeds 1 to 12, 7 of the 43 fair
+  landings saw no enemy at all, the foe in a bush or behind a rock; a playthrough's drop-ins met
+  nobody. The spot now asks for the foe's sight both ways: 43 of the 48 drop-ins see an enemy
+  on landing (36 before, none on the quiet spot), a takedown within the first minute for 28 of
+  48 (26 on the quiet spot), the first life 28 s at the median and 47 s on average (35 s and 42 s
+  on the quiet spot).
