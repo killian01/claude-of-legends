@@ -29,7 +29,12 @@ import {
   fairFoeSpot,
 } from '../src/sim/royale/drop';
 import { depthInside, insideCap } from '../src/sim/royale/dusk';
-import { ARRIVAL_GRACE_S, beginGrace, endGrace } from '../src/sim/royale/grace';
+import {
+  ARRIVAL_GRACE_MAX_S,
+  ARRIVAL_GRACE_S,
+  beginGrace,
+  endGrace,
+} from '../src/sim/royale/grace';
 import { along, type RoyaleGround, randomHeading } from '../src/sim/royale/layout';
 import { ARRIVAL_LEVEL_BEHIND } from '../src/sim/royale/levels';
 import { edgeOfLight, returnCap } from '../src/sim/royale/score';
@@ -121,11 +126,14 @@ describe('an Arrival in play', () => {
     expect(sim.royale!.scores.get(u.id)).toBe(0);
     // The match's own count keeps what happened.
     expect(sim.royaleMode!.tally).toEqual(tally);
-    // In its Grace, for ARRIVAL_GRACE_S.
+    // In its Grace, which waits on the seat's first order past
+    // ARRIVAL_GRACE_S, ARRIVAL_GRACE_MAX_S at most (tests/royale_grace_wait.test.ts).
     expect(sim.royale!.arriving.has(u.id)).toBe(true);
     expect(sim.royaleMode!.graces.get(u.id)).toEqual({
       since: sim.time,
-      until: sim.time + ARRIVAL_GRACE_S,
+      until: sim.time + ARRIVAL_GRACE_MAX_S,
+      orderEndsFrom: sim.time + ARRIVAL_GRACE_S,
+      ordered: false,
       held: true,
     });
     // Somewhere quiet inside the light, on walkable ground.

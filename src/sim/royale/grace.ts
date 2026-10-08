@@ -19,6 +19,14 @@
 // ready, items kept, its level kept unless Respawn lifts it to the field's,
 // and the seat's tally (score, kills, deaths, assists, streak) started from
 // zero for the person taking it.
+// A Respawn Arrival's Grace waits on the person (the seat reports,
+// 2026-10-08: the server began it while a slow client kept its joining
+// card up to FIRST_FRAME_WAIT_MS, so a newcomer could first see the world
+// with the Grace over and a foe 10 m away): past ARRIVAL_GRACE_S it lasts
+// until the seat's first order of any kind, at most ARRIVAL_GRACE_MAX_S.
+// No signal from the client is trusted: the orders are the seat's own and
+// recorded, so a replay re-simulates it, and a bot, which orders on its
+// first decision, never waits on a load (its Grace ends at the floor).
 
 import { cancelRecall } from '../combat/status';
 import { ROYALE_SKILL_RANK, sharpenedSkill } from '../content/bots/royale_skills';
@@ -35,27 +43,46 @@ import type { RoyaleMode } from './mode';
 import { leaderOf, returnCap } from './score';
 import type { DuskCap } from './types';
 
-// Seconds a fresh champion cannot be damaged or targeted.
+// Seconds a fresh champion cannot be damaged or targeted; a Respawn
+// Arrival's floor.
 export const ARRIVAL_GRACE_S = 3;
+// The longest a Respawn Arrival's Grace waits for the seat's first order:
+// the joining card's bound (FIRST_FRAME_WAIT_MS, 4 s) and two seconds to
+// take in the world.
+export const ARRIVAL_GRACE_MAX_S = 6;
 
 // One Grace: when it began (an act at or after it ends it), when it runs
-// out, and whether the hold is its own to let go at its end (it put the
-// hold on, and the seat has not pressed Stop since).
+// out, from when an order of any kind ends it (a Respawn Arrival's floor;
+// null for every other Grace), whether the seat gave one since it began,
+// and whether the hold is its own to let go at its end (it put the hold
+// on, and the seat has not pressed Stop since).
 export interface Grace {
   since: number;
   until: number;
+  orderEndsFrom: number | null;
+  ordered: boolean;
   held: boolean;
 }
 
 // The Grace begins (an Arrival, a Respawn return): a previous one ends.
-export function beginGrace(mode: RoyaleMode, u: Unit, time: number): void {
+// `waits`: a Respawn Arrival's, which waits on the seat's first order.
+export function beginGrace(mode: RoyaleMode, u: Unit, time: number, waits = false): void {
   endGrace(mode, u);
-  const until = time + ARRIVAL_GRACE_S;
+  const until = time + (waits ? ARRIVAL_GRACE_MAX_S : ARRIVAL_GRACE_S);
   const held = !u.holding;
   u.holding = true;
-  mode.graces.set(u.id, { since: time, until, held });
+  const orderEndsFrom = waits ? time + ARRIVAL_GRACE_S : null;
+  mode.graces.set(u.id, { since: time, until, orderEndsFrom, ordered: false, held });
   mode.state.arriving.add(u.id);
   u.statuses.push({ kind: 'untargetable', until });
+}
+
+// An order the seat gave (Sim's move, attack-move and Stop; an attack, a
+// cast or a sigil is an act, RoyaleMode.lastActAt): a Grace that waits on
+// it ends once past its floor.
+export function noteOrder(mode: RoyaleMode, unitId: number): void {
+  const g = mode.graces.get(unitId);
+  if (g) g.ordered = true;
 }
 
 // The Grace ends: its status goes, any other untargetable status (a kit's
@@ -82,8 +109,9 @@ export function inGrace(mode: RoyaleMode, unitId: number, time: number): boolean
   return g !== undefined && time < g.until;
 }
 
-// At the start of a tick: a Grace run out, or ended by its champion's own
-// first attack or cast, ends (in the order they began).
+// At the start of a tick: a Grace run out, ended by its champion's own
+// first attack or cast, or past a Respawn Arrival's floor with an order
+// given, ends (in the order they began).
 export function stepGraces(mode: RoyaleMode, sim: Sim): void {
   if (mode.graces.size === 0) return;
   for (const [id, g] of [...mode.graces]) {
@@ -94,7 +122,8 @@ export function stepGraces(mode: RoyaleMode, sim: Sim): void {
       continue;
     }
     const acted = (mode.lastActAt.get(id) ?? Number.NEGATIVE_INFINITY) >= g.since;
-    if (u.dead || sim.time + 1e-9 >= g.until || acted || u.pendingAttack !== null) {
+    const ordered = g.ordered && g.orderEndsFrom !== null && sim.time + 1e-9 >= g.orderEndsFrom;
+    if (u.dead || sim.time + 1e-9 >= g.until || acted || ordered || u.pendingAttack !== null) {
       endGrace(mode, u);
     }
   }
@@ -136,10 +165,11 @@ export function observeGrace(
 // level, deep enough inside the light, and the spot in its sight both ways
 // (vision.ts inMutualSight). The foe holds its fire only while
 // the Grace lasts (bot/fight.ts isGraced), so the person strikes first and
-// the bot fights on sight after that. With no such bot, and always in One
-// life, a quiet spot (drop.ts arrivalSpot). Either is in the light that
-// holds until the phase ends (score.ts returnCap); every draw from the
-// match's stream.
+// the bot fights on sight after that; in Respawn the Grace waits on the
+// seat's first order (beginGrace), so it lasts until the person can see.
+// With no such bot, and always in One life, a quiet spot (drop.ts
+// arrivalSpot). Either is in the light that holds until the phase ends
+// (score.ts returnCap); every draw from the match's stream.
 export function arrive(mode: RoyaleMode, sim: Sim, u: Unit): boolean {
   const s = mode.state;
   if (s.stage !== 'play' || u.kind !== 'champion') return false;
@@ -173,7 +203,7 @@ export function arrive(mode: RoyaleMode, sim: Sim, u: Unit): boolean {
   freshen(u, time);
   u.pos = { x: at.x, y: at.y, z: at.z };
   clearTally(mode, sim, u);
-  beginGrace(mode, u, time);
+  beginGrace(mode, u, time, respawn);
   sim.pushEvent({ type: 'royale_land', unitId: u.id });
   return true;
 }
