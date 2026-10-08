@@ -223,4 +223,8 @@ back within 10 m of a champion 41 percent of the time (over seeds 1 and 2 of fif
   stand-in's median life fell from 17.9 s to 15.0 s and the steals rose from 37 to 45 percent;
   picking across the light from the fall, 13.7 s and 43 percent; picking nothing, 18.3 s and 41
   percent, the bots fighting 67.4 percent of the seconds an enemy is in reach (66.2 before), the
-  final level median 10 (9), the drop-in's first life 31 s at the median (26).
+  final level median 10 (9), the drop-in's first life 31 s at the median (26). Left open: the
+  drop-ins found a fair first fight 84 percent of the time (93 before), those joining at 7:00
+  half the time (79 percent), and took their first takedown after 23 s at the median (18): the
+  field's levels sit closer together and the Burr keeps more bots in a fight, so fewer soft bots
+  out of combat stand at or under the drop-in's level (`grace.ts` fairFoes).
