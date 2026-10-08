@@ -126,6 +126,7 @@ import {
   wrathChipText,
 } from './objective_line';
 import { firstPointsText, pointsWord, popText } from './points_text';
+import { BURR_COLOR, burrWashLine } from './royale_burr';
 import { RoyaleHud, type RoyaleKill } from './royale_hud';
 import {
   ANNOUNCE_TOP_PX,
@@ -785,6 +786,10 @@ const CSS = `
 /* A Respawn death's life line, under the subtitle (ui/royale_life.ts). */
 .hud-overlay-life { font-size: 14px; margin-top: 6px; color: #e6dcb8;
   font-variant-numeric: tabular-nums; }
+/* Who carries the Burr of a Respawn death, under the life line
+   (ui/royale_burr.ts): a thorn's red, the next life's target. */
+.hud-overlay-burr { font-size: 15px; font-weight: 700; margin-top: 8px; color: ${BURR_COLOR};
+  text-shadow: 0 1px 4px #000; }
 .hud-menu-btn {
   pointer-events: auto; margin-top: 10px; padding: 10px 26px; border-radius: 6px;
   border: 1px solid #466030; background: #1d2a14; color: #d8e6c0;
@@ -827,6 +832,7 @@ const CSS = `
 .hud.compact .hud-overlay-title { font-size: 26px; letter-spacing: 1px; }
 .hud.compact .hud-overlay-sub { font-size: 12.5px; margin-top: 2px; }
 .hud.compact .hud-overlay-life { font-size: 11.5px; margin-top: 3px; }
+.hud.compact .hud-overlay-burr { font-size: 12px; margin-top: 4px; }
 .hud.compact .hud-end-rating { font-size: 13px; margin-top: 2px; min-height: 0; }
 .hud.compact .hud-end-join { margin-top: 8px; font-size: 11.5px; }
 .hud.compact .hud-menu-btn { margin-top: 6px; padding: 8px 18px; font-size: 13px; }
@@ -1326,6 +1332,8 @@ export class Hud {
   private readonly royaleLife = new RoyaleLife();
   private readonly royaleSeen = new SeenChampions();
   private readonly deathLife: HTMLElement;
+  // Who carries the Burr of a Respawn death (ui/royale_burr.ts).
+  private readonly deathBurr: HTMLElement;
   // The best Respawn tally this browser kept before this match's card,
   // read once (game/settings.ts royaleBest).
   private royaleBestBefore: number | null = null;
@@ -1929,6 +1937,9 @@ export class Hud {
     this.deathLife = el('div', 'hud-overlay-life');
     this.deathLife.hidden = true;
     this.deathOverlay.append(this.deathTitle, this.deathSub, this.deathLife);
+    this.deathBurr = el('div', 'hud-overlay-burr');
+    this.deathBurr.hidden = true;
+    this.deathOverlay.appendChild(this.deathBurr);
 
     this.endOverlay = el('div', 'hud-overlay modal');
     this.endTitle = el('div', 'hud-overlay-title');
@@ -3534,6 +3545,16 @@ export class Hud {
       const life = dead && this.royaleVariant === 'respawn' ? this.royaleLife.line(selfRow) : null;
       if (life !== null) setText(this.deathLife, life);
       if (this.deathLife.hidden !== (life === null)) this.deathLife.hidden = life === null;
+      // And who carries the Burr of it: the next life's target.
+      const burr = dead
+        ? burrWashLine(
+            this.world.royaleView?.() ?? null,
+            time,
+            (id) => this.world.seat?.(id)?.name ?? null,
+          )
+        : null;
+      if (burr !== null) setText(this.deathBurr, burr);
+      if (this.deathBurr.hidden !== (burr === null)) this.deathBurr.hidden = burr === null;
       this.syncOverlay();
       return;
     }

@@ -1,18 +1,21 @@
 // The arrows at the screen's edge (the loud moments): what everyone should
 // find on the Wanderseed and is not on the screen right now (a Seedfall's
-// column, and later a Rising, the Wrath, the Lodestar, an Ablaze run)
-// points at from the border, with how far it is. Pure: the targets come in
+// column, a Rising, the Wrath, the Lodestar, an Ablaze run), and the
+// carrier of the viewer's own Burr, points at from the border, with how
+// far it is. Pure: the targets come in
 // already projected by the renderer (render/royale_cues.ts), the screen's
 // safe area beside them, and the arrows come out placed and turned. The
 // HUD draws them (ui/royale_hud_moments.ts).
 
 import { SEEDFALL_AT_S } from '../sim/content/royale_events';
 
-// What an arrow points at, in priority order: a Seedfall before a Rising
+// What an arrow points at, in priority order: a Seedfall before the own
+// Burr's carrier (the viewer's alone, and counting down) before a Rising
 // before the Wrath before the Lodestar before an Ablaze run.
-export type EdgeKind = 'seedfall' | 'rising' | 'wrath' | 'lodestar' | 'ablaze';
+export type EdgeKind = 'seedfall' | 'burr' | 'rising' | 'wrath' | 'lodestar' | 'ablaze';
 export const EDGE_PRIORITY: readonly EdgeKind[] = [
   'seedfall',
+  'burr',
   'rising',
   'wrath',
   'lodestar',

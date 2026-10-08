@@ -115,7 +115,7 @@ describe('the arrows', () => {
   });
 
   it('rank a Seedfall over a Rising over the Wrath over the Lodestar over Ablaze', () => {
-    expect(EDGE_PRIORITY).toEqual(['seedfall', 'rising', 'wrath', 'lodestar', 'ablaze']);
+    expect(EDGE_PRIORITY).toEqual(['seedfall', 'burr', 'rising', 'wrath', 'lodestar', 'ablaze']);
     const off = { x: -500, y: 200 };
     const arrows = edgeArrows(
       [
@@ -128,6 +128,20 @@ describe('the arrows', () => {
       VIEW,
     );
     expect(arrows.map((a) => a.key)).toEqual(['sf', 'ri', 'wr']);
+  });
+
+  it("rank the own Burr's carrier after a Seedfall and before a Rising, its seconds left read", () => {
+    const off = { x: -500, y: 200 };
+    const arrows = edgeArrows(
+      [
+        target({ ...off, key: 'ri', kind: 'rising', distance: 10 }),
+        target({ ...off, key: 'burr', kind: 'burr', distance: 42, secondsLeft: 37.2 }),
+        target({ ...off, key: 'sf', kind: 'seedfall', distance: 90 }),
+      ],
+      VIEW,
+    );
+    expect(arrows.map((a) => a.key)).toEqual(['sf', 'burr', 'ri']);
+    expect(arrows[1]!.label).toBe('42 m \u00b7 0:38');
   });
 
   it('take the nearest first within a kind', () => {
