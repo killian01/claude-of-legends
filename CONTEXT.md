@@ -1184,8 +1184,9 @@ revive already carries.)
 _Avoid_: second wind, gulag, redeploy, extra life
 
 **Last light**:
-Respawn's last closing of the Dusk, until the light goes out at the end of the match: a
-takedown counts double, and in its last fifteen seconds a death is final.
+Respawn's last closing of the Dusk, until the light goes out at the end of the match (its
+last 72 seconds): a takedown counts double on the score, a Lodestar's four, for people and
+bots alike, and the rank line shows "x2" while it lasts. No death is final.
 _Avoid_: sudden death, final circle
 
 **Hastening**:

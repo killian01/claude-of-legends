@@ -36,12 +36,11 @@ describe('the wait for a return', () => {
     expect(returnGlobeOn(respawn, { ...seat, dead: false }, fellAt + 3)).toBe(false);
   });
 
-  it('never shows it in One life, the drop, the end, or once a death is final', () => {
+  it('never shows it in One life, the drop or the end', () => {
     const t = fellAt + 3;
     expect(returnGlobeOn({ v: 'one_life', st: 'play' }, seat, t)).toBe(false);
     expect(returnGlobeOn({ v: 'respawn', st: 'drop' }, seat, t)).toBe(false);
     expect(returnGlobeOn({ v: 'respawn', st: 'over' }, seat, t)).toBe(false);
-    expect(returnGlobeOn({ ...respawn, fi: 1 }, seat, t)).toBe(false);
     expect(returnGlobeOn(respawn, { dead: true, respawnAt: Number.POSITIVE_INFINITY }, t)).toBe(
       false,
     );

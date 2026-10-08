@@ -27,15 +27,13 @@ export interface ReturnSeat {
 export interface ReturnView {
   v: 'respawn' | 'one_life';
   st: 'drop' | 'play' | 'over';
-  // Respawn's Last light: a death is final, no return to pick.
-  fi?: 1;
 }
 
 // Whether the globe shows over a dead champion now: in Respawn's play,
 // RETURN_GLOBE_AFTER_S after the fall, until the champion stands again
 // (a slow snapshot keeps it up past the return's time, never down early).
 export function returnGlobeOn(r: ReturnView, u: ReturnSeat, time: number): boolean {
-  if (r.v !== 'respawn' || r.st !== 'play' || r.fi === 1) return false;
+  if (r.v !== 'respawn' || r.st !== 'play') return false;
   if (!u.dead || !Number.isFinite(u.respawnAt)) return false;
   return time >= u.respawnAt - RESPAWN_S + RETURN_GLOBE_AFTER_S;
 }

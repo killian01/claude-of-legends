@@ -3,8 +3,8 @@
 // all through addRoyaleBlocks: the recipient's Graft offer and Grafts, the
 // Seedfalls, the Risings, the marks, the recipient's Burr, the Clamors, the
 // Respawn rank and gap
-// (a drop-in's since they landed, with rs), the Reprieve, the Graces (an Arrival, a return), the Last light's final seconds and the watched
-// champion; and a cache's kind and its opening time. A builder answers
+// (a drop-in's since they landed, with rs), the Reprieve, the Graces (an Arrival, a return) and the Respawn wait's
+// killer; and a cache's kind and its opening time. A builder answers
 // undefined to leave its block off the wire, which every one does until its
 // rules ship. A block sent on change (sf, cl) asks sentOnChange below, the
 // one memory of what each viewer was last sent, never a tracker of its own
@@ -280,7 +280,6 @@ export const arrivalBlock: Builder<SnapGrace[]> = (sim, viewer) => {
   }
   return out.length > 0 ? out : undefined;
 };
-export const finalBlock: Builder<1> = () => undefined;
 export const watchBlock: Builder<number> = () => undefined;
 
 // Every optional block onto the snapshot's mode block, each only when its
@@ -315,8 +314,6 @@ export function addRoyaleBlocks(
   if (rp !== undefined) block.rp = rp;
   const ar = arrivalBlock(sim, viewer, ctx);
   if (ar !== undefined) block.ar = ar;
-  const fi = finalBlock(sim, viewer, ctx);
-  if (fi !== undefined) block.fi = fi;
   const wa = watchBlock(sim, viewer, ctx);
   if (wa !== undefined) block.wa = wa;
 }

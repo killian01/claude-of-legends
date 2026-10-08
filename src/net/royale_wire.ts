@@ -141,8 +141,6 @@ export interface SnapRoyale {
   // when an order ends it]; absent when none. Sent every snapshot while any
   // is graced.
   ar?: SnapGrace[];
-  // Respawn's Last light: 1 once a death is final.
-  fi?: 1;
   // The champion the recipient watches once out, when not their own.
   wa?: number;
 }
