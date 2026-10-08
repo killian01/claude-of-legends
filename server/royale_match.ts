@@ -52,6 +52,12 @@ export interface RoyalePlayer {
   ackAt: number;
   // Took a bot's seat after the start (ADR 0025).
   dropIn: boolean;
+  // Respawn, a drop-in into the match in play: when they landed, and every
+  // seat's score then. The rank line and the end card count from there
+  // (server/royale_ranking.ts windowStanding), so a seat that came in late
+  // is ranked on what it played, not against whole-match scores. Null for
+  // a seat from the drop and for a rejoin.
+  window: { from: number; base: Map<number, number> } | null;
   // The caches list, and the scoreboard with every seat's name and bot
   // mark, reached this person at least once.
   cachesSent: boolean;
@@ -197,6 +203,15 @@ export class RoyaleMatch {
     const u = this.sim.units.get(unitId);
     const stats = freshStats(this.sim.tickCount, u?.pos.x ?? 0, u?.pos.z ?? 0);
     if (u?.pos.y !== undefined) stats.lastY = u.pos.y;
+    const r = this.sim.royale;
+    const arrived = dropIn && r.stage === 'play';
+    // The seat came down fresh (the Arrival): what it scores from here
+    // falls inside every other drop-in's window.
+    if (arrived) {
+      for (const other of this.players.values()) {
+        other.window?.base.set(unitId, r.scores.get(unitId) ?? 0);
+      }
+    }
     const player: RoyalePlayer = {
       clientId: person.clientId,
       owner: person.owner,
@@ -210,6 +225,10 @@ export class RoyaleMatch {
       ack: 0,
       ackAt: 0,
       dropIn,
+      window:
+        arrived && this.variant === 'respawn'
+          ? { from: this.sim.time, base: new Map(r.scores) }
+          : null,
       cachesSent: false,
       scoreSent: false,
       resultSent: false,
@@ -389,6 +408,7 @@ export class RoyaleMatch {
         people: this.players.size,
         caches,
         ...(finalPlace !== undefined ? { finalPlace } : {}),
+        ...(p.window ? { windowBase: p.window.base } : {}),
       },
     );
   }
@@ -415,9 +435,15 @@ export class RoyaleMatch {
   resultFor(clientId: number): RoyaleResult | null {
     const p = this.players.get(clientId);
     if (!p) return null;
-    const result = royaleResult(this.sim.royale, this.rankedSeats(), p.unitId);
+    const r = this.sim.royale;
+    const result = royaleResult(r, this.rankedSeats(), p.unitId, p.window?.base ?? null);
+    // Respawn: how long the seat was the person's, for the end card's
+    // "in 6:12".
+    if (this.variant === 'respawn') {
+      result.held = Math.max(0, Math.round(this.sim.time - (p.window?.from ?? r.dropEndsAt)));
+    }
     // The Grafts the seat took, in order, for the end card.
-    const grafts = this.sim.royale.grafts.get(p.unitId);
+    const grafts = r.grafts.get(p.unitId);
     if (grafts && grafts.length > 0) result.grafts = [...grafts];
     return result;
   }
