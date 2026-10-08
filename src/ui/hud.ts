@@ -3519,7 +3519,9 @@ export class Hud {
       this.royale.update();
       const time = this.world.time;
       const inPlay = this.world.royaleView?.()?.st === 'play';
-      this.royaleLife.step(time, inPlay, u.dead, selfRow);
+      // A life begun: the last death's recap is done with, or the next
+      // wash would open on it until its own note comes.
+      if (this.royaleLife.step(time, inPlay, u.dead, selfRow)) this.deathRecap = '';
       this.royaleSeen.note(this.world.units.values(), this.selfId, time);
       const dead = u.dead && !this.royale.resultShown();
       this.deathOverlay.classList.toggle('open', dead);
