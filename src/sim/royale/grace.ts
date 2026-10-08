@@ -16,17 +16,23 @@
 // (in its checkpoint) and lists the graced seats in RoyaleState.arriving,
 // which the snapshot and the observation read. An Arrival also makes the
 // champion fresh where it is set down: full health and mana, every cooldown
-// ready, level and items kept, and the seat's tally (score, kills, deaths,
-// assists, streak) started from zero for the person taking it.
+// ready, items kept, its level kept unless Respawn lifts it to the field's,
+// and the seat's tally (score, kills, deaths, assists, streak) started from
+// zero for the person taking it.
 
 import { cancelRecall } from '../combat/status';
+import { ROYALE_SKILL_RANK, sharpenedSkill } from '../content/bots/royale_skills';
+import { outOfCombat } from '../favors';
 import type { Vec3 } from '../geo';
 import type { ObsRoyale } from '../policy';
 import type { Sim } from '../sim';
+import { levelTo } from '../stats';
 import type { Unit } from '../unit';
-import { arrivalSpot } from './drop';
+import { arrivalSpot, deepInLight, type FoeCandidate, fairFoeSpot } from './drop';
+import { arrivalLevel, spendSkillPoints } from './levels';
 import type { RoyaleMode } from './mode';
-import { leaderOf } from './score';
+import { leaderOf, returnCap } from './score';
+import type { DuskCap } from './types';
 
 // Seconds a fresh champion cannot be damaged or targeted.
 export const ARRIVAL_GRACE_S = 3;
@@ -119,22 +125,46 @@ export function observeGrace(
 }
 
 // A drop-in's Arrival (Sim.beginArrival, the replay's 'arrive' event): the
-// seat a person takes from its bot comes down fresh at a quiet spot inside
-// the light (drop.ts arrivalSpot, drawn from the match's stream), in its
-// Grace, its tally started from zero. Only in play; never a seat out for
-// good. False when nothing happened.
+// seat a person takes from its bot comes down fresh, in its Grace, its
+// tally started from zero. Only in play; never a seat out for good. False
+// when nothing happened. In Respawn it first rises to ARRIVAL_LEVEL_BEHIND
+// under the field's middle (levels.ts arrivalLevel; no Graft offer for the
+// levels lifted, the Arrival's own Bough stays the one), then comes down a
+// few steps from a fair first fight (drop.ts fairFoeSpot): a bot's seat,
+// standing, out of its Grace and off any pad, out of combat, no higher in
+// level, deep enough inside the light. The foe holds its fire only while
+// the Grace lasts (bot/fight.ts isGraced), so the person strikes first and
+// the bot fights on sight after that. With no such bot, and always in One
+// life, a quiet spot (drop.ts arrivalSpot). Either is in the light that
+// holds until the phase ends (score.ts returnCap); every draw from the
+// match's stream.
 export function arrive(mode: RoyaleMode, sim: Sim, u: Unit): boolean {
   const s = mode.state;
   if (s.stage !== 'play' || u.kind !== 'champion') return false;
   if (s.eliminated.includes(u.id)) return false;
   if (mode.variant === 'one_life' && u.dead) return false;
   const time = sim.time;
-  const others: Vec3[] = [];
+  const respawn = mode.variant === 'respawn';
+  if (respawn) liftToField(sim, u);
+  const cap = returnCap(s.dusk);
+  const others: { id: number; pos: Vec3 }[] = [];
   for (const o of sim.units.values()) {
     if (o.kind !== 'champion' || o.dead || o.id === u.id || o.pos.y === undefined) continue;
-    others.push(o.pos as Vec3);
+    others.push({ id: o.id, pos: o.pos as Vec3 });
   }
-  const at = arrivalSpot(sim.rng, s.dusk.now, others, mode.layout, mode.ground);
+  const fair = respawn
+    ? fairFoeSpot(sim.rng, cap, fairFoes(mode, sim, u, cap), others, mode.layout, mode.ground)
+    : null;
+  if (fair) mode.tally.fairArrivals++;
+  const at =
+    fair?.at ??
+    arrivalSpot(
+      sim.rng,
+      cap,
+      others.map((o) => o.pos),
+      mode.layout,
+      mode.ground,
+    );
   mode.flights.delete(u.id);
   mode.padHold.delete(u.id);
   freshen(u, time);
@@ -143,6 +173,42 @@ export function arrive(mode: RoyaleMode, sim: Sim, u: Unit): boolean {
   beginGrace(mode, u, time);
   sim.pushEvent({ type: 'royale_land', unitId: u.id });
   return true;
+}
+
+// A Respawn drop-in's level: at least ARRIVAL_LEVEL_BEHIND under the
+// lower median of every other seat's level, the fallen too, its points
+// spent (the ultimate from level 6, levels.ts).
+function liftToField(sim: Sim, u: Unit): void {
+  const field: number[] = [];
+  for (const o of sim.units.values()) {
+    if (o.kind === 'champion' && o.id !== u.id) field.push(o.level);
+  }
+  levelTo(u, arrivalLevel(u.level, field));
+  spendSkillPoints(u);
+}
+
+// The bots an Arrival may come down beside, as fairFoeSpot weighs them.
+function fairFoes(mode: RoyaleMode, sim: Sim, u: Unit, cap: DuskCap): FoeCandidate[] {
+  const s = mode.state;
+  const R = mode.layout.radius;
+  const out: FoeCandidate[] = [];
+  for (const o of sim.units.values()) {
+    if (o.kind !== 'champion' || o.dead || o.id === u.id || o.pos.y === undefined) continue;
+    if (!sim.policies.has(o.id)) continue;
+    if (inGrace(mode, o.id, sim.time) || mode.isFlying(o.id)) continue;
+    if (!outOfCombat(o, sim.time) || o.level > u.level) continue;
+    const pos = o.pos as Vec3;
+    if (!deepInLight(cap, pos, R)) continue;
+    const skill = sharpenedSkill(mode.skillOf(o.id), s.scores.get(o.id) ?? 0, s.dusk.phase);
+    out.push({
+      id: o.id,
+      pos,
+      soft: ROYALE_SKILL_RANK[skill],
+      hpShare: o.maxHp > 0 ? o.hp / o.maxHp : 0,
+      level: o.level,
+    });
+  }
+  return out;
 }
 
 // A fresh champion: up if it was down, full health and mana, every

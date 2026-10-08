@@ -121,6 +121,8 @@ export interface RoyaleTally {
   creaturesTaken: number;
   wardensTaken: number;
   markTakedowns: number;
+  // Respawn Arrivals that came down beside a fair first fight (grace.ts).
+  fairArrivals: number;
 }
 
 // The ground's answers as the mode's rules ask them.
@@ -183,6 +185,7 @@ export class RoyaleMode {
     creaturesTaken: 0,
     wardensTaken: 0,
     markTakedowns: 0,
+    fairArrivals: 0,
   };
   private hpBefore = new Map<number, number>();
   private aliveBefore = 0;
@@ -292,7 +295,8 @@ export class RoyaleMode {
 
   // A drop-in's Arrival (CONTEXT.md; Sim.beginArrival, the replay's
   // 'arrive' event): the seat a person takes from its bot comes down fresh
-  // at a quiet spot inside the light, in its Grace, its tally from zero
+  // inside the light, in Respawn at the field's level beside a fair first
+  // fight, else at a quiet spot, in its Grace, its tally from zero
   // (grace.ts arrive). Only in play.
   beginArrival(sim: Sim, unitId: number): void {
     const u = sim.units.get(unitId);
