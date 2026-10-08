@@ -250,7 +250,7 @@ describe('the pick', () => {
     sim.royale!.offers.get(u.id)![0]!.cards[0] = 'deep_roots';
     u.dead = true;
     u.hp = 0;
-    expect(sim.royaleMode!.wantsDeadDecision(u.id)).toBe(true);
+    expect(sim.royaleMode!.wantsDeadDecision(u, sim.time + 1)).toBe(true);
     expect(sim.pickGraft(u.id, 0)).toBe(true);
     expect(u.grafts).toEqual(['deep_roots']);
     expect(u.hp).toBe(0);

@@ -201,10 +201,14 @@ back within 10 m of a champion 41 percent of the time (over seeds 1 and 2 of fif
   apart around it that holds one gives its point farthest from everyone, and with none the edge
   of the light as before. Each wait picks afresh; no pick, the return is as before
   (`src/sim/royale/return_pick.ts`). The return keeps its Grace.
-- **The bots.** A dead Respawn seat is asked its decision until it picked (the dead decision a
-  Graft offer already asks), through the same observation, which reads the pick back in its
-  `drop`; the brain picks beside a Seedfall landing within 20 s of its return
-  (`bot/brain.ts` respawnPick), else picks nothing and comes back at the edge.
+- **The bots.** A dead Respawn seat is asked its decision once a wait, on its first decision
+  slot after the fall (and on every slot while a Graft offer is open), through the same
+  observation, which reads the pick back in its `drop` (`mode.ts` wantsDeadDecision). The house
+  brain picks nothing and comes back at the edge, where a person who taps nothing comes back
+  (`bot/brain.ts`): measured with the whole tranche (below), a pick beside a Seedfall landing
+  within 20 s of the return, or across the light from the fall, crowded the returns into the
+  fights and shortened every seat's lives; and asked on every slot until it picked, the dead
+  seats cost some 15,000 observations a match for a pick the brain does not make.
 - **Measured** over fifty house bots, seeds 1 to 3: 30 percent of the returns are picked (339 of
   1,069, 296 of 1,023, 331 of 1,094), none of them within 10 m of a champion (11 m at the
   median), none outside the light; the dead seats' decisions cost about 15,000 more
@@ -213,3 +217,10 @@ back within 10 m of a champion 41 percent of the time (over seeds 1 and 2 of fif
   at the median, the first hit after 5.9 s, 0.86 takedowns; picking where it fell, 12 s, 2.6 s,
   0.71; picking the far side of the light from its fall, 18.5 s, 4.0 s, 1.60. The pick is a real
   choice: back into the same fight is quick and short, a fresh side of the light pays.
+- **Measured with the whole tranche** (the waiting Grace, the paid assists, the Burr, the pick;
+  `node scripts/royale_report.mjs --variant respawn --dropin 60,180,300,420`, seeds 1 to 24, a
+  Dain drop-in in both, against rules 5). With the house brain picking beside a Seedfall, the
+  stand-in's median life fell from 17.9 s to 15.0 s and the steals rose from 37 to 45 percent;
+  picking across the light from the fall, 13.7 s and 43 percent; picking nothing, 18.3 s and 41
+  percent, the bots fighting 67.4 percent of the seconds an enemy is in reach (66.2 before), the
+  final level median 10 (9), the drop-in's first life 31 s at the median (26).

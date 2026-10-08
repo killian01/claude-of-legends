@@ -12,7 +12,7 @@ import { royaleFactory } from '../server/royale_build';
 import { RoyaleMatch } from '../server/royale_match';
 import type { RoyalePerson } from '../server/royale_seats';
 import { applyReplayEvent, loadRoyaleReplay } from '../src/net/replay';
-import { runBotDecisions } from '../src/sim/bot_driver';
+import { POLICY_PERIOD_TICKS } from '../src/sim/bot_driver';
 import { attachRoyaleBot } from '../src/sim/content/bots/royale';
 import { DUSK_PHASES } from '../src/sim/content/dusk';
 import { dist, type Vec3 } from '../src/sim/geo';
@@ -32,6 +32,7 @@ import {
 import { returnCap } from '../src/sim/royale/score';
 import { DROP_S, type DuskCap, RESPAWN_S } from '../src/sim/royale/types';
 import type { Sim } from '../src/sim/sim';
+import { DT } from '../src/sim/types';
 import { fakeSnap, landed } from './royale_contract_fixture';
 import { fakeGround, fakeLayout, R, sph } from './royale_fixture';
 import { loadPlanet } from './royale_planet';
@@ -310,28 +311,69 @@ describe('the pick as a command', () => {
 });
 
 describe('a dead bot', () => {
-  it('is asked where it comes back until it picks, in Respawn only', () => {
+  it('is asked where it comes back once a wait, on its first slot after the fall, in Respawn only', () => {
     const { sim, unitIds } = landed('respawn');
     const mode = sim.royaleMode!;
     const id = unitIds[1]!;
     sim.pickGraft(id, 0);
-    expect(mode.wantsDeadDecision(id)).toBe(true);
-    sim.units.get(id)!.dead = true;
+    const u = sim.units.get(id)!;
+    down(sim, id, RESPAWN_S);
+    const fell = sim.time;
+    // The first slot after the fall comes within POLICY_PERIOD_TICKS ticks.
+    expect(mode.wantsDeadDecision(u, fell + DT)).toBe(true);
+    expect(mode.wantsDeadDecision(u, fell + POLICY_PERIOD_TICKS * DT)).toBe(true);
+    expect(mode.wantsDeadDecision(u, fell + (POLICY_PERIOD_TICKS + 1) * DT)).toBe(false);
+    // Picked: asked no more.
     sim.pickDrop(id, sim.units.get(unitIds[0]!)!.pos as Vec3);
-    expect(mode.wantsDeadDecision(id)).toBe(false);
+    expect(mode.wantsDeadDecision(u, fell + DT)).toBe(false);
     const one = landed('one_life').sim;
     const v = [...one.units.values()][1]!;
     one.pickGraft(v.id, 0);
-    expect(one.royaleMode!.wantsDeadDecision(v.id)).toBe(false);
+    down(one, v.id, RESPAWN_S);
+    expect(one.royaleMode!.wantsDeadDecision(v, one.time + DT)).toBe(false);
   });
 
-  it('picks beside a Seedfall landing as it comes back, and returns there clear of everyone', () => {
+  it('decides once through a whole wait with no Graft offer open', () => {
+    const { sim, unitIds } = landed('respawn');
+    const id = unitIds[1]!;
+    sim.pickGraft(id, 0);
+    let asked = 0;
+    sim.attachPolicy(id, (obs) => {
+      if (obs.self.dead) asked++;
+      return { kind: 'noop' };
+    });
+    down(sim, id, RESPAWN_S);
+    untilBack(sim, id);
+    expect(asked).toBe(1);
+  });
+
+  it('of the house picks nothing and comes back at the edge, as a person who taps nothing', () => {
     const { sim, unitIds } = landed('respawn');
     const mode = sim.royaleMode!;
     const id = unitIds[3]!;
     attachRoyaleBot(sim, id);
     sim.pickGraft(id, 0);
-    // A Seedfall called to land as the bot comes back, 30 m from a seat.
+    // A Seedfall called to land as the bot comes back: no pick beside it.
+    sim.royale!.seedfalls.push({
+      id: 1,
+      pos: sim.units.get(unitIds[0]!)!.pos as Vec3,
+      announcedAt: sim.time,
+      landsAt: sim.time + RESPAWN_S + 2,
+      landed: false,
+      cacheId: null,
+    });
+    down(sim, id, RESPAWN_S);
+    untilBack(sim, id);
+    expect(mode.tally.returnsPicked).toBe(0);
+    expect(mode.state.respawnPicks.has(id)).toBe(false);
+  });
+
+  it('that picks on its slot comes back at its pick, clear of everyone', () => {
+    const { sim, unitIds } = landed('respawn');
+    const mode = sim.royaleMode!;
+    const id = unitIds[3]!;
+    sim.pickGraft(id, 0);
+    // A point of the light 30 m from a seat, picked by a policy of its own.
     const near = sim.units.get(unitIds[0]!)!.pos as Vec3;
     let at: Vec3 | null = null;
     for (const c of mode.layout.cacheSpots) {
@@ -342,22 +384,11 @@ describe('a dead bot', () => {
       }
     }
     expect(at).not.toBeNull();
+    sim.attachPolicy(id, (obs) =>
+      obs.self.dead ? { kind: 'drop', x: at!.x, y: at!.y, z: at!.z } : { kind: 'noop' },
+    );
     down(sim, id, RESPAWN_S);
-    sim.royale!.seedfalls.push({
-      id: 1,
-      pos: at!,
-      announcedAt: sim.time,
-      landsAt: sim.time + RESPAWN_S + 2,
-      landed: false,
-      cacheId: null,
-    });
     const u = sim.units.get(id)!;
-    for (let i = 0; i < 20 && !mode.state.respawnPicks.has(id); i++) {
-      sim.tickCount++;
-      runBotDecisions(sim, sim.policies);
-    }
-    expect(mode.state.respawnPicks.has(id)).toBe(true);
-    expect(dist(mode.state.respawnPicks.get(id)!, at!)).toBeLessThan(1);
     untilBack(sim, id);
     expect(mode.tally.returnsPicked).toBe(1);
     expect(dist(u.pos as Vec3, at!)).toBeLessThan(RETURN_CLEAR_M + RETURN_RINGS * RETURN_RING_M);

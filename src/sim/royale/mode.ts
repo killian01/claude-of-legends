@@ -12,6 +12,7 @@
 // Everything here moves with the match and is in the world checkpoint
 // (snapshot, restore); the schedule and the layout are fixed at the start.
 
+import { POLICY_PERIOD_TICKS } from '../bot_driver';
 import { dealDamage } from '../combat/damage';
 import { addStatus, cancelRecall } from '../combat/status';
 import type { RoyaleSkillId } from '../content/bots/royale_skills';
@@ -333,16 +334,19 @@ export class RoyaleMode {
     beginGrace(this, u, sim.time);
   }
 
-  // Whether the bot driver runs a dead seat's policy this tick: while its
-  // Graft offer is open (a Respawn seat; One life's elimination clears the
-  // queue), and in Respawn's play until it picked where it comes back (the
-  // 'drop' while dead, bot/brain.ts respawnPick), as a person picks on the
-  // globe through the wait. Never in the 5v5.
-  wantsDeadDecision(unitId: number): boolean {
-    if (hasOpenOffer(this, unitId)) return true;
-    return (
-      takesReturnPick(this.variant, this.state.stage, true) && !this.state.respawnPicks.has(unitId)
-    );
+  // Whether the bot driver runs a dead seat's policy on this decision slot:
+  // while its Graft offer is open (a Respawn seat; One life's elimination
+  // clears the queue), and in Respawn's play on its first slot after the
+  // fall, to pick where it comes back (the 'drop' while dead, the pick a
+  // person makes on the globe through the wait; the house brain picks
+  // nothing, bot/brain.ts): once a wait, not every slot of it, since every
+  // slot cost an observation per dead seat (some 3 percent of a match's
+  // time). Never in the 5v5.
+  wantsDeadDecision(u: Pick<Unit, 'id' | 'respawnAt'>, time: number): boolean {
+    if (hasOpenOffer(this, u.id)) return true;
+    if (!takesReturnPick(this.variant, this.state.stage, true)) return false;
+    if (this.state.respawnPicks.has(u.id)) return false;
+    return time - (u.respawnAt - RESPAWN_S) <= POLICY_PERIOD_TICKS * DT + 1e-6;
   }
 
   // The health a champion comes back with (the sim's respawn loop): all of

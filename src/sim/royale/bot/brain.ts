@@ -31,13 +31,12 @@ import {
   type RoyaleSkill,
   sharpenedSkill,
 } from '../../content/bots/royale_skills';
-import { dirTo, dist, dot, norm, scale, sub, turnLeft, type Vec3 } from '../../geo';
+import { dist, dot, norm, scale, sub, turnLeft, type Vec3 } from '../../geo';
 import { KITE_DANGER_FRAC, KITE_STEP, RANGED_MIN_RANGE } from '../../playbook/micro';
-import type { Action, Observation, ObsRoyale, ObsSeedfall, ObsUnit } from '../../policy';
+import type { Action, Observation, ObsRoyale, ObsUnit } from '../../policy';
 import type { Rng } from '../../rng';
 import { depthInside, insideCap } from '../dusk';
 import { along, type RoyaleLayout } from '../layout';
-import { RESPAWN_S } from '../types';
 import {
   ambushBush,
   ambushCall,
@@ -411,37 +410,15 @@ export function followLastSeen(sense: Sense): Action | null {
   return best ? moveTo(sense, best) : null;
 }
 
-// How far within the window of a Seedfall's landing a dead Respawn seat
-// asks to come back beside it.
-export const RESPAWN_PICK_S = 20;
-
-// A dead Respawn seat's pick of where to come back (the 'drop' action,
-// while dead): beside the Seedfall whose landing falls within
-// RESPAWN_PICK_S of its return (RESPAWN_S at the latest, the death timer
-// every player reads), at the point inside the light nearest it; else no
-// pick.
-export function respawnPick(obs: Observation, r: ObsRoyale): Action | null {
-  if (r.variant !== 'respawn' || r.stage !== 'play') return null;
-  const backAt = obs.time + RESPAWN_S;
-  let best: ObsSeedfall | null = null;
-  let bestGap = RESPAWN_PICK_S + 1e-9;
-  for (const sf of r.seedfalls ?? []) {
-    const gap = Math.abs(sf.landsAt - backAt);
-    if (gap > bestGap || (gap === bestGap && best !== null && sf.id > best.id)) continue;
-    best = sf;
-    bestGap = gap;
-  }
-  if (!best) return null;
-  const now = r.dusk.now;
-  let at: Vec3 = p3(best);
-  if (now.radius > 0 && !insideCap(now, at)) {
-    const dir = dirTo(now.center, at);
-    if (dir) at = along(now.center, dir as Vec3, Math.max(0, now.radius - 2), norm(now.center));
-  }
-  if (r.drop && dist(p3(r.drop), at) < 1) return NOOP;
-  return { kind: 'drop', x: at.x, y: at.y, z: at.z };
-}
-
+// A dead Respawn seat is asked once where it comes back (the 'drop' while
+// dead, royale/return_pick.ts, the pick a person makes on the globe), and
+// the house brain picks nothing: it comes back at the edge of the light,
+// where a person who taps nothing comes back. Measured over seeds 1 to 24
+// (scripts/royale_report.mjs, the drop-ins at 60, 180, 300 and 420 s), a
+// pick beside a Seedfall landing within 20 s of the return took the
+// stand-in's median life from 17.9 s to 15.0 s and the steals from 37 to
+// 45 percent, and one across the light from the fall to 13.7 s: the picks
+// crowd the returns into the fights. With none, 18.3 s and 41 percent.
 export function decide(
   obs: Observation,
   rng: Rng,
@@ -463,7 +440,7 @@ export function decide(
     const p = pickDropPoint(layout, rng);
     return { kind: 'drop', x: p.x, y: p.y, z: p.z };
   }
-  if (obs.self.dead) return respawnPick(obs, r) ?? NOOP;
+  if (obs.self.dead) return NOOP;
   if (r.stage !== 'play' || r.flying) return NOOP;
   const skill = effectiveSkill(seatSkill, r);
   const sense = buildSense(obs, r, layout, skill);
