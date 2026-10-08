@@ -26,19 +26,22 @@ export class RoyaleLife {
   // Once per HUD update. A life begins on the first update in play with
   // the champion standing, and again on the dead-to-alive edge (the
   // return); it ends on the alive-to-dead edge, its length frozen there.
-  step(time: number, inPlay: boolean, dead: boolean, row: LifeRow | undefined): void {
+  // True on the update a life begins: the wash's recap of the death before
+  // is done with, so the next death never opens on it (its own note can
+  // come an update after the body falls).
+  step(time: number, inPlay: boolean, dead: boolean, row: LifeRow | undefined): boolean {
     const assists = row ? (row.assists ?? 0) : null;
     if (this.from === null || (this.diedAt !== null && !dead)) {
-      if (!inPlay || dead) return;
+      if (!inPlay || dead) return false;
       this.from = time;
       this.diedAt = null;
       this.takedowns = 0;
       this.assistsFrom = assists;
-      return;
+      return true;
     }
     if (dead) {
       if (this.diedAt === null) this.diedAt = time;
-      return;
+      return false;
     }
     // The first row seen, or one under the start: a count only climbs in
     // a life, so a lower one is a row that caught up with an Arrival's
@@ -46,6 +49,7 @@ export class RoyaleLife {
     if (assists !== null && (this.assistsFrom === null || assists < this.assistsFrom)) {
       this.assistsFrom = assists;
     }
+    return false;
   }
 
   // The own champion took a champion down: one more in this life.

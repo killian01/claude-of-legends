@@ -19,6 +19,17 @@ describe('a Respawn life', () => {
     expect(life.line({ assists: 2 })).toBe('This life: 42 s · 1 takedown · 2 assists');
   });
 
+  it('says on which update a life begins, so the last recap is let go', () => {
+    const life = new RoyaleLife();
+    expect(life.step(5, false, false, { assists: 0 })).toBe(false);
+    expect(life.step(10, true, false, { assists: 0 })).toBe(true);
+    expect(life.step(11, true, false, { assists: 0 })).toBe(false);
+    expect(life.step(20, true, true, { assists: 0 })).toBe(false);
+    expect(life.step(22, true, true, { assists: 0 })).toBe(false);
+    expect(life.step(25, true, false, { assists: 0 })).toBe(true);
+    expect(life.step(26, true, false, { assists: 0 })).toBe(false);
+  });
+
   it('begins again on the return, from zero', () => {
     const life = new RoyaleLife();
     life.step(10, true, false, { assists: 0 });
