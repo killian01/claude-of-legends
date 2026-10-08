@@ -173,6 +173,22 @@ export function cardsBox(width: number, compact: boolean): ScreenBox {
   return { left: width / 2 - row / 2, top, right: width / 2 + row / 2, bottom: top + h };
 }
 
+// The whole of the open cards: the title over the row, and the Later
+// button under it (its margin and its height), what the edge arrows'
+// lines keep off (ui/royale_edges.ts layoutArrows covers).
+export const LATER_H_PX = 40;
+export const PHONE_LATER_H_PX = 34;
+
+export function cardsCoverBox(width: number, compact: boolean): ScreenBox {
+  const row = cardsBox(width, compact);
+  return {
+    left: row.left,
+    top: compact ? PHONE_TOP_PX : DESK_TOP_PX,
+    right: row.right,
+    bottom: row.bottom + (compact ? PHONE_LATER_H_PX : LATER_H_PX),
+  };
+}
+
 export function chipBox(_width: number, _height: number, _compact: boolean): ScreenBox {
   return {
     left: CHIP_LEFT_PX,

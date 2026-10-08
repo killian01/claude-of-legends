@@ -17,6 +17,7 @@ import { Sim } from '../src/sim/sim';
 import {
   cardOfKey,
   cardsBox,
+  cardsCoverBox,
   cardsLeaveChampionInSight,
   chipBox,
   GRADE_HINTS,
@@ -212,6 +213,17 @@ describe('where the cards stand', () => {
       ['cluster', { left: w - 300, top: 160, right: w, bottom: 390 }],
     ];
     for (const [name, box] of near) expect(overlaps(chip, box), name).toBe(false);
+  });
+
+  it('cover the title, the row and Later, inside the screen', () => {
+    for (const [w, h] of [...desks, [844, 390] as const]) {
+      const compact = w === 844;
+      const cover = cardsCoverBox(w, compact);
+      const row = cardsBox(w, compact);
+      expect(cover.top).toBeLessThan(row.top);
+      expect(cover.bottom).toBeGreaterThan(row.bottom);
+      expect(inside(cover, w, h)).toBe(true);
+    }
   });
 });
 
