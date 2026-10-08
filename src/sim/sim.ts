@@ -55,7 +55,13 @@ import { stepProjectiles } from './projectiles';
 import { startRecall, stepRecalls } from './recall';
 import { createRemoteSeat, type RemoteSeat, runRemoteDecisions } from './remote_policy';
 import { respawnDelay } from './respawn';
-import { ASSIST_GOLD_FRAC, championBounty, grantKillRewards, grantPassiveGold } from './rewards';
+import {
+  ASSIST_GOLD_FRAC,
+  assistersOf,
+  championBounty,
+  grantKillRewards,
+  grantPassiveGold,
+} from './rewards';
 import { initialRingStates, onCreatureSlain, type RingClock, ringClocks, stepRings } from './rings';
 import { Rng } from './rng';
 import { keepHold, noteOrder } from './royale/grace';
@@ -118,8 +124,6 @@ export type SimEvent =
   // The battle royale's own (royale/types.ts).
   | RoyaleEvent;
 
-// How long a champion's damage on a victim keeps earning an assist.
-const ASSIST_WINDOW_S = 10;
 // Exported: the HUD draws exactly this many build slots, so a full bag and
 // an empty one read as the same shape.
 export const INVENTORY_SLOTS = 6;
@@ -1144,15 +1148,7 @@ export class Sim {
         // window, killer excluded. Dead helpers still earn theirs, and the
         // helpers split an assist pot so a won team fight pays the team,
         // not only the last hitter.
-        const assisters: Unit[] = [];
-        for (const r of u.recentDamagers) {
-          if (r.id === killerId) continue;
-          if (this.time - r.at > ASSIST_WINDOW_S) continue;
-          const helper = this.units.get(r.id);
-          if (helper && helper.kind === 'champion' && helper.team !== u.team) {
-            assisters.push(helper);
-          }
-        }
+        const assisters = assistersOf(this.units, u, killerId, this.time);
         const assistGold =
           assisters.length > 0
             ? Math.floor((championBounty(u) * ASSIST_GOLD_FRAC) / assisters.length)
