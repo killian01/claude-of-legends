@@ -641,6 +641,11 @@ export class RoyaleHud {
     const { world, selfId, selfTeam } = this.host;
     const r = this.state();
     const time = world.time;
+    // The landing noted here too: the HUD asks for the steps before this
+    // layer's update, and on the first tick in play a step with no landing
+    // gate (the ultimate, for a drop-in at the bot's level) took the card
+    // from the fight's.
+    if (r) this.landing = noteLanding(this.landing, r.st, r.de, time);
     let enemyNear = false;
     for (const o of world.units.values()) {
       if (o.id === selfId || o.dead || o.kind !== 'champion' || o.team === selfTeam) continue;
