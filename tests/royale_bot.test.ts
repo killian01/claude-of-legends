@@ -63,7 +63,6 @@ import {
   nerveOf,
   paceAlive,
   paceNerve,
-  RESPAWN_PICK_S,
   ROOM_M,
   risingInDark,
   SETTLE_M,
@@ -954,30 +953,17 @@ describe('a dead Respawn seat', () => {
       normal,
     );
 
-  it('picks to come back beside a Seedfall landing within 20 s of its return', () => {
+  // A pick beside a Seedfall crowded the returns into the fights (the
+  // royale report, seeds 1 to 24: the stand-in's median life 15.0 s
+  // against 18.3 s with none): it comes back at the edge, as a person who
+  // taps nothing on the globe.
+  it('picks nothing, a Seedfall landing as it comes back or not', () => {
     const back = 20 + RESPAWN_S;
-    const pick = dead(back + RESPAWN_PICK_S);
-    expect(pick.kind).toBe('drop');
-    expect(dist(point2(pick), at)).toBeLessThan(0.01);
-    expect(dead(back - RESPAWN_PICK_S).kind).toBe('drop');
-    expect(dead(back + RESPAWN_PICK_S + DT).kind).toBe('noop');
-    expect(dead(back + RESPAWN_PICK_S, { variant: 'one_life' }).kind).toBe('noop');
-  });
-
-  it('picks the point inside the light nearest a Seedfall outside it', () => {
-    const d: DuskState = { ...phase1, now: { center: here, radius: 12 } };
-    const pick = dead(30, { dusk: d });
-    expect(pick.kind).toBe('drop');
-    expect(insideCap(d.now, point2(pick))).toBe(true);
-    expect(dist(point2(pick), at)).toBeLessThan(dist(here, at));
+    expect(dead(back).kind).toBe('noop');
+    expect(dead(back + 10).kind).toBe('noop');
+    expect(dead(back, { variant: 'one_life' }).kind).toBe('noop');
   });
 });
-
-function point2(a: Action): Vec3 {
-  if (a.kind !== 'drop') throw new Error(`no drop in ${a.kind}`);
-  return { x: a.x, y: a.y, z: a.z };
-}
-
 describe("One life's pace", () => {
   it('reads the pace off the minutes since the landing', () => {
     const r = royale();

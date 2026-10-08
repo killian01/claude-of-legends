@@ -25,7 +25,7 @@ export function runBotDecisions(sim: Sim, policies: ReadonlyMap<number, Policy>)
     if (!u) continue;
     // A dead seat decides only when the battle royale asks it to (a Graft
     // to pick, a place to come back): never in the 5v5.
-    if (u.dead && !sim.royaleMode?.wantsDeadDecision(unitId)) continue;
+    if (u.dead && !sim.royaleMode?.wantsDeadDecision(u, sim.time)) continue;
     const obs = buildObservation(sim, unitId);
     if (!obs) continue;
     dispatchAction(sim, unitId, policy(obs, sim.rng));
