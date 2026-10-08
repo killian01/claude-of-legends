@@ -55,6 +55,7 @@ import {
   feedLife,
   feedOverflow,
   feedTier,
+  foldsOut,
   frostLevel,
   heartbeat,
   impactGain,
@@ -452,13 +453,13 @@ export class RoyaleHudMoments {
   // call's color, kept the near tier's while.
   private newsLine(c: MomentCall): void {
     const line = el('div', 'br-feed-line news');
-    line.dataset.tier = 'near';
+    line.dataset.tier = 'news';
     line.style.color = c.color;
     line.appendChild(el('span', '', c.text));
-    this.pushLine(line, 'near');
+    this.pushLine(line, 'news');
   }
 
-  // A line on top of the feed: the ones it pushes out go (a near one
+  // A line on top of the feed: the ones it pushes out go (a near death
   // joins the fold), and it leaves once its tier's time is up.
   private pushLine(line: HTMLElement, tier: FeedTier): void {
     const { feed } = this.host;
@@ -467,7 +468,7 @@ export class RoyaleHudMoments {
     const tiers = lines.map((c) => (c.dataset.tier ?? 'near') as FeedTier);
     let folded = false;
     for (const i of feedOverflow(tiers)) {
-      if (tiers[i] === 'near') {
+      if (foldsOut(tiers[i] as FeedTier)) {
         this.folded.add(performance.now());
         folded = true;
       }

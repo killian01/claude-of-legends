@@ -341,7 +341,9 @@ export interface FeedContext {
   leader?(unitId: number): boolean;
 }
 
-export type FeedTier = 'own' | 'lead' | 'near' | 'fold';
+// 'news' is a mark's news from afar (newsCall): a line of the near rows
+// that is no death.
+export type FeedTier = 'own' | 'lead' | 'near' | 'news' | 'fold';
 
 export function feedTier(k: { unitId: number; killerId: number }, ctx: FeedContext): FeedTier {
   const ids = [k.unitId];
@@ -368,20 +370,29 @@ export function feedLife(tier: FeedTier): number {
 }
 
 // The lines a new one pushes out, by index into `tiers` (newest first, the
-// new one included): the oldest near lines past FEED_NEAR_MAX, then the
-// oldest lines past FEED_MAX, a near one before the viewer's or the
-// leader's. A near line pushed out joins the fold.
+// new one included): the oldest near lines (deaths or news) past
+// FEED_NEAR_MAX, then the oldest lines past FEED_MAX, a near one before
+// the viewer's or the leader's. A near death pushed out joins the fold
+// (foldsOut); a news line just goes.
 export function feedOverflow(tiers: readonly FeedTier[]): number[] {
   const out = new Set<number>();
+  const isNear = (i: number): boolean => tiers[i] === 'near' || tiers[i] === 'news';
   const standing = (): number[] => tiers.map((_, i) => i).filter((i) => !out.has(i));
-  const near = standing().filter((i) => tiers[i] === 'near');
+  const near = standing().filter(isNear);
   for (const i of near.slice(FEED_NEAR_MAX)) out.add(i);
   while (standing().length > FEED_MAX) {
     const rest = standing();
-    const oldestNear = rest.filter((i) => tiers[i] === 'near').pop();
+    const oldestNear = rest.filter(isNear).pop();
     out.add(oldestNear ?? (rest[rest.length - 1] as number));
   }
   return [...out].sort((a, b) => a - b);
+}
+
+// Whether a line pushed out of the feed counts in "+N elsewhere": a near
+// death does; news is no death, and the own and the leader's lines are
+// the feed's to keep.
+export function foldsOut(tier: FeedTier): boolean {
+  return tier === 'near';
 }
 
 // How many deaths the feed folded within its last `windowMs` (wall clock,
