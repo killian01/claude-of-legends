@@ -57,7 +57,7 @@ export interface RoyalePlayer {
   // seat's score then. The rank line and the end card count from there
   // (server/royale_ranking.ts windowStanding), so a seat that came in late
   // is ranked on what it played, not against whole-match scores. Null for
-  // a seat from the drop and for a rejoin.
+  // a seat from the drop; a rejoin gets back the one it left with.
   window: { from: number; base: Map<number, number> } | null;
   // The caches list, and the scoreboard with every seat's name and bot
   // mark, reached this person at least once.
@@ -76,6 +76,9 @@ interface SeatState {
   bot: boolean;
   // The person whose dropped connection this seat waits for, by owner.
   heldFor: number | null;
+  // A drop-in's window while the seat waits for them: their rejoin keeps
+  // counting since they landed, not since the drop.
+  heldWindow?: RoyalePlayer['window'];
 }
 
 // A battle royale's replay (src/net/replay.ts ReplayRecord with the mode's
@@ -209,9 +212,9 @@ export class RoyaleMatch {
     // The seat came down fresh (the Arrival): what it scores from here
     // falls inside every other drop-in's window.
     if (arrived) {
-      for (const other of this.players.values()) {
-        other.window?.base.set(unitId, r.scores.get(unitId) ?? 0);
-      }
+      const score = r.scores.get(unitId) ?? 0;
+      for (const other of this.players.values()) other.window?.base.set(unitId, score);
+      for (const held of this.seats.values()) held.heldWindow?.base.set(unitId, score);
     }
     const player: RoyalePlayer = {
       clientId: person.clientId,
@@ -296,6 +299,7 @@ export class RoyaleMatch {
     if (s) {
       s.bot = true;
       s.heldFor = hold ? p.owner : null;
+      s.heldWindow = hold ? p.window : null;
       this.standIn(p.unitId);
       this.record({ k: this.sim.tickCount, u: p.unitId, e: 'bot_on' });
       this.reidentify(p.unitId);
@@ -303,7 +307,9 @@ export class RoyaleMatch {
     return p;
   }
 
-  // The seat held for `person` (a dropped connection) is theirs again.
+  // The seat held for `person` (a dropped connection) is theirs again; a
+  // drop-in's window with it (a phone put away and taken out again keeps
+  // its count since landing).
   rejoin(person: RoyalePerson, unitId: number): RoyalePlayer | null {
     const s = this.seats.get(unitId);
     if (!s || s.heldFor !== person.owner || !s.bot) return null;
@@ -313,13 +319,20 @@ export class RoyaleMatch {
     s.heldFor = null;
     s.name = person.name;
     this.reidentify(unitId);
-    return this.seat(person, unitId, false);
+    const window = s.heldWindow ?? null;
+    s.heldWindow = null;
+    const p = this.seat(person, unitId, false);
+    p.window = window;
+    return p;
   }
 
   // The reservation on a seat ran out: a newcomer may take it.
   release(unitId: number): void {
     const s = this.seats.get(unitId);
-    if (s) s.heldFor = null;
+    if (s) {
+      s.heldFor = null;
+      s.heldWindow = null;
+    }
   }
 
   // The landing point a person picked during the drop.
