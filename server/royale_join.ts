@@ -65,23 +65,32 @@ export interface BotSeatCandidate {
   // Down for now (Respawn brings it back), or out for good (One life).
   dead: boolean;
   out: boolean;
+  level: number;
 }
 
 // The seat a newcomer takes: never one out for good; a bot playing the
-// champion they picked first, then one standing, then the lowest unit id,
-// so the choice depends on nothing but the match.
+// champion they picked first, then one standing; within that, given the
+// field's level (the lower median of every champion's, Respawn's
+// RoyaleMatch.takeBotSeat), the seat nearest it, then the higher level (a
+// visitor took a level 3 seat at 7:26 with 46 of the 49 champions above
+// it, the seat reports, 2026-10-08); then the lowest unit id, so the
+// choice depends on nothing but the match.
 export function chooseBotSeat(
   seats: readonly BotSeatCandidate[],
   championId: string,
+  fieldLevel?: number,
 ): number | null {
   let best: BotSeatCandidate | null = null;
   const rank = (s: BotSeatCandidate): number =>
     (s.championId === championId ? 0 : 2) + (s.dead ? 1 : 0);
+  const gap = (s: BotSeatCandidate): number =>
+    fieldLevel === undefined ? 0 : Math.abs(s.level - fieldLevel);
+  const higher = (s: BotSeatCandidate): number => (fieldLevel === undefined ? 0 : -s.level);
+  const compare = (a: BotSeatCandidate, b: BotSeatCandidate): number =>
+    rank(a) - rank(b) || gap(a) - gap(b) || higher(a) - higher(b) || a.unitId - b.unitId;
   for (const s of seats) {
     if (s.out) continue;
-    if (!best || rank(s) < rank(best) || (rank(s) === rank(best) && s.unitId < best.unitId)) {
-      best = s;
-    }
+    if (!best || compare(s, best) < 0) best = s;
   }
   return best ? best.unitId : null;
 }
