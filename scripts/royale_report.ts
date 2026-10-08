@@ -34,7 +34,8 @@
 // DEFAULT_CHAMPION_ID and, in Respawn, the field's level), its bot
 // detached, its Arrival begun, then the --standin brain attached. Each
 // drop-in tells its level at landing, the nearest enemy then, whether a
-// fair first fight was found (RoyaleTally.fairArrivals), the seconds to
+// fair first fight was found (RoyaleTally.fairArrivals), whether it sees
+// an enemy on the first tick after landing (team vision), the seconds to
 // the first damage it dealt to a champion (an enemy's recentDamagers
 // naming it, read off the damage events) and to the first it took from
 // one, its first takedown and its takedowns in the first DROPIN_EARLY_S,
@@ -180,6 +181,9 @@ interface DropIn {
   fieldLevel: number;
   nearestM: number | null;
   fair: boolean;
+  // An enemy champion in its sight on the first tick after landing; null
+  // until that tick.
+  seen: boolean | null;
   firstDealt: number | null;
   firstTaken: number | null;
   firstTakedown: number | null;
@@ -484,6 +488,7 @@ function play(
         fieldLevel,
         nearestM: nearest,
         fair,
+        seen: null,
         firstDealt: null,
         firstTaken: null,
         firstTakedown: null,
@@ -557,6 +562,14 @@ function play(
     }
     for (const d of dropIns) {
       const since = sim.time - d.landedAt;
+      // The first tick after landing: does the drop-in see an enemy, as
+      // its screen would (team vision: bushes and rocks hide)?
+      if (d.row.seen === null) {
+        const me = sim.units.get(d.id)!;
+        d.row.seen = [...sim.units.values()].some(
+          (o) => o.kind === 'champion' && o.id !== d.id && !o.dead && sim.isVisible(me.team, o.id),
+        );
+      }
       for (const e of events) {
         if (e.type === 'damage' && e.sourceId !== e.targetId) {
           const near = (a: number, b: number) => {
@@ -932,6 +945,7 @@ function print(m: Match): void {
     console.log(
       `  drop-in at ${clock(d.joinAt)}: level ${d.level} (field ${d.fieldLevel}), nearest enemy ` +
         `${d.nearestM === null ? '-' : `${d.nearestM.toFixed(1)} m`}, fair foe ${d.fair ? 'yes' : 'no'}, ` +
+        `an enemy in sight ${d.seen ? 'yes' : 'no'}, ` +
         `first hit ${s(d.firstDealt)}, first hurt ${s(d.firstTaken)}, first takedown ${s(d.firstTakedown)}, ` +
         `takedowns in ${DROPIN_EARLY_S} s ${d.earlyTakedowns}, first life ${Math.round(d.firstLife)} s` +
         (d.endedBy
@@ -1168,6 +1182,7 @@ function dropInSummary(all: readonly Match[]): void {
       const life = median(ds.map((d) => d.firstLife));
       console.log(
         `  ${label}: n ${ds.length}, fair foe ${pct(ds.filter((d) => d.fair).length, ds.length)}, ` +
+          `an enemy in sight at landing ${pct(ds.filter((d) => d.seen === true).length, ds.length)}, ` +
           `level median ${level ?? '-'} (field ${field ?? '-'}), ` +
           `nearest enemy median ${nearest === null ? '-' : nearest.toFixed(1)} m, ` +
           `first hit median ${medianOrNever(ds.map((d) => d.firstDealt))}, ` +
