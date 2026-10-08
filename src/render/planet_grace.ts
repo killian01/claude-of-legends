@@ -40,6 +40,13 @@ export function shimmerOpacity(until: number, time: number, nowMs: number): numb
 // the dust: a champion just come down, not one walking into sight graced.
 export const DUST_WITHIN_S = 0.6;
 
+// When a Grace began: ARRIVAL_GRACE_S before its run-out, or for one that
+// waits on the seat's order (a Respawn Arrival's, which runs out later) as
+// long before the floor it waits from.
+export function graceBegan(g: Pick<GraceNote, 'until' | 'from'>): number {
+  return (g.from ?? g.until) - ARRIVAL_GRACE_S;
+}
+
 // The Graces seen for the first time this frame and just begun at `time`,
 // by unit id: what raises the dust. `seen` is updated to the frame's.
 export function freshGraces(
@@ -48,9 +55,7 @@ export function freshGraces(
   time: number,
 ): GraceNote[] {
   const now = new Set(graces.map((g) => g.unitId));
-  const fresh = graces.filter(
-    (g) => !seen.has(g.unitId) && g.until - time >= ARRIVAL_GRACE_S - DUST_WITHIN_S,
-  );
+  const fresh = graces.filter((g) => !seen.has(g.unitId) && time - graceBegan(g) <= DUST_WITHIN_S);
   seen.clear();
   for (const id of now) seen.add(id);
   return fresh;
@@ -58,7 +63,9 @@ export function freshGraces(
 
 // Whether the own champion has just come down (the stage's landing, its
 // thud and shake): its Grace, running out at `until` (null for none), seen
-// this frame and not the last, at most DUST_WITHIN_S old at `time`.
+// this frame and not the last, at most DUST_WITHIN_S old at `time` (a
+// Respawn Arrival's runs out later: its landing plays on a slow client's
+// first frame too).
 export function ownGraceFresh(until: number | null, wasGraced: boolean, time: number): boolean {
   return until !== null && !wasGraced && until - time >= ARRIVAL_GRACE_S - DUST_WITHIN_S;
 }

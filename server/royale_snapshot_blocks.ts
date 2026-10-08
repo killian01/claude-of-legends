@@ -272,7 +272,11 @@ export const arrivalBlock: Builder<SnapGrace[]> = (sim, viewer) => {
       if (s.kind === 'untargetable' && s.until > until) until = s.until;
     }
     if (until <= sim.time) continue;
-    out.push([id, round2(until), round2(u.pos.x), round2(u.pos.y), round2(u.pos.z)]);
+    const g: SnapGrace = [id, round2(until), round2(u.pos.x), round2(u.pos.y), round2(u.pos.z)];
+    // A Grace that waits on the seat's order: from when one ends it.
+    const floor = sim.graceFloor?.(id) ?? null;
+    if (floor !== null) g.push(round2(floor));
+    out.push(g);
   }
   return out.length > 0 ? out : undefined;
 };

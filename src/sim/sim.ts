@@ -64,7 +64,7 @@ import {
 } from './rewards';
 import { initialRingStates, onCreatureSlain, type RingClock, ringClocks, stepRings } from './rings';
 import { Rng } from './rng';
-import { keepHold, noteOrder } from './royale/grace';
+import { graceFloor, keepHold, noteOrder } from './royale/grace';
 import { RoyaleMode, type RoyaleOptions } from './royale/mode';
 import { DROP_S, type RoyaleEvent, type RoyaleState } from './royale/types';
 import { MINIONS_ONLY, stepSeparation } from './separation';
@@ -291,6 +291,12 @@ export class Sim {
     const u = this.units.get(unitId);
     if (!this.royaleMode || u?.kind !== 'champion') return false;
     return this.royaleMode.pickDrop(unitId, p, this.time, u.dead);
+  }
+
+  // From when an order ends the battle royale seat's Grace (a Respawn
+  // Arrival's floor, royale/grace.ts); null for none, and outside it.
+  graceFloor(unitId: number): number | null {
+    return this.royaleMode ? graceFloor(this.royaleMode, unitId) : null;
   }
 
   // A seat's pick of its open Graft offer in the battle royale (the 'graft'

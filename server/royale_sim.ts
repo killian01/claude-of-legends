@@ -37,6 +37,9 @@ export interface RoyaleSim {
   scoreboard(): readonly ScoreRow[];
   // The landing point a seat picked during the drop.
   pickDrop(unitId: number, p: Vec3): void;
+  // From when an order ends the seat's Grace (a Respawn Arrival's floor,
+  // Sim.graceFloor); null for none. Optional: a fake has no Grace.
+  graceFloor?(unitId: number): number | null;
   // A card of the seat's open Graft offer; false when nothing was taken.
   pickGraft(unitId: number, pick: number): boolean;
   // A Respawn drop-in's Arrival over the globe (Sim.beginArrival).
