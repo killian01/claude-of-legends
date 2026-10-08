@@ -32,10 +32,12 @@ import {
   RISING_LEVEL,
   ROAM_GOAL_M,
   ROYALE_SKILLS,
+  type RoyaleSkillId,
   SEEDFALL_LATE_S,
   SEEDFALL_STANDOFF_M,
   STEAL_BODY_HP,
   STEAL_M,
+  sharpenedSkill,
   WARY_M,
   WARY_STEP_M,
 } from '../src/sim/content/bots/royale_skills';
@@ -724,6 +726,35 @@ describe('the calm and the sharpening', () => {
     expect(effectiveSkill(gentle, at(0, 2)).id).toBe('gentle');
     expect(effectiveSkill(gentle, at(0, 3)).id).toBe('normal');
     expect(effectiveSkill(normal, at(0, 5)).id).toBe('normal');
+  });
+
+  // The rule in one place (royale_skills.ts sharpenedSkill): the mode reads
+  // it off its state for an Arrival's first foe (royale/grace.ts), the bot
+  // off its observation.
+  it('sharpens a seat by the same table off its score and phase alone', () => {
+    const table: [RoyaleSkillId, number, number, RoyaleSkillId][] = [
+      ['gentle', 1, 0, 'gentle'],
+      ['gentle', 2, 0, 'normal'],
+      ['gentle', 4, 0, 'strong'],
+      ['normal', 3, 0, 'normal'],
+      ['normal', 4, 0, 'strong'],
+      ['strong', 0, 0, 'strong'],
+      ['gentle', 0, 2, 'gentle'],
+      ['gentle', 0, 3, 'normal'],
+      ['normal', 0, 5, 'normal'],
+      ['gentle', 4, 5, 'strong'],
+    ];
+    for (const [id, score, phase, out] of table) {
+      expect(sharpenedSkill(id, score, phase)).toBe(out);
+    }
+    for (const id of ['gentle', 'normal', 'strong'] as const) {
+      for (let score = 0; score <= 6; score++) {
+        for (let phase = 0; phase <= 6; phase++) {
+          const r = royale({ score, dusk: { ...wholeDusk(sph(1, 0, 0)), phase } });
+          expect(effectiveSkill(ROYALE_SKILLS[id], r).id).toBe(sharpenedSkill(id, score, phase));
+        }
+      }
+    }
   });
 });
 

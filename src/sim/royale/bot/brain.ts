@@ -29,10 +29,7 @@ import {
   PACE_NERVE_PER_SEAT,
   ROYALE_SKILLS,
   type RoyaleSkill,
-  type RoyaleSkillId,
-  SHARPEN_GENTLE_PHASE,
-  SHARPEN_NORMAL_AT,
-  SHARPEN_STRONG_AT,
+  sharpenedSkill,
 } from '../../content/bots/royale_skills';
 import { dirTo, dist, dot, norm, scale, sub, turnLeft, type Vec3 } from '../../geo';
 import { KITE_DANGER_FRAC, KITE_STEP, RANGED_MIN_RANGE } from '../../playbook/micro';
@@ -272,19 +269,10 @@ function hitNeutral(sense: Sense, n: ObsUnit, rng: Rng): Action {
   return { kind: 'attack', targetId: n.id };
 }
 
-const RANK: Readonly<Record<RoyaleSkillId, number>> = { gentle: 0, normal: 1, strong: 2 };
-
-// The sharpening: the skill a seat plays this slot, at least its own. A
-// score of SHARPEN_NORMAL_AT plays as normal, SHARPEN_STRONG_AT as strong,
-// and from the Dusk's SHARPEN_GENTLE_PHASE a gentle seat plays as normal.
+// The sharpening: the skill a seat plays this slot, at least its own, by
+// its score and the Dusk's phase (royale_skills.ts sharpenedSkill).
 export function effectiveSkill(skill: RoyaleSkill, r: ObsRoyale): RoyaleSkill {
-  let id: RoyaleSkillId = skill.id;
-  const raise = (to: RoyaleSkillId) => {
-    if (RANK[to] > RANK[id]) id = to;
-  };
-  if (r.score >= SHARPEN_STRONG_AT) raise('strong');
-  else if (r.score >= SHARPEN_NORMAL_AT) raise('normal');
-  if (r.dusk.phase >= SHARPEN_GENTLE_PHASE) raise('normal');
+  const id = sharpenedSkill(skill.id, r.score, r.dusk.phase);
   return id === skill.id ? skill : ROYALE_SKILLS[id];
 }
 
