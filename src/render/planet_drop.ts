@@ -34,3 +34,34 @@ export function diveProgress(t: number): number {
   if (t >= 1) return 1;
   return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
 }
+
+// The Respawn wait's globe (ui/royale_return.ts): the orbit that looks
+// down on a world direction from the planet's center (the light a return
+// comes back to), its elevation kept off the vertical where the orbit's
+// up turns over, as a drag keeps it.
+export const ORBIT_ELEVATION_MAX = 1.35;
+
+export function facingOrbit(dir: Point3, distance: number): DropOrbit {
+  const len = Math.hypot(dir.x, dir.y, dir.z) || 1;
+  const y = Math.max(-1, Math.min(1, dir.y / len));
+  const elevation = Math.max(-ORBIT_ELEVATION_MAX, Math.min(ORBIT_ELEVATION_MAX, Math.asin(y)));
+  return { azimuth: Math.atan2(dir.x, dir.z), elevation, distance };
+}
+
+// How far the wait's camera stands from the planet's center: the whole
+// globe, a little smaller than the drop's, while the light is wide, nearer
+// as it narrows so a small light is big enough to tap, never into the
+// atmosphere's shell.
+export const RETURN_ORBIT_MAX = 330;
+export const RETURN_ORBIT_MIN = 160;
+
+export function returnOrbitDistance(lightRadius: number): number {
+  return Math.max(RETURN_ORBIT_MIN, Math.min(RETURN_ORBIT_MAX, 130 + 2.5 * lightRadius));
+}
+
+// Where the wait's globe sits on the screen, as shares of its width right
+// of the middle and of its height below it: to the right of the death
+// wash's lines, which move left of the middle (ui/hud.ts), and under the
+// Graft cards over the top.
+export const RETURN_GLOBE_RIGHT = 0.22;
+export const RETURN_GLOBE_DOWN = 0.07;
