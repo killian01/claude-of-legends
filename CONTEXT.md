@@ -112,7 +112,8 @@ how its teams are counted, ADR 0030)
 
 **Respawn**:
 The battle royale variant where a death costs five seconds: the champion comes back at the edge
-of the light with everything it had, and the most takedowns when the last light goes out wins.
+of the light (of the light it closes to, while the Dusk closes) with everything it had, and the
+most takedowns when the last light goes out wins.
 What Play now launches.
 _Avoid_: loop mode, deathmatch
 
@@ -396,8 +397,8 @@ To take a bot's seat in a public match already under way (ADR 0025), which is wh
 the public queue does when nobody is waiting in it and such a match has people in it, early
 enough. The champion comes as the bot left it, in the seat's assigned lane, which the
 newcomer is told on arrival; the seat is never rated or recorded. In a battle royale under
-way the seat is not handed over in place: it makes an Arrival, keeping the bot's level and
-pieces but none of its score or run.
+way the seat is not handed over in place: it makes an Arrival, keeping the bot's pieces, and
+its level unless Respawn lifts it to the field's, but none of its score or run.
 _Avoid_: late join, hot join, backfill
 
 **Home**:
@@ -1180,8 +1181,10 @@ _Avoid_: quickening, zone speedup
 
 **Arrival**:
 A battle royale drop-in's coming down: the seat a person takes from its bot in play lands
-fresh (full health and mana, everything ready) at a quiet spot inside the light, its tally
-from zero, and in its Grace.
+fresh (full health and mana, everything ready), its tally from zero, in its Grace. In Respawn
+it comes down at least one level under the middle of the field, a few steps from a fair first
+fight (a bot out of combat, the softest in reach, no higher in level, nobody else near), else
+at a quiet spot; in One life at a quiet spot.
 _Avoid_: spawn, deploy
 
 **Grace**:
