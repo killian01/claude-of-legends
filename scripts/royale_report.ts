@@ -25,14 +25,32 @@
 // had an enemy in its sight within ENGAGE_M, the share it spent fighting a
 // champion (dealt one damage in the last ENGAGED_S), and the share of
 // takedowns that were steals (the killer dealt under STEAL_SHARE of the
-// champion damage the victim took in its last STEAL_WINDOW_S). Bundled and
-// run by scripts/royale_report.mjs:
+// champion damage the victim took in its last STEAL_WINDOW_S).
+//
+// --dropin 60,180,300,420 (seconds after landing, default none) drops a
+// person into the running match at each listed time the server would take
+// one (Respawn until JOIN_UNTIL_END_S before the end, One life in the
+// calm): one bot seat taken the way the server does (chooseBotSeat with
+// DEFAULT_CHAMPION_ID and, in Respawn, the field's level), its bot
+// detached, its Arrival begun, then the --standin brain attached. Each
+// drop-in tells its level at landing, the nearest enemy then, whether a
+// fair first fight was found (RoyaleTally.fairArrivals), the seconds to
+// the first damage it dealt to a champion (an enemy's recentDamagers
+// naming it, read off the damage events) and to the first it took from
+// one, its first takedown and its takedowns in the first DROPIN_EARLY_S,
+// and its first life; then the shares by join time, and one compare line
+// (the stand-in median life, the fighting share, the steals, the final
+// level median) to hold a change against. Bundled and run by
+// scripts/royale_report.mjs:
 //   node scripts/royale_report.mjs [--seeds 4] [--from 1]
-//     [--variant both|respawn|one_life] [--passive 1] [--standin 1] [--quiet]
+//     [--variant both|respawn|one_life] [--passive 1] [--standin 1]
+//     [--dropin 60,180,300,420] [--quiet]
 
 import { readFileSync } from 'node:fs';
+import { chooseBotSeat } from '../server/royale_join';
 import { buildRoyaleSim, type ReplayPick, type RoyalePlanet } from '../src/net/replay';
 import { ROYALE_SKILLS, type RoyaleSkillId } from '../src/sim/content/bots/royale_skills';
+import { DEFAULT_CHAMPION_ID } from '../src/sim/content/champions';
 import { GRAFT_LIST, GRAFTS } from '../src/sim/content/grafts';
 import { assemblePlanet } from '../src/sim/content/planet';
 import { dist } from '../src/sim/geo';
@@ -53,7 +71,14 @@ import {
 } from '../src/sim/royale/bot/travel';
 import { royaleHouseChampions } from '../src/sim/royale/fill';
 import type { RoyaleLayout } from '../src/sim/royale/layout';
-import { CALM_S, DROP_S, PLAY_S, type RoyaleVariant } from '../src/sim/royale/types';
+import { lowerMedian } from '../src/sim/royale/levels';
+import {
+  CALM_S,
+  DROP_S,
+  JOIN_UNTIL_END_S,
+  PLAY_S,
+  type RoyaleVariant,
+} from '../src/sim/royale/types';
 import { decodeSphereNav, findSpherePath, SphereNavGrid } from '../src/sim/sphere_nav';
 import { TICK_RATE } from '../src/sim/types';
 
@@ -67,6 +92,12 @@ const firstSeed = Number(opt('--from', '1'));
 const variantArg = opt('--variant', 'both');
 const passiveSeats = Number(opt('--passive', '1'));
 const standinSeats = Number(opt('--standin', '1'));
+const dropinTimes = opt('--dropin', '')
+  .split(',')
+  .filter((x) => x.trim() !== '')
+  .map(Number)
+  .filter((x) => Number.isFinite(x) && x >= 0)
+  .sort((a, b) => a - b);
 const quiet = args.includes('--quiet');
 const variants: RoyaleVariant[] =
   variantArg === 'respawn' || variantArg === 'one_life' ? [variantArg] : ['respawn', 'one_life'];
@@ -91,6 +122,11 @@ const DUEL_END_S = 45;
 // DUEL_QUIET_S.
 const DUEL_ALONE_S = 5;
 const DUEL_QUIET_S = 10;
+// A drop-in's takedowns are counted over its first this many seconds, and
+// its first hit is one on a champion within DROPIN_HIT_M of it: a bolt or
+// a burn the bot left behind lands farther off, in the first second.
+const DROPIN_EARLY_S = 60;
+const DROPIN_HIT_M = 16;
 
 function loadPlanet(dir = 'public/map/planet/'): RoyalePlanet {
   const planet = assemblePlanet(JSON.parse(readFileSync(`${dir}layout.json`, 'utf8')));
@@ -134,7 +170,26 @@ function passivePolicy(layout: RoyaleLayout) {
   };
 }
 
-type SeatKind = RoyaleSkillId | 'passive' | 'standin';
+type SeatKind = RoyaleSkillId | 'passive' | 'standin' | 'dropin';
+
+// One drop-in, seconds counted from its landing.
+interface DropIn {
+  // The listed time it joined at, seconds after the match's landing.
+  joinAt: number;
+  level: number;
+  fieldLevel: number;
+  nearestM: number | null;
+  fair: boolean;
+  firstDealt: number | null;
+  firstTaken: number | null;
+  firstTakedown: number | null;
+  earlyTakedowns: number;
+  // Its first life: to its first death, or as far as it got, and who
+  // ended it: the enemy nearest at landing (the fair foe when one was
+  // found), another champion, or the world (the Dusk, a Seedfall).
+  firstLife: number;
+  endedBy: 'nearest' | 'other' | 'world' | null;
+}
 
 interface Seat {
   id: number;
@@ -227,6 +282,7 @@ interface Match {
   boughOffers: number;
   boughFallbacks: number;
   botTimeouts: number;
+  dropIns: DropIn[];
 }
 
 const ENGAGE_M = 8;
@@ -257,6 +313,7 @@ function play(
   seed: number,
   passive: number,
   standin: number,
+  dropins: readonly number[],
 ): Match {
   const champions = royaleHouseChampions(seed, 50);
   const taken = new Set<number>();
@@ -363,7 +420,87 @@ function play(
   let boughOffers = 0;
   let boughFallbacks = 0;
   let botTimeouts = 0;
+  // The drop-ins: the times still to come, and each one taken, with its
+  // landing.
+  const dropinsLeft = [...dropins];
+  const dropIns: {
+    id: number;
+    nearestId: number;
+    landedAt: number;
+    row: DropIn;
+    alive: boolean;
+  }[] = [];
+  const dropIn = (joinAt: number): void => {
+    const s = mode.state;
+    const open =
+      variant === 'respawn' ? sim.time < s.endsAt - JOIN_UNTIL_END_S : sim.time < landAt + CALM_S;
+    if (!open) return;
+    const champs = [...sim.units.values()].filter((u) => u.kind === 'champion');
+    const fieldLevel = lowerMedian(champs.map((u) => u.level));
+    const candidates = [...seats.values()]
+      .filter((seat) => seat.skill in ROYALE_SKILLS)
+      .map((seat) => {
+        const u = sim.units.get(seat.id)!;
+        return {
+          unitId: seat.id,
+          championId: u.championId ?? seat.championId,
+          dead: u.dead,
+          out: variant === 'one_life' && s.eliminated.includes(seat.id),
+          level: u.level,
+        };
+      });
+    const id = chooseBotSeat(
+      candidates,
+      DEFAULT_CHAMPION_ID,
+      variant === 'respawn' ? fieldLevel : undefined,
+    );
+    if (id === null) return;
+    const seat = seats.get(id)!;
+    sim.detachPolicy(id);
+    const fairBefore = mode.tally.fairArrivals ?? 0;
+    sim.beginArrival(id);
+    const fair = (mode.tally.fairArrivals ?? 0) > fairBefore;
+    sim.attachPolicy(id, traced('normal', false));
+    seat.skill = 'dropin';
+    const u = sim.units.get(id)!;
+    let nearest: number | null = null;
+    let nearestId = 0;
+    for (const o of champs) {
+      if (o.id === id || o.dead) continue;
+      const d = dist(u.pos, o.pos);
+      if (nearest === null || d < nearest) {
+        nearest = d;
+        nearestId = o.id;
+      }
+    }
+    dropIns.push({
+      id,
+      nearestId,
+      landedAt: sim.time,
+      alive: true,
+      row: {
+        joinAt,
+        level: u.level,
+        fieldLevel,
+        nearestM: nearest,
+        fair,
+        firstDealt: null,
+        firstTaken: null,
+        firstTakedown: null,
+        earlyTakedowns: 0,
+        firstLife: 0,
+        endedBy: null,
+      },
+    });
+  };
   while (mode.state.stage !== 'over' && ticks < cap) {
+    while (
+      mode.state.stage === 'play' &&
+      dropinsLeft.length > 0 &&
+      sim.time - landAt + 1e-9 >= dropinsLeft[0]!
+    ) {
+      dropIn(dropinsLeft.shift()!);
+    }
     for (const [id, q] of mode.state.offers) {
       const head = q[0];
       if (!head || head.until === null || seats.get(id)?.skill === 'passive') continue;
@@ -415,6 +552,33 @@ function play(
         if (holderBefore !== null && e.killerId === holderBefore) holderKills++;
         if (lodestarBefore !== null && e.unitId === lodestarBefore && seats.has(e.killerId)) {
           lodestarDowns++;
+        }
+      }
+    }
+    for (const d of dropIns) {
+      const since = sim.time - d.landedAt;
+      for (const e of events) {
+        if (e.type === 'damage' && e.sourceId !== e.targetId) {
+          const near = (a: number, b: number) => {
+            const ua = sim.units.get(a);
+            const ub = sim.units.get(b);
+            return ua !== undefined && ub !== undefined && dist(ua.pos, ub.pos) <= DROPIN_HIT_M;
+          };
+          if (e.sourceId === d.id && seats.has(e.targetId) && near(d.id, e.targetId)) {
+            d.row.firstDealt ??= since;
+          }
+          if (e.targetId === d.id && seats.has(e.sourceId)) d.row.firstTaken ??= since;
+        } else if (e.type === 'death' && seats.has(e.unitId)) {
+          if (e.killerId === d.id && e.unitId !== d.id) {
+            d.row.firstTakedown ??= since;
+            if (since <= DROPIN_EARLY_S) d.row.earlyTakedowns++;
+          }
+          if (e.unitId === d.id && d.alive) {
+            d.alive = false;
+            d.row.firstLife = since;
+            d.row.endedBy =
+              e.killerId === d.nearestId ? 'nearest' : seats.has(e.killerId) ? 'other' : 'world';
+          }
         }
       }
     }
@@ -523,7 +687,7 @@ function play(
           }
           continue;
         }
-        if (kind === 'standin') continue;
+        if (kind === 'standin' || kind === 'dropin') continue;
         const near = alive.some(
           (o) =>
             o !== u &&
@@ -543,8 +707,10 @@ function play(
     }
   }
   const end = sim.time - landAt;
-  // A stand-in's life still running at the end counts as far as it got.
+  // A stand-in's life still running at the end counts as far as it got,
+  // and a drop-in's first life too.
   for (const [, since] of aliveSince) endLife(since);
+  for (const d of dropIns) if (d.alive) d.row.firstLife = sim.time - d.landedAt;
   const champs = [...sim.units.values()].filter((u) => u.kind === 'champion');
   const ranked = [...champs].sort(
     (a, b) => b.kills - a.kills || a.deaths - b.deaths || a.id - b.id,
@@ -638,6 +804,7 @@ function play(
     boughOffers,
     boughFallbacks,
     botTimeouts,
+    dropIns: dropIns.map((d) => d.row),
   };
 }
 
@@ -760,6 +927,18 @@ function print(m: Match): void {
     `  enemy within ${ENGAGE_M} m in sight: fighting ${pct(m.engagedSeconds, m.nearSeconds)} of ${m.nearSeconds} bot-seconds; ` +
       `steals ${pct(m.steals, m.champTakedowns)} of ${m.champTakedowns} takedowns`,
   );
+  for (const d of m.dropIns) {
+    const s = (x: number | null) => (x === null ? 'never' : `${Math.round(x)} s`);
+    console.log(
+      `  drop-in at ${clock(d.joinAt)}: level ${d.level} (field ${d.fieldLevel}), nearest enemy ` +
+        `${d.nearestM === null ? '-' : `${d.nearestM.toFixed(1)} m`}, fair foe ${d.fair ? 'yes' : 'no'}, ` +
+        `first hit ${s(d.firstDealt)}, first hurt ${s(d.firstTaken)}, first takedown ${s(d.firstTakedown)}, ` +
+        `takedowns in ${DROPIN_EARLY_S} s ${d.earlyTakedowns}, first life ${Math.round(d.firstLife)} s` +
+        (d.endedBy
+          ? ` (ended by ${d.endedBy === 'nearest' ? 'the enemy nearest at landing' : d.endedBy === 'other' ? 'another' : 'the world'})`
+          : ''),
+    );
+  }
   console.log(`  tick ${m.tickAvgMs.toFixed(2)} ms average, ${m.tickMaxMs.toFixed(1)} ms max`);
 }
 
@@ -962,6 +1141,73 @@ function graftAcceptance(all: readonly Match[]): void {
   }
 }
 
+// The median with the ones that never came (null) counted last, so a
+// median that falls on them reads 'never'.
+function medianOrNever(xs: readonly (number | null)[]): string {
+  if (xs.length === 0) return '-';
+  const inf = Number.POSITIVE_INFINITY;
+  const s = [...xs].sort((a, b) => (a ?? inf) - (b ?? inf));
+  const m = Math.floor(s.length / 2);
+  const lo = s.length % 2 === 1 ? s[m]! : s[m - 1]!;
+  const hi = s[m]!;
+  if (lo === null || hi === null) return 'never';
+  return `${((lo + hi) / 2).toFixed(1)} s`;
+}
+
+// The drop-ins by the time they joined, then all of them.
+function dropInSummary(all: readonly Match[]): void {
+  for (const variant of ['respawn', 'one_life'] as const) {
+    const rows = all.filter((m) => m.variant === variant).flatMap((m) => m.dropIns);
+    if (rows.length === 0) continue;
+    console.log(`\ndrop-ins (${variant}), by the time they joined:`);
+    const times = [...new Set(rows.map((d) => d.joinAt))].sort((a, b) => a - b);
+    const line = (label: string, ds: readonly DropIn[]) => {
+      const nearest = median(ds.flatMap((d) => (d.nearestM === null ? [] : [d.nearestM])));
+      const level = median(ds.map((d) => d.level));
+      const field = median(ds.map((d) => d.fieldLevel));
+      const life = median(ds.map((d) => d.firstLife));
+      console.log(
+        `  ${label}: n ${ds.length}, fair foe ${pct(ds.filter((d) => d.fair).length, ds.length)}, ` +
+          `level median ${level ?? '-'} (field ${field ?? '-'}), ` +
+          `nearest enemy median ${nearest === null ? '-' : nearest.toFixed(1)} m, ` +
+          `first hit median ${medianOrNever(ds.map((d) => d.firstDealt))}, ` +
+          `first hurt median ${medianOrNever(ds.map((d) => d.firstTaken))}, ` +
+          `takedown within ${DROPIN_EARLY_S} s ${pct(ds.filter((d) => d.earlyTakedowns > 0).length, ds.length)}, ` +
+          `takedowns in ${DROPIN_EARLY_S} s mean ${mean(ds.map((d) => d.earlyTakedowns)).toFixed(2)}, ` +
+          `first life median ${life === null ? '-' : life.toFixed(0)} s, ` +
+          `ended by the enemy nearest at landing ${pct(ds.filter((d) => d.endedBy === 'nearest').length, ds.length)}`,
+      );
+    };
+    for (const t of times) {
+      line(
+        clock(t),
+        rows.filter((d) => d.joinAt === t),
+      );
+    }
+    line('all', rows);
+  }
+}
+
+// One line per variant to hold a change against: the stand-in median life,
+// the bots' fighting share, the steals and the final level median.
+function compareLine(all: readonly Match[]): void {
+  for (const variant of ['respawn', 'one_life'] as const) {
+    const ms = all.filter((m) => m.variant === variant);
+    if (ms.length === 0) continue;
+    const life = median(ms.flatMap((m) => m.standinLives));
+    const near = ms.reduce((a, m) => a + m.nearSeconds, 0);
+    const engaged = ms.reduce((a, m) => a + m.engagedSeconds, 0);
+    const tds = ms.reduce((a, m) => a + m.champTakedowns, 0);
+    const steals = ms.reduce((a, m) => a + m.steals, 0);
+    const level = median(ms.flatMap((m) => m.levels));
+    console.log(
+      `\ncompare ${variant}: stand-in median life ${life === null ? '-' : life.toFixed(1)} s, ` +
+        `fighting ${near > 0 ? ((100 * engaged) / near).toFixed(1) : '-'}%, ` +
+        `steals ${tds > 0 ? ((100 * steals) / tds).toFixed(1) : '-'}%, final level median ${level ?? '-'}`,
+    );
+  }
+}
+
 function summary(all: readonly Match[]): void {
   console.log(
     '\nvariant   seed  length first  td/min  last2/min peak/min winner                 top5 kills       dusk pads caches(0-3) camps lvl-med tick',
@@ -1069,13 +1315,15 @@ function summary(all: readonly Match[]): void {
   console.log('\nacceptance (the Risings and the hunted):');
   risingsAcceptance(all);
   graftAcceptance(all);
+  dropInSummary(all);
+  compareLine(all);
 }
 
 const planet = loadPlanet();
 const all: Match[] = [];
 for (const variant of variants) {
   for (let seed = firstSeed; seed < firstSeed + seeds; seed++) {
-    const m = play(planet, variant, seed, passiveSeats, standinSeats);
+    const m = play(planet, variant, seed, passiveSeats, standinSeats, dropinTimes);
     all.push(m);
     if (!quiet) print(m);
   }

@@ -62,6 +62,26 @@ export function landingLevels(u: Unit): void {
   spendSkillPoints(u);
 }
 
+// A Respawn drop-in's level (grace.ts arrive): a visitor who took a level 3
+// seat at 7:26 found 46 of the 49 champions above it, its first foe a level
+// 6 with 2572 health against its 1487 (the seat reports, 2026-10-08). The
+// seat comes down ARRIVAL_LEVEL_BEHIND under the middle of the field, the
+// lower median of every other seat's level (the fallen too), and never
+// below its own.
+export const ARRIVAL_LEVEL_BEHIND = 1;
+
+// The sorted values' lower middle (index floor((n - 1) / 2)); START_LEVEL
+// for none.
+export function lowerMedian(values: readonly number[]): number {
+  if (values.length === 0) return START_LEVEL;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor((sorted.length - 1) / 2)]!;
+}
+
+export function arrivalLevel(own: number, field: readonly number[]): number {
+  return Math.max(own, lowerMedian(field) - ARRIVAL_LEVEL_BEHIND);
+}
+
 // Experience to a champion, its points spent at once. Returns the levels
 // it rose (the mode offers the Grafts of the levels passed, grafts.ts).
 export function grantXp(u: Unit, amount: number): number {

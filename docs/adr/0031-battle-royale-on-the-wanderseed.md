@@ -74,3 +74,46 @@ to steer by but the nearest fight. This overrides **Creatures** above for the bi
   each show 4 s long. A takedown on the Lodestar counts double and pays a piece; snuffing out a
   run pays up to three pieces. The 30 s leader show it replaces is gone.
 - **Bots answer them** from the same public signals a person reads (`src/sim/royale/bot/calls.ts`).
+
+## Amended: an Arrival meets a fair first fight (2026-10-08)
+
+The seat reports since 2026-10-03: 16 of the 18 visitors outside the maintainer's own testing
+dropped into the standing Respawn match while it ran, where no escort ever lands. Of the 13
+drop-ins without a takedown, 12 left by 75 s; the only two who stayed to the end had a takedown
+about 10 s after first contact. The quiet spot put a drop-in 25 m from every champion: its first
+damage came 12 to 35 s after landing, and 6 of 12 left alive, 3 of them never attacking. The
+seat itself ignored level: one visitor arrived at level 3 at 7:26 with 46 of the 49 champions
+above it, and the playthrough's first foe was a level 6 with 2572 health against its 1487. And a
+Respawn return set 4 m inside an edge still closing came back burning; one Arrival landed 1 m
+inside a closing edge with a foe 1.3 m away. This overrides the Arrival's quiet spot in Respawn;
+One life's Arrival and every One life rule are unchanged.
+
+- **The seat.** A drop-in still takes a bot playing the champion it picked first, a standing
+  one before one down, never one out for good; within that, in Respawn, the seat whose level is
+  nearest the field's (the lower median of every champion's, the fallen too), then the higher
+  level, then the lowest unit id (`server/royale_join.ts`).
+- **The level.** A Respawn drop-in comes down at least one level under the field's lower median
+  (every other seat's, the fallen too), its points spent and its ultimate ranked from level 6 by
+  the usual rule, never below its own level. The levels lifted offer no Graft: the Arrival's
+  Bough stays the one offer (`src/sim/royale/levels.ts`).
+- **The spot.** A Respawn drop-in comes down 9 to 11 m (inside a champion's 12 m sight) from a
+  bot's seat that is standing, out of its Grace and off any pad, out of combat, no higher in
+  level than the drop-in, and deep enough inside the light, the softest first: the skill it plays
+  now (its sharpening included), then its health share, its level, the lower id. A foe with
+  anyone else within 12 m is passed over, six foes are weighed, eight draws each, and a draw is
+  kept deep enough inside the light with nobody but the foe within 12 m of it. With none, the
+  quiet spot as before (`src/sim/royale/drop.ts`). The foe holds its fire only while the Grace
+  lasts, so the person strikes first; the bot fights on sight after that, as every bot does.
+- **The light it stands in.** While the Dusk closes, a Respawn return and an Arrival are set
+  down in the cap it closes to, which lies inside the closing one, so a fresh champion is not
+  overtaken before the phase ends; while it holds, the light now (`src/sim/royale/score.ts`
+  returnCap). This holds for every seat, the bots' too.
+- **Rules 5.** The planet's rules version moves from 4 to 5; a replay records the seat taken as
+  before ('bot_off') and re-simulates the Arrival from the match's stream.
+- **Measured** (`node scripts/royale_report.mjs --seeds 4 --variant respawn --dropin
+  60,180,300,420`, against the same report on the rules before): a fair foe for 14 of the 16
+  drop-ins (all of those at 1:00 and 3:00), the nearest enemy at landing 10 m against 28 m, the
+  first hit 4 s after landing at the median against 10 s, a takedown within the first minute for
+  9 of 16 against 5 of 16. The first life is shorter at the median, 25 s against 33 s (31.5 s
+  against 35 s over seeds 1 to 12, 50 s against 42 s on average): on seeds 1 to 4 the fair foe
+  ended none of them, the champions drawn to the fight from just past 12 m did.
