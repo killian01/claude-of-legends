@@ -3,10 +3,13 @@
 // skill point goes to the ultimate whenever its level gate allows, else to
 // the basic with the fewest ranks, ties in the house bots' order (Q, W,
 // E), so the three basics climb in turn. Experience comes from takedowns
-// and camps only, all of it to the last hit, on the sim's own curve and
-// bounties (stats.ts, rewards.ts), scaled so a champion who keeps fighting
-// reaches its ultimate around the third or fourth minute and about level
-// eleven by the end.
+// and camps only, to the last hit, on the sim's own curve and bounties
+// (stats.ts, rewards.ts), scaled so a champion who keeps fighting reaches
+// its ultimate around the third or fourth minute and about level eleven by
+// the end. In Respawn each assist on a takedown is paid a share of it too
+// (assists.ts): a seat that helps and never lands the last hit still
+// climbs (the seat reports, 2026-10-08: 25 assists, level 3 all match),
+// and the field's levels sit closer together.
 
 import { DEFAULT_SKILLS } from '../playbook/kit';
 import { championXp } from '../rewards';
@@ -23,12 +26,26 @@ import { type RoyaleVariant, START_LEVEL } from './types';
 
 // The scale on the sim's bounties: a takedown and a camp body pay this
 // many times what they pay in the 5v5. Respawn's takedowns come many times
-// as often as One life's (nobody leaves for good), so each pays less.
+// as often as One life's (nobody leaves for good), so each pays less, and
+// less again since its assists are paid too: 0.75 alone, 0.45 beside
+// them. The royale report over seeds 1 to 24: a Respawn takedown has 3.8
+// assists; the final level median moves from 9 to 10, the tenth percentile
+// from 5 to 8, the ninetieth stays 13, and of the four pairings with
+// ASSIST_XP_SHARE measured, this one alone kept the stand-in's median life
+// within a tenth of what it was.
 export const TAKEDOWN_XP_SCALE: Readonly<Record<RoyaleVariant, number>> = {
   one_life: 2,
-  respawn: 0.75,
+  respawn: 0.45,
 };
 export const CAMP_XP_SCALE = 2;
+// An assist's share of what the takedown would have paid the assisting
+// seat itself (takedownXp weighed by its own level): Respawn's, every seat
+// alike, so about seven assists learn a takedown's worth; One life pays the
+// last hit alone.
+export const ASSIST_XP_SHARE: Readonly<Record<RoyaleVariant, number>> = {
+  one_life: 0,
+  respawn: 0.15,
+};
 
 // Spends every skill point the champion holds, as the rule above says.
 export function spendSkillPoints(u: Unit): void {
@@ -82,13 +99,15 @@ export function arrivalLevel(own: number, field: readonly number[]): number {
   return Math.max(own, lowerMedian(field) - ARRIVAL_LEVEL_BEHIND);
 }
 
-// Experience to a champion, its points spent at once. Returns the levels
-// it rose (the mode offers the Grafts of the levels passed, grafts.ts).
+// Experience to a champion, its points spent at once; a fallen one (an
+// assist paid while down) stays at no health. Returns the levels it rose
+// (the mode offers the Grafts of the levels passed, grafts.ts).
 export function grantXp(u: Unit, amount: number): number {
   if (u.kind !== 'champion' || amount <= 0) return 0;
   const from = u.level;
   gainXp(u, amount);
   spendSkillPoints(u);
+  if (u.dead) u.hp = 0;
   return u.level - from;
 }
 
@@ -106,6 +125,12 @@ export function takedownXp(
   const ratio = victimLevel / Math.max(1, killerLevel);
   const weigh = Math.min(TAKEDOWN_XP_MAX_RATIO, Math.max(TAKEDOWN_XP_MIN_RATIO, ratio));
   return championXp(victimLevel) * TAKEDOWN_XP_SCALE[variant] * weigh;
+}
+
+// What an assist on a takedown pays the assisting seat: its share of what
+// the takedown would have paid it.
+export function assistXp(variant: RoyaleVariant, victimLevel: number, helperLevel: number): number {
+  return takedownXp(variant, victimLevel, helperLevel) * ASSIST_XP_SHARE[variant];
 }
 
 // What a camp body or a big creature pays its last hit.
