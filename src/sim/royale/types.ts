@@ -179,6 +179,13 @@ export interface MarkState {
   shownAt: number;
 }
 
+// A Burr (CONTEXT.md; burr.ts): the champion that last took its owner down,
+// and until when taking it down pays.
+export interface BurrState {
+  carrierId: number;
+  until: number;
+}
+
 // A Clamor (CONTEXT.md): where a takedown rang out and when.
 export interface ClamorState {
   pos: Vec3;
@@ -219,6 +226,8 @@ export interface RoyaleState {
   risings: RisingState[];
   // Champions shown to everyone (marks.ts).
   marks: MarkState[];
+  // Respawn: each seat's Burr, by its owner's unit id (burr.ts).
+  burrs: Map<number, BurrState>;
   // Takedowns still ringing out, for CLAMOR_S each (clamors.ts).
   clamors: ClamorState[];
   // Who carries the Wrath on the planet, and until when.
