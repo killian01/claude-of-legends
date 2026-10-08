@@ -57,9 +57,12 @@ describe('the Grace of a Respawn return', () => {
     const { sim, u, backAt } = returned();
     expect(u.dead).toBe(false);
     expect(sim.royale!.arriving.has(u.id)).toBe(true);
+    // A return's Grace waits on no order: it runs its ARRIVAL_GRACE_S.
     expect(sim.royaleMode!.graces.get(u.id)).toEqual({
       since: backAt,
       until: backAt + ARRIVAL_GRACE_S,
+      orderEndsFrom: null,
+      ordered: false,
       held: true,
     });
     // Holding its fire meanwhile, let go when it ends.
