@@ -55,10 +55,16 @@ import { stepProjectiles } from './projectiles';
 import { startRecall, stepRecalls } from './recall';
 import { createRemoteSeat, type RemoteSeat, runRemoteDecisions } from './remote_policy';
 import { respawnDelay } from './respawn';
-import { ASSIST_GOLD_FRAC, championBounty, grantKillRewards, grantPassiveGold } from './rewards';
+import {
+  ASSIST_GOLD_FRAC,
+  assistersOf,
+  championBounty,
+  grantKillRewards,
+  grantPassiveGold,
+} from './rewards';
 import { initialRingStates, onCreatureSlain, type RingClock, ringClocks, stepRings } from './rings';
 import { Rng } from './rng';
-import { keepHold } from './royale/grace';
+import { keepHold, noteOrder } from './royale/grace';
 import { RoyaleMode, type RoyaleOptions } from './royale/mode';
 import { DROP_S, type RoyaleEvent, type RoyaleState } from './royale/types';
 import { MINIONS_ONLY, stepSeparation } from './separation';
@@ -118,8 +124,6 @@ export type SimEvent =
   // The battle royale's own (royale/types.ts).
   | RoyaleEvent;
 
-// How long a champion's damage on a victim keeps earning an assist.
-const ASSIST_WINDOW_S = 10;
 // Exported: the HUD draws exactly this many build slots, so a full bag and
 // an empty one read as the same shape.
 export const INVENTORY_SLOTS = 6;
@@ -774,6 +778,7 @@ export class Sim {
     u.attackTargetId = null;
     u.attackMoveTarget = null;
     u.path = this.ground.findPath(u.pos, point(x, z, y));
+    if (this.royaleMode) noteOrder(this.royaleMode, unitId);
   }
 
   // Stop (S): halt in place and HOLD, opting out of idle auto-defense until
@@ -786,7 +791,10 @@ export class Sim {
     u.path = [];
     u.attackTargetId = null;
     u.attackMoveTarget = null;
-    if (this.royaleMode) keepHold(this.royaleMode, unitId);
+    if (this.royaleMode) {
+      keepHold(this.royaleMode, unitId);
+      noteOrder(this.royaleMode, unitId);
+    }
   }
 
   // The owner's coach order for a bot seat (ADR 0013): sim state like any
@@ -830,6 +838,7 @@ export class Sim {
     u.attackTargetId = null;
     u.attackMoveTarget = point(x, z, y);
     u.path = this.ground.findPath(u.pos, point(x, z, y));
+    if (this.royaleMode) noteOrder(this.royaleMode, unitId);
   }
 
   startRecall(unitId: number): void {
@@ -1139,15 +1148,7 @@ export class Sim {
         // window, killer excluded. Dead helpers still earn theirs, and the
         // helpers split an assist pot so a won team fight pays the team,
         // not only the last hitter.
-        const assisters: Unit[] = [];
-        for (const r of u.recentDamagers) {
-          if (r.id === killerId) continue;
-          if (this.time - r.at > ASSIST_WINDOW_S) continue;
-          const helper = this.units.get(r.id);
-          if (helper && helper.kind === 'champion' && helper.team !== u.team) {
-            assisters.push(helper);
-          }
-        }
+        const assisters = assistersOf(this.units, u, killerId, this.time);
         const assistGold =
           assisters.length > 0
             ? Math.floor((championBounty(u) * ASSIST_GOLD_FRAC) / assisters.length)

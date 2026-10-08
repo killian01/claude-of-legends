@@ -32,6 +32,30 @@ export const SHUTDOWN_STREAK_CAP = 5;
 // bot and the team's lead never materialized as items).
 export const ASSIST_GOLD_FRAC = 0.5;
 
+// How long a champion's damage on a victim keeps earning an assist.
+export const ASSIST_WINDOW_S = 10;
+
+// The champions that earn an assist on a champion's fall at `time`: every
+// enemy champion that damaged it within ASSIST_WINDOW_S, the killer
+// excluded, in the order they first hit it (combat/damage.ts keeps it). The
+// 5v5 pays them gold from a pot (sim.ts); the battle royale's Respawn a
+// share of the takedown's experience (royale/levels.ts assistXp).
+export function assistersOf(
+  units: ReadonlyMap<number, Unit>,
+  victim: Unit,
+  killerId: number,
+  time: number,
+): Unit[] {
+  const out: Unit[] = [];
+  for (const r of victim.recentDamagers) {
+    if (r.id === killerId) continue;
+    if (time - r.at > ASSIST_WINDOW_S) continue;
+    const helper = units.get(r.id);
+    if (helper && helper.kind === 'champion' && helper.team !== victim.team) out.push(helper);
+  }
+  return out;
+}
+
 export function championBounty(victim: Unit): number {
   return (
     CHAMPION_BOUNTY_BASE +
@@ -42,7 +66,8 @@ export function championBounty(victim: Unit): number {
 
 // The experience a champion's death pays, by the victim's level: taking
 // down the fed enemy accelerates your own spike (snowball review). The
-// battle royale pays the same, to the last hit alone (royale/levels.ts).
+// battle royale pays the same, scaled, to the last hit (royale/levels.ts),
+// and in Respawn a share to each assist.
 export function championXp(victimLevel: number): number {
   return 120 + 20 * victimLevel;
 }

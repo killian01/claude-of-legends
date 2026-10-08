@@ -125,3 +125,55 @@ One life's Arrival and every One life rule are unchanged.
   on landing (36 before, none on the quiet spot), a takedown within the first minute for 28 of
   48 (26 on the quiet spot), the first life 28 s at the median and 47 s on average (35 s and 42 s
   on the quiet spot).
+
+## Amended: a Grace that waits for the person, and assists that pay (2026-10-08)
+
+After the fair first fight, the seat reports still said: of the ten drop-ins who died, four left
+during the five second wait; nobody without a takedown stayed; one visitor made 25 assists and
+stayed at level 3 all match, since only the last hit learned anything, while about two Respawn
+takedowns in five go to a champion who dealt under a quarter of the damage (the royale report's
+steals). And the server began an Arrival's three second Grace as the seat was taken, while a slow
+client keeps its joining card over the match until its first frame, up to four seconds
+(`src/game/first_frame.ts` FIRST_FRAME_WAIT_MS): a newcomer could first see the world with the
+Grace over and its foe ten meters off. This overrides the Grace's length for a Respawn Arrival
+and Respawn's experience; One life and every Respawn return are unchanged.
+
+- **The Grace waits for the person.** A Respawn Arrival's Grace lasts three seconds at least,
+  then until the seat's first order of any kind (a move, an attack-move, a Stop), six seconds
+  at most; its own first attack, cast or sigil still ends it at once. Nothing the client says
+  is trusted: the orders are the seat's own and recorded, so a replay re-simulates the Grace,
+  and the 'loaded' message stays the seat report's. A bot orders on its first decision, so a
+  bot playing the seat ends its Grace at three seconds and never waits on a load. The
+  champions in sight read its latest end (`ObsRoyale.graced`) as the shimmer does
+  (`src/sim/royale/grace.ts`).
+- **Assists pay.** In Respawn every champion with an assist on a takedown (it hit the fallen
+  within the sim's ten second assist window, `src/sim/rewards.ts` assistersOf, the 5v5's assist
+  gold unchanged) learns 0.15 of what the takedown would have paid it, weighed by its own level
+  as the last hit is, so about seven assists learn a takedown's worth; a fallen helper too, and
+  the levels an assist passes offer their Grafts. A Respawn takedown has 3.8 assists on average,
+  so the last hit's scale goes from 0.75 to 0.45 of the 5v5's bounty. One life pays the last
+  hit alone (`src/sim/royale/assists.ts`, `levels.ts`).
+- **Rules 6.** The planet's rules version moves from 5 to 6.
+- **Measured** (`node scripts/royale_report.mjs --variant respawn --dropin 60,180,300,420`
+  over seeds 1 to 24, split over processes with `--dump` and `--merge`, against the same report
+  on rules 5). The final level median goes from 9 to 10, the tenth percentile from 5 to 8, the
+  ninetieth stays 13; the seats with at most three takedowns end at level 8 against 4. The
+  drop-in's first life is 36 s at the median against 34 s (39 s against 28 s on seeds 1 to 12,
+  the seeds the tranche before was measured on), with 10 of 96 first lives under 16 s against
+  15. The stand-in's median life is 18.3 s against 19.9 s, the bots fight 66.5 percent of the
+  seconds an enemy is in reach against 65.9, the steals are 40.5 percent against 37.6. Four
+  pairings of the two numbers were measured (0.35 and 0.2, 0.3 and 0.25, 0.5 and 0.1, 0.45 and
+  0.15); every one held the level median at 9 or 10 and raised the drop-in's first life, and
+  the last alone kept the stand-in's median life within a tenth of before (the others: 17.0 to
+  17.3 s). A bootstrap over matches puts the drop-in's change between -8 and +9 s and the
+  stand-in's between -4 and +1 s at 90 percent: the report's medians move that much from one
+  set of seeds to the next.
+- **A slow load** (`--load 4`: the drop-in gives no order for four seconds after its Arrival,
+  seeds 1 to 12). On rules 5 the report's bots never struck in the second between the Grace's
+  end and the first order (the first hurt came 12 s after the Arrival at the median), so the
+  waiting Grace alone moves no number there (31 s against 33 s for the first life, within the
+  noise): it closes a window the bots happen not to use and a person does see. The whole of
+  rules 6 at that load: the first life 34 s against 33 s, the stand-in's median life 21.2 s
+  against 17.0 s, the fighting share 66.4 percent on both. A local
+  playthrough on a loaded box had the joining card come down 3.45 s after the Arrival with
+  2.55 s of Grace left, where rules 5 had ended it half a second before the world showed.
