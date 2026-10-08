@@ -1,26 +1,48 @@
 // The Arrival (CONTEXT.md; src/sim/royale/grace.ts arrive): a person who
 // drops into a running match takes a bot's seat and the champion comes down
-// fresh, at a quiet spot inside the light, in its Grace, its tally from zero
-// (a playtest, 2026-10-04: a visitor took a seat mid-fight at half health
-// and was slain five seconds after joining, with the bot's score and kills).
-// Recorded as an 'arrive' replay event, so a replay re-simulates it alike.
-// The quiet spot itself (drop.ts arrivalSpot) and the Respawn return's
-// point (score.ts edgeOfLight) are pinned on the real Wanderseed.
+// fresh inside the light, in its Grace, its tally from zero (a playtest,
+// 2026-10-04: a visitor took a seat mid-fight at half health and was slain
+// five seconds after joining, with the bot's score and kills). In Respawn
+// it comes down at the field's level, a few steps from a fair first fight
+// when a bot offers one, else at a quiet spot (the seat reports,
+// 2026-10-08). Recorded as an 'arrive' replay event, so a replay
+// re-simulates it alike. The quiet spot (drop.ts arrivalSpot), the fair
+// foe's (drop.ts fairFoeSpot) and the Respawn return's point (score.ts
+// edgeOfLight) are pinned on the real Wanderseed.
 
 import { describe, expect, it } from 'vitest';
 import { royaleFactory } from '../server/royale_build';
 import { RoyaleMatch } from '../server/royale_match';
 import type { RoyalePerson } from '../server/royale_seats';
 import { applyReplayEvent, loadRoyaleReplay } from '../src/net/replay';
+import { DUSK_PHASES } from '../src/sim/content/dusk';
 import { dist, type Vec3 } from '../src/sim/geo';
 import { Rng } from '../src/sim/rng';
-import { ARRIVAL_DEPTH_M, ARRIVAL_QUIET_M, arrivalSpot } from '../src/sim/royale/drop';
+import {
+  ARRIVAL_DEPTH_M,
+  ARRIVAL_QUIET_M,
+  arrivalSpot,
+  FOE_CLEAR_M,
+  FOE_MAX_M,
+  FOE_MIN_M,
+  type FoeCandidate,
+  fairFoeSpot,
+} from '../src/sim/royale/drop';
 import { depthInside, insideCap } from '../src/sim/royale/dusk';
-import { ARRIVAL_GRACE_S } from '../src/sim/royale/grace';
+import { ARRIVAL_GRACE_S, beginGrace, endGrace } from '../src/sim/royale/grace';
 import { along, type RoyaleGround, randomHeading } from '../src/sim/royale/layout';
-import { edgeOfLight } from '../src/sim/royale/score';
-import { CALM_S, DROP_S, type DuskCap } from '../src/sim/royale/types';
+import { ARRIVAL_LEVEL_BEHIND } from '../src/sim/royale/levels';
+import { edgeOfLight, returnCap } from '../src/sim/royale/score';
+import {
+  CALM_S,
+  DROP_S,
+  type DuskCap,
+  OUT_OF_COMBAT_S,
+  START_LEVEL,
+} from '../src/sim/royale/types';
 import type { Sim } from '../src/sim/sim';
+import { effectiveRank, levelTo } from '../src/sim/stats';
+import type { Unit } from '../src/sim/unit';
 import { landed } from './royale_contract_fixture';
 import { loadPlanet } from './royale_planet';
 
@@ -76,6 +98,7 @@ describe('an Arrival in play', () => {
     const { match, sim } = started();
     tickTo(match, DROP_S + 30);
     const self = match.players.get(1)!.unitId;
+    // Every bot just hit: no fair first fight, the quiet spot.
     wearDown(sim, self);
     const before = new Map(
       champions(sim).map((u) => [u.id, { level: u.level, items: [...u.items], pos: u.pos }]),
@@ -199,6 +222,8 @@ describe('an Arrival in play', () => {
     const { match, sim } = started('respawn', 23);
     tickTo(match, DROP_S + 20);
     match.takeBotSeat(person(2));
+    // Beside a fair first fight, its draws from the match's stream.
+    expect(sim.royaleMode!.tally.fairArrivals).toBe(1);
     tickTo(match, DROP_S + 40);
     const live = match.replayRecord()!;
     const record = { ...live, picks: [...live.picks] };
@@ -223,6 +248,266 @@ describe('an Arrival in play', () => {
       without.sim.tick();
     }
     expect(without.sim.checksum()).not.toBe(sim.checksum());
+  });
+});
+
+// A Respawn Arrival's fair first fight (grace.ts arrive, drop.ts
+// fairFoeSpot) and its level (levels.ts arrivalLevel): a scene on a running
+// match, the seat arriving one of its bots (its policy detached as the
+// server does), the foes left alone at their spots, out of combat and of
+// any Grace, at the seat's level; everyone else in a fight on the far side
+// of the planet.
+function fairScene(sim: Sim, seat: Unit, foes: readonly Unit[], spots: readonly Vec3[]): void {
+  const mode = sim.royaleMode!;
+  const far = spots[0]!;
+  const level = Math.max(...champions(sim).map((u) => u.level));
+  levelTo(seat, level);
+  for (const u of champions(sim)) {
+    if (u.id === seat.id) continue;
+    u.path = [];
+    const i = foes.indexOf(u);
+    if (i >= 0) {
+      levelTo(u, level);
+      endGrace(mode, u);
+      u.dead = false;
+      u.hp = u.maxHp;
+      u.pos = { ...spots[i]! };
+      u.lastDamagedAt = -999;
+      u.lastDealtDamageAt = -999;
+      continue;
+    }
+    u.pos = { x: -far.x, y: -far.y!, z: -far.z };
+    u.lastDamagedAt = sim.time;
+  }
+}
+
+function bots(match: RoyaleMatch, sim: Sim): Unit[] {
+  const self = match.players.get(1)!.unitId;
+  return champions(sim).filter((u) => u.id !== self && sim.policies.has(u.id));
+}
+
+// The seat's Arrival as the server makes it (RoyaleMatch.takeBotSeat).
+function arriveAt(sim: Sim, seat: Unit): Vec3 {
+  sim.detachPolicy(seat.id);
+  sim.beginArrival(seat.id);
+  return seat.pos as Vec3;
+}
+
+// A walkable point `m` from p, toward a heading drawn from `seed`.
+function walkableFrom(sim: Sim, p: Vec3, m: number, seed: number): Vec3 {
+  const mode = sim.royaleMode!;
+  const q = along(p, randomHeading(new Rng(seed), p), m, mode.layout.radius);
+  return mode.ground.nearestWalkable(q) ?? q;
+}
+
+function quietKept(sim: Sim, seat: Unit): void {
+  for (const o of champions(sim)) {
+    if (o.id === seat.id || o.dead) continue;
+    expect(dist(seat.pos, o.pos)).toBeGreaterThanOrEqual(ARRIVAL_QUIET_M);
+  }
+}
+
+describe('a Respawn Arrival meets a fair first fight', () => {
+  it('lands a few steps from a lone gentle bot out of combat, deep in the light, graced', () => {
+    const { match, sim } = started();
+    const mode = sim.royaleMode!;
+    // A closing phase: the light it closes to is the one that counts.
+    tickTo(match, DROP_S + DUSK_PHASES[0]!.closeFrom + 30);
+    expect(mode.state.dusk.shrinking).toBe(true);
+    const cap = returnCap(mode.state.dusk);
+    const [seat, foe] = bots(match, sim);
+    mode.skills.set(foe!.id, 'gentle');
+    // The foe stands inside the light it closes to, past the depth rule.
+    const spot = mode.ground.nearestWalkable(cap.center)!;
+    expect(depthInside(cap, spot)).toBeGreaterThan(FOE_MAX_M + ARRIVAL_DEPTH_M);
+    fairScene(sim, seat!, [foe!], [spot]);
+    const fair = mode.tally.fairArrivals;
+    const at = arriveAt(sim, seat!);
+    expect(mode.tally.fairArrivals).toBe(fair + 1);
+    const d = dist(at, foe!.pos);
+    expect(d).toBeGreaterThanOrEqual(FOE_MIN_M - 1);
+    expect(d).toBeLessThanOrEqual(FOE_MAX_M + 1);
+    // Inside both champions' sight.
+    expect(d).toBeLessThan(foe!.sightRange);
+    expect(d).toBeLessThan(seat!.sightRange);
+    expect(insideCap(cap, at)).toBe(true);
+    expect(depthInside(cap, at)).toBeGreaterThanOrEqual(ARRIVAL_DEPTH_M);
+    expect(mode.ground.walkable(at)).toBe(true);
+    // Nobody else near either of them.
+    for (const o of champions(sim)) {
+      if (o.id === seat!.id || o.id === foe!.id) continue;
+      expect(dist(at, o.pos)).toBeGreaterThan(FOE_CLEAR_M);
+    }
+    expect(sim.royale!.arriving.has(seat!.id)).toBe(true);
+    expect(seat!.hp).toBe(seat!.maxHp);
+  });
+
+  it('never beside a bot in combat, above the seat in level, in its Grace, or with company', () => {
+    const cases: ((sim: Sim, foe: Unit, seat: Unit, other: Unit) => void)[] = [
+      (sim, foe) => {
+        foe.lastDealtDamageAt = sim.time - OUT_OF_COMBAT_S + 1;
+      },
+      (sim, foe) => {
+        foe.lastDamagedAt = sim.time - OUT_OF_COMBAT_S + 1;
+      },
+      (_sim, foe, seat) => {
+        levelTo(foe, seat.level + 1);
+      },
+      (sim, foe, _seat, other) => {
+        other.pos = walkableFrom(sim, foe.pos as Vec3, FOE_CLEAR_M - 4, 3);
+      },
+      // Back from a death, in its own Grace.
+      (sim, foe) => {
+        beginGrace(sim.royaleMode!, foe, sim.time - 1);
+      },
+    ];
+    for (const change of cases) {
+      const { match, sim } = started();
+      const mode = sim.royaleMode!;
+      tickTo(match, DROP_S + 30);
+      const [seat, foe, other] = bots(match, sim);
+      mode.skills.set(foe!.id, 'gentle');
+      fairScene(sim, seat!, [foe!], [foe!.pos as Vec3]);
+      change(sim, foe!, seat!, other!);
+      arriveAt(sim, seat!);
+      expect(mode.tally.fairArrivals).toBe(0);
+      quietKept(sim, seat!);
+      expect(sim.royale!.arriving.has(seat!.id)).toBe(true);
+    }
+  });
+
+  it('takes a gentle bot before a normal one, and one sharpened by 2 takedowns as normal', () => {
+    const near = (score: number) => {
+      const { match, sim } = started();
+      const mode = sim.royaleMode!;
+      tickTo(match, DROP_S + 30);
+      const [seat, gentle, normal] = bots(match, sim);
+      mode.skills.set(gentle!.id, 'gentle');
+      mode.skills.set(normal!.id, 'normal');
+      mode.state.scores.set(gentle!.id, score);
+      const a = gentle!.pos as Vec3;
+      fairScene(sim, seat!, [gentle!, normal!], [a, walkableFrom(sim, a, 60, 1)]);
+      // The normal one a little worn: the softer of two normal bots.
+      normal!.hp = normal!.maxHp * 0.9;
+      const at = arriveAt(sim, seat!);
+      expect(mode.tally.fairArrivals).toBe(1);
+      return dist(at, gentle!.pos) < dist(at, normal!.pos) ? 'gentle' : 'normal';
+    };
+    expect(near(0)).toBe('gentle');
+    expect(near(1)).toBe('gentle');
+    expect(near(2)).toBe('normal');
+  });
+});
+
+describe('a Respawn Arrival at the field level', () => {
+  it('lifts a seat under the field to one level below its lower median, nothing offered for it', () => {
+    const { match, sim } = started();
+    const mode = sim.royaleMode!;
+    tickTo(match, DROP_S + 30);
+    const self = match.players.get(1)!.unitId;
+    const seat = bots(match, sim).find((u) => u.level === START_LEVEL)!;
+    for (const o of champions(sim)) if (o.id !== seat.id) levelTo(o, 9);
+    // One of them down: the fallen count too.
+    sim.units.get(self)!.dead = true;
+    const maxBefore = seat.maxHp;
+    const offers = (mode.state.offers.get(seat.id) ?? []).length;
+    arriveAt(sim, seat);
+    expect(seat.level).toBe(9 - ARRIVAL_LEVEL_BEHIND);
+    expect(seat.maxHp).toBeGreaterThan(maxBefore);
+    expect(seat.hp).toBe(seat.maxHp);
+    expect(seat.mana).toBe(seat.maxMana);
+    expect(seat.skillPoints).toBe(0);
+    expect(effectiveRank(seat, 'R')).toBe(1);
+    // The Arrival's own Bough, and none for levels 5 and 7.
+    const now = (mode.state.offers.get(seat.id) ?? []).filter((o) => o.offeredAt === sim.time);
+    expect(now.map((o) => o.grade)).toEqual(['bough']);
+    expect((mode.state.offers.get(seat.id) ?? []).length).toBe(offers + 1);
+  });
+
+  it('keeps the level of a seat above the field', () => {
+    const { match, sim } = started();
+    tickTo(match, DROP_S + 30);
+    const seat = bots(match, sim)[0]!;
+    for (const o of champions(sim)) if (o.id !== seat.id) levelTo(o, 9);
+    levelTo(seat, 10);
+    seat.xp = 40;
+    arriveAt(sim, seat);
+    expect(seat.level).toBe(10);
+    expect(seat.xp).toBe(40);
+  });
+
+  it('leaves One life alone: a quiet spot in the calm, the level kept', () => {
+    const { match, sim } = started('one_life');
+    const mode = sim.royaleMode!;
+    tickTo(match, DROP_S + CALM_S / 2);
+    const [seat, foe] = bots(match, sim);
+    mode.skills.set(foe!.id, 'gentle');
+    fairScene(sim, seat!, [foe!], [foe!.pos as Vec3]);
+    for (const o of champions(sim)) if (o.id !== seat!.id && o.id !== foe!.id) levelTo(o, 9);
+    const level = seat!.level;
+    arriveAt(sim, seat!);
+    expect(seat!.level).toBe(level);
+    expect(mode.tally.fairArrivals).toBe(0);
+    quietKept(sim, seat!);
+  });
+});
+
+describe('the fair foe spot', () => {
+  const mode = landed().sim.royaleMode!;
+  const layout = mode.layout;
+  const ground = mode.ground;
+  const R = layout.radius;
+  const center = layout.regions[0]!.heart;
+  const foe = (id: number, pos: Vec3, soft = 0, hpShare = 1, level = 5): FoeCandidate => ({
+    id,
+    pos,
+    soft,
+    hpShare,
+    level,
+  });
+
+  it('keeps every landing in the band, deep in a small light, clear of the others', () => {
+    const light: DuskCap = { center, radius: 30 };
+    // A foe near the light's edge: only the draws on the inner side hold.
+    let edge: Vec3 | null = null;
+    for (let s = 1; s < 60 && !edge; s += 0.5) {
+      const q = along(center, randomHeading(new Rng(4), center), s, R);
+      if (ground.walkable(q) && depthInside(light, q) <= ARRIVAL_DEPTH_M + 2) edge = q;
+    }
+    expect(edge).not.toBeNull();
+    let found = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const got = fairFoeSpot(new Rng(seed), light, [foe(7, edge!)], [], layout, ground);
+      if (!got) continue;
+      found++;
+      expect(got.foeId).toBe(7);
+      expect(depthInside(light, got.at)).toBeGreaterThanOrEqual(ARRIVAL_DEPTH_M - 1e-9);
+      expect(dist(got.at, edge!)).toBeGreaterThanOrEqual(FOE_MIN_M - 1);
+      expect(dist(got.at, edge!)).toBeLessThanOrEqual(FOE_MAX_M + 1);
+      expect(ground.walkable(got.at)).toBe(true);
+    }
+    expect(found).toBeGreaterThan(0);
+  });
+
+  it('weighs the softest first, passes a crowded foe over, and draws from the stream alike', () => {
+    const whole: DuskCap = { center, radius: 2 * R };
+    const a = center;
+    const b = along(center, randomHeading(new Rng(1), center), 60, R);
+    const pick = (foes: FoeCandidate[], others: { id: number; pos: Vec3 }[] = []) =>
+      fairFoeSpot(new Rng(9), whole, foes, others, layout, ground)?.foeId ?? null;
+    expect(pick([foe(1, a, 1), foe(2, b, 0)])).toBe(2);
+    expect(pick([foe(1, a, 0, 0.5), foe(2, b, 0, 0.9)])).toBe(1);
+    expect(pick([foe(1, a, 0, 1, 6), foe(2, b, 0, 1, 4)])).toBe(2);
+    expect(pick([foe(3, a), foe(2, b)])).toBe(2);
+    // A third champion beside the softest: the next one.
+    const beside = along(b, randomHeading(new Rng(2), b), FOE_CLEAR_M - 2, R);
+    expect(pick([foe(1, a, 1), foe(2, b, 0)], [{ id: 9, pos: beside }])).toBe(1);
+    // Only the foe itself near: no company.
+    expect(pick([foe(2, b, 0)], [{ id: 2, pos: b }])).toBe(2);
+    expect(pick([])).toBeNull();
+    const same = (seed: number) =>
+      fairFoeSpot(new Rng(seed), whole, [foe(1, a), foe(2, b, 1)], [], layout, ground);
+    expect(same(5)).toEqual(same(5));
   });
 });
 
