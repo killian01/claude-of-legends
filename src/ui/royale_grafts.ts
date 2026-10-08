@@ -1,7 +1,8 @@
 // The Graft cards, decided (CONTEXT.md: Graft; ADR 0032): what each of the
 // three cards of an open offer says (its key, name, grade, what the grade
 // does, its line, and for a Sprout what it adds to the own champion now),
-// the title over them, when they fold into the chip (put off, or a fight),
+// the title over them, when they fold into the chip (put off, a fight, or
+// the first seconds after landing),
 // the key a press picks, the names the end card lists, and where the cards
 // and the chip stand on a screen, as boxes a test checks. The offer never
 // runs out. Pure; ui/royale_hud_grafts.ts draws it.
@@ -92,19 +93,27 @@ export function graftChip(): string {
   return GRAFT_TITLE;
 }
 
+// The cards wait this long after the champion lands, folded into the chip:
+// the first seconds are for the fight and the caches. Open, they covered
+// the top third of a desktop and half a phone, and the 4 visitors in 8 who
+// never picked one all left within 39 s.
+export const GRAFT_SETTLE_S = 12;
+
 // Whether the cards fold into the chip: never over the globe in the drop;
-// otherwise when the person put them off (Later) or is in a fight (a hit
-// in the last FIGHT_FOLD_S), on a phone as on a desktop, unless they
-// opened them again from the chip. The offer never runs out, so folding
-// costs nothing but the look.
+// otherwise when the person put them off (Later), is in a fight (a hit in
+// the last FIGHT_FOLD_S), or landed less than GRAFT_SETTLE_S ago, on a
+// phone as on a desktop, unless they opened them again from the chip. The
+// offer never runs out, so folding costs nothing but the look.
 export function graftFolded(
   sinceHit: number | null,
   dropping: boolean,
   putOff: boolean,
   reopened: boolean,
+  sinceLanding: number | null,
 ): boolean {
   if (dropping || reopened) return false;
-  return putOff || foldForFight(sinceHit, true);
+  const settling = sinceLanding !== null && sinceLanding < GRAFT_SETTLE_S;
+  return putOff || foldForFight(sinceHit, true) || settling;
 }
 
 // The card a key picks: 1, 2 and 3 on the top row or the number pad.

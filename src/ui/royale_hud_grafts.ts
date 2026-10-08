@@ -4,7 +4,8 @@
 // over the globe during the drop and over the play view after an event,
 // picked by a click, a tap, or the keys 1, 2 and 3 (game/input.ts). They
 // never run out (the maintainer, 2026-10-04: time to read): Later folds them
-// into a chip, and so does a fight; a click on the chip opens them again.
+// into a chip, and so do a fight and the first seconds after landing; a
+// click on the chip opens them again.
 // A Graft taken shows as a notice. What the cards say and where they stand
 // is ui/royale_grafts.ts.
 
@@ -158,8 +159,15 @@ export class RoyaleHudGrafts {
   }
 
   // Once per world tick: the snapshot's offer and Grafts, the own champion
-  // as the cards read it, and how long since it was last hit (a fight).
-  update(r: SnapRoyale, _time: number, me: GraftReader | null, sinceHit: number | null): void {
+  // as the cards read it, how long since it was last hit (a fight), and how
+  // long since it landed (null during the drop).
+  update(
+    r: SnapRoyale,
+    _time: number,
+    me: GraftReader | null,
+    sinceHit: number | null,
+    sinceLanding: number | null,
+  ): void {
     this.noteTaken(r.gr ?? []);
     const offer = r.offer ?? null;
     const key = offer ? offerKey(offer) : null;
@@ -176,6 +184,7 @@ export class RoyaleHudGrafts {
       r.st === 'drop',
       this.putOff === key,
       this.reopened === key,
+      sinceLanding,
     );
     if (this.shown !== key) this.build(this.offer, me);
     setHidden(this.box, folded);

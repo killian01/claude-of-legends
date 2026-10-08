@@ -1,6 +1,7 @@
 // The Grafts on the screen (ui/royale_grafts.ts, render/planet_graft_aura.ts,
 // the mirror in src/net/client_world.ts): what the cards say, the title and
-// the grade hints, the fold (put off or a fight) and the chip, the keys, the
+// the grade hints, the fold (put off, a fight, the first seconds after
+// landing) and the chip, the keys, the
 // end card's list, where the cards and the chip stand (a row across the top
 // with the champion in sight, the chip clear of the thumbs' corners), the
 // aura's breath and color, and the mirror keeping the Grafts and the
@@ -19,6 +20,7 @@ import {
   cardsLeaveChampionInSight,
   chipBox,
   GRADE_HINTS,
+  GRAFT_SETTLE_S,
   GRAFT_TITLE,
   graftCards,
   graftChip,
@@ -70,14 +72,29 @@ describe('the cards', () => {
   });
 
   it('fold when put off or in a fight, never over the globe, and open again from the chip', () => {
-    // sinceHit, dropping, put off, reopened
-    expect(graftFolded(1, false, false, false)).toBe(true);
-    expect(graftFolded(5, false, false, false)).toBe(false);
-    expect(graftFolded(null, false, false, false)).toBe(false);
-    expect(graftFolded(1, true, false, false)).toBe(false);
-    expect(graftFolded(null, false, true, false)).toBe(true);
-    expect(graftFolded(null, false, true, true)).toBe(false);
-    expect(graftFolded(1, false, false, true)).toBe(false);
+    // sinceHit, dropping, put off, reopened, since landing
+    const settled = GRAFT_SETTLE_S + 1;
+    expect(graftFolded(1, false, false, false, settled)).toBe(true);
+    expect(graftFolded(5, false, false, false, settled)).toBe(false);
+    expect(graftFolded(null, false, false, false, settled)).toBe(false);
+    expect(graftFolded(1, true, false, false, null)).toBe(false);
+    expect(graftFolded(null, false, true, false, settled)).toBe(true);
+    expect(graftFolded(null, false, true, true, settled)).toBe(false);
+    expect(graftFolded(1, false, false, true, settled)).toBe(false);
+  });
+
+  it('wait folded for the first seconds after landing, then open', () => {
+    // 4 visitors in 8 never picked the cards open on landing, and all 4
+    // left within 39 s.
+    expect(GRAFT_SETTLE_S).toBe(12);
+    expect(graftFolded(null, false, false, false, 0)).toBe(true);
+    expect(graftFolded(null, false, false, false, GRAFT_SETTLE_S - 0.1)).toBe(true);
+    expect(graftFolded(null, false, false, false, GRAFT_SETTLE_S)).toBe(false);
+    // Opened from the chip meanwhile, they stay open.
+    expect(graftFolded(null, false, false, true, 3)).toBe(false);
+    // Never over the globe: the drop has no landing yet.
+    expect(graftFolded(null, true, false, false, null)).toBe(false);
+    expect(graftFolded(null, true, false, false, 0)).toBe(false);
   });
 
   it('pick by the keys 1, 2 and 3 only', () => {
