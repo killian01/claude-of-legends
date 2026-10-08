@@ -233,6 +233,17 @@ export const MARK_FRESH_S = 10;
 export const MARK_CALL_M = 50;
 export const WARY_M = 25;
 export const WARY_STEP_M = 10;
+// The Burr (CONTEXT.md; calls.ts burrCall, fight.ts pickTarget): a normal
+// or strong bot whose Burr's carrier stands within BURR_CALL_M, in the
+// light, walks after it when no Seedfall, Clamor or Rising calls, its odds
+// against it (its level, at full health) reaching its nerve. In sight, every
+// skill weighs the carrier BURR_TARGET_PULL less in a target's score (two
+// meters nearer, or a tenth of its health lower) and fights it on odds
+// BURR_MARGIN under its nerve. A bounded preference: no chase past its
+// skill's, no walk past BURR_CALL_M, no fight it would otherwise run from.
+export const BURR_CALL_M = 40;
+export const BURR_TARGET_PULL = 1.2;
+export const BURR_MARGIN = 0.05;
 // A Rising's site past the light's edge (calls.ts risingReachable): the
 // rings stand where they stand, and from 3:00 the first closing leaves
 // half the planet dark, so half the big creatures rose in the dark and

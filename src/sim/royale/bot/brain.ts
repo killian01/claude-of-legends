@@ -11,9 +11,9 @@
 // it can be caught; never a chase into the Dusk); holding still while a
 // cache opens; ahead of the Dusk's next cap; a winning bot after its
 // target into the bush; a big body in reach it takes on; the calls (a
-// gentle bot's care near a mark, a Seedfall, a Clamor, a Rising, the hunt
-// of a mark); the nearest cache; a camp when nothing better is near; a
-// cache or a Seedfall further off, a wander
+// gentle bot's care near a mark, a Seedfall, a Clamor, a Rising, its
+// Burr's carrier, the hunt of a mark); the nearest cache; a camp when
+// nothing better is near; a cache or a Seedfall further off, a wander
 // only with none near. Its skill (content/bots/royale_skills.ts), sharpened
 // by its score and the Dusk, slows its eye, scatters its aim and sets its
 // nerve.
@@ -51,6 +51,7 @@ import {
 import { pickDropPoint } from './drop_pick';
 import {
   awayPoint,
+  burrMargin,
   COMMIT_M,
   chaseReach,
   escapeCast,
@@ -542,7 +543,9 @@ export function decide(
       const odds = royaleOdds(sense, target);
       const finish = target.hpFrac < FINISH_HP && sense.s.hpFrac > target.hpFrac;
       const answer = sense.struck && (cornered || odds >= nerve - ANSWER_MARGIN);
-      const margin = dist(sense.me, p3(target)) <= CLOSE_M ? CLOSE_MARGIN : 0;
+      // Face to face, and the Burr's carrier (fight.ts burrMargin), on less.
+      const faceToFace = dist(sense.me, p3(target)) <= CLOSE_M ? CLOSE_MARGIN : 0;
+      const margin = faceToFace + burrMargin(sense, target);
       const go =
         odds >= nerve - margin ? 'fight' : finish ? 'finish' : answer ? 'struck-back' : null;
       if (go) return why(go, fight(sense, target, rng));

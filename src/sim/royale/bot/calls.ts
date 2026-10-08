@@ -1,6 +1,7 @@
 // The royale bot's calls (src/sim/royale/bot/brain.ts): somewhere to go
-// when no enemy is in sight, read off the public observation only (a
-// Seedfall, an ambush beside it, a Clamor; a Rising and a mark later).
+// when no enemy is in sight, read off the observation only (a Seedfall,
+// an ambush beside it, a Clamor, a Rising, the carrier of its own Burr, a
+// mark).
 // No memory beyond the observation; the first call that applies wins. The
 // brain consults them after the Dusk's walk and before the plain caches,
 // only with the bot's health at CALL_HP or more, and the ambush also
@@ -14,6 +15,7 @@ import {
   AMBUSH_SEED_M,
   AMBUSH_STRIKE_HP,
   AMBUSH_WAIT_S,
+  BURR_CALL_M,
   CALL_HP,
   CALL_WALK_SPEED,
   CLAMOR_ALIVE,
@@ -46,7 +48,7 @@ import { p3, type Sense } from './sense';
 // A call's goal: a point to walk to, and why. An ambush names the
 // champion it strikes, or none while it waits at the point (the bush).
 export interface RoyaleCall {
-  kind: 'seedfall' | 'ambush' | 'clamor' | 'rising' | 'mark' | 'wary';
+  kind: 'seedfall' | 'ambush' | 'clamor' | 'rising' | 'burr' | 'mark' | 'wary';
   x: number;
   y: number;
   z: number;
@@ -225,9 +227,10 @@ export function risingCall(sense: Sense): RoyaleCall | null {
   return best ? callAt('rising', p3(best)) : null;
 }
 
-// The bot's odds against a marked champion it cannot see: its own health
-// and level against the mark's level at full health.
-export function markOdds(sense: Sense, m: ObsMark): number {
+// The bot's odds against a marked champion it cannot see (a mark, its
+// Burr's carrier): its own health and level against the mark's level at
+// full health.
+export function markOdds(sense: Sense, m: Pick<ObsMark, 'level'>): number {
   const own = strength(sense.s.hpFrac, sense.s.level);
   const them = strength(1, m.level);
   return own + them > 0 ? own / (own + them) : 0.5;
@@ -262,6 +265,19 @@ export function markCall(sense: Sense, nerve: number): RoyaleCall | null {
   return best ? callAt('mark', p3(best.at)) : null;
 }
 
+// The Burr's call: the carrier of the bot's own Burr where it stands,
+// within BURR_CALL_M and in the light, for a creature-taking skill whose
+// odds against it reach its nerve. Never past BURR_CALL_M: a Burr is a
+// score to settle on the way, not a chase across the planet.
+export function burrCall(sense: Sense, nerve: number): RoyaleCall | null {
+  const b = sense.burr;
+  if (!b?.at || !sense.skill.creatures) return null;
+  const at = p3(b.at);
+  if (sense.now.radius > 0 && !insideCap(sense.now, at)) return null;
+  if (dist(sense.me, at) > BURR_CALL_M || markOdds(sense, b) < nerve) return null;
+  return callAt('burr', at);
+}
+
 // A gentle bot's care: a mark shown in the last MARK_FRESH_S within WARY_M
 // is walked away from, WARY_STEP_M, while that keeps it in the light.
 export function waryCall(sense: Sense): RoyaleCall | null {
@@ -277,8 +293,9 @@ export function waryCall(sense: Sense): RoyaleCall | null {
 }
 
 // The call that applies to this slot, or null: a gentle bot's care first,
-// then the ambush, the Seedfall, the Clamor, a Rising, the hunt of a mark,
-// the first that applies. Only at CALL_HP of health or more, but the care.
+// then the ambush, the Seedfall, the Clamor, a Rising, the Burr's carrier,
+// the hunt of a mark, the first that applies. Only at CALL_HP of health or
+// more, but the care.
 export function royaleCall(sense: Sense, nerve = Number.POSITIVE_INFINITY): RoyaleCall | null {
   const wary = waryCall(sense);
   if (wary) return wary;
@@ -288,6 +305,7 @@ export function royaleCall(sense: Sense, nerve = Number.POSITIVE_INFINITY): Roya
     seedfallCall(sense) ??
     clamorCall(sense) ??
     risingCall(sense) ??
+    burrCall(sense, nerve) ??
     markCall(sense, nerve)
   );
 }
