@@ -43,6 +43,7 @@ import {
 import type { Sim } from '../src/sim/sim';
 import { effectiveRank, levelTo } from '../src/sim/stats';
 import type { Unit } from '../src/sim/unit';
+import { brushIndexAt, inMutualSight, sightBlocked } from '../src/sim/vision';
 import { landed } from './royale_contract_fixture';
 import { loadPlanet } from './royale_planet';
 
@@ -327,9 +328,10 @@ describe('a Respawn Arrival meets a fair first fight', () => {
     const d = dist(at, foe!.pos);
     expect(d).toBeGreaterThanOrEqual(FOE_MIN_M - 1);
     expect(d).toBeLessThanOrEqual(FOE_MAX_M + 1);
-    // Inside both champions' sight.
+    // Inside both champions' sight, nothing between them.
     expect(d).toBeLessThan(foe!.sightRange);
     expect(d).toBeLessThan(seat!.sightRange);
+    expect(inMutualSight(sim.map, at, foe!.pos)).toBe(true);
     expect(insideCap(cap, at)).toBe(true);
     expect(depthInside(cap, at)).toBeGreaterThanOrEqual(ARRIVAL_DEPTH_M);
     expect(mode.ground.walkable(at)).toBe(true);
@@ -465,6 +467,8 @@ describe('the fair foe spot', () => {
     hpShare,
     level,
   });
+  // Nothing hides the foe (the sight case below has its own).
+  const sees = (): boolean => true;
 
   it('keeps every landing in the band, deep in a small light, clear of the others', () => {
     const light: DuskCap = { center, radius: 30 };
@@ -477,7 +481,7 @@ describe('the fair foe spot', () => {
     expect(edge).not.toBeNull();
     let found = 0;
     for (let seed = 1; seed <= 12; seed++) {
-      const got = fairFoeSpot(new Rng(seed), light, [foe(7, edge!)], [], layout, ground);
+      const got = fairFoeSpot(new Rng(seed), light, [foe(7, edge!)], [], layout, ground, sees);
       if (!got) continue;
       found++;
       expect(got.foeId).toBe(7);
@@ -494,7 +498,7 @@ describe('the fair foe spot', () => {
     const a = center;
     const b = along(center, randomHeading(new Rng(1), center), 60, R);
     const pick = (foes: FoeCandidate[], others: { id: number; pos: Vec3 }[] = []) =>
-      fairFoeSpot(new Rng(9), whole, foes, others, layout, ground)?.foeId ?? null;
+      fairFoeSpot(new Rng(9), whole, foes, others, layout, ground, sees)?.foeId ?? null;
     expect(pick([foe(1, a, 1), foe(2, b, 0)])).toBe(2);
     expect(pick([foe(1, a, 0, 0.5), foe(2, b, 0, 0.9)])).toBe(1);
     expect(pick([foe(1, a, 0, 1, 6), foe(2, b, 0, 1, 4)])).toBe(2);
@@ -506,8 +510,81 @@ describe('the fair foe spot', () => {
     expect(pick([foe(2, b, 0)], [{ id: 2, pos: b }])).toBe(2);
     expect(pick([])).toBeNull();
     const same = (seed: number) =>
-      fairFoeSpot(new Rng(seed), whole, [foe(1, a), foe(2, b, 1)], [], layout, ground);
+      fairFoeSpot(new Rng(seed), whole, [foe(1, a), foe(2, b, 1)], [], layout, ground, sees);
     expect(same(5)).toEqual(same(5));
+  });
+
+  it('keeps only a landing the foe and the newcomer see each other from', () => {
+    const whole: DuskCap = { center, radius: 2 * R };
+    const a = center;
+    const b = along(center, randomHeading(new Rng(1), center), 60, R);
+    // A bush or a rock between: one side of the softest foe only, then
+    // none of it, then nowhere at all.
+    const north = (p: Vec3, q: Vec3) => p.y! >= q.y!;
+    for (let seed = 1; seed <= 8; seed++) {
+      const got = fairFoeSpot(new Rng(seed), whole, [foe(1, a)], [], layout, ground, north);
+      if (got) expect(got.at.y!).toBeGreaterThanOrEqual(a.y!);
+    }
+    const hidden = (_p: Vec3, q: Vec3) => dist(q, a) > 1;
+    expect(
+      fairFoeSpot(new Rng(3), whole, [foe(1, a), foe(2, b, 1)], [], layout, ground, hidden)?.foeId,
+    ).toBe(2);
+    expect(fairFoeSpot(new Rng(3), whole, [foe(1, a)], [], layout, ground, () => false)).toBeNull();
+  });
+});
+
+// What the fair foe's spot asks of the sight line (vision.ts
+// inMutualSight), on the Wanderseed's own bushes and rocks.
+describe('two champions in sight of each other', () => {
+  const sim = landed().sim;
+  const map = sim.map;
+  const R = sim.royaleMode!.layout.radius;
+  const close = map.closeSight ?? 0;
+  const at = (c: { x: number; y?: number; z: number }): Vec3 => ({ x: c.x, y: c.y!, z: c.z });
+  // A point `m` from p in the first of a few headings that `keep` accepts.
+  const away = (p: Vec3, m: number, keep: (q: Vec3) => boolean): Vec3 | null => {
+    for (let seed = 1; seed <= 64; seed++) {
+      const q = along(p, randomHeading(new Rng(seed), p), m, R);
+      if (keep(q)) return q;
+    }
+    return null;
+  };
+
+  it('sees within close sight whatever stands between', () => {
+    expect(close).toBeGreaterThan(0);
+    const bush = at(map.brush[0]!);
+    const near = away(bush, close - 0.5, (q) => brushIndexAt(map, q) === -1);
+    if (near) expect(inMutualSight(map, bush, near)).toBe(true);
+  });
+
+  it('past close sight: never from a bush to outside it, always within one bush in the open', () => {
+    const bush = map.brush.find((b) => b.r >= close / 2 + 1)!;
+    const c = at(bush);
+    const out = away(
+      c,
+      bush.r + close,
+      (q) => brushIndexAt(map, q) === -1 && !sightBlocked(map, c, q),
+    )!;
+    expect(out).not.toBeNull();
+    expect(inMutualSight(map, c, out)).toBe(false);
+    expect(inMutualSight(map, out, c)).toBe(false);
+    const h = randomHeading(new Rng(5), c);
+    const a = along(c, h, close / 2 + 0.5, R);
+    const b = along(c, h, -(close / 2 + 0.5), R);
+    if (brushIndexAt(map, a) === brushIndexAt(map, b) && !sightBlocked(map, a, b)) {
+      expect(dist(a, b)).toBeGreaterThan(close);
+      expect(inMutualSight(map, a, b)).toBe(true);
+    }
+  });
+
+  it('never across a rock', () => {
+    const rock = map.walls.find((w) => w.r >= 2)!;
+    const c = at(rock);
+    const h = randomHeading(new Rng(2), c);
+    const side = along(c, h, rock.r + 3, R);
+    const other = along(c, h, -(rock.r + 3), R);
+    expect(sightBlocked(map, side, other)).toBe(true);
+    expect(inMutualSight(map, side, other)).toBe(false);
   });
 });
 

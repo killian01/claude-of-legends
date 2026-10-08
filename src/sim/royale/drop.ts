@@ -146,7 +146,9 @@ export function arrivalSpot(
 // FOE_MAX left gets FOE_TRIES draws from the match's stream, FOE_MIN_M to
 // FOE_MAX_M away in a drawn heading, snapped to walkable ground. A draw is
 // kept inside the light at an Arrival's depth, its chord to the foe within
-// a meter of the band, and with nobody but the foe within FOE_CLEAR_M:
+// a meter of the band, in sight of the foe both ways (`sees`: no bush
+// between them, no rock on the line; 7 of 43 fair landings measured saw
+// nobody, 2026-10-08), and with nobody but the foe within FOE_CLEAR_M:
 // the first kept wins; null when none is (the quiet spot then).
 export const FOE_MIN_M = 9;
 export const FOE_MAX_M = 11;
@@ -172,6 +174,7 @@ export function fairFoeSpot(
   others: readonly { id: number; pos: Vec3 }[],
   layout: RoyaleLayout,
   ground: RoyaleGround,
+  sees: (a: Vec3, b: Vec3) => boolean,
 ): { at: Vec3; foeId: number } | null {
   const R = layout.radius;
   const clear2 = FOE_CLEAR_M * FOE_CLEAR_M;
@@ -193,7 +196,7 @@ export function fairFoeSpot(
       const p = snapLanding(along(foe.pos, dir, reach, R), layout, ground);
       if (!p || !deepInLight(cap, p, R)) continue;
       const d2 = dist2(p, foe.pos);
-      if (d2 < lo * lo || d2 > hi * hi || crowded(p, foe.id)) continue;
+      if (d2 < lo * lo || d2 > hi * hi || crowded(p, foe.id) || !sees(p, foe.pos)) continue;
       return { at: p, foeId: foe.id };
     }
   }
