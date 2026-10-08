@@ -20,12 +20,19 @@ import type {
   SnapRising,
   SnapRoyale,
   SnapSeedfall,
+  SnapWatch,
 } from '../src/net/royale_wire';
 import { RING_RISE_AT_S, RISING_WARN_S } from '../src/sim/content/royale_events';
-import { liveBurr } from '../src/sim/royale/burr';
+import { BURR_S, liveBurr } from '../src/sim/royale/burr';
 import { cacheOpenS } from '../src/sim/royale/caches';
 import { firstSeedfallCallAt } from '../src/sim/royale/seedfall';
-import { CACHE_OPEN_S, type CacheState } from '../src/sim/royale/types';
+import {
+  CACHE_OPEN_S,
+  type CacheState,
+  RESPAWN_S,
+  type RoyaleState,
+} from '../src/sim/royale/types';
+import type { Unit } from '../src/sim/unit';
 import { type RankedSeat, rankAndGapIn, royaleRanking, windowStanding } from './royale_ranking';
 import type { RoyaleSim } from './royale_sim';
 import type { RoyaleSnapContext, RoyaleViewer } from './royale_snapshot';
@@ -280,7 +287,44 @@ export const arrivalBlock: Builder<SnapGrace[]> = (sim, viewer) => {
   }
   return out.length > 0 ? out : undefined;
 };
-export const watchBlock: Builder<number> = () => undefined;
+// Who took a waiting Respawn champion down: the carrier of its Burr when
+// that Burr was hung by this very fall (burr.ts hangs one on every
+// takedown, at the fall's time); null for a fall nobody landed (the Dusk,
+// a creature), whose Burr, if any, is an older one.
+export function waitKiller(r: Pick<RoyaleState, 'burrs'>, u: Unit): number | null {
+  if (!u.dead || !Number.isFinite(u.respawnAt)) return null;
+  const b = r.burrs.get(u.id);
+  if (!b) return null;
+  const hungAt = b.until - BURR_S;
+  const fellAt = u.respawnAt - RESPAWN_S;
+  return Math.abs(hungAt - fellAt) < 1e-6 ? b.carrierId : null;
+}
+
+// Respawn: the killer the fallen recipient watches through its wait (the
+// Death beat): its champion and where it stands, every snapshot of the
+// wait while it stands, so the mirror can draw it (a dead champion sees
+// nothing). Only the fallen seat is sent it, and nothing of it reaches any
+// observation: the bots see nothing new.
+export const watchBlock: Builder<SnapWatch> = (sim, viewer) => {
+  const r = sim.royale;
+  if (r.variant !== 'respawn' || r.stage !== 'play') return undefined;
+  const me = sim.units.get(viewer.unitId);
+  if (!me) return undefined;
+  const id = waitKiller(r, me);
+  const k = id !== null ? sim.units.get(id) : undefined;
+  if (!k || k.dead || k.kind !== 'champion' || !k.championId || k.pos.y === undefined) {
+    return undefined;
+  }
+  return {
+    i: k.id,
+    c: k.championId,
+    sk: k.skin,
+    t: k.team,
+    at: [round2(k.pos.x), round2(k.pos.y), round2(k.pos.z)],
+    h: Math.round(k.hp),
+    m: Math.round(k.maxHp),
+  };
+};
 
 // Every optional block onto the snapshot's mode block, each only when its
 // builder answers.

@@ -7,9 +7,12 @@
 // hands the renderer (Renderer.watchUnit, lookAtPoint, recenterCamera)
 // through BeatCamera.
 //
-// A dead champion sees nothing (src/sim/vision.ts), so the killer's body
-// leaves the mirror on the snapshot that tells the death: the beat reads
-// only what the wire carries anyway, and the fog is the server's as ever.
+// A dead champion sees nothing (src/sim/vision.ts), so the killer's own
+// record leaves the snapshot that tells the death; through the wait the
+// mode block's wa carries the killer's champion and where it stands, and
+// the mirror draws its body from it (net/watch_body.ts), which the beat
+// follows as any body in the world. The beat reads only what the wire
+// carries; nothing of it reaches a bot's observation.
 
 import type { SnapRoyale } from '../net/royale_wire';
 import type { Vec3 } from '../sim/geo';
