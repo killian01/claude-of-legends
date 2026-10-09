@@ -2,7 +2,13 @@
 // buttons, from the order and the play the snapshot carries.
 
 import { describe, expect, it } from 'vitest';
-import { coachHint, coachLayout, describeCoachState } from '../src/ui/coach_bar';
+import {
+  coachHint,
+  coachLayout,
+  describeCoachState,
+  FEED_GAP_PX,
+  feedTopUnderBar,
+} from '../src/ui/coach_bar';
 
 describe('the coach bar state line', () => {
   it('names the standing order and whether the bot is on it', () => {
@@ -37,6 +43,12 @@ describe('the coach bar on each pointer', () => {
     expect(coachLayout(false, 'thumbs')).toBe('mouse');
     expect(coachLayout(true, 'thumbs')).toBe('thumbs');
     expect(coachLayout(true, 'tap')).toBe('tap');
+  });
+
+  it('puts the kill feed under the bar on a touchscreen and leaves it alone with a mouse', () => {
+    expect(feedTopUnderBar('mouse', 230)).toBeNull();
+    expect(feedTopUnderBar('thumbs', 231)).toBe(231 + FEED_GAP_PX);
+    expect(feedTopUnderBar('tap', 230.4)).toBe(231 + FEED_GAP_PX);
   });
 
   it('names the click that gives the orders with a place', () => {

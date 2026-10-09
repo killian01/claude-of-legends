@@ -117,6 +117,17 @@ export function coachHint(layout: CoachLayout, leftClickMoves: boolean): string 
   return `${click} the map: go there. ${click} an enemy: focus it.`;
 }
 
+// On a touchscreen the bar holds the top left, where the HUD's kill feed
+// starts (ui/hud.ts .hud-feed), and covered it from its second line. The
+// feed reads under the bar instead: the bar leaves where that is on the
+// stage as --coach-feed-top, a few pixels below its own bottom edge. With
+// a mouse the bar is on the right and the feed keeps its corner.
+export const FEED_GAP_PX = 6;
+
+export function feedTopUnderBar(layout: CoachLayout, barBottom: number): number | null {
+  return layout === 'mouse' ? null : Math.ceil(barBottom) + FEED_GAP_PX;
+}
+
 export interface CoachBar {
   // Called on every snapshot with the coached bot's order and active play.
   update(order: CoachOrder | null, play: string | null): void;
@@ -164,6 +175,18 @@ export function buildCoachBar(
   showHint();
   bar.appendChild(hint);
   container.appendChild(bar);
+  // The bar grows when the state line wraps, and the safe area moves it
+  // when the phone turns: the feed's place follows both.
+  const placeFeed = (): void => {
+    const top = feedTopUnderBar(layout, bar.offsetTop + bar.offsetHeight);
+    if (top !== null) container.style.setProperty('--coach-feed-top', `${top}px`);
+  };
+  const resized = typeof ResizeObserver === 'function' ? new ResizeObserver(placeFeed) : null;
+  if (layout !== 'mouse') {
+    placeFeed();
+    resized?.observe(bar);
+    window.addEventListener('resize', placeFeed);
+  }
   return {
     update(order, play) {
       const d = describeCoachState(order, play);
@@ -175,6 +198,9 @@ export function buildCoachBar(
         b.classList.toggle('on', order !== null && kind === order.kind);
     },
     remove() {
+      resized?.disconnect();
+      window.removeEventListener('resize', placeFeed);
+      container.style.removeProperty('--coach-feed-top');
       bar.remove();
     },
   };
