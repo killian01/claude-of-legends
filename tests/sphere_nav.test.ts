@@ -152,6 +152,47 @@ describe('cube-sphere cells', () => {
     }
   });
 
+  // What a pocket's flood (SphereNavGrid.sealedOff) stands on: a straight
+  // step is a straight step back, and a diagonal step with both side cells
+  // lands on a straight neighbor of a side, on every face, rim and corner.
+  it('keeps straight steps symmetric and every diagonal beside a straight one', () => {
+    const SIDES: [number, number][] = [
+      [0, 2],
+      [0, 3],
+      [1, 2],
+      [1, 3],
+    ];
+    for (const n of [2, 3, 4, 5, 7, 8, 13, 32, 320]) {
+      const grid = openGrid(n);
+      const row = new Int32Array(8);
+      const back = new Int32Array(8);
+      let straightAsym = 0;
+      let diagonalApart = 0;
+      for (let c = 0; c < grid.cellCount; c++) {
+        grid.neighborRow(c, row);
+        for (let k = 0; k < 4; k++) {
+          if (row[k]! < 0) continue;
+          grid.neighborRow(row[k]!, back);
+          if (!back.subarray(0, 4).includes(c)) straightAsym += 1;
+        }
+        for (let k = 4; k < 8; k++) {
+          const d = row[k]!;
+          const [sa, sb] = SIDES[k - 4]!;
+          const a = row[sa]!;
+          const b = row[sb]!;
+          if (d < 0 || a < 0 || b < 0) continue;
+          grid.neighborRow(a, back);
+          const nearA = back.subarray(0, 4).includes(d);
+          grid.neighborRow(b, back);
+          const nearB = back.subarray(0, 4).includes(d);
+          if (!nearA && !nearB) diagonalApart += 1;
+        }
+      }
+      expect(straightAsym).toBe(0);
+      expect(diagonalApart).toBe(0);
+    }
+  });
+
   it('keeps the rim neighbors of the full-size grid symmetric', () => {
     const grid = openGrid(320);
     const n = grid.n;
@@ -383,6 +424,177 @@ describe('path search on the sphere', () => {
       expect(findSpherePath(g1, a, b)).toEqual(p1);
       expect(findSpherePath(g2, a, b)).toEqual(p1);
     }
+  });
+});
+
+// A grid that counts the cells a search expands (and a pocket flood
+// steps through), each one a neighbor row read.
+class CountingGrid extends SphereNavGrid {
+  rows = 0;
+  override neighborRow(c: number, out: Int32Array): void {
+    this.rows += 1;
+    super.neighborRow(c, out);
+  }
+}
+
+// The search without its pocket check: it learns a goal is walled off only
+// by running out of cells or budget.
+class PlainGrid extends CountingGrid {
+  override sealedOff(): boolean {
+    return false;
+  }
+}
+
+function gridOf<G extends SphereNavGrid>(
+  Kind: new (d: ConstructorParameters<typeof SphereNavGrid>[0]) => G,
+  n = 320,
+): G {
+  return new Kind({
+    radius: R,
+    cellsPerFace: n,
+    heightScale: 0.001,
+    blockedValue: -32768,
+    heights: new Int16Array(6 * n * n),
+  });
+}
+
+// A ring of wall samples (src/sim/walls.ts: 0.7 m circles every half
+// meter) of `radius` around c: the cells inside are a pocket.
+function ringAround(grid: SphereNavGrid, c: SpherePoint, radius: number, gap = 0): void {
+  const u = { x: c.x / R, y: c.y / R, z: c.z / R };
+  const up = Math.abs(u.y) < 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 };
+  let e1 = { x: u.y * up.z - u.z * up.y, y: u.z * up.x - u.x * up.z, z: u.x * up.y - u.y * up.x };
+  const l1 = len(e1);
+  e1 = { x: e1.x / l1, y: e1.y / l1, z: e1.z / l1 };
+  const e2 = { x: u.y * e1.z - u.z * e1.y, y: u.z * e1.x - u.x * e1.z, z: u.x * e1.y - u.y * e1.x };
+  const steps = Math.ceil((2 * Math.PI * radius) / 0.5);
+  for (let k = 0; k < steps - gap; k++) {
+    const a = (k * 2 * Math.PI) / steps;
+    const s = radius / R;
+    grid.blockCircle(
+      onSphere(
+        u.x + s * (Math.cos(a) * e1.x + Math.sin(a) * e2.x),
+        u.y + s * (Math.cos(a) * e1.y + Math.sin(a) * e2.y),
+        u.z + s * (Math.cos(a) * e1.z + Math.sin(a) * e2.z),
+      ),
+      0.7,
+    );
+  }
+}
+
+describe('a goal walled into a pocket', () => {
+  it('ends the search at once, with the empty path the whole budget ended with', () => {
+    const goal = onSphere(0.3, 0.8, -0.4);
+    const from = toward(goal, onSphere(1, 0.2, 0.1), 20);
+    const sealed = gridOf(CountingGrid);
+    const plain = gridOf(PlainGrid);
+    ringAround(sealed, goal, 2);
+    ringAround(plain, goal, 2);
+    expect(findSpherePath(plain, from, goal)).toEqual([]);
+    expect(findSpherePath(sealed, from, goal)).toEqual([]);
+    // The plain search spends its whole budget; the pocket check stops it
+    // after its first few dozen cells.
+    expect(plain.rows).toBeGreaterThan(120000);
+    expect(sealed.rows).toBeLessThan(500);
+  });
+
+  it('ends it too on a cell shut by its four straight neighbors, open corners aside', () => {
+    // A search never squeezes between two blocked straight cells: the cell
+    // is a pocket of one though its diagonals stand open.
+    const shut = <G extends SphereNavGrid>(grid: G): G => {
+      const c = 40 * 320 + 200;
+      const row = new Int32Array(8);
+      grid.neighborRow(c, row);
+      const b = grid.snapshotBlockers();
+      for (let k = 0; k < 4; k++) b[row[k]!] = 1;
+      grid.restoreBlockers(b);
+      return grid;
+    };
+    const sealed = shut(gridOf(CountingGrid));
+    const plain = shut(gridOf(PlainGrid));
+    const goal = sealed.cellCenter(40 * 320 + 200);
+    const from = toward(goal, onSphere(0, 1, 0), 10);
+    expect(findSpherePath(plain, from, goal)).toEqual([]);
+    expect(findSpherePath(sealed, from, goal)).toEqual([]);
+    expect(plain.rows).toBeGreaterThan(120000);
+    expect(sealed.rows).toBeLessThan(500);
+  });
+
+  it('finds the way in through a gap in the ring, and out of a pocket', () => {
+    const goal = onSphere(-0.6, 0.1, 0.7);
+    const from = toward(goal, onSphere(0, -1, 0.2), 15);
+    const grid = gridOf(CountingGrid);
+    ringAround(grid, goal, 3, 3);
+    const inward = findSpherePath(grid, from, goal);
+    expect(inward.length).toBeGreaterThan(0);
+    expectWalkablePath(grid, from, inward);
+    const shut = gridOf(CountingGrid);
+    ringAround(shut, goal, 3);
+    // Walled in, the start sees only its own pocket: no way out either.
+    expect(findSpherePath(shut, goal, from)).toEqual([]);
+  });
+
+  it('never changes a path the plain search finds or misses', () => {
+    const rng = new Rng(7);
+    const sealed = gridOf(CountingGrid);
+    const plain = gridOf(PlainGrid);
+    const rings: SpherePoint[] = [];
+    for (let k = 0; k < 40; k++) {
+      const c = randomPoint(rng);
+      const radius = rng.range(0.8, 6);
+      const gap = rng.next() < 0.3 ? 2 : 0;
+      ringAround(sealed, c, radius, gap);
+      ringAround(plain, c, radius, gap);
+      rings.push(c);
+    }
+    for (let k = 0; k < 200; k++) {
+      const c = randomPoint(rng);
+      const r = rng.range(0.5, 3);
+      sealed.blockCircle(c, r);
+      plain.blockCircle(c, r);
+    }
+    // Cells shut by their straight neighbors, among scattered blocked
+    // cells whose corners a search may not squeeze through.
+    const blockers = sealed.snapshotBlockers();
+    const row = new Int32Array(8);
+    const shut: SpherePoint[] = [];
+    for (let k = 0; k < 8; k++) {
+      const c = sealed.cellOf(randomPoint(rng));
+      sealed.neighborRow(c, row);
+      for (let s = 0; s < 4; s++) if (row[s]! >= 0) blockers[row[s]!] = 1;
+      blockers[c] = 0;
+      for (let s = 0; s < 40; s++) {
+        const q = c + Math.floor(rng.range(-12, 12)) * 320 + Math.floor(rng.range(-12, 12));
+        if (q >= 0 && q < blockers.length && q !== c) blockers[q] = 1;
+      }
+      shut.push(sealed.cellCenter(c));
+    }
+    sealed.restoreBlockers(blockers);
+    plain.restoreBlockers(blockers);
+    const cases: [SpherePoint, SpherePoint][] = [];
+    for (let k = 0; k < 24; k++) {
+      const a = randomPoint(rng);
+      cases.push([a, toward(a, randomPoint(rng), rng.range(5, 60))]);
+    }
+    // Into, out of, and within the pockets.
+    for (let k = 0; k < 8; k++) {
+      const c = rings[k]!;
+      cases.push([toward(c, randomPoint(rng), 12), c]);
+      cases.push([c, toward(c, randomPoint(rng), 12)]);
+      cases.push([c, toward(c, randomPoint(rng), 0.4)]);
+      cases.push([toward(shut[k]!, randomPoint(rng), 6), shut[k]!]);
+      cases.push([shut[k]!, toward(shut[k]!, randomPoint(rng), 3)]);
+    }
+    let empty = 0;
+    for (const [a, b] of cases) {
+      const p = findSpherePath(plain, a, b);
+      if (p.length === 0) empty += 1;
+      expect(findSpherePath(sealed, a, b)).toEqual(p);
+    }
+    expect(empty).toBeGreaterThan(0);
+    expect(empty).toBeLessThan(cases.length);
+    // The pockets cut those searches short: a tenth of the plain cost.
+    expect(sealed.rows * 10).toBeLessThan(plain.rows);
   });
 });
 

@@ -197,6 +197,7 @@ export class SphereNavGrid {
   private markGen = 0;
   private readonly queue: Int32Array;
   private readonly row = new Int32Array(8);
+  private readonly floodRow = new Int32Array(8);
 
   constructor(data: SphereNavData) {
     this.radius = data.radius;
@@ -325,6 +326,38 @@ export class SphereNavGrid {
       if (a < 0 || b < 0 || this.blockers[a] !== 0 || this.blockers[b] !== 0) return -1;
     }
     return nb;
+  }
+
+  // Whether `goal` sits in a pocket of open cells, walls and rock all
+  // around it, of at most `cap` cells and without `start`: then no search
+  // from start reaches it. The flood takes straight steps into open cells.
+  // A search's straight step is one backwards too (the straight neighbors
+  // are symmetric), and its diagonal step needs both side cells open, one
+  // of them a straight neighbor of where it lands (tests/sphere_nav.test.ts
+  // pins both): a search's path walked backwards stays inside the flood.
+  // `start` counts whatever it holds, as a search expands its first cell
+  // regardless. False as soon as the flood meets start or outgrows cap.
+  sealedOff(goal: number, start: number, cap: number): boolean {
+    if (goal === start) return false;
+    const gen = this.nextMark();
+    const row = this.floodRow;
+    let head = 0;
+    let tail = 0;
+    this.queue[tail++] = goal;
+    this.mark[goal] = gen;
+    while (head < tail) {
+      this.neighborRow(this.queue[head++]!, row);
+      for (let k = 0; k < 4; k++) {
+        const nb = row[k]!;
+        if (nb < 0 || this.mark[nb] === gen) continue;
+        if (nb === start) return false;
+        if (this.blockers[nb] !== 0) continue;
+        if (tail >= cap) return false;
+        this.mark[nb] = gen;
+        this.queue[tail++] = nb;
+      }
+    }
+    return true;
   }
 
   // The blocker counts as they stand, copied, for a world checkpoint.
@@ -595,6 +628,16 @@ export class SphereNavGrid {
 
 // Expansions before a search gives up (a goal walled off by blockers).
 const NODE_CAP = 120000;
+// A goal in a small pocket (ability walls closing a ring against the rock
+// in a crowded light) would cost every search toward it the whole
+// NODE_CAP, and a chaser repaths each tick while its path is empty: 45 ms
+// a search. At POCKET_FIRST expansions, then at every POCKET_GROWTH-fold,
+// the search asks whether the goal's pocket holds at most that many cells
+// and not the start (SphereNavGrid.sealedOff); when it does, no path
+// exists and the search stops with the empty path it would have ended
+// with anyway. The floods cost a fraction of the expansions they follow.
+const POCKET_FIRST = 64;
+const POCKET_GROWTH = 8;
 // The heuristic is inflated by this weight (weighted A*): the path found
 // costs at most this factor over the best one, and in practice the smoothed
 // path is within a fraction of a percent of it, while the search expands a
@@ -756,6 +799,7 @@ export function findSpherePath(
   push(sIdx, heuristic(here[0]!, here[1]!, here[2]!));
   let found = false;
   let visited = 0;
+  let pocketAt = POCKET_FIRST;
 
   while (size > 0) {
     const cur = pop();
@@ -766,6 +810,10 @@ export function findSpherePath(
     if (closedAt[cur] === gen) continue;
     closedAt[cur] = gen;
     if (++visited > NODE_CAP) break;
+    if (visited === pocketAt) {
+      if (grid.sealedOff(gIdx, sIdx, pocketAt)) break;
+      pocketAt *= POCKET_GROWTH;
+    }
     grid.centerInto(cur, here, 0);
     const gCur = gScore[cur]!;
     grid.neighborRow(cur, row);
