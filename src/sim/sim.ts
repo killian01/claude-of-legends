@@ -22,7 +22,6 @@ import {
   expireStatuses,
   isRooted,
   isStunned,
-  sightFactor,
 } from './combat/status';
 import { type ChampionDef, DEFAULT_CHAMPION_ID, homeLane } from './content/champions';
 import { ITEMS, mayCarryDraught } from './content/items';
@@ -37,7 +36,7 @@ import { startDraught, stepDraughts } from './draught';
 import { Favors, favorBonus } from './favors';
 import type { ForgedChampionDef } from './forge/forged_def';
 import { applyFountainRegen, fountainSeat, withinFountain } from './fountain';
-import { copy, dist, point } from './geo';
+import { copy, point } from './geo';
 import { type Ground, PlaneGround } from './ground';
 import { stepIdleDefense } from './idle_defense';
 import { LANE_ACTIVITY_WINDOW_S, LaneSightings } from './lane_sightings';
@@ -101,7 +100,7 @@ import {
   type Vec2,
 } from './types';
 import { createChampion, hostile, staticFootprint, type Unit, type UnitKind } from './unit';
-import { computeVisibility, sightBlocked } from './vision';
+import { computeVisibility, pointSight, seesPoint } from './vision';
 import { clampThroughWalls, stepWalls, type Wall } from './walls';
 import { FIRST_WAVE_AT, spawnWave, WAVE_EVERY } from './waves';
 import type { Zone } from './zones';
@@ -679,9 +678,7 @@ export class Sim {
     const p = point(x, z, y);
     for (const u of this.units.values()) {
       if (u.team !== team || u.neutral || u.dead) continue;
-      if (dist(u.pos, p) > u.sightRange * sightFactor(u, this.time)) continue;
-      if (sightBlocked(this.map, u.pos, p)) continue;
-      return true;
+      if (seesPoint(this.map, u, p, this.time)) return true;
     }
     return false;
   }
@@ -1300,9 +1297,7 @@ export class Sim {
       this.zones,
       this.teamCount,
     );
-    noteCampSightings(this.campStates, this.time, (team, x, z, y) =>
-      this.isPointVisible(team, x, z, y),
-    );
+    noteCampSightings(this.campStates, this.time, pointSight(this.map, this.units, this.time));
 
     // Refresh each team's memory of the enemy champions it can see right
     // now; a dead champion is forgotten (its corpse spot means nothing).

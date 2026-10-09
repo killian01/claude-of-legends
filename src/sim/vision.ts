@@ -8,7 +8,7 @@
 
 import { isStealthed, sightFactor } from './combat/status';
 import type { GameMap } from './content/map';
-import { dist } from './geo';
+import { dist, point } from './geo';
 import { perTeam, TWO_TEAMS } from './teams';
 import type { Vec2 } from './types';
 import type { Unit } from './unit';
@@ -41,6 +41,42 @@ export function inMutualSight(map: GameMap, a: Vec2, b: Vec2): boolean {
   if (map.closeSight !== undefined && dist(a, b) <= map.closeSight) return true;
   if (brushIndexAt(map, a) !== brushIndexAt(map, b)) return false;
   return !sightBlocked(map, a, b);
+}
+
+// Whether one unit sees the point p: within its sight range (blinds shrink
+// it) and no wall on the line. A team sees a point when an alive unit of
+// its own, neutrals aside, does (Sim.isPointVisible, pointSight).
+export function seesPoint(map: GameMap, u: Unit, p: Vec2, time: number): boolean {
+  if (dist(u.pos, p) > u.sightRange * sightFactor(u, time)) return false;
+  return !sightBlocked(map, u.pos, p);
+}
+
+// Sim.isPointVisible for many points at one moment (every camp spot for
+// every team, once a tick): each team's alive units gathered once instead
+// of every unit walked for each point and team. The same answers, by the
+// same rule (seesPoint), while the units stay as they were gathered.
+export function pointSight(
+  map: GameMap,
+  units: ReadonlyMap<number, Unit>,
+  time: number,
+): (team: number, x: number, z: number, y?: number) => boolean {
+  const byTeam: Unit[][] = [];
+  for (const u of units.values()) {
+    if (u.neutral || u.dead) continue;
+    let own = byTeam[u.team];
+    if (!own) {
+      own = [];
+      byTeam[u.team] = own;
+    }
+    own.push(u);
+  }
+  return (team, x, z, y) => {
+    const own = byTeam[team];
+    if (!own) return false;
+    const p = point(x, z, y);
+    for (const u of own) if (seesPoint(map, u, p, time)) return true;
+    return false;
+  };
 }
 
 // Whether a reveal zone shows a disc at p of radius r right now: a live
