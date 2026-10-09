@@ -52,6 +52,7 @@ import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import { abilityIconUrl, passiveIconUrl, sigilIconUrl } from './ability_icons';
 import { accountOffer, OFFER_CALL } from './account_offer';
+import { chargeFace } from './charge_face';
 import {
   AuraWatch,
   boonChipFace,
@@ -308,6 +309,13 @@ const CSS = `
   position: absolute; inset: 0; border-radius: inherit; background: rgba(0,0,0,0.72);
   color: #fff; display: flex; align-items: center; justify-content: center;
   font-size: 15px; font-weight: 600;
+}
+/* The count of a spell cast from charges, in the corner the key leaves. */
+.hud-slot-charges {
+  position: absolute; left: 2px; top: 2px; min-width: 15px; height: 15px; padding: 0 3px;
+  border-radius: 8px; background: rgba(20, 32, 12, 0.88); border: 1px solid #b89b3e;
+  color: #f2e6b0; font-size: 11px; font-weight: 800; line-height: 13px;
+  display: flex; align-items: center; justify-content: center; z-index: 1;
 }
 .hud-slot-pips {
   position: absolute; left: 3px; right: 3px; bottom: 2px;
@@ -1203,7 +1211,14 @@ export class Hud {
   private readonly xpText: HTMLElement;
   private readonly slots = new Map<
     AbilityKey,
-    { root: HTMLElement; cd: HTMLElement; pips: HTMLElement; up: HTMLElement }
+    {
+      root: HTMLElement;
+      cd: HTMLElement;
+      pips: HTMLElement;
+      up: HTMLElement;
+      // The count of a spell cast from charges (charge_face.ts).
+      charges: HTMLElement;
+    }
   >();
   private readonly sigilSlots: { root: HTMLElement; cd: HTMLElement }[] = [];
   private readonly invSlots: HTMLElement[] = [];
@@ -1574,6 +1589,9 @@ export class Hud {
       slot.appendChild(cd);
       const pips = el('div', 'hud-slot-pips');
       slot.appendChild(pips);
+      const charges = el('div', 'hud-slot-charges');
+      charges.style.display = 'none';
+      slot.appendChild(charges);
       const up = el('div', 'hud-slot-up', '+');
       up.style.display = 'none';
       up.addEventListener('click', (e) => {
@@ -1635,7 +1653,7 @@ export class Hud {
         if (thumbs && e.pointerType === 'touch') this.castTouch?.abilityCancel(key);
       });
       slots.appendChild(slot);
-      this.slots.set(key, { root: slot, cd, pips, up });
+      this.slots.set(key, { root: slot, cd, pips, up, charges });
     }
     for (const [i, keyLabel] of (['D', 'F'] as const).entries()) {
       const slot = el('div', 'hud-slot');
@@ -3403,7 +3421,16 @@ export class Hud {
       if (!slot) continue;
       const rank = effectiveRank(u, key);
       const maxRank = key === 'R' ? ULT_MAX_RANK : BASIC_MAX_RANK;
-      const remaining = (u.cooldowns[key] ?? 0) - this.world.time;
+      const face = chargeFace(
+        def?.abilities[key],
+        u.charges[key],
+        u.cooldowns[key] ?? 0,
+        this.world.time,
+      );
+      const remaining = face.remaining;
+      const showCount = face.count !== null && rank > 0;
+      slot.charges.style.display = showCount ? 'flex' : 'none';
+      if (showCount) setText(slot.charges, String(face.count));
       if (rank <= 0) {
         slot.cd.style.display = 'flex';
         // R waits on champion level; basics wait on a skill point.
