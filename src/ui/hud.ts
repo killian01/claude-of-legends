@@ -1018,7 +1018,12 @@ ${compactTapsCss()}
 .hud.compact .hud-announce { font-size: 20px; top: 62px; }
 .hud.compact .hud-spot { font-size: 32px; top: 96px; letter-spacing: 2px; }
 .hud.compact .hud-spot.top { font-size: 44px; letter-spacing: 3px; }
-.hud.compact .hud-feed { font-size: 11px; left: calc(12px + var(--safe-left, env(safe-area-inset-left, 0px))); }
+/* A coach seat's bar (ui/coach_bar.ts) holds the top left on a phone and
+   leaves on the stage where the feed reads clear of it. */
+.hud.compact .hud-feed {
+  font-size: 11px; left: calc(12px + var(--safe-left, env(safe-area-inset-left, 0px)));
+  top: var(--coach-feed-top, 12px);
+}
 /* With the thumbs the touch bar (ui/touch_bar.ts) holds the left edge, and
    the feed ran down over its Menu and Shop buttons: it starts past the
    column, where the coach bar starts too. */
