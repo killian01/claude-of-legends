@@ -1,6 +1,6 @@
 // Nisk, the Hushdart, end to end through the Sim: the fumble Pepper Dart
 // lands, the charges the Sourpods are cast from, the pods hidden from
-// every enemy that does not stand close (people and bots alike, one rule),
+// every enemy but under its own reveal (people and bots alike, one rule),
 // the lurk of Lie Low, the poison Bittertip renews and Hightail's stride.
 
 import { describe, expect, it } from 'vitest';
@@ -117,22 +117,28 @@ describe('the charges', () => {
 });
 
 describe('the Sourpods', () => {
-  it('lie hidden from an enemy until one of its champions stands close', () => {
-    const { sim, a, b } = arena('vesk', { x: 75, z: 75 }, { x: 75, z: 85 });
+  it('lie hidden from an enemy even beside one, and show under its Eclipse Rain', () => {
+    const { sim, a, b } = arena('ashvyn', { x: 75, z: 75 }, { x: 75, z: 85 });
+    b.abilityRanks.R = 1;
+    b.level = 6;
     ticks(sim, 1);
     expect(sim.castAbility(a.id, 'R', { x: 79, z: 75 })).toBe(true);
     const pod = [...sim.zones.values()].find((z) => z.trap)!;
     expect(pod).toBeDefined();
-    // The planter's team sees it; the enemy, in plain sight of the spot
-    // but ten meters off, does not, on the wire's rule or in a bot's eyes.
+    // The planter's team sees it; the enemy, in plain sight of the spot,
+    // does not, on the wire's rule or in a bot's eyes.
     expect(sim.zoneSeen(0 as TeamId, pod)).toBe(true);
     expect(sim.isPointVisible(1 as TeamId, pod.pos.x, pod.pos.z)).toBe(true);
     expect(sim.zoneSeen(1 as TeamId, pod)).toBe(false);
     expect(buildObservation(sim, b.id)!.zones?.some((z) => z.trap)).toBe(false);
     expect(buildObservation(sim, a.id)!.zones?.some((z) => z.trap && z.friendly)).toBe(true);
-    // Close enough, it shows, and the observation flags it as a pod.
-    b.pos = { x: 79, z: 78 };
+    // Two meters off, nothing either.
+    b.pos = { x: 79, z: 77 };
     b.path = [];
+    expect(sim.zoneSeen(1 as TeamId, pod)).toBe(false);
+    expect(buildObservation(sim, b.id)!.zones?.some((z) => z.trap)).toBe(false);
+    // Under the enemy's reveal it shows, and the observation flags it as a pod.
+    expect(sim.castAbility(b.id, 'R', { x: 79, z: 80 })).toBe(true);
     expect(sim.zoneSeen(1 as TeamId, pod)).toBe(true);
     expect(buildObservation(sim, b.id)!.zones?.some((z) => z.trap && !z.friendly)).toBe(true);
   });

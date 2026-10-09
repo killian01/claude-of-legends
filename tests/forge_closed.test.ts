@@ -45,7 +45,6 @@ describe('the Forge refuses what it does not offer', () => {
         radius: 1,
         duration: 20,
         armDelay: 1,
-        seenWithin: 3,
         maxLive: 2,
         burst: { radius: 2, duration: 1 },
       },

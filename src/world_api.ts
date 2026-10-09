@@ -31,9 +31,10 @@ export interface IWorld {
   championDef(championId: string): ChampionDef | null;
   scoreboard(): readonly ScoreRow[];
   isVisible(team: TeamId, unitId: number): boolean;
-  // Whether a team sees a zone (Sim.zoneSeen: an enemy pod only from close
-  // by). Absent on a world whose zones already arrive scoped to the viewer
-  // (the online mirror), where every zone it holds is seen.
+  // Whether a team sees a zone (Sim.zoneSeen: an enemy pod only under the
+  // team's reveal zone). Absent on a world whose zones already arrive
+  // scoped to the viewer (the online mirror), where every zone it holds is
+  // seen.
   zoneSeen?(team: TeamId, z: Readonly<Zone>): boolean;
   // The Warden's Boon state for a team, null when inactive.
   teamBuff(team: TeamId): { until: number; stacks: number } | null;

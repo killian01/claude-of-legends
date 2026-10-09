@@ -81,7 +81,9 @@ export const CLAMOR_S = 3;
 // refuses a record made under other rules. Bumped once per merged tranche.
 // 8: Nisk joins the pool the house seats are dealt from, with its planet
 // tuning and build.
-export const ROYALE_RULES_VERSION = 8;
+// 9: an enemy pod is seen only under the seat's own reveal zone, never by
+// walking near it (traps.ts): what the bots see of a pod changes their play.
+export const ROYALE_RULES_VERSION = 9;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {

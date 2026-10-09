@@ -278,7 +278,7 @@ export function buildSnapshot(
   }
   const zones: SnapMobile[] = [];
   for (const z of sim.zones.values()) {
-    // An enemy pod only while a champion of the team stands close (the
+    // An enemy pod only while a reveal zone of the team covers it (the
     // one rule, Sim.zoneSeen, the bots' observation reads too).
     if (!sim.zoneSeen(team, z)) continue;
     zones.push(zoneRecord(z));

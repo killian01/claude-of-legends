@@ -687,12 +687,12 @@ export class Sim {
   }
 
   // Whether `team` sees a zone: its own always; an enemy pod only while one
-  // of the team's champions stands close (traps.ts); any other zone while
+  // of the team's reveal zones covers it (traps.ts); any other zone while
   // its center is in the team's sight. One rule for the wire, the Policy
   // observation and the offline renderer.
   zoneSeen(team: TeamId, z: Zone): boolean {
     if (z.team === team) return true;
-    if (z.trap) return trapSeen(this.units, team, z);
+    if (z.trap) return trapSeen(this.zones, team, z, this.time);
     return this.isPointVisible(team, z.pos.x, z.pos.z, z.pos.y);
   }
 

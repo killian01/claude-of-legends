@@ -369,7 +369,6 @@ export function defaultCast(kind: CastSpec['kind']): CastSpec {
         radius: 0.9,
         duration: 120,
         armDelay: 1,
-        seenWithin: 3.5,
         maxLive: 3,
         burst: {
           radius: 2.5,

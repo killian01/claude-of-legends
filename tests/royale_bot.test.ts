@@ -44,6 +44,7 @@ import {
 } from '../src/sim/content/bots/royale_skills';
 import { CHAMPIONS } from '../src/sim/content/champions';
 import { dirTo, dist, type Vec3 } from '../src/sim/geo';
+import { POD_WARY_M } from '../src/sim/playbook/micro';
 import type {
   Action,
   Observation,
@@ -1412,7 +1413,6 @@ describe('pods and the fumble on the planet', () => {
         radius: 0.9,
         duration: 60,
         armDelay: 1,
-        seenWithin: 3.5,
         maxLive: 3,
         burst: { radius: 2, duration: 1 },
       },
@@ -1431,24 +1431,37 @@ describe('pods and the fumble on the planet', () => {
   });
 
   it('rounds a pod it sees instead of walking onto it', () => {
+    // A cache east, and a pod on the straight way to it.
+    const cacheAt = along(here, east, 8, R);
+    const cache = { id: 3, x: cacheAt.x, y: cacheAt.y, z: cacheAt.z, golden: false };
     const pod = along(here, east, 1.8, R);
-    const o: Observation = {
-      ...obs(here),
+    const rim = 0.9;
+    const bare = obs(here, { royale: { caches: [cache] } });
+    const withPod: Observation = {
+      ...bare,
       zones: [
         {
           x: pod.x,
           y: pod.y,
           z: pod.z,
-          radius: 0.9,
+          radius: rim,
           friendly: false,
           detonateAt: null,
           trap: true,
         },
       ],
     };
-    const a = decide(o, new Rng(2), layout, gentle);
-    expect(a.kind).toBe('move');
-    expect(dist(point(a), pod)).toBeGreaterThan(dist(here, pod));
+    // With no pod there, the walk to the cache leads across where it lies.
+    const walk = decide(bare, new Rng(2), layout, gentle);
+    expect(walk.kind).toBe('move');
+    expect(dist(point(walk), cacheAt)).toBeLessThan(0.01);
+    expect(dist(here, pod) + dist(pod, cacheAt) - dist(here, cacheAt)).toBeLessThan(0.01);
+    // The pod in sight: another step, one that clears its rim and the
+    // margin a bot keeps from it.
+    const round = decide(withPod, new Rng(2), layout, gentle);
+    expect(round.kind).toBe('move');
+    expect(round).not.toEqual(walk);
+    expect(dist(point(round), pod)).toBeGreaterThan(rim + POD_WARY_M);
   });
 
   it('gives ground while its attacks would miss, instead of swinging', () => {

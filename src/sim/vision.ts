@@ -43,10 +43,17 @@ export function inMutualSight(map: GameMap, a: Vec2, b: Vec2): boolean {
   return !sightBlocked(map, a, b);
 }
 
+// Whether a reveal zone shows a disc at p of radius r right now: a live
+// reveal zone's area, through brush and stealth alike, to the zone's own
+// team. The one rule an enemy unit and a hidden pod (traps.ts) are shown by.
+export function revealShows(z: Zone, time: number, p: Vec2, r: number): boolean {
+  return z.reveal && z.until > time && dist(p, z.pos) <= z.radius + r;
+}
+
 // For each team (one set per team, in team order, ADR 0030), the set of
 // ENEMY unit ids that team can currently see. Reveal zones (kits-v2) add
 // their area on top: enemies inside are seen through brush and stealth
-// alike.
+// alike (revealShows).
 export function computeVisibility(
   map: GameMap,
   units: ReadonlyMap<number, Unit>,
@@ -91,8 +98,7 @@ export function computeVisibility(
       for (const target of units.values()) {
         if (target.dead) continue;
         if (!target.neutral && target.team === z.team) continue;
-        const d = dist(target.pos, z.pos);
-        if (d <= z.radius + target.radius) seen.add(target.id);
+        if (revealShows(z, time, target.pos, target.radius)) seen.add(target.id);
       }
     }
   }

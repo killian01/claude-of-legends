@@ -838,7 +838,7 @@ export const SPELL_VFX: Readonly<Record<string, SpellVisual>> = {
     castFx: (fx, x, z) => bittertipCoat(fx, x, z),
   },
   // A Sourpod lying in wait: a half-buried bulb, ringed for its own team,
-  // warning-rimmed for an enemy close enough to see it.
+  // warning-rimmed for an enemy whose reveal zone shows it.
   nisk_R_trap: {
     zone: (radius, _colors, hostile) => buildPod(radius, hostile),
     zoneTick: (_fx, holder, _x, _z, _radius, ageMs) => podTick(holder, ageMs),

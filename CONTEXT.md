@@ -365,9 +365,11 @@ _Avoid_: ammo, stack (a mark's and a Sprout's word)
 **Sourpod**:
 A hidden pod Nisk plants with its ultimate: it arms after a second, lies three minutes (five
 of one Nisk at most), and bursts into a slowing cloud of poison when an enemy champion steps
-on it. Its own team always sees it; an enemy only from within a few meters; a minion neither
-sees it for its team nor bursts it. People and bots see it by the one rule. It works on the
-planet too. In code, the primitive is a trap (src/sim/traps.ts).
+on it. Its own team always sees it. An enemy team never sees it by walking near it, only while
+one of that team's own reveal zones covers it (Ashvyn's Eclipse Rain), and then every seat of
+the team does; a minion neither sees it for its team nor bursts it. The cloud a burst leaves
+is seen like any zone. People and bots see it by the one rule. It works on the planet too. In
+code, the primitive is a trap (src/sim/traps.ts).
 _Avoid_: mine, ward, trap in game text
 
 **Lurk**:

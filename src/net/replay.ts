@@ -44,7 +44,9 @@ import { type ClientMsg, isFiniteVec } from './protocol';
 // additive, and a record without it seats and stands in exactly as before.
 // 8: the rings' creatures revealed to both teams again, like the Warden
 // (ADR 0023, amended): what the bots see of a ring changes their play.
-export const REPLAY_VERSION = 8;
+// 9: an enemy pod seen only under the team's own reveal zone, never by
+// walking near it (traps.ts): what the bots see of a pod changes their play.
+export const REPLAY_VERSION = 9;
 
 // The checksum a replay must show at `tick`, or null when the record
 // says nothing about that tick (an older record, or a tick that is not

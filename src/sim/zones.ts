@@ -46,7 +46,8 @@ export interface Zone {
   vfx: string | null;
   // A hidden pod (traps.ts): it ticks by its own rule, bursts into its
   // field when an enemy champion steps on it, and is seen only as
-  // trapSeen says. Absent on every other zone.
+  // trapSeen says (an enemy only under its own reveal zone). Absent on
+  // every other zone.
   trap?: TrapState;
 }
 

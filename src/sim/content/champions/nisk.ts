@@ -134,7 +134,6 @@ export const NISK: ChampionDef = {
         radius: 0.9,
         duration: 180,
         armDelay: 1,
-        seenWithin: 3.5,
         maxLive: 5,
         burst: {
           radius: 3,

@@ -345,7 +345,7 @@ the bill with the nearest passive template):
 |---|---|---|
 | Fumble | Crowd control: the victim's basic attacks miss while it lasts | `combat/status.ts`, `combat/auto_attack.ts` |
 | Charges | A store a spell is cast from, one charge back per recharge | `combat/charges.ts` |
-| Hidden pod | A zone unseen by enemies but from close by, bursting into a field under an enemy champion's step | `traps.ts` |
+| Hidden pod | A zone unseen by enemies but under their own reveal zone, bursting into a field under an enemy champion's step | `traps.ts` |
 | Lurk | Hidden by keeping still or keeping to a brush, until the champion acts or moves out | `lurk.ts` |
 
 Two existing primitives grew a field: an empower may arm several strikes (`hits`), and a dot
@@ -363,10 +363,15 @@ may scale on power and be renewed instead of stacked (`refresh`).
   the one poison.
 - **R, Sourpods.** Three charges, one back every 30 s (shortened by rank), 1.5 s between two
   casts. A pod (trigger radius 0.9) arms in 1 s, lies 180 s, five of one Nisk at most, and is
-  seen by an enemy champion within 3.5; stepping on it bursts a 3-radius cloud for 3 s: magic
-  damage on entry, then ticks of damage and a 35 percent slow. Counterplay: look where you
-  walk; the pod shows from close enough to step round, and minions neither see nor burst it.
+  seen by an enemy only while one of the enemy's own reveal zones covers it, by every seat of
+  that team; walking near it shows nothing. Stepping on it bursts a 3-radius cloud for 3 s,
+  seen like any zone: magic damage on entry, then ticks of damage and a 35 percent slow.
+  Counterplay: a reveal zone shows it (Eclipse Rain), the cloud's slow can be walked out of,
+  and minions neither see nor burst it. Measured when walking near stopped showing a pod
+  (seat matrix, seeds 1 to 6 mirrored): pods bursting under an enemy champion went from 6.5
+  to 19.3 a game and Nisk's win rate from 40.8 to 38.3 percent, inside the roster's band, so the
+  numbers stayed.
 - **Bot playbook:** Q at enemies in range; E when a fight starts; W to leave; a pod where an
-  enemy in a fight will stand when it arms. Every bot walks round a pod it sees and gives
-  ground while it fumbles.
+  enemy in a fight will stand when it arms. Every bot walks round a pod its team reveals (its
+  observation holds no other) and gives ground while it fumbles.
 
