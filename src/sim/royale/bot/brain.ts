@@ -171,12 +171,12 @@ export function dodge(sense: Sense, rng: Rng): Action | null {
     const at = p3(zn);
     const d = dist(me, at);
     if (zn.trap && d <= zn.radius + SELF_RADIUS + POD_WARY_M) {
-      // A seen pod ahead: round it along its rim (playbook/micro.ts dodge),
-      // no dice: a person who sees one never walks onto it.
-      const out = awayFrom(sense, at, zn.radius + SELF_RADIUS + POD_WARY_M + 0.6 - d);
-      const away = dirTo(at, me);
-      const side = away ? (turnLeft(away, me) as Vec3) : null;
-      return move(side ? along(out, side, DODGE_STEP, R) : out);
+      // A seen pod ahead: a step across the way to it, rounding its rim
+      // (playbook/micro.ts dodge), no dice: a person who sees one never
+      // walks onto it. On its very center, straight out.
+      const toward = dirTo(me, at);
+      if (!toward) return move(awayFrom(sense, at, zn.radius + SELF_RADIUS + POD_WARY_M + 0.6));
+      return move(along(me, turnLeft(toward, me) as Vec3, DODGE_STEP, R));
     }
     if (d > zn.radius + SELF_RADIUS) continue;
     if (rng.next() >= sense.skill.dodge) return null;
