@@ -68,6 +68,22 @@ export function buildChampionProp(kind: ChampionPropDef['kind'], accent: number)
       group.add(barrel, muzzle, sight, stock);
       break;
     }
+    case 'blowgun': {
+      // A reed dart tube, longer than the goblin's arm, banded at the
+      // mouthpiece and the end; the accent rides the bands.
+      const reed = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.045, 0.055, 1.25, 6),
+        lambert(0x6b5a34),
+      );
+      reed.position.y = 0.45;
+      const bandMat = lambert(accent, 0.4);
+      const mouth = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.09, 6), bandMat);
+      mouth.position.y = -0.12;
+      const end = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.06, 0.1, 6), bandMat);
+      end.position.y = 1.04;
+      group.add(reed, mouth, end);
+      break;
+    }
     case 'bow': {
       // A soft accent glow keeps the bow readable on dark skins.
       const arc = new THREE.Mesh(

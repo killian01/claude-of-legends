@@ -24,8 +24,8 @@ const open = (memory: Parameters<typeof initialPick>[0]) =>
   initialPick(memory, ROSTER, skinsOf, SIGIL_IDS, DEFAULT_CHAMPION_ID);
 
 describe('the quick pick', () => {
-  it('offers the ten champions of the roster', () => {
-    expect(ROSTER).toHaveLength(10);
+  it('offers the eleven champions of the roster', () => {
+    expect(ROSTER).toHaveLength(11);
   });
 
   it('opens on the pick last played', () => {

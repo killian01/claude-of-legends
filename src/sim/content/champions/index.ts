@@ -15,6 +15,7 @@ import { ELOWEN } from './elowen';
 import { FENN } from './fenn';
 import { KORRATH } from './korrath';
 import { MAERA } from './maera';
+import { NISK } from './nisk';
 import { RHOKA } from './rhoka';
 import { SYLRA } from './sylra';
 import { TORV } from './torv';
@@ -111,6 +112,7 @@ const ALL: readonly ChampionDef[] = [
   MAERA,
   TORV,
   RHOKA,
+  NISK,
 ];
 
 export const CHAMPIONS: Readonly<Record<string, ChampionDef>> = Object.fromEntries(

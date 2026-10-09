@@ -63,6 +63,11 @@ export const SKINS: Readonly<Record<string, readonly SkinDef[]>> = {
     { name: 'Nightprowl', body: 0x262b33, accent: 0x7f8ca8 },
     { name: 'Emberpelt', body: 0x7a3a24, accent: 0xf0a04a },
   ],
+  nisk: [
+    { name: 'Default', body: null, accent: 0x9bd64a },
+    { name: 'Gloamthorn', body: 0x2f3a2a, accent: 0xc6e86a },
+    { name: 'Pepperpot', body: 0x8a3a22, accent: 0xf2b84a },
+  ],
 };
 
 // Resolves a skin index to a valid SkinDef (unknown champion or out-of-range

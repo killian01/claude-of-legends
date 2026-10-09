@@ -26,6 +26,7 @@ export const PLANET_BUILDS: Readonly<Record<string, readonly string[]>> = {
   // Marksmen: the attack speed line and its Gale, then the execute.
   ashvyn: ['skyshear', 'doombrand', 'rendfang', 'titan_cleaver', 'spirit_ward', 'swift_treads'],
   vesk: ['skyshear', 'doombrand', 'rendfang', 'titan_cleaver', 'spirit_ward', 'swift_treads'],
+  nisk: ['skyshear', 'doombrand', 'rendfang', 'titan_cleaver', 'spirit_ward', 'swift_treads'],
   // Mages: the Heartbeat's sustain first (no magic item carries a
   // passive), then the magic line.
   sylra: ['worldheart', 'tempest_core', 'null_engine', 'archmind', 'spirit_ward', 'swift_treads'],

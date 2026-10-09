@@ -30,7 +30,7 @@ export type SpellClipNames = Partial<Record<'Q' | 'W' | 'E' | 'R', string>>;
 export interface ChampionPropDef {
   // A procedural prop shape built in props.ts, or, when url is set instead,
   // a static GLB loaded alongside the champion (a Meshy weapon export).
-  kind?: 'sword' | 'shield' | 'daggers' | 'staff' | 'rifle' | 'bow';
+  kind?: 'sword' | 'shield' | 'daggers' | 'staff' | 'rifle' | 'bow' | 'blowgun';
   // GLB prop model; overrides kind. Normalized at load so its bounding-box
   // center sits on the anchor and its longest axis spans `size` world units.
   url?: string;
@@ -410,6 +410,32 @@ export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
     // Long raptor strides: the run clip covers ground fast at full speed.
     runSpeed: 4.5,
     portrait: { clip: 'idle', time: 0.3, yaw: -2.3, zoom: 0.75 },
+  },
+  // Nisk, the Hushdart: a goblin of the brush with a dart tube longer than
+  // its arm. Quaternius's CC0 goblin (CREDITS.md), the roster's smallest.
+  nisk: {
+    url: '/models/champions/goblin.glb',
+    height: 1.45,
+    barY: 2.1,
+    // Darts leave the tube's end, held at the mouth.
+    muzzle: { forward: 1.0, y: 1.05 },
+    clips: {
+      idle: 'Idle',
+      run: 'Run',
+      attack: 'Attack',
+      cast: 'Attack',
+      windup: 'Attack',
+      death: 'Death',
+      hit: 'HitRecieve',
+    },
+    // The shipped atlas paints this goblin slate grey; the tint reads the
+    // moss of the brush it lives in.
+    tint: 0x9fd889,
+    // The Idle clip bakes a different root facing (the goblin turns round).
+    stripRootRotation: true,
+    runSpeed: 3.2,
+    portrait: { clip: 'attack', time: 0.35, yaw: 0.5, zoom: 0.7 },
+    props: [{ kind: 'blowgun', bone: 'Arm.R', rot: [-1.35, 0, 0.15] }],
   },
 };
 

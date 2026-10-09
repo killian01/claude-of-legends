@@ -395,7 +395,9 @@ describe('a Respawn Arrival meets a fair first fight', () => {
       mode.skills.set(gentle!.id, 'gentle');
       mode.skills.set(normal!.id, 'normal');
       mode.state.scores.set(gentle!.id, score);
-      const a = gentle!.pos as Vec3;
+      // The gentle one deep in the light (where the bot happened to walk
+      // to moves with the seats the roster deals): the order is the rule.
+      const a = mode.ground.nearestWalkable(returnCap(mode.state.dusk).center)!;
       fairScene(sim, seat!, [gentle!, normal!], [a, walkableFrom(sim, a, 60, 1)]);
       // The normal one a little worn: the softer of two normal bots.
       normal!.hp = normal!.maxHp * 0.9;

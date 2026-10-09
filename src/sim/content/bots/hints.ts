@@ -80,6 +80,13 @@ export const BOT_HINTS: Record<string, ChampionHints> = {
     keys: { Q: 'engage', W: 'poke', E: 'steroid' },
     ult: { minEnemies: 1, radius: 4 },
   },
+  // The dart opens a trade, the poison rides the attacks that follow, the
+  // sprint is the way out. A pod goes where the enemy in a fight is about
+  // to step (micro.ts aimAt leads it by the arming beat), one charge a time.
+  nisk: {
+    keys: { Q: 'poke', W: 'escape', E: 'steroid' },
+    ult: { minEnemies: 1, radius: 4 },
+  },
 };
 
 export function hintsFor(championId: string | null): ChampionHints {

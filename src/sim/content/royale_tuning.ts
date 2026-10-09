@@ -59,6 +59,8 @@ export const PLANET_TUNING: Readonly<Record<string, PlanetTuning>> = {
   torv: { hp: 0.95, dmg: 1.55 },
   korrath: { hp: 0.9, dmg: 1.3 },
   maera: { hp: 1.05, dmg: 1.5 },
+  // The eleventh joined at a marksman's share, held to the report's band.
+  nisk: { hp: 1.3, dmg: 0.9 },
 };
 
 const NEUTRAL: PlanetTuning = { hp: 1, dmg: 1 };

@@ -1,8 +1,12 @@
-// Test fixture: the ten roster champions converted to forged shape. The
+// Test fixture: the roster champions converted to forged shape. The
 // abilities and stats pass through verbatim (they are already the data a
 // forged champion declares); each code passive maps to its template
 // archetype with the roster's own numbers. These twins are the budget's
 // calibration set: the roster is the definition of "fits the power budget".
+// A champion whose kit reaches past the Forge's vocabulary (OUTSIDE_FORGE)
+// still has a twin for its bill (scripts/champion_bill.mjs), priced with
+// the nearest template, but stays out of the calibration set: the Forge
+// would refuse what it does not offer.
 
 import { CHAMPION_LIST, type ChampionDef } from '../src/sim/content/champions';
 import type { ForgedChampionDef, ForgedPassiveRef } from '../src/sim/forge/forged_def';
@@ -46,7 +50,18 @@ const TWIN_PASSIVES: Record<string, ForgedPassiveRef> = {
     params: { perSecond: 3, perLevel: 0.6, duration: 2.5 },
     name: 'Rend',
   },
+  // Lie Low has no template (the lurk is engine data, src/sim/lurk.ts):
+  // priced as the nearest one, a burst of speed after a beat.
+  nisk: {
+    template: 'battle_flow',
+    params: { msPct: 0.1, duration: 2 },
+    name: 'Lie Low',
+  },
 };
+
+// The roster champions whose kits use what the Forge does not offer: Nisk's
+// charges, hidden pods, fumble and lurk (forge/bounds.ts names none).
+export const OUTSIDE_FORGE: readonly string[] = ['nisk'];
 
 export function forgedTwin(champion: ChampionDef): ForgedChampionDef {
   const passive = TWIN_PASSIVES[champion.id];
@@ -66,4 +81,6 @@ export function forgedTwin(champion: ChampionDef): ForgedChampionDef {
   };
 }
 
-export const FORGED_TWINS: readonly ForgedChampionDef[] = CHAMPION_LIST.map(forgedTwin);
+export const FORGED_TWINS: readonly ForgedChampionDef[] = CHAMPION_LIST.filter(
+  (c) => !OUTSIDE_FORGE.includes(c.id),
+).map(forgedTwin);

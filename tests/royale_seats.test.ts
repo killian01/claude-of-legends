@@ -108,8 +108,13 @@ describe('the seats', () => {
     for (const seed of [1, 7, 42]) {
       const empty = count(royaleSeats([], seed));
       expect(empty.size).toBe(CHAMPION_LIST.length);
-      for (const c of CHAMPION_LIST)
-        expect(empty.get(c.id)).toBe(ROYALE_SEATS / CHAMPION_LIST.length);
+      // Dealt round: the seats over the roster, rounded one way or the
+      // other (eleven champions do not divide fifty seats).
+      const share = ROYALE_SEATS / CHAMPION_LIST.length;
+      for (const c of CHAMPION_LIST) {
+        expect(empty.get(c.id)!).toBeGreaterThanOrEqual(Math.floor(share));
+        expect(empty.get(c.id)!).toBeLessThanOrEqual(Math.ceil(share));
+      }
       const one = count(royaleSeats([person(1, 'alice')], seed));
       for (const c of CHAMPION_LIST) {
         expect(one.get(c.id)!).toBeGreaterThanOrEqual(4);

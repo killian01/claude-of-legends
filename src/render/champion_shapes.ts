@@ -19,7 +19,8 @@ interface ChampionLook {
     | 'bow'
     | 'staff'
     | 'horns'
-    | 'claws';
+    | 'claws'
+    | 'tube';
   bulk: number;
 }
 
@@ -34,6 +35,7 @@ const LOOKS: Readonly<Record<string, ChampionLook>> = {
   maera: { deco: 'staff', bulk: 0.95 },
   torv: { deco: 'horns', bulk: 1.3 },
   rhoka: { deco: 'claws', bulk: 1.0 },
+  nisk: { deco: 'tube', bulk: 0.75 },
 };
 
 export function buildChampionMesh(
@@ -187,6 +189,17 @@ export function buildChampionMesh(
         horn.rotation.z = -side * 0.45;
         holder.add(horn);
       }
+      break;
+    }
+    case 'tube': {
+      // A long dart tube held level at the mouth, a pouch of darts behind.
+      const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.5, 6), accentMat);
+      tube.rotation.x = Math.PI / 2;
+      tube.position.set(0.18 * b, 1.6, 0.75);
+      holder.add(tube);
+      const pouch = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.3, 0.12), darkMat);
+      pouch.position.set(-0.3 * b, 1.0, -0.3);
+      holder.add(pouch);
       break;
     }
     case 'claws': {

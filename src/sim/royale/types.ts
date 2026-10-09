@@ -79,7 +79,9 @@ export const CLAMOR_S = 3;
 // the planet's rules move with each tranche of play changes without moving the
 // 5v5's REPLAY_VERSION or the content fingerprint, and a royale replay loader
 // refuses a record made under other rules. Bumped once per merged tranche.
-export const ROYALE_RULES_VERSION = 7;
+// 8: Nisk joins the pool the house seats are dealt from, with its planet
+// tuning and build.
+export const ROYALE_RULES_VERSION = 8;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {

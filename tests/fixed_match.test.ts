@@ -57,4 +57,6 @@ describe('a recorded 5v5', () => {
   }, 120_000);
 });
 
-const PINNED = 97662613;
+// Moved when Nisk joined the roster: the sorted ids the seats are dealt
+// from gained an eleventh, and Nisk plays one of the ten seats.
+const PINNED = 1221962103;
