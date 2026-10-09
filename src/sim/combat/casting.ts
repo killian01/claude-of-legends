@@ -113,8 +113,9 @@ export type CastSpec =
     }
   // A temporary rampart perpendicular to the cast direction (walls.ts).
   | { kind: 'wall'; length: number; duration: number }
-  // A hidden pod planted at the aim (traps.ts): unseen by enemies until
-  // one stands close, it bursts into a field when one steps on it.
+  // A hidden pod planted at the aim (traps.ts): unseen by enemies but
+  // under their own reveal zone, it bursts into a field when one steps on
+  // it.
   | TrapSpec;
 
 export interface AbilityDef {

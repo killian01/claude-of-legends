@@ -50,10 +50,20 @@ const POD: AbilityDef = {
     radius: 1,
     duration: 20,
     armDelay: 0.5,
-    seenWithin: 3,
     maxLive: 2,
     burst: { radius: 2, duration: 1, onEnter: [{ kind: 'damage', base: 50, dtype: 'true' }] },
   },
+};
+
+// A reveal zone and nothing else: its area shown to the caster's team,
+// brush, stealth and hidden pods alike.
+const EYE_S = 2;
+const EYE: AbilityDef = {
+  name: 'Test eye',
+  manaCost: 0,
+  cooldown: 1,
+  castRange: 10,
+  spec: { kind: 'zone', radius: 2, duration: EYE_S, reveal: true },
 };
 
 function ticks(sim: Sim, n: number): void {
@@ -114,7 +124,7 @@ describe('the charges', () => {
 });
 
 describe('the hidden pod', () => {
-  it('is seen by its own team, and by an enemy only from close by', () => {
+  it('is seen by its own team, never by an enemy standing close', () => {
     const sim = new Sim(5);
     const a = custom(sim, 0, { x: 75, z: 75 }, { R: POD });
     const b = sim.addChampion(1, { x: 75, z: 83 }, 'torv');
@@ -123,8 +133,9 @@ describe('the hidden pod', () => {
     const pod = [...sim.zones.values()].find((z) => z.trap)!;
     expect(sim.zoneSeen(0, pod)).toBe(true);
     expect(sim.zoneSeen(1, pod)).toBe(false);
-    b.pos = { x: 79, z: 77.5 };
-    expect(sim.zoneSeen(1, pod)).toBe(true);
+    // Beside its rim, before it arms: still nothing.
+    b.pos = { x: 79, z: 76.8 };
+    expect(sim.zoneSeen(1, pod)).toBe(false);
     // A minion standing on it neither sees it for its team nor bursts it.
     b.pos = { x: 75, z: 90 };
     const m = createMinion(nextId++, 1, 'melee', 'mid', { x: 79, z: 75 });
@@ -132,6 +143,30 @@ describe('the hidden pod', () => {
     expect(sim.zoneSeen(1, pod)).toBe(false);
     ticks(sim, Math.ceil(1 / DT));
     expect(sim.zones.has(pod.id)).toBe(true);
+  });
+
+  it('shows to a whole enemy team under one of its reveal zones, for as long as it lasts', () => {
+    const sim = new Sim(5);
+    const a = custom(sim, 0, { x: 75, z: 75 }, { R: POD });
+    const short = custom(sim, 1, { x: 79, z: 84 }, { R: EYE });
+    const touching = custom(sim, 1, { x: 86, z: 80 }, { R: EYE });
+    const far = sim.addChampion(1, { x: 75, z: 100 }, 'torv');
+    ticks(sim, 1);
+    expect(sim.castAbility(a.id, 'R', { x: 79, z: 75 })).toBe(true);
+    a.pos = { x: 40, z: 40 };
+    const pod = [...sim.zones.values()].find((z) => z.trap)!;
+    // A reveal whose area stops short of the pod's shows nothing of it.
+    expect(sim.castAbility(short.id, 'R', { x: 79, z: 78.5 })).toBe(true);
+    expect(sim.zoneSeen(1, pod)).toBe(false);
+    // One whose area touches it shows it to the team, its far seat too.
+    expect(sim.castAbility(touching.id, 'R', { x: 79, z: 77.8 })).toBe(true);
+    expect(sim.zoneSeen(1, pod)).toBe(true);
+    expect(buildObservation(sim, far.id)!.zones?.some((z) => z.trap && !z.friendly)).toBe(true);
+    // The reveal over, the pod lies hidden again.
+    ticks(sim, Math.ceil((EYE_S + 0.1) / DT));
+    expect(sim.zones.has(pod.id)).toBe(true);
+    expect(sim.zoneSeen(1, pod)).toBe(false);
+    expect(buildObservation(sim, far.id)!.zones?.some((z) => z.trap)).toBe(false);
   });
 
   it('bursts under an enemy champion step, leaving its field, and the oldest goes past the cap', () => {

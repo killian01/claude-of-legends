@@ -1412,7 +1412,6 @@ describe('pods and the fumble on the planet', () => {
         radius: 0.9,
         duration: 60,
         armDelay: 1,
-        seenWithin: 3.5,
         maxLive: 3,
         burst: { radius: 2, duration: 1 },
       },

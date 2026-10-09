@@ -1,12 +1,15 @@
 // Hidden traps (CONTEXT.md: Sourpod): a zone planted on the ground that
 // lies unseen by the caster's enemies, arms after a beat, and bursts when an
 // enemy champion steps on it, leaving a field behind (Nisk's poison cloud).
-// Only an enemy champion standing close sees one: the team's own see theirs
-// always, and nobody else sees it at all, people and bots by the one rule
-// (trapSeen), which the wire, the observation and the offline renderer all
-// read. A caster keeps at most `maxLive` of them; planting one more takes
-// the oldest away. On the planet the pod and its cloud are discs of the
-// sphere like every zone (geo.ts).
+// Walking near one shows nothing: the team's own see theirs always, and an
+// enemy team only while one of its reveal zones covers it (vision.ts
+// revealShows, the rule a stealthed champion is shown by), every one of its
+// seats at once, people and bots by the one rule (trapSeen), which the
+// wire, the observation and the offline renderer all read. The cloud a
+// burst leaves is an ordinary zone everyone in sight sees. A caster keeps
+// at most `maxLive` of them; planting one more takes the oldest away. On
+// the planet the pod and its cloud are discs of the sphere like every zone
+// (geo.ts).
 
 import type { EffectSpec, Power } from './combat/effects';
 import { copy, dist } from './geo';
@@ -14,6 +17,7 @@ import type { CombatCtx } from './sim_context';
 import { isSpellTarget } from './spell_targets';
 import type { TeamId, Vec2 } from './types';
 import type { Unit } from './unit';
+import { revealShows } from './vision';
 import type { Zone } from './zones';
 
 // The field a burst leaves: a zone's ticks and entry payload.
@@ -33,8 +37,6 @@ export interface TrapSpec {
   duration: number;
   // Seconds after planting before a step bursts it.
   armDelay: number;
-  // An enemy champion this close sees it (from the pod's center).
-  seenWithin: number;
   // The caster's pods on the ground at once; one more takes the oldest.
   maxLive: number;
   burst: TrapBurst;
@@ -43,7 +45,6 @@ export interface TrapSpec {
 // What a zone carries while it is a pod.
 export interface TrapState {
   armAt: number;
-  seenWithin: number;
   burst: TrapBurst;
 }
 
@@ -118,7 +119,7 @@ export function plantTrap(
     power,
     vfx !== null ? `${vfx}${TRAP_VFX_SUFFIX}` : null,
   );
-  zone.trap = { armAt: ctx.time + spec.armDelay, seenWithin: spec.seenWithin, burst: spec.burst };
+  zone.trap = { armAt: ctx.time + spec.armDelay, burst: spec.burst };
   ctx.zones.set(id, zone);
 }
 
@@ -175,15 +176,19 @@ export function stepTrap(ctx: CombatCtx, z: Zone): boolean {
 }
 
 // Whether `team` sees the pod: its own team always, an enemy only while one
-// of its live champions stands within the pod's sight radius. A zone that
+// of the enemy team's live reveal zones covers it (the pod's disc touching
+// the zone's area). Standing close, even on it, shows nothing. A zone that
 // is no pod answers false: its sight is the ordinary point rule.
-export function trapSeen(units: ReadonlyMap<number, Unit>, team: TeamId, z: Zone): boolean {
-  const trap = z.trap;
-  if (!trap) return false;
+export function trapSeen(
+  zones: ReadonlyMap<number, Zone>,
+  team: TeamId,
+  z: Zone,
+  time: number,
+): boolean {
+  if (!z.trap) return false;
   if (z.team === team) return true;
-  for (const u of units.values()) {
-    if (u.kind !== 'champion' || u.neutral || u.team !== team || u.dead) continue;
-    if (dist(u.pos, z.pos) <= trap.seenWithin) return true;
+  for (const r of zones.values()) {
+    if (r.team === team && revealShows(r, time, z.pos, z.radius)) return true;
   }
   return false;
 }

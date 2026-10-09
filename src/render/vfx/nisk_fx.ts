@@ -148,8 +148,8 @@ export function bittertipCoat(fx: VfxSystem, x: number, z: number): void {
 }
 
 // The pod: a half-buried bulb with a sour sheen. To its own team it shows
-// a faint ring of where it bursts; to an enemy that stands close enough to
-// see it, a warning rim.
+// a faint ring of where it bursts; to an enemy whose reveal zone shows it,
+// a warning rim.
 export function buildPod(radius: number, hostile: boolean): THREE.Object3D {
   const holder = new THREE.Group();
   const bulb = new THREE.Mesh(

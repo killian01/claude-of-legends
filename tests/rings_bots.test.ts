@@ -449,11 +449,12 @@ describe('the creature vocabulary', () => {
     expect(objective).toMatchObject({ prepSeconds: 45, within: 70 });
   });
 
-  it('takes a ring creature in a house bot match on the export inside twelve minutes', () => {
+  it('takes a ring creature in a house bot match on the export inside fourteen minutes', () => {
     // The bodies want a duo and thirty seconds now (docs/plan-rings.md,
-    // round two), and the rings are contested ground: on this seed the
-    // bots' first favor is the Voidmaul's at about 10:10, after two
-    // attempts on the Pyrefang were broken up by the enemy laners.
+    // round two), and the rings are contested ground: on this seed, a
+    // Nisk on each side whose pods burst under the enemy, the bots' first
+    // favor is the Pyrefang's at about 12:45, after the attempts before
+    // it were broken up.
     const sim = orchardSim(42);
     const rng = new Rng(42);
     for (const seat of houseSeats([], rng)) {
@@ -463,7 +464,7 @@ describe('the creature vocabulary', () => {
       attachBot(sim, sim.addChampion(1, undefined, seat.championId).id, seat.bot);
     }
     let favor: { team: number; creature: string | null; aspect: AspectId } | null = null;
-    for (let tick = 0; tick < 12 * 60 * TICKS_PER_S && !favor; tick++) {
+    for (let tick = 0; tick < 14 * 60 * TICKS_PER_S && !favor; tick++) {
       for (const e of sim.tick()) {
         if (e.type === 'favor') favor = { team: e.team, creature: e.creature, aspect: e.aspect };
       }

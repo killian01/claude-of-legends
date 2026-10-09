@@ -202,8 +202,8 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
   const zones: ObsZone[] = [];
   for (const z of sim.zones.values()) {
     const friendly = z.team === u.team;
-    // One rule with the wire: an enemy pod only while a champion of the
-    // team stands close enough to see it (traps.ts).
+    // One rule with the wire: an enemy pod only while a reveal zone of the
+    // team covers it (traps.ts).
     if (!sim.zoneSeen(u.team, z)) continue;
     zones.push({
       x: z.pos.x,

@@ -219,7 +219,7 @@ function describeCast(spec: CastSpec, castRange: number): string[] {
       if (spec.allyOnTick?.length) {
         lines.push(`Allies inside, every ${spec.tickEvery ?? 0.5}s: ${sentence(spec.allyOnTick)}.`);
       }
-      if (spec.reveal) lines.push('Its area is revealed, brush and stealth included.');
+      if (spec.reveal) lines.push('Its area is revealed, brush, stealth and hidden pods included.');
       if (spec.boundary) {
         lines.push(
           `Enemies walking out through the rim: ${sentence(spec.boundary.effects)} ` +
@@ -268,7 +268,7 @@ function describeCast(spec: CastSpec, castRange: number): string[] {
       const b = spec.burst;
       const lines = [
         `Plants a hidden pod (range ${castRange}) that lies for ${spec.duration}s and arms ` +
-          `after ${spec.armDelay}s; enemies see it only within ${spec.seenWithin}. ` +
+          `after ${spec.armDelay}s; enemies see it only inside an area they reveal. ` +
           `At most ${spec.maxLive} lie at once.`,
         `An enemy champion stepping on it bursts it into a cloud (radius ${b.radius}, ` +
           `${b.duration}s).`,

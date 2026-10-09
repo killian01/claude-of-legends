@@ -115,7 +115,7 @@ export interface ObsZone {
   detonateAt: number | null;
   // A hidden pod (additive v0 field, CONTEXT.md: Sourpod): it bursts when
   // an enemy champion steps on it. An enemy pod is listed only while one
-  // of the team's champions stands close enough to see it.
+  // of the team's reveal zones covers it, never for standing close.
   trap?: true;
 }
 

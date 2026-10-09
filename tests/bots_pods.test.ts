@@ -1,8 +1,8 @@
 // The house bots against the fumble and the hidden pods, through the same
 // observation and budget as a person (ADR 0002, ADR 0003): a bot walks
-// round a pod it sees instead of onto it, and while its own attacks would
-// miss it gives ground instead of swinging. Nisk's own bot is
-// tests/nisk_bots.test.ts.
+// round a pod its team reveals instead of onto it, never knows of one its
+// team has not revealed, and while its own attacks would miss it gives
+// ground instead of swinging. Nisk's own bot is tests/nisk_bots.test.ts.
 
 import { describe, expect, it } from 'vitest';
 import type { AbilityDef } from '../src/sim/combat/casting';
@@ -26,20 +26,32 @@ const POD: AbilityDef = {
     radius: 0.9,
     duration: 60,
     armDelay: 1,
-    seenWithin: 3.5,
     maxLive: 3,
     burst: { radius: 2, duration: 1, onEnter: [{ kind: 'damage', base: 50, dtype: 'true' }] },
   },
 };
 
-function planter(sim: Sim, team: TeamId, pos: Vec2): Unit {
+// A reveal zone and nothing else: what shows a team an enemy pod.
+const EYE: AbilityDef = {
+  name: 'Test eye',
+  manaCost: 0,
+  cooldown: 1,
+  castRange: 10,
+  spec: { kind: 'zone', radius: 2.5, duration: 3, reveal: true },
+};
+
+function custom(sim: Sim, id: number, team: TeamId, pos: Vec2, R: AbilityDef): Unit {
   const base = CHAMPIONS.torv!;
-  const def: ChampionDef = { ...base, abilities: { ...base.abilities, R: POD } };
-  const u = createChampion(60_000, team, pos, def);
+  const def: ChampionDef = { ...base, abilities: { ...base.abilities, R } };
+  const u = createChampion(id, team, pos, def);
   u.abilityRanks = { Q: 1, W: 1, E: 1, R: 1 };
   u.level = 6;
   sim.units.set(u.id, u);
   return u;
+}
+
+function planter(sim: Sim, team: TeamId, pos: Vec2): Unit {
+  return custom(sim, 60_000, team, pos, POD);
 }
 
 function ready(u: Unit): void {
@@ -56,7 +68,25 @@ function act(sim: Sim, unitId: number): ReturnType<typeof LANER.policy> {
 }
 
 describe('a bot and a pod', () => {
-  it('walks round a pod it sees instead of onto it', () => {
+  it('walks round a pod its team reveals instead of onto it', () => {
+    const sim = new Sim(31);
+    const a = planter(sim, 0, { x: 75, z: 75 });
+    const b = sim.addChampion(1, { x: 120, z: 120 }, 'vesk');
+    ready(b);
+    const eye = custom(sim, 60_001, 1, { x: 86, z: 81 }, EYE);
+    expect(sim.castAbility(a.id, 'R', { x: 80, z: 75 })).toBe(true);
+    a.pos = { x: 40, z: 40 };
+    b.pos = { x: 82, z: 75 };
+    b.path = [];
+    expect(sim.castAbility(eye.id, 'R', { x: 80, z: 77 })).toBe(true);
+    const action = act(sim, b.id);
+    expect(action.kind).toBe('move');
+    if (action.kind === 'move') {
+      expect(hypot(action.x - 80, action.z - 75)).toBeGreaterThan(hypot(82 - 80, 0));
+    }
+  });
+
+  it('knows nothing of a pod its team has not revealed, even beside it', () => {
     const sim = new Sim(31);
     const a = planter(sim, 0, { x: 75, z: 75 });
     const b = sim.addChampion(1, { x: 120, z: 120 }, 'vesk');
@@ -65,24 +95,15 @@ describe('a bot and a pod', () => {
     a.pos = { x: 40, z: 40 };
     b.pos = { x: 82, z: 75 };
     b.path = [];
-    const action = act(sim, b.id);
-    expect(action.kind).toBe('move');
-    if (action.kind === 'move') {
-      expect(hypot(action.x - 80, action.z - 75)).toBeGreaterThan(hypot(82 - 80, 0));
-    }
-  });
-
-  it('does not dodge a pod it cannot see', () => {
-    const sim = new Sim(31);
-    const a = planter(sim, 0, { x: 75, z: 75 });
-    const b = sim.addChampion(1, { x: 120, z: 120 }, 'vesk');
-    ready(b);
-    expect(sim.castAbility(a.id, 'R', { x: 80, z: 75 })).toBe(true);
-    a.pos = { x: 40, z: 40 };
-    b.pos = { x: 85, z: 75 };
-    b.path = [];
     sim.tick();
-    expect((buildObservation(sim, b.id)!.zones ?? []).length).toBe(0);
+    const seen = buildObservation(sim, b.id)!;
+    expect((seen.zones ?? []).length).toBe(0);
+    // The same moment with no pod on the ground reads the same: the bot
+    // decides exactly as if none lay there, so it walks wherever it was
+    // going, onto the pod too.
+    const pod = [...sim.zones.values()].find((z) => z.trap)!;
+    sim.zones.delete(pod.id);
+    expect(buildObservation(sim, b.id)).toEqual(seen);
   });
 });
 
