@@ -251,6 +251,11 @@ function checkEffect(errors: string[], path: string, e: unknown, depth: number, 
       if (!FORGED_DAMAGE_TYPES.includes(fx.dtype as string)) {
         errors.push(`${path}.dtype: must be 'physical' or 'magic'`);
       }
+      // A dot's ratios and its renewal are the roster's (Nisk's Bittertip);
+      // the Forge offers neither yet.
+      for (const field of ['adRatio', 'apRatio', 'refresh']) {
+        if (fx[field] !== undefined) errors.push(`${path}.${field}: not offered by the Forge`);
+      }
       break;
     case 'knockback':
       checkFields(errors, path, fx, bounds, ['distance']);
@@ -294,6 +299,7 @@ function checkEffect(errors: string[], path: string, e: unknown, depth: number, 
       break;
     case 'empower':
       checkFields(errors, path, fx, bounds, ['duration']);
+      if (fx.hits !== undefined) errors.push(`${path}.hits: not offered by the Forge`);
       checkEffectList(errors, `${path}.bonus`, fx.bonus, depth + 1, walk, true);
       checkEffectList(errors, `${path}.splash`, fx.splash, depth + 1, walk, false);
       break;
@@ -439,6 +445,8 @@ function checkAbility(errors: string[], key: string, def: unknown): void {
     errors.push(`${path}.sound: must be one of ${CAST_SOUNDS.map((s) => s.id).join(', ')}`);
   }
   if (a.look !== undefined) errors.push(...spellLookErrors(a.look, `${path}.look`));
+  // A store of charges is the roster's (Nisk's Sourpods); not the Forge's.
+  if (a.charges !== undefined) errors.push(`${path}.charges: not offered by the Forge`);
   checkNum(errors, `${path}.manaCost`, a.manaCost, ABILITY_BOUNDS.manaCost);
   checkNum(errors, `${path}.castRange`, a.castRange, ABILITY_BOUNDS.castRange);
   checkOptNum(errors, `${path}.windup`, a.windup, ABILITY_BOUNDS.windup);
