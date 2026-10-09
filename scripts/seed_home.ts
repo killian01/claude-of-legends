@@ -50,6 +50,7 @@ const CHAMPS = [
   'vesk',
   'maera',
   'rhoka',
+  'nisk',
 ];
 
 // --- accounts and the hand ladder ---------------------------------------
