@@ -5,7 +5,8 @@ A 5v5 three-lane MOBA in the browser. One deterministic simulation, an authorita
 ## Language
 
 **Champion**:
-A playable character a participant controls for the whole match. Ten exist at launch.
+A playable character a participant controls for the whole match. Ten existed at launch;
+Nisk, the eleventh, joined after.
 _Avoid_: hero, character, class
 
 **Participant**:
@@ -346,6 +347,36 @@ marked, then detonates once more after a fixed delay. A telegraph by constructio
 read the marked ground); standing on it is the mistake. Torv's Faultline is its owner.
 _Avoid_: echo, replay, second wall
 
+**Fumble**:
+A crowd control: while it lasts, its victim's basic attacks miss. The swing is spent and
+nothing lands, no damage and no on-hit; the victim's spells still work. Every viewer reads it
+as a chip and a swirl over the head, and a miss as "Miss". The Resolve shortens it like the
+other crowd control; structures shrug it off. Nisk's Pepper Dart is its owner. Not the blind,
+which dims sight.
+_Avoid_: blind (that dims sight), dazed, miss chance
+
+**Charge**:
+One use in an ability's store. A spell cast from charges spends one per cast; one comes back
+every so many seconds (shortened by rank like a cooldown) until the store is full, and the
+spell's cooldown is only the beat between two casts. The store opens with one charge when the
+spell is learned. The button shows the count. Nisk's Sourpods are the only spell with them.
+_Avoid_: ammo, stack (a mark's and a Sprout's word)
+
+**Sourpod**:
+A hidden pod Nisk plants with its ultimate: it arms after a second, lies three minutes (five
+of one Nisk at most), and bursts into a slowing cloud of poison when an enemy champion steps
+on it. Its own team always sees it; an enemy only from within a few meters; a minion neither
+sees it for its team nor bursts it. People and bots see it by the one rule. It works on the
+planet too. In code, the primitive is a trap (src/sim/traps.ts).
+_Avoid_: mine, ward, trap in game text
+
+**Lurk**:
+Hiding by stillness: a champion whose passive lurks is hidden from its enemies once it has
+kept still, or kept to one brush, for a beat, until it acts, moves in the open or leaves the
+brush; taking damage restarts the count. Its own side sees it half see-through. Nisk's Lie
+Low is the one passive that lurks (src/sim/lurk.ts).
+_Avoid_: invisibility (players read "Hidden", the status chip's word)
+
 **Mastery**:
 A purely cosmetic per-champion rank derived from a player's recorded online matches on that champion (server/mastery.ts thresholds). Shown on the career profile with a title per rank; never affects gameplay, matchmaking, or rating.
 _Avoid_: champion points, grind level
@@ -490,7 +521,7 @@ what people remember about it.
 _Avoid_: slug, normalized name, canonical name
 
 **Roster**:
-The ten champions shipped with the game (`docs/design/roster.md`), as opposed to forged
+The eleven champions shipped with the game (`docs/design/roster.md`), as opposed to forged
 champions. The roster browser is the screen that lists champions.
 _Avoid_: base champions, default cast
 

@@ -24,9 +24,9 @@ Kept as generic genre vocabulary: tower, minion, lane, brush, recall, fog of war
 
 Every ability below is composed from a small set of shared, data-as-code effect primitives. This is what makes 10 champions (50 abilities) feasible in the sprint:
 
-projectile (line, cone, wave, chain) - traveling dash and blink - zone (damage, slow, heal, vision, reveal) - wall - aura - shield and heal - crowd control (slow, root, stun, knockup, knock-aside, pull, taunt) - stealth - stat modifier - on-hit stacks - conditional effects - empowered attack - cooldown events - recast.
+projectile (line, cone, wave, chain) - traveling dash and blink - zone (damage, slow, heal, vision, reveal) - wall - aura - shield and heal - crowd control (slow, root, stun, knockup, knock-aside, pull, taunt, fumble) - stealth and the lurk - stat modifier - on-hit stacks - conditional effects - empowered attack - cooldown events - recast - charges - hidden pod.
 
-## The ten champions
+## The eleven champions
 
 ### Korrath, the Bulwark (Tank, top)
 
@@ -128,6 +128,17 @@ A diving brawler who feeds on extended fights.
 - E, Primal Howl: area slow plus self attack speed surge.
 - R, Apex Frenzy: attack speed surge; while it holds, attacks on bleeding targets heal Rhoka.
 
+### Nisk, the Hushdart (Marksman, bot)
+
+A small, quick prankster of the brush: hard to see, and it punishes careless walkers. The
+eleventh champion, added after launch (`src/sim/content/champions/nisk.ts`).
+
+- Passive, Lie Low: after keeping still, or keeping to one brush, for a beat, Nisk is hidden from enemies until it acts, moves in the open or leaves the brush (the lurk). Its first attack out of hiding swings with a burst of attack speed.
+- Q, Pepper Dart: a dart of magic damage that makes its target fumble briefly: its attacks miss.
+- W, Hightail: a short sprint, and a little speed at all times once learned.
+- E, Bittertip: for a few seconds every attack poisons, each hit renewing the one poison instead of stacking another.
+- R, Sourpods: hidden pods from a store of charges, a few on the ground at once for minutes, seen by an enemy only from close by; an enemy champion stepping on one bursts it into a cloud of poison that slows.
+
 ## Coverage check
 
-Roles: 2 top (tank, fighter), 3 mid or flex (mage, assassin, battlemage), 2 marksman, 2 support (heal, engage), 1 skirmisher flex. These are the home lanes (`CONTEXT.md`): the fill completes a team by them and the sim seats each champion in its own. Every crowd-control primitive, projectile shape, and zone type is exercised by at least one kit, so the roster doubles as a test matrix for the effect system.
+Roles: 2 top (tank, fighter), 3 mid or flex (mage, assassin, battlemage), 3 marksman, 2 support (heal, engage), 1 skirmisher flex. These are the home lanes (`CONTEXT.md`): the fill completes a team by them and the sim seats each champion in its own. Every crowd-control primitive, projectile shape, and zone type is exercised by at least one kit, so the roster doubles as a test matrix for the effect system.

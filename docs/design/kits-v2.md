@@ -332,3 +332,41 @@ One generic spec-driven brain plus a declarative hint table per champion (data, 
    (`describe.ts`, `ability_icons.ts`, vfx catalogue re-tagged); golden traces re-baked.
 3. **Bots.** Generic brain upgrades, hint tables, parity and behavior tests.
 4. **Balance.** Numbers pass, pacing tests, headless self-play sweeps.
+
+## An eleventh kit: Nisk, the Hushdart (Marksman, bot lane)
+
+Added 2026-10-09, after the v2 passes, on the same principles. A scout marksman of the brush:
+hard to see, and it punishes careless walkers. It brought four primitives, each its own module
+with its observation exposure, and none of them offered to the Forge yet (`forge/bounds.ts`
+names none; `tests/forged_twins.ts` keeps the kit out of the calibration set and prices it for
+the bill with the nearest passive template):
+
+| Primitive | What it is | Module |
+|---|---|---|
+| Fumble | Crowd control: the victim's basic attacks miss while it lasts | `combat/status.ts`, `combat/auto_attack.ts` |
+| Charges | A store a spell is cast from, one charge back per recharge | `combat/charges.ts` |
+| Hidden pod | A zone unseen by enemies but from close by, bursting into a field under an enemy champion's step | `traps.ts` |
+| Lurk | Hidden by keeping still or keeping to a brush, until the champion acts or moves out | `lurk.ts` |
+
+Two existing primitives grew a field: an empower may arm several strikes (`hits`), and a dot
+may scale on power and be renewed instead of stacked (`refresh`).
+
+- **Passive, Lie Low.** Hidden after 1.5 s of keeping still or of keeping to one brush, until
+  it acts, moves in the open or leaves the brush; taking damage restarts the count. Its first
+  attack out of hiding swings 60 percent faster, for 2.5 s. Counterplay: area damage still
+  lands, a reveal zone shows it, and it cannot attack without being seen.
+- **Q, Pepper Dart.** A stop-on-hit dart (range 8.5) of magic damage; its target fumbles for
+  1.25 s. Counterplay: the dart is a dodgeable skillshot, and a fumbling champion still casts.
+- **W, Hightail.** A 45 percent sprint for 2 s; once learned, 4 percent more speed at all
+  times, one more per rank.
+- **E, Bittertip.** For 5 s every attack poisons (magic damage over 3 s), each hit renewing
+  the one poison.
+- **R, Sourpods.** Three charges, one back every 30 s (shortened by rank), 1.5 s between two
+  casts. A pod (trigger radius 0.9) arms in 1 s, lies 180 s, five of one Nisk at most, and is
+  seen by an enemy champion within 3.5; stepping on it bursts a 3-radius cloud for 3 s: magic
+  damage on entry, then ticks of damage and a 35 percent slow. Counterplay: look where you
+  walk; the pod shows from close enough to step round, and minions neither see nor burst it.
+- **Bot playbook:** Q at enemies in range; E when a fight starts; W to leave; a pod where an
+  enemy in a fight will stand when it arms. Every bot walks round a pod it sees and gives
+  ground while it fumbles.
+

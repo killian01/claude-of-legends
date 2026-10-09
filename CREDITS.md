@@ -18,7 +18,7 @@ of CC0 source art.
 |---|---|---|---|
 | `knight.glb`, `barbarian.glb`, `mage.glb`, `rogue_hooded.glb` | KayKit Character Pack: Adventurers (https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0) | Kay Lousberg (KayKit) | CC0 1.0 |
 | `skeleton_rogue.glb` | KayKit Character Pack: Skeletons (https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0) | Kay Lousberg (KayKit) | CC0 1.0 |
-| `ghost.glb`, `goblin.glb`, `glubevolved.glb`, `demonalt.glb`, `velociraptor.glb` | Quaternius animated creature packs (https://quaternius.com, https://poly.pizza/u/Quaternius) | Quaternius | CC0 1.0 |
+| `ghost.glb`, `goblin.glb`, `glubevolved.glb`, `demonalt.glb`, `velociraptor.glb` | Quaternius animated creature packs (https://quaternius.com, https://poly.pizza/u/Quaternius); `goblin.glb` is Nisk, its dart tube built in code (`src/render/champions/props.ts`) | Quaternius | CC0 1.0 |
 | `vesk.glb`, `vesk_rifle.glb` | Generated with Meshy AI (https://meshy.ai) from original Vesk concept art, rigged and animated in the Meshy workspace | killian01 via Meshy AI | Per the Meshy plan's asset terms (CC BY 4.0 on the free plan) |
 | `korrath.glb`, `korrath_shield.glb`, `korrath_maul.glb` | Generated with Meshy AI (https://meshy.ai) from original Korrath concept art (docs/design/portrait-prompts.md), rigged and animated in the Meshy workspace; combat clips re-baked in place (horizontal hip travel removed) and the weapon GLBs re-authored in Blender with the grip at the origin | killian01 via Meshy AI | Per the Meshy plan's asset terms (CC BY 4.0 on the free plan) |
 | `sylra.glb` | Generated with Tripo AI (https://www.tripo3d.ai) from original Sylra concept art, the staff a second Tripo generation; regrouped into eight meshes, rigged with Rigify, the staff fitted to her hand and the eight clips authored in Blender, exported by `scripts/export_sylra.py` (docs/sylra-model.md) | killian01 via Tripo AI | Per the Tripo plan's asset terms |
@@ -50,6 +50,7 @@ falls back to the in-engine cinematic render when a file is missing
 | `vesk.webp` | Generated with Google Gemini from original Vesk concept art | Google Gemini output terms |
 | `korrath.webp` | Generated with Google Gemini from the Korrath prompt in docs/design/portrait-prompts.md | Google Gemini output terms |
 | `dain.webp`, `sylra.webp`, `fenn.webp`, `elowen.webp`, `ashvyn.webp`, `maera.webp`, `torv.webp`, `rhoka.webp` | Generated with Google Gemini from the prompts in docs/design/portrait-prompts.md | Google Gemini output terms |
+| `nisk.webp` | Rendered in-engine: the cinematic portrait (`src/render/champions/portrait.ts`) of the CC0 Quaternius goblin at 900x1200, until a painting from its prompt in docs/design/portrait-prompts.md replaces it | CC0 1.0 (the model) |
 
 ## Tier emblems (`public/icons/tiers/`)
 
@@ -115,7 +116,8 @@ The sources stay in `art_src/logo/` (ignored, like the other raw art).
 ## Painted ability, item and sigil icons (`public/icons/`)
 
 The 67 paintings that beat the procedural icon painter: every ability
-except Maera's ultimate and Rhoka's four, all 28 items, all four sigils.
+except Maera's ultimate, Rhoka's four and Nisk's four, all 28 items, all
+four sigils.
 They follow the art contract in docs/design/icon-art-style.md, whose
 subject lines come from our own kit and item records (ADR 0004). The
 generators hand back 512px PNG; what ships is the WebP conversion from

@@ -24,7 +24,7 @@ set:
 > accent color as atmospheric glow, painterly brushwork, high contrast,
 > game character card art, no text, no watermark.
 
-## The ten champions
+## The champions
 
 | File | Prompt line |
 |---|---|
@@ -38,3 +38,4 @@ set:
 | `maera.png` | Maera Tidecaller: a small teal water spirit with fin wings, riding a rising wave, droplets suspended around her, seafoam turquoise atmosphere. |
 | `torv.png` | Torv Stonehorn: a towering stone-grey horned colossus with small bat wings and a broken dark halo, fists like boulders, granite atmosphere, protective bulk. |
 | `rhoka.png` | Rhoka Wildclaw: a russet-brown raptor beast mid-pounce, claws extended, feather-scaled crest, crimson atmosphere, feral motion. |
+| `nisk.png` | Nisk the Hushdart: a small wiry moss-green goblin crouched half hidden in tall brush, huge amber eyes and a sly grin, a long reed dart tube raised to its lips, a pouch of green-tipped darts at its hip, a few seed pods glowing faintly in the grass around it, sour green mist curling at its feet, sickly lime atmosphere. |
