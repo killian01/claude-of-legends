@@ -429,16 +429,18 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
         const casts: { unitId: number; key?: AbilityKey }[] = [];
         const hits: { targetId: number; amount: number }[] = [];
         const attacks: { unitId: number; targetId: number }[] = [];
+        const misses: { unitId: number; targetId: number }[] = [];
         for (const ev of sim.tick()) {
           if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
           else if (ev.type === 'gold' && ev.unitId === self.id) golds.push(ev.amount);
           else if (ev.type === 'cast') casts.push({ unitId: ev.unitId, key: ev.key });
           else if (ev.type === 'sigil') casts.push({ unitId: ev.unitId });
           else if (ev.type === 'attack') attacks.push({ unitId: ev.unitId, targetId: ev.targetId });
+          else if (ev.type === 'miss') misses.push({ unitId: ev.unitId, targetId: ev.targetId });
           else if (ev.type === 'damage' && ev.sourceId === self.id && ev.targetId !== self.id)
             hits.push({ targetId: ev.targetId, amount: ev.amount });
         }
-        pres.onWorldTick({ kills, golds, casts, hits, attacks });
+        pres.onWorldTick({ kills, golds, casts, hits, attacks, misses });
       }
       requestAnimationFrame(frame);
     }
@@ -589,14 +591,16 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
       const kills: { unitId: number; killerId: number }[] = [];
       const casts: { unitId: number; key?: AbilityKey }[] = [];
       const attacks: { unitId: number; targetId: number }[] = [];
+      const misses: { unitId: number; targetId: number }[] = [];
       for (const ev of sim.tick()) {
         if (silent) continue;
         if (ev.type === 'death') kills.push({ unitId: ev.unitId, killerId: ev.killerId });
         else if (ev.type === 'cast') casts.push({ unitId: ev.unitId, key: ev.key });
         else if (ev.type === 'sigil') casts.push({ unitId: ev.unitId });
         else if (ev.type === 'attack') attacks.push({ unitId: ev.unitId, targetId: ev.targetId });
+        else if (ev.type === 'miss') misses.push({ unitId: ev.unitId, targetId: ev.targetId });
       }
-      if (!silent) pres.onWorldTick({ kills, golds: [], casts, hits: [], attacks });
+      if (!silent) pres.onWorldTick({ kills, golds: [], casts, hits: [], attacks, misses });
       checkDrift();
     };
 
@@ -778,12 +782,14 @@ async function runSpectate(matchId: number, team: TeamId): Promise<PostMatchActi
             const kills: { unitId: number; killerId: number }[] = [];
             const casts: { unitId: number; key?: AbilityKey }[] = [];
             const attacks: { unitId: number; targetId: number }[] = [];
+            const misses: { unitId: number; targetId: number }[] = [];
             for (const e of msg.events) {
               if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
               else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
               else if (e.e === 'atk') attacks.push({ unitId: e.unitId, targetId: e.targetId });
+              else if (e.e === 'miss') misses.push({ unitId: e.unitId, targetId: e.targetId });
             }
-            view.onWorldTick({ kills, golds: [], casts, hits: [], attacks });
+            view.onWorldTick({ kills, golds: [], casts, hits: [], attacks, misses });
           }
           break;
         }
@@ -1184,14 +1190,16 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
             const casts: { unitId: number; key?: AbilityKey }[] = [];
             const hits: { targetId: number; amount: number }[] = [];
             const attacks: { unitId: number; targetId: number }[] = [];
+            const misses: { unitId: number; targetId: number }[] = [];
             for (const e of msg.events) {
               if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
               else if (e.e === 'gold') golds.push(e.amount);
               else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
               else if (e.e === 'atk') attacks.push({ unitId: e.unitId, targetId: e.targetId });
+              else if (e.e === 'miss') misses.push({ unitId: e.unitId, targetId: e.targetId });
               else if (e.e === 'dmg') hits.push({ targetId: e.targetId, amount: e.amount });
             }
-            pres?.onWorldTick({ kills, golds, casts, hits, attacks });
+            pres?.onWorldTick({ kills, golds, casts, hits, attacks, misses });
           }
           break;
         }
@@ -1501,10 +1509,12 @@ async function runRoyale(
             const casts: { unitId: number; key?: AbilityKey }[] = [];
             const hits: { targetId: number; amount: number }[] = [];
             const attacks: { unitId: number; targetId: number }[] = [];
+            const misses: { unitId: number; targetId: number }[] = [];
             for (const e of msg.events) {
               if (e.e === 'death') kills.push(royaleKill(e));
               else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
               else if (e.e === 'atk') attacks.push({ unitId: e.unitId, targetId: e.targetId });
+              else if (e.e === 'miss') misses.push({ unitId: e.unitId, targetId: e.targetId });
               else if (e.e === 'dmg') hits.push({ targetId: e.targetId, amount: e.amount });
             }
             pres.onWorldTick({
@@ -1513,6 +1523,7 @@ async function runRoyale(
               casts,
               hits,
               attacks,
+              misses,
               royale: royaleNotes(msg.events),
             });
           }

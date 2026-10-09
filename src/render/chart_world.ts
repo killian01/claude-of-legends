@@ -260,6 +260,14 @@ export class ChartWorld implements IWorld {
     return this.base.isVisible(team, unitId);
   }
 
+  // The base world's own zone: the charted copy stands on the window's
+  // plane, the rule measures on the ground the match stands on.
+  zoneSeen(team: TeamId, z: Readonly<Zone>): boolean {
+    const own = this.base.zones.get(z.id);
+    if (!own || !this.base.zoneSeen) return true;
+    return this.base.zoneSeen(team, own);
+  }
+
   teamBuff(team: TeamId) {
     return this.base.teamBuff(team);
   }

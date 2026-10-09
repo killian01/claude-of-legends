@@ -68,6 +68,9 @@ export class ReplayWorld implements IWorld {
   isVisible(team: TeamId, unitId: number): boolean {
     return this.sim.isVisible(team, unitId);
   }
+  zoneSeen(team: TeamId, z: Readonly<Zone>): boolean {
+    return this.sim.zoneSeen(team, z as Zone);
+  }
   teamBuff(team: TeamId): { until: number; stacks: number } | null {
     return this.sim.teamBuff(team);
   }

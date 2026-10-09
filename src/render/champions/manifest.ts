@@ -125,6 +125,10 @@ export interface ChampionVisualDef {
   tint?: number;
   // Whole-body opacity below 1 renders the champion translucent (Elowen).
   opacity?: number;
+  // Drawn translucent-capable from the load (opacity stays 1), so hiding
+  // fades the body by a uniform alone, never relinking its shader
+  // (render/status_veils.ts): a champion that hides often (Nisk's lurk).
+  fades?: boolean;
   props?: readonly ChampionPropDef[];
 }
 
@@ -415,8 +419,8 @@ export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
   // its arm. Quaternius's CC0 goblin (CREDITS.md), the roster's smallest.
   nisk: {
     url: '/models/champions/goblin.glb',
-    height: 1.45,
-    barY: 2.1,
+    height: 1.55,
+    barY: 2.2,
     // Darts leave the tube's end, held at the mouth.
     muzzle: { forward: 1.0, y: 1.05 },
     clips: {
@@ -433,8 +437,11 @@ export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
     tint: 0x9fd889,
     // The Idle clip bakes a different root facing (the goblin turns round).
     stripRootRotation: true,
+    // It hides often (Lie Low): its body fades without a shader relink.
+    fades: true,
     runSpeed: 3.2,
-    portrait: { clip: 'attack', time: 0.35, yaw: 0.5, zoom: 0.7 },
+    // Facing the camera: the goblin's eyes are the face of the card.
+    portrait: { clip: 'idle', time: 0.3, yaw: -0.4, zoom: 0.75 },
     props: [{ kind: 'blowgun', bone: 'Arm.R', rot: [-1.35, 0, 0.15] }],
   },
 };

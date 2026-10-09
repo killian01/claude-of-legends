@@ -62,7 +62,7 @@ export function measureScene(scene: THREE.Object3D): THREE.Box3 {
 // emissives. Applies the def's recolor/tint/opacity while it walks.
 export function toLambert(
   scene: THREE.Group,
-  def: Pick<ChampionVisualDef, 'recolor' | 'tint' | 'opacity'>,
+  def: Pick<ChampionVisualDef, 'recolor' | 'tint' | 'opacity' | 'fades'>,
 ): void {
   scene.traverse((child) => {
     const mesh = child as THREE.Mesh;
@@ -86,6 +86,7 @@ export function toLambert(
         out.transparent = true;
         out.opacity = def.opacity;
       }
+      if (def.fades) out.transparent = true;
       mat.dispose();
       return out;
     };

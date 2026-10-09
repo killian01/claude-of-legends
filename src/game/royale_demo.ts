@@ -50,7 +50,18 @@ const NAMES = [
   'Bramwell',
 ];
 
-const ROSTER = ['torv', 'vesk', 'sylra', 'dain', 'maera', 'fenn', 'korrath', 'elowen', 'rhoka'];
+const ROSTER = [
+  'torv',
+  'vesk',
+  'sylra',
+  'dain',
+  'maera',
+  'fenn',
+  'korrath',
+  'elowen',
+  'rhoka',
+  'nisk',
+];
 
 function result(v: RoyaleVariant, place: number, score: number): RoyaleResult {
   return {

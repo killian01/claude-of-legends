@@ -15,7 +15,7 @@ import { pointOnStage, rectOnStage, stageSizeOf } from '../game/match_stage';
 import { playCastSfx, playSfx } from '../game/sfx';
 import { attackWindupSeconds, RANGED_THRESHOLD } from '../sim/combat/auto_attack';
 import type { CastSpec } from '../sim/combat/casting';
-import { isRooted, isStunned } from '../sim/combat/status';
+import { isFumbled, isRooted, isStealthed, isStunned } from '../sim/combat/status';
 import { heartwoodOf } from '../sim/content/grafts';
 import { WRATH_EXECUTE_FRAC } from '../sim/content/rings';
 import type { Projectile } from '../sim/projectiles';
@@ -81,6 +81,7 @@ import {
   setRoyaleProjector,
 } from './royale_cues';
 import { pickShieldHolder, type ShieldCandidate } from './shield_holder';
+import { fumbleSwirl, StealthVeils } from './status_veils';
 import { crownHeight, crownLift, flightProgress, isStill } from './structure_fire';
 import type { RenderTerrain } from './terrain';
 import { CHARGE_S, nextChargeDelayS } from './tower_shot';
@@ -180,6 +181,8 @@ interface TrackedUnit {
   barY: number;
   lastHp: number;
   stunMark: THREE.Sprite | null;
+  // A fumbling champion's "?" (CONTEXT.md: Fumble), where a stun's "!" sits.
+  fumbleMark: THREE.Sprite | null;
   rootMark: THREE.Mesh | null;
   // The battle royale's hunted (ui/royale_hunted.ts markAuras): a ring at
   // the feet in the color of the mark the champion carries (the Wrath, the
@@ -240,6 +243,9 @@ export interface CombatNotes {
   hits: readonly { targetId: number; amount: number }[];
   // Auto-attacks fired by visible units, for swing animations.
   attacks: readonly { unitId: number; targetId: number }[];
+  // Strikes that landed nothing, their striker fumbling (CONTEXT.md:
+  // Fumble): a "Miss" rises over the target.
+  misses?: readonly { unitId: number; targetId: number }[];
 }
 
 // What the aim preview needs to draw a cast's range and shape.
@@ -385,6 +391,10 @@ export class Renderer {
   // any single unit (sprites carry userData.sharedMap).
   private markTexture: THREE.Texture | null = null;
   private readonly fct: FloatingText;
+  // Hidden champions the viewer still sees, half see-through, and the
+  // fumble's swirl clocks (status_veils.ts).
+  private readonly veils = new StealthVeils();
+  private readonly swirls = new Map<number, { lastAt: number }>();
   private readonly selfRing: THREE.Mesh;
   private readonly fogCanvas = document.createElement('canvas');
   private readonly fogTexture: THREE.CanvasTexture;
@@ -1436,6 +1446,12 @@ export class Renderer {
       );
     }
     if (impacted) playSfx('impact');
+    for (const miss of notes.misses ?? []) {
+      const t = this.tracked.get(miss.targetId) ?? this.tracked.get(miss.unitId);
+      const at = this.world.units.get(miss.targetId) ?? this.world.units.get(miss.unitId);
+      if (!t || !at || !t.mesh.visible) continue;
+      this.fct.spawn('Miss', '#f2dcae', at.pos.x, t.barY + 1.4, at.pos.z, 0.75);
+    }
     for (const cast of notes.casts) {
       const caster = this.world.units.get(cast.unitId);
       if (!caster) continue;
@@ -2215,6 +2231,7 @@ export class Renderer {
           barY,
           lastHp: u.hp,
           stunMark: null,
+          fumbleMark: null,
           rootMark: null,
           markAura: null,
           wrathMark: null,
@@ -2510,6 +2527,16 @@ export class Renderer {
         }
       }
       if (t.stunMark) t.stunMark.visible = stunned;
+      const fumbling = visible && !stunned && isFumbled(u, this.world.time);
+      if (fumbling && !t.fumbleMark) {
+        const mark = makeTextSprite('?', '#f0a050', 0.8);
+        if (mark) {
+          mark.position.set(0, t.barY + 1.65, 0);
+          t.overhead.add(mark);
+          t.fumbleMark = mark;
+        }
+      }
+      if (t.fumbleMark) t.fumbleMark.visible = fumbling;
       const rooted = visible && !stunned && isRooted(u, this.world.time);
       if (rooted && !t.rootMark) {
         const ring = new THREE.Mesh(
@@ -2523,6 +2550,23 @@ export class Renderer {
         t.rootMark = ring;
       }
       if (t.rootMark) t.rootMark.visible = rooted;
+      // Hidden but seen (its own side): half see-through, shimmering. A
+      // fumbling champion: dust wheeling over its head.
+      if (u.kind === 'champion') {
+        const hidden = visible && isStealthed(u, this.world.time);
+        // The rigged body only: its materials are its own (assets.ts), where
+        // the holder's rings and marks share theirs with the rest.
+        const body = this.championVisuals.get(id)?.root ?? null;
+        this.veils.step(id, body, hidden, t.curr.x, t.curr.z, t.barY * 0.8, this.vfx, nowMs);
+        if (fumbling) {
+          let clock = this.swirls.get(id);
+          if (!clock) {
+            clock = { lastAt: 0 };
+            this.swirls.set(id, clock);
+          }
+          fumbleSwirl(this.vfx, t.curr.x, t.barY + 0.9, t.curr.z, nowMs, clock);
+        }
+      }
 
       // The hunted's aura: everyone who sees the champion sees why every
       // globe shows it, pulsing in the mark's color.
@@ -2715,6 +2759,8 @@ export class Renderer {
           this.dying.push({ mesh: t.mesh, start: performance.now() });
         }
         this.tracked.delete(id);
+        this.veils.lift(id);
+        this.swirls.delete(id);
         const cv = this.championVisuals.get(id);
         if (cv) {
           this.championVisuals.delete(id);
@@ -2828,6 +2874,7 @@ export class Renderer {
           ? vis.zone(z.radius, colors, hostile)
           : buildZoneMesh(z, this.world, TEAM_COLORS[this.look(z.team)] ?? 0xffffff);
         mesh.position.set(z.pos.x, this.groundHeight(z.pos.x, z.pos.z) + 0.1, z.pos.z);
+        mesh.visible = !this.world.zoneSeen || this.world.zoneSeen(this.viewerTeam, z);
         // Telegraphs must never lose the draw-order lottery against the
         // river's translucent layers: lift catalog meshes above them.
         if (vis?.zone) {
@@ -3551,6 +3598,10 @@ export class Renderer {
       else fx.vis.shieldTick?.(fx.holder, now - fx.bornAt, (until - this.world.time) * 1000);
     }
     for (const [id, tz] of this.trackedZones) {
+      // A hidden pod shows only while the viewer's team sees it (the
+      // offline world answers; the online mirror only holds what is seen).
+      const zone = this.world.zones.get(id);
+      tz.mesh.visible = !zone || !this.world.zoneSeen || this.world.zoneSeen(this.viewerTeam, zone);
       if (!tz.custom) {
         const s = 1 + 0.05 * Math.sin(now * 0.006 + id);
         tz.mesh.scale.set(s, 1, s);

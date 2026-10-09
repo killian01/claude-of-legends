@@ -90,6 +90,9 @@ export interface WorldNotes {
   hits: readonly { targetId: number; amount: number }[];
   // Auto-attacks fired by visible units, for swing animations.
   attacks: readonly { unitId: number; targetId: number }[];
+  // Strikes that landed nothing (the fumble), for the "Miss" over the
+  // target; absent where the host tells none.
+  misses?: readonly { unitId: number; targetId: number }[];
   // The battle royale's events (net/royale_client.ts), for the HUD's
   // notices and its first steps; absent in a 5v5.
   royale?: readonly RoyaleNote[];
@@ -782,7 +785,8 @@ export function startPresentation(
         notes.golds.length > 0 ||
         notes.casts.length > 0 ||
         notes.hits.length > 0 ||
-        notes.attacks.length > 0
+        notes.attacks.length > 0 ||
+        (notes.misses?.length ?? 0) > 0
       )
         renderer.onCombatNotes(notes);
     }

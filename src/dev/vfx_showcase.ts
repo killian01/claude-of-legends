@@ -96,6 +96,8 @@ const SHOTS: Readonly<Record<string, Shot>> = {
   maera: { from: { x: 84, z: 75 }, aim: { x: 66, z: 75 }, key: 'R' },
   torv: { from: { x: 84, z: 80 }, aim: { x: 68, z: 71 }, key: 'R' },
   rhoka: { from: { x: 73, z: 71 }, aim: { x: 73, z: 71 }, key: 'R' },
+  // Nisk's pods lie hidden from the other side: the dart shows instead.
+  nisk: { from: { x: 77, z: 70 }, aim: { x: 75, z: 77 }, key: 'Q' },
   // The look demo, one shot per key: the same champion drawn four ways.
   look_q: { from: { x: 68, z: 84 }, aim: { x: 76.5, z: 79 }, key: 'Q' },
   look_w: { from: { x: 66, z: 75 }, aim: CENTER, key: 'W' },

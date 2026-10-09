@@ -23,6 +23,20 @@ import {
   wispImpact,
 } from './elowen_fx';
 import { lookVisual } from './looks';
+import {
+  bittertipCoat,
+  buildCloud,
+  buildDart,
+  buildPod,
+  cloudTick,
+  hightailBurst,
+  PEPPER,
+  pepperImpact,
+  pepperTrail,
+  podTick,
+  SOUR,
+  sourSplash,
+} from './nisk_fx';
 import { basicMat, flatDisc, flatRing, growSweep, pulseRim, telegraphZone } from './shapes';
 import { SPRITE } from './sprites';
 import {
@@ -800,6 +814,41 @@ export const SPELL_VFX: Readonly<Record<string, SpellVisual>> = {
   elowen_E: {
     castFx: (fx, x, z, dirX, dirZ, _colors, fromX, fromZ) =>
       driftingStep(fx, x, z, dirX, dirZ, fromX, fromZ),
+  },
+
+  // Nisk (nisk_fx.ts): darts from a tube, sour poison, a hidden pod.
+  // The autos: a short dart tipped in sour green, a spit of droplets.
+  nisk_A: {
+    projectile: () => buildDart(SOUR.main, 0.8),
+    impact: (fx, x, z) => sourSplash(fx, x, z),
+  },
+  // Pepper Dart: a dart shedding stinging orange dust, bursting in a puff
+  // at the victim's eyes.
+  nisk_Q: {
+    projectile: () => buildDart(PEPPER.main, 1.1),
+    projectileTick: (fx, x, z) => pepperTrail(fx, x, z),
+    impact: (fx, x, z) => pepperImpact(fx, x, z),
+  },
+  // Hightail: dust at the heels and wind streaks behind.
+  nisk_W: {
+    castFx: (fx, x, z, dirX, dirZ) => hightailBurst(fx, x, z, dirX, dirZ),
+  },
+  // Bittertip: the darts dipped, a green welling around the tube.
+  nisk_E: {
+    castFx: (fx, x, z) => bittertipCoat(fx, x, z),
+  },
+  // A Sourpod lying in wait: a half-buried bulb, ringed for its own team,
+  // warning-rimmed for an enemy close enough to see it.
+  nisk_R_trap: {
+    zone: (radius, _colors, hostile) => buildPod(radius, hostile),
+    zoneTick: (_fx, holder, _x, _z, _radius, ageMs) => podTick(holder, ageMs),
+  },
+  // The cloud a pod bursts into: it pops, then rolls and bubbles.
+  nisk_R: {
+    zone: (radius, _colors, hostile) => buildCloud(radius, hostile),
+    zoneTick: (fx, holder, x, z, radius, ageMs, _colors, dtMs) =>
+      cloudTick(fx, holder, x, z, radius, ageMs, dtMs),
+    castFx: (fx, x, z) => fx.sparkBurst(x, 0.6, z, SOUR.main, 6, 3, { life: 0.4, size: 0.3 }),
   },
 };
 
