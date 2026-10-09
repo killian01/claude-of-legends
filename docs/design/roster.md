@@ -96,7 +96,7 @@ A mobile duelist marksman on a rhythm of thirds.
 - Q, Shadow Volley: cone of arrows.
 - W, Hunter's Step: traveling dash that primes the Twinshot counter.
 - E, Pinning Arrow: single skillshot that roots at long range, slows up close.
-- R, Eclipse Rain: arrow storm zone that reveals enemies inside for its duration.
+- R, Eclipse Rain: arrow storm zone that reveals enemies inside for its duration, and hidden pods.
 
 ### Maera, Tidecaller (Support, healer)
 
@@ -137,7 +137,7 @@ eleventh champion, added after launch (`src/sim/content/champions/nisk.ts`).
 - Q, Pepper Dart: a dart of magic damage that makes its target fumble briefly: its attacks miss.
 - W, Hightail: a short sprint, and a little speed at all times once learned.
 - E, Bittertip: for a few seconds every attack poisons, each hit renewing the one poison instead of stacking another.
-- R, Sourpods: hidden pods from a store of charges, a few on the ground at once for minutes, seen by an enemy only from close by; an enemy champion stepping on one bursts it into a cloud of poison that slows.
+- R, Sourpods: hidden pods from a store of charges, a few on the ground at once for minutes, seen by an enemy only under its own reveal zone, never by walking near; an enemy champion stepping on one bursts it into a cloud of poison that slows.
 
 ## Coverage check
 
