@@ -2,7 +2,7 @@
 
 <img src="docs/screenshots/logo-readme.webp" alt="Claude of Legends" width="420">
 
-**A 5v5 MOBA born in a 48 hour vibe coding sprint: three lanes, ten champions, free in your browser right now.**
+**A 5v5 MOBA born in a 48 hour vibe coding sprint: three lanes, eleven champions, free in your browser right now.**
 
 **Play now: https://claudeoflegends.com/**
 
@@ -29,7 +29,7 @@ A smarter bot is a playbook, no engine code at all. Small and self-contained:
 
 ## What this is
 
-A complete mini MOBA you can play right now: three lanes, ten champions with
+A complete mini MOBA you can play right now: three lanes, eleven champions with
 full kits, jungle camps, three neutral creatures to fight over, fog of war,
 items, skins, a ladder, a Forge where you build a champion of your own, and an
 authoritative server for online play. No install. Online play
@@ -171,7 +171,7 @@ write the kit: a passive and four abilities, composed from the same
 primitives the roster is built out of, inside a power budget a
 deterministic validator enforces. Nothing a player writes ever runs as
 code in the sim, because a forged champion is data on the same engine as
-the ten (ADR 0010). From the splash you approved, the Forge derives the
+the roster (ADR 0010). From the splash you approved, the Forge derives the
 model reference, builds the 3D body and its weapon, and then rigs and
 animates it on a second, deliberate click, so you see the model before
 paying for the motion. Yours plays in the Forge queue, mixed with roster
