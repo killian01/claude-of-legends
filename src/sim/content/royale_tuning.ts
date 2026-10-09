@@ -37,7 +37,10 @@
 // back two steps (1.5 to 1.4); Sylra fell from 16.5 to 10.9 and took three
 // (1.35 to 1.5); Ashvyn, with Chainsap and Bloodsap, rose to 28.6 and gave
 // back one (0.7 to 0.65): Respawn back to 13.4 to 24.7 a seat over seeds
-// 1 to 6, a spread of 1.84.
+// 1 to 6, a spread of 1.84. Nisk joined at a marksman's 0.9 and 1.3 and took
+// 10.4 a seat in Respawn (seeds 1 to 6), the field's last; at 1.2 damage it
+// took 27.4, the first; at 1.05 it takes 16.2, mid-field, and the spread
+// of the eleven is 2.03 (from 2.16 for the ten).
 //
 // Data, but planet rules only: the 5v5 never reads it, so it stays out of
 // the content fingerprint (fingerprint.ts) and a change moves
@@ -59,8 +62,7 @@ export const PLANET_TUNING: Readonly<Record<string, PlanetTuning>> = {
   torv: { hp: 0.95, dmg: 1.55 },
   korrath: { hp: 0.9, dmg: 1.3 },
   maera: { hp: 1.05, dmg: 1.5 },
-  // The eleventh joined at a marksman's share, held to the report's band.
-  nisk: { hp: 1.3, dmg: 0.9 },
+  nisk: { hp: 1.3, dmg: 1.05 },
 };
 
 const NEUTRAL: PlanetTuning = { hp: 1, dmg: 1 };
