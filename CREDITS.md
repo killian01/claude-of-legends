@@ -50,7 +50,7 @@ falls back to the in-engine cinematic render when a file is missing
 | `vesk.webp` | Generated with Google Gemini from original Vesk concept art | Google Gemini output terms |
 | `korrath.webp` | Generated with Google Gemini from the Korrath prompt in docs/design/portrait-prompts.md | Google Gemini output terms |
 | `dain.webp`, `sylra.webp`, `fenn.webp`, `elowen.webp`, `ashvyn.webp`, `maera.webp`, `torv.webp`, `rhoka.webp` | Generated with Google Gemini from the prompts in docs/design/portrait-prompts.md | Google Gemini output terms |
-| `nisk.webp` | Rendered in-engine: the cinematic portrait (`src/render/champions/portrait.ts`) of the CC0 Quaternius goblin at 900x1200, until a painting from its prompt in docs/design/portrait-prompts.md replaces it | CC0 1.0 (the model) |
+| `nisk.webp` | Generated with an image model from the Nisk prompt in docs/design/portrait-prompts.md, supplied by killian01 | The generator's output terms |
 
 ## Tier emblems (`public/icons/tiers/`)
 
