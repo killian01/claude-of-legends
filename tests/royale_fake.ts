@@ -237,6 +237,10 @@ export class FakeRoyaleSim implements RoyaleSim {
     return this.sightOf(team).some((s) => dist(s.pos, p) <= SIGHT);
   }
 
+  zoneSeen(team: number, z: Zone): boolean {
+    return z.team === team || this.isPointVisible(team, z.pos.x, z.pos.z, z.pos.y);
+  }
+
   scoreboard(): readonly ScoreRow[] {
     return [...this.units.values()]
       .filter((u) => u.kind === 'champion')

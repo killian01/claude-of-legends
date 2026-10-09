@@ -160,6 +160,8 @@ export type EffectSpec =
   | { kind: 'taunt'; duration: number }
   | { kind: 'stealth'; duration: number }
   | { kind: 'blind'; duration: number; factor: number }
+  // The target's basic attacks miss for `duration` (CONTEXT.md: Fumble).
+  | { kind: 'fumble'; duration: number }
   // direction: 'away' from the source (default), 'aside' off the delivery's
   // travel line (kits-v2 knock-aside), or 'toCenter' of the resolved shape.
   | { kind: 'knockback'; distance: number; direction?: 'away' | 'aside' | 'toCenter' }
@@ -180,7 +182,19 @@ export type EffectSpec =
         onExpire?: readonly EffectSpec[];
       };
     }
-  | { kind: 'dot'; duration: number; perSecond: number; dtype: DamageType }
+  // perSecond grows with the rank like any base amount, plus the source's
+  // power by the ratios. refresh: one such dot per source on a target, a
+  // new one renewing it (the larger rate, the later end) instead of
+  // stacking beside it (Nisk's Bittertip: a poison every hit refreshes).
+  | {
+      kind: 'dot';
+      duration: number;
+      perSecond: number;
+      adRatio?: number;
+      apRatio?: number;
+      dtype: DamageType;
+      refresh?: boolean;
+    }
   | { kind: 'grievous'; duration: number; factor: number }
   | { kind: 'buff'; duration: number; msPct?: number; asPct?: number; armor?: number; mr?: number }
   | {
@@ -202,13 +216,15 @@ export type EffectSpec =
   // cooldown events: aim and target selection become resources).
   | { kind: 'cooldownRefund'; key: AbilityKey; pctOfRemaining: number }
   // Arms the target's next auto attack within `duration` with rider
-  // effects, optionally splashing around the struck victim.
+  // effects, optionally splashing around the struck victim; `hits` arms
+  // that many attacks inside the window instead of one.
   | {
       kind: 'empower';
       duration: number;
       bonus: readonly EffectSpec[];
       splashRadius?: number;
       splash?: readonly EffectSpec[];
+      hits?: number;
     };
 
 // Displaces a unit along v (a vector at its position, any length) by up to
@@ -273,7 +289,8 @@ export function applyEffects(
         spec.kind === 'knockback' ||
         spec.kind === 'pull' ||
         spec.kind === 'knockup' ||
-        spec.kind === 'blind')
+        spec.kind === 'blind' ||
+        spec.kind === 'fumble')
     ) {
       continue;
     }
@@ -330,6 +347,9 @@ export function applyEffects(
           factor: spec.factor,
         });
         break;
+      case 'fumble':
+        addStatus(target, { kind: 'fumble', until: ctx.time + held(target, spec.duration) });
+        break;
       case 'knockback': {
         const direction = spec.direction ?? 'away';
         if (direction === 'aside' && fx.lineFrom && fx.lineDir) {
@@ -383,15 +403,34 @@ export function applyEffects(
         });
         break;
       }
-      case 'dot':
+      case 'dot': {
+        const perSecond =
+          spec.perSecond * scale + (spec.adRatio ?? 0) * power.ad + (spec.apRatio ?? 0) * power.ap;
+        const until = ctx.time + spec.duration;
+        if (spec.refresh) {
+          const live = target.statuses.find(
+            (s) =>
+              s.kind === 'dot' &&
+              s.sourceId === sourceId &&
+              s.tag === 'refresh' &&
+              s.until > ctx.time,
+          );
+          if (live && live.kind === 'dot') {
+            live.until = Math.max(live.until, until);
+            live.perSecond = Math.max(live.perSecond, perSecond);
+            break;
+          }
+        }
         addStatus(target, {
           kind: 'dot',
-          until: ctx.time + spec.duration,
-          perSecond: spec.perSecond * scale,
+          until,
+          perSecond,
           sourceId,
           dtype: spec.dtype,
+          ...(spec.refresh ? { tag: 'refresh' as const } : {}),
         });
         break;
+      }
       case 'grievous':
         addStatus(target, {
           kind: 'grievous',
@@ -440,6 +479,7 @@ export function applyEffects(
           splashRadius: spec.splashRadius ?? 0,
           splash: spec.splash ?? [],
           scale,
+          hits: Math.max(1, spec.hits ?? 1),
         });
         break;
     }

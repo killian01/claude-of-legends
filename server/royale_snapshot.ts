@@ -201,6 +201,11 @@ function royaleEvents(
       case 'attack':
         if (sees(ev.unitId)) out.push({ e: 'atk', unitId: ev.unitId, targetId: ev.targetId });
         break;
+      case 'miss':
+        if (sees(ev.unitId) || sees(ev.targetId)) {
+          out.push({ e: 'miss', unitId: ev.unitId, targetId: ev.targetId });
+        }
+        break;
       case 'royale_land':
         if (sees(ev.unitId)) out.push({ e: 'royale_land', unitId: ev.unitId });
         break;
@@ -380,7 +385,7 @@ export function buildRoyaleSnapshot(
   }
   const zones: SnapMobile[] = [];
   for (const z of sim.zones.values()) {
-    if (z.sourceId !== self && !sim.isPointVisible(team, z.pos.x, z.pos.z, z.pos.y)) continue;
+    if (!sim.zoneSeen(team, z)) continue;
     zones.push(zoneRecord(z));
   }
   const walls: SnapWall[] = [];

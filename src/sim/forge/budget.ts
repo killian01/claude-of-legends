@@ -36,6 +36,9 @@ export const EFFECT_PRICES = {
   knockbackPerUnit: 22,
   pullPerUnit: 18,
   blindPerFactorSecond: 90,
+  // A fumble takes the attacks away whole, a root's worth for an attacker
+  // and nothing for a caster: priced between a blind and a root.
+  fumblePerSecond: 80,
   stealthPerSecond: 35,
   untargetablePerSecond: 110,
   shieldWeight: 0.9,
@@ -51,6 +54,9 @@ export const EFFECT_PRICES = {
   conditionalWeakBranch: 0.25,
   cooldownRefundPerPct: 60,
   empowerSplashWeight: 0.8,
+  // How many strikes an empower arming several attacks is paid for, per
+  // second of its window: about the roster's attack pace.
+  empowerStrikesPerSecond: 0.9,
 } as const;
 
 export const CAST_PRICES = {
@@ -75,6 +81,12 @@ export const CAST_PRICES = {
   dashUntargetable: 45,
   wallPerLengthSecond: 4.5,
   recastCost: 40,
+  // A pod pays out only when an enemy steps on it, and it lies hidden for
+  // minutes until one does: its burst at a little over half price.
+  trapWeight: 0.6,
+  // A store of charges spends its first ones back to back: each charge past
+  // the first adds this share of one more delivery.
+  chargeBurstWeight: 0.25,
 } as const;
 
 // Availability: a payload on a short cooldown is most of a champion's
@@ -136,7 +148,11 @@ export function costOfEffect(e: EffectSpec): number {
         P.healWeight
       );
     case 'dot':
-      return e.perSecond * e.duration * P.dotWeight;
+      return (
+        (e.perSecond + ((e.adRatio ?? 0) + (e.apRatio ?? 0)) * P.ratioValue) *
+        e.duration *
+        P.dotWeight
+      );
     case 'slow':
       return e.pct * e.duration * P.slowPerPctSecond;
     case 'root':
@@ -153,6 +169,8 @@ export function costOfEffect(e: EffectSpec): number {
       return e.distance * P.pullPerUnit;
     case 'blind':
       return e.duration * e.factor * P.blindPerFactorSecond;
+    case 'fumble':
+      return e.duration * P.fumblePerSecond;
     case 'stealth':
       return e.duration * P.stealthPerSecond;
     case 'untargetable':
@@ -184,8 +202,22 @@ export function costOfEffect(e: EffectSpec): number {
     }
     case 'cooldownRefund':
       return e.pctOfRemaining * P.cooldownRefundPerPct;
-    case 'empower':
-      return costOfEffects(e.bonus) + costOfEffects(e.splash) * P.empowerSplashWeight;
+    case 'empower': {
+      // Several strikes are paid one each, up to the window's pace; a
+      // refreshing dot never stacks, so the strikes keep one running for
+      // the window and its own tail instead.
+      const strikes = Math.min(
+        Math.max(1, e.hits ?? 1),
+        Math.max(1, e.duration * P.empowerStrikesPerSecond),
+      );
+      let bonus = 0;
+      for (const b of e.bonus) {
+        if (b.kind === 'dot' && b.refresh && strikes > 1) {
+          bonus += costOfEffect({ ...b, duration: b.duration + e.duration });
+        } else bonus += costOfEffect(b) * strikes;
+      }
+      return bonus + costOfEffects(e.splash) * P.empowerSplashWeight * strikes;
+    }
   }
 }
 
@@ -252,6 +284,12 @@ export function costOfCast(spec: CastSpec, castRange: number): number {
     }
     case 'wall':
       return spec.length * spec.duration * C.wallPerLengthSecond;
+    case 'trap': {
+      const b = spec.burst;
+      const ticks = b.duration / (b.tickEvery ?? 0.5);
+      const payload = costOfEffects(b.onEnter) + costOfEffects(b.onTick) * ticks * C.zoneTickWeight;
+      return payload * (0.8 + b.radius * 0.15) * (1 + castRange * 0.012) * C.trapWeight;
+    }
   }
 }
 
@@ -264,7 +302,11 @@ export function costOfAbility(def: AbilityDef): number {
     const maxRank = Math.max(...def.atRank.map((o) => o.rank));
     delivery = Math.max(delivery, costOfCast(specForRank(def, maxRank), def.castRange));
   }
-  const availability = AVAIL_PIVOT / (AVAIL_SOFT + def.cooldown);
+  // A store of charges is available at its recharge, not at the short
+  // beat between two casts, and its first charges come back to back.
+  if (def.charges) delivery *= 1 + (def.charges.max - 1) * CAST_PRICES.chargeBurstWeight;
+  const clock = def.charges ? Math.max(def.cooldown, def.charges.every) : def.cooldown;
+  const availability = AVAIL_PIVOT / (AVAIL_SOFT + clock);
   const manaRelief = Math.min(MANA_RELIEF_CAP, def.manaCost * MANA_RELIEF_PER_POINT);
   const windupRelief = Math.min(WINDUP_RELIEF_CAP, (def.windup ?? 0) * WINDUP_RELIEF_PER_SECOND);
   let cost = delivery * availability * (1 - manaRelief) * (1 - windupRelief);

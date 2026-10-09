@@ -111,6 +111,8 @@ function clause(e: EffectSpec): string {
       return `grants ${span('tt-util', 'stealth')} for ${e.duration}s`;
     case 'blind':
       return `dims their sight to ${span('tt-cc', pct(e.factor))} for ${e.duration}s`;
+    case 'fumble':
+      return `makes their attacks miss for ${span('tt-cc', `${e.duration}s`)}`;
     case 'knockback':
       if (e.direction === 'aside') return `sweeps them ${span('tt-cc', `${e.distance}`)} aside`;
       if (e.direction === 'toCenter') {
@@ -123,8 +125,15 @@ function clause(e: EffectSpec): string {
       return `knocks airborne for ${span('tt-cc', `${e.duration}s`)}`;
     case 'untargetable':
       return `becomes ${span('tt-util', 'untargetable')} for ${e.duration}s`;
-    case 'dot':
-      return `deals ${span(DTYPE_CLS[e.dtype] ?? 'tt-true', `${e.perSecond}/s`)} ${e.dtype} damage over ${e.duration}s`;
+    case 'dot': {
+      const cls = DTYPE_CLS[e.dtype] ?? 'tt-true';
+      if (!e.adRatio && !e.apRatio && !e.refresh) {
+        return `deals ${span(cls, `${e.perSecond}/s`)} ${e.dtype} damage over ${e.duration}s`;
+      }
+      const rate = amount(e.perSecond, e.adRatio ?? 0, e.apRatio ?? 0, cls);
+      const renew = e.refresh ? ', renewed rather than stacked by a second one' : '';
+      return `deals ${rate} ${e.dtype} damage a second for ${e.duration}s${renew}`;
+    }
     case 'grievous':
       return `cuts their healing by ${span('tt-cc', pct(e.factor))} for ${e.duration}s`;
     case 'buff': {
@@ -148,7 +157,11 @@ function clause(e: EffectSpec): string {
     case 'cooldownRefund':
       return `refunds ${span('tt-util', pct(e.pctOfRemaining))} of ${e.key}'s remaining cooldown`;
     case 'empower': {
-      let s = `empowers your next attack within ${e.duration}s: ${joinAnd(e.bonus.map(clause))}`;
+      const which =
+        (e.hits ?? 1) > 1
+          ? `every attack for ${e.duration}s`
+          : `your next attack within ${e.duration}s`;
+      let s = `empowers ${which}: ${joinAnd(e.bonus.map(clause))}`;
       if (e.splash?.length) {
         s += `; it splashes to enemies around the victim (radius ${e.splashRadius ?? 0}): ${joinAnd(
           e.splash.map(clause),
@@ -251,6 +264,21 @@ function describeCast(spec: CastSpec, castRange: number): string[] {
         `Raises a stone rampart (length ${spec.length}) across your aim for ${spec.duration}s.`,
         'It blocks walking and dashes; shots pass over it.',
       ];
+    case 'trap': {
+      const b = spec.burst;
+      const lines = [
+        `Plants a hidden pod (range ${castRange}) that lies for ${spec.duration}s and arms ` +
+          `after ${spec.armDelay}s; enemies see it only within ${spec.seenWithin}. ` +
+          `At most ${spec.maxLive} lie at once.`,
+        `An enemy champion stepping on it bursts it into a cloud (radius ${b.radius}, ` +
+          `${b.duration}s).`,
+      ];
+      if (b.onEnter?.length) lines.push(`Enemies the cloud catches: ${sentence(b.onEnter)}.`);
+      if (b.onTick?.length) {
+        lines.push(`Enemies inside, every ${b.tickEvery ?? 0.5}s: ${sentence(b.onTick)}.`);
+      }
+      return lines;
+    }
     case 'enemy_target': {
       const lines = [`Strikes an enemy within ${castRange}: ${sentence(spec.effects)}.`];
       if (spec.selfEffects?.length) lines.push(`On yourself: ${sentence(spec.selfEffects)}.`);
@@ -273,7 +301,12 @@ export function describeAbility(key: AbilityKey, def: AbilityDef): string[] {
   // The flavor line first, the story; the mechanics follow in the game's
   // own words, derived, the same for every champion.
   if (def.flavor) lines.push(span('tt-flavor', escapeAuthored(def.flavor)));
-  lines.push(`${def.manaCost} mana. ${def.cooldown}s cooldown.`);
+  if (def.charges) {
+    lines.push(
+      `${def.manaCost} mana. ${span('tt-util', `${def.charges.max} charges`)}, one back every ` +
+        `${def.charges.every}s; ${def.cooldown}s between two casts.`,
+    );
+  } else lines.push(`${def.manaCost} mana. ${def.cooldown}s cooldown.`);
   if (def.windup && def.windup > 0) {
     lines.push(`Winds up for ${def.windup}s before it fires; both teams see the telegraph.`);
   }

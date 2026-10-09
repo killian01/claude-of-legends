@@ -34,6 +34,9 @@ export interface RoyaleSim {
   // champion's sight shows.
   isVisible(team: number, unitId: number): boolean;
   isPointVisible(team: number, x: number, z: number, y?: number): boolean;
+  // Whether a seat sees a zone: its own, an enemy pod only from close by,
+  // any other while its center is in sight (Sim.zoneSeen).
+  zoneSeen(team: number, z: Zone): boolean;
   scoreboard(): readonly ScoreRow[];
   // The landing point a seat picked during the drop.
   pickDrop(unitId: number, p: Vec3): void;

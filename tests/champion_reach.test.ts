@@ -41,6 +41,9 @@ function reachOfSpec(spec: CastSpec, castRange: number): number {
     case 'enemy_target':
     case 'wall':
       return castRange;
+    // A pod is planted at its cast range and bursts under a step on its rim.
+    case 'trap':
+      return castRange + spec.radius;
   }
 }
 

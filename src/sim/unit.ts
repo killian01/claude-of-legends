@@ -3,6 +3,7 @@
 // units; what varies is data (stats, kind), not the entity shape.
 
 import type { CoachOrder } from './coach';
+import type { ChargeState } from './combat/charges';
 import type { Status } from './combat/status';
 import type { CampDef, CampKind } from './content/camps';
 import type { ChampionDef } from './content/champions';
@@ -19,6 +20,7 @@ import { WARDEN_BODY, WARDEN_GOLD_BOUNTY } from './content/warden';
 import type { DashState } from './dashes';
 import { type FavorStacks, NO_FAVORS } from './favors';
 import { copy } from './geo';
+import { type LurkState, newLurkState } from './lurk';
 import type { LanePreference } from './playbook/types';
 import type { AbilityKey, TeamId, Vec2 } from './types';
 
@@ -71,6 +73,10 @@ export interface Unit {
   statuses: Status[];
   // Ready-at sim times per ability key.
   cooldowns: Partial<Record<AbilityKey, number>>;
+  // The stores of the abilities cast from charges (combat/charges.ts),
+  // per key, from the moment the ability is learned; empty for a champion
+  // whose kit carries none.
+  charges: Partial<Record<AbilityKey, ChargeState>>;
   // Ability ranks (basics start at 1, R unlocks at champion level 6) and
   // unspent skill points (one per level-up past 1).
   abilityRanks: Record<AbilityKey, number>;
@@ -80,6 +86,14 @@ export interface Unit {
   skin: number;
   // Generic per-champion passive counter (Heat, Twinshot...).
   passiveStacks: number;
+  // The last sim time this unit acted: began an attack, cast an ability or
+  // a sigil, or pressed a recast (every act that breaks stealth).
+  actedAt: number;
+  // The lurk of a champion whose passive hides it when it keeps still
+  // (lurk.ts): where and since when it has kept still, and the brush it
+  // hides in while hidden (-1 for hidden in the open). Null for every
+  // champion whose passive declares no lurk.
+  lurk: LurkState | null;
   // Last time ANY damage landed (Shieldskin-style passives).
   lastDamagedAt: number;
   // Last time this unit's damage landed on anyone; with lastDamagedAt,
@@ -253,12 +267,15 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     },
     statuses: [],
     cooldowns: {},
+    charges: {},
     // Every rank is earned: level 1 grants one point to place (the level 1
     // skill choice the genre opens with).
     abilityRanks: { Q: 0, W: 0, E: 0, R: 0 },
     skillPoints: 0,
     skin: 0,
     passiveStacks: 0,
+    actedAt: -999,
+    lurk: null,
     lastDamagedAt: -999,
     lastDealtDamageAt: -999,
     outOfCombatBonus: 0,
@@ -349,6 +366,7 @@ export function createChampion(id: number, team: TeamId, pos: Vec2, def: Champio
   u.xpBounty = 200;
   u.sigils = ['riftstep', 'mend'];
   u.sigilCooldowns = [0, 0];
+  u.lurk = def.passive.lurk ? newLurkState(pos) : null;
   return u;
 }
 

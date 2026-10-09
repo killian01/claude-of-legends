@@ -13,10 +13,12 @@ import type { CombatCtx } from '../sim_context';
 import type { SpellLook } from '../spell_look';
 import { isSpellTarget } from '../spell_targets';
 import { effectiveRank, RANK_BASE_SCALE, RANK_CD_SCALE } from '../stats';
+import { plantTrap, type TrapSpec } from '../traps';
 import type { AbilityKey, Vec2 } from '../types';
 import { hostile, type Unit } from '../unit';
 import { raiseWall } from '../walls';
 import { allyDashAim } from './ally_dash';
+import { type ChargeSpec, chargesOf, openStore, spendCharge } from './charges';
 import { applyEffects, type EffectSpec, type Power } from './effects';
 import {
   addStatus,
@@ -110,7 +112,10 @@ export type CastSpec =
       untargetableDuringTravel?: boolean;
     }
   // A temporary rampart perpendicular to the cast direction (walls.ts).
-  | { kind: 'wall'; length: number; duration: number };
+  | { kind: 'wall'; length: number; duration: number }
+  // A hidden pod planted at the aim (traps.ts): unseen by enemies until
+  // one stands close, it bursts into a field when one steps on it.
+  | TrapSpec;
 
 export interface AbilityDef {
   name: string;
@@ -141,6 +146,10 @@ export interface AbilityDef {
   // the follow-up. v2's only recast blinks the caster back to where it
   // pressed the first cast. Budgeted like any cast; no mana, no cooldown.
   recast?: { window: number; returnBlink: true };
+  // Cast from a store of charges (combat/charges.ts): each cast spends one,
+  // one comes back every `every` seconds up to `max`, and `cooldown` is
+  // only the beat between two casts.
+  charges?: ChargeSpec;
 }
 
 // The live spec for a rank: the highest atRank override at or below `rank`,
@@ -399,6 +408,9 @@ export function executeCast(
       raiseWall(ctx, caster.id, caster.team, at, away(at, caster.pos), spec.length, spec.duration);
       return true;
     }
+    case 'trap':
+      plantTrap(ctx, caster, spec, clampToRange(caster.pos, aim, castRange), power, vfx);
+      return true;
   }
 }
 
@@ -426,6 +438,7 @@ export function castAbility(
       caster.activeDash = null;
     }
     breakStealth(caster);
+    caster.actedAt = ctx.time;
     ctx.events.push({ type: 'cast', unitId: caster.id, key });
     return true;
   }
@@ -437,6 +450,8 @@ export function castAbility(
   // Rank 0 means locked (R before champion level 6).
   if (rank <= 0) return false;
   if ((caster.cooldowns[key] ?? 0) > ctx.time) return false;
+  if (def.charges) openStore(caster, key, def.charges, rank, ctx.time);
+  if (def.charges && chargesOf(caster, key) < 1) return false;
   if (caster.mana < def.manaCost) return false;
 
   const power = {
@@ -468,8 +483,10 @@ export function castAbility(
   }
 
   caster.cooldowns[key] = ctx.time + def.cooldown * (1 - RANK_CD_SCALE * (rank - 1));
+  if (def.charges) spendCharge(caster, key, def.charges, rank, ctx.time);
   caster.mana -= def.manaCost;
   breakStealth(caster);
+  caster.actedAt = ctx.time;
   passiveOf(caster)?.onCast?.(ctx, caster, key);
   // A Graft's say on the cooldown just set (Overgrowth); none in the 5v5.
   if (caster.grafts.length > 0) runGraftCast(ctx, caster, key);

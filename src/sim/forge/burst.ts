@@ -57,7 +57,10 @@ function burstOfEffect(e: EffectSpec): number {
         (e.maxHpPct ?? 0) * BURST_REF.hp
       );
     case 'dot':
-      return e.perSecond * Math.min(e.duration, BURST_REF.tickWindow);
+      return (
+        (e.perSecond + (e.adRatio ?? 0) * BURST_REF.ad + (e.apRatio ?? 0) * BURST_REF.ap) *
+        Math.min(e.duration, BURST_REF.tickWindow)
+      );
     case 'conditional':
       return Math.max(burstOfEffects(e.effects), burstOfEffects(e.otherwise));
     case 'mark':
@@ -107,6 +110,13 @@ export function burstOfSpec(spec: CastSpec): number {
       return burstOfEffects(spec.onLand) + burstOfEffects(spec.passThrough);
     case 'wall':
       return 0;
+    // One pod bursts under one step: its entry payload and the cloud's
+    // ticks inside the window, like a zone's.
+    case 'trap':
+      return (
+        burstOfEffects(spec.burst.onEnter) +
+        burstOfEffects(spec.burst.onTick) * ticksIn(spec.burst.duration, spec.burst.tickEvery)
+      );
   }
 }
 

@@ -137,6 +137,8 @@ export function defaultEffect(kind: EffectSpec['kind']): EffectSpec {
       return { kind, duration: 1.5 };
     case 'blind':
       return { kind, duration: 1, factor: 0.4 };
+    case 'fumble':
+      return { kind, duration: 1 };
     case 'knockback':
       return { kind, distance: 1.5 };
     case 'pull':
@@ -361,6 +363,20 @@ export function defaultCast(kind: CastSpec['kind']): CastSpec {
       };
     case 'wall':
       return { kind, length: 4, duration: 4 };
+    case 'trap':
+      return {
+        kind,
+        radius: 0.9,
+        duration: 120,
+        armDelay: 1,
+        seenWithin: 3.5,
+        maxLive: 3,
+        burst: {
+          radius: 2.5,
+          duration: 2,
+          onEnter: [{ kind: 'damage', base: 60, apRatio: 0.4, dtype: 'magic' }],
+        },
+      };
   }
 }
 
@@ -392,6 +408,9 @@ const CAST_LISTS: Record<CastSpec['kind'], readonly { key: string; label: string
     { key: 'selfEffects', label: 'on self' },
   ],
   wall: [],
+  // Not offered to the Forge (forge/bounds.ts names no pod): listed for
+  // the record's shape only.
+  trap: [],
 };
 
 export function buildCastEditor(holder: { spec: CastSpec }, hooks: KitHooks): HTMLElement {

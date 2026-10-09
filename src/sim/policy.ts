@@ -29,8 +29,10 @@ export const POLICY_CONTRACT_VERSION = 0;
 // A visible status on a champion, the on-screen state ring made observable
 // (additive v0 block). Curated to what a human viewer reads off the screen;
 // internal bookkeeping statuses (marks, empowers, buff stats) stay hidden.
+// 'fumble' (its attacks miss, CONTEXT.md: Fumble) is an additive v0 kind:
+// a policy that does not know it reads past it.
 export interface ObsStatus {
-  kind: 'stun' | 'root' | 'airborne' | 'slow' | 'shield';
+  kind: 'stun' | 'root' | 'airborne' | 'slow' | 'shield' | 'fumble';
   until: number;
 }
 
@@ -111,6 +113,10 @@ export interface ObsZone {
   radius: number;
   friendly: boolean;
   detonateAt: number | null;
+  // A hidden pod (additive v0 field, CONTEXT.md: Sourpod): it bursts when
+  // an enemy champion steps on it. An enemy pod is listed only while one
+  // of the team's champions stands close enough to see it.
+  trap?: true;
 }
 
 // A temporary ability wall (additive v0 block). Walls are terrain: both
@@ -168,9 +174,17 @@ export interface ObsSelf {
   level: number;
   gold: number;
   dead: boolean;
-  // Cooldown, mana, and rank gates resolved; the decision budget is not
-  // part of readiness (a ready ability can still be budget-rejected).
+  // Cooldown, mana, rank and charge gates resolved; the decision budget is
+  // not part of readiness (a ready ability can still be budget-rejected).
   abilityReady: Record<AbilityKey, boolean>;
+  // The charges in store of the abilities cast from charges (additive v0
+  // field, CONTEXT.md: Charge), only for those keys: the count on the
+  // button a person reads. Absent when the kit carries none.
+  abilityCharges?: Partial<Record<AbilityKey, number>>;
+  // The own champion's visible statuses (additive v0 field), the chips a
+  // person reads under their own portrait: a fumble tells it its attacks
+  // will miss. Absent when there are none.
+  statuses?: readonly ObsStatus[];
   // Effective ability ranks (R reads 0 until champion level 6) and unspent
   // skill points. Additive v0 fields, like `invulnerable` on ObsUnit.
   abilityRanks: Record<AbilityKey, number>;

@@ -41,6 +41,7 @@ const STATUS_WORDS: Readonly<Record<Status['kind'], [word: string, tip: string]>
   taunt: ['Taunted', 'Taunted'],
   buff: ['Boost', 'Boosted'],
   blind: ['Blind', 'Blinded'],
+  fumble: ['Fumble', 'Fumbling: attacks miss'],
   empower: ['Empower', 'Next attack empowered'],
 };
 

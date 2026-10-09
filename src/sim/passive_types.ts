@@ -2,6 +2,7 @@
 // hooked into fixed engine points. Passives must stay deterministic: sim
 // state and ctx only, no wall clock, no unseeded randomness.
 
+import type { LurkSpec } from './lurk';
 import type { CombatCtx } from './sim_context';
 import type { DamageType } from './types';
 import type { Unit } from './unit';
@@ -11,6 +12,9 @@ export type DamageVia = 'attack' | 'ability' | 'other';
 export interface ChampionPassive {
   name: string;
   description: string;
+  // Data, not a hook: the champion hides when it keeps still or keeps to
+  // a brush (lurk.ts), stepped by the engine every tick.
+  lurk?: LurkSpec;
   // After an auto-attack of `self` lands on `target`.
   onAttackHit?(ctx: CombatCtx, self: Unit, target: Unit): void;
   // After `self` pays for an ability cast (before it resolves).

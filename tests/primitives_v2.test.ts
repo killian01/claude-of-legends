@@ -172,6 +172,7 @@ describe('empowered attack', () => {
       splashRadius: 2.5,
       splash: [{ kind: 'slow', pct: 0.4, duration: 6 }],
       scale: 1,
+      hits: 1,
     });
     sim.orderAttack(a.id, b.id);
     for (let i = 0; i < 30; i++) sim.tick();

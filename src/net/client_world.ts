@@ -55,6 +55,8 @@ function toStatus(k: string, until: number, v: number | undefined): Status | nul
       return { kind: 'untargetable', until };
     case 'stealth':
       return { kind: 'stealth', until };
+    case 'fumble':
+      return { kind: 'fumble', until };
     case 'slow':
       return { kind: 'slow', until, pct: v ?? 0 };
     case 'shield':
@@ -123,10 +125,13 @@ function materializeUnit(s: SnapUnit): Unit {
     },
     statuses: [],
     cooldowns: {},
+    charges: {},
     abilityRanks: { Q: 1, W: 1, E: 1, R: 0 },
     skillPoints: 0,
     skin: s.sk ?? 0,
     passiveStacks: 0,
+    actedAt: -999,
+    lurk: null,
     lastDamagedAt: -999,
     lastDealtDamageAt: -999,
     outOfCombatBonus: 0,
@@ -654,6 +659,11 @@ export class ClientWorld implements IWorld {
         self.dead = msg.self.dead;
         self.respawnAt = msg.self.respawnAt;
         self.cooldowns = msg.self.cooldowns;
+        // The charge stores (CONTEXT.md: Charge), for the HUD's count.
+        self.charges = {};
+        for (const [key, pair] of Object.entries(msg.self.ch ?? {})) {
+          if (pair) self.charges[key as AbilityKey] = { count: pair[0], nextAt: pair[1] };
+        }
         self.abilityRanks = msg.self.abilityRanks;
         self.skillPoints = msg.self.skillPoints;
         self.sigilCooldowns = msg.self.sigilCooldowns;

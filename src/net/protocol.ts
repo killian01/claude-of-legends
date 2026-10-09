@@ -256,6 +256,10 @@ export interface SelfSnap {
   dead: boolean;
   respawnAt: number;
   cooldowns: Partial<Record<AbilityKey, number>>;
+  // The stores of the abilities cast from charges (CONTEXT.md: Charge), per
+  // key: the charges in store and when the next comes back. Absent when
+  // the kit carries none.
+  ch?: Partial<Record<AbilityKey, [count: number, nextAt: number]>>;
   // Effective ability ranks and unspent skill points, for the HUD pips.
   abilityRanks: Record<AbilityKey, number>;
   skillPoints: number;
@@ -324,6 +328,9 @@ export type SnapEvent =
   | { e: 'dmg'; targetId: number; amount: number }
   // A visible unit fired an auto-attack; drives swing animations.
   | { e: 'atk'; unitId: number; targetId: number }
+  // A visible unit's strike landed nothing: it fumbled (CONTEXT.md:
+  // Fumble). Told to whoever sees the striker or the target.
+  | { e: 'miss'; unitId: number; targetId: number }
   | { e: 'victory'; team: TeamId }
   | RoyaleSnapEvent;
 

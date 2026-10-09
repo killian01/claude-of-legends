@@ -18,6 +18,7 @@ const DELIVERY: Record<CastSpec['kind'], string> = {
   burst: 'a blast around the caster',
   dash: 'a swift dash',
   wall: 'a conjured wall that blocks the path',
+  trap: 'a hidden pod that bursts underfoot',
 };
 
 // The effect kinds worth drawing, in the order they should be mentioned;
@@ -35,6 +36,7 @@ const EFFECT_WORDS: readonly { kind: EffectSpec['kind']; word: string }[] = [
   { kind: 'taunt', word: 'a taunt' },
   { kind: 'slow', word: 'a chilling slow' },
   { kind: 'blind', word: 'blinding' },
+  { kind: 'fumble', word: 'fumbled strikes' },
   { kind: 'stealth', word: 'vanishing from sight' },
   { kind: 'untargetable', word: 'untouchability' },
   { kind: 'grievous', word: 'wound-deepening' },
@@ -63,6 +65,8 @@ function effectLists(spec: CastSpec): readonly (readonly EffectSpec[] | undefine
       return [spec.onLand, spec.selfEffects, spec.passThrough];
     case 'wall':
       return [];
+    case 'trap':
+      return [spec.burst.onEnter, spec.burst.onTick];
   }
 }
 

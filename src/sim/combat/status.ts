@@ -22,6 +22,9 @@ export type Status =
   | { kind: 'taunt'; until: number; sourceId: number }
   | { kind: 'stealth'; until: number }
   | { kind: 'blind'; until: number; factor: number }
+  // The holder's basic attacks miss while it lasts (CONTEXT.md: Fumble):
+  // the swing is spent and nothing lands. Its spells still do.
+  | { kind: 'fumble'; until: number }
   // burst: a detonation payload fired when the shield breaks or expires
   // (combat/shield_burst.ts); plain shields carry none.
   | {
@@ -37,7 +40,9 @@ export type Status =
       };
     }
   // The holder's next auto attack carries `bonus` riders (and optionally a
-  // splash around the victim); consumed by the strike that spends it.
+  // splash around the victim); consumed by the strike that spends it. With
+  // `hits` above one it arms that many strikes inside its window, each
+  // spending one (Nisk's Bittertip arms every attack for a few seconds).
   | {
       kind: 'empower';
       until: number;
@@ -45,6 +50,7 @@ export type Status =
       splashRadius: number;
       splash: readonly EffectSpec[];
       scale: number;
+      hits: number;
     }
   // Marks are keyed per SOURCE: two casters stacking marks on one target
   // build separate pools, so their trigger thresholds never cross.
@@ -56,7 +62,9 @@ export type Status =
       sourceId: number;
       dtype: DamageType;
       // The Wrath's burn (combat/damage.ts): one per target, refreshed.
-      tag?: 'wrath';
+      // A 'refresh' dot is one per source on a target: a new one renews it
+      // instead of stacking beside it (effects.ts, the dot's refresh).
+      tag?: 'wrath' | 'refresh';
     }
   | { kind: 'grievous'; until: number; factor: number }
   | {
@@ -127,6 +135,10 @@ export function isUntargetable(u: Unit, time: number): boolean {
 
 export function isStealthed(u: Unit, time: number): boolean {
   return has(u, 'stealth', time);
+}
+
+export function isFumbled(u: Unit, time: number): boolean {
+  return has(u, 'fumble', time);
 }
 
 export function breakStealth(u: Unit): void {
@@ -232,13 +244,15 @@ export function absorbWithShields(u: Unit, amount: number, time: number): number
   return left;
 }
 
-// Takes the first live empowered-attack status off the unit and returns it;
-// the caller (the auto-attack strike) applies its riders.
+// Spends one strike of the first live empowered-attack status and returns
+// it; the caller (the auto-attack strike) applies its riders. The status
+// leaves with its last strike.
 export function consumeEmpower(u: Unit, time: number): Extract<Status, { kind: 'empower' }> | null {
   for (let i = 0; i < u.statuses.length; i++) {
     const s = u.statuses[i]!;
     if (s.kind === 'empower' && s.until > time) {
-      u.statuses.splice(i, 1);
+      if (s.hits > 1) s.hits -= 1;
+      else u.statuses.splice(i, 1);
       return s;
     }
   }

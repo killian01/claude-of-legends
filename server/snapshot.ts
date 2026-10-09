@@ -17,7 +17,7 @@ import type { Projectile } from '../src/sim/projectiles';
 import type { Sim, SimEvent } from '../src/sim/sim';
 import { effectiveRank } from '../src/sim/stats';
 import { otherTeam, TWO_TEAMS } from '../src/sim/teams';
-import type { TeamId } from '../src/sim/types';
+import type { AbilityKey, TeamId } from '../src/sim/types';
 import type { Unit } from '../src/sim/unit';
 import type { Wall } from '../src/sim/walls';
 import type { Zone } from '../src/sim/zones';
@@ -48,12 +48,16 @@ export function ccChips(u: Unit, time: number): { k: string; v?: number }[] {
   let markStacks = 0;
   for (const s of u.statuses) {
     if (s.until <= time) continue;
+    // A stealthed unit reaches only its own team's snapshots (an enemy
+    // never sees it at all): what draws the shimmer on a hidden ally.
     if (
       s.kind === 'stun' ||
       s.kind === 'root' ||
       s.kind === 'recall' ||
       s.kind === 'airborne' ||
-      s.kind === 'untargetable'
+      s.kind === 'untargetable' ||
+      s.kind === 'fumble' ||
+      s.kind === 'stealth'
     ) {
       out.push({ k: s.kind });
     } else if (s.kind === 'slow') out.push({ k: 'slow', v: round2(s.pct) });
@@ -181,6 +185,18 @@ export function wallRecord(w: Wall): SnapWall {
   return rec;
 }
 
+// The charge stores on the self block, absent for a kit with none.
+function chargesRecord(u: Unit): Pick<SelfSnap, 'ch'> {
+  const ch: NonNullable<SelfSnap['ch']> = {};
+  let any = false;
+  for (const [key, st] of Object.entries(u.charges)) {
+    if (!st) continue;
+    ch[key as AbilityKey] = [st.count, round2(st.nextAt)];
+    any = true;
+  }
+  return any ? { ch } : {};
+}
+
 // The own champion's block, what every host tells its seat alike: the
 // numbers the HUD draws and what the prediction walks on. `path` sends the
 // path still to walk as x, z pairs (the plane's prediction reads it).
@@ -195,6 +211,7 @@ export function selfRecord(u: Unit, time: number, seat: SeatAck, path = true): S
     dead: u.dead,
     respawnAt: round2(u.respawnAt),
     cooldowns: { ...u.cooldowns },
+    ...chargesRecord(u),
     // Effective ranks: R already reads 1 at level 6 pre-investment.
     abilityRanks: {
       Q: effectiveRank(u, 'Q'),
@@ -261,7 +278,9 @@ export function buildSnapshot(
   }
   const zones: SnapMobile[] = [];
   for (const z of sim.zones.values()) {
-    if (z.team !== team && !sim.isPointVisible(team, z.pos.x, z.pos.z, z.pos.y)) continue;
+    // An enemy pod only while a champion of the team stands close (the
+    // one rule, Sim.zoneSeen, the bots' observation reads too).
+    if (!sim.zoneSeen(team, z)) continue;
     zones.push(zoneRecord(z));
   }
   // Walls are terrain: both teams always see them (they block everyone's
@@ -318,6 +337,11 @@ export function buildSnapshot(
       snapEvents.push({ e: 'cast', unitId: ev.unitId });
     } else if (ev.type === 'attack' && sim.isVisible(team, ev.unitId)) {
       snapEvents.push({ e: 'atk', unitId: ev.unitId, targetId: ev.targetId });
+    } else if (
+      ev.type === 'miss' &&
+      (sim.isVisible(team, ev.unitId) || sim.isVisible(team, ev.targetId))
+    ) {
+      snapEvents.push({ e: 'miss', unitId: ev.unitId, targetId: ev.targetId });
     } else if (ev.type === 'victory') {
       snapEvents.push({ e: 'victory', team: ev.team });
     }

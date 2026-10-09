@@ -3,6 +3,7 @@
 // is enforced by construction here, exactly like the server-side snapshot
 // scoping is for human clients.
 
+import { chargesOf } from './combat/charges';
 import { effectiveMoveSpeed } from './combat/status';
 import { heartwoodOf } from './content/grafts';
 import { SIGILS } from './content/sigils';
@@ -35,7 +36,20 @@ const OBS_STATUS_KINDS: readonly ObsStatus['kind'][] = [
   'airborne',
   'slow',
   'shield',
+  'fumble',
 ];
+
+// A unit's statuses as a viewer reads them, absent when none shows.
+function visibleStatuses(u: Unit, time: number): ObsStatus[] | undefined {
+  const visible: ObsStatus[] = [];
+  for (const st of u.statuses) {
+    if (st.until <= time) continue;
+    if ((OBS_STATUS_KINDS as readonly string[]).includes(st.kind)) {
+      visible.push({ kind: st.kind as ObsStatus['kind'], until: st.until });
+    }
+  }
+  return visible.length > 0 ? visible : undefined;
+}
 
 // The motion a viewer sees on screen: a dash in flight travels at its own
 // speed, a walking unit steps toward its next waypoint at effective speed
@@ -82,11 +96,17 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
 
   const abilityReady = { Q: false, W: false, E: false, R: false };
   const abilityRanks = { Q: 0, W: 0, E: 0, R: 0 };
+  let abilityCharges: Partial<Record<AbilityKey, number>> | null = null;
   for (const key of KEYS) {
     const a = def.abilities[key];
     abilityRanks[key] = effectiveRank(u, key);
     abilityReady[key] =
       (u.cooldowns[key] ?? 0) <= sim.time && u.mana >= a.manaCost && abilityRanks[key] > 0;
+    if (a.charges) {
+      const n = chargesOf(u, key);
+      abilityCharges = { ...(abilityCharges ?? {}), [key]: n };
+      if (n < 1) abilityReady[key] = false;
+    }
     // ADR 0005: an armed recast window reads as ready; the press resolves
     // the follow-up with no mana or cooldown gate.
     if (u.recastArmed && u.recastArmed.key === key && u.recastArmed.until > sim.time) {
@@ -132,14 +152,8 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       row.vz = vel.vz;
     }
     if (other.kind === 'champion') {
-      const visible: ObsStatus[] = [];
-      for (const st of other.statuses) {
-        if (st.until <= sim.time) continue;
-        if ((OBS_STATUS_KINDS as readonly string[]).includes(st.kind)) {
-          visible.push({ kind: st.kind as ObsStatus['kind'], until: st.until });
-        }
-      }
-      if (visible.length > 0) row.statuses = visible;
+      const visible = visibleStatuses(other, sim.time);
+      if (visible) row.statuses = visible;
       if (other.championId) row.championId = other.championId;
       row.items = [...other.items];
       row.level = other.level;
@@ -188,7 +202,9 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
   const zones: ObsZone[] = [];
   for (const z of sim.zones.values()) {
     const friendly = z.team === u.team;
-    if (!friendly && !sim.isPointVisible(u.team, z.pos.x, z.pos.z, z.pos.y)) continue;
+    // One rule with the wire: an enemy pod only while a champion of the
+    // team stands close enough to see it (traps.ts).
+    if (!sim.zoneSeen(u.team, z)) continue;
     zones.push({
       x: z.pos.x,
       z: z.pos.z,
@@ -196,6 +212,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       radius: z.radius,
       friendly,
       detonateAt: z.detonateAt,
+      ...(z.trap ? { trap: true as const } : {}),
     });
   }
   // Memory of the vanished: enemy champions the team saw recently but
@@ -244,6 +261,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
   }
 
   const pit = sim.wardenPit();
+  const selfStatuses = visibleStatuses(u, sim.time);
   return {
     tick: sim.tickCount,
     time: sim.time,
@@ -262,6 +280,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       gold: u.gold,
       dead: u.dead,
       abilityReady,
+      ...(abilityCharges ? { abilityCharges } : {}),
       abilityRanks,
       skillPoints: u.skillPoints,
       sigils: [...u.sigils],
@@ -278,6 +297,7 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
       recalling: u.statuses.some((s) => s.kind === 'recall' && s.until > sim.time),
       drinking: draughtLeft(u, sim.time),
       struckAt: u.lastHitByChampion !== 0 ? u.lastHitAt : null,
+      ...(selfStatuses ? { statuses: selfStatuses } : {}),
       // The owner's coach order, additive: absent for every uncoached seat.
       ...(u.coachOrder ? { coachOrder: u.coachOrder } : {}),
       // On the planet (additive v0 fields): the third coordinate, where the

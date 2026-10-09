@@ -7,6 +7,7 @@ import { applyEffects, type EffectSpec, type Power } from './combat/effects';
 import { copy, dist } from './geo';
 import type { CombatCtx } from './sim_context';
 import { isSpellTarget } from './spell_targets';
+import { stepTrap, type TrapState } from './traps';
 import type { TeamId, Vec2 } from './types';
 import type { Unit } from './unit';
 
@@ -43,6 +44,10 @@ export interface Zone {
   // Cosmetic source tag ('championId_KEY' or 'sigil_id'). Renderers pick
   // per-ability visuals from it; never gameplay.
   vfx: string | null;
+  // A hidden pod (traps.ts): it ticks by its own rule, bursts into its
+  // field when an enemy champion steps on it, and is seen only as
+  // trapSeen says. Absent on every other zone.
+  trap?: TrapState;
 }
 
 function unitsInside(ctx: CombatCtx, z: Zone, enemies: boolean): Unit[] {
@@ -62,6 +67,10 @@ const BOUNDARY_SHELL = 1.2;
 
 export function stepZones(ctx: CombatCtx): void {
   for (const z of [...ctx.zones.values()]) {
+    if (z.trap) {
+      stepTrap(ctx, z);
+      continue;
+    }
     const inside = unitsInside(ctx, z, true);
 
     if (z.onEnter.length > 0) {
