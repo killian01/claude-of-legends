@@ -8,7 +8,7 @@
 //   after the zones: the Dusk's burn, then a Seedfall's impact ->
 //   in the deaths: takedowns, loot, experience, places ->
 //   after the deaths: caches, Seedfalls, Risings, marks, Clamors, Grafts,
-//   the leader, the end.
+//   the Last light, the leader, the end.
 // Everything here moves with the match and is in the world checkpoint
 // (snapshot, restore); the schedule and the layout are fixed at the start.
 
@@ -47,6 +47,7 @@ import {
   stepGrafts,
   tallyOf,
 } from './grafts';
+import { lastLightFactor, stepLastLight } from './last_light';
 import type { RoyaleGround, RoyaleLayout } from './layout';
 import { creatureXp, grantXp, landingLevels, takedownXp } from './levels';
 import { GOLDEN_PIECES, grantPieces, healShare, manaShare, seatBuild, streakShare } from './loot';
@@ -567,7 +568,8 @@ export class RoyaleMode {
         const share = streakShare(taker.killStreak);
         healShare(taker, takedownHealOf(taker, TAKEDOWN_HEAL) * share);
         manaShare(taker, TAKEDOWN_MANA * share);
-        const score = pay.score * burr.factor;
+        // Respawn's Last light counts it double (last_light.ts).
+        const score = pay.score * burr.factor * lastLightFactor(this.state, sim.time);
         this.state.scores.set(taker.id, (this.state.scores.get(taker.id) ?? 0) + score);
         if (pay.snuffed !== null) {
           this.emit(sim, {
@@ -734,6 +736,7 @@ export class RoyaleMode {
     stepBurrs(this, sim);
     stepClamors(this, sim);
     stepGrafts(this, sim);
+    stepLastLight(this, sim);
     // The end.
     if (s.stage !== 'play') return;
     if (this.variant === 'one_life') {

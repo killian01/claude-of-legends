@@ -79,7 +79,7 @@ export const CLAMOR_S = 3;
 // the planet's rules move with each tranche of play changes without moving the
 // 5v5's REPLAY_VERSION or the content fingerprint, and a royale replay loader
 // refuses a record made under other rules. Bumped once per merged tranche.
-export const ROYALE_RULES_VERSION = 6;
+export const ROYALE_RULES_VERSION = 7;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {
@@ -192,9 +192,9 @@ export interface ClamorState {
   at: number;
 }
 
-// Respawn's Last light as its events tell it: the heads-up, the double
-// takedowns, the final seconds where a death is final.
-export type LastLightStep = 'heads_up' | 'double' | 'final';
+// Respawn's Last light as its events tell it (last_light.ts): the double
+// takedowns beginning.
+export type LastLightStep = 'double';
 
 export interface RoyaleState {
   variant: RoyaleVariant;

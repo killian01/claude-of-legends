@@ -1184,8 +1184,9 @@ revive already carries.)
 _Avoid_: second wind, gulag, redeploy, extra life
 
 **Last light**:
-Respawn's last closing of the Dusk, until the light goes out at the end of the match: a
-takedown counts double, and in its last fifteen seconds a death is final.
+Respawn's last closing of the Dusk, until the light goes out at the end of the match (its
+last 72 seconds): a takedown counts double on the score, a Lodestar's four, for people and
+bots alike, and the rank line shows "x2" while it lasts. No death is final.
 _Avoid_: sudden death, final circle
 
 **Hastening**:
@@ -1220,8 +1221,9 @@ _Avoid_: ground pound
 **Death beat**:
 The camera on whoever took a champion down, right after the fall. In One life, the two and a
 half seconds it holds on them, before following them. In Respawn, the first second of the wait,
-before the globe rises: it follows them while the world shows their body or a mark shows them,
-holds on where the champion fell otherwise; on the globe the Burr's red light shows where they
-stand, and the camera is back on the champion as it returns. A fallen champion sees nothing,
-so the beat shows only what the fog lets through.
+before the globe rises: it follows them, the fallen seat alone being sent their champion and
+where they stand through the wait, so their body is drawn though a fallen champion sees nothing;
+it holds on where the champion fell when nobody landed the fall or they are down too. On the
+globe the Burr's red light shows where they stand, and the camera is back on the champion as
+it returns. No bot's observation reads any of it.
 _Avoid_: kill cam, death recap

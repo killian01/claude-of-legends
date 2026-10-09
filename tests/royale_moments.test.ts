@@ -192,6 +192,20 @@ describe('Snuffed out and Payback', () => {
   });
 });
 
+describe('the Last light', () => {
+  it('calls it in Respawn with its sound, then what it changes, kept on its line', () => {
+    const calls = watching('respawn').onNotes([{ kind: 'last_light', step: 'double' }]);
+    expect(texts(calls)).toEqual(['LAST LIGHT', 'Takedowns count double until the light goes out']);
+    expect(calls[0]).toMatchObject({ spotlight: true, sfx: 'lastlight' });
+    expect(calls[1]).toMatchObject({ keep: true });
+    expect(calls[1]?.sfx).toBeUndefined();
+  });
+
+  it('says nothing of it in One life', () => {
+    expect(watching('one_life').onNotes([{ kind: 'last_light', step: 'double' }])).toEqual([]);
+  });
+});
+
 describe('the voice', () => {
   it('speaks only lines recorded on disk, never rampage', () => {
     const m = watching('one_life');

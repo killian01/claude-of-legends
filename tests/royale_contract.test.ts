@@ -29,7 +29,7 @@ import { FakeRoyaleSim, fakeFactory, spot } from './royale_fake';
 import { loadPlanet } from './royale_planet';
 
 // Every optional block on the wire (src/net/royale_wire.ts SnapRoyale).
-const NEW_BLOCK_KEYS = ['offer', 'gr', 'sf', 'ri', 'mk', 'cl', 'rk', 'gap', 'rp', 'ar', 'fi', 'wa'];
+const NEW_BLOCK_KEYS = ['offer', 'gr', 'sf', 'ri', 'mk', 'cl', 'rk', 'gap', 'rp', 'ar', 'wa'];
 
 describe('the state', () => {
   it('holds every new field at its default, in the sim and on the fake', () => {

@@ -71,6 +71,20 @@ export type SnapClamor = [number, number, number, number];
 // Arrival's, src/sim/royale/grace.ts) from when an order ends it.
 export type SnapGrace = [number, number, number, number, number, number?];
 
+// The killer a fallen Respawn seat watches through its wait (the Death
+// beat, src/game/death_beat.ts): a dead champion sees nothing, so the
+// mirror draws the killer from this alone. Its unit id, champion, skin and
+// team, where it stands, and its health and maximum for the bar.
+export interface SnapWatch {
+  i: number;
+  c: string;
+  sk: number;
+  t: number;
+  at: WirePoint;
+  h: number;
+  m: number;
+}
+
 // The recipient's own open Graft offer: its grade, the three cards, and
 // when card 0 is taken for them.
 export interface SnapGraftOffer {
@@ -141,10 +155,9 @@ export interface SnapRoyale {
   // when an order ends it]; absent when none. Sent every snapshot while any
   // is graced.
   ar?: SnapGrace[];
-  // Respawn's Last light: 1 once a death is final.
-  fi?: 1;
-  // The champion the recipient watches once out, when not their own.
-  wa?: number;
+  // Respawn: the champion that took the recipient down, through the wait
+  // (CONTEXT.md: Death beat), while it stands; absent otherwise.
+  wa?: SnapWatch;
 }
 
 // Sent to each person when their match ends or they are out for good.

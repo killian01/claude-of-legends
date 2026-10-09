@@ -31,9 +31,11 @@ import type {
   SeatLabel,
   SnapCache,
   SnapRoyale,
+  SnapWatch,
   WirePoint,
 } from './royale_wire';
 import { type DrawnSelf, pathOfPairs, SelfPredictor } from './self_predict';
+import { watchRecord } from './watch_body';
 
 const SAP = ITEMS.sapdraught?.drink;
 const DRAUGHT_PER_SECOND = SAP ? SAP.heal / SAP.seconds : 1;
@@ -227,6 +229,9 @@ export class ClientWorld implements IWorld {
   // Clamors, the own Grafts): the last of each, kept between sends.
   private kept: Pick<SnapRoyale, 'sf' | 'ri' | 'mk' | 'cl' | 'gr'> = {};
   private readonly seats = new Map<number, SeatLabel>();
+  // The killer's body drawn from the mode block's wa through a Respawn
+  // wait (net/watch_body.ts), by unit id; null when none is.
+  private watched: number | null = null;
 
   // Match-scoped champion resolution, mirroring the server sim's registry:
   // the Forge queue delivers the match's forged definitions at setup and
@@ -309,6 +314,36 @@ export class ClientWorld implements IWorld {
     this.dropPicks = [];
     this.kept = {};
     this.seats.clear();
+    this.watched = null;
+  }
+
+  // The killer the fallen champion watches through its wait (the mode
+  // block's wa), after the snapshot's own units: drawn from wa while the
+  // snapshot sends no record of it, moved with each wa, let go when wa
+  // ends. A record of its own (the killer back in sight) takes over the
+  // body in place.
+  private applyWatch(w: SnapWatch | undefined, sent: ReadonlySet<number>): void {
+    const held = this.watched;
+    if (held !== null && (sent.has(held) || !w || w.i !== held)) {
+      if (!sent.has(held)) this.units.delete(held);
+      this.watched = null;
+    }
+    if (!w || sent.has(w.i)) return;
+    const rec = watchRecord(w);
+    const body = this.units.get(w.i);
+    if (this.watched === w.i && body) {
+      body.pos.x = rec.x;
+      body.pos.y = rec.y;
+      body.pos.z = rec.z;
+      body.hp = rec.h;
+      body.maxHp = rec.m;
+      return;
+    }
+    if (body) return;
+    const unit: MirrorUnit = materializeUnit(rec);
+    unit.champion = unit.championId ? this.champions.get(unit.championId) : null;
+    this.units.set(w.i, unit);
+    this.watched = w.i;
   }
 
   private applyRoyale(r: SnapRoyale): void {
@@ -738,6 +773,7 @@ export class ClientWorld implements IWorld {
     }
 
     if (msg.royale) this.applyRoyale(msg.royale);
+    if (this.royaleMatch) this.applyWatch(msg.royale?.wa, new Set(msg.units.map((s) => s.i)));
     // The kill feed names champions the mirror never saw.
     for (const e of msg.events) {
       if (e.e === 'death' || e.e === 'royale_out') {

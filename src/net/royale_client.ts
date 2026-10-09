@@ -129,7 +129,7 @@ function nameOf<K extends string>(v: unknown, key: K): Partial<Record<K, string>
 
 const RISINGS: readonly string[] = ['pyrefang', 'voidmaul', 'warden'];
 const MARKS: readonly string[] = ['lodestar', 'ablaze', 'wrath', 'slayer'];
-const LAST_LIGHT: readonly string[] = ['heads_up', 'double', 'final'];
+const LAST_LIGHT: readonly string[] = ['double'];
 
 export function royaleNotes(events: readonly unknown[] | undefined): RoyaleNote[] {
   const notes: RoyaleNote[] = [];

@@ -18,7 +18,7 @@ describe('the match arc, inert', () => {
     });
   }
 
-  for (const key of ['rp', 'ar', 'fi']) {
+  for (const key of ['rp', 'ar']) {
     it(`sends no ${key} block`, () => {
       expect(fakeSnap().snap().royale).not.toHaveProperty(key);
     });

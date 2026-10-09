@@ -38,6 +38,7 @@ export type MomentSfx =
   | 'chime'
   | 'gong'
   | 'boom'
+  | 'lastlight'
   | 'multikill';
 
 // One call: what to show, what to play, and how big.
@@ -214,7 +215,7 @@ export class RoyaleMoments {
   }
 
   // The mode's notes: the run the viewer snuffed out, the Seedfalls called
-  // and landing. A batch's Seedfalls make one call (Respawn's two seeds
+  // and landing, Respawn's Last light beginning. A batch's Seedfalls make one call (Respawn's two seeds
   // land together): the call kept on its line with the seconds to the
   // landing, `time` the match's clock, and the landing's line without a
   // sound, since the impact's boom is played by distance
@@ -239,6 +240,8 @@ export class RoyaleMoments {
         landsAt = Math.min(landsAt, n.landsAt);
       } else if (n.kind === 'seedfall_land') {
         landed += 1;
+      } else if (n.kind === 'last_light' && this.variant === 'respawn') {
+        calls.push(...LAST_LIGHT_CALLS);
       }
     }
     if (called > 0) {
@@ -263,6 +266,26 @@ export class RoyaleMoments {
     return calls;
   }
 }
+
+// Respawn's Last light beginning (src/sim/royale/last_light.ts): its name
+// in the spotlight with its call, then what it changes, kept on its line.
+export const LAST_LIGHT_COLOR = '#ffd36b';
+export const LAST_LIGHT_CALLS: readonly MomentCall[] = [
+  {
+    text: 'LAST LIGHT',
+    color: LAST_LIGHT_COLOR,
+    spotlight: true,
+    holdMs: 3000,
+    sfx: 'lastlight',
+    duckMs: RUN_DUCK_MS,
+  },
+  {
+    text: 'Takedowns count double until the light goes out',
+    color: LAST_LIGHT_COLOR,
+    keep: true,
+    holdMs: 4200,
+  },
+];
 
 function countWord(n: number): string {
   return n === 2 ? 'Two' : n === 3 ? 'Three' : String(n);
