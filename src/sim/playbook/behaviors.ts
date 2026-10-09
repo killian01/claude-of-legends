@@ -20,6 +20,7 @@ import {
   ESCORT_MIN,
   FARM_RANGE,
   FIGHT_TARGET_RADIUS,
+  fumbled,
   hardCCd,
   homewardPoint,
   JOIN_RANGE,
@@ -337,8 +338,12 @@ function fight(
   const range = ctx.attackRange;
   const mode = stance === 'auto' ? (range >= RANGED_MIN_RANGE ? 'kite' : 'front') : stance;
   const cast = pickCast(ctx, champ, committed);
+  // Its attacks would miss (CONTEXT.md: Fumble): the spells still go, and
+  // between them it gives ground instead of swinging at nothing.
+  const missing = fumbled(s, obs.time);
   if (mode === 'front') {
     if (cast) return cast;
+    if (missing && dc <= CHAMPION_ATTACK_RANGE) return kiteStep(ctx, champ);
     if (dc <= CHAMPION_ATTACK_RANGE) return { kind: 'attack', targetId: champ.id };
     // Told to hold when alone, or the odds under the commit: no walk-in;
     // the plays below (join, fall back, farm) take the slot instead.
@@ -363,9 +368,10 @@ function fight(
   // held for a strike is damage lost), then the strike on the clock, then
   // the step between strikes.
   if (cast) return cast;
-  const ready = (s.attackReadyAt ?? 0) <= obs.time;
+  const ready = (s.attackReadyAt ?? 0) <= obs.time && !missing;
   const inReach = dc <= range + 0.5;
   if (ready && inReach) return { kind: 'attack', targetId: champ.id };
+  if (missing && threat && td < range) return kiteStep(ctx, threat);
   if (threat && td < range * KITE_DANGER_FRAC && !securing) return kiteStep(ctx, threat);
   if (inReach) return { kind: 'noop' };
   if (!committed) return null;

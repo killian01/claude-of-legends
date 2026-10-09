@@ -141,6 +141,19 @@ export function aimAt(sense: Sense, target: ObsUnit, def: AbilityDef, rng: Rng):
   const at = p3(target);
   const spec = def.spec;
   let aim = at;
+  if (spec.kind === 'trap' && !hardCCd(target, sense.obs.time)) {
+    // A pod goes where the target will stand when it arms, within reach.
+    const v = { x: target.vx ?? 0, y: target.vy ?? 0, z: target.vz ?? 0 };
+    const speed = norm(v);
+    if (speed > 0.05) {
+      aim = along(at, scale(v, 1 / speed) as Vec3, speed * (spec.armDelay + 0.25), R);
+    }
+    const d = dist(sense.me, aim);
+    if (d > def.castRange) {
+      const dir = dirTo(sense.me, aim);
+      if (dir) aim = along(sense.me, dir as Vec3, def.castRange, R);
+    }
+  }
   if (spec.kind === 'skillshot' && !hardCCd(target, sense.obs.time)) {
     const v = { x: target.vx ?? 0, y: target.vy ?? 0, z: target.vz ?? 0 };
     const speed = norm(v);

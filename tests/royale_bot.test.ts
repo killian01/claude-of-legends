@@ -9,6 +9,7 @@
 // a dead Respawn seat's pick of where to come back.
 
 import { describe, expect, it } from 'vitest';
+import type { AbilityDef } from '../src/sim/combat/casting';
 import {
   AMBUSH_WAIT_S,
   CALL_WALK_SPEED,
@@ -1393,5 +1394,83 @@ describe('the Risings and the hunted', () => {
     // A slayer, at full health after its creature, is no threat to flee.
     const slayer = obs(here, { royale: { marks: [mark(7, at, { kind: 'slayer' })] } });
     expect(callOf(slayer, gentle)).toBeNull();
+  });
+});
+
+describe('pods and the fumble on the planet', () => {
+  it('plants a pod where the enemy will stand when it arms, within its reach', () => {
+    const at = along(here, east, 4, R);
+    const v = north;
+    const e = enemy(9, at, { vx: v.x * 3.7, vy: v.y * 3.7, vz: v.z * 3.7 });
+    const r: AbilityDef = {
+      name: 'Test pod',
+      manaCost: 0,
+      cooldown: 1,
+      castRange: 6,
+      spec: {
+        kind: 'trap',
+        radius: 0.9,
+        duration: 60,
+        armDelay: 1,
+        seenWithin: 3.5,
+        maxLive: 3,
+        burst: { radius: 2, duration: 1 },
+      },
+    };
+    if (r.spec.kind !== 'trap') throw new Error('a pod');
+    const sense = buildSense(obs(here, { units: [e] }), royale(), layout, strong);
+    const lead = 3.7 * (r.spec.armDelay + 0.25);
+    const ahead = along(at, v, lead, R);
+    let err = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const aim = aimAt(sense, e, r, new Rng(seed));
+      expect(dist(here, aim)).toBeLessThanOrEqual(r.castRange + strong.aimError + 1e-6);
+      err += dist(aim, ahead);
+    }
+    expect(err / 20).toBeLessThan(0.5);
+  });
+
+  it('rounds a pod it sees instead of walking onto it', () => {
+    const pod = along(here, east, 1.8, R);
+    const o: Observation = {
+      ...obs(here),
+      zones: [
+        {
+          x: pod.x,
+          y: pod.y,
+          z: pod.z,
+          radius: 0.9,
+          friendly: false,
+          detonateAt: null,
+          trap: true,
+        },
+      ],
+    };
+    const a = decide(o, new Rng(2), layout, gentle);
+    expect(a.kind).toBe('move');
+    expect(dist(point(a), pod)).toBeGreaterThan(dist(here, pod));
+  });
+
+  it('gives ground while its attacks would miss, instead of swinging', () => {
+    const at = along(here, east, 3, R);
+    const e = enemy(9, at);
+    const spent = { Q: false, W: false, E: false, R: false };
+    const fumbling = obs(
+      here,
+      { units: [e] },
+      {
+        struckAt: 19.8,
+        abilityReady: spent,
+        sigilReady: [false, false],
+        statuses: [{ kind: 'fumble', until: 21 }],
+      },
+    );
+    expect(decide(fumbling, new Rng(1), layout, strong).kind).not.toBe('attack');
+    const plain = obs(
+      here,
+      { units: [e] },
+      { struckAt: 19.8, abilityReady: spent, sigilReady: [false, false] },
+    );
+    expect(decide(plain, new Rng(1), layout, strong).kind).toBe('attack');
   });
 });

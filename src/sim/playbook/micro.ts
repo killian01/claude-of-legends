@@ -102,6 +102,16 @@ export function hardCCd(u: ObsUnit, time: number): boolean {
   );
 }
 
+// The bot's own attacks miss right now (CONTEXT.md: Fumble), what its own
+// status chips tell a person: a strike would be a swing for nothing.
+export function fumbled(s: ObsSelf, time: number): boolean {
+  return (s.statuses ?? []).some((st) => st.kind === 'fumble' && st.until > time);
+}
+
+// A seen enemy pod (CONTEXT.md: Sourpod) this close beyond its own rim is
+// stepped around, the way a person who sees one walks wide of it.
+export const POD_WARY_M = 1.0;
+
 // Predictive aim (kits-v2 bots): lead a skillshot by the target's observed
 // velocity over the bolt's flight time; anything else fires at the body.
 // The lead never reaches past the bolt's max range.
@@ -112,6 +122,18 @@ function aimAt(
   time: number,
 ): { x: number; z: number } {
   const spec = def.spec;
+  if (spec.kind === 'trap' && !hardCCd(target, time)) {
+    // A pod is planted where the target will stand when it arms.
+    const lead = spec.armDelay + 0.25;
+    const px = target.x + (target.vx ?? 0) * lead;
+    const pz = target.z + (target.vz ?? 0) * lead;
+    const pd = hypot(px - s.x, pz - s.z);
+    if (pd > def.castRange && pd > 0) {
+      const k = def.castRange / pd;
+      return { x: s.x + (px - s.x) * k, z: s.z + (pz - s.z) * k };
+    }
+    return { x: px, z: pz };
+  }
   if (spec.kind !== 'skillshot' || hardCCd(target, time)) return { x: target.x, z: target.z };
   const d = hypot(target.x - s.x, target.z - s.z);
   const eta = d / spec.speed;
@@ -424,6 +446,19 @@ export function dodge(ctx: SlotContext): Action | null {
   for (const zn of obs.zones ?? []) {
     if (zn.friendly) continue;
     const d = hypot(s.x - zn.x, s.z - zn.z);
+    if (zn.trap && d <= zn.radius + SELF_RADIUS + POD_WARY_M) {
+      // A seen pod ahead: step round it, along its rim, on the side the
+      // bot already stands off its center (the walk it was on resumes past
+      // it). Straight back out would leave the walk to lead in again.
+      const ux = d > 0.05 ? (s.x - zn.x) / d : 1;
+      const uz = d > 0.05 ? (s.z - zn.z) / d : 0;
+      const side = ((s.id & 1) === 0 ? 1 : -1) as 1 | -1;
+      const out = zn.radius + SELF_RADIUS + POD_WARY_M + 0.6;
+      const mx = zn.x + ux * out - uz * side * DODGE_STEP;
+      const mz = zn.z + uz * out + ux * side * DODGE_STEP;
+      if (inTowerReach(mx, mz) && !inTowerReach(s.x, s.z)) return towardHome(ctx, out);
+      return { kind: 'move', x: mx, z: mz };
+    }
     if (d > zn.radius + SELF_RADIUS) continue;
     const ux = d > 0.05 ? (s.x - zn.x) / d : 1;
     const uz = d > 0.05 ? (s.z - zn.z) / d : 0;

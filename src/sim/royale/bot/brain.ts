@@ -31,8 +31,14 @@ import {
   type RoyaleSkill,
   sharpenedSkill,
 } from '../../content/bots/royale_skills';
-import { dist, dot, norm, scale, sub, turnLeft, type Vec3 } from '../../geo';
-import { KITE_DANGER_FRAC, KITE_STEP, RANGED_MIN_RANGE } from '../../playbook/micro';
+import { dirTo, dist, dot, norm, scale, sub, turnLeft, type Vec3 } from '../../geo';
+import {
+  fumbled,
+  KITE_DANGER_FRAC,
+  KITE_STEP,
+  POD_WARY_M,
+  RANGED_MIN_RANGE,
+} from '../../playbook/micro';
 import type { Action, Observation, ObsRoyale, ObsUnit } from '../../policy';
 import type { Rng } from '../../rng';
 import { depthInside, insideCap } from '../dusk';
@@ -164,6 +170,14 @@ export function dodge(sense: Sense, rng: Rng): Action | null {
     if (zn.friendly) continue;
     const at = p3(zn);
     const d = dist(me, at);
+    if (zn.trap && d <= zn.radius + SELF_RADIUS + POD_WARY_M) {
+      // A seen pod ahead: round it along its rim (playbook/micro.ts dodge),
+      // no dice: a person who sees one never walks onto it.
+      const out = awayFrom(sense, at, zn.radius + SELF_RADIUS + POD_WARY_M + 0.6 - d);
+      const away = dirTo(at, me);
+      const side = away ? (turnLeft(away, me) as Vec3) : null;
+      return move(side ? along(out, side, DODGE_STEP, R) : out);
+    }
     if (d > zn.radius + SELF_RADIUS) continue;
     if (rng.next() >= sense.skill.dodge) return null;
     return move(awayFrom(sense, at, zn.radius + SELF_RADIUS + 1 - d));
@@ -218,6 +232,12 @@ function fight(sense: Sense, target: ObsUnit, rng: Rng): Action {
   if (c) return c;
   const sigil = fightSigil(sense, target);
   if (sigil) return sigil;
+  // Its attacks would miss (CONTEXT.md: Fumble): it gives ground until the
+  // fumble passes instead of swinging at nothing.
+  if (fumbled(s, obs.time)) {
+    const step = awayPoint(sense, KITE_STEP);
+    return depthInside(sense.now, step) > 2 ? move(step) : NOOP;
+  }
   const d = dist(sense.me, p3(target));
   if (
     sense.skill.kite &&
