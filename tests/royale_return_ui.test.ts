@@ -9,16 +9,21 @@ import {
   facingOrbit,
   ORBIT_ELEVATION_MAX,
   orbitPosition,
+  RETURN_GLOBE_RIGHT,
   RETURN_ORBIT_MAX,
   RETURN_ORBIT_MIN,
   returnOrbitDistance,
 } from '../src/render/planet_drop';
+import { PLANET_RADIUS } from '../src/render/planet_ground';
 import { RESPAWN_S } from '../src/sim/royale/types';
 import {
   RETURN_GLOBE_AFTER_S,
+  RETURN_GLOBE_HALF_VH,
+  RETURN_WASH_GAP_VH,
   returnGlobeOn,
   returnHint,
   returnLight,
+  returnWashColumnPx,
   waitMarks,
 } from '../src/ui/royale_return';
 
@@ -133,5 +138,32 @@ describe('the wait globe orbit', () => {
     expect(returnOrbitDistance(110)).toBe(RETURN_ORBIT_MAX);
     expect(returnOrbitDistance(28)).toBeLessThan(returnOrbitDistance(50));
     expect(returnOrbitDistance(0)).toBe(RETURN_ORBIT_MIN);
+  });
+});
+
+describe('the wait globe on the screen', () => {
+  // The play camera's vertical field of view (render/renderer.ts).
+  const FOV_DEG = 50;
+
+  it('stands in the middle, and at its farthest orbit spans the half height the wash keeps clear of', () => {
+    expect(RETURN_GLOBE_RIGHT).toBe(0);
+    const edge = Math.asin(PLANET_RADIUS / RETURN_ORBIT_MAX);
+    const halfVh = (50 * Math.tan(edge)) / Math.tan((FOV_DEG * Math.PI) / 360);
+    expect(halfVh).toBeLessThanOrEqual(RETURN_GLOBE_HALF_VH);
+    expect(halfVh).toBeGreaterThan(RETURN_GLOBE_HALF_VH - 1);
+  });
+
+  it('leaves the wash a column left of it, wide enough for its lines', () => {
+    for (const [w, h] of [
+      [1280, 720],
+      [960, 540],
+      [1920, 1080],
+      [844, 390],
+    ] as const) {
+      const column = returnWashColumnPx(w, h);
+      const globeLeft = w / 2 - (RETURN_GLOBE_HALF_VH * h) / 100;
+      expect(column).toBeGreaterThanOrEqual(250);
+      expect(globeLeft - column).toBeCloseTo((RETURN_WASH_GAP_VH * h) / 100, 6);
+    }
   });
 });

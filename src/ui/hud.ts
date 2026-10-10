@@ -149,9 +149,9 @@ import {
 import { RoyaleLife, SeenChampions } from './royale_life';
 import { respawnTally, royaleSting } from './royale_result';
 import {
-  RETURN_WASH_LINE_VW,
+  RETURN_GLOBE_HALF_VH,
+  RETURN_WASH_GAP_VH,
   RETURN_WASH_PHONE_BOTTOM_PX,
-  RETURN_WASH_RIGHT_VW,
   returnGlobeOn,
   returnHint,
 } from './royale_return';
@@ -813,16 +813,17 @@ const CSS = `
    (ui/royale_burr.ts): a thorn's red, the next life's target. */
 .hud-overlay-burr { font-size: 15px; font-weight: 700; margin-top: 8px; color: ${BURR_COLOR};
   text-shadow: 0 1px 4px #000; }
-/* The Respawn wait's globe (ui/royale_return.ts): the wash's lines move
-   left of the middle, clear of the globe the camera sets on the right
-   (render/planet_drop.ts RETURN_GLOBE_RIGHT) and of the Graft cards over
-   the top, the shade thins toward the globe, and its line says what a tap
-   or a click on it does. */
-.hud-overlay.returning { padding-right: ${RETURN_WASH_RIGHT_VW}vw;
-  background: linear-gradient(90deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.32) 45%,
-    rgba(0, 0, 0, 0.06) 70%); }
-.hud-overlay.returning > * { max-width: ${RETURN_WASH_LINE_VW}vw; text-align: center;
-  text-wrap: balance; }
+/* The Respawn wait's globe (ui/royale_return.ts): it stands in the middle
+   (render/planet_drop.ts RETURN_GLOBE_RIGHT), the wash's lines move into
+   the column left of it, the shade thins toward it, and its line says what
+   a tap or a click on it does. */
+.hud-overlay.returning {
+  padding-right: calc(50 * var(--vw, 1vw) + ${RETURN_GLOBE_HALF_VH + RETURN_WASH_GAP_VH} * var(--vh, 1vh));
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.3) 25%,
+    rgba(0, 0, 0, 0.04) 40%); }
+.hud-overlay.returning > * {
+  max-width: calc(50 * var(--vw, 1vw) - ${RETURN_GLOBE_HALF_VH + RETURN_WASH_GAP_VH} * var(--vh, 1vh));
+  text-align: center; text-wrap: balance; }
 .hud-overlay-hint { font-size: 15px; font-weight: 700; margin-top: 8px; color: #ffe3a0; }
 /* The thumb controls stand down meanwhile: their box under the right thumb
    took the tap meant for the globe, and a dead champion casts nothing. */

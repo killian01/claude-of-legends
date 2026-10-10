@@ -60,8 +60,9 @@ export function returnOrbitDistance(lightRadius: number): number {
 }
 
 // Where the wait's globe sits on the screen, as shares of its width right
-// of the middle and of its height below it: to the right of the death
-// wash's lines, which move left of the middle (ui/hud.ts), and under the
-// Graft cards over the top.
-export const RETURN_GLOBE_RIGHT = 0.22;
+// of the middle and of its height below it: in the middle, where the eye
+// already is when the play rig rises to it, a little low so it stays under
+// the Graft cards over the top. The death wash's lines stand in the column
+// left of it (ui/royale_return.ts).
+export const RETURN_GLOBE_RIGHT = 0;
 export const RETURN_GLOBE_DOWN = 0.07;

@@ -76,13 +76,20 @@ export function waitMarks(
   };
 }
 
-// The wash while the globe shows (ui/hud.ts): its lines centered in the
-// screen's width less RETURN_WASH_RIGHT_VW on the right, none wider than
-// RETURN_WASH_LINE_VW, so they keep left of the globe the camera sets right
-// of the middle (render/planet_drop.ts RETURN_GLOBE_RIGHT), whose left edge
-// stands some 57 percent across a 1280x720 screen and 60 on a phone's.
-export const RETURN_WASH_RIGHT_VW = 34;
-export const RETURN_WASH_LINE_VW = 46;
+// The wash while the globe shows (ui/hud.ts): its lines in a column left
+// of the globe, which stands in the middle of the screen (render/
+// planet_drop.ts RETURN_GLOBE_RIGHT). The globe at its farthest orbit
+// spans RETURN_GLOBE_HALF_VH of the screen's height on each side of the
+// middle, whatever the width; the column ends RETURN_WASH_GAP_VH before it
+// and its lines are no wider than the column.
+export const RETURN_GLOBE_HALF_VH = 27;
+export const RETURN_WASH_GAP_VH = 3;
+
+// The column's width in pixels on a screen of `width` by `height`.
+export function returnWashColumnPx(width: number, height: number): number {
+  return width / 2 - ((RETURN_GLOBE_HALF_VH + RETURN_WASH_GAP_VH) * height) / 100;
+}
+
 // On a phone the lines end RETURN_WASH_PHONE_BOTTOM_PX over the bottom,
 // whatever the screen's height: above the notices' column and the bar
 // (ui/royale_layout.ts compactNotesBox).
