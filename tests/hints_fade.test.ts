@@ -3,6 +3,8 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  feedTopUnderHints,
+  HINTS_FEED_GAP_PX,
   HINTS_HOLD_TAP,
   HINTS_HOLD_THUMBS,
   HINTS_START,
@@ -72,5 +74,19 @@ describe('the hint fade clock', () => {
     const faded = run(HINTS_START, 0, 13, false, HINTS_HOLD_THUMBS);
     expect(faded.faded).toBe(true);
     expect(stepHints(faded, 14, true, HINTS_HOLD_THUMBS)).toBe(faded);
+  });
+});
+
+describe('the kill feed beside the thumbs hint', () => {
+  it('reads under the hint while it is up', () => {
+    expect(feedTopUnderHints(true, false, 117.4)).toBe(118 + HINTS_FEED_GAP_PX);
+  });
+
+  it('takes its corner back once the hint has faded', () => {
+    expect(feedTopUnderHints(true, true, 117.4)).toBeNull();
+  });
+
+  it('keeps its corner with the tap scheme and a mouse', () => {
+    expect(feedTopUnderHints(false, false, 117.4)).toBeNull();
   });
 });

@@ -41,3 +41,19 @@ export function stepHints(
   const seen = state.seen + (state.last === null ? 0 : Math.max(0, time - state.last));
   return { seen, last: time, faded: seen >= hold };
 }
+
+// With the thumbs the hint sits just under the kill feed's first line, past
+// the touch bar's column (ui/hud.ts .hud.thumbs .hud-hints), and a feed of
+// two lines or more ran over it. While the hint is up the feed reads under
+// it instead: the HUD leaves where that is as --hints-feed-top, a few pixels
+// below the hint's bottom edge, and drops it once the hint has faded. The
+// tap scheme's hint is at the bottom and a mouse keeps the feed's corner.
+export const HINTS_FEED_GAP_PX = 6;
+
+export function feedTopUnderHints(
+  thumbs: boolean,
+  faded: boolean,
+  hintsBottom: number,
+): number | null {
+  return thumbs && !faded ? Math.ceil(hintsBottom) + HINTS_FEED_GAP_PX : null;
+}

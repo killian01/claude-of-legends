@@ -88,7 +88,13 @@ import {
   stepsFinished,
   stepsStart,
 } from './first_steps';
-import { HINTS_START, type HintsClock, hintsHold, stepHints } from './hints_fade';
+import {
+  feedTopUnderHints,
+  HINTS_START,
+  type HintsClock,
+  hintsHold,
+  stepHints,
+} from './hints_fade';
 import { buildLadderBox, type LadderBox } from './ladder_box';
 import {
   closeLaneCard,
@@ -1035,7 +1041,13 @@ ${compactTapsCss()}
 /* With the thumbs the touch bar (ui/touch_bar.ts) holds the left edge, and
    the feed ran down over its Menu and Shop buttons: it starts past the
    column, where the coach bar starts too. */
-.hud.thumbs .hud-feed { left: calc(84px + var(--safe-left, env(safe-area-inset-left, 0px))); }
+/* The controls hint stands under the feed's first line there, and the feed
+   reads under the hint while it is up (ui/hints_fade.ts feedTopUnderHints),
+   or under a coach seat's bar when that reaches lower. */
+.hud.thumbs .hud-feed {
+  left: calc(84px + var(--safe-left, env(safe-area-inset-left, 0px)));
+  top: max(var(--coach-feed-top, 12px), var(--hints-feed-top, 12px));
+}
 .hud.compact .hud-hints {
   font-size: 9px; max-width: 170px; line-height: 1.45;
   left: calc(12px + env(safe-area-inset-left, 0px));
@@ -1318,6 +1330,9 @@ export class Hud {
   private readonly hintsEl: HTMLElement;
   private hintsClock: HintsClock = HINTS_START;
   private readonly hintsHold: number | null;
+  // The feed's place under the thumbs hint last written (feedTopUnderHints),
+  // so a frame writes the style only when it moves.
+  private feedUnderHints: number | null = null;
   // What the browser answered the landscape ask (setLandscapeLocked), and
   // whether the phone is upright: with the setting for the rotated view
   // (game/rotated_view.ts), what decides whether the turn wall stands.
@@ -2391,6 +2406,24 @@ export class Hud {
       this.hintsHold,
     );
     if (this.hintsClock.faded) this.hintsEl.classList.add('faded');
+    this.placeFeedUnderHints();
+  }
+
+  // Measured only while the feed has a line to place, the few seconds a
+  // kill shows in the hint's first seconds; the safe area moves the hint,
+  // so its edge is read where it stands.
+  private placeFeedUnderHints(): void {
+    const thumbs = this.stepsInput === 'thumbs';
+    if (thumbs && !this.hintsClock.faded && this.feed.childElementCount === 0) return;
+    const top = feedTopUnderHints(
+      thumbs,
+      this.hintsClock.faded,
+      thumbs ? this.hintsEl.offsetTop + this.hintsEl.offsetHeight : 0,
+    );
+    if (top === this.feedUnderHints) return;
+    this.feedUnderHints = top;
+    if (top === null) this.rootEl.style.removeProperty('--hints-feed-top');
+    else this.rootEl.style.setProperty('--hints-feed-top', `${top}px`);
   }
 
   private stepNudge(): void {
