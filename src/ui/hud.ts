@@ -88,13 +88,7 @@ import {
   stepsFinished,
   stepsStart,
 } from './first_steps';
-import {
-  feedTopUnderHints,
-  HINTS_START,
-  type HintsClock,
-  hintsHold,
-  stepHints,
-} from './hints_fade';
+import { feedTopUnderHints, type HintsClock, hintsHold, hintsStart, stepHints } from './hints_fade';
 import { buildLadderBox, type LadderBox } from './ladder_box';
 import {
   closeLaneCard,
@@ -1329,7 +1323,7 @@ export class Hud {
   // The controls hint and its fade clock (ui/hints_fade.ts): seconds of
   // uncovered screen, null hold on a mouse where it stays.
   private readonly hintsEl: HTMLElement;
-  private hintsClock: HintsClock = HINTS_START;
+  private hintsClock: HintsClock;
   private readonly hintsHold: number | null;
   // The feed's place under the thumbs hint last written (feedTopUnderHints),
   // so a frame writes the style only when it moves.
@@ -1462,6 +1456,7 @@ export class Hud {
     this.portrait =
       typeof window.matchMedia === 'function' ? window.matchMedia('(orientation: portrait)') : null;
     this.hintsHold = hintsHold(coarsePointer, thumbs);
+    this.hintsClock = hintsStart(guide);
     // The first steps, for a person on the seat: what this browser has
     // done, unless the player hid the guide. A coach or a replay viewer
     // meets none, and that is not remembered as hidden.
@@ -2121,10 +2116,10 @@ export class Hud {
       turnLeave,
     );
 
+    root.append(turnWall, bottom);
+    // Only a person on the seat meets the controls hint (hintsStart).
+    if (!this.hintsClock.faded) root.appendChild(hints);
     root.append(
-      turnWall,
-      bottom,
-      hints,
       kda,
       this.teamScore.el,
       this.targetFrame,

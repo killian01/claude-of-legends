@@ -10,6 +10,7 @@ import {
   HINTS_START,
   type HintsClock,
   hintsHold,
+  hintsStart,
   stepHints,
 } from '../src/ui/hints_fade';
 
@@ -88,5 +89,22 @@ describe('the kill feed beside the thumbs hint', () => {
 
   it('keeps its corner with the tap scheme and a mouse', () => {
     expect(feedTopUnderHints(false, false, 117.4)).toBeNull();
+  });
+});
+
+describe('who meets the hint', () => {
+  it('starts up for a person on the seat', () => {
+    expect(hintsStart('play')).toEqual(HINTS_START);
+  });
+
+  it('never shows for a coach or a replay viewer, on any screen', () => {
+    for (const guide of ['coach', 'watch'] as const) {
+      const start = hintsStart(guide);
+      expect(start.faded).toBe(true);
+      expect(run(start, 0, 30, false, null).faded).toBe(true);
+      expect(run(start, 0, 30, false, HINTS_HOLD_THUMBS).faded).toBe(true);
+      // Faded from the start, so the kill feed keeps the thumbs' corner.
+      expect(feedTopUnderHints(true, start.faded, 117.4)).toBeNull();
+    }
   });
 });

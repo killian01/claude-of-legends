@@ -7,6 +7,8 @@
 // HUD (the shop, the pause menu, the end screen, the turn wall), in match
 // seconds, the lane card's clock (ui/lane_guide.ts).
 
+import type { GuideMode } from './lane_guide';
+
 // Seconds of uncovered screen before the hint fades: the thumb controls'
 // hint is short, the older tap-to-walk one is a paragraph. A mouse keeps
 // its hint (null).
@@ -29,6 +31,15 @@ export interface HintsClock {
 }
 
 export const HINTS_START: HintsClock = { seen: 0, last: null, faded: false };
+
+// The hint says how the seat's champion is played: the stick, the spells,
+// the keys. A coach orders a bot through the coach bar, which carries its
+// own line (ui/coach_bar.ts coachHint), and a replay viewer plays nothing,
+// so neither meets the hint: its clock starts faded and the HUD leaves it
+// out, the way the first steps skip them (ui/first_steps.ts).
+export function hintsStart(guide: GuideMode): HintsClock {
+  return guide === 'play' ? HINTS_START : { ...HINTS_START, faded: true };
+}
 
 export function stepHints(
   state: HintsClock,
