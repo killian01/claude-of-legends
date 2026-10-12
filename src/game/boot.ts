@@ -20,6 +20,7 @@ import { effectiveRank } from '../sim/stats';
 import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
 import { DT } from '../sim/types';
 import type { Unit } from '../sim/unit';
+import { seatShops } from '../ui/coach_bar';
 import { attackCursor, defaultCursor } from '../ui/cursors';
 import { Hud, type NetHooks } from '../ui/hud';
 import { LaneArrow, laneArrowHalf } from '../ui/lane_arrow';
@@ -743,11 +744,13 @@ export function startPresentation(
     ? buildTouchBar(
         stage.el,
         {
-          // No shop and no recall in a battle royale (ADR 0031).
-          ...(options.royale
+          // No shop and no recall in a battle royale (ADR 0031). A coach
+          // seat keeps Recall (its bot's Back order) and leaves the shop
+          // and the drink to the bot (ui/coach_bar.ts seatShops).
+          ...(options.royale ? {} : { onRecall: () => inputHandlers.onRecall() }),
+          ...(options.royale || !seatShops(guide)
             ? {}
             : {
-                onRecall: () => inputHandlers.onRecall(),
                 onToggleShop: () => inputHandlers.onToggleShop(),
                 onDrink: () => {
                   const me = world.units.get(selfId);

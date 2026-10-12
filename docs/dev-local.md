@@ -119,6 +119,11 @@ From cheapest to most complete:
 3. **The browser**: the Academy card on the home screen; local sparring needs nothing
    else and shows the active-play overlay in the replay.
 4. **The click-through**: `scripts/e2e_academy.mjs` with `CHROME` set to a Chrome binary.
+5. **A coach seat**: `scripts/e2e_coach.mjs` makes a bot, seats it in the classic queue and
+   coaches it (`PHONE=1` at 844x390 with touch, `SCHEME=tap`, `SHOT=path`). Restart the
+   stack between runs: a match left running takes the next account in as a drop-in.
+   Software WebGL draws the match at a frame or two a second and the page falls behind the
+   snapshots, so the script waits for each answer with the match tab behind another.
 
 ## Browser scripts
 

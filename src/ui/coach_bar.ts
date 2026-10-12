@@ -18,6 +18,7 @@ import type { TouchScheme } from '../game/touch';
 import { MIN_TAP_PX } from '../game/ui_scale';
 import type { CoachOrder, CoachOrderKind } from '../sim/coach';
 import { COACH_PLAY_ID } from '../sim/content/playbooks/new_bot';
+import type { GuideMode } from './lane_guide';
 
 const CSS = `
 .coach-bar {
@@ -126,6 +127,14 @@ export const FEED_GAP_PX = 6;
 
 export function feedTopUnderBar(layout: CoachLayout, barBottom: number): number | null {
   return layout === 'mouse' ? null : Math.ceil(barBottom) + FEED_GAP_PX;
+}
+
+// A coach seat's bot buys, sells and drinks its own kit, and the mirror
+// world refuses those verbs from a coach (net/client_world.ts). So the
+// seat gets no shop, none opening by itself at the start, and no Drink:
+// a button that answers nothing, or a toast that says the wrong thing.
+export function seatShops(guide: GuideMode): boolean {
+  return guide !== 'coach';
 }
 
 export interface CoachBar {

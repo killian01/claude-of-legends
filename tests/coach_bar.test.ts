@@ -2,12 +2,16 @@
 // buttons, from the order and the play the snapshot carries.
 
 import { describe, expect, it } from 'vitest';
+import { starOrchard } from '../server/star_orchard';
+import { ClientWorld } from '../src/net/client_world';
+import type { ClientMsg } from '../src/net/protocol';
 import {
   coachHint,
   coachLayout,
   describeCoachState,
   FEED_GAP_PX,
   feedTopUnderBar,
+  seatShops,
 } from '../src/ui/coach_bar';
 
 describe('the coach bar state line', () => {
@@ -60,5 +64,20 @@ describe('the coach bar on each pointer', () => {
       expect(coachHint(layout, true)).toBe('Tap the map: go there. Tap an enemy: focus it.');
       expect(coachHint(layout, false)).toBe(coachHint(layout, true));
     }
+  });
+
+  it('leaves the shop and the drink to the bot in a coach seat', () => {
+    expect(seatShops('play')).toBe(true);
+    expect(seatShops('watch')).toBe(true);
+    expect(seatShops('coach')).toBe(false);
+    // Why: the coach's mirror world refuses those verbs and sends nothing,
+    // so a shop or a Drink button there could only answer wrongly.
+    const sent: ClientMsg[] = [];
+    const world = new ClientWorld((m) => sent.push(m), starOrchard().map);
+    world.applyServer({ t: 'match_start', selfUnitId: 1, team: 0, coach: true });
+    expect(world.buyItem(1, 'sapdraught')).toBe(false);
+    expect(world.sellItem(1, 0)).toBe(false);
+    expect(world.drinkItem(1, 0)).toBe(false);
+    expect(sent).toEqual([]);
   });
 });

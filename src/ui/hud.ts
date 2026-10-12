@@ -63,6 +63,7 @@ import {
   statusKey,
   wrathChipFace,
 } from './chip_text';
+import { seatShops } from './coach_bar';
 import { COMPACT_ROW_GAP, COMPACT_SCALE, compactTapsCss } from './compact_taps';
 import { setText } from './dom_write';
 import { END_OFFER_CLASS, fillEndScreen } from './end_screen';
@@ -1789,7 +1790,7 @@ export class Hud {
       // Right-click sells at the fountain for 70 percent of the price.
       slot.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        if (this.royale) return;
+        if (this.royale || !seatShops(this.guideMode)) return;
         const u = this.world.units.get(this.selfId);
         const itemId = u?.items[i];
         if (!u || itemId === undefined) return;
@@ -2408,8 +2409,9 @@ export class Hud {
   }
 
   toggleShop(): void {
-    // No shop in a battle royale: loot is the build (ADR 0031).
-    if (this.royale) return;
+    // No shop in a battle royale: loot is the build (ADR 0031). Nor in a
+    // coach seat, whose bot buys its own.
+    if (this.royale || !seatShops(this.guideMode)) return;
     this.setShopOpen(!this.shop.classList.contains('open'));
     this.update();
   }
@@ -2947,7 +2949,7 @@ export class Hud {
   // Drinks the Sapdraught in bag slot `slot` (a click on it, its number
   // key, the touch bar's Drink); a slot holding anything else does nothing.
   drinkSlot(slot: number): void {
-    if (this.royale) return;
+    if (this.royale || !seatShops(this.guideMode)) return;
     const u = this.world.units.get(this.selfId);
     const itemId = u?.items[slot];
     if (!u || u.dead || !itemId || !ITEMS[itemId]?.drink) return;
@@ -3319,8 +3321,9 @@ export class Hud {
     if (!this.openedOpeningShop) {
       this.openedOpeningShop = true;
       // Only at the top of a live match: a rejoin or a replay opens to the
-      // game, not to a shop nobody asked for.
-      if (this.world.time < 5 && this.world.winner === null) {
+      // game, not to a shop nobody asked for. A coach seat's bot buys its
+      // own kit (coach_bar.ts seatShops).
+      if (this.world.time < 5 && this.world.winner === null && seatShops(this.guideMode)) {
         this.setShopOpen(true);
         this.openingShopUp = true;
       } else {
